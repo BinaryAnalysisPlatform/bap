@@ -1,4 +1,5 @@
 # UUID                                  	Group Name
 #
 ldap:cn=aegis,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/aegis
+ldap:cn=penn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/penn
 user:maverick                           	user/Maverick Woo (maverick)
