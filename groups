@@ -5,4 +5,5 @@ ldap:cn=intern,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/intern
 ldap:cn=okahn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/okahn
 ldap:cn=penn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/penn
 ldap:cn=vincenth,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/vincenth
+user:ddirenzo                           	user/Dominick DiRenzo (ddirenzo)
 user:maverick                           	user/Maverick Woo (maverick)
