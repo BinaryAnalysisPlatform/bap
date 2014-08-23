@@ -1,5 +1,6 @@
 # UUID                                  	Group Name
 #
+70098d8616f0cabfd77d3ae24196daa68b0a2e94	bap-read-only
 ldap:cn=aegis,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/aegis
 ldap:cn=intern,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/intern
 ldap:cn=okahn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/okahn
