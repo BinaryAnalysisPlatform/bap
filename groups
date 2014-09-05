@@ -1,11 +1,5 @@
 # UUID                                  	Group Name
 #
-70098d8616f0cabfd77d3ae24196daa68b0a2e94	bap-read-only
-ldap:cn=aegis,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/aegis
-ldap:cn=intern,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/intern
-ldap:cn=okahn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/okahn
-ldap:cn=penn,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/penn
-ldap:cn=ppp,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/ppp
-ldap:cn=vincenth,ou=Group,dc=aegis,dc=cylab,dc=cmu,dc=edu	ldap/vincenth
-user:ddirenzo                           	user/Dominick DiRenzo (ddirenzo)
-user:maverick                           	user/Maverick Woo (maverick)
+e2181e77b3c71c4f597c7dcfb9a1997714224983	geohot
+global:Registered-Users                 	Registered Users
+user:maurer                             	user/Matthew Maurer (maurer)
