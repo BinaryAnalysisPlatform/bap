@@ -1,0 +1,92 @@
+true: short_paths
+# OASIS_START
+# DO NOT EDIT (digest: 58b12aef622a4b0519fd8ccd5c08a061)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library types
+"lib/bap_types/types.cmxs": use_types
+# Library bap_core
+"lib/bap_core/bap_core.cmxs": use_bap_core
+# Library top
+"lib/bap_core/top.cmxs": use_top
+<lib/bap_core/*.ml{,i,y}>: pkg_bin_prot.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_camlp4
+<lib/bap_core/*.ml{,i,y}>: pkg_comparelib.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_compiler-libs
+<lib/bap_core/*.ml{,i,y}>: pkg_core_kernel
+<lib/bap_core/*.ml{,i,y}>: pkg_herelib.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_pa_ounit.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_sexplib.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_variantslib.syntax
+<lib/bap_core/*.ml{,i,y}>: pkg_zarith
+<lib/bap_core/*.ml{,i,y}>: use_bap_core
+<lib/bap_core/*.ml{,i,y}>: use_types
+# Library conceval
+"lib/bap_types/conceval.cmxs": use_conceval
+# Library serialization
+"lib/bap_types/serialization.cmxs": use_serialization
+<lib/bap_types/*.ml{,i,y}>: pkg_bin_prot.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_camlp4
+<lib/bap_types/*.ml{,i,y}>: pkg_comparelib.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_core_kernel
+<lib/bap_types/*.ml{,i,y}>: pkg_herelib.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_pa_ounit.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_piqirun.ext
+<lib/bap_types/*.ml{,i,y}>: pkg_piqirun.pb
+<lib/bap_types/*.ml{,i,y}>: pkg_sexplib.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_variantslib.syntax
+<lib/bap_types/*.ml{,i,y}>: pkg_zarith
+<lib/bap_types/*.ml{,i,y}>: use_types
+# Library types_test
+"lib_test/bap_types/types_test.cmxs": use_types_test
+<lib_test/bap_types/*.ml{,i,y}>: pkg_bin_prot.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_camlp4
+<lib_test/bap_types/*.ml{,i,y}>: pkg_comparelib.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_core_kernel
+<lib_test/bap_types/*.ml{,i,y}>: pkg_herelib.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_pa_ounit.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_sexplib.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_variantslib.syntax
+<lib_test/bap_types/*.ml{,i,y}>: pkg_zarith
+<lib_test/bap_types/*.ml{,i,y}>: use_conceval
+<lib_test/bap_types/*.ml{,i,y}>: use_types
+# Executable run_tests
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_bin_prot.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_camlp4
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_comparelib.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_core_kernel
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_herelib.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_oUnit
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_pa_ounit.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_sexplib.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_variantslib.syntax
+<lib_test/bap_core/run_tests.{native,byte}>: pkg_zarith
+<lib_test/bap_core/run_tests.{native,byte}>: use_conceval
+<lib_test/bap_core/run_tests.{native,byte}>: use_types
+<lib_test/bap_core/run_tests.{native,byte}>: use_types_test
+<lib_test/bap_core/*.ml{,i,y}>: pkg_bin_prot.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_camlp4
+<lib_test/bap_core/*.ml{,i,y}>: pkg_comparelib.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_core_kernel
+<lib_test/bap_core/*.ml{,i,y}>: pkg_herelib.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_oUnit
+<lib_test/bap_core/*.ml{,i,y}>: pkg_pa_ounit.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_sexplib.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_variantslib.syntax
+<lib_test/bap_core/*.ml{,i,y}>: pkg_zarith
+<lib_test/bap_core/*.ml{,i,y}>: use_conceval
+<lib_test/bap_core/*.ml{,i,y}>: use_types
+<lib_test/bap_core/*.ml{,i,y}>: use_types_test
+# OASIS_STOP

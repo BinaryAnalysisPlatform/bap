@@ -1,0 +1,125 @@
+OASISFormat: 0.4
+Name:        bap_core
+Version:     0.2
+Synopsis:    BAP Core Library
+Authors:     BAP Team
+Maintainers: Ivan Gotovchits <ivg@ieee.org>
+License:     MIT
+Copyrights:  (C) 2014 Carnegie Mellon University
+Plugins:     META (0.4), DevFiles (0.4)
+AlphaFeatures: ocamlbuild_more_args
+BuildTools: ocamlbuild, camlp4o
+BuildDepends:
+              bin_prot.syntax,
+              camlp4,
+              comparelib.syntax,
+              core_kernel,
+              herelib.syntax,
+              pa_ounit.syntax,
+              sexplib.syntax,
+              variantslib.syntax
+
+# for some reason oasis doesn't provide us a $cp command
+PostInstallCommand: cp baptop bapbuild $bindir
+PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
+
+
+Document bap_core
+  Type: ocamlbuild (0.4)
+  BuildTools: ocamlbuild, ocamldoc
+  Title:      API documentation for bap_core
+  XOCamlbuildPath: lib/bap_core/
+  XOCamlbuildExtraArgs:
+    "-docflags '-colorize-code -short-functors -charset utf-8'"
+  XOCamlbuildLibraries: bap_core
+
+
+Flag serialization
+  Description: "Build serialization library"
+  Default: false
+
+Library bap_core
+  Path:            lib/bap_core
+  FindLibName:     bap_core
+  CompiledObject:  best
+  BuildDepends:    bap_core.types
+  Modules:         Bap_core
+
+Library top
+  XMETADescription:
+     Toplevel printers for bap-types and core-kernel
+  Path: lib/bap_core
+  FindLibParent: bap_core
+  FindLibName: top
+  Modules:  Bap_install_printers
+  BuildDepends: compiler-libs, bap_core
+
+Library types
+  Path:            lib/bap_types
+  FindlibParent:   bap_core
+  FindlibName:     types
+  CompiledObject:  best
+  BuildDepends:    zarith
+  Modules:         Bap_types,
+                   Bap_addr,
+                   Bap_arch,
+                   Bap_bil,
+                   Bap_bitvector,
+                   Bap_common,
+                   Bap_exp,
+                   Bap_integer,
+                   Bap_integer_intf,
+                   Bap_regular,
+                   Bap_size,
+                   Bap_stmt,
+                   Bap_type,
+                   Bap_var
+
+Library conceval
+  Path: lib/bap_types
+  FindLibParent: types
+  FindLibName: conceval
+  BuildTools: ocamlbuild
+  Modules: Conceval
+  BuildDepends: bap_core.types
+  CompiledObject: best
+
+Library serialization
+  XMETADescription: Provides serialization for main data types
+  Path:         lib/bap_types/
+  Build$: flag(serialization)
+  FindLibParent: types
+  FindLibName: serialization
+  BuildTools: ocamlbuild, piqi
+  DataFiles:    *.piqi
+  CompiledObject: best
+  BuildDepends: piqirun.pb, piqirun.ext, bap_core.types
+  Modules:   Bil_piqi,
+             Stmt_piqi,
+             Stmt_piqi_ext
+
+
+Library types_test
+  Path: lib_test/bap_types
+  Build$: flag(tests)
+  CompiledObject: best
+  BuildDepends: bap_core.types, bap_core.types.conceval
+  FindlibParent: types
+  FindlibName: tests
+  Modules:     Test_bitvector,
+               Test_conceval
+
+
+Executable run_tests
+  Path:         lib_test/bap_core
+  MainIs:       run_tests.ml
+  Install:      false
+  Build$:       flag(tests)
+  BuildTools:   ocamlbuild
+  BuildDepends: oUnit, bap_core.types.tests
+  CompiledObject: best
+
+
+Test main
+  TestTools: run_tests
+  Command: $run_tests
