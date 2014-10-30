@@ -8,7 +8,7 @@ module T = struct
 
   let hash = Hashtbl.hash
 
-  let module_name = "Bap_types.Bap_arch"
+  let module_name = "Bap_arch"
 
   let to_string = function
     | X86_32 -> "X86_32"

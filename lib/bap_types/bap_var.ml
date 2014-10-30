@@ -11,7 +11,7 @@ module T = struct
 
   let compare v1 v2 = compare_int v1.uid v2.uid
   let hash v = v.uid
-  let module_name = "Bap_types.Bap_var"
+  let module_name = "Bap_var"
 
   let pp fmt v =
     Format.fprintf fmt "%s_%d:%a" v.var v.uid Bap_type.pp v.typ

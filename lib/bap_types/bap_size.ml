@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Or_error
 
 open Bap_common
-open Reg
 
 let to_bits : 'a -> int = function
   | `r8   -> 8
@@ -53,7 +52,7 @@ module T = struct
   open Format
 
   type t = size with bin_io, compare, sexp
-  let module_name = "Bap_types.Bap_size"
+  let module_name = "Bap_size"
 
   let pp fmt n =
     fprintf fmt "u%u" (to_bits n)

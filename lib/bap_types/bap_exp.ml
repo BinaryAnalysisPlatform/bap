@@ -117,7 +117,7 @@ end
 include Regular.Make(struct
     include Bap_bil.Exp
     let hash = Hashtbl.hash
-    let module_name = "Bap_types.Bap_exp"
+    let module_name = "Bap_exp"
     let pp = PP.pp
   end)
 

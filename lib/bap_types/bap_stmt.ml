@@ -28,6 +28,6 @@ let pp_stmts fmt ss =
 include Regular.Make(struct
     include Bap_bil.Stmt
     let hash = Hashtbl.hash
-    let module_name = "Bap_types.Bap_stmt"
+    let module_name = "Bap_stmt"
     let pp = pp
   end)
