@@ -1,0 +1,17 @@
+# OASIS_START
+# DO NOT EDIT (digest: b094215ee65e4db674265274e91f0ffd)
+Bap_addr
+Bap_arch
+Bap_bil
+Bap_bitvector
+Bap_common
+Bap_exp
+Bap_integer
+Bap_integer_intf
+Bap_regular
+Bap_size
+Bap_stmt
+Bap_type
+Bap_var
+Std
+# OASIS_STOP

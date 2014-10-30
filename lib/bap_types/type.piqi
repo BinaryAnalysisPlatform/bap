@@ -1,0 +1,100 @@
+.variant [
+  .name typ
+  .option [.name bool]
+  .option [.type size]
+  .option [.type tmem]
+]
+
+.variant [
+  .name addr-size
+  .option [.name r32]
+  .option [.name r64]
+]
+
+.variant [
+  .name size
+  .option [.name r8]
+  .option [.name r16]
+  .option [.name r32]
+  .option [.name r64]
+  .option [.name r128]
+  .option [.name r256]
+]
+
+
+.record [
+  .name tmem
+  .field [
+    .name index-type
+    .type addr-size
+  ]
+  .field [
+    .name element-type
+    .type size
+  ]
+]
+
+.enum [
+  .name cast-type
+  .option [.name cast-unsigned]
+  .option [.name cast-signed]
+  .option [.name cast-high]
+  .option [.name cast-low]
+]
+
+.enum [
+  .name binop-type
+  .option [.name plus   ]
+  .option [.name minus  ]
+  .option [.name times  ]
+  .option [.name divide ]
+  .option [.name sdivide]
+  .option [.name modbop ]
+  .option [.name smod   ]
+  .option [.name lshift ]
+  .option [.name rshift ]
+  .option [.name arshift]
+  .option [.name andbop ]
+  .option [.name orbop  ]
+  .option [.name xor    ]
+  .option [.name eq     ]
+  .option [.name neq    ]
+  .option [.name lt     ]
+  .option [.name le     ]
+  .option [.name slt    ]
+  .option [.name sle    ]
+]
+
+.enum [
+  .name unop-type
+  .option [.name uneg]
+  .option [.name unot]
+]
+
+.record [
+  .name var
+  .field [
+    .name name
+    .type string
+  ]
+  .field [
+    .name id
+    .type int
+  ]
+  .field [
+    .name typ
+    .type typ
+  ]
+]
+
+% bitvectors
+.alias [
+  .name bitvector
+  .type binary
+]
+
+% an address is now a bitvector
+.alias [
+  .name address
+  .type bitvector
+]
