@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap_core.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
+[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 # Overview
 
 `Bap_core` library provides basic facilities for doing binary analysis
