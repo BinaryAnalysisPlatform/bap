@@ -1,4 +1,4 @@
-# Overview
+# Overview[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap_core.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap_core)
 
 `Bap_core` library provides basic facilities for doing binary analysis
 in OCaml.
