@@ -13,15 +13,22 @@ let def_piqic (() : unit) : unit =
       then String.concat " "
           (OASISExec.run_read_output ~ctxt:!BaseContext.default "cygpath" [piqic_path])
       else piqic_path) |> ignore;
-  BaseEnv.dump ();
-  BaseEnv.unload ();
-  BaseEnv.load ()
+  BaseEnv.(unload (); load (); dump ())
 
 let is_var_undefined name =
   try ignore (BaseEnv.var_get name); false
   with PropList.Unknown_field _ -> true
 
+let fix_compiler_libs_warning () =
+  let prefix = BaseEnv.var_get "standard_library" in
+  let dir = OASISHostPath.make [prefix; "compiler-libs"] in
+  let cmd = Printf.sprintf "env %s=%s >/dev/null" "OCAMLFIND_IGNORE_DUPS_IN" dir in
+  let ctxt = !OASISContext.default in
+  if BaseStandardVar.os_type () <> "Win32" then
+    OASISExec.run ~quote:false ~ctxt cmd []
+
 let () =
   if is_var_undefined "piqic" then
     def_piqic ();
+  fix_compiler_libs_warning ();
   setup ();;
