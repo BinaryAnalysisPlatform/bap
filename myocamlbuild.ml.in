@@ -1,5 +1,3 @@
-(* OASIS_START *)
-(* OASIS_STOP *)
 let oasis_env =
   BaseEnvLight.load
     ~filename:MyOCamlbuildBase.env_filename

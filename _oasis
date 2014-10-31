@@ -19,10 +19,11 @@ BuildDepends:
               sexplib.syntax,
               variantslib.syntax
 
+PreConfCommand: ocaml preconfig.ml
 # for some reason oasis doesn't provide us a $cp command
 PostInstallCommand: cp baptop bapbuild $bindir
 PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
-
+PostDistcleanCommand: $rm Makefile _tags myocamlbuild.ml setup.ml setup.data configure
 
 Document bap_core
   Type: ocamlbuild (0.4)
@@ -32,7 +33,6 @@ Document bap_core
   XOCamlbuildExtraArgs:
     "-docflags '-colorize-code -short-functors -charset utf-8'"
   XOCamlbuildLibraries: bap_core
-
 
 Flag serialization
   Description: "Build serialization library"
@@ -108,7 +108,6 @@ Library types_test
   FindlibName: tests
   Modules:     Test_bitvector,
                Test_conceval
-
 
 Executable run_tests
   Path:         lib_test/bap_core
