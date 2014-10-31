@@ -12,5 +12,6 @@ META
 myocamlbuild.ml
 /*.native
 *.odocl
-/setup.*
+/setup.data
+/setup.ml
 _tags
