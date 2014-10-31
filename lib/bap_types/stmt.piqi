@@ -1,0 +1,79 @@
+.include [
+  .module exp
+]
+
+.variant [
+  .name stmt
+  .option [.type move   ]
+  .option [.type jmp    ]
+  .option [.type special]
+  .option [.type while-stmt]
+  .option [.type if-stmt]
+  .option [.type cpuexn]
+]
+
+.list [
+  .name stmt-list
+  .type stmt
+]
+
+.record [
+  .name move
+  .field [
+    .name lvar
+    .type var
+  ]
+  .field [
+    .name rexp
+    .type exp
+  ]
+]
+
+.record [
+  .name jmp
+  .field [
+    .name target
+    .type exp
+  ]
+]
+
+.alias [
+  .name special
+  .type string
+]
+
+.record [
+  .name while-stmt
+  .field [
+    .name cond
+    .type exp
+  ]
+  .field [
+    .name loop-body
+    .type stmt-list
+  ]
+]
+
+.record [
+  .name if-stmt
+  .field [
+    .name cond
+    .type exp
+  ]
+  .field [
+    .name true-branch
+    .type stmt-list
+  ]
+  .field [
+    .name false-branch
+    .type stmt-list
+  ]
+]
+
+.record [
+  .name cpuexn
+  .field [
+    .name errno
+    .type int
+  ]
+]

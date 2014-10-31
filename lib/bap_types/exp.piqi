@@ -1,0 +1,193 @@
+.include [
+  .module type
+]
+
+.enum [
+  .name endian
+  .option [.name little-endian]
+  .option [.name big-endian]
+]
+
+.variant [
+  .name exp
+  .option [.type var    ]
+  .option [.type inte   ]
+  .option [.type load   ]
+  .option [.type store  ]
+  .option [.type binop  ]
+  .option [.type unop   ]
+  .option [.type cast   ]
+  .option [.type let-exp]
+  .option [.type unknown]
+  .option [.type ite    ]
+  .option [.type extract]
+  .option [.type concat ]
+]
+
+.record [
+  .name load
+  .field [
+    .name memory
+    .type exp
+  ]
+  .field [
+    .name address
+    .type exp
+  ]
+  .field [
+    .name endian
+    .type endian
+  ]
+  .field [
+    .name size
+    .type size
+  ]
+]
+
+.record [
+  .name store
+  .field [
+    .name memory
+    .type exp
+  ]
+  .field [
+    .name address
+    .type exp
+  ]
+  .field [
+    .name value
+    .type exp
+  ]
+  .field [
+    .name endian
+    .type endian
+  ]
+  .field [
+    .name size
+    .type size
+  ]
+]
+
+.record [
+  .name binop
+  .field [
+    .name op
+    .type binop-type
+  ]
+  .field [
+    .name lexp
+    .type exp
+  ]
+  .field [
+    .name rexp
+    .type exp
+  ]
+]
+
+.record [
+  .name unop
+  .field [
+    .name op
+    .type unop-type
+  ]
+  .field [
+    .name exp
+    .type exp
+  ]
+]
+
+.record [
+  .name inte
+  .field [
+    .name int
+    .type bitvector
+  ]
+]
+
+.record [
+  .name cast
+  .field [
+    .name cast-type
+    .type cast-type
+  ]
+  .field [
+    .name size
+    .type size
+  ]
+  .field [
+    .name exp
+    .type exp
+  ]
+]
+
+.record [
+  .name let-exp
+  .field [
+    .name bound-var
+    .type var
+  ]
+  .field [
+    .name definition
+    .type exp
+  ]
+  .field [
+    .name open-exp
+    .type exp
+  ]
+]
+
+.record [
+  .name unknown
+  .field [
+    .name descr
+    .type string
+  ]
+  .field [
+    .name typ
+    .type typ
+  ]
+]
+
+.record [
+  .name ite
+  .field [
+    .name condition
+    .type exp
+  ]
+  .field [
+    .name iftrue
+    .type exp
+  ]
+  .field [
+    .name iffalse
+    .type exp
+  ]
+]
+
+.record [
+  .name extract
+  .field [
+    .name hbit
+    .type int
+  ]
+  .field [
+    .name lbit
+    .type int
+  ]
+  .field [
+    .name exp
+    .type exp
+  ]
+]
+
+.record [
+  .name concat
+  .field [
+    .name lexp
+    .type exp
+  ]
+  .field [
+    .name rexp
+    .type exp
+  ]
+]
