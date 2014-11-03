@@ -8,7 +8,6 @@ License:     MIT
 Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4), DevFiles (0.4)
 AlphaFeatures: ocamlbuild_more_args
-BetaFeatures: section_object
 BuildTools: ocamlbuild, camlp4o
 BuildDepends:
               bin_prot.syntax,
@@ -194,7 +193,6 @@ Executable run_tests
   Build$:       flag(tests)
   BuildDepends: oUnit, types_test, image_test, dwarf_test
   CompiledObject: best
-
 
 Test unit_tests
   TestTools: run_tests

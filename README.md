@@ -1,7 +1,7 @@
 # Overview
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
-
 `Bap` library provides basic facilities for doing binary analysis
+
 in OCaml.
 
 # Install
