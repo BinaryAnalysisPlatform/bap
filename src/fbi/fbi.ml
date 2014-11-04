@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Or_error
 
-open Bap_core.Std
+open Bap.Std
 open Elf.Types
 open Dwarf
 

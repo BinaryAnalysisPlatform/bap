@@ -1,5 +1,5 @@
 OASISFormat: 0.4
-Name:        bap_core
+Name:        bap
 Version:     0.2
 Synopsis:    BAP Core Library
 Authors:     BAP Team
@@ -28,43 +28,43 @@ PostInstallCommand: cp baptop bapbuild $bindir
 PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
 PostDistcleanCommand: $rm Makefile _tags myocamlbuild.ml setup.ml setup.data configure
 
-Document bap_core
+Document bap
   Type: ocamlbuild (0.4)
   BuildTools: ocamlbuild, ocamldoc
-  Title:      API documentation for bap_core
-  XOCamlbuildPath: lib/bap_core/
+  Title:      API documentation for bap
+  XOCamlbuildPath: lib/bap/
   XOCamlbuildExtraArgs:
     "-docflags '-colorize-code -short-functors -charset utf-8'"
-  XOCamlbuildLibraries: bap_core
+  XOCamlbuildLibraries: bap
 
 Flag serialization
   Description: "Build serialization library"
   Default: false
 
-Library bap_core
-  Path:            lib/bap_core
-  FindLibName:     bap_core
+Library bap
+  Path:            lib/bap
+  FindLibName:     bap
   CompiledObject:  best
-  BuildDepends:    bap_core.dwarf,
-                   bap_core.elf,
-                   bap_core.image,
-                   bap_core.types,
+  BuildDepends:    bap.dwarf,
+                   bap.elf,
+                   bap.image,
+                   bap.types,
                    dynlink,
                    findlib
-  Modules:         Bap_core, Bap_plugin, Bap_plugins
+  Modules:         Bap, Bap_plugin, Bap_plugins
 
 Library top
   XMETADescription:
      Toplevel printers for bap-types and core-kernel
-  Path: lib/bap_core
-  FindLibParent: bap_core
+  Path: lib/bap
+  FindLibParent: bap
   FindLibName: top
   Modules:  Bap_install_printers
-  BuildDepends: compiler-libs, bap_core
+  BuildDepends: compiler-libs, bap
 
 Library types
   Path:            lib/bap_types
-  FindlibParent:   bap_core
+  FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
   BuildDepends:    zarith
@@ -89,7 +89,7 @@ Library conceval
   FindLibName: conceval
   BuildTools: ocamlbuild
   Modules: Conceval
-  BuildDepends: bap_core.types
+  BuildDepends: bap.types
   CompiledObject: best
 
 Library serialization
@@ -101,18 +101,18 @@ Library serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun.pb, piqirun.ext, bap_core.types
+  BuildDepends: piqirun.pb, piqirun.ext, bap.types
   Modules:   Bil_piqi,
              Stmt_piqi,
              Stmt_piqi_ext
 
 Library bap_image
   Path:          lib/bap_image/
-  FindlibParent: bap_core
+  FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap_core.elf,
-                 bap_core.dwarf,
-                 bap_core.types
+  BuildDepends:  bap.elf,
+                 bap.dwarf,
+                 bap.types
   Modules:       Bap_image,
                  Image_backend,
                  Image_types
@@ -123,12 +123,12 @@ Library elf_backend
   FindlibName:     elf_backend
   XMETAExtraLines: plugin_system = "bap.image"
   CompiledObject:  best
-  BuildDepends:    bap_core
+  BuildDepends:    bap
   Modules:         Image_elf
 
 Library elf
   Path:          lib/bap_elf
-  FindlibParent: bap_core
+  FindlibParent: bap
   FindlibName:   elf
   BuildDepends:  bitstring, bitstring.syntax
   Modules:       Bap_elf,
@@ -137,9 +137,9 @@ Library elf
 
 Library dwarf
   Path:          lib/bap_dwarf
-  FindlibParent: bap_core
+  FindlibParent: bap
   FindlibName:   dwarf
-  BuildDepends:  bap_core.types
+  BuildDepends:  bap.types
   Modules:       Bap_dwarf,
                  Dwarf_data,
                  Dwarf_fbi,
@@ -152,7 +152,7 @@ Library types_test
   Build$:         flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap_core.types, bap_core.types.conceval
+  BuildDepends:   bap.types, bap.types.conceval
   Modules:        Test_bitvector,
                   Test_conceval
 
@@ -160,7 +160,7 @@ Library image_test
   Path:           lib_test/bap_image
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap_core
+  BuildDepends:   bap
   Install:        false
   Modules:        Test_image
 
@@ -168,7 +168,7 @@ Library dwarf_test
   Path:           lib_test/bap_dwarf
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap_core.dwarf
+  BuildDepends:   bap.dwarf
   Install:        false
   Modules:        Test_leb128
 
@@ -177,17 +177,17 @@ Executable readbin
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap_core
+  BuildDepends:   bap
 
 Executable fbi
   Path:           src/fbi
   MainIs:         fbi.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap_core
+  BuildDepends:   bap
 
 Executable run_tests
-  Path:         lib_test/bap_core
+  Path:         lib_test/bap
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)

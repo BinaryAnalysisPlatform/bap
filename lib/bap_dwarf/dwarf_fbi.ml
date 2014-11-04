@@ -45,7 +45,7 @@ module Fn = struct
         | Some (Value.Rel off) -> Some Addr.(pc_lo ++ off)
     }
     let hash = Hashtbl.hash
-    let module_name = "Dff.Fn"
+    let module_name = "Dwarf_fbi.Fn"
   end
   include T
   include Identifiable.Make(struct
