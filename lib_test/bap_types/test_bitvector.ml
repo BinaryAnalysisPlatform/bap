@@ -1,4 +1,4 @@
-open OUnit
+open OUnit2
 open Core_kernel.Std
 open Bap_types.Std
 
@@ -9,71 +9,72 @@ let _DEADBEEF = Word.(of_int64 0xDEADBEEFL)
 let zero_32 = Word.(of_int32 0x0l)
 let zero_64 = Word.(of_int64 0x0L)
 
-let normalized ~n ~add ~width () =
-  assert_equal
+let normalized ~n ~add ~width ctxt =
+  assert_equal ~ctxt
     ~printer:Word.to_string
     (Word.of_int n ~width)
     (Word.of_int (n + add) ~width)
 
-let to_string ~str v () =
-  assert_equal ~printer:ident str (Word.to_string v)
+let to_string ~str v ctxt =
+  assert_equal ~ctxt ~printer:ident str (Word.to_string v)
 
-let of_string ~str v () =
-  assert_equal ~printer:Word.to_string
+let of_string ~str v ctxt =
+  assert_equal ~ctxt ~printer:Word.to_string
     v (Word.of_string str)
 
 let print_int_list lst =
   let sexp_of_int n = Sexp.Atom (sprintf "0x%02X" n) in
   Sexp.to_string_hum (sexp_of_list sexp_of_int lst)
 
-let to_chars ~expect endian v () =
-  assert_equal
+let to_chars ~expect endian v ctxt =
+  assert_equal ~ctxt
     ~printer:print_int_list
     expect Word.(to_chars endian v      |>
                  Seq.map ~f:Char.to_int |>
                  Sequence.to_list)
 
-let concat ~expect v1 v2 () =
-  assert_equal ~printer:Word.to_string
+let concat ~expect v1 v2 ctxt =
+  assert_equal ~ctxt ~printer:Word.to_string
     expect Word.(v1 @. v2)
 
-let is_zero word () =
+let is_zero word ctxt =
   assert_bool Word.(to_string word) Word.(is_zero b0)
 
-let validate validate word () =
+let validate validate word ctxt =
   let v = validate word in
   assert_bool
     (String.concat ~sep:"\n" (Validate.errors v))
     (Validate.result v = Ok ())
 
-let binary op ~width ~expect x y () =
+let binary op ~width ~expect x y ctxt =
   let (!$) = Word.of_int ~width in
-  assert_equal
+  assert_equal ~ctxt
     ~printer:Word.to_string
     !$expect (op !$x !$y)
 
 let sub = binary Word.Int_exn.sub
 let lshift = binary Word.Int_exn.lshift
 
-let is yes () = assert_bool "doesn't hold" yes
+let is yes ctxt = assert_bool "doesn't hold" yes
 
 let lognot x y ~width =
   is Word.(Int_exn.lnot (of_int x ~width) = of_int y ~width)
 
-let bitsub ?hi ?lo ~expect v () =
+let bitsub ?hi ?lo ~expect v ctxt =
   let (!$) (z,w) = Word.of_int z ~width:w in
-  assert_equal
+  assert_equal ~ctxt
     ~printer:Word.to_string
     !$expect
     (Word.bitsub_exn ?hi ?lo !$v)
 
-let of_binary endian string ~expect () =
-  assert_equal
+let of_binary endian string ~expect ctxt =
+  assert_equal ~ctxt
     ~printer:Word.to_string
     expect
     (Word.of_binary endian string)
 
-let tests =
+
+let suite =
   "Bitvector" >:::
   [
     "13=13+1024|7"   >:: normalized ~n:13 ~add:1024 ~width:7;
@@ -224,7 +225,7 @@ let tests =
     "cast_low:8"  >:: bitsub ~expect:(0xD5,8) ~hi:0x7 (0xDAD5,16);
     "cast_low:4"  >:: bitsub ~expect:(0x5,4)  ~hi:0x3 (0xDAD5,16);
     "cast_mid:8"  >:: bitsub ~expect:(0xAD,8) ~hi:0xB ~lo:0x4 (0xDAD5,16);
-    "mono_size"   >:: (fun () ->
+    "mono_size"   >:: (fun ctxt ->
         assert_raises Word.Width
           (fun () -> Word.(Mono.(zero_32 < b0))));
 

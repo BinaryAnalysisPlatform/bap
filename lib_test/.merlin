@@ -1,0 +1,11 @@
+REC
+B ../_build/lib_test/bap_core
+B ../_build/lib_test/bap_dwarf
+B ../_build/lib_test/bap_elf
+B ../_build/lib_test/bap_image
+B ../_build/lib_test/bap_types
+S bap_core
+S bap_dwarf
+S bap_elf
+S bap_image
+S bap_types

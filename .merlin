@@ -1,0 +1,18 @@
+B _build
+B _build/lib/bap_core
+B _build/lib/bap_dwarf
+B _build/lib/bap_elf
+B _build/lib/bap_image
+B _build/lib/bap_types
+S lib/bap_core
+S lib/bap_dwarf
+S lib/bap_elf
+S lib/bap_image
+S lib/bap_types
+
+PKG core_kernel
+EXT ounit
+EXT here
+EXT ounit
+EXT nonrec
+FLAG -short-paths

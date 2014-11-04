@@ -1,7 +1,2 @@
-PKG compiler-libs
-PKG core_kernel
 PKG zarith
-EXT here
-EXT ounit
-EXT nonrec
-B _build
+REC

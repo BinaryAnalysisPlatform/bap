@@ -14,7 +14,10 @@ BuildDepends:
               camlp4,
               comparelib.syntax,
               core_kernel,
+              fieldslib.syntax,
               herelib.syntax,
+              herelib.syntax,
+              pa_ounit.syntax,
               pa_ounit.syntax,
               sexplib.syntax,
               variantslib.syntax
@@ -42,8 +45,13 @@ Library bap_core
   Path:            lib/bap_core
   FindLibName:     bap_core
   CompiledObject:  best
-  BuildDepends:    bap_core.types
-  Modules:         Bap_core
+  BuildDepends:    bap_core.dwarf,
+                   bap_core.elf,
+                   bap_core.image,
+                   bap_core.types,
+                   dynlink,
+                   findlib
+  Modules:         Bap_core, Bap_plugin, Bap_plugins
 
 Library top
   XMETADescription:
@@ -98,27 +106,98 @@ Library serialization
              Stmt_piqi,
              Stmt_piqi_ext
 
+Library bap_image
+  Path:          lib/bap_image/
+  FindlibParent: bap_core
+  FindlibName:   image
+  BuildDepends:  bap_core.elf,
+                 bap_core.dwarf,
+                 bap_core.types
+  Modules:       Bap_image,
+                 Image_backend,
+                 Image_types
+
+Library elf_backend
+  Path:            lib/bap_image/
+  FindlibParent:   bap_image
+  FindlibName:     elf_backend
+  XMETAExtraLines: plugin_system = "bap.image"
+  CompiledObject:  best
+  BuildDepends:    bap_core
+  Modules:         Image_elf
+
+Library elf
+  Path:          lib/bap_elf
+  FindlibParent: bap_core
+  FindlibName:   elf
+  BuildDepends:  bitstring, bitstring.syntax
+  Modules:       Bap_elf,
+                 Elf_parse,
+                 Elf_types
+
+Library dwarf
+  Path:          lib/bap_dwarf
+  FindlibParent: bap_core
+  FindlibName:   dwarf
+  BuildDepends:  bap_core.types
+  Modules:       Bap_dwarf,
+                 Dwarf_data,
+                 Dwarf_fbi,
+                 Dwarf_input,
+                 Dwarf_leb128,
+                 Dwarf_types
 
 Library types_test
-  Path: lib_test/bap_types
-  Build$: flag(tests)
+  Path:           lib_test/bap_types
+  Build$:         flag(tests)
+  Install:        false
   CompiledObject: best
-  BuildDepends: bap_core.types, bap_core.types.conceval
-  FindlibParent: types
-  FindlibName: tests
-  Modules:     Test_bitvector,
-               Test_conceval
+  BuildDepends:   bap_core.types, bap_core.types.conceval
+  Modules:        Test_bitvector,
+                  Test_conceval
+
+Library image_test
+  Path:           lib_test/bap_image
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap_core
+  Install:        false
+  Modules:        Test_image
+
+Library dwarf_test
+  Path:           lib_test/bap_dwarf
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap_core.dwarf
+  Install:        false
+  Modules:        Test_leb128
+
+Executable readbin
+  Path:           src/readbin
+  MainIs:         readbin.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap_core
+
+Executable fbi
+  Path:           src/fbi
+  MainIs:         fbi.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap_core
 
 Executable run_tests
   Path:         lib_test/bap_core
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)
-  BuildTools:   ocamlbuild
-  BuildDepends: oUnit, bap_core.types.tests
+  BuildDepends: oUnit, types_test, image_test, dwarf_test
   CompiledObject: best
 
-
-Test main
+Test unit_tests
   TestTools: run_tests
   Command: $run_tests
+
+Test inline_tests
+  TestTools: run_tests
+  Command: $run_tests inline-test-runner dummy -show-counts

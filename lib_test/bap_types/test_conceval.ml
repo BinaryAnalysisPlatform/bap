@@ -1,5 +1,5 @@
 open Core_kernel.Std
-open OUnit
+open OUnit2
 open Bap_types.Std
 
 open Conceval
@@ -24,134 +24,134 @@ let option_printer = function
   | None -> "None"
   | Some v -> sprintf "Some (%s)" @@ to_string v
 
-let tests =
+let suite =
   "Conceval" >:::
   [
     "Memory" >:::
     [
-      "Load without write" >:: (fun () ->
+      "Load without write" >:: (fun ctxt ->
           let mem = empty in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Memory.load mem (BV i0_8) LittleEndian `r32)
             None;
         );
 
-      "Basic write and load" >:: (fun () ->
+      "Basic write and load" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty
               ~idx:zero
               ~data:(BV (Addr.of_int32 0xDEADBEEFl)) LittleEndian `r32 in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV test_word))
             (Memory.load ~mem ~idx:zero LittleEndian `r32);
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Bitvector.of_int32 0xEFBEADDEl)))
             (Memory.load ~mem ~idx:zero BigEndian `r32);
         );
 
-      "Read low" >:: (fun () ->
+      "Read low" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty
               ~idx:zero
               ~data:(BV test_word)
               LittleEndian `r32 in
 
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV Word.(of_int 0xBEEF ~width:16)))
             (Memory.load ~mem ~idx:zero LittleEndian `r16);
 
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV Word.(of_int 0xEFBE ~width:16)))
             (Memory.load ~mem ~idx:zero BigEndian `r16);
         );
 
-      "Read high" >:: (fun () ->
+      "Read high" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty ~idx:zero
               ~data:(BV (Word.of_int32 0xdeadbeefl))
               LittleEndian `r32 in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xDEAD ~width:16)))
             (Memory.load ~mem ~idx:two LittleEndian `r16);
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xADDE ~width:16)))
             (Memory.load ~mem ~idx:two BigEndian `r16);
         );
 
-      "Read middle" >:: (fun () ->
+      "Read middle" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty ~idx:zero
               ~data:(BV test_word) LittleEndian `r32 in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xADBE ~width:16)))
             (Memory.load ~mem ~idx:one LittleEndian `r16);
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xBEAD ~width:16)))
             (Memory.load ~mem ~idx:one BigEndian `r16);
         );
 
-      "Read low (bigendian)" >:: (fun () ->
+      "Read low (bigendian)" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty ~idx:zero
               ~data:(BV (Word.of_int32 0xefbeaddel))
               BigEndian `r32 in
-          assert_equal  ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xBEEF ~width:16)))
             (Memory.load ~mem ~idx:zero LittleEndian `r16);
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xEFBE ~width:16)))
             (Memory.load ~mem ~idx:zero BigEndian `r16);
         );
 
-      "Read high (bigendian)" >:: (fun () ->
+      "Read high (bigendian)" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty ~idx:zero
               ~data:(BV (Bitvector.of_int32 0xefbeaddel))
               BigEndian `r32 in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xDEAD ~width:16)))
             (Memory.load ~mem ~idx:two LittleEndian `r16);
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Memory.load ~mem ~idx:two BigEndian `r16)
             (Some (BV (Word.of_int 0xADDE ~width:16)));
         );
 
-      "Read middle (bigendian)" >:: (fun () ->
+      "Read middle (bigendian)" >:: (fun ctxt ->
           let mem = Memory.store
               ~mem:empty ~idx:zero
               ~data:(BV (Word.of_int32 0xefbeaddel)) BigEndian `r32 in
-          assert_equal ~printer:option_printer
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xADBE ~width:16)))
             (Memory.load ~mem ~idx:one LittleEndian `r16);
-          assert_equal
+          assert_equal ~ctxt ~printer:option_printer
             (Some (BV (Word.of_int 0xBEAD ~width:16)))
             (Memory.load ~mem ~idx:one BigEndian `r16);
         );
     ];
     "eval_exp" >:::
     [
-      "BinOp" >:: (fun () ->
+      "BinOp" >:: (fun ctxt ->
           let state = State.empty in
-          assert_equal
+          assert_equal ~ctxt
             (eval_exp state Exp.(int i3_8 * int i3_8))
             (BV i9_8));
-      "UnOp" >:: (fun () ->
+      "UnOp" >:: (fun ctxt ->
           let state = State.empty in
-          assert_equal
+          assert_equal ~ctxt
             (eval_exp state Exp.(lnot (int i3_8)))
             (BV (Word.of_int ~width:8 (-4))));
     ];
     "eval_stmt" >:::
     [
-      "Move" >:: (fun () ->
+      "Move" >:: (fun ctxt ->
           let state = State.empty in
           let var = Var.create "Garfield" reg8_t in
           let state, _ = eval_stmt state Stmt.(move var Exp.(int i3_8)) in
-          assert_equal
+          assert_equal ~ctxt
             (State.peek state var)
             (Some (BV i3_8))
         );
-      "While" >:: (fun () ->
+      "While" >:: (fun ctxt ->
           let v = Var.create "Daisy" reg8_t in
           let state, _ =
             eval_stmt
@@ -165,7 +165,7 @@ let tests =
             (State.peek state v)
             (Some (BV (Word.of_int 101 ~width:8)))
         );
-      "collatz" >:: (fun () ->
+      "collatz" >:: (fun ctxt ->
           (* Starting with 17, we take 12 steps in the `3x+1` problem (OEIS). *)
           let v_steps = Var.create "nsteps" reg64_t in
           let v_n = Var.create ~tmp:true "n" reg64_t in
@@ -187,8 +187,8 @@ let tests =
           (* Format.(fprintf std_formatter "@.@[program@ =@ %a@.@]" *)
           (*           Stmt.pp_stmts prog); *)
           let state, _ = eval_stmts State.empty prog in
-          assert_equal (State.peek state v_n) None;
-          assert_equal
+          assert_equal ~ctxt (State.peek state v_n) None;
+          assert_equal ~ctxt
             (State.peek state v_steps)
             (Some (BV (Bitvector.of_int 12 ~width:64)))
         );

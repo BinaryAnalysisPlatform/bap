@@ -1,7 +1,7 @@
-[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 # Overview
+[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
+`Bap` library provides basic facilities for doing binary analysis
 
-`Bap_core` library provides basic facilities for doing binary analysis
 in OCaml.
 
 # Install
@@ -66,10 +66,10 @@ script:
 
 ```
  $ baptop
- utop # open Bap_core.Std;;
+ utop # open Bap.Std;;
 ```
 
-Now, you can play with `Bap_core`. For example:
+Now, you can play with `Bap`. For example:
 
 ```
  utop # let x = Word.of_int32 0xDEADBEEFl;;
@@ -90,7 +90,7 @@ the following in any ocaml top-level:
 ```
  # #use "topfind";;
  # #require "bap_core.top";;
- # open Bap_core.Std;;
+ # open Bap.Std;;
 ```
 
 And everything should work just out of box, i.e. it will load all
@@ -117,7 +117,7 @@ then just add `bap_core` to `BuildDepends` field. If you're using,
 ocamlbuild with ocamlfind plugin, then add `package(bap_core)` or
 `pkg_bap_core` to your `_tags` file.
 
-## Learning Bap_core
+## Learning Bap
 
 TBD
 

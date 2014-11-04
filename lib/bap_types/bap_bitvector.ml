@@ -60,11 +60,10 @@ module type Kernel = sig
   include Stringable with type t := t
 end
 
-
 (** internal representation *)
 module Make(Size : Compare) : Kernel = struct
-  type t = Internal.t with bin_io, sexp
   open Internal
+  type nonrec t = t with bin_io, sexp
 
   let module_name = "Bap_bitvector"
 

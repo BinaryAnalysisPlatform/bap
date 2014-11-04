@@ -14,8 +14,6 @@ rule "piqic: piqi -> .ml & _ext.ml"
      Cmd (S (List.filter nonempty [
          A (expand "${piqic}");
          A (expand "${piqic_flags}");
-         A "--debug";
-         A "1";
          A "-C";
          A "lib/bap_types";
          A "-I";
