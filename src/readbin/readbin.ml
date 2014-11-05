@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Or_error
-open Bap_core.Std
+open Bap.Std
 
 let string_of_perm s =
   let m f c = if f s then c else " " in

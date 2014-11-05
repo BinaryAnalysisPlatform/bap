@@ -4,7 +4,7 @@ ocamlbuild \
     -use-ocamlfind \
     -classic-display \
     -syntax camlp4o \
-    -pkg bap_core \
+    -pkg bap \
     -pkg core_kernel \
     -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
     -pkg bin_prot.syntax \

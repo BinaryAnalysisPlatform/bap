@@ -1,5 +1,5 @@
 open Core_kernel.Std
-open Bap_core.Std
+open Bap.Std
 open Or_error
 
 let eval_exn str =

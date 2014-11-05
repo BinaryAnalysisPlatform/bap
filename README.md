@@ -1,8 +1,7 @@
 # Overview
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
-`Bap` library provides basic facilities for doing binary analysis
 
-in OCaml.
+`Bap` library provides basic facilities for doing binary analysis in OCaml.
 
 # Install
 
@@ -29,7 +28,7 @@ environment.
  $ opam install oasis
 ```
 
-## Compiling and installing `bap_core`
+## Compiling and installing `bap`
 
 After all dependencies are installed, we can start the actual
 build. In a development version you need to start with an `oasis
@@ -89,7 +88,7 @@ the following in any ocaml top-level:
 
 ```
  # #use "topfind";;
- # #require "bap_core.top";;
+ # #require "bap.top";;
  # open Bap.Std;;
 ```
 
@@ -97,7 +96,7 @@ And everything should work just out of box, i.e. it will load all
 dependencies, install top-level printers, etc.
 
 
-## Compiling with `bap_core`
+## Compiling with `bap`
 
 As with top-level, you can use our script named `bapbuild` to start
 working without tackling with all this build systems. Just type
@@ -112,10 +111,10 @@ that he can't find something, then make sure that you didn't skip
 
 When using your own build environment, then make sure, that you have
 added us as a dependency. We are installing as `ocamlfind`-enabled
-project named `bap_core`. For example, if you're using `oasis`,
-then just add `bap_core` to `BuildDepends` field. If you're using,
-ocamlbuild with ocamlfind plugin, then add `package(bap_core)` or
-`pkg_bap_core` to your `_tags` file.
+project named `bap`. For example, if you're using `oasis`,
+then just add `bap` to `BuildDepends` field. If you're using,
+ocamlbuild with ocamlfind plugin, then add `package(bap)` or
+`pkg_bap` to your `_tags` file.
 
 ## Learning Bap
 

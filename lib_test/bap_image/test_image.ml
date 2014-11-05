@@ -3,7 +3,7 @@ open OUnit2
 open Or_error
 open Word_size
 
-open Bap_core.Std
+open Bap.Std
 open Image_backend
 
 let create_addr = function
