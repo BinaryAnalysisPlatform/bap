@@ -20,6 +20,6 @@ let is_var_undefined name =
   with PropList.Unknown_field _ -> true
 
 let () =
+  setup ();
   if is_var_undefined "piqic" then
-    def_piqic ();
-  setup ();;
+    def_piqic ()
