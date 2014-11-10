@@ -10,8 +10,12 @@
 The easiest way is to install packages using `opam` package manager:
 
 ```
- $ opam install core_kernel zarith
+ $ opam install core_kernel zarith bitstring
 ```
+
+Note: the up to date source of our dependency list can be looked up in
+travis automation script. Variable `OPAM_DEPENDS` lists our opam depends, and
+`SYS_DEPENDS` lists system packages for ubuntu. 
 
 If you would like to use our serialization library, then please also
 install a `piqi` tool with the following invocation:
