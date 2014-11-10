@@ -1,2 +1,4 @@
+open Core_kernel.Std
 open Elf_types
-val of_string : string -> elf option
+
+val from_bigstring : ?pos:int -> ?len:int ->  Bigstring.t -> elf Or_error.t

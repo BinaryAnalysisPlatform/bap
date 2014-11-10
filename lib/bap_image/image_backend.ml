@@ -1,26 +1,30 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Image_common
 
-type perm = { r : bool; w : bool; x : bool}
+type perm = R | W | X | Or of perm * perm
+with bin_io, compare, sexp
 
+(** A named contiguous part of file with permissions.  *)
 module Section = struct
   type t = {
     name: string;
-    addr: addr;         (** virtual address of the first byte *)
     perm: perm;         (** section's permissions  *)
-    off:  int;          (** offset in a data  *)
-    size: int;          (** size of section in a data  *)
-    data: Bigstring.t;  (** section data  *)
-  } with fields
+    off: int;
+    vsize : int;        (** virtual size  *)
+    location : location;
+  } with bin_io, compare, fields, sexp
 end
 
+(** Symbol definition, that can span several non-contiguous parts of
+    memory *)
 module Sym = struct
   type t = {
-    name : string option;
-    kind: [`undef | `func];
-    addr: addr;
-    size: int option;
-  } with fields
+    name : string;
+    is_function : bool;
+    is_debug : bool;
+    locations : location * location list;
+  } with bin_io, compare, fields, sexp
 end
 
 module Img = struct
@@ -29,13 +33,9 @@ module Img = struct
     addr_size: Word_size.t;
     endian   : endian;
     entry    : addr;
-    sections : Section.t array;
-    symbols  : Sym.t array;
+    sections : Section.t * Section.t list;
+    symbols  : Sym.t list;
   } with fields
 end
 
-type t = {
-  (** [read data imag]  *)
-  of_data: Bigstring.t -> Img.t option;
-  to_data: (Img.t -> Bigstring.t) option;
-}
+type t = Bigstring.t -> Img.t option

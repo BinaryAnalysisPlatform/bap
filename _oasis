@@ -75,6 +75,7 @@ Library types
                    Bap_bitvector,
                    Bap_common,
                    Bap_exp,
+                   Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
                    Bap_regular,
@@ -114,8 +115,11 @@ Library bap_image
                  bap.dwarf,
                  bap.types
   Modules:       Bap_image,
+                 Bap_memory,
+                 Bap_table,
                  Image_backend,
-                 Image_types
+                 Image_common,
+                 Image_internal_std
 
 Library elf_backend
   Path:            lib/bap_image/
@@ -133,7 +137,9 @@ Library elf
   BuildDepends:  bitstring, bitstring.syntax
   Modules:       Bap_elf,
                  Elf_parse,
-                 Elf_types
+                 Elf_types,
+                 Elf_utils
+  InternalModules: Elf_internal_utils
 
 Library dwarf
   Path:          lib/bap_dwarf

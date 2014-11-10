@@ -219,27 +219,18 @@ module Std = struct
   type unop      = Exp.Unop.t  with bin_io, compare, sexp
   type binop     = Exp.Binop.t with bin_io, compare, sexp
 
+  (** {2 Common type abbreviations}  *)
 
-  (** A signature for a lifter.
-      Maybe it should move away from here. *)
-  module type ARCH =
-  sig
-    type cpustate
-    val arch : arch
-    val mem_index_type : typ
-    val mem : var
-    val sp  : var
-    val ip  : var
-    val init_state : cpustate
-    val state_with_addr : cpustate
-      -> addr
-      -> cpustate
-    val regs : var list
-    val disasm : cpustate
-      -> (addr -> char)
-      -> addr
-      -> cpustate * stmt list * addr * string option
+  module Seq = struct
+    include Sequence
+    include Bap_seq
   end
 
-  exception Arch_exception of arch * string
+  include Seq.Export
+
+  type 'a seq = 'a Seq.seq with sexp
+  type bigstring = Bigstring.t
+
+  include Bap_int_conversions
+
 end
