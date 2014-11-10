@@ -32,6 +32,12 @@ environment.
  $ opam install oasis
 ```
 
+We also recommend you install utop for running BAP.  
+
+```
+ $ opam install utop
+```
+
 ## Compiling and installing `bap`
 
 After all dependencies are installed, we can start the actual
@@ -40,6 +46,7 @@ setup` command. If you're building a released sources, then you can
 skip this section. Now, run the following triplet:
 
 ```
+ $ oasis setup  # only needed if you have cloned off git
  $ ./configure --prefix=$(opam config var prefix)
  $ make
  $ make install
