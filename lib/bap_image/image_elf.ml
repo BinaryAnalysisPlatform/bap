@@ -4,26 +4,53 @@ open Or_error
 open Bap.Std
 open Elf.Types
 open Image_backend
+open Image_common
 
-let name = "ocaml-elf"
+let name = "bap-elf"
 
-let perm_of_flags flags =
-  let init = {x = false; w = false; r = false} in
-  List.fold flags ~init ~f:(fun perm -> function
-      | PF_X -> { perm with x = true }
-      | PF_W -> { perm with w = true }
-      | PF_R -> { perm with r = true }
-      | _ -> perm)
+let perm_of_flag = function
+  | PF_X -> Some X
+  | PF_W -> Some W
+  | PF_R -> Some R
+  | PF_EXT _ -> None
 
-let create_symtab endian elf =
+
+let perm_of_flags = function
+  | [] -> errorf "empty flag list"
+  | x :: xs ->
+    let perm = List.fold xs ~init:None ~f:(fun perm flag ->
+        Option.merge perm (perm_of_flag flag)
+          ~f:(fun p1 p2 -> Or (p1,p2))) in
+    match perm with
+    | None -> errorf "invalid set of flags"
+    | Some perm -> return perm
+
+let section_data  data s : string Or_error.t =
+  int_of_int64 s.sh_size >>= fun size ->
+  int_of_int64 s.sh_offset >>= fun offset ->
+  try
+    let dst = String.create size in
+    Bigstring.To_string.blit
+      ~src:data ~src_pos:offset
+      ~dst ~dst_pos:0 ~len:size;
+    return dst
+  with exn -> of_exn exn
+
+let create_symtab data endian elf  =
   let module Buffer = Dwarf.Data.Buffer in
-  let create name s = Some (name, Buffer.create s.sh_data) in
-  let sections = List.filter_map elf.e_sections ~f:(fun s ->
-      match s.sh_name with
-      | ".debug_info"   -> create Dwarf.Section.Info s
-      | ".debug_abbrev" -> create Dwarf.Section.Abbrev s
-      | ".debug_str"    -> create Dwarf.Section.Str s
-      | _ -> None) in
+  let create name s =
+    match section_data data s with
+    | Error err -> None          (* TODO something *)
+    | Ok data ->   Some (name, Buffer.create data) in
+  let sections = Seq.filter_map elf.e_sections ~f:(fun s ->
+      let name =
+        Elf.section_name data elf s in
+      match name with
+      | Ok ".debug_info"   -> create Dwarf.Section.Info s
+      | Ok ".debug_abbrev" -> create Dwarf.Section.Abbrev s
+      | Ok ".debug_str"    -> create Dwarf.Section.Str s
+      | Ok _ | Error _ -> None) in
+  let sections = Seq.to_list_rev sections in
   Dwarf.Data.create endian sections >>= fun data ->
   Dwarf.Fbi.create data >>= fun dff ->
   let seq = Sequence.mapi (Dwarf.Fbi.functions dff) ~f:(fun i (name,fn) ->
@@ -33,39 +60,53 @@ let create_symtab endian elf =
         | Some pc_hi ->
           Addr.Int.(!$pc_hi - !$pc_lo) >>= Addr.to_int >>| fun size ->
           Some size in
-      size >>= fun size -> return {
-        Sym.name = Some name;
-        Sym.kind = `func;
-        Sym.addr = pc_lo;
-        Sym.size = size
+      size >>= fun size ->
+      let location = Location.({
+          addr = pc_lo;
+          len = Option.value size ~default:1
+        }) in
+      return {
+        Sym.name = name;
+        Sym.is_function = true;
+        Sym.is_debug = true;
+        Sym.locations = location, [];
       }) in
   all (Sequence.to_list_rev seq)
 
-let create_section addr i es =
-  let name = sprintf "%02d" i in
-  let name = if es.p_type = PT_LOAD then Some name else None in
-  let open Option.Monad_infix in
-  name >>= fun name -> Int64.to_int es.p_memsz >>= function
-  | 0 -> None
-  | size ->
-    let data = Bigstring.init size ~f:(fun (_:int) -> '\000') in
-    Bigstring.From_string.blito ~src:es.p_data ~dst:data ();
-    Some {
-      Section.name;
-      Section.addr = addr es.p_vaddr;
-      Section.perm = perm_of_flags es.p_flags;
-      Section.off = 0;
-      Section.size = String.length es.p_data;
-      Section.data;
-    }
-
+(** @return
+    [None] - if section should be skipped as non interesting,
+    [Some error] - if an error has occured when we have tried
+                   to load section,
+    [Some (Ok section)] - if we have loaded section at the end.
+*)
+let create_section make_addr i es : Section.t Or_error.t option =
+  if es.p_type <> PT_LOAD then None
+  else
+    let section =
+      let name = sprintf "%02d" i in
+      int_of_int64 es.p_filesz >>= fun len ->
+      int_of_int64 es.p_offset >>= fun off ->
+      int_of_int64 es.p_memsz  >>= fun vsize ->
+      perm_of_flags es.p_flags >>= fun perm ->
+      let addr = make_addr es.p_vaddr in
+      let location = Location.Fields.create ~len ~addr in
+      return  {
+        Section.name;
+        Section.perm;
+        Section.off;
+        Section.location;
+        Section.vsize;
+      } in
+    match section with
+    | Error _ as err ->
+      Some (tag_arg err "skipped segment" i sexp_of_int)
+    | ok -> Some ok
 
 let addr_maker = function
   | Word_size.W32 -> fun x -> Addr.of_int32 (Int64.to_int32_exn x)
   | Word_size.W64 -> Addr.of_int64
 
-
-let img_of_elf elf : Img.t Or_error.t =
+let img_of_elf data elf : Img.t Or_error.t =
   let endian = match elf.e_data with
     | ELFDATA2LSB -> LittleEndian
     | ELFDATA2MSB -> BigEndian in
@@ -79,42 +120,40 @@ let img_of_elf elf : Img.t Or_error.t =
     | EM_X86_64 -> Ok Arch.X86_64
     | EM_ARM -> Ok Arch.ARM
     | _ -> errorf "can't load file, unsupported platform" in
-  let sections =
-    Array.of_list @@
-    List.filter_mapi elf.e_segments (create_section addr) in
-  let symbols = match create_symtab endian elf with
-    | Ok syms -> Array.of_list_rev syms
+  let sections,errors =
+    Seq.filter_mapi elf.e_segments (create_section addr) |>
+    Seq.to_list |>
+    List.partition_map ~f:(function
+        | Ok s    -> `Fst s
+        | Error e -> `Snd e) in
+  let symbols,errors =
+    match create_symtab data endian elf with
+    | Ok syms -> syms,errors
     | Error err ->
-      eprintf "Elf_backend: failed to read symbols: %s\n" @@
-      Error.to_string_hum err;
-      [| |] in
+      [], Error.tag err "failed to read symbols" :: errors in
   arch >>= fun arch ->
-  if Array.length sections = 0
-  then errorf "failed to read sections"
-  else Ok (Img.Fields.create
-             ~arch ~addr_size ~endian ~entry ~sections ~symbols)
+  match sections with
+  | [] -> errorf "failed to read sections"
+  | s::ss ->
+    let img = Img.Fields.create
+        ~arch ~addr_size ~endian ~entry ~sections:(s,ss) ~symbols in
+    Ok img
 
-let of_data_exn (data : bigstring) : Img.t option =
-  match Elf.Parse.of_string (Bigstring.to_string data) with
-  | None -> eprintf "Elf_backend: failed for unknown reason\n"; None
-  | Some elf -> match img_of_elf elf with
-    | Ok img -> Some img
-    | Error err ->
-      eprintf "Elf_backend: %s\n" @@
-      Error.to_string_hum err;
-      None
+let of_data_err (data : bigstring) : Img.t Or_error.t =
+  Elf.Parse.from_bigstring data >>= img_of_elf data
 
-let of_data data =
-  try of_data_exn data
-  with exn ->
+let of_data (data : Bigstring.t) : Img.t option =
+  match of_data_err data  with
+  | Ok img -> Some img
+  | Error err ->
     eprintf "Elf_backend: failed with exn: %s" @@
-    Exn.to_string exn;
+    Error.to_string_hum err;
     None
 
 
 let () =
   let r =
-    Bap_image.register_backend ~name {of_data; to_data = None;} in
+    Bap_image.register_backend ~name of_data in
   match r with
   | `Ok -> ()
   | `Duplicate ->

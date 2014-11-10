@@ -1,4 +1,4 @@
-open Bap_types.Std
+open Bap.Std
 
 let zero = Word.of_int32 0l
 let one  = Word.of_int32 1l

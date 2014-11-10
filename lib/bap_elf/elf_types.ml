@@ -1,3 +1,5 @@
+open Core_kernel.Std
+
 type e_class =
   | ELFCLASS32
   | ELFCLASS64
@@ -123,7 +125,7 @@ type p_type =
   | PT_NOTE
   | PT_SHLIB
   | PT_PHDR
-  | PT_OTHER of Int32.t
+  | PT_OTHER of int32
 
 type p_flag =
   | PF_X
@@ -144,7 +146,7 @@ type sh_type =
   | SHT_REL
   | SHT_SHLIB
   | SHT_DYNSYM
-  | SHT_EXT of Int32.t
+  | SHT_EXT of int32
 
 type sh_flag =
   | SHF_WRITE
@@ -153,26 +155,27 @@ type sh_flag =
   | SHF_EXT of int
 
 type segment = {
-  p_type : p_type;
-  p_flags : p_flag list;
-  p_vaddr : Int64.t;
-  p_paddr : Int64.t;
-  p_align : Int64.t;
-  p_memsz : Int64.t;
-  p_data : string;
+  p_type   : p_type;
+  p_flags  : p_flag list;
+  p_vaddr  : int64;
+  p_paddr  : int64;
+  p_align  : int64;
+  p_memsz  : int64;
+  p_filesz : int64;
+  p_offset : int64;
 }
 
 type section = {
-  sh_name : string;
+  sh_name : int;
   sh_type : sh_type;
   sh_flags : sh_flag list;
-  sh_addr : Int64.t;
-  sh_size : Int64.t;
-  sh_link : Int32.t;
-  sh_info : Int32.t;
-  sh_addralign : Int64.t;
-  sh_entsize : Int64.t;
-  sh_data : string;
+  sh_addr : int64;
+  sh_size : int64;
+  sh_link : int32;
+  sh_info : int32;
+  sh_addralign : int64;
+  sh_entsize : int64;
+  sh_offset : int64;
 }
 
 type elf = {
@@ -183,13 +186,14 @@ type elf = {
   e_abiver : int;
   e_type : e_type;
   e_machine : e_machine;
-  e_entry : Int64.t;
-  e_sections : section list;
-  e_segments : segment list;
+  e_entry : int64;
+  e_shstrndx : int;
+  e_sections : section Sequence.t;
+  e_segments : segment Sequence.t;
 }
 
 type table_info = {
-  table_offset : Int64.t;
+  table_offset : int64;
   entry_size : int;
   entry_num : int;
 }

@@ -17,6 +17,7 @@ BuildDepends:
               fieldslib.syntax,
               herelib.syntax,
               herelib.syntax,
+              pa_bench.syntax,
               pa_ounit.syntax,
               pa_ounit.syntax,
               sexplib.syntax,
@@ -41,6 +42,10 @@ Flag serialization
   Description: "Build serialization library"
   Default: false
 
+Flag benchmarks
+  Description: "Build and run benchmarks"
+  Default: false
+
 Library bap
   Path:            lib/bap
   FindLibName:     bap
@@ -51,7 +56,9 @@ Library bap
                    bap.types,
                    dynlink,
                    findlib
-  Modules:         Bap, Bap_plugin, Bap_plugins
+  Modules:         Bap,
+                   Bap_plugin,
+                   Bap_plugins
 
 Library top
   XMETADescription:
@@ -59,7 +66,11 @@ Library top
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
-  Modules:  Bap_install_printers
+  Modules:
+            Bap_install_printers,
+            Bap_load_plugins,
+            Bap_toplevel
+
   BuildDepends: compiler-libs, bap
 
 Library types
@@ -75,9 +86,11 @@ Library types
                    Bap_bitvector,
                    Bap_common,
                    Bap_exp,
+                   Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
                    Bap_regular,
+                   Bap_seq,
                    Bap_size,
                    Bap_stmt,
                    Bap_type,
@@ -114,8 +127,11 @@ Library bap_image
                  bap.dwarf,
                  bap.types
   Modules:       Bap_image,
+                 Bap_memory,
+                 Bap_table,
                  Image_backend,
-                 Image_types
+                 Image_common,
+                 Image_internal_std
 
 Library elf_backend
   Path:            lib/bap_image/
@@ -123,7 +139,7 @@ Library elf_backend
   FindlibName:     elf_backend
   XMETAExtraLines: plugin_system = "bap.image"
   CompiledObject:  best
-  BuildDepends:    bap
+  BuildDepends:    bap, core_kernel
   Modules:         Image_elf
 
 Library elf
@@ -133,7 +149,9 @@ Library elf
   BuildDepends:  bitstring, bitstring.syntax
   Modules:       Bap_elf,
                  Elf_parse,
-                 Elf_types
+                 Elf_types,
+                 Elf_utils
+  InternalModules: Elf_internal_utils
 
 Library dwarf
   Path:          lib/bap_dwarf
@@ -163,6 +181,14 @@ Library image_test
   BuildDepends:   bap
   Install:        false
   Modules:        Test_image
+
+Library benchmarks
+  Path:           benchmarks
+  Build$:         flag(tests) && flag(benchmarks)
+  CompiledObject: best
+  BuildDepends:   bap, core, core_bench, threads
+  Install:        false
+  Modules:        Bench_image
 
 Library dwarf_test
   Path:           lib_test/bap_dwarf
@@ -194,6 +220,14 @@ Executable run_tests
   BuildDepends: oUnit, types_test, image_test, dwarf_test
   CompiledObject: best
 
+Executable run_benchmarks
+  Path:         benchmarks
+  MainIs:       run_benchmarks.ml
+  Install:      false
+  Build$:       flag(tests) && flag(benchmarks)
+  BuildDepends: bap, benchmarks
+  CompiledObject: native
+
 Test unit_tests
   TestTools: run_tests
   Command: $run_tests
@@ -201,3 +235,8 @@ Test unit_tests
 Test inline_tests
   TestTools: run_tests
   Command: $run_tests inline-test-runner dummy -show-counts
+
+Test benchmarks
+  TestTools: run_benchmarks
+  Run$:         flag(tests) && flag(benchmarks)
+  Command: $run_benchmarks

@@ -1,0 +1,9 @@
+REC
+B ../_build/lib_test/bap_core
+B ../_build/lib_test/bap_dwarf
+B ../_build/lib_test/bap_elf
+B ../_build/lib_test/bap_image
+B ../_build/lib_test/bap_types
+
+PKG core
+PKG core_bench
