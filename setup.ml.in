@@ -20,6 +20,7 @@ let is_var_undefined name =
   with PropList.Unknown_field _ -> true
 
 let () =
+  if Sys.file_exists BaseEnv.default_filename &&
+     is_var_undefined "piqic" then
+    def_piqic ();
   setup ();
-  if is_var_undefined "piqic" then
-    def_piqic ()
