@@ -56,14 +56,14 @@ skip this section. Now, run the following triplet:
 with errors if something goes wrong. So make sure, that you have
 checked its result.
 
-If you're already installed `bap_types` previously, then use
+If you're already installed `bap` previously, then use
 
 ```
  $ make reinstall
 ```
 
 command instead of `make install`. If it still complains, then try to
-remove old `bap_types` manually with a `ocamlfind remove bap_types`
+remove old `bap` manually with a `ocamlfind remove bap`
 command.
 
 # Using
@@ -118,9 +118,10 @@ working without tackling with all this build systems. Just type
 
 and everything should work just out-of-box. If `bapbuild` complains
 that he can't find something, then make sure that you didn't skip
-[Install] phase.
+[Install] phase. You can add your own dependencies with a `-package` 
+command line option.
 
-When using your own build environment, then make sure, that you have
+If you're using your own build environment, then make sure, that you have
 added us as a dependency. We are installing as `ocamlfind`-enabled
 project named `bap`. For example, if you're using `oasis`,
 then just add `bap` to `BuildDepends` field. If you're using,
