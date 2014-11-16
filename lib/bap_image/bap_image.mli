@@ -14,6 +14,8 @@ type sec with bin_io, compare, sexp
 (** symbol  *)
 type sym with bin_io, compare, sexp
 
+type path = string
+
 (** {2 Constructing}  *)
 
 (** constructing an image can result in actual image and a set
@@ -22,20 +24,20 @@ type sym with bin_io, compare, sexp
     this information messages can be considered as warnings. *)
 type result = (t * Error.t list) Or_error.t
 
-(** [create ?backend ~path:filename] creates an image of the file
+(** [create ?backend filename] creates an image of the file
     specified specified by the [filename]. If [backend] is not specfied,
     then all backends are tried in order. If only one backend can read
     this file (i.e., there is no ambiguity), then image is
     returned. *)
-val create : ?backend:string -> path:string -> result
+val create : ?backend:string -> path -> result
 
 (** [of_string ?backend ~data] creates an image from the specified
     [data]. See {!create} for [backend] parameter. *)
-val of_string : ?backend:string -> data:string -> result
+val of_string : ?backend:string -> string -> result
 
 (** [of_string ?backend ~data] creates an image from the specified
     [data]. See {!create} for [backend] parameter. *)
-val of_bigstring : ?backend:string -> data:Bigstring.t -> result
+val of_bigstring : ?backend:string -> Bigstring.t -> result
 
 (** {2 Attributes}  *)
 

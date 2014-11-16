@@ -5,3 +5,5 @@
 *)
 
 val load : unit -> unit
+
+val all : unit -> Bap_plugin.t list

@@ -10,6 +10,7 @@ open Backend
 type 'a m = 'a Or_error.t
 type img = Backend.Img.t
 type mem = Memory.t
+type path = string
 
 let backends : Backend.t String.Table.t =
   String.Table.create ()
@@ -229,16 +230,16 @@ let autoload data path =
   | [] -> errorf "Autoloader: no suitable backend found"
   | _  -> errorf "Autoloader: can't resolve proper backend"
 
-let create_image path ?backend ~data : result =
+let create_image path ?backend data : result =
   match backend with
   | None -> autoload data path
   | Some backend -> of_backend backend data path
 
-let of_bigstring ?backend ~data =
-  create_image "memory" ?backend ~data
+let of_bigstring ?backend data =
+  create_image "memory" ?backend data
 
-let of_string ?backend ~data =
-  of_bigstring ?backend ~data:(Bigstring.of_string data)
+let of_string ?backend data =
+  of_bigstring ?backend (Bigstring.of_string data)
 
 let mapfile path : Bigstring.t option =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
@@ -256,7 +257,7 @@ let readfile path : Bigstring.t =
   | Some data -> data
   | None -> Bigstring.of_string (In_channel.read_all path)
 
-let create ?backend ~path : result =
+let create ?backend path : result =
   try_with (fun () -> readfile path) >>= fun data ->
   match backend with
   | None -> autoload data path

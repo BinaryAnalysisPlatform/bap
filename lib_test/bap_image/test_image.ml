@@ -92,7 +92,7 @@ let print_list r =
 
 let to_list ~word_size backend ~expect ctxt =
   let data = String.Table.find_exn files backend in
-  let r = Image.of_string ~backend ~data >>| fun (img,errs) ->
+  let r = Image.of_string ~backend data >>| fun (img,errs) ->
     assert_bool "to_list: no warning" (errs = []);
     Table.to_sequence (Image.words img word_size) |>
     Seq.map ~f:snd |>  Seq.to_list in
@@ -102,7 +102,7 @@ let to_list ~word_size backend ~expect ctxt =
 
 let check ?(base=0) backend ~f ctxt =
   let data = String.Table.find_exn files backend in
-  let r = Image.of_string ~backend ~data
+  let r = Image.of_string ~backend data
     >>= fun (img,warns) ->
     assert_bool "check: no warning" (warns = []);
     f img >>= fun _ -> return () in

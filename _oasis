@@ -17,6 +17,7 @@ BuildDepends:
               fieldslib.syntax,
               herelib.syntax,
               herelib.syntax,
+              pa_bench.syntax,
               pa_ounit.syntax,
               pa_ounit.syntax,
               sexplib.syntax,
@@ -51,7 +52,9 @@ Library bap
                    bap.types,
                    dynlink,
                    findlib
-  Modules:         Bap, Bap_plugin, Bap_plugins
+  Modules:         Bap,
+                   Bap_plugin,
+                   Bap_plugins
 
 Library top
   XMETADescription:
@@ -59,7 +62,11 @@ Library top
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
-  Modules:  Bap_install_printers
+  Modules:
+            Bap_install_printers,
+            Bap_load_plugins,
+            Bap_toplevel
+
   BuildDepends: compiler-libs, bap
 
 Library types
@@ -79,6 +86,7 @@ Library types
                    Bap_integer,
                    Bap_integer_intf,
                    Bap_regular,
+                   Bap_seq,
                    Bap_size,
                    Bap_stmt,
                    Bap_type,
@@ -127,7 +135,8 @@ Library elf_backend
   FindlibName:     elf_backend
   XMETAExtraLines: plugin_system = "bap.image"
   CompiledObject:  best
-  BuildDepends:    bap
+  ByteOpt:         -linkall
+  BuildDepends:    bap, core_kernel
   Modules:         Image_elf
 
 Library elf
