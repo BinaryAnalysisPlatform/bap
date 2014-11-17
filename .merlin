@@ -15,4 +15,4 @@ EXT ounit
 EXT here
 EXT ounit
 EXT nonrec
-FLAG -short-paths
+FLG -short-paths

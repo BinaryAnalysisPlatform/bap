@@ -31,6 +31,8 @@ val addr_of_int_opt : int -> addr_size option
 
 val addr_of_word_size : Word_size.t -> addr_size
 
+val word_of_addr_size : addr_size -> Word_size.t
+
 val to_addr_size : size -> addr_size Or_error.t
 
 (** [to_bits size] returns the number of bits. *)

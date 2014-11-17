@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Or_error
 open Bap.Std
+open Format
 
 let string_of_perm s =
   let m f c = if f s then c else " " in
@@ -12,35 +13,29 @@ let string_of_perm s =
 
 let main () =
   let r =
-    Image.create Sys.argv.(1) >>| fun img -> begin
+    Image.create Sys.argv.(1) >>| fun (img,warns) -> begin
     let open Image in
     let bits = match addr_size img with
       | Word_size.W32 -> 32
       | Word_size.W64 -> 64 in
-    let addrlen = bits / 4 in
     printf "File name:    %s\n" @@ filename img;
     printf "Architecture: %s\n" @@ Arch.to_string (arch img);
     printf "Address size: %d\n" bits;
     printf "Entry point:  %s\n" @@ Addr.to_string (entry_point img);
     printf "Symbols:\n";
-    Sequence.iter (symbols img) ~f:(fun s ->
-        printf "Symbol name: %s\n" @@
-        Option.value ~default:"unknown" (Sym.name s);
-        printf "Symbol data:\n%s\n" @@ Sym.hexdump s;
-
+    Table.iteri (symbols img) ~f:(fun mem s ->
+        printf "Symbol name: %s\n" (Sym.name s);
+        printf "Symbol data:\n%a\n" Memory.pp mem;
       );
     printf "Loadable sections: %d\n" @@
-    Sequence.length (sections img);
+    Table.length (sections img);
     printf "\n";
-    Sequence.iter (sections img) ~f:(fun s ->
+    Table.iteri (sections img) ~f:(fun mem s ->
         printf "Section name : %s\n" @@ Sec.name s;
         printf "Section start: %s\n" @@
-        Addr.to_string @@ Sec.addr s;
-        printf "Virtual size : 0x%0*X\n"  addrlen @@ Sec.size s;
+        Addr.to_string @@ Memory.min_addr mem;
         printf "Section perm : %s\n" @@ string_of_perm s;
-        let mem = Sec.memory_exn s in
-        Mem_exn.hexdump mem Format.str_formatter;
-        printf "Section data:\n%s\n" (Format.flush_str_formatter ()));
+        printf "Section data:\n%a\n" Memory.pp mem);
   end in
   match r with
   | Ok () -> ()
