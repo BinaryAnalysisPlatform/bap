@@ -1,6 +1,10 @@
 *.mldylib
 *.mllib
+*.clib
 *.mlpack
+*.ba*
+myocamlbuild.ml
+/*.native
 *.odocl
 /*.byte
 /*.docdir

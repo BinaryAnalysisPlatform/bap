@@ -14,3 +14,11 @@ S lib/bap_dwarf
 S lib/bap_elf
 S lib/bap_image
 S lib/bap_types
+
+PKG core_kernel
+PKG ocamlbuild
+EXT ounit
+EXT here
+EXT ounit
+EXT nonrec
+FLG -short-paths

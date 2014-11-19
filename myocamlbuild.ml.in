@@ -3,26 +3,36 @@ let oasis_env =
     ~filename:MyOCamlbuildBase.env_filename
     ~allow_empty:true
     ()
-let nonempty = function (A s) -> String.length s != 0 | _ -> true
+let nonempty = function (A s) -> String.length s <> 0 | _ -> true
 let expand s = BaseEnvLight.var_expand s oasis_env;;
 
 (* the piqi support is rather fragile *)
-rule "piqic: piqi -> .ml & _ext.ml"
-  ~prods:["%_piqi.ml"; "%_piqi_ext.ml"]
-  ~deps:["%.piqi"]
-  (fun env _ ->
-     Cmd (S (List.filter nonempty [
-         A (expand "${piqic}");
-         A (expand "${piqic_flags}");
-         A "-C";
-         A "lib/bap_types";
-         A "-I";
-         A "../lib/bap_types";
-         A (env "%.piqi");
-         A"--multi-format"])));;
+let piqic_rule () : unit =
+  rule "piqic: piqi -> .ml & _ext.ml"
+    ~prods:["%_piqi.ml"; "%_piqi_ext.ml"]
+    ~deps:["%.piqi"]
+    (fun env _ ->
+       Cmd (S (List.filter nonempty [
+           A (expand "${piqic}");
+           A (expand "${piqic_flags}");
+           A "-C";
+           A "lib/bap_types";
+           A "-I";
+           A "../lib/bap_types";
+           A (env "%.piqi");
+           A"--multi-format"])));;
 
+let cxx_rule () =
+  let deps = ["%.hpp"; "%.cpp"; "%.h"] and prod = "%.o" in
+  let action env _ = Cmd (S [
+      Sh (expand "${cxx} ${cxxflags} ${llvm_cxxflags}");
+      A "-c"; P (env "%.cpp"); A "-o"; P (env "%.o")]) in
+  rule "cxx: hpp & cpp & h -> o" ~deps ~prod action
 
 let dispatch = function
+  | Before_rules ->
+    piqic_rule ();
+    cxx_rule ();
   | After_rules ->
     List.iter
       (fun tag ->
