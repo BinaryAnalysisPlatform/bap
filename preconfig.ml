@@ -1,7 +1,6 @@
 let targets = [
   "myocamlbuild.ml.in", "myocamlbuild.ml";
   "setup.ml.in",        "setup.ml";
-  "Makefile.in",        "Makefile";
   "_tags.in",           "_tags";
 ]
 

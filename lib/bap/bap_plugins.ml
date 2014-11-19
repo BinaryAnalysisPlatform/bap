@@ -2,7 +2,9 @@ open Core_kernel.Std
 
 
 let systems = [
-  "bap.image"
+  "bap.image";
+  "bap.disasm"
+
 ]
 
 let string_of_or_error = function
@@ -11,7 +13,7 @@ let string_of_or_error = function
 
 let load () =
   List.iter systems
-    ~f:(fun system -> List.iter (Bap_plugin.load_all ~system:"bap.image")
+    ~f:(fun system -> List.iter (Bap_plugin.load_all ~system)
            ~f:(function
                | _, Ok () -> ()
                | pkg, Error err ->
