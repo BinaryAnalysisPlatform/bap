@@ -82,9 +82,9 @@ struct operand {
         fmm fmm_val;
     };
 
-// this is not in a union since we have a recursion in insn field. We
-// can either leak, or use more memory for each operand. I prefer the
-// latter.
+    // this is not in a union since we have a recursion in insn field. We
+    // can either leak, or use more memory for each operand. I prefer the
+    // latter.
     std::shared_ptr<insn> insn_val;
 };
 
@@ -98,7 +98,9 @@ struct insn {
     int code;
     int name;
     location loc;
-    std::array<operand,max_operands>  ops;
+    int ops_num;
+    operand ops[max_operands];
+    // std::array<operand,max_operands>  ops;
 };
 
 

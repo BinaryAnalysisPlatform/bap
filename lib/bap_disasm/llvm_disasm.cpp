@@ -47,12 +47,9 @@ public:
 
     int readByte(uint64_t pc, uint8_t *ptr) const {
         int offset = pc - getBase();
-        std::cerr << "addr1 = " << pc << "\n";
         if (offset < 0 || offset >= getExtent())
             return -1;
         *ptr = mem.data[mem.loc.off + offset];
-        std::cerr << "offset " << mem.loc.off + offset << "\n";
-        printf("read %02X\n", *ptr);
         return 0;
     }
 
@@ -260,7 +257,6 @@ public:
     void step(int64_t pc) {
         llvm::MCInst fresh;
         uint64_t size = 0;
-        std::cerr << "pc = " << pc << std::endl;
         auto status = dis->getInstruction
             (fresh, size, *mem, pc,
              (debug_level > 2 ? llvm::errs() : llvm::nulls()),
@@ -268,15 +264,13 @@ public:
 
         mcinst = fresh;
 
-        std::cerr << "read " << size << " bytes\n";
-        std::cerr.flush();
         int off = (int)(pc - mem->getBase());
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
-            if (debug_level > 1)
-                std::cerr << "successfully decoded:\n"
-                          << get_asm() << "\n";
+            if (debug_level > 1) {
+                std::cerr << get_asm() << "\n";
+            }
             current = valid_insn(mcinst, loc);
         } else {
             if (debug_level > 0)
@@ -284,6 +278,7 @@ public:
                           << " pc " << pc
                           << " offset " << off
                           << " skipping " << size << " bytes\n";
+            mcinst = invalid;
             current = invalid_insn(loc);
         }
     }
@@ -299,10 +294,11 @@ public:
         return stream.str();
     }
 
+    // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
         bool current_invalid = current.code == invalid.getOpcode();
         if (p == is_invalid || current_invalid) {
-            return current_invalid;
+            return (p == is_invalid) && current_invalid;
         } else if (p == is_true) {
             return true;
         } else {
@@ -310,7 +306,7 @@ public:
             if (p == may_affect_control_flow) {
                 d.mayAffectControlFlow(mcinst, *reg_info);
             } else if (auto check = fun_of_pred(p)) {
-                check(d);
+                return check(d);
             } else {
                 return false;
             }
@@ -340,6 +336,7 @@ private:
 
             ins.ops[i] = create_operand(op, loc);
         }
+        ins.ops_num = mcinst.getNumOperands();
         ins.code = mcinst.getOpcode();
         ins.name = ins_info->getName(ins.code) - ins_tab.data;
         ins.loc = loc;

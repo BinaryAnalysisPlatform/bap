@@ -6,6 +6,9 @@
 #include <cassert>
 #include <cstring>
 
+// debug REMOVE
+#include <iostream>
+
 #include "disasm.hpp"
 
 namespace bap {
@@ -227,6 +230,12 @@ public:
         return operand_value<OpVal>(insn.ops[j]);
     }
 
+    bap_disasm_op_type oper_type(int i, int j) const {
+        auto insn = nth_insn(i);
+        assert(j >= 0 && j < insn.ops.size());
+        return insn.ops[j].type;
+    }
+
     int oper_insn(int i, int j) const {
         auto r = submap.find(std::make_pair(i,j));
         assert(r != submap.end());
@@ -266,7 +275,9 @@ private:
             insn_preds.push_back(ps);
         }
 
-        if (preds.size() == 0) {
+        if (insn.loc.len == 0) {
+            return true;
+        } else if (preds.size() == 0) {
             return false;
         } else if (preds[0] == is_true) {
             return true;
@@ -278,7 +289,7 @@ private:
     }
 };
 
-vector< shared_ptr<disassembler> > disassemblers;
+static vector< shared_ptr<disassembler> > disassemblers;
 
 }
 
@@ -408,7 +419,11 @@ int bap_disasm_insn_satisfies(int d, int i, bap_disasm_insn_p_type p) {
 }
 
 int bap_disasm_insn_ops_size(int d, int i) {
-    return get_insn(d,i).ops.size();
+    return get_insn(d,i).ops_num;
+}
+
+bap_disasm_op_type bap_disasm_insn_op_type(int d, int i, int j) {
+    return get(d)->oper_type(i,j);
 }
 
 int bap_disasm_insn_op_reg_name(int d, int i, int op) {
