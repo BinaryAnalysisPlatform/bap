@@ -1,7 +1,9 @@
-#include <disasm.h>
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
 #include <caml/bigarray.h>
+#include <caml/alloc.h>
+
+#include "disasm.h"
 
 
 /* noalloc */
@@ -30,7 +32,7 @@ value bap_disasm_set_memory_stub(value d,
                                  value len) {
     bap_disasm_set_memory(Int_val(d),
                           Int64_val(base),
-                          Caml_ba_data_val(data),
+                          (const char *)Caml_ba_data_val(data),
                           Int_val(off),
                           Int_val(len));
     return Val_unit;
@@ -51,19 +53,19 @@ value bap_disasm_store_asm_strings_stub(value d, value b) {
 /* alloc */
 value bap_disasm_insn_table_stub(value d) {
     CAMLparam1(d);
-    int dims[1];
+    intnat dims[1];
     dims[0] = bap_disasm_insn_table_size(Int_val(d));
-    Camlreturn(caml_ba_alloc(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1,
-                             bap_disasm_insn_table_ptr(Int_val(d)), dims));
+    CAMLreturn(caml_ba_alloc(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1,
+                             (void *)bap_disasm_insn_table_ptr(Int_val(d)), dims));
 }
 
 /* alloc */
 value bap_disasm_reg_table_stub(value d) {
     CAMLparam1(d);
-    int dims[1];
+    intnat dims[1];
     dims[0] = bap_disasm_reg_table_size(Int_val(d));
-    Camlreturn(caml_ba_alloc(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1,
-                             bap_disasm_reg_table_ptr(Int_val(d)), dims));
+    CAMLreturn(caml_ba_alloc(CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1,
+                             (void *)bap_disasm_reg_table_ptr(Int_val(d)), dims));
 }
 
 /* noalloc */
@@ -71,15 +73,17 @@ value bap_disasm_predicates_clear_stub(value d) {
     bap_disasm_predicates_clear(Int_val(d));
     return Val_unit;
 }
+
+#define Pred_val(p) (bap_disasm_insn_p_type) Int_val(p)
 /* noalloc */
 value bap_disasm_predicates_push_stub(value d, value p) {
-    bap_disasm_predicates_push(Int_val(d), Int_val(p));
+    bap_disasm_predicates_push(Int_val(d), Pred_val(p));
     return Val_unit;
 }
 
 /* noalloc */
 value bap_disasm_predicate_is_supported_stub(value d, value p) {
-    return Val_bool(bap_disasm_predicate_is_supported(Int_val(d), Int_val(p)));
+    return Val_bool(bap_disasm_predicate_is_supported(Int_val(d), Pred_val(p)));
 }
 
 
@@ -135,13 +139,13 @@ value bap_disasm_insn_asm_size_stub(value d, value i) {
 
 /* noalloc */
 value bap_disasm_insn_asm_copy_stub(value d, value i, value data) {
-    bap_disasm_insn_asm_copy(Int_val(d), Int_val(i), Caml_ba_data_val(data));
+    bap_disasm_insn_asm_copy(Int_val(d), Int_val(i), String_val(data));
     return Val_unit;
 }
 
 /* noalloc */
 value bap_disasm_insn_satisfies_stub(value d, value i, value p) {
-    return Val_bool(bap_disasm_insn_satisfies(Int_val(d), Int_val(i), Int_val(p)));
+    return Val_bool(bap_disasm_insn_satisfies(Int_val(d), Int_val(i), Pred_val(p)));
 }
 
 /* noalloc */
@@ -173,16 +177,14 @@ value bap_disasm_insn_op_imm_value_stub(value d, value i, value j) {
 }
 
 /* noalloc */
-value bap_disasm_insn_op_imm_value_is_small_stub(value d, value i, value j) {
-    int64_t v = bap_disasm_insn_op_imm_value(Int_val(d), Int_val(i), Int_val(j));
-    return Val_bool(v >= Min_long && v <= Max_long);
-}
-
-/* noalloc */
 value bap_disasm_insn_op_imm_small_value_stub(value d, value i, value j) {
-    return Val_int(bap_disasm_insn_op_imm_value(Int_val(d), Int_val(i), Int_val(j)));
+    int64_t v = bap_disasm_insn_op_imm_value(Int_val(d), Int_val(i), Int_val(j));
+    if (v < Min_long)
+        v = Min_long;
+    if (v > Max_long)
+        v = Max_long;
+    return Val_int(v);
 }
-
 
 /* alloc */
 value bap_disasm_insn_op_fmm_value_stub(value d, value i, value j) {
