@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <cassert>
+#include <cstring>
 
 #include "disasm.hpp"
 
@@ -17,11 +18,28 @@ using vector = std::vector<T>;
 template <typename T>
 using shared_ptr = std::shared_ptr<T>;
 
+static std::map<string, shared_ptr<disasm_factory>> backends;
 
-struct disasm_factory {
-    virtual shared_ptr<disasm_base>
-    create(const char *backend, const char *cpu) = 0;
+static auto all_predicates = {
+    is_true,
+    is_invalid,
+    is_return,
+    is_call,
+    is_barrier,
+    is_terminator,
+    is_branch,
+    is_indirect_branch,
+    is_conditional_branch,
+    is_unconditional_branch,
+    may_affect_control_flow
 };
+
+int register_disassembler(string name, shared_ptr<disasm_factory> f) {
+    if (backends.find(name) != backends.end())
+        return -1;
+    backends[name] = f;
+    return 0;
+}
 
 
 template <typename T>
@@ -46,42 +64,57 @@ fmm operand_value<fmm>(operand op) {
 }
 
 template <>
-insn * operand_value<insn *>(operand op) {
+shared_ptr<insn> operand_value<shared_ptr<insn> >(operand op) {
     assert(op.type == bap_disasm_op_insn);
     return op.insn_val;
 }
 
-
-static std::map<string, shared_ptr<disasm_factory>> backends;
-
-struct unknown_backend : std::exception {};
-
-
 class disassembler {
-    using predicates = vector<shared_ptr<predicate>>;
+    using predicates = std::vector<bap_disasm_insn_p_type>;
     using pred = predicates::value_type;
     using subkey = std::pair<int,int>;
+
+    shared_ptr<disassembler_interface> dis;
+    predicates supported_predicates;
     predicates preds;
-    shared_ptr<disasm_base> dis;
     vector<insn> insns;
-    vector<insn> sub_insns;
-    vector<int>  asm_offs;
+    vector< shared_ptr<insn> > sub_insns;
     std::map<subkey,int> submap;
-    vector<int>  sub_asm_offs;
-    std::string asms;
+    vector<string>  asms;
+    string asm_cache;
+    vector<predicates> insn_preds;
     int64_t base;
     int off;
+    bool store_preds, store_asms;
+
+
+    disassembler(shared_ptr<disassembler_interface> dis)
+        : dis(dis)
+        , base(0L)
+        , off(0)
+        , store_preds(false)
+        , store_asms(false) {
+        for (auto p : all_predicates) {
+            if (dis->supports(p))
+                supported_predicates.push_back(p);
+        }
+        // it should be already sorted, but nothing worse if will do it twice.
+        sort(supported_predicates.begin(), supported_predicates.end());
+    }
 
 public:
-    disassembler(const char *name, const char *triple, const char *cpu)
-    : base(0L), off(0) {
-        auto factory = backends.find(name);
-
-        if (factory != backends.end()) {
-            factory->second->create(triple, cpu);
-        } else {
-            throw unknown_backend();
-        }
+    static result<disassembler>
+    create(const char *name, const char *triple, const char *cpu, int debug_level) {
+        if (auto factory = backends[name]) {
+            auto result = factory->create(triple, cpu, debug_level);
+            if (!result.dis) {
+                return {nullptr, result.err};
+            } else {
+                auto dis = shared_ptr<disassembler>(new disassembler(result.dis));
+                return {dis, 0};
+            }
+        } else
+            return {nullptr, bap_disasm_no_such_backend};
     }
 
     void run() {
@@ -92,15 +125,29 @@ public:
         };
     }
 
-    void set_memory(int64_t base, const char *data, int off, int len) {
-        dis->set_memory({data, base, {off, len}});
+    void set_memory(int64_t addr, const char *data, int offset, int length) {
+        this->base = addr;
+        this->off  = 0;
+        dis->set_memory({data, addr, {offset, length}});
+    }
+
+    void enable_store_preds(bool enable) {
+        assert(queue_size() == 0 || enable == false);
+        store_preds = enable;
+        if (enable == false)
+            insn_preds.clear();
+    }
+
+    void enable_store_asms(bool enable) {
+        assert(queue_size() == 0 || enable == false);
+        store_asms = enable;
+        if (enable == false)
+            asms.clear();
     }
 
     void push_pred(bap_disasm_insn_p_type p) {
-        auto pred = dis->create_predicate(p);
-        if (pred) {
-            preds.push_back(pred);
-        }
+        preds.push_back(p);
+        sort(preds.begin(), preds.end());
     }
 
     void clear_preds() {
@@ -110,9 +157,9 @@ public:
     void clear_insns() {
         insns.clear();
         sub_insns.clear();
-        asm_offs.clear();
-        sub_asm_offs.clear();
+        submap.clear();
         asms.clear();
+        insn_preds.clear();
     }
 
     int queue_size() const {
@@ -127,33 +174,50 @@ public:
         return dis->reg_table();
     }
 
-    table asm_table() const {
-        return { &asms[0], asms.size()};
+    bool supports(bap_disasm_insn_p_type p) const {
+        return dis->supports(p);
     }
 
-    bool is_supported(bap_disasm_insn_p_type p) {
-        return dis->create_predicate(p) != NULL;
+    bool satisfies(bap_disasm_insn_p_type p, int n) {
+        if (store_preds) {
+            assert(n >= 0 && n < insn_preds.size());
+            auto beg = insn_preds[n].begin(), end = insn_preds[n].end();
+            return std::binary_search(beg, end, p);
+        } else {
+            assert(n == queue_size() - 1);
+            return dis->satisfies(p);
+        }
     }
 
-    bool is_satisfied(bap_disasm_insn_p_type pre, const insn& insn) {
-        auto p = dis->create_predicate(pre);
-        return p && p->satisfies(insn);
+    string get_asm(int n) {
+        if (store_asms) {
+            assert(n >= 0 && n < asms.size());
+            return asms[n];
+        } else {
+            assert(n == queue_size() - 1);
+            if (asms.size() == 1)
+                return asms[0];
+            else {
+                if (asm_cache.empty())
+                    asm_cache = dis->get_asm();
+                return asm_cache;
+            }
+        }
     }
 
     void set_offset(int new_off) {
         off = new_off;
     }
 
-    int offset() const {
-        return off;
-    }
-
     const insn& nth_insn(int i) const {
-        return get(i, insns, sub_insns);
-    }
-
-    const int asm_offset(int i) const {
-        return get(i, asm_offs, sub_asm_offs);
+        if (i < 0) {
+            i = -i + 1;
+            assert(i < sub_insns.size());
+            return *sub_insns[i];
+        } else {
+            assert(i < insns.size());
+            return insns[i];
+        }
     }
 
     template <typename OpVal>
@@ -170,49 +234,51 @@ public:
     }
 
 private:
-    template <typename T>
-    const T& get(int i, const vector<T> &cont, const vector<T> &sub) const {
-        if (i < 0) {
-            i = -i + 1;
-            assert(i < sub_insns.size());
-            return sub[i];
-        } else {
-            assert(i < insns.size());
-            return cont[i];
-        }
-    }
-
-    void update_asms(const insn& ins, vector<insn> &set, vector<int> &offs) {
-        set.push_back(ins);
-        offs.push_back(asms.size());
-        dis->append_asm_to_string(asms, ins);
-        asms.push_back('\x00');
-    }
-
     bool step() {
-        auto insn = dis->get_insn(base + off);
+        dis->step(base + off);
+        auto insn = dis->get_insn();
         off = insn.loc.off + insn.loc.len;
-        update_asms(insn, insns, asm_offs);
+        insns.push_back(insn);
+        asm_cache.clear();
 
         int insn_no = insns.size() - 1;
         int op_no = 0;
-        std::for_each(insn.ops.begin(), insn.ops.end(), [&](operand op){
-                if (op.type == bap_disasm_op_insn) {
-                    update_asms(insn, sub_insns, sub_asm_offs);
-                    int sub_no = sub_insns.size() - 1;
-                    subkey key = {insn_no, op_no};
-                    submap.insert(std::make_pair(key, sub_no));
-                }
-                op_no++;
-            });
+        for (auto op : insn.ops) {
+            if (op.type == bap_disasm_op_insn) {
+                sub_insns.push_back(op.insn_val);
+                int sub_no = sub_insns.size() - 1;
+                subkey key = {insn_no, op_no};
+                submap.insert(std::make_pair(key, sub_no));
+            }
+            op_no++;
+        }
 
-        return std::any_of(preds.begin(), preds.end(), [insn](pred p) {
-                return p->satisfies(insn);
-            });
+        if (store_asms) {
+            asms.push_back(dis->get_asm());
+        }
+
+        if (store_preds) {
+            predicates ps;
+            for (auto p : supported_predicates) {
+                if (dis->satisfies(p))
+                    ps.push_back(p);
+            }
+            insn_preds.push_back(ps);
+        }
+
+        if (preds.size() == 0) {
+            return false;
+        } else if (preds[0] == is_true) {
+            return true;
+        } else {
+            return std::any_of(preds.begin(), preds.end(), [&](pred p) {
+                    return dis->satisfies(p);
+                });
+        }
     }
 };
 
-vector<shared_ptr<disassembler>> disassemblers;
+vector< shared_ptr<disassembler> > disassemblers;
 
 }
 
@@ -221,32 +287,46 @@ using namespace bap;
 
 bap_disasm_type bap_disasm_create(const char *backend,
                                   const char *triple,
-                                  const char *cpu) try {
-    int id = -1;
-    auto dis = std::make_shared<disassembler>(backend, triple, cpu);
+                                  const char *cpu,
+                                  int debug_level) {
+    auto result = disassembler::create(backend, triple, cpu, debug_level);
+
+    if (!result.dis)
+        return result.err;
 
     for (int i = 0; i < disassemblers.size(); i++) {
-        if (disassemblers[i] == NULL) {
-            disassemblers[i] = dis;
+        if (disassemblers[i] == nullptr) {
+            disassemblers[i] = result.dis;
             return i;
         }
     }
-    id = disassemblers.size();
-    disassemblers.push_back(dis);
-    return id;
-} catch (unknown_backend) {
-    return BAP_DISASM_NO_SUCH_BACKEND;
-} catch (std::exception) {
-    return BAP_DISASM_UNKNOWN_ERROR;
+    disassemblers.push_back(result.dis);
+    return disassemblers.size() - 1;
+}
+
+void bap_disasm_delete(bap_disasm_type d) {
+    assert(d >= 0 && d < disassemblers.size());
+    disassemblers[d].reset();
 }
 
 static shared_ptr<disassembler> get(int d) {
     assert(d >= 0 && d < disassemblers.size());
+    auto dis = disassemblers[d];
+    assert(dis);
+    return dis;
 }
 
 
 void bap_disasm_set_memory(int d, int64_t base, const char *data, int off, int len) {
     get(d)->set_memory(base, data, off, len);
+}
+
+void bap_disasm_store_predicates(int d, int v) {
+    get(d)->enable_store_preds(v);
+}
+
+void bap_disasm_store_asm_strings(int d, int v) {
+    get(d)->enable_store_asms(v);
 }
 
 const char *bap_disasm_insn_table_ptr(int d) {
@@ -257,7 +337,6 @@ int bap_disasm_insn_table_size(int d) {
     return get(d)->insn_table().size;
 }
 
-
 const char *bap_disasm_reg_table_ptr(int d) {
     return get(d)->reg_table().data;
 }
@@ -266,33 +345,30 @@ int bap_disasm_reg_table_size(int d) {
     return get(d)->reg_table().size;
 }
 
-const char *bap_disasm_queue_asm_table_ptr(int d) {
-    return get(d)->asm_table().data;
-}
-
-int bap_disasm_queue_asm_table_size(int d) {
-    return get(d)->asm_table().size;
-}
-
 void bap_disasm_predicates_clear(int d) {
     get(d)->clear_preds();
 }
 
-void bap_disasm_predicates_clear(int d, bap_disasm_insn_p_type p) {
+void bap_disasm_predicates_push(int d, bap_disasm_insn_p_type p) {
     get(d)->push_pred(p);
 }
 
 
 int bap_disasm_predicate_is_supported(int d, bap_disasm_insn_p_type p) {
-    return get(d)->is_supported(p);
+    return get(d)->supports(p);
 }
 
 void bap_disasm_set_offset(int d, int off) {
     get(d)->set_offset(off);
 }
 
-int bap_disasm_get_offset(int d) {
-    return get(d)->offset();
+int bap_disasm_insn_asm_size(int d, int i) {
+    return get(d)->get_asm(i).size();
+}
+
+void bap_disasm_insn_asm_copy(int d, int i, void *dst) {
+    string s = get(d)->get_asm(i);
+    std::memcpy(dst, &s[0], s.size());
 }
 
 void bap_disasm_run(int d) {
@@ -327,13 +403,8 @@ int bap_disasm_insn_code(int d, int i) {
     return get_insn(d,i).code;
 }
 
-
-int bap_disasm_isn_asm(int d, int i) {
-    return get(d)->asm_offset(i);
-}
-
 int bap_disasm_insn_satisfies(int d, int i, bap_disasm_insn_p_type p) {
-    return get(i)->is_satisfied(p, get_insn(d,i));
+    return get(d)->satisfies(p, i);
 }
 
 int bap_disasm_insn_ops_size(int d, int i) {
@@ -358,7 +429,6 @@ fmm bap_disasm_insn_op_fmm_value(int d, int i, int op) {
 }
 
 int bap_disasm_insn_op_insn_value(int d, int i, int op) {
-    // assumption that sub instructions cannot have sub instructions fails here:
     assert(i >= 0);
-    return get(i)->oper_insn(i,op);
+    return get(d)->oper_insn(i,op);
 }

@@ -5,9 +5,6 @@
  *
  *  This module defines a primitive low-level interface to a disassembler.
  *  This interface was created with a performance considerations in mind.
- *  Also, although it is not stated explicitly in the code, it mimicks,
- *  to some extent, the MCDisassembler from LLVM, but it is supposed that
- *  it can be implemented by other disassemblers, like capstone or udism.
  *
  *  The disassembler can be viewed as a primitive state machine, with
  *  the following logic.
@@ -20,12 +17,25 @@
  *     then stop
  *     else goto 1.
  *
+ *  If disassembly fails in some manner, then disassembler pushes
+ *  invalid instruction.
+ *
+ *  If the set of predicates is empty, then it evaluates to false.  In
+ *  other words with an empty set of predicates, the disassembler will
+ *  run until it hits the end-of-data condition. This allows to implement
+ *  a sweeping mode.
+ *
+ *  A special is_true predicate allows to implement a single step mode, when
+ *  disassembler stops after each iteration. It is guaranteed by implementation,
+ *  that if [is_true] is in a set of predicates, then no other predicates will
+ *  be evaluated, unless [store_predicates] option is turned on.
+ *
  *  Disassembler state consists of:
  *
  *  1. instructions queue
  *  2. predicates set
  *  3. offset
- *  4. instruction disasm table
+ *
  *
  *  There is also some static state, that doesn't change, but worths
  *  to be mentioned:
@@ -40,53 +50,57 @@
  *  created, but since it is not changed in the disassembler step it can
  *  be considered static.
  *
- *  If the set of predicates is empty, then it evaluates to false.
- *  In other words with an empty set of predicates, the disassembler
- *  will run until it hits the end-of-data condition.
- *
- *  If given predicate is not supported by the backend, then it will
- *  always evaluate to false. In other words, it won't be added to the
- *  set.
+ *  Notes:
  *
  *  Every run of dissassembler will increase the size of instructions
  *  queue. Even if there is no data, disassembler will push an invalid
  *  instruction into the queue and stop.
  *
  *  Due to the performance reasons error handling is very deficient,
- *  if any.  It is supposed that all checks are made by a caller side,
- *  that should be written in a high-level language. By no means, this
- *  interface was designed for the use from c-code. Anyway, for the
- *  debugging purposes, we provide a facility that allows to dump,
- *  debug information to the stderr.
+ *  if any. The calling side should check that preconditions holds,
+ *  before the call. If preconditions don't hold the result is
+ *  undefined.
  *
- *
+ *  One of the precondition that hold for all function, is that argument
+ *  of type bap_disasm_type  should be valid.
  */
 
 
 /** disassembler descriptor  */
 typedef int bap_disasm_type;
 
-typedef enum bap_disasm_error {
-    BAP_DISASM_UNKNOWN_ERROR = -1,
-    BAP_DISASM_NO_SUCH_BACKEND = -2
+typedef enum {
+    bap_disasm_unknown_error = -1,
+    bap_disasm_no_such_backend = -2,
+    bap_disasm_unsupported_target = -3,
 } bap_disasm_error;
 
-typedef enum bap_disasm_op_type {
-    bap_disasm_op_reg,
-    bap_disasm_op_imm,
-    bap_disasm_op_fmm,
-    bap_disasm_op_insn,
+
+/* In a normal mode the set of predicates defines the stopping condition
+ *
+ * In a sweep mode, disassembler will not check for predicates and
+ * will run until the end of data condition is met.
+ *
+ * In a step mode disassembler will not check for predicates and will
+ * stop after each step
+ */
+
+typedef enum {
+    bap_disasm_op_reg  = 0,
+    bap_disasm_op_imm  = 1,
+    bap_disasm_op_fmm  = 2,
+    bap_disasm_op_insn = 3 ,
 } bap_disasm_op_type;
 
 /** predicates on the instructions  */
 typedef enum bap_disasm_insn_p {
-    is_true,
-    is_invalid,
-    is_return,
-    is_call,
-    is_barrier,
-    is_terminator,
-    is_branch,
+    is_true,                    /* true for all instructions */
+    is_invalid,                 /* the instruction is invalid */
+    is_return,                  /* all returns  */
+    is_call,                    /* all calls */
+    is_barrier,                 /* control flow won't hit the next insn */
+    is_terminator,              /* is basic block terminator */
+    is_branch,                  /* branching instructions */
     is_indirect_branch,
     is_conditional_branch,
     is_unconditional_branch,
@@ -94,14 +108,29 @@ typedef enum bap_disasm_insn_p {
 } bap_disasm_insn_p_type;
 
 /* bap_disasm_create(triple,cpu) creates a disassembler for a given
- * triple and cpu */
+ * triple and cpu.
+ * This function is not thread safe.
+ * @pre No preconditions. In case of error the corresponding code is returned. */
 bap_disasm_type bap_disasm_create(
     const char *backend,
     const char *triple,
     const char *cpu,
     int debug_level);
 
-/** assosiates memory region with a given disassembler */
+/* deletes disassembler \a disasm.
+ * This function is not thread safe.
+ * @pre disasm is valid descriptor */
+void bap_disasm_delete(bap_disasm_type disasm);
+
+/** assosiates memory region with a given disassembler. Current offset
+ * is automatically reset to 0.
+ *
+ * @pre memory region between (data+off) and (data+off+len-1)
+ * inclusive is readable by a process.
+ *
+ * @pre off >= 0 && len >= 0. (sic, it can be empty)
+ * @pos off = 0
+ * */
 void bap_disasm_set_memory(
     bap_disasm_type disasm,
     int64_t base,
@@ -109,10 +138,31 @@ void bap_disasm_set_memory(
     int off,
     int len);
 
+/* by default only the last disassembled instruction can be queried by
+ * different predicates. If this option is enabled, then for each
+ * disassembled instruction a set of predicates that evaluates to true
+ * will be stored, so that it can be later queried. Enabling this
+ * option doesn't affect any other options, also current set of
+ * predicates remains unchanged.
+ * @pre enable => insns queue is empty
+ */
+void bap_disasm_store_predicates(bap_disasm_type disasm, int enable);
+
+
+/* by default assembler strings are not stored anywhere and not even
+ * created, but with this option enabled, after each diassembly step,
+ * the assembly string will be stored for later retrieval. Regardless
+ * of the value of this option, you can always retrieve an assembly
+ * string for the last disassembled instruction, given it is valid.
+ * @pre enable => insns queue is empty.
+ */
+void bap_disasm_store_asm_strings(bap_disasm_type disasm, int enable);
+
+
 /* returns a pointer to an instruction name table.
  * The table is created with a disassembler and never changes afterwards.
- * It contains a set of null-terminated strings
- */
+* It contains a set of null-terminated strings
+*/
 const char *bap_disasm_insn_table_ptr(bap_disasm_type disasm);
 
 int bap_disasm_insn_table_size(bap_disasm_type disasm);
@@ -126,60 +176,64 @@ const char *bap_disasm_reg_table_ptr(bap_disasm_type disasm);
 /* returns the size in bytes of the registers names table */
 int bap_disasm_reg_table_size(bap_disasm_type disasm);
 
-/* returns a pointer to a table of instruction strings, unlike the
- * «static» insn and reg tables, this table can be invalidated after
- * each run of the disassembler.
- */
-const char *bap_disasm_queue_asm_table(bap_disasm_type disasm);
-
-/* returns a size of asm table  */
-int bap_disasm_queue_asm_table_size(bap_disasm_type disasm);
-
-
 
 /** Operations over a set of predicates  */
 
 /* clears the set of predicates  */
-void bap_disasm_predicates_clear(bap_disasm_type disasm, bap_disasm_insn_p_type p);
-
+void bap_disasm_predicates_clear(bap_disasm_type disasm);
 
 
 /* bap_disasm_predicates_push(disasm,p) adds predicate p to the set of
- * predicates */
+ * predicates.
+ * @pre is_supported p
+ */
 void bap_disasm_predicates_push(bap_disasm_type disasm,
-                        bap_disasm_insn_p_type p);
+                                bap_disasm_insn_p_type p);
 
-/* returns true, if the predicate is supported by the backend  */
+/* returns true, if the predicate is supported by the backend.
+ * @pre none.
+ */
 int bap_disasm_predicate_is_supported(bap_disasm_type disasm,
-                                       bap_disasm_insn_p_type p);
+                                      bap_disasm_insn_p_type p);
 
-/* moves pc to the specfied address  */
+/* points a disassembler into specified part of the memory.
+ * @pre none.
+ * */
 void bap_disasm_set_offset(bap_disasm_type disasm, int offset);
 
-/* get current pc  */
-int bap_disasm_get_offset(bap_disasm_type disasm);
 
-/* runs disassembler until one of the predicates evaluates to true or
- * until there is no more data. An empty set of predicates, always
- * evaluates to false.
+/* in a normal mode of operation runs disassembler until one of the
+ * predicates evaluates to true or until there is no more data. An
+ * empty set of predicates, always evaluates to false.
  *
- * The condition check is performed _after_ each diassembly step. This
- * means, that if [is_true] is in a set of predicates, then each
- * invocation of the [bap_disasm_run] will disassemble exactly
- * one instruction (in assumption that there is enough space).
+ * In a sweep mode, runs until the end of the data.
  *
- * In case of errors, an invalid instruction is pushed into queue,
- * and disassembly process is continued according to the current
- * set of predicates.
+ * In as single step mode, stops after the first atempt.
+ *
+ * @pre none.
+ * @post insn_size is increased by one.
  */
 void bap_disasm_run(bap_disasm_type disasm);
 
-
+/* clears instruction queue and all assosiated data
+ * @pre none
+ * @post instruction queue is empty
+ */
 void bap_disasm_insns_clear(bap_disasm_type disasm);
-
 
 /* returns the amount of instructions in the decompiler queue.  */
 int bap_disasm_insns_size(bap_disasm_type disasm);
+
+
+/* Quering instructions
+ *
+ * All functions below (if not stated otherwise) share the following
+ * precondition:
+ *
+ *    insn >= 0 && insn < insns_size
+ *    || insn was returned by insn_op_insn_value function
+ *       (aka subinstruction).
+ */
 
 /** returns size in bytes of the insn @n  */
 int bap_disasm_insn_size(bap_disasm_type disasm, int insn);
@@ -195,15 +249,38 @@ int bap_disasm_insn_code(bap_disasm_type disasm, int insn);
 /** returns an offset of the instruction in a memory region  */
 int bap_disasm_insn_offset(bap_disasm_type disasm, int insn);
 
+/* returns the size of the representation of the instruction \a insn
+ * in a target's assembly.
+ * @pre insn is not a subinstruction
+ * @pre not satisfies(insn, is_invalid)
+ * @pre store_asm_strings option is enabled
+ *      || insn = insns_size - 1
+ */
+int bap_disasm_insn_asm_size(bap_disasm_type disasm, int insn);
 
-/* returns an offset of the insn disassembly string in the current asm
- * table */
-int bap_disasm_insn_asm(bap_disasm_type disasm, int insn);
+/* copies assembly representation to the specified
+ * destination.
+ * @pre all asm_size preconditions;
+ * @pre memory region (dst, dst+asm_size-1) is writable by a process.
+ */
+void bap_disasm_insn_asm_copy(bap_disasm_type disasm, int insn, void *dst);
 
-/* returns true if instruction satisfies predicate */
+/* returns non zero if instruction satisfies predicate.
+ * @pre not satisfies(insn, is_invalid)
+ * @pre is_supported(p)
+ * @pre store_predicates option is enabled
+ *      || insn = insn_size - 1
+ */
 int bap_disasm_insn_satisfies(bap_disasm_type disasm,
                               int insn,
                               bap_disasm_insn_p_type p);
+
+
+/* Quering operands
+ *
+ * All functions below share precondition that op is less than
+ * ops_size and greater than zero
+ */
 
 /* returns the amount of operands for a given instruction  */
 int bap_disasm_insn_ops_size(bap_disasm_type disasm,
@@ -214,22 +291,30 @@ bap_disasm_op_type bap_disasm_insn_op_type(bap_disasm_type disasm,
                                            int insn,
                                            int op);
 
-/* returns an offset in a registers name table */
+/* returns an offset in a registers name table.
+ * @pre op_type = reg
+ */
 int bap_disasm_insn_op_reg_name(bap_disasm_type disasm,
                                 int insn,
                                 int op);
 
-/* returns a unique identifier of the register operand */
+/* returns a unique identifier of the register
+ * @pre op_type = reg
+ */
 int bap_disasm_insn_op_reg_code(bap_disasm_type disasm,
                                 int insn,
                                 int op);
 
-/* returns value of the integer immediate value */
+/* returns value of the integer immediate value.
+ * @pre op_type = imm
+ */
 int64_t bap_disasm_insn_op_imm_value(bap_disasm_type disasm,
                                      int insn,
                                      int op);
 
-/* returns value of the floating point immediate value */
+/* returns value of the floating point immediate value
+ * @pre op_type = fmm
+ */
 double bap_disasm_insn_op_fmm_value(bap_disasm_type disasm,
                                     int insn,
                                     int op);
@@ -237,7 +322,10 @@ double bap_disasm_insn_op_fmm_value(bap_disasm_type disasm,
 /* returns a subinstruction of the instruction. It can be accessed
  * the same way as a "toplevel" instructions, and it is guaranteed,
  * that returned value is not in the set of valid instruction numbers for
- * the current queue */
+ * the current queue.
+ *
+ * @pre insn is not a subinstruction
+ */
 int bap_disasm_insn_op_insn_value(bap_disasm_type disasm,
                                   int insn,
                                   int op);
