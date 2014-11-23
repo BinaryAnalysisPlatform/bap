@@ -7,7 +7,7 @@ open Elf_internal_utils
 
 module Char = Caml.Char
 
-let elf_header_size = 64         (* no magick! *)
+let elf_max_header_size = 64         (* no magick! *)
 
 (** value mapping *)
 
@@ -396,7 +396,7 @@ let validate_offsets desc  ~pos ~len ~offset ~size : unit Or_error.t =
       name "size" @@ Int.validate_bound size
         ~min:(Incl 0) ~max:(Incl len);
       name "offset" @@ Int.validate_bound offset
-        ~min:(Incl (pos + elf_header_size))
+        ~min:(Incl pos)
         ~max:(Excl (pos + len));
       name "size+offset" @@
       Int.validate_ubound (size + offset)
@@ -428,7 +428,7 @@ let validate_bounds ~pos ~len ~data_len =
       name "pos in bounds" @@ Int.validate_bound pos
         ~min:(Incl 0) ~max:(Excl data_len);
       name "len in bounds" @@ Int.validate_bound len
-        ~min:(Incl elf_header_size) ~max:(Incl data_len);
+        ~min:(Incl elf_max_header_size) ~max:(Incl data_len);
       name "pos+len in bounds" @@ Int.validate_ubound (pos+len)
         ~max:(Incl data_len)
     ])
@@ -438,10 +438,10 @@ let from_bigstring_exn ?(pos=0) ?len data =
   let data_len = Bigstring.length data in
   let len = Option.value len ~default:data_len in
   validate_bounds ~pos ~len ~data_len >>= fun () ->
-  let header = String.create elf_header_size in
+  let header = String.create elf_max_header_size in
   Bigstring.To_string.blit
     ~src:data ~src_pos:pos ~dst:header ~dst_pos:0
-    ~len:elf_header_size;
+    ~len:elf_max_header_size;
   let (elf, seg_ti, sec_ti) =
     parse_elf_hdr (bitstring_of_string header) in
   let endian = endian_of elf.e_data in
