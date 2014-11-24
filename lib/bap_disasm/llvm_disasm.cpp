@@ -304,7 +304,7 @@ public:
         } else {
             auto d = ins_info->get(current.code);
             if (p == may_affect_control_flow) {
-                d.mayAffectControlFlow(mcinst, *reg_info);
+                return d.mayAffectControlFlow(mcinst, *reg_info);
             } else if (auto check = fun_of_pred(p)) {
                 return check(d);
             } else {
