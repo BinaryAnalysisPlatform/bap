@@ -1,10 +1,7 @@
 /*.bak
 /_build/
 /*.byte
-/configure
 /*.docdir
-Makefile
-/Makefile
 META
 *.mldylib
 *.mllib
