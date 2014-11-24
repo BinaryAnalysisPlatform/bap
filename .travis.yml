@@ -1,4 +1,4 @@
-language: c
+language: cpp
 script: bash -ex .travis-ci.sh
 os:
   - linux
