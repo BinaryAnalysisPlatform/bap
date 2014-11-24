@@ -226,13 +226,13 @@ public:
     template <typename OpVal>
     OpVal oper_value(int i, int j) const {
         auto insn = nth_insn(i);
-        assert(j >= 0 && j < insn.ops.size());
+        assert(j >= 0 && j < insn.ops_num);
         return operand_value<OpVal>(insn.ops[j]);
     }
 
     bap_disasm_op_type oper_type(int i, int j) const {
         auto insn = nth_insn(i);
-        assert(j >= 0 && j < insn.ops.size());
+        assert(j >= 0 && j < insn.ops_num);
         return insn.ops[j].type;
     }
 

@@ -8,7 +8,9 @@ Makefile
 META
 *.mldylib
 *.mllib
+*.clib
 *.mlpack
+*.ba*
 myocamlbuild.ml
 /*.native
 *.odocl

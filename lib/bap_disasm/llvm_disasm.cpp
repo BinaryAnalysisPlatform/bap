@@ -446,5 +446,5 @@ int bap_disasm_llvm_init() {
 
 
 // Local Variables:
-// compile-command: "g++ -c -std=c++11 -fno-rtti `llvm-config-3.4 --cxxflags` `llvm-config-3.4 --ldflags` -lLLVM-3.4"
+// compile-command: g++ -g llvm_disasm.cpp disasm.cpp test.cpp  -std=c++11 -fno-rtti `llvm-config-3.4 --cxxflags` -O0 `llvm-config-3.4 --ldflags`  -lLLVM-3.4 `llvm-config-3.4 --libs` && ./a.out
 // End:

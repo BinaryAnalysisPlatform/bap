@@ -45,6 +45,7 @@ let main () =
 
 let () =
   Plugins.load ();
+  Bap_llvm.init ();
   if Array.length Sys.argv = 2
   then main ()
   else eprintf "Usage: reading filename\n";

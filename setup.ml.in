@@ -1,26 +1,118 @@
-let def_piqic (() : unit) : unit =
+let definition_end = BaseEnv.var_ignore
+
+let ctxt = !BaseContext.default
+
+let piqic () : unit =
   let chop str = try
       Filename.chop_extension str
     with _ -> str in
   let piqic_path = BaseCheck.prog_best "piqic_path" ["piqic-ocaml"; "piqic"] () in
   BaseEnv.var_define "piqic_flags" (fun () ->
-      if chop (Filename.basename (BaseEnv.var_get "piqic"))
-         = "piqic"
+      if chop (Filename.basename (BaseEnv.var_get "piqic")) = "piqic"
       then "ocaml"
-      else "") |> ignore;
+      else "") |>
+  definition_end;
   BaseEnv.var_define "piqic" (fun () ->
-      if (BaseStandardVar.os_type () = "Cygwin") || (BaseStandardVar.os_type () = "Win32")
-      then String.concat " "
-          (OASISExec.run_read_output ~ctxt:!BaseContext.default "cygpath" [piqic_path])
-      else piqic_path) |> ignore;
-  BaseEnv.(unload (); load (); dump ())
+      if List.mem (BaseStandardVar.os_type ()) ["Cygwin"; "Win32"]
+      then
+        String.concat " "
+          (OASISExec.run_read_output ~ctxt "cygpath" [piqic_path])
+      else piqic_path) |>
+  definition_end
 
-let is_var_undefined name =
-  try ignore (BaseEnv.var_get name); false
-  with PropList.Unknown_field _ -> true
+let cxx () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "c++ compiler")
+    "cxx"
+    (fun () -> OASISFileUtil.which ~ctxt "c++") |>
+  definition_end
+
+let llvm_version () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "libllvm version (e.g., 3.4)")
+    "llvm_version"
+    (fun () -> "") |>
+  definition_end
+
+
+let llvm_config () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "llvm-config executable")
+    "llvm_config"
+    (fun () ->
+       let suffix =
+         match BaseEnv.var_get "llvm_version" with
+         | "" -> ""
+         | suf -> "-"^suf in
+       OASISFileUtil.which ~ctxt ("llvm-config"^suffix)) |>
+  definition_end
+
+let llvm var () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "llvm-config --"^var)
+    ("llvm_"^var)
+    (fun () ->
+       let llvm_config = BaseEnv.var_get "llvm_config" in
+       OASISExec.run_read_one_line ~ctxt llvm_config ["--"^var]) |>
+  definition_end
+
+let cxx_flags () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "c++ flags")
+    "cxxflags"
+    (fun () -> "-std=c++11") |>
+  definition_end
+
+let cxx_libs () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "c++ flags")
+    "cxxlibs"
+    (fun () -> "-lstdc++") |>
+  definition_end
+
+let llvm_mainlib () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "main LLVM library")
+    "llvm_mainlib"
+    (fun () ->
+       let llvm_config = BaseEnv.var_get "llvm_config" in
+       let ver =
+         OASISExec.run_read_one_line ~ctxt llvm_config ["--version"] in
+       "-lLLVM-"^ver) |>
+  definition_end
+
+let define definitions =
+  List.iter (fun f -> try f () with exn -> ()) definitions
 
 let () =
-  if Sys.file_exists BaseEnv.default_filename &&
-     is_var_undefined "piqic" then
-    def_piqic ();
+  define [
+    piqic;
+    cxx;
+    cxx_flags;
+    cxx_libs;
+    llvm_version;
+    llvm_config;
+    llvm_mainlib;
+    llvm "cxxflags";
+    llvm "ldflags";
+    llvm "cflags";
+    llvm "libs";
+  ];
   setup ();

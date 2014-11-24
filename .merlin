@@ -11,6 +11,7 @@ S lib/bap_image
 S lib/bap_types
 
 PKG core_kernel
+PKG ocamlbuild
 EXT ounit
 EXT here
 EXT ounit

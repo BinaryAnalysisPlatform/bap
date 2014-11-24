@@ -6,7 +6,7 @@ Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
 License:     MIT
 Copyrights:  (C) 2014 Carnegie Mellon University
-Plugins:     META (0.4), DevFiles (0.4)
+Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
 BuildDepends:
@@ -23,11 +23,11 @@ BuildDepends:
               sexplib.syntax,
               variantslib.syntax
 
-PreConfCommand: ocaml preconfig.ml
 # for some reason oasis doesn't provide us a $cp command
+PreConfCommand: $rm setup.data
 PostInstallCommand: cp baptop bapbuild $bindir
 PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
-PostDistcleanCommand: $rm Makefile _tags myocamlbuild.ml setup.ml setup.data configure
+PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
 Document bap
   Type: ocamlbuild (0.4)
@@ -39,12 +39,20 @@ Document bap
   XOCamlbuildLibraries: bap
 
 Flag serialization
-  Description: "Build serialization library"
+  Description: Build serialization library
   Default: false
 
 Flag benchmarks
-  Description: "Build and run benchmarks"
+  Description: Build and run benchmarks
   Default: false
+
+Flag disassemblers
+  Description: Builds C++ interface to dissassemblers backend
+  Default: true
+
+Flag llvm
+ Description: Build with llvm backend
+ Default: true
 
 Library bap
   Path:            lib/bap
@@ -165,6 +173,26 @@ Library dwarf
                  Dwarf_leb128,
                  Dwarf_types
 
+Library disasm
+  Path:          lib/bap_disasm
+  Build$:        flag(disassemblers)
+  FindlibParent: bap
+  FindlibName:   disasm
+  BuildDepends:  bap.types,
+                 bap.image
+  Modules:       Bap_disasm_prim
+  CSources:      disasm.h, disasm.c, disasm_stubs.c
+
+Library llvm
+  Path:          lib/bap_disasm
+  Build$:        flag(llvm) && flag(disassemblers)
+  FindlibParent: bap
+  FindlibName:   llvm
+  Modules:       Bap_llvm
+  CCLib:         $llvm_ldflags $llvm_mainlib $llvm_libs $cxxlibs
+  CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
+
+
 Library types_test
   Path:           lib_test/bap_types
   Build$:         flag(tests)
@@ -203,7 +231,7 @@ Executable readbin
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, bap.llvm, bap.disasm
 
 Executable fbi
   Path:           src/fbi
