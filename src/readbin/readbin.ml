@@ -1,7 +1,6 @@
 open Core_kernel.Std
 open Or_error
 open Bap.Std
-open Format
 
 let string_of_perm s =
   let m f c = if f s then c else " " in
@@ -18,6 +17,7 @@ let main () =
     let bits = match addr_size img with
       | Word_size.W32 -> 32
       | Word_size.W64 -> 64 in
+    let open Format in
     printf "File name:    %s\n" @@ filename img;
     printf "Architecture: %s\n" @@ Arch.to_string (arch img);
     printf "Address size: %d\n" bits;
