@@ -205,6 +205,20 @@ Executable readbin
   CompiledObject: best
   BuildDepends:   bap
 
+Executable byteweight
+  Path:           src/byteweight
+  MainIs:         byteweight.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap
+
+Executable train
+  Path:           src/byteweight
+  MainIs:         train.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap
+
 Executable fbi
   Path:           src/fbi
   MainIs:         fbi.ml
