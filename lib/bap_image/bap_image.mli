@@ -35,7 +35,7 @@ val create : ?backend:string -> path -> result
     [data]. See {!create} for [backend] parameter. *)
 val of_string : ?backend:string -> string -> result
 
-(** [of_string ?backend ~data] creates an image from the specified
+(** [of_bigstring ?backend ~data] creates an image from the specified
     [data]. See {!create} for [backend] parameter. *)
 val of_bigstring : ?backend:string -> Bigstring.t -> result
 
@@ -54,6 +54,7 @@ val symbols : t -> sym table
 
 (** {2 Mappings }  *)
 val memory_of_section  : t -> sec -> mem
+(** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)
 val memory_of_symbol   : t -> sym -> mem * mem seq
 val symbols_of_section : t -> sec -> sym seq
 val section_of_symbol  : t -> sym -> sec
