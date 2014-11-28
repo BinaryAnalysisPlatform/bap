@@ -491,10 +491,10 @@ TEST_MODULE = struct
     ]
 
   let disasm = [
-    ["SUB64ri8"; "RSP"; "RSP"; "0x8"];
-    ["CALL64pcrel32"; "0xFFFFFFFFFFFFEE47"];
-    ["MOV32rm"; "EAX"; "RAX"; "0x1"; "nil"; "0x10"; "nil"];
-    ["ADD64ri8"; "RSP"; "RSP"; "0x8"];
+    ["SUB64ri8"; "RSP"; "RSP"; "8"];
+    ["CALL64pcrel32"; "-4537"];
+    ["MOV32rm"; "EAX"; "RAX"; "1"; "nil"; "16"; "nil"];
+    ["ADD64ri8"; "RSP"; "RSP"; "8"];
     ["RET"]
   ]
 

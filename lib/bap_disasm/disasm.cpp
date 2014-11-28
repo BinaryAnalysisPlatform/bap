@@ -324,7 +324,7 @@ void bap_disasm_delete(bap_disasm_type d) {
     disassemblers[d].reset();
 }
 
-static shared_ptr<disassembler> get(int d) {
+static inline shared_ptr<disassembler> get(int d) {
     assert(d >= 0 && d < disassemblers.size());
     auto dis = disassemblers[d];
     assert(dis);
@@ -404,7 +404,7 @@ int bap_disasm_insns_size(int d) {
     return get(d)->queue_size();
 }
 
-static const insn &get_insn(int d, int i) {
+static inline const insn &get_insn(int d, int i) {
     return get(d)->nth_insn(i);
 }
 

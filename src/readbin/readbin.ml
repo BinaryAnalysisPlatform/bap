@@ -15,17 +15,18 @@ let print_disasm s () =
   let open Disasm in
   List.iter (Basic.insns s) ~f:(fun (mem,insn) ->
       let addr = ok_exn (Addr.to_int64 (Memory.min_addr mem)) in
-      printf "0x%08LX\t" addr;
+      printf "%08LX  " addr;
       match insn with
       | None -> printf "skipped\n"
       | Some insn ->
-        printf "%-40s\t" (Sexp.to_string (Insn.sexp_of_t insn));
-        printf ";%s\n" (Insn.asm insn));
+        printf "%-48s" (Sexp.to_string (Insn.sexp_of_t insn));
+        printf "|%s\n" (Insn.asm insn));
   Basic.stop s ()
 
 let main () =
   Image.create Sys.argv.(1) >>= fun (img,warns) ->
-  List.iter warns ~f:(fun w -> printf "Warning: %s\n" @@ Error.to_string_hum w);
+  List.iter warns ~f:(fun w -> printf "Warning: %s\n" @@
+                       Error.to_string_hum w);
   let open Image in
   let bits = match addr_size img with
     | Word_size.W32 -> 32
@@ -55,16 +56,17 @@ let main () =
       printf "Section start: %s\n" @@
       Addr.to_string @@ Memory.min_addr mem;
       printf "Section perm : %s\n" @@ string_of_perm s;
-      printf "Section data:\n%a\n" Memory.pp mem);
-  return ()
+      (* printf "Section data:\n%a\n" Memory.pp mem *));
+  return (List.length warns)
 
 let () =
-  try
-    Plugins.load ();
-    Bap_llvm.init ();
-    if Array.length Sys.argv = 2
-    then match main () with
-      | Ok () -> ()
-      | Error err -> printf "Failed with: %s" @@ Error.to_string_hum err
-    else printf "Usage: reading filename\n";
-  with exn -> printf "Unhandled exception: %s\n" (Exn.to_string exn)
+  let () = try
+      Plugins.load ();
+      Bap_llvm.init ();
+      if Array.length Sys.argv = 2
+      then match main () with
+        | Ok n -> exit n
+        | Error err -> printf "Failed with: %s" @@ Error.to_string_hum err
+      else printf "Usage: reading filename\n"
+    with exn -> printf "Unhandled exception: %s\n" (Exn.to_string exn) in
+  exit (-1)
