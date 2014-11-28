@@ -5,13 +5,17 @@ B _build/lib/bap_dwarf
 B _build/lib/bap_elf
 B _build/lib/bap_image
 B _build/lib/bap_types
+EXT here
+EXT nonrec
+EXT ounit
+FLG -short-paths
+PKG core_kernel
 S lib/bap
 S lib/bap_disasm
 S lib/bap_dwarf
 S lib/bap_elf
 S lib/bap_image
 S lib/bap_types
-
 PKG core_kernel
 PKG ocamlbuild
 EXT ounit
