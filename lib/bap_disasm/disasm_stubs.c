@@ -2,6 +2,7 @@
 #include <caml/memory.h>
 #include <caml/bigarray.h>
 #include <caml/alloc.h>
+#include <assert.h>
 
 #include "disasm.h"
 
@@ -92,6 +93,12 @@ value bap_disasm_set_offset_stub(value d, value off) {
     bap_disasm_set_offset(Int_val(d), Int_val(off));
     return Val_unit;
 }
+
+/* noalloc */
+value bap_disasm_offset_stub(value d) {
+    return Val_int(bap_disasm_offset(Int_val(d)));
+}
+
 
 /* noalloc */
 value bap_disasm_run_stub(value d) {

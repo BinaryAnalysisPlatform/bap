@@ -212,6 +212,10 @@ public:
         off = new_off;
     }
 
+    int offset() const {
+        return off;
+    }
+
     const insn& nth_insn(int i) const {
         if (i < 0) {
             i = -i + 1;
@@ -372,6 +376,12 @@ int bap_disasm_predicate_is_supported(int d, bap_disasm_insn_p_type p) {
 void bap_disasm_set_offset(int d, int off) {
     get(d)->set_offset(off);
 }
+
+int bap_disasm_offset(int d) {
+    return get(d)->offset();
+}
+
+
 
 int bap_disasm_insn_asm_size(int d, int i) {
     return get(d)->get_asm(i).size();

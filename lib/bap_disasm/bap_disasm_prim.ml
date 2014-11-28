@@ -25,18 +25,20 @@ type pred =
   | Is_return
   | Is_call
   | Is_barrier
-  | Is_terminato
+  | Is_terminator
   | Is_branch
   | Is_indirect_branch
   | Is_conditional_branch
   | Is_unconditional_branch
   | May_affect_control_flow
+with compare, sexp
 
 type op =
   | Reg
   | Imm
   | Fmm
   | Insn
+with compare, sexp
 
 
 
@@ -49,7 +51,7 @@ external create
   = "bap_disasm_create_stub" "noalloc"
 
 external delete : t -> unit = "bap_disasm_delete_stub"  "noalloc"
-external set_memory : t -> int64 -> Bigstring.t -> int -> int -> unit
+external set_memory : t -> int64 -> Bigstring.t -> off:int -> len:int -> unit
   = "bap_disasm_set_memory_stub" "noalloc"
 
 external store_predicates : t -> bool -> unit =
@@ -76,6 +78,9 @@ external is_supported : t -> pred -> bool =
 external set_offset : t -> int -> unit =
   "bap_disasm_set_offset_stub" "noalloc"
 
+external offset : t -> int =
+  "bap_disasm_offset_stub" "noalloc"
+
 external run : t -> unit =
   "bap_disasm_run_stub" "noalloc"
 
@@ -91,6 +96,9 @@ external insn_size : t -> insn:int -> int =
 external insn_name : t -> insn:int -> int =
   "bap_disasm_insn_name_stub" "noalloc"
 
+external insn_code : t -> insn:int -> int =
+  "bap_disasm_insn_code_stub" "noalloc"
+
 external insn_offset : t -> insn:int -> int =
   "bap_disasm_insn_offset_stub" "noalloc"
 
@@ -100,32 +108,32 @@ external insn_asm_size : t -> insn:int -> int =
 external insn_asm_copy : t -> insn:int -> string -> unit =
   "bap_disasm_insn_asm_copy_stub" "noalloc"
 
-external insn_satisfies : t -> insn:int -> bool =
+external insn_satisfies : t -> insn:int -> pred -> bool =
   "bap_disasm_insn_satisfies_stub" "noalloc"
 
 external insn_ops_size : t -> insn:int -> int =
   "bap_disasm_insn_ops_size_stub" "noalloc"
 
-external insn_op_type : t -> insn:int -> op:int -> op =
+external insn_op_type : t -> insn:int -> oper:int -> op =
   "bap_disasm_insn_op_type_stub" "noalloc"
 
-external insn_op_reg_name : t -> insn:int -> op:int -> int =
+external insn_op_reg_name : t -> insn:int -> oper:int -> int =
   "bap_disasm_insn_op_reg_name_stub" "noalloc"
 
-external insn_op_reg_code : t -> insn:int -> op:int -> int =
+external insn_op_reg_code : t -> insn:int -> oper:int -> int =
   "bap_disasm_insn_op_reg_code_stub" "noalloc"
 
-external insn_op_imm_value : t -> insn:int -> op:int -> int64 =
+external insn_op_imm_value : t -> insn:int -> oper:int -> int64 =
   "bap_disasm_insn_op_imm_value_stub"
 
-external insn_op_imm_small_value : t -> insn:int -> op:int -> int =
+external insn_op_imm_small_value : t -> insn:int -> oper:int -> int =
   "bap_disasm_insn_op_imm_small_value_stub" "noalloc"
 
 
-external insn_op_fmm_value : t -> insn:int -> op:int -> float =
+external insn_op_fmm_value : t -> insn:int -> oper:int -> float =
   "bap_disasm_insn_op_fmm_value_stub"
 
-external insn_op_insn_value : t -> insn:int -> op:int -> int =
+external insn_op_insn_value : t -> insn:int -> oper:int -> int =
   "bap_disasm_insn_op_insn_value_stub" "noalloc"
 
 (**/**)

@@ -100,7 +100,6 @@ struct insn {
     location loc;
     int ops_num;
     operand ops[max_operands];
-    // std::array<operand,max_operands>  ops;
 };
 
 
