@@ -188,7 +188,7 @@ Library disasm
                  Bap_insn_kind,
                  Bap_llvm
   CCOpt:         -O3
-  CCLib:         $llvm_libs $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_mainlib $cxxlibs $llvm_ldflags
   CSources:      disasm.h, disasm.c, disasm_stubs.c,
                  llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
 

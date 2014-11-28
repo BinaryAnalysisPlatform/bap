@@ -66,12 +66,6 @@ fmm operand_value<fmm>(operand op) {
     return op.fmm_val;
 }
 
-template <>
-shared_ptr<insn> operand_value<shared_ptr<insn> >(operand op) {
-    assert(op.type == bap_disasm_op_insn);
-    return op.insn_val;
-}
-
 class disassembler {
     using predicates = std::vector<bap_disasm_insn_p_type>;
     using pred = predicates::value_type;
@@ -81,8 +75,6 @@ class disassembler {
     predicates supported_predicates;
     predicates preds;
     vector<insn> insns;
-    vector< shared_ptr<insn> > sub_insns;
-    std::map<subkey,int> submap;
     vector<string>  asms;
     string asm_cache;
     vector<predicates> insn_preds;
@@ -159,8 +151,6 @@ public:
 
     void clear_insns() {
         insns.clear();
-        sub_insns.clear();
-        submap.clear();
         asms.clear();
         insn_preds.clear();
     }
@@ -217,33 +207,21 @@ public:
     }
 
     const insn& nth_insn(int i) const {
-        if (i < 0) {
-            i = -i + 1;
-            assert(i < sub_insns.size());
-            return *sub_insns[i];
-        } else {
-            assert(i < insns.size());
-            return insns[i];
-        }
+        assert(i < insns.size());
+        return insns[i];
     }
 
     template <typename OpVal>
     OpVal oper_value(int i, int j) const {
         auto insn = nth_insn(i);
-        assert(j >= 0 && j < insn.ops_num);
+        assert(j >= 0 && j < insn.ops.size());
         return operand_value<OpVal>(insn.ops[j]);
     }
 
     bap_disasm_op_type oper_type(int i, int j) const {
         auto insn = nth_insn(i);
-        assert(j >= 0 && j < insn.ops_num);
+        assert(j >= 0 && j < insn.ops.size());
         return insn.ops[j].type;
-    }
-
-    int oper_insn(int i, int j) const {
-        auto r = submap.find(std::make_pair(i,j));
-        assert(r != submap.end());
-        return -(r->second + 1);
     }
 
 private:
@@ -253,18 +231,6 @@ private:
         off = insn.loc.off + insn.loc.len;
         insns.push_back(insn);
         asm_cache.clear();
-
-        int insn_no = insns.size() - 1;
-        int op_no = 0;
-        for (auto op : insn.ops) {
-            if (op.type == bap_disasm_op_insn) {
-                sub_insns.push_back(op.insn_val);
-                int sub_no = sub_insns.size() - 1;
-                subkey key = {insn_no, op_no};
-                submap.insert(std::make_pair(key, sub_no));
-            }
-            op_no++;
-        }
 
         if (store_asms) {
             asms.push_back(dis->get_asm());
@@ -429,7 +395,7 @@ int bap_disasm_insn_satisfies(int d, int i, bap_disasm_insn_p_type p) {
 }
 
 int bap_disasm_insn_ops_size(int d, int i) {
-    return get_insn(d,i).ops_num;
+    return get_insn(d,i).ops.size();
 }
 
 bap_disasm_op_type bap_disasm_insn_op_type(int d, int i, int j) {
@@ -451,9 +417,4 @@ imm bap_disasm_insn_op_imm_value(int d, int i, int op) {
 
 fmm bap_disasm_insn_op_fmm_value(int d, int i, int op) {
     return get(d)->oper_value<fmm>(i,op);
-}
-
-int bap_disasm_insn_op_insn_value(int d, int i, int op) {
-    assert(i >= 0);
-    return get(d)->oper_insn(i,op);
 }

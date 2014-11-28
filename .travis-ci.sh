@@ -55,8 +55,5 @@ oasis setup
 make
 make test
 make install
-cd examples
-./run.sh
-cd ..
-readbin `which readbin`
+./test.sh
 make uninstall

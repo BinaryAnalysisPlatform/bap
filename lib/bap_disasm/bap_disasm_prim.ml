@@ -133,7 +133,4 @@ external insn_op_imm_small_value : t -> insn:int -> oper:int -> int =
 external insn_op_fmm_value : t -> insn:int -> oper:int -> float =
   "bap_disasm_insn_op_fmm_value_stub"
 
-external insn_op_insn_value : t -> insn:int -> oper:int -> int =
-  "bap_disasm_insn_op_insn_value_stub" "noalloc"
-
 (**/**)

@@ -7,8 +7,6 @@ extern "C" {
 }
 
 namespace bap {
-const int max_operands = 16;
-
 struct table;
 struct memory;
 struct insn;
@@ -81,11 +79,6 @@ struct operand {
         imm imm_val;
         fmm fmm_val;
     };
-
-    // this is not in a union since we have a recursion in insn field. We
-    // can either leak, or use more memory for each operand. I prefer the
-    // latter.
-    std::shared_ptr<insn> insn_val;
 };
 
 
@@ -98,8 +91,7 @@ struct insn {
     int code;
     int name;
     location loc;
-    int ops_num;
-    operand ops[max_operands];
+    std::vector<operand> ops;
 };
 
 

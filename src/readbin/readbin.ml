@@ -32,8 +32,8 @@ let main () =
     | Word_size.W32 -> 32
     | Word_size.W64 -> 64 in
   let target = match arch img with
-    | Arch.ARM -> "ARM"
-    | Arch.X86_32 -> "i386"
+    | Arch.ARM -> "arm"
+    | Arch.X86_32 -> "x86"
     | Arch.X86_64 -> "x86_64" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
   let dis = Disasm.Basic.store_asm dis in
@@ -43,7 +43,6 @@ let main () =
   printf "Address size: %d\n" bits;
   printf "Entry point:  %s\n" @@ Addr.to_string (entry_point img);
   printf "Symbols: (%d)\n" (Table.length (symbols img));
-
   Table.iteri (symbols img) ~f:(fun mem s ->
       printf "\nSymbol name: %s\n" (Sym.name s);
       printf "Symbol data:\n%a\n" Memory.pp mem;
@@ -56,7 +55,10 @@ let main () =
       printf "Section start: %s\n" @@
       Addr.to_string @@ Memory.min_addr mem;
       printf "Section perm : %s\n" @@ string_of_perm s;
-      (* printf "Section data:\n%a\n" Memory.pp mem *));
+      printf "Linear sweep :\n";
+      Disasm.Basic.run dis
+        ~stopped:print_disasm ~return:ident ~init:() mem;
+      printf "Section data:\n%a\n" Memory.pp mem);
   return (List.length warns)
 
 let () =

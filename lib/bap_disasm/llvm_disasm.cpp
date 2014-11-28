@@ -59,7 +59,6 @@ public:
             return -1;
 
         const char *ptr = &mem.data[mem.loc.off + offset];
-        std::cerr  << "copying " << size << " bytes from " << mem.loc.off + offset << "\n";
         memcpy(buf, ptr, size);
         return 0;
     }
@@ -265,6 +264,11 @@ public:
         mcinst = fresh;
 
         int off = (int)(pc - mem->getBase());
+
+        if (off < mem->getExtent() && size == 0) {
+            size += 1;
+        }
+
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
@@ -334,9 +338,9 @@ private:
                 return invalid_insn(loc);
             }
 
-            ins.ops[i] = create_operand(op, loc);
+            ins.ops.push_back(create_operand(op, loc));
         }
-        ins.ops_num = mcinst.getNumOperands();
+
         ins.code = mcinst.getOpcode();
         ins.name = ins_info->getName(ins.code) - ins_tab.data;
         ins.loc = loc;
@@ -368,11 +372,10 @@ private:
             return op;
         }
         if (mcop.isInst()) {
-            op.type = bap_disasm_op_insn;
-            op.insn_val = std::make_shared<insn>(valid_insn(*mcop.getInst(), loc));
-            return op;
+            std::cerr << "got subinst\n";
+            abort();
         }
-        assert(false);
+        abort();
     }
 
     reg create_reg(unsigned code) const {

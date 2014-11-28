@@ -199,9 +199,3 @@ value bap_disasm_insn_op_fmm_value_stub(value d, value i, value j) {
     CAMLreturn(caml_copy_double
                (bap_disasm_insn_op_fmm_value(Int_val(d), Int_val(i), Int_val(j))));
 }
-
-
-/* noalloc */
-value bap_disasm_insn_op_insn_value_stub(value d, value i, value j) {
-    return Val_int(bap_disasm_insn_op_insn_value(Int_val(d), Int_val(i), Int_val(j)));
-}
