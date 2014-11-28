@@ -253,14 +253,6 @@ Executable fbi
   CompiledObject: best
   BuildDepends:   bap
 
-Executable disasm
-  Path:           src/disasm
-  MainIs:         disasm.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   bap
-
-
 Executable run_tests
   Path:         lib_test/bap
   MainIs:       run_tests.ml
