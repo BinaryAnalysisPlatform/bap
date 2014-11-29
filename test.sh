@@ -3,7 +3,7 @@
 cd examples
 ./run.sh
 cd ..
-readbin `which readbin` > /dev/null
+readbin /bin/ls > /dev/null
 
 git clone https://github.com/BinaryAnalysisPlatform/arm-binaries.git
 cd arm-binaries/coreutils

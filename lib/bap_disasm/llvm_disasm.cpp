@@ -93,6 +93,14 @@ static const bap_disasm_insn_p_type supported[] = {
     may_affect_control_flow
 };
 
+static const llvm::Target *lookup_target(std::string arch) {
+    for (auto t = llvm::TargetRegistry::begin();
+         t != llvm::TargetRegistry::end(); ++t)
+        if (t->getName() == arch)
+            return &*t;
+    return nullptr;
+}
+
 class llvm_disassembler : public disassembler_interface {
     shared_ptr<const llvm::MCRegisterInfo>  reg_info;
     shared_ptr<const llvm::MCInstrInfo>     ins_info;
@@ -118,8 +126,8 @@ public:
         std::string error;
 
         // returned value is not allocted
-        const llvm::Target *target =
-            llvm::TargetRegistry::lookupTarget(triple, error);
+        const llvm::Target *target = lookup_target(triple);
+            //llvm::TargetRegistry::lookupTarget(triple, error);
 
         if (!target) {
             if (debug_level > 0)

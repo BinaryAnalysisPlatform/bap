@@ -34,7 +34,7 @@ let main () =
   let target = match arch img with
     | Arch.ARM -> "arm"
     | Arch.X86_32 -> "x86"
-    | Arch.X86_64 -> "x86_64" in
+    | Arch.X86_64 -> "x86" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
   let dis = Disasm.Basic.store_asm dis in
   let dis = Disasm.Basic.store_kinds dis in
@@ -64,11 +64,10 @@ let main () =
 let () =
   let () = try
       Plugins.load ();
-      Bap_llvm.init ();
       if Array.length Sys.argv = 2
       then match main () with
         | Ok n -> exit n
-        | Error err -> printf "Failed with: %s" @@ Error.to_string_hum err
+        | Error err -> printf "Failed with: %s\n" @@ Error.to_string_hum err
       else printf "Usage: reading filename\n"
     with exn -> printf "Unhandled exception: %s\n" (Exn.to_string exn) in
   exit (-1)
