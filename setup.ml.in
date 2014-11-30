@@ -49,12 +49,11 @@ let llvm_config () : unit =
     "llvm_config"
     (fun () ->
        (* assume macports if we're on mac os x *)
-       let mp = if 
+       let mp = if
          BaseEnv.var_get "system" = "macosx" then "-mp" else "" in
        let ver = match BaseEnv.var_get "llvm_version" with
          | "" -> ""
          | ver -> "-"^ver in
-       Printf.eprintf "Looking for %s\n" ("llvm-config" ^ mp ^ ver);
        OASISFileUtil.which ~ctxt ("llvm-config" ^ mp ^ ver)) |>
   definition_end
 

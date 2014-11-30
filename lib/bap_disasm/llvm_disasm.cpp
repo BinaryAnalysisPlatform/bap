@@ -117,7 +117,7 @@ public:
         std::string error;
 
         // returned value is not allocted
-        const llvm::Target *target = 
+        const llvm::Target *target =
             llvm::TargetRegistry::lookupTarget(triple, error);
 
         if (!target) {
@@ -274,7 +274,6 @@ public:
             }
             current = valid_insn(loc);
         } else {
-            mcinst.setOpcode(0);
             if (debug_level > 0)
                 std::cerr << "failed to decode insn at"
                           << " pc " << pc
@@ -289,7 +288,7 @@ public:
     }
 
     std::string get_asm() const {
-        if (mcinst.getOpcode() != 0) {
+        if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
             printer->printInst(&mcinst, stream, "");
@@ -301,7 +300,7 @@ public:
 
     // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
-        bool current_invalid = mcinst.getOpcode() == 0;
+        bool current_invalid = current.code == 0;
         if (p == is_invalid || current_invalid) {
             return (p == is_invalid) && current_invalid;
         } else if (p == is_true) {
