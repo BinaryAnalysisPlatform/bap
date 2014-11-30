@@ -1,8 +1,10 @@
-language: c
+language: cpp
 script: bash -ex .travis-ci.sh
 os:
   - linux
   - osx
+compiler:
+  - clang
 env:
   - OCAML_VERSION=4.01.0 OPAM_VERSION=1.1.0
   - OCAML_VERSION=4.01.0 OPAM_VERSION=1.2.0

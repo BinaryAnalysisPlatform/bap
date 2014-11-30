@@ -1,5 +1,5 @@
 OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop"
-SYS_DEPENDS="libgmp-dev time"
+SYS_DEPENDS="libgmp-dev time llvm-3.4-dev"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
 4.02.0,1.2.0) ppa=avsm/ocaml42+opam12 ;;
@@ -47,12 +47,13 @@ opam --git-version
 opam init
 opam install ${OPAM_DEPENDS}
 eval `opam config env`
+
+
+
 oasis setup
-./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization
+./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`
 make
 make test
 make install
-cd examples
-./run.sh
-cd ..
+./test.sh
 make uninstall

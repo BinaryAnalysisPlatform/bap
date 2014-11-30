@@ -4,7 +4,7 @@ open Core_kernel.Std
 open Bap_types.Std
 open Image_common
 
-type t
+type t with sexp_of
 
 val create
   : ?pos:int                    (** defaults to [0]  *)
@@ -13,14 +13,13 @@ val create
   -> addr
   -> Bigstring.t -> t Or_error.t
 
-(** [copy/view word_size ~from ~words mem] returns a new memory
+(** [view word_size ~from ~words mem] returns a new memory
     that represents the specified region of memory [mem]. [copy]
     function performs deep copy.
 
     @param addr  defaults [min_addr mem]
     @param words defaults to the end of the memory region.
 *)
-val copy : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 
 (** [first_byte m] returns first byte of [m] as a memory  *)

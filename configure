@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -e
+
+FST=true
+for i in "$@"; do
+  if $FST; then
+    set --
+    FST=false
+  fi
+
+  case $i in
+    --*=*)
+      ARG=${i%%=*}
+      VAL=${i##*=}
+      set -- "$@" "$ARG" "$VAL"
+      ;;
+    *)
+      set -- "$@" "$i"
+      ;;
+  esac
+done
+
+ocaml preconfig.ml
+ocaml setup.ml -configure "$@"
