@@ -33,8 +33,8 @@ let main () =
     | Word_size.W64 -> 64 in
   let target = match arch img with
     | Arch.ARM -> "arm"
-    | Arch.X86_32 -> "x86"
-    | Arch.X86_64 -> "x86" in
+    | Arch.X86_32 -> "i386"
+    | Arch.X86_64 -> "x86_64" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
   let dis = Disasm.Basic.store_asm dis in
   let dis = Disasm.Basic.store_kinds dis in
