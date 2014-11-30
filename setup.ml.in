@@ -98,6 +98,17 @@ let llvm_mainlib () : unit =
        "-lLLVM-"^ver) |>
   definition_end
 
+let cc_optimization () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "C compiler optimization level")
+    "cc_optimization"
+    (fun () -> "-O2") |>
+  definition_end
+
+
 let define definitions =
   List.iter (fun f -> try f () with exn -> ()) definitions
 
@@ -107,6 +118,7 @@ let () =
     cxx;
     cxx_flags;
     cxx_libs;
+    cc_optimization;
     llvm_version;
     llvm_config;
     llvm_mainlib;

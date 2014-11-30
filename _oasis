@@ -186,7 +186,7 @@ Library disasm
                  Bap_disasm_basic,
                  Bap_disasm_prim,
                  Bap_insn_kind
-  CCOpt:         -O3
+  CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
   CSources:      disasm.h, disasm.c, disasm_stubs.c
 
@@ -200,7 +200,7 @@ Library llvm
                  bap.disasm,
                  bap.types
   Modules:       Bap_llvm
-  CCOpt:         -O3
+  CCOpt:         $cc_optimization
   CCLib:         $llvm_mainlib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm"
