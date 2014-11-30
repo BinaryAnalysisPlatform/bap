@@ -172,6 +172,10 @@ public:
     }
 
     bool satisfies(bap_disasm_insn_p_type p, int n) {
+        if (p == is_invalid && insns[n].code == 0) {
+            return true;
+        }
+
         if (store_preds) {
             assert(n >= 0 && n < insn_preds.size());
             auto beg = insn_preds[n].begin(), end = insn_preds[n].end();
@@ -346,8 +350,6 @@ void bap_disasm_set_offset(int d, int off) {
 int bap_disasm_offset(int d) {
     return get(d)->offset();
 }
-
-
 
 int bap_disasm_insn_asm_size(int d, int i) {
     return get(d)->get_asm(i).size();
