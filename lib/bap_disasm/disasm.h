@@ -202,6 +202,12 @@ int bap_disasm_predicate_is_supported(bap_disasm_type disasm,
 void bap_disasm_set_offset(bap_disasm_type disasm, int offset);
 
 
+/* returns current offset
+ * @pre none.
+ * */
+int bap_disasm_offset(bap_disasm_type disasm);
+
+
 /* in a normal mode of operation runs disassembler until one of the
  * predicates evaluates to true or until there is no more data. An
  * empty set of predicates, always evaluates to false.

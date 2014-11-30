@@ -47,12 +47,13 @@ opam --git-version
 opam init
 opam install ${OPAM_DEPENDS}
 eval `opam config env`
+
+
+
 oasis setup
-./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization
+./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`
 make
 make test
 make install
-cd examples
-./run.sh
-cd ..
+./test.sh
 make uninstall

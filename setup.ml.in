@@ -37,9 +37,8 @@ let llvm_version () : unit =
     ~cli:BaseEnv.CLIWith
     ~short_desc:(fun () -> "libllvm version (e.g., 3.4)")
     "llvm_version"
-    (fun () -> "") |>
+    (fun () -> "3.4") |>
   definition_end
-
 
 let llvm_config () : unit =
   BaseEnv.var_define
@@ -49,11 +48,13 @@ let llvm_config () : unit =
     ~short_desc:(fun () -> "llvm-config executable")
     "llvm_config"
     (fun () ->
-       let suffix =
-         match BaseEnv.var_get "llvm_version" with
+       (* assume macports if we're on mac os x *)
+       let mp = if
+         BaseEnv.var_get "system" = "macosx" then "-mp" else "" in
+       let ver = match BaseEnv.var_get "llvm_version" with
          | "" -> ""
-         | suf -> "-"^suf in
-       OASISFileUtil.which ~ctxt ("llvm-config"^suffix)) |>
+         | ver -> "-"^ver in
+       OASISFileUtil.which ~ctxt ("llvm-config" ^ mp ^ ver)) |>
   definition_end
 
 let llvm var () : unit =
@@ -80,9 +81,10 @@ let cxx_libs () : unit =
   BaseEnv.var_define
     ~hide:true
     ~dump:true
-    ~short_desc:(fun () -> "c++ flags")
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "c++ library")
     "cxxlibs"
-    (fun () -> "-lstdc++") |>
+    (fun () -> if BaseEnv.var_get "system" = "macosx" then "-lc++" else "-lstdc++") |>
   definition_end
 
 let llvm_mainlib () : unit =
@@ -98,6 +100,17 @@ let llvm_mainlib () : unit =
        "-lLLVM-"^ver) |>
   definition_end
 
+let cc_optimization () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "C compiler optimization level")
+    "cc_optimization"
+    (fun () -> "-O2") |>
+  definition_end
+
+
 let define definitions =
   List.iter (fun f -> try f () with exn -> ()) definitions
 
@@ -107,6 +120,7 @@ let () =
     cxx;
     cxx_flags;
     cxx_libs;
+    cc_optimization;
     llvm_version;
     llvm_config;
     llvm_mainlib;

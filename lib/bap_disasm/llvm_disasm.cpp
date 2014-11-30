@@ -59,7 +59,6 @@ public:
             return -1;
 
         const char *ptr = &mem.data[mem.loc.off + offset];
-        std::cerr  << "copying " << size << " bytes from " << mem.loc.off + offset << "\n";
         memcpy(buf, ptr, size);
         return 0;
     }
@@ -103,7 +102,6 @@ class llvm_disassembler : public disassembler_interface {
     shared_ptr<llvm::MCDisassembler>       dis;
     shared_ptr<const llvm::MemoryObject>   mem;
     shared_ptr<llvm::MCInstPrinter>       printer;
-    const llvm::MCInst invalid;
     const int debug_level;
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
@@ -255,30 +253,32 @@ public:
     }
 
     void step(int64_t pc) {
-        llvm::MCInst fresh;
+        mcinst.clear();
         uint64_t size = 0;
         auto status = dis->getInstruction
-            (fresh, size, *mem, pc,
+            (mcinst, size, *mem, pc,
              (debug_level > 2 ? llvm::errs() : llvm::nulls()),
              llvm::nulls());
 
-        mcinst = fresh;
-
         int off = (int)(pc - mem->getBase());
+
+        if (off < mem->getExtent() && size == 0) {
+            size += 1;
+        }
+
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
             if (debug_level > 1) {
-                std::cerr << get_asm() << "\n";
+                std::cerr << "read: '" << get_asm() << "'\n";
             }
-            current = valid_insn(mcinst, loc);
+            current = valid_insn(loc);
         } else {
             if (debug_level > 0)
                 std::cerr << "failed to decode insn at"
                           << " pc " << pc
                           << " offset " << off
                           << " skipping " << size << " bytes\n";
-            mcinst = invalid;
             current = invalid_insn(loc);
         }
     }
@@ -288,15 +288,19 @@ public:
     }
 
     std::string get_asm() const {
-        std::string empty;
-        llvm::raw_string_ostream stream(empty);
-        printer->printInst(&mcinst, stream, "");
-        return stream.str();
+        if (current.code != 0) {
+            std::string data;
+            llvm::raw_string_ostream stream(data);
+            printer->printInst(&mcinst, stream, "");
+            return stream.str();
+        } else {
+            return "";
+        }
     }
 
     // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
-        bool current_invalid = current.code == invalid.getOpcode();
+        bool current_invalid = current.code == 0;
         if (p == is_invalid || current_invalid) {
             return (p == is_invalid) && current_invalid;
         } else if (p == is_true) {
@@ -304,7 +308,7 @@ public:
         } else {
             auto d = ins_info->get(current.code);
             if (p == may_affect_control_flow) {
-                d.mayAffectControlFlow(mcinst, *reg_info);
+                return d.mayAffectControlFlow(mcinst, *reg_info);
             } else if (auto check = fun_of_pred(p)) {
                 return check(d);
             } else {
@@ -322,7 +326,7 @@ public:
     }
 
 private:
-    insn valid_insn(const llvm::MCInst & mcinst, location loc) const {
+    insn valid_insn(location loc) const {
         insn ins;
 
         for (int i = 0; i < mcinst.getNumOperands(); ++i) {
@@ -334,9 +338,9 @@ private:
                 return invalid_insn(loc);
             }
 
-            ins.ops[i] = create_operand(op, loc);
+            ins.ops.push_back(create_operand(op, loc));
         }
-        ins.ops_num = mcinst.getNumOperands();
+
         ins.code = mcinst.getOpcode();
         ins.name = ins_info->getName(ins.code) - ins_tab.data;
         ins.loc = loc;
@@ -344,8 +348,7 @@ private:
     }
 
     insn invalid_insn(location loc) const {
-        int code = invalid.getOpcode();
-        return {code, 0L, loc};
+        return {0, 0L, loc};
     }
 
     operand create_operand(llvm::MCOperand mcop, location loc) const {
@@ -368,11 +371,10 @@ private:
             return op;
         }
         if (mcop.isInst()) {
-            op.type = bap_disasm_op_insn;
-            op.insn_val = std::make_shared<insn>(valid_insn(*mcop.getInst(), loc));
-            return op;
+            std::cerr << "got subinst\n";
+            abort();
         }
-        assert(false);
+        abort();
     }
 
     reg create_reg(unsigned code) const {
@@ -443,8 +445,3 @@ int bap_disasm_llvm_init() {
     bap::initialize_llvm();
     return bap::register_disassembler("llvm", f);
 }
-
-
-// Local Variables:
-// compile-command: g++ -g llvm_disasm.cpp disasm.cpp test.cpp  -std=c++11 -fno-rtti `llvm-config-3.4 --cxxflags` -O0 `llvm-config-3.4 --ldflags`  -lLLVM-3.4 `llvm-config-3.4 --libs` && ./a.out
-// End:

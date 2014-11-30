@@ -34,6 +34,24 @@ type t = {
   get  : getters;
 }
 
+module Repr = struct
+  type t = {
+    endian  : endian;
+    offset  : int;
+    base    : addr;
+    size    : int;
+  } with sexp_of
+end
+
+let to_repr mem = {
+  Repr.endian = mem.endian;
+  Repr.offset = mem.off;
+  Repr.base   = mem.addr;
+  Repr.size   = mem.size;
+}
+
+let sexp_of_t mem = Repr.sexp_of_t (to_repr mem)
+
 (** [create_getters endian addr offset size data] creates a getters
     class according to the specified parameters. All parameters will be
     encapsulated inside a closure (cf, [getter] type).
@@ -179,12 +197,15 @@ module Input = struct
   let int64 = read int64
 end
 
+(* todo add optimization for one byte memory *)
 let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
   let amin = Option.value from ~default:(min_addr t) in
   let amax =
     Option.map words
       ~f:(fun w -> Addr.(amin ++ (w * Size.to_bytes word_size - 1))) |>
     Option.value ~default:(max_addr t) in
+  Validate.(result @@ name "non-empty view" @@
+            Addr.validate_lbound amax ~min:(Incl amin)) >>= fun () ->
   Addr.Int.(!$amax - !$amin >>= Addr.to_int) >>= fun diff ->
   let size = diff + 1 in
   Addr.Int.(!$amin - !$(t.addr) >>= Addr.to_int) >>= fun off ->

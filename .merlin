@@ -1,5 +1,6 @@
 B _build
 B _build/lib/bap
+B _build/lib/bap_disasm
 B _build/lib/bap_dwarf
 B _build/lib/bap_elf
 B _build/lib/bap_image
@@ -10,6 +11,7 @@ EXT ounit
 FLG -short-paths
 PKG core_kernel
 S lib/bap
+S lib/bap_disasm
 S lib/bap_dwarf
 S lib/bap_elf
 S lib/bap_image
@@ -19,6 +21,6 @@ PKG core_kernel
 PKG ocamlbuild
 EXT ounit
 EXT here
-EXT ounit
 EXT nonrec
 FLG -short-paths
+FLG -w -4-33-40-41-42-43-34-44

@@ -14,6 +14,7 @@ BuildDepends:
               camlp4,
               comparelib.syntax,
               core_kernel,
+              enumerate.syntax,
               fieldslib.syntax,
               herelib.syntax,
               herelib.syntax,
@@ -58,7 +59,8 @@ Library bap
   Path:            lib/bap
   FindLibName:     bap
   CompiledObject:  best
-  BuildDepends:    bap.dwarf,
+  BuildDepends:    bap.disasm,
+                   bap.dwarf,
                    bap.elf,
                    bap.image,
                    bap.types,
@@ -178,19 +180,30 @@ Library disasm
   Build$:        flag(disassemblers)
   FindlibParent: bap
   FindlibName:   disasm
-  BuildDepends:  bap.types,
-                 bap.image
-  Modules:       Bap_disasm_prim
+  BuildDepends:  bap.image,
+                 bap.types
+  Modules:       Bap_disasm,
+                 Bap_disasm_basic,
+                 Bap_disasm_prim,
+                 Bap_insn_kind
+  CCOpt:         $cc_optimization
+  CCLib:         $cxxlibs
   CSources:      disasm.h, disasm.c, disasm_stubs.c
+
 
 Library llvm
   Path:          lib/bap_disasm
-  Build$:        flag(llvm) && flag(disassemblers)
+  Build$:        flag(disassemblers) && flag(llvm)
   FindlibParent: bap
   FindlibName:   llvm
+  BuildDepends:  bap.image,
+                 bap.disasm,
+                 bap.types
   Modules:       Bap_llvm
-  CCLib:         $llvm_ldflags $llvm_mainlib $llvm_libs $cxxlibs
+  CCOpt:         $cc_optimization
+  CCLib:         $llvm_mainlib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
+  XMETAExtraLines: plugin_system = "bap.disasm"
 
 
 Library types_test
@@ -231,7 +244,7 @@ Executable readbin
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.llvm, bap.disasm
+  BuildDepends:   bap, bap.disasm
 
 Executable byteweight
   Path:           src/byteweight
