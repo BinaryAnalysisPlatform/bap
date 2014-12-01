@@ -11,17 +11,13 @@ let string_of_perm s =
       m Sec.is_executable "X";
     ])
 
-let print_disasm s () =
+let print_disasm s mem insn () =
   let open Disasm in
-  List.iter (Basic.insns s) ~f:(fun (mem,insn) ->
-      let addr = ok_exn (Addr.to_int64 (Memory.min_addr mem)) in
-      printf "%08LX  " addr;
-      match insn with
-      | None -> printf "skipped\n"
-      | Some insn ->
-        printf "%-48s" (Sexp.to_string (Insn.sexp_of_t insn));
-        printf "|%s\n" (Insn.asm insn));
-  Basic.stop s ()
+  let addr = ok_exn (Addr.to_int64 (Memory.min_addr mem)) in
+  printf "%08LX  %-48s|%s\n" addr
+    (Sexp.to_string (Insn.sexp_of_t insn))
+    (Insn.asm insn);
+  Basic.step s ()
 
 let main () =
   Image.create Sys.argv.(1) >>= fun (img,warns) ->
@@ -36,8 +32,6 @@ let main () =
     | Arch.X86_32 -> "i386"
     | Arch.X86_64 -> "x86_64" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
-  let dis = Disasm.Basic.store_asm dis in
-  let dis = Disasm.Basic.store_kinds dis in
   printf "File name:    %s\n" @@ filename img;
   printf "Architecture: %s\n" @@ Arch.to_string (arch img);
   printf "Address size: %d\n" bits;
@@ -46,8 +40,8 @@ let main () =
   Table.iteri (symbols img) ~f:(fun mem s ->
       printf "\nSymbol name: %s\n" (Sym.name s);
       printf "Symbol data:\n%a\n" Memory.pp mem;
-      Disasm.Basic.run dis
-        ~stopped:print_disasm ~return:ident ~init:() mem);
+      Disasm.Basic.run dis ~stop_on:[`valid]
+        ~hit:print_disasm ~return:ident ~init:() mem);
   printf "Loadable sections: %d\n" @@
   Table.length (sections img);
   Table.iteri (sections img) ~f:(fun mem s ->
@@ -56,8 +50,8 @@ let main () =
       Addr.to_string @@ Memory.min_addr mem;
       printf "Section perm : %s\n" @@ string_of_perm s;
       printf "Linear sweep :\n";
-      Disasm.Basic.run dis
-        ~stopped:print_disasm ~return:ident ~init:() mem;
+      Disasm.Basic.run dis ~stop_on:[`valid]
+        ~hit:print_disasm ~return:ident ~init:() mem;
       printf "Section data:\n%a\n" Memory.pp mem);
   return (List.length warns)
 
