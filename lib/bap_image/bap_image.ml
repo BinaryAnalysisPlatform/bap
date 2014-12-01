@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap_types.Std
 open Or_error
 
-
 open Image_common
 open Image_internal_std
 open Backend

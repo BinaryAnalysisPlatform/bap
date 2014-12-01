@@ -9,6 +9,10 @@ module Std = struct
   module Symbol  = Image.Sym
   module Plugin = Bap_plugin
   module Plugins = Bap_plugins
+
+  module Disasm = Bap_disasm
+
+
   type image = Image.t
   type elf = Elf.t
 end
