@@ -15,7 +15,7 @@ package manager:
 $ opam install bitstring core_kernel zarith
 ```
 
-_Note:_ The most setup-to-date source of our dependency list is in our travis
+_Note:_ The most up-to-date source of our dependency list is in our travis
 automation script `.travis-ci.sh`. The variable `SYS_DEPENDS` lists dependencies
 that should be installed on your system using `apt-get`; the variable
 `OPAM_DEPENDS` lists dependencies that can be installed via `opam`.
@@ -59,9 +59,11 @@ The `./configure` script will check that everything is OK. If not, it will
 terminate with error messages displayed on the console. Please be sure to check
 the console output.
 
-If you have installed `bap` previously, then use the `make reinstall` command
-instead of `make install`. If `make` still complains, then try to remove the old
-`bap` installation manually with the command `ocamlfind remove bap`.
+If you have installed `bap` previously, then use the command `make reinstall`
+instead of `make install`. However, this will *not* work if `setup.log` has been
+erased (by, for example, `git clean -fdx` or `make clean`). In that case, you
+can remove the old `bap` installation manually via the command `ocamlfind remove
+bap`.
 
 # Usage
 
