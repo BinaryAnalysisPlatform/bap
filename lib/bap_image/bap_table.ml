@@ -57,8 +57,11 @@ let empty = {
 }
 
 let fold_intersections tab x ~init ~f =
-  let min, min_addr = Mem.first_byte x, Mem.min_addr x in
   let max, max_addr = Mem.last_byte x,  Mem.max_addr x in
+  let min_addr = Mem.min_addr x in
+  let min = match Map.min_elt tab.map with
+    | Some (m,_) -> m
+    | None -> max in
   Map.fold_range_inclusive tab.map ~min ~max ~init
     ~f:(fun ~key ~data init ->
         match Mem.compare_with key min_addr,
