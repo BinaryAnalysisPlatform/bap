@@ -221,7 +221,8 @@ Library image_test
   CompiledObject: best
   BuildDepends:   bap
   Install:        false
-  Modules:        Test_image
+  Modules:        Test_image,
+                  Test_table
 
 Library benchmarks
   Path:           benchmarks

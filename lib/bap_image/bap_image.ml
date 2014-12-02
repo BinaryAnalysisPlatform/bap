@@ -177,7 +177,7 @@ let words_of_table word_size tab =
   let words_of_memory mem tab =
     Memory.foldi ~word_size mem ~init:tab
       ~f:(fun addr word tab ->
-          match Memory.view ~word_size ~from:addr mem with
+          match Memory.view ~word_size ~from:addr ~words:1 mem with
           | Error err ->
             eprintf "\nSkipping with error: %s\n"
               (Error.to_string_hum err);

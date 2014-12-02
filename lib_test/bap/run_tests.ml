@@ -5,6 +5,7 @@ let suite =
     Test_bitvector.suite;
     Test_conceval.suite;
     Test_image.suite;
+    Test_table.suite;
     Test_leb128.suite;
   ]
 
