@@ -15,3 +15,10 @@ type reg = Reg.t with bin_io, compare, sexp
 type imm = Imm.t with bin_io, compare, sexp
 type fmm = Fmm.t with bin_io, compare, sexp
 type (+'a,+'k) insn
+
+
+(** ARM instruction set  *)
+module Arm = struct
+  include Bap_disasm_arm
+  module Lift = Bap_disasm_arm_lifter
+end

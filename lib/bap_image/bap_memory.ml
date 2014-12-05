@@ -176,10 +176,12 @@ let compare_with mem addr =
   if Addr.between ~low ~high addr then `addr_is_inside else
   if Addr.(addr < low) then `addr_is_below else `addr_is_above
 
-let get ?(word_size=`r8) t addr : word or_error =
-  (getter t word_size).safe ~pos_ref:(ref addr)
+let get ?disp ?index ?(scale=`r8) ?addr t : word or_error =
+  let base = Option.value addr ~default:t.addr in
+  let addr = Addr.memref ?disp ?index ~scale base in
+  (getter t scale).safe ~pos_ref:(ref addr)
 
-let (^) t addr = get t addr
+let (^) t addr = get ~addr t
 let (^!) t addr = ok_exn (t ^ addr)
 
 module Input = struct

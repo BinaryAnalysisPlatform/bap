@@ -112,7 +112,7 @@
   ]
   .field [
     .name size
-    .type size
+    .type int
   ]
   .field [
     .name exp

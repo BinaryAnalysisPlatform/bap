@@ -29,7 +29,7 @@ val last_byte : t -> t
 
 (** [get word_size mem addr] reads memory value from the specified
     address. [word_size] default to [`r8] *)
-val get : ?word_size:size -> t -> addr -> word Or_error.t
+val get : ?disp:int -> ?index:int -> ?scale:size -> ?addr:addr -> t -> word Or_error.t
 
 (** [m^n] dereferences a byte at address [n]  *)
 val (^) : t -> addr -> word Or_error.t

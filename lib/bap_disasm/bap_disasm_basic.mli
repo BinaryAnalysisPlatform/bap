@@ -234,7 +234,7 @@ end
 (** Integer immediate operand  *)
 module Imm : sig
   type t = imm
-  val to_word  : t -> word
+  val to_word  : t -> width:int -> word option
   val to_int64 : t -> int64
   val to_int   : t -> int option
   include Regular with type t := t

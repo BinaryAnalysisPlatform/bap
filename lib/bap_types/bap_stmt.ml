@@ -4,7 +4,7 @@ open Format
 
 let rec pp fmt s =
   let open Bap_bil.Stmt in match s with
-  | Move (var, exp) -> fprintf fmt "%a = %a" Bap_var.pp var Bap_exp.pp exp
+  | Move (var, exp) -> fprintf fmt "@[<v2>%a = %a@]" Bap_var.pp var Bap_exp.pp exp
   | Jmp exp -> fprintf fmt "jmp %a" Bap_exp.pp exp
   | Special s -> fprintf fmt "special (%s)" s
   | While (cond, body) ->
@@ -24,6 +24,7 @@ and pp_else fmt = function
 
 let pp_stmts fmt ss =
   fprintf fmt "@[<v0>@[<v2>{@\n%a@]@\n}@]" pp_list ss
+
 
 include Regular.Make(struct
     include Bap_bil.Stmt
