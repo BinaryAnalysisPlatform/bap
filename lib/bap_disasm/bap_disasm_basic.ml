@@ -146,7 +146,11 @@ module Imm = struct
     with bin_io, sexp, compare
     let module_name = "Bap_disasm_basic.Imm"
     let pp fmt t =
-      Format.fprintf fmt "%Ld" (to_int64 t)
+      let x = to_int64 t in
+      if Int64.is_negative x then 
+        Format.fprintf fmt "-0x%Lx" (Int64.abs x)
+      else
+        Format.fprintf fmt "0x%Lx" x
 
     let hash {data = n} =
       if fits n.imm_small
