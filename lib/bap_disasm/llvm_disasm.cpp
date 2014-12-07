@@ -208,8 +208,9 @@ public:
                 output_error(triple, cpu, "failed to create instruction printer");
             return {nullptr, bap_disasm_unsupported_target};
         }
-
-
+        /* Make the default for immediates to be in hex */
+        printer->setPrintImmHex(true);
+          
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info));
 
