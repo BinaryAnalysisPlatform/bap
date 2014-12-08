@@ -8,8 +8,8 @@
 
 ## Installing `bap` dependencies
 
-The easiest way to install the dependencies of `bap` is to use the `opam`
-package manager:
+The easiest way to install the OCaml dependencies of `bap` is to use
+the `opam` package manager:
 
 ```bash
 $ opam install bitstring core_kernel zarith
@@ -40,6 +40,10 @@ We also recommend you install `utop` for running BAP.
 ```bash
 $ opam install utop
 ```
+
+Finally, you need to now install LLVM.  LLVM often changes their APIs,
+so we have had to standardize against one.  BAP currently compiles
+against llvm-3.4, which we have confirmed works on OSX and Ubuntu.
 
 ## Compiling and installing `bap`
 
