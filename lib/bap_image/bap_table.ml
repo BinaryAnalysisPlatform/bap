@@ -29,13 +29,13 @@ module Map = Mem.Map
 type mem = Mem.t with sexp_of
 
 type 'a cache = 'a Cache.t
-type 'a map = 'a Map.t
+type 'a map = 'a Map.t with sexp_of
 type 'a hashable = 'a Hashtbl.Hashable.t
 
 type 'a t = {
-  cache : 'a map -> 'a cache Lazy.t;
+  cache : 'a map -> 'a cache Lazy.t sexp_opaque;
   map : 'a map;
-}
+} with sexp_of
 
 type 'a ranged
   = ?start:mem   (** defaults to the lowest mapped region *)

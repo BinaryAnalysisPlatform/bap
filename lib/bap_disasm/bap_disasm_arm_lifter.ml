@@ -661,7 +661,7 @@ let lift_mem ops insn =
 
   (* POS_SIGN_BIT *)
   | `LDRSHTi, [|dest1; _unknown; base; Imm imm_off; cond; _|] ->
-    let offset = Mem_shift.mem_offset_reg_or_imm_pos (Op.Reg `nil) imm_off in
+    let offset = Mem_shift.mem_offset_reg_or_imm_pos (Op.Reg `Nil) imm_off in
     let insns =
       Mem_shift.lift_r_exp ~dest1 ~base ~offset PostIndex Signed H Ld
     in

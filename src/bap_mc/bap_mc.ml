@@ -15,8 +15,8 @@ let create_memory addr s =
   | Error _ -> raise Create_mem_exn
 
 let print_kinds insn =
-  let output = Insn.kinds insn 
-               |> List.map ~f:(fun kind -> 
+  let output = Insn.kinds insn
+               |> List.map ~f:(fun kind ->
                    Sexp.to_string_hum (Insn.Kind.sexp_of_t kind))
                |> String.concat ~sep:", " in
   printf "%-4s;; %s\n" " " output
@@ -24,21 +24,21 @@ let print_kinds insn =
 let print_insn insn width o_reg_format o_imm_format =
   let open Op in
   let init = [Sexp.Atom (Insn.name insn)] in
-  let res = 
+  let res =
     Insn.ops insn
     |> Array.fold ~init ~f:(fun l x -> match x with
-        | Reg reg -> 
+        | Reg reg ->
           if String.(o_reg_format = "code") then
             Sexp.Atom ("r:" ^ Int.to_string (Reg.code reg)) :: l else
             Sexp.Atom (Reg.name reg) :: l
-        | Imm imm -> 
+        | Imm imm ->
           if String.(o_imm_format = "dec") then
             let v = match Imm.to_int imm with
               | Some x -> x
               | None -> raise @@ Convert_imm_exn (Imm.to_string imm) in
             Sexp.Atom (Printf.sprintf "%d" v) :: l else
             Sexp.Atom (Imm.to_string imm) :: l
-        | Fmm fmm -> 
+        | Fmm fmm ->
           Sexp.Atom (Fmm.to_string fmm) :: l) in
   let s = Sexp.to_string @@ Sexp.List (List.rev res) in
   printf "%-4s%-*s" " " width s
@@ -47,7 +47,7 @@ let print_insn insn width o_reg_format o_imm_format =
  * things consistent *)
 let print_asm insn f_inst =
   let s = String.strip @@ Insn.asm insn in
-  if f_inst 
+  if f_inst
   then printf "; %s" s
   else printf "%-4s%s" " " s
 
@@ -72,7 +72,7 @@ let disasm s o_arch f_asm f_inst f_kinds o_reg_format o_imm_format =
   Disasm.Basic.create ~backend:"llvm" o_arch >>= fun dis ->
   let input = match input_src with
     | Some input ->
-      begin match String.prefix input 2 with 
+      begin match String.prefix input 2 with
         | "" | "\n" -> exit 0
         | "\\x" -> let f = ident in to_bin_str input f
         | "0x" -> let f = String.substr_replace_all ~pattern:"0x" ~with_:"\\x"
@@ -86,8 +86,8 @@ let disasm s o_arch f_asm f_inst f_kinds o_reg_format o_imm_format =
   let hit =
     print_disasm width f_asm f_inst f_kinds o_reg_format o_imm_format in
   let invalid state disasm = raise No_disassembly in
-  Disasm.Basic.run dis ~return:ident ~stop_on:[`valid] ~invalid ~hit ~init:() 
-    mem_of_input; 
+  Disasm.Basic.run dis ~return:ident ~stop_on:[`Valid] ~invalid ~hit ~init:()
+    mem_of_input;
   return ()
 
 open Cmdliner
@@ -136,28 +136,28 @@ let cmd =
         "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | bap-mc  --show-inst --show-asm");
     `S "SEE ALSO";
     `P "$(llvm-mc)"] in
-  Term.(pure disasm $ hex_str $ o_arch $ f_asm $ f_inst $ f_kinds 
+  Term.(pure disasm $ hex_str $ o_arch $ f_asm $ f_inst $ f_kinds
         $ o_reg_format $ o_imm_format),
   Term.info "bap-mc" ~doc ~man ~version:"1.0"
 
 let () =
-  Plugins.load (); 
+  Plugins.load ();
   let err = Format.std_formatter in
   try match Term.eval cmd ~catch:false ~err with
-    | `Error `Parse -> exit 64 
+    | `Error `Parse -> exit 64
     | `Error _ -> exit 1
     | _ -> exit 0
-  with e -> 
-    let fin s n = print_endline s; exit n in 
-    match e with 
-    | Bad_user_input -> 
+  with e ->
+    let fin s n = print_endline s; exit n in
+    match e with
+    | Bad_user_input ->
       fin "Could not parse: malformed input" 65
-    | Convert_imm_exn imm -> 
+    | Convert_imm_exn imm ->
       fin (sprintf "Unable to convert Imm hex value [%s] to int" imm) 1
-    | Create_mem_exn -> 
+    | Create_mem_exn ->
       fin "Internal error: cannot create memory for dissasembly backend" 1
-    | Stdin_exn -> 
+    | Stdin_exn ->
       fin "Could not read from stdin" 1
-    | No_disassembly -> 
+    | No_disassembly ->
       fin (sprintf "Invalid instruction encountered, disassembly stopped") 1
     | _ -> fin "Could not disassemble input" 1

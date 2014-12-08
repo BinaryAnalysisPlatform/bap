@@ -14,18 +14,18 @@ let x86_64 = "x86_64", [
 
     (* callq 942040 *)
     "\xe8\x47\xee\xff\xff", ["CALL64pcrel32"; "-0x11b9";],
-    [`call; `may_affect_control_flow];
+    [`Call; `May_affect_control_flow];
 
     (* mov 0x10(%rax),%eax *)
-    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "nil"; "0x10"; "nil"],
-    [`may_load];
+    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
+    [`May_load];
 
     (* add $0x8, %rsp *)
     "\x48\x83\xc4\x08", ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
 
     (* "retq" *)
     "\xc3", ["RET"],
-    [`return; `barrier; `terminator; `may_affect_control_flow]
+    [`Return; `Barrier; `Terminator; `May_affect_control_flow]
   ]
 
 let memory_of_string data =

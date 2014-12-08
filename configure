@@ -22,5 +22,14 @@ for i in "$@"; do
 done
 
 [ -f setup.ml -a setup.ml -nt _oasis ] || oasis -quiet setup
+
+
 ocaml preconfig.ml
+
+case `ocaml -vnum` in
+    4.01.*)
+       sed -i 's/mark_tag_used/ignore/' myocamlbuild.ml
+    ;;
+esac
+
 ocaml setup.ml -configure "$@"

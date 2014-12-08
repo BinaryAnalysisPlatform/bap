@@ -27,15 +27,17 @@ module Sym = struct
   } with bin_io, compare, fields, sexp
 end
 
+
+
 module Img = struct
   type t = {
     arch : arch;
-    addr_size: Word_size.t;
+    addr_size: addr_size;
     endian   : endian;
     entry    : addr;
     sections : Section.t * Section.t list;
     symbols  : Sym.t list;
-  } with fields
+  } with bin_io, compare, fields, sexp
 end
 
 type t = Bigstring.t -> Img.t option

@@ -7,8 +7,7 @@ open Image_internal_std
 open Backend
 
 type 'a m = 'a Or_error.t
-type img = Backend.Img.t
-type mem = Memory.t
+type img = Backend.Img.t with sexp_of
 type path = string
 
 let backends : Backend.t String.Table.t =
@@ -71,16 +70,17 @@ type words = {
 }
 
 type t = {
-  img  : img;
-  name : string;
+  img  : img ;
+  name : string option;
+  data : Bigstring.t;
   symbols : sym table;
   sections : sec table;
-  words : words;
-  memory_of_section : sec -> mem;
-  memory_of_symbol : (sym -> mem * mem seq) Lazy.t;
-  symbols_of_section : (sec -> sym seq) Lazy.t;
-  section_of_symbol : (sym -> sec) Lazy.t;
-}
+  words : words sexp_opaque;
+  memory_of_section : sec -> mem sexp_opaque;
+  memory_of_symbol : (sym -> mem * mem seq) Lazy.t sexp_opaque;
+  symbols_of_section : (sec -> sym seq) Lazy.t sexp_opaque;
+  section_of_symbol : (sym -> sec) Lazy.t sexp_opaque;
+} with sexp_of
 
 type result = (t * Error.t list) Or_error.t
 
@@ -209,20 +209,23 @@ let of_img img data name =
   let section_of_symbol () : sym -> sec =
     Table.(link ~one_to:one Sym.hashable syms secs) in
   return ({
-      img; name; symbols = syms; sections = secs; words;
+      img; name; data; symbols = syms; sections = secs; words;
       memory_of_section;
       memory_of_symbol   = Lazy.from_fun memory_of_symbol;
       symbols_of_section = Lazy.from_fun symbols_of_section;
       section_of_symbol  = Lazy.from_fun section_of_symbol;
     }, errs)
 
+let data t = t.data
+
 
 let of_backend backend data path : result =
   match String.Table.find backends backend with
   | None -> errorf "no such backend: '%s'" backend
   | Some load -> match load data with
-    | None -> errorf "%s: failed to read file «%s»" backend path
     | Some img -> of_img img data path
+    | None -> error "create image" (backend,`path path)
+                <:sexp_of<string * [`path of string option]>>
 
 let autoload data path =
   let bs = String.Table.data backends in
@@ -237,7 +240,7 @@ let create_image path ?backend data : result =
   | Some backend -> of_backend backend data path
 
 let of_bigstring ?backend data =
-  create_image "memory" ?backend data
+  create_image None ?backend data
 
 let of_string ?backend data =
   of_bigstring ?backend (Bigstring.of_string data)
@@ -261,8 +264,8 @@ let readfile path : Bigstring.t =
 let create ?backend path : result =
   try_with (fun () -> readfile path) >>= fun data ->
   match backend with
-  | None -> autoload data path
-  | Some backend -> of_backend backend data path
+  | None -> autoload data (Some path)
+  | Some backend -> of_backend backend data (Some path)
 
 let entry_point t = Img.entry t.img
 let filename t = t.name
