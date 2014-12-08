@@ -92,10 +92,10 @@ module PP = struct
     | Load (mem, idx, edn, s) ->
       fprintf fmt "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
     | Store (mem, idx, exp, edn, s) ->
-      fprintf fmt "%a with [%a, %a]:%a <- %a"
+      fprintf fmt "@[<v2>%a with@;[%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
-      fprintf fmt "if %a then %a else %a" pp ce pp te pp fe
+      fprintf fmt "@[<v2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
       fprintf fmt "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
@@ -106,8 +106,8 @@ module PP = struct
       fprintf fmt "%a(%a)" pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
     | Int bv  -> Bap_bitvector.pp fmt bv
-    | Cast (ct, s, exp) ->
-      fprintf fmt "%a:%a[%a]" pp_cast ct Bap_size.pp s pp exp
+    | Cast (ct, n, exp) ->
+      fprintf fmt "%a:%d[%a]" pp_cast ct n pp exp
     | Let (var, def, body) ->
       fprintf fmt "let %a = %a in %a" Bap_var.pp var pp def pp body
     | Unknown (s, typ) ->

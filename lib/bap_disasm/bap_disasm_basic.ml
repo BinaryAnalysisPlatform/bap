@@ -18,11 +18,6 @@ type pred = [
   |  kind
 ] with sexp,compare
 
-
-
-(** Invariant:
-    If data is not forced, then operand is from current queue.
-*)
 type 'a oper = {
   oper : int;
   insn : int;
@@ -139,7 +134,12 @@ module Imm = struct
     | None -> Int64.of_int n.imm_small
     | Some x -> x
 
-  let to_word t = to_int64 t |> Word.of_int64
+  let to_word t ~width =
+    let n = to_int64 t in
+    match Word.bitsub ~hi:(width-1) (Word.of_int64 n) with
+    | Ok word -> Some word
+    | Error _ -> None
+
 
   module T = struct
     type t = imm

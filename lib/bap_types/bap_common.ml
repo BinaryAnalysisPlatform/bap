@@ -46,13 +46,16 @@ with bin_io, compare, sexp
 type addr_size = [ `r32 | `r64 ] Size.p
 with bin_io, compare, sexp
 
+type nat1 = int
+with bin_io, compare, sexp
 
 (** The IR type of a BIL expression *)
 module Type = struct
   type t =
-    | Bool                      (** a one-bit flag  *)
-    | Reg  of size              (** imidiate value of [size]  *)
-    | TMem of addr_size * size  (** memory with a specifed addr_size *)
+    (** [Imm n] - n-bit immidiate   *)
+    | Imm of nat1
+    (** [Mem (a,t)]memory with a specifed addr_size *)
+    | Mem of addr_size * size
   with bin_io, compare, sexp, variants
 end
 

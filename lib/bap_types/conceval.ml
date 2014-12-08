@@ -165,7 +165,6 @@ let handle_binop op l r : value =
 
 let handle_cast cast_kind size v =
   let open Exp.Cast in
-  let size = Size.to_bits size in
   let cast v = match cast_kind with
     | UNSIGNED -> Word.bitsub_exn ~hi:size v
     | SIGNED   -> Word.bitsub_exn ~hi:size (Word.signed v)
@@ -180,7 +179,8 @@ let rec eval_exp state exp =
     | Load (arr, idx, endian, t) ->
       (match Memory.load (eval_exp state arr) (eval_exp state idx) endian t with
        | Some v -> v
-       | None -> Un ("Load from uninitialized memory", Type.reg t))
+       | None -> Un ("Load from uninitialized memory",
+                     Type.imm Size.(to_bits t)))
     | Store (arr, idx, v, endian, t) ->
       Memory.store (eval_exp state arr) (eval_exp state idx) (eval_exp state v)
         endian t

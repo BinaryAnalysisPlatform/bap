@@ -11,12 +11,21 @@ let string_of_perm s =
       m Sec.is_executable "X";
     ])
 
-let print_disasm s mem insn () =
+let is_lifted =
+  let open Arch in function
+    | ARM -> true
+    | _ -> false
+
+let print_disasm arch s mem insn () =
   let open Disasm in
-  let addr = ok_exn (Addr.to_int64 (Memory.min_addr mem)) in
-  printf "%08LX  %-48s|%s\n" addr
-    (Sexp.to_string (Insn.sexp_of_t insn))
-    (Insn.asm insn);
+  printf "# insn: %s@;%s@."
+    (Insn.asm insn)
+    (Sexp.to_string (Insn.sexp_of_t insn));
+  let () =
+    if is_lifted arch then match Arm.Lift.insn mem insn with
+      | Ok stmts -> printf "%a@.@." Stmt.pp_stmts stmts
+      | Error err -> printf "@.failed to lift: %s@." @@
+        Error.to_string_hum err in
   Basic.step s ()
 
 let main () =
@@ -24,38 +33,37 @@ let main () =
   List.iter warns ~f:(fun w -> printf "Warning: %s\n" @@
                        Error.to_string_hum w);
   let open Image in
+  let arch = arch img in
   let bits = match addr_size img with
     | Word_size.W32 -> 32
     | Word_size.W64 -> 64 in
-  let target = match arch img with
+  let target = match arch with
     | Arch.ARM -> "arm"
     | Arch.X86_32 -> "i386"
     | Arch.X86_64 -> "x86_64" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
-  printf "File name:    %s\n" @@ filename img;
-  printf "Architecture: %s\n" @@ Arch.to_string (arch img);
-  printf "Address size: %d\n" bits;
-  printf "Entry point:  %s\n" @@ Addr.to_string (entry_point img);
-  printf "Symbols: (%d)\n" (Table.length (symbols img));
+  printf "# File name:    %s\n" @@ filename img;
+  printf "# Architecture: %s\n" @@ Arch.to_string arch;
+  printf "# Address size: %d\n" bits;
+  printf "# Entry point:  %s\n" @@ Addr.to_string (entry_point img);
+  printf "# Symbols: (%d)\n" (Table.length (symbols img));
   Table.iteri (symbols img) ~f:(fun mem s ->
-      printf "\nSymbol name: %s\n" (Sym.name s);
-      printf "Symbol data:\n%a\n" Memory.pp mem;
+      printf "\n# Symbol name: %s\n" (Sym.name s);
+      printf "# Symbol data:\n%a\n" Memory.pp mem;
       Disasm.Basic.run dis ~stop_on:[`valid]
-        ~hit:print_disasm ~return:ident ~init:() mem);
-  printf "Loadable sections: %d\n" @@
+        ~hit:(print_disasm arch) ~return:ident ~init:() mem);
+  printf "# Loadable sections: %d\n" @@
   Table.length (sections img);
   Table.iteri (sections img) ~f:(fun mem s ->
       printf "Section name : %s\n" @@ Sec.name s;
       printf "Section start: %s\n" @@
       Addr.to_string @@ Memory.min_addr mem;
       printf "Section perm : %s\n" @@ string_of_perm s;
-      printf "Linear sweep :\n";
-      Disasm.Basic.run dis ~stop_on:[`valid]
-        ~hit:print_disasm ~return:ident ~init:() mem;
-      printf "Section data:\n%a\n" Memory.pp mem);
+      printf "Section data:\n%a\n" Memory.pp mem );
   return (List.length warns)
 
 let () =
+  Printexc.record_backtrace true;
   let () = try
       Plugins.load ();
       if Array.length Sys.argv = 2
@@ -63,5 +71,7 @@ let () =
         | Ok n -> exit n
         | Error err -> printf "Failed with: %s\n" @@ Error.to_string_hum err
       else printf "Usage: reading filename\n"
-    with exn -> printf "Unhandled exception: %s\n" (Exn.to_string exn) in
+    with exn -> printf "Unhandled exception: %s : %s \n"
+                  (Exn.to_string exn)
+                  (Exn.backtrace ()) in
   exit (-1)

@@ -183,13 +183,26 @@ Library disasm
   BuildDepends:  bap.image,
                  bap.types
   Modules:       Bap_disasm,
+                 Bap_disasm_arm,
+                 Bap_disasm_arm_bit,
+                 Bap_disasm_arm_branch,
+                 Bap_disasm_arm_env,
+                 Bap_disasm_arm_flags,
+                 Bap_disasm_arm_lifter,
+                 Bap_disasm_arm_mem,
+                 Bap_disasm_arm_mem_shift,
+                 Bap_disasm_arm_mov,
+                 Bap_disasm_arm_mul,
+                 Bap_disasm_arm_shift,
+                 Bap_disasm_arm_types,
+                 Bap_disasm_arm_utils,
                  Bap_disasm_basic,
                  Bap_disasm_prim,
                  Bap_insn_kind
+
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
   CSources:      disasm.h, disasm.c, disasm_stubs.c
-
 
 Library llvm
   Path:          lib/bap_disasm

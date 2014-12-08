@@ -74,14 +74,12 @@ let binop_of_piqi = function
   | `sle -> SLE
 
 let rec type_to_piqi : typ -> Stmt_piqi.typ = function
-  | Bool  -> `bool
-  | Reg s ->  (s :> Stmt_piqi.typ)
-  | TMem (t, t') -> `tmem {Stmt_piqi.Tmem.index_type = t; element_type = t';}
+  | Imm s ->  `imm s
+  | Mem (t, t') -> `mem {Stmt_piqi.Mem.index_type = t; element_type = t';}
 
 let rec type_of_piqi = function
-  | `bool -> Bool
-  | `tmem {P.Tmem.index_type; element_type} -> TMem (index_type, element_type)
-  | #size as n ->  Reg n
+  | `imm n -> Imm n
+  | `mem {P.Mem.index_type; element_type} -> Mem (index_type, element_type)
 
 
 let var_to_piqi v =

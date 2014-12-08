@@ -92,8 +92,8 @@ let print_list r =
 
 let to_list ~word_size backend ~expect ctxt =
   let data = String.Table.find_exn files backend in
-  let r = Image.of_string ~backend data >>| fun (img,errs) ->
-    assert_bool "to_list: no warning" (errs = []);
+  let r = Image.of_string ~backend data >>| fun (img,warns) ->
+    assert_bool "to_list: no warning" (warns = []);
     Table.to_sequence (Image.words img word_size) |>
     Seq.map ~f:snd |>  Seq.to_list in
   let width = Size.to_bits word_size in

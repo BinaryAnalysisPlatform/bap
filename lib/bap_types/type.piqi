@@ -1,8 +1,7 @@
 .variant [
   .name typ
-  .option [.name bool]
-  .option [.type size]
-  .option [.type tmem]
+  .option [.type imm]
+  .option [.type mem]
 ]
 
 .variant [
@@ -19,9 +18,13 @@
   .option [.name r64]
 ]
 
+.alias [
+  .name imm
+  .type int
+]
 
 .record [
-  .name tmem
+  .name mem
   .field [
     .name index-type
     .type addr-size

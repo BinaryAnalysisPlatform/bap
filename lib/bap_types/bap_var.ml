@@ -14,7 +14,7 @@ module T = struct
   let module_name = "Bap_var"
 
   let pp fmt v =
-    Format.fprintf fmt "%s_%d:%a" v.var v.uid Bap_type.pp v.typ
+    Format.fprintf fmt "%s:%a" v.var Bap_type.pp v.typ
 end
 
 include T
