@@ -1,26 +1,76 @@
 #!/usr/bin/env python
+"""
+Algebraic Data Types (ADT) is used to represent two kinds of things:
 
+1. A discrimintated union of types, called sum
+2. A combination of some types, called product.
+
+# Sum types
+
+Sum types represents a concept of generalizing. For example,
+on ARM R0 and R1 are all general purpose registers (GPR). Also on ARM
+we have Condition Code registers (CCR) :
+
+   class Reg(ADT) : pass
+   class GPR(Reg) : pass
+   class CCR(Reg) : pass
+   class R0(GPR)  : pass
+   class R1(GPR)  : pass
+
+
+That states that a register can be either R0 or R1, but not both.
+
+# Product types
+
+Product types represent a combination of other types. For example,
+mov instruction has two arguments, and the arguments are also ADT's by
+itself:
+
+   def Insn(ADT) : pass
+   def Mov(Insn) : pass
+
+   Mov(R0(), R1())
+
+
+# Comparison
+
+ADT objects are compared structurally: if they have the same class and
+and their values are structurally the same, then they are equal, i.e.,
+
+   assert(R0() == R0())
+   assert(R1() != R0())
+
+"""
 
 from collections import Iterable
 
 class ADT(object):
     """ Algebraic Data Type.
 
-    This is a base class for all ADTs. ADT represented by a tuple of arguments
-    If a particular constructor doesn't have an assosiated
-    value then it is an empty tuple. A one-tuple is automatically unboxed,
-    i.e., `Int(12)` has value `12`, not `(12,)`.
-    For convinience, a name of the constructor is provided in `name` field.
+    This is a base class for all ADTs. ADT represented by a tuple of arguments,
+    stored in a val field. Arguments should be instances of ADT class, or numbers,
+    or strings. Empty set of arguments is permitted.
+    A one-tuple is automatically untupled, i.e., `Int(12)` has value `12`, not `(12,)`.
+    For convenience, a name of the constructor is provided in `name` field.
+
+    A structural comparison is provided.
+
     """
-    def __init__(self, val=()):
-        self.val = val
+    def __init__(self, *args):
         self.name = self.__class__.__name__
+        self.val = args if len(args) != 1 else args[0]
+
+    def __cmp__(self,other):
+        return self.__dict__.__cmp__(other.__dict__)
 
     def __repr__(self):
-        if self.val is ():
-            return "%s()" % self.name
-        else:
-            return "%s(%r)" % (self.name, self.val)
+        def args():
+            if isinstance(self.val, tuple):
+                return "{0}".format(", ".join(str(x) for x in self.val))
+            else:
+                return "{0!r}".format(self.val)
+        return "{0}({1})".format(self.name, args())
+
 
 class Visitor(object):
     """ ADT Visitor.
@@ -40,7 +90,7 @@ class Visitor(object):
         no specific visitors. It will recursively descent into all
         ADT values.
         """
-        if isinstance(adt.val, Iterable):
+        if isinstance(adt.val, tuple):
             for e in adt.val:
                 self.run(e)
 
@@ -62,7 +112,7 @@ class Visitor(object):
         to recurse into sub-elements, e.g., call run method.
 
         For example, suppose that we want to count negative values in a given
-        expression:
+        BIL expression:
 
         class CountNegatives(Visitor):
             def __init__(self):
@@ -100,3 +150,13 @@ class Visitor(object):
                 fn = getattr(self, name, None)
                 if fn is not None:
                     return fn(adt)
+
+
+if __name__ == "__main__":
+    class Fruit(ADT) : pass
+    class Bannana(Fruit) : pass
+    class Apple(Fruit) : pass
+
+    assert(Bannana() == Bannana())
+    assert(Bannana() != Apple())
+    assert(  Apple() <  Bannana())

@@ -73,8 +73,9 @@ class Mem(Type) : pass  # Mem(Int(addr_size), Int(value_size))
 
 if __name__ == "__main__":
 
-    exp = Load((Int(12),Int(14), LittleEndian()))
-    exp = Load((exp, exp, BigEndian()))
+    exp = Load(Int(12),Int(14), LittleEndian())
+    print exp
+    exp = Load(exp, exp, BigEndian())
 
 
     class CountEvens(Visitor):

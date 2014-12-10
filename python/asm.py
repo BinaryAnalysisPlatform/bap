@@ -40,5 +40,6 @@ class Fmm(Op)        : pass
 
 
 if __name__ == "__main__":
-    insn = eval("Insn('MOVi', 0x40000, 0x4, 'mov r0, #5', [Call()], (Reg('R0'), Imm(5), Imm(14), Reg('nil'), Reg('nil')))")
-    print insn
+    print Reg('R0')
+    for insn in ["Reg(\"R0\")", "Imm(5)", "Imm(14)", "Reg(\"Nil\")", "Reg(\"Nil\")"]:
+        print eval(insn)
