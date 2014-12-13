@@ -25,11 +25,11 @@ type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
 
 
-(** Disasembler.
+(** Disassembler.
 
     ['a] and ['k] type variables specify disassembler modes of
     operation. In a process of disassembly it can store extra
-    information that might be usefull. Although, since storing it
+    information that might be useful. Although, since storing it
     takes extra time and space, it is disabled by default.
 
     The first type variable specifies whether storing assembly strings

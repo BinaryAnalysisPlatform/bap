@@ -1,4 +1,4 @@
-OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop"
+OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop cmdliner"
 SYS_DEPENDS="libgmp-dev time llvm-3.4-dev"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
