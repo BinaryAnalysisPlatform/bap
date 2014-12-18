@@ -9,11 +9,37 @@ open Core_kernel.Std
     but doesn't require [of_string] function, that is usually much
     harder to implement in comparison with [to_string] function. Also,
     instead of [to_string] it requires [pp] function that can be
-    implemented much more efficiently and elegantly.
+    implemented much more efficiently and elegantly. From the [pp]
+    function the whole plethora of printing functions are derived:
+    [str], [pps], [ppo], [ppb]
+
 *)
 module type S = sig
   type t with bin_io, sexp, compare
   val to_string : t -> string
+
+  (** [str () t] is formatted output function that matches "%a"
+      conversion format specifier in functions, that prints to string,
+      e.g., [sprintf], [failwithf], [errorf] and, suprisingly all
+      [Lwt] printing function, including [Lwt_io.printf] and logging
+      (or any other function with type ('a,unit,string,...)
+      formatN`. Example:
+
+      [Or_error.errorf "type %a is not valid for %a"
+         Type.str ty Exp.str exp]
+  *)
+  val str : unit -> t -> string
+
+  (** synonym for [str]  *)
+  val pps : unit -> t -> string
+
+  (** will print to a standard [output_channel], useful for using in
+      [printf], [fprintf], etc. *)
+  val ppo : out_channel -> t -> unit
+
+  (** will output to [Buffer], useful for [bprintf]  *)
+  val ppb : Buffer.t -> t -> unit
+
   include Comparable.S_binable with type t := t
   include Hashable.S_binable   with type t := t
   include Pretty_printer.S     with type t := t
