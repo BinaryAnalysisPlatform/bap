@@ -15,11 +15,9 @@ BuildDepends:
               comparelib.syntax,
               core_kernel,
               enumerate.syntax,
+              faillib.syntax,
               fieldslib.syntax,
               herelib.syntax,
-              herelib.syntax,
-              pa_bench.syntax,
-              pa_ounit.syntax,
               pa_ounit.syntax,
               sexplib.syntax,
               variantslib.syntax
@@ -53,6 +51,10 @@ Flag disassemblers
 
 Flag llvm
  Description: Build with llvm backend
+ Default: true
+
+Flag server
+ Description: Build BAP server
  Default: true
 
 Library bap
@@ -252,6 +254,14 @@ Library dwarf_test
   BuildDepends:   bap.dwarf
   Install:        false
   Modules:        Test_leb128
+
+Executable "bap-server"
+  Path:           src/server
+  Build$:         flag(server)
+  CompiledObject: best
+  BuildDepends:   bap, lwt-zmq, ezjsonm, uri
+  Install:        true
+  MainIs:         main.ml
 
 Executable readbin
   Path:           src/readbin
