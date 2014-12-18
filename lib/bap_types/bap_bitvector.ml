@@ -168,6 +168,11 @@ let to_int   = unop (safe Bignum.to_int)
 let to_int32 = unop (safe Bignum.to_int32)
 let to_int64 = unop (safe Bignum.to_int64)
 
+let string_of_value ?(hex=true) =
+  unop (Bignum.format (if hex then "0x%x" else "%d"))
+
+
+
 let of_binary ?width endian num  =
   let num = match endian with
     | LittleEndian -> num

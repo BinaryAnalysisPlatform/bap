@@ -88,7 +88,7 @@ module Reg = struct
     let data =
       let reg_code = C.insn_op_reg_code dis.id ~insn ~oper in
       let reg_name =
-        if reg_code = 0 then lazy "nil"
+        if reg_code = 0 then lazy "Nil"
         else
           let off = C.insn_op_reg_name dis.id ~insn ~oper in
           lazy (Table.lookup dis.reg_table off) in
@@ -286,6 +286,13 @@ let compare_insn (i1 : ('a,'b) insn) (i2 : ('a,'b) insn) =
   Insn.compare i1 i2
 let sexp_of_insn : ('a,'b) insn -> Sexp.t = Insn.sexp_of_t
 
+
+type full_insn = (asm,kind) insn
+
+let sexp_of_full_insn = sexp_of_insn
+
+
+
 type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
 module Pred = struct
@@ -479,64 +486,3 @@ let insn_of_mem dis mem =
         split mem' >>= fun r -> stop s (mem,Some insn,`left r))
     ~invalid:(fun s mem' _ ->
         split mem' >>= fun r -> stop s ( mem,None,`left r))
-
-(* TEST_MODULE = struct *)
-(*   (\* bap_disasm_insn_ops_size *\) *)
-(*   let data = String.concat [ *)
-(*       "\x48\x83\xec\x08";         (\* sub $0x8,%rsp       *\) *)
-(*       "\xe8\x47\xee\xff\xff";     (\* callq 942040        *\) *)
-(*       "\x8b\x40\x10";             (\* mov 0x10(%rax),%eax *\) *)
-(*       "\x48\x83\xc4\x08";         (\* add $0x8, %rsp *\) *)
-(*       "\xc3";                     (\* retq *\) *)
-(*     ] *)
-
-(*   let disasm = [ *)
-(*     ["SUB64ri8"; "RSP"; "RSP"; "8"]; *)
-(*     ["CALL64pcrel32"; "-4537"]; *)
-(*     ["MOV32rm"; "EAX"; "RAX"; "1"; "nil"; "16"; "nil"]; *)
-(*     ["ADD64ri8"; "RSP"; "RSP"; "8"]; *)
-(*     ["RET"] *)
-(*   ] *)
-
-(*   let string_of_disasm d = *)
-(*     let string_of_insn insn = *)
-(*       "\t" ^ Sexp.to_string_hum (<:sexp_of<(string list)>> insn) in *)
-(*     List.map d ~f:string_of_insn |> String.concat ~sep:"\n" *)
-
-
-(*   let memory addr s = *)
-(*     Mem.create LittleEndian Addr.(of_int64 addr) @@ *)
-(*     Bigstring.of_string s |> ok_exn *)
-
-(*   let hit state mem insn disasm = *)
-(*     let ops = Insn.ops insn |> *)
-(*               Array.map ~f:(Op.to_string) |> *)
-(*               Array.to_list in *)
-(*     step state ((Insn.name insn :: ops) :: disasm) *)
-
-(*   let get_all state = *)
-(*     List.map ~f:snd (insns state) |> *)
-(*     List.filter_opt |> *)
-(*     List.map ~f:(fun insn -> Insn.name insn :: *)
-(*                              (Insn.ops insn |> *)
-(*                               Array.map ~f:Op.to_string |> *)
-(*                               Array.to_list)) *)
-
-(*   let stopped s = function *)
-(*     | [] -> stop s (get_all s) *)
-(*     | xs -> stop s (List.rev xs) *)
-
-(*   let invalid state disasm = assert false *)
-
-
-(*   let state, mem = *)
-(*     let mem = memory 0x9431f0L data in *)
-(*     let dis = ok_exn (create ~backend:"llvm" "x86_64") in *)
-(*     create_state dis mem ~return:ident ~invalid ~stopped ~hit, mem *)
-
-(*   TEST = *)
-(*     let r = jump state mem [] in *)
-(*     printf "Expect:\n%s\n" (string_of_disasm disasm); *)
-(*     printf "Return:\n%s\n" (string_of_disasm r); *)
-(*     r = disasm *)
-(* end *)

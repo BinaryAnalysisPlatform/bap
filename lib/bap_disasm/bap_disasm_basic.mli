@@ -22,6 +22,11 @@ type imm  with bin_io, compare, sexp
 type fmm  with bin_io, compare, sexp
 type (+'a,+'k) insn
 type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
+type empty     (** set when information is not stored                *)
+type asm       (** set when assembler information is stored        *)
+type kinds     (** set when instruction kind information is stored *)
+
+type full_insn = (asm,kind) insn with sexp_of
 
 
 
@@ -43,13 +48,10 @@ type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
     store extra information about instruction kind.
 
     Note: at some points you can have an access to this information
-    even if you don't enable it explicitely.
+    even if you don't enable it explicitly.
 *)
 type ('a,'k) t
 
-type empty     (** set when information is not stored                *)
-type asm       (** set when assembler information is stored        *)
-type kinds     (** set when instruction kind information is stored *)
 
 
 (** Disassembler state.

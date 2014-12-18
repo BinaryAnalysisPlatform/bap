@@ -190,6 +190,7 @@ val of_binary : ?width:int -> endian -> string -> t
 val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
+val string_of_value : ?hex:bool -> t -> string
 
 (** [signed t] casts t to a signed type, so that any operations
     applied on [t] will be signed *)

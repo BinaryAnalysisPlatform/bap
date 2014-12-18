@@ -8,7 +8,7 @@ open Image_internal_std
 
 (** {2 Type definitions}  *)
 
-type t                          (** image   *)
+type t with sexp_of            (** image   *)
 (** section *)
 type sec with bin_io, compare, sexp
 (** symbol  *)
@@ -39,13 +39,16 @@ val of_string : ?backend:string -> string -> result
     [data]. See {!create} for [backend] parameter. *)
 val of_bigstring : ?backend:string -> Bigstring.t -> result
 
+
 (** {2 Attributes}  *)
 
 val entry_point : t -> addr
-val filename : t -> string
+val filename : t -> string option
 val arch: t -> arch
-val addr_size : t -> Word_size.t
+val addr_size : t -> addr_size
 val endian : t -> endian
+
+val data : t -> Bigstring.t
 
 (** {2 Tables }  *)
 val words : t -> size -> word table

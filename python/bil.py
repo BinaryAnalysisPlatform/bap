@@ -6,27 +6,27 @@ from adt import ADT, Visitor
 
 
 class Exp(ADT)  : pass     # Abstract base for all expressions
-class Load(Exp) : pass     # Load((mem,idx,endian,Int(size)))
-class Store(Exp): pass     # Store((mem,idx,val,endian,Int(size)))
+class Load(Exp) : pass     # Load(mem,idx,endian,size)
+class Store(Exp): pass     # Store(mem,idx,val,endian,size)
 class BinOp(Exp): pass     # Abstract base for all binary operators
 class UnOp(Exp) : pass     # Abstract base for all unary operators
-class Var(Exp)  : pass     # Var((name,type))
-class Int(Exp)  : pass     # Int(int)
+class Var(Exp)  : pass     # Var(name,type)
+class Int(Exp)  : pass     # Int(int,size)
 class Cast(Exp) : pass     # Abstract base for all cast operations
-class Let(Exp)  : pass     # Let((var,val,body))
+class Let(Exp)  : pass     # Let(var,val,body)
 class Unknown(Exp): pass   # Unknown(string,type)
-class Ite(Exp): pass       # Ite ((cond,if_true,if_false))
-class Extract(Exp): pass   # Extract(Int(hb),Int(lb), exp)
-class Concat(Exp): pass    # Concat((lhs,rhs))
+class Ite(Exp): pass       # Ite (cond,if_true,if_false)
+class Extract(Exp): pass   # Extract(hb,lb, exp)
+class Concat(Exp): pass    # Concat(lhs,rhs)
 
 class Stmt(ADT) : pass     # Abstract base for all statements
 
-class Move(Stmt) : pass    # Move((var,exp))
+class Move(Stmt) : pass    # Move(var,exp)
 class Jmp(Stmt) : pass     # Jmp(exp)
 class Special(Stmt): pass  # Special (string)
-class While(Stmt) : pass   # While ((cond, exps))
-class If(Stmt) : pass      # If((cond, yes-exprs, no-exprs))
-class CpuExn(Stmt) : pass  # CpuExn(Int(n))
+class While(Stmt) : pass   # While (cond, exps)
+class If(Stmt) : pass      # If(cond, yes-exprs, no-exprs)
+class CpuExn(Stmt) : pass  # CpuExn(n)
 
 # All BinOps have two operands of type exp
 class PLUS    (BinOp) : pass
@@ -65,8 +65,8 @@ class LittleEndian(Endian) : pass
 class BigEndian(Endian) : pass
 
 class Type(ADT) : pass  # Abstract base for expression type
-class Imm(Type) : pass  # Imm(Int(size)) - immediate value
-class Mem(Type) : pass  # Mem(Int(addr_size), Int(value_size))
+class Imm(Type) : pass  # Imm(size) - immediate value
+class Mem(Type) : pass  # Mem(addr_size, value_size)
 
 
 # A playground.

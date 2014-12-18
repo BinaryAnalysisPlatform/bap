@@ -27,6 +27,9 @@ val first_byte : t -> t
 (** [last_byte m] returns last byte of [m] as a memory  *)
 val last_byte : t -> t
 
+(** returns the order of bytes in a word  *)
+val endian : t -> endian
+
 (** [get word_size mem addr] reads memory value from the specified
     address. [word_size] default to [`r8] *)
 val get : ?disp:int -> ?index:int -> ?scale:size -> ?addr:addr -> t -> word Or_error.t

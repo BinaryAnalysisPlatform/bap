@@ -35,14 +35,15 @@ let main () =
   let open Image in
   let arch = arch img in
   let bits = match addr_size img with
-    | Word_size.W32 -> 32
-    | Word_size.W64 -> 64 in
+    | `r32 -> 32
+    | `r64 -> 64 in
   let target = match arch with
     | Arch.ARM -> "arm"
     | Arch.X86_32 -> "i386"
     | Arch.X86_64 -> "x86_64" in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
-  printf "# File name:    %s\n" @@ filename img;
+  let name = Option.value (filename img) ~default:"<memory>" in
+  printf "# File name:    %s\n" @@ name;
   printf "# Architecture: %s\n" @@ Arch.to_string arch;
   printf "# Address size: %d\n" bits;
   printf "# Entry point:  %s\n" @@ Addr.to_string (entry_point img);
