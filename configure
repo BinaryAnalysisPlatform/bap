@@ -21,5 +21,6 @@ for i in "$@"; do
   esac
 done
 
+[ -f setup.ml ] || oasis -quiet setup
 ocaml preconfig.ml
 ocaml setup.ml -configure "$@"

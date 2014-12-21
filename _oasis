@@ -43,6 +43,10 @@ Flag serialization
   Description: Build serialization library
   Default: false
 
+Flag llvm_static
+  Description: Links with llvm in a static mode
+  Default: true
+
 Flag benchmarks
   Description: Build and run benchmarks
   Default: false
@@ -214,7 +218,7 @@ Library llvm
                  bap.types
   Modules:       Bap_llvm
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_mainlib $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm"
 
