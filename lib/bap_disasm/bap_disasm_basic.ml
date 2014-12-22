@@ -475,14 +475,14 @@ let store_asm d =
   {d with asm = true}
 
 let insn_of_mem dis mem =
-  let init = mem,None,`left mem in
+  let init = mem, None, `left mem in
   let split mem' =
     Mem.view mem ~from:Addr.(Mem.max_addr mem' ++ 1) in
-  run ~stop_on:[`valid] dis mem ~return ~init
-    ~hit:(fun s mem' insn _ ->
-        split mem' >>= fun r -> stop s (mem,Some insn,`left r))
-    ~invalid:(fun s mem' _ ->
-        split mem' >>= fun r -> stop s ( mem,None,`left r))
+  run ~stop_on:[ `valid ] dis mem ~return ~init
+    ~hit:(fun s mem insn _ ->
+        split mem >>= fun r -> stop s (mem, Some insn, `left r))
+    ~invalid:(fun s mem _ ->
+        split mem >>= fun r -> stop s (mem, None,      `left r))
 
 (* TEST_MODULE = struct *)
 (*   (\* bap_disasm_insn_ops_size *\) *)
