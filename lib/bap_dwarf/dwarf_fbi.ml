@@ -13,7 +13,7 @@ module Input = Dwarf_input
 module Value = struct
   type hi_addr =
     | Abs of addr
-    | Rel of int
+    | Rel of int64
   with sexp,bin_io,compare
 
   type t =
@@ -37,13 +37,19 @@ module Fn = struct
       pc_lo: addr;
     } with sexp,bin_io,compare,fields
 
-    let create ?pc_hi ~pc_lo () = {
-      pc_lo;
-      pc_hi = match pc_hi with
-        | None -> None
-        | Some (Value.Abs addr) -> Some addr
-        | Some (Value.Rel off) -> Some Addr.(pc_lo ++ off)
-    }
+    let int_of_int64 off : int Or_error.t =
+      Result.of_option
+        ~error:Error.(create "hi pc offset is too big"
+                        off sexp_of_int64)
+        (Int64.to_int off)
+
+    let create ?pc_hi ~pc_lo () =
+      let pc_hi = match pc_hi with
+        | None -> return None
+        | Some (Value.Abs addr) -> return (Some addr)
+        | Some (Value.Rel off) -> int_of_int64 off >>| fun off ->
+          Some Addr.(pc_lo ++ off) in
+      pc_hi >>| fun pc_hi -> {pc_lo; pc_hi}
     let hash = Hashtbl.hash
     let module_name = "Dwarf_fbi.Fn"
   end
@@ -68,9 +74,9 @@ let fn_of_values vs : (string * fn) Or_error.t =
   let open Value in
   match List.sort ~cmp:Value.compare vs with
   | Id name :: Lo pc_lo :: Hi pc_hi :: _ ->
-    return (name, Fn.create ~pc_hi ~pc_lo ())
+    Fn.create ~pc_hi ~pc_lo () >>| fun fn -> name,fn
   | Id name :: Lo pc_lo :: _ ->
-    return (name, Fn.create ~pc_lo ())
+    Fn.create ~pc_lo () >>| fun fn -> name,fn
   | Id name :: vs -> errorf "'%s' is degenerate" name |> fun err ->
     tag_arg err "attrs" vs (sexp_of_list sexp_of_value )
   | vs -> errorf "got anonymous function" |> fun err ->
@@ -89,7 +95,8 @@ let read_scheme s str_sec action str ~pos_ref =
   let lo_pc = Input.map address ~f:Value.lo in
   let hi_pc = Input.map address ~f:(fun x -> Value.(hi (Abs x))) in
 
-  let rec emit attr form = match attr,form with
+  let rec emit attr form =
+    match attr,form with
     | Attr.Name,  Form.String -> action name
     | Attr.Low_pc,  Form.Addr -> action lo_pc
     | Attr.High_pc, Form.Addr -> action hi_pc
@@ -211,7 +218,9 @@ let create data : t Or_error.t =
         | Ok (Yield (fn,())) -> Yield (fn,(abbrs,cu_end))
         | Ok (Skip ()) -> Skip (abbrs,cu_end)
         | Error err ->
-          eprintf "Parsing stopped: %s\n"
+          eprintf
+            "Warning: Dwarf parser stopped prematurely: %s\n\
+             Some symbols maybe ommited\n"
             (Error.to_string_hum err);
           Sequence.Step.Done) in
   read_unit ()

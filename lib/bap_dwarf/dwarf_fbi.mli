@@ -16,15 +16,15 @@ type fn with bin_io, compare, sexp
     - .debug_info   [Section.Info]
     - .debug_str    [Section.Str]
 *)
-val create: string Dwarf_data.t -> t Or_error.t
+val create : string Dwarf_data.t -> t Or_error.t
 
 (** [functions searcher] enumerates functions  *)
-val functions: t -> (string * fn) Sequence.t
+val functions : t -> (string * fn) Sequence.t
 
 (** Current function representation.  *)
 module Fn : sig
   type t = fn with bin_io, compare, sexp
-  val pc_lo: t -> addr
-  val pc_hi: t -> addr option
+  val pc_lo : t -> addr
+  val pc_hi : t -> addr option
   include Identifiable.S with type t := t
 end

@@ -36,6 +36,8 @@ setup.data: *.in
 configure:
 	$(CONFIGURE) $(BAPCONFIGUREFLAGS)
 
+.PHONY: configure
+.PHONY: clean disclean reinstall
 
 .PHONY: check
 check: check-piqi check-ocp-indent
