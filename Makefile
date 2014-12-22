@@ -1,41 +1,40 @@
-SETUP = ocaml setup.ml
+SETUP = ocaml setup.ml -quiet
+CONFIGURE = ./configure
 PIQI=piqi
 OCI=ocp-indent
 
 build: setup.data
-	$(SETUP) -build $(BUILDFLAGS)
+	$(SETUP) -build $(BAPBUILDFLAGS)
 
 doc: setup.data build
-	$(SETUP) -doc $(DOCFLAGS)
+	$(SETUP) -doc $(BAPDOCFLAGS)
 
 test: setup.data build
-	$(SETUP) -test $(TESTFLAGS)
+	$(SETUP) -test $(BAPTESTFLAGS)
 
-all:
-	$(SETUP) -all $(ALLFLAGS)
+all: setup.data
+	$(SETUP) -all $(BAPALLFLAGS)
 
 install: setup.data
-	$(SETUP) -install $(INSTALLFLAGS)
+	$(SETUP) -install $(BAPINSTALLFLAGS)
 
 uninstall: setup.data
-	$(SETUP) -uninstall $(UNINSTALLFLAGS)
+	$(SETUP) -uninstall $(BAPUNINSTALLFLAGS)
 
 reinstall: setup.data
-	$(SETUP) -reinstall $(REINSTALLFLAGS)
+	$(SETUP) -reinstall $(BAPREINSTALLFLAGS)
 
-clean:
-	$(SETUP) -clean $(CLEANFLAGS)
+clean: setup.data
+	$(SETUP) -clean $(BAPCLEANFLAGS)
 
-distclean:
-	$(SETUP) -distclean $(DISTCLEANFLAGS)
+distclean: setup.data
+	$(SETUP) -distclean $(BAPDISTCLEANFLAGS)
 
-setup.data:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
+setup.data: *.in
+	$(CONFIGURE) $(BAPCONFIGUREFLAGS)
 
 configure:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
-
-.PHONY: build doc test all install uninstall reinstall clean distclean configure
+	$(CONFIGURE) $(BAPCONFIGUREFLAGS)
 
 
 .PHONY: check

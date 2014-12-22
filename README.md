@@ -35,7 +35,7 @@ environment.
 $ opam install oasis
 ```
 
-We also recommend you install `utop` for running BAP.  
+We also recommend you install `utop` for running BAP.
 
 ```bash
 $ opam install utop
@@ -48,20 +48,28 @@ against llvm-3.4, which we have confirmed works on OSX and Ubuntu.
 ## Compiling and installing `bap`
 
 Once all the dependencies of `bap` have been installed, we can start the actual
-build. In a development version, you need to start by executing `oasis setup`.
-If you are building from a release, e.g., you have just downloaded a tarball,
-then you can skip this step. Now, run the following commands:
+build. Now, run the following commands:
 
 ```bash
-$ oasis setup  #needed only if you have cloned from git
-$ ./configure --prefix=$(opam config var prefix)
 $ make
 $ make install
 ```
 
-The `./configure` script will check that everything is OK. If not, it will
-terminate with error messages displayed on the console. Please be sure to check
-the console output.
+This will run take care to run all configuration scripts for you. If
+you want to provide some specific flags to `configure`, then you need
+either to invoke it manually with `./configure` or provide them to
+make using `BAPCONFIGUREFLAGS` environment variable.
+
+Note: if you have chosen prefix that require super-user privileges,
+then you need to run `make install` using either `sudo`, e.g., `sudo
+make install` or switch to a super-user mode. Although it is not
+required, we suggest to install `bap` in to `opam` stack. In this case
+a proper prefix can be generated using `opam config var` command,
+e.g.,
+
+```bash
+./configure --prefix=$(opam config var prefix)
+```
 
 If you have installed `bap` previously, then use the command `make reinstall`
 instead of `make install`. However, this will *not* work if `setup.log` has been
