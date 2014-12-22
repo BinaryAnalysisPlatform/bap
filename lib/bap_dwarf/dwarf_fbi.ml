@@ -220,7 +220,7 @@ let create data : t Or_error.t =
         | Error err ->
           eprintf
             "Warning: Dwarf parser stopped prematurely: %s\n\
-             Some symbols maybe ommited\n"
+             \t\tSome symbols maybe ommited\n"
             (Error.to_string_hum err);
           Sequence.Step.Done) in
   read_unit ()
