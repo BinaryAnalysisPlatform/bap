@@ -32,7 +32,6 @@ sudo apt-get update -qq
 export OPAMYES=1
 export OPAMVERBOSE=1
 export OPAMJOBS=4
-export MAKEFLAGS='-j 4'
 
 echo $TRAVIS_OS_NAME
 case $TRAVIS_OS_NAME in
