@@ -12,7 +12,7 @@ test_case() {
     fi;
 }
 
-export -f test_file
+export -f test_case
 
 TARGETS="arm x86"
 
