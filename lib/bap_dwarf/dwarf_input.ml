@@ -148,6 +148,7 @@ let form = read_leb128 form_of_int
 let read_addr  = make_reader addr
 let read_int   = make_reader int
 let read_int32 = make_reader int32
+let read_int64 = make_reader int64
 
 let take read str ~pos_ref = read str ~pos_ref >>| Option.some
 let drop read str ~pos_ref = read str ~pos_ref >>| fun _ -> None
@@ -205,17 +206,20 @@ let code = read_leb128 (fun x -> Ok x)
 let address = read_addr
 
 
-let const lenspec : endian -> int reader =
+let const lenspec : endian -> int64 reader =
   match lenspec with
-  | Leb128 -> fun (_ : endian) -> code
-  | One -> fun (_ : endian) -> char
-  | Two -> read_int16
-  | Four ->  fun endian -> read_int endian W32
-  | Eight -> fun endian -> read_int endian W64
+  | Leb128 -> fun (_ : endian) -> map ~f:Int64.of_int code
+  | One -> fun (_ : endian) -> map ~f:Int64.of_int char
+  | Two -> fun (e) -> map ~f:Int64.of_int (read_int16 e)
+  | Four ->  fun endian -> read_int64 endian W32
+  | Eight -> fun endian -> read_int64 endian W64
 
 
 let block lenspec endian src ~pos_ref =
   const lenspec endian src ~pos_ref >>= fun len ->
+  Result.of_option
+    ~error:(Error.create "block size is too big" len sexp_of_int64)
+    (Int64.to_int len) >>= fun len ->
   let dst = String.create len in
   String.blit ~src ~src_pos:!pos_ref ~dst ~dst_pos:0 ~len;
   pos_ref := !pos_ref + len;

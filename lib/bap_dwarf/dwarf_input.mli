@@ -19,7 +19,7 @@ val address_size: Word_size.t reader
 val offset: endian -> Word_size.t -> int reader
 
 val block: lenspec -> endian -> string reader
-val const: lenspec -> endian -> int reader
+val const: lenspec -> endian -> int64 reader
 
 val map: 'a reader -> f:('a -> 'b) -> 'b reader
 val take: 'a reader -> 'a option reader

@@ -58,7 +58,6 @@ let main () =
       printf "Section name : %s\n" @@ Sec.name s;
       printf "Section start: %s\n" @@
       Addr.to_string @@ Memory.min_addr mem;
-      printf "Section perm : %s\n" @@ string_of_perm s;
       printf "Section data:\n%a\n" Memory.pp mem );
   return (List.length warns)
 
