@@ -23,7 +23,10 @@ cd ..
 
 for target in $TARGETS; do
     git clone --depth=1 https://github.com/BinaryAnalysisPlatform/$target-binaries.git
-    find "$target-binaries" -type f -regex '.*utils_.*' | parallel test_case {}
+    echo "will test the following files:"
+    find "$target-binaries" -type f -regex '.*utils_.*'
+    echo "starting the test suite"
+    find "$target-binaries" -type f -regex '.*utils_.*' | parallel test_case
     rm -rf "$target-binaries"
 done
 
