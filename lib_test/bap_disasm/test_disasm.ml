@@ -8,20 +8,24 @@ module Dis = Disasm.Basic
 let err fmt = Or_error.errorf fmt
 
 let x86_64 = "x86_64", [
-    "\x48\x83\xec\x08", ["SUB64ri8"; "RSP"; "RSP"; "0x8"],
-    "sub $0x8,%rsp";
 
+    (* sub $0x8,%rsp *)
+    "\x48\x83\xec\x08", ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
+
+    (* callq 942040 *)
     "\xe8\x47\xee\xff\xff", ["CALL64pcrel32"; "-0x11b9";],
-    "callq 942040";
+    [`call; `may_affect_control_flow];
 
+    (* mov 0x10(%rax),%eax *)
     "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "nil"; "0x10"; "nil"],
-    "mov 0x10(%rax),%eax";
+    [`may_load];
 
-    "\x48\x83\xc4\x08", ["ADD64ri8"; "RSP"; "RSP"; "0x8"],
-    "add $0x8, %rsp";
+    (* add $0x8, %rsp *)
+    "\x48\x83\xc4\x08", ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
 
+    (* "retq" *)
     "\xc3", ["RET"],
-    "retq"
+    [`return; `barrier; `terminator; `may_affect_control_flow]
   ]
 
 let memory_of_string data =
@@ -64,6 +68,7 @@ let test_run_all (arch,samples) ctxt =
   let mem =
     samples |> List.map ~f:fst3 |> String.concat |> memory_of_string in
   Dis.create ~backend:"llvm" arch >>= fun dis ->
+  let dis = Dis.store_kinds dis in
   Dis.run
     ~return:Or_error.return ~init:()
     ~invalid:(fun _ _ () -> err "got invalid instruction")
@@ -71,13 +76,18 @@ let test_run_all (arch,samples) ctxt =
     ~stopped:(fun s () ->
         Or_error.return @@
         List.iter2_exn  samples  (Dis.insns s)
-          ~f:(fun (data,exp,asm) -> function
+          ~f:(fun (data,exp,kinds) -> function
               | (_,None) -> assert_string "bad instruction"
               | (mem, Some r) ->
                 assert_equal ~ctxt ~printer
                   (Ok exp) (Ok (strings_of_insn r));
                 assert_equal ~ctxt ~printer:Int.to_string
-                  (String.length data) (Memory.size mem))) dis mem
+                  (String.length data) (Memory.size mem);
+                List.iter kinds ~f:(fun expected ->
+                    let name =
+                      string_of_sexp @@  Dis.sexp_of_kind expected in
+                    assert_bool name (Dis.Insn.is r expected));
+            )) dis mem
 
 let test_run_all data ctxt =
   let printer x = Sexp.to_string (Or_error.sexp_of_t sexp_of_unit x) in

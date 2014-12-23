@@ -31,6 +31,8 @@ type pred =
   | Is_conditional_branch
   | Is_unconditional_branch
   | May_affect_control_flow
+  | May_store
+  | May_load
 with compare, sexp
 
 type op =

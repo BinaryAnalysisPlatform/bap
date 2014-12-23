@@ -34,7 +34,9 @@ static auto all_predicates = {
     is_indirect_branch,
     is_conditional_branch,
     is_unconditional_branch,
-    may_affect_control_flow
+    may_affect_control_flow,
+    may_store,
+    may_load
 };
 
 int register_disassembler(string name, shared_ptr<disasm_factory> f) {
