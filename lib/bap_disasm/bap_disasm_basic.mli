@@ -86,12 +86,6 @@ val store_asm : (_,'k) t -> (asm,'k) t
 (** enables storing instruction kinds information *)
 val store_kinds : ('a,_) t -> ('a,kinds) t
 
-(** disables storing assembler information  *)
-val drop_asm  : (_,'k) t -> (empty,'k) t
-
-(** disables storing instruction kinds information *)
-val drop_kinds : ('a,_) t -> ('a,empty) t
-
 (** [run ?stop_on ?invalid ?stopped dis mem ~init ~return ~hit]
     performs recursive disassembly of specified memory [mem]. The
     process of disassembly can be driven using [stop], [step], [back]
@@ -154,7 +148,7 @@ val run :
     disassembly was successful, and [None] otherwise. [`left over]
     complements [imem] to original [mem]. *)
 val insn_of_mem : (_,_) t -> mem ->
-  (mem * (asm,kinds) insn option * [`left of mem]) Or_error.t
+  (mem * (asm,kinds) insn option * [`left of mem | `finished]) Or_error.t
 
 (** current position of the disassembler  *)
 val addr : (_,_,_,_) state -> addr
