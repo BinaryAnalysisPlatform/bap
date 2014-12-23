@@ -9,6 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
+XOCamlbuildExtraArgs: -j 2
 BuildDepends:
               bin_prot.syntax,
               camlp4,

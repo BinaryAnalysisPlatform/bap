@@ -25,12 +25,9 @@ install_on_osx () {
   eval `opam config env`
 }
 
-
-echo "yes" | sudo add-apt-repository ppa:$ppa
-sudo apt-get update -qq
-
 export OPAMYES=1
 export OPAMVERBOSE=1
+export OPAMJOBS=4
 
 echo $TRAVIS_OS_NAME
 case $TRAVIS_OS_NAME in
@@ -47,8 +44,6 @@ opam --git-version
 opam init
 opam install ${OPAM_DEPENDS}
 eval `opam config env`
-
-
 
 oasis setup
 ./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`

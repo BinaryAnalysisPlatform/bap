@@ -57,8 +57,7 @@ let main () =
   Table.iteri (sections img) ~f:(fun mem s ->
       printf "Section name : %s\n" @@ Sec.name s;
       printf "Section start: %s\n" @@
-      Addr.to_string @@ Memory.min_addr mem;
-      printf "Section data:\n%a\n" Memory.pp mem );
+      Addr.to_string @@ Memory.min_addr mem);
   return (List.length warns)
 
 let () =
