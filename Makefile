@@ -3,7 +3,7 @@ CONFIGURE = ./configure
 PIQI=piqi
 OCI=ocp-indent
 
-build: setup.data
+build: setup.data setup.ml
 	$(SETUP) -build $(BAPBUILDFLAGS)
 
 doc: setup.data build
@@ -30,7 +30,7 @@ clean: setup.data
 distclean: setup.data
 	$(SETUP) -distclean $(BAPDISTCLEANFLAGS)
 
-setup.data: *.in
+setup.data: *.in _oasis
 	$(CONFIGURE) $(BAPCONFIGUREFLAGS)
 
 configure:

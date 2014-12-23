@@ -48,7 +48,7 @@ eval `opam config env`
 oasis setup
 ./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`
 make
-make test
 make install
+make test
 ./test.sh
 make uninstall
