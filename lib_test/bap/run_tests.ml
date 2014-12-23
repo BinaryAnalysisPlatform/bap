@@ -7,6 +7,7 @@ let suite =
     Test_image.suite;
     Test_table.suite;
     Test_leb128.suite;
+    Test_disasm.suite;
   ]
 
 
