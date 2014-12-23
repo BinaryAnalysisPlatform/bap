@@ -258,6 +258,14 @@ Library dwarf_test
   Install:        false
   Modules:        Test_leb128
 
+Library disasm_test
+  Path:           lib_test/bap_disasm
+  Build$:         flag(tests) && flag(disassemblers)
+  CompiledObject: best
+  BuildDepends:   bap
+  Install:        false
+  Modules:        Test_disasm
+
 Executable readbin
   Path:           src/readbin
   MainIs:         readbin.ml
@@ -298,7 +306,12 @@ Executable run_tests
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)
-  BuildDepends: oUnit, types_test, image_test, dwarf_test
+  BuildDepends:
+                disasm_test,
+                dwarf_test,
+                image_test,
+                oUnit,
+                types_test
   CompiledObject: best
 
 Executable run_benchmarks
