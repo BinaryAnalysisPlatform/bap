@@ -90,7 +90,9 @@ static const bap_disasm_insn_p_type supported[] = {
     is_indirect_branch,
     is_conditional_branch,
     is_unconditional_branch,
-    may_affect_control_flow
+    may_affect_control_flow,
+    may_load,
+    may_store
 };
 
 class llvm_disassembler : public disassembler_interface {
@@ -210,7 +212,7 @@ public:
         }
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
-          
+
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info));
 
@@ -394,6 +396,8 @@ private:
         case is_indirect_branch : return &MCInstrDesc::isIndirectBranch;
         case is_conditional_branch : return &MCInstrDesc::isConditionalBranch;
         case is_unconditional_branch : return &MCInstrDesc::isUnconditionalBranch;
+        case may_load : return &MCInstrDesc::mayLoad;
+        case may_store : return &MCInstrDesc::mayStore;
         default : return nullptr;
         }
     }

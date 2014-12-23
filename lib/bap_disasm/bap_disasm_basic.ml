@@ -224,7 +224,8 @@ let cpred_of_pred : pred -> C.pred = function
   | `barrier -> C.Is_barrier
   | `terminator -> C.Is_terminator
   | `may_affect_control_flow -> C.May_affect_control_flow
-  | `may_store | `may_load -> C.Is_true (* TODO add *)
+  | `may_store  -> C.May_store
+  | `may_load -> C.May_load
 
 module Insn = struct
   type ins_info = {
