@@ -90,10 +90,10 @@ let suite = "Leb128" >::: [
     "unsinged int32" >:: rounds uints32 @@ int32 ~signed:false;
     "signed   int32" >:: rounds ints32  @@ int32 ~signed:true;
     "unsinged int64" >:: rounds uints64 @@ int64 ~signed:false;
-    "signed   int64" >:: rounds  ints64 @@ int64 ~signed:true ;
+    "signed   int64" >:: rounds ints64  @@ int64 ~signed:true ;
     "int"            >:: rounds uints   @@ int   ~signed:true;
     "int32"          >:: rounds uints32 @@ int32 ~signed:true;
-    "int64"          >:: rounds uints64 @@ int64 ~signed:true;
+    "int64"          >:: rounds uints64 @@ int64 ~signed:false;
     "read int"       >:: read  ~expect:624485 "\xE5\x8E\x26" @@ int ~signed:false;
     "unsigned write" >:: write ~expect:"\xE5\x8E\x26" 624485 @@ int ~signed:false;
     "signed read"    >:: read  ~expect:(-624485) "\x9b\xf1\x59" @@ int ~signed:true;
@@ -112,6 +112,7 @@ let suite = "Leb128" >::: [
     "int32 zero"     >:: round (int32 ~signed:true) 0l;
     "uint64 zero"    >:: round (int64 ~signed:false) 0L;
     "int64 zero"     >:: round (int64 ~signed:true) 0L;
+    "uint64 zero"    >:: round (int64 ~signed:true) 0xFFFF_FFFF_FFFF_FFFDL;
     "uint zero size" >:: size ~expect:1 0 @@ int ~signed:false;
     "int zero size"  >:: size ~expect:1 0 @@ int ~signed:true;
     "uint one size"  >:: size ~expect:1 1 @@ int ~signed:false;
