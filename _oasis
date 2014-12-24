@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     0.2
+Version:     0.9
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
@@ -9,6 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
+XOCamlbuildExtraArgs: -j 2
 BuildDepends:
               bin_prot.syntax,
               camlp4,
@@ -40,6 +41,10 @@ Document bap
 Flag serialization
   Description: Build serialization library
   Default: false
+
+Flag llvm_static
+  Description: Links with llvm in a static mode
+  Default: true
 
 Flag benchmarks
   Description: Build and run benchmarks
@@ -216,7 +221,7 @@ Library llvm
                  bap.types
   Modules:       Bap_llvm
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_mainlib $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm"
 
@@ -255,6 +260,14 @@ Library dwarf_test
   Install:        false
   Modules:        Test_leb128
 
+Library disasm_test
+  Path:           lib_test/bap_disasm
+  Build$:         flag(tests) && flag(disassemblers)
+  CompiledObject: best
+  BuildDepends:   bap
+  Install:        false
+  Modules:        Test_disasm
+
 Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
@@ -269,6 +282,13 @@ Executable readbin
   Install:        true
   CompiledObject: best
   BuildDepends:   bap, bap.disasm
+
+Executable "bap-mc"
+  Path:           src/bap_mc
+  MainIs:         bap_mc.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.disasm, cmdliner
 
 Executable byteweight
   Path:           src/byteweight
@@ -296,7 +316,12 @@ Executable run_tests
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)
-  BuildDepends: oUnit, types_test, image_test, dwarf_test
+  BuildDepends:
+                disasm_test,
+                dwarf_test,
+                image_test,
+                oUnit,
+                types_test
   CompiledObject: best
 
 Executable run_benchmarks

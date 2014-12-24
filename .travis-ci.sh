@@ -1,4 +1,4 @@
-OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop"
+OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop cmdliner"
 SYS_DEPENDS="libgmp-dev time llvm-3.4-dev"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
@@ -25,12 +25,9 @@ install_on_osx () {
   eval `opam config env`
 }
 
-
-echo "yes" | sudo add-apt-repository ppa:$ppa
-sudo apt-get update -qq
-
 export OPAMYES=1
 export OPAMVERBOSE=1
+export OPAMJOBS=4
 
 echo $TRAVIS_OS_NAME
 case $TRAVIS_OS_NAME in
@@ -48,12 +45,10 @@ opam init
 opam install ${OPAM_DEPENDS}
 eval `opam config env`
 
-
-
 oasis setup
 ./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`
 make
-make test
 make install
+make test
 ./test.sh
 make uninstall

@@ -44,6 +44,9 @@ val (^!) : t -> addr -> word
 val max_addr : t -> addr
 val min_addr : t -> addr
 
+(** [size] returns the size of the memory *)
+val size : t -> int
+
 (** [contains mem addr] returns true if [mem] contains address [addr]  *)
 val contains : t -> addr -> bool
 

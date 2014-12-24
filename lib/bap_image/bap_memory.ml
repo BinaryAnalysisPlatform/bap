@@ -124,6 +124,8 @@ let max_addr t : addr =
   let n = t.size - 1 in
   Addr.(t.addr ++ n)
 
+let size t : int = t.size
+
 let one_byte_getters data addr pos =
   let byte = Word.of_int ~width:8 in
   let make read  =

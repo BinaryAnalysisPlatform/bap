@@ -8,7 +8,7 @@ module Bits = struct
   let get_int32 = unpack_signed_32 ~byte_order:`Little_endian
   let get_int64 = unpack_signed_64_little_endian
   let set_int8 = pack_unsigned_8
-  let set_int16 = pack_signed_16_little_endian
+  let set_int16 = pack_unsigned_16_little_endian
   let set_int32 = pack_signed_32 ~byte_order:`Little_endian
   let set_int64 = pack_signed_64_little_endian
 end
@@ -40,7 +40,7 @@ module Cursor = struct
     { cur with
       pos = min (cur.len / 8 - 2) pos;
       bit;
-  }
+    }
 
   let bit0 cur : int = cur.bit - cur.pos * 8
 
@@ -79,7 +79,7 @@ let fix ~negative (s : int Sequence.t) : t = {
           | xs,x -> x lor (1 lsl 7) :: xs)
 }
 
-(** [decode_unsigned leb] transforms a number in a LEB128
+(** [decode leb] transforms a number in a LEB128
     representation to a binary form *)
 let decode (leb : t) buf ~off ~len : unit =
   let m = List.length leb.data in
@@ -91,6 +91,7 @@ let decode (leb : t) buf ~off ~len : unit =
           let word =
             if leb.negative && i = m - 1
             then word lor (lnot 0 lsl (bit0 + 7)) else word in
+          let word = word land 0xFFFF in
           Bits.set_int16 buf cur.pos word;
           Cursor.next cur) in
   if leb.negative then begin
@@ -172,12 +173,12 @@ let int64 = {
 let decoder (repr : 'a repr) x : 'a Or_error.t =
   let bits = String.make repr.size '\000' in
   decode x bits ~off:0 ~len:repr.size;
-  match
-    if String.length bits > repr.size then None
-    else repr.read bits
+  match if String.length bits > repr.size
+    then None else repr.read bits
   with
   | Some n -> Ok n
-  | None -> Or_error.errorf "number doesn't fit"
+  | None -> Or_error.errorf "number doesn't fit: %d -> %d"
+              (String.length bits) repr.size
 
 let encoder (repr : 'a repr) ?(signed=false) x : t =
   let bits = String.make repr.size '\000' in

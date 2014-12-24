@@ -1,9 +1,11 @@
+B ../_build/lib_test/bap_disasm
 B ../_build/lib_test/bap_core
 B ../_build/lib_test/bap_dwarf
 B ../_build/lib_test/bap_elf
 B ../_build/lib_test/bap_image
 B ../_build/lib_test/bap_types
 REC
+S bap_disasm
 S bap_core
 S bap_dwarf
 S bap_elf

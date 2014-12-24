@@ -146,7 +146,11 @@ module Imm = struct
     with bin_io, sexp, compare
     let module_name = "Bap_disasm_basic.Imm"
     let pp fmt t =
-      Format.fprintf fmt "%Ld" (to_int64 t)
+      let x = to_int64 t in
+      if Int64.is_negative x then
+        Format.fprintf fmt "-0x%Lx" (Int64.abs x)
+      else
+        Format.fprintf fmt "0x%Lx" x
 
     let hash {data = n} =
       if fits n.imm_small
@@ -460,14 +464,6 @@ let run ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state = with_preds state stop_on in
   jump state (memory state) init
 
-let drop_kinds d =
-  C.store_predicates d.id false;
-  {d with kinds = false}
-
-let drop_asm d =
-  C.store_asm_string d.id false;
-  {d with asm = false}
-
 let store_kinds d =
   C.store_predicates d.id true;
   {d with kinds = true}
@@ -480,9 +476,11 @@ let store_asm d =
 let insn_of_mem dis mem =
   let init = mem,None,`left mem in
   let split mem' =
-    Mem.view mem ~from:Addr.(Mem.max_addr mem' ++ 1) in
+    if Mem.(max_addr mem' = max_addr mem) then Ok `finished
+    else Mem.view mem ~from:Addr.(Mem.max_addr mem' ++ 1)
+      >>| fun r -> `left r in
   run ~stop_on:[`valid] dis mem ~return ~init
     ~hit:(fun s mem' insn _ ->
-        split mem' >>= fun r -> stop s (mem,Some insn,`left r))
+        split mem' >>= fun r -> stop s (mem',Some insn,r))
     ~invalid:(fun s mem' _ ->
-        split mem' >>= fun r -> stop s ( mem,None,`left r))
+        split mem' >>= fun r -> stop s (mem',None,r))
