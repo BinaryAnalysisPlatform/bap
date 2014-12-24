@@ -104,7 +104,9 @@ typedef enum bap_disasm_insn_p {
     is_indirect_branch,
     is_conditional_branch,
     is_unconditional_branch,
-    may_affect_control_flow
+    may_affect_control_flow,
+    may_store,
+    may_load
 } bap_disasm_insn_p_type;
 
 /* bap_disasm_create(triple,cpu) creates a disassembler for a given
