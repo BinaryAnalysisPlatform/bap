@@ -3,7 +3,7 @@ open Lwt
 
 val catch : (unit -> 'a t) -> exn:(exn -> 'a t) -> 'a t
 
-val try_bind : (unit -> 'a t) -> ok:('a -> 'b t) -> exn:(exn -> 'b t) -> 'a t
+val try_bind : (unit -> 'a t) -> ok:('a -> 'b t) -> exn:(exn -> 'b t) -> 'b t
 
 val protect : (unit -> 'a t) -> finally:(unit -> unit t) -> 'a t
 
