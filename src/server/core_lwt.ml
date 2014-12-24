@@ -6,7 +6,7 @@ module Std = struct
   module Lwt = struct
     include Lwt
     include (Core_lwt_basic : Monad with type 'a t := 'a t)
-
+    include Core_lwt_extra
     module Main = Lwt_main
     module Unix = Lwt_unix
     module Chan = Lwt_chan

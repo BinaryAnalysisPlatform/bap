@@ -4,21 +4,16 @@ open Lwt_log
 
 let section = Section.make "Transport"
 
-type server = {
-  uri : Uri.t;
-  close : unit -> unit sexp_opaque;
-} with sexp_of
-
 type data = Bigsubstring.t
 
 type provider =
-  ?query:string -> ?file:string -> data -> server Lwt.Or_error.t
+  ?query:string -> ?file:string -> data -> Uri.t Lwt.Or_error.t
 
 type fetcher = Uri.t -> data Lwt.Or_error.t
 
 
 type t = {
-  served : server Lwt_sequence.t;
+  served : Uri.t Lwt_sequence.t;
   providers : provider String.Table.t;
   fetchers  : fetcher String.Table.t;
 }  with fields

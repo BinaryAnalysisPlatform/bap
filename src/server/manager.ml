@@ -215,7 +215,6 @@ let image_of_bigsubstring ?backend substr =
   else Image.of_bigstring ?backend base
 
 let create_image ?backend data =
-  let open Lwt in
   match image_of_bigsubstring ?backend data with
   | Ok (img,warns) -> print_warnings warns >>= fun () -> return (Ok img)
   | Error err -> return (Error err)
