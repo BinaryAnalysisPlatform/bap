@@ -17,7 +17,7 @@ let x86_64 = "x86_64", [
     [`call; `may_affect_control_flow];
 
     (* mov 0x10(%rax),%eax *)
-    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "nil"; "0x10"; "nil"],
+    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
     [`may_load];
 
     (* add $0x8, %rsp *)
