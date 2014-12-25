@@ -131,7 +131,7 @@ Library serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun.pb, piqirun.ext, bap.types
+  BuildDepends: piqirun, bap.types
   Modules:   Bil_piqi,
              Stmt_piqi,
              Stmt_piqi_ext
