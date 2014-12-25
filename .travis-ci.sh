@@ -47,7 +47,7 @@ opam install ${OPAM_DEPENDS}
 eval `opam config env`
 
 oasis setup
-./configure --prefix=$(opam config var prefix) --enable-tests --enable-serialization --with-cxx=`which $CXX`
+./configure --prefix=$(opam config var prefix) --enable-tests --with-cxx=`which $CXX`
 make
 make install
 make test
