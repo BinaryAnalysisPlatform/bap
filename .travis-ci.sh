@@ -1,5 +1,5 @@
 OPAM_DEPENDS="core_kernel oasis piqi zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri"
-SYS_DEPENDS="libgmp-dev time llvm-3.4-dev"
+SYS_DEPENDS="libgmp-dev time llvm-3.4-dev libzmq3-dev"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
 4.02.0,1.2.0) ppa=avsm/ocaml42+opam12 ;;
