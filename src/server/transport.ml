@@ -5,6 +5,9 @@ open Lwt_log
 let section = Section.make "Transport"
 
 type data = Bigsubstring.t
+type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
+type 'a list1 = 'a * 'a list
+
 
 type provider =
   ?query:string -> ?file:string -> data -> Uri.t Lwt.Or_error.t
@@ -16,25 +19,24 @@ type t = {
   served : Uri.t Lwt_sequence.t;
   providers : provider String.Table.t;
   fetchers  : fetcher String.Table.t;
-}  with fields
+  services  : (unit -> (string,string) pipe Lwt.Or_error.t) String.Table.t;
+} with fields
+
+open Fields
+
 
 let t = {
   served = Lwt_sequence.create ();
   providers = String.Table.create ();
   fetchers  = String.Table.create ();
+  services  = String.Table.create ();
 }
-
-
 
 let log level fmt err =
   log_f ~level ~section (fmt ^^ ": %s") Error.(to_string_hum err)
 
 
-
-let serve ?query ?file data =
-  let providers = String.Table.data t.providers in
-  Lwt.List.map providers ~f:(fun create -> create ?query ?file data)
-  >>= fun r ->
+let combine r =
   let servers,failures =
     List.partition_map r
       ~f:(function Ok s -> `Fst s | Error e -> `Snd e ) in
@@ -47,7 +49,13 @@ let serve ?query ?file data =
     Lwt.List.iter errs ~f:(log Warning "provider failed") >>= fun () ->
     Lwt.Or_error.return (s,ss)
 
-let fetch uri =
+
+let serve_resource ?query ?file data =
+  String.Table.data t.providers |>
+  Lwt.List.map ~how:`Parallel  ~f:(fun create -> create ?query ?file data)
+  >>= combine
+
+let fetch_resource uri =
   match Uri.scheme uri with
   | None -> Lwt.Or_error.errorf "url '%s' doesn't contain scheme"
               Uri.(to_string uri)
@@ -56,9 +64,27 @@ let fetch uri =
       Lwt.Or_error.errorf "Don't know how to fetch '%s' scheme" scheme
     | Some fetch -> fetch uri
 
-let register_fetcher ~scheme fetcher =
-  String.Table.add t.fetchers ~key:scheme  ~data:fetcher
+let register what ~key ~data =
+  String.Table.add (Fieldslib.Field.get what t) ~key ~data |> function
+  | `Ok -> ()
+  | `Duplicate ->
+    ign_warning_f ~section "Can register %s in %s: Duplicate entry."
+      key (Fieldslib.Field.name what)
 
+let register_resource_fetcher ~scheme fetcher =
+  register fetchers ~key:scheme ~data:fetcher
 
-let register_server ~scheme ~create =
-  String.Table.add t.providers ~key:scheme  ~data:create
+let register_resource_server ~scheme ~create =
+  register providers ~key:scheme ~data:create
+
+let register_service ~name ~start =
+  register services ~key:name ~data:start
+
+let start_service name = Lwt.Or_error.unimplemented "start_service"
+
+let start ?name () =
+  match name with
+  | Some name -> start_service name
+  | None ->
+    String.Table.data t.services |>
+    Lwt.List.map ~how:`Parallel ~f:(fun start -> start ()) >>= combine

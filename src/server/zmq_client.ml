@@ -75,13 +75,8 @@ let main () =
   let socks = Lwt_pool.create max_connections
       (fun () -> Lwt.return ZMQ.Socket.(create ctxt req)) in
   List.iter ["zmq+tcp"; "zmq+ipc"] ~f:(fun scheme ->
-      Transport.register_fetcher ~scheme
-        (fun uri -> Lwt_pool.use socks (fetch uri)) |> function
-      | `Ok -> ()
-      | `Duplicate ->
-        ign_warning_f ~section "Failed to register ZMQ client\
-                                for scheme %s, as it is already\
-                                registered." scheme)
+      Transport.register_resource_fetcher ~scheme
+        (fun uri -> Lwt_pool.use socks (fetch uri)))
 
 
 let () = main ()

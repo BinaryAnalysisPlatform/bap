@@ -6,14 +6,24 @@
 open Core_kernel.Std
 open Core_lwt.Std
 
-val serve : ?query:string -> ?file:string ->
+type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
+type 'a list1 = 'a * 'a list
+
+(** returns a pipe for each registered service provider  *)
+val start : ?name:string -> unit -> (string,string) pipe list1 Lwt.Or_error.t
+
+val serve_resource : ?query:string -> ?file:string ->
   Bigsubstring.t -> (Uri.t * Uri.t list) Lwt.Or_error.t
 
-val fetch : Uri.t -> Bigsubstring.t Lwt.Or_error.t
+val fetch_resource : Uri.t -> Bigsubstring.t Lwt.Or_error.t
 
-val register_fetcher :
+val register_service :
+  name:string ->
+  start:(unit -> (string,string) pipe Lwt.Or_error.t) -> unit
+
+val register_resource_fetcher :
   scheme:string ->
-  (Uri.t -> Bigsubstring.t Lwt.Or_error.t) -> [`Ok | `Duplicate]
+  (Uri.t -> Bigsubstring.t Lwt.Or_error.t) -> unit
 
 (** [register ~scheme ~create] a service provider.
     Each time the resource with the specified [scheme] is going to be
@@ -31,8 +41,8 @@ val register_fetcher :
 
 *)
 
-val register_server :
+val register_resource_server :
   scheme:string ->
   create:(?query:string ->
           ?file: string ->
-          Bigsubstring.t -> Uri.t Lwt.Or_error.t) -> [`Ok | `Duplicate]
+          Bigsubstring.t -> Uri.t Lwt.Or_error.t) -> unit

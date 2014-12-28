@@ -64,10 +64,6 @@ let main () =
         else
           add_and_forget files {data=base; path};
         Lwt.Or_error.return (url_of_file ?query data path) in
-  match Transport.register_server ~scheme ~create with
-  | `Ok -> ()
-  | `Duplicate ->
-    ign_warning_f ~section "Failed to register scheme '%s',\
-                            it is already registered" scheme
+  Transport.register_resource_server ~scheme ~create
 
 let () = main ()

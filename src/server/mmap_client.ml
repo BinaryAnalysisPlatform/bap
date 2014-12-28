@@ -31,11 +31,6 @@ module Weak_set = struct
     try Some (find_exn t elt) with Not_found -> None
 end
 
-
-type files = Weak_set.t
-
-type result = Bigsubstring.t Lwt.Or_error.t
-
 let int_of_string str =
   try Some (Int.of_string str) with exn -> None
 
@@ -47,28 +42,22 @@ let int_of_param uri name =
     | None -> err "%s value '%s' is not a valid integer" name off
     | Some n -> Lwt.Or_error.return n
 
-
-let substring_of_entry (uri : Uri.t) (entry : entry) : result =
+let substring_of_entry uri entry  =
   int_of_param uri "length" >>=? fun len ->
-  int_of_param uri "offset" >>=? fun pos ->
-  Bigsubstring.create ~len ~pos entry.data |>
-  Lwt.Or_error.return
+  int_of_param uri "offset" >>|? fun pos ->
+  Bigsubstring.create ~len ~pos entry.data
 
 let openfile path =
-  Lwt_unix.(openfile path [O_RDONLY] 0o400) >>= fun fd ->
-  try
-    let fd = Lwt_unix.unix_file_descr fd in
-    Lwt.Or_error.return fd
-  with exn -> Lwt.Or_error.fail (Error.of_exn exn)
+  Lwt.Or_error.try_with (fun () ->
+      Lwt_unix.(openfile path [O_RDONLY] 0o400 >>| unix_file_descr))
 
 let main () =
   let files = Weak_set.create 256 in
   let fetch uri =
     let str = Uri.to_string uri in
     match Uri.path uri with
-    | "" -> err "url '%s' doesn't contain path" str
-    | path ->
-      match Weak_set.find files (entry path) with
+    | "" -> err "url '%s' has an empty path" str
+    | path -> match Weak_set.find files (entry path) with
       | Some entry -> substring_of_entry uri entry
       | None ->
         openfile path >>=? fun fd ->
@@ -76,8 +65,4 @@ let main () =
         let entry = {data; path} in
         Weak_set.add files entry;
         substring_of_entry uri entry in
-  match Transport.register_fetcher ~scheme fetch with
-  | `Ok -> ()
-  | `Duplicate -> ign_warning_f
-                    "Failed to register fetcher for '%s' scheme, \
-                     since it is already registered\n" scheme
+  Transport.register_resource_fetcher ~scheme fetch

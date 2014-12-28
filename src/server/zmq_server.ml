@@ -127,13 +127,8 @@ let main () =
 
 
   List.iter sockets ~f:(fun socket ->
-      Transport.register_server
+      Transport.register_resource_server
         ~scheme:socket.scheme
-        ~create:(create socket.uri) |> function
-      | `Ok -> ()
-      | `Duplicate ->
-        ign_warning_f ~section "failed to register '%s' server, \
-                                the server is already registered"
-          socket.scheme)
+        ~create:(create socket.uri))
 
 let () = main ()
