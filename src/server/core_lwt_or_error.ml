@@ -50,6 +50,9 @@ let try_with ?(backtrace=false) f : 'a t =
        let backtrace = if backtrace then Some `Get else None in
        fail (Error.of_exn ?backtrace exn))
 
+let of_exn ?backtrace exn =
+  fail (Error.of_exn ?backtrace exn)
+
 let try_with_join ?backtrace (f : unit -> 'a t) : 'a t =
   let open Lwt in
   try_with ?backtrace f >>= fun err -> return (Or_error.join err)

@@ -6,6 +6,7 @@ type 'a t = 'a Or_error.t Lwt.t
 include Monad with type 'a t := 'a t
 
 val fail  : Error.t -> _ t
+val of_exn : ?backtrace:[`Get | `This of string] -> exn -> _ t
 val errorf : ('a, unit, string, _ t) format4 -> 'a
 val error : string -> 'a -> ('a -> Sexp.t) -> _ t
 val error_string : string -> _ t

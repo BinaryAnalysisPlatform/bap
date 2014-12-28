@@ -13,7 +13,7 @@ module Std = struct
     module Mutex = Lwt_mutex
     module IO = Lwt_io
     module Or_error = Core_lwt_or_error
-
+    module Stream = Core_lwt_stream
     module Seq = Lift_sequence(Core_lwt_basic)
     module List = struct
       include Lift_list(Core_lwt_basic)
