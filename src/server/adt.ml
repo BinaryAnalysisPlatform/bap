@@ -96,4 +96,5 @@ let to_strings pp = List.map ~f:(Format.asprintf "%a" pp)
 let strings_of_bil = to_strings Stmt.pp
 let strings_of_ops = to_strings Asm.pp_op
 let strings_of_kinds = to_strings Asm.pp_kind
-let string_of_arm = to_string Arm.pp_insn
+let string_of_arm insn ops = to_string Arm.pp_insn (insn,ops)
+let string_of_endian = to_string pp_endian

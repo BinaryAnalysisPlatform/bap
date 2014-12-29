@@ -17,9 +17,9 @@ end
 module Ids = Id.Table
 
 type id = Id.t
-type 'a list1 = 'a * 'a list
+type 'a list1 = 'a List1.t
 
-type server = Transport.server
+type server = Uri.t
 
 type 'a hashed =
   | Available of 'a Lwt.Or_error.t
@@ -30,6 +30,7 @@ type meta = {
   arch : Arch.t;
   addr : Addr.t;
   endian : endian;
+  id : id;
 }
 
 type 'a resource = {
@@ -84,8 +85,8 @@ let provide_memory ?file arch id mem =
   let addr = Memory.min_addr mem in
   let endian = Memory.endian mem in
   let data = Available (Lwt.Or_error.return mem) in
-  Transport.provide ~query ?file buffer >>|? fun refs ->
-  {meta = {endian; addr; arch; refs}; data}
+  Transport.serve_resource ~query ?file buffer >>|? fun refs ->
+  {meta = {endian; addr; arch; refs; id}; data}
 
 
 let add_image img =
@@ -121,16 +122,16 @@ let add_image img =
             Lwt.Or_error.ok_unit)) >>=? fun () ->
   let buffer = Bigsubstring.create (Image.data img) in
   let query  = string_of_id img_id in
-  Transport.provide ~query ?file buffer >>=? fun refs ->
+  Transport.serve_resource ~query ?file buffer >>=? fun refs ->
   let addr = Image.entry_point img in
   let data = Available (Lwt.Or_error.return img) in
   let endian = Image.endian img in
-  let resource = {meta={addr; arch; refs; endian}; data} in
+  let resource = {meta={addr; arch; refs; endian; id=img_id}; data} in
   Ids.add_exn t.images ~key:img_id ~data:resource;
   Lwt.return (Or_error.return img_id)
 
 let add_memory arch endian addr uri : id Lwt.Or_error.t =
-  Transport.fetch uri >>=? fun data ->
+  Transport.fetch_resource uri >>=? fun data ->
   let pos = Bigsubstring.pos data in
   let len = Bigsubstring.length data in
   let data = Bigsubstring.base data in
@@ -192,10 +193,10 @@ type ('mem,'img,'sec,'sym,'a) visitor =
 let try_all (s,ss) =
   let open Transport in
   let open Lwt in
-  fetch s.uri >>= fun data ->
+  fetch_resource s >>= fun data ->
   List.fold ss ~init:data ~f:(fun fetched next_src -> match fetched with
       | Ok data -> return (Ok data)
-      | Error err -> fetch next_src.uri >>|
+      | Error err -> fetch_resource next_src >>|
         Result.map_error ~f:(fun err' -> Error.of_list [err;err']))
 
 let fetch resource = match resource.data with
@@ -221,7 +222,9 @@ let create_image ?backend data =
 
 
 let add_file ?backend uri =
-  Transport.fetch uri >>=? create_image ?backend  >>=? add_image
+  Transport.fetch_resource uri >>=?
+  create_image ?backend >>=?
+  add_image
 
 let nothing () = Lwt.Or_error.return Nil
 
@@ -247,7 +250,7 @@ let of_image res : (mem list1,img,nil,nil) res =
     Table.to_sequence (Image.sections img)  |>
     Sequence.map ~f:fst |> Sequence.to_list |>
     function [] -> Lwt.Or_error.errorf "empty image"
-           | s::ss -> Lwt.Or_error.return (s,ss) in
+           | s::ss -> Lwt.Or_error.return @@ List1.create (s,ss) in
   { (init res) with img; mem}
 
 let of_section sec id : (mem,img,sec,nil) res Or_error.t =
@@ -277,7 +280,7 @@ let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
     let mem () =
       fetch m >>=? fun m ->
       Lwt.Or_error.List.map ~how:`Parallel ms ~f:fetch >>=? fun ms ->
-      Lwt.Or_error.return (m,ms) in
+      Lwt.Or_error.return @@ List1.create (m,ms) in
     return { res with img; sym; sec; mem}
 
 module Return = struct
@@ -300,7 +303,8 @@ let symbol  r = r.sym
 let endian  r = r.res.endian
 let addr    r = r.res.addr
 let arch    r = r.res.arch
-let refs    r = r.res.refs
+let links   r = r.res.refs
+let id      r = r.res.id
 
 let with_resource ~chunk ~symbol ~section ~image (id : id) =
   let open Fields_of_context in
@@ -315,15 +319,12 @@ let with_resource ~chunk ~symbol ~section ~image (id : id) =
         | None -> Lwt.Or_error.errorf "unknown id: %a" Id.str id
 
 
-let list_of_list1 (x,xs) = x::xs
 
 let servers_of_id id =
   match Ids.find t.images id with
-  | Some {meta = {refs = (x,xs)}} -> x::xs
+  | Some {meta = {refs}} -> List1.to_list refs
   | None -> match Ids.find t.chunks id with
-    | Some {meta = {refs = (x,xs)}} -> x::xs
+    | Some {meta = {refs}} -> List1.to_list refs
     | None -> []
 
-let links_of_id id =
-  servers_of_id id |>
-  List.map ~f:(fun s -> Transport.(s.uri))
+let links_of_id id = servers_of_id id

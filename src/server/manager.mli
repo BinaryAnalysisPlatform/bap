@@ -10,7 +10,7 @@ open Bap.Std
     module. *)
 type id
 
-type 'a list1 = 'a * 'a list
+type 'a list1 = 'a List1.t
 
 
 (** Resource.
@@ -53,10 +53,6 @@ val sections_of_image  : id -> id list
 val symbols_of_section : id -> id list
 val memory_of_symbol   : id -> id list
 
-(** returns an empty list if it is not served *)
-val links_of_id : id -> Uri.t list
-
-
 (** Access to resource  *)
 
 val fetch_memory  : ('a,_,_,_) res -> 'a Lwt.Or_error.t
@@ -66,6 +62,8 @@ val symbol        : (_,_,_,'a) res -> 'a
 val endian        : (_,_,_,_) res -> endian
 val arch          : (_,_,_,_) res -> arch
 val addr          : (_,_,_,_) res -> addr
+val links         : (_,_,_,_) res -> Uri.t list1
+val id            : (_,_,_,_) res -> id
 
 
 (** Resource Visitor.

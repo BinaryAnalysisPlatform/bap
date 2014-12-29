@@ -292,7 +292,7 @@ let compare_insn (i1 : ('a,'b) insn) (i2 : ('a,'b) insn) =
 let sexp_of_insn : ('a,'b) insn -> Sexp.t = Insn.sexp_of_t
 
 
-type full_insn = (asm,kind) insn
+type full_insn = (asm,kinds) insn
 
 let sexp_of_full_insn = sexp_of_insn
 

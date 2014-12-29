@@ -74,8 +74,9 @@ end
 module Sym : sig
   type t = sym
   include Regular with type t := t
-  val is_function : t -> bool
   val name : t -> string
+  val is_function : t -> bool
+  val is_debug : t -> bool
 end
 
 (** {2 Backend Interface}  *)

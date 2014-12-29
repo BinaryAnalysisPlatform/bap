@@ -6,7 +6,7 @@ let section = Section.make "Transport"
 
 type data = Bigsubstring.t
 type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
-type 'a list1 = 'a * 'a list
+type 'a list1 = 'a List1.t
 
 
 type provider =
@@ -47,7 +47,8 @@ let combine r =
     Lwt.Or_error.fail
   | s::ss, errs ->
     Lwt.List.iter errs ~f:(log Warning "provider failed") >>= fun () ->
-    Lwt.Or_error.return (s,ss)
+    List1.create (s,ss) |>
+    Lwt.Or_error.return
 
 
 let serve_resource ?query ?file data =

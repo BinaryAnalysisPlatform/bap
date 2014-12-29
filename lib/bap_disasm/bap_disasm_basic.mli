@@ -26,7 +26,7 @@ type empty     (** set when information is not stored                *)
 type asm       (** set when assembler information is stored        *)
 type kinds     (** set when instruction kind information is stored *)
 
-type full_insn = (asm,kind) insn with sexp_of
+type full_insn = (asm,kinds) insn with sexp_of
 
 
 
