@@ -1,0 +1,9 @@
+B ../../_build/src/server
+REC
+PKG ezjsonm
+PKG lwt
+PKG lwt-zmq
+PKG ZMQ
+PKG uri
+
+S .

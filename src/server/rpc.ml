@@ -5,10 +5,13 @@ open Ezjsonm
 
 type response = Ezjsonm.t
 type request = Ezjsonm.t
-type target  = string
-type resource = string
+type target  = string with sexp_of
+type resource = string with sexp_of
 type uri = Uri.t
-type id = string
+type id = string with sexp_of
+
+let sexp_of_response = Fn.compose Ezjsonm.to_sexp Ezjsonm.value
+let sexp_of_request = sexp_of_response
 
 module Id = String
 
@@ -172,4 +175,92 @@ end
 module Target = struct
   type t = target
   let arm insn ops : t = Adt.string_of_arm insn ops
+end
+
+module Request = struct
+  type t = request with sexp_of
+  let (/) = Fn.compose
+
+  let pp_obj () v =
+    Sexp.to_string_hum @@ to_sexp v
+
+  let pp_path () path =
+    String.concat ~sep:"." path
+
+  let no_value path v =
+    errorf "Path '%a' not found in object %a" pp_path path pp_obj v
+  let protocol path msg v =
+    errorf "Failed to parse path %a : %s. Object: %a"
+      pp_path path msg pp_obj v
+
+
+  let parse pro v path =
+    try Ok (find v path |> pro) with
+    | Not_found -> no_value path v
+    | Parse_error (v,msg) -> protocol path msg v
+    | exn -> protocol path Exn.(to_string exn) v
+
+
+  let value  = parse ident
+  let string = parse get_string
+  let arch = parse @@ Arch.of_string / get_string
+  let addr = parse @@ ok_exn / Adt.Parse.word / get_string
+  let endian = parse @@ ok_exn / Adt.Parse.endian / get_string
+  let url = parse @@ Uri.of_string / get_string
+  let kinds =
+    parse @@ ok_exn / all / get_list (Adt.Parse.kind / get_string)
+
+  let accept_load_file f obj =
+    url obj ["url"] >>= fun uri ->
+    if mem obj ["loader"]
+    then string obj ["loader"] >>= fun loader ->
+      f ?loader:(Some loader) uri
+    else f ?loader:None uri
+
+  let accept_load_chunk f obj =
+    url obj    ["url"]     >>= fun url ->
+    addr obj   ["address"] >>= fun addr ->
+    arch obj   ["arch"]    >>= fun arch ->
+    endian obj ["endian"]  >>= fun endian ->
+    f addr arch endian url
+
+  let accept_get_insns f obj =
+    string obj ["resource"] >>= fun id ->
+    if mem obj ["stop-conditions"]
+    then kinds obj ["stop-conditions"] >>= fun kinds ->
+      f kinds id
+    else f [] id
+
+  let accept_init f obj = string obj ["version"] >>= f
+
+  let accept_get_resource f obj =
+    try_with (fun () -> get_string obj) >>= f
+
+  let accept obj
+      ~init ~load_file ~load_chunk ~get_insns ~get_resource =
+    let obj = Ezjsonm.value obj in
+    let init = accept_init init in
+    let load_file = accept_load_file load_file in
+    let load_chunk = accept_load_chunk load_chunk in
+    let get_insns = accept_get_insns get_insns in
+    let get_resource = accept_get_resource get_resource in
+    let (>>) path fn = if mem obj [path]
+      then Some (value obj [path] >>= fn)
+      else None in
+    let (||) = Option.merge ~f:(fun x y -> x) in
+    let chain =
+      "init"              >> init         ||
+      "load-file"         >> load_file    ||
+      "load-memory-chunk" >> load_chunk   ||
+      "get-insns"         >> get_insns    ||
+      "get-resource"      >> get_resource in
+    match chain with
+    | Some r -> r
+    | None -> errorf "One of the required properties is not found: %a"
+                pp_obj obj
+
+
+  let id obj =
+    string (Ezjsonm.value obj) ["id"]
+
 end

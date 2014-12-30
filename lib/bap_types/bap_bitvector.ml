@@ -153,8 +153,8 @@ let b0 = create (Bignum.of_int 0) 1
 let b1 = create (Bignum.of_int 1) 1
 let of_bool v = if v then b1 else b0
 
-let of_int32 n = create (Bignum.of_int32 n) 32
-let of_int64 n = create (Bignum.of_int64 n) 64
+let of_int32 ?(width=32) n = create (Bignum.of_int32 n) width
+let of_int64 ?(width=64) n = create (Bignum.of_int64 n) width
 let of_int ~width v = create (Bignum.of_int v) width
 let ones  n = of_int (-1) ~width:n
 let zeros n = of_int (0)  ~width:n

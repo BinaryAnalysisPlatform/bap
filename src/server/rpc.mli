@@ -18,18 +18,18 @@ module Target : sig
 
 end
 
-(* module Request : sig *)
-(*   type t = request *)
-(*   val id : t -> id *)
+module Request : sig
+  type t = request
 
-(*   val accept : t -> *)
-(*     init:(string -> 'a) -> *)
-(*     load_file:(?loader:string -> resource -> 'a) -> *)
-(*     load_memory_chunk:(?addr:addr -> arch -> resource -> 'a) -> *)
-(*     get_insns:(?stop_conditions:(Disasm.kind list) -> id -> 'a) -> *)
-(*     get_resource:(id -> 'a) -> 'a *)
-(* end *)
+  val id : t -> id Or_error.t
 
+  val accept : t ->
+    init:(string -> 'a Or_error.t) ->
+    load_file:(?loader:string -> Uri.t -> 'a Or_error.t) ->
+    load_chunk:(addr -> arch -> endian -> Uri.t -> 'a Or_error.t) ->
+    get_insns:(Disasm.kind list -> id -> 'a Or_error.t) ->
+    get_resource:(resource -> 'a Or_error.t) -> 'a Or_error.t
+end
 
 module Response : sig
   type t = response

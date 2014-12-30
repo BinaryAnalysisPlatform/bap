@@ -149,8 +149,8 @@ module Mono : Comparable with type t := t
 *)
 val of_bool  : bool -> t
 val of_int   : width:int -> int -> t
-val of_int32 : int32 -> t
-val of_int64 : int64 -> t
+val of_int32 : ?width:int -> int32 -> t
+val of_int64 : ?width:int -> int64 -> t
 
 (** { 3 Some predefined constant constructors }  *)
 
