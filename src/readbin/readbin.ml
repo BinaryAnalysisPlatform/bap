@@ -51,7 +51,7 @@ let main () =
   Table.iteri (symbols img) ~f:(fun mem s ->
       printf "\n# Symbol name: %s\n" (Sym.name s);
       printf "# Symbol data:\n%a\n" Memory.pp mem;
-      Disasm.Basic.run dis ~stop_on:[`valid]
+      Disasm.Basic.run dis ~stop_on:[`Valid]
         ~hit:(print_disasm arch) ~return:ident ~init:() mem);
   printf "# Loadable sections: %d\n" @@
   Table.length (sections img);

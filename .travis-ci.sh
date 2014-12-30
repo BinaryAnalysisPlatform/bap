@@ -11,7 +11,7 @@ esac
 
 
 install_on_linux () {
-  echo "yes" | sudo add-apt-repository ppa:$ppa
+  echo 'yes' | sudo add-apt-repository ppa:$ppa
   echo 'yes' | sudo apt-add-repository ppa:chris-lea/zeromq
   sudo apt-get update -qq
   sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam $SYS_DEPENDS
@@ -42,7 +42,6 @@ echo OPAM versions
 opam --version
 opam --git-version
 
-opam init
 opam install ${OPAM_DEPENDS}
 eval `opam config env`
 

@@ -12,7 +12,7 @@ type kind = Bap_insn_kind.t with compare, sexp
 
 (** predicate to drive the disassembler *)
 type pred = [
-  | `valid  (** stop on first valid insn  *)
+  | `Valid  (** stop on first valid insn  *)
   |  kind   (** stop on first insn of the specified kind *)
 ] with sexp
 

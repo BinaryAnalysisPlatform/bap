@@ -103,8 +103,8 @@ let create_section make_addr i es : Section.t Or_error.t option =
     | ok -> Some ok
 
 let addr_maker = function
-  | `r32 -> fun x -> Addr.of_int32 (Int64.to_int32_exn x)
-  | `r64 -> Addr.of_int64
+  | `r32 -> Addr.of_int64 ~width:32
+  | `r64 -> Addr.of_int64 ~width:64
 
 let img_of_elf data elf : Img.t Or_error.t =
   let endian = match elf.e_data with
