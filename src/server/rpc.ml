@@ -36,7 +36,7 @@ module Response = struct
 
   let create id (msg : msg) : t = msg id
 
-  let error id sev desc : msg =
+  let error sev desc : msg =
     obj "error" [
       "severity", string (string_of_severity sev);
       "description", string desc
@@ -214,27 +214,27 @@ module Request = struct
     url obj ["url"] >>= fun uri ->
     if mem obj ["loader"]
     then string obj ["loader"] >>= fun loader ->
-      f ?loader:(Some loader) uri
-    else f ?loader:None uri
+      return (f ?loader:(Some loader) uri)
+    else return (f ?loader:None uri)
 
   let accept_load_chunk f obj =
     url obj    ["url"]     >>= fun url ->
     addr obj   ["address"] >>= fun addr ->
     arch obj   ["arch"]    >>= fun arch ->
     endian obj ["endian"]  >>= fun endian ->
-    f addr arch endian url
+    return (f addr arch endian url)
 
   let accept_get_insns f obj =
     string obj ["resource"] >>= fun id ->
     if mem obj ["stop-conditions"]
     then kinds obj ["stop-conditions"] >>= fun kinds ->
-      f kinds id
-    else f [] id
+      return (f kinds id)
+    else return (f [] id)
 
-  let accept_init f obj = string obj ["version"] >>= f
+  let accept_init f obj = string obj ["version"] >>| f
 
   let accept_get_resource f obj =
-    try_with (fun () -> get_string obj) >>= f
+    try_with (fun () -> get_string obj) >>| f
 
   let accept obj
       ~init ~load_file ~load_chunk ~get_insns ~get_resource =

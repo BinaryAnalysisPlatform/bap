@@ -24,11 +24,11 @@ module Request : sig
   val id : t -> id Or_error.t
 
   val accept : t ->
-    init:(string -> 'a Or_error.t) ->
-    load_file:(?loader:string -> Uri.t -> 'a Or_error.t) ->
-    load_chunk:(addr -> arch -> endian -> Uri.t -> 'a Or_error.t) ->
-    get_insns:(Disasm.kind list -> id -> 'a Or_error.t) ->
-    get_resource:(resource -> 'a Or_error.t) -> 'a Or_error.t
+    init:(string -> 'a) ->
+    load_file:(?loader:string -> Uri.t -> 'a) ->
+    load_chunk:(addr -> arch -> endian -> Uri.t -> 'a) ->
+    get_insns:(Disasm.kind list -> id -> 'a) ->
+    get_resource:(resource -> 'a) -> 'a Or_error.t
 end
 
 module Response : sig
@@ -39,7 +39,7 @@ module Response : sig
   (** creates a response to the request with the [id]  *)
   val create : id -> msg -> t
 
-  val error : id -> [`Critical | `Error | `Warning] -> string -> msg
+  val error : [`Critical | `Error | `Warning] -> string -> msg
 
   val capabilities : (* unimplemented *) msg
 
