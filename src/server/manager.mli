@@ -22,9 +22,10 @@ type ('mem,'img,'sec,'sym) res
 
 (** Types of resource data  *)
 type nil                        (** data not available  *)
+type mem
 type sym = Symbol.t             (** symbol  *)
 type sec = Section.t            (** section  *)
-type img = Image.t              (** image  *)
+type img
 
 (** Unique Identifer  *)
 module Id : Regular with type t = id
@@ -55,16 +56,20 @@ val memory_of_symbol   : id -> id list
 
 (** Access to resource  *)
 
-val fetch_memory  : ('a,_,_,_) res -> 'a Lwt.Or_error.t
-val fetch_image   : (_,'a,_,_) res -> 'a Lwt.Or_error.t
-val section       : (_,_,'a,_) res -> 'a
-val symbol        : (_,_,_,'a) res -> 'a
-val endian        : (_,_,_,_) res -> endian
-val arch          : (_,_,_,_) res -> arch
-val addr          : (_,_,_,_) res -> addr
-val links         : (_,_,_,_) res -> Uri.t list1
-val id            : (_,_,_,_) res -> id
+val memory  : ('a,_,_,_) res -> 'a
+val image   : (_,'a,_,_) res -> 'a
+val section : (_,_,'a,_) res -> 'a
+val symbol  : (_,_,_,'a) res -> 'a
+val endian  : (_,_,_,_) res -> endian
+val arch    : (_,_,_,_) res -> arch
+val addr    : (_,_,_,_) res -> addr
+val links   : (_,_,_,_) res -> Uri.t list1
+val id      : (_,_,_,_) res -> id
 
+val links_of_memory : mem -> Uri.t list1
+val links_of_image  : img -> Uri.t list1
+val fetch_memory    : mem -> Memory.t Lwt.Or_error.t
+val fetch_image     : img -> Image.t  Lwt.Or_error.t
 
 (** Resource Visitor.
     Visitor is a function that accepts a resource and returns a value
@@ -102,5 +107,5 @@ val with_resource :
   chunk:(mem,nil,nil,nil,'a) visitor ->
   symbol:(mem list1, img,sec,sym,'a) visitor ->
   section:(mem,img,sec,nil,'a) visitor ->
-  image:(mem list1,img,nil,nil,'a) visitor ->
+  image:(nil,img,nil,nil,'a) visitor ->
   id -> 'a Lwt.Or_error.t

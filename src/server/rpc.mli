@@ -3,9 +3,12 @@ open Bap.Std
 
 type request
 type response
-type resource = string
 type target
-type id
+type id with sexp_of
+type links = Uri.t List1.t
+type 'a resource = links * 'a
+type res_id = string
+type res_ids = res_id list with sexp_of
 
 
 module Id : Identifiable with type t := id
@@ -28,13 +31,14 @@ module Request : sig
     load_file:(?loader:string -> Uri.t -> 'a) ->
     load_chunk:(addr -> arch -> endian -> Uri.t -> 'a) ->
     get_insns:(Disasm.kind list -> id -> 'a) ->
-    get_resource:(resource -> 'a) -> 'a Or_error.t
+    get_resource:(res_id -> 'a) -> 'a Or_error.t
 end
 
 module Response : sig
   type t = response
   type msg
   type insn
+
 
   (** creates a response to the request with the [id]  *)
   val create : id -> msg -> t
@@ -43,46 +47,21 @@ module Response : sig
 
   val capabilities : (* unimplemented *) msg
 
+  val image : secs:res_ids -> Image.t resource -> msg
 
+  val section : syms:res_ids -> Section.t -> mem resource -> msg
 
-  val image :
-    img:resource ->
-    secs:resource list ->
-    syms:resource list ->
-    Uri.t List1.t ->
-    Image.t -> msg
+  val symbol : Symbol.t -> mem resource List1.t -> msg
 
+  val memory : mem resource -> msg
 
-  val section :
-    img:resource ->
-    sec:resource ->
-    mem:resource ->
-    Uri.t List1.t  ->
-    Section.t ->
-    msg
-
-  val symbol :
-    sec:resource ->
-    sym:resource ->
-    mem:resource list ->
-    Uri.t List1.t ->
-    Symbol.t -> msg
-
-  val memory :
-    ?sec:resource ->
-    ?sym:resource ->
-    mem:resource ->
-    Uri.t List1.t ->
-    Memory.t -> msg
-
-  val insn :
-    ?target:target -> ?bil:stmt list ->
-    mem_id:resource -> Disasm.Basic.full_insn -> insn
+  val insn : ?target:target -> ?bil:stmt list ->
+    mem_id:id -> Disasm.Basic.full_insn -> insn
 
   val insns : insn list -> msg
 
-  val images : resource list -> msg
-  val sections : resource list -> msg
-  val symbols  : resource list -> msg
-  val chunks : resource list -> msg
+  val images   : res_id list -> msg
+  val sections : res_id list -> msg
+  val symbols  : res_id list -> msg
+  val chunks   : res_id list -> msg
 end

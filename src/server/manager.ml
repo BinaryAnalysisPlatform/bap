@@ -38,6 +38,7 @@ type 'a resource = {
   mutable data : 'a hashed;
 } with fields
 
+
 type context = {
   images : image resource Ids.t;
   chunks : mem   resource Ids.t;
@@ -169,14 +170,20 @@ let sections_of_image = find_list t.sections_of_image
 let symbols_of_section = find_list t.symbols_of_section
 let memory_of_symbol = find_list t.memory_of_symbol
 
+type 'a served = {
+  links : server list1;
+  fetch : unit -> 'a Lwt.Or_error.t;
+}
+
 type nil = Nil
-type sym = Symbol.t
-type sec = Section.t
-type img = Image.t
+type mem = Memory.t served
+type sym = Symbol.t             (** symbol  *)
+type sec = Section.t            (** section  *)
+type img = Image.t served
 
 type ('mem, 'img, 'sec, 'sym) res = {
-  mem : unit -> 'mem Lwt.Or_error.t;
-  img : unit -> 'img Lwt.Or_error.t;
+  mem : 'mem;
+  img : 'img;
   sec : 'sec;
   sym : 'sym;
   res : meta;
@@ -184,6 +191,16 @@ type ('mem, 'img, 'sec, 'sym) res = {
 
 type ('mem,'img,'sec,'sym,'a) visitor =
   ('mem,'img,'sec,'sym) res -> 'a Lwt.Or_error.t
+
+let memory  r = r.mem
+let image   r = r.img
+let section r = r.sec
+let symbol  r = r.sym
+let endian  r = r.res.endian
+let addr    r = r.res.addr
+let arch    r = r.res.arch
+let links   r = r.res.refs
+let id      r = r.res.id
 
 
 (* we assume that resource references are sorted in the order of their
@@ -228,9 +245,9 @@ let add_file ?backend uri =
 
 let nothing () = Lwt.Or_error.return Nil
 
-let init r = {
-  mem = nothing;
-  img = nothing;
+let init r : (nil, nil, nil, nil) res = {
+  mem = Nil;
+  img = Nil;
   sec = Nil;
   sym = Nil;
   res = r.meta;
@@ -243,15 +260,18 @@ let find_in field id : 'a Or_error.t =
     Or_error.errorf "Failed to find id %a in table %s"
       Id.str id (Fieldslib.Field.name field)
 
+let serve res = {
+  links = res.meta.refs;
+  fetch = fun () -> fetch res;
+}
 
-let of_image res : (mem list1,img,nil,nil) res =
-  let img () = fetch res in
-  let mem () = img () >>=? fun img ->
-    Table.to_sequence (Image.sections img)  |>
-    Sequence.map ~f:fst |> Sequence.to_list |>
-    function [] -> Lwt.Or_error.errorf "empty image"
-           | s::ss -> Lwt.Or_error.return @@ List1.create (s,ss) in
-  { (init res) with img; mem}
+let links_of_memory r = r.links
+let links_of_image r = r.links
+let fetch_memory r = r.fetch ()
+let fetch_image r = r.fetch ()
+
+let of_image res : (nil,img,nil,nil) res =
+  { (init res) with img = serve res; }
 
 let of_section sec id : (mem,img,sec,nil) res Or_error.t =
   let open Or_error in
@@ -260,9 +280,7 @@ let of_section sec id : (mem,img,sec,nil) res Or_error.t =
   find_in images img_id >>= fun img ->
   find_in chunks id >>= fun mem ->
   let res = init img in
-  let img () = fetch img in
-  let mem () = fetch mem in
-  return { res with img; mem; sec}
+  return { res with img = serve img; mem = serve mem; sec}
 
 let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
   let open Fields_of_context in
@@ -276,12 +294,8 @@ let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
   | [] -> errorf "Symbol without memory"
   | m::ms ->
     let res = init img in
-    let img () = fetch img in
-    let mem () =
-      fetch m >>=? fun m ->
-      Lwt.Or_error.List.map ~how:`Parallel ms ~f:fetch >>=? fun ms ->
-      Lwt.Or_error.return @@ List1.create (m,ms) in
-    return { res with img; sym; sec; mem}
+    let mem = List1.create m ms |> List1.map ~f:serve in
+    return { res with img = serve img; sym; sec; mem}
 
 module Return = struct
   let unit res = Lwt.Or_error.ok_unit
@@ -296,15 +310,6 @@ module Return = struct
 end
 
 
-let fetch_memory r = r.mem ()
-let fetch_image  r = r.img ()
-let section r = r.sec
-let symbol  r = r.sym
-let endian  r = r.res.endian
-let addr    r = r.res.addr
-let arch    r = r.res.arch
-let links   r = r.res.refs
-let id      r = r.res.id
 
 let with_resource ~chunk ~symbol ~section ~image (id : id) =
   let open Fields_of_context in
@@ -315,7 +320,7 @@ let with_resource ~chunk ~symbol ~section ~image (id : id) =
     | None -> match Ids.find t.symbols id with
       | Some sym -> return (of_symbol sym id) >>=? symbol
       | None -> match Ids.find t.chunks id with
-        | Some mem -> chunk {(init mem) with mem = fun () -> fetch mem}
+        | Some mem -> chunk {(init mem) with mem = serve mem}
         | None -> Lwt.Or_error.errorf "unknown id: %a" Id.str id
 
 

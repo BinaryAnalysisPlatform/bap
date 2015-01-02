@@ -2,7 +2,7 @@ open Core_kernel.Std
 
 include List
 
-let create (x,xs) = x::xs
+let create x xs = x::xs
 let singleton x = [x]
 let of_list = function
   | [] -> None

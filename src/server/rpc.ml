@@ -6,9 +6,13 @@ open Ezjsonm
 type response = Ezjsonm.t
 type request = Ezjsonm.t
 type target  = string with sexp_of
-type resource = string with sexp_of
 type uri = Uri.t
+type links = Uri.t List1.t
+type 'a resource = links * 'a
 type id = string with sexp_of
+type res_id = string with sexp_of
+type res_ids = res_id list with sexp_of
+
 
 let sexp_of_response = Fn.compose Ezjsonm.to_sexp Ezjsonm.value
 let sexp_of_request = sexp_of_response
@@ -24,42 +28,35 @@ type severity = [
 let string_of_severity s =
   Sexp.to_string @@ sexp_of_severity s
 
-let obj name o id = `O [
-    id,  string id;
-    name, `O o
-  ]
 
 module Response = struct
   type t = response
-  type msg = id -> t
+  type msg = (id * value) list
   type insn = value
 
-  let create id (msg : msg) : t = msg id
+  let create id (msg : msg) : t = `O ([
+      "id", string id;
+    ] @ msg)
 
-  let error sev desc : msg =
-    obj "error" [
+  let error sev desc : msg = [
+    "error", dict [
       "severity", string (string_of_severity sev);
       "description", string desc
     ]
+  ]
 
-  let capabilities : msg =
-    obj "capabilities" [
-
-    ]
+  let capabilities : msg = [
+    "capabilities", dict []
+  ]
 
   let list_of_uris uris =
     List1.map uris ~f:Uri.to_string |>
     List1.to_list
 
-  let resource ~id links name props : msg = obj name @@ [
-      "id", string id;
-      "links", strings @@ list_of_uris links
-    ] @ props
-
   let disassembler
       ~name ~arch ~kinds ~has_name ~has_ops ~has_target
-      ~has_bil : msg =
-    obj "disassembler" [
+      ~has_bil : msg = [
+    "disassembler", dict [
       "name", string name;
       "architecture", string arch;
       "kinds", strings @@ Adt.strings_of_kinds kinds;
@@ -68,7 +65,7 @@ module Response = struct
       "has-target", bool has_target;
       "has-bil", bool has_bil
     ]
-
+  ]
 
   let string_of_sym s =
     Sexp.to_string (<:sexp_of<[`debug | `symtab]>> s)
@@ -76,14 +73,14 @@ module Response = struct
   let strings_of_syms syms =
     List.intersperse ~sep:"," @@ List.map syms ~f:string_of_sym
 
-  let loader ~name ~arch ~format syms : msg =
-    obj "loader" [
+  let loader ~name ~arch ~format syms : msg = [
+    "loader", dict [
       "name", string name;
       "architecture", string arch;
       "format", string format;
       "symbols", strings (strings_of_syms syms)
     ]
-
+  ]
   let optional_field name json_of_value = function
     | None -> []
     | Some value -> [name, json_of_value value]
@@ -104,10 +101,9 @@ module Response = struct
     ] @ optional_field "target" string target
       @ optional_field "bil" bil_value bil
 
-  let insns (insns : insn list) : msg = fun id -> `O [
-      "id", string id;
-      "insns", `A insns;
-    ]
+  let insns (insns : insn list) : msg = [
+    "insns", `A insns;
+  ]
 
   let list_of_perm sec =
     let (:=) v f = Option.some_if (f sec) v in
@@ -117,54 +113,57 @@ module Response = struct
         "x" := is_executable;
       ])
 
-  let section ~img ~sec ~mem links s : msg =
-    resource ~id:sec links "section" [
-      "name", string @@ Section.name s;
-      "image",  string img;
-      "memory", string mem;
-      "perm", strings @@ list_of_perm s
-    ]
-
-
   let string_of_addr = Addr.string_of_value ~hex:false
 
-  let image ~img ~secs ~syms links image : msg =
+  let resource links name props : msg = [
+    name, dict @@ [
+      "links", strings @@ list_of_uris links
+    ] @ props
+  ]
+
+  let image ~secs (links,image) : msg =
     let open Image in
-    let ids = [
-      "sections", strings secs;
-      "symbols",  strings syms;
-    ] in
     let (/) = Fn.compose in
-    resource ~id:img links "image" @@
+    resource links "image" @@
     List.map ~f:(fun (r,v) -> r, v image) [
       "arch", string / Arch.to_string / arch;
       "entry-point", string / string_of_addr / entry_point;
       "addr-size", string / Int.to_string / Size.to_bits / addr_size;
       "endian", string / Adt.string_of_endian / endian;
-    ] @ optional_field "file" string (filename image) @ ids
-
-  let memory ?sec ?sym ~mem links m : msg =
-    resource ~id:mem links "memory" @@ [
-      "addr", string @@ Int.to_string  @@ Memory.size m;
-      "size", string @@ string_of_addr @@ Memory.min_addr m;
-    ] @ optional_field "section" string sec
-      @ optional_field "symbol"  string sym
-
-  let symbol ~sec ~sym ~mem links s : msg =
-    let open Symbol in
-    resource ~id:sym links "symbol" @@ [
-      "name", string @@ name s;
-      "is_function", bool @@ is_function s;
-      "is_debug", bool @@ is_debug s;
-      "section", string sec;
-      "memory", strings mem;
+    ] @ optional_field "file" string (filename image) @ [
+      "sections", strings secs;
     ]
 
-  let resources name rs : msg = fun id ->
-    `O [
-      "id", string  id;
-      name, strings rs;
+  let memory_parameters m : msg = [
+    "addr", string @@ Int.to_string  @@ Memory.size m;
+    "size", string @@ string_of_addr @@ Memory.min_addr m;
+  ]
+
+  let memory (links, m) : msg =
+    resource links "memory" @@ memory_parameters m
+
+  let symbol s mems : msg =
+    let open Symbol in [
+      "symbol", dict @@ [
+        "name", string @@ name s;
+        "is_function", bool @@ is_function s;
+        "is_debug", bool @@ is_debug s;
+        "chunks", list (fun (links,m) -> dict @@ [
+            "links", strings @@ list_of_uris links;
+          ] @ memory_parameters m)
+          (List1.to_list mems);
+      ]
     ]
+
+  let section ~syms s mem : msg = [
+    "section", dict @@ [
+      "name", string @@ Section.name s;
+      "perm", strings @@ list_of_perm s;
+      "symbols", strings syms;
+    ] @ memory mem
+  ]
+
+  let resources name rs : msg = [name, strings rs]
   let sections = resources "sections"
   let symbols = resources "symbols"
   let images = resources "images"

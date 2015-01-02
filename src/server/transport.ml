@@ -47,7 +47,7 @@ let combine r =
     Lwt.Or_error.fail
   | s::ss, errs ->
     Lwt.List.iter errs ~f:(log Warning "provider failed") >>= fun () ->
-    List1.create (s,ss) |>
+    List1.create s ss |>
     Lwt.Or_error.return
 
 
