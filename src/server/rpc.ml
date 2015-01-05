@@ -87,18 +87,35 @@ module Response = struct
 
   let enum map x = strings (map x)
 
+  let string_of_addr = Addr.string_of_value ~hex:false
+
+  let memory_parameters m : msg = [
+    "addr", string @@ string_of_addr @@ Memory.min_addr m;
+    "size", string @@ Int.to_string  @@ Memory.size m;
+  ]
+
+
+  let resource links name props : msg = [
+    name, dict @@ [
+      "links", strings @@ list_of_uris links
+    ] @ props
+  ]
+
+  let memory (links, m) : msg =
+    resource links "memory" @@ memory_parameters m
 
   let bil_value = Fn.compose strings Adt.strings_of_bil
 
-  let insn ?target ?bil ~mem_id insn : insn  =
-    let open Disasm.Basic in dict @@ [
-      "memory", string @@ mem_id;
+  let insn ?target ?bil mem insn : insn  =
+    let module Insn = Disasm.Basic.Insn in
+    dict @@ [
       "name", string @@ Insn.name insn;
       "asm", string @@ Insn.asm insn;
       "kinds", strings @@ Adt.strings_of_kinds @@ Insn.kinds insn;
       "operands", strings @@ Adt.strings_of_ops
       @@ Array.to_list @@ Insn.ops insn;
-    ] @ optional_field "target" string target
+    ] @ memory mem
+      @ optional_field "target" string target
       @ optional_field "bil" bil_value bil
 
   let insns (insns : insn list) : msg = [
@@ -113,13 +130,6 @@ module Response = struct
         "x" := is_executable;
       ])
 
-  let string_of_addr = Addr.string_of_value ~hex:false
-
-  let resource links name props : msg = [
-    name, dict @@ [
-      "links", strings @@ list_of_uris links
-    ] @ props
-  ]
 
   let image ~secs (links,image) : msg =
     let open Image in
@@ -134,13 +144,7 @@ module Response = struct
       "sections", strings secs;
     ]
 
-  let memory_parameters m : msg = [
-    "addr", string @@ Int.to_string  @@ Memory.size m;
-    "size", string @@ string_of_addr @@ Memory.min_addr m;
-  ]
 
-  let memory (links, m) : msg =
-    resource links "memory" @@ memory_parameters m
 
   let symbol s mems : msg =
     let open Symbol in [
@@ -202,12 +206,17 @@ module Request = struct
 
   let value  = parse ident
   let string = parse get_string
-  let arch = parse @@ Arch.of_string / get_string
+  let string_opt = parse @@ Option.some / get_string
+  let arch = parse @@ uw / Arch.of_string / get_string
   let addr = parse @@ ok_exn / Adt.Parse.word / get_string
   let endian = parse @@ ok_exn / Adt.Parse.endian / get_string
   let url = parse @@ Uri.of_string / get_string
-  let kinds =
-    parse @@ ok_exn / all / get_list (Adt.Parse.kind / get_string)
+
+  let nulls constr =
+    parse @@ ok_exn / all / get_list (constr / get_string)
+
+  let kinds = nulls Adt.Parse.kind
+  let preds = nulls Adt.Parse.pred
 
   let accept_load_file f obj =
     url obj ["url"] >>= fun uri ->
@@ -223,12 +232,14 @@ module Request = struct
     endian obj ["endian"]  >>= fun endian ->
     return (f addr arch endian url)
 
+  let optional obj name ~default get =
+    if mem obj [name] then get obj [name] else return default
+
   let accept_get_insns f obj =
     string obj ["resource"] >>= fun id ->
-    if mem obj ["stop-conditions"]
-    then kinds obj ["stop-conditions"] >>= fun kinds ->
-      return (f kinds id)
-    else return (f [] id)
+    optional obj "stop-conditions" preds ~default:[] >>= fun ks ->
+    optional obj "backend" string_opt ~default:None >>= fun backend ->
+    return (f ?backend ks id)
 
   let accept_init f obj = string obj ["version"] >>| f
 
@@ -257,7 +268,6 @@ module Request = struct
     | Some r -> r
     | None -> errorf "One of the required properties is not found: %a"
                 pp_obj obj
-
 
   let id obj =
     string (Ezjsonm.value obj) ["id"]

@@ -65,8 +65,8 @@ end
 
 module Asm = struct
   open Disasm
-  let pp_kind ch kind =
-    pr ch "%a()" (pp_sexp Insn.Kind.sexp_of_t) kind
+  let pp_pred ch kind =
+    pr ch "%a()" (pp_sexp Basic.sexp_of_pred) kind
 
   let pp_op ch = function
     | Op.Imm imm -> pr ch "Imm(0x%Lx)" (Imm.to_int64 imm)
@@ -95,9 +95,11 @@ let to_strings pp = List.map ~f:(Format.asprintf "%a" pp)
 
 let strings_of_bil = to_strings Stmt.pp
 let strings_of_ops = to_strings Asm.pp_op
-let strings_of_kinds = to_strings Asm.pp_kind
+let strings_of_preds = to_strings Asm.pp_pred
 let string_of_arm insn ops = to_string Arm.pp_insn (insn,ops)
 let string_of_endian = to_string pp_endian
+let strings_of_kinds ks =
+  strings_of_preds (ks :> Disasm.Basic.pred list)
 
 
 
@@ -160,6 +162,7 @@ module Parse = struct
     | _ -> errorf "'%s' doesn't match 'Int(num,size)'" str
 
 
-  let kind = nullary Disasm.Insn.Kind.t_of_sexp
+  let kind = nullary Disasm.Basic.kind_of_sexp
+  let pred = nullary Disasm.Basic.pred_of_sexp
   let endian = nullary endian_of_sexp
 end

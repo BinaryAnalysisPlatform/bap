@@ -111,15 +111,14 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     monad, like [Or_error], or [Lwt]. Otherwise, just use [ident]
     function and assume that ['s == 'r].
 
-    In a process of disassembly three user provided callbacks are
-    invoked by the engine. To each callback at least two parameters
-    are passed: [state] and [user_data]. [user_data] is arbitrary data
-    of type ['s] with which the folding over the memory is actually
+    In a process of disassembly user provided callbacks are invoked by
+    the engine. To each callback at least two parameters are passed:
+    [state] and [user_data]. [user_data] is arbitrary data of type ['s]
+    with which the folding over the memory is actually
     performed. [state] incapsulates the current state of the
     disassembler, and provides continuation functions, namely [stop],
-    [next] and [back], that drives the process of
-    disassembly. This functions are used to pass control back to the
-    disassembler.
+    [next] and [back], that drives the process of disassembly. This
+    functions are used to pass control back to the disassembler.
 
     [stopped state user_data] is called when there is no more data to
     disassemble. This handler is optional and defaults to [stop].
