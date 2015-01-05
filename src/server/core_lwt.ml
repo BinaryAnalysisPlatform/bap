@@ -12,6 +12,7 @@ module Std = struct
     module Chan = Lwt_chan
     module Mutex = Lwt_mutex
     module IO = Lwt_io
+    module Pool = Core_lwt_pool
     module Or_error = Core_lwt_or_error
     module Stream = Core_lwt_stream
     module Seq = Lift_sequence(Core_lwt_basic)
