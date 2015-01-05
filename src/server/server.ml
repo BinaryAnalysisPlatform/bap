@@ -7,6 +7,8 @@ open Rpc
 module Res = Manager
 module Dis = Disasm.Basic
 
+let version = "0.1"
+
 module type Disasms = sig
   val get
     : ?cpu:string -> backend:string -> string
@@ -44,7 +46,6 @@ module Disasms : Disasms = struct
       get ?cpu ~backend target ~f
 end
 
-
 let section = Lwt_log.Section.make "bap_server"
 
 let stub name = Lwt.Or_error.unimplemented name
@@ -59,7 +60,32 @@ module Handlers(Ctxt : sig
   let error fmt = reply_error `Error fmt
   let warning fmt = reply_error `Warning fmt
 
-  let init ver = stub "init"
+  let init version =
+    let ts = List.(Transport.registered_fetchers >>|
+                   Response.transport) in
+    let kinds = Disasm.Insn.Kind.all in
+    let ds =
+      Response.disassembler
+        ~name:"llvm" ~arch:Arch.ARM ~kinds
+        ~has_name:true ~has_bil:true ~has_ops:true ~has_target:true ::
+      List.map [Arch.X86_32; Arch.X86_64] ~f:(fun arch ->
+          Response.disassembler ~name:"llvm" ~arch
+            ~has_name:true ~has_ops:true ~kinds
+            ~has_target:false ~has_bil:false) in
+    let ls =
+      List.map Arch.all ~f:(fun arch ->
+          Response.loader ~name:"bap_elf" ~arch
+            ~format:"ELF" [`debug]) in
+    let capabilities = Response.capabilities ~version ts ls ds in
+    let (%) x f = List.map x ~f:Manager.string_of_id |> f in
+    let images = Manager.images % Response.images in
+    let sections = Manager.sections % Response.sections in
+    let symbols = Manager.symbols % Response.symbols in
+    let chunks = Manager.chunks % Response.chunks in
+    Lwt.List.iter ~f:reply
+      [capabilities; images; sections; symbols; chunks] >>=
+    Lwt.Or_error.return
+
 
   let reply_resource uri res =
     res >>|? Res.string_of_id >>|? Response.added >>= function
@@ -183,7 +209,6 @@ module Handlers(Ctxt : sig
           let mem = Res.memory r in
           get_mem mem >>|? Response.section ~syms sec) >>=? fun msg ->
     reply msg >>= Lwt.Or_error.return
-
 end
 
 let accept reply (req : request) : unit Lwt.Or_error.t =

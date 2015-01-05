@@ -89,3 +89,7 @@ let start ?name () =
   | None ->
     String.Table.data t.services |>
     Lwt.List.map ~how:`Parallel ~f:(fun start -> start ()) >>= combine
+
+
+let registered_fetchers : string list =
+  String.Table.keys t.fetchers

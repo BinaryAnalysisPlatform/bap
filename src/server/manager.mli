@@ -54,6 +54,11 @@ val sections_of_image  : id -> id list
 val symbols_of_section : id -> id list
 val memory_of_symbol   : id -> id list
 
+val images : id list
+val sections : id list
+val symbols : id list
+val chunks : id list
+
 (** Access to resource  *)
 
 val memory  : ('a,_,_,_) res -> 'a

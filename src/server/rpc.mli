@@ -38,6 +38,9 @@ module Response : sig
   type t = response
   type msg
   type insn
+  type loader
+  type disassembler
+  type transport
 
 
   (** creates a response to the request with the [id]  *)
@@ -45,7 +48,8 @@ module Response : sig
 
   val error : [`Critical | `Error | `Warning] -> string -> msg
 
-  val capabilities : (* unimplemented *) msg
+  val capabilities : version:string ->
+    transport list -> loader list -> disassembler list -> msg
 
   val image : secs:res_ids -> Image.t resource -> msg
 
@@ -65,5 +69,14 @@ module Response : sig
   val symbols  : res_id list -> msg
   val chunks   : res_id list -> msg
   val added    : res_id -> msg
+
+  val loader : name:string -> arch:arch -> format:string ->
+    [`symtab | `debug] list -> loader
+
+  val disassembler : name:string -> arch:arch ->
+    kinds:Disasm.kind list -> has_name:bool -> has_ops:bool ->
+    has_target:bool -> has_bil:bool -> disassembler
+
+  val transport : string -> transport
 
 end

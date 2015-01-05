@@ -32,6 +32,9 @@ let string_of_severity s =
 module Response = struct
   type t = response
   type msg = (id * value) list
+  type loader = value
+  type disassembler = value
+  type transport = string
   type insn = value
 
   let create id (msg : msg) : t = `O ([
@@ -45,8 +48,13 @@ module Response = struct
     ]
   ]
 
-  let capabilities : msg = [
-    "capabilities", dict []
+  let capabilities ~version ts ls ds : msg = [
+    "capabilities", dict [
+      "version", string version;
+      "loaders", `A ls;
+      "disassemblers", `A ds;
+      "transports", strings ts;
+    ]
   ]
 
   let list_of_uris uris =
@@ -55,17 +63,16 @@ module Response = struct
 
   let disassembler
       ~name ~arch ~kinds ~has_name ~has_ops ~has_target
-      ~has_bil : msg = [
-    "disassembler", dict [
+      ~has_bil : disassembler =
+    dict [
       "name", string name;
-      "architecture", string arch;
+      "architecture", string (Arch.to_string arch);
       "kinds", strings @@ Adt.strings_of_kinds kinds;
       "has-name", bool has_name;
       "has-ops", bool has_ops;
       "has-target", bool has_target;
       "has-bil", bool has_bil
     ]
-  ]
 
   let string_of_sym s =
     Sexp.to_string (<:sexp_of<[`debug | `symtab]>> s)
@@ -73,14 +80,17 @@ module Response = struct
   let strings_of_syms syms =
     List.intersperse ~sep:"," @@ List.map syms ~f:string_of_sym
 
-  let loader ~name ~arch ~format syms : msg = [
-    "loader", dict [
+  let loader ~name ~arch ~format syms : loader =
+    dict [
       "name", string name;
-      "architecture", string arch;
+      "architecture", string (Arch.to_string arch);
       "format", string format;
       "symbols", strings (strings_of_syms syms)
     ]
-  ]
+
+  let transport = ident
+
+
   let optional_field name json_of_value = function
     | None -> []
     | Some value -> [name, json_of_value value]
@@ -174,6 +184,10 @@ module Response = struct
   let chunks = resources "chunks"
 
   let added id : msg = ["resource", string id]
+
+
+
+
 
 end
 

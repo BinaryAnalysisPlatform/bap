@@ -46,3 +46,6 @@ val register_resource_server :
   create:(?query:string ->
           ?file: string ->
           Bigsubstring.t -> Uri.t Lwt.Or_error.t) -> unit
+
+
+val registered_fetchers : string list

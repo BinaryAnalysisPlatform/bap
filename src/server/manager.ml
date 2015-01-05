@@ -333,3 +333,14 @@ let servers_of_id id =
     | None -> []
 
 let links_of_id id = servers_of_id id
+
+
+include struct
+  let export field = Fieldslib.Field.get field t |> Ids.keys
+  open Fields_of_context
+
+  let images = export images
+  let sections = export sections
+  let symbols = export symbols
+  let chunks = export chunks
+end
