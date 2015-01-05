@@ -172,6 +172,9 @@ module Response = struct
   let symbols = resources "symbols"
   let images = resources "images"
   let chunks = resources "chunks"
+
+  let added id : msg = ["resource", string id]
+
 end
 
 

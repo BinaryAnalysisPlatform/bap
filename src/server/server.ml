@@ -60,10 +60,22 @@ module Handlers(Ctxt : sig
   let warning fmt = reply_error `Warning fmt
 
   let init ver = stub "init"
-  let load_file ?loader uri = stub "load_file"
-  let load_chunk addr arch endian uri = stub "chunk"
 
-  let unimplemented r = Res.Return.errorf "unimplemented" r
+  let reply_resource uri res =
+    res >>|? Res.string_of_id >>|? Response.added >>= function
+    | Ok msg -> reply msg >>= Lwt.Or_error.return
+    | Error err -> error "Failed to add resource from %s: %s"
+                     (Uri.to_string uri)
+                     (Error.to_string_hum err) >>=
+      Lwt.Or_error.return
+
+
+  let load_file ?loader uri =
+    Res.add_file ?backend:loader uri |> reply_resource uri
+
+  let load_chunk addr arch endian uri : unit Lwt.Or_error.t =
+    Res.add_memory arch endian addr uri |> reply_resource uri
+
 
   let get_mem mem : 'a Rpc.resource Lwt.Or_error.t =
     Res.fetch_memory mem >>|? fun m ->
@@ -113,8 +125,6 @@ module Handlers(Ctxt : sig
     | Arch.ARM -> arm_lifter
     | _   -> no_lifter
 
-
-
   let get_insns ?(backend="llvm") stop_on res_id =
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->
     let mems_of_img img =
@@ -144,8 +154,6 @@ module Handlers(Ctxt : sig
     Lwt.return target >>=? Disasms.get ~backend ~f:(fun dis ->
         Lwt.List.iter ms ~f:(disasm_mem lifter dis ~stop_on) >>= fun () ->
         Lwt.Or_error.return ())
-
-
 
   let get_resource res_id : 'a Lwt.Or_error.t =
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->

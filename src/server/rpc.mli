@@ -64,4 +64,6 @@ module Response : sig
   val sections : res_id list -> msg
   val symbols  : res_id list -> msg
   val chunks   : res_id list -> msg
+  val added    : res_id -> msg
+
 end
