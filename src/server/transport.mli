@@ -7,10 +7,20 @@ open Core_kernel.Std
 open Core_lwt.Std
 
 type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
+type connection = (string,string) pipe
 type 'a list1 = 'a List1.t
 
-(** returns a pipe for each registered service provider  *)
-val start : ?name:string -> unit -> (string,string) pipe list1 Lwt.Or_error.t
+(** if [name] is not provided then starts all services in parallel,
+    otherwise only the specified service will be started.
+
+    To all started service the callback [new_connection] is passed.
+    It will be called any time a new connection is established.
+
+    The connection contains of a stream of requests, paired with a
+    [reply] function.
+*)
+val start_service : ?name:string ->
+  new_connection:(connection -> unit) -> unit -> unit Lwt.Or_error.t
 
 val serve_resource : ?query:string -> ?file:string ->
   Bigsubstring.t -> (Uri.t list1) Lwt.Or_error.t
@@ -19,7 +29,7 @@ val fetch_resource : Uri.t -> Bigsubstring.t Lwt.Or_error.t
 
 val register_service :
   name:string ->
-  start:(unit -> (string,string) pipe Lwt.Or_error.t) -> unit
+  start:(new_connection:(connection -> unit) -> unit Lwt.Or_error.t) -> unit
 
 val register_resource_fetcher :
   scheme:string ->

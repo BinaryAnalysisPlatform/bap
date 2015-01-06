@@ -5,5 +5,7 @@ PKG lwt
 PKG lwt-zmq
 PKG ZMQ
 PKG uri
+PKG cohttp.lwt
+PKG cohttp
 
 S .

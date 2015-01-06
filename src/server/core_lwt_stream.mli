@@ -4,7 +4,7 @@ open Lwt_stream
 
 (** Data streams *)
 
-type 'a t
+type 'a t = 'a Lwt_stream.t
 (** Type of a stream holding values of type ['a] *)
 
 (** Type of sources for bounded push-streams. *)

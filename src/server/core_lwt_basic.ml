@@ -1,5 +1,6 @@
 open Core_kernel.Std
 
+type 'a t = 'a Lwt.t
 include Monad.Make(struct
     type 'a t = 'a Lwt.t
     let return = Lwt.return

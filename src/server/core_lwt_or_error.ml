@@ -1,6 +1,8 @@
 open Core_kernel.Std
+open Core_lwt_container
 
-module M = struct
+
+module Basic = struct
   type 'a t = 'a Or_error.t Lwt.t
   let bind m f =
     Lwt.bind m (function
@@ -11,7 +13,12 @@ module M = struct
   let return x = Lwt.return (Ok x)
 end
 
-type 'a t = 'a M.t
+module M = struct
+  type 'a t = 'a Or_error.t Lwt.t
+  include Monad.Make(Basic)
+end
+
+type 'a t = 'a Or_error.t Lwt.t
 
 let fail err : _ t = Lwt.return (Error err)
 
@@ -57,7 +64,6 @@ let try_with_join ?backtrace (f : unit -> 'a t) : 'a t =
   let open Lwt in
   try_with ?backtrace f >>= fun err -> return (Or_error.join err)
 
-module Sequence = Make_sequence(M)
-module List = Make_list(M)
-include Monad.Make(M)
-end
+module Seq = Lift_sequence(M)
+module List = Lift_list(M)
+include Monad.Make(Basic)

@@ -68,7 +68,7 @@ module Lift_sequence(M : Monad) = struct
   let init ?how n ~f = map ?how (Sequence.init n ~f:Fn.id) ~f
 end
 
-module Make_list(M : Monad) = struct
+module Lift_list(M : Monad) = struct
   module Sequence = Lift_sequence(M)
   open M
 
@@ -138,13 +138,14 @@ struct
   type 'a monad = 'a M.t
   type 'a t = 'a T.t
 
-  let foldi t ~init ~f = foldi (to_sequence t)
-  let fold t ~init ~f = fold (to_sequence t)
-  let all t = Seq.all (to_sequence t)
+  let foldi t ~init ~f = foldi ~init (to_sequence t) ~f
+  let fold t  ~init ~f = fold ~init (to_sequence t) ~f
+  let all t = Seq.all (to_sequence t) >>| of_sequence
   let all_unit t = all_unit (to_sequence t)
   let iter ?how t ~f = iter ?how (to_sequence t) ~f
   let iteri ?how t ~f = iteri ?how (to_sequence t) ~f
-  let map ?how t ~f = Seq.map ?how (to_sequence t) ~f
+  let map ?how t ~f = Seq.map ?how (to_sequence t) ~f >>| of_sequence
+
   let init ?how n ~f = Seq.init ?how n ~f >>| of_sequence
   let filter ?how t ~f =
     filter ?how (to_sequence t) ~f >>| of_sequence

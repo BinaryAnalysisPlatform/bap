@@ -309,8 +309,6 @@ module Return = struct
   let error msg data sexp _res = Lwt.Or_error.error msg data sexp
 end
 
-
-
 let with_resource ~chunk ~symbol ~section ~image (id : id) =
   let open Fields_of_context in
   match Ids.find t.images id with
@@ -322,8 +320,6 @@ let with_resource ~chunk ~symbol ~section ~image (id : id) =
       | None -> match Ids.find t.chunks id with
         | Some mem -> chunk {(init mem) with mem = serve mem}
         | None -> Lwt.Or_error.errorf "unknown id: %a" Id.str id
-
-
 
 let servers_of_id id =
   match Ids.find t.images id with

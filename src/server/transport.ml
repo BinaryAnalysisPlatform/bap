@@ -14,12 +14,15 @@ type provider =
 
 type fetcher = Uri.t -> data Lwt.Or_error.t
 
+type connection = (string,string) pipe
+type service = new_connection:(connection -> unit) -> unit Lwt.Or_error.t
+
 
 type t = {
   served : Uri.t Lwt_sequence.t;
   providers : provider String.Table.t;
   fetchers  : fetcher String.Table.t;
-  services  : (unit -> (string,string) pipe Lwt.Or_error.t) String.Table.t;
+  services  : service String.Table.t;
 } with fields
 
 open Fields
@@ -81,15 +84,16 @@ let register_resource_server ~scheme ~create =
 let register_service ~name ~start =
   register services ~key:name ~data:start
 
-let start_service name = Lwt.Or_error.unimplemented "start_service"
-
-let start ?name () =
+let start_service ?name ~new_connection () =
   match name with
-  | Some name -> start_service name
   | None ->
     String.Table.data t.services |>
-    Lwt.List.map ~how:`Parallel ~f:(fun start -> start ()) >>= combine
-
+    Lwt.List.map ~how:`Parallel ~f:(fun start -> start ~new_connection)
+    >>= combine >>=? fun (results : unit list1) ->
+    Lwt.Or_error.return ()
+  | Some name -> match String.Table.find t.services name with
+    | Some start -> start ~new_connection
+    | None -> Lwt.Or_error.errorf "Unknown service protocol: %s" name
 
 let registered_fetchers : string list =
   String.Table.keys t.fetchers

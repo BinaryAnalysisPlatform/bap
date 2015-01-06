@@ -37,6 +37,8 @@ module Response = struct
   type transport = string
   type insn = value
 
+  let to_string r = to_string r
+
   let create id (msg : msg) : t = `O ([
       "id", string id;
     ] @ msg)
@@ -200,6 +202,9 @@ end
 module Request = struct
   type t = request with sexp_of
   let (/) = Fn.compose
+
+  let of_string s =
+    Or_error.try_with (fun () -> from_string s)
 
   let pp_obj () v =
     Sexp.to_string_hum @@ to_sexp v

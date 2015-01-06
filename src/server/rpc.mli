@@ -24,6 +24,8 @@ end
 module Request : sig
   type t = request
 
+  val of_string : string -> t Or_error.t
+
   val id : t -> id Or_error.t
 
   val accept : t ->
@@ -41,6 +43,8 @@ module Response : sig
   type loader
   type disassembler
   type transport
+
+  val to_string : t -> string
 
 
   (** creates a response to the request with the [id]  *)
