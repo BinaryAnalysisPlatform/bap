@@ -66,3 +66,5 @@ let main () =
         Weak_set.add files entry;
         substring_of_entry uri entry in
   Transport.register_resource_fetcher ~scheme fetch
+
+let () = main ()

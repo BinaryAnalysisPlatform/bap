@@ -17,7 +17,7 @@ let handle_session (of_client,to_client) =
         None) in
   Server.run (of_client,to_client) >>= function
   | Ok () -> return ()
-  | Error err -> error_f ~section "Interaction failed: %s"
+  | Error err -> error_f ~section "Session failed: %s"
                    (Error.to_string_hum err)
 
 
@@ -32,4 +32,7 @@ let main () =
 
 let () =
   let module H = Http_service in
+  let module M = Mmap_client in
+  let module N = Mmap_server in
+  let () = Plugins.load () in
   Lwt.Main.run @@ main ()

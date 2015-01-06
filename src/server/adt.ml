@@ -90,8 +90,7 @@ module Arm = struct
 end
 
 let to_string pp  = Format.asprintf "%a" pp
-let to_strings pp = List.map ~f:(Format.asprintf "%a" pp)
-
+let to_strings pp lst = List.map ~f:(fun x -> Format.asprintf "%a" pp x) lst
 
 let strings_of_bil = to_strings Stmt.pp
 let strings_of_ops = to_strings Asm.pp_op

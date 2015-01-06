@@ -33,13 +33,13 @@ let url_of_file ?query sub path : Uri.t =
   | Some v -> Uri.with_query' url ["q", v]
 
 let save_to_file data : string =
-  let path,chan = Filename.open_temp_file "bap" ".mmap" in
-  let fd = Unix.descr_of_out_channel chan in
+  let path = Filename.temp_file "bap_" ".mmap" in
+  let fd = Unix.(openfile path [Unix.O_RDWR] 0o600) in
   let size = Bigstring.length data in
   let dst = Lwt_bytes.map_file ~fd ~size ~shared:true () in
   Bigstring.blito ~src:data ~dst ();
   Bigstring.unsafe_destroy dst;
-  Out_channel.close chan;
+  Unix.close fd;
   path
 
 let add_and_forget files file =
@@ -47,6 +47,7 @@ let add_and_forget files file =
   ()
 
 let main () =
+
   let files : files = Bag.create () in
   let create ?query ?file data =
     match file with

@@ -223,7 +223,7 @@ let run_exn (request, reply) : unit Lwt.t =
   let reply x = reply x >>= function
     | Ok () -> Lwt.return_unit
     | Error err ->
-      error_f "Service is finished with error: %s"
+      error_f "Service has finished with error: %s"
         (Error.to_string_mach err) >>= fun () ->
       Lwt.fail Stopped in
   let handle_request req =
