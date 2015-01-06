@@ -1,4 +1,4 @@
-OPAM_DEPENDS="core_kernel.112.01.00 oasis piqi.0.7.1 zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri re cohttp.0.14.0"
+OPAM_DEPENDS="core_kernel.111.28.00 oasis piqi.0.7.1 zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri.1.7.2 re cohttp.0.14.0"
 SYS_DEPENDS="libgmp-dev time llvm-3.4-dev libzmq3-dev aspcud"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in

@@ -98,7 +98,7 @@ let chunk_of_data data : string list =
   let len  = Bigsubstring.length data in
   let data = Bigsubstring.base data in
   let size = min len max_chunk_size in
-  let n = size + len - 1 / size in
+  let n = (size + len - 1) / size in
   List.init n ~f:(fun i ->
       let src_pos = pos + i * size in
       let left = pos + len - src_pos in

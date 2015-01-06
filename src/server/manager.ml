@@ -90,6 +90,9 @@ let provide_memory ?file arch id mem =
   {meta = {endian; addr; arch; refs; id}; data}
 
 
+let seq_is_empty seq =
+  Seq.length_is_bounded_by ~max:0 seq
+
 let add_image img =
   let img_id = next_id () in
   let file = Image.filename img in
@@ -116,7 +119,7 @@ let add_image img =
               Ids.add_exn t.symbol_of_memory ~key:mem_id ~data:sym_id;
               provide_memory arch ?file mem_id mem >>|? fun data ->
               Ids.add_exn t.chunks ~key:mem_id ~data) >>=? fun () ->
-          if mems = Seq.empty then
+          if seq_is_empty mems then
             provide_memory arch ?file sym_id mem >>|? fun data ->
             Ids.add_exn t.chunks ~key:sym_id ~data
           else

@@ -89,7 +89,7 @@ module Arm = struct
     pr ch "%a(%a)" (pp_sexp Arm.Insn.sexp_of_t) insn pp_ops ops
 end
 
-let to_string pp  = Format.asprintf "%a" pp
+let to_string pp x = Format.asprintf "%a" pp x
 let to_strings pp lst = List.map ~f:(fun x -> Format.asprintf "%a" pp x) lst
 
 let strings_of_bil = to_strings Stmt.pp
