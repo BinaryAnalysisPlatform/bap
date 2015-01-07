@@ -1,4 +1,4 @@
-OPAM_DEPENDS="core_kernel.111.28.00 oasis piqi.0.7.1 zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri.1.7.2 re cohttp"
+OPAM_DEPENDS="core_kernel.111.28.00 oasis piqi.0.7.1 zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri.1.7.2 re cohttp.0.14.0"
 SYS_DEPENDS="libgmp-dev time llvm-3.4-dev libzmq3-dev aspcud"
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
@@ -9,13 +9,17 @@ case "$OCAML_VERSION,$OPAM_VERSION" in
 *) echo Unknown $OCAML_VERSION,$OPAM_VERSION; exit 1 ;;
 esac
 
-
 install_on_linux () {
   echo 'yes' | sudo add-apt-repository ppa:$ppa
   echo 'yes' | sudo apt-add-repository ppa:chris-lea/zeromq
   sudo apt-get update -qq
   sudo apt-get install -qq ocaml ocaml-native-compilers camlp4-extra opam $SYS_DEPENDS
-  opam init
+
+  if [ $OPAM_VERSION = "1.1.0" ]; then
+      opam init default https://opam.ocaml.org/1.1
+  else
+      opam init
+  fi
 }
 
 install_on_osx () {
