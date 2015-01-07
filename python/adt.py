@@ -64,11 +64,17 @@ class ADT(object):
         return self.__dict__.__cmp__(other.__dict__)
 
     def __repr__(self):
+        def qstr(x):
+            if isinstance(x, int) or isinstance(x, ADT):
+                return str(x)
+            else:
+                return '"{0}"'.format(x)
         def args():
             if isinstance(self.val, tuple):
-                return "{0}".format(", ".join(str(x) for x in self.val))
+                return ", ".join(qstr(x) for x in self.val)
             else:
-                return "{0!r}".format(self.val)
+                return qstr(self.val)
+
         return "{0}({1})".format(self.name, args())
 
 

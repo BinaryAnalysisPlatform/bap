@@ -2,7 +2,7 @@
 
 """BAP BIL Python representation"""
 
-from adt import ADT, Visitor
+from adt import *
 
 
 class Exp(ADT)  : pass     # Abstract base for all expressions
@@ -68,6 +68,8 @@ class Type(ADT) : pass  # Abstract base for expression type
 class Imm(Type) : pass  # Imm(size) - immediate value
 class Mem(Type) : pass  # Mem(addr_size, value_size)
 
+def loads(s):
+    return eval(s)
 
 # A playground.
 

@@ -18,15 +18,22 @@ let pp_size ch size =
 let pp_sexp sexp ch x =
   pr ch "%a" Sexp.pp (sexp x)
 
-let pp_ty ch = function
-  | Type.Imm n -> pr ch "Imm(%d)" n
-  | Type.Mem (n,m) -> pr ch "Mem(%a,%a)" pp_size n pp_size m
+module Var = struct
+  let pp_ty ch = function
+    | Type.Imm n -> pr ch "Imm(%d)" n
+    | Type.Mem (n,m) -> pr ch "Mem(%a,%a)" pp_size n pp_size m
 
-let pp_var ch v =
-  pr ch "Var(%s,%a)" Var.(name v) pp_ty Var.(typ v)
+  let pp_var ch v =
+    pr ch "Var(\"%s\",%a)" Var.(name v) pp_ty Var.(typ v)
+
+end
 
 module Exp = struct
   open Exp
+  open Var
+
+
+
   let rec pp ch = function
     | Load (x,y,e,s) ->
       pr ch "Load(%a,%a,%a,%a)" pp x pp y pp_endian e pp_size s
@@ -49,10 +56,11 @@ end
 
 module Stmt = struct
   open Stmt
+  open Var
   let rec pp ch = function
     | Move (v,e) -> pr ch "Move(%a,%a)" pp_var v Exp.pp e
     | Jmp e -> pr ch "Jmp(%a)" Exp.pp e
-    | Special s -> pr ch "Special(%s)" s
+    | Special s -> pr ch "Special(\"%s\")" s
     | While (e,ss) -> pr ch "While(%a, (%a))" Exp.pp e pps ss
     | If (e,xs,ys) -> pr ch "If(%a, (%a), (%a))" Exp.pp e pps xs pps ys
     | CpuExn n -> pr ch "CpuExn(%d)" n
@@ -71,14 +79,14 @@ module Asm = struct
   let pp_op ch = function
     | Op.Imm imm -> pr ch "Imm(0x%Lx)" (Imm.to_int64 imm)
     | Op.Fmm fmm -> pr ch "Fmm(%g)" (Fmm.to_float fmm)
-    | Op.Reg reg -> pr ch "Reg(%a)" Reg.pp reg
+    | Op.Reg reg -> pr ch "Reg(\"%a\")" Reg.pp reg
 end
 
 module Arm = struct
   open Disasm
   let pp_op ch = function
     | Arm.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
-    | Arm.Op.Reg reg -> pr ch "Reg(%a)" Arm.Reg.pp reg
+    | Arm.Op.Reg reg -> pr ch "Reg(%a())" Arm.Reg.pp reg
 
   let rec pp_ops ch = function
     | [] -> ()

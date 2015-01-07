@@ -2,7 +2,9 @@
 
 """Lifted ARM instruction"""
 
-from adt import ADT
+from adt import *
+from asm import *
+from bil import *
 
 class Reg(ADT) : pass
 class Nil(Reg) : pass
@@ -236,3 +238,7 @@ class MRS(Special) : pass
 class MSR(Special) : pass
 class PLDi12(Special) : pass
 class SVC(Special) : pass
+
+
+def loads(s):
+    return eval(s)
