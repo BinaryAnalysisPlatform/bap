@@ -219,8 +219,9 @@ let accept reply (req : request) : unit Lwt.Or_error.t =
 
 exception Stopped
 
-let run_exn (request, reply) : unit Lwt.t =
-  let reply x = reply x >>= function
+let run_exn (requests, replies) : unit Lwt.t =
+  let reply x =
+    Lwt.Stream.Push_queue.push replies x >>= function
     | Ok () -> Lwt.return_unit
     | Error err ->
       error_f "Service has finished with error: %s"
@@ -230,7 +231,7 @@ let run_exn (request, reply) : unit Lwt.t =
     Request.id req |> Lwt.return >>=? fun id ->
     let reply msg = reply (Response.create id msg) in
     accept reply req in
-  Lwt.Stream.iter_s request ~f:(fun req ->
+  Lwt.Stream.iter_s requests ~f:(fun req ->
       handle_request req >>= function
       | Ok () -> Lwt.return ()
       | Error err -> match Request.id req with

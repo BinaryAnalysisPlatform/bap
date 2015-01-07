@@ -282,6 +282,7 @@ Library core_lwt
                   Core_lwt_basic,
                   Core_lwt_container,
                   Core_lwt_container_intf,
+                  Core_lwt_extra,
                   Core_lwt_or_error,
                   Core_lwt_pool,
                   Core_lwt_stream

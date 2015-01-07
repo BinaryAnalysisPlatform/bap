@@ -13,6 +13,8 @@ type id = string with sexp_of
 type res_id = string with sexp_of
 type res_ids = res_id list with sexp_of
 
+let minify = false
+
 
 let sexp_of_response = Fn.compose Ezjsonm.to_sexp Ezjsonm.value
 let sexp_of_request = sexp_of_response
@@ -37,7 +39,7 @@ module Response = struct
   type transport = string
   type insn = value
 
-  let to_string r = to_string r
+  let to_string r = to_string ~minify r
 
   let create id (msg : msg) : t = `O ([
       "id", string id;

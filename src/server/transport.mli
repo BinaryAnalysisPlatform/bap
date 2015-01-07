@@ -6,7 +6,7 @@
 open Core_kernel.Std
 open Core_lwt.Std
 
-type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
+type ('a,'b) pipe = 'a Lwt.Stream.t * ('b Lwt.Stream.bounded_push)
 type connection = (string,string) pipe
 type 'a list1 = 'a List1.t
 

@@ -235,6 +235,8 @@ module Push_queue : sig
 
   type 'a t = 'a bounded_push
 
+  val wrap : 'a t -> f:('b -> 'a) -> 'b t
+
   (** Size of the stream. *)
   val size : _ t -> int
 

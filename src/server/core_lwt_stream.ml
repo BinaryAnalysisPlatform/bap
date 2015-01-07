@@ -49,6 +49,17 @@ module Push_queue = struct
   let push_all q xs =
     Lwt_or_error.List.iter xs ~f:(push q)
 
+  let wrap (q : 'a t) ~f : 'b t = object
+    method size = q#size
+    method resize n = q#resize n
+    method push x = q#push (f x)
+    method close = q#close
+    method count = q#count
+    method closed = q#closed
+    method blocked = q#blocked
+    method set_reference : 'a. 'a -> unit = q#set_reference
+  end
+
   let close q = q#close
   let length q = q#size
   let blocked q = q#blocked

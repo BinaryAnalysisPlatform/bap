@@ -5,7 +5,7 @@ open Lwt_log
 let section = Section.make "Transport"
 
 type data = Bigsubstring.t
-type ('a,'b) pipe = 'a Lwt.Stream.t * ('b -> unit Lwt.Or_error.t)
+type ('a,'b) pipe = 'a Lwt.Stream.t * ('b Lwt.Stream.bounded_push)
 type 'a list1 = 'a List1.t
 
 
@@ -85,12 +85,14 @@ let register_service ~name ~start =
   register services ~key:name ~data:start
 
 let start_service ?name ~new_connection () =
+  notice "Starting services" >>= fun () ->
   match name with
   | None ->
     String.Table.data t.services |>
     Lwt.List.map ~how:`Parallel ~f:(fun start -> start ~new_connection)
     >>= combine >>=? fun (results : unit list1) ->
-    Lwt.Or_error.return ()
+    notice "All services finished" >>=
+    Lwt.Or_error.return
   | Some name -> match String.Table.find t.services name with
     | Some start -> start ~new_connection
     | None -> Lwt.Or_error.errorf "Unknown service protocol: %s" name

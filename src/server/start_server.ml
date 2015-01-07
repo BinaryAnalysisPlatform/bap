@@ -6,8 +6,8 @@ open Bap.Std
 let section = Lwt_log.Section.make "bap_server"
 
 let handle_session (of_client,to_client) =
-  let to_client res =
-    to_client (Rpc.Response.to_string res) in
+  let to_client = Lwt.Stream.Push_queue.wrap
+      to_client ~f:Rpc.Response.to_string in
   let of_client = Lwt.Stream.filter_map of_client ~f:(fun msg ->
       match Rpc.Request.of_string msg with
       | Ok req -> Some req
@@ -15,10 +15,14 @@ let handle_session (of_client,to_client) =
         ign_warning_f ~section "Failed with %s, when parsing '%s'"
           (Error.to_string_hum err) msg;
         None) in
-  Server.run (of_client,to_client) >>= function
-  | Ok () -> return ()
-  | Error err -> error_f ~section "Session failed: %s"
-                   (Error.to_string_hum err)
+  Lwt.protect (fun () ->
+      Server.run (of_client,to_client) >>= function
+      | Ok () -> return ()
+      | Error err -> error_f ~section "Session failed: %s"
+                       (Error.to_string_hum err))
+    ~finally:(fun () ->
+        Lwt.Stream.Push_queue.close to_client;
+        return ())
 
 
 let main () =

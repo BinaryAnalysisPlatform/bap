@@ -19,9 +19,9 @@ let start ~new_connection =
   let callback conn req body =
     let to_client,queue = Lwt.Stream.create_bounded max_messages in
     let of_client = Lwt.Stream.clone (Body.to_stream body) in
-    new_connection (of_client,Lwt.Stream.Push_queue.push queue);
+    new_connection (of_client, queue);
     let body = Body.of_stream to_client in
-    Http.Server.respond ~headers ~status:`OK ~body () in
+    Http.Server.respond ~flush:false ~headers ~status:`OK ~body () in
   let srv = Http.Server.make ~callback () in
   Http.Server.create srv >>= Lwt.Or_error.return
 
