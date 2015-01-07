@@ -93,9 +93,9 @@ let provide_memory ?file arch id mem =
 let seq_is_empty seq =
   Seq.length_is_bounded_by ~max:0 seq
 
-let add_image img =
+let add_image ?file img =
   let img_id = next_id () in
-  let file = Image.filename img in
+  let file = Option.first_some file (Image.filename img) in
   let arch = Image.arch img in
   let sections = Image.sections img |> Table.to_sequence in
   Lwt.Or_error.Seq.iter sections ~f:(fun (mem,sec) ->
@@ -242,9 +242,11 @@ let create_image ?backend data =
 
 
 let add_file ?backend uri =
+  let file = Option.(Uri.scheme uri >>= function
+    |"file" -> return (Uri.path uri) | _ -> None) in
   Transport.fetch_resource uri >>=?
   create_image ?backend >>=?
-  add_image
+  add_image ?file
 
 let nothing () = Lwt.Or_error.return Nil
 

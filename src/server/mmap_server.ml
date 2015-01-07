@@ -47,7 +47,6 @@ let add_and_forget files file =
   ()
 
 let main () =
-
   let files : files = Bag.create () in
   let create ?query ?file data =
     match file with

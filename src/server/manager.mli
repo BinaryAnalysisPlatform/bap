@@ -32,7 +32,7 @@ module Id : Regular with type t = id
 
 
 (** adds file image to the resources data base  *)
-val add_image  : image -> id Lwt.Or_error.t
+val add_image  : ?file:string -> image -> id Lwt.Or_error.t
 
 (** fetches memory chunk from a given [uri], and adds it to the
     resource pool *)
