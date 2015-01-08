@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
+import os, time
 import requests
 
 from subprocess import Popen
 from mmap import mmap
 from tempfile import NamedTemporaryFile
-import adt, arm, asm, bil
-
 import json
-
+import adt, arm, asm, bil
 
 instance = None
 
@@ -53,7 +51,16 @@ class Disassembler(object):
             self.url = server
 
         self.last_id = 0
-        self.capabilities = self.post({'init' : {'version' : '0.1'}})
+        for attempt in range(10):
+            try:
+                self.capabilities = self.post({'init' : {
+                    'version' : '0.1'}})
+            except Exception:
+                time.sleep(0.1 * attempt)
+
+        if not "capabilities" in self.__dict__:
+            raise RuntimeError("Failed to connect to BAP server")
+
         self.data = {}
         self.temp = NamedTemporaryFile('rw+b')
 
@@ -88,6 +95,7 @@ class Disassembler(object):
         return self._load_resource({'load-memory-chunk' : kwargs})
 
     def __exit__(self):
+        print "closing connection to BAP"
         if 'server' in self.__dict__:
             self.server.terminate()
         self.temp.close()
@@ -122,8 +130,9 @@ class Disassembler(object):
 def spawn_server(**kwargs):
     port = kwargs.get('port', 8080)
     name = kwargs.get('name', 'bap-server')
+    server = Popen([name, '--port=' + str(port)])
     return {
-        'server' : Popen([name, '--port=' + str(port)]),
+        'server' : server,
         'url' : "http://127.0.0.1:{0}".format(port)
     }
 
@@ -155,7 +164,7 @@ def parse_insn(js):
 
 def demo_chunk():
     data = b"\x48\x83\xec\x08"
-    insns = disasm(bytes(data), server="http://127.0.0.1:8080", arch="x86_64")
+    insns = disasm(bytes(data), arch="x86_64")
     print list(insns)
 
 
