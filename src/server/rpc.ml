@@ -13,6 +13,16 @@ type id = string with sexp_of
 type res_id = string with sexp_of
 type res_ids = res_id list with sexp_of
 
+type value = [
+  | `Null
+  | `Bool of bool
+  | `Float of float
+  | `String of string
+  | `A of value list
+  | `O of (string * value) list
+] with sexp_of
+
+
 let minify = false
 
 
@@ -206,10 +216,13 @@ module Request = struct
   let (/) = Fn.compose
 
   let of_string s =
-    Or_error.try_with (fun () -> from_string s)
+    Or_error.try_with (fun () -> from_string s) |> function
+    | Ok s -> Ok s
+    | Error err -> errorf "Error: %s when parsing:\n%s\n"
+                     (Error.to_string_hum err) s
 
-  let pp_obj () v =
-    Sexp.to_string_hum @@ to_sexp v
+  let pp_obj () obj =
+    Sexp.to_string_hum @@ sexp_of_value obj
 
   let pp_path () path =
     String.concat ~sep:"." path
