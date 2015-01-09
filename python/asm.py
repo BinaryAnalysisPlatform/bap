@@ -18,6 +18,7 @@ class Terminator(Affecting_control): pass
 class May_affect_control_flow(Affecting_control) : pass
 class May_load(Having_side_effects)     : pass
 class May_store(Having_side_effects)    : pass
+class Valid(Kind) : pass
 
 
 def eval_if_not_adt(s):

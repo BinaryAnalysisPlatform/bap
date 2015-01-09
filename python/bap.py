@@ -32,6 +32,10 @@ def get_instance(**kwargs):
 atexit.register(del_instance)
 
 def disasm(obj, **kwargs):
+    r""" disasm(obj) disassembles provided object.
+    Returns a generator object yield instructions.
+
+    """
     def ret(obj):
         return get_instance(**kwargs).insns(obj)
     if isinstance(obj, Id):
@@ -110,11 +114,14 @@ class Section(Resource):
         except StopIteration:
             return d
 
-
     def __getattr__(self, name):
         if name == 'symbols':
             self.load_symbols()
             return self.symbols
+        elif name == 'addr' or name == 'size':
+            return self.get('memory')[name]
+        elif name == 'memory':
+            return Memory(self.get('memory'), self)
         else:
             return self.get(name)
 
@@ -123,10 +130,23 @@ class Symbol(Resource):
         super(Symbol, self).__init__('symbol', ident, parent.bap)
         self.parent = parent
 
+    def load_chunks(self):
+        self.chunks = [Memory(s, self) for s in self.get('chunks')]
+
     def __getattr__(self, name):
-        return self.get(name)
+        if name == 'chunks':
+            self.load_chunks()
+            return self.chunks
+        elif name == 'addr':
+            return self.chunks[0].addr
+        else:
+            return self.get(name)
 
-
+class Memory(object):
+    def __init__(self, mem, parent):
+        self.__dict__.update(mem)
+        self.parent = parent
+        self.data = None  # currently unimplemented
 
 class ServerError(Exception):
     def __init__(self, err):
