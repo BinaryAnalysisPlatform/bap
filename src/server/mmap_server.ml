@@ -5,10 +5,10 @@ open Lwt_log
 let section = Section.make "mmap_server"
 
 
-(* the data field should be mmaped otherwise we're riskin to run out
+(* the data field should be mmaped otherwise we're risking to run out
    fd resources. If a user provides us with a data that is mapped,
    but doesn't give us a filename of the mapped file, then we won't
-   save the data in our bag, and issue a warning
+   save the data in our bag, and issue a debug warning
 *)
 
 type file = {
@@ -59,7 +59,7 @@ let main () =
       | None ->
         let path = save_to_file base in
         if Bigstring.is_mmapped base then
-          ign_warning ~section
+          ign_debug ~section
             "user provided a mmaped file without a name"
         else
           add_and_forget files {data=base; path};

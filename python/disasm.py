@@ -73,8 +73,8 @@ class Disassembler(object):
                 else:
                     return (parse_insn(js) for js in msg['insns'])
 
-        if isinstance(src, (file,)):
-            return get_insns(self.load_file(src))
+        if isinstance(src, file):
+            return get_insns(self.load_file(src.name))
         elif isinstance(src, Id):
             return get_insns(src)
         else:
@@ -136,7 +136,6 @@ def spawn_server(**kwargs):
         'url' : "http://127.0.0.1:{0}".format(port)
     }
 
-
 def jsons(r, p=0):
     dec = json.JSONDecoder(encoding='utf-8')
     while True:
@@ -151,23 +150,23 @@ def parse_target(js):
 
 def parse_bil(js):
     if 'bil' in js:
-        return [arm.loads(s) for s in js['bil']]
+        return [bil.loads(s) for s in js['bil']]
     else:
         return None
 
 def parse_insn(js):
-    "accepts json object and returns a lifted instruction"
     js.update(js['memory'], bil=parse_bil(js), target=parse_target(js))
     return asm.Insn(**js)
 
-
+##### Examples
 
 def demo_chunk():
     data = b"\x48\x83\xec\x08"
-    insns = disasm(bytes(data), arch="x86_64")
+    insns = disasm(data, arch="x86_64")
     print list(insns)
 
 
 
 if "__main__" == __name__:
-    demo_chunk()
+    for x in xrange(1000):
+        demo_chunk()

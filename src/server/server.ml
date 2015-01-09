@@ -107,6 +107,7 @@ module Handlers(Ctxt : sig
     Res.fetch_memory mem >>|? fun m ->
     Res.links_of_memory mem, m
 
+
   (** Runs disassembler on the specified memory  *)
   let disasm_mem lift dis ~stop_on (links,mem) : unit Lwt.t=
     let invalid_mem mem =
@@ -120,8 +121,9 @@ module Handlers(Ctxt : sig
           return (Some resp)) in
     Dis.run dis mem ~return ~init:[] ~stop_on
       ~stopped:(fun s _ ->
-          warning "Hit end of data before the stop condition"
-          >>= fun () -> emit_insns (Dis.insns s))
+          (if stop_on <> []
+           then warning "Hit end of data before the stop condition"
+           else Lwt.return_unit) >>= fun () -> emit_insns (Dis.insns s))
       ~invalid:(fun s mem _ ->
           invalid_mem mem >>= fun () -> emit_insns (Dis.insns s))
       ~hit:(fun s _ _ _ -> emit_insns (Dis.insns s))

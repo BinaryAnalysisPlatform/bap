@@ -85,7 +85,6 @@ let register_service ~name ~start =
   register services ~key:name ~data:start
 
 let start_service ?name ~new_connection () =
-  notice "Starting services" >>= fun () ->
   match name with
   | None ->
     String.Table.data t.services |>
