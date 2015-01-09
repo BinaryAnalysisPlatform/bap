@@ -284,8 +284,11 @@ let of_section sec id : (mem,img,sec,nil) res Or_error.t =
   find_in image_of_section id >>= fun img_id ->
   find_in images img_id >>= fun img ->
   find_in chunks id >>= fun mem ->
-  let res = init img in
-  return { res with img = serve img; mem = serve mem; sec}
+  let r = init mem in
+  return { r with
+           img = serve img;
+           mem = serve mem;
+           sec}
 
 let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
   let open Fields_of_context in
@@ -298,7 +301,7 @@ let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
   List.map mems ~f:(find_in chunks) |> all >>= function
   | [] -> errorf "Symbol without memory"
   | m::ms ->
-    let res = init img in
+    let res = init m in
     let mem = List1.create m ms |> List1.map ~f:serve in
     return { res with img = serve img; sym; sec; mem}
 

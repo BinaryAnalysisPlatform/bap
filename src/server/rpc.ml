@@ -82,10 +82,10 @@ module Response = struct
       "name", string name;
       "architecture", string (Arch.to_string arch);
       "kinds", strings @@ Adt.strings_of_kinds kinds;
-      "has-name", bool has_name;
-      "has-ops", bool has_ops;
-      "has-target", bool has_target;
-      "has-bil", bool has_bil
+      "has_name", bool has_name;
+      "has_ops", bool has_ops;
+      "has_target", bool has_target;
+      "has_bil", bool has_bil
     ]
 
   let string_of_sym s =
@@ -161,8 +161,8 @@ module Response = struct
     resource links "image" @@
     List.map ~f:(fun (r,v) -> r, v image) [
       "arch", string / Arch.to_string / arch;
-      "entry-point", string / string_of_addr / entry_point;
-      "addr-size", string / Int.to_string / Size.to_bits / addr_size;
+      "entry_point", string / string_of_addr / entry_point;
+      "addr_size", string / Int.to_string / Size.to_bits / addr_size;
       "endian", string / Adt.string_of_endian / endian;
     ] @ optional_field "file" string (filename image) @ [
       "sections", strings secs;
@@ -198,10 +198,6 @@ module Response = struct
   let chunks = resources "chunks"
 
   let added id : msg = ["resource", string id]
-
-
-
-
 
 end
 
@@ -274,7 +270,7 @@ module Request = struct
 
   let accept_get_insns f obj =
     string obj ["resource"] >>= fun id ->
-    optional obj "stop-conditions" preds ~default:[] >>= fun ks ->
+    optional obj "stop_conditions" preds ~default:[] >>= fun ks ->
     optional obj "backend" string_opt ~default:None >>= fun backend ->
     return (f ?backend ks id)
 
@@ -297,10 +293,10 @@ module Request = struct
     let (||) = Option.merge ~f:(fun x y -> x) in
     let chain =
       "init"              >> init         ||
-      "load-file"         >> load_file    ||
-      "load-memory-chunk" >> load_chunk   ||
-      "get-insns"         >> get_insns    ||
-      "get-resource"      >> get_resource in
+      "load_file"         >> load_file    ||
+      "load_memory_chunk" >> load_chunk   ||
+      "get_insns"         >> get_insns    ||
+      "get_resource"      >> get_resource in
     match chain with
     | Some r -> r
     | None -> errorf "One of the required properties is not found: %a"

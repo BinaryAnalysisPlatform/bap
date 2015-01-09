@@ -111,7 +111,7 @@ module Handlers(Ctxt : sig
   (** Runs disassembler on the specified memory  *)
   let disasm_mem lift dis ~stop_on (links,mem) : unit Lwt.t=
     let invalid_mem mem =
-      error "%s doesn't contain a valid instruction"
+      warning "%s doesn't contain a valid instruction"
         (Sexp.to_string (sexp_of_mem mem)) in
     let emit_insns = Lwt.List.filter_map ~f:(function
         | mem,None -> invalid_mem mem >>= fun () -> return None
