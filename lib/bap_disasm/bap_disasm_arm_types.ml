@@ -36,7 +36,7 @@ with bin_io, compare, sexp, enumerate
 
 
 module Reg = struct
-  type nil = [ `nil ]
+  type nil = [ `Nil ]
   with bin_io, compare, sexp, enumerate
 
   (** General purpose registers  *)

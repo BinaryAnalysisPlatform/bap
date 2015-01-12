@@ -26,8 +26,9 @@
     - each type provides a [Set] with values of type [t];
     - for those, courage enough there is also an AVL tree;
     - hastable is exposed via [Table] module;
-    - [to_string] and [pp] functions for pretty-printing;
-    - sexpable and binable interface.
+    - sexpable and binable interface;
+    - [to_string], [str],[pp], [ppo], [pps], [ppb] functions
+      for pretty-printing.
 
     And most types usually provides much more.
 
@@ -35,7 +36,9 @@
 
     You should start any code relying on [bap-types] library with a
 
-    [open Bap_types.Std]
+    [open Bap.Std]
+
+    (or open [Bap_types.Std] if you're developing inside bap)
 
     It is a good idea, to open [Core_kenel.Std] before. You should
     never use modules that are not exposed by the [Std] module directly,

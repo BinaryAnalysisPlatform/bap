@@ -14,7 +14,7 @@ type mem = Mem.t with sexp_of
 type kind = Kind.t with compare, sexp
 
 type pred = [
-  | `valid
+  | `Valid
   |  kind
 ] with sexp,compare
 
@@ -88,7 +88,7 @@ module Reg = struct
     let data =
       let reg_code = C.insn_op_reg_code dis.id ~insn ~oper in
       let reg_name =
-        if reg_code = 0 then lazy "nil"
+        if reg_code = 0 then lazy "Nil"
         else
           let off = C.insn_op_reg_name dis.id ~insn ~oper in
           lazy (Table.lookup dis.reg_table off) in
@@ -215,17 +215,17 @@ with bin_io, compare, sexp
 
 
 let cpred_of_pred : pred -> C.pred = function
-  | `valid -> C.Is_true
-  | `conditional_branch -> C.Is_conditional_branch
-  | `unconditional_branch -> C.Is_unconditional_branch
-  | `indirect_branch -> C.Is_indirect_branch
-  | `return -> C.Is_return
-  | `call -> C.Is_call
-  | `barrier -> C.Is_barrier
-  | `terminator -> C.Is_terminator
-  | `may_affect_control_flow -> C.May_affect_control_flow
-  | `may_store  -> C.May_store
-  | `may_load -> C.May_load
+  | `Valid -> C.Is_true
+  | `Conditional_branch -> C.Is_conditional_branch
+  | `Unconditional_branch -> C.Is_unconditional_branch
+  | `Indirect_branch -> C.Is_indirect_branch
+  | `Return -> C.Is_return
+  | `Call -> C.Is_call
+  | `Barrier -> C.Is_barrier
+  | `Terminator -> C.Is_terminator
+  | `May_affect_control_flow -> C.May_affect_control_flow
+  | `May_store  -> C.May_store
+  | `May_load -> C.May_load
 
 module Insn = struct
   type ins_info = {
@@ -290,6 +290,13 @@ type ('a,'k) insn = ('a,'k) Insn.t
 let compare_insn (i1 : ('a,'b) insn) (i2 : ('a,'b) insn) =
   Insn.compare i1 i2
 let sexp_of_insn : ('a,'b) insn -> Sexp.t = Insn.sexp_of_t
+
+
+type full_insn = (asm,kinds) insn
+
+let sexp_of_full_insn = sexp_of_insn
+
+
 
 type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
@@ -473,7 +480,7 @@ let insn_of_mem dis mem =
     if Mem.(max_addr mem' = max_addr mem) then Ok `finished
     else Mem.view mem ~from:Addr.(Mem.max_addr mem' ++ 1)
       >>| fun r -> `left r in
-  run ~stop_on:[`valid] dis mem ~return ~init
+  run ~stop_on:[`Valid] dis mem ~return ~init
     ~hit:(fun s mem' insn _ ->
         split mem' >>= fun r -> stop s (mem',Some insn,r))
     ~invalid:(fun s mem' _ ->

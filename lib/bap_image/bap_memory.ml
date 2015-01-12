@@ -52,6 +52,8 @@ let to_repr mem = {
 
 let sexp_of_t mem = Repr.sexp_of_t (to_repr mem)
 
+let endian t = t.endian
+
 (** [create_getters endian addr offset size data] creates a getters
     class according to the specified parameters. All parameters will be
     encapsulated inside a closure (cf, [getter] type).

@@ -149,8 +149,8 @@ module Mono : Comparable with type t := t
 *)
 val of_bool  : bool -> t
 val of_int   : width:int -> int -> t
-val of_int32 : int32 -> t
-val of_int64 : int64 -> t
+val of_int32 : ?width:int -> int32 -> t
+val of_int64 : ?width:int -> int64 -> t
 
 (** { 3 Some predefined constant constructors }  *)
 
@@ -190,6 +190,7 @@ val of_binary : ?width:int -> endian -> string -> t
 val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
+val string_of_value : ?hex:bool -> t -> string
 
 (** [signed t] casts t to a signed type, so that any operations
     applied on [t] will be signed *)

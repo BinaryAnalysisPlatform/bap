@@ -121,7 +121,7 @@ module Arch = struct
     | X86_32
     | X86_64
     | ARM
-  with bin_io, compare, sexp, variants
+  with bin_io, compare, enumerate, sexp, variants
 end
 
 

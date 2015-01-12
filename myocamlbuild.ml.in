@@ -41,5 +41,14 @@ let dispatch = function
       ["ocamldep"; "compile"; "doc"];
   | _ -> ()
 
-let () = Ocamlbuild_plugin.dispatch (fun hook ->
-    dispatch hook; dispatch_default hook)
+
+let mark_tags () =
+  let open Ocamlbuild_plugin in
+  mark_tag_used "pkg_core_bench";
+  mark_tag_used "tests"
+
+
+let () =
+  mark_tags ();
+  Ocamlbuild_plugin.dispatch (fun hook ->
+      dispatch hook; dispatch_default hook)

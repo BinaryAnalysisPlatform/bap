@@ -15,14 +15,16 @@ module T = struct
     | X86_64 -> "X86_64"
     | ARM    -> "ARM"
 
+  let pp ch arch = Format.fprintf ch "%s" (to_string arch)
+
   let of_string s =
     match Fn.compose String.uppercase String.strip s with
-    | "X86" | "X86-32" | "X86_32" | "IA32" | "IA-32" | "I386" -> X86_32
-    | "X86-64" | "X86_64" | "AMD64" | "x64" -> X86_64
-    | "arm" | "ARM" -> ARM
-    | s -> failwithf "Arch.of_string: Unknown arch '%s'" s ()
+    | "X86" | "X86-32" | "X86_32" | "IA32" | "IA-32" | "I386" -> Some X86_32
+    | "X86-64" | "X86_64" | "AMD64" | "x64" -> Some X86_64
+    | "arm" | "ARM" -> Some ARM
+    | s -> None
 end
 
 (* derive Identifiable interface from Core *)
 include T
-include Identifiable.Make(T)
+include Regular.Make(T)
