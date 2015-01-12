@@ -122,7 +122,8 @@ class Section(Resource):
         elif name == 'addr' or name == 'size':
             return self.get('memory')[name]
         elif name == 'memory':
-            return Memory(self.get('memory'), self)
+            self.memory = Memory(self.get('memory'), self)
+            return self.memory
         else:
             return self.get(name)
 
@@ -139,27 +140,28 @@ class Symbol(Resource):
             self.load_chunks()
             return self.chunks
         elif name == 'addr':
+            self.load_chunks()
             return self.chunks[0].addr
         else:
             return self.get(name)
 
 class Memory(object):
     def __init__(self, mem, parent):
-        self.__dict__.update(mem)
         self.parent = parent
-
+        self.size = int(mem['size'])
+        self.addr = int(mem['addr'])
+        self.links = mem['links']
 
     def load_data(self):
         try:
             url = (urlparse(url) for url in self.links
                    if urlparse(url).scheme == 'mmap').next()
             qs = parse_qs(url.query)
-            length = int(qs['length'][0])
             offset = int(qs['offset'][0])
             with open(url.path, "rw+b") as f:
                 mm = mmap(f.fileno(), length=0)
                 mm.seek(offset)
-                self.data = mm.read(length)
+                self.data = mm.read(self.size)
                 mm.close()
         except StopIteration:
             self.data = None
@@ -311,6 +313,9 @@ def parse_insn(js):
     js.update(js['memory'], bil=parse_bil(js), target=parse_target(js))
     return asm.Insn(**js)
 
+def hexs(data):
+    return ' '.join(x.encode('hex') for x in data)
+
 ##### Examples
 
 def demo_chunk():
@@ -328,8 +333,7 @@ def demo_image():
         for sym in sec.symbols:
             print "\t\t\t{0}".format(sym.name)
     sym = img.get_symbol('to_uchar')
-    print ' '.join(x.encode('hex') for x in sym.chunks[0].data)
-    print "Diassembly of the `{0}` function:".format(sym.name)
+    print "Disassembly of the `{0}` function:".format(sym.name)
     for insn in disasm(sym):
         print insn.asm
 

@@ -90,12 +90,14 @@ following attributes:
 * addr
 * chunks
 
-Where chunks is a list of memory objects. Each memory object has the
+Where chunks is a list of instances of ``Memory`` class, each having the
 following attributes:
 
 * addr
 * size
 * data
+
+Where data is actual string of bytes.
 """
 __all__ = ['disasm', 'image']
 
