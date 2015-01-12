@@ -274,7 +274,7 @@ Library disasm_test
   Modules:        Test_disasm
 
 Library core_lwt
-  Path:           src/server
+  Path:           lwt
   Build$:         flag(server)
   CompiledObject: best
   BuildDepends:   lwt, lwt.unix, lwt.log
