@@ -5,6 +5,7 @@ import os, time, atexit
 import requests
 from subprocess import Popen
 from mmap import mmap
+from urlparse import urlparse, parse_qs
 from tempfile import NamedTemporaryFile
 import json
 import adt, arm, asm, bil
@@ -146,7 +147,29 @@ class Memory(object):
     def __init__(self, mem, parent):
         self.__dict__.update(mem)
         self.parent = parent
-        self.data = None  # currently unimplemented
+
+
+    def load_data(self):
+        try:
+            url = (urlparse(url) for url in self.links
+                   if urlparse(url).scheme == 'mmap').next()
+            qs = parse_qs(url.query)
+            length = int(qs['length'][0])
+            offset = int(qs['offset'][0])
+            with open(url.path, "rw+b") as f:
+                mm = mmap(f.fileno(), length=0)
+                mm.seek(offset)
+                self.data = mm.read(length)
+                mm.close()
+        except StopIteration:
+            self.data = None
+
+    def __getattr__(self, name):
+        if name == 'data':
+            self.load_data()
+            return self.data
+        raise AttributeError(name)
+
 
 class ServerError(Exception):
     def __init__(self, err):
@@ -305,6 +328,7 @@ def demo_image():
         for sym in sec.symbols:
             print "\t\t\t{0}".format(sym.name)
     sym = img.get_symbol('to_uchar')
+    print ' '.join(x.encode('hex') for x in sym.chunks[0].data)
     print "Diassembly of the `{0}` function:".format(sym.name)
     for insn in disasm(sym):
         print insn.asm

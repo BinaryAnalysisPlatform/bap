@@ -30,7 +30,9 @@ let url_of_file ?query sub path : Uri.t =
     ] () in
   match query with
   | None -> url
-  | Some v -> Uri.with_query' url ["q", v]
+  | Some v ->
+    ("q", [v]) :: Uri.query url |>
+    Uri.with_query url
 
 let save_to_file data : string =
   let path = Filename.temp_file "bap_" ".mmap" in
