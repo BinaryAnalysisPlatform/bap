@@ -58,14 +58,14 @@ module Make(Int : Core_int) = struct
 end
 
 module I32 = struct
-  let of_bv = Bitvector.to_int32
-  let to_bv = Bitvector.of_int32
+  let of_bv x = Bitvector.to_int32 x
+  let to_bv x = Bitvector.of_int32 x
   include Int32
 end
 
 module I64 = struct
-  let of_bv = Bitvector.to_int64
-  let to_bv = Bitvector.of_int64
+  let of_bv x = Bitvector.to_int64 x
+  let to_bv x = Bitvector.of_int64 x
   include Int64
 end
 

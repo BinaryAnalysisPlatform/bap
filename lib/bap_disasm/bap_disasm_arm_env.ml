@@ -6,7 +6,7 @@ module Arm = Bap_disasm_arm
 let (%:) name typ = Var.create name typ
 
 
-let nil = Arm.Reg.to_string `nil %: reg32_t
+let nil = Arm.Reg.to_string `Nil %: reg32_t
 
 let make_register reg ty = Arm.Reg.to_string reg %: ty
 let reg32 reg = make_register reg reg32_t
@@ -80,7 +80,7 @@ let var_of_ccr : Arm.Reg.ccr -> var = function
   | `ITSTATE -> itstate
 
 let of_reg : Arm.Reg.t -> var = function
-  | `nil -> nil
+  | `Nil -> nil
   | #Arm.Reg.gpr as reg -> var_of_gpr reg
   | #Arm.Reg.ccr as reg -> var_of_ccr reg
 

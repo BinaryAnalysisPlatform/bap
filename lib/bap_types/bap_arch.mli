@@ -2,5 +2,7 @@
 open Core_kernel.Std
 open Bap_common
 
+val of_string : string -> arch option
+
 (** [arch] type implements [Idenfifiable]  interface  *)
-include Identifiable with type t := arch
+include Regular with type t := arch

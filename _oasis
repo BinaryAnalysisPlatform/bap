@@ -16,11 +16,9 @@ BuildDepends:
               comparelib.syntax,
               core_kernel,
               enumerate.syntax,
+              faillib.syntax,
               fieldslib.syntax,
               herelib.syntax,
-              herelib.syntax,
-              pa_bench.syntax,
-              pa_ounit.syntax,
               pa_ounit.syntax,
               sexplib.syntax,
               variantslib.syntax
@@ -53,11 +51,19 @@ Flag benchmarks
   Default: false
 
 Flag disassemblers
-  Description: Builds C++ interface to dissassemblers backend
+  Description: Build C++ interface to dissassemblers backend
+  Default: true
+
+Flag server
+  Description: Build BAP server
   Default: true
 
 Flag llvm
  Description: Build with llvm backend
+ Default: true
+
+Flag server
+ Description: Build BAP server
  Default: true
 
 Library bap
@@ -129,7 +135,7 @@ Library serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun.pb, piqirun.ext, bap.types
+  BuildDepends: piqirun, bap.types
   Modules:   Bil_piqi,
              Stmt_piqi,
              Stmt_piqi_ext
@@ -250,6 +256,7 @@ Library benchmarks
   Install:        false
   Modules:        Bench_image
 
+
 Library dwarf_test
   Path:           lib_test/bap_dwarf
   Build$:         flag(tests)
@@ -265,6 +272,29 @@ Library disasm_test
   BuildDepends:   bap
   Install:        false
   Modules:        Test_disasm
+
+Library core_lwt
+  Path:           lwt
+  Build$:         flag(server)
+  CompiledObject: best
+  BuildDepends:   lwt, lwt.unix, lwt.log
+  Modules:        Core_lwt,
+                  Core_lwt_basic,
+                  Core_lwt_container,
+                  Core_lwt_container_intf,
+                  Core_lwt_extra,
+                  Core_lwt_or_error,
+                  Core_lwt_pool,
+                  Core_lwt_stream
+
+
+Executable "bap-server"
+  Path:           src/server
+  Build$:         flag(server)
+  CompiledObject: best
+  BuildDepends:   bap, lwt-zmq, ezjsonm, uri, cohttp.lwt, core_lwt
+  Install:        true
+  MainIs:         start_server.ml
 
 Executable readbin
   Path:           src/readbin

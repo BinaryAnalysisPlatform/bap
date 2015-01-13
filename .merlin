@@ -19,6 +19,7 @@ S lib/bap_types
 
 PKG core_kernel
 PKG ocamlbuild
+PKG jsonm
 EXT ounit
 EXT here
 EXT nonrec

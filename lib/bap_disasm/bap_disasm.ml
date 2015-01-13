@@ -15,6 +15,7 @@ type reg = Reg.t with bin_io, compare, sexp
 type imm = Imm.t with bin_io, compare, sexp
 type fmm = Fmm.t with bin_io, compare, sexp
 type (+'a,+'k) insn
+type kind = Insn.Kind.t with bin_io, compare, sexp
 
 
 (** ARM instruction set  *)

@@ -21,12 +21,12 @@ let search_stop dst =
 let patch (src_file,dst_file) =
   let src = open_in_bin src_file in
   let patch_len = in_channel_length src in
-  let patch = String.create patch_len in
+  let patch = String.make patch_len '\x00' in
   really_input src patch 0 patch_len;
   close_in src;
   let dst = open_in_bin dst_file in
   let dst_len = in_channel_length dst in
-  let buf = String.create (patch_len + dst_len) in
+  let buf = String.make (patch_len + dst_len) '\x00' in
   really_input dst buf 0 dst_len;
   close_in dst;
   let pos = try search_stop buf with End_of_file -> dst_len in
