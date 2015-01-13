@@ -29,37 +29,37 @@ let anon_fun s = bin := Some s
 
 let output oc fsi =
   Sequence.iter fsi ~f:(fun addr ->
-    Printf.fprintf oc "%s\n" @@ Addr.to_string addr
-  );
+      Printf.fprintf oc "%s\n" @@ Addr.to_string addr
+    );
   Out_channel.close oc
 
 
 let fsi_bin_fn bin =
   let r =
     Image.create bin >>| fun (img, _) -> begin
-      let code_sections = Table.filter (Image.sections img) ~f:Image.Sec.is_executable in
-      (* TODO: currently the architecture is hard-coded. Check if we add
-       * architecture as an option or figure out the architecture of binary by
-       * calling some detection method *)
-      let fn_table = Fn_table.create ~signatures:!f_wpt ~work_on_bytes:!work_on_bytes Arch.ARM
+    let code_sections = Table.filter (Image.sections img) ~f:Image.Sec.is_executable in
+    (* TODO: currently the architecture is hard-coded. Check if we add
+     * architecture as an option or figure out the architecture of binary by
+     * calling some detection method *)
+    let fn_table = Fn_table.create ~signatures:!f_wpt ~work_on_bytes:!work_on_bytes `arm
         ~sections:code_sections in
-      Fn_table.addrs fn_table
-    end in
+    Fn_table.addrs fn_table
+  end in
   match r with
-    | Ok fsi -> fsi
-    | Error err ->
-        eprintf "Program failed with: %s\n" @@
-        Error.to_string_hum err; Sequence.empty
+  | Ok fsi -> fsi
+  | Error err ->
+    eprintf "Program failed with: %s\n" @@
+    Error.to_string_hum err; Sequence.empty
 
 (* main *)
 let () =
   Plugins.load ();
   let () = Arg.parse arg_specs anon_fun usage in
   match !bin, !d_bin with
-    (* TODO: currently for every binary signature file has to be read again
-     * because Fn_table.create interfaces (which targets at segments and one connot decide the
-     * architecture before calling create) *)
-    | None, Some d_i -> (
+  (* TODO: currently for every binary signature file has to be read again
+   * because Fn_table.create interfaces (which targets at segments and one connot decide the
+   * architecture before calling create) *)
+  | None, Some d_i -> (
       match !d_out with
       | None ->
         let err =
@@ -67,18 +67,18 @@ let () =
         raise (Arg.Bad err)
       | Some d_o ->
         let bins = List.map
-          ~f:(Filename.concat d_i)
-          (Array.to_list (Sys.readdir d_i)) in
+            ~f:(Filename.concat d_i)
+            (Array.to_list (Sys.readdir d_i)) in
         List.iter ~f:(fun bin ->
-          Printf.printf "%s\n%!" bin;
-          let fs_seq = fsi_bin_fn bin in
-          let oc =
-            let bin_out = Filename.concat d_o (Filename.basename bin) in
-            open_out bin_out in
-          output oc fs_seq
-        ) bins
+            Printf.printf "%s\n%!" bin;
+            let fs_seq = fsi_bin_fn bin in
+            let oc =
+              let bin_out = Filename.concat d_o (Filename.basename bin) in
+              open_out bin_out in
+            output oc fs_seq
+          ) bins
     )
-    | Some i, None ->
-      let fs_seq = fsi_bin_fn i in
-      output !out fs_seq
-    | _ -> raise (Arg.Bad usage)
+  | Some i, None ->
+    let fs_seq = fsi_bin_fn i in
+    output !out fs_seq
+  | _ -> raise (Arg.Bad usage)

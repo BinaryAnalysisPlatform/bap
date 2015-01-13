@@ -1,4 +1,5 @@
 B ../../_build/src/server
+B ../../_build/lwt
 REC
 PKG ezjsonm
 PKG lwt
@@ -9,3 +10,4 @@ PKG cohttp.lwt
 PKG cohttp
 
 S .
+S ../../lwt

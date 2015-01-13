@@ -19,3 +19,5 @@ myocamlbuild.ml
 /setup.log
 /setup.ml
 /_tags
+/python/*.pyc
+/python/bap.egg-info/

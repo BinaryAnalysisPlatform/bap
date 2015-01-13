@@ -2,29 +2,31 @@
 
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 
-`Bap` library provides basic facilities for performing binary analysis in OCaml.
+`Bap` library provides basic facilities for performing binary analysis
+in OCaml and other languages.
 
 # <a name="Installation"></a>Installation
 
 ## Installing `bap` dependencies
 
+### Installing system dependencies
+
+There are few system libraries that bap depends on. We provide a file
+`apt.deps` that contains package names as they are in Ubuntu
+Trusty. Depending on your OS and distribution, you may need to adjust
+this names. But, on most Debian-based Linux distribution, this should work:
+
+```bash
+$ sudo apt-get install $(cat apt.deps)
+```
+
+### Installing OCaml dependencies
+
 The easiest way to install the OCaml dependencies of `bap` is to use
 the `opam` package manager:
 
 ```bash
-$ opam install bitstring core_kernel zarith
-```
-
-_Note:_ The most up-to-date source of our dependency list is in our travis
-automation script `.travis-ci.sh`. The variable `SYS_DEPENDS` lists dependencies
-that should be installed on your system using `apt-get`; the variable
-`OPAM_DEPENDS` lists dependencies that can be installed via `opam`.
-
-If you would like to use our serialization library, then please also install the
-`piqi` package as follows:
-
-```bash
-$ opam install piqi
+$ opam install $(cat opam.deps)
 ```
 
 If you are using a development version, e.g., you have just cloned this from
@@ -40,10 +42,6 @@ We also recommend you install `utop` for running BAP.
 ```bash
 $ opam install utop
 ```
-
-Finally, you need to now install LLVM.  LLVM often changes their APIs,
-so we have had to standardize against one.  BAP currently compiles
-against llvm-3.4, which we have confirmed works on OSX and Ubuntu.
 
 ## Compiling and installing `bap`
 
@@ -117,6 +115,66 @@ in any OCaml top-level:
 And everything should work just out of box, i.e. it will load all the
 dependencies, install top-level printers, etc.
 
+## Using from Python
+
+You can install `bap` python bindings with `pip`.
+
+```bash
+$ pip install bap/python
+```
+
+Where `bap/python` is a path to bap python bindings. Adjust it
+according to your setup. Also, you may need to use `sudo` or to
+activate your `virtualenv` if you're using one.
+
+If you don't like `pip`, then you can just go to `bap/python` folder
+and copy-paste the contents to whatever place you like, and use it as
+desired.
+
+After bindings are properly installed, you can start to use it:
+
+```python
+    >>> import bap
+    >>> print '\n'.join(insn.asm for insn in bap.disasm("\x48\x83\xec\x08"))
+        decl    %eax
+        subl    $0x8, %esp
+```
+
+A more complex example:
+
+```python
+    >>> img = bap.image('coreutils_O0_ls')
+    >>> sym = img.get_symbol('main')
+    >>> print '\n'.join(insn.asm for insn in bap.disasm(sym))
+        push    {r11, lr}
+        add     r11, sp, #0x4
+        sub     sp, sp, #0xc8
+        ... <snip> ...
+```
+
+For more information, read builtin documentation, for example with
+`ipython`:
+
+```python
+    >>> bap?
+```
+
+## Using from shell
+
+We're shipping a `bap-mc` executable that can disassemble arbitrary
+strings. Read `bap-mc --help` for more information.
+
+## Using from other languages
+
+BAP exposes most of its functionality using `JSON`-based RPC protocol,
+specified
+[Public API Draft](https://github.com/BinaryAnalysisPlatform/bap/wiki/Public-API-%5Bdraft%5D)
+doument. The protocol is implemented by `bap-server` program that is
+shipped with bap by default. You can talk with server using `HTTP`
+protocol, or extend it with any other transporting protocol you would
+like.
+
+
 ## Compiling your program with `bap`
 
 Similar to the top-level, you can use our `bapbuild` script to compile a program
@@ -138,18 +196,22 @@ should add `bap` to the `BuildDepends` field. If you are using `ocamlbuild` with
 the `ocamlfind` plugin, then you should add `package(bap)` or `pkg_bap` to your
 `_tags` file.
 
+## Extending BAP
+
+BAP can be extended using plugin system. That means, that you can use
+`bap` library, to extend the `bap` library! See our
+[blog](http://binaryanalysisplatform.github.io/bap_plugins/) for more
+information.
+
+
 ## Learning BAP
 
-TBD
-
-# Development
-
-TBD
+The best source of information about BAP is it's source code, that is
+well-documented. There are also
+[blog](http://binaryanalysisplatform.github.io/bap_plugins/) and
+[wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
+can find some useful information.
 
 # License
 
 Please see the `LICENSE` file for licensing information.
-
-# TODO
-
-TBD

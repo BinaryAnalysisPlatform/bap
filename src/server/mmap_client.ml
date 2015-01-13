@@ -64,6 +64,7 @@ let main () =
         let data = Lwt_bytes.map_file ~fd ~shared:false () in
         let entry = {data; path} in
         Weak_set.add files entry;
+        Lwt.Unix.close (Lwt.Unix.of_unix_file_descr fd) >>= fun () ->
         substring_of_entry uri entry in
   Transport.register_resource_fetcher ~scheme fetch
 

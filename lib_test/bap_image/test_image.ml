@@ -56,7 +56,7 @@ let nonempty = function
 let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
   let sections = nonempty (ss addr_size name) in
   let symbols = syms in
-  let arch = Arch.ARM in
+  let arch = `arm in
   let entry = create_addr addr_size 0 in
   let load _ =
     Some (Img.Fields.create ~arch ~addr_size ~endian ~entry ~sections ~symbols) in

@@ -34,7 +34,7 @@ def map_eval(ss):
 
 
 class Insn(object) :
-    def __init__(self, name, addr, size, asm, kinds, operands, target=None, bil=[], **kw):
+    def __init__(self, name, addr, size, asm, kinds, operands, target=None, bil=None, **kw):
         self.name  = name
         self.addr  = int(addr)
         self.size  = int(size)
@@ -45,14 +45,25 @@ class Insn(object) :
         self.bil = bil
         self.__dict__.update(kw)
 
+    def has_kind(self, k):
+        return exists(self.kinds, lambda x: isinstance(x,k))
+
     def __repr__(self):
-        return 'Insn("{name}", {addr:#010x}, {size}, "{asm}", {kinds}, {operands}, {target}, {bil})'.\
+        return 'Insn("{name}", {addr:#010x}, {size}, "{asm}", {kinds}, {operands})'.\
           format(**self.__dict__)
 
 class Op(ADT)        : pass
 class Reg(Op)        : pass
 class Imm(Op)        : pass
 class Fmm(Op)        : pass
+
+
+def exists(cont,f):
+    try:
+        r = (x for x in cont if f(x)).next()
+        return True
+    except StopIteration:
+        return False
 
 
 if __name__ == "__main__":

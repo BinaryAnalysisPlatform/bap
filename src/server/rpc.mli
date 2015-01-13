@@ -31,7 +31,7 @@ module Request : sig
   val accept : t ->
     init:(string -> 'a) ->
     load_file:(?loader:string -> Uri.t -> 'a) ->
-    load_chunk:(addr -> arch -> endian -> Uri.t -> 'a) ->
+    load_chunk:(addr -> arch -> Uri.t -> 'a) ->
     get_insns:(?backend:res_id -> Disasm.Basic.pred list -> res_id -> 'a) ->
     get_resource:(res_id -> 'a) -> 'a Or_error.t
 end

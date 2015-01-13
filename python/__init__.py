@@ -99,6 +99,6 @@ following attributes:
 
 Where data is actual string of bytes.
 """
-__all__ = ['disasm', 'image']
+__all__ = ['disasm', 'image', 'adt', 'asm', 'arm', 'bil']
 
 from .bap import disasm, image

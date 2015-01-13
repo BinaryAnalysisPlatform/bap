@@ -57,25 +57,27 @@ class ADT(object):
 
     """
     def __init__(self, *args):
-        self.name = self.__class__.__name__
-        self.val = args if len(args) != 1 else args[0]
+        self.constr = self.__class__.__name__
+        self.arg = args if len(args) != 1 else args[0]
 
     def __cmp__(self,other):
         return self.__dict__.__cmp__(other.__dict__)
 
     def __repr__(self):
         def qstr(x):
-            if isinstance(x, int) or isinstance(x, ADT):
+            if isinstance(x, (int,long)):
+                return '0x{0:x}'.format(x)
+            elif isinstance(x, ADT):
                 return str(x)
             else:
                 return '"{0}"'.format(x)
         def args():
-            if isinstance(self.val, tuple):
-                return ", ".join(qstr(x) for x in self.val)
+            if isinstance(self.arg, tuple):
+                return ", ".join(qstr(x) for x in self.arg)
             else:
-                return qstr(self.val)
+                return qstr(self.arg)
 
-        return "{0}({1})".format(self.name, args())
+        return "{0}({1})".format(self.constr, args())
 
 
 class Visitor(object):
@@ -96,9 +98,12 @@ class Visitor(object):
         no specific visitors. It will recursively descent into all
         ADT values.
         """
-        if isinstance(adt.val, tuple):
-            for e in adt.val:
+        if isinstance(adt.arg, tuple):
+            for e in adt.arg:
                 self.run(e)
+        elif isinstance(adt.arg, ADT):
+            self.run(adt.arg)
+
 
     def run(self, adt):
         """ADT.run(adt-or-iterable) -> None
@@ -126,14 +131,14 @@ class Visitor(object):
                 self.count = 0
 
             def visit_Int(self, int):
-                if int.val < 0 and not self.neg \
-                  or int.val > 0 and self.neg:
+                if int.arg < 0 and not self.neg \
+                  or int.arg > 0 and self.neg:
                     self.count += 1
 
             def visit_NEG(self, op):
                 was = self.neg
                 self.neg = not was
-                self.run(op.val)
+                self.run(op.arg)
                 self.neg = was
 
         We need to keep track on the unary negation operator, and, of
@@ -147,15 +152,22 @@ class Visitor(object):
         and recurse into the operand. After we return from the recursion, we restore
         the sign.
         """
-        if isinstance(adt, Iterable):
-            for s in adt:
-                self.run(s)
         if isinstance(adt, ADT):
             for c in adt.__class__.mro():
                 name = ("visit_%s" % c.__name__)
                 fn = getattr(self, name, None)
                 if fn is not None:
                     return fn(adt)
+
+
+def visit(visitor, adt):
+
+    if isinstance(adt, Iterable):
+        for x in adt:
+            visitor.run(x)
+    else:
+        visitor.run(adt)
+    return visitor
 
 
 if __name__ == "__main__":

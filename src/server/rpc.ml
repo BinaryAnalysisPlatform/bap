@@ -23,7 +23,7 @@ type value = [
 ] with sexp_of
 
 
-let minify = false
+let minify = true
 
 
 let sexp_of_response = Fn.compose Ezjsonm.to_sexp Ezjsonm.value
@@ -237,12 +237,19 @@ module Request = struct
     | exn -> protocol path Exn.(to_string exn) v
 
 
+
+  let word arch =
+    Word.of_int64 ~width:(Arch.addr_size arch |> Size.to_bits)
+
+  let arch_of_string arch = match Arch.of_string arch with
+    | Some arch -> arch
+    | None -> invalid_argf "Unknown arch: %s" arch ()
+
   let value  = parse ident
   let string = parse get_string
   let string_opt = parse @@ Option.some / get_string
-  let arch = parse @@ uw / Arch.of_string / get_string
-  let addr = parse @@ ok_exn / Adt.Parse.word / get_string
-  let endian = parse @@ ok_exn / Adt.Parse.endian / get_string
+  let arch = parse @@ arch_of_string / get_string
+  let addr arch = parse @@ word arch / Int64.of_string / get_string
   let url = parse @@ Uri.of_string / get_string
 
   let nulls constr =
@@ -258,20 +265,20 @@ module Request = struct
       return (f ?loader:(Some loader) uri)
     else return (f ?loader:None uri)
 
-  let accept_load_chunk f obj =
-    url obj    ["url"]     >>= fun url ->
-    addr obj   ["address"] >>= fun addr ->
-    arch obj   ["arch"]    >>= fun arch ->
-    endian obj ["endian"]  >>= fun endian ->
-    return (f addr arch endian url)
-
-  let optional obj name ~default get =
+  let optional get obj name ~default  =
     if mem obj [name] then get obj [name] else return default
+
+  let accept_load_chunk f obj =
+    url obj       ["url"]  >>= fun url ->
+    arch obj      ["arch"] >>= fun arch ->
+    addr arch obj ["addr"] >>= fun addr ->
+    return (f addr arch url)
+
 
   let accept_get_insns f obj =
     string obj ["resource"] >>= fun id ->
-    optional obj "stop_conditions" preds ~default:[] >>= fun ks ->
-    optional obj "backend" string_opt ~default:None >>= fun backend ->
+    optional preds obj "stop_conditions" ~default:[] >>= fun ks ->
+    optional string_opt obj "backend" ~default:None >>= fun backend ->
     return (f ?backend ks id)
 
   let accept_init f obj = string obj ["version"] >>| f
