@@ -13,7 +13,7 @@ let string_of_perm s =
 
 let is_lifted =
   let open Arch in function
-    | ARM -> true
+    | #Arch.arm -> true
     | _ -> false
 
 let print_disasm arch s mem insn () =
@@ -37,11 +37,11 @@ let main () =
   let bits = match addr_size img with
     | `r32 -> 32
     | `r64 -> 64 in
-  let target = match arch with
-    | Arch.ARM -> "arm"
-    | Arch.X86_32 -> "i386"
-    | Arch.X86_64 -> "x86_64" in
+  let target = Arch.to_string arch in
   Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
+  let disasm mem =
+    Disasm.Basic.run dis ~stop_on:[`Valid]
+      ~hit:(print_disasm arch) ~return:ident ~init:() mem in
   let name = Option.value (filename img) ~default:"<memory>" in
   printf "# File name:    %s\n" @@ name;
   printf "# Architecture: %s\n" @@ Arch.to_string arch;
@@ -51,14 +51,15 @@ let main () =
   Table.iteri (symbols img) ~f:(fun mem s ->
       printf "\n# Symbol name: %s\n" (Sym.name s);
       printf "# Symbol data:\n%a\n" Memory.pp mem;
-      Disasm.Basic.run dis ~stop_on:[`Valid]
-        ~hit:(print_disasm arch) ~return:ident ~init:() mem);
+      disasm mem);
   printf "# Loadable sections: %d\n" @@
   Table.length (sections img);
   Table.iteri (sections img) ~f:(fun mem s ->
       printf "Section name : %s\n" @@ Sec.name s;
       printf "Section start: %s\n" @@
-      Addr.to_string @@ Memory.min_addr mem);
+      Addr.to_string @@ Memory.min_addr mem;
+      if Sec.is_executable s && Table.length (symbols img) = 0 then
+        disasm mem);
   return (List.length warns)
 
 let () =

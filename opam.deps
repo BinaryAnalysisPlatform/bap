@@ -1,0 +1,12 @@
+base-unix
+bitstring
+cmdliner
+cohttp.0.15.0
+core_kernel.111.28.00
+ezjsonm
+faillib
+lwt
+oasis
+re
+uri.1.7.2
+zarith

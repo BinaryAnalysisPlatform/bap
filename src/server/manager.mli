@@ -36,7 +36,7 @@ val add_image  : ?file:string -> image -> id Lwt.Or_error.t
 
 (** fetches memory chunk from a given [uri], and adds it to the
     resource pool *)
-val add_memory : arch -> endian -> addr -> Uri.t -> id Lwt.Or_error.t
+val add_memory : arch -> addr -> Uri.t -> id Lwt.Or_error.t
 
 (** fetched image from a given [url], and stores it among other
     resources *)

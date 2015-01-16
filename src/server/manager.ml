@@ -134,11 +134,12 @@ let add_image ?file img =
   Ids.add_exn t.images ~key:img_id ~data:resource;
   Lwt.return (Or_error.return img_id)
 
-let add_memory arch endian addr uri : id Lwt.Or_error.t =
+let add_memory arch addr uri : id Lwt.Or_error.t =
   Transport.fetch_resource uri >>=? fun data ->
   let pos = Bigsubstring.pos data in
   let len = Bigsubstring.length data in
   let data = Bigsubstring.base data in
+  let endian = Arch.endian arch in
   match Memory.create ~pos ~len endian addr data with
   | Error err ->
     Error.tag_arg err "fetching chunk from" uri Uri.sexp_of_t |>

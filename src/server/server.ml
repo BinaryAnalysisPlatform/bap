@@ -66,9 +66,9 @@ module Handlers(Ctxt : sig
     let kinds = Disasm.Insn.Kind.all in
     let ds =
       Response.disassembler
-        ~name:"llvm" ~arch:Arch.ARM ~kinds
+        ~name:"llvm" ~arch:`arm ~kinds
         ~has_name:true ~has_bil:true ~has_ops:true ~has_target:true ::
-      List.map [Arch.X86_32; Arch.X86_64] ~f:(fun arch ->
+      List.map Arch.all ~f:(fun arch ->
           Response.disassembler ~name:"llvm" ~arch
             ~has_name:true ~has_ops:true ~kinds
             ~has_target:false ~has_bil:false) in
@@ -86,7 +86,6 @@ module Handlers(Ctxt : sig
       [capabilities; images; sections; symbols; chunks] >>=
     Lwt.Or_error.return
 
-
   let reply_resource uri res =
     res >>|? Res.string_of_id >>|? Response.added >>= function
     | Ok msg -> reply msg >>= Lwt.Or_error.return
@@ -95,24 +94,21 @@ module Handlers(Ctxt : sig
                      (Error.to_string_hum err) >>=
       Lwt.Or_error.return
 
-
   let load_file ?loader uri =
     Res.add_file ?backend:loader uri |> reply_resource uri
 
-  let load_chunk addr arch endian uri : unit Lwt.Or_error.t =
-    Res.add_memory arch endian addr uri |> reply_resource uri
-
+  let load_chunk addr arch uri : unit Lwt.Or_error.t =
+    Res.add_memory arch addr uri |> reply_resource uri
 
   let get_mem mem : 'a Rpc.resource Lwt.Or_error.t =
     Res.fetch_memory mem >>|? fun m ->
     Res.links_of_memory mem, m
 
-
   (** Runs disassembler on the specified memory  *)
   let disasm_mem lift dis ~stop_on (links,mem) : unit Lwt.t=
     let invalid_mem mem =
-      warning "%s doesn't contain a valid instruction"
-        (Sexp.to_string (sexp_of_mem mem)) in
+      warning "This is not a valid instruction:\n%s"
+        (Memory.hexdump mem) in
     let emit_insns = Lwt.List.filter_map ~f:(function
         | mem,None -> invalid_mem mem >>= fun () -> return None
         | mem,Some insn ->
@@ -150,14 +146,15 @@ module Handlers(Ctxt : sig
   let no_lifter : ('a,'b) lifter = fun _ _ -> return (None,None)
 
   let lifter_of_arch : arch -> ('a,'b) lifter = function
-    | Arch.ARM -> arm_lifter
+    | #Arch.arm -> arm_lifter
     | _   -> no_lifter
 
   let get_insns ?(backend="llvm") stop_on res_id =
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->
     let mems_of_img img =
-      Image.sections img |> Table.to_sequence |>
-      Seq.map ~f:fst |> Seq.to_list  in
+      Image.sections img |> Table.to_sequence |> Seq.to_list |>
+      List.filter ~f:(fun (_,s) -> Section.is_executable s) |>
+      List.map ~f:fst   in
     let chunk r = Res.memory r |> get_mem >>|? List.return in
     let section = chunk in
     let symbol r =
@@ -173,9 +170,7 @@ module Handlers(Ctxt : sig
       ~section:get_arch ~image:get_arch >>=? fun arch ->
     let lifter = lifter_of_arch arch in
     let target = Arch.(match backend, arch with
-        | "llvm", ARM -> Ok "arm"
-        | "llvm", X86_32 -> Ok "i386"
-        | "llvm", X86_64 -> Ok "x86_64"
+        | "llvm", arch -> Ok (Arch.to_string arch)
         | backend, arch ->
           Or_error.errorf "Unsupported backend+arch combination: %s+%a"
             backend Arch.pps arch) in

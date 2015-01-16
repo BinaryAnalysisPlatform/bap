@@ -39,7 +39,5 @@ let () =
   let module F = File_fetcher in
   let module M = Mmap_client in
   let module N = Mmap_server in
-  let module Z = Zmq_server in
-  let module C = Zmq_client in
   let () = Plugins.load () in
   Lwt.Main.run @@ main ()

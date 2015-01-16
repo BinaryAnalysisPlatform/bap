@@ -117,14 +117,82 @@ with bin_io, compare, sexp
 
 (** Supported architectures  *)
 module Arch = struct
-  type t =
-    | X86_32
-    | X86_64
-    | ARM
-  with bin_io, compare, enumerate, sexp, variants
+  type x86 = [
+    | `x86
+    | `x86_64
+  ] with bin_io, compare, enumerate, sexp
+
+  type arm = [
+    | `arm
+    | `armeb
+    | `armv4
+    | `armv4t
+    | `armv5
+    | `armv6
+    | `armv7
+    | `thumb
+    | `thumbeb
+  ] with bin_io, compare, enumerate, sexp
+
+  type aarch64 = [
+    | `aarch64
+    | `aarch64_be
+  ]
+  with bin_io, compare, enumerate, sexp
+
+  type ppc = [
+    | `ppc
+    | `ppc64
+    | `ppc64le
+  ]
+  with bin_io, compare, enumerate, sexp
+
+  type mips = [
+    | `mips
+    | `mipsel
+    | `mips64
+    | `mips64el
+  ]
+  with bin_io, compare, enumerate, sexp
+
+  type sparc = [
+    | `sparc
+    | `sparcv9
+  ]
+  with bin_io, compare, enumerate, sexp
+
+  type nvptx = [
+    | `nvptx
+    | `nvptx64
+  ]
+  with bin_io, compare, enumerate, sexp
+
+  type hexagon = [`hexagon]
+  with bin_io, compare, enumerate, sexp
+
+  type r600 = [`r600]
+  with bin_io, compare, enumerate, sexp
+
+  type systemz = [`systemz]
+  with bin_io, compare, enumerate, sexp
+
+  type xcore = [`xcore]
+  with bin_io, compare, enumerate, sexp
+
+  type t = [
+    | aarch64
+    | arm
+    | hexagon
+    | mips
+    | nvptx
+    | ppc
+    | r600
+    | sparc
+    | systemz
+    | x86
+    | xcore
+  ] with bin_io, compare, enumerate, sexp, variants
 end
-
-
 
 (** {2 Common type abbreviations}
     You will see them later.

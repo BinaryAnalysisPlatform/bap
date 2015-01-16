@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     0.9
+Version:     0.9.1
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
@@ -57,6 +57,10 @@ Flag disassemblers
 Flag server
   Description: Build BAP server
   Default: true
+
+Flag zmq
+  Description: Build ZMQ transports for BAP server
+  Default: false
 
 Flag llvm
  Description: Build with llvm backend
@@ -287,12 +291,18 @@ Library core_lwt
                   Core_lwt_pool,
                   Core_lwt_stream
 
+Library zmq
+  Path:           src/server
+  Build$:         flag(server) && flag(zmq)
+  CompiledObject: best
+  Install:        true
+  Modules:        Zmq_client, Zmq_server
 
 Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
   CompiledObject: best
-  BuildDepends:   bap, lwt-zmq, ezjsonm, uri, cohttp.lwt, core_lwt
+  BuildDepends:   bap, ezjsonm, uri, cohttp.lwt, core_lwt
   Install:        true
   MainIs:         start_server.ml
 

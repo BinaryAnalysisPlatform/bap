@@ -304,8 +304,10 @@ public:
     // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
         bool current_invalid = current.code == 0;
-        if (p == is_invalid || current_invalid) {
-            return (p == is_invalid) && current_invalid;
+        if (p == is_invalid) {
+            return current_invalid;
+        } else if (current_invalid) {
+            return false;
         } else if (p == is_true) {
             return true;
         } else {

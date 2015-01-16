@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os, time, atexit
+from signal import signal, SIGTERM
 import requests
 from subprocess import Popen
 from mmap import mmap
@@ -10,41 +11,64 @@ from tempfile import NamedTemporaryFile
 import json
 import adt, arm, asm, bil
 
+import threading
+
+from pprint import pprint
+
 
 __all__ = ["disasm", "image"]
 
 DEBUG_LEVEL = ["Critical", "Error"]
 
-instance = None
+
+storage = threading.local()
+servers = dict()
+server_lock = threading.Lock()
 
 def del_instance():
+    instance = getattr(storage, 'instance', None)
     if instance is not None:
         instance.close()
 
 def get_instance(**kwargs):
-    global instance
-    if 'server' in kwargs or instance is None:
-        if instance is not None:
-            instance.close()
+    instance = getattr(storage, 'instance', None)
+    if instance is None:
         args = kwargs.get('server', {})
-        instance = Bap(args)
-    return instance
+        storage.instance = Bap(args)
+    return storage.instance
 
 atexit.register(del_instance)
+signal(SIGTERM, lambda x,y: del_instance)
+
+
+def spawn_server(**kwargs):
+    port = str(kwargs.get('port', 8080))
+    name = kwargs.get('name', 'bap-server')
+    with server_lock:
+        if port in servers:
+            return servers[port]
+        else:
+            process = Popen([name, '--port=' + port])
+            server  = {
+                'server' : process,
+                'url' : "http://127.0.0.1:{0}".format(port)
+            }
+            servers[port] = server
+            return server
+
 
 def disasm(obj, **kwargs):
     r""" disasm(obj) disassembles provided object.
     Returns a generator object yield instructions.
-
     """
-    def ret(obj):
-        return get_instance(**kwargs).insns(obj)
+    def run(obj):
+        return get_instance(**kwargs).insns(obj, **kwargs)
     if isinstance(obj, Id):
-        return ret(obj)
+        return run(obj)
     elif isinstance(obj, Resource):
-        return ret(obj.ident)
+        return run(obj.ident)
     else:
-        return ret(load_chunk(obj, **kwargs))
+        return run(load_chunk(obj, **kwargs))
 
 def image(f, **kwargs):
     bap = get_instance(**kwargs)
@@ -218,10 +242,12 @@ class Bap(object):
             raise RuntimeError("Failed to connect to BAP server")
 
         self.data = {}
-        self.temp = NamedTemporaryFile('rw+b')
+        self.temp = NamedTemporaryFile('rw+b', prefix="bap-")
 
-    def insns(self, src):
-        res = self.call({'get_insns' : {'resource' : src}})
+    def insns(self, src, **kwargs):
+        req = {'resource' : src}
+        req.update(kwargs)
+        res = self.call({'get_insns' : req})
         for msg in res:
             if 'error' in msg:
                 err = Error(msg)
@@ -242,9 +268,13 @@ class Bap(object):
 
     def load_chunk(self, data, **kwargs):
         kwargs.setdefault('url', self.mmap(data))
-        kwargs.setdefault('arch', 'x86_32')
-        kwargs.setdefault('address', bil.Int(0,32))
-        kwargs.setdefault('endian', bil.LittleEndian())
+        kwargs.setdefault('arch', 'i386')
+        kwargs.setdefault('addr', 0)
+        addr = kwargs['addr']
+        if isinstance(addr, str):
+            addr = long(addr, 0)
+        kwargs['addr'] = '0x{0:x}'.format(addr)
+
         return self._load_resource({'load_memory_chunk' : kwargs})
 
     def __exit__(self):
@@ -270,8 +300,8 @@ class Bap(object):
     def mmap(self, data):
         url = "mmap://{0}?offset=0&length={1}".format(
             self.temp.name, len(data))
-        os.ftruncate(self.temp.fileno(), len(data))
-        mm = mmap(self.temp.fileno(), len(data))
+        os.ftruncate(self.temp.fileno(), 4096)
+        mm = mmap(self.temp.fileno(), 4096)
         mm.write(data)
         mm.close()
         return url
@@ -282,14 +312,6 @@ class Bap(object):
             raise ServerError(rep)
         return Id(rep['resource'])
 
-def spawn_server(**kwargs):
-    port = kwargs.get('port', 8080)
-    name = kwargs.get('name', 'bap-server')
-    server = Popen([name, '--port=' + str(port)])
-    return {
-        'server' : server,
-        'url' : "http://127.0.0.1:{0}".format(port)
-    }
 
 def jsons(r, p=0):
     dec = json.JSONDecoder(encoding='utf-8')

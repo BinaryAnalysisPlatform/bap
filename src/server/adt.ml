@@ -32,8 +32,6 @@ module Exp = struct
   open Exp
   open Var
 
-
-
   let rec pp ch = function
     | Load (x,y,e,s) ->
       pr ch "Load(%a,%a,%a,%a)" pp x pp y pp_endian e pp_size s

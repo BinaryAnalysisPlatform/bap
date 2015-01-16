@@ -115,10 +115,23 @@ let img_of_elf data elf : Img.t Or_error.t =
     | ELFCLASS64 -> `r64 in
   let addr = addr_maker addr_size in
   let entry = addr elf.e_entry in
-  let arch = match elf.e_machine with
-    | EM_386 -> Ok Arch.X86_32
-    | EM_X86_64 -> Ok Arch.X86_64
-    | EM_ARM -> Ok Arch.ARM
+  let arch = match elf.e_machine, endian with
+    | EM_386, _ -> Ok `x86
+    | EM_X86_64, _ -> Ok `x86_64
+    | EM_ARM, LittleEndian -> Ok `armv7
+    | EM_ARM, BigEndian -> Ok `armeb
+    | EM_AARCH64, LittleEndian -> Ok `aarch64
+    | EM_AARCH64, BigEndian -> Ok `aarch64_be
+    | EM_SPARC,_ -> Ok `sparc
+    | EM_SPARCV9,_ -> Ok `sparcv9
+    | EM_PPC,_ -> Ok `ppc
+    | EM_PPC64, BigEndian -> Ok `ppc64
+    | EM_PPC64, LittleEndian -> Ok `ppc64le
+    | EM_S390,_ -> Ok `systemz
+    | EM_MIPS, BigEndian -> Ok `mips
+    | EM_MIPS, LittleEndian -> Ok `mipsel
+    | EM_MIPS_X, BigEndian -> Ok `mips64
+    | EM_MIPS_X, LittleEndian -> Ok `mips64el
     | _ -> errorf "can't load file, unsupported platform" in
   let sections,errors =
     Seq.filter_mapi elf.e_segments (create_section addr) |>

@@ -1,5 +1,5 @@
-OPAM_DEPENDS="core_kernel.111.28.00 oasis zarith bitstring utop cmdliner faillib ezjsonm lwt-zmq uri.1.7.2 re cohttp.0.15.0"
-SYS_DEPENDS="libgmp-dev time llvm-3.4-dev libzmq3-dev aspcud"
+OPAM_DEPENDS=`cat opam.deps opam.opt.deps`
+SYS_DEPENDS=`cat apt.deps apt.opt.deps`
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
 4.02.1,1.2.0) ppa=avsm/ocaml42+opam12 ;;
