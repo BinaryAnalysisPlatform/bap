@@ -26,10 +26,4 @@ done
 
 ocaml preconfig.ml
 
-case `ocaml -vnum` in
-    4.01.*)
-       sed -i 's/mark_tag_used/ignore/' myocamlbuild.ml
-    ;;
-esac
-
 ocaml setup.ml -configure "$@"
