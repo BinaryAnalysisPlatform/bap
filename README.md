@@ -7,12 +7,26 @@ in OCaml and other languages.
 
 # <a name="Installation"></a>Installation
 
+BAP is released using `opam` package manager. After you've successfully
+[installed](https://opam.ocaml.org/doc/Install.html) opam, and have all
+[system dependencies](#sysdeps) satisfied, you can proceed with:
+
+```bash
+$ opam install bap
+```
+
+And if you're interested in python bindings, then you can install them using pip:
+
+```bash
+$ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
+```
+
 ## Installing `bap` dependencies
 
-### Installing system dependencies
+### <a name="sysdeps"></a>Installing system dependencies
 
-There are few system libraries that bap depends on. We provide a file
-`apt.deps` that contains package names as they are in Ubuntu
+There are few system libraries that bap depends on, namely `llvm-3.4` and `clang` compiler.
+We provide a file `apt.deps` that contains package names as they are in Ubuntu
 Trusty. Depending on your OS and distribution, you may need to adjust
 this names. But, on most Debian-based Linux distribution, this should work:
 
@@ -20,60 +34,6 @@ this names. But, on most Debian-based Linux distribution, this should work:
 $ sudo apt-get install $(cat apt.deps)
 ```
 
-### Installing OCaml dependencies
-
-The easiest way to install the OCaml dependencies of `bap` is to use
-the `opam` package manager:
-
-```bash
-$ opam install $(cat opam.deps)
-```
-
-If you are using a development version, e.g., you have just cloned this from
-github, then you will also need the `oasis` package in order to create a build
-environment.
-
-```bash
-$ opam install oasis
-```
-
-We also recommend you install `utop` for running BAP.
-
-```bash
-$ opam install utop
-```
-
-## Compiling and installing `bap`
-
-Once all the dependencies of `bap` have been installed, we can start the actual
-build. Now, run the following commands:
-
-```bash
-$ make
-$ make install
-```
-
-This will run take care to run all configuration scripts for you. If
-you want to provide some specific flags to `configure`, then you need
-either to invoke it manually with `./configure` or provide them to
-make using `BAPCONFIGUREFLAGS` environment variable.
-
-Note: if you have chosen prefix that require super-user privileges,
-then you need to run `make install` using either `sudo`, e.g., `sudo
-make install` or switch to a super-user mode. Although it is not
-required, we suggest to install `bap` in to `opam` stack. In this case
-a proper prefix can be generated using `opam config var` command,
-e.g.,
-
-```bash
-./configure --prefix=$(opam config var prefix)
-```
-
-If you have installed `bap` previously, then use the command `make reinstall`
-instead of `make install`. However, this will *not* work if `setup.log` has been
-erased (by, for example, `git clean -fdx` or `make clean`). In that case, you
-can remove the old `bap` installation manually via the command `ocamlfind remove
-bap`.
 
 # Usage
 
