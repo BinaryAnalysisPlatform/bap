@@ -20,10 +20,26 @@ __all__ = ["disasm", "image"]
 
 DEBUG_LEVEL = ["Critical", "Error"]
 
-
 storage = threading.local()
 servers = dict()
 server_lock = threading.Lock()
+requests_lock = threading.Lock()
+request = None
+
+def init_requests():
+    global request
+    with requests_lock:
+        if request == None:
+            request = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=1000,
+                    pool_maxsize=1000,
+                    max_retries=10,
+                    pool_block=True)
+            request.mount('http://', adapter)
+
+init_requests()
+
 
 def del_instance():
     instance = getattr(storage, 'instance', None)
@@ -282,20 +298,21 @@ class Bap(object):
             self.server.terminate()
         self.temp.close()
 
-    def call(self, data):
-        def dumps(dic):
-            self.last_id += 1
-            dic['id'] = Id(self.last_id)
-            return json.dumps(dic, default=str)
+    def dumps(self,dic):
+        self.last_id += 1
+        dic['id'] = Id(self.last_id)
+        return json.dumps(dic, default=str)
 
+    def call(self, data):
         if isinstance(data, dict):
-            method = requests.post
+            method = request.post
             if 'get_insns' or 'get_resource' in data:
-                method = requests.get
-            return jsons(method(self.url, data=dumps(data)))
+                method = request.get
+            return jsons(method(self.url, data=self.dumps(data)))
         else:
-            gen = (dumps(msg) for msg in data)
-            return jsons(requests.post(self.uri, data=gen))
+            gen = (self.dumps(msg) for msg in data)
+            return jsons(request.post(self.uri, data=gen))
+
 
     def mmap(self, data):
         url = "mmap://{0}?offset=0&length={1}".format(
