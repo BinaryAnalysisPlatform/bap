@@ -8,10 +8,13 @@ let rec pp fmt s =
   | Jmp exp -> fprintf fmt "jmp %a" Bap_exp.pp exp
   | Special s -> fprintf fmt "special (%s)" s
   | While (cond, body) ->
-    fprintf fmt "@[<v0>@[<v2>while (%a) {@;%a@]@\n}@]"
+    fprintf fmt "@[<v0>@[<v2>while (%a) {@;%a@]@;}@]"
       Bap_exp.pp cond pp_list body
+  | If (cond, ts, []) ->
+    fprintf fmt "@[<v0>@[<v2>if (%a) {@;%a@]@,}@]"
+      Bap_exp.pp cond pp_list ts
   | If (cond, ts, fs) ->
-    fprintf fmt "@[<v0>@[<v2>if (%a) {@;%a@]@,}@\n%a@]"
+    fprintf fmt "@[<v0>@[<v2>if (%a) {@;%a@]@,}@;%a@]"
       Bap_exp.pp cond pp_list ts pp_else fs
   | CpuExn  n -> fprintf fmt "cpuexn (%d)" n
 and pp_list fmt = function

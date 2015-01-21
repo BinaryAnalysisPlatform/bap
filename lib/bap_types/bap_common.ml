@@ -12,10 +12,12 @@ open Core_kernel.Std
 module Bitvector = Bap_bitvector
 module Integer   = Bap_integer
 module Regular   = Bap_regular
+module Printable = Regular.Printable
 
 (** {2 Basic Interfaces}  *)
-module type Integer = Integer.S
-module type Regular = Regular.S
+module type Integer   = Integer.S
+module type Regular   = Regular.S
+module type Printable = Regular.Printable
 
 type endian = Bitvector.endian =
     LittleEndian | BigEndian

@@ -22,6 +22,24 @@ val create
 *)
 val view : ?word_size:size -> ?from:addr -> ?words:int -> t -> t Or_error.t
 
+(** [range mem a0 a1] returns a view on [mem] starting from
+    address [a0] and ending at [a1], bounds inclusive   *)
+val range : t -> addr -> addr -> t Or_error.t
+
+(** [merge m1 m2] takes two memory regions, that either intersects or
+    share edges (i.e., difference between [min_addr] of one of the
+    blocks and [max_addr] of another is less then or equal to one, and
+    returns memory blocks that spans memory starting from the address
+    {[min (min_addr m1) (min_addr m2)]} and ending with address
+    {[max (max_addr m1) (max_addr m2)]}.
+
+    Will return an error, if either the above state precondition
+    doesn't hold, or if this two memory blocks doesn't share the same
+    underlying memory (i.e., bases), or if they have different
+    endianness.
+*)
+val merge : t -> t -> t Or_error.t
+
 (** [first_byte m] returns first byte of [m] as a memory  *)
 val first_byte : t -> t
 (** [last_byte m] returns last byte of [m] as a memory  *)
@@ -44,8 +62,8 @@ val (^!) : t -> addr -> word
 val max_addr : t -> addr
 val min_addr : t -> addr
 
-(** [size] returns the size of the memory *)
-val size : t -> int
+(** [length] returns the length of the memory in bytes *)
+val length : t -> int
 
 (** [contains mem addr] returns true if [mem] contains address [addr]  *)
 val contains : t -> addr -> bool
@@ -80,8 +98,9 @@ module Input : sig
   val int64  : word reader
 end
 
-(** Pretty prints memory. *)
-val pp : Format.formatter -> t -> unit
+(** {3 Printing and outputing}  *)
+
+include Printable with type t := t
 
 (** [hexdump t out] outputs hexdump (as per [hexdump -C]) of the
     memory to formatter [out]  *)
@@ -101,7 +120,7 @@ module Make_iterators( M : Monad.S )
                       and type 'a m = 'a M.t
 
 
-(** { 3 Interfacing with C}
+(** {3 Interfacing with C}
 
     The following interfaces is supposed to be used only for the
     purposes of exposing memory to c programs. *)

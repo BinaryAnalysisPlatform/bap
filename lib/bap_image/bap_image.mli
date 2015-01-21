@@ -9,6 +9,7 @@ open Image_internal_std
 (** {2 Type definitions}  *)
 
 type t with sexp_of            (** image   *)
+
 (** section *)
 type sec with bin_io, compare, sexp
 (** symbol  *)

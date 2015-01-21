@@ -115,7 +115,7 @@ module Response = struct
 
   let memory_parameters m : msg = [
     "addr", string @@ string_of_addr @@ Memory.min_addr m;
-    "size", string @@ Int.to_string  @@ Memory.size m;
+    "size", string @@ Int.to_string  @@ Memory.length m;
   ]
 
 
@@ -131,7 +131,7 @@ module Response = struct
   let bil_value = Fn.compose strings Adt.strings_of_bil
 
   let insn ?target ?bil mem insn : insn  =
-    let module Insn = Disasm.Basic.Insn in
+    let module Insn = Disasm_expert.Basic.Insn in
     dict @@ [
       "name", string @@ Insn.name insn;
       "asm", string @@ Insn.asm insn;

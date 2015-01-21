@@ -8,6 +8,9 @@ type 'a hashable = 'a Hashtbl.Hashable.t
 (** creates an empty table  *)
 val empty : 'a t
 
+(** creates a table containing one bindins  *)
+val singleton : mem -> 'a -> 'a t
+
 (** [add table mem v] returns a new table with added mapping from a
     mem region [mem] to a data value [v] *)
 val add : 'a t -> mem -> 'a -> 'a t Or_error.t
@@ -18,17 +21,18 @@ val remove : 'a t -> mem -> 'a t
 
 (** [change tab mem ~f] function [f] is applied to a set of all memory
     regions that intersects with [mem]. If function [f] evaluates to
-    [`remap y] then all memory regions that have had intersections
-    with [mem] will be removed from the new map and memory region
-    [mem] will be mapped to [y]. If [f] evaluates to [`remove], then
-    the regions will be removed, and nothing will be added. If it
-    evaluates to [`skip] then the table will be returned unchanged.
-    Intersections are passed sorted in an ascending order.
+    [`remap (new_mem,y)] then all memory regions that have had
+    intersections with [mem] will be removed from the new map and
+    memory region [new_mem] will be mapped to [y]. If [f] evaluates to
+    [`remove], then the regions will be removed, and nothing will be
+    added. If it evaluates to [`skip] then the table will be returned
+    unchanged.  Intersections are passed sorted in an ascending order.
 *)
 val change : 'a t -> mem -> f:((mem * 'a) seq -> [
-    | `remap of 'a               (** change value  *)
-    | `remove                   (** remove all  *)
-    | `skip])                   (** bail out  *)
+    | `rebind of mem * 'a         (** add new mapping instead  *)
+    | `update of ((mem * 'a) -> 'a) (** update all bindings      *)
+    | `remove                    (** remove all bindings      *)
+    | `ignore])                  (** don't touch anything     *)
   -> 'a t
 
 (** [length table] returns a number of entries in the table  *)
@@ -37,6 +41,10 @@ val length : 'a t -> int
 (** [find table mem] finds an element mapped to the memory region [mem]  *)
 val find : 'a t -> mem -> 'a option
 
+(** [find_addr tab addr] finds a memory region that contains a
+    specified [addr]   *)
+val find_addr : 'a t -> addr -> (mem * 'a) option
+
 (** [intersections table mem] returns all mappings in a [table] that
     have intersections with [mem] *)
 val intersections : 'a t -> mem -> (mem * 'a) seq
@@ -44,6 +52,10 @@ val intersections : 'a t -> mem -> (mem * 'a) seq
 (** [fold_intersections table mem] folds over all regions
     intersecting with [mem] *)
 val fold_intersections : 'a t -> mem -> init:'b -> f:(mem -> 'a -> 'b -> 'b) -> 'b
+
+(** [has_intersections tab mem] is true iff some portion of [mem] is
+    is already mapped in [tab]. *)
+val has_intersections : 'a t -> mem -> bool
 
 (** [mem table mem] is true if table contains mem region [mem]  *)
 val mem : _ t -> mem -> bool
@@ -123,13 +135,13 @@ val link : one_to:('b,'r) r -> 'a hashable -> 'a t -> 'b t -> 'a -> 'r
     typeclass [t] stored in table [tab] to memory regions.
 
     Note. not every mapping is reversable, for example, trying to obtain
-    a reverse of surjective mapping will result in error. Although,
-    surjective mappings can be mapped using [~one_to:many] mapping. A
-    particular example of surjective mapping is [symbol] tables, in a
-    case when functions can occupy several non-contiguous regions of
-    memory.
+    a reverse of surjective mapping as a one-to-one mapping will
+    result in an error. But surjective mappings can be reversed
+    using [~one_to:many] mapping. A particular example of surjective
+    mapping is [symbol] tables, in a case when functions can occupy
+    several non-contiguous regions of memory.
 
-    { 5 Examples}
+    {5 Examples}
 
     To create a mapping from a function symbol to sequence of memory
     regions with it code:

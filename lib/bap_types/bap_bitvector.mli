@@ -1,6 +1,6 @@
 (** Bitvector -- a type for representing binary values.
 
-    { 2 Overview }
+    {2 Overview }
 
     A numeric value with a 2-complement binary representation. It is
     good for representing addresses, offsets and other numeric values.
@@ -14,7 +14,7 @@
     them, if you know what kind of operands you're expecting.
 
 
-    { 3 Clarifications endianness and bit-ordering }
+    {3 Clarifications endianness and bit-ordering }
 
     Bitvector should be considered as an number with an arbitrary
     width. That means, that as with all numbers it is subject to
@@ -33,7 +33,7 @@
     index equal to [width - 1]. That means, they're endianness
     agnostic.
 
-    { 3 Clarification on size-morphism }
+    {3 Clarification on size-morphism }
 
     Size-monomorphic operations (as opposed to size-polymorphic
     comparison) doesn't allow to compare two operands with different
@@ -56,7 +56,7 @@
     Note, [Mono] submodule doesn't provide [Table], since we cannot
     guarantee that all keys in a hash-table have equal size.
 
-    { 3 Clarification on signs}
+    {3 Clarification on signs}
 
     By default all numbers represented by a bitvector are considered
     unsigned. This includes comparisons, e.g., [of_int (-1) ~width:32]
@@ -80,7 +80,7 @@
       let q = signed x < zero   (* p = true *)
     ]}
 
-    { 3 Clarification on string representation }
+    {3 Clarification on string representation }
 
     As a part of [Identifiable] interface bitvector provides a pair of
     complement functions: [to_string] and [of_string], that provides
@@ -130,7 +130,7 @@ type endian =
   | BigEndian    (** most  significant byte comes first  *)
 with bin_io, compare, sexp
 
-include Identifiable with type t := t
+include Bap_regular.S with type t := t
 include Comparable.With_zero with type t := t
 (** {2 Container interfaces}
 
@@ -147,12 +147,13 @@ module Mono : Comparable with type t := t
     not forget about [of_string] function, exposed via [Identifiable]
     interface.
 *)
+val of_string : string -> t
 val of_bool  : bool -> t
 val of_int   : width:int -> int -> t
 val of_int32 : ?width:int -> int32 -> t
 val of_int64 : ?width:int -> int64 -> t
 
-(** { 3 Some predefined constant constructors }  *)
+(** {3 Some predefined constant constructors }  *)
 
 
 (** [b0 = of_bool false] - a zero bit  *)
@@ -160,7 +161,7 @@ val b0 : t
 (** [b1 = of_bool true] - a one bit  *)
 val b1 : t
 
-(** { 3 Helpful shortcuts }  *)
+(** {3 Helpful shortcuts }  *)
 
 (** [one width] number one with a specified [width], is a shortcut for
     [of_int 1 ~width]*)
@@ -184,9 +185,9 @@ val ones : int -> t
 *)
 val of_binary : ?width:int -> endian -> string -> t
 
-(** { 2 Conversions to integers }  *)
+(** {2 Conversions to integers }  *)
 
-(** { 3 Signed conversions }  *)
+(** {3 Signed conversions }  *)
 val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
@@ -253,7 +254,7 @@ val (++) : t -> int -> t
 (** [a -- n] is [npred a n]  *)
 val (--) : t -> int -> t
 
-(** { 2 Iteration over bitvector components }  *)
+(** {2 Iteration over bitvector components }  *)
 
 (** [to_bytes x order] returns bytes of [x] in a specified [order].
     Each byte is represented as a [bitvector] itself. *)

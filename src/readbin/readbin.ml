@@ -2,76 +2,68 @@ open Core_kernel.Std
 open Or_error
 open Bap.Std
 open Format
+open Options
+open Image
 
-let string_of_perm s =
-  let m f c = if f s then c else " " in
-  String.concat Image.([
-      m Sec.is_readable "R";
-      m Sec.is_writable "W";
-      m Sec.is_executable "X";
-    ])
+module Program(Conf : Options.Provider) = struct
+  open Conf
 
-let is_lifted =
-  let open Arch in function
-    | #Arch.arm -> true
-    | _ -> false
+  let disassemble img mem =
+    let syms = match options.symsfile with
+      | Some filename ->
+        Symtab.read ?demangle:options.demangle ~filename mem
+      | None -> Table.map (symbols img) ~f:Symbol.name in
+    let roots =
+      Seq.(Table.regions syms >>| Memory.min_addr |> to_list) in
+    let disasm = disassemble ~roots (arch img) mem in
+    let module Env = struct
+      let options = options
+      let cfg = Disasm.blocks disasm
+      let base = mem
+      let syms = syms
+      let arch = arch img
+    end in
+    let module Printing = Printing.Make(Env) in
+    let module Helpers = Helpers.Make(Env) in
+    let open Printing in
+    let open Helpers in
 
-let print_disasm arch s mem insn () =
-  let open Disasm in
-  printf "# insn: %s@;%s@."
-    (Insn.asm insn)
-    (Sexp.to_string (Insn.sexp_of_t insn));
-  let () =
-    if is_lifted arch then match Arm.Lift.insn mem insn with
-      | Ok stmts -> printf "%a@.@." Stmt.pp_stmts stmts
-      | Error err -> printf "@.failed to lift: %s@." @@
-        Error.to_string_hum err in
-  Basic.step s ()
+    let pp_blk = List.map options.output_dump ~f:(function
+        | `with_asm -> pp_blk Block.insns pp_insns
+        | `with_bil -> pp_blk bil_of_block pp_bil) |> pp_concat in
 
-let main () =
-  Image.create Sys.argv.(1) >>= fun (img,warns) ->
-  List.iter warns ~f:(fun w -> printf "Warning: %s\n" @@
-                       Error.to_string_hum w);
-  let open Image in
-  let arch = arch img in
-  let bits = match addr_size img with
-    | `r32 -> 32
-    | `r64 -> 64 in
-  let target = Arch.to_string arch in
-  Disasm.Basic.create ~backend:"llvm" target >>= fun dis ->
-  let disasm mem =
-    Disasm.Basic.run dis ~stop_on:[`Valid]
-      ~hit:(print_disasm arch) ~return:ident ~init:() mem in
-  let name = Option.value (filename img) ~default:"<memory>" in
-  printf "# File name:    %s\n" @@ name;
-  printf "# Architecture: %s\n" @@ Arch.to_string arch;
-  printf "# Address size: %d\n" bits;
-  printf "# Entry point:  %s\n" @@ Addr.to_string (entry_point img);
-  printf "# Symbols: (%d)\n" (Table.length (symbols img));
-  Table.iteri (symbols img) ~f:(fun mem s ->
-      printf "\n# Symbol name: %s\n" (Sym.name s);
-      printf "# Symbol data:\n%a\n" Memory.pp mem;
-      disasm mem);
-  printf "# Loadable sections: %d\n" @@
-  Table.length (sections img);
-  Table.iteri (sections img) ~f:(fun mem s ->
-      printf "Section name : %s\n" @@ Sec.name s;
-      printf "Section start: %s\n" @@
-      Addr.to_string @@ Memory.min_addr mem;
-      if Sec.is_executable s && Table.length (symbols img) = 0 then
-        disasm mem);
-  return (List.length warns)
+    Tags.install std_formatter `Text;
+    if options.output_dump <> [] then
+      pp_code (pp_syms pp_blk) std_formatter syms;
+
+    if options.output_phoenix <> None then
+      let module Phoenix = Phoenix.Make(Env) in
+      let dest = Phoenix.store () in
+      printf "Phoenix data was stored in %s folder@." dest
+
+  let main () =
+    Image.create options.filename >>= fun (img,warns) ->
+    List.iter warns ~f:(eprintf "Warning: %a\n" Error.pp);
+    printf "%-20s: %a\n" "Arch"  Arch.pp (arch img);
+    printf "%-20s: %a\n" "Entry" Addr.pp (entry_point img);
+    printf "%-20s: %d\n" "Symbols" (Table.length (symbols img));
+    printf "%-20s: %d\n" "Sections" (Table.length (sections img));
+    Table.iteri (sections img) ~f:(fun mem s ->
+        if Section.is_executable s then
+          disassemble img mem);
+    return (List.length warns)
+end
+
+let start options =
+  let module Program = Program(struct
+      let options = options
+    end) in
+  Program.main ()
 
 let () =
   Printexc.record_backtrace true;
-  let () = try
-      Plugins.load ();
-      if Array.length Sys.argv = 2
-      then match main () with
-        | Ok n -> exit n
-        | Error err -> printf "Failed with: %s\n" @@ Error.to_string_hum err
-      else printf "Usage: reading filename\n"
-    with exn -> printf "Unhandled exception: %s : %s \n"
-                  (Exn.to_string exn)
-                  (Exn.backtrace ()) in
-  exit (-1)
+  Plugins.load ();
+  match Cmdline.parse () >>= start with
+  | Ok n -> exit n
+  | Error err -> eprintf "%s" Error.(to_string_hum err);
+    exit 1

@@ -104,7 +104,7 @@ let strings_of_preds = to_strings Asm.pp_pred
 let string_of_arm insn ops = to_string Arm.pp_insn (insn,ops)
 let string_of_endian = to_string pp_endian
 let strings_of_kinds ks =
-  strings_of_preds (ks :> Disasm.Basic.pred list)
+  strings_of_preds (ks :> Disasm_expert.Basic.pred list)
 
 
 
@@ -167,7 +167,7 @@ module Parse = struct
     | _ -> errorf "'%s' doesn't match 'Int(num,size)'" str
 
 
-  let kind = nullary Disasm.Basic.kind_of_sexp
-  let pred = nullary Disasm.Basic.pred_of_sexp
+  let kind = nullary Disasm_expert.Basic.kind_of_sexp
+  let pred = nullary Disasm_expert.Basic.pred_of_sexp
   let endian = nullary endian_of_sexp
 end

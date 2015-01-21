@@ -25,11 +25,11 @@ module type Compare = sig
 end
 
 module Size_poly = struct
-  let compare = Int.compare
+  let compare x y = Int.compare x y
 end
 
 module Size_mono = struct
-  let compare x y = if x <> y then raise Width else 0
+  let compare x y = if Int.(x <> y) then raise Width else 0
 end
 
 module Internal = struct
@@ -57,6 +57,7 @@ module type Kernel = sig
   val compare  : t -> t -> int
   val hash : t -> int
   val module_name : string
+  include Pretty_printer.S with type t := t
   include Stringable with type t := t
 end
 
@@ -98,8 +99,11 @@ module Make(Size : Compare) : Kernel = struct
   let lift2 op t1 t2 = create (binop op t1 t2) t1.w
 
   let compare l r =
-    let s = binop Bignum.compare l r in
-    if s <> 0 then s else Size.compare l.w r.w
+    let s = Size.compare l.w r.w in
+    if s <> 0 then s else
+    if l.signed || r.signed
+    then binop Bignum.compare l r
+    else Bignum.compare l.z r.z
 
   let to_string = function
     | {z; w=1} -> if Bignum.equal z Bignum.zero then "false" else "true"
@@ -110,8 +114,9 @@ module Make(Size : Compare) : Kernel = struct
     | "true"  -> create Bignum.one  1
     | s -> match String.split ~on:':' s with
       | [z; n] -> create (Bignum.of_string z) (Int.of_string n)
-      | _ -> failwith "Bitvector.of_string"
+      | _ -> failwithf "Bitvector.of_string: '%s'" s ()
 
+  let pp fmt v = Format.fprintf fmt "%s" (to_string v)
 
   let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -377,5 +382,5 @@ let to_bits bv endian =
 module Mono = Comparable.Make(Make(Size_mono))
 
 include Or_error.Monad_infix
-include Identifiable.Make(T)
+include Bap_regular.Make(T)
 module Int = Safe

@@ -15,6 +15,8 @@ let seq_of_sexp elt_of_sexp t =
 
 let cons x xs = append (singleton x) xs
 
+let is_empty : 'a seq -> bool = length_is_bounded_by ~max:0
+
 module Export = struct
   let (^::) = cons
 end

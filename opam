@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "bap"
-version: "0.9.1"
+version: "0.9.2"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
 homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
@@ -12,7 +12,13 @@ build: [
   [make]
 ]
 install: [make "install"]
-remove: [make "uninstall"]
+remove: [
+  ["ocamlfind" "remove" "bap"]
+  ["ocamlfind" "remove" "core_lwt"]
+]
+
+build-doc: [make "doc"]
+
 depends: [
  	"base-unix"
  	"bitstring"
@@ -23,6 +29,7 @@ depends: [
 	"faillib"
 	"lwt"
 	"oasis" {build}
+    "ocamlgraph"
 	"re"
 	"uri" {= "1.7.2"}
 	"zarith"

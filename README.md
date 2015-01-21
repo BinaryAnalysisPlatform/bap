@@ -51,16 +51,16 @@ Now, you can play with BAP. For example:
 
 ```ocaml
 utop # open Bap.Std;;
-utop # let x = Word.of_int32 0xDEADBEEFl;;
-val x : word = 0xDEADBEEF:32
-utop # let y = Word.of_int32 0xEFBEADDEl;;
-val y : word = 0xEFBEADDE:32
-utop # let z = Word.Int.(!$x + !$y);;
-val z : Word.Int.t = Core_kernel.Result.Ok 0xCE6C6CCD:32
-utop # let z = Word.Int_exn.(x + y);;
-val z : word = 0xCE6C6CCD:32
-utop # Word.to_bytes x BigEndian |> Sequence.to_list;;
-- : word list = [0xDE:8; 0xAD:8; 0xBE:8; 0xEF:8]
+utop # let d = disassemble_file "ls";;
+val d : t = <abstr>
+utop # let insn = Disasm.insn_at_addr d (Addr.of_int32 0xa9dbl);;
+val insn : (mem * insn) option = Some (0000a9d8: 01 00 00 0a , beq #0x4; Bcc(0x4,0x0,CPSR))
+let blk = Disasm.blocks d |> Table.elements |> Seq.hd_exn;;
+val blk : block = [991c, 9923]
+utop # Block.leader blk;;
+- : insn = push {r3, lr}; STMDB_UPD(SP,SP,0xe,Nil,R3,LR)
+utop # Block.terminator blk |> Insn.bil;;
+- : Bap_types.Std.bil = [LR = 0x9924:32; jmp 0x9ED4:32]
 ```
 
 If you do not want to use `baptop` or `utop`, then you can execute the following
@@ -80,12 +80,13 @@ dependencies, install top-level printers, etc.
 You can install `bap` python bindings with `pip`.
 
 ```bash
-$ pip install bap/python
+$ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
 ```
 
-Where `bap/python` is a path to bap python bindings. Adjust it
-according to your setup. Also, you may need to use `sudo` or to
-activate your `virtualenv` if you're using one.
+
+Instead of git path you can also use a local one. Adjust it according
+to your setup. Also, you may need to use `sudo` or to activate your
+`virtualenv` if you're using one.
 
 If you don't like `pip`, then you can just go to `bap/python` folder
 and copy-paste the contents to whatever place you like, and use it as
@@ -121,7 +122,31 @@ For more information, read builtin documentation, for example with
 
 ## Using from shell
 
-We're shipping a `bap-mc` executable that can disassemble arbitrary
+Bap is shipped with `bap-objdump` utility that can disassemble files,
+and printout dumps in different formats, including plain text, json,
+dot, html. The example of `bap-objdump` output is:
+
+```ocaml
+  begin(sub_B6C8_0xec)
+      0000b7b4: 00 00 50 e3    cmp r0, #0x0        ; CMPri(R0,0x0,0xe,Nil)
+      0000b7b8: e4 ff ff ca    bgt #-0x70          ; Bcc(-0x70,0xc,CPSR)
+  end(sub_B6C8_0xec)
+
+  begin(sub_B6C8_0xec) {
+    orig1_2673 = R0
+    orig2_2674 = 0x0:32
+    dest_2671 = R0 - 0x0:32
+    CF = orig2_2674 <= orig1_2673
+    VF = high:1[(orig1_2673 ^ orig2_2674) & (orig1_2673 ^ dest_2671)]
+    NF = high:1[dest_2671]
+    ZF = dest_2671 = 0x0:32
+    if ((ZF = false) & (NF = VF)) {
+      jmp sub_B6C8_0x88
+    }
+  }
+```
+
+Also we're shipping a `bap-mc` executable that can disassemble arbitrary
 strings. Read `bap-mc --help` for more information.
 
 ## Using from other languages
@@ -148,6 +173,12 @@ $ bapbuild mycoolprog.native
 and you will obtain `mycoolprog.native`. If `bapbuild` complains that something
 is missing, make sure that you didn't skip the [Installation](#Installation)
 phase. You can add your own dependencies with a `-package` command line option.
+
+If you have other dependencies, you can compile it using `pkg` flag, like this
+
+```bash
+$ bapbuild -pkg lwt mycoolprog.native
+```
 
 If you use your own build environment, please make sure that you have added
 `bap` as a dependency. We install our libraries using `ocamlfind` and you just

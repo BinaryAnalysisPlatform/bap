@@ -27,83 +27,84 @@
     - for those, courage enough there is also an AVL tree;
     - hastable is exposed via [Table] module;
     - sexpable and binable interface;
-    - [to_string], [str],[pp], [ppo], [pps], [ppb] functions
+    - [to_string], [str], [pp], [ppo], [pps] functions
       for pretty-printing.
 
     And most types usually provides much more.
+*)
 
-    { 3 How to use the library}
+(**  {3 How to use the library }
 
-    You should start any code relying on [bap-types] library with a
+     You should start any code relying on [bap-types] library with a
 
-    [open Bap.Std]
+     [open Bap.Std]
 
-    (or open [Bap_types.Std] if you're developing inside bap)
+     (or open [Bap_types.Std] if you're developing inside bap)
 
-    It is a good idea, to open [Core_kenel.Std] before. You should
-    never use modules that are not exposed by the [Std] module directly,
-    if you need something from this, that export it via [Std] module,
-    and make a pull request, or whatever. Although, while these
-    modules are barred, their interfaces can still serve as good
-    reference and documentation, that's why they are installed along
-    with the library package.
+     It is a good idea, to open [Core_kenel.Std] before. You should
+     never use modules that are not exposed by the [Std] module directly,
+     if you need something from this, that export it via [Std] module,
+     and make a pull request, or whatever. Although, while these
+     modules are barred, their interfaces can still serve as good
+     reference and documentation, that's why they are installed along
+     with the library package.
 
-    For each exported type, there is a module with the same name
-    (module capitalization), that implements its interface. For
-    example, type [exp] is indeed a type abbreviation for [Exp.t], and
-    module [Exp] contains all functions and types related to type
-    [exp]. Most modules consists of two parts:
-    - base part, that usually defines types and constructors,
-    - main part, that extends the type interface with common
-    functions. This is hidden from a user, but it is good to know
-    about this, since it will help you to find a documentation. For
-    example, module [Stmt], that implements interface for type [stmt],
-    consists of module [Bap_bil.Stmt] extended by [Bap_stmt] module,
-    but from a user's perspective, you will see only [Stmt] module,
-    with fields from both modules merged. For a reference purpose,
-    although it is a good idea to look in [Bap_bil.Stmt] module for
-    type definitions, and [Bap_stmt] for extra functions. But, again,
-    you do not need to actually reference this modules from your code,
-    for example, to create a hashtable of statements, just type:
+     For each exported type, there is a module with the same name
+     (module capitalization), that implements its interface. For
+     example, type [exp] is indeed a type abbreviation for [Exp.t], and
+     module [Exp] contains all functions and types related to type
+     [exp]. Most modules consists of two parts:
+     - base part, that usually defines types and constructors,
+     - main part, that extends the type interface with common
+     functions. This is hidden from a user, but it is good to know
+     about this, since it will help you to find a documentation. For
+     example, module [Stmt], that implements interface for type [stmt],
+     consists of module [Bap_bil.Stmt] extended by [Bap_stmt] module,
+     but from a user's perspective, you will see only [Stmt] module,
+     with fields from both modules merged. For a reference purpose,
+     although it is a good idea to look in [Bap_bil.Stmt] module for
+     type definitions, and [Bap_stmt] for extra functions. But, again,
+     you do not need to actually reference this modules from your code,
+     for example, to create a hashtable of statements, just type:
 
-    [let table = Stmt.Table.create ()]
+     [let table = Stmt.Table.create ()]
 
-    If a type is a variant type, and most types in [bap-types]
-    library, are variant, then for each contructor named [Name], you
-    will find a corresponding function named [name] that will accept
-    the same number of arguments as the arity of the constructor. For
-    example, type [exp] has a contructor [Extract int * int * t)], and
-    there is a corresponding function named [extract], that has type
-    [int -> int -> t -> t]. See [variantslib] for more information about,
-    variants interface.
+     If a type is a variant type, and most types in [bap-types]
+     library, are variant, then for each contructor named [Name], you
+     will find a corresponding function named [name] that will accept
+     the same number of arguments as the arity of the constructor. For
+     example, type [exp] has a contructor [Extract int * int * t)], and
+     there is a corresponding function named [extract], that has type
+     [int -> int -> t -> t]. See [variantslib] for more information about,
+     variants interface.
 
-    { 3 Linking, loading and other staff}
+     {3 Linking, loading and other staff}
 
-    Library is organized as a main library, named [bap-types], and
-    several sublibraries, namely:
+     Library is organized as a main library, named [bap-types], and
+     several sublibraries, namely:
 
-    - [top] for loading [bap-types] with all its dependencies to a
-      ocaml's toplevel.
+     - [top] for loading [bap-types] with all its dependencies to a
+     ocaml's toplevel.
 
 
-    - [bap-types.serialization] - provides facilities for marshaling
-      and demarshaling base types;
+     - [bap-types.serialization] - provides facilities for marshaling
+     and demarshaling base types;
 
-    - [conceval] - for checking BIL semantics;
+     - [conceval] - for checking BIL semantics;
 
-    { 3 Using in toplevel }
+     {3 Using in toplevel }
 
-    To start tackling with BIL and BAP in an OCaml's toplevel all that
-    you need, is invoke the following commands in a toplevel
-    (including '#' symbol):
+     To start tackling with BIL and BAP in an OCaml's toplevel all that
+     you need, is invoke the following commands in a toplevel
+     (including '#' symbol):
 
-    {[
-      #use "topfind";;
-      #require "bap-types.top";;
-    ]}
+     {[
+       #use "topfind";;
+       #require "bap-types.top";;
+     ]}
 
-    This will install pretty-printers for bap-types, types in core
-    kernel, and perform all needed customizations.
+     This will install pretty-printers for bap-types, types in core
+     kernel, and perform all needed customizations.
 *)
 
 open Core_kernel.Std
@@ -114,9 +115,11 @@ module Std = struct
       that can create regular types out of thin air. *)
   module Regular = Regular
   module Integer = Integer
+  module Printable = Printable
 
   module type Regular = Regular
   module type Integer = Integer
+  module type Printable = Printable
 
   (** Processor architecture.
 
@@ -215,6 +218,7 @@ module Std = struct
   type var       = Var.t       with bin_io, compare, sexp
   type stmt      = Stmt.t      with bin_io, compare, sexp
   type exp       = Exp.t       with bin_io, compare, sexp
+  type bil       = stmt list   with bin_io, compare, sexp
   type arch      = Arch.t      with bin_io, compare, sexp
   type addr      = Addr.t      with bin_io, compare, sexp
   type word      = Word.t      with bin_io, compare, sexp
@@ -222,7 +226,6 @@ module Std = struct
   type unop      = Exp.Unop.t  with bin_io, compare, sexp
   type binop     = Exp.Binop.t with bin_io, compare, sexp
 
-  (** {2 Common type abbreviations}  *)
 
   module Seq = struct
     include Sequence
@@ -231,6 +234,7 @@ module Std = struct
 
   include Seq.Export
 
+  (** {2 Common type abbreviations}  *)
   type 'a seq = 'a Seq.seq with sexp
   type bigstring = Bigstring.t
 

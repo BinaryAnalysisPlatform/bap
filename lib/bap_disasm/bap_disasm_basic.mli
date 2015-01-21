@@ -1,6 +1,6 @@
 (** Basic disassembler.
 
-    This is a target agnostic basic disassembler. It
+    This is a target agnostic basic disassembler.
 *)
 
 open Core_kernel.Std
@@ -26,9 +26,7 @@ type empty     (** set when information is not stored                *)
 type asm       (** set when assembler information is stored        *)
 type kinds     (** set when instruction kind information is stored *)
 
-type full_insn = (asm,kinds) insn with sexp_of
-
-
+type full_insn = (asm,kinds) insn with compare, sexp_of
 
 (** Disassembler.
 
@@ -93,7 +91,7 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     process of disassembly can be driven using [stop], [step], [back]
     and [jump] functions, described later.
 
-    @param [stop_on] defines a set of predicates that will be checked
+    @param stop_on defines a set of predicates that will be checked
     on each step to decide whether it should stop here and call a
     user-provided [hit] function, or it should continue. The descision
     is made acording to the rule: [if exists stop_on then stop], i.e.,
@@ -103,10 +101,10 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     can match predicates, and if the set is empty, then it always
     evaluates to false.
 
-    @param [init] initial value of user data, that can be passed
+    @param init initial value of user data, that can be passed
     through handlers (cf., [fold])
 
-    @param [return] a function that lifts user data type ['s] to type
+    @param return a function that lifts user data type ['s] to type
     ['r]. It is useful when you need to perform disassembly in some
     monad, like [Or_error], or [Lwt]. Otherwise, just use [ident]
     function and assume that ['s == 'r].

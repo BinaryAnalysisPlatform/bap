@@ -129,14 +129,12 @@ public:
     }
 
     void enable_store_preds(bool enable) {
-        assert(queue_size() == 0 || enable == false);
         store_preds = enable;
         if (enable == false)
             insn_preds.clear();
     }
 
     void enable_store_asms(bool enable) {
-        assert(queue_size() == 0 || enable == false);
         store_asms = enable;
         if (enable == false)
             asms.clear();

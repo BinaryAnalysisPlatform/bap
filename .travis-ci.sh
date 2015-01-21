@@ -55,5 +55,9 @@ oasis setup
 make
 make install
 make test
-./test.sh
+./test.sh coreutils
 make uninstall
+
+echo "Finished successfully!"
+echo Have `opam list -i | wc --lines` opam packages
+echo And `dpkg --list | wc --lines` system packages
