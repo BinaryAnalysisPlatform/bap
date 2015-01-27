@@ -1,11 +1,12 @@
 (** Native lifter of x86 instructions to the BAP IL *)
 
 open Core_kernel.Std
-open Bil
-open Big_int_Z
-open Type
-open Arch
-open Var
+open Bap_types.Std
+(* open Bil *)
+module BZ = Big_int_Z
+(* open Type *)
+(* open Arch *)
+(* open Var *)
 
 module BV = Bitvector
 
@@ -23,13 +24,15 @@ module Util = struct
 
   let concat_explist elist =
     List.reduce_exn
-      ~f:(fun l r -> Bop.(l ^ r)) elist
+      ~f:Exp.(^) elist
 end
 
 module Strip = struct
-  let bits_of_width = function
-    | Reg n -> n
-    | _ -> invalid_arg "bits_of_width"
+  let bits_of_width typ =
+    let open Type in
+    match typ with
+    | Imm n -> n
+    | Mem _ -> invalid_arg "bits_of_width"
   let bytes_of_width t =
     let b = bits_of_width t in
     if not ((b mod 8) = 0) then invalid_arg "bytes_of_width";
@@ -37,87 +40,91 @@ module Strip = struct
 end
 open Strip
 
-let exp_false = Int (BV.lit 0 1)
-let exp_true  = Int (BV.lit 1 1)
-let exp_not e = UnOp (NOT, e)
+let exp_false = Exp.int BV.b0
+let exp_true  = Exp.int BV.b1
+let exp_not = Exp.lnot
 
 (* XXX this is a lot of crap copied from arithmetic.ml
  * I'm starting to think we should just pull in the old
  * big_int code instead. unless I'm missing something and this stuff
  * is slated to go away? *)
-let it n t = Int (BV.lit n t)
+let it n t = BV.of_int n ~width:t |> Exp.int
 
 module Big_int_temp = struct
   (* the 2 with_width functions are versions of functions that
    * already exist that don't throw away existing width information
    * so that we can avoid calling Typecheck.infer_ast *)
   let extract_element_symbolic_with_width t e n et =
-    Cast (CAST_LOW, t, Bop.(e lsl (n * (it (bits_of_width t) et))))
+    let open Exp in
+    let t = bits_of_width t in
+    cast Cast.low t (e lsl (n * (it t et)))
   let extract_byte_symbolic_with_width e n et =
-    extract_element_symbolic_with_width (Reg 8) e n et
+    extract_element_symbolic_with_width (Type.imm 8) e n et
   (* the following functions were used in Big_int_Z stuff
    * and have temporarily been put here, since Bitvector functionality is
    * not up to speed yet. *)
   let extract_element t e n =
     let nbits = t in
-    Extract ((n*nbits+(nbits-1)), (n*nbits), e)
+    Exp.extract (n*nbits+(nbits-1)) (n*nbits) e
   let extract_byte e n = extract_element 8 e n
   let reverse_bytes e t =
     let bytes = bytes_of_width t in
     let get_byte n = extract_byte e n in
     List.reduce_exn
-      ~f:(fun bige e -> Bop.(bige ^ e))
+      ~f:(fun bige e -> Exp.(bige ^ e))
       (List.map ~f:get_byte (List.init ~f:Util.id bytes))
   let min_symbolic ~signed e1 e2 =
-    let bop = if signed then SLT else LT in
-    Ite (BinOp (bop, e1, e2), e1, e2)
+    let open Exp in
+    let cond = match signed with
+      | true -> e1 <$ e2
+      | false -> e1 < e2 in
+    ite cond e1 e2
   let max_symbolic ~signed e1 e2 =
-    let bop = if signed then SLT else LT in
-    Ite (UnOp (NOT, (BinOp (bop, e1, e2))), e1, e2)
+    let open Exp in
+    let cond = match signed with
+      | true -> e1 <$ e2
+      | false -> e1 < e2 in
+    ite (lnot cond) e1 e2
 
-  let (<<%) = shift_left_big_int
-  let (+%) = add_big_int
-  let bi1 = big_int_of_int 0x1
-  let power_of_two = shift_left_big_int bi1
-  let bitmask = let (-%) = sub_big_int in
+  let (<<%) = BZ.shift_left_big_int
+  let (+%) = BZ.add_big_int
+  let bi1 = BZ.big_int_of_int 0x1
+  let power_of_two = BZ.shift_left_big_int bi1
+  let bitmask = let (-%) = BZ.sub_big_int in
     (fun i -> power_of_two i -% bi1)
   let to_big_int (i,t) =
     let bits = bits_of_width t in
-    and_big_int i (bitmask bits)
+    BZ.and_big_int i (bitmask bits)
   (* sign extend to type t *)
   let to_sbig_int (i,t) =
-    let (>>%) = shift_right_big_int in
-    let (-%) = sub_big_int in
-    let bi_is_zero bi = eq_big_int bi (big_int_of_int 0x0) in
+    let (>>%) = BZ.shift_right_big_int in
+    let (-%) = BZ.sub_big_int in
+    let bi_is_zero bi = BZ.(big_int_of_int 0x0 |> eq_big_int bi) in
     let bits = bits_of_width t in
-    let final = to_big_int (i, Reg(bits-1)) in
+    let final = to_big_int (i, Type.imm (bits-1)) in
     (* mod always returns a positive number *)
     let sign = i >>% (bits-1) in
     if bi_is_zero sign then
       (* positive *) final
-    else (* negative *) minus_big_int ((power_of_two (bits-1) -% final))
+    else (* negative *) BZ.minus_big_int ((power_of_two (bits-1) -% final))
   let to_signed i t = to_sbig_int (i, t)
   let to_val t i =
     (to_big_int (i,t), t)
   let cast ct ((_,t) as v) t2 =
-    let bits1 = bits_of_width t
-    and bits = bits_of_width t2 in
-    (match ct with
-     | CAST_UNSIGNED ->
-       to_val t2 (to_big_int v)
-     | CAST_SIGNED ->
-       to_val t2 (to_sbig_int v)
-     | CAST_HIGH ->
-       to_val t2
-         (shift_right_big_int (to_big_int v) (bits1-bits))
-     | CAST_LOW ->
-       to_val t2 (to_big_int v))
+    let bits1 = bits_of_width t in
+    let bits = bits_of_width t2 in
+    let open Exp.Cast in
+    match ct with
+    | UNSIGNED -> to_val t2 (to_big_int v)
+    | SIGNED -> to_val t2 (to_sbig_int v)
+    | HIGH -> to_val t2 (BZ.shift_right_big_int (to_big_int v) (bits1-bits))
+    | LOW -> to_val t2 (to_big_int v)
 end
 open Big_int_temp
 
 module Cpu_exceptions = struct
-  let general_protection = CpuExn 0xd
-  let divide_by_zero = CpuExn 0x0
+  let general_protection = Stmt.cpuexn 0xd
+  let divide_by_zero = Stmt.cpuexn 0x0
 end
 
 
@@ -161,12 +168,12 @@ let compute_segment_bases = ref false
 
 (* type segment = CS | SS | DS | ES | FS | GS *)
 
-type binopf = Bil.exp -> Bil.exp -> Bil.exp
+type binopf = Exp.binop
 
 type mode = X86 | X8664
 let type_of_mode = function
-  | X86 -> Reg 32
-  | X8664 -> Reg 64
+  | X86 -> Type.imm 32
+  | X8664 -> Type.imm 64
 let width_of_mode mode = bits_of_width (type_of_mode mode)
 
 type order = Low | High
@@ -177,12 +184,12 @@ type operand =
   | Oreg of int
   | Ovec of int
   | Oseg of int
-  | Oaddr of Bil.exp
-  | Oimm of big_int
+  | Oaddr of Exp.t
+  | Oimm of BZ.big_int
 
 type jumptarget =
   | Jabs of operand
-  | Jrel of Type.addr * Type.addr (* next ins address, offset *)
+  | Jrel of addr * addr (* next ins address, offset *)
 
 (* See section 4.1 of the Intel® 64 and IA-32 Architectures Software
    Developer’s Manual, Volumes 2A & 2B: Instruction Set Reference
@@ -247,7 +254,7 @@ module Pcmpstr = struct
     agg : agg;
     negintres1 : bool;
     maskintres1 : bool;
-    outselectsig : outselectsig;
+     outselectsig : outselectsig;
     outselectmask : outselectmask;
   }
 
@@ -274,29 +281,29 @@ type offsetinfo = {
   offsrcoffset : int;
   offdstoffset : int;
 }
-
+type cast_type = Bap_types.Std.cast
 type opcode =
   | Bswap of (typ * operand)
   | Retn of ((typ * operand) option) * bool (* bytes to release, far/near ret *)
   | Nop
-  | Mov of typ * operand * operand * (Bil.exp option) (* dst, src, condition *)
+  | Mov of typ * operand * operand * (Exp.t option) (* dst, src, condition *)
   | Movs of typ
   | Movzx of typ * operand * typ * operand (* dsttyp, dst, srctyp, src *)
   | Movsx of typ * operand * typ * operand (* dsttyp, dst, srctyp, src *)
   | Movdq of typ * operand * typ * operand * bool (* dst type, dst op, src type, src op, aligned *)
   | Movoffset of (typ * operand) * offsetinfo list
   (* dest type, dest, (src copy length, src type, src, src src offset, src dest offset)* *)
-  | Lea of typ * operand * Bil.exp
-  | Call of operand * Type.addr (* addr is RA *)
-  | Shift of binop_type * typ * operand * operand
-  | Shiftd of binop_type * typ * operand * operand * operand
-  | Rotate of binop_type * typ * operand * operand * bool (* left or right, type, src/dest op, shift op, use carry flag *)
+  | Lea of typ * operand * Exp.t
+  | Call of operand * addr (* addr is RA *)
+  | Shift of binop * typ * operand * operand
+  | Shiftd of binop * typ * operand * operand * operand
+  | Rotate of binop * typ * operand * operand * bool (* left or right, type, src/dest op, shift op, use carry flag *)
   | Bt of typ * operand * operand
   | Bs of typ * operand * operand * direction
   | Jump of jumptarget
-  | Jcc of jumptarget * Bil.exp
-  | Setcc of typ * operand * Bil.exp
-  | Hlt
+  | Jcc of jumptarget * Exp.t
+  | Setcc of typ * operand * Exp.t
+  | Hltm
   | Cmps of typ
   | Scas of typ
   | Stos of typ
@@ -344,7 +351,7 @@ type opcode =
   | Pbinop of (typ * binopf * string * operand * operand * operand option)
   | Pmov of (typ * typ * typ * operand * operand * cast_type * string) (* Packed move. dest size, dest elt size, src elt size, dest, src, ext(signed/zero), name *)
   | Pmovmskb of (typ * operand * operand)
-  | Pcmp of (typ * typ * binop_type * string * operand * operand * operand option)
+  | Pcmp of (typ * typ * binop * string * operand * operand * operand option)
   | Palignr of (typ * operand * operand * operand option * operand)
   | Pcmpstr of (typ * operand * operand * operand * Pcmpstr.imm8cb * Pcmpstr.pcmpinfo)
   | Pshufb of typ * operand * operand * operand option
@@ -357,18 +364,18 @@ type opcode =
 
 (* prefix names *)
 let pref_lock = 0xf0
-and repnz = 0xf2
-and repz = 0xf3
-and hint_bnt = 0x2e
-and hint_bt = 0x3e
-and pref_cs = 0x2e
-and pref_ss = 0x36
-and pref_ds = 0x3e
-and pref_es = 0x26
-and pref_fs = 0x64
-and pref_gs = 0x65
-and pref_opsize = 0x66
-and pref_addrsize = 0x67
+let repnz = 0xf2
+let repz = 0xf3
+let hint_bnt = 0x2e
+let hint_bt = 0x3e
+let pref_cs = 0x2e
+let pref_ss = 0x36
+let pref_ds = 0x3e
+let pref_es = 0x26
+let pref_fs = 0x64
+let pref_gs = 0x65
+let pref_opsize = 0x66
+let pref_addrsize = 0x67
 
 (* Prefixes that we can usually handle automatically *)
 let standard_prefs = [pref_opsize; pref_addrsize; hint_bnt; hint_bt; pref_cs; pref_ss; pref_ds; pref_es; pref_fs; pref_gs]
@@ -410,7 +417,7 @@ type prefix = {
   sib_extend : int; (* extended sib index bit *)
   (* add more as needed *)
 }
-
+(*
 (** disfailwith is a non-fatal disassembly exception. *)
 let disfailwith m s =
   let a = match m with
@@ -1595,7 +1602,7 @@ module ToIR = struct
         let (index, index_width) = if t' = 256 && ndword > 3 then
             (Bop.(index + (Int (BV.lit 4 (bits_of_width t)))), 256)
           else (index, t') in
-        extract_element_symbolic_with_width (Reg 32) src_e index index_width
+        extract_element_symbolic_with_width (Type.imm 32) src_e index index_width
       in
       let topdword = match t with Reg 128 -> 3 | _ -> 7 in
       let dwords = Util.concat_explist (List.map ~f:get_dword (List.range ~stride:(-1) ~stop:`inclusive topdword 0)) in
@@ -1888,7 +1895,7 @@ module ToIR = struct
       in
       begin match pref with
         | [] -> stmts
-        | [single] when single = repz || single = repnz -> 
+        | [single] when single = repz || single = repnz ->
           rep_wrap ~mode ~check_zf:single ~addr ~next stmts
         | _ -> unimplemented "unsupported flags in cmps" end
     | Scas(Reg _bits as t) ->
@@ -1903,7 +1910,7 @@ module ToIR = struct
       in
       begin match pref with
         | [] -> stmts
-        | [single] when single = repz || single = repnz -> 
+        | [single] when single = repz || single = repnz ->
           rep_wrap ~mode ~check_zf:single ~addr ~next stmts
         | _ -> unimplemented "unsupported flags in scas" end
     | Stos(Reg _bits as t) ->
@@ -3504,3 +3511,6 @@ let disasm_instr mode g addr =
   let (ss, pref) = parse_prefixes mode pref op in
   let ir = ToIR.to_ir mode addr na ss pref has_rex has_vex op in
   (ir, na)
+        *)
+
+let insn mem insn = Or_error.unimplemented "not implemented"
