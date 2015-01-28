@@ -211,6 +211,7 @@ Library disasm
                  Bap_disasm_arm_shift,
                  Bap_disasm_arm_types,
                  Bap_disasm_arm_utils,
+                 Bap_disasm_x86_lifter,
                  Bap_disasm_basic,
                  Bap_disasm_prim,
                  Bap_insn_kind
