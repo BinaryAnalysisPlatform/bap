@@ -417,97 +417,98 @@ type prefix = {
   sib_extend : int; (* extended sib index bit *)
   (* add more as needed *)
 }
-(*
+
+exception Arch_exception of Arch.x86 * string
 (** disfailwith is a non-fatal disassembly exception. *)
 let disfailwith m s =
   let a = match m with
-    | X86   -> X86_32
-    | X8664 -> X86_64 in
+    | X86   -> `x86
+    | X8664 -> `x86_64 in
   raise (Arch_exception (a, s))
 
 let unimplemented a s  = disfailwith a ("disasm_i386: unimplemented feature: "^s)
 
 (* register widths *)
-let r1 = Reg 1
-let r4 = Reg 4
-let r8 = Reg 8
-let r16 = Reg 16
-let r32 = Reg 32
-let r64 = Reg 64
-let r128 = Reg 128
-let r256 = Reg 256
+let r1 = Type.imm 1
+let r4 = Type.imm 4
+let r8 = Type.imm 8
+let r16 = Type.imm 16
+let r32 = Type.imm 32
+let r64 = Type.imm 64
+let r128 = Type.imm 128
+let r256 = Type.imm 256
 let xmm_t = r128
 let ymm_t = r256
-let st_t = Reg 80
+let st_t = Type.imm 80
 
-type multimodereg = { v32: Var.t; v64: Var.t }
+type multimodereg = { v32: var; v64: var }
 (* new multi-mode variable *)
-let nmv n32 t32 n64 t64 = { v32=Var.new_var n32 t32; v64=Var.new_var n64 t64; }
+let nmv n32 t32 n64 t64 = { v32=Var.create n32 t32; v64=Var.create n64 t64; }
 
 let gv mode { v32; v64 } = match mode with
   | X86 -> v32
   | X8664 -> v64
 
-let ge mode mv = Var (gv mode mv)
+let ge mode mv = gv mode mv |> Exp.var
 
 (* registers *)
 
 let rbp = nmv "R_EBP_32" r32 "R_RBP" r64
-and rsp = nmv "R_ESP_32" r32 "R_RSP" r64
-and rsi = nmv "R_ESI_32" r32 "R_RSI" r64
-and rdi = nmv "R_EDI_32" r32 "R_RDI" r64
-and rip = nmv "R_EIP" r32 "R_RIP" r64 (* XXX why is eip in here? *)
-and rax = nmv "R_EAX_32" r32 "R_RAX" r64
-and rbx = nmv "R_EBX_32" r32 "R_RBX" r64
-and rcx = nmv "R_ECX_32" r32 "R_RCX" r64
-and rdx = nmv "R_EDX_32" r32 "R_RDX" r64
-and rflags = nmv "R_EFLAGS" r32 "R_RFLAGS" r64 (* XXX why is eflags in here? *)
+let rsp = nmv "R_ESP_32" r32 "R_RSP" r64
+let rsi = nmv "R_ESI_32" r32 "R_RSI" r64
+let rdi = nmv "R_EDI_32" r32 "R_RDI" r64
+let rip = nmv "R_EIP" r32 "R_RIP" r64 (* XXX why is eip here? *)
+let rax = nmv "R_EAX_32" r32 "R_RAX" r64
+let rbx = nmv "R_EBX_32" r32 "R_RBX" r64
+let rcx = nmv "R_ECX_32" r32 "R_RCX" r64
+let rdx = nmv "R_EDX_32" r32 "R_RDX" r64
+let rflags = nmv "R_EFLAGS" r32 "R_RFLAGS" r64 (* XXX why is eflags here? *)
 (* condition flag bits *)
-and cf = Var.new_var "R_CF" r1
-and pf = Var.new_var "R_PF" r1
-and af = Var.new_var "R_AF" r1
-and zf = Var.new_var "R_ZF" r1
-and sf = Var.new_var "R_SF" r1
-and oF = Var.new_var "R_OF" r1
-and df = Var.new_var "R_DF" r1
+let cf = Var.create "R_CF" r1
+let pf = Var.create "R_PF" r1
+let af = Var.create "R_AF" r1
+let zf = Var.create "R_ZF" r1
+let sf = Var.create "R_SF" r1
+let oF = Var.create "R_OF" r1
+let df = Var.create "R_DF" r1
 
-(* segment registers and bases *)
-and fs_base = nmv "R_FS_BASE_32" r32 "R_FS_BASE_64" r64
-and gs_base = nmv "R_GS_BASE_32" r32 "R_GS_BASE_64" r64
+(* segment registers let bases *)
+let fs_base = nmv "R_FS_BASE_32" r32 "R_FS_BASE_64" r64
+let gs_base = nmv "R_GS_BASE_32" r32 "R_GS_BASE_64" r64
 
-and cs = Var.new_var "R_CS" r16
-and ds = Var.new_var "R_DS" r16
-and es = Var.new_var "R_ES" r16
-and fs = Var.new_var "R_FS" r16
-and gs = Var.new_var "R_GS" r16
-and ss = Var.new_var "R_SS" r16
+let cs = Var.create "R_CS" r16
+let ds = Var.create "R_DS" r16
+let es = Var.create "R_ES" r16
+let fs = Var.create "R_FS" r16
+let gs = Var.create "R_GS" r16
+let ss = Var.create "R_SS" r16
 
-and gdt = nmv "R_GDTR" r32 "R_GDTR" r64
-and ldt = nmv "R_LDTR" r32 "R_LDTR" r64
+let gdt = nmv "R_GDTR" r32 "R_GDTR" r64
+let ldt = nmv "R_LDTR" r32 "R_LDTR" r64
 
-and fpu_ctrl = Var.new_var "R_FPU_CONTROL" r16
-and mxcsr = Var.new_var "R_MXCSR" r32
+let fpu_ctrl = Var.create "R_FPU_CONTROL" r16
+let mxcsr = Var.create "R_MXCSR" r32
 
 (* r8 -> r15 *)
-let nums = Array.init 8 ~f:(fun i -> nmv "ERROR" (Reg 0) (Printf.sprintf "R_R%d" (i+8)) r64)
+let nums = Array.init 8 ~f:(fun i -> nmv "ERROR" (Type.imm 0) (Printf.sprintf "R_R%d" (i+8)) r64)
 
 (*
 let xmms = Array.init 8 ~f:(fun i -> Var.new_var (Printf.sprintf "R_XMM%d" i) xmm_t)
 *)
 
-let ymms = Array.init 16 ~f:(fun i -> Var.new_var (Printf.sprintf "R_YMM%d" i) ymm_t)
+let ymms = Array.init 16 ~f:(fun i -> Var.create (Printf.sprintf "R_YMM%d" i) ymm_t)
 
 (* floating point registers *)
-let st = Array.init 8 ~f:(fun i -> Var.new_var (Printf.sprintf "R_ST%d" i) st_t)
+let st = Array.init 8 ~f:(fun i -> Var.create (Printf.sprintf "R_ST%d" i) st_t)
 
 let mvs {v64; v32} = [v64; v32]
 
 let shared_regs =
-  cf::pf::af::zf::sf::oF::df::cs::ds::es::fs::gs::ss::fpu_ctrl::mxcsr::[]
+  [cf; pf; af; zf; sf; oF; df; cs; ds; es; fs; gs; ss; fpu_ctrl; mxcsr]
   @ Array.to_list st
 
 let shared_multi_regs =
-  rbp::rsp::rsi::rdi::rip::rax::rbx::rcx::rdx::rflags::fs_base::gs_base::[]
+  [rbp; rsp; rsi; rdi; rip; rax; rbx; rcx; rdx; rflags; fs_base; gs_base]
 
 let regs_x86 : var list =
   shared_regs
@@ -535,20 +536,20 @@ let regs_of_mode = function
   | X8664 -> regs_x86_64
 
 let o_rax = Oreg 0
-and o_rcx = Oreg 1
-and o_rdx = Oreg 2
-and o_rbx = Oreg 3
-and o_rsp = Oreg 4
-and o_rbp = Oreg 5
-and o_rsi = Oreg 6
-and o_rdi = Oreg 7
+let o_rcx = Oreg 1
+let o_rdx = Oreg 2
+let o_rbx = Oreg 3
+let o_rsp = Oreg 4
+let o_rbp = Oreg 5
+let o_rsi = Oreg 6
+let o_rdi = Oreg 7
 
 let o_es = Oseg 0
-and o_cs = Oseg 1
-and o_ss = Oseg 2
-and o_ds = Oseg 3
-and o_fs = Oseg 4
-and o_gs = Oseg 5
+let o_cs = Oseg 1
+let o_ss = Oseg 2
+let o_ds = Oseg 3
+let o_fs = Oseg 4
+let o_gs = Oseg 5
 
 (* let esp_e = Var esp *)
 (* and ebp_e = Var ebp *)
@@ -558,7 +559,7 @@ and o_gs = Oseg 5
 (* and eax_e = Var eax *)
 (* and edx_e = Var edx *)
 
-let mem = nmv "mem32" (TMem (r32, r8)) "mem64" (TMem (r64, r8))
+let mem = nmv "mem32" (Type.mem `r32 `r8) "mem64" (Type.mem `r64 `r8)
 
 (* 32-bit registers *)
 module R32 = struct
@@ -596,33 +597,33 @@ module R64 = struct
   let r15 = r_15.v64
 end
 
+let cf_e = Exp.var cf
+let pf_e = Exp.var pf
+let af_e = Exp.var af
+let zf_e = Exp.var zf
+let sf_e = Exp.var sf
+let of_e = Exp.var oF
 
-let cf_e = Var cf
-and pf_e = Var pf
-and af_e = Var af
-and zf_e = Var zf
-and sf_e = Var sf
-and of_e = Var oF
-
-and df_e = Var df
+let df_e = Exp.var df
 
 let seg_cs = None
-and seg_ss = None
-and seg_ds = None
-and seg_es = None
-and seg_fs = Some fs_base
-and seg_gs = Some gs_base
+let seg_ss = None
+let seg_ds = None
+let seg_es = None
+let seg_fs = Some fs_base
+let seg_gs = Some gs_base
 
 (* eflags *)
 let df_to_offset mode e =
   match type_of_mode mode with
-  | TMem _ -> failwith "type_of_mode shouldn't be returning this"
-  | Reg t ->
-    Ite (Bop.(e = exp_false), it 1 t, it (-1) t)
+  | Type.Mem _ -> failwith "type_of_mode shouldn't be returning this"
+  | Type.Imm t ->
+    let open Exp in
+    ite (e = exp_false) (it 1 t) (it (-1) t)
 
 let bap_to_rflags =
-  let undefined d = Unknown(Printf.sprintf "Undefined RFLAGS bit %d" d, r1) in
-  let unmodeled s = Unknown("Unmodeled RFLAGS bit " ^ s, r1) in
+  let undefined d = Exp.unknown (Printf.sprintf "Undefined RFLAGS bit %d" d) r1 in
+  let unmodeled s = Exp.unknown ("Unmodeled RFLAGS bit " ^ s) r1 in
   (List.map ~f:undefined (List.range ~stride:(-1) ~stop:`inclusive 64 32))
   @  undefined 31               (* 31 *)
      :: undefined 30               (* 30 *)
@@ -661,10 +662,10 @@ let bap_to_eflags = List.drop bap_to_rflags 32
 let bap_to_flags = List.drop bap_to_eflags 16
 let bap_to_lflags = List.drop bap_to_flags 16
 
-let rflags_e = List.reduce_exn ~f:Bop.(^) bap_to_rflags
-let eflags_e = List.reduce_exn ~f:Bop.(^) bap_to_eflags
-and flags_e = List.reduce_exn ~f:Bop.(^) bap_to_flags
-and lflags_e = List.reduce_exn ~f:Bop.(^) bap_to_lflags
+let rflags_e = List.reduce_exn ~f:Exp.(^) bap_to_rflags
+let eflags_e = List.reduce_exn ~f:Exp.(^) bap_to_eflags
+let flags_e = List.reduce_exn ~f:Exp.(^) bap_to_flags
+let lflags_e = List.reduce_exn ~f:Exp.(^) bap_to_lflags
 
 let rflags_to_bap =
   let assn v = Some (v, Util.id) in
@@ -710,7 +711,7 @@ let assns_rflags_to_bap =
   List.map
     ~f:(function
         | None -> (fun _ -> [])
-        | Some (v,f) -> (fun e -> [Move(v,f e)]))
+        | Some (v,f) -> (fun e -> [Stmt.move v (f e)]))
     rflags_to_bap
 let assns_eflags_to_bap = List.drop assns_rflags_to_bap 32
 let assns_flags_to_bap = List.drop assns_eflags_to_bap 16
@@ -721,16 +722,16 @@ let assns_lflags_to_bap = List.drop assns_flags_to_bap 8
 let load_s mode s t a =
   let mem_e = ge mode mem in
   match s with
-  | None -> Load(mem_e, a, LittleEndian, t)
-  | Some v -> Load(mem_e, Bop.(+) (Var v) a, LittleEndian, t)
+  | None -> Exp.load mem_e a LittleEndian t
+  | Some v -> Exp.(load mem_e (var v + a) LittleEndian t)
 
 (* exp from int64 *)
 (* we are not sure of the big int to bitvector stuff *)
 let bitvector_of_bil = function
-  | Int bv -> bv
+  | Exp.Int bv -> bv
   | _ -> failwith "not a BIL int"
 
-let lt n t = Int (BV.lit64 n t)
+let lt n t = (BV.of_int64 n ~width:t) |> Exp.int
 let l64 i = lt i 64
 let l32 i = lt i 32
 let l16 i = lt i 16
@@ -740,7 +741,7 @@ let int64_of_mode m i = match m with
   | X8664 -> bitvector_of_bil (l64 i)
 
 (* exp from int *)
-let it n t = Int (BV.lit n t)
+(* let it n t = Int (BV.lit n t) *) (*defined in previous code*)
 let i64 i = it i 64
 let i32 i = it i 32
 
@@ -750,7 +751,7 @@ let int_of_mode m i = match m with
   | X8664 -> bitvector_of_bil (i64 i)
 
 (* exp from big int *)
-let bt n t = Int (BV.litz n t)
+let bt n t = Z.to_bits n |> BV.of_binary LittleEndian |> Exp.int
 let b64 i = bt i 64
 let b32 i = bt i 32
 let b16 i = bt i 16
@@ -762,10 +763,10 @@ let big_int_of_mode m i = match m with
 (* Get elemt from low opcode bits *)
 let lowbits2elemt b =
   match b land 3 with
-  | 0 -> Reg 8
-  | 1 -> Reg 16
-  | 2 -> Reg 32
-  | 3 -> Reg 64
+  | 0 -> Type.imm 8
+  | 1 -> Type.imm 16
+  | 2 -> Type.imm 32
+  | 3 -> Type.imm 64
   | _ -> disfailwith X86 "invalid"
 
 (* converts a register number to the corresponding register variable *)
@@ -781,7 +782,7 @@ let bits2genreg = function
   | i when i >= 8 && i <= 15 -> nums.(i-8)
   | _ -> failwith "bits2genreg takes 4 bits"
 
-and reg2bits r =
+let reg2bits r =
   Util.index_ofq r [rax; rcx; rdx; rbx; rsp; rbp; rsi; rdi]
 
 let bits2segreg = function
@@ -794,20 +795,23 @@ let bits2segreg = function
   | 6 | 7 -> disfailwith X86 "bits2segreg: reserved"
   | _ -> failwith "bits2regseg: invalid"
 
-let bits2segrege b = Var(bits2segreg b)
+let bits2segrege b = bits2segreg b |> Exp.var
 
 let bits2ymm b = ymms.(b)
 
-let bits2ymme b = Var(bits2ymm b)
+let bits2ymme b = bits2ymm b |> Exp.var
+
+(*FIXME: This is conversion from typ to nat1. It's used in cast expressions*)
+let (!!) = function Type.Imm v -> v | _ -> failwith "internal error"
 
 let bits2ymm128e b =
-  Cast (CAST_LOW, r128, bits2ymme b)
+  bits2ymme b |> Exp.(cast Cast.low (!!r128))
 
 let bits2ymm64e b =
-  Cast (CAST_LOW, r64, bits2ymme b)
+  bits2ymme b |> Exp.(cast Cast.low (!!r64))
 
 let bits2ymm32e b =
-  Cast (CAST_LOW, r32, bits2ymme b)
+  bits2ymme b |> Exp.(cast Cast.low (!!r32))
 
 let bits2xmm = bits2ymm128e
 
@@ -821,29 +825,30 @@ let bits2reg64e mode b =
   ge mode (bits2genreg b)
 
 let bits2reg32e mode b =
-  Cast (CAST_LOW, r32, ge mode (bits2genreg b))
+  bits2genreg b |> ge mode |> Exp.(cast Cast.low (!!r32))
 
 let bits2reg16e mode b =
-  Cast (CAST_LOW, r16, bits2reg32e mode b)
+  bits2reg32e mode b |> Exp.(cast Cast.low (!!r16))
 
 let bits2reg8e mode ?(has_rex=false) b =
   if b < 4 || has_rex then
-    Cast (CAST_LOW, r8, bits2reg32e mode b)
+    bits2reg32e mode b |> Exp.(cast Cast.low (!!r8))
   else
-    Cast (CAST_HIGH, r8, Cast (CAST_LOW, r16, bits2reg32e mode (b land 3)))
+    b land 3 |> bits2reg32e mode |>
+    Exp.(cast Cast.low (!!r16)) |>  Exp.(cast Cast.high (!!r8))
 
-let reg2xmm r =
-  bits2xmm (reg2bits r)
+let reg2xmm r =  reg2bits r |> bits2xmm
 
 (* effective addresses for 16-bit addressing *)
 let eaddr16 mode =
-  let e v = Cast (CAST_LOW, r16, ge mode v) in
+  let e v = ge mode v |> Exp.(cast Cast.low (!!r16)) in
+  let open Exp in
   function
   (* R/M byte *)
-  | 0 -> Bop.((e rbx) + (e rsi))
-  | 1 -> Bop.((e rbx) + (e rdi))
-  | 2 -> Bop.((e rbp) + (e rsi))
-  | 3 -> Bop.((e rbp) + (e rdi))
+  | 0 -> e rbx + e rsi
+  | 1 -> e rbx + e rdi
+  | 2 -> e rbp + e rsi
+  | 3 -> e rbp + e rdi
   | 4 -> e rsi
   | 5 -> e rdi
   | 6 -> e rbp
@@ -856,7 +861,7 @@ let ah_e mode = bits2reg8e mode 4
 let ch_e mode = bits2reg8e mode 5
 let dh_e mode = bits2reg8e mode 6
 let bh_e mode = bits2reg8e mode 7
-
+(*
 module ToIR = struct
 
   (* stmt helpers *)
