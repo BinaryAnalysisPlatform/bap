@@ -1341,8 +1341,7 @@ module ToIR = struct
         let byte1 = Exp.Extract(i*elebits-1, (i-1)*elebits, src) in
         let byte2 = Exp.Extract(i*elebits-1, (i-1)*elebits, op2e t vsrc) in
         let tmp = Var.create ~tmp:true ("t" ^ string_of_int i) elet in
-        let open Exp in
-        Var tmp, Stmt.Move (tmp, Ite (BinOp (bop, byte1, byte2), lt (-1L) (bits_of_width elet), lt 0L (bits_of_width elet)))
+        Exp.Var tmp, Stmt.Move (tmp, Exp.(Ite (BinOp (bop, byte1, byte2), lt (-1L) (bits_of_width elet), lt 0L (bits_of_width elet))))
       in
       let indices = List.init ~f:(fun i -> i + 1) ncmps in (* list 1-nbytes *)
       let comparisons = List.map ~f:compare_region indices in
@@ -1703,7 +1702,6 @@ module ToIR = struct
       [assn t o1 Exp.(Cast (Cast.UNSIGNED, !!t, c))]
     | Shift(st, s, dst, shift) ->
       let open Exp.Binop in
-      let open Stmt in
       assert (List.mem [r8; r16; r32; r64] s);
       let origCOUNT, origDEST = Var.create ~tmp:true "origCOUNT" s,
                                 Var.create ~tmp:true "origDEST" s in
@@ -1732,18 +1730,17 @@ module ToIR = struct
           Exp.(Cast (Cast.HIGH, !!r1, Var origDEST lsl (size - Var origCOUNT)))
         | _ -> failwith "impossible"
       in
-      [Move (origDEST, dste);
-       Move (origCOUNT, count);
+      [Stmt.Move (origDEST, dste);
+       Stmt.Move (origCOUNT, count);
        assn s dst (s_f dste count);
-       Move (cf, ifzero cf_e new_cf);
-       Move (oF, Exp.(ifzero of_e (Ite (Var origCOUNT = it 1 s', new_of, unk_of))));
-       Move (sf, ifzero sf_e (compute_sf dste));
-       Move (zf, ifzero zf_e (compute_zf s' dste));
-       Move (pf, ifzero pf_e (compute_pf s dste));
-       Move (af, ifzero af_e (Exp.Unknown ("AF undefined after shift", r1)))
+       Stmt.Move (cf, ifzero cf_e new_cf);
+       Stmt.Move (oF, Exp.(ifzero of_e (Ite (Var origCOUNT = it 1 s', new_of, unk_of))));
+       Stmt.Move (sf, ifzero sf_e (compute_sf dste));
+       Stmt.Move (zf, ifzero zf_e (compute_zf s' dste));
+       Stmt.Move (pf, ifzero pf_e (compute_pf s dste));
+       Stmt.Move (af, ifzero af_e (Exp.Unknown ("AF undefined after shift", r1)))
       ]
     | Shiftd(st, s, dst, fill, count) ->
-      let open Stmt in
       let open Exp.Binop in
       let origDEST, origCOUNT = Var.create ~tmp:true "origDEST" s,
                                 Var.create ~tmp:true "origCOUNT" s in
@@ -1773,23 +1770,21 @@ module ToIR = struct
       let result = Exp.(ret1 lor ret2) in
       (* SWXXX If shift is greater than the operand size, dst and
          flags are undefined *)
-      [
-        Move (origDEST, e_dst);
-        Move (origCOUNT, e_count);
+      [ Stmt.Move (origDEST, e_dst);
+        Stmt.Move (origCOUNT, e_count);
         assn s dst result;
-        Move (cf, ifzero cf_e new_cf);
+        Stmt.Move (cf, ifzero cf_e new_cf);
         (* For a 1-bit shift, the OF flag is set if a sign change occurred;
            otherwise, it is cleared. For shifts greater than 1 bit, the OF flag
            is undefined. *)
-        Move (oF, Exp.(ifzero of_e (Ite (Var origCOUNT = it 1 s', new_of, unk_of))));
-        Move (sf, ifzero sf_e (compute_sf e_dst));
-        Move (zf, ifzero zf_e (compute_zf s' e_dst));
-        Move (pf, ifzero pf_e (compute_pf s e_dst));
-        Move (af, ifzero af_e (Exp.Unknown ("AF undefined after shiftd", r1)))
+        Stmt.Move (oF, Exp.(ifzero of_e (Ite (Var origCOUNT = it 1 s', new_of, unk_of))));
+        Stmt.Move (sf, ifzero sf_e (compute_sf e_dst));
+        Stmt.Move (zf, ifzero zf_e (compute_zf s' e_dst));
+        Stmt.Move (pf, ifzero pf_e (compute_pf s e_dst));
+        Stmt.Move (af, ifzero af_e (Exp.Unknown ("AF undefined after shiftd", r1)))
       ]
     | Rotate(rt, s, dst, shift, use_cf) ->
       let open Exp.Binop in
-      let open Stmt in
       (* SWXXX implement use_cf *)
       if use_cf then unimplemented "rotate use_vf";
       let origCOUNT = Var.create ~tmp:true "origCOUNT" s in
@@ -1824,14 +1819,13 @@ module ToIR = struct
         | _ -> disfailwith "impossible" in
       let result = Exp.(ret1 lor ret2) in
       [
-        Move (origCOUNT, e_shift);
+        Stmt.Move (origCOUNT, e_shift);
         assn s dst result;
         (* cf must be set before of *)
-        Move (cf, ifzero cf_e new_cf);
-        Move (oF, ifzero of_e Exp.(Ite (Var origCOUNT = it 1 s', new_of, unk_of)));
+        Stmt.Move (cf, ifzero cf_e new_cf);
+        Stmt.Move (oF, ifzero of_e Exp.(Ite (Var origCOUNT = it 1 s', new_of, unk_of)));
       ]
     | Bt(t, bitoffset, bitbase) ->
-      let open Stmt in
       let t' = bits_of_width t in
       let offset = op2e t bitoffset in
       let value, shift = match bitbase with
@@ -1923,10 +1917,9 @@ module ToIR = struct
       let src2 = Var.create ~tmp:true "src2" t in
       let tmpres = Var.create ~tmp:true "tmp" t in
       let stmts =
-        let open Stmt in
-        Move (src1, op2e t (Oaddr rsi_e))
-        :: Move (src2, op2e_s mode seg_es has_rex t (Oaddr rdi_e))
-        :: Move (tmpres, Exp.(Var src1 - Var src2))
+        Stmt.Move (src1, op2e t (Oaddr rsi_e))
+        :: Stmt.Move (src2, op2e_s mode seg_es has_rex t (Oaddr rdi_e))
+        :: Stmt.Move (tmpres, Exp.(Var src1 - Var src2))
         :: string_incr mode t rsi
         :: string_incr mode t rdi
         :: set_flags_sub t' (Exp.Var src1) (Exp.Var src2) (Exp.Var tmpres)
