@@ -1196,8 +1196,8 @@ module ToIR = struct
         let base = Exp.Ite (ti, ge mode ldt, ge mode gdt) in
         (* Extract index into table *)
         let entry_size, entry_shift = match mode with
-          | X86 -> r64, 6
-          | X8664 -> r128, 7
+          | X86 -> r64, 6  (* "1<<6 = 64" *)
+          | X8664 -> r128, 7 (* "1<<7 = 128" *)
         in
         let index = Exp.(Cast (Cast.UNSIGNED, !!mt, (Extract (15, 4, e)) lsl (Int (mi entry_shift)))) in
         (* Load the table entry *)
