@@ -38,7 +38,7 @@ module Strip = struct
     if not ((b mod 8) = 0) then invalid_arg "bytes_of_width";
     b / 8
 end
-open Strip
+
 
 let exp_false = Exp.int BV.b0
 let exp_true  = Exp.int BV.b1
@@ -56,7 +56,7 @@ module Big_int_temp = struct
    * so that we can avoid calling Typecheck.infer_ast *)
   let extract_element_symbolic_with_width t e n et =
     let open Exp in
-    let t = bits_of_width t in
+    let t = Strip.bits_of_width t in
     cast Cast.low t (e lsl (n * (it t et)))
   let extract_byte_symbolic_with_width e n et =
     extract_element_symbolic_with_width (Type.imm 8) e n et
@@ -68,7 +68,7 @@ module Big_int_temp = struct
     Exp.extract (n*nbits+(nbits-1)) (n*nbits) e
   let extract_byte e n = extract_element 8 e n
   let reverse_bytes e t =
-    let bytes = bytes_of_width t in
+    let bytes = Strip.bytes_of_width t in
     let get_byte n = extract_byte e n in
     List.reduce_exn
       ~f:(fun bige e -> Exp.(bige ^ e))
@@ -93,14 +93,14 @@ module Big_int_temp = struct
   let bitmask = let (-%) = BZ.sub_big_int in
     (fun i -> power_of_two i -% bi1)
   let to_big_int (i,t) =
-    let bits = bits_of_width t in
+    let bits = Strip.bits_of_width t in
     BZ.and_big_int i (bitmask bits)
   (* sign extend to type t *)
   let to_sbig_int (i,t) =
     let (>>%) = BZ.shift_right_big_int in
     let (-%) = BZ.sub_big_int in
     let bi_is_zero bi = BZ.(big_int_of_int 0x0 |> eq_big_int bi) in
-    let bits = bits_of_width t in
+    let bits = Strip.bits_of_width t in
     let final = to_big_int (i, Type.imm (bits-1)) in
     (* mod always returns a positive number *)
     let sign = i >>% (bits-1) in
@@ -111,8 +111,8 @@ module Big_int_temp = struct
   let to_val t i =
     (to_big_int (i,t), t)
   let cast ct ((_,t) as v) t2 =
-    let bits1 = bits_of_width t in
-    let bits = bits_of_width t2 in
+    let bits1 = Strip.bits_of_width t in
+    let bits = Strip.bits_of_width t2 in
     let open Exp.Cast in
     match ct with
     | UNSIGNED -> to_val t2 (to_big_int v)
@@ -120,7 +120,8 @@ module Big_int_temp = struct
     | HIGH -> to_val t2 (BZ.shift_right_big_int (to_big_int v) (bits1-bits))
     | LOW -> to_val t2 (to_big_int v)
 end
-open Big_int_temp
+
+module BITEMP = Big_int_temp
 
 module Cpu_exceptions = struct
   let general_protection = Stmt.cpuexn 0xd
@@ -174,7 +175,7 @@ type mode = X86 | X8664
 let type_of_mode = function
   | X86 -> Type.imm 32
   | X8664 -> Type.imm 64
-let width_of_mode mode = bits_of_width (type_of_mode mode)
+let width_of_mode mode = Strip.bits_of_width (type_of_mode mode)
 
 type order = Low | High
 
@@ -896,7 +897,7 @@ module ToIR = struct
     | Oseg r when t = r16 -> (bits2segrege r, t)
     | Oseg _ -> (disfailwith mode "Segment register when t is not r16", t)
     | Oaddr e -> (load_s mode ss t e, t)
-    | Oimm i -> (Int (BV.litz i (bits_of_width t)), t)
+    | Oimm i -> (Int (BV.litz i (Strip.bits_of_width t)), t)
 
   let op2e_s mode ss has_rex t = function
     | Ovec r when t = r256 -> bits2ymme r
@@ -915,14 +916,14 @@ module ToIR = struct
     | Oseg r when t = r16 -> bits2segrege r
     | Oseg _ -> disfailwith mode "Segment register when t is not r16"
     | Oaddr e -> load_s mode ss t e
-    | Oimm i -> Int (BV.litz i (bits_of_width t))
+    | Oimm i -> Int (BV.litz i (Strip.bits_of_width t))
 
   let assn_s mode s has_rex has_vex t v e =
     (* Assign to some bits of v, starting at bit off, while preserving the other bits *)
     let sub_assn ?(off=0) t v e =
       let concat_exps = ref [] in
-      let bits = bits_of_width (Var.typ v) in
-      let assnbits = bits_of_width t in
+      let bits = Strip.bits_of_width (Var.typ v) in
+      let assnbits = Strip.bits_of_width t in
 
       (* Add the upper preserved bits, if any *)
       let ubh = (bits-1) and ubl = (assnbits+off) in
@@ -990,9 +991,9 @@ module ToIR = struct
   let assn_dbl_s mode s has_rex has_vex t e = match op_dbl t with
     | (t,o) :: [] -> [assn_s mode s has_rex has_vex t o e], op2e_s mode s has_rex t o
     | l ->
-      let tmp = Var.new_tmp "t" (Reg (bits_of_width t * 2)) in
+      let tmp = Var.new_tmp "t" (Reg (Strip.bits_of_width t * 2)) in
       let f (stmts, off) (ct, o) =
-        let newoff = off + bits_of_width ct in
+        let newoff = off + Strip.bits_of_width ct in
         assn_s mode s has_rex has_vex ct o (Extract (newoff-1, off, Var tmp))::stmts, newoff
       in
       List.rev (fst (List.fold_left ~f:f ~init:([Move (tmp, e)], 0) (List.rev l))), Var tmp
@@ -1012,7 +1013,7 @@ module ToIR = struct
     if t = r8 then
       Move (v, Bop.(Var v + df_to_offset mode df_e))
     else
-      Move (v, Bop.(Var v + (df_to_offset mode df_e * i (bytes_of_width t))))
+      Move (v, Bop.(Var v + (df_to_offset mode df_e * i (Strip.bytes_of_width t))))
 
   let rep_wrap ?check_zf ~mode ~addr ~next stmts =
     let bi = big_int_of_mode mode in
@@ -1042,7 +1043,7 @@ module ToIR = struct
   let compute_pf t r =
     let acc = Var.new_tmp "acc" t in
     let var_acc = Var acc in
-    let t' = bits_of_width t in
+    let t' = Strip.bits_of_width t in
     (* extra parens do not change semantics but do make it pretty print nicer *)
     exp_not (Cast (CAST_LOW, r1,
                    Bop.((Let(acc, (r lsr (it 4 t')) lxor r, Let(acc, (var_acc lsr (it 2 t')) lxor var_acc, (var_acc lsr (it 1 t')) lxor var_acc))))))
@@ -1052,7 +1053,7 @@ module ToIR = struct
   let set_pf t r = Move (pf, compute_pf t r)
 
   let set_pszf t r =
-    let t' = bits_of_width t in
+    let t' = Strip.bits_of_width t in
     [set_pf t r;
      set_sf r;
      set_zf t' r]
@@ -1142,7 +1143,7 @@ module ToIR = struct
     | Bswap(t, op) ->
       let e = match t with
         | Reg 32 | Reg 64 -> let (op', t') = op2e_keep_width t op in
-          reverse_bytes op' t'
+          BITEMP.reverse_bytes op' t'
         | _ -> disfailwith "bswap: Expected 32 or 64 bit type"
       in
       [assn t op e]
@@ -1154,7 +1155,7 @@ module ToIR = struct
         else Move (temp, load_s mode seg_ss mt rsp_e)
       in
       let rsp_stmts =
-        Move (rsp, Bop.(rsp_e + (Int (mi (bytes_of_width mt)))))::
+        Move (rsp, Bop.(rsp_e + (Int (mi (Strip.bytes_of_width mt)))))::
         (match op with
          | None -> []
          | Some(t, src) ->
@@ -1249,12 +1250,12 @@ module ToIR = struct
       in
       let offsets = List.sort ~cmp:(fun {offdstoffset=o1; _} {offdstoffset=o2; _} -> Int.compare o1 o2) offsets in
       let add_exp (elist,nextbit) {offlen; offtyp; offop; offsrcoffset; offdstoffset} =
-        Extract (((bits_of_width offlen) + offsrcoffset - 1), offsrcoffset, (op2e offtyp offop))
+        Extract (((Strip.bits_of_width offlen) + offsrcoffset - 1), offsrcoffset, (op2e offtyp offop))
         :: padding (offdstoffset - 1) nextbit
-        @ elist, offdstoffset + (bits_of_width offlen)
+        @ elist, offdstoffset + (Strip.bits_of_width offlen)
       in
       let elist, nextbit = List.fold_left ~f:add_exp ~init:([],0) offsets in
-      let elist = padding ((bits_of_width tdst) - 1) nextbit @ elist in
+      let elist = padding ((Strip.bits_of_width tdst) - 1) nextbit @ elist in
       [assn tdst dst (Util.concat_explist elist)]
     | Punpck(t, et, o, d, s, vs) ->
       let nelem = match t, et with
@@ -1263,16 +1264,16 @@ module ToIR = struct
       in
       assert (nelem mod 2 = 0);
       let nelem_per_src = nelem / 2 in
-      let halft = Reg ((bits_of_width t)/2) in
+      let halft = Reg ((Strip.bits_of_width t)/2) in
       let castf = match o with
         | High -> fun e -> Cast (CAST_HIGH, halft, e)
         | Low -> fun e -> Cast (CAST_LOW, halft, e)
       in
       let se, de = castf (op2e t s), castf (op2e t d) in
       let st, dt = Var.new_tmp "s" halft, Var.new_tmp "d" halft in
-      let et' = bits_of_width et in
+      let et' = Strip.bits_of_width et in
       let mape i =
-        [extract_element et' (Var st) i; extract_element et' (Var dt) i]
+        [BITEMP.extract_element et' (Var st) i; BITEMP.extract_element et' (Var dt) i]
       in
       let e = Util.concat_explist (List.concat (List.map ~f:mape (List.range ~stride:(-1) ~stop:`inclusive (nelem_per_src-1) 0))) in
       let dest = match vs with
@@ -1292,7 +1293,7 @@ module ToIR = struct
            elements *)
         match o with
         | Oimm _ -> op2e et o
-        | _ -> extract_element (bits_of_width et) (op2e t o) i
+        | _ -> BITEMP.extract_element (Strip.bits_of_width et) (op2e t o) i
       in
       let f i =
         fbop (getelement d i) (getelement s i)
@@ -1306,8 +1307,8 @@ module ToIR = struct
        | None -> [assn t o1 (fbop (op2e t o1) (op2e t o2))]
        | Some vop -> [assn t o1 (fbop (op2e t vop) (op2e t o2))])
     | Pcmp (t,elet,bop,_,dst,src,vsrc) ->
-      let elebits = bits_of_width elet in
-      let ncmps = (bits_of_width t) / elebits in
+      let elebits = Strip.bits_of_width elet in
+      let ncmps = (Strip.bits_of_width t) / elebits in
       let src = match src with
         | Ovec _ -> op2e t src
         | Oaddr a -> load t a
@@ -1321,7 +1322,7 @@ module ToIR = struct
         let byte1 = Extract(i*elebits-1, (i-1)*elebits, src) in
         let byte2 = Extract(i*elebits-1, (i-1)*elebits, op2e t vsrc) in
         let tmp = Var.new_tmp ("t" ^ string_of_int i) elet in
-        Var tmp, Move (tmp, Ite (BinOp (bop, byte1, byte2), lt (-1L) (bits_of_width elet), lt 0L (bits_of_width elet)))
+        Var tmp, Move (tmp, Ite (BinOp (bop, byte1, byte2), lt (-1L) (Strip.bits_of_width elet), lt 0L (Strip.bits_of_width elet)))
       in
       let indices = List.init ~f:(fun i -> i + 1) ncmps in (* list 1-nbytes *)
       let comparisons = List.map ~f:compare_region indices in
@@ -1337,7 +1338,7 @@ module ToIR = struct
         | Reg n, Reg n' -> n / n'
         | _ -> disfailwith "invalid"
       in
-      let getelt op i = extract_element (bits_of_width srcet) (op2e t op) i in
+      let getelt op i = BITEMP.extract_element (Strip.bits_of_width srcet) (op2e t op) i in
       let extcast = match ext with
         | CAST_UNSIGNED | CAST_SIGNED -> fun e -> Cast (ext, dstet, e)
         | _ -> disfailwith "invalid"
@@ -1346,7 +1347,7 @@ module ToIR = struct
       let e = Util.concat_explist (List.map ~f:extend (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0)) in
       [assn t dst e]
     | Pmovmskb (t,dst,src) ->
-      let nbytes = bytes_of_width t in
+      let nbytes = Strip.bytes_of_width t in
       let src = match src with
         | Ovec _ -> op2e t src
         | _ -> disfailwith "invalid operand"
@@ -1356,7 +1357,7 @@ module ToIR = struct
       let all_bits = List.rev (List.map ~f:get_bit byte_indices) in
       (* could also be done with shifts *)
       let padt = Reg(32 - nbytes) in
-      let or_together_bits = List.fold_left ~f:(fun acc i -> Concat(acc,i)) ~init:(it 0 (bits_of_width padt)) all_bits in
+      let or_together_bits = List.fold_left ~f:(fun acc i -> Concat(acc,i)) ~init:(it 0 (Strip.bits_of_width padt)) all_bits in
       [assn r32 dst or_together_bits]
     | Palignr (t,dst,src,vsrc,imm) ->
       let (dst_e, t_concat) = op2e_keep_width t dst in
@@ -1364,10 +1365,10 @@ module ToIR = struct
       (* previously, this code called Typecheck.infer_ast.
        * We're now just preserving the widths, so here we assert
        * that our 2 "preserved widths" are the same. *)
-      assert (bits_of_width t_concat = bits_of_width t_concat');
+      assert (Strip.bits_of_width t_concat = Strip.bits_of_width t_concat');
       let imm = op2e t imm in
       let concat = Bop.(dst_e ^ src_e) in
-      let shift = Bop.(concat lsr (Cast (CAST_UNSIGNED, t_concat, imm lsl (it 3 (bits_of_width t))))) in
+      let shift = Bop.(concat lsr (Cast (CAST_UNSIGNED, t_concat, imm lsl (it 3 (Strip.bits_of_width t))))) in
       let high, low = match t with
         | Reg 256 -> 255, 0
         | Reg 128 -> 127, 0
@@ -1403,7 +1404,7 @@ module ToIR = struct
         | {ssize=Words; _} -> 8, 16, Reg 16
       in
       (* Get element index in e *)
-      let get_elem = extract_element (bits_of_width elemt) in
+      let get_elem = BITEMP.extract_element (Strip.bits_of_width elemt) in
       (* Get from xmm1/xmm2 *)
       let get_xmm1 = get_elem xmm1_e
       and get_xmm2 = get_elem xmm2m128_e
@@ -1417,7 +1418,7 @@ module ToIR = struct
           (* Previous element is valid *)
           let prev_valid = if i = 0 then exp_true else Var (is_valid_xmm_i (i-1)) in
           (* Current element is valid *)
-          let curr_valid = Bop.(get_xmm_i i <> (it 0 (bits_of_width elemt))) in
+          let curr_valid = Bop.(get_xmm_i i <> (it 0 (Strip.bits_of_width elemt))) in
           Let(is_valid_xmm_i i, Bop.(prev_valid land curr_valid), acc)
         in (fun e -> List.fold_left ~f:f ~init:e (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0))
       in
@@ -1427,10 +1428,10 @@ module ToIR = struct
       let build_explicit_valid_xmm_i is_valid_xmm_i sizee =
         (* Max size is nelem *)
         let sizev = Var.new_tmp "sz" regm in
-        let sizee = Ite (BinOp (LT, it nelem (bits_of_width regm), sizee), it nelem (bits_of_width regm), sizee) in
+        let sizee = Ite (BinOp (LT, it nelem (Strip.bits_of_width regm), sizee), it nelem (Strip.bits_of_width regm), sizee) in
         let f acc i =
           (* Current element is valid *)
-          let curr_valid = BinOp (LT, it i (bits_of_width regm), Var sizev) in
+          let curr_valid = BinOp (LT, it i (Strip.bits_of_width regm), Var sizev) in
           Let(is_valid_xmm_i i, curr_valid, acc)
         in (fun e -> Let(sizev, sizee, List.fold_left ~f:f ~init:e (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0)))
       in
@@ -1531,15 +1532,15 @@ module ToIR = struct
 
       let contains_null e =
         List.fold_left ~f:(fun acc i ->
-            Ite (Bop.(get_elem e i = it 0 (bits_of_width elemt)), exp_true, acc)) ~init:exp_false (List.init ~f:Util.id nelem)
+            Ite (Bop.(get_elem e i = it 0 (Strip.bits_of_width elemt)), exp_true, acc)) ~init:exp_false (List.init ~f:Util.id nelem)
       in
       (* For pcmpistri/pcmpestri *)
       let sb e =
         List.fold_left ~f:(fun acc i ->
             Ite (Bop.(exp_true = Extract (i, i, e)),
-                 (it i (bits_of_width regm)),
+                 (it i (Strip.bits_of_width regm)),
                  acc))
-          ~init:(it nelem (bits_of_width regm))
+          ~init:(it nelem (Strip.bits_of_width regm))
           (match imm8cb with
            | {outselectsig=LSB; _} -> List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0
            | {outselectsig=MSB; _} -> List.init ~f:Util.id nelem)
@@ -1598,16 +1599,16 @@ module ToIR = struct
         let high = 2 * (ndword mod 4) + 1 in
         let low = 2 * (ndword mod 4) in
         let index = Cast (CAST_UNSIGNED, t, Extract (high, low, imm_e)) in
-        let t' = bits_of_width t in
+        let t' = Strip.bits_of_width t in
         (* Use the same pattern for the top half of a ymm register *)
         (* had to stop using extract_element_symbolic, since that calls
          * Typecheck.infer_ast. I believe this captures the same
          * "width logic", but this is a good place to check if things start
          * going wrong later. *)
         let (index, index_width) = if t' = 256 && ndword > 3 then
-            (Bop.(index + (Int (BV.lit 4 (bits_of_width t)))), 256)
+            (Bop.(index + (Int (BV.lit 4 (Strip.bits_of_width t)))), 256)
           else (index, t') in
-        extract_element_symbolic_with_width (Type.imm 32) src_e index index_width
+        BITEMP.extract_element_symbolic_with_width (Type.imm 32) src_e index index_width
       in
       let topdword = match t with Reg 128 -> 3 | _ -> 7 in
       let dwords = Util.concat_explist (List.map ~f:get_dword (List.range ~stride:(-1) ~stop:`inclusive topdword 0)) in
@@ -1634,10 +1635,10 @@ module ToIR = struct
           | _ -> disfailwith "invalid size for pshufb"
         in
         let index = Cast (CAST_UNSIGNED, t, index) in
-        let atindex = extract_byte_symbolic_with_width dst_e index index_width in
+        let atindex = BITEMP.extract_byte_symbolic_with_width dst_e index index_width in
         Ite (highbit, it 0 8, atindex)
       in
-      let n = (bits_of_width t) / 8 in
+      let n = (Strip.bits_of_width t) / 8 in
       let e = Util.concat_explist (List.map ~f:get_bit (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive n 0)) in
       (match vsrc with
        | None -> [assn t dst e]
@@ -1661,13 +1662,13 @@ module ToIR = struct
       let target = op2e mt o1 in
       (match o1 with
        | Oimm _ ->
-         [Move (rsp, Bop.(rsp_e - (Int (mi (bytes_of_width mt)))));
+         [Move (rsp, Bop.(rsp_e - (Int (mi (Strip.bytes_of_width mt)))));
           store_s mode None mt rsp_e (Int ra);
           Jmp target]
        | _ ->
          let t = Var.new_tmp "target" mt in
          [Move (t, target);
-          Move (rsp, Bop.(rsp_e - (Int (mi (bytes_of_width mt)))));
+          Move (rsp, Bop.(rsp_e - (Int (mi (Strip.bytes_of_width mt)))));
           store_s mode None mt rsp_e (Int ra);
           Jmp (Var t)])
     | Jump(o) ->
@@ -1679,7 +1680,7 @@ module ToIR = struct
     | Shift(st, s, dst, shift) ->
       assert (List.mem [r8; r16; r32; r64] s);
       let origCOUNT, origDEST = Var.new_tmp "origCOUNT" s, Var.new_tmp "origDEST" s in
-      let s' = bits_of_width s in
+      let s' = Strip.bits_of_width s in
       let size = it s' s'
       and s_f = Bop.(match st with LSHIFT -> (lsl) | RSHIFT -> (lsr)
                                  | ARSHIFT -> (asr) | _ -> disfailwith "invalid shift type")
@@ -1717,7 +1718,7 @@ module ToIR = struct
       let origDEST, origCOUNT = Var.new_tmp "origDEST" s, Var.new_tmp "origCOUNT" s in
       let e_dst = op2e s dst in
       let e_fill = op2e s fill in
-      let s' = bits_of_width s in
+      let s' = Strip.bits_of_width s in
       (* Check for 64-bit operand *)
       let size = it s' s' in
       let count_mask = Bop.(size - it 1 s') in
@@ -1764,9 +1765,9 @@ module ToIR = struct
         | Reg 64 -> 63
         | _ -> 31
       in
-      let s' = bits_of_width s in
+      let s' = Strip.bits_of_width s in
       let e_shift = Bop.(op2e s shift land it shift_val s') in
-      let size = it (bits_of_width s) s' in
+      let size = it (Strip.bits_of_width s) s' in
       let new_cf = match rt with
         | LSHIFT -> Cast (CAST_LOW, r1, e_dst)
         | RSHIFT -> Cast (CAST_HIGH, r1, e_dst)
@@ -1797,7 +1798,7 @@ module ToIR = struct
         Move (oF, ifzero of_e (Ite (Bop.(Var origCOUNT = it 1 s'), new_of, unk_of)));
       ]
     | Bt(t, bitoffset, bitbase) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let offset = op2e t bitoffset in
       let value, shift = match bitbase with
         | Oreg _ ->
@@ -1818,11 +1819,11 @@ module ToIR = struct
         Move (pf, Unknown ("PF undefined after bt", r1))
       ]
     | Bs(t, dst, src, dir) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let source_is_zero = Var.new_tmp "t" r1 in
       let source_is_zero_v = Var source_is_zero in
       let src_e = op2e t src in
-      let bits = bits_of_width t in
+      let bits = Strip.bits_of_width t in
       let check_bit bitindex next_value =
         Ite (Bop.(Extract (bitindex,bitindex,src_e) = it 1 1), it bitindex t', next_value)
       in
@@ -1888,7 +1889,7 @@ module ToIR = struct
     | Fst (_dst,_pop) ->
       unimplemented "unsupported FPU flags"
     | Cmps(Reg _bits as t) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let src1 = Var.new_tmp "src1" t and src2 = Var.new_tmp "src2" t and tmpres = Var.new_tmp "tmp" t in
       let stmts =
         Move (src1, op2e t (Oaddr rsi_e))
@@ -1904,7 +1905,7 @@ module ToIR = struct
           rep_wrap ~mode ~check_zf:single ~addr ~next stmts
         | _ -> unimplemented "unsupported flags in cmps" end
     | Scas(Reg _bits as t) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let src1 = Var.new_tmp "src1" t and src2 = Var.new_tmp "src2" t and tmpres = Var.new_tmp "tmp" t in
       let stmts =
         Move (src1, Cast (CAST_LOW, t, Var rax))
@@ -1929,7 +1930,7 @@ module ToIR = struct
     | Push(t, o) ->
       let tmp = Var.new_tmp "t" t in (* only really needed when o involves esp *)
       Move (tmp, op2e t o)
-      :: Move (rsp, Bop.(rsp_e - Int (mi (bytes_of_width t))))
+      :: Move (rsp, Bop.(rsp_e - Int (mi (Strip.bytes_of_width t))))
       :: store_s mode seg_ss t rsp_e (Var tmp) (* FIXME: can ss be overridden? *)
       :: []
     | Pop(t, o) ->
@@ -1943,7 +1944,7 @@ module ToIR = struct
       *)
       assn t o (load_s mode seg_ss t rsp_e)
       :: if o = o_rsp then []
-      else [Move (rsp, Bop.(rsp_e + Int (mi (bytes_of_width t))))]
+      else [Move (rsp, Bop.(rsp_e + Int (mi (Strip.bytes_of_width t))))]
     | Pushf(t) ->
       (* Note that we currently treat these fields as unknowns, but the
          manual says: When copying the entire EFLAGS register to the
@@ -1956,7 +1957,7 @@ module ToIR = struct
         | Reg 64 -> rflags_e
         | _ -> failwith "impossible"
       in
-      Move (rsp, Bop.(rsp_e - Int (mi (bytes_of_width t))))
+      Move (rsp, Bop.(rsp_e - Int (mi (Strip.bytes_of_width t))))
       :: store_s mode seg_ss t rsp_e flags_e
       :: []
     | Popf t ->
@@ -1971,13 +1972,13 @@ module ToIR = struct
         List.map
           ~f:(fun i ->
               Extract (i, i, Var tmp))
-          (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive (bits_of_width t) 0)
+          (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive (Strip.bits_of_width t) 0)
       in
       Move (tmp, load_s mode seg_ss t rsp_e)
-      :: Move (rsp, Bop.(rsp_e + Int (mi (bytes_of_width t))))
+      :: Move (rsp, Bop.(rsp_e + Int (mi (Strip.bytes_of_width t))))
       :: List.concat (List.map2_exn ~f:(fun f e -> f e) assnsf extractlist)
     | Popcnt(t, s, d) ->
-      let width = bits_of_width t in
+      let width = Strip.bits_of_width t in
       let bits = op2e t s in
       let bitvector = Array.to_list (Array.init width ~f:(fun i -> Ite (Extract (i, i, bits), it 1 width, it 0 width))) in
       let count = List.reduce_exn ~f:Bop.(+) bitvector in
@@ -2004,10 +2005,10 @@ module ToIR = struct
       :: Move (tmp2, op2e t o2)
       :: assn t o1 Bop.(op2e t o1 + Var tmp2)
       :: let s1 = Var tmp and s2 = Var tmp2 and r = op2e t o1 in
-      set_flags_add (bits_of_width t) s1 s2 r
+      set_flags_add (Strip.bits_of_width t) s1 s2 r
     | Adc(t, o1, o2) ->
       let orig1 = Var.new_tmp "orig1" t and orig2 = Var.new_tmp "orig2" t in
-      let bits = bits_of_width t in
+      let bits = Strip.bits_of_width t in
       let t' = Reg (bits + 1) in
       let c e = Cast (CAST_UNSIGNED, t', e) in
       (* Literally compute the addition with an extra bit and see
@@ -2018,15 +2019,15 @@ module ToIR = struct
       :: Move (orig2, op2e t o2)
       :: assn t o1 Bop.(s1 + s2 + Cast (CAST_UNSIGNED, t, cf_e))
       :: Move (cf, Extract (bits, bits, bige))
-      :: set_aopszf_add (bits_of_width t) s1 s2 r
+      :: set_aopszf_add (Strip.bits_of_width t) s1 s2 r
     | Inc(t, o) (* o = o + 1 *) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let tmp = Var.new_tmp "t" t in
       Move (tmp, op2e t o)
       :: assn t o Bop.(op2e t o + it 1 t')
       :: set_aopszf_add t' (Var tmp) (it 1 t') (op2e t o)
     | Dec(t, o) (* o = o - 1 *) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let tmp = Var.new_tmp "t" t in
       Move (tmp, op2e t o)
       :: assn t o Bop.(op2e t o - it 1 t')
@@ -2035,7 +2036,7 @@ module ToIR = struct
       let oldo1 = Var.new_tmp "t" t in
       Move (oldo1, op2e t o1)
       :: assn t o1 Bop.(op2e t o1 - op2e t o2)
-      :: set_flags_sub (bits_of_width t) (Var oldo1) (op2e t o2) (op2e t o1)
+      :: set_flags_sub (Strip.bits_of_width t) (Var oldo1) (op2e t o2) (op2e t o1)
     | Sbb(t, o1, o2) ->
       let tmp_s = Var.new_tmp "ts" t in
       let tmp_d = Var.new_tmp "td" t in
@@ -2061,13 +2062,13 @@ module ToIR = struct
       *)
       (* sub overflow | add overflow *)
       :: Move (cf, Bop.((sube > orig_d) lor (sube < orig_s)))
-      :: set_apszf (bits_of_width t) orig_s orig_d d
+      :: set_apszf (Strip.bits_of_width t) orig_s orig_d d
     | Cmp(t, o1, o2) ->
       let tmp = Var.new_tmp "t" t in
       Move (tmp, Bop.(op2e t o1 - op2e t o2))
-      :: set_flags_sub (bits_of_width t) (op2e t o1) (op2e t o2) (Var tmp)
+      :: set_flags_sub (Strip.bits_of_width t) (op2e t o1) (op2e t o2) (Var tmp)
     | Cmpxchg(t, src, dst) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let eax_e = op2e t o_rax in
       let dst_e = op2e t dst in
       let src_e = op2e t src in
@@ -2100,7 +2101,7 @@ module ToIR = struct
       :: assn t src (op2e t dst)
       :: assn t dst (Var tmp)
       :: let s = Var tmp and src = op2e t src and dst = op2e t dst in
-      set_flags_add (bits_of_width t) s src dst
+      set_flags_add (Strip.bits_of_width t) s src dst
     | Xchg(t, src, dst) ->
       let tmp = Var.new_tmp "t" t in
       [
@@ -2121,7 +2122,7 @@ module ToIR = struct
       :: Move (af, Unknown ("AF is undefined after or", r1))
       :: set_pszf t (op2e t o1)
     | Xor(t, o1, o2) when o1 = o2->
-      assn t o1 (Int(BV.lit 0 (bits_of_width t)))
+      assn t o1 (Int(BV.lit 0 (Strip.bits_of_width t)))
       :: Move (af, Unknown ("AF is undefined after xor", r1))
       :: List.map ~f:(fun v -> Move (v, exp_true)) [zf; pf]
       @  List.map ~f:(fun v -> Move (v, exp_false)) [oF; cf; sf]
@@ -2139,7 +2140,7 @@ module ToIR = struct
       :: Move (af, Unknown ("AF is undefined after and", r1))
       :: set_pszf t (Var tmp)
     | Ptest(t, o1, o2) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let tmp1 = Var.new_tmp "t1" t in
       let tmp2 = Var.new_tmp "t2" t in
       Move (tmp1, Bop.(op2e t o2 land op2e t o1))
@@ -2153,7 +2154,7 @@ module ToIR = struct
     | Not(t, o) ->
       [assn t o (exp_not (op2e t o))]
     | Neg(t, o) ->
-      let t' = bits_of_width t in
+      let t' = Strip.bits_of_width t in
       let tmp = Var.new_tmp "t" t in
       let min_int =
         BinOp (LSHIFT, it 1 t', it (t'-1) t')
@@ -2169,13 +2170,13 @@ module ToIR = struct
 
       (* The OF and CF flags are set to 0 if the upper half of the result is 0;
          otherwise, they are set to 1 *)
-      let new_t = Reg ((bits_of_width t)*2) in
+      let new_t = Reg ((Strip.bits_of_width t)*2) in
       let assnstmts, assne = Bop.(assn_dbl t ((Cast (CAST_UNSIGNED, new_t, op2e t o_rax)) * (Cast (CAST_UNSIGNED, new_t, op2e t src))))
       in
       let flag =
-        let highbit = bits_of_width new_t - 1 in
-        let lowbit = bits_of_width new_t / 2 in
-        Bop.((Extract (highbit, lowbit, assne)) <> it 0 (bits_of_width t))
+        let highbit = Strip.bits_of_width new_t - 1 in
+        let lowbit = Strip.bits_of_width new_t / 2 in
+        Bop.((Extract (highbit, lowbit, assne)) <> it 0 (Strip.bits_of_width t))
       in
       assnstmts
       @
@@ -2188,7 +2189,7 @@ module ToIR = struct
         Move (pf, Unknown ("PF is undefined after Mul", r1))
       ]
     | Imul (t, (oneopform, dst), src1, src2) ->
-      let new_t = Reg ((bits_of_width t)*2) in
+      let new_t = Reg ((Strip.bits_of_width t)*2) in
       let mul_stmts =
         (match oneopform with
          | true ->
@@ -2197,9 +2198,9 @@ module ToIR = struct
            let flag =
              (* Intel checks if EAX == EDX:EAX.  Instead of doing this, we are just
                 going to check if the upper bits are != 0 *)
-             let highbit = bits_of_width new_t - 1 in
-             let lowbit = bits_of_width new_t / 2 in
-             Bop.((Extract (highbit, lowbit, assne)) <> it 0 (bits_of_width t))
+             let highbit = Strip.bits_of_width new_t - 1 in
+             let lowbit = Strip.bits_of_width new_t / 2 in
+             Bop.((Extract (highbit, lowbit, assne)) <> it 0 (Strip.bits_of_width t))
            in
            assnstmts @
            [Move (oF, flag);
@@ -2222,7 +2223,7 @@ module ToIR = struct
         Move (af, Unknown ("AF is undefined after imul", r1));
       ]
     | Div(t, src) ->
-      let dt' = bits_of_width t * 2 in
+      let dt' = Strip.bits_of_width t * 2 in
       let dt = Reg dt' in
       let dividend = op2e_dbl t in
       let divisor = Cast (CAST_UNSIGNED, dt, op2e t src) in
@@ -2234,14 +2235,14 @@ module ToIR = struct
       :: Move (trem, Bop.(dividend mod divisor))
       (* Overflow is indicated with the #DE (divide error) exception
          rather than with the CF flag. *)
-      :: If (Bop.((Cast (CAST_HIGH, t, Var tdiv)) = it 0 (bits_of_width t)), [], [Cpu_exceptions.divide_by_zero])
+      :: If (Bop.((Cast (CAST_HIGH, t, Var tdiv)) = it 0 (Strip.bits_of_width t)), [], [Cpu_exceptions.divide_by_zero])
       :: fst (assn_dbl t assne)
       @ (let undef (Var.V(_, n, t) as r) =
           Move (r, Unknown ((n^" undefined after div"), t))
          in
          List.map ~f:undef [cf; oF; sf; zf; af; pf])
     | Idiv(t, src) ->
-      let dt' = bits_of_width t * 2 in
+      let dt' = Strip.bits_of_width t * 2 in
       let dt = Reg dt' in
       let dividend = op2e_dbl t in
       let divisor = Cast (CAST_SIGNED, dt, op2e t src) in
@@ -2255,7 +2256,7 @@ module ToIR = struct
          rather than with the CF flag. *)
       (* SWXXX For signed division make sure quotient is between smallest and
          largest values.  For type t, this would be -2^(t/2) to (2^(t/2) - 1). *)
-      :: If (Bop.((Cast (CAST_HIGH, t, Var tdiv)) = it 0 (bits_of_width t)), [], [Cpu_exceptions.divide_by_zero])
+      :: If (Bop.((Cast (CAST_HIGH, t, Var tdiv)) = it 0 (Strip.bits_of_width t)), [], [Cpu_exceptions.divide_by_zero])
       :: fst (assn_dbl t assne)
       @ (let undef (Var.V(_, n, t) as r) =
           Move (r, Unknown (n^" undefined after div", t)) in
@@ -2391,11 +2392,11 @@ let parse_instr mode g addr =
       | _ -> None
       in*)
   let parse_int nbits a =
-    let r a n = (Z.(~$) (Char.to_int (g (a +% (big_int_of_int n))))) <<% (8*n) in
+    let r a n = (Z.(~$) (Char.to_int (g (a BITEMP.+% (big_int_of_int n))))) BITEMP.<<% (8*n) in
     let nbytes = nbits/8 in
     let bytes = List.map ~f:(fun n -> r a n) (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nbytes 0) in
     let i = List.reduce_exn ~f:or_big_int bytes in
-    (i, a +% (big_int_of_int nbytes))
+    (i, a BITEMP.+% (big_int_of_int nbytes))
   in
   let parse_int8 = parse_int 8 in
   let parse_int16 = parse_int 16 in
@@ -2732,7 +2733,7 @@ let parse_instr mode g addr =
     | 0x70 | 0x71 | 0x72 | 0x73 | 0x74 | 0x75 | 0x76 | 0x77 | 0x78 | 0x79
     | 0x7a | 0x7b | 0x7c | 0x7d | 0x7e | 0x7f ->
       let (i,na) = parse_disp8 na in
-      (Jcc(Jabs(Oimm(i +% na)), cc_to_exp b1), na)
+      (Jcc(Jabs(Oimm(i BITEMP.+% na)), cc_to_exp b1), na)
     | 0x80 | 0x81 | 0x82 | 0x83 ->
       let it = match b1 with
         | 0x81 -> if prefix.opsize = r64 then r32 else prefix.opsize
@@ -2888,12 +2889,12 @@ let parse_instr mode g addr =
     | 0xe8 -> let t = expanded_jump_type prefix.opsize in
       let (i,na) = parse_disp t na in
       (* I suppose the width of the return address should be addrsize *)
-      (Call (Oimm (i +% na), BV.litz na (bits_of_width addrsize)), na)
+      (Call (Oimm (i BITEMP.+% na), BV.litz na (Strip.bits_of_width addrsize)), na)
     | 0xe9 -> let t = expanded_jump_type prefix.opsize in
       let (i,na) = parse_disp t na in
-      (Jump (Jabs (Oimm (i +% na))), na)
+      (Jump (Jabs (Oimm (i BITEMP.+% na))), na)
     | 0xeb -> let (i,na) = parse_disp8 na in
-      (Jump (Jabs (Oimm (i +% na))), na)
+      (Jump (Jabs (Oimm (i BITEMP.+% na))), na)
     | 0xc0 | 0xc1
     | 0xd0 | 0xd1 | 0xd2
     | 0xd3 -> let immoff = if (b1 land 0xfe) = 0xc0 then Some r8 else None in
@@ -2923,7 +2924,7 @@ let parse_instr mode g addr =
                 (Printf.sprintf "impossible opcode: %02x/%d" b1 r)
       )
     | 0xe3 ->
-      let t = bits_of_width addrsize in
+      let t = Strip.bits_of_width addrsize in
       let rcx_e = ge mode rcx in
       let (i,na) = parse_disp8 na in
       (Jcc (Jrel (BV.litz na t, BV.litz i t), Bop.(rcx_e = Int (mi 0))), na)
@@ -2978,7 +2979,7 @@ let parse_instr mode g addr =
                 (Printf.sprintf "impossible opcode: %02x/%d" b1 r)
       )
     | 0xff -> let (r, rm, na) = parse_modrmext_addr None na in
-      let t = bits_of_width addrsize in
+      let t = Strip.bits_of_width addrsize in
       (match r with (* Grp 5 *)
        | 0 -> (Inc (prefix.opsize, rm), na)
        | 1 -> (Dec (prefix.opsize, rm), na)
@@ -3053,7 +3054,7 @@ let parse_instr mode g addr =
           let d, s, td = if b2 = 0x10 then r, rm, r128 else rm, r, t in
           (match rm, rv with
            | Ovec _, Some rv ->
-             let nt = bits_of_width t in
+             let nt = Strip.bits_of_width t in
              (Movoffset((r128, d),
                         {offlen=Reg (128 - nt); offtyp=r128; offop=rv; offsrcoffset=nt; offdstoffset=nt}
                         :: {offlen=t; offtyp=r128; offop=s; offsrcoffset=0; offdstoffset=0} :: []), na)
@@ -3183,14 +3184,14 @@ let parse_instr mode g addr =
                | 0x38 -> Reg 8 | 0x39 -> Reg 32
                | _ -> disfailwith "invalid"
              in
-             (Ppackedbinop(prefix.mopsize, et, min_symbolic ~signed:true, "pmins", r, rm, rv), na)
+             (Ppackedbinop(prefix.mopsize, et, BITEMP.min_symbolic ~signed:true, "pmins", r, rm, rv), na)
            | 0x3a | 0x3b when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
              let et = match b3 with
                | 0x3a -> Reg 16 | 0x3b -> Reg 32
                | _ -> disfailwith "invalid"
              in
-             (Ppackedbinop(prefix.mopsize, et, min_symbolic ~signed:false, "pminu", r, rm, rv), na)
+             (Ppackedbinop(prefix.mopsize, et, BITEMP.min_symbolic ~signed:false, "pminu", r, rm, rv), na)
            | _ -> disfailwith (Printf.sprintf "opcode unsupported: 0f 38 %02x" b3))
         | 0x3a ->
           let b3 = Char.to_int (g na) and na = s na in
@@ -3278,7 +3279,7 @@ let parse_instr mode g addr =
         | 0x8a | 0x8b | 0x8c | 0x8d | 0x8e | 0x8f ->
           let t = expanded_jump_type prefix.opsize in
           let (i,na) = parse_disp t na in
-          (Jcc(Jabs(Oimm(i +% na)), cc_to_exp b2), na)
+          (Jcc(Jabs(Oimm(i BITEMP.+% na)), cc_to_exp b2), na)
         (* add other opcodes for setcc here *)
         | 0x90 | 0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 | 0x97 | 0x98 | 0x99
         | 0x9a | 0x9b | 0x9c | 0x9d | 0x9e | 0x9f ->
@@ -3365,7 +3366,7 @@ let parse_instr mode g addr =
           (Ppackedbinop(t, et, fbop, str, r, rm, rv), na)
         | 0xda ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Ppackedbinop(prefix.mopsize, Reg 8, min_symbolic ~signed:false, "pminub", r, rm, rv), na)
+          (Ppackedbinop(prefix.mopsize, Reg 8, BITEMP.min_symbolic ~signed:false, "pminub", r, rm, rv), na)
         | 0xdb ->
           let r, rm, rv, na = parse_modrm_vec None na in
           (Pbinop(prefix.mopsize, (fun a b -> BinOp (AND, a, b)), "pand", r, rm, rv), na)
@@ -3375,7 +3376,7 @@ let parse_instr mode g addr =
           (Pmovmskb(prefix.mopsize, r, rm), na)
         | 0xde ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Ppackedbinop(prefix.mopsize, Reg 8, max_symbolic ~signed:false, "pmaxub", r, rm, rv), na)
+          (Ppackedbinop(prefix.mopsize, Reg 8, BITEMP.max_symbolic ~signed:false, "pmaxub", r, rm, rv), na)
         | 0xdf ->
           let r, rm, rv, na = parse_modrm_vec None na in
           let andn x y = BinOp (AND, UnOp (NOT, x), y) in
@@ -3389,12 +3390,12 @@ let parse_instr mode g addr =
             | 0x03 -> r16
             | _ -> disfailwith "invalid"
           in
-          let one = it 1 (bits_of_width et) in
+          let one = it 1 (Strip.bits_of_width et) in
           let average x y = Bop.(((x + y) + one) lsr one) in
           (Ppackedbinop(prefix.mopsize, et, average, "pavg", r, rm, rv), na)
         | 0xea ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Ppackedbinop(prefix.mopsize, Reg 16, min_symbolic ~signed:true, "pmins", r, rm, rv), na)
+          (Ppackedbinop(prefix.mopsize, Reg 16, BITEMP.min_symbolic ~signed:true, "pmins", r, rm, rv), na)
         | 0xeb ->
           let r, rm, rv, na = parse_modrm_vec None na in
           (Pbinop(prefix.mopsize, (fun a b -> BinOp (OR, a, b)), "por", r, rm, rv), na)
