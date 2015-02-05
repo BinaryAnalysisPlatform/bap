@@ -1,7 +1,6 @@
 open Core_kernel.Std
 open Bap_types.Std
 
-
 module Location = struct
   type t = {
     addr : addr;
@@ -10,7 +9,6 @@ module Location = struct
 end
 
 type location = Location.t with bin_io, compare, sexp
-
 
 module type Memory_iterators = sig
   type t
@@ -25,7 +23,4 @@ module type Memory_iterators = sig
   val find_if  : ?word_size:size -> t -> f:(addr -> word -> bool m) -> word option m
   val find_map : ?word_size:size -> t -> f:(addr -> word -> 'a option m) ->
     'a option m
-
-
-
 end

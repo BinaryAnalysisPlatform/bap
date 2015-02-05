@@ -13,6 +13,7 @@ type kinds
 type mem = Mem.t with sexp_of
 type kind = Kind.t with compare, sexp
 
+
 type pred = [
   | `Valid
   |  kind
@@ -30,7 +31,7 @@ type reg_info = {
   reg_name : string Lazy.t;
 } with bin_io, sexp
 
-let compare_reg_info {reg_code=x} {reg_code=y} = compare x y
+let compare_reg_info {reg_code=x} {reg_code=y} = Int.compare x y
 
 type imm_info = {
   imm_small : int;
@@ -243,7 +244,7 @@ module Insn = struct
     Sexp.List (Sexp.Atom name :: List.map ops ~f:(fun op ->
         Sexp.Atom (Op.to_string op)))
 
-  let compare {code=x} {code=y} = compare x y
+  let compare {code=x} {code=y} = Int.compare x y
 
   let name {name = lazy x} = x
   let code op = op.code
@@ -295,6 +296,11 @@ let sexp_of_insn : ('a,'b) insn -> Sexp.t = Insn.sexp_of_t
 type full_insn = (asm,kinds) insn
 
 let sexp_of_full_insn = sexp_of_insn
+let compare_full_insn i1 i2 =
+  let open Insn in
+  let r1 = Int.compare i1.code i2.code in
+  if r1 <> 0 then String.compare i1.asm i2.asm
+  else r1
 
 
 

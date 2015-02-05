@@ -64,12 +64,12 @@ module PP = struct
           | SDIVIDE -> "/$"
           | MOD     -> "%"
           | SMOD    -> "%$"
-          | LSHIFT  -> "lsl"
-          | RSHIFT  -> "lsr"
-          | ARSHIFT -> "asr"
-          | AND     -> "land"
-          | OR      -> "lor"
-          | XOR     -> "lxor"
+          | LSHIFT  -> "<<"
+          | RSHIFT  -> ">>"
+          | ARSHIFT -> "~>>"
+          | AND     -> "&"
+          | OR      -> "|"
+          | XOR     -> "^"
           | EQ      -> "="
           | NEQ     -> "<>"
           | LT      -> "<"
@@ -87,31 +87,40 @@ module PP = struct
           | LittleEndian -> "el"
           | BigEndian    -> "be")
 
+
+
   let rec pp fmt exp =
-    let open Bap_bil.Exp in match exp with
+    let open Bap_bil.Exp in
+    let is_imm = function
+      | Var _ | Int _ -> true
+      | _ -> false in
+    let a e = format_of_string
+        (if is_imm e then "%a" else "(%a)") in
+    let pr s = fprintf fmt s in
+    match exp with
     | Load (mem, idx, edn, s) ->
-      fprintf fmt "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+      pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
     | Store (mem, idx, exp, edn, s) ->
-      fprintf fmt "@[<v2>%a with@;[%a, %a]:%a <- %a@]"
+      pr "@[<v2>%a with[%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
-      fprintf fmt "@[<v2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
+      pr "@[<v2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
-      fprintf fmt "extract: %d:%d[%a]" hi lo pp exp
+      pr "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
-      fprintf fmt "(%a)^(%a)" pp le pp re
+      pr (a le ^^ "." ^^ a re) pp le pp re
     | BinOp (op, le, re) ->
-      fprintf fmt "(%a) %a (%a)" pp le pp_binop op pp re
+      pr (a le ^^ " %a " ^^ a re) pp le pp_binop op pp re
     | UnOp (op, exp) ->
-      fprintf fmt "%a(%a)" pp_unop op pp exp
+      pr ("%a" ^^ a exp) pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
     | Int bv  -> Bap_bitvector.pp fmt bv
     | Cast (ct, n, exp) ->
-      fprintf fmt "%a:%d[%a]" pp_cast ct n pp exp
+      pr "%a:%d[%a]" pp_cast ct n pp exp
     | Let (var, def, body) ->
-      fprintf fmt "let %a = %a in %a" Bap_var.pp var pp def pp body
+      pr "let %a = %a in@ %a" Bap_var.pp var pp def pp body
     | Unknown (s, typ) ->
-      fprintf fmt "unknown[%s]:%a" s Bap_type.pp typ
+      pr "unknown[%s]:%a" s Bap_type.pp typ
 end
 
 include Regular.Make(struct

@@ -1,8 +1,8 @@
 open Core_kernel.Std open Or_error open OUnit2
 open Bap.Std
 
-open Disasm
-module Disasm = Disasm.Basic
+module Disasm = Disasm_expert.Basic
+module Insn = Disasm.Insn
 
 exception Bad_user_input
 exception No_disassembly of mem * int * int

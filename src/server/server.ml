@@ -5,7 +5,7 @@ open Bap.Std
 open Rpc
 
 module Res = Manager
-module Dis = Disasm.Basic
+module Dis = Disasm_expert.Basic
 
 let version = "0.1"
 
@@ -63,7 +63,7 @@ module Handlers(Ctxt : sig
   let init version =
     let ts = List.(Transport.registered_fetchers >>|
                    Response.transport) in
-    let kinds = Disasm.Insn.Kind.all in
+    let kinds = Disasm_expert.Kind.all in
     let ds =
       Response.disassembler
         ~name:"llvm" ~arch:`arm ~kinds

@@ -103,29 +103,6 @@ let create_getters endian addr off size data  =
     int64  = int64 8 unsafe_get_int64_t_le;
   }
 
-let create ?(pos=0) ?len endian addr data : t Or_error.t =
-  let data_len = Bigstring.length data in
-  let size = Option.value ~default:data_len len in
-  let v = Validate.(name_list "Bap_memory.create" [
-      name "size" @@ Int.validate_bound size
-        ~min:(Excl 0) ~max:(Incl data_len);
-      name "pos" @@ Int.validate_bound pos
-        ~min:(Incl 0) ~max:(Excl data_len);
-      name "pos+size" @@ Int.validate_ubound (pos+size)
-        ~max:(Incl data_len);
-    ]) in
-  Validate.result v >>= fun () ->
-  let get = create_getters endian addr pos size data in
-  return {endian; data; addr; off=pos; size; get }
-
-let min_addr t : addr = t.addr
-
-let max_addr t : addr =
-  let n = t.size - 1 in
-  Addr.(t.addr ++ n)
-
-let size t : int = t.size
-
 let one_byte_getters data addr pos =
   let byte = Word.of_int ~width:8 in
   let make read  =
@@ -159,6 +136,34 @@ let make_byte mem addr off : t = {
   size = 1;
   get = one_byte_getters mem.data addr off;
 }
+
+let create ?(pos=0) ?len endian addr data : t Or_error.t =
+  let data_len = Bigstring.length data in
+  let size = Option.value ~default:data_len len in
+  let v = Validate.(name_list "Bap_memory.create" [
+      name "size" @@ Int.validate_bound size
+        ~min:(Excl 0) ~max:(Incl data_len);
+      name "pos" @@ Int.validate_bound pos
+        ~min:(Incl 0) ~max:(Excl data_len);
+      name "pos+size" @@ Int.validate_ubound (pos+size)
+        ~max:(Incl data_len);
+    ]) in
+  Validate.result v >>= fun () ->
+  if size = 1 then
+    let get = one_byte_getters data addr pos in
+    return {endian; data; addr; off=pos; size; get}
+  else
+    let get = create_getters endian addr pos size data in
+    return {endian; data; addr; off=pos; size; get }
+
+let min_addr t : addr = t.addr
+
+let max_addr t : addr =
+  let n = t.size - 1 in
+  Addr.(t.addr ++ n)
+
+let length t : int = t.size
+
 
 let first_byte mem : t =
   make_byte mem mem.addr mem.off
@@ -203,14 +208,13 @@ module Input = struct
   let int64 = read int64
 end
 
-(* todo add optimization for one byte memory *)
 let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
   let amin = Option.value from ~default:(min_addr t) in
   let amax =
     Option.map words
       ~f:(fun w -> Addr.(amin ++ (w * Size.to_bytes word_size - 1))) |>
     Option.value ~default:(max_addr t) in
-  Validate.(result @@ name "non-empty view" @@
+  Validate.(result @@ name "view must not be empty" @@
             Addr.validate_lbound amax ~min:(Incl amin)) >>= fun () ->
   Addr.Int.(!$amax - !$amin >>= Addr.to_int) >>= fun diff ->
   let size = diff + 1 in
@@ -227,15 +231,35 @@ let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
       ];
     ]) in
   Validate.result check_preconditions >>= fun () ->
-  let get = create_getters t.endian amin off size t.data in
-  return { t with size; data = t.data; addr = amin; off; get}
+  if size = 1 then return (make_byte t amin off)
+  else
+    let get = create_getters t.endian amin off size t.data in
+    return { t with size; data = t.data; addr = amin; off; get}
 
 let view = sub ident
 let copy = sub Bigstring.subo
 
+let range mem a1 a2 =
+  Addr.Int.(!$a2 - !$a1) >>= Addr.to_int >>= fun bytes ->
+  view ~from:a1 ~words:(bytes + 1) mem
+
 let to_buffer {data; off; size} =
   Bigsubstring.create ~pos:off ~len:size data
 
+let merge m1 m2 =
+  let m1,m2 =
+    Addr.(if min_addr m1 < min_addr m2 then m1,m2 else m2,m1) in
+  let m1_max = max_addr m1 in
+  if Addr.(min_addr m2 > succ m1_max)
+  then errorf "blocks doesn't intersect"
+  else if endian m1 <> endian m2
+  then errorf "blocks has different sex"
+  else if not (phys_equal m1.data m2.data)
+  then errorf "blocks doesn't share base"
+  else
+    let pos = m1.off in
+    let len = m2.off + m2.size - m1.off in
+    create ~pos ~len m1.endian (min_addr m1) m1.data
 
 let folder step ?(word_size=`r8) t ~(init:'a) ~f : 'a =
   let read = (getter t word_size).fast in
@@ -262,36 +286,7 @@ let foldi ?word_size t ~init ~f  =
 let fold ?word_size t ~init ~f =
   folder without_address ?word_size t ~init ~f
 
-let pp fmt t =
-  let print_char c =
-    let c = match Char.of_int c with
-      | Some c when Char.is_print c -> c
-      | _ -> '.' in
-    Format.fprintf fmt "%c" c in
 
-  let print_chars off = function
-    | [] -> ()
-    | chars ->
-      Format.fprintf fmt "%*s" (3*off + 1) "|";
-      List.iter (List.rev chars) ~f:print_char;
-      Format.fprintf fmt "%*s\n" (off + 1) "|" in
-  let chars = foldi t ~init:[] ~f:(fun addr char chars ->
-      let newline = chars = [] || List.length chars = 16 in
-      let addr = ok_exn Addr.(to_int64 addr) in
-      let char = ok_exn Word.(to_int char) in
-      if newline then begin
-        print_chars 0 chars;
-        Format.fprintf fmt "%08LX  " addr;
-      end;
-      Format.fprintf fmt "%02X " char;
-      if newline then [char] else char :: chars) in
-  let x = 16 - List.length chars in
-  print_chars x chars
-
-let () = Pretty_printer.register "Bap_memory.pp"
-
-
-let hexdump t = Format.asprintf "%a" pp t
 
 
 
@@ -373,3 +368,53 @@ module Make_iterators( M : Monad.S) = struct
 end
 
 module With_error = Make_iterators(Or_error)
+
+
+let pp_hex fmt t =
+  let print_char c =
+    let c = match Char.of_int c with
+      | Some c when Char.is_print c -> c
+      | _ -> '.' in
+    Format.fprintf fmt "%c" c in
+
+  let print_chars off = function
+    | [] -> ()
+    | chars ->
+      Format.fprintf fmt "%*s" (3*off + 1) "|";
+      List.iter (List.rev chars) ~f:print_char;
+      Format.fprintf fmt "%*s\n" (off + 1) "|" in
+  let chars = foldi t ~init:[] ~f:(fun addr char chars ->
+      let newline = chars = [] || List.length chars = 16 in
+      let addr = ok_exn Addr.(to_int64 addr) in
+      let char = ok_exn Word.(to_int char) in
+      if newline then begin
+        print_chars 0 chars;
+        Format.fprintf fmt "%08LX  " addr;
+      end;
+      Format.fprintf fmt "%02X " char;
+      if newline then [char] else char :: chars) in
+  let x = 16 - List.length chars in
+  print_chars x chars
+
+
+include Printable(struct
+    open Format
+    type nonrec t = t
+
+    let module_name = "Bap_memory"
+
+    let print_word fmt addr =
+      let width = Addr.bitwidth addr / 4 in
+      fprintf fmt "%0*Lx" width (Addr.to_int64 addr |> ok_exn)
+
+    let pp_small fmt t =
+      Format.fprintf fmt "%a: " print_word t.addr;
+      iter t ~f:(fun b -> fprintf fmt "%a " print_word b)
+
+    let pp fmt t =
+      if length t < 16
+      then pp_small fmt t
+      else pp_hex fmt t
+  end)
+
+let hexdump t = Format.asprintf "%a" pp_hex t

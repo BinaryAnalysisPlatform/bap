@@ -1,0 +1,4 @@
+REC
+PKG ezjsonm
+B ../../_build/src/readbin
+S .

@@ -14,17 +14,17 @@ module T = struct
   let module_name = "Bap_var"
 
   let pp fmt v =
-    Format.fprintf fmt "%s:%a" v.var Bap_type.pp v.typ
+    let name =
+      if v.tmp then sprintf "%s_%d" v.var v.uid else v.var in
+    Format.fprintf fmt "%s" name
+    (* Format.fprintf fmt "%s:%a" name Bap_type.pp v.typ *)
 end
 
 include T
 
-
 let name v = v.var
 let typ  v = v.typ
 let is_tmp v = v.tmp
-
-
 
 let create =
   let var_counter = ref 0 in
