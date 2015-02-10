@@ -52,7 +52,7 @@ module Memory = struct
       if Mem.is_empty mem then None
       else
         let bytes = Size.to_bytes sz in
-        let max = Addr.(idx ++ (bytes - 1)) in
+        let max = Addr.(idx ++ Int.(bytes - 1)) in
         let data =
           List.map ~f:snd (Mem.range_to_alist mem ~min:idx ~max) in
         if List.length data = bytes then
@@ -165,43 +165,43 @@ let handle_binop op l r : value =
 
 let handle_cast cast_kind size v =
   let open Exp.Cast in
+  let hi = size - 1 in
   let cast v = match cast_kind with
-    | UNSIGNED -> Word.bitsub_exn ~hi:size v
-    | SIGNED   -> Word.bitsub_exn ~hi:size (Word.signed v)
-    | HIGH     -> Word.bitsub_exn ~lo:(Word.bitwidth v - size) v
-    | LOW      -> Word.bitsub_exn ~hi:size v in
+    | UNSIGNED -> Word.extract_exn ~hi v
+    | SIGNED   -> Word.extract_exn ~hi (Word.signed v)
+    | HIGH     -> Word.extract_exn ~lo:(Word.bitwidth v - size) v
+    | LOW      -> Word.extract_exn ~hi v in
   bv_action_or_unknown v (fun v -> BV (cast v))
 
 (** Given state, evaluate a single BIL expression. *)
 let rec eval_exp state exp =
-  let open Exp in
   let result = match exp with
-    | Load (arr, idx, endian, t) ->
+    | Bil.Load (arr, idx, endian, t) ->
       (match Memory.load (eval_exp state arr) (eval_exp state idx) endian t with
        | Some v -> v
        | None -> Un ("Load from uninitialized memory",
                      Type.imm Size.(to_bits t)))
-    | Store (arr, idx, v, endian, t) ->
+    | Bil.Store (arr, idx, v, endian, t) ->
       Memory.store (eval_exp state arr) (eval_exp state idx) (eval_exp state v)
         endian t
-    | BinOp (op, l, r) -> handle_binop op (eval_exp state l) (eval_exp state r)
-    | UnOp (op, v) -> handle_unop op (eval_exp state v)
-    | Var v -> State.peek_exn state v
-    | Int v -> BV v
-    | Cast (cast_kind, new_type, v) ->
+    | Bil.BinOp (op, l, r) -> handle_binop op (eval_exp state l) (eval_exp state r)
+    | Bil.UnOp (op, v) -> handle_unop op (eval_exp state v)
+    | Bil.Var v -> State.peek_exn state v
+    | Bil.Int v -> BV v
+    | Bil.Cast (cast_kind, new_type, v) ->
       handle_cast cast_kind new_type (eval_exp state v)
-    | Let (v, a, b) -> (* FIXME Should there be typechecking done here? *)
+    | Bil.Let (v, a, b) -> (* FIXME Should there be typechecking done here? *)
       let state = State.move  state ~key:v ~data:(eval_exp state a) in
       eval_exp state b
-    | Unknown (str, typ) -> Un (str, typ)
-    | Ite (cond, t_case, f_case) ->
+    | Bil.Unknown (str, typ) -> Un (str, typ)
+    | Bil.Ite (cond, t_case, f_case) ->
       bv_action_or_unknown (eval_exp state cond)
         (fun v ->
            if not (Word.is_zero v) then eval_exp state t_case
            else eval_exp state f_case)
-    | Extract (hi, lo, v) -> bv_action_or_unknown (eval_exp state v)
-                               (fun v -> BV (Word.bitsub_exn ~hi ~lo v))
-    | Concat (l, r) -> (match eval_exp state l, eval_exp state r with
+    | Bil.Extract (hi, lo, v) -> bv_action_or_unknown (eval_exp state v)
+                                   (fun v -> BV (Word.extract_exn ~hi ~lo v))
+    | Bil.Concat (l, r) -> (match eval_exp state l, eval_exp state r with
         | (Mem _, _) | (_, Mem _) ->
           raise (Abort "Operation cannot be performed on memory.")
         | ((Un (_, _) as un), _) | (_, (Un (_, _) as un)) -> un

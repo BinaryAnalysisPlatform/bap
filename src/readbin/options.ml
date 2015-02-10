@@ -11,8 +11,11 @@ type t = {
   output_phoenix : string option;
   output_dump : insn_format sexp_list;
   demangle : demangle sexp_option;
-  target_format : [`numeric | `symbolic];
+  no_resolve : bool;
   keep_alive : bool;
+  no_inline : bool;
+  keep_consts : bool;
+  no_optimizations : bool;
 } with sexp, fields
 
 module type Provider = sig

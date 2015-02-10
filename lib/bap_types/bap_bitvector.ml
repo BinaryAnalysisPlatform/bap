@@ -51,7 +51,7 @@ module type Kernel = sig
   val lift2 : (bignum -> bignum -> bignum) -> t -> t -> t
   val unop  : (bignum -> 'a) -> t -> 'a
   val binop : (bignum -> bignum -> 'a) -> t -> t -> 'a
-  val bitsub : ?hi:int -> ?lo:int -> t -> t Or_error.t
+  val extract : ?hi:int -> ?lo:int -> t -> t Or_error.t
   val bitwidth : t -> int
   val bits_of_z  : t -> string
   val compare  : t -> t -> int
@@ -120,7 +120,7 @@ module Make(Size : Compare) : Kernel = struct
 
   let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
-  let bitsub ?hi ?(lo=0) t =
+  let extract ?hi ?(lo=0) t =
     let n = bitwidth t in
     let hi = Option.value ~default:(n-1) hi in
     let extract = if t.signed then
@@ -128,13 +128,13 @@ module Make(Size : Compare) : Kernel = struct
         Bignum.extract in
     let do_extract () =
       let len = hi-lo+1 in
-      create (extract t.z lo len) len in
+      let z = if t.signed then signed_z t else t.z in
+      create (extract z lo len) len in
     with_validation ~f:do_extract
-      Validate.(name_list "bitsub" [
+      Validate.(name_list "extract" [
           name "(hi >= 0)"    @@ Int.validate_non_negative hi;
           name "(lo >= 0)"    @@ Int.validate_non_negative lo;
-          name "(hi > lo)"    @@ Int.validate_positive (hi - lo);
-          name "(hi < width)" @@ Int.validate_positive (n - hi);
+          name "(hi > lo)"    @@ Int.validate_non_negative (hi - lo);
         ])
 
 end
@@ -154,17 +154,19 @@ end
 module T = Make(Size_poly)
 include T
 
-let b0 = create (Bignum.of_int 0) 1
-let b1 = create (Bignum.of_int 1) 1
-let of_bool v = if v then b1 else b0
-
-let of_int32 ?(width=32) n = create (Bignum.of_int32 n) width
-let of_int64 ?(width=64) n = create (Bignum.of_int64 n) width
-let of_int ~width v = create (Bignum.of_int v) width
-let ones  n = of_int (-1) ~width:n
-let zeros n = of_int (0)  ~width:n
-let zero  n = of_int 0    ~width:n
-let one   n = of_int 1    ~width:n
+module Cons = struct
+  let b0 = create (Bignum.of_int 0) 1
+  let b1 = create (Bignum.of_int 1) 1
+  let of_bool v = if v then b1 else b0
+  let of_int32 ?(width=32) n = create (Bignum.of_int32 n) width
+  let of_int64 ?(width=64) n = create (Bignum.of_int64 n) width
+  let of_int ~width v = create (Bignum.of_int v) width
+  let ones  n = of_int (-1) ~width:n
+  let zeros n = of_int (0)  ~width:n
+  let zero  n = of_int 0    ~width:n
+  let one   n = of_int 1    ~width:n
+end
+include Cons
 
 
 let safe f t = try_with (fun () -> f t)
@@ -320,10 +322,11 @@ module Int_exn = struct
   include Bap_integer.Make(Base)
 end
 
-let bitsub_exn ?hi ?lo z =
-  Or_error.ok_exn @@ bitsub ?hi ?lo z
+let extract_exn ?hi ?lo z =
+  Or_error.ok_exn @@ extract ?hi ?lo z
 
 let is_zero = unop Bignum.(equal zero)
+let is_one = unop Bignum.(equal one)
 let is_positive = unop Bignum.(fun z -> gt z zero)
 let is_non_positive  = Fn.non is_positive
 let is_negative = unop Bignum.(fun z -> lt z zero)
@@ -383,4 +386,7 @@ module Mono = Comparable.Make(Make(Size_mono))
 
 include Or_error.Monad_infix
 include Bap_regular.Make(T)
-module Int = Safe
+module Int_err = Safe
+include (Int_exn : Bap_integer.S with type t := t)
+let one = Cons.one
+let zero = Cons.zero

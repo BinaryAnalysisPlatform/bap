@@ -79,7 +79,7 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
     | `SUB -> Exp.(s1 - s2)
     | `RSB -> Exp.(s2 - s1)
     | `ADD -> Exp.(s1 + s2)
-    | `ADC -> Exp.(s1 + s2 + cast Cast.unsigned 32 vcf)
-    | `SBC -> Exp.(s1 + lnot s2 + cast Cast.unsigned 32 vcf)
-    | `RSC -> Exp.(lnot s1 + s2 + cast Cast.unsigned 32 vcf) in
+    | `ADC -> Exp.(s1 + s2 + cast unsigned 32 vcf)
+    | `SBC -> Exp.(s1 + lnot s2 + cast unsigned 32 vcf)
+    | `RSC -> Exp.(lnot s1 + s2 + cast unsigned 32 vcf) in
   exec (stmts @ [assn dest oper]) ~flags ~wflag cond

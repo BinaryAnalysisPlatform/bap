@@ -81,12 +81,12 @@ let exp_of_op = function
   | Op.Imm word -> Exp.int word
 
 let cast_type = function
-  | Signed -> Exp.Cast.signed
-  | Unsigned -> Exp.Cast.unsigned
+  | Signed -> Exp.signed
+  | Unsigned -> Exp.unsigned
 
 let cast_of_sign sign size exp = Exp.cast (cast_type sign) size exp
 
 
 
-let msb r = Exp.(cast Cast.high 1 r)
+let msb r = Exp.(cast high 1 r)
 let zero ty = Exp.int (Word.zero (bitlen ty))

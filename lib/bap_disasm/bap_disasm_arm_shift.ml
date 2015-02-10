@@ -24,7 +24,7 @@ let shift_of_word op = match Word.to_int op with
 let shift_c ~src shift_type ~shift t =
   let bits = bitlen t in
   let bits_e = Exp.int (Word.of_int bits ~width:bits) in
-  let nth_bit n e = Exp.(cast Cast.low 1 (e lsr n)) in
+  let nth_bit n e = Exp.(cast low 1 (e lsr n)) in
   let e1 = Exp.int (Word.one bits) in
   match shift_type with
   | `ASR ->
@@ -49,7 +49,7 @@ let shift_c ~src shift_type ~shift t =
     shifted, carry
   | `RRX ->
     let ret1 = Exp.(src lsr e1) in
-    let carryin = Exp.(cast Cast.unsigned bits (var Env.cf) lsl (bits_e - e1)) in
+    let carryin = Exp.(cast unsigned bits (var Env.cf) lsl (bits_e - e1)) in
     let shifted = Exp.(ret1 lor carryin) in
     let carry = nth_bit Exp.(int (Word.zero 0)) src in
     shifted, carry
@@ -65,9 +65,11 @@ let i_shift ~src shift_type t =
   let three = Word.of_int 3 ~width in
   (* lower three bits are type*)
   let r =
-    Word.Int.(!$shift_type land !$mask) >>| shift_of_word >>= fun shift_t ->
+    Word.Int_err.(!$shift_type land !$mask) >>| shift_of_word >>=
+    fun shift_t ->
     (* other bits are immediate *)
-    Word.Int.((!$shift_type land (lnot !$mask)) lsr !$three) >>= fun shift_amt ->
+    Word.Int_err.((!$shift_type land (lnot !$mask)) lsr !$three) >>=
+    fun shift_amt ->
     return (shift_t, shift_amt) in
   match r with
   | Error err -> fail _here_ "%s" Error.(to_string_hum err)
@@ -89,12 +91,13 @@ let mem_shift ~src shift typ =
   let word = Word.of_int ~width in
   let wordm n = Ok (word n) in
   let shift_typ w =
-    Word.Int.((!$w land wordm 0xE000) lsr wordm 13) >>| shift_of_word in
+    Word.Int_err.((!$w land wordm 0xE000) lsr wordm 13) >>|
+    shift_of_word in
   (* Gets the shift amount from the immediate *)
-  let shift_amt w = Word.Int.(!$w land wordm 0xFFF) >>| Exp.int in
+  let shift_amt w = Word.Int_err.(!$w land wordm 0xFFF) >>| Exp.int in
   (* Converts the shift to a negative if the negative bit is set *)
   let to_neg w exp =
-    if Word.Int.(wordm 0x1000 land !$w = wordm 0x1000) then
+    if Word.Int_err.(wordm 0x1000 land !$w = wordm 0x1000) then
       Exp.(int (Word.ones width) * exp)
     else
       exp in

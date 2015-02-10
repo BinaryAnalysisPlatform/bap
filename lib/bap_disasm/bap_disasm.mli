@@ -16,7 +16,6 @@ open Image_internal_std
     memory region. To create values of this type use [disassemble]
     function *)
 type disasm
-type t = disasm
 
 (** values of type [insn] represents machine instructions decoded
     from the given piece of memory *)
@@ -36,7 +35,7 @@ type block = Bap_disasm_block.t with compare, sexp_of
 
     The returned value will contain all memory reachable from the
     given set of roots, at our best knowledge. *)
-val disassemble : ?roots:addr list -> arch -> mem -> t
+val disassemble : ?roots:addr list -> arch -> mem -> disasm
 
 (** [disassemble_image image] disassemble given image.
     Will take executable sections of the image and disassemble it,
@@ -44,14 +43,26 @@ val disassemble : ?roots:addr list -> arch -> mem -> t
     symbol table will be used as a source of roots. If file doesn't
     contain one, then entry point will be used.
 *)
-val disassemble_image : ?roots:addr list -> Bap_image.t -> t
+val disassemble_image : ?roots:addr list -> Bap_image.t -> disasm
 
 (** [disassemble_file ?roots path] takes a path to a binary and
     disassembles it  *)
-val disassemble_file : ?roots:addr list -> string -> t
+val disassemble_file : ?roots:addr list -> string -> disasm Or_error.t
+
+(** [disassemble_file ?roots path] takes a path to a binary and
+    disassembles it  *)
+val disassemble_file_exn : ?roots:addr list -> string -> disasm
+
+(** [linear_sweep arch mem] will perform a linear sweep disassembly on
+    the specified memory [mem] *)
+val linear_sweep : arch -> mem -> (mem * insn option) list Or_error.t
+val linear_sweep_exn : arch -> mem -> (mem * insn option) list
+
 
 (** Disassembled program  *)
 module Disasm : sig
+  type t = disasm
+
   (** returns all instructions that was successfully decoded in an
       ascending order of their addresses. Each instruction is
       accompanied with its block of memory. *)

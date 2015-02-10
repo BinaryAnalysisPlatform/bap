@@ -70,7 +70,7 @@ let create_getters endian addr off size data  =
       inj r in
 
     let safe ~pos_ref : word or_error =
-      Addr.Int.(!$(!pos_ref) - !$addr) >>= fun addr ->
+      Addr.Int_err.(!$(!pos_ref) - !$addr) >>= fun addr ->
       Addr.(to_int (addr ++ off)) >>= fun pos ->
       if pos < off then
         errorf "segfault: addr < min_addr" else
@@ -212,13 +212,13 @@ let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
   let amin = Option.value from ~default:(min_addr t) in
   let amax =
     Option.map words
-      ~f:(fun w -> Addr.(amin ++ (w * Size.to_bytes word_size - 1))) |>
+      ~f:(fun w -> Addr.(amin ++ Int.(w * Size.to_bytes word_size - 1))) |>
     Option.value ~default:(max_addr t) in
   Validate.(result @@ name "view must not be empty" @@
             Addr.validate_lbound amax ~min:(Incl amin)) >>= fun () ->
-  Addr.Int.(!$amax - !$amin >>= Addr.to_int) >>= fun diff ->
+  Addr.Int_err.(!$amax - !$amin >>= Addr.to_int) >>= fun diff ->
   let size = diff + 1 in
-  Addr.Int.(!$amin - !$(t.addr) >>= Addr.to_int) >>= fun off ->
+  Addr.Int_err.(!$amin - !$(t.addr) >>= Addr.to_int) >>= fun off ->
   let off = t.off + off in
   let check_preconditions = Validate.(name_list "preconditions" [
       name "offset in bounds" @@ Int.validate_bound off
@@ -240,7 +240,7 @@ let view = sub ident
 let copy = sub Bigstring.subo
 
 let range mem a1 a2 =
-  Addr.Int.(!$a2 - !$a1) >>= Addr.to_int >>= fun bytes ->
+  Addr.Int_err.(!$a2 - !$a1) >>= Addr.to_int >>= fun bytes ->
   view ~from:a1 ~words:(bytes + 1) mem
 
 let to_buffer {data; off; size} =

@@ -132,6 +132,7 @@ with bin_io, compare, sexp
 
 include Bap_regular.S with type t := t
 include Comparable.With_zero with type t := t
+include Bap_integer.S with type t := t
 (** {2 Container interfaces}
 
     Bitvector is also a container for bytes and bits. You can access
@@ -200,32 +201,33 @@ val signed : t -> t
 (** [is_zero bv] is true iff all bits are set to zero. *)
 val is_zero : t -> bool
 
+(** [is_ones bv] is true if the least significant bit is equal to one  *)
+val is_one : t -> bool
+
 (** [bitwidth bv] return a bit-width, i.e., the amount of bits *)
 val bitwidth : t -> int
 
-(** [bitsub bv ~signed ~hi ~lo] extracts a subvector from [bv], starting
+(** [extract bv ~signed ~hi ~lo] extracts a subvector from [bv], starting
     from bit [hi] and ending with [lo]. Bits are enumerated from
     right to left (from least significant to most), starting from
-    zero.
+    zero. [hi] maybe greater then [size].
 
-    [hi] defaults to [width bv]
+    [hi] defaults to [width bv - 1]
     [lo] defaults to [0].
-    [signed] defaults to [false]
 
     Example:
 
-    [bitsub (of_int 17 ~width:8) ~hi:4 ~lo:3]
-
+    [extract (of_int 17 ~width:8) ~hi:4 ~lo:3]
     will result in a two bit vector consisting of the forth and
     third bits, i.e., equal to a number [2].
 
-    [lo] and [hi] should be non-negative numbers less then a
-    [width bv] and  [hi > lo]. *)
-val bitsub : ?hi:int -> ?lo:int -> t -> t Or_error.t
+    [lo] and [hi] should be non-negative numbers. [lo] must be less
+    then a [width bv] and [hi >= lo]. *)
+val extract : ?hi:int -> ?lo:int -> t -> t Or_error.t
 
-(** [bitsub_exn bv ~hi ~lo] is the same as [bitsub], but will raise
+(** [extract_exn bv ~hi ~lo] is the same as [extract], but will raise
     an exception on error.  *)
-val bitsub_exn : ?hi:int -> ?lo:int -> t -> t
+val extract_exn : ?hi:int -> ?lo:int -> t -> t
 
 (** [concat b1 b2] concatenates two bitvectors  *)
 val concat : t -> t -> t
@@ -286,7 +288,7 @@ val to_bits  : t -> endian -> bool Sequence.t
        [Z.(!$v1 + !$v2 / !$v3)].
 *)
 
-module Int : sig
+module Int_err : sig
   (** [!$v] lifts [v] to an Or_error monad. It is, essentially, the
       same as [Ok v] *)
   val (!$): t -> t Or_error.t

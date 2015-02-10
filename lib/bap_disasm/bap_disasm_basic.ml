@@ -137,7 +137,7 @@ module Imm = struct
 
   let to_word t ~width =
     let n = to_int64 t in
-    match Word.bitsub ~hi:(width-1) (Word.of_int64 n) with
+    match Word.extract ~hi:(width-1) (Word.of_int64 n) with
     | Ok word -> Some word
     | Error _ -> None
 

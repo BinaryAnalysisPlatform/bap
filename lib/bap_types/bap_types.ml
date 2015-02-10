@@ -144,26 +144,56 @@ module Std = struct
       like [reg8_t], or [mem32_t]. Look at [Bap_type], for more. *)
   include Type.Export
 
-
-  (** BIL expressions. *)
-  module Exp = struct
-    include Bap_bil.Exp
-    include Bap_exp
-    module Cast  = Cast
-    module Binop = Binop
-    module Unop  = Unop
-  end
-
   (** Sizes of expression operands  *)
   module Size = struct
     include Size
     include Bap_size
   end
 
+  (** BIL expressions. *)
+  module Exp = struct
+    type t = Bap_bil.exp with bin_io, compare, sexp
+    include Bap_bil.Cast
+    include Bap_bil.Binop
+    include Bap_bil.Unop
+    include Bap_bil.Exp
+    include Bap_bil.Stmt
+    include Bap_exp.Exp
+    include Bap_exp.Unop
+    include Bap_exp.Binop
+    include Bap_exp.Cast
+    include Bap_exp.Infix
+    module Unop = Bap_bil.Unop
+    module Binop = Bap_bil.Binop
+    module Cast = Bap_bil.Cast
+  end
+
   (** Bil statements  *)
   module Stmt = struct
+    type t = Bap_bil.stmt with bin_io, compare, sexp
     include Bap_bil.Stmt
+    include Bap_stmt.Stmt
     include Bap_stmt
+    include Bap_stmt.Infix
+  end
+
+  module Bil = struct
+    type t = Bap_bil.bil with bin_io, compare, sexp
+    include Bap_exp
+    include Bap_bil.Cast
+    include Bap_bil.Binop
+    include Bap_bil.Unop
+    include Bap_bil.Exp
+    include Bap_bil.Stmt
+    include Bap_exp.Exp
+    include Bap_exp.Unop
+    include Bap_exp.Binop
+    include Bap_exp.Cast
+    include Bap_exp.Infix
+    include Bap_stmt.Stmt
+    include Bap_stmt.Infix
+    include Bap_helpers
+    include Bap_visitor
   end
 
   (** Bitvector is an ubiquitous module, that represents bitstrings and
@@ -213,18 +243,20 @@ module Std = struct
   type nonrec addr_size = addr_size
   with bin_io, compare, sexp
 
-  type size      = Size.t      with bin_io, compare, sexp
-  type typ       = Type.t      with bin_io, compare, sexp
-  type var       = Var.t       with bin_io, compare, sexp
-  type stmt      = Stmt.t      with bin_io, compare, sexp
-  type exp       = Exp.t       with bin_io, compare, sexp
-  type bil       = stmt list   with bin_io, compare, sexp
-  type arch      = Arch.t      with bin_io, compare, sexp
   type addr      = Addr.t      with bin_io, compare, sexp
+  type arch      = Arch.t      with bin_io, compare, sexp
+  type bil       = Bap_bil.bil with bin_io, compare, sexp
+  type binop     = Bil.binop   with bin_io, compare, sexp
+  type cast      = Bil.cast    with bin_io, compare, sexp
+  type exp       = Exp.t       with bin_io, compare, sexp
+  type size      = Size.t      with bin_io, compare, sexp
+  type stmt      = Stmt.t      with bin_io, compare, sexp
+  type typ       = Type.t      with bin_io, compare, sexp
+  type unop      = Bil.unop    with bin_io, compare, sexp
+  type var       = Var.t       with bin_io, compare, sexp
   type word      = Word.t      with bin_io, compare, sexp
-  type cast      = Exp.Cast.t  with bin_io, compare, sexp
-  type unop      = Exp.Unop.t  with bin_io, compare, sexp
-  type binop     = Exp.Binop.t with bin_io, compare, sexp
+
+  class ['a] bil_visitor = ['a] Bap_visitor.visitor
 
 
   module Seq = struct

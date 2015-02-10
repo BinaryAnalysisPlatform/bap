@@ -59,24 +59,30 @@ let demangle : 'a option Term.t =
   Arg.(value & opt ~vopt:(Some `internal) (some spec) None &
        info ["demangle"] ~doc)
 
-
-let target_format : _ Term.t =
-  let vals = ["numeric", `numeric; "symbolic", `symbolic] in
-  let doc =
-    sprintf "Set jump destinations format in BIL to %s"
-      (Arg.doc_alts_enum vals) in
-  Arg.(value & opt (enum vals) `symbolic &
-       info ["dests"] ~doc)
+let no_resolve : bool Term.t =
+  let doc = "Do not resolve addresses to symbolic names" in
+  Arg.(value & flag & info ["no-resolve"; "-n"] ~doc)
 
 let keep_alive : bool Term.t =
-  let doc = "Keep alive dead BIL code" in
+  let doc = "Keep alive unused temporary variables" in
   Arg.(value & flag & info ["keep-alive"] ~doc)
+
+let no_inline : bool Term.t =
+  let doc = "Disable inlining temporary variables" in
+  Arg.(value & flag & info ["no-inline"] ~doc)
+
+let keep_consts : bool Term.t =
+  let doc = "Disable constant folding" in
+  Arg.(value & flag & info ["keep-const"] ~doc)
+
+let no_optimizations : bool Term.t =
+  let doc = "Disable all kinds of optimizations" in
+  Arg.(value & flag & info ["no-optimizations"] ~doc)
 
 
 let create
-    a b c d e f g h = Options.Fields.create
-    a b c d e f g h
-
+    a b c d e f g h i k l = Options.Fields.create
+    a b c d e f g h i k l
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -99,7 +105,8 @@ let program =
   Term.(pure create
         $filename $symsfile $cfg_format
         $output_phoenix $output_dump $demangle
-        $target_format $keep_alive),
+        $no_resolve $keep_alive
+        $no_inline $keep_consts $no_optimizations),
   Term.info "bap-objdump" ~version:"0.9.2" ~doc ~man
 
 let parse () = match Term.eval program with
