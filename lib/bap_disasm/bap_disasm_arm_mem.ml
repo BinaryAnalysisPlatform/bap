@@ -128,8 +128,16 @@ let lift_m dest_list base mode update operation =
     | Ld -> assn dest Exp.(load mem addr LittleEndian `r32)
     | St -> Stmt.move (Env.new_mem "mem")
               Exp.(store mem addr (var dest) LittleEndian `r32) in
-  List.concat [
+  (* Jmps should always be the last statement *)
+  let rec move_jump_to_end l =
+    match l with
+      [] -> []
+    | (stmt :: stmts) ->
+      match stmt with
+      | (Stmt.Jmp exp) -> stmts @ [Stmt.Jmp exp]
+      |   _  -> stmt :: move_jump_to_end stmts in
+  move_jump_to_end (List.concat [
     [Stmt.move o_base Exp.(var base)];
     List.mapi ~f:create_access dest_list;
     writeback
-  ]
+  ])
