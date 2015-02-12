@@ -13,6 +13,8 @@ val create
   -> addr
   -> Bigstring.t -> t Or_error.t
 
+val of_file : endian -> addr -> string -> t Or_error.t
+
 (** [view word_size ~from ~words mem] returns a new memory
     that represents the specified region of memory [mem]. [copy]
     function performs deep copy.

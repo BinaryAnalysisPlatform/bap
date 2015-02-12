@@ -15,11 +15,11 @@ let symsfile : string option Term.t =
 let cfg_format : 'a list Term.t =
   Arg.(value & vflag_all [`with_name] [
       `with_name, info ["labels-with-name"]
-        ~doc: "put block name on graph labels";
+        ~doc: "Put block name on graph labels";
       `with_asm, info ["labels-with-asm"]
-        ~doc:"put assembler instructions on graph labels";
+        ~doc:"Put assembler instructions on graph labels";
       `with_bil, info ["labels-with-bil"]
-        ~doc:"put bil instructions on graph labels";
+        ~doc:"Put bil instructions on graph labels";
     ])
 
 let output_phoenix : _ Term.t =
@@ -79,23 +79,31 @@ let no_optimizations : bool Term.t =
   let doc = "Disable all kinds of optimizations" in
   Arg.(value & flag & info ["no-optimizations"] ~doc)
 
+let binaryarch : _ Term.t =
+  let doc =
+    sprintf
+      "Parse input file as raw binary with specified \
+      architecture, e.g. x86, arm, etc." in
+  Arg.(value & opt (some string) None &
+       info ["binary"] ~doc)
+
 
 let create
-    a b c d e f g h i k l = Options.Fields.create
-    a b c d e f g h i k l
+    a b c d e f g h i k l m = Options.Fields.create
+    a b c d e f g h i k l m
 let program =
   let doc = "Disassemble binary" in
   let man = [
     `S "DESCRIPTION";
     `P "$(tname) disassembles $(i,FILE) and outputs results in a
-          user ajustable form.";
+          user adjustable form.";
     `S "SYMBOL TABLES";
     `P "Although $(tname) will try to extract symbols from \
         the binary file, you can also provide symbols externally, \
         using `-s' option. The argument to this option must be a \
         file containing s-expressions. Each s expression is list \
         of three atoms: name, starting address, ending address (i.e. \
-        an address of the byte that immidiately follows the last \
+        an address of the byte that immediately follows the last \
         byte of the symbol).";
     `S "BUGS";
     `P "Report bugs to \
@@ -106,8 +114,9 @@ let program =
         $filename $symsfile $cfg_format
         $output_phoenix $output_dump $demangle
         $no_resolve $keep_alive
-        $no_inline $keep_consts $no_optimizations),
-  Term.info "bap-objdump" ~version:"0.9.2" ~doc ~man
+        $no_inline $keep_consts $no_optimizations
+        $binaryarch),
+  Term.info "bap-objdump" ~version:"0.9.3" ~doc ~man
 
 let parse () = match Term.eval program with
   | `Ok opts -> Ok opts

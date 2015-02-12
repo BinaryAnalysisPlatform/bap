@@ -156,6 +156,9 @@ let create ?(pos=0) ?len endian addr data : t Or_error.t =
     let get = create_getters endian addr pos size data in
     return {endian; data; addr; off=pos; size; get }
 
+let of_file endian addr path : t Or_error.t =
+  create endian addr (Bap_fileutils.readfile path)
+
 let min_addr t : addr = t.addr
 
 let max_addr t : addr =

@@ -160,7 +160,8 @@ Library bap_image
   BuildDepends:  bap.elf,
                  bap.dwarf,
                  bap.types
-  Modules:       Bap_image,
+  Modules:       Bap_fileutils,
+                 Bap_image,
                  Bap_memory,
                  Bap_table,
                  Image_backend,
