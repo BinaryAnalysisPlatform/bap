@@ -83,7 +83,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
     let trunc = match size with
       | B | H ->
         let n = if size = B then 8 else 16 in
-        [Stmt.move temp Exp.(cast Cast.low n (var dst1))]
+        [Stmt.move temp Exp.(cast low n (var dst1))]
       | W | D -> [] in
     let stores =
       let m1,m2 = Env.(new_mem "m1", new_mem "m2") in
@@ -137,7 +137,7 @@ let lift_m dest_list base mode update operation =
       | (Stmt.Jmp exp) -> stmts @ [Stmt.Jmp exp]
       |   _  -> stmt :: move_jump_to_end stmts in
   move_jump_to_end (List.concat [
-    [Stmt.move o_base Exp.(var base)];
-    List.mapi ~f:create_access dest_list;
-    writeback
-  ])
+      [Stmt.move o_base Exp.(var base)];
+      List.mapi ~f:create_access dest_list;
+      writeback
+    ])

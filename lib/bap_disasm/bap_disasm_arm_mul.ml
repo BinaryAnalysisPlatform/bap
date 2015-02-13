@@ -36,7 +36,7 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
   let dest = assert_reg _here_ dest in
   let src1 = exp_of_op src1 in
   let src2 = exp_of_op src2 in
-  let excast hi lo s = Exp.(cast Cast.signed 64 (extract hi lo s)) in
+  let excast hi lo s = Exp.(cast signed 64 (extract hi lo s)) in
   let top  = excast 31 16 in
   let bot  = excast 15 0 in
   let top32 = excast 47 16 in
@@ -50,13 +50,13 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
     | TT -> top src1 * top src2
     | D  -> top src1 * top src2 + bot src1 * bot src2
     | DX -> top src1 * bot src2 + bot src1 * top src2
-    | WB -> top32 (cast Cast.signed 64 (src1 * bot src2))
-    | WT -> top32 (cast Cast.signed 64 (src1 * top src2))  in
+    | WB -> top32 (cast signed 64 (src1 * bot src2))
+    | WT -> top32 (cast signed 64 (src1 * top src2))  in
   let result =
     let open Exp in
     match accum, hiaccum with
     | None,   None     -> result
-    | Some a, None     -> result + cast Cast.signed 64 (exp_of_op a)
+    | Some a, None     -> result + cast signed 64 (exp_of_op a)
     | Some a, Some hia -> result + concat (exp_of_op hia) (exp_of_op a)
     | _ -> fail _here_ "Cannot specify only a hi accumulator" in
   let qflag =

@@ -65,7 +65,7 @@ let bitsub ?hi ?lo ~expect v ctxt =
   assert_equal ~ctxt
     ~printer:Word.to_string
     !$expect
-    (Word.bitsub_exn ?hi ?lo !$v)
+    (Word.extract_exn ?hi ?lo !$v)
 
 let of_binary endian string ~expect ctxt =
   assert_equal ~ctxt

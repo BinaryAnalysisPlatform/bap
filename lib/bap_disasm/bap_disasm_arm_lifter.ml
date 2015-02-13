@@ -304,7 +304,7 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
       assn temp Exp.(load (var mem) src2 LittleEndian `r8);
       Stmt.move mem
         Exp.(store (var mem) src2 (extract 7 0 src1) LittleEndian `r8);
-      assn dest Exp.(cast Cast.unsigned 32 (var temp));
+      assn dest Exp.(cast unsigned 32 (var temp));
     ] cond
 
   (* Pack half *)
@@ -984,7 +984,7 @@ let lift_special ops insn =
 
   | `MRS, [|Reg dest; cond; _|] ->
     let get_bits flag src lsb =
-      Exp.(src lor (cast Cast.unsigned 32 (var flag) lsl int32 lsb)) in
+      Exp.(src lor (cast unsigned 32 (var flag) lsl int32 lsb)) in
     let d = Env.of_reg dest in
     let vd = Exp.var d in
     exec [
@@ -1046,7 +1046,7 @@ let arm_ops ops = try_with (arm_ops_exn ops)
 let insn_exn mem insn =
   let open Arm.Insn in
   let name = Basic.Insn.name insn in
-  Memory.(Addr.Int.(!$(max_addr mem) - !$(min_addr mem)))
+  Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
   >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
   Memory.get ~scale:(size ) mem >>| fun word ->
   match Arm.Insn.create insn with

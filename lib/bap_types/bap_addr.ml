@@ -4,7 +4,8 @@ open Bap_common
 
 let memref ?(disp=0) ?(index=0) ?(scale=`r8)  addr =
   let n = Bap_size.to_bytes scale in
-  Bap_bitvector.(addr ++ (n * index + disp))
+  let off = n * index + disp in
+  Bap_bitvector.(addr ++ off)
 
 module type Arith = sig
   include Integer
@@ -32,7 +33,7 @@ module Make(Int : Core_int) = struct
     let width = Int.num_bits in
     let x = Int.to_bv x in
     let w = Bitvector.of_int width ~width in
-    match Bitvector.(Int.(!$x mod !$w) >>= to_int) with
+    match Bitvector.(Int_err.(!$x mod !$w) >>= to_int) with
     | Error _ -> assert false
     | Ok x -> x
 

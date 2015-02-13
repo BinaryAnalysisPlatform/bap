@@ -7,6 +7,7 @@ open Bap_disasm_types
 open Image_internal_std
 
 module Rec = Bap_disasm_rec
+module Dis = Bap_disasm_basic
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
 module Image = Bap_image
@@ -33,8 +34,6 @@ type disasm = {
   insns : insn table Lazy.t;
   mems_of_insn : (insn -> mem seq) Lazy.t;
 }
-
-type t = disasm
 
 let insns_of_blocks bs =
   Seq.(Table.elements bs >>| Block.insns |> join)
@@ -63,7 +62,6 @@ let fail error mem = {
   empty with
   memmap = Table.singleton mem (Failed error);
 }
-
 
 let mem_of_rec_error = function
   | `Failed_to_disasm mem -> mem
@@ -112,6 +110,26 @@ let lifter_of_arch = function
   | #Arch.arm -> Some Bap_disasm_arm_lifter.insn
   | _ -> None
 
+let linear_sweep arch mem : (mem * insn option) list Or_error.t =
+  Dis.create ~backend:"llvm" (Arch.to_string arch) >>| fun dis ->
+  let dis = Dis.store_asm dis in
+  let dis = Dis.store_kinds dis in
+  Dis.run dis mem
+    ~init:[] ~return:ident ~stopped:(fun s _ ->
+        Dis.stop s (Dis.insns s)) |>
+  List.map ~f:(function
+      | mem, None -> mem,None
+      | mem, Some insn -> match lifter_of_arch arch with
+        | None -> mem, Some (Insn.of_basic insn)
+        | Some lift -> match lift mem insn with
+          | Ok bil -> mem, Some (Insn.of_basic ~bil insn)
+          | _ -> mem, Some (Insn.of_basic insn))
+
+
+let linear_sweep_exn arch mem = ok_exn (linear_sweep arch mem)
+
+
+
 let disassemble ?roots arch mem =
   let lifter = lifter_of_arch arch in
   match Rec.run ?lifter ?roots arch mem with
@@ -140,12 +158,23 @@ let disassemble_image ?roots image =
       else dis)
 
 let disassemble_file ?roots filename =
-  match Image.create filename with
-  | Error err -> empty
-  | Ok (image,_warns) ->          (* todo: add warnings *)
-    disassemble_image ?roots image
+  Image.create filename >>= fun (img,errs) ->
+  let dis = disassemble_image ?roots img in
+  let memmap =
+    List.fold ~init:dis.memmap errs ~f:(fun memmap e ->
+        let e = `Failed e in
+        Table.map memmap ~f:(function
+            | Failed e' -> Failed (`Errors (e,e'))
+            | Decoded (insn,None) -> Decoded (insn,Some e)
+            | Decoded (insn,Some e') ->
+              Decoded (insn, Some (`Errors(e,e'))))) in
+  return {dis with memmap}
+
+let disassemble_file_exn ?roots filename =
+  disassemble_file ?roots filename |> ok_exn
 
 module Disasm = struct
+  type t = disasm
   let insns t = insns_of_blocks t.blocks
   let blocks t = t.blocks
   let insn_at_mem {memmap} m =

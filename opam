@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "bap"
-version: "0.9.2"
+version: "0.9.3"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
 homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
@@ -8,7 +8,7 @@ bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
 license: "MIT"
 build: [
-  ["./configure" "--prefix=%{prefix}%"]
+  ["./configure" "--prefix=%{prefix}%" "--enable-docs"]
   [make]
 ]
 install: [make "install"]
@@ -32,6 +32,7 @@ depends: [
     "ocamlgraph"
 	"re"
 	"uri" {= "1.7.2"}
+    "utop"
 	"zarith"
 ]
 available: [ocaml-version >= "4.01"]

@@ -31,7 +31,7 @@ let set_sub s1 s2 r t =
 
 let set_adc s1 s2 r t =
   let sum_with_carry =
-    let extend = Exp.cast Exp.Cast.unsigned (bitlen t + 1) in
+    let extend = Bil.(cast unsigned) (bitlen t + 1) in
     Exp.(extend s1 + extend s2 + extend (var Env.cf)) in
   Stmt.move Env.cf (msb sum_with_carry) :: set_vnzf_add s1 s2 r t
 

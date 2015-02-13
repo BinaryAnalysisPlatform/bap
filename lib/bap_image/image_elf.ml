@@ -58,7 +58,7 @@ let create_symtab data endian elf  =
       let size = match Dwarf.Fn.pc_hi fn with
         | None -> return None
         | Some pc_hi ->
-          Addr.Int.(!$pc_hi - !$pc_lo) >>= Addr.to_int >>| fun size ->
+          Addr.Int_err.(!$pc_hi - !$pc_lo) >>= Addr.to_int >>| fun size ->
           Some size in
       size >>= fun size ->
       let location = Location.({

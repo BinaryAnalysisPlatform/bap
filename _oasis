@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     0.9.1
+Version:     0.9.3
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
@@ -118,6 +118,7 @@ Library types
                    Bap_bitvector,
                    Bap_common,
                    Bap_exp,
+                   Bap_helpers,
                    Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
@@ -126,7 +127,8 @@ Library types
                    Bap_size,
                    Bap_stmt,
                    Bap_type,
-                   Bap_var
+                   Bap_var,
+                   Bap_visitor
 
 Library conceval
   Path: lib/bap_types

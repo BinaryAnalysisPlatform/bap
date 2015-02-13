@@ -18,7 +18,7 @@ let wordm x = Ok (Word.of_int x ~width:32)
 let extend ~dest ~src ?src2 sign size ~rot cond =
   let rot = assert_imm _here_ rot in
   let dest = assert_reg _here_ dest in
-  let amount = match Word.Int.((!$rot * wordm 8)) with
+  let amount = match Word.Int_err.((!$rot * wordm 8)) with
     | Ok amount -> amount
     | Error err -> fail _here_ "failed to obtain amount" in
   let rotated, (_ : exp) =
@@ -28,7 +28,7 @@ let extend ~dest ~src ?src2 sign size ~rot cond =
       Shift.lift_c ~src:(exp_of_op src)
         `ROR ~shift:(Exp.int amount) reg32_t in
   let extracted =
-    Exp.(cast Cast.low (bits_of_size size) rotated) in
+    Bil.(cast low (bits_of_size size) rotated) in
   let extent = cast_of_sign sign 32 extracted in
   let final = match src2 with
     | Some s2 -> Exp.(exp_of_op s2 + extent)

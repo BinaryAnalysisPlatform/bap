@@ -129,7 +129,7 @@ let assert_cont ~word_size img =
         Addr.(a1 = a2) ==> Addr.(a1 = base)
       end;
       let s1 = Addr.of_int ~width:32 step in
-      let () = match Addr.Int.(!$a2 - !$a1 - !$s1) with
+      let () = match Addr.Int_err.(!$a2 - !$a1 - !$s1) with
         | Error err -> assert_string @@ Error.to_string_hum err
         | Ok diff ->
           assert_bool "a1 <> a2 -> a2 - a1 = (word_size)"
