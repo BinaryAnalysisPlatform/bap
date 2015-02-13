@@ -245,24 +245,8 @@ let of_bigstring ?backend data =
 let of_string ?backend data =
   of_bigstring ?backend (Bigstring.of_string data)
 
-let mapfile path : Bigstring.t option =
-  let fd = Unix.(openfile path [O_RDONLY] 0o400) in
-  try
-    let size = Unix.((fstat fd).st_size) in
-    let data = Bigstring.map_file ~shared:false fd size in
-    Unix.close fd;
-    Some data
-  with exn ->
-    Unix.close fd;
-    None
-
-let readfile path : Bigstring.t =
-  match mapfile path with
-  | Some data -> data
-  | None -> Bigstring.of_string (In_channel.read_all path)
-
 let create ?backend path : result =
-  try_with (fun () -> readfile path) >>= fun data ->
+  try_with (fun () -> Bap_fileutils.readfile path) >>= fun data ->
   match backend with
   | None -> autoload data (Some path)
   | Some backend -> of_backend backend data (Some path)
