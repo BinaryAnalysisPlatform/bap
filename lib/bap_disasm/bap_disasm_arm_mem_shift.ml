@@ -46,7 +46,7 @@ let lift_r_op ~dest1 ?dest2 ?shift ~base ~offset mode sign size operation =
   let base = assert_reg _here_ base |> Env.of_reg in
   let (offset : exp) =
     match offset with
-    | Op.Reg _ -> fail _here_ "got register instead of imm"
+    | Op.Reg r -> Exp.(var (Env.of_reg r))
     | Op.Imm w ->
       let width = Word.bitwidth w in
       let _1 = Word.one 32 in
