@@ -70,12 +70,8 @@ Flag zmq
   Default: false
 
 Flag llvm
- Description: Build with llvm backend
- Default: true
-
-Flag server
- Description: Build BAP server
- Default: true
+  Description: Build with llvm backend
+  Default: true
 
 Library bap
   Path:            lib/bap
@@ -305,10 +301,13 @@ Library core_lwt
                   Core_lwt_pool,
                   Core_lwt_stream
 
-Library zmq
+Library zmq_transport
   Path:           src/server
   Build$:         flag(server) && flag(zmq)
   CompiledObject: best
+  FindlibParent:  bap
+  FindlibName:    zmq_transport
+  BuildDepends:   lwt-zmq
   Install:        true
   Modules:        Zmq_client, Zmq_server
 

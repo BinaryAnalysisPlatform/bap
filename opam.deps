@@ -1,12 +1,13 @@
 base-unix
 bitstring
 cmdliner
-cohttp.0.15.0
-core_kernel.111.28.00
-ezjsonm.0.4.0
+cohttp>=0.15.0
+core_kernel>=111.28.00
+ezjsonm>=0.4.0
 faillib
 lwt
 oasis
 re
-uri.1.7.2
+uri>=1.7.2
 zarith
+ocamlgraph
