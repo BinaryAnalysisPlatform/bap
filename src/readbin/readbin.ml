@@ -8,10 +8,16 @@ open Image
 module Program(Conf : Options.Provider) = struct
   open Conf
 
-  let disassemble ?(syms=Table.empty) ?roots arch mem =
-    let disasm = match roots with
-      | Some x -> disassemble ~roots:x arch mem
-      | None -> disassemble arch mem in
+  let disassemble ?img arch mem =
+    let syms = match options.symsfile with
+      | Some filename ->
+        Symtab.read ?demangle:options.demangle ~filename mem
+      | None -> match img with
+        | Some x -> Table.map (symbols x) ~f:Symbol.name
+        | None -> Table.singleton mem "text" in
+    let roots =
+      Seq.(Table.regions syms >>| Memory.min_addr |> to_list) in
+    let disasm = disassemble ~roots arch mem in
     let module Env = struct
       let options = options
       let cfg = Disasm.blocks disasm
@@ -37,31 +43,22 @@ module Program(Conf : Options.Provider) = struct
       let dest = Phoenix.store () in
       printf "Phoenix data was stored in %s folder@." dest
 
-  let disassemble_img img arch mem =
-    let syms = match options.symsfile with
-      | Some filename ->
-        Symtab.read ?demangle:options.demangle ~filename mem
-      | None -> Table.map (symbols img) ~f:Symbol.name in
-    let roots =
-      Seq.(Table.regions syms >>| Memory.min_addr |> to_list) in
-      disassemble ~syms ~roots arch mem
-
   let main () =
     match options.binaryarch with
       | None -> (Image.create options.filename >>= fun (img,warns) ->
         List.iter warns ~f:(eprintf "Warning: %a\n" Error.pp);
-        printf "%-20s: %a\n" "Arch"  Arch.pp (arch img);
+        printf "%-20s: %a\n" "Arch" Arch.pp (arch img);
         printf "%-20s: %a\n" "Entry" Addr.pp (entry_point img);
         printf "%-20s: %d\n" "Symbols" (Table.length (symbols img));
         printf "%-20s: %d\n" "Sections" (Table.length (sections img));
         Table.iteri (sections img) ~f:(fun mem s ->
-            if Section.is_executable s then
-              disassemble_img img (arch img) mem);
+          if Section.is_executable s then
+            disassemble ~img (arch img) mem);
         return (List.length warns))
       | Some s -> match Arch.of_string s with
         | None -> eprintf "unrecognized architecture\n"; return 1
         | Some arch ->
-          printf "%-20s: %a\n" "Arch"  Arch.pp arch;
+          printf "%-20s: %a\n" "Arch" Arch.pp arch;
           let width_of_arch = arch |> Arch.addr_size |> Size.to_bits in
           let addr = Addr.of_int ~width:width_of_arch 0 in
           match Memory.of_file (Arch.endian arch) addr options.filename with
