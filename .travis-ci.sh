@@ -1,4 +1,3 @@
-OPAM_DEPENDS=`cat opam.deps opam.opt.deps`
 SYS_DEPENDS=`cat apt.deps apt.opt.deps`
 
 case "$OCAML_VERSION,$OPAM_VERSION" in
@@ -47,7 +46,7 @@ opam --version
 opam --git-version
 opam repository list
 
-opam install ${OPAM_DEPENDS}
+opam install --deps-only bap
 eval `opam config env`
 
 oasis setup
