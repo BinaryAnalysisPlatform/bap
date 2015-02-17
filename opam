@@ -8,13 +8,14 @@ bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
 license: "MIT"
 build: [
-  ["./configure" "--prefix=%{prefix}%" "--enable-docs"]
+  ["./configure" "--prefix=%{prefix}%" "--enable-docs" "--%{lwt-zmq:enable}%-zmq"]
   [make]
 ]
 install: [make "install"]
 remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "core_lwt"]
+  ["rm" "-f" "%{bin}%/bap-bw-train" "%{bin}%/bap-mc" "%{bin}%/bap-objdump" "%{bin}%/bap-server" "%{bin}%/baptop"]
 ]
 
 build-doc: [make "doc"]
@@ -23,16 +24,19 @@ depends: [
  	"base-unix"
  	"bitstring"
 	"cmdliner"
-	"cohttp" {= "0.15.0"}
-	"core_kernel" {= "111.28.0"}
-	"ezjsonm" {= "0.4.0"}
+	"cohttp" {>= "0.15.0"}
+	"core_kernel" {>= "111.28.0"}
+	"ezjsonm" {>= "0.4.0"}
 	"faillib"
 	"lwt"
 	"oasis" {build}
-    "ocamlgraph"
+	"ocamlgraph"
 	"re"
-	"uri" {= "1.7.2"}
-    "utop"
+	"uri" {>= "1.7.2"}
 	"zarith"
 ]
+depopts: [
+	"lwt-zmq"
+]
 available: [ocaml-version >= "4.01"]
+messages: "Before using baptop, you should install utop." {! utop:installed}
