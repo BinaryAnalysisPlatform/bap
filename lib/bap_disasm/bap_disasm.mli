@@ -106,6 +106,8 @@ module Disasm : sig
     | `Failed_to_lift of mem * insn * Error.t
   ] with sexp_of
 
+  module Error : Printable with type t := error
+
   (** returns a list of all errors and warnings that occurred during
       the disassembling *)
   val errors : t -> (mem * error) seq

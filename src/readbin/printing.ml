@@ -40,6 +40,10 @@ module Make(Env : Env) = struct
 
   let pp_bil : bil pp = Stmt.pp_stmts
 
+  let pp_err fmt err = fprintf fmt "%a: %a" Memory.pp (fst err) Disasm.Error.pp (snd err)
+
+  let pp_errs fmt errs = pp_seq pp_err fmt errs
+
   let pp_insn_line fmt (mem,insn) =
     pp_print_cut fmt ();
     pp_print_tab fmt ();

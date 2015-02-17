@@ -12,9 +12,11 @@ module Program(Conf : Options.Provider) = struct
     let syms = match options.symsfile with
       | Some filename ->
         Symtab.read ?demangle:options.demangle ~filename mem
-      | None -> match img with
-        | Some x -> Table.map (symbols x) ~f:Symbol.name
-        | None -> Table.singleton mem "text" in
+      | None ->
+         Option.value_map img
+            ~default:Table.empty
+           ~f:(fun img -> Table.map (symbols img) ~f:Symbol.name) in
+    let syms = if Table.length syms = 0 then Table.singleton mem "text" else syms in
     let roots =
       Seq.(Table.regions syms >>| Memory.min_addr |> to_list) in
     let disasm = disassemble ~roots arch mem in
@@ -37,6 +39,10 @@ module Program(Conf : Options.Provider) = struct
     Tags.install std_formatter `Text;
     if options.output_dump <> [] then
       pp_code (pp_syms pp_blk) std_formatter syms;
+
+    if options.verbose <> false then
+      let errors = Disasm.errors disasm in
+        pp_errs std_formatter errors;
 
     if options.output_phoenix <> None then
       let module Phoenix = Phoenix.Make(Env) in

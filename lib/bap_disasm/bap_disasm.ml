@@ -210,6 +210,19 @@ module Disasm = struct
     | `Failed_to_lift of mem * insn * Error.t
   ] with sexp_of
 
+  module Error = Printable(struct
+    open Format
+    type t = error
+
+    let module_name = "Bap_disasm.Disasm.Error"
+
+    let pp fmt t : unit =
+      match t with
+      | `Failed e -> fprintf fmt "Failed: %a@\n" Error.pp e
+      | `Failed_to_disasm m -> fprintf fmt "Failed to disassemble: %a@\n" Memory.pp m
+      | `Failed_to_lift (m, i, e) -> fprintf fmt "Failed to lift: %a%a%a@\n" Memory.pp m Insn.pp i Error.pp e
+  end)
+
   let errors d : (mem * error) seq =
     let open Seq.Generator in
     let error_of_state (mem,s) = match s with

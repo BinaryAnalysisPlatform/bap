@@ -129,7 +129,6 @@ module Handlers(Ctxt : sig
     mem -> ('a,'b) Dis.insn -> (Target.t option * stmt list option) Lwt.t
 
   let arm_lifter : ('a,'b) lifter = fun mem insn ->
-    let open Disasm in
     let arm = Arm.Insn.create insn in
     let ops = Array.map (Dis.Insn.ops insn) ~f:Arm.Op.create |>
               Array.to_list |> Option.all in

@@ -29,6 +29,9 @@ module Make(Env : Env) : sig
 
   val pp_blk_name : block pp
 
+  val pp_err  : (mem * Disasm.error) pp
+  val pp_errs : (mem * Disasm.error) seq pp
+
   val pp_sym  : block pp -> (mem * string) pp
   val pp_syms : block pp -> string table pp
   val pp_code : 'a pp -> 'a pp
