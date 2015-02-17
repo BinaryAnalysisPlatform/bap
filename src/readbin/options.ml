@@ -17,6 +17,7 @@ type t = {
   keep_consts : bool;
   no_optimizations : bool;
   binaryarch : string option;
+  verbose : bool;
 } with sexp, fields
 
 module type Provider = sig

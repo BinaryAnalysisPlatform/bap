@@ -61,7 +61,7 @@ let demangle : 'a option Term.t =
 
 let no_resolve : bool Term.t =
   let doc = "Do not resolve addresses to symbolic names" in
-  Arg.(value & flag & info ["no-resolve"; "-n"] ~doc)
+  Arg.(value & flag & info ["no-resolve"; "n"] ~doc)
 
 let keep_alive : bool Term.t =
   let doc = "Keep alive unused temporary variables" in
@@ -87,10 +87,13 @@ let binaryarch : _ Term.t =
   Arg.(value & opt (some string) None &
        info ["binary"] ~doc)
 
+let verbose : bool Term.t =
+  let doc = "Print verbose output" in
+  Arg.(value & flag & info ["verbose"; "v"] ~doc)
 
 let create
-    a b c d e f g h i k l m = Options.Fields.create
-    a b c d e f g h i k l m
+    a b c d e f g h i k l m n = Options.Fields.create
+    a b c d e f g h i k l m n
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -115,7 +118,7 @@ let program =
         $output_phoenix $output_dump $demangle
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
-        $binaryarch),
+        $binaryarch $verbose),
   Term.info "bap-objdump" ~version:"0.9.3" ~doc ~man
 
 let parse () = match Term.eval program with
