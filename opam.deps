@@ -1,12 +1,15 @@
 base-unix
 bitstring
+camlzip
 cmdliner
 cohttp.0.15.0
 core_kernel.111.28.00
 ezjsonm.0.4.0
 faillib
+fileutils
 lwt
 oasis
+ocurl
 re
 uri.1.7.2
 zarith

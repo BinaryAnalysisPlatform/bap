@@ -125,13 +125,24 @@ let linear_sweep arch mem : (mem * insn option) list Or_error.t =
           | Ok bil -> mem, Some (Insn.of_basic ~bil insn)
           | _ -> mem, Some (Insn.of_basic insn))
 
-
 let linear_sweep_exn arch mem = ok_exn (linear_sweep arch mem)
 
-
+let find_roots arch mem =
+  let module BW = Bap_byteweight.Bytes in
+  match Bap_signatures.load ~mode:"bytes" arch with
+  | None -> None
+  | Some data ->
+    let bw = Binable.of_string (module BW) data in
+    let start = Memory.min_addr mem in
+    let rec loop acc n =
+      match BW.find bw ~length:12 ~threshold:0.9 mem n with
+      | Some n -> loop (Addr.(start ++ n) :: acc) (n+1)
+      | None -> List.rev acc in
+    Some (loop [] 0)
 
 let disassemble ?roots arch mem =
   let lifter = lifter_of_arch arch in
+  let roots = if roots = None then find_roots arch mem else roots in
   match Rec.run ?lifter ?roots arch mem with
   | Error err -> fail (`Failed err) mem
   | Ok r -> of_rec r

@@ -41,17 +41,17 @@ module Make(Env : Printing.Env) = struct
   (** This optimization will inline temporary variables that occurres
       inside the instruction definition if the right hand side of the
       variable definition is either side-effect free, or another
-      variable, that is not changed in the scope of the variable definition.
-  *)
+      variable, that is not changed in the scope of the variable definition. *)
   let inline_variables stmt =
     let rec loop ss = function
       | [] -> List.rev ss
-      | Stmt.Move (x, Exp.Var y) as s :: xs when Var.is_tmp x ->
+      | Bil.Move _ as s :: [] -> loop (s::ss) []
+      | Bil.Move (x, Exp.Var y) as s :: xs when Var.is_tmp x ->
         if Bil.is_modified y xs || Bil.is_modified x xs
         then loop (s::ss) xs else
           let xs = Bil.substitute (Exp.var x) (Exp.var y) xs in
           loop ss xs
-      | Stmt.Move (x, y) as s :: xs when Var.is_tmp x ->
+      | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
         if has_side_effect y xs || Bil.is_modified x xs
         then loop (s::ss) xs
         else loop ss (Bil.substitute (Exp.var x) y xs)

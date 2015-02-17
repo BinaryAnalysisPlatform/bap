@@ -25,6 +25,7 @@ BuildDepends:
 
 # for some reason oasis doesn't provide us a $cp command
 PreConfCommand: $rm setup.data
+PostConfCommand: ocaml postconfig.ml
 PostInstallCommand: cp baptop bapbuild $bindir
 PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
@@ -73,10 +74,6 @@ Flag llvm
  Description: Build with llvm backend
  Default: true
 
-Flag server
- Description: Build BAP server
- Default: true
-
 Library bap
   Path:            lib/bap
   FindLibName:     bap
@@ -117,6 +114,7 @@ Library types
                    Bap_bil,
                    Bap_bitvector,
                    Bap_common,
+                   Bap_config,
                    Bap_exp,
                    Bap_helpers,
                    Bap_int_conversions,
@@ -126,6 +124,7 @@ Library types
                    Bap_seq,
                    Bap_size,
                    Bap_stmt,
+                   Bap_trie,
                    Bap_type,
                    Bap_var,
                    Bap_visitor
@@ -206,7 +205,8 @@ Library disasm
   FindlibParent: bap
   FindlibName:   disasm
   BuildDepends:  bap.image,
-                 bap.types
+                 bap.types,
+                 camlzip
   Modules:       Bap_disasm,
                  Bap_disasm_arm,
                  Bap_disasm_arm_bit,
@@ -227,7 +227,9 @@ Library disasm
                  Bap_disasm_prim,
                  Bap_disasm_rec,
                  Bap_disasm_types,
-                 Bap_insn_kind
+                 Bap_insn_kind,
+                 Bap_byteweight,
+                 Bap_signatures
 
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
@@ -316,7 +318,7 @@ Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
   CompiledObject: best
-  BuildDepends:   bap, ezjsonm, uri, cohttp.lwt, core_lwt
+  BuildDepends:   bap, ezjsonm, uri, cohttp.lwt, core_lwt, re
   Install:        true
   MainIs:         start_server.ml
 
@@ -334,19 +336,12 @@ Executable "bap-mc"
   CompiledObject: best
   BuildDepends:   bap, bap.disasm, cmdliner
 
-Executable byteweight
+Executable "bap-byteweight"
   Path:           src/byteweight
   MainIs:         byteweight.ml
-  Install:        false
-  CompiledObject: best
-  BuildDepends:   bap
-
-Executable "bap-bw-train"
-  Path:           src/byteweight
-  MainIs:         train.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, cmdliner, fileutils, curl, re.posix
 
 Executable fbi
   Path:           src/fbi

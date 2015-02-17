@@ -207,7 +207,7 @@ val is_one : t -> bool
 (** [bitwidth bv] return a bit-width, i.e., the amount of bits *)
 val bitwidth : t -> int
 
-(** [extract bv ~signed ~hi ~lo] extracts a subvector from [bv], starting
+(** [extract bv ~hi ~lo] extracts a subvector from [bv], starting
     from bit [hi] and ending with [lo]. Bits are enumerated from
     right to left (from least significant to most), starting from
     zero. [hi] maybe greater then [size].
@@ -318,3 +318,29 @@ end
     [Width] exception if operands sizes mismatch.
 *)
 module Int_exn : Bap_integer.S with type t = t
+
+(** Prefix trees for bitvectors.
+
+    Bitvector comes with 4 predefined prefix trees:
+
+    - [Trie.Big.Bits] - big endian prefix tree, where each
+    token is a bit, and bitvector is tokenized from msb to lsb.
+
+    - [Trie.Big.Byte] - big endian prefix tree, where each token
+    is a byte, and bitvector is tokenized from most significant
+    byte to less significant
+
+    - [Trie.Little.Bits] - is a little endian bit tree.
+
+    - [Trie.Little.Byte] - is a little endian byte tree.
+*)
+module Trie : sig
+  module Big : sig
+    module Bits : Bap_trie.S  with type key = t
+    module Bytes : Bap_trie.S with type key = t
+  end
+  module Little : sig
+    module Bits : Bap_trie.S  with type key = t
+    module Bytes : Bap_trie.S with type key = t
+  end
+end

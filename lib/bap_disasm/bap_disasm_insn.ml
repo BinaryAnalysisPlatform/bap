@@ -88,6 +88,33 @@ let of_decoded = function
   | _, Some insn, bil -> Some (of_basic ?bil insn)
   | _, None,_ -> None
 
+module Trie = struct
+  module Key = struct
+    type token = int * Op.t array with bin_io, compare, sexp
+    type t = token array
+
+    let length = Array.length
+    let nth_token = Array.get
+    let token_hash = Hashtbl.hash
+  end
+
+  module Normalized = Trie.Make(struct
+      include Key
+      let compare_token (x,xs) (y,ys) =
+        let r = compare_int x y in
+        if r = 0 then Op.Normalized.compare_ops xs ys else r
+      let hash_ops = Array.fold ~init:0
+          ~f:(fun h x -> h lxor Op.Normalized.hash x)
+      let hash (x,xs) =
+        x lxor hash_ops xs
+    end)
+
+  let token_of_insn insn = insn.code, insn.ops
+  let key_of_insns = Array.of_list_map ~f:token_of_insn
+
+  include Trie.Make(Key)
+end
+
 include Regular.Make(struct
     type nonrec t = t with sexp, bin_io, compare
     let hash = code
