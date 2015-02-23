@@ -50,8 +50,6 @@ type full_insn = (asm,kinds) insn with compare, sexp_of
 *)
 type ('a,'k) t
 
-
-
 (** Disassembler state.
 
     Words of precautions: this state is valid only inside handlers
@@ -62,7 +60,6 @@ type ('a,'k) t
     is for user data type, that can be used to pass extra information
 *)
 type (+'a,+'k,'s,'r) state
-
 
 (** [create ?debug_level ?cpu ~backend target] creates a disassembler
     for the specified [target]. All parameters are backend specific,
@@ -197,6 +194,14 @@ module Op : sig
     | Imm of imm
     | Fmm of fmm
   with bin_io, compare, sexp
+
+  (** Provides normalized comparison  *)
+  module Normalized : sig
+    val compare : t -> t -> int
+    val hash : t -> int
+    val compare_ops : t array -> t array -> int
+  end
+
   include Regular with type t := t
 end
 
@@ -238,4 +243,16 @@ module Fmm : sig
   type t = fmm
   val to_float : t -> float
   include Regular with type t := t
+end
+
+module Trie : sig
+  type key
+
+  (** [key_of_first_insns state ~len:n] creates a key from first [n]
+      instructions stored in the state if state contains such
+      amount of instructions  *)
+  val key_of_first_insns : (_,_,_,_) state -> len:int -> key option
+
+  module Normalized : Trie with type key = key
+  include Trie with type key := key
 end

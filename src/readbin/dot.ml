@@ -84,7 +84,7 @@ module Make(Env : Printing.Env) = struct
       let pr = asprintf in
       List.sort ~cmp:label_order options.cfg_format |>
       List.map ~f:(function
-          | `with_name -> pr "%s@." name
+          | `with_name -> pr "«%s»\\n" name
           | `with_asm  -> pr "@[<v>%a@]@?" pp_blk_asm blk |> escape_label
           | `with_bil  -> pr "@[<v>%a@]@?" pp_blk_bil blk |> escape_label) |>
       String.concat

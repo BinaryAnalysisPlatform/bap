@@ -101,6 +101,7 @@ module Std = struct
   include Bap_disasm
   module Insn    = Bap_disasm_insn
   module Block   = Bap_disasm_block
+  module Symtab  = Bap_disasm_symtab
 
   (** {4 Expert interface to disassembler}
       This interface is rather complicated, and is built around to
@@ -135,4 +136,7 @@ module Std = struct
       BAP at certain extension points. *)
   module Plugin = Bap_plugin
   module Plugins = Bap_plugins
+
+  module Signatures = Bap_signatures
+
 end

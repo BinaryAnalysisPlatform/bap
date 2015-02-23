@@ -5,6 +5,10 @@ cd examples
 ./run.sh
 cd ..
 
+echo "Updating signatures"
+bap-byteweight update
+echo "done"
+
 for target in $TEST_TARGETS; do
     git clone --depth=1 https://github.com/BinaryAnalysisPlatform/$target-binaries.git
     files=`find "$target-binaries" -name "*$1*" -type f -regex '.*utils_.*'`

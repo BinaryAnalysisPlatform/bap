@@ -384,6 +384,49 @@ let to_bits bv endian =
 
 module Mono = Comparable.Make(Make(Size_mono))
 
+module Trie = struct
+  module Common = struct
+    type nonrec t = t
+    type token = int with bin_io, compare, sexp
+    let token_hash = Fn.id
+
+  end
+
+  module Little = struct
+    module Bits = Bap_trie.Make(struct
+        include Common
+        let length = bitwidth
+        let nth_token v n =
+          extract_exn ~hi:n ~lo:n v |> to_int |> ok_exn
+      end)
+
+    module Bytes = Bap_trie.Make(struct
+        include Common
+        let length v = (bitwidth v + 8 - 1) / 8
+        let nth_token v n =
+          extract_exn ~hi:(n*8 + 8) ~lo:(n*8) v |> to_int |> ok_exn
+      end)
+  end
+
+  module Big = struct
+    module Bits = Bap_trie.Make(struct
+        include Common
+        let length = bitwidth
+        let nth_token v n =
+          let m = bitwidth v - 1 - n in
+          extract_exn ~hi:m ~lo:m v |> to_int |> ok_exn
+      end)
+
+    module Bytes = Bap_trie.Make(struct
+        include Common
+        let length v = (bitwidth v + 8 - 1) / 8
+        let nth_token v n =
+          let n = length v - n - 1 in
+          extract_exn ~hi:(n*8 + 8) ~lo:(n*8) v |> to_int |> ok_exn
+      end)
+  end
+end
+
 include Or_error.Monad_infix
 include Bap_regular.Make(T)
 module Int_err = Safe

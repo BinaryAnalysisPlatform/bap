@@ -18,6 +18,11 @@ type t = {
   no_optimizations : bool;
   binaryarch : string option;
   verbose : bool;
+  bw_disable : bool;
+  bw_length : int;
+  bw_threshold : float;
+  print_symbols : [`with_name | `with_addr | `with_size] list;
+  use_ida : string option option;
 } with sexp, fields
 
 module type Provider = sig

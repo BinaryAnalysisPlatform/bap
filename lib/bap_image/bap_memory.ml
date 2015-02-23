@@ -110,8 +110,10 @@ let one_byte_getters data addr pos =
       pos_ref := !pos_ref + 1;
       byte (read data ~pos)  in
     let safe ~pos_ref =
-      pos_ref := Addr.(!pos_ref ++ 1);
-      return (byte (read data ~pos)) in
+      if Addr.(pos_ref.contents <> addr)
+      then errorf "segfault: you missed a byte"
+      else (pos_ref := Addr.(!pos_ref ++ 1);
+            return (byte (read data ~pos))) in
     {fast ; safe } in
   let error =
     let msg = "trying to read word from one byte of memory" in
@@ -399,6 +401,22 @@ let pp_hex fmt t =
   let x = 16 - List.length chars in
   print_chars x chars
 
+
+module Trie = struct
+  module Key(Spec : sig val size : size end ) = struct
+    open Spec
+    type nonrec t = t
+    type token = word with bin_io, compare, sexp
+
+    let length m = length m / Size.to_bytes size
+    let nth_token m n = get ~index:n ~scale:size m |> ok_exn
+    let token_hash = Word.hash
+  end
+  module R8  = Trie.Make(Key(struct let size = `r8 end))
+  module R16 = Trie.Make(Key(struct let size = `r16 end))
+  module R32 = Trie.Make(Key(struct let size = `r32 end))
+  module R64 = Trie.Make(Key(struct let size = `r64 end))
+end
 
 include Printable(struct
     open Format

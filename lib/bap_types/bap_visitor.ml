@@ -126,8 +126,8 @@ class ['a] visitor = object (self : 's)
   method enter_while ~cond ss x = x
   method leave_while ~cond ss x = x
   method visit_while ~cond ss x =
-    let x = self#enter_while ~cond ss x |>
-            self#visit_exp cond in
+    let x = self#enter_while ~cond ss x in
+    let x = {< in_loop = true >}#visit_exp cond x in
     let self = {< under_condition = true;
                   in_loop = true >} in
     self#run ss x |>

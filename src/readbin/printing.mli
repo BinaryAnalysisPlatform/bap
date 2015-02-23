@@ -35,7 +35,7 @@ module Make(Env : Env) : sig
   val pp_sym  : block pp -> (mem * string) pp
   val pp_syms : block pp -> string table pp
   val pp_code : 'a pp -> 'a pp
-  val pp_concat : 'a pp list -> 'a pp
+  val pp_concat : ?sep:unit pp -> 'a pp list -> 'a pp
   val pp_seq  : 'a pp -> 'a seq pp
   val pp_list : ?sep:unit pp -> 'a pp -> 'a list pp
 end

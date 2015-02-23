@@ -138,3 +138,11 @@ module Make_iterators( M : Monad.S )
 
 *)
 val to_buffer : t -> Bigsubstring.t
+
+
+module Trie : sig
+  module R8  : Trie with type key = t
+  module R16 : Trie with type key = t
+  module R32 : Trie with type key = t
+  module R64 : Trie with type key = t
+end

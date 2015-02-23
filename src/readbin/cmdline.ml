@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap.Std
 open Cmdliner
 open Format
 
@@ -29,7 +30,7 @@ let output_phoenix : _ Term.t =
              directory name." in
   let vopt = Some (Sys.getcwd ()) in
   Arg.(value & opt ~vopt (some string) None &
-       info ["phoenix"; "p"] ~doc)
+       info ["phoenix"] ~doc)
 
 let output_dump : _ list Term.t =
   let values = [
@@ -83,7 +84,7 @@ let binaryarch : _ Term.t =
   let doc =
     sprintf
       "Parse input file as raw binary with specified \
-      architecture, e.g. x86, arm, etc." in
+       architecture, e.g. x86, arm, etc." in
   Arg.(value & opt (some string) None &
        info ["binary"] ~doc)
 
@@ -91,9 +92,43 @@ let verbose : bool Term.t =
   let doc = "Print verbose output" in
   Arg.(value & flag & info ["verbose"; "v"] ~doc)
 
+let bw_disable : bool Term.t =
+  let doc = "Disable root finding with byteweight" in
+  Arg.(value & flag & info ["no-byteweight"] ~doc)
+
+let bw_length : int Term.t =
+  let doc = "Maximum prefix length when byteweighting" in
+  Arg.(value & opt int 16 & info ["byteweight-length"] ~doc)
+
+let bw_threshold : float Term.t =
+  let doc = "Minimum score for the function start" in
+  Arg.(value & opt float 0.9 & info ["byteweight-threshold"] ~doc)
+
+let print_symbols : _ list Term.t =
+  let opts = [
+    "name", `with_name;
+    "addr", `with_addr;
+    "size", `with_size;
+  ] in
+  let doc = sprintf
+      "Print found symbols. Optional value \
+       defines output format, and can be %s. You can \
+       specify this parameter several times, if you \
+       want both, for example."
+    @@ Arg.doc_alts_enum opts in
+  Arg.(value & opt_all ~vopt:`with_name (enum opts) [] &
+       info ["print-symbols"; "p"] ~doc)
+
+let use_ida : string option option Term.t =
+  let doc = "Use IDA to extract symbols from file. \
+             You can optionally provide path to IDA executable,\
+             or executable name." in
+  Arg.(value & opt ~vopt:(Some None)
+         (some (some string)) None & info ["use-ida"] ~doc)
+
 let create
-    a b c d e f g h i k l m n = Options.Fields.create
-    a b c d e f g h i k l m n
+    a b c d e f g h i k l m n o p q r s = Options.Fields.create
+    a b c d e f g h i k l m n o p q r s
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -118,8 +153,10 @@ let program =
         $output_phoenix $output_dump $demangle
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
-        $binaryarch $verbose),
-  Term.info "bap-objdump" ~version:"0.9.3" ~doc ~man
+        $binaryarch $verbose $bw_disable $bw_length $bw_threshold
+        $print_symbols $use_ida),
+  Term.info "bap-objdump"
+    ~version:Config.pkg_version ~doc ~man
 
 let parse () = match Term.eval program with
   | `Ok opts -> Ok opts

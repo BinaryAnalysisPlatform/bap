@@ -125,9 +125,7 @@ let linear_sweep arch mem : (mem * insn option) list Or_error.t =
           | Ok bil -> mem, Some (Insn.of_basic ~bil insn)
           | _ -> mem, Some (Insn.of_basic insn))
 
-
 let linear_sweep_exn arch mem = ok_exn (linear_sweep arch mem)
-
 
 
 let disassemble ?roots arch mem =
@@ -211,17 +209,17 @@ module Disasm = struct
   ] with sexp_of
 
   module Error = Printable(struct
-    open Format
-    type t = error
+      open Format
+      type t = error
 
-    let module_name = "Bap_disasm.Disasm.Error"
+      let module_name = "Bap_disasm.Disasm.Error"
 
-    let pp fmt t : unit =
-      match t with
-      | `Failed e -> fprintf fmt "Failed: %a@\n" Error.pp e
-      | `Failed_to_disasm m -> fprintf fmt "Failed to disassemble: %a@\n" Memory.pp m
-      | `Failed_to_lift (m, i, e) -> fprintf fmt "Failed to lift: %a%a%a@\n" Memory.pp m Insn.pp i Error.pp e
-  end)
+      let pp fmt t : unit =
+        match t with
+        | `Failed e -> fprintf fmt "Failed: %a@\n" Error.pp e
+        | `Failed_to_disasm m -> fprintf fmt "Failed to disassemble: %a@\n" Memory.pp m
+        | `Failed_to_lift (m, i, e) -> fprintf fmt "Failed to lift: %a%a%a@\n" Memory.pp m Insn.pp i Error.pp e
+    end)
 
   let errors d : (mem * error) seq =
     let open Seq.Generator in

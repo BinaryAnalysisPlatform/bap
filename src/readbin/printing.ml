@@ -77,8 +77,12 @@ module Make(Env : Env) = struct
   let pp_syms pp_blk fmt syms =
     pp_seq (pp_sym pp_blk) fmt (Table.to_sequence syms)
 
-  let pp_concat pps fmt x =
-    List.iter pps ~f:(fun pp -> pp fmt x)
+  let pp_ignore _ () = ()
+
+  let pp_concat ?(sep=pp_ignore) pps fmt x =
+    List.map pps ~f:(fun pp -> fun fmt () -> pp fmt x) |>
+    List.intersperse ~sep |>
+    List.iter ~f:(fun pp -> pp fmt ())
 
   let setup_tab_stops fmt =
     pp_print_as fmt 6 "";
