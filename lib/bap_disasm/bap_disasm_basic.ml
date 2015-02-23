@@ -13,7 +13,6 @@ type kinds
 type mem = Mem.t with sexp_of
 type kind = Kind.t with compare, sexp
 
-
 type pred = [
   | `Valid
   |  kind
@@ -24,7 +23,6 @@ type 'a oper = {
   insn : int;
   data : 'a;
 } with bin_io, compare, sexp
-
 
 type reg_info = {
   reg_code : int;
@@ -42,9 +40,7 @@ type reg = reg_info oper with bin_io, compare, sexp
 type imm = imm_info oper with bin_io, compare, sexp
 type fmm = float    oper with bin_io, compare, sexp
 
-
 module Table = struct
-
   (* Bigstring.length is very slow... we should report a bug to the
      mantis. They need to add "noalloc" to it, otherwise on each call
      the whole GC machinery is triggered. For now we will store the
@@ -73,7 +69,6 @@ module Table = struct
               ~src:t.data ~src_pos:pos ~dst ~dst_pos:0 ~len;
             dst)
 end
-
 
 type dis = {
   id : int;
@@ -141,7 +136,6 @@ module Imm = struct
     | Ok word -> Some word
     | Error _ -> None
 
-
   module T = struct
     type t = imm
     with bin_io, sexp, compare
@@ -184,7 +178,6 @@ module Fmm = struct
   include Regular.Make(T)
 end
 
-
 module Op = struct
   module T = struct
     type t =
@@ -204,16 +197,37 @@ module Op = struct
       | Reg r -> Reg.hash r
       | Imm n -> Imm.hash n
       | Fmm n -> Fmm.hash n
+
+    (** Normalized comparison *)
+    module Normalized = struct
+      (** immediates are all equal  *)
+      let compare x y = match x, y with
+        | Imm _, Imm _ -> 0
+        | Fmm _, Fmm _ -> 0
+        | _ -> compare x y
+
+      (** compares equal if one of arrays is a prefix of another, e.g,
+          [| x; y; z |] is equal to [| x; y |] and vice verse *)
+      let compare_ops xs ys =
+        let len = min (Array.length xs) (Array.length ys) in
+        let rec loop = function
+          | 0 -> 0
+          | n ->
+            let r = compare xs.(len - n) ys.(len - n) in
+            if r = 0 then loop (n-1) else r in
+        loop len
+
+      let hash = function
+        | Imm _ | Fmm _ -> 0
+        | Reg x -> Reg.hash x
+    end
   end
   include T
   include Regular.Make(T)
-
 end
 
 type op = Op.t
 with bin_io, compare, sexp
-
-
 
 let cpred_of_pred : pred -> C.pred = function
   | `Valid -> C.Is_true
@@ -283,6 +297,7 @@ module Insn = struct
           | C.Fmm -> Op.Fmm Fmm.(create dis ~insn ~oper)
           | C.Insn -> assert false) in
     {code; name; asm; kinds; opers }
+
 
 end
 
@@ -491,3 +506,43 @@ let insn_of_mem dis mem =
         split mem' >>= fun r -> stop s (mem',Some insn,r))
     ~invalid:(fun s mem' _ ->
         split mem' >>= fun r -> stop s (mem',None,r))
+
+
+module Trie = struct
+
+  type s = State : (_,_,_,_) state -> s
+  type key = int * s
+
+  let key_of_first_insns s ~len:n =
+    Option.some_if (Array.length s.insns <= n) (n, State s)
+
+  module Key = struct
+    type t = key
+    type token = int * Op.t array with bin_io, compare, sexp
+    let length = fst
+    let nth_token (_, State s) i =
+      match s.insns.(i) with
+      | lazy (mem, None) -> 0, [| |]
+      | lazy (mem, Some insn) -> Insn.(insn.code, insn.opers)
+
+    let token_hash = Hashtbl.hash
+  end
+
+  module Normalized_key = struct
+    include Key
+
+    let compare_token (x,xs) (y,ys) =
+      let r = compare_int x y in
+      if r <> 0 then r
+      else Op.Normalized.compare_ops xs ys
+
+    let ops_hash xs =
+      Array.fold ~init:0 ~f:(fun h x -> Op.Normalized.hash x lxor h) xs
+
+    let token_hash (x,xs) =
+      x lxor ops_hash xs
+  end
+
+  module Normalized = Trie.Make(Normalized_key)
+  include (Trie.Make(Key) : Trie with type key := key)
+end

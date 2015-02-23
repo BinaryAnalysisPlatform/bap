@@ -6,6 +6,8 @@ open Bap_visitor
 val find_map : 'a #finder -> bil -> 'a option
 val find : unit #finder -> bil -> bool
 val iter : unit #visitor -> bil -> unit
+val fold : 'a #visitor -> init:'a -> bil -> 'a
+val map : #mapper -> bil -> bil
 
 (** [is_referenced x p] is [true] if [x] is referenced in some expression or
     statement in program [p] *)
@@ -31,6 +33,11 @@ val normalize_negatives : bil -> bil
     expression [y] in program [p] *)
 val substitute : exp -> exp -> bil -> bil
 
+
+(** [substitute_var x y p] substitutes all occurences of variable [x]
+    by expression [y] *)
+val substitute_var : var -> exp -> bil -> bil
+
 (** [fold_consts] evaluate constant expressions.
     Note: this function performs only one step, and has no loops,
     it is supposed to be run using a fixpoint combinator.
@@ -44,3 +51,35 @@ class constant_folder : mapper
     reached. If the transformation orbit contains non-trivial
     cycles, then a arbitrary point of cycle will be returned. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
+
+(** Bil provides two prefix tries trees.
+
+    The default one is not normalized and will compare bil statements
+    literally. This means that comparison is sensitive to variable
+    names and immediate values. Depending on your context it may be
+    find or not. For example, two [SP] variables may compare as different
+    if one of them was obtained from different compilation (and met
+    the other one through some persistant storage, e.g., file on hard
+    disk). Moreover, BIL obtained from different lifters will have
+    different names for the same registers. All this issues are
+    addressed in normalized [Trie].
+*)
+module Trie : sig
+  type normalized_bil
+
+  (** [normalize ?subst bil] normalize BIL. If [subst] is provided,
+      then substitute each occurence of the fst expression to the
+      snd expression before the normalization. The effect of
+      normalization is the following:
+
+      1. All immediate values are compared equal
+      2. All variables are compared nominally
+      3. BIL is simplified to reduce the syntactic differences
+      (but the comparison is still syntactic, and (x + 2) will
+      be compared differently to (2 + x).
+  *)
+  val normalize : ?subst:(exp * exp) list -> bil -> normalized_bil
+
+  module Normalized : Trie with type key = normalized_bil
+  include Trie with type key = bil
+end

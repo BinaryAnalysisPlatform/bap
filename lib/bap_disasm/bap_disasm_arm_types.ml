@@ -6,10 +6,7 @@ module Memory = Bap_memory
 
 type mem = Memory.t
 
-
 exception Lifting_failed of string
-
-
 
 module Cond = struct
   type t = [
@@ -33,7 +30,6 @@ end
 
 type cond = Cond.t
 with bin_io, compare, sexp, enumerate
-
 
 module Reg = struct
   type nil = [ `Nil ]
@@ -59,7 +55,6 @@ module Reg = struct
     | `SP
   ] with bin_io, compare, sexp, enumerate
 
-
   type gpr_or_nil = [nil | gpr]
   with bin_io, compare, sexp, enumerate
 
@@ -69,7 +64,6 @@ module Reg = struct
     | `SPSR
     | `ITSTATE
   ] with bin_io, compare, sexp, enumerate
-
 
   type ccr_or_nil = [nil | ccr ]
   with bin_io, compare, sexp, enumerate
@@ -344,9 +338,7 @@ type arth = [`ADD | `ADC | `SBC | `RSC | `SUB | `RSB ]
 type move = [`AND | `BIC | `EOR | `MOV | `MVN | `ORR ]
 type data_oper = [ arth | move]
 
-
 type repair = [`POS | `NEG]
-
 
 (* shift types *)
 type shift = [`ASR | `LSL | `LSR | `ROR | `RRX]

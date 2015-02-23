@@ -116,10 +116,12 @@ module Std = struct
   module Regular = Regular
   module Integer = Integer
   module Printable = Printable
+  module Trie = Trie
 
   module type Regular = Regular
   module type Integer = Integer
   module type Printable = Printable
+  module type Trie = Trie
 
   (** Processor architecture.
 
@@ -272,4 +274,5 @@ module Std = struct
 
   include Bap_int_conversions
 
+  module Config = Bap_config
 end

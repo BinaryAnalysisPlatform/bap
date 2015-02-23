@@ -8,6 +8,8 @@ module Word = Bitvector
 let find_map (finder : 'a #finder) ss : 'a option = finder#find ss
 let find finder ss = finder#find ss = Some ()
 let iter (visitor : unit #visitor) ss = visitor#run ss ()
+let fold (visitor : 'a #visitor) ~init ss = visitor#run ss init
+let map m = m#run
 
 let is_assigned ?(strict=false) x = find (object(self)
     inherit [unit] finder
@@ -187,6 +189,56 @@ let fix compare f x  =
 
 let fixpoint = fix compare_bil
 
-let substitute x y = (object inherit mapper
-  method! map_exp z = if Bap_exp.(x = z) then y else z
+let substitute x y = (object inherit mapper as super
+  method! map_exp z =
+    let z = super#map_exp z in
+    if Bap_exp.(z = x) then y else z
 end)#run
+
+let substitute_var x y = (object inherit mapper as super
+  method! map_var z =
+    match super#map_var z with
+    | Exp.Var z when Bap_var.(z = x) -> y
+    | z -> z
+end)#run
+
+
+module Trie = struct
+  type normalized_bil = bil
+
+  let vars = String.Table.create ()
+
+  let pruned ty = Exp.Unknown ("<pruned>", ty)
+
+  let normalize_values =
+    map (object inherit mapper
+      method! map_sym var =
+        let name = Bap_var.name var in
+        let ty = Bap_var.typ var in
+        String.Table.find_or_add vars name
+          ~default:(fun () -> Bap_var.create name ty)
+      method! map_int w =
+        let ty = Type.Imm (Word.bitwidth w) in
+        pruned ty
+    end)
+
+  let simplify = List.map ~f:fixpoint [
+      prune_unreferenced;
+      normalize_negatives;
+      fold_consts;
+    ] |> List.reduce_exn ~f:Fn.compose |> fixpoint
+
+  let normalize ?(subst=[]) bil =
+    List.fold subst ~init:bil ~f:(fun bil (x,y) -> substitute x y bil)
+    |> simplify |> normalize_values
+
+  module Normalized = Trie.Make(struct
+      type t = bil
+      type token = stmt with bin_io, sexp, compare
+      let length  = List.length
+      let nth_token = List.nth_exn
+      let token_hash = Hashtbl.hash
+    end)
+
+  include Normalized
+end

@@ -21,6 +21,7 @@ PKG core_kernel
 PKG ocamlbuild
 PKG jsonm
 PKG ocamlgraph
+PKG camlzip
 EXT ounit
 EXT here
 EXT nonrec

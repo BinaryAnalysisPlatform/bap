@@ -126,23 +126,37 @@ Bap is shipped with `bap-objdump` utility that can disassemble files,
 and printout dumps in different formats, including plain text, json,
 dot, html. The example of `bap-objdump` output is:
 
-```ocaml
-  begin(sub_B6C8_0xec)
-      0000b7b4: 00 00 50 e3    cmp r0, #0x0        ; CMPri(R0,0x0,0xe,Nil)
-      0000b7b8: e4 ff ff ca    bgt #-0x70          ; Bcc(-0x70,0xc,CPSR)
-  end(sub_B6C8_0xec)
+```asm
+  begin(to_uchar)
+      0000a004: 04 b0 2d e5    str r11, [sp, #-4]! ; STR_PRE_IMM(SP,R11,SP,0xfffffffc,0xe,Nil)
+      0000a008: 00 b0 8d e2    add r11, sp, #0x0   ; ADDri(R11,SP,0x0,0xe,Nil,Nil)
+      0000a00c: 0c d0 4d e2    sub sp, sp, #0xc    ; SUBri(SP,SP,0xc,0xe,Nil,Nil)
+      0000a010: 00 30 a0 e1    mov r3, r0          ; MOVr(R3,R0,0xe,Nil,Nil)
+      0000a014: 05 30 4b e5    strb r3, [r11, #-5] ; STRBi12(R3,R11,0xfffffffb,0xe,Nil)
+      0000a018: 05 30 5b e5    ldrb r3, [r11, #-5] ; LDRBi12(R3,R11,0xfffffffb,0xe,Nil)
+      0000a01c: 03 00 a0 e1    mov r0, r3          ; MOVr(R0,R3,0xe,Nil,Nil)
+      0000a020: 00 d0 8b e2    add sp, r11, #0x0   ; ADDri(SP,R11,0x0,0xe,Nil,Nil)
+      0000a024: 00 08 bd e8    ldm sp!, {r11}      ; LDMIA_UPD(SP,SP,0xe,Nil,R11)
+      0000a028: 1e ff 2f e1    bx lr               ; BX_RET(0xe,Nil)
+  end(to_uchar)
+```
 
-  begin(sub_B6C8_0xec) {
-    orig1_2673 = R0
-    orig2_2674 = 0x0:32
-    dest_2671 = R0 - 0x0:32
-    CF = orig2_2674 <= orig1_2673
-    VF = high:1[(orig1_2673 ^ orig2_2674) & (orig1_2673 ^ dest_2671)]
-    NF = high:1[dest_2671]
-    ZF = dest_2671 = 0x0:32
-    if ((ZF = false) & (NF = VF)) {
-      jmp sub_B6C8_0x88
-    }
+```ocaml
+  begin(to_uchar) {
+    mem := mem with [SP - 0x4:32, el]:u32 <- R11
+    SP := SP - 0x4:32
+    R11 := SP
+    SP := SP - 0xC:32
+    R3 := R0
+    mem := mem with [R11 - 0x5:32, el]:u8 <- low:8[R3]
+    temp_2303 := mem[R11 - 0x5:32, el]:u8
+    R3 := pad:32[temp_2303]
+    R0 := R3
+    SP := R11
+    orig_base_2309 := SP
+    R11 := mem[orig_base_2309, el]:u32
+    SP := SP + 0x4:32
+    jmp LR
   }
 ```
 

@@ -400,6 +400,22 @@ let pp_hex fmt t =
   print_chars x chars
 
 
+module Trie = struct
+  module Key(Spec : sig val size : size end ) = struct
+    open Spec
+    type nonrec t = t
+    type token = word with bin_io, compare, sexp
+
+    let length m = length m / Size.to_bytes size
+    let nth_token m n = get ~index:n ~scale:size m |> ok_exn
+    let token_hash = Word.hash
+  end
+  module R8  = Trie.Make(Key(struct let size = `r8 end))
+  module R16 = Trie.Make(Key(struct let size = `r16 end))
+  module R32 = Trie.Make(Key(struct let size = `r32 end))
+  module R64 = Trie.Make(Key(struct let size = `r64 end))
+end
+
 include Printable(struct
     open Format
     type nonrec t = t

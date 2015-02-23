@@ -135,4 +135,7 @@ module Std = struct
       BAP at certain extension points. *)
   module Plugin = Bap_plugin
   module Plugins = Bap_plugins
+
+  module Signatures = Bap_signatures
+
 end

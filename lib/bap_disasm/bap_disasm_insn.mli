@@ -20,7 +20,7 @@ include Regular with type t := t
 (** returns backend specific name of instruction *)
 val name : t -> string
 
-(** target-specific assembler string representing the instructio  *)
+(** target-specific assembler string representing the instruction  *)
 val asm  : t -> string
 
 (** returns BIL program specifying instruction semantics  *)
@@ -62,6 +62,31 @@ val may_load : t -> bool
 
 (** [may_store] is true if instruction may store data to memory  *)
 val may_store : t -> bool
+
+
+(** {3 Prefix Tree}
+    This module provides a trie data structure where a sequence of
+    instructions is used as a key (and an individual instruction
+    as a token). Two implementations are provided, a regular, where
+    insns are compared as-is, and normalized, where instructions are
+    compared using normalized comparison.
+
+    In normalized comparison concerete immediate values are ignored,
+    and if instructions have different number of operands, then only
+    then excess operands are excluded from the comparison.
+*)
+module Trie : sig
+  (** Trie requires 0(1) get operation  *)
+  type key
+
+  (** [key_of_insns insns] takes a list of instructions and transforms
+      it to [key] *)
+  val key_of_insns : t list -> key
+
+  module Normalized : Trie with type key = key
+  include Trie with type key := key
+end
+
 
 (** {3 Creating}
     The following functions will create [insn] instances from a lower
