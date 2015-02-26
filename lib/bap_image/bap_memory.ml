@@ -110,8 +110,10 @@ let one_byte_getters data addr pos =
       pos_ref := !pos_ref + 1;
       byte (read data ~pos)  in
     let safe ~pos_ref =
-      pos_ref := Addr.(!pos_ref ++ 1);
-      return (byte (read data ~pos)) in
+      if Addr.(pos_ref.contents <> addr)
+      then errorf "segfault: you missed a byte"
+      else (pos_ref := Addr.(!pos_ref ++ 1);
+            return (byte (read data ~pos))) in
     {fast ; safe } in
   let error =
     let msg = "trying to read word from one byte of memory" in

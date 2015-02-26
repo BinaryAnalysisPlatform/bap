@@ -226,6 +226,7 @@ Library disasm
                  Bap_disasm_insn,
                  Bap_disasm_prim,
                  Bap_disasm_rec,
+                 Bap_disasm_symtab,
                  Bap_disasm_types,
                  Bap_insn_kind,
                  Bap_byteweight,
@@ -327,7 +328,7 @@ Executable "bap-objdump"
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.disasm, ocamlgraph, ezjsonm, cmdliner
+  BuildDepends:   bap, bap.disasm, ocamlgraph, ezjsonm, cmdliner, fileutils
 
 Executable "bap-mc"
   Path:           src/bap_mc

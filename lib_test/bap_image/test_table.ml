@@ -50,13 +50,13 @@ let get_mem_tag = function
   | Some (_,x) -> x
   | None -> assert_failure "No memory contents"
 
-let mem_low = create_mem ~start_addr:0x00 ~size:0x10 ()
-let mem_high = create_mem ~start_addr:0x20 ~size:0x10 ()
+let mem_low = create_mem ~start_addr:0x10 ~size:0x10 ()
+let mem_high = create_mem ~start_addr:0x30 ~size:0x10 ()
 
 (* Construct a new table tab *)
 let tab =
   let t = Bap_table.add empty_table mem_low "lo" >>= fun t ->
-  Bap_table.add t mem_high "hi" >>= fun t -> return t in
+    Bap_table.add t mem_high "hi" >>= fun t -> return t in
   match t with
   | Ok t -> t
   | Error err -> assert_failure (Error.to_string_hum err)
@@ -95,8 +95,8 @@ let test_one_to_one ctxt =
   let tab2 =
     let extra = create_mem ~start_addr:0x50 ~size:0x30 () in
     let t = Bap_table.add empty_table mem_low "reg1" >>= fun t ->
-    Bap_table.add t mem_high "reg2" >>= fun t ->
-    Bap_table.add t extra "reg3" >>= fun t -> return t in
+      Bap_table.add t mem_high "reg2" >>= fun t ->
+      Bap_table.add t extra "reg3" >>= fun t -> return t in
     match t with
     | Ok t -> t
     | Error err -> assert_failure (Error.to_string_hum err) in
@@ -106,22 +106,28 @@ let test_one_to_one ctxt =
 let suite = "Table" >::: [
     "table_length_zero" >:: test_table_len;
     "table_length_nonzero" >:: test_table_len2;
-    "test_find" >:: test_find;
-    "test_mem" >:: test_mem;
-    "test_intersections1" >::
-      test_intersections ~start_addr:0x00 ~size:0x30 ~expect:["hi";"lo"];
-    "test_intersections2" >::
-      test_intersections ~start_addr:0x0F ~size:0x30 ~expect:["hi";"lo"];
-    "test_intersections3" >::
-      test_intersections ~start_addr:0x10 ~size:0x10 ~expect:[];
-    "test_intersections4" >::
-      test_intersections ~start_addr:0x10 ~size:0x30 ~expect:["hi"];
-    "test_intersections5" >::
-      test_intersections ~start_addr:0x21 ~size:0x01 ~expect:["hi"];
-    "test_intersections6" >::
-      test_intersections ~start_addr:0x21 ~size:0x20 ~expect:["hi"];
-    "test_next" >:: test_next;
-    "test_prev" >:: test_prev;
-    "test_min" >:: test_min;
-    "test_max" >:: test_max;
+    "find" >:: test_find;
+    "mem" >:: test_mem;
+    "intersections1" >::
+    test_intersections ~start_addr:0x10 ~size:0x30 ~expect:["hi";"lo"];
+    "intersections2" >::
+    test_intersections ~start_addr:0x1F ~size:0x30 ~expect:["hi";"lo"];
+    "intersections3" >::
+    test_intersections ~start_addr:0x20 ~size:0x10 ~expect:[];
+    "intersections4" >::
+    test_intersections ~start_addr:0x20 ~size:0x30 ~expect:["hi"];
+    "intersections5" >::
+    test_intersections ~start_addr:0x31 ~size:0x01 ~expect:["hi"];
+    "intersections6" >::
+    test_intersections ~start_addr:0x31 ~size:0x20 ~expect:["hi"];
+    "intersections7" >::
+    test_intersections ~start_addr:0x0 ~size:0x10 ~expect:[];
+    "intersections8" >::
+    test_intersections ~start_addr:0x0 ~size:0x11 ~expect:["lo"];
+    "intersections9" >::
+    test_intersections ~start_addr:0x0 ~size:0x21 ~expect:["lo"];
+    "next" >:: test_next;
+    "prev" >:: test_prev;
+    "min" >:: test_min;
+    "max" >:: test_max;
   ]

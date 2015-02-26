@@ -1,4 +1,5 @@
 REC
 PKG ezjsonm
+PKG fileutils
 B ../../_build/src/readbin
 S .

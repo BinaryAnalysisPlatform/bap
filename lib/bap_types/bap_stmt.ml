@@ -1,11 +1,15 @@
 open Core_kernel.Std
 open Bap_common
 open Format
+open Bap_bil
 
 let rec pp fmt s =
-  let open Bap_bil.Stmt in match s with
-  | Move (var, exp) -> fprintf fmt "@[<v2>%a := %a@]" Bap_var.pp var Bap_exp.pp exp
-  | Jmp exp -> fprintf fmt "jmp %a" Bap_exp.pp exp
+  let open Stmt in match s with
+  | Move (var, exp) ->
+    fprintf fmt "@[<v2>%a := %a@]" Bap_var.pp var Bap_exp.pp exp
+  | Jmp (Exp.Var _ | Exp.Int _ as exp) ->
+    fprintf fmt "jmp %a" Bap_exp.pp exp
+  | Jmp exp -> fprintf fmt "jmp (%a)" Bap_exp.pp exp
   | Special s -> fprintf fmt "special (%s)" s
   | While (cond, body) ->
     fprintf fmt "@[<v0>@[<v2>while (%a) {@;%a@]@;}@]"

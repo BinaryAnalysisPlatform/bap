@@ -15,7 +15,7 @@ module type S = sig
   val train : t -> max_length:int -> (key -> bool) -> corpus -> unit
   val length : t -> int
 
-  val find : t ->
+  val next : t ->
     length:int ->
     threshold:float ->
     corpus -> int -> int option
@@ -31,5 +31,8 @@ module Make
 
 type mem = Bap_memory.t
 
-module Bytes : S with type key = mem
-                  and type corpus = mem
+module Bytes : sig
+  include S with type key = mem
+             and type corpus = mem
+  val find : t -> length:int -> threshold:float -> corpus -> addr list
+end

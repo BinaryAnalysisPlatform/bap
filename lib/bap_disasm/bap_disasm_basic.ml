@@ -399,6 +399,7 @@ let with_preds s (ps : pred list) =
   else begin
     C.predicates_clear s.dis.id;
     Preds.iter ps ~f:(add);
+    C.predicates_push s.dis.id C.Is_invalid;
   end;
   {s with current = {s.current with preds = ps}}
 
@@ -481,7 +482,7 @@ type ('a,'k) t = dis
 
 let run ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =
-    create_state  ?invalid ?stopped ?hit ~return
+    create_state ?invalid ?stopped ?hit ~return
       dis mem in
   let state = with_preds state stop_on in
   jump state (memory state) init

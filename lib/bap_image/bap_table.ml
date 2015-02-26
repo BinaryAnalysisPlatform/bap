@@ -40,8 +40,14 @@ module Bound = struct
   let is_unbound bound mem = match bound with
     | Unbound -> true
     | Bounded (x,y) ->
-      Addr.(Mem.max_addr mem > y) ||
-      Addr.(Mem.min_addr mem < x)
+      Addr.(Mem.max_addr mem < x) ||
+      Addr.(Mem.min_addr mem > y)
+
+  let is_bound bound mem = not (is_unbound bound mem)
+
+  let pp fmt = function
+    | Unbound -> Format.fprintf fmt "[]"
+    | Bounded (x,y) -> Format.fprintf fmt "[%a,%a]" Addr.pp x Addr.pp y
 end
 
 module Cache = Mem.Table
@@ -85,24 +91,54 @@ let singleton k v = {
   bound = Bound.(update empty k);
 }
 
-let fold_intersections tab x ~init ~f =
-  let max, max_addr = Mem.last_byte x,  Mem.max_addr x in
-  let min_addr = Mem.min_addr x in
-  let min = match Map.min_elt tab.map with
-    | Some (m,_) -> m
-    | None -> max in
-  Map.fold_range_inclusive tab.map ~min ~max ~init
-    ~f:(fun ~key ~data init ->
-        match Mem.compare_with key min_addr,
-              Mem.compare_with key max_addr with
-        | `addr_is_inside, _ | _, `addr_is_inside
-        | `addr_is_below, `addr_is_above -> f key data init
-        | _ -> init)
+let pp_elt f fmt = function
+  | None -> Format.fprintf fmt "None"
+  | Some (x,_) -> Format.fprintf fmt "Some %a" Addr.pp (f x)
+
+(** @pre [x <= y] *)
+let intersects x y = Addr.(Mem.max_addr x >= (Mem.min_addr y))
 
 let has_intersections tab (x : mem) : bool =
-  with_return (fun cc ->
-      fold_intersections tab x ~init:() ~f:(fun _ _ _ -> cc.return true);
-      false)
+  Bound.is_bound tab.bound x &&
+  match Map.find tab.map x with
+  | Some _ -> true
+  | None -> match Map.prev_key tab.map x with
+    | Some (p,_) when intersects p x -> true
+    | _ -> match Map.next_key tab.map x with
+      | None -> false
+      | Some (n,_) -> intersects x n
+
+(** [left_bound t x ] returns a key to a largest interval in [t] that
+    has intersections with [].
+
+    since we can't get the matching key (only lesser or greater ones)
+    we will return key [x] itself on a perfect match case. That means,
+    that this function shouldn't ever be exposed to a user.
+
+    Otherwise, the only solution (other then just reimplementing our
+    own tree) is to sequence all keys and return the head.
+*)
+let left_bound tab x =
+  let rec search_left p = match Map.prev_key tab.map p with
+    | Some (p,_) when intersects p x -> search_left p
+    | _  -> p in
+  if has_intersections tab x then match Map.prev_key tab.map x with
+    | Some (p,_) when intersects p x -> Some (search_left p)
+    | _ when Map.find tab.map x <> None -> Some x (* see note above*)
+    | _ -> Map.next_key tab.map x |> Option.map ~f:fst
+  else None
+
+let fold_intersections tab x ~init ~f =
+  let rec loop (p,d) init =
+    let init = f p d init in
+    match Map.next_key tab.map p with
+    | Some (n,d) when intersects x n -> loop (n,d) init
+    | _ -> init in
+  match left_bound tab x with
+  | None -> init
+  | Some p -> match Map.find tab.map p with
+    | Some d -> loop (p,d) init
+    | None -> assert false
 
 let intersections tab (x : mem) : 'a seq =
   let open Seq.Generator in
@@ -112,8 +148,7 @@ let intersections tab (x : mem) : 'a seq =
   run m
 
 let change tab mem ~f =
-  let ins = if Bound.is_unbound tab.bound mem
-    then Seq.empty else intersections tab mem  in
+  let ins = intersections tab mem in
   match f ins with
   | `ignore -> tab
   | `update _ | `rebind _  | `remove as cmd ->
@@ -256,13 +291,16 @@ let find_addr tab (addr : addr) : (mem * 'a) option =
 let make_map map add ?start ?until tab ~f =
   if start = None && until = None
   then {
-    bound = Bound.empty;
+    bound = tab.bound;
     map = map tab.map ~f:(fun ~key ~data -> f key data);
     cache = recache
   } else
-    let map = foldi ?start ?until tab ~init:Map.empty
-        ~f:(fun addr x map -> add map ~key:addr ~data:(f addr x)) in
-    { map; cache = recache; bound = Bound.empty}
+    let map,bound =
+      foldi ?start ?until tab ~init:(Map.empty,Bound.empty)
+        ~f:(fun addr x (map,bound) ->
+            add map ~key:addr ~data:(f addr x),
+            Bound.update bound addr) in
+    { map; cache = recache; bound}
 
 let mapi ?start ?until tab ~f =
   make_map Map.mapi Map.add ?start ?until tab ~f

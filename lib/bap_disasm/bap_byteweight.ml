@@ -16,7 +16,7 @@ module type S = sig
   val train : t -> max_length:int -> (key -> bool) -> corpus -> unit
   val length : t -> int
 
-  val find : t ->
+  val next : t ->
     length:int ->
     threshold:float ->
     corpus -> int -> int option
@@ -71,7 +71,7 @@ module Make
       let n = a + b in
       Float.(of_int a / of_int n) > threshold
 
-  let find trie ~length ~threshold set n =
+  let next trie ~length ~threshold set n =
     let open Option.Monad_infix in
     let rec loop n =
       Corpus.look set ~length n >>= fun key ->
@@ -86,15 +86,26 @@ module Memory = Bap_memory
 
 type mem = Memory.t
 
-module Bytes = Make(struct
-    type t = mem
-    type key = mem
+module Bytes = struct
+  include Make(struct
+      type t = mem
+      type key = mem
 
-    let create mem = mem
+      let create mem = mem
 
-    let look mem ~length n =
-      let from = Addr.(Memory.min_addr mem ++ n) in
-      match Memory.view ~from ~words:length mem with
-      | Ok mem -> Some mem
-      | _ -> None
-  end)(Memory.Trie.R8)
+      let look mem ~length n =
+        let from = Addr.(Memory.min_addr mem ++ n) in
+        match Memory.view ~from ~words:length mem with
+        | Ok mem -> Some mem
+        | _ -> None
+    end)(Memory.Trie.R8)
+
+  let find bw ~length ~threshold mem =
+    let start = Memory.min_addr mem in
+    let rec loop acc n =
+      match next bw ~length ~threshold mem n with
+      | Some n -> loop (Addr.(start ++ n) :: acc) (n+1)
+      | None -> List.rev acc in
+    loop [] 0
+
+end

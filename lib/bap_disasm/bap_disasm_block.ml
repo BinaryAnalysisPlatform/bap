@@ -18,10 +18,14 @@ let insns_of_decoded_list init : (mem * insn) seq =
 
 include Rec.Block
 
+let uw = function
+  | Some x -> x
+  | _ -> failwith "Failed to unwind option"
+
 let insns blk =
   Rec.Block.insns blk |> insns_of_decoded_list
-let terminator blk = terminator blk |> Insn.of_decoded |> uw
-let leader blk = leader blk |> Insn.of_decoded |> uw
+let terminator blk = insns blk |> Seq.to_list_rev |> List.hd_exn |> snd
+let leader blk = insns blk |> Seq.hd_exn |> snd
 let of_rec_block = Fn.id
 
 let () = Pretty_printer.register ("Bap_disasm_block.pp")

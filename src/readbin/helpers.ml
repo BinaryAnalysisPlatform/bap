@@ -15,21 +15,18 @@ module Make(Env : Printing.Env) = struct
     let jump_type = match Arch.addr_size arch with
       | `r32 -> reg32_t
       | `r64 -> reg64_t in
-    let blk_base blk =
-      let name = Format.asprintf "%a" pp_blk_name blk in
+    let make_var name =
       Exp.var (Var.create name jump_type) in
     (object inherit Bil.mapper as super
       method! map_int addr =
-        match Table.find_addr cfg addr with
-        | Some (mem,blk) ->
+        match Table.find_addr syms addr with
+        | Some (mem,sym) ->
           let start = Memory.min_addr mem in
-          if Addr.(start = addr) then blk_base blk else
+          if Addr.(start = addr) then make_var sym else
             let off = Addr.Int_exn.(addr - start) in
-            Exp.(blk_base blk + int off)
+            Exp.(make_var sym + int off)
         | None -> Exp.Int addr
     end)#run
-
-
 
   (* we're very conservative here *)
   let has_side_effect e scope = (object inherit [bool] Bil.visitor

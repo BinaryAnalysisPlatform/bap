@@ -75,7 +75,7 @@ let find threshold length comp path input : unit t =
       if Section.is_executable sec then
         let start = Memory.min_addr mem in
         let rec loop n =
-          match Byteweight.find bw ~length ~threshold mem n with
+          match Byteweight.next bw ~length ~threshold mem n with
           | Some n -> printf "%a\n" Addr.ppo Addr.(start ++ n); loop (n+1)
           | None -> () in
         loop 0);
@@ -92,6 +92,13 @@ let symbols print_name print_size input : unit t =
       printf "%a %s%s\n" Addr.ppo addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
+
+let create_parent_dir dst =
+  let dir = if Filename.(check_suffix dst dir_sep)
+    then dst else Filename.dirname dst in
+  FileUtil.mkdir ~parent:true dir
+
+
 let fetch fname url =
   let tmp,fd = Filename.open_temp_file "bap_" ".sigs" in
   let write s = Out_channel.output_string fd s; String.length s in
@@ -103,6 +110,7 @@ let fetch fname url =
   Curl.perform conn;
   Curl.cleanup conn;
   Out_channel.close fd;
+  create_parent_dir fname;
   FileUtil.mv tmp fname;
   printf "Successfully downloaded to %s\n" fname
 
@@ -112,9 +120,7 @@ let fetch fname url = try Ok (fetch fname url) with
   | exn -> Or_error.of_exn exn
 
 let install src dst = try_with begin fun () ->
-    let dir = if Filename.(check_suffix dst dir_sep)
-      then dst else Filename.dirname dst in
-    FileUtil.mkdir ~parent:true dir;
+    create_parent_dir dst;
     FileUtil.cp [src] dst;
     printf "Installed signatures to %s\n" dst;
   end
