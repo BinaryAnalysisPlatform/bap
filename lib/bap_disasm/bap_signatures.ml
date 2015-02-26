@@ -10,9 +10,9 @@ let entry ?(comp="default") ~mode arch =
 let default_path =
   try Sys.getenv "BAP_SIGFILE"
   with Not_found ->
-    Config.prefix / "share" / "bap" / "sigs.db"
+    Config.prefix / "share" / "bap" / "sigs.zip"
 
-let load ?comp ?path ~mode arch =
+let load_exn ?comp ?path ~mode arch =
   let path = Option.value path ~default:default_path in
   let zip = Zip.open_in path in
   let entry_path = entry ?comp ~mode arch in
@@ -22,6 +22,10 @@ let load ?comp ?path ~mode arch =
     with Not_found -> None in
   Zip.close_in zip;
   r
+
+let load ?comp ?path ~mode arch =
+  try load_exn ?comp ?path ~mode arch with exn -> None
+
 
 (* for some reason Zip truncates the output file, and doesn't provide
    us an option to append anything to for it. *)

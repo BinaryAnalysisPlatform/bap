@@ -41,7 +41,7 @@ let matching =
   FileUtil.(And (Is_file, Not ignored))
 
 let train meth length comp db paths =
-  let db = Option.value db ~default:"sigs.db" in
+  let db = Option.value db ~default:"sigs.zip" in
   let collect path =
     FileUtil.find matching path (fun xs x -> x :: xs) [] in
   let files = List.map paths
@@ -126,7 +126,7 @@ let install src dst = try_with begin fun () ->
   end
 
 let update url dst =
-  let old = Filename.temp_file "bap_old_sigs" ".db" in
+  let old = Filename.temp_file "bap_old_sigs" ".zip" in
   if Sys.file_exists dst
   then FileUtil.cp [dst] old;
   fetch dst url >>| fun () ->
@@ -186,11 +186,11 @@ module Cmdline = struct
     let doc = "Url of the binary signatures" in
     let default = sprintf
         "https://github.com/BinaryAnalysisPlatform/bap/\
-         releases/download/v%s/sigs.db" Config.pkg_version in
+         releases/download/v%s/sigs.zip" Config.pkg_version in
     Arg.(value & opt string default & info ["url"] ~doc)
 
   let src : string Term.t =
-    Arg.(value & pos 0 non_dir_file "sigs.db" & info []
+    Arg.(value & pos 0 non_dir_file "sigs.zip" & info []
            ~doc:"Signatures file" ~docv:"SRC")
   let dst : string Term.t =
     Arg.(value & pos 1 string Signatures.default_path &
@@ -198,7 +198,7 @@ module Cmdline = struct
 
   let output : string Term.t =
     let doc = "Output filename" in
-    Arg.(value & opt string "sigs.db" & info ["o"] ~doc)
+    Arg.(value & opt string "sigs.zip" & info ["o"] ~doc)
 
   let print_name : bool Term.t =
     let doc = "Print symbol's name." in
