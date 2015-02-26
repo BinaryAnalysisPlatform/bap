@@ -25,4 +25,4 @@ open Bap.Std
 
 *)
 
-val read : ?demangle:Options.demangle -> filename:string -> mem -> string table
+val read : ?demangle:Options.demangle -> filename:string -> arch -> mem -> string table
