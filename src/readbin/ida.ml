@@ -72,7 +72,8 @@ let create_exn ?ida target =
   FileUtil.cp [target] exe;
 
   let self = {
-    ida; exe;
+    ida = Filename.quote ida;
+    exe;
     close = fun () ->
       FileUtil.rm [exe; idb exe; asm exe];
   } in
@@ -82,7 +83,7 @@ let create_exn ?ida target =
     FileUtil.cp [idb target] (idb exe);
     FileUtil.cp [asm target] (asm exe);
   ) else (
-    run self @@ shell "%s -B %s" ida exe;
+    run self @@ shell "%s -B %s" self.ida self.exe;
   );
   self
 
@@ -103,9 +104,9 @@ let run_script self script_to =
       FileUtil.rm [script; result]);
   result
 
-let get_symbols t mem =
+let get_symbols ?demangle t mem =
   let result = run_script t extract_symbols in
-  Symbols.read ~filename:result mem
+  Symbols.read ?demangle ~filename:result mem
 
 let close self = self.close ()
 
