@@ -21,3 +21,4 @@ myocamlbuild.ml
 /_tags
 /python/*.pyc
 /python/bap.egg-info/
+/lib/bap_types/bap_config.ml

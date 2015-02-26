@@ -74,16 +74,17 @@ module Program(Conf : Options.Provider) = struct
   let pp_name f (_,sym) = fprintf f "%-30s" sym
 
   let disassemble ?img arch mem =
+    let demangle = options.demangle in
     let usr_syms = match options.symsfile with
       | Some filename ->
-        Symbols.read ?demangle:options.demangle ~filename mem
+        Symbols.read ?demangle ~filename mem
       | None -> Table.empty in
     let ida_syms = match options.use_ida with
       | None -> Table.empty
       | Some ida ->
         let result =
           Ida.(with_file ?ida options.filename
-                 (fun ida -> get_symbols ida mem)) in
+                 (fun ida -> get_symbols ?demangle ida mem)) in
         match result with
         | Ok syms -> syms
         | Error err ->

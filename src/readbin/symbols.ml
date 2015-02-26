@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 
 let demangle_native str =
   let open String in
@@ -64,7 +65,4 @@ let read ?demangle ~filename base  : string table =
             let mem = Memory.view ~from ~words base |> ok_exn in
             let name = demangle name in
             Table.add syms mem name |> ok_exn
-          with exn ->
-            eprintf "Warning: ignoring symbol %s@." @@
-            Exn.to_string exn;
-            syms))
+          with exn -> syms))
