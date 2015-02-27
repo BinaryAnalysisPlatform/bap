@@ -4,7 +4,11 @@ open Core_kernel.Std
 let systems = [
   "bap.image";
   "bap.disasm"
+]
 
+let internal = [
+  (module Image_elf : Unit);
+  (module Bap_llvm  : Unit);
 ]
 
 let string_of_or_error = function

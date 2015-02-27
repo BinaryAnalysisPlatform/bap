@@ -83,7 +83,9 @@ Library bap
                    bap.image,
                    bap.types,
                    dynlink,
-                   findlib
+                   findlib,
+                   bap.image.elf_backend,
+                   bap.llvm
   Modules:         Bap,
                    Bap_plugin,
                    Bap_plugins

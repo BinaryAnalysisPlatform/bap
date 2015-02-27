@@ -126,9 +126,16 @@ let use_ida : string option option Term.t =
   Arg.(value & opt ~vopt:(Some None)
          (some (some string)) None & info ["use-ida"] ~doc)
 
+let sigsfile : string option Term.t =
+  let doc = "Path to the signature file. No needed by default, \
+             usually it is enough to run `bap-byteweight update'." in
+  Arg.(value & opt (some non_dir_file) None & info ["sigs"] ~doc)
+
+
+
 let create
-    a b c d e f g h i k l m n o p q r s = Options.Fields.create
-    a b c d e f g h i k l m n o p q r s
+    a b c d e f g h i k l m n o p q r s t = Options.Fields.create
+    a b c d e f g h i k l m n o p q r s t
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -154,7 +161,7 @@ let program =
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
-        $print_symbols $use_ida),
+        $print_symbols $use_ida $sigsfile),
   Term.info "bap-objdump"
     ~version:Config.pkg_version ~doc ~man
 
