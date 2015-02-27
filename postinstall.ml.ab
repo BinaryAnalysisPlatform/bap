@@ -1,0 +1,26 @@
+#load "unix.cma";;
+#directory "$pkg_fileutils";;
+#load "fileutils.cma";;
+
+open Printf
+
+let tools = [
+  "bap-mc";
+  "bap-objdump";
+  "bap-byteweight";
+]
+
+let create_man prog =
+  let man = sprintf "%s.1" prog in
+  Unix.system @@ sprintf "%s --help=groff > %s 2>/dev/null" prog man
+  |> ignore;
+  man
+
+let main () =
+  let men = List.map create_man tools in
+  let dst = "$mandir/man1" in
+  FileUtil.mkdir ~parent:true dst;
+  FileUtil.cp men dst
+
+
+let () = main ()
