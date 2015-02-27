@@ -5,7 +5,6 @@ let load pkg =
   let cmd = sprintf "#require \"%s\";;" (Bap_plugin.name pkg) in
   Bap_toplevel.eval cmd
 
-
 let () =
   Bap_plugins.all () |>
   List.iter ~f:(fun pkg -> match load pkg with

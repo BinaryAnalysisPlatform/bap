@@ -1,10 +1,13 @@
 open Core_kernel.Std
 open Or_error
 
-open Bap.Std
-open Elf.Types
+open Bap_types.Std
+open Bap_elf.Types
 open Image_backend
 open Image_common
+
+module Dwarf = Bap_dwarf
+module Elf = Bap_elf
 
 let name = "bap-elf"
 

@@ -11,9 +11,11 @@ type t = {
 } with fields
 
 let init_findlib = lazy (
-  Dynlink.init ();
-  Dynlink.allow_unsafe_modules true;
-  Findlib.init ())
+  try
+    Dynlink.init ();
+    Dynlink.allow_unsafe_modules true;
+    Findlib.init ()
+  with _ -> ())
 
 let create_exn ~system name =
   let module Pkg = Fl_package_base in

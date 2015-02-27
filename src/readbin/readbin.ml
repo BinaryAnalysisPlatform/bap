@@ -12,7 +12,8 @@ module Program(Conf : Options.Provider) = struct
     if options.bw_disable then None
     else
       let module BW = Bap_byteweight.Bytes in
-      match Bap_signatures.load ~mode:"bytes" arch with
+      let path = options.sigfile in
+      match Bap_signatures.load ?path ~mode:"bytes" arch with
       | None ->
         eprintf "No signatures found@.Please, use `bap-byteweight' \
                  utility to fetch/create/install them.@.%!";
