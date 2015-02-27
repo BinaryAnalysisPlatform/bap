@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "bap"
-version: "0.9.3"
+version: "0.9.4"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
 homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
@@ -13,7 +13,7 @@ build: [
                  "--with-cxx=`which clang++`"
                  "--enable-docs"
                  "--docdir=%{doc}%/bap"
-                 "--mandir=%{man}%/bap"]
+                 "--mandir=%{man}%"]
   [make]
   [make "doc"]
 ]
@@ -25,6 +25,9 @@ remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "core_lwt"]
   ["rm" "-rf" bap:doc]
+  ["rm" "-f" "%{man}%/bap-*"]
+  ["rm" "-f" "%{bin}%/bapbuild"]
+  ["rm" "-f" "%{bin}%/baptop"]
 ]
 
 depends: [
