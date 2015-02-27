@@ -14,7 +14,7 @@ for target in $TEST_TARGETS; do
     files=`find "$target-binaries" \( -name "$1*" -o -name "gcc_$1*" \) -type f -regex '.*utils_.*'`
     for file in $files; do
         printf '%-70s ' $file;
-        bap-objdump $file -d bil -d asm > /dev/null;
+        bap-objdump $file -d bil > /dev/null;
         if [ $? -eq 0 ]; then
             echo 'ok';
         else

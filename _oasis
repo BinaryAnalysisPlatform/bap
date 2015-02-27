@@ -23,10 +23,10 @@ BuildDepends:
               sexplib.syntax,
               variantslib.syntax
 
-# for some reason oasis doesn't provide us a $cp command
+FilesAB: lib/bap_types/bap_config.ml.ab, postinstall.ml.ab
+
 PreConfCommand: $rm setup.data
-PostConfCommand: ocaml postconfig.ml
-PostInstallCommand: cp baptop bapbuild $bindir
+PostInstallCommand: ocaml postinstall.ml
 PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
@@ -44,7 +44,6 @@ Document bap
                         bap.dwarf,
                         bap.elf,
                         bap.llvm
-
 
 Flag serialization
   Description: Build serialization library

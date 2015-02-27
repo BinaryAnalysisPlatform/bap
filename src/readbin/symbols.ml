@@ -26,7 +26,7 @@ let demangle_native str =
     match extract_name pos with
     | None | Some "" -> List.rev acc
     | Some name -> extract_names (name::acc) in
-  match extract_names [] |> String.concat ~sep:"__" with
+  match extract_names [] |> String.concat ~sep:"." with
   | "" -> str
   | s  -> s
 
