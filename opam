@@ -8,31 +8,51 @@ bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
 dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
 license: "MIT"
 build: [
-  ["./configure" "--prefix=%{prefix}%" "--enable-docs"]
+  ["./configure"
+                 "--prefix=%{prefix}%"
+                 "--with-cxx=`which clang++`"
+                 "--enable-docs"
+                 "--docdir=%{doc}%/bap"
+                 "--mandir=%{man}%/bap"]
   [make]
+  [make "doc"]
 ]
-install: [make "install"]
+install: [
+  [make "install"]
+]
+
 remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "core_lwt"]
+  ["rm" "-rf" bap:doc]
 ]
-
-build-doc: [make "doc"]
 
 depends: [
  	"base-unix"
  	"bitstring"
 	"cmdliner"
-	"cohttp" {= "0.15.0"}
-	"core_kernel" {= "111.28.0"}
-	"ezjsonm" {= "0.4.0"}
+	"cohttp"
+	"core_kernel" {>= "111.28.0"}
+	"ezjsonm" {>= "0.4.0"}
 	"faillib"
 	"lwt"
-	"oasis" {build}
+	"oasis" {build & >= "0.4.0"}
     "ocamlgraph"
 	"re"
-	"uri" {= "1.7.2"}
+	"uri"
     "utop"
 	"zarith"
 ]
+
+depexts: [
+    [["ubuntu"] [
+                "libgmp-dev"
+                "libzip-dev"
+                "libcurl4-gnutls-dev"
+                "llvm-3.4-dev"
+                "time" "clang"
+                "llvm" "m4"
+                ]]
+]
+
 available: [ocaml-version >= "4.01"]
