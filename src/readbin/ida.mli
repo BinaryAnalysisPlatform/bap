@@ -19,7 +19,7 @@ type t
 val create : ?ida:string -> string -> t Or_error.t
 
 (** [get_symbols ?demangle ida mem] extract symbols from binary, using IDA *)
-val get_symbols : ?demangle:Options.demangle -> t -> mem -> string table
+val get_symbols : ?demangle:Options.demangle -> t -> arch -> mem -> string table
 
 (** [close ida] finish interaction with IDA and clean all resources  *)
 val close : t -> unit

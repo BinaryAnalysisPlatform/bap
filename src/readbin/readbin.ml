@@ -14,7 +14,7 @@ module Program(Conf : Options.Provider) = struct
       let module BW = Bap_byteweight.Bytes in
       match Bap_signatures.load ~mode:"bytes" arch with
       | None ->
-        eprintf "No signatures found@.Please, use `bap-byteweight'\
+        eprintf "No signatures found@.Please, use `bap-byteweight' \
                  utility to fetch/create/install them.@.%!";
         None
       | Some data ->
@@ -77,14 +77,14 @@ module Program(Conf : Options.Provider) = struct
     let demangle = options.demangle in
     let usr_syms = match options.symsfile with
       | Some filename ->
-        Symbols.read ?demangle ~filename mem
+        Symbols.read ?demangle ~filename arch mem
       | None -> Table.empty in
     let ida_syms = match options.use_ida with
       | None -> Table.empty
       | Some ida ->
         let result =
           Ida.(with_file ?ida options.filename
-                 (fun ida -> get_symbols ?demangle ida mem)) in
+                 (fun ida -> get_symbols ?demangle ida arch mem)) in
         match result with
         | Ok syms -> syms
         | Error err ->

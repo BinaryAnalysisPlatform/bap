@@ -104,9 +104,9 @@ let run_script self script_to =
       FileUtil.rm [script; result]);
   result
 
-let get_symbols ?demangle t mem =
+let get_symbols ?demangle t arch mem =
   let result = run_script t extract_symbols in
-  Symbols.read ?demangle ~filename:result mem
+  Symbols.read ?demangle ~filename:result arch  mem
 
 let close self = self.close ()
 

@@ -50,7 +50,7 @@ let demangle_name ?(how=`internal) name =
     | `internal -> demangle_native name
   else name
 
-let read ?demangle ~filename base  : string table =
+let read ?demangle ~filename arch base  : string table =
   let demangle name = match demangle with
     | None -> name
     | Some how -> demangle_name ~how name in
@@ -61,7 +61,8 @@ let read ?demangle ~filename base  : string table =
           try
             let (name,es,ef) = sym_of_sexp sexp in
             let words = Int64.(ef - es |> to_int_exn) in
-            let from = Addr.of_int64 ~width:32 es in
+            let width = Arch.addr_size arch |> Size.to_bits in
+            let from = Addr.of_int64 ~width es in
             let mem = Memory.view ~from ~words base |> ok_exn in
             let name = demangle name in
             Table.add syms mem name |> ok_exn
