@@ -172,7 +172,7 @@ Library elf_backend
   Path:            lib/bap_image/
   FindlibParent:   bap_image
   FindlibName:     elf_backend
-  XMETAExtraLines: plugin_system = "bap.image"
+  XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
   Modules:         Image_elf
@@ -254,7 +254,7 @@ Library llvm
   CCOpt:         $cc_optimization
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
-  XMETAExtraLines: plugin_system = "bap.disasm"
+  XMETAExtraLines: plugin_system = "bap.disasm.disabled"
 
 
 Library types_test
