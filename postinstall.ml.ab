@@ -20,7 +20,7 @@ let main () =
   let men = List.map create_man tools in
   let dst = "$mandir/man1" in
   FileUtil.mkdir ~parent:true dst;
-  FileUtil.cp men dst
-
+  FileUtil.cp men dst;
+  FileUtil.cp ["bapbuild"; "baptop"] "$bindir"
 
 let () = main ()
