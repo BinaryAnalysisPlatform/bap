@@ -43,12 +43,11 @@ let dispatch = function
 
 
 let mark_tags () =
+  let mark_tag_used = ignore in
   let open Ocamlbuild_plugin in
-  (* Uncomment the following in OCaml 4.02, to remove warnings. *)
-  (* mark_tag_used "pkg_core_bench"; *)
-  (* mark_tag_used "tests"; *)
-  (* mark_tag_used "pkg_piqirun" *)
-  ()
+  mark_tag_used "pkg_core_bench";
+  mark_tag_used "tests";
+  mark_tag_used "pkg_piqirun"
 
 let () =
   mark_tags ();
