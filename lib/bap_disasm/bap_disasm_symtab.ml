@@ -10,14 +10,16 @@ module Insn = Bap_disasm_insn
 type t = string table
 
 
-let symbol_span roots base entry =
-  let visited = Addr.Table.create () in
+let symbol_span map visited roots base entry =
   let border blk = Block.memory blk |> Memory.max_addr in
+  let overran =
+    match Addr.Map.next_key map (Block.addr entry) with
+    | Some (next,_) -> (fun addr -> addr >= next)
+    | None -> (fun _ -> false) in
   let rec loop maddr p =
     Seq.fold ~init:maddr (Block.dests p) ~f:(fun maddr -> function
         | `Unresolved _ -> maddr
-        | `Block (blk,_)
-          when Addr.Table.mem roots (Block.addr blk) -> maddr
+        | `Block (blk,_) when overran (Block.addr blk) -> maddr
         | `Block (_,`Jump)
           when Insn.is_call (Block.terminator p) -> maddr
         | `Block (blk,_) ->
@@ -63,12 +65,14 @@ let create_roots_table roots cfg =
 
 let create roots base cfg =
   let roots = create_roots_table roots cfg in
+  let map = Addr.Map.of_alist_exn (Addr.Table.to_alist roots) in
+  let visited = Addr.Table.create () in
   Table.fold cfg ~init:Table.empty ~f:(fun blk syms ->
       match Addr.Table.find roots (Block.addr blk) with
       | None -> syms
       | Some name ->
         let r =
-          symbol_span roots base blk >>= fun mem ->
+          symbol_span map visited roots base blk >>= fun mem ->
           Table.add syms mem name in
         match r with
         | Ok syms -> syms

@@ -89,7 +89,6 @@ let create_section make_addr i es : Section.t Or_error.t option =
       let name = sprintf "%02d" i in
       int_of_int64 es.p_filesz >>= fun len ->
       int_of_int64 es.p_offset >>= fun off ->
-      int_of_int64 es.p_memsz  >>= fun vsize ->
       perm_of_flags es.p_flags >>= fun perm ->
       let addr = make_addr es.p_vaddr in
       let location = Location.Fields.create ~len ~addr in
@@ -98,7 +97,6 @@ let create_section make_addr i es : Section.t Or_error.t option =
         Section.perm;
         Section.off;
         Section.location;
-        Section.vsize;
       } in
     match section with
     | Error _ as err ->
@@ -151,8 +149,8 @@ let img_of_elf data elf : Img.t Or_error.t =
   match sections with
   | [] -> errorf "failed to read sections"
   | s::ss ->
-    let img = Img.Fields.create
-        ~arch ~addr_size ~endian ~entry ~sections:(s,ss) ~symbols in
+    let img =
+      Img.Fields.create ~arch ~entry ~sections:(s,ss) ~symbols in
     Ok img
 
 let of_data_err (data : bigstring) : Img.t Or_error.t =

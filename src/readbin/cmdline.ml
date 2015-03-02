@@ -131,11 +131,17 @@ let sigsfile : string option Term.t =
              usually it is enough to run `bap-byteweight update'." in
   Arg.(value & opt (some non_dir_file) None & info ["sigs"] ~doc)
 
-
+let load : string list Term.t =
+  let doc = "Load the specified plugin. Plugin must be compiled with \
+             `bapbuild $(docv).plugin'. This option can be specified \
+             several times. Every plugin will be loaded and executed \
+             in the same order, as they were specified on command line." in
+  Arg.(value & opt_all string [] &
+       info ["load"; "l"] ~doc ~docv:"NAME")
 
 let create
-    a b c d e f g h i k l m n o p q r s t = Options.Fields.create
-    a b c d e f g h i k l m n o p q r s t
+    a b c d e f g h i k l m n o p q r s t u = Options.Fields.create
+    a b c d e f g h i k l m n o p q r s t u
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -161,7 +167,7 @@ let program =
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
-        $print_symbols $use_ida $sigsfile),
+        $print_symbols $use_ida $sigsfile $load),
   Term.info "bap-objdump"
     ~version:Config.pkg_version ~doc ~man
 

@@ -11,7 +11,6 @@ module Section = struct
     name: string;
     perm: perm;         (** section's permissions  *)
     off: int;
-    vsize : int;        (** virtual size  *)
     location : location;
   } with bin_io, compare, fields, sexp
 end
@@ -31,9 +30,7 @@ end
 
 module Img = struct
   type t = {
-    arch : arch;
-    addr_size: addr_size;
-    endian   : endian;
+    arch     : arch;
     entry    : addr;
     sections : Section.t * Section.t list;
     symbols  : Sym.t list;

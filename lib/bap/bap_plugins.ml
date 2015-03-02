@@ -1,32 +1,40 @@
 open Core_kernel.Std
 
+module Std = struct
+  module Plugin = Bap_plugin
+  type plugin = Plugin.t
 
-let systems = [
-  "bap.image";
-  "bap.disasm"
-]
+  let systems = [
+    "bap.image";
+    "bap.disasm"
+  ]
 
-let internal = [
-  (module Image_elf : Unit);
-  (module Bap_llvm  : Unit);
-]
+  let internal = [
+    (module Image_elf : Unit);
+    (module Bap_llvm  : Unit);
+  ]
 
-let string_of_or_error = function
-  | Ok () -> "ok"
-  | Error err -> Error.to_string_hum err
+  let string_of_or_error = function
+    | Ok () -> "ok"
+    | Error err -> Error.to_string_hum err
 
-let load () =
-  List.iter systems
-    ~f:(fun system -> List.iter (Bap_plugin.load_all ~system)
-           ~f:(function
-               | _, Ok () -> ()
-               | pkg, Error err ->
-                 eprintf "failed to load plugin %s of system %s: %s\n"
-                   (Bap_plugin.name pkg)
-                   system
-                   (Error.to_string_hum err)))
+  module Plugins = struct
+    let load () =
+      List.iter systems
+        ~f:(fun system ->
+            List.iter (Bap_plugin.find_all ~system)
+              ~f:(fun pkg -> match Bap_plugin.load pkg with
+                  | Ok () -> ()
+                  | Error err ->
+                    eprintf
+                      "failed to load plugin %s of system %s: %s\n"
+                      (Bap_plugin.name pkg)
+                      system
+                      (Error.to_string_hum err)))
 
 
-let all () =
-  List.map systems ~f:(fun s -> Bap_plugin.list ~system:s) |>
-  List.concat
+    let all () =
+      List.map systems ~f:(fun s -> Bap_plugin.find_all ~system:s) |>
+      List.concat
+  end
+end

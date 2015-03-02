@@ -119,6 +119,8 @@ module Std = struct
     module Block = Bap_disasm_rec.Block
   end
 
+  module Program_visitor = Bap_program_visitor
+
   (** {3 Auxiliary libraries} *)
 
   (** {4 Dwarf library}
@@ -131,12 +133,9 @@ module Std = struct
   module Elf     = Bap_elf
   type elf = Elf.t
 
-  (** {4 Plugin system}
-      Provides facilities to load code at runtime, allowing to extend
-      BAP at certain extension points. *)
-  module Plugin = Bap_plugin
-  module Plugins = Bap_plugins
-
+  (** {4 Binary Signatures Storage}  *)
   module Signatures = Bap_signatures
 
+  (** {4 Byteweight Algorithm implementation}  *)
+  module Byteweight = Bap_byteweight
 end

@@ -29,7 +29,7 @@ let create ?root fname =
 let with_file name ~f =
   Out_channel.with_file name ~f:(fun chan ->
       let fmt = Format.formatter_of_out_channel chan in
-      Tags.install fmt `Html;
+      Text_tags.install fmt `Html;
       f fmt)
 
 let with_files_in_folders folders (base,_) name ~f =

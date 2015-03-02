@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_plugins.Std
 open Bap.Std
 open Result
 open OUnit2

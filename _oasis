@@ -41,9 +41,7 @@ Document bap
                         bap.types,
                         bap.image,
                         bap.disasm,
-                        bap.dwarf,
-                        bap.elf,
-                        bap.llvm
+                        bap.dwarf
 
 Flag serialization
   Description: Build serialization library
@@ -83,12 +81,19 @@ Library bap
                    bap.image,
                    bap.types,
                    dynlink,
-                   findlib,
-                   bap.image.elf_backend,
-                   bap.llvm
+                   findlib
   Modules:         Bap,
-                   Bap_plugin,
+                   Bap_program_visitor
+
+
+Library plugins
+  Path:            lib/bap
+  FindLibParent:   bap
+  FindLibName:     plugins
+  Modules:         Bap_plugin,
                    Bap_plugins
+  BuildDepends:    bap.image.elf_backend,
+                   bap.llvm
 
 Library top
   XMETADescription:
@@ -101,7 +106,7 @@ Library top
             Bap_load_plugins,
             Bap_toplevel
 
-  BuildDepends: compiler-libs, bap
+  BuildDepends: compiler-libs, bap, bap.plugins
 
 Library types
   Path:            lib/bap_types
@@ -164,6 +169,7 @@ Library bap_image
                  Bap_image,
                  Bap_memory,
                  Bap_table,
+                 Bap_tags,
                  Image_backend,
                  Image_common,
                  Image_internal_std
@@ -325,7 +331,7 @@ Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
   CompiledObject: best
-  BuildDepends:   bap, ezjsonm, uri, cohttp.lwt, core_lwt, re
+  BuildDepends:   bap, bap.plugins, ezjsonm, uri, cohttp.lwt, core_lwt, re
   Install:        true
   MainIs:         start_server.ml
 
@@ -334,35 +340,34 @@ Executable "bap-objdump"
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.disasm, ocamlgraph, ezjsonm, cmdliner, fileutils
+  BuildDepends:   bap,
+                  bap.plugins,
+                  ocamlgraph,
+                  ezjsonm,
+                  cmdliner,
+                  fileutils,
+                  re.posix
 
 Executable "bap-mc"
   Path:           src/bap_mc
   MainIs:         bap_mc.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.disasm, cmdliner
+  BuildDepends:   bap, bap.plugins, cmdliner
 
 Executable "bap-byteweight"
   Path:           src/byteweight
   MainIs:         byteweight.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, cmdliner, fileutils, curl, re.posix
-
-Executable fbi
-  Path:           src/fbi
-  MainIs:         fbi.ml
-  Install:        false
-  CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, curl, re.posix
 
 Executable run_tests
   Path:         lib_test/bap
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)
-  BuildDepends:
+  BuildDepends: bap.plugins,
                 disasm_test,
                 dwarf_test,
                 image_test,

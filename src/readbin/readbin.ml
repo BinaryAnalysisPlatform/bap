@@ -1,9 +1,10 @@
 open Core_kernel.Std
 open Or_error
 open Bap.Std
+open Bap_plugins.Std
 open Format
 open Options
-open Image
+open Program_visitor
 
 module Program(Conf : Options.Provider) = struct
   open Conf
@@ -11,9 +12,9 @@ module Program(Conf : Options.Provider) = struct
   let find_roots arch mem =
     if options.bw_disable then None
     else
-      let module BW = Bap_byteweight.Bytes in
+      let module BW = Byteweight.Bytes in
       let path = options.sigfile in
-      match Bap_signatures.load ?path ~mode:"bytes" arch with
+      match Signatures.load ?path ~mode:"bytes" arch with
       | None ->
         eprintf "No signatures found@.Please, use `bap-byteweight' \
                  utility to fetch/create/install them.@.%!";
@@ -48,7 +49,7 @@ module Program(Conf : Options.Provider) = struct
               else
                 let s = Memory.min_addr in
                 let miss = Addr.(signed (s m - s m') |> to_int) in
-                printf "Symbol %s@%a => %s@%a start missed by %d bytes@."
+                printf "Symbol %s@@%a => %s@@%a start missed by %d bytes@."
                   sym' Addr.pp (s m') sym Addr.pp (s m) (ok_exn miss))
         | _ -> ());
     Table.foldi lhs ~init:rhs ~f:(fun m' sym' rhs ->
@@ -58,12 +59,12 @@ module Program(Conf : Options.Provider) = struct
           match Table.add rhs m' sym' with
           | Ok rhs ->
             if options.verbose then
-              printf "Symbol %s@%a wasn't found, adding@."
+              printf "Symbol %s@@%a wasn't found, adding@."
                 sym' Addr.pp (Memory.min_addr m');
             rhs
           | Error _ ->
             if options.verbose then
-              printf "Symbol %s@%a wasn't found correctly, skipping@."
+              printf "Symbol %s@@%a wasn't found correctly, skipping@."
                 sym' Addr.pp (Memory.min_addr m');
             rhs)
 
@@ -93,27 +94,49 @@ module Program(Conf : Options.Provider) = struct
             Error.pp err;
           Table.empty in
     let img_syms = match img with
-      | Some img -> Table.map (symbols img) ~f:Symbol.name
+      | Some img -> Table.map (Image.symbols img) ~f:Symbol.name
       | None -> Table.empty in
     let rec_roots =
       Option.value (find_roots arch mem) ~default:[] in
-    let roots =
-      rec_roots @ roots_of_table usr_syms @ roots_of_table img_syms in
+    let roots = List.concat [
+        rec_roots;
+        roots_of_table usr_syms;
+        roots_of_table img_syms;
+        roots_of_table ida_syms;
+      ] in
     let disasm = disassemble ~roots arch mem in
     let cfg = Disasm.blocks disasm in
     let syms = Symtab.create roots mem cfg |>
                rename_symbols ida_syms |>
-               merge_syms img_syms     |>
-               rename_symbols img_syms |>
                merge_syms ida_syms     |>
+               rename_symbols img_syms |>
+               merge_syms img_syms     |>
                rename_symbols usr_syms |>
                merge_syms usr_syms     in
+    let project = {
+      arch; memory = mem;
+      annots = Table.empty;
+      program = disasm;
+      symbols = syms;
+    } in
+    List.iter options.plugins ~f:(fun name ->
+        let name = if Filename.check_suffix name ".plugin" then
+            name else (name ^ ".plugin") in
+        match
+          Plugin.create ~system:"program" name |> Plugin.load
+        with Ok () -> ()
+           | Error err -> eprintf "Failed to load plugin %s: %a@."
+                            (Filename.basename name) Error.pp err);
+    let project =
+      List.fold ~init:project (Program_visitor.registered ())
+        ~f:(fun project visit -> visit project) in
+
     let module Env = struct
       let options = options
-      let cfg = cfg
-      let base = mem
-      let syms = syms
-      let arch = arch
+      let cfg = Disasm.blocks project.program
+      let base = project.memory
+      let syms = project.symbols
+      let arch = project.arch
     end in
     let module Printing = Printing.Make(Env) in
     let module Helpers = Helpers.Make(Env) in
@@ -134,7 +157,7 @@ module Program(Conf : Options.Provider) = struct
         | `with_asm -> pp_blk Block.insns pp_insns
         | `with_bil -> pp_blk bil_of_block pp_bil) |> pp_concat in
 
-    Tags.install std_formatter `Text;
+    Text_tags.install std_formatter `Text;
     if options.output_dump <> [] then
       pp_code (pp_syms pp_blk) std_formatter syms;
 
@@ -152,13 +175,11 @@ module Program(Conf : Options.Provider) = struct
       Image.create options.filename >>= fun (img,warns) ->
       List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
       printf "%-20s: %s@." "File" options.filename;
-      printf "%-20s: %a@." "Arch" Arch.pp (arch img);
-      printf "%-20s: %a@." "Entry" Addr.pp (entry_point img);
-      printf "%-20s: %d@." "Symbols" (Table.length (symbols img));
-      printf "%-20s: %d@." "Sections" (Table.length (sections img));
-      Table.iteri (sections img) ~f:(fun mem s ->
+      printf "%-20s: %a@." "Arch" Arch.pp (Image.arch img);
+      printf "%-20s: %a@." "Entry" Addr.pp (Image.entry_point img);
+      Table.iteri (Image.sections img) ~f:(fun mem s ->
           if Section.is_executable s then
-            disassemble ~img (arch img) mem);
+            disassemble ~img (Image.arch img) mem);
       return (List.length warns)
     | Some s -> match Arch.of_string s with
       | None -> eprintf "unrecognized architecture\n"; return 1
