@@ -159,7 +159,8 @@ let validate_sections data (s,ss) : Validate.t =
     validate_no_intersections (s,ss)
   ]
 
-let create_sections endian data (s,ss) =
+let create_sections arch data (s,ss) =
+  let endian = Arch.endian arch in
   Validate.result (validate_sections data (s,ss)) >>= fun () ->
   List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
       let loc, pos = Section.(location s, off s) in
@@ -197,7 +198,7 @@ let register_backend ~name backend =
 
 let of_img img data name =
   let open Img in
-  create_sections (endian img) data (sections img) >>= fun secs ->
+  create_sections (arch img) data (sections img) >>= fun secs ->
   let syms,errs = create_symbols (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Sec.hashable secs)
@@ -254,8 +255,8 @@ let create ?backend path : result =
 let entry_point t = Img.entry t.img
 let filename t = t.name
 let arch t = Img.arch t.img
-let addr_size t = Img.addr_size t.img
-let endian t = Img.endian t.img
+let addr_size t = Arch.addr_size (Img.arch t.img)
+let endian t = Arch.endian (Img.arch t.img)
 
 let words t (size : size) : word table =
   let lazy table = match size with
@@ -280,7 +281,6 @@ TEST_MODULE = struct
     let section (addr, off, size) = {
       Section.name = "test-section";
       Section.perm = R;
-      Section.vsize = size;
       Section.off;
       Section.location = {
         Location.addr = Addr.of_int ~width addr;

@@ -1,5 +1,8 @@
 #!/bin/sh
 
+for target; do :; done
+args=`echo "$@" | sed 's/.plugin/.cmxs/'`
+
 ocamlbuild \
     -use-ocamlfind \
     -classic-display \
@@ -15,4 +18,13 @@ ocamlbuild \
     -tag short_paths \
     -cflags "-w A-4-33-40-41-42-43-34-44" \
     -cflags -strict-sequence \
-    $@
+    $args
+result=$?
+
+source="_build/`basename $target .plugin 2>/dev/null`.cmxs"
+
+if [ -f "$source" ]; then
+    cp $source $target
+fi
+
+exit $result

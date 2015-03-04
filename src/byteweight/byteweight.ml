@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_plugins.Std
 open Or_error
 
 (** list of posix regexes of files that are ignored during

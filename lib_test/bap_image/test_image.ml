@@ -23,7 +23,7 @@ let create_section
     | Some size, Some data -> size,data in
   let addr = create_addr asize addr in
   let location = Location.Fields.create ~addr ~len:size in
-  Section.Fields.create ~name ~location ~perm ~off ~vsize:size
+  Section.Fields.create ~name ~location ~perm ~off
 
 
 let create_file () = String.create 0x1000
@@ -56,10 +56,14 @@ let nonempty = function
 let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
   let sections = nonempty (ss addr_size name) in
   let symbols = syms in
-  let arch = `arm in
+  let arch = match addr_size, endian with
+    | `r32,LittleEndian -> `mipsel
+    | `r32,BigEndian    -> `mips
+    | `r64,LittleEndian -> `mips64el
+    | `r64,BigEndian    -> `mips64 in
   let entry = create_addr addr_size 0 in
   let load _ =
-    Some (Img.Fields.create ~arch ~addr_size ~endian ~entry ~sections ~symbols) in
+    Some (Img.Fields.create ~arch ~entry ~sections ~symbols) in
   load
 
 let backends =

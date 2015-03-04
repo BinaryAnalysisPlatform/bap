@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_plugins.Std
 open Or_error
 
 let load pkg =
@@ -6,12 +7,12 @@ let load pkg =
   Bap_toplevel.eval cmd
 
 let () =
-  Bap_plugins.all () |>
+  Plugins.all () |>
   List.iter ~f:(fun pkg -> match load pkg with
       | Ok true -> ()
       | Ok false -> assert false
       | Error err ->
         eprintf "failed to load plugin into toplevel: (%s)%s: %s"
-          (Bap_plugin.system pkg)
-          (Bap_plugin.name pkg)
+          (Plugin.system pkg)
+          (Plugin.name pkg)
           (Error.to_string_hum err))

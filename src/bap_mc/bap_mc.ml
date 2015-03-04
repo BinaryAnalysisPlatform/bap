@@ -1,5 +1,8 @@
-open Core_kernel.Std open Or_error open OUnit2
+open Core_kernel.Std
+open Or_error
+open OUnit2
 open Bap.Std
+open Bap_plugins.Std
 
 module Disasm = Disasm_expert.Basic
 module Insn = Disasm.Insn

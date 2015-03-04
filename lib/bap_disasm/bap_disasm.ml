@@ -102,6 +102,7 @@ let of_rec r =
                 | Some insn -> add_decoded map mem insn)) in
   let memmap =
     List.fold (Rec.errors r) ~init:memmap ~f:add_rec_error in
+  (* let memmap = Table.empty in *)
   let blocks = Rec.blocks r |> Table.map ~f:Block.of_rec_block in
   let insns, mems_of_insn = create_insn_mapping blocks in
   {blocks; memmap; insns; mems_of_insn}
@@ -217,9 +218,13 @@ module Disasm = struct
 
       let pp fmt t : unit =
         match t with
-        | `Failed e -> fprintf fmt "Failed: %a@\n" Error.pp e
-        | `Failed_to_disasm m -> fprintf fmt "Failed to disassemble: %a@\n" Memory.pp m
-        | `Failed_to_lift (m, i, e) -> fprintf fmt "Failed to lift: %a%a%a@\n" Memory.pp m Insn.pp i Error.pp e
+        | `Failed e ->
+          fprintf fmt "Failed: %a@\n" Error.pp e
+        | `Failed_to_disasm m ->
+          fprintf fmt "Failed to disassemble: %a@\n" Memory.pp m
+        | `Failed_to_lift (m, i, e) ->
+          fprintf fmt "Failed to lift: %a%a%a@\n"
+            Memory.pp m Insn.pp i Error.pp e
     end)
 
   let errors d : (mem * error) seq =

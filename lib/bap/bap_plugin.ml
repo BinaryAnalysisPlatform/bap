@@ -10,6 +10,10 @@ type t = {
   system : string;
 } with fields
 
+let create ~system path = {
+  name = Filename.basename path;
+  path; system}
+
 let init_findlib = lazy (
   try
     Dynlink.init ();
@@ -17,7 +21,7 @@ let init_findlib = lazy (
     Findlib.init ()
   with _ -> ())
 
-let create_exn ~system name =
+let find_exn ~system name =
   let module Pkg = Fl_package_base in
   let pkg = Pkg.query name in
   let def = Pkg.(pkg.package_defs) in
@@ -35,8 +39,8 @@ let create_exn ~system name =
       system;
     }
 
-let create ~system name =
-  try create_exn ~system name with
+let find ~system name =
+  try find_exn ~system name with
   | Not_found -> None
 
 let load pkg : unit or_error =
@@ -45,10 +49,7 @@ let load pkg : unit or_error =
     error_string (Dynlink.error_message err)
   | exn -> of_exn exn
 
-let list ~system : t list =
+let find_all ~system : t list =
   let lazy () = init_findlib in
   Fl_package_base.list_packages () |>
-  List.filter_map ~f:(create ~system)
-
-let load_all ~system : (t * unit Or_error.t) list =
-  list ~system |> List.map ~f:(fun pkg -> pkg, load pkg)
+  List.filter_map ~f:(find ~system)
