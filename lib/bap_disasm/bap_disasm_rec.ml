@@ -175,8 +175,8 @@ let sexp_of_block (blk : block) =
   Sexp.Atom (Addr.string_of_value blk.addr)
 
 let kind_of_dests = function
-  | [] -> `Fall
-  | xs -> if List.exists xs ~f:(fun (_,x) -> x = `Jump)
+  | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall
+  | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump)
     then `Jump
     else `Cond
 
@@ -185,7 +185,6 @@ let kind_of_branches t f =
   | `Jump,`Jump -> `Jump
   | `Fall,`Fall -> `Fall
   | _         -> `Cond
-
 
 let fold_consts = Bil.(fixpoint fold_consts)
 
@@ -230,6 +229,7 @@ let update_dests next s mem insn dests =
   let is = Dis.Insn.is insn in
   let fall = Some next, `Fall in
   let dests = match kind_of_dests dests with
+    | `Fall when is `Return -> [] (* if BIL doesn't get this *)
     | `Jump when is `Call -> fall :: dests
     | `Cond | `Fall -> fall :: dests
     | _ -> dests in
@@ -237,9 +237,12 @@ let update_dests next s mem insn dests =
   let dests = List.map dests ~f:(fun d -> match d with
       | Some addr,kind when Memory.contains s.base addr -> d
       | _,kind -> None, kind) in
-  List.iter dests ~f:(fun dest ->
-      let key = Memory.max_addr mem in
-      Addr.Table.add_multi s.dests ~key ~data:dest);
+  let key = Memory.max_addr mem in
+  begin match dests with
+    | [] -> Addr.Table.add_exn s.dests ~key ~data:[]
+    | dests -> List.iter dests ~f:(fun data ->
+        Addr.Table.add_multi s.dests ~key ~data)
+  end;
   { s with
     roots = List.filter_map ~f:fst dests |> List.rev_append s.roots;
   }
@@ -293,7 +296,6 @@ let stage1 ?lifter ?(roots=[]) disasm base =
 let sexp_of_addr addr =
   Sexp.Atom (Addr.string_of_value addr)
 
-
 let create_indexes (dests : dests Addr.Table.t) =
   let leads = Addrs.create () in
   let terms = Addrs.create () in
@@ -315,7 +317,9 @@ let stage2 dis stage1 =
   let preds = Addrs.create () in
   let next = Addr.succ in
   let is_edge addr =
-    Addrs.mem leads (next addr) || Addrs.mem kinds addr in
+    Addrs.mem leads (next addr) ||
+    Addrs.mem kinds addr ||
+    Addrs.mem stage1.dests addr in
   let is_visited = Span.mem stage1.visited in
   let next_visited = Span.upper_bound stage1.visited in
   let create_block start finish =
@@ -327,7 +331,8 @@ let stage2 dis stage1 =
           Addrs.add_multi preds ~key:leader ~data:start) in
     let dests = match Addrs.find kinds finish with
       | Some dests -> dests
-      | None when Addrs.mem leads (next finish) ->
+      | None when Addrs.mem leads (next finish) &&
+                  not (Addrs.mem stage1.dests finish) ->
         Addrs.add_multi preds ~key:(next finish) ~data:start;
         [Some (next finish),`Fall]
       | None -> [] in
