@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "bap"
-version: "0.9.4"
+version: "master"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
 homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
@@ -25,7 +25,14 @@ remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "core_lwt"]
   ["rm" "-rf" bap:doc]
-  ["rm" "-f" "%{man}%/bap-*"]
+  ["rm" "-f" "%{prefix}%/share/bap/sigs.zip"]
+  ["rm" "-f" "%{man}%/man1/bap-mc.1"]
+  ["rm" "-f" "%{man}%/man1/bap-objdump.1"]
+  ["rm" "-f" "%{man}%/man1/bap-byteweight.1"]
+  ["rm" "-f" "%{bin}%/bap-mc"]
+  ["rm" "-f" "%{bin}%/bap-objdump"]
+  ["rm" "-f" "%{bin}%/bap-byteweight"]
+  ["rm" "-f" "%{bin}%/bap-server"]
   ["rm" "-f" "%{bin}%/bapbuild"]
   ["rm" "-f" "%{bin}%/baptop"]
 ]
@@ -33,14 +40,17 @@ remove: [
 depends: [
  	"base-unix"
  	"bitstring"
+    "camlzip"
 	"cmdliner" {>= "0.9.6"}
 	"cohttp" {>= "0.15.0"}
 	"core_kernel" {>= "111.28.0"}
 	"ezjsonm" {>= "0.4.0"}
 	"faillib"
+    "fileutils"
 	"lwt"
 	"oasis" {build & >= "0.4.0"}
     "ocamlgraph"
+    "ocurl"
 	"re"
 	"uri"
     "utop"
