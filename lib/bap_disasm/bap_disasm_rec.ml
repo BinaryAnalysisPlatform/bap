@@ -152,6 +152,7 @@ type stage1 = {
   addr : addr;
   visited : Span.t;
   roots : addr list;
+  inits : addr list;
   dests : dests Addr.Table.t;
   errors : (addr * error) list;
   lifter : lifter option;
@@ -275,7 +276,8 @@ let stage1 ?lifter ?(roots=[]) disasm base =
     | r :: rs -> r,rs
     | [] -> Memory.min_addr base, [] in
   let init = {base; addr; visited = Span.empty;
-              roots; dests = Addr.Table.create (); errors = []; lifter} in
+              roots; inits = roots;
+              dests = Addr.Table.create (); errors = []; lifter} in
   Memory.view ~from:addr base >>= fun mem ->
   Dis.run disasm mem ~stop_on:[`May_affect_control_flow] ~return ~init
     ~hit:(fun d mem insn s -> next d (update (Dis.addr d) s mem insn))
@@ -315,11 +317,14 @@ let stage2 dis stage1 =
   let addrs = Addrs.create () in
   let succs = Addrs.create () in
   let preds = Addrs.create () in
+  let inits =
+    List.fold ~init:Addr.Set.empty stage1.inits ~f:Set.add in
   let next = Addr.succ in
   let is_edge addr =
     Addrs.mem leads (next addr) ||
     Addrs.mem kinds addr ||
-    Addrs.mem stage1.dests addr in
+    Addrs.mem stage1.dests addr ||
+    Addr.Set.mem inits addr in
   let is_visited = Span.mem stage1.visited in
   let next_visited = Span.upper_bound stage1.visited in
   let create_block start finish =
@@ -339,8 +344,8 @@ let stage2 dis stage1 =
     Addrs.add_exn succs ~key:start ~data:dests;
     return () in
 
-  let rec loop start curr =
-    let curr = next curr in
+  let rec loop start curr' =
+    let curr = next curr' in
     if is_visited curr then
       if is_edge curr
       then
@@ -348,8 +353,11 @@ let stage2 dis stage1 =
         loop (next curr) (next curr)
       else loop start curr
     else match next_visited curr with
-      | None -> return ()
-      | Some addr -> loop addr addr in
+      | Some addr -> loop addr addr
+      | None when
+          is_visited start && is_visited curr' ->
+        create_block start curr'
+      | None -> return () in
   match Span.min stage1.visited with
   | None -> errorf "Provided memory doesn't contain recognizable code"
   | Some addr -> loop addr addr >>= fun () ->
