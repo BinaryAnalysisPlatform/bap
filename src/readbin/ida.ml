@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Word_size
 
+exception External_command_failed of string
+
 type t = {
   ida : string;
   exe : string;
@@ -14,9 +16,10 @@ let run cmd =
   let r = In_channel.input_lines inp in
   In_channel.close inp; r
 
-let system cmd = Unix.system cmd |> ignore
-let pread cmd = Printf.ksprintf run cmd
-let shell cmd = Printf.ksprintf (fun cmd () -> system cmd) cmd
+let system cmd =
+  if Sys.command cmd <> 0 then raise (External_command_failed cmd)
+let pread cmd = ksprintf run cmd
+let shell cmd = ksprintf (fun cmd () -> system cmd) cmd
 
 let ext p e =
   FilePath.(add_extension (chop_extension p) e)
@@ -140,7 +143,8 @@ let run_script self script_to =
 
 let get_symbols ?demangle t arch mem =
   let result = run_script t Idapy.extract_symbols in
-  Symbols.read ?demangle ~filename:result arch  mem
+  In_channel.with_file result ~f:(fun ic ->
+    Symbols.read ?demangle ic arch mem)
 
 let close self = self.close ()
 

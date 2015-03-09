@@ -9,19 +9,24 @@
 open Bap.Std
 open Core_kernel.Std
 
-(** IDA instance  *)
+(** exception External_command_failed occurs when the external IDA
+    command is not executed successfully *)
+exception External_command_failed of string
+
+(** IDA instance *)
 type t
 
 (** [create ?ida target] create an IDA instance that will work with
-     [target] executable. [ida] is an optional hint, that can be
-     either a full path to [ida] executable, or just an executable
-     name *)
+    [target] executable. [ida] is an optional hint, that can be
+    either a full path to [ida] executable, or just an executable
+    name *)
 val create : ?ida:string -> string -> t Or_error.t
 
-(** [get_symbols ?demangle ida mem] extract symbols from binary, using IDA *)
+(** [get_symbols ?demangle ida mem] extract symbols from binary, using
+    IDA with specific path [ida] *)
 val get_symbols : ?demangle:Options.demangle -> t -> arch -> mem -> string table
 
-(** [close ida] finish interaction with IDA and clean all resources  *)
+(** [close ida] finish interaction with IDA and clean all resources *)
 val close : t -> unit
 
 
