@@ -9,24 +9,25 @@ module Rec = Disasm_expert.Recursive
 
 let err fmt = Or_error.errorf fmt
 
+let sub = "\x48\x83\xec\x08"
+let call = "\xe8\x47\xee\xff\xff"
+let mov = "\x8b\x40\x10"
+let add = "\x48\x83\xc4\x08"
+let ret = "\xc3"
+
 let x86_64 = "x86_64", [
-
     (* sub $0x8,%rsp *)
-    "\x48\x83\xec\x08", ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
-
+    sub , ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
     (* callq 942040 *)
-    "\xe8\x47\xee\xff\xff", ["CALL64pcrel32"; "-0x11b9";],
+    call , ["CALL64pcrel32"; "-0x11b9";],
     [`Call; `May_affect_control_flow];
-
     (* mov 0x10(%rax),%eax *)
-    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
+    mov, ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
     [`May_load];
-
     (* add $0x8, %rsp *)
-    "\x48\x83\xc4\x08", ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
-
+    add, ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
     (* "retq" *)
-    "\xc3", ["RET"],
+    ret, ["RET"],
     [`Return; `Barrier; `Terminator; `May_affect_control_flow]
   ]
 
@@ -106,7 +107,7 @@ let test_run_all data ctxt =
      }
 
 This is the actual assembler output, that we've got with the following
-command: [arm-linux-gnueabihf-gcc -marm]
+command: [arm-linux-gnueabi-gcc -marm]
 
 
 f:
@@ -277,6 +278,31 @@ let structure cfg ctxt =
   let expect = deepsort graph in
   assert_equal ~ctxt ~printer ~msg:"Wrong graph structure" expect got
 
+(* test one instruction cfg *)
+let test_micro_cfg insn ctxt =
+  let open Or_error in
+  let mem = Bigstring.of_string insn |>
+            Memory.create LittleEndian (Addr.of_int64 0L) |>
+            ok_exn in
+  let lifter = Bap_disasm_x86_lifter.insn `x86_64 in
+  let dis = Rec.run ~lifter `x86_64 mem |> ok_exn in
+  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "One block" (Rec.blocks dis |> Table.length = 1);
+  Rec.blocks dis |> Table.to_sequence |>
+  Seq.to_list |> List.hd_exn |> snd
+  |> Rec.Block.insns |> function
+  | [mem, Some _, Some _] ->
+    let max_addr = Addr.of_int ~width:64 (String.length insn - 1) in
+    assert_equal ~printer:Addr.to_string ~ctxt
+      (Addr.of_int64 0L) (Memory.min_addr mem);
+    assert_equal ~printer:Addr.to_string ~ctxt
+      max_addr (Memory.max_addr mem)
+  | [mem, None, _] -> assert_string "Failed to disassemble"
+  | [mem, _, None] -> assert_string "Failed to lift"
+  | [] -> assert_string "No instructions"
+  | _ :: _ -> assert_string "More than one instruction"
+
+
 let () = Plugins.load ()
 
 let suite = "Disasm.Basic" >::: [
@@ -285,4 +311,6 @@ let suite = "Disasm.Basic" >::: [
     "recurse"    >:: test_cfg amount;
     "addresses"  >:: test_cfg addresses;
     "structure"  >:: test_cfg structure;
+    "ret"        >:: test_micro_cfg ret;
+    "sub"        >:: test_micro_cfg ret;
   ]
