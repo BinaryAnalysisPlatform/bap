@@ -26,7 +26,7 @@ name=`basename $target .plugin 2>/dev/null`
 source="_build/$name.cmxa"
 
 if [ -f "$source" ]; then
-    CMD=`grep -A1 "Target: b.cmxa" _build/_log | grep -v "Target" | sed 's/.cmxa/.cmxs/' | sed 's/-a/-shared/'`
+    CMD=`grep -A1 "Target: $name.cmxa" _build/_log | grep -v "Target" | sed 's/.cmxa/.cmxs/' | sed 's/-a/-shared/'`
     cd _build
     $CMD
     cp "$name.cmxs" "../$target"
