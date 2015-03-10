@@ -1,13 +1,14 @@
 #!/bin/sh
 
 for target; do :; done
-args=`echo "$@" | sed 's/.plugin/.cmxa/'`
+args=`echo "$@" | sed 's/\.plugin$/.cmxa/'`
 
 ocamlbuild \
     -use-ocamlfind \
     -classic-display \
     -syntax camlp4o \
     -pkg bap \
+    -pkg bap.plugins \
     -pkg core_kernel \
     -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
     -pkg bin_prot.syntax \
