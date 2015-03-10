@@ -194,6 +194,26 @@ Library elf
                  Elf_utils
   InternalModules: Elf_internal_utils
 
+Library image_llvm
+  Path:            lib/bap_image/
+  FindlibParent:   bap_image
+  FindlibName:     image_llvm
+  XMETAExtraLines: plugin_system = "bap.image.disabled"
+  CompiledObject:  best
+  BuildDepends:    bap, core_kernel
+  Modules:         Image_llvm,
+                   Object_file,
+                   Section_ref,
+                   Symbol_ref
+  CCOpt:           $cc_optimization
+  CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
+  CSources:        object_file_stubs.c,
+                   object_file_stubs.h,
+                   section_ref_stubs.c,
+                   section_ref_stubs.h,
+                   symbol_ref_stubs.c,
+                   symbol_ref_stubs.h
+
 Library dwarf
   Path:          lib/bap_dwarf
   FindlibParent: bap
