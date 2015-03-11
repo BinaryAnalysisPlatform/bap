@@ -46,7 +46,7 @@ module Exp = struct
     | Cast (ct,sz,ex) ->
       pr ch "%a(%d,%a)" (pp_sexp sexp_of_cast) ct sz pp ex
     | Let (v,e1,e2) -> pr ch "Let(%a,%a,%a)" pp_var v pp e1 pp e2
-    | Unknown (s,t) -> pr ch "Unknown(%s,%a)" s pp_ty t
+    | Unknown (s,t) -> pr ch "Unknown(\"%s\",%a)" s pp_ty t
     | Ite (e1,e2,e3) -> pr ch "Ite(%a,%a,%a)" pp e1 pp e2 pp e3
     | Extract (n,m,e) -> pr ch "Extract(%d,%d,%a)" n m pp e
     | Concat (e1,e2) -> pr ch "Concat(%a,%a)" pp e1 pp e2
