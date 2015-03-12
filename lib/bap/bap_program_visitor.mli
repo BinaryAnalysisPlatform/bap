@@ -7,7 +7,7 @@ type project = {
   program : disasm;
   symbols : string table;
   memory  : mem;
-  annots  : tags table;
+  annots  : (string * string) memmap;
 }
 
 val register : (project -> project) -> unit

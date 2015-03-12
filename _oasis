@@ -167,9 +167,9 @@ Library bap_image
                  bap.types
   Modules:       Bap_fileutils,
                  Bap_image,
+                 Bap_memmap,
                  Bap_memory,
                  Bap_table,
-                 Bap_tags,
                  Image_backend,
                  Image_common,
                  Image_internal_std
@@ -279,6 +279,7 @@ Library image_test
   BuildDepends:   bap
   Install:        false
   Modules:        Test_image,
+                  Test_memmap,
                   Test_table
 
 Library benchmarks

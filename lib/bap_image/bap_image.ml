@@ -75,6 +75,7 @@ type t = {
   data : Bigstring.t;
   symbols : sym table;
   sections : sec table;
+  tags : (string * string) memmap;
   words : words sexp_opaque;
   memory_of_section : sec -> mem sexp_opaque;
   memory_of_symbol : (sym -> mem * mem seq) Lazy.t sexp_opaque;
@@ -198,7 +199,8 @@ let register_backend ~name backend =
 
 let of_img img data name =
   let open Img in
-  create_sections (arch img) data (sections img) >>= fun secs ->
+  let arch = arch img in
+  create_sections arch data (sections img) >>= fun secs ->
   let syms,errs = create_symbols (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Sec.hashable secs)
@@ -209,15 +211,21 @@ let of_img img data name =
     Table.(link ~one_to:many Sec.hashable secs syms) in
   let section_of_symbol () : sym -> sec =
     Table.(link ~one_to:one Sym.hashable syms secs) in
+  let tags = List.fold (tags img) ~init:Memmap.empty ~f:(fun map tag ->
+      match mem_of_location (Arch.endian arch) data tag.Tag.location with
+      | Ok mem -> Memmap.add map mem Tag.(tag.name, tag.data)
+      | Error _ ->  map) in
   return ({
       img; name; data; symbols = syms; sections = secs; words;
       memory_of_section;
+      tags;
       memory_of_symbol   = Lazy.from_fun memory_of_symbol;
       symbols_of_section = Lazy.from_fun symbols_of_section;
       section_of_symbol  = Lazy.from_fun section_of_symbol;
     }, errs)
 
 let data t = t.data
+let tags t = t.tags
 
 
 let of_backend backend data path : result =

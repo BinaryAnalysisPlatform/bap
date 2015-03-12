@@ -1,3 +1,19 @@
+(** Table.
+
+    Tables are used to partition memory region into a set of
+    non-intersecting areas. Each area is assosiated with arbitrary
+    value of type ['a] bound to the type of the table.
+
+    All operations over tables are purely applicative, i.e. there is
+    no observable side-effects. Although, they employ some kind of
+    caching underneath the hood, so that they perform better if
+    they're  build once and used many times.
+
+    Tables can be also linked. For example, if you have two tables
+    mapping the same memory region to a different sets of values, you
+    can create a mapping from one set of values to another. See [link]
+    function for mode details.
+*)
 open Core_kernel.Std
 open Bap_types.Std
 

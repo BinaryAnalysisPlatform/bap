@@ -32,6 +32,10 @@ module Program(Conf : Options.Provider) = struct
         | Some (m,name) when Addr.(Memory.min_addr m = addr) -> name
         | _ -> sym)
 
+  let annotate_symbols name syms map : (string * string) memmap =
+    Table.foldi ~init:map syms ~f:(fun mem sym map ->
+        Memmap.add map mem (name,sym))
+
   (* rhs is recovered, lhs is static.
      must be called after symbol renaming  *)
   let merge_syms lhs rhs : string table =
@@ -106,16 +110,23 @@ module Program(Conf : Options.Provider) = struct
       ] in
     let disasm = disassemble ~roots arch mem in
     let cfg = Disasm.blocks disasm in
-    let syms = Symtab.create roots mem cfg |>
+    let rec_syms = Symtab.create roots mem cfg in
+    let syms = rec_syms |>
                rename_symbols ida_syms |>
                merge_syms ida_syms     |>
                rename_symbols img_syms |>
                merge_syms img_syms     |>
                rename_symbols usr_syms |>
                merge_syms usr_syms     in
+    let annots =
+      Option.value_map img ~default:Memmap.empty ~f:Image.tags |>
+      annotate_symbols "found-symbol" rec_syms |>
+      annotate_symbols "ida-symbol" ida_syms |>
+      annotate_symbols "image-symbol" img_syms |>
+      annotate_symbols "user-symbol" usr_syms in
     let project = {
       arch; memory = mem;
-      annots = Table.empty;
+      annots;
       program = disasm;
       symbols = syms;
     } in

@@ -12,7 +12,7 @@ open Bap_disasm_types
 open Image_internal_std
 
 
-(** value of type [disasm] is a results of the disassembling of a
+(** value of type [disasm] is a result of the disassembling of a
     memory region. To create values of this type use [disassemble]
     function *)
 type disasm

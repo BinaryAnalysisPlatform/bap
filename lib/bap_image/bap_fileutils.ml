@@ -14,5 +14,5 @@ let mapfile path : Bigstring.t option =
 
 let readfile path : Bigstring.t =
   match mapfile path with
-    | Some data -> data
-    | None -> Bigstring.of_string (In_channel.read_all path)
+  | Some data -> data
+  | None -> Bigstring.of_string (In_channel.read_all path)
