@@ -33,6 +33,8 @@ module Size = struct
     | `r16
     | `r32
     | `r64
+    | `r128
+    | `r256
   ] with bin_io, compare, sexp, variants
 
   type 'a p = 'a constraint 'a = [< all]
