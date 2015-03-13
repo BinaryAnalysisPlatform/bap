@@ -130,6 +130,13 @@ type error = [
 type decoded =  mem * insn option * stmt list option
 with sexp_of
 
+type jump = [
+  | `Jump     (** unconditional jump                  *)
+  | `Cond     (** conditional jump                    *)
+] with compare, sexp
+
+type edge = [jump | `Fall] with compare,sexp
+
 type block = {
   addr : addr;
   mem : mem Lazy.t;
@@ -142,8 +149,8 @@ type block = {
 }
 
 and blk_dest = [
-  | `Block of block * [`Jump | `Cond | `Fall]
-  | `Unresolved of [`Jump | `Cond ]
+  | `Block of block * edge
+  | `Unresolved of jump
 ]
 
 

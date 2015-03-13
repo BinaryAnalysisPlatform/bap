@@ -9,3 +9,12 @@ type t = string table
     provided, then only calls
 *)
 val create : addr list -> mem -> block table -> t
+
+module Graph : Graph.Sig.P
+  with type V.label = mem * string (** function body *)
+   and type E.label = addr         (** callsite  *)
+
+
+(** [to_graph blocks syms] creates a callgraph. Edges of the graph
+    are labeled with a callsite *)
+val to_graph : block table -> t -> Graph.t
