@@ -151,7 +151,7 @@ let df_to_offset mode e =
 let bap_to_rflags =
   let undefined d = Exp.unknown (Printf.sprintf "Undefined RFLAGS bit %d" d) bool_t in
   let unmodeled s = Exp.unknown ("Unmodeled RFLAGS bit " ^ s) bool_t in
-  (List.map ~f:undefined (List.range ~stride:(-1) ~stop:`inclusive 64 32))
+  (List.map ~f:undefined (List.range ~stride:(-1) ~stop:`inclusive 63 32))
   @  undefined 31                  (* 31 *)
      :: undefined 30               (* 30 *)
      :: undefined 29               (* 29 *)
@@ -188,7 +188,7 @@ let bap_to_rflags =
 
 let bap_to_eflags = List.drop bap_to_rflags 32
 let bap_to_flags = List.drop bap_to_eflags 16
-let bap_to_lflags = List.drop bap_to_flags 16
+let bap_to_lflags = List.drop bap_to_flags 8
 
 let rflags_e = List.reduce_exn ~f:Exp.(^) bap_to_rflags
 let eflags_e = List.reduce_exn ~f:Exp.(^) bap_to_eflags
