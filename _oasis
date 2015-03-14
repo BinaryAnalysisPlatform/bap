@@ -213,7 +213,8 @@ Library disasm
   FindlibName:   disasm
   BuildDepends:  bap.image,
                  bap.types,
-                 camlzip
+                 camlzip,
+                 ocamlgraph
   Modules:       Bap_disasm,
                  Bap_disasm_arm,
                  Bap_disasm_arm_bit,

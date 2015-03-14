@@ -10,6 +10,12 @@ type block with compare, sexp_of
 type insn = full_insn
 type lifter = mem -> insn -> bil Or_error.t
 type decoded = mem * insn option * bil option with sexp_of
+type jump = [
+  | `Jump     (** unconditional jump                  *)
+  | `Cond     (** conditional jump                    *)
+] with compare, sexp
+
+type edge = [jump | `Fall] with compare,sexp
 
 type error = [
   | `Failed_to_disasm of mem
@@ -26,9 +32,10 @@ val errors : t -> error list
 
 module Block : sig
   type t = block with compare, sexp_of
+
   type dest = [
-    | `Block of block * [`Jump | `Cond | `Fall]
-    | `Unresolved of    [`Jump | `Cond ]
+    | `Block of block * edge
+    | `Unresolved of    jump
   ] with compare, sexp_of
   val addr : t -> addr
   val memory : t -> mem

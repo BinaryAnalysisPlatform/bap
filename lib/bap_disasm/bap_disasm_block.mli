@@ -23,14 +23,17 @@ open Bap_disasm_basic
 type t with compare, sexp_of
 type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 
+type jump = [
+  | `Jump     (** unconditional jump                  *)
+  | `Cond     (** conditional jump                    *)
+] with compare, sexp
+
+type edge = [jump | `Fall] with compare,sexp
+
 (** block destinations  *)
 type dest = [
-  | `Block of t * [
-      | `Jump     (** unconditional jump                  *)
-      | `Cond     (** conditional jump                    *)
-      | `Fall     (** a pseudo jump to a next instruction *)
-    ]
-  | `Unresolved of [`Jump | `Cond ]
+  | `Block of t * edge
+  | `Unresolved of jump
 ] with compare, sexp_of
 
 (** [addr block] address of the first instruction  *)
@@ -56,6 +59,18 @@ val dests : t -> dest seq
 val succs : t -> t seq
 (** [preds blk] block immediate predecessors  *)
 val preds : t -> t seq
+
+(** Blocks as graph  *)
+module Graph : Graph.Sig.P
+  with type V.label = t option  (** possibly unresolved  *)
+   and type E.label = edge      (** destination type     *)
+
+(** [to_graph ?bound entry] builds a graph starting with [entry] and
+    spanning all reachable blocks that are bounded by a memory region
+    [bound].
+    @param bound defaults to infinite memory region.
+*)
+val to_graph : ?bound:mem -> t -> Graph.t
 
 (** all the printing stuff, including [to_string] function *)
 include Printable with type t := t

@@ -1,10 +1,10 @@
 base-unix
 bitstring
 camlzip
-cmdliner
-cohttp
+cmdliner.0.9.6
+cohttp.0.15.0
 core_kernel
-ezjsonm
+ezjsonm.0.4.0
 faillib
 fileutils
 lwt
