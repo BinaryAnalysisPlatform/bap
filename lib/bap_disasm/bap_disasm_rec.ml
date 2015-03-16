@@ -266,11 +266,13 @@ let update next s mem insn : stage1 =
 let next dis s =
   let rec loop s = match s.roots with
     | [] -> Dis.stop dis s
-    | r :: roots when not(Memory.contains s.base r) -> loop {s with roots}
-    | r :: roots when Span.mem s.visited r -> loop {s with roots}
+    | r :: roots when not(Memory.contains s.base r) ->
+      loop {s with roots}
+    | r :: roots when Span.mem s.visited r ->
+      loop {s with roots}
     | addr :: roots ->
       let mem = match Span.upper_bound s.visited addr with
-        | None ->  Memory.view ~from:addr s.base
+        | None -> Memory.view ~from:addr s.base
         | Some r1 -> Memory.range s.base addr r1  in
       let mem =
         Result.map_error mem ~f:(fun err -> Error.tag err "next_root") in
@@ -357,12 +359,11 @@ let stage2 dis stage1 =
       if is_edge curr
       then
         create_block start curr >>= fun () ->
-        loop (next curr) (next curr)
+        loop (next curr) curr
       else loop start curr
     else match next_visited curr with
       | Some addr -> loop addr addr
-      | None when
-          is_visited start && is_visited curr' ->
+      | None when is_visited start && is_visited curr' ->
         create_block start curr'
       | None -> return () in
   match Span.min stage1.visited with

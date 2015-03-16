@@ -31,9 +31,17 @@ let x86_64 = "x86_64", [
     [`Return; `Barrier; `Terminator; `May_affect_control_flow]
   ]
 
-let memory_of_string data =
+let call1 = "\xe8\x01\x00\x00\x00"
+
+let mem_equal x y =
+  Memory.(Addr.(min_addr x = min_addr y && max_addr x = max_addr y))
+
+let assert_memory =
+  assert_equal ~printer:Memory.to_string ~cmp:mem_equal
+
+let memory_of_string ?(start=0) ?(width=64) data =
   Memory.create LittleEndian
-    (Addr.zero 32)
+    (Addr.of_int start ~width)
     (Bigstring.of_string data) |> Or_error.ok_exn
 
 let string_of_strings insn =
@@ -302,6 +310,58 @@ let test_micro_cfg insn ctxt =
   | [] -> assert_string "No instructions"
   | _ :: _ -> assert_string "More than one instruction"
 
+(* call 1
+   ret
+   ret
+   ret
+
+   should emit structure
+
+   +-------------------+
+   |0:     call 1      +------+
+   +---------+---------+      |
+             |                |
+   +---------+---------+      |
+   |5:      ret        |      |
+   +-------------------+      |
+                              |
+   +-------------------+      |
+   |6:      ret        +<-----+
+   +-------------------+
+
+   With the third ret unreachable.
+*)
+
+let has_dest src dst kind =
+  Seq.exists (Rec.Block.dests src) ~f:(function
+      | `Block (blk,k) ->
+        Rec.Block.compare blk dst = 0 && k = kind
+      | _ -> false)
+
+
+let call1_3ret ctxt =
+  let mem = String.concat [call1; ret; ret; ret] |>
+            memory_of_string in
+  let lifter = Bap_disasm_x86_lifter.insn `x86_64 in
+  let dis = Rec.run ~lifter `x86_64 mem |> Or_error.ok_exn in
+  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "Three block" (Rec.blocks dis |> Table.length = 3);
+  match Rec.blocks dis |> Table.elements |> Seq.to_list with
+  | [b1;b2;b3] ->
+    let call = memory_of_string ~width:64 call1 in
+    let ret1 = memory_of_string ret ~start:5 ~width:64 in
+    let ret2 = memory_of_string ret ~start:6 ~width:64 in
+    assert_memory call (Rec.Block.memory b1);
+    assert_memory ret1 (Rec.Block.memory b2);
+    assert_memory ret2 (Rec.Block.memory b3);
+    assert_bool "b1 -> jump b3" @@ has_dest b1 b3 `Jump;
+    assert_bool "b1 -> fall b2" @@ has_dest b1 b2 `Fall;
+    assert_bool "b2 has no succs" @@
+    Seq.is_empty (Rec.Block.succs b2);
+    assert_bool "b3 has no succs" @@
+    Seq.is_empty (Rec.Block.succs b3);
+  | _ -> assert false
+
 
 let () = Plugins.load ()
 
@@ -313,4 +373,5 @@ let suite = "Disasm.Basic" >::: [
     "structure"  >:: test_cfg structure;
     "ret"        >:: test_micro_cfg ret;
     "sub"        >:: test_micro_cfg ret;
+    "call1_3ret" >:: call1_3ret;
   ]
