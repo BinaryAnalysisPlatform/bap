@@ -202,13 +202,13 @@ Library image_llvm
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
   Modules:         Image_llvm,
-                   Object_file,
+                   Llvm_binary,
                    Section_ref,
                    Symbol_ref
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
-  CSources:        object_file_stubs.c,
-                   object_file_stubs.h,
+  CSources:        llvm_binary_stubs.c,
+                   llvm_binary_stubs.h,
                    section_ref_stubs.c,
                    section_ref_stubs.h,
                    symbol_ref_stubs.c,
