@@ -27,17 +27,25 @@ type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 include Block_accessors with type t := t and type insn := insn
 include Block_traverse  with type t := t
 
-(** Blocks as graph  *)
-module Graph : Graph.Sig.P
-  with type V.label = t option  (** possibly unresolved  *)
-   and type E.label = edge      (** destination type     *)
+(** A classic control flow graph using OCamlgraph library.
+    Graph vertices are made abstract, but the implement
+    [Block_accessors] interface, including hash tables, maps, hash
+    sets etc. *)
+module Cfg : sig
+  module Block : Block_accessors with type insn := insn
+  include Graph.Sig.P
+    with type V.t = Block.t
+     and type V.label = Block.t
+     and type E.t = Block.t * edge * Block.t
+     and type E.label = edge      (** destination type     *)
+end
 
 (** [to_graph ?bound entry] builds a graph starting with [entry] and
     spanning all reachable blocks that are bounded by a memory region
     [bound].
     @param bound defaults to infinite memory region.
 *)
-val to_graph : ?bound:mem -> t -> Graph.t
+val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
 
 (** lifting from a lower level  *)
 val of_rec_block : Bap_disasm_rec.block -> t

@@ -13,17 +13,20 @@ let insns_of_decoded_list ds : (mem * insn) list =
       | mem, (Some insn, bil) -> Some (mem, Insn.of_basic ?bil insn)
       | _ -> None)
 
-include Rec.Block
+module Block = struct
+  include Rec.Block
 
-let uw = function
-  | Some x -> x
-  | _ -> failwith "Failed to unwind option"
+  let uw = function
+    | Some x -> x
+    | _ -> failwith "Failed to unwind option"
 
-let insns blk =
-  Rec.Block.insns blk |> insns_of_decoded_list
-let terminator blk = insns blk |> List.last_exn |> snd
-let leader blk = insns blk |> List.hd_exn |> snd
-let of_rec_block = Fn.id
+  let insns blk =
+    Rec.Block.insns blk |> insns_of_decoded_list
+  let terminator blk = insns blk |> List.last_exn |> snd
+  let leader blk = insns blk |> List.hd_exn |> snd
+  let of_rec_block = Fn.id
+end
+include Block
 
 let () = Pretty_printer.register ("Bap_disasm_block.pp")
 
@@ -32,14 +35,14 @@ module Edge = struct
   let default = `Fall
 end
 
-module Graph =
-  Graph.Persistent.Digraph.AbstractLabeled(struct
-    type nonrec t = t option
-  end)(Edge)
+
+module Cfg = struct
+  module Block = Block
+  include Graph.Persistent.Digraph.ConcreteBidirectionalLabeled
+      (Block)(Edge)
+end
 
 module Vis = Addr.Set
-
-let unresolved = Graph.V.create None
 
 let to_graph ?bound entry =
   let bounded addr =
@@ -52,15 +55,9 @@ let to_graph ?bound entry =
     if skip vis src then (gr,vis)
     else Seq.fold ~init:(gr,Vis.add vis (addr src)) (dests src)
         ~f:(fun (gr,vis) -> function
-            | `Unresolved kind ->
-              let src = Graph.V.create (Some src) in
-              let kind = (kind :> edge) in
-              let edge = Graph.E.create src kind unresolved in
-              Graph.add_edge_e gr edge, vis
+            | `Unresolved kind -> (gr,vis)
             | `Block (dst,kind) ->
-              let v1 = Graph.V.create (Some src)
-              and v2 = Graph.V.create (Some dst) in
-              let edge = Graph.E.create v1 kind v2 in
-              let gr = Graph.add_edge_e gr edge in
+              let edge = Cfg.E.create src kind dst in
+              let gr = Cfg.add_edge_e gr edge in
               build gr vis dst) in
-  build Graph.empty Vis.empty entry |> fst
+  entry, build Cfg.empty Vis.empty entry |> fst
