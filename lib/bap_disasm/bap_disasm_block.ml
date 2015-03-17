@@ -2,22 +2,16 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_basic
 open Image_internal_std
+open Bap_disasm_block_intf
 
 module Rec = Bap_disasm_rec
 module Insn = Bap_disasm_insn
 type insn = Insn.t with compare, bin_io, sexp
-type edge = Rec.edge with compare, sexp
-type jump = Rec.jump with compare, sexp
 
-
-let insns_of_decoded_list init : (mem * insn) seq =
-  let open Seq.Step in
-  Seq.unfold_step ~init ~f:(function
-      | [] -> Done
-      | (mem,_,_) as x :: xs -> match Insn.of_decoded x with
-        | None -> Skip xs
-        | Some insn -> Yield ((mem, insn), xs))
-
+let insns_of_decoded_list ds : (mem * insn) list =
+  List.filter_map ds ~f:(function
+      | mem, (Some insn, bil) -> Some (mem, Insn.of_basic ?bil insn)
+      | _ -> None)
 
 include Rec.Block
 
@@ -27,8 +21,8 @@ let uw = function
 
 let insns blk =
   Rec.Block.insns blk |> insns_of_decoded_list
-let terminator blk = insns blk |> Seq.to_list_rev |> List.hd_exn |> snd
-let leader blk = insns blk |> Seq.hd_exn |> snd
+let terminator blk = insns blk |> List.last_exn |> snd
+let leader blk = insns blk |> List.hd_exn |> snd
 let of_rec_block = Fn.id
 
 let () = Pretty_printer.register ("Bap_disasm_block.pp")

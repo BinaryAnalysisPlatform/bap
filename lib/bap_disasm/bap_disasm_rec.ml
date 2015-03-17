@@ -127,8 +127,8 @@ type error = [
   | `Failed_to_lift of mem * insn * Error.t
 ] with sexp_of
 
-type decoded =  mem * insn option * stmt list option
-with sexp_of
+type maybe_insn = insn option * bil option with sexp_of
+type decoded = mem * maybe_insn with sexp_of
 
 type jump = [
   | `Jump     (** unconditional jump                  *)
@@ -290,8 +290,7 @@ let stage1 ?lifter ?(roots=[]) disasm base =
   Memory.view ~from:addr base >>= fun mem ->
   Dis.run disasm mem ~stop_on:[`May_affect_control_flow] ~return ~init
     ~hit:(fun d mem insn s -> next d (update (Dis.addr d) s mem insn))
-    ~invalid:(fun d mem s ->
-        next d (errored s (`Failed_to_disasm mem)))
+    ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
     ~stopped:next
 
 (* performs the initial markup.
@@ -376,12 +375,12 @@ let stage2 dis stage1 =
         ~init:[] ~return:ident ~stopped:(fun s _ ->
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
-          | mem, None -> mem,None,None
+          | mem, None -> mem,(None,None)
           | mem, (Some ins as insn) -> match stage1.lifter with
-            | None -> mem,insn,None
+            | None -> mem,(insn,None)
             | Some lift -> match lift mem ins with
-              | Ok bil -> mem,insn,Some bil
-              | _ -> mem, insn, None) in
+              | Ok bil -> mem,(insn,Some bil)
+              | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
 
 module Block = struct
@@ -455,7 +454,7 @@ module Block = struct
     let get_mem () = Addrs.find_exn t.addrs addr  in
     let mem = Lazy.from_fun get_mem in
     if List.for_all (t.disasm @@ get_mem ())
-        ~f:(fun (_,insn,_) -> insn = None)
+        ~f:(fun (_,(insn,_)) -> insn = None)
     then raise Empty_block;
     let insns = Lazy.(mem   >>| t.disasm) in
     let lead  = Lazy.(insns >>| List.hd_exn) in
@@ -470,8 +469,8 @@ module Block = struct
   let addr (b : block) = b.addr
 
   let memory {mem = lazy x} = x
-  let leader {lead = lazy x} = x
-  let terminator {term = lazy x} = x
+  let leader {lead = lazy (_,x)} = x
+  let terminator {term = lazy (_,x)} = x
   let insns {insns = lazy x} = x
   let succs t = t.blk_succs
   let preds t = t.blk_preds
@@ -509,6 +508,16 @@ module Block = struct
           Addr.(string_of_value addr)
           Addr.(string_of_value (Memory.max_addr mem))
     end)
+
+  module T = struct
+    type t = block with sexp_of
+    let t_of_sexp _ = invalid_arg "table element is abstract"
+    let compare = compare
+    let hash b = Addr.hash (addr b)
+  end
+
+  include Hashable.Make(T)
+  include Comparable.Make(T)
 end
 
 let stage3 s2 =

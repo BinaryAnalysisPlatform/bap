@@ -79,6 +79,7 @@ Library bap
                    bap.dwarf,
                    bap.elf,
                    bap.image,
+                   bap.sema,
                    bap.types,
                    dynlink,
                    findlib
@@ -167,6 +168,7 @@ Library bap_image
                  bap.types
   Modules:       Bap_fileutils,
                  Bap_image,
+                 Bap_image_std,
                  Bap_memmap,
                  Bap_memory,
                  Bap_table,
@@ -236,10 +238,11 @@ Library disasm
                  Bap_disasm_x86_utils,
                  Bap_disasm_basic,
                  Bap_disasm_block,
+                 Bap_disasm_block_intf,
                  Bap_disasm_insn,
                  Bap_disasm_prim,
                  Bap_disasm_rec,
-                 Bap_disasm_symtab,
+                 Bap_disasm_std,
                  Bap_disasm_types,
                  Bap_insn_kind,
                  Bap_byteweight,
@@ -262,6 +265,16 @@ Library llvm
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm.disabled"
+
+Library sema
+  Path:          lib/bap_sema
+  FindlibParent: bap
+  FindlibName:   sema
+  BuildDepends:  bap.disasm,
+                 bap.types
+  Modules:       Bap_sema_std,
+                 Bap_sema_symtab
+
 
 
 Library types_test
@@ -290,7 +303,6 @@ Library benchmarks
   BuildDepends:   bap, core, core_bench, threads
   Install:        false
   Modules:        Bench_image
-
 
 Library dwarf_test
   Path:           lib_test/bap_dwarf
