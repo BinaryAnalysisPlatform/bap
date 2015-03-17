@@ -362,24 +362,6 @@ let call1_3ret ctxt =
     Seq.is_empty (Rec.Block.succs b3);
   | _ -> assert false
 
-
-
-(*
-main:
-        call f
-        ret
-f:
-        call g
-        ret
-g:
-        call f
-        ret
-
-
-  *)
-let triplet ctxt = ()
-
-
 let () = Plugins.load ()
 
 let suite = "Disasm.Basic" >::: [

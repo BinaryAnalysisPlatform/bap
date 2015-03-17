@@ -273,7 +273,8 @@ Library sema
   BuildDepends:  bap.disasm,
                  bap.types
   Modules:       Bap_sema_std,
-                 Bap_sema_symtab
+                 Bap_sema_symtab,
+                 Bap_lnf
 
 
 
