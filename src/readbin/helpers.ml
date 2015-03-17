@@ -72,9 +72,9 @@ module Make(Env : Printing.Env) = struct
     |> disable_if no_optimizations
 
   let bil_of_insns insns =
-    let insns = Seq.(insns >>| Insn.bil |> to_list) in
-    List.(insns >>| optimizations |> concat)
+    List.(insns >>| Insn.bil >>| optimizations |> concat)
+
 
   let bil_of_block blk : bil =
-    bil_of_insns Seq.(Block.insns blk >>| snd)
+    bil_of_insns List.(Block.insns blk >>| snd)
 end

@@ -22,7 +22,7 @@ end
     be controlled using [Tags] interface.
 *)
 module Make(Env : Env) : sig
-  val pp_insns : (mem * insn) seq pp
+  val pp_insns : (mem * insn) list pp
   val pp_bil : bil pp
 
   val pp_blk  : (block -> 'a) -> 'a pp -> block pp

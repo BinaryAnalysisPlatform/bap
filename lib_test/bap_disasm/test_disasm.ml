@@ -263,15 +263,15 @@ let addresses cfg ctxt =
           ~msg (Memory.length mem') (Memory.length mem))
 
 let build_graph cfg : graph =
-  let open Rec.Block in
+  let module Blk = Rec.Block in
   let blk_num blk =
-    let mem = memory blk in
+    let mem = Blk.memory blk in
     match Array.findi blocks ~f:(Fn.const (equal_addrs mem)) with
     | Some (i,_) -> i + 1
     | None -> unexpected_block mem in
   Table.fold (Rec.blocks cfg) ~init:[] ~f:(fun blk graph ->
-      let preds = Seq.map (preds blk) ~f:(fun blk -> blk_num blk) in
-      let dests = Seq.map (dests blk) ~f:(function
+      let preds = Seq.map (Blk.preds blk) ~f:(fun blk -> blk_num blk) in
+      let dests = Seq.map (Blk.dests blk) ~f:(function
           | `Unresolved kind -> 0, (kind :> dest_kind)
           | `Block (blk,kind) -> blk_num blk, kind) in
       (blk_num blk, Seq.to_list preds, Seq.to_list dests) :: graph)
@@ -299,14 +299,14 @@ let test_micro_cfg insn ctxt =
   Rec.blocks dis |> Table.to_sequence |>
   Seq.to_list |> List.hd_exn |> snd
   |> Rec.Block.insns |> function
-  | [mem, Some _, Some _] ->
+  | [mem, (Some _, Some _)] ->
     let max_addr = Addr.of_int ~width:64 (String.length insn - 1) in
     assert_equal ~printer:Addr.to_string ~ctxt
       (Addr.of_int64 0L) (Memory.min_addr mem);
     assert_equal ~printer:Addr.to_string ~ctxt
       max_addr (Memory.max_addr mem)
-  | [mem, None, _] -> assert_string "Failed to disassemble"
-  | [mem, _, None] -> assert_string "Failed to lift"
+  | [mem, (None, _)] -> assert_string "Failed to disassemble"
+  | [mem, (_, None)] -> assert_string "Failed to lift"
   | [] -> assert_string "No instructions"
   | _ :: _ -> assert_string "More than one instruction"
 
@@ -361,7 +361,6 @@ let call1_3ret ctxt =
     assert_bool "b3 has no succs" @@
     Seq.is_empty (Rec.Block.succs b3);
   | _ -> assert false
-
 
 let () = Plugins.load ()
 

@@ -84,10 +84,6 @@ let has_side_effect insn = may_store insn || may_load insn
 let is_unconditional_jump insn =
   is_jump insn || not (is_conditional_jump insn)
 
-let of_decoded = function
-  | _, Some insn, bil -> Some (of_basic ?bil insn)
-  | _, None,_ -> None
-
 module Trie = struct
   module Key = struct
     type token = int * Op.t array with bin_io, compare, sexp

@@ -20,8 +20,12 @@ let no_disassembly state boff =
 
   raise (No_disassembly (mem, boff, stop))
 
-let create_memory addr s =
-  Memory.create LittleEndian Addr.(of_int64 addr) @@
+let create_memory arch addr s =
+  let width = match Arch.of_string arch with
+    | Some arch -> Arch.addr_size arch |> Size.to_bits
+    | None -> eprintf "Warning: unknown arch, assuming 32 bitness\n";
+      32 in
+  Memory.create LittleEndian Addr.(of_int64 ~width addr) @@
   Bigstring.of_string s |> function
   | Ok r -> r
   | Error _ -> raise Create_mem_exn
@@ -103,7 +107,7 @@ let disasm s o_arch f_asm f_inst f_kinds o_reg_format o_imm_format =
   let hit =
     print_disasm width f_asm f_inst f_kinds o_reg_format o_imm_format in
   let invalid state mem off = no_disassembly state off in
-  let mem = create_memory 0x0L input in
+  let mem = create_memory o_arch 0x0L input in
   let _pos : int =
     Disasm.run dis ~return:ident ~stop_on:[`Valid] ~invalid ~hit ~init:0
       mem in

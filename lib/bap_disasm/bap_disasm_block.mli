@@ -19,61 +19,33 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_basic
+open Bap_disasm_block_intf
 
 type t with compare, sexp_of
 type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 
-type jump = [
-  | `Jump     (** unconditional jump                  *)
-  | `Cond     (** conditional jump                    *)
-] with compare, sexp
+include Block_accessors with type t := t and type insn := insn
+include Block_traverse  with type t := t
 
-type edge = [jump | `Fall] with compare,sexp
-
-(** block destinations  *)
-type dest = [
-  | `Block of t * edge
-  | `Unresolved of jump
-] with compare, sexp_of
-
-(** [addr block] address of the first instruction  *)
-val addr : t -> addr
-
-(** [memory blk] memory region, occupied by a block*)
-val memory : t -> mem
-
-(** [leader blk] the first instruction *)
-val leader : t -> insn
-
-(** [terminator blk] last instruction of the block  *)
-val terminator : t -> insn
-
-(** [insns blk] returns a list of block instructions  *)
-val insns : t -> (mem * insn) seq
-
-(** [dests blk] block immediate destinations including unresolved
-    one *)
-val dests : t -> dest seq
-
-(** [succs blk] block immediate successors  *)
-val succs : t -> t seq
-(** [preds blk] block immediate predecessors  *)
-val preds : t -> t seq
-
-(** Blocks as graph  *)
-module Graph : Graph.Sig.P
-  with type V.label = t option  (** possibly unresolved  *)
-   and type E.label = edge      (** destination type     *)
+(** A classic control flow graph using OCamlgraph library.
+    Graph vertices are made abstract, but the implement
+    [Block_accessors] interface, including hash tables, maps, hash
+    sets etc. *)
+module Cfg : sig
+  module Block : Block_accessors with type insn := insn
+  include Graph.Sig.P
+    with type V.t = Block.t
+     and type V.label = Block.t
+     and type E.t = Block.t * edge * Block.t
+     and type E.label = edge      (** destination type     *)
+end
 
 (** [to_graph ?bound entry] builds a graph starting with [entry] and
     spanning all reachable blocks that are bounded by a memory region
     [bound].
     @param bound defaults to infinite memory region.
 *)
-val to_graph : ?bound:mem -> t -> Graph.t
-
-(** all the printing stuff, including [to_string] function *)
-include Printable with type t := t
+val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
 
 (** lifting from a lower level  *)
 val of_rec_block : Bap_disasm_rec.block -> t
