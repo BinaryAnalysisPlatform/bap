@@ -332,7 +332,7 @@ let stage2 dis stage1 =
     Addrs.mem leads (next addr) ||
     Addrs.mem kinds addr ||
     Addrs.mem stage1.dests addr ||
-    Addr.Set.mem inits addr in
+    Addr.Set.mem inits (next addr) in
   let is_visited = Span.mem stage1.visited in
   let next_visited = Span.upper_bound stage1.visited in
   let create_block start finish =
@@ -355,8 +355,7 @@ let stage2 dis stage1 =
   let rec loop start curr' =
     let curr = next curr' in
     if is_visited curr then
-      if is_edge curr
-      then
+      if is_edge curr then
         create_block start curr >>= fun () ->
         loop (next curr) curr
       else loop start curr
