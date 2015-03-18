@@ -18,7 +18,7 @@ let lift_mull ~lodest ~hidest ~src1 ~src2 sign ?addend ~wflag cond =
   let s1_64, s2_64 =
     let cast src = cast_of_sign sign 64 (exp_of_op src) in
     cast src1, cast src2 in
-  let result = new_tmp "result" in
+  let result = new_tmp "r" in
   let eres  = Exp.var result in
   let flags = Flags.set_nzf eres reg64_t in
   let opn = match addend with
@@ -40,7 +40,7 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
   let top  = excast 31 16 in
   let bot  = excast 15 0 in
   let top32 = excast 47 16 in
-  let res = new_tmp "result_64" in
+  let res = new_tmp "r" in
   let result =
     let open Exp in
     match size with

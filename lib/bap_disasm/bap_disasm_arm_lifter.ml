@@ -299,13 +299,12 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
     let dest = Env.of_reg dest in
     let src1 = Env.of_reg src1 |> Exp.var in
     let src2 = Env.of_reg src2 |> Exp.var in
-    let mem = Env.new_mem "mem" in
-    exec [
-      assn temp Exp.(load (var mem) src2 LittleEndian `r8);
-      Stmt.move mem
-        Exp.(store (var mem) src2 (extract 7 0 src1) LittleEndian `r8);
-      assn dest Exp.(cast unsigned 32 (var temp));
-    ] cond
+    exec Bil.([
+        assn temp (load (var Env.mem) src2 LittleEndian `r8);
+        Env.mem :=
+          store (var Env.mem) src2 (extract 7 0 src1) LittleEndian `r8;
+        assn dest (cast unsigned 32 (var temp));
+      ]) cond
 
   (* Pack half *)
   | `PKHTB, [|Reg dest; src1; src2; shift; cond; _|] ->
