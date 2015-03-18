@@ -91,7 +91,7 @@ module Std = struct
 
 
   (** {3 Sematic analysis}   *)
-  include Bap_sema_std
+  include Bap_sema.Std
 
   (** {3 Auxiliary libraries} *)
 

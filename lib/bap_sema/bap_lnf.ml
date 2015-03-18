@@ -17,12 +17,12 @@ type tree = {
   subs: tree list
 } with sexp_of
 
-type t = tree list
+type t = tree list with sexp_of
 
 let trees = ident
 let children t = t.subs
-let headers t = BS.elements t.hdrs
-let bodies  t = BS.elements t.body
+let headers t = t.hdrs
+let bodies  t = t.body
 
 
 let empty = {hdrs = BS.empty; body = BS.empty; subs = []}

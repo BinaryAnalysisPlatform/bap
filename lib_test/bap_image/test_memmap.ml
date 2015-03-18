@@ -1,10 +1,7 @@
 open Core_kernel.Std
 open OUnit2
 open Format
-
 open Bap.Std
-
-module Memmap = Bap_memmap
 
 let start = Addr.of_int32 0x100l
 let addr offset = Addr.(start ++ offset)

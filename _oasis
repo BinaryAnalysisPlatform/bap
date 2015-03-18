@@ -272,7 +272,7 @@ Library sema
   FindlibName:   sema
   BuildDepends:  bap.disasm,
                  bap.types
-  Modules:       Bap_sema_std,
+  Modules:       Bap_sema,
                  Bap_sema_symtab,
                  Bap_lnf
 
