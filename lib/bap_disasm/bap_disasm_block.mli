@@ -32,12 +32,25 @@ include Block_traverse  with type t := t
     [Block_accessors] interface, including hash tables, maps, hash
     sets etc. *)
 module Cfg : sig
-  module Block : Block_accessors with type insn := insn
+  module Block : sig
+    type t with sexp_of
+    include Block_accessors with type t := t and type insn := insn
+  end
+
+  (** Imperative graph *)
+  module Imperative : Graph.Sig.I
+    with type V.t = Block.t
+     and type V.label = Block.t
+     and type E.t = Block.t * edge * Block.t
+     and type E.label = edge
+
+  (** The default graph is persistant  *)
   include Graph.Sig.P
     with type V.t = Block.t
      and type V.label = Block.t
      and type E.t = Block.t * edge * Block.t
-     and type E.label = edge      (** destination type     *)
+     and type E.label = edge
+
 end
 
 (** [to_graph ?bound entry] builds a graph starting with [entry] and
@@ -46,6 +59,7 @@ end
     @param bound defaults to infinite memory region.
 *)
 val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
+val to_imperative_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.Imperative.t
 
 (** lifting from a lower level  *)
 val of_rec_block : Bap_disasm_rec.block -> t
