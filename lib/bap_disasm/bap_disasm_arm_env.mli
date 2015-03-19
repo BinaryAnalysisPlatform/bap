@@ -38,4 +38,4 @@ val new_var : string -> var
 
 val new_tmp : string -> var
 
-val new_mem : string -> var
+val mem : var
