@@ -90,6 +90,10 @@ Triple::ArchType llvm_binary_arch(Binary* binary) {
     }
 }
 
+uint64_t llvm_binary_entry(Binary* binary) {
+    return utils::create_extractor(binary)->entry();
+}
+
 } //namespace llvm_binary
 
 CAMLprim value llvm_binary_create_stub(value arg) {
@@ -106,6 +110,11 @@ CAMLprim value llvm_binary_create_stub(value arg) {
 CAMLprim value llvm_binary_arch_stub(value arg) {
     CAMLparam1(arg);
     CAMLreturn(impl::to_value(impl::llvm_binary_arch(impl::from_value(arg))));
+}
+
+CAMLprim value llvm_binary_entry_stub(value arg) {
+    CAMLparam1(arg);
+    CAMLreturn(::caml_copy_int64(impl::llvm_binary_entry(impl::from_value(arg))));
 }
 
 CAMLprim value llvm_binary_symbols_stub(value arg) {

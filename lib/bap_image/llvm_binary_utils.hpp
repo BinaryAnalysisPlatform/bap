@@ -18,32 +18,33 @@ using namespace llvm::object;
 
 //Extracto. Extracts require values from binary
 struct extractor_base {
-    // virtual uint64_t entry() const = 0;
+    virtual uint64_t entry() const = 0;
     virtual Triple::ArchType arch() const = 0;
-    virtual ~extractor_base();
+    virtual ~extractor_base() {}
 };
 
 template <typename T>
 struct extractor_objfile : extractor_base {
-    typedef T object_file_type;
-    explicit extractor_objfile(const object_file_type* obj) : obj_(obj) {}
+    explicit extractor_objfile(const T* obj) : obj_(obj) {}
     Triple::ArchType arch() const {
         return static_cast<Triple::ArchType>(obj_->getArch());
     }
 protected:
-    const object_file_type *obj_;
+    const T *obj_;
 };
 
 template <typename T>
 struct extractor;
 
-
 //ELF extractor
 template <typename ELFT>
 struct extractor< ELFObjectFile<ELFT> > : extractor_objfile< ELFObjectFile<ELFT> > {
-    
     explicit extractor(const ELFObjectFile<ELFT> *obj)
         : extractor_objfile< ELFObjectFile<ELFT> >(obj) {}
+
+    uint64_t entry() const {
+        return this -> obj_ -> getELFFile() -> getHeader() -> e_entry;
+    }
 };
 
 //MachO extractor
@@ -51,6 +52,7 @@ template <>
 struct extractor<MachOObjectFile> : extractor_objfile<MachOObjectFile> {
     explicit extractor(const MachOObjectFile *obj)
         : extractor_objfile<MachOObjectFile>(obj) {}
+    uint64_t entry() const { return 42; };
 };
 
 //COFF extractor
@@ -58,6 +60,7 @@ template <>
 struct extractor<COFFObjectFile> : extractor_objfile<COFFObjectFile> {
     explicit extractor(const COFFObjectFile *obj)
         : extractor_objfile<COFFObjectFile>(obj) {}
+    uint64_t entry() const { return 42; };
 };
 
 template <typename T>
