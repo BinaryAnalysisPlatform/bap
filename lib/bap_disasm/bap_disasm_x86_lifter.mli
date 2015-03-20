@@ -1,6 +1,25 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Bap_image_std
+open Bap_disasm_types
+open Bap_disasm_abi
 
-(** [insn mem basic] takes a basic instruction and a memory and
-    returns a sequence of BIL statements. *)
-val insn : Arch.x86 -> Bap_memory.t -> ('a,'k) Bap_disasm_basic.insn -> stmt list Or_error.t
+module IA32 : sig
+  module CPU : CPU
+  val register_abi : abi_constructor -> unit
+  val get_abi :
+    ?all:bool -> (** defaults to false  *)
+    ?image:image ->
+    ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+  val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
+end
+
+module AMD64 : sig
+  module CPU : CPU
+  val register_abi : abi_constructor -> unit
+  val get_abi :
+    ?all:bool -> (** defaults to false  *)
+    ?image:image ->
+    ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+  val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
+end

@@ -1,7 +1,9 @@
 open Core_kernel.Std
 open Or_error
 open Bap_types.Std
-
+open Bap_disasm_abi
+open Bap_disasm_abi_helpers
+open Bap_disasm_types
 open Bap_disasm_arm_types
 open Bap_disasm_arm_utils
 
@@ -1060,7 +1062,76 @@ let insn_exn mem insn =
       | #branch as op -> lift_branch mem ops op
       | #special as op -> lift_special ops op
 
-let insn mem insn =
+let lift mem insn =
   try insn_exn mem insn with
   | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
   | exn -> of_exn exn
+
+
+module CPU : CPU = struct
+  open Bap_disasm_arm_env
+
+  let mem = mem
+  let pc = pc
+  let sp = sp
+
+
+  let regs = Var.Set.of_list [
+      r0; r1; r2; r3; r4;
+      r5; r6; r7; r8; r9;
+      r10; r11; r12;
+      pc;  sp; lr;
+      spsr; cpsr; itstate;
+    ]
+
+  (* although PC is stricly speaking is GPR we will rule it out *)
+  let non_gpr = Var.Set.of_list [
+      pc; spsr; cpsr; itstate;
+    ]
+
+  let gpr = Var.Set.diff regs non_gpr
+
+  let perms = Var.Set.of_list [
+      r4; r5; r6; r7; r8; r9; r10; r11;
+    ]
+
+  let flags = Var.Set.of_list @@ [
+      nf; zf; cf; qf;
+    ] @ Array.to_list ge
+
+  let nf = nf
+  let zf = zf
+  let cf = cf
+  let vf = vf
+
+  let is = Var.equal
+
+  let is_reg = Set.mem regs
+  let is_sp = is sp
+  let is_bp = is r11
+  let is_pc = is pc
+  let addr_of_pc m = Addr.(Memory.min_addr m ++ 8)
+  let is_flag = Set.mem flags
+  let is_zf = is zf
+  let is_cf = is cf
+  let is_vf = is vf
+  let is_nf = is nf
+
+  let is_return = is r0
+  let is_formal = function
+    | 0 -> is r0
+    | 1 -> is r1
+    | 2 -> is r2
+    | 3 -> is r3
+    | _ -> fun _ -> false
+
+  let is_permanent = Set.mem perms
+  let is_mem = is mem
+end
+
+
+let registered = ref []
+
+let register_abi abi = registered := abi :: !registered
+
+let get_abi = create_abi_getter registered

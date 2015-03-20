@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_arm_types
 
-val nil : var
 val spsr : var
 val cpsr : var
 val nf : var
@@ -28,9 +27,6 @@ val r9 : var
 val r10 : var
 val r11 : var
 val r12 : var
-val r13 : var
-val r14 : var
-val r15 : var
 
 val of_reg : reg -> var
 
