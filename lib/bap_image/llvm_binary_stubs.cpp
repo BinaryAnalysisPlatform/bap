@@ -10,7 +10,7 @@ extern "C" {
 #include <caml/bigarray.h>
 }
 
-#include "llvm_binary_stubs.h"
+#include <iostream>
 
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Object/Binary.h>
@@ -18,6 +18,10 @@ extern "C" {
 #include <llvm/ADT/Triple.h>
 #include <llvm/Object/Archive.h>
 #include <llvm/Object/ObjectFile.h>
+#include <llvm/Support/Casting.h>
+
+#include "llvm_binary_stubs.h"
+#include "llvm_segment.hpp"
 
 namespace impl {
 
@@ -95,6 +99,20 @@ value to_value(Triple::ArchType arch) {
     }
 }
 
+value segment_to_value(segment s) {
+    CAMLlocal1(result);
+    result = caml_alloc(8, 0);  
+    Store_field (result, 0, caml_copy_string(s.name.data()));
+    Store_field (result, 1, caml_copy_int64(s.address));
+    Store_field (result, 2, caml_copy_int64(s.offset));
+    Store_field (result, 3, Val_int(s.length));
+    Store_field (result, 4, Val_int(s.bitwidth));
+    Store_field (result, 5, Val_bool(s.is_readable));
+    Store_field (result, 6, Val_bool(s.is_writable));
+    Store_field (result, 7, Val_bool(s.is_executable));
+    return result;
+}
+
 } //namespace llvm_binary
 
 CAMLprim value llvm_binary_create_stub(value arg) {
@@ -125,4 +143,19 @@ CAMLprim value llvm_binary_sections_stub(value arg) {
     CAMLreturn(Val_unit);
 }
 
+CAMLprim value llvm_binary_segments_stub(value bin_val) {
+    CAMLparam1(bin_val);
+    CAMLlocal2(result, cons);
+    result = Val_emptylist;
+    impl::Binary* bin = impl::from_value(bin_val);
+    std::vector<segment> s = get_segments(bin);
+    int length = s.size();
+    for (int i = length - 1; i >= 0; i--) {
+        cons = caml_alloc(2, 0);
+        Store_field(cons, 0, impl::segment_to_value(s.at(i)));  // head
+        Store_field(cons, 1, result);                           // tail
+        result = cons;
+    }
+    CAMLreturn(result);
+}
 
