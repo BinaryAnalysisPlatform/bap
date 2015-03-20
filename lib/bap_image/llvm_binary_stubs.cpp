@@ -1,6 +1,16 @@
 #include <memory>
 #include <string>
 
+#include "llvm_binary_stubs.h"
+#include "llvm_binary_utils.hpp"
+
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Object/Binary.h>
+#include <llvm/Support/system_error.h>
+#include <llvm/ADT/Triple.h>
+#include <llvm/Object/Archive.h>
+#include <llvm/Object/ObjectFile.h>
+
 extern "C" {
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
@@ -9,15 +19,6 @@ extern "C" {
 #include <caml/custom.h>
 #include <caml/bigarray.h>
 }
-
-#include "llvm_binary_stubs.h"
-
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Object/Binary.h>
-#include <llvm/Support/system_error.h>
-#include <llvm/ADT/Triple.h>
-#include <llvm/Object/Archive.h>
-#include <llvm/Object/ObjectFile.h>
 
 namespace impl {
 
@@ -30,7 +31,7 @@ Binary* from_value (::value v) {
 
 ::value to_value (Binary* b) {
     static struct custom_operations binary_ops = {
-        "llvm.caml.llvm_binary",
+        const_cast<char*>("llvm.caml.llvm_binary"),
         [](::value v) { delete from_value(v); },
         custom_compare_default,
         custom_hash_default,
@@ -56,13 +57,7 @@ Binary* llvm_binary_create(const char* data, std::size_t size) {
 }
 
 Triple::ArchType llvm_binary_arch(Binary* binary) {
-    if (Archive *arc = dyn_cast<Archive>(binary)) {
-        ::caml_failwith("Archive's arch not implemented");
-    } else if (ObjectFile *obj = dyn_cast<ObjectFile>(binary)) {
-         return static_cast<Triple::ArchType>(obj->getArch());
-    } else {
-        ::caml_failwith("Unrecognized file type");
-    }
+    return utils::create_extractor(binary)->arch();
 }
 
 ::value to_value(Triple::ArchType arch) {
