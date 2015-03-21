@@ -163,6 +163,7 @@ let rec mapi m ~f = Option.map m ~f:(fun m -> {
       rhs = mapi m.rhs ~f;
     })
 
+
 let rec remove_min_binding = function
   | None -> assert false
   | Some {lhs=None; rhs} -> rhs
@@ -221,3 +222,47 @@ let filter_mapi map ~f =
 
 let filter_map map ~f =
   filter_mapi map ~f:(fun _ x -> f x)
+
+let to_sequence start =
+  let open Seq.Generator in
+  let rec go = function
+    | None -> return ()
+    | Some t ->
+      go t.lhs >>= fun () -> yield (t.key, t.data) >>= fun () -> go t.rhs
+  in
+  start |> go |> run
+
+(* we do not use include Container.Make(...) per the jane street *)
+(* `core_kernel` `container.ml` best practice documentation *)
+module C = Container.Make(
+  struct
+    type 'a t = 'a node option
+    let rec fold m ~init ~f = Option.fold m ~init:init ~f:(fun acc m ->
+        fold m.rhs ~init:(f (fold m.lhs ~init:acc ~f) m.data) ~f
+      )
+
+    let rec iter m ~f = Option.iter m ~f:(fun m ->
+        iter m.lhs ~f;
+        f m.data;
+        iter m.rhs ~f
+      )
+
+    let iter  = `Custom iter
+  end
+  )
+
+let fold = C.fold
+let count = C.count
+let sum = C.sum
+let iter = C.iter
+let length = C.length
+let is_empty = C.is_empty
+let exists = C.exists
+let mem = C.mem
+let for_all = C.for_all
+let find_map = C.find_map
+let find = C.find
+let to_list = C.to_list
+let to_array = C.to_array
+let min_elt = C.min_elt
+let max_elt = C.max_elt
