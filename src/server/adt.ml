@@ -83,8 +83,8 @@ end
 module Arm = struct
   open Disasm
   let pp_op ch = function
-    | Arm.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
-    | Arm.Op.Reg reg -> pr ch "Reg(%a())" Arm.Reg.pp reg
+    | ARM.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
+    | ARM.Op.Reg reg -> pr ch "Reg(%a())" ARM.Reg.pp reg
 
   let rec pp_ops ch = function
     | [] -> ()
@@ -92,7 +92,7 @@ module Arm = struct
     | x :: xs -> pr ch "%a, %a" pp_op x pp_ops xs
 
   let pp_insn ch (insn,ops) =
-    pr ch "%a(%a)" (pp_sexp Arm.Insn.sexp_of_t) insn pp_ops ops
+    pr ch "%a(%a)" (pp_sexp ARM.Insn.sexp_of_t) insn pp_ops ops
 end
 
 let to_string pp x = Format.asprintf "%a" pp x

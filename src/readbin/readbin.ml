@@ -141,6 +141,7 @@ module Program(Conf : Options.Provider) = struct
     let project =
       List.fold ~init:project (Program_visitor.registered ())
         ~f:(fun project visit -> visit project) in
+    let module Target = (val target_of_arch arch) in
 
     let module Env = struct
       let options = options
@@ -148,6 +149,7 @@ module Program(Conf : Options.Provider) = struct
       let base = project.memory
       let syms = project.symbols
       let arch = project.arch
+      module Target = Target
     end in
     let module Printing = Printing.Make(Env) in
     let module Helpers = Helpers.Make(Env) in

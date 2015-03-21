@@ -48,8 +48,9 @@ val fold_consts : bil -> bil
 class constant_folder : mapper
 
 (** [fixpoint f] applies transformation [f] until fixpoint is
-    reached. If the transformation orbit contains non-trivial
-    cycles, then a arbitrary point of cycle will be returned. *)
+    reached. If the transformation orbit contains non-trivial cycles,
+    then the transformation will stop at an arbitrary point of a
+    cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
 (** Bil provides two prefix tries trees.

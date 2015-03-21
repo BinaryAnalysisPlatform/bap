@@ -234,7 +234,7 @@ let blocks = [|
 
 let run_rec () =
   let mem = create_block 0x840Cl strlen in
-  let lifter = Arm.Lift.insn in
+  let lifter = ARM.lift in
   Rec.run ~lifter `armv7 mem
 
 let test_cfg test ctxt =
@@ -292,7 +292,7 @@ let test_micro_cfg insn ctxt =
   let mem = Bigstring.of_string insn |>
             Memory.create LittleEndian (Addr.of_int64 0L) |>
             ok_exn in
-  let lifter = Bap_disasm_x86_lifter.insn `x86_64 in
+  let lifter = AMD64.lift in
   let dis = Rec.run ~lifter `x86_64 mem |> ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
   assert_bool "One block" (Rec.blocks dis |> Table.length = 1);
@@ -342,7 +342,7 @@ let has_dest src dst kind =
 let call1_3ret ctxt =
   let mem = String.concat [call1; ret; ret; ret] |>
             memory_of_string in
-  let lifter = Bap_disasm_x86_lifter.insn `x86_64 in
+  let lifter = AMD64.lift in
   let dis = Rec.run ~lifter `x86_64 mem |> Or_error.ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
   assert_bool "Three block" (Rec.blocks dis |> Table.length = 3);

@@ -11,6 +11,7 @@ module type Env = sig
   val syms : string table
   val cfg  : block table
   val arch : arch
+  module Target : Target
 end
 
 module Make(Env : Env) = struct

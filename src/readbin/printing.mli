@@ -14,6 +14,8 @@ module type Env = sig
   val cfg  : block table
   (** target architecture  *)
   val arch : arch
+
+  module Target : Target
 end
 (** Create a set of pretty printers for a given program
     environment.

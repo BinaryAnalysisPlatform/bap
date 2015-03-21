@@ -108,8 +108,9 @@ let of_rec r =
   {blocks; memmap; insns; mems_of_insn}
 
 let lifter_of_arch = function
-  | #Arch.arm -> Some Bap_disasm_arm_lifter.insn
-  | #Arch.x86 as arch -> Some (Bap_disasm_x86_lifter.insn arch)
+  | #Arch.arm -> Some Bap_disasm_arm_lifter.lift
+  | `x86    -> Some (Bap_disasm_x86_lifter.IA32.lift)
+  | `x86_64 -> Some (Bap_disasm_x86_lifter.AMD64.lift)
   | _ -> None
 
 let linear_sweep arch mem : (mem * insn option) list Or_error.t =
