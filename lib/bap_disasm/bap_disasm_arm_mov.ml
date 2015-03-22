@@ -19,7 +19,7 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
     | Some src -> exp_of_op src
     | None     -> zero reg32_t in
 
-  let unshifted = Env.new_tmp "t" in
+  let unshifted = Env.new_tmp "u" in
 
   (* Do the register shift *)
   let s1, s2, stmts, carry =
