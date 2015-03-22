@@ -107,8 +107,7 @@ let statistics threshold length path (input : string) : unit t =
     >>= fun data ->
      (*  List.iter [] ~f:(fun addr -> printf "%a\n" Addr.ppo addr) *)
   let bw = Binable.of_string (module Byteweight) data in
-  (* List.iter [] ~f:(fun addr -> printf "%a\n" Addr.ppo addr) *)
-  Ida.create ~ida:"idaq" input >>| fun ida ->
+  Ida.create ~ida:"idaq64" input >>| fun ida ->
     let ida_syms, bw_syms =
       Table.foldi (Image.sections img) ~init:([], []) ~f:(fun mem sec (ida_syms,
       bw_syms) ->
@@ -120,13 +119,11 @@ let statistics threshold length path (input : string) : unit t =
           ida_syms @ ida_syms_t, bw_syms @ bw_syms_t
         else ida_syms, bw_syms) in
     (* List.iter bw_syms ~f:(fun addr -> printf "%a\n" Addr.ppo addr);
-    printf "===============================\n"; *)
     List.iter ida_syms ~f:(fun addr -> printf "%a\n" Addr.ppo addr);
-    List.iter gt_syms ~f:(printf "%a\n" Addr.ppo);
-    let bw_measurement = Measure.compare bw_syms gt_syms "byteweight" in
+    List.iter gt_syms ~f:(printf "%a\n" Addr.ppo); *)
+    let bw_measurement = Measure.compare bw_syms gt_syms "bw" in
     let ida_measurement = Measure.compare ida_syms gt_syms "ida" in
     Measure.pp [bw_measurement;ida_measurement]
-  (* let gt = symbols print_name print_size input *)
 
 let create_parent_dir dst =
   let dir = if Filename.(check_suffix dst dir_sep)
