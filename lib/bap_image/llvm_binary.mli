@@ -11,9 +11,11 @@ external create : Bigstring.t -> t =
 external arch : t -> arch =
   "llvm_binary_arch_stub"
 
+external entry : t -> int64 =
+  "llvm_binary_entry_stub"
+
 external symbols : t -> Symbol_ref.t list =
   "llvm_binary_symbols_stub"
 
 external sections : t -> Section_ref.t list =
   "llvm_binary_sections_stub"
-
