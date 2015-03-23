@@ -16,8 +16,8 @@ module Program(Conf : Options.Provider) = struct
       let path = options.sigfile in
       match Signatures.load ?path ~mode:"bytes" arch with
       | None ->
-        eprintf "No signatures found@.Please, use `bap-byteweight' \
-                 utility to fetch/create/install them.@.%!";
+        eprintf "No signatures found@.Please, use `bap-byteweight update' \
+                 to get the latest available signatures.@.%!";
         None
       | Some data ->
         let bw = Binable.of_string (module BW) data in
