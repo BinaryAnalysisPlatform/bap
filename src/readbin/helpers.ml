@@ -95,10 +95,13 @@ module Make(Env : Printing.Env) = struct
     |> disable_if no_optimizations
     |> fun optimize -> optimize bil
 
+  let bil_of_insn insn = optimizations (Tuple2.map2 ~f:Insn.bil insn)
+
+
   let bil_of_insns insns =
-    List.(insns >>| Tuple2.map2 ~f:Insn.bil >>| optimizations |> concat)
+    List.(insns >>| bil_of_insn |> concat)
 
 
   let bil_of_block blk : bil =
-    bil_of_insns List.(Block.insns blk)
+    bil_of_insns (Block.insns blk)
 end

@@ -8,8 +8,10 @@ type project = {
   symbols : string table;
   memory  : mem;
   annots  : (string * string) memmap;
+  bil_of_insns : (mem * insn) list -> bil;
 }
 
 let visitors = ref []
 let register v = visitors := v :: !visitors
+let register' v = register (fun p -> v p; p)
 let registered () = List.rev !visitors
