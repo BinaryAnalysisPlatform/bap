@@ -209,8 +209,6 @@ Library image_llvm
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
   CSources:        llvm_binary_stubs.c,
                    llvm_binary_stubs.h,
-                   llvm_binary_utils.c,
-                   llvm_binary_utils.h,
                    section_ref_stubs.c,
                    section_ref_stubs.h,
                    symbol_ref_stubs.c,

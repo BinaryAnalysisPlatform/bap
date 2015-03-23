@@ -2,7 +2,7 @@
 #include <string>
 
 #include "llvm_binary_stubs.h"
-#include "llvm_binary_utils.hpp"
+#include "llvm_binary_stubs.hpp"
 
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Object/Binary.h>
