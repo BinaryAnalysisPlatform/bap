@@ -97,3 +97,9 @@ val remove_intersections : 'a t -> mem -> 'a t
 (** [remove_dominators map mem] removes all bindings that are
     dominators to [mem] *)
 val remove_dominators : 'a t -> mem -> 'a t
+
+(** [to_sequence map] converts the memmap ['a t] to a sequence of
+    key-value pairs *)
+val to_sequence : 'a t -> (mem * 'a) Sequence.t
+
+include Container.S1 with type 'a t:='a t 

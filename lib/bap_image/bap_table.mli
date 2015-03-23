@@ -226,7 +226,7 @@ val filteri : ('a t -> f:(mem -> 'a -> bool) -> 'a t) ranged
 val filter_mapi : ('a t -> f:(mem -> 'a -> 'b option) -> 'b t) ranged
 
 
-(** [to_sequence_in tab] converts the table [t] to a
+(** [to_sequence tab] converts the table [t] to a
     sequence of key-value pairs.  *)
 val to_sequence : ('a t -> (mem * 'a) Sequence.t) ranged
 
