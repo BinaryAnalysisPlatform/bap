@@ -110,6 +110,10 @@ uint64_t llvm_binary_entry(Binary* binary) {
     return result;
 }
 
+int llvm_binary_nsym(Binary* binary) {
+    return utils::create_extractor(binary)->nsym();
+}
+
 } //namespace llvm_binary
 
 CAMLprim value llvm_binary_create_stub(value arg) {
@@ -131,6 +135,11 @@ CAMLprim value llvm_binary_arch_stub(value arg) {
 CAMLprim value llvm_binary_entry_stub(value arg) {
     CAMLparam1(arg);
     CAMLreturn(::caml_copy_int64(impl::llvm_binary_entry(impl::from_value(arg))));
+}
+
+CAMLprim value llvm_binary_nsym_stub(value arg) {
+    CAMLparam1(arg);
+    CAMLreturn(Val_int(impl::llvm_binary_nsym(impl::from_value(arg))));
 }
 
 CAMLprim value llvm_binary_symbols_stub(value arg) {

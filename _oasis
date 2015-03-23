@@ -417,3 +417,10 @@ Test benchmarks
   TestTools: run_benchmarks
   Run$:         flag(tests) && flag(benchmarks)
   Command: $run_benchmarks
+
+Executable "llvm-binary-test"
+  Path:           .
+  MainIs:         llvm_binary_test.ml
+  Install:        false
+  CompiledObject: best
+  BuildDepends:   bap, bap.image.image_llvm, bap.llvm

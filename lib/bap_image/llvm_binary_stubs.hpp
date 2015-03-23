@@ -2,7 +2,8 @@
 #define BAP_LLVM_BINARY_STUBS_HPP
 
 #include <memory>
-#include <stdexcept>
+#include <numeric>
+
 #include <llvm/Object/ELFObjectFile.h>
 #include <llvm/Object/COFF.h>
 #include <llvm/Object/MachO.h>
@@ -16,18 +17,41 @@ namespace utils {
 using namespace llvm;
 using namespace llvm::object;
 
+
 //Extracto. Extracts require values from binary
 struct extractor_base {
     virtual uint64_t entry() const = 0;
     virtual Triple::ArchType arch() const = 0;
+    virtual int nsym() const = 0;
     virtual ~extractor_base() {}
 };
+
+template <typename T>
+int distance(content_iterator<T> begin, content_iterator<T> end) {
+    error_code ec;
+    int n = 0;
+    while (begin != end) {
+        ++n;
+        begin.increment(ec);
+        if (ec)
+            ::caml_failwith(ec.message().c_str());
+    }
+    return n;
+}
 
 template <typename T>
 struct extractor_objfile : extractor_base {
     explicit extractor_objfile(const T* obj) : obj_(obj) {}
     Triple::ArchType arch() const {
         return static_cast<Triple::ArchType>(obj_->getArch());
+    }
+
+    int nsym() const {
+        return
+            distance(obj_->begin_symbols(),
+                     obj_->end_symbols()) +
+            distance(obj_->begin_dynamic_symbols(),
+                     obj_->end_dynamic_symbols());
     }
 protected:
     const T *obj_;
