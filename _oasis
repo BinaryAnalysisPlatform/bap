@@ -214,7 +214,9 @@ Library image_llvm
                    section_ref_stubs.c,
                    section_ref_stubs.h,
                    symbol_ref_stubs.c,
-                   symbol_ref_stubs.h
+                   symbol_ref_stubs.h,
+                   llvm_segment.c,
+                   llvm_segment.h
 
 Library dwarf
   Path:          lib/bap_dwarf
