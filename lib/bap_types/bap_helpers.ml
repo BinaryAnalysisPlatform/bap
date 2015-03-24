@@ -33,6 +33,7 @@ let prune_unreferenced stmt =
     | s :: xs -> loop (s::ss) xs in
   loop [] stmt
 
+
 let normalize_negatives = (object inherit mapper as super
   method! map_binop op e1 e2 = match op,e2 with
     | Binop.PLUS, Exp.Int arg
@@ -42,11 +43,21 @@ let normalize_negatives = (object inherit mapper as super
     | _ -> super#map_binop op e1 e2
 end)#run
 
+module Addr = Bitvector
+let rec addr_intersection (x,xs) (y,ys) =
+  let open Addr in
+  let xe = x ++ xs and ye = y ++ ys in
+  let ze = min xe ye in
+  if x <= y then
+    if ze > y then Some (y, ok_exn (to_int (ze - y)))
+    else None
+  else addr_intersection (y,ys) (x,xs)
 
 include struct
   open Exp
   class constant_folder =
-    object inherit mapper as super
+    object
+      inherit mapper as super
       method! map_binop op e1 e2 =
         let open Binop in
         let zero v1 v2 = match v1,v2 with
@@ -55,7 +66,14 @@ include struct
               | Type.Mem _ -> super#map_binop op e1 e2
             end
           | _ -> super#map_binop op e1 e2 in
+        let equal x y = compare_exp x y = 0 in
+        let open Bap_exp.Exp in
         match op, e1, e2 with
+        | (AND|OR), e1, e2 when equal e1 e2 -> e1
+        | XOR, e1, e2 when equal e1 e2 -> zero e1 e2
+        | EQ, e1, e2 when equal e1 e2 -> Int Word.b1
+        | NEQ, e1, e2 when equal e1 e2 -> Int Word.b0
+        | (LT|SLT), e1, e2 when equal e1 e2 -> Int Word.b0
         | op, Int v1, Int v2 ->
           let open Bap_exp.Exp in
           let signed = Word.signed in
@@ -89,6 +107,13 @@ include struct
         | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
         | (OR|AND), v1, v2 when compare_exp v1 v2 = 0 -> v1
         | (XOR), v1, v2 when compare_exp v1 v2 = 0 -> zero v1 v2
+        | op, Int v, e -> super#map_binop op e (Int v)
+        | PLUS, BinOp (PLUS, a, Int b), Int c ->
+          BinOp (PLUS, a, super#map_binop PLUS (Int b) (Int c))
+        | PLUS, BinOp (MINUS, a, Int b), Int c ->
+          BinOp (MINUS, a, super#map_binop MINUS (Int b) (Int c))
+        | MINUS, BinOp (MINUS, a, Int b), Int c ->
+          BinOp (MINUS, a, super#map_binop PLUS (Int b) (Int c))
         | _ -> super#map_binop op e1 e2
 
       method! map_unop op arg = match arg with
@@ -138,6 +163,49 @@ include struct
         | Int v -> if Word.is_zero v then [] else bil
         | _ -> super#map_while ~cond bil
 
+      method! map_load ~mem ~addr:la le ls =
+        let loader = object
+          inherit [exp] finder
+          method! enter_store ~mem ~addr:sa ~exp:r se ss find =
+            if compare_exp la sa = 0 then
+              if ls = ss then find.return (Some r)
+              else if ls > ss || se <> le then find.return None
+              else
+                let sz = Bap_size.(to_bits ss - to_bits ls) in
+                if se = LittleEndian
+                then find.return @@
+                  Some (Exp.Cast (Cast.LOW, sz,  r))
+                else find.return @@
+                  Some (Exp.Cast (Cast.HIGH, sz, r))
+            else find
+        end in
+
+        let result =
+          with_return (fun r -> ignore(loader#visit_exp mem r); None) in
+        match result with
+        | None -> super#map_load ~mem ~addr:la le ls
+        | Some exp -> exp
+
+      method! map_store ~mem ~addr:na ~exp:nval ne ns =
+        let found = ref false in
+        let mem = (object
+          inherit mapper as super
+          method! map_store ~mem ~addr:pa ~exp:pval pe ps =
+            if compare_exp pa na = 0 then begin
+              found := true;
+              if ns >= ps then Exp.Store (mem,nval,na,ne,ns)
+              else
+                let cast = if pe = LittleEndian
+                  then Cast.LOW else Cast.HIGH in
+                let sz = Bap_size.(to_bits ps - to_bits ns) in
+                let ex =
+                  Exp.Concat (nval, Exp.Cast (cast, sz, pval)) in
+                Exp.Store (mem,ex,na,ne,ns)
+            end
+            else super#map_store ~mem ~exp:pval ~addr:pa pe ps
+        end)#map_exp mem in
+        if found.contents then mem
+        else super#map_store ~mem ~exp:nval ~addr:na ne ns
     end
 end
 let fold_consts = (new constant_folder)#run

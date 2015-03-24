@@ -152,10 +152,12 @@ module PP = struct
         (if is_imm e then "%a" else "(%a)") in
     let pr s = fprintf fmt s in
     match exp with
-    | Load (mem, idx, edn, s) ->
+    | Load (Var _ as mem, idx, edn, s) ->
       pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+    | Load (mem, idx, edn, s) ->
+      pr "(%a)[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
     | Store (mem, idx, exp, edn, s) ->
-      pr "@[<v2>%a with [%a, %a]:%a <- %a@]"
+      pr "@[<v2>%a@;with [%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
       pr "@[<v2>if %a@;then %a@;else %a@]" pp ce pp te pp fe

@@ -38,19 +38,19 @@ class ['a] visitor = object (self : 's)
     self#visit_exp e1 |> self#visit_exp e2 |>
     self#leave_binop op e1 e2
 
-  method enter_store ~dst ~addr ~src e s x = x
-  method leave_store ~dst ~addr ~src e s x = x
-  method visit_store ~dst ~addr ~src e s x =
-    self#enter_store ~dst ~addr ~src e s x |>
-    self#visit_exp dst |> self#visit_exp addr |> self#visit_exp src |>
-    self#leave_store ~dst ~addr ~src e s
+  method enter_store ~mem ~addr ~exp e s x = x
+  method leave_store ~mem ~addr ~exp e s x = x
+  method visit_store ~mem ~addr ~exp e s x =
+    self#enter_store ~mem ~addr ~exp e s x |>
+    self#visit_exp mem |> self#visit_exp addr |> self#visit_exp exp |>
+    self#leave_store ~mem ~addr ~exp e s
 
-  method enter_load ~src ~addr _e _s x = x
-  method leave_load ~src ~addr _e _s x = x
-  method visit_load ~src ~addr _e _s x =
-    self#enter_load ~src ~addr _e _s x |>
-    self#visit_exp src |> self#visit_exp addr |>
-    self#leave_load ~src ~addr _e _s
+  method enter_load ~mem ~addr _e _s x = x
+  method leave_load ~mem ~addr _e _s x = x
+  method visit_load ~mem ~addr _e _s x =
+    self#enter_load ~mem ~addr _e _s x |>
+    self#visit_exp mem |> self#visit_exp addr |>
+    self#leave_load ~mem ~addr _e _s
 
   method enter_cast _ _ e x =  x
   method leave_cast _ _ e x =  x
@@ -156,8 +156,8 @@ class ['a] visitor = object (self : 's)
       | Exp.Int v -> self#visit_int v x
       | Exp.UnOp (op,e) -> self#visit_unop op e x
       | Exp.BinOp (op,e1,e2) -> self#visit_binop op e1 e2 x
-      | Exp.Store (dst,addr,src,e,s) -> self#visit_store ~dst ~addr ~src e s x
-      | Exp.Load (src,addr,e,s) -> self#visit_load ~src ~addr e s x
+      | Exp.Store (mem,addr,exp,e,s) -> self#visit_store ~mem ~addr ~exp e s x
+      | Exp.Load (mem,addr,e,s) -> self#visit_load ~mem ~addr e s x
       | Exp.Cast (ct,sz,ex) -> self#visit_cast ct sz ex x
       | Exp.Let (v,exp,body) -> self#visit_let v ~exp ~body x
       | Exp.Ite (cond,yes,no) -> self#visit_ite ~cond ~yes ~no x
@@ -210,13 +210,13 @@ class mapper = object (self : 's)
   method map_binop op e1 e2=
     Exp.BinOp (op, self#map_exp e1, self#map_exp e2)
 
-  method map_store ~dst ~addr ~src e s =
-    Exp.Store (self#map_exp dst,
+  method map_store ~mem ~addr ~exp e s =
+    Exp.Store (self#map_exp mem,
                self#map_exp addr,
-               self#map_exp src, e, s)
+               self#map_exp exp, e, s)
 
-  method map_load ~src ~addr e s =
-    Exp.Load (self#map_exp src, self#map_exp addr, e, s)
+  method map_load ~mem ~addr e s =
+    Exp.Load (self#map_exp mem, self#map_exp addr, e, s)
 
   method map_cast ct cs e = Exp.Cast (ct,cs,self#map_exp e)
 
@@ -266,8 +266,8 @@ class mapper = object (self : 's)
     | Exp.Int v -> self#map_int v
     | Exp.UnOp (op,e) -> self#map_unop op e
     | Exp.BinOp (op,e1,e2) -> self#map_binop op e1 e2
-    | Exp.Store (dst,addr,src,e,s) -> self#map_store ~dst ~addr ~src e s
-    | Exp.Load (src,addr,e,s) -> self#map_load ~src ~addr e s
+    | Exp.Store (mem,addr,exp,e,s) -> self#map_store ~mem ~addr ~exp e s
+    | Exp.Load (mem,addr,e,s) -> self#map_load ~mem ~addr e s
     | Exp.Cast (ct,sz,ex) -> self#map_cast ct sz ex
     | Exp.Let (v,exp,body) -> self#map_let v ~exp ~body
     | Exp.Ite (cond,yes,no) -> self#map_ite ~cond ~yes ~no
