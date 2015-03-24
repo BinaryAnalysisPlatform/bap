@@ -52,7 +52,7 @@ class type abi = object
       A good start whould be to use:
       [specific; compiler; os; vendor]
 
-      Example: ["unknown; ""linux"; "gnueabi"; "*exit"].
+      Example: ["*exit"; "gnueabi"; "linux"; "unknown"]
 
       Will encode an ABI of [exit] family of functions for ARM linux
       gnueabi. The recommended printing format for the ABI is to
@@ -91,8 +91,7 @@ class type abi = object
   (** [return_value] returns an expression, that can be used to return
       a value from a function. Use [Bil.concat] to represent return
       value that doesn't fit into one register  *)
-  method return_value : exp
-
+  method return_value : exp option
 
   (** [args] returns a list of expressions that represents
       arguments of the given function. Each expression can be
@@ -110,4 +109,4 @@ end
 (** symbol name may be provided if known. Also an access
     to the whole binary image is provided if there is one. *)
 type abi_constructor =
-  ?image:image -> ?sym:string -> mem -> Bap_disasm_block.t -> abi option
+  ?image:image -> ?sym:string -> mem -> Bap_disasm_block.t -> abi

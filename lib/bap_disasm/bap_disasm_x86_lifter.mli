@@ -5,21 +5,19 @@ open Bap_disasm_types
 open Bap_disasm_abi
 
 module IA32 : sig
-  module CPU : CPU
-  val register_abi : abi_constructor -> unit
-  val get_abi :
-    ?all:bool -> (** defaults to false  *)
-    ?image:image ->
-    ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+  module CPU : sig
+    include module type of Bap_disasm_x86_env
+    include Bap_disasm_x86_env.ModeVars
+    include CPU
+  end
   val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
 end
 
 module AMD64 : sig
-  module CPU : CPU
-  val register_abi : abi_constructor -> unit
-  val get_abi :
-    ?all:bool -> (** defaults to false  *)
-    ?image:image ->
-    ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+  module CPU : sig
+    include module type of Bap_disasm_x86_env
+    include Bap_disasm_x86_env.ModeVars
+    include CPU
+  end
   val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
 end

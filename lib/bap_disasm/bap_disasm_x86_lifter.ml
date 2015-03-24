@@ -1469,8 +1469,9 @@ let insn arch mem insn =
       let stmts, _ = disasm_instr mode mem addr in stmts)
 
 
-module Make_CPU(Env : ModeVars) : CPU = struct
-  open Env
+module Make_CPU(Env : ModeVars) = struct
+  include Bap_disasm_x86_env
+  include Env
   (* we do not include pc into a set of gpr *)
   let gpr = Var.Set.of_list @@ [
       rax; rcx; rdx; rsi; rdi;
@@ -1508,16 +1509,10 @@ end
 
 module AMD64 = struct
   module CPU = Make_CPU(R64)
-  let registered = ref []
-  let register_abi abi = registered := abi :: !registered
-  let get_abi = create_abi_getter registered
   let lift mem i = insn `x86_64 mem i
 end
 
 module IA32 = struct
   module CPU = Make_CPU(R32)
-  let registered = ref []
-  let register_abi abi = registered := abi :: !registered
-  let get_abi = create_abi_getter registered
   let lift mem i = insn `x86 mem i
 end

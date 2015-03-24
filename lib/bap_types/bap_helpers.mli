@@ -13,9 +13,6 @@ val map : #mapper -> bil -> bil
     statement in program [p] *)
 val is_referenced : var -> bil -> bool
 
-(** [is_modified x p] is [true] is [x] is assigned in [p]  *)
-val is_modified : var -> bil -> bool
-
 (** [is_assigned x p] is [true] if there exists such [Move]
     statement, that [x] occures on the left side of it. If [strict]
     is true, then only unconditional assignments. By default,

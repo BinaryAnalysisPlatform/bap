@@ -25,12 +25,6 @@ let is_referenced x = find (object(self)
       if Bap_var.(x = y) then cc.return (Some ()); cc
   end)
 
-let is_modified x = find (object inherit [unit] finder
-    method! enter_move y _ ctrl =
-      if Bap_var.(x = y) then ctrl.return (Some ());
-      ctrl
-  end)
-
 let prune_unreferenced stmt =
   let rec loop ss = function
     | [] -> List.rev ss
