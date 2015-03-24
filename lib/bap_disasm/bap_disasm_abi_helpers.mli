@@ -19,6 +19,6 @@ val to_string : arch -> string list -> string
 (**/**)
 val create_abi_getter :
   abi_constructor list ref ->
-  ?all:bool -> (** defaults to false  *)
+  ?merge:(abi list -> abi) -> (** defaults to [merge]  *)
   ?image:image ->
-  ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+  ?sym:string -> mem -> Bap_disasm_block.t -> abi

@@ -1,11 +1,14 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Bap_image_std
+open Bap_disasm_abi_helpers
 
 let lift _ _ = Or_error.error_string "not implemented"
-
-let register_abi _ = ()
-let get_abi ?all ?image ?sym mem blk = []
+module ABI = struct
+  let register _ = ()
+  let create ?merge ?image ?sym mem blk = new stub
+  include Bap_disasm_abi_helpers
+end
 
 module CPU = struct
   let gpr = Var.Set.empty

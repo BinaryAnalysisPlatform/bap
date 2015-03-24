@@ -221,6 +221,7 @@ Library disasm
                  Bap_disasm_abi,
                  Bap_disasm_abi_helpers,
                  Bap_disasm_arm,
+                 Bap_disasm_arm_abi,
                  Bap_disasm_arm_bit,
                  Bap_disasm_arm_branch,
                  Bap_disasm_arm_env,
@@ -233,6 +234,8 @@ Library disasm
                  Bap_disasm_arm_shift,
                  Bap_disasm_arm_types,
                  Bap_disasm_arm_utils,
+                 Bap_disasm_amd64_abi,
+                 Bap_disasm_ia32_abi,
                  Bap_disasm_stub_lifter,
                  Bap_disasm_x86,
                  Bap_disasm_x86_lifter,
@@ -250,6 +253,7 @@ Library disasm
                  Bap_insn_kind,
                  Bap_byteweight,
                  Bap_signatures
+
 
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs

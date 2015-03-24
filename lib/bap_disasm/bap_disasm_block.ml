@@ -59,7 +59,8 @@ module Build(G : Graph.Builder.S with type G.E.t = t * edge * t
       Vis.mem visited addr || not (bounded addr) in
     let rec build gr vis src =
       if skip vis src then (gr,vis)
-      else Seq.fold ~init:(gr,Vis.add vis (addr src)) (dests src)
+      else Seq.fold (dests src)
+          ~init:(G.add_vertex gr src,Vis.add vis (addr src))
           ~f:(fun (gr,vis) -> function
               | `Unresolved kind -> (gr,vis)
               | `Block (dst,kind) ->

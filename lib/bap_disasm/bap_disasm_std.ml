@@ -8,8 +8,10 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Bap_image_std
+
 include Bap_disasm_types
 include Bap_disasm
+include Bap_disasm_abi
 module Insn    = Bap_disasm_insn
 module Block   = Bap_disasm_block
 
@@ -31,39 +33,28 @@ module Disasm_expert = struct
 end
 
 (** include type definitions of the ABI  *)
-include Bap_disasm_abi
-
-(** Packs all ABI in one module.  *)
-module ABI = struct
-  include Bap_disasm_abi_helpers
-  module ARM = struct
-  end
-
-  module IA32 = struct
-  end
-
-  module AMD64 = struct
-  end
-end
-
 module type Target = sig
   module CPU : CPU
 
-  (** registers given ABI under the given target   *)
-  val register_abi : abi_constructor -> unit
-  (** [lift mem insn] lifts provided instruction to BIL.
-      Usually you do not need to call this function directly, as
-      [disassemble] function will do the lifting.
-  *)
+  module ABI : sig
+    include module type of Bap_disasm_abi_helpers
+    (** registers given ABI under the given target   *)
+    val register : abi_constructor -> unit
+    (** [lift mem insn] lifts provided instruction to BIL.
+        Usually you do not need to call this function directly, as
+        [disassemble] function will do the lifting.
+    *)
 
-  (** creates a set of ABI for the provided symbol.
-      Until [all] parameter is set to true the ABI will be
-      disambiguated, using [choose] method. Only equally
-      valid ABI are returned. *)
-  val get_abi :
-    ?all:bool -> (** defaults to false  *)
-    ?image:image ->
-    ?sym:string -> mem -> Bap_disasm_block.t -> abi list
+    (** creates a set of ABI for the provided symbol.
+        Until [all] parameter is set to true the ABI will be
+        disambiguated, using [choose] method. Only equally
+        valid ABI are returned. *)
+    val create :
+      ?merge:(abi list -> abi) ->
+      ?image:image ->
+      ?sym:string -> mem -> Bap_disasm_block.t -> abi
+
+  end
 
   val lift : mem -> ('a,'k) Basic.insn -> bil Or_error.t
 end
@@ -76,21 +67,34 @@ end
 (** ARM architecture  *)
 module ARM  = struct
   include Bap_disasm_arm
+  module ABI = struct
+    include Bap_disasm_abi_helpers
+    include Bap_disasm_arm_abi
+  end
   include Bap_disasm_arm_lifter
 end
 
 module AMD64 = struct
   include Bap_disasm_x86_lifter.AMD64
+  module ABI = struct
+    include Bap_disasm_abi_helpers
+    include Bap_disasm_amd64_abi
+  end
+
 end
 
 module IA32 = struct
   include Bap_disasm_x86_lifter.IA32
+  module ABI = struct
+    include Bap_disasm_abi_helpers
+    include Bap_disasm_ia32_abi
+  end
 end
 
 module Stub = Bap_disasm_stub_lifter
 
 let target_of_arch = function
-  | `arm -> (module ARM : Target)
-  | `x86_64 -> (module AMD64 : Target)
+  | #Arch.arm -> (module ARM : Target)
+  | `x86_64 -> (module AMD64)
   | `x86 -> (module IA32)
-  | _ -> (module Stub : Target)
+  | _ -> (module Stub)

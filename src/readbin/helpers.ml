@@ -53,7 +53,7 @@ module Make(Env : Printing.Env) = struct
   let has_side_effect e scope = (object inherit [bool] Bil.visitor
     method! enter_load  ~src:_ ~addr:_ _e _s _r = true
     method! enter_store ~dst:_ ~addr:_ ~src:_ _e _s _r = true
-    method! enter_var v r = r || Bil.is_modified v scope
+    method! enter_var v r = r || Bil.is_assigned v scope
   end)#visit_exp e false
 
   (** This optimization will inline temporary variables that occurres
@@ -65,12 +65,12 @@ module Make(Env : Printing.Env) = struct
       | [] -> List.rev ss
       | Bil.Move _ as s :: [] -> loop (s::ss) []
       | Bil.Move (x, Exp.Var y) as s :: xs when Var.is_tmp x ->
-        if Bil.is_modified y xs || Bil.is_modified x xs
+        if Bil.is_assigned y xs || Bil.is_assigned x xs
         then loop (s::ss) xs else
           let xs = Bil.substitute (Exp.var x) (Exp.var y) xs in
           loop ss xs
       | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
-        if has_side_effect y xs || Bil.is_modified x xs
+        if has_side_effect y xs || Bil.is_assigned x xs
         then loop (s::ss) xs
         else loop ss (Bil.substitute (Exp.var x) y xs)
       | s :: xs -> loop (s::ss) xs in

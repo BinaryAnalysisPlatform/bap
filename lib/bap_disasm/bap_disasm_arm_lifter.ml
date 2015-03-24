@@ -1068,8 +1068,8 @@ let lift mem insn =
   | exn -> of_exn exn
 
 
-module CPU : CPU = struct
-  open Bap_disasm_arm_env
+module CPU = struct
+  include Bap_disasm_arm_env
 
   let mem = mem
   let pc = pc
@@ -1128,10 +1128,3 @@ module CPU : CPU = struct
   let is_permanent = Set.mem perms
   let is_mem = is mem
 end
-
-
-let registered = ref []
-
-let register_abi abi = registered := abi :: !registered
-
-let get_abi = create_abi_getter registered

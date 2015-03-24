@@ -9,7 +9,7 @@ class stub : abi = object
   method id = ["unknown"; "unknown"; "unknown"]
   method specific = false
   method choose _ = -1
-  method return_value = Bil.unknown "unknown" reg8_t
+  method return_value = None
   method args = []
   method vars = []
   method records = []
@@ -34,7 +34,7 @@ let join x y : abi = object
   method specific = x#specific || y#specific
   method choose other = max (x#choose other) (y#choose other)
   method return_value =
-    if Exp.compare x#return_value stub#return_value = 0
+    if x#return_value = stub#return_value
     then x#return_value
     else y#return_value
   method args = either_or_first x#args y#args
@@ -56,8 +56,10 @@ let cmp x y = match x#choose y, y#choose x with
   | p,_ -> p
 
 let create_abi_getter (registered : abi_constructor list ref) =
-  fun ?all ?image ?sym mem blk ->
-    List.filter_map !registered (fun cs -> cs ?image ?sym mem blk) |>
+  fun ?(merge=merge) ?image ?sym mem blk ->
+    List.filter_map !registered (fun cs ->
+        try Some (cs ?image ?sym mem blk) with exn -> None) |>
     List.sort ~cmp |> function
-    | [] -> []
-    | x :: _ as xs -> List.take_while xs ~f:(fun y -> cmp x y = 0)
+    | [] -> new stub
+    | x :: _ as xs ->
+      merge (List.take_while xs ~f:(fun y -> cmp x y = 0))
