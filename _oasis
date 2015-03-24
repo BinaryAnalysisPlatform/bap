@@ -45,7 +45,7 @@ Document bap
 
 Flag serialization
   Description: Build serialization library
-  Default: false
+  Default: true
 
 Flag llvm_static
   Description: Links with llvm in a static mode
@@ -106,7 +106,6 @@ Library top
             Bap_install_printers,
             Bap_load_plugins,
             Bap_toplevel
-
   BuildDepends: compiler-libs, bap, bap.plugins
 
 Library types
@@ -154,7 +153,7 @@ Library serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun, bap.types
+  BuildDepends: piqilib,piqirun,piqirun.pb,piqirun.ext,bap.types
   Modules:   Bil_piqi,
              Stmt_piqi,
              Stmt_piqi_ext
@@ -375,7 +374,7 @@ Executable "bap-mc"
   MainIs:         bap_mc.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner
+  BuildDepends:   bap, bap.plugins, cmdliner, bap.types.serialization
 
 Executable "bap-byteweight"
   Path:           src/byteweight

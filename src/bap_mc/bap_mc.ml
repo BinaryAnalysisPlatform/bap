@@ -17,7 +17,6 @@ let no_disassembly state boff =
   let mem = Disasm.memory state in
   let addr = Disasm.addr state in
   let stop = Addr.to_int addr |> ok_exn in
-
   raise (No_disassembly (mem, boff, stop))
 
 let create_memory arch addr s =
@@ -59,6 +58,37 @@ let print_insn insn width o_reg_format o_imm_format =
   let s = Sexp.to_string @@ Sexp.List (List.rev res) in
   printf "%-4s%-*s" " " width s
 
+let rec dinsns_to_insn_list = function
+  | [(_, None)] 
+  | [] -> []
+  | (_, None) :: restInsns -> dinsns_to_insn_list restInsns
+  | (_, Some insn) :: restInsns -> insn :: (dinsns_to_insn_list restInsns)
+
+let insns_to_bil_list insns = 
+  let insns = (dinsns_to_insn_list insns) in
+  (List.map insns Bap.Std.Insn.bil) 
+
+let print_bilsexp_of_insns insns =
+  let bil_list = insns_to_bil_list insns in
+  let f x= Sexp.to_string_hum (sexp_of_bil x) in
+  let string_list = (List.map bil_list f) in
+  List.iter string_list print_string;;
+
+let print_pb_of_insns insns =
+  let bil_list = insns_to_bil_list insns in
+  let f x = (Bil_piqi.pb_of_stmts (Bap.Std.Insn.bil x)) in
+  List.iter (List.map (dinsns_to_insn_list insns) ~f:f) ~f:print_string
+
+let print_json_of_insns insns =
+  let bil_list = insns_to_bil_list insns in
+  let f x = (Bil_piqi.json_of_stmts (Bap.Std.Insn.bil x)) in
+  List.iter (List.map (dinsns_to_insn_list insns) ~f:f) print_string
+
+let print_xml_of_insns insns =
+  let bil_list = insns_to_bil_list insns in
+  let f x = Bil_piqi.xml_of_stmts (Bap.Std.Insn.bil x) in
+  List.iter (List.map (dinsns_to_insn_list insns) ~f:f) print_string
+
 (* Note: Insn.asm returns string with 8 character padding, Strip it to keep
  * things consistent *)
 let print_asm insn f_inst =
@@ -67,10 +97,14 @@ let print_asm insn f_inst =
   then printf "; %s" s
   else printf "%-4s%s" " " s
 
-let print_disasm width f_asm f_inst f_kinds o_reg_format o_imm_format
+let print_disasm arch width f_asm f_inst f_bil f_bil_to_pb f_bil_to_json f_bil_to_xml f_kinds o_reg_format o_imm_format
     state mem insn off =
   if f_kinds then print_kinds insn;
   if f_inst then print_insn insn width o_reg_format o_imm_format;
+  if f_bil then print_bilsexp_of_insns (linear_sweep_exn arch mem);
+  if f_bil_to_pb then print_pb_of_insns (linear_sweep_exn arch mem);
+  if f_bil_to_json then print_json_of_insns (linear_sweep_exn arch mem);
+  if f_bil_to_xml then print_xml_of_insns (linear_sweep_exn arch mem);
   if f_asm then print_asm insn f_inst;
   if (f_asm || f_inst) then print_newline ();
   Disasm.step state (Disasm.addr state |> Addr.to_int |> ok_exn)
@@ -86,7 +120,9 @@ let to_bin_str s f =
   try bytes |> List.map ~f |> String.concat |> Scanf.unescaped
   with Scanf.Scan_failure _ -> raise Bad_user_input
 
-let disasm s o_arch f_asm f_inst f_kinds o_reg_format o_imm_format =
+let disasm s o_arch f_asm f_inst
+	   f_bil f_bil_to_pb f_bil_to_json f_bil_to_xml
+	   f_kinds o_reg_format o_imm_format =
   let input_src =
     match s with
     | "" -> In_channel.input_line In_channel.stdin
@@ -104,8 +140,14 @@ let disasm s o_arch f_asm f_inst f_kinds o_reg_format o_imm_format =
     | None -> raise Stdin_exn in
   (* arm instructions tend to be longer, so increase the printed width *)
   let width = if o_arch = "arm" then 65 else 50 in
+  let arch = if o_arch="arm" then `arm
+	     else if o_arch="x86" then `x86
+	     else if o_arch="x86_64" || o_arch="x86-64" then `x86_64
+	     else `x86 in
   let hit =
-    print_disasm width f_asm f_inst f_kinds o_reg_format o_imm_format in
+    print_disasm arch width f_asm f_inst f_bil
+		 f_bil_to_pb f_bil_to_json f_bil_to_xml
+		 f_kinds o_reg_format o_imm_format in
   let invalid state mem off = no_disassembly state off in
   let mem = create_memory o_arch 0x0L input in
   let _pos : int =
@@ -135,6 +177,22 @@ let f_inst =
   let doc = "Output BAP instruction disassembly." in
   Arg.(value & flag & info ["show-inst"] ~doc)
 
+let f_bil = 
+  let doc = "Output unadulterated BIL for given hex." in
+  Arg.(value & flag & info ["show-bil"] ~doc)
+
+let f_bil_pb =
+  let doc = "Output protobuf of BIL for given hex." in
+  Arg.(value & flag & info ["show-pb"] ~doc)
+
+let f_bil_json =
+  let doc = "Output json of BIL for given hex." in
+  Arg.(value & flag & info ["show-json"] ~doc)
+
+let f_bil_xml =
+  let doc = "Output xml of BIL for given hex." in
+  Arg.(value & flag & info ["show-xml"] ~doc)
+
 let f_asm =
   let doc = "Output disassembly." in
   Arg.(value & flag & info ["show-asm"] ~doc)
@@ -160,8 +218,9 @@ let cmd =
         "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | bap-mc  --show-inst --show-asm");
     `S "SEE ALSO";
     `P "$(llvm-mc)"] in
-  Term.(pure disasm $ hex_str $ o_arch $ f_asm $ f_inst $ f_kinds
-        $ o_reg_format $ o_imm_format),
+  Term.(pure disasm $ hex_str $ o_arch $ f_asm $ f_inst
+	$ f_bil $ f_bil_pb $ f_bil_json $ f_bil_xml
+	$ f_kinds $ o_reg_format $ o_imm_format),
   Term.info "bap-mc" ~doc ~man ~version:"1.0"
 
 let () =

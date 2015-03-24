@@ -1,3 +1,4 @@
 #!/bin/sh
-
-exec utop -require bap.top "$@"
+# for bil serialization do: -required "bap.types.serialization"
+# disabled by default to reduce breakage liklihood
+exec utop -require "bap.top" "$@"
