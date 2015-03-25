@@ -93,6 +93,7 @@ Library plugins
   Modules:         Bap_plugin,
                    Bap_plugins
   BuildDepends:    bap.image.elf_backend,
+                   bap.image.llvm_loader_backend,
                    bap.llvm
 
 Library top
@@ -200,7 +201,8 @@ Library llvm_binary
   FindlibName:     llvm_binary
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
-  Modules:         Llvm_binary,
+  Modules:         Llvm_loader,
+                   Llvm_binary,
                    Llvm_binary_segment,
                    Llvm_binary_symbol
   CCOpt:           $cc_optimization
@@ -208,15 +210,16 @@ Library llvm_binary
   CSources:        llvm_binary_stubs.c,
                    llvm_binary_stubs.h
 
-# Library image_llvm
-#   Path:            lib/bap_image/
-#   FindlibParent:   bap_image
-#   FindlibName:     image_llvm
-#   XMETAExtraLines: plugin_system = "bap.image.disabled"
-#   CompiledObject:  best
-#   BuildDepends:    bap, core_kernel
-#   Modules:         Image_llvm,
-#                    Llvm_loader
+Library llvm_loader_backend
+  Path:            lib/bap_image/
+  FindlibParent:   bap_image
+  FindlibName:     llvm_loader_backend
+  XMETAExtraLines: plugin_system = "bap.image.disabled"
+  CompiledObject:  best
+  BuildDepends:    bap,
+                   bap.image.llvm_binary,
+                   core_kernel
+  Modules:         Llvm_loader_backend
 
 Library dwarf
   Path:          lib/bap_dwarf
