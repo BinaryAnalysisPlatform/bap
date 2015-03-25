@@ -24,7 +24,7 @@ module Var = struct
     | Type.Mem (n,m) -> pr ch "Mem(%a,%a)" pp_size n pp_size m
 
   let pp_var ch v =
-    pr ch "Var(\"%s\",%a)" Var.(name v) pp_ty Var.(typ v)
+    pr ch "Var(\"%a\",%a)" Var.pp v  pp_ty Var.(typ v)
 
 end
 
@@ -46,7 +46,7 @@ module Exp = struct
     | Cast (ct,sz,ex) ->
       pr ch "%a(%d,%a)" (pp_sexp sexp_of_cast) ct sz pp ex
     | Let (v,e1,e2) -> pr ch "Let(%a,%a,%a)" pp_var v pp e1 pp e2
-    | Unknown (s,t) -> pr ch "Unknown(%s,%a)" s pp_ty t
+    | Unknown (s,t) -> pr ch "Unknown(\"%s\",%a)" s pp_ty t
     | Ite (e1,e2,e3) -> pr ch "Ite(%a,%a,%a)" pp e1 pp e2 pp e3
     | Extract (n,m,e) -> pr ch "Extract(%d,%d,%a)" n m pp e
     | Concat (e1,e2) -> pr ch "Concat(%a,%a)" pp e1 pp e2
@@ -83,8 +83,8 @@ end
 module Arm = struct
   open Disasm
   let pp_op ch = function
-    | Arm.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
-    | Arm.Op.Reg reg -> pr ch "Reg(%a())" Arm.Reg.pp reg
+    | ARM.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
+    | ARM.Op.Reg reg -> pr ch "Reg(%a())" ARM.Reg.pp reg
 
   let rec pp_ops ch = function
     | [] -> ()
@@ -92,7 +92,7 @@ module Arm = struct
     | x :: xs -> pr ch "%a, %a" pp_op x pp_ops xs
 
   let pp_insn ch (insn,ops) =
-    pr ch "%a(%a)" (pp_sexp Arm.Insn.sexp_of_t) insn pp_ops ops
+    pr ch "%a(%a)" (pp_sexp ARM.Insn.sexp_of_t) insn pp_ops ops
 end
 
 let to_string pp x = Format.asprintf "%a" pp x

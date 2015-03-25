@@ -79,6 +79,7 @@ Library bap
                    bap.dwarf,
                    bap.elf,
                    bap.image,
+                   bap.sema,
                    bap.types,
                    dynlink,
                    findlib
@@ -167,9 +168,10 @@ Library bap_image
                  bap.types
   Modules:       Bap_fileutils,
                  Bap_image,
+                 Bap_image_std,
+                 Bap_memmap,
                  Bap_memory,
                  Bap_table,
-                 Bap_tags,
                  Image_backend,
                  Image_common,
                  Image_internal_std
@@ -213,9 +215,13 @@ Library disasm
   FindlibName:   disasm
   BuildDepends:  bap.image,
                  bap.types,
-                 camlzip
+                 camlzip,
+                 ocamlgraph
   Modules:       Bap_disasm,
+                 Bap_disasm_abi,
+                 Bap_disasm_abi_helpers,
                  Bap_disasm_arm,
+                 Bap_disasm_arm_abi,
                  Bap_disasm_arm_bit,
                  Bap_disasm_arm_branch,
                  Bap_disasm_arm_env,
@@ -228,6 +234,9 @@ Library disasm
                  Bap_disasm_arm_shift,
                  Bap_disasm_arm_types,
                  Bap_disasm_arm_utils,
+                 Bap_disasm_amd64_abi,
+                 Bap_disasm_ia32_abi,
+                 Bap_disasm_stub_lifter,
                  Bap_disasm_x86,
                  Bap_disasm_x86_lifter,
                  Bap_disasm_x86_env,
@@ -235,14 +244,16 @@ Library disasm
                  Bap_disasm_x86_utils,
                  Bap_disasm_basic,
                  Bap_disasm_block,
+                 Bap_disasm_block_intf,
                  Bap_disasm_insn,
                  Bap_disasm_prim,
                  Bap_disasm_rec,
-                 Bap_disasm_symtab,
+                 Bap_disasm_std,
                  Bap_disasm_types,
                  Bap_insn_kind,
                  Bap_byteweight,
                  Bap_signatures
+
 
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
@@ -262,6 +273,17 @@ Library llvm
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm.disabled"
 
+Library sema
+  Path:          lib/bap_sema
+  FindlibParent: bap
+  FindlibName:   sema
+  BuildDepends:  bap.disasm,
+                 bap.types
+  Modules:       Bap_sema,
+                 Bap_sema_symtab,
+                 Bap_lnf
+
+
 
 Library types_test
   Path:           lib_test/bap_types
@@ -279,6 +301,7 @@ Library image_test
   BuildDepends:   bap
   Install:        false
   Modules:        Test_image,
+                  Test_memmap,
                   Test_table
 
 Library benchmarks
@@ -288,7 +311,6 @@ Library benchmarks
   BuildDepends:   bap, core, core_bench, threads
   Install:        false
   Modules:        Bench_image
-
 
 Library dwarf_test
   Path:           lib_test/bap_dwarf

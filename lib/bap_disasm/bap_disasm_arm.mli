@@ -1,7 +1,7 @@
 (** Types for ARM instructions.
-    The type definitions itself can be viewed in a
-    [Bap_disasm_arm_types] module. This one extends them with a
-    [Regular] functions.
+     The type definitions itself can be viewed in a
+     [Bap_disasm_arm_types] module. This one extends them with a
+     [Regular] functions.
 *)
 open Core_kernel.Std
 open Bap_types.Std

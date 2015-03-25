@@ -96,7 +96,7 @@ let pp_elt f fmt = function
   | Some (x,_) -> Format.fprintf fmt "Some %a" Addr.pp (f x)
 
 (** @pre [x <= y] *)
-let intersects x y = Addr.(Mem.max_addr x >= (Mem.min_addr y))
+let intersects x y = Addr.(Mem.max_addr x >= Mem.min_addr y)
 
 let has_intersections tab (x : mem) : bool =
   Bound.is_bound tab.bound x &&

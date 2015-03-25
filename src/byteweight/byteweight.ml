@@ -285,7 +285,9 @@ module Cmdline = struct
       `P "bap-byteweight is a toolkit for training, fetching, testing \
           and installing byteweight signatures."
     ] in
-    Term.(pure usage $ choice_names), Term.info "bap-byteweight" ~doc ~man
+    Term.(pure usage $ choice_names),
+    Term.info "bap-byteweight"
+      ~version:Config.pkg_version ~doc ~man
 
   let eval () = Term.eval_choice default
       [train; find; fetch; install; update; symbols; metrics]

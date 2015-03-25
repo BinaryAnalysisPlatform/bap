@@ -19,7 +19,7 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
     | Some src -> exp_of_op src
     | None     -> zero reg32_t in
 
-  let unshifted = Env.new_tmp "unshifted" in
+  let unshifted = Env.new_tmp "t" in
 
   (* Do the register shift *)
   let s1, s2, stmts, carry =
@@ -57,8 +57,8 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
     | #move, _, _ ->
       stmts, Stmt.move Env.cf carry :: set_nzf Exp.(var dest) reg32_t
     | #arth as itype1, _, _ ->
-      let orig1 = Env.new_tmp "orig1" in
-      let orig2 = Env.new_tmp "orig2" in
+      let orig1 = Env.new_tmp "s" in
+      let orig2 = Env.new_tmp "t" in
       let v1,v2,vd = Exp.(var orig1, var orig2, var dest) in
       let flags = match itype1 with
         | `SUB -> set_sub v1 v2 vd reg32_t

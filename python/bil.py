@@ -173,7 +173,7 @@ class Type(ADT) : pass  # Abstract base for expression type
 class Imm(Type) :
     "Imm(size) - immediate value"
     @property
-    def size(self): return self.arg[0]
+    def size(self): return self.arg
 
 class Mem(Type) :
     "Mem(addr_size, value_size)"

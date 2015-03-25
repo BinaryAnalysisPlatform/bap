@@ -56,6 +56,9 @@ val words : t -> size -> word table
 val sections : t -> sec table
 val symbols : t -> sym table
 
+(** returns memory tagged with arbitrary [(name,data)] tags  *)
+val tags : t -> (string * string) memmap
+
 (** {2 Mappings }  *)
 val memory_of_section  : t -> sec -> mem
 (** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)

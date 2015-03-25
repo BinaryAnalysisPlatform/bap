@@ -36,7 +36,7 @@ type disasm = {
 }
 
 let insns_of_blocks bs =
-  Seq.(Table.elements bs >>| Block.insns |> join)
+  Seq.(Table.elements bs >>| Block.insns >>| of_list |> join)
 
 let insns_table blocks =
   insns_of_blocks blocks |> Seq.fold ~init:Table.empty
@@ -96,20 +96,21 @@ let of_rec r =
     Table.foldi (Rec.blocks r) ~init:Table.empty
       ~f:(fun mem blk map ->
           List.fold (Rec.Block.insns blk) ~init:map
-            ~f:(fun map (mem,_,_ as insn) ->
-                match Insn.of_decoded insn with
-                | None -> add_rec_error map (`Failed_to_disasm mem)
-                | Some insn -> add_decoded map mem insn)) in
+            ~f:(fun map dec -> match dec with
+                | mem, (None,_) ->
+                  add_rec_error map (`Failed_to_disasm mem)
+                | mem, (Some insn, bil) ->
+                  add_decoded map mem (Insn.of_basic ?bil insn))) in
   let memmap =
     List.fold (Rec.errors r) ~init:memmap ~f:add_rec_error in
-  (* let memmap = Table.empty in *)
   let blocks = Rec.blocks r |> Table.map ~f:Block.of_rec_block in
   let insns, mems_of_insn = create_insn_mapping blocks in
   {blocks; memmap; insns; mems_of_insn}
 
 let lifter_of_arch = function
-  | #Arch.arm -> Some Bap_disasm_arm_lifter.insn
-  | #Arch.x86 as arch -> Some (Bap_disasm_x86_lifter.insn arch)
+  | #Arch.arm -> Some Bap_disasm_arm_lifter.lift
+  | `x86    -> Some (Bap_disasm_x86_lifter.IA32.lift)
+  | `x86_64 -> Some (Bap_disasm_x86_lifter.AMD64.lift)
   | _ -> None
 
 let linear_sweep arch mem : (mem * insn option) list Or_error.t =

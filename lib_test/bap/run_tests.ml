@@ -6,6 +6,7 @@ let suite =
     Test_conceval.suite;
     Test_image.suite;
     Test_table.suite;
+    Test_memmap.suite;
     Test_leb128.suite;
     Test_disasm.suite;
   ]

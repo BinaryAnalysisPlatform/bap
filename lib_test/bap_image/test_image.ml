@@ -62,8 +62,9 @@ let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
     | `r64,LittleEndian -> `mips64el
     | `r64,BigEndian    -> `mips64 in
   let entry = create_addr addr_size 0 in
+  let tags = [] in
   let load _ =
-    Some (Img.Fields.create ~arch ~entry ~sections ~symbols) in
+    Some (Img.Fields.create ~arch ~entry ~sections ~symbols ~tags) in
   load
 
 let backends =

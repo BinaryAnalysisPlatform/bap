@@ -12,5 +12,5 @@ type backend = Backend.t
 module Memory = Bap_memory
 type mem = Memory.t with sexp_of
 
-module Tags = Bap_tags
-type tags = Tags.t with bin_io, compare, sexp
+module Memmap = Bap_memmap
+type 'a memmap = 'a Memmap.t with sexp_of

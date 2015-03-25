@@ -13,9 +13,6 @@ val map : #mapper -> bil -> bil
     statement in program [p] *)
 val is_referenced : var -> bil -> bool
 
-(** [is_modified x p] is [true] is [x] is assigned in [p]  *)
-val is_modified : var -> bil -> bool
-
 (** [is_assigned x p] is [true] if there exists such [Move]
     statement, that [x] occures on the left side of it. If [strict]
     is true, then only unconditional assignments. By default,
@@ -48,8 +45,9 @@ val fold_consts : bil -> bil
 class constant_folder : mapper
 
 (** [fixpoint f] applies transformation [f] until fixpoint is
-    reached. If the transformation orbit contains non-trivial
-    cycles, then a arbitrary point of cycle will be returned. *)
+    reached. If the transformation orbit contains non-trivial cycles,
+    then the transformation will stop at an arbitrary point of a
+    cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
 (** Bil provides two prefix tries trees.

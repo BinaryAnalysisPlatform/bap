@@ -146,11 +146,22 @@ let img_of_elf data elf : Img.t Or_error.t =
     | Error err ->
       [], Error.tag err "failed to read symbols" :: errors in
   arch >>= fun arch ->
+  let tags = Seq.filter_map elf.e_sections ~f:(fun s ->
+      match Elf.section_name data elf s with
+      | Error _ -> None
+      | Ok name -> Some {
+          Tag.name = "section";
+          Tag.data = name;
+          Tag.location = {
+            Location.addr = addr s.sh_addr;
+            Location.len  = Int64.to_int_exn s.sh_size;
+          }
+        }) |> Seq.to_list in
   match sections with
   | [] -> errorf "failed to read sections"
   | s::ss ->
     let img =
-      Img.Fields.create ~arch ~entry ~sections:(s,ss) ~symbols in
+      Img.Fields.create ~arch ~entry ~sections:(s,ss) ~symbols ~tags in
     Ok img
 
 let of_data_err (data : bigstring) : Img.t Or_error.t =

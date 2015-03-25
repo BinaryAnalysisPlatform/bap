@@ -1,13 +1,14 @@
 #!/bin/sh
 
 for target; do :; done
-args=`echo "$@" | sed 's/.plugin/.cmxs/'`
+args=`echo "$@" | sed 's/\.plugin$/.cmxa/'`
 
 ocamlbuild \
     -use-ocamlfind \
     -classic-display \
     -syntax camlp4o \
     -pkg bap \
+    -pkg bap.plugins \
     -pkg core_kernel \
     -pkg sexplib.syntax,comparelib.syntax,fieldslib.syntax,variantslib.syntax \
     -pkg bin_prot.syntax \
@@ -21,10 +22,16 @@ ocamlbuild \
     $args
 result=$?
 
-source="_build/`basename $target .plugin 2>/dev/null`.cmxs"
+name=`basename $target .plugin 2>/dev/null`
+source="_build/$name.cmxa"
 
 if [ -f "$source" ]; then
-    cp $source $target
+    CMD=`grep -A1 "Target: $name.cmxa" _build/_log | grep -v "Target" | sed 's/.cmxa/.cmxs/' | sed 's/-a/-shared/'`
+    cd _build
+    $CMD
+    cp "$name.cmxs" "../$target"
+    cd ..
+    chmod a-x $target
 fi
 
 exit $result

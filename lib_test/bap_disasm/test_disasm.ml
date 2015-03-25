@@ -9,30 +9,39 @@ module Rec = Disasm_expert.Recursive
 
 let err fmt = Or_error.errorf fmt
 
+let sub = "\x48\x83\xec\x08"
+let call = "\xe8\x47\xee\xff\xff"
+let mov = "\x8b\x40\x10"
+let add = "\x48\x83\xc4\x08"
+let ret = "\xc3"
+
 let x86_64 = "x86_64", [
-
     (* sub $0x8,%rsp *)
-    "\x48\x83\xec\x08", ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
-
+    sub , ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
     (* callq 942040 *)
-    "\xe8\x47\xee\xff\xff", ["CALL64pcrel32"; "-0x11b9";],
+    call , ["CALL64pcrel32"; "-0x11b9";],
     [`Call; `May_affect_control_flow];
-
     (* mov 0x10(%rax),%eax *)
-    "\x8b\x40\x10", ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
+    mov, ["MOV32rm"; "EAX"; "RAX"; "0x1"; "Nil"; "0x10"; "Nil"],
     [`May_load];
-
     (* add $0x8, %rsp *)
-    "\x48\x83\xc4\x08", ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
-
+    add, ["ADD64ri8"; "RSP"; "RSP"; "0x8"], [];
     (* "retq" *)
-    "\xc3", ["RET"],
+    ret, ["RET"],
     [`Return; `Barrier; `Terminator; `May_affect_control_flow]
   ]
 
-let memory_of_string data =
+let call1 = "\xe8\x01\x00\x00\x00"
+
+let mem_equal x y =
+  Memory.(Addr.(min_addr x = min_addr y && max_addr x = max_addr y))
+
+let assert_memory =
+  assert_equal ~printer:Memory.to_string ~cmp:mem_equal
+
+let memory_of_string ?(start=0) ?(width=64) data =
   Memory.create LittleEndian
-    (Addr.zero 32)
+    (Addr.of_int start ~width)
     (Bigstring.of_string data) |> Or_error.ok_exn
 
 let string_of_strings insn =
@@ -106,7 +115,7 @@ let test_run_all data ctxt =
      }
 
 This is the actual assembler output, that we've got with the following
-command: [arm-linux-gnueabihf-gcc -marm]
+command: [arm-linux-gnueabi-gcc -marm]
 
 
 f:
@@ -225,7 +234,7 @@ let blocks = [|
 
 let run_rec () =
   let mem = create_block 0x840Cl strlen in
-  let lifter = Arm.Lift.insn in
+  let lifter = ARM.lift in
   Rec.run ~lifter `armv7 mem
 
 let test_cfg test ctxt =
@@ -254,15 +263,15 @@ let addresses cfg ctxt =
           ~msg (Memory.length mem') (Memory.length mem))
 
 let build_graph cfg : graph =
-  let open Rec.Block in
+  let module Blk = Rec.Block in
   let blk_num blk =
-    let mem = memory blk in
+    let mem = Blk.memory blk in
     match Array.findi blocks ~f:(Fn.const (equal_addrs mem)) with
     | Some (i,_) -> i + 1
     | None -> unexpected_block mem in
   Table.fold (Rec.blocks cfg) ~init:[] ~f:(fun blk graph ->
-      let preds = Seq.map (preds blk) ~f:(fun blk -> blk_num blk) in
-      let dests = Seq.map (dests blk) ~f:(function
+      let preds = Seq.map (Blk.preds blk) ~f:(fun blk -> blk_num blk) in
+      let dests = Seq.map (Blk.dests blk) ~f:(function
           | `Unresolved kind -> 0, (kind :> dest_kind)
           | `Block (blk,kind) -> blk_num blk, kind) in
       (blk_num blk, Seq.to_list preds, Seq.to_list dests) :: graph)
@@ -277,6 +286,82 @@ let structure cfg ctxt =
   let expect = deepsort graph in
   assert_equal ~ctxt ~printer ~msg:"Wrong graph structure" expect got
 
+(* test one instruction cfg *)
+let test_micro_cfg insn ctxt =
+  let open Or_error in
+  let mem = Bigstring.of_string insn |>
+            Memory.create LittleEndian (Addr.of_int64 0L) |>
+            ok_exn in
+  let lifter = AMD64.lift in
+  let dis = Rec.run ~lifter `x86_64 mem |> ok_exn in
+  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "One block" (Rec.blocks dis |> Table.length = 1);
+  Rec.blocks dis |> Table.to_sequence |>
+  Seq.to_list |> List.hd_exn |> snd
+  |> Rec.Block.insns |> function
+  | [mem, (Some _, Some _)] ->
+    let max_addr = Addr.of_int ~width:64 (String.length insn - 1) in
+    assert_equal ~printer:Addr.to_string ~ctxt
+      (Addr.of_int64 0L) (Memory.min_addr mem);
+    assert_equal ~printer:Addr.to_string ~ctxt
+      max_addr (Memory.max_addr mem)
+  | [mem, (None, _)] -> assert_string "Failed to disassemble"
+  | [mem, (_, None)] -> assert_string "Failed to lift"
+  | [] -> assert_string "No instructions"
+  | _ :: _ -> assert_string "More than one instruction"
+
+(* call 1
+   ret
+   ret
+   ret
+
+   should emit structure
+
+   +-------------------+
+   |0:     call 1      +------+
+   +---------+---------+      |
+             |                |
+   +---------+---------+      |
+   |5:      ret        |      |
+   +-------------------+      |
+                              |
+   +-------------------+      |
+   |6:      ret        +<-----+
+   +-------------------+
+
+   With the third ret unreachable.
+*)
+
+let has_dest src dst kind =
+  Seq.exists (Rec.Block.dests src) ~f:(function
+      | `Block (blk,k) ->
+        Rec.Block.compare blk dst = 0 && k = kind
+      | _ -> false)
+
+
+let call1_3ret ctxt =
+  let mem = String.concat [call1; ret; ret; ret] |>
+            memory_of_string in
+  let lifter = AMD64.lift in
+  let dis = Rec.run ~lifter `x86_64 mem |> Or_error.ok_exn in
+  assert_bool "No errors" (Rec.errors dis = []);
+  assert_bool "Three block" (Rec.blocks dis |> Table.length = 3);
+  match Rec.blocks dis |> Table.elements |> Seq.to_list with
+  | [b1;b2;b3] ->
+    let call = memory_of_string ~width:64 call1 in
+    let ret1 = memory_of_string ret ~start:5 ~width:64 in
+    let ret2 = memory_of_string ret ~start:6 ~width:64 in
+    assert_memory call (Rec.Block.memory b1);
+    assert_memory ret1 (Rec.Block.memory b2);
+    assert_memory ret2 (Rec.Block.memory b3);
+    assert_bool "b1 -> jump b3" @@ has_dest b1 b3 `Jump;
+    assert_bool "b1 -> fall b2" @@ has_dest b1 b2 `Fall;
+    assert_bool "b2 has no succs" @@
+    Seq.is_empty (Rec.Block.succs b2);
+    assert_bool "b3 has no succs" @@
+    Seq.is_empty (Rec.Block.succs b3);
+  | _ -> assert false
+
 let () = Plugins.load ()
 
 let suite = "Disasm.Basic" >::: [
@@ -285,4 +370,7 @@ let suite = "Disasm.Basic" >::: [
     "recurse"    >:: test_cfg amount;
     "addresses"  >:: test_cfg addresses;
     "structure"  >:: test_cfg structure;
+    "ret"        >:: test_micro_cfg ret;
+    "sub"        >:: test_micro_cfg ret;
+    "call1_3ret" >:: call1_3ret;
   ]

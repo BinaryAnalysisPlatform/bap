@@ -93,4 +93,3 @@ end
     level representation.
 *)
 val of_basic : ?bil:bil -> Basic.full_insn -> t
-val of_decoded : Rec.decoded -> t option

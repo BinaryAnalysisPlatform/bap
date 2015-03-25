@@ -16,8 +16,8 @@ module Program(Conf : Options.Provider) = struct
       let path = options.sigfile in
       match Signatures.load ?path ~mode:"bytes" arch with
       | None ->
-        eprintf "No signatures found@.Please, use `bap-byteweight' \
-                 utility to fetch/create/install them.@.%!";
+        eprintf "No signatures found@.Please, use `bap-byteweight update' \
+                 to get the latest available signatures.@.%!";
         None
       | Some data ->
         let bw = Binable.of_string (module BW) data in
@@ -31,6 +31,10 @@ module Program(Conf : Options.Provider) = struct
         match Table.find_addr subs addr with
         | Some (m,name) when Addr.(Memory.min_addr m = addr) -> name
         | _ -> sym)
+
+  let annotate_symbols name syms map : (string * string) memmap =
+    Table.foldi ~init:map syms ~f:(fun mem sym map ->
+        Memmap.add map mem (name,sym))
 
   (* rhs is recovered, lhs is static.
      must be called after symbol renaming  *)
@@ -106,19 +110,21 @@ module Program(Conf : Options.Provider) = struct
       ] in
     let disasm = disassemble ~roots arch mem in
     let cfg = Disasm.blocks disasm in
-    let syms = Symtab.create roots mem cfg |>
+    let rec_syms = Symtab.create roots mem cfg in
+    let syms = rec_syms |>
                rename_symbols ida_syms |>
                merge_syms ida_syms     |>
                rename_symbols img_syms |>
                merge_syms img_syms     |>
                rename_symbols usr_syms |>
                merge_syms usr_syms     in
-    let project = {
-      arch; memory = mem;
-      annots = Table.empty;
-      program = disasm;
-      symbols = syms;
-    } in
+    let annots =
+      Option.value_map img ~default:Memmap.empty ~f:Image.tags |>
+      annotate_symbols "found-symbol" rec_syms |>
+      annotate_symbols "ida-symbol" ida_syms |>
+      annotate_symbols "image-symbol" img_syms |>
+      annotate_symbols "user-symbol" usr_syms in
+
     List.iter options.plugins ~f:(fun name ->
         let name = if Filename.check_suffix name ".plugin" then
             name else (name ^ ".plugin") in
@@ -127,9 +133,28 @@ module Program(Conf : Options.Provider) = struct
         with Ok () -> ()
            | Error err -> eprintf "Failed to load plugin %s: %a@."
                             (Filename.basename name) Error.pp err);
+    let module Target = (val target_of_arch arch) in
+
+    let make_project annots symbols =
+      let module H = Helpers.Make(struct
+          let options = options
+          let cfg = Disasm.blocks disasm
+          let base = mem
+          let syms = syms
+          let arch = arch
+          module Target = Target
+        end) in {
+        annots;
+        symbols;
+        arch; memory = mem;
+        program = disasm;
+        bil_of_insns = H.bil_of_insns;
+      } in
+
     let project =
-      List.fold ~init:project (Program_visitor.registered ())
-        ~f:(fun project visit -> visit project) in
+      List.fold ~init:(make_project annots syms)
+        (Program_visitor.registered ())
+        ~f:(fun p visit -> visit (make_project p.annots p.symbols)) in
 
     let module Env = struct
       let options = options
@@ -137,11 +162,12 @@ module Program(Conf : Options.Provider) = struct
       let base = project.memory
       let syms = project.symbols
       let arch = project.arch
+      module Target = Target
     end in
     let module Printing = Printing.Make(Env) in
     let module Helpers = Helpers.Make(Env) in
     let open Printing in
-    let open Helpers in
+    let bil_of_block blk = project.bil_of_insns (Block.insns blk) in
 
     let pp_sym = List.map options.print_symbols ~f:(function
         | `with_name -> pp_name

@@ -11,6 +11,7 @@ module type Env = sig
   val syms : string table
   val cfg  : block table
   val arch : arch
+  module Target : Target
 end
 
 module Make(Env : Env) = struct
@@ -51,7 +52,7 @@ module Make(Env : Env) = struct
     pp_print_tab fmt ();
     Insn.pp fmt insn
 
-  let pp_insns = pp_seq pp_insn_line
+  let pp_insns = pp_list pp_insn_line
 
   (** [pp_blk fmt blk] creates a basic block printer. The block is
       printed inside a 2 space indented vertical box *)
