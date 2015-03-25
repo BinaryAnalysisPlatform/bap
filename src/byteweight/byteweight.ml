@@ -93,7 +93,7 @@ let symbols print_name print_size input : unit t =
       printf "%a %s%s\n" Addr.ppo addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
-let statistics threshold length path (input : string) : unit t =
+let metrics threshold length path (input : string) : unit t =
   let roots_of_table t : addr list =
     Seq.(Table.regions t >>| Memory.min_addr |> to_list) in
   Image.create input >>= fun (img, _warns) ->
@@ -266,10 +266,10 @@ module Cmdline = struct
     Term.(pure symbols $print_name $print_size $filename),
     Term.info "symbols" ~doc
 
-  let statistics =
-    let doc = "Output the statistics result along with those by IDA" in
-    Term.(pure statistics $threshold $length $database_in $filename),
-    Term.info "statistics" ~doc
+  let metrics =
+    let doc = "Output the evaluation result along with those by IDA" in
+    Term.(pure metrics $threshold $length $database_in $filename),
+    Term.info "metrics" ~doc
 
   let usage choices =
     eprintf "usage: bap-byteweight [--version] [--help] \
@@ -282,13 +282,13 @@ module Cmdline = struct
     let doc = "Byteweight Toolkit" in
     let man = [
       `S "DESCRIPTION";
-      `P "bap-byteweight is a toolkit for training, fetching, testing\
+      `P "bap-byteweight is a toolkit for training, fetching, testing \
           and installing byteweight signatures."
     ] in
     Term.(pure usage $ choice_names), Term.info "bap-byteweight" ~doc ~man
 
   let eval () = Term.eval_choice default
-      [train; find; fetch; install; update; symbols; statistics]
+      [train; find; fetch; install; update; symbols; metrics]
 end
 
 let () =
