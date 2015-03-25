@@ -9,7 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
-XOCamlbuildExtraArgs: -j 2
+XOCamlbuildExtraArgs: -j 8
 BuildDepends:
               bin_prot.syntax,
               camlp4,
@@ -194,27 +194,29 @@ Library elf
                  Elf_utils
   InternalModules: Elf_internal_utils
 
-Library image_llvm
+Library llvm_binary
   Path:            lib/bap_image/
   FindlibParent:   bap_image
-  FindlibName:     image_llvm
-  XMETAExtraLines: plugin_system = "bap.image.disabled"
+  FindlibName:     llvm_binary
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
-  Modules:         Image_llvm,
-                   Llvm_binary,
-                   Section_ref,
-                   Symbol_ref
+  Modules:         Llvm_binary,
+                   Llvm_binary_segment,
+                   Llvm_binary_symbol
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
   CSources:        llvm_binary_stubs.c,
-                   llvm_binary_stubs.h,
-                   section_ref_stubs.c,
-                   section_ref_stubs.h,
-                   symbol_ref_stubs.c,
-                   symbol_ref_stubs.h,
-                   llvm_segment.c,
-                   llvm_segment.h
+                   llvm_binary_stubs.h
+
+# Library image_llvm
+#   Path:            lib/bap_image/
+#   FindlibParent:   bap_image
+#   FindlibName:     image_llvm
+#   XMETAExtraLines: plugin_system = "bap.image.disabled"
+#   CompiledObject:  best
+#   BuildDepends:    bap, core_kernel
+#   Modules:         Image_llvm,
+#                    Llvm_loader
 
 Library dwarf
   Path:          lib/bap_dwarf
@@ -423,4 +425,4 @@ Executable "llvm-binary-test"
   MainIs:         llvm_binary_test.ml
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap, bap.image.image_llvm, bap.llvm
+  BuildDepends:   bap.image.llvm_binary

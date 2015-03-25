@@ -12,7 +12,6 @@ module Std = struct
   let internal = [
     (module Image_elf : Unit);
     (module Bap_llvm  : Unit);
-    (module Image_llvm : Unit);
   ]
 
   let string_of_or_error = function

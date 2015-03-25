@@ -11,8 +11,6 @@
 #include <llvm/Object/Archive.h>
 #include <llvm/Object/ObjectFile.h>
 
-#include "llvm_segment.hpp"
-
 extern "C" {
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
@@ -20,6 +18,10 @@ extern "C" {
 #include <caml/alloc.h>
 #include <caml/custom.h>
 #include <caml/bigarray.h>
+}
+
+void llvm_binary_fail [[ noreturn ]](const char* message) {
+    ::caml_failwith(message);
 }
 
 namespace impl {
@@ -45,22 +47,6 @@ Binary* from_value (::value v) {
     return v;
 }
 
-inline void fail_with_error(const error_code& ec) {
-    ::caml_failwith(ec.message().c_str());
-}
-
-Binary* llvm_binary_create(const char* data, std::size_t size) {
-    StringRef data_ref(data, size);
-    MemoryBuffer* buff(MemoryBuffer::getMemBufferCopy(data_ref, "binary"));
-    OwningPtr<object::Binary> binary;
-    if (error_code ec = createBinary(buff, binary))
-        fail_with_error(ec);
-    return binary.take();
-}
-
-Triple::ArchType llvm_binary_arch(Binary* binary) {
-    return utils::create_extractor(binary)->arch();
-}
 
 ::value to_value(Triple::ArchType arch) {
     typedef Triple::ArchType AT;
@@ -92,80 +78,78 @@ Triple::ArchType llvm_binary_arch(Binary* binary) {
     }
 }
 
-uint64_t llvm_binary_entry(Binary* binary) {
-    return utils::create_extractor(binary)->entry();
-}
 
-::value segment_to_value(segment s) {
+::value to_value(const seg::segment& s) {
     CAMLlocal1(result);
-    result = caml_alloc(8, 0);  
-    Store_field (result, 0, caml_copy_string(s.name.data()));
-    Store_field (result, 1, caml_copy_int64(s.address));
-    Store_field (result, 2, caml_copy_int64(s.offset));
-    Store_field (result, 3, Val_int(s.length));
-    Store_field (result, 4, Val_int(s.bitwidth));
-    Store_field (result, 5, Val_bool(s.is_readable));
-    Store_field (result, 6, Val_bool(s.is_writable));
-    Store_field (result, 7, Val_bool(s.is_executable));
+    result = caml_alloc(7, 0);  
+    Store_field (result, 0, caml_copy_string(s.name().c_str()));
+    Store_field (result, 1, caml_copy_int64(s.offset()));
+    Store_field (result, 2, caml_copy_int64(s.addr()));
+    Store_field (result, 3, caml_copy_int64(s.size()));
+    Store_field (result, 4, Val_bool(s.is_readable()));
+    Store_field (result, 5, Val_bool(s.is_writable()));
+    Store_field (result, 6, Val_bool(s.is_executable()));
     return result;
 }
 
-int llvm_binary_nsym(Binary* binary) {
-    return utils::create_extractor(binary)->nsym();
+::value to_value(const sym::symbol& s) {
+    CAMLlocal1(result);
+    result = caml_alloc(4, 0);  
+    Store_field (result, 0, caml_copy_string(s.name().c_str()));
+    Store_field (result, 1, Val_int(s.kind()));
+    Store_field (result, 2, caml_copy_int64(s.addr()));
+    Store_field (result, 3, caml_copy_int64(s.size()));
+    return result;
+
 }
 
-} //namespace llvm_binary
+template <typename T>
+::value to_value(const std::vector<T>& data) {
+    CAMLlocal2(result, cons);
+    result = Val_emptylist;
+    auto begin = data.rbegin();
+    auto end = data.rend();
+    while (begin != end) {
+        cons = caml_alloc(2, 0);
+        Store_field(cons, 0, to_value(*begin));  // head
+        Store_field(cons, 1, result); // tail
+        result = cons;
+        ++begin;
+    }
+    return result;
+}
+
+
+} //namespace impl
 
 CAMLprim value llvm_binary_create_stub(value arg) {
     CAMLparam1(arg);
     const caml_ba_array* array = Caml_ba_array_val(arg);
     if (array->num_dims != 1)
         ::caml_invalid_argument("invalid bigarray dimension");
-    impl::Binary* obj =
-        impl::llvm_binary_create(reinterpret_cast<const char*>(array->data),
-                                 array->dim[0]);
+    binary::Binary* obj =
+        binary::llvm_binary_create(reinterpret_cast<const char*>(array->data),
+                                   array->dim[0]);
     CAMLreturn(impl::to_value(obj));
 }
 
 CAMLprim value llvm_binary_arch_stub(value arg) {
     CAMLparam1(arg);
-    CAMLreturn(impl::to_value(impl::llvm_binary_arch(impl::from_value(arg))));
+    CAMLreturn(impl::to_value(binary::llvm_binary_arch(impl::from_value(arg))));
 }
 
 CAMLprim value llvm_binary_entry_stub(value arg) {
     CAMLparam1(arg);
-    CAMLreturn(::caml_copy_int64(impl::llvm_binary_entry(impl::from_value(arg))));
+    CAMLreturn(::caml_copy_int64(binary::llvm_binary_entry(impl::from_value(arg))));
 }
 
-CAMLprim value llvm_binary_nsym_stub(value arg) {
+CAMLprim value llvm_binary_segments_stub(value arg) {
     CAMLparam1(arg);
-    CAMLreturn(Val_int(impl::llvm_binary_nsym(impl::from_value(arg))));
+    CAMLreturn(impl::to_value(binary::llvm_binary_segments(impl::from_value(arg))));
 }
 
 CAMLprim value llvm_binary_symbols_stub(value arg) {
     CAMLparam1(arg);
-
-    CAMLreturn(Val_unit);
+    CAMLreturn(impl::to_value(binary::llvm_binary_symbols(impl::from_value(arg))));
 }
 
-CAMLprim value llvm_binary_sections_stub(value arg) {
-    CAMLparam1(arg);
-
-    CAMLreturn(Val_unit);
-}
-
-CAMLprim value llvm_binary_segments_stub(value bin_val) {
-    CAMLparam1(bin_val);
-    CAMLlocal2(result, cons);
-    result = Val_emptylist;
-    impl::Binary* bin = impl::from_value(bin_val);
-    std::vector<segment> s = get_segments(bin);
-    int length = s.size();
-    for (int i = length - 1; i >= 0; i--) {
-        cons = caml_alloc(2, 0);
-        Store_field(cons, 0, impl::segment_to_value(s.at(i)));  // head
-        Store_field(cons, 1, result);                           // tail
-        result = cons;
-    }
-    CAMLreturn(result);
-}
