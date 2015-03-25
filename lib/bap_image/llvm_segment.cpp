@@ -83,16 +83,13 @@ void add_mac_segment(SegCommand cmd, std::size_t bits, segment_sequence &s) {
     s.push_back(seg);    
 }
 
-std::size_t macho_commands_count(const MachOObjectFile *macobj) {
-    if (macobj->is64Bit())
-        return macobj->getHeader64().ncmds;
-    else
-        return macobj->getHeader().ncmds;   
-}
-
 uint64_t macho_enrty_point(const MachOObjectFile *macobj) {
     MachOObjectFile::LoadCommandInfo info = macobj->getFirstLoadCommandInfo();
-    std::size_t cmd_count = macho_commands_count(macobj);
+    std::size_t cmd_count = 0;
+    if (macobj->is64Bit())
+        cmd_count = macobj->getHeader64().ncmds;
+    else
+        cmd_count = macobj->getHeader().ncmds;
     //check for LC_MAIN command
     for (std::size_t i = 0; i < cmd_count; ++i) {
         if (info.C.cmd == MachO::LC_MAIN) {
@@ -100,32 +97,6 @@ uint64_t macho_enrty_point(const MachOObjectFile *macobj) {
             return ((const MachO::entry_point_command *)info.Ptr)->entryoff;
         }
         info = macobj->getNextLoadCommandInfo(info);
-    }
-    error_code ec;
-    StringRef name;
-    // otherwise looking for __text section
-    for (section_iterator it = macobj->begin_sections();
-         it != macobj->end_sections(); it.increment(ec)) {
-        if (ec || it->getName(name))
-            break;
-        if (name == "__text") {
-            uint64_t addr;
-            ec = it->getAddress(addr);
-            if (!ec)
-                return addr;
-        }
-    }
-    // otherwise looking for _start or _main symbol
-    for (symbol_iterator si = macobj->begin_symbols(); 
-         si != macobj->end_symbols(); si.increment(ec)) {
-        if (ec || si->getName(name))
-            break;
-        if (name == "_start" || name == "_main") {
-            uint64_t addr;
-            ec = si->getAddress(addr);
-            if (ec)
-                return addr;
-        }
     }
     // otherwise
     return 0;    
