@@ -14,8 +14,8 @@ external arch : t -> arch =
 external entry : t -> int64 =
   "llvm_binary_entry_stub"
 
-external symbols : t -> Symbol_ref.t list =
-  "llvm_binary_symbols_stub"
+external segments : t -> Llvm_binary_segment.t list =
+  "llvm_binary_segments_stub"
 
-external sections : t -> Section_ref.t list =
-  "llvm_binary_sections_stub"
+external symbols : t -> Llvm_binary_symbol.t list =
+  "llvm_binary_symbols_stub"

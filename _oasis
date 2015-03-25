@@ -9,7 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
-XOCamlbuildExtraArgs: -j 2
+XOCamlbuildExtraArgs: -j 8
 BuildDepends:
               bin_prot.syntax,
               camlp4,
@@ -93,6 +93,7 @@ Library plugins
   Modules:         Bap_plugin,
                    Bap_plugins
   BuildDepends:    bap.image.elf_backend,
+                   bap.image.llvm_loader_backend,
                    bap.llvm
 
 Library top
@@ -194,29 +195,31 @@ Library elf
                  Elf_utils
   InternalModules: Elf_internal_utils
 
-Library image_llvm
+Library llvm_binary
   Path:            lib/bap_image/
   FindlibParent:   bap_image
-  FindlibName:     image_llvm
-  XMETAExtraLines: plugin_system = "bap.image.disabled"
+  FindlibName:     llvm_binary
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
-  Modules:         Image_llvm,
+  Modules:         Llvm_loader,
                    Llvm_binary,
-                   Section_ref,
-                   Symbol_ref
+                   Llvm_binary_segment,
+                   Llvm_binary_symbol
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
   CSources:        llvm_binary_stubs.c,
-                   llvm_binary_stubs.h,
-                   llvm_binary_utils.c,
-                   llvm_binary_utils.h,
-                   section_ref_stubs.c,
-                   section_ref_stubs.h,
-                   symbol_ref_stubs.c,
-                   symbol_ref_stubs.h,
-                   llvm_segment.c,
-                   llvm_segment.h
+                   llvm_binary_stubs.h
+
+Library llvm_loader_backend
+  Path:            lib/bap_image/
+  FindlibParent:   bap_image
+  FindlibName:     llvm_loader_backend
+  XMETAExtraLines: plugin_system = "bap.image.disabled"
+  CompiledObject:  best
+  BuildDepends:    bap,
+                   bap.image.llvm_binary,
+                   core_kernel
+  Modules:         Llvm_loader_backend
 
 Library dwarf
   Path:          lib/bap_dwarf
@@ -419,3 +422,10 @@ Test benchmarks
   TestTools: run_benchmarks
   Run$:         flag(tests) && flag(benchmarks)
   Command: $run_benchmarks
+
+Executable "llvm-binary-test"
+  Path:           .
+  MainIs:         llvm_binary_test.ml
+  Install:        false
+  CompiledObject: best
+  BuildDepends:   bap.image.llvm_binary
