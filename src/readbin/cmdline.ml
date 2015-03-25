@@ -173,4 +173,4 @@ let program =
 
 let parse () = match Term.eval program with
   | `Ok opts -> Ok opts
-  | _ -> Or_error.errorf "no cmdline options provided"
+  | _ -> Or_error.errorf "no cmdline options provided\n"
