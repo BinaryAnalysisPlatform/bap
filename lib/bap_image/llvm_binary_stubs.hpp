@@ -260,7 +260,14 @@ template <>
 struct extractor<COFFObjectFile> : extractor_objfile<COFFObjectFile> {
     explicit extractor(const COFFObjectFile *obj)
         : extractor_objfile<COFFObjectFile>(obj) {}
-    uint64_t entry() const { return 42; };
+    uint64_t entry() const {
+        const pe32_header* hdr = 0;
+        if (error_code ec = this -> obj_ -> getPE32Header(hdr))
+            llvm_binary_fail(ec);
+        if (!hdr)
+            llvm_binary_fail("PE header not found");
+        return hdr->AddressOfEntryPoint;
+    };
 };
 
 template <typename T>
