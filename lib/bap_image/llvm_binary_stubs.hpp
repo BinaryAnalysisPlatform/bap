@@ -45,7 +45,22 @@ int distance(content_iterator<T> begin, content_iterator<T> end) {
     return n;
 }
     
+std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile* obj) {
+    std::size_t cmd_count = 0;
+    if (obj->is64Bit()) 
+        cmd_count = obj->getHeader64().ncmds;
+    else
+        cmd_count = obj->getHeader().ncmds;
+    std::vector<MachOObjectFile::LoadCommandInfo> cmds;
+    MachOObjectFile::LoadCommandInfo info = obj->getFirstLoadCommandInfo();
+    for (std::size_t i = 0; i < cmd_count; ++i) {
+        cmds.push_back(info);
+        info = obj->getNextLoadCommandInfo(info);
+    }
+    return cmds;
 }
+
+} // namespace utils
 
 namespace seg {
 using namespace llvm;
@@ -62,6 +77,14 @@ struct segment {
         , is_writable_(hdr.p_flags & ELF::PF_W)
         , is_executable_(hdr.p_flags & ELF::PF_X) { }
 
+    segment(const MachO::segment_command &s) {
+        init_macho_segment(s);
+    }
+
+    segment(const MachO::segment_command_64 &s) {
+        init_macho_segment(s);
+    }    
+
     const std::string& name() const { return name_; }
     uint64_t offset() const { return offset_; }
     uint64_t addr() const { return addr_; }
@@ -69,6 +92,20 @@ struct segment {
     bool is_readable() const { return is_readable_; }
     bool is_writable() const { return is_writable_; }
     bool is_executable() const { return is_executable_; }
+
+private:
+
+    template <typename S>
+    void init_macho_segment(const S &s) {
+        name_ = s.segname;
+        offset_ = s.fileoff;
+        addr_ = s.vmaddr;
+        size_ = s.filesize;        
+        is_readable_ = s.initprot & MachO::VM_PROT_READ;
+        is_writable_ = s.initprot & MachO::VM_PROT_WRITE;
+        is_executable_ = s.initprot & MachO::VM_PROT_EXECUTE;
+    }
+
 private:
     std::string name_;
     uint64_t offset_;
@@ -93,7 +130,17 @@ std::vector<segment> read(const ELFObjectFile<T>* obj) {
 }
 
 std::vector<segment> read(const MachOObjectFile* obj) {
-    return std::vector<segment>();
+    typedef MachOObjectFile::LoadCommandInfo command_info;
+    std::vector<command_info> cmds = utils::load_commands(obj);
+    std::vector<segment> segments;
+    for (std::size_t i = 0; i < cmds.size(); ++i) {
+        command_info info = cmds.at(i);        
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
+            segments.push_back(segment(obj->getSegment64LoadCommand(info)));
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
+            segments.push_back(segment(obj->getSegmentLoadCommand(info)));
+    }
+    return segments;
 }
 
 std::vector<segment> read(const COFFObjectFile* obj) {
@@ -252,7 +299,25 @@ template <>
 struct extractor<MachOObjectFile> : extractor_objfile<MachOObjectFile> {
     explicit extractor(const MachOObjectFile *obj)
         : extractor_objfile<MachOObjectFile>(obj) {}
-    uint64_t entry() const { return 42; };
+
+    uint64_t entry() const {
+        typedef MachOObjectFile::LoadCommandInfo command_info;
+        typedef std::vector<command_info> commands;
+        typedef std::vector<command_info>::const_iterator const_iterator;
+        commands cmds = utils::load_commands(obj_);
+        const_iterator it =
+            std::find_if(cmds.begin(),
+                         cmds.end(),
+                         [](const command_info &info)
+                         {return info.C.cmd == MachO::LoadCommandType::LC_MAIN;});
+        if (it != cmds.end()) {
+            const MachO::entry_point_command *entry_cmd =
+                reinterpret_cast<const MachO::entry_point_command*>(it->Ptr);
+            return entry_cmd->entryoff;
+        } else {
+            llvm_binary_fail("LC_MAIN not found, binary version < 10.8");
+        }
+    }
 };
 
 //COFF extractor
