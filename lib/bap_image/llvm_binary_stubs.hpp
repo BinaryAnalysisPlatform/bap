@@ -85,6 +85,19 @@ struct segment {
         init_macho_segment(s);
     }    
 
+    segment(const coff_section &s) 
+        : name_(s.Name)
+        , offset_(static_cast<uint32_t>(s.PointerToRawData))
+        , addr_(static_cast<uint32_t>(s.VirtualAddress))
+        , size_(static_cast<uint32_t>(s.SizeOfRawData))
+        , is_readable_(static_cast<uint32_t>(s.Characteristics) &
+                       COFF::IMAGE_SCN_MEM_READ)
+        , is_writable_(static_cast<uint32_t>(s.Characteristics) &
+                       COFF::IMAGE_SCN_MEM_WRITE)
+        , is_executable_(static_cast<uint32_t>(s.Characteristics) & 
+                         COFF::IMAGE_SCN_MEM_EXECUTE)
+        {}
+
     const std::string& name() const { return name_; }
     uint64_t offset() const { return offset_; }
     uint64_t addr() const { return addr_; }
@@ -134,7 +147,7 @@ std::vector<segment> read(const MachOObjectFile* obj) {
     std::vector<command_info> cmds = utils::load_commands(obj);
     std::vector<segment> segments;
     for (std::size_t i = 0; i < cmds.size(); ++i) {
-        command_info info = cmds.at(i);        
+        command_info info = cmds.at(i); 
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
             segments.push_back(segment(obj->getSegment64LoadCommand(info)));
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
@@ -144,7 +157,14 @@ std::vector<segment> read(const MachOObjectFile* obj) {
 }
 
 std::vector<segment> read(const COFFObjectFile* obj) {
-    return std::vector<segment>();
+    std::vector<segment> segments;
+    for (auto it = obj->begin_sections();
+         it != obj->end_sections(); ++it) {
+        const coff_section *s = obj->getCOFFSection(it);
+        if (static_cast<uint32_t>(s->Characteristics) & COFF::IMAGE_SCN_CNT_CODE) 
+            segments.push_back(segment(*s));
+    }
+    return segments;
 }
 
 } //namespace seg
