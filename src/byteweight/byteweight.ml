@@ -64,7 +64,7 @@ let train meth length comp db paths =
   printf "Signatures are stored in %s\n%!" db;
   Ok ()
 
-let find threshold length comp path input : unit t =
+let find threshold length comp path (input : string) : unit t =
   Image.create input >>= fun (img,_warns) ->
   let arch = Image.arch img in
   let data = Signatures.load ?path ~mode:"bytes" arch in
@@ -93,12 +93,42 @@ let symbols print_name print_size input : unit t =
       printf "%a %s%s\n" Addr.ppo addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
+let metrics threshold length path (input : string) : unit t =
+  let roots_of_table t : addr list =
+    Seq.(Table.regions t >>| Memory.min_addr |> to_list) in
+  Image.create input >>= fun (img, _warns) ->
+  let gt_syms : addr list =
+    let gt_table = Image.symbols img in
+    roots_of_table gt_table in
+  let arch = Image.arch img in
+  let data = Signatures.load ?path ~mode:"bytes" arch in
+  Result.of_option data
+    ~error:(Error.of_string "failed to read signatures from database")
+    >>= fun data ->
+     (*  List.iter [] ~f:(fun addr -> printf "%a\n" Addr.ppo addr) *)
+  let bw = Binable.of_string (module Byteweight) data in
+  Ida.create ~ida:"idaq64" input >>| fun ida ->
+    let ida_syms, bw_syms =
+      Table.foldi (Image.sections img) ~init:([], []) ~f:(fun mem sec (ida_syms,
+      bw_syms) ->
+        if Section.is_executable sec then
+          let ida_syms_t = roots_of_table Ida.(get_symbols ida arch mem) in
+          let bw_syms_t =
+            let module BW = Bap_byteweight.Bytes in
+            BW.find bw ~length ~threshold mem in
+          ida_syms @ ida_syms_t, bw_syms @ bw_syms_t
+        else ida_syms, bw_syms) in
+    (* List.iter bw_syms ~f:(fun addr -> printf "%a\n" Addr.ppo addr);
+    List.iter ida_syms ~f:(fun addr -> printf "%a\n" Addr.ppo addr);
+    List.iter gt_syms ~f:(printf "%a\n" Addr.ppo); *)
+    let bw_measurement = Measure.compare bw_syms gt_syms "bw" in
+    let ida_measurement = Measure.compare ida_syms gt_syms "ida" in
+    Measure.pp [bw_measurement;ida_measurement]
 
 let create_parent_dir dst =
   let dir = if Filename.(check_suffix dst dir_sep)
     then dst else Filename.dirname dst in
   FileUtil.mkdir ~parent:true dir
-
 
 let fetch fname url =
   let tmp,fd = Filename.open_temp_file "bap_" ".sigs" in
@@ -236,6 +266,11 @@ module Cmdline = struct
     Term.(pure symbols $print_name $print_size $filename),
     Term.info "symbols" ~doc
 
+  let metrics =
+    let doc = "Output the evaluation result along with those by IDA" in
+    Term.(pure metrics $threshold $length $database_in $filename),
+    Term.info "metrics" ~doc
+
   let usage choices =
     eprintf "usage: bap-byteweight [--version] [--help] \
              <command> [<args>]\n";
@@ -247,7 +282,7 @@ module Cmdline = struct
     let doc = "Byteweight Toolkit" in
     let man = [
       `S "DESCRIPTION";
-      `P "bap-byteweight is a toolkit for training, fetching, testing\
+      `P "bap-byteweight is a toolkit for training, fetching, testing \
           and installing byteweight signatures."
     ] in
     Term.(pure usage $ choice_names),
@@ -255,7 +290,7 @@ module Cmdline = struct
       ~version:Config.pkg_version ~doc ~man
 
   let eval () = Term.eval_choice default
-      [train; find; fetch; install; update; symbols]
+      [train; find; fetch; install; update; symbols; metrics]
 end
 
 let () =
