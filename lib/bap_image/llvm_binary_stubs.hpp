@@ -211,6 +211,19 @@ OutputIterator read(symbol_iterator begin,
 }
 
 std::vector<symbol> read(const ObjectFile* obj) {
+    int size = utils::distance(obj->begin_symbols(),
+                               obj->end_symbols());
+    std::vector<symbol> symbols;
+    symbols.reserve(size);
+    
+    read(obj->begin_symbols(),
+         obj->end_symbols(),
+         std::back_inserter(symbols));
+    return symbols;
+}
+
+template <typename ELFT>
+std::vector<symbol> read(const ELFObjectFile<ELFT>* obj) {
     int size1 = utils::distance(obj->begin_symbols(),
                                 obj->end_symbols());
     int size2 = utils::distance(obj->begin_dynamic_symbols(),
@@ -228,19 +241,6 @@ std::vector<symbol> read(const ObjectFile* obj) {
          it);
     return symbols;
 }
-
-std::vector<symbol> read(const MachOObjectFile* obj) {
-    int size = utils::distance(obj->begin_symbols(),
-                               obj->end_symbols());
-    std::vector<symbol> symbols;
-    symbols.reserve(size);
-    
-    read(obj->begin_symbols(),
-         obj->end_symbols(),
-         std::back_inserter(symbols));
-    return symbols;
-}
-
 
     
 } //namespace sym
