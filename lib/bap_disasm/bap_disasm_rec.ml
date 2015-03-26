@@ -127,8 +127,15 @@ type error = [
   | `Failed_to_lift of mem * insn * Error.t
 ] with sexp_of
 
-type decoded =  mem * insn option * stmt list option
-with sexp_of
+type maybe_insn = insn option * bil option with sexp_of
+type decoded = mem * maybe_insn with sexp_of
+
+type jump = [
+  | `Jump     (** unconditional jump                  *)
+  | `Cond     (** conditional jump                    *)
+] with compare, sexp
+
+type edge = [jump | `Fall] with compare,sexp
 
 type block = {
   addr : addr;
@@ -142,8 +149,8 @@ type block = {
 }
 
 and blk_dest = [
-  | `Block of block * [`Jump | `Cond | `Fall]
-  | `Unresolved of [`Jump | `Cond ]
+  | `Block of block * edge
+  | `Unresolved of jump
 ]
 
 
@@ -259,11 +266,13 @@ let update next s mem insn : stage1 =
 let next dis s =
   let rec loop s = match s.roots with
     | [] -> Dis.stop dis s
-    | r :: roots when not(Memory.contains s.base r) -> loop {s with roots}
-    | r :: roots when Span.mem s.visited r -> loop {s with roots}
+    | r :: roots when not(Memory.contains s.base r) ->
+      loop {s with roots}
+    | r :: roots when Span.mem s.visited r ->
+      loop {s with roots}
     | addr :: roots ->
       let mem = match Span.upper_bound s.visited addr with
-        | None ->  Memory.view ~from:addr s.base
+        | None -> Memory.view ~from:addr s.base
         | Some r1 -> Memory.range s.base addr r1  in
       let mem =
         Result.map_error mem ~f:(fun err -> Error.tag err "next_root") in
@@ -281,8 +290,7 @@ let stage1 ?lifter ?(roots=[]) disasm base =
   Memory.view ~from:addr base >>= fun mem ->
   Dis.run disasm mem ~stop_on:[`May_affect_control_flow] ~return ~init
     ~hit:(fun d mem insn s -> next d (update (Dis.addr d) s mem insn))
-    ~invalid:(fun d mem s ->
-        next d (errored s (`Failed_to_disasm mem)))
+    ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
     ~stopped:next
 
 (* performs the initial markup.
@@ -324,7 +332,7 @@ let stage2 dis stage1 =
     Addrs.mem leads (next addr) ||
     Addrs.mem kinds addr ||
     Addrs.mem stage1.dests addr ||
-    Addr.Set.mem inits addr in
+    Addr.Set.mem inits (next addr) in
   let is_visited = Span.mem stage1.visited in
   let next_visited = Span.upper_bound stage1.visited in
   let create_block start finish =
@@ -347,15 +355,13 @@ let stage2 dis stage1 =
   let rec loop start curr' =
     let curr = next curr' in
     if is_visited curr then
-      if is_edge curr
-      then
+      if is_edge curr then
         create_block start curr >>= fun () ->
-        loop (next curr) (next curr)
+        loop (next curr) curr
       else loop start curr
     else match next_visited curr with
       | Some addr -> loop addr addr
-      | None when
-          is_visited start && is_visited curr' ->
+      | None when is_visited start && is_visited curr' ->
         create_block start curr'
       | None -> return () in
   match Span.min stage1.visited with
@@ -368,12 +374,12 @@ let stage2 dis stage1 =
         ~init:[] ~return:ident ~stopped:(fun s _ ->
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
-          | mem, None -> mem,None,None
+          | mem, None -> mem,(None,None)
           | mem, (Some ins as insn) -> match stage1.lifter with
-            | None -> mem,insn,None
+            | None -> mem,(insn,None)
             | Some lift -> match lift mem ins with
-              | Ok bil -> mem,insn,Some bil
-              | _ -> mem, insn, None) in
+              | Ok bil -> mem,(insn,Some bil)
+              | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
 
 module Block = struct
@@ -447,7 +453,7 @@ module Block = struct
     let get_mem () = Addrs.find_exn t.addrs addr  in
     let mem = Lazy.from_fun get_mem in
     if List.for_all (t.disasm @@ get_mem ())
-        ~f:(fun (_,insn,_) -> insn = None)
+        ~f:(fun (_,(insn,_)) -> insn = None)
     then raise Empty_block;
     let insns = Lazy.(mem   >>| t.disasm) in
     let lead  = Lazy.(insns >>| List.hd_exn) in
@@ -462,8 +468,8 @@ module Block = struct
   let addr (b : block) = b.addr
 
   let memory {mem = lazy x} = x
-  let leader {lead = lazy x} = x
-  let terminator {term = lazy x} = x
+  let leader {lead = lazy (_,x)} = x
+  let terminator {term = lazy (_,x)} = x
   let insns {insns = lazy x} = x
   let succs t = t.blk_succs
   let preds t = t.blk_preds
@@ -501,6 +507,16 @@ module Block = struct
           Addr.(string_of_value addr)
           Addr.(string_of_value (Memory.max_addr mem))
     end)
+
+  module T = struct
+    type t = block with sexp_of
+    let t_of_sexp _ = invalid_arg "table element is abstract"
+    let compare = compare
+    let hash b = Addr.hash (addr b)
+  end
+
+  include Hashable.Make(T)
+  include Comparable.Make(T)
 end
 
 let stage3 s2 =

@@ -50,7 +50,8 @@ let from_data data : Img.t option =
     let symbols =
       B.symbols b |>
       List.map ~f:(to_sym arch) in
-    Img.Fields.create ~arch ~entry ~sections ~symbols in
+    let tags = [] in
+    Img.Fields.create ~arch ~entry ~sections ~symbols ~tags in
   try from_data_exn () |> Option.some
   with exn -> None
 

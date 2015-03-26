@@ -7,9 +7,10 @@ type project = {
   program : disasm;
   symbols : string table;
   memory  : mem;
-  annots  : tags table;
+  annots  : (string * string) memmap;
+  bil_of_insns : (mem * insn) list -> bil;
 }
 
 val register : (project -> project) -> unit
-
+val register': (project -> unit) -> unit
 val registered : unit -> (project -> project) list

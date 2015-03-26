@@ -53,18 +53,7 @@ module Std = struct
 
       Proceed to [Bap_image] module for more information.
   *)
-
-  (** bring to scope some basic types like [mem] and [table] *)
-  include Image_internal_std
-
-  module Image   = Bap_image
-  module Section = Image.Sec
-  module Symbol  = Image.Sym
-
-  type image = Image.t
-  type symbol  = Symbol.t with bin_io, compare, sexp
-  type section = Section.t with bin_io, compare, sexp
-
+  include Bap_image_std
 
   (** {3 Disassembler}
 
@@ -97,31 +86,17 @@ module Std = struct
       platform-specific stuff. There is a believe, that one shouldn't
       need this for program analysis. But you may still find it usefull.
   *)
-  include Bap_disasm_types
-  include Bap_disasm
-  module Insn    = Bap_disasm_insn
-  module Block   = Bap_disasm_block
-  module Symtab  = Bap_disasm_symtab
+  include Bap_disasm_std
 
-  (** {4 Expert interface to disassembler}
-      This interface is rather complicated, and is built around to
-      implementations of the disassembler [Basic] and [Recursive].
-      [Basic] provides an efficient (and very lazy) linear sweep,
-      driven in a continuation passing style. On top of the [Basic]
-      the [Recursive] disassembler is built, that reconstructs the
-      control flow graph, and represents the latter as a table of
-      blocks. *)
-  module Disasm_expert = struct
-    module Basic = Bap_disasm_basic
-    module Recursive = Bap_disasm_rec
-    module Kind = Bap_insn_kind
-    module Insn = Bap_disasm_basic.Insn
-    module Block = Bap_disasm_rec.Block
-  end
 
-  module Program_visitor = Bap_program_visitor
+
+  (** {3 Sematic analysis}   *)
+  include Bap_sema.Std
 
   (** {3 Auxiliary libraries} *)
+
+  (** {3 Program visitor}  *)
+  module Program_visitor = Bap_program_visitor
 
   (** {4 Dwarf library}
       This library gives an access to debugging information stored

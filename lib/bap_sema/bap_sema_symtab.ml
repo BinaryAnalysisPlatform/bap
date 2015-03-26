@@ -77,3 +77,28 @@ let create roots base cfg =
         match r with
         | Ok syms -> syms
         | Error err -> syms)
+
+
+module Graph =
+  Graph.Persistent.Digraph.AbstractLabeled(struct
+    type t = mem * string
+  end)(struct
+    type t = addr with compare
+    let default = Addr.b0
+  end)
+
+let to_graph blocks symbols =
+  Table.foldi symbols ~init:Graph.empty ~f:(fun smem src gr ->
+      Table.intersections blocks smem |>
+      Seq.fold ~init:gr ~f:(fun gr (_,blk) ->
+          Seq.fold ~init:gr (Block.succs blk) ~f:(fun gr suc ->
+              match Table.find_addr symbols (Block.addr suc) with
+              | Some (dmem,dst) ->
+                if Addr.(Block.addr suc = Memory.min_addr dmem)
+                then
+                  let v1 = Graph.V.create (smem,src) in
+                  let v2 = Graph.V.create (dmem,dst) in
+                  let edge = Graph.E.create v1 (Block.addr blk) v2 in
+                  Graph.add_edge_e gr edge
+                else gr
+              | _ -> gr)))

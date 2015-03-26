@@ -18,14 +18,14 @@ let system cmd = Unix.system cmd |> ignore
 let pread cmd = Printf.ksprintf run cmd
 let shell cmd = Printf.ksprintf (fun cmd () -> system cmd) cmd
 
+let ext p e =
+  FilePath.(add_extension (chop_extension p) e)
 
-let idb,asm =
-  let ext p e = FilePath.add_extension p e in
-  let idb p = match word_size with
-    | W32 -> ext p "idb"
-    | W64 -> ext p "i64" in
-  let asm p = ext p "asm" in
-  idb,asm
+let idb ida p =
+  if Filename.check_suffix ida "64"
+  then ext p "i64" else ext p "idb"
+
+let asm p = ext p "asm"
 
 let extract_symbols output = sprintf "
 from idautils import *
@@ -84,12 +84,10 @@ let find_curses () =
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
 let locate exe =
-  let first_found =
-    pread "locate %s" exe |>
-    List.filter ~f:Sys.file_exists |> List.hd in
-  match first_found with
-  | Some path -> path
-  | None -> exe
+  pread "locate %s" exe |>
+  FileUtil.(filter (And (Is_file, Is_exec))) |> function
+  | [] -> exe
+  | x :: _ -> x
 
 let find exe = try FileUtil.which exe with Not_found -> locate exe
 
@@ -105,9 +103,7 @@ let create_exn ?ida target =
     | Some path -> path
     | None when Sys.win32 ->
       failwithf "Don't know how to find files in Windows" ()
-    | None -> match word_size with
-      | W32 -> find "idaq"
-      | W64 -> find "idaq64" in
+    | None -> "idaq" in
   let ida =
     if Filename.is_implicit ida then find ida else ida in
   if not (Sys.file_exists ida) then raise Not_found;
@@ -115,9 +111,10 @@ let create_exn ?ida target =
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
   FileUtil.cp [target] exe;
-
+  let idb = idb ida in
+  let ida = Filename.quote ida in
   let self = {
-    ida = Filename.quote ida;
+    ida;
     exe;
     curses;
     close = fun () ->

@@ -17,7 +17,7 @@ module Id : Identifiable with type t := id
 module Target : sig
   type t = target
 
-  val arm :  Arm.Insn.t -> Arm.Op.t list -> t
+  val arm :  ARM.Insn.t -> ARM.Op.t list -> t
 
 end
 

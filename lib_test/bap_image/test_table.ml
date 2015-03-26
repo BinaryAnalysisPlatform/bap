@@ -5,9 +5,6 @@ open Word_size
 open Format
 
 open Bap.Std
-open Image_common
-open Image_backend
-open Bap_table
 
 let create_addr = function
   | W32 -> Addr.of_int ~width:32
@@ -100,7 +97,8 @@ let test_one_to_one ctxt =
     match t with
     | Ok t -> t
     | Error err -> assert_failure (Error.to_string_hum err) in
-  let link_table = link ~one_to:one String.hashable tab tab2 in
+  let link_table =
+    Table.(link ~one_to:one String.hashable tab tab2) in
   assert_equal "reg2" (link_table "hi")
 
 let suite = "Table" >::: [

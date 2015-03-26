@@ -6,7 +6,7 @@ val strings_of_bil   : stmt list -> string list
 val strings_of_ops   : Basic.op list -> string list
 val strings_of_kinds : Basic.kind list -> string list
 val strings_of_preds : Basic.pred list -> string list
-val string_of_arm    : Arm.Insn.t -> Arm.Op.t list -> string
+val string_of_arm    : ARM.Insn.t -> ARM.Op.t list -> string
 val string_of_endian : endian -> string
 
 module Parse : sig

@@ -14,6 +14,8 @@ module type Env = sig
   val cfg  : block table
   (** target architecture  *)
   val arch : arch
+
+  module Target : Target
 end
 (** Create a set of pretty printers for a given program
     environment.
@@ -22,7 +24,7 @@ end
     be controlled using [Tags] interface.
 *)
 module Make(Env : Env) : sig
-  val pp_insns : (mem * insn) seq pp
+  val pp_insns : (mem * insn) list pp
   val pp_bil : bil pp
 
   val pp_blk  : (block -> 'a) -> 'a pp -> block pp

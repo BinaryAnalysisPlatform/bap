@@ -26,7 +26,13 @@ module Sym = struct
   } with bin_io, compare, fields, sexp
 end
 
-
+module Tag = struct
+  type t = {
+    name : string;
+    data : string;
+    location : location;
+  } with bin_io, compare, fields, sexp
+end
 
 module Img = struct
   type t = {
@@ -34,6 +40,7 @@ module Img = struct
     entry    : addr;
     sections : Section.t * Section.t list;
     symbols  : Sym.t list;
+    tags     : Tag.t list;
   } with bin_io, compare, fields, sexp
 end
 

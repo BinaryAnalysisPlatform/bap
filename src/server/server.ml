@@ -51,8 +51,8 @@ let section = Lwt_log.Section.make "bap_server"
 let stub name = Lwt.Or_error.unimplemented name
 
 module Handlers(Ctxt : sig
-                  val reply : Response.msg -> unit Lwt.t
-                end) = struct
+    val reply : Response.msg -> unit Lwt.t
+  end) = struct
   open Ctxt
 
   let reply_error sev fmt =
@@ -128,24 +128,37 @@ module Handlers(Ctxt : sig
   type ('a,'b) lifter =
     mem -> ('a,'b) Dis.insn -> (Target.t option * stmt list option) Lwt.t
 
+  let bil_error err insn =
+    warning "Failed to raise insn %s to BIL: %s"
+      (Sexp.to_string (Dis.Insn.sexp_of_t insn))
+      (Error.to_string_hum err)
+
   let arm_lifter : ('a,'b) lifter = fun mem insn ->
-    let arm = Arm.Insn.create insn in
-    let ops = Array.map (Dis.Insn.ops insn) ~f:Arm.Op.create |>
+    let arm = ARM.Insn.create insn in
+    let ops = Array.map (Dis.Insn.ops insn) ~f:ARM.Op.create |>
               Array.to_list |> Option.all in
     let target = Option.both arm ops |>
                  Option.map ~f:(Tuple2.uncurry Target.arm) in
-    match Arm.Lift.insn mem insn with
+    match ARM.lift mem insn with
     | Ok bil -> return (target, Some bil)
     | Error err ->
-      warning "Failed to raise insn %s to BIL: %s"
-        (Sexp.to_string (Dis.Insn.sexp_of_t insn))
-        (Error.to_string_hum err) >>= fun () ->
+      bil_error err insn >>= fun () ->
       return (target, None)
+
+  let x86_lifter mem insn = match IA32.lift mem insn with
+    | Ok bil -> return (None, Some bil)
+    | Error err -> bil_error err insn >>= fun () -> return (None,None)
+
+  let x86_64_lifter mem insn = match AMD64.lift mem insn with
+    | Ok bil -> return (None, Some bil)
+    | Error err -> bil_error err insn >>= fun () -> return (None,None)
 
   let no_lifter : ('a,'b) lifter = fun _ _ -> return (None,None)
 
   let lifter_of_arch : arch -> ('a,'b) lifter = function
     | #Arch.arm -> arm_lifter
+    | `x86 -> x86_lifter
+    | `x86_64 -> x86_64_lifter
     | _   -> no_lifter
 
   let get_insns ?(backend="llvm") stop_on res_id =

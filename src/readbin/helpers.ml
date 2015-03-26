@@ -11,7 +11,7 @@ module Make(Env : Printing.Env) = struct
       For any given value, if it belongs to some basic block, then
       substitute it with [base + off], where [base] is a start of
       basic block and [off] is the offset from the [base]. *)
-  let resolve_jumps =
+  let resolve_to_symbols =
     let jump_type = match Arch.addr_size arch with
       | `r32 -> reg32_t
       | `r64 -> reg64_t in
@@ -28,11 +28,32 @@ module Make(Env : Printing.Env) = struct
         | None -> Exp.Int addr
     end)#run
 
+  (** substitute loads with the value of corresponding memory *)
+  let resolve_indirects =
+    Bil.map (object inherit Bil.mapper as super
+      method! map_load ~src ~addr endian scale =
+        let exp = super#map_load ~src ~addr endian scale in
+        match addr with
+        | Bil.Int addr -> (match Memory.get ~scale ~addr base with
+            | Ok w -> Bil.int w
+            | _ -> exp)
+        | _ -> exp
+    end)
+
+  (** Substitute PC with its value  *)
+  let resolve_pc mem = Bil.map (object(self)
+      inherit Bil.mapper as super
+      method! map_var var =
+        if Target.CPU.is_pc var then
+          Bil.int (Target.CPU.addr_of_pc mem)
+        else super#map_var var
+    end)
+
   (* we're very conservative here *)
   let has_side_effect e scope = (object inherit [bool] Bil.visitor
     method! enter_load  ~src:_ ~addr:_ _e _s _r = true
     method! enter_store ~dst:_ ~addr:_ ~src:_ _e _s _r = true
-    method! enter_var v r = r || Bil.is_modified v scope
+    method! enter_var v r = r || Bil.is_assigned v scope
   end)#visit_exp e false
 
   (** This optimization will inline temporary variables that occurres
@@ -44,12 +65,12 @@ module Make(Env : Printing.Env) = struct
       | [] -> List.rev ss
       | Bil.Move _ as s :: [] -> loop (s::ss) []
       | Bil.Move (x, Exp.Var y) as s :: xs when Var.is_tmp x ->
-        if Bil.is_modified y xs || Bil.is_modified x xs
+        if Bil.is_assigned y xs || Bil.is_assigned x xs
         then loop (s::ss) xs else
           let xs = Bil.substitute (Exp.var x) (Exp.var y) xs in
           loop ss xs
       | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
-        if has_side_effect y xs || Bil.is_modified x xs
+        if has_side_effect y xs || Bil.is_assigned x xs
         then loop (s::ss) xs
         else loop ss (Bil.substitute (Exp.var x) y xs)
       | s :: xs -> loop (s::ss) xs in
@@ -58,23 +79,29 @@ module Make(Env : Printing.Env) = struct
   let disable_if option optimization =
     if Field.get option options then Fn.id else optimization
 
-  let optimizations =
+  let optimizations (mem,bil) =
     let open Fields in
     List.map ~f:Bil.fixpoint [
-      disable_if no_resolve       resolve_jumps;
+      disable_if no_resolve       resolve_indirects;
+      disable_if no_resolve       resolve_to_symbols;
       disable_if keep_alive       Bil.prune_unreferenced;
       disable_if keep_consts      Bil.fold_consts;
       disable_if keep_consts      Bil.normalize_negatives;
+      disable_if keep_consts      (resolve_pc mem);
       disable_if no_inline        inline_variables;
     ]
     |> List.reduce_exn ~f:Fn.compose
     |> Bil.fixpoint
     |> disable_if no_optimizations
+    |> fun optimize -> optimize bil
+
+  let bil_of_insn insn = optimizations (Tuple2.map2 ~f:Insn.bil insn)
+
 
   let bil_of_insns insns =
-    let insns = Seq.(insns >>| Insn.bil |> to_list) in
-    List.(insns >>| optimizations |> concat)
+    List.(insns >>| bil_of_insn |> concat)
+
 
   let bil_of_block blk : bil =
-    bil_of_insns Seq.(Block.insns blk >>| snd)
+    bil_of_insns (Block.insns blk)
 end
