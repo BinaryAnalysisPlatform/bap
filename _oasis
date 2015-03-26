@@ -197,10 +197,10 @@ Library elf
                  Elf_utils
   InternalModules: Elf_internal_utils
 
-Library llvm_binary
+Library llvm_loader
   Path:            lib/bap_image/
   FindlibParent:   bap_image
-  FindlibName:     llvm_binary
+  FindlibName:     llvm_loader
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
   Modules:         Llvm_loader,
@@ -220,7 +220,7 @@ Library llvm_loader_backend
   XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
   BuildDepends:    bap,
-                   bap.image.llvm_binary,
+                   bap.image.llvm_loader,
                    core_kernel
   Modules:         Llvm_loader_backend
 
@@ -451,4 +451,4 @@ Executable "llvm-binary-test"
   MainIs:         llvm_binary_test.ml
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap.image.llvm_binary
+  BuildDepends:   bap.image.llvm_loader
