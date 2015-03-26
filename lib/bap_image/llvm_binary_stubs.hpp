@@ -182,6 +182,14 @@ private:
     uint64_t size_;
 };
 
+template <typename OutputIterator>
+OutputIterator read(symbol_iterator begin,
+                    symbol_iterator end,
+                    OutputIterator out) {
+    return std::transform(begin, end, out,
+                          [](const SymbolRef& s) { return symbol(s); });
+}
+
 std::vector<symbol> read(const ObjectFile* obj) {
     int size1 = utils::distance(obj->begin_symbols(),
                                 obj->end_symbols());
@@ -190,16 +198,30 @@ std::vector<symbol> read(const ObjectFile* obj) {
 
     std::vector<symbol> symbols;
     symbols.reserve(size1+size2);
-    auto it = std::transform(obj->begin_symbols(),
-                             obj->end_symbols(),
-                             std::back_inserter(symbols),
-                             [](const SymbolRef& s) { return symbol(s); });
-    std::transform(obj->begin_symbols(),
+    
+    auto it = read(obj->begin_symbols(),
                    obj->end_symbols(),
-                   it,
-                   [](const SymbolRef& s) { return symbol(s); });
+                   std::back_inserter(symbols));
+
+    read(obj->begin_dynamic_symbols(),
+         obj->end_dynamic_symbols(),
+         it);
     return symbols;
 }
+
+std::vector<symbol> read(const MachOObjectFile* obj) {
+    int size = utils::distance(obj->begin_symbols(),
+                               obj->end_symbols());
+    std::vector<symbol> symbols;
+    symbols.reserve(size);
+    
+    read(obj->begin_symbols(),
+         obj->end_symbols(),
+         std::back_inserter(symbols));
+    return symbols;
+}
+
+
     
 } //namespace sym
 
