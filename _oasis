@@ -206,7 +206,8 @@ Library llvm_binary
   Modules:         Llvm_loader,
                    Llvm_binary,
                    Llvm_binary_segment,
-                   Llvm_binary_symbol
+                   Llvm_binary_symbol,
+                   Llvm_binary_section
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
   CSources:        llvm_binary_stubs.c,

@@ -156,6 +156,46 @@ std::vector<symbol> read(const ObjectFile* obj) {
     
 } //namespace sym
 
+namespace sec {
+using namespace llvm;
+using namespace llvm::object;
+
+struct section {
+    explicit section(const SectionRef& sec) {
+        StringRef name;
+        if(error_code err = sec.getName(name))
+            llvm_binary_fail(err);
+        this->name_ = name.str();
+        if (error_code err = sec.getAddress(this->addr_))
+            llvm_binary_fail(err);
+        
+        if (error_code err = sec.getSize(this->size_))
+            llvm_binary_fail(err);
+    }
+    const std::string& name() const { return name_; }
+    uint64_t addr() const { return addr_; }
+    uint64_t size() const { return size_; }
+
+private:
+    std::string name_;
+    uint64_t addr_;
+    uint64_t size_;
+};
+
+std::vector<section> read(const ObjectFile* obj) {
+    int size = utils::distance(obj->begin_sections(),
+                               obj->end_sections());
+    std::vector<section> sections;
+    sections.reserve(size);
+    std::transform(obj->begin_sections(),
+                   obj->end_sections(),
+                   std::back_inserter(sections),
+                   [](const SectionRef& s) { return section(s); });
+    return sections;
+}
+
+} //namespace sec
+
 namespace ext {
 using namespace llvm;
 using namespace llvm::object;
@@ -166,6 +206,7 @@ struct extractor_base {
     virtual Triple::ArchType arch() const = 0;
     virtual std::vector<seg::segment> segments() const = 0;
     virtual std::vector<sym::symbol> symbols() const = 0;
+    virtual std::vector<sec::section> sections() const = 0;
     virtual ~extractor_base() {}
 };
 
@@ -183,6 +224,10 @@ struct extractor_objfile : extractor_base {
 
     std::vector<sym::symbol> symbols() const {
         return sym::read(obj_);
+    }
+
+    std::vector<sec::section> sections() const {
+        return sec::read(obj_);
     }
 protected:
     const T *obj_;
@@ -291,6 +336,10 @@ std::vector<seg::segment> llvm_binary_segments(Binary* binary) {
 
 std::vector<sym::symbol> llvm_binary_symbols(Binary* binary) {
     return ext::create_extractor(binary)->symbols();
+}
+
+std::vector<sec::section> llvm_binary_sections(Binary* binary) {
+    return ext::create_extractor(binary)->sections();
 }
 
 } //binary

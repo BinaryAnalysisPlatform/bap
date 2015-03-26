@@ -37,6 +37,15 @@ let to_sym arch s : Sym.t =
     l, [] in
   Sym.Fields.create ~name ~is_function ~is_debug ~locations
 
+let to_tag arch s : Tag.t =
+  let module S = Llvm_binary_section in
+  let name = "section" in
+  let data = S.name s in
+  let location = Location.Fields.create
+                   ~addr:(S.addr s |> make_addr arch)
+                   ~len:(S.size s |> Int64.to_int_exn) in
+  Tag.Fields.create ~name ~data ~location
+
 let from_data data : Img.t option =
   let from_data_exn () =
     let module B = Llvm_binary in
@@ -50,7 +59,9 @@ let from_data data : Img.t option =
     let symbols =
       B.symbols b |>
       List.map ~f:(to_sym arch) in
-    let tags = [] in
+    let tags =
+      B.sections b |>
+      List.map ~f:(to_tag arch) in
     Img.Fields.create ~arch ~entry ~sections ~symbols ~tags in
   try from_data_exn () |> Option.some
   with exn -> None

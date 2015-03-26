@@ -100,7 +100,15 @@ Binary* from_value (::value v) {
     Store_field (result, 2, caml_copy_int64(s.addr()));
     Store_field (result, 3, caml_copy_int64(s.size()));
     return result;
+}
 
+::value to_value(const sec::section& s) {
+    CAMLlocal1(result);
+    result = caml_alloc(3, 0);  
+    Store_field (result, 0, caml_copy_string(s.name().c_str()));
+    Store_field (result, 1, caml_copy_int64(s.addr()));
+    Store_field (result, 2, caml_copy_int64(s.size()));
+    return result;
 }
 
 template <typename T>
@@ -153,3 +161,7 @@ CAMLprim value llvm_binary_symbols_stub(value arg) {
     CAMLreturn(impl::to_value(binary::llvm_binary_symbols(impl::from_value(arg))));
 }
 
+CAMLprim value llvm_binary_sections_stub(value arg) {
+    CAMLparam1(arg);
+    CAMLreturn(impl::to_value(binary::llvm_binary_sections(impl::from_value(arg))));
+}

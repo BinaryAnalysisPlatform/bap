@@ -19,3 +19,6 @@ external segments : t -> Llvm_binary_segment.t list =
 
 external symbols : t -> Llvm_binary_symbol.t list =
   "llvm_binary_symbols_stub"
+
+external sections : t -> Llvm_binary_section.t list =
+  "llvm_binary_sections_stub"
