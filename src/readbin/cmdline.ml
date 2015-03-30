@@ -131,6 +131,11 @@ let sigsfile : string option Term.t =
              usually it is enough to run `bap-byteweight update'." in
   Arg.(value & opt (some non_dir_file) None & info ["sigs"] ~doc)
 
+let emit_ida_script : string option Term.t =
+  let doc = "Emit annotations to IDA based on project annotations to \
+             the specified filename." in
+  Arg.(value & opt (some string) None & info ["emit-ida-script"] ~doc)
+
 let load : string list Term.t =
   let doc = "Load the specified plugin. Plugin must be compiled with \
              `bapbuild $(docv).plugin'. This option can be specified \
@@ -139,9 +144,17 @@ let load : string list Term.t =
   Arg.(value & opt_all string [] &
        info ["load"; "l"] ~doc ~docv:"NAME")
 
+let load_path : string list Term.t =
+  let doc = "Add $(docv) to a set of search paths. Plugins specified \
+             with `-l` flag will be searched in this paths, if they \
+             are not found in the current folder or in a folder \
+             specified by a `BAP_PLUGIN_PATH' environment variable" in
+  Arg.(value & opt_all string [] &
+       info ["load-path"; "L"] ~doc ~docv:"PATH")
+
 let create
-    a b c d e f g h i k l m n o p q r s t u = Options.Fields.create
-    a b c d e f g h i k l m n o p q r s t u
+    a b c d e f g h i k l m n o p q r s t u v x = Options.Fields.create
+    a b c d e f g h i k l m n o p q r s t u v x
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -167,7 +180,8 @@ let program =
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
-        $print_symbols $use_ida $sigsfile $load),
+        $print_symbols $use_ida $sigsfile $load
+        $emit_ida_script $load_path),
   Term.info "bap-objdump"
     ~version:Config.pkg_version ~doc ~man
 
