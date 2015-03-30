@@ -1,4 +1,6 @@
-#include <llvm/ADT/OwningPtr.h>
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 5
+  #include <llvm/ADT/OwningPtr.h>
+#endif
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCContext.h>
 #include <llvm/MC/MCDisassembler.h>
@@ -176,9 +178,13 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-
-        llvm::OwningPtr<llvm::MCRelocationInfo>
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 5
+	llvm::OwningPtr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
+#else
+        std::unique_ptr<llvm::MCRelocationInfo>
+            rel_info(target->createMCRelocationInfo(triple, *ctx));
+#endif
 
         if (!rel_info) {
             if (debug_level > 0)
@@ -186,13 +192,23 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        llvm::OwningPtr<llvm::MCSymbolizer>
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 5
+	llvm::OwningPtr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
                            nullptr, // getOpInfo
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
                            &*ctx, rel_info.take()));
+#else
+        std::unique_ptr<llvm::MCSymbolizer>
+            symbolizer(target->createMCSymbolizer(
+                           triple,
+                           nullptr, // getOpInfo
+                           nullptr, // SymbolLookUp
+                           nullptr, // DisInfo
+                           &*ctx, rel_info.release()));
+#endif
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -213,8 +229,13 @@ public:
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 5
         shared_ptr<llvm::MCDisassembler>
-            dis(target->createMCDisassembler(*sub_info));
+	  dis(target->createMCDisassembler(*sub_info));
+#else
+        shared_ptr<llvm::MCDisassembler>
+	  dis(target->createMCDisassembler(*sub_info, *ctx));
+#endif
 
         if (!dis) {
             if (debug_level > 0)
@@ -222,12 +243,16 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        dis->setSymbolizer(symbolizer);
-        dis->setupForSymbolicDisassembly(
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 5
+	dis->setSymbolizer(symbolizer);
+	dis->setupForSymbolicDisassembly(
             nullptr, // getOpInfo
             nullptr, // SymbolLookUp
             nullptr, // DisInfo,
             &*ctx, rel_info);
+#else
+	dis->setSymbolizer(std::move(symbolizer));
+#endif
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
         self->printer  = printer;
