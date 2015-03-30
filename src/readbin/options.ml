@@ -25,6 +25,8 @@ type t = {
   use_ida : string option option;
   sigfile : string option;
   plugins : string list;
+  emit_ida_script : string option;
+  load_path : string list;
 } with sexp, fields
 
 module type Provider = sig

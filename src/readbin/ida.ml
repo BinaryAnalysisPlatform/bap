@@ -27,18 +27,6 @@ let idb ida p =
 
 let asm p = ext p "asm"
 
-let extract_symbols output = sprintf "
-from idautils import *
-with open('%s', 'w+') as out:
-    for ea in Segments():
-        fs = Functions(SegStart(ea), SegEnd(ea))
-        for f in fs:
-            out.write ('(%%s 0x%%x 0x%%x)\\n' %% (
-                GetFunctionName(f),
-                GetFunctionAttr(f, FUNCATTR_START),
-                GetFunctionAttr(f, FUNCATTR_END)))
-
-idc.Exit(0)" output
 
 (* Headless IDA on linux systems dlopens libcurses.so (sic).
    So, we need to find a 32-bit libcurses library, copy it
@@ -84,8 +72,11 @@ let find_curses () =
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
 let locate exe =
+  let ends_with = Re.execp (Re_posix.re (exe ^ "$") |> Re.compile) in
+  let ends_with = FileUtil.Custom ends_with in
   pread "locate %s" exe |>
-  FileUtil.(filter (And (Is_file, Is_exec))) |> function
+  FileUtil.(filter (And (ends_with, And (Is_file, Is_exec))))
+  |> function
   | [] -> exe
   | x :: _ -> x
 
@@ -148,7 +139,7 @@ let run_script self script_to =
   result
 
 let get_symbols ?demangle t arch mem =
-  let result = run_script t extract_symbols in
+  let result = run_script t Idapy.extract_symbols in
   Symbols.read ?demangle ~filename:result arch  mem
 
 let close self = self.close ()

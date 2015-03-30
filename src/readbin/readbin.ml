@@ -6,8 +6,27 @@ open Format
 open Options
 open Program_visitor
 
+
+
 module Program(Conf : Options.Provider) = struct
   open Conf
+
+  let paths_of_env () =
+    try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
+    with Not_found -> []
+
+  let load_plugin name =
+    let paths = [
+      [FileUtil.pwd ()]; paths_of_env (); options.load_path
+    ] |> List.concat in
+    List.find_map paths ~f:(fun dir ->
+        let path = Filename.concat dir name in
+        Option.some_if (Sys.file_exists path) path) |>
+    Result.of_option
+      ~error:(Error.of_string "Failed to find plugin in path, \
+                               try to use -L option or set \
+                               BAP_PLUGIN_PATH environment variable")
+    >>| Plugin.create ~system:"program" >>= Plugin.load
 
   let find_roots arch mem =
     if options.bw_disable then None
@@ -128,11 +147,10 @@ module Program(Conf : Options.Provider) = struct
     List.iter options.plugins ~f:(fun name ->
         let name = if Filename.check_suffix name ".plugin" then
             name else (name ^ ".plugin") in
-        match
-          Plugin.create ~system:"program" name |> Plugin.load
-        with Ok () -> ()
-           | Error err -> eprintf "Failed to load plugin %s: %a@."
-                            (Filename.basename name) Error.pp err);
+        match load_plugin name with
+        | Ok () -> ()
+        | Error err -> eprintf "Failed to load plugin %s: %a@."
+                         (Filename.basename name) Error.pp err);
     let module Target = (val target_of_arch arch) in
 
     let make_project annots symbols =
@@ -155,6 +173,9 @@ module Program(Conf : Options.Provider) = struct
       List.fold ~init:(make_project annots syms)
         (Program_visitor.registered ())
         ~f:(fun p visit -> visit (make_project p.annots p.symbols)) in
+
+    Option.iter options.emit_ida_script (fun dst ->
+        Out_channel.write_all dst ~data:(Idapy.annotate_ida project));
 
     let module Env = struct
       let options = options
