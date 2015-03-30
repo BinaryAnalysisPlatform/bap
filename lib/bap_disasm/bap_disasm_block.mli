@@ -27,6 +27,9 @@ type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 include Block_accessors with type t := t and type insn := insn
 include Block_traverse  with type t := t
 
+val dfs : ?next:(t -> t seq) -> ?bound:mem -> t -> t seq
+
+
 (** A classic control flow graph using OCamlgraph library.
     Graph vertices are made abstract, but the implement
     [Block_accessors] interface, including hash tables, maps, hash
@@ -59,7 +62,9 @@ end
     @param bound defaults to infinite memory region.
 *)
 val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
-val to_imperative_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.Imperative.t
+val to_imperative_graph :
+  ?bound:mem -> t -> Cfg.Block.t * Cfg.Imperative.t
+
 
 (** lifting from a lower level  *)
 val of_rec_block : Bap_disasm_rec.block -> t

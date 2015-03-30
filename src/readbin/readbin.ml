@@ -174,7 +174,7 @@ module Program(Conf : Options.Provider) = struct
         | `with_addr -> pp_addr
         | `with_size -> pp_size) |> pp_concat ~sep:pp_print_space in
 
-    printf "Found %d symbols@." (Table.length syms);
+    (* printf "Found %d symbols@." (Table.length syms); *)
     if options.print_symbols <> [] then
       Table.iteri syms
         ~f:(fun mem sym -> printf "@[%a@]@." pp_sym (mem,sym));
@@ -200,9 +200,9 @@ module Program(Conf : Options.Provider) = struct
     | None ->
       Image.create options.filename >>= fun (img,warns) ->
       List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
-      printf "%-20s: %s@." "File" options.filename;
-      printf "%-20s: %a@." "Arch" Arch.pp (Image.arch img);
-      printf "%-20s: %a@." "Entry" Addr.pp (Image.entry_point img);
+      (* printf "%-20s: %s@." "File" options.filename; *)
+      (* printf "%-20s: %a@." "Arch" Arch.pp (Image.arch img); *)
+      (* printf "%-20s: %a@." "Entry" Addr.pp (Image.entry_point img); *)
       Table.iteri (Image.sections img) ~f:(fun mem s ->
           if Section.is_executable s then
             disassemble ~img (Image.arch img) mem);

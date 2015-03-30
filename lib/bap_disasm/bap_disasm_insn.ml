@@ -43,9 +43,9 @@ end)#run bil []
 
 let lookup_side_effects bil = (object
   inherit [kind list] Bil.visitor
-  method! enter_store ~dst:_ ~addr:_ ~src:_ _ _ acc =
+  method! enter_store ~mem:_ ~addr:_ ~exp:_ _ _ acc =
     `May_store :: acc
-  method! enter_load ~src:_ ~addr:_ _ _ acc =
+  method! enter_load ~mem:_ ~addr:_ _ _ acc =
     `May_load :: acc
 end)#run bil []
 

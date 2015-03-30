@@ -26,7 +26,7 @@ module Block = struct
   let leader blk = insns blk |> List.hd_exn |> snd
   let of_rec_block = Fn.id
 end
-include Block
+
 
 let () = Pretty_printer.register ("Bap_disasm_block.pp")
 
@@ -34,7 +34,6 @@ module Edge = struct
   type t = edge with compare
   let default = `Fall
 end
-
 
 module Cfg = struct
   module Block = Block
@@ -46,31 +45,52 @@ module Cfg = struct
       (Block)(Edge)
 end
 
-module Vis = Addr.Set
+module Vis = Addr.Hash_set
 
-module Build(G : Graph.Builder.S with type G.E.t = t * edge * t
-                                  and type G.V.t = t) = struct
+let bounded bound addr =
+  Option.value_map bound
+    ~default:true ~f:(fun m -> Memory.contains m addr)
+
+let skip bound visited blk =
+  let addr = Block.addr blk in
+  Hash_set.mem visited addr || not (bounded bound addr)
+
+
+module Build(G : Graph.Builder.S
+             with type G.E.t = Block.t * edge * Block.t
+              and type G.V.t = Block.t) = struct
   let to_graph ?bound entry =
-    let bounded addr =
-      Option.value_map bound
-        ~default:true ~f:(fun m -> Memory.contains m addr) in
-    let skip visited blk =
-      let addr = addr blk in
-      Vis.mem visited addr || not (bounded addr) in
-    let rec build gr vis src =
-      if skip vis src then (gr,vis)
-      else Seq.fold (dests src)
-          ~init:(G.add_vertex gr src,Vis.add vis (addr src))
-          ~f:(fun (gr,vis) -> function
-              | `Unresolved kind -> (gr,vis)
+    let vis = Vis.create () in
+    let rec build gr (src : Block.t) =
+      if skip bound vis src then gr
+      else Seq.fold (Block.dests src)
+          ~init:(G.add_vertex gr src)
+          ~f:(fun gr dest ->
+              Hash_set.add vis (Block.addr src);
+              match dest with
+              | `Unresolved _ -> gr
               | `Block (dst,kind) ->
                 let edge = Cfg.E.create src kind dst in
                 let gr = G.add_edge_e gr edge in
-                build gr vis dst) in
-    entry, build (G.empty ()) Vis.empty entry |> fst
+                build gr dst) in
+    entry, build (G.empty ()) entry
 end
 module Persistant = Build(Graph.Builder.P(Cfg))
 module Imperative = Build(Graph.Builder.I(Cfg.Imperative))
 
 let to_graph = Persistant.to_graph
 let to_imperative_graph = Imperative.to_graph
+
+let dfs ?(next=Block.succs) ?bound entry =
+  let open Seq.Generator in
+  let vis = Vis.create () in
+  let yield blk =
+    Hash_set.add vis (Block.addr blk);
+    yield blk in
+  let rec loop blk =
+    if skip bound vis blk then return ()
+    else Seq.fold (next blk) ~init:(yield blk)
+        ~f:(fun gen blk -> gen >>= fun () -> loop blk) in
+  run (loop entry)
+
+include Block

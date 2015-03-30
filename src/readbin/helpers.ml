@@ -31,8 +31,8 @@ module Make(Env : Printing.Env) = struct
   (** substitute loads with the value of corresponding memory *)
   let resolve_indirects =
     Bil.map (object inherit Bil.mapper as super
-      method! map_load ~src ~addr endian scale =
-        let exp = super#map_load ~src ~addr endian scale in
+      method! map_load ~mem ~addr endian scale =
+        let exp = super#map_load ~mem ~addr endian scale in
         match addr with
         | Bil.Int addr -> (match Memory.get ~scale ~addr base with
             | Ok w -> Bil.int w
@@ -51,8 +51,8 @@ module Make(Env : Printing.Env) = struct
 
   (* we're very conservative here *)
   let has_side_effect e scope = (object inherit [bool] Bil.visitor
-    method! enter_load  ~src:_ ~addr:_ _e _s _r = true
-    method! enter_store ~dst:_ ~addr:_ ~src:_ _e _s _r = true
+    method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
+    method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
     method! enter_var v r = r || Bil.is_assigned v scope
   end)#visit_exp e false
 

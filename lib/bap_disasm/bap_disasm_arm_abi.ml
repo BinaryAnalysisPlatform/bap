@@ -16,7 +16,6 @@ let register abi = registered := abi :: !registered
 let create =
   create_abi_getter registered
 
-
 class gnueabi_basic ?image ?sym mem blk = object(self)
   inherit stub
   method! id = ["gnueabi"; "linux"; "unknown"]
@@ -31,10 +30,8 @@ class gnueabi_basic ?image ?sym mem blk = object(self)
                  List.map ~f:(fun r -> None, Bil.var r)
 end
 
-module Cfg = Block.Cfg.Imperative
-
 let bil_of_block blk =
-  Block.Cfg.Block.insns blk |> List.concat_map ~f:(fun (_,insn) -> Insn.bil insn)
+  Block.insns blk |> List.concat_map ~f:(fun (_,insn) -> Insn.bil insn)
 
 let is_used_before_assigned v bil =
   Bil.is_referenced v bil &&
@@ -49,24 +46,21 @@ let is_used_before_assigned v bil =
       goto
   end) bil
 
-let is_assigned_before cfg blk var =
-  with_return (fun {return} -> Cfg.iter_pred (fun blk ->
-      if Bil.is_assigned var (bil_of_block blk)
-      then return true) cfg blk;
-      false)
+let is_assigned_before bound blk var =
+  Seq.exists (Block.preds blk) ~f:(fun blk ->
+      Block.dfs ~next:Block.preds ~bound blk |>
+      Seq.exists ~f:(fun blk ->
+          Bil.is_assigned var (bil_of_block blk)))
 
-let is_parameter cfg var =
-  with_return (fun {return} ->
-      Cfg.iter_vertex (fun blk ->
-          let bil = bil_of_block blk in
-          if is_used_before_assigned var bil &&
-             not (is_assigned_before cfg blk var)
-          then return true) cfg;
-      false)
+let is_parameter bound blk var =
+  Block.dfs ~next:(Block.succs) ~bound blk |>
+  Seq.exists ~f:(fun blk ->
+      let bil = bil_of_block blk in
+      is_used_before_assigned var bil &&
+      not (is_assigned_before bound blk var))
 
 class gnueabi ?image ?sym mem blk =
-  let _,cfg = Block.to_imperative_graph ~bound:mem blk in
-  let args = List.take_while [r0;r1;r2;r3] ~f:(is_parameter cfg) in
+  let args = List.take_while [r0;r1;r2;r3] ~f:(is_parameter mem blk) in
   object(self)
     inherit gnueabi_basic ?image ?sym mem blk
     method! args = List.map args ~f:(fun r -> None, Bil.var r)
