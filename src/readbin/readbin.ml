@@ -221,9 +221,6 @@ module Program(Conf : Options.Provider) = struct
     | None ->
       Image.create options.filename >>= fun (img,warns) ->
       List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
-      (* printf "%-20s: %s@." "File" options.filename; *)
-      (* printf "%-20s: %a@." "Arch" Arch.pp (Image.arch img); *)
-      (* printf "%-20s: %a@." "Entry" Addr.pp (Image.entry_point img); *)
       Table.iteri (Image.sections img) ~f:(fun mem s ->
           if Section.is_executable s then
             disassemble ~img (Image.arch img) mem);

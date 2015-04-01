@@ -84,6 +84,21 @@ let has_side_effect insn = may_store insn || may_load insn
 let is_unconditional_jump insn =
   is_jump insn || not (is_conditional_jump insn)
 
+module Adt = struct
+  let pr fmt = Format.fprintf fmt
+
+  let rec pp_ops ch = function
+    | [] -> ()
+    | [x] -> pr ch "%a" Op.pp_adt x
+    | x :: xs -> pr ch "%a, %a" Op.pp_adt x pp_ops xs
+
+  let pp ch insn = pr ch "%s(%a)"
+      (String.capitalize insn.name)
+      pp_ops (Array.to_list insn.ops)
+end
+
+let pp_adt = Adt.pp
+
 module Trie = struct
   module Key = struct
     type token = int * Op.t array with bin_io, compare, sexp

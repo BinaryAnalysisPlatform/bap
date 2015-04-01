@@ -27,6 +27,17 @@ type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 include Block_accessors with type t := t and type insn := insn
 include Block_traverse  with type t := t
 
+
+(** [dfs ?next ?bound blk] searches from the [blk] using DFS.
+
+    Search can be bound with [bound], i.e., the search will not continue
+    on block that has no intersections with the specified bound. By
+    default the search is unbound. Search direction can be also
+    specified by the [next] parameter. By default search is performed
+    in a forward direction, using [succs] function. To search in a
+    reverse direction, use [preds] function. The search result is
+    returned as a lazy sequence.
+*)
 val dfs : ?next:(t -> t seq) -> ?bound:mem -> t -> t seq
 
 

@@ -168,6 +168,7 @@ module Std = struct
     module Unop = Bap_bil.Unop
     module Binop = Bap_bil.Binop
     module Cast = Bap_bil.Cast
+    let pp_adt = Bap_bil_adt.pp_exp
   end
 
   (** Bil statements  *)
@@ -177,6 +178,7 @@ module Std = struct
     include Bap_stmt.Stmt
     include Bap_stmt
     include Bap_stmt.Infix
+    let pp_adt = Bap_bil_adt.pp_stmt
   end
 
   module Bil = struct

@@ -186,10 +186,17 @@ module Op = struct
       | Fmm of fmm
     with bin_io, compare, sexp
 
+    let pr fmt = Format.fprintf fmt
     let pp fmt = function
-      | Reg reg -> Format.fprintf fmt "%a" Reg.pp reg
-      | Imm imm -> Format.fprintf fmt "%a" Imm.pp imm
-      | Fmm fmm -> Format.fprintf fmt "%a" Fmm.pp fmm
+      | Reg reg -> pr fmt "%a" Reg.pp reg
+      | Imm imm -> pr fmt "%a" Imm.pp imm
+      | Fmm fmm -> pr fmt "%a" Fmm.pp fmm
+
+    let pp_adt ch = function
+      | Imm imm -> pr ch "Imm(0x%Lx)" (Imm.to_int64 imm)
+      | Fmm fmm -> pr ch "Fmm(%g)" (Fmm.to_float fmm)
+      | Reg reg -> pr ch "Reg(\"%a\")" Reg.pp reg
+
 
     let module_name = "Bap_disasm_basic.Op"
 
