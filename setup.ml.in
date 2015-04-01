@@ -1,3 +1,4 @@
+#load "str.cma";;
 #load "unix.cma";;
 
 let definition_end = BaseEnv.var_ignore
@@ -65,7 +66,7 @@ let llvm var () : unit =
     ~hide:true
     ~dump:true
     ~short_desc:(fun () -> "llvm-config --"^var)
-    ("llvm_"^var)
+    ("llvm_"^ (Str.global_replace (Str.regexp "-") "_" var))
     (fun () ->
        let llvm_config = BaseEnv.var_get "llvm_config" in
        OASISExec.run_read_one_line ~ctxt llvm_config ["--"^var]) |>
@@ -166,6 +167,7 @@ let () =
     llvm "ldflags";
     llvm "cflags";
     llvm "libs";
+    llvm "system-libs";
     llvm_lib;
   ];
 

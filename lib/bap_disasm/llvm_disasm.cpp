@@ -1,4 +1,3 @@
-#include <llvm/ADT/OwningPtr.h>
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCContext.h>
 #include <llvm/MC/MCDisassembler.h>
@@ -177,7 +176,7 @@ public:
         }
 
 
-        llvm::OwningPtr<llvm::MCRelocationInfo>
+        std::unique_ptr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
 
         if (!rel_info) {
@@ -186,13 +185,13 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        llvm::OwningPtr<llvm::MCSymbolizer>
+        std::unique_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
                            nullptr, // getOpInfo
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
-                           &*ctx, rel_info.take()));
+                           &*ctx, rel_info.release()));
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -214,7 +213,7 @@ public:
         printer->setPrintImmHex(true);
 
         shared_ptr<llvm::MCDisassembler>
-            dis(target->createMCDisassembler(*sub_info));
+	  dis(target->createMCDisassembler(*sub_info, *ctx));
 
         if (!dis) {
             if (debug_level > 0)
@@ -222,12 +221,7 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        dis->setSymbolizer(symbolizer);
-        dis->setupForSymbolicDisassembly(
-            nullptr, // getOpInfo
-            nullptr, // SymbolLookUp
-            nullptr, // DisInfo,
-            &*ctx, rel_info);
+	dis->setSymbolizer(std::move(symbolizer));
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
         self->printer  = printer;

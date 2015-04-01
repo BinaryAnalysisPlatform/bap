@@ -268,7 +268,7 @@ Library llvm
                  bap.types
   Modules:       Bap_llvm
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags $llvm_system_libs
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
   XMETAExtraLines: plugin_system = "bap.disasm.disabled"
 
