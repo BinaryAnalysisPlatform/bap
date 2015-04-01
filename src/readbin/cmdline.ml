@@ -13,6 +13,10 @@ let symsfile : string option Term.t =
   Arg.(value & opt (some non_dir_file) None &
        info ["syms"; "s"] ~doc ~docv:"SYMS")
 
+let loader : string Term.t =
+  let doc = "Backend name for an image loader" in
+  Arg.(value & opt string "bap-elf" & info ["loader"] ~doc)
+
 let cfg_format : 'a list Term.t =
   Arg.(value & vflag_all [`with_name] [
       `with_name, info ["labels-with-name"]
@@ -153,8 +157,9 @@ let load_path : string list Term.t =
        info ["load-path"; "L"] ~doc ~docv:"PATH")
 
 let create
-    a b c d e f g h i k l m n o p q r s t u v x = Options.Fields.create
-    a b c d e f g h i k l m n o p q r s t u v x
+    a b c d e f g h i k l m n o p q r s t u v x y =
+  Options.Fields.create
+    a b c d e f g h i k l m n o p q r s t u v x y
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -175,7 +180,7 @@ let program =
     `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
   ] in
   Term.(pure create
-        $filename $symsfile $cfg_format
+        $filename $loader $symsfile $cfg_format
         $output_phoenix $output_dump $demangle
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations

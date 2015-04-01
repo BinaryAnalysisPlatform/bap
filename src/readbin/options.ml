@@ -6,6 +6,7 @@ type label_format = [`with_name | insn_format] with sexp
 
 type t = {
   filename : string;
+  loader : string;
   symsfile : string sexp_option;
   cfg_format : label_format sexp_list;
   output_phoenix : string option;
