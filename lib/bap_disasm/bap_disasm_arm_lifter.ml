@@ -290,6 +290,7 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
       While (Exp.(var v <> int32 0), [
           Move (r, Var r lsl int32 1);
           Move (r, Var r lor (Var v land int32 1));
+          Move (v, Var v lsr int32 1);
           Move (s, Var s - int32 1);
         ]);
       Move (Env.of_reg dest, Var r lsl Var s);
