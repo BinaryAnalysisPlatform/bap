@@ -219,7 +219,8 @@ module Program(Conf : Options.Provider) = struct
   let main () =
     match options.binaryarch with
     | None ->
-      Image.create options.filename >>= fun (img,warns) ->
+      Image.create ~backend:options.loader options.filename >>=
+      fun (img,warns) ->
       List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
       Table.iteri (Image.sections img) ~f:(fun mem s ->
           if Section.is_executable s then
