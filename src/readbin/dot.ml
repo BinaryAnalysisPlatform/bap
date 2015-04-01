@@ -56,7 +56,7 @@ module Make(Env : Printing.Env) = struct
       `Fontname "Monospace";
       `Width 1.0
     ]
-    let vertex_name = snd
+    let vertex_name (_,name) = sprintf "%S" name
 
     let id_only_vertex (blk,name) = [`Label name]
 
