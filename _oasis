@@ -118,6 +118,7 @@ Library types
                    Bap_addr,
                    Bap_arch,
                    Bap_bil,
+                   Bap_bil_adt,
                    Bap_bitvector,
                    Bap_common,
                    Bap_config,

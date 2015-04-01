@@ -202,6 +202,7 @@ module Op : sig
     val compare_ops : t array -> t array -> int
   end
 
+  val pp_adt : Format.formatter -> t -> unit
   include Regular with type t := t
 end
 

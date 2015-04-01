@@ -18,66 +18,16 @@ let pp_size ch size =
 let pp_sexp sexp ch x =
   pr ch "%a" Sexp.pp (sexp x)
 
-module Var = struct
-  let pp_ty ch = function
-    | Type.Imm n -> pr ch "Imm(%d)" n
-    | Type.Mem (n,m) -> pr ch "Mem(%a,%a)" pp_size n pp_size m
-
-  let pp_var ch v =
-    pr ch "Var(\"%a\",%a)" Var.pp v  pp_ty Var.(typ v)
-
-end
-
-module Exp = struct
-  open Exp
-  open Var
-
-  let rec pp ch = function
-    | Load (x,y,e,s) ->
-      pr ch "Load(%a,%a,%a,%a)" pp x pp y pp_endian e pp_size s
-    | Store (x,y,z,e,s) ->
-      pr ch "Store(%a,%a,%a,%a,%a)" pp x pp y pp z pp_endian e pp_size s
-    | BinOp (op,x,y) ->
-      pr ch "%a(%a,%a)" (pp_sexp sexp_of_binop) op pp x pp y
-    | UnOp (op,x) ->
-      pr ch "%a(%a)" (pp_sexp sexp_of_unop) op pp x
-    | Var v -> pp_var ch v
-    | Int w -> pp_word ch w
-    | Cast (ct,sz,ex) ->
-      pr ch "%a(%d,%a)" (pp_sexp sexp_of_cast) ct sz pp ex
-    | Let (v,e1,e2) -> pr ch "Let(%a,%a,%a)" pp_var v pp e1 pp e2
-    | Unknown (s,t) -> pr ch "Unknown(\"%s\",%a)" s pp_ty t
-    | Ite (e1,e2,e3) -> pr ch "Ite(%a,%a,%a)" pp e1 pp e2 pp e3
-    | Extract (n,m,e) -> pr ch "Extract(%d,%d,%a)" n m pp e
-    | Concat (e1,e2) -> pr ch "Concat(%a,%a)" pp e1 pp e2
-end
-
-module Stmt = struct
-  open Stmt
-  open Var
-  let rec pp ch = function
-    | Move (v,e) -> pr ch "Move(%a,%a)" pp_var v Exp.pp e
-    | Jmp e -> pr ch "Jmp(%a)" Exp.pp e
-    | Special s -> pr ch "Special(\"%s\")" s
-    | While (e,ss) -> pr ch "While(%a, (%a))" Exp.pp e pps ss
-    | If (e,xs,ys) -> pr ch "If(%a, (%a), (%a))" Exp.pp e pps xs pps ys
-    | CpuExn n -> pr ch "CpuExn(%d)" n
-  and pps ch = function
-    | []  -> ()
-    | [s] -> pp ch s
-    | s :: ss -> pr ch "%a, %a" pp s pps ss
-end
+let rec pp_list pp ch = function
+  | [] -> ()
+  | [x] -> pr ch "%a" pp x
+  | x :: xs -> pr ch "%a, %a" pp x (pp_list pp) xs
 
 
 module Asm = struct
   open Disasm
   let pp_pred ch kind =
     pr ch "%a()" (pp_sexp Basic.sexp_of_pred) kind
-
-  let pp_op ch = function
-    | Op.Imm imm -> pr ch "Imm(0x%Lx)" (Imm.to_int64 imm)
-    | Op.Fmm fmm -> pr ch "Fmm(%g)" (Fmm.to_float fmm)
-    | Op.Reg reg -> pr ch "Reg(\"%a\")" Reg.pp reg
 end
 
 module Arm = struct
@@ -86,20 +36,17 @@ module Arm = struct
     | ARM.Op.Imm imm -> pr ch "Imm(%a)" pp_word imm
     | ARM.Op.Reg reg -> pr ch "Reg(%a())" ARM.Reg.pp reg
 
-  let rec pp_ops ch = function
-    | [] -> ()
-    | [x] -> pr ch "%a" pp_op x
-    | x :: xs -> pr ch "%a, %a" pp_op x pp_ops xs
-
   let pp_insn ch (insn,ops) =
-    pr ch "%a(%a)" (pp_sexp ARM.Insn.sexp_of_t) insn pp_ops ops
+    pr ch "%a(%a)"
+      (pp_sexp ARM.Insn.sexp_of_t) insn
+      (pp_list pp_op) ops
 end
 
 let to_string pp x = Format.asprintf "%a" pp x
 let to_strings pp lst = List.map ~f:(fun x -> Format.asprintf "%a" pp x) lst
 
-let strings_of_bil = to_strings Stmt.pp
-let strings_of_ops = to_strings Asm.pp_op
+let strings_of_bil = to_strings Stmt.pp_adt
+let strings_of_ops = to_strings Op.pp_adt
 let strings_of_preds = to_strings Asm.pp_pred
 let string_of_arm insn ops = to_string Arm.pp_insn (insn,ops)
 let string_of_endian = to_string pp_endian

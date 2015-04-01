@@ -64,6 +64,10 @@ val may_load : t -> bool
 val may_store : t -> bool
 
 
+(** [pp_adt] prints instruction in ADT format, suitable for reading
+    by evaluating in many languages, e.g. Python, Js, etc *)
+val pp_adt : Format.formatter -> t -> unit
+
 (** {3 Prefix Tree}
     This module provides a trie data structure where a sequence of
     instructions is used as a key (and an individual instruction
