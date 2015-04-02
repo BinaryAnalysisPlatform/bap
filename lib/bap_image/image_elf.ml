@@ -175,11 +175,8 @@ let of_data (data : Bigstring.t) : Img.t option =
     Error.to_string_hum err;
     None
 
-
 let () =
-  let r =
-    Bap_image.register_backend ~name of_data in
-  match r with
+  match Bap_image.register_backend ~name of_data with
   | `Ok -> ()
   | `Duplicate ->
-    eprintf "Elf_backend: name «%s» is already used\n" name;
+    eprintf "Elf_backend: name «%s» is already used\n" name

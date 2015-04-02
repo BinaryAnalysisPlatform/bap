@@ -221,11 +221,12 @@ module Program(Conf : Options.Provider) = struct
     | None ->
       Image.create ~backend:options.loader options.filename >>=
       fun (img,warns) ->
-      List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
+      if options.verbose then
+        List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
       Table.iteri (Image.sections img) ~f:(fun mem s ->
           if Section.is_executable s then
             disassemble ~img (Image.arch img) mem);
-      return (List.length warns)
+      return 0
     | Some s -> match Arch.of_string s with
       | None -> eprintf "unrecognized architecture\n"; return 1
       | Some arch ->
