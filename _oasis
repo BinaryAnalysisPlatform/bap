@@ -330,7 +330,8 @@ Library image_test
   Install:        false
   Modules:        Test_image,
                   Test_memmap,
-                  Test_table
+                  Test_table,
+                  Test_llvm_image
 
 Library benchmarks
   Path:           benchmarks
