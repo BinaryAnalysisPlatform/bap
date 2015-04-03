@@ -21,6 +21,7 @@ module T = struct
     | "i386"| "i486" | "i586" | "i686" -> "x86"
     | "x86-64" | "x86_64" | "amd64" | "x64" | "x86_64h" -> "x86_64"
     | "powerpc" -> "ppc"
+    | "arm" -> "armv7"
     | "xscale"  -> "arm"
     | "thumbv4t" -> "armv4t"
     | "armv5t" | "armv5e" | "thumbv5" | "thumbv5e" -> "armv5"
