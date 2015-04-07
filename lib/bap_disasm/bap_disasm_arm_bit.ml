@@ -23,15 +23,15 @@ let extend ~dest ~src ?src2 sign size ~rot cond =
     | Error err -> fail _here_ "failed to obtain amount" in
   let rotated, (_ : exp) =
     if Word.is_zero amount then
-      exp_of_op src, Exp.int (Word.zero 32)
+      exp_of_op src, Bil.int (Word.zero 32)
     else
       Shift.lift_c ~src:(exp_of_op src)
-        `ROR ~shift:(Exp.int amount) reg32_t in
+        `ROR ~shift:(Bil.int amount) reg32_t in
   let extracted =
     Bil.(cast low (bits_of_size size) rotated) in
   let extent = cast_of_sign sign 32 extracted in
   let final = match src2 with
-    | Some s2 -> Exp.(exp_of_op s2 + extent)
+    | Some s2 -> Bil.(exp_of_op s2 + extent)
     | None    -> extent in
   exec [assn (Env.of_reg dest) final] cond
 
@@ -45,7 +45,7 @@ let bit_extract ~dest ~src sign ~lsb ~widthminus1 cond =
       Error.to_string_hum err  in
   let low = int_of_imm lsb in
   let high = low + (int_of_imm widthminus1) in
-  let extracted = Exp.extract high low (exp_of_op src) in
+  let extracted = Bil.extract high low (exp_of_op src) in
   let final = cast_of_sign sign 32 extracted in
   exec [assn (Env.of_reg dest) final] cond
 
@@ -63,16 +63,16 @@ let get_lsb_width instr : int * int =
 let bit_field_insert ~dest ~src raw cond =
   let dest = assert_reg _here_ dest in
   let d   = Env.of_reg dest in
-  let d_e = Exp.var d in
+  let d_e = Bil.var d in
   let lsb, width = get_lsb_width raw in
-  let extracted = Exp.extract (width - 1) 0 (exp_of_op src) in
-  let ext_h b s = Exp.extract 31 b s in
-  let ext_l b s = Exp.extract b 0 s in
+  let extracted = Bil.extract (width - 1) 0 (exp_of_op src) in
+  let ext_h b s = Bil.extract 31 b s in
+  let ext_l b s = Bil.extract b 0 s in
   let inst = match lsb + width - 1, lsb with
     | 31, 0 -> extracted
-    | 31, l -> Exp.concat extracted (ext_l (l - 1) d_e)
-    | m,  0 -> Exp.concat (ext_h (m + 1) d_e) extracted
-    | m,  l -> Exp.concat (Exp.concat
+    | 31, l -> Bil.concat extracted (ext_l (l - 1) d_e)
+    | m,  0 -> Bil.concat (ext_h (m + 1) d_e) extracted
+    | m,  l -> Bil.concat (Bil.concat
                              (ext_h (m + 1) d_e) extracted)
                  (ext_l (l - 1) d_e) in
-  exec [Stmt.move d inst] cond
+  exec [Bil.move d inst] cond

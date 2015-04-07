@@ -17,20 +17,20 @@ let word = Word.of_int ~width:32
 let lift operand ?link ?x:_ ?cond addr =
   let target =
     match operand with
-    | Op.Reg r -> Exp.var (Env.of_reg r)
+    | Op.Reg r -> Bil.var (Env.of_reg r)
     | Op.Imm offset ->
       let width = Word.bitwidth offset in
       let _1 = Word.one 32 in
       let min_32 = Word.Int_exn.(_1 lsl Word.of_int 31 ~width) in
       let offset = if offset = min_32 then Word.zero 32 else offset in
       let r = Word.Int_exn.(addr + pc_offset + offset) in
-      Exp.int r in
+      Bil.int r in
   (* TODO detect change to thumb in `x` *)
-  let jump_instr = [Stmt.jmp target] in
+  let jump_instr = [Bil.jmp target] in
   let link_instr =
     let next_addr = Word.Int_exn.(addr + pc_offset - word 4) in
     match link with
-    | Some true -> [Stmt.move Env.lr Exp.(int next_addr)]
+    | Some true -> [Bil.move Env.lr Bil.(int next_addr)]
     | _         -> [] in
   let stmts = link_instr @ jump_instr in
   match cond with

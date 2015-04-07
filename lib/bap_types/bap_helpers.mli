@@ -1,3 +1,4 @@
+(** BIL high level functions.   *)
 open Core_kernel.Std
 open Bap_common
 open Bap_bil

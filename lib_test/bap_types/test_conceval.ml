@@ -133,34 +133,31 @@ let suite =
       "BinOp" >:: (fun ctxt ->
           let state = State.empty in
           assert_equal ~ctxt
-            (eval_exp state Exp.(int i3_8 * int i3_8))
+            (eval_exp state Bil.(int i3_8 * int i3_8))
             (BV i9_8));
       "UnOp" >:: (fun ctxt ->
           let state = State.empty in
           assert_equal ~ctxt
-            (eval_exp state Exp.(lnot (int i3_8)))
+            (eval_exp state Bil.(lnot (int i3_8)))
             (BV (Word.of_int ~width:8 (-4))));
     ];
     "eval_stmt" >:::
     [
       "Move" >:: (fun ctxt ->
           let state = State.empty in
-          let var = Var.create "Garfield" reg8_t in
-          let state, _ = eval_stmt state Stmt.(move var Exp.(int i3_8)) in
+          let v = Var.create "Garfield" reg8_t in
+          let state, _ = eval_stmt state Bil.(v := int i3_8) in
           assert_equal ~ctxt
-            (State.peek state var)
+            (State.peek state v)
             (Some (BV i3_8))
         );
       "While" >:: (fun ctxt ->
           let v = Var.create "Daisy" reg8_t in
           let state, _ =
-            eval_stmt
-              State.empty Stmt.(move v Exp.(int i0_8)) in
-          let cond = Exp.(int i101_8 <> var v) in
-          let body = Stmt.([
-              move v Exp.(int i1_8 + var v);
-            ]) in
-          let state, _ = eval_stmt state Stmt.(While (cond, body)) in
+            eval_stmt State.empty Bil.(v := int i0_8) in
+          let cond = Bil.(int i101_8 <> var v) in
+          let body = Bil.([v := int i1_8 + var v]) in
+          let state, _ = eval_stmt state Bil.(While (cond, body)) in
           assert_equal
             (State.peek state v)
             (Some (BV (Word.of_int 101 ~width:8)))
@@ -174,18 +171,15 @@ let suite =
           let one  = Word.of_int64 1L  in
           let two  = Word.of_int64 2L  in
           let three  = Word.of_int64 3L  in
-          let prog = [
-            Stmt.(move v_n Exp.(int i17_64));
-            Stmt.(move v_steps Exp.(int zero));
-            Stmt.(While (Exp.(int one <> var v_n), [
-                If (Exp.(int zero = var v_n mod int two),
-                    [move v_n Exp.(var v_n / int two)],
-                    [move v_n Exp.(var v_n * int three + int one)]);
-                move v_steps Exp.(var v_steps + int one)
-              ]))
-          ] in
-          (* Format.(fprintf std_formatter "@.@[program@ =@ %a@.@]" *)
-          (*           Stmt.pp_stmts prog); *)
+          let prog = Bil.([
+              v_n := int i17_64;
+              v_steps := int zero;
+              while_ (int one <> var v_n) [
+                if_ (int zero = var v_n mod int two)
+                  [v_n := var v_n / int two]
+                  [v_n := var v_n * int three + int one];
+                v_steps := var v_steps + int one;
+              ]]) in
           let state, _ = eval_stmts State.empty prog in
           assert_equal ~ctxt (State.peek state v_n) None;
           assert_equal ~ctxt

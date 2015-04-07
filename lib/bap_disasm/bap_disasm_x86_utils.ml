@@ -11,7 +11,7 @@ let index_ofq elt lst =
 
 let concat_explist elist =
   List.reduce_exn
-    ~f:Exp.(^) elist
+    ~f:Bil.(^) elist
 
 (*FIXME: This is conversion from typ to nat1. It's used in cast expressions*)
 let (!!) = function Type.Imm v -> v | _ -> failwith "internal error"
@@ -21,20 +21,19 @@ let bytes_of_width t =
   if not ((b mod 8) = 0) then invalid_arg "bytes_of_width";
   b / 8
 
-let exp_false = Exp.int BV.b0
-let exp_true  = Exp.int BV.b1
-let exp_not = Exp.lnot
+let exp_false = Bil.int BV.b0
+let exp_true  = Bil.int BV.b1
+let exp_not = Bil.lnot
 
 (* exp from int *)
-let int_exp n width = BV.of_int n ~width |> Exp.int
+let int_exp n width = BV.of_int n ~width |> Bil.int
 
 (* the 2 with_width functions are versions of functions that
  * already exist that don't throw away existing width information
  * so that we can avoid calling Typecheck.infer_ast *)
 let extract_element_symbolic_with_width t e n et =
-  let open Exp in
   let t = !!t in
-  cast low t (e lsl (n * (int_exp t et)))
+  Bil.(cast low t (e lsl (n * (int_exp t et))))
 
 let extract_byte_symbolic_with_width e n et =
   extract_element_symbolic_with_width (Type.imm 8) e n et
@@ -44,7 +43,7 @@ let extract_byte_symbolic_with_width e n et =
  * not up to speed yet. *)
 let extract_element t e n =
   let nbits = t in
-  Exp.extract (n*nbits+(nbits-1)) (n*nbits) e
+  Bil.extract (n*nbits+(nbits-1)) (n*nbits) e
 
 let extract_byte e n = extract_element 8 e n
 
@@ -52,26 +51,26 @@ let reverse_bytes e t =
   let bytes = bytes_of_width t in
   let get_byte n = extract_byte e n in
   List.reduce_exn
-    ~f:(fun bige e -> Exp.(bige ^ e))
+    ~f:(fun bige e -> Bil.(bige ^ e))
     (List.map ~f:get_byte (List.init ~f:(fun x -> x) bytes))
 
 let min_symbolic ~is_signed e1 e2 =
-  let open Exp in
+  let open Bil in
   let cond = match is_signed with
     | true -> e1 <$ e2
     | false -> e1 < e2 in
   ite cond e1 e2
 
 let max_symbolic ~is_signed e1 e2 =
-  let open Exp in
+  let open Bil in
   let cond = match is_signed with
     | true -> e1 <$ e2
     | false -> e1 < e2 in
   ite (lnot cond) e1 e2
 
 module Cpu_exceptions = struct
-  let general_protection = Stmt.cpuexn 0xd
-  let divide_by_zero = Stmt.cpuexn 0x0
+  let general_protection = Bil.cpuexn 0xd
+  let divide_by_zero = Bil.cpuexn 0x0
 end
 
 
@@ -146,11 +145,11 @@ let df_to_offset mode e =
   | Type.Mem _ -> failwith "type_of_mode shouldn't be returning this"
   | Type.Imm t ->
     let open Exp in
-    ite (e = exp_false) (int_exp 1 t) (int_exp (-1) t)
+    Bil.(ite (e = exp_false) (int_exp 1 t) (int_exp (-1) t))
 
 let bap_to_rflags =
-  let undefined d = Exp.unknown (Printf.sprintf "Undefined RFLAGS bit %d" d) bool_t in
-  let unmodeled s = Exp.unknown ("Unmodeled RFLAGS bit " ^ s) bool_t in
+  let undefined d = Bil.unknown (Printf.sprintf "Undefined RFLAGS bit %d" d) bool_t in
+  let unmodeled s = Bil.unknown ("Unmodeled RFLAGS bit " ^ s) bool_t in
   (List.map ~f:undefined (List.range ~stride:(-1) ~stop:`inclusive 63 32))
   @  undefined 31                  (* 31 *)
      :: undefined 30               (* 30 *)
@@ -172,28 +171,28 @@ let bap_to_rflags =
      :: unmodeled "NT"             (* 14 *)
      :: unmodeled "IOPL1"          (* 13 *)
      :: unmodeled "IOPL2"          (* 12 *)
-     :: Exp.var oF                 (* 11 *)
-     :: Exp.var df                 (* 10 *)
+     :: Bil.var oF                 (* 11 *)
+     :: Bil.var df                 (* 10 *)
      :: unmodeled "IF"             (*  9 *)
      :: unmodeled "TF"             (*  8 *)
-     :: Exp.var sf                 (*  7 *)
-     :: Exp.var zf                 (*  6 *)
+     :: Bil.var sf                 (*  7 *)
+     :: Bil.var zf                 (*  6 *)
      :: undefined 5                (*  5 *)
-     :: Exp.var af                 (*  4 *)
+     :: Bil.var af                 (*  4 *)
      :: undefined 3                (*  3 *)
-     :: Exp.var pf                 (*  2 *)
+     :: Bil.var pf                 (*  2 *)
      :: undefined 1                (*  1 *)
-     :: Exp.var cf                 (*  0 *)
+     :: Bil.var cf                 (*  0 *)
      :: []
 
 let bap_to_eflags = List.drop bap_to_rflags 32
 let bap_to_flags = List.drop bap_to_eflags 16
 let bap_to_lflags = List.drop bap_to_flags 8
 
-let rflags_e = List.reduce_exn ~f:Exp.(^) bap_to_rflags
-let eflags_e = List.reduce_exn ~f:Exp.(^) bap_to_eflags
-let flags_e = List.reduce_exn ~f:Exp.(^) bap_to_flags
-let lflags_e = List.reduce_exn ~f:Exp.(^) bap_to_lflags
+let rflags_e = List.reduce_exn ~f:Bil.(^) bap_to_rflags
+let eflags_e = List.reduce_exn ~f:Bil.(^) bap_to_eflags
+let flags_e = List.reduce_exn ~f:Bil.(^) bap_to_flags
+let lflags_e = List.reduce_exn ~f:Bil.(^) bap_to_lflags
 
 let rflags_to_bap =
   let assn v = Some (v, (fun x -> x)) in
@@ -241,7 +240,7 @@ let assns_rflags_to_bap =
   List.map
     ~f:(function
         | None -> (fun _ -> [])
-        | Some (v,f) -> (fun e -> [Stmt.move v (f e)]))
+        | Some (v,f) -> (fun e -> [Bil.move v (f e)]))
     rflags_to_bap
 let assns_eflags_to_bap = List.drop assns_rflags_to_bap 32
 let assns_flags_to_bap = List.drop assns_eflags_to_bap 16
@@ -253,15 +252,15 @@ let load_s mode s t a =
   let mem = match mode with
     | X86 -> R32.mem
     | X8664 -> R64.mem in
-  let mem_e = Exp.var mem in
+  let mem_e = Bil.var mem in
   match s with
-  | None -> Exp.load mem_e a LittleEndian t
-  | Some v -> Exp.(load mem_e (var v + a) LittleEndian t)
+  | None -> Bil.load mem_e a LittleEndian t
+  | Some v -> Bil.(load mem_e (var v + a) LittleEndian t)
 
 let resize_word v width = Word.extract_exn ~hi:(width - 1) v
 
 (* exp from big int *)
-let bt n width = resize_word n width |> Exp.int
+let bt n width = resize_word n width |> Bil.int
 let b64 i = bt i 64
 let b32 i = bt i 32
 let b16 i = bt i 16
@@ -296,16 +295,16 @@ let lowbits2elemt b =
 let bits2genreg mode =
   let module R = (val (vars_of_mode mode)) in
   let open R in function
-  | 0 -> rax
-  | 1 -> rcx
-  | 2 -> rdx
-  | 3 -> rbx
-  | 4 -> rsp
-  | 5 -> rbp
-  | 6 -> rsi
-  | 7 -> rdi
-  | i when i >= 8 && i <= 15 -> nums.(i-8)
-  | _ -> failwith "bits2genreg takes 4 bits"
+    | 0 -> rax
+    | 1 -> rcx
+    | 2 -> rdx
+    | 3 -> rbx
+    | 4 -> rsp
+    | 5 -> rbp
+    | 6 -> rsi
+    | 7 -> rdi
+    | i when i >= 8 && i <= 15 -> nums.(i-8)
+    | _ -> failwith "bits2genreg takes 4 bits"
 
 let reg2bits mode r =
   let module R = (val (vars_of_mode mode)) in
@@ -322,20 +321,20 @@ let bits2segreg = function
   | 6 | 7 -> disfailwith X86 "bits2segreg: reserved"
   | _ -> failwith "bits2regseg: invalid"
 
-let bits2segrege b = bits2segreg b |> Exp.var
+let bits2segrege b = bits2segreg b |> Bil.var
 
 let bits2ymm b = ymms.(b)
 
-let bits2ymme b = bits2ymm b |> Exp.var
+let bits2ymme b = bits2ymm b |> Bil.var
 
 let bits2ymm128e b =
-  bits2ymme b |> Exp.(cast low (!!reg128_t))
+  bits2ymme b |> Bil.(cast low (!!reg128_t))
 
 let bits2ymm64e b =
-  bits2ymme b |> Exp.(cast low (!!reg64_t))
+  bits2ymme b |> Bil.(cast low (!!reg64_t))
 
 let bits2ymm32e b =
-  bits2ymme b |> Exp.(cast low (!!reg32_t))
+  bits2ymme b |> Bil.(cast low (!!reg32_t))
 
 let bits2xmm = bits2ymm128e
 
@@ -344,29 +343,29 @@ let bits2xmm64e = bits2ymm64e
 let bits2xmm32e = bits2ymm32e
 
 let bits2reg64e mode b =
-  Exp.var (bits2genreg mode b)
+  Bil.var (bits2genreg mode b)
 
 let bits2reg32e mode b =
-  bits2genreg mode b |> Exp.var |> Exp.(cast low (!!reg32_t))
+  bits2genreg mode b |> Bil.var |> Bil.(cast low (!!reg32_t))
 
 let bits2reg16e mode b =
-  bits2reg32e mode b |> Exp.(cast low (!!reg16_t))
+  bits2reg32e mode b |> Bil.(cast low (!!reg16_t))
 
 let bits2reg8e mode ?(has_rex=false) b =
   if b < 4 || has_rex then
-    bits2reg32e mode b |> Exp.(cast low (!!reg8_t))
+    bits2reg32e mode b |> Bil.(cast low (!!reg8_t))
   else
     b land 3 |> bits2reg32e mode |>
-    Exp.(cast low (!!reg16_t)) |>  Exp.(cast high (!!reg8_t))
+    Bil.(cast low (!!reg16_t)) |>  Bil.(cast high (!!reg8_t))
 
 let reg2xmm mode r = reg2bits mode r |> bits2xmm
 
 (* effective addresses for 16-bit addressing *)
 let eaddr16 mode =
-  let open Exp in
+  let open Bil in
   let module R = (val (vars_of_mode mode)) in
   let open R in
-  let e v = Exp.var v |> Exp.(cast low (!!reg16_t)) in
+  let e v = Bil.var v |> Bil.(cast low (!!reg16_t)) in
   function
   (* R/M byte *)
   | 0 -> e rbx + e rsi

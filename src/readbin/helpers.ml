@@ -16,7 +16,7 @@ module Make(Env : Printing.Env) = struct
       | `r32 -> reg32_t
       | `r64 -> reg64_t in
     let make_var name =
-      Exp.var (Var.create name jump_type) in
+      Bil.var (Var.create name jump_type) in
     (object inherit Bil.mapper as super
       method! map_int addr =
         match Table.find_addr syms addr with
@@ -24,8 +24,8 @@ module Make(Env : Printing.Env) = struct
           let start = Memory.min_addr mem in
           if Addr.(start = addr) then make_var sym else
             let off = Addr.Int_exn.(addr - start) in
-            Exp.(make_var sym + int off)
-        | None -> Exp.Int addr
+            Bil.(make_var sym + int off)
+        | None -> Bil.Int addr
     end)#run
 
   (** substitute loads with the value of corresponding memory *)
@@ -64,15 +64,15 @@ module Make(Env : Printing.Env) = struct
     let rec loop ss = function
       | [] -> List.rev ss
       | Bil.Move _ as s :: [] -> loop (s::ss) []
-      | Bil.Move (x, Exp.Var y) as s :: xs when Var.is_tmp x ->
+      | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_tmp x ->
         if Bil.is_assigned y xs || Bil.is_assigned x xs
         then loop (s::ss) xs else
-          let xs = Bil.substitute (Exp.var x) (Exp.var y) xs in
+          let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
           loop ss xs
       | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
         if has_side_effect y xs || Bil.is_assigned x xs
         then loop (s::ss) xs
-        else loop ss (Bil.substitute (Exp.var x) y xs)
+        else loop ss (Bil.substitute (Bil.var x) y xs)
       | s :: xs -> loop (s::ss) xs in
     loop [] stmt
 

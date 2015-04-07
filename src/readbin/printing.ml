@@ -39,7 +39,7 @@ module Make(Env : Env) = struct
       sep ppf ();
       pp_list ~sep pp_v ppf vs
 
-  let pp_bil : bil pp = Stmt.pp_stmts
+  let pp_bil : bil pp = Bil.pp
 
   let pp_err fmt err = fprintf fmt "%a: %a" Memory.pp (fst err) Disasm.Error.pp (snd err)
 

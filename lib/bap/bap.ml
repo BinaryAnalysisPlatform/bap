@@ -4,7 +4,7 @@
     find a list of modules, as well as redirection to other subparts
     of the library. This module can be viewed as library index.
 
-    BAP has a layered architecture currently consisting of three
+    BAP has a layered architecture currently consisting of four
     layers:
     [Types] - an extension of standard library, adding some types
               specific to binary analysis.
@@ -13,6 +13,7 @@
     [Disasm] - a first step of program structure reconstruction,
               representing a program as a graph of blocks of
               instructions.
+    [Sema]  - provides semantic analysis.
 
     Each library resides in each own subfolder, named correspondingly.
 
@@ -88,24 +89,23 @@ module Std = struct
   *)
   include Bap_disasm_std
 
-
-
   (** {3 Sematic analysis}   *)
   include Bap_sema.Std
 
   (** {3 Auxiliary libraries} *)
 
-  (** {3 Program visitor}  *)
+  (** {3 Program visitor}
+      An extension point for program visiting plugins.  *)
   module Program_visitor = Bap_program_visitor
 
   (** {4 Dwarf library}
       This library gives an access to debugging information stored
       in a binary program.  *)
-  module Dwarf   = Bap_dwarf
+  module Dwarf = Bap_dwarf
 
   (** {4 Elf library}
       Provides an access to [ELF] information.  *)
-  module Elf     = Bap_elf
+  module Elf = Bap_elf
   type elf = Elf.t
 
   (** {4 Binary Signatures Storage}  *)

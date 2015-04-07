@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Bil.Types
 open Or_error
 open Image_internal_std
 module Dis = Bap_disasm_basic
@@ -201,10 +202,10 @@ let fold_consts = Bil.(fixpoint fold_consts)
 let rec dests_of_bil bil =
   fold_consts bil |> List.concat_map ~f:dests_of_stmt
 and dests_of_stmt = function
-  | Stmt.Jmp (Exp.Int addr) -> [Some addr,`Jump]
-  | Stmt.Jmp (_) -> [None, `Jump]
-  | Stmt.If (_,yes,no) -> merge_branches yes no
-  | Stmt.While (_,ss) -> dests_of_bil ss
+  | Jmp (Int addr) -> [Some addr,`Jump]
+  | Jmp (_) -> [None, `Jump]
+  | If (_,yes,no) -> merge_branches yes no
+  | While (_,ss) -> dests_of_bil ss
   | _ -> []
 and merge_branches yes no =
   let x = dests_of_bil yes and y = dests_of_bil no in

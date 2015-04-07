@@ -20,3 +20,5 @@ end
 module Infix : sig
   val (:=) : var -> exp -> stmt
 end
+
+module Stmts_pp : Printable with type t = stmt list
