@@ -12,7 +12,8 @@ open Bap_disasm_std
 (** The result of Binary analysis.  *)
 type project = {
   arch    : arch;               (** architecture  *)
-  program : disasm;             (** disassembled memory  *)
+  argv    : string array;       (** command line arguments *)
+  program : disasm;             (** disassembled memory *)
   symbols : string table;       (** symbol table  *)
   memory  : mem;                (** base memory *)
   annots  : (string * string) memmap; (** annotations  *)
