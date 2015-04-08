@@ -157,9 +157,11 @@ let load_path : string list Term.t =
        info ["load-path"; "L"] ~doc ~docv:"PATH")
 
 let create
-    a b c d e f g h i k l m n o p q r s t u v x y =
+    a b c d e f g h i j k l m n o p q r s t u v x =
   Options.Fields.create
-    a b c d e f g h i k l m n o p q r s t u v x y
+    a b c d e f g h i j k l m n o p q r s t u v x
+
+
 let program =
   let doc = "Disassemble binary" in
   let man = [
@@ -179,6 +181,7 @@ let program =
         https://github.com/BinaryAnalysisPlatform/bap/issues";
     `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
   ] in
+
   Term.(pure create
         $filename $loader $symsfile $cfg_format
         $output_phoenix $output_dump $demangle
@@ -190,6 +193,15 @@ let program =
   Term.info "bap-objdump"
     ~version:Config.pkg_version ~doc ~man
 
-let parse () = match Term.eval program with
+let parse () =
+  let plugins = match Term.eval_peek_opts load with
+    | Some ps,_ -> ps | _ -> eprintf "no plugins\n"; [] in
+
+  let argv = Array.filter ~f:(fun opt ->
+      not(List.exists plugins ~f:(fun plugin ->
+          let prefix = "--"^plugin^"-" in
+          String.is_prefix opt ~prefix))) Sys.argv in
+
+  match Term.eval ~argv program with
   | `Ok opts -> Ok opts
   | _ -> Or_error.errorf "no cmdline options provided\n"

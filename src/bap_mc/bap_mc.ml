@@ -175,13 +175,13 @@ module Cmdline = struct
     Arg.(value & pos 0 (some string) None & info [] ~docv:"STRING" ~doc)
 
   let cmd main =
-    let doc = "manual page for $(tname)" in
+    let doc = "BAP machine instruction playground" in
     let man = [
       `S "DESCRIPTION";
       `I ("OVERVIEW",
           " Disassemble a string of bytes. This is the BAP machine \
            code playground. It is intended to mimic a subset of \
-           llvm-mc  functionality using the BAP disassembly backend.");
+           llvm-mc functionality using the BAP disassembly backend.");
       `S "EXAMPLES";
       `P "Four hex representations are supported:"; `Noblank;
       `I (".BR", " 0x31 0xd2 0x48 0xf7 0xf3"); `Noblank;
@@ -192,7 +192,7 @@ module Cmdline = struct
           "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
            bap-mc  --show-inst --show-asm");
       `S "SEE ALSO";
-      `P "$(llvm-mc)"] in
+      `P "llvm-mc"] in
     Term.(pure main $src $arch $show_insn $show_bil $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.pkg_version
 

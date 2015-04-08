@@ -4,6 +4,7 @@ open Bap_disasm
 
 type project = {
   arch    : arch;
+  argv    : string array;
   program : disasm;
   symbols : string table;
   memory  : mem;

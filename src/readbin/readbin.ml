@@ -28,6 +28,14 @@ module Program(Conf : Options.Provider) = struct
                                BAP_PLUGIN_PATH environment variable")
     >>| Plugin.create ~system:"program" >>= Plugin.load
 
+  let prepare_args argv name =
+    let prefix = "--" ^ name ^ "-" in
+    Array.filter_map argv ~f:(fun arg ->
+        if arg = argv.(0) then Some name
+        else match String.chop_prefix arg ~prefix with
+          | None -> None
+          | Some arg -> Some ("--" ^ arg))
+
   let find_roots arch mem =
     if options.bw_disable then None
     else
@@ -153,7 +161,7 @@ module Program(Conf : Options.Provider) = struct
                          (Filename.basename name) Error.pp err);
     let module Target = (val target_of_arch arch) in
 
-    let make_project annots symbols =
+    let make_project argv annots symbols =
       let module H = Helpers.Make(struct
           let options = options
           let cfg = Disasm.blocks disasm
@@ -164,15 +172,18 @@ module Program(Conf : Options.Provider) = struct
         end) in {
         annots;
         symbols;
-        arch; memory = mem;
+        argv; arch; memory = mem;
         program = disasm;
         bil_of_insns = H.bil_of_insns;
       } in
 
     let project =
-      List.fold ~init:(make_project annots syms)
+      List.fold2_exn ~init:(make_project Sys.argv annots syms)
+        options.plugins
         (Program_visitor.registered ())
-        ~f:(fun p visit -> visit (make_project p.annots p.symbols)) in
+        ~f:(fun p name visit ->
+            let argv = prepare_args Sys.argv name in
+            visit (make_project argv p.annots p.symbols)) in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst ~data:(Idapy.annotate_ida project));
@@ -195,7 +206,6 @@ module Program(Conf : Options.Provider) = struct
         | `with_addr -> pp_addr
         | `with_size -> pp_size) |> pp_concat ~sep:pp_print_space in
 
-    (* printf "Found %d symbols@." (Table.length syms); *)
     if options.print_symbols <> [] then
       Table.iteri syms
         ~f:(fun mem sym -> printf "@[%a@]@." pp_sym (mem,sym));
