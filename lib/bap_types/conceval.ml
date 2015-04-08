@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Bil.Types
 
 module Seq = Sequence
 
@@ -123,7 +124,7 @@ module Z = Bitvector.Int_exn
 
 (** Handle a unary operator. *)
 let handle_unop op v =
-  let open Exp.Unop in bv_action_or_unknown v
+  bv_action_or_unknown v
     (fun v -> match op with
        | NEG -> BV (Z.neg v)
        | NOT -> BV (Z.lnot v))
@@ -132,7 +133,6 @@ let handle_unop op v =
 
 (** Handle a binary operator. *)
 let handle_binop op l r : value =
-  let open Exp.Binop in
   match (l, r) with
   | (Mem _, _) | (_, Mem _) ->
     raise (Abort "Operation cannot be performed on memory.")
@@ -164,7 +164,6 @@ let handle_binop op l r : value =
     BV (op l r)
 
 let handle_cast cast_kind size v =
-  let open Exp.Cast in
   let hi = size - 1 in
   let cast v = match cast_kind with
     | UNSIGNED -> Word.extract_exn ~hi v
@@ -176,32 +175,32 @@ let handle_cast cast_kind size v =
 (** Given state, evaluate a single BIL expression. *)
 let rec eval_exp state exp =
   let result = match exp with
-    | Bil.Load (arr, idx, endian, t) ->
+    | Load (arr, idx, endian, t) ->
       (match Memory.load (eval_exp state arr) (eval_exp state idx) endian t with
        | Some v -> v
        | None -> Un ("Load from uninitialized memory",
                      Type.imm Size.(to_bits t)))
-    | Bil.Store (arr, idx, v, endian, t) ->
+    | Store (arr, idx, v, endian, t) ->
       Memory.store (eval_exp state arr) (eval_exp state idx) (eval_exp state v)
         endian t
-    | Bil.BinOp (op, l, r) -> handle_binop op (eval_exp state l) (eval_exp state r)
-    | Bil.UnOp (op, v) -> handle_unop op (eval_exp state v)
-    | Bil.Var v -> State.peek_exn state v
-    | Bil.Int v -> BV v
-    | Bil.Cast (cast_kind, new_type, v) ->
+    | BinOp (op, l, r) -> handle_binop op (eval_exp state l) (eval_exp state r)
+    | UnOp (op, v) -> handle_unop op (eval_exp state v)
+    | Var v -> State.peek_exn state v
+    | Int v -> BV v
+    | Cast (cast_kind, new_type, v) ->
       handle_cast cast_kind new_type (eval_exp state v)
-    | Bil.Let (v, a, b) -> (* FIXME Should there be typechecking done here? *)
+    | Let (v, a, b) -> (* FIXME Should there be typechecking done here? *)
       let state = State.move  state ~key:v ~data:(eval_exp state a) in
       eval_exp state b
-    | Bil.Unknown (str, typ) -> Un (str, typ)
-    | Bil.Ite (cond, t_case, f_case) ->
+    | Unknown (str, typ) -> Un (str, typ)
+    | Ite (cond, t_case, f_case) ->
       bv_action_or_unknown (eval_exp state cond)
         (fun v ->
            if not (Word.is_zero v) then eval_exp state t_case
            else eval_exp state f_case)
-    | Bil.Extract (hi, lo, v) -> bv_action_or_unknown (eval_exp state v)
-                                   (fun v -> BV (Word.extract_exn ~hi ~lo v))
-    | Bil.Concat (l, r) -> (match eval_exp state l, eval_exp state r with
+    | Extract (hi, lo, v) -> bv_action_or_unknown (eval_exp state v)
+                               (fun v -> BV (Word.extract_exn ~hi ~lo v))
+    | Concat (l, r) -> (match eval_exp state l, eval_exp state r with
         | (Mem _, _) | (_, Mem _) ->
           raise (Abort "Operation cannot be performed on memory.")
         | ((Un (_, _) as un), _) | (_, (Un (_, _) as un)) -> un
@@ -212,7 +211,8 @@ let rec eval_exp state exp =
   * a location to jump to, if any. *)
 let rec eval_stmt state =
   let open Stmt in function
-    | Move (v, exp) -> (State.move ~key:v ~data:(eval_exp state exp) state), None
+    | Move (v, exp) ->
+      (State.move ~key:v ~data:(eval_exp state exp) state), None
     | Jmp (exp) -> state, Some (eval_exp state exp)
     | While (cond, stmts) ->
       (match eval_exp state cond with

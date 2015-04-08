@@ -48,13 +48,13 @@ module type S = sig
 end
 
 module Make(M : sig
-              type t with bin_io, sexp, compare
-              include Pretty_printer.S with type t := t
-              val hash : t -> int
-              val module_name : string
-            end ) : S with type t := M.t
+    type t with bin_io, sexp, compare
+    include Pretty_printer.S with type t := t
+    val hash : t -> int
+    val module_name : string
+  end ) : S with type t := M.t
 
 module Printable(M : sig
-                   include Pretty_printer.S
-                   val module_name : string
-                 end) : Printable with type t := M.t
+    include Pretty_printer.S
+    val module_name : string
+  end) : Printable with type t := M.t

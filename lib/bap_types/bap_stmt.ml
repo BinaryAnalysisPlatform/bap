@@ -53,3 +53,12 @@ include Regular.Make(struct
     let module_name = "Bap_stmt"
     let pp = pp
   end)
+
+module Stmts_pp = struct
+  type t = stmt list
+  include Printable(struct
+      type nonrec t = t
+      let pp = pp_stmts
+      let module_name = "Bil"
+    end)
+end

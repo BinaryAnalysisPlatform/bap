@@ -10,14 +10,14 @@ open Bap_disasm_x86_env
    for 70 to 7f and 0f 80 to 8f *)
 let cc_to_exp i =
   let cc = match i land 0xe with
-    | 0x0 -> Exp.var oF
-    | 0x2 -> Exp.var cf
-    | 0x4 -> Exp.var zf
-    | 0x6 -> Exp.(var cf lor var zf)
-    | 0x8 -> Exp.var sf
-    | 0xa -> Exp.var pf
-    | 0xc -> Exp.(var sf lxor var oF)
-    | 0xe -> Exp.(var zf lor (var sf lxor var oF))
+    | 0x0 -> Bil.var oF
+    | 0x2 -> Bil.var cf
+    | 0x4 -> Bil.var zf
+    | 0x6 -> Bil.(var cf lor var zf)
+    | 0x8 -> Bil.var sf
+    | 0xa -> Bil.var pf
+    | 0xc -> Bil.(var sf lxor var oF)
+    | 0xe -> Bil.(var zf lor (var sf lxor var oF))
     | _ -> disfailwith X86 "impossible condition code"
   in
   if (i land 1) = 0 then cc else exp_not cc
@@ -194,14 +194,14 @@ let parse_instr mode mem addr =
     let ss = b lsr 6 and idx = ((b lsr 3) land 7) lor (e rex_x) in
     let base, na =
       match (b land 7, modb land 7) with (* base register, MOD *)
-      | 5, 0 -> let (i,na) = parse_disp32 (s a) in (bm i |> Exp.int, na)
+      | 5, 0 -> let (i,na) = parse_disp32 (s a) in (bm i |> Bil.int, na)
       | _, 0 | _, 1 | _, 2 -> (bits2rege mode ((b land 7) lor (e rex_b)), s a)
       | _ -> disfailwith (Printf.sprintf "impossible opcode: sib b=%02x" b)
     in
     if idx = 4 then (base, na) else
       let idx = bits2rege mode idx in
-      if ss = 0 then Exp.(base + idx, na)
-      else Exp.(base + (idx lsl Int (im ss)), na)
+      if ss = 0 then Bil.(base + idx, na)
+      else Bil.(base + (idx lsl Int (im ss)), na)
   in
   (* Parse mod/rm bits helper function *)
   let parse_modrmbits a =
@@ -229,8 +229,8 @@ let parse_instr mode mem addr =
     (* ISR 2.1.5 Table 2-1 *)
     match modb land 7 with (* MOD *)
     | 0 -> (match rm land 7 with
-        | 6 -> let (disp, na) = parse_disp16 na in (r, Oaddr(Exp.Int (bm disp)), na)
-        | n when n < 8 -> (r, Oaddr (Exp.(cast unsigned !!tm (eaddr16 mode rm))), na)
+        | 6 -> let (disp, na) = parse_disp16 na in (r, Oaddr(Bil.Int (bm disp)), na)
+        | n when n < 8 -> (r, Oaddr (Bil.(cast unsigned !!tm (eaddr16 mode rm))), na)
         | _ -> disfailwith "Impossible"
       )
     | 1 | 2 ->
@@ -238,7 +238,7 @@ let parse_instr mode mem addr =
       let (disp, na) =
         if (modb land 7) = 1 then parse_disp8 na else (*2*) parse_disp16 na
       in
-      (r, Oaddr (Exp.(cast unsigned !!tm (base + b16 disp))), na)
+      (r, Oaddr (Bil.(cast unsigned !!tm (base + b16 disp))), na)
     | 3 -> (r, Oreg rm, na)
     | _ -> disfailwith "Impossible"
   in
@@ -282,7 +282,7 @@ let parse_instr mode mem addr =
     let bits2rege =
       let open Type in
       match at with
-      | Imm 32 -> fun b -> Exp.(cast unsigned !!(type_of_mode mode) (bits2reg32e mode b))
+      | Imm 32 -> fun b -> Bil.(cast unsigned !!(type_of_mode mode) (bits2reg32e mode b))
       | Imm 64 -> bits2reg64e mode
       | _ -> failwith "parse_modrm3264int: invalid address type"
     in
@@ -303,7 +303,7 @@ let parse_instr mode mem addr =
                | Some (Type.Imm nbits) -> int_exp (nbits / 8) 64
                | _ -> int_exp 0 64
              in
-             let (disp, na) = parse_disp32 na in (r, Oaddr Exp.(b64 disp + b64 na + immoff), na))
+             let (disp, na) = parse_disp32 na in (r, Oaddr Bil.(b64 disp + b64 na + immoff), na))
         | _ -> (r, Oaddr(bits2rege rm), na)
       )
     | 1 | 2 ->
@@ -312,7 +312,7 @@ let parse_instr mode mem addr =
         if 4 = (rm land 7) then parse_sib rex modb na else (bits2rege rm, na) in
       let (disp, na) =
         if modb = 1 then parse_disp8 na else (*2*) parse_disp32 na in
-      (r, Oaddr Exp.(base + int (bm disp)), na)
+      (r, Oaddr Bil.(base + int (bm disp)), na)
     | 3 -> (r, Oreg rm, na)
     | _ -> disfailwith "Impossible"
   in
@@ -409,8 +409,8 @@ let parse_instr mode mem addr =
   let _parse_simmd = parse_simm32 in
   (* width changing oimm size *)
   let oimm_resize op size = match op with
-      | Oimm d -> Oimm (Word.extract_exn ~hi:(!!size - 1) (Word.signed d))
-      | _ -> disfailwith "oimm_resize only handles Oimm"
+    | Oimm d -> Oimm (Word.extract_exn ~hi:(!!size - 1) (Word.signed d))
+    | _ -> disfailwith "oimm_resize only handles Oimm"
   in
   (* This is for opcodes like e9 *)
   let expanded_jump_type opsize = match mode with
@@ -419,7 +419,7 @@ let parse_instr mode mem addr =
   in
   let get_opcode _pref ({rex; vex; rm_extend; addrsize; _} as prefix) a =
     let parse_disp_addr, parse_modrm_addr, parse_modrmseg_addr,
-             parse_modrmext_addr =
+        parse_modrmext_addr =
       let open Type in
       match addrsize with
       | Imm 16 -> parse_disp16, parse_modrm16 rex, parse_modrm16seg rex, parse_modrm16ext rex
@@ -520,12 +520,12 @@ let parse_instr mode mem addr =
       let reg = Oreg (rm_extend lor (b1 land 7)) in
       (Xchg(prefix.opsize, o_rax, reg), na)
     | 0x98 -> let srct =
-      let open Type in
-      match prefix.opsize with
-      | Imm 16 -> reg8_t
-      | Imm 32 -> reg16_t
-      | Imm 64 -> reg32_t
-      | _ -> disfailwith "invalid opsize for CBW/CWDE/CWQE"
+                let open Type in
+                match prefix.opsize with
+                | Imm 16 -> reg8_t
+                | Imm 32 -> reg16_t
+                | Imm 64 -> reg32_t
+                | _ -> disfailwith "invalid opsize for CBW/CWDE/CWQE"
       in
       (Movsx(prefix.opsize, o_rax, srct, o_rax), na)
     | 0x9c -> (Pushf(prefix.bopsize), na)
@@ -537,11 +537,11 @@ let parse_instr mode mem addr =
     | 0xa0 | 0xa1 ->
       let t = if b1 = 0xa0 then Type.imm 8 else prefix.opsize in
       let (addr, na) = parse_disp_addr na in
-      (Mov(t, o_rax, Oaddr (mbi addr |> Exp.int), None), na)
+      (Mov(t, o_rax, Oaddr (mbi addr |> Bil.int), None), na)
     | 0xa2 | 0xa3 ->
       let t = if b1 = 0xa2 then reg8_t else prefix.opsize in
       let (addr, na) = parse_disp_addr na in
-      (Mov(t, Oaddr (mbi addr |> Exp.int), o_rax, None), na)
+      (Mov(t, Oaddr (mbi addr |> Bil.int), o_rax, None), na)
     | 0xa4 -> (Movs reg8_t, na)
     | 0xa5 -> (Movs prefix.opsize, na)
     | 0xa6 -> (Cmps reg8_t, na)
@@ -646,7 +646,7 @@ let parse_instr mode mem addr =
         | _ ->
           disfailwith (Printf.sprintf "impossible opcode: %02x/%d" b1 r)
       in
-      let open Exp.Binop in
+      let open Bil in
       (match r with (* Grp 2 *)
        | 0 -> (Rotate(LSHIFT, opsize, rm, amt, false),na)
        | 1 -> (Rotate(RSHIFT, opsize, rm, amt, false),na)
@@ -665,10 +665,10 @@ let parse_instr mode mem addr =
       )
     | 0xe3 ->
       let t = !!addrsize in
-      let rcx_e = Exp.var R.rcx in
+      let rcx_e = Bil.var R.rcx in
       let (i,na) = parse_disp8 na in
       (* (Jcc (Jrel (BV.litz na t, BV.litz i t), Bop.(rcx_e = Int (mi 0))), na) *)
-      (Jcc (Jrel (resize_word na t, resize_word i t), Exp.(rcx_e = (mi 0 |> int))), na)
+      (Jcc (Jrel (resize_word na t, resize_word i t), Bil.(rcx_e = (mi 0 |> int))), na)
     | 0xf4 -> (Hlt, na)
     | 0xf6
     | 0xf7 -> let t = if b1 = 0xf6 then reg8_t else prefix.opsize in
@@ -731,8 +731,8 @@ let parse_instr mode mem addr =
        | 5 -> unimplemented (* jmpf *)
                 (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
        | 6 -> let size = match mode with
-         | X86 -> prefix.opsize
-         | X8664 -> reg64_t
+           | X86 -> prefix.opsize
+           | X8664 -> reg64_t
          in
          (Push(size, rm), na)
        | _ -> disfailwith
@@ -894,15 +894,15 @@ let parse_instr mode mem addr =
              (Ptest(prefix.mopsize, d, s), na)
            | 0x29 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
-             (Pcmp(prefix.mopsize, Type.imm 64, Exp.Binop.EQ, "pcmpeq", r, rm, rv), na)
+             (Pcmp(prefix.mopsize, Type.imm 64, Bil.EQ, "pcmpeq", r, rm, rv), na)
            | 0x20 | 0x21 | 0x22 | 0x23 | 0x24 | 0x25
            | 0x30 | 0x31 | 0x32 | 0x33 | 0x34 | 0x35 when prefix.opsize_override ->
              (* pmovsx and pmovzx *)
              let r, rm, _, na = parse_modrm_vec None na in
              (* determine sign/zero extension *)
              let ext, name = match (b3 land 0xf0) with
-               | 0x20 -> Exp.signed, "pmovsx"
-               | 0x30 -> Exp.unsigned, "pmovzx"
+               | 0x20 -> Bil.signed, "pmovsx"
+               | 0x30 -> Bil.unsigned, "pmovzx"
                | _ -> disfailwith "impossible"
              in
              (* determine dest/src element size *)
@@ -918,7 +918,7 @@ let parse_instr mode mem addr =
              (Pmov(prefix.mopsize, dstet, srcet, r, rm, ext, fullname), na)
            | 0x37 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
-             (Pcmp(prefix.mopsize, Type.imm 64, Exp.Binop.SLT, "pcmpgt", r, rm, rv), na)
+             (Pcmp(prefix.mopsize, Type.imm 64, Bil.SLT, "pcmpgt", r, rm, rv), na)
            | 0x38 | 0x39 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
              let et = match b3 with
@@ -963,7 +963,7 @@ let parse_instr mode mem addr =
         | 0x57 ->
           let r, rm, rv, na = parse_modrm_vec None na in
           let t = if prefix.mopsize = reg256_t then reg256_t else reg128_t in
-          (Ppackedbinop(t, prefix.opsize, Exp.(lxor), "xorp", r, rm, rv), na)
+          (Ppackedbinop(t, prefix.opsize, Bil.(lxor), "xorp", r, rm, rv), na)
         | 0x60 | 0x61 | 0x62 | 0x68 | 0x69 | 0x6a ->
           let order = match b2 with
             | 0x60 | 0x61 | 0x62 -> Low
@@ -991,8 +991,10 @@ let parse_instr mode mem addr =
           let r, rm, rv, na = parse_modrm_vec None na in
           let elet = match o land 0x6 with | 0x4 -> reg8_t | 0x5 -> reg16_t | 0x6 -> reg32_t | _ ->
             disfailwith "impossible" in
-          let bop, bstr = match o land 0x70 with | 0x70 -> Exp.Binop.EQ, "pcmpeq" | 0x60 -> Exp.Binop.SLT, "pcmpgt"
-                                                 | _ -> disfailwith "impossible" in
+          let bop, bstr = match o land 0x70 with
+            | 0x70 -> Bil.EQ, "pcmpeq"
+            | 0x60 -> Bil.SLT, "pcmpgt"
+            | _ -> disfailwith "impossible" in
           (Pcmp(prefix.mopsize, elet, bop, bstr, r, rm, rv), na)
         | 0x70 when prefix.opsize = reg16_t ->
           let r, rm, rv, na = parse_modrm_vec (Some reg8_t) na in
@@ -1004,14 +1006,14 @@ let parse_instr mode mem addr =
           let i, na = parse_imm8 na in
           let bi8 = Word.of_int ~width:8 0x8 in
           let fbop, str, et, i =
-            let open Exp.Binop in
+            let open Bil in
             match b2, r, i with
-            | _, Ovec 2, _ -> Exp.binop RSHIFT, "psrl", lowbits2elemt b2, i
-            | _, Ovec 6, _ -> Exp.binop LSHIFT, "psll", lowbits2elemt b2, i
-            | _, Ovec 4, _ -> Exp.binop ARSHIFT, "psra", lowbits2elemt b2, i
+            | _, Ovec 2, _ -> Bil.binop RSHIFT, "psrl", lowbits2elemt b2, i
+            | _, Ovec 6, _ -> Bil.binop LSHIFT, "psll", lowbits2elemt b2, i
+            | _, Ovec 4, _ -> Bil.binop ARSHIFT, "psra", lowbits2elemt b2, i
             (* The shift amount of next two elements are multipled by eight *)
-            | 0x73, Ovec 3, Oimm i when prefix.opsize_override -> Exp.binop RSHIFT, "psrldq", t, Oimm (Addr.(i * bi8))
-            | 0x73, Ovec 7, Oimm i when prefix.opsize_override -> Exp.binop LSHIFT, "pslldq", t, Oimm (Addr.(i * bi8))
+            | 0x73, Ovec 3, Oimm i when prefix.opsize_override -> Bil.binop RSHIFT, "psrldq", t, Oimm (Addr.(i * bi8))
+            | 0x73, Ovec 7, Oimm i when prefix.opsize_override -> Bil.binop LSHIFT, "pslldq", t, Oimm (Addr.(i * bi8))
             | _, Oreg i, _ -> disfailwith (Printf.sprintf "invalid psrl/psll encoding b2=%#x r=%#x" b2 i)
             | _ -> disfailwith "impossible"
           in
@@ -1038,20 +1040,20 @@ let parse_instr mode mem addr =
           (* shld *)
           let (r, rm, na) = parse_modrm_addr (Some reg8_t) na in
           let (i, na) = parse_imm8 na in
-          (Shiftd(Exp.Binop.LSHIFT, prefix.opsize, rm, r, i), na)
+          (Shiftd(Bil.LSHIFT, prefix.opsize, rm, r, i), na)
         | 0xa5 ->
           (* shld *)
           let (r, rm, na) = parse_modrm_addr None na in
-          (Shiftd(Exp.Binop.LSHIFT, prefix.opsize, rm, r, o_rcx), na)
+          (Shiftd(Bil.LSHIFT, prefix.opsize, rm, r, o_rcx), na)
         | 0xac ->
           (* shrd *)
           let (r, rm, na) = parse_modrm_addr (Some reg8_t) na in
           let (i, na) = parse_imm8 na in
-          (Shiftd(Exp.Binop.RSHIFT, prefix.opsize, rm, r, i), na)
+          (Shiftd(Bil.RSHIFT, prefix.opsize, rm, r, i), na)
         | 0xad ->
           (* shrd *)
           let (r, rm, na) = parse_modrm_addr None na in
-          (Shiftd(Exp.Binop.RSHIFT, prefix.opsize, rm, r, o_rcx), na)
+          (Shiftd(Bil.RSHIFT, prefix.opsize, rm, r, o_rcx), na)
         | 0xae ->
           let (r, rm, na) = parse_modrmext_addr None na in
           (match r with
@@ -1098,9 +1100,9 @@ let parse_instr mode mem addr =
           let r, rm, rv, na = parse_modrm_vec None na in
           let et = lowbits2elemt b2 in
           let fbop, str = match b2 land 0xf0 with
-            | 0xd0 -> Exp.(lsr), "psrl"
-            | 0xe0 -> Exp.(asr), "psra"
-            | 0xf0 -> Exp.(lsl), "psll"
+            | 0xd0 -> Bil.(lsr), "psrl"
+            | 0xe0 -> Bil.(asr), "psra"
+            | 0xf0 -> Bil.(lsl), "psll"
             | _ -> disfailwith "invalid"
           in
           (Ppackedbinop(t, et, fbop, str, r, rm, rv), na)
@@ -1109,7 +1111,7 @@ let parse_instr mode mem addr =
           (Ppackedbinop(prefix.mopsize, Type.imm 8, min_symbolic ~is_signed:false, "pminub", r, rm, rv), na)
         | 0xdb ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Pbinop(prefix.mopsize, Exp.(land), "pand", r, rm, rv), na)
+          (Pbinop(prefix.mopsize, Bil.(land), "pand", r, rm, rv), na)
         | 0xd7 ->
           let r, rm, na = parse_modrm_addr None na in
           let r, rm = r, tovec rm in
@@ -1119,7 +1121,7 @@ let parse_instr mode mem addr =
           (Ppackedbinop(prefix.mopsize, Type.imm 8, max_symbolic ~is_signed:false, "pmaxub", r, rm, rv), na)
         | 0xdf ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          let andn x y = Exp.(lnot x land y) in
+          let andn x y = Bil.(lnot x land y) in
           (Pbinop(prefix.mopsize, andn, "pandn", r, rm, rv), na)
         | 0xe0 | 0xe3 ->
           (* pavg *)
@@ -1131,17 +1133,17 @@ let parse_instr mode mem addr =
             | _ -> disfailwith "invalid"
           in
           let one = int_exp 1 !!et in
-          let average x y = Exp.(((x + y) + one) lsr one) in
+          let average x y = Bil.(((x + y) + one) lsr one) in
           (Ppackedbinop(prefix.mopsize, et, average, "pavg", r, rm, rv), na)
         | 0xea ->
           let r, rm, rv, na = parse_modrm_vec None na in
           (Ppackedbinop(prefix.mopsize, Type.imm 16, min_symbolic ~is_signed:true, "pmins", r, rm, rv), na)
         | 0xeb ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Pbinop(prefix.mopsize, Exp.(lor), "por", r, rm, rv), na)
+          (Pbinop(prefix.mopsize, Bil.(lor), "por", r, rm, rv), na)
         | 0xef ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Pbinop(prefix.mopsize, Exp.(lxor), "pxor", r, rm, rv), na)
+          (Pbinop(prefix.mopsize, Bil.(lxor), "pxor", r, rm, rv), na)
         | 0xf0 ->
           let r, rm, _, na = parse_modrm_vec None na in
           let t = if prefix.mopsize = reg256_t then reg256_t else reg128_t in
@@ -1156,7 +1158,7 @@ let parse_instr mode mem addr =
             | _ -> disfailwith "impossible"
           in
           (* XXX I should just have put in a binop *)
-          (Ppackedbinop(prefix.mopsize, eltsize, Exp.(-), "psub", r, rm, rv), na)
+          (Ppackedbinop(prefix.mopsize, eltsize, Bil.(-), "psub", r, rm, rv), na)
         | _ -> unimplemented
                  (Printf.sprintf "unuspported opcode: %02x %02x" b1 b2)
       )
@@ -1185,7 +1187,7 @@ let parse_instr mode mem addr =
   in
   let opsize = match rex with
     | Some {rex_w=true; _} -> reg64_t (* See Table 3-4: Effective Operand-
-                                     and Address-Size Attributes in 64-Bit Mode *)
+                                         and Address-Size Attributes in 64-Bit Mode *)
     | Some {rex_w=false; _} | None -> opsize
   in
   let opsize = match vex with

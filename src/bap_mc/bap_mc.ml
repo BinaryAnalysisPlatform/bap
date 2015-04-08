@@ -9,7 +9,7 @@ module Dis = Disasm_expert.Basic
 exception Bad_user_input
 exception Bad_insn of mem * int * int
 exception Convert_imm of string
-exception Create_mem
+exception Create_mem of Error.t
 exception No_input
 exception Unknown_arch
 exception Can't_lift of Error.t
@@ -57,7 +57,7 @@ let create_memory arch s =
   Memory.create endian Addr.(of_int ~width 0) @@
   Bigstring.of_string s |> function
   | Ok r -> r
-  | Error _ -> raise Create_mem
+  | Error e -> raise (Create_mem e)
 
 let print_kinds insn =
   Dis.Insn.kinds insn |>
@@ -93,11 +93,10 @@ let string_of_bil = function
   | `pb -> Bil_piqi.pb_of_stmts
   | `json -> Bil_piqi.json_of_stmts
   | `xml -> Bil_piqi.xml_of_stmts
-  | `bil -> asprintf "%a" Stmt.pp_stmts
+  | `bil -> asprintf "%a" Bil.pp
   | `adt -> string_of_list Stmt.pp_adt
   | `sexp -> asprintf "%a" pp_sexp
-  | `binprot -> Binable.to_string
-                  (module struct type t = bil with bin_io end)
+  | `binprot -> Binable.to_string (module Bil)
 
 let print_bil lift bil_formats mem insn =
   let bil = bil_of_insn lift mem in
@@ -176,7 +175,7 @@ module Cmdline = struct
     Arg.(value & pos 0 (some string) None & info [] ~docv:"STRING" ~doc)
 
   let cmd main =
-    let doc = "manual page for bap-mc 1.0" in
+    let doc = "manual page for $(tname)" in
     let man = [
       `S "DESCRIPTION";
       `I ("OVERVIEW",
@@ -184,7 +183,7 @@ module Cmdline = struct
            code playground. It is intended to mimic a subset of \
            llvm-mc  functionality using the BAP disassembly backend.");
       `S "EXAMPLES";
-      `P "Three hex representations are supported:"; `Noblank;
+      `P "Four hex representations are supported:"; `Noblank;
       `I (".BR", " 0x31 0xd2 0x48 0xf7 0xf3"); `Noblank;
       `I (".BR", " \\\\x31\\\\xd2\\\\x48\\\\xf7\\\\xf3"); `Noblank;
       `I (".BR", " 31 d2 48 f7 f3");
@@ -200,9 +199,10 @@ module Cmdline = struct
   let parse main = Term.eval (cmd main) ~catch:false
 end
 
-let exitf n = ksprintf (fun s -> eprintf "%s\n" s; exit n)
+let exitf n =
+  kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
 
-let () =
+let _main : unit =
   Plugins.load ();
   try match Cmdline.parse disasm with
     | `Ok Ok () -> exit 0
@@ -211,14 +211,17 @@ let () =
     | `Error _ -> exit 2
     | _ -> exit 1
   with
-  | Bad_user_input | Create_mem ->
+  | Bad_user_input ->
     exitf 65 "Could not parse: malformed input"
   | No_input -> exitf 1 "Could not read from stdin"
   | Unknown_arch ->
-    exitf 64 "Unknown architecture. Supported architectures:\n%s\n" @@
+    exitf 64 "Unknown architecture. Supported architectures:\n%s" @@
     String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string
   | Trailing_data left ->
-    exitf 1 "%d bytes were left non disassembled@." left
+    exitf 1 "%d bytes were left non disassembled" left
+  | Create_mem err ->
+    exitf 65 "Unable to create a memory: %a" Error.pp err
+  | Can't_lift err -> exitf 63 "Lifting failed: %a" Error.pp err
   | Bad_insn (mem,boff,stop)->
     let dump = Memory.hexdump mem in
     let line = boff / 16 in
