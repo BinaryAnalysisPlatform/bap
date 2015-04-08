@@ -64,7 +64,7 @@ let train meth length comp db paths =
   printf "Signatures are stored in %s\n%!" db;
   Ok ()
 
-let find threshold length comp path input : unit t =
+let find threshold length comp path print_sexp (input : string) : unit t =
   Image.create input >>= fun (img,_warns) ->
   let arch = Image.arch img in
   let data = Signatures.load ?path ~mode:"bytes" arch in
@@ -72,33 +72,45 @@ let find threshold length comp path input : unit t =
     ~error:(Error.of_string "failed to read signatures from database")
   >>= fun data ->
   let bw = Binable.of_string (module Byteweight) data in
+  (* if output sexp, get the addr set and output *)
+  if print_sexp then
+    let fs_set =
+      let fs_list = Table.foldi (Image.sections img) ~init:[] ~f:(fun mem sec fs_l ->
+        if Section.is_executable sec then
+          let new_fs_l = let module BW = Bap_byteweight.Bytes in
+            BW.find bw ~length ~threshold mem in
+          fs_l @ new_fs_l
+        else fs_l) in
+      Addr.Hash_set.of_list fs_list in
+    Symbols.write_addrset fs_set
+  else
   Table.iteri (Image.sections img) ~f:(fun mem sec ->
-      if Section.is_executable sec then
-        let start = Memory.min_addr mem in
-        let rec loop n =
-          match Byteweight.next bw ~length ~threshold mem n with
-          | Some n -> printf "%a\n" Addr.ppo Addr.(start ++ n); loop (n+1)
-          | None -> () in
-        loop 0);
+    if Section.is_executable sec then
+      let start = Memory.min_addr mem in
+      let rec loop n =
+        match Byteweight.next bw ~length ~threshold mem n with
+        | Some n -> printf "%a\n" Addr.ppo Addr.(start ++ n); loop (n+1)
+        | None -> () in
+      loop 0);
   Ok ()
 
-let symbols print_name print_size input : unit t =
+let symbols print_name print_size print_sexp input : unit t =
   Image.create input >>| fun (img,_warns) ->
   let syms = Image.symbols img in
-  Table.iteri syms ~f:(fun mem sym ->
-      let addr = Memory.min_addr mem in
-      let name = if print_name then Symbol.name sym else "" in
-      let size = if print_size
-        then sprintf "%4d " (Memory.length mem) else "" in
-      printf "%a %s%s\n" Addr.ppo addr size name);
-  printf "Outputted %d symbols\n" (Table.length syms)
-
+  if print_sexp then Symbols.write syms
+  else (
+    Table.iteri syms ~f:(fun mem sym ->
+        let addr = Memory.min_addr mem in
+        let name = if print_name then Symbol.name sym else "" in
+        let size = if print_size
+          then sprintf "%4d " (Memory.length mem) else "" in
+        printf "%a %s%s\n" Addr.ppo addr size name);
+    printf "Outputted %d symbols\n" (Table.length syms) )
 
 let create_parent_dir dst =
   let dir = if Filename.(check_suffix dst dir_sep)
     then dst else Filename.dirname dst in
   FileUtil.mkdir ~parent:true dir
-
 
 let fetch fname url =
   let tmp,fd = Filename.open_temp_file "bap_" ".sigs" in
@@ -193,6 +205,7 @@ module Cmdline = struct
   let src : string Term.t =
     Arg.(value & pos 0 non_dir_file "sigs.zip" & info []
            ~doc:"Signatures file" ~docv:"SRC")
+
   let dst : string Term.t =
     Arg.(value & pos 1 string Signatures.default_path &
          info [] ~doc:"Destination" ~docv:"DST")
@@ -209,6 +222,10 @@ module Cmdline = struct
     let doc = "Print symbol's size." in
     Arg.(value & flag & info ["print-size"; "s"] ~doc)
 
+  let print_sexp : bool Term.t =
+    let doc = "Print in S-expression." in
+    Arg.(value & flag & info ["print-sexp"; "x"] ~doc)
+
   let train =
     let doc = "Train byteweight on the specified set of files" in
     Term.(pure train $meth $length $compiler $database $files),
@@ -216,7 +233,7 @@ module Cmdline = struct
 
   let find =
     let doc = "Output all function starts in a given executable" in
-    Term.(pure find $threshold $length $compiler $database_in $filename),
+    Term.(pure find $threshold $length $compiler $database_in $print_sexp $filename),
     Term.info "find" ~doc
 
   let fetch =
@@ -233,7 +250,7 @@ module Cmdline = struct
 
   let symbols =
     let doc = "Print file's symbol table if any." in
-    Term.(pure symbols $print_name $print_size $filename),
+    Term.(pure symbols $print_name $print_size $print_sexp $filename),
     Term.info "symbols" ~doc
 
   let usage choices =
@@ -247,7 +264,7 @@ module Cmdline = struct
     let doc = "Byteweight Toolkit" in
     let man = [
       `S "DESCRIPTION";
-      `P "bap-byteweight is a toolkit for training, fetching, testing\
+      `P "bap-byteweight is a toolkit for training, fetching, testing \
           and installing byteweight signatures."
     ] in
     Term.(pure usage $ choice_names),
