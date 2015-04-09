@@ -243,10 +243,9 @@ let autoload data path =
   | [] -> errorf "Autoloader: no suitable backend found"
   | _  -> errorf "Autoloader: can't resolve proper backend"
 
-let create_image path ?backend data : result =
-  match backend with
-  | None -> autoload data path
-  | Some backend -> of_backend backend data path
+let create_image path ?(backend="llvm") data : result =
+  if backend = "auto" then autoload data path
+  else of_backend backend data path
 
 let of_bigstring ?backend data =
   create_image None ?backend data
