@@ -247,7 +247,7 @@ class Bap(object):
         for attempt in range(RETRIES):
             try:
                 self.capabilities = self.call({'init' : {
-                    'version' : '0.1'}})
+                    'version' : '0.1'}}).next()['capabilities']
             except Exception:
                 if attempt + 1 == RETRIES:
                     raise
@@ -256,7 +256,6 @@ class Bap(object):
 
         if not "capabilities" in self.__dict__:
             raise RuntimeError("Failed to connect to BAP server")
-
         self.data = {}
         self.temp = NamedTemporaryFile('rw+b', prefix="bap-")
 
@@ -306,8 +305,6 @@ class Bap(object):
     def call(self, data):
         if isinstance(data, dict):
             method = request.post
-            if 'get_insns' or 'get_resource' in data:
-                method = request.get
             return jsons(method(self.url, data=self.dumps(data)))
         else:
             gen = (self.dumps(msg) for msg in data)
