@@ -15,7 +15,7 @@ let symsfile : string option Term.t =
 
 let loader : string Term.t =
   let doc = "Backend name for an image loader" in
-  Arg.(value & opt string "bap-elf" & info ["loader"] ~doc)
+  Arg.(value & opt string "llvm" & info ["loader"] ~doc)
 
 let cfg_format : 'a list Term.t =
   Arg.(value & vflag_all [`with_name] [

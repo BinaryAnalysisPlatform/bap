@@ -25,11 +25,11 @@ type path = string
     this information messages can be considered as warnings. *)
 type result = (t * Error.t list) Or_error.t
 
-(** [create ?backend filename] creates an image of the file
-    specified specified by the [filename]. If [backend] is not specfied,
-    then all backends are tried in order. If only one backend can read
-    this file (i.e., there is no ambiguity), then image is
-    returned. *)
+(** [create ?backend filename] creates an image of the file specified
+    specified by the [filename]. If [backend] is equal to "auto", then
+    all backends are tried in order. If only one backend can read this
+    file (i.e., there is no ambiguity), then image is returned. If
+    [backend] is not specifed, then the LLVM backend is used. *)
 val create : ?backend:string -> path -> result
 
 (** [of_string ?backend ~data] creates an image from the specified
