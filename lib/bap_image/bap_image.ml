@@ -253,11 +253,10 @@ let of_bigstring ?backend data =
 let of_string ?backend data =
   of_bigstring ?backend (Bigstring.of_string data)
 
-let create ?backend path : result =
+let create ?(backend="llvm") path : result =
   try_with (fun () -> Bap_fileutils.readfile path) >>= fun data ->
-  match backend with
-  | None -> autoload data (Some path)
-  | Some backend -> of_backend backend data (Some path)
+  if backend = "auto" then autoload data (Some path)
+  else of_backend backend data (Some path)
 
 let entry_point t = Img.entry t.img
 let filename t = t.name
