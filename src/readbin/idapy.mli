@@ -18,4 +18,5 @@ val extract_symbols : string -> string
     all defintions from [idautils] modules are brought to the environment.
 
 *)
-val annotate_ida : project -> string
+
+val extract_script : value memmap -> string

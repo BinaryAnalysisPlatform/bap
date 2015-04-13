@@ -202,6 +202,6 @@ let parse () =
           let prefix = "--"^plugin^"-" in
           String.is_prefix opt ~prefix))) Sys.argv in
 
-  match Term.eval ~argv program with
+  match Term.eval ~argv ~catch:false program with
   | `Ok opts -> Ok opts
   | _ -> Or_error.errorf "no cmdline options provided\n"

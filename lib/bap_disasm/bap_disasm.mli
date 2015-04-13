@@ -93,7 +93,6 @@ module Disasm : sig
       starting address only.  *)
   val insn_at_addr : t -> addr -> (mem * insn) option
 
-
   (** returns a blocks of memory that was visited during the
       disassembly. The regions are merged with [Memory.merge] if
       possible. So it returns the least possible amount of contiguous
@@ -111,4 +110,9 @@ module Disasm : sig
   (** returns a list of all errors and warnings that occurred during
       the disassembling *)
   val errors : t -> (mem * error) seq
+
+  (** Tags to annotate memory  *)
+  val insn : insn tag
+  val block : block tag
+  val error : error tag
 end

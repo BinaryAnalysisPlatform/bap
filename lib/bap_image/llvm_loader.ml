@@ -44,14 +44,13 @@ let to_sym arch s : Sym.t option =
     Option.some
   else None
 
-let to_tag arch s : Tag.t =
+let to_region arch s : Region.t =
   let module S = Llvm_binary_section in
-  let name = "section" in
-  let data = S.name s in
+  let name = S.name s in
   let location = Location.Fields.create
-                   ~addr:(S.addr s |> make_addr arch)
-                   ~len:(S.size s |> Int64.to_int_exn) in
-  Tag.Fields.create ~name ~data ~location
+      ~addr:(S.addr s |> make_addr arch)
+      ~len:(S.size s |> Int64.to_int_exn) in
+  Region.Fields.create ~name ~location
 
 let from_data data : Img.t option =
   let from_data_exn () =
@@ -62,22 +61,11 @@ let from_data data : Img.t option =
                (fun v -> Option.value_exn v) in
     let entry = B.entry b |> make_addr arch in
     let sections =
-      B.segments b |>
-      List.filter_map ~f:(to_section arch) |>
+      B.segments b |> List.filter_map ~f:(to_section arch) |>
       (fun s -> List.hd_exn s, List.tl_exn s) in
     let symbols =
-      B.symbols b |>
-      List.filter_map ~f:(to_sym arch) in
-    let tags =
-      B.sections b |>
-      List.map ~f:(to_tag arch) in
-    Img.Fields.create ~arch ~entry ~sections ~symbols ~tags in
-  try from_data_exn () |> Option.some
-  with
-  | Failure s -> eprintf "llvm_loader: %s\n" s; None
-  | exn -> None
-
-
-let from_file path =
-  Bap_fileutils.readfile path |>
-  from_data
+      B.symbols b |> List.filter_map ~f:(to_sym arch) in
+    let regions =
+      B.sections b |> List.map ~f:(to_region arch) in
+    Img.Fields.create ~arch ~entry ~sections ~symbols ~regions in
+  Option.try_with from_data_exn

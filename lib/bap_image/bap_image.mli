@@ -56,8 +56,13 @@ val words : t -> size -> word table
 val sections : t -> sec table
 val symbols : t -> sym table
 
+
+val section : sec tag
+val symbol  : sym tag
+val region  : string tag
+
 (** returns memory tagged with arbitrary [(name,data)] tags  *)
-val tags : t -> (string * string) memmap
+val memory : t -> value memmap
 
 (** {2 Mappings }  *)
 val memory_of_section  : t -> sec -> mem
@@ -65,6 +70,8 @@ val memory_of_section  : t -> sec -> mem
 val memory_of_symbol   : t -> sym -> mem * mem seq
 val symbols_of_section : t -> sec -> sym seq
 val section_of_symbol  : t -> sym -> sec
+
+
 
 module Sec : sig
   type t = sec

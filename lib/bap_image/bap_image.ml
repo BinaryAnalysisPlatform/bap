@@ -62,6 +62,11 @@ end
 type sec = Sec.t with bin_io, compare, sexp
 type sym = Sym.t with bin_io, compare, sexp
 
+let section = Tag.register "section" sexp_of_sec
+let symbol  = Tag.register "symbol" sexp_of_sym
+let region  = Tag.register "region" sexp_of_string
+let file    = Tag.register "file"   sexp_of_string
+
 type words = {
   r8  : word table Lazy.t;
   r16 : word table Lazy.t;
@@ -75,7 +80,7 @@ type t = {
   data : Bigstring.t;
   symbols : sym table;
   sections : sec table;
-  tags : (string * string) memmap;
+  memory : value memmap;
   words : words sexp_opaque;
   memory_of_section : sec -> mem sexp_opaque;
   memory_of_symbol : (sym -> mem * mem seq) Lazy.t sexp_opaque;
@@ -85,46 +90,53 @@ type t = {
 
 type result = (t * Error.t list) Or_error.t
 
-
 let mem_of_location endian data {Location.addr; len} =
   Memory.create ~len endian addr data
 
-let find_section secs addr =
-  Table.find_mapi secs ~f:(fun mem sec ->
-      if Memory.contains mem addr then Some (mem,sec) else None)
+let memory_error ?here msg mem =
+  Error.create ?here msg
+    (Memory.min_addr mem, Memory.max_addr mem)
+    <:sexp_of<(addr*addr)>>
 
-module Error = struct
-  include Error
-  let prepend msg v sov err = tag_arg err msg v sov
-end
+let (++!) e1 e2 = Error.of_list [e1;e2]
 
-let add_sym errs secs syms sym =
+let memory_of_location loc mem : mem Or_error.t =
+  let (addr, len) = Location.(addr loc, len loc) in
+  match Memory.view ~from:addr ~words:len mem with
+  | Error err ->
+    Error.create "symbol at" addr sexp_of_addr ++!
+    Error.create "with size" len sexp_of_int ++!
+    memory_error "doesn't fit into memory" mem ++! err |>
+    Result.fail
+  | ok -> ok
+
+let add_sym memory errs secs syms sym =
   let (m,ms) = Sym.locations sym in
-  List.fold (m::ms) ~init:(syms,errs) ~f:(fun (map,errs) loc ->
-      let (addr, len) = Location.(addr loc, len loc) in
-      let r = match find_section secs addr with
-        | None -> Error Error.(of_string "no section for location")
-        | Some (mem,sec) ->
-          match Memory.view ~from:addr ~words:len mem with
-          | Error err ->
-            Error
-              Error.(tag_arg err "section memory"
-                       (lazy (Memory.min_addr mem, Memory.max_addr mem))
-                       <:sexp_of<(addr*addr) Lazy.t>> |>
-                     prepend "symbol's memory doesn't fit in section"
-                       sec sexp_of_sec)
-          | Ok mem -> match Table.add map mem sym with
-            | Error err -> Error Error.(tag err "intersecting symbol")
-            | ok -> ok in
-      match r with
-      | Ok map -> (map,errs)
-      | Error err ->
-        let err = Error.tag_arg err "skipped sym" sym sexp_of_sym in
-        map, err::errs)
+  List.fold (m::ms) ~init:(memory,syms,errs)
+    ~f:(fun (memory, map,errs) loc ->
+        let (addr, len) = Location.(addr loc, len loc) in
+        let memory,r = match Table.find_addr secs addr with
+          | None ->
+            memory, Error Error.(of_string "no section for location")
+          | Some (sec_mem,sec) ->
+            match memory_of_location loc sec_mem with
+            | Error err -> memory, Error err
+            | Ok mem ->
+              let memory =
+                Memmap.add memory mem (Tag.create symbol sym) in
+              match Table.add map mem sym with
+              | Error err ->
+                memory,Error Error.(tag err "intersecting symbol")
+              | ok -> memory,ok in
+        match r with
+        | Ok map -> memory,map,errs
+        | Error err ->
+          let err = Error.tag_arg err "skipped sym" sym sexp_of_sym in
+          memory, map, err::errs)
 
-let create_symbols syms secs =
-  List.fold syms ~init:(Table.empty,[])
-    ~f:(fun (symtab,errs) sym -> add_sym errs secs symtab sym )
+let create_symbols memory syms secs =
+  List.fold syms ~init:(memory,Table.empty,[])
+    ~f:(fun (memory,symtab,errs) sym -> add_sym memory errs secs symtab sym )
 
 let validate_no_intersections (s,ss) : Validate.t =
   let open Backend.Section in
@@ -138,7 +150,6 @@ let validate_no_intersections (s,ss) : Validate.t =
         Int.validate_lbound s2.off ~min:(Incl (s1.off + loc1.len))  in
       (v1 :: v2 :: vs, s2)) in
   Validate.name_list "sections shouldn't intersect" vs
-
 
 let validate_section data s : Validate.t =
   let size = Bigstring.length data in
@@ -197,11 +208,31 @@ let create_words secs = {
 let register_backend ~name backend =
   String.Table.add backends ~key:name ~data:backend
 
+let create_section_of_symbol_table syms secs =
+  let tab = Sym.Table.create ()
+      ~growth_allowed:false
+      ~size:(Table.length syms) in
+  Table.iteri syms ~f:(fun mem sym ->
+      match Table.find_addr secs (Memory.min_addr mem) with
+      | None -> ()
+      | Some (_,sec) ->
+        Sym.Table.add_exn tab ~key:sym ~data:sec);
+  Sym.Table.find_exn tab
+
 let of_img img data name =
   let open Img in
   let arch = arch img in
   create_sections arch data (sections img) >>= fun secs ->
-  let syms,errs = create_symbols (symbols img) secs in
+  let memory : value memmap =
+    List.fold (regions img) ~init:Memmap.empty ~f:(fun map reg ->
+        mem_of_location (Arch.endian arch) data (Region.location reg)
+        |> function
+        | Ok mem ->
+          Memmap.add map mem (Tag.create region (Region.name reg))
+        | Error _ -> map) in
+  let memory = Table.foldi secs ~init:memory ~f:(fun mem sec map ->
+      Memmap.add map mem Tag.(create section sec)) in
+  let memory,syms,errs = create_symbols memory (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Sec.hashable secs)
   >>= fun (memory_of_section : sec -> mem) ->
@@ -210,23 +241,18 @@ let of_img img data name =
   let symbols_of_section () : sec -> sym seq =
     Table.(link ~one_to:many Sec.hashable secs syms) in
   let section_of_symbol () : sym -> sec =
-    Table.(link ~one_to:one Sym.hashable syms secs) in
-  let tags = List.fold (tags img) ~init:Memmap.empty ~f:(fun map tag ->
-      match mem_of_location (Arch.endian arch) data tag.Tag.location with
-      | Ok mem -> Memmap.add map mem Tag.(tag.name, tag.data)
-      | Error _ ->  map) in
+    create_section_of_symbol_table syms secs in
   return ({
       img; name; data; symbols = syms; sections = secs; words;
       memory_of_section;
-      tags;
+      memory;
       memory_of_symbol   = Lazy.from_fun memory_of_symbol;
       symbols_of_section = Lazy.from_fun symbols_of_section;
       section_of_symbol  = Lazy.from_fun section_of_symbol;
     }, errs)
 
 let data t = t.data
-let tags t = t.tags
-
+let memory t = t.memory
 
 let of_backend backend data path : result =
   match String.Table.find backends backend with

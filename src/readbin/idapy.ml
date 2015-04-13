@@ -18,16 +18,11 @@ idc.Exit(0)" output
 let addr take mem =
   sprintf "0x%s" @@ Addr.string_of_value (take mem)
 
-let annotate_ida p =
-  let buf = Buffer.create 64 in
+let extract_script map =
+  let buf = Buffer.create 4096 in
   Buffer.add_string buf "from idautils import *\n";
-  Memmap.to_sequence p.annots |> Seq.iter ~f:(fun (mem,(tag,script)) ->
-      if tag = "idapy" then
-        Buffer.add_substitute buf (function
-            | "min_addr" -> addr Memory.min_addr mem
-            | "max_addr" -> addr Memory.max_addr mem
-            | "mem_size" -> Int.to_string (Memory.length mem)
-            | s -> sprintf
-                     "raise RuntimeError('bad substitution: %s')" s)
-          script);
+  Memmap.iter map ~f:(fun tag ->
+      match Tag.value python tag with
+      | Some line -> Buffer.add_string buf line
+      | None -> ());
   Buffer.contents buf
