@@ -26,10 +26,9 @@ module Sym = struct
   } with bin_io, compare, fields, sexp
 end
 
-module Tag = struct
+module Region = struct
   type t = {
     name : string;
-    data : string;
     location : location;
   } with bin_io, compare, fields, sexp
 end
@@ -40,7 +39,7 @@ module Img = struct
     entry    : addr;
     sections : Section.t * Section.t list;
     symbols  : Sym.t list;
-    tags     : Tag.t list;
+    regions  : Region.t list;
   } with bin_io, compare, fields, sexp
 end
 

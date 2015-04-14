@@ -132,6 +132,7 @@ Library types
                    Bap_seq,
                    Bap_size,
                    Bap_stmt,
+                   Bap_tag,
                    Bap_trie,
                    Bap_type,
                    Bap_var,

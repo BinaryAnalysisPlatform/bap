@@ -297,8 +297,10 @@ module Std = struct
        represent data *)
   module Word = Bitvector
 
+  module Tag = Bap_tag
+
   (** Byte endian. This is the only not first class type in a bap-types.
-      Sorry, no mapping and tables for this type.
+      Sorry, no maps and tables for this type.
   *)
   type endian = Bap_common.endian = LittleEndian | BigEndian
   with sexp,bin_io,compare
@@ -319,18 +321,20 @@ module Std = struct
   type nonrec addr_size = addr_size
   with bin_io, compare, sexp
 
-  type addr      = Addr.t      with bin_io, compare, sexp
-  type arch      = Arch.t      with bin_io, compare, sexp
-  type bil       = Bap_bil.bil with bin_io, compare, sexp
-  type binop     = Bil.binop   with bin_io, compare, sexp
-  type cast      = Bil.cast    with bin_io, compare, sexp
-  type exp       = Exp.t       with bin_io, compare, sexp
-  type size      = Size.t      with bin_io, compare, sexp
-  type stmt      = Stmt.t      with bin_io, compare, sexp
-  type typ       = Type.t      with bin_io, compare, sexp
-  type unop      = Bil.unop    with bin_io, compare, sexp
-  type var       = Var.t       with bin_io, compare, sexp
-  type word      = Word.t      with bin_io, compare, sexp
+  type addr  = Addr.t      with bin_io, compare, sexp
+  type arch  = Arch.t      with bin_io, compare, sexp
+  type bil   = Bap_bil.bil with bin_io, compare, sexp
+  type binop = Bil.binop   with bin_io, compare, sexp
+  type cast  = Bil.cast    with bin_io, compare, sexp
+  type exp   = Exp.t       with bin_io, compare, sexp
+  type size  = Size.t      with bin_io, compare, sexp
+  type stmt  = Stmt.t      with bin_io, compare, sexp
+  type typ   = Type.t      with bin_io, compare, sexp
+  type unop  = Bil.unop    with bin_io, compare, sexp
+  type var   = Var.t       with bin_io, compare, sexp
+  type word  = Word.t      with bin_io, compare, sexp
+  type value = Tag.value   with sexp_of
+  type 'a tag = 'a Tag.t     with sexp_of
 
   class ['a] bil_visitor = ['a] Bap_visitor.visitor
 

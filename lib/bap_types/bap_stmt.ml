@@ -59,6 +59,6 @@ module Stmts_pp = struct
   include Printable(struct
       type nonrec t = t
       let pp = pp_stmts
-      let module_name = "Bil"
+      let module_name = "Bap_stmt.Stmts_pp"
     end)
 end
