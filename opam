@@ -24,7 +24,6 @@ install: [
 remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "core_lwt"]
-  ["ocamlfind" "remove" "piqi"]
   ["rm" "-rf" bap:doc]
   ["rm" "-f" "%{prefix}%/share/bap/sigs.zip"]
   ["rm" "-f" "%{man}%/man1/bap-mc.1"]

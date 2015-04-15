@@ -5,7 +5,7 @@
 open Printf
 
 let (/) = Filename.concat
-              
+
 let tools = [
   "bap-mc";
   "bap-objdump";
@@ -19,7 +19,7 @@ let create_man prog =
   man
 
 let main () =
-  let scripts = ["bapbuild"; "baptop"] in
+  let scripts = ["baptop"] in
   let men = List.map create_man tools in
   let dst = "$mandir/man1" in
   FileUtil.mkdir ~parent:true dst;

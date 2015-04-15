@@ -16,6 +16,7 @@ module Program(Conf : Options.Provider) = struct
     with Not_found -> []
 
   let load_plugin name =
+    let before = Program_visitor.registered () |> List.length in
     let paths = [
       [FileUtil.pwd ()]; paths_of_env (); options.load_path
     ] |> List.concat in
@@ -26,7 +27,10 @@ module Program(Conf : Options.Provider) = struct
       ~error:(Error.of_string "Failed to find plugin in path, \
                                try to use -L option or set \
                                BAP_PLUGIN_PATH environment variable")
-    >>| Plugin.create ~system:"program" >>= Plugin.load
+    >>| Plugin.create ~system:"program" >>= Plugin.load >>= fun () ->
+    if List.length (Program_visitor.registered ()) = before
+    then errorf "Plugin %s didn't register itself" name
+    else return ()
 
   let prepare_args argv name =
     let prefix = "--" ^ name ^ "-" in
@@ -342,5 +346,5 @@ let () =
   Plugins.load ();
   match try_with_join (fun () -> Cmdline.parse () >>= start) with
   | Ok n -> exit n
-  | Error err -> eprintf "%s" Error.(to_string_hum err);
+  | Error err -> eprintf "%a@." Error.pp err;
     exit 1
