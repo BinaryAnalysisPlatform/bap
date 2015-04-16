@@ -52,7 +52,6 @@ let plugin () =
   rule "bap: cmxa & a -> plugin"
     ~prods:["%.plugin"]
     ~deps:["%.cmxa"; "%" -.- !Options.ext_lib]
-    ~doc:"Create BAP plugin"
     (fun env _ ->
        Seq [Cmd (S [
            !Options.ocamlopt;
