@@ -3,7 +3,7 @@ Copyright (c) 2014 Carnegie Mellon University
 In the following, "the BAP Library" refers to all files in the "lib"
 folder and all its subfolders with the following exceptions:
 
-       o Bap.top library consisting of the following modules:
+       o bap.top library consisting of the following modules:
          - Bap_install_printers
          - Bap_load_plugins
          - Bap_toplevel
@@ -14,8 +14,8 @@ all its subfolders.
 The BAP Library and BAP Toolkit are distributed under the terms of the
 MIT Licence (included below).
 
-The Bap.top library is distributed under ther terms of the Q Public
-License version 1.0 (included below)
+The bap.top library and bapbuild executable are distributed under ther
+terms of the Q Public License version 1.0 (included below)
 
 
 

@@ -27,7 +27,7 @@ FilesAB: lib/bap_types/bap_config.ml.ab, postinstall.ml.ab
 
 PreConfCommand: $rm setup.data
 PostInstallCommand: ocaml postinstall.ml
-PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
+PostUninstallCommand: $rm $bindir/baptop
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
 Document bap
@@ -283,7 +283,6 @@ Library disasm
                  Bap_byteweight,
                  Bap_signatures
 
-
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
   CSources:      disasm.h, disasm.c, disasm_stubs.c
@@ -412,6 +411,13 @@ Executable "bap-byteweight"
   Install:        true
   CompiledObject: best
   BuildDepends:   bap, bap.plugins, cmdliner, fileutils, curl, re.posix
+
+Executable "bapbuild"
+  Path:           .
+  MainIs:         bapbuild.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   core_kernel, ocamlbuild
 
 Executable run_tests
   Path:         lib_test/bap

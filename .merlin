@@ -1,3 +1,17 @@
+EXT here
+EXT nonrec
+EXT ounit
+
+FLG -short-paths
+FLG -w -4-33-40-41-42-43-34-44
+
+PKG core_kernel
+PKG ocamlbuild
+PKG jsonm
+PKG ocamlgraph
+PKG camlzip
+PKG fileutils
+
 B _build
 B _build/lib/bap
 B _build/lib/bap_disasm
@@ -6,11 +20,8 @@ B _build/lib/bap_elf
 B _build/lib/bap_image
 B _build/lib/bap_sema
 B _build/lib/bap_types
-EXT here
-EXT nonrec
-EXT ounit
-FLG -short-paths
-PKG core_kernel
+B _build/lwt
+
 S lib/bap
 S lib/bap_disasm
 S lib/bap_dwarf
@@ -18,15 +29,4 @@ S lib/bap_elf
 S lib/bap_image
 S lib/bap_sema
 S lib/bap_types
-
-PKG core_kernel
-PKG ocamlbuild
-PKG jsonm
-PKG ocamlgraph
-PKG camlzip
-PKG fileutils
-EXT ounit
-EXT here
-EXT nonrec
-FLG -short-paths
-FLG -w -4-33-40-41-42-43-34-44
+S lwt
