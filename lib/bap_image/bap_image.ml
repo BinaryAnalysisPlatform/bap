@@ -63,7 +63,7 @@ type sec = Sec.t with bin_io, compare, sexp
 type sym = Sym.t with bin_io, compare, sexp
 
 let section = Tag.register "section" sexp_of_sec
-let symbol  = Tag.register "symbol" sexp_of_sym
+let symbol  = Tag.register "symbol" sexp_of_string
 let region  = Tag.register "region" sexp_of_string
 let file    = Tag.register "file"   sexp_of_string
 
@@ -123,7 +123,8 @@ let add_sym memory errs secs syms sym =
             | Error err -> memory, Error err
             | Ok mem ->
               let memory =
-                Memmap.add memory mem (Tag.create symbol sym) in
+                let tag = Tag.create symbol (Sym.name sym) in
+                Memmap.add memory mem tag in
               match Table.add map mem sym with
               | Error err ->
                 memory,Error Error.(tag err "intersecting symbol")

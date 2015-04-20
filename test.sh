@@ -1,25 +1,30 @@
 #!/bin/bash
 
+TARGETS="arm x86 x86_64"
+TEST_FILES=".*\(ls\|cp\|rm\|tr\|wc\)$"
+LOADERS="llvm bap-elf"
 
-cd examples
-./run.sh
-cd ..
+if [ "x$1" != "x" ]; then
+    TEST_FILES=$1
+fi
 
 echo "Updating signatures"
 bap-byteweight update
 echo "done"
 
-for target in $TEST_TARGETS; do
+for target in $TARGETS; do
     git clone --depth=1 https://github.com/BinaryAnalysisPlatform/$target-binaries.git
-    files=`find "$target-binaries" \( -name "$1*" -o -name "gcc_$1*" \) -type f`
-    for file in $files; do
-        printf '%-70s ' $file;
-        bap-objdump $file --loader=$BAP_LOADER -d bil > /dev/null;
-        if [ $? -eq 0 ]; then
-            echo 'ok';
-        else
-            echo 'fail';
-            exit 1
-        fi
+    files=`find "$target-binaries" -regex $TEST_FILES -type f`
+    for loader in $LOADERS; do
+        for file in $files; do
+            printf '%s:%-70s ' $loader $file;
+            bap $file --loader=$loader -d bil > /dev/null;
+            if [ $? -eq 0 ]; then
+                echo 'ok';
+            else
+                echo 'fail';
+                exit 1
+            fi
+        done
     done
 done

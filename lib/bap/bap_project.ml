@@ -3,14 +3,13 @@ open Bap_types.Std
 open Image_internal_std
 open Bap_disasm
 
-type project = {
+type t = {
   arch    : arch;
-  argv    : string array;
-  program : disasm;
+  disasm  : disasm;
+  memory  : value memmap;
+  storage : value String.Map.t;
   symbols : string table;
-  memory  : mem;
-  annots  : value memmap;
-  bil_of_insns : (mem * insn) list -> bil;
+  base    : mem;
 }
 
 type color = [
@@ -33,7 +32,11 @@ let mark = Tag.register "mark" sexp_of_unit
 let color = Tag.register "color" sexp_of_color
 let weight = Tag.register "weight" sexp_of_float
 
-let visitors = ref []
-let register v = visitors := v :: !visitors
-let register' v = register (fun p -> v p; p)
-let registered () = List.rev !visitors
+let plugins : (string array -> t -> t) list ref = ref []
+let register_plugin_with_args p =
+  plugins := p :: !plugins
+let register_plugin_with_args' v =
+  register_plugin_with_args (fun a p -> v a p; p)
+let register_plugin v = register_plugin_with_args (fun _arg p -> v p)
+let register_plugin' v = register_plugin (fun p -> v p; p)
+let plugins () = List.rev !plugins

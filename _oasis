@@ -84,7 +84,7 @@ Library bap
                    dynlink,
                    findlib
   Modules:         Bap,
-                   Bap_program_visitor
+                   Bap_project
 
 
 Library plugins
@@ -385,7 +385,7 @@ Executable "bap-server"
   Install:        true
   MainIs:         start_server.ml
 
-Executable "bap-objdump"
+Executable "bap"
   Path:           src/readbin
   MainIs:         readbin.ml
   Install:        true

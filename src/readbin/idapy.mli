@@ -1,5 +1,4 @@
 open Bap.Std
-open Program_visitor
 
 (** [extract_symbols output_path] will emit a script, that will
     extract symbols from IDA database and store it [output_path] *)

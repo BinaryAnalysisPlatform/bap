@@ -163,19 +163,45 @@ let create
 
 
 let program =
-  let doc = "Disassemble binary" in
+  let doc = "Binary Analysis Platform" in
   let man = [
     `S "DESCRIPTION";
-    `P "$(tname) disassembles $(i,FILE) and outputs results in a
-          user adjustable form.";
-    `S "SYMBOL TABLES";
-    `P "Although $(tname) will try to extract symbols from \
-        the binary file, you can also provide symbols externally, \
-        using `-s' option. The argument to this option must be a \
-        file containing s-expressions. Each s expression is list \
-        of three atoms: name, starting address, ending address (i.e. \
-        an address of the byte that immediately follows the last \
-        byte of the symbol).";
+    `P "
+  $(mname) is a tool for binary analysis. It is an entry point to a
+  binary analysis platform, that allows you to start your analysis
+  right now." ;
+    `P "
+  The default $(mname) performs the following operations on provided
+  file:"; `Noblank;
+    `I ("", "- disassemble"); `Noblank;
+    `I ("", "- lift instructions into BIL"); `Noblank;
+    `I ("", "- reconstruct CFG"); `Noblank;
+    `I ("", "- reconstruct functions");
+    `P "
+  Results can be printed in different formats, including plain
+  text, html and dot.";
+
+    `P "
+  But BAP is also organized with a plugin architecture. That means
+  that you can extend BAP by your own code, written in OCaml. The
+  plugin can be as simple as:";
+    `I ("", "$$$$ cat mycode.ml"); `Noblank;
+    `I ("", "open Bap.Std"); `Noblank;
+    `I ("", "let main project = print_endline \"Hello, World\""); `Noblank;
+    `I ("", "let () = Project.register_plugin' main");
+
+    `P "Building is easy with our $(b,bapbuild) tool:";
+    `I ("", "$$$$ bapbuild mycode.plugin");
+    `P "And to load into bap:";
+    `I ("", "$$$$ bap /bin/ls -lmycode");
+    `P "User plugins have access to all the program state, and can
+    change it and communicate with other plugins, or just store their
+    results in whatever place you like.";
+    `I ("Note:", "$(b,bapbuild) is just a $(b,ocamlbuild) extended with
+    our rules. It is not needed to build your standalone applications,
+    or to build BAP itself.");
+    `P "$(mname) also can integrate with IDA. It can sync names with
+    IDA, and emit idapython scripts, based on the analysis";
     `S "BUGS";
     `P "Report bugs to \
         https://github.com/BinaryAnalysisPlatform/bap/issues";
@@ -190,7 +216,7 @@ let program =
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
         $print_symbols $use_ida $sigsfile $load
         $emit_ida_script $load_path),
-  Term.info "bap-objdump"
+  Term.info "bap"
     ~version:Config.pkg_version ~doc ~man
 
 let parse () =

@@ -4,9 +4,7 @@ open Bap.Std
 open Bap_plugins.Std
 open Format
 open Options
-open Program_visitor
-
-
+open Project
 
 module Program(Conf : Options.Provider) = struct
   open Conf
@@ -16,7 +14,7 @@ module Program(Conf : Options.Provider) = struct
     with Not_found -> []
 
   let load_plugin name =
-    let before = Program_visitor.registered () |> List.length in
+    let before = Project.plugins () |> List.length in
     let paths = [
       [FileUtil.pwd ()]; paths_of_env (); options.load_path
     ] |> List.concat in
@@ -28,7 +26,7 @@ module Program(Conf : Options.Provider) = struct
                                try to use -L option or set \
                                BAP_PLUGIN_PATH environment variable")
     >>| Plugin.create ~system:"program" >>= Plugin.load >>= fun () ->
-    if List.length (Program_visitor.registered ()) = before
+    if List.length (Project.plugins ()) = before
     then errorf "Plugin %s didn't register itself" name
     else return ()
 
@@ -75,9 +73,8 @@ module Program(Conf : Options.Provider) = struct
     sprintf "0x%s" @@ Addr.string_of_value (take mem)
 
   let substitute project =
-    let open Program_visitor in
     let find_tag tag mem =
-      Memmap.dominators project.annots mem |>
+      Memmap.dominators project.memory mem |>
       Seq.find_map ~f:(fun (mem,v) -> match Tag.value tag v with
           | Some reg -> Some (mem,reg)
           | None -> None) in
@@ -92,7 +89,7 @@ module Program(Conf : Options.Provider) = struct
       | Some thing -> subst thing spec
       | None -> value in
     let find_block mem =
-      Table.find_addr (Disasm.blocks project.program)
+      Table.find_addr (Disasm.blocks project.disasm)
         (Memory.min_addr mem) in
     let subst_block (mem,_) spec = addr spec mem in
     let asm insn = Insn.asm insn in
@@ -115,7 +112,7 @@ module Program(Conf : Options.Provider) = struct
           | Some (`bil | `asm as out) -> disasm mem out
           | None -> x) x;
       Buffer.contents buf in
-    let annots = Memmap.mapi project.annots ~f:(fun mem value ->
+    let memory = Memmap.mapi project.memory ~f:(fun mem value ->
         let tagval =
           List.find_map [text; html; comment; python; shell]
             ~f:(fun tag -> match Tag.value tag value with
@@ -124,7 +121,7 @@ module Program(Conf : Options.Provider) = struct
         match tagval with
         | Some (tag,value) -> Tag.create tag (sub mem value)
         | None -> value) in
-    {project with annots}
+    {project with memory}
 
   let find_roots arch mem =
     if options.bw_disable then None
@@ -245,7 +242,7 @@ module Program(Conf : Options.Provider) = struct
           Error.raise (Error.tag err msg));
     let module Target = (val target_of_arch arch) in
 
-    let make_project argv annots symbols =
+    let make_project memory symbols =
       let module H = Helpers.Make(struct
           let options = options
           let cfg = Disasm.blocks disasm
@@ -253,30 +250,31 @@ module Program(Conf : Options.Provider) = struct
           let syms = syms
           let arch = arch
           module Target = Target
-        end) in {
-        annots;
-        symbols;
-        argv; arch; memory = mem;
-        program = disasm;
-        bil_of_insns = H.bil_of_insns;
-      } in
+        end) in Project.({
+          memory;
+          storage = String.Map.empty;
+          symbols;
+          arch; base = mem;
+          disasm;
+        }) in
 
     let project =
-      List.fold2_exn ~init:(make_project Sys.argv annots syms)
+      List.fold2_exn ~init:(make_project annots syms)
         options.plugins
-        (Program_visitor.registered ())
+        (Project.plugins ())
         ~f:(fun p name visit ->
             let argv = prepare_args Sys.argv name in
-            visit (make_project argv p.annots p.symbols)) |>
+            visit argv (make_project p.memory p.symbols)) |>
       substitute in
 
     Option.iter options.emit_ida_script (fun dst ->
-        Out_channel.write_all dst ~data:(Idapy.extract_script project.annots));
+        Out_channel.write_all dst
+          ~data:(Idapy.extract_script project.memory));
 
     let module Env = struct
       let options = options
-      let cfg = Disasm.blocks project.program
-      let base = project.memory
+      let cfg = Disasm.blocks project.disasm
+      let base = project.base
       let syms = project.symbols
       let arch = project.arch
       module Target = Target
@@ -284,7 +282,6 @@ module Program(Conf : Options.Provider) = struct
     let module Printing = Printing.Make(Env) in
     let module Helpers = Helpers.Make(Env) in
     let open Printing in
-    let bil_of_block blk = project.bil_of_insns (Block.insns blk) in
 
     let pp_sym = List.map options.print_symbols ~f:(function
         | `with_name -> pp_name
@@ -297,7 +294,7 @@ module Program(Conf : Options.Provider) = struct
 
     let pp_blk = List.map options.output_dump ~f:(function
         | `with_asm -> pp_blk Block.insns pp_insns
-        | `with_bil -> pp_blk bil_of_block pp_bil) |> pp_concat in
+        | `with_bil -> pp_blk Helpers.bil_of_block pp_bil) |> pp_concat in
 
     Text_tags.install std_formatter `Text;
     if options.output_dump <> [] then
