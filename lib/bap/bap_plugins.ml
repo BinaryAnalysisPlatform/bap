@@ -5,8 +5,8 @@ module Std = struct
   type plugin = Plugin.t
 
   let systems = [
-    "bap.image";
-    "bap.disasm"
+    "bap.loader";
+    "bap.disasm";
   ]
 
   let internal = [
@@ -32,8 +32,6 @@ module Std = struct
                       (Bap_plugin.name pkg)
                       system
                       (Error.to_string_hum err)))
-
-
     let all () =
       List.map systems ~f:(fun s -> Bap_plugin.find_all ~system:s) |>
       List.concat

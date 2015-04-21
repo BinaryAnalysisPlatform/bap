@@ -11,7 +11,6 @@ build: [
   ["./configure"
                  "--prefix=%{prefix}%"
                  "--with-cxx=`which clang++`"
-                 "--enable-docs"
                  "--docdir=%{doc}%/bap"
                  "--mandir=%{man}%"]
   [make]
@@ -19,6 +18,7 @@ build: [
 ]
 install: [
   [make "install"]
+  ["bap-byteweight" "update"]
 ]
 
 remove: [
