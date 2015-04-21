@@ -54,14 +54,16 @@ val data : t -> Bigstring.t
 (** {2 Tables }  *)
 val words : t -> size -> word table
 val sections : t -> sec table
+
+(** @deprecated: this will be removed in a next release  *)
 val symbols : t -> sym table
 
 
 val section : sec tag
-val symbol  : sym tag
+val symbol  : string tag
 val region  : string tag
 
-(** returns memory tagged with arbitrary [(name,data)] tags  *)
+(** returns memory  *)
 val memory : t -> value memmap
 
 (** {2 Mappings }  *)

@@ -94,9 +94,9 @@ module Std = struct
 
   (** {3 Auxiliary libraries} *)
 
-  (** {3 Program visitor}
-      An extension point for program visiting plugins.  *)
-  module Program_visitor = Bap_program_visitor
+  (** {3 Project}
+      A big view on a dissassembled binary  *)
+  module Project = Bap_project
 
   (** {4 Dwarf library}
       This library gives an access to debugging information stored

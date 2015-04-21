@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Program_visitor
+open Project
 
 let extract_symbols output = sprintf "
 from idautils import *
