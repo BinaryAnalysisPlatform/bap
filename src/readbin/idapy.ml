@@ -4,6 +4,7 @@ open Project
 
 let extract_symbols output = sprintf "
 from idautils import *
+Wait()
 with open('%s', 'w+') as out:
     for ea in Segments():
         fs = Functions(SegStart(ea), SegEnd(ea))
@@ -20,7 +21,7 @@ let addr take mem =
 
 let extract_script map =
   let buf = Buffer.create 4096 in
-  Buffer.add_string buf "from idautils import *\n";
+  Buffer.add_string buf "from idautils import *\nWait()\n";
   Memmap.iter map ~f:(fun tag ->
       match Tag.value python tag with
       | Some line -> Buffer.add_string buf line

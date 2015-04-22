@@ -14,6 +14,7 @@ open Bap.Std
 
     The file can be generated from IDA with the following script:
 
+    Wait()
     fs = Functions(SegStart(ea), SegEnd(ea))
     for f in fs:
        print '(%s 0x%x 0x%x)' % (
