@@ -34,7 +34,12 @@
 
     - [Image.section] -- if the binary data was loaded from a binary
       format that contains sections (aka segments), then corresponding
-      memory regions would be marked. Sections gives you access
+      memory regions would be marked. Sections gives you access to
+      permission information.
+
+    - [Image.symbol] -- with this tag we annotate each memory regions
+      that belongs to a particular symbol. Currently, the type of tag
+      is just a string.
 
 *)
 open Core_kernel.Std
@@ -50,8 +55,8 @@ type t = {
   storage : value String.Map.t; (** arbitrary data storage *)
 
   (** Deprecated fields, the will be removed in a next release. *)
-  symbols : string table;       (** symbol table  @deprecated *)
-  base    : mem;                (** base memory   @deprecated *)
+  symbols : string table;       (** @deprecated symbol table  *)
+  base    : mem;                (** @deprecated base memory  *)
 }
 
 type color = [

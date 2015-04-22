@@ -8,7 +8,7 @@ let (/) = Filename.concat
 
 let tools = [
   "bap-mc";
-  "bap-objdump";
+  "bap";
   "bap-byteweight";
 ]
 
