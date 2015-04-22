@@ -4,8 +4,8 @@
 
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 
-`Bap` library provides basic facilities for performing binary analysis
-in OCaml and other languages.
+BAP is a platform for binary analysis. It is written in OCaml, but can
+be used from other languages, for example, from Python.
 
 # <a name="Installation"></a>Installation
 
@@ -27,23 +27,86 @@ $ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
 
 ### <a name="sysdeps"></a>Installing system dependencies
 
-There are few system libraries that bap depends on, namely `llvm-3.4` and `clang` compiler.
-We provide a file `apt.deps` that contains package names as they are in Ubuntu
-Trusty. Depending on your OS and distribution, you may need to adjust
-this names. But, on most Debian-based Linux distribution, this should work:
+BAP uses clang compiler and llvm library as major backend. We also
+need curl, zip and gmp packages for our tools. A complete up-to-date
+list of packages can be found in `opam` file, under `depexts` section.
+
+You can query for the external (system) dependecies with
 
 ```bash
-$ sudo apt-get install $(cat apt.deps)
+$ opam install bap -e ubuntu
 ```
+
+To install dependencies, using this method, try the following:
+
+```bash
+$ sudo apt-get install $(opam install bap -e ubuntu)
+```
+
+If you're not using Ubuntu, then you need to adapt package names in
+according to your system package manager preferences.
 
 
 # Usage
 
+## Using from OCaml
+
+There're two ways to use BAP. Compile your own application, and use
+BAP library, or write a plugin, that can still use the library, but
+will also get an access to decompiled binary. For the latter, write
+your plugin in OCaml using your
+[favorite text editor](https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs)
+:
+```sh
+$ cat mycode.ml
+open Bap.Std
+let main project = print_endline "Hello, World"
+let () = Project.register_plugin' main
+```
+
+Next, build it with our `bapbuild` tool:
+
+```sh
+$ bapbuild mycode.plugin
+```
+
+After this you can load your plugin with `-l` command line option, and
+get an immediate access to the decompiled binary:
+
+```sh
+$ bap /bin/ls -lmycode
+```
+
+`bapbuild` can compile a standalone applications, not only plugins. In
+fact, `bapbuild` underneath the hood is an `ocamlbuild` utility extended
+with our rules an flags. To compile a standalone binary,
+
+```bash
+$ bapbuild mycoolprog.native
+```
+
+If `bapbuild` complains that something is missing, make sure that you
+didn't skip the [Installation](#Installation) phase. You can add your
+own dependencies with a `-pkg` or `-pkgs` command line options:
+
+```bash
+$ bapbuild -pkg lwt mycoolprog.native
+```
+
+If you use your own build environment, please make sure that you have
+added `bap` as a dependency. We install our libraries using
+`ocamlfind` and you just need to add `bap` to your project. For
+example, if you use `oasis`, then you should add `bap` to the
+`BuildDepends` field. If you are using `ocamlbuild` with the
+`ocamlfind` plugin, then you should add `package(bap)` or `pkg_bap` to
+your `_tags` file.
+
+
 ## Using from top-level
 
-It is a good idea to learn how to use our library by playing in an OCaml
-top-level. If you have installed `utop`, then you can just use our `baptop`
-script to run `utop` with `bap` extensions:
+It maybe a good idea to learn how to use our library by playing in an
+OCaml top-level. If you have installed `utop`, then you can just use
+our `baptop` script to run `utop` with `bap` extensions:
 
 ```bash
 $ baptop
@@ -79,22 +142,8 @@ dependencies, install top-level printers, etc.
 
 ## Using from Python
 
-You can install `bap` python bindings with `pip`.
-
-```bash
-$ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
-```
-
-
-Instead of git path you can also use a local one. Adjust it according
-to your setup. Also, you may need to use `sudo` or to activate your
-`virtualenv` if you're using one.
-
-If you don't like `pip`, then you can just go to `bap/python` folder
-and copy-paste the contents to whatever place you like, and use it as
-desired.
-
-After bindings are properly installed, you can start to use it:
+After BAP and python bindings are properly installed, you can start to
+use it:
 
 ```python
     >>> import bap
@@ -124,9 +173,9 @@ For more information, read builtin documentation, for example with
 
 ## Using from shell
 
-Bap is shipped with `bap-objdump` utility that can disassemble files,
-and printout dumps in different formats, including plain text, json,
-dot, html. The example of `bap-objdump` output is:
+Bap is shipped with `bap` utility that can disassemble files, and
+printout dumps in different formats, including plain text, json, dot,
+html. The example of `bap` output is:
 
 ```asm
   begin(to_uchar)
@@ -162,8 +211,14 @@ dot, html. The example of `bap-objdump` output is:
   }
 ```
 
-Also we're shipping a `bap-mc` executable that can disassemble arbitrary
-strings. Read `bap-mc --help` for more information.
+Also we're shipping a `bap-mc` executable that can disassemble
+arbitrary strings and output them in a plethora of formats. Read
+`bap-mc --help` for more information. `bap-byteweight` utility can be
+used to evaluate our `byteweight` algorithm for finding symbols inside
+the binary. It is also a supporting toolkit for byteweight
+infrastructure, it can download, create and install binary signatures,
+used for identification.
+
 
 ## Using from other languages
 
@@ -175,41 +230,16 @@ shipped with bap by default. You can talk with server using `HTTP`
 protocol, or extend it with any other transporting protocol you would
 like.
 
-
-## Compiling your program with `bap`
-
-Similar to the top-level, you can use our `bapbuild` script to compile a program
-that uses `bap` without tackling with the build system. For example, if your
-program is `mycoolprog.ml`, then you can execute:
-
-```bash
-$ bapbuild mycoolprog.native
-```
-
-and you will obtain `mycoolprog.native`. If `bapbuild` complains that something
-is missing, make sure that you didn't skip the [Installation](#Installation)
-phase. You can add your own dependencies with a `-package` command line option.
-
-If you have other dependencies, you can compile it using `pkg` flag, like this
-
-```bash
-$ bapbuild -pkg lwt mycoolprog.native
-```
-
-If you use your own build environment, please make sure that you have added
-`bap` as a dependency. We install our libraries using `ocamlfind` and you just
-need to add `bap` to your project. For example, if you use `oasis`, then you
-should add `bap` to the `BuildDepends` field. If you are using `ocamlbuild` with
-the `ocamlfind` plugin, then you should add `package(bap)` or `pkg_bap` to your
-`_tags` file.
-
 ## Extending BAP
 
-BAP can be extended using plugin system. That means, that you can use
-`bap` library, to extend the `bap` library! See our
+We're always welcome for any contributions. If you want to add new
+code, or fix a bug, feel free to clone us, and create a pull request.
+
+But BAP can also be extended in a non invasive way, using plugin
+system. That means, that you can use `bap` library, to extend the
+`bap` library! See our
 [blog](http://binaryanalysisplatform.github.io/bap_plugins/) for more
 information.
-
 
 ## Learning BAP
 
@@ -217,7 +247,9 @@ The best source of information about BAP is it's source code, that is
 well-documented. There are also
 [blog](http://binaryanalysisplatform.github.io/bap_plugins/) and
 [wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
-can find some useful information.
+can find some useful information. Also, we have a permanently manned
+chat in case of emergency. Look at the badge on top of the README file,
+and feel free to join.
 
 # License
 

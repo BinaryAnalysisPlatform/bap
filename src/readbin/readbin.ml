@@ -13,7 +13,35 @@ module Program(Conf : Options.Provider) = struct
     try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
     with Not_found -> []
 
+  (** [create_plugin system name file] if file is not [None]
+      then create a plugin targeting this file, otherwise
+      search for the plugin with a given [system] and [name]
+      if a system. Return an error, if nothing found.  *)
+  let create_plugin system name = function
+    | Some name -> Ok (Plugin.create ~system name)
+    | None ->
+      Plugin.find_all ~system |>
+      List.filter ~f:(fun p -> Plugin.name p = name) |> function
+      | [] ->
+        errorf "Failed to find plugin in path or in system, \
+                try to use -L option or set \
+                BAP_PLUGIN_PATH environment variable"
+      | _ :: _ :: _ ->
+        errorf "The plugin name is ambigious, as I found more \
+                than one plugin named '%s' in your system." name
+      | [p] -> Ok p
+
+  (** [load_plugin name] if [name] or [name.plugin] points to a
+      file then load it, otherwise search for the plugin of a
+      system "bap.project" with the given [name] using findlib.
+      Bail-out with error if nothing found.
+      Once plugin is loaded it is checked that it registered itself
+      under the system. *)
   let load_plugin name =
+    let system = "bap.project" in
+    let name =
+      if Filename.check_suffix name ".plugin"
+      then name else name ^ ".plugin" in
     let before = Project.plugins () |> List.length in
     let paths = [
       [FileUtil.pwd ()]; paths_of_env (); options.load_path
@@ -21,11 +49,7 @@ module Program(Conf : Options.Provider) = struct
     List.find_map paths ~f:(fun dir ->
         let path = Filename.concat dir name in
         Option.some_if (Sys.file_exists path) path) |>
-    Result.of_option
-      ~error:(Error.of_string "Failed to find plugin in path, \
-                               try to use -L option or set \
-                               BAP_PLUGIN_PATH environment variable")
-    >>| Plugin.create ~system:"program" >>= Plugin.load >>= fun () ->
+    create_plugin system name >>= Plugin.load >>= fun () ->
     if List.length (Project.plugins ()) = before
     then errorf "Plugin %s didn't register itself" name
     else return ()
@@ -38,8 +62,6 @@ module Program(Conf : Options.Provider) = struct
           | None -> None
           | Some arg -> Some ("--" ^ arg))
 
-
-
   type bound = [`min | `max] with sexp
   type spec = [`name | bound] with sexp
 
@@ -51,7 +73,6 @@ module Program(Conf : Options.Provider) = struct
     | `asm
     | `bil
   ] with sexp
-
 
   let subst_of_string = function
     | "region" | "region_name" -> Some (`region `name)
@@ -228,49 +249,32 @@ module Program(Conf : Options.Provider) = struct
                merge_syms img_syms     |>
                rename_symbols usr_syms |>
                merge_syms usr_syms     in
-    let annots =
-      Option.value_map img ~default:Memmap.empty ~f: Image.memory in
+    let memory =
+      Option.value_map img ~default:Memmap.empty ~f:Image.memory in
+    let memory =
+      Table.foldi syms ~init:memory ~f:(fun mem sym map ->
+          Memmap.add map mem (Tag.create Image.symbol sym)) in
 
     List.iter options.plugins ~f:(fun name ->
-        let name = if Filename.check_suffix name ".plugin" then
-            name else (name ^ ".plugin") in
         match load_plugin name with
         | Ok () -> ()
         | Error err ->
           let msg = asprintf "Failed to load plugin %s"
               (Filename.basename name) in
           Error.raise (Error.tag err msg));
-    let module Target = (val target_of_arch arch) in
-
-    let make_project memory symbols =
-      let module H = Helpers.Make(struct
-          let options = options
-          let cfg = Disasm.blocks disasm
-          let base = mem
-          let syms = syms
-          let arch = arch
-          module Target = Target
-        end) in Project.({
-          memory;
-          storage = String.Map.empty;
-          symbols;
-          arch; base = mem;
-          disasm;
-        }) in
 
     let project =
-      List.fold2_exn ~init:(make_project annots syms)
-        options.plugins
-        (Project.plugins ())
-        ~f:(fun p name visit ->
-            let argv = prepare_args Sys.argv name in
-            visit argv (make_project p.memory p.symbols)) |>
+      List.fold2_exn options.plugins (Project.plugins ()) ~init:{
+        arch; disasm; memory; storage = String.Map.empty;
+        symbols = syms; base = mem
+      } ~f:(fun p name f -> f (prepare_args Sys.argv name) p) |>
       substitute in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
           ~data:(Idapy.extract_script project.memory));
 
+    let module Target = (val target_of_arch arch) in
     let module Env = struct
       let options = options
       let cfg = Disasm.blocks project.disasm
