@@ -14,7 +14,6 @@ build: [
                  "--docdir=%{doc}%/bap"
                  "--mandir=%{man}%"]
   [make]
-  [make "doc"]
 ]
 install: [
   [make "install"]
