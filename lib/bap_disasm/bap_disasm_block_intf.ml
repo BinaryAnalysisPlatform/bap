@@ -42,11 +42,13 @@ module type Block_traverse = sig
   ] with compare, sexp_of
 
   (** [dests blk] block immediate destinations including unresolved
-      one *)
+      one. Successors are returned in the order of execution, e.g.,
+      taken branch comes before the implicit one. *)
   val dests : t -> dest seq
 
-  (** [succs blk] block immediate successors  *)
+  (** [succs blk] block immediate successors in the order of
+      execution, @see dests.  *)
   val succs : t -> t seq
-  (** [preds blk] block immediate predecessors  *)
+  (** [preds blk] block immediate predecessors in unspecified order. *)
   val preds : t -> t seq
 end

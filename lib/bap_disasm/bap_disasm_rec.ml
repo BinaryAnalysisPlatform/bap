@@ -434,6 +434,12 @@ module Block = struct
        instructions.
   *)
 
+
+  let sort_dests =
+    List.sort ~cmp:(fun x y -> match x,y with
+        | (_,`Fall), _ -> 1
+        | _,_ -> 0)
+
   let rec create t addr =
     let nabes inj side =
       Seq.of_list (side addr) |> Seq.unfold_with ~init:()
@@ -449,7 +455,7 @@ module Block = struct
       | None,`Jump -> Yield (`Unresolved `Jump, ())
       | None,`Cond -> Yield (`Unresolved `Cond, ()) in
     let with_nil f a = Option.value ~default:[] (f a) in
-    let succs a = with_nil (Addrs.find t.succs) a in
+    let succs a = sort_dests (with_nil (Addrs.find t.succs) a) in
     let preds a = with_nil (Addrs.find t.preds) a in
     let get_mem () = Addrs.find_exn t.addrs addr  in
     let mem = Lazy.from_fun get_mem in

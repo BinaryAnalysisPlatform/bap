@@ -36,7 +36,11 @@ include Block_traverse  with type t := t
     specified by the [next] parameter. By default search is performed
     in a forward direction, using [succs] function. To search in a
     reverse direction, use [preds] function. The search result is
-    returned as a lazy sequence.
+    returned as a lazy sequence. Destinations of the block are visited
+    in the order of execution, e.g., taken branch is visited before
+    non taken. No such guarantee is made for the predecessors or any
+    other function provided as a [next] arguments, since it is a
+    property of a [next] function, not the algorithm itsef.
 *)
 val dfs : ?next:(t -> t seq) -> ?bound:mem -> t -> t seq
 
