@@ -11,7 +11,20 @@ let syntax_packages = List.map [
 
 let default_pkgs = ["bap"; "bap.plugins"; "core_kernel"]
 
-let packages = default_pkgs @ syntax_packages
+(* there is no way to figure out what libraries were linked into
+   the bap executable in the runtime. Later we can try to figure
+   this out from the _oasis file for example, but right now I will
+   hardcode the dependencies here.
+*)
+let bap_packages = [
+  "ocamlgraph";
+  "ezjsonm";
+  "cmdliner";
+  "fileutils";
+  "re.posix";
+]
+
+let packages = default_pkgs @ syntax_packages @ bap_packages
 
 let default_tags = [
   "linkall";
@@ -37,8 +50,8 @@ let extern_deps_link_flags () =
                 Findlib.topological_closure in
   !Options.ocaml_pkgs |>
   List.map ~f:Findlib.query |>
-  List.filter ~f:(fun pkg -> not (List.mem interns pkg)) |>
   Findlib.topological_closure |>
+  List.filter ~f:(fun pkg -> not (List.mem interns pkg)) |>
   Findlib.link_flags_native
 
 let symlink env =
