@@ -390,6 +390,7 @@ Executable "bap"
   MainIs:         readbin.ml
   Install:        true
   CompiledObject: best
+  # XXX: Update bapbuild.ml bap_packages if you add something here
   BuildDepends:   bap,
                   bap.plugins,
                   ocamlgraph,
