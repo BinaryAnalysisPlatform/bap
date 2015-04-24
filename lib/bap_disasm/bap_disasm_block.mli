@@ -42,7 +42,10 @@ include Block_traverse  with type t := t
     other function provided as a [next] arguments, since it is a
     property of a [next] function, not the algorithm itsef.
 *)
-val dfs : ?next:(t -> t seq) -> ?bound:mem -> t -> t seq
+val dfs :
+  ?order:[`post | `pre] ->        (** defaults to pre *)
+  ?next:(t -> t seq) ->           (** defaults to succs  *)
+  ?bound:mem -> t -> t seq
 
 
 (** A classic control flow graph using OCamlgraph library.

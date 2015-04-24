@@ -69,6 +69,7 @@ module Build(G : Graph.Builder.S
               Hash_set.add vis (Block.addr src);
               match dest with
               | `Unresolved _ -> gr
+              | `Block (dst,_) when skip bound vis dst -> gr
               | `Block (dst,kind) ->
                 let edge = Cfg.E.create src kind dst in
                 let gr = G.add_edge_e gr edge in
@@ -81,7 +82,7 @@ module Imperative = Build(Graph.Builder.I(Cfg.Imperative))
 let to_graph = Persistant.to_graph
 let to_imperative_graph = Imperative.to_graph
 
-let dfs ?(next=Block.succs) ?bound entry =
+let dfs ?(order=`pre) ?(next=Block.succs) ?bound entry =
   let open Seq.Generator in
   let vis = Vis.create () in
   let yield blk =
@@ -89,8 +90,21 @@ let dfs ?(next=Block.succs) ?bound entry =
     yield blk in
   let rec loop blk =
     if skip bound vis blk then return ()
-    else Seq.fold (next blk) ~init:(yield blk)
-        ~f:(fun gen blk -> gen >>= fun () -> loop blk) in
-  run (loop entry)
+    else
+      let childs =
+        Seq.fold (next blk) ~init:(return ())
+          ~f:(fun gen blk -> gen >>= fun () -> loop blk) in
+      match order with
+      | `post -> childs >>= fun () -> yield blk
+      | `pre  -> yield blk >>= fun () -> childs
+  in
+  run (loop entry) |> Seq.memoize
+(*                    ^^^^^^^^^^^ *)
+(* This is needed because we're folding with a hidden and imperative
+   table of visited blocks. If sequence will be reevaluated then all
+   blocks will be already visited. Of course one can argue that it
+   is better to fold with explicit persistent set, but in this case
+   I need to write my own loop, since the generator monad doesn't
+   allow me to pass my own state with it.*)
 
 include Block
