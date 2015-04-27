@@ -34,14 +34,10 @@ Document bap
   Type: ocamlbuild (0.4)
   BuildTools: ocamlbuild, ocamldoc
   Title:      API documentation for bap
-  XOCamlbuildPath: .
+  XOCamlbuildPath: lib/bap
   XOCamlbuildExtraArgs:
     "-docflags '-colorize-code -short-functors -charset utf-8'"
-  XOCamlbuildLibraries: bap,
-                        bap.types,
-                        bap.image,
-                        bap.disasm,
-                        bap.dwarf
+  XOCamlbuildModules: Bap
 
 Flag serialization
   Description: Build serialization library
@@ -83,18 +79,18 @@ Library bap
                    bap.types,
                    dynlink,
                    findlib
-  Modules:         Bap,
-                   Bap_project
+  Modules:         Bap
+  InternalModules: Bap_project
 
 
 Library plugins
   Path:            lib/bap
   FindLibParent:   bap
   FindLibName:     plugins
-  Modules:         Bap_plugin,
-                   Bap_plugins
-  BuildDepends:    bap.image.elf_backend,
-                   bap.image.llvm_loader_backend,
+  Modules:         Bap_plugins
+  InternalModules: Bap_plugin
+  BuildDepends:    bap.elf_backend,
+                   bap.llvm_loader_backend,
                    bap.llvm
 
 Library top
@@ -103,7 +99,7 @@ Library top
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
-  Modules:
+  InternalModules:
             Bap_install_printers,
             Bap_load_plugins,
             Bap_toplevel
@@ -115,7 +111,7 @@ Library types
   FindlibName:     types
   CompiledObject:  best
   BuildDepends:    zarith
-  Modules:         Bap_types,
+  InternalModules:
                    Bap_addr,
                    Bap_arch,
                    Bap_bil,
@@ -135,29 +131,31 @@ Library types
                    Bap_tag,
                    Bap_trie,
                    Bap_type,
+                   Bap_types,
                    Bap_var,
                    Bap_visitor
 
 Library conceval
   Path: lib/bap_types
-  FindLibParent: types
+  FindLibParent: bap
   FindLibName: conceval
   BuildTools: ocamlbuild
   Modules: Conceval
-  BuildDepends: bap.types
+  BuildDepends: bap
   CompiledObject: best
 
 Library serialization
   XMETADescription: Provides serialization for main data types
   Path:         lib/bap_types/
   Build$: flag(serialization)
-  FindLibParent: types
+  FindLibParent: bap
   FindLibName: serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqilib,piqirun,piqirun.pb,piqirun.ext,bap.types
-  Modules:   Bil_piqi,
+  BuildDepends: piqilib,piqirun,piqirun.pb,piqirun.ext,bap
+  Modules:   Bil_piqi
+  InternalModules:
              Stmt_piqi,
              Stmt_piqi_ext
 
@@ -168,7 +166,8 @@ Library bap_image
   BuildDepends:  bap.elf,
                  bap.dwarf,
                  bap.types
-  Modules:       Bap_fileutils,
+  InternalModules:
+                 Bap_fileutils,
                  Bap_image,
                  Bap_image_std,
                  Bap_memmap,
@@ -180,23 +179,24 @@ Library bap_image
 
 Library elf_backend
   Path:            lib/bap_image/
-  FindlibParent:   bap_image
+  FindlibParent:   bap
   FindlibName:     elf_backend
   XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
   BuildDepends:    bap, core_kernel
-  Modules:         Image_elf
+  InternalModules: Image_elf
 
 Library elf
   Path:          lib/bap_elf
   FindlibParent: bap
   FindlibName:   elf
   BuildDepends:  bitstring, bitstring.syntax
-  Modules:       Bap_elf,
+  InternalModules:
+                 Bap_elf,
                  Elf_parse,
                  Elf_types,
-                 Elf_utils
-  InternalModules: Elf_internal_utils
+                 Elf_utils,
+                 Elf_internal_utils
 
 Library llvm_loader
   Path:            lib/bap_image/
@@ -216,21 +216,22 @@ Library llvm_loader
 
 Library llvm_loader_backend
   Path:            lib/bap_image/
-  FindlibParent:   bap_image
+  FindlibParent:   bap
   FindlibName:     llvm_loader_backend
   XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
   BuildDepends:    bap,
                    bap.image.llvm_loader,
                    core_kernel
-  Modules:         Llvm_loader_backend
+  InternalModules: Llvm_loader_backend
 
 Library dwarf
   Path:          lib/bap_dwarf
   FindlibParent: bap
   FindlibName:   dwarf
   BuildDepends:  bap.types
-  Modules:       Bap_dwarf,
+  InternalModules:
+                 Bap_dwarf,
                  Dwarf_data,
                  Dwarf_fbi,
                  Dwarf_input,
@@ -246,7 +247,8 @@ Library disasm
                  bap.types,
                  camlzip,
                  ocamlgraph
-  Modules:       Bap_disasm,
+  InternalModules:
+                 Bap_disasm,
                  Bap_disasm_abi,
                  Bap_disasm_abi_helpers,
                  Bap_disasm_arm,
@@ -295,7 +297,8 @@ Library llvm
   BuildDepends:  bap.image,
                  bap.disasm,
                  bap.types
-  Modules:       Bap_llvm
+  InternalModules:
+                 Bap_llvm
   CCOpt:         $cc_optimization
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
@@ -307,18 +310,17 @@ Library sema
   FindlibName:   sema
   BuildDepends:  bap.disasm,
                  bap.types
-  Modules:       Bap_sema,
+  InternalModules:
+                 Bap_sema,
                  Bap_sema_symtab,
                  Bap_lnf
-
-
 
 Library types_test
   Path:           lib_test/bap_types
   Build$:         flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap.types, bap.types.conceval
+  BuildDepends:   bap, bap.conceval
   Modules:        Test_bitvector,
                   Test_conceval
 
@@ -404,7 +406,7 @@ Executable "bap-mc"
   MainIs:         bap_mc.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, bap.types.serialization
+  BuildDepends:   bap, bap.plugins, cmdliner, bap.serialization
 
 Executable "bap-byteweight"
   Path:           src/byteweight

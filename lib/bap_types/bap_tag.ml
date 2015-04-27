@@ -23,5 +23,5 @@ include Printable(struct
     let pp ppf v = Format.fprintf ppf "%s %s"
         (String.capitalize (tagname v))
         (ppstring_of_sexp (sexp_of_value v))
-    let module_name = "Bap_tag"
+    let module_name = "Bap.Std.Tag"
   end)

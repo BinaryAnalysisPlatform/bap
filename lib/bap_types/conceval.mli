@@ -4,7 +4,7 @@
 *)
 
 open Core_kernel.Std
-open Bap_types.Std
+open Bap.Std
 
 type state
 with bin_io, compare, sexp

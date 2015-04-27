@@ -121,6 +121,7 @@ module type ModeVars = sig
 
   (* r8 -> r15 *)
   val nums : var array
+  val r : var array
 end
 
 module R32 = struct
@@ -152,6 +153,7 @@ module R32 = struct
 
   (* r8 -> r15 *)
   let nums = Array.init 8 ~f:(fun i -> Var.create "ERROR" (Type.imm 0) )
+  let r = nums
 end
 
 module R64 = struct
@@ -183,6 +185,7 @@ module R64 = struct
 
   (* r8 -> r15 *)
   let nums = Array.init 8 ~f:(fun i -> Var.create (Printf.sprintf "R%d" (i+8)) reg64_t)
+  let r = nums
 end
 
 let vars_of_mode mode =

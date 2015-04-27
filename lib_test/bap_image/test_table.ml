@@ -10,38 +10,38 @@ let create_addr = function
   | W32 -> Addr.of_int ~width:32
   | W64 -> Addr.of_int ~width:64
 
-let empty_table = Bap_table.empty
+let empty_table = Table.empty
 
 let create_mem ?(addr_size=W32) ?(start_addr=0x00) ?(size=0x08) () =
   let addr = create_addr W32 start_addr in
   let contents = Bigstring.init size ~f:(fun i -> char_of_int (i+0x61)) in
-  let m = Bap_memory.create LittleEndian addr contents in
+  let m = Memory.create LittleEndian addr contents in
   match m with
   | Ok m -> m
   | Error err -> assert_failure (Error.to_string_hum err)
 
 let table =
   let mem = create_mem () in
-  let t = Bap_table.add empty_table mem "Tagged" in
+  let t = Table.add empty_table mem "Tagged" in
   match t with
   | Ok t -> t
   | Error err -> assert_failure (Error.to_string_hum err)
 
 let test_table_len ctxt =
-  assert_equal 0 (Bap_table.length empty_table)
+  assert_equal 0 (Table.length empty_table)
 
 let test_table_len2 ctxt =
-  assert_equal 1 (Bap_table.length table)
+  assert_equal 1 (Table.length table)
 
 let test_find ctxt =
   let mem_to_find = create_mem () in
-  Bap_table.find table mem_to_find |> function
+  Table.find table mem_to_find |> function
   | Some x -> assert_equal "Tagged" x
   | None -> assert_failure "Not found"
 
 let test_mem ctxt =
   let mem_to_find = create_mem () in
-  assert_bool "Memory not found" (Bap_table.mem table mem_to_find)
+  assert_bool "Memory not found" (Table.mem table mem_to_find)
 
 let get_mem_tag = function
   | Some (_,x) -> x
@@ -52,8 +52,8 @@ let mem_high = create_mem ~start_addr:0x30 ~size:0x10 ()
 
 (* Construct a new table tab *)
 let tab =
-  let t = Bap_table.add empty_table mem_low "lo" >>= fun t ->
-    Bap_table.add t mem_high "hi" >>= fun t -> return t in
+  let t = Table.add empty_table mem_low "lo" >>= fun t ->
+    Table.add t mem_high "hi" >>= fun t -> return t in
   match t with
   | Ok t -> t
   | Error err -> assert_failure (Error.to_string_hum err)
@@ -61,7 +61,7 @@ let tab =
 (* Tests if the mem range intersects with the mem expected regions *)
 let test_intersections ctxt ~start_addr ~size ~expect =
   let mem_intersect = create_mem ~start_addr ~size () in
-  let result = Bap_table.intersections tab mem_intersect in
+  let result = Table.intersections tab mem_intersect in
   let regions = Seq.fold result ~init:[] ~f:(fun acc x -> (snd x) :: acc) in
   let printer l = Sexp.to_string_hum (sexp_of_list sexp_of_string l) in
   assert_equal ~ctxt ~printer expect regions
@@ -69,31 +69,31 @@ let test_intersections ctxt ~start_addr ~size ~expect =
 let str_printer expect_err = Sexp.to_string_hum (sexp_of_string expect_err)
 
 let test_next ctxt =
-  let result = Bap_table.next tab mem_low |> get_mem_tag in
+  let result = Table.next tab mem_low |> get_mem_tag in
   let msg = "Wrong next element" in
   assert_equal ~ctxt ~printer:str_printer ~msg "hi" result
 
 let test_prev ctxt =
-  let result = Bap_table.prev tab mem_high |> get_mem_tag in
+  let result = Table.prev tab mem_high |> get_mem_tag in
   let msg = "Wrong prev element" in
   assert_equal ~ctxt ~printer:str_printer ~msg "lo" result
 
 let test_min ctxt =
-  let result = Bap_table.min tab |> get_mem_tag in
+  let result = Table.min tab |> get_mem_tag in
   let msg = "Wrong lowest memory binding" in
   assert_equal ~ctxt ~printer:str_printer ~msg "lo" result
 
 let test_max ctxt =
-  let result = Bap_table.max tab |> get_mem_tag in
+  let result = Table.max tab |> get_mem_tag in
   let msg = "Wrong highest memory binding" in
   assert_equal ~ctxt ~printer:str_printer ~msg "hi" result
 
 let test_one_to_one ctxt =
   let tab2 =
     let extra = create_mem ~start_addr:0x50 ~size:0x30 () in
-    let t = Bap_table.add empty_table mem_low "reg1" >>= fun t ->
-      Bap_table.add t mem_high "reg2" >>= fun t ->
-      Bap_table.add t extra "reg3" >>= fun t -> return t in
+    let t = Table.add empty_table mem_low "reg1" >>= fun t ->
+      Table.add t mem_high "reg2" >>= fun t ->
+      Table.add t extra "reg3" >>= fun t -> return t in
     match t with
     | Ok t -> t
     | Error err -> assert_failure (Error.to_string_hum err) in

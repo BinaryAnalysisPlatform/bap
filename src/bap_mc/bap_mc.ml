@@ -90,7 +90,7 @@ let string_of_list pp bil =
   flush_str_formatter ()
 
 let string_of_bil = function
-  | `pb -> Bil_piqi.pb_of_stmts
+  | `pb ->  Bil_piqi.pb_of_stmts
   | `json -> Bil_piqi.json_of_stmts
   | `xml -> Bil_piqi.xml_of_stmts
   | `bil -> asprintf "%a" Bil.pp

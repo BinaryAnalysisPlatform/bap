@@ -50,7 +50,7 @@ end
 include Regular.Make(struct
     type t = Bap_bil.stmt with bin_io, compare, sexp
     let hash = Hashtbl.hash
-    let module_name = "Bap_stmt"
+    let module_name = "Bap.Std.Stmt"
     let pp = pp
   end)
 
@@ -59,6 +59,6 @@ module Stmts_pp = struct
   include Printable(struct
       type nonrec t = t
       let pp = pp_stmts
-      let module_name = "Bap_stmt.Stmts_pp"
+      let module_name = "Bap.Std.Bil"
     end)
 end

@@ -52,7 +52,8 @@ module Make(Env : Env) = struct
     pp_print_tab fmt ();
     Insn.pp fmt insn
 
-  let pp_insns = pp_list pp_insn_line
+  let pp_nothing _ () = ()
+  let pp_insns = pp_list ~sep:pp_nothing pp_insn_line
 
   (** [pp_blk fmt blk] creates a basic block printer. The block is
       printed inside a 2 space indented vertical box *)
@@ -78,9 +79,8 @@ module Make(Env : Env) = struct
   let pp_syms pp_blk fmt syms =
     pp_seq (pp_sym pp_blk) fmt (Table.to_sequence syms)
 
-  let pp_ignore _ () = ()
 
-  let pp_concat ?(sep=pp_ignore) pps fmt x =
+  let pp_concat ?(sep=pp_nothing) pps fmt x =
     List.map pps ~f:(fun pp -> fun fmt () -> pp fmt x) |>
     List.intersperse ~sep |>
     List.iter ~f:(fun pp -> pp fmt ())

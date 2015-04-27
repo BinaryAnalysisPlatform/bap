@@ -508,7 +508,7 @@ module Block = struct
 
   include Printable(struct
       type t = block
-      let module_name = "Bap_disasm_rec.Block"
+      let module_name = "Bap.Std.Disasm_expert.Recursive.Block"
       let pp fmt  ({addr; mem = lazy mem} : block) =
         Format.fprintf fmt "[%s, %s]"
           Addr.(string_of_value addr)

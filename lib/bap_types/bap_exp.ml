@@ -182,6 +182,6 @@ end
 include Regular.Make(struct
     type t = Bap_bil.exp with bin_io, compare, sexp
     let hash = Hashtbl.hash
-    let module_name = "Bap_exp"
+    let module_name = "Bap.Std.Exp"
     let pp = PP.pp
   end)

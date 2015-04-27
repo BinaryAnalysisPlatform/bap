@@ -148,7 +148,7 @@ module Response = struct
 
   let list_of_perm sec =
     let (:=) v f = Option.some_if (f sec) v in
-    List.filter_opt Section.([
+    List.filter_opt Image.Sec.([
         "r" := is_readable;
         "w" := is_writable;
         "x" := is_executable;
@@ -171,7 +171,7 @@ module Response = struct
 
 
   let symbol s mems : msg =
-    let open Symbol in [
+    let open Image.Sym in [
       "symbol", dict @@ [
         "name", string @@ name s;
         "is_function", bool @@ is_function s;
@@ -185,7 +185,7 @@ module Response = struct
 
   let section ~syms s mem : msg = [
     "section", dict @@ [
-      "name", string @@ Section.name s;
+      "name", string @@ Image.Sec.name s;
       "perm", strings @@ list_of_perm s;
       "symbols", strings syms;
     ] @ memory mem

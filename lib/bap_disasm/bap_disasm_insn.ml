@@ -129,7 +129,7 @@ end
 include Regular.Make(struct
     type nonrec t = t with sexp, bin_io, compare
     let hash = code
-    let module_name = "Bap_disasm_insn"
+    let module_name = "Bap.Std.Insn"
 
     let string_of_ops ops =
       Array.map ops ~f:Op.to_string |> Array.to_list |>

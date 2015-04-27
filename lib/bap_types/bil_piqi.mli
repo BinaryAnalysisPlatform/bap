@@ -1,4 +1,4 @@
-open Bap_types.Std
+open Bap.Std
 
 (** [to_pb p] converts [p] to protobuffer format. *)
 val to_pb : stmt -> string

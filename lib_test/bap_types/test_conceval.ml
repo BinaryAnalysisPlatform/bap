@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open OUnit2
-open Bap_types.Std
+open Bap.Std
 
 open Conceval
 

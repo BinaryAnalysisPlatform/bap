@@ -88,7 +88,7 @@ let is_headless = function
   | None -> false
 
 let create_exn ?ida target =
-  let curses = if Config.system = "linux" && is_headless ida
+  let curses = if Sys.os_type = "Unix" && is_headless ida
     then find_curses () else None in
   let ida = match ida with
     | Some path -> path

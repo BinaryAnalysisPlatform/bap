@@ -306,10 +306,10 @@ let bits2genreg mode =
     | i when i >= 8 && i <= 15 -> nums.(i-8)
     | _ -> failwith "bits2genreg takes 4 bits"
 
-let reg2bits mode r =
+let reg2bits mode x =
   let module R = (val (vars_of_mode mode)) in
   let open R in
-  index_ofq r [rax; rcx; rdx; rbx; rsp; rbp; rsi; rdi]
+  index_ofq x [rax; rcx; rdx; rbx; rsp; rbp; rsi; rdi]
 
 let bits2segreg = function
   | 0 -> es

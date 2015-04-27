@@ -23,8 +23,8 @@ type ('mem,'img,'sec,'sym) res
 (** Types of resource data  *)
 type nil                        (** data not available  *)
 type mem
-type sym = Symbol.t             (** symbol  *)
-type sec = Section.t            (** section  *)
+type sym = Image.Sym.t             (** symbol  *)
+type sec = Image.Sec.t            (** section  *)
 type img
 
 (** Unique Identifer  *)
