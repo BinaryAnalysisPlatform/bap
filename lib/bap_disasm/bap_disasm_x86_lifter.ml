@@ -969,7 +969,8 @@ module ToIR = struct
             let shift = Bil.(offset land int_exp Pervasives.(t' - 1) t') in
             reg, shift
           | Oaddr a ->
-            let byte = load (size_of_typ reg8_t) Bil.(a + (offset lsr int_exp 3 t')) in
+            let offset = Bil.(cast unsigned (width_of_mode mode) offset) in
+            let byte = load (size_of_typ reg8_t) Bil.(a + offset lsr int_exp 3 t') in
             let shift = Bil.(Cast (LOW, !!reg8_t, offset) land int_exp 7 8) in
             byte, shift
           | Ovec _ | Oseg _ | Oimm _ -> disfailwith "Invalid bt operand"
