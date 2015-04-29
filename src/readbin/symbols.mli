@@ -27,3 +27,9 @@ open Bap.Std
 *)
 
 val read : ?demangle:Options.demangle -> filename:string -> arch -> mem -> string table
+
+val read_addrset : string -> Addr.Set.t
+
+val write_addrset : ?filename:string -> Addr.Set.t -> unit
+
+val write : ?filename:string -> symbol table -> unit

@@ -399,6 +399,20 @@ Executable "bap"
                   fileutils,
                   re.posix
 
+Executable "bap-byteweight"
+  Path:           src/readbin
+  MainIs:         byteweight_util.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, curl, re.posix
+
+Executable "bap-measure-byteweight"
+  Path:           src/readbin
+  MainIs:         compare.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, re.posix, fileutils
+
 Executable "bap-mc"
   Path:           src/bap_mc
   MainIs:         bap_mc.ml
@@ -406,12 +420,6 @@ Executable "bap-mc"
   CompiledObject: best
   BuildDepends:   bap, bap.plugins, cmdliner, bap.types.serialization
 
-Executable "bap-byteweight"
-  Path:           src/byteweight
-  MainIs:         byteweight.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, curl, re.posix
 
 Executable "bapbuild"
   Path:           .

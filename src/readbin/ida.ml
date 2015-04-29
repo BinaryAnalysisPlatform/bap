@@ -140,7 +140,7 @@ let run_script self script_to =
 
 let get_symbols ?demangle t arch mem =
   let result = run_script t Idapy.extract_symbols in
-  Symbols.read ?demangle ~filename:result arch  mem
+  Symbols.read ?demangle ~filename:result arch mem
 
 let close self = self.close ()
 
