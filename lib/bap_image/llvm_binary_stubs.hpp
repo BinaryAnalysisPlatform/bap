@@ -331,12 +331,40 @@ uint64_t image_entry(const MachOObjectFile* obj) {
 }
 
 uint64_t image_entry(const COFFObjectFile* obj) {
-    const pe32_header* hdr = 0;
-    if (error_code ec = obj -> getPE32Header(hdr))
-        llvm_binary_fail(ec);
-    if (!hdr)
-        llvm_binary_fail("PE header not found");
-    return hdr->AddressOfEntryPoint;
+    if (obj->getBytesInAddress() == 4) {
+        const pe32_header* hdr = 0;
+        if (error_code ec = obj -> getPE32Header(hdr))
+            llvm_binary_fail(ec);
+        if (!hdr)
+            llvm_binary_fail("PE header not found");
+        return hdr->AddressOfEntryPoint;
+    } else {        
+        // llvm version 3.4 doesn't support pe32plus_header,
+        // but in version 3.5 it does. So, later one will be 
+        // able to write obj->getPE32PlusHeader(hdr) for 64-bit files.
+        uint64_t cur_ptr = 0;
+        const char * buf = (obj->getData()).data();
+        const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
+        uint8_t b0 = start[0];
+        uint8_t b1 = start[1];
+        if (b0 == 0x4d && b1 == 0x5a) { // Check if this is a PE/COFF file.
+            // A pointer at offset 0x3C points to the PE header. 
+            cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
+            // Check the PE magic bytes.
+            if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
+                llvm_binary_fail("PE header not found");
+            cur_ptr += 4; // Skip the PE magic bytes.
+            cur_ptr += sizeof(coff_file_header);
+            const pe32plus_header *hdr = 
+                reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
+            if (hdr->Magic == 0x20b)
+                return hdr->AddressOfEntryPoint;
+            else
+                llvm_binary_fail("PEplus header not found");
+        } else {
+            llvm_binary_fail("PEplus header not found");
+        }
+    }
 };
 
 template <typename T>
