@@ -30,15 +30,6 @@ PostInstallCommand: ocaml postinstall.ml
 PostUninstallCommand: $rm $bindir/baptop
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
-Document bap
-  Type: ocamlbuild (0.4)
-  BuildTools: ocamlbuild, ocamldoc
-  Title:      API documentation for bap
-  XOCamlbuildPath: lib/bap
-  XOCamlbuildExtraArgs:
-    "-docflags '-colorize-code -short-functors -charset utf-8'"
-  XOCamlbuildModules: Bap
-
 Flag serialization
   Description: Build serialization library
   Default: true
