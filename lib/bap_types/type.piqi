@@ -16,6 +16,8 @@
   .option [.name r16]
   .option [.name r32]
   .option [.name r64]
+  .option [.name r128]
+  .option [.name r256]
 ]
 
 .alias [

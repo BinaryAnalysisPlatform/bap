@@ -899,6 +899,8 @@ module Std : sig
       | `r16
       | `r32
       | `r64
+      | `r128
+      | `r256
     ] with variants
 
     type 'a p = 'a constraint 'a = [< all]

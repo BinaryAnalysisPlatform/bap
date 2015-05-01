@@ -83,6 +83,8 @@ type words = {
   r16 : word table Lazy.t;
   r32 : word table Lazy.t;
   r64 : word table Lazy.t;
+  r128 : word table Lazy.t;
+  r256 : word table Lazy.t;
 }
 
 type t = {
@@ -212,6 +214,8 @@ let create_words secs = {
   r16 = lazy (words_of_table `r16 secs);
   r32 = lazy (words_of_table `r32 secs);
   r64 = lazy (words_of_table `r64 secs);
+  r128 = lazy (words_of_table `r128 secs);
+  r256 = lazy (words_of_table `r256 secs);
 }
 
 let register_backend ~name backend =
@@ -309,7 +313,9 @@ let words t (size : size) : word table =
     | `r8  -> t.words.r8
     | `r16 -> t.words.r16
     | `r32 -> t.words.r32
-    | `r64 -> t.words.r64 in
+    | `r64 -> t.words.r64
+    | `r128 -> t.words.r128
+    | `r256 -> t.words.r256 in
   table
 
 let segments t = t.segments
