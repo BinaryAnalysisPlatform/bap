@@ -15,8 +15,11 @@ The BAP Library and BAP Toolkit are distributed under the terms of the
 MIT Licence (included below).
 
 The bap.top library and bapbuild executable are distributed under ther
-terms of the Q Public License version 1.0 (included below)
+terms of the Q Public License version 1.0 (included below).
 
+The `doc/style.css' file was taken from Cubicle Project, copyrighted
+by Sylvain Conchon and Alain Mebsout, Universite Paris-Sud 11, under
+Apache Software License version 2.0. See `doc/COPYING` file.
 
 
 --------------------------------------------------------------------

@@ -6,8 +6,9 @@ OCI=ocp-indent
 build: setup.data setup.ml
 	$(SETUP) -build $(BAPBUILDFLAGS)
 
-doc: setup.data build
-	$(SETUP) -doc $(BAPDOCFLAGS)
+.PHONY: doc
+doc:
+	ocaml bapdoc.ml
 
 test: setup.data build
 	$(SETUP) -test $(BAPTESTFLAGS)

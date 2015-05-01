@@ -104,10 +104,11 @@ let generate () =
      not (Sys.is_directory outdir) then
     raise No_out_dir;
   Sys.chdir tmp;
-  compile ~options:("-d " ^ outdir ^ " -html") on
-
+  let options = String.concat " " ["-d"; outdir; "-html"] in
+  compile ~options on
 
 let () =
   try generate () with
   | No_out_dir ->
     prerr_string ("Please, create the `" ^ outdir ^ "' folder");
+    exit 1
