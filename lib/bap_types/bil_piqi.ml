@@ -1,5 +1,5 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Bap.Std
 open Bil.Types
 
 module P = Stmt_piqi

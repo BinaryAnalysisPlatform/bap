@@ -27,7 +27,7 @@ let rec pp_list pp ch = function
 module Asm = struct
   open Disasm
   let pp_pred ch kind =
-    pr ch "%a()" (pp_sexp Basic.sexp_of_pred) kind
+    pr ch "%a()" (pp_sexp Disasm_expert.Basic.sexp_of_pred) kind
 end
 
 module Arm = struct
@@ -114,7 +114,7 @@ module Parse = struct
     | _ -> errorf "'%s' doesn't match 'Int(num,size)'" str
 
 
-  let kind = nullary Disasm_expert.Basic.kind_of_sexp
+  let kind = nullary kind_of_sexp
   let pred = nullary Disasm_expert.Basic.pred_of_sexp
   let endian = nullary endian_of_sexp
 end

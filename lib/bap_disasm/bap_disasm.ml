@@ -219,7 +219,7 @@ module Disasm = struct
       open Format
       type t = error
 
-      let module_name = "Bap_disasm.Disasm.Error"
+      let module_name = "Bap.Std.Disasm.Error"
 
       let pp fmt t : unit =
         match t with

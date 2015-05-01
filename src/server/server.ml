@@ -63,7 +63,7 @@ module Handlers(Ctxt : sig
   let init version =
     let ts = List.(Transport.registered_fetchers >>|
                    Response.transport) in
-    let kinds = Disasm_expert.Kind.all in
+    let kinds = Kind.all in
     let ds =
       Response.disassembler
         ~name:"llvm" ~arch:`arm ~kinds
@@ -165,7 +165,7 @@ module Handlers(Ctxt : sig
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->
     let mems_of_img img =
       Image.sections img |> Table.to_sequence |> Seq.to_list |>
-      List.filter ~f:(fun (_,s) -> Section.is_executable s) |>
+      List.filter ~f:(fun (_,s) -> Image.Sec.is_executable s) |>
       List.map ~f:fst   in
     let chunk r = Res.memory r |> get_mem >>|? List.return in
     let section = chunk in

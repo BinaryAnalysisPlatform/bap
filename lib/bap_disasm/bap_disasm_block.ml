@@ -28,7 +28,7 @@ module Block = struct
 end
 
 
-let () = Pretty_printer.register ("Bap_disasm_block.pp")
+let () = Pretty_printer.register ("Bap.Std.Block.pp")
 
 module Edge = struct
   type t = edge with compare

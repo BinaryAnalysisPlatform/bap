@@ -57,9 +57,9 @@ module Response : sig
 
   val image : secs:res_ids -> Image.t resource -> msg
 
-  val section : syms:res_ids -> Section.t -> mem resource -> msg
+  val section : syms:res_ids -> Image.Sec.t -> mem resource -> msg
 
-  val symbol : Symbol.t -> mem resource List1.t -> msg
+  val symbol : Image.Sym.t -> mem resource List1.t -> msg
 
   val memory : mem resource -> msg
 

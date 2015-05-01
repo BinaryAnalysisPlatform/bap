@@ -66,7 +66,7 @@ module Make(Size : Compare) : Kernel = struct
   open Internal
   type nonrec t = t with bin_io, sexp
 
-  let module_name = "Bap_bitvector"
+  let module_name = "Bap.Std.Bitvector"
 
   let znorm z w = Bignum.(z land ((one lsl w) - one))
 

@@ -13,7 +13,7 @@ let ignored = [
   ];
 ]
 
-module Byteweight = Bap_byteweight.Bytes
+module BW = Bap.Std.Byteweight.Bytes
 
 let train_on_file meth length db path : unit t =
   Image.create path >>| fun (img,warns) ->
@@ -22,15 +22,15 @@ let train_on_file meth length db path : unit t =
   Table.iteri (Image.symbols img) ~f:(fun mem _ ->
       Addr.Table.add_exn symtab ~key:(Memory.min_addr mem) ~data:());
   let test mem = Addr.Table.mem symtab (Memory.min_addr mem) in
-  let bw = if not (Sys.file_exists db) then Byteweight.create ()
+  let bw = if not (Sys.file_exists db) then BW.create ()
     else match Signatures.load ~mode:"bytes" ~path:db arch with
       | Some s when meth = `update ->
-        Binable.of_string (module Byteweight) s
-      | _ -> Byteweight.create () in
+        Binable.of_string (module BW) s
+      | _ -> BW.create () in
   Table.iteri (Image.sections img) ~f:(fun mem sec ->
-      if Section.is_executable sec then
-        Byteweight.train bw ~max_length:length test mem);
-  let data = Binable.to_string (module Byteweight) bw in
+      if Image.Sec.is_executable sec then
+        BW.train bw ~max_length:length test mem);
+  let data = Binable.to_string (module BW) bw in
   Signatures.save ~mode:"bytes" ~path:db arch data
 
 let matching =
@@ -71,12 +71,12 @@ let find threshold length comp path input : unit t =
   Result.of_option data
     ~error:(Error.of_string "failed to read signatures from database")
   >>= fun data ->
-  let bw = Binable.of_string (module Byteweight) data in
+  let bw = Binable.of_string (module BW) data in
   Table.iteri (Image.sections img) ~f:(fun mem sec ->
-      if Section.is_executable sec then
+      if Image.Sec.is_executable sec then
         let start = Memory.min_addr mem in
         let rec loop n =
-          match Byteweight.next bw ~length ~threshold mem n with
+          match BW.next bw ~length ~threshold mem n with
           | Some n -> printf "%a\n" Addr.ppo Addr.(start ++ n); loop (n+1)
           | None -> () in
         loop 0);
@@ -87,7 +87,7 @@ let symbols print_name print_size input : unit t =
   let syms = Image.symbols img in
   Table.iteri syms ~f:(fun mem sym ->
       let addr = Memory.min_addr mem in
-      let name = if print_name then Symbol.name sym else "" in
+      let name = if print_name then Image.Sym.name sym else "" in
       let size = if print_size
         then sprintf "%4d " (Memory.length mem) else "" in
       printf "%a %s%s\n" Addr.ppo addr size name);
@@ -107,6 +107,7 @@ let fetch fname url =
   Curl.set_writefunction conn (write);
   Curl.set_failonerror conn true;
   Curl.set_followlocation conn true;
+  Curl.set_sslverifypeer conn false;
   Curl.set_url conn url;
   Curl.perform conn;
   Curl.cleanup conn;

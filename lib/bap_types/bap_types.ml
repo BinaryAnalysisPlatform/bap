@@ -2,97 +2,8 @@
 
     This library introduces base types for Binary Analysis Platform.
 
-    Library provides 7 core types, namely:
-
-    - [arch] - computer architecture
-    - [size] - word or addresses size
-    - [var]  - a typed variable
-    - [type] - types of expressions
-    - [exp]  - bil expression
-    - [stmt] - bil statement
-    - [addr],
-      [word] - represents imidiate data,
-               this types are indeed synonyms to [Bitvector.t].
-
-    Every type implements [Regular.S] interface. This interface is
-    very similiar to core's [Identifiable], and is supposed to
-    represent a type that is as common as built-in type. One should
-    expect to find any function that is implemented for such types as
-    [int], [string], [char], etc. To name a few, this interface
-    includes:
-
-    - comparison functions: ([<, >, <= , >= , compare, between, ...]);
-    - each type defines a polymorphic [Map] with keys of type [t];
-    - each type provides a [Set] with values of type [t];
-    - for those, courage enough there is also an AVL tree;
-    - hastable is exposed via [Table] module;
-    - sexpable and binable interface;
-    - [to_string], [str], [pp], [ppo], [pps] functions
-      for pretty-printing.
-
-    And most types usually provides much more.
 *)
 
-(**  {3 How to use the library }
-
-     You should start any code relying on [bap-types] library with a
-
-     [open Bap.Std]
-
-     (or open [Bap_types.Std] if you're developing inside bap)
-
-     It is a good idea, to open [Core_kenel.Std] before. You should
-     never use modules that are not exposed by the [Std] module directly,
-     if you need something from this, that export it via [Std] module,
-     and make a pull request, or whatever. Although, while these
-     modules are barred, their interfaces can still serve as good
-     reference and documentation, that's why they are installed along
-     with the library package.
-
-     For each exported type, there is a module with the same name
-     (module capitalization), that implements its interface. For
-     example, type [exp] is indeed a type abbreviation for [Exp.t], and
-     module [Exp] contains all functions and types related to type
-     [exp]. Most modules consists of two parts:
-     - base part, that usually defines types and constructors,
-     - main part, that extends the type interface with common
-     functions. This is hidden from a user, but it is good to know
-     about this, since it will help you to find a documentation. For
-     example, module [Stmt], that implements interface for type [stmt],
-     consists of module [Bap_bil.Stmt] extended by [Bap_stmt] module,
-     but from a user's perspective, you will see only [Stmt] module,
-     with fields from both modules merged. For a reference purpose,
-     although it is a good idea to look in [Bap_bil.Stmt] module for
-     type definitions, and [Bap_stmt] for extra functions. But, again,
-     you do not need to actually reference this modules from your code,
-     for example, to create a hashtable of statements, just type:
-
-     [let table = Stmt.Table.create ()]
-
-     If a type is a variant type, and most types in [bap-types]
-     library, are variant, then for each contructor named [Name], you
-     will find a corresponding function named [name] that will accept
-     the same number of arguments as the arity of the constructor. For
-     example, type [exp] has a contructor [Extract int * int * t)], and
-     there is a corresponding function named [extract], that has type
-     [int -> int -> t -> t]. See [variantslib] for more information about,
-     variants interface.
-
-     {3 Linking, loading and other staff}
-
-     Library is organized as a main library, named [bap-types], and
-     several sublibraries, namely:
-
-     - [top] for loading [bap-types] with all its dependencies to a
-     ocaml's toplevel.
-
-
-     - [bap-types.serialization] - provides facilities for marshaling
-     and demarshaling base types;
-
-     - [conceval] - for evaluating BIL expressions
-       (but see also [Bil.fold_consts]);
-*)
 
 open Core_kernel.Std
 open Bap_common
@@ -333,6 +244,7 @@ module Std = struct
   type unop  = Bil.unop    with bin_io, compare, sexp
   type var   = Var.t       with bin_io, compare, sexp
   type word  = Word.t      with bin_io, compare, sexp
+  type nat1  = int         with bin_io, compare, sexp
   type value = Tag.value   with sexp_of
   type 'a tag = 'a Tag.t     with sexp_of
 

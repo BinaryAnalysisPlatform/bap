@@ -42,8 +42,8 @@ type 'a resource = {
 type context = {
   images : image resource Ids.t;
   chunks : mem   resource Ids.t;
-  sections : Section.t Ids.t;
-  symbols  : Symbol.t  Ids.t;
+  sections : Image.Sec.t Ids.t;
+  symbols  : Image.Sym.t  Ids.t;
   sections_of_image  : id list Ids.t;
   symbols_of_section : id list Ids.t;
   memory_of_symbol   : id list Ids.t;
@@ -181,8 +181,8 @@ type 'a served = {
 
 type nil = Nil
 type mem = Memory.t served
-type sym = Symbol.t             (** symbol  *)
-type sec = Section.t            (** section  *)
+type sym = Image.Sym.t             (** symbol  *)
+type sec = Image.Sec.t            (** section  *)
 type img = Image.t served
 
 type ('mem, 'img, 'sec, 'sym) res = {

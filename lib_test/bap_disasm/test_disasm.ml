@@ -54,7 +54,7 @@ let printer r =
 let strings_of_insn insn =
   let name = Dis.Insn.name insn in
   let ops = Dis.Insn.ops insn |> Array.to_list |>
-            List.map ~f:(Dis.Op.to_string) in
+            List.map ~f:(Op.to_string) in
   (name :: ops)
 
 
@@ -96,7 +96,7 @@ let test_run_all (arch,samples) ctxt =
                   (String.length data) (Memory.length mem);
                 List.iter kinds ~f:(fun expected ->
                     let name =
-                      string_of_sexp @@  Dis.sexp_of_kind expected in
+                      string_of_sexp @@  sexp_of_kind expected in
                     assert_bool name (Dis.Insn.is r expected));
             )) dis mem
 

@@ -229,7 +229,7 @@ module Program(Conf : Options.Provider) = struct
             Error.pp err;
           Table.empty in
     let img_syms = match img with
-      | Some img -> Table.map (Image.symbols img) ~f:Symbol.name
+      | Some img -> Table.map (Image.symbols img) ~f:Image.Sym.name
       | None -> Table.empty in
     let rec_roots =
       Option.value (find_roots arch mem) ~default:[] in
@@ -320,7 +320,7 @@ module Program(Conf : Options.Provider) = struct
       if options.verbose then
         List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
       Table.iteri (Image.sections img) ~f:(fun mem s ->
-          if Section.is_executable s then
+          if Image.Sec.is_executable s then
             disassemble ~img (Image.arch img) mem);
       return 0
     | Some s -> match Arch.of_string s with

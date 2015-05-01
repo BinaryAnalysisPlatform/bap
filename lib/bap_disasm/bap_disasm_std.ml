@@ -12,6 +12,7 @@ open Bap_image_std
 include Bap_disasm_types
 include Bap_disasm
 include Bap_disasm_abi
+include Bap_disasm_block_intf
 module Insn    = Bap_disasm_insn
 module Block   = Bap_disasm_block
 
@@ -32,30 +33,22 @@ module Disasm_expert = struct
   module Block = Bap_disasm_rec.Block
 end
 
+module type ABI = sig
+  val create :
+    ?merge:(abi list -> abi) ->
+    ?image:image ->
+    ?sym:string -> mem -> Bap_disasm_block.t -> abi
+  val merge : abi list -> abi
+  val merge_id : string list -> string list -> string list
+  class stub : abi
+  val to_string : arch -> string list -> string
+  val register : abi_constructor -> unit
+end
+
 (** include type definitions of the ABI  *)
 module type Target = sig
   module CPU : CPU
-
-  module ABI : sig
-    include module type of Bap_disasm_abi_helpers
-    (** registers given ABI under the given target   *)
-    val register : abi_constructor -> unit
-    (** [lift mem insn] lifts provided instruction to BIL.
-        Usually you do not need to call this function directly, as
-        [disassemble] function will do the lifting.
-    *)
-
-    (** creates a set of ABI for the provided symbol.
-        Until [all] parameter is set to true the ABI will be
-        disambiguated, using [choose] method. Only equally
-        valid ABI are returned. *)
-    val create :
-      ?merge:(abi list -> abi) ->
-      ?image:image ->
-      ?sym:string -> mem -> Bap_disasm_block.t -> abi
-
-  end
-
+  module ABI : ABI
   val lift : mem -> ('a,'k) Basic.insn -> bil Or_error.t
 end
 

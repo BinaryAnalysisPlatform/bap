@@ -1,11 +1,8 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Bap.Std
 open Bil.Types
 
-module Seq = Sequence
-
 exception Abort of string
-
 
 (** Given 8*n, return n.
   * useful for operating on memory. *)
@@ -17,13 +14,13 @@ module Mem = Addr.Map
 
 module T = struct
   type t =
-    | BV of Bitvector.t
+    | BV of word
     | Mem of memory
     | Un of string * typ
   and memory = t Mem.t
   with bin_io, compare, sexp
 
-  let module_name = "Bap_conceval"
+  let module_name = "Bap.Std.Conceval"
   let hash = Hashtbl.hash
 
   open Format

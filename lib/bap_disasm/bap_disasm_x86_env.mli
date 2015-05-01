@@ -79,6 +79,8 @@ module type ModeVars = sig
   val mem : var
   (* r8 -> r15 *)
   val nums : var array
+  (** idem to nums  *)
+  val r : var array
 end
 
 module R32 : ModeVars

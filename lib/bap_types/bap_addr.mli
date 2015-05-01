@@ -10,20 +10,6 @@
 
 open Core_kernel.Std
 open Bap_common
-
-
-(** [memref ?disp ?index ?scale base] mimics a memory reference syntax
-    in gas assembler,   [dis(base,index,scale)]
-    assembler operation. It returns address at
-    [base + index * scale + dis].
-
-    @param disp stands for displacement and defaults to [0]
-    @param index defaults for [0]
-    @param scale defaults to [`r8]
-
-    All operations are taken modulo {% $2^n$ %},
-    where [n = bitwidth base].
-*)
 val memref : ?disp:int -> ?index:int -> ?scale:size -> addr -> addr
 
 (** Address arithmetics  *)

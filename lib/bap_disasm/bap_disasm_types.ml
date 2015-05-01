@@ -17,7 +17,6 @@ type imm = Imm.t with bin_io, compare, sexp
 type fmm = Fmm.t with bin_io, compare, sexp
 type kind = Kind.t with bin_io, compare, sexp
 
-
 (** A BIL model of CPU.
 
     In general this is a model of a processor architecture, involving

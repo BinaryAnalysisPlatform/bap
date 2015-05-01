@@ -3,7 +3,7 @@ open Bap_plugins.Std
 open Or_error
 
 let load pkg =
-  let cmd = sprintf "#require \"%s\";;" (Bap_plugin.name pkg) in
+  let cmd = sprintf "#require \"%s\";;" (Plugin.name pkg) in
   Bap_toplevel.eval cmd
 
 let () =

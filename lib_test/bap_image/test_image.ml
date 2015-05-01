@@ -4,8 +4,7 @@ open Or_error
 open Word_size
 
 open Bap.Std
-open Image_common
-open Image_backend
+open Backend
 
 let create_addr = function
   | `r32 -> Addr.of_int ~width:32
