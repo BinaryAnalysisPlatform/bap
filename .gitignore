@@ -13,6 +13,7 @@
 /_build/
 /_tags
 /configure
+/doc
 /lib/bap_types/bap_config.ml
 /myocamlbuild.ml
 /postinstall.ml

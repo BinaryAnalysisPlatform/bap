@@ -1,8 +1,6 @@
 # Overview
 
-[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
+[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap) [![docs](https://img.shields.io/badge/doc-online-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v0.9.7/Bap.Std.html)
 
 BAP is a platform for binary analysis. It is written in OCaml, but can
 be used from other languages, for example, from Python.
@@ -10,42 +8,20 @@ be used from other languages, for example, from Python.
 # <a name="Installation"></a>Installation
 
 BAP is released using `opam` package manager. After you've successfully
-[installed](https://opam.ocaml.org/doc/Install.html) opam, and have all
-[system dependencies](#sysdeps) satisfied, you can proceed with:
+[installed](https://opam.ocaml.org/doc/Install.html) opam, do the following:
 
 ```bash
+$ opam init --comp=4.02.1
+$ eval `opam config env`
+$ opam install depext
+$ opam depext bap
 $ opam install bap
 ```
-
 And if you're interested in python bindings, then you can install them using pip:
 
 ```bash
 $ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
 ```
-
-## Installing `bap` dependencies
-
-### <a name="sysdeps"></a>Installing system dependencies
-
-BAP uses clang compiler and llvm library as major backend. We also
-need curl, zip and gmp packages for our tools. A complete up-to-date
-list of packages can be found in `opam` file, under `depexts` section.
-
-You can query for the external (system) dependecies with
-
-```bash
-$ opam install bap -e ubuntu
-```
-
-To install dependencies, using this method, try the following:
-
-```bash
-$ sudo apt-get install $(opam install bap -e ubuntu)
-```
-
-If you're not using Ubuntu, then you need to adapt package names in
-according to your system package manager preferences.
-
 
 # Usage
 
@@ -116,7 +92,7 @@ Now, you can play with BAP. For example:
 
 ```ocaml
 utop # open Bap.Std;;
-utop # let d = disassemble_file "ls";;
+utop # let d = disassemble_file "/bin/ls";;
 val d : t = <abstr>
 utop # let insn = Disasm.insn_at_addr d (Addr.of_int32 0xa9dbl);;
 val insn : (mem * insn) option = Some (0000a9d8: 01 00 00 0a , beq #0x4; Bcc(0x4,0x0,CPSR))
@@ -243,9 +219,7 @@ information.
 
 ## Learning BAP
 
-The best source of information about BAP is it's source code, that is
-well-documented. There are also
-[blog](http://binaryanalysisplatform.github.io/bap_plugins/) and
+Other than [API](http://binaryanalysisplatform.github.io/bap/api/v0.9.7/Bap.Std.html) documentation, we have [blog](http://binaryanalysisplatform.github.io/bap_plugins/) and
 [wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
 can find some useful information. Also, we have a permanently manned
 chat in case of emergency. Look at the badge on top of the README file,
