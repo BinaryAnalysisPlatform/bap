@@ -57,7 +57,7 @@
   .option [.name arshift]
   .option [.name andbop ]
   .option [.name orbop  ]
-  .option [.name xor    ]
+  .option [.name x-or   ]
   .option [.name eq     ]
   .option [.name neq    ]
   .option [.name lt     ]
