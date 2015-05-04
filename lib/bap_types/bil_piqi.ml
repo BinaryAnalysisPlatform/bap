@@ -41,7 +41,7 @@ let binop_to_piqi : 'a -> Stmt_piqi.binop_type = function
   | ARSHIFT -> `arshift
   | AND -> `andbop
   | OR -> `orbop
-  | XOR -> `xor
+  | XOR -> `x_or
   | EQ -> `eq
   | NEQ -> `neq
   | LT -> `lt
@@ -62,7 +62,7 @@ let binop_of_piqi = function
   | `arshift -> ARSHIFT
   | `andbop -> AND
   | `orbop -> OR
-  | `xor -> XOR
+  | `x_or -> XOR
   | `eq -> EQ
   | `neq -> NEQ
   | `lt -> LT
@@ -101,7 +101,7 @@ let endianness_of_piqi = function
   | `little_endian -> LittleEndian
   | `big_endian -> BigEndian
 
-let rec exp_to_piqi : exp -> Stmt_piqi.exp =
+let rec exp_to_piqi : exp -> Stmt_piqi.expr =
   function
   | Load (m, i, e, s) ->
     let m = exp_to_piqi m in
@@ -220,7 +220,7 @@ let rec stmt_to_piqi : stmt -> Stmt_piqi.stmt = function
     let then_branch = stmts_to_piqi then_branch in
     let else_branch = stmts_to_piqi else_branch in
     `if_stmt {P.If_stmt.cond=e; true_branch=then_branch; false_branch=else_branch}
-  | CpuExn n -> `cpuexn {P.Cpuexn.errno=n}
+  | CpuExn n -> `cpuexn {P.Cpuexn.errnum=n}
 
 and stmts_to_piqi l = List.map ~f:stmt_to_piqi l
 
@@ -242,7 +242,7 @@ let rec stmt_of_piqi = function
     let then_branch = stmts_of_piqi true_branch in
     let else_branch = stmts_of_piqi false_branch in
     If (e, then_branch, else_branch)
-  | `cpuexn {P.Cpuexn.errno} -> CpuExn errno
+  | `cpuexn {P.Cpuexn.errnum} -> CpuExn errnum
 
 and stmts_of_piqi l = List.map ~f:stmt_of_piqi l
 

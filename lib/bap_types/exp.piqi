@@ -9,7 +9,7 @@
 ]
 
 .variant [
-  .name exp
+  .name expr
   .option [.type var    ]
   .option [.type inte   ]
   .option [.type load   ]
@@ -28,11 +28,11 @@
   .name load
   .field [
     .name memory
-    .type exp
+    .type expr
   ]
   .field [
     .name address
-    .type exp
+    .type expr
   ]
   .field [
     .name endian
@@ -48,15 +48,15 @@
   .name store
   .field [
     .name memory
-    .type exp
+    .type expr
   ]
   .field [
     .name address
-    .type exp
+    .type expr
   ]
   .field [
     .name value
-    .type exp
+    .type expr
   ]
   .field [
     .name endian
@@ -76,11 +76,11 @@
   ]
   .field [
     .name lexp
-    .type exp
+    .type expr
   ]
   .field [
     .name rexp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -92,7 +92,7 @@
   ]
   .field [
     .name exp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -116,7 +116,7 @@
   ]
   .field [
     .name exp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -128,11 +128,11 @@
   ]
   .field [
     .name definition
-    .type exp
+    .type expr
   ]
   .field [
     .name open-exp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -152,15 +152,15 @@
   .name ite
   .field [
     .name condition
-    .type exp
+    .type expr
   ]
   .field [
     .name iftrue
-    .type exp
+    .type expr
   ]
   .field [
     .name iffalse
-    .type exp
+    .type expr
   ]
 ]
 
@@ -176,7 +176,7 @@
   ]
   .field [
     .name exp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -184,10 +184,10 @@
   .name concat
   .field [
     .name lexp
-    .type exp
+    .type expr
   ]
   .field [
     .name rexp
-    .type exp
+    .type expr
   ]
 ]
