@@ -24,7 +24,7 @@ module Std : sig
         |                                         |
         |  +-----------------------------------+  |
         |  |                                   |  |
-        |  |           Disassembling           |  |
+        |  |           Disassembly             |  |
         |  |                                   |  |
         |  +-----------------------------------+  |
         |                                         |
@@ -37,31 +37,31 @@ module Std : sig
       ]}
 
 
-      {{!bfl}Foundation library} defines core types, that are used
-      throughout the whole BAP library and is useful in binary
-      analysis. {{!section:image}Memory model} layer is responsible
-      for loading and parsing binary objects and representing them in
-      memory. It also defines few useful data structures, that are
-      used extensively by later layers. The next layer performs
-      {{!section:disasm}disassembling} and lifting to BIL. And,
-      finally, the {{!section:sema}semantic analysis} layer,
-      transforms binary into IR representation and provides a set of
+      The {{!bfl}Foundation library} defines core types that are used
+      throughout the BAP library for binary analysis. The
+      {{!section:image}Memory model} layer is responsible for loading
+      and parsing binary objects and representing them in memory. It
+      also defines a few useful data structures that are used
+      extensively by later layers. The next layer performs
+      {{!section:disasm}disassembly} and lifting to BIL. Finally,
+      the {{!section:sema}semantic analysis} layer transforms a
+      binary into an IR representation, and further provides a set of
       handful analysis tools.
 
-      From another point of view BAP has a plugin architecture, like
-      GIMP or Frama-C. BAP plugins plays different role in our
-      infrastructure.  In fact even LLVM disassembler is just a
-      plugin. Currently we have three different extension points in
-      BAP:
+      Another important point of view is the BAP plugin architecture,
+      similar to that of GIMP or Frama-C. BAP features a pluggable
+      architecture with a number of extension points. For example,
+      even the LLVM disassembler is considered a type of plugin.
+      Currently we support three such extension points in BAP:
 
       - {{!Backend}loaders} - to add new binary object loaders;
       - disassemblers - to add new disassemblers;
       - {{!Project}program analysis} - to analyze programs.
 
-      The latter category of plugins is most widely used, so that
-      usually when we speak about plugin, we think in particular
-      program analysis plugin. The following figure provides an
-      overview of the BAP system.
+      The latter category of plugins is most widely used. Therefore,
+      when we use the term "plugin" without making a distinction, we
+      refer to a program analysis plugin. The following figure
+      provides an overview of the BAP system.
 
       {[
         +---------------------------------------------+
@@ -85,16 +85,17 @@ module Std : sig
         +---------------------------------------------+
       ]}
 
-      All plugins has full access to the library, so that they can and
-      should open [Bap.Std]. BAP library uses loader and disassembler
-      plugins as a backends, to provide its services. Program analysis
-      plugins are loaded by BAP toolkit utilities, to extend their
-      functionality and to provide an access to the state of the
-      target of analysis or, in our parlance, to the
-      {{!project}project}. (See {!section:project}).
+      All plugins have full access to the library; an important
+      consequence is that they can and should open [Bap.Std]. The BAP
+      library uses backend loader and disassembler plugins to provide
+      its services. Program analysis plugins are loaded by BAP
+      toolkit utilities. These utilities extend plugin functionality
+      by providing access to the state of the target of analysis or,
+      in our parlance, to the {{!project}project}. (See
+      {!section:project}).
 
-      Other then library itself, and BAP toolkit, there are two more
-      libraries, that are bundled with BAP:
+      Other than library itself, and the BAP toolkit, there are two
+      additional libraries that are bundled with BAP:
 
       - [bap.plugins] to dynamically load code into BAP;
       - [bap.serialization] to serialize BAP data structures in
@@ -104,7 +105,7 @@ module Std : sig
 
   (** {2:bfl Foundation Library}
 
-      At this layer we define our core types that are tightly
+      At this layer we define the core types that are tightly
       integrated with Binary Intermediate Language ({{!Bil}BIL}). The
       core types are:
 
@@ -121,12 +122,12 @@ module Std : sig
       - {{!Seq}'a seq} - slightly extended Core [Sequence], aka lazy
         list.
 
-      Every type implements {{!Regular}Regular} interface. This
+      Every type implements the {{!Regular}Regular} interface. This
       interface is very similar to Core's [Identifiable], and is
-      supposed to represent a type that is as common as built-in
-      type. One should expect to find any function that is implemented
-      for such types as [int], [string], [char], etc. To name a few,
-      this interface includes:
+      supposed to represent a type that is as common as a built-in
+      type. One should expect to find any function that is
+      implemented for such types as [int], [string], [char], etc.
+      Namely, this interface includes:
 
       - comparison functions: ([<, >, <= , >= , compare, between, ...]);
       - each type defines a polymorphic [Map] with keys of type [t];
@@ -137,51 +138,52 @@ module Std : sig
       - [to_string], [str], [pp], [ppo], [pps] functions
       for pretty-printing.
 
-      And most types usually provide much more.
-
-      For each type, there is a module with the same name, that
-      implements its interface. For example, type [exp] is indeed a
-      type abbreviation for [Exp.t], and module [Exp] contains all
-      functions and types related to type [exp]. For example, to create
-      a hashtable of statements, just type:
+      Most types usually provide much more. For each type, there is a
+      module with the same name that implements its interface. For
+      example, type [exp] is indeed a type abbreviation for [Exp.t],
+      and module [Exp] contains all functions and types related to 
+      type [exp]. For example, to create a hashtable of statements,
+      just type:
 
       [let table = Stmt.Table.create ()]
 
       If a type is a variant type (i.e., defines constructors) then for
-      each contructor named [Name], you will find a corresponding
+      each constructor named [Name], there exists a corresponding
       function named [name] that will accept the same number of
-      arguments as the arity of the constructor. For example, [Bil.Int]
-      can be constructed with [Bil.int] function, that has type [word ->
-      exp]. If constructor has several arguments of the same type we
-      usually disambiguate them with keywords, e.g., [Bil.Load of
-      (exp,exp,endian,size)] has function {{!Bil.load}Bil.load} with
-      type: [mem:exp -> addr:exp -> endian -> size -> exp]
+      arguments as the arity of the constructor. For example, a
+      [Bil.Int] can be constructed with the [Bil.int] function that
+      has type [word -> exp]. If a constructor has several arguments
+      of the same type we usually disambiguate them with keywords,
+      e.g., [Bil.Load of (exp,exp,endian,size)] has function
+      {{!Bil.load}Bil.load} with type: 
+      [mem:exp -> addr:exp -> endian -> size -> exp]
 
 
       {3:tries Tries}
 
-      Foundation library also defines a prefix tree data structure,
-      that proved to be useful in binary analysis applications.
-      {{!module:Trie}Trie}s in BAP is a functor, that will derive for
-      a given {{!modtype:Trie.Key}Key} a polymorphic trie data structure.
+      The Foundation library also defines a prefix tree data
+      structure that proves useful for binary analysis applications.
+      {{!module:Trie}Trie}s in BAP is a functor that derives a
+      polymorphic trie data structure for a given
+      {{!modtype:Trie.Key}Key}.
 
-      For the convenience we provide instantiated tries for most of
+      For convenience we support instantiating tries for most of
       our data structures. For example, {{!Bitvector}Word} has several
       {{!Bitvector.Trie}tries} inside.
 
-      For the common strings, we provide {!Trie.String}.
+      For common strings, there's {!Trie.String}.
   *)
 
   (** {2:image Memory model}
 
       This layer provides everything you need to work with binary
-      objects:s
+      objects:
 
       - {{!Memory}mem} - a contiguous array of bytes, indexed with
-       absolute addresses.
+       absolute addresses;
 
       - {{!Table} 'a table} - a mapping from a memory regions to
-       arbitrary data (no duplicates or intersections).
+       arbitrary data (no duplicates or intersections);
 
       - {{!Memmap}a memmap} - a mapping from memory region to
         arbitrary data with duplicates and intersections allowed, aka
@@ -190,47 +192,47 @@ module Std : sig
       - {{!Image}image} - represents a binary object with all its
        symbols, sections and other meta information.
 
-      [Image] module uses plugin system to load binary objects. In
-      order to add new loader, one should implement
-      {{!Backend}Backend.t} loader function and register it using
-      {{!Image.register_backend}Image.register_backend} function *)
+      The [Image] module uses the plugin system to load binary
+      objects. In order to add new loader, one should implement the
+      {{!Backend}Backend.t} loader function and register it with the
+      {{!Image.register_backend}Image.register_backend} function. *)
 
 
   (** {2:disasm Disassembler}
 
       This layer consists of disassemblers and lifters. They are
       tightly integrated, but in general we can disassemble all
-      supported {{!Arch.t}architectures}, but lift only arm, x86 and
-      x86_64.
+      supported {{!Arch.t}architectures}. Currently we lift only arm,
+      x86 and x86_64.
 
 
-      There're two interfaces to disassemblers:
+      There are two interfaces to disassemblers:
 
-      - {{!Disasm}Disasm} - a regular interface, that hides all
-       complexities, but sometimes not very flexible.
+      - {{!Disasm}Disasm} - a regular interface that hides all
+       complexities, but may not always be very flexible.
       - {{!Disasm_expert}Disasm_expert} - an expert interface that
-      provides access to a low-level representation, and is very
-      flexible and fast, but is hard to use.
+      provides access to a low-level representation. It is very
+      flexible and fast, but harder to use.
 
-      To disassemble file or data with regular interface use one of the
-      following functions:
+      To disassemble files or data with the regular interface, use
+      one of the following functions:
 
       - {{!disassemble}disassemble} - to disassemble a region of
         memory;
-      - {{!disassemble_image}disassemble_image} - to disassembled
+      - {{!disassemble_image}disassemble_image} - to disassemble a
         loaded binary object;
       - {{!disassemble_file}disassemble_file} or
         {{!disassemble_file_exn}disassemble_file} - to disassemble
         file.
 
-      All this functions perform recursive descent disassembly,
-      reconstruct the control flow graph and perform lifting. The
-      result of disassembling is represented by abstract value of
+      All these functions perform disassembly by recursive descent,
+      reconstruct the control flow graph, and perform lifting. The
+      result of disassembly is represented by the abstract value of
       type {{!Disasm}disasm}. Two main data structures that are used
       to represent disassembled program are:
 
-      - {{!Insn}insn} - machine instruction;
-      - {{!Block}block} - a basic block, i.e. a linear sequence of
+      - {{!Insn}insn} - a machine instruction;
+      - {{!Block}block} - a basic block, i.e., a linear sequence of
         instructions.
 
       The following figure shows the relationship between basic data
@@ -260,48 +262,49 @@ module Std : sig
       ]}
 
 
-      A disassembled program is represented as a set of interconnected
-      {{!Block}basic blocks}. You can navigate between blocks using
-      {{!Block_traverse.succs}Block.succs} and
+      A disassembled program is represented as a set of
+      interconnected {{!Block}basic blocks}. You can navigate between
+      blocks using {{!Block_traverse.succs}Block.succs} and
       {{!Block_traverse.preds}Block.preds} functions, or you can
-      transform a set of blocks into a real {{!Block.Cfg}graph}, using
-      {{!Block.to_graph}Block.to_graph} function. Sometimes it maybe
-      enough to traverse program using {{!Block.dfs}depth-first
-      search}.
+      transform a set of blocks into a real {{!Block.Cfg}graph} using
+      the {{!Block.to_graph}Block.to_graph} function. Sometimes it
+      is enough to traverse program using 
+      {{!Block.dfs}depth-first search}.
 
       Each block is a container to a sequence of machine
-      instructions. It is guaranteed, that there is at least one
-      instruction in the block, thus
+      instructions. It is guaranteed that there's at least one
+      instruction in the block, thus the
       {{!Block_accessors.leader}Block.leader} and
       {{!Block_accessors.terminator}Block.terminator} functions are
       total.
 
       Each {{!Insn}machine instruction} is represented by its
-      [opcode], [name] and [array] of operands, that are machine and
-      disassembler specific; a set of predicates, that describes
-      instruction semantics on a very high level; and by a sequence of
-      {{!Bil}BIL} statements, that defines precisely the semantics of
-      this instruction.
+      [opcode], [name] and [array] of operands (these are machine and
+      disassembler specific), a set of predicates (describing
+      instruction semantics on a very high level), and a sequence of
+      {{!Bil}BIL} statements that precisely define the semantics of
+      the instruction.
 
       Modules of type {{!CPU}CPU} provide a high level abstraction of
-      CPU and allow one to reason about instruction semantics
+      the CPU and allow one to reason about instruction semantics
       independently from the target platform. Modules of type
-      {{!ABI}ABI} provide even more information, e.g., maps registers
-      to formals. Module type {{!Target}Target} brings [CPU] and [ABI]
-      together. To get an instance of this module, you can use
-      function {{!target_of_arch}target_of_arch}. To get access to
-      full information about target platform, use the following
-      modules, that reveals low-level and platform-specific details:
+      {{!ABI}ABI} provide even more information, e.g., it maps
+      registers to formals. The module type {{!Target}Target} brings
+      [CPU] and [ABI] together. To get an instance of this module,
+      you can use the {{!target_of_arch}target_of_arch} function. For
+      accessing all information about target platform, use the
+      following modules that expose low-level and platform-specific
+      details:
 
-      - {{!ARM}ARM};
-      - {{!IA32}IA32};
-      - {{!AMD64}AMD64}.
+      - {{!ARM}ARM}
+      - {{!IA32}IA32}
+      - {{!AMD64}AMD64}
 
 
-      If you do not need the cfg reconstruction, then you can use
-      {{!linear_sweep}linear_sweep} function to disassemble given
+      If you do not need cfg reconstruction, you can use
+      {{!linear_sweep}linear_sweep} function to disassemble a given
       memory region. If you need more granularity, then you can use
-      expert interface, that has two modules inside:
+      the expert interface accordingly:
 
       - {{!Disasm_expert.Basic}Basic} - provides access to a low-level
         disassembler on top of which all other disassemblers are
@@ -311,59 +314,60 @@ module Std : sig
   *)
 
   (** {2:sema Semantic Analysis}
-      This part of the library are currently under heavy
+      This part of the library is currently under heavy
       construction. We will provide information later.  *)
 
 
   (** {2:project Writing Program Analysis Plugins}
 
       To write a program analysis plugin you need to implement a
-      function of one of the following interfaces:
+      function with one of the following interfaces:
 
       - [project -> project] and register it with
         {{!Project.register_plugin}register_plugin};
       - [project -> unit] and register it with
          {{!Project.register_plugin'}register_plugin'};
       - [string array -> project -> project] and register it with
-        {{!Project.register_plugin_with_args}register_plugin_with_args}
+        {{!Project.register_plugin_with_args}register_plugin_with_args};
       - [string array -> project -> unit] and register it with
         {{!Project.register_plugin_with_args'}register_plugin_with_args'}.
 
       Once loaded from the [bap] utility (see [man bap]) this function
-      will be invoked with a value of type {{!Project.t}project}, that
-      provides an access to all information that was gathered over the
-      binary so far. If registered function returns non [unit] type,
-      then it can functionally update the project state, e.g., add
-      annotations, discover new symbols, remove incorrect and, even,
-      change architecture and redisassemble everything.
+      will be invoked with a value of type {{!Project.t}project} that
+      provides access to all information gathered over the binary so
+      far. If the registered function returns a non [unit] type, then it 
+      can functionally update the project state, e.g., add
+      annotations, discover new symbols, make corrections, and even
+      change the architecture and re-disassemble everything.
 
       {3 Exchanging information}
 
-      For exchanging information in type safe manner we use
-      {{!Tag}universal values}. Values can be attached to a particular
-      memory region, or to a key of type [string]. For the first case
-      we use {{!Memmap}memmap} data structure that is an interval tree
-      containing all the memory regions that were used during
-      analysis. For the latter a regular [String.Map] is used.
+      For exchanging information in a type safe manner, we use
+      {{!Tag}universal values}. Values can be attached to a
+      particular memory region, or to a key of type [string]. For the
+      first case we use the {{!Memmap}memmap} data structure. It is
+      an interval tree containing all the memory regions that are
+      used during analysis. For the latter a regular [String.Map] is
+      used.
 
       {3 Annotating memory}
 
       Depending on the analysis performed and input parameters, one can
       expect that memory may be annotated with the following tags:
 
-      - [Image.region] -- for regions of memory, that had some
-      particular name in the original binary. For example, in ELF
-      sections have names, that will be used to annotate corresponding
-      memory regions.
+      - [Image.region] -- for regions of memory that had a
+      particular name in the original binary. For example, in ELF,
+      sections have names that annotate a corresponding memory
+      region.
 
       - [Image.section] -- if the binary data was loaded from a binary
-      format that contains sections (aka segments), then corresponding
-      memory regions would be marked. Sections gives you access to
-      permission information.
+      format that contains sections (aka segments), then the
+      corresponding memory regions are be marked. Sections provide
+      access to permission information.
 
-      - [Image.symbol] -- with this tag we annotate each memory regions
-      that belongs to a particular symbol. Currently, the type of tag
-      is just a string.
+      - [Image.symbol] -- with this tag we annotate each memory region
+      that belongs to a particular symbol. Currently, the type of
+      this tag is a string.
   *)
 
 
@@ -371,16 +375,16 @@ module Std : sig
 
       {3:dwarf DWARF library}
 
-      Dwarf library provides an access to DWARF debugging
+      The Dwarf library provides an access to DWARF debugging
       information. It implements parsing of some subset of DWARF
       features, and a high-level interface {{!Dwarf.Fbi}Fbi} that
-      will extract function symbols from the given DWARF data.
+      extracts function symbols from the given DWARF data.
 
       {3:sigs Byteweight}
 
-      This {{!Byteweight}library} implements a byteweight algorithm,
-      that can identify functions in stripped binaries, as well as to
-      train itself on provided training corpus.
+      This {{!Byteweight}library} implements a byteweight algorithm
+      that identifies functions in stripped binaries, as well as
+      being able to train itself on a provided training corpus.
   *)
 
   (** {1:api BAP API}  *)
@@ -427,11 +431,11 @@ module Std : sig
   end
 
   (** Regular types models a general concept of value, i.e., something
-      that can be used in way similiar to regular [int], [string],
+      that can be used in way similar to regular [int], [string],
       [char] and other built in types. So that it can be compared, used
       in maps, sets, hashtables, printer, etc.
 
-      Note: this signature is pretty similiar to core's [Identifiable],
+      Note: this signature is pretty similar to core's [Identifiable],
       but doesn't require [of_string] function, that is usually much
       harder to implement in comparison with [to_string] function. Also,
       instead of [to_string] it requires [pp] function that can be
