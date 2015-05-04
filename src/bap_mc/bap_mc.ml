@@ -1,4 +1,4 @@
-open Core_kernel.Std
+ open Core_kernel.Std
 open Or_error
 open Format
 open Bap.Std
@@ -15,10 +15,10 @@ exception Unknown_arch
 exception Can't_lift of Error.t
 exception Trailing_data of int
 
-let no_disassembly state boff =
+let no_disassembly state (start_addr, boff) =
   let mem = Dis.memory state in
-  let addr = Dis.addr state in
-  let stop = Addr.to_int addr |> ok_exn in
+  let addr = Addr.((Dis.addr state) - start_addr) in
+  let stop = (Addr.to_int addr |> ok_exn) in
   raise (Bad_insn (mem, boff, stop))
 
 let escape_0x =
@@ -51,10 +51,9 @@ let read_input input =
     | "0x" ->  to_binary ~escape:escape_0x input
     | x -> to_binary ~escape:prepend_slash_x input
 
-let create_memory arch s =
-  let width = Arch.addr_size arch |> Size.to_bits in
+let create_memory arch s addr =
   let endian = Arch.endian arch in
-  Memory.create endian Addr.(of_int ~width 0) @@
+  Memory.create endian addr @@
   Bigstring.of_string s |> function
   | Ok r -> r
   | Error e -> raise (Create_mem e)
@@ -63,6 +62,11 @@ let print_kinds insn =
   Dis.Insn.kinds insn |>
   List.map ~f:sexp_of_kind |>
   List.iter ~f:(printf "%a@." Sexp.pp)
+
+let print_insn_size should_print mem =
+  if should_print then
+    let len = Memory.length mem in
+    printf "%#x\n" len
 
 let print_insn insn_formats insn =
   let insn = Insn.of_basic insn in
@@ -103,31 +107,48 @@ let print_bil lift bil_formats mem insn =
   List.iter bil_formats ~f:(fun fmt ->
       printf "%s@." (string_of_bil fmt (bil insn)))
 
-let make_print lift insn_fmt bil_fmt show_kinds mem insn =
-  print_insn insn_fmt insn;
+let make_print lift insn_fmt bil_fmt show_kinds show_size mem insn =
+  print_insn_size show_size mem;
+  print_insn insn_fmt insn; 
   print_bil lift bil_fmt mem insn;
   if show_kinds then print_kinds insn
 
-let step print state mem insn _ =
-  print mem insn;
-  Dis.step state (Dis.addr state |> Addr.to_int |> ok_exn)
+let check max_insn counter = match max_insn with
+  | None -> true
+  | Some max_insn -> counter < max_insn
+  
+let step max_insn print state mem insn (addr, counter) =
+  if (check max_insn counter) then (
+    print mem insn;
+    Dis.step state (Dis.addr state, counter+1)
+  ) else Dis.stop state (Dis.addr state, counter)
 
-let disasm src arch show_insn show_bil show_kinds =
+let disasm src addr max_insn arch show_oplen show_insn show_bil show_kinds =
   let arch = match Arch.of_string arch with
     | None -> raise Unknown_arch
     | Some arch -> arch in
+  let extension = match arch with
+    | `x86 -> ":32"
+    | `x86_64 -> ":64" in
+  let addr = Addr.of_string (addr ^ extension) in
   let module Target = (val target_of_arch arch) in
-  let print = make_print Target.lift show_insn show_bil show_kinds in
+  let print = make_print Target.lift show_insn show_bil show_kinds show_oplen in
   let input = read_input src in
   Dis.create ~backend:"llvm" (Arch.to_string arch) >>= fun dis ->
-  let invalid state mem off = no_disassembly state off in
-  let pos =
-    Dis.run dis ~return:ident
-      ~stop_on:[`Valid] ~invalid ~hit:(step print) ~init:0
-      (create_memory arch input) in
-  if pos <> String.length input then
-    raise (Trailing_data (String.length input - pos));
-  return ()
+  let invalid state mem (r_addr, off) = no_disassembly state (r_addr, off) in
+  let pos, dis_insn_count  =
+    Dis.run dis ~return:(fun x -> x)
+      ~stop_on:[`Valid] ~invalid
+      ~hit:(step max_insn print) ~init:(addr, 0)
+      (create_memory arch input addr) in
+  let bytes_disassembled = Addr.(pos - addr) |> Addr.to_int |> ok_exn in
+  let len = String.length input in
+  match max_insn with
+  | None -> 
+     if bytes_disassembled <> len then
+       raise (Trailing_data (len - bytes_disassembled));
+     return ()
+  | _ -> return ()
 
 module Cmdline = struct
   open Cmdliner
@@ -139,6 +160,14 @@ module Cmdline = struct
   let show_kinds =
     let doc = "Output instruction kinds." in
     Arg.(value & flag & info ["show-kinds"] ~doc)
+
+  let show_insn_size =
+    let doc =
+      "Output recognized opcode length (including potential data)\
+       as in the number of bytes EIP is incremented upon having\
+       executed said opcode."
+    in
+    Arg.(value & flag & info ["show-size"] ~doc)
 
   let show_insn =
     let formats = [
@@ -170,6 +199,21 @@ module Cmdline = struct
     Arg.(value & opt_all ~vopt:`bil (enum formats) [] &
          info ["show-bil"] ~doc)
 
+  let addr =
+    let doc = "Specify an address of first byte, as though \
+	       the instructions occur at a certain address, \
+	       and accordingly interpreted. Be careful that \
+	       you appropriately use 0x prefix for hex and \
+	       leave it without for decimal." in
+    Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
+
+  let max_insns =
+    let doc = "Specify a number of instructions to disassemble.\
+	       Good for ensuring that only one instruction is ever\
+	       lifted or disassembled from a byte blob. Default is all" in
+    Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
+
+       
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
     Arg.(value & pos 0 (some string) None & info [] ~docv:"STRING" ~doc)
@@ -193,7 +237,7 @@ module Cmdline = struct
            bap-mc  --show-inst --show-asm");
       `S "SEE ALSO";
       `P "llvm-mc"] in
-    Term.(pure main $src $arch $show_insn $show_bil $show_kinds),
+    Term.(pure main $src $addr $max_insns $arch $show_insn_size $show_insn $show_bil $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.pkg_version
 
   let parse main = Term.eval (cmd main) ~catch:false
