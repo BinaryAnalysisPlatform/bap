@@ -1,4 +1,4 @@
- open Core_kernel.Std
+open Core_kernel.Std
 open Or_error
 open Format
 open Bap.Std
@@ -109,14 +109,14 @@ let print_bil lift bil_formats mem insn =
 
 let make_print lift insn_fmt bil_fmt show_kinds show_size mem insn =
   print_insn_size show_size mem;
-  print_insn insn_fmt insn; 
+  print_insn insn_fmt insn;
   print_bil lift bil_fmt mem insn;
   if show_kinds then print_kinds insn
 
 let check max_insn counter = match max_insn with
   | None -> true
   | Some max_insn -> counter < max_insn
-  
+
 let step max_insn print state mem insn (addr, counter) =
   if (check max_insn counter) then (
     print mem insn;
@@ -127,9 +127,9 @@ let disasm src addr max_insn arch show_oplen show_insn show_bil show_kinds =
   let arch = match Arch.of_string arch with
     | None -> raise Unknown_arch
     | Some arch -> arch in
-  let extension = match arch with
-    | `x86 -> ":32"
-    | `x86_64 -> ":64" in
+  let extension = match Arch.addr_size arch with
+    | `r32 -> ":32"
+    | `r64 -> ":64" in
   let addr = Addr.of_string (addr ^ extension) in
   let module Target = (val target_of_arch arch) in
   let print = make_print Target.lift show_insn show_bil show_kinds show_oplen in
@@ -144,10 +144,10 @@ let disasm src addr max_insn arch show_oplen show_insn show_bil show_kinds =
   let bytes_disassembled = Addr.(pos - addr) |> Addr.to_int |> ok_exn in
   let len = String.length input in
   match max_insn with
-  | None -> 
-     if bytes_disassembled <> len then
-       raise (Trailing_data (len - bytes_disassembled));
-     return ()
+  | None ->
+    if bytes_disassembled <> len then
+      raise (Trailing_data (len - bytes_disassembled));
+    return ()
   | _ -> return ()
 
 module Cmdline = struct
@@ -201,19 +201,19 @@ module Cmdline = struct
 
   let addr =
     let doc = "Specify an address of first byte, as though \
-	       the instructions occur at a certain address, \
-	       and accordingly interpreted. Be careful that \
-	       you appropriately use 0x prefix for hex and \
-	       leave it without for decimal." in
+	           the instructions occur at a certain address, \
+	           and accordingly interpreted. Be careful that \
+	           you appropriately use 0x prefix for hex and \
+	           leave it without for decimal." in
     Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
 
   let max_insns =
     let doc = "Specify a number of instructions to disassemble.\
-	       Good for ensuring that only one instruction is ever\
-	       lifted or disassembled from a byte blob. Default is all" in
+	           Good for ensuring that only one instruction is ever\
+	           lifted or disassembled from a byte blob. Default is all" in
     Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
 
-       
+
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
     Arg.(value & pos 0 (some string) None & info [] ~docv:"STRING" ~doc)
