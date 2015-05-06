@@ -18,6 +18,5 @@ let with_ida ~which_ida bin : Addr.Set.t t =
       if Image.Sec.is_executable sec then
         let sym_tbl = Ida.(get_symbols ida arch mem) in
         Seq.fold Seq.(Table.regions sym_tbl >>| Memory.min_addr)
-          ~init:ida_syms
-          ~f:(fun s sym -> Addr.Set.add s sym)
+          ~init:ida_syms ~f:Addr.Set.add
       else ida_syms)

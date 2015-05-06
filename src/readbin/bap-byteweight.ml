@@ -97,7 +97,7 @@ let symbols print_name print_size input : unit t =
       printf "%a %s%s\n" Addr.pp addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
-let dump _output_format info length threshold path (input : string) : unit t =
+let dump info length threshold path (input : string) : unit t =
   Image.create input >>= fun (img, _warns) ->
   match info with
   | `BW ->
@@ -231,11 +231,6 @@ module Cmdline = struct
     let doc = "Print symbol's size." in
     Arg.(value & flag & info ["print-size"; "s"] ~doc)
 
-  let output_format : [`text | `sexp] Term.t =
-    let enums = ["text", `text; "sexp", `sexp] in
-    let doc = sprintf "The output format. %s" @@ Arg.doc_alts_enum enums in
-    Arg.(value & opt (enum enums) `sexp & info ["output_format"; "f"] ~doc)
-
   let tool : [`BW | `SymTbl] Term.t =
     let enums = ["byteweight", `BW; "symbols", `SymTbl] in
     let doc = sprintf "The info to be dumped. %s" @@ Arg.doc_alts_enum enums in
@@ -243,8 +238,7 @@ module Cmdline = struct
 
   let dump =
     let doc = "Dump the function starts in a given executable by given tool" in
-    Term.(pure dump $output_format $tool $length $threshold $database_in
-          $filename),
+    Term.(pure dump $tool $length $threshold $database_in $filename),
     Term.info "dump" ~doc
 
   let train =
