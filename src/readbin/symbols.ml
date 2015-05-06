@@ -50,20 +50,33 @@ let demangle_name ?(how=`internal) name =
     | `internal -> demangle_native name
   else name
 
-let read ?demangle ~filename arch base  : string table =
+
+let read ?demangle ic arch base : string table =
   let demangle name = match demangle with
     | None -> name
     | Some how -> demangle_name ~how name in
   let sym_of_sexp x = <:of_sexp<string * int64 * int64>> x in
-  In_channel.with_file filename ~f:(fun out ->
-      let buf = Lexing.from_channel out in
-      Sexp.scan_fold_sexps buf ~init:Table.empty ~f:(fun syms sexp ->
-          try
-            let (name,es,ef) = sym_of_sexp sexp in
-            let words = Int64.(ef - es |> to_int_exn) in
-            let width = Arch.addr_size arch |> Size.to_bits in
-            let from = Addr.of_int64 ~width es in
-            let mem = Memory.view ~from ~words base |> ok_exn in
-            let name = demangle name in
-            Table.add syms mem name |> ok_exn
-          with exn -> syms))
+  let buf = Lexing.from_channel ic in
+  Sexp.scan_fold_sexps buf ~init:Table.empty ~f:(fun syms sexp ->
+      try
+        let (name,es,ef) = sym_of_sexp sexp in
+        let words = Int64.(ef - es |> to_int_exn) in
+        let width = Arch.addr_size arch |> Size.to_bits in
+        let from = Addr.of_int64 ~width es in
+        let mem = Memory.view ~from ~words base |> ok_exn in
+        let name = demangle name in
+        Table.add syms mem name |> ok_exn
+      with _exn -> syms)
+
+let read_addrset ic : Addr.Set.t =
+  Addr.Set.t_of_sexp @@ Sexp.input_sexp ic
+
+
+let write_addrset oc (addr_set : Addr.Set.t) : unit =
+  Sexp.output oc @@ Addr.Set.sexp_of_t addr_set
+
+let write oc (syms : Image.sym table) : unit =
+  let fs_s = Table.foldi syms ~init:Addr.Set.empty ~f:(fun mem _sym fs_set ->
+      let addr = Memory.min_addr mem in
+      Addr.Set.add fs_set addr) in
+  write_addrset oc fs_s

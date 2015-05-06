@@ -214,7 +214,8 @@ module Program(Conf : Options.Provider) = struct
     let demangle = options.demangle in
     let usr_syms = match options.symsfile with
       | Some filename ->
-        Symbols.read ?demangle ~filename arch mem
+        In_channel.with_file filename
+          ~f:(fun ic -> Symbols.read ?demangle ic arch mem)
       | None -> Table.empty in
     let ida_syms = match options.use_ida with
       | None -> Table.empty
