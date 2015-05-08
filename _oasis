@@ -380,31 +380,31 @@ Executable "bap-server"
 
 Executable "bap"
   Path:           src/readbin
-  MainIs:         readbin.ml
+  MainIs:         bap_main.ml
   Install:        true
   CompiledObject: best
   # XXX: Update bapbuild.ml bap_packages if you add something here
   BuildDepends:   bap,
                   bap.plugins,
-                  ocamlgraph,
-                  ezjsonm,
                   cmdliner,
+                  ezjsonm,
                   fileutils,
+                  ocamlgraph,
                   re.posix
 
 Executable "bap-byteweight"
   Path:           src/readbin
-  MainIs:         bap-byteweight.ml
+  MainIs:         byteweight_main.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, curl, re.posix
+  BuildDepends:   bap, bap.plugins, cmdliner, curl, fileutils, re.posix
 
 Executable "bap-fsi-benchmark"
   Path:           src/readbin
-  MainIs:         fsi_benchmark.ml
+  MainIs:         fsi_benchmark_main.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, re.posix, fileutils
+  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, re.posix
 
 Executable "bap-mc"
   Path:           src/bap_mc
