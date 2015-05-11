@@ -2,5 +2,6 @@ REC
 PKG ezjsonm
 PKG fileutils
 PKG re.posix
+PKG curl
 B ../../_build/src/readbin
 S .

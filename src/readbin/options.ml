@@ -12,6 +12,7 @@ type t = {
   cfg_format : label_format sexp_list;
   output_phoenix : string option;
   output_dump : dump_format sexp_list;
+  dump_symbols : string option option;
   demangle : demangle sexp_option;
   no_resolve : bool;
   keep_alive : bool;

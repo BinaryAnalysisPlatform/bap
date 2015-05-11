@@ -50,33 +50,31 @@ let demangle_name ?(how=`internal) name =
     | `internal -> demangle_native name
   else name
 
-
-let read ?demangle ic arch base : string table =
-  let demangle name = match demangle with
+let demangle ?d name = match d with
     | None -> name
-    | Some how -> demangle_name ~how name in
+    | Some how -> demangle_name ~how name
+
+let read arch ic : (string * addr * addr) list =
   let sym_of_sexp x = <:of_sexp<string * int64 * int64>> x in
-  let buf = Lexing.from_channel ic in
-  Sexp.scan_fold_sexps buf ~init:Table.empty ~f:(fun syms sexp ->
-      try
-        let (name,es,ef) = sym_of_sexp sexp in
-        let words = Int64.(ef - es |> to_int_exn) in
-        let width = Arch.addr_size arch |> Size.to_bits in
-        let from = Addr.of_int64 ~width es in
-        let mem = Memory.view ~from ~words base |> ok_exn in
-        let name = demangle name in
-        Table.add syms mem name |> ok_exn
-      with _exn -> syms)
+  let addr_of_int64 x =
+    let width = Arch.addr_size arch |> Size.to_bits in
+    Addr.of_int64 ~width x in
+  List.(Sexp.input_sexps ic >>| sym_of_sexp >>| (fun (s, es, ef) ->
+      s, addr_of_int64 es, addr_of_int64 ef))
 
-let read_addrset ic : Addr.Set.t =
-  Addr.Set.t_of_sexp @@ Sexp.input_sexp ic
+let read_addrs ic : addr list =
+  List.t_of_sexp Addr.t_of_sexp @@ Sexp.input_sexp ic
 
+let write_addrs oc (addrs : addr list) : unit =
+  Sexp.output oc @@ List.sexp_of_t Addr.sexp_of_t addrs
 
-let write_addrset oc (addr_set : Addr.Set.t) : unit =
-  Sexp.output oc @@ Addr.Set.sexp_of_t addr_set
-
-let write oc (syms : Image.sym table) : unit =
-  let fs_s = Table.foldi syms ~init:Addr.Set.empty ~f:(fun mem _sym fs_set ->
-      let addr = Memory.min_addr mem in
-      Addr.Set.add fs_set addr) in
-  write_addrset oc fs_s
+let write oc (syms : (string * addr * addr) list) : unit =
+  let sexp_of_sym x = <:sexp_of<string * int64 * int64>> x in
+  try
+    let syms = List.map syms ~f:(fun (s, es, ef) -> s, Addr.to_int64 es |> ok_exn,
+                                                Addr.to_int64 ef |> ok_exn) in
+    List.iter syms ~f:(fun sym -> Sexp.output_hum oc @@ sexp_of_sym sym;
+                        output_char oc '\n')
+  with exn ->
+    printf "Output error: %a." Exn.pp exn;
+    ()

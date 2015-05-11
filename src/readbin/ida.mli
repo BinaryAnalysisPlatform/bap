@@ -22,9 +22,9 @@ type t
     name *)
 val create : ?ida:string -> string -> t Or_error.t
 
-(** [get_symbols ?demangle ida mem] extract symbols from binary, using
-    IDA with specific path [ida] *)
-val get_symbols : ?demangle:Options.demangle -> t -> arch -> mem -> string table
+(** [get_symbols ida arch] extract symbols from binary, using IDA with
+    specific path [ida] *)
+val get_symbols : t -> arch -> (string * addr * addr) list
 
 (** [close ida] finish interaction with IDA and clean all resources *)
 val close : t -> unit

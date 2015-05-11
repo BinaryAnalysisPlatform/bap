@@ -108,11 +108,12 @@ let dump info length threshold path (input : string) : unit t =
               let new_fs_s = BW.find bw ~length ~threshold mem in
               Addr.Set.union fs_s @@ Addr.Set.of_list new_fs_s
             else fs_s) in
-    Symbols.write_addrset stdout fs_set;
+    Symbols.write_addrs stdout @@ Addr.Set.to_list fs_set;
     Ok ()
   | `SymTbl ->
     let syms = Image.symbols img in
-    Symbols.write stdout syms;
+    let mems = Table.regions syms in
+    Symbols.write_addrs stdout @@ Seq.to_list (Seq.map mems Memory.min_addr);
     Ok ()
 
 let create_parent_dir dst =

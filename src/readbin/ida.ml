@@ -141,10 +141,9 @@ let run_script self script_to =
       FileUtil.rm [script; result]);
   result
 
-let get_symbols ?demangle t arch mem =
+let get_symbols t arch =
   let result = run_script t Idapy.extract_symbols in
-  In_channel.with_file result ~f:(fun ic ->
-    Symbols.read ?demangle ic arch mem)
+  In_channel.with_file result ~f:(Symbols.read arch)
 
 let close self = self.close ()
 

@@ -51,6 +51,15 @@ let output_dump : _ list Term.t =
   Arg.(value & opt_all ~vopt:`with_asm (enum values) [] &
        info ["dump"; "d"] ~doc)
 
+let dump_symbols : string option option Term.t =
+  let doc = "Output symbol information. In the output file, each symbol is in format of:
+  (<symbol name> <symbol start address> <symbol end address>), e.g.,
+  (malloc@@GLIBC_2.4 0x11034 0x11038)" in
+  Arg.(value & opt ~vopt:(Some None) (some (some string)) None & info
+         ["dump-symbols"] ~doc)
+
+
+
 let demangle : 'a option Term.t =
   let doc = "Demangle C++ symbols, using either internal \
              algorithm or a specified external tool, e.g. \
@@ -158,10 +167,9 @@ let load_path : string list Term.t =
        info ["load-path"; "L"] ~doc ~docv:"PATH")
 
 let create
-    a b c d e f g h i j k l m n o p q r s t u v x =
+    a b c d e f g h i j k l m n o p q r s t u v x y =
   Options.Fields.create
-    a b c d e f g h i j k l m n o p q r s t u v x
-
+    a b c d e f g h i j k l m n o p q r s t u v x y
 
 let program =
   let doc = "Binary Analysis Platform" in
@@ -211,7 +219,7 @@ let program =
 
   Term.(pure create
         $filename $loader $symsfile $cfg_format
-        $output_phoenix $output_dump $demangle
+        $output_phoenix $output_dump $dump_symbols $demangle
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold

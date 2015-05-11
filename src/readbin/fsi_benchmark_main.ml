@@ -21,16 +21,16 @@ type evaluation = {
   recl: float;
   f_05: float}
 
+let bin : string Term.t =
+  let doc = "The testing stripped binary." in
+  Arg.(required & pos 0 (some non_dir_file) None & info [] ~docv:"binary" ~doc)
+
 let tool : string Term.t =
   let doc = "The tool of the function start result that we are going to
   evaluate. If user wants to evaluate bap-byteweight, one can use
   \"bap-byteweight\". If user want to evaluate IDA, one can use
   \"idaq\", \"idal\", \"idaq64\" or the specific path of IDA." in
-  Arg.(required & pos 0 (some string) (Some "bap-byteweight") & info [] ~docv:"tool" ~doc)
-
-let bin : string Term.t =
-  let doc = "The testing stripped binary." in
-  Arg.(required & pos 1 (some non_dir_file) None & info [] ~docv:"binary" ~doc)
+  Arg.(required & pos 1 (some string) (Some "bap-byteweight") & info [] ~docv:"tool" ~doc)
 
 let truth : string Term.t =
   let doc =
@@ -84,11 +84,15 @@ let print formatter tool result print_metrics : unit =
   fprintf formatter "\n%s" tool_name;
   output_metric_value formatter result print_metrics
 
-let compare_against tool_name bin truth_name print_metrics : unit =
+let compare_against bin tool_name truth_name print_metrics : unit =
   let open Or_error in
   match (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
          Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
          let result =
+           let to_set seq = Seq.fold seq ~init:Addr.Set.empty
+               ~f:(fun set fs -> Addr.Set.add set fs) in
+           let tool = to_set tool in
+           let truth = to_set truth in
            let false_positive = Set.(length (diff tool truth)) in
            let false_negative = Set.(length (diff truth tool)) in
            let true_positive = Set.length truth - false_negative in
@@ -104,7 +108,7 @@ let compare_against tool_name bin truth_name print_metrics : unit =
   the following error:\n %a" Error.pp err
 
 
-let compare_against_t = Term.(pure compare_against $tool $bin $truth $print_metrics)
+let compare_against_t = Term.(pure compare_against $bin $tool $truth $print_metrics)
 
 let info =
   let doc = "to compare the functions start identification result to the ground
