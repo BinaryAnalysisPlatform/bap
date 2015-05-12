@@ -3853,19 +3853,19 @@ module Std : sig
     (** all string tags attached to a memory region supports the
         following substitutions:
 
-        - [$region_{name,addr,min_addr,max_addr}] - name of region of file
+        - [$region{_name,_addr,_min_addr,_max_addr}] - name of region of file
         to which it belongs. For example, in ELF this name will
         correspond to the section name
 
-        - [$symbol_{name,addr}] - name or address of the symbol to which this
+        - [$symbol{_name,_addr,_min_addr,_max_addr}] - name or address of the symbol to which this
         memory belongs
 
         - [$asm] - assembler listing of the memory region
 
         - [$bil] - BIL code of the tagged memory region
 
-        - [$block_{name,addr}] - name or address of a basic block to which
-        this region belongs
+        - [$block{_name,_addr,_min_addr,_max_addr}] - name or address of a basic
+        block to which this region belongs
 
         - [$min_addr, $addr] - starting address of a memory region
 
