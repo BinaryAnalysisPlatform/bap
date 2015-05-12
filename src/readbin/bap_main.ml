@@ -69,7 +69,7 @@ module Program(Conf : Options.Provider) = struct
     | `region of spec
     | `symbol of spec
     | `memory of bound
-    | `block of bound
+    | `block of spec
     | `asm
     | `bil
   ] with sexp
@@ -81,6 +81,9 @@ module Program(Conf : Options.Provider) = struct
     | "symbol" | "symbol_name" -> Some (`symbol `name)
     | "symbol_addr" | "symbol_min_addr" -> Some (`symbol `min)
     | "symbol_max_addr" -> Some (`symbol `max)
+    | "bil" -> Some (`bil)
+    | "asm" -> Some (`asm)
+    | "block_name" ->  Some (`block `name)
     | "block_addr" | "block_min_addr" -> Some (`block `min)
     | "block_max_addr" -> Some (`block `max)
     | "min_addr" | "addr" -> Some (`memory `min)
@@ -112,7 +115,10 @@ module Program(Conf : Options.Provider) = struct
     let find_block mem =
       Table.find_addr (Disasm.blocks project.disasm)
         (Memory.min_addr mem) in
-    let subst_block (mem,_) spec = addr spec mem in
+    let subst_block (mem,block) spec =
+      match spec with
+      | #bound as b -> addr b mem
+      | `name -> "blk_"^addr `min mem in
     let asm insn = Insn.asm insn in
     let bil insn = asprintf "%a" Bil.pp (Insn.bil insn) in
     let disasm mem out =
@@ -128,8 +134,8 @@ module Program(Conf : Options.Provider) = struct
           | Some (`symbol spec) ->
             apply_subst find_symbol mem subst_region spec x
           | Some (`memory bound) -> addr bound mem
-          | Some (`block bound) ->
-            apply_subst find_block mem subst_block bound x
+          | Some (`block spec) ->
+            apply_subst find_block mem subst_block spec x
           | Some (`bil | `asm as out) -> disasm mem out
           | None -> x) x;
       Buffer.contents buf in
@@ -332,7 +338,8 @@ module Program(Conf : Options.Provider) = struct
         let addr = Addr.of_int ~width:width_of_arch 0 in
         match Memory.of_file (Arch.endian arch) addr options.filename with
         | Ok m -> disassemble arch m; return 0
-        | Error e -> eprintf "failed to create memory: %s\n" (Error.to_string_hum e);
+        | Error e ->
+            eprintf "failed to create memory: %s\n" (Error.to_string_hum e);
           return 1
 end
 
