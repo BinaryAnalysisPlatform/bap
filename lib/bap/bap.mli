@@ -117,7 +117,7 @@ module Std : sig
       - {{!Stmt}stmt} - BIL statement;
       - {{!Bitvector}word,addr} - a bitvector data structure
         to represent immediate data;
-      - {{!Tag}'a tag} and {{!Tag}value} - an extensible variant type,
+      - {{!Value}'a tag} and {{!Value}value} - an extensible variant type,
         aka existential, aka type [any];
       - {{!Seq}'a seq} - slightly extended Core [Sequence], aka lazy
         list.
@@ -141,7 +141,7 @@ module Std : sig
       Most types usually provide much more. For each type, there is a
       module with the same name that implements its interface. For
       example, type [exp] is indeed a type abbreviation for [Exp.t],
-      and module [Exp] contains all functions and types related to 
+      and module [Exp] contains all functions and types related to
       type [exp]. For example, to create a hashtable of statements,
       just type:
 
@@ -155,7 +155,7 @@ module Std : sig
       has type [word -> exp]. If a constructor has several arguments
       of the same type we usually disambiguate them with keywords,
       e.g., [Bil.Load of (exp,exp,endian,size)] has function
-      {{!Bil.load}Bil.load} with type: 
+      {{!Bil.load}Bil.load} with type:
       [mem:exp -> addr:exp -> endian -> size -> exp]
 
 
@@ -268,7 +268,7 @@ module Std : sig
       {{!Block_traverse.preds}Block.preds} functions, or you can
       transform a set of blocks into a real {{!Block.Cfg}graph} using
       the {{!Block.to_graph}Block.to_graph} function. Sometimes it
-      is enough to traverse program using 
+      is enough to traverse program using
       {{!Block.dfs}depth-first search}.
 
       Each block is a container to a sequence of machine
@@ -335,7 +335,7 @@ module Std : sig
       Once loaded from the [bap] utility (see [man bap]) this function
       will be invoked with a value of type {{!Project.t}project} that
       provides access to all information gathered over the binary so
-      far. If the registered function returns a non [unit] type, then it 
+      far. If the registered function returns a non [unit] type, then it
       can functionally update the project state, e.g., add
       annotations, discover new symbols, make corrections, and even
       change the architecture and re-disassemble everything.
@@ -343,7 +343,7 @@ module Std : sig
       {3 Exchanging information}
 
       For exchanging information in a type safe manner, we use
-      {{!Tag}universal values}. Values can be attached to a
+      {{!Value}universal values}. Values can be attached to a
       particular memory region, or to a key of type [string]. For the
       first case we use the {{!Memmap}memmap} data structure. It is
       an interval tree containing all the memory regions that are
@@ -1063,20 +1063,21 @@ module Std : sig
   type typ = Type.t
   with bin_io, compare, sexp
 
-  val bool_t  : typ             (** one bit  *)
-  val reg8_t  : typ             (** 8-bit width value *)
-  val reg16_t : typ             (** 16-bit width value *)
-  val reg32_t : typ             (** 32-bit width value *)
-  val reg64_t : typ             (** 64-bit width value *)
+  val bool_t  : typ             (** one bit             *)
+  val reg8_t  : typ             (** 8-bit width value   *)
+  val reg16_t : typ             (** 16-bit width value  *)
+  val reg32_t : typ             (** 32-bit width value  *)
+  val reg64_t : typ             (** 64-bit width value  *)
   val reg128_t: typ             (** 128-bit width value *)
   val reg256_t: typ             (** 256-bit width value *)
 
-  (** [mem32_t size] 32-bit chunk of memory of a given [size] *)
+  (** [mem32_t size] creates a type for memory with [32]-bit addresses
+      and elements of size [size].  *)
   val mem32_t : size -> typ
 
-  (** [mem64_t size]  32-bit chunk of memory of a given [size] *)
+  (** [mem64_t size] creates a type for memory with [64]-bit addresses
+      and elements of size [size].  *)
   val mem64_t : size -> typ
-
 
   (** bil variable   *)
   type var
@@ -1751,14 +1752,14 @@ module Std : sig
   with bin_io, compare, sexp
 
 
-  (** Extensible variants
+  (** Universal Values.
 
       This module creates an extensible variant type, that resembles
       extensible variant types, introduced in 4.02, but even more safe.
 
       To extend variant type with a new constructor, use
 
-      [Tag.register constructor_name sexp_of_constructor], where
+      [Value.Tag.register constructor_name sexp_of_constructor], where
 
       constructor name can be any name, and can even clash with previous
       definitions it is guaranteed, that you will receive a new
@@ -1770,41 +1771,78 @@ module Std : sig
       [Image.Symbol of sym]
       - [Image.section] for image sections;
       - [Image.region] for other named image memory regions. *)
-  module Tag : sig
-
-    (** Tag constructor of type ['a]  *)
-    type 'a t   with sexp_of
+  module Value : sig
 
     (** a value injected into extensible variant  *)
-    type value with sexp_of
+    type t with sexp_of
 
-    (** [register name sexp] creates a new variant constructor, i.e.,
-        a new branch in a variant type. This function has no side-effects,
-        it just returns a witness of a new constructor, that can be later
-        used for storing into [value] and extracting from it. This
-        witness should be shared between user and creator of the value *)
-    val register : string -> ('a -> Sexp.t) -> 'a t
+    (** Tag constructor of type ['a]  *)
+    type 'a tag   with sexp_of
 
     (** [create cons x] creates a value using constructor [cons] and
         argument [x] *)
-    val create : 'a t -> 'a -> value
+    val create : 'a tag -> 'a -> t
 
-    (** [value cons] extracts a value associated with a constructor [cons]
+    (** [get cons] extracts a value associated with a constructor [cons]
         (Essentially, performs a pattern match on the specified variant
         branch) *)
-    val value : 'a t -> value -> 'a option
+    val get : 'a tag -> t -> 'a option
 
     (** [is cons v] true if value [v] was constructed with constructor
         [cons] *)
-    val is  : 'a t -> value -> bool
+    val is  : 'a tag -> t -> bool
 
     (** [tagname value] returns a constructor name of the [value]  *)
-    val tagname : value -> string
+    val tagname : t -> string
 
-    (** [name cons] returns a name of a constructor.  *)
-    val name : 'a t -> string
 
-    include Printable with type t := value
+    include Printable with type t := t
+
+    module Tag : sig
+      type 'a t = 'a tag with sexp_of
+      (** [register name sexp] creates a new variant constructor, i.e.,
+          a new branch in a variant type. This function has no side-effects,
+          it just returns a witness of a new constructor, that can be later
+          used for storing into [value] and extracting from it. This
+          witness should be shared between user and creator of the value *)
+      val register : string -> ('a -> Sexp.t) -> 'a t
+
+      (** [to_string cons] returns a name of a constructor.  *)
+      val to_string : 'a t -> string
+    end
+
+    (** Universal Map.  *)
+    module Map : sig
+      (** The can store values of arbitrary type. Only one value of a
+          given tag can be stored in the map. For example, if you have
+          tag [cconv] (calling convention) then it is guaranteed that
+          in map there is zero or one value with this tag.  *)
+
+      (** type of map *)
+      type t
+
+      (** an empty instance  *)
+      val empty : t
+
+      (** [is_empty map] true if is empty. *)
+      val is_empty : t -> bool
+
+      (** [set map tag x] inserts or update  *)
+      val set : t -> 'a tag -> 'a -> t
+
+      (** [mem map tag] checks membership  *)
+      val mem : t -> 'a tag -> bool
+
+      (** [find map tag] lookups value  *)
+      val find : t -> 'a tag -> 'a option
+
+      (** [add map tag x] adds new value  *)
+      val add : t -> 'a tag -> 'a -> [`Ok of t | `Duplicate]
+
+      (** [change map tag f] changes value.  *)
+      val change : t -> 'a tag -> ('a option -> 'a option) -> t
+    end
+
   end
 
   (** Lazy sequence  *)
@@ -1835,8 +1873,8 @@ module Std : sig
   type exp   = Exp.t       with bin_io, compare, sexp
   type stmt  = Stmt.t      with bin_io, compare, sexp
   type unop  = Bil.unop    with bin_io, compare, sexp
-  type value = Tag.value   with sexp_of
-  type 'a tag = 'a Tag.t     with sexp_of
+  type value = Value.t     with sexp_of
+  type 'a tag = 'a Value.tag with sexp_of
 
 
   (** an image loaded into memory  *)
@@ -3821,6 +3859,377 @@ module Std : sig
         are labeled with a callsite *)
     val to_graph : block table -> t -> Graph.t
   end
+
+  (** BAP IR.
+
+      Program is a hierarchy of program entities.
+
+  *)
+  type 'a term
+
+  type program
+  type sub
+  type arg
+  type blk
+  type phi
+  type def
+  type jmp
+
+  type tid
+  type call
+
+  type label =
+    | Direct of tid
+    | Indirect of exp
+
+  type jmp_kind =
+    | Call of call
+    | Goto of label
+
+  type ('a,'b) cls
+
+  val sub_t : (program, sub) cls
+  val arg_t : (sub, arg) cls
+  val blk_t : (sub, blk) cls
+  val phi_t : (blk, phi) cls
+  val def_t : (blk, def) cls
+  val jmp_t : (blk, jmp) cls
+
+
+  module Tid : Regular with type t = tid
+
+  (** IR language term.  *)
+  module Term : sig
+    (** IR is used to model a program. A program model is expressed as
+        a formula built of terms. *)
+
+    (** term type  *)
+    type 'a t = 'a term
+
+    (** [clone term] creates an object with a fresh new identifier that
+        has the same contents as [term], i.e., that is syntactically the
+        same. *)
+    val clone : 'a t -> 'a t
+
+    (** [same x y] returns true if [x] and [y] represents the same
+        object, i.e., [Tid.(tid x = tid y)] *)
+    val same : 'a t -> 'a t -> bool
+
+    (** [name t] returns name of the term  *)
+    val name : 'a t -> string
+
+    (** [tid entity] returns the unique tidentifier of the [entity]  *)
+    val tid : 'a t -> tid
+
+    (** [find t p id] is [Some c] if term [p] has a subterm of type [t]
+        such that [tid c = id].  *)
+    val find : ('a,'b) cls -> 'a term -> tid -> 'b term option
+
+    (** [update t p c] if term [p] contains a term with id equal to
+        [tid c] then return [p] with this term substituted with [p] *)
+    val update : ('a,'b) cls -> 'a term -> 'b term -> 'a term
+
+    (** [remove t p id] returns a block that doesn't contain element
+        with the given [id] *)
+    val remove : ('a,_) cls -> 'a term -> tid -> 'a term
+
+    (** [to_sequence ?rev t p] returns all subterms of type [t] of the
+        given term [p] *)
+    val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a term -> 'b term seq
+
+    (** [map t p ~f] returns term [p] with all subterms of type [t]
+        mapped with function [f] *)
+    val map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term) -> 'a term
+
+    (** [filter_map t p ~f] returns term [p] with all subterms of type [t]
+        filter_mapped with function [f], i.e., all terms for which
+        function [f] returned [Some thing] are substituted by the
+        [thing], otherwise they're removed from the parent term  *)
+    val filter_map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term option) -> 'a term
+
+    (** [concat_map t p ~f] substitute subterm [c] of type [t] in parent term
+        [p] with [f c]. If [f c] is an empty list, then [c] doesn't
+        occur in a new parent term, if [f c] is a singleton list, then
+        [c] is substituted with the [f c], like in [map]. If [f c] is a
+        list of [n] elements, then in the place of [c] this [n] elements
+        are inserted.  *)
+    val concat_map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term list) -> 'a term
+
+    (** [filter t p ~f] returns a term [p] with subterms [c] for which
+        [f c = false] removed. *)
+    val filter : ('a,'b) cls -> 'a term -> f:('b term -> bool) -> 'a term
+
+    (** [next t p id] returns a term that preceeds a term with a given
+        [id], if such exists.  *)
+    val next : ('a,'b) cls -> 'a term -> tid -> 'b term option
+
+    (** [next t p id] returns a term that is after a term with a given
+        [id], if such exists.  *)
+    val prev : ('a,'b) cls -> 'a term -> tid -> 'b term option
+
+    (** [after t ?rev p tid] returns all subterms in term [p] that occur
+        after a term with a given [tid]. if [rev] is [true] or omitted then
+        terms are returned in the evaluation order. Otherwise
+        they're reversed. If there is no term with a given [tid],
+        then an empty sequence is returned. *)
+    val after : ('a,'b) cls -> ?rev:bool -> 'a term -> tid -> 'b term seq
+
+    (** [before t ?rev p tid] returns all term that occurs before
+        defintion with given [tid] in blk. If there is no such
+        definition, then the sequence will be empty.  @param rev has the
+        same meaning as in {!after}.  *)
+    val before : ('a,'b) cls -> ?rev:bool -> 'a term -> tid -> 'b term seq
+
+    (** [append t ~after:this p c] returns the [p] term with [c]
+        appended after [this] term. If [after] is not specified,
+        then append [def] to the end of the parent term (if it makes
+        sense, otherwise it is just added).  If [this] doesn't
+        occur in the [p] term then do nothing. The term tid is
+        preserved.  *)
+    val append : ('a,'b) cls -> ?after:tid -> 'a term -> 'b term -> 'a term
+
+    (** [prepend t ~before:this p c] returns the [p] with [c] inserted
+        before [this] term. If [before] is left unspecified, then
+        insert the [c] at the beginning of the [p] if it is a sequence,
+        otherwise just insert. If [this] is specified but doesn't occur
+        in the [p] then [p] is returned as is.  In all cases, the
+        returned term has the same [tid] as [p]. *)
+    val prepend : ('a,'b) cls -> ?before:tid -> 'a term -> 'b term -> 'a term
+
+  end
+
+  (** Program.  *)
+  module Program : sig
+    (** Program is a collection of function terms. *)
+
+    type t = program term
+
+    (** [create ()] creates an empty program. *)
+    val create : unit -> t
+
+    (** [lookup t program id] is like {{!find}find} but performs deep
+        lookup in the whole [program] for a term with a given [id].
+        This function is memoized, so it has amortized O(1) complexity,
+        with a wostcase complexity of $O(N)$, where $N$ is the total
+        amount of terms in program.  *)
+    val lookup : (_,'b) cls -> t -> tid -> 'b term option
+
+    (** [parent t program id] is [Some p] iff [find t p id <> None]  *)
+    val parent : ('a,'b) cls -> t -> tid -> 'a term option
+
+    module Builder : sig
+      type t
+      val create : ?tid:tid  -> ?subs:int -> unit -> t
+      val add_sub : t -> sub term -> unit
+      val result : t -> program term
+    end
+
+    include Regular with type t := t
+  end
+
+  (** Function.  *)
+  module Sub : sig
+    (** Function is a set of blocks.
+        The first block of a function is considered an entry block.
+    *)
+    type t = sub term
+
+    val create : ?name:string -> unit -> t
+
+    val name : t -> string
+
+    module Builder : sig
+      type t
+      val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string -> unit -> t
+      val add_blk : t -> blk term -> unit
+      val add_arg : t -> arg term -> unit
+      val result : t -> sub term
+    end
+
+    include Regular with type t := t
+  end
+
+  (** Block.  *)
+  module Blk : sig
+    (** Logically block consists of a set of {{!Phi}phi nodes}, a
+        sequence of {{!Def}definitions} and a sequence of out-coming
+        edges, aka {{!Jmp}jumps}. A colloquial term for this three
+        entities is a "block element".
+
+        The order of $\Phi$-nodes is unspecified. Definitions are stored
+        in the order of execution. Jumps are specified in the order in
+        which they should be taken, i.e., [jmp_n] is taken only after
+        [jmp_{n-1}] and if and only if the latter was not taken. For
+        example, if block ends with $N$ jumps, where each $n$-th jump
+        have destination named $t_n$ and condition $c_n$, then it would
+        have the semantics as per the following OCaml program:
+
+        {[
+          if c_1 then jump t_1 else
+          if c_2 then jump t_2 else
+          if c_N then jump t_N
+        ]}
+    *)
+
+    type t = blk term
+
+    (** Union type for all element types  *)
+    type elt =
+      | Def of def term
+      | Phi of phi term
+      | Jmp of jmp term
+
+
+    (** [create ()] creates a new empty block.  *)
+    val create : unit -> t
+
+    (** [split_while blk ~f] splits [blk] into two block: the first
+        block holds all definitions for which [f p] is true and has
+        the same tid as [blk]. The second block is freshly created and
+        holds the rest definitions (if any). All successors of the
+        [blk] become successors of the second block, which becomes the
+        successor of the first block.
+
+        Note: if [f def] is [true] for all blocks, then the second block
+        will not contain any definitions, i.e., the result would be the same as
+        of {{!split_bot}split_bot} function. *)
+    val split_while : t -> f:(def term -> bool) -> t * t
+
+    (** [split_after blk def] creates two new blocks, where the first block
+        contains all defintions up to [def] inclusive, the second
+        contains the rest.
+
+        Note: if def is not in a [blk] then the first block will contain
+        all the defintions, and the second block will be empty.  *)
+    val split_after : t -> def term -> t * t
+
+    (** [split_before blk def] is like {{!split_after}split_after} but
+        [def] will fall into the second [blk] *)
+    val split_before : t -> def term -> t * t
+
+    (** [split_top blk] returns two blocks, where first block shares the
+        same tid as [blk] and has all $\Phi$-nodes of [blk], but has only one
+        destination, namely the second block. Second block has new
+        tidentity, but inherits all definitions and jumps from the [blk]. *)
+    val split_top : t -> t * t
+
+    (** [split_top blk] returns two blocks, where first block shares the
+        same tid as [blk], has all $\Phi$-nodes and definitions from
+        [blk], but has only one destination, namely the second
+        block. Second block has new tidentity, all jumps from the [blk]. *)
+    val split_bot : t -> t * t
+
+    (** [elts ~rev blk] return all elements of the [blk].
+        if [rev] is false or left unspecified, then elements are returned
+        in the following order: $\Phi$-nodes, defs (in normal order),
+        jmps in the order in which they will be taken.
+        If [rev] is true, the order will be the following:
+        all jumps in the opposite order, then definitions in the
+        opposite order, and finally $\Phi$-nodes. *)
+    val elts : ?rev:bool -> t -> elt seq
+
+    (** [dominated blk by:dom def] if [def] is dominated by [dom] in [blk].  *)
+    val dominated : t -> by:tid -> tid -> bool
+
+    (** Builder interface.  *)
+    module Builder : sig
+      (** This interface provides an efficient way to build new
+          blocks. It is also useful, when rebuilding existing block,
+          as it allows to specify the [tid] of the block. It is a user
+          responsibility to preserve the uniqueness of tidentifiers
+          throughout the program instance.
+      *)
+
+      type t
+
+      (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
+          If [tid] parameter is specified, then the new block will have
+          this tid. If any of [phis], [defs] or [jmps] parameters are
+          specified, the provtided number would be used as a hint of the
+          expected amount of the corresponding entries. Since it is the
+          hint, it can mismatch with the actual size. The hint must be
+          a positive number.
+      *)
+      val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
+      val add_def : t -> def term -> unit
+      val add_jmp : t -> jmp term -> unit
+      val add_phi : t -> phi term -> unit
+      val add_elt : t -> elt -> unit
+      val result  : t -> blk term
+    end
+
+    include Regular with type t := t
+  end
+
+  module Def : sig
+    type t = def term
+    val create : var -> exp -> t
+    val lhs : t -> var
+    val rhs : t -> exp
+    val with_lhs : t -> var -> t
+    val with_rhs : t -> exp -> t
+
+    include Regular with type t := t
+  end
+
+
+  module Jmp : sig
+    type t = jmp term
+    (** [create ?cond ?return target]  *)
+    val create_call : ?cond:exp -> call -> t
+    val create_goto : ?cond:exp -> label -> t
+    val kind : t -> jmp_kind
+    val cond : t -> exp
+
+    val with_cond : t -> exp -> t
+    val with_kind : t -> jmp_kind -> t
+
+    include Regular with type t := t
+  end
+
+  module Phi : sig
+    type t = phi term
+    val create : var -> def term -> t
+    val lhs : t -> var
+    val defs : t -> def term seq
+    val add_def : t -> def term -> t
+    val remove_def : t -> tid -> t
+
+    include Regular with type t := t
+  end
+
+  module Arg : sig
+    type t = arg term
+
+    val create : ?name:string -> typ -> t
+    val of_var : var -> t
+    val to_var : t -> var
+    val name : t -> string
+    include Regular with type t := t
+  end
+
+  module Call : sig
+    type t = call
+    val create : ?return:label -> target:label -> unit -> t
+    val target : t -> label
+    val return : t -> label option
+    val with_target : t -> label -> t
+    val with_return : t -> label -> t
+    val with_noreturn : t -> t
+
+    include Regular with type t := t
+  end
+
+  (** Target of a control flow transfer.  *)
+  module Label : sig
+    type t = label
+    val direct : tid -> t
+    val indirect : exp -> t
+    val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t
+
+    include Regular with type t := t
+  end
+
 
   (** Target of analysis.  *)
   module Project : sig

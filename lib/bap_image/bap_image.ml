@@ -62,10 +62,10 @@ end
 type sec = Sec.t with bin_io, compare, sexp
 type sym = Sym.t with bin_io, compare, sexp
 
-let section = Tag.register "section" sexp_of_sec
-let symbol  = Tag.register "symbol" sexp_of_string
-let region  = Tag.register "region" sexp_of_string
-let file    = Tag.register "file"   sexp_of_string
+let section = Value.Tag.register "section" sexp_of_sec
+let symbol  = Value.Tag.register "symbol" sexp_of_string
+let region  = Value.Tag.register "region" sexp_of_string
+let file    = Value.Tag.register "file"   sexp_of_string
 
 type words = {
   r8  : word table Lazy.t;
@@ -123,7 +123,7 @@ let add_sym memory errs secs syms sym =
             | Error err -> memory, Error err
             | Ok mem ->
               let memory =
-                let tag = Tag.create symbol (Sym.name sym) in
+                let tag = Value.create symbol (Sym.name sym) in
                 Memmap.add memory mem tag in
               match Table.add map mem sym with
               | Error err ->
@@ -229,10 +229,10 @@ let of_img img data name =
         mem_of_location (Arch.endian arch) data (Region.location reg)
         |> function
         | Ok mem ->
-          Memmap.add map mem (Tag.create region (Region.name reg))
+          Memmap.add map mem (Value.create region (Region.name reg))
         | Error _ -> map) in
   let memory = Table.foldi secs ~init:memory ~f:(fun mem sec map ->
-      Memmap.add map mem Tag.(create section sec)) in
+      Memmap.add map mem Value.(create section sec)) in
   let memory,syms,errs = create_symbols memory (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Sec.hashable secs)

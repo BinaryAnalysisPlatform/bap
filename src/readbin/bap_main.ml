@@ -172,7 +172,7 @@ module Program(Conf : Options.Provider) = struct
       Option.value_map img ~default:Memmap.empty ~f:Image.memory in
     let memory =
       Table.foldi syms ~init:memory ~f:(fun mem sym map ->
-          Memmap.add map mem (Tag.create Image.symbol sym)) in
+          Memmap.add map mem (Value.create Image.symbol sym)) in
 
     List.iter options.plugins ~f:(fun name ->
         match load_plugin name with
@@ -187,7 +187,7 @@ module Program(Conf : Options.Provider) = struct
         arch; disasm; memory; storage = String.Map.empty;
         symbols = syms; base = mem
       } ~f:(fun p name f -> f (prepare_args Sys.argv name) p) |>
-      substitute in
+      Project.substitute in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
@@ -251,7 +251,7 @@ module Program(Conf : Options.Provider) = struct
         match Memory.of_file (Arch.endian arch) addr options.filename with
         | Ok m -> disassemble arch m; return 0
         | Error e ->
-            eprintf "failed to create memory: %s\n" (Error.to_string_hum e);
+          eprintf "failed to create memory: %s\n" (Error.to_string_hum e);
           return 1
 end
 

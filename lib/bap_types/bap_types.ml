@@ -208,7 +208,7 @@ module Std = struct
        represent data *)
   module Word = Bitvector
 
-  module Tag = Bap_tag
+  module Value = Bap_value
 
   (** Byte endian. This is the only not first class type in a bap-types.
       Sorry, no maps and tables for this type.
@@ -245,8 +245,8 @@ module Std = struct
   type var   = Var.t       with bin_io, compare, sexp
   type word  = Word.t      with bin_io, compare, sexp
   type nat1  = int         with bin_io, compare, sexp
-  type value = Tag.value   with sexp_of
-  type 'a tag = 'a Tag.t     with sexp_of
+  type value = Value.t     with sexp_of
+  type 'a tag = 'a Value.tag with sexp_of
 
   class ['a] bil_visitor = ['a] Bap_visitor.visitor
 

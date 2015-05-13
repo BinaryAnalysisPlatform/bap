@@ -24,6 +24,14 @@ type color = [
   | `white
 ] with sexp
 
+let text = Value.Tag.register "text" sexp_of_string
+let html = Value.Tag.register "html" sexp_of_string
+let comment = Value.Tag.register "comment" sexp_of_string
+let python = Value.Tag.register "python" sexp_of_string
+let shell = Value.Tag.register "shell" sexp_of_string
+let mark = Value.Tag.register "mark" sexp_of_unit
+let color = Value.Tag.register "color" sexp_of_color
+let weight = Value.Tag.register "weight" sexp_of_float
 type bound = [`min | `max] with sexp
 type spec = [`name | bound] with sexp
 
@@ -36,14 +44,6 @@ type subst = [
   | `bil
 ] with sexp
 
-let text = Tag.register "text" sexp_of_string
-let html = Tag.register "html" sexp_of_string
-let comment = Tag.register "comment" sexp_of_string
-let python = Tag.register "python" sexp_of_string
-let shell = Tag.register "shell" sexp_of_string
-let mark = Tag.register "mark" sexp_of_unit
-let color = Tag.register "color" sexp_of_color
-let weight = Tag.register "weight" sexp_of_float
 
 let plugins : (string array -> t -> t) list ref = ref []
 let register_plugin_with_args p =
@@ -79,7 +79,7 @@ let addr which mem =
 let substitute project =
   let find_tag tag mem =
     Memmap.dominators project.memory mem |>
-    Seq.find_map ~f:(fun (mem,v) -> match Tag.value tag v with
+    Seq.find_map ~f:(fun (mem,v) -> match Value.get tag v with
         | Some reg -> Some (mem,reg)
         | None -> None) in
   let find_region = find_tag Image.region in
@@ -123,10 +123,10 @@ let substitute project =
   let memory = Memmap.mapi project.memory ~f:(fun mem value ->
       let tagval =
         List.find_map [text; html; comment; python; shell]
-          ~f:(fun tag -> match Tag.value tag value with
+          ~f:(fun tag -> match Value.get tag value with
               | Some value -> Some (tag,value)
               | None -> None) in
       match tagval with
-      | Some (tag,value) -> Tag.create tag (sub mem value)
+      | Some (tag,value) -> Value.create tag (sub mem value)
       | None -> value) in
   {project with memory}

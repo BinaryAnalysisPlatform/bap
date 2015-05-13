@@ -1,19 +1,24 @@
 open Core_kernel.Std
 open Bap_common
 
-type 'a t = 'a Type_equal.Id.t with sexp_of
-type value = Univ.t with sexp_of
-
-let register name sexp = Type_equal.Id.create ~name sexp
+type 'a tag = 'a Type_equal.Id.t with sexp_of
+type t = Univ.t with sexp_of
 
 let is t v = Univ.does_match v t
-let value t v = Univ.match_ v t
+let get t v = Univ.match_ v t
 let create t v = Univ.create t v
 let tagname = Univ.type_id_name
-let name = Type_equal.Id.name
+
+module Tag = struct
+  type 'a t = 'a tag with sexp_of
+  let to_string = Type_equal.Id.name
+  let register name sexp = Type_equal.Id.create ~name sexp
+end
+
+module Map = Univ_map
 
 include Printable(struct
-    type t = value with sexp_of
+    type nonrec t = t with sexp_of
 
     let rec ppstring_of_sexp = function
       | Sexp.List ss -> sprintf "(%s)" @@
@@ -22,6 +27,6 @@ include Printable(struct
 
     let pp ppf v = Format.fprintf ppf "%s %s"
         (String.capitalize (tagname v))
-        (ppstring_of_sexp (sexp_of_value v))
-    let module_name = "Bap.Std.Tag"
+        (ppstring_of_sexp (sexp_of_t v))
+    let module_name = "Bap.Std.Value"
   end)

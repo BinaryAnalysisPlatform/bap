@@ -34,11 +34,11 @@ let create_project architecture =
 
 let substitute project ~kind ~hexstring =
   let memory =
-    let tag =(Tag.create text kind) in
+    let tag = Value.create text kind in
     Memmap.add project.memory (create_mem ~hexstring ()) tag in
   let project_result = Project.substitute {project with memory} in
   Memmap.fold ~init:[] project_result.memory ~f:(fun acc tag ->
-      match Tag.value text tag with
+      match Value.get text tag with
       | None -> acc
       | Some text -> text :: acc)
 
