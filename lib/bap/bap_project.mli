@@ -46,7 +46,7 @@ type color = [
 
     - $max_addr - address of the last byte of a memory region.
 *)
-
+val substitute : t -> t
 
 (** an arbitrary text *)
 val text : string tag
