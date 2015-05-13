@@ -325,6 +325,14 @@ Library image_test
                   Test_memmap,
                   Test_table
 
+Library project_test
+  Path:           lib_test/bap_project
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap
+  Install:        false
+  Modules:        Test_project
+
 Library benchmarks
   Path:           benchmarks
   Build$:         flag(tests) && flag(benchmarks)
@@ -431,7 +439,8 @@ Executable run_tests
                 dwarf_test,
                 image_test,
                 oUnit,
-                types_test
+                types_test,
+                project_test
   CompiledObject: best
 
 Executable run_benchmarks

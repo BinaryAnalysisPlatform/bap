@@ -9,6 +9,7 @@ let suite =
     Test_memmap.suite;
     Test_leb128.suite;
     Test_disasm.suite;
+    Test_project.suite;
   ]
 
 
