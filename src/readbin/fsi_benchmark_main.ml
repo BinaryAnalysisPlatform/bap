@@ -1,8 +1,8 @@
 open Core_kernel.Std
-open Cmdliner
 open Bap.Std
 open Bap_plugins.Std
 open Format
+open Cmdliner
 
 type metrics = [
   | `with_F
