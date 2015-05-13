@@ -1,5 +1,5 @@
-#ifndef BAP_LLVM_BINARY_STUBS_HPP
-#define BAP_LLVM_BINARY_STUBS_HPP
+#ifndef BAP_BINARY_HPP
+#define BAP_BINARY_HPP
 
 #include <memory>
 #include <numeric>
@@ -11,9 +11,9 @@
 #include <llvm/Object/MachO.h>
 #include <llvm/Object/Archive.h>
 
-void llvm_binary_fail [[ noreturn ]](const char*);
+extern "C" void llvm_binary_fail(const char*);
 
-void llvm_binary_fail [[ noreturn ]](const llvm::error_code& ec) {
+void llvm_binary_fail (const llvm::error_code& ec) {
     llvm_binary_fail(ec.message().c_str());
 }
 
@@ -302,6 +302,9 @@ struct image {
     virtual ~image() {}
 };
 
+template <typename T>
+uint64_t count_elements(const std::vector<T>& v) {return v.size();}
+
 Triple::ArchType image_arch(const ObjectFile* obj) {
     return static_cast<Triple::ArchType>(obj->getArch());
 }
@@ -444,4 +447,4 @@ image* create(const char* data, std::size_t size) {
 
 } //namespace img
 
-#endif //BAP_LLVM_BINARY_STUBS_HPP
+#endif //BAP_BINARY_HPP
