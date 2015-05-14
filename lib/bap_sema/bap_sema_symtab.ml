@@ -46,6 +46,7 @@ let dest_of_insn insn =
   | _ :: _ as bil -> dest_of_bil bil
   | [] -> None
 
+
 let create_roots_table roots cfg =
   let table = Addr.Table.create () in
   let name addr =
@@ -58,7 +59,7 @@ let create_roots_table roots cfg =
       if Insn.is_call term then match dest_of_insn term with
         | None -> ()
         | Some w ->
-          let _ : string =
+          let (_ : string) =
             Addr.Table.find_or_add table w ~default:(fun () -> name w) in
           ());
   table

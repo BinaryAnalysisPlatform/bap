@@ -304,6 +304,7 @@ Library sema
   InternalModules:
                  Bap_sema,
                  Bap_sema_symtab,
+                 Bap_sema_lift,
                  Bap_ir,
                  Bap_lnf
 
