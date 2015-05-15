@@ -63,7 +63,7 @@ val python : string tag
 (** to assosiate a shell command with a region  *)
 val shell : string tag
 
-(** just mark a region  *)
+(** just mark a region *)
 val mark : unit tag
 
 (** attach a color  *)

@@ -40,6 +40,7 @@ let output_dump : _ list Term.t =
   let values = [
     "asm", `with_asm;
     "bil", `with_bil;
+    "bir", `with_bir;
   ] in
   let doc = sprintf
       "Print dump to standard output. Optional value \

@@ -157,10 +157,10 @@ module PP = struct
     | Load (mem, idx, edn, s) ->
       pr "(%a)[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
     | Store (mem, idx, exp, edn, s) ->
-      pr "@[<v2>%a@;with [%a, %a]:%a <- %a@]"
+      pr "@[<2>%a@;with [%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
-      pr "@[<v2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
+      pr "@[<2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
       pr "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->

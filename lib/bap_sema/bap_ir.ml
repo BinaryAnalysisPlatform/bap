@@ -18,7 +18,7 @@ module Tid = struct
       let hash = Int63.hash
 
       let pp ppf tid =
-        Format.fprintf ppf "%%%08Lx" (Int63.to_int64 tid)
+        Format.fprintf ppf "%08Lx" (Int63.to_int64 tid)
 
       let to_string tid = Format.asprintf "%a" pp tid
     end)
@@ -42,7 +42,12 @@ with bin_io, compare, fields, sexp
 type jmp_kind =
   | Call of call
   | Goto of label
+  | Ret  of label
+  | Int  of int * tid
 with bin_io, compare, sexp
+
+
+type intent = In | Out | Both with bin_io, compare, sexp
 
 type jmp = (exp * jmp_kind) with bin_io, compare, sexp
 type def = (var * exp) with bin_io, compare, sexp
@@ -54,7 +59,7 @@ type blk = {
   jmps : jmp term array;
 } with bin_io, compare, fields, sexp
 
-type arg = var
+type arg = var * intent option
 with bin_io, compare, sexp
 
 type sub = {
@@ -224,7 +229,7 @@ let nil_jmp : jmp term =
 let nil_blk : blk term =
   make_term Tid.nil {phis=[| |] ; defs = [| |] ; jmps = [| |] }
 
-let nil_arg : arg term = make_term Tid.nil undefined_var
+let nil_arg : arg term = make_term Tid.nil (undefined_var,None)
 
 let nil_sub : sub term = make_term Tid.nil {
     name = "undefined"; blks = [| |] ; args = [| |]}
@@ -296,6 +301,15 @@ module Term = struct
     let ts = t.get p.self in findi t p tid >>= fun (i,_) ->
     if i = 0 then None else Some (ts.(i-1))
 
+  let first t p : 'a term option =
+    let xs = t.get p.self in
+    if Array.is_empty xs then None else (Some xs.(0))
+
+  let last t p : 'a term option =
+    let xs = t.get p.self in
+    let n = Array.length xs in
+    if n = 0 then None else Some (xs.(n-1))
+
   let after ?(rev=false) t p tid =
     let run,cut = if rev then Seq.take_while,0 else Seq.drop_while,1 in
     Seq.(drop_eagerly (to_sequence ~rev t p |> run ~f:(fun x -> x.tid <> tid)) cut)
@@ -334,6 +348,7 @@ module Label = struct
   type t = label
   let direct x = Direct x
   let indirect x = Indirect x
+  let create () = direct (Tid.create ())
   let change ?(direct=ident) ?(indirect=ident) label =
     match label with
     | Direct x -> Direct (direct x)
@@ -345,7 +360,7 @@ module Label = struct
       let hash = Hashtbl.hash
       let pp ppf = function
         | Indirect exp -> Exp.pp ppf exp
-        | Direct tid -> Tid.pp ppf tid
+        | Direct tid -> Format.fprintf ppf "%%%a" Tid.pp tid
     end)
 end
 
@@ -364,8 +379,8 @@ module Call = struct
 
       let pp_return ppf lab = match lab with
         | Some label ->
-          Format.fprintf ppf "return to %a" Label.pp label
-        | None -> Format.fprintf ppf "noreturn"
+          Format.fprintf ppf "with return %a" Label.pp label
+        | None -> Format.fprintf ppf "with noreturn"
 
       let pp ppf c =
         Format.fprintf ppf "@[call %a %a@]"
@@ -375,32 +390,44 @@ module Call = struct
     end)
 end
 
-module Arg = struct
+module Ir_arg = struct
   type t = arg term
-  let create ?name typ : t =
+  include Leaf
+  let create ?intent ?name typ : t =
     let tid = Tid.create () in
     let tmp = Option.is_none name in
     let name = match name with
       | Some name -> name
       | None -> "arg" in
     let var = Var.create ~tmp name typ in
-    make_term tid var
+    make_term tid (var,intent)
 
-  let of_var var : t = Term.create var
-  let to_var x = x.self
-  let name arg = Var.name (to_var arg)
+  let var = lhs
+  let intent = rhs
+  let with_intent (t : t) intent : t = with_rhs t (Some intent)
+  let with_unknown_intent : t -> t = fun t -> with_rhs t None
+  let name arg = Var.name (var arg)
 
   include Regular.Make(struct
       type t = arg term with bin_io, compare, sexp
       let module_name = "Bap.Std.Arg"
       let hash = hash_of_term
-      let pp ppf arg =
-        Format.fprintf ppf "@[%a: %s :: %a@]@."
-          Tid.pp arg.tid (Var.name arg.self) Type.pp (Var.typ arg.self)
+
+      let string_of_intent = function
+        | Some In -> "in "
+        | Some Out -> "out "
+        | Some Both -> "in out "
+        | None -> ""
+
+      let pp ppf {tid; self=(var,intent)} =
+        Format.fprintf ppf "@[%a: %s :: %s%a@]@."
+          Tid.pp tid (Var.name var)
+          (string_of_intent intent)
+          Type.pp (Var.typ var)
     end)
 end
 
-module Def = struct
+module Ir_def = struct
   type t = def term
   include Leaf
   include Regular.Make(struct
@@ -413,7 +440,7 @@ module Def = struct
     end)
 end
 
-module Phi = struct
+module Ir_phi = struct
   type t = phi term
   include Leaf
   let create var def : phi term =
@@ -436,15 +463,14 @@ module Phi = struct
     end)
 end
 
-module Jmp = struct
+module Ir_jmp = struct
   type t = jmp term
   include Leaf
 
-  let create_call ?(cond=Bil.(int Word.b1)) call =
-    create cond (Call call)
-
-  let create_goto ?(cond=Bil.(int Word.b1)) dest =
-    create cond (Goto dest)
+  let create_call ?(cond=always) call = create cond (Call call)
+  let create_goto ?(cond=always) dest = create cond (Goto dest)
+  let create_ret  ?(cond=always) dest = create cond (Ret  dest)
+  let create_int  ?(cond=always) n t  = create cond (Int (n,t))
 
   let kind = rhs
   let cond = lhs
@@ -459,14 +485,21 @@ module Jmp = struct
       let pp_dst ppf = function
         | Goto dst -> Format.fprintf ppf "goto %a" Label.pp dst
         | Call sub -> Call.pp ppf sub
+        | Ret  dst -> Format.fprintf ppf "return %a" Label.pp dst
+        | Int (n,t) ->
+          Format.fprintf ppf "int %d return %%%a" n Tid.pp t
+
+      let pp_cond ppf cond =
+        if Exp.(cond <> always) then
+          Format.fprintf ppf "when %a " Exp.pp cond
 
       let pp ppf jmp =
-        Format.fprintf ppf "@[<4>%a: if %a then %a@]@."
-          Tid.pp jmp.tid Exp.pp (lhs jmp) pp_dst (rhs jmp)
+        Format.fprintf ppf "@[<4>%a: %a%a@]@."
+          Tid.pp jmp.tid pp_cond (lhs jmp) pp_dst (rhs jmp)
     end)
 end
 
-module Blk = struct
+module Ir_blk = struct
   type t = blk term
   type elt = Def of def term | Phi of phi term | Jmp of jmp term
 
@@ -527,7 +560,7 @@ module Blk = struct
       self = {
         phis = blk.self.phis;
         defs = Array.subo blk.self.defs ~len:i;
-        jmps = [| Jmp.create_goto (Label.direct next_blk) |]
+        jmps = [| Ir_jmp.create_goto (Label.direct next_blk) |]
       }
     }, {
       tid = next_blk;
@@ -587,15 +620,15 @@ module Blk = struct
       let pp ppf blk =
         Format.fprintf ppf "@[<v>@.%a:@.%a%a%a@]"
           Tid.pp blk.tid
-          (Array.pp Phi.pp) blk.self.phis
-          (Array.pp Def.pp) blk.self.defs
-          (Array.pp Jmp.pp) blk.self.jmps
+          (Array.pp Ir_phi.pp) blk.self.phis
+          (Array.pp Ir_def.pp) blk.self.defs
+          (Array.pp Ir_jmp.pp) blk.self.jmps
 
     end)
 end
 
 
-module Sub = struct
+module Ir_sub = struct
   type t = sub term
 
   let create ?name () : t =
@@ -610,6 +643,7 @@ module Sub = struct
     }
 
   let name sub = sub.self.name
+  let with_name sub name = {sub with self = {sub.self with name}}
 
   module Builder = struct
     type t = tid option * arg term vec * blk term vec * string option
@@ -643,13 +677,13 @@ module Sub = struct
           Tid.pp sub.tid sub.self.name
           (String.concat ~sep:", " @@
            Array.to_list @@
-           Array.map sub.self.args ~f:Arg.name)
-          (Array.pp Arg.pp) sub.self.args
-          (Array.pp Blk.pp) sub.self.blks
+           Array.map sub.self.args ~f:Ir_arg.name)
+          (Array.pp Ir_arg.pp) sub.self.args
+          (Array.pp Ir_blk.pp) sub.self.blks
     end)
 end
 
-module Program = struct
+module Ir_program = struct
   type t = program term
 
   let create () : t = Term.create {
@@ -779,6 +813,6 @@ module Program = struct
       let hash = hash_of_term
       let pp ppf p =
         Format.fprintf ppf "@[<v>%a: program@.%a@]"
-          Tid.pp p.tid (Array.pp Sub.pp) p.self.subs
+          Tid.pp p.tid (Array.pp Ir_sub.pp) p.self.subs
     end)
 end

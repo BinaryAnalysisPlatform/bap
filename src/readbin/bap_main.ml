@@ -206,6 +206,14 @@ module Program(Conf : Options.Provider) = struct
     let module Helpers = Helpers.Make(Env) in
     let open Printing in
 
+    let (dump : insn_format list) =
+      List.filter_map options.output_dump ~f:(function
+          | #insn_format as fmt -> Some fmt
+          | `with_bir ->
+            let prog = Program.lift roots (Disasm.blocks disasm) in
+            printf "%a" Program.pp prog;
+            None) in
+
     let pp_sym = List.map options.print_symbols ~f:(function
         | `with_name -> pp_name
         | `with_addr -> pp_addr
@@ -215,12 +223,12 @@ module Program(Conf : Options.Provider) = struct
       Table.iteri syms
         ~f:(fun mem sym -> printf "@[%a@]@." pp_sym (mem,sym));
 
-    let pp_blk = List.map options.output_dump ~f:(function
+    let pp_blk = List.map dump ~f:(function
         | `with_asm -> pp_blk Block.insns pp_insns
         | `with_bil -> pp_blk Helpers.bil_of_block pp_bil) |> pp_concat in
 
     Text_tags.install std_formatter `Text;
-    if options.output_dump <> [] then
+    if dump <> [] then
       pp_code (pp_syms pp_blk) std_formatter syms;
 
     if options.verbose <> false then

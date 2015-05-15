@@ -68,12 +68,12 @@ let make_sub name args blks : sub term =
   Sub.Builder.result b
 
 let abc = Term.append jmp_t abc
-    (Jmp.create_goto (Label.indirect Bil.(var ARM.CPU.lr)))
+    (Jmp.create_ret (Label.indirect Bil.(var ARM.CPU.lr)))
 
 let sub1 = make_sub "f" [arg_1;arg_2] [abc]
 let sub1_label = Label.direct Term.(tid sub1)
 let goto_xyz =
-  Jmp.create_goto ~cond:Bil.(var s = var @@ Arg.to_var arg_1) xyz_label
+  Jmp.create_goto ~cond:Bil.(var s = var @@ Arg.var arg_1) xyz_label
 let call_sub1 =
   let call = Call.create ~return:pqr_label ~target:sub1_label () in
   Jmp.create_call call

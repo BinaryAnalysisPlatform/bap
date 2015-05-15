@@ -1,2 +1,3 @@
 true: short_paths
 true: annot, bin_annot
+true: debug

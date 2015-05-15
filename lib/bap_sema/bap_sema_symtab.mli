@@ -10,6 +10,8 @@ type t = string table
 *)
 val create : addr list -> mem -> block table -> t
 
+val create_roots_table : addr list -> block table -> string Addr.Table.t
+
 module Graph : Graph.Sig.P
   with type V.label = mem * string (** function body *)
    and type E.label = addr         (** callsite  *)

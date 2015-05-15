@@ -38,7 +38,7 @@ module type Block_traverse = sig
   type t
   type dest = [
     | `Block of t * edge
-    | `Unresolved of    jump
+    | `Unresolved of jump
   ] with compare, sexp_of
 
   (** [dests blk] block immediate destinations including unresolved

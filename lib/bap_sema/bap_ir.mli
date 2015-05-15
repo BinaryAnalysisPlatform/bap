@@ -1,26 +1,35 @@
 open Core_kernel.Std
 open Bap_types.Std
 
-type 'a term
+type 'a term with bin_io, compare, sexp
+type program with bin_io, compare, sexp
+type sub with bin_io, compare, sexp
+type arg with bin_io, compare, sexp
+type blk with bin_io, compare, sexp
+type phi with bin_io, compare, sexp
+type def with bin_io, compare, sexp
+type jmp with bin_io, compare, sexp
 
-type program
-type sub
-type arg
-type blk
-type phi
-type def
-type jmp
-
-type tid
-type call
+type tid with bin_io, compare, sexp
+type call with bin_io, compare, sexp
 
 type label =
   | Direct of tid
   | Indirect of exp
+with bin_io, compare, sexp
 
 type jmp_kind =
   | Call of call
   | Goto of label
+  | Ret  of label
+  | Int  of int * tid
+with bin_io, compare, sexp
+
+type intent =
+  | In
+  | Out
+  | Both
+with bin_io, compare, sexp
 
 type ('a,'b) cls
 
@@ -31,7 +40,11 @@ val phi_t : (blk, phi) cls
 val def_t : (blk, def) cls
 val jmp_t : (blk, jmp) cls
 
-module Tid : Regular with type t = tid
+module Tid : sig
+  type t = tid
+  val create : unit -> t
+  include Regular with type t := t
+end
 
 module Term : sig
   type 'a t = 'a term
@@ -49,13 +62,15 @@ module Term : sig
   val filter : ('a,'b) cls -> 'a t -> f:('b t -> bool) -> 'a t
   val next : ('a,'b) cls -> 'a t -> tid -> 'b t option
   val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
+  val first : ('a,'b) cls -> 'a t -> 'b t option
+  val last  : ('a,'b) cls -> 'a t -> 'b t option
   val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
   val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
   val append : ('a,'b) cls -> ?after:tid -> 'a t -> 'b t -> 'a t
   val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
 end
 
-module Program : sig
+module Ir_program : sig
   type t = program term
   val create : unit -> t
   val lookup : (_,'b) cls -> t -> tid -> 'b term option
@@ -70,10 +85,11 @@ module Program : sig
   include Regular with type t := t
 end
 
-module Sub : sig
+module Ir_sub : sig
   type t = sub term
   val create : ?name:string -> unit -> t
   val name : t -> string
+  val with_name : t -> string -> t
   module Builder : sig
     type t
     val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string -> unit -> t
@@ -84,7 +100,7 @@ module Sub : sig
   include Regular with type t := t
 end
 
-module Blk : sig
+module Ir_blk : sig
   type t = blk term
   type elt =
     | Def of def term
@@ -111,7 +127,7 @@ module Blk : sig
   include Regular with type t := t
 end
 
-module Def : sig
+module Ir_def : sig
   type t = def term
   val create : var -> exp -> t
   val lhs : t -> var
@@ -123,10 +139,12 @@ module Def : sig
 end
 
 
-module Jmp : sig
+module Ir_jmp : sig
   type t = jmp term
   val create_call : ?cond:exp -> call -> t
   val create_goto : ?cond:exp -> label -> t
+  val create_ret  : ?cond:exp -> label -> t
+  val create_int  : ?cond:exp -> int -> tid -> t
   val kind : t -> jmp_kind
   val cond : t -> exp
 
@@ -135,7 +153,7 @@ module Jmp : sig
   include Regular with type t := t
 end
 
-module Phi : sig
+module Ir_phi : sig
   type t = phi term
   val create : var -> def term -> t
   val lhs : t -> var
@@ -146,13 +164,14 @@ module Phi : sig
   include Regular with type t := t
 end
 
-module Arg : sig
+module Ir_arg : sig
   type t = arg term
 
-  val create : ?name:string -> typ -> t
-  val of_var : var -> t
-  val to_var : t -> var
-  val name : t -> string
+  val create : ?intent:intent -> ?name:string -> typ -> t
+  val var : t -> var
+  val intent : t -> intent option
+  val with_intent : t -> intent -> t
+  val with_unknown_intent : t -> t
   include Regular with type t := t
 end
 
@@ -170,6 +189,7 @@ end
 
 module Label : sig
   type t = label
+  val create : unit -> t
   val direct : tid -> t
   val indirect : exp -> t
   val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t

@@ -3865,26 +3865,37 @@ module Std : sig
       Program is a hierarchy of program entities.
 
   *)
-  type 'a term
+  type 'a term with bin_io, compare, sexp
 
-  type program
-  type sub
-  type arg
-  type blk
-  type phi
-  type def
-  type jmp
+  type program with bin_io, compare, sexp
+  type sub with bin_io, compare, sexp
+  type arg with bin_io, compare, sexp
+  type blk with bin_io, compare, sexp
+  type phi with bin_io, compare, sexp
+  type def with bin_io, compare, sexp
+  type jmp with bin_io, compare, sexp
 
-  type tid
-  type call
+  type tid with bin_io, compare, sexp
+  type call with bin_io, compare, sexp
 
   type label =
     | Direct of tid
     | Indirect of exp
+  with bin_io, compare, sexp
+
 
   type jmp_kind =
     | Call of call
     | Goto of label
+    | Ret  of label
+    | Int  of int * tid
+  with bin_io, compare, sexp
+
+  type intent =
+    | In
+    | Out
+    | Both
+  with bin_io, compare, sexp
 
   type ('a,'b) cls
 
@@ -3896,7 +3907,11 @@ module Std : sig
   val jmp_t : (blk, jmp) cls
 
 
-  module Tid : Regular with type t = tid
+  module Tid : sig
+    type t = tid
+    val create : unit -> t
+    include Regular with type t := t
+  end
 
   (** IR language term.  *)
   module Term : sig
@@ -3906,9 +3921,9 @@ module Std : sig
     (** term type  *)
     type 'a t = 'a term
 
-    (** [clone term] creates an object with a fresh new identifier that
-        has the same contents as [term], i.e., that is syntactically the
-        same. *)
+    (** [clone term] creates an object with a fresh new identifier
+        that has the same contents as [term], i.e., that is
+        syntactically the same. *)
     val clone : 'a t -> 'a t
 
     (** [same x y] returns true if [x] and [y] represents the same
@@ -3923,78 +3938,85 @@ module Std : sig
 
     (** [find t p id] is [Some c] if term [p] has a subterm of type [t]
         such that [tid c = id].  *)
-    val find : ('a,'b) cls -> 'a term -> tid -> 'b term option
+    val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
     (** [update t p c] if term [p] contains a term with id equal to
         [tid c] then return [p] with this term substituted with [p] *)
-    val update : ('a,'b) cls -> 'a term -> 'b term -> 'a term
+    val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
 
     (** [remove t p id] returns a block that doesn't contain element
         with the given [id] *)
-    val remove : ('a,_) cls -> 'a term -> tid -> 'a term
+    val remove : ('a,_) cls -> 'a t -> tid -> 'a t
 
     (** [to_sequence ?rev t p] returns all subterms of type [t] of the
         given term [p] *)
-    val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a term -> 'b term seq
+    val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
 
     (** [map t p ~f] returns term [p] with all subterms of type [t]
         mapped with function [f] *)
-    val map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term) -> 'a term
+    val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t) -> 'a t
 
-    (** [filter_map t p ~f] returns term [p] with all subterms of type [t]
-        filter_mapped with function [f], i.e., all terms for which
+    (** [filter_map t p ~f] returns term [p] with all subterms of type
+        [t] filter_mapped with function [f], i.e., all terms for which
         function [f] returned [Some thing] are substituted by the
-        [thing], otherwise they're removed from the parent term  *)
-    val filter_map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term option) -> 'a term
+        [thing], otherwise they're removed from the parent term *)
+    val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option) -> 'a t
 
-    (** [concat_map t p ~f] substitute subterm [c] of type [t] in parent term
-        [p] with [f c]. If [f c] is an empty list, then [c] doesn't
-        occur in a new parent term, if [f c] is a singleton list, then
-        [c] is substituted with the [f c], like in [map]. If [f c] is a
-        list of [n] elements, then in the place of [c] this [n] elements
-        are inserted.  *)
-    val concat_map : ('a,'b) cls -> 'a term -> f:('b term -> 'b term list) -> 'a term
+    (** [concat_map t p ~f] substitute subterm [c] of type [t] in
+        parent term [p] with [f c]. If [f c] is an empty list, then
+        [c] doesn't occur in a new parent term, if [f c] is a
+        singleton list, then [c] is substituted with the [f c], like
+        in [map]. If [f c] is a list of [n] elements, then in the
+        place of [c] this [n] elements are inserted.  *)
+    val concat_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t list) -> 'a t
 
     (** [filter t p ~f] returns a term [p] with subterms [c] for which
         [f c = false] removed. *)
-    val filter : ('a,'b) cls -> 'a term -> f:('b term -> bool) -> 'a term
+    val filter : ('a,'b) cls -> 'a t -> f:('b t -> bool) -> 'a t
+
+    (** [first t p] returns the first subterm of type [t] of a given
+        parent [p] *)
+    val first : ('a,'b) cls -> 'a t -> 'b t option
+
+    (** [last t p] returns a last subterm of type [t] of a given
+        parent [p] *)
+    val last  : ('a,'b) cls -> 'a t -> 'b t option
 
     (** [next t p id] returns a term that preceeds a term with a given
         [id], if such exists.  *)
-    val next : ('a,'b) cls -> 'a term -> tid -> 'b term option
+    val next : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
     (** [next t p id] returns a term that is after a term with a given
         [id], if such exists.  *)
-    val prev : ('a,'b) cls -> 'a term -> tid -> 'b term option
+    val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
-    (** [after t ?rev p tid] returns all subterms in term [p] that occur
-        after a term with a given [tid]. if [rev] is [true] or omitted then
-        terms are returned in the evaluation order. Otherwise
-        they're reversed. If there is no term with a given [tid],
-        then an empty sequence is returned. *)
-    val after : ('a,'b) cls -> ?rev:bool -> 'a term -> tid -> 'b term seq
+    (** [after t ?rev p tid] returns all subterms in term [p] that
+        occur after a term with a given [tid]. if [rev] is [true] or
+        omitted then terms are returned in the evaluation
+        order. Otherwise they're reversed. If there is no term with a
+        given [tid], then an empty sequence is returned. *)
+    val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
 
     (** [before t ?rev p tid] returns all term that occurs before
         defintion with given [tid] in blk. If there is no such
-        definition, then the sequence will be empty.  @param rev has the
-        same meaning as in {!after}.  *)
-    val before : ('a,'b) cls -> ?rev:bool -> 'a term -> tid -> 'b term seq
+        definition, then the sequence will be empty.  @param rev has
+        the same meaning as in {!after}.  *)
+    val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
 
     (** [append t ~after:this p c] returns the [p] term with [c]
-        appended after [this] term. If [after] is not specified,
-        then append [def] to the end of the parent term (if it makes
-        sense, otherwise it is just added).  If [this] doesn't
-        occur in the [p] term then do nothing. The term tid is
-        preserved.  *)
-    val append : ('a,'b) cls -> ?after:tid -> 'a term -> 'b term -> 'a term
+        appended after [this] term. If [after] is not specified, then
+        append [def] to the end of the parent term (if it makes sense,
+        otherwise it is just added).  If [this] doesn't occur in the
+        [p] term then do nothing. The term tid is preserved.  *)
+    val append : ('a,'b) cls -> ?after:tid -> 'a t -> 'b t -> 'a t
 
     (** [prepend t ~before:this p c] returns the [p] with [c] inserted
         before [this] term. If [before] is left unspecified, then
-        insert the [c] at the beginning of the [p] if it is a sequence,
-        otherwise just insert. If [this] is specified but doesn't occur
-        in the [p] then [p] is returned as is.  In all cases, the
-        returned term has the same [tid] as [p]. *)
-    val prepend : ('a,'b) cls -> ?before:tid -> 'a term -> 'b term -> 'a term
+        insert the [c] at the beginning of the [p] if it is a
+        sequence, otherwise just insert. If [this] is specified but
+        doesn't occur in the [p] then [p] is returned as is.  In all
+        cases, the returned term has the same [tid] as [p]. *)
+    val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
 
   end
 
@@ -4007,11 +4029,15 @@ module Std : sig
     (** [create ()] creates an empty program. *)
     val create : unit -> t
 
+    (** [lift roots cfg] takes a set of function starts and a whole
+        program cfg and returns a program term. *)
+    val lift : addr list -> block table -> program term
+
     (** [lookup t program id] is like {{!find}find} but performs deep
         lookup in the whole [program] for a term with a given [id].
-        This function is memoized, so it has amortized O(1) complexity,
-        with a wostcase complexity of $O(N)$, where $N$ is the total
-        amount of terms in program.  *)
+        This function is memoized, so it has amortized O(1)
+        complexity, with a wostcase complexity of $O(N)$, where $N$ is
+        the total amount of terms in program.  *)
     val lookup : (_,'b) cls -> t -> tid -> 'b term option
 
     (** [parent t program id] is [Some p] iff [find t p id <> None]  *)
@@ -4029,12 +4055,15 @@ module Std : sig
 
   (** Function.  *)
   module Sub : sig
-    (** Function is a set of blocks.
-        The first block of a function is considered an entry block.
-    *)
+    (** Function is a set of blocks.  The first block of a function is
+        considered an entry block.  *)
     type t = sub term
 
     val create : ?name:string -> unit -> t
+
+    (** [lift entry] takes an basic block of assembler instructions,
+        as an entry and lifts it to the subroutine term.  *)
+    val lift : block -> sub term
 
     val name : t -> string
 
@@ -4056,13 +4085,14 @@ module Std : sig
         edges, aka {{!Jmp}jumps}. A colloquial term for this three
         entities is a "block element".
 
-        The order of $\Phi$-nodes is unspecified. Definitions are stored
-        in the order of execution. Jumps are specified in the order in
-        which they should be taken, i.e., [jmp_n] is taken only after
-        [jmp_{n-1}] and if and only if the latter was not taken. For
-        example, if block ends with $N$ jumps, where each $n$-th jump
-        have destination named $t_n$ and condition $c_n$, then it would
-        have the semantics as per the following OCaml program:
+        The order of $\Phi$-nodes is unspecified. Definitions are
+        stored in the order of execution. Jumps are specified in the
+        order in which they should be taken, i.e., [jmp_n] is taken
+        only after [jmp_{n-1}] and if and only if the latter was not
+        taken. For example, if block ends with $N$ jumps, where each
+        $n$-th jump have destination named $t_n$ and condition $c_n$,
+        then it would have the semantics as per the following OCaml
+        program:
 
         {[
           if c_1 then jump t_1 else
@@ -4083,6 +4113,11 @@ module Std : sig
     (** [create ()] creates a new empty block.  *)
     val create : unit -> t
 
+    (** [lift block] takes a basic block of assembly instructions and
+        lifts it to a list of blk terms. The first term in the list
+        is the entry. *)
+    val lift : block -> blk term list
+
     (** [split_while blk ~f] splits [blk] into two block: the first
         block holds all definitions for which [f p] is true and has
         the same tid as [blk]. The second block is freshly created and
@@ -4090,14 +4125,14 @@ module Std : sig
         [blk] become successors of the second block, which becomes the
         successor of the first block.
 
-        Note: if [f def] is [true] for all blocks, then the second block
-        will not contain any definitions, i.e., the result would be the same as
-        of {{!split_bot}split_bot} function. *)
+        Note: if [f def] is [true] for all blocks, then the second
+        block will not contain any definitions, i.e., the result would
+        be the same as of {{!split_bot}split_bot} function. *)
     val split_while : t -> f:(def term -> bool) -> t * t
 
-    (** [split_after blk def] creates two new blocks, where the first block
-        contains all defintions up to [def] inclusive, the second
-        contains the rest.
+    (** [split_after blk def] creates two new blocks, where the first
+        block contains all defintions up to [def] inclusive, the
+        second contains the rest.
 
         Note: if def is not in a [blk] then the first block will contain
         all the defintions, and the second block will be empty.  *)
@@ -4107,28 +4142,31 @@ module Std : sig
         [def] will fall into the second [blk] *)
     val split_before : t -> def term -> t * t
 
-    (** [split_top blk] returns two blocks, where first block shares the
-        same tid as [blk] and has all $\Phi$-nodes of [blk], but has only one
-        destination, namely the second block. Second block has new
-        tidentity, but inherits all definitions and jumps from the [blk]. *)
+    (** [split_top blk] returns two blocks, where first block shares
+        the same tid as [blk] and has all $\Phi$-nodes of [blk], but
+        has only one destination, namely the second block. Second
+        block has new tidentity, but inherits all definitions and
+        jumps from the [blk]. *)
     val split_top : t -> t * t
 
-    (** [split_top blk] returns two blocks, where first block shares the
-        same tid as [blk], has all $\Phi$-nodes and definitions from
-        [blk], but has only one destination, namely the second
-        block. Second block has new tidentity, all jumps from the [blk]. *)
+    (** [split_top blk] returns two blocks, where first block shares
+        the same tid as [blk], has all $\Phi$-nodes and definitions
+        from [blk], but has only one destination, namely the second
+        block. Second block has new tidentity, all jumps from the
+        [blk]. *)
     val split_bot : t -> t * t
 
-    (** [elts ~rev blk] return all elements of the [blk].
-        if [rev] is false or left unspecified, then elements are returned
-        in the following order: $\Phi$-nodes, defs (in normal order),
-        jmps in the order in which they will be taken.
-        If [rev] is true, the order will be the following:
-        all jumps in the opposite order, then definitions in the
-        opposite order, and finally $\Phi$-nodes. *)
+    (** [elts ~rev blk] return all elements of the [blk].  if [rev] is
+        false or left unspecified, then elements are returned in the
+        following order: $\Phi$-nodes, defs (in normal order), jmps in
+        the order in which they will be taken.  If [rev] is true, the
+        order will be the following: all jumps in the opposite order,
+        then definitions in the opposite order, and finally
+        $\Phi$-nodes. *)
     val elts : ?rev:bool -> t -> elt seq
 
-    (** [dominated blk by:dom def] if [def] is dominated by [dom] in [blk].  *)
+    (** [dominated blk by:dom def] if [def] is dominated by [dom] in
+        [blk].  *)
     val dominated : t -> by:tid -> tid -> bool
 
     (** Builder interface.  *)
@@ -4137,19 +4175,17 @@ module Std : sig
           blocks. It is also useful, when rebuilding existing block,
           as it allows to specify the [tid] of the block. It is a user
           responsibility to preserve the uniqueness of tidentifiers
-          throughout the program instance.
-      *)
+          throughout the program instance.  *)
 
       type t
 
       (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
-          If [tid] parameter is specified, then the new block will have
-          this tid. If any of [phis], [defs] or [jmps] parameters are
-          specified, the provtided number would be used as a hint of the
-          expected amount of the corresponding entries. Since it is the
-          hint, it can mismatch with the actual size. The hint must be
-          a positive number.
-      *)
+          If [tid] parameter is specified, then the new block will
+          have this tid. If any of [phis], [defs] or [jmps] parameters
+          are specified, the provtided number would be used as a hint
+          of the expected amount of the corresponding entries. Since
+          it is the hint, it can mismatch with the actual size. The
+          hint must be a positive number.  *)
       val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
       val add_def : t -> def term -> unit
       val add_jmp : t -> jmp term -> unit
@@ -4175,9 +4211,12 @@ module Std : sig
 
   module Jmp : sig
     type t = jmp term
-    (** [create ?cond ?return target]  *)
-    val create_call : ?cond:exp -> call -> t
+    (** [create ?cond target]  *)
+    val create_call : ?cond:exp -> call  -> t
     val create_goto : ?cond:exp -> label -> t
+    val create_ret  : ?cond:exp -> label -> t
+    val create_int  : ?cond:exp -> int -> tid -> t
+
     val kind : t -> jmp_kind
     val cond : t -> exp
 
@@ -4200,11 +4239,11 @@ module Std : sig
 
   module Arg : sig
     type t = arg term
-
-    val create : ?name:string -> typ -> t
-    val of_var : var -> t
-    val to_var : t -> var
-    val name : t -> string
+    val create : ?intent:intent -> ?name:string -> typ -> t
+    val var : t -> var
+    val intent : t -> intent option
+    val with_intent : t -> intent -> t
+    val with_unknown_intent : t -> t
     include Regular with type t := t
   end
 
@@ -4223,6 +4262,7 @@ module Std : sig
   (** Target of a control flow transfer.  *)
   module Label : sig
     type t = label
+    val create : unit -> t
     val direct : tid -> t
     val indirect : exp -> t
     val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t
