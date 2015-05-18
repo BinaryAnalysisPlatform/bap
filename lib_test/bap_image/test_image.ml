@@ -6,9 +6,11 @@ open Word_size
 open Bap.Std
 open Backend
 
+let ident = Int64.of_int
+
 let create_addr = function
-  | `r32 -> Addr.of_int ~width:32
-  | `r64 -> Addr.of_int ~width:64
+  | `r32 -> Addr.of_int64 ~width:32
+  | `r64 -> Addr.of_int64 ~width:64
 
 let create_section
     ?(name=".test")
@@ -20,7 +22,7 @@ let create_section
     | Some size, None -> size, String.create size
     | None, Some data -> String.length data, data
     | Some size, Some data -> size,data in
-  let addr = create_addr asize addr in
+  let addr = create_addr asize (Int64.of_int addr) in
   let location = Location.Fields.create ~addr ~len:size in
   Section.Fields.create ~name ~location ~perm ~off
 
@@ -60,7 +62,7 @@ let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
     | `r32,BigEndian    -> `mips
     | `r64,LittleEndian -> `mips64el
     | `r64,BigEndian    -> `mips64 in
-  let entry = create_addr addr_size 0 in
+  let entry = create_addr addr_size 0L in
   let regions = [] in
   let load _ =
     Some (Img.Fields.create ~arch ~entry ~sections ~symbols ~regions) in
@@ -101,7 +103,7 @@ let to_list ~word_size backend ~expect ctxt =
     Table.to_sequence (Image.words img word_size) |>
     Seq.map ~f:snd |>  Seq.to_list in
   let width = Size.to_bits word_size in
-  let expect = List.map expect ~f:(Addr.of_int ~width) in
+  let expect = List.map expect ~f:(Addr.of_int64 ~width) in
   assert_equal ~ctxt ~printer:print_list (Ok expect) r
 
 let check ?(base=0) backend ~f ctxt =
@@ -155,25 +157,25 @@ let suite = "Image" >::: [
 
     "to_list/0-15/int16_32LE" >:: to_list ~word_size:`r16 "0-15_32LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15/int16_32BE" >:: to_list ~word_size:`r16 "0-15_32BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15/int16_64LE" >:: to_list ~word_size:`r16 "0-15_64LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15/int16_64BE" >:: to_list ~word_size:`r16 "0-15_64BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15/int64_64LE" >:: to_list ~word_size:`r64 "0-15_64LE"
-      ~expect:[0x0706050403020100; 0x0f0e0d0c0b0a0908];
+      ~expect:[0x0706050403020100L; 0x0f0e0d0c0b0a0908L];
 
     "to_list/0-15/int64_64BE" >:: to_list ~word_size:`r64 "0-15_64BE"
-      ~expect:[0x0001020304050607; 0x08090a0b0c0d0e0f];
+      ~expect:[0x0001020304050607L; 0x08090a0b0c0d0e0fL];
 
 
     "to_list/0-15_b/bytes_32LE" >:: to_list ~word_size:`r8 "0-15_b_32LE"
@@ -188,25 +190,25 @@ let suite = "Image" >::: [
       ~expect:(List.init 64 ~f:ident);
     "to_list/0-15_b/int16_32LE" >:: to_list ~word_size:`r16 "0-15_b_32LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15_b/int16_32BE" >:: to_list ~word_size:`r16 "0-15_b_32BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15_b/int16_64LE" >:: to_list ~word_size:`r16 "0-15_b_64LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15_b/int16_64BE" >:: to_list ~word_size:`r16 "0-15_b_64BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15_b/int64_64LE" >:: to_list ~word_size:`r64 "0-15_b_64LE"
-      ~expect:[0x0706050403020100; 0x0f0e0d0c0b0a0908];
+      ~expect:[0x0706050403020100L; 0x0f0e0d0c0b0a0908L];
 
     "to_list/0-15_b/int64_64BE" >:: to_list ~word_size:`r64 "0-15_b_64BE"
-      ~expect:[0x0001020304050607; 0x08090a0b0c0d0e0f];
+      ~expect:[0x0001020304050607L; 0x08090a0b0c0d0e0fL];
 
 
     "to_list/0-15_g/bytes_32LE" >:: to_list ~word_size:`r8 "0-15_g_32LE"
@@ -221,25 +223,25 @@ let suite = "Image" >::: [
       ~expect:(List.init 64 ~f:ident);
     "to_list/0-15_g/int16_32LE" >:: to_list ~word_size:`r16 "0-15_g_32LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15_g/int16_32BE" >:: to_list ~word_size:`r16 "0-15_g_32BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15_g/int16_64LE" >:: to_list ~word_size:`r16 "0-15_g_64LE"
       ~expect:[
-        0x0100; 0x0302; 0x0504; 0x0706; 0x0908; 0x0b0a; 0x0d0c; 0x0f0e
+        0x0100L; 0x0302L; 0x0504L; 0x0706L; 0x0908L; 0x0b0aL; 0x0d0cL; 0x0f0eL
       ];
     "to_list/0-15_g/int16_64BE" >:: to_list ~word_size:`r16 "0-15_g_64BE"
       ~expect:[
-        0x0001; 0x0203; 0x0405; 0x0607; 0x0809; 0x0a0b; 0x0c0d; 0x0e0f
+        0x0001L; 0x0203L; 0x0405L; 0x0607L; 0x0809L; 0x0a0bL; 0x0c0dL; 0x0e0fL
       ];
     "to_list/0-15_g/int64_64LE" >:: to_list ~word_size:`r64 "0-15_g_64LE"
-      ~expect:[0x0706050403020100; 0x0f0e0d0c0b0a0908];
+      ~expect:[0x0706050403020100L; 0x0f0e0d0c0b0a0908L];
 
     "to_list/0-15_g/int64_64BE" >:: to_list ~word_size:`r64 "0-15_g_64BE"
-      ~expect:[0x0001020304050607; 0x08090a0b0c0d0e0f];
+      ~expect:[0x0001020304050607L; 0x08090a0b0c0d0e0fL];
 
     "addr/cont/8"  >:: check "0-15_32LE" ~f:(assert_cont ~word_size:`r8);
     "addr/cont/16" >:: check "0-15_32LE" ~f:(assert_cont ~word_size:`r16);
