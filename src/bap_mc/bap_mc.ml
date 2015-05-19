@@ -201,16 +201,16 @@ module Cmdline = struct
 
   let addr =
     let doc = "Specify an address of first byte, as though \
-	           the instructions occur at a certain address, \
-	           and accordingly interpreted. Be careful that \
-	           you appropriately use 0x prefix for hex and \
-	           leave it without for decimal." in
+	       the instructions occur at a certain address, \
+	       and accordingly interpreted. Be careful that \
+	       you appropriately use 0x prefix for hex and \
+	       leave it without for decimal." in
     Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
 
   let max_insns =
     let doc = "Specify a number of instructions to disassemble.\
-	           Good for ensuring that only one instruction is ever\
-	           lifted or disassembled from a byte blob. Default is all" in
+	       Good for ensuring that only one instruction is ever\
+	       lifted or disassembled from a byte blob. Default is all" in
     Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
 
 

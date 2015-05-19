@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap_types.Std
 
+module Dict = Value.Dict
+
 module Tid = struct
   exception Overrun
   type t = Int63.t
@@ -29,6 +31,7 @@ type tid = Tid.t with bin_io, compare, sexp
 type 'a term = {
   tid : tid;
   self : 'a;
+  dict : dict;
 } with bin_io, compare, fields, sexp
 
 type label =
@@ -83,49 +86,6 @@ let compare_program x y =
   compare x.subs y.subs
 
 
-module Vec : sig
-  type 'a t
-  val create : capacity:int -> default:'a -> 'a t
-  val append : 'a t -> 'a -> unit
-  val to_array : 'a t -> 'a array
-  val map_to_array : 'a t -> f:('a -> 'b) -> 'b array
-end = struct
-  type 'a t = {
-    mutable size : int;
-    mutable data : 'a array;
-    default : 'a;
-  }
-
-  let create ~capacity ~default =
-    if capacity <= 0
-    then invalid_arg "capacity must be positive";
-    {
-      size = 0;
-      data = Array.create ~len:capacity default;
-      default;
-    }
-
-  let resize vec =
-    let n = Array.length vec.data in
-    let data = Array.init (vec.size * 2)
-        ~f:(fun i -> if i < n then vec.data.(i) else vec.default) in
-    vec.data <- data
-
-  let append vec x =
-    if Array.length vec.data = vec.size
-    then resize vec;
-    vec.data.(vec.size) <- x;
-    vec.size <- vec.size + 1
-
-  let to_array vec =
-    Array.sub vec.data ~pos:0 ~len:vec.size
-
-  let map_to_array vec ~f =
-    Array.init vec.size ~f:(fun i -> f vec.data.(i))
-end
-
-type 'a vec = 'a Vec.t
-
 module Array = struct
   include Array
   (** [insert xs x i] insert [x] into [xs] in a position befor [i].
@@ -163,14 +123,22 @@ let never  = Bil.(int Word.b0)
 let undefined_exp = Bil.unknown "undefined" bool_t
 let undefined_var = Var.create "undefined" bool_t
 
+let pp_attr ppf attr =
+  Format.fprintf ppf "@[         .%s %a@]@."
+    (Value.tagname attr) Value.pp attr
+
+let pp_attrs ppf dict =
+  Dict.data dict |> Seq.iter ~f:(pp_attr ppf)
+
 module Leaf = struct
   let create lhs rhs = {
     tid = Tid.create ();
-    self = (lhs,rhs)
+    self = (lhs,rhs);
+    dict = Value.Dict.empty;
   }
 
   let make tid exp dst = {
-    tid; self = (exp,dst);
+    tid; self = (exp,dst); dict = Value.Dict.empty
   }
 
   let lhs {self=(x,_)} = x
@@ -215,7 +183,7 @@ let cls typ par nil field = {
 }
 
 let hash_of_term t = Tid.hash (tid t)
-let make_term tid self : 'a term = {tid; self; }
+let make_term tid self : 'a term = {tid; self; dict = Dict.empty}
 
 let nil_def : def term =
   Leaf.make Tid.nil undefined_var undefined_exp
@@ -282,9 +250,9 @@ module Term = struct
 
   let concat_map t p ~f =
     let concat_map xs =
-      let vec = Vec.create ~capacity:(Array.length xs) ~default:t.nil in
-      Array.iter xs ~f:(fun x -> List.iter (f x) ~f:(Vec.append vec));
-      Vec.to_array vec in
+      let vec = Vector.create ~capacity:(Array.length xs) t.nil in
+      Array.iter xs ~f:(fun x -> List.iter (f x) ~f:(Vector.append vec));
+      Vector.to_array vec in
     apply concat_map t p
 
   let filter t p ~f = apply (Array.filter ~f) t p
@@ -340,7 +308,12 @@ module Term = struct
 
   let prepend t ?before:id = insert t (`before id)
   let append t ?after:id p c = insert t (`after id) p c
+  let set_attr t tag x = {t with dict = Dict.set t.dict tag x}
+  let get_attr t = Dict.find t.dict
+  let del_attr t tag = {t with dict = Dict.remove t.dict tag}
+  let has_attr t tag = get_attr t tag <> None
 
+  let length t p = Array.length (t.get p.self)
 end
 
 
@@ -419,11 +392,12 @@ module Ir_arg = struct
         | Some Both -> "in out "
         | None -> ""
 
-      let pp ppf {tid; self=(var,intent)} =
-        Format.fprintf ppf "@[%a: %s :: %s%a@]@."
+      let pp ppf {tid; dict; self=(var,intent)} =
+        Format.fprintf ppf "@[%a: %s :: %s%a@]@.%a"
           Tid.pp tid (Var.name var)
           (string_of_intent intent)
           Type.pp (Var.typ var)
+          pp_attrs dict
     end)
 end
 
@@ -435,8 +409,9 @@ module Ir_def = struct
       let module_name = "Bap.Std.Def"
       let hash = hash_of_term
       let pp ppf def =
-        Format.fprintf ppf "@[<4>%a: %a := %a@]@."
+        Format.fprintf ppf "@[<4>%a: %a := %a@]@.%a"
           Tid.pp def.tid Var.pp (lhs def) Exp.pp (rhs def)
+          pp_attrs def.dict
     end)
 end
 
@@ -456,10 +431,12 @@ module Ir_phi = struct
       let module_name = "Bap.Std.Phi"
       let hash = hash_of_term
       let pp ppf phi =
-        Format.fprintf ppf "@[<4>%a: %a := phi(%s)@]@."
-          Tid.pp phi.tid Var.pp (lhs phi) @@
-        String.concat ~sep:", " (List.map (rhs phi)
-                                   ~f:(Fn.compose Tid.to_string tid))
+        Format.fprintf ppf "@[<4>%a: %a := phi(%s)@]@.%a"
+          Tid.pp phi.tid Var.pp (lhs phi)
+          (String.concat ~sep:", "
+             (List.map (rhs phi)
+                ~f:(Fn.compose Tid.to_string tid)))
+          pp_attrs phi.dict
     end)
 end
 
@@ -471,6 +448,7 @@ module Ir_jmp = struct
   let create_goto ?(cond=always) dest = create cond (Goto dest)
   let create_ret  ?(cond=always) dest = create cond (Ret  dest)
   let create_int  ?(cond=always) n t  = create cond (Int (n,t))
+  let create      ?(cond=always) kind = create cond kind
 
   let kind = rhs
   let cond = lhs
@@ -494,8 +472,9 @@ module Ir_jmp = struct
           Format.fprintf ppf "when %a " Exp.pp cond
 
       let pp ppf jmp =
-        Format.fprintf ppf "@[<4>%a: %a%a@]@."
+        Format.fprintf ppf "@[<4>%a: %a%a@]@.%a"
           Tid.pp jmp.tid pp_cond (lhs jmp) pp_dst (rhs jmp)
+          pp_attrs jmp.dict
     end)
 end
 
@@ -508,32 +487,33 @@ module Ir_blk = struct
   module Builder = struct
     type t = {
       b_tid : tid;
-      b_defs : def term vec;
-      b_phis : phi term vec;
-      b_jmps : jmp term vec;
+      b_defs : def term vector;
+      b_phis : phi term vector;
+      b_jmps : jmp term vector;
     }
 
     let create ?tid ?(phis=16) ?(defs=16) ?(jmps=16) () = {
-      b_phis = Vec.create ~capacity:phis ~default:nil_phi;
-      b_defs = Vec.create ~capacity:defs ~default:nil_def;
-      b_jmps = Vec.create ~capacity:jmps ~default:nil_jmp;
+      b_phis = Vector.create ~capacity:phis nil_phi;
+      b_defs = Vector.create ~capacity:defs nil_def;
+      b_jmps = Vector.create ~capacity:jmps nil_jmp;
       b_tid = match tid with
         | None -> Tid.create ()
         | Some tid -> tid
     }
 
-    let add_def b = Vec.append b.b_defs
-    let add_jmp b = Vec.append b.b_jmps
-    let add_phi b = Vec.append b.b_phis
+    let add_def b = Vector.append b.b_defs
+    let add_jmp b = Vector.append b.b_jmps
+    let add_phi b = Vector.append b.b_phis
     let add_elt b = function
       | Jmp j -> add_jmp b j
       | Phi p -> add_phi b p
       | Def d -> add_def b d
 
-    let of_vec = Vec.to_array
+    let of_vec = Vector.to_array
 
     let result (b : t) : blk term = {
       tid = b.b_tid;
+      dict = Dict.empty;
       self = {
         defs = of_vec b.b_defs;
         phis = of_vec b.b_phis;
@@ -544,6 +524,7 @@ module Ir_blk = struct
 
   let create () : blk term = {
     tid = Tid.create ();
+    dict = Dict.empty;
     self = {
       phis = [| |] ;
       defs = [| |] ;
@@ -557,6 +538,7 @@ module Ir_blk = struct
     let next_blk = Tid.create () in
     {
       tid = blk.tid;
+      dict = Dict.empty;
       self = {
         phis = blk.self.phis;
         defs = Array.subo blk.self.defs ~len:i;
@@ -564,6 +546,7 @@ module Ir_blk = struct
       }
     }, {
       tid = next_blk;
+      dict = Dict.empty;
       self = {
         phis = [| |] ;
         defs = Array.subo blk.self.defs ~pos:i;
@@ -607,7 +590,6 @@ module Ir_blk = struct
       Seq.(seq def_t ~rev blk >>| fun x -> Def x) @
       Seq.(seq jmp_t ~rev blk >>| fun x -> Jmp x)
 
-
   let dominated b ~by:dominator id =
     dominator = id ||
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> x.tid = id))
@@ -618,12 +600,11 @@ module Ir_blk = struct
       let hash = hash_of_term
 
       let pp ppf blk =
-        Format.fprintf ppf "@[<v>@.%a:@.%a%a%a@]"
-          Tid.pp blk.tid
+        Format.fprintf ppf "@[<v>@;%a:@.%a%a%a%a@]"
+          Tid.pp blk.tid pp_attrs blk.dict
           (Array.pp Ir_phi.pp) blk.self.phis
           (Array.pp Ir_def.pp) blk.self.defs
           (Array.pp Ir_jmp.pp) blk.self.jmps
-
     end)
 end
 
@@ -646,23 +627,24 @@ module Ir_sub = struct
   let with_name sub name = {sub with self = {sub.self with name}}
 
   module Builder = struct
-    type t = tid option * arg term vec * blk term vec * string option
+    type t =
+      tid option * arg term vector * blk term vector * string option
 
     let create ?tid ?(args=4) ?(blks=16) ?name () : t =
       tid,
-      Vec.create ~capacity:args ~default:nil_arg,
-      Vec.create ~capacity:blks ~default:nil_blk,
+      Vector.create ~capacity:args nil_arg,
+      Vector.create ~capacity:blks nil_blk,
       name
 
-    let add_blk (_,_,bs,_) = Vec.append bs
-    let add_arg (_,xs,_,_) = Vec.append xs
+    let add_blk (_,_,bs,_) = Vector.append bs
+    let add_arg (_,xs,_,_) = Vector.append xs
 
     let result (tid,args,blks,name) : sub term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
-      let args = Vec.to_array args in
-      let blks = Vec.to_array blks in
+      let args = Vector.to_array args in
+      let blks = Vector.to_array blks in
       let name = match name with
         | Some name -> name
         | None -> Format.asprintf "sub_%a" Tid.pp tid in
@@ -673,11 +655,12 @@ module Ir_sub = struct
       let module_name = "Bap.Std.Sub"
       let hash = hash_of_term
       let pp ppf sub =
-        Format.fprintf ppf "@[<v>@.%a: sub %s(%s)@.%a%a@]"
+        Format.fprintf ppf "@[<v>@.%a: sub %s(%s)@.%a%a%a@]"
           Tid.pp sub.tid sub.self.name
           (String.concat ~sep:", " @@
            Array.to_list @@
            Array.map sub.self.args ~f:Ir_arg.name)
+          pp_attrs sub.dict
           (Array.pp Ir_arg.pp) sub.self.args
           (Array.pp Ir_blk.pp) sub.self.blks
     end)
@@ -715,13 +698,11 @@ module Ir_program = struct
     | [| i |] -> self.subs.(i)
     | _ -> assert false
 
-
   let get_1st get prog tid : (path * 'a) option =
     with_return (fun {return} ->
         Array.iteri (get prog.self) ~f:(fun i x ->
             if x.tid = tid then return (Some ([|i|], x )));
         None)
-
 
   let get_2nd get {self} tid : (path * 'a) option =
     with_return (fun {return} ->
@@ -790,19 +771,19 @@ module Ir_program = struct
       | _ -> None
 
   module Builder = struct
-    type t = tid option * sub term vec
+    type t = tid option * sub term vector
 
     let create ?tid ?(subs=16) () : t =
-      tid, Vec.create ~capacity:subs ~default:nil_sub
+      tid, Vector.create ~capacity:subs nil_sub
 
-    let add_sub (_,subs) = Vec.append subs
+    let add_sub (_,subs) = Vector.append subs
 
     let result (tid,subs) : program term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
       make_term tid {
-        subs = Vec.to_array subs;
+        subs = Vector.to_array subs;
         paths = Tid.Table.create ();
       }
   end
@@ -812,7 +793,9 @@ module Ir_program = struct
       let module_name = "Bap.Std.Program"
       let hash = hash_of_term
       let pp ppf p =
-        Format.fprintf ppf "@[<v>%a: program@.%a@]"
-          Tid.pp p.tid (Array.pp Ir_sub.pp) p.self.subs
+        Format.fprintf ppf "@[<v>%a: program@.@[<v>%a@]@.%a@]"
+          Tid.pp p.tid
+          pp_attrs p.dict
+          (Array.pp Ir_sub.pp) p.self.subs
     end)
 end

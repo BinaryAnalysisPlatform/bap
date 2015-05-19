@@ -62,10 +62,21 @@ end
 type sec = Sec.t with bin_io, compare, sexp
 type sym = Sym.t with bin_io, compare, sexp
 
-let section = Value.Tag.register "section" sexp_of_sec
-let symbol  = Value.Tag.register "symbol" sexp_of_string
-let region  = Value.Tag.register "region" sexp_of_string
-let file    = Value.Tag.register "file"   sexp_of_string
+let section = Value.Tag.register (module Sec)
+    ~name:"section"
+    ~uuid:"a0eec123-5937-4283-b141-58d579a9b0df"
+
+let symbol  = Value.Tag.register (module String)
+    ~name:"symbol"
+    ~uuid:"768bc13d-d4be-43fc-9f7a-c369ebab9c7e"
+
+let region  = Value.Tag.register (module String)
+    ~name:"region"
+    ~uuid:"4014408d-a3af-488f-865b-5413beaf198e"
+
+let file = Value.Tag.register (module String)
+    ~name:"file"
+    ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
 
 type words = {
   r8  : word table Lazy.t;

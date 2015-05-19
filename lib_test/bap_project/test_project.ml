@@ -29,16 +29,17 @@ let create_project architecture =
     disassemble architecture mem in
   let symtab = Table.add Table.empty mem ".text" |> ok_exn in
   {arch = architecture; disasm = dis; memory = Memmap.empty;
-   storage = String.Map.empty; symbols = symtab;
+   program = Program.create ();
+   storage = Dict.empty; symbols = symtab;
    base = mem }
 
 let substitute project ~kind ~hexstring =
   let memory =
-    let tag = Value.create text kind in
+    let tag = Value.create comment kind in
     Memmap.add project.memory (create_mem ~hexstring ()) tag in
   let project_result = Project.substitute {project with memory} in
   Memmap.fold ~init:[] project_result.memory ~f:(fun acc tag ->
-      match Value.get text tag with
+      match Value.get comment tag with
       | None -> acc
       | Some text -> text :: acc)
 

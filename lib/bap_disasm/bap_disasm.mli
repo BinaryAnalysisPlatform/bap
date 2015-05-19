@@ -19,7 +19,7 @@ type disasm
 
 (** values of type [insn] represents machine instructions decoded
     from the given piece of memory *)
-type insn = Bap_disasm_insn.t with bin_io, compare, sexp_of
+type insn = Bap_disasm_insn.t with bin_io, compare, sexp
 type op = Op.t with bin_io, compare, sexp_of
 
 (** [block] is a region of memory that is believed to be a basic block
@@ -111,8 +111,7 @@ module Disasm : sig
       the disassembling *)
   val errors : t -> (mem * error) seq
 
-  (** Tags to annotate memory  *)
+  (** Tags  *)
   val insn : insn tag
-  val block : block tag
-  val error : error tag
+  val block : addr tag
 end
