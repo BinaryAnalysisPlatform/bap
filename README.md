@@ -1,6 +1,6 @@
 # Overview
 
-[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap) [![docs](https://img.shields.io/badge/doc-online-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v0.9.7/Bap.Std.html)
+[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap) [![docs](https://img.shields.io/badge/doc-v0.9.7-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v0.9.7/Bap.Std.html)[![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/Bap.Std.html)
 
 BAP is a platform for binary analysis. It is written in OCaml, but can
 be used from other languages, for example, from Python.
