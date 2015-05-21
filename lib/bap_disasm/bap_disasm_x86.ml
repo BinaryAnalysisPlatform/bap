@@ -967,7 +967,7 @@ let parse_instr mode mem addr =
         | 0x60 | 0x61 | 0x62 | 0x68 | 0x69 | 0x6a ->
           let order = match b2 with
             | 0x60 | 0x61 | 0x62 -> Low
-            | 0x68 | 0x69 | 0x70 -> High
+            | 0x68 | 0x69 | 0x6a -> High
             | _ -> disfailwith "impossible"
           in
           let elemt = match b2 with
