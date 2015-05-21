@@ -2,36 +2,20 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
+open Bap_sema.Std
 open Format
 
 type t = {
   arch    : arch;
   disasm  : disasm;
   memory  : value memmap;
-  storage : value String.Map.t;
+  storage : dict;
+  program : program term;
   symbols : string table;
   base    : mem;
 }
 
-type color = [
-  | `black
-  | `red
-  | `green
-  | `yellow
-  | `blue
-  | `magenta
-  | `cyan
-  | `white
-] with sexp
 
-let text = Value.Tag.register "text" sexp_of_string
-let html = Value.Tag.register "html" sexp_of_string
-let comment = Value.Tag.register "comment" sexp_of_string
-let python = Value.Tag.register "python" sexp_of_string
-let shell = Value.Tag.register "shell" sexp_of_string
-let mark = Value.Tag.register "mark" sexp_of_unit
-let color = Value.Tag.register "color" sexp_of_color
-let weight = Value.Tag.register "weight" sexp_of_float
 type bound = [`min | `max] with sexp
 type spec = [`name | bound] with sexp
 
@@ -76,7 +60,7 @@ let addr which mem =
     | `max -> Memory.max_addr in
   sprintf "0x%s" @@ Addr.string_of_value (take mem)
 
-let substitute project =
+let substitute ?(tags=[comment; python; shell]) project =
   let find_tag tag mem =
     Memmap.dominators project.memory mem |>
     Seq.find_map ~f:(fun (mem,v) -> match Value.get tag v with
@@ -122,7 +106,7 @@ let substitute project =
     Buffer.contents buf in
   let memory = Memmap.mapi project.memory ~f:(fun mem value ->
       let tagval =
-        List.find_map [text; html; comment; python; shell]
+        List.find_map tags
           ~f:(fun tag -> match Value.get tag value with
               | Some value -> Some (tag,value)
               | None -> None) in

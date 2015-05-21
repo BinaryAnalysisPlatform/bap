@@ -211,9 +211,13 @@ module Disasm = struct
     | `Failed_to_lift of mem * insn * Error.t
   ] with sexp_of
 
-  let insn  = Value.Tag.register "insn" sexp_of_insn
-  let block = Value.Tag.register "block" sexp_of_block
-  let error = Value.Tag.register "error" sexp_of_error
+  let insn  = Value.Tag.register (module Insn)
+      ~name:"insn"
+      ~uuid:"8e2a3998-bf07-4a52-a791-f74ea190630a"
+
+  let block = Value.Tag.register (module Addr)
+      ~name:"disasm_block"
+      ~uuid:"d261d12c-23b9-4bc0-9d0b-a6700bf59377"
 
   module Error = Printable(struct
       open Format

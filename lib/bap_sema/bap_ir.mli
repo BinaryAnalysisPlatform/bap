@@ -68,6 +68,11 @@ module Term : sig
   val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
   val append : ('a,'b) cls -> ?after:tid -> 'a t -> 'b t -> 'a t
   val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
+  val length : ('a,'b) cls -> 'a t -> int
+  val set_attr : 'a t -> 'b tag -> 'b -> 'a t
+  val get_attr : 'a t -> 'b tag -> 'b option
+  val del_attr : 'a t -> 'b tag -> 'a t
+  val has_attr : 'a t -> 'b tag -> bool
 end
 
 module Ir_program : sig
@@ -141,6 +146,7 @@ end
 
 module Ir_jmp : sig
   type t = jmp term
+  val create : ?cond:exp -> jmp_kind -> t
   val create_call : ?cond:exp -> call -> t
   val create_goto : ?cond:exp -> label -> t
   val create_ret  : ?cond:exp -> label -> t

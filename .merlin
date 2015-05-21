@@ -11,6 +11,7 @@ PKG jsonm
 PKG ocamlgraph
 PKG camlzip
 PKG fileutils
+PKG uuidm
 
 B _build
 B _build/lib/bap

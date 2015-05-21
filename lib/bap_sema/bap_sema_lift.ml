@@ -117,10 +117,13 @@ let blk block : blk term list =
             List.fold (linear_of_stmt block insn stmt) ~init
               ~f:( fun (bs,b) -> function
                   | Label lab ->
-                    Ir_blk.Builder.result b :: bs,
+                    let b = Ir_blk.Builder.result b in
+                    b :: bs,
                     Ir_blk.Builder.create ~tid:lab ()
                   | Instr elt -> Ir_blk.Builder.add_elt b elt; bs,b))) |>
-  fun (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs)
+  fun (bs,b) -> match List.rev (Ir_blk.Builder.result b :: bs) with
+  | [] -> []
+  | b :: bs -> Term.set_attr b Disasm.block (Block.addr block) :: bs
 
 (* extracts resolved calls from the blk *)
 let call_of_blk blk =
@@ -177,7 +180,8 @@ let sub entry =
   List.iter blks ~f:(fun blk ->
       Ir_sub.Builder.add_blk sub
         (Term.map jmp_t blk ~f:(resolve_jmp addrs)));
-  Ir_sub.Builder.result sub
+  let sub = Ir_sub.Builder.result sub in
+  Term.set_attr sub subroutine_addr (Block.addr entry)
 
 let ok_duplicate = function
   | `Ok | `Duplicate -> ()
@@ -196,6 +200,5 @@ let program roots cfg =
           Hashtbl.add_exn addrs ~key:root ~data:(Term.tid sub)
         | _ -> ());
   let program = Ir_program.Builder.result b in
-  Term.map sub_t program ~f:(fun sub ->
-      Term.map blk_t sub ~f:(fun blk ->
-          Term.map jmp_t blk ~f:(resolve_jmp addrs)))
+  Term.map sub_t program
+    ~f:(Term.map blk_t ~f:(Term.map jmp_t ~f:(resolve_jmp addrs)))

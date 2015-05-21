@@ -209,6 +209,7 @@ module Std = struct
   module Word = Bitvector
 
   module Value = Bap_value
+  module Dict = Value.Dict
 
   (** Byte endian. This is the only not first class type in a bap-types.
       Sorry, no maps and tables for this type.
@@ -245,8 +246,9 @@ module Std = struct
   type var   = Var.t       with bin_io, compare, sexp
   type word  = Word.t      with bin_io, compare, sexp
   type nat1  = int         with bin_io, compare, sexp
-  type value = Value.t     with sexp_of
-  type 'a tag = 'a Value.tag with sexp_of
+  type value = Value.t     with bin_io, compare, sexp
+  type dict  = Value.dict  with bin_io, compare, sexp
+  type 'a tag = 'a Value.tag
 
   class ['a] bil_visitor = ['a] Bap_visitor.visitor
 
@@ -258,11 +260,17 @@ module Std = struct
   end
   include Seq.Export
 
+
+  module Vector = Bap_vector
+
+  type 'a vector = 'a Vector.t with bin_io, compare, sexp
+
   (** {2 Common type abbreviations}  *)
   type 'a seq = 'a Seq.seq with sexp
   type bigstring = Bigstring.t
 
   include Bap_int_conversions
+  include Bap_attributes
 
   (** Library configuration, version, and other constants  *)
   module Config = Bap_config

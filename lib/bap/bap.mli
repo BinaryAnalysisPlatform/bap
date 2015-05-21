@@ -314,8 +314,56 @@ module Std : sig
   *)
 
   (** {2:sema Semantic Analysis}
-      This part of the library is currently under heavy
-      construction. We will provide information later.  *)
+
+      On semantic level the disassembled program is transferred into
+      the intermediate representation (IR) suitable for writing
+      analysis.
+
+      IR is closely related to BIL. In fact it totally reuses
+      expression sub-language of BIL. But unlike BIL, IR is flat,
+      (i.e., it doesn't contain recursive statements), and
+      unstructured (no [while], [if], only jumps). Thus IR is much
+      more low-level, so it is harder to read, but easier to analyze
+      programmatically.
+
+      The program in IR is build of terms. In fact the program itself
+      is also a term. There're only 6 kinds of terms:
+
+      - {{!Program}program} - the program in whole;
+      - {{!Sub}sub} - subroutine;
+      - {{!Arg}arg} - subroutine argument;
+      - {{!Blk}blk} - basic block;
+      - {{!Def}def} - definition of a variable;
+      - {{!Phi}phi} - phi-node in the SSA form;
+      - {{!Jmp}jmp} - a transfer of control.
+
+
+      Moreover, the structure of the program term is quite fixed:
+
+      {[
+        +--------------------------------------------------------+
+        |                +-------------------+                   |
+        |                |      program      |                   |
+        |                +---------+---------+                   |
+        |                          |*                            |
+        |                +---------+---------+                   |
+        |                |        sub        |                   |
+        |                +---------+---------+                   |
+        |                          |                             |
+        |        +-----------------+---------------+             |
+        |        |*                                |*            |
+        |  +-----+-------+                 +-------+-------+     |
+        |  |    arg      |                 |      blk      |     |
+        |  +-------------+                 +-------+-------+     |
+        |                                          |             |
+        |           +---------------+--------------+             |
+        |           |*              |*             | *           |
+        |     +-----+-----+   +-----+-----+   +----+-----+       |
+        |     |    phi    |   |    def    |   |   jmp    |       |
+        |     +-----------+   +-----------+   +----------+       |
+        +--------------------------------------------------------+
+      ]}
+  *)
 
 
   (** {2:project Writing Program Analysis Plugins}
@@ -344,30 +392,31 @@ module Std : sig
 
       For exchanging information in a type safe manner, we use
       {{!Value}universal values}. Values can be attached to a
-      particular memory region, or to a key of type [string]. For the
-      first case we use the {{!Memmap}memmap} data structure. It is
-      an interval tree containing all the memory regions that are
-      used during analysis. For the latter a regular [String.Map] is
-      used.
+      particular memory region, or put into the [storage]
+      dictionary. For the first case we use the {{!Memmap}memmap} data
+      structure.  It is an interval tree containing all the memory
+      regions that are used during analysis. For the [storage] we use
+      [Dict] data structure. One can also annotate program by
+      attaching attributes to IR terms.
 
-      {3 Annotating memory}
+      {3 Predefined tags}
 
-      Depending on the analysis performed and input parameters, one can
-      expect that memory may be annotated with the following tags:
+      Depending on the analysis performed and input parameters there
+      would be different values in memory maps and storage.
+      Here are summary
 
-      - [Image.region] -- for regions of memory that had a
+      - {{!Image.region}region} -- for regions of memory that had a
       particular name in the original binary. For example, in ELF,
       sections have names that annotate a corresponding memory
-      region.
+      region. Of course, this will be available only if the project
+      was loaded from some binary container.
 
-      - [Image.section] -- if the binary data was loaded from a binary
-      format that contains sections (aka segments), then the
-      corresponding memory regions are be marked. Sections provide
+      - {{!Image.section}section} -- if the binary data was loaded
+      from a binary format that contains sections (aka segments), then
+      the corresponding memory regions are be marked. Sections provide
       access to permission information.
 
-      - [Image.symbol] -- with this tag we annotate each memory region
-      that belongs to a particular symbol. Currently, the type of
-      this tag is a string.
+      - {{!Image.symbol}symbol} -- for annotating with symbol names.
   *)
 
 
@@ -1755,94 +1804,317 @@ module Std : sig
   (** Universal Values.
 
       This module creates an extensible variant type, that resembles
-      extensible variant types, introduced in 4.02, but even more safe.
+      extensible variant types, introduced in 4.02, but even more safe
+      and more extensible, and, what really matters,
+      serializable. Basically you should think of [Value.t] as a union
+      type, aka sum type, that can be extended in any place, including
+      your plugin code. Where extending is adding new constructor. To
+      add new constructor, you need to register it, e.g.,
 
-      To extend variant type with a new constructor, use
+      {[
+        let function_signature = Value.Tag.register (module String)
+            ~name:"function_signature"
+            ~uuid:"2175c28c-08ca-4052-8385-3a01e1c6ab6f"
+      ]}
 
-      [Value.Tag.register constructor_name sexp_of_constructor], where
+      This is merely equivalent to adding a branch
 
-      constructor name can be any name, and can even clash with previous
-      definitions it is guaranteed, that you will receive a new
-      representation of the constructor, every time you're calling this
-      function even if parameters are the same. The returned value is
-      supposed to be exposed in a module, for later use in other
-      modules, c.f., {{!Image}Image} module defines three constructors:
-      - [Image.symbol] for Image symbols, that basically can be seen as
-      [Image.Symbol of sym]
-      - [Image.section] for image sections;
-      - [Image.region] for other named image memory regions. *)
+      {[
+        | Function_signature of string
+      ]}
+
+      to existing union type. The main difference is that the [name]
+      shouldn't be unique (in fact [name] doesn't bear any semantic
+      meaning, it basically for pretty-printing). On the other hand
+      the [uuid] parameter must be unique across the universe, space
+      and time. To get the UUID with such properties, you can use
+      [uuidgen] program that is usually available on Linux and Mac OS.
+
+      [name] and [uuid] must be strings, known at compile time, in
+      other words it must be string literal, not just an arbitrary
+      string, created dynamically. This is made intentionally, in
+      order to prevent the abuse of the system.
+
+      The [(module String)] syntax creates a value from the module
+      [String], (so called first-class module). The module should
+      implement [Value.S] signature, that requires pretty-printing,
+      comparison function and serialization.
+
+      {[
+        module type S = sig
+          type t with bin_io, compare, sexp
+
+          val pp : Format.formatter -> t -> unit
+        end
+      ]}
+
+
+      The good news is that, most of the types in [Core] and [Bap] do
+      conform with the requirements. Usually, one can implement the
+      requirements very easily by using type-driven syntax extensions
+      (although, you still need to implement pretty-printing function
+      yourself):
+
+      {[
+        module Loc = struct
+          type t = string * int * int
+          with bin_io, compare, sexp
+
+          let pp ppf (file,line,col) =
+            Format.fprintf ppf "%s:%d:%d" file line col
+        end
+
+        let loc = Value.Tag.register (module Loc)
+            ~name:"loc"
+            ~uuid:"400e190e-ce21-488d-87b1-c101709621a8"
+      ]}
+
+      The returned value, is a tag that can be used to constructed
+      values of that branch, and to deconstruct (extract) them. You
+      may think of it as a cipher key, that is used to package data
+      into the value container, and later to unpack it:
+
+      {[
+        # let main_pos = Value.create loc ("test.c", 20, 2);;
+        val main_pos : value = test.c:20:2
+      ]}
+
+      You may see, that OCaml pretty-prints the value. That's neat!
+      Also, you may see, that the returned expression has type
+      [value]. That means that it can be used uniformly with other
+      values, for example, you can put them in one container, e.g.,
+
+      {[
+        # let main_t = Value.create function_signature
+              "void main(int argc, const char *argv[])";;
+        val main_t : value = void main(int argc, const char *argv[])
+      ]}
+
+      {[
+        # let main = [main_pos; main_t];;
+        val main : value list = [
+            test.c:20:2;
+            void main(int argc, const char *argv[])
+          ]
+      ]}
+
+      To extract value you can use [Value.get] function:
+
+      {[
+        # Value.get loc main_pos;;
+        - : Loc.t option = Some ("test.c", 20, 2)
+      ]}
+
+      This will require an extra allocation of an [option] container,
+      and in a performance critical context it may be unacceptable.
+      For this special case you can use a more efficient:
+
+      {[if Value.is loc then Value.get_exn loc main_pos]}.
+
+      Underneath the hood, the values of type [value] is just a pair
+      of an original value and runtime type information. For
+      performance reasons the RTTI is usually just an integer. But
+      for serialization we use persistent UUID for storing RTTI type.
+      To get it, one can use [Value.typeid] function.
+
+      The comparison of two values of type [value] is actually a
+      multi-method, as it has the following behavior:
+
+      1. If both values has the same type, then use [compare]
+         function, that was provided for this type.
+      2. If values are of different types, that are known to
+         the type system, then compare them using RTTI
+      3. If at least one of the values is of the unknown type,
+         (i.e., type wasn't registered in the type system), then
+         use polymorphic compare on a tuple of UUID and binary
+         representation of the values.
+
+      This algorithm implies that ordering may change a little bit
+      between different compiler versions and different programs, as
+      RTTI is generated from scratch at every program start. If it
+      really matters (usually it doesn't), then you should use
+      [typeid] as key. In that case the ordering would be stable
+      across space time. In any case it is not recommended to use data
+      structures where [value]s are used as keys. For this case, we
+      provide {{!Dict}Dict} data structure, that is a heterogeneous
+      dictionary of values.
+
+      {2 Thread safety}
+
+      The only thread unsafe function is [register], that should be
+      called in the module initialization time. In general programs
+      modules are initialized in a single thread, so this shouldn't be
+      an issue.  The implementation by itself doesn't call [register].
+  *)
   module Value : sig
 
-    (** a value injected into extensible variant  *)
-    type t with sexp_of
+    (** a universal value  *)
+    type t with bin_io, compare, sexp
 
     (** Tag constructor of type ['a]  *)
-    type 'a tag   with sexp_of
+    type 'a tag
+
+    (** A required interface for the type to be lifted to value. *)
+    module type S = sig
+      (** In order to construct a value with the given type you must
+          provide an implementation for marshaling functions,
+          comparison function and pretty-printing.  *)
+      type t with bin_io, compare, sexp
+      val pp : Format.formatter -> t -> unit
+    end
+
+    (** uninhabited type  *)
+    type void
+
+    (** literal string. Don't look at the right hand side of a type
+        equation, this is just a way to say that a string should be a
+        literal not a value. Compiler will automatically coerce your
+        string literals to this type. *)
+    type literal = (void,void,void) format
+
+    (** persistent type identifier  *)
+    type typeid with bin_io, compare, sexp
 
     (** [create cons x] creates a value using constructor [cons] and
         argument [x] *)
     val create : 'a tag -> 'a -> t
+
+    (** [is cons v] true if value [v] was constructed with constructor
+        [cons], i.e., it is true only when [is_cons t (create t x)] *)
+    val is  : 'a tag -> t -> bool
 
     (** [get cons] extracts a value associated with a constructor [cons]
         (Essentially, performs a pattern match on the specified variant
         branch) *)
     val get : 'a tag -> t -> 'a option
 
-    (** [is cons v] true if value [v] was constructed with constructor
-        [cons] *)
-    val is  : 'a tag -> t -> bool
+    (** [get_exn t v] extracts value created with [t] from the
+        variant. Raises unspecified exception if variant [v] wasn't
+        created with [t].  *)
+    val get_exn : 'a tag -> t -> 'a
 
     (** [tagname value] returns a constructor name of the [value]  *)
     val tagname : t -> string
 
-
-    include Printable with type t := t
-
+    (** Variants of values.  *)
     module Tag : sig
-      type 'a t = 'a tag with sexp_of
-      (** [register name sexp] creates a new variant constructor, i.e.,
-          a new branch in a variant type. This function has no side-effects,
-          it just returns a witness of a new constructor, that can be later
-          used for storing into [value] and extracting from it. This
-          witness should be shared between user and creator of the value *)
-      val register : string -> ('a -> Sexp.t) -> 'a t
+      type 'a t = 'a tag
+      (** [register ~name ~uuid (module T)] creates a new variant
+          constructor, that accepts values of type [T.t]. Module [T]
+          should implement [Binable.S] and [Sexpable.S] interfaces,
+          provide [compare] and pretty-printing [pp] functions. This
+          functions will be used to print, compare and serialize
+          values.
+
+          [uuid] and [name] parameters must be string literals, i.e.,
+          they must be known at compile time. This is to prevent the
+          abuse of type system.
+
+          The returned value of type [T.t tag] is a special key that
+          can be used with [create] and [get] functions to pack and
+          unpack values of type [T.t] into [value]. *)
+      val register : name:literal -> uuid:literal ->
+        (module S with type t = 'a) -> 'a tag
 
       (** [to_string cons] returns a name of a constructor.  *)
       val to_string : 'a t -> string
     end
 
-    (** Universal Map.  *)
-    module Map : sig
-      (** The can store values of arbitrary type. Only one value of a
-          given tag can be stored in the map. For example, if you have
-          tag [cconv] (calling convention) then it is guaranteed that
-          in map there is zero or one value with this tag.  *)
+    (** Persistent type identifiers.  *)
+    module Typeid : Regular with type t = typeid
 
-      (** type of map *)
-      type t
+    (** Although values of type [value] implements regular interface
+        it is recommended to used [dict] data structure instead of
+        those, that are provided by [Regular] interface.x *)
+    include Regular with type t := t
+  end
 
-      (** an empty instance  *)
-      val empty : t
+  type 'a tag = 'a Value.tag
 
-      (** [is_empty map] true if is empty. *)
-      val is_empty : t -> bool
+  (** {3 Some predefined tags} *)
 
-      (** [set map tag x] inserts or update  *)
-      val set : t -> 'a tag -> 'a -> t
+  type color = [
+    | `black
+    | `red
+    | `green
+    | `yellow
+    | `blue
+    | `magenta
+    | `cyan
+    | `white
+  ] with bin_io, compare, sexp
 
-      (** [mem map tag] checks membership  *)
-      val mem : t -> 'a tag -> bool
+  (** Color something with a color  *)
+  val color : color tag
 
-      (** [find map tag] lookups value  *)
-      val find : t -> 'a tag -> 'a option
+  (** A human readable comment *)
+  val comment : string tag
 
-      (** [add map tag x] adds new value  *)
-      val add : t -> 'a tag -> 'a -> [`Ok of t | `Duplicate]
+  (** A command in python language *)
+  val python : string tag
 
-      (** [change map tag f] changes value.  *)
-      val change : t -> 'a tag -> ('a option -> 'a option) -> t
-    end
+  (** A command in shell language *)
+  val shell : string tag
 
+  (** Mark something as marked *)
+  val mark : unit tag
+
+  (** Give a weight *)
+  val weight : float tag
+
+  (** The real virtual address of a target  *)
+  val target_addr : addr tag
+
+  (** Symbolic name of a target  *)
+  val target_name : string tag
+
+  (** Name of a subroutine  *)
+  val subroutine_name : string tag
+
+  (** Address of a subroutine entry point  *)
+  val subroutine_addr : addr tag
+
+  (** A name of a file  *)
+  val filename : string tag
+
+  (** Universal Heterogeneous Map.  *)
+  module Dict : sig
+    (** The dictionary can store values of arbitrary type. Only one
+        value of a given tag can be stored in the map. For example, if
+        you have tag [cconv] (calling convention) then it is
+        guaranteed that in map there is zero or one value with this
+        tag. *)
+
+    (** type of map *)
+    type t with bin_io, compare, sexp
+
+    (** an empty instance  *)
+    val empty : t
+
+    (** [is_empty map] true if is empty. *)
+    val is_empty : t -> bool
+
+    (** [set map tag x] inserts or update  *)
+    val set : t -> 'a tag -> 'a -> t
+
+    (** [mem map tag] checks membership  *)
+    val mem : t -> 'a tag -> bool
+
+    (** [find map tag] lookups value  *)
+    val find : t -> 'a tag -> 'a option
+
+    (** [add map tag x] adds new value  *)
+    val add : t -> 'a tag -> 'a -> [`Ok of t | `Duplicate]
+
+    (** [change map tag f] changes value.  *)
+    val change : t -> 'a tag -> ('a option -> 'a option) -> t
+
+    (** [remove map tag] returns a map without a value associated
+        with [tag]  *)
+    val remove : t -> 'a tag -> t
+
+    (** [data dict] is a sequence of all dict elements  *)
+    val data : t -> Value.t Sequence.t
   end
 
   (** Lazy sequence  *)
@@ -1862,6 +2134,50 @@ module Std : sig
   (** [x ^:: xs] is a consing operator for sequences  *)
   val (^::) : 'a -> 'a seq -> 'a seq
 
+
+  (** {{!Vector}Resizable array}  *)
+  type 'a vector
+
+  (** Resizable Array.
+
+      Resizable arrays with a logarithmic push_back in the style of
+      C++. A user need to provide a default value (c.f.,
+      DefaultConstructible requirement in C++ version). *)
+  module Vector : sig
+    (** a type of vector holding elements of type ['a]  *)
+    type 'a t = 'a vector with bin_io, compare, sexp
+
+    (** [create ?capacity default] creates an empty vector with a given
+        [capacity]. It is guaranteed that the default value will never
+        be seen by the user unless he put it into the vector explicitely
+        with [append] or [set].
+    *)
+    val create : ?capacity:int -> 'a -> 'a t
+
+    (** [append xs x] appends [x] to the end of [xs]  *)
+    val append : 'a t -> 'a -> unit
+
+    (** [nth vec n] returns [n]'th element of vector [vec] *)
+    val nth : 'a t -> int -> 'a option
+
+    (** [get vec n] like [nth] but raises exception if index is out of
+        bounds *)
+    val get : 'a t -> int -> 'a
+
+    (** [set vec n x] sets [n]'th element of a vector [vec] to [x] if
+        [n < length vec] then raises exception *)
+    val set : 'a t -> int -> 'a -> unit
+
+    (** [map_to_array xs ~f] copies data from [xs] to an array applying
+        [f] to each element. See also [to_array] function from
+        [Container.S1] interface *)
+    val map_to_array : 'a t -> f:('a -> 'b) -> 'b array
+
+    (** implements common accessors for the array, like [find], [fold],
+        [iter], etc  *)
+    include Container.S1 with type 'a t := 'a t
+  end
+
   (** Access to BAP configuration variables  *)
   module Config : sig
     val pkg_version : string
@@ -1873,8 +2189,8 @@ module Std : sig
   type exp   = Exp.t       with bin_io, compare, sexp
   type stmt  = Stmt.t      with bin_io, compare, sexp
   type unop  = Bil.unop    with bin_io, compare, sexp
-  type value = Value.t     with sexp_of
-  type 'a tag = 'a Value.tag with sexp_of
+  type value = Value.t     with bin_io, compare, sexp
+  type dict  = Dict.t      with bin_io, compare, sexp
 
 
   (** an image loaded into memory  *)
@@ -2661,8 +2977,6 @@ module Std : sig
 
     (** Tags to annotate memory  *)
     val insn : insn tag
-    val block : block tag
-    val error : error tag
   end
 
   (** Kinds of instructions  *)
@@ -3862,7 +4176,7 @@ module Std : sig
 
   (** BAP IR.
 
-      Program is a hierarchy of program entities.
+      Program is a tree of terms.
 
   *)
   type 'a term with bin_io, compare, sexp
@@ -3878,35 +4192,40 @@ module Std : sig
   type tid with bin_io, compare, sexp
   type call with bin_io, compare, sexp
 
+  (** target of control transfer  *)
   type label =
-    | Direct of tid
-    | Indirect of exp
+    | Direct of tid             (** direct jump  *)
+    | Indirect of exp           (** indirect jump  *)
   with bin_io, compare, sexp
 
-
+  (** control transfer variants  *)
   type jmp_kind =
-    | Call of call
-    | Goto of label
-    | Ret  of label
-    | Int  of int * tid
+    | Call of call              (** call to subroutine          *)
+    | Goto of label             (** jump inside subroutine      *)
+    | Ret  of label             (** return from call to label   *)
+    | Int  of int * tid         (** interrupt and return to tid *)
   with bin_io, compare, sexp
 
+  (** argument intention  *)
   type intent =
-    | In
-    | Out
-    | Both
+    | In                        (** input argument  *)
+    | Out                       (** output argument *)
+    | Both                      (** input/output    *)
   with bin_io, compare, sexp
 
   type ('a,'b) cls
 
-  val sub_t : (program, sub) cls
-  val arg_t : (sub, arg) cls
-  val blk_t : (sub, blk) cls
-  val phi_t : (blk, phi) cls
-  val def_t : (blk, def) cls
-  val jmp_t : (blk, jmp) cls
+  (** {4 Term type classes}  *)
+
+  val sub_t : (program, sub) cls (** sub  *)
+  val arg_t : (sub, arg) cls     (** arg  *)
+  val blk_t : (sub, blk) cls     (** blk  *)
+  val phi_t : (blk, phi) cls     (** phi  *)
+  val def_t : (blk, def) cls     (** def  *)
+  val jmp_t : (blk, jmp) cls     (** jmp  *)
 
 
+  (** Term identifier  *)
   module Tid : sig
     type t = tid
     val create : unit -> t
@@ -3935,6 +4254,10 @@ module Std : sig
 
     (** [tid entity] returns the unique tidentifier of the [entity]  *)
     val tid : 'a t -> tid
+
+    (** [length t p] returns the amount of terms of type [t] in the
+        parent term [p] *)
+    val length : ('a,'b) cls -> 'a t -> int
 
     (** [find t p id] is [Some c] if term [p] has a subterm of type [t]
         such that [tid c = id].  *)
@@ -4018,6 +4341,22 @@ module Std : sig
         cases, the returned term has the same [tid] as [p]. *)
     val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
 
+
+    (** {2 Attributes} *)
+
+    (** [set_attr term attr value] attaches an [value] to attribute
+        [attr] in [term] *)
+    val set_attr : 'a t -> 'b tag -> 'b -> 'a t
+
+    (** [get_attr term attr] returns a value of the given [attr] in
+        [term] *)
+    val get_attr : 'a t -> 'b tag -> 'b option
+
+    (** [has_attr term attr] is [true] if [term] has attribute [attr]  *)
+    val has_attr : 'a t -> 'b tag -> bool
+
+    (** [del_attr term attr] deletes attribute [attr] from [term]  *)
+    val del_attr : 'a t -> 'b tag -> 'a t
   end
 
   (** Program.  *)
@@ -4043,35 +4382,54 @@ module Std : sig
     (** [parent t program id] is [Some p] iff [find t p id <> None]  *)
     val parent : ('a,'b) cls -> t -> tid -> 'a term option
 
+    (** Program builder.  *)
     module Builder : sig
       type t
+      (** Initializes an empty builder.  *)
       val create : ?tid:tid  -> ?subs:int -> unit -> t
+
+      (** [add_sub builder sub] appends a subroutine term to the
+          program.  *)
       val add_sub : t -> sub term -> unit
+
+      (** fixes the result  *)
       val result : t -> program term
     end
 
     include Regular with type t := t
   end
 
-  (** Function.  *)
+  (** Subroutine.  *)
   module Sub : sig
-    (** Function is a set of blocks.  The first block of a function is
+    (** Subroutine is a set of blocks.  The first block of a function is
         considered an entry block.  *)
     type t = sub term
 
+    (** [create ?name ()] creates an empty subroutine with an optional
+        name. *)
     val create : ?name:string -> unit -> t
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
     val lift : block -> sub term
 
+    (** [name sub] returns a subroutine name  *)
     val name : t -> string
 
+    (** updates subroutine name *)
+    val with_name : t -> string -> t
+
+    (** Subroutine builder *)
     module Builder : sig
       type t
+      (** initializes empty subroutine builder.  *)
       val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string -> unit -> t
+      (** appends a block to a subroutine  *)
       val add_blk : t -> blk term -> unit
+      (** appends an argument  *)
       val add_arg : t -> arg term -> unit
+
+      (** returns current result  *)
       val result : t -> sub term
     end
 
@@ -4085,14 +4443,14 @@ module Std : sig
         edges, aka {{!Jmp}jumps}. A colloquial term for this three
         entities is a "block element".
 
-        The order of $\Phi$-nodes is unspecified. Definitions are
-        stored in the order of execution. Jumps are specified in the
-        order in which they should be taken, i.e., [jmp_n] is taken
-        only after [jmp_{n-1}] and if and only if the latter was not
-        taken. For example, if block ends with $N$ jumps, where each
-        $n$-th jump have destination named $t_n$ and condition $c_n$,
-        then it would have the semantics as per the following OCaml
-        program:
+        The order of $\Phi$-nodes can be specified in any order, as
+        the executes simultaneously . Definitions are stored in the
+        order of execution. Jumps are specified in the order in which
+        they should be taken, i.e., [jmp_n] is taken only after
+        [jmp_{n-1}] and if and only if the latter was not taken. For
+        example, if block ends with $N$ jumps, where each $n$-th jump
+        have destination named $t_n$ and condition $c_n$, then it
+        would have the semantics as per the following OCaml program:
 
         {[
           if c_1 then jump t_1 else
@@ -4187,73 +4545,199 @@ module Std : sig
           it is the hint, it can mismatch with the actual size. The
           hint must be a positive number.  *)
       val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
+
+      (** appends a definition  *)
       val add_def : t -> def term -> unit
+      (** appends a jump  *)
       val add_jmp : t -> jmp term -> unit
+      (** appends a phi node  *)
       val add_phi : t -> phi term -> unit
+      (** appends generic element *)
       val add_elt : t -> elt -> unit
+      (** returns current result  *)
       val result  : t -> blk term
     end
 
     include Regular with type t := t
   end
 
+  (** Definition.  *)
   module Def : sig
+    (** The definition is an assignment. The left hand side of an
+        assignment is a variable, and the right side is an expression.
+
+        The definition is the only way for a block to perform some
+        side effects.
+    *)
+
     type t = def term
+
+    (** [create x exp] creates definition [x := exp]  *)
     val create : var -> exp -> t
+
+    (** returns the left hand side of a definition  *)
     val lhs : t -> var
+    (** returns the right hand side of a definition  *)
     val rhs : t -> exp
+
+    (** updates the lhs of definition  *)
     val with_lhs : t -> var -> t
+    (** updates the right hand side of a definition  *)
     val with_rhs : t -> exp -> t
 
     include Regular with type t := t
   end
 
-
+  (** A control transfer operation.  *)
   module Jmp : sig
+    (** Jmp is the only way to transfer control from block to block.
+        Jumps are guarded with conditions. The jump should be taken
+        only if its condition is evaluated to true.
+        When control flow reaches the end of block it should take the
+        first jump with true condition. If there is no such jump, then
+        program stops.
+
+        Jumps are further subdivided into categories:
+        - goto - is a local control transfer instruction. The label
+          can be only local to subroutine;
+        - call - transfer a control to another subroutine. A call
+          contains a continuation, i.e., a label to which we're hoping
+          to return after subroutine returns the control to us. Of
+          course, called subroutine can in general return to another
+          position, or not to return at all.
+        - ret - performs a return from subroutine
+        - int - calls to interrupt subroutine. If interrupt returns,
+          then continue with the provided label.
+
+    *)
     type t = jmp term
-    (** [create ?cond target]  *)
+
+    (** [create ?cond kind] creates a jump of given kind  *)
+    val create : ?cond:exp -> jmp_kind -> t
+
+    (** [create_call ?cond target] transfer control to subroutine
+        [target] *)
     val create_call : ?cond:exp -> call  -> t
+
+    (** [create_goto ?cond label] local jump  *)
     val create_goto : ?cond:exp -> label -> t
+
+    (** [create_ret ?cond label] return from a procedure  *)
     val create_ret  : ?cond:exp -> label -> t
+
+    (** [create_int ?cond int_number] call interrupt subroutine  *)
     val create_int  : ?cond:exp -> int -> tid -> t
 
+    (** [kind jmp] evaluates to a kind of jump  *)
     val kind : t -> jmp_kind
+
+    (** [cond jmp] returns the jump guard condition  *)
     val cond : t -> exp
 
+    (** updated jump's guard condition  *)
     val with_cond : t -> exp -> t
+    (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
     include Regular with type t := t
   end
 
+  (** PHI-node  *)
   module Phi : sig
+    (** Phi nodes are used to represent the values, that the same
+        variable can take depending on control flow paths.
+        Phi nodes should occur only in blocks that has more than one
+        incoming edges, i.e., in blocks to which there is a transfer
+        of control flow from more than one block.
+
+        Each element of a phi-node corresponds to a particular
+        incoming edge.
+
+        Note: phi-node doesn't define variable, the definition occurs
+        in one of the edges. *)
     type t = phi term
+
+    (** [create var def] create a bogus phi-node with only one
+        definition *)
     val create : var -> def term -> t
+
+    (** [lhs phi] returns a variable associated with phi node  *)
     val lhs : t -> var
+
+    (** [defs phi] enumerates all definitions in a phi node  *)
     val defs : t -> def term seq
+
+    (** [add_def phi def] appends new definition to a phi node  *)
     val add_def : t -> def term -> t
+
+    (** [remove_def id] removes definition with a given [id]  *)
     val remove_def : t -> tid -> t
 
     include Regular with type t := t
   end
 
+  (** Subroutine argument.  *)
   module Arg : sig
+    (** In the IR model subroutines are not functions, that has a return
+        value, but a more general subroutine that has a set of
+        arguments, that can be used for  input, output or both
+        purposes. *)
+
     type t = arg term
+
+    (** [create ?intent ?name typ] creates an argument. If intent is
+        not specified it is left unkown.   *)
     val create : ?intent:intent -> ?name:string -> typ -> t
+
+    (** [var arg] returns a variable associated with the argument.  *)
     val var : t -> var
+
+    (** [intent arg] returns the argument intent. The [None] value
+        denontes unknown intent.  *)
     val intent : t -> intent option
+
+    (** [with_intent intent arg] updates argument intent  *)
     val with_intent : t -> intent -> t
+
+    (** removes the intent from an argument  *)
     val with_unknown_intent : t -> t
     include Regular with type t := t
   end
 
+  (** A control transfer to another subroutine.  *)
   module Call : sig
+    (** calls have two-fold representation. From the intra-procedural
+        point of view call is a transfer of control to the next
+        address with a side effect of calling to other
+        subroutine. From the iter-procedural point of view, call is
+        transfer of control from caller to the callee, that may or may
+        not result in a return to the caller side.  Thus each call is
+        represented by two labels. The [target] label points to the
+        procedure that is called, the [return] label denotes a block
+        to which the control flow should (but mustn't) continue when
+        called subroutine returns.  *)
+
     type t = call
+
+
+    (** [create ?return ~target ()] creates a call to the [target]
+        subroutine. If [return] is not provided, that it is assumed that
+        subroutine doesn't return. *)
     val create : ?return:label -> target:label -> unit -> t
+
+    (** returns the target of the call  *)
     val target : t -> label
+
+    (** returns call continuation  *)
     val return : t -> label option
+
+    (** updates target  *)
     val with_target : t -> label -> t
+
+    (** updates return continuation *)
     val with_return : t -> label -> t
+
+    (** marks call as a "noreturn"  *)
     val with_noreturn : t -> t
 
     include Regular with type t := t
@@ -4261,10 +4745,23 @@ module Std : sig
 
   (** Target of a control flow transfer.  *)
   module Label : sig
+    (** Labels can be direct, that are known to us. Or indirect, that
+        are arbitrary expressions.  *)
+
     type t = label
+
+    (** [create ()] creates a new label with a freshly generated
+        identifier.  *)
     val create : unit -> t
+
+    (** [direct label] creates a direct label with a given identifier.  *)
     val direct : tid -> t
+
+    (** [indirect exp] creates a label that is resolved to an
+        expression [exp] *)
     val indirect : exp -> t
+
+    (** updates the label  *)
     val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t
 
     include Regular with type t := t
@@ -4281,33 +4778,26 @@ module Std : sig
       arch    : arch;               (** architecture  *)
       disasm  : disasm;             (** disassembly of a program *)
       memory  : value memmap;       (** annotations  *)
-      storage : value String.Map.t; (** arbitrary data storage *)
+      storage : dict;               (** arbitrary data storage *)
+      program : program term;       (** Program lifter to BAP IR  *)
 
       (** Deprecated fields, the will be removed in a next release. *)
       symbols : string table;       (** @deprecated symbol table  *)
       base    : mem;                (** @deprecated base memory  *)
     }
 
-    type color = [
-      | `black
-      | `red
-      | `green
-      | `yellow
-      | `blue
-      | `magenta
-      | `cyan
-      | `white
-    ] with sexp
+    (** [substitute ?tags p] apply substitutions in text values
+        associated with the provided tags in project memory. [tags]
+        defaults to [[comment; python; shell]].
 
-    (** all string tags attached to a memory region supports the
-        following substitutions:
+        The following substitutions are performed:
 
         - [$region{_name,_addr,_min_addr,_max_addr}] - name of region of file
         to which it belongs. For example, in ELF this name will
         correspond to the section name
 
-        - [$symbol{_name,_addr,_min_addr,_max_addr}] - name or address of the symbol to which this
-        memory belongs
+        - [$symbol{_name,_addr,_min_addr,_max_addr}] - name or address
+        of the symbol to which this memory belongs
 
         - [$asm] - assembler listing of the memory region
 
@@ -4318,33 +4808,9 @@ module Std : sig
 
         - [$min_addr, $addr] - starting address of a memory region
 
-        - [$max_addr] - address of the last byte of a memory region.
-    *)
-    val substitute : t -> t
+        - [$max_addr] - address of the last byte of a memory region. *)
+    val substitute : ?tags:string tag list ->  t -> t
 
-    (** an arbitrary text *)
-    val text : string tag
-
-    (** the associated data is an html markup *)
-    val html : string tag
-
-    (** associate a comment string with a memory region  *)
-    val comment : string tag
-
-    (** to assosiate a python command with a region *)
-    val python : string tag
-
-    (** to assosiate a shell command with a region  *)
-    val shell : string tag
-
-    (** just mark a region  *)
-    val mark : unit tag
-
-    (** attach a color  *)
-    val color : color tag
-
-    (** attach a weight to a memory  *)
-    val weight : float tag
 
     (** [register plugin] registers [plugin] in the system  *)
     val register_plugin : (t -> t) -> unit

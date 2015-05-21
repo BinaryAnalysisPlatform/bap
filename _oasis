@@ -101,10 +101,11 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    zarith
+  BuildDepends:    zarith, uuidm
   InternalModules:
                    Bap_addr,
                    Bap_arch,
+                   Bap_attributes,
                    Bap_bil,
                    Bap_bil_adt,
                    Bap_bitvector,
@@ -124,6 +125,7 @@ Library types
                    Bap_types,
                    Bap_value,
                    Bap_var,
+                   Bap_vector,
                    Bap_visitor
 
 Library conceval

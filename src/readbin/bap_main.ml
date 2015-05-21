@@ -182,9 +182,22 @@ module Program(Conf : Options.Provider) = struct
               (Filename.basename name) in
           Error.raise (Error.tag err msg));
 
+    let program = Program.lift roots (Disasm.blocks disasm) in
+    let program = Term.map sub_t program ~f:(fun sub ->
+        Term.get_attr sub subroutine_addr  |>
+        Option.value_map ~default:sub ~f:(fun addr ->
+            Table.find_addr syms addr |>
+            Option.value_map ~default:sub ~f:(fun (_,name) ->
+                Sub.with_name sub name))) in
+
+    Memmap.iter memory ~f:(fun v ->
+        Option.iter (Value.get Image.region v) ~f:print_endline);
+
     let project =
       List.fold2_exn options.plugins (Project.plugins ()) ~init:{
-        arch; disasm; memory; storage = String.Map.empty;
+        arch; disasm; memory;
+        storage = Dict.(set empty Bap.Std.filename options.filename);
+        program;
         symbols = syms; base = mem
       } ~f:(fun p name f -> f (prepare_args Sys.argv name) p) |>
       Project.substitute in
@@ -210,8 +223,7 @@ module Program(Conf : Options.Provider) = struct
       List.filter_map options.output_dump ~f:(function
           | #insn_format as fmt -> Some fmt
           | `with_bir ->
-            let prog = Program.lift roots (Disasm.blocks disasm) in
-            printf "%a" Program.pp prog;
+            printf "%a" Program.pp program;
             None) in
 
     let pp_sym = List.map options.print_symbols ~f:(function
