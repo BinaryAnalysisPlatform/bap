@@ -1,14 +1,14 @@
 open Core_kernel.Std
-
-(** {1 Binary Analysis Platform Library}  *)
 module Std : sig
+
+  (** {1 Binary Analysis Platform Library}  *)
 
   (** {2 Overview}
 
       BAP has a layered architecture currently consisting of four
       layers:
 
-      {[
+      {v
         +-----------------------------------------+
         |  +-----------------------------------+  |
         |  |                                   |  |
@@ -34,7 +34,7 @@ module Std : sig
         |  |                                   |  |
         |  +-----------------------------------+  |
         +-----------------------------------------+
-      ]}
+      v}
 
 
       The {{!bfl}Foundation library} defines core types that are used
@@ -63,7 +63,7 @@ module Std : sig
       refer to a program analysis plugin. The following figure
       provides an overview of the BAP system.
 
-      {[
+      {v
         +---------------------------------------------+
         |  +----------------+    +-----------------+  |
         |  |    Loader      |    |  Disassembler   |  |
@@ -83,7 +83,7 @@ module Std : sig
         |  |                |    |                 |  |
         |  +----------------+    +-----------------+  |
         +---------------------------------------------+
-      ]}
+      v}
 
       All plugins have full access to the library; an important
       consequence is that they can and should open [Bap.Std]. The BAP
@@ -238,7 +238,7 @@ module Std : sig
       The following figure shows the relationship between basic data
       structures of the disassembled program.
 
-      {[
+      {v
         +-----------------+
         | +-------------+ |
         | |   disasm    | |
@@ -259,7 +259,7 @@ module Std : sig
         | |     stmt    | |
         | +-------------+ |
         +-----------------+
-      ]}
+      v}
 
 
       A disassembled program is represented as a set of
@@ -315,19 +315,17 @@ module Std : sig
 
   (** {2:sema Semantic Analysis}
 
-      On semantic level the disassembled program is transferred into
-      the intermediate representation (IR) suitable for writing
-      analysis.
+      On semantic level the disassembled program is lifted into the
+      intermediate representation (IR) suitable for writing analysis.
 
-      IR is closely related to BIL. In fact it totally reuses
-      expression sub-language of BIL. But unlike BIL, IR is flat,
-      (i.e., it doesn't contain recursive statements), and
-      unstructured (no [while], [if], only jumps). Thus IR is much
-      more low-level, so it is harder to read, but easier to analyze
-      programmatically.
+      IR is closely related to BIL. In fact it even reuses expression
+      sub-language of BIL. But unlike BIL, IR is flat, (i.e., it
+      doesn't contain recursive statements), and unstructured (no
+      [while], [if], only jumps). Thus IR is much more low-level, so
+      it is harder to read, but easier to analyze programmatically.
 
       The program in IR is build of terms. In fact the program itself
-      is also a term. There're only 6 kinds of terms:
+      is also a term. There're only 7 kinds of terms:
 
       - {{!Program}program} - the program in whole;
       - {{!Sub}sub} - subroutine;
@@ -337,10 +335,64 @@ module Std : sig
       - {{!Phi}phi} - phi-node in the SSA form;
       - {{!Jmp}jmp} - a transfer of control.
 
-
-      Moreover, the structure of the program term is quite fixed:
+      Unlike expressions and statements in BIL, IR's terms are
+      {e concrete entities}.  Concrete entity is such entity that can
+      change in time and space, as well as come in and out of
+      existence.  Contrary, {e abstract entity} is eternal and
+      unchangeable.  {e Identity} denotes the sameness of a concrete
+      entity as it changes in time.  Abstract entities don't have an
+      identity since they are immutable.  Program is built of concrete
+      entities called terms.  Terms have {e attributes} that can change in
+      time, without affecting the identity of a term.  Attributes are
+      abstract entities.  In each particular point of space and time a
+      term is represented by a snapshot of all its attributes,
+      colloquially called {e value}.  Functions that change the value of a
+      term in fact returns a new value with different set of
+      attributes.  For example, [def] term has two attributes: left
+      hand side (lhs), that associates definition with abstract
+      variable, and right hand side (rhs) that associates [def] with
+      an abstract expression. Suppose, that the definition was:
 
       {[
+        # let d_1 = Def.create x Bil.(var y + var z);;
+        val d_1 : Def.t = 00000001: x := y + z
+      ]}
+
+      To change the right hand side of a definition we use
+      [Def.with_rhs] that returns the {e same} definition but with
+      {e different} value:
+
+      {[
+        # let d_2 = Def.with_rhs d_1 Bil.(int Word.b1);;
+        val d_2 : Def.t = 00000001: x := true
+      ]}
+
+      [d_1] and [d_2] is different values
+
+      {[
+        # Def.equal d_1 d_2;;
+        - : bool = false
+      ]}  of the same term {[
+        # Term.same d_1 d_2;;
+        - : bool = true
+      ]}
+
+      The identity of this terms is denoted by the term identifier
+      ([tid]). In the textual representation term identifiers are
+      printed as ordinal numbers.
+
+      Terms, can contain other terms. But unlike BIL expressions or
+      statements, this relation is not truly recursive, since the
+      structure of program term is fixed: [arg], [phi], [def], [jmp]
+      are leaf terms; [sub] can only contain [arg]'s or [blk]'s; [blk]
+      consists of [phi], [def] and [jmp] sequences of terms, as
+      pictured in the figure below.  Although, the term structure is
+      closed to changes, you still can extend particular term with
+      attributes, using [set_attr] and [get_attr] functions of the
+      {{!Term}Term} module. This functions are using {{!Value}extensible
+      variant} type to encode attributes.
+
+      {v
         +--------------------------------------------------------+
         |                +-------------------+                   |
         |                |      program      |                   |
@@ -362,7 +414,8 @@ module Std : sig
         |     |    phi    |   |    def    |   |   jmp    |       |
         |     +-----------+   +-----------+   +----------+       |
         +--------------------------------------------------------+
-      ]}
+      v}
+
   *)
 
 
@@ -2016,8 +2069,13 @@ module Std : sig
       val register : name:literal -> uuid:literal ->
         (module S with type t = 'a) -> 'a tag
 
-      (** [to_string cons] returns a name of a constructor.  *)
-      val to_string : 'a t -> string
+      (** [name cons] returns a name of a constructor.  *)
+      val name : 'a t -> string
+
+      val same : 'a t -> 'b t -> bool
+      val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
+      val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
+
     end
 
     (** Persistent type identifiers.  *)
@@ -4234,8 +4292,42 @@ module Std : sig
 
   (** IR language term.  *)
   module Term : sig
-    (** IR is used to model a program. A program model is expressed as
-        a formula built of terms. *)
+    (** Term is a building block of the
+        {{!sema}Intermediate Representation} of the binary program.
+
+        This module provides functions that are overloaded for
+        different term classes. Term class is denoted with an explicit
+        instance of type [('a,'b)cls], where ['a] stands for the parent
+        term and ['b] for the child term.
+
+        {2 Example}
+
+        Give a block
+
+        {[# let b = Blk.create ();;]}
+        {v val b : Blk.t =
+        00000003: v}
+
+
+        We can append a definition to it with an overloaded
+        [Term.append]
+
+        {[# let b = Term.append def_t b d_1;;]}
+        {v val b : blk term =
+        00000003:
+        00000001: x := y + z
+        v}
+
+        Update a value of a definition in the block:
+
+
+        {[# let b = Term.update def_t b d_2;;]}
+        {v val b : blk term =
+        00000003:
+        00000001: x := true
+        v}
+
+    *)
 
     (** term type  *)
     type 'a t = 'a term
@@ -4246,7 +4338,7 @@ module Std : sig
     val clone : 'a t -> 'a t
 
     (** [same x y] returns true if [x] and [y] represents the same
-        object, i.e., [Tid.(tid x = tid y)] *)
+        entity, i.e., [Tid.(tid x = tid y)] *)
     val same : 'a t -> 'a t -> bool
 
     (** [name t] returns name of the term  *)
@@ -4342,7 +4434,15 @@ module Std : sig
     val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
 
 
-    (** {2 Attributes} *)
+    (** {2 Attributes}
+
+        Terms attribute set can be extended, using {{!Value}universal
+        values}. A value of type ['a tag] is used to denote an
+        attribute of type ['a] with the name [Value.Tag.name tag].
+
+        With the provided interface Term can be treated as an
+        extensible record.
+    *)
 
     (** [set_attr term attr value] attaches an [value] to attribute
         [attr] in [term] *)
@@ -4441,22 +4541,23 @@ module Std : sig
     (** Logically block consists of a set of {{!Phi}phi nodes}, a
         sequence of {{!Def}definitions} and a sequence of out-coming
         edges, aka {{!Jmp}jumps}. A colloquial term for this three
-        entities is a "block element".
+        entities is a {e block element}.
 
-        The order of $\Phi$-nodes can be specified in any order, as
+        The order of Phi-nodes can be specified in any order, as
         the executes simultaneously . Definitions are stored in the
         order of execution. Jumps are specified in the order in which
-        they should be taken, i.e., [jmp_n] is taken only after
-        [jmp_{n-1}] and if and only if the latter was not taken. For
-        example, if block ends with $N$ jumps, where each $n$-th jump
-        have destination named $t_n$ and condition $c_n$, then it
+        they should be taken, i.e., jmp_n is taken only after
+        jmp_n-1 and if and only if the latter was not taken. For
+        example, if block ends with N jumps, where each n-th jump
+        have destination named t_n and condition c_n then it
         would have the semantics as per the following OCaml program:
 
-        {[
+        {v
           if c_1 then jump t_1 else
           if c_2 then jump t_2 else
-          if c_N then jump t_N
-        ]}
+          if c_N then jump t_N else
+          stop
+        v}
     *)
 
     type t = blk term
