@@ -160,12 +160,24 @@ let typeid x = match typeof x with
 
 module Tag = struct
   type 'a t = 'a tag
-  let to_string = Type_equal.Id.name
+  let name = Type_equal.Id.name
 
   let register (type a) ~name ~uuid
       (typ : (module S with type t = a)) : a tag =
     let uuid = Typeid.of_string (string_of_format uuid) in
     register ~name:(string_of_format name) ~uuid typ
+
+
+
+  (* core changed the type of same_witness in transition from 111 to
+     112, so we can't use more efficient [same_witness]. When we drop,
+     4.01 support we can rewrite it to more efficient functions.  *)
+  let same_witness t1 t2 =
+    Option.try_with (fun () -> Type_equal.Id.same_witness_exn t1 t2)
+
+  let same_witness_exn = Type_equal.Id.same_witness_exn
+  let same = Type_equal.Id.same
+
 end
 
 module Dict = struct

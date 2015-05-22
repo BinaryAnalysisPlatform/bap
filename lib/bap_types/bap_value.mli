@@ -36,9 +36,13 @@ end
 
 module Tag : sig
   type 'a t = 'a tag
-  val to_string : 'a tag -> string
   val register : name:literal -> uuid:literal ->
     (module S with type t = 'a) -> 'a tag
+
+  val name : 'a tag -> string
+  val same : 'a t -> 'b t -> bool
+  val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
+  val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
 end
 
 module Typeid : Regular with type t = typeid

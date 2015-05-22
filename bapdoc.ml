@@ -3,6 +3,7 @@
 
 let target = "lib/bap/bap.mli"
 let outdir = "doc"
+
 let deps = [
   "core_kernel";
   "ocamlgraph";
@@ -46,11 +47,11 @@ let find_p4_with s =
 let preprocess_with oc s = match find_p4_with s with
   | None -> output_string oc s
   | Some i -> match find_comments s with
-    | None, None -> output_substring oc s 0 i
+    | None, None -> output oc s 0 i
     | Some j,_ when j > i ->
-      output_substring oc s 0 i;
-      output_substring oc s j (String.length s - j)
-    | _, Some j -> if j < i then output_substring oc s 0 i
+      output oc s 0 i;
+      output oc s j (String.length s - j)
+    | _, Some j -> if j < i then output oc s 0 i
     | _ -> output_string oc s
 
 
@@ -104,7 +105,13 @@ let generate () =
      not (Sys.is_directory outdir) then
     raise No_out_dir;
   Sys.chdir tmp;
-  let options = String.concat " " ["-d"; outdir; "-html"] in
+  let options = String.concat " " [
+      "-d"; outdir;
+      "-html";
+      "-colorize-code";
+      "-short-functors";
+      "-hide Bap.Std,Core_kernel.Std"
+    ] in
   compile ~options on
 
 let () =
