@@ -121,53 +121,46 @@ module Program(Conf : Options.Provider) = struct
                 sym' Addr.pp (Memory.min_addr m');
             rhs)
 
-  let roots_of_table t : addr list =
-    Seq.(Table.regions t >>| Memory.min_addr |> to_list)
-
+  let roots_of_list l : addr list = List.map l ~f:snd3
   let pp_addr f (mem,_) = Addr.pp f (Memory.min_addr mem)
   let pp_size f (mem,_) = fprintf f "%-4d" (Memory.length mem)
   let pp_name f (_,sym) = fprintf f "%-30s" sym
 
   let disassemble ?img arch mem =
-    let demangle = options.demangle in
     let usr_syms = match options.symsfile with
       | Some filename ->
-        In_channel.with_file filename
-          ~f:(fun ic -> Symbols.read ?demangle ic arch mem)
-      | None -> Table.empty in
+        In_channel.with_file filename ~f:(Symbols.read arch)
+      | None -> [] in
     let ida_syms = match options.use_ida with
-      | None -> Table.empty
+      | None -> []
       | Some ida ->
         let result =
           Ida.(with_file ?ida options.filename
-                 (fun ida -> get_symbols ?demangle ida arch mem)) in
+                 (fun ida -> get_symbols ida arch)) in
         match result with
         | Ok syms -> syms
         | Error err ->
           eprintf "Failed to get symbols from IDA: %a@."
             Error.pp err;
-          Table.empty in
+          [] in
     let img_syms = match img with
-      | Some img -> Table.map (Image.symbols img) ~f:Image.Sym.name
-      | None -> Table.empty in
+      | Some img ->
+        Table.foldi (Image.symbols img) ~init:[] ~f:(fun mem s syms ->
+            let es = Memory.min_addr mem in
+            let ef = Memory.max_addr mem in
+            (s, es, ef) :: syms)
+      | None -> [] in
     let rec_roots =
       Option.value (find_roots arch mem) ~default:[] in
     let roots = List.concat [
         rec_roots;
-        roots_of_table usr_syms;
-        roots_of_table img_syms;
-        roots_of_table ida_syms;
+        roots_of_list usr_syms;
+        roots_of_list img_syms;
+        roots_of_list ida_syms;
       ] in
     let disasm = disassemble ~roots arch mem in
     let cfg = Disasm.blocks disasm in
-    let rec_syms = Symtab.create roots mem cfg in
-    let syms = rec_syms |>
-               rename_symbols ida_syms |>
-               merge_syms ida_syms     |>
-               rename_symbols img_syms |>
-               merge_syms img_syms     |>
-               rename_symbols usr_syms |>
-               merge_syms usr_syms     in
+    let syms = Symtab.create roots mem cfg in
     let memory =
       Option.value_map img ~default:Memmap.empty ~f:Image.memory in
     let memory =
@@ -246,10 +239,22 @@ module Program(Conf : Options.Provider) = struct
     if options.verbose <> false then
       pp_errs std_formatter (Disasm.errors disasm);
 
-    if options.output_phoenix <> None then
-      let module Phoenix = Phoenix.Make(Env) in
-      let dest = Phoenix.store () in
-      printf "Phoenix data was stored in %s folder@." dest
+    let () =
+      if options.output_phoenix <> None then
+        let module Phoenix = Phoenix.Make(Env) in
+        let dest = Phoenix.store () in
+        printf "Phoenix data was stored in %s folder@." dest
+    in
+
+    if options.dump_symbols <> None then
+      let name_es_ef =
+        Table.foldi syms ~init:[] ~f:(fun mem name s ->
+            let es = Memory.min_addr mem in
+            let ef = Memory.max_addr mem in
+            (name, es, ef) :: s) in
+      match Option.join options.dump_symbols with
+      | Some f -> Out_channel.with_file f ~f:(fun oc -> Symbols.write oc name_es_ef)
+      | None -> Symbols.write stdout name_es_ef
 
   let main () =
     match options.binaryarch with

@@ -26,18 +26,18 @@ open Bap.Std
 
 *)
 
-(** [read ?demangle ic arch mem] reads symbol table from input channel
-    [ic] *)
-val read : ?demangle:Options.demangle -> in_channel -> arch -> mem -> string table
 
-(** [read_addrset ic] reads function start address set from input
+(** [read arch ic] reads (symbol, start, end) from input channel [ic] *)
+val read : arch -> in_channel -> (string * addr * addr) list
+
+(** [read_addrs ic] reads function start address list from input
     channel [ic] *)
-val read_addrset : in_channel -> Addr.Set.t
+val read_addrs : in_channel -> addr list
 
-(** [write oc sym] writes function start address set from symbol table
-    [sym] to output channel [oc] *)
-val write : out_channel -> Image.sym table -> unit
-
-(** [write oc addrset] writes function start addresses [addrset] to
+(** [write oc syms] writes the [syms] in format of (name, start, end) to
     output channel [oc] *)
-val write_addrset : out_channel -> Addr.Set.t -> unit
+val write : out_channel -> (string * addr * addr) list -> unit
+
+(** [write oc addrs] writes function start addresses list [addrs] to
+    output channel [oc] *)
+val write_addrs : out_channel -> addr list -> unit
