@@ -94,7 +94,7 @@ let string_of_list pp bil =
   flush_str_formatter ()
 
 let string_of_bil = function
-  | `pb ->  Bil_piqi.pb_of_stmts
+  | `pb -> Bil_piqi.pb_of_stmts
   | `json -> Bil_piqi.json_of_stmts
   | `xml -> Bil_piqi.xml_of_stmts
   | `bil -> asprintf "%a" Bil.pp
@@ -107,10 +107,26 @@ let print_bil lift bil_formats mem insn =
   List.iter bil_formats ~f:(fun fmt ->
       printf "%s@." (string_of_bil fmt (bil insn)))
 
-let make_print lift insn_fmt bil_fmt show_kinds show_size mem insn =
+let string_of_bir = function
+  | `binprot -> Binable.to_string (module Blk)
+  | `sexp -> fun blk -> asprintf "%a" Sexp.pp (Blk.sexp_of_t blk)
+  | `bir -> asprintf "%a" Blk.pp
+
+let print_bir lift bir_formats mem insn =
+  let bil = bil_of_insn lift mem insn in
+  let bs = Blk.from_insn (Insn.of_basic ~bil insn) in
+  List.iter bir_formats ~f:(fun fmt ->
+      printf "%s" @@ String.concat ~sep:"\n"
+        (List.map bs ~f:(string_of_bir fmt)))
+
+
+let make_print arch insn_fmt bil_fmt bir_fmt show_kinds show_size mem
+    insn =
+  let module Target = (val target_of_arch arch) in
   print_insn_size show_size mem;
   print_insn insn_fmt insn;
-  print_bil lift bil_fmt mem insn;
+  print_bil Target.lift bil_fmt mem insn;
+  print_bir Target.lift bir_fmt mem insn;
   if show_kinds then print_kinds insn
 
 let check max_insn counter = match max_insn with
@@ -123,7 +139,7 @@ let step max_insn print state mem insn (addr, counter) =
     Dis.step state (Dis.addr state, counter+1)
   ) else Dis.stop state (Dis.addr state, counter)
 
-let disasm src addr max_insn arch show_oplen show_insn show_bil show_kinds =
+let disasm src addr max_insn arch show_oplen show_insn show_bil show_bir show_kinds =
   let arch = match Arch.of_string arch with
     | None -> raise Unknown_arch
     | Some arch -> arch in
@@ -131,8 +147,8 @@ let disasm src addr max_insn arch show_oplen show_insn show_bil show_kinds =
     | `r32 -> ":32"
     | `r64 -> ":64" in
   let addr = Addr.of_string (addr ^ extension) in
-  let module Target = (val target_of_arch arch) in
-  let print = make_print Target.lift show_insn show_bil show_kinds show_oplen in
+  let print =
+    make_print arch show_insn show_bil show_bir show_kinds show_oplen in
   let input = read_input src in
   Dis.create ~backend:"llvm" (Arch.to_string arch) >>= fun dis ->
   let invalid state mem (r_addr, off) = no_disassembly state (r_addr, off) in
@@ -199,18 +215,30 @@ module Cmdline = struct
     Arg.(value & opt_all ~vopt:`bil (enum formats) [] &
          info ["show-bil"] ~doc)
 
+  let show_bir =
+    let formats = [
+      "bir", `bir;
+      "sexp", `sexp;
+      "binprot", `binprot
+    ] in
+    let doc = sprintf
+        "Output for each instruction in particular. Accepted \
+         values are %s" @@ Arg.doc_alts_enum formats in
+    Arg.(value & opt_all ~vopt:`bir (enum formats) [] &
+         info ["show-bir"] ~doc)
+
   let addr =
     let doc = "Specify an address of first byte, as though \
-	       the instructions occur at a certain address, \
-	       and accordingly interpreted. Be careful that \
-	       you appropriately use 0x prefix for hex and \
-	       leave it without for decimal." in
+	           the instructions occur at a certain address, \
+	           and accordingly interpreted. Be careful that \
+	           you appropriately use 0x prefix for hex and \
+	           leave it without for decimal." in
     Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
 
   let max_insns =
     let doc = "Specify a number of instructions to disassemble.\
-	       Good for ensuring that only one instruction is ever\
-	       lifted or disassembled from a byte blob. Default is all" in
+	           Good for ensuring that only one instruction is ever\
+	           lifted or disassembled from a byte blob. Default is all" in
     Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
 
 
@@ -237,7 +265,8 @@ module Cmdline = struct
            bap-mc  --show-inst --show-asm");
       `S "SEE ALSO";
       `P "llvm-mc"] in
-    Term.(pure main $src $addr $max_insns $arch $show_insn_size $show_insn $show_bil $show_kinds),
+    Term.(pure main $src $addr $max_insns $arch $show_insn_size
+          $show_insn $show_bil $show_bir $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.pkg_version
 
   let parse main = Term.eval (cmd main) ~catch:false

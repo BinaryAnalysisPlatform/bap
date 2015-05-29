@@ -223,6 +223,9 @@ let filter_mapi map ~f =
 let filter_map map ~f =
   filter_mapi map ~f:(fun _ x -> f x)
 
+let filter map ~f : _ t =
+  filter_map map ~f:(fun x -> Option.some_if (f x) x)
+
 let to_sequence start =
   let open Seq.Generator in
   let rec go = function

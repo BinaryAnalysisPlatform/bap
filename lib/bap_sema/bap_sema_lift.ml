@@ -4,6 +4,7 @@ open Bap_image_std
 open Bap_disasm_std
 open Bap_ir
 
+
 (* A note about lifting call instructions.
 
    We're labeling calls with an expected continuation, that should be
@@ -32,6 +33,43 @@ type linear =
   | Label of tid
   | Instr of Ir_blk.elt
 
+(* we're very conservative here *)
+let has_side_effect e scope = (object inherit [bool] Bil.visitor
+  method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
+  method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
+  method! enter_var v r = r || Bil.is_assigned v scope
+end)#visit_exp e false
+
+(** This optimization will inline temporary variables that occurrs
+    inside the instruction definition if the right hand side of the
+    variable definition is either side-effect free, or another
+    variable, that is not changed in the scope of the variable definition. *)
+let inline_variables stmt =
+  let rec loop ss = function
+    | [] -> List.rev ss
+    | Bil.Move _ as s :: [] -> loop (s::ss) []
+    | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_tmp x ->
+      if Bil.is_assigned y xs || Bil.is_assigned x xs
+      then loop (s::ss) xs else
+        let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
+        loop ss xs
+    | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
+      if has_side_effect y xs || Bil.is_assigned x xs
+      then loop (s::ss) xs
+      else loop ss (Bil.substitute (Bil.var x) y xs)
+    | s :: xs -> loop (s::ss) xs in
+  loop [] stmt
+
+let optimize =
+  List.map ~f:Bil.fixpoint [
+    Bil.prune_unreferenced;
+    Bil.fold_consts;
+    Bil.normalize_negatives;
+    inline_variables;
+  ]
+  |> List.reduce_exn ~f:Fn.compose
+  |> Bil.fixpoint
+
 let fall_of_block block =
   Seq.find_map (Block.dests block) ~f:(function
       | `Block (b,`Fall) -> Some b
@@ -41,12 +79,18 @@ let label_of_fall block =
   Option.map (fall_of_block block) ~f:(fun blk ->
       Label.indirect Bil.(int (Block.addr blk)))
 
-let linear_of_stmt block insn stmt : linear list =
+let annotate_insn term insn = Term.set_attr term Disasm.insn insn
+let annotate_addr term addr = Term.set_attr term Disasm.insn_addr addr
+
+
+let linear_of_stmt ?addr fall insn stmt : linear list =
+  let (~@) t = match addr with
+    | None -> t
+    | Some addr -> annotate_addr (annotate_insn t insn) addr in
   let goto ?cond id =
-    Ir_blk.Jmp (Ir_jmp.create_goto ?cond (Label.direct id)) in
+    Ir_blk.Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
   let jump ?cond exp =
     let target = Label.indirect exp in
-    let fall = lazy (label_of_fall block) in
     let tail = if cond = None then [] else
         match Lazy.force fall with
         | None -> []
@@ -59,14 +103,15 @@ let linear_of_stmt block insn stmt : linear list =
         (Call.create ?return:(Lazy.force fall) ~target ())
     ] else Ir_jmp.create_goto ?cond target :: tail in
   let jump ?cond exp =
-    List.map (jump ?cond exp) ~f:(fun j -> Instr (Ir_blk.Jmp j)) in
+    List.map (jump ?cond exp) ~f:(fun j -> Instr (Ir_blk.Jmp ~@j)) in
   let cpuexn ?cond n =
     let next = Tid.create () in [
-      Instr (Ir_blk.Jmp (Ir_jmp.create_int ?cond n next));
+      Instr (Ir_blk.Jmp ~@(Ir_jmp.create_int ?cond n next));
       Label next] in
 
   let rec linearize = function
-    | Bil.Move (lhs,rhs) -> [Instr (Ir_blk.Def (Ir_def.create lhs rhs))]
+    | Bil.Move (lhs,rhs) ->
+      [Instr (Ir_blk.Def ~@(Ir_def.create lhs rhs))]
     | Bil.If (cond, [],[]) -> []
     | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
     | Bil.If (cond,[Bil.CpuExn n],[]) -> cpuexn ~cond n
@@ -110,17 +155,21 @@ let linear_of_stmt block insn stmt : linear list =
       Label finish :: [] in
   linearize stmt
 
+let lift_insn ?addr fall init insn =
+  List.fold (optimize @@ Insn.bil insn) ~init ~f:(fun init stmt ->
+      List.fold (linear_of_stmt ?addr fall insn stmt) ~init
+        ~f:( fun (bs,b) -> function
+            | Label lab ->
+              Ir_blk.Builder.result b :: bs,
+              Ir_blk.Builder.create ~tid:lab ()
+            | Instr elt ->
+              Ir_blk.Builder.add_elt b elt; bs,b))
+
 let blk block : blk term list =
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
-    ~f:(fun init (_mem,insn)->
-        List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
-            List.fold (linear_of_stmt block insn stmt) ~init
-              ~f:( fun (bs,b) -> function
-                  | Label lab ->
-                    let b = Ir_blk.Builder.result b in
-                    b :: bs,
-                    Ir_blk.Builder.create ~tid:lab ()
-                  | Instr elt -> Ir_blk.Builder.add_elt b elt; bs,b))) |>
+    ~f:(fun init (mem,insn) ->
+        let addr = Memory.min_addr mem in
+        lift_insn ~addr (lazy (label_of_fall block)) init insn) |>
   fun (bs,b) -> match List.rev (Ir_blk.Builder.result b :: bs) with
   | [] -> []
   | b :: bs -> Term.set_attr b Disasm.block (Block.addr block) :: bs
@@ -161,44 +210,47 @@ let resolve_jmp addrs jmp =
         (fun id -> Call (Call.with_return call (Direct id)))
     | _ -> jmp
 
-let sub entry =
+let unbound _ = true
+
+
+
+let lift_sub ?(bound=unbound) entry =
   let addrs = Addr.Table.create () in
-  let calls = Addr.Hash_set.create () in
   let rec recons acc b =
     let addr = Block.addr b in
-    if Hashtbl.mem addrs addr || Hash_set.mem calls addr
-    then acc
-    else
+    if not (Hashtbl.mem addrs addr) && bound addr then
       let bls = blk b in
       Option.iter (List.hd bls) ~f:(fun blk ->
           Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-      Option.iter (List.find_map bls ~f:call_of_blk)
-        ~f:(Hash_set.add calls);
-      Seq.fold (Block.succs b) ~init:(acc @ bls) ~f:recons in
+      Seq.fold (Block.succs b) ~init:(acc @ bls) ~f:recons
+    else acc in
   let blks = recons [] entry in
-  let sub = Ir_sub.Builder.create ~blks:(List.length blks) () in
+  let n = let n = List.length blks in Option.some_if (n > 0) n in
+  let sub = Ir_sub.Builder.create ?blks:n () in
   List.iter blks ~f:(fun blk ->
       Ir_sub.Builder.add_blk sub
         (Term.map jmp_t blk ~f:(resolve_jmp addrs)));
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub subroutine_addr (Block.addr entry)
 
-let ok_duplicate = function
-  | `Ok | `Duplicate -> ()
-
-let program roots cfg =
+let program symtab =
   let b = Ir_program.Builder.create () in
-  let roots = Bap_sema_symtab.create_roots_table roots cfg in
   let addrs = Addr.Table.create () in
-  Hashtbl.iter roots ~f:(fun ~key:root ~data:name ->
-      if not (Hashtbl.mem addrs root) then
-        match Table.find_addr cfg root with
-        | Some (mem,blk)
-          when Addr.(Memory.min_addr mem = root) ->
-          let sub = sub blk in
-          Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
-          Hashtbl.add_exn addrs ~key:root ~data:(Term.tid sub)
-        | _ -> ());
+  Seq.iter (Symtab.to_sequence symtab) ~f:(fun fn ->
+      let addr = Block.addr (Symtab.entry_of_fn fn) in
+      let in_fun = unstage (Symtab.create_bound symtab fn) in
+      let entry = Symtab.entry_of_fn fn in
+      let sub = lift_sub ~bound:in_fun entry in
+      let name = Symtab.name_of_fn fn in
+      Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
+      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
   let program = Ir_program.Builder.result b in
   Term.map sub_t program
     ~f:(Term.map blk_t ~f:(Term.map jmp_t ~f:(resolve_jmp addrs)))
+
+
+let sub = lift_sub
+
+let insn insn =
+  lift_insn (lazy None) ([], Ir_blk.Builder.create ()) insn |>
+  function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs)

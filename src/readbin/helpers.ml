@@ -2,10 +2,19 @@ open Core_kernel.Std
 open Bap.Std
 open Options
 
-module Make(Env : Printing.Env) = struct
+module Make(Env : sig
+    val options : Options.t
+    val project : project
+    module Target : Target
+  end) = struct
   module Printing = Printing.Make(Env)
   open Env
   open Printing
+
+  let arch = Project.arch project
+  let syms = Project.symbols project
+  let memory = Project.memory project
+
 
   (** maps immediates to symbols.
       For any given value, if it belongs to some basic block, then
@@ -19,14 +28,16 @@ module Make(Env : Printing.Env) = struct
       Bil.var (Var.create name jump_type) in
     (object inherit Bil.mapper as super
       method! map_int addr =
-        match Table.find_addr syms addr with
-        | Some (mem,sym) ->
-          let start = Memory.min_addr mem in
+        Symtab.fns_of_addr syms addr |> List.hd |> function
+        | Some fn ->
+          let start = Block.addr (Symtab.entry_of_fn fn) in
+          let sym = Symtab.name_of_fn fn in
           if Addr.(start = addr) then make_var sym else
             let off = Addr.Int_exn.(addr - start) in
             Bil.(make_var sym + int off)
         | None -> Bil.Int addr
     end)#run
+
 
   (** substitute loads with the value of corresponding memory *)
   let resolve_indirects =
@@ -34,9 +45,13 @@ module Make(Env : Printing.Env) = struct
       method! map_load ~mem ~addr endian scale =
         let exp = super#map_load ~mem ~addr endian scale in
         match addr with
-        | Bil.Int addr -> (match Memory.get ~scale ~addr base with
-            | Ok w -> Bil.int w
-            | _ -> exp)
+        | Bil.Int addr ->
+          let exp = Memmap.lookup memory addr |> Seq.hd |> function
+            | None -> exp
+            | Some (mem,_) -> match Memory.get ~scale ~addr mem with
+              | Ok w -> Bil.int w
+              | _ -> exp in
+          exp
         | _ -> exp
     end)
 

@@ -4,66 +4,12 @@ open Bap.Std
 open Bap_plugins.Std
 open Format
 open Options
-open Project
 
 module Program(Conf : Options.Provider) = struct
   open Conf
 
-  let paths_of_env () =
-    try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
-    with Not_found -> []
-
-  (** [create_plugin system name file] if file is not [None]
-      then create a plugin targeting this file, otherwise
-      search for the plugin with a given [system] and [name]
-      if a system. Return an error, if nothing found.  *)
-  let create_plugin system name = function
-    | Some name -> Ok (Plugin.create ~system name)
-    | None ->
-      Plugin.find_all ~system |>
-      List.filter ~f:(fun p -> Plugin.name p = name) |> function
-      | [] ->
-        errorf "Failed to find plugin in path or in system, \
-                try to use -L option or set \
-                BAP_PLUGIN_PATH environment variable"
-      | _ :: _ :: _ ->
-        errorf "The plugin name is ambigious, as I found more \
-                than one plugin named '%s' in your system." name
-      | [p] -> Ok p
-
-  (** [load_plugin name] if [name] or [name.plugin] points to a
-      file then load it, otherwise search for the plugin of a
-      system "bap.project" with the given [name] using findlib.
-      Bail-out with error if nothing found.
-      Once plugin is loaded it is checked that it registered itself
-      under the system. *)
-  let load_plugin name =
-    let system = "bap.project" in
-    let name =
-      if Filename.check_suffix name ".plugin"
-      then name else name ^ ".plugin" in
-    let before = Project.plugins () |> List.length in
-    let paths = [
-      [FileUtil.pwd ()]; paths_of_env (); options.load_path
-    ] |> List.concat in
-    List.find_map paths ~f:(fun dir ->
-        let path = Filename.concat dir name in
-        Option.some_if (Sys.file_exists path) path) |>
-    create_plugin system name >>= Plugin.load >>= fun () ->
-    if List.length (Project.plugins ()) = before
-    then errorf "Plugin %s didn't register itself" name
-    else return ()
-
-  let prepare_args argv name =
-    let prefix = "--" ^ name ^ "-" in
-    Array.filter_map argv ~f:(fun arg ->
-        if arg = argv.(0) then Some name
-        else match String.chop_prefix arg ~prefix with
-          | None -> None
-          | Some arg -> Some ("--" ^ arg))
-
-  let find_roots arch mem =
-    if options.bw_disable then None
+  let find_roots arch mem : addr list  =
+    if options.bw_disable then []
     else
       let module BW = Byteweight.Bytes in
       let path = options.sigfile in
@@ -71,141 +17,45 @@ module Program(Conf : Options.Provider) = struct
       | None ->
         eprintf "No signatures found@.Please, use `bap-byteweight update' \
                  to get the latest available signatures.@.%!";
-        None
+        []
       | Some data ->
         let bw = Binable.of_string (module BW) data in
         let length = options.bw_length in
         let threshold = options.bw_threshold in
-        Some (BW.find bw ~length ~threshold mem)
+        BW.find bw ~length ~threshold mem
 
-  let rename_symbols subs syms : string table =
-    Table.mapi syms ~f:(fun mem sym ->
-        let addr = Memory.min_addr mem in
-        match Table.find_addr subs addr with
-        | Some (m,name) when Addr.(Memory.min_addr m = addr) -> name
-        | _ -> sym)
+  let pp_addr f fn = Addr.pp f (Block.addr @@ Symtab.entry_of_fn fn)
+  let pp_name f fn = fprintf f "%-30s" (Symtab.name_of_fn fn)
 
-  (* rhs is recovered, lhs is static.
-     must be called after symbol renaming  *)
-  let merge_syms lhs rhs : string table =
-    Table.iteri rhs ~f:(fun m sym ->
-        match Table.find lhs m with
-        | None when options.verbose ->
-          let inters = Table.intersections lhs m in
-          Seq.iter inters ~f:(fun (m',sym') ->
-              if sym = sym' then
-                (* starting addresses are equal *)
-                let diff = Memory.(length m - length m') in
-                printf "Symbol %s is %s by %d bytes@."
-                  sym (if diff < 0 then "shrinked" else "grown")
-                  (abs diff)
-              else
-                let s = Memory.min_addr in
-                let miss = Addr.(signed (s m - s m') |> to_int) in
-                printf "Symbol %s@@%a => %s@@%a start missed by %d bytes@."
-                  sym' Addr.pp (s m') sym Addr.pp (s m) (ok_exn miss))
-        | _ -> ());
-    Table.foldi lhs ~init:rhs ~f:(fun m' sym' rhs ->
-        match Table.find rhs m' with
-        | Some _ -> rhs
-        | None ->
-          match Table.add rhs m' sym' with
-          | Ok rhs ->
-            if options.verbose then
-              printf "Symbol %s@@%a wasn't found, adding@."
-                sym' Addr.pp (Memory.min_addr m');
-            rhs
-          | Error _ ->
-            if options.verbose then
-              printf "Symbol %s@@%a wasn't found correctly, skipping@."
-                sym' Addr.pp (Memory.min_addr m');
-            rhs)
+  let extract_symbols option ~f =
+    match option with
+    | None -> []
+    | Some value -> f value
 
-  let roots_of_list l : addr list = List.map l ~f:snd3
-  let pp_addr f (mem,_) = Addr.pp f (Memory.min_addr mem)
-  let pp_size f (mem,_) = fprintf f "%-4d" (Memory.length mem)
-  let pp_name f (_,sym) = fprintf f "%-30s" sym
-
-  let disassemble ?img arch mem =
-    let usr_syms = match options.symsfile with
-      | Some filename ->
-        In_channel.with_file filename ~f:(Symbols.read arch)
-      | None -> [] in
-    let ida_syms = match options.use_ida with
-      | None -> []
-      | Some ida ->
-        let result =
-          Ida.(with_file ?ida options.filename
-                 (fun ida -> get_symbols ida arch)) in
-        match result with
-        | Ok syms -> syms
-        | Error err ->
-          eprintf "Failed to get symbols from IDA: %a@."
-            Error.pp err;
-          [] in
-    let img_syms = match img with
-      | Some img ->
-        Table.foldi (Image.symbols img) ~init:[] ~f:(fun mem s syms ->
-            let es = Memory.min_addr mem in
-            let ef = Memory.max_addr mem in
-            (s, es, ef) :: syms)
-      | None -> [] in
-    let rec_roots =
-      Option.value (find_roots arch mem) ~default:[] in
-    let roots = List.concat [
-        rec_roots;
-        roots_of_list usr_syms;
-        roots_of_list img_syms;
-        roots_of_list ida_syms;
-      ] in
-    let disasm = disassemble ~roots arch mem in
-    let cfg = Disasm.blocks disasm in
-    let syms = Symtab.create roots mem cfg in
-    let memory =
-      Option.value_map img ~default:Memmap.empty ~f:Image.memory in
-    let memory =
-      Table.foldi syms ~init:memory ~f:(fun mem sym map ->
-          Memmap.add map mem (Value.create Image.symbol sym)) in
-
+  let run project =
+    let system = "bap.pass" in
     List.iter options.plugins ~f:(fun name ->
-        match load_plugin name with
-        | Ok () -> ()
-        | Error err ->
-          let msg = asprintf "Failed to load plugin %s"
-              (Filename.basename name) in
-          Error.raise (Error.tag err msg));
+        Plugin.create ~library:options.load_path ~system name |>
+        function
+        | None ->
+          invalid_argf "Failed to find plugin with name '%s'" name ()
+        | Some p -> match Plugin.load p with
+          | Ok () -> ()
+          | Error err ->
+            invalid_argf "Failed to load plugin `%s': %s" name
+              (Error.to_string_hum err) ());
 
-    let program = Program.lift roots (Disasm.blocks disasm) in
-    let program = Term.map sub_t program ~f:(fun sub ->
-        Term.get_attr sub subroutine_addr  |>
-        Option.value_map ~default:sub ~f:(fun addr ->
-            Table.find_addr syms addr |>
-            Option.value_map ~default:sub ~f:(fun (_,name) ->
-                Sub.with_name sub name))) in
-
-    Memmap.iter memory ~f:(fun v ->
-        Option.iter (Value.get Image.region v) ~f:print_endline);
-
-    let project =
-      List.fold2_exn options.plugins (Project.plugins ()) ~init:{
-        arch; disasm; memory;
-        storage = Dict.(set empty Bap.Std.filename options.filename);
-        program;
-        symbols = syms; base = mem
-      } ~f:(fun p name f -> f (prepare_args Sys.argv name) p) |>
-      Project.substitute in
+    let project = Project.run_passes project in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
-          ~data:(Idapy.extract_script project.memory));
+          ~data:(Idapy.extract_script (Project.memory project)));
 
-    let module Target = (val target_of_arch arch) in
+    let module Target =
+      (val target_of_arch @@ Project.arch project) in
     let module Env = struct
       let options = options
-      let cfg = Disasm.blocks project.disasm
-      let base = project.base
-      let syms = project.symbols
-      let arch = project.arch
+      let project = project
       module Target = Target
     end in
     let module Printing = Printing.Make(Env) in
@@ -216,8 +66,18 @@ module Program(Conf : Options.Provider) = struct
       List.filter_map options.output_dump ~f:(function
           | #insn_format as fmt -> Some fmt
           | `with_bir ->
-            printf "%a" Program.pp program;
+            List.iter options.emit_attr ~f:Text_tags.print_attr;
+            Text_tags.with_mode std_formatter `Attr ~f:(fun () ->
+                printf "%a" Program.pp (Project.program project));
             None) in
+
+    let syms = Project.symbols project in
+
+    let pp_size f fn =
+      let mem = Symtab.memory_of_fn syms fn in
+      let len = Memmap.to_sequence mem |> Seq.fold ~init:0
+                  ~f:(fun n (mem,_) -> n + Memory.length mem) in
+      fprintf f "%-4d" len in
 
     let pp_sym = List.map options.print_symbols ~f:(function
         | `with_name -> pp_name
@@ -225,8 +85,8 @@ module Program(Conf : Options.Provider) = struct
         | `with_size -> pp_size) |> pp_concat ~sep:pp_print_space in
 
     if options.print_symbols <> [] then
-      Table.iteri syms
-        ~f:(fun mem sym -> printf "@[%a@]@." pp_sym (mem,sym));
+      Project.symbols project |> Symtab.to_sequence |>
+      Seq.iter ~f:(printf "@[%a@]@." pp_sym);
 
     let pp_blk = List.map dump ~f:(function
         | `with_asm -> pp_blk Block.insns pp_insns
@@ -237,7 +97,7 @@ module Program(Conf : Options.Provider) = struct
       pp_code (pp_syms pp_blk) std_formatter syms;
 
     if options.verbose <> false then
-      pp_errs std_formatter (Disasm.errors disasm);
+      pp_errs std_formatter (Disasm.errors (Project.disasm project));
 
     let () =
       if options.output_phoenix <> None then
@@ -247,37 +107,75 @@ module Program(Conf : Options.Provider) = struct
     in
 
     if options.dump_symbols <> None then
-      let name_es_ef =
-        Table.foldi syms ~init:[] ~f:(fun mem name s ->
-            let es = Memory.min_addr mem in
-            let ef = Memory.max_addr mem in
-            (name, es, ef) :: s) in
+      let serialized =
+        Symtab.to_sequence syms |> Seq.fold ~init:[] ~f:(fun acc fn ->
+            let name = Symtab.name_of_fn fn in
+            let emem = Block.memory (Symtab.entry_of_fn fn) in
+            let es = Memory.min_addr in
+            let ef = Memory.max_addr in
+            let hd = (name,es emem,ef emem) in
+            let tl = Symtab.memory_of_fn syms fn |> Memmap.to_sequence in
+            hd :: Seq.fold tl ~init:acc ~f:(fun acc (mem,_) ->
+                if Addr.(ef mem = ef emem)
+                then acc else (name, es mem, ef mem) :: acc)) in
       match Option.join options.dump_symbols with
-      | Some f -> Out_channel.with_file f ~f:(fun oc -> Symbols.write oc name_es_ef)
-      | None -> Symbols.write stdout name_es_ef
+      | Some name -> Out_channel.with_file name
+                       ~f:(fun oc -> Symbols.write oc serialized)
+      | None -> Symbols.write stdout serialized
 
   let main () =
+    let usr_syms arch =
+      extract_symbols options.symsfile ~f:(fun filename ->
+          In_channel.with_file filename ~f:(Symbols.read arch)) in
+    let ida_syms arch =
+      extract_symbols options.use_ida ~f:(fun ida ->
+          Ida.(with_file ?ida options.filename
+                 (fun ida -> get_symbols ida arch)) |> function
+          | Ok syms -> syms
+          | Error err ->
+            eprintf "Failed to extract symbols from IDA: %a@."
+              Error.pp err; []) in
+    let ext_syms arch = match options.demangle with
+      | None -> usr_syms arch @ ida_syms arch
+      | Some way ->
+        let tool = match way with
+          | `program tool -> Some tool
+          | `internal -> None in
+        List.map (usr_syms arch @ ida_syms arch)
+          ~f:(fun (name,es,ef) -> Symbols.demangle ?tool name, es, ef) in
+    let symbols arch =
+      List.fold (ext_syms arch)
+        ~init:(String.Map.empty,Addr.Map.empty)
+        ~f:(fun (names,addrs) (name,addr,_) ->
+            if Map.mem names name then names,addrs
+            else Map.add names ~key:name ~data:addr,
+                 Map.add addrs ~key:addr ~data:name) |> snd in
     match options.binaryarch with
     | None ->
       Image.create ~backend:options.loader options.filename >>=
       fun (img,warns) ->
       if options.verbose then
         List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
-      Table.iteri (Image.sections img) ~f:(fun mem s ->
-          if Image.Sec.is_executable s then
-            disassemble ~img (Image.arch img) mem);
+      let arch = Image.arch img in
+      let symbols = symbols arch in
+      let roots = Map.keys symbols in
+      let name = Map.find symbols in
+      Project.from_image ~name ~roots img >>= fun proj ->
+      run proj;
       return 0
     | Some s -> match Arch.of_string s with
       | None -> eprintf "unrecognized architecture\n"; return 1
       | Some arch ->
-        printf "%-20s: %a\n" "Arch" Arch.pp arch;
         let width_of_arch = arch |> Arch.addr_size |> Size.to_bits in
-        let addr = Addr.of_int ~width:width_of_arch 0 in
-        match Memory.of_file (Arch.endian arch) addr options.filename with
-        | Ok m -> disassemble arch m; return 0
-        | Error e ->
-          eprintf "failed to create memory: %s\n" (Error.to_string_hum e);
-          return 1
+        let addr = Addr.of_int 0 ~width:width_of_arch in
+        let symbols = symbols arch in
+        let name = Map.find symbols in
+        Memory.of_file (Arch.endian arch) addr options.filename
+        >>= fun mem ->
+        let roots = find_roots arch mem @ Map.keys symbols in
+        Project.from_mem ~name ~roots arch mem >>= fun proj ->
+        run proj;
+        return 0
 end
 
 let start options =

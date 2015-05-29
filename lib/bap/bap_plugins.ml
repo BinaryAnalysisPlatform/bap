@@ -9,18 +9,12 @@ module Std = struct
     "bap.disasm";
   ]
 
-  let internal = [
-    (module Image_elf : Unit);
-    (module Bap_llvm  : Unit);
-    (module Llvm_loader_backend : Unit);
-  ]
-
   let string_of_or_error = function
     | Ok () -> "ok"
     | Error err -> Error.to_string_hum err
 
   module Plugins = struct
-    let load () =
+    let load ?(systems=systems) () =
       List.iter systems
         ~f:(fun system ->
             List.iter (Bap_plugin.find_all ~system)

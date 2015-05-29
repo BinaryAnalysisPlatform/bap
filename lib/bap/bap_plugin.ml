@@ -10,7 +10,7 @@ type t = {
   system : string;
 } with fields
 
-let create ~system path = {
+let make ~system path = {
   name = Filename.basename path;
   path; system}
 
@@ -53,3 +53,32 @@ let find_all ~system : t list =
   let lazy () = init_findlib in
   Fl_package_base.list_packages () |>
   List.filter_map ~f:(find ~system)
+
+
+let paths_of_env () =
+  try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
+  with Not_found -> []
+
+let undash = String.map ~f:(function '-' -> '_' | c -> c)
+
+
+let create ?(library=[]) ?path ~system name = match path with
+  | Some path -> Some (make ~system path)
+  | None ->
+    let filename =
+      if Filename.check_suffix name ".plugin"
+      then name else name ^ ".plugin" in
+    let paths = [
+      [FileUtil.pwd ()]; paths_of_env (); library
+    ] |> List.concat in
+    List.find_map paths ~f:(fun dir ->
+        let path = Filename.concat dir filename in
+        if Sys.file_exists path then Some path else
+        if Sys.file_exists (undash path) then Some (undash path)
+        else None) |> function
+    | Some path -> Some (make ~system path)
+    | None ->
+      find_all ~system |>
+      List.filter ~f:(fun p -> p.name = name) |> function
+      | [] -> None
+      | p :: _ -> Some p

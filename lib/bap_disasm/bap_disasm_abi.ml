@@ -32,7 +32,7 @@ open Bap_image_std
     symbol using the following functional constructor, of the
     following type:
 
-    [?image:image -> ?sym:string -> mem -> block -> abi option]
+    [symtab -> sym -> abi option]
 
     ABI constructors are registered in the target specific lifter,
     and constructed for each symbol. Afterwards a set of most
@@ -109,4 +109,4 @@ end
 (** symbol name may be provided if known. Also an access
     to the whole binary image is provided if there is one. *)
 type abi_constructor =
-  ?image:image -> ?sym:string -> mem -> Bap_disasm_block.t -> abi
+  Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi

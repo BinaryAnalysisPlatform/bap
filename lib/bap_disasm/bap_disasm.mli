@@ -114,4 +114,5 @@ module Disasm : sig
   (** Tags  *)
   val insn : insn tag
   val block : addr tag
+  val insn_addr : addr tag
 end

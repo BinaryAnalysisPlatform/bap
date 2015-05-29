@@ -62,6 +62,7 @@
     accepted
 *)
 
-type mode = [`Text | `Html | `None]
+type mode = [`Attr | `Html | `Text | `None]
 val install : Format.formatter -> mode -> unit
 val with_mode : Format.formatter -> mode -> f:(unit -> 'a) -> 'a
+val print_attr : string -> unit

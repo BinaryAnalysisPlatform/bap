@@ -1,54 +1,58 @@
 open Core_kernel.Std
 open Bap_types.Std
-open Image_internal_std
+open Bap_image_std
 open Bap_disasm_std
 open Bap_sema.Std
 
-(** The result of Binary analysis.  *)
-type t = {
-  arch    : arch;               (** architecture  *)
-  disasm  : disasm;             (** disassembly of a program *)
-  memory  : value memmap;       (** annotations  *)
-  storage : dict;               (** arbitrary data storage *)
-  program : program term;       (** program lifted to BAP IR *)
-  (** Deprecated fields, the will be removed in a next release. *)
-  symbols : string table;       (** @deprecated symbol table  *)
-  base    : mem;                (** @deprecated base memory  *)
-}
+type t
 
-(** all string tags supports the following substitutions:
+val from_file :
+  ?on_warning:(Error.t -> unit Or_error.t) ->
+  ?backend:string ->
+  ?name:(addr -> string option) ->
+  ?roots:addr list ->
+  string -> t Or_error.t
 
-    - $region_{name,addr,min_addr,max_addr} - name of region of file
-      to which it belongs. For example, in ELF this name will
-      correspond to the section name
+val from_image :
+  ?name:(addr -> string option) ->
+  ?roots:addr list ->
+  image -> t Or_error.t
 
-    - $symbol_{name,addr} - name or address of the symbol to which this
-      memory belongs
+val from_mem :
+  ?name:(addr -> string option) ->
+  ?roots:addr list ->
+  arch -> mem -> t Or_error.t
 
-    - $asm - assembler listing of the memory region
+val from_string :
+  ?base:addr ->
+  ?name:(addr -> string option) ->
+  ?roots:addr list ->
+  arch -> string -> t Or_error.t
 
-    - $bil - BIL code of the tagged memory region
+val from_bigstring :
+  ?base:addr ->
+  ?name:(addr -> string option) ->
+  ?roots:addr list ->
+  arch -> Bigstring.t -> t Or_error.t
 
-    - $block_{name,addr} - name or address of a basic block to which
-      this region belongs
+val arch : t -> arch
+val program : t -> program term
+val symbols : t -> symtab
+val with_symbols : t -> symtab -> t
+val memory : t -> value memmap
+val disasm : t -> disasm
+val with_memory : t -> value memmap -> t
+val tag_memory : t -> mem -> 'a tag -> 'a -> t
+val substitute : t -> mem -> string tag  -> string -> t
+val set : t -> 'a tag -> 'a -> t
+val get : t -> 'a tag -> 'a option
+val has : t -> 'a tag -> bool
 
-    - $min_addr, $addr - starting address of a memory region
+val register_pass : string -> (t -> t) -> unit
+val register_pass': string -> (t -> unit) -> unit
+val register_pass_with_args : string -> (string array -> t -> t) -> unit
+val register_pass_with_args' : string -> (string array -> t -> unit) -> unit
 
-    - $max_addr - address of the last byte of a memory region.
-*)
-val substitute : ?tags:string tag list -> t -> t
-
-
-(** [register plugin] registers [plugin] in the system  *)
-val register_plugin : (t -> t) -> unit
-
-(** [register' plugin] registers a [plugin] that will be
-    evaluated only for side effect. *)
-val register_plugin': (t -> unit) -> unit
-
-val register_plugin_with_args : (string array -> t -> t) -> unit
-
-val register_plugin_with_args' : (string array -> t -> unit) -> unit
-
-(** A list of registered plugins in the order of registration  *)
-val plugins : unit -> (string array -> t -> t) list
+val run_passes : ?argv:string array -> t -> t
+val run_pass : ?argv:string array -> string -> t -> t option
+val has_pass : string -> bool

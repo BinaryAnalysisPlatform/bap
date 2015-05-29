@@ -108,13 +108,3 @@ module String = Make(struct
     let nth_token = String.unsafe_get
     let token_hash = Char.to_int
   end)
-
-
-open String
-let pp_int_trie = pp pp_print_int
-let t = create ();;
-add t "hell is my life" 1;;
-add t "hello" 2;;
-add t "hello my darling Clementine" 3;;
-#install_printer pp_int_trie;;
-t;;

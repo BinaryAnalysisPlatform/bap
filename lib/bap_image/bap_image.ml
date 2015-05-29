@@ -243,7 +243,7 @@ let of_img img data name =
           Memmap.add map mem (Value.create region (Region.name reg))
         | Error _ -> map) in
   let memory = Table.foldi secs ~init:memory ~f:(fun mem sec map ->
-      Memmap.add map mem Value.(create section sec)) in
+      Memmap.add map mem (Value.create section sec)) in
   let memory,syms,errs = create_symbols memory (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Sec.hashable secs)

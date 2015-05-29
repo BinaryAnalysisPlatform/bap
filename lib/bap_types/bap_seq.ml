@@ -17,6 +17,9 @@ let cons x xs = append (singleton x) xs
 
 let is_empty : 'a seq -> bool = length_is_bounded_by ~max:0
 
+
+let filter s ~f = filteri s ~f:(fun _ x -> f x)
+
 module Export = struct
   let (^::) = cons
 end

@@ -3,92 +3,76 @@ open OUnit2
 open Format
 open Word_size
 open Bap.Std
-open Project
 
-let arm_mov_r2_0 = "\x00\x20\xA0\xE3"
-let x86_mov_mem_esp_esi = "\x89\x34\x24"
+type case = {
+  arch : arch;
+  addr : int;
+  code : string;
+  bil : string;
+  asm : string;
+}
 
-let str_printer expect_err = Sexp.to_string_hum (sexp_of_string expect_err)
+let arm = {
+  arch = `arm;
+  addr = 16;
+  code = "\x00\x20\xA0\xE3";
+  bil  = "R2 := 0x0:32";
+  asm  = "mov r2, #0x0";
+}
 
-let create_addr = function
-  | W32 -> Addr.of_int ~width:32
-  | W64 -> Addr.of_int ~width:64
+let x86 = {
+  arch = `x86;
+  addr = 10;
+  code = "\x89\x34\x24";
+  asm  = "movl %esi, (%esp)";
+  bil  = "mem32 := mem32 with [low:32[ESP],el]:u32 <- low:32[ESI]";
+}
 
-let create_mem ?(addr_size=W32) ?(start_addr=0x00)
-    ?(size=0x10) ?(hexstring="\x61\x61\x61\x61") () =
-  let addr = create_addr W32 start_addr in
-  let hexstring = Bigstring.of_string hexstring in
-  let m = Memory.create LittleEndian addr hexstring in
-  match m with
-  | Ok m -> m
-  | Error err -> assert_failure (Error.to_string_hum err)
-
-let create_project architecture =
-  let mem = create_mem () in
-  let dis =
-    disassemble architecture mem in
-  let symtab = Table.add Table.empty mem ".text" |> ok_exn in
-  {arch = architecture; disasm = dis; memory = Memmap.empty;
-   program = Program.create ();
-   storage = Dict.empty; symbols = symtab;
-   base = mem }
-
-let substitute project ~kind ~hexstring =
-  let memory =
-    let tag = Value.create comment kind in
-    Memmap.add project.memory (create_mem ~hexstring ()) tag in
-  let project_result = Project.substitute {project with memory} in
-  Memmap.fold ~init:[] project_result.memory ~f:(fun acc tag ->
-      match Value.get comment tag with
-      | None -> acc
-      | Some text -> text :: acc)
-
-let strip = String.filter ~f:(function
-    | '\n' | '\r' | ' ' | '\t' -> false
+let normalize = String.filter ~f:(function
+    | '\n' | '\r' | ' ' | '\t' | '{' | '}' -> false
     | _ -> true)
 
-let test_substitution ctxt ~arch ~kind ~expect ~hexstring =
-  let project = create_project arch in
-  let result = substitute project ~kind ~hexstring in
-  let msg = sprintf "Incorrect %s substitution" kind in
-  assert_equal ~ctxt ~printer:str_printer ~msg expect
-    (match List.hd result with
-     | Some x -> strip x
-     | None -> assert_failure "Empty result")
+let assert_normalized ~expect got ctxt : unit =
+  assert_equal ~ctxt (normalize expect) (normalize got) ~printer:ident
 
-let expect_x86_mov_mem_esp_esi =
-  "{mem32:=mem32with[low:32[ESP],el]:u32<-low:32[ESI]}"
+let tag = Value.Tag.register (module String)
+    ~name:"test"
+    ~uuid:"6b3dab52-f3f5-493d-9db7-ad3eed33add8"
+
+let addr_width case = Arch.addr_size case.arch |> Size.to_bits
+
+let test_substitute case : test list =
+  let sub_name = Format.asprintf "test_%a" Arch.pp case.arch in
+  let addr = sprintf "%#x" in
+  let min_addr = addr case.addr in
+  let max_addr = addr (case.addr + String.length case.code - 1) in
+  let base = Addr.of_int case.addr ~width:(addr_width case) in
+  let name addr = Option.some_if Addr.(base = addr) sub_name in
+  let roots = [base] in
+  let p = Project.from_string ~roots ~base ~name case.arch case.code |>
+          ok_exn in
+  let mem,_ = Memmap.lookup (Project.memory p) base |> Seq.hd_exn in
+  let test expect s =
+    let p = Project.substitute p mem tag s in
+    let s = Option.value_exn (Project.memory p |>
+                              Memmap.find_map ~f:(Value.get tag)) in
+    expect >:: assert_normalized ~expect s in
+  [
+    test case.asm "$asm";
+    test case.bil "$bil";
+    test sub_name "$symbol";
+    test sub_name "$symbol_name";
+    test min_addr "$symbol_min_addr";
+    test max_addr "$symbol_max_addr";
+    test min_addr "$symbol_addr";
+    test min_addr "$block_addr";
+    test max_addr "$block_max_addr";
+    test min_addr "$addr";
+    test min_addr "$min_addr";
+    test max_addr "$max_addr";
+  ]
 
 let suite = "Project" >::: [
-    "sub_asm" >::
-    test_substitution ~arch:`armv7 ~kind:"$asm"
-      ~expect:"movr2,#0x0" ~hexstring:arm_mov_r2_0;
-
-    "sub_bil_arm" >::
-    test_substitution ~arch:`armv7 ~kind:"$bil"
-      ~expect:"{R2:=0x0:32}" ~hexstring:arm_mov_r2_0;
-
-    "sub_bil_x86" >::
-    test_substitution ~arch:`x86 ~kind:"$bil"
-      ~expect:expect_x86_mov_mem_esp_esi ~hexstring:x86_mov_mem_esp_esi;
-
-    "sub_addr" >::
-    test_substitution ~arch:`armv7 ~kind:"$addr"
-      ~expect:"0x0" ~hexstring:arm_mov_r2_0;
-
-    "sub_max_addr_arm" >::
-    test_substitution ~arch:`armv7 ~kind:"$max_addr"
-      ~expect:"0x3" ~hexstring:arm_mov_r2_0;
-
-    "sub_max_addr_x86" >::
-    test_substitution ~arch:`x86 ~kind:"$max_addr"
-      ~expect:"0x2" ~hexstring:x86_mov_mem_esp_esi;
-
-    "sub_symbol" >::
-    test_substitution ~arch:`armv7 ~kind:"$symbol"
-      ~expect:".text" ~hexstring:arm_mov_r2_0;
-
-    "sub_symbol_addr" >::
-    test_substitution ~arch:`armv7 ~kind:"$symbol_addr"
-      ~expect:"0x0" ~hexstring:arm_mov_r2_0;
+    "ARM" >::: test_substitute arm;
+    "386" >::: test_substitute x86;
   ]
