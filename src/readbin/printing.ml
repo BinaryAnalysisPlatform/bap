@@ -5,27 +5,21 @@ open Options
 
 type 'a pp = formatter -> 'a -> unit
 
-module type Env = sig
-  val options : Options.t
-  val base : mem
-  val syms : string table
-  val cfg  : block table
-  val arch : arch
-  module Target : Target
-end
-
-module Make(Env : Env) = struct
+module Make(Env : sig val project : project end) = struct
   open Env
 
   let pp_blk_name fmt blk =
-    let make_pos name bmem =
-      let off = Addr.Int_exn.(Block.addr blk - Memory.min_addr bmem) in
-      if Word.is_zero off then sprintf "%s_ENTRY" name
-      else sprintf "%s_0x%s" name (Word.string_of_value off) in
-    let pos = Table.fold_intersections syms (Block.memory blk) ~init:None
-        ~f:(fun fmem sym _prev -> Some (make_pos sym fmem)) in
+    let addr = Block.addr blk in
     let pos =
-      Option.value pos ~default:(make_pos "text" base) in
+      Symtab.fns_of_addr (Project.symbols project) addr |>
+      List.hd |> function
+      | None -> sprintf "text_0x%s" (Addr.string_of_value addr)
+      | Some fn ->
+        let name = Symtab.name_of_fn fn in
+        let entry = Symtab.entry_of_fn fn in
+        let off = Addr.Int_exn.(addr - Block.addr entry) in
+        if Word.is_zero off then sprintf "%s_ENTRY" name
+        else sprintf "%s_0x%s" name (Word.string_of_value off) in
     fprintf fmt "%s" pos
 
   (** [pp_seq pp] prints a sequence using given printer [pp] *)
@@ -66,8 +60,14 @@ module Make(Env : Env) = struct
   (** [pp_sym base cfg symtab] creates a printer for a symbol.
       The symbol is dentoned by its memory region, i.e., the
       printer has [formatter -> mem -> unit] type.  *)
-  let pp_sym pp_blk fmt (mem,sym)  =
-    let blks = Table.intersections cfg mem |> Seq.map ~f:snd  in
+  let pp_sym pp_blk fmt fn =
+    let sym = Symtab.name_of_fn fn in
+    let syms = Project.symbols project in
+    let cfg = Project.disasm project |> Disasm.blocks in
+    let bound = unstage (Symtab.create_bound syms fn) in
+    let blks = Table.to_sequence cfg
+               |> Seq.map ~f:snd
+               |> Seq.filter ~f:(fun blk -> bound (Block.addr blk))  in
     fprintf fmt "@;@[<v2>@{<(div (id %s))>%a@}@]"
       sym (pp_seq pp_blk) blks
 
@@ -77,8 +77,8 @@ module Make(Env : Env) = struct
       occupied by the symbol. Block will be printed in an order of
       their starting addresses.  *)
   let pp_syms pp_blk fmt syms =
-    pp_seq (pp_sym pp_blk) fmt (Table.to_sequence syms)
-
+    pp_seq (pp_sym pp_blk) fmt (Symtab.to_sequence
+                                  (Project.symbols project))
 
   let pp_concat ?(sep=pp_nothing) pps fmt x =
     List.map pps ~f:(fun pp -> fun fmt () -> pp fmt x) |>

@@ -65,14 +65,14 @@ Library bap
   BuildDepends:    bap.disasm,
                    bap.dwarf,
                    bap.elf,
+                   bap.elf_backend,
                    bap.image,
+                   bap.llvm,
+                   bap.llvm_loader,
                    bap.sema,
-                   bap.types,
-                   dynlink,
-                   findlib
+                   bap.types
   Modules:         Bap
   InternalModules: Bap_project
-
 
 Library plugins
   Path:            lib/bap
@@ -80,9 +80,7 @@ Library plugins
   FindLibName:     plugins
   Modules:         Bap_plugins
   InternalModules: Bap_plugin
-  BuildDepends:    bap.elf_backend,
-                   bap.llvm_loader_backend,
-                   bap.llvm
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib
 
 Library top
   XMETADescription:
@@ -176,8 +174,8 @@ Library elf_backend
   FindlibName:     elf_backend
   XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
-  BuildDepends:    bap, core_kernel
-  InternalModules: Image_elf
+  BuildDepends:    core_kernel
+  InternalModules: Bap_native_loader
 
 Library elf
   Path:          lib/bap_elf
@@ -193,30 +191,19 @@ Library elf
 
 Library llvm_loader
   Path:            lib/bap_image/
-  FindlibParent:   bap_image
+  FindlibParent:   bap
   FindlibName:     llvm_loader
   CompiledObject:  best
-  BuildDepends:    bap, core_kernel
-  Modules:         Llvm_loader,
-                   Llvm_binary,
-                   Llvm_binary_segment,
-                   Llvm_binary_symbol,
-                   Llvm_binary_section
+  BuildDepends:    core_kernel
+  InternalModules: Bap_llvm_binary,
+                   Bap_llvm_loader,
+                   Bap_llvm_types
+
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
-  CSources:        llvm_binary_stubs.c,
-                   llvm_binary_stubs.h
+  CSources:        bap_llvm_binary_stubs.c,
+                   bap_llvm_binary_stubs.h
 
-Library llvm_loader_backend
-  Path:            lib/bap_image/
-  FindlibParent:   bap
-  FindlibName:     llvm_loader_backend
-  XMETAExtraLines: plugin_system = "bap.image.disabled"
-  CompiledObject:  best
-  BuildDepends:    bap,
-                   bap.image.llvm_loader,
-                   core_kernel
-  InternalModules: Llvm_loader_backend
 
 Library dwarf
   Path:          lib/bap_dwarf
@@ -273,6 +260,7 @@ Library disasm
                  Bap_disasm_prim,
                  Bap_disasm_rec,
                  Bap_disasm_std,
+                 Bap_disasm_symtab,
                  Bap_disasm_types,
                  Bap_insn_kind,
                  Bap_byteweight,
@@ -305,7 +293,6 @@ Library sema
                  bap.types
   InternalModules:
                  Bap_sema,
-                 Bap_sema_symtab,
                  Bap_sema_lift,
                  Bap_ir,
                  Bap_lnf

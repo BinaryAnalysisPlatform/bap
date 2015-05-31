@@ -78,6 +78,8 @@ val map : 'a t -> f:('a -> 'b) -> 'b t
     and [tag] is a [tag] assosiated with that region. *)
 val mapi : 'a t -> f:(mem -> 'a -> 'b) -> 'b t
 
+val filter : 'a t -> f:('a -> bool) -> 'a t
+
 (** [filter_map m f] creates a new map by applying a function [f] to
     each tag. If [f] returns [Some x] then this region will be mapped
     to [x] in a new map, otherwise it will be dropped. *)

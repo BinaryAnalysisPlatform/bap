@@ -43,16 +43,12 @@ let maybe_mangled name =
   Char.is_uppercase name.[1] &&
   Char.is_alpha name.[1]
 
-let demangle_name ?(how=`internal) name =
+let demangle ?tool name =
   if maybe_mangled name then
-    match how with
-    | `program prog -> demangle_external ~prog name
-    | `internal -> demangle_native name
+    match tool with
+    | Some prog -> demangle_external ~prog name
+    | None -> demangle_native name
   else name
-
-let demangle ?d name = match d with
-    | None -> name
-    | Some how -> demangle_name ~how name
 
 let read arch ic : (string * addr * addr) list =
   let sym_of_sexp x = <:of_sexp<string * int64 * int64>> x in
@@ -72,7 +68,7 @@ let write oc (syms : (string * addr * addr) list) : unit =
   let sexp_of_sym x = <:sexp_of<string * int64 * int64>> x in
   try
     let syms = List.map syms ~f:(fun (s, es, ef) -> s, Addr.to_int64 es |> ok_exn,
-                                                Addr.to_int64 ef |> ok_exn) in
+                                                    Addr.to_int64 ef |> ok_exn) in
     List.iter syms ~f:(fun sym -> Sexp.output_hum oc @@ sexp_of_sym sym;
                         output_char oc '\n')
   with exn ->

@@ -219,6 +219,10 @@ module Disasm = struct
       ~name:"disasm_block"
       ~uuid:"d261d12c-23b9-4bc0-9d0b-a6700bf59377"
 
+  let insn_addr = Value.Tag.register (module Addr)
+      ~name:"insn_addr"
+      ~uuid:"38713d83-8a16-49f8-a753-40fcf91fe264"
+
   module Error = Printable(struct
       open Format
       type t = error

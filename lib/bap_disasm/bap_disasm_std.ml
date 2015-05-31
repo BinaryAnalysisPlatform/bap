@@ -36,8 +36,7 @@ end
 module type ABI = sig
   val create :
     ?merge:(abi list -> abi) ->
-    ?image:image ->
-    ?sym:string -> mem -> Bap_disasm_block.t -> abi
+    Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi
   val merge : abi list -> abi
   val merge_id : string list -> string list -> string list
   class stub : abi
@@ -91,3 +90,7 @@ let target_of_arch = function
   | `x86_64 -> (module AMD64)
   | `x86 -> (module IA32)
   | _ -> (module Stub)
+
+
+module Symtab  = Bap_disasm_symtab
+type symtab = Symtab.t

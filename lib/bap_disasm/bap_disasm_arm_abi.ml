@@ -7,6 +7,7 @@ open Bap_disasm_abi_helpers
 open Bap_disasm_arm_env
 
 module Block = Bap_disasm_block
+module Symtab = Bap_disasm_symtab
 module Insn = Bap_disasm_insn
 
 let registered = ref []
@@ -16,7 +17,7 @@ let register abi = registered := abi :: !registered
 let create =
   create_abi_getter registered
 
-class gnueabi_basic ?image ?sym mem blk = object(self)
+class gnueabi_basic syms sym = object(self)
   inherit stub
   method! id = ["gnueabi"; "linux"; "unknown"]
   method! specific = false
@@ -52,20 +53,21 @@ let is_assigned_before bound blk var =
       Seq.exists ~f:(fun blk ->
           Bil.is_assigned var (bil_of_block blk)))
 
-let is_parameter bound blk var =
-  Block.dfs ~next:(Block.succs) ~bound blk |>
+let is_parameter bound entry var =
+  Block.dfs ~next:(Block.succs) ~bound entry |>
   Seq.exists ~f:(fun blk ->
       let bil = bil_of_block blk in
       is_used_before_assigned var bil &&
       not (is_assigned_before bound blk var))
 
-class gnueabi ?image ?sym mem blk =
-  let args = List.take_while [r0;r1;r2;r3] ~f:(is_parameter mem blk) in
+class gnueabi syms fn =
+  let bound = unstage (Symtab.create_bound syms fn) in
+  let entry = Symtab.entry_of_fn fn in
+  let args =
+    List.take_while [r0;r1;r2;r3] ~f:(is_parameter bound entry) in
   object(self)
-    inherit gnueabi_basic ?image ?sym mem blk
+    inherit gnueabi_basic syms fn
     method! args = List.map args ~f:(fun r -> None, Bil.var r)
   end
-
-
 
 let () = register (new gnueabi)

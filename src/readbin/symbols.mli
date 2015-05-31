@@ -41,3 +41,8 @@ val write : out_channel -> (string * addr * addr) list -> unit
 (** [write oc addrs] writes function start addresses list [addrs] to
     output channel [oc] *)
 val write_addrs : out_channel -> addr list -> unit
+
+
+(** [demangle ?tool symbol] demangle symbol. If [?tool] is provided it
+    will be run with [popen] and [symbol] will be filtered through it.*)
+val demangle : ?tool:string -> string -> string

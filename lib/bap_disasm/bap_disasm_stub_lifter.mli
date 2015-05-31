@@ -13,8 +13,8 @@ module ABI : sig
 
   val create :
     ?merge:(abi list -> abi) ->
-    ?image:image ->
-    ?sym:string -> mem -> Bap_disasm_block.t -> abi
+    Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi
+
 
   include module type of Bap_disasm_abi_helpers
 end

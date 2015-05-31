@@ -1,3 +1,5 @@
+open Core_kernel.Std
+
 module Std = struct
   type 'a printer = Format.formatter -> 'a -> unit
   include Bap_types.Std
@@ -12,3 +14,10 @@ module Std = struct
   module Signatures = Bap_signatures
   module Byteweight = Bap_byteweight
 end
+
+(* load internal plugins *)
+let internal : (module Unit) list = [
+  (module Bap_llvm);
+  (module Bap_llvm_loader);
+  (module Bap_native_loader);
+]

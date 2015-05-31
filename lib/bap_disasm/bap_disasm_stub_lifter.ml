@@ -6,7 +6,7 @@ open Bap_disasm_abi_helpers
 let lift _ _ = Or_error.error_string "not implemented"
 module ABI = struct
   let register _ = ()
-  let create ?merge ?image ?sym mem blk = new stub
+  let create ?merge _ _ = new stub
   include Bap_disasm_abi_helpers
 end
 

@@ -124,7 +124,7 @@ let undefined_exp = Bil.unknown "undefined" bool_t
 let undefined_var = Var.create "undefined" bool_t
 
 let pp_attr ppf attr =
-  Format.fprintf ppf "@[         .%s %a@]@."
+  Format.fprintf ppf "@[.%s %a@]"
     (Value.tagname attr) Value.pp attr
 
 let pp_attrs ppf dict =
@@ -312,10 +312,16 @@ module Term = struct
   let get_attr t = Dict.find t.dict
   let del_attr t tag = {t with dict = Dict.remove t.dict tag}
   let has_attr t tag = get_attr t tag <> None
-
   let length t p = Array.length (t.get p.self)
-end
 
+  let pp pp_self ppf t =
+    let open Format in
+    let attrs = Dict.data t.dict in
+    Seq.iter attrs ~f:(fun attr ->
+        pp_open_tag ppf (asprintf "%a" pp_attr attr));
+    Format.fprintf ppf "@[%a: %a@]@." Tid.pp t.tid pp_self t.self;
+    Seq.iter attrs ~f:(fun _ -> pp_close_tag ppf ());
+end
 
 module Label = struct
   type t = label
@@ -392,12 +398,13 @@ module Ir_arg = struct
         | Some Both -> "in out "
         | None -> ""
 
-      let pp ppf {tid; dict; self=(var,intent)} =
-        Format.fprintf ppf "@[%a: %s :: %s%a@]@.%a"
-          Tid.pp tid (Var.name var)
+      let pp_self ppf (var,intent) =
+        Format.fprintf ppf "%s :: %s%a"
+          (Var.name var)
           (string_of_intent intent)
           Type.pp (Var.typ var)
-          pp_attrs dict
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -408,10 +415,11 @@ module Ir_def = struct
       type t = def term with bin_io, compare, sexp
       let module_name = "Bap.Std.Def"
       let hash = hash_of_term
-      let pp ppf def =
-        Format.fprintf ppf "@[<4>%a: %a := %a@]@.%a"
-          Tid.pp def.tid Var.pp (lhs def) Exp.pp (rhs def)
-          pp_attrs def.dict
+
+      let pp_self ppf (lhs,rhs) =
+        Format.fprintf ppf "%a := %a" Var.pp lhs Exp.pp rhs
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -430,13 +438,15 @@ module Ir_phi = struct
       type t = phi term with bin_io, compare, sexp
       let module_name = "Bap.Std.Phi"
       let hash = hash_of_term
-      let pp ppf phi =
-        Format.fprintf ppf "@[<4>%a: %a := phi(%s)@]@.%a"
-          Tid.pp phi.tid Var.pp (lhs phi)
+
+      let pp_self ppf (lhs,rhs) =
+        Format.fprintf ppf "%s := phi(%s)"
+          Var.(name lhs)
           (String.concat ~sep:", "
-             (List.map (rhs phi)
+             (List.map rhs
                 ~f:(Fn.compose Tid.to_string tid)))
-          pp_attrs phi.dict
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -471,10 +481,10 @@ module Ir_jmp = struct
         if Exp.(cond <> always) then
           Format.fprintf ppf "when %a " Exp.pp cond
 
-      let pp ppf jmp =
-        Format.fprintf ppf "@[<4>%a: %a%a@]@.%a"
-          Tid.pp jmp.tid pp_cond (lhs jmp) pp_dst (rhs jmp)
-          pp_attrs jmp.dict
+      let pp_self ppf (lhs,rhs) =
+        Format.fprintf ppf "%a%a" pp_cond lhs pp_dst rhs
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -599,12 +609,13 @@ module Ir_blk = struct
       let module_name = "Bap.Std.Blk"
       let hash = hash_of_term
 
-      let pp ppf blk =
-        Format.fprintf ppf "@[<v>@;%a:@.%a%a%a%a@]"
-          Tid.pp blk.tid pp_attrs blk.dict
-          (Array.pp Ir_phi.pp) blk.self.phis
-          (Array.pp Ir_def.pp) blk.self.defs
-          (Array.pp Ir_jmp.pp) blk.self.jmps
+      let pp_self ppf self =
+        Format.fprintf ppf "@[@.%a%a%a@]"
+          (Array.pp Ir_phi.pp) self.phis
+          (Array.pp Ir_def.pp) self.defs
+          (Array.pp Ir_jmp.pp) self.jmps
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -654,15 +665,16 @@ module Ir_sub = struct
       type t = sub term with bin_io, compare, sexp
       let module_name = "Bap.Std.Sub"
       let hash = hash_of_term
-      let pp ppf sub =
-        Format.fprintf ppf "@[<v>@.%a: sub %s(%s)@.%a%a%a@]"
-          Tid.pp sub.tid sub.self.name
+      let pp_self ppf self =
+        Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+          self.name
           (String.concat ~sep:", " @@
            Array.to_list @@
-           Array.map sub.self.args ~f:Ir_arg.name)
-          pp_attrs sub.dict
-          (Array.pp Ir_arg.pp) sub.self.args
-          (Array.pp Ir_blk.pp) sub.self.blks
+           Array.map self.args ~f:Ir_arg.name)
+          (Array.pp Ir_arg.pp) self.args
+          (Array.pp Ir_blk.pp) self.blks
+
+      let pp = Term.pp pp_self
     end)
 end
 
@@ -792,10 +804,9 @@ module Ir_program = struct
       type t = program term with bin_io, compare, sexp
       let module_name = "Bap.Std.Program"
       let hash = hash_of_term
-      let pp ppf p =
-        Format.fprintf ppf "@[<v>%a: program@.@[<v>%a@]@.%a@]"
-          Tid.pp p.tid
-          pp_attrs p.dict
-          (Array.pp Ir_sub.pp) p.self.subs
+      let pp_self ppf self =
+        Format.fprintf ppf "@[<v>program@.%a@]"
+          (Array.pp Ir_sub.pp) self.subs
+      let pp = Term.pp pp_self
     end)
 end

@@ -16,6 +16,10 @@ open Bap.Std
     was provided, then it will be returned, otherwise it will be
     mangled from the executable name).
 *)
-module Make(Env : Printing.Env) : sig
+module Make(Env : sig
+    val project : project
+    val options : Options.t
+    module Target : Target
+  end) : sig
   val store : unit -> string
 end

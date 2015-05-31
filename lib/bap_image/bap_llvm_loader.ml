@@ -3,19 +3,21 @@ open Bap_types.Std
 open Image_backend
 open Image_common
 
+module Binary = Bap_llvm_binary
+
 let make_addr arch addr =
   match Arch.addr_size arch with
   | `r32 -> Addr.of_int64 ~width:32 addr
   | `r64 -> Addr.of_int64 ~width:64 addr
 
 let to_section arch s : Section.t option =
-  let module S = Llvm_binary_segment in
+  let module S = Binary.LLVM.Segment in
   let name = S.name s in
-  let perm =
-    let p = [ S.is_readable s, R;
-              S.is_writable s, W;
-              S.is_executable s, X ] in
-    List.filter_map ~f:(fun (e, p) -> if e then Some p else None) p |>
+  let perm = [
+    S.is_readable s, R;
+    S.is_writable s, W;
+    S.is_executable s, X ] |>
+    List.filter_map ~f:(fun (e, p) -> if e then Some p else None) |>
     List.reduce ~f:(fun p1 p2 -> Or (p1, p2)) in
   let off = S.offset s |> Int64.to_int_exn in
   let location = Location.Fields.create
@@ -28,24 +30,21 @@ let to_section arch s : Section.t option =
   | _ -> None
 
 let to_sym arch s : Sym.t option =
-  let module S = Llvm_binary_symbol in
+  let module S = Binary.LLVM.Symbol in
   let name = S.name s in
-  let is_function, is_debug =
-    let open S in
-    (match kind s with Function -> true | _ -> false),
-    (match kind s with Debug -> true | _ -> false) in
-  let locations =
-    let l = Location.Fields.create
-        ~addr:(S.addr s |> make_addr arch)
-        ~len:(S.size s |> Int64.to_int_exn) in
-    l, [] in
-  if S.size s <> Int64.zero && is_function then
+  let is_function = S.kind s = S.Function in
+  let is_debug = S.kind s = S.Debug in
+  let locations = Location.Fields.create
+      ~addr:(S.addr s |> make_addr arch)
+      ~len:(S.size s |> Int64.to_int_exn), [] in
+
+  if S.size s <> Int64.zero then
     Sym.Fields.create ~name ~is_function ~is_debug ~locations |>
     Option.some
   else None
 
 let to_region arch s : Region.t =
-  let module S = Llvm_binary_section in
+  let module S = Binary.LLVM.Section in
   let name = S.name s in
   let location = Location.Fields.create
       ~addr:(S.addr s |> make_addr arch)
@@ -54,18 +53,25 @@ let to_region arch s : Region.t =
 
 let from_data data : Img.t option =
   let from_data_exn () =
-    let module B = Llvm_binary in
-    let b = B.create data in
-    let arch = B.arch b |>
+    let b = Binary.create data in
+    let arch = Binary.arch b |>
                Arch.of_string |>
                (fun v -> Option.value_exn v) in
-    let entry = B.entry b |> make_addr arch in
+    let entry = Binary.entry b |> make_addr arch in
     let sections =
-      B.segments b |> List.filter_map ~f:(to_section arch) |>
+      Binary.segments b |> List.filter_map ~f:(to_section arch) |>
       (fun s -> List.hd_exn s, List.tl_exn s) in
     let symbols =
-      B.symbols b |> List.filter_map ~f:(to_sym arch) in
+      Binary.symbols b |> List.filter_map ~f:(to_sym arch) in
     let regions =
-      B.sections b |> List.map ~f:(to_region arch) in
+      Binary.sections b |> List.map ~f:(to_region arch) in
     Img.Fields.create ~arch ~entry ~sections ~symbols ~regions in
   Option.try_with from_data_exn
+
+
+let () =
+  let name = "llvm" in
+  match Bap_image.register_backend ~name from_data with
+  | `Ok -> ()
+  | `Duplicate ->
+    eprintf "llvm_loader_backend: name «%s» is already used\n" name

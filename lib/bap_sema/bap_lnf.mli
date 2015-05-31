@@ -15,5 +15,5 @@ val headers : tree -> blocks
 val bodies : tree -> blocks
 
 
-val create : ?bound:mem -> Block.t -> t
+val create : ?bound:(addr -> bool) -> Block.t -> t
 (* val of_cfg : Block.Cfg.t -> t *)

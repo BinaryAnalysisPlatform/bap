@@ -13,13 +13,20 @@ module Std : sig
   module Plugin : sig
     type t = plugin
 
-    (** [create ~system path] creates a plugin.
-
-        Parameter [system] denotes the name of the extension point where
-        the plugin would be plugged in. Path is should point to the plugin
-        file. Plugin name is set to the [basename path].
+    (** [create ?library ?path ~system name] if file is not [None]
+        then create a plugin targeting this file, otherwise look at
+        current working directory for file named [name.plugin], if it
+        doesn't exist, then search for the plugin with a given [name]
+        and [system] first in folders specified by [BAP_PLUGIN_PATH]
+        environment variable, and if nothing found, continue with all
+        folders specified with [library] parameter, and finally search
+        in findlib system.
+        If more than one plugin exists, then the first found is used.
     *)
-    val create : system:string -> string -> t
+    val create :
+      ?library:string list ->
+      ?path:string ->
+      system:string -> string -> t option
 
     (** [load plugin] loads given [plugin]  *)
     val load : t -> unit Or_error.t
@@ -38,7 +45,7 @@ module Std : sig
   end
 
   module Plugins : sig
-    val load : unit -> unit
+    val load : ?systems:string list -> unit -> unit
     val all : unit -> plugin list
   end
 

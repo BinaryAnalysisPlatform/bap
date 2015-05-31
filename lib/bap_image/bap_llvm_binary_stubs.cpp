@@ -1,7 +1,7 @@
 #include <string>
 
-#include "llvm_binary_stubs.h"
-#include "llvm_binary_stubs.hpp"
+#include "bap_llvm_binary_stubs.h"
+#include "bap_llvm_binary_stubs.hpp"
 
 extern "C" {
 #include <caml/mlvalues.h>
@@ -52,7 +52,7 @@ img::image* from_value (::value v) {
 ::value to_value(const seg::segment& s) {
     CAMLparam0();
     CAMLlocal1(result);
-    result = caml_alloc(7, 0);  
+    result = caml_alloc(7, 0);
     Store_field (result, 0, caml_copy_string(s.name().c_str()));
     Store_field (result, 1, caml_copy_int64(s.offset()));
     Store_field (result, 2, caml_copy_int64(s.addr()));
@@ -66,7 +66,7 @@ img::image* from_value (::value v) {
 ::value to_value(const sym::symbol& s) {
     CAMLparam0();
     CAMLlocal1(result);
-    result = caml_alloc(4, 0);  
+    result = caml_alloc(4, 0);
     Store_field (result, 0, caml_copy_string(s.name().c_str()));
     Store_field (result, 1, Val_int(s.kind()));
     Store_field (result, 2, caml_copy_int64(s.addr()));
@@ -77,7 +77,7 @@ img::image* from_value (::value v) {
 ::value to_value(const sec::section& s) {
     CAMLparam0();
     CAMLlocal1(result);
-    result = caml_alloc(3, 0);  
+    result = caml_alloc(3, 0);
     Store_field (result, 0, caml_copy_string(s.name().c_str()));
     Store_field (result, 1, caml_copy_int64(s.addr()));
     Store_field (result, 2, caml_copy_int64(s.size()));
@@ -139,4 +139,3 @@ CAMLprim value llvm_binary_sections_stub(value arg) {
     CAMLparam1(arg);
     CAMLreturn(impl::to_value(impl::from_value(arg)->sections()));
 }
-

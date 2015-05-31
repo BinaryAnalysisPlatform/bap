@@ -1,6 +1,5 @@
 module Std = struct
 
-  module Symtab  = Bap_sema_symtab
   module Lnf = Bap_lnf
   include Bap_ir
 
@@ -18,6 +17,7 @@ module Std = struct
   module Blk = struct
     include Ir_blk
     let lift = Ir_lift.blk
+    let from_insn = Ir_lift.insn
   end
   module Sub = struct
     include Ir_sub

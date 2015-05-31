@@ -5,12 +5,12 @@ EXT ounit
 FLG -short-paths
 FLG -w -4-33-40-41-42-43-34-44
 
-PKG core_kernel
-PKG ocamlbuild
-PKG jsonm
-PKG ocamlgraph
 PKG camlzip
+PKG core_kernel
 PKG fileutils
+PKG jsonm
+PKG ocamlbuild
+PKG ocamlgraph
 PKG uuidm
 
 B _build

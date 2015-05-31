@@ -1,7 +1,9 @@
 open Core_kernel.Std
+open Bap.Std
 open Format
 
-type mode = [`Text | `Html | `None]
+type mode = [`Attr | `Html | `Text | `None]
+
 
 let expect_tag () =
   invalid_arg "Expect: tag := (<name> [<arg> <arg>...]) | <name>"
@@ -100,7 +102,33 @@ module Text = struct
     }
 end
 
+module Attr = struct
+  let attrs = String.Hash_set.create ()
+  let add attr = Hash_set.add attrs attr
+
+  let need_to_print tag =
+    Scanf.sscanf tag " .%s %s@\n" (fun attr _ ->
+        Hash_set.mem attrs attr)
+
+
+  let print_open_tag ppf tag : unit =
+    if need_to_print tag then begin
+      pp_print_string ppf tag;
+      pp_print_newline ppf ()
+    end
+
+
+  let install ppf =
+    pp_set_print_tags ppf true;
+    let tags = pp_get_formatter_tag_functions ppf () in
+    pp_set_formatter_tag_functions ppf {
+      tags with
+      print_open_tag = print_open_tag ppf;
+    }
+end
+
 let install fmt = function
+  | `Attr -> Attr.install fmt
   | `Text -> Text.install fmt
   | `Html -> Html.install fmt
   | `None ->
@@ -118,3 +146,5 @@ let with_mode fmt mode =
     pp_set_formatter_tag_functions fmt g in
   install fmt mode;
   Exn.protect ~finally
+
+let print_attr = Attr.add

@@ -5,58 +5,65 @@ module Std : sig
 
   (** {2 Overview}
 
-      BAP has a layered architecture currently consisting of four
-      layers:
+      BAP has a layered architecture consisting of four
+      layers. Although the layers are not really observable from outside
+      of the library, they make it easier to learn the library, as
+      they introduce new concepts sequentially. On top of this layers,
+      the {{!section:project}Project} module is defined, that
+      consolidates all information about target of an
+      analysis. [Project] module may be viewed as an entry point to
+      the library.
 
       {v
-        +-----------------------------------------+
-        |  +-----------------------------------+  |
-        |  |                                   |  |
-        |  |       Foundation Library          |  |
-        |  |                                   |  |
-        |  +-----------------------------------+  |
-        |                                         |
-        |  +-----------------------------------+  |
-        |  |                                   |  |
-        |  |          Memory Model             |  |
-        |  |                                   |  |
-        |  +-----------------------------------+  |
-        |                                         |
-        |  +-----------------------------------+  |
-        |  |                                   |  |
-        |  |           Disassembly             |  |
-        |  |                                   |  |
-        |  +-----------------------------------+  |
-        |                                         |
-        |  +-----------------------------------+  |
-        |  |                                   |  |
-        |  |        Semantic Analysis          |  |
-        |  |                                   |  |
-        |  +-----------------------------------+  |
-        +-----------------------------------------+
+        +-----------------------------------------------------+
+        | +--------+   +-----------------------------------+  |
+        | |        |   |                                   |  |
+        | |        |   |       Foundation Library          |  |
+        | |        |   |                                   |  |
+        | |        |   +-----------------------------------+  |
+        | |   P    |                                          |
+        | |        |   +-----------------------------------+  |
+        | |   R    |   |                                   |  |
+        | |        |   |          Memory Model             |  |
+        | |   O    |   |                                   |  |
+        | |        |   +-----------------------------------+  |
+        | |   J    |                                          |
+        | |        |   +-----------------------------------+  |
+        | |   E    |   |                                   |  |
+        | |        |   |           Disassembly             |  |
+        | |   C    |   |                                   |  |
+        | |        |   +-----------------------------------+  |
+        | |   T    |                                          |
+        | |        |   +-----------------------------------+  |
+        | |        |   |                                   |  |
+        | |        |   |        Semantic Analysis          |  |
+        | |        |   |                                   |  |
+        | +--------+   +-----------------------------------+  |
+        +-----------------------------------------------------+
       v}
 
 
-      The {{!bfl}Foundation library} defines core types that are used
-      throughout the BAP library for binary analysis. The
+      The {{!bfl}Foundation library} defines {{!Bil}BAP Instruction
+      language} data types, as well as other useful data structures,
+      like {!Value}, {!Trie}, {!Vector}, etc. The
       {{!section:image}Memory model} layer is responsible for loading
-      and parsing binary objects and representing them in memory. It
-      also defines a few useful data structures that are used
-      extensively by later layers. The next layer performs
-      {{!section:disasm}disassembly} and lifting to BIL. Finally,
-      the {{!section:sema}semantic analysis} layer transforms a
-      binary into an IR representation, and further provides a set of
-      handful analysis tools.
+      and parsing binary objects and representing them in computer
+      memory. It also defines a few useful data structures that are
+      used extensively by later layers, like {!Table} and
+      {!Memmap}. The next layer performs
+      {{!section:disasm}disassembly} and lifting to BIL. Finally, the
+      {{!section:sema}semantic analysis} layer transforms a binary
+      into an IR representation, that is suitable for writing analysis.
 
-      Another important point of view is the BAP plugin architecture,
-      similar to that of GIMP or Frama-C. BAP features a pluggable
-      architecture with a number of extension points. For example,
-      even the LLVM disassembler is considered a type of plugin.
-      Currently we support three such extension points in BAP:
+      Another important point of view is the BAP plugin architecture.
+      Similar to GIMP or Frama-C, BAP features a pluggable architecture
+      with a number of extension points. For example, even the LLVM
+      disassembler is considered a type of plugin.  Currently we
+      support three such extension points in BAP:
 
       - {{!Backend}loaders} - to add new binary object loaders;
       - disassemblers - to add new disassemblers;
-      - {{!Project}program analysis} - to analyze programs.
+      - {{!section:project}program analysis} - to write analysis.
 
       The latter category of plugins is most widely used. Therefore,
       when we use the term "plugin" without making a distinction, we
@@ -105,29 +112,30 @@ module Std : sig
 
   (** {2:bfl Foundation Library}
 
-      At this layer we define the core types that are tightly
-      integrated with Binary Intermediate Language ({{!Bil}BIL}). The
-      core types are:
+      At this layer we define ({{!Bil}Binary Instruction language})
+      and few other useful data structures:
 
-      - {{!Arch}arch} - to denote computer architecture;
-      - {{!Size}size} - to specify sizes of wors or addresses;
-      - {{!Var}var}  - BIL variable;
-      - {{!Type}typ} - OCaml type for BIL type;
-      - {{!Exp}exp}  - BIL expression;
-      - {{!Stmt}stmt} - BIL statement;
-      - {{!Bitvector}word,addr} - a bitvector data structure
-        to represent immediate data;
-      - {{!Value}'a tag} and {{!Value}value} - an extensible variant type,
-        aka existential, aka type [any];
+      - {{!Arch}arch} - describes computer architecture;
+      - {{!Size}size} - word and register sizes;
+      - {{!Var}var}  - {{!Bil}BIL} variable;
+      - {{!Type}typ} - {{!Bil}BIL} type system;
+      - {{!Exp}exp}  - {{!Bil}BIL} expression sub-language;
+      - {{!Stmt}stmt} - {{!Bil}BIL} statements;
+      - {{!Bitvector}bitvector} - a bitvector data structure
+        to represent immediate data, used usually by their aliases
+      - {!word} and {!addr};
+      - {{!Value}value} - an extensible variant type;
+      - {{!Dict}dict} - an extensible record;
+      - {{!Vector}vector} - array that can grow;
       - {{!Seq}'a seq} - slightly extended Core [Sequence], aka lazy
         list.
 
-      Every type implements the {{!Regular}Regular} interface. This
-      interface is very similar to Core's [Identifiable], and is
-      supposed to represent a type that is as common as a built-in
-      type. One should expect to find any function that is
-      implemented for such types as [int], [string], [char], etc.
-      Namely, this interface includes:
+      Most of the types implement the {{!Regular}Regular}
+      interface. This interface is very similar to Core's
+      [Identifiable], and is supposed to represent a type that is as
+      common as a built-in type. One should expect to find any
+      function that is implemented for such types as [int], [string],
+      [char], etc.  Namely, this interface includes:
 
       - comparison functions: ([<, >, <= , >= , compare, between, ...]);
       - each type defines a polymorphic [Map] with keys of type [t];
@@ -158,11 +166,30 @@ module Std : sig
       {{!Bil.load}Bil.load} with type:
       [mem:exp -> addr:exp -> endian -> size -> exp]
 
+      {3:value Value}
+
+      {{!Value}Universal values} can be viewed as extensible variants on
+      steroids. Not only they maybe extended, but they also can be
+      serialized, compared with user-defined comparison function and
+      even pretty printed.
+
+
+      {3:dict Dict}
+
+      Like {{!Value}value} is an extensible sum type, {{!Dict}dict}
+      can be viewed as extensible product type. Dict is a sequence of
+      values of type {!value}, with {{!Value.Tag}tags} used as field
+      names. Of course, fields are unique.
+
+      {3:vector Vector}
+
+      Vector is an implementation of STL like vectors with logarithmic
+      push back.
 
       {3:tries Tries}
 
-      The Foundation library also defines a prefix tree data
-      structure that proves useful for binary analysis applications.
+      The Foundation library also defines a prefix tree data structure
+      that proves to be useful for binary analysis applications.
       {{!module:Trie}Trie}s in BAP is a functor that derives a
       polymorphic trie data structure for a given
       {{!modtype:Trie.Key}Key}.
@@ -418,20 +445,19 @@ module Std : sig
 
   *)
 
+  (** {2:plugins Writing Program Analysis Plugins}
 
-  (** {2:project Writing Program Analysis Plugins}
-
-      To write a program analysis plugin you need to implement a
-      function with one of the following interfaces:
+      To write a program analysis plugin (or pass in short) you need to
+      implement a function with one of the following interfaces:
 
       - [project -> project] and register it with
-        {{!Project.register_plugin}register_plugin};
+        {{!Project.register_pass}register_pass};
       - [project -> unit] and register it with
-         {{!Project.register_plugin'}register_plugin'};
+         {{!Project.register_pass'}register_pass'};
       - [string array -> project -> project] and register it with
-        {{!Project.register_plugin_with_args}register_plugin_with_args};
+        {{!Project.register_pass_with_args}register_pass_with_args};
       - [string array -> project -> unit] and register it with
-        {{!Project.register_plugin_with_args'}register_plugin_with_args'}.
+        {{!Project.register_pass_with_args'}register_pass_with_args'}.
 
       Once loaded from the [bap] utility (see [man bap]) this function
       will be invoked with a value of type {{!Project.t}project} that
@@ -452,24 +478,20 @@ module Std : sig
       [Dict] data structure. One can also annotate program by
       attaching attributes to IR terms.
 
-      {3 Predefined tags}
+      {3 Memory marks}
 
-      Depending on the analysis performed and input parameters there
-      would be different values in memory maps and storage.
-      Here are summary
+      By default the memory is marked with the following marks:
 
       - {{!Image.region}region} -- for regions of memory that had a
       particular name in the original binary. For example, in ELF,
       sections have names that annotate a corresponding memory
-      region. Of course, this will be available only if the project
-      was loaded from some binary container.
+      region. If project was created from memory object, then the
+      overall memory will be marked as a ["bap.user"] region.
 
       - {{!Image.section}section} -- if the binary data was loaded
       from a binary format that contains sections (aka segments), then
       the corresponding memory regions are be marked. Sections provide
       access to permission information.
-
-      - {{!Image.symbol}symbol} -- for annotating with symbol names.
   *)
 
 
@@ -1257,7 +1279,7 @@ module Std : sig
         | MOD     (** Unsigned modulus. *)
         | SMOD    (** Signed modulus. *)
         | LSHIFT  (** Left shift. *)
-        | RSHIFT  (** Right shift, fill with 0. *)
+        | RSHIFT  (** Right shift, zero padding. *)
         | ARSHIFT (** Right shift, sign extend. *)
         | AND     (** Bitwise and. (commutative, associative) *)
         | OR      (** Bitwise or. (commutative, associative) *)
@@ -2179,6 +2201,10 @@ module Std : sig
   module Seq : sig
     type 'a t = 'a Sequence.t
     include module type of Sequence with type 'a t := 'a t
+
+    (** for compatibility with Core <= 111.28  *)
+    val filter : 'a t -> f:('a -> bool) -> 'a t
+
     val of_array : 'a array -> 'a t
 
     val cons : 'a -> 'a t -> 'a t
@@ -2650,7 +2676,7 @@ module Std : sig
 
     (** [to_sequence tab] converts the table [t] to a
         sequence of key-value pairs.  *)
-    val to_sequence : ('a t -> (mem * 'a) Sequence.t) ranged
+    val to_sequence : ('a t -> (mem * 'a) seq) ranged
 
 
     (** [regions table] returns in an ascending order of addresses all
@@ -2901,6 +2927,10 @@ module Std : sig
         and [tag] is a [tag] assosiated with that region. *)
     val mapi : 'a t -> f:(mem -> 'a -> 'b) -> 'b t
 
+    (** [filter map f] returns a map that contains only those elements
+        for which [f] evaluated to [true] *)
+    val filter : 'a t -> f:('a -> bool) -> 'a t
+
     (** [filter_map m f] creates a new map by applying a function [f] to
         each tag. If [f] returns [Some x] then this region will be mapped
         to [x] in a new map, otherwise it will be dropped. *)
@@ -3033,8 +3063,18 @@ module Std : sig
         the disassembling *)
     val errors : t -> (mem * error) seq
 
-    (** Tags to annotate memory  *)
+    (** {2 Tags}  *)
+
+    (** start of basic block  *)
+    val block : addr tag
+
+    (** machine instruction  *)
     val insn : insn tag
+
+    (** address of instruction  *)
+    val insn_addr : addr tag
+
+
   end
 
   (** Kinds of instructions  *)
@@ -3128,6 +3168,42 @@ module Std : sig
 
   type op = Op.t with bin_io, compare, sexp_of
 
+  type symtab
+
+  (** Reconstructed symbol table  *)
+  module Symtab : sig
+
+    (** symbol table  *)
+    type t = symtab
+
+    (** symbol table entry  *)
+    type fn
+
+    val reconstruct :
+      ?name:(addr -> string option) ->
+      ?roots:addr list -> block table -> t
+
+    val add_symbol : t -> string -> block -> block seq -> t
+
+    val remove : t -> fn -> t
+
+    val find_by_name  : t -> string -> fn option
+
+    val find_by_start : t -> addr -> fn option
+
+    val fns_of_addr : t -> addr -> fn list
+
+    val fns_of_mem : t -> mem -> fn list
+
+    val create_bound : t -> fn -> (addr -> bool) Staged.t
+
+    val to_sequence : t -> fn seq
+
+    val name_of_fn : fn -> string
+    val entry_of_fn : fn -> block
+    val memory_of_fn : t -> fn -> unit memmap
+
+  end
 
   (** ABI interface.
       Each ABI object must implement this interface. *)
@@ -3200,8 +3276,7 @@ module Std : sig
 
   (** symbol name may be provided if known. Also an access
       to the whole binary image is provided if there is one. *)
-  type abi_constructor =
-    ?image:image -> ?sym:string -> mem -> block -> abi
+  type abi_constructor = Symtab.t -> Symtab.fn -> abi
 
 
   (** A BIL model of CPU
@@ -3282,8 +3357,7 @@ module Std : sig
         valid ABI are returned. *)
     val create :
       ?merge:(abi list -> abi) ->
-      ?image:image ->
-      ?sym:string -> mem -> block -> abi
+      Symtab.t -> Symtab.fn -> abi
 
     (** [merge abis] create an abi that tries to take best from all
         provided abi. If the input list is empty, then the stub abi
@@ -3747,7 +3821,7 @@ module Std : sig
     val dfs :
       ?order:[`post | `pre] ->        (** defaults to pre *)
       ?next:(t -> t seq) ->           (** defaults to succs  *)
-      ?bound:mem -> t -> t seq
+      ?bound:(addr -> bool) -> t -> t seq
 
 
     (** A classic control flow graph using OCamlgraph library.
@@ -3781,9 +3855,9 @@ module Std : sig
         [bound].
         @param bound defaults to infinite memory region.
     *)
-    val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
+    val to_graph : ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.t
     val to_imperative_graph :
-      ?bound:mem -> t -> Cfg.Block.t * Cfg.Imperative.t
+      ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.Imperative.t
   end
 
 
@@ -3806,8 +3880,13 @@ module Std : sig
     val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> bil Or_error.t
   end
 
-  (** [target_of_arch arch] creates a module for the given [arch], if
-      [arch] is not lifted, the stub module is returned. *)
+  (** [target_of_arch arch] returns a module packed into value, that
+      abstracts target architecture. The returned module has type
+      {!Target} and can be unpacked locally with:
+      {[
+        let module Target = (val Project.target project) in
+      ]}
+ *)
   val target_of_arch : arch -> (module Target)
 
 
@@ -3820,9 +3899,7 @@ module Std : sig
       include ABI
 
       (** [gnueabi] ABI  *)
-      class gnueabi :
-        ?image:image ->
-        ?sym:string -> mem -> block -> abi
+      class gnueabi : Symtab.t -> Symtab.fn -> abi
 
     end
 
@@ -4212,25 +4289,7 @@ module Std : sig
     module ABI : ABI
   end
 
-  (** @deprecated will be removed soon  *)
-  module Symtab : sig
-    type t = string table
 
-    (** [create roots base cfg]
-        creates a symbol table from [cfg]. If no roots are
-        provided, then only calls
-    *)
-    val create : addr list -> mem -> block table -> t
-
-    module Graph : Graph.Sig.P
-      with type V.label = mem * string (** function body *)
-       and type E.label = addr         (** callsite  *)
-
-
-    (** [to_graph blocks syms] creates a callgraph. Edges of the graph
-        are labeled with a callsite *)
-    val to_graph : block table -> t -> Graph.t
-  end
 
   (** BAP IR.
 
@@ -4470,7 +4529,7 @@ module Std : sig
 
     (** [lift roots cfg] takes a set of function starts and a whole
         program cfg and returns a program term. *)
-    val lift : addr list -> block table -> program term
+    val lift : symtab -> program term
 
     (** [lookup t program id] is like {{!find}find} but performs deep
         lookup in the whole [program] for a term with a given [id].
@@ -4511,7 +4570,7 @@ module Std : sig
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
-    val lift : block -> sub term
+    val lift : ?bound:(addr -> bool) -> block -> sub term
 
     (** [name sub] returns a subroutine name  *)
     val name : t -> string
@@ -4576,6 +4635,9 @@ module Std : sig
         lifts it to a list of blk terms. The first term in the list
         is the entry. *)
     val lift : block -> blk term list
+
+
+    val from_insn : insn -> blk term list
 
     (** [split_while blk ~f] splits [blk] into two block: the first
         block holds all definitions for which [f p] is true and has
@@ -4872,26 +4934,101 @@ module Std : sig
   (** Target of analysis.  *)
   module Project : sig
     (** A project groups together all the information recovered from
-        the underlying binary information. It is also used for
-        interaction between plugins.  *)
+        the underlying binary. It is also used for exchanging
+        information between {{!plugins}passes}.  *)
 
-    type t = {
-      arch    : arch;               (** architecture  *)
-      disasm  : disasm;             (** disassembly of a program *)
-      memory  : value memmap;       (** annotations  *)
-      storage : dict;               (** arbitrary data storage *)
-      program : program term;       (** Program lifter to BAP IR  *)
+    type t
 
-      (** Deprecated fields, the will be removed in a next release. *)
-      symbols : string table;       (** @deprecated symbol table  *)
-      base    : mem;                (** @deprecated base memory  *)
-    }
+    (** [from_file filename] creates a project from a binary file. The
+        file must be in format, supportable by some of our loader plugins,
+        e.g., ELF, COFF, MACH-O, etc.
 
-    (** [substitute ?tags p] apply substitutions in text values
-        associated with the provided tags in project memory. [tags]
-        defaults to [[comment; python; shell]].
+        @param on_warning is a function that will be called if some
+        non-critical problem has occurred during loading file;
 
-        The following substitutions are performed:
+        @param name is a naming function, that allows to specify a
+        name for a function starting at give address. If [None] is
+        provided, then the default naming scheme will be used, i.e.,
+        [sub_ADDR].
+
+        @param backend allows to choose loader plugin
+
+        @param roots allows to provide starting approximation of the
+        roots for recursive disassembling procedure. Each root should
+        be a start of a function.*)
+    val from_file :
+      ?on_warning:(Error.t -> unit Or_error.t) ->
+      ?backend:string ->
+      ?name:(addr -> string option) ->
+      ?roots:addr list ->
+      string -> t Or_error.t
+
+    (** [from_image image] is like {!from_file} but accepts already
+        loaded image of a binary file *)
+    val from_image :
+      ?name:(addr -> string option) ->
+      ?roots:addr list ->
+      image -> t Or_error.t
+
+    (** [from_mem arch mem] creates a project directly from a memory
+        object. Parameters [name] and [roots] has the same meaning as
+        in {!from_file}  *)
+    val from_mem :
+      ?name:(addr -> string option) ->
+      ?roots:addr list ->
+      arch -> mem -> t Or_error.t
+
+    (** [from_string arch string] creates a memory object from a
+        provided string and uses {!from_mem} to create a project.  *)
+    val from_string :
+      ?base:addr ->
+      ?name:(addr -> string option) ->
+      ?roots:addr list ->
+      arch -> string -> t Or_error.t
+
+    (** [from_bigstring arch bigstring] is the same as {!from_string}
+        but accepts a value of type [bigstring] *)
+    val from_bigstring :
+      ?base:addr ->
+      ?name:(addr -> string option) ->
+      ?roots:addr list ->
+      arch -> Bigstring.t -> t Or_error.t
+
+    (** [arch project] reveals the architecture of a loaded file  *)
+    val arch : t -> arch
+
+    (** [disasm project] returns results of disassembling  *)
+    val disasm : t -> disasm
+
+    (** [program project] returns a program lifted into {{!sema}IR}  *)
+    val program : t -> program term
+
+    (** [symbols t] returns reconstructed symbol table  *)
+    val symbols : t -> symtab
+
+    (** [with_symbols project symbols] updates [project] symbols  *)
+    val with_symbols : t -> symtab -> t
+
+    (** [memory t] returns the memory as an interval tree marked with
+        arbitrary values.   *)
+    val memory : t -> value memmap
+
+    (** [tag_memory project region tag value] tags given [region] of
+        memory in [project] with a given [tag] and [value]. Example:
+        [Project.tag_memory project tained color red]
+    *)
+    val tag_memory : t -> mem -> 'a tag -> 'a -> t
+
+    (** [substitute p region tag value] is like
+        {{!tag_memory}tag_memory}, but it will also apply
+        substitutions in the provided string value, as per OCaml
+        standard library's [Buffer.add_substitute] function.
+
+        Example: {[
+          Project.substitute project comment "$symbol starts at $symbol_addr"
+        ]}
+
+        The following substitutions are supported:
 
         - [$region{_name,_addr,_min_addr,_max_addr}] - name of region of file
         to which it belongs. For example, in ELF this name will
@@ -4910,22 +5047,88 @@ module Std : sig
         - [$min_addr, $addr] - starting address of a memory region
 
         - [$max_addr] - address of the last byte of a memory region. *)
-    val substitute : ?tags:string tag list ->  t -> t
+    val substitute : t -> mem -> string tag -> string -> t
+
+    (** [with_memory project] updates project memory. It is
+        recommended to use {!tag_memory} and {!substitute} instead of this
+        function, if possible.  *)
+    val with_memory : t -> value memmap -> t
+
+    (** {3 Extensible record}
+
+        Project can also be viewed as an extensible record, where one
+        can store arbitrary values. Example,
+        {[
+          let p = Project.set project color `green
+        ]}
+        This will set field [color] to a value [`green].*)
+
+    (** [set project field value] sets a [field] to a give value. If
+        [field] was already set, then new value overrides the old
+        one. Otherwise the field is added.  *)
+    val set : t -> 'a tag -> 'a -> t
+
+    (** [get project field] returns the value of the [field] if it
+        exists *)
+    val get : t -> 'a tag -> 'a option
+
+    (** [has project field] checks whether field exists or not. Useful
+        for fields of type unit, that actually isomorphic to bool fields,
+        e.g., [if Project.has project mark]
+    *)
+    val has : t -> 'a tag -> bool
+
+    (** {3 Registering and running passes}
+
+        To add new pass one of the following [register_*] functions
+        should be called.
+
+    *)
+
+    (** [register_pass name pass] registers project transformation,
+        that doesn't require command line arguments. *)
+    val register_pass : string -> (t -> t) -> unit
+
+    (** [register_pass name pass] registers [pass] that doesn't modify
+        the project effect and is run only for side effect.  *)
+    val register_pass': string -> (t -> unit) -> unit
+
+    (** [register_pass_with_args name pass] registers [pass] that
+        requires command line arguments. The arguments will be passed
+        in the first parameter of the [pass] function.  *)
+    val register_pass_with_args : string -> (string array -> t -> t) -> unit
+
+    (** [register_pass_with_args' name pass] register a [pass] that
+        requires arguments for a side effect *)
+    val register_pass_with_args' : string -> (string array -> t -> unit) -> unit
 
 
-    (** [register plugin] registers [plugin] in the system  *)
-    val register_plugin : (t -> t) -> unit
+    (** [run_pass ?argv name project] runs a pass that has a provided
+        [name]. Returns [None] if no such pass was registered.
 
-    (** [register' plugin] registers a [plugin] that will be
-        evaluated only for side effect. *)
-    val register_plugin': (t -> unit) -> unit
+        If pass requires command line arguments then they will be
+        provided to a pass as a first parameter. The arguments will be
+        extracted from [argv] array (which defaults to [Sys.argv]) by
+        removing all arguments that doesn't start with
+        [--name-]. Then, from all command arguments that are left, the
+        [--name-] prefix is substituted with [--]. For example, if
+        [argv] contained [ [| "bap"; "-lcallgraph";
+        "--callgraph-help"|]] then pass that registered itself under
+        [callgraph] name will receive the following array of arguments
+        [ [| "callgraph"; --help |] ]. That means, that plugins can't
+        accept arguments that are anonymous or short options.
 
-    val register_plugin_with_args : (string array -> t -> t) -> unit
+        Note: currently only the following syntax is supported:
+         [--plugin-name-agrument-name=value], the following IS NOT
+         supported [--plugin-name-argument-name value].
+    *)
+    val run_pass : ?argv:string array -> string -> t -> t option
 
-    val register_plugin_with_args' : (string array -> t -> unit) -> unit
-
-    (** A list of registered plugins in the order of registration  *)
-    val plugins : unit -> (string array -> t -> t) list
+    (** [run_passes ?argv project] folds [project] over all registered
+        passes. Passes are invoked in the order of
+        registration. Command line arguments are passed as described
+        in {!run_pass} function.  *)
+    val run_passes : ?argv:string array -> t -> t
   end
 
   type project = Project.t

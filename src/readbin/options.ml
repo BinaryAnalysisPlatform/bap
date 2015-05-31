@@ -30,6 +30,7 @@ type t = {
   plugins : string list;
   emit_ida_script : string option;
   load_path : string list;
+  emit_attr : string list;
 } with sexp, fields
 
 module type Provider = sig

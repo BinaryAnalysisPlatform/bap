@@ -48,8 +48,7 @@ end
 module Vis = Addr.Hash_set
 
 let bounded bound addr =
-  Option.value_map bound
-    ~default:true ~f:(fun m -> Memory.contains m addr)
+  Option.value_map bound ~default:true ~f:(fun f -> f addr)
 
 let skip bound visited blk =
   let addr = Block.addr blk in
@@ -65,12 +64,12 @@ module Build(G : Graph.Builder.S
       if skip bound vis src then gr
       else Seq.fold (Block.dests src)
           ~init:(G.add_vertex gr src)
-          ~f:(fun gr dest ->
-              Hash_set.add vis (Block.addr src);
-              match dest with
+          ~f:(fun gr -> function
               | `Unresolved _ -> gr
-              | `Block (dst,_) when skip bound vis dst -> gr
+              | `Block (dst,_)
+                when not (bounded bound (Block.addr dst)) -> gr
               | `Block (dst,kind) ->
+                Hash_set.add vis (Block.addr src);
                 let edge = Cfg.E.create src kind dst in
                 let gr = G.add_edge_e gr edge in
                 build gr dst) in

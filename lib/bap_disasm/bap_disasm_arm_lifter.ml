@@ -1041,28 +1041,6 @@ let arm_ops_exn ops () =
 let arm_ops ops = try_with (arm_ops_exn ops)
 
 
-let insn_exn mem insn =
-  let open Arm.Insn in
-  let name = Basic.Insn.name insn in
-  Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
-  >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
-  Memory.get ~scale:(size ) mem >>| fun word ->
-  match Arm.Insn.create insn with
-  | None -> [Bil.special (sprintf "unsupported: %s" name)]
-  | Some arm_insn -> match arm_ops (Basic.Insn.ops insn) with
-    | Error err -> [Bil.special (Error.to_string_hum err)]
-    | Ok ops -> match arm_insn with
-      | #move as op -> lift_move word ops op
-      | #bits as op -> lift_bits word ops op
-      | #mult as op -> lift_mult ops op
-      | #mem  as op -> lift_mem  ops op
-      | #branch as op -> lift_branch mem ops op
-      | #special as op -> lift_special ops op
-
-let lift mem insn =
-  try insn_exn mem insn with
-  | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
-  | exn -> of_exn exn
 
 
 module CPU = struct
@@ -1125,3 +1103,36 @@ module CPU = struct
   let is_permanent = Set.mem perms
   let is_mem = is mem
 end
+
+
+(** Substitute PC with its value  *)
+let resolve_pc mem = Bil.map (object(self)
+    inherit Bil.mapper as super
+    method! map_var var =
+      if Var.(equal var CPU.pc) then
+        Bil.int (CPU.addr_of_pc mem)
+      else super#map_var var
+  end)
+
+let insn_exn mem insn : bil Or_error.t =
+  let open Arm.Insn in
+  let name = Basic.Insn.name insn in
+  Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
+  >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
+  Memory.get ~scale:(size ) mem >>| fun word ->
+  match Arm.Insn.create insn with
+  | None -> [Bil.special (sprintf "unsupported: %s" name)]
+  | Some arm_insn -> match arm_ops (Basic.Insn.ops insn) with
+    | Error err -> [Bil.special (Error.to_string_hum err)]
+    | Ok ops -> match arm_insn with
+      | #move as op -> lift_move word ops op
+      | #bits as op -> lift_bits word ops op
+      | #mult as op -> lift_mult ops op
+      | #mem  as op -> lift_mem  ops op
+      | #branch as op -> lift_branch mem ops op
+      | #special as op -> lift_special ops op
+
+let lift mem insn =
+  try insn_exn mem insn >>| resolve_pc mem with
+  | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
+  | exn -> of_exn exn

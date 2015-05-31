@@ -2,6 +2,8 @@
 
 open Core_kernel.Std
 
+module LLVM = Bap_llvm_types
+
 type t
 
 external create : Bigstring.t -> t =
@@ -13,11 +15,11 @@ external arch : t -> string =
 external entry : t -> int64 =
   "llvm_binary_entry_stub"
 
-external segments : t -> Llvm_binary_segment.t list =
+external segments : t -> LLVM.Segment.t list =
   "llvm_binary_segments_stub"
 
-external symbols : t -> Llvm_binary_symbol.t list =
+external symbols : t -> LLVM.Symbol.t list =
   "llvm_binary_symbols_stub"
 
-external sections : t -> Llvm_binary_section.t list =
+external sections : t -> LLVM.Section.t list =
   "llvm_binary_sections_stub"

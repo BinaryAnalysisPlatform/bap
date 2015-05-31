@@ -2,13 +2,8 @@ open Core_kernel.Std
 
 type t
 
-(** [create ~system path] creates a plugin.
 
-    Parameter [system] denotes the name of the extension point where
-    the plugin would be plugged in. Path is should point to the plugin
-    file. Plugin name is set to the [basename path].
-*)
-val create : system:string -> string -> t
+val create : ?library:string list -> ?path:string -> system:string -> string -> t option
 
 (** [load plugin] loads given [plugin]  *)
 val load : t -> unit Or_error.t

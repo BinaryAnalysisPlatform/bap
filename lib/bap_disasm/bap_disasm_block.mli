@@ -45,7 +45,7 @@ include Block_traverse  with type t := t
 val dfs :
   ?order:[`post | `pre] ->        (** defaults to pre *)
   ?next:(t -> t seq) ->           (** defaults to succs  *)
-  ?bound:mem -> t -> t seq
+  ?bound:(addr -> bool) -> t -> t seq
 
 
 (** A classic control flow graph using OCamlgraph library.
@@ -79,9 +79,9 @@ end
     [bound].
     @param bound defaults to infinite memory region.
 *)
-val to_graph : ?bound:mem -> t -> Cfg.Block.t * Cfg.t
+val to_graph : ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.t
 val to_imperative_graph :
-  ?bound:mem -> t -> Cfg.Block.t * Cfg.Imperative.t
+  ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.Imperative.t
 
 
 (** lifting from a lower level  *)

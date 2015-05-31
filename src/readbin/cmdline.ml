@@ -166,10 +166,15 @@ let load_path : string list Term.t =
   Arg.(value & opt_all string [] &
        info ["load-path"; "L"] ~doc ~docv:"PATH")
 
+let emit_attr : string list Term.t =
+  let doc = "When printing IR emit attribute $(docv)" in
+  Arg.(value & opt_all string [] &
+       info ["emit-attr"; "A"] ~doc ~docv:"NAME")
+
 let create
-    a b c d e f g h i j k l m n o p q r s t u v x y =
+    a b c d e f g h i j k l m n o p q r s t u v x y z =
   Options.Fields.create
-    a b c d e f g h i j k l m n o p q r s t u v x y
+    a b c d e f g h i j k l m n o p q r s t u v x y z
 
 let program =
   let doc = "Binary Analysis Platform" in
@@ -224,7 +229,7 @@ let program =
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
         $print_symbols $use_ida $sigsfile $load
-        $emit_ida_script $load_path),
+        $emit_ida_script $load_path $emit_attr),
   Term.info "bap"
     ~version:Config.pkg_version ~doc ~man
 
