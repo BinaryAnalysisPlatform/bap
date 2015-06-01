@@ -79,11 +79,11 @@ module Handlers(Ctxt : sig
     let capabilities = Response.capabilities ~version ts ls ds in
     let (%) x f = List.map x ~f:Manager.string_of_id |> f in
     let images = Manager.images % Response.images in
-    let sections = Manager.sections % Response.sections in
+    let segments = Manager.segments % Response.segments in
     let symbols = Manager.symbols % Response.symbols in
     let chunks = Manager.chunks % Response.chunks in
     Lwt.List.iter ~f:reply
-      [capabilities; images; sections; symbols; chunks] >>=
+      [capabilities; images; segments; symbols; chunks] >>=
     Lwt.Or_error.return
 
   let reply_resource uri res =
@@ -164,22 +164,22 @@ module Handlers(Ctxt : sig
   let get_insns ?(backend="llvm") stop_on res_id =
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->
     let mems_of_img img =
-      Image.sections img |> Table.to_sequence |> Seq.to_list |>
-      List.filter ~f:(fun (_,s) -> Image.Sec.is_executable s) |>
+      Image.segments img |> Table.to_sequence |> Seq.to_list |>
+      List.filter ~f:(fun (_,s) -> Image.Segment.is_executable s) |>
       List.map ~f:fst   in
     let chunk r = Res.memory r |> get_mem >>|? List.return in
-    let section = chunk in
+    let segment = chunk in
     let symbol r =
       Res.memory r |> List1.to_list |>
       Lwt.Or_error.List.map ~f:get_mem in
     let image r = Res.image r |> Res.fetch_image >>|? mems_of_img >>|?
       List.map ~f:(fun mem -> Res.links r, mem)  in
-    Res.with_resource id ~chunk ~symbol ~section ~image
+    Res.with_resource id ~chunk ~symbol ~segment ~image
     >>=? fun ms ->
     let get_arch r = Lwt.Or_error.return (Res.arch r) in
     Res.with_resource id
       ~chunk:get_arch ~symbol:get_arch
-      ~section:get_arch ~image:get_arch >>=? fun arch ->
+      ~segment:get_arch ~image:get_arch >>=? fun arch ->
     let lifter = lifter_of_arch arch in
     let target = Arch.(match backend, arch with
         | "llvm", arch -> Ok (Arch.to_string arch)
@@ -206,17 +206,17 @@ module Handlers(Ctxt : sig
           let img = Res.image r in
           let img_id = Res.id r in
           let links = Res.links_of_image img in
-          let secs = Res.sections_of_image img_id |>
+          let secs = Res.segments_of_image img_id |>
                      List.map ~f:Res.string_of_id in
           Res.fetch_image img >>|? Tuple2.create links >>|?
           Response.image ~secs)
-      ~section:(fun r ->
-          let sec = Res.section r in
+      ~segment:(fun r ->
+          let sec = Res.segment r in
           let sec_id = Res.id r in
-          let syms = Res.symbols_of_section sec_id |>
+          let syms = Res.symbols_of_segment sec_id |>
                      List.map ~f:Res.string_of_id  in
           let mem = Res.memory r in
-          get_mem mem >>|? Response.section ~syms sec) >>=? fun msg ->
+          get_mem mem >>|? Response.segment ~syms sec) >>=? fun msg ->
     reply msg >>= Lwt.Or_error.return
 end
 

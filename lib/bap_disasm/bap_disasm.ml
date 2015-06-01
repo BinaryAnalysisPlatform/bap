@@ -137,9 +137,9 @@ let disassemble ?roots arch mem =
   | Error err -> fail (`Failed err) mem
   | Ok r -> of_rec r
 
-(* merges the results of disassembling of different sections,
+(* merges the results of disassembling of different segments,
    table entries mustn't overlap. *)
-let merge_different_sections d1 d2 =
+let merge_different_segments d1 d2 =
   let add mem x tab = Table.add tab mem x |> ok_exn in
   let merge t1 t2 = Table.foldi t1 ~init:t2 ~f:add in
   let memmap = merge d1.memmap d2.memmap in
@@ -153,9 +153,9 @@ let disassemble_image ?roots image =
     | Some roots -> roots
     | None -> Image.symbols image |> Table.regions |>
               Seq.map ~f:Memory.min_addr |> Seq.to_list in
-  Table.foldi ~init:empty (Image.sections image) ~f:(fun mem sec dis ->
-      if Image.Sec.is_executable sec then
-        merge_different_sections dis (disassemble ~roots arch mem)
+  Table.foldi ~init:empty (Image.segments image) ~f:(fun mem sec dis ->
+      if Image.Segment.is_executable sec then
+        merge_different_segments dis (disassemble ~roots arch mem)
       else dis)
 
 let disassemble_file ?roots filename =

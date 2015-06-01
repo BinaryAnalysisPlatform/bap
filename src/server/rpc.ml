@@ -148,7 +148,7 @@ module Response = struct
 
   let list_of_perm sec =
     let (:=) v f = Option.some_if (f sec) v in
-    List.filter_opt Image.Sec.([
+    List.filter_opt Image.Segment.([
         "r" := is_readable;
         "w" := is_writable;
         "x" := is_executable;
@@ -165,13 +165,13 @@ module Response = struct
       "addr_size", string / Int.to_string / Size.to_bits / addr_size;
       "endian", string / Adt.string_of_endian / endian;
     ] @ optional_field "file" string (filename image) @ [
-      "sections", strings secs;
+      "segments", strings secs;
     ]
 
 
 
   let symbol s mems : msg =
-    let open Image.Sym in [
+    let open Image.Symbol in [
       "symbol", dict @@ [
         "name", string @@ name s;
         "is_function", bool @@ is_function s;
@@ -183,16 +183,16 @@ module Response = struct
       ]
     ]
 
-  let section ~syms s mem : msg = [
-    "section", dict @@ [
-      "name", string @@ Image.Sec.name s;
+  let segment ~syms s mem : msg = [
+    "segment", dict @@ [
+      "name", string @@ Image.Segment.name s;
       "perm", strings @@ list_of_perm s;
       "symbols", strings syms;
     ] @ memory mem
   ]
 
   let resources name rs : msg = [name, strings rs]
-  let sections = resources "sections"
+  let segments = resources "segments"
   let symbols = resources "symbols"
   let images = resources "images"
   let chunks = resources "chunks"

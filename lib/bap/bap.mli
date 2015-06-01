@@ -217,7 +217,7 @@ module Std : sig
         segment tree or interval map;
 
       - {{!Image}image} - represents a binary object with all its
-       symbols, sections and other meta information.
+       symbols, segments, sections and other meta information.
 
       The [Image] module uses the plugin system to load binary
       objects. In order to add new loader, one should implement the
@@ -482,17 +482,16 @@ module Std : sig
 
       By default the memory is marked with the following marks:
 
-      - {{!Image.region}region} -- for regions of memory that had a
+      - {{!Image.section}section} -- for regions of memory that had a
       particular name in the original binary. For example, in ELF,
       sections have names that annotate a corresponding memory
       region. If project was created from memory object, then the
-      overall memory will be marked as a ["bap.user"] region.
+      overall memory will be marked as a ["bap.user"] section.
 
-      - {{!Image.section}section} -- if the binary data was loaded
-      from a binary format that contains sections (aka segments), then
-      the corresponding memory regions are be marked. Sections provide
-      access to permission information.
-  *)
+      - {{!Image.segment}segment} -- if the binary data was loaded
+      from a binary format that contains segments, then the
+      corresponding memory regions are be marked. Segments provide
+      access to permission information.  *)
 
 
   (** {2:aux Auxiliary libraries}
@@ -2713,10 +2712,10 @@ module Std : sig
 
     (** A named contiguous part of file with permissions.
         Also, known as segment in ELF.    *)
-    module Section : sig
+    module Segment : sig
       type t = {
         name: string;
-        perm: perm;         (** section's permissions  *)
+        perm: perm;         (** segment's permissions  *)
         off: int;
         location : location;
       } with bin_io, compare, fields, sexp
@@ -2724,7 +2723,7 @@ module Std : sig
 
     (** Symbol definition, that can span several non-contiguous parts of
         memory *)
-    module Sym : sig
+    module Symbol : sig
       type t = {
         name : string;
         is_function : bool;
@@ -2733,8 +2732,8 @@ module Std : sig
       } with bin_io, compare, fields, sexp
     end
 
-    (** Just a named region of memory. (Known as section in ELF)  *)
-    module Region : sig
+    (** Just a named region of memory.  *)
+    module Section : sig
       type t = {
         name : string;
         location : location;
@@ -2746,9 +2745,9 @@ module Std : sig
       type t = {
         arch     : arch;
         entry    : addr;
-        sections : Section.t * Section.t list;
-        symbols  : Sym.t list;
-        regions  : Region.t list;
+        segments : Segment.t * Segment.t list;
+        symbols  : Symbol.t list;
+        sections  : Section.t list;
       } with bin_io, compare, fields, sexp
     end
 
@@ -2763,10 +2762,10 @@ module Std : sig
 
     type t = image with sexp_of            (** image   *)
 
-    (** section *)
-    type sec with bin_io, compare, sexp
+    (** segment *)
+    type segment with bin_io, compare, sexp
     (** symbol  *)
-    type sym with bin_io, compare, sexp
+    type symbol with bin_io, compare, sexp
 
     type path = string
 
@@ -2806,29 +2805,29 @@ module Std : sig
 
     (** {2 Tables }  *)
     val words : t -> size -> word table
-    val sections : t -> sec table
-    val symbols : t -> sym table
+    val segments : t -> segment table
+    val symbols : t -> symbol table
 
     (** {2 Tags}  *)
-    val section : sec tag
+    val segment : segment tag
     val symbol  : string tag
-    val region  : string tag
+    val section : string tag
 
     (** returns memory, annotated with tags  *)
     val memory : t -> value memmap
 
     (** {2 Mappings }  *)
-    val memory_of_section  : t -> sec -> mem
+    val memory_of_segment  : t -> segment -> mem
     (** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)
-    val memory_of_symbol   : t -> sym -> mem * mem seq
-    val symbols_of_section : t -> sec -> sym seq
-    val section_of_symbol  : t -> sym -> sec
+    val memory_of_symbol   : t -> symbol -> mem * mem seq
+    val symbols_of_segment : t -> segment -> symbol seq
+    val segment_of_symbol  : t -> symbol -> segment
 
-    (** Image Section.
-        Section is a contiguous region of memory that has
+    (** Image Segments.
+        Segment is a contiguous region of memory that has
         permissions. The same as segment in ELF.    *)
-    module Sec : sig
-      type t = sec
+    module Segment : sig
+      type t = segment
       include Regular with type t := t
       val name : t -> string
       val is_writable   : t -> bool
@@ -2837,8 +2836,8 @@ module Std : sig
     end
 
     (** Symbol.  *)
-    module Sym : sig
-      type t = sym
+    module Symbol : sig
+      type t = symbol
       include Regular with type t := t
       val name : t -> string
       val is_function : t -> bool
@@ -2983,7 +2982,7 @@ module Std : sig
   val disassemble : ?roots:addr list -> arch -> mem -> disasm
 
   (** [disassemble_image image] disassemble given image.
-      Will take executable sections of the image and disassemble it,
+      Will take executable segments of the image and disassemble it,
       applying [disassemble] function. If no roots are specified, then
       symbol table will be used as a source of roots. If file doesn't
       contain one, then entry point will be used.
@@ -5030,7 +5029,7 @@ module Std : sig
 
         The following substitutions are supported:
 
-        - [$region{_name,_addr,_min_addr,_max_addr}] - name of region of file
+        - [$section{_name,_addr,_min_addr,_max_addr}] - name of region of file
         to which it belongs. For example, in ELF this name will
         correspond to the section name
 

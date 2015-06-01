@@ -20,7 +20,7 @@ type bound = [`min | `max] with sexp
 type spec = [`name | bound] with sexp
 
 type subst = [
-  | `region of spec
+  | `section of spec
   | `symbol of spec
   | `memory of bound
   | `block of bound
@@ -36,7 +36,7 @@ let from_mem ?name ?roots arch mem : t Or_error.t =
   let symbols = Symtab.reconstruct ?name ~roots cfg in
   let program = Program.lift symbols in
   let memory =
-    Memmap.add Memmap.empty mem (Value.create Image.region "bap.user") in
+    Memmap.add Memmap.empty mem (Value.create Image.section "bap.user") in
   let storage = Dict.empty in
   Ok ({arch; disasm; memory; storage; program; symbols})
 
@@ -60,7 +60,7 @@ let from_image ?(name=fun _ -> None) ?(roots=[]) img =
   let name addr = match name addr with
     | Some name -> Some name
     | None -> Table.find_addr (Image.symbols img) addr |>
-              Option.map ~f:(fun (_,sym) -> Image.Sym.name sym) in
+              Option.map ~f:(fun (_,sym) -> Image.Symbol.name sym) in
   let roots = roots @ image_roots in
   let disasm = disassemble_image ~roots img in
   let cfg = Disasm.blocks disasm in
@@ -97,9 +97,9 @@ let get t = Dict.find t.storage
 let has t = Dict.mem t.storage
 
 let subst_of_string = function
-  | "region" | "region_name" -> Some (`region `name)
-  | "region_addr" | "region_min_addr" -> Some (`region `min)
-  | "region_max_addr" -> Some (`region `max)
+  | "section" | "section_name" -> Some (`section `name)
+  | "section_addr" | "section_min_addr" -> Some (`section `min)
+  | "section_max_addr" -> Some (`section `max)
   | "symbol" | "symbol_name" -> Some (`symbol `name)
   | "symbol_addr" | "symbol_min_addr" -> Some (`symbol `min)
   | "symbol_max_addr" -> Some (`symbol `max)
@@ -130,7 +130,7 @@ let substitute project mem tag value : t =
     Seq.find_map ~f:(fun (mem,v) -> match Value.get tag v with
         | Some reg -> Some (mem,reg)
         | None -> None) in
-  let find_region = find_tag Image.region in
+  let find_section = find_tag Image.section in
   let find_symbol mem =
     Symtab.fns_of_addr project.symbols (Memory.min_addr mem) |>
     List.hd |>
@@ -139,7 +139,7 @@ let substitute project mem tag value : t =
   let find_block mem =
     Table.find_addr (Disasm.blocks project.disasm)
       (Memory.min_addr mem) in
-  let subst_region (mem,name) = function
+  let subst_section (mem,name) = function
     | #bound as b -> addr b mem
     | `name -> name in
   let subst_block (mem,block) = function
@@ -160,10 +160,10 @@ let substitute project mem tag value : t =
   let sub mem x =
     let buf = Buffer.create (String.length x) in
     Buffer.add_substitute buf (fun x -> match subst_of_string x with
-        | Some (`region spec) ->
-          apply_subst find_region mem subst_region spec x
+        | Some (`section spec) ->
+          apply_subst find_section mem subst_section spec x
         | Some (`symbol spec) ->
-          apply_subst find_symbol mem subst_region spec x
+          apply_subst find_symbol mem subst_section spec x
         | Some (`memory bound) -> addr bound mem
         | Some (`block spec) ->
           apply_subst find_block mem subst_block spec x

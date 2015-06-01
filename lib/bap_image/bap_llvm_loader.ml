@@ -10,7 +10,7 @@ let make_addr arch addr =
   | `r32 -> Addr.of_int64 ~width:32 addr
   | `r64 -> Addr.of_int64 ~width:64 addr
 
-let to_section arch s : Section.t option =
+let to_segment arch s : Segment.t option =
   let module S = Binary.LLVM.Segment in
   let name = S.name s in
   let perm = [
@@ -25,11 +25,11 @@ let to_section arch s : Section.t option =
       ~len:(S.size s |> Int64.to_int_exn) in
   match perm with
   | Some perm when S.size s <> Int64.zero ->
-    Section.Fields.create ~name ~perm ~off ~location |>
+    Segment.Fields.create ~name ~perm ~off ~location |>
     Option.some
   | _ -> None
 
-let to_sym arch s : Sym.t option =
+let to_symbol arch s : Symbol.t option =
   let module S = Binary.LLVM.Symbol in
   let name = S.name s in
   let is_function = S.kind s = S.Function in
@@ -39,17 +39,17 @@ let to_sym arch s : Sym.t option =
       ~len:(S.size s |> Int64.to_int_exn), [] in
 
   if S.size s <> Int64.zero then
-    Sym.Fields.create ~name ~is_function ~is_debug ~locations |>
+    Symbol.Fields.create ~name ~is_function ~is_debug ~locations |>
     Option.some
   else None
 
-let to_region arch s : Region.t =
+let to_section arch s : Section.t =
   let module S = Binary.LLVM.Section in
   let name = S.name s in
   let location = Location.Fields.create
       ~addr:(S.addr s |> make_addr arch)
       ~len:(S.size s |> Int64.to_int_exn) in
-  Region.Fields.create ~name ~location
+  Section.Fields.create ~name ~location
 
 let from_data data : Img.t option =
   let from_data_exn () =
@@ -58,14 +58,14 @@ let from_data data : Img.t option =
                Arch.of_string |>
                (fun v -> Option.value_exn v) in
     let entry = Binary.entry b |> make_addr arch in
-    let sections =
-      Binary.segments b |> List.filter_map ~f:(to_section arch) |>
+    let segments =
+      Binary.segments b |> List.filter_map ~f:(to_segment arch) |>
       (fun s -> List.hd_exn s, List.tl_exn s) in
     let symbols =
-      Binary.symbols b |> List.filter_map ~f:(to_sym arch) in
-    let regions =
-      Binary.sections b |> List.map ~f:(to_region arch) in
-    Img.Fields.create ~arch ~entry ~sections ~symbols ~regions in
+      Binary.symbols b |> List.filter_map ~f:(to_symbol arch) in
+    let sections =
+      Binary.sections b |> List.map ~f:(to_section arch) in
+    Img.Fields.create ~arch ~entry ~segments ~symbols ~sections in
   Option.try_with from_data_exn
 
 
