@@ -3886,7 +3886,7 @@ module Std : sig
       {[
         let module Target = (val Project.target project) in
       ]}
- *)
+  *)
   val target_of_arch : arch -> (module Target)
 
 
@@ -5085,26 +5085,46 @@ module Std : sig
 
     *)
 
-    (** [register_pass name pass] registers project transformation,
-        that doesn't require command line arguments. *)
-    val register_pass : string -> (t -> t) -> unit
+    type 'a register = ?deps:string list -> string -> 'a -> unit
 
-    (** [register_pass name pass] registers [pass] that doesn't modify
-        the project effect and is run only for side effect.  *)
-    val register_pass': string -> (t -> unit) -> unit
 
     (** [register_pass_with_args name pass] registers [pass] that
         requires command line arguments. The arguments will be passed
-        in the first parameter of the [pass] function.  *)
-    val register_pass_with_args : string -> (string array -> t -> t) -> unit
+        in the first parameter of the [pass] function.
+
+        @param deps is list of dependencies. Each dependency is a name
+        of a pass. If dependency pass is not registered it will be
+        auto-loaded (See {!run_passes}) *)
+    val register_pass_with_args : (string array -> t -> t) register
+
+    (** [register_pass ?deps name pass] registers project transformation,
+        that doesn't require command line arguments.
+        (See {!register_pass_with_args})*)
+    val register_pass : (t -> t) register
+
+    (** [register_pass ?deps name pass] registers [pass] that doesn't modify
+        the project effect and is run only for side effect.
+        (See {!register_pass_with_args})  *)
+    val register_pass': (t -> unit) register
+
 
     (** [register_pass_with_args' name pass] register a [pass] that
-        requires arguments for a side effect *)
-    val register_pass_with_args' : string -> (string array -> t -> unit) -> unit
+        requires arguments for a side effect.
+        (See {!register_pass_with_args}) *)
+    val register_pass_with_args' : (string array -> t -> unit) register
 
+    (** [run_passes ?library ?argv project] folds [project] over all
+        registered passes. Passes are invoked in the order of
+        registration.
 
-    (** [run_pass ?argv name project] runs a pass that has a provided
-        [name]. Returns [None] if no such pass was registered.
+        If pass has dependencies, then they will be run before the
+        pass. The dependencies will be auto-loaded if needed. The
+        auto-loading procedure will look for the file with the
+        specified name (modulo hyphens) and [".plugin"] extension in
+        current folder and all folders specified with [library]
+        argument. If nothing found, then it will search for plugins of
+        system ["bap.pass"] using findlib. If the dependency cannot be
+        satisfied [run_pass] will terminate with error.
 
         If pass requires command line arguments then they will be
         provided to a pass as a first parameter. The arguments will be
@@ -5122,18 +5142,10 @@ module Std : sig
          [--plugin-name-agrument-name=value], the following IS NOT
          supported [--plugin-name-argument-name value].
     *)
-    val run_pass : ?argv:string array -> string -> t -> t option
-
-    (** [run_passes ?argv project] folds [project] over all registered
-        passes. Passes are invoked in the order of
-        registration. Command line arguments are passed as described
-        in {!run_pass} function.  *)
-    val run_passes : ?argv:string array -> t -> t
+    val run_passes : ?library:string list -> ?argv:string array -> t -> t Or_error.t
   end
 
   type project = Project.t
-
-
 
   (** Dwarf library
       This library gives an access to debugging information stored

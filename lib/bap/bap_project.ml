@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_plugins.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
@@ -171,13 +172,34 @@ let substitute project mem tag value : t =
     Buffer.contents buf in
   tag_memory project mem tag (sub mem value)
 
-let passes : (string * (string array -> t -> t)) list ref = ref []
-let register_pass_with_args n p =
-  passes := (n,p) :: !passes
-let register_pass_with_args' n v =
-  register_pass_with_args n (fun a p -> v a p; p)
-let register_pass n v = register_pass_with_args n (fun _arg p -> v p)
-let register_pass' n v = register_pass n (fun p -> v p; p)
+module DList = Doubly_linked
+
+type pass = {
+  name : string;
+  main : string array -> t -> t;
+  deps : string list;
+}
+
+type 'a register = ?deps:string list -> string -> 'a -> unit
+
+let passes : pass DList.t = DList.create ()
+
+let forget : pass DList.Elt.t -> unit = fun _ -> ()
+
+let find name : pass option =
+  DList.find passes ~f:(fun p -> p.name = name)
+
+let register_pass_with_args ?(deps=[]) name main : unit =
+  DList.insert_last passes {name; main; deps} |> forget
+
+let register_pass_with_args' ?deps n v : unit =
+  register_pass_with_args ?deps n (fun a p -> v a p; p)
+
+let register_pass ?deps n v : unit =
+  register_pass_with_args ?deps n (fun _arg p -> v p)
+
+let register_pass' ?deps n v : unit =
+  register_pass ?deps n (fun p -> v p; p)
 
 let prepare_args argv name =
   let prefix = "--" ^ name ^ "-" in
@@ -187,17 +209,31 @@ let prepare_args argv name =
         | None -> None
         | Some arg -> Some ("--" ^ arg))
 
-let run_it ?(argv=Sys.argv) (name,f) p = f (prepare_args argv name) p
 
-let find_pass name =
-  List.find (List.rev !passes) ~f:(fun (pass,f) -> name = pass)
+let load ?library name : pass Or_error.t =
+  match find name with
+  | Some pass -> Ok pass
+  | None -> match Plugin.create ?library ~system:"bap.pass" name with
+    | None -> errorf "Failed to auto-load plugin %s" name
+    | Some p -> Plugin.load p >>= fun () -> match find name with
+      | Some pass -> Ok pass
+      | None -> errorf "Plugin has not registered a pass"
 
-let run_pass ?argv name p =
-  let open Option.Monad_infix in
-  find_pass name >>| fun pass -> run_it ?argv pass p
+let rec run ?library ?(argv=Sys.argv) (passed,proj) name =
+  if List.mem passed name then (passed,proj)
+  else
+    let pass = load ?library name |> ok_exn in
+    let (passed,proj) = List.fold pass.deps ~init:(passed,proj)
+        ~f:(run ?library ~argv) in
+    let argv = prepare_args argv pass.name in
+    name :: passed, pass.main argv proj
 
-let run_passes ?argv p =
-  List.fold_right !passes ~init:p ~f:(run_it ?argv)
+let run_passes_exn ?library ?argv proj =
+  let passes = DList.to_list passes |> List.map ~f:(fun p -> p.name) in
+  match List.find_a_dup passes with
+  | Some name -> invalid_argf "%s is duplicated" name ()
+  | None ->
+    List.fold passes ~init:([],proj) ~f:(run ?library ?argv) |> snd
 
-
-let has_pass name = find_pass name <> None
+let run_passes ?library ?argv proj : t Or_error.t =
+  try_with (fun () -> run_passes_exn ?library ?argv proj)

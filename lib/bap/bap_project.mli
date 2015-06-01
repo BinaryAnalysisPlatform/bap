@@ -48,11 +48,11 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 
-val register_pass : string -> (t -> t) -> unit
-val register_pass': string -> (t -> unit) -> unit
-val register_pass_with_args : string -> (string array -> t -> t) -> unit
-val register_pass_with_args' : string -> (string array -> t -> unit) -> unit
+type 'a register = ?deps:string list -> string -> 'a -> unit
 
-val run_passes : ?argv:string array -> t -> t
-val run_pass : ?argv:string array -> string -> t -> t option
-val has_pass : string -> bool
+val register_pass : (t -> t) register
+val register_pass': (t -> unit) register
+val register_pass_with_args : (string array -> t -> t) register
+val register_pass_with_args' : (string array -> t -> unit) register
+
+val run_passes : ?library:string list -> ?argv:string array -> t -> t Or_error.t
