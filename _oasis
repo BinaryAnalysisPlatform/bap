@@ -69,6 +69,7 @@ Library bap
                    bap.image,
                    bap.llvm,
                    bap.llvm_loader,
+                   bap.plugins,
                    bap.sema,
                    bap.types
   Modules:         Bap

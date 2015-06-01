@@ -34,8 +34,9 @@ module Program(Conf : Options.Provider) = struct
 
   let run project =
     let system = "bap.pass" in
+    let library = options.load_path in
     List.iter options.plugins ~f:(fun name ->
-        Plugin.create ~library:options.load_path ~system name |>
+        Plugin.create ~library ~system name |>
         function
         | None ->
           invalid_argf "Failed to find plugin with name '%s'" name ()
@@ -45,7 +46,7 @@ module Program(Conf : Options.Provider) = struct
             invalid_argf "Failed to load plugin `%s': %s" name
               (Error.to_string_hum err) ());
 
-    let project = Project.run_passes project in
+    let project = Project.run_passes ~library project |> ok_exn in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
