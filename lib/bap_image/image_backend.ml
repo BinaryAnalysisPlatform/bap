@@ -6,10 +6,10 @@ type perm = R | W | X | Or of perm * perm
 with bin_io, compare, sexp
 
 (** A named contiguous part of file with permissions.  *)
-module Section = struct
+module Segment = struct
   type t = {
     name: string;
-    perm: perm;         (** section's permissions  *)
+    perm: perm;         (** segment's permissions  *)
     off: int;
     location : location;
   } with bin_io, compare, fields, sexp
@@ -17,7 +17,7 @@ end
 
 (** Symbol definition, that can span several non-contiguous parts of
     memory *)
-module Sym = struct
+module Symbol = struct
   type t = {
     name : string;
     is_function : bool;
@@ -26,7 +26,7 @@ module Sym = struct
   } with bin_io, compare, fields, sexp
 end
 
-module Region = struct
+module Section = struct
   type t = {
     name : string;
     location : location;
@@ -37,9 +37,9 @@ module Img = struct
   type t = {
     arch     : arch;
     entry    : addr;
-    sections : Section.t * Section.t list;
-    symbols  : Sym.t list;
-    regions  : Region.t list;
+    segments : Segment.t * Segment.t list;
+    symbols  : Symbol.t list;
+    sections : Section.t list;
   } with bin_io, compare, fields, sexp
 end
 

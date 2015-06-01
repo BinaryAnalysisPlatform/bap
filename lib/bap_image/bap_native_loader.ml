@@ -69,23 +69,23 @@ let create_symtab data endian elf  =
           len = Option.value size ~default:1
         }) in
       return {
-        Sym.name = name;
-        Sym.is_function = true;
-        Sym.is_debug = true;
-        Sym.locations = location, [];
+        Symbol.name = name;
+        is_function = true;
+        is_debug = true;
+        locations = location, [];
       }) in
   all (Sequence.to_list_rev seq)
 
 (** @return
-    [None] - if section should be skipped as non interesting,
+    [None] - if segment should be skipped as non interesting,
     [Some error] - if an error has occured when we have tried
-                   to load section,
-    [Some (Ok section)] - if we have loaded section at the end.
+                   to load segment,
+    [Some (Ok segment)] - if we have loaded segment at the end.
 *)
-let create_section make_addr i es : Section.t Or_error.t option =
+let create_segment make_addr i es : Segment.t Or_error.t option =
   if es.p_type <> PT_LOAD then None
   else
-    let section =
+    let segment =
       let name = sprintf "%02d" i in
       int_of_int64 es.p_filesz >>= fun len ->
       int_of_int64 es.p_offset >>= fun off ->
@@ -93,12 +93,12 @@ let create_section make_addr i es : Section.t Or_error.t option =
       let addr = make_addr es.p_vaddr in
       let location = Location.Fields.create ~len ~addr in
       return  {
-        Section.name;
-        Section.perm;
-        Section.off;
-        Section.location;
+        Segment.name;
+        Segment.perm;
+        Segment.off;
+        Segment.location;
       } in
-    match section with
+    match segment with
     | Error _ as err ->
       Some (tag_arg err "skipped segment" i sexp_of_int)
     | ok -> Some ok
@@ -134,8 +134,8 @@ let img_of_elf data elf : Img.t Or_error.t =
     | EM_MIPS_X, BigEndian -> Ok `mips64
     | EM_MIPS_X, LittleEndian -> Ok `mips64el
     | _ -> errorf "can't load file, unsupported platform" in
-  let sections,errors =
-    Seq.filter_mapi elf.e_segments (create_section addr) |>
+  let segments,errors =
+    Seq.filter_mapi elf.e_segments (create_segment addr) |>
     Seq.to_list |>
     List.partition_map ~f:(function
         | Ok s    -> `Fst s
@@ -146,21 +146,21 @@ let img_of_elf data elf : Img.t Or_error.t =
     | Error err ->
       [], Error.tag err "failed to read symbols" :: errors in
   arch >>= fun arch ->
-  let regions = Seq.filter_map elf.e_sections ~f:(fun s ->
+  let sections = Seq.filter_map elf.e_sections ~f:(fun s ->
       match Elf.section_name data elf s with
       | Error _ -> None
       | Ok name -> Some {
-          Region.name;
-          Region.location = {
+          Section.name;
+          Section.location = {
             Location.addr = addr s.sh_addr;
             Location.len  = Int64.to_int_exn s.sh_size;
           }
         }) |> Seq.to_list in
-  match sections with
-  | [] -> errorf "failed to read sections"
+  match segments with
+  | [] -> errorf "failed to read segments"
   | s::ss ->
     return @@
-    Img.Fields.create ~arch ~entry ~sections:(s,ss) ~symbols ~regions
+    Img.Fields.create ~arch ~entry ~segments:(s,ss) ~symbols ~sections
 
 let of_data_err (data : bigstring) : Img.t Or_error.t =
   Elf.Parse.from_bigstring data >>= img_of_elf data

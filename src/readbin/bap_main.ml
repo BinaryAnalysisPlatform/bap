@@ -159,8 +159,12 @@ module Program(Conf : Options.Provider) = struct
         List.iter warns ~f:(eprintf "Warning: %a@." Error.pp);
       let arch = Image.arch img in
       let symbols = symbols arch in
-      let roots = Map.keys symbols in
       let name = Map.find symbols in
+      let roots = Table.foldi (Image.segments img)
+          ~init:(Map.keys symbols) ~f:(fun mem sec roots ->
+              if Image.Segment.is_executable sec
+              then find_roots arch mem @ roots
+              else roots) in
       Project.from_image ~name ~roots img >>= fun proj ->
       run proj;
       return 0

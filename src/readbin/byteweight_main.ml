@@ -28,8 +28,8 @@ let train_on_file meth length db path : unit t =
       | Some s when meth = `update ->
         Binable.of_string (module BW) s
       | _ -> BW.create () in
-  Table.iteri (Image.sections img) ~f:(fun mem sec ->
-      if Image.Sec.is_executable sec then
+  Table.iteri (Image.segments img) ~f:(fun mem sec ->
+      if Image.Segment.is_executable sec then
         BW.train bw ~max_length:length test mem);
   let data = Binable.to_string (module BW) bw in
   Signatures.save ~mode:"bytes" ~path:db arch data
@@ -76,8 +76,8 @@ let create_bw img path : BW.t t =
 let find threshold length comp path input : unit t =
   Image.create input >>= fun (img,_warns) ->
   create_bw img path >>= fun bw ->
-  Table.iteri (Image.sections img) ~f:(fun mem sec ->
-      if Image.Sec.is_executable sec then
+  Table.iteri (Image.segments img) ~f:(fun mem sec ->
+      if Image.Segment.is_executable sec then
         let start = Memory.min_addr mem in
         let rec loop n =
           match BW.next bw ~length ~threshold mem n with
@@ -91,7 +91,7 @@ let symbols print_name print_size input : unit t =
   let syms = Image.symbols img in
   Table.iteri syms ~f:(fun mem sym ->
       let addr = Memory.min_addr mem in
-      let name = if print_name then Image.Sym.name sym else "" in
+      let name = if print_name then Image.Symbol.name sym else "" in
       let size = if print_size
         then sprintf "%4d " (Memory.length mem) else "" in
       printf "%a %s%s\n" Addr.pp addr size name);
@@ -102,9 +102,9 @@ let dump info length threshold path (input : string) : unit t =
   match info with
   | `BW ->
     create_bw img path >>= fun bw ->
-    let fs_set = Table.foldi (Image.sections img) ~init:Addr.Set.empty
+    let fs_set = Table.foldi (Image.segments img) ~init:Addr.Set.empty
         ~f:(fun mem sec fs_s ->
-            if Image.Sec.is_executable sec then
+            if Image.Segment.is_executable sec then
               let new_fs_s = BW.find bw ~length ~threshold mem in
               Addr.Set.union fs_s @@ Addr.Set.of_list new_fs_s
             else fs_s) in

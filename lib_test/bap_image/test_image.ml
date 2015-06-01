@@ -12,11 +12,11 @@ let create_addr = function
   | `r32 -> Addr.of_int64 ~width:32
   | `r64 -> Addr.of_int64 ~width:64
 
-let create_section
+let create_segment
     ?(name=".test")
     ?(addr=0)
     ?(perm=(Or (R,X)))
-    ~off ?size ?data asize : Section.t =
+    ~off ?size ?data asize : Segment.t =
   let (size, data) = match size, data with
     | None, None ->  4, String.create 4
     | Some size, None -> size, String.create size
@@ -24,7 +24,7 @@ let create_section
     | Some size, Some data -> size,data in
   let addr = create_addr asize (Int64.of_int addr) in
   let location = Location.Fields.create ~addr ~len:size in
-  Section.Fields.create ~name ~location ~perm ~off
+  Segment.Fields.create ~name ~location ~perm ~off
 
 
 let create_file () = String.create 0x1000
@@ -45,7 +45,7 @@ let data ?(base=0) ?(gap=0) f ss asize name =
         ~src:data ~src_pos:0
         ~dst      ~dst_pos:off ~len;
       addr_ref := !addr_ref + len + gap;
-      create_section ~off ~addr ~data asize)
+      create_segment ~off ~addr ~data asize)
 
 let seq (n,m) : string =
   String.init (m-n+1) ~f:(fun i -> Option.value_exn (Char.of_int (i+n)))
@@ -55,7 +55,7 @@ let nonempty = function
   | x :: xs -> x, xs
 
 let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
-  let sections = nonempty (ss addr_size name) in
+  let segments = nonempty (ss addr_size name) in
   let symbols = syms in
   let arch = match addr_size, endian with
     | `r32,LittleEndian -> `mipsel
@@ -63,9 +63,9 @@ let create ?(addr_size=`r32) ?(endian=LittleEndian) ~syms ss name =
     | `r64,LittleEndian -> `mips64el
     | `r64,BigEndian    -> `mips64 in
   let entry = create_addr addr_size 0L in
-  let regions = [] in
+  let sections = [] in
   let load _ =
-    Some (Img.Fields.create ~arch ~entry ~sections ~symbols ~regions) in
+    Some (Img.Fields.create ~arch ~entry ~segments ~symbols ~sections) in
   load
 
 let backends =

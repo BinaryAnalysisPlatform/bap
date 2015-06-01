@@ -2,9 +2,9 @@
 include Image_internal_std
 
 module Image   = Bap_image
-module Section = Image.Sec
-module Symbol  = Image.Sym
+module Segment = Image.Segment
+module Symbol  = Image.Symbol
 
 type image = Image.t
 type symbol  = Symbol.t with bin_io, compare, sexp
-type section = Section.t with bin_io, compare, sexp
+type segment = Segment.t with bin_io, compare, sexp
