@@ -1611,17 +1611,29 @@ module Std : sig
         of type ['a option]).
 
         For example, the following function will check whether [x]
-        variable is referenced in the provided scope.
+        variable is assigned (i.e., occurs on the left of the
+        assignment operator) in the provided scope.
         {[
-          let is_referenced x = find (object(self)
+          let is_assigned x = find (object(self)
               inherit [unit] finder
-              method! enter_var y cc =
+              method! enter_move y _rhs cc =
                 if Var.(x = y) then cc.return (Some ()); cc
             end)
-        ]} *)
+        ]}
+
+        There're three [find] functions in the library, that accepts
+        an object of type [finder]:
+
+        - [Bil.finder] searches in the [stmt list] aka [bil]
+        - [Stmt.finder] searches in [stmt]
+        - [Exp.finder] searches in [exp].
+
+        In addition, you can use this object directly, using one of
+        the two provided entry points.  *)
     class ['a] finder : object
       inherit ['a option return] visitor
-      method find : stmt list -> 'a option
+      method find_in_bil : stmt list -> 'a option
+      method find_in_exp : exp -> 'a option
     end
 
     (** AST transformation.
@@ -1667,48 +1679,56 @@ module Std : sig
 
     (** {2:bil_helpers BIL Helper functions}  *)
 
-    (** [find_map finder bil] search in the BIL   *)
-    val find_map : 'a #finder -> stmt list -> 'a option
 
-    (** [find finder bil] returns true if [finder] finds
-        something. Note a better name would be [exists] *)
-    val find : unit #finder -> stmt list -> bool
-
-    (** [iter visitor bil] apply a visitor for each node of a BIL
-        forest. *)
-    val iter : unit #visitor -> stmt list -> unit
+    (** {3 General purpose iterators}  *)
 
     (** [fold visitor ~init bil] folds visitor over BIL, passing init
-        value through the tree nodes.  *)
+        value through the tree nodes. See also {!Exp.fold} and
+        {!Stmt.fold}.  *)
     val fold : 'a #visitor -> init:'a -> stmt list -> 'a
 
-    (** [map mapper bil] map or transform BIL program.  *)
+    (** [iter visitor bil] apply a visitor for each node of a BIL
+        forest. See also {!Exp.iter} and {!Stmt.iter}. *)
+    val iter : unit #visitor -> stmt list -> unit
+
+    (** [map mapper bil] map or transform BIL program. See also
+        {!Exp.map} and {!Stmt.map}. *)
     val map : #mapper -> stmt list -> stmt list
 
-    (** [is_referenced x p] is [true] if [x] is referenced in some expression or
-        statement in program [p]:
-        BUG: currently occurrences on the left hand side of the
-        assignment operator is considered a reference too.
-    *)
+    (** [find finder bil] search in [bil] using provided [finder]. See
+        also {!Exp.find} and {!Stmt.find}. *)
+    val find : 'a #finder -> stmt list -> 'a option
+
+    (** [exists finder bil] returns true if [finder] finds
+        something. See also {!Exp.exists} and {!Stmt.exists}.*)
+    val exists : unit #finder -> stmt list -> bool
+
+
+    (** [is_referenced x p] is [true] if [x] is referenced in some
+        expression or statement in program [p], before it is
+        assigned. *)
     val is_referenced : var -> stmt list -> bool
 
     (** [is_assigned x p] is [true] if there exists such [Move]
-        statement, that [x] occures on the left side of it. If [strict]
-        is true, then only unconditional assignments. By default,
-        [strict] is [false] *)
+        statement, that [x] occures on the left side of it. If
+        [strict] is true, then only unconditional assignments are
+        accounted. By default, [strict] is [false] *)
     val is_assigned : ?strict:bool -> var -> stmt list -> bool
 
     (** [prune_unreferenced p] remove all assignments to variables that
-        are not used in the program [p] *)
+        are not used in the program [p]. This is a local optimization.
+        The variable is unreferenced if it is not referenced in its lexical
+        scope, or if it is referenced after the assignment. Only
+        temporary variables are pruned, as their scope is local.  *)
     val prune_unreferenced : stmt list -> stmt list
 
     (** [normalize_negatives p] transform [x + y] to [x - abs(y)] if [y < 0] *)
     val normalize_negatives : stmt list -> stmt list
 
     (** [substitute x y p] substitutes each occurrence of expression [x] by
-        expression [y] in program [p] *)
+        expression [y] in program [p]. The mnemonic to remember the
+        order is to recall the sed's [s/in/out] syntax. *)
     val substitute : exp -> exp -> stmt list -> stmt list
-
 
     (** [substitute_var x y p] substitutes all occurences of variable [x]
         by expression [y] *)
@@ -1766,6 +1786,70 @@ module Std : sig
   (** [Regular] interface for BIL expressions *)
   module Exp : sig
     type t = Bil.exp
+
+    (** [fold visitor ~init exp] traverse the [exp] tree with
+        provided [visitor]. For example, the following will collect
+        all address that are accessed with a load operation:
+        [{
+        let collect_load_addresses = Exp.fold ~init:[] (object
+            inherit [word list] Bil.visitor
+            method! enter_load ~mem ~addr _ _  addrs =
+            match addr with
+            | Bil.Int addr -> addr :: addrs
+            | _ -> addrs
+        end)
+        }]
+        See also {!Bil.fold} and {!Stmt.fold}
+    *)
+    val fold : 'a #Bil.visitor -> init:'a -> t -> 'a
+
+    (** [iter visitor exp] iterates over all terms of the [exp] using
+        provided visitor. See also {!Bil.iter} and {!Stmt.iter}  *)
+    val iter : unit #Bil.visitor -> t -> unit
+
+    (** [find finder exp] returns [Some thing] if finder finds some
+        [thing]. See also {!Bil.find} and {!Stmt.find} *)
+    val find : 'a #Bil.finder -> t -> 'a option
+
+    (** [map mapper exp] maps [exp] tree using provided [mapper].
+        See also {!Bil.map} *)
+    val map  : #Bil.mapper -> t -> t
+
+    (** [exists finder exp] is [true] if [finder] finds
+        something. See also {!Bil.exists} and {Stmt.exists}  *)
+    val exists : unit #Bil.finder -> t -> bool
+
+    (** [is_referenced x exp] true if [exp] contains [Var x] on one of
+        its leafs. See also {!Bil.is_referenced} and {!Stmt.is_referenced}  *)
+    val is_referenced : var -> t -> bool
+
+    (** [normalize_negatives exp] returns an exp where all negative
+        additions are substituted by subtractions. See
+        {!Bil.normalize_negatives} for more details  *)
+    val normalize_negatives : t -> t
+
+    (** [fold_constants] performs one step of constant evaluation. In
+        order to perform all possible reductions one should use
+        {!fixpoint} function, provided later. Example:
+        [let x = Bil.var (Var.create "x" reg32_t)]
+        [fixpoint fold_constants Bil.(x lxor x lxor x lxor x)]
+
+        will yield [0x0:32], but without
+        a fixpoint, the result would be just:
+
+        [fold_constants Bil.(x lxor x lxor x lxor x)]
+        [(0x0:32 ^ x) ^ x].
+
+        See also {!Bil.fold_constants} and {!Stmt.fold_constants} *)
+    val fold_constants : t -> t
+
+    (** [fixpoint f] applies transformation [f] to [t] until it
+        reaches a fixpoint, i.e., such point [x] that
+        [f x] = [f (f x)].
+        See also {!Bil.fixpoint} and {!Stmt.fixpoint}
+    *)
+    val fixpoint : (t -> t) -> (t -> t)
+
     include Regular with type t := t
     val pp_adt : t printer
   end
@@ -1773,6 +1857,35 @@ module Std : sig
   (** [Regular] interface for BIL statements  *)
   module Stmt : sig
     type t = Bil.stmt
+    (** [fold ~init visitor stmt] folds a [stmt] with a visitor. See
+        {!Bil.fold} and {!Exp.fold} for more details.  *)
+    val fold : 'a #Bil.visitor -> init:'a -> t -> 'a
+
+    (** [iter visitor stmt] iters over a [stmt] with a visitor. See
+        {!Bil.iter} and {!Exp.iter} for more details.  *)
+    val iter : unit #Bil.visitor -> t -> unit
+
+    (** [find finder stmt] performs a lookup into the Bil statement. See
+        {!Bil.find} and {!Exp.find} for more details.  *)
+    val find : 'a #Bil.finder -> t -> 'a option
+
+
+    (** [exists finder stmt] is [true] iff [find finder stmt <> None].
+        See {!Bil.exists} and {!Exp.exists} for more details.  *)
+    val exists : unit #Bil.finder -> t -> bool
+
+    (** [is_referenced x stmt] is true is [x] is used in the [stmt]
+        in any place other then right hand side of the assignment. E.g.,
+        [is_referenced x Bil.(x := var x)] is [true], but
+        [is_referenced x Bil.(x := var y)] is [false].
+        see {!Bil.is_referenced} for more details.
+    *)
+    val is_referenced : var -> t -> bool
+
+    (** [fixpoint f x] applies transformation [f] until it reaches
+        fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)
+    val fixpoint : (t -> t) -> (t -> t)
+
     include Regular with type t := t
     val pp_adt : t printer
   end
@@ -3169,8 +3282,11 @@ module Std : sig
 
   type symtab
 
-  (** Reconstructed symbol table  *)
+  (** Reconstructed symbol table.  *)
   module Symtab : sig
+    (** This data structure holds information about functions that
+        were found in the executable.*)
+
 
     (** symbol table  *)
     type t = symtab
@@ -3178,30 +3294,60 @@ module Std : sig
     (** symbol table entry  *)
     type fn
 
+    (** [reconstruct ?name ?roots cfg] reconstructs symbols using a
+        whole program [cfg]. [name] is a naming function, that should
+        return [Some name] for the symbols starting at provided
+        address. If [name] returns [None], then the default naming
+        scheme will be used for that symbol. [roots] is the initial
+        set of function starts. This set will be extended with all
+        targets of calls, found in the [cfg]. Note: it is not required
+        for [roots] to be actually a set - duplicates is ok.  *)
     val reconstruct :
       ?name:(addr -> string option) ->
       ?roots:addr list -> block table -> t
 
+    (** [add_symbol table name entry blocks] extends [table] with a
+        new symbol with a given [name], [entry] block and body
+        [blocks].  *)
     val add_symbol : t -> string -> block -> block seq -> t
 
+    (** [remove table fn] removes symbol [fn] from [table]  *)
     val remove : t -> fn -> t
 
+    (** [find_by_name symbols name] finds a symbols with a given name  *)
     val find_by_name  : t -> string -> fn option
 
+    (** [find_by_start symbols addr] finds a symbol that starts from
+        a given address *)
     val find_by_start : t -> addr -> fn option
 
+    (** [fns_of_addr symbols addr] return a list of functions that
+        owns [addr]   *)
     val fns_of_addr : t -> addr -> fn list
 
+    (** [fns_of_mem syms mem] returns a list of functions that
+        dominates over provided memory region [mem] *)
     val fns_of_mem : t -> mem -> fn list
 
+    (** [create_bound syms fn] creates a predicate that returns [true]
+        for all addresses that belongs to function [f]. The returned
+        predicated is in a staged form, to prevent abuse. To unstage,
+        use function [unstage], e.g.,
+        [let bound = unstage (Symtab.create_bound syms fn)]
+    *)
     val create_bound : t -> fn -> (addr -> bool) Staged.t
 
+    (** [to_sequence symtab] returns a sequence of functions  *)
     val to_sequence : t -> fn seq
 
+    (** [name_of_fn fn] returns symbol name  *)
     val name_of_fn : fn -> string
-    val entry_of_fn : fn -> block
-    val memory_of_fn : t -> fn -> unit memmap
 
+    (** [entry_of_fn fn] returns an entry block of a given function [fn]  *)
+    val entry_of_fn : fn -> block
+
+    (** [memory_of_fn syms fn] returns memory covered by function [fn]   *)
+    val memory_of_fn : t -> fn -> unit memmap
   end
 
   (** ABI interface.
@@ -5080,20 +5226,18 @@ module Std : sig
     (** {3 Registering and running passes}
 
         To add new pass one of the following [register_*] functions
-        should be called.
-
-    *)
+        should be called.*)
 
     type 'a register = ?deps:string list -> string -> 'a -> unit
-
 
     (** [register_pass_with_args name pass] registers [pass] that
         requires command line arguments. The arguments will be passed
         in the first parameter of the [pass] function.
 
-        @param deps is list of dependencies. Each dependency is a name
-        of a pass. If dependency pass is not registered it will be
-        auto-loaded (See {!run_passes}) *)
+        Parameter [deps] is list of dependencies. Each dependency is a
+        name of a pass, that should be run before the [pass]. If
+        dependency pass is not registered it will be auto-loaded (See
+        {!run_passes}) *)
     val register_pass_with_args : (string array -> t -> t) register
 
     (** [register_pass ?deps name pass] registers project transformation,

@@ -186,9 +186,13 @@ exception Found
 
 class ['a] finder = object(self)
   inherit ['a option return] visitor
-  method find stmts : 'a option =
+  method find_in_bil stmts : 'a option =
     with_return (fun cc ->
         ignore (self#run stmts cc);
+        None)
+  method find_in_exp exp : 'a option =
+    with_return (fun cc ->
+        ignore (self#visit_exp exp cc);
         None)
 end
 

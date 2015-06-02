@@ -5,13 +5,14 @@ open Bap_visitor
 
 module Word = Bitvector
 
-let find_map (finder : 'a #finder) ss : 'a option = finder#find ss
-let find finder ss = finder#find ss = Some ()
+let find (finder : 'a #finder) ss : 'a option =
+  finder#find_in_bil ss
+let exists finder ss = finder#find_in_bil ss = Some ()
 let iter (visitor : unit #visitor) ss = visitor#run ss ()
 let fold (visitor : 'a #visitor) ~init ss = visitor#run ss init
 let map m = m#run
 
-let is_assigned ?(strict=false) x = find (object(self)
+let is_assigned ?(strict=false) x = exists (object(self)
     inherit [unit] finder
     method! enter_move y _ cc =
       if Bap_var.(x = y) && not(strict && under_condition)
@@ -19,11 +20,18 @@ let is_assigned ?(strict=false) x = find (object(self)
       cc
   end)
 
-let is_referenced x = find (object(self)
-    inherit [unit] finder
-    method! enter_var y cc =
-      if Bap_var.(x = y) then cc.return (Some ()); cc
-  end)
+class reference_finder x = object(self)
+  inherit [unit] finder
+  method! visit_move y rhs goto =
+    let goto = self#visit_exp rhs goto in
+    if Bap_var.(x = y)
+    then goto.return None
+    else goto
+  method! enter_var y cc =
+    if Bap_var.(x = y) then cc.return (Some ()); cc
+end
+
+let is_referenced x = exists (new reference_finder x)
 
 let prune_unreferenced stmt =
   let rec loop ss = function
@@ -33,15 +41,17 @@ let prune_unreferenced stmt =
     | s :: xs -> loop (s::ss) xs in
   loop [] stmt
 
-
-let normalize_negatives = (object inherit mapper as super
+class negative_normalizer = object
+  inherit mapper as super
   method! map_binop op e1 e2 = match op,e2 with
     | Binop.PLUS, Exp.Int arg
       when Word.(is_negative (signed arg)) ->
       let (-) = Bap_exp.Infix.(-) in
       (e1 - Exp.Int Word.(abs (signed arg)))
     | _ -> super#map_binop op e1 e2
-end)#run
+end
+
+let normalize_negatives = (new negative_normalizer)#run
 
 module Addr = Bitvector
 let rec addr_intersection (x,xs) (y,ys) =
@@ -61,7 +71,9 @@ include struct
       method! map_binop op e1 e2 =
         let open Binop in
         let zero v1 v2 = match v1,v2 with
-          | Var v,_ | _, Var v -> begin match Bap_var.typ v with
+          | Int x,_ |_,Int x  -> Int (Word.zero (Word.bitwidth x))
+          | Var v,_ | _, Var v ->
+            begin match Bap_var.typ v with
               | Type.Imm width -> Int (Word.zero width)
               | Type.Mem _ -> super#map_binop op e1 e2
             end
@@ -97,7 +109,7 @@ include struct
               | NEQ     -> bool (v1 <> v2)
               | LT      -> bool (v1 < v2)
               | LE      -> bool (v1 <= v2)
-              | SLT     -> bool (signed v1 <= signed v2)
+              | SLT     -> bool (signed v1 < signed v2)
               | SLE     -> bool (signed v1 <= signed v2))
         | (PLUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), Int v, e
         | (PLUS|MINUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), e, Int v
@@ -105,8 +117,8 @@ include struct
         | TIMES,e,Int v | TIMES, Int v, e when Word.is_one v -> e
         | (TIMES|AND), e, Int v
         | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
-        | (OR|AND), v1, v2 when compare_exp v1 v2 = 0 -> v1
-        | (XOR), v1, v2 when compare_exp v1 v2 = 0 -> zero v1 v2
+        | (OR|AND), v1, v2 when equal v1 v2 -> v1
+        | (XOR), v1, v2 when equal v1 v2 -> zero v1 v2
         | op, Int v, e -> super#map_binop op e (Int v)
         | PLUS, BinOp (PLUS, a, Int b), Int c ->
           BinOp (PLUS, a, super#map_binop PLUS (Int b) (Int c))
@@ -211,34 +223,38 @@ end
 let fold_consts = (new constant_folder)#run
 
 
-let connection_point (next : 'a -> 'a option) x : 'a option =
+let connection_point (type t) compare (f : t -> t) x : t option =
   let collision_point init =
-    let rec loop slow = function
-      | None -> None
-      | Some fast when phys_equal slow fast -> Some fast
-      | Some fast -> match next slow with
-        | None -> assert false
-        | Some slow -> match next fast with
-          | None -> None
-          | Some fast -> loop slow (next fast) in
-    loop init (next init) in
+    let rec loop slow fast =
+      if compare slow fast = 0 then Some fast
+      else loop (f slow) (f (f fast)) in
+    loop init (f init) in
   let convergent_point x y =
-    let next p = match next p with
-      | None -> invalid_arg "transformation has terminated"
-      | Some p -> p in
     let rec loop x y =
-      if phys_equal x y then x else loop (next x) (next y) in
+      if compare x y = 0 then x else loop (f x) (f y) in
     loop x y in
   match collision_point x with
   | None -> None
-  | Some p -> match next p with
-    | None -> Some p
-    | Some p -> Some (convergent_point x p)
+  | Some p -> Some (convergent_point x p)
 
 (* later we can provide a hashconsing, but for now a simple
    but safe implementation.
    The algorithm is adopted from A. Stepanov and P. McJones
    collision point algorithm [ISBN-10: 0-321-63537-X].
+   {v
+   slow = x;
+   fast = f(x);
+   while (fast != slow) { // slow = fn(x) ∧ fast = f2n+1(x)
+     slow = f(slow); // slow = fn+1(x) ∧ fast = f2n+1(x)
+     if (!p(fast)) return fast;
+     fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+2(x)
+     if (!p(fast)) return fast;
+     fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+3(x)
+   // n ← n + 1
+   }
+   return fast;
+   v}
+
 *)
 let fix compare f x  =
   let rec loop slow fast =
@@ -247,6 +263,13 @@ let fix compare f x  =
       let fast' = f fast in
       if compare fast' fast = 0 then fast
       else loop (f slow) (f fast) in
+  loop x (f x)
+
+
+let fix compare f x  =
+  let rec loop slow fast =
+    if compare slow fast = 0 then fast
+    else loop (f slow) (f (f fast)) in
   loop x (f x)
 
 let fixpoint = fix compare_bil
@@ -303,4 +326,31 @@ module Trie = struct
     end)
 
   include Normalized
+end
+
+module Exp = struct
+  let find (finder : 'a #finder) es : 'a option =
+    finder#find_in_exp es
+  let exists finder ss = finder#find_in_exp ss = Some ()
+  let iter (visitor : unit #visitor) ss = visitor#visit_exp ss ()
+  let fold (visitor : 'a #visitor) ~init ss = visitor#visit_exp ss init
+  let map m = m#map_exp
+  let is_referenced x = exists (new reference_finder x)
+  let normalize_negatives = (new negative_normalizer)#map_exp
+  let fold_constants = (new constant_folder)#map_exp
+  let fixpoint = fix compare_exp
+end
+
+module Stmt = struct
+  let find (finder : 'a #finder) s : 'a option =
+    finder#find_in_bil [s]
+  let exists finder ss = finder#find_in_bil [ss] = Some ()
+  let iter (visitor : unit #visitor) ss = visitor#visit_stmt ss ()
+  let fold (visitor : 'a #visitor) ~init ss = visitor#visit_stmt ss init
+  let map (m : #mapper) = m#map_stmt
+  let assigns ?strict x stmt = is_assigned ?strict x [stmt]
+  let is_referenced x ss = is_referenced x [ss]
+  let normalize_negatives = (new negative_normalizer)#map_stmt
+  let fold_constants = (new constant_folder)#map_stmt
+  let fixpoint = fix compare_stmt
 end

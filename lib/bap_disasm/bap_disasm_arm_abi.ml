@@ -35,17 +35,7 @@ let bil_of_block blk =
   Block.insns blk |> List.concat_map ~f:(fun (_,insn) -> Insn.bil insn)
 
 let is_used_before_assigned v bil =
-  Bil.is_referenced v bil &&
-  Bil.find (object(self) inherit [unit] Bil.finder
-    method! visit_move u e goto =
-      if compare_var v u = 0
-      then goto.return None;
-      self#visit_exp e goto
-    method! enter_var u goto =
-      if compare_var v u = 0
-      then goto.return (Some ());
-      goto
-  end) bil
+  Bil.is_referenced v bil
 
 let is_assigned_before bound blk var =
   Seq.exists (Block.preds blk) ~f:(fun blk ->
