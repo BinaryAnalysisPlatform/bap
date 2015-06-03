@@ -163,7 +163,7 @@ let img_of_elf data elf : Img.t Or_error.t =
     Img.Fields.create ~arch ~entry ~segments:(s,ss) ~symbols ~sections
 
 let of_data_err (data : bigstring) : Img.t Or_error.t =
-  Elf.Parse.from_bigstring data >>= img_of_elf data
+  Elf.from_bigstring data >>= img_of_elf data
 
 let of_data (data : Bigstring.t) : Img.t option =
   match of_data_err data with
