@@ -173,6 +173,7 @@ module Std = struct
   (** [Regular] interface for BIL expressions *)
   module Exp = struct
     type t = Bap_bil.exp with bin_io, compare, sexp
+    include Bap_helpers.Exp
     include (Bap_exp : Regular with type t := t)
     let pp_adt = Bap_bil_adt.pp_exp
   end
@@ -180,6 +181,7 @@ module Std = struct
   (** [Regular] interface for BIL statements  *)
   module Stmt = struct
     type t = Bap_bil.stmt with bin_io, compare, sexp
+    include Bap_helpers.Stmt
     include (Bap_stmt : Regular with type t := t)
     let pp_adt = Bap_bil_adt.pp_stmt
   end

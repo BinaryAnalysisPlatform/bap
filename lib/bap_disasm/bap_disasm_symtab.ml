@@ -41,10 +41,10 @@ let recons_symbol starts ((name,entry) as fn) table : fn memmap =
 
 let dest_of_bil bil =
   (object inherit [word] Bil.finder
-    method! enter_int dst goto =
-      if in_jmp then goto.return (Some dst);
-      goto
-  end)#find bil
+    method! enter_jmp dst goto = match dst with
+      | Bil.Int dst -> goto.return (Some dst)
+      | _ -> goto
+  end)#find_in_bil bil
 
 let dest_of_insn insn =
   match Insn.bil insn with

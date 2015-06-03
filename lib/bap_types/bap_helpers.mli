@@ -4,8 +4,8 @@ open Bap_common
 open Bap_bil
 open Bap_visitor
 
-val find_map : 'a #finder -> bil -> 'a option
-val find : unit #finder -> bil -> bool
+val find : 'a #finder -> bil -> 'a option
+val exists : unit #finder -> bil -> bool
 val iter : unit #visitor -> bil -> unit
 val fold : 'a #visitor -> init:'a -> bil -> 'a
 val map : #mapper -> bil -> bil
@@ -20,8 +20,6 @@ val is_referenced : var -> bil -> bool
     [strict] is [false] *)
 val is_assigned : ?strict:bool -> var -> bil -> bool
 
-(** [prune_unreferenced p] remove all assignments to variables that
-    are not used in the program [p] *)
 val prune_unreferenced : bil -> bil
 
 (** [normalize_negatives p] transform [x + y] to [x - abs(y)] if [y < 0] *)
@@ -50,6 +48,27 @@ class constant_folder : mapper
     then the transformation will stop at an arbitrary point of a
     cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
+
+module Exp : sig
+  val fold : 'a #visitor -> init:'a -> exp -> 'a
+  val iter : unit #visitor -> exp -> unit
+  val find : 'a #finder -> exp -> 'a option
+  val map  : #mapper -> exp -> exp
+  val exists : unit #finder -> exp -> bool
+  val is_referenced : var -> exp -> bool
+  val normalize_negatives : exp -> exp
+  val fold_constants : exp -> exp
+  val fixpoint : (exp -> exp) -> (exp -> exp)
+end
+
+module Stmt : sig
+  val fold : 'a #visitor -> init:'a -> stmt -> 'a
+  val iter : unit #visitor -> stmt -> unit
+  val find : 'a #finder -> stmt -> 'a option
+  val exists : unit #finder -> stmt -> bool
+  val is_referenced : var -> stmt -> bool
+  val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
+end
 
 (** Bil provides two prefix tries trees.
 

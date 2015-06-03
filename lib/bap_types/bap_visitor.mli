@@ -208,7 +208,8 @@ end
 *)
 class ['a] finder : object
   inherit ['a option return] visitor
-  method find : bil -> 'a option
+  method find_in_bil : bil -> 'a option
+  method find_in_exp : exp -> 'a option
 end
 
 (** AST transformation.
