@@ -82,7 +82,6 @@ let label_of_fall block =
 let annotate_insn term insn = Term.set_attr term Disasm.insn insn
 let annotate_addr term addr = Term.set_attr term Disasm.insn_addr addr
 
-
 let linear_of_stmt ?addr fall insn stmt : linear list =
   let (~@) t = match addr with
     | None -> t
@@ -91,19 +90,14 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
     Ir_blk.Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
   let jump ?cond exp =
     let target = Label.indirect exp in
-    let tail = if cond = None then [] else
-        match Lazy.force fall with
-        | None -> []
-        | Some fall -> [Ir_jmp.create_goto fall] in
     if Insn.is_return insn
-    then Ir_jmp.create_ret ?cond target :: tail
+    then Ir_jmp.create_ret ?cond target
     else if Insn.is_call insn
-    then [
+    then
       Ir_jmp.create_call ?cond
-        (Call.create ?return:(Lazy.force fall) ~target ())
-    ] else Ir_jmp.create_goto ?cond target :: tail in
-  let jump ?cond exp =
-    List.map (jump ?cond exp) ~f:(fun j -> Instr (Ir_blk.Jmp ~@j)) in
+        (Call.create ?return:fall ~target ())
+    else Ir_jmp.create_goto ?cond target in
+  let jump ?cond exp = Instr (Ir_blk.Jmp  ~@(jump ?cond exp)) in
   let cpuexn ?cond n =
     let next = Tid.create () in [
       Instr (Ir_blk.Jmp ~@(Ir_jmp.create_int ?cond n next));
@@ -115,7 +109,7 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
     | Bil.If (cond, [],[]) -> []
     | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
     | Bil.If (cond,[Bil.CpuExn n],[]) -> cpuexn ~cond n
-    | Bil.If (cond,[Bil.Jmp exp],[]) -> jump ~cond exp
+    | Bil.If (cond,[Bil.Jmp exp],[]) -> [jump ~cond exp]
     | Bil.If (cond,yes,[]) ->
       let yes_label = Tid.create () in
       let tail = Tid.create () in
@@ -138,7 +132,7 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
       List.concat_map no ~f:linearize @
       Instr (goto tail) ::
       Label tail :: []
-    | Bil.Jmp exp -> jump exp
+    | Bil.Jmp exp -> [jump exp]
     | Bil.CpuExn n -> cpuexn n
     | Bil.Special _ -> []
     | Bil.While (cond,body) ->
@@ -166,13 +160,21 @@ let lift_insn ?addr fall init insn =
               Ir_blk.Builder.add_elt b elt; bs,b))
 
 let blk block : blk term list =
+  let fall_label = label_of_fall block in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
-        lift_insn ~addr (lazy (label_of_fall block)) init insn) |>
-  fun (bs,b) -> match List.rev (Ir_blk.Builder.result b :: bs) with
-  | [] -> []
-  | b :: bs -> Term.set_attr b Disasm.block (Block.addr block) :: bs
+        lift_insn ~addr fall_label init insn) |>
+  fun (bs,b) ->
+  let fall =
+    if Insn.is_call (Block.terminator block) then None
+    else match fall_label with
+      | None -> None
+      | Some fall ->
+        Some (Ir_blk.Jmp (Ir_jmp.create_goto fall)) in
+  Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
+  let b = Ir_blk.Builder.result b in
+  List.rev (Term.set_attr b Disasm.block (Block.addr block) :: bs)
 
 (* extracts resolved calls from the blk *)
 let call_of_blk blk =
@@ -212,8 +214,6 @@ let resolve_jmp addrs jmp =
 
 let unbound _ = true
 
-
-
 let lift_sub ?(bound=unbound) entry =
   let addrs = Addr.Table.create () in
   let rec recons acc b =
@@ -252,5 +252,5 @@ let program symtab =
 let sub = lift_sub
 
 let insn insn =
-  lift_insn (lazy None) ([], Ir_blk.Builder.create ()) insn |>
+  lift_insn None ([], Ir_blk.Builder.create ()) insn |>
   function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs)

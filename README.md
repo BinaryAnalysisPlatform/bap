@@ -1,9 +1,9 @@
 # Overview
 
-[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap) [![docs](https://img.shields.io/badge/doc-v0.9.7-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v0.9.7/Bap.Std.html) [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/Bap.Std.html)
+[![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap) [![docs](https://img.shields.io/badge/doc-v0.9.8-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v0.9.8/Bap.Std.html) [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/Bap.Std.html)
 
 BAP is a platform for binary analysis. It is written in OCaml, but can
-be used from other languages, for example, from Python.
+be used from other languages.
 
 # <a name="Installation"></a>Installation
 
@@ -27,30 +27,32 @@ $ pip install git+git://github.com/BinaryAnalysisPlatform/bap.git
 
 ## Using from OCaml
 
-There're two ways to use BAP. Compile your own application, and use
-BAP library, or write a plugin, that can still use the library, but
-will also get an access to decompiled binary. For the latter, write
-your plugin in OCaml using your
+There're two ways to use BAP: compile your own stand-alone
+application, and use BAP library, or write a plugin, that can still
+use the library, but will also get an access to decompiled binary, as
+well as intergration with tools and other plugins. For the latter,
+write your plugin in OCaml using your
 [favorite text editor](https://github.com/BinaryAnalysisPlatform/bap/wiki/Emacs)
 :
+
 ```sh
-$ cat mycode.ml
-open Bap.Std
-let main project = print_endline "Hello, World"
-let () = Project.register_plugin' main
+$ cat hello_world.ml
+open Bap.Std let main project =
+print_endline "Hello, World"
+let () = Project.register_pass "hello-world" main
 ```
 
 Next, build it with our `bapbuild` tool:
 
 ```sh
-$ bapbuild mycode.plugin
+$ bapbuild hello_world.plugin
 ```
 
 After this you can load your plugin with `-l` command line option, and
 get an immediate access to the decompiled binary:
 
 ```sh
-$ bap /bin/ls -lmycode
+$ bap /bin/ls -lhello-world
 ```
 
 `bapbuild` can compile a standalone applications, not only plugins. In

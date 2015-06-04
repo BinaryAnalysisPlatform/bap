@@ -445,7 +445,17 @@ module Std : sig
 
   *)
 
-  (** {2:plugins Writing Program Analysis Plugins}
+  (** {2:project Working with project}
+
+      There're two general approaches to obtain a value of type
+      {{!Project}project}:
+      - create it manually using one of the [Project.from_*] function;
+      - to write a plugin to a [bap] utility
+
+      Although the first approach is simplistic and gives you a full
+      control, we still recommend to use the latter, as [bap] utility
+      will provide you integration with different tools, like IDA, as
+      well as interaction with a user and other plugins.
 
       To write a program analysis plugin (or pass in short) you need to
       implement a function with one of the following interfaces:
@@ -467,16 +477,32 @@ module Std : sig
       annotations, discover new symbols, make corrections, and even
       change the architecture and re-disassemble everything.
 
+      {3 Example}
+
+      The following plugin prints all sections in a file:
+
+      {[
+        open Core_kernel.Std
+        open Bap.Std
+        open Format
+
+        let print_sections p =
+          Project.memory p |> Memmap.to_sequence |> Seq.iter ~f:(fun (mem,x) ->
+              Option.iter (Value.get Image.section x) ~f:(fun name ->
+                  printf "Section: %s@.%a@." name Memory.pp mem))
+
+        let () = Project.register_pass' "print-sections" print_sections
+      ]}
+
       {3 Exchanging information}
 
       For exchanging information in a type safe manner, we use
       {{!Value}universal values}. Values can be attached to a
-      particular memory region, or put into the [storage]
+      particular memory region, IR terms, or put into the [storage]
       dictionary. For the first case we use the {{!Memmap}memmap} data
       structure.  It is an interval tree containing all the memory
       regions that are used during analysis. For the [storage] we use
-      [Dict] data structure. One can also annotate program by
-      attaching attributes to IR terms.
+      [Dict] data structure.
 
       {3 Memory marks}
 
@@ -1698,7 +1724,7 @@ module Std : sig
     val iter : unit #visitor -> stmt list -> unit
 
     (** [map mapper bil] map or transform BIL program. See also
-        {!Exp.map} and {!Stmt.map}. *)
+        {!Exp.map}. *)
     val map : #mapper -> stmt list -> stmt list
 
     (** [find finder bil] search in [bil] using provided [finder]. See
@@ -1834,11 +1860,11 @@ module Std : sig
         {!Bil.normalize_negatives} for more details  *)
     val normalize_negatives : t -> t
 
-    (** [fold_constants] performs one step of constant evaluation. In
+    (** [fold_consts] performs one step of constant evaluation. In
         order to perform all possible reductions one should use
         {!fixpoint} function, provided later. Example:
         [let x = Bil.var (Var.create "x" reg32_t)]
-        [fixpoint fold_constants Bil.(x lxor x lxor x lxor x)]
+        [fixpoint fold_consts Bil.(x lxor x lxor x lxor x)]
 
         will yield [0x0:32], but without
         a fixpoint, the result would be just:
@@ -1846,8 +1872,8 @@ module Std : sig
         [fold_constants Bil.(x lxor x lxor x lxor x)]
         [(0x0:32 ^ x) ^ x].
 
-        See also {!Bil.fold_constants} and {!Stmt.fold_constants} *)
-    val fold_constants : t -> t
+        See also {!Bil.fold_consts} *)
+    val fold_consts : t -> t
 
     (** [fixpoint f] applies transformation [f] to [t] until it
         reaches a fixpoint, i.e., such point [x] that
@@ -3447,7 +3473,9 @@ module Std : sig
     (** Memory  *)
     val mem : var
 
-    (** Program counter  *)
+    (** Program counter.
+        @deprecated this maybe removed, if we decide, that PC register
+        breaks abstraction.*)
     val pc  : var
 
     (** Stack pointer  *)
@@ -3459,6 +3487,13 @@ module Std : sig
     val vf  : var
     val nf  : var
 
+    (** [addr_of_pc mem] given a memory region, representing some
+        instruction, return a value to which a PC register is set when
+        this instruction is executed by CPU.
+        This function is useful to resolve PC-relative calculations.
+        @deprecated this maybe removed, if we decide, that PC register
+        breaks abstraction.
+    *)
     val addr_of_pc : mem -> addr
 
     (** {3 Predicates}  *)
@@ -4035,7 +4070,7 @@ module Std : sig
       abstracts target architecture. The returned module has type
       {!Target} and can be unpacked locally with:
       {[
-        let module Target = (val Project.target project) in
+        let module Target = (val target_of_arch arch) in
       ]}
   *)
   val target_of_arch : arch -> (module Target)
@@ -5086,7 +5121,7 @@ module Std : sig
   module Project : sig
     (** A project groups together all the information recovered from
         the underlying binary. It is also used for exchanging
-        information between {{!plugins}passes}.  *)
+        information between {{!section:project}passes}.  *)
 
     type t
 
@@ -5236,6 +5271,44 @@ module Std : sig
 
     type 'a register = ?deps:string list -> string -> 'a -> unit
 
+    (** An error that can occur when loading or running pass.
+        - [Not_loaded name] pass with a given [name] wasn't loaded for
+          some reason. This is a very unlikely error, indicating
+          either a logic error in the plugin system implementation or
+          something very weird, that we didn't expect.
+
+        - [Is_duplicate name] more than one plugin were registered
+          under this [name], either it is the same plugin or a name clash
+          between to different we don't know.
+
+        - [Not_found name] when we tried to load plugin with a given
+          [name] we failed to find it in our search paths.
+
+        - [Doesn't_register name] the plugin with a given [name]
+          doesn't register a pass with the same name.
+
+        - [Load_failed (name,problem)] a [problem] has occured, when
+          we tried to dynamically link a plugin with a given [name]
+
+        - [Runtime_error (name,exn)] when plugin with a given [name]
+          was ran it raised an [exn].
+
+    *)
+    type error =
+      | Not_loaded of string
+      | Is_duplicate of string
+      | Not_found of string
+      | Doesn't_register of string
+      | Load_failed of string * Error.t
+      | Runtime_error of string * exn
+    with sexp_of
+
+    (** raised when a pass failed to load or to run. Note: this
+        exception is raised only from two functions in this module, that
+        state this in their documentation and has [_exn] suffix in their
+        name. *)
+    exception Pass_failed of error with sexp
+
     (** [register_pass_with_args name pass] registers [pass] that
         requires command line arguments. The arguments will be passed
         in the first parameter of the [pass] function.
@@ -5255,7 +5328,6 @@ module Std : sig
         the project effect and is run only for side effect.
         (See {!register_pass_with_args})  *)
     val register_pass': (t -> unit) register
-
 
     (** [register_pass_with_args' name pass] register a [pass] that
         requires arguments for a side effect.
@@ -5292,6 +5364,27 @@ module Std : sig
          supported [--plugin-name-argument-name value].
     *)
     val run_passes : ?library:string list -> ?argv:string array -> t -> t Or_error.t
+
+
+    (** [passes ?library ()] returns a transitive closure of all
+        passes registered in the system so far.   *)
+    val passes : ?library:string list -> unit -> string list Or_error.t
+
+
+    (** [run_passes_exn proj] is the same as {!run_passes}, but raises
+        an exception on error. Useful to provide custom error
+        handling/printing.
+        @raise Pass_failed if failed to load, or if plugin failed at runtime.
+    *)
+    val run_passes_exn : ?library:string list -> ?argv:string array -> t -> t
+
+
+    (** [passes_exn proj] is the same as {!passes}, but raises
+        an exception on error. Useful to provide custom error
+        handling/printing.
+        @raise Pass_failed if failed to load some plugin *)
+    val passes_exn : ?library:string list -> unit -> string list
+
   end
 
   type project = Project.t

@@ -1,3 +1,72 @@
+0.9.8
+=====
+
+1. BAP IR is introduced
+
+   BAP Intermediate Representation is based on BAP Instruction
+   Language and is a semigraphical representation of a program.
+
+   See documentation and following PR's for more information.
+   a2a4621df7c5b25d85c04665732423992e8def98
+   74cdee48818225e8b43d39803c97471903ef6d1f
+
+2. Refactored structure of the Project
+   Module `Project` now a proper entry point to the library.
+   Many stuff from bap utility moved there.
+   See 96bd334a0d8af17a6dfd21eff9ec710d448f13e8 for more details.
+
+   This is a breaking change. It hides `project` record and removes
+   access to some information, that was previously marked as deprecated:
+   - symbols as a mapping from memory to string
+   - base as a memory.
+
+   Instead of old symbols table we now have a better interface, see
+   below. Instead of base, we now represent all memory as an interval
+   map (Memmap).
+
+
+3. New model for symbols
+
+   Previosly symbols were modeled as contiguous chunk of memory,
+   marked with name. Moreover, data sharing between different symbols
+   weren't allowed. Since this release, symbols can be a noncontiguous,
+   and share data. A new interface is implemented in `Symtab` module.
+
+4. Plugins dependency and autoloading
+
+   Plugins now can now specify dependencies to other plugins, that may
+   be auto-loaded by the library.
+   See db2a175ba8e6708753a06a2428940c857a1910ec
+
+5. Extended BIL helpers
+   See 65f472c08d27020a6570b7992b93397346251d1e
+
+6. Exposed ELF library
+
+7. Fixed segment/section/region name hell
+   See 9a574498392c6a13606c9d202037daf137bb780c
+
+8. New universal values library
+
+   The library is based on Core_kernel's Univ, but with addition of
+   serialization, comparison and pretty-printing.
+   See 383003d60baa3434dd4cd8c894e1d8c2e889b4a2
+
+9. Added bap-fsi-benchmark utility
+
+   80382114f395bcf45925ae2e4bc5b9aac5bba4e7
+
+10. Fixed BIL piqi serialization
+
+   2a5c4671468c5a2699b6007a8af3fda8867e8eb8
+
+11. Fixed installation on more recent ubuntu
+
+  By defaulting LLVM version to 3.4 (and more clever
+  searching procedure)
+
+12. Lot's of bugfixes and small extensions
+
 0.9.7
 =====
 

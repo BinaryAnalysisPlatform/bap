@@ -475,7 +475,7 @@ module Ir_jmp = struct
         | Call sub -> Call.pp ppf sub
         | Ret  dst -> Format.fprintf ppf "return %a" Label.pp dst
         | Int (n,t) ->
-          Format.fprintf ppf "int %d return %%%a" n Tid.pp t
+          Format.fprintf ppf "interrupt 0x%X return %%%a" n Tid.pp t
 
       let pp_cond ppf cond =
         if Exp.(cond <> always) then

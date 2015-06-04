@@ -101,9 +101,6 @@ type t = {
 
 type result = (t * Error.t list) Or_error.t
 
-let mem_of_location endian data {Location.addr; len} =
-  Memory.create ~len endian addr data
-
 let memory_error ?here msg mem =
   Error.create ?here msg
     (Memory.min_addr mem, Memory.max_addr mem)
@@ -235,15 +232,17 @@ let of_img img data name =
   let open Img in
   let arch = arch img in
   create_segments arch data (segments img) >>= fun secs ->
-  let memory : value memmap =
-    List.fold (sections img) ~init:Memmap.empty ~f:(fun map reg ->
-        mem_of_location (Arch.endian arch) data (Section.location reg)
-        |> function
-        | Ok mem ->
-          Memmap.add map mem (Value.create section (Section.name reg))
-        | Error _ -> map) in
-  let memory = Table.foldi secs ~init:memory ~f:(fun mem sec map ->
+  let memory = Table.foldi secs ~init:Memmap.empty ~f:(fun mem sec map ->
       Memmap.add map mem (Value.create segment sec)) in
+  let memory : value memmap =
+    List.fold (sections img) ~init:memory ~f:(fun map sec ->
+        let loc = Section.location sec in
+        let (addr,len) = Location.(addr loc, len loc) in
+        Memmap.lookup memory addr |> Seq.hd |> function
+        | None -> map
+        | Some (mem,_) ->
+          let mem = ok_exn (memory_of_location loc mem) in
+          Memmap.add map mem (Value.create section (Section.name sec))) in
   let memory,syms,errs = create_symbols memory (symbols img) secs in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Segment.hashable secs)

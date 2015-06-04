@@ -57,7 +57,7 @@ module Exp : sig
   val exists : unit #finder -> exp -> bool
   val is_referenced : var -> exp -> bool
   val normalize_negatives : exp -> exp
-  val fold_constants : exp -> exp
+  val fold_consts : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
 end
 

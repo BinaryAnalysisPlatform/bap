@@ -238,7 +238,7 @@ let connection_point (type t) compare (f : t -> t) x : t option =
   | Some p -> Some (convergent_point x p)
 
 (* later we can provide a hashconsing, but for now a simple
-   but safe implementation.
+   but safe? implementation.
    The algorithm is adopted from A. Stepanov and P. McJones
    collision point algorithm [ISBN-10: 0-321-63537-X].
    {v
@@ -246,16 +246,20 @@ let connection_point (type t) compare (f : t -> t) x : t option =
    fast = f(x);
    while (fast != slow) { // slow = fn(x) ∧ fast = f2n+1(x)
      slow = f(slow); // slow = fn+1(x) ∧ fast = f2n+1(x)
-     if (!p(fast)) return fast;
      fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+2(x)
-     if (!p(fast)) return fast;
      fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+3(x)
    // n ← n + 1
    }
    return fast;
    v}
-
 *)
+let fix compare f x  =
+  let rec loop slow fast =
+    if compare slow fast = 0 then fast
+    else loop (f slow) (f (f fast)) in
+  loop x (f x)
+
+
 let fix compare f x  =
   let rec loop slow fast =
     if compare slow fast = 0 then fast
@@ -266,11 +270,6 @@ let fix compare f x  =
   loop x (f x)
 
 
-let fix compare f x  =
-  let rec loop slow fast =
-    if compare slow fast = 0 then fast
-    else loop (f slow) (f (f fast)) in
-  loop x (f x)
 
 let fixpoint = fix compare_bil
 
@@ -337,7 +336,7 @@ module Exp = struct
   let map m = m#map_exp
   let is_referenced x = exists (new reference_finder x)
   let normalize_negatives = (new negative_normalizer)#map_exp
-  let fold_constants = (new constant_folder)#map_exp
+  let fold_consts = (new constant_folder)#map_exp
   let fixpoint = fix compare_exp
 end
 
@@ -350,7 +349,5 @@ module Stmt = struct
   let map (m : #mapper) = m#map_stmt
   let assigns ?strict x stmt = is_assigned ?strict x [stmt]
   let is_referenced x ss = is_referenced x [ss]
-  let normalize_negatives = (new negative_normalizer)#map_stmt
-  let fold_constants = (new constant_folder)#map_stmt
   let fixpoint = fix compare_stmt
 end

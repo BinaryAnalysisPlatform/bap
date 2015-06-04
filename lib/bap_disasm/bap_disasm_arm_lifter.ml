@@ -978,7 +978,8 @@ let lift_special ops insn =
   match insn, ops with
   (* supervisor call *)
   | `SVC, [|Imm word; cond; _|] ->
-    exec [Bil.special (Format.asprintf "svc %a" Word.pp word)] cond
+    let num = Word.extract_exn ~hi:23 word in
+    exec [Bil.(cpuexn (Word.to_int num |> ok_exn))] cond
 
   | `MRS, [|Reg dest; cond; _|] ->
     let get_bits flag src lsb =
