@@ -132,10 +132,14 @@ let llvm_lib () : unit =
     "llvm_lib"
     (fun () ->
        let llvm_static = BaseEnv.var_get "llvm_static" in
-       let lib = if llvm_static = "true"
-         then "llvm_libs"
-         else "llvm_mainlib" in
-       BaseEnv.var_get lib) |>
+       let lib = if llvm_static = "true" then "llvm_libs" else "llvm_mainlib" in
+       let llvm_version =
+         OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"] in
+       let syslibs =
+	 if ((String.compare llvm_version "3.4") > 0)
+	 then OASISExec.run_read_one_line ~ctxt "llvm-config" ["--system-libs"]
+	 else "" in
+       (BaseEnv.var_get lib) ^ " " ^ syslibs) |>
   definition_end
 
 let is_defined var : bool =
