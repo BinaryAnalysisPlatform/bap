@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_plugins.Std
 open Bap.Std
 open Cmdliner
 open Format
@@ -234,13 +235,32 @@ let program =
     ~version:Config.pkg_version ~doc ~man
 
 let parse () =
-  let plugins = match Term.eval_peek_opts load with
-    | Some ps,_ -> ps | _ -> eprintf "no plugins\n"; [] in
+  let system = "bap.pass" in
+  let library = fst (Term.eval_peek_opts load_path) in
+  let plugins = Option.value (fst (Term.eval_peek_opts load))
+      ~default:[] in
+  List.iter plugins ~f:(fun name ->
+      Plugin.create ?library ~system name |>
+      function
+      | None ->
+        Error.raise @@ Error.of_string @@
+        sprintf "failed to find plugin with name '%s'" name
+      | Some p -> match Plugin.load p with
+        | Ok () -> ()
+        | Error err ->
+          Error.raise @@ Error.of_string @@
+          sprintf "failed to load plugin %s: %s"
+            name (Error.to_string_hum err));
 
-  let argv = Array.filter ~f:(fun opt ->
-      not(List.exists plugins ~f:(fun plugin ->
-          let prefix = "--"^plugin^"-" in
-          String.is_prefix opt ~prefix))) Sys.argv in
+  let plugins = match Project.passes ?library () with
+    | Ok plugins -> plugins
+    | Error err -> Error.raise err in
+
+  let plugin_option opt =
+    List.exists plugins ~f:(fun plugin ->
+        let prefix = "--"^plugin^"-" in
+        String.is_prefix opt ~prefix) in
+  let argv = Array.filter Sys.argv ~f:(Fn.non plugin_option) in
 
   match Term.eval ~argv ~catch:false program with
   | `Ok opts -> Ok opts

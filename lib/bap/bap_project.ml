@@ -183,6 +183,7 @@ type pass = {
 type 'a register = ?deps:string list -> string -> 'a -> unit
 
 let passes : pass DList.t = DList.create ()
+let errors : Error.t String.Table.t = String.Table.create ()
 
 let forget : pass DList.Elt.t -> unit = fun _ -> ()
 
@@ -209,31 +210,92 @@ let prepare_args argv name =
         | None -> None
         | Some arg -> Some ("--" ^ arg))
 
+type error =
+  | Not_loaded of string
+  | Is_duplicate of string
+  | Not_found of string
+  | Doesn't_register of string
+  | Load_failed of string * Error.t
+  | Runtime_error of string * exn
+with variants, sexp_of
 
-let load ?library name : pass Or_error.t =
+exception Pass_failed of error with sexp
+let plugin_failure error = raise (Pass_failed error)
+let fail name error = plugin_failure (error name)
+
+let load ?library name : unit =
   match find name with
-  | Some pass -> Ok pass
+  | Some _ -> ()
   | None -> match Plugin.create ?library ~system:"bap.pass" name with
-    | None -> errorf "Failed to auto-load plugin %s" name
-    | Some p -> Plugin.load p >>= fun () -> match find name with
-      | Some pass -> Ok pass
-      | None -> errorf "Plugin has not registered a pass"
+    | None -> fail name not_found
+    | Some p -> match Plugin.load p with
+      | Error err -> plugin_failure (load_failed name err)
+      | Ok () ->
+        match find name with
+        | Some _ -> ()
+        | None -> fail name doesn't_register
+
+(* load dependencies until a fixpoint or error condition are reached  *)
+let load_deps ?library () : unit =
+  let step () =
+    DList.to_list passes |>
+    List.iter ~f:(fun pass -> List.iter pass.deps ~f:(load ?library)) in
+  let rec loop () =
+    let m = DList.length passes in
+    step ();
+    if m <> DList.length passes then loop () in
+  loop ()
+
 
 let rec run ?library ?(argv=Sys.argv) (passed,proj) name =
   if List.mem passed name then (passed,proj)
   else
-    let pass = load ?library name |> ok_exn in
+    let pass = match find name with
+      | Some pass -> pass
+      | None -> fail name not_loaded in
     let (passed,proj) = List.fold pass.deps ~init:(passed,proj)
         ~f:(run ?library ~argv) in
     let argv = prepare_args argv pass.name in
-    name :: passed, pass.main argv proj
+    let proj = try pass.main argv proj with
+        exn -> plugin_failure (runtime_error name exn) in
+    name :: passed, proj
 
 let run_passes_exn ?library ?argv proj =
   let passes = DList.to_list passes |> List.map ~f:(fun p -> p.name) in
   match List.find_a_dup passes with
-  | Some name -> invalid_argf "%s is duplicated" name ()
+  | Some name -> fail name is_duplicate
   | None ->
+    load_deps ?library ();
     List.fold passes ~init:([],proj) ~f:(run ?library ?argv) |> snd
 
+let make_error = function
+  | Not_loaded name ->
+    errorf "plugin %s wasn't not loaded in the system" name
+  | Is_duplicate name ->
+    errorf "plugin with name %s was registered more than once" name
+  | Not_found name ->
+    errorf "can't find library for plugin %s" name
+  | Doesn't_register name ->
+    errorf "plugin %s didn't register any passes" name
+  | Load_failed (name,err) ->
+    errorf "the following error has occured when loading %s:%s"
+      name (Error.to_string_hum err)
+  | Runtime_error (name,exn) ->
+    errorf "plugin %s failed in runtime with exception %s"
+      name (Exn.to_string exn)
+
 let run_passes ?library ?argv proj : t Or_error.t =
-  try_with (fun () -> run_passes_exn ?library ?argv proj)
+  try Ok (run_passes_exn ?library ?argv proj) with
+  | Pass_failed error -> make_error error
+  | exn -> errorf "unexpected error when running plugins: %s"
+             (Exn.to_string exn)
+
+let passes_exn ?library () =
+  load_deps ?library ();
+  DList.to_list passes |> List.map ~f:(fun p -> p.name)
+
+let passes ?library () =
+  try Ok (passes_exn ?library ()) with
+  | Pass_failed err -> make_error err
+  | exn -> errorf "unexpecting error, when loading dependencies: %s"
+             (Exn.to_string exn)

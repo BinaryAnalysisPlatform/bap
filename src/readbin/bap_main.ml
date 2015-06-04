@@ -1,7 +1,7 @@
 open Core_kernel.Std
-open Or_error
-open Bap.Std
 open Bap_plugins.Std
+open Bap.Std
+open Or_error
 open Format
 open Options
 
@@ -33,20 +33,8 @@ module Program(Conf : Options.Provider) = struct
     | Some value -> f value
 
   let run project =
-    let system = "bap.pass" in
     let library = options.load_path in
-    List.iter options.plugins ~f:(fun name ->
-        Plugin.create ~library ~system name |>
-        function
-        | None ->
-          invalid_argf "Failed to find plugin with name '%s'" name ()
-        | Some p -> match Plugin.load p with
-          | Ok () -> ()
-          | Error err ->
-            invalid_argf "Failed to load plugin `%s': %s" name
-              (Error.to_string_hum err) ());
-
-    let project = Project.run_passes ~library project |> ok_exn in
+    let project = Project.run_passes_exn ~library project in
 
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
@@ -195,5 +183,5 @@ let () =
   Plugins.load ();
   match try_with_join (fun () -> Cmdline.parse () >>= start) with
   | Ok n -> exit n
-  | Error err -> eprintf "%a@." Error.pp err;
+  | Error err -> eprintf "Aborting because %a.@." Error.pp err;
     exit 1
