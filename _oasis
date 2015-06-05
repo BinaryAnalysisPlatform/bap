@@ -203,8 +203,9 @@ Library llvm_loader
   CCOpt:           $cc_optimization
   CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
   CSources:        bap_llvm_binary_stubs.c,
-                   bap_llvm_binary_stubs.h
-
+                   bap_llvm_binary_stubs.h,
+                   bap_llvm_binary.c,
+                   bap_llvm_binary.h
 
 Library dwarf
   Path:          lib/bap_dwarf
@@ -315,7 +316,8 @@ Library image_test
   Install:        false
   Modules:        Test_image,
                   Test_memmap,
-                  Test_table
+                  Test_table,
+                  Test_llvm_loader
 
 Library project_test
   Path:           lib_test/bap_project

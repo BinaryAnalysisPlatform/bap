@@ -51,8 +51,8 @@ let to_section arch s : Section.t =
       ~len:(S.size s |> Int64.to_int_exn) in
   Section.Fields.create ~name ~location
 
-let from_data data : Img.t option =
-  let from_data_exn () =
+let of_data data : Img.t option =
+  let of_data_exn () =
     let b = Binary.create data in
     let arch = Binary.arch b |>
                Arch.of_string |>
@@ -66,12 +66,12 @@ let from_data data : Img.t option =
     let sections =
       Binary.sections b |> List.map ~f:(to_section arch) in
     Img.Fields.create ~arch ~entry ~segments ~symbols ~sections in
-  Option.try_with from_data_exn
+  Option.try_with of_data_exn
 
 
 let () =
   let name = "llvm" in
-  match Bap_image.register_backend ~name from_data with
+  match Bap_image.register_backend ~name of_data with
   | `Ok -> ()
   | `Duplicate ->
     eprintf "llvm_loader_backend: name «%s» is already used\n" name

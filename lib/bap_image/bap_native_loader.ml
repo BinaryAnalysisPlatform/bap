@@ -20,7 +20,7 @@ let perm_of_flag = function
 
 let perm_of_flags = function
   | [] -> errorf "empty flag list"
-  | x :: xs ->
+  | xs ->
     let perm = List.fold xs ~init:None ~f:(fun perm flag ->
         Option.merge perm (perm_of_flag flag)
           ~f:(fun p1 p2 -> Or (p1,p2))) in

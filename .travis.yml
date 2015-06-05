@@ -1,3 +1,4 @@
+sudo: true
 language: cpp
 script: bash -ex .travis-ci.sh
 os:
