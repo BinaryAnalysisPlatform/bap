@@ -1,19 +1,23 @@
-#ifndef BAP_LLVM_BINARY_STUBS_HPP
-#define BAP_LLVM_BINARY_STUBS_HPP
+#ifndef BAP_LLVM_BINARY_HPP
+#define BAP_LLVM_BINARY_HPP
 
 #include <memory>
 #include <numeric>
 #include <vector>
 #include <algorithm>
+#include <iostream>
+#include <iomanip>
+#include <sstream>
 
 #include <llvm/Object/ELFObjectFile.h>
 #include <llvm/Object/COFF.h>
 #include <llvm/Object/MachO.h>
 #include <llvm/Object/Archive.h>
+#include <llvm/Support/Compiler.h>
 
-void llvm_binary_fail [[ noreturn ]](const char*);
+extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
-void llvm_binary_fail [[ noreturn ]](const llvm::error_code& ec) {
+LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const llvm::error_code& ec) {
     llvm_binary_fail(ec.message().c_str());
 }
 
@@ -69,14 +73,17 @@ using namespace llvm::object;
 
 struct segment {
     template <typename T>
-    segment(const Elf_Phdr_Impl<T>& hdr)
-        : name_("not applicable")
-        , offset_(hdr.p_offset)
+    segment(const Elf_Phdr_Impl<T>& hdr, int pos)
+        : offset_(hdr.p_offset)
         , addr_(hdr.p_vaddr)
         , size_(hdr.p_filesz)
         , is_readable_(hdr.p_flags & ELF::PF_R)
         , is_writable_(hdr.p_flags & ELF::PF_W)
-        , is_executable_(hdr.p_flags & ELF::PF_X) { }
+        , is_executable_(hdr.p_flags & ELF::PF_X) { 
+        std::ostringstream oss;
+        oss << std::setfill('0') << std::setw(2) << pos ;
+        name_ = oss.str();
+    }
 
     segment(const MachO::segment_command &s) {
         init_macho_segment(s);
@@ -136,10 +143,11 @@ std::vector<segment> read(const ELFObjectFile<T>* obj) {
     auto end = obj->getELFFile()->end_program_headers();
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
-    std::copy_if(begin,
-                 end,
-                 std::back_inserter(segments),
-                 [](const Elf_Phdr_Impl<T>& hdr){ return hdr.p_type == ELF::PT_LOAD;});
+    for (int pos = 0; begin != end; ++begin, ++pos) {
+        if (begin -> p_type == ELF::PT_LOAD) {
+            segments.push_back(segment(*begin, pos));
+        }
+    }
     return segments;
 }
 
@@ -444,4 +452,4 @@ image* create(const char* data, std::size_t size) {
 
 } //namespace img
 
-#endif //BAP_LLVM_BINARY_STUBS_HPP
+#endif //BAP_LLVM_BINARY_HPP
