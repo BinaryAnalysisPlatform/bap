@@ -37,6 +37,7 @@ val from_bigstring :
 
 val arch : t -> arch
 val program : t -> program term
+val with_program : t -> program term -> t
 val symbols : t -> symtab
 val with_symbols : t -> symtab -> t
 val memory : t -> value memmap

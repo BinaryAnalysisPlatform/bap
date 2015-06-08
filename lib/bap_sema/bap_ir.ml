@@ -440,8 +440,8 @@ module Ir_phi = struct
       let hash = hash_of_term
 
       let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%s := phi(%s)"
-          Var.(name lhs)
+        Format.fprintf ppf "%a = phi(%s)"
+          Var.pp lhs
           (String.concat ~sep:", "
              (List.map rhs
                 ~f:(Fn.compose Tid.to_string tid)))
