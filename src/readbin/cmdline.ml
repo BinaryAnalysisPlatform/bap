@@ -59,8 +59,6 @@ let dump_symbols : string option option Term.t =
   Arg.(value & opt ~vopt:(Some None) (some (some string)) None & info
          ["dump-symbols"] ~doc)
 
-
-
 let demangle : 'a option Term.t =
   let doc = "Demangle C++ symbols, using either internal \
              algorithm or a specified external tool, e.g. \
