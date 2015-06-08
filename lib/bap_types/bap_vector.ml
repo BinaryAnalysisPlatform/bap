@@ -6,8 +6,7 @@ type 'a t = {
 } with bin_io, compare, sexp
 
 let create ?(capacity=16) default =
-  if capacity <= 0
-  then invalid_arg "capacity must be positive";
+  let capacity = max capacity 1 in
   {
     size = 0;
     data = Array.create ~len:capacity default;

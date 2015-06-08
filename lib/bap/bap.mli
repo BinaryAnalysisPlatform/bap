@@ -5189,6 +5189,9 @@ module Std : sig
     (** [program project] returns a program lifted into {{!sema}IR}  *)
     val program : t -> program term
 
+    (** [with_program project program] updates a project program *)
+    val with_program : t -> program term -> t
+
     (** [symbols t] returns reconstructed symbol table  *)
     val symbols : t -> symtab
 

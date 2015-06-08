@@ -82,6 +82,7 @@ let from_file ?(on_warning=ok) ?backend ?name ?roots filename =
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols
+let with_program = Field.fset Fields.program
 
 let tag_memory t tag mem x =
   with_memory t @@
