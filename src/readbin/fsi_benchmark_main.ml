@@ -86,11 +86,11 @@ let print formatter tool result print_metrics : unit =
 
 let compare_against bin tool_name truth_name print_metrics : unit =
   let open Or_error in
-  match (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
+  (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
          Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
          let result =
            let to_set seq = Seq.fold seq ~init:Addr.Set.empty
-               ~f:(fun set fs -> Addr.Set.add set fs) in
+               ~f:Addr.Set.add in
            let tool = to_set tool in
            let truth = to_set truth in
            let false_positive = Set.(length (diff tool truth)) in
@@ -101,7 +101,7 @@ let compare_against bin tool_name truth_name print_metrics : unit =
            let recl = ratio false_negative in
            let f_05 = 1.5 *. prec *. recl /. (0.5 *. prec +. recl) in
            {false_positive;false_negative;true_positive;prec;recl;f_05} in
-         print std_formatter tool_name result print_metrics) with
+         print std_formatter tool_name result print_metrics) |> function
   | Ok _ -> ()
   | Error err ->
     printf "Function start is not recognized properly due to
