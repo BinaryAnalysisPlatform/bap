@@ -165,6 +165,11 @@ module PP = struct
       pr "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
       pr (a le ^^ "." ^^ a re) pp le pp re
+    | BinOp (Binop.EQ,e, Int x) | BinOp (Binop.EQ,Int x, e)
+      when Bitvector.(x = b1) -> pr ("%a") pp e
+    | BinOp (Binop.EQ,e, Int x) | BinOp (Binop.EQ,Int x, e)
+      when Bitvector.(x = b0) ->
+      pr ("%a(%a)") pp_unop Unop.NOT pp e
     | BinOp (op, le, re) ->
       pr (a le ^^ " %a " ^^ a re) pp le pp_binop op pp re
     | UnOp (op, exp) ->

@@ -87,7 +87,7 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
     | None -> t
     | Some addr -> annotate_addr (annotate_insn t insn) addr in
   let goto ?cond id =
-    Ir_blk.Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
+    `Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
   let jump ?cond exp =
     let target = Label.indirect exp in
     if Insn.is_return insn
@@ -97,15 +97,15 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
       Ir_jmp.create_call ?cond
         (Call.create ?return:fall ~target ())
     else Ir_jmp.create_goto ?cond target in
-  let jump ?cond exp = Instr (Ir_blk.Jmp  ~@(jump ?cond exp)) in
+  let jump ?cond exp = Instr (`Jmp  ~@(jump ?cond exp)) in
   let cpuexn ?cond n =
     let next = Tid.create () in [
-      Instr (Ir_blk.Jmp ~@(Ir_jmp.create_int ?cond n next));
+      Instr (`Jmp ~@(Ir_jmp.create_int ?cond n next));
       Label next] in
 
   let rec linearize = function
     | Bil.Move (lhs,rhs) ->
-      [Instr (Ir_blk.Def ~@(Ir_def.create lhs rhs))]
+      [Instr (`Def ~@(Ir_def.create lhs rhs))]
     | Bil.If (cond, [],[]) -> []
     | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
     | Bil.If (cond,[Bil.CpuExn n],[]) -> cpuexn ~cond n
@@ -171,7 +171,7 @@ let blk block : blk term list =
     else match fall_label with
       | None -> None
       | Some fall ->
-        Some (Ir_blk.Jmp (Ir_jmp.create_goto fall)) in
+        Some (`Jmp (Ir_jmp.create_goto fall)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
   List.rev (Term.set_attr b Disasm.block (Block.addr block) :: bs)
@@ -186,7 +186,7 @@ let call_of_blk blk =
         | Indirect (Bil.Int addr) -> Some addr
         | Indirect _ -> None)
 
-let resolve_jmp addrs jmp =
+let resolve_jmp ~skip_calls addrs jmp =
   let update_kind jmp addr make_kind =
     Option.value_map ~default:jmp
       (Hashtbl.find addrs addr)
@@ -196,6 +196,7 @@ let resolve_jmp addrs jmp =
   | Goto (Indirect (Bil.Int addr)) ->
     update_kind jmp addr (fun id -> Goto (Direct id))
   | Goto _ -> jmp
+  | Call _ when skip_calls -> jmp
   | Call call ->
     let jmp,call = match Call.target call with
       | Indirect (Bil.Int addr) ->
@@ -229,7 +230,7 @@ let lift_sub ?(bound=unbound) entry =
   let sub = Ir_sub.Builder.create ?blks:n () in
   List.iter blks ~f:(fun blk ->
       Ir_sub.Builder.add_blk sub
-        (Term.map jmp_t blk ~f:(resolve_jmp addrs)));
+        (Term.map jmp_t blk ~f:(resolve_jmp ~skip_calls:true addrs)));
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub subroutine_addr (Block.addr entry)
 
@@ -246,7 +247,8 @@ let program symtab =
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
   let program = Ir_program.Builder.result b in
   Term.map sub_t program
-    ~f:(Term.map blk_t ~f:(Term.map jmp_t ~f:(resolve_jmp addrs)))
+    ~f:(Term.map blk_t ~f:(
+        Term.map jmp_t ~f:(resolve_jmp ~skip_calls:false addrs)))
 
 
 let sub = lift_sub

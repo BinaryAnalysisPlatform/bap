@@ -14,20 +14,6 @@ end
 type 'a tag = 'a Type_equal.Id.t
 type t = Univ.t
 
-(* The only shared
-*)
-
-(* uuid simultaneously has three representations:
-   int as an interned string
-   string as human readable identifier
-   bytes as compact string of bytes.
-
-   string and bytes representations are persistent, i.e.,
-   they do not change in time and space. Integer representation
-   is fast but online, i.e., is valid only for the run of the
-   program.
-*)
-
 module Typeid = struct
 
   module Bin = Bin_prot.Utils.Make_binable(struct
