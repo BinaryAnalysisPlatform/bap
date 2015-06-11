@@ -54,7 +54,7 @@ type intent = In | Out | Both with bin_io, compare, sexp
 
 type jmp = (exp * jmp_kind) with bin_io, compare, sexp
 type def = (var * exp) with bin_io, compare, sexp
-type phi = (var * def term list) with bin_io, compare, sexp
+type phi = (var * exp Tid.Map.t) with bin_io, compare, sexp
 
 type blk = {
   phis : phi term array;
@@ -189,7 +189,7 @@ let nil_def : def term =
   Leaf.make Tid.nil undefined_var undefined_exp
 
 let nil_phi : phi term =
-  Leaf.make Tid.nil undefined_var []
+  Leaf.make Tid.nil undefined_var Tid.Map.empty
 
 let nil_jmp : jmp term =
   Leaf.make Tid.nil undefined_exp (Goto (Direct Tid.nil))
@@ -411,6 +411,11 @@ end
 module Ir_def = struct
   type t = def term
   include Leaf
+
+  let map_exp def ~f : def term =
+    with_rhs def (f (rhs def))
+
+
   include Regular.Make(struct
       type t = def term with bin_io, compare, sexp
       let module_name = "Bap.Std.Def"
@@ -426,13 +431,32 @@ end
 module Ir_phi = struct
   type t = phi term
   include Leaf
-  let create var def : phi term =
-    create var [def]
 
-  let defs (phi : phi term) : def term seq = Seq.of_list (rhs phi)
-  let add_def (phi : phi term) def : phi term = with_rhs phi (def :: rhs phi)
-  let remove_def phi tid : phi term =
-    with_rhs phi (List.filter (rhs phi) ~f:(fun p -> p.tid <> tid))
+  let of_list var bs : phi term =
+    create var (Tid.Map.of_alist_reduce bs ~f:(fun _ x -> x))
+
+  let create var tid exp : phi term = of_list var [tid,exp]
+
+  let values (phi : phi term) : (tid * exp) seq =
+    Map.to_sequence (rhs phi)
+
+  let update (phi : phi term) tid exp : phi term =
+    with_rhs phi (Map.add (rhs phi) ~key:tid ~data:exp)
+
+  let remove phi tid : phi term =
+    with_rhs phi (Map.remove (rhs phi) tid)
+
+  let select phi tid : exp option =
+    Map.find (rhs phi) tid
+
+  let select_or_unknown phi tid = match select phi tid with
+    | Some thing -> thing
+    | None ->
+      let name = Format.asprintf "no path from %a" Tid.pp tid in
+      Bil.unknown name (Var.typ (lhs phi))
+
+  let map_exp phi ~f : phi term =
+    with_rhs phi (Map.map (rhs phi) ~f)
 
   include Regular.Make(struct
       type t = phi term with bin_io, compare, sexp
@@ -440,12 +464,12 @@ module Ir_phi = struct
       let hash = hash_of_term
 
       let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%a = phi(%s)"
+        Format.fprintf ppf "%a := phi(%s)"
           Var.pp lhs
-          (String.concat ~sep:", "
-             (List.map rhs
-                ~f:(Fn.compose Tid.to_string tid)))
-
+          (String.concat ~sep:", " @@
+           List.map ~f:(fun (id,exp) ->
+               Format.asprintf "[%a, %%%a]" Exp.pp exp Tid.pp id)
+             (Map.to_alist rhs))
       let pp = Term.pp pp_self
     end)
 end
@@ -464,6 +488,22 @@ module Ir_jmp = struct
   let cond = lhs
   let with_cond = with_lhs
   let with_kind = with_rhs
+
+  let map_exp (jmp : jmp term) ~f : jmp term =
+    let map_label label = match label with
+      | Indirect exp -> Label.indirect (f exp)
+      | Direct _ -> label in
+    let map_call call : call =
+      let return = Option.map (Call.return call) ~f:map_label in
+      let target = map_label (Call.target call) in
+      Call.create ?return ~target () in
+    let jmp = with_cond jmp (f (cond jmp)) in
+    let kind = match kind jmp with
+      | Call t -> Call (map_call  t)
+      | Goto t -> Goto (map_label t)
+      | Ret  t -> Ret  (map_label t)
+      | Int (_,_) as kind -> kind in
+    with_kind jmp kind
 
   include Regular.Make(struct
       type t = jmp term with bin_io, compare, sexp
@@ -490,7 +530,7 @@ end
 
 module Ir_blk = struct
   type t = blk term
-  type elt = Def of def term | Phi of phi term | Jmp of jmp term
+  type elt = [`Def of def term | `Phi of phi term | `Jmp of jmp term]
 
   module Fields = Fields_of_blk
 
@@ -515,9 +555,25 @@ module Ir_blk = struct
     let add_jmp b = Vector.append b.b_jmps
     let add_phi b = Vector.append b.b_phis
     let add_elt b = function
-      | Jmp j -> add_jmp b j
-      | Phi p -> add_phi b p
-      | Def d -> add_def b d
+      | `Jmp j -> add_jmp b j
+      | `Phi p -> add_phi b p
+      | `Def d -> add_def b d
+
+    let transfer term_type blk adder bld =
+      Term.to_sequence term_type blk |> Seq.iter ~f:(adder bld)
+
+    let init
+        ?(same_tid=true)
+        ?(copy_phis=false) ?(copy_defs=false) ?(copy_jmps=false) blk =
+      let tid = if same_tid then Term.tid blk else Tid.create () in
+      let b = create ~tid ()
+          ~phis:(Term.length phi_t blk)
+          ~defs:(Term.length def_t blk)
+          ~jmps:(Term.length jmp_t blk) in
+      if copy_phis then transfer phi_t blk add_phi b;
+      if copy_defs then transfer def_t blk add_def b;
+      if copy_jmps then transfer jmp_t blk add_jmp b;
+      b
 
     let of_vec = Vector.to_array
 
@@ -592,13 +648,59 @@ module Ir_blk = struct
     let open Seq.Infix in
     let seq = Term.to_sequence in
     if rev then
-      Seq.(seq jmp_t ~rev blk >>| fun x -> Jmp x) @
-      Seq.(seq def_t ~rev blk >>| fun x -> Def x) @
-      Seq.(seq phi_t ~rev blk >>| fun x -> Phi x)
+      Seq.(seq jmp_t ~rev blk >>| fun x -> `Jmp x) @
+      Seq.(seq def_t ~rev blk >>| fun x -> `Def x) @
+      Seq.(seq phi_t ~rev blk >>| fun x -> `Phi x)
     else
-      Seq.(seq phi_t ~rev blk >>| fun x -> Phi x) @
-      Seq.(seq def_t ~rev blk >>| fun x -> Def x) @
-      Seq.(seq jmp_t ~rev blk >>| fun x -> Jmp x)
+      Seq.(seq phi_t ~rev blk >>| fun x -> `Phi x) @
+      Seq.(seq def_t ~rev blk >>| fun x -> `Def x) @
+      Seq.(seq jmp_t ~rev blk >>| fun x -> `Jmp x)
+
+
+  let apply_map name get map skip blk ~f =
+    if List.mem skip name then (get blk.self) else
+      Array.map (get blk.self) ~f:(fun x -> map x ~f)
+
+  let map_exp ?(skip=[]) blk ~f = {
+    blk with self = {
+      phis = apply_map `phi phis Ir_phi.map_exp skip blk ~f;
+      defs = apply_map `def defs Ir_def.map_exp skip blk ~f;
+      jmps = apply_map `jmp jmps Ir_jmp.map_exp skip blk ~f;
+    }
+  }
+
+  let map_phi_lhs p ~f = Ir_phi.(with_lhs p (f (lhs p)))
+  let map_def_lhs d ~f = Ir_def.(with_lhs d (f (lhs d)))
+
+  let map_lhs ?(skip=[]) blk ~f = {
+    blk with self = {
+      phis = apply_map `phi phis map_phi_lhs skip blk ~f;
+      defs = apply_map `def defs map_def_lhs skip blk ~f;
+      jmps = jmps blk.self;
+    }
+  }
+
+  let defines_var blk x =
+    let exists t =
+      Term.to_sequence t blk |>
+      Seq.exists ~f:(fun y -> Var.(Leaf.lhs y = x)) in
+    exists phi_t || exists def_t
+
+  let uses_var blk x =
+    let uses t f =
+      Seq.exists (Term.to_sequence t blk) ~f:(fun y -> f (Leaf.rhs y)) in
+    uses phi_t (fun map -> Map.exists map ~f:(Exp.is_referenced x)) ||
+    uses def_t (Exp.is_referenced x)
+
+  let find_var blk var =
+    Term.to_sequence def_t blk ~rev:true |>
+    Seq.find ~f:(fun d -> Ir_def.lhs d = var) |> function
+    | Some def -> Some (`Def def)
+    | None ->
+      Term.to_sequence phi_t blk |>
+      Seq.find ~f:(fun p -> Ir_phi.lhs p = var) |> function
+      | Some phi -> Some (`Phi phi)
+      | None -> None
 
   let dominated b ~by:dominator id =
     dominator = id ||

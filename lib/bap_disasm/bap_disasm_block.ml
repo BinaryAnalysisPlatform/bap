@@ -28,7 +28,7 @@ module Block = struct
 end
 
 
-let () = Pretty_printer.register ("Bap.Std.Block.pp")
+let () = Pretty_printer.register "Bap.Std.Block.pp"
 
 module Edge = struct
   type t = edge with compare
@@ -66,8 +66,9 @@ module Build(G : Graph.Builder.S
           ~init:(G.add_vertex gr src)
           ~f:(fun gr -> function
               | `Unresolved _ -> gr
-              | `Block (dst,_)
-                when not (bounded bound (Block.addr dst)) -> gr
+              | `Block (dst,(`Cond|`Jump))
+                when not (bounded bound (Block.addr dst))
+                     || Insn.is_call (Block.terminator src) -> gr
               | `Block (dst,kind) ->
                 Hash_set.add vis (Block.addr src);
                 let edge = Cfg.E.create src kind dst in

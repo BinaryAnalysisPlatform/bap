@@ -107,10 +107,11 @@ end
 
 module Ir_blk : sig
   type t = blk term
-  type elt =
-    | Def of def term
-    | Phi of phi term
-    | Jmp of jmp term
+  type elt = [
+    | `Def of def term
+    | `Phi of phi term
+    | `Jmp of jmp term
+  ]
   val create : unit -> t
   val split_while : t -> f:(def term -> bool) -> t * t
   val split_after : t -> def term -> t * t
@@ -118,11 +119,31 @@ module Ir_blk : sig
   val split_top : t -> t * t
   val split_bot : t -> t * t
   val elts : ?rev:bool -> t -> elt seq
+  val map_exp :
+    ?skip:[`phi | `def | `jmp] list ->
+    t -> f:(exp -> exp) -> t
+  val map_lhs :
+    ?skip:[`phi | `def ] list ->
+    t -> f:(var -> var) -> t
+  val find_var : t -> var -> [
+      | `Phi of phi term
+      | `Def of def term
+    ] option
+  val defines_var : t -> var -> bool
+  val uses_var : t -> var -> bool
+
   val dominated : t -> by:tid -> tid -> bool
 
   module Builder : sig
     type t
     val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
+    val init :
+      ?same_tid :bool ->
+      ?copy_phis:bool ->
+      ?copy_defs:bool ->
+      ?copy_jmps:bool ->
+      blk term -> t
+
     val add_def : t -> def term -> unit
     val add_jmp : t -> jmp term -> unit
     val add_phi : t -> phi term -> unit
@@ -139,10 +160,9 @@ module Ir_def : sig
   val rhs : t -> exp
   val with_lhs : t -> var -> t
   val with_rhs : t -> exp -> t
-
+  val map_exp : t -> f:(exp -> exp) -> t
   include Regular with type t := t
 end
-
 
 module Ir_jmp : sig
   type t = jmp term
@@ -153,20 +173,24 @@ module Ir_jmp : sig
   val create_int  : ?cond:exp -> int -> tid -> t
   val kind : t -> jmp_kind
   val cond : t -> exp
-
   val with_cond : t -> exp -> t
   val with_kind : t -> jmp_kind -> t
+  val map_exp : t -> f:(exp -> exp) -> t
   include Regular with type t := t
 end
 
 module Ir_phi : sig
   type t = phi term
-  val create : var -> def term -> t
+  val create : var -> tid -> exp -> t
+  val of_list : var -> (tid * exp) list -> t
   val lhs : t -> var
-  val defs : t -> def term seq
-  val add_def : t -> def term -> t
-  val remove_def : t -> tid -> t
-
+  val with_lhs : t -> var -> t
+  val values : t -> (tid * exp) seq
+  val update : t -> tid -> exp -> t
+  val select : t -> tid -> exp option
+  val remove : t -> tid -> t
+  val select_or_unknown : t -> tid -> exp
+  val map_exp : t -> f:(exp -> exp) -> t
   include Regular with type t := t
 end
 

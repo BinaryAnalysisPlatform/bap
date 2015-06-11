@@ -4808,11 +4808,11 @@ module Std : sig
     type t = blk term
 
     (** Union type for all element types  *)
-    type elt =
-      | Def of def term
-      | Phi of phi term
-      | Jmp of jmp term
-
+    type elt = [
+      | `Def of def term
+      | `Phi of phi term
+      | `Jmp of jmp term
+    ]
 
     (** [create ()] creates a new empty block.  *)
     val create : unit -> t
@@ -4872,6 +4872,38 @@ module Std : sig
         $\Phi$-nodes. *)
     val elts : ?rev:bool -> t -> elt seq
 
+    (** [map_exp b ~f] applies function [f] for each expression in
+        block [b]. By default function [f] will be applied to all
+        values of type [exp], including right hand sides of
+        phi-nodes, definitions, jump conditions and targets. [skip]
+        parameter allows to skip expressions from a given term kind.*)
+    val map_exp :
+      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
+      t -> f:(exp -> exp) -> t
+
+    (** [map_lhs blk ~f] applies [f] to every left hand side variable
+        in def and phi subterms of [blk]. Parameter [skip] allows to
+        ignore particular terms.  E.g.,
+        [map_lhs ~skip:[`phi] ~f:(substitute vars)].*)
+    val map_lhs :
+      ?skip:[`phi | `def ] list -> (** defaults to [[]]  *)
+      t -> f:(var -> var) -> t
+
+    (** [find_var blk var] finds a last definition of a variable [var]
+        in a block [blk].  *)
+    val find_var : t -> var -> [
+        | `Phi of phi term
+        | `Def of def term
+      ] option
+
+    (** [defines_var blk x] true if there exists such phi term or def
+        term with left hand side equal to [x]  *)
+    val defines_var : t -> var -> bool
+
+    (** [uses_var blk x] true if variable [x] occurs on the right
+        hand side of any phi or def term.  *)
+    val uses_var : t -> var -> bool
+
     (** [dominated blk by:dom def] if [def] is dominated by [dom] in
         [blk].  *)
     val dominated : t -> by:tid -> tid -> bool
@@ -4883,7 +4915,6 @@ module Std : sig
           as it allows to specify the [tid] of the block. It is a user
           responsibility to preserve the uniqueness of tidentifiers
           throughout the program instance.  *)
-
       type t
 
       (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
@@ -4894,6 +4925,19 @@ module Std : sig
           it is the hint, it can mismatch with the actual size. The
           hint must be a positive number.  *)
       val create : ?tid:tid -> ?phis:int -> ?defs:int -> ?jmps:int -> unit -> t
+
+      (** [init blk] creates a builder based on an existing
+          block. If [copy_phis], [copy_defs] or [copy_jmps] is [true]
+          (defaults to [false]), then prepopulate builder with
+          corresponding terms from block [blk]. If [same_tid] is true
+          (default), then a resulting block will have the same [tid]
+          as block [blk]. Otherwise, a fresh new [tid] will be created. *)
+      val init :
+        ?same_tid :bool ->       (** defaults to [true]  *)
+        ?copy_phis:bool ->       (** defaults to [false] *)
+        ?copy_defs:bool ->       (** defaults to [false] *)
+        ?copy_jmps:bool ->       (** defaults to [false] *)
+        blk term -> t
 
       (** appends a definition  *)
       val add_def : t -> def term -> unit
@@ -4933,6 +4977,10 @@ module Std : sig
     val with_lhs : t -> var -> t
     (** updates the right hand side of a definition  *)
     val with_rhs : t -> exp -> t
+
+    (** [map_exp def f] applies [f] to a [rhs] of [def] and returns
+        an updated definition. *)
+    val map_exp : t -> f:(exp -> exp) -> t
 
     include Regular with type t := t
   end
@@ -4974,7 +5022,7 @@ module Std : sig
     (** [create_ret ?cond label] return from a procedure  *)
     val create_ret  : ?cond:exp -> label -> t
 
-    (** [create_int ?cond int_number] call interrupt subroutine  *)
+    (** [create_int ?cond int_number return] call interrupt subroutine  *)
     val create_int  : ?cond:exp -> int -> tid -> t
 
     (** [kind jmp] evaluates to a kind of jump  *)
@@ -4982,6 +5030,10 @@ module Std : sig
 
     (** [cond jmp] returns the jump guard condition  *)
     val cond : t -> exp
+
+    (** [map_exp jmp ~f] applies [f] to each expression in a [jmp],
+        e.g., conditions and indirect labels.  *)
+    val map_exp : t -> f:(exp -> exp) -> t
 
     (** updated jump's guard condition  *)
     val with_cond : t -> exp -> t
@@ -4993,34 +5045,58 @@ module Std : sig
 
   (** PHI-node  *)
   module Phi : sig
-    (** Phi nodes are used to represent the values, that the same
-        variable can take depending on control flow paths.
-        Phi nodes should occur only in blocks that has more than one
-        incoming edges, i.e., in blocks to which there is a transfer
-        of control flow from more than one block.
+    (** Phi nodes are used to represent a set of values, that can be
+        assigned to a given variable depending on a control flow path
+        taken.  Phi nodes should occur only in blocks that has more
+        than one incoming edge, i.e., in blocks to which there is a
+        transfer of control flow from more than one block.
 
         Each element of a phi-node corresponds to a particular
-        incoming edge.
-
-        Note: phi-node doesn't define variable, the definition occurs
-        in one of the edges. *)
+        incoming edge. *)
     type t = phi term
 
-    (** [create var def] create a bogus phi-node with only one
-        definition *)
-    val create : var -> def term -> t
+    (** [create var label exp] creates a phi-node that associates a
+        variable [var] with an expression [exp]. This expression
+        should be selected if a control flow enters a block, that owns
+        this phi-node from a block labeled with [label]. Example,
+        [create x loop_header y].*)
+    val create : var -> tid -> exp -> t
 
-    (** [lhs phi] returns a variable associated with phi node  *)
+    (** [of_list var bindings] creates a phi-node, that for each pair
+        of [label,exp] in the [bindings] list associates variable [var]
+        with expression [exp] if control flow reaches this point via block
+        labeled with [label].  *)
+    val of_list : var -> (tid * exp) list -> t
+
+    (** [values phi] enumerate all possible values.  *)
+    val values : t -> (tid * exp) seq
+
+    (** [lhs phi] returns a variable associated with a phi node  *)
     val lhs : t -> var
 
-    (** [defs phi] enumerates all definitions in a phi node  *)
-    val defs : t -> def term seq
+    (** [with_lhs phi var] updates a left hand side of [phi] with
+        [var] *)
+    val with_lhs : t -> var -> t
 
-    (** [add_def phi def] appends new definition to a phi node  *)
-    val add_def : t -> def term -> t
+    (** [map_exp t ~f] applies [f] to all expressions on the right
+        hand side of a phi-node [t] *)
+    val map_exp : t -> f:(exp -> exp) -> t
+
+    (** [update phi label exp] associates expression [exp] with a
+        control flow path labeled with [label].  *)
+    val update : t -> tid -> exp -> t
+
+    (** [select phi label] takes the value corresponding to a control
+        flow path marked with [label].   *)
+    val select : t -> tid -> exp option
+
+    (** [select_or_unknown phi label] is [exp] if
+        [select phi label = Some exp], otherwise returns a
+        [Bil.unknown] expression.     *)
+    val select_or_unknown : t -> tid -> exp
 
     (** [remove_def id] removes definition with a given [id]  *)
-    val remove_def : t -> tid -> t
+    val remove : t -> tid -> t
 
     include Regular with type t := t
   end
