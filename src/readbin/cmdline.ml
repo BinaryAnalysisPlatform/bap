@@ -29,13 +29,16 @@ let cfg_format : 'a list Term.t =
     ])
 
 let output_phoenix : _ Term.t =
-  let doc = "Output data in a phoenix format. Output folder \
+  let doc = "Output information about processed binary in a human \
+             readable format. This will emit CFG for each format in \
+             dot format. It will also store BIL and ASM code in html \
+             format.Output folder \
              can be optionally specified. If omitted, the \
              basename of the target file will be used as a \
              directory name." in
   let vopt = Some (Sys.getcwd ()) in
   Arg.(value & opt ~vopt (some string) None &
-       info ["phoenix"] ~doc)
+       info ["phoenix"; "output"] ~doc)
 
 let output_dump : _ list Term.t =
   let values = [

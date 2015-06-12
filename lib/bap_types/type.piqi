@@ -86,6 +86,12 @@
     .name typ
     .type typ
   ]
+
+  .field [
+    .name tmp
+    .type bool
+  ]
+
 ]
 
 % bitvectors

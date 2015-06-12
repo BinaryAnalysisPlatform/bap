@@ -1006,8 +1006,7 @@ module ToIR = struct
         ]
         @
         let undef r =
-          let (n,_,t) = Var.V1.serialize r in
-          Bil.Move (r, Bil.Unknown (n^" undefined after bsf", t)) in
+          Bil.Move (r, Bil.Unknown (Var.name r^" is undefined after bsf", t)) in
         List.map ~f:undef [cf; oF; sf; af; pf]
       | Hlt -> [] (* x86 Hlt is essentially a NOP *)
       | Rdtsc ->
@@ -1403,8 +1402,7 @@ module ToIR = struct
         :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
         :: fst (assn_dbl t assne)
         @ (let undef r =
-             let n,_,t = Var.V1.serialize r in
-             Bil.Move (r, Bil.Unknown ((n^" undefined after div"), t))
+             Bil.Move (r, Bil.Unknown ((Var.name r ^" undefined after div"), t))
            in
            List.map ~f:undef [cf; oF; sf; zf; af; pf])
       | Idiv(t, src) ->
@@ -1425,8 +1423,7 @@ module ToIR = struct
         :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
         :: fst (assn_dbl t assne)
         @ (let undef r =
-             let n,_,t = Var.V1.serialize r in
-             Bil.Move (r, Bil.Unknown (n^" undefined after div", t)) in
+             Bil.Move (r, Bil.Unknown (Var.name r ^ "undefined after div", t)) in
            List.map ~f:undef [cf; oF; sf; zf; af; pf])
       | Cld ->
         [Bil.Move (df, exp_false)]
@@ -1491,9 +1488,9 @@ module Make_CPU(Env : ModeVars) = struct
 
   let addr_of_pc = Memory.max_addr
 
-  let is = Var.equal
-  let is_reg r = is pc r || Set.mem gpr r
-  let is_flag = Set.mem flags
+  let is = Var.same
+  let is_reg r = is pc r || Set.mem gpr (Var.base r)
+  let is_flag r = Set.mem flags (Var.base r)
   let is_zf = is zf
   let is_cf = is cf
   let is_vf = is oF

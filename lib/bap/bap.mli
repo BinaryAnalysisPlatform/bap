@@ -1233,8 +1233,24 @@ module Std : sig
   with bin_io, compare, sexp
 
   (** BIL variable.
-      BIL variables are regular values. Every call to
-      [create] will create a fresh variable.  *)
+      BIL variables are regular values. Variables can versioned. I.e.,
+      a version number can be added to a variable, to represent the
+      same variable but at different time or space (control flow path).
+      This is particulary useful for representing variables in SSA
+      form.
+
+      By default, comparison functions takes version number into
+      account. In order to compare two variables regardless their
+      version number use [same] function, or compare with [base x].
+
+      Temporary variables (those, that are created with flag
+      [tmp:true] argument, are treated differently. Every time a
+      temporary variable is created a fresh new identifier is created
+      and appended to a provided name (interleaved with '_'
+      character). So that it is impossible to create two equal
+      temporary variables.
+
+  *)
   module Var : sig
 
     type t = var
@@ -1242,12 +1258,13 @@ module Std : sig
     (** implements [Regular] interface  *)
     include Regular with type t := t
 
-    (** [create ?tmp name typ] creates a fresh new variable with
-        assosiated [name] and type [typ]. The created variable is
-        absolutely new, and is comparable to true only with itself.
+    (** [create ?tmp name typ] creates a variable with associated
+        [name] and type [typ]. A newly created variable has version
+        equal to 0.
 
-        @param tmp designates variable is temporary, with whatever
-        meaning assosiated to it by a caller. *)
+        If [tmp] is [true] then a fresh new identifier is created by
+        incrementing a hidden counter, and prepending it to a variable
+        name.*)
     val create : ?tmp:bool -> string -> typ -> t
 
     (** [name var] returns a name assosiated with variable  *)
@@ -1259,9 +1276,24 @@ module Std : sig
     (** [is_tmp] true if variable is temporary  *)
     val is_tmp : t -> bool
 
+    (** [renumber var ver] returns a variable, that is identical to
+        [var], but with version equal to [ver] *)
+    val renumber : t -> int -> t
+
+    (** [version v] returns a variable version  *)
+    val version : t -> int
+
+    (** [base var] returns an original variable. Essentially,
+        identical to [renumber var 0] *)
+    val base : t -> t
+
+    (** [same x y] compares variables ignoring versions, i.e.,
+        [same x y] iff [equal (base x) (base y)] *)
+    val same : t -> t -> bool
+
     (** Serialization format  *)
     module V1 : sig
-      type r = string * int * typ
+      type r = string * int * typ * bool
       val serialize   : t -> r
       val deserialize : r -> t
     end
@@ -4600,6 +4632,10 @@ module Std : sig
         such that [tid c = id].  *)
     val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
+    (** [find t p id] like {!find} but raises [Not_found] if nothing
+        is found.  *)
+    val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
+
     (** [update t p c] if term [p] contains a term with id equal to
         [tid c] then return [p] with this term substituted with [p] *)
     val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
@@ -4608,8 +4644,19 @@ module Std : sig
         with the given [id] *)
     val remove : ('a,_) cls -> 'a t -> tid -> 'a t
 
-    (** [to_sequence ?rev t p] returns all subterms of type [t] of the
+    (** [change t p id f] if [p] contains subterm with of a given kind
+        [t] and identifier [id], then apply [f] to this
+        subterm. Otherwise, apply [f] to [None]. If [f] return [None],
+        then remove this subterm (given it did exist), otherwise,
+        update parent with a new subterm.  *)
+    val change : ('a,'b) cls -> 'a t -> tid -> ('b t option -> 'b t option) -> 'a t
+
+
+    (** [enum ?rev t p] enumerate all subterms of type [t] of the
         given term [p] *)
+    val enum : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
+
+    (** [to_sequence ?rev t p] is a synonym for [enum]. *)
     val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
 
     (** [map t p ~f] returns term [p] with all subterms of type [t]

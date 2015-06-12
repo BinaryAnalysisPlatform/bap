@@ -113,6 +113,7 @@ module Array = struct
     then Array.map xs ~f:(fun x -> if is_target x then y else x)
     else xs
 
+
   let pp ppx ppf xs =
     Array.iter xs ~f:(fun x -> Format.fprintf ppf "%a" ppx x)
 end
@@ -231,8 +232,15 @@ module Term = struct
 
   let find t p tid = Array.find (t.get p.self) ~f:(fun x -> x.tid = tid)
 
+  let find_exn t p tid = Array.find_exn (t.get p.self) ~f:(fun x -> x.tid = tid)
+
   let remove t p tid =
     apply (Array.remove_if ~f:(fun x -> x.tid = tid)) t p
+
+  let change t p tid f =
+    match f (find t p tid) with
+    | None -> remove t p tid
+    | Some c -> update t p c
 
   let to_seq xs =
     Seq.init (Array.length xs) ~f:(Array.unsafe_get xs)
@@ -243,6 +251,8 @@ module Term = struct
 
   let to_sequence ?(rev=false) t p =
     if rev then to_seq_rev (t.get p.self) else to_seq (t.get p.self)
+
+  let enum = to_sequence
 
   let map t p ~f : 'a term = apply (Array.map ~f) t p
 

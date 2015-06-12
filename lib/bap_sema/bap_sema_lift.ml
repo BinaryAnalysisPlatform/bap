@@ -196,9 +196,9 @@ let resolve_jmp ~skip_calls addrs jmp =
   | Goto (Indirect (Bil.Int addr)) ->
     update_kind jmp addr (fun id -> Goto (Direct id))
   | Goto _ -> jmp
-  | Call _ when skip_calls -> jmp
   | Call call ->
     let jmp,call = match Call.target call with
+      | _ when skip_calls -> jmp, call
       | Indirect (Bil.Int addr) ->
         let new_call = ref call in
         let jmp = update_kind jmp addr
