@@ -53,9 +53,12 @@ module Term : sig
   val name : 'a t -> string
   val tid : 'a t -> tid
   val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
+  val find_exn : ('a,'b) cls -> 'a t -> tid -> 'b t
   val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
   val remove : ('a,_) cls -> 'a t -> tid -> 'a t
+  val change : ('a,'b) cls -> 'a t -> tid -> ('b t option -> 'b t option) -> 'a t
   val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
+  val enum : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
   val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t) -> 'a t
   val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option) -> 'a t
   val concat_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t list) -> 'a t

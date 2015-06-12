@@ -1072,7 +1072,7 @@ module CPU = struct
     ]
 
   let flags = Var.Set.of_list @@ [
-      nf; zf; cf; qf;
+      nf; zf; cf; qf; vf;
     ] @ Array.to_list ge
 
   let nf = nf
@@ -1080,28 +1080,19 @@ module CPU = struct
   let cf = cf
   let vf = vf
 
-  let is = Var.equal
+  let is = Var.same
 
-  let is_reg = Set.mem regs
+  let is_reg r = Set.mem regs (Var.base r)
   let is_sp = is sp
   let is_bp = is r11
   let is_pc = is pc
   let addr_of_pc m = Addr.(Memory.min_addr m ++ 8)
-  let is_flag = Set.mem flags
+  let is_flag r = Set.mem flags (Var.base r)
   let is_zf = is zf
   let is_cf = is cf
   let is_vf = is vf
   let is_nf = is nf
 
-  let is_return = is r0
-  let is_formal = function
-    | 0 -> is r0
-    | 1 -> is r1
-    | 2 -> is r2
-    | 3 -> is r3
-    | _ -> fun _ -> false
-
-  let is_permanent = Set.mem perms
   let is_mem = is mem
 end
 

@@ -80,18 +80,20 @@ let rec type_of_piqi = function
 
 
 let var_to_piqi v =
-  let (name,id,typ) = Var.V1.serialize v in
+  let (name,id,typ,tmp) = Var.V1.serialize v in
   let module P = Stmt_piqi in {
     P.Var.name = name;
     P.Var.id  = id;
     P.Var.typ = type_to_piqi typ;
+    P.Var.tmp = tmp;
   }
 
 let var_of_piqi p =
   let module P = Stmt_piqi in
   Var.V1.deserialize (p.P.Var.name,
                       p.P.Var.id,
-                      type_of_piqi p.P.Var.typ)
+                      type_of_piqi p.P.Var.typ,
+                      p.P.Var.tmp)
 
 let endianness_to_piqi : endian -> Stmt_piqi.endian = function
   | LittleEndian -> `little_endian

@@ -92,8 +92,7 @@ module Program(Conf : Options.Provider) = struct
       if options.output_phoenix <> None then
         let module Phoenix = Phoenix.Make(Env) in
         let dest = Phoenix.store () in
-        printf "Phoenix data was stored in %s folder@." dest
-    in
+        printf "Stored data in folder %s@." dest in
 
     if options.dump_symbols <> None then
       let serialized =
