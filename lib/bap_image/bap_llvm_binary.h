@@ -1,5 +1,5 @@
 #ifndef BAP_LLVM_BINARY_H
-#define BAP_LLVM_BINATY_H
+#define BAP_LLVM_BINARY_H
 
 struct image;
 struct section;
