@@ -37,9 +37,9 @@ write your plugin in OCaml using your
 
 ```sh
 $ cat hello_world.ml
-open Bap.Std let main project =
-print_endline "Hello, World"
-let () = Project.register_pass "hello-world" main
+open Bap.Std 
+let main project = print_endline "Hello, World"
+let () = Project.register_pass' "hello-world" main
 ```
 
 Next, build it with our `bapbuild` tool:
