@@ -27,7 +27,6 @@ let bap_packages = [
 let packages = default_pkgs @ syntax_packages @ bap_packages
 
 let default_tags = [
-  "linkall";
   "thread";
   "debug";
   "annot";
@@ -35,14 +34,13 @@ let default_tags = [
   "short_paths"
 ]
 
-let set_default_flags () : unit =
+let set_default_options () : unit =
   Options.(begin
       use_ocamlfind := true;
       ocaml_syntax := Some "camlp4o";
       ocaml_pkgs := packages;
       tags := default_tags;
     end)
-
 
 let extern_deps_link_flags () =
   let interns = packages |>
@@ -78,7 +76,8 @@ let plugin () =
          ])
 
 let main () =
-  set_default_flags ();
+  set_default_options ();
+  flag ["ocaml"; "library"; "link"]  (A"-linkall");
   Command.jobs := 4;
   Ocamlbuild_plugin.dispatch (function
       | Before_rules -> plugin ()
