@@ -10,7 +10,7 @@ fileutils
 lwt
 oasis
 ocamlgraph
-ocurl
+ocurl.0.7.1
 re
 uri
 zarith

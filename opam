@@ -50,7 +50,7 @@ depends: [
     "lwt"
     "oasis" {build & >= "0.4.0"}
     "ocamlgraph"
-    "ocurl"
+    "ocurl" {<= "0.7.1"}
     "re"
     "uri"
     "utop"

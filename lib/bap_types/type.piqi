@@ -97,7 +97,7 @@
 % bitvectors
 .alias [
   .name bitvector
-  .type binary
+  .type string
 ]
 
 % an address is now a bitvector
