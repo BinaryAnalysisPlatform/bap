@@ -41,7 +41,7 @@ module Typeid = struct
       include Sexp
       include Stringable
       let hash = Hashtbl.hash
-      let module_name = "Bap.Std.Value.Typeid"
+      let module_name = Some "Bap.Std.Value.Typeid"
       let pp ppf t = Uuidm.print ppf t
     end)
   include Uuidm
@@ -203,5 +203,5 @@ include Regular.Make(struct
     let pp ppf v = match typeof v with
       | Some t -> t.pp ppf v
       | None -> Format.fprintf ppf "<poly>"
-    let module_name = "Bap.Std.Value"
+    let module_name = Some "Bap.Std.Value"
   end)

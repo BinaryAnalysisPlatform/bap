@@ -51,7 +51,7 @@ module Fn = struct
           Some Addr.(pc_lo ++ off) in
       pc_hi >>| fun pc_hi -> {pc_lo; pc_hi}
     let hash = Hashtbl.hash
-    let module_name = "Bap.Std.Dwarf.Fn"
+    let module_name =  "Bap.Std.Dwarf.Fn"
   end
   include T
   include Identifiable.Make(struct

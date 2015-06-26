@@ -1,7 +1,15 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Bap_common
+open Bap_bil
 
+module Value = Bap_value
 module Dict = Value.Dict
+module Seq = Sequence
+module Vec = Bap_vector
+module Var = Bap_var
+
+type dict = Dict.t with bin_io, compare, sexp
+type 'a vector = 'a Vec.t
 
 module Tid = struct
   exception Overrun
@@ -16,7 +24,7 @@ module Tid = struct
   let nil = Int63.zero
   include Regular.Make(struct
       type nonrec t = Int63.t with bin_io, compare, sexp
-      let module_name = "Bap.Std.Tid"
+      let module_name = Some "Bap.Std.Tid"
       let hash = Int63.hash
 
       let pp ppf tid =
@@ -88,7 +96,7 @@ let compare_program x y =
 
 module Array = struct
   include Array
-  (** [insert xs x i] insert [x] into [xs] in a position befor [i].
+  (** [insert xs x i] insert [x] into [xs] in a position before [i].
       [i] can be in a range of [0 <= i <= length xs]
   *)
   let insert xs x i =
@@ -119,10 +127,10 @@ module Array = struct
 end
 
 
-let always = Bil.(int Word.b1)
-let never  = Bil.(int Word.b0)
-let undefined_exp = Bil.unknown "undefined" bool_t
-let undefined_var = Var.create "undefined" bool_t
+let always = Bap_bil.Exp.Int Bitvector.b1
+let never  = Bap_bil.Exp.Int Bitvector.b0
+let undefined_exp = Bap_exp.Exp.unknown "undefined" Bap_type.Export.bool_t
+let undefined_var = Bap_var.create "undefined" Bap_type.Export.bool_t
 
 let pp_attr ppf attr =
   Format.fprintf ppf "@[.%s %a@]"
@@ -132,8 +140,8 @@ let pp_attrs ppf dict =
   Dict.data dict |> Seq.iter ~f:(pp_attr ppf)
 
 module Leaf = struct
-  let create lhs rhs = {
-    tid = Tid.create ();
+  let create ?(tid=Tid.create ()) lhs rhs = {
+    tid;
     self = (lhs,rhs);
     dict = Value.Dict.empty;
   }
@@ -230,17 +238,20 @@ module Term = struct
   let update t p y =
     apply (fun xs -> Array.update_if xs y ~f:(fun x -> x.tid = y.tid)) t p
 
-  let find t p tid = Array.find (t.get p.self) ~f:(fun x -> x.tid = tid)
+  let find t p tid =
+    Array.find (t.get p.self) ~f:(fun x -> x.tid = tid)
 
-  let find_exn t p tid = Array.find_exn (t.get p.self) ~f:(fun x -> x.tid = tid)
+  let find_exn t p tid =
+    Array.find_exn (t.get p.self) ~f:(fun x -> x.tid = tid)
+
+  let nth t p i =
+    let xs = t.get p.self in
+    if i < Array.length xs then Some xs.(i) else None
+
+  let nth_exn t p i = (t.get p.self).(i)
 
   let remove t p tid =
     apply (Array.remove_if ~f:(fun x -> x.tid = tid)) t p
-
-  let change t p tid f =
-    match f (find t p tid) with
-    | None -> remove t p tid
-    | Some c -> update t p c
 
   let to_seq xs =
     Seq.init (Array.length xs) ~f:(Array.unsafe_get xs)
@@ -260,9 +271,9 @@ module Term = struct
 
   let concat_map t p ~f =
     let concat_map xs =
-      let vec = Vector.create ~capacity:(Array.length xs) t.nil in
-      Array.iter xs ~f:(fun x -> List.iter (f x) ~f:(Vector.append vec));
-      Vector.to_array vec in
+      let vec = Vec.create ~capacity:(Array.length xs) t.nil in
+      Array.iter xs ~f:(fun x -> List.iter (f x) ~f:(Vec.append vec));
+      Vec.to_array vec in
     apply concat_map t p
 
   let filter t p ~f = apply (Array.filter ~f) t p
@@ -324,6 +335,16 @@ module Term = struct
   let has_attr t tag = get_attr t tag <> None
   let length t p = Array.length (t.get p.self)
 
+  let change t p tid f =
+    Array.findi (t.get p.self) ~f:(fun _ x -> x.tid = tid) |> function
+    | None -> Option.value_map (f None) ~f:(append t p) ~default:p
+    | Some (i,x) -> match f (Some x) with
+      | None -> remove t p tid
+      | Some c ->
+        let xs = Array.mapi (t.get p.self) ~f:(fun n x ->
+            if i = n then c else x) in
+        {p with self = t.set p.self xs}
+
   let pp pp_self ppf t =
     let open Format in
     let attrs = Dict.data t.dict in
@@ -345,10 +366,10 @@ module Label = struct
 
   include Regular.Make(struct
       type t = label with bin_io, compare, sexp
-      let module_name = "Bap.Std.Label"
+      let module_name = Some "Bap.Std.Label"
       let hash = Hashtbl.hash
       let pp ppf = function
-        | Indirect exp -> Exp.pp ppf exp
+        | Indirect exp -> Bap_exp.pp ppf exp
         | Direct tid -> Format.fprintf ppf "%%%a" Tid.pp tid
     end)
 end
@@ -364,7 +385,7 @@ module Call = struct
 
   include Regular.Make(struct
       type t = call with bin_io, compare, sexp
-      let module_name = "Bap.Std.Call"
+      let module_name = Some "Bap.Std.Call"
 
       let pp_return ppf lab = match lab with
         | Some label ->
@@ -382,8 +403,7 @@ end
 module Ir_arg = struct
   type t = arg term
   include Leaf
-  let create ?intent ?name typ : t =
-    let tid = Tid.create () in
+  let create ?(tid=Tid.create()) ?intent ?name typ : t =
     let tmp = Option.is_none name in
     let name = match name with
       | Some name -> name
@@ -399,7 +419,7 @@ module Ir_arg = struct
 
   include Regular.Make(struct
       type t = arg term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Arg"
+      let module_name = Some "Bap.Std.Arg"
       let hash = hash_of_term
 
       let string_of_intent = function
@@ -412,7 +432,7 @@ module Ir_arg = struct
         Format.fprintf ppf "%s :: %s%a"
           (Var.name var)
           (string_of_intent intent)
-          Type.pp (Var.typ var)
+          Bap_type.pp (Var.typ var)
 
       let pp = Term.pp pp_self
     end)
@@ -428,11 +448,11 @@ module Ir_def = struct
 
   include Regular.Make(struct
       type t = def term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Def"
+      let module_name = Some "Bap.Std.Def"
       let hash = hash_of_term
 
       let pp_self ppf (lhs,rhs) =
-        Format.fprintf ppf "%a := %a" Var.pp lhs Exp.pp rhs
+        Format.fprintf ppf "%a := %a" Var.pp lhs Bap_exp.pp rhs
 
       let pp = Term.pp pp_self
     end)
@@ -442,12 +462,12 @@ module Ir_phi = struct
   type t = phi term
   include Leaf
 
-  let of_list var bs : phi term =
-    create var (Tid.Map.of_alist_reduce bs ~f:(fun _ x -> x))
+  let of_list ?tid var bs : phi term =
+    create ?tid var (Tid.Map.of_alist_reduce bs ~f:(fun _ x -> x))
 
-  let create var tid exp : phi term = of_list var [tid,exp]
+  let create ?tid var src exp : phi term = of_list var [src,exp]
 
-  let values (phi : phi term) : (tid * exp) seq =
+  let values (phi : phi term) : (tid * exp) Seq.t =
     Map.to_sequence (rhs phi)
 
   let update (phi : phi term) tid exp : phi term =
@@ -463,14 +483,14 @@ module Ir_phi = struct
     | Some thing -> thing
     | None ->
       let name = Format.asprintf "no path from %a" Tid.pp tid in
-      Bil.unknown name (Var.typ (lhs phi))
+      Bap_exp.Exp.unknown name (Var.typ (lhs phi))
 
   let map_exp phi ~f : phi term =
     with_rhs phi (Map.map (rhs phi) ~f)
 
   include Regular.Make(struct
       type t = phi term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Phi"
+      let module_name = Some "Bap.Std.Phi"
       let hash = hash_of_term
 
       let pp_self ppf (lhs,rhs) =
@@ -478,7 +498,7 @@ module Ir_phi = struct
           Var.pp lhs
           (String.concat ~sep:", " @@
            List.map ~f:(fun (id,exp) ->
-               Format.asprintf "[%a, %%%a]" Exp.pp exp Tid.pp id)
+               Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
              (Map.to_alist rhs))
       let pp = Term.pp pp_self
     end)
@@ -488,11 +508,20 @@ module Ir_jmp = struct
   type t = jmp term
   include Leaf
 
-  let create_call ?(cond=always) call = create cond (Call call)
-  let create_goto ?(cond=always) dest = create cond (Goto dest)
-  let create_ret  ?(cond=always) dest = create cond (Ret  dest)
-  let create_int  ?(cond=always) n t  = create cond (Int (n,t))
-  let create      ?(cond=always) kind = create cond kind
+  let create_call ?tid ?(cond=always) call =
+    create ?tid cond (Call call)
+
+  let create_goto ?tid ?(cond=always) dest =
+    create ?tid cond (Goto dest)
+
+  let create_ret  ?tid ?(cond=always) dest =
+    create ?tid cond (Ret  dest)
+
+  let create_int  ?tid ?(cond=always) n t  =
+    create ?tid cond (Int (n,t))
+
+  let create      ?tid ?(cond=always) kind =
+    create ?tid cond kind
 
   let kind = rhs
   let cond = lhs
@@ -517,7 +546,7 @@ module Ir_jmp = struct
 
   include Regular.Make(struct
       type t = jmp term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Jmp"
+      let module_name = Some "Bap.Std.Jmp"
       let hash = hash_of_term
 
       let pp_dst ppf = function
@@ -529,7 +558,7 @@ module Ir_jmp = struct
 
       let pp_cond ppf cond =
         if Exp.(cond <> always) then
-          Format.fprintf ppf "when %a " Exp.pp cond
+          Format.fprintf ppf "when %a " Bap_exp.pp cond
 
       let pp_self ppf (lhs,rhs) =
         Format.fprintf ppf "%a%a" pp_cond lhs pp_dst rhs
@@ -552,18 +581,16 @@ module Ir_blk = struct
       b_jmps : jmp term vector;
     }
 
-    let create ?tid ?(phis=16) ?(defs=16) ?(jmps=16) () = {
-      b_phis = Vector.create ~capacity:phis nil_phi;
-      b_defs = Vector.create ~capacity:defs nil_def;
-      b_jmps = Vector.create ~capacity:jmps nil_jmp;
-      b_tid = match tid with
-        | None -> Tid.create ()
-        | Some tid -> tid
+    let create ?(tid=Tid.create()) ?(phis=16) ?(defs=16) ?(jmps=16) () = {
+      b_phis = Vec.create ~capacity:phis nil_phi;
+      b_defs = Vec.create ~capacity:defs nil_def;
+      b_jmps = Vec.create ~capacity:jmps nil_jmp;
+      b_tid  = tid
     }
 
-    let add_def b = Vector.append b.b_defs
-    let add_jmp b = Vector.append b.b_jmps
-    let add_phi b = Vector.append b.b_phis
+    let add_def b = Vec.append b.b_defs
+    let add_jmp b = Vec.append b.b_jmps
+    let add_phi b = Vec.append b.b_phis
     let add_elt b = function
       | `Jmp j -> add_jmp b j
       | `Phi p -> add_phi b p
@@ -585,7 +612,7 @@ module Ir_blk = struct
       if copy_jmps then transfer jmp_t blk add_jmp b;
       b
 
-    let of_vec = Vector.to_array
+    let of_vec = Vec.to_array
 
     let result (b : t) : blk term = {
       tid = b.b_tid;
@@ -598,8 +625,8 @@ module Ir_blk = struct
     }
   end
 
-  let create () : blk term = {
-    tid = Tid.create ();
+  let create ?(tid=Tid.create ()) () : blk term = {
+    tid;
     dict = Dict.empty;
     self = {
       phis = [| |] ;
@@ -697,10 +724,11 @@ module Ir_blk = struct
     exists phi_t || exists def_t
 
   let uses_var blk x =
+    let is_referenced = Bap_helpers.Exp.is_referenced in
     let uses t f =
       Seq.exists (Term.to_sequence t blk) ~f:(fun y -> f (Leaf.rhs y)) in
-    uses phi_t (fun map -> Map.exists map ~f:(Exp.is_referenced x)) ||
-    uses def_t (Exp.is_referenced x)
+    uses phi_t (fun map -> Map.exists map ~f:(is_referenced x)) ||
+    uses def_t (is_referenced x)
 
   let find_var blk var =
     Term.to_sequence def_t blk ~rev:true |>
@@ -718,7 +746,7 @@ module Ir_blk = struct
 
   include Regular.Make(struct
       type t = blk term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Blk"
+      let module_name = Some "Bap.Std.Blk"
       let hash = hash_of_term
 
       let pp_self ppf self =
@@ -735,8 +763,7 @@ end
 module Ir_sub = struct
   type t = sub term
 
-  let create ?name () : t =
-    let tid = Tid.create () in
+  let create ?(tid=Tid.create ()) ?name () : t =
     let name = match name with
       | Some name -> name
       | None -> Tid.to_string tid in
@@ -755,19 +782,19 @@ module Ir_sub = struct
 
     let create ?tid ?(args=4) ?(blks=16) ?name () : t =
       tid,
-      Vector.create ~capacity:args nil_arg,
-      Vector.create ~capacity:blks nil_blk,
+      Vec.create ~capacity:args nil_arg,
+      Vec.create ~capacity:blks nil_blk,
       name
 
-    let add_blk (_,_,bs,_) = Vector.append bs
-    let add_arg (_,xs,_,_) = Vector.append xs
+    let add_blk (_,_,bs,_) = Vec.append bs
+    let add_arg (_,xs,_,_) = Vec.append xs
 
     let result (tid,args,blks,name) : sub term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
-      let args = Vector.to_array args in
-      let blks = Vector.to_array blks in
+      let args = Vec.to_array args in
+      let blks = Vec.to_array blks in
       let name = match name with
         | Some name -> name
         | None -> Format.asprintf "sub_%a" Tid.pp tid in
@@ -775,7 +802,7 @@ module Ir_sub = struct
   end
   include Regular.Make(struct
       type t = sub term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Sub"
+      let module_name = Some "Bap.Std.Sub"
       let hash = hash_of_term
       let pp_self ppf self =
         Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
@@ -793,7 +820,7 @@ end
 module Ir_program = struct
   type t = program term
 
-  let create () : t = Term.create {
+  let create ?(tid=Tid.create ()) () : t = make_term tid {
       subs = [| |] ;
       paths = Tid.Table.create ();
     }
@@ -898,23 +925,23 @@ module Ir_program = struct
     type t = tid option * sub term vector
 
     let create ?tid ?(subs=16) () : t =
-      tid, Vector.create ~capacity:subs nil_sub
+      tid, Vec.create ~capacity:subs nil_sub
 
-    let add_sub (_,subs) = Vector.append subs
+    let add_sub (_,subs) = Vec.append subs
 
     let result (tid,subs) : program term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
       make_term tid {
-        subs = Vector.to_array subs;
+        subs = Vec.to_array subs;
         paths = Tid.Table.create ();
       }
   end
 
   include Regular.Make(struct
       type t = program term with bin_io, compare, sexp
-      let module_name = "Bap.Std.Program"
+      let module_name = Some "Bap.Std.Program"
       let hash = hash_of_term
       let pp_self ppf self =
         Format.fprintf ppf "@[<v>program@.%a@]"

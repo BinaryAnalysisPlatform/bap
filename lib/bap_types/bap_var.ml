@@ -19,7 +19,7 @@ module T = struct
   } with sexp, bin_io,compare
 
   let hash v = String.hash v.var
-  let module_name = "Bap.Std.Var"
+  let module_name = Some "Bap.Std.Var"
 
   let pp fmt v =
     Format.fprintf fmt "%s%s" v.var

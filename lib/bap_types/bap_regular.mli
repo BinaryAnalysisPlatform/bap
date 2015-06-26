@@ -20,10 +20,10 @@ module Make(M : sig
     type t with bin_io, sexp, compare
     include Pretty_printer.S with type t := t
     val hash : t -> int
-    val module_name : string
+    val module_name : string option
   end ) : S with type t := M.t
 
 module Printable(M : sig
     include Pretty_printer.S
-    val module_name : string
+    val module_name : string option
   end) : Printable with type t := M.t

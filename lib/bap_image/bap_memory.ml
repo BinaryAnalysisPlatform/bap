@@ -422,7 +422,7 @@ include Printable(struct
     open Format
     type nonrec t = t
 
-    let module_name = "Bap.Std.Memory"
+    let module_name = Some "Bap.Std.Memory"
 
     let print_word fmt addr =
       let width = Addr.bitwidth addr / 4 in

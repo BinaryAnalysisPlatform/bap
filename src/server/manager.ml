@@ -10,7 +10,7 @@ module Id = struct
       exn -> Or_error.errorf "Bad ID format: '%s'" s
   include Regular.Make(struct
       include Int64
-      let module_name = "Manager.Id"
+      let module_name = Some "Manager.Id"
     end)
 end
 

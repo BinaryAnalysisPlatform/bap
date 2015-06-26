@@ -182,5 +182,5 @@ let () =
   Plugins.load ();
   match try_with_join (fun () -> Cmdline.parse () >>= start) with
   | Ok n -> exit n
-  | Error err -> eprintf "Aborting because %a.@." Error.pp err;
+  | Error err -> eprintf "Exiting because %a.@." Error.pp err;
     exit 1

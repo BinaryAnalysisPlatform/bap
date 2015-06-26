@@ -56,7 +56,7 @@ module type Kernel = sig
   val bits_of_z  : t -> string
   val compare  : t -> t -> int
   val hash : t -> int
-  val module_name : string
+  val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
 end
@@ -66,7 +66,7 @@ module Make(Size : Compare) : Kernel = struct
   open Internal
   type nonrec t = t with bin_io, sexp
 
-  let module_name = "Bap.Std.Bitvector"
+  let module_name = Some "Bap.Std.Bitvector"
 
   let znorm z w = Bignum.(z land ((one lsl w) - one))
 

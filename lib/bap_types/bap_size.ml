@@ -52,7 +52,7 @@ module T = struct
   open Format
 
   type t = size with bin_io, compare, sexp
-  let module_name = "Bap.Std.Size"
+  let module_name = Some "Bap.Std.Size"
 
   let pp fmt n =
     fprintf fmt "u%u" (to_bits n)

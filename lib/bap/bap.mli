@@ -538,6 +538,11 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
+  (** Access to BAP configuration variables  *)
+  module Config : sig
+    val pkg_version : string
+  end
+
   (** ['a printer] defines a type for pretty-printers for a value of
       type ['a]. This is the type, that is required by [%a] specifier,
       for [Format.printf]-family of functions. Also, this is the type,
@@ -598,6 +603,16 @@ module Std : sig
     include Hashable.S_binable   with type t := t
   end
 
+  (** Opaque type is like regular type, except that we can print or
+      examine it in any way. So it can't be serialized or
+      pretty-printed. An {!Opaque.Make} can create an instances of
+      such type.  *)
+  module type Opaque = sig
+    type t
+    include Comparable with type t := t
+    include Hashable   with type t := t
+  end
+
   (** Signature for integral type.  *)
   module type Integer = sig
     type t
@@ -645,9 +660,40 @@ module Std : sig
         type t with bin_io, sexp, compare
         include Pretty_printer.S with type t := t
         val hash : t -> int
-        val module_name : string
+        val module_name : string option
       end) : Regular with type t := M.t
   end
+
+  (** creates a module implementing [Opaque] interface.   *)
+  module Opaque : sig
+    module Make(S : sig
+        type t with compare
+        val hash : t -> int
+      end) : Opaque with type t := S.t
+  end
+
+
+  (** Lazy sequence  *)
+  module Seq : sig
+    type 'a t = 'a Sequence.t
+    include module type of Sequence with type 'a t := 'a t
+
+    (** for compatibility with Core <= 111.28  *)
+    val filter : 'a t -> f:('a -> bool) -> 'a t
+    val compare : ('a -> 'b -> int) -> 'a t -> 'b t -> int
+
+    val of_array : 'a array -> 'a t
+
+    val cons : 'a -> 'a t -> 'a t
+
+    val is_empty : 'a t -> bool
+  end
+
+  (** type abbreviation for ['a Sequence.t]  *)
+  type 'a seq = 'a Seq.t
+
+  (** [x ^:: xs] is a consing operator for sequences  *)
+  val (^::) : 'a -> 'a seq -> 'a seq
 
   (** Prefix tries.
 
@@ -1064,15 +1110,15 @@ module Std : sig
 
     (** [to_bytes x order] returns bytes of [x] in a specified [order].
         Each byte is represented as a [bitvector] itself. *)
-    val to_bytes : t -> endian ->    t Sequence.t
+    val to_bytes : t -> endian ->    t seq
     (** [to_bytes x order] returns bytes of [x] in a specified [order],
         with bytes represented by [char] type *)
-    val to_chars : t -> endian -> char Sequence.t
+    val to_chars : t -> endian -> char seq
 
     (** [to_bits x order] returns bits of [x] in a specified [order].
         [order] defines only the ordering of words in a bitvector, bits
         will always be in MSB first order. *)
-    val to_bits  : t -> endian -> bool Sequence.t
+    val to_bits  : t -> endian -> bool seq
 
     (** {2 Arithmetic raised into [Or_error] monad }
 
@@ -2372,29 +2418,9 @@ module Std : sig
     val remove : t -> 'a tag -> t
 
     (** [data dict] is a sequence of all dict elements  *)
-    val data : t -> Value.t Sequence.t
+    val data : t -> Value.t seq
   end
 
-  (** Lazy sequence  *)
-  module Seq : sig
-    type 'a t = 'a Sequence.t
-    include module type of Sequence with type 'a t := 'a t
-
-    (** for compatibility with Core <= 111.28  *)
-    val filter : 'a t -> f:('a -> bool) -> 'a t
-
-    val of_array : 'a array -> 'a t
-
-    val cons : 'a -> 'a t -> 'a t
-
-    val is_empty : 'a t -> bool
-  end
-
-  (** type abbreviation for ['a Sequence.t]  *)
-  type 'a seq = 'a Seq.t
-
-  (** [x ^:: xs] is a consing operator for sequences  *)
-  val (^::) : 'a -> 'a seq -> 'a seq
 
 
   (** {{!Vector}Resizable array}  *)
@@ -2440,11 +2466,6 @@ module Std : sig
     include Container.S1 with type 'a t := 'a t
   end
 
-  (** Access to BAP configuration variables  *)
-  module Config : sig
-    val pkg_version : string
-  end
-
   type bil   = Bil.t       with bin_io, compare, sexp
   type binop = Bil.binop   with bin_io, compare, sexp
   type cast  = Bil.cast    with bin_io, compare, sexp
@@ -2454,6 +2475,1057 @@ module Std : sig
   type value = Value.t     with bin_io, compare, sexp
   type dict  = Dict.t      with bin_io, compare, sexp
 
+  (** BAP IR.
+
+      Program is a tree of terms.
+
+  *)
+  type 'a term with bin_io, compare, sexp
+
+  type program with bin_io, compare, sexp
+  type sub with bin_io, compare, sexp
+  type arg with bin_io, compare, sexp
+  type blk with bin_io, compare, sexp
+  type phi with bin_io, compare, sexp
+  type def with bin_io, compare, sexp
+  type jmp with bin_io, compare, sexp
+
+  type tid with bin_io, compare, sexp
+  type call with bin_io, compare, sexp
+
+  (** target of control transfer  *)
+  type label =
+    | Direct of tid             (** direct jump  *)
+    | Indirect of exp           (** indirect jump  *)
+  with bin_io, compare, sexp
+
+  (** control transfer variants  *)
+  type jmp_kind =
+    | Call of call              (** call to subroutine          *)
+    | Goto of label             (** jump inside subroutine      *)
+    | Ret  of label             (** return from call to label   *)
+    | Int  of int * tid         (** interrupt and return to tid *)
+  with bin_io, compare, sexp
+
+  (** argument intention  *)
+  type intent =
+    | In                        (** input argument  *)
+    | Out                       (** output argument *)
+    | Both                      (** input/output    *)
+  with bin_io, compare, sexp
+
+  type ('a,'b) cls
+
+  (** {4 Term type classes}  *)
+
+  val sub_t : (program, sub) cls (** sub  *)
+  val arg_t : (sub, arg) cls     (** arg  *)
+  val blk_t : (sub, blk) cls     (** blk  *)
+  val phi_t : (blk, phi) cls     (** phi  *)
+  val def_t : (blk, def) cls     (** def  *)
+  val jmp_t : (blk, jmp) cls     (** jmp  *)
+
+
+  (** {4 Graph Library}  *)
+
+  (** Interface provided by graph nodes.  *)
+  module type Node = sig
+
+    type t                      (** node type is opaque  *)
+    type graph
+    type label
+    type edge
+
+    (** [create label] creates a node with a given [label]  *)
+    val create : label -> t
+
+    (** [label node] returns a node's label  *)
+    val label : t -> label
+
+    (** [mem node graph] is [true] if [node] is part of [graph]  *)
+    val mem : t -> graph -> bool
+
+    (** [succs node graph] returns a sequence of successors of a
+        [node] in a given [graph] *)
+    val succs : t -> graph -> t seq
+
+    (** [preds node graph] returns a sequence of predecessors of a
+        [node] in a given [graph] *)
+    val preds : t -> graph -> t seq
+
+    (** [inputs node graph] is incomming edges of a [node] in [graph]  *)
+    val inputs : t -> graph -> edge seq
+
+    (** [outputs node graph] is outcomming edges of a [node] in [graph]  *)
+    val outputs : t -> graph -> edge seq
+
+    (** [insert node graph] returns new graph that contains [node] as
+        well as all other nodes of old [graph].  *)
+    val insert : t -> graph -> graph
+
+    (** [update n g] updates node [n] in a graph [g] if [n] was
+        contained in [g]. Otherwise returns [g] unchanged.
+        Note: this operation makes sense for nodes, that are not
+        structurally compared, and have some fields, that doesn't
+        affect the equality of a node.  *)
+    val update : t -> graph -> graph
+
+    (** [remove n g] returns a new graph [g'], that is structurally
+        the same as [g] but doesn't contain node [n] *)
+    val remove : t -> graph -> graph
+
+    (** [has_edge x y g] is true if there exists such edge in graph
+        [g] that its destination is [y] and source is [x] *)
+    val has_edge : t -> t -> graph -> bool
+
+    (** [edge x y g] if there is an edge in graph [g] with source [x]
+        and destination [y], then return it.  Otherwise return [None] *)
+    val edge : t -> t -> graph -> edge option
+
+    (** [edges x y g] returns all edges in graph [g] that have source
+        node [x] and destination node [y] *)
+    val edges : t -> t -> graph -> edge seq
+
+    (** node provides common data structures, like Table, Map, Set,
+        Hash_set, etc.  *)
+    include Opaque with type t := t
+  end
+
+  (** Interface that every Graph edge should provide  *)
+  module type Edge = sig
+
+    type t
+    type node
+    type graph
+    type label
+
+    (** [create x y l] creates an edge connecting nodes [x] and [y]
+        labeled with a given label [l] *)
+    val create : node -> node -> label -> t
+
+    (** [label e] returns a label of an edge [e]  *)
+    val label : t -> label
+
+    (** [src e] returns a source of an edge [e]  *)
+    val src : t -> node
+
+    (** [dst e] returns a destination of an edge [e] *)
+    val dst : t -> node
+
+    (** [mem e g] is true if edge [e] was inserted in graph [g]  *)
+    val mem : t -> graph -> bool
+
+    (** [insert e g] returns a graph [g'] that has the same structure
+        as [g] plus a new edge [e] *)
+    val insert : t -> graph -> graph
+
+    (** [update e g] if edge [e] exists in graph [g] then update it
+        with a new value.  *)
+    val update : t -> graph -> graph
+
+    (** [remove e g] returns a graph [g'] that doesn't contain edge [e]  *)
+    val remove : t -> graph -> graph
+    include Opaque with type t := t
+  end
+
+  (** Interface that all graphs provide  *)
+  module type Graph = sig
+
+    (** type of graph  *)
+    type t
+
+    (** type of nodes *)
+    type node
+
+    (** type of edges  *)
+    type edge
+
+
+    (** Node interface.  *)
+    module Node : Node with type graph = t
+                        and type t = node
+                        and type edge = edge
+
+    (** Edge interface  *)
+    module Edge : Edge with type graph = t
+                        and type t = edge
+                        and type node = node
+
+    (** [empty] is an empty graph  *)
+    val empty : t
+
+    (** [nodes g] returns all nodes of graph [g] in unspecified order  *)
+    val nodes : t -> node seq
+
+    (** [edges g] returns all edges of graph [g] in unspecified order  *)
+    val edges : t -> edge seq
+
+    (** [is_directed] is true if graph is a directed graph  *)
+    val is_directed : bool
+
+    (** [number_of_edges g] returns the amount of edges in a graph [g]  *)
+    val number_of_edges : t -> int
+
+
+    (** [number_of_nodes g] returns the amount of nodes in a graph [g]  *)
+    val number_of_nodes : t -> int
+
+    (** All graphs provides a common interface for any opaque data structure  *)
+    include Opaque with type t := t
+
+    (** All graphs are printable.   *)
+    include Printable with type t := t
+  end
+
+  (** a type abbreviation for a packed module, implementing graph
+      interface.
+      Note: this type prenexes only 3 out of 8 type variables, so,
+      sometimes it is not enough. *)
+  type ('c,'n,'e) graph =
+    (module Graph with type t = 'c
+                   and type node = 'n
+                   and type edge = 'e)
+
+  (** Graph edges classification.
+      For explanations see {{!Graphlib.depth_first_search}DFS}.*)
+  type edge_kind = [
+    | `Tree                     (** edge is a part of a tree  *)
+    | `Back                     (** back edge   *)
+    | `Cross                    (** cross edge  *)
+    | `Forward                  (** forward edge  *)
+  ]
+
+  (** a {!Tree} representation.  *)
+  type 'a tree
+
+  (** a type representing {!Frontier}s  *)
+  type 'a frontier
+
+  (** a {{!Partition}result} of partitioning algorithms  *)
+  type 'a partition
+
+  (** a partition {{!Group}Cell} *)
+  type 'a group
+
+  (** walk without a repetition of edges and inner nodes *)
+  type 'a path
+
+  (** runtime witness of the {{!Equiv}equivalence class} *)
+  type equiv
+
+  (** Tree is a particular subtype of a graph for which
+      each node has only one predecessor, and there is only
+      one path between tree root and any other node.
+      Here is an example of a tree:
+      {v
+                               (A)
+                                |
+                        +-------+-------+
+                        |       |       |
+                       (B)     (C)     (D)
+                                |
+                        +-------+-------+
+                        |       |       |
+                       (E)     (F)     (G)
+                                |
+                               (H)
+      v}
+  *)
+  module Tree : sig
+    type 'a t = 'a tree
+
+    (** [children tree x] returns all immediate successors of node
+        [x]. For example, children of node [A] is a sequence of
+        [B,C,D]. But node [B] doesn't have any children at all.*)
+    val children : 'a t -> 'a -> 'a seq
+
+    (** [parent tree n] returns an immediate parent of a given node.
+        Returns [None] only if [n] is a tree root. For example, parent
+        of [F] is [C]. And [A] doesn't have a parent.*)
+    val parent : 'a t -> 'a -> 'a option
+
+    (** [ancestors tree n] returns a sequence of all ancestors of node
+        [n]. An ancestor of a node is either a parent or an ancestor of
+        the parent. For example, ancestors of [G] are [C] and [D]. The
+        root node is the only one, that has an empty set of
+        ancestors. *)
+    val ancestors : 'a t -> 'a -> 'a seq
+
+    (** [descendants tree n] returns a set of all descendants of a
+        given node [n]. Descendant is either a child or a descendant
+        of a child. For example, all nodes in the example [tree]
+        (except the roots itself) are descendants of the root [A].
+        The descendants of [C] are [E,F,G,H].    *)
+    val descendants : 'a t -> 'a -> 'a seq
+
+    (** [is_child_of tree parent child] returns [true] if child is one
+        of [children tree root] *)
+    val is_child_of : 'a t -> parent:'a -> 'a -> bool
+
+    (** [is_ancestor_of tree child x] returns true, if [x] is one of
+        the ancestors of a [child] node.  *)
+    val is_ancestor_of : 'a t -> child:'a -> 'a -> bool
+
+    (** [is_descendant_of ~parent tree x] is [true] for all [x] that
+        are descendants of a [parent] node.  *)
+    val is_descendant_of : 'a t -> parent:'a -> 'a -> bool
+
+    (** [to_sequence tree] enumerates nodes of a [tree] in an
+        unspecified order.  *)
+    val to_sequence : 'a t -> 'a seq
+
+    (** [pp pp_elt] creates a pretty-printer for a node, based on
+        element's pretty-printer [pp_elt]. The tree is printed in a dot
+        format, for the ease of visualization. Example:
+        {[let pp_int_tree = Tree.pp Int.pp]}
+        Note: For all instatiations of [Graph] interface in the
+        [Graphlib] library printable versions of [tree], [partition],
+        [group] etc are provided. For example, for [Graphlib.Int.Bool]
+        graph the printable version of a [tree] is available under
+        [Graphlib.Int.Tree]. All instantiated pretty-printers are
+        automatically installed once the library is loaded into the
+        toplevel. *)
+    val pp : 'a printer -> 'a t printer
+  end
+
+  (** Frontier maps each node into a possibly empty set of nodes.
+      This is used for representing dominance and post-dominance
+      frontiers.  *)
+  module Frontier : sig
+
+    type 'a t = 'a frontier
+
+    (** [enum f x] enumerates frontier of [x]  *)
+    val enum : 'a t -> 'a -> 'a seq
+
+    (** [mem f x y] is true if [y] is in a frontier of [x]  *)
+    val mem : 'a t -> 'a -> 'a -> bool
+
+    (** [to_sequence frontier] enumerates all elements of a [frontier] *)
+    val to_sequence : 'a t -> 'a seq
+
+    (** [pp pp_elt] instantiates a pretty-printer for a given
+        element. See {!Tree.pp} for more information.  *)
+    val pp : 'a printer -> 'a t printer
+  end
+
+  (** Path between two nodes.  *)
+  module Path : sig
+    (** path is a walk without repetitions  *)
+
+    (** representation type  *)
+    type 'e t = 'e path
+
+    (** [start p] the starting edge of a path [p] *)
+    val start : 'e t -> 'e
+
+    (** [finish p] the last edge of a path [p] *)
+    val finish : 'e t -> 'e
+
+    (** [edges p] a sequence of edges from start to finish  *)
+    val edges : 'e t -> 'e seq
+
+    (** [edges_rev p] a reversed sequence from finish to start  *)
+    val edges_rev : 'e t -> 'e seq
+
+    (** [weight p] total weight of a path *)
+    val weight : 'e t -> int
+
+    (** amount of edges in a path *)
+    val length : 'e t -> int
+
+    (** [pp pp_elt] constructs a pretty based on element printer
+        [pp_elt] *)
+    val pp : 'a printer -> 'a t printer
+  end
+
+  (** Result of a set partitioning.
+
+      A partition of a set [S] is a set of non-empty subset of set [S],
+      such that each element in a set of [S] is included in one and only
+      one of the subsets and a union of the subsets forms a set [S].
+
+      All nodes belonging to the same subset (called [group] in our
+      parlance) represents the equivalence class. The equivalence side
+      can be represented by a particular ordinal number or
+      representative, that can be thought about as an ordinary
+      number. See {!Equiv} for the representation of this ordinal
+      numbers. A particular element of an equivalence class plays a
+      role of «representative element». Depending on the nature of
+      partitioning, this role can have different semantics.
+
+      This data structure is used to represent results of partioning of
+      a graph into groups of nodes, for example, to strongly connected
+      components.*)
+  module Partition : sig
+
+    type 'a t = 'a partition
+
+    (** [groups p] returns all partition cells of a partitioning [p] *)
+    val groups : 'a t -> 'a group seq
+
+    (** [group p x] returns a [group] of an element [x]. Note, this
+        function is not total since the set of all values of type ['a] is
+        usually larger than the underlying set that was partitioned.  *)
+    val group : 'a t -> 'a -> 'a group option
+
+    (** [equiv p x y] is true of [x] and [y] belongs to the same
+        equivalence class (i.e., to the same group).  *)
+    val equiv : 'a t -> 'a -> 'a -> bool
+
+    (** [number_of_groups p] returns the amount of groups in a given
+        partitioning [p]. *)
+    val number_of_groups : 'a t -> int
+
+    (** [of_equiv p n] rebuilds a group from an equivalence class
+        ordinal number. *)
+    val of_equiv : 'a t -> equiv -> 'a group option
+  end
+
+  (** Group is a non-empty set that is a result of partitioning of an
+      underlying set [S] into a set of non-intersecting and non-empty
+      subsets that cover set [S]. See {!Partition} for more
+      information.  *)
+  module Group : sig
+
+    type 'a t = 'a group
+
+    (** [enum group] enumerates all elements of a group, including the
+        designated one.  *)
+    val enum : 'a group -> 'a seq
+
+    (** [mem group x] checks membership of [x] in a given group.  *)
+    val mem  : 'a group -> 'a -> bool
+
+    (** [top group] returns the top element of a group also known as a
+        representative element. The function is total since groups is
+        guaranteed to be non-empty.    *)
+    val top  : 'a group -> 'a
+
+    (** [to_equiv g] returns the ordinal number representing the
+        particular group [g] *)
+    val to_equiv : 'a group -> equiv
+  end
+
+  (** Ordinal for representing equivalence. Useful, for indexing
+      elements based on their equivalence. *)
+  module Equiv : sig
+    type t
+    val to_int : t -> int
+    include Regular with type t := t
+  end
+
+
+  (** {5 Auxiliary graph data structures}  *)
+
+  (** A type of modules for filtering graphs.
+      See {!filtered} or {!Filtered}  *)
+  module type Predicate = sig
+    type edge
+    type node
+    val edge : edge -> bool
+    val node : node -> bool
+  end
+
+  (** [Isomorphism] is a bijection between type [s] and [t].
+      Usefull for creating graph views and mapping graphs.
+      See {!Graphlib.view} and {!Graphlib.Mapper}.
+  *)
+  module type Isomorphism = sig
+    type s
+    type t
+    val forward  : s -> t
+    val backward : t -> s
+  end
+
+  class type ['n,'e,'s] dfs_visitor = object
+    method start_tree :       'n -> 's -> 's
+    method enter_node : int -> 'n -> 's -> 's
+    method leave_node : int -> 'n -> 's -> 's
+    method enter_edge : edge_kind -> 'e -> 's -> 's
+    method leave_edge : edge_kind -> 'e -> 's -> 's
+  end
+
+
+  (** {4 Visual attributes for graphvizualization.}
+      Consult OCamlGraph library for more information.
+  *)
+
+  type node_attr  = Graph.Graphviz.DotAttributes.vertex
+  type edge_attr  = Graph.Graphviz.DotAttributes.edge
+  type graph_attr = Graph.Graphviz.DotAttributes.graph
+
+
+  (** Generic Graph Library  *)
+  module Graphlib : sig
+
+    (* we need this restatement, since first class modules in
+       4.01 were nominally typed.  *)
+    module type Graph = Graph
+
+    (** [create (module G) ~nodes ~edges ()] creates a graph using
+        implementation provided by [module G].
+        Example:
+        {[
+          module G = Graphlib.String.Bool;;
+          let g = Graphlib.create (module G) ~edges:[
+              "entry", "loop", true;
+              "loop", "exit", false;
+              "loop", "loop", true] ()
+        ]} *)
+    val create :
+      (module Graph with type t = 'c
+                     and type Node.label = 'a
+                     and type Edge.label = 'b) ->
+      ?nodes:'a list ->
+      ?edges:('a * 'a * 'b) list -> unit -> 'c
+
+    (** [to_dot (module G) ~filename:"graph.dot" g] dumps graph [g]
+        using [dot] format. This is a customizable version of printing
+        function. For most cases it will be enough to use [G.pp] or
+        [G.to_string] function. Use this function, if you really need
+        to customize your output.
+
+        @param graph_attrs a list of global graph attributes;
+        @param node_attrs  a list of node specific attributes;
+        @param edge_attrs  a list of edge specific attributes;
+        @param string_of_node used to print nodes;
+        @param string_of_edge used to print edges;
+        @param channel where to output the graph;
+        @param formatter where to output the graph;
+        @param filename where to output the graph;
+
+        Note: if no output parameter is provided, the graph will not be
+        outputted. More than one output targets is OK. For example,
+        [to_dot (module G) ~filename:"graph.dot" ~channel:stdout g] will
+        output graph [g] into both file named ["graph.dot"] and
+        standard output.
+
+        Note: if [string_of_node] function is not provided, then graph
+        nodes will be labeled with the reverse post order number.  *)
+    val to_dot :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?graph_attrs:('c -> graph_attr list) ->
+      ?node_attrs:('n -> node_attr list) ->
+      ?edge_attrs:('e -> edge_attr list) ->
+      ?string_of_node:('n -> string) ->
+      ?string_of_edge:('e -> string) ->
+      ?channel:out_channel ->
+      ?formatter:Format.formatter ->
+      ?filename:string -> 'c -> unit
+
+    (** [depth_first_search (module G) ~init g].  It is the most
+        important algorithm of the Graphlib. It builds a forest of
+        spanning trees of a graph, classifies graph edges and numbers
+        nodes. It is a Swiss-army knife, that is very useful in
+        implementing many other algorithms. You can think of this
+        function as [fold] on steroids. But unlike [fold], that
+        accepts only one function, the [depth_first_search] accepts 5
+        different functions, that will be called on different
+        situations, allowing you to «fill in the blanks» of your
+        algorithm.
+
+        Although [depth_first_search] doesn't allow you to drive the
+        walk itself, there're still ways to do this, using {!filtered}
+        function. That allows you to hide nodes or edges from the
+        walker, thus effectively erasing them from a graph, without
+        even touching it.
+
+        @param rev if true, then the graph [g] is traversed in a
+        reverse direction. This is essentially the same, as reversing
+        the graph, but make sure, that you've adjusted the start
+        node.
+
+        @param start if specified, then the traverse will be started
+        from the node that is equal to node [start]. Otherwise the
+        traverse is started from the first node of a graph as returned
+        by [G.nodes], i.e., usually it is an arbitrary node.
+
+        @param start_tree [node] [state] is called on each new spanning
+        tree started by the algorithm. If all nodes are reachable from
+        the start node, then this function will be called only
+        once. If all nodes of a graph are connected, then this
+        function, will be called only once.
+
+        @param enter_node [pre] [node] [state] is called when a node
+        is first discovered by the traversal. The number is a preorder
+        number, also known as depth-first number or [dfnum]. All nodes
+        are entered in a pre-order.
+
+        @param leave_node [rpost] [node] [state] is called when all
+        successors of a [node] are left (finished). The provided
+        number is a reverse post order number, that also defines a
+        topological sorting order of a graph. All nodes, are left in
+        a post order.
+
+        @param enter_edge [kind] [edge] [state] is called when and
+        [edge] is first discovered. Edge kinds are described below.
+        The destination of the edge may not be discovered (i.e.,
+        entered) yet. But the source is already entered (but not
+        finished).
+
+        @param leave_edge [kind] [edge] [state] is called when the
+        edge destination is at least started.
+
+        {2 Edges classification}
+
+        An edge in a spanning tree, produced by a depth first walk,
+        can belong to one of the following category (kind):
+
+        - Tree edges constitutes a spanning tree [T] of a graph;
+        - Forward edges go from an ancestor to a descendants in
+          a tree [T];
+        - Back edges go from descendants to ancestors in [T],
+          including node itself (they are also known as cycle
+          edges).
+        - Cross edges - all other edges, i.e., such edges for
+          which doesn't go from ancestors to descendants or vice
+          verse. They are possible since, tree defines only partial
+          ordering.
+
+        With respect to a pre-order and reverse post-ordering
+        numbering the source [x] and a destination [y] of an edge with
+        a given [kind] satisfy to the following inequalities:
+
+        {v
+          +---------+-----------------+---------------------+
+          | Tree    | pre[x] < pre[y] | rpost[x] < rpost[y] |
+          | Forward | pre[x] < pre[y] | rpost[x] < rpost[y] |
+          | Back    | pre[x] >= pre[y] | rpost[x] >= rpost[y] |
+          | Cross   | pre[x] > pre[y] | rpost[x] < rpost[y] |
+          +---------+-----------------+---------------------+
+        v}
+
+        Note: since there can be more than one valid order of
+        traversal of the same graph, (and thus more than one valid
+        spanning tree), depending on a traversal the same edges can be
+        classified differently. With the only exception, that a back
+        edge will be always a back edge, disregarding the particular
+        order.
+
+        (** {3 Complexity}  *)
+        The algorithm is linear in time and space (including the stack
+        space). In fact, for small graphs it uses stack, but for large
+        graphs dynamically switches to a heap storage. *)
+    val depth_first_search :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool ->
+      ?start:'n ->
+      ?start_tree:('n -> 's -> 's) ->
+      ?enter_node:(int -> 'n -> 's -> 's) ->
+      ?leave_node:(int -> 'n -> 's -> 's) ->
+      ?enter_edge:(edge_kind -> 'e -> 's -> 's) ->
+      ?leave_edge:(edge_kind -> 'e -> 's -> 's) ->
+      'c -> init:'s -> 's
+
+    (** [depth_first_visit (module G) ~init visitor g] allows to
+        specify visiting functions using object. That opens space for
+        re-usability and using open recursion.  *)
+    val depth_first_visit :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> ?start:'n -> 'c -> init:'s -> ('n,'e,'s) dfs_visitor -> 's
+
+    (** base class with all methods defaults to nothing.  *)
+    class ['n,'e,'s] dfs_identity_visitor : ['n,'e,'s] dfs_visitor
+
+    (** returns a sequence of nodes in reverse post order.  *)
+    val reverse_postorder_traverse :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> ?start:'n -> 'c -> 'n seq
+
+    (** returns a sequence of nodes in post order  *)
+    val postorder_traverse :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> ?start:'n -> 'c -> 'n seq
+
+    (** [dominators (module G) g entry] builds a dominators tree for a
+        given graph.
+
+        Definition: a _walk_ is a sequence of alternating nodes and
+        edges, where each edge's endpoints are the preceding and
+        following nodes in the sequence.
+
+        Definition: a node [v] is _reachable_ if there exists a walk
+        starting from [entry] and ending with [v].
+
+        Definition: node [u] _dominates_ [v] if [u = v] or if all walks
+        from [entry] to [v] contains [u].
+
+        Definition: node [u] _strictly dominates_ [v] if it dominates
+        [v] and [u <> v].
+
+        Definition: node [u] _immediately dominates_ [v] if it
+        strictly dominates [v] and there is no other node that
+        strictly dominates [v] and is dominated by [u].
+
+        Algorithm computes a dominator tree [t] that has the following
+        properties:
+
+        1) Sets of graph nodes and tree nodes are equal;
+        2) if node [u] is a parent of node [v], then node [u]
+           immediately dominates node [v];
+        3) if node [u] is an ancestors of node [v], then node [u]
+           strictly dominates node [v];
+        4) if node [v] is a child of node [u], then node [u]
+           immediately dominates node [v];
+        5) if node [v] is a descendant of node [u], then node [u]
+           strictly dominates node [v].
+
+        If every node of graph [g] is reachable from a provided
+        [entry] node, then properties (2) - (5) are reversible, i.e.,
+        an [if] statement can be read as [iff], and the tree is
+        unique.
+
+        Lemma: Everything dominates unreachable block.
+        Proof: (by contradiction) suppose there exists a node [u] that
+        doesn't dominate unreachable block [v]. That means, that there
+        exists a path from [entry] to [v] that doesn't contain
+        [u]. But that means, at least, that [v] is reachable. Qed.
+
+        If some nodes of graph [g] are unreachable from the provided
+        [entry] node, then they are be dominated by all other nodes of
+        a graph. It means that the provided system is under
+        constrained and has more then one solution (i.e., there exists
+        more than one tree, that satisfies properties (1) - (5). In
+        current implementation each unreachable node is immediately
+        dominated by the [entry], if the [entry] is in graph.
+
+        To get a post-dominator tree, reverse the graph by passing
+        [true] to [rev] and pass exit node as a starting node.
+
+        Note: although it is not imposed by the algotihm, but it is a
+        good idea to have an entry node, that doesn't have any
+        predecessors. Usually, this is what is silently assumed in
+        many program analysis textbooks, but is not true in general
+        for control-flow graphs that are reconstructed from binaries *)
+    val dominators :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> 'c -> 'n -> 'n tree
+
+    (** [dom_frontier (module G) g dom_tree] calculates dominance
+        frontiers for all nodes in a graph [g].     *)
+    val dom_frontier :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> 'c -> 'n tree -> 'n frontier
+
+    (** [strong_components (module G) g] partition graph into strongly
+        connected components. The top of each component is a root
+        node, i.e., a node that has the least pre-order number.*)
+    val strong_components :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      'c -> 'n partition
+
+    (** [shortest_path (module G) ?weight ?rev g u v]
+        Find a shortest path from node [u] to node [v].
+
+        @param weight defines a weight of each edge. It defaults to 1.
+        @param rev allows to reverse graph.    *)
+    val shortest_path :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?weight:('e -> int) -> ?rev:bool -> 'c -> 'n -> 'n -> 'e path option
+
+    (** [is_reachable (module G) ?rev g u v] is true if node [v] is
+        reachable from node [u] in graph [g]. If rev is true, then it
+        will solve the same problem but on a reversed graph.  *)
+    val is_reachable :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> 'c -> 'n -> 'n -> bool
+
+    (** [fold_reachable (module G) ?rev ~init ~f g n] applies function
+        [f] to all nodes reachable from node [g] in graph [g]. If
+        [rev] is true, then the graph is reversed.
+
+        For example, the following will build a set of reachable nodes:
+        [fold_reachable (module G) ~init:G.Node.Set.empty ~f:Set.add]
+    *)
+    val fold_reachable :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?rev:bool -> init:'a -> f:('a -> 'n -> 'a) -> 'c -> 'n -> 'a
+
+    (** [compare (module G1) (module G2) g1 g2] compares two graphs,
+        with different implementation but the same node type.  *)
+    val compare :
+      (module Graph with type t = 'a
+                     and type node = 'n) ->
+      (module Graph with type t = 'b
+                     and type node = 'n) ->
+      'a -> 'b -> int
+
+    (** [let module G' = filtered (module G) ?skip_node ?skip_edge ()]
+        creates a new module [G'] that can be used at any place
+        instead of [G], but that will hide nodes and edges, for which
+        functions [skip_node] and [skip_edge] return true.
+
+        Example:
+        {[
+          let killed_edges = G.Edge.Hash_set.create () in
+          let module G = Graphlib.filtered (module G)
+              ~skip_edge:(Hash_set.mem killed_edges) () in
+          let rec loop g () =
+            (* use (module G) as normal *)
+            Hash_set.add killed_edges some_edge;
+            (* all edges added to [killed_edges] will no be visible *)
+        ]} *)
+    val filtered :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) ->
+      ?skip_node:('n -> bool) ->
+      ?skip_edge:('e -> bool) -> unit ->
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e)
+
+    (** [view (module G) ~node ~edge ~node_label ~edge_label]
+        creates a proxy module, that will transform back and
+        forward elements of graph, using corresponding functions.  *)
+    val view :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e
+                     and type Node.label = 'a
+                     and type Edge.label = 'b) ->
+      node:(('n -> 'f) * ('f -> 'n)) ->
+      edge:(('e -> 'd) * ('d -> 'e)) ->
+      node_label:(('a -> 'p) * ('p -> 'a)) ->
+      edge_label:(('b -> 'r) * ('r -> 'b)) ->
+      (module Graph with type t = 'c
+                     and type node = 'f
+                     and type edge = 'd
+                     and type Node.label = 'p
+                     and type Edge.label = 'r)
+
+
+    (** [To_ocamlgraph(G)] returns a module that implements
+        OCamlGraph interface for a persistent graph.  *)
+    module To_ocamlgraph(G : Graph) :
+      Graph.Sig.P with type t = G.t
+                   and type V.t = G.node
+                   and type E.t = G.edge
+                   and type V.label = G.Node.label
+                   and type E.label = G.Edge.label
+
+    (** [Of_ocamlgraph(O)] creates an adapter module, that implements
+        [Graphlib] interface on top of the module implementing
+        [OCamlGraph] interface.
+    *)
+    module Of_ocamlgraph(G : Graph.Sig.P) :
+      Graph with type t = G.t
+             and type node = G.V.t
+             and type edge = G.E.t
+             and type Node.label = G.V.label
+             and type Edge.label = G.E.label
+
+    (** functorized version of a {!Graphlib.filter} function.  *)
+    module Filtered
+        (G : Graph)
+        (P : Predicate with type node = G.node
+                        and type edge = G.edge) :
+      Graph with type t = G.t
+             and type node = G.node
+             and type edge = G.edge
+             and module Node = G.Node
+             and module Edge = G.Edge
+
+    (** functorized version of {!Graphlib.view} function.  *)
+    module Mapper
+        (G  : Graph)
+        (N  : Isomorphism with type s = G.node)
+        (E  : Isomorphism with type s = G.edge)
+        (NL : Isomorphism with type s = G.Node.label)
+        (EL : Isomorphism with type s = G.Edge.label) :
+      Graph with type t = G.t
+             and type node = N.t
+             and type edge = E.t
+             and type Node.label = NL.t
+             and type Edge.label = EL.t
+
+    (** [Make(Node)(Edge)] creates a module that implements [Graph]
+        interface and has unlabeled nodes of type [Node.t] and edges
+        labeled with [Edge.t] *)
+    module Make(Node : Opaque)(Edge : Opaque) : Graph
+      with type node = Node.t
+       and type Node.label = Node.t
+       and type Edge.label = Edge.t
+
+    (** a common interface for a regular graph.
+        Graphlib comes with a big set of predefined (i.e.,
+        instantiated graphs. Each regular graph is actually a
+        family of graphs indexed by a type of an edge label.
+
+        For example, [Graphlib.Int.Bool] is a graph with [int]s as
+        nodes, and with edges labeled with values of type [bool].
+
+        Each regular graph also provides a printable interface for
+        each auxiliary data structure.  *)
+    module type Graphs = sig
+      type node
+
+      module Bool : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = bool
+      module Char : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = char
+      module Unit : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = unit
+      module Value : Graph with type node = node
+                            and type Node.label = node
+                            and type Edge.label = value
+      module Word : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = word
+      module Int : Graph with type node = node
+                          and type Node.label = node
+                          and type Edge.label = int
+      module String : Graph with type node = node
+                             and type Node.label = node
+                             and type Edge.label = string
+      module Exp : Graph with type node = node
+                          and type Node.label = node
+                          and type Edge.label = exp
+
+      module Stmt : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = stmt
+
+      module Var : Graph with type node = node
+                          and type Node.label = node
+                          and type Edge.label = var
+
+      module Tid : Graph with type node = node
+                          and type Node.label = node
+                          and type Edge.label = tid
+
+      module Type : Graph with type node = node
+                           and type Node.label = node
+                           and type Edge.label = typ
+
+      module Tree : Printable with type t = node tree
+      module Frontier : Printable with type t = node frontier
+      module Path : Printable with type t = node path
+      module Partition : Printable with type t = node partition
+      module Group : Printable with type t = node group
+    end
+
+    (** {3 Pre-instantiated graphs} *)
+
+    module Char   : Graphs with type node = char
+    module Int    : Graphs with type node = int
+    module Word   : Graphs with type node = word
+    module Type   : Graphs with type node = typ
+    module Value  : Graphs with type node = value
+    module String : Graphs with type node = string
+    module Var    : Graphs with type node = var
+    module Exp    : Graphs with type node = exp
+    module Stmt   : Graphs with type node = stmt
+    module Tid    : Graphs with type node = tid
+
+    (** IR code as a graph.
+
+        This module implements a graph view on the IR representation
+        of a program.  The underlying implementation uses a value of
+        type [sub term] to implement most of the operations. But in
+        order to get fast bidirectional access to a graph, it
+        augments term with extra information, like back edges.*)
+    module Ir : sig
+      type t
+      type edge
+
+      (** since in IR the order of edges defines semantics, we provide
+          extra functions *)
+      module Edge : sig
+        include Edge with type graph = t
+                      and type node = blk term
+                      and type t = edge
+
+        (** [jmps dir e g] enumerates all jumps (including calls,
+            interrupts, indirects, etc), that occurs before if
+            [dir = `before] or after if [dir = `after] an edge [e] *)
+        val jmps  : [`after | `before] -> t -> graph -> jmp term seq
+
+        (** [edges dir e g] enumerates all edges occurring before of
+            after an edge [e] in graph [g] *)
+        val edges : [`after | `before] -> t -> graph -> t seq
+
+        (** [jmp e] returns a jmp term associated with edge [e]  *)
+        val jmp : t -> jmp term
+
+        (** [tid e] returns a tid of a jmp term that is associated
+            with an edge [e] *)
+        val tid : t -> tid
+
+        (** [cond e g] computes a condition expression that is
+            asserted to be [true] if this branch is taken.
+
+            Note: this is not the same as a condition associated with
+            the jmp term itself, it takes into account all conditions
+            preceding the edge.
+        *)
+        val cond : t -> graph -> exp
+
+        include Printable with type t := t
+      end
+
+      module Node : sig
+        include Node with type graph = t
+                      and type t = blk term
+                      and type edge = edge
+                      and type label = blk term
+        include Printable with type t := t
+      end
+
+      include Graph with type t := t
+                     and type node = blk term
+                     and type edge := edge
+                     and type Node.label = blk term
+                     and module Node := Node
+                     and module Edge := Edge
+
+      (** [create ?tid ?name ()] creates an empty graph, that will
+          build a [sub term]  with a give [tid] and [name] *)
+      val create : ?tid:tid -> ?name:string -> unit -> t
+
+      (** [of_sub sub] builds a graph from a give subroutine term.  *)
+      val of_sub : sub term -> t
+
+      (** [to_sub g] projects a graph into a subroutine. (Note: this
+          is a no-op function, it just returns an underlying
+          subroutine.)  *)
+      val to_sub : t -> sub term
+
+      (** {4 Printable interface for auxiliary data structures}  *)
+      module Tree : Printable with type t = node tree
+      module Frontier : Printable with type t = node frontier
+      module Path : Printable with type t = node path
+      module Partition : Printable with type t = node partition
+      module Group : Printable with type t = node group
+    end
+
+  end
 
   (** an image loaded into memory  *)
   type image
@@ -3131,7 +4203,7 @@ module Std : sig
 
     (** [to_sequence map] converts the memmap ['a t] to a sequence of
         key-value pairs *)
-    val to_sequence : 'a t -> (mem * 'a) Sequence.t
+    val to_sequence : 'a t -> (mem * 'a) seq
 
     include Container.S1 with type 'a t := 'a t
   end
@@ -4510,58 +5582,6 @@ module Std : sig
   end
 
 
-
-  (** BAP IR.
-
-      Program is a tree of terms.
-
-  *)
-  type 'a term with bin_io, compare, sexp
-
-  type program with bin_io, compare, sexp
-  type sub with bin_io, compare, sexp
-  type arg with bin_io, compare, sexp
-  type blk with bin_io, compare, sexp
-  type phi with bin_io, compare, sexp
-  type def with bin_io, compare, sexp
-  type jmp with bin_io, compare, sexp
-
-  type tid with bin_io, compare, sexp
-  type call with bin_io, compare, sexp
-
-  (** target of control transfer  *)
-  type label =
-    | Direct of tid             (** direct jump  *)
-    | Indirect of exp           (** indirect jump  *)
-  with bin_io, compare, sexp
-
-  (** control transfer variants  *)
-  type jmp_kind =
-    | Call of call              (** call to subroutine          *)
-    | Goto of label             (** jump inside subroutine      *)
-    | Ret  of label             (** return from call to label   *)
-    | Int  of int * tid         (** interrupt and return to tid *)
-  with bin_io, compare, sexp
-
-  (** argument intention  *)
-  type intent =
-    | In                        (** input argument  *)
-    | Out                       (** output argument *)
-    | Both                      (** input/output    *)
-  with bin_io, compare, sexp
-
-  type ('a,'b) cls
-
-  (** {4 Term type classes}  *)
-
-  val sub_t : (program, sub) cls (** sub  *)
-  val arg_t : (sub, arg) cls     (** arg  *)
-  val blk_t : (sub, blk) cls     (** blk  *)
-  val phi_t : (blk, phi) cls     (** phi  *)
-  val def_t : (blk, def) cls     (** def  *)
-  val jmp_t : (blk, jmp) cls     (** jmp  *)
-
-
   (** Term identifier  *)
   module Tid : sig
     type t = tid
@@ -4613,20 +5633,22 @@ module Std : sig
 
     (** [clone term] creates an object with a fresh new identifier
         that has the same contents as [term], i.e., that is
-        syntactically the same. *)
+        syntactically the same. The clone operation is shallow, all
+        subterms of [term] are unchanged.
+    *)
     val clone : 'a t -> 'a t
 
     (** [same x y] returns true if [x] and [y] represents the same
         entity, i.e., [Tid.(tid x = tid y)] *)
     val same : 'a t -> 'a t -> bool
 
-    (** [name t] returns name of the term  *)
+    (** [name t] returns a string representation of a term [t] identity *)
     val name : 'a t -> string
 
-    (** [tid entity] returns the unique tidentifier of the [entity]  *)
+    (** [tid entity] returns a unique identifier of the [entity]  *)
     val tid : 'a t -> tid
 
-    (** [length t p] returns the amount of terms of type [t] in the
+    (** [length t p] returns an amount of terms of [t] class in a
         parent term [p] *)
     val length : ('a,'b) cls -> 'a t -> int
 
@@ -4634,15 +5656,15 @@ module Std : sig
         such that [tid c = id].  *)
     val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
-    (** [find t p id] like {!find} but raises [Not_found] if nothing
+    (** [find_exn t p id] like {!find} but raises [Not_found] if nothing
         is found.  *)
-    val find : ('a,'b) cls -> 'a t -> tid -> 'b t option
+    val find_exn : ('a,'b) cls -> 'a t -> tid -> 'b t
 
     (** [update t p c] if term [p] contains a term with id equal to
         [tid c] then return [p] with this term substituted with [p] *)
     val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
 
-    (** [remove t p id] returns a block that doesn't contain element
+    (** [remove t p id] returns a term that doesn't contain element
         with the given [id] *)
     val remove : ('a,_) cls -> 'a t -> tid -> 'a t
 
@@ -4727,6 +5749,13 @@ module Std : sig
         cases, the returned term has the same [tid] as [p]. *)
     val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
 
+    (** [nth t p n] returns [n]'th [t]-term of parent [p].  *)
+    val nth : ('a,'b) cls -> 'a t -> int -> 'b t option
+
+    (** [nth_exn t p n] same as [nth], but raises exception if [n] is
+        not a valid position number.  *)
+    val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
+
 
     (** {2 Attributes}
 
@@ -4759,11 +5788,11 @@ module Std : sig
 
     type t = program term
 
-    (** [create ()] creates an empty program. *)
-    val create : unit -> t
+    (** [create ?tid ()] creates an empty program. If [tid]  *)
+    val create : ?tid:tid -> unit -> t
 
-    (** [lift roots cfg] takes a set of function starts and a whole
-        program cfg and returns a program term. *)
+    (** [lift symbols] takes a table of functions and return a whole
+        program lifted into IR *)
     val lift : symtab -> program term
 
     (** [lookup t program id] is like {{!find}find} but performs deep
@@ -4801,7 +5830,7 @@ module Std : sig
 
     (** [create ?name ()] creates an empty subroutine with an optional
         name. *)
-    val create : ?name:string -> unit -> t
+    val create : ?tid:tid -> ?name:string -> unit -> t
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
@@ -4864,7 +5893,7 @@ module Std : sig
     ]
 
     (** [create ()] creates a new empty block.  *)
-    val create : unit -> t
+    val create : ?tid:tid -> unit -> t
 
     (** [lift block] takes a basic block of assembly instructions and
         lifts it to a list of blk terms. The first term in the list
@@ -5014,8 +6043,8 @@ module Std : sig
 
     type t = def term
 
-    (** [create x exp] creates definition [x := exp]  *)
-    val create : var -> exp -> t
+    (** [create ?tid x exp] creates definition [x := exp]  *)
+    val create : ?tid:tid -> var -> exp -> t
 
     (** returns the left hand side of a definition  *)
     val lhs : t -> var
@@ -5059,20 +6088,20 @@ module Std : sig
     type t = jmp term
 
     (** [create ?cond kind] creates a jump of given kind  *)
-    val create : ?cond:exp -> jmp_kind -> t
+    val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
 
     (** [create_call ?cond target] transfer control to subroutine
         [target] *)
-    val create_call : ?cond:exp -> call  -> t
+    val create_call : ?tid:tid -> ?cond:exp -> call  -> t
 
     (** [create_goto ?cond label] local jump  *)
-    val create_goto : ?cond:exp -> label -> t
+    val create_goto : ?tid:tid -> ?cond:exp -> label -> t
 
     (** [create_ret ?cond label] return from a procedure  *)
-    val create_ret  : ?cond:exp -> label -> t
+    val create_ret  : ?tid:tid -> ?cond:exp -> label -> t
 
     (** [create_int ?cond int_number return] call interrupt subroutine  *)
-    val create_int  : ?cond:exp -> int -> tid -> t
+    val create_int  : ?tid:tid -> ?cond:exp -> int -> tid -> t
 
     (** [kind jmp] evaluates to a kind of jump  *)
     val kind : t -> jmp_kind
@@ -5109,13 +6138,13 @@ module Std : sig
         should be selected if a control flow enters a block, that owns
         this phi-node from a block labeled with [label]. Example,
         [create x loop_header y].*)
-    val create : var -> tid -> exp -> t
+    val create : ?tid:tid -> var -> tid -> exp -> t
 
     (** [of_list var bindings] creates a phi-node, that for each pair
         of [label,exp] in the [bindings] list associates variable [var]
         with expression [exp] if control flow reaches this point via block
         labeled with [label].  *)
-    val of_list : var -> (tid * exp) list -> t
+    val of_list : ?tid:tid -> var -> (tid * exp) list -> t
 
     (** [values phi] enumerate all possible values.  *)
     val values : t -> (tid * exp) seq
@@ -5161,7 +6190,7 @@ module Std : sig
 
     (** [create ?intent ?name typ] creates an argument. If intent is
         not specified it is left unkown.   *)
-    val create : ?intent:intent -> ?name:string -> typ -> t
+    val create : ?tid:tid -> ?intent:intent -> ?name:string -> typ -> t
 
     (** [var arg] returns a variable associated with the argument.  *)
     val var : t -> var
@@ -5240,7 +6269,6 @@ module Std : sig
 
     include Regular with type t := t
   end
-
 
   (** Target of analysis.  *)
   module Project : sig
@@ -5678,7 +6706,7 @@ module Std : sig
       val create : string Data.t -> t Or_error.t
 
       (** [functions searcher] enumerates functions  *)
-      val functions : t -> (string * fn) Sequence.t
+      val functions : t -> (string * fn) seq
     end
   end
 
@@ -5873,8 +6901,8 @@ module Std : sig
         e_machine : e_machine;
         e_entry : int64;
         e_shstrndx : int;
-        e_sections : section Sequence.t;
-        e_segments : segment Sequence.t;
+        e_sections : section seq;
+        e_segments : segment seq;
       }
 
       type table_info = {

@@ -145,6 +145,8 @@ module PP = struct
 
   let rec pp fmt exp =
     let open Bap_bil.Exp in
+    let open Bap_bil.Binop in
+    let open Bap_bil.Unop in
     let is_imm = function
       | Var _ | Int _ -> true
       | _ -> false in
@@ -165,13 +167,17 @@ module PP = struct
       pr "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
       pr (a le ^^ "." ^^ a re) pp le pp re
-    | BinOp (Binop.EQ,e, Int x) | BinOp (Binop.EQ,Int x, e)
+    | BinOp (EQ,e, Int x) | BinOp (EQ,Int x, e)
       when Bitvector.(x = b1) -> pr ("%a") pp e
-    | BinOp (Binop.EQ,e, Int x) | BinOp (Binop.EQ,Int x, e)
+    | BinOp (EQ,e, Int x) | BinOp (EQ,Int x, e)
       when Bitvector.(x = b0) ->
       pr ("%a(%a)") pp_unop Unop.NOT pp e
     | BinOp (op, le, re) ->
       pr (a le ^^ " %a " ^^ a re) pp le pp_binop op pp re
+    | UnOp (NOT, BinOp(LE,le,re)) ->
+      pr (a le ^^ " > " ^^ a re) pp le pp re
+    | UnOp (NOT, BinOp(LT,le,re)) ->
+      pr (a le ^^ " >= " ^^ a re) pp le pp re
     | UnOp (op, exp) ->
       pr ("%a" ^^ a exp) pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
@@ -187,6 +193,6 @@ end
 include Regular.Make(struct
     type t = Bap_bil.exp with bin_io, compare, sexp
     let hash = Hashtbl.hash
-    let module_name = "Bap.Std.Exp"
+    let module_name = Some "Bap.Std.Exp"
     let pp = PP.pp
   end)

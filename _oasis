@@ -9,7 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
-XOCamlbuildExtraArgs: -j 2
+XOCamlbuildExtraArgs: -j 1
 BuildDepends:
               bin_prot.syntax,
               camlp4,
@@ -100,7 +100,7 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    zarith, uuidm
+  BuildDepends:    zarith, uuidm, ocamlgraph
   InternalModules:
                    Bap_addr,
                    Bap_arch,
@@ -111,10 +111,18 @@ Library types
                    Bap_common,
                    Bap_config,
                    Bap_exp,
+                   Bap_graph,
+                   Bap_graph_intf,
+                   Bap_graph_regular,
+                   Bap_graph_regular_intf,
+                   Bap_graph_pp,
+                   Bap_ir,
+                   Bap_ir_graph,
                    Bap_helpers,
                    Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
+                   Bap_opaque,
                    Bap_regular,
                    Bap_seq,
                    Bap_size,
@@ -145,7 +153,7 @@ Library serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqilib,piqirun,piqirun.pb,piqirun.ext,bap
+  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
   Modules:   Bil_piqi
   InternalModules:
              Stmt_piqi,
@@ -296,7 +304,6 @@ Library sema
   InternalModules:
                  Bap_sema,
                  Bap_sema_lift,
-                 Bap_ir,
                  Bap_lnf
 
 Library types_test
@@ -306,7 +313,8 @@ Library types_test
   CompiledObject: best
   BuildDepends:   bap, bap.conceval, oUnit
   Modules:        Test_bitvector,
-                  Test_conceval
+                  Test_conceval,
+                  Test_graph
 
 Library image_test
   Path:           lib_test/bap_image
@@ -357,7 +365,7 @@ Library benchmarks
   CompiledObject: best
   BuildDepends:   bap, core, core_bench, threads
   Install:        false
-  Modules:        Bench_image
+  Modules:        Bench_dom, Bench_image
 
 Library core_lwt
   Path:           lwt
@@ -456,7 +464,7 @@ Executable run_benchmarks
 
 Test unit_tests
   TestTools: run_tests
-  Command: $run_tests
+  Command: $run_tests -runner sequential
 
 Test inline_tests
   TestTools: run_tests

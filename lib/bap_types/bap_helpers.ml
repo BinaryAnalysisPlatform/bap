@@ -114,7 +114,8 @@ include struct
         | (PLUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), Int v, e
         | (PLUS|MINUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), e, Int v
           when Word.is_zero v -> e
-        | TIMES,e,Int v | TIMES, Int v, e when Word.is_one v -> e
+        | (TIMES|AND),e,Int v
+        | (TIMES|AND), Int v, e when Word.is_one v -> e
         | (TIMES|AND), e, Int v
         | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
         | (OR|AND), v1, v2 when equal v1 v2 -> v1

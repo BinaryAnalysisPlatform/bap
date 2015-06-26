@@ -2,8 +2,10 @@ open Core.Std
 open Core_bench.Std
 open Bap.Std
 
-let benchmarks = Bench.make_command [
-    Bench_image.test;
+let benchmarks = Bench.make_command @@ List.concat [
+    Bench_dom.tests;
+    Bench_image.tests;
   ]
+
 
 let () = Command.run benchmarks

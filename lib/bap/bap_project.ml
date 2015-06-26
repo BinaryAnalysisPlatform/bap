@@ -61,7 +61,9 @@ let from_image ?(name=fun _ -> None) ?(roots=[]) img =
     | Some name -> Some name
     | None -> Table.find_addr (Image.symbols img) addr |>
               Option.map ~f:(fun (_,sym) -> Image.Symbol.name sym) in
-  let roots = roots @ image_roots in
+  let roots = match roots @ image_roots with
+    | [] -> [Image.entry_point img]
+    | xs -> xs in
   let disasm = disassemble_image ~roots img in
   let cfg = Disasm.blocks disasm in
   let symbols = Symtab.reconstruct ~name ~roots cfg in
