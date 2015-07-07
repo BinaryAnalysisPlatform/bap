@@ -5,12 +5,12 @@
 
    ./run_tests.native -only-test name -loader-binary path
 
-   where 
+   where
    name = BAP:9:Image:0:llvm_loader
    path - path to binary e.g. gcc_coreutils_64_O0_cat
 
    To make test over files in binary repository it can be used like this:
-   
+
    find ../x86_64-binaries/elf/ -type f -name "gcc_*O0*" -exec \
    ./run_tests.native -only-test BAP:9:Image:0:llvm_loader -loader-binary '{}' \;
 *)
@@ -20,8 +20,8 @@ open Or_error
 open Bap_types.Std
 open Image_backend
 
-(* Accoding to llvm (ObjectFile.h line 186) 
-   symbols type can be debug or function. 
+(* Accoding to llvm (ObjectFile.h line 186)
+   symbols type can be debug or function.
    Thats why we don't compare is_debug field *)
 module SS = Set.Make(
   struct
@@ -40,6 +40,7 @@ let get_filename =
   Conf.make_string "loader_binary" default
     "native and llvm loaders compare test file path"
 
+
 let run_test ctxt =
   let file = get_filename ctxt in
   if not (Sys.file_exists file) then skip_if true "file not found";
@@ -48,11 +49,11 @@ let run_test ctxt =
       Bap_fileutils.readfile file |> Bap_native_loader.of_data,
       Bap_fileutils.readfile file |> Bap_llvm_loader.of_data in
     let () = match images with
-    | _ , None -> assert_string "llvm loader failed"
-    | None, _ -> skip_if true "elf loader failed"
-    | _ -> () in
+      | _ , None -> assert_string "llvm loader failed"
+      | None, _ -> skip_if true "elf loader failed"
+      | _ -> () in
     Option.value_exn img1_opt, Option.value_exn img2_opt in
-  
+
   assert_equal ~ctxt ~printer:Arch.to_string
     ~msg:"loaders gives different arch"
     (Img.arch img1)
@@ -66,14 +67,12 @@ let run_test ctxt =
   assert_equal ~ctxt ~printer:(fun e ->
       List.sexp_of_t Segment.sexp_of_t e |> Sexp.to_string)
     ~msg:"loaders gives different segments"
-    ~cmp:(fun e1 e2 -> List.compare e1 e2 ~cmp:Segment.compare = 0)
     (Img.segments img1 |> (fun (e, ee) -> e::ee))
     (Img.segments img2 |> (fun (e, ee) -> e::ee));
 
   assert_equal ~ctxt ~printer:(fun e ->
       List.sexp_of_t Section.sexp_of_t e |> Sexp.to_string)
     ~msg:"loaders gives different sections"
-    ~cmp:(fun e1 e2 -> List.compare e1 e2 ~cmp:Section.compare = 0)
     (Img.sections img1)
     (Img.sections img2);
 
@@ -82,7 +81,7 @@ let run_test ctxt =
       Img.symbols img |>
       SS.of_list in
     symbols img1, symbols img2 in
-  
+
   if not (SS.subset sym1 sym2) then
     let string_of_set s =
       SS.fold ~init:[]
@@ -95,13 +94,12 @@ let run_test ctxt =
       SS.diff sym2 sym1 |>
       string_of_set in
 
-    String.concat ~sep:"\n" 
+    String.concat ~sep:"\n"
       [file;
        "llvm loader losted symbols:"; diff12;
-      "llvm loader surplused symbols:"; diff21] |>
+       "llvm loader surplused symbols:"; diff21] |>
     assert_string
 
 let suite = "Image" >::: [
-  "llvm_loader"   >::run_test;
-]
-
+    "llvm_loader"   >::run_test;
+  ]

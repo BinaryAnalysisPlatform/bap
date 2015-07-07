@@ -304,7 +304,7 @@ Library types_test
   Build$:         flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap, bap.conceval
+  BuildDepends:   bap, bap.conceval, oUnit
   Modules:        Test_bitvector,
                   Test_conceval
 
@@ -312,7 +312,7 @@ Library image_test
   Path:           lib_test/bap_image
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_image,
                   Test_memmap,
@@ -323,7 +323,7 @@ Library project_test
   Path:           lib_test/bap_project
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_project
 
@@ -331,7 +331,7 @@ Library dwarf_test
   Path:           lib_test/bap_dwarf
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap.dwarf
+  BuildDepends:   bap.dwarf, oUnit
   Install:        false
   Modules:        Test_leb128
 
@@ -339,7 +339,7 @@ Library disasm_test
   Path:           lib_test/bap_disasm
   Build$:         flag(tests) && flag(disassemblers)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_disasm
 
@@ -347,7 +347,7 @@ Library sema_test
   Path:           lib_test/bap_sema
   Build$:         flag(tests) && flag(disassemblers)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_ir
 
