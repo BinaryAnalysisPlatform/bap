@@ -50,17 +50,14 @@ module Bound = struct
     | Bounded (x,y) -> Format.fprintf fmt "[%a,%a]" Addr.pp x Addr.pp y
 end
 
-module Cache = Mem.Table
 module Map = Mem.Map
 
 type mem = Mem.t with sexp_of
 
-type 'a cache = 'a Cache.t
 type 'a map = 'a Map.t with sexp_of
 type 'a hashable = 'a Hashtbl.Hashable.t
 
 type 'a t = {
-  cache : 'a map -> 'a cache Lazy.t sexp_opaque;
   map : 'a map;
   bound : Bound.t;
 } with sexp_of
@@ -70,23 +67,12 @@ type 'a ranged
   -> ?until:mem   (** defaults to the highest mapped area  *)
   -> 'a
 
-let cache_of_map map =
-  let size = Map.length map in
-  let cache = Cache.create ~growth_allowed:false ~size () in
-  Map.iter map ~f:(Cache.add_exn cache);
-  cache
-
-
-let recache map = lazy (cache_of_map map)
-
 let empty = {
-  cache = recache;
   map = Map.empty;
   bound = Bound.empty;
 }
 
 let singleton k v = {
-  cache = recache;
   map = Map.singleton k v;
   bound = Bound.(update empty k);
 }
@@ -164,14 +150,13 @@ let change tab mem ~f =
       | `rebind (mem,data) ->
         Map.add map ~key:mem ~data,
         Bound.update tab.bound mem in
-    { map; cache = recache; bound  }
+    { map; bound }
 
 let add tab mem x =
   if has_intersections tab mem
   then error "memory has intersections" mem sexp_of_mem
   else Ok {
       map = Mem.Map.add tab.map ~key:mem ~data:x;
-      cache = recache;
       bound = Bound.update tab.bound mem;
     }
 
@@ -181,17 +166,12 @@ let remove tab x =
   then {
     tab with
     map = Map.remove tab.map x;
-    cache = recache;
   } else tab
 
 let length tab = Map.length tab.map
 
-let lookup f tab x =
-  let lazy cache = tab.cache tab.map in
-  f cache x
-
-let find tab mem = lookup Cache.find tab mem
-let mem  tab mem  = lookup Cache.mem tab mem
+let find tab mem = Map.find tab.map mem
+let mem  tab mem  = Map.mem tab.map mem
 
 let next tab = Map.next_key tab.map
 let prev tab = Map.prev_key tab.map
@@ -293,14 +273,13 @@ let make_map map add ?start ?until tab ~f =
   then {
     bound = tab.bound;
     map = map tab.map ~f:(fun ~key ~data -> f key data);
-    cache = recache
   } else
     let map,bound =
       foldi ?start ?until tab ~init:(Map.empty,Bound.empty)
         ~f:(fun addr x (map,bound) ->
             add map ~key:addr ~data:(f addr x),
             Bound.update bound addr) in
-    { map; cache = recache; bound}
+    { map; bound}
 
 let mapi ?start ?until tab ~f =
   make_map Map.mapi Map.add ?start ?until tab ~f
