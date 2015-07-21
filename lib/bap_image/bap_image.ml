@@ -234,16 +234,19 @@ let of_img img data name =
   create_segments arch data (segments img) >>= fun secs ->
   let memory = Table.foldi secs ~init:Memmap.empty ~f:(fun mem sec map ->
       Memmap.add map mem (Value.create segment sec)) in
-  let memory : value memmap =
-    List.fold (sections img) ~init:memory ~f:(fun map sec ->
+  let memory,syms,errs = create_symbols memory (symbols img) secs in
+  let memory,errs =
+    List.fold (sections img) ~init:(memory,errs) ~f:(fun (map,es) sec ->
         let loc = Section.location sec in
+        let name = Section.name sec in
         let (addr,len) = Location.(addr loc, len loc) in
         Memmap.lookup memory addr |> Seq.hd |> function
-        | None -> map
-        | Some (mem,_) ->
-          let mem = ok_exn (memory_of_location loc mem) in
-          Memmap.add map mem (Value.create section (Section.name sec))) in
-  let memory,syms,errs = create_symbols memory (symbols img) secs in
+        | None -> map,errs
+        | Some (mem,_) -> match memory_of_location loc mem with
+          | Error e ->
+            map, Error.tag e ("skipped section " ^ name) :: es
+          | Ok mem ->
+            Memmap.add map mem (Value.create section name),es) in
   let words = create_words secs in
   Table.(rev_map ~one_to:one Segment.hashable secs)
   >>= fun (memory_of_segment : segment -> mem) ->
