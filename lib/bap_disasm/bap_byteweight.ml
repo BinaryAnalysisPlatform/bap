@@ -67,7 +67,7 @@ module Make
   let test ~threshold trie key =
     match Trie.longest_match trie key with
     | None -> false
-    | Some (m,(a,b)) ->
+    | Some (_,(a,b)) ->
       let n = a + b in
       Float.(of_int a / of_int n) > threshold
 

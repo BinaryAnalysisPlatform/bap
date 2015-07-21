@@ -688,7 +688,9 @@ module Std : sig
     (** [remove trie key] removes value bound with [key] if any.  *)
     val remove : 'a t -> key -> unit
 
-    (** [longest_match trie key]   *)
+    (** [longest_match trie k] find the longest key in a [trie] that
+        is a substring of [k]. Returns a pair - a length of matched
+        key and data, associated with that key  *)
     val longest_match : 'a t -> key -> (int * 'a) option
 
     (** [length trie] returns the amount of entries in the [trie]  *)
