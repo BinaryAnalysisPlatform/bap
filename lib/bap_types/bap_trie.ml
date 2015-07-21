@@ -76,11 +76,11 @@ module Make(Key : Key) = struct
     let len = Key.length k in
     let rec lookup n trie =
       let c = Key.nth_token k (len - n) in
-      match n with
-      | 1 -> Tokens.find trie.subs c >>= data >>| fun s -> (len,s)
-      | n -> match Tokens.find trie.subs c with
-        | Some sub -> lookup (n-1) sub
-        | None -> trie.data >>| fun s -> (len - n),s in
+      match Tokens.find trie.subs c with
+      | None -> trie.data >>| fun s -> (len-n, s)
+      | Some sub -> match n with
+        | 1 -> data sub >>| fun s -> (len,s)
+        | n -> lookup (n-1) sub in
     lookup len trie
 
   let find trie k = match longest_match trie k with
