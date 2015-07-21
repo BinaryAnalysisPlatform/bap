@@ -390,7 +390,7 @@ let pp_hex fmt t =
       Format.fprintf fmt "%*s\n" (off + 1) "|" in
   let chars = foldi t ~init:[] ~f:(fun addr char chars ->
       let newline = chars = [] || List.length chars = 16 in
-      let addr = ok_exn Addr.(to_int64 addr) in
+      let addr = ok_exn Addr.(to_int64 (signed addr)) in
       let char = ok_exn Word.(to_int char) in
       if newline then begin
         print_chars 0 chars;
@@ -426,7 +426,8 @@ include Printable(struct
 
     let print_word fmt addr =
       let width = Addr.bitwidth addr / 4 in
-      fprintf fmt "%0*Lx" width (Addr.to_int64 addr |> ok_exn)
+      fprintf fmt "%0*Lx" width
+        (Addr.(to_int64 (signed addr)) |> ok_exn)
 
     let pp_small fmt t =
       Format.fprintf fmt "%a: " print_word t.addr;
