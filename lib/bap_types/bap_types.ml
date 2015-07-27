@@ -16,9 +16,11 @@ module Std = struct
   module Regular = Regular
   module Integer = Integer
   module Printable = Printable
+  module Opaque = Opaque
   module Trie = Trie
 
   module type Regular = Regular
+  module type Opaque = Opaque
   module type Integer = Integer
   module type Printable = Printable
   module type Trie = Trie

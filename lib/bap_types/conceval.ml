@@ -20,7 +20,7 @@ module T = struct
   and memory = t Mem.t
   with bin_io, compare, sexp
 
-  let module_name = "Bap.Std.Conceval"
+  let module_name = Some "Bap.Std.Conceval"
   let hash = Hashtbl.hash
 
   open Format

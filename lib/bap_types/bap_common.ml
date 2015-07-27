@@ -12,12 +12,14 @@ open Core_kernel.Std
 module Bitvector = Bap_bitvector
 module Integer   = Bap_integer
 module Regular   = Bap_regular
+module Opaque    = Bap_opaque
 module Printable = Regular.Printable
 module Trie      = Bap_trie
 
 (** {2 Basic Interfaces}  *)
 module type Integer   = Integer.S
 module type Regular   = Regular.S
+module type Opaque    = Opaque.S
 module type Printable = Regular.Printable
 module type Trie      = Trie.S
 

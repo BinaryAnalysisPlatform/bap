@@ -265,4 +265,4 @@ let parse () =
 
   match Term.eval ~argv ~catch:false program with
   | `Ok opts -> Ok opts
-  | _ -> Or_error.errorf "no cmdline options provided\n"
+  | _ -> Or_error.errorf "nothing to do"

@@ -1,5 +1,7 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Bap_common
+open Bap_bil
+open Bap_value
 
 type 'a term with bin_io, compare, sexp
 type program with bin_io, compare, sexp
@@ -57,8 +59,8 @@ module Term : sig
   val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
   val remove : ('a,_) cls -> 'a t -> tid -> 'a t
   val change : ('a,'b) cls -> 'a t -> tid -> ('b t option -> 'b t option) -> 'a t
-  val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
-  val enum : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
+  val to_sequence : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t Sequence.t
+  val enum : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t Sequence.t
   val map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t) -> 'a t
   val filter_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t option) -> 'a t
   val concat_map : ('a,'b) cls -> 'a t -> f:('b t -> 'b t list) -> 'a t
@@ -67,11 +69,13 @@ module Term : sig
   val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
   val first : ('a,'b) cls -> 'a t -> 'b t option
   val last  : ('a,'b) cls -> 'a t -> 'b t option
-  val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
-  val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
+  val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t Sequence.t
+  val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t Sequence.t
   val append : ('a,'b) cls -> ?after:tid -> 'a t -> 'b t -> 'a t
   val prepend : ('a,'b) cls -> ?before:tid -> 'a t -> 'b t -> 'a t
   val length : ('a,'b) cls -> 'a t -> int
+  val nth : ('a,'b) cls -> 'a t -> int -> 'b t option
+  val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
   val set_attr : 'a t -> 'b tag -> 'b -> 'a t
   val get_attr : 'a t -> 'b tag -> 'b option
   val del_attr : 'a t -> 'b tag -> 'a t
@@ -80,7 +84,7 @@ end
 
 module Ir_program : sig
   type t = program term
-  val create : unit -> t
+  val create : ?tid:tid -> unit -> t
   val lookup : (_,'b) cls -> t -> tid -> 'b term option
   val parent : ('a,'b) cls -> t -> tid -> 'a term option
   module Builder : sig
@@ -95,7 +99,7 @@ end
 
 module Ir_sub : sig
   type t = sub term
-  val create : ?name:string -> unit -> t
+  val create : ?tid:tid -> ?name:string -> unit -> t
   val name : t -> string
   val with_name : t -> string -> t
   module Builder : sig
@@ -115,13 +119,13 @@ module Ir_blk : sig
     | `Phi of phi term
     | `Jmp of jmp term
   ]
-  val create : unit -> t
+  val create : ?tid:tid -> unit -> t
   val split_while : t -> f:(def term -> bool) -> t * t
   val split_after : t -> def term -> t * t
   val split_before : t -> def term -> t * t
   val split_top : t -> t * t
   val split_bot : t -> t * t
-  val elts : ?rev:bool -> t -> elt seq
+  val elts : ?rev:bool -> t -> elt Sequence.t
   val map_exp :
     ?skip:[`phi | `def | `jmp] list ->
     t -> f:(exp -> exp) -> t
@@ -158,7 +162,7 @@ end
 
 module Ir_def : sig
   type t = def term
-  val create : var -> exp -> t
+  val create : ?tid:tid -> var -> exp -> t
   val lhs : t -> var
   val rhs : t -> exp
   val with_lhs : t -> var -> t
@@ -169,11 +173,11 @@ end
 
 module Ir_jmp : sig
   type t = jmp term
-  val create : ?cond:exp -> jmp_kind -> t
-  val create_call : ?cond:exp -> call -> t
-  val create_goto : ?cond:exp -> label -> t
-  val create_ret  : ?cond:exp -> label -> t
-  val create_int  : ?cond:exp -> int -> tid -> t
+  val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
+  val create_call : ?tid:tid -> ?cond:exp -> call -> t
+  val create_goto : ?tid:tid -> ?cond:exp -> label -> t
+  val create_ret  : ?tid:tid -> ?cond:exp -> label -> t
+  val create_int  : ?tid:tid -> ?cond:exp -> int -> tid -> t
   val kind : t -> jmp_kind
   val cond : t -> exp
   val with_cond : t -> exp -> t
@@ -184,11 +188,11 @@ end
 
 module Ir_phi : sig
   type t = phi term
-  val create : var -> tid -> exp -> t
-  val of_list : var -> (tid * exp) list -> t
+  val create : ?tid:tid -> var -> tid -> exp -> t
+  val of_list : ?tid:tid -> var -> (tid * exp) list -> t
   val lhs : t -> var
   val with_lhs : t -> var -> t
-  val values : t -> (tid * exp) seq
+  val values : t -> (tid * exp) Sequence.t
   val update : t -> tid -> exp -> t
   val select : t -> tid -> exp option
   val remove : t -> tid -> t
@@ -200,7 +204,7 @@ end
 module Ir_arg : sig
   type t = arg term
 
-  val create : ?intent:intent -> ?name:string -> typ -> t
+  val create : ?tid:tid -> ?intent:intent -> ?name:string -> typ -> t
   val var : t -> var
   val intent : t -> intent option
   val with_intent : t -> intent -> t

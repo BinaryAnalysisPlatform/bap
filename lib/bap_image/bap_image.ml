@@ -31,7 +31,7 @@ module Segment = struct
     type t = Segment.t with bin_io, compare, sexp
     let hash = Addr.hash +> Location.addr +> Segment.location
     let pp fmt t = Format.fprintf fmt "%s" @@ Segment.name t
-    let module_name = "Bap.Std.Image.Segment"
+    let module_name = Some "Bap.Std.Image.Segment"
   end
 
   let name = Segment.name
@@ -53,7 +53,7 @@ module Symbol = struct
     type t = Symbol.t with bin_io, compare, sexp
     let hash = Addr.hash +> Location.addr +> fst +> Symbol.locations
     let pp fmt t = Format.fprintf fmt "%s" @@ Symbol.name t
-    let module_name = "Bap.Std.Image.Symbol"
+    let module_name = Some "Bap.Std.Image.Symbol"
   end
   include Symbol
   include Regular.Make(T)
