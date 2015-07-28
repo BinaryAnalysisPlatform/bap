@@ -13,6 +13,8 @@ let r = Var.create "r" bool_t
 let a = Var.create "a" bool_t
 let b = Var.create "b" bool_t
 let c = Var.create "c" bool_t
+let u = Var.create "arg_1" bool_t
+let v = Var.create "arg_2" bool_t
 
 
 let def_x = Def.create x (Bil.(int Word.b1))
@@ -20,8 +22,8 @@ let def_y = Def.create y (Bil.(int Word.b0))
 let def_z = Def.create z (Bil.(int Word.b1))
 let def_o = Def.create o (Bil.(int Word.b0))
 let def_s = Def.create s (Bil.(var o land var z))
-let arg_1 = Arg.create ~name:"arg_1" bool_t
-let arg_2 = Arg.create ~name:"arg_2" bool_t
+let arg_1 = Arg.create u (Bil.(int Word.b1))
+let arg_2 = Arg.create v (Bil.(int Word.b0))
 let arg_3 = Term.clone arg_1
 let arg_4 = Term.clone arg_2
 
@@ -73,7 +75,7 @@ let abc = Term.append jmp_t abc
 let sub1 = make_sub "f" [arg_1;arg_2] [abc]
 let sub1_label = Label.direct Term.(tid sub1)
 let goto_xyz =
-  Jmp.create_goto ~cond:Bil.(var s = var @@ Arg.var arg_1) xyz_label
+  Jmp.create_goto ~cond:Bil.(var s = var @@ Arg.lhs arg_1) xyz_label
 let call_sub1 =
   let call = Call.create ~return:pqr_label ~target:sub1_label () in
   Jmp.create_call call

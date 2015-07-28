@@ -34,9 +34,7 @@ module Disasm_expert = struct
 end
 
 module type ABI = sig
-  val create :
-    ?merge:(abi list -> abi) ->
-    Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi
+  val create : ?merge:(abi list -> abi) -> abi_constructor
   val merge : abi list -> abi
   val merge_id : string list -> string list -> string list
   class stub : abi

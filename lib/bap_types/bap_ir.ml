@@ -70,7 +70,7 @@ type blk = {
   jmps : jmp term array;
 } with bin_io, compare, fields, sexp
 
-type arg = var * intent option
+type arg = var * exp * intent option
 with bin_io, compare, sexp
 
 type sub = {
@@ -206,7 +206,8 @@ let nil_jmp : jmp term =
 let nil_blk : blk term =
   make_term Tid.nil {phis=[| |] ; defs = [| |] ; jmps = [| |] }
 
-let nil_arg : arg term = make_term Tid.nil (undefined_var,None)
+let nil_arg : arg term =
+  make_term Tid.nil (undefined_var,undefined_exp,None)
 
 let nil_sub : sub term = make_term Tid.nil {
     name = "undefined"; blks = [| |] ; args = [| |]}
@@ -402,20 +403,19 @@ end
 
 module Ir_arg = struct
   type t = arg term
-  include Leaf
-  let create ?(tid=Tid.create()) ?intent ?name typ : t =
-    let tmp = Option.is_none name in
-    let name = match name with
-      | Some name -> name
-      | None -> "arg" in
-    let var = Var.create ~tmp name typ in
-    make_term tid (var,intent)
+  let create ?(tid=Tid.create()) ?intent var exp : t =
+    make_term tid (var,exp,intent)
 
-  let var = lhs
-  let intent = rhs
-  let with_intent (t : t) intent : t = with_rhs t (Some intent)
-  let with_unknown_intent : t -> t = fun t -> with_rhs t None
-  let name arg = Var.name (var arg)
+  let lhs t = Tuple3.get1 t.self
+  let rhs t = Tuple3.get2 t.self
+  let intent t = Tuple3.get3 t.self
+  let with_intent (t : t) intent : t = {
+    t with self = Tuple3.map3 t.self ~f:(fun _ -> Some intent)
+  }
+  let with_unknown_intent t : t = {
+    t with self = Tuple3.map3 t.self ~f:(fun _ -> None)
+  }
+  let name arg = Var.name (lhs arg)
 
   include Regular.Make(struct
       type t = arg term with bin_io, compare, sexp
@@ -428,11 +428,12 @@ module Ir_arg = struct
         | Some Both -> "in out "
         | None -> ""
 
-      let pp_self ppf (var,intent) =
-        Format.fprintf ppf "%s :: %s%a"
+      let pp_self ppf (var,exp,intent) =
+        Format.fprintf ppf "%s :: %s%a = %a"
           (Var.name var)
           (string_of_intent intent)
           Bap_type.pp (Var.typ var)
+          Bap_exp.pp exp
 
       let pp = Term.pp pp_self
     end)

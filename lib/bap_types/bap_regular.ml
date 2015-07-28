@@ -6,6 +6,7 @@ module type Printable = sig
   val str : unit -> t -> string
   val pps : unit -> t -> string
   val ppo : out_channel -> t -> unit
+  val pp_seq : Format.formatter -> t Sequence.t -> unit
   include Pretty_printer.S     with type t := t
 end
 
@@ -35,9 +36,14 @@ module Printable(M : sig
     pp f x;
     Format.pp_print_flush f ()
 
+  let pp_seq ppf xs : unit =
+    Bap_seq.pp pp ppf xs
+
 
   let () = Option.iter M.module_name
-      ~f:(fun name -> Pretty_printer.register (name ^ ".pp"))
+      ~f:(fun name ->
+          Pretty_printer.register (name ^ ".pp");
+          Pretty_printer.register (name ^ ".pp_seq"))
 end
 
 module Make(M : sig

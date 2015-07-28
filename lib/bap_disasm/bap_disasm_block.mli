@@ -20,6 +20,7 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_basic
 open Bap_disasm_block_intf
+open Bap_graph_intf
 
 type t with compare, sexp_of
 type insn = Bap_disasm_insn.t with compare,bin_io,sexp
@@ -27,61 +28,18 @@ type insn = Bap_disasm_insn.t with compare,bin_io,sexp
 include Block_accessors with type t := t and type insn := insn
 include Block_traverse  with type t := t
 
+module Graph : Graph
+  with type node = t
+   and type Node.label = t
+   and type Edge.label = edge
 
-(** [dfs ?next ?bound blk] searches from the [blk] using DFS.
-
-    Search can be bound with [bound], i.e., the search will not continue
-    on block that has no intersections with the specified bound. By
-    default the search is unbound. Search direction can be also
-    specified by the [next] parameter. By default search is performed
-    in a forward direction, using [succs] function. To search in a
-    reverse direction, use [preds] function. The search result is
-    returned as a lazy sequence. Destinations of the block are visited
-    in the order of execution, e.g., taken branch is visited before
-    non taken. No such guarantee is made for the predecessors or any
-    other function provided as a [next] arguments, since it is a
-    property of a [next] function, not the algorithm itsef.
-*)
-val dfs :
-  ?order:[`post | `pre] ->        (** defaults to pre *)
-  ?next:(t -> t seq) ->           (** defaults to succs  *)
-  ?bound:(addr -> bool) -> t -> t seq
-
-
-(** A classic control flow graph using OCamlgraph library.
-    Graph vertices are made abstract, but the implement
-    [Block_accessors] interface, including hash tables, maps, hash
-    sets etc. *)
-module Cfg : sig
-  module Block : sig
-    type t with sexp_of
-    include Block_accessors with type t := t and type insn := insn
-  end
-
-  (** Imperative graph *)
-  module Imperative : Graph.Sig.I
-    with type V.t = Block.t
-     and type V.label = Block.t
-     and type E.t = Block.t * edge * Block.t
-     and type E.label = edge
-
-  (** The default graph is persistant  *)
-  include Graph.Sig.P
-    with type V.t = Block.t
-     and type V.label = Block.t
-     and type E.t = Block.t * edge * Block.t
-     and type E.label = edge
-
-end
 
 (** [to_graph ?bound entry] builds a graph starting with [entry] and
     spanning all reachable blocks that are bounded by a memory region
     [bound].
     @param bound defaults to infinite memory region.
 *)
-val to_graph : ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.t
-val to_imperative_graph :
-  ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.Imperative.t
+val to_graph : ?bound:(addr -> bool) -> t -> Graph.t
 
 
 (** lifting from a lower level  *)

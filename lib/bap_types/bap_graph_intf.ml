@@ -15,12 +15,12 @@ module type Node = sig
   val preds  : t -> graph -> t Sequence.t
   val inputs : t -> graph -> edge Sequence.t
   val outputs: t -> graph -> edge Sequence.t
+  val degree : ?dir:[`In | `Out] -> t -> graph -> int
   val insert : t -> graph -> graph
-  val update : t -> graph -> graph
+  val update : t -> label -> graph -> graph
   val remove : t -> graph -> graph
   val has_edge : t -> t -> graph -> bool
   val edge : t -> t -> graph -> edge option
-  val edges : t -> t -> graph -> edge Sequence.t
   include Opaque with type t := t
 end
 
@@ -35,7 +35,7 @@ module type Edge = sig
   val dst : t -> node
   val mem : t -> graph -> bool
   val insert : t -> graph -> graph
-  val update : t -> graph -> graph
+  val update : t -> label -> graph -> graph
   val remove : t -> graph -> graph
   include Opaque with type t := t
 end
@@ -45,7 +45,6 @@ module type Graph = sig
   type edge
 
   type t
-
 
   module Node : Node with type graph = t
                       and type t = node
@@ -105,6 +104,10 @@ class type ['n,'e,'s] dfs_visitor = object
   method leave_edge : edge_kind -> 'e -> 's -> 's
 end
 
+type ('n,'a) labeled = {
+  node : 'n;
+  node_label : 'a;
+}
 
 
 type node_attr = Graph.Graphviz.DotAttributes.vertex

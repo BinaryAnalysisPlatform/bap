@@ -56,9 +56,9 @@ let cmp x y = match x#choose y, y#choose x with
   | p,_ -> p
 
 let create_abi_getter (registered : abi_constructor list ref) =
-  fun ?(merge=merge) syms sym ->
+  fun ?(merge=merge) sub ->
     List.filter_map !registered (fun cs ->
-        try Some (cs syms sym) with exn -> None) |>
+        try Some (cs sub) with exn -> None) |>
     List.sort ~cmp |> function
     | [] -> new stub
     | x :: _ as xs ->

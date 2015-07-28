@@ -1,6 +1,4 @@
 module Std = struct
-
-  module Lnf = Bap_lnf
   include Bap_ir
 
   module Ir_lift = Bap_sema_lift

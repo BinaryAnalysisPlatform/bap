@@ -45,7 +45,7 @@ module Std : sig
 
       The {{!bfl}Foundation library} defines {{!Bil}BAP Instruction
       language} data types, as well as other useful data structures,
-      like {!Value}, {!Trie}, {!Vector}, etc. The
+      like {!Value}, {!Trie}, {!Vector}, {!Graph}, etc. The
       {{!section:image}Memory model} layer is responsible for loading
       and parsing binary objects and representing them in computer
       memory. It also defines a few useful data structures that are
@@ -128,7 +128,10 @@ module Std : sig
       - {{!Dict}dict} - an extensible record;
       - {{!Vector}vector} - array that can grow;
       - {{!Seq}'a seq} - slightly extended Core [Sequence], aka lazy
-        list.
+        list;
+      - {{!Trie}Trie} - prefix trees;
+      - {{!Graph}Graph} - graph implementations and library.
+
 
       Most of the types implement the {{!Regular}Regular}
       interface. This interface is very similar to Core's
@@ -199,6 +202,68 @@ module Std : sig
       {{!Bitvector.Trie}tries} inside.
 
       For common strings, there's {!Trie.String}.
+
+
+      {3 Graph library}
+
+      {!Graphlib} is a generic library that extends a well known
+      OCamlGraph library. {!Graphlib} uses its own, more reach,
+      {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
+      signature for persistant graphs. Two functors witness the
+      isomorphism of the interfaces:
+      {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
+      to this functors any algorithm written for OCamlGraph can be
+      used on [Graphlibs] graph and vice verse.
+
+      The {!Graph} interface provides a richer interface in a Core
+      style. Nodes and Edges implements {!Opaque} data structure,
+      i.e., they come with Maps, Sets, Hashtbls, etc, preloaded (e.g.,
+      [G.Node.Set] is a set of node for graph implementation, provided
+      by a module named [G]). Graphs also implement {!Printable}
+      interface, that makes them much easier to debug.
+
+      Along with graphs, auxiliary data structures are provided, like
+      {{!Path}path} to represent paths in graph, {{!Tree}tree} for
+      representing different graph spannings, {{!Partition}partition}
+      for graph partitioning, and more.
+
+      {!Graphlib} is a library that provides a set of generic
+      algorithms, as well as implementations of a {!Graph} interface,
+      and a suite of preinstantiated graphs.
+
+      Contrary to OCamlGraph, each {!Graphlib} interface is provided
+      as a function, not a functor. Thus making there use syntactically
+      easier. Also, {!Graphlib} heavily uses optional and keyword
+      parameters. For die-hards, may algorithms are still have functor
+      interface.
+
+      All {!Graphlib} algorithms accept a first-class module with
+      graph implementation as a first argument. You can think of this
+      parameter as an explicit type class. Later, when modular
+      implicits will be accepted in OCaml, this parameter can be
+      omitted. But for now, we need to pass it.
+
+      A recommended way to work with {!Graphlib} is to bind the
+      chosen implementation with some short name, usually [G] would be
+      a good choice:
+
+      {[module G = Graphlib.String.Bool]}
+
+      This will bind name [G] with a graph implementation that has
+      [string] nodes, with edges marked by values of type [bool].
+
+      To create a graph of type [G.t] one can use a generic
+      {!Graphlib.create} function:
+
+      {[let g = Graphlib.create (module G) ~edges:[
+          "entry", "loop", true;
+          "loop", "exit", true;
+          "loop", "loop", false;
+        ] ()]}
+
+      This will create an instance of type [G.t]. Of course, it is
+      still possible to use non-generic [G.empty], [G.Node.insert],
+      [G.Edge.insert].
   *)
 
   (** {2:image Memory model}
@@ -578,6 +643,10 @@ module Std : sig
         [printf], [fprintf], etc. *)
     val ppo : out_channel -> t -> unit
 
+    (** prints a sequence of values of type [t] *)
+    val pp_seq : Format.formatter -> t Sequence.t -> unit
+
+
     (** this will include [pp] function from [Core] that has type
         {{!printer}[t printer]}, and can be used in [Format.printf]
         family of functions *)
@@ -687,6 +756,14 @@ module Std : sig
     val cons : 'a -> 'a t -> 'a t
 
     val is_empty : 'a t -> bool
+
+    val pp : 'a printer -> 'a t printer
+    val pp_bools : bool t printer
+    val pp_chars : char t printer
+    val pp_floats : float t printer
+    val pp_ints : int t printer
+    val pp_strings : string t printer
+
   end
 
   (** type abbreviation for ['a Sequence.t]  *)
@@ -2525,24 +2602,25 @@ module Std : sig
   val def_t : (blk, def) cls     (** def  *)
   val jmp_t : (blk, jmp) cls     (** jmp  *)
 
-
-  (** {4 Graph Library}  *)
-
-  (** Interface provided by graph nodes.  *)
+  (** {!Graph} nodes.  *)
   module type Node = sig
+    (** Semantics of operations is denoted using mathematical model,
+        described in {!Graph} interface.  *)
 
     type t                      (** node type is opaque  *)
     type graph
     type label
     type edge
 
-    (** [create label] creates a node with a given [label]  *)
+    (** [create label] creates a new node, and associates it with a
+        given [label].  *)
     val create : label -> t
 
-    (** [label node] returns a node's label  *)
+    (** [label n] returns a value associated with a node [n].  *)
     val label : t -> label
 
-    (** [mem node graph] is [true] if [node] is part of [graph]  *)
+    (** [mem n g] is [true] if [n] is a member of nodes [N] of graph
+        [g].  *)
     val mem : t -> graph -> bool
 
     (** [succs node graph] returns a sequence of successors of a
@@ -2559,32 +2637,51 @@ module Std : sig
     (** [outputs node graph] is outcomming edges of a [node] in [graph]  *)
     val outputs : t -> graph -> edge seq
 
-    (** [insert node graph] returns new graph that contains [node] as
-        well as all other nodes of old [graph].  *)
+    (** [degree ?dir n] when [in_or_out] is [`In] then returns
+        the amount of incomming edges, otherwise returns the amount of
+        outcomming edges. If parameter [dir] is left absent, then
+        return the amount of adjacent nodes (i.e., a sum of incomming
+        and outcomming edges).  *)
+    val degree : ?dir:[`In | `Out] -> t -> graph -> int
+
+    (** [insert n g] returns new graph [g'] that has a set of nodes
+        [N] extended with node [n]. If [N] was contained [n], then
+        the [g == g']. Use {!update} to change existing nodes.
+
+        Postconditions: {v
+          - N(g') = N(g) ∪ {n}.
+          v}
+    *)
     val insert : t -> graph -> graph
 
-    (** [update n g] updates node [n] in a graph [g] if [n] was
-        contained in [g]. Otherwise returns [g] unchanged.
-        Note: this operation makes sense for nodes, that are not
-        structurally compared, and have some fields, that doesn't
-        affect the equality of a node.  *)
-    val update : t -> graph -> graph
+    (** [update n l g] if node [n] is in [N] then return a graph [g]
+        in which node [n] is associated with label [l]. If wasn't in
+        the set [N] then [g] is returned unchanged.
 
-    (** [remove n g] returns a new graph [g'], that is structurally
-        the same as [g] but doesn't contain node [n] *)
+        Postconditions: {v
+          - n ∉ N(g) -> n ∉ N(g').
+          - n ∈ N(g) → ν(g')n = l.
+          v}
+    *)
+    val update : t -> label -> graph -> graph
+
+    (** [remove n g] returns graph [g'], with a node [n] removed from
+        a set of nodes [N].
+
+        Postconditions: {v
+          - E(g) ⊆ E(g')
+          - N(g) ⊆ N(g')
+          - N(g') = N(g) \ {n}.
+          v}
+    *)
     val remove : t -> graph -> graph
 
-    (** [has_edge x y g] is true if there exists such edge in graph
-        [g] that its destination is [y] and source is [x] *)
+    (** [has_edge x y g] is true iff (x,y) ∈ E. *)
     val has_edge : t -> t -> graph -> bool
 
-    (** [edge x y g] if there is an edge in graph [g] with source [x]
-        and destination [y], then return it.  Otherwise return [None] *)
+    (** [edge x y g] if graph [g] has an edge between nodes [x] and
+        [y] then it is returned.  *)
     val edge : t -> t -> graph -> edge option
-
-    (** [edges x y g] returns all edges in graph [g] that have source
-        node [x] and destination node [y] *)
-    val edges : t -> t -> graph -> edge seq
 
     (** node provides common data structures, like Table, Map, Set,
         Hash_set, etc.  *)
@@ -2593,6 +2690,8 @@ module Std : sig
 
   (** Interface that every Graph edge should provide  *)
   module type Edge = sig
+    (** Semantics of operations is denoted using mathematical model,
+        described in {!Graph} interface.  *)
 
     type t
     type node
@@ -2612,24 +2711,93 @@ module Std : sig
     (** [dst e] returns a destination of an edge [e] *)
     val dst : t -> node
 
-    (** [mem e g] is true if edge [e] was inserted in graph [g]  *)
+    (** [mem e g] is true if [e] ∈ E.  *)
     val mem : t -> graph -> bool
 
-    (** [insert e g] returns a graph [g'] that has the same structure
-        as [g] plus a new edge [e] *)
+    (** [insert e g] returns a graph [g'] with a set of edges extended
+        with edge [e]. If [src e] or [dst e] wasn't in the set of nodes
+        [N], then it is extended as well, so that axioms of graph are
+        preserved.
+
+        Postconditions: {v
+          - E(g') = E(g) ∪ {e}.
+          v}
+    *)
     val insert : t -> graph -> graph
 
-    (** [update e g] if edge [e] exists in graph [g] then update it
-        with a new value.  *)
-    val update : t -> graph -> graph
+    (** [update e l g] if edge [e] exists in graph [g] then return a
+        new graph [g'] in which edge [e] is associated with label [l].
+        Otherwise return [g] unchanged.
 
-    (** [remove e g] returns a graph [g'] that doesn't contain edge [e]  *)
+        Postcondition: {v
+          - E(g) ⊆ E(g')
+          - N(g) ⊆ N(g')
+          - e ∉ E(g) → e ∉ E(g').
+          - e ∈ E(g) → ε(g')e = l.
+          v}
+    *)
+    val update : t -> label -> graph -> graph
+
+    (** [remove e g] returns a graph [g'] that doesn't contain edge
+        [e].
+
+        Postconditions: {v
+          - E(g') = E(g) \ {e}.
+          v}
+    *)
     val remove : t -> graph -> graph
     include Opaque with type t := t
   end
 
-  (** Interface that all graphs provide  *)
+  (** Graph signature.  *)
   module type Graph = sig
+    (** Graph is mathematical data structure that is used to represent
+        relations between elements of a set. Usually, graph is defined
+        as an ordered pair of two sets - a set of vertices and a set
+        of edges that is a 2-subset of the set of nodes,
+
+        {v G = (V,E). v}
+
+        In Graphlib vertices (called nodes in our parlance) and edges
+        are labeled. That means that we can associate data with edges
+        and nodes. Thus graph should be considered as an associative
+        data structure. And from mathematics perspective graph is
+        represented as an ordered 6-tuple, consisting of a set of nodes,
+        edges, node labels, edge labels, and two functions that maps
+        nodes and edges to their corresponding labels:
+
+        {v G = (N, E, N', E', ν : N -> N', ε : E -> E'), v}
+
+        where set [E] is a subset of [ N × N ].
+
+        With this general framework an unlabeled graph can be
+        represented as:
+
+        {v G = (N, E, N, E, ν = λx.x, ε = λx.x) v}
+
+        Another possible representation of an unlabeled graph would be:
+
+        {v G = (N, E, {u}, {v}, ν = λx.u, ε = λx.v). v}
+
+        Implementations are free to choose any suitable representation
+        of graph data structure, if it conforms to the graph signature
+        and all operations follows the described semantics and
+        properties of a graph structure are preserved.
+
+        The axiomatic semantics of operations on a graph is described by
+        a set of postconditions. To describe the semantics of an
+        operation in terms of input and output arguments, we project
+        graphs to its fields with the following notation
+        [<field>(<graph>)], e.g., [N(g)] is a set of nodes of graph [g].
+
+        Only the strongest postcondition is specified, e.g., if it
+        specified that [νn = l], than it also means that
+
+        [n ∈ N ∧ ∃u((u,v) ∈ E ∨ (v,u) ∈ E) ∧ l ∈ N' ∧ ...]
+
+        In other words the structure [G] of the graph G is an invariant
+        that is always preserved.
+    *)
 
     (** type of graph  *)
     type t
@@ -2641,12 +2809,12 @@ module Std : sig
     type edge
 
 
-    (** Node interface.  *)
+    (** Graph nodes.  *)
     module Node : Node with type graph = t
                         and type t = node
                         and type edge = edge
 
-    (** Edge interface  *)
+    (** Graph edges  *)
     module Edge : Edge with type graph = t
                         and type t = edge
                         and type node = node
@@ -2654,20 +2822,19 @@ module Std : sig
     (** [empty] is an empty graph  *)
     val empty : t
 
-    (** [nodes g] returns all nodes of graph [g] in unspecified order  *)
+    (** [nodes g] returns all nodes of graph [g] in an unspecified order  *)
     val nodes : t -> node seq
 
-    (** [edges g] returns all edges of graph [g] in unspecified order  *)
+    (** [edges g] returns all edges of graph [g] in an unspecified order  *)
     val edges : t -> edge seq
 
-    (** [is_directed] is true if graph is a directed graph  *)
+    (** [is_directed] is true if graph is a directed graph.  *)
     val is_directed : bool
 
-    (** [number_of_edges g] returns the amount of edges in a graph [g]  *)
+    (** [number_of_edges g] returns the size of a graph [g].  *)
     val number_of_edges : t -> int
 
-
-    (** [number_of_nodes g] returns the amount of nodes in a graph [g]  *)
+    (** [number_of_nodes g] returns the order of a graph [g]  *)
     val number_of_nodes : t -> int
 
     (** All graphs provides a common interface for any opaque data structure  *)
@@ -2718,18 +2885,18 @@ module Std : sig
       one path between tree root and any other node.
       Here is an example of a tree:
       {v
-                               (A)
-                                |
-                        +-------+-------+
-                        |       |       |
-                       (B)     (C)     (D)
-                                |
-                        +-------+-------+
-                        |       |       |
-                       (E)     (F)     (G)
-                                |
-                               (H)
-      v}
+                                 (A)
+                                  |
+                          +-------+-------+
+                          |       |       |
+                         (B)     (C)     (D)
+                                  |
+                          +-------+-------+
+                          |       |       |
+                         (E)     (F)     (G)
+                                  |
+                                 (H)
+        v}
   *)
   module Tree : sig
     type 'a t = 'a tree
@@ -2915,11 +3082,10 @@ module Std : sig
     include Regular with type t := t
   end
 
-
   (** {5 Auxiliary graph data structures}  *)
 
   (** A type of modules for filtering graphs.
-      See {!filtered} or {!Filtered}  *)
+      See {!Graphlib.filtered} or {!Graphlib.Filtered}  *)
   module type Predicate = sig
     type edge
     type node
@@ -2954,6 +3120,11 @@ module Std : sig
   type node_attr  = Graph.Graphviz.DotAttributes.vertex
   type edge_attr  = Graph.Graphviz.DotAttributes.edge
   type graph_attr = Graph.Graphviz.DotAttributes.graph
+
+  type ('n,'a) labeled = {
+    node : 'n;
+    node_label : 'a;
+  }
 
 
   (** Generic Graph Library  *)
@@ -3073,7 +3244,6 @@ module Std : sig
 
         An edge in a spanning tree, produced by a depth first walk,
         can belong to one of the following category (kind):
-
         - Tree edges constitutes a spanning tree [T] of a graph;
         - Forward edges go from an ancestor to a descendants in
           a tree [T];
@@ -3090,13 +3260,13 @@ module Std : sig
         a given [kind] satisfy to the following inequalities:
 
         {v
-          +---------+-----------------+---------------------+
-          | Tree    | pre[x] < pre[y] | rpost[x] < rpost[y] |
-          | Forward | pre[x] < pre[y] | rpost[x] < rpost[y] |
-          | Back    | pre[x] >= pre[y] | rpost[x] >= rpost[y] |
-          | Cross   | pre[x] > pre[y] | rpost[x] < rpost[y] |
-          +---------+-----------------+---------------------+
-        v}
+            +---------+-----------------+---------------------+
+            | Tree    | pre[x] < pre[y] | rpost[x] < rpost[y] |
+            | Forward | pre[x] < pre[y] | rpost[x] < rpost[y] |
+            | Back    | pre[x] ≥ pre[y] | rpost[x] ≥ rpost[y] |
+            | Cross   | pre[x] > pre[y] | rpost[x] < rpost[y] |
+            +---------+-----------------+---------------------+
+          v}
 
         Note: since there can be more than one valid order of
         traversal of the same graph, (and thus more than one valid
@@ -3105,7 +3275,7 @@ module Std : sig
         edge will be always a back edge, disregarding the particular
         order.
 
-        (** {3 Complexity}  *)
+        {3 Complexity}
         The algorithm is linear in time and space (including the stack
         space). In fact, for small graphs it uses stack, but for large
         graphs dynamically switches to a heap storage. *)
@@ -3151,34 +3321,33 @@ module Std : sig
     (** [dominators (module G) g entry] builds a dominators tree for a
         given graph.
 
-        Definition: a _walk_ is a sequence of alternating nodes and
+        Definition: a {b walk} is a sequence of alternating nodes and
         edges, where each edge's endpoints are the preceding and
         following nodes in the sequence.
 
-        Definition: a node [v] is _reachable_ if there exists a walk
+        Definition: a node [v] is {b reachable} if there exists a walk
         starting from [entry] and ending with [v].
 
-        Definition: node [u] _dominates_ [v] if [u = v] or if all walks
+        Definition: node [u] {b dominates} [v] if [u = v] or if all walks
         from [entry] to [v] contains [u].
 
-        Definition: node [u] _strictly dominates_ [v] if it dominates
+        Definition: node [u] {b strictly dominates} [v] if it dominates
         [v] and [u <> v].
 
-        Definition: node [u] _immediately dominates_ [v] if it
+        Definition: node [u] {b immediately dominates} [v] if it
         strictly dominates [v] and there is no other node that
         strictly dominates [v] and is dominated by [u].
 
         Algorithm computes a dominator tree [t] that has the following
         properties:
-
-        1) Sets of graph nodes and tree nodes are equal;
-        2) if node [u] is a parent of node [v], then node [u]
+        + Sets of graph nodes and tree nodes are equal;
+        + if node [u] is a parent of node [v], then node [u]
            immediately dominates node [v];
-        3) if node [u] is an ancestors of node [v], then node [u]
+        + if node [u] is an ancestors of node [v], then node [u]
            strictly dominates node [v];
-        4) if node [v] is a child of node [u], then node [u]
+        + if node [v] is a child of node [u], then node [u]
            immediately dominates node [v];
-        5) if node [v] is a descendant of node [u], then node [u]
+        + if node [v] is a descendant of node [u], then node [u]
            strictly dominates node [v].
 
         If every node of graph [g] is reachable from a provided
@@ -3186,19 +3355,23 @@ module Std : sig
         an [if] statement can be read as [iff], and the tree is
         unique.
 
-        Lemma: Everything dominates unreachable block.
-        Proof: (by contradiction) suppose there exists a node [u] that
+
+        {b Lemma}: Everything dominates unreachable block.
+
+        {b Proof}: (by contradiction) suppose there exists a node [u] that
         doesn't dominate unreachable block [v]. That means, that there
         exists a path from [entry] to [v] that doesn't contain
-        [u]. But that means, at least, that [v] is reachable. Qed.
+        [u]. But that means, at least, that [v] is reachable. This  is
+        a contradiction with the original statement that [v] is
+        unreachable. {b Qed.}
 
         If some nodes of graph [g] are unreachable from the provided
-        [entry] node, then they are be dominated by all other nodes of
-        a graph. It means that the provided system is under
-        constrained and has more then one solution (i.e., there exists
-        more than one tree, that satisfies properties (1) - (5). In
-        current implementation each unreachable node is immediately
-        dominated by the [entry], if the [entry] is in graph.
+        [entry] node, then they are dominated by all other nodes of a
+        graph. It means that the provided system is under constrained
+        and has more then one solution (i.e., there exists more than
+        one tree, that satisfies properties (1) - (5). In a current
+        implementation each unreachable node is immediately dominated
+        by the [entry], if the [entry] is in graph.
 
         To get a post-dominator tree, reverse the graph by passing
         [true] to [rev] and pass exit node as a starting node.
@@ -3329,8 +3502,7 @@ module Std : sig
 
     (** [Of_ocamlgraph(O)] creates an adapter module, that implements
         [Graphlib] interface on top of the module implementing
-        [OCamlGraph] interface.
-    *)
+        [OCamlGraph] interface.*)
     module Of_ocamlgraph(G : Graph.Sig.P) :
       Graph with type t = G.t
              and type node = G.V.t
@@ -3338,7 +3510,7 @@ module Std : sig
              and type Node.label = G.V.label
              and type Edge.label = G.E.label
 
-    (** functorized version of a {!Graphlib.filter} function.  *)
+    (** functorized version of a {!filter} function.  *)
     module Filtered
         (G : Graph)
         (P : Predicate with type node = G.node
@@ -3370,6 +3542,13 @@ module Std : sig
        and type Node.label = Node.t
        and type Edge.label = Edge.t
 
+
+    module Labeled(Node : Opaque)(NL : T)(EL : T) : Graph
+      with type node = (Node.t, NL.t) labeled
+       and type Node.label = (Node.t, NL.t) labeled
+       and type Edge.label = EL.t
+
+
     (** a common interface for a regular graph.
         Graphlib comes with a big set of predefined (i.e.,
         instantiated graphs. Each regular graph is actually a
@@ -3386,9 +3565,6 @@ module Std : sig
       module Bool : Graph with type node = node
                            and type Node.label = node
                            and type Edge.label = bool
-      module Char : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = char
       module Unit : Graph with type node = node
                            and type Node.label = node
                            and type Edge.label = unit
@@ -3433,10 +3609,8 @@ module Std : sig
 
     (** {3 Pre-instantiated graphs} *)
 
-    module Char   : Graphs with type node = char
     module Int    : Graphs with type node = int
     module Word   : Graphs with type node = word
-    module Type   : Graphs with type node = typ
     module Value  : Graphs with type node = value
     module String : Graphs with type node = string
     module Var    : Graphs with type node = var
@@ -3444,22 +3618,96 @@ module Std : sig
     module Stmt   : Graphs with type node = stmt
     module Tid    : Graphs with type node = tid
 
-    (** IR code as a graph.
+    (** Graph view over IR.
 
-        This module implements a graph view on the IR representation
-        of a program.  The underlying implementation uses a value of
-        type [sub term] to implement most of the operations. But in
-        order to get fast bidirectional access to a graph, it
-        augments term with extra information, like back edges.*)
+        This module implements a graph view on an intermediate
+        representation of a subroutine. Although it implements all
+        operations of {!Graph} interface it is recommended to use
+        {!Term} interface to build and modify underlying terms. The
+        next few sections will clarify the behavior of a graph when it
+        is modified using {!Graph} interface. If you do not want to read
+        the following sections, then better use [Term] interface.
+
+        {2 Inserting nodes}
+
+        When node is inserted into a graph [g] all jumps of a node,
+        that lead to blocks that are already in a graph will be
+        represented as edges. Also, all jumps from other nodes to the
+        inserted node, will be added as edges (assuming that this
+        other nodes are also in the graph g). Thus inserting node can
+        create an arbitrary number of edges, from zero to N. If jump
+        target is not yet in the graph, then jump is not removed from a
+        sequence of jumps of the inserted node, but just ignored.
+
+
+        {2 Updating nodes}
+
+        When node is updated with the same node (but possibly with
+        different set of terms, see {{!sema}description of sameness})
+        then all changes that affects control flow will be
+        applied. For example, if jump is absent in a new version of a
+        block, and this jump corresponds to an edge in the graph, then
+        this edge will be removed.
+
+        {2 Removing nodes}
+
+        The node will be removed from the underlying [sub term], and
+        all edges incident to the removed node will be also removed.
+        This will not affect jmp terms of blk terms.
+
+        {2 Inserting edges}
+
+        Edges in IR graph represents a transfer of a control flow
+        between basic blocks. The basic block in IR is more reach,
+        rather then a node in a graph. For example, in blk term the
+        order of jumps matters. Jump [n] is taken, only if guard
+        conditions of jumps [0] to [n-1] evaluated to [false] (like
+        switch statement in C language). The order of edges in a graph
+        is unspecified. So, some precaution should be taken, to handle
+        edge removing and inserting correctly. Each edge is labeled
+        with abstract label, that represents the jump position in a
+        graph.
+
+        When an edge is created it will look for corresponding jumps
+        in source node. If there exists such jump, and it points to
+        the destination, then it will be left untouched. If it points
+        to a different node, then it will be fixed to point at the
+        given destination. If there is no position in a slot,
+        represented by the given label, then it will be
+        inserted. Dummy jumps will be prepended before the inserted
+        jump, if needed.
+
+        When an edge is inserted into the graph, then source and
+        destination nodes are inserted or updated (depending on whether
+        they were already present in the graph). As a result, the
+        graph must contain at least nodes, incident to the edge, and
+        the edge itself.
+
+        {2 Updating edge}
+
+        Updating an edge is basically the same, as updating incident
+        nodes, given that the edge exists in the graph.
+
+
+        {2 Removing edge}
+
+        Removing an edge is not symmetric with edge insertion. It
+        doesn't remove the incident nodes, but instead removes jumps
+        from the source node to destination. The jumps are removed
+        accurately, so that the order (and semantics) is preserved. If
+        the removed jump was in the middle of the sequence then it is
+        substituted by a dummy jump with [false] guard.
+    *)
     module Ir : sig
       type t
       type edge
+      type node
 
       (** since in IR the order of edges defines semantics, we provide
           extra functions *)
       module Edge : sig
         include Edge with type graph = t
-                      and type node = blk term
+                      and type node = node
                       and type t = edge
 
         (** [jmps dir e g] enumerates all jumps (including calls,
@@ -3492,14 +3740,14 @@ module Std : sig
 
       module Node : sig
         include Node with type graph = t
-                      and type t = blk term
+                      and type t = node
                       and type edge = edge
                       and type label = blk term
         include Printable with type t := t
       end
 
       include Graph with type t := t
-                     and type node = blk term
+                     and type node := node
                      and type edge := edge
                      and type Node.label = blk term
                      and module Node := Node
@@ -4542,24 +4790,24 @@ module Std : sig
     (** [return_value] returns an expression, that can be used to return
         a value from a function. Use [Bil.concat] to represent return
         value that doesn't fit into one register  *)
-    method return_value : exp option
+    method return_value : (var * exp) option
 
     (** [args] returns a list of expressions that represents
         arguments of the given function. Each expression can be
         annotated with suggested name  *)
-    method args : (string option * exp) list
+    method args : (var * exp) list
 
     (** [vars] returns a list of expressions, that represents
         local variables of the function  *)
-    method vars : (string option * exp) list
+    method vars : (var * exp) list
 
     (** [records] returns a list of records, found in the symbol.  *)
-    method records : (string option * exp) list list
+    method records : (var * exp) list list
   end
 
   (** symbol name may be provided if known. Also an access
       to the whole binary image is provided if there is one. *)
-  type abi_constructor = Symtab.t -> Symtab.fn -> abi
+  type abi_constructor = sub term -> abi
 
 
   (** A BIL model of CPU
@@ -4647,9 +4895,7 @@ module Std : sig
         Until [all] parameter is set to true the ABI will be
         disambiguated, using [choose] method. Only equally
         valid ABI are returned. *)
-    val create :
-      ?merge:(abi list -> abi) ->
-      Symtab.t -> Symtab.fn -> abi
+    val create : ?merge:(abi list -> abi) -> sub term -> abi
 
     (** [merge abis] create an abi that tries to take best from all
         provided abi. If the input list is empty, then the stub abi
@@ -5095,63 +5341,20 @@ module Std : sig
     include Block_accessors with type t := t and type insn := insn
     include Block_traverse  with type t := t
 
-
-    (** [dfs ?next ?bound blk] searches from the [blk] using DFS.
-
-        Search can be bound with [bound], i.e., the search will not continue
-        on block that has no intersections with the specified bound. By
-        default the search is unbound. Search direction can be also
-        specified by the [next] parameter. By default search is performed
-        in a forward direction, using [succs] function. To search in a
-        reverse direction, use [preds] function. The search result is
-        returned as a lazy sequence. Destinations of the block are visited
-        in the order of execution, e.g., taken branch is visited before
-        non taken. No such guarantee is made for the predecessors or any
-        other function provided as a [next] arguments, since it is a
-        property of a [next] function, not the algorithm itsef.
-    *)
-    val dfs :
-      ?order:[`post | `pre] ->        (** defaults to pre *)
-      ?next:(t -> t seq) ->           (** defaults to succs  *)
-      ?bound:(addr -> bool) -> t -> t seq
-
-
-    (** A classic control flow graph using OCamlgraph library.
-        Graph vertices are made abstract, but the implement
-        [Block_accessors] interface, including hash tables, maps, hash
-        sets etc. *)
-    module Cfg : sig
-      module Block : sig
-        type t with sexp_of
-        include Block_accessors with type t := t and type insn := insn
-      end
-
-      (** Imperative graph *)
-      module Imperative : Graph.Sig.I
-        with type V.t = Block.t
-         and type V.label = Block.t
-         and type E.t = Block.t * edge * Block.t
-         and type E.label = edge
-
-      (** The default graph is persistant  *)
-      include Graph.Sig.P
-        with type V.t = Block.t
-         and type V.label = Block.t
-         and type E.t = Block.t * edge * Block.t
-         and type E.label = edge
-
-    end
+    (** Graph of blocks.  *)
+    module Graph : Graph
+      with type node = t
+       and type Node.label = t
+       and type Edge.label = edge
 
     (** [to_graph ?bound entry] builds a graph starting with [entry] and
-        spanning all reachable blocks that are bounded by a memory region
-        [bound].
-        @param bound defaults to infinite memory region.
-    *)
-    val to_graph : ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.t
-    val to_imperative_graph :
-      ?bound:(addr -> bool) -> t -> Cfg.Block.t * Cfg.Imperative.t
+        spanning all reachable blocks.
+        @param bound if specified, then the resulting graph will
+        contain only blocks [b] for which [bound (Block.addr b)]
+        evaluated to [true]. {!Symtab.create_bound} is an example of
+        such function. *)
+    val to_graph : ?bound:(addr -> bool) -> t -> Graph.t
   end
-
 
   (** Abstract interface for all targets.
 
@@ -5191,7 +5394,7 @@ module Std : sig
       include ABI
 
       (** [gnueabi] ABI  *)
-      class gnueabi : Symtab.t -> Symtab.fn -> abi
+      class gnueabi : sub term -> abi
 
     end
 
@@ -5605,7 +5808,7 @@ module Std : sig
 
         {[# let b = Blk.create ();;]}
         {v val b : Blk.t =
-        00000003: v}
+          00000003: v}
 
 
         We can append a definition to it with an overloaded
@@ -5613,18 +5816,18 @@ module Std : sig
 
         {[# let b = Term.append def_t b d_1;;]}
         {v val b : blk term =
-        00000003:
-        00000001: x := y + z
-        v}
+          00000003:
+          00000001: x := y + z
+          v}
 
         Update a value of a definition in the block:
 
 
         {[# let b = Term.update def_t b d_2;;]}
         {v val b : blk term =
-        00000003:
-        00000001: x := true
-        v}
+          00000003:
+          00000001: x := true
+          v}
 
     *)
 
@@ -5782,6 +5985,13 @@ module Std : sig
     val del_attr : 'a t -> 'b tag -> 'a t
   end
 
+  (* TBD
+
+     module Callgraph : Graph
+     with type node = sub term
+     and type Node.label = sub term
+     and type Edge.label = Blk.Set.t
+  *)
   (** Program.  *)
   module Program : sig
     (** Program is a collection of function terms. *)
@@ -5794,6 +6004,8 @@ module Std : sig
     (** [lift symbols] takes a table of functions and return a whole
         program lifted into IR *)
     val lift : symtab -> program term
+
+    (* TBD: val to_callgraph : t -> Callgraph.t *)
 
     (** [lookup t program id] is like {{!find}find} but performs deep
         lookup in the whole [program] for a term with a given [id].
@@ -5841,7 +6053,12 @@ module Std : sig
 
     (** updates subroutine name *)
     val with_name : t -> string -> t
-
+    (*
+       TBD
+    val of_cfg : Graphlib.Ir.t -> t
+    val to_cfg : t -> Graphlib.Ir.t
+    val to_graph : t -> Graphlib.Tid.Tid.t
+    *)
     (** Subroutine builder *)
     module Builder : sig
       type t
@@ -5876,11 +6093,11 @@ module Std : sig
         would have the semantics as per the following OCaml program:
 
         {v
-          if c_1 then jump t_1 else
-          if c_2 then jump t_2 else
-          if c_N then jump t_N else
-          stop
-        v}
+            if c_1 then jump t_1 else
+            if c_2 then jump t_2 else
+            if c_N then jump t_N else
+            stop
+          v}
     *)
 
     type t = blk term
@@ -6188,12 +6405,16 @@ module Std : sig
 
     type t = arg term
 
-    (** [create ?intent ?name typ] creates an argument. If intent is
-        not specified it is left unkown.   *)
-    val create : ?tid:tid -> ?intent:intent -> ?name:string -> typ -> t
+    (** [create ?intent var exp] creates an argument. If intent is
+        not specified it is left unknown.   *)
+    val create : ?tid:tid -> ?intent:intent -> var -> exp -> t
 
-    (** [var arg] returns a variable associated with the argument.  *)
-    val var : t -> var
+    (** [lhs arg] returns a variable associated with the argument.  *)
+    val lhs : t -> var
+
+    (** [rhs arg] returns an expression to which argument is
+        bound.  *)
+    val rhs : t -> exp
 
     (** [intent arg] returns the argument intent. The [None] value
         denontes unknown intent.  *)

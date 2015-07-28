@@ -204,8 +204,9 @@ end
 module Ir_arg : sig
   type t = arg term
 
-  val create : ?tid:tid -> ?intent:intent -> ?name:string -> typ -> t
-  val var : t -> var
+  val create : ?tid:tid -> ?intent:intent -> var -> exp -> t
+  val lhs : t -> var
+  val rhs : t -> exp
   val intent : t -> intent option
   val with_intent : t -> intent -> t
   val with_unknown_intent : t -> t

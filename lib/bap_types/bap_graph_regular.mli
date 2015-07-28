@@ -5,16 +5,19 @@ open Bap_graph
 open Bap_bil
 open Bap_graph_regular_intf
 
-module Make(Node : Opaque)(Edge : Opaque) : Graph
+
+module Make(Node : Opaque)(Label : T) : Graph
   with type node = Node.t
    and type Node.label = Node.t
-   and type Edge.label = Edge.t
+   and type Edge.label = Label.t
 
+module Labeled(Node : Opaque)(NL : T)(EL : T) : Graph
+  with type node = (Node.t, NL.t) labeled
+   and type Node.label = (Node.t, NL.t) labeled
+   and type Edge.label = EL.t
 
-module Char   : S with type node = char
 module Int    : S with type node = int
 module Word   : S with type node = word
-module Type   : S with type node = typ
 module Value  : S with type node = Bap_value.t
 module String : S with type node = string
 module Var    : S with type node = var

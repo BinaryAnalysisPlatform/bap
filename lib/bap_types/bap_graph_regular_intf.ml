@@ -3,40 +3,48 @@ open Bap_graph_intf
 open Bap_graph
 open Bap_bil
 
+
+
 module type S = sig
   type node
   module Bool : Graph with type node = node
                        and type Node.label = node
                        and type Edge.label = bool
-  module Char : Graph with type node = node
-                       and type Node.label = node
-                       and type Edge.label = char
+
   module Unit : Graph with type node = node
                        and type Node.label = node
                        and type Edge.label = unit
+
   module Value : Graph with type node = node
                         and type Node.label = node
                         and type Edge.label = Bap_value.t
+
   module Word : Graph with type node = node
                        and type Node.label = node
                        and type Edge.label = word
+
   module Int : Graph with type node = node
                       and type Node.label = node
                       and type Edge.label = int
+
   module String : Graph with type node = node
                          and type Node.label = node
                          and type Edge.label = string
+
   module Exp : Graph with type node = node
                       and type Node.label = node
                       and type Edge.label = exp
+
 
   module Stmt : Graph with type node = node
                        and type Node.label = node
                        and type Edge.label = stmt
 
+
   module Var : Graph with type node = node
                       and type Node.label = node
                       and type Edge.label = var
+
 
   module Tid : Graph with type node = node
                       and type Node.label = node
