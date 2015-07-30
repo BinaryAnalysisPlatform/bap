@@ -424,13 +424,13 @@ include Printable(struct
 
     let module_name = Some "Bap.Std.Memory"
 
-    let print_word fmt addr =
-      let width = Addr.bitwidth addr / 4 in
+    let print_word fmt word =
+      let width = Word.bitwidth word / 4 in
       fprintf fmt "%0*Lx" width
-        (Addr.(to_int64 (signed addr)) |> ok_exn)
+        (Word.(to_int64 word) |> ok_exn)
 
     let pp_small fmt t =
-      Format.fprintf fmt "%a: " print_word t.addr;
+      Format.fprintf fmt "%a: " print_word (Addr.signed t.addr);
       iter t ~f:(fun b -> fprintf fmt "%a " print_word b)
 
     let pp fmt t =

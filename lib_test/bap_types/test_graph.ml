@@ -455,11 +455,10 @@ module Test_IR = struct
 
   let sub = sub_of_blks blks
 
-  let etalon = G.of_sub sub
+  let etalon = Sub.to_cfg sub
 
   let insert blks =
-    let init = G.create ~tid:(Term.tid sub) ~name:(Sub.name sub) () in
-    let g = List.fold blks ~init ~f:(fun g blk ->
+    let g = List.fold blks ~init:G.empty ~f:(fun g blk ->
         G.Node.insert (G.Node.create blk) g) in
     let etalon = G.edges g |> Seq.fold ~init:etalon ~f:(fun etalon e ->
         G.Edge.remove e etalon) in

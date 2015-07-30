@@ -3,6 +3,7 @@ open Bap_common
 open Bap_bil
 open Bap_ir
 open Bap_graph_intf
+open Bap_graph_regular
 open Bap_graph
 
 
@@ -43,6 +44,7 @@ val create : ?tid:tid -> ?name:string -> unit -> t
 val of_sub : sub term -> t
 val to_sub : t -> sub term
 
+val create_tid_graph : sub term -> Tid.Tid.t
 
 module Tree : Printable with type t = node tree
 module Frontier : Printable with type t = node frontier

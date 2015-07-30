@@ -8,12 +8,41 @@ module Seq = Sequence
 module Vec = Bap_vector
 module Var = Bap_var
 
+module Bil = struct
+  include Bap_visitor
+  include Bap_helpers
+end
+
+module Exp = struct
+  include Bap_exp
+  include Bap_helpers.Exp
+end
+
 type dict = Dict.t with bin_io, compare, sexp
 type 'a vector = 'a Vec.t
 
 module Tid = struct
   exception Overrun
   type t = Int63.t
+
+  let names = Int63.Table.create ()
+
+  let rev_lookup name =
+    Hashtbl.to_alist names |> List.find_map ~f:(fun (tid,x) ->
+        Option.some_if (x = name) tid) |> function
+    | None -> invalid_argf "unbound name: %s" name ()
+    | Some name -> name
+
+  let from_string_exn str = match str.[0] with
+    | '%' -> Scanf.sscanf str "%%%X" (Int63.of_int)
+    | '@' -> Scanf.sscanf str "@%s" rev_lookup
+    | _ -> invalid_arg "label should start from '%' or '@'"
+
+  let from_string str = Or_error.try_with (fun () ->
+      from_string_exn str)
+
+  let (!) = from_string_exn
+
   let create =
     let tid = ref Int63.zero in
     fun () ->
@@ -32,6 +61,13 @@ module Tid = struct
 
       let to_string tid = Format.asprintf "%a" pp tid
     end)
+
+  let set_name tid name =
+    Hashtbl.set names ~key:tid ~data:name
+
+  let name tid = match Hashtbl.find names tid with
+    | None -> Format.asprintf "%%%a" pp tid
+    | Some name -> sprintf "@%s" name
 end
 
 type tid = Tid.t with bin_io, compare, sexp
@@ -228,7 +264,7 @@ module Term = struct
   let create self : 'a term = make_term (Tid.create ()) self
   let clone {self} = create self
   let same x y = x.tid = y.tid
-  let name b = Format.asprintf "%a" Tid.pp b.tid
+  let name b = Tid.name b.tid
   let tid x = x.tid
   let with_field field term x = {
     term with self=Field.fset field term.self x
@@ -371,7 +407,7 @@ module Label = struct
       let hash = Hashtbl.hash
       let pp ppf = function
         | Indirect exp -> Bap_exp.pp ppf exp
-        | Direct tid -> Format.fprintf ppf "%%%a" Tid.pp tid
+        | Direct tid -> Format.fprintf ppf "%s" @@ Tid.name tid
     end)
 end
 
@@ -439,6 +475,7 @@ module Ir_arg = struct
     end)
 end
 
+
 module Ir_def = struct
   type t = def term
   include Leaf
@@ -446,6 +483,9 @@ module Ir_def = struct
   let map_exp def ~f : def term =
     with_rhs def (f (rhs def))
 
+  let substitute def x y = map_exp def ~f:(Exp.substitute x y)
+
+  let free_vars def = Exp.free_vars (rhs def)
 
   include Regular.Make(struct
       type t = def term with bin_io, compare, sexp
@@ -489,6 +529,12 @@ module Ir_phi = struct
   let map_exp phi ~f : phi term =
     with_rhs phi (Map.map (rhs phi) ~f)
 
+  let substitute phi x y = map_exp phi ~f:(Exp.substitute x y)
+
+  let free_vars phi =
+    values phi |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars (_,e) ->
+        Set.union vars (Exp.free_vars e))
+
   include Regular.Make(struct
       type t = phi term with bin_io, compare, sexp
       let module_name = Some "Bap.Std.Phi"
@@ -529,6 +575,21 @@ module Ir_jmp = struct
   let with_cond = with_lhs
   let with_kind = with_rhs
 
+  let exps (jmp : jmp term) : exp Sequence.t =
+    let open Sequence.Generator in
+    let label label = match label with
+      | Indirect exp -> yield exp
+      | Direct _ -> return () in
+    let call call =
+      Option.value_map ~default:(return ())
+        (Call.return call) ~f:label >>= fun () ->
+      label (Call.target call) in
+    let r = match kind jmp with
+      | Call t -> call  t
+      | Goto t | Ret  t -> label t
+      | _ -> return () in
+    run (r >>= fun () -> yield (cond jmp))
+
   let map_exp (jmp : jmp term) ~f : jmp term =
     let map_label label = match label with
       | Indirect exp -> Label.indirect (f exp)
@@ -544,6 +605,12 @@ module Ir_jmp = struct
       | Ret  t -> Ret  (map_label t)
       | Int (_,_) as kind -> kind in
     with_kind jmp kind
+
+  let substitute jmp x y = map_exp jmp ~f:(Exp.substitute x y)
+
+  let free_vars jmp =
+    exps jmp |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars e ->
+        Set.union vars (Exp.free_vars e))
 
   include Regular.Make(struct
       type t = jmp term with bin_io, compare, sexp
@@ -707,6 +774,9 @@ module Ir_blk = struct
     }
   }
 
+  let substitute ?skip blk x y =
+    map_exp ?skip  blk ~f:(Exp.substitute x y)
+
   let map_phi_lhs p ~f = Ir_phi.(with_lhs p (f (lhs p)))
   let map_def_lhs d ~f = Ir_def.(with_lhs d (f (lhs d)))
 
@@ -724,12 +794,20 @@ module Ir_blk = struct
       Seq.exists ~f:(fun y -> Var.(Leaf.lhs y = x)) in
     exists phi_t || exists def_t
 
-  let uses_var blk x =
-    let is_referenced = Bap_helpers.Exp.is_referenced in
-    let uses t f =
-      Seq.exists (Term.to_sequence t blk) ~f:(fun y -> f (Leaf.rhs y)) in
-    uses phi_t (fun map -> Map.exists map ~f:(is_referenced x)) ||
-    uses def_t (is_referenced x)
+  let free_vars blk =
+    let (++) = Set.union and (--) = Set.diff in
+    let init = Bap_var.Set.empty,Bap_var.Set.empty in
+    fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
+        | `Phi phi ->
+          Ir_phi.free_vars phi ++ vars,
+          Set.add kill (Ir_phi.lhs phi)
+        | `Def def ->
+          Ir_def.free_vars def -- kill ++ vars,
+          Set.add kill (Ir_def.lhs def)
+        | `Jmp jmp ->
+          Ir_jmp.free_vars jmp -- kill ++ vars, kill)
+
+  let uses_var blk x = Set.mem (free_vars blk) x
 
   let find_var blk var =
     Term.to_sequence def_t blk ~rev:true |>
@@ -741,7 +819,7 @@ module Ir_blk = struct
       | Some phi -> Some (`Phi phi)
       | None -> None
 
-  let dominated b ~by:dominator id =
+  let occurs b ~after:dominator id =
     dominator = id ||
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> x.tid = id))
 

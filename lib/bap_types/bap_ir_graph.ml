@@ -382,6 +382,18 @@ let compare x y = Sub.compare x.sub y.sub
 
 let is_directed = true
 
+let create_tid_graph sub =
+  let module G = Bap_graph_regular.Tid.Tid in
+  Term.enum blk_t sub |> Seq.fold ~init:G.empty ~f:(fun g src ->
+      let sid = Term.tid src in
+      Term.enum jmp_t src |> Seq.fold ~init:g ~f:(fun g jmp ->
+          match succ_tid_of_jmp jmp with
+          | None -> g
+          | Some did ->
+            let jid = Term.tid jmp in
+            let edge = G.Edge.create sid did jid in
+            G.Edge.insert edge g))
+
 include Regular.Make(struct
     type nonrec t = t with bin_io, compare, sexp
     let module_name = Some "Bap.Std.Graphlib.Ir"
@@ -418,7 +430,7 @@ include Regular.Make(struct
         ~nodes_of_edge ~nodes:(nodes g) ~edges:(edges g) ppf
   end)
 
-let pp_blk ppf blk = Format.fprintf ppf "\"%a\"" Tid.pp (Term.tid blk)
+let pp_blk ppf blk = Format.fprintf ppf "%a" Tid.pp (Term.tid blk)
 
 module Tree = struct
   type t = blk term tree

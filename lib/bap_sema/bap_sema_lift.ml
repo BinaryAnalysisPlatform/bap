@@ -152,7 +152,7 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
 let lift_insn ?addr fall init insn =
   List.fold (optimize @@ Insn.bil insn) ~init ~f:(fun init stmt ->
       List.fold (linear_of_stmt ?addr fall insn stmt) ~init
-        ~f:( fun (bs,b) -> function
+        ~f:(fun (bs,b) -> function
             | Label lab ->
               Ir_blk.Builder.result b :: bs,
               Ir_blk.Builder.create ~tid:lab ()
@@ -186,19 +186,19 @@ let call_of_blk blk =
         | Indirect (Bil.Int addr) -> Some addr
         | Indirect _ -> None)
 
-let resolve_jmp ~skip_calls addrs jmp =
+let resolve_jmp ~local addrs jmp =
   let update_kind jmp addr make_kind =
     Option.value_map ~default:jmp
       (Hashtbl.find addrs addr)
       ~f:(fun id -> Ir_jmp.with_kind jmp (make_kind id)) in
   match Ir_jmp.kind jmp with
   | Ret _ | Int _ -> jmp
-  | Goto (Indirect (Bil.Int addr)) ->
+  | Goto (Indirect (Bil.Int addr)) when local ->
     update_kind jmp addr (fun id -> Goto (Direct id))
   | Goto _ -> jmp
   | Call call ->
     let jmp,call = match Call.target call with
-      | _ when skip_calls -> jmp, call
+      | _ when local -> jmp, call
       | Indirect (Bil.Int addr) ->
         let new_call = ref call in
         let jmp = update_kind jmp addr
@@ -208,10 +208,21 @@ let resolve_jmp ~skip_calls addrs jmp =
         jmp, !new_call
       | _ -> jmp,call in
     match Call.return call with
-    | Some (Indirect (Bil.Int addr)) ->
+    | Some (Indirect (Bil.Int addr)) when Hashtbl.mem addrs addr ->
       update_kind jmp addr
         (fun id -> Call (Call.with_return call (Direct id)))
+    | Some (Indirect (Bil.Int addr)) ->
+      Ir_jmp.with_kind jmp @@ Call (Call.with_noreturn call)
     | _ -> jmp
+
+(* remove all jumps that are after unconditional jump *)
+let remove_false_jmps blk =
+  Term.enum jmp_t blk |> Seq.find ~f:(fun jmp ->
+      Exp.(Ir_jmp.cond jmp = (Bil.Int Word.b1))) |> function
+  | None -> blk
+  | Some last ->
+    Term.after jmp_t blk (Term.tid last) |> Seq.map ~f:Term.tid |>
+    Seq.fold ~init:blk ~f:(Term.remove jmp_t)
 
 let unbound _ = true
 
@@ -230,9 +241,10 @@ let lift_sub ?(bound=unbound) entry =
   let sub = Ir_sub.Builder.create ?blks:n () in
   List.iter blks ~f:(fun blk ->
       Ir_sub.Builder.add_blk sub
-        (Term.map jmp_t blk ~f:(resolve_jmp ~skip_calls:true addrs)));
+        (Term.map jmp_t blk ~f:(resolve_jmp ~local:true addrs)));
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub subroutine_addr (Block.addr entry)
+
 
 let program symtab =
   let b = Ir_program.Builder.create () in
@@ -244,11 +256,13 @@ let program symtab =
       let sub = lift_sub ~bound:in_fun entry in
       let name = Symtab.name_of_fn fn in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
+      Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
   let program = Ir_program.Builder.result b in
   Term.map sub_t program
-    ~f:(Term.map blk_t ~f:(
-        Term.map jmp_t ~f:(resolve_jmp ~skip_calls:false addrs)))
+    ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
+        Term.map jmp_t (remove_false_jmps blk)
+          ~f:(resolve_jmp ~local:false addrs)))
 
 
 let sub = lift_sub
