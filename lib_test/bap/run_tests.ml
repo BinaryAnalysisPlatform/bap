@@ -2,6 +2,7 @@ open OUnit2
 
 let suite =
   "BAP" >::: [
+    Test_trie.suite;
     Test_bitvector.suite;
     Test_conceval.suite;
     Test_graph.suite;

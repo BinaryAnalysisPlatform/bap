@@ -128,6 +128,7 @@ Library types
                    Bap_size,
                    Bap_stmt,
                    Bap_trie,
+                   Bap_trie_intf,
                    Bap_type,
                    Bap_types,
                    Bap_value,
@@ -315,7 +316,8 @@ Library types_test
   BuildDepends:   bap, bap.conceval, oUnit
   Modules:        Test_bitvector,
                   Test_conceval,
-                  Test_graph
+                  Test_graph,
+                  Test_trie
 
 Library image_test
   Path:           lib_test/bap_image

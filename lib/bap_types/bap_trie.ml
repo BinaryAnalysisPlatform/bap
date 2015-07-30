@@ -1,26 +1,7 @@
 open Core_kernel.Std
 open Format
-
-module type Key = sig
-  type t
-  type token with bin_io, compare, sexp
-  val length : t -> int
-  val nth_token : t -> int -> token
-  val token_hash : token -> int
-end
-
-module type S = sig
-  type 'a t with bin_io, sexp
-  type key
-  val create : unit -> 'a t
-  val add : 'a t -> key:key -> data:'a -> unit
-  val change : 'a t -> key -> ('a option -> 'a option) -> unit
-  val find : 'a t -> key -> 'a option
-  val remove : 'a t -> key -> unit
-  val longest_match : 'a t -> key -> (int * 'a) option
-  val length : 'a t -> int
-  val pp : (formatter -> 'a -> unit) -> formatter -> 'a t -> unit
-end
+open Option.Monad_infix
+open Bap_trie_intf
 
 module Make(Key : Key) = struct
   module Tokens = Hashtbl.Make_binable(struct
@@ -30,39 +11,42 @@ module Make(Key : Key) = struct
 
   type key = Key.t
   type 'a t = {
-    data : 'a option;
+    mutable data : 'a option;
     subs : 'a t Tokens.t;
   } with bin_io, fields, sexp
 
   let init v = {data = Some v; subs = Tokens.create ()}
   let create () = {data = None; subs = Tokens.create ()}
 
-  let change goto trie k f =
-    let open Option.Monad_infix in
+  let change trie k f {return} =
     let len = Key.length k in
     let rec loop n {subs} =
-      let c = Key.nth_token k (len - n) in
-      match n with
-      | 1 -> finish subs c
-      | n -> continue subs n c
-    and continue parent n c =
-      match Tokens.find parent c with
-      | Some s -> loop (n-1) s
+      let c = Key.nth_token k n in
+      if n + 1 = len then found subs c else find subs n c
+    and found parent c = Tokens.change parent c (function
+        | None -> f None >>| init
+        | Some t -> Some {t with data = f t.data})
+    and find parent n c = match Tokens.find parent c with
+      | Some s -> loop (n+1) s
       | None -> match f None with
-        | None -> goto.return ()
+        | None -> return ()
         | Some _ ->
           let sub = create () in
           Tokens.add_exn parent c sub;
-          loop (n-1) sub
-    and finish parent c =
-      Tokens.change parent c (function
-          | None -> f None >>| init
-          | Some t -> Some {t with data = f t.data}) in
-    loop len trie
+          loop (n+1) sub in
+    if len > 0 then loop 0 trie
+    else trie.data <- f trie.data
 
-  let change trie k f = with_return (fun goto -> change goto trie k f)
-  let add trie ~key ~data:v = change trie key (fun _ -> Some v)
-  let remove trie k = change trie k (fun _ -> None)
+  let walk root k ~init ~f  =
+    let len = Key.length k in
+    let rec lookup best n trie =
+      match Tokens.find trie.subs (Key.nth_token k n) with
+      | None -> best
+      | Some sub ->
+        let best = f best sub.data in
+        if n + 1 = len then best else lookup best (n+1) sub in
+    let best = f init root.data in
+    if len > 0 then lookup best 0 root else best
 
   let length trie =
     let rec count trie =
@@ -71,22 +55,20 @@ module Make(Key : Key) = struct
         ~f:(fun ~key:_ ~data:trie n -> n + count trie) in
     count trie
 
-  let longest_match trie k =
-    let open Option.Monad_infix in
-    let len = Key.length k in
-    let rec lookup n trie =
-      let c = Key.nth_token k (len - n) in
-      match Tokens.find trie.subs c with
-      | None -> trie.data >>| fun s -> (len-n, s)
-      | Some sub -> match n with
-        | 1 -> data sub >>| fun s -> (len,s)
-        | n -> lookup (n-1) sub in
-    lookup len trie
+  let longest_match root k =
+    walk root k ~init:(0,0,None) ~f:(fun (n,i,best) -> function
+        | None -> (n+1,i,best)
+        | better -> (n+1,n,better)) |> function
+    | (_,i,Some thing) -> Some (i,thing)
+    | _ -> None
+
+  let change trie k f = with_return (change trie k f)
+  let add trie ~key ~data:v = change trie key (fun _ -> Some v)
+  let remove trie k = change trie k (fun _ -> None)
 
   let find trie k = match longest_match trie k with
-    | None -> None
     | Some (s,v) when s = Key.length k -> Some v
-    | Some _ -> None
+    | _ -> None
 
   let rec pp pp_val fmt t =
     let pp_some_data fmt = function
@@ -101,10 +83,39 @@ module Make(Key : Key) = struct
       pp_some_data t.data pp_table t.subs
 end
 
-module String = Make(struct
+module String = struct
+  module Common = struct
     type t = string
     type token = char with bin_io, compare, sexp
     let length = String.length
-    let nth_token = String.unsafe_get
     let token_hash = Char.to_int
-  end)
+  end
+  module Prefix = Make(struct
+      include Common
+      let nth_token = String.get
+    end)
+
+  module Suffix = Make(struct
+      include Common
+      let nth_token s n =
+        s.[String.length s - n - 1]
+    end)
+end
+
+module Array = struct
+  module Common(T : Token) = struct
+    type t = T.t array
+    type token = T.t with bin_io, compare, sexp
+    let length = Array.length
+    let token_hash = T.hash
+  end
+  module Prefix(T : Token) = Make(struct
+      include Common(T)
+      let nth_token = Array.get
+    end)
+
+  module Suffix(T : Token) = Make(struct
+      include Common(T)
+      let nth_token xs n = xs.(Array.length xs - n - 1)
+    end)
+end
