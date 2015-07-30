@@ -21,7 +21,7 @@ module type Integer   = Integer.S
 module type Regular   = Regular.S
 module type Opaque    = Opaque.S
 module type Printable = Regular.Printable
-module type Trie      = Trie.S
+module type Trie      = Bap_trie_intf.S
 
 type endian = Bitvector.endian =
     LittleEndian | BigEndian

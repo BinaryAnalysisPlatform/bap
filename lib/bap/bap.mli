@@ -808,12 +808,18 @@ module Std : sig
     (** [find trie key] finds data associated with [key]  *)
     val find : 'a t -> key -> 'a option
 
+    (** [walk trie key ~init ~f] walks down the tree starting from the
+        root and ending with the last token of the key. Function [f]
+        is fold over values associated with all substrings of the key,
+        starting from a zero substring. *)
+    val walk : 'a t -> key -> init:'b -> f:('b -> 'a option -> 'b) -> 'b
+
     (** [remove trie key] removes value bound with [key] if any.  *)
     val remove : 'a t -> key -> unit
 
-    (** [longest_match trie k] find the longest key in a [trie] that
-        is a substring of [k]. Returns a pair - a length of matched
-        key and data, associated with that key  *)
+    (** [longest_match trie k] find the value associated with a
+        longest substring of a key [k]. Returns a pair - a length of
+        matched key and data, associated with that key. *)
     val longest_match : 'a t -> key -> (int * 'a) option
 
     (** [length trie] returns the amount of entries in the [trie]  *)
@@ -859,8 +865,23 @@ module Std : sig
     (** Create a trie for a given [Key]  *)
     module Make(Key : Key) : Trie with type key = Key.t
 
-    (** Predefined trie with [String] as a [Key]  *)
-    module String : Trie with type key = string
+    (** Minimum required interface for a token data type  *)
+    module type Token = sig
+      type t  with bin_io, compare, sexp
+      val hash : t -> int
+    end
+
+    (** Prefix and suffix tries for specified token types.  *)
+    module Array : sig
+      module Prefix(Tok : Token) : Trie with type key = Tok.t array
+      module Suffix(Tok : Token) : Trie with type key = Tok.t array
+    end
+
+    (** Predefined prefix and suffix string tries.    *)
+    module String : sig
+      module Prefix : Trie with type key = string
+      module Suffix : Trie with type key = string
+    end
   end
 
   (** Type to represent machine word  *)

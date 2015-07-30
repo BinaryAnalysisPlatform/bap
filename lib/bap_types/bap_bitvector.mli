@@ -1,4 +1,5 @@
 open Core_kernel.Std
+
 type t
 exception Width with sexp
 type endian =
@@ -58,11 +59,11 @@ end
 module Int_exn : Bap_integer.S with type t = t
 module Trie : sig
   module Big : sig
-    module Bits : Bap_trie.S  with type key = t
-    module Bytes : Bap_trie.S with type key = t
+    module Bits : Bap_trie_intf.S  with type key = t
+    module Bytes : Bap_trie_intf.S with type key = t
   end
   module Little : sig
-    module Bits : Bap_trie.S  with type key = t
-    module Bytes : Bap_trie.S with type key = t
+    module Bits : Bap_trie_intf.S  with type key = t
+    module Bytes : Bap_trie_intf.S with type key = t
   end
 end

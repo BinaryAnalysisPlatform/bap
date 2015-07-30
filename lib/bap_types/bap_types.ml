@@ -17,7 +17,10 @@ module Std = struct
   module Integer = Integer
   module Printable = Printable
   module Opaque = Opaque
-  module Trie = Trie
+  module Trie = struct
+    include Bap_trie_intf
+    include Bap_trie
+  end
 
   module type Regular = Regular
   module type Opaque = Opaque
