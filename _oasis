@@ -133,7 +133,8 @@ Library types
                    Bap_value,
                    Bap_var,
                    Bap_vector,
-                   Bap_visitor
+                   Bap_visitor,
+                   Graphlib
 
 Library conceval
   Path: lib/bap_types
@@ -303,8 +304,8 @@ Library sema
                  bap.types
   InternalModules:
                  Bap_sema,
-                 Bap_sema_lift,
-                 Bap_lnf
+                 Bap_sema_lift
+
 
 Library types_test
   Path:           lib_test/bap_types

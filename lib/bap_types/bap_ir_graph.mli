@@ -5,17 +5,14 @@ open Bap_ir
 open Bap_graph_intf
 open Bap_graph
 
-(* this module implements a graph structure on top of
-   sub term. This is not a control flow graph, just a
-   regular graph (no entry or exit node requirements
-   are requested) *)
 
 type t
 type edge
+type node
 
 module Edge : sig
   include Edge with type graph = t
-                and type node = blk term
+                and type node = node
                 and type t = edge
 
   val jmps  : [`after | `before] -> t -> graph -> jmp term Sequence.t
@@ -29,14 +26,14 @@ end
 
 module Node : sig
   include Node with type graph = t
-                and type t = blk term
+                and type t = node
                 and type edge = edge
                 and type label = blk term
   include Printable with type t := t
 end
 
 include Graph with type t := t
-               and type node = blk term
+               and type node := node
                and type edge := edge
                and type Node.label = blk term
                and module Node := Node

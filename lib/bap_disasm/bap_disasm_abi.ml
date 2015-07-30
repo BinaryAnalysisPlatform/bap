@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Bap_image_std
+open Bap_ir
 
 (** Base type definitions for ABI.
 
@@ -91,22 +92,21 @@ class type abi = object
   (** [return_value] returns an expression, that can be used to return
       a value from a function. Use [Bil.concat] to represent return
       value that doesn't fit into one register  *)
-  method return_value : exp option
+  method return_value : (var * exp) option
 
   (** [args] returns a list of expressions that represents
       arguments of the given function. Each expression can be
       annotated with suggested name  *)
-  method args : (string option * exp) list
+  method args : (var * exp) list
 
   (** [vars] returns a list of expressions, that represents
       local variables of the function  *)
-  method vars : (string option * exp) list
+  method vars : (var * exp) list
 
   (** [records] returns a list of records, found in the symbol.  *)
-  method records : (string option * exp) list list
+  method records : (var * exp) list list
 end
 
 (** symbol name may be provided if known. Also an access
     to the whole binary image is provided if there is one. *)
-type abi_constructor =
-  Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi
+type abi_constructor = sub term -> abi

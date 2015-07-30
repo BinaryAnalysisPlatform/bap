@@ -107,6 +107,7 @@ let generate () =
   Sys.chdir tmp;
   let options = String.concat " " [
       "-d"; outdir;
+      "-charset UTF-8";
       "-html";
       "-colorize-code";
       "-short-functors";

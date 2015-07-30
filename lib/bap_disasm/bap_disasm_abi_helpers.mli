@@ -20,4 +20,4 @@ val to_string : arch -> string list -> string
 val create_abi_getter :
   abi_constructor list ref ->
   ?merge:(abi list -> abi) -> (** defaults to [merge]  *)
-  Bap_disasm_symtab.t -> Bap_disasm_symtab.fn -> abi
+  abi_constructor

@@ -43,7 +43,6 @@ let string_of_set ~sep pp_elt set =
   Seq.map set#enum ~f:(asprintf "%a" pp_elt) |>
   Seq.to_list |> String.concat ~sep
 
-
 let empty_set map =
   Set.empty ~comparator:(Map.comparator map)
 
@@ -221,15 +220,34 @@ module To_ocamlgraph(G : Graph) = struct
 
   let nb_vertex = G.number_of_nodes
   let nb_edges = G.number_of_edges
-  let out_degree g n = G.Node.outputs n g |> Seq.length
-  let in_degree g n = G.Node.inputs n g |> Seq.length
+
+  let checked name f n g =
+    if G.Node.mem n g then f n g
+    else invalid_argf "%s: node is not in G" name ()
+
+  let out_degree g n =
+    checked "out_degree" (G.Node.degree ~dir:`Out) n g
+
+  let in_degree g n =
+    checked "in_degree" (G.Node.degree ~dir:`In) n g
+
   let mem_vertex g n = G.Node.mem n g
   let mem_edge g x y = G.Node.has_edge x y g
-  let succ g n = G.Node.succs n g |> Seq.to_list_rev
-  let pred g n = G.Node.preds n g |> Seq.to_list_rev
-  let succ_e g n = G.Node.outputs n g |> Seq.to_list_rev
-  let pred_e g n = G.Node.inputs n g |> Seq.to_list_rev
+
+  let succ g n =
+    checked "succ" G.Node.succs n g |> Seq.to_list_rev
+
+  let pred g n =
+    checked "pred" G.Node.preds n g |> Seq.to_list_rev
+
+  let succ_e g n =
+    checked "succ_e" G.Node.outputs n g |> Seq.to_list_rev
+
+  let pred_e g n =
+    checked "pred_e" G.Node.inputs n g |> Seq.to_list_rev
+
   let iter_vertex f g = G.nodes g |> Seq.iter ~f
+
   let iter_edges_e f g = G.edges g |> Seq.iter ~f
   let iter_succ f g n = G.Node.succs n g |> Seq.iter ~f
   let iter_pred f g n = G.Node.preds n g |> Seq.iter ~f
@@ -255,8 +273,9 @@ module To_ocamlgraph(G : Graph) = struct
     | Some e -> e
     | None -> raise Not_found
 
-  let find_all_edges g x y = G.Node.edges x y g |> Seq.to_list_rev
-
+  let find_all_edges g x y = G.Node.edge x y g |> function
+    | None -> []
+    | Some x -> [x]
 
   let fold_succ f g n init =
     G.Node.succs n g |> Seq.fold ~init ~f:(fun a x -> f x a)
@@ -282,20 +301,20 @@ module To_ocamlgraph(G : Graph) = struct
 
   let add_edge_e g e = G.Edge.insert e g
 
-  let remove_edge g x y =
-    G.Node.edges x y g |> Seq.fold ~init:g ~f:(fun g e ->
-        G.Edge.remove e g)
+  let remove_edge g x y = match G.Node.edge x y g with
+    | None -> g
+    | Some e -> G.Edge.remove e g
 
   let remove_edge_e g e = G.Edge.remove e g
 
-  let mem_edge_e g e =
-    let es = G.Node.edges (G.Edge.src e) (G.Edge.dst e) g in
-    Seq.mem es e ~equal:(fun x y -> G.Edge.compare x y = 0)
+  let mem_edge_e g e = G.Node.has_edge (G.Edge.src e) (G.Edge.dst e) g
 end
 
 let seq_of_fold fold g =
-  let open Seq.Generator in
-  fold (fun v m -> m >>= fun () -> yield v) g (return ()) |> run
+  try
+    let open Seq.Generator in
+    fold (fun v m -> m >>= fun () -> yield v) g (return ()) |> run
+  with exn -> Seq.empty
 
 module Of_ocamlgraph(G : Graph.Sig.P) = struct
   type t = G.t
@@ -326,11 +345,20 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
     let outputs n g = seq_of_fold (fun f -> G.fold_succ_e f g) n
     let inputs n g = seq_of_fold (fun f -> G.fold_pred_e f g) n
     let insert n g = G.add_vertex g n
-    let update n g = G.add_vertex (G.remove_vertex g n) n
+    let update n l g =
+      if G.mem_vertex g n
+      then G.add_vertex (G.remove_vertex g n) (create l) else g
     let remove n g = G.remove_vertex g n
     let has_edge x y g = G.mem_edge g x y
-    let edge x y g = try Some (G.find_edge g x y) with Not_found -> None
-    let edges x y g = G.find_all_edges g x y |> Seq.of_list
+    let edge x y g =
+      try Some (G.find_edge g x y) with Not_found -> None
+
+    let degree ?dir n g =
+      try match dir with
+        | None -> G.in_degree g n + G.out_degree g n
+        | Some `In -> G.in_degree g n
+        | Some `Out -> G.out_degree g n
+      with exn -> 0
 
     include Opaque.Make(struct
         type t = node
@@ -351,12 +379,22 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
     let dst = G.E.dst
     let mem e g = G.mem_edge_e g e
     let insert e g = G.add_edge_e g e
-    let update e g = G.add_edge_e (G.remove_edge_e g e) e
+    let update e l g =
+      if G.mem_edge_e g e
+      then
+        let e' = (create (src e) (dst e) l) in
+        G.add_edge_e (G.remove_edge_e g e) e'
+      else g
+
     let remove e g = G.remove_edge_e g e
+
     include Opaque.Make(struct
         type t = edge
-        let hash = Hashtbl.hash
-        let compare = G.E.compare
+        let hash e =
+          Hashtbl.hash (src e) lxor Hashtbl.hash (dst e)
+        let compare x y = match Node.compare (src x) (src y) with
+          | 0 -> Node.compare (dst x) (dst y)
+          | n -> n
       end)
   end
 
@@ -409,7 +447,6 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
         | n -> n
     end)
 end
-
 
 let create
     (type t) (type a) (type b)
@@ -669,7 +706,7 @@ let idom (type t) (type n) (type e)
   `idom (fun n ->
       try
         let i = pnum n in
-        Option.some_if (i <> len - 1) node.(doms.(i))
+        if i <> len - 1 then Some node.(doms.(i)) else None
       with Not_found ->
         if G.Node.mem n g
         then Some node.(len - 1) else None)
@@ -727,12 +764,6 @@ let dom_frontier_generic (type t) (type n) (type e)
 
 let dom_frontier g =
   dom_frontier_generic (module Dom_frontier_cooper) g
-
-
-
-
-
-
 
 let strong_components
     (type t) (type n) (type e)
@@ -834,10 +865,6 @@ let fold_reachable (type t) (type n) (type e)
             if G.Node.(n = start) then s else return s)
         ~enter_node:(fun _ n u -> f u n))
 
-
-
-
-
 module Filtered
     (G : Graph)
     (Has : Predicate with type edge = G.edge and type node = G.node) =
@@ -870,13 +897,21 @@ struct
     let preds n g   = enum preds n g   // Has.node
     let inputs n g  = enum inputs n g  // Has.edge
     let outputs n g = enum outputs n g // Has.edge
-    let edges n m g =
-      if Has.node n && Has.node m then edges n m g // Has.edge else Seq.empty
-    let edge n m g = edges n m g |> Seq.hd
+    let edge n m g = match edge n m g with
+      | Some e when Has.edge e -> Some e
+      | _ -> None
     let has_edge n m g = match edge n m g with
       | None -> false
       | _ -> true
+
+    let degree ?dir n g =
+      let len = Seq.length in
+      match dir with
+      | None -> len (inputs n g) + len (outputs n g)
+      | Some `In -> len (inputs n g)
+      | Some `Out -> len (outputs n g)
   end
+
 
   module Edge = G.Edge
 
@@ -940,12 +975,11 @@ module Mapper
     let outputs n g = outputs (N.backward n) g /@ E.forward
     let insert n g = insert (N.backward n) g
     let remove n g = remove (N.backward n) g
-    let update n g = update (N.backward n) g
+    let update n l g = update (N.backward n) (NL.backward l) g
     let has_edge n m g = has_edge (N.backward n) (N.backward m) g
     let edge n m g =
       Option.(edge (N.backward n) (N.backward m) g >>| E.forward)
-    let edges n m g =
-      edges (N.backward n) (N.backward m) g /@ E.forward
+    let degree ?dir n g = degree ?dir (N.backward n) g
     include Opaque.Make(struct
         type t = node
         let compare x y = G.Node.compare (N.backward x) (N.backward y)
@@ -968,7 +1002,7 @@ module Mapper
     let dst e = dst (E.backward e) |> N.forward
     let mem e g = mem (E.backward e) g
     let insert e g = insert (E.backward e) g
-    let update e g = update (E.backward e) g
+    let update e l g = update (E.backward e) (EL.backward l) g
     let remove e g = remove (E.backward e) g
     include Opaque.Make(struct
         type t = edge

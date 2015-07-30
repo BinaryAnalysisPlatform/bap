@@ -174,7 +174,7 @@ module Test_algo(Gl : Graph_for_algo) = struct
     ]
 
   let random_graph () =
-    let v = Random.int (1 + 500) in
+    let v = Random.int 500 + 1 in
     let e = v * 3 / 2 in
     Rand.labeled (fun _ _ -> ()) ~loops:true ~e ~v ()
 
@@ -257,8 +257,8 @@ end
 module type Factory = sig
   type t
   val create : unit -> t
-  module E : Graph with type node = t and type Edge.label = t
-  module G : Graph with type node = t and type Edge.label = t
+  module E : Graph with type node = t and type Edge.label = unit
+  module G : Graph with type node = t and type Edge.label = unit
 end
 
 
@@ -280,9 +280,9 @@ module Construction(Factory : Factory) = struct
   let make_edges (type g)
       (module G : Graph with type t = g
                          and type node = t
-                         and type Edge.label = t) g =
+                         and type Edge.label = unit) g =
     G.edges g |> Seq.map ~f:(fun e ->
-        G.Edge.src e, G.Edge.dst e, G.Edge.label e) |>
+        G.Edge.src e, G.Edge.dst e, G.Edge.src e) |>
     Seq.fold ~init:Edges.empty ~f:Set.add
 
   let compare e g : int =
@@ -304,9 +304,9 @@ module Construction(Factory : Factory) = struct
   let random_edge = random_elt E.number_of_edges E.edges
 
   let insert_edge (e,g) : graphs =
-    let src,dst,lab = Factory.(create (), create (), create ()) in
-    E.Edge.insert (E.Edge.create src dst lab) e,
-    G.Edge.insert (G.Edge.create src dst lab) g
+    let src,dst = Factory.(create (), create ()) in
+    E.Edge.insert (E.Edge.create src dst ()) e,
+    G.Edge.insert (G.Edge.create src dst ()) g
 
   let insert_node (e,g) : graphs =
     let x = Factory.create () in
@@ -336,6 +336,8 @@ module Construction(Factory : Factory) = struct
     ]
 
   let validate (e,g) ctxt =
+    if compare e g <> 0 then
+      eprintf "expected:\n%a\ngot:\n%a\n%!" E.pp e G.pp g;
     assert_bool "structures differ" (compare e g = 0)
 
   let run (scheme : (graphs -> graphs) list) length ctxt =
@@ -381,8 +383,8 @@ let graphs_for_algo : (module Graph_for_algo) list = [
 module Int100 : Factory = struct
   type t = int
   let create () = Random.int 100
-  module E = OBII
-  module G = Graphlib.Int.Int
+  module E = OBIU
+  module G = Graphlib.Int.Unit
 end
 
 module Test_IR = struct
@@ -434,6 +436,7 @@ module Test_IR = struct
 
   let b4 = cond b4 Bil.(var k) b5 b6
 
+
   let b5 =
     let call = Call.create ()
         ~return:(Label.direct (Term.tid exit))
@@ -454,22 +457,63 @@ module Test_IR = struct
 
   let etalon = G.of_sub sub
 
-  let insert blks ctxt =
+  let insert blks =
     let init = G.create ~tid:(Term.tid sub) ~name:(Sub.name sub) () in
-    let g = List.fold blks ~init ~f:(Fn.flip G.Node.insert) in
+    let g = List.fold blks ~init ~f:(fun g blk ->
+        G.Node.insert (G.Node.create blk) g) in
     let etalon = G.edges g |> Seq.fold ~init:etalon ~f:(fun etalon e ->
         G.Edge.remove e etalon) in
-    let msg = "all edges should be removed" in
-    assert_equal ~ctxt ~msg ~cmp:Int.equal ~printer:Int.to_string
-      0 (G.number_of_edges etalon)
+    [
+      "all edges inserted" >::(fun ctxt ->
+          assert_equal ~ctxt ~cmp:Int.equal ~printer:Int.to_string
+            0 (G.number_of_edges etalon));
+      "all nodes connected" >:: fun ctxt ->
+        assert_bool "doesn't hold" @@
+        Seq.for_all (G.nodes g) ~f:(fun n -> G.Node.degree n g <> 0)
+    ]
 
 
-  let insert_randomly ctxt =
-    Seq.range 0 1000 |> Seq.iter ~f:(fun _ ->
-        insert (List.permute blks) ctxt)
+  let insert_randomly =
+    List.(range 0 100 >>= fun _ -> insert (List.permute blks))
+
+  let (++) g x = G.Node.(insert (create x) g)
+  let (--) g x = G.Node.(remove (create x) g)
+  let has = ident
+  let hasn't = not
+  let nil = G.empty
+
+  let edges n g ctxt =
+    assert_bool "failed" (G.number_of_edges g = n)
+
+  let nodes n g ctxt =
+    assert_bool "failed" (G.number_of_nodes g = n)
+
+  let edge has g x y ctxt =
+    assert_bool "failed"
+      (has (G.Node.(has_edge (create x) (create y) g)))
 
   let suite = [
-    "in order" >:: insert_randomly
+    "random insert" >::: insert_randomly;
+    "[entry] has no edges" >:: edges 0 (nil ++ entry);
+    "[b1] has no edges" >:: edges 0 (nil ++ b1);
+    "[entry] has one block" >:: nodes 1 (nil ++ entry);
+    "[b1] has one block" >:: nodes 1 (nil ++ b1);
+    "b2 -> b3 in [b2;b3]" >:: edge has (nil ++ b2 ++ b3) b2 b3;
+    "b3 -> b2 in [b2;b3]" >:: edge has (nil ++ b2 ++ b3) b3 b2;
+    "[b2] has no edges" >:: edges 0 (nil ++ b2 ++ b3 -- b3);
+    "[b2] has one block" >:: nodes 1 (nil ++ b2 ++ b3 -- b3);
+    "no b2 -> b3 in []" >:: edge hasn't (nil ++ b2 ++ b3 -- b2 -- b3) b2 b3;
+    "no b3 <- b2 in []" >:: edge hasn't (nil ++ b2 ++ b3 -- b2 -- b3) b3 b2;
+    "b2 -> b3 in [b2-b3+b3]" >:: edge has (nil ++ b2 -- b3 ++ b3) b2 b3;
+    "b3 -> b2 in [b2-b3+b3]" >:: edge has (nil ++ b2 -- b3 ++ b3) b3 b2;
+    "b2 -> b3 in [b2+b3+b3]" >:: edge has (nil ++ b2 ++ b3 ++ b3) b2 b3;
+    "b3 -> b2 in [b2+b3+b3]" >:: edge has (nil ++ b2 ++ b3 ++ b3) b3 b2;
+    "2 edges in [b2+b3+b3]" >:: edges 2 (nil ++ b2 ++ b3 ++ b3);
+    "2 edges in [b2-b3+b3]" >:: edges 2 (nil ++ b2 -- b3 ++ b3);
+    "2 nodes in [b2+b3+b3]" >:: nodes 2 (nil ++ b2 ++ b3 ++ b3);
+    "2 nodes in [b2-b3+b3]" >:: nodes 2 (nil ++ b2 -- b3 ++ b3);
+
+
   ]
 
 end

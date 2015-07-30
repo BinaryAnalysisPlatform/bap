@@ -26,10 +26,13 @@ module Pred = struct
   let remove_all src rdep =
     Map.map rdep ~f:(Set.filter ~f:(fun id -> id <> src))
 
-  let insert src dst rdep =
+  let update src dst rdep =
     Map.change rdep dst (function
-        | None -> Some (Tid.Set.singleton src)
+        | None -> None
         | Some xs -> Some (Set.add xs src))
+
+  let insert dst preds =
+    Map.add preds ~key:dst ~data:Tid.Set.empty
 end
 
 (* internal representation of a graph:
@@ -47,7 +50,11 @@ type edge = {
   src : blk term;
   dst : blk term;
   pos : int;
-} with bin_io, compare, sexp
+} with bin_io, sexp
+
+let compare_edge x y = match Blk.compare x.src y.src with
+  | 0 -> Blk.compare x.dst y.dst
+  | n -> n
 
 let empty_sub = Sub.create ()
 
@@ -116,9 +123,12 @@ module Node = struct
 
   let label = ident
 
+  let mem blk t = Map.mem t.preds (Term.tid blk)
+
   let succs blk t : node seq =
     Term.enum jmp_t blk |>
-    Seq.filter_map ~f:(succ_of_jmp t.sub)
+    Seq.filter_map ~f:(succ_of_jmp t.sub) |>
+    Seq.filter ~f:(fun blk -> mem blk t)
 
   let preds blk t : node seq =
     match Map.find t.preds (Term.tid blk) with
@@ -137,65 +147,60 @@ module Node = struct
 
   let outputs src t : edge seq =
     Term.enum jmp_t src |> Seq.filter_mapi ~f:(fun pos jmp ->
-        succ_of_jmp t.sub jmp >>| fun dst -> {src; pos; dst})
+        succ_of_jmp t.sub jmp >>= fun dst ->
+        if mem src t && mem dst t then Some {src; pos; dst} else None)
 
-  let update blk' t =
-    let bid = Term.tid blk' in
+  let in_degree blk t = match Map.find t.preds (Term.tid blk) with
+    | None -> 0
+    | Some ts -> Set.length ts
+
+  let out_degree blk t = Seq.length (outputs blk t)
+
+  let degree ?dir blk g = match dir with
+    | None -> in_degree blk g + out_degree blk g
+    | Some `Out -> out_degree blk g
+    | Some `In  -> in_degree blk g
+
+  let update b blk' t =
+    let bid = Term.tid b in
     match Term.find blk_t t.sub bid with
     | None -> t
+    | _ when not (Term.same b blk') -> t
     | Some blk ->
       let sub = Term.update blk_t t.sub blk' in
       match control_flow_difference blk blk' with
       | [] -> {t with sub}
       | ds -> List.fold ~init:{t with sub} ds ~f:(fun t -> function
-          | New_jmp dst -> {t with preds = Pred.insert bid dst t.preds}
+          | New_jmp dst -> {t with preds = Pred.update bid dst t.preds}
           | Del_jmp dst -> {t with preds = Pred.remove bid dst t.preds}
           | Target_change (tx,ty) ->
             t.preds |>
             Pred.remove bid tx |>
-            Pred.insert bid ty |> fun preds -> {t with preds})
+            Pred.update bid ty |> fun preds -> {t with preds})
 
-  let change update f blk t = {
-    sub = Term.change blk_t t.sub (Term.tid blk) (fun _ -> update blk);
-    preds = succs_of_blk blk |>
-            Seq.fold ~init:t.preds
-              ~f:(fun preds dst -> f (Term.tid blk) dst preds)
-  }
+  let update_preds sub preds =
+    Term.enum blk_t sub  |> Seq.fold ~init:preds ~f:(fun preds blk ->
+        succs_of_blk blk |> Seq.fold ~init:preds ~f:(fun preds dst ->
+            Pred.update (Term.tid blk) dst preds))
 
-  let update_preds f blk t =
-    succs_of_blk blk |>
-    Seq.fold ~init:t.preds
-      ~f:(fun preds dst -> f (Term.tid blk) dst preds)
-
-  let insert blk t : graph =
+  let do_insert blk t =
     let sub = if Sub.(t.sub = empty_sub)
       then Sub.create () else t.sub in
-    {
-      preds = update_preds Pred.insert blk t;
-      sub = Term.append blk_t sub blk;
-    }
+    let sub = Term.append blk_t sub blk in
+    let preds = Pred.insert (Term.tid blk) t.preds in
+    {preds = update_preds sub preds; sub}
+
+  let insert blk t : graph =
+    if mem blk t then t
+    else do_insert blk t
 
   let remove blk t =
-    let sub = Term.remove blk_t t.sub (Term.tid blk) |>
-              Term.map blk_t ~f:(fun src ->
-                  Term.filter jmp_t src ~f:(fun jmp ->
-                      match succ_tid_of_jmp jmp with
-                      | None -> true
-                      | Some dst -> dst <> Term.tid blk)) in
-    let preds = Pred.remove_all (Term.tid blk) t.preds in
-    {sub; preds}
-
-
-  let mem blk t = Map.mem t.preds (Term.tid blk)
-
-  let upsert blk t =
-    if mem blk t then update blk t else insert blk t
-
-  let edges src dst t : edge seq =
-    inputs dst t |> Seq.filter ~f:(fun e -> Term.same e.src src)
+    let id = Term.tid blk in
+    { sub = Term.remove blk_t t.sub id;
+      preds = Map.remove t.preds id |> Pred.remove_all id}
 
   let edge src dst t : edge option =
-    edges src dst t |> Seq.hd
+    inputs dst t |> Seq.find ~f:(fun e -> Term.same e.src src)
 
   (* can be defined as [let mem t s d = find t s d <> None],
      but the following would be more efficient. *)
@@ -245,16 +250,9 @@ module Edge = struct
   let src e = e.src
   let dst e = e.dst
 
-  (* this implementation is O(N), where N is the amount of blocks.
-     We can't do better unless we provide more bookkeeping.  *)
-  let mem e g = match Term.find blk_t g.sub (Term.tid e.src) with
+  let mem e g = match Map.find g.preds (Term.tid e.dst) with
     | None -> false
-    | Some src -> match Term.nth jmp_t src e.pos with
-      | None -> false
-      | Some jmp -> match succ_tid_of_jmp jmp with
-        | None -> false
-        | Some id -> Tid.equal id (Term.tid e.dst)
-
+    | Some ps -> Set.mem ps (Term.tid e.src)
 
   let jmps_before e src =
     Seq.take (Term.enum jmp_t src) e.pos
@@ -287,9 +285,17 @@ module Edge = struct
         let c = Exp.UnOp (Unop.NOT, Jmp.cond jmp) in
         Exp.BinOp (Binop.AND,cond,c)) |> simpl
 
-  let insert e t = Node.(upsert e.dst t |> upsert e.src)
+  let insert e t = Node.(insert e.dst t |> insert e.src)
 
-  let update e t = Node.(update e.dst t |> update e.src)
+  let do_update e l t =
+    let e = create e.src e.dst l in
+    Node.(insert e.dst t |>
+          insert e.src |>
+          update e.src e.src |>
+          update e.dst e.dst)
+
+  let update e l t =
+    if mem e t then do_update e l t else t
 
   let cut_tail pos blk =
     let b = Blk.Builder.init ~copy_phis:true ~copy_defs:true blk in
@@ -317,7 +323,7 @@ module Edge = struct
         | Some jmp -> make_dummy jmp src in
       let n = tail_length src in
       let src = if n = 0 then src else cut_tail (len - n) src in
-      Node.update src t
+      Node.update src src t
 
   include Regular.Make(struct
       type t = edge with bin_io, compare, sexp
@@ -354,6 +360,9 @@ let preds_of_sub sub : Tid.Set.t Tid.Map.t =
   Term.enum blk_t sub |>
   Seq.fold ~init:Tid.Map.empty ~f:(fun ins src ->
       let src_id = Term.tid src in
+      let ins = Map.change ins src_id (function
+          | None -> Some Tid.Set.empty
+          | other -> other) in
       Term.enum jmp_t src |>
       Seq.fold ~init:ins ~f:(fun ins jmp ->
           match succ_tid_of_jmp jmp with
