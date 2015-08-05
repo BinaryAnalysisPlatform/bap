@@ -9,6 +9,8 @@ let deps = [
   "ocamlgraph";
 ]
 
+let command = "opam config exec --switch=4.02.1 ocamlfind ocamldoc"
+
 exception No_out_dir
 
 let find_word ?(start=0) w s =
@@ -41,9 +43,9 @@ let find_p4_with s =
     then None else Some i
 
 
-(* right now we will just with, but later we can transform
-   them to "@with ..." comment, that can be later processed
-   to output corresponding documentation. *)
+(* right now we will just kill `with', but later we can transform them
+   to "@with ..." comment, that can be later processed to output
+   corresponding documentation. *)
 let preprocess_with oc s = match find_p4_with s with
   | None -> output_string oc s
   | Some i -> match find_comments s with
@@ -87,7 +89,7 @@ let run cmd =
 
 let compile ~options name =
   let b = Buffer.create 64 in
-  Buffer.add_string b ("ocamlfind ocamldoc " ^ options ^ " " ^ name);
+  Buffer.add_string b (command ^ options ^ " " ^ name);
   List.iter (fun dep ->
       Buffer.add_string b " -package ";
       Buffer.add_string b dep) deps;

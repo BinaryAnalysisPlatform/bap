@@ -229,19 +229,21 @@ module Labeled(Node : Opaque)(NL : T)(EL : T) = struct
   include Make(Labeled_node)(EL)
 end
 
-
-module type Product = sig
-  include Opaque
+module type Pp = sig
+  type t
   val pp : formatter -> t -> unit
-  val name : string
+  val module_name : string
 end
 
+module type Product = sig
+  type t
+  include Opaque with type t := t
+  include Pp with type t := t
+end
 
-module Make_factory(P : Product) = struct
+module Aux(P : Pp) = struct
   open Bap_graph
-  type node = P.t
-
-  let make_name name = Some ("Bap.Std.Graphlib."^P.name^"."^name)
+  let make_name name = Some (P.module_name^"."^name)
 
   module Tree = struct
     type t = P.t tree
@@ -253,7 +255,7 @@ module Make_factory(P : Product) = struct
   end
 
   module Frontier = struct
-    type t = node frontier
+    type t = P.t frontier
     include Printable(struct
         type nonrec t = t
         let pp = Frontier.pp P.pp
@@ -262,7 +264,7 @@ module Make_factory(P : Product) = struct
   end
 
   module Group = struct
-    type t = node group
+    type t = P.t group
     include Printable(struct
         type nonrec t = t
         let pp = Group.pp P.pp
@@ -271,7 +273,7 @@ module Make_factory(P : Product) = struct
   end
 
   module Partition = struct
-    type t = node partition
+    type t = P.t partition
     include Printable(struct
         type nonrec t = t
         let pp = Partition.pp P.pp
@@ -280,13 +282,22 @@ module Make_factory(P : Product) = struct
   end
 
   module Path = struct
-    type t = node path
+    type t = P.t path
     include Printable(struct
         type nonrec t = t
         let pp = Path.pp P.pp
         let module_name = make_name "Path"
       end)
   end
+end
+
+module Make_factory(P : Product) = struct
+  open Bap_graph
+  type node = P.t
+
+  let make_name name = Some (P.module_name^"."^name)
+
+  include Aux(P)
 
   module Bool = Printable_graph(struct
       module G = Make(P)(Bool)
@@ -372,15 +383,25 @@ module Make_factory(P : Product) = struct
     end)
 end
 
-module PInt = struct include Int let name = "Int" end
-module PValue = struct include Bap_value let name = "Value" end
-module PString = struct include String let name = "String" end
-module PWord = struct include Bitvector let name = "Word" end
-module PVar = struct include Bap_var let name = "Var" end
-module PExp = struct type t = exp include Bap_exp let name = "Exp" end
-module PStmt = struct type t = stmt include Bap_stmt let name = "Stmt" end
-module PTid = struct include Bap_ir.Tid let name = "Tid" end
-module PType = struct type t = typ include Bap_type let name = "Type" end
+module Named(T : sig
+    type t
+    val name : string
+    val pp : Format.formatter -> t -> unit
+    include Opaque with type t := t
+  end) = struct
+  let module_name = "Bap.Std.Graphlib."^T.name
+  include T
+end
+
+module PInt = Named(struct include Int let name = "Int" end)
+module PValue = Named(struct include Bap_value let name = "Value" end)
+module PString = Named(struct include String let name = "String" end)
+module PWord = Named(struct include Bitvector let name = "Word" end)
+module PVar = Named(struct include Bap_var let name = "Var" end)
+module PExp = Named(struct type t = exp include Bap_exp let name = "Exp" end)
+module PStmt = Named(struct type t = stmt include Bap_stmt let name = "Stmt" end)
+module PTid = Named(struct include Bap_ir.Tid let name = "Tid" end)
+module PType = Named(struct type t = typ include Bap_type let name = "Type" end)
 
 module Int = Make_factory(PInt)
 module Value = Make_factory(PValue)

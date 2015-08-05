@@ -14,6 +14,7 @@ module Std = struct
   module Program = struct
     include Ir_program
     let lift = Ir_lift.program
+    let to_graph = Graphlib.Callgraph.create
   end
 
   module Arg = Ir_arg

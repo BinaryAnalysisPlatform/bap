@@ -3116,6 +3116,16 @@ module Std : sig
     include Regular with type t := t
   end
 
+  (** Printable auxiliary graph structures  *)
+  module type Aux = sig
+    type node
+    module Tree : Printable with type t = node tree
+    module Frontier : Printable with type t = node frontier
+    module Path : Printable with type t = node path
+    module Partition : Printable with type t = node partition
+    module Group : Printable with type t = node group
+  end
+
   (** {5 Auxiliary graph data structures}  *)
 
   (** A type of modules for filtering graphs.
@@ -3633,12 +3643,8 @@ module Std : sig
       module Type : Graph with type node = node
                            and type Node.label = node
                            and type Edge.label = typ
+      include Aux with type node := node
 
-      module Tree : Printable with type t = node tree
-      module Frontier : Printable with type t = node frontier
-      module Path : Printable with type t = node path
-      module Partition : Printable with type t = node partition
-      module Group : Printable with type t = node group
     end
 
     (** {3 Pre-instantiated graphs} *)
@@ -3669,7 +3675,7 @@ module Std : sig
         time.
 
         Although this implements all operations of {!Graph} interface
-        it is recommended to use {!Term} or [Builder} interfaces to
+        it is recommended to use {!Term} or [Builder] interfaces to
         build and modify underlying terms. The next few sections will
         clarify the behavior of a graph when it is modified using
         {!Graph} interface. If you do not want to read the following
@@ -3802,12 +3808,23 @@ module Std : sig
                      and module Edge := Edge
 
       (** {4 Printable interface for auxiliary data structures}  *)
-      module Tree : Printable with type t = node tree
-      module Frontier : Printable with type t = node frontier
-      module Path : Printable with type t = node path
-      module Partition : Printable with type t = node partition
-      module Group : Printable with type t = node group
+      include Aux with type node := node
     end
+
+    (** A call graph representation.  *)
+    module Callgraph : sig
+      (** In this representations, nodes are identifiers of subroutine
+          terms, and edges, representing calls, are marked with a list of
+          callsites, where callsite is denoted by a jump term.  *)
+
+      include Graph with type node = tid
+                     and type Node.label = tid
+                     and type Edge.label = jmp term list
+      val create : program term -> t
+      val pp : Format.formatter -> t -> unit
+      include Aux with type node := node
+    end
+
 
   end
 
@@ -5828,7 +5845,7 @@ module Std : sig
     val set_name : tid -> string -> unit
 
     (** [name tid] returns a term name: either a string name
-        with @prefix, or number identifier.   *)
+        with at-prefix, or number identifier.   *)
     val name : tid -> string
 
     (** [from_string s] parses tid from string. The expected
@@ -6046,13 +6063,6 @@ module Std : sig
     val del_attr : 'a t -> 'b tag -> 'a t
   end
 
-  (* TBD
-
-     module Callgraph : Graph
-     with type node = sub term
-     and type Node.label = sub term
-     and type Edge.label = Blk.Set.t
-  *)
   (** Program.  *)
   module Program : sig
     (** Program is a collection of function terms. *)
@@ -6066,7 +6076,8 @@ module Std : sig
         program lifted into IR *)
     val lift : symtab -> program term
 
-    (* TBD: val to_callgraph : t -> Callgraph.t *)
+    (** [to_graph program] creates a callgraph of a [program]  *)
+    val to_graph : t -> Graphlib.Callgraph.t
 
     (** [lookup t program id] is like {{!find}find} but performs deep
         lookup in the whole [program] for a term with a given [id].
