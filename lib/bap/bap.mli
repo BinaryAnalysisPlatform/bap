@@ -1944,6 +1944,11 @@ module Std : sig
         by expression [y] *)
     val substitute_var : var -> exp -> stmt list -> stmt list
 
+    (** [free_vars bil] returns a set of free variables in program
+        [bil]. Variable is considered free if it is not bound in a
+        preceding statement or is not bound with [let] expression *)
+    val free_vars : stmt list -> Var.Set.t
+
     (** [fold_consts] evaluate constant expressions.
         Note: this function performs only one step, and has no loops,
         it is supposed to be run using a fixpoint combinator.
@@ -2060,6 +2065,10 @@ module Std : sig
     *)
     val fixpoint : (t -> t) -> (t -> t)
 
+    (** [free_vars exp] returns a set of all unbound variables, that
+        occurs in the expression [exp]. *)
+    val free_vars : t -> Var.Set.t
+
     include Regular with type t := t
     val pp_adt : t printer
   end
@@ -2095,6 +2104,10 @@ module Std : sig
     (** [fixpoint f x] applies transformation [f] until it reaches
         fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)
     val fixpoint : (t -> t) -> (t -> t)
+
+    (** [free_vars stmt] returns a set of all unbound variables, that
+        occurs in the [stmt]. *)
+    val free_vars : t -> Var.Set.t
 
     include Regular with type t := t
     val pp_adt : t printer
@@ -3642,12 +3655,26 @@ module Std : sig
     (** Graph view over IR.
 
         This module implements a graph view on an intermediate
-        representation of a subroutine. Although it implements all
-        operations of {!Graph} interface it is recommended to use
-        {!Term} interface to build and modify underlying terms. The
-        next few sections will clarify the behavior of a graph when it
-        is modified using {!Graph} interface. If you do not want to read
-        the following sections, then better use [Term] interface.
+        representation of a subroutine. To create an instance of a
+        graph, using existing subroutine use {!Sub.to_cfg}. At any
+        moment current sub term can be obtained using {!Sub.of_cfg}
+        function. This is a just a projection operation, so it doesn't
+        take any computing time.
+
+        All [Graph] modification operations, like [insert], [remove]
+        and [update] in [Node] and [Edge] modules are mapped to
+        corresponding [Term] operations. Also, for performance
+        reasons, graph is augmented with auxiliary data structures,
+        that allows to perform most of the operations in O(log(N))
+        time.
+
+        Although this implements all operations of {!Graph} interface
+        it is recommended to use {!Term} or [Builder} interfaces to
+        build and modify underlying terms. The next few sections will
+        clarify the behavior of a graph when it is modified using
+        {!Graph} interface. If you do not want to read the following
+        sections, then better do not use this module to build your
+        terms.
 
         {2 Inserting nodes}
 
@@ -3773,18 +3800,6 @@ module Std : sig
                      and type Node.label = blk term
                      and module Node := Node
                      and module Edge := Edge
-
-      (** [create ?tid ?name ()] creates an empty graph, that will
-          build a [sub term]  with a give [tid] and [name] *)
-      val create : ?tid:tid -> ?name:string -> unit -> t
-
-      (** [of_sub sub] builds a graph from a give subroutine term.  *)
-      val of_sub : sub term -> t
-
-      (** [to_sub g] projects a graph into a subroutine. (Note: this
-          is a no-op function, it just returns an underlying
-          subroutine.)  *)
-      val to_sub : t -> sub term
 
       (** {4 Printable interface for auxiliary data structures}  *)
       module Tree : Printable with type t = node tree
@@ -4929,8 +4944,8 @@ module Std : sig
     class stub : abi
 
     val to_string : arch -> string list -> string
-    (** registers given ABI under the given target   *)
 
+    (** registers given ABI under the given target   *)
     val register : abi_constructor -> unit
   end
 
@@ -5411,13 +5426,7 @@ module Std : sig
 
     val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> bil Or_error.t
 
-    module ABI : sig
-      include ABI
-
-      (** [gnueabi] ABI  *)
-      class gnueabi : sub term -> abi
-
-    end
+    module ABI : ABI
 
     (** ARM CPU.
         Other than common CPU interface, this module also exposes ARM
@@ -5809,7 +5818,38 @@ module Std : sig
   (** Term identifier  *)
   module Tid : sig
     type t = tid
+
+    (** [create ()] creates a fresh newly term identifier  *)
     val create : unit -> t
+
+    (** [set_name tid name] associates a [name] with a given
+        term identifier [tid]. Any previous associations are
+        overridden.*)
+    val set_name : tid -> string -> unit
+
+    (** [name tid] returns a term name: either a string name
+        with @prefix, or number identifier.   *)
+    val name : tid -> string
+
+    (** [from_string s] parses tid from string. The expected
+        format is:
+        {v
+          tid = symbol | number.
+          symbol = "@", string.
+          number = "%", hex.
+          string = ?sequence of characters?.
+          number = ?ocaml hexadecimal representation?.
+        v}
+    *)
+    val from_string : string -> tid Or_error.t
+
+    (** [from_string_exn s] same as [from_string_exn] but throws
+        exception on error.  *)
+    val from_string_exn : string -> tid
+
+    (** infix notation for [from_string_exn]  *)
+    val (!) : string -> tid
+
     include Regular with type t := t
   end
 
@@ -6074,12 +6114,51 @@ module Std : sig
 
     (** updates subroutine name *)
     val with_name : t -> string -> t
-    (*
-       TBD
-    val of_cfg : Graphlib.Ir.t -> t
-    val to_cfg : t -> Graphlib.Ir.t
+
+    (** [ssa sub] returns [sub] in SSA form. The underlying algorithm
+        produces a semi-pruned SSA form. To represent different
+        versions of the same variable we use {{!Var}variable
+        versions}. Any definition of a variable increases its version
+        number. So, the zero version is reserved for variables that
+        weren't defined before the first use.  *)
+    val ssa : t -> t
+
+    (** [is_ssa sub] is [true] if [sub] was transformed into an SSA
+        form. This is O(1) predicate that doesn't really check, that
+        a subroutine is in an SSA form, so it is a responsibility of
+        a user to preserve the SSA form on any transformation.    *)
+    val is_ssa : t -> bool
+
+    (** [free_vars sub] computes a set of variables that are free in a
+        given subroutine [sub]. The variable is considered free if it
+        is used before defined or is not locally bound.  If [sub] is in
+        an SSA form, then the set is computed trivially, thanks to a
+        naming scheme. If program is not in an SSA form, then a BFS on a
+        dominators tree is used.  *)
+    val free_vars : t -> Var.Set.t
+
+    (** [infer_args sub arch] uses {!abi} to infer and populate
+        arguments of subroutine [sub].  *)
+    val infer_args : t -> arch -> t
+
+    (** [to_graph sub] builds a graph of subroutine [sub]. Graph nodes
+        are block term identifiers, and edges are labeled with term
+        identifiers of the jmp terms, that corresponds to the edge.
+        This representation is useful, if you need to compute some
+        graph relation on a subroutine, that will be later used to
+        perform its incremental transformation. *)
     val to_graph : t -> Graphlib.Tid.Tid.t
-    *)
+
+    (** [to_cfg sub] builds a graph representation of a subroutine
+        [sub]. All graph operations are mapped to corresponding
+        [Term] operations. See {!Graphlib.Ir} for more information.*)
+    val to_cfg : t -> Graphlib.Ir.t
+
+    (** [of_cfg cfg] extracts a [sub term] from a given graph [cfg].
+        Since {!Graphlib.Ir} module builds term incrementally this
+        operation is just a projection, i.e., it has O(0) complexity.  *)
+    val of_cfg : Graphlib.Ir.t -> t
+
     (** Subroutine builder *)
     module Builder : sig
       type t
@@ -6139,6 +6218,8 @@ module Std : sig
     val lift : block -> blk term list
 
 
+    (** [from_insn insn] creates an IR representation of a single
+        machine instruction [insn].  *)
     val from_insn : insn -> blk term list
 
     (** [split_while blk ~f] splits [blk] into two block: the first
@@ -6197,6 +6278,15 @@ module Std : sig
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> f:(exp -> exp) -> t
 
+
+    (** [substitute ?skip blk x y] substitutes each occurrence of
+        expression [x] with expression [y] in block [blk]. See
+        {!map_exp} for [skip] parameter. The substitution is performed
+        deeply.  *)
+    val substitute :
+      ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
+      t -> exp -> exp -> t
+
     (** [map_lhs blk ~f] applies [f] to every left hand side variable
         in def and phi subterms of [blk]. Parameter [skip] allows to
         ignore particular terms.  E.g.,
@@ -6216,13 +6306,21 @@ module Std : sig
         term with left hand side equal to [x]  *)
     val defines_var : t -> var -> bool
 
-    (** [uses_var blk x] true if variable [x] occurs on the right
-        hand side of any phi or def term.  *)
+    (** [free_vars blk] returns a set of variables that occurs free
+        in block [blk]. A variable is free, if it occurs unbound in the
+        expression and there is no preceding definition of this variable
+        in a block [blk].  *)
+    val free_vars : t -> Var.Set.t
+
+    (** [uses_var blk x] true if variable [x] is in [free_vars blk].
+        If you need to call this function on several variables it is
+        better to compute [free_vars] explicitly and use [Set.mem]
+        function.  *)
     val uses_var : t -> var -> bool
 
-    (** [dominated blk by:dom def] if [def] is dominated by [dom] in
-        [blk].  *)
-    val dominated : t -> by:tid -> tid -> bool
+    (** [occurs blk after:x def] if [def] is occurs after definition
+        [def] in [blk].  *)
+    val occurs : t -> after:tid -> tid -> bool
 
     (** Builder interface.  *)
     module Builder : sig
@@ -6298,6 +6396,15 @@ module Std : sig
         an updated definition. *)
     val map_exp : t -> f:(exp -> exp) -> t
 
+    (** [substitute def x y] substitutes [x] by [y] in the right hand
+        side of a definition [def] *)
+    val substitute : t -> exp -> exp -> t
+
+    (** [free_vars def] returns a set of free variables, that occurs
+        on the right hand side of definition [def]. See {!Exp.free_vars}
+        for more information.  *)
+    val free_vars : t -> Var.Set.t
+
     include Regular with type t := t
   end
 
@@ -6347,9 +6454,22 @@ module Std : sig
     (** [cond jmp] returns the jump guard condition  *)
     val cond : t -> exp
 
+    (** [exps jmp] returns a sequence of expressions occurring in
+        different positions of a jump [jmp], e.g., in [cond],
+        [target], etc.  *)
+    val exps : t -> exp seq
+
+    (** [free_vars jmp] returns a set of all variables that are free
+        in some expression in the jump [jmp].  *)
+    val free_vars : t -> Var.Set.t
+
     (** [map_exp jmp ~f] applies [f] to each expression in a [jmp],
         e.g., conditions and indirect labels.  *)
     val map_exp : t -> f:(exp -> exp) -> t
+
+    (** [substitute jmp x y] substitutes [x] by [y] in all expressions
+        that occur in jump [jmp] expressions.*)
+    val substitute : t -> exp -> exp -> t
 
     (** updated jump's guard condition  *)
     val with_cond : t -> exp -> t
@@ -6387,6 +6507,11 @@ module Std : sig
     (** [values phi] enumerate all possible values.  *)
     val values : t -> (tid * exp) seq
 
+    (** [free_vars t] returns a set of variables that occur free on
+        the right hand side of the phi-node. See {Exp.free_vars} for
+        clarification on what variables are considered free.  *)
+    val free_vars : t -> Var.Set.t
+
     (** [lhs phi] returns a variable associated with a phi node  *)
     val lhs : t -> var
 
@@ -6397,6 +6522,10 @@ module Std : sig
     (** [map_exp t ~f] applies [f] to all expressions on the right
         hand side of a phi-node [t] *)
     val map_exp : t -> f:(exp -> exp) -> t
+
+    (** [substitute phi x y] substitutes [x] by [y] in all right
+        hand-side expressions of the [phi] node. *)
+    val substitute : t -> exp -> exp -> t
 
     (** [update phi label exp] associates expression [exp] with a
         control flow path labeled with [label].  *)
@@ -6411,7 +6540,7 @@ module Std : sig
         [Bil.unknown] expression.     *)
     val select_or_unknown : t -> tid -> exp
 
-    (** [remove_def id] removes definition with a given [id]  *)
+    (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
     include Regular with type t := t
@@ -6522,7 +6651,8 @@ module Std : sig
 
     (** [from_file filename] creates a project from a binary file. The
         file must be in format, supportable by some of our loader plugins,
-        e.g., ELF, COFF, MACH-O, etc.
+        e.g., ELF, COFF, MACH-O, etc. A provided [filename] is stored
+        in a {!filename} field of a project.
 
         @param on_warning is a function that will be called if some
         non-critical problem has occurred during loading file;
@@ -6536,7 +6666,10 @@ module Std : sig
 
         @param roots allows to provide starting approximation of the
         roots for recursive disassembling procedure. Each root should
-        be a start of a function.*)
+        be a start of a function.
+
+
+    *)
     val from_file :
       ?on_warning:(Error.t -> unit Or_error.t) ->
       ?backend:string ->
@@ -6545,7 +6678,8 @@ module Std : sig
       string -> t Or_error.t
 
     (** [from_image image] is like {!from_file} but accepts already
-        loaded image of a binary file *)
+        loaded image of a binary file. If [image] was loaded from a
+        file, then {!filename} field is set to the name of the file.  *)
     val from_image :
       ?name:(addr -> string option) ->
       ?roots:addr list ->

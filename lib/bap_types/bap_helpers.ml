@@ -120,7 +120,12 @@ include struct
         | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
         | (OR|AND), v1, v2 when equal v1 v2 -> v1
         | (XOR), v1, v2 when equal v1 v2 -> zero v1 v2
-        | op, Int v, e -> super#map_binop op e (Int v)
+        | EQ, e, Int v when Word.(v = b1) -> e
+        | NEQ,e, Int v when Word.(v = b0) -> e
+        | EQ, e, Int v when Word.(v = b0) -> super#map_unop Unop.NOT e
+        | NEQ,e, Int v when Word.(v = b1) -> super#map_unop Unop.NOT e
+        | op, Int v, e when Bap_exp.Binop.is_commutative op ->
+          super#map_binop op e (Int v)
         | PLUS, BinOp (PLUS, a, Int b), Int c ->
           BinOp (PLUS, a, super#map_binop PLUS (Int b) (Int c))
         | PLUS, BinOp (MINUS, a, Int b), Int c ->
@@ -133,6 +138,7 @@ include struct
         | Int v -> Unop.(match op with
             | NEG -> Int Word.(neg v)
             | NOT -> Int Word.(lnot v))
+        | UnOp (op',arg) when op = op' -> arg
         | _ -> super#map_unop op arg
 
       method! map_cast kind size arg =
@@ -274,11 +280,14 @@ let fix compare f x  =
 
 let fixpoint = fix compare_bil
 
-let substitute x y = (object inherit mapper as super
+class rewriter x y = object
+  inherit mapper as super
   method! map_exp z =
     let z = super#map_exp z in
     if Bap_exp.(z = x) then y else z
-end)#run
+end
+
+let substitute x y = (new rewriter x y)#run
 
 let substitute_var x y = (object inherit mapper as super
   method! map_var z =
@@ -328,6 +337,8 @@ module Trie = struct
   include Normalized
 end
 
+module VS = Bap_var.Set
+
 module Exp = struct
   let find (finder : 'a #finder) es : 'a option =
     finder#find_in_exp es
@@ -339,6 +350,22 @@ module Exp = struct
   let normalize_negatives = (new negative_normalizer)#map_exp
   let fold_consts = (new constant_folder)#map_exp
   let fixpoint = fix compare_exp
+
+  let substitute x y = map (new rewriter x y)
+
+  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
+      inherit [VS.t * var list] visitor
+
+      method! enter_var var (vars,stack) =
+        if List.exists stack ~f:(fun x -> Bap_var.(x = var))
+        then (vars,stack) else Set.add vars var,stack
+
+      method! enter_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, var::stack)
+
+      method! leave_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, List.tl_exn stack)
+    end) exp
 end
 
 module Stmt = struct
@@ -351,4 +378,26 @@ module Stmt = struct
   let assigns ?strict x stmt = is_assigned ?strict x [stmt]
   let is_referenced x ss = is_referenced x [ss]
   let fixpoint = fix compare_stmt
+  let substitute x y = map (new rewriter x y)
+
+  let rec free_vars (s : stmt) = match s with
+    | Stmt.Move (_,e)
+    | Stmt.Jmp e -> Exp.free_vars e
+    | Stmt.While (e,ss) ->
+      VS.union_list @@ Exp.free_vars e :: List.map ss ~f:free_vars
+    | Stmt.If (e,s1,s2) ->
+      VS.union_list @@ Exp.free_vars e :: List.map (s1@s2) ~f:free_vars
+    | Stmt.Special _
+    | Stmt.CpuExn _ -> VS.empty
+
+  let bil_free_vars bil =
+    let update news vars kill =
+      VS.union vars (VS.diff news kill) in
+    fst @@ List.fold bil ~init:(VS.empty,VS.empty)
+      ~f:(fun (vars,kill) -> function
+          | Stmt.Move (v,e) ->
+            update (Exp.free_vars e) vars kill, VS.add kill v
+          | stmt -> update (free_vars stmt) vars kill, kill)
 end
+
+let free_vars = Stmt.bil_free_vars

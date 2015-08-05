@@ -145,6 +145,130 @@ let lookup cls hay ctxt =
   | Some t -> assert_bool "Found wrong" (Term.same hay t)
   | None -> assert_string "Not_found"
 
+module Example = struct
+  let entry = Blk.create ()
+  let b1 = Blk.create ()
+  let b2 = Blk.create ()
+  let b3 = Blk.create ()
+  let b4 = Blk.create ()
+  let b5 = Blk.create ()
+  let b6 = Blk.create ()
+  let exit = Blk.create ()
+
+  let i = Var.create "i" reg32_t
+  let j = Var.create "j" reg32_t
+  let k = Var.create "k" bool_t
+
+  let _1 = Bil.int (Word.one 32)
+  let _2 = Bil.int (Word.of_int32 2l)
+  let _F = Bil.int Word.b0
+  let _T = Bil.int Word.b1
+
+  let def var exp b = Term.append def_t b @@ Def.create var exp
+  let cond blk cond t f =
+    let jt = Jmp.create_goto ~cond (Label.direct (Term.tid t)) in
+    let jf = Jmp.create_goto (Label.direct (Term.tid f)) in
+    let blk = Term.append jmp_t blk jt in
+    Term.append jmp_t blk jf
+  let goto dst src = Term.append jmp_t src @@
+    Jmp.create_goto (Label.direct (Term.tid dst))
+
+  let entry = entry |>
+              goto b1
+
+  let b1 = b1       |>
+           def k _F |>
+           def i _1 |>
+           def j _2 |>
+           goto b2
+
+  let b2 = cond b2 Bil.(var i <= var j) b3 b4
+
+  let b3 = b3                     |>
+           def j Bil.(var j * _2) |>
+           def k _T               |>
+           def i Bil.(var i + _1) |>
+           goto b2
+
+  let b3_without_jumps = Term.filter jmp_t ~f:(fun _ -> false) b3
+
+  let b4 = cond b4 Bil.(var k) b5 b6
+
+  let b5 =
+    let call = Call.create ()
+        ~return:(Label.direct (Term.tid exit))
+        ~target:(Label.indirect (Bil.var j)) in
+    let use = Jmp.create_call call in
+    Term.append jmp_t b5 use
+
+  let b3_with_jump_to_b5 = Term.map jmp_t ~f:(fun _ ->
+      Jmp.create_goto (Label.direct (Term.tid b5))) b3
+
+
+
+  let b6 = def i Bil.(var i + _1) b6 |> goto exit
+
+  let sub_of_blk blks =
+    let sub = Sub.create ~name:"example" () in
+    List.fold blks ~init:sub ~f:(Term.append blk_t)
+
+  let blks = [entry; b1; b2; b3; b4; b5; b6; exit]
+  let sub = sub_of_blk blks
+
+  let in_set vars set = List.for_all vars ~f:(Set.mem set)
+
+  let free_vars free expect blk _ =
+    let free = free blk in
+    assert_bool (Term.name blk) @@ in_set expect free
+
+  let blk_free_vars = free_vars Blk.free_vars
+  let sub_free_vars = free_vars Sub.free_vars
+
+  let check_free_vars = "free_vars" >::: [
+      "entry" >:: blk_free_vars [] entry;
+      "b1"    >:: blk_free_vars [] b1;
+      "b2"    >:: blk_free_vars [i;j] b2;
+      "b3"    >:: blk_free_vars [i] b3;
+      "b4"    >:: blk_free_vars [k] b4;
+      "b5"    >:: blk_free_vars [j] b5;
+      "b6"    >:: blk_free_vars [i] b6;
+      "exit"  >:: blk_free_vars [] exit;
+      "sub"   >:: sub_free_vars [] sub;
+    ]
+
+
+  let phi_node sub var var_ver blk blk_ver ctxt =
+    Term.enum blk_t sub |> Seq.find_map ~f:(fun blk ->
+        Term.enum phi_t blk |> Seq.find ~f:(fun phi ->
+            let v = Phi.lhs phi in
+            Var.same v var && Var.version v = var_ver)) |> function
+    | None -> assert_string "no such phi-node"
+    | Some phi -> Phi.values phi |> Seq.find ~f:(fun (tid,exp) ->
+        Term.tid blk = tid && match exp with
+        | Bil.Var v -> Var.version v = blk_ver
+        | _ -> assert false) |> function
+                  | None -> assert_string "wrong phi-node"
+                  | Some _ -> ()
+
+  let phi_node = phi_node (Sub.ssa sub)
+
+  let check_phi_nodes = "phi nodes" >::: [
+      "i.2=i.1" >:: phi_node i 2 b1 1;
+      "i.2=i.3" >:: phi_node i 2 b3 3;
+      "j.2=j.1" >:: phi_node j 2 b1 1;
+      "j.2=j.3" >:: phi_node j 2 b3 3;
+      "k.2=k.1" >:: phi_node k 2 b1 1;
+      "k.2=k.3" >:: phi_node k 2 b3 3;
+      "i.5=i.3" >:: phi_node i 5 b5 3;
+      "i.5=i.4" >:: phi_node i 5 b6 4;
+    ]
+
+  let tests = [
+    check_free_vars;
+    check_phi_nodes;
+  ]
+end
+
 
 open Term
 let suite = "Sema.IR" >::: [
@@ -213,4 +337,4 @@ let suite = "Sema.IR" >::: [
     "lookup(r)" >:: lookup def_t def_r;
     "lookup(goto_xyz)" >:: lookup jmp_t goto_xyz;
     "lookup(call_xyz)" >:: lookup jmp_t call_sub1;
-  ]
+  ] @ Example.tests

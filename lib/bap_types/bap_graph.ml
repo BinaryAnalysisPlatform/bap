@@ -98,10 +98,10 @@ module Tree = struct
   let pp pp_elt ppf tree =
     fprintf ppf "@.@[<v2>digraph {";
     begin match tree.all with
-      | [p] -> fprintf ppf "@;%a" pp_elt p
+      | [p] -> fprintf ppf "@;\"%a\"" pp_elt p
       | _ -> List.iter tree.all ~f:(fun p ->
           Seq.iter (children tree p) ~f:(fun c ->
-              fprintf ppf "@;%a -> %a" pp_elt p pp_elt c));
+              fprintf ppf "@;\"%a\" -> \"%a\"" pp_elt p pp_elt c));
     end;
     pp_close_box ppf ();
     fprintf ppf "@]@.}"

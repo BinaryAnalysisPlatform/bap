@@ -16,25 +16,3 @@ let register abi = registered := abi :: !registered
 
 let create =
   create_abi_getter registered
-
-class gnueabi_basic sub = object(self)
-  inherit stub
-  method! id = ["gnueabi"; "linux"; "unknown"]
-  method! specific = false
-  method! choose other =
-    if List.mem other#id "gnueabi" then
-      Int.compare (List.length self#id) (List.length other#id)
-    else 0
-
-  method! return_value = None
-  method! args = []
-end
-
-
-class gnueabi sub =
-  object(self)
-    inherit gnueabi_basic sub
-    method! args = []
-  end
-
-let () = register (new gnueabi)

@@ -32,6 +32,8 @@ module Binop : sig
   val le : binop
   val slt : binop
   val sle : binop
+  val is_commutative : binop -> bool
+  val is_associative : binop -> bool
 end
 
 module Unop : sig

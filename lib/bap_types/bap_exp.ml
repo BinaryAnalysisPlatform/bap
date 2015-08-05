@@ -44,6 +44,14 @@ module Binop = struct
   let le = LE
   let slt = SLT
   let sle = SLE
+
+  let is_commutative = function
+    | PLUS | TIMES | AND | XOR | OR | EQ | NEQ -> true
+    | _ -> false
+
+  let is_associative = function
+    | PLUS | TIMES | AND | OR | XOR -> true
+    | _ -> false
 end
 
 module Unop = struct

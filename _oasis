@@ -305,7 +305,10 @@ Library sema
                  bap.types
   InternalModules:
                  Bap_sema,
-                 Bap_sema_lift
+                 Bap_sema_abi,
+                 Bap_sema_lift,
+                 Bap_sema_ssa,
+                 Bap_sema_free_vars
 
 
 Library types_test

@@ -45,6 +45,11 @@ val jmp_t : (blk, jmp) cls
 module Tid : sig
   type t = tid
   val create : unit -> t
+  val set_name : t -> string -> unit
+  val name : t -> string
+  val from_string : string -> tid Or_error.t
+  val from_string_exn : string -> tid
+  val (!) : string -> tid
   include Regular with type t := t
 end
 
@@ -129,6 +134,9 @@ module Ir_blk : sig
   val map_exp :
     ?skip:[`phi | `def | `jmp] list ->
     t -> f:(exp -> exp) -> t
+  val substitute :
+    ?skip:[`phi | `def | `jmp] list ->
+    t -> exp -> exp -> t
   val map_lhs :
     ?skip:[`phi | `def ] list ->
     t -> f:(var -> var) -> t
@@ -138,8 +146,9 @@ module Ir_blk : sig
     ] option
   val defines_var : t -> var -> bool
   val uses_var : t -> var -> bool
+  val free_vars : t -> Bap_var.Set.t
+  val occurs : t -> after:tid -> tid -> bool
 
-  val dominated : t -> by:tid -> tid -> bool
 
   module Builder : sig
     type t
@@ -168,6 +177,8 @@ module Ir_def : sig
   val with_lhs : t -> var -> t
   val with_rhs : t -> exp -> t
   val map_exp : t -> f:(exp -> exp) -> t
+  val substitute : t -> exp -> exp -> t
+  val free_vars : t -> Bap_var.Set.t
   include Regular with type t := t
 end
 
@@ -182,7 +193,10 @@ module Ir_jmp : sig
   val cond : t -> exp
   val with_cond : t -> exp -> t
   val with_kind : t -> jmp_kind -> t
+  val exps : t -> exp Sequence.t
   val map_exp : t -> f:(exp -> exp) -> t
+  val substitute : t -> exp -> exp -> t
+  val free_vars : t -> Bap_var.Set.t
   include Regular with type t := t
 end
 
@@ -198,6 +212,8 @@ module Ir_phi : sig
   val remove : t -> tid -> t
   val select_or_unknown : t -> tid -> exp
   val map_exp : t -> f:(exp -> exp) -> t
+  val substitute : t -> exp -> exp -> t
+  val free_vars : t -> Bap_var.Set.t
   include Regular with type t := t
 end
 

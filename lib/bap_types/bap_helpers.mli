@@ -10,6 +10,8 @@ val iter : unit #visitor -> bil -> unit
 val fold : 'a #visitor -> init:'a -> bil -> 'a
 val map : #mapper -> bil -> bil
 
+class rewriter : exp -> exp -> mapper
+
 (** [is_referenced x p] is [true] if [x] is referenced in some expression or
     statement in program [p] *)
 val is_referenced : var -> bil -> bool
@@ -34,6 +36,9 @@ val substitute : exp -> exp -> bil -> bil
     by expression [y] *)
 val substitute_var : var -> exp -> bil -> bil
 
+
+val free_vars : bil -> Bap_var.Set.t
+
 (** [fold_consts] evaluate constant expressions.
     Note: this function performs only one step, and has no loops,
     it is supposed to be run using a fixpoint combinator.
@@ -55,10 +60,12 @@ module Exp : sig
   val find : 'a #finder -> exp -> 'a option
   val map  : #mapper -> exp -> exp
   val exists : unit #finder -> exp -> bool
+  val substitute : exp -> exp -> exp -> exp
   val is_referenced : var -> exp -> bool
   val normalize_negatives : exp -> exp
   val fold_consts : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
+  val free_vars : exp -> Bap_var.Set.t
 end
 
 module Stmt : sig
@@ -66,8 +73,10 @@ module Stmt : sig
   val iter : unit #visitor -> stmt -> unit
   val find : 'a #finder -> stmt -> 'a option
   val exists : unit #finder -> stmt -> bool
+  val substitute : exp -> exp -> stmt -> bil
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
+  val free_vars : stmt -> Bap_var.Set.t
 end
 
 (** Bil provides two prefix tries trees.
