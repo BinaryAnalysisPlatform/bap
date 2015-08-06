@@ -1,10 +1,12 @@
 open Core_kernel.Std
-open Bap_graph
-open Bap_ir
-open Bap_common
-open Bap_bil
 open Option.Monad_infix
 
+open Bap_bil
+open Core_kernel.Std
+open Bap_common
+open Bap_graph
+open Bap_graph_regular_intf
+open Bap_ir
 module Jmp = Ir_jmp
 module Blk = Ir_blk
 module Sub = Ir_sub
@@ -12,6 +14,8 @@ module Seq = struct
   include Sequence
   include Bap_seq
 end
+
+module RGraph = Bap_graph_regular
 type 'a seq = 'a Seq.t
 
 module Pred = struct
@@ -430,50 +434,9 @@ include Regular.Make(struct
         ~nodes_of_edge ~nodes:(nodes g) ~edges:(edges g) ppf
   end)
 
-let pp_blk ppf blk = Format.fprintf ppf "%a" Tid.pp (Term.tid blk)
 
-module Tree = struct
-  type t = blk term tree
-  include Printable(struct
-      type nonrec t = t
-      let pp = Tree.pp pp_blk
-      let module_name = Some "Bap.Std.Graphlib.Ir.Tree"
-    end)
-end
-
-module Frontier = struct
-  type t = blk term frontier
-  include Printable(struct
-      type nonrec t = t
-      let pp = Frontier.pp pp_blk
-      let module_name = Some "Bap.Std.Graphlib.Ir.Frontier"
-    end)
-end
-
-
-module Group = struct
-  type t = blk term group
-  include Printable(struct
-      type nonrec t = t
-      let pp = Group.pp pp_blk
-      let module_name = Some "Bap.Std.Graphlib.Ir.Group"
-    end)
-end
-
-module Partition = struct
-  type t = blk term partition
-  include Printable(struct
-      type nonrec t = t
-      let pp = Partition.pp pp_blk
-      let module_name = Some "Bap.Std.Graphlib.Ir.Partition"
-    end)
-end
-
-module Path = struct
-  type t = node path
-  include Printable(struct
-      type nonrec t = t
-      let pp = Path.pp pp_blk
-      let module_name = Some "Bap.Std.Graphlib.Ir.Path"
-    end)
-end
+include RGraph.Aux(struct
+    type t = node
+    let pp ppf blk = Format.fprintf ppf "%a" Tid.pp (Term.tid blk)
+    let module_name = "Bap.Std.Graphlib.Ir"
+  end)

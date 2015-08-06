@@ -5,6 +5,16 @@ open Bap_bil
 
 
 
+module type Aux = sig
+  type node
+  module Tree : Printable with type t = node tree
+  module Frontier : Printable with type t = node frontier
+  module Path : Printable with type t = node path
+  module Partition : Printable with type t = node partition
+  module Group : Printable with type t = node group
+end
+
+
 module type S = sig
   type node
   module Bool : Graph with type node = node
@@ -53,10 +63,5 @@ module type S = sig
   module Type : Graph with type node = node
                        and type Node.label = node
                        and type Edge.label = typ
-
-  module Tree : Printable with type t = node tree
-  module Frontier : Printable with type t = node frontier
-  module Path : Printable with type t = node path
-  module Partition : Printable with type t = node partition
-  module Group : Printable with type t = node group
+  include Aux with type node := node
 end

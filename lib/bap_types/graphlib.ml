@@ -13,11 +13,13 @@ module Std = struct
   module Partition = Partition
   module Equiv = Equiv
   module Path = Path
+  module type Aux = Bap_graph_regular_intf.Aux
 
   module Graphlib = struct
     include Bap_graph
     module type Graphs = Bap_graph_regular_intf.S
     include Bap_graph_regular
     module Ir = Bap_ir_graph
+    module Callgraph = Bap_ir_callgraph
   end
 end

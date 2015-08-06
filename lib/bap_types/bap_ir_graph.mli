@@ -4,6 +4,7 @@ open Bap_bil
 open Bap_ir
 open Bap_graph_intf
 open Bap_graph_regular
+open Bap_graph_regular_intf
 open Bap_graph
 
 
@@ -46,8 +47,4 @@ val to_sub : t -> sub term
 
 val create_tid_graph : sub term -> Tid.Tid.t
 
-module Tree : Printable with type t = node tree
-module Frontier : Printable with type t = node frontier
-module Path : Printable with type t = node path
-module Partition : Printable with type t = node partition
-module Group : Printable with type t = node group
+include Aux with type node := node
