@@ -1,3 +1,53 @@
+0.9.9
+=====
+
+1. Graphlib library
+
+   `Graphlib` is a generic library that extends a well known
+   OCamlGraph library. `Graphlib` uses its own, more reach and modern,
+   `Graph` interface that is isomorphic to OCamlGraph's `Sigs.P`
+   signature for persistant graphs. This interface is developed
+   according to the Janestreet's style guidlines and depends on
+   Core_kernel library.  Other than the new interface, `Graphlib`
+   provides several graph implementations, and generic algorithms.  To
+   make our algorithms polymorphic over chosen graph representation we
+   use first-class modules, instead of functors, that makes library
+   syntactically more light weight.
+
+2. Refined IR.
+
+   phi and arg terms were refined. a phi term now is a discriminated
+   set of expressions, and arguments are made more like a defintions.
+
+3. SSA form
+
+   A transformation to a semipruned SSA form was added to a library
+
+4. Changed Var interface.
+
+   Variables can now be versioned, that plays well with SSA form. A
+   version is used to represent the same variable but at different
+   point of time.
+
+5. Extended and fixed Trie data structure
+
+   Several bug-fixes to a Trie data structure were made. Added
+   `walk` function, that allows to perform generic queries over a trie.
+   Also added prefix and suffix variants of String tries, as well as
+   provided a functor to create tries with an array keys.
+
+6. Redesigned `abi` interface.
+
+   Now `abi` works on an IR level.
+
+7. Added argument reconstruction algorithms.
+
+   Two argument reconstructions algorithm, based on a new `abi`
+   interface, were added - for ARM gnueabi ABI and System V amd64 ABI.
+   Currently only parameters passed via registers are reconstructed.
+
+8. Added `free_vars` algorithm to BIL and BIR terms.
+
 0.9.8
 =====
 

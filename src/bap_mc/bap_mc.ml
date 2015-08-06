@@ -11,7 +11,6 @@ exception Convert_imm of string
 exception Create_mem of Error.t
 exception No_input
 exception Unknown_arch
-exception Can't_lift of Error.t
 exception Trailing_data of int
 
 module Program(Conf : Options.Provider) = struct
@@ -84,8 +83,9 @@ module Program(Conf : Options.Provider) = struct
 
   let bil_of_insn lift mem insn =
     match lift mem insn with
-    | Error e -> raise (Can't_lift e)
     | Ok bil -> bil
+    | Error e -> [Bil.special @@ sprintf "Lifter: %s" @@
+                  Error.to_string_hum e]
 
   let pp_sexp fmt x =
     Sexp.pp fmt (sexp_of_bil x)
@@ -300,23 +300,22 @@ let _main : unit =
   Plugins.load ();
   try match Cmdline.parse () >>= start with
     | Ok _ -> exit 0
-    | Error err -> exitf 12 "%s\n" Error.(to_string_hum err)
+    | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
   with
   | Bad_user_input ->
     exitf 65 "Could not parse: malformed input"
-  | No_input -> exitf 1 "Could not read from stdin"
+  | No_input -> exitf 66 "Could not read from stdin"
   | Unknown_arch ->
     exitf 64 "Unknown architecture. Supported architectures:\n%s" @@
     String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string
   | Trailing_data left ->
-    exitf 1 "%d bytes were left non disassembled" left
+    exitf 65 "%d bytes were left non disassembled" left
   | Create_mem err ->
     exitf 65 "Unable to create a memory: %a" Error.pp err
-  | Can't_lift err -> exitf 63 "Lifting failed: %a" Error.pp err
   | Bad_insn (mem,boff,stop)->
     let dump = Memory.hexdump mem in
     let line = boff / 16 in
     let pos off = line * 77 + (off mod 16) * 3 + 9 in
     dump.[pos boff] <- '(';
     dump.[pos stop] <- ')';
-    exitf 1 "Invalid instruction at offset %d:\n%s" boff dump
+    exitf 66 "Invalid instruction at offset %d:\n%s" boff dump

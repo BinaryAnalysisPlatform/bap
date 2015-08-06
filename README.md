@@ -37,7 +37,7 @@ write your plugin in OCaml using your
 
 ```sh
 $ cat hello_world.ml
-open Bap.Std 
+open Bap.Std
 let main project = print_endline "Hello, World"
 let () = Project.register_pass' "hello-world" main
 ```
@@ -90,24 +90,27 @@ our `baptop` script to run `utop` with `bap` extensions:
 $ baptop
 ```
 
-Now, you can play with BAP. For example:
+Now, you can play with BAP. The following example, will create a
+project from
+[coreutils_O2_true](https://github.com/BinaryAnalysisPlatform/arm-binaries/raw/master/coreutils/coreutils_O2_true)
+file, build callgraph of a program, control flow graph and dominance
+tree of a `main` function.
 
 ```ocaml
+utop # open Core_kernel.Std;;
 utop # open Bap.Std;;
-utop # let d = disassemble_file "/bin/ls";;
-val d : t = <abstr>
-utop # let insn = Disasm.insn_at_addr d (Addr.of_int32 0xa9dbl);;
-val insn : (mem * insn) option = Some (0000a9d8: 01 00 00 0a , beq #0x4; Bcc(0x4,0x0,CPSR))
-let blk = Disasm.blocks d |> Table.elements |> Seq.hd_exn;;
-val blk : block = [991c, 9923]
-utop # Block.leader blk;;
-- : insn = push {r3, lr}; STMDB_UPD(SP,SP,0xe,Nil,R3,LR)
-utop # Block.terminator blk |> Insn.bil;;
-- : Bap_types.Std.bil = [LR = 0x9924:32; jmp 0x9ED4:32]
+utop # let proj = Project.from_file "coreutils_O2_true" |> ok_exn;;
+utop # let prog = Project.program proj;;
+utop # let cg = Program.to_graph prog;;
+utop # let main = Term.find_exn sub_t prog Tid.(!"@main");;
+utop # let cfg = Sub.to_cfg main;;
+utop # module G = Graphlib.Ir;;
+utop # let entry = Option.value_exn (Term.first blk_t main);;
+utop # let dom_tree = Graphlib.dominators (module G) cfg (G.Node.create entry);;
 ```
 
-If you do not want to use `baptop` or `utop`, then you can execute the following
-in any OCaml top-level:
+Note: if you do not want to use `baptop` or `utop`, then you can
+execute the following in any OCaml top-level:
 
 ```ocaml
 # #use "topfind";;
@@ -149,44 +152,44 @@ For more information, read builtin documentation, for example with
     >>> bap?
 ```
 
+Currently, only disassembler and lifter are exposed via python interface.
+
 ## Using from shell
 
 Bap is shipped with `bap` utility that can disassemble files, and
 printout dumps in different formats, including plain text, json, dot,
 html. The example of `bap` output is:
 
-```asm
-  begin(to_uchar)
-      0000a004: 04 b0 2d e5    str r11, [sp, #-4]! ; STR_PRE_IMM(SP,R11,SP,0xfffffffc,0xe,Nil)
-      0000a008: 00 b0 8d e2    add r11, sp, #0x0   ; ADDri(R11,SP,0x0,0xe,Nil,Nil)
-      0000a00c: 0c d0 4d e2    sub sp, sp, #0xc    ; SUBri(SP,SP,0xc,0xe,Nil,Nil)
-      0000a010: 00 30 a0 e1    mov r3, r0          ; MOVr(R3,R0,0xe,Nil,Nil)
-      0000a014: 05 30 4b e5    strb r3, [r11, #-5] ; STRBi12(R3,R11,0xfffffffb,0xe,Nil)
-      0000a018: 05 30 5b e5    ldrb r3, [r11, #-5] ; LDRBi12(R3,R11,0xfffffffb,0xe,Nil)
-      0000a01c: 03 00 a0 e1    mov r0, r3          ; MOVr(R0,R3,0xe,Nil,Nil)
-      0000a020: 00 d0 8b e2    add sp, r11, #0x0   ; ADDri(SP,R11,0x0,0xe,Nil,Nil)
-      0000a024: 00 08 bd e8    ldm sp!, {r11}      ; LDMIA_UPD(SP,SP,0xe,Nil,R11)
-      0000a028: 1e ff 2f e1    bx lr               ; BX_RET(0xe,Nil)
-  end(to_uchar)
 ```
+00000088: sub strcpy(arg_0, arg_1)
+00000151: arg_0 :: u32 = R0
+00000152: arg_1 :: u32 = R1
+0000005f:
+00000063: ZF.1 := R0 = 0x0:32
+00000064: when ZF.1 return LR
+00000065: goto %00000066
 
-```ocaml
-  begin(to_uchar) {
-    mem := mem with [SP - 0x4:32, el]:u32 <- R11
-    SP := SP - 0x4:32
-    R11 := SP
-    SP := SP - 0xC:32
-    R3 := R0
-    mem := mem with [R11 - 0x5:32, el]:u8 <- low:8[R3]
-    temp_2303 := mem[R11 - 0x5:32, el]:u8
-    R3 := pad:32[temp_2303]
-    R0 := R3
-    SP := R11
-    orig_base_2309 := SP
-    R11 := mem[orig_base_2309, el]:u32
-    SP := SP + 0x4:32
-    jmp LR
-  }
+00000066:
+00000067: t_614.1 := mem[R1, el]:u8
+00000068: R3.1 := pad:32[t_614.1]
+0000006c: ZF.2 := R3.1 = 0x0:32
+0000006d: when ZF.2 goto %0000006f
+0000006e: goto %00000076
+
+0000006f:
+00000070: R12.1 := R0
+00000071: goto %00000072
+
+00000072:
+0000012f: R1.1 := phi([R1, %0000006f], [R1.3, %00000086])
+00000131: R12.2 := phi([R12.1, %0000006f], [R12.4, %00000086])
+00000133: R2.1 := phi([R2, %0000006f], [R2.4, %00000086])
+00000135: R3.2 := phi([R3.1, %0000006f], [R3.5, %00000086])
+00000137: mem.1 := phi([mem, %0000006f], [mem.4, %00000086])
+00000073: R3.3 := 0x0:32
+00000074: mem.2 := mem.1 with [R12.2, el]:u8 <- low:8[R3.3]
+00000075: return LR
+...
 ```
 
 Also we're shipping a `bap-mc` executable that can disassemble
