@@ -1,13 +1,33 @@
-sudo: true
-language: cpp
-script: bash -ex .travis-ci.sh
-os:
-  - linux
-  - osx
-compiler:
-  - clang
+language: c
+install: wget https://raw.githubusercontent.com/ocaml/ocaml-travisci-skeleton/master/.travis-opam.sh
+script: bash -ex .travis-opam.sh
+sudo: false
+addons:
+  apt:
+    sources:
+    - avsm
+    packages:
+    - camlp4
+    - camlp4-extra
+    - clang
+    - curl
+    - libcurl3
+    - libcurl4-gnutls-dev
+    - libgmp-dev
+    - libssl-dev
+    - libxen-dev
+    - libzip-dev
+    - llvm
+    - llvm-3.4-dev
+    - m4
+    - ocaml
+    - ocaml-base
+    - ocaml-base-nox
+    - ocaml-compiler-libs
+    - ocaml-interp
+    - ocaml-native-compilers
+    - ocaml-nox
+    - time
+
 env:
-  - OCAML_VERSION=4.01.0 OPAM_VERSION=1.1.0
-  - OCAML_VERSION=4.01.0 OPAM_VERSION=1.2.0
-  - OCAML_VERSION=4.02.1 OPAM_VERSION=1.1.0
-  - OCAML_VERSION=4.02.1 OPAM_VERSION=1.2.0
+  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true OCAML_VERSION=4.01
