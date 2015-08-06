@@ -9,7 +9,7 @@ let deps = [
   "ocamlgraph";
 ]
 
-let command = "opam config exec --switch=4.02.1 ocamlfind ocamldoc"
+let command = "opam config exec --switch=4.02.1 ocamlfind -- ocamldoc"
 
 exception No_out_dir
 
@@ -89,7 +89,7 @@ let run cmd =
 
 let compile ~options name =
   let b = Buffer.create 64 in
-  Buffer.add_string b (command ^ options ^ " " ^ name);
+  Buffer.add_string b (command ^ " " ^ options ^ " " ^ name);
   List.iter (fun dep ->
       Buffer.add_string b " -package ";
       Buffer.add_string b dep) deps;

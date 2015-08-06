@@ -798,9 +798,7 @@ module Ir_blk = struct
     let (++) = Set.union and (--) = Set.diff in
     let init = Bap_var.Set.empty,Bap_var.Set.empty in
     fst @@ Seq.fold (elts blk) ~init ~f:(fun (vars,kill) -> function
-        | `Phi phi ->
-          Ir_phi.free_vars phi ++ vars,
-          Set.add kill (Ir_phi.lhs phi)
+        | `Phi phi -> vars, Set.add kill (Ir_phi.lhs phi)
         | `Def def ->
           Ir_def.free_vars def -- kill ++ vars,
           Set.add kill (Ir_def.lhs def)

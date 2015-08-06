@@ -6126,9 +6126,10 @@ module Std : sig
     (** updates subroutine name *)
     val with_name : t -> string -> t
 
-    (** [ssa sub] returns [sub] in SSA form. The underlying algorithm
-        produces a semi-pruned SSA form. To represent different
-        versions of the same variable we use {{!Var}variable
+    (** [ssa sub] returns [sub] in SSA form. If program is already in
+        SSA, then do nothing (see also {!is_ssa}). The underlying
+        algorithm produces a semi-pruned SSA form. To represent
+        different versions of the same variable we use {{!Var}variable
         versions}. Any definition of a variable increases its version
         number. So, the zero version is reserved for variables that
         weren't defined before the first use.  *)
