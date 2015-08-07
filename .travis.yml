@@ -22,10 +22,9 @@ addons:
     - ocaml-base
     - ocaml-base-nox
     - ocaml-compiler-libs
-    - ocaml-interp
     - ocaml-native-compilers
     - ocaml-nox
     - time
 
 env:
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest POST_INSTALL_HOOK="bash -eux test.sh"
+  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest POST_INSTALL_HOOK="bash -ex test.sh"
