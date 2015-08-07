@@ -27,4 +27,4 @@ addons:
     - time
 
 env:
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest POST_INSTALL_HOOK="bash -ex test.sh"
+  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest
