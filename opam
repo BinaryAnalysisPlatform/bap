@@ -20,6 +20,7 @@ build: [
 install: [
   [make "install"]
   ["bap-byteweight" "update"]
+  [make "test"]
 ]
 
 remove: [
@@ -35,10 +36,6 @@ remove: [
   ["rm" "-f" "%{bin}%/bap-server"]
   ["rm" "-f" "%{bin}%/bapbuild"]
   ["rm" "-f" "%{bin}%/baptop"]
-]
-
-build-test: [
-  [make "test"]
 ]
 
 depends: [
