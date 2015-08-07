@@ -39,7 +39,6 @@ remove: [
 
 build-test: [
   [make "test"]
-  ["./test.sh"]
 ]
 
 depends: [

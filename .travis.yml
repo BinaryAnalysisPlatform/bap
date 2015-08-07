@@ -11,11 +11,9 @@ addons:
     - camlp4-extra
     - clang
     - curl
-    - libcurl3
     - libcurl4-gnutls-dev
     - libgmp-dev
     - libssl-dev
-    - libxen-dev
     - libzip-dev
     - llvm
     - llvm-3.4-dev
@@ -30,4 +28,4 @@ addons:
     - time
 
 env:
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true OCAML_VERSION=4.01
+  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest POST_INSTALL_HOOK="bash -eux test.sh"
