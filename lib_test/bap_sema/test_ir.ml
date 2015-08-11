@@ -259,7 +259,7 @@ module Example = struct
       "j.2=j.3" >:: phi_node j 2 b3 3;
       "k.2=k.1" >:: phi_node k 2 b1 1;
       "k.2=k.3" >:: phi_node k 2 b3 3;
-      "i.5=i.3" >:: phi_node i 5 b5 3;
+      "i.5=i.2" >:: phi_node i 5 b5 2;
       "i.5=i.4" >:: phi_node i 5 b6 4;
     ]
 

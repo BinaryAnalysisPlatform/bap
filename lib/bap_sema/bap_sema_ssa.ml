@@ -130,19 +130,19 @@ let rename t =
             | (id,Bil.Var v) when Tid.(tid = id) ->
               Ir_phi.update phi tid (Bil.var (top v))
             | _ -> phi)) in
-  let pop_defs blk' =
-    let pop v = Hashtbl.change vars v (function
+  let pop_defs blk =
+    let pop v = Hashtbl.change vars (Var.base v) (function
         | Some (x::xs) -> Some xs
         | xs -> xs) in
-    Term.enum phi_t blk' |>
+    Term.enum phi_t blk |>
     Seq.iter ~f:(fun phi -> pop (Ir_phi.lhs phi));
-    Term.enum def_t blk' |>
+    Term.enum def_t blk |>
     Seq.iter ~f:(fun def -> pop (Ir_def.lhs def)) in
 
   let rec rename_block sub blk' =
     let tid = Term.tid blk' in
-    let blk = blk sub tid |>
-              rename_phis |> rename_defs |> rename_jmps in
+    let blk' = blk sub tid in
+    let blk = blk' |> rename_phis |> rename_defs |> rename_jmps in
     let sub = Term.update blk_t sub blk in
     let sub =
       succs t.cfg sub tid |> Seq.fold ~init:sub ~f:(fun sub dst ->
@@ -151,7 +151,7 @@ let rename t =
                    Seq.filter ~f:(Tree.is_child_of ~parent:tid t.dom) |>
                    Seq.map ~f:(blk_of_tid sub) in
     let sub = Seq.fold children ~init:sub ~f:rename_block in
-    pop_defs blk;
+    pop_defs blk';
     sub in
   rename_block t.sub (blk_of_tid t.sub t.entry)
 
