@@ -2,7 +2,7 @@ FROM avsm/docker-opam:ubuntu-trusty-4.02.1
 MAINTAINER maurer@matthewmaurer.org
 RUN sudo apt-get update
 ADD . /home/opam/bap
-RUN opam pin add bap ~/bap -n -k git
+RUN opam pin add bap ~/bap -n
 RUN opam install depext
 RUN opam config exec opam depext bap
 RUN opam install bap utop
