@@ -68,7 +68,7 @@ let of_basic ?bil insn =
     code = Insn.code insn;
     name = Insn.name insn;
     asm  = normalize_asm (Insn.asm insn);
-    bil  = Option.value bil ~default:[];
+    bil  = Option.value bil ~default:[Bil.special "Unknown Semantics"];
     ops  = Insn.ops insn;
     is_jump;
     is_conditional_jump;
