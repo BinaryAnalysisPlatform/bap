@@ -350,10 +350,11 @@ let sexp_of_maybe_ins (_,insn) =
 
 
 type (+'a,+'k,'s,'r) state = {
+  backlog : int;
   dis : dis sexp_opaque;
   current : step;
   history : step list;
-  insns : ('a,'k) maybe_insn Lazy.t array sexp_opaque;
+  insns : ('a,'k) maybe_insn array sexp_opaque;
   return : ('s -> 'r) sexp_opaque;
   stopped : (('a,'k,'s,'r) state -> 's -> 'r) option sexp_opaque;
   invalid : (('a,'k,'s,'r) state -> mem -> 's -> 'r) option sexp_opaque;
@@ -361,7 +362,9 @@ type (+'a,+'k,'s,'r) state = {
       option sexp_opaque;
 } with sexp_of
 
-let create_state ?(stop_on=[]) ?stopped ?invalid ?hit dis mem ~return  = {
+let create_state ?(backlog=8) ?(stop_on=[]) ?stopped ?invalid ?hit dis
+    mem ~return  = {
+  backlog;
   dis; return; hit;
   current = {mem; off=0; preds = Preds.of_list stop_on};
   stopped;
@@ -388,7 +391,7 @@ let set_memory dis p : unit =
 
 let update_state s current = {
   s with
-  history = s.current :: s.history;
+  history = List.take (s.current :: s.history) s.backlog;
   current;
 }
 
@@ -411,12 +414,12 @@ let with_preds s (ps : pred list) =
   {s with current = {s.current with preds = ps}}
 
 let insns s =
-  List.init Array.(length s.insns) ~f:(fun i -> Lazy.force s.insns.(i))
+  List.init Array.(length s.insns) ~f:(fun i -> s.insns.(i))
 
 let last s n =
   let m = Array.length s.insns in
   let n = min n m in
-  List.init n ~f:(fun i -> Lazy.force s.insns.(m - i - 1))
+  List.init n ~f:(fun i -> s.insns.(m - i - 1))
 
 let preds s = Preds.to_list s.current.preds
 
@@ -434,13 +437,13 @@ let step s data =
     let stop = C.insn_size s.dis.id ~insn = 0 in
     let n = if stop then max 0 (n - 1) else n in
     let {asm; kinds} = s.dis in
-    let insns = Array.init n ~f:(fun insn -> lazy begin
-        let is_valid =
-          not(C.insn_satisfies s.dis.id ~insn C.Is_invalid) in
-        insn_mem s ~insn,
-        Option.some_if is_valid
-          (Insn.create ~asm ~kinds s.dis ~insn)
-      end) in
+    let insns = Array.init n ~f:(fun insn -> begin
+          let is_valid =
+            not(C.insn_satisfies s.dis.id ~insn C.Is_invalid) in
+          insn_mem s ~insn,
+          Option.some_if is_valid
+            (Insn.create ~asm ~kinds s.dis ~insn)
+        end) in
     let s = {s with insns} in
     if stop then match s.stopped with
       | Some f -> f s data
@@ -487,9 +490,9 @@ let create ?(debug_level=0) ?(cpu="") ~backend triple =
 
 type ('a,'k) t = dis
 
-let run ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
+let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =
-    create_state ?invalid ?stopped ?hit ~return
+    create_state ?backlog ?invalid ?stopped ?hit ~return
       dis mem in
   let state = with_preds state stop_on in
   jump state (memory state) init
@@ -530,8 +533,8 @@ module Trie = struct
     let length = fst
     let nth_token (_, State s) i =
       match s.insns.(i) with
-      | lazy (mem, None) -> 0, [| |]
-      | lazy (mem, Some insn) -> Insn.(insn.code, insn.opers)
+      | (mem, None) -> 0, [| |]
+      | (mem, Some insn) -> Insn.(insn.code, insn.opers)
 
     let token_hash = Hashtbl.hash
   end

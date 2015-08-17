@@ -129,6 +129,7 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     assembly string and kinds even if the corresponding modes are
     disabled.  *)
 val run :
+  ?backlog:int ->
   ?stop_on:pred list ->
   ?invalid:(('a,'k,'s,'r) state -> mem -> 's -> 'r) ->
   ?stopped:(('a,'k,'s,'r) state -> 's -> 'r) ->

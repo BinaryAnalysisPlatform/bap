@@ -5131,6 +5131,10 @@ module Std : sig
           process of disassembly can be driven using [stop], [step], [back]
           and [jump] functions, described later.
 
+          @param backlog defines a size of history of states, that can
+          be used for backtracking. Defaults to some positive natural
+          number.
+
           @param stop_on defines a set of predicates that will be checked
           on each step to decide whether it should stop here and call a
           user-provided [hit] function, or it should continue. The descision
@@ -5172,6 +5176,7 @@ module Std : sig
           assembly string and kinds even if the corresponding modes are
           disabled.  *)
       val run :
+        ?backlog:int ->
         ?stop_on:pred list ->
         ?invalid:(('a,'k,'s,'r) state -> mem -> 's -> 'r) ->
         ?stopped:(('a,'k,'s,'r) state -> 's -> 'r) ->
