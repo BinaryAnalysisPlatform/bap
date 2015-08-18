@@ -66,7 +66,7 @@ module Handlers(Ctxt : sig
     let kinds = Kind.all in
     let ds =
       Response.disassembler
-        ~name:"llvm" ~arch:`arm ~kinds
+        ~name:"llvm" ~arch:`armv7 ~kinds
         ~has_name:true ~has_bil:true ~has_ops:true ~has_target:true ::
       List.map Arch.all ~f:(fun arch ->
           Response.disassembler ~name:"llvm" ~arch

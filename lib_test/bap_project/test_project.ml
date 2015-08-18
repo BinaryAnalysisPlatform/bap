@@ -13,7 +13,7 @@ type case = {
 }
 
 let arm = {
-  arch = `arm;
+  arch = `armv7;
   addr = 16;
   code = "\x00\x20\xA0\xE3";
   bil  = "R2 := 0x0:32";

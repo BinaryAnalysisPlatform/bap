@@ -120,7 +120,7 @@ let img_of_elf data elf : Img.t Or_error.t =
     | EM_386, _ -> Ok `x86
     | EM_X86_64, _ -> Ok `x86_64
     | EM_ARM, LittleEndian -> Ok `armv7
-    | EM_ARM, BigEndian -> Ok `armeb
+    | EM_ARM, BigEndian -> Ok `armv7eb
     | EM_AARCH64, LittleEndian -> Ok `aarch64
     | EM_AARCH64, BigEndian -> Ok `aarch64_be
     | EM_SPARC,_ -> Ok `sparc
