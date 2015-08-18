@@ -42,6 +42,7 @@ let find_p4_with s =
     if has_type || has_module || not is_word
     then None else Some i
 
+open Printf
 
 (* right now we will just kill `with', but later we can transform them
    to "@with ..." comment, that can be later processed to output
@@ -53,7 +54,7 @@ let preprocess_with oc s = match find_p4_with s with
     | Some j,_ when j > i ->
       output oc s 0 i;
       output oc s j (String.length s - j)
-    | _, Some j -> if j < i then output oc s 0 i
+    | _, Some k when k < i -> output oc s 0 i
     | _ -> output_string oc s
 
 
