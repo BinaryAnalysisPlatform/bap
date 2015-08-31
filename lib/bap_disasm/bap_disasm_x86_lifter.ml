@@ -1006,7 +1006,7 @@ module ToIR = struct
         ]
         @
         let undef r =
-          Bil.Move (r, Bil.Unknown (Var.name r^" is undefined after bsf", t)) in
+          Bil.Move (r, Bil.Unknown (Var.name r ^ " undefined after bsf", Var.typ r)) in
         List.map ~f:undef [cf; oF; sf; af; pf]
       | Hlt -> [] (* x86 Hlt is essentially a NOP *)
       | Rdtsc ->
@@ -1402,7 +1402,7 @@ module ToIR = struct
         :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
         :: fst (assn_dbl t assne)
         @ (let undef r =
-             Bil.Move (r, Bil.Unknown ((Var.name r ^" undefined after div"), t))
+             Bil.Move (r, Bil.Unknown ((Var.name r ^ " undefined after div"), Var.typ r))
            in
            List.map ~f:undef [cf; oF; sf; zf; af; pf])
       | Idiv(t, src) ->
@@ -1423,7 +1423,7 @@ module ToIR = struct
         :: Bil.If (Bil.((Cast (HIGH, !!t, Var tdiv)) = int_exp 0 !!t), [], [Cpu_exceptions.divide_by_zero])
         :: fst (assn_dbl t assne)
         @ (let undef r =
-             Bil.Move (r, Bil.Unknown (Var.name r ^ "undefined after div", t)) in
+             Bil.Move (r, Bil.Unknown (Var.name r ^ " undefined after div", Var.typ r)) in
            List.map ~f:undef [cf; oF; sf; zf; af; pf])
       | Cld ->
         [Bil.Move (df, exp_false)]
