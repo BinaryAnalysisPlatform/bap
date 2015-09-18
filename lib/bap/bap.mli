@@ -2361,6 +2361,8 @@ module Std : sig
     (** a universal value  *)
     type t with bin_io, compare, sexp
 
+    type value = t
+
     (** Tag constructor of type ['a]  *)
     type 'a tag
 
@@ -2432,8 +2434,63 @@ module Std : sig
       val same : 'a t -> 'b t -> bool
       val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
       val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
-
     end
+
+
+    (** Runtime parallel match.  *)
+    module Match : sig
+      (** This module can be used to handle several cases in parallel
+          instead of using a sequence of nested matches or if/then/else
+          chains.
+
+          The combinators in the module are designed to be used as follows:
+
+          {[
+            let lift v = Match.(begin
+                switch v @@
+                case memory_load   (fun x -> `Load x)  @@
+                case memory_store  (fun x -> `Store x) @@
+                case register_read (fun x -> `Read x)  @@
+                default (fun () -> `Unknown)
+              end)
+          ]}
+
+          Note: in the example, the whole expression will build and
+          then match. In case when performance matter, and when there
+          is more then one match, it is recommended to evaluate a
+          matching object first, and return a function, that matches
+          values. For this there is a [select] combinator:
+
+          {[
+            let lift =
+              Match.(begin
+                  select @@
+                  case memory_load   (fun x -> `Load x)  @@
+                  case memory_store  (fun x -> `Store x) @@
+                  case register_read (fun x -> `Read x)  @@
+                  default (fun () -> `Unknown)
+                end)
+          ]}
+
+      *)
+      type 'a t
+
+      (** [switch x matcher] applies [matcher] to value [x]  *)
+      val switch : value -> 's t -> 's
+
+      (** [select matcher x] applies [matcher] to value [x].
+          [select] is the same as [Fn.flip switch].      *)
+      val select : 's t -> value -> 's
+
+      (** [case tag action matcher] adds an [action] to [matcher] that
+          will be invoked for values with a given [tag] *)
+      val case : 'a tag -> ('a -> 's) -> 's t -> 's t
+
+      (** [default def] creates an empty matcher with default handler [def]. *)
+      val default : (unit -> 's) -> 's t
+    end
+
+
 
     (** Persistent type identifiers.  *)
     module Typeid : Regular with type t = typeid
@@ -4673,7 +4730,7 @@ module Std : sig
   module Reg : sig
     type t = reg
 
-    (** unique number representig a register  *)
+    (** unique number representing a register  *)
     val code : t -> int
 
     (** name of a register  *)

@@ -45,6 +45,14 @@ module Tag : sig
   val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
 end
 
+module Match : sig
+  type 'a t
+  val switch : value -> 's t -> 's
+  val select : 's t -> value -> 's
+  val case : 'a tag -> ('a -> 's) -> 's t -> 's t
+  val default : (unit -> 's) -> 's t
+end
+
 module Typeid : Regular with type t = typeid
 
 include Regular with type t := t
