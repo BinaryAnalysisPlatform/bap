@@ -250,8 +250,10 @@ let run_exn (requests, replies) : unit Lwt.t =
           Response.create id msg |> reply
         | Error err' ->
           let err = Error.of_list [err; err'] in
-          let msg = Error.to_string_hum err in
-          warning_f ~section "Ignoring junk request: %s" msg)
+          let str = Error.to_string_hum err in
+          warning_f ~section "Ignoring junk request: %s" str >>= fun () ->
+          let msg = Response.error `Error str in
+          Response.create (Id.of_string "0") msg |> reply)
 
 
 let run (pipe : (request, response) Transport.pipe)

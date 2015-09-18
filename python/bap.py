@@ -248,6 +248,7 @@ class Bap(object):
             try:
                 self.capabilities = self.call({'init' : {
                     'version' : '0.1'}}).next()['capabilities']
+                break
             except Exception:
                 if attempt + 1 == RETRIES:
                     raise
