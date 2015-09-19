@@ -166,6 +166,38 @@ module Tag = struct
 
 end
 
+module Match = struct
+
+  module Map = Type_equal.Id.Uid.Map
+
+  type 's t = {
+    default : (unit -> 's);
+    handlers : (value -> 's) Map.t;
+  }
+
+  let empty = Map.empty
+
+  let default default = {
+    handlers = empty;
+    default = default;
+  }
+
+  let case t f (tab : 's t) =
+    let handlers = Map.add tab.handlers (Type_equal.Id.uid t)
+        (fun v -> f (get_exn t v)) in
+    {tab with handlers}
+
+  let run v tab =
+    match Map.find tab.handlers (Univ.type_id_uid v) with
+    | Some f -> f v
+    | None -> tab.default ()
+
+  let switch = run
+
+  let select x y = switch y x
+end
+
+
 module Dict = struct
 
   type t = value Typeid.Map.t with bin_io, compare, sexp
