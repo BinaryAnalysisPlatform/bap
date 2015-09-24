@@ -60,9 +60,9 @@ with bin_io, compare, sexp
 module Exp = struct
   type exp =
     (** Load    (mem,  idx,  endian,  size) *)
-    | Load    of exp * exp * endian * size
+    | Load    of var * exp * endian * size
     (** Store   (mem,  idx,  val,  endian,  size) *)
-    | Store   of exp * exp * exp * endian * size
+    | Store   of var * exp * exp * endian * size
     | BinOp   of binop * exp * exp
     | UnOp    of unop * exp
     | Var     of var

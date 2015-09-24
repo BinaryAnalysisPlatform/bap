@@ -173,12 +173,12 @@ let handle_cast cast_kind size v =
 let rec eval_exp state exp =
   let result = match exp with
     | Load (arr, idx, endian, t) ->
-      (match Memory.load (eval_exp state arr) (eval_exp state idx) endian t with
+      (match Memory.load (State.peek_exn state arr) (eval_exp state idx) endian t with
        | Some v -> v
        | None -> Un ("Load from uninitialized memory",
                      Type.imm Size.(to_bits t)))
     | Store (arr, idx, v, endian, t) ->
-      Memory.store (eval_exp state arr) (eval_exp state idx) (eval_exp state v)
+      Memory.store (State.peek_exn state arr) (eval_exp state idx) (eval_exp state v)
         endian t
     | BinOp (op, l, r) -> handle_binop op (eval_exp state l) (eval_exp state r)
     | UnOp (op, v) -> handle_unop op (eval_exp state v)

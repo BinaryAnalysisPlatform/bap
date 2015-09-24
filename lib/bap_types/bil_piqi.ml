@@ -106,12 +106,12 @@ let endianness_of_piqi = function
 let rec exp_to_piqi : exp -> Stmt_piqi.expr =
   function
   | Load (m, i, e, s) ->
-    let m = exp_to_piqi m in
+    let m = var_to_piqi m in
     let i = exp_to_piqi i in
     let e = endianness_to_piqi e in
     `load {P.Load.memory=m; address=i; endian=e; size=s;}
   | Store (m, i, v, e, size) ->
-    let m = exp_to_piqi m in
+    let m = var_to_piqi m in
     let i = exp_to_piqi i in
     let v = exp_to_piqi v in
     let e = endianness_to_piqi e in
@@ -156,12 +156,12 @@ let rec exp_to_piqi : exp -> Stmt_piqi.expr =
 
 let rec exp_of_piqi = function
   | `load {P.Load.memory; address; endian; size} ->
-    let m = exp_of_piqi memory in
+    let m = var_of_piqi memory in
     let i = exp_of_piqi address in
     let e = endianness_of_piqi endian in
     Load (m, i, e, size)
   | `store {P.Store.memory; address; value; endian; size} ->
-    let m = exp_of_piqi memory in
+    let m = var_of_piqi memory in
     let i = exp_of_piqi address in
     let v = exp_of_piqi value in
     let e = endianness_of_piqi endian in

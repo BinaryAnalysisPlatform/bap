@@ -65,12 +65,11 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
       | B | H -> [Bil.move dst1 rhs]
       | W | D -> [] in
     let loads =
-      let mem = Bil.var (Env.mem) in
       if size = D then [
-        Bil.move dst1 (load mem address);
-        Bil.move (uw dst2) (load mem Bil.(address + four));
+        Bil.move dst1 (load Env.mem address);
+        Bil.move (uw dst2) (load Env.mem Bil.(address + four));
       ] else [
-        assn temp (load mem address);
+        assn temp (load Env.mem address);
       ] in
     List.concat [
       pre_write_back;
@@ -87,15 +86,14 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
       | W | D -> [] in
     let stores =
       let m = Env.mem in
-      let v = Bil.var m in
       match size with
       | D -> [
-          Bil.move m (store v address Bil.(var dst1));
-          Bil.move m (store v
+          Bil.move m (store m address Bil.(var dst1));
+          Bil.move m (store m
                         Bil.(address + four) Bil.(var (uw dst2)));
         ]
       | B | H | W -> [
-          Bil.move m (store v address Bil.(var temp));
+          Bil.move m (store m address Bil.(var temp));
         ] in
     List.concat [
       trunc;                   (* truncate the value if necessary *)
@@ -122,12 +120,11 @@ let lift_m dest_list base mode update operation =
       in [Bil.move base Bil.(var base +-  int dest_len)] in
   let create_access i dest =
     let offset_e = Word.of_int ~width:32 (calc_offset i) in
-    let mem = Bil.var Env.mem in
     let addr = Bil.(var o_base + int offset_e) in
     match operation with
-    | Ld -> assn dest Bil.(load mem addr LittleEndian `r32)
+    | Ld -> assn dest Bil.(load Env.mem addr LittleEndian `r32)
     | St -> Bil.move Env.mem
-              Bil.(store Env.(var mem) addr (var dest) LittleEndian `r32) in
+              Bil.(store Env.mem addr (var dest) LittleEndian `r32) in
   (* Jmps should always be the last statement *)
   let rec move_jump_to_end l =
     match l with

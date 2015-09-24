@@ -252,10 +252,9 @@ let load_s mode s t a =
   let mem = match mode with
     | X86 -> R32.mem
     | X8664 -> R64.mem in
-  let mem_e = Bil.var mem in
   match s with
-  | None -> Bil.load mem_e a LittleEndian t
-  | Some v -> Bil.(load mem_e (var v + a) LittleEndian t)
+  | None -> Bil.load mem a LittleEndian t
+  | Some v -> Bil.(load mem (var v + a) LittleEndian t)
 
 let resize_word v width = Word.extract_exn ~hi:(width - 1) v
 

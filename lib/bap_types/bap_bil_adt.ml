@@ -37,9 +37,9 @@ module Exp = struct
 
   let rec pp ch = function
     | Load (x,y,e,s) ->
-      pr ch "Load(%a,%a,%a,%a)" pp x pp y pp_endian e pp_size s
+      pr ch "Load(%a,%a,%a,%a)" pp_var x pp y pp_endian e pp_size s
     | Store (x,y,z,e,s) ->
-      pr ch "Store(%a,%a,%a,%a,%a)" pp x pp y pp z pp_endian e pp_size s
+      pr ch "Store(%a,%a,%a,%a,%a)" pp_var x pp y pp z pp_endian e pp_size s
     | BinOp (op,x,y) ->
       pr ch "%a(%a,%a)" (pp_sexp sexp_of_binop) op pp x pp y
     | UnOp (op,x) ->

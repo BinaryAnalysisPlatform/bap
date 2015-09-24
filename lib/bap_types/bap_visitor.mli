@@ -125,14 +125,14 @@ class ['a] visitor : object
   method leave_exp : exp -> 'a -> 'a
 
   (** {4 [Load (src,addr,endian,size)]}  *)
-  method enter_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-  method visit_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-  method leave_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
+  method enter_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
+  method visit_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
+  method leave_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
 
   (** {4 [Store (dst,addr,src,endian,size)]}  *)
-  method enter_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-  method visit_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-  method leave_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+  method enter_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+  method visit_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+  method leave_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
 
   (** {4 [BinOp (op,e1,e2)]}  *)
   method enter_binop : binop -> exp -> exp -> 'a -> 'a
@@ -238,8 +238,8 @@ class mapper : object
 
   (** {3 Expressions}  *)
   method map_exp : exp -> exp
-  method map_load : mem:exp -> addr:exp -> endian -> size -> exp
-  method map_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> exp
+  method map_load : mem:var -> addr:exp -> endian -> size -> exp
+  method map_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> exp
   method map_binop : binop -> exp -> exp -> exp
   method map_unop : unop -> exp -> exp
   method map_cast : cast -> nat1 -> exp -> exp

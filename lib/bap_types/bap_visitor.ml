@@ -42,14 +42,14 @@ class ['a] visitor = object (self : 's)
   method leave_store ~mem ~addr ~exp e s x = x
   method visit_store ~mem ~addr ~exp e s x =
     self#enter_store ~mem ~addr ~exp e s x |>
-    self#visit_exp mem |> self#visit_exp addr |> self#visit_exp exp |>
+    self#visit_var mem |> self#visit_exp addr |> self#visit_exp exp |>
     self#leave_store ~mem ~addr ~exp e s
 
   method enter_load ~mem ~addr _e _s x = x
   method leave_load ~mem ~addr _e _s x = x
   method visit_load ~mem ~addr _e _s x =
     self#enter_load ~mem ~addr _e _s x |>
-    self#visit_exp mem |> self#visit_exp addr |>
+    self#visit_var mem |> self#visit_exp addr |>
     self#leave_load ~mem ~addr _e _s
 
   method enter_cast _ _ e x =  x
@@ -215,12 +215,12 @@ class mapper = object (self : 's)
     Exp.BinOp (op, self#map_exp e1, self#map_exp e2)
 
   method map_store ~mem ~addr ~exp e s =
-    Exp.Store (self#map_exp mem,
+    Exp.Store (self#map_sym mem,
                self#map_exp addr,
                self#map_exp exp, e, s)
 
   method map_load ~mem ~addr e s =
-    Exp.Load (self#map_exp mem, self#map_exp addr, e, s)
+    Exp.Load (self#map_sym mem, self#map_exp addr, e, s)
 
   method map_cast ct cs e = Exp.Cast (ct,cs,self#map_exp e)
 

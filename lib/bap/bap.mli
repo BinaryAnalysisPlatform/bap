@@ -167,7 +167,7 @@ module Std : sig
       of the same type we usually disambiguate them with keywords,
       e.g., [Bil.Load of (exp,exp,endian,size)] has function
       {{!Bil.load}Bil.load} with type:
-      [mem:exp -> addr:exp -> endian -> size -> exp]
+      [mem:var -> addr:exp -> endian -> size -> exp]
 
       {3:value Value}
 
@@ -1511,8 +1511,8 @@ module Std : sig
 
       (** BIL expression variants  *)
       type exp =
-        | Load    of exp * exp * endian * size (** load from memory *)
-        | Store   of exp * exp * exp * endian * size (** store to memory  *)
+        | Load    of var * exp * endian * size (** load from memory *)
+        | Store   of var * exp * exp * endian * size (** store to memory  *)
         | BinOp   of binop * exp * exp  (** binary operation  *)
         | UnOp    of unop * exp         (** unary operation *)
         | Var     of var                (** variable *)
@@ -1626,8 +1626,8 @@ module Std : sig
     val sle : binop
     val neg : unop
     val not : unop
-    val load : mem:exp -> addr:exp -> endian -> size -> exp
-    val store : mem:exp -> addr:exp -> exp -> endian -> size -> exp
+    val load : mem:var -> addr:exp -> endian -> size -> exp
+    val store : mem:var -> addr:exp -> exp -> endian -> size -> exp
     val binop : binop -> exp -> exp -> exp
     val unop : unop -> exp -> exp
     val var : var -> exp
@@ -1754,14 +1754,14 @@ module Std : sig
       method leave_exp : exp -> 'a -> 'a
 
       (** [Load (src,addr,endian,size)]  *)
-      method enter_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-      method visit_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-      method leave_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
+      method enter_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
+      method visit_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
+      method leave_load : mem:var -> addr:exp -> endian -> size -> 'a -> 'a
 
       (** [Store (dst,addr,src,endian,size)]  *)
-      method enter_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-      method visit_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-      method leave_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+      method enter_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+      method visit_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
+      method leave_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
 
       (** [BinOp (op,e1,e2)]  *)
       method enter_binop : binop -> exp -> exp -> 'a -> 'a
@@ -1873,8 +1873,8 @@ module Std : sig
 
       (** {3 Expressions}  *)
       method map_exp : exp -> exp
-      method map_load : mem:exp -> addr:exp -> endian -> size -> exp
-      method map_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> exp
+      method map_load : mem:var -> addr:exp -> endian -> size -> exp
+      method map_store : mem:var -> addr:exp -> exp:exp -> endian -> size -> exp
       method map_binop : binop -> exp -> exp -> exp
       method map_unop : unop -> exp -> exp
       method map_cast : cast -> nat1 -> exp -> exp

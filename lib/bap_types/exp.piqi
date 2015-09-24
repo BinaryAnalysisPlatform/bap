@@ -28,7 +28,7 @@
   .name load
   .field [
     .name memory
-    .type expr
+    .type var
   ]
   .field [
     .name address
@@ -48,7 +48,7 @@
   .name store
   .field [
     .name memory
-    .type expr
+    .type var
   ]
   .field [
     .name address
