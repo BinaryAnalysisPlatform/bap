@@ -42,8 +42,8 @@ module Unop : sig
 end
 
 module Exp : sig
-  val load : mem:exp -> addr:exp -> endian -> size -> exp
-  val store : mem:exp -> addr:exp -> exp -> endian -> size -> exp
+  val load : mem:var -> addr:exp -> endian -> size -> exp
+  val store : mem:var -> addr:exp -> exp -> endian -> size -> exp
   val binop : binop -> exp -> exp -> exp
   val unop : unop -> exp -> exp
   val var : var -> exp

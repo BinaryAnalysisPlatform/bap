@@ -301,9 +301,9 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
     let src1 = Env.of_reg src1 |> Bil.var in
     let src2 = Env.of_reg src2 |> Bil.var in
     exec Bil.([
-        assn temp (load (var Env.mem) src2 LittleEndian `r8);
+        assn temp (load Env.mem src2 LittleEndian `r8);
         Env.mem :=
-          store (var Env.mem) src2 (extract 7 0 src1) LittleEndian `r8;
+          store Env.mem src2 (extract 7 0 src1) LittleEndian `r8;
         assn dest (cast unsigned 32 (var temp));
       ]) cond
 

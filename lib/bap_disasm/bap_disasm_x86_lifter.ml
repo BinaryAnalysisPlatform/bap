@@ -30,12 +30,12 @@ module ToIR = struct
       | X8664 -> R64.mem in
     let sz = size_of_typ t in
     match s with
-    | None -> Bil.Move (mem, Bil.(Store (Var mem, a, e, LittleEndian, sz)))
-    | Some v -> Bil.Move (mem, Bil.(Store (Var mem, Var v + a, e,
+    | None -> Bil.Move (mem, Bil.(Store (mem, a, e, LittleEndian, sz)))
+    | Some v -> Bil.Move (mem, Bil.(Store (mem, Var v + a, e,
                                            LittleEndian, sz)))
 
   let storem mode t a e =
-    Bil.Move (mode, Bil.(Store (Var mode, a, e, LittleEndian, t)))
+    Bil.Move (mode, Bil.(Store (mode, a, e, LittleEndian, t)))
 
   (* copypasted from op2e_s below, but keeps the opcode width *)
   let op2e_s_keep_width mode ss has_rex t = function

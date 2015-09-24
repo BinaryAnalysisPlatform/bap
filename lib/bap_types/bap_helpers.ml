@@ -182,49 +182,6 @@ include struct
         | Int v -> if Word.is_zero v then [] else bil
         | _ -> super#map_while ~cond bil
 
-      method! map_load ~mem ~addr:la le ls =
-        let loader = object
-          inherit [exp] finder
-          method! enter_store ~mem ~addr:sa ~exp:r se ss find =
-            if compare_exp la sa = 0 then
-              if ls = ss then find.return (Some r)
-              else if ls > ss || se <> le then find.return None
-              else
-                let sz = Bap_size.(to_bits ss - to_bits ls) in
-                if se = LittleEndian
-                then find.return @@
-                  Some (Exp.Cast (Cast.LOW, sz,  r))
-                else find.return @@
-                  Some (Exp.Cast (Cast.HIGH, sz, r))
-            else find
-        end in
-
-        let result =
-          with_return (fun r -> ignore(loader#visit_exp mem r); None) in
-        match result with
-        | None -> super#map_load ~mem ~addr:la le ls
-        | Some exp -> exp
-
-      method! map_store ~mem ~addr:na ~exp:nval ne ns =
-        let found = ref false in
-        let mem = (object
-          inherit mapper as super
-          method! map_store ~mem ~addr:pa ~exp:pval pe ps =
-            if compare_exp pa na = 0 then begin
-              found := true;
-              if ns >= ps then Exp.Store (mem,nval,na,ne,ns)
-              else
-                let cast = if pe = LittleEndian
-                  then Cast.LOW else Cast.HIGH in
-                let sz = Bap_size.(to_bits ps - to_bits ns) in
-                let ex =
-                  Exp.Concat (nval, Exp.Cast (cast, sz, pval)) in
-                Exp.Store (mem,ex,na,ne,ns)
-            end
-            else super#map_store ~mem ~exp:pval ~addr:pa pe ps
-        end)#map_exp mem in
-        if found.contents then mem
-        else super#map_store ~mem ~exp:nval ~addr:na ne ns
     end
 end
 let fold_consts = (new constant_folder)#run
