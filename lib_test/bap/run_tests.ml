@@ -4,7 +4,7 @@ let suite =
   "BAP" >::: [
     Test_trie.suite;
     Test_bitvector.suite;
-    Test_conceval.suite;
+    Test_bili.suite;
     Test_graph.suite;
     Test_image.suite;
     Test_table.suite;

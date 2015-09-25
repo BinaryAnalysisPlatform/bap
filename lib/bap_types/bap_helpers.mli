@@ -3,6 +3,7 @@ open Core_kernel.Std
 open Bap_common
 open Bap_bil
 open Bap_visitor
+open Bap_result
 
 val find : 'a #finder -> bil -> 'a option
 val exists : unit #finder -> bil -> bool
@@ -54,6 +55,7 @@ class constant_folder : mapper
     cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
+
 module Exp : sig
   val fold : 'a #visitor -> init:'a -> exp -> 'a
   val iter : unit #visitor -> exp -> unit
@@ -66,6 +68,7 @@ module Exp : sig
   val fold_consts : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
   val free_vars : exp -> Bap_var.Set.t
+  val eval : exp -> value
 end
 
 module Stmt : sig
@@ -77,6 +80,7 @@ module Stmt : sig
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
+  val eval : stmt list -> (#Bap_bili.context as 'a) -> 'a
 end
 
 (** Bil provides two prefix tries trees.

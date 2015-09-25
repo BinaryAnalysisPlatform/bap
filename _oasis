@@ -106,11 +106,15 @@ Library types
                    Bap_arch,
                    Bap_attributes,
                    Bap_bil,
+                   Bap_bili,
                    Bap_bil_adt,
+                   Bap_biri,
                    Bap_bitvector,
                    Bap_common,
                    Bap_config,
+                   Bap_context,
                    Bap_exp,
+                   Bap_expi,
                    Bap_graph,
                    Bap_graph_intf,
                    Bap_graph_regular,
@@ -123,8 +127,11 @@ Library types
                    Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
+                   Bap_monad_types,
+                   Bap_monad,
                    Bap_opaque,
                    Bap_regular,
+                   Bap_result,
                    Bap_seq,
                    Bap_size,
                    Bap_stmt,
@@ -132,20 +139,12 @@ Library types
                    Bap_trie_intf,
                    Bap_type,
                    Bap_types,
+                   Bap_type_error,
                    Bap_value,
                    Bap_var,
                    Bap_vector,
                    Bap_visitor,
                    Graphlib
-
-Library conceval
-  Path: lib/bap_types
-  FindLibParent: bap
-  FindLibName: conceval
-  BuildTools: ocamlbuild
-  Modules: Conceval
-  BuildDepends: bap
-  CompiledObject: best
 
 Library serialization
   XMETADescription: Provides serialization for main data types
@@ -317,9 +316,9 @@ Library types_test
   Build$:         flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap, bap.conceval, oUnit
+  BuildDepends:   bap, oUnit
   Modules:        Test_bitvector,
-                  Test_conceval,
+                  Test_bili,
                   Test_graph,
                   Test_trie
 

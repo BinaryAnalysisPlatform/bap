@@ -63,209 +63,111 @@ let rec addr_intersection (x,xs) (y,ys) =
     else None
   else addr_intersection (y,ys) (x,xs)
 
+class substitution x y = object(self)
+  inherit mapper as super
+  method! map_let z ~exp ~body =
+    if Bap_var.(z = x)
+    then super#map_let z ~exp:(self#map_exp exp) ~body
+    else super#map_let z ~exp:(self#map_exp exp) ~body:
+        (super#map_exp body)
+
+  method! map_var z =
+    match super#map_var z with
+    | Exp.Var z when Bap_var.(z = x) -> y
+    | z -> z
+end
+
+let substitute_var x y ss =
+  let r = new substitution x y in
+  let rec loop acc = function
+    | Stmt.Move (z,e) :: ss when Bap_var.(z = x) ->
+      List.rev_append acc (Stmt.Move (z,r#map_exp e)::ss)
+    | Stmt.If (c,t,e) :: ss ->
+      loop (Stmt.If (r#map_exp c, loop [] t, loop [] e)::acc) ss
+    | Stmt.While (c,b) :: ss ->
+      loop (Stmt.While (r#map_exp c, loop [] b)::acc) ss
+    | s :: ss -> loop (r#map_stmt s @ acc) ss
+    | [] -> List.rev acc in
+  loop [] ss
+
 include struct
   open Exp
-  class constant_folder =
-    object
-      inherit mapper as super
-      method! map_binop op e1 e2 =
-        let open Binop in
-        let zero v1 v2 = match v1,v2 with
-          | Int x,_ |_,Int x  -> Int (Word.zero (Word.bitwidth x))
-          | Var v,_ | _, Var v ->
-            begin match Bap_var.typ v with
-              | Type.Imm width -> Int (Word.zero width)
-              | Type.Mem _ -> super#map_binop op e1 e2
-            end
-          | _ -> super#map_binop op e1 e2 in
-        let equal x y = compare_exp x y = 0 in
-        let open Bap_exp.Exp in
-        match op, e1, e2 with
-        | (AND|OR), e1, e2 when equal e1 e2 -> e1
-        | XOR, e1, e2 when equal e1 e2 -> zero e1 e2
-        | EQ, e1, e2 when equal e1 e2 -> Int Word.b1
-        | NEQ, e1, e2 when equal e1 e2 -> Int Word.b0
-        | (LT|SLT), e1, e2 when equal e1 e2 -> Int Word.b0
-        | op, Int v1, Int v2 ->
-          let open Bap_exp.Exp in
-          let signed = Word.signed in
-          let bool v = int (Word.of_bool v) in
-          let open Word.Mono in
-          Word.Int_exn.(match op with
-              | PLUS    -> int (v1 + v2)
-              | MINUS   -> int (v1 - v2)
-              | TIMES   -> int (v1 * v2)
-              | DIVIDE  -> int (v1 / v2)
-              | SDIVIDE -> int (signed v1 / signed v2)
-              | MOD     -> int (v1 mod v2)
-              | SMOD    -> int (signed v1 mod signed v2)
-              | LSHIFT  -> int (v1 lsl v2)
-              | RSHIFT  -> int (v1 lsr v2)
-              | ARSHIFT -> int (v1 asr v2)
-              | AND     -> int (v1 land v2)
-              | OR      -> int (v1 lor v2)
-              | XOR     -> int (v1 lxor v2)
-              | EQ      -> bool (v1 = v2)
-              | NEQ     -> bool (v1 <> v2)
-              | LT      -> bool (v1 < v2)
-              | LE      -> bool (v1 <= v2)
-              | SLT     -> bool (signed v1 < signed v2)
-              | SLE     -> bool (signed v1 <= signed v2))
-        | (PLUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), Int v, e
-        | (PLUS|MINUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), e, Int v
-          when Word.is_zero v -> e
-        | (TIMES|AND),e,Int v
-        | (TIMES|AND), Int v, e when Word.is_one v -> e
-        | (TIMES|AND), e, Int v
-        | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
-        | (OR|AND), v1, v2 when equal v1 v2 -> v1
-        | (XOR), v1, v2 when equal v1 v2 -> zero v1 v2
-        | EQ, e, Int v when Word.(v = b1) -> e
-        | NEQ,e, Int v when Word.(v = b0) -> e
-        | EQ, e, Int v when Word.(v = b0) -> super#map_unop Unop.NOT e
-        | NEQ,e, Int v when Word.(v = b1) -> super#map_unop Unop.NOT e
-        | op, Int v, e when Bap_exp.Binop.is_commutative op ->
-          super#map_binop op e (Int v)
-        | PLUS, BinOp (PLUS, a, Int b), Int c ->
-          BinOp (PLUS, a, super#map_binop PLUS (Int b) (Int c))
-        | PLUS, BinOp (MINUS, a, Int b), Int c ->
-          BinOp (MINUS, a, super#map_binop MINUS (Int b) (Int c))
-        | MINUS, BinOp (MINUS, a, Int b), Int c ->
-          BinOp (MINUS, a, super#map_binop PLUS (Int b) (Int c))
-        | _ -> super#map_binop op e1 e2
+  let expi = new Bap_expi.t
+  let ctxt = new Bap_expi.context
 
-      method! map_unop op arg = match arg with
-        | Int v -> Unop.(match op with
-            | NEG -> Int Word.(neg v)
-            | NOT -> Int Word.(lnot v))
-        | UnOp (op',arg) when op = op' -> arg
-        | _ -> super#map_unop op arg
+  class constant_folder = object
+    inherit mapper as super
+    method! map_exp e =
+      let r = Bap_monad.State.eval (expi#eval_exp e) ctxt in
+      match Bap_result.value r  with
+      | Bap_result.Imm w -> Exp.Int w
+      | _ -> super#map_exp e
 
-      method! map_cast kind size arg =
-        let cast kind v =
-          let open Cast in match kind with
-          | UNSIGNED -> Word.extract_exn ~hi:(size - 1) v
-          | SIGNED   -> Word.extract_exn ~hi:(size - 1) (Word.signed v)
-          | HIGH     -> Word.extract_exn ~lo:(Word.bitwidth v - size) v
-          | LOW      -> Word.extract_exn ~hi:(size - 1) v in
-        match arg with
-        | Int v -> Int (cast kind v)
-        | _ -> super#map_cast kind size arg
+    method! map_binop op e1 e2 =
+      let open Binop in
+      let zero v1 v2 = match v1,v2 with
+        | Int x,_ |_,Int x  -> Int (Word.zero (Word.bitwidth x))
+        | Var v,_ | _, Var v ->
+          begin match Bap_var.typ v with
+            | Type.Imm width -> Int (Word.zero width)
+            | Type.Mem _ -> super#map_binop op e1 e2
+          end
+        | _ -> super#map_binop op e1 e2 in
+      let equal x y = compare_exp x y = 0 in
+      let open Bap_exp.Exp in
+      match op, e1, e2 with
+      | (AND|OR), e1, e2 when equal e1 e2 -> e1
+      | XOR, e1, e2 when equal e1 e2 -> zero e1 e2
+      | EQ, e1, e2 when equal e1 e2 -> Int Word.b1
+      | NEQ, e1, e2 when equal e1 e2 -> Int Word.b0
+      | (LT|SLT), e1, e2 when equal e1 e2 -> Int Word.b0
+      | (PLUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), Int v, e
+      | (PLUS|MINUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), e, Int v
+        when Word.is_zero v -> e
+      | (TIMES|AND),e,Int v
+      | (TIMES|AND), Int v, e when Word.is_one v -> e
+      | (TIMES|AND), e, Int v
+      | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
+      | (OR|AND), v1, v2 when equal v1 v2 -> v1
+      | (XOR), v1, v2 when equal v1 v2 -> zero v1 v2
+      | EQ, e, Int v when Word.(v = b1) -> e
+      | NEQ,e, Int v when Word.(v = b0) -> e
+      | EQ, e, Int v when Word.(v = b0) -> super#map_unop Unop.NOT e
+      | NEQ,e, Int v when Word.(v = b1) -> super#map_unop Unop.NOT e
+      | op, Int v, e when Bap_exp.Binop.is_commutative op ->
+        super#map_binop op e (Int v)
+      | PLUS, BinOp (PLUS, a, Int b), Int c ->
+        BinOp (PLUS, a, super#map_binop PLUS (Int b) (Int c))
+      | PLUS, BinOp (MINUS, a, Int b), Int c ->
+        BinOp (MINUS, a, super#map_binop MINUS (Int b) (Int c))
+      | MINUS, BinOp (MINUS, a, Int b), Int c ->
+        BinOp (MINUS, a, super#map_binop PLUS (Int b) (Int c))
+      | _ -> super#map_binop op e1 e2
 
-      method! map_let var ~exp ~body =
-        match exp with
-        | Int v ->
-          (object inherit mapper
-            method! map_var z =
-              if Bap_var.(z = var) then exp else (Exp.Var z)
-          end)#map_exp body
-        | _ -> super#map_let var ~exp ~body
+    method! map_unop op arg = match arg with
+      | UnOp (op',arg) when op = op' -> arg
+      | _ -> super#map_unop op arg
 
-      method! map_ite ~cond ~yes ~no =
-        match cond with
-        | Int v -> if Word.is_zero v then no else yes
-        | _ -> super#map_ite ~cond ~yes ~no
+    method! map_let var ~exp ~body =
+      match exp with
+      | Int v ->  (new substitution var exp)#map_exp body
+      | _ -> super#map_let var ~exp ~body
 
-      method! map_extract ~hi ~lo = function
-        | Int v -> Int (Word.extract_exn ~hi ~lo v)
-        | e  -> super#map_extract ~hi ~lo e
+    method! map_ite ~cond ~yes ~no =
+      match cond with
+      | Int v -> if Word.is_zero v then no else yes
+      | _ -> super#map_ite ~cond ~yes ~no
 
-      method! map_concat e1 e2 = match e1,e2 with
-        | Int v1, Int v2 -> Int (Word.concat v1 v2)
-        | _ -> super#map_concat e1 e2
+    method! map_if ~cond ~yes ~no = match cond with
+      | Int v -> if Word.is_zero v then no else yes
+      | _ -> super#map_if ~cond ~yes ~no
 
-      method! map_if ~cond ~yes ~no = match cond with
-        | Int v -> if Word.is_zero v then no else yes
-        | _ -> super#map_if ~cond ~yes ~no
-
-      method! map_while ~cond bil = match cond with
-        | Int v -> if Word.is_zero v then [] else bil
-        | _ -> super#map_while ~cond bil
-
-      method! map_load ~mem ~addr:la le ls =
-        let loader = object
-          inherit [exp] finder
-          method! enter_store ~mem ~addr:sa ~exp:r se ss find =
-            if compare_exp la sa = 0 then
-              if ls = ss then find.return (Some r)
-              else if ls > ss || se <> le then find.return None
-              else
-                let sz = Bap_size.(to_bits ss - to_bits ls) in
-                if se = LittleEndian
-                then find.return @@
-                  Some (Exp.Cast (Cast.LOW, sz,  r))
-                else find.return @@
-                  Some (Exp.Cast (Cast.HIGH, sz, r))
-            else find
-        end in
-
-        let result =
-          with_return (fun r -> ignore(loader#visit_exp mem r); None) in
-        match result with
-        | None -> super#map_load ~mem ~addr:la le ls
-        | Some exp -> exp
-
-      method! map_store ~mem ~addr:na ~exp:nval ne ns =
-        let found = ref false in
-        let mem = (object
-          inherit mapper as super
-          method! map_store ~mem ~addr:pa ~exp:pval pe ps =
-            if compare_exp pa na = 0 then begin
-              found := true;
-              if ns >= ps then Exp.Store (mem,nval,na,ne,ns)
-              else
-                let cast = if pe = LittleEndian
-                  then Cast.LOW else Cast.HIGH in
-                let sz = Bap_size.(to_bits ps - to_bits ns) in
-                let ex =
-                  Exp.Concat (nval, Exp.Cast (cast, sz, pval)) in
-                Exp.Store (mem,ex,na,ne,ns)
-            end
-            else super#map_store ~mem ~exp:pval ~addr:pa pe ps
-        end)#map_exp mem in
-        if found.contents then mem
-        else super#map_store ~mem ~exp:nval ~addr:na ne ns
-    end
+    method! map_while ~cond bil = match cond with
+      | Int v -> if Word.is_zero v then [] else bil
+      | _ -> super#map_while ~cond bil
+  end
 end
 let fold_consts = (new constant_folder)#run
-
-
-let connection_point (type t) compare (f : t -> t) x : t option =
-  let collision_point init =
-    let rec loop slow fast =
-      if compare slow fast = 0 then Some fast
-      else loop (f slow) (f (f fast)) in
-    loop init (f init) in
-  let convergent_point x y =
-    let rec loop x y =
-      if compare x y = 0 then x else loop (f x) (f y) in
-    loop x y in
-  match collision_point x with
-  | None -> None
-  | Some p -> Some (convergent_point x p)
-
-(* later we can provide a hashconsing, but for now a simple
-   but safe? implementation.
-   The algorithm is adopted from A. Stepanov and P. McJones
-   collision point algorithm [ISBN-10: 0-321-63537-X].
-   {v
-   slow = x;
-   fast = f(x);
-   while (fast != slow) { // slow = fn(x) ∧ fast = f2n+1(x)
-     slow = f(slow); // slow = fn+1(x) ∧ fast = f2n+1(x)
-     fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+2(x)
-     fast = f(fast); // slow = fn+1(x) ∧ fast = f2n+3(x)
-   // n ← n + 1
-   }
-   return fast;
-   v}
-*)
-let fix compare f x  =
-  let rec loop slow fast =
-    if compare slow fast = 0 then fast
-    else loop (f slow) (f (f fast)) in
-  loop x (f x)
-
 
 let fix compare f x  =
   let rec loop slow fast =
@@ -275,8 +177,6 @@ let fix compare f x  =
       if compare fast' fast = 0 then fast
       else loop (f slow) (f fast) in
   loop x (f x)
-
-
 
 let fixpoint = fix compare_bil
 
@@ -288,14 +188,6 @@ class rewriter x y = object
 end
 
 let substitute x y = (new rewriter x y)#run
-
-let substitute_var x y = (object inherit mapper as super
-  method! map_var z =
-    match super#map_var z with
-    | Exp.Var z when Bap_var.(z = x) -> y
-    | z -> z
-end)#run
-
 
 module Trie = struct
   type normalized_bil = bil
@@ -366,6 +258,13 @@ module Exp = struct
       method! leave_let var ~exp:_ ~body:_ (vars,stack) =
         (vars, List.tl_exn stack)
     end) exp
+
+  include struct
+    open Bap_expi
+    let eval exp =
+      let expi = new t and ctxt = new context in
+      Bap_monad.State.eval (expi#eval_exp exp) ctxt |> Bap_result.value
+  end
 end
 
 module Stmt = struct
@@ -398,6 +297,10 @@ module Stmt = struct
           | Stmt.Move (v,e) ->
             update (Exp.free_vars e) vars kill, VS.add kill v
           | stmt -> update (free_vars stmt) vars kill, kill)
+
+  let eval stmts ctxt =
+    let bili = new Bap_bili.t in
+    Bap_monad.State.exec (bili#eval stmts) ctxt
 end
 
 let free_vars = Stmt.bil_free_vars
