@@ -25,7 +25,7 @@
   ]
   .field [
     .name rexp
-    .type exp
+    .type expr
   ]
 ]
 
@@ -33,7 +33,7 @@
   .name jmp
   .field [
     .name target
-    .type exp
+    .type expr
   ]
 ]
 
@@ -46,7 +46,7 @@
   .name while-stmt
   .field [
     .name cond
-    .type exp
+    .type expr
   ]
   .field [
     .name loop-body
@@ -58,7 +58,7 @@
   .name if-stmt
   .field [
     .name cond
-    .type exp
+    .type expr
   ]
   .field [
     .name true-branch
@@ -73,7 +73,7 @@
 .record [
   .name cpuexn
   .field [
-    .name errno
+    .name errnum
     .type int
   ]
 ]

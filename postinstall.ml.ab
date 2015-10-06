@@ -1,0 +1,30 @@
+#load "unix.cma";;
+#directory "$pkg_fileutils";;
+#load "fileutils.cma";;
+
+open Printf
+
+let (/) = Filename.concat
+
+let tools = [
+  "bap-mc";
+  "bap";
+  "bap-byteweight";
+]
+
+let create_man prog =
+  let man = sprintf "%s.1" prog in
+  Unix.system @@ sprintf "%s --help=groff > %s 2>/dev/null" prog man
+  |> ignore;
+  man
+
+let main () =
+  let scripts = ["baptop"] in
+  let men = List.map create_man tools in
+  let dst = "$mandir/man1" in
+  FileUtil.mkdir ~parent:true dst;
+  FileUtil.cp men dst;
+  FileUtil.cp scripts "$bindir";
+  List.iter (fun name -> Unix.chmod ("$bindir" / name) 0o700) scripts
+
+let () = main ()

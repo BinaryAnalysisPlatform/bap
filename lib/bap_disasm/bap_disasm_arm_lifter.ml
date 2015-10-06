@@ -1,7 +1,9 @@
 open Core_kernel.Std
 open Or_error
 open Bap_types.Std
-
+open Bap_disasm_abi
+open Bap_disasm_abi_helpers
+open Bap_disasm_types
 open Bap_disasm_arm_types
 open Bap_disasm_arm_utils
 
@@ -20,7 +22,7 @@ module Flags = Bap_disasm_arm_flags
 open Op
 
 let word = Word.of_int ~width:32
-let int32 x = Exp.int (word x)
+let int32 x = Bil.int (word x)
 
 
 let string_of_ops ops =
@@ -219,11 +221,11 @@ let lift_move mem ops (insn : Arm.Insn.move) : stmt list =
   (** Special Data Instructions *)
 
   | `MOVi16, [|Reg dest; src; cond; _wflag|] ->
-    exec [Stmt.move (Env.of_reg dest) (exp_of_op src)] cond
+    exec [Bil.move (Env.of_reg dest) (exp_of_op src)] cond
 
   | `MOVTi16, [|Reg dest; _; src; cond; _wflag|] ->
     let dest = Env.of_reg dest in
-    [Stmt.move dest Exp.(var dest lor exp_of_op src lsl int32 16)] |>
+    [Bil.move dest Bil.(var dest lor exp_of_op src lsl int32 16)] |>
     fun ins -> exec ins cond
   | insn,ops ->
     fail _here_ "ops %s doesn't match move insn %s"
@@ -279,33 +281,31 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
     let v = Env.new_tmp "v"  in
     let r = Env.new_tmp "r"  in
     let s = Env.new_tmp "s"  in
-    let open Exp in
-    let open Stmt in
-    exec [
-      move v (exp_of_op src lsr int32 1);
-      move r (exp_of_op src);
-      move s (int32 31);
-      While (Exp.(var v <> int32 0), [
-          Move (r, Var r lsl int32 1);
-          Move (r, Var r lor (Var v land int32 1));
-          Move (s, Var s - int32 1);
-        ]);
-      Move (Env.of_reg dest, Var r lsl Var s);
-    ] cond
+    exec Bil.([
+        v := exp_of_op src lsr int32 1;
+        r := exp_of_op src;
+        s := int32 31;
+        while_ (var v <> int32 0) [
+          r := var r lsl int32 1;
+          r := var r lor (var v land int32 1);
+          v := var v lsr int32 1;
+          s := var s - int32 1;
+        ];
+        Env.of_reg dest := var r lsl var s;
+      ]) cond
 
   (* Swap bytes *)
   | `SWPB, [|Reg dest; Reg src1; Reg src2; cond; _|] ->
     let temp = Var.create ~tmp:true "x" reg8_t in
     let dest = Env.of_reg dest in
-    let src1 = Env.of_reg src1 |> Exp.var in
-    let src2 = Env.of_reg src2 |> Exp.var in
-    let mem = Env.new_mem "mem" in
-    exec [
-      assn temp Exp.(load (var mem) src2 LittleEndian `r8);
-      Stmt.move mem
-        Exp.(store (var mem) src2 (extract 7 0 src1) LittleEndian `r8);
-      assn dest Exp.(cast Cast.unsigned 32 (var temp));
-    ] cond
+    let src1 = Env.of_reg src1 |> Bil.var in
+    let src2 = Env.of_reg src2 |> Bil.var in
+    exec Bil.([
+        assn temp (load (var Env.mem) src2 LittleEndian `r8);
+        Env.mem :=
+          store (var Env.mem) src2 (extract 7 0 src1) LittleEndian `r8;
+        assn dest (cast unsigned 32 (var temp));
+      ]) cond
 
   (* Pack half *)
   | `PKHTB, [|Reg dest; src1; src2; shift; cond; _|] ->
@@ -315,7 +315,7 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
         ~shift:(exp_of_op shift) reg32_t in
     exec [
       assn (Env.of_reg dest)
-        Exp.(extract 31 16 (exp_of_op src1) ^
+        Bil.(extract 31 16 (exp_of_op src1) ^
              extract 15  0  shifted)
     ] cond
   (* reverses *)
@@ -326,7 +326,7 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
     let umask = int32 0xff0000 in
     let lmask = int32 0xff00 in
     let rev =
-      let open Exp in
+      let open Bil in
       s              lsl i24 lor
       s              lsr i24 lor
       (s land umask) lsr i8  lor
@@ -336,22 +336,20 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
   | `REV16, [|Reg dest; src; cond; _|] ->
     let s = exp_of_op src in
     let i16 = int32 16 in
-    let rev = Exp.(s lsl i16 lor s lsr i16) in
+    let rev = Bil.(s lsl i16 lor s lsr i16) in
     exec [assn (Env.of_reg dest) rev] cond
   | `CLZ, [|Reg dest; src; cond; _|] ->
     let shift = Env.new_tmp "shift" in
     let accum = Env.new_tmp "accum" in
-    let open Exp in
-    exec [
-      Stmt.move shift (exp_of_op src);
-      Stmt.move accum (int32 32);
-      Stmt.While (var shift <> int32 0, [
-          Stmt.move shift (var shift lsr int32 1);
-          Stmt.move accum (var accum - int32 1);
-        ]);
-      Stmt.move (Env.of_reg dest) (var accum);
-
-    ] cond
+    Bil.(exec [
+        shift := exp_of_op src;
+        accum := int32 32;
+        while_ (var shift <> int32 0) [
+          shift := var shift lsr int32 1;
+          accum := var accum - int32 1;
+        ];
+        Env.of_reg dest := var accum;
+      ]) cond
   | insn,ops ->
     fail _here_ "ops %s doesn't match bits insn %s"
       (string_of_ops ops) (Arm.Insn.to_string (insn :> insn))
@@ -363,22 +361,22 @@ let lift_mult ops insn =
   let open Mul in
   match insn,ops with
   | `MUL, [|Reg dest; src1; src2; cond; _rflag; wflag|] ->
-    let flags = Flags.set_nzf Exp.(var (Env.of_reg dest)) reg32_t in
+    let flags = Flags.set_nzf Bil.(var (Env.of_reg dest)) reg32_t in
     exec [
-      assn (Env.of_reg dest) Exp.(exp_of_op src1 * exp_of_op src2)
+      assn (Env.of_reg dest) Bil.(exp_of_op src1 * exp_of_op src2)
     ] ~flags ~wflag cond
 
   | `MLA, [|Reg dest; src1; src2; addend; cond; _rflag; wflag|] ->
-    let flags = Flags.set_nzf Exp.(var Exp.(Env.of_reg dest)) reg32_t in
+    let flags = Flags.set_nzf Bil.(var Bil.(Env.of_reg dest)) reg32_t in
     exec [
       assn (Env.of_reg dest)
-        Exp.(exp_of_op addend + exp_of_op src1 * exp_of_op src2)
+        Bil.(exp_of_op addend + exp_of_op src1 * exp_of_op src2)
     ] ~flags ~wflag cond
 
   | `MLS, [|Reg dest; src1; src2; addend; cond; _|] ->
     exec [
-      Stmt.move (Env.of_reg dest)
-        Exp.(exp_of_op addend - exp_of_op src1 * exp_of_op src2)
+      Bil.move (Env.of_reg dest)
+        Bil.(exp_of_op addend - exp_of_op src1 * exp_of_op src2)
     ] cond
 
   | `UMULL, [|lodest; hidest; src1; src2; cond; _rflag; wflag|] ->
@@ -907,7 +905,7 @@ let lift_mem ops insn =
     let insns =
       Mem_shift.lift_r_op ~dest1:src1 ~base ~offset:(Imm (word 0))
         Offset Unsigned W St in
-    let result = [Stmt.move (Env.of_reg dest1) (int32 0)] in
+    let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
     exec (insns @ result) cond
 
   | `STREXB, [|Reg dest1; src1; base; cond; _|] ->
@@ -915,7 +913,7 @@ let lift_mem ops insn =
       Mem_shift.lift_r_op ~dest1:src1 ~base ~offset:(Imm (word 0))
         Offset Unsigned B St
     in
-    let result = [Stmt.move (Env.of_reg dest1) (int32 0)] in
+    let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
     exec (insns @ result) cond
 
   | `STREXH, [|Reg dest1; src1; base; cond; _|] ->
@@ -923,7 +921,7 @@ let lift_mem ops insn =
       Mem_shift.lift_r_op ~dest1:src1 ~base ~offset:(Imm (word 0))
         Offset Unsigned H St
     in
-    let result = [Stmt.move (Env.of_reg dest1) (int32 0)] in
+    let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
     exec (insns @ result) cond
 
   (* multisrc is one of the multireg combinations *)
@@ -932,7 +930,7 @@ let lift_mem ops insn =
       Mem_shift.lift_r_op ~dest1:multisrc ~base ~offset:(Imm (word 0))
         Offset Unsigned D St
     in
-    let result = [Stmt.move (Env.of_reg dest1) (int32 0)] in
+    let result = [Bil.move (Env.of_reg dest1) (int32 0)] in
     exec (insns @ result) cond
   | #Insn.mem_multi as insn, ops -> lift_mem_multi ops insn
   | insn,ops ->
@@ -980,24 +978,25 @@ let lift_special ops insn =
   match insn, ops with
   (* supervisor call *)
   | `SVC, [|Imm word; cond; _|] ->
-    exec [Stmt.special (Format.asprintf "svc %a" Word.pp word)] cond
+    let num = Word.extract_exn ~hi:23 word in
+    exec [Bil.(cpuexn (Word.to_int num |> ok_exn))] cond
 
   | `MRS, [|Reg dest; cond; _|] ->
     let get_bits flag src lsb =
-      Exp.(src lor (cast Cast.unsigned 32 (var flag) lsl int32 lsb)) in
+      Bil.(src lor (cast unsigned 32 (var flag) lsl int32 lsb)) in
     let d = Env.of_reg dest in
-    let vd = Exp.var d in
+    let vd = Bil.var d in
     exec [
-      Stmt.move d (int32 0);
-      Stmt.move d (get_bits Env.nf vd 31);
-      Stmt.move d (get_bits Env.zf vd 30);
-      Stmt.move d (get_bits Env.cf vd 29);
-      Stmt.move d (get_bits Env.vf vd 28);
-      Stmt.move d (get_bits Env.qf vd 27);
-      Stmt.move d (get_bits Env.ge.(3) vd 19);
-      Stmt.move d (get_bits Env.ge.(2) vd 18);
-      Stmt.move d (get_bits Env.ge.(1) vd 17);
-      Stmt.move d (get_bits Env.ge.(0) vd 16);
+      Bil.move d (int32 0);
+      Bil.move d (get_bits Env.nf vd 31);
+      Bil.move d (get_bits Env.zf vd 30);
+      Bil.move d (get_bits Env.cf vd 29);
+      Bil.move d (get_bits Env.vf vd 28);
+      Bil.move d (get_bits Env.qf vd 27);
+      Bil.move d (get_bits Env.ge.(3) vd 19);
+      Bil.move d (get_bits Env.ge.(2) vd 18);
+      Bil.move d (get_bits Env.ge.(1) vd 17);
+      Bil.move d (get_bits Env.ge.(0) vd 16);
     ] cond
 
   (* Move to special from register
@@ -1008,8 +1007,8 @@ let lift_special ops insn =
    * bit 3 is APSR_nzcvq
    **)
   | `MSR, [|Imm imm; Reg src; cond; _|] ->
-    let src = Exp.var (Env.of_reg src) in
-    let (:=) flag bit = Stmt.move flag (Exp.extract bit bit src) in
+    let src = Bil.var (Env.of_reg src) in
+    let (:=) flag bit = Bil.move flag (Bil.extract bit bit src) in
     let s1 =
       if Word.(Int_exn.(imm land word 0x8) = word 0x8) then [
         Env.nf := 31;
@@ -1043,16 +1042,80 @@ let arm_ops_exn ops () =
 let arm_ops ops = try_with (arm_ops_exn ops)
 
 
-let insn_exn mem insn =
+
+
+module CPU = struct
+  include Bap_disasm_arm_env
+
+  let mem = mem
+  let pc = pc
+  let sp = sp
+
+
+  let regs = Var.Set.of_list [
+      r0; r1; r2; r3; r4;
+      r5; r6; r7; r8; r9;
+      r10; r11; r12;
+      pc;  sp; lr;
+      spsr; cpsr; itstate;
+    ]
+
+  (* although PC is stricly speaking is GPR we will rule it out *)
+  let non_gpr = Var.Set.of_list [
+      pc; spsr; cpsr; itstate;
+    ]
+
+  let gpr = Var.Set.diff regs non_gpr
+
+  let perms = Var.Set.of_list [
+      r4; r5; r6; r7; r8; r9; r10; r11;
+    ]
+
+  let flags = Var.Set.of_list @@ [
+      nf; zf; cf; qf; vf;
+    ] @ Array.to_list ge
+
+  let nf = nf
+  let zf = zf
+  let cf = cf
+  let vf = vf
+
+  let is = Var.same
+
+  let is_reg r = Set.mem regs (Var.base r)
+  let is_sp = is sp
+  let is_bp = is r11
+  let is_pc = is pc
+  let addr_of_pc m = Addr.(Memory.min_addr m ++ 8)
+  let is_flag r = Set.mem flags (Var.base r)
+  let is_zf = is zf
+  let is_cf = is cf
+  let is_vf = is vf
+  let is_nf = is nf
+
+  let is_mem = is mem
+end
+
+
+(** Substitute PC with its value  *)
+let resolve_pc mem = Bil.map (object(self)
+    inherit Bil.mapper as super
+    method! map_var var =
+      if Var.(equal var CPU.pc) then
+        Bil.int (CPU.addr_of_pc mem)
+      else super#map_var var
+  end)
+
+let insn_exn mem insn : bil Or_error.t =
   let open Arm.Insn in
   let name = Basic.Insn.name insn in
-  Memory.(Addr.Int.(!$(max_addr mem) - !$(min_addr mem)))
+  Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
   >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
   Memory.get ~scale:(size ) mem >>| fun word ->
   match Arm.Insn.create insn with
-  | None -> [Stmt.special (sprintf "unsupported: %s" name)]
+  | None -> [Bil.special (sprintf "unsupported: %s" name)]
   | Some arm_insn -> match arm_ops (Basic.Insn.ops insn) with
-    | Error err -> [Stmt.special (Error.to_string_hum err)]
+    | Error err -> [Bil.special (Error.to_string_hum err)]
     | Ok ops -> match arm_insn with
       | #move as op -> lift_move word ops op
       | #bits as op -> lift_bits word ops op
@@ -1061,7 +1124,7 @@ let insn_exn mem insn =
       | #branch as op -> lift_branch mem ops op
       | #special as op -> lift_special ops op
 
-let insn mem insn =
-  try insn_exn mem insn with
+let lift mem insn =
+  try insn_exn mem insn >>| resolve_pc mem with
   | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
   | exn -> of_exn exn

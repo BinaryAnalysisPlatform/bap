@@ -1,6 +1,23 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Bap_image_std
+open Bap_disasm_types
+open Bap_disasm_abi
 
-(** [insn mem basic] takes a basic instruction and a memory and
-    returns a sequence of BIL statements. *)
-val insn : Bap_memory.t -> ('a,'k) Bap_disasm_basic.insn -> stmt list Or_error.t
+module IA32 : sig
+  module CPU : sig
+    include module type of Bap_disasm_x86_env
+    include Bap_disasm_x86_env.ModeVars
+    include CPU
+  end
+  val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
+end
+
+module AMD64 : sig
+  module CPU : sig
+    include module type of Bap_disasm_x86_env
+    include Bap_disasm_x86_env.ModeVars
+    include CPU
+  end
+  val lift : mem -> ('a,'k) Basic.insn -> stmt list Or_error.t
+end

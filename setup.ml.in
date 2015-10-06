@@ -37,10 +37,18 @@ let llvm_version () : unit =
     ~hide:false
     ~dump:true
     ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "libllvm version (e.g., 3.4)")
+    ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
     "llvm_version"
-    (fun () -> "") |>
+    (fun () -> "3.4") |>
   definition_end
+
+let rec find_map xs ~f =
+  match xs with
+  | [] -> None
+  | x :: xs -> match f x with
+    | None -> find_map xs ~f
+    | yay -> yay
+
 
 let llvm_config () : unit =
   BaseEnv.var_define
@@ -50,14 +58,17 @@ let llvm_config () : unit =
     ~short_desc:(fun () -> "llvm-config executable")
     "llvm_config"
     (fun () ->
-       (* assume macports if we're on mac os x *)
+       (* default macports if we're on mac os x *)
        let macosx = BaseEnv.var_get "system" = "macosx" in
-       let ver = match BaseEnv.var_get "llvm_version" with
-         | "" when macosx -> "-mp-3.4"
-         | "" -> ""
-         | ver when macosx -> "-mp-" ^ ver
-         | ver -> "-" ^ ver in
-       OASISFileUtil.which ~ctxt ("llvm-config" ^ ver)) |>
+       let vers = match BaseEnv.var_get "llvm_version" with
+         | "" -> []
+         | ver when macosx -> ["-mp-" ^ ver; ver]
+         | ver -> ["-" ^ ver] in
+       find_map vers ~f:(fun ver ->
+           try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
+           with Not_found -> None) |> function
+       | Some path -> path
+       | None -> raise Not_found) |>
   definition_end
 
 let llvm var () : unit =
@@ -77,7 +88,7 @@ let cxx_flags () : unit =
     ~dump:true
     ~short_desc:(fun () -> "c++ flags")
     "cxxflags"
-    (fun () -> "-std=c++11") |>
+    (fun () -> "-std=c++11 -I$standard_library") |>
   definition_end
 
 let cxx_libs () : unit =

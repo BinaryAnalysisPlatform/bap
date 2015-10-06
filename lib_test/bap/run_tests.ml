@@ -2,12 +2,18 @@ open OUnit2
 
 let suite =
   "BAP" >::: [
+    Test_trie.suite;
     Test_bitvector.suite;
     Test_conceval.suite;
+    Test_graph.suite;
     Test_image.suite;
     Test_table.suite;
+    Test_memmap.suite;
     Test_leb128.suite;
     Test_disasm.suite;
+    Test_ir.suite;
+    Test_project.suite;
+    Test_llvm_loader.suite;
   ]
 
 

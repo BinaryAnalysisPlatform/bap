@@ -17,7 +17,7 @@ module Id : Identifiable with type t := id
 module Target : sig
   type t = target
 
-  val arm :  Disasm.Arm.Insn.t -> Disasm.Arm.Op.t list -> t
+  val arm :  ARM.Insn.t -> ARM.Op.t list -> t
 
 end
 
@@ -32,7 +32,7 @@ module Request : sig
     init:(string -> 'a) ->
     load_file:(?loader:string -> Uri.t -> 'a) ->
     load_chunk:(addr -> arch -> Uri.t -> 'a) ->
-    get_insns:(?backend:res_id -> Disasm.Basic.pred list -> res_id -> 'a) ->
+    get_insns:(?backend:res_id -> Disasm_expert.Basic.pred list -> res_id -> 'a) ->
     get_resource:(res_id -> 'a) -> 'a Or_error.t
 end
 
@@ -57,19 +57,19 @@ module Response : sig
 
   val image : secs:res_ids -> Image.t resource -> msg
 
-  val section : syms:res_ids -> Section.t -> mem resource -> msg
+  val segment : syms:res_ids -> Image.Segment.t -> mem resource -> msg
 
-  val symbol : Symbol.t -> mem resource List1.t -> msg
+  val symbol : Image.Symbol.t -> mem resource List1.t -> msg
 
   val memory : mem resource -> msg
 
   val insn : ?target:target -> ?bil:stmt list ->
-    mem resource -> Disasm.Basic.full_insn -> insn
+    mem resource -> Disasm_expert.Basic.full_insn -> insn
 
   val insns : insn list -> msg
 
   val images   : res_id list -> msg
-  val sections : res_id list -> msg
+  val segments : res_id list -> msg
   val symbols  : res_id list -> msg
   val chunks   : res_id list -> msg
   val added    : res_id -> msg
@@ -78,7 +78,7 @@ module Response : sig
     [`symtab | `debug] list -> loader
 
   val disassembler : name:string -> arch:arch ->
-    kinds:Disasm.kind list -> has_name:bool -> has_ops:bool ->
+    kinds:kind list -> has_name:bool -> has_ops:bool ->
     has_target:bool -> has_bil:bool -> disassembler
 
   val transport : string -> transport

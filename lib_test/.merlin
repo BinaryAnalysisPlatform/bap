@@ -4,6 +4,7 @@ B ../_build/lib_test/bap_dwarf
 B ../_build/lib_test/bap_elf
 B ../_build/lib_test/bap_image
 B ../_build/lib_test/bap_types
+B ../_build/lib_test/bap_sema
 REC
 S bap_disasm
 S bap_core
@@ -11,3 +12,5 @@ S bap_dwarf
 S bap_elf
 S bap_image
 S bap_types
+S bap_sema
+PKG oUnit

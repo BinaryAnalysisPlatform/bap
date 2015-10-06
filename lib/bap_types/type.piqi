@@ -16,6 +16,8 @@
   .option [.name r16]
   .option [.name r32]
   .option [.name r64]
+  .option [.name r128]
+  .option [.name r256]
 ]
 
 .alias [
@@ -57,7 +59,7 @@
   .option [.name arshift]
   .option [.name andbop ]
   .option [.name orbop  ]
-  .option [.name xor    ]
+  .option [.name x-or   ]
   .option [.name eq     ]
   .option [.name neq    ]
   .option [.name lt     ]
@@ -86,12 +88,18 @@
     .name typ
     .type typ
   ]
+
+  .field [
+    .name tmp
+    .type bool
+  ]
+
 ]
 
 % bitvectors
 .alias [
   .name bitvector
-  .type binary
+  .type string
 ]
 
 % an address is now a bitvector

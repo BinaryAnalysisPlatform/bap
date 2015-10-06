@@ -16,117 +16,141 @@ let backends : Backend.t String.Table.t =
 
 let (+>) = Fn.compose
 
-(* We hide Sec and Sym module making them not only abstract,
+(* We hide Segment and Symbol module making them not only abstract,
    but even nonconstructable from the outside, so that we
    can enforce several invariants.  In particular, we can enforce
-   a strict bijection between section and memory regions as well
+   a strict bijection between segment and memory regions as well
    as between symbol and memory. This means that no one can construct
-   such symbol or section that will not be mapped to the memory. This
+   such symbol or segment that will not be mapped to the memory. This
    allows us to provide handy mapping functions, that are guaranteed
    for not to fail.
 *)
 
-module Sec = struct
+module Segment = struct
   module T = struct
-    type t = Section.t with bin_io, compare, sexp
-    let hash = Addr.hash +> Location.addr +> Section.location
-    let pp fmt t = Format.fprintf fmt "%s" @@ Section.name t
-    let module_name = "Bap_image.Sec"
+    type t = Segment.t with bin_io, compare, sexp
+    let hash = Addr.hash +> Location.addr +> Segment.location
+    let pp fmt t = Format.fprintf fmt "%s" @@ Segment.name t
+    let module_name = Some "Bap.Std.Image.Segment"
   end
 
-  let name = Section.name
+  let name = Segment.name
 
 
   let rec checked p = function
     | Or (p1,p2) -> checked p p1 || checked p p2
     | X|W|R as p' -> p = p'
 
-  let is_writable t   = checked W (Section.perm t)
-  let is_readable t   = checked R (Section.perm t)
-  let is_executable t = checked X (Section.perm t)
+  let is_writable t   = checked W (Segment.perm t)
+  let is_readable t   = checked R (Segment.perm t)
+  let is_executable t = checked X (Segment.perm t)
   include T
   include Regular.Make(T)
 end
 
-module Sym = struct
+module Symbol = struct
   module T = struct
-    type t = Sym.t with bin_io, compare, sexp
-    let hash = Addr.hash +> Location.addr +> fst +> Sym.locations
-    let pp fmt t = Format.fprintf fmt "%s" @@ Sym.name t
-    let module_name = "Bap_image.Sym"
+    type t = Symbol.t with bin_io, compare, sexp
+    let hash = Addr.hash +> Location.addr +> fst +> Symbol.locations
+    let pp fmt t = Format.fprintf fmt "%s" @@ Symbol.name t
+    let module_name = Some "Bap.Std.Image.Symbol"
   end
-  include Sym
+  include Symbol
   include Regular.Make(T)
 end
 
-type sec = Sec.t with bin_io, compare, sexp
-type sym = Sym.t with bin_io, compare, sexp
+type segment = Segment.t with bin_io, compare, sexp
+type symbol = Symbol.t with bin_io, compare, sexp
+
+let segment = Value.Tag.register (module Segment)
+    ~name:"segment"
+    ~uuid:"a0eec123-5937-4283-b141-58d579a9b0df"
+
+let symbol  = Value.Tag.register (module String)
+    ~name:"symbol"
+    ~uuid:"768bc13d-d4be-43fc-9f7a-c369ebab9c7e"
+
+let section  = Value.Tag.register (module String)
+    ~name:"section"
+    ~uuid:"4014408d-a3af-488f-865b-5413beaf198e"
+
+let file = Value.Tag.register (module String)
+    ~name:"file"
+    ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
 
 type words = {
   r8  : word table Lazy.t;
   r16 : word table Lazy.t;
   r32 : word table Lazy.t;
   r64 : word table Lazy.t;
+  r128 : word table Lazy.t;
+  r256 : word table Lazy.t;
 }
 
 type t = {
   img  : img ;
   name : string option;
   data : Bigstring.t;
-  symbols : sym table;
-  sections : sec table;
+  symbols : symbol table;
+  segments : segment table;
+  memory : value memmap;
   words : words sexp_opaque;
-  memory_of_section : sec -> mem sexp_opaque;
-  memory_of_symbol : (sym -> mem * mem seq) Lazy.t sexp_opaque;
-  symbols_of_section : (sec -> sym seq) Lazy.t sexp_opaque;
-  section_of_symbol : (sym -> sec) Lazy.t sexp_opaque;
+  memory_of_segment : segment -> mem sexp_opaque;
+  memory_of_symbol : (symbol -> mem * mem seq) Lazy.t sexp_opaque;
+  symbols_of_segment : (segment -> symbol seq) Lazy.t sexp_opaque;
+  segment_of_symbol : (symbol -> segment) Lazy.t sexp_opaque;
 } with sexp_of
 
 type result = (t * Error.t list) Or_error.t
 
+let memory_error ?here msg mem =
+  Error.create ?here msg
+    (Memory.min_addr mem, Memory.max_addr mem)
+    <:sexp_of<(addr*addr)>>
 
-let mem_of_location endian data {Location.addr; len} =
-  Memory.create ~len endian addr data
+let (++!) e1 e2 = Error.of_list [e1;e2]
 
-let find_section secs addr =
-  Table.find_mapi secs ~f:(fun mem sec ->
-      if Memory.contains mem addr then Some (mem,sec) else None)
+let memory_of_location loc mem : mem Or_error.t =
+  let (addr, len) = Location.(addr loc, len loc) in
+  match Memory.view ~from:addr ~words:len mem with
+  | Error err ->
+    Error.create "symbol at" addr sexp_of_addr ++!
+    Error.create "with size" len sexp_of_int ++!
+    memory_error "doesn't fit into memory" mem ++! err |>
+    Result.fail
+  | ok -> ok
 
-module Error = struct
-  include Error
-  let prepend msg v sov err = tag_arg err msg v sov
-end
+let add_sym memory errs secs syms sym =
+  let (m,ms) = Symbol.locations sym in
+  List.fold (m::ms) ~init:(memory,syms,errs)
+    ~f:(fun (memory, map,errs) loc ->
+        let (addr, len) = Location.(addr loc, len loc) in
+        let memory,r = match Table.find_addr secs addr with
+          | None ->
+            memory, Error Error.(of_string "no segment for location")
+          | Some (sec_mem,sec) ->
+            match memory_of_location loc sec_mem with
+            | Error err -> memory, Error err
+            | Ok mem ->
+              let memory =
+                let tag = Value.create symbol (Symbol.name sym) in
+                Memmap.add memory mem tag in
+              match Table.add map mem sym with
+              | Error err ->
+                memory,Error Error.(tag err "intersecting symbol")
+              | ok -> memory,ok in
+        match r with
+        | Ok map -> memory,map,errs
+        | Error err ->
+          let err = Error.tag_arg err "skipped sym" sym sexp_of_symbol in
+          memory, map, err::errs)
 
-let add_sym errs secs syms sym =
-  let (m,ms) = Sym.locations sym in
-  List.fold (m::ms) ~init:(syms,errs) ~f:(fun (map,errs) loc ->
-      let (addr, len) = Location.(addr loc, len loc) in
-      let r = match find_section secs addr with
-        | None -> Error Error.(of_string "no section for location")
-        | Some (mem,sec) ->
-          match Memory.view ~from:addr ~words:len mem with
-          | Error err ->
-            Error
-              Error.(tag_arg err "section memory"
-                       (lazy (Memory.min_addr mem, Memory.max_addr mem))
-                       <:sexp_of<(addr*addr) Lazy.t>> |>
-                     prepend "symbol's memory doesn't fit in section"
-                       sec sexp_of_sec)
-          | Ok mem -> match Table.add map mem sym with
-            | Error err -> Error Error.(tag err "intersecting symbol")
-            | ok -> ok in
-      match r with
-      | Ok map -> (map,errs)
-      | Error err ->
-        let err = Error.tag_arg err "skipped sym" sym sexp_of_sym in
-        map, err::errs)
-
-let create_symbols syms secs =
-  List.fold syms ~init:(Table.empty,[])
-    ~f:(fun (symtab,errs) sym -> add_sym errs secs symtab sym )
+let create_symbols memory syms secs =
+  List.fold syms ~init:(memory,Table.empty,[])
+    ~f:(fun (memory,symtab,errs) sym -> add_sym memory errs secs symtab sym )
 
 let validate_no_intersections (s,ss) : Validate.t =
-  let open Backend.Section in
+  let open Backend.Segment in
   let (vs,_) = List.fold ss ~init:([],s) ~f:(fun (vs,s1) s2 ->
       let loc1,loc2 = location s1, location s2 in
       let open Location in
@@ -136,14 +160,13 @@ let validate_no_intersections (s,ss) : Validate.t =
       let v2 =
         Int.validate_lbound s2.off ~min:(Incl (s1.off + loc1.len))  in
       (v1 :: v2 :: vs, s2)) in
-  Validate.name_list "sections shouldn't intersect" vs
+  Validate.name_list "segments shouldn't intersect" vs
 
-
-let validate_section data s : Validate.t =
+let validate_segment data s : Validate.t =
   let size = Bigstring.length data in
-  let off = Section.off s in
-  let len = Location.len (Section.location s) in
-  Validate.(name_list "section" [
+  let off = Backend.Segment.off s in
+  let len = Location.len (Backend.Segment.location s) in
+  Validate.(name_list "segment" [
       name "offset" @@
       Int.validate_bound off ~min:(Incl 0) ~max:(Excl size);
       name "length" @@
@@ -152,17 +175,18 @@ let validate_section data s : Validate.t =
       Int.validate_ubound (len+off) ~max:(Incl size)
     ])
 
-let validate_sections data (s,ss) : Validate.t =
-  let check_secs = Validate.list_indexed (validate_section data) in
+let validate_segments data (s,ss) : Validate.t =
+  let check_secs = Validate.list_indexed (validate_segment data) in
   Validate.of_list [
     check_secs (s::ss);
     validate_no_intersections (s,ss)
   ]
 
-let create_sections endian data (s,ss) =
-  Validate.result (validate_sections data (s,ss)) >>= fun () ->
+let create_segments arch data (s,ss) =
+  let endian = Arch.endian arch in
+  Validate.result (validate_segments data (s,ss)) >>= fun () ->
   List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
-      let loc, pos = Section.(location s, off s) in
+      let loc, pos = Backend.Segment.(location s, off s) in
       let len, addr = Location.(len loc, addr loc) in
       Memory.create ~pos ~len endian addr data >>= fun mem ->
       tab >>= fun tab -> Table.add tab mem s)
@@ -190,34 +214,63 @@ let create_words secs = {
   r16 = lazy (words_of_table `r16 secs);
   r32 = lazy (words_of_table `r32 secs);
   r64 = lazy (words_of_table `r64 secs);
+  r128 = lazy (words_of_table `r128 secs);
+  r256 = lazy (words_of_table `r256 secs);
 }
 
 let register_backend ~name backend =
   String.Table.add backends ~key:name ~data:backend
 
+let create_segment_of_symbol_table syms secs =
+  let tab = Symbol.Table.create ()
+      ~growth_allowed:false
+      ~size:(Table.length syms) in
+  Table.iteri syms ~f:(fun mem sym ->
+      match Table.find_addr secs (Memory.min_addr mem) with
+      | None -> ()
+      | Some (_,sec) ->
+        Symbol.Table.add_exn tab ~key:sym ~data:sec);
+  Symbol.Table.find_exn tab
+
 let of_img img data name =
   let open Img in
-  create_sections (endian img) data (sections img) >>= fun secs ->
-  let syms,errs = create_symbols (symbols img) secs in
+  let arch = arch img in
+  create_segments arch data (segments img) >>= fun secs ->
+  let memory = Table.foldi secs ~init:Memmap.empty ~f:(fun mem sec map ->
+      Memmap.add map mem (Value.create segment sec)) in
+  let memory,syms,errs = create_symbols memory (symbols img) secs in
+  let memory,errs =
+    List.fold (sections img) ~init:(memory,errs) ~f:(fun (map,es) sec ->
+        let loc = Section.location sec in
+        let name = Section.name sec in
+        let (addr,len) = Location.(addr loc, len loc) in
+        Memmap.lookup memory addr |> Seq.hd |> function
+        | None -> map,errs
+        | Some (mem,_) -> match memory_of_location loc mem with
+          | Error e ->
+            map, Error.tag e ("skipped section " ^ name) :: es
+          | Ok mem ->
+            Memmap.add map mem (Value.create section name),es) in
   let words = create_words secs in
-  Table.(rev_map ~one_to:one Sec.hashable secs)
-  >>= fun (memory_of_section : sec -> mem) ->
-  let memory_of_symbol () : sym -> mem * mem seq =
-    ok_exn (Table.(rev_map ~one_to:at_least_one Sym.hashable syms)) in
-  let symbols_of_section () : sec -> sym seq =
-    Table.(link ~one_to:many Sec.hashable secs syms) in
-  let section_of_symbol () : sym -> sec =
-    Table.(link ~one_to:one Sym.hashable syms secs) in
+  Table.(rev_map ~one_to:one Segment.hashable secs)
+  >>= fun (memory_of_segment : segment -> mem) ->
+  let memory_of_symbol () : symbol -> mem * mem seq =
+    ok_exn (Table.(rev_map ~one_to:at_least_one Symbol.hashable syms)) in
+  let symbols_of_segment () : segment -> symbol seq =
+    Table.(link ~one_to:many Segment.hashable secs syms) in
+  let segment_of_symbol () : symbol -> segment =
+    create_segment_of_symbol_table syms secs in
   return ({
-      img; name; data; symbols = syms; sections = secs; words;
-      memory_of_section;
+      img; name; data; symbols = syms; segments = secs; words;
+      memory_of_segment;
+      memory;
       memory_of_symbol   = Lazy.from_fun memory_of_symbol;
-      symbols_of_section = Lazy.from_fun symbols_of_section;
-      section_of_symbol  = Lazy.from_fun section_of_symbol;
+      symbols_of_segment = Lazy.from_fun symbols_of_segment;
+      segment_of_symbol  = Lazy.from_fun segment_of_symbol;
     }, errs)
 
 let data t = t.data
-
+let memory t = t.memory
 
 let of_backend backend data path : result =
   match String.Table.find backends backend with
@@ -234,10 +287,9 @@ let autoload data path =
   | [] -> errorf "Autoloader: no suitable backend found"
   | _  -> errorf "Autoloader: can't resolve proper backend"
 
-let create_image path ?backend data : result =
-  match backend with
-  | None -> autoload data path
-  | Some backend -> of_backend backend data path
+let create_image path ?(backend="llvm") data : result =
+  if backend = "auto" then autoload data path
+  else of_backend backend data path
 
 let of_bigstring ?backend data =
   create_image None ?backend data
@@ -245,70 +297,54 @@ let of_bigstring ?backend data =
 let of_string ?backend data =
   of_bigstring ?backend (Bigstring.of_string data)
 
-let mapfile path : Bigstring.t option =
-  let fd = Unix.(openfile path [O_RDONLY] 0o400) in
-  try
-    let size = Unix.((fstat fd).st_size) in
-    let data = Bigstring.map_file ~shared:false fd size in
-    Unix.close fd;
-    Some data
-  with exn ->
-    Unix.close fd;
-    None
-
-let readfile path : Bigstring.t =
-  match mapfile path with
-  | Some data -> data
-  | None -> Bigstring.of_string (In_channel.read_all path)
-
-let create ?backend path : result =
-  try_with (fun () -> readfile path) >>= fun data ->
-  match backend with
-  | None -> autoload data (Some path)
-  | Some backend -> of_backend backend data (Some path)
+let create ?(backend="llvm") path : result =
+  try_with (fun () -> Bap_fileutils.readfile path) >>= fun data ->
+  if backend = "auto" then autoload data (Some path)
+  else of_backend backend data (Some path)
 
 let entry_point t = Img.entry t.img
 let filename t = t.name
 let arch t = Img.arch t.img
-let addr_size t = Img.addr_size t.img
-let endian t = Img.endian t.img
+let addr_size t = Arch.addr_size (Img.arch t.img)
+let endian t = Arch.endian (Img.arch t.img)
 
 let words t (size : size) : word table =
   let lazy table = match size with
     | `r8  -> t.words.r8
     | `r16 -> t.words.r16
     | `r32 -> t.words.r32
-    | `r64 -> t.words.r64 in
+    | `r64 -> t.words.r64
+    | `r128 -> t.words.r128
+    | `r256 -> t.words.r256 in
   table
 
-let sections t = t.sections
+let segments t = t.segments
 let symbols t = t.symbols
-let memory_of_section t = t.memory_of_section
+let memory_of_segment t = t.memory_of_segment
 
 let memory_of_symbol {memory_of_symbol = lazy f} = f
-let symbols_of_section {symbols_of_section = lazy f} = f
-let section_of_symbol {section_of_symbol = lazy f} = f
+let symbols_of_segment {symbols_of_segment = lazy f} = f
+let segment_of_symbol {segment_of_symbol = lazy f} = f
 
 TEST_MODULE = struct
 
   let expect ?(print=false) ~errors data_size ss =
     let width = 32 in
-    let section (addr, off, size) = {
-      Section.name = "test-section";
-      Section.perm = R;
-      Section.vsize = size;
-      Section.off;
-      Section.location = {
+    let segment (addr, off, size) = {
+      Backend.Segment.name = "test-segment";
+      Backend.Segment.perm = R;
+      Backend.Segment.off;
+      Backend.Segment.location = {
         Location.addr = Addr.of_int ~width addr;
         Location.len = size;
 
       }
     } in
     let data = Bigstring.create data_size in
-    let secs = match List.map ss ~f:section with
-      | [] -> invalid_arg "empty set of sections"
+    let secs = match List.map ss ~f:segment with
+      | [] -> invalid_arg "empty set of segments"
       | (s::ss) -> (s,ss) in
-    let v = validate_sections data secs in
+    let v = validate_segments data secs in
     if print then begin
       match Validate.(result v) with
       | Ok () -> eprintf "No errors\n"

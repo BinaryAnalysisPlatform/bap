@@ -1,6 +1,6 @@
 (** Basic disassembler.
 
-    This is a target agnostic basic disassembler. It
+    This is a target agnostic basic disassembler.
 *)
 
 open Core_kernel.Std
@@ -26,9 +26,7 @@ type empty     (** set when information is not stored                *)
 type asm       (** set when assembler information is stored        *)
 type kinds     (** set when instruction kind information is stored *)
 
-type full_insn = (asm,kinds) insn with sexp_of
-
-
+type full_insn = (asm,kinds) insn with compare, sexp_of
 
 (** Disassembler.
 
@@ -52,8 +50,6 @@ type full_insn = (asm,kinds) insn with sexp_of
 *)
 type ('a,'k) t
 
-
-
 (** Disassembler state.
 
     Words of precautions: this state is valid only inside handlers
@@ -64,7 +60,6 @@ type ('a,'k) t
     is for user data type, that can be used to pass extra information
 *)
 type (+'a,+'k,'s,'r) state
-
 
 (** [create ?debug_level ?cpu ~backend target] creates a disassembler
     for the specified [target]. All parameters are backend specific,
@@ -93,7 +88,7 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     process of disassembly can be driven using [stop], [step], [back]
     and [jump] functions, described later.
 
-    @param [stop_on] defines a set of predicates that will be checked
+    @param stop_on defines a set of predicates that will be checked
     on each step to decide whether it should stop here and call a
     user-provided [hit] function, or it should continue. The descision
     is made acording to the rule: [if exists stop_on then stop], i.e.,
@@ -103,10 +98,10 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     can match predicates, and if the set is empty, then it always
     evaluates to false.
 
-    @param [init] initial value of user data, that can be passed
+    @param init initial value of user data, that can be passed
     through handlers (cf., [fold])
 
-    @param [return] a function that lifts user data type ['s] to type
+    @param return a function that lifts user data type ['s] to type
     ['r]. It is useful when you need to perform disassembly in some
     monad, like [Or_error], or [Lwt]. Otherwise, just use [ident]
     function and assume that ['s == 'r].
@@ -134,6 +129,7 @@ val store_kinds : ('a,_) t -> ('a,kinds) t
     assembly string and kinds even if the corresponding modes are
     disabled.  *)
 val run :
+  ?backlog:int ->
   ?stop_on:pred list ->
   ?invalid:(('a,'k,'s,'r) state -> mem -> 's -> 'r) ->
   ?stopped:(('a,'k,'s,'r) state -> 's -> 'r) ->
@@ -199,6 +195,15 @@ module Op : sig
     | Imm of imm
     | Fmm of fmm
   with bin_io, compare, sexp
+
+  (** Provides normalized comparison  *)
+  module Normalized : sig
+    val compare : t -> t -> int
+    val hash : t -> int
+    val compare_ops : t array -> t array -> int
+  end
+
+  val pp_adt : Format.formatter -> t -> unit
   include Regular with type t := t
 end
 
@@ -240,4 +245,16 @@ module Fmm : sig
   type t = fmm
   val to_float : t -> float
   include Regular with type t := t
+end
+
+module Trie : sig
+  type key
+
+  (** [key_of_first_insns state ~len:n] creates a key from first [n]
+      instructions stored in the state if state contains such
+      amount of instructions  *)
+  val key_of_first_insns : (_,_,_,_) state -> len:int -> key option
+
+  module Normalized : Trie with type key = key
+  include Trie with type key := key
 end

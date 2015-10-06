@@ -5,7 +5,7 @@ open Bap.Std
 open Rpc
 
 module Res = Manager
-module Dis = Disasm.Basic
+module Dis = Disasm_expert.Basic
 
 let version = "0.1"
 
@@ -51,8 +51,8 @@ let section = Lwt_log.Section.make "bap_server"
 let stub name = Lwt.Or_error.unimplemented name
 
 module Handlers(Ctxt : sig
-                  val reply : Response.msg -> unit Lwt.t
-                end) = struct
+    val reply : Response.msg -> unit Lwt.t
+  end) = struct
   open Ctxt
 
   let reply_error sev fmt =
@@ -63,10 +63,10 @@ module Handlers(Ctxt : sig
   let init version =
     let ts = List.(Transport.registered_fetchers >>|
                    Response.transport) in
-    let kinds = Disasm.Insn.Kind.all in
+    let kinds = Kind.all in
     let ds =
       Response.disassembler
-        ~name:"llvm" ~arch:`arm ~kinds
+        ~name:"llvm" ~arch:`armv7 ~kinds
         ~has_name:true ~has_bil:true ~has_ops:true ~has_target:true ::
       List.map Arch.all ~f:(fun arch ->
           Response.disassembler ~name:"llvm" ~arch
@@ -79,11 +79,11 @@ module Handlers(Ctxt : sig
     let capabilities = Response.capabilities ~version ts ls ds in
     let (%) x f = List.map x ~f:Manager.string_of_id |> f in
     let images = Manager.images % Response.images in
-    let sections = Manager.sections % Response.sections in
+    let segments = Manager.segments % Response.segments in
     let symbols = Manager.symbols % Response.symbols in
     let chunks = Manager.chunks % Response.chunks in
     Lwt.List.iter ~f:reply
-      [capabilities; images; sections; symbols; chunks] >>=
+      [capabilities; images; segments; symbols; chunks] >>=
     Lwt.Or_error.return
 
   let reply_resource uri res =
@@ -128,46 +128,58 @@ module Handlers(Ctxt : sig
   type ('a,'b) lifter =
     mem -> ('a,'b) Dis.insn -> (Target.t option * stmt list option) Lwt.t
 
+  let bil_error err insn =
+    warning "Failed to raise insn %s to BIL: %s"
+      (Sexp.to_string (Dis.Insn.sexp_of_t insn))
+      (Error.to_string_hum err)
+
   let arm_lifter : ('a,'b) lifter = fun mem insn ->
-    let open Disasm in
-    let arm = Arm.Insn.create insn in
-    let ops = Array.map (Dis.Insn.ops insn) ~f:Arm.Op.create |>
+    let arm = ARM.Insn.create insn in
+    let ops = Array.map (Dis.Insn.ops insn) ~f:ARM.Op.create |>
               Array.to_list |> Option.all in
     let target = Option.both arm ops |>
                  Option.map ~f:(Tuple2.uncurry Target.arm) in
-    match Arm.Lift.insn mem insn with
+    match ARM.lift mem insn with
     | Ok bil -> return (target, Some bil)
     | Error err ->
-      warning "Failed to raise insn %s to BIL: %s"
-        (Sexp.to_string (Dis.Insn.sexp_of_t insn))
-        (Error.to_string_hum err) >>= fun () ->
+      bil_error err insn >>= fun () ->
       return (target, None)
+
+  let x86_lifter mem insn = match IA32.lift mem insn with
+    | Ok bil -> return (None, Some bil)
+    | Error err -> bil_error err insn >>= fun () -> return (None,None)
+
+  let x86_64_lifter mem insn = match AMD64.lift mem insn with
+    | Ok bil -> return (None, Some bil)
+    | Error err -> bil_error err insn >>= fun () -> return (None,None)
 
   let no_lifter : ('a,'b) lifter = fun _ _ -> return (None,None)
 
   let lifter_of_arch : arch -> ('a,'b) lifter = function
     | #Arch.arm -> arm_lifter
+    | `x86 -> x86_lifter
+    | `x86_64 -> x86_64_lifter
     | _   -> no_lifter
 
   let get_insns ?(backend="llvm") stop_on res_id =
     Lwt.return @@ Res.id_of_string res_id >>=? fun id ->
     let mems_of_img img =
-      Image.sections img |> Table.to_sequence |> Seq.to_list |>
-      List.filter ~f:(fun (_,s) -> Section.is_executable s) |>
+      Image.segments img |> Table.to_sequence |> Seq.to_list |>
+      List.filter ~f:(fun (_,s) -> Image.Segment.is_executable s) |>
       List.map ~f:fst   in
     let chunk r = Res.memory r |> get_mem >>|? List.return in
-    let section = chunk in
+    let segment = chunk in
     let symbol r =
       Res.memory r |> List1.to_list |>
       Lwt.Or_error.List.map ~f:get_mem in
     let image r = Res.image r |> Res.fetch_image >>|? mems_of_img >>|?
       List.map ~f:(fun mem -> Res.links r, mem)  in
-    Res.with_resource id ~chunk ~symbol ~section ~image
+    Res.with_resource id ~chunk ~symbol ~segment ~image
     >>=? fun ms ->
     let get_arch r = Lwt.Or_error.return (Res.arch r) in
     Res.with_resource id
       ~chunk:get_arch ~symbol:get_arch
-      ~section:get_arch ~image:get_arch >>=? fun arch ->
+      ~segment:get_arch ~image:get_arch >>=? fun arch ->
     let lifter = lifter_of_arch arch in
     let target = Arch.(match backend, arch with
         | "llvm", arch -> Ok (Arch.to_string arch)
@@ -194,17 +206,17 @@ module Handlers(Ctxt : sig
           let img = Res.image r in
           let img_id = Res.id r in
           let links = Res.links_of_image img in
-          let secs = Res.sections_of_image img_id |>
+          let secs = Res.segments_of_image img_id |>
                      List.map ~f:Res.string_of_id in
           Res.fetch_image img >>|? Tuple2.create links >>|?
           Response.image ~secs)
-      ~section:(fun r ->
-          let sec = Res.section r in
+      ~segment:(fun r ->
+          let sec = Res.segment r in
           let sec_id = Res.id r in
-          let syms = Res.symbols_of_section sec_id |>
+          let syms = Res.symbols_of_segment sec_id |>
                      List.map ~f:Res.string_of_id  in
           let mem = Res.memory r in
-          get_mem mem >>|? Response.section ~syms sec) >>=? fun msg ->
+          get_mem mem >>|? Response.segment ~syms sec) >>=? fun msg ->
     reply msg >>= Lwt.Or_error.return
 end
 
@@ -238,8 +250,10 @@ let run_exn (requests, replies) : unit Lwt.t =
           Response.create id msg |> reply
         | Error err' ->
           let err = Error.of_list [err; err'] in
-          let msg = Error.to_string_hum err in
-          warning_f ~section "Ignoring junk request: %s" msg)
+          let str = Error.to_string_hum err in
+          warning_f ~section "Ignoring junk request: %s" str >>= fun () ->
+          let msg = Response.error `Error str in
+          Response.create (Id.of_string "0") msg |> reply)
 
 
 let run (pipe : (request, response) Transport.pipe)

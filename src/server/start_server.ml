@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_plugins.Std
 open Core_lwt.Std
 open Lwt_log
 open Bap.Std

@@ -10,7 +10,7 @@ module Id = struct
       exn -> Or_error.errorf "Bad ID format: '%s'" s
   include Regular.Make(struct
       include Int64
-      let module_name = "Manager.Id"
+      let module_name = Some "Manager.Id"
     end)
 end
 
@@ -42,14 +42,14 @@ type 'a resource = {
 type context = {
   images : image resource Ids.t;
   chunks : mem   resource Ids.t;
-  sections : Section.t Ids.t;
-  symbols  : Symbol.t  Ids.t;
-  sections_of_image  : id list Ids.t;
-  symbols_of_section : id list Ids.t;
+  segments : Image.Segment.t Ids.t;
+  symbols  : Image.Symbol.t  Ids.t;
+  segments_of_image  : id list Ids.t;
+  symbols_of_segment : id list Ids.t;
   memory_of_symbol   : id list Ids.t;
   symbol_of_memory   : id Ids.t;
-  section_of_symbol  : id Ids.t;
-  image_of_section   : id Ids.t;
+  segment_of_symbol  : id Ids.t;
+  image_of_segment   : id Ids.t;
 } with fields
 
 
@@ -59,14 +59,14 @@ let t =
   {
     images = empty ();
     chunks = empty ();
-    sections = empty ();
+    segments = empty ();
     symbols = empty ();
-    sections_of_image = empty ();
-    symbols_of_section = empty ();
+    segments_of_image = empty ();
+    symbols_of_segment = empty ();
     memory_of_symbol = empty ();
     symbol_of_memory = empty ();
-    section_of_symbol = empty ();
-    image_of_section = empty ();
+    segment_of_symbol = empty ();
+    image_of_segment = empty ();
   }
 
 
@@ -97,21 +97,21 @@ let add_image ?file img =
   let img_id = next_id () in
   let file = Option.first_some file (Image.filename img) in
   let arch = Image.arch img in
-  let sections = Image.sections img |> Table.to_sequence in
-  Lwt.Or_error.Seq.iter sections ~f:(fun (mem,sec) ->
+  let segments = Image.segments img |> Table.to_sequence in
+  Lwt.Or_error.Seq.iter segments ~f:(fun (mem,sec) ->
       let sec_id = next_id () in
-      Ids.add_multi t.sections_of_image ~key:img_id ~data:sec_id;
-      Ids.add_exn t.image_of_section ~key:sec_id ~data:img_id;
-      provide_memory arch ?file sec_id mem >>=? fun section ->
-      Ids.add_exn t.chunks ~key:sec_id ~data:section;
-      Ids.add_exn t.sections ~key:sec_id ~data:sec;
-      let syms = Image.symbols_of_section img sec  in
+      Ids.add_multi t.segments_of_image ~key:img_id ~data:sec_id;
+      Ids.add_exn t.image_of_segment ~key:sec_id ~data:img_id;
+      provide_memory arch ?file sec_id mem >>=? fun segment ->
+      Ids.add_exn t.chunks ~key:sec_id ~data:segment;
+      Ids.add_exn t.segments ~key:sec_id ~data:sec;
+      let syms = Image.symbols_of_segment img sec  in
       Lwt.Or_error.Seq.iter syms ~f:(fun sym ->
           let sym_id = next_id () in
           let (mem,mems) = Image.memory_of_symbol img sym in
           Ids.add_exn t.symbols ~key:sym_id ~data:sym;
-          Ids.add_multi t.symbols_of_section ~key:sec_id ~data:sym_id;
-          Ids.add_exn t.section_of_symbol ~key:sym_id ~data:sec_id;
+          Ids.add_multi t.symbols_of_segment ~key:sec_id ~data:sym_id;
+          Ids.add_exn t.segment_of_symbol ~key:sym_id ~data:sec_id;
           let all_mems = mem :: Seq.to_list mems in
           Lwt.Or_error.List.iter all_mems ~f:(fun mem ->
               let mem_id = next_id () in
@@ -157,21 +157,21 @@ let id_of_string s =
   let open Or_error in
   Id.of_string s >>= fun id ->
   let f = Ids.mem in
-  let tables = [f t.images; f t.chunks; f t.symbols; f t.sections] in
+  let tables = [f t.images; f t.chunks; f t.symbols; f t.segments] in
   match List.exists tables ~f:(fun f -> f id) with
   | true -> Ok id
   | false -> errorf "Id %s is not known"  s
 
 let symbol_of_memory = Ids.find t.symbol_of_memory
-let section_of_symbol = Ids.find t.section_of_symbol
-let image_of_section = Ids.find t.image_of_section
+let segment_of_symbol = Ids.find t.segment_of_symbol
+let image_of_segment = Ids.find t.image_of_segment
 
 let find_list tab id = match Ids.find tab id with
   | Some lst -> lst
   | None -> []
 
-let sections_of_image = find_list t.sections_of_image
-let symbols_of_section = find_list t.symbols_of_section
+let segments_of_image = find_list t.segments_of_image
+let symbols_of_segment = find_list t.symbols_of_segment
 let memory_of_symbol = find_list t.memory_of_symbol
 
 type 'a served = {
@@ -181,8 +181,8 @@ type 'a served = {
 
 type nil = Nil
 type mem = Memory.t served
-type sym = Symbol.t             (** symbol  *)
-type sec = Section.t            (** section  *)
+type sym = Image.Symbol.t             (** symbol  *)
+type seg = Image.Segment.t            (** segment  *)
 type img = Image.t served
 
 type ('mem, 'img, 'sec, 'sym) res = {
@@ -198,7 +198,7 @@ type ('mem,'img,'sec,'sym,'a) visitor =
 
 let memory  r = r.mem
 let image   r = r.img
-let section r = r.sec
+let segment r = r.sec
 let symbol  r = r.sym
 let endian  r = r.res.endian
 let addr    r = r.res.addr
@@ -279,10 +279,10 @@ let fetch_image r = r.fetch ()
 let of_image res : (nil,img,nil,nil) res =
   { (init res) with img = serve res; }
 
-let of_section sec id : (mem,img,sec,nil) res Or_error.t =
+let of_segment sec id : (mem,img,seg,nil) res Or_error.t =
   let open Or_error in
   let open Fields_of_context in
-  find_in image_of_section id >>= fun img_id ->
+  find_in image_of_segment id >>= fun img_id ->
   find_in images img_id >>= fun img ->
   find_in chunks id >>= fun mem ->
   let r = init mem in
@@ -291,12 +291,12 @@ let of_section sec id : (mem,img,sec,nil) res Or_error.t =
            mem = serve mem;
            sec}
 
-let of_symbol sym id : (mem list1,img,sec,sym) res Or_error.t =
+let of_symbol sym id : (mem list1,img,seg,sym) res Or_error.t =
   let open Fields_of_context in
   let open Or_error in
-  find_in section_of_symbol id    >>= fun sec_id ->
-  find_in sections sec_id         >>= fun sec    ->
-  find_in image_of_section sec_id >>= fun img_id ->
+  find_in segment_of_symbol id    >>= fun sec_id ->
+  find_in segments sec_id         >>= fun sec    ->
+  find_in image_of_segment sec_id >>= fun img_id ->
   find_in images img_id           >>= fun img ->
   find_in memory_of_symbol id     >>= fun mems ->
   List.map mems ~f:(find_in chunks) |> all >>= function
@@ -318,12 +318,12 @@ module Return = struct
   let error msg data sexp _res = Lwt.Or_error.error msg data sexp
 end
 
-let with_resource ~chunk ~symbol ~section ~image (id : id) =
+let with_resource ~chunk ~symbol ~segment ~image (id : id) =
   let open Fields_of_context in
   match Ids.find t.images id with
   | Some img -> image (of_image img)
-  | None -> match Ids.find t.sections id with
-    | Some sec -> return (of_section sec id) >>=? section
+  | None -> match Ids.find t.segments id with
+    | Some sec -> return (of_segment sec id) >>=? segment
     | None -> match Ids.find t.symbols id with
       | Some sym -> return (of_symbol sym id) >>=? symbol
       | None -> match Ids.find t.chunks id with
@@ -345,7 +345,7 @@ include struct
   open Fields_of_context
 
   let images = export images
-  let sections = export sections
+  let segments = export segments
   let symbols = export symbols
   let chunks = export chunks
 end

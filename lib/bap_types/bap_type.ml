@@ -6,7 +6,7 @@ open Type
 
 module T = struct
   type t = typ with bin_io, compare, sexp
-  let module_name = "Bap_type"
+  let module_name = Some "Bap.Std.Type"
 
   let pp fmt = function
     | Imm n -> fprintf fmt "u%u" n
@@ -18,10 +18,13 @@ end
 
 module Export = struct
   let bool_t  = imm  1
+  let reg4_t  = imm  4
   let reg8_t  = imm  8
   let reg16_t = imm 16
   let reg32_t = imm 32
   let reg64_t = imm 64
+  let reg128_t = imm 128
+  let reg256_t = imm 256
   let mem32_t = mem `r32
   let mem64_t = mem `r64
 end

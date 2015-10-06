@@ -28,7 +28,7 @@ let repair_imm (src : word) ~sign_mask ~imm_mask rtype : exp =
     (bit_set && rtype = `NEG) ||
     (not bit_set && rtype = `POS) in
   let offset = Z.(src land word imm_mask) in
-  Exp.int (if negate then Z.neg offset else offset)
+  Bil.int (if negate then Z.neg offset else offset)
 
 let repair_reg reg imm ~sign_mask rtype =
   let bit_set =
@@ -37,7 +37,7 @@ let repair_reg reg imm ~sign_mask rtype =
     (bit_set && rtype = `NEG) || (not bit_set && rtype = `POS)
   in
   let m_one = Word.(ones (bitwidth imm))  in
-  if negate then Exp.(int m_one * reg) else reg
+  if negate then Bil.(int m_one * reg) else reg
 
 
 
@@ -46,14 +46,14 @@ let lift_r_op ~dest1 ?dest2 ?shift ~base ~offset mode sign size operation =
   let base = assert_reg _here_ base |> Env.of_reg in
   let (offset : exp) =
     match offset with
-    | Op.Reg _ -> fail _here_ "got register instead of imm"
+    | Op.Reg r -> Bil.(var (Env.of_reg r))
     | Op.Imm w ->
       let width = Word.bitwidth w in
       let _1 = Word.one 32 in
       let min_32 = Word.Int_exn.(_1 lsl Word.of_int 31 ~width) in
       if Word.(w = min_32)
-      then Exp.(int Word.(zero width))
-      else Exp.(int w) in
+      then Bil.(int Word.(zero width))
+      else Bil.(int w) in
 
   let offset = match shift with
     | Some s -> Shift.lift_mem ~src:offset s reg32_t
@@ -99,7 +99,7 @@ let mem_offset_reg_or_imm_neg reg_off imm_off =
   | Op.Reg #Reg.nil ->
     repair_imm imm_off ~sign_mask:0x100 ~imm_mask:0xff `NEG
   | Op.Reg (#Reg.gpr as reg) ->
-    repair_reg Exp.(var (Env.of_reg reg)) imm_off ~sign_mask:0x100 `NEG
+    repair_reg Bil.(var (Env.of_reg reg)) imm_off ~sign_mask:0x100 `NEG
   | op -> fail _here_ "unexpected operand: %s" (Arm.Op.to_string op)
 
 let mem_offset_reg_or_imm_pos reg_off imm_off =
@@ -107,5 +107,5 @@ let mem_offset_reg_or_imm_pos reg_off imm_off =
   | Op.Reg #Reg.nil ->
     repair_imm imm_off ~sign_mask:0x100 ~imm_mask:0xff `POS
   | Op.Reg (#Reg.gpr as reg) ->
-    repair_reg Exp.(var (Env.of_reg reg)) imm_off ~sign_mask:0x1 `POS
+    repair_reg Bil.(var (Env.of_reg reg)) imm_off ~sign_mask:0x1 `POS
   | op -> fail _here_ "unexpected operand: %s" (Arm.Op.to_string op)

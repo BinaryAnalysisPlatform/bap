@@ -123,27 +123,27 @@ class Image(Resource):
     def __init__(self, ident, bap):
         super(Image,self).__init__('image', ident, bap)
 
-    def load_sections(self):
-        ss = self.get('sections')
-        self.sections = [Section(s, self) for s in ss]
+    def load_segments(self):
+        ss = self.get('segments')
+        self.segments = [Segment(s, self) for s in ss]
 
     def get_symbol(self, name, d=None):
-        for sec in self.sections:
+        for sec in self.segments:
             sym = sec.get_symbol(name, d)
             if sym is not d:
                 return sym
         return d
 
     def __getattr__(self, name):
-        if name == 'sections':
-            self.load_sections()
-            return self.sections
+        if name == 'segments':
+            self.load_segments()
+            return self.segments
         else:
             return self.get(name)
 
-class Section(Resource):
+class Segment(Resource):
     def __init__(self, ident, parent):
-        super(Section, self).__init__('section', ident, parent.bap)
+        super(Segment, self).__init__('segment', ident, parent.bap)
         self.parent = parent
 
     def load_symbols(self):
@@ -247,7 +247,8 @@ class Bap(object):
         for attempt in range(RETRIES):
             try:
                 self.capabilities = self.call({'init' : {
-                    'version' : '0.1'}})
+                    'version' : '0.1'}}).next()['capabilities']
+                break
             except Exception:
                 if attempt + 1 == RETRIES:
                     raise
@@ -256,7 +257,6 @@ class Bap(object):
 
         if not "capabilities" in self.__dict__:
             raise RuntimeError("Failed to connect to BAP server")
-
         self.data = {}
         self.temp = NamedTemporaryFile('rw+b', prefix="bap-")
 
@@ -306,8 +306,6 @@ class Bap(object):
     def call(self, data):
         if isinstance(data, dict):
             method = request.post
-            if 'get_insns' or 'get_resource' in data:
-                method = request.get
             return jsons(method(self.url, data=self.dumps(data)))
         else:
             gen = (self.dumps(msg) for msg in data)
@@ -365,8 +363,8 @@ def demo_chunk():
 def demo_image():
     img = image("coreutils_O0_ls")
     print "Arch: {1}".format(img.name, img.arch)
-    print "Sections:"
-    for sec in img.sections:
+    print "Segments:"
+    for sec in img.segments:
         print "\t{0}\t{1}".format(sec.name, "".join(sec.perm))
         print "\t\tSymbols:"
         for sym in sec.symbols:

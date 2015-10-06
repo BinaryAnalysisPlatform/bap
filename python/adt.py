@@ -69,6 +69,8 @@ class ADT(object):
                 return '0x{0:x}'.format(x)
             elif isinstance(x, ADT):
                 return str(x)
+            elif isinstance(x, tuple):
+                return "(" + ", ".join(qstr(i) for i in x) + ")"
             else:
                 return '"{0}"'.format(x)
         def args():

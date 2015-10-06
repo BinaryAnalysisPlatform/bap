@@ -1,10 +1,8 @@
 open Core_kernel.Std
-open Bap_types.Std
-
-module Seq = Sequence
+open Bap.Std
+open Bil.Types
 
 exception Abort of string
-
 
 (** Given 8*n, return n.
   * useful for operating on memory. *)
@@ -16,13 +14,13 @@ module Mem = Addr.Map
 
 module T = struct
   type t =
-    | BV of Bitvector.t
+    | BV of word
     | Mem of memory
     | Un of string * typ
   and memory = t Mem.t
   with bin_io, compare, sexp
 
-  let module_name = "Bap_conceval"
+  let module_name = Some "Bap.Std.Conceval"
   let hash = Hashtbl.hash
 
   open Format
@@ -52,7 +50,7 @@ module Memory = struct
       if Mem.is_empty mem then None
       else
         let bytes = Size.to_bytes sz in
-        let max = Addr.(idx ++ (bytes - 1)) in
+        let max = Addr.(idx ++ Int.(bytes - 1)) in
         let data =
           List.map ~f:snd (Mem.range_to_alist mem ~min:idx ~max) in
         if List.length data = bytes then
@@ -123,7 +121,7 @@ module Z = Bitvector.Int_exn
 
 (** Handle a unary operator. *)
 let handle_unop op v =
-  let open Exp.Unop in bv_action_or_unknown v
+  bv_action_or_unknown v
     (fun v -> match op with
        | NEG -> BV (Z.neg v)
        | NOT -> BV (Z.lnot v))
@@ -132,7 +130,6 @@ let handle_unop op v =
 
 (** Handle a binary operator. *)
 let handle_binop op l r : value =
-  let open Exp.Binop in
   match (l, r) with
   | (Mem _, _) | (_, Mem _) ->
     raise (Abort "Operation cannot be performed on memory.")
@@ -164,17 +161,16 @@ let handle_binop op l r : value =
     BV (op l r)
 
 let handle_cast cast_kind size v =
-  let open Exp.Cast in
+  let hi = size - 1 in
   let cast v = match cast_kind with
-    | UNSIGNED -> Word.bitsub_exn ~hi:size v
-    | SIGNED   -> Word.bitsub_exn ~hi:size (Word.signed v)
-    | HIGH     -> Word.bitsub_exn ~lo:(Word.bitwidth v - size) v
-    | LOW      -> Word.bitsub_exn ~hi:size v in
+    | UNSIGNED -> Word.extract_exn ~hi v
+    | SIGNED   -> Word.extract_exn ~hi (Word.signed v)
+    | HIGH     -> Word.extract_exn ~lo:(Word.bitwidth v - size) v
+    | LOW      -> Word.extract_exn ~hi v in
   bv_action_or_unknown v (fun v -> BV (cast v))
 
 (** Given state, evaluate a single BIL expression. *)
 let rec eval_exp state exp =
-  let open Exp in
   let result = match exp with
     | Load (arr, idx, endian, t) ->
       (match Memory.load (eval_exp state arr) (eval_exp state idx) endian t with
@@ -200,7 +196,7 @@ let rec eval_exp state exp =
            if not (Word.is_zero v) then eval_exp state t_case
            else eval_exp state f_case)
     | Extract (hi, lo, v) -> bv_action_or_unknown (eval_exp state v)
-                               (fun v -> BV (Word.bitsub_exn ~hi ~lo v))
+                               (fun v -> BV (Word.extract_exn ~hi ~lo v))
     | Concat (l, r) -> (match eval_exp state l, eval_exp state r with
         | (Mem _, _) | (_, Mem _) ->
           raise (Abort "Operation cannot be performed on memory.")
@@ -212,7 +208,8 @@ let rec eval_exp state exp =
   * a location to jump to, if any. *)
 let rec eval_stmt state =
   let open Stmt in function
-    | Move (v, exp) -> (State.move ~key:v ~data:(eval_exp state exp) state), None
+    | Move (v, exp) ->
+      (State.move ~key:v ~data:(eval_exp state exp) state), None
     | Jmp (exp) -> state, Some (eval_exp state exp)
     | While (cond, stmts) ->
       (match eval_exp state cond with

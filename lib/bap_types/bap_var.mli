@@ -17,6 +17,14 @@ include Regular with type t := t
 
 val create : ?tmp:bool -> string -> typ -> t
 
+val renumber : t -> int -> t
+
+val version : t -> int
+
+val base : t -> t
+
+val same : t -> t -> bool
+
 (** [name var] returns a name assosiated with variable  *)
 val name : t -> string
 
@@ -26,10 +34,11 @@ val typ : t -> typ
 (** [is_tmp] true if variable is temporary  *)
 val is_tmp : t -> bool
 
+
 (**/**)
 
 module V1 : sig
-  type r = string * int * typ
+  type r = string * int * typ * bool
   val serialize   : t -> r
   val deserialize : r -> t
 end

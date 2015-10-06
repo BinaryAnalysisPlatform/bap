@@ -10,12 +10,18 @@ type t = {
   system : string;
 } with fields
 
-let init_findlib = lazy (
-  Dynlink.init ();
-  Dynlink.allow_unsafe_modules true;
-  Findlib.init ())
+let make ~system path = {
+  name = Filename.basename path;
+  path; system}
 
-let create_exn ~system name =
+let init_findlib = lazy (
+  try
+    Dynlink.init ();
+    Dynlink.allow_unsafe_modules true;
+    Findlib.init ()
+  with _ -> ())
+
+let find_exn ~system name =
   let module Pkg = Fl_package_base in
   let pkg = Pkg.query name in
   let def = Pkg.(pkg.package_defs) in
@@ -33,8 +39,8 @@ let create_exn ~system name =
       system;
     }
 
-let create ~system name =
-  try create_exn ~system name with
+let find ~system name =
+  try find_exn ~system name with
   | Not_found -> None
 
 let load pkg : unit or_error =
@@ -43,10 +49,36 @@ let load pkg : unit or_error =
     error_string (Dynlink.error_message err)
   | exn -> of_exn exn
 
-let list ~system : t list =
+let find_all ~system : t list =
   let lazy () = init_findlib in
   Fl_package_base.list_packages () |>
-  List.filter_map ~f:(create ~system)
+  List.filter_map ~f:(find ~system)
 
-let load_all ~system : (t * unit Or_error.t) list =
-  list ~system |> List.map ~f:(fun pkg -> pkg, load pkg)
+
+let paths_of_env () =
+  try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
+  with Not_found -> []
+
+let undash = String.map ~f:(function '-' -> '_' | c -> c)
+
+
+let create ?(library=[]) ?path ~system name = match path with
+  | Some path -> Some (make ~system path)
+  | None ->
+    let filename =
+      if Filename.check_suffix name ".plugin"
+      then name else name ^ ".plugin" in
+    let paths = [
+      [FileUtil.pwd ()]; paths_of_env (); library
+    ] |> List.concat in
+    List.find_map paths ~f:(fun dir ->
+        let path = Filename.concat dir filename in
+        if Sys.file_exists path then Some path else
+        if Sys.file_exists (undash path) then Some (undash path)
+        else None) |> function
+    | Some path -> Some (make ~system path)
+    | None ->
+      find_all ~system |>
+      List.filter ~f:(fun p -> p.name = name) |> function
+      | [] -> None
+      | p :: _ -> Some p

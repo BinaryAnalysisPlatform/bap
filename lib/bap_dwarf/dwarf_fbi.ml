@@ -51,7 +51,7 @@ module Fn = struct
           Some Addr.(pc_lo ++ off) in
       pc_hi >>| fun pc_hi -> {pc_lo; pc_hi}
     let hash = Hashtbl.hash
-    let module_name = "Dwarf_fbi.Fn"
+    let module_name =  "Bap.Std.Dwarf.Fn"
   end
   include T
   include Identifiable.Make(struct
@@ -78,9 +78,9 @@ let fn_of_values vs : (string * fn) Or_error.t =
   | Id name :: Lo pc_lo :: _ ->
     Fn.create ~pc_lo () >>| fun fn -> name,fn
   | Id name :: vs -> errorf "'%s' is degenerate" name |> fun err ->
-    tag_arg err "attrs" vs (sexp_of_list sexp_of_value )
+                     tag_arg err "attrs" vs (sexp_of_list sexp_of_value )
   | vs -> errorf "got anonymous function" |> fun err ->
-    tag_arg err "attrs" vs (sexp_of_list sexp_of_value)
+          tag_arg err "attrs" vs (sexp_of_list sexp_of_value)
 
 
 let is_done str ~pos_ref =
@@ -162,8 +162,8 @@ let lookup table code =
 let run_scheme scheme str ~pos_ref : value list Or_error.t =
   List.fold scheme ~init:(Ok []) ~f:(fun vs step ->
       vs >>= fun vs -> step str ~pos_ref >>| function
-    | Some v -> v :: vs
-    | None -> vs)
+      | Some v -> v :: vs
+      | None -> vs)
 
 let read_function cu_end abbrs str ~pos_ref  =
   let open Sequence.Step in

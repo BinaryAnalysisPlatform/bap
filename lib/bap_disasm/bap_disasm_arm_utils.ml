@@ -28,7 +28,7 @@ let assert_cond loc op =
 
 
 let assn d s =
-  if d = Env.pc then Stmt.jmp s else Stmt.move d s
+  if d = Env.pc then Bil.jmp s else Bil.move d s
 
 let bitlen = function
   | Type.Imm len -> len
@@ -46,47 +46,47 @@ let exec
     | _ -> stmts in
   (* generates an expression for the given McCond *)
   let set_cond mccond =
-    let z = Exp.var Env.zf in
-    let c = Exp.var Env.cf in
-    let v = Exp.var Env.vf in
-    let n = Exp.var Env.nf in
-    let f = Exp.int (Word.of_bool false) in
-    let t = Exp.int (Word.of_bool true) in
+    let z = Bil.var Env.zf in
+    let c = Bil.var Env.cf in
+    let v = Bil.var Env.vf in
+    let n = Bil.var Env.nf in
+    let f = Bil.int (Word.of_bool false) in
+    let t = Bil.int (Word.of_bool true) in
     match cond with
-    | `EQ -> Exp.(z = t)
-    | `NE -> Exp.(z = f)
-    | `CS -> Exp.(c = t)
-    | `CC -> Exp.(c = f)
-    | `MI -> Exp.(n = t)
-    | `PL -> Exp.(n = f)
-    | `VS -> Exp.(v = t)
-    | `VC -> Exp.(v = f)
-    | `HI -> Exp.((c = t) land (z = f))
-    | `LS -> Exp.((c = f) lor  (z = t))
-    | `GE -> Exp.(n = v)
-    | `LT -> Exp.(n <> v)
-    | `GT -> Exp.((z = f) land (n =  v))
-    | `LE -> Exp.((z = t) lor  (n <> v))
+    | `EQ -> Bil.(z = t)
+    | `NE -> Bil.(z = f)
+    | `CS -> Bil.(c = t)
+    | `CC -> Bil.(c = f)
+    | `MI -> Bil.(n = t)
+    | `PL -> Bil.(n = f)
+    | `VS -> Bil.(v = t)
+    | `VC -> Bil.(v = f)
+    | `HI -> Bil.((c = t) land (z = f))
+    | `LS -> Bil.((c = f) lor  (z = t))
+    | `GE -> Bil.(n = v)
+    | `LT -> Bil.(n <> v)
+    | `GT -> Bil.((z = f) land (n =  v))
+    | `LE -> Bil.((z = t) lor  (n <> v))
     | `AL -> t in
   (* We shortcut if the condition = all *)
   match cond with
   | `AL -> stmts
-  | _ -> [Stmt.If (set_cond cond, stmts, [])]
+  | _ -> [Bil.If (set_cond cond, stmts, [])]
 
 
-let exp_of_reg reg = Exp.var (Env.of_reg reg)
+let exp_of_reg reg = Bil.var (Env.of_reg reg)
 
 let exp_of_op = function
   | Op.Reg reg -> exp_of_reg reg
-  | Op.Imm word -> Exp.int word
+  | Op.Imm word -> Bil.int word
 
 let cast_type = function
-  | Signed -> Exp.Cast.signed
-  | Unsigned -> Exp.Cast.unsigned
+  | Signed -> Bil.signed
+  | Unsigned -> Bil.unsigned
 
-let cast_of_sign sign size exp = Exp.cast (cast_type sign) size exp
+let cast_of_sign sign size exp = Bil.cast (cast_type sign) size exp
 
 
 
-let msb r = Exp.(cast Cast.high 1 r)
-let zero ty = Exp.int (Word.zero (bitlen ty))
+let msb r = Bil.(cast high 1 r)
+let zero ty = Bil.int (Word.zero (bitlen ty))

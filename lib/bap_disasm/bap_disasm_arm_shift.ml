@@ -17,41 +17,37 @@ let shift_of_word op = match Word.to_int op with
   | _ -> fail _here_ "Imm %s, doesn't stand for shift"
            (Word.to_string op)
 
-
-
-
-
 let shift_c ~src shift_type ~shift t =
   let bits = bitlen t in
-  let bits_e = Exp.int (Word.of_int bits ~width:bits) in
-  let nth_bit n e = Exp.(cast Cast.low 1 (e lsr n)) in
-  let e1 = Exp.int (Word.one bits) in
+  let bits_e = Bil.int (Word.of_int bits ~width:bits) in
+  let nth_bit n e = Bil.(cast low 1 (e lsr n)) in
+  let e1 = Bil.int (Word.one bits) in
   match shift_type with
   | `ASR ->
-    let shifted = Exp.(src asr shift) in
-    let carry = nth_bit Exp.(shift - e1) src in
+    let shifted = Bil.(src asr shift) in
+    let carry = nth_bit Bil.(shift - e1) src in
     shifted, carry
   | `LSL ->
-    let shifted = Exp.(src lsl shift) in
-    let carry = Exp.(ite (shift <> int (Word.zero bits))
-                       (nth_bit Exp.(bits_e - shift) src)
+    let shifted = Bil.(src lsl shift) in
+    let carry = Bil.(ite (shift <> int (Word.zero bits))
+                       (nth_bit Bil.(bits_e - shift) src)
                        (var Env.cf)) in
     shifted, carry
   | `LSR ->
-    let shifted = Exp.(src lsr shift) in
-    let carry = nth_bit Exp.(shift - e1) src in
+    let shifted = Bil.(src lsr shift) in
+    let carry = nth_bit Bil.(shift - e1) src in
     shifted, carry
   | `ROR ->
-    let ret1 = Exp.(src lsr shift) in
-    let ret2 = Exp.(src lsl (bits_e - shift)) in
-    let shifted = Exp.(ret1 lor ret2) in
-    let carry = nth_bit Exp.(shift - e1) src in
+    let ret1 = Bil.(src lsr shift) in
+    let ret2 = Bil.(src lsl (bits_e - shift)) in
+    let shifted = Bil.(ret1 lor ret2) in
+    let carry = nth_bit Bil.(shift - e1) src in
     shifted, carry
   | `RRX ->
-    let ret1 = Exp.(src lsr e1) in
-    let carryin = Exp.(cast Cast.unsigned bits (var Env.cf) lsl (bits_e - e1)) in
-    let shifted = Exp.(ret1 lor carryin) in
-    let carry = nth_bit Exp.(int (Word.zero 0)) src in
+    let ret1 = Bil.(src lsr e1) in
+    let carryin = Bil.(cast unsigned bits (var Env.cf) lsl (bits_e - e1)) in
+    let shifted = Bil.(ret1 lor carryin) in
+    let carry = nth_bit Bil.(int (Word.zero 0)) src in
     shifted, carry
 
 let r_shift ~src shift_type ~shift t =
@@ -65,14 +61,16 @@ let i_shift ~src shift_type t =
   let three = Word.of_int 3 ~width in
   (* lower three bits are type*)
   let r =
-    Word.Int.(!$shift_type land !$mask) >>| shift_of_word >>= fun shift_t ->
+    Word.Int_err.(!$shift_type land !$mask) >>| shift_of_word >>=
+    fun shift_t ->
     (* other bits are immediate *)
-    Word.Int.((!$shift_type land (lnot !$mask)) lsr !$three) >>= fun shift_amt ->
+    Word.Int_err.((!$shift_type land (lnot !$mask)) lsr !$three) >>=
+    fun shift_amt ->
     return (shift_t, shift_amt) in
   match r with
   | Error err -> fail _here_ "%s" Error.(to_string_hum err)
   | Ok (shift_t, shift_amt) ->
-    shift_c ~src shift_t ~shift:Exp.(int shift_amt) t
+    shift_c ~src shift_t ~shift:Bil.(int shift_amt) t
 
 (* decodes a shifted operand for a memory operation
  * src - the operand to be shifted
@@ -89,13 +87,14 @@ let mem_shift ~src shift typ =
   let word = Word.of_int ~width in
   let wordm n = Ok (word n) in
   let shift_typ w =
-    Word.Int.((!$w land wordm 0xE000) lsr wordm 13) >>| shift_of_word in
+    Word.Int_err.((!$w land wordm 0xE000) lsr wordm 13) >>|
+    shift_of_word in
   (* Gets the shift amount from the immediate *)
-  let shift_amt w = Word.Int.(!$w land wordm 0xFFF) >>| Exp.int in
+  let shift_amt w = Word.Int_err.(!$w land wordm 0xFFF) >>| Bil.int in
   (* Converts the shift to a negative if the negative bit is set *)
   let to_neg w exp =
-    if Word.Int.(wordm 0x1000 land !$w = wordm 0x1000) then
-      Exp.(int (Word.ones width) * exp)
+    if Word.Int_err.(wordm 0x1000 land !$w = wordm 0x1000) then
+      Bil.(int (Word.ones width) * exp)
     else
       exp in
   let r = shift_typ shift >>= fun t -> shift_amt shift >>= fun amt ->

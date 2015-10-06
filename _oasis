@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     0.9.1
+Version:     0.9.9
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
@@ -9,7 +9,7 @@ Copyrights:  (C) 2014 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild, camlp4o
-XOCamlbuildExtraArgs: -j 2
+XOCamlbuildExtraArgs: -j 1
 BuildDepends:
               bin_prot.syntax,
               camlp4,
@@ -23,24 +23,16 @@ BuildDepends:
               sexplib.syntax,
               variantslib.syntax
 
-# for some reason oasis doesn't provide us a $cp command
-PreConfCommand: $rm setup.data
-PostInstallCommand: cp baptop bapbuild $bindir
-PostUninstallCommand: $rm $bindir/baptop $bindir/bapbuild
-PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
+FilesAB: lib/bap_types/bap_config.ml.ab, postinstall.ml.ab
 
-Document bap
-  Type: ocamlbuild (0.4)
-  BuildTools: ocamlbuild, ocamldoc
-  Title:      API documentation for bap
-  XOCamlbuildPath: lib/bap/
-  XOCamlbuildExtraArgs:
-    "-docflags '-colorize-code -short-functors -charset utf-8'"
-  XOCamlbuildLibraries: bap
+PreConfCommand: $rm setup.data
+PostInstallCommand: ocaml postinstall.ml
+PostUninstallCommand: $rm $bindir/baptop
+PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
 Flag serialization
   Description: Build serialization library
-  Default: false
+  Default: true
 
 Flag llvm_static
   Description: Links with llvm in a static mode
@@ -66,10 +58,6 @@ Flag llvm
  Description: Build with llvm backend
  Default: true
 
-Flag server
- Description: Build BAP server
- Default: true
-
 Library bap
   Path:            lib/bap
   FindLibName:     bap
@@ -77,13 +65,23 @@ Library bap
   BuildDepends:    bap.disasm,
                    bap.dwarf,
                    bap.elf,
+                   bap.elf_backend,
                    bap.image,
-                   bap.types,
-                   dynlink,
-                   findlib
-  Modules:         Bap,
-                   Bap_plugin,
-                   Bap_plugins
+                   bap.llvm,
+                   bap.llvm_loader,
+                   bap.plugins,
+                   bap.sema,
+                   bap.types
+  Modules:         Bap
+  InternalModules: Bap_project
+
+Library plugins
+  Path:            lib/bap
+  FindLibParent:   bap
+  FindLibName:     plugins
+  Modules:         Bap_plugins
+  InternalModules: Bap_plugin
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib
 
 Library top
   XMETADescription:
@@ -91,56 +89,76 @@ Library top
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
-  Modules:
+  InternalModules:
             Bap_install_printers,
             Bap_load_plugins,
             Bap_toplevel
-
-  BuildDepends: compiler-libs, bap
+  BuildDepends: compiler-libs, bap, bap.plugins
 
 Library types
   Path:            lib/bap_types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    zarith
-  Modules:         Bap_types,
+  BuildDepends:    zarith, uuidm, ocamlgraph
+  InternalModules:
                    Bap_addr,
                    Bap_arch,
+                   Bap_attributes,
                    Bap_bil,
+                   Bap_bil_adt,
                    Bap_bitvector,
                    Bap_common,
+                   Bap_config,
                    Bap_exp,
+                   Bap_graph,
+                   Bap_graph_intf,
+                   Bap_graph_regular,
+                   Bap_graph_regular_intf,
+                   Bap_graph_pp,
+                   Bap_ir,
+                   Bap_ir_graph,
+                   Bap_ir_callgraph,
+                   Bap_helpers,
                    Bap_int_conversions,
                    Bap_integer,
                    Bap_integer_intf,
+                   Bap_opaque,
                    Bap_regular,
                    Bap_seq,
                    Bap_size,
                    Bap_stmt,
+                   Bap_trie,
+                   Bap_trie_intf,
                    Bap_type,
-                   Bap_var
+                   Bap_types,
+                   Bap_value,
+                   Bap_var,
+                   Bap_vector,
+                   Bap_visitor,
+                   Graphlib
 
 Library conceval
   Path: lib/bap_types
-  FindLibParent: types
+  FindLibParent: bap
   FindLibName: conceval
   BuildTools: ocamlbuild
   Modules: Conceval
-  BuildDepends: bap.types
+  BuildDepends: bap
   CompiledObject: best
 
 Library serialization
   XMETADescription: Provides serialization for main data types
   Path:         lib/bap_types/
   Build$: flag(serialization)
-  FindLibParent: types
+  FindLibParent: bap
   FindLibName: serialization
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun, bap.types
-  Modules:   Bil_piqi,
+  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
+  Modules:   Bil_piqi
+  InternalModules:
              Stmt_piqi,
              Stmt_piqi_ext
 
@@ -151,7 +169,11 @@ Library bap_image
   BuildDepends:  bap.elf,
                  bap.dwarf,
                  bap.types
-  Modules:       Bap_image,
+  InternalModules:
+                 Bap_fileutils,
+                 Bap_image,
+                 Bap_image_std,
+                 Bap_memmap,
                  Bap_memory,
                  Bap_table,
                  Image_backend,
@@ -160,30 +182,49 @@ Library bap_image
 
 Library elf_backend
   Path:            lib/bap_image/
-  FindlibParent:   bap_image
+  FindlibParent:   bap
   FindlibName:     elf_backend
-  XMETAExtraLines: plugin_system = "bap.image"
+  XMETAExtraLines: plugin_system = "bap.image.disabled"
   CompiledObject:  best
-  BuildDepends:    bap, core_kernel
-  Modules:         Image_elf
+  BuildDepends:    core_kernel
+  InternalModules: Bap_native_loader
 
 Library elf
   Path:          lib/bap_elf
   FindlibParent: bap
   FindlibName:   elf
   BuildDepends:  bitstring, bitstring.syntax
-  Modules:       Bap_elf,
+  InternalModules:
+                 Bap_elf,
                  Elf_parse,
                  Elf_types,
-                 Elf_utils
-  InternalModules: Elf_internal_utils
+                 Elf_utils,
+                 Elf_internal_utils
+
+Library llvm_loader
+  Path:            lib/bap_image/
+  FindlibParent:   bap
+  FindlibName:     llvm_loader
+  CompiledObject:  best
+  BuildDepends:    core_kernel
+  InternalModules: Bap_llvm_binary,
+                   Bap_llvm_loader,
+                   Bap_llvm_types
+
+  CCOpt:           $cc_optimization
+  CCLib:           $llvm_lib $cxxlibs $llvm_ldflags
+  CSources:        bap_llvm_binary_stubs.c,
+                   bap_llvm_binary_stubs.h,
+                   bap_llvm_binary.c,
+                   bap_llvm_binary.h
 
 Library dwarf
   Path:          lib/bap_dwarf
   FindlibParent: bap
   FindlibName:   dwarf
   BuildDepends:  bap.types
-  Modules:       Bap_dwarf,
+  InternalModules:
+                 Bap_dwarf,
                  Dwarf_data,
                  Dwarf_fbi,
                  Dwarf_input,
@@ -196,9 +237,15 @@ Library disasm
   FindlibParent: bap
   FindlibName:   disasm
   BuildDepends:  bap.image,
-                 bap.types
-  Modules:       Bap_disasm,
+                 bap.types,
+                 camlzip,
+                 ocamlgraph
+  InternalModules:
+                 Bap_disasm,
+                 Bap_disasm_abi,
+                 Bap_disasm_abi_helpers,
                  Bap_disasm_arm,
+                 Bap_disasm_arm_abi,
                  Bap_disasm_arm_bit,
                  Bap_disasm_arm_branch,
                  Bap_disasm_arm_env,
@@ -211,10 +258,26 @@ Library disasm
                  Bap_disasm_arm_shift,
                  Bap_disasm_arm_types,
                  Bap_disasm_arm_utils,
+                 Bap_disasm_amd64_abi,
+                 Bap_disasm_ia32_abi,
+                 Bap_disasm_stub_lifter,
+                 Bap_disasm_x86,
                  Bap_disasm_x86_lifter,
+                 Bap_disasm_x86_env,
+                 Bap_disasm_x86_types,
+                 Bap_disasm_x86_utils,
                  Bap_disasm_basic,
+                 Bap_disasm_block,
+                 Bap_disasm_block_intf,
+                 Bap_disasm_insn,
                  Bap_disasm_prim,
-                 Bap_insn_kind
+                 Bap_disasm_rec,
+                 Bap_disasm_std,
+                 Bap_disasm_symtab,
+                 Bap_disasm_types,
+                 Bap_insn_kind,
+                 Bap_byteweight,
+                 Bap_signatures
 
   CCOpt:         $cc_optimization
   CCLib:         $cxxlibs
@@ -228,11 +291,25 @@ Library llvm
   BuildDepends:  bap.image,
                  bap.disasm,
                  bap.types
-  Modules:       Bap_llvm
+  InternalModules:
+                 Bap_llvm
   CCOpt:         $cc_optimization
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h, llvm_disasm.c, llvm_stubs.c
-  XMETAExtraLines: plugin_system = "bap.disasm"
+  XMETAExtraLines: plugin_system = "bap.disasm.disabled"
+
+Library sema
+  Path:          lib/bap_sema
+  FindlibParent: bap
+  FindlibName:   sema
+  BuildDepends:  bap.disasm,
+                 bap.types
+  InternalModules:
+                 Bap_sema,
+                 Bap_sema_abi,
+                 Bap_sema_lift,
+                 Bap_sema_ssa,
+                 Bap_sema_free_vars
 
 
 Library types_test
@@ -240,33 +317,36 @@ Library types_test
   Build$:         flag(tests)
   Install:        false
   CompiledObject: best
-  BuildDepends:   bap.types, bap.types.conceval
+  BuildDepends:   bap, bap.conceval, oUnit
   Modules:        Test_bitvector,
-                  Test_conceval
+                  Test_conceval,
+                  Test_graph,
+                  Test_trie
 
 Library image_test
   Path:           lib_test/bap_image
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_image,
-                  Test_table
+                  Test_memmap,
+                  Test_table,
+                  Test_llvm_loader
 
-Library benchmarks
-  Path:           benchmarks
-  Build$:         flag(tests) && flag(benchmarks)
+Library project_test
+  Path:           lib_test/bap_project
+  Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, core, core_bench, threads
+  BuildDepends:   bap, oUnit
   Install:        false
-  Modules:        Bench_image
-
+  Modules:        Test_project
 
 Library dwarf_test
   Path:           lib_test/bap_dwarf
   Build$:         flag(tests)
   CompiledObject: best
-  BuildDepends:   bap.dwarf
+  BuildDepends:   bap.dwarf, oUnit
   Install:        false
   Modules:        Test_leb128
 
@@ -274,9 +354,25 @@ Library disasm_test
   Path:           lib_test/bap_disasm
   Build$:         flag(tests) && flag(disassemblers)
   CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_disasm
+
+Library sema_test
+  Path:           lib_test/bap_sema
+  Build$:         flag(tests) && flag(disassemblers)
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Test_ir
+
+Library benchmarks
+  Path:           benchmarks
+  Build$:         flag(tests) && flag(benchmarks)
+  CompiledObject: best
+  BuildDepends:   bap, core, core_bench, threads
+  Install:        false
+  Modules:        Bench_dom, Bench_image
 
 Library core_lwt
   Path:           lwt
@@ -303,56 +399,66 @@ Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
   CompiledObject: best
-  BuildDepends:   bap, ezjsonm, uri, cohttp.lwt, core_lwt
+  BuildDepends:   bap, bap.plugins, ezjsonm, uri, cohttp.lwt, core_lwt, re
   Install:        true
   MainIs:         start_server.ml
 
-Executable readbin
+Executable "bap"
   Path:           src/readbin
-  MainIs:         readbin.ml
+  MainIs:         bap_main.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.disasm
+  # XXX: Update bapbuild.ml bap_packages if you add something here
+  BuildDepends:   bap,
+                  bap.plugins,
+                  cmdliner,
+                  ezjsonm,
+                  fileutils,
+                  ocamlgraph,
+                  re.posix
+
+Executable "bap-byteweight"
+  Path:           src/readbin
+  MainIs:         byteweight_main.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, curl, fileutils, re.posix
+
+Executable "bap-fsi-benchmark"
+  Path:           src/readbin
+  MainIs:         fsi_benchmark_main.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, re.posix
 
 Executable "bap-mc"
   Path:           src/bap_mc
   MainIs:         bap_mc.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.disasm, cmdliner
+  BuildDepends:   bap, bap.plugins, cmdliner, bap.serialization
 
-Executable byteweight
-  Path:           src/byteweight
-  MainIs:         byteweight.ml
+
+Executable "bapbuild"
+  Path:           .
+  MainIs:         bapbuild.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap
-
-Executable train
-  Path:           src/byteweight
-  MainIs:         train.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   bap
-
-Executable fbi
-  Path:           src/fbi
-  MainIs:         fbi.ml
-  Install:        true
-  CompiledObject: best
-  BuildDepends:   bap
+  BuildDepends:   core_kernel, ocamlbuild
 
 Executable run_tests
   Path:         lib_test/bap
   MainIs:       run_tests.ml
   Install:      false
   Build$:       flag(tests)
-  BuildDepends:
+  BuildDepends: bap.plugins,
                 disasm_test,
                 dwarf_test,
                 image_test,
                 oUnit,
-                types_test
+                sema_test,
+                types_test,
+                project_test
   CompiledObject: best
 
 Executable run_benchmarks
@@ -365,7 +471,7 @@ Executable run_benchmarks
 
 Test unit_tests
   TestTools: run_tests
-  Command: $run_tests
+  Command: $run_tests -runner sequential
 
 Test inline_tests
   TestTools: run_tests

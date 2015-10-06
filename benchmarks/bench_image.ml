@@ -37,7 +37,7 @@ let sum_fold () =
 
 let sum_foldm () =
   let (_ : word Or_error.t) =
-    Memory.With_error.fold mem ~f:(fun w1 w2 -> Word.Int.(!$w1 + !$w2)) ~init:zero
+    Memory.With_error.fold mem ~f:(fun w1 w2 -> Word.Int_err.(!$w1 + !$w2)) ~init:zero
   in ()
 
 let sum_fold_tab () =
@@ -52,3 +52,5 @@ let test = Bench.Test.create_group ~name:"image" [
     Bench.Test.create ~name:"Bap_image.map_sum_foldm"  sum_foldm;
     Bench.Test.create ~name:"Bap_image.map_sum_table"  sum_fold_tab;
   ]
+
+let tests = [test]

@@ -8,7 +8,7 @@ module T = struct
 
   let hash = Hashtbl.hash
 
-  let module_name = "Bap_arch"
+  let module_name = Some "Bap.Std.Arch"
 
   let to_string = function
     | `x86 -> "i386"
@@ -21,11 +21,11 @@ module T = struct
     | "i386"| "i486" | "i586" | "i686" -> "x86"
     | "x86-64" | "x86_64" | "amd64" | "x64" | "x86_64h" -> "x86_64"
     | "powerpc" -> "ppc"
+    | "arm" -> "armv7"
+    | "thumb" -> "thumbv7"
+    | "armeb" -> "armv7eb"
+    | "thumbeb" -> "thumbv7eb"
     | "xscale"  -> "arm"
-    | "thumbv4t" -> "armv4t"
-    | "armv5t" | "armv5e" | "thumbv5" | "thumbv5e" -> "armv5"
-    | "thumbv6" -> "armv6"
-    | "thumbv7" -> "armv7"
     | "powerpc64" | "ppu" -> "ppc64"
     | "sparc64" -> "sparcv9"
     | "s390x" -> "systemz"
@@ -40,20 +40,20 @@ module T = struct
     Option.try_with (fun () -> of_string_exn s)
 
   let addr_size : t -> addr_size = function
-    | #arm | `x86 | `ppc | `mips | `mipsel | `sparc
+    | #arm | #armeb | #thumb | #thumbeb
+    | `x86 | `ppc | `mips | `mipsel | `sparc
     | `nvptx | `hexagon |  `r600 | `xcore  -> `r32
 
     | #aarch64 | `mips64el |`sparcv9|`ppc64le|`x86_64
     | `ppc64|`nvptx64 | `systemz | `mips64 -> `r64
 
   let endian : t -> endian = function
-    | `armeb  | `aarch64_be | `thumbeb -> BigEndian
+    | #armeb  | `aarch64_be | #thumbeb -> BigEndian
     | `mipsel | `mips64el | `ppc64le -> LittleEndian
-    | #arm | #x86 | #aarch64 | #r600
+    | #arm | #thumb | #x86 | #aarch64 | #r600
     | #hexagon | #nvptx | #xcore -> LittleEndian
     | #ppc | #mips | #sparc | #systemz   -> BigEndian
 end
 
-(* derive Identifiable interface from Core *)
 include T
 include Regular.Make(T)

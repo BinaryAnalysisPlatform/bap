@@ -15,7 +15,7 @@ module Cond = struct
   include Regular.Make(struct
       type t = cond with bin_io, compare, sexp
       let hash (cond : t) = Hashtbl.hash cond
-      let module_name = "Bap_disasm_arm.Cond"
+      let module_name = Some "Bap.Std.ARM.Cond"
       let pp fmt cond =
         Format.fprintf fmt "%a" Sexp.pp (sexp_of_t cond)
     end)
@@ -51,7 +51,7 @@ module Reg = struct
   include Regular.Make(struct
       type t = reg with bin_io, compare, sexp
       let hash (reg : t) = Hashtbl.hash reg
-      let module_name = "Bap_disasm_arm.Reg"
+      let module_name = Some "Bap.Std.ARM.Reg"
       let pp fmt reg =
         Format.fprintf fmt "%a" Sexp.pp (sexp_of_t reg)
     end)
@@ -62,7 +62,7 @@ end
 module Op = struct
   include Regular.Make(struct
       type t = op with bin_io, compare, sexp
-      let module_name = "Bap_disasm_arm.Op"
+      let module_name = Some "Bap.Std.ARM.Op"
       let pp fmt op =
         Format.fprintf fmt "%a" Sexp.pp (sexp_of_t op)
       let hash (op : op) = Hashtbl.hash op
@@ -84,7 +84,7 @@ module Insn = struct
 
   include Regular.Make(struct
       type t = insn with bin_io, compare, sexp
-      let module_name = "Bap_disasm_arm.Op"
+      let module_name = Some "Bap.Std.ARM.Insn"
       let pp fmt insn =
         Format.fprintf fmt "%a" Sexp.pp (sexp_of_t insn)
       let hash (insn : t) = Hashtbl.hash insn

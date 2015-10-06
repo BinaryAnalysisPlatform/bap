@@ -24,13 +24,12 @@ type 'a oper = {
   data : 'a;
 } with bin_io, compare, sexp
 
-
 type reg_info = {
   reg_code : int;
   reg_name : string Lazy.t;
 } with bin_io, sexp
 
-let compare_reg_info {reg_code=x} {reg_code=y} = compare x y
+let compare_reg_info {reg_code=x} {reg_code=y} = Int.compare x y
 
 type imm_info = {
   imm_small : int;
@@ -41,9 +40,7 @@ type reg = reg_info oper with bin_io, compare, sexp
 type imm = imm_info oper with bin_io, compare, sexp
 type fmm = float    oper with bin_io, compare, sexp
 
-
 module Table = struct
-
   (* Bigstring.length is very slow... we should report a bug to the
      mantis. They need to add "noalloc" to it, otherwise on each call
      the whole GC machinery is triggered. For now we will store the
@@ -73,7 +70,6 @@ module Table = struct
             dst)
 end
 
-
 type dis = {
   id : int;
   insn_table : Table.t;
@@ -102,7 +98,7 @@ module Reg = struct
     type t = reg
     with bin_io, sexp, compare
 
-    let module_name = "Bap_disasm_basic.Reg"
+    let module_name = Some "Bap.Std.Reg"
 
     let pp fmt t =
       Format.fprintf fmt "%s" @@ name t
@@ -136,15 +132,14 @@ module Imm = struct
 
   let to_word t ~width =
     let n = to_int64 t in
-    match Word.bitsub ~hi:(width-1) (Word.of_int64 n) with
+    match Word.extract ~hi:(width-1) (Word.of_int64 n) with
     | Ok word -> Some word
     | Error _ -> None
-
 
   module T = struct
     type t = imm
     with bin_io, sexp, compare
-    let module_name = "Bap_disasm_basic.Imm"
+    let module_name = Some "Bap.Std.Imm"
     let pp fmt t =
       let x = to_int64 t in
       if Int64.is_negative x then
@@ -174,7 +169,7 @@ module Fmm = struct
     type t = fmm
     with bin_io, sexp, compare
 
-    let module_name = "Bap_disasm_basic.Fmm"
+    let module_name = Some "Bap.Std.Fmm"
     let hash t = Float.hash (to_float t)
     let pp fmt t =
       Format.fprintf fmt "%a" Float.pp (to_float t)
@@ -182,7 +177,6 @@ module Fmm = struct
   include T
   include Regular.Make(T)
 end
-
 
 module Op = struct
   module T = struct
@@ -192,27 +186,55 @@ module Op = struct
       | Fmm of fmm
     with bin_io, compare, sexp
 
+    let pr fmt = Format.fprintf fmt
     let pp fmt = function
-      | Reg reg -> Format.fprintf fmt "%a" Reg.pp reg
-      | Imm imm -> Format.fprintf fmt "%a" Imm.pp imm
-      | Fmm fmm -> Format.fprintf fmt "%a" Fmm.pp fmm
+      | Reg reg -> pr fmt "%a" Reg.pp reg
+      | Imm imm -> pr fmt "%a" Imm.pp imm
+      | Fmm fmm -> pr fmt "%a" Fmm.pp fmm
 
-    let module_name = "Bap_disasm_basic.Op"
+    let pp_adt ch = function
+      | Imm imm -> pr ch "Imm(0x%Lx)" (Imm.to_int64 imm)
+      | Fmm fmm -> pr ch "Fmm(%g)" (Fmm.to_float fmm)
+      | Reg reg -> pr ch "Reg(\"%a\")" Reg.pp reg
+
+
+    let module_name = Some "Bap.Std.Op"
 
     let hash = function
       | Reg r -> Reg.hash r
       | Imm n -> Imm.hash n
       | Fmm n -> Fmm.hash n
+
+    (** Normalized comparison *)
+    module Normalized = struct
+      (** immediates are all equal  *)
+      let compare x y = match x, y with
+        | Imm _, Imm _ -> 0
+        | Fmm _, Fmm _ -> 0
+        | _ -> compare x y
+
+      (** compares equal if one of arrays is a prefix of another, e.g,
+          [| x; y; z |] is equal to [| x; y |] and vice verse *)
+      let compare_ops xs ys =
+        let len = min (Array.length xs) (Array.length ys) in
+        let rec loop = function
+          | 0 -> 0
+          | n ->
+            let r = compare xs.(len - n) ys.(len - n) in
+            if r = 0 then loop (n-1) else r in
+        loop len
+
+      let hash = function
+        | Imm _ | Fmm _ -> 0
+        | Reg x -> Reg.hash x
+    end
   end
   include T
   include Regular.Make(T)
-
 end
 
 type op = Op.t
 with bin_io, compare, sexp
-
-
 
 let cpred_of_pred : pred -> C.pred = function
   | `Valid -> C.Is_true
@@ -243,7 +265,7 @@ module Insn = struct
     Sexp.List (Sexp.Atom name :: List.map ops ~f:(fun op ->
         Sexp.Atom (Op.to_string op)))
 
-  let compare {code=x} {code=y} = compare x y
+  let compare {code=x} {code=y} = Int.compare x y
 
   let name {name = lazy x} = x
   let code op = op.code
@@ -283,6 +305,7 @@ module Insn = struct
           | C.Insn -> assert false) in
     {code; name; asm; kinds; opers }
 
+
 end
 
 type ('a,'k) insn = ('a,'k) Insn.t
@@ -295,6 +318,11 @@ let sexp_of_insn : ('a,'b) insn -> Sexp.t = Insn.sexp_of_t
 type full_insn = (asm,kinds) insn
 
 let sexp_of_full_insn = sexp_of_insn
+let compare_full_insn i1 i2 =
+  let open Insn in
+  let r1 = Int.compare i1.code i2.code in
+  if r1 <> 0 then String.compare i1.asm i2.asm
+  else r1
 
 
 
@@ -322,10 +350,11 @@ let sexp_of_maybe_ins (_,insn) =
 
 
 type (+'a,+'k,'s,'r) state = {
+  backlog : int;
   dis : dis sexp_opaque;
   current : step;
   history : step list;
-  insns : ('a,'k) maybe_insn Lazy.t array sexp_opaque;
+  insns : ('a,'k) maybe_insn array sexp_opaque;
   return : ('s -> 'r) sexp_opaque;
   stopped : (('a,'k,'s,'r) state -> 's -> 'r) option sexp_opaque;
   invalid : (('a,'k,'s,'r) state -> mem -> 's -> 'r) option sexp_opaque;
@@ -333,7 +362,9 @@ type (+'a,+'k,'s,'r) state = {
       option sexp_opaque;
 } with sexp_of
 
-let create_state ?(stop_on=[]) ?stopped ?invalid ?hit dis mem ~return  = {
+let create_state ?(backlog=8) ?(stop_on=[]) ?stopped ?invalid ?hit dis
+    mem ~return  = {
+  backlog;
   dis; return; hit;
   current = {mem; off=0; preds = Preds.of_list stop_on};
   stopped;
@@ -360,7 +391,7 @@ let set_memory dis p : unit =
 
 let update_state s current = {
   s with
-  history = s.current :: s.history;
+  history = List.take (s.current :: s.history) s.backlog;
   current;
 }
 
@@ -378,16 +409,17 @@ let with_preds s (ps : pred list) =
   else begin
     C.predicates_clear s.dis.id;
     Preds.iter ps ~f:(add);
+    C.predicates_push s.dis.id C.Is_invalid;
   end;
   {s with current = {s.current with preds = ps}}
 
 let insns s =
-  List.init Array.(length s.insns) ~f:(fun i -> Lazy.force s.insns.(i))
+  List.init Array.(length s.insns) ~f:(fun i -> s.insns.(i))
 
 let last s n =
   let m = Array.length s.insns in
   let n = min n m in
-  List.init n ~f:(fun i -> Lazy.force s.insns.(m - i - 1))
+  List.init n ~f:(fun i -> s.insns.(m - i - 1))
 
 let preds s = Preds.to_list s.current.preds
 
@@ -405,13 +437,13 @@ let step s data =
     let stop = C.insn_size s.dis.id ~insn = 0 in
     let n = if stop then max 0 (n - 1) else n in
     let {asm; kinds} = s.dis in
-    let insns = Array.init n ~f:(fun insn -> lazy begin
-        let is_valid =
-          not(C.insn_satisfies s.dis.id ~insn C.Is_invalid) in
-        insn_mem s ~insn,
-        Option.some_if is_valid
-          (Insn.create ~asm ~kinds s.dis ~insn)
-      end) in
+    let insns = Array.init n ~f:(fun insn -> begin
+          let is_valid =
+            not(C.insn_satisfies s.dis.id ~insn C.Is_invalid) in
+          insn_mem s ~insn,
+          Option.some_if is_valid
+            (Insn.create ~asm ~kinds s.dis ~insn)
+        end) in
     let s = {s with insns} in
     if stop then match s.stopped with
       | Some f -> f s data
@@ -458,9 +490,9 @@ let create ?(debug_level=0) ?(cpu="") ~backend triple =
 
 type ('a,'k) t = dis
 
-let run ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
+let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
   let state =
-    create_state  ?invalid ?stopped ?hit ~return
+    create_state ?backlog ?invalid ?stopped ?hit ~return
       dis mem in
   let state = with_preds state stop_on in
   jump state (memory state) init
@@ -485,3 +517,43 @@ let insn_of_mem dis mem =
         split mem' >>= fun r -> stop s (mem',Some insn,r))
     ~invalid:(fun s mem' _ ->
         split mem' >>= fun r -> stop s (mem',None,r))
+
+
+module Trie = struct
+
+  type s = State : (_,_,_,_) state -> s
+  type key = int * s
+
+  let key_of_first_insns s ~len:n =
+    Option.some_if (Array.length s.insns <= n) (n, State s)
+
+  module Key = struct
+    type t = key
+    type token = int * Op.t array with bin_io, compare, sexp
+    let length = fst
+    let nth_token (_, State s) i =
+      match s.insns.(i) with
+      | (mem, None) -> 0, [| |]
+      | (mem, Some insn) -> Insn.(insn.code, insn.opers)
+
+    let token_hash = Hashtbl.hash
+  end
+
+  module Normalized_key = struct
+    include Key
+
+    let compare_token (x,xs) (y,ys) =
+      let r = compare_int x y in
+      if r <> 0 then r
+      else Op.Normalized.compare_ops xs ys
+
+    let ops_hash xs =
+      Array.fold ~init:0 ~f:(fun h x -> Op.Normalized.hash x lxor h) xs
+
+    let token_hash (x,xs) =
+      x lxor ops_hash xs
+  end
+
+  module Normalized = Trie.Make(Normalized_key)
+  include (Trie.Make(Key) : Trie with type key := key)
+end

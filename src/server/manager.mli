@@ -23,8 +23,8 @@ type ('mem,'img,'sec,'sym) res
 (** Types of resource data  *)
 type nil                        (** data not available  *)
 type mem
-type sym = Symbol.t             (** symbol  *)
-type sec = Section.t            (** section  *)
+type sym = Image.Symbol.t             (** symbol  *)
+type seg = Image.Segment.t            (** segment  *)
 type img
 
 (** Unique Identifer  *)
@@ -47,15 +47,15 @@ val string_of_id : id -> string
 val id_of_string : string -> id Or_error.t
 
 val symbol_of_memory  : id -> id option
-val section_of_symbol : id -> id option
-val image_of_section  : id -> id option
+val segment_of_symbol : id -> id option
+val image_of_segment  : id -> id option
 
-val sections_of_image  : id -> id list
-val symbols_of_section : id -> id list
+val segments_of_image  : id -> id list
+val symbols_of_segment : id -> id list
 val memory_of_symbol   : id -> id list
 
 val images : id list
-val sections : id list
+val segments : id list
 val symbols : id list
 val chunks : id list
 
@@ -63,7 +63,7 @@ val chunks : id list
 
 val memory  : ('a,_,_,_) res -> 'a
 val image   : (_,'a,_,_) res -> 'a
-val section : (_,_,'a,_) res -> 'a
+val segment : (_,_,'a,_) res -> 'a
 val symbol  : (_,_,_,'a) res -> 'a
 val endian  : (_,_,_,_) res -> endian
 val arch    : (_,_,_,_) res -> arch
@@ -110,7 +110,7 @@ end
 *)
 val with_resource :
   chunk:(mem,nil,nil,nil,'a) visitor ->
-  symbol:(mem list1, img,sec,sym,'a) visitor ->
-  section:(mem,img,sec,nil,'a) visitor ->
+  symbol:(mem list1, img,seg,sym,'a) visitor ->
+  segment:(mem,img,seg,nil,'a) visitor ->
   image:(nil,img,nil,nil,'a) visitor ->
   id -> 'a Lwt.Or_error.t

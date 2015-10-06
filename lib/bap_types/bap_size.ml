@@ -8,6 +8,8 @@ let to_bits : 'a -> int = function
   | `r16  -> 16
   | `r32  -> 32
   | `r64  -> 64
+  | `r128  -> 128
+  | `r256  -> 256
 
 let to_bytes x = to_bits x / 8
 
@@ -16,6 +18,8 @@ let of_int : int -> size Or_error.t = function
   | 16  -> Ok `r16
   | 32  -> Ok `r32
   | 64  -> Ok `r64
+  | 128 -> Ok `r128
+  | 256 -> Ok `r256
   | n   -> errorf "unsupported word size: %d" n
 
 let of_int_exn n = ok_exn (of_int n)
@@ -52,7 +56,7 @@ module T = struct
   open Format
 
   type t = size with bin_io, compare, sexp
-  let module_name = "Bap_size"
+  let module_name = Some "Bap.Std.Size"
 
   let pp fmt n =
     fprintf fmt "u%u" (to_bits n)

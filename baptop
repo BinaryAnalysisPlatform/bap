@@ -1,3 +1,2 @@
 #!/bin/sh
-
-exec utop -require bap.top "$@"
+exec utop -require "bap.top" "$@"

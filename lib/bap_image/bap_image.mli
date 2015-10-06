@@ -9,10 +9,11 @@ open Image_internal_std
 (** {2 Type definitions}  *)
 
 type t with sexp_of            (** image   *)
-(** section *)
-type sec with bin_io, compare, sexp
+
+(** segment *)
+type segment with bin_io, compare, sexp
 (** symbol  *)
-type sym with bin_io, compare, sexp
+type symbol with bin_io, compare, sexp
 
 type path = string
 
@@ -24,11 +25,11 @@ type path = string
     this information messages can be considered as warnings. *)
 type result = (t * Error.t list) Or_error.t
 
-(** [create ?backend filename] creates an image of the file
-    specified specified by the [filename]. If [backend] is not specfied,
-    then all backends are tried in order. If only one backend can read
-    this file (i.e., there is no ambiguity), then image is
-    returned. *)
+(** [create ?backend filename] creates an image of the file specified
+    specified by the [filename]. If [backend] is equal to "auto", then
+    all backends are tried in order. If only one backend can read this
+    file (i.e., there is no ambiguity), then image is returned. If
+    [backend] is not specifed, then the LLVM backend is used. *)
 val create : ?backend:string -> path -> result
 
 (** [of_string ?backend ~data] creates an image from the specified
@@ -52,18 +53,30 @@ val data : t -> Bigstring.t
 
 (** {2 Tables }  *)
 val words : t -> size -> word table
-val sections : t -> sec table
-val symbols : t -> sym table
+val segments : t -> segment table
+
+(** @deprecated: this will be removed in a next release  *)
+val symbols : t -> symbol table
+
+
+val segment : segment tag
+val symbol  : string tag
+val section : string tag
+
+(** returns memory  *)
+val memory : t -> value memmap
 
 (** {2 Mappings }  *)
-val memory_of_section  : t -> sec -> mem
-(** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)
-val memory_of_symbol   : t -> sym -> mem * mem seq
-val symbols_of_section : t -> sec -> sym seq
-val section_of_symbol  : t -> sym -> sec
+val memory_of_segment  : t -> segment -> mem
+(** [memory_of_symbol symbol]: returns the memory of symbol in acending order. *)
+val memory_of_symbol   : t -> symbol -> mem * mem seq
+val symbols_of_segment : t -> segment -> symbol seq
+val segment_of_symbol  : t -> symbol -> segment
 
-module Sec : sig
-  type t = sec
+
+
+module Segment : sig
+  type t = segment
   include Regular with type t := t
   val name : t -> string
   val is_writable   : t -> bool
@@ -71,8 +84,8 @@ module Sec : sig
   val is_executable : t -> bool
 end
 
-module Sym : sig
-  type t = sym
+module Symbol : sig
+  type t = symbol
   include Regular with type t := t
   val name : t -> string
   val is_function : t -> bool

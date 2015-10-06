@@ -4,9 +4,12 @@ open Or_error
 
 let install_printers () =
   List.map (Pretty_printer.all ()) ~f:(fun printer ->
-      let printer = String.substr_replace_first printer
-          ~pattern:"Core"
-          ~with_:"Core_kernel" in
+      let printer =
+        if String.is_prefix printer ~prefix:"Core."
+        then String.substr_replace_first printer
+            ~pattern:"Core"
+            ~with_:"Core_kernel"
+        else printer in
       let cmd = sprintf "#install_printer %s;;" printer in
       Bap_toplevel.eval cmd) |>
   Or_error.all >>| List.for_all ~f:ident

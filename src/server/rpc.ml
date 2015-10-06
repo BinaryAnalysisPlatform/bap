@@ -115,7 +115,7 @@ module Response = struct
 
   let memory_parameters m : msg = [
     "addr", string @@ string_of_addr @@ Memory.min_addr m;
-    "size", string @@ Int.to_string  @@ Memory.size m;
+    "size", string @@ Int.to_string  @@ Memory.length m;
   ]
 
 
@@ -131,7 +131,7 @@ module Response = struct
   let bil_value = Fn.compose strings Adt.strings_of_bil
 
   let insn ?target ?bil mem insn : insn  =
-    let module Insn = Disasm.Basic.Insn in
+    let module Insn = Disasm_expert.Basic.Insn in
     dict @@ [
       "name", string @@ Insn.name insn;
       "asm", string @@ Insn.asm insn;
@@ -148,7 +148,7 @@ module Response = struct
 
   let list_of_perm sec =
     let (:=) v f = Option.some_if (f sec) v in
-    List.filter_opt Section.([
+    List.filter_opt Image.Segment.([
         "r" := is_readable;
         "w" := is_writable;
         "x" := is_executable;
@@ -165,13 +165,13 @@ module Response = struct
       "addr_size", string / Int.to_string / Size.to_bits / addr_size;
       "endian", string / Adt.string_of_endian / endian;
     ] @ optional_field "file" string (filename image) @ [
-      "sections", strings secs;
+      "segments", strings secs;
     ]
 
 
 
   let symbol s mems : msg =
-    let open Symbol in [
+    let open Image.Symbol in [
       "symbol", dict @@ [
         "name", string @@ name s;
         "is_function", bool @@ is_function s;
@@ -183,16 +183,16 @@ module Response = struct
       ]
     ]
 
-  let section ~syms s mem : msg = [
-    "section", dict @@ [
-      "name", string @@ Section.name s;
+  let segment ~syms s mem : msg = [
+    "segment", dict @@ [
+      "name", string @@ Image.Segment.name s;
       "perm", strings @@ list_of_perm s;
       "symbols", strings syms;
     ] @ memory mem
   ]
 
   let resources name rs : msg = [name, strings rs]
-  let sections = resources "sections"
+  let segments = resources "segments"
   let symbols = resources "symbols"
   let images = resources "images"
   let chunks = resources "chunks"

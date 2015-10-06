@@ -41,14 +41,16 @@ let dispatch = function
       ["ocamldep"; "compile"; "doc"];
   | _ -> ()
 
+module Ocamlbuild_compat = struct
+  let mark_tag_used = ignore
+  include Ocamlbuild_plugin
+end
 
 let mark_tags () =
-  let open Ocamlbuild_plugin in
-  (* Uncomment the following in OCaml 4.02, to remove warnings. *)
-  (* mark_tag_used "pkg_core_bench"; *)
-  (* mark_tag_used "tests"; *)
-  (* mark_tag_used "pkg_piqirun" *)
-  ()
+  let open Ocamlbuild_compat in
+  mark_tag_used "pkg_core_bench";
+  mark_tag_used "tests";
+  mark_tag_used "pkg_piqirun"
 
 let () =
   mark_tags ();

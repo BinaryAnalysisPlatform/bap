@@ -9,7 +9,7 @@ module Mem = struct
 
     type repr = addr with sexp
     let repr m = min_addr m
-    let compare m1 m2 = compare (repr m1) (repr m2)
+    let compare m1 m2 = Addr.compare (repr m1) (repr m2)
 
     let sexp_of_t t = <:sexp_of<repr>> (repr t)
     let t_of_sexp = opaque_of_sexp
@@ -23,18 +23,43 @@ module Mem = struct
   include Hashable.Make(T)
 end
 
-module Cache = Mem.Table
+module Bound = struct
+  type t =
+    | Unbound
+    | Bounded of addr * addr
+  with sexp_of
+
+  let empty = Unbound
+
+  let update bound mem = match bound with
+    | Unbound -> Bounded (Mem.min_addr mem, Mem.max_addr mem)
+    | Bounded (x,y) ->
+      let p = Mem.min_addr mem and q = Mem.max_addr mem in
+      Bounded (Addr.min x p, Addr.max y q)
+
+  let is_unbound bound mem = match bound with
+    | Unbound -> true
+    | Bounded (x,y) ->
+      Addr.(Mem.max_addr mem < x) ||
+      Addr.(Mem.min_addr mem > y)
+
+  let is_bound bound mem = not (is_unbound bound mem)
+
+  let pp fmt = function
+    | Unbound -> Format.fprintf fmt "[]"
+    | Bounded (x,y) -> Format.fprintf fmt "[%a,%a]" Addr.pp x Addr.pp y
+end
+
 module Map = Mem.Map
 
 type mem = Mem.t with sexp_of
 
-type 'a cache = 'a Cache.t
 type 'a map = 'a Map.t with sexp_of
 type 'a hashable = 'a Hashtbl.Hashable.t
 
 type 'a t = {
-  cache : 'a map -> 'a cache Lazy.t sexp_opaque;
   map : 'a map;
+  bound : Bound.t;
 } with sexp_of
 
 type 'a ranged
@@ -42,38 +67,64 @@ type 'a ranged
   -> ?until:mem   (** defaults to the highest mapped area  *)
   -> 'a
 
-let cache_of_map map =
-  let size = Map.length map in
-  let cache = Cache.create ~growth_allowed:false ~size () in
-  Map.iter map ~f:(Cache.add_exn cache);
-  cache
-
-
-let recache map = lazy (cache_of_map map)
-
 let empty = {
-  cache = recache;
   map = Map.empty;
+  bound = Bound.empty;
 }
 
-let fold_intersections tab x ~init ~f =
-  let max, max_addr = Mem.last_byte x,  Mem.max_addr x in
-  let min_addr = Mem.min_addr x in
-  let min = match Map.min_elt tab.map with
-    | Some (m,_) -> m
-    | None -> max in
-  Map.fold_range_inclusive tab.map ~min ~max ~init
-    ~f:(fun ~key ~data init ->
-        match Mem.compare_with key min_addr,
-              Mem.compare_with key max_addr with
-        | `addr_is_inside, _ | _, `addr_is_inside
-        | `addr_is_below, `addr_is_above -> f key data init
-        | _ -> init)
+let singleton k v = {
+  map = Map.singleton k v;
+  bound = Bound.(update empty k);
+}
+
+let pp_elt f fmt = function
+  | None -> Format.fprintf fmt "None"
+  | Some (x,_) -> Format.fprintf fmt "Some %a" Addr.pp (f x)
+
+(** @pre [x <= y] *)
+let intersects x y = Addr.(Mem.max_addr x >= Mem.min_addr y)
 
 let has_intersections tab (x : mem) : bool =
-  with_return (fun cc ->
-      fold_intersections tab x ~init:() ~f:(fun _ _ _ -> cc.return true);
-      false)
+  Bound.is_bound tab.bound x &&
+  match Map.find tab.map x with
+  | Some _ -> true
+  | None -> match Map.prev_key tab.map x with
+    | Some (p,_) when intersects p x -> true
+    | _ -> match Map.next_key tab.map x with
+      | None -> false
+      | Some (n,_) -> intersects x n
+
+(** [left_bound t x ] returns a key to a largest interval in [t] that
+    has intersections with [].
+
+    since we can't get the matching key (only lesser or greater ones)
+    we will return key [x] itself on a perfect match case. That means,
+    that this function shouldn't ever be exposed to a user.
+
+    Otherwise, the only solution (other then just reimplementing our
+    own tree) is to sequence all keys and return the head.
+*)
+let left_bound tab x =
+  let rec search_left p = match Map.prev_key tab.map p with
+    | Some (p,_) when intersects p x -> search_left p
+    | _  -> p in
+  if has_intersections tab x then match Map.prev_key tab.map x with
+    | Some (p,_) when intersects p x -> Some (search_left p)
+    | _ when Map.find tab.map x <> None -> Some x (* see note above*)
+    | _ -> Map.next_key tab.map x |> Option.map ~f:fst
+  else None
+
+let fold_intersections tab x ~init ~f =
+  let rec loop (p,d) init =
+    let init = f p d init in
+    match Map.next_key tab.map p with
+    | Some (n,d) when intersects x n -> loop (n,d) init
+    | _ -> init in
+  match left_bound tab x with
+  | None -> init
+  | Some p -> match Map.find tab.map p with
+    | Some d -> loop (p,d) init
+    | None -> assert false
 
 let intersections tab (x : mem) : 'a seq =
   let open Seq.Generator in
@@ -82,41 +133,45 @@ let intersections tab (x : mem) : 'a seq =
       gen >>= fun () -> yield (addr,x)) in
   run m
 
-
 let change tab mem ~f =
-  let ins = intersections tab mem  in
+  let ins = intersections tab mem in
   match f ins with
-  | `skip -> tab
-  | `remap _ | `remove as cmd ->
-    let map = Seq.fold ins ~init:tab.map
-        ~f:(fun map (mem,_) -> Map.remove map mem) in
-    let map = match cmd with
-      | `remove -> map
-      | `remap data -> Map.add map ~key:mem ~data in
-    { map; cache = recache }
+  | `ignore -> tab
+  | `update _ | `rebind _  | `remove as cmd ->
+    let map =
+      Seq.fold ins ~init:tab.map ~f:(fun m (k,_) -> Map.remove m k) in
+    let map, bound = match cmd with
+      | `remove -> map, tab.bound
+      | `update f ->
+        Seq.fold ins ~init:(map, tab.bound)
+          ~f:(fun (map,bnd) (mem,x) ->
+              Map.add map ~key:mem ~data:(f (mem,x)),
+              Bound.update bnd mem)
+      | `rebind (mem,data) ->
+        Map.add map ~key:mem ~data,
+        Bound.update tab.bound mem in
+    { map; bound }
 
 let add tab mem x =
   if has_intersections tab mem
   then error "memory has intersections" mem sexp_of_mem
   else Ok {
       map = Mem.Map.add tab.map ~key:mem ~data:x;
-      cache = recache;
+      bound = Bound.update tab.bound mem;
     }
 
 let remove tab x =
   (* we shouldn't invalidate our cache if nothing changes *)
   if Map.mem tab.map x
-  then { map = Map.remove tab.map x; cache = recache }
-  else tab
+  then {
+    tab with
+    map = Map.remove tab.map x;
+  } else tab
 
 let length tab = Map.length tab.map
 
-let lookup f tab x =
-  let lazy cache = tab.cache tab.map in
-  f cache x
-
-let find tab mem = lookup Cache.find tab mem
-let mem  tab mem  = lookup Cache.mem tab mem
+let find tab mem = Map.find tab.map mem
+let mem  tab mem  = Map.mem tab.map mem
 
 let next tab = Map.next_key tab.map
 let prev tab = Map.prev_key tab.map
@@ -201,16 +256,30 @@ let find_map ?start ?until tab ~f =
 let find_if ?start ?until tab ~f =
   find_map ?start ?until tab ~f:(fun x -> if f x then Some x else None)
 
+(** TODO: this very inefficient implementation uses O(N) time, but we
+    should provide this, or users will create their own
+    implementations. Later, this should be optimized using interval
+    tree. *)
+let find_addr tab (addr : addr) : (mem * 'a) option =
+  with_return (fun cc ->
+      iteri tab ~f:(fun mem x -> match Mem.compare_with mem addr with
+          | `addr_is_inside -> cc.return (Some (mem,x))
+          | `addr_is_below  -> cc.return None
+          | `addr_is_above  -> ());
+      None)
 
 let make_map map add ?start ?until tab ~f =
   if start = None && until = None
   then {
+    bound = tab.bound;
     map = map tab.map ~f:(fun ~key ~data -> f key data);
-    cache = recache
   } else
-    let map = foldi ?start ?until tab ~init:Map.empty
-        ~f:(fun addr x map -> add map ~key:addr ~data:(f addr x)) in
-    { map; cache = recache}
+    let map,bound =
+      foldi ?start ?until tab ~init:(Map.empty,Bound.empty)
+        ~f:(fun addr x (map,bound) ->
+            add map ~key:addr ~data:(f addr x),
+            Bound.update bound addr) in
+    { map; bound}
 
 let mapi ?start ?until tab ~f =
   make_map Map.mapi Map.add ?start ?until tab ~f
@@ -303,8 +372,6 @@ let link : type b c . one_to:((b,c) r) ->
     | Maybe_one -> link_maybe_one
     | At_least_one -> link_at_least_one
     | Many -> link_many
-
-
 
 (* reverse injective mapping   *)
 let make_rev_map add find t tab =

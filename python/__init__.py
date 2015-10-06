@@ -27,7 +27,7 @@ Disassembling things
 
 ``disasm`` is a swiss knife for disassembling things. It takes either a
 string object, or something returned by an ``image`` function, e.g.,
-images, sections and symbols.
+images, segments and symbols.
 
 ``disasm`` function returns a generator yielding instances of class
 ``Insn`` defined in module :mod:`asm`. It has the following attributes:
@@ -69,9 +69,9 @@ file by name, and the following set of attributes (self describing):
 * addr_size
 * endian
 * file (file name)
-* sections
+* segments
 
-Sections is a list of instances of ``Section`` class, that also has a
+Segments is a list of instances of ``Segment`` class, that also has a
 ``get_symbol`` function and the following attributes:
 
 * name
