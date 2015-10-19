@@ -682,6 +682,7 @@ module Std : sig
     include Hashable   with type t := t
   end
 
+
   (** Signature for integral type.  *)
   module type Integer = sig
     type t
@@ -719,6 +720,38 @@ module Std : sig
     val (lsl)  : t -> t -> t
     val (lsr)  : t -> t -> t
     val (asr)  : t -> t -> t
+  end
+
+  module Monad : sig
+    module type Basic = Monad.Basic
+    module type Basic2 = Monad.Basic2
+
+    module type Infix = Monad.Infix
+    module type Infix2 = Monad.Infix2
+
+    module type S = Monad.S
+    module type S2 = Monad.S2
+
+    module type State = sig
+      type (+'a,'s) t
+
+      include Monad.S2 with type ('a,'s) t := ('a,'s) t
+
+      val put : 's -> (unit,'s) t
+      val get : unit -> ('s,'s) t
+      val gets : ('s -> 'r) -> ('r,'s) t
+      val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
+
+
+      val run : ('a,'s) t -> 's -> 'a * 's
+      val eval : ('a,'s) t -> 's -> 'a
+      val exec : ('a,'s) t -> 's -> 's
+    end
+
+    module Make(M : Basic) : S with type 'a t := 'a M.t
+    module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
+
+    module State : State
   end
 
   (** In order to implement [Regular] interface you need to provide a
@@ -1447,6 +1480,8 @@ module Std : sig
     end
   end
 
+
+
   (** Main BIL module
 
       This module defines BIL language and is useful to write BIL
@@ -1942,8 +1977,10 @@ module Std : sig
         order is to recall the sed's [s/in/out] syntax. *)
     val substitute : exp -> exp -> stmt list -> stmt list
 
-    (** [substitute_var x y p] substitutes all occurences of variable [x]
-        by expression [y] *)
+    (** [substitute_var x y p] substitutes all free occurences of
+        variable [x] in program [p] by expression [y]. A variable is
+        free if it is not bounded in a preceding statement or not bound
+        with let expression.  *)
     val substitute_var : var -> exp -> stmt list -> stmt list
 
     (** [free_vars bil] returns a set of free variables in program
@@ -1965,6 +2002,136 @@ module Std : sig
         then the transformation will stop at an arbitrary point of a
         cycle. *)
     val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
+
+    (** Result of a computation.*)
+    type result
+
+
+    (** An interface to a memory storage.
+
+        A storage is a mapping from addresses to bytes. For
+        consistency and efficiency bytes are still reprented with
+        bitvectors.
+
+        Storages should not take care of aliasing or endiannes, as they
+        are byte addressable. All memory operations are normalized by
+        Bili. *)
+    class type storage = object('s)
+
+      (** [load a] loads a byte from a given address  [a]  *)
+      method load : addr -> word option
+
+      (** [save a w] stores byte [w] at address [a]  *)
+      method save : addr -> word -> 's
+    end
+
+
+    (** Predefined storage classes  *)
+    module Storage : sig
+      (** linear storage literally implements operational
+          semantics, but has O(N) lookup and uses space
+          very ineffectively, as it is implemented as a list
+          of assignments. *)
+      class linear : storage
+
+      (** sparse storage is slightly more efficient storage,
+          in comparison with linear. It uses balanced tree
+          data structure, and provides logarithmic lookup and
+          update method. *)
+      class sparse : storage
+    end
+
+
+    (** Value of a result.
+        We slightly diverge from an operational semantics by allowing
+        a user to provide its own storage implementation.
+
+        In operational semantics a storage is represented
+        syntactically as
+        {v
+            v1 with [v2,ed] : nat <- v3,
+        v}
+        where v1 may be either a [Bot] value, representing an empty
+        memory (or an absence of knowledge), or another storage. So a
+        well typed memory object is defined inductively as:
+
+        {v
+          Inductive memory :=
+           | bot : memory
+           | store : (mem : memory) (addr : value) (data : value).
+        v}
+
+        That is equivalent to an assoc list. Although we provide an
+        assoc list as storage variant (see {!Storage.linear}), the
+        default storage is implemented slightly more effective, and
+        uses linear space and provides $log(N)$ lookup and update
+        methods. Users are encouraged to provide more efficient
+        storage implementations, for interpreters that rely heave on
+        memory throughput.
+    *)
+    type value =
+      | Imm of word             (** immediate value  *)
+      | Mem of storage          (** memory storage   *)
+      | Bot                     (** undefined value  *)
+
+    (** Result of computation.
+
+        Result of an expression evaluation depends on a context.
+        Thus, each result has a unique identifier, associated with it,
+        that is usually provided by a context. The result is a
+        concrete value, that is created whenever an expression is
+        evaluated under given context. Since, context is changed
+        during the evaluation (at least because a new result is
+        allocated), two consecutive evaluations of the same expression
+        will give different results. (This property is preserved by
+        Expi.context class, that provides methods for creating values
+        of type result).
+
+        Since [Result.Id] is a regular type, it is possible to
+        associate arbitrary information (like taint information,
+        formulae, etc) with each result, using associative data
+        structures, like maps and hash tables.*)
+    module Result : sig
+
+      (** result identifier  *)
+      type id
+
+      type t = result
+
+      (** State monad that evaluates to result  *)
+      type 'a r = (result,'a) Monad.State.t
+
+      (** State monad that evaluates to unit  *)
+      type 'a u = (unit,'a) Monad.State.t
+
+      (** [undefined id] creates result with a given [id] and
+          undefined value *)
+      val undefined : id -> t
+
+      (** [storage s id] creates result with a given [id] and
+          storage [s] as a value *)
+      val storage : storage -> id -> t
+
+      (** [word w id] creates result with a given [id] and
+          word [w] as a value *)
+      val word : word -> id -> t
+
+      (** returns result identifier  *)
+      val id : t -> id
+
+      (** returns result value  *)
+      val value : t -> value
+
+      (** Result identifier.  *)
+      module Id : sig
+        include Regular with type t = id
+        val zero : t
+        val succ : t -> t
+      end
+
+      module Value : Printable with type t = value
+      include Printable with type t := t
+    end
 
     (** Tries on BIL.
 
@@ -1999,6 +2166,310 @@ module Std : sig
       include Trie with type key = stmt list
     end
   end
+
+  type bil   = Bil.t       with bin_io, compare, sexp
+  type binop = Bil.binop   with bin_io, compare, sexp
+  type cast  = Bil.cast    with bin_io, compare, sexp
+  type exp   = Bil.exp     with bin_io, compare, sexp
+  type stmt  = Bil.stmt    with bin_io, compare, sexp
+  type unop  = Bil.unop    with bin_io, compare, sexp
+  type value               with bin_io, compare, sexp
+  type dict                with bin_io, compare, sexp
+
+
+  (** Base class for evaluation contexts.
+
+      All interpreters evaluate terms under given context,
+      wrapped into a state monad. All context must be structural
+      subtypes of the [Context.t].
+
+      The base context is just a mapping from variables to values.
+
+      Other than a type [Context.t] this module has n class [t] that
+      provides a logarithmic implementation for lookup and update
+      methods.
+
+      Since context, for any interpreter must be a structural subtype
+      of [Context.t] it is not required that this particular should be used.
+      Any implementation that has matching interface will work.
+  *)
+  module Context : sig
+    class t : object('s)
+      method lookup : var -> Bil.result option
+      method update : var -> Bil.result -> 's
+      method bindings : (var * Bil.result) Sequence.t
+    end
+  end
+
+  module Type_error : sig
+    type t with bin_io, compare, sexp
+
+    val bad_mem : t
+    val bad_imm : t
+    val bad_cast : t
+    val bad_type : exp:typ -> got:typ -> t
+
+    include Regular with type t := t
+  end
+
+  (** A BIL type error  *)
+  type type_error = Type_error.t with bin_io, compare, sexp
+
+
+  (** BIL Interpreter.*)
+  module Expi : sig
+    open Bil.Result
+    (**
+
+       An extensible interpreter for BIL expressions.
+
+       Note: before diving into the deepness of Expi module consider
+       [Exp.eval] function, that expose an easy interface to concrete
+       evaluation of expressions.
+
+       Expi implements an operational semantics described in [1].
+
+
+       [1]: https://github.com/BinaryAnalysisPlatform/bil
+    *)
+
+
+    (** Context for expression evaluation.
+
+        Context provides a unique identifier for each freshly created
+        value.  *)
+    class context : object('s)
+      inherit Context.t
+
+      (** creates a fresh new result, containing an undefined value,
+          and returns it with a modified context. *)
+      method create_undefined : 's * Bil.result
+      (** creates a fresh new result, containing given word,
+          and returns it with a modified context. *)
+      method create_word : word -> 's * Bil.result
+      (** creates a fresh new result, containing given storage,
+          and returns it with a modified context. *)
+      method create_storage : Bil.storage -> 's * Bil.result
+    end
+
+    (** Expression interpreter.
+
+        Expi is a base class for all other interpreters (see {!bili}
+        and {!biri}, that do all the hard work. Expi recognizes a
+        language defined by [exp] type. It evaluates arbitrary
+        expressions under provided {{!Context}context}.
+
+
+        To create new interpreter use operator [new]:
+
+        {v
+        let expi = new expi;;
+        val expi : _#Expi.context expi = <obj>
+        v}
+
+        Note: The type [_#Expi.context] is weakly polymorphic subtype of
+        [Expi.context][1]. Basically, this means, that the type is not
+        generalized and will be instantiated when used and fixed
+        afterwards.
+
+        {v
+        let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
+        val r : _#Expi.context Bil.Result.r = <abstr>
+        v}
+
+        The returned value is a state monad parametrized by a subtype
+        of class [Expi.context]. The state monad is a chain of
+        computations, where each computation is merely a function from
+        state to a state paired with the result of computation. The
+        state is accessible inside the computation and can be
+        changed.
+
+        To run the computation use [Monad.State.eval] function, that
+        accepts a state monad and an initial value. Here we can
+        provide any subtype of [Expi.context] as an initial
+        value. Let start with a [Expi.context] as first approximation:
+
+        {v
+        let x = Monad.State.eval r (new Expi.context);;
+        val x : Bil.result = [0x3] true
+        v}
+
+        The expression evaluates to [true], and the result is tagged
+        with an identifier [[0x3]]. The [Exp.context] assigns a unique
+        identifier for each freshly created result. Tag [[0x3]] means
+        that this was the third value created under provided context.
+
+        If the only thing, that you need is just to evaluate an
+        expression, then you can just use [Exp.eval] function:
+
+        {v
+        Exp.eval Bil.(int Word.b0 lor int Word.b1);;
+        - : Bil.value = true
+        v}
+
+        The main strength of [expi] is its extensibility. Let's write
+        a expression evaluator that will record a trace of evaluation:
+
+        {[
+          class context = object
+            inherit Expi.context
+            val events : (exp * Bil.result) list = []
+            method add_event exp res = {< events = (exp,res) :: events >}
+            method events = List.rev events
+          end
+        ]}
+
+        {[
+          class ['a] exp_tracer = object
+            constraint 'a = #context
+            inherit ['a] expi as super
+            method! eval_exp e =
+              let open Monad.State in
+              super#eval_exp e >>= fun r ->
+              get () >>= fun ctxt ->
+              put (ctxt#add_event e r) >>= fun () ->
+              return r
+          end;;
+        ]}
+
+        Note : We made our [exp_tracer] class polymorphic as a
+        courtesy to our fellow programmer, that may want to reuse it.
+        We can define it by inheriting from [expi] parametrized with
+        our context type, like this: [inherit [context] expi]
+
+        Also, there is no need to write a [constraint], as it will be
+        inferred automatically.
+
+        Now, let's try to use our tracer. We will use
+        [Monad.State.run] function, that returns both, the evaluated
+        value and the context. (We can also use [Monad.State.exec], if
+        we're not interested in value at all):
+
+        {v
+        let expi = new exp_tracer;;
+        val expi : _#context exp_tracer = <obj>
+        # let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
+        val r : _#context Bil.Result.r = <abstr>
+        # let r,ctxt = Monad.State.run r (new context) ;;
+        val r : Bil.result = [0x3] true
+        val ctxt : context = <obj>
+        ctxt#events;;
+        - : (exp * Bil.result) list =
+        [(false, [0x1] false); (true, [0x2] true); (false | true, [0x3] true)]
+        v}
+
+        [1]: The weakness of the type variable is introduced by
+        a value restriction and can't be relaxed since it is invariant
+        in state monad.
+    *)
+    class ['a] t : object
+      constraint 'a = #context
+
+      (** {2 Interaction with environment} *)
+
+
+      (** creates an empty storage. If you want to provide
+          your own implementation of storage, then it is definitely
+          the right place.  *)
+      method empty  : Bil.storage
+
+      (** a variable is looked up in a context *)
+      method lookup : var -> 'a r
+
+      (** a variable is bind to a value.*)
+      method update : var -> Bil.result -> 'a u
+
+      (** a byte is loaded from given address  *)
+      method load   : Bil.storage -> addr -> 'a r
+
+      (** a byte is stored to a given address  *)
+      method store  : Bil.storage -> addr -> word -> 'a r
+
+      (** {2 Error conditions}  *)
+
+      (** given typing error has occured  *)
+      method type_error : type_error -> 'a r
+
+      (** we can't do this!  *)
+      method division_by_zero : unit -> 'a r
+
+      (** called when storage doesn't contain the addr  *)
+      method undefined_addr : addr -> 'a r
+
+      (** called when context doesn't know the variable  *)
+      method undefined_var  : var  -> 'a r
+
+      (** {2 Evaluation methods}  *)
+      method eval_exp : exp -> 'a r
+      method eval_var : var -> 'a r
+      method eval_int : word -> 'a r
+      method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
+      method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
+      method eval_binop : binop -> exp -> exp -> 'a r
+      method eval_unop  : unop -> exp -> 'a r
+      method eval_cast  : cast -> nat1 -> exp -> 'a r
+      method eval_let : var -> exp -> exp -> 'a r
+      method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
+      method eval_concat : exp -> exp -> 'a r
+      method eval_extract : nat1 -> nat1 -> exp -> 'a r
+      method eval_unknown : string -> typ -> 'a r
+    end
+  end
+
+  (** Expression {{!Expi}interpreter}  *)
+  class ['a] expi : ['a] Expi.t
+
+  (** BIL Interpreter.
+
+      [bili] extends [expi] with methods for evaluating BIL
+      statements, thus allowing one to interpret BIL AST. To
+      interpret BIL in the intermediate representation use
+      {{!Biri}biri}.
+
+      Also, if you don't need to change the default behavior
+      of the interpreter, then you may use {!Stmt.eval} that
+      exposes an easier interface for BIL evaluation. For example,
+
+      {v
+      let x = Var.create "x" bool_t;;
+      val x : var = x
+      let ctxt = Stmt.eval [Bil.(x := int Word.b0)] (new Bili.context);;
+      val ctxt : Bili.context = <obj>
+      ctxt#bindings |> Seq.to_list;;
+      - : (var * Bil.result) list = [(x, [0x1] false)]
+      v}
+  *)
+  module Bili : sig
+
+
+    open Bil.Result
+
+    (** [Bili.context] extends [Expi.context] with PC (Program
+        Counter).  *)
+    class context : object('s)
+      inherit Expi.context
+      method pc : Bil.value
+      method with_pc : Bil.value -> 's
+    end
+
+    (** Base class for BIL interpreters   *)
+    class ['a] t : object
+      constraint 'a = #context
+      inherit ['a] expi
+      method eval : stmt list -> 'a u
+      method eval_stmt : stmt -> 'a u
+      method eval_move : var -> exp -> 'a u
+      method eval_jmp : exp -> 'a u
+      method eval_while : cond:exp -> body:stmt list -> 'a u
+      method eval_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a u
+      method eval_cpuexn : int -> 'a u
+      method eval_special : string -> 'a u
+    end
+  end
+
+  (** BIL {{!Bili}interpreter} *)
+  class ['a] bili : ['a] Bili.t
+
 
   (** [Regular] interface for BIL expressions *)
   module Exp : sig
@@ -2071,6 +2542,9 @@ module Std : sig
         occurs in the expression [exp]. *)
     val free_vars : t -> Var.Set.t
 
+
+    val eval : exp -> Bil.value
+
     include Regular with type t := t
     val pp_adt : t printer
   end
@@ -2110,6 +2584,9 @@ module Std : sig
     (** [free_vars stmt] returns a set of all unbound variables, that
         occurs in the [stmt]. *)
     val free_vars : t -> Var.Set.t
+
+
+    val eval : t list -> (#Bili.context as 'a) -> 'a
 
     include Regular with type t := t
     val pp_adt : t printer
@@ -2380,9 +2857,8 @@ module Std : sig
   module Value : sig
 
     (** a universal value  *)
-    type t with bin_io, compare, sexp
+    type t = value with bin_io, compare, sexp
 
-    type value = t
 
     (** Tag constructor of type ['a]  *)
     type 'a tag
@@ -2524,6 +3000,7 @@ module Std : sig
 
   type 'a tag = 'a Value.tag
 
+
   (** {3 Some predefined tags} *)
 
   type color = [
@@ -2579,7 +3056,7 @@ module Std : sig
         tag. *)
 
     (** type of map *)
-    type t with bin_io, compare, sexp
+    type t = dict with bin_io, compare, sexp
 
     (** an empty instance  *)
     val empty : t
@@ -2609,6 +3086,7 @@ module Std : sig
     (** [data dict] is a sequence of all dict elements  *)
     val data : t -> Value.t seq
   end
+
 
 
 
@@ -2655,14 +3133,6 @@ module Std : sig
     include Container.S1 with type 'a t := 'a t
   end
 
-  type bil   = Bil.t       with bin_io, compare, sexp
-  type binop = Bil.binop   with bin_io, compare, sexp
-  type cast  = Bil.cast    with bin_io, compare, sexp
-  type exp   = Exp.t       with bin_io, compare, sexp
-  type stmt  = Stmt.t      with bin_io, compare, sexp
-  type unop  = Bil.unop    with bin_io, compare, sexp
-  type value = Value.t     with bin_io, compare, sexp
-  type dict  = Dict.t      with bin_io, compare, sexp
 
   (** BAP IR.
 
@@ -2860,6 +3330,99 @@ module Std : sig
     val remove : t -> graph -> graph
     include Opaque with type t := t
   end
+
+  (** BIR Interpreter  *)
+  module Biri : sig
+    open Bil.Result
+
+    (** Biri evaluates terms in the context of a whole program (since
+        terms may contain calls and jumps).
+        Biri also tracks for current position inside block, the block
+        and preceding block.
+    *)
+
+    class context : program term ->  object('s)
+        inherit Expi.context
+        method program : program term
+        method trace : tid list
+        method enter_term : tid -> 's
+        method set_next : tid option -> 's
+        method next : tid option
+      end
+
+    (** base class for BIR interpreters  *)
+    class ['a] t : object
+      constraint 'a = #context
+      inherit ['a] expi
+
+      (** called for each term, just after the position is updated,
+          but before any side effect of term evaluation had occurred.*)
+      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+      (** called after all side effects of the term has occurred  *)
+      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+      (** Evaluates a subroutine with the following algorithm:
+
+          0. next <- first block of subroutine and goto 1
+          1. eval all in and in/out arguments and goto 2
+          2. if next is some blk then eval it and goto 2 else goto 3
+          3. if next is some sub then eval it and goto 2 else goto 4
+          4. eval all out and in/out arguments.
+      *)
+      method eval_sub : sub term -> 'a u
+
+      (** evaluate argument by first evaluating its right hand side,
+          and then assigning the result to the left hand side.*)
+      method eval_arg : arg term -> 'a u
+
+      (** evaluate all terms in a given block, starting with phi
+          nodes, then proceeding to def nodes and finally evaluating
+          all jmp terms until either jump is taken or jump condition
+          is undefined.
+          After the evaluation the context#next will point next
+          destination.  *)
+      method eval_blk : blk term -> 'a u
+
+      (** evaluate definition by assigning the result of the right
+          hand side to the definition variable  *)
+      method eval_def : def term -> 'a u
+
+      (** based on trace select an expression and assign its
+          value to the left hand side of phi node.   *)
+      method eval_phi : phi term -> 'a u
+
+      (** evaluate condition, and if it is false, then do nothing,
+          otherwise evaluate jump target (see below) *)
+      method eval_jmp : jmp term -> 'a u
+
+      (** evaluate label, using [eval_direct] or [eval_indirect], based
+          on the label variant *)
+      method eval_goto : label -> 'a u
+
+      (** evaluate target label, using [eval_direct] or
+          [eval_indirect], based on the label variant.
+          Ignores return label.  *)
+      method eval_call : call -> 'a u
+
+      (** evaluate label, using [eval_direct] or [eval_indirect], based
+          on the label variant *)
+      method eval_ret  : label -> 'a u
+
+      (** ignore arguments and set context#next to None  *)
+      method eval_exn  : int -> tid -> 'a u
+
+      (** set context#next to the given tid  *)
+      method eval_direct : tid -> 'a u
+
+      (** ignore argument and set context#next to None  *)
+      method eval_indirect : exp -> 'a u
+    end
+  end
+
+  (** BIR {{!Biri}interpreter}  *)
+  class ['a] biri : ['a] Biri.t
+
 
   (** Graph signature.  *)
   module type Graph = sig

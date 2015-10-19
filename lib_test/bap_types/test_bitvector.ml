@@ -1,8 +1,6 @@
 open OUnit2
 open Core_kernel.Std
-open Bap_types.Std
-
-module Seq = Sequence
+open Bap.Std
 
 let deadbeef = Word.(of_int32 0xDEADBEEFl)
 let _DEADBEEF = Word.(of_int64 0xDEADBEEFL)

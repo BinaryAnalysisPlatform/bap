@@ -15,7 +15,14 @@ end
 
 module Exp = struct
   include Bap_exp
+  include Exp
   include Bap_helpers.Exp
+end
+
+module Stmt = struct
+  include Bap_stmt
+  include Stmt
+  include Bap_helpers.Stmt
 end
 
 type dict = Dict.t with bin_io, compare, sexp
@@ -487,6 +494,7 @@ module Ir_def = struct
 
   let free_vars def = Exp.free_vars (rhs def)
 
+
   include Regular.Make(struct
       type t = def term with bin_io, compare, sexp
       let module_name = Some "Bap.Std.Def"
@@ -611,6 +619,15 @@ module Ir_jmp = struct
   let free_vars jmp =
     exps jmp |> Seq.fold ~init:Bap_var.Set.empty ~f:(fun vars e ->
         Set.union vars (Exp.free_vars e))
+
+  let eval jmp bili =
+    let eval_label = function
+      | Indirect dst -> bili#eval_jmp (Stmt.jmp dst)
+      | Direct _ -> assert false in
+    match kind jmp with
+    | Goto t -> eval_label t
+    | _ -> assert false
+
 
   include Regular.Make(struct
       type t = jmp term with bin_io, compare, sexp
