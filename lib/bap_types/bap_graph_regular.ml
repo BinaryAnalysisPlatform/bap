@@ -64,9 +64,26 @@ module Make(Node : Opaque)(Label : T) = struct
         | None -> Some empty_node
         | other -> other)
 
+    let update_arrows field neibs n g : graph =
+      Map.fold neibs ~init:g ~f:(fun ~key:m ~data:_ g ->
+          match Map.find g m with
+          | None -> g
+          | Some info ->
+            let arrs = Fieldslib.Field.get field info in
+            match Map.find arrs n with
+            | None -> g
+            | Some l ->
+              let arrs = Map.add arrs ~key:n ~data:l in
+              let data = Fieldslib.Field.fset field info arrs in
+              Map.add g ~key:m ~data)
+
     let update n l g : graph = Map.find g n |> function
       | None -> g
-      | Some data -> Map.add g ~key:(create l) ~data
+      | Some {inc;out} ->
+        let n = (create l) in
+        let g = update_arrows Fields_of_node_info.out inc n g in
+        let g = update_arrows Fields_of_node_info.inc out n g in
+        Map.add g ~key:n ~data:{inc;out}
 
     let remove n g = Map.remove g n
 
