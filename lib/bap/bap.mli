@@ -3236,9 +3236,8 @@ module Std : sig
     *)
     val insert : t -> graph -> graph
 
-    (** [update n l g] if node [n] is in [N] then return a graph [g]
-        in which node [n] is associated with label [l]. If wasn't in
-        the set [N] then [g] is returned unchanged.
+    (** [update n l g] if node [n] is not in [N(g)] then return [g],
+        else return graph [g] where node [n] is labeled with [l].
 
         Postconditions: {v
           - n ∉ N(g) -> n ∉ N(g').
@@ -3331,97 +3330,6 @@ module Std : sig
     include Opaque with type t := t
   end
 
-  (** BIR Interpreter  *)
-  module Biri : sig
-    open Bil.Result
-
-    (** Biri evaluates terms in the context of a whole program (since
-        terms may contain calls and jumps).
-        Biri also tracks for current position inside block, the block
-        and preceding block.
-    *)
-
-    class context : program term ->  object('s)
-        inherit Expi.context
-        method program : program term
-        method trace : tid list
-        method enter_term : tid -> 's
-        method set_next : tid option -> 's
-        method next : tid option
-      end
-
-    (** base class for BIR interpreters  *)
-    class ['a] t : object
-      constraint 'a = #context
-      inherit ['a] expi
-
-      (** called for each term, just after the position is updated,
-          but before any side effect of term evaluation had occurred.*)
-      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
-
-      (** called after all side effects of the term has occurred  *)
-      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
-
-      (** Evaluates a subroutine with the following algorithm:
-
-          0. next <- first block of subroutine and goto 1
-          1. eval all in and in/out arguments and goto 2
-          2. if next is some blk then eval it and goto 2 else goto 3
-          3. if next is some sub then eval it and goto 2 else goto 4
-          4. eval all out and in/out arguments.
-      *)
-      method eval_sub : sub term -> 'a u
-
-      (** evaluate argument by first evaluating its right hand side,
-          and then assigning the result to the left hand side.*)
-      method eval_arg : arg term -> 'a u
-
-      (** evaluate all terms in a given block, starting with phi
-          nodes, then proceeding to def nodes and finally evaluating
-          all jmp terms until either jump is taken or jump condition
-          is undefined.
-          After the evaluation the context#next will point next
-          destination.  *)
-      method eval_blk : blk term -> 'a u
-
-      (** evaluate definition by assigning the result of the right
-          hand side to the definition variable  *)
-      method eval_def : def term -> 'a u
-
-      (** based on trace select an expression and assign its
-          value to the left hand side of phi node.   *)
-      method eval_phi : phi term -> 'a u
-
-      (** evaluate condition, and if it is false, then do nothing,
-          otherwise evaluate jump target (see below) *)
-      method eval_jmp : jmp term -> 'a u
-
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_goto : label -> 'a u
-
-      (** evaluate target label, using [eval_direct] or
-          [eval_indirect], based on the label variant.
-          Ignores return label.  *)
-      method eval_call : call -> 'a u
-
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_ret  : label -> 'a u
-
-      (** ignore arguments and set context#next to None  *)
-      method eval_exn  : int -> tid -> 'a u
-
-      (** set context#next to the given tid  *)
-      method eval_direct : tid -> 'a u
-
-      (** ignore argument and set context#next to None  *)
-      method eval_indirect : exp -> 'a u
-    end
-  end
-
-  (** BIR {{!Biri}interpreter}  *)
-  class ['a] biri : ['a] Biri.t
 
 
   (** Graph signature.  *)
@@ -4468,6 +4376,99 @@ module Std : sig
 
 
   end
+
+  (** BIR Interpreter  *)
+  module Biri : sig
+    open Bil.Result
+
+    (** Biri evaluates terms in the context of a whole program (since
+        terms may contain calls and jumps).
+        Biri also tracks for current position inside block, the block
+        and preceding block.
+    *)
+
+    class context : program term ->  object('s)
+        inherit Expi.context
+        method program : program term
+        method trace : tid list
+        method enter_term : tid -> 's
+        method set_next : tid option -> 's
+        method next : tid option
+      end
+
+    (** base class for BIR interpreters  *)
+    class ['a] t : object
+      constraint 'a = #context
+      inherit ['a] expi
+
+      (** called for each term, just after the position is updated,
+          but before any side effect of term evaluation had occurred.*)
+      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+      (** called after all side effects of the term has occurred  *)
+      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+      (** Evaluates a subroutine with the following algorithm:
+
+          0. next <- first block of subroutine and goto 1
+          1. eval all in and in/out arguments and goto 2
+          2. if next is some blk then eval it and goto 2 else goto 3
+          3. if next is some sub then eval it and goto 2 else goto 4
+          4. eval all out and in/out arguments.
+      *)
+      method eval_sub : sub term -> 'a u
+
+      (** evaluate argument by first evaluating its right hand side,
+          and then assigning the result to the left hand side.*)
+      method eval_arg : arg term -> 'a u
+
+      (** evaluate all terms in a given block, starting with phi
+          nodes, then proceeding to def nodes and finally evaluating
+          all jmp terms until either jump is taken or jump condition
+          is undefined.
+          After the evaluation the context#next will point next
+          destination.  *)
+      method eval_blk : blk term -> 'a u
+
+      (** evaluate definition by assigning the result of the right
+          hand side to the definition variable  *)
+      method eval_def : def term -> 'a u
+
+      (** based on trace select an expression and assign its
+          value to the left hand side of phi node.   *)
+      method eval_phi : phi term -> 'a u
+
+      (** evaluate condition, and if it is false, then do nothing,
+          otherwise evaluate jump target (see below) *)
+      method eval_jmp : jmp term -> 'a u
+
+      (** evaluate label, using [eval_direct] or [eval_indirect], based
+          on the label variant *)
+      method eval_goto : label -> 'a u
+
+      (** evaluate target label, using [eval_direct] or
+          [eval_indirect], based on the label variant.
+          Ignores return label.  *)
+      method eval_call : call -> 'a u
+
+      (** evaluate label, using [eval_direct] or [eval_indirect], based
+          on the label variant *)
+      method eval_ret  : label -> 'a u
+
+      (** ignore arguments and set context#next to None  *)
+      method eval_exn  : int -> tid -> 'a u
+
+      (** set context#next to the given tid  *)
+      method eval_direct : tid -> 'a u
+
+      (** ignore argument and set context#next to None  *)
+      method eval_indirect : exp -> 'a u
+    end
+  end
+
+  (** BIR {{!Biri}interpreter}  *)
+  class ['a] biri : ['a] Biri.t
+
 
   (** an image loaded into memory  *)
   type image
