@@ -390,6 +390,7 @@ let create_tid_graph sub =
   let module G = Bap_graph_regular.Tid.Tid in
   Term.enum blk_t sub |> Seq.fold ~init:G.empty ~f:(fun g src ->
       let sid = Term.tid src in
+      let g = G.Node.insert sid g in
       Term.enum jmp_t src |> Seq.fold ~init:g ~f:(fun g jmp ->
           match succ_tid_of_jmp jmp with
           | None -> g
