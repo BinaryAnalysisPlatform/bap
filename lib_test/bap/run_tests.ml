@@ -14,6 +14,7 @@ let suite =
     Test_ir.suite;
     Test_project.suite;
     Test_llvm_loader.suite;
+    Test_trace.suite;
   ]
 
 

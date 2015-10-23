@@ -71,6 +71,7 @@ Library bap
                    bap.llvm_loader,
                    bap.plugins,
                    bap.sema,
+                   bap.trace,
                    bap.types
   Modules:         Bap
   InternalModules: Bap_project
@@ -144,6 +145,7 @@ Library types
                    Bap_var,
                    Bap_vector,
                    Bap_visitor,
+                   Bap_uuid,
                    Graphlib
 
 Library serialization
@@ -394,6 +396,28 @@ Library zmq
   Install:        true
   Modules:        Zmq_client, Zmq_server
 
+Library trace
+  Path:            lib/bap_trace
+  FindlibParent:   bap
+  FindLibName:     trace
+  CompiledObject:  best
+  InternalModules: Bap_trace,
+                   Bap_trace_binprot,
+                   Bap_trace_events,  
+                   Bap_trace_event_types, 
+                   Bap_trace_meta,
+                   Bap_trace_meta_types,
+                   Bap_trace_std
+  BuildDepends:    bap.types, uri
+
+Library trace_test
+  Path:            lib_test/bap_trace
+  Build$:          flag(tests)
+  Install:         false
+  CompiledObject:  best
+  Modules:         Test_trace
+  BuildDepends:    bap, bap.trace, oUnit
+
 Executable "bap-server"
   Path:           src/server
   Build$:         flag(server)
@@ -457,7 +481,8 @@ Executable run_tests
                 oUnit,
                 sema_test,
                 types_test,
-                project_test
+                project_test,
+                trace_test
   CompiledObject: best
 
 Executable run_benchmarks
