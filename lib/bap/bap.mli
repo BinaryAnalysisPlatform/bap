@@ -5905,6 +5905,45 @@ module Std : sig
       end
     end
 
+    (** Shingled Disassembler.
+        This disassembler is built on top of [Basic], and it uses a
+        combined approach wherein every byte offset is treated as a
+        potential instruction and conservatively kept, but subsequent
+        passes try to sheer off noise. It uses a short circuiting
+        approach to determine those instruction sequences that lead to
+        what can be definitively established as Data and back
+        propagates such determinations maximally. In this fashion, it
+        is recognized that benign compilers do not produce instruction
+        sequences with any such interpretation sequences other than
+        that determined by a mere single entry. In another note, this
+        disassembler makes use of instruction target analysis and
+        a machine trained Probabilitic Finite State Machine to help
+        further increase accuracy.
+    *)
+    module Shingled : sig
+      (** This is a conservative byte offset disassembler; everything that
+          is returned in a list of type mem * insn option. It is tail
+          recursive  *)
+      val all_shingles : ('a, 'b) Basic.t -> mem -> init:'c ->
+        at:('c -> mem * Basic.full_insn option -> 'c) -> 'c
+
+      (** Applies a couple of techniques to try and sheer off noise, 
+          dropping obviously recognizable data, and attempting a maximal
+          recognition backward propagation of fall through and
+          subsuequently a probabilistic finite state machine for selecting
+          maximally probable execution sequences based on a corpus of
+          trianing data. *)
+      val sheered_shingles :?backend:string -> arch ->
+        ?dis:(Basic.empty, Basic.empty) Basic.t -> mem -> insn memmap
+    end
+
+    module Shingled_lifter : sig
+      val lift_all : ?backend:string-> ?min_addr:addr -> arch -> string ->
+        bil list
+      val lift_sheered : ?backend:string -> ?min_addr:addr -> arch ->
+        string -> bil memmap
+    end 
+
     (** Recursive Descent Disassembler.
         This disassembler is built on top of [Basic] disassembler. It
         uses work list algorithm to implement recursive descent
