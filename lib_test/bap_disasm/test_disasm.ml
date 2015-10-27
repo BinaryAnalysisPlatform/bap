@@ -6,6 +6,7 @@ open OUnit2
 
 module Dis = Disasm_expert.Basic
 module Rec = Disasm_expert.Recursive
+module Shingled_disasm = Disasm_expert.Shingled
 
 let err fmt = Or_error.errorf fmt
 
@@ -14,7 +15,8 @@ let call = "\xe8\x47\xee\xff\xff"
 let mov = "\x8b\x40\x10"
 let add = "\x48\x83\xc4\x08"
 let ret = "\xc3"
-
+let overlap = "\x2d\xdd\xc3\x54\x55"
+let valid_insn_seq = "\x55\x54\xE9\xFC\xFF\xFF\xFF"
 let x86_64 = "x86_64", [
     (* sub $0x8,%rsp *)
     sub , ["SUB64ri8"; "RSP"; "RSP"; "0x8"], [];
@@ -362,15 +364,88 @@ let call1_3ret ctxt =
     Seq.is_empty (Rec.Block.succs b3);
   | _ -> assert false
 
+(* *****
+   Test shingled disasm sub-routines and test components are and below
+ *)
+
+exception Create_mem of Error.t
+let create_memory arch s addr =
+  let endian = Arch.endian arch in
+  Memory.create endian addr @@
+  Bigstring.of_string s |> function
+  | Ok r -> r
+  | Error e -> raise (Create_mem e)  
+
+let make_params bytes =
+  let open Or_error in
+  let arch = Arch.(`x86) in
+  let addr_size= Size.to_bits @@ Arch.addr_size arch in
+  let min_addr = Addr.of_int addr_size 0 in
+  let memory = create_memory arch bytes min_addr in
+  let dis = Dis.create ~backend:"llvm" (Arch.to_string arch) |> ok_exn in
+  dis, memory, arch
+
+let check_results addrs expected_results =
+  let list_to_string x =
+    List.to_string ~f:Int.to_string x in
+  List.iter2_exn addrs expected_results
+    ~f:(fun actual_size expected_size ->
+        assert_equal ~msg:((list_to_string addrs)
+                           ^ (list_to_string expected_results))
+          actual_size expected_size)  
+
+let shingles_to_list shingles =
+  let open Or_error in
+  let open Addr in
+  let open Memory in
+  Memmap.to_sequence shingles |>
+  Seq.map ~f:(fun (mem, insn) -> length mem)
+  |> Seq.to_list
+
+(* This test affirms that both the order and the inner sequences of a set of bytes
+   will be interpreted appropriately by the bap utility *)
+let test_hits_every_byte test_ctxt =
+  let dis, memory, arch = make_params overlap in
+  let addrs = Shingled_disasm.all_shingles dis memory ~init:[]
+      ~at:(fun accu (mem,insn) -> (Memory.length mem)::accu) in
+  let expected_results = [ 5; 2; 1; 1; 1; ] in
+  check_results addrs expected_results
+
+let test_sheers test_ctxt =
+  let dis, memory, arch = make_params overlap in
+  let sheered_shingles =
+    Shingled_disasm.sheered_shingles arch ~dis memory in
+  let addrs = shingles_to_list sheered_shingles in
+  (* the above is a byte sequence taken out of context. The shingled
+  disassembler will sheer properly the ending sequences that lead to
+  data, but currently only one side of the transitive closure is computed
+  *)
+  let expected_results = [ 2; 1; ] in 
+  check_results addrs expected_results 
+
+let test_sheering_retains test_ctxt =
+  (* TODO: construct a loop of assembler. Assert is is not lost  *)
+  let dis, memory, arch = make_params valid_insn_seq in
+  let sheered_shingles =
+    Shingled_disasm.sheered_shingles arch ~dis memory in
+  let expected_results = [ 1; 1; 5; ] in
+  check_results (shingles_to_list sheered_shingles) expected_results
+  (* TODO: check that a loop that contains a jump to an invalid
+     destination is lost *)
+
+
 let () = Plugins.load ()
 
 let suite = "Disasm.Basic" >::: [
-    "x86_64/one" >:: test_insn_of_mem x86_64;
-    "x86_64/all" >:: test_run_all     x86_64;
-    "recurse"    >:: test_cfg amount;
-    "addresses"  >:: test_cfg addresses;
-    "structure"  >:: test_cfg structure;
-    "ret"        >:: test_micro_cfg ret;
-    "sub"        >:: test_micro_cfg ret;
-    "call1_3ret" >:: call1_3ret;
+    "x86_64/one"            >:: test_insn_of_mem x86_64;
+    "x86_64/all"            >:: test_run_all     x86_64;
+    "recurse"               >:: test_cfg amount;
+    "addresses"             >:: test_cfg addresses;
+    "structure"             >:: test_cfg structure;
+    "ret"                   >:: test_micro_cfg ret;
+    "sub"                   >:: test_micro_cfg ret;
+    "call1_3ret"            >:: call1_3ret;
+    "test_hits_every_byte"  >:: test_hits_every_byte;
+    "test_sheers"           >:: test_sheers;
+    "test_sheering_retains" >:: test_sheering_retains;
   ]

@@ -268,6 +268,8 @@ Library disasm
                  Bap_disasm_x86_types,
                  Bap_disasm_x86_utils,
                  Bap_disasm_basic,
+                 Bap_disasm_shingled,
+                 Bap_disasm_shingled_lifter,
                  Bap_disasm_block,
                  Bap_disasm_block_intf,
                  Bap_disasm_insn,
@@ -277,6 +279,7 @@ Library disasm
                  Bap_disasm_symtab,
                  Bap_disasm_types,
                  Bap_insn_kind,
+                 Bap_insn_aliasing,
                  Bap_byteweight,
                  Bap_signatures
 
