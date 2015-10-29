@@ -26,6 +26,7 @@ module Dict : sig
   val find : t -> 'a tag -> 'a option
   val add : t -> 'a tag -> 'a -> [`Ok of t | `Duplicate]
   val change : t -> 'a tag -> ('a option -> 'a option) -> t
+  val all_pairs : t -> (typeid * value) Sequence.t
   val data : t -> value Sequence.t
 end
 

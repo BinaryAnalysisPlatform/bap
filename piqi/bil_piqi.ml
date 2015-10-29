@@ -3,9 +3,7 @@ open Bap.Std
 open Bil.Types
 
 module P = Stmt_piqi
-module V = Var
 open Type
-
 
 let casttype_to_piqi : 'a -> Stmt_piqi.cast_type =
   function
@@ -267,3 +265,16 @@ let bil_of_json filename =
 let bil_of_xml filename =
   stmts_of_piqi (In_channel.with_file filename ~binary:true
                    ~f:(fun ic -> Stmt_piqi_ext.parse_stmt_list (In_channel.input_all ic) `xml))
+
+type stmt_list=Stmt_piqi.stmt_list
+type stmt=Stmt_piqi.stmt
+
+let default_stmt = Stmt_piqi.default_stmt
+
+let parse_stmt = Stmt_piqi.parse_stmt
+let gen_stmt = Stmt_piqi.gen_stmt
+let gen__stmt = Stmt_piqi.gen__stmt
+
+let parse_stmt_list = Stmt_piqi.parse_stmt_list
+let gen__stmt_list = Stmt_piqi.gen__stmt_list
+let gen_stmt_list = Stmt_piqi.gen_stmt_list

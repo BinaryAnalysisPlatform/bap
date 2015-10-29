@@ -31,7 +31,7 @@ PostUninstallCommand: $rm $bindir/baptop
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
 Flag serialization
-  Description: Build serialization library
+  Description: Build piqi serialization library
   Default: true
 
 Flag llvm_static
@@ -86,7 +86,7 @@ Library plugins
 
 Library top
   XMETADescription:
-     Toplevel printers for bap-types and core-kernel
+     Toplevel printers for bap-types and core_kernel
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
@@ -149,8 +149,8 @@ Library types
                    Graphlib
 
 Library serialization
-  XMETADescription: Provides serialization for main data types
-  Path:         lib/bap_types/
+  XMETADescription: Provides piqi serialization for main data types (BIL, IR)
+  Path:         piqi
   Build$: flag(serialization)
   FindLibParent: bap
   FindLibName: serialization
@@ -158,10 +158,14 @@ Library serialization
   DataFiles:    *.piqi
   CompiledObject: best
   BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
-  Modules:   Bil_piqi
+  Modules:   Bap_piqi
   InternalModules:
              Stmt_piqi,
-             Stmt_piqi_ext
+             Stmt_piqi_ext,
+             Bil_piqi,
+             Ir_piqi,
+             Ir_piqi_ext,
+             Bir_piqi
 
 Library bap_image
   Path:          lib/bap_image/
@@ -369,6 +373,14 @@ Library sema_test
   BuildDepends:   bap, oUnit
   Install:        false
   Modules:        Test_ir
+
+Library serialization_test
+  Path:		  piqi/test
+  Build$:	  flag(tests) && flag(serialization)
+  CompiledObject: best
+  BuildDepends:	  bap, oUnit, bap.serialization
+  Install:	  false
+  Modules:	  Test_serialization
 
 Library benchmarks
   Path:           benchmarks

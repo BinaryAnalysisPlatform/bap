@@ -374,6 +374,7 @@ module Term = struct
   let prepend t ?before:id = insert t (`before id)
   let append t ?after:id p c = insert t (`after id) p c
   let set_attr t tag x = {t with dict = Dict.set t.dict tag x}
+  let attrs t = t.dict
   let get_attr t = Dict.find t.dict
   let del_attr t tag = {t with dict = Dict.remove t.dict tag}
   let has_attr t tag = get_attr t tag <> None

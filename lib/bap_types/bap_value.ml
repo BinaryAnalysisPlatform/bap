@@ -188,6 +188,8 @@ module Dict = struct
     | Some data -> set t key data
     | None -> if Option.is_none orig then t else remove t key
 
+  let all_pairs t : (typeid * value) Sequence.t =
+    Map.to_sequence t
   let data t : value Sequence.t =
     Map.to_sequence t |> Sequence.map ~f:snd
 end

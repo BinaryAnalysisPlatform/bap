@@ -16,9 +16,9 @@ let piqic_rule () : unit =
            A (expand "${piqic}");
            A (expand "${piqic_flags}");
            A "-C";
-           A "lib/bap_types";
+           A "../_build/piqi";
            A "-I";
-           A "../lib/bap_types";
+           A "../piqi";
            A (env "%.piqi");
            A"--multi-format"])));;
 

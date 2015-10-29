@@ -1,0 +1,344 @@
+.import [
+  .module stmt
+  .name stmt
+  .ocaml-module "Stmt_piqi"
+]
+
+.alias [
+  .name typeid
+  .type string
+]
+
+# we use a value alias because Core_kernel.Univ.t 
+# is also known as a value. In reality, we use bin_prot's
+# capabilities and just store values that way.
+.record [
+  .name value
+  .field [
+    .name value
+    .type string
+  ]
+  .field [
+    .name typeid
+    .type typeid
+  ]
+]
+
+.list [
+  .name dict
+  .type value
+]
+
+.record [
+  .name tid-path
+  .field [
+    .name tid-key
+    .type tid
+  ]
+  .field [
+    .name path-value
+    .type path
+  ]
+]
+
+.record [
+  .name tid-path-table
+  .field [
+    .repeated
+    .name entry
+    .type tid-path
+  ]
+]
+
+.alias [
+  .name program-typ
+  .type program
+]
+.alias [
+  .name sub-typ
+  .type sub
+]
+.alias [
+  .name arg-typ
+  .type arg
+]
+.alias [
+  .name blk-typ
+  .type blk
+]
+.alias [
+  .name phi-typ
+  .type phi
+]
+.alias [
+  .name def-typ
+  .type def
+]
+.alias [
+  .name jmp-typ
+  .type jmp
+]
+
+.variant [
+  .name typ
+  .option [ .type program-typ ]
+  .option [ .type sub-typ     ]
+  .option [ .type arg-typ     ]
+  .option [ .type blk-typ     ]
+  .option [ .type phi-typ     ]
+  .option [ .type def-typ     ]
+  .option [ .type jmp-typ     ]
+]
+
+.record [
+  .name term
+  .field [.name tid .type tid  ]
+  .field [.name dict .type dict]
+]
+.record [
+  .name sub-term
+  .field [ .name term .type term ]
+  .field [ .name self .type sub  ]
+]
+.record [
+  .name arg-term
+  .field [ .name term .type term ]
+  .field [ .name self .type arg  ]
+]
+.record [
+  .name blk-term
+  .field [ .name term .type term ]
+  .field [ .name self .type blk  ]
+]
+.record [
+  .name phi-term
+  .field [ .name term .type term ]
+  .field [ .name self .type phi  ]
+]
+.record [
+  .name def-term
+  .field [ .name term .type term ]
+  .field [ .name self .type def  ]
+]
+.record [
+  .name jmp-term
+  .field [ .name term .type term ]
+  .field [ .name self .type jmp  ]
+]
+
+.record [
+  .name path
+  .field [ .name i .type int .repeated]
+]
+
+.record [
+  .name path-table-entry
+  .field [
+    .name path-key
+    .type tid
+  ]
+  .field [
+     .name path
+     .type path
+  ]
+]
+
+.list [
+  .name path-table
+  .type path-table-entry
+]
+
+.record [
+  .name program
+  .field [
+    .name subs
+    .type sub-term
+    .repeated
+  ]
+]
+
+.record [
+  .name program-term
+  .field [ .name term .type term    ]
+  .field [ .name self .type program ]
+]
+
+.record [
+  .name sub
+  .field [
+    .name name
+    .type string
+  ]
+  .field [
+    .name blks
+    .type blk-term
+    .repeated
+  ]
+  .field [
+    .name args
+    .type arg-term
+    .repeated
+  ]
+]
+
+.record [
+  .name arg
+  .field [
+    .name var
+    .type stmt/var
+  ]
+  .field [
+    .name exp
+    .type stmt/expr
+  ]
+  .field [
+    .name intent
+    .type intent
+    .optional
+  ]
+]
+
+.record [
+  .name blk
+  .field [
+    .name phis
+    .type phi-term
+    .repeated
+  ]
+  .field [
+    .name defs
+    .type def-term
+    .repeated
+  ]
+  .field [
+    .name jmps
+    .type jmp-term
+    .repeated
+  ]
+]
+
+.record [
+  .name exp-tid-map
+  .repeated
+  .record [
+    .name entry
+    .optional
+    .field [
+      .name exp-key
+      .type exp
+    ]
+    .field [
+      .name tid-value
+      .type tid
+    ]
+  ]
+]
+
+.record [
+  .name tid-exp-map-entry
+  .field [
+    .name tid
+    .type tid
+  ]
+  .field [
+    .name exp
+    .type stmt/expr
+  ]
+]
+
+.list [
+  .name exp-map
+  .type tid-exp-map-entry
+]
+
+.record [
+  .name phi
+  .field [
+    .name var
+    .type stmt/var
+  ]
+  .field [
+    .name exprs
+    .type exp-map
+  ]
+]
+
+.record [
+  .name def
+  .field [
+    .name var
+    .type stmt/var
+  ]
+  .field [
+    .name exp
+    .type stmt/expr
+  ]
+]
+
+.record [
+  .name jmp
+  .field [
+    .name exp
+    .type stmt/expr
+  ]
+  .field [
+    .name jmp-kind
+    .type jmp-kind
+  ]
+]
+
+.alias [
+  .name tid
+  .type string
+]
+
+.record [
+  .name call
+  .field [
+    .name target
+    .type label
+  ]
+  .field [
+    .name return
+    .type label
+    .optional
+  ]
+]
+
+.alias [ .name Direct   .type tid       ]
+.alias [ .name Indirect .type stmt/expr ]
+.variant [
+  .name label
+  .option [ .type Direct   ]
+  .option [ .type Indirect ]
+]
+
+.alias [ .name Goto .type label ]
+.alias [ .name Ret  .type label ]
+
+.record [
+  .name int-tid
+  .field [
+    .name value
+    .type int
+  ]
+  .field [
+    .name tid
+    .type tid
+  ]
+]
+
+.variant [
+  .name jmp-kind
+  .option [ .type call    ]
+  .option [ .type Goto    ]
+  .option [ .type Ret     ]
+  .option [ .type int-tid ]
+]
+
+.enum [
+  .name intent
+  .option [ .name into ]
+  .option [ .name out  ]
+  .option [ .name both ]
+]
