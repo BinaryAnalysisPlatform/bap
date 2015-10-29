@@ -104,7 +104,7 @@ let eval_terms f c1 c2 c3 blk : #context u =
 
 class ['a] t = object(self)
   constraint 'a = #context
-  inherit ['a] Bap_expi.t as super
+  inherit ['a] Bap_expi.t
 
   method private do_enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun cls t ->
     update_context (fun c -> c#enter_term (Term.tid t)) >>= fun () ->
@@ -130,12 +130,13 @@ class ['a] t = object(self)
     | Some p -> match Term.find blk_t sub p with
       | Some blk -> self#eval_blk blk >>= fun () -> self#eval_fun sub
       | None -> match Term.find sub_t c#program p with
-        | None -> SM.return ()
         | Some sub -> self#eval_sub sub
+        | None -> match Ir_program.parent blk_t c#program p with
+          | None -> SM.return ()
+          | Some sub -> self#eval_fun sub
 
   method eval_blk (blk : blk term) : 'a u =
     self#do_enter_term blk_t blk >>= fun () ->
-    set_next None >>= fun () ->
     eval_terms self#eval_phi phi_t (Some jmp_t) (Some phi_t) blk >>= fun () ->
     eval_terms self#eval_def def_t (Some jmp_t)  None        blk >>= fun () ->
     eval_terms self#eval_jmp jmp_t None  None                blk >>= fun () ->
