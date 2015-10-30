@@ -880,6 +880,7 @@ struct
   end
 
   let (//) xs f = Seq.filter xs ~f
+  let (/@) xs f = Seq.map xs ~f
 
   let empty = G.empty
   let is_directed = G.is_directed
@@ -893,10 +894,10 @@ struct
     include G.Node
     let mem n g = Has.node n && mem n g
     let enum enum n g = if Has.node n then enum n g else Seq.empty
-    let succs n g   = enum succs n g   // Has.node
-    let preds n g   = enum preds n g   // Has.node
     let inputs n g  = enum inputs n g  // Has.edge
     let outputs n g = enum outputs n g // Has.edge
+    let succs n g   = outputs n g /@ G.Edge.dst
+    let preds n g   = inputs n g  /@ G.Edge.src
     let edge n m g = match edge n m g with
       | Some e when Has.edge e -> Some e
       | _ -> None
