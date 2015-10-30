@@ -103,20 +103,46 @@ module Text = struct
 end
 
 module Attr = struct
+  open Scanf
+
   let attrs = String.Hash_set.create ()
   let add attr = Hash_set.add attrs attr
 
-  let need_to_print tag =
-    Scanf.sscanf tag " .%s %s@\n" (fun attr _ ->
-        Hash_set.mem attrs attr)
+  (* ideally, we should clean in a [print_close_tag] method,
+     but, thanks to bug #6769 in Format library
+     (see OCaml Mantis), we need to hijack the newline method,
+     and use this ugly reference  *)
+  let clean = ref true
 
+  let foreground tag = sscanf tag " .foreground %s@\n" ident
+  let background tag = sscanf tag " .background %s@\n" ident
+
+  let name_of_attr tag = sscanf tag " .%s %s@\n" (fun s _ -> s)
+
+  let ascii_color tag =
+    try Option.some @@ match name_of_attr tag with
+      | "foreground" -> foreground tag
+      | "background" -> background tag
+      | _ -> raise Not_found
+    with exn -> None
+
+  let need_to_print tag =
+    Hash_set.mem attrs (name_of_attr tag)
+
+  let reset ppf =
+    if not clean.contents
+    then pp_print_string ppf "\x1b[39;49m";
+    clean := true
 
   let print_open_tag ppf tag : unit =
-    if need_to_print tag then begin
-      pp_print_string ppf tag;
-      pp_print_newline ppf ()
-    end
-
+    if need_to_print tag then
+      match ascii_color tag with
+      | Some color ->
+        pp_print_string ppf color;
+        clean := false
+      | None ->
+        pp_print_string ppf tag;
+        pp_force_newline ppf ()
 
   let install ppf =
     pp_set_print_tags ppf true;
@@ -124,6 +150,13 @@ module Attr = struct
     pp_set_formatter_tag_functions ppf {
       tags with
       print_open_tag = print_open_tag ppf;
+    };
+    let out = pp_get_formatter_out_functions ppf () in
+    pp_set_formatter_out_functions ppf {
+      out with
+      out_newline = (fun () ->
+          reset ppf;
+          out.out_newline ())
     }
 end
 

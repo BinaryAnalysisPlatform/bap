@@ -3017,6 +3017,16 @@ module Std : sig
   (** Color something with a color  *)
   val color : color tag
 
+
+  (** print marked entity with the specified color.  (the same
+      as color, but pretty printing function will output ascii escape
+      sequence of corresponding color.  *)
+  val foreground : color tag
+
+
+  (** print marked entity with specified color. See [foreground].  *)
+  val background : color tag
+
   (** A human readable comment *)
   val comment : string tag
 
