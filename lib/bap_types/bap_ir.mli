@@ -82,6 +82,7 @@ module Term : sig
   val nth : ('a,'b) cls -> 'a t -> int -> 'b t option
   val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
   val set_attr : 'a t -> 'b tag -> 'b -> 'a t
+  val attrs : 'a t -> Dict.t
   val get_attr : 'a t -> 'b tag -> 'b option
   val del_attr : 'a t -> 'b tag -> 'a t
   val has_attr : 'a t -> 'b tag -> bool

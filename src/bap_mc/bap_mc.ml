@@ -5,6 +5,8 @@ open Bap.Std
 open Bap_plugins.Std
 open Options
 
+module Bil_piqi = Bap_piqi.Bil
+
 exception Bad_user_input
 exception Bad_insn of mem * int * int
 exception Convert_imm of string

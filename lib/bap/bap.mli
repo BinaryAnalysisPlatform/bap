@@ -212,7 +212,7 @@ module Std : sig
       signature for persistant graphs. Two functors witness the
       isomorphism of the interfaces:
       {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
-      to this functors any algorithm written for OCamlGraph can be
+      to these functors, any algorithm written for OCamlGraph can be
       used on [Graphlibs] graph and vice verse.
 
       The {!Graph} interface provides a richer interface in a Core
@@ -234,7 +234,7 @@ module Std : sig
       Contrary to OCamlGraph, each {!Graphlib} interface is provided
       as a function, not a functor. Thus making there use syntactically
       easier. Also, {!Graphlib} heavily uses optional and keyword
-      parameters. For die-hards, may algorithms are still have functor
+      parameters. For die-hards, many algorithms still have functor
       interface.
 
       All {!Graphlib} algorithms accept a first-class module with
@@ -3093,8 +3093,12 @@ module Std : sig
         with [tag]  *)
     val remove : t -> 'a tag -> t
 
+    (** [all_pairs dict] is a sequence of all tid value
+        entries  *)
+    val all_pairs : t -> (Value.typeid * value) Sequence.t
+
     (** [data dict] is a sequence of all dict elements  *)
-    val data : t -> Value.t seq
+    val data : t -> Value.t Sequence.t
   end
 
 
@@ -3383,8 +3387,8 @@ module Std : sig
         graphs to its fields with the following notation
         [<field>(<graph>)], e.g., [N(g)] is a set of nodes of graph [g].
 
-        Only the strongest postcondition is specified, e.g., if it
-        specified that [νn = l], than it also means that
+        Only the strongest postcondition is specified, e.g., if it is
+        specified that [νn = l], then it also means that
 
         [n ∈ N ∧ ∃u((u,v) ∈ E ∨ (v,u) ∈ E) ∧ l ∈ N' ∧ ...]
 
@@ -6746,7 +6750,9 @@ module Std : sig
     (** [set_attr term attr value] attaches an [value] to attribute
         [attr] in [term] *)
     val set_attr : 'a t -> 'b tag -> 'b -> 'a t
-
+    (** [attrs term attrs] returns the set of [attributes] associated
+        with a [term]*)
+    val attrs : 'a t -> Dict.t
     (** [get_attr term attr] returns a value of the given [attr] in
         [term] *)
     val get_attr : 'a t -> 'b tag -> 'b option
@@ -6891,7 +6897,7 @@ module Std : sig
         entities is a {e block element}.
 
         The order of Phi-nodes can be specified in any order, as
-        the executes simultaneously . Definitions are stored in the
+        they execute simultaneously . Definitions are stored in the
         order of execution. Jumps are specified in the order in which
         they should be taken, i.e., jmp_n is taken only after
         jmp_n-1 and if and only if the latter was not taken. For
@@ -7188,7 +7194,7 @@ module Std : sig
 
   (** PHI-node  *)
   module Phi : sig
-    (** Phi nodes are used to represent a set of values, that can be
+    (** Phi nodes are used to represent a set of values that can be
         assigned to a given variable depending on a control flow path
         taken.  Phi nodes should occur only in blocks that has more
         than one incoming edge, i.e., in blocks to which there is a
@@ -7295,7 +7301,7 @@ module Std : sig
         not result in a return to the caller side.  Thus each call is
         represented by two labels. The [target] label points to the
         procedure that is called, the [return] label denotes a block
-        to which the control flow should (but mustn't) continue when
+        to which the control flow should (but may not) continue when
         called subroutine returns.  *)
 
     type t = call
