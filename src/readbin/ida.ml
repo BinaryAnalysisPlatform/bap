@@ -9,7 +9,7 @@ type t = {
   exe : string;
   curses : string option;
   mutable close : unit -> unit;
-}
+} with sexp
 
 let run cmd =
   let inp = Unix.open_process_in cmd in
@@ -83,7 +83,8 @@ let locate exe =
   | [] -> exe
   | x :: _ -> x
 
-let find exe = try FileUtil.which exe with Not_found -> locate exe
+let find exe =
+  try FileUtil.which exe with Not_found -> locate exe
 
 let is_headless = function
   | Some ida ->
@@ -127,7 +128,8 @@ let create_exn ?ida target =
 let create ?ida target =
   try Ok (create_exn ?ida target) with
   | Not_found -> Or_error.errorf "Can't find IDA in your environment"
-  | exn -> Or_error.of_exn exn
+  | exn ->
+    Or_error.of_exn exn
 
 let run_script self script_to =
   let script,out = Filename.open_temp_file "bap_" ".py" in

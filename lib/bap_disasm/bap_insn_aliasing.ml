@@ -21,11 +21,11 @@ let kind_of_branches t f =
 
 let rec dests_of_bil bil =
   fold_consts bil |> List.concat_map ~f:dests_of_stmt
-and dests_of_stmt = let open Bil in function
-  | Jmp (Bil.Int addr) -> [Some addr,`Jump]
-  | Jmp (_) -> [None, `Jump]
-  | If (_,yes,no) -> merge_branches yes no
-  | While (_,ss) -> dests_of_bil ss
+and dests_of_stmt = function
+  | Bil.Jmp (Bil.Int addr) -> [Some addr,`Jump]
+  | Bil.Jmp (_) -> [None, `Jump]
+  | Bil.If (_,yes,no) -> merge_branches yes no
+  | Bil.While (_,ss) -> dests_of_bil ss
   | _ -> []
 and merge_branches yes no =
   let x = dests_of_bil yes and y = dests_of_bil no in

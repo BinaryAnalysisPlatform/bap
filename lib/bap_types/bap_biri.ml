@@ -76,31 +76,34 @@ let set_next term : #context u =
        - None otherwise
 *)
 let eval_terms f c1 c2 c3 blk : #context u =
-  let next_hd = match c2 with
-    | None -> SM.return ()
-    | Some c2 -> match Seq.hd (Term.enum c2 blk) with
-      | Some t -> set_next (Some t)
-      | None -> match c3 with
-        | None -> SM.return ()
-        | Some c3 -> set_next (Seq.hd (Term.enum c3 blk)) in
-  let step (t1 : 'a term) t2 =
+  let set_next next = match next with
+    | Some thing as next -> set_next next
+    | None -> match c2 with
+      | None -> SM.return ()
+      | Some c2 -> match Seq.hd (Term.enum c2 blk) with
+        | Some t -> set_next (Some t)
+        | None -> match c3 with
+          | None -> SM.return ()
+          | Some c3 -> set_next (Seq.hd (Term.enum c3 blk)) in
+  let step t1 next =
     SM.get () >>= fun c -> match c#next with
     | None -> SM.return ()
     | Some tid when Tid.(Term.tid t1 <> tid) -> SM.return ()
-    | _ -> set_next (Some t2) >>= fun () -> f t1 in
-  Term.enum c1 blk |> Seq.fold ~init:(SM.return Empty)
+    | _ -> set_next next >>= fun () -> f t1 in
+  let terms = Term.enum c1 blk in
+  set_next (Seq.hd terms) >>= fun () ->
+  Seq.fold terms ~init:(SM.return Empty)
     ~f:(fun m t -> m >>= function
       | Empty -> SM.return (First t)
       | First t1 -> set_next (Some t1) >>| fun () -> Ready (t1,t)
       | Ready (t1,t2) ->
-        step t1 t2 >>= fun () ->
+        step t1 (Some t2) >>= fun () ->
         SM.return (Ready (t2,t))) >>= function
   | Empty -> SM.return ()
-  | First t -> next_hd >>= fun () -> f t
+  | First t -> step t None
   | Ready (t1,t2) ->
-    step t1 t2 >>= fun () ->
-    next_hd >>= fun () ->
-    f t2
+    step t1 (Some t2) >>= fun () ->
+    step t2 None
 
 class ['a] t = object(self)
   constraint 'a = #context
@@ -121,8 +124,7 @@ class ['a] t = object(self)
     set_next (Term.first blk_t sub) >>= fun () ->
     eval_args `enter sub self#eval_arg >>= fun () ->
     self#eval_fun sub >>= fun () ->
-    eval_args `leave sub self#eval_arg >>= fun () ->
-    self#leave_term sub_t sub
+    self#eval_return sub
 
   method private eval_fun sub : 'a u =
     SM.get () >>= fun c -> match c#next with
@@ -131,12 +133,25 @@ class ['a] t = object(self)
       | Some blk -> self#eval_blk blk >>= fun () -> self#eval_fun sub
       | None -> match Term.find sub_t c#program p with
         | Some sub -> self#eval_sub sub
-        | None -> match Ir_program.parent blk_t c#program p with
-          | None -> SM.return ()
-          | Some sub -> self#eval_fun sub
+        | None -> SM.return ()
+
+  method private eval_return sub : 'a u =
+    SM.get () >>= fun c -> match c#next with
+    | None -> SM.return ()
+    | Some p ->
+      self#leave_fun sub >>= fun () ->
+      match Ir_program.parent blk_t c#program p with
+      | None -> SM.return ()
+      | Some sub -> self#eval_fun sub
+
+  method private leave_fun sub =
+    eval_args `leave sub self#eval_arg >>= fun () ->
+    self#leave_term sub_t sub
+
 
   method eval_blk (blk : blk term) : 'a u =
     self#do_enter_term blk_t blk >>= fun () ->
+    set_next None >>= fun () ->
     eval_terms self#eval_phi phi_t (Some jmp_t) (Some phi_t) blk >>= fun () ->
     eval_terms self#eval_def def_t (Some jmp_t)  None        blk >>= fun () ->
     eval_terms self#eval_jmp jmp_t None  None                blk >>= fun () ->

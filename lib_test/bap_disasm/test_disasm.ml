@@ -10,6 +10,8 @@ module Shingled_disasm = Disasm_expert.Shingled
 
 let err fmt = Or_error.errorf fmt
 
+let leaq = "\x48\x8d\x00"
+let lea = "\x67\x8d\x00"
 let sub = "\x48\x83\xec\x08"
 let call = "\xe8\x47\xee\xff\xff"
 let mov = "\x8b\x40\x10"
@@ -366,7 +368,7 @@ let call1_3ret ctxt =
 
 (* *****
    Test shingled disasm sub-routines and test components are and below
- *)
+*)
 
 exception Create_mem of Error.t
 let create_memory arch s addr =
@@ -374,7 +376,7 @@ let create_memory arch s addr =
   Memory.create endian addr @@
   Bigstring.of_string s |> function
   | Ok r -> r
-  | Error e -> raise (Create_mem e)  
+  | Error e -> raise (Create_mem e)
 
 let make_params bytes =
   let open Or_error in
@@ -392,7 +394,7 @@ let check_results addrs expected_results =
     ~f:(fun actual_size expected_size ->
         assert_equal ~msg:((list_to_string addrs)
                            ^ (list_to_string expected_results))
-          actual_size expected_size)  
+          actual_size expected_size)
 
 let shingles_to_list shingles =
   let open Or_error in
@@ -417,11 +419,11 @@ let test_sheers test_ctxt =
     Shingled_disasm.sheered_shingles arch ~dis memory in
   let addrs = shingles_to_list sheered_shingles in
   (* the above is a byte sequence taken out of context. The shingled
-  disassembler will sheer properly the ending sequences that lead to
-  data, but currently only one side of the transitive closure is computed
+     disassembler will sheer properly the ending sequences that lead to
+     data, but currently only one side of the transitive closure is computed
   *)
-  let expected_results = [ 2; 1; ] in 
-  check_results addrs expected_results 
+  let expected_results = [ 2; 1; ] in
+  check_results addrs expected_results
 
 let test_sheering_retains test_ctxt =
   (* TODO: construct a loop of assembler. Assert is is not lost  *)
@@ -430,8 +432,8 @@ let test_sheering_retains test_ctxt =
     Shingled_disasm.sheered_shingles arch ~dis memory in
   let expected_results = [ 1; 1; 5; ] in
   check_results (shingles_to_list sheered_shingles) expected_results
-  (* TODO: check that a loop that contains a jump to an invalid
-     destination is lost *)
+(* TODO: check that a loop that contains a jump to an invalid
+   destination is lost *)
 
 
 let () = Plugins.load ()
