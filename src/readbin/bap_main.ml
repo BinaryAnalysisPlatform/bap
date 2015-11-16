@@ -5,6 +5,8 @@ open Or_error
 open Format
 open Options
 
+module C = Frontc
+
 module Program(Conf : Options.Provider) = struct
   open Conf
 

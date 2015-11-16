@@ -3142,6 +3142,16 @@ module Std : sig
         [Container.S1] interface *)
     val map_to_array : 'a t -> f:('a -> 'b) -> 'b array
 
+
+    val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
+    val iteri : 'a t -> f:(int -> 'a -> unit) -> unit
+    val foldi : 'a t -> init:'b -> f:(int -> 'b -> 'a -> 'b) -> 'b
+
+    val index : ?equal:('a -> 'a -> bool) -> 'a t -> 'a -> int option
+    val index_exn : ?equal:('a -> 'a -> bool) -> 'a t -> 'a -> int
+    val index_with : ?equal:('a -> 'a -> bool) -> default:int -> 'a t -> 'a -> int
+
+
     (** implements common accessors for the array, like [find], [fold],
         [iter], etc  *)
     include Container.S1 with type 'a t := 'a t
@@ -5941,7 +5951,7 @@ module Std : sig
       val all_shingles : ('a, 'b) Basic.t -> mem -> init:'c ->
         at:('c -> mem * Basic.full_insn option -> 'c) -> 'c
 
-      (** Applies a couple of techniques to try and sheer off noise, 
+      (** Applies a couple of techniques to try and sheer off noise,
           dropping obviously recognizable data, and attempting a maximal
           recognition backward propagation of fall through and
           subsuequently a probabilistic finite state machine for selecting
@@ -5956,7 +5966,7 @@ module Std : sig
         bil list
       val lift_sheered : ?backend:string -> ?min_addr:addr -> arch ->
         string -> bil memmap
-    end 
+    end
 
     (** Recursive Descent Disassembler.
         This disassembler is built on top of [Basic] disassembler. It
@@ -8101,7 +8111,7 @@ module Std : sig
 
     type io_error = [
       | `Protocol_error of Error.t   (** Data encoding problem         *)
-      | `System_error of Unix.error  (** System error                  *)  
+      | `System_error of Unix.error  (** System error                  *)
     ]
 
     type error = [
@@ -8118,7 +8128,7 @@ module Std : sig
     *)
 
 
-    (** [load ~monitor uri] fetches trace from a provided [uri]. 
+    (** [load ~monitor uri] fetches trace from a provided [uri].
         [monitor] is fail_on_error by default. *)
     val load : ?monitor:monitor -> Uri.t -> (t,error) Result.t
 
@@ -8263,7 +8273,7 @@ module Std : sig
     *)
 
     module type S = sig
-      val name: string 
+      val name: string
       val supports: 'a tag -> bool
     end
 

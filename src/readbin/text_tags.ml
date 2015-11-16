@@ -142,7 +142,7 @@ module Attr = struct
         clean := false
       | None ->
         pp_print_string ppf tag;
-        pp_force_newline ppf ()
+        pp_print_newline ppf ()
 
   let install ppf =
     pp_set_print_tags ppf true;

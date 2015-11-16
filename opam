@@ -48,6 +48,7 @@ depends: [
     "ezjsonm" {>= "0.4.0" & < "0.4.1" }
     "faillib"
     "fileutils"
+    "FrontC"
     "lwt"
     "oasis" {build & >= "0.4.0"}
     "ounit" {build}
