@@ -246,35 +246,29 @@ let rec stmt_of_piqi = function
 
 and stmts_of_piqi l = List.map ~f:stmt_of_piqi l
 
+open Stmt_piqi_ext
+
 let to_pb p   = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `pb
 let to_json p = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `json_pretty
 let to_xml p  = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `xml_pretty
 
 let pb_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `pb
 let json_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `json_pretty
-let xml_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `xml_pretty
+let xml_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `
+    xml_pretty
 
-let bil_of_pb filename =
-  stmts_of_piqi (In_channel.with_file filename ~binary:true
-                   ~f:(fun ic -> Stmt_piqi_ext.parse_stmt_list (In_channel.input_all ic) `pb))
+type fmt = [ `json | `pb | `piq | `pib | `xml ]
+type out_fmt = [fmt | `json_pretty | `xml_pretty]
 
-let bil_of_json filename =
-  stmts_of_piqi (In_channel.with_file filename ~binary:true
-                   ~f:(fun ic -> Stmt_piqi_ext.parse_stmt_list (In_channel.input_all ic) `json))
+let loads f g fmt s = f (g s fmt)
+let dumps g f fmt x = f (g x) (fmt : fmt :> out_fmt)
 
-let bil_of_xml filename =
-  stmts_of_piqi (In_channel.with_file filename ~binary:true
-                   ~f:(fun ic -> Stmt_piqi_ext.parse_stmt_list (In_channel.input_all ic) `xml))
 
-type stmt_list=Stmt_piqi.stmt_list
-type stmt=Stmt_piqi.stmt
-
-let default_stmt = Stmt_piqi.default_stmt
-
-let parse_stmt = Stmt_piqi.parse_stmt
-let gen_stmt = Stmt_piqi.gen_stmt
-let gen__stmt = Stmt_piqi.gen__stmt
-
-let parse_stmt_list = Stmt_piqi.parse_stmt_list
-let gen__stmt_list = Stmt_piqi.gen__stmt_list
-let gen_stmt_list = Stmt_piqi.gen_stmt_list
+let bil_of_string  = loads stmts_of_piqi parse_stmt_list
+let stmt_of_string = loads stmt_of_piqi parse_stmt
+let exp_of_string  = loads exp_of_piqi parse_expr
+let string_of_bil  = dumps stmts_to_piqi gen_stmt_list
+let string_of_stmt = dumps stmt_to_piqi gen_stmt
+let string_of_exp  = dumps exp_to_piqi gen_expr
+let piqi_of_exp = exp_to_piqi
+let piqi_of_var = var_to_piqi

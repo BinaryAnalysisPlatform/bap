@@ -30,7 +30,7 @@ PostInstallCommand: ocaml postinstall.ml
 PostUninstallCommand: $rm $bindir/baptop
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
 
-Flag serialization
+Flag piqi
   Description: Build piqi serialization library
   Default: true
 
@@ -148,24 +148,23 @@ Library types
                    Bap_uuid,
                    Graphlib
 
-Library serialization
+Library piqi
   XMETADescription: Provides piqi serialization for main data types (BIL, IR)
   Path:         piqi
-  Build$: flag(serialization)
+  Build$: flag(piqi)
   FindLibParent: bap
-  FindLibName: serialization
+  FindLibName: piqi
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
   BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
-  Modules:   Bap_piqi
+  Modules:   Bir_piqi, Bil_piqi
   InternalModules:
              Stmt_piqi,
              Stmt_piqi_ext,
-             Bil_piqi,
              Ir_piqi,
-             Ir_piqi_ext,
-             Bir_piqi
+             Ir_piqi_ext
+
 
 Library bap_image
   Path:          lib/bap_image/
@@ -374,13 +373,6 @@ Library sema_test
   Install:        false
   Modules:        Test_ir
 
-Library serialization_test
-  Path:		  piqi/test
-  Build$:	  flag(tests) && flag(serialization)
-  CompiledObject: best
-  BuildDepends:	  bap, oUnit, bap.serialization
-  Install:	  false
-  Modules:	  Test_serialization
 
 Library benchmarks
   Path:           benchmarks
@@ -474,7 +466,7 @@ Executable "bap-mc"
   MainIs:         bap_mc.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, cmdliner, bap.serialization
+  BuildDepends:   bap, bap.plugins, cmdliner, bap.piqi
 
 
 Executable "bapbuild"
@@ -500,6 +492,14 @@ Executable run_tests
                 trace_test
   CompiledObject: best
 
+Executable run_piqi_tests
+  Path:		  piqi/test
+  Build$:	  flag(tests) && flag(piqi)
+  CompiledObject: best
+  BuildDepends:	  bap, oUnit, bap.piqi
+  Install:	  false
+  MainIs: run_piqi_tests.ml
+
 Executable run_benchmarks
   Path:         benchmarks
   MainIs:       run_benchmarks.ml
@@ -508,6 +508,10 @@ Executable run_benchmarks
   BuildDepends: bap, benchmarks
   CompiledObject: native
 
+Test piqi_tests
+ TestTools: run_piqi_tests
+ Command: $run_piqi_tests -runner sequential
+
 Test unit_tests
   TestTools: run_tests
   Command: $run_tests -runner sequential
@@ -515,6 +519,7 @@ Test unit_tests
 Test inline_tests
   TestTools: run_tests
   Command: $run_tests inline-test-runner dummy -show-counts
+
 
 Test benchmarks
   TestTools: run_benchmarks
