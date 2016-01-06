@@ -16,7 +16,7 @@ let piqic_rule () : unit =
            A (expand "${piqic}");
            A (expand "${piqic_flags}");
            A "-C";
-           A "../_build/piqi";
+           A "piqi";
            A "-I";
            A "../piqi";
            A (env "%.piqi");

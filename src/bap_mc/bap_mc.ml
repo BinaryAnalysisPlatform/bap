@@ -5,8 +5,6 @@ open Bap.Std
 open Bap_plugins.Std
 open Options
 
-module Bil_piqi = Bap_piqi.Bil
-
 exception Bad_user_input
 exception Bad_insn of mem * int * int
 exception Convert_imm of string
@@ -98,14 +96,13 @@ module Program(Conf : Options.Provider) = struct
         pp_print_newline str_formatter ());
     flush_str_formatter ()
 
+
   let string_of_bil = function
-    | `pb -> Bil_piqi.pb_of_stmts
-    | `json -> Bil_piqi.json_of_stmts
-    | `xml -> Bil_piqi.xml_of_stmts
     | `bil -> asprintf "%a" Bil.pp
     | `adt -> string_of_list Stmt.pp_adt
     | `sexp -> asprintf "%a" pp_sexp
     | `binprot -> Binable.to_string (module Bil)
+    | #Bil_piqi.fmt as fmt -> Bil_piqi.string_of_bil fmt
 
   let print_bil lift mem insn =
     let bil = bil_of_insn lift mem in
