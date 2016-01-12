@@ -3,6 +3,7 @@ open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_ir
+open Format
 
 
 (* A note about lifting call instructions.
@@ -82,7 +83,7 @@ let label_of_fall block =
 let annotate_insn term insn = Term.set_attr term Disasm.insn insn
 let annotate_addr term addr = Term.set_attr term Disasm.insn_addr addr
 
-let linear_of_stmt ?addr fall insn stmt : linear list =
+let linear_of_stmt ?addr return insn stmt : linear list =
   let (~@) t = match addr with
     | None -> t
     | Some addr -> annotate_addr (annotate_insn t insn) addr in
@@ -94,14 +95,27 @@ let linear_of_stmt ?addr fall insn stmt : linear list =
     then Ir_jmp.create_ret ?cond target
     else if Insn.is_call insn
     then
-      Ir_jmp.create_call ?cond
-        (Call.create ?return:fall ~target ())
+      Ir_jmp.create_call ?cond (Call.create ?return ~target ())
     else Ir_jmp.create_goto ?cond target in
-  let jump ?cond exp = Instr (`Jmp  ~@(jump ?cond exp)) in
+  let jump ?cond exp = Instr (`Jmp ~@(jump ?cond exp)) in
   let cpuexn ?cond n =
-    let next = Tid.create () in [
-      Instr (`Jmp ~@(Ir_jmp.create_int ?cond n next));
-      Label next] in
+    let landing = Tid.create () in
+    let takeoff = Tid.create () in
+    let exn = `Jmp ~@(Ir_jmp.create_int ?cond n landing) in
+    match return with
+    | None -> [
+        Instr exn;
+        Label landing;
+        (* No code was found that follows the interrupt,
+           so this is a no-return interrupt *)
+      ]
+    | Some lab -> [
+        Instr (goto takeoff);
+        Label landing;
+        Instr (`Jmp ~@(Ir_jmp.create_goto lab));
+        Label takeoff;
+        Instr exn;
+      ] in
 
   let rec linearize = function
     | Bil.Move (lhs,rhs) ->
@@ -159,6 +173,21 @@ let lift_insn ?addr fall init insn =
             | Instr elt ->
               Ir_blk.Builder.add_elt b elt; bs,b))
 
+let has_jump_under_condition bil =
+  with_return (fun {return} ->
+      let enter_control ifs = if ifs = 0 then ifs else return true in
+      Bil.fold (object
+        inherit [int] Bil.visitor
+        method! enter_if ~cond ~yes:_ ~no:_ x = x + 1
+        method! leave_if ~cond ~yes:_ ~no:_ x = x - 1
+        method! enter_jmp _ ifs    = enter_control ifs
+        method! enter_cpuexn _ ifs = enter_control ifs
+      end) ~init:0 bil |> fun (_ : int) -> false)
+
+let is_conditional_jump jmp =
+  Insn.may_affect_control_flow jmp &&
+  has_jump_under_condition (Insn.bil jmp)
+
 let blk block : blk term list =
   let fall_label = label_of_fall block in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
@@ -167,11 +196,11 @@ let blk block : blk term list =
         lift_insn ~addr fall_label init insn) |>
   fun (bs,b) ->
   let fall =
-    if Insn.is_call (Block.terminator block) then None
-    else match fall_label with
+    let jmp = Block.terminator block in
+    if Insn.is_call jmp && not (is_conditional_jump jmp)
+    then None else match fall_label with
       | None -> None
-      | Some fall ->
-        Some (`Jmp (Ir_jmp.create_goto fall)) in
+      | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
   List.rev (Term.set_attr b Disasm.block (Block.addr block) :: bs)
