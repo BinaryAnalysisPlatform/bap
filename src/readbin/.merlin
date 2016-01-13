@@ -1,7 +1,0 @@
-REC
-PKG curl
-PKG ezjsonm
-PKG fileutils
-PKG re.posix
-B ../../_build/src/readbin
-S .

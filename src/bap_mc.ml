@@ -3,7 +3,7 @@ open Or_error
 open Format
 open Bap.Std
 open Bap_plugins.Std
-open Options
+open Mc_options
 
 exception Bad_user_input
 exception Bad_insn of mem * int * int
@@ -13,7 +13,7 @@ exception No_input
 exception Unknown_arch
 exception Trailing_data of int
 
-module Program(Conf : Options.Provider) = struct
+module Program(Conf : Mc_options.Provider) = struct
   open Conf
   module Dis = Disasm_expert.Basic
 
@@ -246,7 +246,7 @@ module Cmdline = struct
 
 
   let create a b c d e f g h i =
-    Options.Fields.create a b c d e f g h i
+    Mc_options.Fields.create a b c d e f g h i
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
