@@ -7571,7 +7571,7 @@ module Std : sig
         Parameter [deps] is list of dependencies. Each dependency is a
         name of a pass, that should be run before the [pass]. If
         dependency pass is not registered it will be auto-loaded (See
-        {!run_passes}) *)
+        {!run_pass}) *)
     val register_pass_with_args : (string array -> t -> t) register
 
     (** [register_pass ?deps name pass] registers project transformation,
@@ -7589,20 +7589,20 @@ module Std : sig
         (See {!register_pass_with_args}) *)
     val register_pass_with_args' : (string array -> t -> unit) register
 
-    (** [run_passes ?library ?argv project] folds [project] over all
-        registered passes. Passes are invoked in the order of
-        registration.
+    (** [run_pass ?library ?argv project pass] finds a [pass] and
+        applies it to a [project].
 
-        If pass has dependencies, then they will be run before the
-        pass. The dependencies will be auto-loaded if needed. The
-        auto-loading procedure will look for the file with the
-        specified name (modulo hyphens) and [".plugin"] extension in
-        current folder and all folders specified with [library]
-        argument. If nothing found, then it will search for plugins of
-        system ["bap.pass"] using findlib. If the dependency cannot be
-        satisfied [run_pass] will terminate with error.
+        If a pass has dependencies, then they will be run before the
+        pass in some topological order. The dependencies will be
+        auto-loaded if needed. The auto-loading procedure will look
+        for the file with the specified name (modulo hyphens) and
+        [".plugin"] extension in current folder and all folders
+        specified with [library] argument. If nothing found, then it
+        will search for plugins of system ["bap.pass"] using
+        findlib. If the dependency cannot be satisfied [run_pass] will
+        terminate with an error.
 
-        If pass requires command line arguments then they will be
+        If a pass requires command line arguments then they will be
         provided to a pass as a first parameter. The arguments will be
         extracted from [argv] array (which defaults to [Sys.argv]) by
         removing all arguments that doesn't start with
@@ -7625,11 +7625,10 @@ module Std : sig
     val passes : ?library:string list -> unit -> string list Or_error.t
 
 
-    (** [run_passes_exn proj] is the same as {!run_passes}, but raises
-        an exception on error. Useful to provide custom error
-        handling/printing.
-        @raise Pass_failed if failed to load, or if plugin failed at runtime.
-    *)
+    (** [run_pass_exn proj] is the same as {!run_pass}, but raises an
+        exception on error. Useful to provide custom error
+        handling/printing.  @raise Pass_failed if failed to load, or if
+        plugin failed at runtime.  *)
     val run_pass_exn :
       ?library:string list ->
       ?argv:string array -> t -> string -> t
@@ -7640,7 +7639,6 @@ module Std : sig
         handling/printing.
         @raise Pass_failed if failed to load some plugin *)
     val passes_exn : ?library:string list -> unit -> string list
-
   end
 
   type project = Project.t

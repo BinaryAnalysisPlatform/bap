@@ -9,6 +9,7 @@
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/MemoryObject.h>
 #include <llvm/Support/TargetRegistry.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Target/TargetInstrInfo.h>
 
 
@@ -450,5 +451,6 @@ struct create_llvm_disassembler : disasm_factory {
 int bap_disasm_llvm_init() {
     auto f = std::make_shared<bap::create_llvm_disassembler>();
     bap::initialize_llvm();
+    llvm::cl::ParseEnvironmentOptions("bap", "BAP_LLVM_OPTIONS");
     return bap::register_disassembler("llvm", f);
 }
