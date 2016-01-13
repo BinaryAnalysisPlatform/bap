@@ -5445,7 +5445,7 @@ module Std : sig
     (** [to_sequence symtab] returns a sequence of functions  *)
     val to_sequence : t -> fn seq
 
-    (** [name_of_fn fn] returns symbol name  *)
+    (** [name_of_fn fn] returns symbol's name  *)
     val name_of_fn : fn -> string
 
     (** [entry_of_fn fn] returns an entry block of a given function [fn]  *)
@@ -7608,17 +7608,16 @@ module Std : sig
         removing all arguments that doesn't start with
         [--name-]. Then, from all command arguments that are left, the
         [--name-] prefix is substituted with [--]. For example, if
-        [argv] contained [ [| "bap"; "-lcallgraph";
+        [argv] contained [ [| "bap"; "-lcallgraph"; "--callgraph"
         "--callgraph-help"|]] then pass that registered itself under
         [callgraph] name will receive the following array of arguments
         [ [| "callgraph"; --help |] ]. That means, that plugins can't
         accept arguments that are anonymous or short options.
 
-        Note: currently only the following syntax is supported:
-         [--plugin-name-agrument-name=value], the following IS NOT
-         supported [--plugin-name-argument-name value].
     *)
-    val run_passes : ?library:string list -> ?argv:string array -> t -> t Or_error.t
+    val run_pass :
+      ?library:string list ->
+      ?argv:string array -> t -> string -> t Or_error.t
 
 
     (** [passes ?library ()] returns a transitive closure of all
@@ -7631,7 +7630,9 @@ module Std : sig
         handling/printing.
         @raise Pass_failed if failed to load, or if plugin failed at runtime.
     *)
-    val run_passes_exn : ?library:string list -> ?argv:string array -> t -> t
+    val run_pass_exn :
+      ?library:string list ->
+      ?argv:string array -> t -> string -> t
 
 
     (** [passes_exn proj] is the same as {!passes}, but raises

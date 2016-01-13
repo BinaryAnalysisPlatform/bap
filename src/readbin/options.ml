@@ -27,10 +27,10 @@ type t = {
   print_symbols : [`with_name | `with_addr | `with_size] list;
   use_ida : string option option;
   sigfile : string option;
-  plugins : string list;
   emit_ida_script : string option;
   load_path : string list;
   emit_attr : string list;
+  plugins : string list;
 } with sexp, fields
 
 module type Provider = sig

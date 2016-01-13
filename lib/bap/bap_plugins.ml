@@ -14,20 +14,14 @@ module Std = struct
     | Error err -> Error.to_string_hum err
 
   module Plugins = struct
-    let load ?(systems=systems) () =
-      List.iter systems
-        ~f:(fun system ->
-            List.iter (Bap_plugin.find_all ~system)
-              ~f:(fun pkg -> match Bap_plugin.load pkg with
-                  | Ok () -> ()
-                  | Error err ->
-                    eprintf
-                      "failed to load plugin %s of system %s: %s\n"
-                      (Bap_plugin.name pkg)
-                      system
-                      (Error.to_string_hum err)))
-    let all () =
-      List.map systems ~f:(fun s -> Bap_plugin.find_all ~system:s) |>
-      List.concat
+    let load  () =
+      Plugin.find_libraries () |>
+      List.iter ~f:(fun pkg -> match Plugin.load pkg with
+          | Ok () -> ()
+          | Error err ->
+            eprintf
+              "failed to load plugin %s: %s\n"
+              (Plugin.name pkg)
+              (Error.to_string_hum err))
   end
 end

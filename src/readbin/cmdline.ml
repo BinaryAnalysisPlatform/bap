@@ -155,10 +155,8 @@ let emit_ida_script : string option Term.t =
 let load : string list Term.t =
   let doc = "Load the specified plugin. Plugin must be compiled with \
              `bapbuild $(docv).plugin'. This option can be specified \
-             several times. Every plugin will be loaded and executed \
-             in the same order, as they were specified on command line." in
-  Arg.(value & opt_all string [] &
-       info ["load"; "l"] ~doc ~docv:"NAME")
+             several times with different names. " in
+  Arg.(value & opt_all string [] & info ["l"] ~doc ~docv:"NAME")
 
 let load_path : string list Term.t =
   let doc = "Add $(docv) to a set of search paths. Plugins specified \
@@ -174,48 +172,45 @@ let emit_attr : string list Term.t =
        info ["emit-attr"; "A"] ~doc ~docv:"NAME")
 
 let create
-    a b c d e f g h i j k l m n o p q r s t u v x y z =
+    a b c d e f g h i j k l m n o p q r s t u v x y =
   Options.Fields.create
-    a b c d e f g h i j k l m n o p q r s t u v x y z
+    a b c d e f g h i j k l m n o p q r s t u v x y []
 
 let program =
   let doc = "Binary Analysis Platform" in
   let man = [
     `S "DESCRIPTION";
-    `P "
-  $(mname) is a tool for binary analysis. It is an entry point to a
-  binary analysis platform, that allows you to start your analysis
-  right now." ;
-    `P "
-  The default $(mname) performs the following operations on provided
-  file:"; `Noblank;
-    `I ("", "- disassemble"); `Noblank;
-    `I ("", "- lift instructions into BIL"); `Noblank;
-    `I ("", "- reconstruct CFG"); `Noblank;
-    `I ("", "- reconstruct functions");
-    `P "
-  Results can be printed in different formats, including plain
-  text, html and dot.";
-
-    `P "
-  But BAP is also organized with a plugin architecture. That means
-  that you can extend BAP by your own code, written in OCaml. The
-  plugin can be as simple as:";
-    `I ("", "$$$$ cat mycode.ml"); `Noblank;
-    `I ("", "open Bap.Std"); `Noblank;
-    `I ("", "let main project = print_endline \"Hello, World\""); `Noblank;
-    `I ("", "let () = Project.register_plugin' main");
-
+    `P "A frontend to the Binary Analysis Platfrom library.
+      The tool allows you to inspect binary programs by printing them
+      in different representations including assembly, BIL, BIR,
+      XML, HTML, JSON, Graphviz dot graphs and so on.";
+    `P "The tool is extensible via a plugin system. There're several
+       extension points, that allows you:";
+    `Pre "
+      - write your own analysis;
+      - add new serialization formats;
+      - adjust printing formats;
+      - add new program loaders (i.e. to handle new file formats);
+      - provide your own disassembler.";
+    `P "The following example shows how to write a simple analysis
+  plugin (called a pass in our parlance)";
+    `Pre "
+      $(b,\\$ cat) mycode.ml
+      open Bap.Std
+      let main project = print_endline \"Hello, World\"
+      let () = Project.register_pass' \"hello\" main";
     `P "Building is easy with our $(b,bapbuild) tool:";
-    `I ("", "$$$$ bapbuild mycode.plugin");
+    `Pre "
+      $(b, \\$ bapbuild) mycode.plugin";
     `P "And to load into bap:";
-    `I ("", "$$$$ bap /bin/ls -lmycode");
+    `Pre ("
+      $(b, \\$ bap) /bin/ls -lmycode --hello");
     `P "User plugins have access to all the program state, and can
     change it and communicate with other plugins, or just store their
     results in whatever place you like.";
-    `I ("Note:", "$(b,bapbuild) is just a $(b,ocamlbuild) extended with
-    our rules. It is not needed to build your standalone applications,
-    or to build BAP itself.");
+    `I ("Note:", "The $(b,bapbuild) tool is just an $(b,ocamlbuild)
+    extended with our rules. It is not needed to build your standalone
+    applications, or to build BAP itself.");
     `P "$(mname) also can integrate with IDA. It can sync names with
     IDA, and emit idapython scripts, based on the analysis";
     `S "BUGS";
@@ -230,19 +225,39 @@ let program =
         $no_resolve $keep_alive
         $no_inline $keep_consts $no_optimizations
         $binaryarch $verbose $bw_disable $bw_length $bw_threshold
-        $print_symbols $use_ida $sigsfile $load
+        $print_symbols $use_ida $sigsfile
         $emit_ida_script $load_path $emit_attr),
   Term.info "bap"
     ~version:Config.pkg_version ~doc ~man
 
+type action = Keep | Drop
+let filter_option options prefix =
+  let is_long = String.is_prefix ~prefix:"--" in
+  let is_our = String.is_prefix ~prefix in
+  let is_key = String.is_prefix ~prefix:"-" in
+  List.fold options ~init:([],Keep) ~f:(fun (opts,act) opt ->
+      match act with
+      | _ when prefix = opt -> (opts,Drop)
+      | _ when is_our opt && is_long opt ->
+        if String.mem opt '=' then (opts,Keep) else (opts,Drop)
+      | _ when is_our opt -> (opts,Keep)
+      | Drop when is_key opt && not(is_our opt) -> (opt::opts,Keep)
+      | Keep -> (opt::opts,Keep)
+      | Drop -> (opts,Keep)) |>
+  fst |> List.rev
+
+let filter_options ~known_passes ~argv =
+  let opts = Array.to_list argv in
+  let prefixes = List.map known_passes ~f:(fun pass -> "--"^pass) in
+  List.fold ("-l" :: prefixes) ~init:opts ~f:filter_option |>
+  Array.of_list
+
 let parse () =
-  let system = "bap.pass" in
   let library = fst (Term.eval_peek_opts load_path) in
   let plugins = Option.value (fst (Term.eval_peek_opts load))
       ~default:[] in
   List.iter plugins ~f:(fun name ->
-      Plugin.create ?library ~system name |>
-      function
+      Plugin.find_plugin ?library name |> function
       | None ->
         Error.raise @@ Error.of_string @@
         sprintf "failed to find plugin with name '%s'" name
@@ -252,17 +267,13 @@ let parse () =
           Error.raise @@ Error.of_string @@
           sprintf "failed to load plugin %s: %s"
             name (Error.to_string_hum err));
-
-  let plugins = match Project.passes ?library () with
+  let known_passes = match Project.passes ?library () with
     | Ok plugins -> plugins
     | Error err -> Error.raise err in
-
-  let plugin_option opt =
-    List.exists plugins ~f:(fun plugin ->
-        let prefix = "--"^plugin^"-" in
-        String.is_prefix opt ~prefix) in
-  let argv = Array.filter Sys.argv ~f:(Fn.non plugin_option) in
-
+  let to_plugin opt =
+    List.find known_passes ~f:(fun plugin -> opt = "--"^plugin) in
+  let plugins = Array.(to_list @@ filter_map Sys.argv ~f:to_plugin) in
+  let argv = filter_options ~known_passes ~argv:Sys.argv in
   match Term.eval ~argv ~catch:false program with
-  | `Ok opts -> Ok opts
+  | `Ok opts -> Ok { opts with Options.plugins}
   | _ -> Or_error.errorf "nothing to do"
