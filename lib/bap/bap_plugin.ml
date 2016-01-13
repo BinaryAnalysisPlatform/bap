@@ -4,15 +4,12 @@ open Or_error
 
 type 'a or_error = 'a Or_error.t
 
-type t = {
-  name : string;
-  path : string;
-  system : string;
-} with fields
+type t = {path : string; name : string}
+with bin_io,compare,fields,sexp
 
-let make ~system path = {
-  name = Filename.basename path;
-  path; system}
+let system = "bap.plugin"
+
+let of_path path = { path; name = Filename.basename path}
 
 let init_findlib = lazy (
   try
@@ -21,7 +18,7 @@ let init_findlib = lazy (
     Findlib.init ()
   with _ -> ())
 
-let find_exn ~system name =
+let find_library_exn name =
   let module Pkg = Fl_package_base in
   let pkg = Pkg.query name in
   let def = Pkg.(pkg.package_defs) in
@@ -33,15 +30,10 @@ let find_exn ~system name =
   let file = Dynlink.adapt_filename cmx in
   let path = Findlib.resolve_path ~base:dir file in
   if sys <> system then None
-  else Some {
-      name;
-      path;
-      system;
-    }
+  else Some {path; name}
 
-let find ~system name =
-  try find_exn ~system name with
-  | Not_found -> None
+let find_library name =
+  try find_library_exn name with Not_found -> None
 
 let load pkg : unit or_error =
   try Ok (Dynlink.loadfile pkg.path) with
@@ -49,11 +41,10 @@ let load pkg : unit or_error =
     error_string (Dynlink.error_message err)
   | exn -> of_exn exn
 
-let find_all ~system : t list =
+let find_libraries () : t list =
   let lazy () = init_findlib in
   Fl_package_base.list_packages () |>
-  List.filter_map ~f:(find ~system)
-
+  List.filter_map ~f:find_library
 
 let paths_of_env () =
   try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
@@ -61,24 +52,23 @@ let paths_of_env () =
 
 let undash = String.map ~f:(function '-' -> '_' | c -> c)
 
+let normalize_path name =
+  if Filename.check_suffix name ".plugin"
+  then name else name ^ ".plugin"
 
-let create ?(library=[]) ?path ~system name = match path with
-  | Some path -> Some (make ~system path)
-  | None ->
-    let filename =
-      if Filename.check_suffix name ".plugin"
-      then name else name ^ ".plugin" in
-    let paths = [
-      [FileUtil.pwd ()]; paths_of_env (); library
-    ] |> List.concat in
-    List.find_map paths ~f:(fun dir ->
-        let path = Filename.concat dir filename in
-        if Sys.file_exists path then Some path else
-        if Sys.file_exists (undash path) then Some (undash path)
-        else None) |> function
-    | Some path -> Some (make ~system path)
-    | None ->
-      find_all ~system |>
-      List.filter ~f:(fun p -> p.name = name) |> function
-      | [] -> None
-      | p :: _ -> Some p
+let normalize_name name =
+  let name = Filename.basename name in
+  if Filename.check_suffix name ".plugin"
+  then Filename.chop_extension name else name
+
+let find_plugin ?(library=[]) name =
+  let filename = normalize_path name in
+  let name = normalize_name name in
+  let paths =
+    [[FileUtil.pwd ()]; paths_of_env (); library] |> List.concat in
+  List.find_map paths ~f:(fun dir ->
+      let path = Filename.concat dir filename in
+      if Sys.file_exists path then Some {path; name} else
+      if Sys.file_exists (undash path)
+      then Some {path=(undash path); name}
+      else None)

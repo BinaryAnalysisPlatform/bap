@@ -36,8 +36,8 @@ module Program(Conf : Options.Provider) = struct
 
   let run project =
     let library = options.load_path in
-    let project = Project.run_passes_exn ~library project in
-
+    let project = options.plugins |> List.fold ~init:project
+                    ~f:(Project.run_pass_exn ~library) in
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
           ~data:(Idapy.extract_script (Project.memory project)));
