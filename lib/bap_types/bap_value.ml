@@ -232,4 +232,6 @@ include Regular.Make(struct
       | Some t -> t.pp ppf v
       | None -> Format.fprintf ppf "<poly>"
     let module_name = Some "Bap.Std.Value"
+    let version = "0.1"
+
   end)

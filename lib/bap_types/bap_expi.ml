@@ -85,7 +85,7 @@ class ['a] t = object(self)
     | Imm addr -> self#eval mem >>= function
       | Bot -> self#bot
       | Imm _ -> self#type_error TE.bad_imm
-      | Mem mem -> self#load_word mem addr endian (Sz.to_bits sz)
+      | Mem mem -> self#load_word mem addr endian (Sz.in_bits sz)
 
   method load mem addr = match mem#load addr with
     | None -> self#undefined_addr addr
@@ -109,9 +109,9 @@ class ['a] t = object(self)
       | Bot -> storage self#empty
       | Mem mem -> self#type_error TE.bad_imm
       | Imm addr -> self#eval mem >>= function
-        | Bot -> self#store_word self#empty addr word e (Sz.to_bits s)
+        | Bot -> self#store_word self#empty addr word e (Sz.in_bits s)
         | Imm _ -> self#type_error TE.bad_mem
-        | Mem mem -> self#store_word mem addr word e (Sz.to_bits s)
+        | Mem mem -> self#store_word mem addr word e (Sz.in_bits s)
 
   method store mem addr word : 'a r = storage (mem#save addr word)
 

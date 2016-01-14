@@ -1,10 +1,12 @@
 open Core_kernel.Std
 open Bap_regular
+open Bap_data_types
+open Bap_data_intf
 
 module type S = sig
   type t
   include Comparable with type t := t
-  include Hashable with type t := t
+  include Hashable   with type t := t
 end
 
 module Make(M : sig

@@ -5,32 +5,32 @@ open Or_error
 open Bap.Std
 open Trace.Event
 open Trace.Meta
- 
+
 let bed = Word.of_int32 0xBEDl
 let coffee = Word.of_int32 0xC0FFEEl
 let move = Trace.Move.({cell = bed; data = coffee;})
-let var = Var.create ~tmp:true "temp" (Type.Imm 0xC0FFEE) 
+let var = Var.create ~fresh:true "temp" (Type.Imm 0xC0FFEE)
 let reg = Trace.Move.({cell = var; data = coffee;})
 let bin = Trace.Binary.({path="/dev/null"; stripped = None})
-let trc = Trace.Tracer.({name="test_tracer"; args=Array.empty (); version="";}) 
+let trc = Trace.Tracer.({name="test_tracer"; args=Array.empty (); version="";})
 
-let memory_events = 
+let memory_events =
   [ Value.create memory_load move;
     Value.create memory_store move; ]
 
-let test_events = 
+let test_events =
   memory_events @
   [ Value.create register_read reg;
     Value.create register_write reg; ]
 
-let test_meta = 
+let test_meta =
   let open Dict in
   let meta = set empty binary bin in
-  set meta tracer trc   
+  set meta tracer trc
 
 module Tool : Trace.S = struct
-  let name = "test_tool" 
-  let supports = fun tag -> 
+  let name = "test_tool"
+  let supports = fun tag ->
     let same t = Value.Tag.same tag t in
     same memory_load || same memory_store
 end
@@ -40,9 +40,9 @@ let empty = Trace.create test_tool
 
 let assert_seq_equal ~ctxt  =
   let cmp s s' = Seq.compare Value.compare s s' = 0 in
-  assert_equal ~ctxt ~cmp 
+  assert_equal ~ctxt ~cmp
 
-let assert_dict_equal ~ctxt = 
+let assert_dict_equal ~ctxt =
   let cmp d d' = Dict.compare d d' = 0 in
   assert_equal ~ctxt ~cmp
 
@@ -54,7 +54,7 @@ let save_and_load ctxt =
     let r = Trace.save uri t in
     assert_bool "save failed" (Result.is_ok r) in
   let load () = match Trace.load uri with
-    | Ok t -> 
+    | Ok t ->
       let evs = Trace.events t in
       let meta = Trace.meta t in
       let tool = Trace.tool t in
@@ -65,55 +65,55 @@ let save_and_load ctxt =
   save ();
   load ()
 
-let id ctxt = 
+let id ctxt =
   let t  = Trace.create test_tool in
   let t' = Trace.create test_tool in
   let id,id' = Trace.(id t, id t') in
   let not_eql = not (Trace.Id.equal id id') in
   assert_bool "id mustn't be equal, failed" not_eql
 
-let trace_tool ctxt = 
+let trace_tool ctxt =
   let t = Trace.create test_tool in
   let tool = Trace.tool t in
   assert_equal ~ctxt tool test_tool
 
-let set_and_get_attr t attr a ctxt = 
+let set_and_get_attr t attr a ctxt =
   let t = Trace.set_attr t attr a in
   match Trace.get_attr t attr with
   | None -> assert_failure "set/get attribute failed"
   | Some a' -> assert_equal ~ctxt a a'
 
-let has_attr t attr a ctxt = 
+let has_attr t attr a ctxt =
   let t = Trace.set_attr t attr a in
   let has = Trace.has_attr t attr in
   assert_bool "attribute is absent" has
 
 let set_meta t ctxt =
-  let open Dict in 
+  let open Dict in
   let t = Trace.set_meta t test_meta in
-  let meta = Trace.meta t in 
+  let meta = Trace.meta t in
   assert_dict_equal ~ctxt meta test_meta
 
-let add_event t tag v ctxt = 
+let add_event t tag v ctxt =
   let t = Trace.add_event t tag v in
   match Trace.contains t tag with
   | Some s -> assert_bool "add event failed" s
   | None -> assert_failure "add event failed"
 
-let events ctxt = 
+let events ctxt =
   let evs = Seq.of_list test_events in
   let t = Trace.append empty evs in
   let evs' = Trace.events t in
   assert_seq_equal ~ctxt evs evs'
 
-let find t tag v ctxt = 
+let find t tag v ctxt =
   let t = Trace.add_event t tag v in
-  match Trace.find t tag with 
-  | None -> assert_failure "find failed" 
+  match Trace.find t tag with
+  | None -> assert_failure "find failed"
   | Some v' -> assert_equal ~ctxt v v'
 
-let find_all count tag value ctxt = 
-  let rec add n t = 
+let find_all count tag value ctxt =
+  let rec add n t =
     if n < count then
       Trace.add_event t tag value |> add (n + 1)
     else t in
@@ -122,7 +122,7 @@ let find_all count tag value ctxt =
   let s = Seq.filter s ~f:(fun v -> v = value) in
   assert_equal ~ctxt (Seq.length s) count
 
-let find_all_matching ctxt = 
+let find_all_matching ctxt =
   let t = Trace.append empty (Seq.of_list test_events) in
   let s = Trace.find_all_matching t
       Value.Match.(begin
@@ -137,23 +137,23 @@ let find_all_matching ctxt =
 let fold_matching ctxt =
   let t = Trace.append empty (Seq.of_list test_events) in
   let s = Trace.fold_matching t ~init:[] ~f:(fun xs x -> xs @ x)
-          Value.Match.(begin
-              case memory_load  (fun x  -> [`Memory,x]) @@
-              case memory_store (fun x  -> [`Memory,x]) @@
-              default           (fun () -> [])
-            end) in
+      Value.Match.(begin
+          case memory_load  (fun x  -> [`Memory,x]) @@
+          case memory_store (fun x  -> [`Memory,x]) @@
+          default           (fun () -> [])
+        end) in
   let is_memory (p,_) = p = `Memory in
   assert_bool "failed fold_matching"
-    (List.for_all s ~f:is_memory && 
+    (List.for_all s ~f:is_memory &&
      List.length s = List.length memory_events)
 
-let supports ctxt = 
+let supports ctxt =
   let m = Trace.supports empty memory_load in
   let m' = Trace.supports empty memory_store in
   let r = not (Trace.supports empty register_read) in
   assert_bool "supports failed" (m && m' && r)
 
-let contains t ctxt = 
+let contains t ctxt =
   let t = Trace.add_event t memory_load move in
   match Trace.contains t memory_load with
   | Some r -> assert_bool "contains failed" r
@@ -170,13 +170,13 @@ let append ctxt =
   let events = Trace.events t in
   assert_seq_equal ~ctxt events expected
 
-let make_next evs = 
+let make_next evs =
   let a = ref evs in
   fun () -> match !a with
     | [] -> None
     | hd::tl -> a := tl; Some hd
 
-let unfold ctxt = 
+let unfold ctxt =
   let evs = List.map test_events ~f:(fun ev -> Ok ev, ()) in
   let next = make_next evs in
   let t = Trace.unfold test_tool ~f:next ~init:() in
@@ -184,13 +184,13 @@ let unfold ctxt =
   let evs' = Seq.of_list test_events in
   assert_seq_equal ~ctxt evs evs'
 
-let memoize ctxt = 
+let memoize ctxt =
   let a = ref 0 in
-  let next = 
+  let next =
     let evs = ref test_events in
     fun () -> match !evs with
       | [] -> None
-      | hd::tl -> 
+      | hd::tl ->
         a := !a + 1; evs := tl; Some (Ok hd, ()) in
   let t = Trace.unfold test_tool ~f:next ~init:() in
   assert_equal ~ctxt !a 0;
@@ -199,21 +199,21 @@ let memoize ctxt =
 
 let error = Error.of_string "syscall failed"
 
-let events_with_error = 
+let events_with_error =
   Error error ::
   List.map test_events ~f:(fun ev -> Ok ev)
 
-let unfold_with_monitor monitor = 
+let unfold_with_monitor monitor =
   let next = make_next events_with_error in
-  Trace.unfold' ~monitor test_tool ~f:next 
+  Trace.unfold' ~monitor test_tool ~f:next
 
-let fail_monitor ctxt = 
+let fail_monitor ctxt =
   let monitor = Trace.Monitor.fail_on_error in
   let t = unfold_with_monitor monitor in
-  let f () = Trace.find t memory_load in 
+  let f () = Trace.find t memory_load in
   assert_raises (Info.to_exn (Error.to_info error)) f
 
-let miss_monitor ctxt = 
+let miss_monitor ctxt =
   let monitor = Trace.Monitor.ignore_errors in
   let t = unfold_with_monitor monitor in
   let events = Trace.events t in
@@ -228,12 +228,12 @@ let stop_monitor ctxt =
 let pack_monitor ctxt =
   let pack _ = Value.create memory_load move in
   let monitor = Trace.Monitor.pack_errors pack in
-  let t = unfold_with_monitor monitor in  
+  let t = unfold_with_monitor monitor in
   let len = Seq.length (Trace.events t) in
   let len' = List.length test_events in
   assert_equal ~ctxt len (len' + 1)
 
-let warn_monitor ctxt = 
+let warn_monitor ctxt =
   let a = ref 0 in
   let warn _ = a := !a + 1 in
   let monitor = Trace.Monitor.warn_on_error warn in
@@ -242,8 +242,8 @@ let warn_monitor ctxt =
   assert_equal ~ctxt !a 1;
   assert_seq_equal ~ctxt (Trace.events t) (Seq.of_list test_events)
 
-let user_monitor ctxt = 
-  let filter seq = 
+let user_monitor ctxt =
+  let filter seq =
     Seq.filter_map seq ~f:(fun e -> match e with
         | Ok e -> Some e
         | Error _ -> None) in
@@ -251,7 +251,7 @@ let user_monitor ctxt =
   let t = unfold_with_monitor monitor in
   assert_seq_equal ~ctxt (Trace.events t) (Seq.of_list test_events)
 
-let suite =  
+let suite =
   "Trace" >:::
   [
     "save_and_load"     >:: save_and_load;

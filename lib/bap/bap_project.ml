@@ -41,7 +41,7 @@ let from_mem ?name ?roots arch mem : t Or_error.t =
   Ok ({arch; disasm; memory; storage; program; symbols})
 
 let null arch : addr =
-  Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.to_bits)
+  Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
 
 let from_bigstring ?base ?name ?roots arch big : t Or_error.t =
   let base = Option.value base ~default:(null arch) in

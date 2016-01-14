@@ -12,20 +12,13 @@ val fold : 'a #visitor -> init:'a -> bil -> 'a
 val map : #mapper -> bil -> bil
 
 class rewriter : exp -> exp -> mapper
-
-(** [is_referenced x p] is [true] if [x] is referenced in some expression or
-    statement in program [p] *)
 val is_referenced : var -> bil -> bool
-
-(** [is_assigned x p] is [true] if there exists such [Move]
-    statement, that [x] occures on the left side of it. If [strict]
-    is true, then only unconditional assignments. By default,
-    [strict] is [false] *)
 val is_assigned : ?strict:bool -> var -> bil -> bool
-
-val prune_unreferenced : bil -> bil
-
-(** [normalize_negatives p] transform [x + y] to [x - abs(y)] if [y < 0] *)
+val prune_unreferenced :
+  ?such_that:(var -> bool) ->
+  ?physicals:bool ->
+  ?virtuals:bool ->
+  bil -> bil
 val normalize_negatives : bil -> bil
 
 (** [substitute x y p] substitutes each occurrence of expression [x] by

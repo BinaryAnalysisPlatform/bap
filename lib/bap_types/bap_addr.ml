@@ -3,7 +3,7 @@ open Bap_common
 
 
 let memref ?(disp=0) ?(index=0) ?(scale=`r8)  addr =
-  let n = Bap_size.to_bytes scale in
+  let n = Bap_size.in_bytes scale in
   let off = n * index + disp in
   Bap_bitvector.(addr ++ off)
 

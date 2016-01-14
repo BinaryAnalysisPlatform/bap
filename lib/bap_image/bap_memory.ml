@@ -89,10 +89,10 @@ let create_getters endian addr off size data  =
   let int32 = make Word.of_int32 in
   let int64 = make Word.of_int64 in
   let concat_int64X2 = make Word.(
-    fun (a, b) -> concat (of_int64 a) (of_int64 b)) in
+      fun (a, b) -> concat (of_int64 a) (of_int64 b)) in
   let concat_int64X4 = make Word.(
-    fun (a, b, c, d) -> concat (concat (of_int64 a) (of_int64 b))
-                               (concat (of_int64 c) (of_int64 d))) in
+      fun (a, b, c, d) -> concat (concat (of_int64 a) (of_int64 b))
+          (concat (of_int64 c) (of_int64 d))) in
   let open Bigstring in
   if endian = BigEndian then
     let get_int64_beX2 t ~pos = (
@@ -255,7 +255,7 @@ let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
   let amin = Option.value from ~default:(min_addr t) in
   let amax =
     Option.map words
-      ~f:(fun w -> Addr.(amin ++ Int.(w * Size.to_bytes word_size - 1))) |>
+      ~f:(fun w -> Addr.(amin ++ Int.(w * Size.in_bytes word_size - 1))) |>
     Option.value ~default:(max_addr t) in
   Validate.(result @@ name "view must not be empty" @@
             Addr.validate_lbound amax ~min:(Incl amin)) >>= fun () ->
@@ -307,7 +307,7 @@ let merge m1 m2 =
 let folder step ?(word_size=`r8) t ~(init:'a) ~f : 'a =
   let read = (getter t word_size).fast in
   let pos_ref = ref t.off in
-  let word_len = Size.to_bytes word_size in
+  let word_len = Size.in_bytes word_size in
   let finish = t.off + t.size - word_len in
   let base = Addr.(t.addr -- t.off) in
   let rec loop init =
@@ -446,7 +446,7 @@ module Trie = struct
     type nonrec t = t
     type token = word with bin_io, compare, sexp
 
-    let length m = length m / Size.to_bytes size
+    let length m = length m / Size.in_bytes size
     let nth_token m n = get ~index:n ~scale:size m |> ok_exn
     let token_hash = Word.hash
   end
@@ -461,6 +461,7 @@ include Printable(struct
     type nonrec t = t
 
     let module_name = Some "Bap.Std.Memory"
+    let version = "0.1"
 
     let print_word fmt word =
       let width = Word.bitwidth word / 4 in

@@ -51,6 +51,8 @@ include Regular.Make(struct
     type t = Bap_bil.stmt with bin_io, compare, sexp
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Stmt"
+    let version = "0.1"
+
     let pp = pp
   end)
 
@@ -61,4 +63,30 @@ module Stmts_pp = struct
       let pp = pp_stmts
       let module_name = Some "Bap.Std.Bil"
     end)
+end
+
+module Stmts_data = struct
+  module T = struct
+    type t = stmt list with bin_io, sexp
+    let version = "0.1"
+  end
+  include T
+  include Bap_data.Make(T)
+  open Bap_data
+  let bin_reader = bin_reader (module T)
+  let bin_writer = bin_writer (module T)
+  let sexp_reader = sexp_reader (module T)
+  let sexp_writer = sexp_writer (module T)
+  let printer = (Bap_data.pretty_writer (module Stmts_pp))
+
+  let () =
+    let ver = version in
+    add_writer ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_writer;
+    add_reader ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_reader;
+    add_writer ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_writer;
+    add_reader ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_reader;
+    add_writer ~desc:"Pretty printer" ~ver:T.version "pretty" printer;
+    set_default_printer "pretty";
+    set_default_writer "bin";
+    set_default_reader "bin"
 end

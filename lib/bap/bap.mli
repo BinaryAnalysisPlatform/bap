@@ -608,6 +608,194 @@ module Std : sig
     val pkg_version : string
   end
 
+  type 'a reader
+  type 'a writer
+
+  (** Data type interface.
+
+      Types that implements this interface have a concrete
+      representation, that can be serialized and deserialized.
+
+      The only requirement is to provide a [version] value, that
+      represents a version number of the representation. Every time
+      the representation changes, the version should be updated.  *)
+  module type Data = sig
+    type t
+
+    (** [Ver v,name,desc] information attached to a particular
+        reader or writer.  *)
+    type info = string * [`Ver of string] * string option
+
+    (** Data representation version. After any change in data
+        representation the version should be increased.
+
+        Serializers that are derived from a data representation must have
+        the same version as a version of the data structure, from which
+        it is derived. This kind of serializers can only read and write
+        data of the same version.
+
+        Other serializers can actually read and write data independent
+        on its representation version. A serializer, that can't store
+        data of current version simply shouldn't be added to a set of
+        serializers.
+
+        It is assumed, that if a reader and a writer has the same name
+        and version, then whatever was written by the writer should be
+        readable by the reader. The round-trip equality is not required,
+        thus it is acceptable if some information is lost.
+
+        It is also possible, that a reader and a writer that has the
+        same name are compatible. In that case it is recommended to use
+        semantic versioning.
+    *)
+    val version : string
+
+    (** [size_in_bytes ?ver ?fmt datum] returns the amount of bytes
+        that is needed to represent [datum] in the given format and
+        version *)
+    val size_in_bytes : ?ver:string -> ?fmt:string -> t -> int
+
+    (** [of_bytes ?ver ?fmt bytes] deserializes a datum from bytes  *)
+    val of_bytes : ?ver:string -> ?fmt:string -> bytes -> t
+
+    (** [to_bytes ?ver ?fmt datum] serializes a datum to a sequence of
+        bytes *)
+    val to_bytes : ?ver:string -> ?fmt:string -> t -> bytes
+
+    (** [blit_to_bytes ?ver ?fmt buffer datum offset] copies a
+        serialized representation of datum into a [buffer], starting from
+        [offset].  *)
+    val blit_to_bytes : ?ver:string -> ?fmt:string -> bytes -> t -> int -> unit
+
+    (** [of_bigstring ?ver ?fmt buf] deserializes a datum from bigstring  *)
+    val of_bigstring : ?ver:string -> ?fmt:string -> bigstring -> t
+
+    (** [of_bigstring ?ver ?fmt datum] serializes a datum to a sequence of
+        bytes represented as bigstring *)
+    val to_bigstring : ?ver:string -> ?fmt:string -> t -> bigstring
+
+    (** [blit_to_bigstring ?ver ?fmt buffer datum offset] copies a
+        serialized representation of datum into a [buffer], starting from
+        [offset].  *)
+    val blit_to_bigstring : ?ver:string -> ?fmt:string -> bigstring -> t -> int -> unit
+
+    (** Input/Output functions for the given datum.*)
+    module Io : sig
+
+      (** [load ?ver ?fmt channel] loads datum from the input channel  *)
+      val load  : ?ver:string -> ?fmt:string -> in_channel -> t
+
+
+      (** [read_all ?ver ?fmt ?rev channel] reads a sequence of datums
+          stored in the storage accessed via [channel] and returns it as a
+          list. If [rev] is [true] (defaults to [false]) then a list will
+          be reversed (slightly faster).  *)
+      val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> in_channel -> t list
+
+      (** [scan ?ver ?fmt channel] creates a stream of datums, that
+          are loaded consequently from the channel *)
+      val scan  : ?ver:string -> ?fmt:string -> in_channel -> (unit -> t option)
+
+      (** [save ?ver ?fmt channel datum] saves [datum] to a [channel] *)
+      val save  : ?ver:string -> ?fmt:string -> out_channel -> t -> unit
+
+
+      (** [save_all ?ver ?fmt data channel] saves a list of data into
+          a [channel] *)
+      val save_all : ?ver:string -> ?fmt:string -> out_channel -> t list -> unit
+
+      (** [dump ?ver ?fmt chan stream] dumps a [stream] (represented
+          by a [next] function) into channel.  *)
+      val dump  : ?ver:string -> ?fmt:string -> out_channel -> (unit -> t option) -> unit
+
+      (** [show ?ver ?fmt datum] saves datum to standard output
+          channel, using a [default_printer] if [fmt] is not
+          specified. Does nothing the printer is not set up.  *)
+      val show  : ?ver:string -> ?fmt:string -> t -> unit
+
+      (** [print ?ver ?fmt ppf] prints datum to a given formatter,
+          using a [default_printer] if [fmt] is left unspecified.  *)
+      val print : ?ver:string -> ?fmt:string -> Format.formatter -> t -> unit
+
+    end
+
+    (** [add_reader ?desc ~ver name reader] registers a new [reader]
+        with a provided [name], version [ver] and optional description
+        [desc] *)
+    val add_reader : ?desc:string -> ver:string -> string -> t reader -> unit
+
+
+    (** [add_writer ?desc ~ver name writer] registers a new [writer]
+        with a provided [name], version [ver] and optional description
+        [desc] *)
+    val add_writer : ?desc:string -> ver:string -> string -> t writer -> unit
+
+    (** [available_reader ()] lists available readers for the data type  *)
+    val available_readers : unit -> info list
+
+    (** [default_reader] returns information about default reader  *)
+    val default_reader : unit -> info
+
+    (** [set_default_reader ?ver name] sets new default reader. If
+        version is not specifed then the latest available version is
+        used. Raises an exception if a reader with a given name doesn't
+        exist.  *)
+    val set_default_reader : ?ver:string -> string -> unit
+
+    (** [with_reader ?ver name operation] temporary sets a default
+        reader to a reader with a specified name and version. The default
+        reader is restored after [operation] is finished.  *)
+    val with_reader : ?ver:string -> string -> (unit -> 'a) -> 'a
+
+
+    (** [available_writer ()] lists available writers for the data type  *)
+    val available_writers : unit -> info list
+
+    (** [default_writer] returns information about default writer  *)
+    val default_writer : unit -> info
+
+    (** [set_default_writer ?ver name] sets new default writer. If
+        version is not specifed then the latest available version is
+        used. Raises an exception if a writer with a given name doesn't
+        exist.  *)
+    val set_default_writer : ?ver:string -> string -> unit
+
+    (** [with_writer ?ver name operation] temporary sets a default
+        writer to a writer with a specified name and version. The default
+        writer is restored after [operation] is finished.  *)
+    val with_writer : ?ver:string -> string -> (unit -> 'a) -> 'a
+
+
+    (** [default_writer] optionally returns an information about
+        default printer *)
+    val default_printer : unit -> info option
+
+    (** [set_default_printer ?ver name] sets new default printer. If
+        version is not specifed then the latest available version is
+        used. Raises an exception if a printer with a given name doesn't
+        exist.  *)
+    val set_default_printer : ?ver:string -> string -> unit
+
+    (** [with_printer ?ver name operation] temporary sets a default
+        printer to a printer with a specified name and version. The default
+        printer is restored after [operation] is finished.  *)
+    val with_printer : ?ver:string -> string -> (unit -> 'a) -> 'a
+
+
+    (** {2 Low level access to serializers}  *)
+
+    (** [find_reader ?ver name] lookups a reader with a given name. If
+        version is not specified, then a reader with maximum version is
+        returned.  *)
+    val find_reader : ?ver:string -> string -> t reader option
+
+    (** [find_writer ?ver name] lookups a writer with a given name. If
+        version is not specified, then a writer with maximum version is
+        returned.  *)
+    val find_writer : ?ver:string -> string -> t writer option
+
+  end
+
   (** ['a printer] defines a type for pretty-printers for a value of
       type ['a]. This is the type, that is required by [%a] specifier,
       for [Format.printf]-family of functions. Also, this is the type,
@@ -670,6 +858,7 @@ module Std : sig
     include Printable            with type t := t
     include Comparable.S_binable with type t := t
     include Hashable.S_binable   with type t := t
+    include Data with type t := t
   end
 
   (** Opaque type is like regular type, except that we can print or
@@ -722,6 +911,102 @@ module Std : sig
     val (asr)  : t -> t -> t
   end
 
+
+  module Data : sig
+
+    (** [copy buf obj pos] is a method to copy object [obj] into a buffer
+        [buf], starting from a position [pos] and will return the number
+        of bytes written.  XXX: we need the amount of bytes beforehand.
+    *)
+    type ('a,'b) copy = 'b -> 'a -> int -> unit
+    (** *)
+    type ('a,'b) dump = 'b -> 'a -> unit
+
+    type lexbuf  = Lexing.lexbuf
+    type scanbuf = Scanf.Scanning.scanbuf
+
+
+    module type Versioned = sig
+      (** type of data  *)
+      type t
+
+      (** version of data representation  *)
+      val version : string
+    end
+
+
+    module type Sexpable = sig
+      include Versioned
+      include Sexpable with type t := t
+    end
+
+    module type Binable = sig
+      include Versioned
+      include Binable with type t := t
+    end
+
+
+    val marshal_reader : (module T with type t = 'a) -> 'a reader
+    val marshal_writer : (module T with type t = 'a) -> 'a writer
+    val sexp_reader : (module Sexpable with type t = 'a) -> 'a reader
+    val sexp_writer : (module Sexpable with type t = 'a) -> 'a writer
+    val bin_reader : (module Binable with type t = 'a) -> 'a reader
+    val bin_writer : (module Binable with type t = 'a) -> 'a writer
+    val pretty_writer : (module Pretty_printer.S with type t = 'a) -> 'a writer
+
+
+
+    module type S = Data
+
+    module Make (T : Versioned) : S with type t := T.t
+
+    module Read : sig
+      type 'a t = 'a reader
+
+      (** A minimal complete definition is any method except
+          [from_channel].
+
+          If a class is defined only with [from_bigstring] or [from_bytes]
+          then [from_channel] function will consume all input and pass it
+          to the correspondings function.  *)
+      val create :
+        ?of_channel     : (in_channel -> 'a) ->
+        ?of_lexbuf      : (lexbuf -> 'a) ->
+        ?of_scanbuf     : (scanbuf -> 'a) ->
+        ?of_bigstring   : (bigstring -> 'a) ->
+        ?of_bytes       : (bytes -> 'a) ->
+        unit -> 'a t
+
+      val of_bytes : 'a t -> bytes -> 'a
+      val of_channel : 'a t -> in_channel -> 'a
+      val of_bigstring : 'a t -> bigstring -> 'a
+    end
+
+    module Write : sig
+      type 'a t = 'a writer
+
+      val create :
+        ?to_bytes  : ('a -> bytes) ->
+        ?to_bigstring : ('a -> bigstring) ->
+        ?dump  : (out_channel -> 'a -> unit) ->
+        ?pp    : (Format.formatter -> 'a -> unit) ->
+        ?size  : ('a -> int) ->
+        ?blit_to_string:('a,string) copy ->
+        ?blit_to_bigstring:('a,bigstring) copy ->
+        unit -> 'a t
+
+      val size : 'a t -> 'a -> int
+      val to_channel : 'a t -> out_channel -> 'a -> unit
+      val to_formatter : 'a t -> Format.formatter -> 'a -> unit
+      val to_bytes : 'a t -> 'a -> bytes
+      val to_bigstring : 'a t -> 'a -> bigstring
+      val blit_to_string : 'a t -> string -> 'a -> int -> unit
+      val blit_to_bigstring : 'a t -> bigstring -> 'a -> int -> unit
+    end
+
+
+  end
+
   module Monad : sig
     module type Basic = Monad.Basic
     module type Basic2 = Monad.Basic2
@@ -761,6 +1046,7 @@ module Std : sig
         (** type t should be binable, sexpable and provide compare function  *)
         type t with bin_io, sexp, compare
         include Pretty_printer.S with type t := t
+        include Data.Versioned with type t := t
         val hash : t -> int
         val module_name : string option
       end) : Regular with type t := M.t
@@ -974,9 +1260,11 @@ module Std : sig
 
     val to_addr_size : t -> [ `r32 | `r64 ] Or_error.t
 
-    (** [to_bits size] returns the number of bits. *)
-    val to_bits  : 'a p -> int
-    val to_bytes : 'a p -> int
+    (** [in_bits size] returns size in bits. *)
+    val in_bits  : 'a p -> int
+
+    (** [in_bytes sz] returns size in bytes  *)
+    val in_bytes : 'a p -> int
 
     include Regular with type t := t
   end
@@ -1241,17 +1529,19 @@ module Std : sig
 
     (** {2 Iteration over bitvector components }  *)
 
-    (** [to_bytes x order] returns bytes of [x] in a specified [order].
-        Each byte is represented as a [bitvector] itself. *)
-    val to_bytes : t -> endian ->    t seq
-    (** [to_bytes x order] returns bytes of [x] in a specified [order],
-        with bytes represented by [char] type *)
-    val to_chars : t -> endian -> char seq
+    (** [enum_bytes x order] returns a sequence of bytes of [x] in a
+        specified [order].  Each byte is represented as a [bitvector]
+        itself. *)
+    val enum_bytes : t -> endian ->    t seq
 
-    (** [to_bits x order] returns bits of [x] in a specified [order].
+    (** [enum_bytes x order] returns bytes of [x] in a specified [order],
+        with bytes represented by [char] type *)
+    val enum_chars : t -> endian -> char seq
+
+    (** [enum_bits x order] returns bits of [x] in a specified [order].
         [order] defines only the ordering of words in a bitvector, bits
         will always be in MSB first order. *)
-    val to_bits  : t -> endian -> bool seq
+    val enum_bits  : t -> endian -> bool seq
 
     (** {2 Arithmetic raised into [Or_error] monad }
 
@@ -1414,23 +1704,23 @@ module Std : sig
   with bin_io, compare, sexp
 
   (** BIL variable.
-      BIL variables are regular values. Variables can versioned. I.e.,
-      a version number can be added to a variable, to represent the
-      same variable but at different time or space (control flow path).
+
+      BIL variables are regular values. Variables can have
+      indices. Usually the index is used to represent the same
+      variable but at different time or space (control flow path).
       This is particulary useful for representing variables in SSA
       form.
 
-      By default, comparison functions takes version number into
-      account. In order to compare two variables regardless their
-      version number use [same] function, or compare with [base x].
+      By default, comparison functions takes indices into account. In
+      order to compare two variables regardless their index use [same]
+      function, or compare with [base x].
 
-      Temporary variables (those, that are created with flag
-      [tmp:true] argument, are treated differently. Every time a
-      temporary variable is created a fresh new identifier is created
-      and appended to a provided name (interleaved with '_'
-      character). So that it is impossible to create two equal
-      temporary variables.
+      A variable can represent a physical register or be just a virtual
+      variable.
 
+      {2 Printing}
+
+      A default pretty printer doesn't print zero indices.
   *)
   module Var : sig
 
@@ -1439,14 +1729,20 @@ module Std : sig
     (** implements [Regular] interface  *)
     include Regular with type t := t
 
-    (** [create ?tmp name typ] creates a variable with associated
-        [name] and type [typ]. A newly created variable has version
-        equal to 0.
+    (** [create ?register ?fresh name typ] creates a variable with a
+        given [name] and [typ]e.
 
-        If [tmp] is [true] then a fresh new identifier is created by
-        incrementing a hidden counter, and prepending it to a variable
-        name.*)
-    val create : ?tmp:bool -> string -> typ -> t
+        A newly created variable has version equal to 0.
+
+        If [fresh] is [true] (defaults to [false]), then a unique salt
+        is mixed to the name of variable, making it unique.
+
+        If [is_virtual] is [true] (defaults to [false]), then a
+        variable is virtual, i.e., it doesn't correspond to some
+        physical register or memory location and was added to a program
+        artificially.
+    *)
+    val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t
 
     (** [name var] returns a name assosiated with variable  *)
     val name : t -> string
@@ -1454,30 +1750,29 @@ module Std : sig
     (** [typ var] returns a type assosiated with variable  *)
     val typ : t -> typ
 
-    (** [is_tmp] true if variable is temporary  *)
-    val is_tmp : t -> bool
+    (** [is_physical v] is [true] if a variable [v] represents a
+        physical register or memory location.  *)
+    val is_physical : t -> bool
 
-    (** [renumber var ver] returns a variable, that is identical to
+
+    (** [is_virtual v] is [true] if [v] is not physical  *)
+    val is_virtual : t -> bool
+
+    (** [ var ver] returns a variable, that is identical to
         [var], but with version equal to [ver] *)
-    val renumber : t -> int -> t
+    val with_index : t -> int -> t
 
-    (** [version v] returns a variable version  *)
-    val version : t -> int
+    (** [index v] returns variable's index  *)
+    val index : t -> int
 
     (** [base var] returns an original variable. Essentially,
-        identical to [renumber var 0] *)
+        identical to [with_index var 0] *)
     val base : t -> t
 
-    (** [same x y] compares variables ignoring versions, i.e.,
-        [same x y] iff [equal (base x) (base y)] *)
+    (** [same x y] compares variables ignoring indices, i.e., for
+        variables [x] and [y] the [same x y] is [true] iff [equal
+        (base x) (base y)] *)
     val same : t -> t -> bool
-
-    (** Serialization format  *)
-    module V1 : sig
-      type r = string * int * typ * bool
-      val serialize   : t -> r
-      val deserialize : r -> t
-    end
   end
 
 
@@ -1582,6 +1877,7 @@ module Std : sig
 
 
     include Printable with type t := t
+    include Data      with type t := t
 
     (** Infix operators  *)
     module Infix : sig
@@ -1962,12 +2258,37 @@ module Std : sig
         accounted. By default, [strict] is [false] *)
     val is_assigned : ?strict:bool -> var -> stmt list -> bool
 
-    (** [prune_unreferenced p] remove all assignments to variables that
-        are not used in the program [p]. This is a local optimization.
-        The variable is unreferenced if it is not referenced in its lexical
-        scope, or if it is referenced after the assignment. Only
-        temporary variables are pruned, as their scope is local.  *)
-    val prune_unreferenced : stmt list -> stmt list
+    (** [prune_unreferenced ?physicals ?virtuals ?such_that p] remove
+        all assignments to variables that are not used in the program
+        [p]. This is a local optimization.  The variable is
+        unreferenced if it is not referenced in its lexical scope, or if
+        it is referenced after the assignment. A variable is pruned
+        only if it matches to one of the user specified kind,
+        described below (no variable matches the default values, so
+        by default nothing is pruned):
+
+        [such_that] matches a variable [v] for which [such_that v] is
+        [true];
+
+        [physicals] matches all physical variables (i.e., registers
+        and memory locations). See {!Var.is_physical} for more
+        information. Note: passing [true] to this option is in general
+        unsound, unless you're absolutely sure, that physical
+        variables will not live out program [p];
+
+        [virtuals] matches all virtual variables (i.e., such variables
+        that were added to a program artificially and are not
+        represented physically in a program). See {!Var.is_virtual}
+        for more information on virtual variables.
+
+
+
+    *)
+    val prune_unreferenced :
+      ?such_that:(var -> bool) ->
+      ?physicals:bool ->
+      ?virtuals:bool ->
+      stmt list -> stmt list
 
     (** [normalize_negatives p] transform [x + y] to [x - abs(y)] if [y < 0] *)
     val normalize_negatives : stmt list -> stmt list
@@ -5664,8 +5985,7 @@ module Std : sig
     (** [insns blk] returns a list of block instructions  *)
     val insns : t -> (mem * insn) list
 
-    include Comparable with type t := t
-    include Hashable   with type t := t
+    include Opaque     with type t := t
     (** all the printing stuff, including [to_string] function *)
     include Printable  with type t := t
   end

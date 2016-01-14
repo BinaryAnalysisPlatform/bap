@@ -40,9 +40,9 @@ val nsucc : t -> int -> t
 val npred : t -> int -> t
 val (++) : t -> int -> t
 val (--) : t -> int -> t
-val to_bytes : t -> endian ->    t Sequence.t
-val to_chars : t -> endian -> char Sequence.t
-val to_bits  : t -> endian -> bool Sequence.t
+val enum_bytes : t -> endian ->    t Sequence.t
+val enum_chars : t -> endian -> char Sequence.t
+val enum_bits  : t -> endian -> bool Sequence.t
 module Int_err : sig
   val (!$): t -> t Or_error.t
   val i1 :  t -> t Or_error.t

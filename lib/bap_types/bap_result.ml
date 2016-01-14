@@ -26,6 +26,7 @@ end = struct
         Format.fprintf ppf "0x%LX" (Int63.to_int64 id)
       let hash = Int63.hash
       let module_name = Some "Bap.Std.Bil.Result.Id"
+      let version = "0.1"
     end)
 end
 
@@ -66,6 +67,7 @@ module Value = struct
   include Printable(struct
       type t = value
       let module_name = Some "Bap.Std.Bil.Result.Value"
+      let version = "0.1"
       let pp ppf x =
         Format.fprintf ppf "%s" @@ match x with
         | Imm w -> Bap_bitvector.to_string w
@@ -80,4 +82,6 @@ include Printable(struct
     let pp ppf r =
       Format.fprintf ppf "[%a] %a" Id.pp (id r) Value.pp (value r);;
     let module_name = Some "Bap.Std.Bil.Result"
+    let version = "0.1"
+
   end)

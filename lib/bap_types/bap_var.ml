@@ -13,40 +13,35 @@ end
 module T = struct
   type t = {
     var : string;
-    ver : int;
+    ind : int;
     typ : typ;
-    tmp : bool;
+    vir : bool;
   } with sexp, bin_io,compare
 
   let hash v = String.hash v.var
   let module_name = Some "Bap.Std.Var"
-
+  let version = "0.1"
   let pp fmt v =
     Format.fprintf fmt "%s%s" v.var
-      (if v.ver <> 0 then sprintf ".%d" v.ver else "" )
+      (if v.ind <> 0 then sprintf ".%d" v.ind else "" )
 end
-
 
 include T
 
 let name v = v.var
-let renumber v ver = {v with ver}
-let base v = {v with ver = 0}
+let with_index v ind = {v with ind}
+let index v = v.ind
+let base v = {v with ind = 0}
 let typ  v = v.typ
-let is_tmp v = v.tmp
+let is_physical v = not v.vir
+let is_virtual v = v.vir
 
-let create ?(tmp=false) name typ =
-  let var = if not tmp then name
-    else name ^ "_" ^ Int63.to_string (Id.create ()) in
-  {ver = 0; var; typ; tmp}
+let create ?(is_virtual=false) ?(fresh=false) name typ =
+  let var =
+    if fresh then name ^ Int63.to_string (Id.create ())
+    else name in
+  {ind = 0; var; typ; vir = is_virtual}
 
-let version {ver} = ver
 let same x y = base x = base y
-
-module V1 = struct
-  type r = string * int * typ * bool
-  let serialize v = v.var, v.ver, v.typ, v.tmp
-  let deserialize (var,ver,typ,tmp) = {var; ver; typ; tmp}
-end
 
 include Regular.Make(T)

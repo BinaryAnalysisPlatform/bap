@@ -9,16 +9,13 @@ module Env = Bap_disasm_arm_env
 module Shift = Bap_disasm_arm_shift
 module Flags = Bap_disasm_arm_flags
 
-
-let new_tmp name = Var.create ~tmp:true name reg64_t
-
 let lift_mull ~lodest ~hidest ~src1 ~src2 sign ?addend ~wflag cond =
   let lodest = assert_reg _here_ lodest in
   let hidest = assert_reg _here_ hidest in
   let s1_64, s2_64 =
     let cast src = cast_of_sign sign 64 (exp_of_op src) in
     cast src1, cast src2 in
-  let result = new_tmp "r" in
+  let result = tmp reg64_t in
   let eres  = Bil.var result in
   let flags = Flags.set_nzf eres reg64_t in
   let opn = match addend with
@@ -40,7 +37,7 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
   let top  = excast 31 16 in
   let bot  = excast 15 0 in
   let top32 = excast 47 16 in
-  let res = new_tmp "r" in
+  let res = tmp reg64_t in
   let result =
     let open Bil in
     match size with

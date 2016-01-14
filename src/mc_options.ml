@@ -6,9 +6,9 @@ type t = {
   max_insn : int option;
   arch : string;
   show_insn_size : bool;
-  insn_formats : [ `adt | `asm | `sexp ] list;
-  bil_formats : [ `adt | `bil | `binprot | `json | `pb | `sexp | `xml ] list;
-  bir_formats : [ `binprot | `bir | `sexp ] list;
+  insn_formats : string list;
+  bil_formats : string list;
+  bir_formats : string list;
   show_kinds: bool;
 } with sexp, fields
 

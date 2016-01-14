@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Or_error
+open Bap_data_types
 
 type endian = LittleEndian | BigEndian
 with bin_io, compare, sexp
@@ -59,6 +60,7 @@ module type Kernel = sig
   val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
+  include Versioned with type t := t
 end
 
 (** internal representation *)
@@ -67,6 +69,9 @@ module Make(Size : Compare) : Kernel = struct
   type nonrec t = t with bin_io, sexp
 
   let module_name = Some "Bap.Std.Bitvector"
+
+  let version = "0.1"
+
 
   let znorm z w = Bignum.(z land ((one lsl w) - one))
 
@@ -345,7 +350,7 @@ let validate_negative =
 let validate_non_negative =
   validate is_non_negative "should be non negative"
 
-let to_chars t endian  =
+let enum_chars t endian  =
   let open Sequence in
   let n = (bitwidth t + 7) / 8 in
   if is_zero t then take (repeat '\x00') n
@@ -369,8 +374,8 @@ let to_chars t endian  =
       cat zeros s
 
 
-let to_bytes t endian =
-  Sequence.map (to_chars t endian) ~f:(fun c ->
+let enum_bytes t endian =
+  Sequence.map (enum_chars t endian) ~f:(fun c ->
       of_int ~width:8 (Char.to_int c))
 
 let bits_of_byte byte =
@@ -379,8 +384,8 @@ let bits_of_byte byte =
       if n < 0 then None
       else Some (byte land (1 lsl n) <> 0, n - 1))
 
-let to_bits bv endian =
-  to_chars bv endian |> Sequence.map ~f:bits_of_byte |> Sequence.concat
+let enum_bits bv endian =
+  enum_chars bv endian |> Sequence.map ~f:bits_of_byte |> Sequence.concat
 
 module Mono = Comparable.Make(Make(Size_mono))
 

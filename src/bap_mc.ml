@@ -31,14 +31,14 @@ module Program(Conf : Mc_options.Provider) = struct
   (** [to_binary ?escape s] make a binary string from ascii
       representation, (e.g., "\x01\x02..."). Apply optional
       escape function for each byte *)
-  let to_binary ?(escape=ident) s =
+  let to_binary ?(map=ident) s =
     let seps = [' '; ','; ';'] in
     let separated = List.exists seps ~f:(String.mem s) in
     let bytes = if separated
       then String.split_on_chars ~on:seps s
       else List.init (String.length s / 2) ~f:(fun n ->
           String.slice s (n*2) (n*2+2)) in
-    try bytes |> List.map ~f:escape |> String.concat |> Scanf.unescaped
+    try bytes |> List.map ~f:map |> String.concat |> Scanf.unescaped
     with Scanf.Scan_failure _ -> raise Bad_user_input
 
   let read_input input =
@@ -50,8 +50,8 @@ module Program(Conf : Mc_options.Provider) = struct
     | Some input -> match String.prefix input 2 with
       | "" | "\n" -> exit 0
       | "\\x" -> to_binary input
-      | "0x" ->  to_binary ~escape:escape_0x input
-      | x -> to_binary ~escape:prepend_slash_x input
+      | "0x" ->  to_binary ~map:escape_0x input
+      | x -> to_binary ~map:prepend_slash_x input
 
   let create_memory arch s addr =
     let endian = Arch.endian arch in
@@ -72,14 +72,9 @@ module Program(Conf : Mc_options.Provider) = struct
 
   let print_insn insn_formats insn =
     let insn = Insn.of_basic insn in
-    List.iter insn_formats ~f:(function
-        | `asm -> printf "%s@." @@ Insn.asm insn
-        | `adt -> printf "%a@." Insn.pp_adt insn
-        | `sexp ->
-          printf "(%s %s)@."
-            (Insn.name insn)
-            List.(Insn.ops insn |> Array.to_list >>| Op.to_string |>
-                  String.concat ~sep:" "))
+    List.iter insn_formats ~f:(fun fmt ->
+        Insn.with_printer fmt (fun () ->
+            printf "%a@." Insn.pp insn))
 
   let bil_of_insn lift mem insn =
     match lift mem insn with
@@ -87,39 +82,17 @@ module Program(Conf : Mc_options.Provider) = struct
     | Error e -> [Bil.special @@ sprintf "Lifter: %s" @@
                   Error.to_string_hum e]
 
-  let pp_sexp fmt x =
-    Sexp.pp fmt (sexp_of_bil x)
-
-  let string_of_list pp bil =
-    List.iter bil ~f:(fun stmt ->
-        pp str_formatter stmt;
-        pp_print_newline str_formatter ());
-    flush_str_formatter ()
-
-
-  let string_of_bil = function
-    | `bil -> asprintf "%a" Bil.pp
-    | `adt -> string_of_list Stmt.pp_adt
-    | `sexp -> asprintf "%a" pp_sexp
-    | `binprot -> Binable.to_string (module Bil)
-    | #Bil_piqi.fmt as fmt -> Bil_piqi.string_of_bil fmt
-
   let print_bil lift mem insn =
     let bil = bil_of_insn lift mem in
     List.iter options.bil_formats ~f:(fun fmt ->
-        printf "%s@." (string_of_bil fmt (bil insn)))
-
-  let string_of_bir = function
-    | `binprot -> Binable.to_string (module Blk)
-    | `sexp -> fun blk -> asprintf "%a" Sexp.pp (Blk.sexp_of_t blk)
-    | `bir -> asprintf "%a" Blk.pp
+        printf "%s@." (Bil.to_bytes ~fmt (bil insn)))
 
   let print_bir lift mem insn =
     let bil = bil_of_insn lift mem insn in
     let bs = Blk.from_insn (Insn.of_basic ~bil insn) in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
-          (List.map bs ~f:(string_of_bir fmt)))
+          (List.map bs ~f:(Blk.to_bytes ~fmt)))
 
   let make_print arch mem insn =
     let module Target = (val target_of_arch arch) in
@@ -151,8 +124,7 @@ module Program(Conf : Mc_options.Provider) = struct
       make_print arch in
     let input = read_input options.src in
     Dis.create ~backend:"llvm" (Arch.to_string arch) >>= fun dis ->
-    let invalid state mem (r_addr, off) =
-      no_disassembly state (r_addr, off) in
+    let invalid state mem pos = no_disassembly state pos in
     let pos, dis_insn_count  =
       Dis.run dis ~return:(fun x -> x)
         ~stop_on:[`Valid] ~invalid
@@ -168,6 +140,10 @@ module Program(Conf : Mc_options.Provider) = struct
     | _ -> return 0
 end
 
+let format_info get_fmts  =
+  get_fmts () |>
+  List.map  ~f:(fun (name, `Ver ver, desc) -> name ^ "-" ^ ver) |>
+  String.concat ~sep:", "
 
 module Cmdline = struct
   open Cmdliner
@@ -181,53 +157,30 @@ module Cmdline = struct
     Arg.(value & flag & info ["show-kinds"] ~doc)
 
   let show_insn_size =
-    let doc =
-      "Output recognized opcode length (including potential data)\
-       as in the number of bytes EIP is incremented upon having\
-       executed said opcode."
-    in
+    let doc = "Output recognized instruction length" in
     Arg.(value & flag & info ["show-size"] ~doc)
 
   let insn_formats =
-    let formats = [
-      "asm", `asm;
-      "adt", `adt;
-      "sexp", `sexp;
-    ] in
     let doc = sprintf
         "Print instructions, using specified format $(docv). \
          $(docv) can be %s. Defaults to `asm'." @@
-      Arg.doc_alts_enum formats in
-    Arg.(value & opt_all ~vopt:`asm (enum formats) [] &
+      format_info Insn.available_writers in
+    Arg.(value & opt_all ~vopt:"pretty" string [] &
          info ["show-inst"; "show-insn"] ~doc)
 
   let bil_formats =
-    let formats = [
-      "bil", `bil;
-      "pb", `pb;
-      "json", `json;
-      "xml", `xml;
-      "sexp", `sexp;
-      "binprot", `binprot;
-      "adt", `adt;
-    ] in
     let doc = sprintf
         "Output BIL code. Optional value specifies format \
-         and can be %s. Defaults to `bil`, i.e., in a BIL \
-         concrete syntax" @@ Arg.doc_alts_enum formats in
-    Arg.(value & opt_all ~vopt:`bil (enum formats) [] &
+         and can be %s. Defaults to `pretty`, i.e., in a BIL \
+         concrete syntax" @@ format_info Stmt.available_writers in
+    Arg.(value & opt_all ~vopt:"pretty" string [] &
          info ["show-bil"] ~doc)
 
   let bir_formats =
-    let formats = [
-      "bir", `bir;
-      "sexp", `sexp;
-      "binprot", `binprot
-    ] in
     let doc = sprintf
         "Output for each instruction in particular. Accepted \
-         values are %s" @@ Arg.doc_alts_enum formats in
-    Arg.(value & opt_all ~vopt:`bir (enum formats) [] &
+         values are %s" @@ format_info Blk.available_writers in
+    Arg.(value & opt_all ~vopt:"pretty" string [] &
          info ["show-bir"] ~doc)
 
   let addr =

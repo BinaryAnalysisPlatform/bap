@@ -2,6 +2,7 @@
 open Core_kernel.Std
 open Bap_common
 open Bap_bil
+open Bap_data_intf
 
 include Regular with type t := stmt
 
@@ -22,3 +23,4 @@ module Infix : sig
 end
 
 module Stmts_pp : Printable with type t = stmt list
+module Stmts_data : Data with type t = stmt list

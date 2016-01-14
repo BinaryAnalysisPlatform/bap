@@ -33,10 +33,17 @@ end
 
 let is_referenced x = exists (new reference_finder x)
 
-let prune_unreferenced stmt =
+let prune_unreferenced
+    ?(such_that=(fun _ -> false))
+    ?(physicals=false)
+    ?(virtuals=false) stmt =
+  let prune x =
+    Bap_var.(physicals && is_physical x ||
+             virtuals && is_virtual  x ||
+             such_that x) in
   let rec loop ss = function
     | [] -> List.rev ss
-    | Stmt.Move (x,_) as s :: xs when Bap_var.is_tmp x ->
+    | Stmt.Move (x,_) as s :: xs when prune x ->
       if is_referenced x xs then loop (s::ss) xs else loop ss xs
     | s :: xs -> loop (s::ss) xs in
   loop [] stmt
@@ -208,8 +215,11 @@ module Trie = struct
         pruned ty
     end)
 
+  let prune x = prune_unreferenced
+      ~virtuals:true x
+
   let simplify = List.map ~f:fixpoint [
-      prune_unreferenced;
+      prune;
       normalize_negatives;
       fold_consts;
     ] |> List.reduce_exn ~f:Fn.compose |> fixpoint

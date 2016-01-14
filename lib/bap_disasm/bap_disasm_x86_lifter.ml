@@ -160,7 +160,7 @@ module ToIR = struct
     match op_dbl t with
     | (t,o) :: [] -> [assn_s mode s has_rex has_vex t o e], op2e_s mode s has_rex t o
     | l ->
-      let tmp = Var.create ~tmp:true "t" (Type.Imm (!!t * 2)) in
+      let tmp = tmp (Type.Imm (!!t * 2)) in
       let f (stmts, off) (ct, o) =
         let newoff = off + !!ct in
         assn_s mode s has_rex has_vex ct o (Bil.Extract (newoff-1, off, Bil.Var tmp))::stmts, newoff
@@ -216,7 +216,7 @@ module ToIR = struct
     Bil.((Int bi0) = result)
 
   let compute_pf t r =
-    let acc = Var.create ~tmp:true "acc" t in
+    let acc = tmp t in
     let var_acc = Bil.Var acc in
     let t' = !!t in
     (* extra parens do not change semantics but do make it pretty
@@ -306,7 +306,7 @@ module ToIR = struct
         in
         [assn t op e]
       | Retn (op, far_ret) when pref = [] || pref = [repz]  || pref = [repnz]->
-        let temp = Var.create ~tmp:true "ra" mt in
+        let temp = tmp mt in
         let load_stmt = if far_ret
           then (* TODO Mess with segment selectors here *)
             unimplemented "long retn not supported"
@@ -427,7 +427,7 @@ module ToIR = struct
           | Low -> fun e -> Bil.(Cast (LOW, !!halft, e))
         in
         let se, de = castf (op2e t s), castf (op2e t d) in
-        let st, dt = Var.create ~tmp:true "s" halft, Var.create ~tmp:true "d" halft in
+        let st, dt = tmp halft, tmp halft in
         let et' = !!et in
         let mape i =
           [extract_element et' (Bil.Var st) i; extract_element et' (Bil.Var dt) i]
@@ -478,7 +478,7 @@ module ToIR = struct
         let compare_region i =
           let byte1 = Bil.Extract(i*elebits-1, (i-1)*elebits, src) in
           let byte2 = Bil.Extract(i*elebits-1, (i-1)*elebits, op2e t vsrc) in
-          let tmp = Var.create ~tmp:true ("t" ^ string_of_int i) elet in
+          let tmp = tmp ~name:("t" ^ string_of_int i) elet in
           let ltw n t = (BV.of_int64 n ~width:t) |> Bil.int in
           Bil.Var tmp, Bil.Move (tmp, Bil.(Ite (BinOp (bop, byte1, byte2), ltw (-1L) !!elet, ltw 0L !!elet)))
         in
@@ -584,7 +584,7 @@ module ToIR = struct
            is_valid variables using explicit string length. *)
         let build_explicit_valid_xmm_i is_valid_xmm_i sizee =
           (* Max size is nelem *)
-          let sizev = Var.create ~tmp:true "sz" regm in
+          let sizev = tmp ~name:"sz" regm in
           let sizee = Bil.(Ite (BinOp (LT, int_exp nelem !!regm, sizee), int_exp nelem !!regm, sizee)) in
           let f acc i =
             (* Current element is valid *)
@@ -601,7 +601,7 @@ module ToIR = struct
           (fun xmmnum index -> match Hashtbl.find vh (xmmnum,index) with
              | Some v -> v
              | None ->
-               let v = Var.create ~tmp:true ("is_valid_xmm"^string_of_int xmmnum^"_ele"^string_of_int index) bool_t in
+               let v = tmp ~name:("is_valid_xmm"^string_of_int xmmnum^"_ele"^string_of_int index) bool_t in
                Hashtbl.add_exn vh ~key:(xmmnum,index) ~data:v;
                v)
         in
@@ -686,8 +686,8 @@ module ToIR = struct
         in
         let bits = List.map ~f:get_intres1_bit (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0) in
         let res_e = build_valid_xmm1 (build_valid_xmm2 (concat_explist bits)) in
-        let int_res_1 = Var.create ~tmp:true "IntRes1" reg16_t in
-        let int_res_2 = Var.create ~tmp:true "IntRes2" reg16_t in
+        let int_res_1 = tmp ~name:"IntRes1" reg16_t in
+        let int_res_2 = tmp ~name:"IntRes2" reg16_t in
 
         let contains_null e =
           List.fold_left ~f:(fun acc i ->
@@ -827,7 +827,7 @@ module ToIR = struct
             store_s mode None mt rsp_e (Bil.Int ra);
             Bil.Jmp target]
          | _ ->
-           let t = Var.create ~tmp:true "target" mt in
+           let t = tmp mt in
            [Bil.Move (t, target);
             Bil.Move (rsp, Bil.(rsp_e - (Int (mi (bytes_of_width mt)))));
             store_s mode None mt rsp_e (Bil.Int ra);
@@ -840,8 +840,8 @@ module ToIR = struct
         [assn t o1 Bil.(Cast (UNSIGNED, !!t, c))]
       | Shift(st, s, dst, shift) ->
         assert (List.mem [reg8_t; reg16_t; reg32_t; reg64_t] s);
-        let origCOUNT, origDEST = Var.create ~tmp:true "origCOUNT" s,
-                                  Var.create ~tmp:true "origDEST" s in
+        let origCOUNT, origDEST = tmp ~name:"orig_count" s,
+                                  tmp ~name:"orig_dest" s in
         let s' = !!s in
         let size = int_exp s' s' in
         let s_f = Bil.(match st with LSHIFT -> (lsl)  | RSHIFT -> (lsr)
@@ -878,8 +878,8 @@ module ToIR = struct
          Bil.Move (af, ifzero af_e (Bil.Unknown ("AF undefined after shift", bool_t)))
         ]
       | Shiftd(st, s, dst, fill, count) ->
-        let origDEST, origCOUNT = Var.create ~tmp:true "origDEST" s,
-                                  Var.create ~tmp:true "origCOUNT" s in
+        let origDEST, origCOUNT = tmp ~name:"orig_dest" s,
+                                  tmp ~name:"orig_count" s in
         let e_dst = op2e s dst in
         let e_fill = op2e s fill in
         let s' = !!s in
@@ -922,7 +922,7 @@ module ToIR = struct
       | Rotate(rt, s, dst, shift, use_cf) ->
         (* SWXXX implement use_cf *)
         if use_cf then unimplemented "rotate use_vf";
-        let origCOUNT = Var.create ~tmp:true "origCOUNT" s in
+        let origCOUNT = tmp ~name:"orig_count" s in
         let e_dst = op2e s dst in
         let shift_val = match s with
           | Type.Imm 64 -> 63
@@ -984,7 +984,7 @@ module ToIR = struct
         ]
       | Bs(t, dst, src, dir) ->
         let t' = !!t in
-        let source_is_zero = Var.create ~tmp:true "t" bool_t in
+        let source_is_zero = tmp bool_t in
         let source_is_zero_v = Bil.Var source_is_zero in
         let src_e = op2e t src in
         let bits = !!t in
@@ -1048,9 +1048,9 @@ module ToIR = struct
         unimplemented "unsupported FPU flags"
       | Cmps(Type.Imm _bits as t) ->
         let t' = !!t in
-        let src1 = Var.create ~tmp:true "src1" t in
-        let src2 = Var.create ~tmp:true "src2" t in
-        let tmpres = Var.create ~tmp:true "tmp" t in
+        let src1   = tmp t in
+        let src2   = tmp t in
+        let tmpres = tmp t in
         let stmts =
           Bil.Move (src1, op2e t (Oaddr rsi_e))
           :: Bil.Move (src2, op2e_s mode seg_es has_rex t (Oaddr rdi_e))
@@ -1066,9 +1066,9 @@ module ToIR = struct
           | _ -> unimplemented "unsupported flags in cmps" end
       | Scas(Type.Imm _bits as t) ->
         let t' = !!t in
-        let src1 = Var.create ~tmp:true "src1" t in
-        let src2 = Var.create ~tmp:true "src2" t in
-        let tmpres = Var.create ~tmp:true "tmp" t in
+        let src1   = tmp t in
+        let src2   = tmp t in
+        let tmpres = tmp t in
         let stmts =
           let open Stmt in
           Move (src1, Bil.(Cast (LOW, !!t, Var rax)))
@@ -1091,7 +1091,7 @@ module ToIR = struct
           | [single] when single = repz -> rep_wrap ~mode ~addr ~next stmts
           | _ -> unimplemented "unsupported prefix for stos" end
       | Push(t, o) ->
-        let tmp = Var.create ~tmp:true "t" t in (* only really needed when o involves esp *)
+        let tmp = tmp t in (* only really needed when o involves esp *)
         Bil.Move (tmp, op2e t o)
         :: Bil.Move (rsp, Bil.(rsp_e - Int (mi (bytes_of_width t))))
         :: store_s mode seg_ss t rsp_e (Bil.Var tmp) (* FIXME: can ss be overridden? *)
@@ -1130,7 +1130,7 @@ module ToIR = struct
           | Type.Imm 64 -> assns_rflags_to_bap
           | _ -> failwith "impossible"
         in
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         let extractlist =
           List.map
             ~f:(fun i ->
@@ -1151,7 +1151,7 @@ module ToIR = struct
         :: List.map ~f:(fun r -> Bil.Move (r, int_exp 0 1)) [cf; oF; sf; af; pf]
       | Sahf ->
         let assnsf = assns_lflags_to_bap in
-        let tah = Var.create ~tmp:true "AH" reg8_t in
+        let tah = tmp ~name:"AH" reg8_t in
         let extractlist =
           List.map
             ~f:(fun i ->
@@ -1164,16 +1164,15 @@ module ToIR = struct
         let o_ah = Oreg 4 in
         [assn reg8_t o_ah lflags_e]
       | Add(t, o1, o2) ->
-        let tmp = Var.create ~tmp:true "t1" t in
-        let tmp2 = Var.create ~tmp:true "t2" t in
+        let tmp  = tmp t and tmp2 = tmp t in
         Bil.Move (tmp, op2e t o1)
         :: Bil.Move (tmp2, op2e t o2)
         :: assn t o1 Bil.(op2e t o1 + Var tmp2)
         :: let s1 = Bil.Var tmp in let s2 = Bil.Var tmp2 in let r = op2e t o1 in
         set_flags_add !!t s1 s2 r
       | Adc(t, o1, o2) ->
-        let orig1 = Var.create ~tmp:true "orig1" t in
-        let orig2 = Var.create ~tmp:true "orig2" t in
+        let orig1 = tmp t in
+        let orig2 = tmp t in
         let bits = !!t in
         let t' = Type.Imm (bits + 1) in
         let c e = Bil.(Cast (UNSIGNED, !!t', e)) in
@@ -1188,24 +1187,24 @@ module ToIR = struct
         :: set_aopszf_add !!t s1 s2 r
       | Inc(t, o) (* o = o + 1 *) ->
         let t' = !!t in
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, op2e t o)
         :: assn t o Bil.(op2e t o + int_exp 1 t')
         :: set_aopszf_add t' (Bil.Var tmp) (int_exp 1 t') (op2e t o)
       | Dec(t, o) (* o = o - 1 *) ->
         let t' = !!t in
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, op2e t o)
         :: assn t o Bil.(op2e t o - int_exp 1 t')
         :: set_aopszf_sub t' (Bil.Var tmp) (int_exp 1 t') (op2e t o) (* CF is maintained *)
       | Sub(t, o1, o2) (* o1 = o1 - o2 *) ->
-        let oldo1 = Var.create ~tmp:true "t" t in
+        let oldo1 = tmp t in
         Bil.Move (oldo1, op2e t o1)
         :: assn t o1 Bil.(op2e t o1 - op2e t o2)
         :: set_flags_sub !!t (Bil.Var oldo1) (op2e t o2) (op2e t o1)
       | Sbb(t, o1, o2) ->
-        let tmp_s = Var.create ~tmp:true "ts" t in
-        let tmp_d = Var.create ~tmp:true "td" t in
+        let tmp_s = tmp t in
+        let tmp_d = tmp t in
         let orig_s = Bil.Var tmp_s in
         let orig_d = Bil.Var tmp_d in
         let sube = Bil.(orig_s + Cast (UNSIGNED, !!t, cf_e)) in
@@ -1230,7 +1229,7 @@ module ToIR = struct
         :: Bil.Move (cf, Bil.((sube > orig_d) lor (sube < orig_s)))
         :: set_apszf !!t orig_s orig_d d
       | Cmp(t, o1, o2) ->
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, Bil.(op2e t o1 - op2e t o2))
         :: set_flags_sub !!t (op2e t o1) (op2e t o2) (Bil.Var tmp)
       | Cmpxchg(t, src, dst) ->
@@ -1238,7 +1237,7 @@ module ToIR = struct
         let eax_e = op2e t o_rax in
         let dst_e = op2e t dst in
         let src_e = op2e t src in
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, Bil.(eax_e - dst_e))
         :: set_flags_sub t' eax_e dst_e (Bil.Var tmp)
         @ assn t dst (Bil.Ite (zf_e, src_e, dst_e))
@@ -1252,7 +1251,7 @@ module ToIR = struct
         let dst_hi_e = Bil.Extract(31, 0, dst_e) in
         let eax_e = op2e reg32_t o_rax in
         let edx_e = op2e reg32_t o_rdx in
-        let equal = Var.create ~tmp:true "t" bool_t in
+        let equal = tmp bool_t in
         let equal_v = Bil.Var equal in
         [
           Bil.Move (equal, Bil.(accumulator = dst_e));
@@ -1262,14 +1261,14 @@ module ToIR = struct
           assn reg32_t o_rdx (Bil.Ite (equal_v, edx_e, dst_hi_e))
         ]
       | Xadd(t, dst, src) ->
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, Bil.(op2e t dst + op2e t src))
         :: assn t src (op2e t dst)
         :: assn t dst (Bil.Var tmp)
         :: let s = Bil.Var tmp in let src = op2e t src in let dst = op2e t dst in
         set_flags_add !!t s src dst
       | Xchg(t, src, dst) ->
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         [ Bil.Move (tmp, op2e t src);
           assn t src (op2e t dst);
           assn t dst (Bil.Var tmp); ]
@@ -1297,7 +1296,7 @@ module ToIR = struct
         :: Bil.Move (af, Bil.Unknown ("AF is undefined after xor", bool_t))
         :: set_pszf t (op2e t o1)
       | Test(t, o1, o2) ->
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         Bil.Move (tmp, Bil.(op2e t o1 land op2e t o2))
         :: Bil.Move (oF, exp_false)
         :: Bil.Move (cf, exp_false)
@@ -1306,8 +1305,7 @@ module ToIR = struct
       | Ptest(t, o1, o2) ->
         let open Stmt in
         let t' = !!t in
-        let tmp1 = Var.create ~tmp:true "t1" t in
-        let tmp2 = Var.create ~tmp:true "t2" t in
+        let tmp1 = tmp t and tmp2 = tmp t in
         Move (tmp1, Bil.(op2e t o2 land op2e t o1))
         :: Move (tmp2, Bil.(op2e t o2 land (exp_not (op2e t o1))))
         :: Move (af, exp_false)
@@ -1320,7 +1318,7 @@ module ToIR = struct
         [assn t o (exp_not (op2e t o))]
       | Neg(t, o) ->
         let t' = !!t in
-        let tmp = Var.create ~tmp:true "t" t in
+        let tmp = tmp t in
         let min_int =
           Bil.BinOp (LSHIFT, int_exp 1 t', int_exp (t'-1) t')
         in
@@ -1373,7 +1371,7 @@ module ToIR = struct
               Bil.Move (cf, flag)]
            | false ->
              (* Two and three operand forms *)
-             let tmp = Var.create ~tmp:true "t" new_t in
+             let tmp = tmp new_t in
              (* Flag is set when the result is truncated *)
              let flag = Bil.(Var tmp <> Cast (SIGNED, !!new_t, op2e t dst)) in
              [(Bil.Move (tmp, Bil.((Cast (SIGNED, !!new_t, op2e t src1)) * (Cast (SIGNED, !!new_t, op2e t src2)))));
@@ -1391,8 +1389,8 @@ module ToIR = struct
         let dt = Type.Imm dt' in
         let dividend = op2e_dbl t in
         let divisor = Bil.(Cast (UNSIGNED, !!dt, op2e t src)) in
-        let tdiv = Var.create ~tmp:true "div" dt in
-        let trem = Var.create ~tmp:true "rem" dt in
+        let tdiv = tmp ~name:"div" dt in
+        let trem = tmp ~name:"rem" dt in
         let assne = Bil.((Cast (LOW, !!t, Bil.Var trem)) ^ (Cast (LOW, !!t, Var tdiv))) in
         Bil.If (Bil.(divisor = int_exp 0 dt'), [Cpu_exceptions.divide_by_zero], [])
         :: Bil.Move (tdiv, Bil.(dividend / divisor))
@@ -1410,8 +1408,8 @@ module ToIR = struct
         let dt = Type.Imm dt' in
         let dividend = op2e_dbl t in
         let divisor = Bil.(Cast (SIGNED, !!dt, op2e t src)) in
-        let tdiv = Var.create ~tmp:true "div" dt in
-        let trem = Var.create ~tmp:true "rem" dt in
+        let tdiv = tmp ~name:"div" dt in
+        let trem = tmp ~name:"rem" dt in
         let assne = Bil.((Cast (LOW, !!t, Var trem)) ^ (Cast (LOW, !!t, Var tdiv))) in
         Bil.If (Bil.(divisor = int_exp 0 dt'), [Cpu_exceptions.divide_by_zero], [])
         :: Bil.Move (tdiv, Bil.(dividend /$ divisor))

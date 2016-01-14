@@ -219,6 +219,9 @@ module Node = struct
       let pp = Blk.pp
       let hash x = Tid.hash (Term.tid x)
       let module_name = Some "Bap.Std.Graphlib.Ir.Node"
+      let version = "0.1"
+
+
     end)
 
 end
@@ -332,6 +335,7 @@ module Edge = struct
   include Regular.Make(struct
       type t = edge with bin_io, compare, sexp
       let module_name = Some "Bap.Std.Graphlib.Ir.Edge"
+      let version = "0.1"
       let hash t = Blk.hash t.src lxor Blk.hash t.dst
       let pp ppf x =
         Option.iter (Term.nth jmp_t x.src x.pos) ~f:(Jmp.pp ppf)
@@ -402,6 +406,7 @@ let create_tid_graph sub =
 include Regular.Make(struct
     type nonrec t = t with bin_io, compare, sexp
     let module_name = Some "Bap.Std.Graphlib.Ir"
+    let version = "0.1"
     let hash g = Sub.hash g.sub
     let pp ppf g =
       let open Bap_graph_pp in
@@ -440,4 +445,5 @@ include RGraph.Aux(struct
     type t = node
     let pp ppf blk = Format.fprintf ppf "%a" Tid.pp (Term.tid blk)
     let module_name = "Bap.Std.Graphlib.Ir"
+    let version = "0.1"
   end)

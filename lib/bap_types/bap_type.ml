@@ -7,6 +7,8 @@ open Type
 module T = struct
   type t = typ with bin_io, compare, sexp
   let module_name = Some "Bap.Std.Type"
+  let version = "0.1"
+
 
   let pp fmt = function
     | Imm n -> fprintf fmt "u%u" n

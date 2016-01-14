@@ -18,7 +18,7 @@ let create_memory arch s addr =
   | Error e -> raise (Create_mem e)
 
 let lift_all ?backend ?min_addr arch string_mem =
-  let addr_size= Size.to_bits @@ Arch.addr_size arch in
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let min_addr =
     Option.value min_addr ~default:(Addr.of_int addr_size 0) in
   let backend = Option.value backend ~default:"llvm" in
@@ -32,7 +32,7 @@ let lift_all ?backend ?min_addr arch string_mem =
 
 
 let lift_sheered ?backend ?min_addr arch string_mem =
-  let addr_size= Size.to_bits @@ Arch.addr_size arch in
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let min_addr =
     Option.value min_addr ~default:(Addr.of_int addr_size 0) in
   let gmem = (create_memory arch string_mem min_addr) in
@@ -40,4 +40,3 @@ let lift_sheered ?backend ?min_addr arch string_mem =
       ?backend arch gmem in
   Memmap.map shingles ~f:(fun insn ->
       Insn.(bil insn))
-    
