@@ -36,7 +36,7 @@ module Program(Conf : Options.Provider) = struct
 
   let run project =
     let library = options.load_path in
-    let project = options.plugins |> List.fold ~init:project
+    let project = options.passes |> List.fold ~init:project
                     ~f:(Project.run_pass_exn ~library) in
     Option.iter options.emit_ida_script (fun dst ->
         Out_channel.write_all dst
@@ -178,11 +178,77 @@ let start options =
     end) in
   Program.main ()
 
+let program =
+  let doc = "Binary Analysis Platform" in
+  let man = [
+    `S "DESCRIPTION";
+    `P "A frontend to the Binary Analysis Platfrom library.
+      The tool allows you to inspect binary programs by printing them
+      in different representations including assembly, BIL, BIR,
+      XML, HTML, JSON, Graphviz dot graphs and so on.";
+    `P "The tool is extensible via a plugin system. There're several
+       extension points, that allows you:";
+    `Pre "
+      - write your own analysis;
+      - add new serialization formats;
+      - adjust printing formats;
+      - add new program loaders (i.e. to handle new file formats);
+      - provide your own disassembler.";
+    `P "The following example shows how to write a simple analysis
+  plugin (called a pass in our parlance)";
+    `Pre "
+      $(b,\\$ cat) mycode.ml
+      open Bap.Std
+      let main project = print_endline \"Hello, World\"
+      let () = Project.register_pass' \"hello\" main";
+    `P "Building is easy with our $(b,bapbuild) tool:";
+    `Pre "
+      $(b, \\$ bapbuild) mycode.plugin";
+    `P "And to load into bap:";
+    `Pre ("
+      $(b, \\$ bap) /bin/ls -lmycode --hello");
+    `P "User plugins have access to all the program state, and can
+    change it and communicate with other plugins, or just store their
+    results in whatever place you like.";
+    `I ("Note:", "The $(b,bapbuild) tool is just an $(b,ocamlbuild)
+    extended with our rules. It is not needed to build your standalone
+    applications, or to build BAP itself.");
+    `P "$(mname) also can integrate with IDA. It can sync names with
+    IDA, and emit idapython scripts, based on the analysis";
+    `S "BUGS";
+    `P "Report bugs to \
+        https://github.com/BinaryAnalysisPlatform/bap/issues";
+    `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
+  ] in
+
+  let create
+      a b c d e f g h i j k l m n o p q r s t u v x y =
+    Options.Fields.create
+      a b c d e f g h i j k l m n o p q r s t u v x y [] in
+  let open Bap_cmdline_terms in
+  let open Cmdliner in
+
+  Term.(pure create
+        $filename $loader $symsfile $cfg_format
+        $output_phoenix $output_dump $dump_symbols $demangle
+        $no_resolve $keep_alive
+        $no_inline $keep_consts $no_optimizations
+        $binaryarch $verbose $bw_disable $bw_length $bw_threshold
+        $print_symbols $use_ida $sigsfile
+        $emit_ida_script $load_path $emit_attr),
+  Term.info "bap" ~version:Config.pkg_version ~doc ~man
+
+let parse () =
+  let argv,passes = Bap_plugin_loader.run_and_get_passes Sys.argv in
+  match Cmdliner.Term.eval ~argv ~catch:false program with
+  | `Ok opts -> Ok { opts with Options.passes }
+  | _ -> Or_error.errorf "nothing to do"
+
 let () =
   at_exit (pp_print_flush err_formatter);
   Printexc.record_backtrace true;
   Plugins.load ();
-  match try_with_join (fun () -> Cmdline.parse () >>= start) with
+  match try_with_join (fun () -> parse () >>= start) with
   | Ok n -> exit n
   | Error err -> eprintf "Exiting because %a.@." Error.pp err;
     exit 1
