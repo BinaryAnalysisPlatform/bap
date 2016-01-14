@@ -278,8 +278,8 @@ module Cmdline = struct
   let exitf n =
     kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
 
-  let parse () =
-    match Term.eval program ~catch:false with
+  let parse argv =
+    match Term.eval ~argv program ~catch:false with
     | `Ok opts -> Ok opts
     | `Error `Parse -> exit 64
     | `Error _ -> exit 2
@@ -297,7 +297,8 @@ let start options =
 
 let _main : unit =
   Plugins.load ();
-  try match Cmdline.parse () >>= start with
+  let argv = Bap_plugin_loader.run Sys.argv in
+  try match Cmdline.parse argv >>= start with
     | Ok _ -> exit 0
     | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
   with
