@@ -23,7 +23,6 @@ B _build/lib/bap_image
 B _build/lib/bap_sema
 B _build/lib/bap_trace
 B _build/lib/bap_types
-B _build/lwt
 B _build/piqi
 
 S lib/bap
