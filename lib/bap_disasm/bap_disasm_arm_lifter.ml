@@ -278,9 +278,9 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
   (* bit reverse *)
   | `RBIT, [|dest; src; cond; _|] ->
     let dest = assert_reg _here_ dest in
-    let v = Env.new_tmp "v"  in
-    let r = Env.new_tmp "r"  in
-    let s = Env.new_tmp "s"  in
+    let v = tmp ~name:"v" reg32_t in
+    let r = tmp ~name:"r" reg32_t in
+    let s = tmp ~name:"s" reg32_t in
     exec Bil.([
         v := exp_of_op src lsr int32 1;
         r := exp_of_op src;
@@ -296,7 +296,7 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
 
   (* Swap bytes *)
   | `SWPB, [|Reg dest; Reg src1; Reg src2; cond; _|] ->
-    let temp = Var.create ~tmp:true "x" reg8_t in
+    let temp = tmp reg8_t in
     let dest = Env.of_reg dest in
     let src1 = Env.of_reg src1 |> Bil.var in
     let src2 = Env.of_reg src2 |> Bil.var in
@@ -339,8 +339,8 @@ let lift_bits mem ops (insn : Arm.Insn.bits ) =
     let rev = Bil.(s lsl i16 lor s lsr i16) in
     exec [assn (Env.of_reg dest) rev] cond
   | `CLZ, [|Reg dest; src; cond; _|] ->
-    let shift = Env.new_tmp "shift" in
-    let accum = Env.new_tmp "accum" in
+    let shift = tmp ~name:"shift" reg32_t in
+    let accum = tmp ~name:"accum" reg32_t in
     Bil.(exec [
         shift := exp_of_op src;
         accum := int32 32;

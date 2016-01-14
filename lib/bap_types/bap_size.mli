@@ -36,7 +36,7 @@ val word_of_addr_size : addr_size -> Word_size.t
 val to_addr_size : size -> addr_size Or_error.t
 
 (** [to_bits size] returns the number of bits. *)
-val to_bits  : 'a Size.p -> int
-val to_bytes : 'a Size.p -> int
+val in_bits  : 'a Size.p -> int
+val in_bytes : 'a Size.p -> int
 
 include Regular with type t := size

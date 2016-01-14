@@ -1,4 +1,6 @@
 open Core_kernel.Std
+open Bap_data_types
+open Bap_data_intf
 
 module type Printable = sig
   type t
@@ -15,11 +17,13 @@ module type S = sig
   include Printable            with type t := t
   include Comparable.S_binable with type t := t
   include Hashable.S_binable   with type t := t
+  include Data with type t := t
 end
 
 module Make(M : sig
     type t with bin_io, sexp, compare
     include Pretty_printer.S with type t := t
+    include Versioned with type t := t
     val hash : t -> int
     val module_name : string option
   end ) : S with type t := M.t

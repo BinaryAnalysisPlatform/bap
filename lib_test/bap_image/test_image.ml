@@ -102,7 +102,7 @@ let to_list ~word_size backend ~expect ctxt =
     assert_bool "to_list: no warning" (warns = []);
     Table.to_sequence (Image.words img word_size) |>
     Seq.map ~f:snd |>  Seq.to_list in
-  let width = Size.to_bits word_size in
+  let width = Size.in_bits word_size in
   let expect = List.map expect ~f:(Addr.of_int64 ~width) in
   assert_equal ~ctxt ~printer:print_list (Ok expect) r
 
@@ -122,7 +122,7 @@ let list_of_memory ?word_size m : (addr * word) list =
       (addr,word) :: acc ) |> List.rev
 
 let assert_cont ~word_size img =
-  let step = Size.to_bytes word_size in
+  let step = Size.in_bytes word_size in
   let words = Image.words img word_size in
   let base = match Table.min words with
     | Some (mem,_) -> Memory.min_addr mem

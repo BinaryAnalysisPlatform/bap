@@ -14,7 +14,7 @@ module Env = Bap_disasm_arm_env
 (* Single-register memory access *)
 let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
     ~(offset : exp) mode sign size operation =
-  let o_base   = Env.new_tmp "base" in
+  let o_base = tmp reg32_t in
   (* If this load is a jump (only valid for 4-byte load)
    * We need to do the write_back before the load so we
    * Use the originals
@@ -53,7 +53,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
   let load  m n   = Bil.(load  m n LittleEndian typ) in
 
   let temp = match size with
-    | B | H -> Env.new_tmp "t"
+    | B | H -> tmp reg32_t
     | _ -> dst1 in
 
   let four = Bil.int (Word.of_int 4 ~width:32) in
@@ -104,7 +104,7 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
     ]
 
 let lift_m dest_list base mode update operation =
-  let o_base = Env.new_tmp "base" in
+  let o_base = tmp reg32_t in
   let calc_offset ith = match mode with
     | IB ->  4 * (ith + 1)
     | DB -> -4 * (ith + 1)

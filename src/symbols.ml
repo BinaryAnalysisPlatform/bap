@@ -53,7 +53,7 @@ let demangle ?tool name =
 let read arch ic : (string * addr * addr) list =
   let sym_of_sexp x = <:of_sexp<string * int64 * int64>> x in
   let addr_of_int64 x =
-    let width = Arch.addr_size arch |> Size.to_bits in
+    let width = Arch.addr_size arch |> Size.in_bits in
     Addr.of_int64 ~width x in
   List.(Sexp.input_sexps ic >>| sym_of_sexp >>| (fun (s, es, ef) ->
       s, addr_of_int64 es, addr_of_int64 ef))

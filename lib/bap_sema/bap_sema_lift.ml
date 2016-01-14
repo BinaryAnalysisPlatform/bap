@@ -41,7 +41,7 @@ let has_side_effect e scope = (object inherit [bool] Bil.visitor
   method! enter_var v r = r || Bil.is_assigned v scope
 end)#visit_exp e false
 
-(** This optimization will inline temporary variables that occurrs
+(** This optimization will inline virtual variables that occurs
     inside the instruction definition if the right hand side of the
     variable definition is either side-effect free, or another
     variable, that is not changed in the scope of the variable definition. *)
@@ -49,21 +49,23 @@ let inline_variables stmt =
   let rec loop ss = function
     | [] -> List.rev ss
     | Bil.Move _ as s :: [] -> loop (s::ss) []
-    | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_tmp x ->
+    | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_virtual x ->
       if Bil.is_assigned y xs || Bil.is_assigned x xs
       then loop (s::ss) xs else
         let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
         loop ss xs
-    | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
+    | Bil.Move (x, y) as s :: xs when Var.is_virtual x ->
       if has_side_effect y xs || Bil.is_assigned x xs
       then loop (s::ss) xs
       else loop ss (Bil.substitute (Bil.var x) y xs)
     | s :: xs -> loop (s::ss) xs in
   loop [] stmt
 
+let prune x = Bil.prune_unreferenced ~virtuals:true x
+
 let optimize =
   List.map ~f:Bil.fixpoint [
-    Bil.prune_unreferenced;
+    prune;
     Bil.fold_consts;
     Bil.normalize_negatives;
     inline_variables;

@@ -2,6 +2,9 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_arm_types
 
+
+val tmp : ?name:string -> typ -> var
+
 val assn : var -> exp -> stmt
 
 val fail : Source_code_position.t -> ('a,unit,string,'b) format4 -> 'a

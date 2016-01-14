@@ -186,6 +186,7 @@ module Make(Node : Opaque)(Label : T) = struct
   include Printable(struct
       type nonrec t = t
       let module_name = None
+
       let pp ppf graph =
         let open Bap_graph_pp in
         let string_of_node =
@@ -261,6 +262,7 @@ end
 module Aux(P : Pp) = struct
   open Bap_graph
   let make_name name = Some (P.module_name^"."^name)
+
 
   module Tree = struct
     type t = P.t tree
@@ -401,24 +403,25 @@ module Make_factory(P : Product) = struct
 end
 
 module Named(T : sig
-    type t
+    type t with bin_io, compare, sexp
     val name : string
+    val hash : t -> int
     val pp : Format.formatter -> t -> unit
-    include Opaque with type t := t
   end) = struct
-  let module_name = "Bap.Std.Graphlib."^T.name
   include T
+  let module_name = "Bap.Std.Graphlib."^T.name
+  include Opaque.Make(T)
 end
 
-module PInt = Named(struct include Int let name = "Int" end)
 module PValue = Named(struct include Bap_value let name = "Value" end)
-module PString = Named(struct include String let name = "String" end)
 module PWord = Named(struct include Bitvector let name = "Word" end)
 module PVar = Named(struct include Bap_var let name = "Var" end)
 module PExp = Named(struct type t = exp include Bap_exp let name = "Exp" end)
 module PStmt = Named(struct type t = stmt include Bap_stmt let name = "Stmt" end)
 module PTid = Named(struct include Bap_ir.Tid let name = "Tid" end)
 module PType = Named(struct type t = typ include Bap_type let name = "Type" end)
+module PInt = Named(struct include Int let name = "Int" end)
+module PString = Named(struct include String let name = "String" end)
 
 module Int = Make_factory(PInt)
 module Value = Make_factory(PValue)

@@ -71,7 +71,7 @@ module Make(Env : sig
     method! enter_var v r = r || Bil.is_assigned v scope
   end)#visit_exp e false
 
-  (** This optimization will inline temporary variables that occurres
+  (** This optimization will inline virtual variables that occurres
       inside the instruction definition if the right hand side of the
       variable definition is either side-effect free, or another
       variable, that is not changed in the scope of the variable definition. *)
@@ -79,12 +79,12 @@ module Make(Env : sig
     let rec loop ss = function
       | [] -> List.rev ss
       | Bil.Move _ as s :: [] -> loop (s::ss) []
-      | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_tmp x ->
+      | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_virtual x ->
         if Bil.is_assigned y xs || Bil.is_assigned x xs
         then loop (s::ss) xs else
           let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
           loop ss xs
-      | Bil.Move (x, y) as s :: xs when Var.is_tmp x ->
+      | Bil.Move (x, y) as s :: xs when Var.is_virtual x ->
         if has_side_effect y xs || Bil.is_assigned x xs
         then loop (s::ss) xs
         else loop ss (Bil.substitute (Bil.var x) y xs)
@@ -94,12 +94,14 @@ module Make(Env : sig
   let disable_if option optimization =
     if Field.get option options then Fn.id else optimization
 
+  let prune x = Bil.prune_unreferenced ~virtuals:true x
+
   let optimizations (mem,bil) =
     let open Fields in
     List.map ~f:Bil.fixpoint [
       disable_if no_resolve       resolve_indirects;
       disable_if no_resolve       resolve_to_symbols;
-      disable_if keep_alive       Bil.prune_unreferenced;
+      disable_if keep_alive       prune;
       disable_if keep_consts      Bil.fold_consts;
       disable_if keep_consts      Bil.normalize_negatives;
       disable_if keep_consts      (resolve_pc mem);

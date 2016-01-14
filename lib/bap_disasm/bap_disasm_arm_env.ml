@@ -86,5 +86,4 @@ let of_reg : Arm.Reg.t -> var = function
 
 
 let new_var name = Var.create name reg32_t
-let new_tmp name = Var.create ~tmp:true name reg32_t
 let mem = Var.create "mem" (mem32_t `r32)

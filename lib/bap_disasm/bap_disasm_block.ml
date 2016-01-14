@@ -23,7 +23,8 @@ module Block = struct
 end
 
 
-module Graph = Bap_graph_regular.Make(Block)(struct type t = edge end)
+module Graph =
+  Bap_graph_regular.Make(Block)(struct type t = edge end)
 
 module Vis = Addr.Hash_set
 
@@ -44,7 +45,7 @@ let to_graph ?bound entry =
             | `Unresolved _ -> gr
             | `Block (dst,(`Cond|`Jump))
               when not (bounded bound (Block.addr dst))
-                   || Insn.is_call (Block.terminator src) -> gr
+                || Insn.is_call (Block.terminator src) -> gr
             | `Block (dst,kind) ->
               Hash_set.add vis (Block.addr src);
               let edge = Graph.Edge.create src dst kind in

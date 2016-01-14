@@ -22,8 +22,9 @@ module Std = struct
     include Bap_trie
   end
 
-  module type Regular = Regular
+  include Bap_data_intf
   module type Opaque = Opaque
+  module type Regular = Regular
   module type Integer = Integer
   module type Printable = Printable
   module type Trie = Trie
@@ -31,6 +32,15 @@ module Std = struct
   module Monad = struct
     include Bap_monad
     include Bap_monad_types
+  end
+
+  module Data = struct
+    include Bap_data_intf
+    include Bap_data_types
+    include Bap_data
+    module type S = Data
+    module Write = Bap_data_write
+    module Read = Bap_data_read
   end
 
   (** Target architecture. *)
@@ -63,6 +73,7 @@ module Std = struct
   module Bil = struct
     type t = Bap_bil.bil with bin_io, compare, sexp
     include (Bap_stmt.Stmts_pp : Printable with type t := t)
+    include (Bap_stmt.Stmts_data : Data with type t := t)
     module Types = struct
       include Bap_bil.Cast
       include Bap_bil.Binop

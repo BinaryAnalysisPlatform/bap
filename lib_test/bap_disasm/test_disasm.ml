@@ -381,7 +381,7 @@ let create_memory arch s addr =
 let make_params bytes =
   let open Or_error in
   let arch = Arch.(`x86) in
-  let addr_size= Size.to_bits @@ Arch.addr_size arch in
+  let addr_size= Size.in_bits @@ Arch.addr_size arch in
   let min_addr = Addr.of_int addr_size 0 in
   let memory = create_memory arch bytes min_addr in
   let dis = Dis.create ~backend:"llvm" (Arch.to_string arch) |> ok_exn in

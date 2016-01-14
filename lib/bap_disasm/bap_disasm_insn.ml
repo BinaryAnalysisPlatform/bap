@@ -95,6 +95,7 @@ module Adt = struct
   let pp ch insn = pr ch "%s(%a)"
       (String.capitalize insn.name)
       pp_ops (Array.to_list insn.ops)
+
 end
 
 let pp_adt = Adt.pp
@@ -130,14 +131,22 @@ include Regular.Make(struct
     type nonrec t = t with sexp, bin_io, compare
     let hash = code
     let module_name = Some "Bap.Std.Insn"
+    let version = "0.1"
 
     let string_of_ops ops =
       Array.map ops ~f:Op.to_string |> Array.to_list |>
       String.concat ~sep:","
 
     let pp fmt insn =
-      let open Format in
-      pp_print_string fmt insn.asm;
-      pp_print_tbreak fmt 0 10;
-      Format.fprintf fmt "; %s(%s)" insn.name (string_of_ops insn.ops)
+      Format.fprintf fmt "%s(%s)" insn.name (string_of_ops insn.ops)
   end)
+
+let pp_asm ppf insn =
+  Format.fprintf ppf "%s" (asm insn)
+
+let () =
+  Data.Write.create ~pp:Adt.pp () |>
+  add_writer ~desc:"Abstract Data Type pretty printing format"
+    ~ver:version "adt";
+  Data.Write.create ~pp:pp_asm () |>
+  add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm"

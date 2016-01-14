@@ -481,6 +481,14 @@ module Block = struct
     | `Unresolved k1 , `Unresolved k2 ->
       Polymorphic_compare.compare k1 k2
 
+
+  module T = struct
+    type t = block with sexp_of
+    let t_of_sexp _ = invalid_arg "table element is abstract"
+    let compare = compare
+    let hash b = Addr.hash (addr b)
+  end
+  include Opaque.Make(T)
   include Printable(struct
       type t = block
       let module_name = Some "Bap.Std.Disasm_expert.Recursive.Block"
@@ -489,16 +497,6 @@ module Block = struct
           Addr.(string_of_value addr)
           Addr.(string_of_value (Memory.max_addr mem))
     end)
-
-  module T = struct
-    type t = block with sexp_of
-    let t_of_sexp _ = invalid_arg "table element is abstract"
-    let compare = compare
-    let hash b = Addr.hash (addr b)
-  end
-
-  include Hashable.Make(T)
-  include Comparable.Make(T)
 end
 
 let stage3 s2 =

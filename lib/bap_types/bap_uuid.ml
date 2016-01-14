@@ -31,6 +31,8 @@ include Regular.Make(struct
     include Stringable
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Uuid"
+    let version = "0.1"
+
     let pp ppf t = Uuidm.print ppf t
   end)
 

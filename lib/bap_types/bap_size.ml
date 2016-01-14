@@ -3,7 +3,7 @@ open Or_error
 
 open Bap_common
 
-let to_bits : 'a -> int = function
+let in_bits : 'a -> int = function
   | `r8   -> 8
   | `r16  -> 16
   | `r32  -> 32
@@ -11,7 +11,7 @@ let to_bits : 'a -> int = function
   | `r128  -> 128
   | `r256  -> 256
 
-let to_bytes x = to_bits x / 8
+let in_bytes x = in_bits x / 8
 
 let of_int : int -> size Or_error.t = function
   | 8   -> Ok `r8
@@ -39,7 +39,7 @@ let of_addr_size (x : addr_size) : size = (x :> size)
 let to_addr_size (x : size) : addr_size Or_error.t =
   match x with
   | `r32 | `r64 as x -> Ok x
-  | n -> errorf "unsupported address size: %d" (to_bits n)
+  | n -> errorf "unsupported address size: %d" (in_bits n)
 
 let addr_of_int : int -> addr_size Or_error.t = function
   | 32 -> Ok `r32
@@ -57,11 +57,11 @@ module T = struct
 
   type t = size with bin_io, compare, sexp
   let module_name = Some "Bap.Std.Size"
-
+  let version = "0.1"
   let pp fmt n =
-    fprintf fmt "u%u" (to_bits n)
+    fprintf fmt "u%u" (in_bits n)
 
-  let hash = to_bytes
+  let hash = in_bytes
 end
 
 include Regular.Make(T)

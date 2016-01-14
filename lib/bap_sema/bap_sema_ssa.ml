@@ -109,7 +109,7 @@ let rename t =
         | None -> Some 1
         | Some x -> Some (x + 1));
     let n = Hashtbl.find_exn nums x in
-    let y = Var.renumber x n in
+    let y = Var.with_index x n in
     Hashtbl.add_multi vars ~key:x ~data:y;
     y in
   let rename_phis blk =

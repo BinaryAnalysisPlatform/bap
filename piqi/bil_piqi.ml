@@ -5,8 +5,7 @@ open Bil.Types
 module P = Stmt_piqi
 open Type
 
-let casttype_to_piqi : 'a -> Stmt_piqi.cast_type =
-  function
+let casttype_to_piqi = function
   | UNSIGNED -> `cast_unsigned
   | SIGNED -> `cast_signed
   | HIGH -> `cast_high
@@ -78,20 +77,17 @@ let rec type_of_piqi = function
 
 
 let var_to_piqi v =
-  let (name,id,typ,tmp) = Var.V1.serialize v in
   let module P = Stmt_piqi in {
-    P.Var.name = name;
-    P.Var.id  = id;
-    P.Var.typ = type_to_piqi typ;
-    P.Var.tmp = tmp;
+    P.Var.name = Var.name v;
+    P.Var.id  = Var.index v;
+    P.Var.typ = type_to_piqi (Var.typ v);
+    P.Var.tmp = Var.is_virtual v;
   }
 
-let var_of_piqi p =
+let var_of_piqi { P.Var.name; id; typ; tmp} =
   let module P = Stmt_piqi in
-  Var.V1.deserialize (p.P.Var.name,
-                      p.P.Var.id,
-                      type_of_piqi p.P.Var.typ,
-                      p.P.Var.tmp)
+  let v = Var.create ~is_virtual:tmp name (type_of_piqi typ) in
+  Var.with_index v id
 
 let endianness_to_piqi : endian -> Stmt_piqi.endian = function
   | LittleEndian -> `little_endian
@@ -248,21 +244,11 @@ and stmts_of_piqi l = List.map ~f:stmt_of_piqi l
 
 open Stmt_piqi_ext
 
-let to_pb p   = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `pb
-let to_json p = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `json_pretty
-let to_xml p  = Stmt_piqi_ext.gen_stmt (stmt_to_piqi p) `xml_pretty
-
-let pb_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `pb
-let json_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `json_pretty
-let xml_of_stmts p = Stmt_piqi_ext.gen_stmt_list (stmts_to_piqi p) `
-    xml_pretty
-
-type fmt = [ `json | `pb | `piq | `pib | `xml ]
+type fmt = [ `json | `pb | `piq | `pib | `xml ] with sexp, enumerate
 type out_fmt = [fmt | `json_pretty | `xml_pretty]
 
 let loads f g fmt s = f (g s fmt)
 let dumps g f fmt x = f (g x) (fmt : fmt :> out_fmt)
-
 
 let bil_of_string  = loads stmts_of_piqi parse_stmt_list
 let stmt_of_string = loads stmt_of_piqi parse_stmt
@@ -272,3 +258,24 @@ let string_of_stmt = dumps stmt_to_piqi gen_stmt
 let string_of_exp  = dumps exp_to_piqi gen_expr
 let piqi_of_exp = exp_to_piqi
 let piqi_of_var = var_to_piqi
+
+
+let writer f fmt =
+  Data.Write.create ~to_bytes:(f fmt) ()
+
+let reader f fmt =
+  Data.Read.create ~of_bytes:(f fmt) ()
+
+
+let ver = "0.1"
+let desc = "Piqi generated serializer"
+
+let () =
+  List.iter all_of_fmt ~f:(fun fmt ->
+      let name = Sexp.to_string (sexp_of_fmt fmt) in
+      Stmt.add_reader ~desc ~ver name (reader stmt_of_string fmt);
+      Stmt.add_writer ~desc ~ver name (writer string_of_stmt fmt);
+      Exp.add_reader ~desc ~ver name (reader exp_of_string fmt);
+      Exp.add_writer ~desc ~ver name (writer string_of_exp fmt);
+      Bil.add_reader ~desc ~ver name (reader bil_of_string fmt);
+      Bil.add_writer ~desc ~ver name (writer string_of_bil fmt))

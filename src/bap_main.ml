@@ -160,7 +160,7 @@ module Program(Conf : Options.Provider) = struct
     | Some s -> match Arch.of_string s with
       | None -> eprintf "unrecognized architecture\n"; return 1
       | Some arch ->
-        let width_of_arch = arch |> Arch.addr_size |> Size.to_bits in
+        let width_of_arch = arch |> Arch.addr_size |> Size.in_bits in
         let addr = Addr.of_int 0 ~width:width_of_arch in
         let symbols = symbols arch in
         let name = Map.find symbols in

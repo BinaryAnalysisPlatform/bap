@@ -10,7 +10,7 @@ let (++) = Set.union and (--) = Set.diff
 let blk = G.Node.label
 
 let ssa_free_vars sub =
-  let is_undefined v = Var.version v = 0 in
+  let is_undefined v = Var.index v = 0 in
   Term.enum blk_t sub |> Seq.fold ~init:Var.Set.empty ~f:(fun vars blk ->
       vars ++ Set.filter (Ir_blk.free_vars blk) ~f:is_undefined)
 
