@@ -3,6 +3,7 @@ open Core_kernel.Std
 open Bap_common
 open Bap_bil
 open Bap_visitor
+open Bap_result
 
 val find : 'a #finder -> bil -> 'a option
 val exists : unit #finder -> bil -> bool
@@ -11,20 +12,13 @@ val fold : 'a #visitor -> init:'a -> bil -> 'a
 val map : #mapper -> bil -> bil
 
 class rewriter : exp -> exp -> mapper
-
-(** [is_referenced x p] is [true] if [x] is referenced in some expression or
-    statement in program [p] *)
 val is_referenced : var -> bil -> bool
-
-(** [is_assigned x p] is [true] if there exists such [Move]
-    statement, that [x] occures on the left side of it. If [strict]
-    is true, then only unconditional assignments. By default,
-    [strict] is [false] *)
 val is_assigned : ?strict:bool -> var -> bil -> bool
-
-val prune_unreferenced : bil -> bil
-
-(** [normalize_negatives p] transform [x + y] to [x - abs(y)] if [y < 0] *)
+val prune_unreferenced :
+  ?such_that:(var -> bool) ->
+  ?physicals:bool ->
+  ?virtuals:bool ->
+  bil -> bil
 val normalize_negatives : bil -> bil
 
 (** [substitute x y p] substitutes each occurrence of expression [x] by
@@ -54,6 +48,7 @@ class constant_folder : mapper
     cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
+
 module Exp : sig
   val fold : 'a #visitor -> init:'a -> exp -> 'a
   val iter : unit #visitor -> exp -> unit
@@ -66,6 +61,7 @@ module Exp : sig
   val fold_consts : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
   val free_vars : exp -> Bap_var.Set.t
+  val eval : exp -> value
 end
 
 module Stmt : sig
@@ -77,6 +73,7 @@ module Stmt : sig
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
+  val eval : stmt list -> (#Bap_bili.context as 'a) -> 'a
 end
 
 (** Bil provides two prefix tries trees.

@@ -39,7 +39,7 @@ let tag = Value.Tag.register (module String)
     ~name:"test"
     ~uuid:"6b3dab52-f3f5-493d-9db7-ad3eed33add8"
 
-let addr_width case = Arch.addr_size case.arch |> Size.to_bits
+let addr_width case = Arch.addr_size case.arch |> Size.in_bits
 
 let test_substitute case : test list =
   let sub_name = Format.asprintf "test_%a" Arch.pp case.arch in

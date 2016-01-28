@@ -1,2 +1,4 @@
 REC
 PKG cmdliner
+S .
+B ../_build/src

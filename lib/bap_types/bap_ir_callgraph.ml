@@ -30,11 +30,13 @@ include Graph.Aux(struct
     type t = node
     let pp = Tid.pp
     let module_name = "Bap.Std.Graphlib.Callgraph"
+    let version = "0.1"
   end)
 
 include Printable(struct
     type t = G.t
     let module_name = Some "Bap.Std.Graphlib.Callgraph"
+    let version = "0.1"
 
     let pp ppf g =
       Dot.pp_graph

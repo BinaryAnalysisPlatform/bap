@@ -228,6 +228,7 @@ module Disasm = struct
       type t = error
 
       let module_name = Some "Bap.Std.Disasm.Error"
+      let version = "0.1"
 
       let pp fmt t : unit =
         match t with

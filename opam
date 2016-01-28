@@ -25,7 +25,6 @@ install: [
 
 remove: [
   ["ocamlfind" "remove" "bap"]
-  ["ocamlfind" "remove" "core_lwt"]
   ["rm" "-rf" "%{prefix}%/share/bap"]
   ["rm" "-f" "%{man}%/man1/bap-mc.1"]
   ["rm" "-f" "%{man}%/man1/bap.1"]
@@ -33,7 +32,6 @@ remove: [
   ["rm" "-f" "%{bin}%/bap-mc"]
   ["rm" "-f" "%{bin}%/bap"]
   ["rm" "-f" "%{bin}%/bap-byteweight"]
-  ["rm" "-f" "%{bin}%/bap-server"]
   ["rm" "-f" "%{bin}%/bapbuild"]
   ["rm" "-f" "%{bin}%/baptop"]
 ]
@@ -43,12 +41,11 @@ depends: [
     "bitstring"
     "camlzip"
     "cmdliner" {>= "0.9.6"}
-    "cohttp" {>= "0.15.0"}
-    "core_kernel" {>= "111.28.0" & < "112.35.0"}
-    "ezjsonm" {>= "0.4.0"}
+    "core_kernel" {>= "112.17.0" & < "112.35.0"}
+    "ezjsonm" {>= "0.4.0" & < "0.4.1" }
     "faillib"
     "fileutils"
-    "lwt"
+    "FrontC"
     "oasis" {build & >= "0.4.0"}
     "ounit" {build}
     "ocamlgraph"

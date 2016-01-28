@@ -3,6 +3,8 @@ open Bap_types.Std
 open Bil.Types
 open Or_error
 open Image_internal_std
+open Bap_insn_aliasing
+
 module Dis = Bap_disasm_basic
 
 module Addrs = Addr.Table
@@ -183,34 +185,7 @@ type t = stage3
 let sexp_of_block (blk : block) =
   Sexp.Atom (Addr.string_of_value blk.addr)
 
-let kind_of_dests = function
-  | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall
-  | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump)
-    then `Jump
-    else `Cond
 
-let kind_of_branches t f =
-  match kind_of_dests t, kind_of_dests f with
-  | `Jump,`Jump -> `Jump
-  | `Fall,`Fall -> `Fall
-  | _         -> `Cond
-
-let fold_consts = Bil.(fixpoint fold_consts)
-
-(* [dests_of_*] return a list of jumps, without concerning about
-   fallthroughs. They're added later in [update_dests] *)
-let rec dests_of_bil bil =
-  fold_consts bil |> List.concat_map ~f:dests_of_stmt
-and dests_of_stmt = function
-  | Jmp (Int addr) -> [Some addr,`Jump]
-  | Jmp (_) -> [None, `Jump]
-  | If (_,yes,no) -> merge_branches yes no
-  | While (_,ss) -> dests_of_bil ss
-  | _ -> []
-and merge_branches yes no =
-  let x = dests_of_bil yes and y = dests_of_bil no in
-  let kind = kind_of_branches x y in
-  List.(rev_append x y >>| fun (a,_) -> a,kind)
 
 (* the following is a speculation...  *)
 let dests_of_basic s insn =
@@ -506,6 +481,14 @@ module Block = struct
     | `Unresolved k1 , `Unresolved k2 ->
       Polymorphic_compare.compare k1 k2
 
+
+  module T = struct
+    type t = block with sexp_of
+    let t_of_sexp _ = invalid_arg "table element is abstract"
+    let compare = compare
+    let hash b = Addr.hash (addr b)
+  end
+  include Opaque.Make(T)
   include Printable(struct
       type t = block
       let module_name = Some "Bap.Std.Disasm_expert.Recursive.Block"
@@ -514,16 +497,6 @@ module Block = struct
           Addr.(string_of_value addr)
           Addr.(string_of_value (Memory.max_addr mem))
     end)
-
-  module T = struct
-    type t = block with sexp_of
-    let t_of_sexp _ = invalid_arg "table element is abstract"
-    let compare = compare
-    let hash b = Addr.hash (addr b)
-  end
-
-  include Hashable.Make(T)
-  include Comparable.Make(T)
 end
 
 let stage3 s2 =

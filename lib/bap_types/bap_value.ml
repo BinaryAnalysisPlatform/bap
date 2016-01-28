@@ -11,46 +11,18 @@ module type S = sig
   val pp : Format.formatter -> t -> unit
 end
 
+
 type 'a tag = 'a Type_equal.Id.t
 type t = Univ.t
 
-module Typeid = struct
-
-  module Bin = Bin_prot.Utils.Make_binable(struct
-      module Binable = String
-      type t = Uuidm.t
-      let to_binable = Uuidm.to_bytes
-      let of_binable s = match Uuidm.of_bytes s with
-        | None -> invalid_arg "Bad UUID format"
-        | Some uuid -> uuid
-    end)
-
-  module Stringable = struct
-    type t = Uuidm.t
-    let of_string s = match Uuidm.of_string s with
-      | None -> invalid_arg "Bad UUID format"
-      | Some uuid -> uuid
-    let to_string s = Uuidm.to_string s
-  end
-
-  module Sexp = Sexpable.Of_stringable(Stringable)
-
-  include Regular.Make(struct
-      let compare = Uuidm.compare
-      include Bin
-      include Sexp
-      include Stringable
-      let hash = Hashtbl.hash
-      let module_name = Some "Bap.Std.Value.Typeid"
-      let pp ppf t = Uuidm.print ppf t
-    end)
-  include Uuidm
-  let of_string = Stringable.of_string
-  let to_string = Stringable.to_string
+module type Tag = sig
+  type t
+  val tag : t tag
 end
 
-type typeid = Typeid.t with bin_io, compare, sexp
+module Typeid = Bap_uuid
 
+type typeid = Typeid.t with bin_io, compare, sexp
 
 type type_info = {
   uuid : Typeid.t;
@@ -58,6 +30,8 @@ type type_info = {
   of_string : string -> Univ.t;
   to_string : Univ.t -> string;
   compare : Univ.t -> Univ.t -> int;
+  witness : (module S);
+  tag : (module Tag);
 }
 
 let types : type_info Type_equal.Id.Uid.Table.t  =
@@ -66,29 +40,49 @@ let types : type_info Type_equal.Id.Uid.Table.t  =
 let info_of_uuid uuid =
   Hashtbl.to_alist types |> List.find ~f:(fun (k,i) -> i.uuid = uuid)
 
+let unpack_tag (type a) (module T : Tag with type t = a) = T.tag
+
+external unsafe_cast : (module Tag) -> (module Tag with type t = 'a) = "%identity"
+
+let same_modules (module X : S) (module Y : S) =
+  phys_same X.compare Y.compare
+
+let tag_of_info (type a) (module S : S with type t = a) info
+  : a tag option =
+  if same_modules info.witness (module S)
+  then Some (unpack_tag (unsafe_cast info.tag))
+  else None
+
 let register (type a) ~name ~uuid
     (typ : (module S with type t = a)) : a tag =
   let module S = (val typ) in
-  if info_of_uuid uuid <> None then
-    invalid_argf "UUID %s is already in use" (Uuidm.to_string uuid) ();
-  let tag = Type_equal.Id.create name S.sexp_of_t in
-  let pp ppf univ = S.pp ppf (Univ.match_exn univ tag) in
-  let of_string str =
-    Univ.create tag (Binable.of_string (module S) str) in
-  let to_string x =
-    Binable.to_string (module S) (Univ.match_exn x tag) in
-  let compare x y = match Univ.match_ x tag, Univ.match_ y tag with
-    | Some x, Some y -> S.compare x y
-    | _,_ -> Type_equal.Id.Uid.compare
-               (Univ.type_id_uid x) (Univ.type_id_uid y) in
-  let info = {
-    uuid; pp;
-    of_string;
-    to_string;
-    compare;
-  } in
-  Hashtbl.add_exn types ~key:(Type_equal.Id.uid tag) ~data:info;
-  tag
+  match info_of_uuid uuid with
+  | None ->
+    let tag = Type_equal.Id.create name S.sexp_of_t in
+    let pp ppf univ = S.pp ppf (Univ.match_exn univ tag) in
+    let of_string str =
+      Univ.create tag (Binable.of_string (module S) str) in
+    let to_string x =
+      Binable.to_string (module S) (Univ.match_exn x tag) in
+    let compare x y = match Univ.match_ x tag, Univ.match_ y tag with
+      | Some x, Some y -> S.compare x y
+      | _,_ -> Type_equal.Id.Uid.compare
+                 (Univ.type_id_uid x) (Univ.type_id_uid y) in
+    let info = {
+      uuid; pp;
+      of_string;
+      to_string;
+      compare;
+      witness = (module S);
+      tag = (module (struct type t = a let tag = tag end));
+    } in
+    Hashtbl.add_exn types ~key:(Type_equal.Id.uid tag) ~data:info;
+    tag
+  | Some (_,info) -> match tag_of_info typ info with
+    | None ->
+      invalid_argf "UUID %s is already in use" (Typeid.to_string uuid) ()
+    | Some tag -> tag
+
 
 module Nil = struct
   type t = Typeid.t * string with sexp_of
@@ -222,6 +216,8 @@ module Dict = struct
     | Some data -> set t key data
     | None -> if Option.is_none orig then t else remove t key
 
+  let all_pairs t : (typeid * value) Sequence.t =
+    Map.to_sequence t
   let data t : value Sequence.t =
     Map.to_sequence t |> Sequence.map ~f:snd
 end
@@ -236,4 +232,6 @@ include Regular.Make(struct
       | Some t -> t.pp ppf v
       | None -> Format.fprintf ppf "<poly>"
     let module_name = Some "Bap.Std.Value"
+    let version = "0.1"
+
   end)

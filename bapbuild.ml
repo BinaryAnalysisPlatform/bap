@@ -7,6 +7,10 @@ let syntax_packages = List.map [
     "comparelib";
     "fieldslib";
     "variantslib";
+    "bin_prot";
+    "enumerate";
+    "herelib";
+    "pa_ounit";
   ] ~f:(fun pkg -> pkg ^ "." ^ "syntax")
 
 let default_pkgs = ["bap"; "bap.plugins"; "core_kernel"]
@@ -17,11 +21,25 @@ let default_pkgs = ["bap"; "bap.plugins"; "core_kernel"]
    hardcode the dependencies here.
 *)
 let bap_packages = [
-  "ocamlgraph";
-  "ezjsonm";
+  "bitstring";
+  "camlp4";
   "cmdliner";
+  "core_kernel";
+  "curl";
+  "dynlink";
+  "ezjsonm";
+  "ezjsonm";
   "fileutils";
+  "fileutils.str";
+  "findlib";
+  "ocamlgraph";
+  "ocamlgraph";
+  "re";
   "re.posix";
+  "uri";
+  "uuidm";
+  "zarith";
+  "FrontC";
 ]
 
 let packages = default_pkgs @ syntax_packages @ bap_packages

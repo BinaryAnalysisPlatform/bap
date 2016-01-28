@@ -32,6 +32,4 @@ val of_reg : reg -> var
 
 val new_var : string -> var
 
-val new_tmp : string -> var
-
 val mem : var

@@ -67,7 +67,8 @@ val register_pass_with_args : (string array -> t -> t) register
 val register_pass_with_args' : (string array -> t -> unit) register
 
 val passes : ?library:string list -> unit -> string list Or_error.t
-val run_passes : ?library:string list -> ?argv:string array -> t -> t Or_error.t
-
+val run_pass :
+  ?library:string list -> ?argv:string array -> t -> string -> t Or_error.t
 val passes_exn : ?library:string list -> unit -> string list
-val run_passes_exn : ?library:string list -> ?argv:string array -> t -> t
+val run_pass_exn : ?library:string list -> ?argv:string array -> t ->
+  string -> t

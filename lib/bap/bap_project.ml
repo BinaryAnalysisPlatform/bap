@@ -41,7 +41,7 @@ let from_mem ?name ?roots arch mem : t Or_error.t =
   Ok ({arch; disasm; memory; storage; program; symbols})
 
 let null arch : addr =
-  Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.to_bits)
+  Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
 
 let from_bigstring ?base ?name ?roots arch big : t Or_error.t =
   let base = Option.value base ~default:(null arch) in
@@ -205,13 +205,20 @@ let register_pass ?deps n v : unit =
 let register_pass' ?deps n v : unit =
   register_pass ?deps n (fun p -> v p; p)
 
+
 let prepare_args argv name =
   let prefix = "--" ^ name ^ "-" in
-  Array.filter_map argv ~f:(fun arg ->
-      if arg = argv.(0) then Some name
-      else match String.chop_prefix arg ~prefix with
-        | None -> None
-        | Some arg -> Some ("--" ^ arg))
+  let is_key = String.is_prefix ~prefix:"-" in
+  Array.fold argv ~init:([],`drop) ~f:(fun (args,act) arg ->
+      let take arg = ("--" ^ arg) :: args in
+      if arg = argv.(0) then (name::args,`drop)
+      else match String.chop_prefix arg ~prefix, act with
+        | None,`take when is_key arg -> args,`drop
+        | None,`take -> arg::args,`drop
+        | None,`drop -> args,`drop
+        | Some arg,_ when String.mem arg '=' -> take arg,`drop
+        | Some arg,_ -> take arg,`take) |>
+  fst |> List.rev |> Array.of_list
 
 type error =
   | Not_loaded of string
@@ -229,7 +236,7 @@ let fail name error = plugin_failure (error name)
 let load ?library name : unit =
   match find name with
   | Some _ -> ()
-  | None -> match Plugin.create ?library ~system:"bap.pass" name with
+  | None -> match Plugin.find_plugin ?library name with
     | None -> fail name not_found
     | Some p -> match Plugin.load p with
       | Error err -> plugin_failure (load_failed name err)
@@ -263,13 +270,15 @@ let rec run ?library ?(argv=Sys.argv) (passed,proj) name =
         exn -> plugin_failure (runtime_error name exn) in
     name :: passed, proj
 
-let run_passes_exn ?library ?argv proj =
+let prepare_passes ?library ?argv () =
   let passes = DList.to_list passes |> List.map ~f:(fun p -> p.name) in
   match List.find_a_dup passes with
   | Some name -> fail name is_duplicate
-  | None ->
-    load_deps ?library ();
-    List.fold passes ~init:([],proj) ~f:(run ?library ?argv) |> snd
+  | None -> load_deps ?library ()
+
+let run_pass_exn ?library ?argv proj pass =
+  prepare_passes ?library ?argv ();
+  run ?library ?argv ([],proj) pass |> snd
 
 let make_error = function
   | Not_loaded name ->
@@ -287,8 +296,8 @@ let make_error = function
     errorf "plugin %s failed in runtime with exception %s"
       name (Exn.to_string exn)
 
-let run_passes ?library ?argv proj : t Or_error.t =
-  try Ok (run_passes_exn ?library ?argv proj) with
+let run_pass ?library ?argv proj name : t Or_error.t =
+  try Ok (run_pass_exn ?library ?argv proj name) with
   | Pass_failed error -> make_error error
   | exn -> errorf "unexpected error when running plugins: %s"
              (Exn.to_string exn)

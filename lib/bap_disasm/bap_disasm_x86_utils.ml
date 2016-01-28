@@ -4,6 +4,9 @@ open Bap_types.Std
 open Bap_disasm_x86_types
 open Bap_disasm_x86_env
 
+let tmp ?(name="v") ty =
+  Var.create ~fresh:true ~is_virtual:true name ty
+
 let index_ofq elt lst =
   match List.findi lst ~f:(fun _ e -> e = elt) with
   | None -> raise Not_found

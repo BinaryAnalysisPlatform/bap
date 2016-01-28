@@ -16,7 +16,7 @@ let pp_endian ch = function
   | LittleEndian -> pr ch "LittleEndian()"
 
 let pp_size ch size =
-  pr ch "%d" (Bap_size.to_bits size)
+  pr ch "%d" (Bap_size.in_bits size)
 
 let pp_sexp sexp ch x =
   pr ch "%a" Sexp.pp (sexp x)
@@ -53,6 +53,7 @@ module Exp = struct
     | Ite (e1,e2,e3) -> pr ch "Ite(%a,%a,%a)" pp e1 pp e2 pp e3
     | Extract (n,m,e) -> pr ch "Extract(%d,%d,%a)" n m pp e
     | Concat (e1,e2) -> pr ch "Concat(%a,%a)" pp e1 pp e2
+
 end
 
 module Stmt = struct
@@ -71,6 +72,17 @@ module Stmt = struct
     | s :: ss -> pr ch "%a, %a" pp s pps ss
 end
 
+module Bil = struct
+  let pp ppf bil = pr ppf "(%a)" Stmt.pps bil
+end
 
 let pp_stmt = Stmt.pp
 let pp_exp = Exp.pp
+
+let () =
+  let desc = "Abstract Data Type pretty printing format" in
+  let ver = Bap_exp.version and name = "adt" in
+  let create pp = Bap_data_write.create ~pp  () in
+  create Exp.pp  |> Bap_exp.add_writer ~desc ~ver name;
+  create Stmt.pp |> Bap_stmt.add_writer ~desc ~ver name;
+  create Bil.pp  |> Bap_stmt.Stmts_data.add_writer ~desc ~ver name

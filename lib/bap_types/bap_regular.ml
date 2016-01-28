@@ -1,4 +1,6 @@
 open Core_kernel.Std
+open Bap_data_types
+open Bap_data_intf
 
 module type Printable = sig
   type t
@@ -15,12 +17,13 @@ module type S = sig
   include Printable            with type t := t
   include Comparable.S_binable with type t := t
   include Hashable.S_binable   with type t := t
+  include Data with type t := t
 end
 
 module Printable(M : sig
     include Pretty_printer.S
     val module_name : string option
-  end) = struct
+  end) : Printable with type t := M.t  = struct
   include M
 
   let to_string t =
@@ -39,7 +42,6 @@ module Printable(M : sig
   let pp_seq ppf xs : unit =
     Bap_seq.pp pp ppf xs
 
-
   let () = Option.iter M.module_name
       ~f:(fun name ->
           Pretty_printer.register (name ^ ".pp");
@@ -49,11 +51,38 @@ end
 module Make(M : sig
     type t with bin_io, compare, sexp
     include Pretty_printer.S with type t := t
+    include Versioned with type t := t
     val hash: t -> int
     val module_name : string option
   end) = struct
   include M
-  include (Printable(M) : Printable with type t := t)
   include Comparable.Make_binable(M)
   include Hashable.Make_binable(M)
+
+  include struct
+    open Bap_data
+    include Make(M)
+    let bin_reader = bin_reader (module M)
+    let bin_writer = bin_writer (module M)
+    let sexp_reader = sexp_reader (module M)
+    let sexp_writer = sexp_writer (module M)
+    let printer = (Bap_data.pretty_writer (module M))
+
+    let () =
+      let ver = version in
+      add_writer ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_writer;
+      add_reader ~desc:"Janestreet Binary Protocol" ~ver "bin" bin_reader;
+      add_writer ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_writer;
+      add_reader ~desc:"Janestreet Sexp Protocol" ~ver "sexp" sexp_reader;
+      add_writer ~desc:"Pretty printer" ~ver:M.version "pretty" printer;
+      set_default_printer "pretty";
+      set_default_writer "bin";
+      set_default_reader "bin"
+  end
+
+  include Printable(struct
+      include M
+      let pp ppf x = Io.print ppf x
+    end)
+
 end

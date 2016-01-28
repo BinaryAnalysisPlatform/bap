@@ -12,6 +12,7 @@ PKG jsonm
 PKG ocamlbuild
 PKG ocamlgraph
 PKG uuidm
+PKG uri
 
 B _build
 B _build/lib/bap
@@ -20,8 +21,9 @@ B _build/lib/bap_dwarf
 B _build/lib/bap_elf
 B _build/lib/bap_image
 B _build/lib/bap_sema
+B _build/lib/bap_trace
 B _build/lib/bap_types
-B _build/lwt
+B _build/piqi
 
 S lib/bap
 S lib/bap_disasm
@@ -29,5 +31,7 @@ S lib/bap_dwarf
 S lib/bap_elf
 S lib/bap_image
 S lib/bap_sema
+S lib/bap_trace
 S lib/bap_types
+S piqi
 S lwt

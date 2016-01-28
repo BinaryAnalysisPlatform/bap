@@ -28,10 +28,8 @@ module type Block_accessors = sig
   (** [insns blk] returns a list of block instructions  *)
   val insns : t -> (mem * insn) list
 
-  include Comparable with type t := t
-  include Hashable   with type t := t
-  (** all the printing stuff, including [to_string] function *)
-  include Printable  with type t := t
+  include Opaque with type t := t
+  include Printable with type t := t
 end
 
 module type Block_traverse = sig

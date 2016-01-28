@@ -38,7 +38,7 @@ end
 class amd64_registers_only sub = object
   inherit input_register_only sub
       "amd64" ["linux"; "unknown"]
-      AMD64.CPU.([rdi; rsi; rdx; rcx; r.(8); r.(9)])
+      AMD64.CPU.([rdi; rsi; rdx; rcx; r.(0); r.(1)])
 end
 
 

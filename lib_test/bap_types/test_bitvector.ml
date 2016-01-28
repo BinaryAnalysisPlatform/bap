@@ -1,8 +1,6 @@
 open OUnit2
 open Core_kernel.Std
-open Bap_types.Std
-
-module Seq = Sequence
+open Bap.Std
 
 let deadbeef = Word.(of_int32 0xDEADBEEFl)
 let _DEADBEEF = Word.(of_int64 0xDEADBEEFL)
@@ -29,7 +27,7 @@ let print_int_list lst =
 let to_chars ~expect endian v ctxt =
   assert_equal ~ctxt
     ~printer:print_int_list
-    expect Word.(to_chars endian v      |>
+    expect Word.(enum_chars endian v    |>
                  Seq.map ~f:Char.to_int |>
                  Sequence.to_list)
 

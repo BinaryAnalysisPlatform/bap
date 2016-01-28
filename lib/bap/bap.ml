@@ -14,6 +14,7 @@ module Std = struct
   module Signatures = Bap_signatures
   module Byteweight = Bap_byteweight
   include Graphlib.Std
+  include Bap_trace_std
 end
 
 (* load internal plugins *)

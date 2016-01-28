@@ -1,8 +1,4 @@
-(** Loads all known to bap plugins.
-
-    If you want to load a plugin unknown to bap, use [Plugin] module
-    directly.
-*)
+(** Bap Plugin Library *)
 
 open Core_kernel.Std
 
@@ -13,40 +9,36 @@ module Std : sig
   module Plugin : sig
     type t = plugin
 
-    (** [create ?library ?path ~system name] if file is not [None]
-        then create a plugin targeting this file, otherwise look at
-        current working directory for file named [name.plugin], if it
-        doesn't exist, then search for the plugin with a given [name]
-        and [system] first in folders specified by [BAP_PLUGIN_PATH]
-        environment variable, and if nothing found, continue with all
-        folders specified with [library] parameter, and finally search
-        in findlib system.
-        If more than one plugin exists, then the first found is used.
-    *)
-    val create :
-      ?library:string list ->
-      ?path:string ->
-      system:string -> string -> t option
+    (** [of_path path] create a plugin of the provided path  *)
+    val of_path : string -> t
 
-    (** [load plugin] loads given [plugin]  *)
-    val load : t -> unit Or_error.t
+    (** [find_plugin ?library name] searches for a plugin named
+        [name.plugin] or [name] if [name] ends with [.plugin] in
+        current directory, then in each directory specified by
+        [BAP_PLUGIN_PATH] environment variable, then in each folder
+        specified by a [library] list (defaults to an empty list).
+        Returns the first found plugin, if any. *)
+    val find_plugin : ?library:string list -> string -> t option
 
-    val name : t -> string
+    (** [find_library] searches using findlib for a library that is
+        dynamically linkable and has a [plugin_system] field set to
+        "bap.plugin". *)
+    val find_library : string -> t option
+
+    (** [find_libraries ()] loads all finlib packages in the findlib path
+        with META file containing entry [plugin_system] equal to [system],
+        and returns a list of results of each load operation *)
+    val find_libraries: unit -> t list
 
     val path : t -> string
 
-    val system : t -> string
+    val name : t -> string
 
-    (** [find ~system] loads all finlib packages in the findlib path with
-        META file containing entry [plugin_system] equal to [system], and
-        returns a list of results of each load operation *)
-    val find_all: system:string -> t list
-
+    (** [load plugin] loads given [plugin]  *)
+    val load : t -> unit Or_error.t
   end
 
   module Plugins : sig
-    val load : ?systems:string list -> unit -> unit
-    val all : unit -> plugin list
+    val load : unit -> unit
   end
-
 end

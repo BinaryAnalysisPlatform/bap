@@ -475,6 +475,24 @@ module Test_IR = struct
   let insert_randomly =
     List.(range 0 100 >>= fun _ -> insert (List.permute blks))
 
+  let update_labeled ctxt =
+    let module G = Graphlib.Labeled(Int)(String)(Unit) in
+    let n1 = {node = 1; node_label = "1"} in
+    let n2 = {node = 2; node_label = "2"} in
+    let s1 = {node = 1; node_label = "one"} in
+    let s2 = {node = 2; node_label = "two"} in
+    let g1 = Graphlib.create (module G) ~edges:[n1,n2,()] () in
+    let g2 = G.Node.update n1 s1 g1 in
+    let g3 = G.Node.update n2 s2 g2 in
+    let ps = G.Node.preds s2 g3 in
+    let ss = G.Node.succs s1 g3 in
+    match Seq.to_list ps @ Seq.to_list ss with
+    | [{node_label="one"}; {node_label="two"}] -> ()
+    | [{node_label="one"}; {node_label=l}] -> assert_failure "bad out"
+    | [{node_label=l}; {node_label="two"}] -> assert_failure "bad inc"
+    | [] | [_] -> assert_failure "egde(n1,n2) doesn't exist"
+    | _ -> assert_failure "bad out and inc"
+
   let (++) g x = G.Node.(insert (create x) g)
   let (--) g x = G.Node.(remove (create x) g)
   let has = ident
@@ -511,8 +529,7 @@ module Test_IR = struct
     "2 edges in [b2-b3+b3]" >:: edges 2 (nil ++ b2 -- b3 ++ b3);
     "2 nodes in [b2+b3+b3]" >:: nodes 2 (nil ++ b2 ++ b3 ++ b3);
     "2 nodes in [b2-b3+b3]" >:: nodes 2 (nil ++ b2 -- b3 ++ b3);
-
-
+    "update_labeled " >:: update_labeled
   ]
 
 end

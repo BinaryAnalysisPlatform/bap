@@ -1,0 +1,97 @@
+.import [
+  .module stmt
+]
+
+.record [
+  .name program
+  .field [.name tid  .type tid]
+  .field [.name subs .type sub .repeated]
+]
+
+.record [
+  .name sub
+  .field [ .name tid  .type tid]
+  .field [ .name name .type string ]
+  .field [ .name args .type arg .repeated ]
+  .field [ .name blks .type blk .repeated ]
+]
+
+.record [
+  .name arg
+  .field [.name tid     .type tid]
+  .field [ .name lhs    .type stmt/var ]
+  .field [ .name rhs    .type stmt/expr ]
+  .field [ .name intent .type intent .optional]
+]
+
+.record [
+  .name blk
+  .field [.name tid .type tid]
+  .field [ .name phis .type phi .repeated]
+  .field [ .name defs .type def .repeated]
+  .field [ .name jmps .type jmp .repeated]
+]
+
+.record [
+  .name phi
+  .field [.name tid .type tid]
+  .field [.name lhs .type stmt/var]
+  .field [.name values .type tid-exp-pair .repeated]
+]
+
+.record [
+ .name def
+ .field [.name tid .type tid]
+ .field [.name lhs .type stmt/var]
+ .field [.name rhs .type stmt/expr]
+]
+
+
+.record [
+ .name jmp
+  .field [.name tid .type tid]
+  .field [.name cond .type stmt/expr]
+  .field [.name jump .type jump]
+]
+
+.alias [.name tid .type string]
+
+.record [
+  .name tid-exp-pair
+  .field [.name tid .type tid]
+  .field [.name exp .type stmt/expr]
+]
+
+.variant [
+  .name jump
+  .option [.type call]
+  .option [.name goto .type label]
+  .option [.name ret  .type label]
+  .option [.type exn]
+]
+
+.variant [
+  .name label
+  .option [.name direct   .type tid]
+  .option [.name indirect .type stmt/expr]
+]
+
+.enum [
+  .name intent
+  .option [.name in]
+  .option [.name out]
+  .option [.name both]
+]
+
+
+.record [
+  .name call
+  .field [.name target .type label]
+  .field [.name return .type label .optional]
+]
+
+.record [
+  .name exn
+  .field [.name number .type int]
+  .field [.name return .type tid]
+]

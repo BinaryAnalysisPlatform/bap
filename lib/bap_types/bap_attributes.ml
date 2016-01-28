@@ -17,6 +17,35 @@ module Color = struct
     Format.fprintf ppf "%a" Sexp.pp (sexp_of_t color)
 end
 
+module Foreground = struct
+  type t = Color.t with bin_io, compare, sexp
+  let to_ascii = function
+    | `black   -> "\x1b[30m"
+    | `red     -> "\x1b[31m"
+    | `green   -> "\x1b[32m"
+    | `yellow  -> "\x1b[33m"
+    | `blue    -> "\x1b[34m"
+    | `magenta -> "\x1b[35m"
+    | `cyan    -> "\x1b[36m"
+    | `white   -> "\x1b[37m"
+  let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
+end
+
+module Background = struct
+  type t = Color.t with bin_io, compare, sexp
+  let to_ascii : t -> string = function
+    | `black   -> "\x1b[40m"
+    | `red     -> "\x1b[41m"
+    | `green   -> "\x1b[42m"
+    | `yellow  -> "\x1b[43m"
+    | `blue    -> "\x1b[44m"
+    | `magenta -> "\x1b[45m"
+    | `cyan    -> "\x1b[46m"
+    | `white   -> "\x1b[47m"
+
+  let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
+end
+
 type color = Color.t with bin_io, compare, sexp
 
 let comment = register (module String)
@@ -62,3 +91,11 @@ let subroutine_name = register (module String)
 let filename = register (module String)
     ~name:"filename"
     ~uuid:"9701d189-24e3-4348-8610-0dedf780d06b"
+
+let foreground = register (module Foreground)
+    ~name:"foreground"
+    ~uuid:"56b29739-2df4-4e6c-9f63-15e20edf1857"
+
+let background = register (module Background)
+    ~name:"background"
+    ~uuid:"9a80a9cc-4106-48fc-abf3-55d7b333e734"

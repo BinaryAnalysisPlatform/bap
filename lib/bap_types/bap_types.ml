@@ -22,11 +22,26 @@ module Std = struct
     include Bap_trie
   end
 
-  module type Regular = Regular
+  include Bap_data_intf
   module type Opaque = Opaque
+  module type Regular = Regular
   module type Integer = Integer
   module type Printable = Printable
   module type Trie = Trie
+
+  module Monad = struct
+    include Bap_monad
+    include Bap_monad_types
+  end
+
+  module Data = struct
+    include Bap_data_intf
+    include Bap_data_types
+    include Bap_data
+    module type S = Data
+    module Write = Bap_data_write
+    module Read = Bap_data_read
+  end
 
   (** Target architecture. *)
   module Arch = struct
@@ -54,71 +69,11 @@ module Std = struct
     include Bap_size
   end
 
-  (** BIL
 
-      This module captures BIL language definitions. Do not open
-      this module globally, since it may override common OCaml
-      functions. Actually, opening this module is a way of
-      switching from OCaml language into a BIL embedded DSL, for
-      example:
-
-      {[
-        Bil.([
-            v := exp_of_op src lsr int32 1;
-            r := exp_of_op src;
-            s := int32 31;
-            while_ (var v <> int32 0) [
-              r := var r lsl int32 1;
-              r := var r lor (var v land int32 1);
-              v := var v lsr int32 1;
-              s := var s - int32 1;
-            ];
-            dest := var r lsl var s;
-          ])
-      ]}
-
-      In the above example, all operators, e.g., [lsl], [-], [<>],
-      are from the BIL language, and the result of the above
-      expression is a value of type [Bil.t].
-
-      To summarize, this module includes:
-      - all constructors
-      - all infix and prefix operators of BIL
-      - a set of functional constructors
-      - BIL visitors
-      - BIL helper functions
-
-      This module also implements [Sexpable], [Binable] and
-      [Printable] interfaces for the [bil] type aka [stmt list].
-      This interfaces allow you to print, store and read BIL in
-      different formats. There is also a standalone [Bil_piqi]
-      module that provides a family of functions to store and load
-      BIL in different formats, supported by piqi library. See,
-      [bap-mc] application for examples of serializing BIL into
-      different formats.
-
-      The [Regular] interface for the [bil] type is not provided for
-      intention, to prevent from creating [Bil.Map], [Bil.Table] or
-      other structures, that inefficient by their nature.
-
-      If you're looking for the [Regular] interface for BIL
-      expressions and statements, then [Exp] and [Stmt] modules below
-      are for you. E.g., [Exp.(x = y)] will compare two expressions
-      and will evaluate to the [bool] type. [Bil.(x = y)] results in
-      a symbolic comparison of two expressions and will evaluate to a
-      BIL expression.
-
-  *)
   module Bil = struct
     type t = Bap_bil.bil with bin_io, compare, sexp
     include (Bap_stmt.Stmts_pp : Printable with type t := t)
-
-    (** This submodule is useful if all you want is to get access
-        to constructor names (for example for pattern matching).
-        If opened this module will bring to the namespace only
-        constructor names and types. Types will have the same name
-        as corresponding module, e.g. [cast], [binop], [unop].
-        It is quite safe to open this module globally. *)
+    include (Bap_stmt.Stmts_data : Data with type t := t)
     module Types = struct
       include Bap_bil.Cast
       include Bap_bil.Binop
@@ -126,54 +81,41 @@ module Std = struct
       include Bap_bil.Exp
       include Bap_bil.Stmt
     end
-    (** put all types and constructor names into [Bil] namespace *)
     include Types
-
-    (** {4 Infix operators}
-
-        Every BIL expression or statement is mapped to the
-        corresponding OCaml operator. Signed forms of operations
-        a build with appending [$] sign to the original operator,
-        e.g., signed division is [/%]. Exception, signed modulo
-        is [%$].
-
-        Move statement has an infix form of the assignment operator,
-        i.e., [:=]. *)
     module Infix = struct
       include Bap_exp.Infix
       include Bap_stmt.Infix
     end
     include Infix
-
-    (** {4 Functional constructors}
-
-        For each constructor there is the same named function, c.f.,
-        [variantslib] library, but with some exceptions summarized below.
-
-        In general constructors are mapped to the same named
-        functions, e.g.,   [Move of var * exp] is mapped to
-        [move : var -> exp -> stmt].
-
-        Some complex constructors (especially those with many
-        parameters of the same type) are mapped functions with keyword
-        arguments, e.g., [Load of (exp * exp * endian * size)] is
-        mapped to [load mem:exp -> addr:exp -> endian -> size -> exp].
-
-        Constructors that results in a keywords, e.g., [While], [If],
-        are escaped with trailing underscore, e.g., [while_], [if_].
-    *)
     include Bap_exp.Exp
     include Bap_exp.Unop
     include Bap_exp.Binop
     include Bap_exp.Cast
     include Bap_stmt.Stmt
-
-    (** {4 Visitors}  *)
     include Bap_visitor
-
-    (** {4 High level helpers}  *)
     include Bap_helpers
+    module Result = Bap_result
+    module Storage = Result.Storage
+    class type storage = Result.storage
+    type value = Result.value =
+      | Imm of word
+      | Mem of storage
+      | Bot
+
+    type result = Result.t
   end
+
+  module Expi = Bap_expi
+  module Bili = Bap_bili
+  module Biri = Bap_biri
+  module Type_error = Bap_type_error
+  module Context = Bap_context
+
+  type type_error = Type_error.t with bin_io, compare, sexp
+
+  class ['a] bili = ['a] Bili.t
+  class ['a] expi = ['a] Expi.t
+  class ['a] biri = ['a] Biri.t
 
   (** [Regular] interface for BIL expressions *)
   module Exp = struct
@@ -258,6 +200,7 @@ module Std = struct
   type 'a tag = 'a Value.tag
 
   class ['a] bil_visitor = ['a] Bap_visitor.visitor
+
 
   (** A more concise name for the Core's Sequence module.
       Also, it extends sequence with some useful functions.  *)

@@ -52,6 +52,7 @@ module Fn = struct
       pc_hi >>| fun pc_hi -> {pc_lo; pc_hi}
     let hash = Hashtbl.hash
     let module_name =  "Bap.Std.Dwarf.Fn"
+    let version = "0.1"
   end
   include T
   include Identifiable.Make(struct

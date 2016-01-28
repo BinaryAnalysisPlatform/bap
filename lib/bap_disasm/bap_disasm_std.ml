@@ -27,6 +27,8 @@ module Block   = Bap_disasm_block
     blocks. *)
 module Disasm_expert = struct
   module Basic = Bap_disasm_basic
+  module Shingled = Bap_disasm_shingled
+  module Shingled_lifter = Bap_disasm_shingled_lifter
   module Recursive = Bap_disasm_rec
   module Kind = Bap_insn_kind
   module Insn = Bap_disasm_basic.Insn

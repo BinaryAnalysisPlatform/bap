@@ -136,6 +136,8 @@ module Equiv = struct
   include Regular.Make(struct
       include Int
       let module_name = Some "Bap.Std.Equiv"
+      let version = "0.1"
+
     end)
 end
 
@@ -364,6 +366,7 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
         type t = node
         let hash = G.V.hash
         let compare = G.V.compare
+        let version = "0.1"
       end)
   end
 
@@ -395,12 +398,14 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
         let compare x y = match Node.compare (src x) (src y) with
           | 0 -> Node.compare (dst x) (dst y)
           | n -> n
+        let version = "0.1"     (* this should be an OCamlgraph version *)
       end)
   end
 
   include Printable(struct
       type nonrec t = t
       let module_name = None
+      let version = "0.1"
       let pp ppf graph =
         let open Bap_graph_pp in
         let string_of_node =
@@ -416,6 +421,8 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
 
   include Opaque.Make(struct
       type t = G.t
+      let version =  "0.1"
+
       let hash g =
         Seq.fold (edges g) ~init:0 ~f:(fun hash x ->
             hash lxor Edge.hash x)
@@ -880,6 +887,7 @@ struct
   end
 
   let (//) xs f = Seq.filter xs ~f
+  let (/@) xs f = Seq.map xs ~f
 
   let empty = G.empty
   let is_directed = G.is_directed
@@ -893,10 +901,10 @@ struct
     include G.Node
     let mem n g = Has.node n && mem n g
     let enum enum n g = if Has.node n then enum n g else Seq.empty
-    let succs n g   = enum succs n g   // Has.node
-    let preds n g   = enum preds n g   // Has.node
     let inputs n g  = enum inputs n g  // Has.edge
     let outputs n g = enum outputs n g // Has.edge
+    let succs n g   = outputs n g /@ G.Edge.dst
+    let preds n g   = inputs n g  /@ G.Edge.src
     let edge n m g = match edge n m g with
       | Some e when Has.edge e -> Some e
       | _ -> None
@@ -982,6 +990,7 @@ module Mapper
     let degree ?dir n g = degree ?dir (N.backward n) g
     include Opaque.Make(struct
         type t = node
+        let version = "0.1"
         let compare x y = G.Node.compare (N.backward x) (N.backward y)
         let hash x = hash (N.backward x)
       end)
@@ -1006,6 +1015,7 @@ module Mapper
     let remove e g = remove (E.backward e) g
     include Opaque.Make(struct
         type t = edge
+        let version = "0.1"
         let compare x y =
           G.Edge.compare (E.backward x) (E.backward y)
         let hash x = hash (E.backward x)
