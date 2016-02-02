@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap_data_types
 
+type bytes = Bap_bytes.t
+
 type 'a t = {
   size : 'a -> int;
   copy : ('a,string) copy;

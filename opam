@@ -41,7 +41,7 @@ depends: [
     "bitstring"
     "camlzip"
     "cmdliner" {>= "0.9.6"}
-    "core_kernel" {>= "112.17.0" & < "112.35.0"}
+    "core_kernel" {>= "112.35.0" & < "113.00.0"}
     "ezjsonm" {>= "0.4.0" & < "0.4.1" }
     "faillib"
     "fileutils"
