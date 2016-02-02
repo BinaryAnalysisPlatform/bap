@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap_data_types
 type 'a t
 
+type bytes = Bap_bytes.t
+
 val create :
   ?to_bytes  : ('a -> bytes) ->
   ?to_bigstring : ('a -> bigstring) ->
