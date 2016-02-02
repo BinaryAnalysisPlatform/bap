@@ -608,6 +608,8 @@ module Std : sig
     val pkg_version : string
   end
 
+  type bytes = Bytes.t 
+
   type 'a reader
   type 'a writer
 

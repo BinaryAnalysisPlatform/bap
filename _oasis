@@ -103,6 +103,7 @@ Library types
                    Bap_bil_adt,
                    Bap_biri,
                    Bap_bitvector,
+                   Bap_bytes,
                    Bap_common,
                    Bap_config,
                    Bap_context,
