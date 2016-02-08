@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap_data_types
 
 type 'a t
+type bytes = Bap_bytes.t
 
 (** A minimal complete definition is any method except
     [from_channel].
