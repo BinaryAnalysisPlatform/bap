@@ -224,4 +224,7 @@ module Std = struct
 
   (** Library configuration, version, and other constants  *)
   module Config = Bap_config
+
+  module Bytes = Bap_bytes
+
 end

@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap_data_types
 
+type bytes = Bap_bytes.t
+
 type 'a reader = 'a Bap_data_read.t
 type 'a writer = 'a Bap_data_write.t
 

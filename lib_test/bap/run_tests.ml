@@ -5,6 +5,7 @@ let suite =
     Test_trie.suite;
     Test_bitvector.suite;
     Test_bili.suite;
+    Test_bytes.suite;
     Test_graph.suite;
     Test_image.suite;
     Test_table.suite;
