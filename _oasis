@@ -103,6 +103,7 @@ Library types
                    Bap_bil_adt,
                    Bap_biri,
                    Bap_bitvector,
+                   Bap_bytes,
                    Bap_common,
                    Bap_config,
                    Bap_context,
@@ -324,6 +325,7 @@ Library types_test
   BuildDepends:   bap, oUnit
   Modules:        Test_bitvector,
                   Test_bili,
+                  Test_bytes,
                   Test_graph,
                   Test_trie
 

@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap_data_types
 
+type bytes = Bap_bytes.t
+
 type 'a t = {
   of_channel : in_channel -> 'a;
   of_bigstring : bigstring -> 'a ;
