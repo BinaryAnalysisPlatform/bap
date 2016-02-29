@@ -3,16 +3,17 @@ open Core_kernel.Std
 open Or_error
 
 open Bap.Std
-open Trace.Event
-open Trace.Meta
+open Bap_traces.Std
+open Event
+open Meta
 
 let bed = Word.of_int32 0xBEDl
 let coffee = Word.of_int32 0xC0FFEEl
-let move = Trace.Move.({cell = bed; data = coffee;})
+let move = Move.({cell = bed; data = coffee;})
 let var = Var.create ~fresh:true "temp" (Type.Imm 0xC0FFEE)
-let reg = Trace.Move.({cell = var; data = coffee;})
-let bin = Trace.Binary.({path="/dev/null"; stripped = None})
-let trc = Trace.Tracer.({name="test_tracer"; args=Array.empty (); version="";})
+let reg = Move.({cell = var; data = coffee;})
+let bin = Binary.({path="/dev/null"; stripped = None})
+let trc = Tracer.({name="test_tracer"; args=Array.empty (); version="";})
 
 let memory_events =
   [ Value.create memory_load move;
@@ -251,7 +252,7 @@ let user_monitor ctxt =
   let t = unfold_with_monitor monitor in
   assert_seq_equal ~ctxt (Trace.events t) (Seq.of_list test_events)
 
-let suite =
+let suite () =
   "Trace" >:::
   [
     "save_and_load"     >:: save_and_load;

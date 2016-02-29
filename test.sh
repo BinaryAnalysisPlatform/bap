@@ -18,7 +18,7 @@ for target in $TARGETS; do
     for loader in $LOADERS; do
         for file in $files; do
             printf '%s:%-70s ' $loader $file;
-            bap $file --loader=$loader -d bil > /dev/null;
+            bap $file --loader=$loader -d > /dev/null;
             if [ $? -eq 0 ]; then
                 echo 'ok';
             else

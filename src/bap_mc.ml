@@ -123,30 +123,37 @@ module Program(Conf : Mc_options.Provider) = struct
     let print =
       make_print arch in
     let input = read_input options.src in
-    Dis.create ~backend:"llvm" (Arch.to_string arch) >>= fun dis ->
-    let invalid state mem pos = no_disassembly state pos in
-    let pos, dis_insn_count  =
-      Dis.run dis ~return:(fun x -> x)
-        ~stop_on:[`Valid] ~invalid
-        ~hit:(step print) ~init:(addr, 0)
-        (create_memory arch input addr) in
-    let bytes_disassembled = Addr.(pos - addr) |> Addr.to_int |> ok_exn in
-    let len = String.length input in
-    match options.max_insn with
-    | None ->
-      if bytes_disassembled <> len then
-        raise (Trailing_data (len - bytes_disassembled));
-      return 0
-    | _ -> return 0
+    let backend = options.disassembler in
+    Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
+        let invalid state mem pos = no_disassembly state pos in
+        let pos, dis_insn_count  =
+          Dis.run dis ~return:(fun x -> x)
+            ~stop_on:[`Valid] ~invalid
+            ~hit:(step print) ~init:(addr, 0)
+            (create_memory arch input addr) in
+        let bytes_disassembled = Addr.(pos - addr) |> Addr.to_int |> ok_exn in
+        let len = String.length input in
+        match options.max_insn with
+        | None ->
+          if bytes_disassembled <> len then
+            raise (Trailing_data (len - bytes_disassembled));
+          return 0
+        | _ -> return 0)
 end
 
-let format_info get_fmts  =
-  get_fmts () |>
-  List.map  ~f:(fun (name, `Ver ver, desc) -> name ^ "-" ^ ver) |>
-  String.concat ~sep:", "
+let format_info get_fmts =
+  get_fmts () |> List.map  ~f:fst3 |> String.concat ~sep:", "
+
+let print_data_formats data_type =
+  let print = Bap_format_printer.run `writers in
+  match data_type with
+  | `insn -> print (module Insn)
+  | `bil  -> print (module Bil)
+  | `bir  -> print (module Blk)
 
 module Cmdline = struct
   open Cmdliner
+  open Bap_cmdline_terms
 
   let arch =
     let doc = "Target architecture" in
@@ -159,6 +166,21 @@ module Cmdline = struct
   let show_insn_size =
     let doc = "Output recognized instruction length" in
     Arg.(value & flag & info ["show-size"] ~doc)
+
+  let list_formats_types = [
+    "insn", `insn;
+    "inst", `insn;
+    "bil",  `bil;
+    "bir",  `bir;
+  ]
+  let list_formats_doc = sprintf
+      "Print available formats for the given data $(i,TYPE). \
+       The $(i,TYPE) must be %s" @@
+    Arg.doc_alts_enum list_formats_types
+  let list_formats_option = "list-formats"
+  let list_formats =
+    Arg.(value & opt (some (enum list_formats_types)) None &
+         info [list_formats_option] ~doc:list_formats_doc)
 
   let insn_formats =
     let doc = sprintf
@@ -197,46 +219,55 @@ module Cmdline = struct
                lifted or disassembled from a byte blob. Default is all" in
     Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
 
-
-  let create a b c d e f g h i =
-    Mc_options.Fields.create a b c d e f g h i
+  let create a b c d e f g h i j =
+    Mc_options.Fields.create a b c d e f g h i j
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
-    Arg.(value & pos 0 (some string) None & info [] ~docv:"STRING" ~doc)
+    Arg.(value & pos 0 (some string) None & info [] ~docv:"DATA" ~doc)
 
-  let program =
+  let program () =
     let doc = "BAP machine instruction playground" in
     let man = [
+      `S "SYNOPSIS";
+      `Pre "
+ $(b,$mname) [PLUGIN OPTION]... --list-formats
+ $(b,$mname) [OPTION]... DATA";
       `S "DESCRIPTION";
-      `I ("OVERVIEW",
-          " Disassemble a string of bytes. This is the BAP machine \
-           code playground. It is intended to mimic a subset of \
-           llvm-mc functionality using the BAP disassembly backend.");
-      `S "EXAMPLES";
-      `P "Four hex representations are supported:"; `Noblank;
-      `I (".BR", " 0x31 0xd2 0x48 0xf7 0xf3"); `Noblank;
-      `I (".BR", " \\\\x31\\\\xd2\\\\x48\\\\xf7\\\\xf3"); `Noblank;
-      `I (".BR", " 31 d2 48 f7 f3");
-      `I (".BR", " 31d248f7f3");
-      `I ("INPUT: Supplied via stdin or on the command-line",
-          "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
-           bap-mc  --show-inst --show-bil");
-      `S "SEE ALSO";
-      `P "llvm-mc"] in
-    Term.(pure create $src $addr $max_insns $arch $show_insn_size
+      `P "Disassemble a string of bytes. This is the BAP machine \
+          code playground. It is intended to mimic a subset of \
+          llvm-mc functionality using the BAP disassembly backend.";
+      `S "OPTIONS";
+      `I ("$(b,--list-formats)=$(i,TYPE)", list_formats_doc);
+    ] @ Bap_cmdline_terms.common_loader_options
+      @ [
+        `S "EXAMPLES";
+        `P "The following hex representations are supported:"; `Noblank;
+        `Pre "
+         0x31 0xd2 0x48 0xf7 0xf3
+         \\\\x31\\\\xd2\\\\x48\\\\xf7\\\\xf3
+         31 d2 48 f7 f3
+         31d248f7f3";
+        `I ("INPUT: Supplied via stdin or on the command-line",
+            "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
+             bap-mc  --show-inst --show-bil");
+        `S "SEE ALSO";
+        `P "llvm-mc"] in
+    Term.(const create $(disassembler ()) $src $addr $max_insns $arch $show_insn_size
           $insn_formats $bil_formats $bir_formats $show_kinds),
-    Term.info "bap-mc" ~doc ~man ~version:Config.pkg_version
+    Term.info "bap-mc" ~doc ~man ~version:Config.version
 
   let exitf n =
     kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
 
   let parse argv =
-    match Term.eval ~argv program ~catch:false with
-    | `Ok opts -> Ok opts
-    | `Error `Parse -> exit 64
-    | `Error _ -> exit 2
-    | _ -> exit 1
+    match Cmdliner.Term.eval_peek_opts ~argv list_formats with
+    | Some (Some typ),_ -> print_data_formats typ; exit 0
+    | _ -> match Term.eval ~argv (program ()) ~catch:false with
+      | `Ok opts -> Ok opts
+      | `Error `Parse -> exit 64
+      | `Error _ -> exit 2
+      | _ -> exit 1
 end
 
 let exitf n =
@@ -249,7 +280,6 @@ let start options =
   Program.main ()
 
 let _main : unit =
-  Plugins.load ();
   let argv = Bap_plugin_loader.run Sys.argv in
   try match Cmdline.parse argv >>= start with
     | Ok _ -> exit 0

@@ -101,7 +101,7 @@ let test_one_to_one ctxt =
     Table.(link ~one_to:one String.hashable tab tab2) in
   assert_equal "reg2" (link_table "hi")
 
-let suite = "Table" >::: [
+let suite () = "Table" >::: [
     "table_length_zero" >:: test_table_len;
     "table_length_nonzero" >:: test_table_len2;
     "find" >:: test_find;

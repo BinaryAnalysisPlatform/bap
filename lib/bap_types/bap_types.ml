@@ -6,6 +6,7 @@
 
 
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 
 (** This module is included into [Bap.Std], you need to open it
@@ -13,20 +14,14 @@ open Bap_common
 module Std = struct
   (** A definition for a regular type, and a handy module,
       that can create regular types out of thin air. *)
-  module Regular = Regular
   module Integer = Integer
-  module Printable = Printable
-  module Opaque = Opaque
+  module State = Bap_state
   module Trie = struct
     include Bap_trie_intf
     include Bap_trie
   end
 
-  include Bap_data_intf
-  module type Opaque = Opaque
-  module type Regular = Regular
   module type Integer = Integer
-  module type Printable = Printable
   module type Trie = Trie
 
   module Monad = struct
@@ -34,14 +29,6 @@ module Std = struct
     include Bap_monad_types
   end
 
-  module Data = struct
-    include Bap_data_intf
-    include Bap_data_types
-    include Bap_data
-    module type S = Data
-    module Write = Bap_data_write
-    module Read = Bap_data_read
-  end
 
   (** Target architecture. *)
   module Arch = struct
@@ -68,7 +55,6 @@ module Std = struct
     include Size
     include Bap_size
   end
-
 
   module Bil = struct
     type t = Bap_bil.bil with bin_io, compare, sexp
@@ -201,22 +187,11 @@ module Std = struct
 
   class ['a] bil_visitor = ['a] Bap_visitor.visitor
 
-
-  (** A more concise name for the Core's Sequence module.
-      Also, it extends sequence with some useful functions.  *)
-  module Seq = struct
-    include Sequence
-    include Bap_seq
-  end
-  include Seq.Export
-
-
   module Vector = Bap_vector
 
   type 'a vector = 'a Vector.t with bin_io, compare, sexp
 
   (** {2 Common type abbreviations}  *)
-  type 'a seq = 'a Seq.seq with sexp
   type bigstring = Bigstring.t
 
   include Bap_int_conversions
@@ -225,6 +200,9 @@ module Std = struct
   (** Library configuration, version, and other constants  *)
   module Config = Bap_config
 
-  module Bytes = Bap_bytes
+  module Seq = Seq
+  type 'a seq = 'a Seq.t with bin_io, compare, sexp
+
+  module Callgraph = Bap_ir_callgraph
 
 end

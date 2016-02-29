@@ -1,3 +1,1 @@
-
-
-val suite : OUnit2.test
+val suite : unit -> OUnit2.test

@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Or_error
 

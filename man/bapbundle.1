@@ -1,0 +1,194 @@
+.TH "BAPBUNDLE" 1 "2015-01-26" "BAP" "Bap Manual"
+.SH NAME
+bapbundle \- manages BAP bundles.
+.SH SYNOPSIS
+.P
+.nf
+\fBbapbundle\fR \-help
+\fBbapbundle\fR \fICOMMAND\fR \-help
+\fBbapbundle\fR \fBinstall\fR [\fIOPTION\fR]...  \fIBUNDLE\fR
+\fBbapbundle\fR \fBremove\fR  [\fIOPTION\fR]...  \fIBUNDLE\fR
+\fBbapbundle\fR \fBshow\fR    [\fIOPTION\fR]...  \fIBUNDLE\fR
+\fBbapbundle\fR \fBupdate\fR  [\fIOPTION\fR]...  \fIBUNDLE\fR
+\fBbapbundle\fR \fBpack\fR    [\fIOPTION\fR]...  \fIBUNDLE\fR
+.fi
+
+.SH DESCRIPTION
+.P
+
+A bundle is an opaque package containing anything that is requested for a
+program to work in a standalone mode. The \fBbapbundle\fR tool allows a user
+to create bundles, update meta information and pack resources. It also can
+install and remove bundles into the designated bundle repository, where they
+can be found by a main BAP program without extra options.
+
+Usually the \fBbapbundle\fR command is used implicitly by the
+\fBbapbuild\fR, so there is no need to use the \fBpack\fR command
+directly. A user can, however, add some resource files or update meta
+information, using the \fBupdate\fR command.
+
+The \fBinstall\fR command copies a \fIBUNDLE\fR to a known
+destination, that is seearched by a main program, when plugins are
+loaded automatically. The default destination is specified at program
+configuration time and usually works out of box. The destination can
+be overridden in the runtime, however.
+
+The \fBremove\fR command removes a previously installed \fIBUNDLE\fR
+from a given destination.
+
+.SH ARGUMENTS
+.TP 4
+\fIBUNDLE\fR
+Name of a bundle.
+
+.SH COMMON OPTIONS
+.TP 4
+\fB\-help\fR, \fB\-\-help\fR
+Prints a brief summary of command line options.
+
+
+.SH COMMON META OPTIONS
+.P
+
+The following options sets or updates meta information stored in the
+\fIBUNDLE\fR.
+
+.TP 4
+\fB\-author\fR \fINAME\fR
+
+Set author's name. If unspecified, then a value of \fBUSER\fR
+environment variable is used. Ideally, the name should be of the
+form \fBFull Name [Short name] <email>\fR
+
+.TP 4
+\fB\-name\fR \fINAME\fR
+
+Sets the name of the \fIBUNDLE\fR to the \fINAME\fR. If not specified,
+then a basename without an extension of the \fINAME\fR will be used.
+
+.TP 4
+\fB\-desc\fR \fITEXT\f
+
+Sets the \fITEXT\fR as a package description. The text should consist
+of a one line short description, followed by an optional detailed
+multiline description. The detailed description should be separated
+from the short one by a new line symbol.
+
+.SH INSTALL AND REMOVE OPTIONS
+
+.TP
+\fB\-destdir\fR \fIDIR\f
+
+Specifies a directory for \fBinstall\fR and \fBremove\fR commands.
+If unspecified, then a default directory specified at configuration
+time will be used.
+
+.SH SHOW OPTIONS
+
+.TP 4
+\fB\-m\FR
+
+Shows meta information.
+
+.TP 4
+\fB\-r\FR
+
+Prints a list of resource files stored in the \fIBUNDLE\fR.
+
+.TP 4
+\fB\-l\FR
+
+Prints a list of libraries and other loadable code, stored in the
+\fIBUNDLE\fR.
+
+.SH UPDATE OPTIONS
+.P
+Other then \fBCOMMON META OPTIONS\fR the \fBupdate\fR command accepts
+the following options:
+
+.TP 4
+\fB\-add-resources \fIRESOURCE\-LIST\fR
+
+Adds resources specified by the \fIRESOURCE\-LIST\fR to the
+\fIBUNDLE\fR.  The \fIRESOURCE\-LIST\fR is a comma separated list of
+resources, where each resources is either a file path or a named
+filepath of a form \fB<name>=<path>\fR, where \fB<name>\fR defines
+how a resource will accessed in the bundle. If not specified, then
+the \fB<name>\fR is equal to \fB<path>\fR. The \fIRESOURCE\-LIST\fR
+mustn't contain spaces, unless a filename contains it. In that case
+the resource list must be enclosed in parenthesis.
+
+The \fIRESOURCE\-LIST\fR grammar:
+.P
+.nf
+.RS
+resources ::= resource [, resources]
+resource  ::= path | name=path
+.RE
+.fi
+
+.SH PACK OPTIONS
+.P
+Other then \fBCOMMON META OPTIONS\fR the \fBupdate\fR command accepts
+the following options:
+
+
+.TP 4
+\fB\-main\fR \fINAME\fR
+
+Set the entry point to \fINAME\fR. The entry point is a module that is
+loaded by a bap main program.
+
+.TP 4
+\fB\-requires\fR \fIFEATURE-LIST\fR
+
+Define package requirements. The requirements are libraries used by
+the package. The \fIFEATURE-LIST\fR must be a comma separated list, of
+requirements. Each requirement is a library name, optionally followed
+by filename of the implementation. If implementation is provided, then
+it will be included in the \fIBUNDLE\fR. Othrewise, only the name will
+be stored, and the implementation will be searched at the time of
+loading using \fBocaml-findlib\fR.
+
+The \fIFEATURE\-LIST\fR grammar:
+.P
+.RS
+.nf
+feature-list ::= feature [, feature]
+feature      ::= name | name=path
+.fi
+.RE
+
+.TP 4
+\fB\-provides\fR \fIFEATURE-LIST\fR
+
+Specify a list of features provided by the package. The
+\fIFEATURE-LIST\fR should a comma separated list of names, where each
+name is an interface name provided by a plugin.
+
+.TP 4
+\fB\-resources\fR \fRESOURCES\fR
+
+Specify a list of resources used by the package. See
+\fB\-add-resource\fR option for more information.
+
+.SH EXIT STATUS
+.P
+
+Program returns:
+   \- 0 if everything is ok.
+   \- 1 for malformed command line
+   \- 2 for all other errors.
+
+.SH ENVIRONMENT
+.P
+
+Program reads \fBUSER\fR variable to get a user name.
+
+.SH BUGS
+.P
+Report bugs to https://github.com/BinaryAnalysisPlatform/bap/issues
+
+.SH SEE ALSO
+.P
+\fBbap\fR(1),\fBbapbuild\fR(1),\fBocamlfind\fR(1)

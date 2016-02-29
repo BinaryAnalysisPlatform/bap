@@ -3,8 +3,9 @@ open Word_size
 open Or_error
 open Binary_packing
 
-open Bap_types.Std
+open Bap.Std
 open Dwarf_types
+module Leb128 = Dwarf_leb128
 
 type 'a reader = string -> pos_ref : int ref -> 'a Or_error.t
 

@@ -1,5 +1,6 @@
 (** Extends [exp] interface.  *)
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Bap_bil
 

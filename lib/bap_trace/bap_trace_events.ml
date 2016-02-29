@@ -1,16 +1,17 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Regular.Std
+open Bap.Std
 open Bap_trace_event_types
 
-let pp_bytes fmt s = 
-  let pp fmt s = 
+let pp_bytes fmt s =
+  let pp fmt s =
     String.iter ~f:(fun c -> Format.fprintf fmt "%X@ " (Char.to_int c)) s in
   Format.fprintf fmt "@[<hv>%a@]" pp s
 
-let pp_array pp fmt ar = 
+let pp_array pp fmt ar =
   let ppa pref = Format.fprintf fmt "%s%a" pref pp in
   ignore(Array.fold ~f:(fun pref a -> ppa pref a; ", ") ~init:"" ar)
-        
+
 module Move = struct
   include Move
   let pp pp_cell arr ppf t =
@@ -39,13 +40,13 @@ end
 
 module Chunk = struct
   include Chunk
-  let pp ppf t = 
-    Format.fprintf ppf "%a: %a" Bap_bitvector.pp t.addr pp_bytes t.data
+  let pp ppf t =
+    Format.fprintf ppf "%a: %a" Addr.pp t.addr pp_bytes t.data
 end
 
 module Syscall = struct
   include Syscall
-  let pp ppf s = 
+  let pp ppf s =
     Format.fprintf ppf "syscall[%d](%a)" s.number (pp_array Word.pp) s.args
 end
 
@@ -60,10 +61,10 @@ module Exn = struct
 end
 
 module Location = struct
-  include Location 
-  let pp ppf t = 
-    let ppo ppf = function 
-      | Some a -> Format.fprintf ppf "%s@" a 
+  include Location
+  let pp ppf t =
+    let ppo ppf = function
+      | Some a -> Format.fprintf ppf "%s@" a
       | None -> () in
     Format.fprintf ppf "%a %a" ppo t.name Addr.pp t.addr
 end

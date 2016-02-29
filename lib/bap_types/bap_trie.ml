@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Format
 open Option.Monad_infix
 open Bap_trie_intf

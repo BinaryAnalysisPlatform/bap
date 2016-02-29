@@ -4,7 +4,7 @@ open Graphlib.Std
 open Bap_ir
 
 module Ssa = Bap_sema_ssa
-module G = Graphlib.Ir
+module G = Bap_ir_graph
 
 let (++) = Set.union and (--) = Set.diff
 let blk = G.Node.label
@@ -95,9 +95,9 @@ let dom_bind_arg dom root sub (var,exp) =
   try bfs root; sub with Finished sub -> sub
 
 let dom_bind_args sub entry args =
-  let module G = Graphlib.Tid.Tid in
+  let module G = Bap_tid_graph in
   let entry = Term.tid entry in
-  let cfg = Graphlib.Ir.create_tid_graph sub in
+  let cfg = G.create sub in
   let dom = Graphlib.dominators (module G) cfg entry in
   Seq.fold args ~init:sub ~f:(dom_bind_arg dom entry)
 

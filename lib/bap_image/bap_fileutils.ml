@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_types.Std
+open Option.Monad_infix
 
 let mapfile path : Bigstring.t option =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
@@ -16,3 +17,24 @@ let readfile path : Bigstring.t =
   match mapfile path with
   | Some data -> data
   | None -> Bigstring.of_string (In_channel.read_all path)
+
+let split_right ~after str =
+  match String.rindex str after with
+  | None -> str,None
+  | Some n -> String.(subo ~len:n str, Some (subo ~pos:(n+1) str))
+
+let extension s = split_right ~after:'.' s |> snd
+
+let parse_name filename =
+  let name,ver = split_right ~after:'-' filename in
+  extension name >>| fun ext -> ext,ver
+
+TEST_MODULE = struct
+  TEST = parse_name "subs" = None
+  TEST = parse_name "subs.sexp" = Some ("sexp",None)
+  TEST = parse_name "subs.sexp-1.0" = Some ("sexp", Some "1.0")
+  TEST = parse_name "subs.local.sexp" = Some ("sexp",None)
+  TEST = parse_name "subs." = Some ("",None)
+  TEST = parse_name "subs-1.0" = None
+  TEST = parse_name "subs.sexp-" = Some ("sexp", Some "")
+end

@@ -1,3 +1,5 @@
+(* OASIS_START *)
+(* OASIS_STOP *)
 let oasis_env =
   BaseEnvLight.load
     ~filename:MyOCamlbuildBase.env_filename
@@ -16,9 +18,9 @@ let piqic_rule () : unit =
            A (expand "${piqic}");
            A (expand "${piqic_flags}");
            A "-C";
-           A "piqi";
+           A "lib/bap_piqi";
            A "-I";
-           A "../piqi";
+           A "../lib/bap_piqi";
            A (env "%.piqi");
            A"--multi-format"])));;
 
@@ -55,4 +57,5 @@ let mark_tags () =
 let () =
   mark_tags ();
   Ocamlbuild_plugin.dispatch (fun hook ->
-      dispatch hook; dispatch_default hook)
+      dispatch hook;
+      dispatch_default hook)

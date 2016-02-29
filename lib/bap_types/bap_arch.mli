@@ -1,5 +1,6 @@
 (** Extends [arch] interface  *)
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 
 val of_string : string -> arch option

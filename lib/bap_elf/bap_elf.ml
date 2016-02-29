@@ -1,4 +1,8 @@
-module Types = Elf_types
-type t = Types.elf
-include Elf_utils
-include Elf_parse
+module Std = struct
+  module Elf = struct
+    include Elf_types
+    type t = elf
+    include Elf_utils
+    include Elf_parse
+  end
+end

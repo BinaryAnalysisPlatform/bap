@@ -18,12 +18,14 @@ all: setup.data
 
 install: setup.data
 	$(SETUP) -install $(BAPINSTALLFLAGS)
+	sh tools/build_plugins.sh
 
 uninstall: setup.data
 	$(SETUP) -uninstall $(BAPUNINSTALLFLAGS)
 
 reinstall: setup.data
-	$(SETUP) -reinstall $(BAPREINSTALLFLAGS)
+	make uninstall
+	make install
 
 clean: setup.data
 	$(SETUP) -clean $(BAPCLEANFLAGS)

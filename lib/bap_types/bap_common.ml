@@ -4,6 +4,7 @@
     as an internal [Std] module, that should be included most modules,
     internal to the library. *)
 open Core_kernel.Std
+open Regular.Std
 
 (** {2 Basic modules}
     The following modules defines the most basic types, on which the
@@ -11,16 +12,10 @@ open Core_kernel.Std
 *)
 module Bitvector = Bap_bitvector
 module Integer   = Bap_integer
-module Regular   = Bap_regular
-module Opaque    = Bap_opaque
-module Printable = Regular.Printable
 module Trie      = Bap_trie
 
 (** {2 Basic Interfaces}  *)
 module type Integer   = Integer.S
-module type Regular   = Regular.S
-module type Opaque    = Opaque.S
-module type Printable = Regular.Printable
 module type Trie      = Bap_trie_intf.S
 
 type endian = Bitvector.endian =

@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap_types.Std
 open Bap_disasm_std
 open Bap_ir
-module Helpers = Bap_disasm_abi_helpers
 
 module Ssa = Bap_sema_ssa
 open Bap_sema_free_vars
@@ -18,8 +17,8 @@ let compute_args sub ins =
 class input_register_only sub name namespace ins =
   let args = compute_args sub ins in
   object(self)
-    inherit Helpers.stub
-    method! id = name :: namespace
+    inherit abi
+    method id = name :: namespace
     method! specific = false
     method! choose other =
       if List.mem other#id name then
@@ -29,29 +28,10 @@ class input_register_only sub name namespace ins =
     method! args = args
   end
 
-class gnueabi_registers_only sub = object
-  inherit input_register_only sub
-      "gnueabi" ["linux"; "unknown"]
-      ARM.CPU.([r0;r1;r2;r3])
-end
-
-class amd64_registers_only sub = object
-  inherit input_register_only sub
-      "amd64" ["linux"; "unknown"]
-      AMD64.CPU.([rdi; rsi; rdx; rcx; r.(0); r.(1)])
-end
-
-
-
 let infer_args sub arch =
   let module Target = (val target_of_arch arch) in
-  let abi = Target.ABI.create sub in
+  let abi = Abi.create arch sub in
   let add sub (var,exp) =
     Term.append arg_t sub @@ Ir_arg.create var exp in
   let sub = List.fold abi#args ~init:sub ~f:add in
   Option.value_map abi#return_value ~default:sub ~f:(add sub)
-
-
-let register () =
-  ARM.ABI.register (new gnueabi_registers_only);
-  AMD64.ABI.register (new amd64_registers_only);

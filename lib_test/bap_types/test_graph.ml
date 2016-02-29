@@ -9,6 +9,7 @@
  *)
 
 open Core_kernel.Std
+open Graphlib.Std
 open Bap.Std
 open OUnit2
 open Format
@@ -373,22 +374,23 @@ module OBSS =
        (Tid)(struct include Tid
        let default = Tid.create () end))
 
+module Intu = Graphlib.Make(Int)(Unit)
 
 let graphs_for_algo : (module Graph_for_algo) list = [
   (module ODIU);
   (module OBIU);
-  (module Graphlib.Int.Unit);
+  (module Intu);
 ]
 
 module Int100 : Factory = struct
   type t = int
   let create () = Random.int 100
   module E = OBIU
-  module G = Graphlib.Int.Unit
+  module G = Intu
 end
 
 module Test_IR = struct
-  module G = Graphlib.Ir
+  module G = Graphs.Ir
 
   let entry = Blk.create ()
   let b1 = Blk.create ()
@@ -509,7 +511,7 @@ module Test_IR = struct
     assert_bool "failed"
       (has (G.Node.(has_edge (create x) (create y) g)))
 
-  let suite = [
+  let suite () = [
     "random insert" >::: insert_randomly;
     "[entry] has no edges" >:: edges 0 (nil ++ entry);
     "[b1] has no edges" >:: edges 0 (nil ++ b1);
@@ -538,12 +540,12 @@ module Test_int100 = Construction(Int100)
 
 
 
-let suite =
+let suite () =
   "Graph" >::: [
     "Algo" >:::
     List.mapi graphs_for_algo ~f:(fun n (module G) ->
         let module Test = Test_algo(G) in
         Test.suite (sprintf "%d" n));
     "Construction" >::: [Test_int100.suite];
-    "IR" >::: Test_IR.suite
+    "IR" >::: Test_IR.suite ()
   ]

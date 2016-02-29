@@ -69,8 +69,10 @@ let make_sub name args blks : sub term =
   List.iter blks ~f:(Sub.Builder.add_blk b);
   Sub.Builder.result b
 
-let abc = Term.append jmp_t abc
-    (Jmp.create_ret (Label.indirect Bil.(var ARM.CPU.lr)))
+let abc =
+  let lr = Var.create "LR" reg32_t in
+  Term.append jmp_t abc
+    (Jmp.create_ret (Label.indirect Bil.(var lr)))
 
 let sub1 = make_sub "f" [arg_1;arg_2] [abc]
 let sub1_label = Label.direct Term.(tid sub1)
@@ -271,7 +273,7 @@ end
 
 
 open Term
-let suite = "Sema.IR" >::: [
+let suite () = "Sema.IR" >::: [
     "order(xyoz)" >:: def_order [x;y;o;z] xyoz;
     "order(oxyz)" >:: def_order [o;x;y;z] oxyz;
     "order(xyzo)" >:: def_order [x;y;z;o] xyzo;

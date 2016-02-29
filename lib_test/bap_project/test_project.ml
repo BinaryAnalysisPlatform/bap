@@ -48,8 +48,9 @@ let test_substitute case : test list =
   let max_addr = addr (case.addr + String.length case.code - 1) in
   let base = Addr.of_int case.addr ~width:(addr_width case) in
   let name addr = Option.some_if Addr.(base = addr) sub_name in
-  let roots = [base] in
-  let p = Project.from_string ~roots ~base ~name case.arch case.code |>
+  let symbolizer = Symbolizer.create name in
+  let rooter = [base] |> Seq.of_list |> Rooter.create in
+  let p = Project.from_string ~rooter ~base ~symbolizer case.arch case.code |>
           ok_exn in
   let mem,_ = Memmap.lookup (Project.memory p) base |> Seq.hd_exn in
   let test expect s =
@@ -72,7 +73,9 @@ let test_substitute case : test list =
     test max_addr "$max_addr";
   ]
 
-let suite = "Project" >::: [
+
+
+let suite () = "Project" >::: [
     "ARM" >::: test_substitute arm;
     "386" >::: test_substitute x86;
   ]

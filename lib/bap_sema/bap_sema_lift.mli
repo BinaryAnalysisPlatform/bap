@@ -6,6 +6,6 @@ open Bap_ir
 
 
 val program : symtab -> program term
-val sub : ?bound:(addr -> bool) -> block -> sub term
-val blk : block -> blk term list
+val sub : block -> cfg -> sub term
+val blk : cfg -> block -> blk term list
 val insn : insn -> blk term list

@@ -7,19 +7,12 @@ module Std = struct
   include Bap_disasm_std
   include Bap_sema.Std
   module Project = Bap_project
+  module Self = Bap_self.Create
   type project = Project.t
-  module Dwarf = Bap_dwarf
-  module Elf = Bap_elf
-  type elf = Elf.t
-  module Signatures = Bap_signatures
-  module Byteweight = Bap_byteweight
-  include Graphlib.Std
-  include Bap_trace_std
+  module Graphs = struct
+    module Tid = Bap_tid_graph
+    module Ir = Bap_ir_graph
+    module Callgraph = Bap_ir_callgraph
+    module Cfg = Cfg
+  end
 end
-
-(* load internal plugins *)
-let internal : (module Unit) list = [
-  (module Bap_llvm);
-  (module Bap_llvm_loader);
-  (module Bap_native_loader);
-]

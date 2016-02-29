@@ -1,9 +1,50 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
 
 module Insn = Bap_disasm_basic.Insn
 
+type must = Must
+type may = May
+type 'a property = Z.t * string
+
+let known_properties = ref []
+
+let new_property _ name : 'a property =
+  let bit = List.length !known_properties in
+  let property = Z.shift_left Z.one bit, name in
+  known_properties := !known_properties @ [property];
+  property
+
+let prop = new_property ()
+
+let jump                = prop "jump"
+let conditional         = prop "cond"
+let indirect            = prop "indirect"
+let call                = prop "call"
+let return              = prop "return"
+let affect_control_flow = prop "affect_control_flow"
+let load                = prop "load"
+let store               = prop "store"
+
+module Props = struct
+  type t = Z.t with compare
+  module Bits = struct
+    type t = Z.t
+    let to_string = Z.to_bits
+    let of_string = Z.of_bits
+  end
+  let empty = Z.zero
+  let (+) flags (flag,_) = Z.logor flags flag
+  let (-) flags (flag,_) = Z.logand flags (Z.lognot flag)
+  let has flags (flag,_) =
+    Z.logand flags flag = flag
+  let set_if cond flag =
+    if cond then fun flags -> flags + flag else ident
+  include Sexpable.Of_stringable(Bits)
+  include Binable.Of_stringable(Bits)
+end
 
 type t = {
   code : int;
@@ -11,21 +52,10 @@ type t = {
   asm  : string;
   bil  : bil;
   ops  : Op.t array;
-  is_jump : bool;
-  is_conditional_jump : bool;
-  is_indirect_jump : bool;
-  is_call : bool;
-  is_return : bool;
-  may_affect_control_flow : bool;
-  may_load : bool;
-  may_store : bool;
-} with bin_io, fields, sexp
+  props : Props.t;
+} with bin_io, fields, compare, sexp
 
 type op = Op.t with bin_io, compare, sexp
-
-let compare t1 t2 =
-  let r = Int.compare t1.code t2.code in
-  if r = 0 then String.compare t1.asm t2.asm else r
 
 let normalize_asm asm =
   String.substr_replace_all asm ~pattern:"\t"
@@ -64,25 +94,31 @@ let of_basic ?bil insn =
   let may_affect_control_flow = is `May_affect_control_flow in
   let may_load = is_bil `May_load in
   let may_store = is_bil `May_store in
+  let props =
+    Props.empty                                              |>
+    Props.set_if is_jump jump                                |>
+    Props.set_if is_conditional_jump conditional             |>
+    Props.set_if is_indirect_jump indirect                   |>
+    Props.set_if is_call call                                |>
+    Props.set_if is_return return                            |>
+    Props.set_if may_affect_control_flow affect_control_flow |>
+    Props.set_if may_load load                               |>
+    Props.set_if may_store store in
   {
     code = Insn.code insn;
     name = Insn.name insn;
     asm  = normalize_asm (Insn.asm insn);
     bil  = Option.value bil ~default:[Bil.special "Unknown Semantics"];
     ops  = Insn.ops insn;
-    is_jump;
-    is_conditional_jump;
-    is_indirect_jump;
-    is_call;
-    is_return;
-    may_affect_control_flow;
-    may_load;
-    may_store;
+    props;
   }
 
-let has_side_effect insn = may_store insn || may_load insn
-let is_unconditional_jump insn =
-  is_jump insn || not (is_conditional_jump insn)
+let is flag t = Props.has t.props flag
+let may = is
+let must flag insn = {insn with props = Props.(insn.props + flag) }
+let mustn't flag insn = {insn with props = Props.(insn.props - flag)}
+let should = must
+let shouldn't = mustn't
 
 module Adt = struct
   let pr fmt = Format.fprintf fmt
@@ -92,10 +128,15 @@ module Adt = struct
     | [x] -> pr ch "%a" Op.pp_adt x
     | x :: xs -> pr ch "%a, %a" Op.pp_adt x pp_ops xs
 
-  let pp ch insn = pr ch "%s(%a)"
+  let props insn =
+    List.filter !known_properties ~f:(fun p -> is p insn) |>
+    List.map ~f:snd |>
+    String.concat ~sep:", "
+
+  let pp ch insn = pr ch "%s(%a, Props(%s))"
       (String.capitalize insn.name)
       pp_ops (Array.to_list insn.ops)
-
+      (props insn)
 end
 
 let pp_adt = Adt.pp
@@ -129,7 +170,7 @@ end
 
 include Regular.Make(struct
     type nonrec t = t with sexp, bin_io, compare
-    let hash = code
+    let hash t = t.code
     let module_name = Some "Bap.Std.Insn"
     let version = "0.1"
 
@@ -142,7 +183,7 @@ include Regular.Make(struct
   end)
 
 let pp_asm ppf insn =
-  Format.fprintf ppf "%s" (asm insn)
+  Format.fprintf ppf "%s" insn.asm
 
 let () =
   Data.Write.create ~pp:Adt.pp () |>

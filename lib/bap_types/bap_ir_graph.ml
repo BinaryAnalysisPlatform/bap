@@ -1,21 +1,15 @@
 open Core_kernel.Std
+open Regular.Std
+open Graphlib.Std
 open Option.Monad_infix
 
 open Bap_bil
-open Core_kernel.Std
 open Bap_common
-open Bap_graph
-open Bap_graph_regular_intf
 open Bap_ir
 module Jmp = Ir_jmp
 module Blk = Ir_blk
 module Sub = Ir_sub
-module Seq = struct
-  include Sequence
-  include Bap_seq
-end
 
-module RGraph = Bap_graph_regular
 type 'a seq = 'a Seq.t
 
 module Pred = struct
@@ -220,8 +214,6 @@ module Node = struct
       let hash x = Tid.hash (Term.tid x)
       let module_name = Some "Bap.Std.Graphlib.Ir.Node"
       let version = "0.1"
-
-
     end)
 
 end
@@ -390,26 +382,12 @@ let compare x y = Sub.compare x.sub y.sub
 
 let is_directed = true
 
-let create_tid_graph sub =
-  let module G = Bap_graph_regular.Tid.Tid in
-  Term.enum blk_t sub |> Seq.fold ~init:G.empty ~f:(fun g src ->
-      let sid = Term.tid src in
-      let g = G.Node.insert sid g in
-      Term.enum jmp_t src |> Seq.fold ~init:g ~f:(fun g jmp ->
-          match succ_tid_of_jmp jmp with
-          | None -> g
-          | Some did ->
-            let jid = Term.tid jmp in
-            let edge = G.Edge.create sid did jid in
-            G.Edge.insert edge g))
-
 include Regular.Make(struct
     type nonrec t = t with bin_io, compare, sexp
     let module_name = Some "Bap.Std.Graphlib.Ir"
     let version = "0.1"
     let hash g = Sub.hash g.sub
     let pp ppf g =
-      let open Bap_graph_pp in
       let node_label blk =
         let open Bap_ir in
         let phis =
@@ -429,21 +407,15 @@ include Regular.Make(struct
                      ~f:(function '\n' -> "\\l"
                                 | c -> Char.to_string c) in
         sprintf "%s\n%s" (Term.name blk) body in
-      let string_of_node b = sprintf "%s" (Term.name b) in
+      let string_of_node b =
+        sprintf "%s" (Term.name b) in
       let edge_label e = match Edge.cond e g with
         | Exp.Int w when Bitvector.is_one w -> ""
         | exp -> Bap_exp.to_string exp  in
       let nodes_of_edge e = Edge.(src e, dst e) in
-      Dot.pp_graph
+      Graphlib.Dot.pp_graph
+        ~name:(Ir_sub.name g.sub)
         ~attrs:["node[shape=box]"]
         ~string_of_node ~node_label ~edge_label
         ~nodes_of_edge ~nodes:(nodes g) ~edges:(edges g) ppf
-  end)
-
-
-include RGraph.Aux(struct
-    type t = node
-    let pp ppf blk = Format.fprintf ppf "%a" Tid.pp (Term.tid blk)
-    let module_name = "Bap.Std.Graphlib.Ir"
-    let version = "0.1"
   end)

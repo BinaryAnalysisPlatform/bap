@@ -6,7 +6,7 @@ open OUnit2
 
 module Dis = Disasm_expert.Basic
 module Rec = Disasm_expert.Recursive
-module Shingled_disasm = Disasm_expert.Shingled
+module Cfg = Graphs.Cfg
 
 let err fmt = Or_error.errorf fmt
 
@@ -64,14 +64,14 @@ let strings_of_insn insn =
 
 let insn_of_mem arch data ctxt =
   let mem = memory_of_string data in
-  Dis.create ~backend:"llvm" arch >>= fun dis ->
-  Dis.insn_of_mem dis mem >>= function
-  | mem,None,rest -> err "Failed to disassemble instruction"
-  | _,_,`left _ -> err "some memory was left"
-  | mem,(Some insn),`finished ->
-    assert_equal ~printer:(string_of_int)
-      (String.length data) (Memory.length mem);
-    return (strings_of_insn insn)
+  Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
+      Dis.insn_of_mem dis mem >>= function
+      | mem,None,rest -> err "Failed to disassemble instruction"
+      | _,_,`left _ -> err "some memory was left"
+      | mem,(Some insn),`finished ->
+        assert_equal ~printer:(string_of_int)
+          (String.length data) (Memory.length mem);
+        return (strings_of_insn insn))
 
 let test_insn_of_mem  (arch,samples) ctxt =
   let test (data,expect,_) =
@@ -82,27 +82,27 @@ let test_insn_of_mem  (arch,samples) ctxt =
 let test_run_all (arch,samples) ctxt =
   let mem =
     samples |> List.map ~f:fst3 |> String.concat |> memory_of_string in
-  Dis.create ~backend:"llvm" arch >>= fun dis ->
-  let dis = Dis.store_kinds dis in
-  Dis.run
-    ~return:Or_error.return ~init:()
-    ~invalid:(fun _ _ () -> err "got invalid instruction")
-    ~hit:(fun _ _ _ () -> err "hit should be called")
-    ~stopped:(fun s () ->
-        Or_error.return @@
-        List.iter2_exn  samples  (Dis.insns s)
-          ~f:(fun (data,exp,kinds) -> function
-              | (_,None) -> assert_string "bad instruction"
-              | (mem, Some r) ->
-                assert_equal ~ctxt ~printer
-                  (Ok exp) (Ok (strings_of_insn r));
-                assert_equal ~ctxt ~printer:Int.to_string
-                  (String.length data) (Memory.length mem);
-                List.iter kinds ~f:(fun expected ->
-                    let name =
-                      string_of_sexp @@  sexp_of_kind expected in
-                    assert_bool name (Dis.Insn.is r expected));
-            )) dis mem
+  Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
+      let dis = Dis.store_kinds dis in
+      Dis.run
+        ~return:Or_error.return ~init:()
+        ~invalid:(fun _ _ () -> err "got invalid instruction")
+        ~hit:(fun _ _ _ () -> err "hit should be called")
+        ~stopped:(fun s () ->
+            Or_error.return @@
+            List.iter2_exn  samples  (Dis.insns s)
+              ~f:(fun (data,exp,kinds) -> function
+                  | (_,None) -> assert_string "bad instruction"
+                  | (mem, Some r) ->
+                    assert_equal ~ctxt ~printer
+                      (Ok exp) (Ok (strings_of_insn r));
+                    assert_equal ~ctxt ~printer:Int.to_string
+                      (String.length data) (Memory.length mem);
+                    List.iter kinds ~f:(fun expected ->
+                        let name =
+                          string_of_sexp @@  sexp_of_kind expected in
+                        assert_bool name (Dis.Insn.is r expected));
+                )) dis mem)
 
 let test_run_all data ctxt =
   let printer x = Sexp.to_string (Or_error.sexp_of_t sexp_of_unit x) in
@@ -207,8 +207,6 @@ let strlen = List.concat [
    preds - list of block numbers of predcessors
    succs is a list of destinations, where each destination is
    (blk_num, kind).
-
-   For unresolved target 0 is used.
 *)
 
 type dest_kind = [`Jump | `Cond | `Fall ] with sexp
@@ -220,7 +218,7 @@ let graph : graph = [
   1, [],    [3, `Jump];
   2, [3],   [3, `Fall];
   3, [1;2], [2, `Cond; 4, `Fall];
-  4, [3],   [0, `Jump]
+  4, [3],   []
 ]
 
 let create_block addr blk =
@@ -238,26 +236,26 @@ let blocks = [|
 
 let run_rec () =
   let mem = create_block 0x840Cl strlen in
-  let lifter = ARM.lift in
-  Rec.run ~lifter `armv7 mem
+  Rec.run `armv7 mem
 
 let test_cfg test ctxt =
   match run_rec () with
   | Ok r -> test r ctxt
   | Error err -> assert_string (Error.to_string_hum err)
 
-let amount cfg ctxt =
+let amount dis ctxt =
   assert_equal ~ctxt ~printer:Int.to_string
     ~msg:"Expected 4 basic blocks"
-    4 (Table.length (Rec.blocks cfg))
+    4 (Cfg.number_of_nodes (Rec.cfg dis))
 
 let equal_addrs m1 m2 = Memory.(min_addr m1 = min_addr m2)
 let string_of_mem mem = Addr.string_of_value (Memory.min_addr mem)
 let unexpected_block mem =
   failwithf "Unexpected block starting from %s" (string_of_mem mem) ()
 
-let addresses cfg ctxt =
-  Table.iteri (Rec.blocks cfg) ~f:(fun mem blk ->
+let addresses dis ctxt =
+  Rec.cfg dis |> Cfg.nodes |> Seq.iter ~f:(fun blk ->
+      let mem = Block.memory blk in
       match Array.find blocks ~f:(equal_addrs mem) with
       | None -> unexpected_block mem
       | Some mem' ->
@@ -266,18 +264,17 @@ let addresses cfg ctxt =
         assert_equal ~ctxt ~printer:Int.to_string
           ~msg (Memory.length mem') (Memory.length mem))
 
-let build_graph cfg : graph =
-  let module Blk = Rec.Block in
+let build_graph dis : graph =
   let blk_num blk =
-    let mem = Blk.memory blk in
+    let mem = Block.memory blk in
     match Array.findi blocks ~f:(Fn.const (equal_addrs mem)) with
     | Some (i,_) -> i + 1
     | None -> unexpected_block mem in
-  Table.fold (Rec.blocks cfg) ~init:[] ~f:(fun blk graph ->
-      let preds = Seq.map (Blk.preds blk) ~f:(fun blk -> blk_num blk) in
-      let dests = Seq.map (Blk.dests blk) ~f:(function
-          | `Unresolved kind -> 0, (kind :> dest_kind)
-          | `Block (blk,kind) -> blk_num blk, kind) in
+  let cfg = Rec.cfg dis in
+  Cfg.nodes cfg |> Seq.fold ~init:[] ~f:(fun graph blk ->
+      let preds = Seq.map (Cfg.Node.preds blk cfg) ~f:(fun blk -> blk_num blk) in
+      let dests = Seq.map (Cfg.Node.outputs blk cfg) ~f:(fun e ->
+          blk_num (Cfg.Edge.dst e), Cfg.Edge.label e) in
       (blk_num blk, Seq.to_list preds, Seq.to_list dests) :: graph)
 
 let structure cfg ctxt =
@@ -296,21 +293,18 @@ let test_micro_cfg insn ctxt =
   let mem = Bigstring.of_string insn |>
             Memory.create LittleEndian (Addr.of_int64 0L) |>
             ok_exn in
-  let lifter = AMD64.lift in
-  let dis = Rec.run ~lifter `x86_64 mem |> ok_exn in
+  let dis = Rec.run `x86_64 mem |> ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
-  assert_bool "One block" (Rec.blocks dis |> Table.length = 1);
-  Rec.blocks dis |> Table.to_sequence |>
-  Seq.to_list |> List.hd_exn |> snd
-  |> Rec.Block.insns |> function
-  | [mem, (Some _, Some _)] ->
+  assert_bool "One block" (Rec.cfg dis |> Cfg.number_of_nodes = 1);
+  Rec.cfg dis |> Cfg.nodes |>
+  Seq.to_list |> List.hd_exn
+  |> Block.insns |> function
+  | [mem, _] ->
     let max_addr = Addr.of_int ~width:64 (String.length insn - 1) in
     assert_equal ~printer:Addr.to_string ~ctxt
       (Addr.of_int64 0L) (Memory.min_addr mem);
     assert_equal ~printer:Addr.to_string ~ctxt
       max_addr (Memory.max_addr mem)
-  | [mem, (None, _)] -> assert_string "Failed to disassemble"
-  | [mem, (_, None)] -> assert_string "Failed to lift"
   | [] -> assert_string "No instructions"
   | _ :: _ -> assert_string "More than one instruction"
 
@@ -336,118 +330,41 @@ let test_micro_cfg insn ctxt =
    With the third ret unreachable.
 *)
 
-let has_dest src dst kind =
-  Seq.exists (Rec.Block.dests src) ~f:(function
-      | `Block (blk,k) ->
-        Rec.Block.compare blk dst = 0 && k = kind
-      | _ -> false)
+let has_dest cfg src dst kind =
+  let e = Cfg.Edge.create src dst kind in
+  Cfg.Edge.mem e cfg
 
 
 let call1_3ret ctxt =
   let mem = String.concat [call1; ret; ret; ret] |>
             memory_of_string in
-  let lifter = AMD64.lift in
-  let dis = Rec.run ~lifter `x86_64 mem |> Or_error.ok_exn in
+  let dis = Rec.run `x86_64 mem |> Or_error.ok_exn in
   assert_bool "No errors" (Rec.errors dis = []);
-  assert_bool "Three block" (Rec.blocks dis |> Table.length = 3);
-  match Rec.blocks dis |> Table.elements |> Seq.to_list with
+  assert_bool "Three block" (Rec.cfg dis |> Cfg.number_of_nodes = 3);
+  let cfg = Rec.cfg dis in
+  match Cfg.nodes cfg |> Seq.to_list with
   | [b1;b2;b3] ->
     let call = memory_of_string ~width:64 call1 in
     let ret1 = memory_of_string ret ~start:5 ~width:64 in
     let ret2 = memory_of_string ret ~start:6 ~width:64 in
-    assert_memory call (Rec.Block.memory b1);
-    assert_memory ret1 (Rec.Block.memory b2);
-    assert_memory ret2 (Rec.Block.memory b3);
-    assert_bool "b1 -> jump b3" @@ has_dest b1 b3 `Jump;
-    assert_bool "b1 -> fall b2" @@ has_dest b1 b2 `Fall;
+    assert_memory call (Block.memory b1);
+    assert_memory ret1 (Block.memory b2);
+    assert_memory ret2 (Block.memory b3);
+    assert_bool "b1 -> jump b3" @@ has_dest cfg b1 b3 `Jump;
+    assert_bool "b1 -> fall b2" @@ has_dest cfg b1 b2 `Fall;
     assert_bool "b2 has no succs" @@
-    Seq.is_empty (Rec.Block.succs b2);
+    Seq.is_empty (Cfg.Node.succs b2 cfg);
     assert_bool "b3 has no succs" @@
-    Seq.is_empty (Rec.Block.succs b3);
+    Seq.is_empty (Cfg.Node.succs b3 cfg);
   | _ -> assert false
 
-(* *****
-   Test shingled disasm sub-routines and test components are and below
-*)
-
-exception Create_mem of Error.t
-let create_memory arch s addr =
-  let endian = Arch.endian arch in
-  Memory.create endian addr @@
-  Bigstring.of_string s |> function
-  | Ok r -> r
-  | Error e -> raise (Create_mem e)
-
-let make_params bytes =
-  let open Or_error in
-  let arch = Arch.(`x86) in
-  let addr_size= Size.in_bits @@ Arch.addr_size arch in
-  let min_addr = Addr.of_int addr_size 0 in
-  let memory = create_memory arch bytes min_addr in
-  let dis = Dis.create ~backend:"llvm" (Arch.to_string arch) |> ok_exn in
-  dis, memory, arch
-
-let check_results addrs expected_results =
-  let list_to_string x =
-    List.to_string ~f:Int.to_string x in
-  List.iter2_exn addrs expected_results
-    ~f:(fun actual_size expected_size ->
-        assert_equal ~msg:((list_to_string addrs)
-                           ^ (list_to_string expected_results))
-          actual_size expected_size)
-
-let shingles_to_list shingles =
-  let open Or_error in
-  let open Addr in
-  let open Memory in
-  Memmap.to_sequence shingles |>
-  Seq.map ~f:(fun (mem, insn) -> length mem)
-  |> Seq.to_list
-
-(* This test affirms that both the order and the inner sequences of a set of bytes
-   will be interpreted appropriately by the bap utility *)
-let test_hits_every_byte test_ctxt =
-  let dis, memory, arch = make_params overlap in
-  let addrs = Shingled_disasm.all_shingles dis memory ~init:[]
-      ~at:(fun accu (mem,insn) -> (Memory.length mem)::accu) in
-  let expected_results = [ 5; 2; 1; 1; 1; ] in
-  check_results addrs expected_results
-
-let test_sheers test_ctxt =
-  let dis, memory, arch = make_params overlap in
-  let sheered_shingles =
-    Shingled_disasm.sheered_shingles arch ~dis memory in
-  let addrs = shingles_to_list sheered_shingles in
-  (* the above is a byte sequence taken out of context. The shingled
-     disassembler will sheer properly the ending sequences that lead to
-     data, but currently only one side of the transitive closure is computed
-  *)
-  let expected_results = [ 2; 1; ] in
-  check_results addrs expected_results
-
-let test_sheering_retains test_ctxt =
-  (* TODO: construct a loop of assembler. Assert is is not lost  *)
-  let dis, memory, arch = make_params valid_insn_seq in
-  let sheered_shingles =
-    Shingled_disasm.sheered_shingles arch ~dis memory in
-  let expected_results = [ 1; 1; 5; ] in
-  check_results (shingles_to_list sheered_shingles) expected_results
-(* TODO: check that a loop that contains a jump to an invalid
-   destination is lost *)
-
-
-let () = Plugins.load ()
-
-let suite = "Disasm.Basic" >::: [
+let suite () = "Disasm.Basic" >::: [
     "x86_64/one"            >:: test_insn_of_mem x86_64;
     "x86_64/all"            >:: test_run_all     x86_64;
     "recurse"               >:: test_cfg amount;
     "addresses"             >:: test_cfg addresses;
     "structure"             >:: test_cfg structure;
     "ret"                   >:: test_micro_cfg ret;
-    "sub"                   >:: test_micro_cfg ret;
+    "sub"                   >:: test_micro_cfg sub;
     "call1_3ret"            >:: call1_3ret;
-    "test_hits_every_byte"  >:: test_hits_every_byte;
-    "test_sheers"           >:: test_sheers;
-    "test_sheering_retains" >:: test_sheering_retains;
   ]

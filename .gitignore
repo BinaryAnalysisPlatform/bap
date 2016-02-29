@@ -23,3 +23,9 @@
 /setup.log
 /setup.ml
 META
+_oasis
+/bap_config.ml
+/man/bap-mc.1
+/man/bap-byteweight.1
+/man/bap.1
+/lib/bap_config/bap_config.ml

@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 
 type t
 exception Width with sexp
@@ -7,7 +8,7 @@ type endian =
   | BigEndian
 with bin_io, compare, sexp
 
-include Bap_regular.S with type t := t
+include Regular with type t := t
 include Comparable.With_zero with type t := t
 include Bap_integer.S with type t := t
 module Mono : Comparable with type t := t

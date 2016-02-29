@@ -1,5 +1,6 @@
 #load "unix.cma";;
-
+(* OASIS_START *)
+(* OASIS_STOP *)
 let definition_end = BaseEnv.var_ignore
 
 let ctxt = !BaseContext.default
@@ -156,6 +157,15 @@ let check =
       then error message)
 
 
+let install_headers hdrs =
+  InternalInstallPlugin.lib_hook :=
+    fun (cs, bs, lib) ->
+      match lib.OASISTypes.lib_findlib_name with
+      | Some "bap" -> (cs, bs, lib, hdrs)
+      | _ -> (cs, bs, lib, [])
+
+
+
 let define definitions =
   List.iter (fun f -> try f () with exn -> ()) definitions
 
@@ -178,6 +188,11 @@ let () =
     llvm "cflags";
     llvm "libs";
     llvm_lib;
+  ];
+
+  install_headers [
+    "lib/bap_disasm/disasm.hpp";
+    "lib/bap_disasm/disasm.h";
   ];
 
   setup ();

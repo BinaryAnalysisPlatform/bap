@@ -1,8 +1,0 @@
-libgmp-dev
-libzip-dev
-libcurl4-gnutls-dev
-llvm-3.4-dev
-time
-clang
-llvm
-m4

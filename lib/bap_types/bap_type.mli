@@ -1,5 +1,6 @@
 (** Extends [typ] interface.  *)
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 
 (** This definitions will be placed in a global namespace after you

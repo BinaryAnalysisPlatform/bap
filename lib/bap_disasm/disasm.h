@@ -109,7 +109,7 @@ typedef enum bap_disasm_insn_p {
     may_load
 } bap_disasm_insn_p_type;
 
-/* bap_disasm_create(triple,cpu) creates a disassembler for a given
+/** bap_disasm_create(triple,cpu) creates a disassembler for a given
  * triple and cpu.
  * This function is not thread safe.
  * @pre No preconditions. In case of error the corresponding code is returned. */
@@ -119,10 +119,19 @@ bap_disasm_type bap_disasm_create(
     const char *cpu,
     int debug_level);
 
-/* deletes disassembler \a disasm.
+/** deletes disassembler \a disasm.
  * This function is not thread safe.
  * @pre disasm is valid descriptor */
 void bap_disasm_delete(bap_disasm_type disasm);
+
+/** returns total amount of registered backends */
+int bap_disasm_backends_size(void);
+
+
+/** returns a constant pointer to a name of the nth backend.
+    @pre i >= 0 /\ i < bap_disasm_backends_size
+ */
+const char* bap_disasm_backend_name(int i);
 
 /** assosiates memory region with a given disassembler. Current offset
  * is automatically reset to 0.

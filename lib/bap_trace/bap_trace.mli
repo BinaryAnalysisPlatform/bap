@@ -1,5 +1,6 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Regular.Std
+open Bap.Std
 
 (** Trace is a sequence of events accompanied with meta information.
 
@@ -39,7 +40,7 @@ type t
 
 type io_error = [
   | `Protocol_error of Error.t   (** Data encoding problem         *)
-  | `System_error of Unix.error  (** System error                  *)  
+  | `System_error of Unix.error  (** System error                  *)
 ]
 
 type error = [
@@ -56,7 +57,7 @@ type error = [
 *)
 
 
-(** [load ~monitor uri] fetches trace from a provided [uri]. 
+(** [load ~monitor uri] fetches trace from a provided [uri].
     [monitor] is fail_on_error by default. *)
 val load : ?monitor:monitor -> Uri.t -> (t,error) Result.t
 
@@ -201,7 +202,7 @@ val append : t -> event seq -> t
 *)
 
 module type S = sig
-  val name: string 
+  val name: string
   val supports: 'a tag -> bool
 end
 

@@ -1,4 +1,4 @@
-open Bap_types.Std
+open Bap.Std
 open Core_kernel.Std
 
 module Move = struct

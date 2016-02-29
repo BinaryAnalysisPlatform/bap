@@ -1,0 +1,36 @@
+opam-version: "1.2"
+name: "bap-frontend"
+version: "master"
+maintainer: "Ivan Gotovchits <ivg@ieee.org>"
+authors: "BAP Team"
+homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
+bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
+dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
+license: "MIT"
+build: [
+  ["./configure"
+                 "--prefix=%{prefix}%"
+                 "--mandir=%{man}%"
+                 "--disable-frontend"
+                 "--enable-mc"
+                 "--disable-byteweight"
+  ]
+  [make]
+]
+
+install: [
+  [make "install"]
+]
+
+remove: [
+  ["rm" "-f" "%{man}%/man1/bap-mc.1"]
+  ["rm" "-f" "%{bin}%/bap-mc"]
+]
+
+depends: [
+    "bap-std"
+    "cmdliner" {>= "0.9.6"}
+    "oasis" {build & >= "0.4.0"}
+]
+
+available: [ocaml-version >= "4.02.0"]

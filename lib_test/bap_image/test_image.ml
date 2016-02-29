@@ -142,7 +142,7 @@ let assert_cont ~word_size img =
             (a1 <> a2 ==> Addr.is_zero diff) in
       a2) |> return
 
-let suite = "Image" >::: [
+let suite () = "Image" >::: [
     "to_list:0-15/bytes_32LE" >:: to_list ~word_size:`r8 "0-15_32LE"
       ~expect:(List.init 16 ~f:ident);
     "to_list/0-15/bytes_32BE" >:: to_list ~word_size:`r8 "0-15_32BE"

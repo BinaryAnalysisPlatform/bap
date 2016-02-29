@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Bap_bil
 
@@ -30,35 +31,23 @@ type 'a vector = 'a Vec.t
 
 module Tid = struct
   exception Overrun
-  type t = Int63.t
+  type t = Int63.t with bin_io, compare, sexp
 
-  let names = Int63.Table.create ()
-
-  let rev_lookup name =
-    Hashtbl.to_alist names |> List.find_map ~f:(fun (tid,x) ->
-        Option.some_if (x = name) tid) |> function
-    | None -> invalid_argf "unbound name: %s" name ()
-    | Some name -> name
-
-  let from_string_exn str = match str.[0] with
-    | '%' -> Scanf.sscanf str "%%%X" (Int63.of_int)
-    | '@' -> Scanf.sscanf str "@%s" rev_lookup
-    | _ -> invalid_arg "label should start from '%' or '@'"
-
-  let from_string str = Or_error.try_with (fun () ->
-      from_string_exn str)
-
-  let (!) = from_string_exn
+  module Tid_generator = Bap_state.Make(struct
+      type t = Int63.t ref
+      let create () = ref (Int63.zero)
+    end)
 
   let create =
-    let tid = ref Int63.zero in
     fun () ->
-      Int63.incr tid;
-      if tid.contents = Int63.zero
+      let last_tid = !Tid_generator.state in
+      Int63.incr last_tid;
+      if last_tid.contents = Int63.zero
       then raise Overrun;
-      tid.contents
+      last_tid.contents
+
   let nil = Int63.zero
-  include Regular.Make(struct
+  module Tid = Regular.Make(struct
       type nonrec t = Int63.t with bin_io, compare, sexp
       let module_name = Some "Bap.Std.Tid"
       let version = "0.1"
@@ -71,12 +60,40 @@ module Tid = struct
       let to_string tid = Format.asprintf "%a" pp tid
     end)
 
-  let set_name tid name =
-    Hashtbl.set names ~key:tid ~data:name
+  module Name_resolver = Bap_state.Make(struct
+      type t = string Tid.Table.t
+      let create () = Tid.Table.create ()
+    end)
 
-  let name tid = match Hashtbl.find names tid with
-    | None -> Format.asprintf "%%%a" pp tid
+  let names = Name_resolver.state
+
+  let rev_lookup name =
+    Hashtbl.to_alist !names |> List.find_map ~f:(fun (tid,x) ->
+        Option.some_if (x = name) tid) |> function
+    | None -> invalid_argf "unbound name: %s" name ()
+    | Some name -> name
+
+  let from_string_exn str = match str.[0] with
+    | '%' -> Scanf.sscanf str "%%%X" (Int63.of_int)
+    | '@' -> Scanf.sscanf str "@%s" rev_lookup
+    | _ -> invalid_arg "label should start from '%' or '@'"
+
+  let from_string str = Or_error.try_with (fun () ->
+      from_string_exn str)
+
+  let set_name tid name =
+    Hashtbl.set !names ~key:tid ~data:name
+
+  let name tid = match Hashtbl.find !names tid with
+    | None -> Format.asprintf "%%%a" Tid.pp tid
     | Some name -> sprintf "@%s" name
+
+  module State = struct
+    let set_name_resolver resolver = names := resolver
+  end
+
+  let (!) = from_string_exn
+  include Tid
 end
 
 type tid = Tid.t with bin_io, compare, sexp

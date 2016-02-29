@@ -1,0 +1,31 @@
+OASISFormat: 0.4
+Name:        bap
+Version:     0.9.9
+Synopsis:    BAP Core Library
+Authors:     BAP Team
+Maintainers: Ivan Gotovchits <ivg@ieee.org>
+License:     MIT
+Copyrights:  (C) 2016 Carnegie Mellon University
+Plugins:     META (0.4)
+AlphaFeatures: ocamlbuild_more_args
+BuildTools: ocamlbuild, camlp4o
+XOCamlbuildExtraArgs:
+     -j 8
+     -use-ocamlfind
+     -classic-display
+     -plugin-tags "'package(findlib),package(core_kernel)'"
+
+BuildDepends: bin_prot.syntax,
+              camlp4,
+              comparelib.syntax,
+              core_kernel,
+              fieldslib.syntax,
+              sexplib.syntax
+
+FilesAB: lib/bap_config/bap_config.ml.ab
+
+
+PreConfCommand: $rm setup.data
+PostInstallCommand: ./postinstall.byte
+PostUninstallCommand: $rm $bindir/baptop
+PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data

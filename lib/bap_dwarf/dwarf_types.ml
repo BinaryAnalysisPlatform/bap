@@ -1,9 +1,8 @@
 (** Basic type declarations for DWARF format.  *)
 open Core_kernel.Std
-open Bap_types.Std
+open Bap.Std
 
-module Leb128 = Dwarf_leb128
-type leb128 = Leb128.t with bin_io, compare, sexp
+type leb128 = Dwarf_leb128.t with bin_io, compare, sexp
 
 (** File sections  *)
 module Section = struct

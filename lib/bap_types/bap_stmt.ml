@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Format
 open Bap_bil
@@ -42,7 +43,6 @@ module Stmt = struct
   let cpuexn n = CpuExn n
 end
 
-
 module Infix = struct
   let (:=) v x = Bap_bil.Stmt.Move (v,x)
 end
@@ -71,13 +71,13 @@ module Stmts_data = struct
     let version = "0.1"
   end
   include T
-  include Bap_data.Make(T)
-  open Bap_data
+  include Data.Make(T)
+  open Data
   let bin_reader = bin_reader (module T)
   let bin_writer = bin_writer (module T)
   let sexp_reader = sexp_reader (module T)
   let sexp_writer = sexp_writer (module T)
-  let printer = (Bap_data.pretty_writer (module Stmts_pp))
+  let printer = (Data.pretty_writer (module Stmts_pp))
 
   let () =
     let ver = version in

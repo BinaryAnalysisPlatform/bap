@@ -1,6 +1,6 @@
 open Core_kernel.Std
+open Regular.Std
 open Or_error
-open Bap_data_types
 
 type endian = LittleEndian | BigEndian
 with bin_io, compare, sexp
@@ -60,7 +60,7 @@ module type Kernel = sig
   val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
-  include Versioned with type t := t
+  include Data.Versioned with type t := t
 end
 
 (** internal representation *)
@@ -433,7 +433,7 @@ module Trie = struct
 end
 
 include Or_error.Monad_infix
-include Bap_regular.Make(T)
+include Regular.Make(T)
 module Int_err = Safe
 include (Int_exn : Bap_integer.S with type t := t)
 let one = Cons.one

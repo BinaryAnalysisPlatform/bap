@@ -1,6 +1,7 @@
 open Core_kernel.Std
 
 type t = {
+  disassembler : string;
   src : string option;
   addr : string;
   max_insn : int option;
