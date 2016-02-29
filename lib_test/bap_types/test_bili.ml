@@ -41,7 +41,7 @@ let assert_prg value prg ctxt =
   let res = bili#eval prg >>= fun () -> bili#lookup r >>| Bil.Result.value in
   Monad.State.eval res (new Bili.context)
 
-let suite =
+let suite () =
   "Bili" >::: [
     "mem[0,el]:32 ~> bot" >::
     assert_exp undefined Bil.(load ~mem ~addr:(int one) el `r32);

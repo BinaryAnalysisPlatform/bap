@@ -1,21 +1,17 @@
 open Core_kernel.Std
 open Bap.Std
 open Or_error
+open Format
 
 let install_printers () =
-  List.map (Pretty_printer.all ()) ~f:(fun printer ->
+  List.iter (Pretty_printer.all ()) ~f:(fun printer ->
       let printer =
         if String.is_prefix printer ~prefix:"Core."
         then String.substr_replace_first printer
             ~pattern:"Core"
             ~with_:"Core_kernel"
         else printer in
-      let cmd = sprintf "#install_printer %s;;" printer in
-      Bap_toplevel.eval cmd) |>
-  Or_error.all >>| List.for_all ~f:ident
+      Topdirs.dir_install_printer std_formatter
+        (Longident.parse printer))
 
-let () = match install_printers () with
-  | Ok true -> ()
-  | Ok false -> eprintf "Problem installing printers"
-  | Error err -> eprintf "Failed to install printers: %s" @@
-    Error.to_string_hum err
+let () = install_printers () 

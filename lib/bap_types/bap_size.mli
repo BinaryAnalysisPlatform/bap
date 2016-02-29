@@ -1,6 +1,7 @@
 (** Extends [size] type.  *)
 
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 
 (** {2 Lifting from int} *)

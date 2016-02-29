@@ -1,6 +1,7 @@
 (** A loadable memory image of an executable.  *)
 
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 
 open Image_internal_std
@@ -97,3 +98,5 @@ end
 (** [register_backend ~name backend] tries to register backend under
     the specified [name]. *)
 val register_backend : name:string -> Image_backend.t -> [ `Ok | `Duplicate ]
+
+val available_backends : unit -> string list

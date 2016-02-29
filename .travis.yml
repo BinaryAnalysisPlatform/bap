@@ -2,11 +2,6 @@ language: c
 install: wget https://raw.githubusercontent.com/ocaml/ocaml-travisci-skeleton/master/.travis-opam.sh
 script: bash -ex .travis-opam.sh
 sudo: false
-cache:
-  directories:
-    - $HOME/.opam
-  before_cache:
-    - rm -rf $HOME/.opam/log
 addons:
   apt:
     sources:

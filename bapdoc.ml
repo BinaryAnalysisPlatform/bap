@@ -7,6 +7,7 @@ let outdir = "doc"
 let deps = [
   "core_kernel";
   "ocamlgraph";
+  "uri"
 ]
 
 let command = "opam config exec --switch=4.02.1 ocamlfind -- ocamldoc"

@@ -52,6 +52,11 @@ external create
   -> t
   = "bap_disasm_create_stub" "noalloc"
 
+external backends_size : unit -> int =
+  "bap_disasm_backends_size_stub" "noalloc"
+
+external backend_name : int -> string = "bap_disasm_backend_name_stub"
+
 external delete : t -> unit = "bap_disasm_delete_stub"  "noalloc"
 external set_memory : t -> int64 -> Bigstring.t -> off:int -> len:int -> unit
   = "bap_disasm_set_memory_stub" "noalloc"

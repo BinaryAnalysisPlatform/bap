@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
@@ -8,31 +9,46 @@ type t
 
 val from_file :
   ?on_warning:(Error.t -> unit Or_error.t) ->
-  ?backend:string ->
-  ?name:(addr -> string option) ->
-  ?roots:addr list ->
+  ?loader:string ->
+  ?disassembler:string ->
+  ?brancher:brancher ->
+  ?symbolizer:symbolizer ->
+  ?rooter:rooter ->
+  ?reconstructor:reconstructor ->
   string -> t Or_error.t
 
 val from_image :
-  ?name:(addr -> string option) ->
-  ?roots:addr list ->
+  ?disassembler:string ->
+  ?brancher:brancher ->
+  ?symbolizer:symbolizer ->
+  ?rooter:rooter ->
+  ?reconstructor:reconstructor ->
   image -> t Or_error.t
 
 val from_mem :
-  ?name:(addr -> string option) ->
-  ?roots:addr list ->
+  ?disassembler:string ->
+  ?brancher:brancher ->
+  ?symbolizer:symbolizer ->
+  ?rooter:rooter ->
+  ?reconstructor:reconstructor ->
   arch -> mem -> t Or_error.t
 
 val from_string :
   ?base:addr ->
-  ?name:(addr -> string option) ->
-  ?roots:addr list ->
+  ?disassembler:string ->
+  ?brancher:brancher ->
+  ?symbolizer:symbolizer ->
+  ?rooter:rooter ->
+  ?reconstructor:reconstructor ->
   arch -> string -> t Or_error.t
 
 val from_bigstring :
   ?base:addr ->
-  ?name:(addr -> string option) ->
-  ?roots:addr list ->
+  ?disassembler:string ->
+  ?brancher:brancher ->
+  ?symbolizer:symbolizer ->
+  ?rooter:rooter ->
+  ?reconstructor:reconstructor ->
   arch -> Bigstring.t -> t Or_error.t
 
 val arch : t -> arch
@@ -49,26 +65,28 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 
-type 'a register = ?deps:string list -> string -> 'a -> unit
+val restore_state : t -> unit
+
 type error =
   | Not_loaded of string
-  | Is_duplicate of string
-  | Not_found of string
-  | Doesn't_register of string
-  | Load_failed of string * Error.t
   | Runtime_error of string * exn
 with sexp_of
 
 exception Pass_failed of error with sexp
 
-val register_pass : (t -> t) register
-val register_pass': (t -> unit) register
-val register_pass_with_args : (string array -> t -> t) register
-val register_pass_with_args' : (string array -> t -> unit) register
+val register_pass : ?deps:string list -> ?name:string -> (t -> t) -> unit
+val register_pass': ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
-val passes : ?library:string list -> unit -> string list Or_error.t
-val run_pass :
-  ?library:string list -> ?argv:string array -> t -> string -> t Or_error.t
-val passes_exn : ?library:string list -> unit -> string list
-val run_pass_exn : ?library:string list -> ?argv:string array -> t ->
-  string -> t
+val passes : unit -> string list Or_error.t
+val run_pass : t -> string -> t Or_error.t
+val run_pass_exn : t -> string -> t
+val passes : unit -> string list
+
+module Factory : Source.Factory
+  with type t =
+         ?disassembler:string ->
+         ?brancher:brancher ->
+         ?symbolizer:symbolizer ->
+         ?rooter:rooter ->
+         ?reconstructor:reconstructor -> unit -> t Or_error.t
+include Data with type t := t

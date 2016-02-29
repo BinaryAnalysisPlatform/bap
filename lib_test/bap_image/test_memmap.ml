@@ -158,7 +158,7 @@ let intersections cons size ctxt =
                 |> sort_ints |> List.dedup in
       assert_equal ~printer ~ctxt expect got)
 
-let suite = "Memmap" >::: [
+let suite () = "Memmap" >::: [
     "add/lookup/1@0"    >:: add_lookup (byte 0);
     "add/lookup/1@1"    >:: add_lookup (byte 1);
     "add/lookup/1@1024" >:: add_lookup (byte 1023);

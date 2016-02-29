@@ -1,5 +1,5 @@
 open Core_kernel.Std
-open Bap_common
+open Regular.Std
 
 type t with bin_io, compare, sexp
 type value = t with bin_io, compare, sexp
@@ -26,7 +26,7 @@ module Dict : sig
   val find : t -> 'a tag -> 'a option
   val add : t -> 'a tag -> 'a -> [`Ok of t | `Duplicate]
   val change : t -> 'a tag -> ('a option -> 'a option) -> t
-  val all_pairs : t -> (typeid * value) Sequence.t
+  val to_sequence : t -> (typeid * value) Sequence.t
   val data : t -> value Sequence.t
 end
 
@@ -41,6 +41,8 @@ module Tag : sig
     (module S with type t = 'a) -> 'a tag
 
   val name : 'a tag -> string
+  val typeid  : 'a tag -> typeid
+  val key : 'a tag -> 'a Type_equal.Id.t
   val same : 'a t -> 'b t -> bool
   val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
   val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
@@ -54,6 +56,6 @@ module Match : sig
   val default : (unit -> 's) -> 's t
 end
 
-module Typeid : Regular with type t = typeid
+module Typeid : Identifiable with type t = typeid
 
 include Regular with type t := t

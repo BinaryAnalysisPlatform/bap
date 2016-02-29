@@ -1,0 +1,3 @@
+REC
+PKG cmdliner
+B ../../_build/plugins/llvm

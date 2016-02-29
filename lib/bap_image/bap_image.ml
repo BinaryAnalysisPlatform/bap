@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Or_error
 
@@ -222,6 +223,8 @@ let create_words secs = {
 
 let register_backend ~name backend =
   String.Table.add backends ~key:name ~data:backend
+
+let available_backends () = Hashtbl.keys backends
 
 let create_segment_of_symbol_table syms secs =
   let tab = Symbol.Table.create ()

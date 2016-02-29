@@ -1,0 +1,291 @@
+Library bap
+  Path:            lib/bap
+  FindLibName:     bap
+  CompiledObject:  best
+  BuildDepends:    bap.disasm,
+                   bap.image,
+                   bap.plugins,
+                   bap.sema,
+                   bap.types
+  Modules:         Bap
+  InternalModules: Bap_project, Bap_self
+
+Library regular
+  Path:            lib/regular
+  FindlibName:     regular
+  CompiledObject:  best
+  BuildDepends:    core_kernel
+  Modules:         Regular
+  InternalModules:
+                   Regular_bytes,
+                   Regular_cache,
+                   Regular_data,
+                   Regular_data_intf,
+                   Regular_data_types,
+                   Regular_data_write,
+                   Regular_data_read,
+                   Regular_opaque,
+                   Regular_regular,
+                   Regular_seq
+
+
+Library graphlib
+  Path:            lib/graphlib
+  FindlibName:     graphlib
+  CompiledObject:  best
+  BuildDepends:    core_kernel, regular, ocamlgraph
+  Modules:         Graphlib
+  InternalModules:
+                   Graphlib_graph,
+                   Graphlib_intf,
+                   Graphlib_regular,
+                   Graphlib_regular_intf,
+                   Graphlib_pp
+
+Library types
+  Path:            lib/bap_types
+  FindlibParent:   bap
+  FindlibName:     types
+  CompiledObject:  best
+  BuildDepends:    zarith, uuidm, bap.config, regular, graphlib,
+                   variantslib.syntax,
+                   enumerate.syntax
+
+  InternalModules:
+                   Bap_addr,
+                   Bap_arch,
+                   Bap_attributes,
+                   Bap_bil,
+                   Bap_bili,
+                   Bap_bil_adt,
+                   Bap_biri,
+                   Bap_bitvector,
+                   Bap_common,
+                   Bap_context,
+                   Bap_exp,
+                   Bap_expi,
+                   Bap_ir,
+                   Bap_ir_graph,
+                   Bap_ir_callgraph,
+                   Bap_tid_graph,
+                   Bap_helpers,
+                   Bap_int_conversions,
+                   Bap_integer,
+                   Bap_integer_intf,
+                   Bap_monad_types,
+                   Bap_monad,
+                   Bap_result,
+                   Bap_size,
+                   Bap_state,
+                   Bap_stmt,
+                   Bap_trie,
+                   Bap_trie_intf,
+                   Bap_type,
+                   Bap_types,
+                   Bap_type_error,
+                   Bap_value,
+                   Bap_var,
+                   Bap_vector,
+                   Bap_visitor
+
+
+Library bap_image
+  Path:          lib/bap_image/
+  FindlibParent: bap
+  FindlibName:   image
+  BuildDepends:  bap.types, pa_ounit.syntax
+  InternalModules:
+                 Bap_fileutils,
+                 Bap_image,
+                 Bap_image_std,
+                 Bap_memmap,
+                 Bap_memory,
+                 Bap_table,
+                 Image_backend,
+                 Image_common,
+                 Image_internal_std
+
+Library disasm
+  Path:          lib/bap_disasm
+  FindlibParent: bap
+  FindlibName:   disasm
+  BuildDepends:  bap.image,
+                 bap.types,
+                 camlzip,
+                 ocamlgraph,
+                 herelib.syntax
+  InternalModules:
+                 Bap_disasm,
+                 Bap_disasm_abi,
+                 Bap_disasm_basic,
+                 Bap_disasm_block,
+                 Bap_disasm_brancher,
+                 Bap_disasm_insn,
+                 Bap_disasm_linear_sweep,
+                 Bap_disasm_prim,
+                 Bap_disasm_rec,
+                 Bap_disasm_reconstructor,
+                 Bap_disasm_rooter,
+                 Bap_disasm_source,
+                 Bap_disasm_source_factory,
+                 Bap_disasm_source_intf,
+                 Bap_disasm_std,
+                 Bap_disasm_symbolizer,
+                 Bap_disasm_symtab,
+                 Bap_disasm_target_factory,
+                 Bap_disasm_target_intf,
+                 Bap_disasm_types,
+                 Bap_insn_kind
+  CCOpt:         $cc_optimization
+  CCLib:         $cxxlibs
+  CSources:      disasm.h, disasm.c, disasm_stubs.c
+
+Library sema
+  Path:          lib/bap_sema
+  FindlibParent: bap
+  FindlibName:   sema
+  BuildDepends:  bap.disasm,
+                 bap.types
+  InternalModules:
+                 Bap_sema,
+                 Bap_sema_abi,
+                 Bap_sema_lift,
+                 Bap_sema_ssa,
+                 Bap_sema_free_vars
+
+Library plugins
+  Path:            lib/bap_plugins
+  FindLibParent:   bap
+  FindLibName:     plugins
+  Modules:         Bap_plugins
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap.bundle, bap.config
+
+Library "bap-build"
+  Path: lib/bap_build
+  FindlibName: bap-build # will rename later
+  #FindlibParent: bap
+  CompiledObject: best
+  Modules: Bap_build
+  BuildDepends: findlib, ocamlbuild
+
+
+Library top
+  XMETADescription:
+     Toplevel printers for bap-types and core_kernel
+  Path: lib/bap
+  FindLibParent: bap
+  FindLibName: top
+  InternalModules:
+            Bap_install_printers,
+            Bap_load_plugins
+  BuildDepends: compiler-libs,
+                compiler-libs.common,
+                bap,
+                bap.plugins,
+                bap.config
+
+Library config
+  Path:            lib/bap_config
+  FindlibParent:   bap
+  FindlibName:     config
+  Modules:         Bap_config
+
+
+Library bundle
+  Path:          lib/bap_bundle
+  FindlibParent: bap
+  FindlibName:   bundle
+  BuildDepends:  uri, camlzip, unix, bap.config
+  Modules:       Bap_bundle
+
+Library types_test
+  Path:           lib_test/bap_types
+  Build$:         flag(tests)
+  Install:        false
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Modules:        Test_bitvector,
+                  Test_bili,
+                  Test_bytes,
+                  Test_graph,
+                  Test_trie
+
+Library image_test
+  Path:           lib_test/bap_image
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Test_image,
+                  Test_memmap,
+                  Test_table
+
+Library project_test
+  Path:           lib_test/bap_project
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Test_project
+
+Library disasm_test
+  Path:           lib_test/bap_disasm
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Test_disasm
+
+Library sema_test
+  Path:           lib_test/bap_sema
+  Build$:         flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Test_ir
+
+
+Executable run_tests
+  Path:         lib_test/bap
+  MainIs:       run_tests.ml
+  Install:      false
+  Build$:       flag(tests)
+  BuildDepends: bap.plugins,
+                disasm_test,
+                image_test,
+                oUnit,
+                sema_test,
+                types_test,
+                project_test,
+                findlib.dynload
+  CompiledObject: best
+
+
+Test unit_tests
+  TestTools: run_tests
+  Command: $run_tests -runner sequential
+
+Test inline_tests
+  TestTools: run_tests
+  Command: $run_tests inline-test-runner dummy -show-counts
+
+Executable "bapbuild"
+  Path:           tools
+  MainIs:         bapbuild.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs
+
+Executable "bapbundle"
+  Path:           tools
+  MainIs:         bapbundle.ml
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   core_kernel, bap.bundle, fileutils
+
+Executable "postinstall"
+  Path:           tools
+  MainIs:         postinstall.ml
+  Install:        false
+  CompiledObject: byte
+  BuildDepends:   bap.config, fileutils

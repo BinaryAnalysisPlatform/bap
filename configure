@@ -2,7 +2,11 @@
 
 set -e
 
+rm -f _oasis
+
 FST=true
+WITHOUT_BAP_LIBRARY=false
+
 for i in "$@"; do
   if $FST; then
     set --
@@ -10,6 +14,9 @@ for i in "$@"; do
   fi
 
   case $i in
+    --without-library)
+      WITHOUT_BAP_LIBRARY=true
+      ;;
     --*=*)
       ARG=${i%%=*}
       VAL=${i##*=}
@@ -21,9 +28,13 @@ for i in "$@"; do
   esac
 done
 
-[ -f setup.ml -a setup.ml -nt _oasis ] || oasis -quiet setup
+if [ $WITHOUT_BAP_LIBRARY = "true" ]; then
+    ocaml tools/cat.ml oasis/common oasis/src _oasis
+else
+    ocaml tools/cat.ml oasis/common oasis/bap oasis/src _oasis
+fi
 
-
-ocaml preconfig.ml
-
-ocaml setup.ml -configure "$@"
+ocaml tools/cat.ml myocamlbuild.ml.in myocamlbuild.ml
+ocaml tools/cat.ml setup.ml.in setup.ml
+oasis -quiet setup
+ocaml setup.ml -quiet -configure "$@"

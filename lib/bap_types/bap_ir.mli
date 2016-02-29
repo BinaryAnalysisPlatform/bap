@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Bap_bil
 open Bap_value
@@ -51,6 +52,8 @@ module Tid : sig
   val from_string_exn : string -> tid
   val (!) : string -> tid
   include Regular with type t := t
+  module Tid_generator : Bap_state.S
+  module Name_resolver : Bap_state.S
 end
 
 module Term : sig

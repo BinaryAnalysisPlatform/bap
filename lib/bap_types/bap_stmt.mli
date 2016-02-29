@@ -1,8 +1,8 @@
 (** Extends [stmt] interface  *)
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Bap_bil
-open Bap_data_intf
 
 include Regular with type t := stmt
 

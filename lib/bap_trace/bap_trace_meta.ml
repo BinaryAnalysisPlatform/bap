@@ -1,5 +1,6 @@
 open Core_kernel.Std
-open Bap_types.Std
+open Regular.Std
+open Bap.Std
 
 open Bap_trace_meta_types
 
@@ -24,18 +25,18 @@ let pp_time fmt t =
   let open Unix in
   let tm = gmtime t in
   Format.fprintf fmt "%02d:%02d:%02d %02d.%02d.%04d GMT"
-    tm.tm_hour tm.tm_min tm.tm_sec tm.tm_mday 
+    tm.tm_hour tm.tm_min tm.tm_sec tm.tm_mday
     tm.tm_mon (1900 + tm.tm_year)
 
 module File_stats = struct
   include File_stats
 
-  let pp ppf t = 
+  let pp ppf t =
     let ppt name fmt ft = Format.fprintf fmt "last %s time %a" name pp_time ft in
-    Format.fprintf ppf "@[filesize: %d bytes;@ %a;@ %a;@ %a;@]@ " 
-      t.size 
+    Format.fprintf ppf "@[filesize: %d bytes;@ %a;@ %a;@ %a;@]@ "
+      t.size
       (ppt "access") t.atime
-      (ppt "modification") t.mtime 
+      (ppt "modification") t.mtime
       (ppt "status change") t.ctime
 end
 

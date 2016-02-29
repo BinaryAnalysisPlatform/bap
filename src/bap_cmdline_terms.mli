@@ -1,27 +1,26 @@
 open Cmdliner
+open Bap_options
 
 val filename : string Term.t
-val symsfile : string option Term.t
-val loader : string Term.t
-val cfg_format : [> `with_asm | `with_bil | `with_name ] list Term.t
-val output_phoenix : string option Term.t
-val output_dump : [> `with_asm | `with_bil | `with_bir ] list Term.t
-val dump_symbols : string option option Term.t
-val demangle : [ `internal | `program of string ] option Term.t
-val no_resolve : bool Term.t
-val keep_alive : bool Term.t
-val no_inline : bool Term.t
-val keep_consts : bool Term.t
-val no_optimizations : bool Term.t
-val binaryarch : string option Term.t
+val loader : source -> string Term.t
+val disassembler : unit -> string Term.t
+val list_formats : bool Term.t
+val list_formats_doc : string
+val dump_formats : unit -> fmt_spec list Term.t
+val source_type : source Term.t
 val verbose : bool Term.t
-val bw_disable : bool Term.t
-val bw_length : int Term.t
-val bw_threshold : float Term.t
-val print_symbols : [> `with_addr | `with_name | `with_size ] list Term.t
-val use_ida : string option option Term.t
-val sigsfile : string option Term.t
-val emit_ida_script : string option Term.t
+val brancher : source -> string option Term.t
+val symbolizers : source -> string list Term.t
+val rooters : source -> string list Term.t
+val symbols : source -> string list Term.t
+val reconstructor : source -> string option Term.t
+
 val load : string list Term.t
 val load_path : string list Term.t
-val emit_attr : string list Term.t
+val list_plugins : bool Term.t
+val disable_plugin : string list Term.t
+val no_auto_load : bool Term.t
+
+val loader_options : string list
+val common_loader_options : Manpage.block list
+val options_for_passes    : Manpage.block list

@@ -1,6 +1,7 @@
 (** Memory representation. *)
 
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Image_common
 

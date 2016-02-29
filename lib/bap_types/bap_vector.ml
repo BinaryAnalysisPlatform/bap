@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 type 'a t = {
   mutable size : int;
   mutable data : 'a array;

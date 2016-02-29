@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_common
 open Bap_bil
 module Word = Bitvector
@@ -82,7 +83,7 @@ let pp_exp = Exp.pp
 let () =
   let desc = "Abstract Data Type pretty printing format" in
   let ver = Bap_exp.version and name = "adt" in
-  let create pp = Bap_data_write.create ~pp  () in
+  let create pp = Data.Write.create ~pp  () in
   create Exp.pp  |> Bap_exp.add_writer ~desc ~ver name;
   create Stmt.pp |> Bap_stmt.add_writer ~desc ~ver name;
   create Bil.pp  |> Bap_stmt.Stmts_data.add_writer ~desc ~ver name

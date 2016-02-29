@@ -14,7 +14,8 @@ let ignored = [
   ];
 ]
 
-module BW = Bap.Std.Byteweight.Bytes
+module BW = Bap_byteweight.Bytes
+module Sigs = Bap_byteweight_signatures
 
 let train_on_file meth length db path : unit t =
   Image.create path >>| fun (img,warns) ->
@@ -24,7 +25,7 @@ let train_on_file meth length db path : unit t =
       Addr.Table.add_exn symtab ~key:(Memory.min_addr mem) ~data:());
   let test mem = Addr.Table.mem symtab (Memory.min_addr mem) in
   let bw = if not (Sys.file_exists db) then BW.create ()
-    else match Signatures.load ~mode:"bytes" ~path:db arch with
+    else match Sigs.load ~mode:"bytes" ~path:db arch with
       | Some s when meth = `update ->
         Binable.of_string (module BW) s
       | _ -> BW.create () in
@@ -32,7 +33,7 @@ let train_on_file meth length db path : unit t =
       if Image.Segment.is_executable sec then
         BW.train bw ~max_length:length test mem);
   let data = Binable.to_string (module BW) bw in
-  Signatures.save ~mode:"bytes" ~path:db arch data
+  Sigs.save ~mode:"bytes" ~path:db arch data
 
 let matching =
   let open FileUtil in
@@ -67,7 +68,7 @@ let train meth length comp db paths =
 
 let create_bw img path : BW.t t =
   let arch = Image.arch img in
-  let data = Signatures.load ?path ~mode:"bytes" arch in
+  let data = Sigs.load ?path ~mode:"bytes" arch in
   Result.of_option data
     ~error:(Error.of_string "failed to read signatures from database")
   >>| fun data ->
@@ -210,14 +211,14 @@ module Cmdline = struct
     let doc = "Url of the binary signatures" in
     let default = sprintf
         "https://github.com/BinaryAnalysisPlatform/bap/\
-         releases/download/v%s/sigs.zip" Config.pkg_version in
+         releases/download/v%s/sigs.zip" Config.version in
     Arg.(value & opt string default & info ["url"] ~doc)
 
   let src : string Term.t =
     Arg.(value & pos 0 non_dir_file "sigs.zip" & info []
            ~doc:"Signatures file" ~docv:"SRC")
   let dst : string Term.t =
-    Arg.(value & pos 1 string Signatures.default_path &
+    Arg.(value & pos 1 string Sigs.default_path &
          info [] ~doc:"Destination" ~docv:"DST")
 
   let output : string Term.t =
@@ -277,23 +278,22 @@ module Cmdline = struct
     Ok ()
 
   let default =
-    let doc = "Byteweight Toolkit" in
+    let doc = "byteweight toolkit" in
     let man = [
       `S "DESCRIPTION";
-      `P "bap-byteweight is a toolkit for training, fetching, testing\
-          and installing byteweight signatures."
+      `P "A toolkit for training, fetching, testing
+          and installing byteweight signatures.";
     ] in
     Term.(pure usage $ choice_names),
     Term.info "bap-byteweight"
-      ~version:Config.pkg_version ~doc ~man
+      ~version:Config.version ~doc ~man
 
-  let eval () = Term.eval_choice default
+  let eval argv = Term.eval_choice ~argv default
       [train; find; fetch; install; update; symbols; dump]
 end
 
 let () =
-  Plugins.load ();
-  match Cmdline.eval () with
+  match Cmdline.eval Sys.argv with
   | `Ok Ok () -> ()
   | `Ok Error err -> eprintf "Program failed: %s\n"
                        Error.(to_string_hum err)

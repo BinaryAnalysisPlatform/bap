@@ -1,4 +1,7 @@
 open Core_kernel.Std
+open Regular.Std
+open Graphlib.Std
+
 module Std : sig
 
   (** {1 Binary Analysis Platform Library}  *)
@@ -204,66 +207,6 @@ module Std : sig
       For common strings, there's {!Trie.String}.
 
 
-      {3 Graph library}
-
-      {!Graphlib} is a generic library that extends a well known
-      OCamlGraph library. {!Graphlib} uses its own, more reach,
-      {!Graph} interface that is isomorphic to OCamlGraph's [Sigs.P]
-      signature for persistant graphs. Two functors witness the
-      isomorphism of the interfaces:
-      {!Graphlib.To_ocamlgraph} and {!Graphlib.Of_ocamlgraph}. Thanks
-      to these functors, any algorithm written for OCamlGraph can be
-      used on [Graphlibs] graph and vice verse.
-
-      The {!Graph} interface provides a richer interface in a Core
-      style. Nodes and Edges implements {!Opaque} data structure,
-      i.e., they come with Maps, Sets, Hashtbls, etc, preloaded (e.g.,
-      [G.Node.Set] is a set of node for graph implementation, provided
-      by a module named [G]). Graphs also implement {!Printable}
-      interface, that makes them much easier to debug.
-
-      Along with graphs, auxiliary data structures are provided, like
-      {{!Path}path} to represent paths in graph, {{!Tree}tree} for
-      representing different graph spannings, {{!Partition}partition}
-      for graph partitioning, and more.
-
-      {!Graphlib} is a library that provides a set of generic
-      algorithms, as well as implementations of a {!Graph} interface,
-      and a suite of preinstantiated graphs.
-
-      Contrary to OCamlGraph, each {!Graphlib} interface is provided
-      as a function, not a functor. Thus making there use syntactically
-      easier. Also, {!Graphlib} heavily uses optional and keyword
-      parameters. For die-hards, many algorithms still have functor
-      interface.
-
-      All {!Graphlib} algorithms accept a first-class module with
-      graph implementation as a first argument. You can think of this
-      parameter as an explicit type class. Later, when modular
-      implicits will be accepted in OCaml, this parameter can be
-      omitted. But for now, we need to pass it.
-
-      A recommended way to work with {!Graphlib} is to bind the
-      chosen implementation with some short name, usually [G] would be
-      a good choice:
-
-      {[module G = Graphlib.String.Bool]}
-
-      This will bind name [G] with a graph implementation that has
-      [string] nodes, with edges marked by values of type [bool].
-
-      To create a graph of type [G.t] one can use a generic
-      {!Graphlib.create} function:
-
-      {[let g = Graphlib.create (module G) ~edges:[
-          "entry", "loop", true;
-          "loop", "exit", true;
-          "loop", "loop", false;
-        ] ()]}
-
-      This will create an instance of type [G.t]. Of course, it is
-      still possible to use non-generic [G.empty], [G.Node.insert],
-      [G.Edge.insert].
   *)
 
   (** {2:image Memory model}
@@ -585,595 +528,66 @@ module Std : sig
       access to permission information.  *)
 
 
-  (** {2:aux Auxiliary libraries}
-
-      {3:dwarf DWARF library}
-
-      The Dwarf library provides an access to DWARF debugging
-      information. It implements parsing of some subset of DWARF
-      features, and a high-level interface {{!Dwarf.Fbi}Fbi} that
-      extracts function symbols from the given DWARF data.
-
-      {3:sigs Byteweight}
-
-      This {{!Byteweight}library} implements a byteweight algorithm
-      that identifies functions in stripped binaries, as well as
-      being able to train itself on a provided training corpus.
-  *)
 
   (** {1:api BAP API}  *)
 
   (** Access to BAP configuration variables  *)
   module Config : sig
-    val pkg_version : string
-  end
-
-  module Bytes : sig
-
-    type t = Bytes.t with bin_io, compare, sexp
-
-    include Container.S0   with type t := t with type elt := char
-    include Blit.S         with type t := t
-    include Identifiable.S with type t := t
-    module To_string   : Blit.S_distinct with type src := t with type dst := string
-    module From_string : Blit.S_distinct with type src := string with type dst := t
-
-    (** [create n] returns a new byte sequence of length [n]. The
-        sequence is uninitialized and contains arbitrary bytes.
-        Raise [Invalid_argument] if [n < 0] or [n > ]{!Sys.max_string_length}. *)
-    external create : int -> t = "caml_create_string"
-
-    (** [make n c] returns a new byte sequence of length [n], filled with
-        the byte [c].
-        Raise [Invalid_argument] if [n < 0] or [n > ]{!Sys.max_string_length}. *)
-    val make : int -> char -> t
-
-    (** [init n ~f] returns a fresh byte sequence of length [n], with
-        character [i] initialized to the result of [f i] (in increasing
-        index order).
-        Raise [Invalid_argument] if [n < 0] or [n > ]{!Sys.max_string_length}. *)
-    val init : int -> f:(int -> char) -> t
-
-    (** [empty] a byte sequence of size 0. *)
-    val empty : t
-
-    (** [length t] returns the length (number of bytes) of [t]. *)
-    external length: t -> int = "%string_length"
-
-    (** [get s n] returns the byte at index [n] in [s].
-        Raise [Invalid_argument] if [n] not a valid index in [s]. *)
-    external get : t -> int -> char = "%string_safe_get"
-
-    (** [set s n c] modifies [s] in place, replacing the byte at index [n] 
-        with [c]. 
-        Raise [Invalid_argument] if [n] is not a valid index in [s]. *)
-    external set : t -> int -> char -> unit = "%string_safe_set"
-
-    (** [copy t] returns a new byte sequence that contains the same
-        bytes as [t]. *)
-    val copy : t -> t
-
-    (** [of_string s] returns a new byte sequence that contains the
-        same bytes as the given string. *)
-    val of_string : string -> t
-
-    (** [to_string t] returns a new string that contains the same 
-        bytes as the given byte sequence. *)
-    val to_string : t -> string
-
-    (** [extend s left right] returns a new byte sequence that contains
-        the bytes of [s], with [left] uninitialized bytes prepended and
-        [right] uninitialized bytes appended to it. If [left] or [right]
-        is negative, then bytes are removed (instead of appended) from
-        the corresponding side of [s].
-        Raise [Invalid_argument] if the result length is negative or
-        longer than {!Sys.max_string_length} bytes. *)
-    val extend : t -> int -> int -> t
-
-    (** [fill s start len c] modifies [s] in place, replacing [len]
-        characters with [c], starting at [start].
-        Raise [Invalid_argument] if [start] and [len] do not designate a
-        valid range of [s]. *)
-    val fill : t -> int -> int -> char -> unit
-
-    (** [concat sep sl] concatenates the list of byte sequences [sl],
-        inserting the separator byte sequence [sep] between each, and
-        returns the result as a new byte sequence.
-        Raise [Invalid_argument] if the result is longer than
-        {!Sys.max_string_length} bytes. *)
-    val concat : t -> t list -> t
-
-    (** [cat s1 s2] concatenates [s1] and [s2] and returns the result
-         as new byte sequence.
-        Raise [Invalid_argument] if the result is longer than
-        {!Sys.max_string_length} bytes. *)
-    val cat : t -> t -> t
-
-    (** [iteri t ~f] same as {!iter}, but the function is 
-        applied to the index of the byte as first argument and the 
-        byte itself as second argument. *)
-    val iteri : t -> f:(int -> char -> unit) -> unit
-
-    (** [map s ~f] applies function [f] in turn to all the bytes of [s]
-        (in increasing index order) and stores the resulting bytes in
-        a new sequence that is returned as the result. *)
-    val map : t -> f:(char -> char) -> t
-
-    (** [mapi s ~f] calls [f] with each character of [s] and its
-        index (in increasing index order) and stores the resulting bytes
-        in a new sequence that is returned as the result. *)
-    val mapi : t -> f:(int -> char -> char) -> t
-
-    (** [trim t] returns a copy of [t], without leading and trailing
-        whitespace. The bytes regarded as whitespace are the ASCII
-        characters [' '], ['\012'], ['\n'], ['\r'], and ['\t']. *)
-    val trim : t -> t
-
-    (** [escaped t] returns a copy of [t], with special characters
-        represented by escape sequences, following the lexical 
-        conventions of OCaml.
-        Raise [Invalid_argument] if the result is longer than
-        {!Sys.max_string_length} bytes. *)
-    val escaped : t -> t
-
-    (** [index s c] returns the index of the first occurrence of byte [c]
-        in [s].
-        Raise [Not_found] if [c] does not occur in [s]. *)
-    val index : t -> char -> int
-
-    (** [rindex s c] returns the index of the last occurrence of byte [c]
-        in [s].
-        Raise [Not_found] if [c] does not occur in [s]. *)
-    val rindex : t -> char -> int
-
-    (** [index_from s i c] returns the index of the first occurrence of
-        byte [c] in [s] after position [i].  [index s c] is
-        equivalent to [index_from s 0 c].
-        Raise [Invalid_argument] if [i] is not a valid position in [s].
-        Raise [Not_found] if [c] does not occur in [s] after position [i]. *)
-    val index_from : t -> int -> char -> int
-
-    (** [rindex_from s i c] returns the index of the last occurrence of
-        byte [c] in [s] before position [i+1].  [rindex s c] is equivalent
-        to [rindex_from s (length s - 1) c].
-        Raise [Invalid_argument] if [i+1] is not a valid position in [s].
-        Raise [Not_found] if [c] does not occur in [s] before position [i+1]. *)
-    val rindex_from : t -> int -> char -> int
-
-    (** [contains s c] tests if byte [c] appears in [s]. *)
-    val contains : t -> char -> bool
-
-    (** [contains_from s start c] tests if byte [c] appears in [s] after
-        position [start].  [contains s c] is equivalent to [contains_from
-        s 0 c].
-        Raise [Invalid_argument] if [start] is not a valid position in [s]. *)
-    val contains_from : t -> int -> char -> bool
-
-    (** [rcontains_from s stop c] tests if byte [c] appears in [s] before
-        position [stop+1].
-        Raise [Invalid_argument] if [stop < 0] or [stop+1] is not a valid
-        position in [s]. *)
-    val rcontains_from : t -> int -> char -> bool
-
-    (** [uppercase t] returns a copy of [t], with all lowercase letters
-        translated to uppercase, including accented letters of the ISO
-        Latin-1 (8859-1) character set. *)
-    val uppercase : t -> t
-
-    (** [lowercase t] returns a copy of [t], with all uppercase letters
-        translated to lowercase, including accented letters of the ISO
-        Latin-1 (8859-1) character set. *)
-    val lowercase : t -> t
-
-    (** [capitalize t] returns a copy of [t], with the first byte set 
-        to uppercase. *)
-    val capitalize : t -> t
-
-    (** [uncapitalize t] returns a copy of [t], with the first byte set 
-        to lowercase. *)
-    val uncapitalize : t -> t
-
-    (** {4 Unsafe conversions (for advanced users)}
-
-        This section describes unsafe, low-level conversion functions
-        between [bytes] and [string]. They do not copy the internal data;
-        used improperly, they can break the immutability invariant on
-        strings provided by the [-safe-string] option. They are available for
-        expert library authors, but for most purposes you should use the
-        always-correct {!Bytes.to_string} and {!Bytes.of_string} instead. *)
-    module Unsafe : sig
-
-      (** [to_string b] - unsafely converts a byte sequence into a string.
-
-          To reason about the use of [to_string], it is convenient to
-          consider an "ownership" discipline. A piece of code that
-          manipulates some data "owns" it; there are several disjoint ownership
-          modes, including:
-          - Unique ownership: the data may be accessed and mutated
-          - Shared ownership: the data has several owners, that may only
-            access it, not mutate it.
-
-          Unique ownership is linear: passing the data to another piece of
-          code means giving up ownership (we cannot write the
-          data again). A unique owner may decide to make the data shared
-          (giving up mutation rights on it), but shared data may not become
-          uniquely-owned again.
-
-          [to_string s] can only be used when the caller owns the byte
-          sequence [s] -- either uniquely or as shared immutable data. The
-          caller gives up ownership of [s], and gains ownership of the
-          returned string.
-
-          There are two valid use-cases that respect this ownership
-          discipline:
-
-          1. Creating a string by initializing and mutating a byte sequence
-          that is never changed after initialization is performed.
-
-          {[
-            let string_init len f : string =
-              let s = Bytes.create len in
-              for i = 0 to len - 1 do Bytes.set s i (f i) done;
-              Bytes.Unsafe.to_string s
-          ]}
-
-          This function is safe because the byte sequence [s] will never be
-          accessed or mutated after [to_string] is called. The
-          [string_init] code gives up ownership of [s], and returns the
-          ownership of the resulting string to its caller.
-
-          Note that it would be unsafe if [s] was passed as an additional
-          parameter to the function [f] as it could escape this way and be
-          mutated in the future -- [string_init] would give up ownership of
-          [s] to pass it to [f], and could not call [to_string]
-          safely.
-
-          We have provided the {!String.init}, {!String.map} and
-          {!String.mapi} functions to cover most cases of building
-          new strings. You should prefer those over [to_string] or
-          [to_string] whenever applicable.
-
-          2. Temporarily giving ownership of a byte sequence to a function
-          that expects a uniquely owned string and returns ownership back, so
-          that we can mutate the sequence again after the call ended.
-
-          {[
-            let bytes_length (s : bytes) =
-              String.length (Bytes.Unsafe.to_string s)
-          ]}
-
-          In this use-case, we do not promise that [s] will never be mutated
-          after the call to [bytes_length s]. The {!String.length} function
-          temporarily borrows unique ownership of the byte sequence
-          (and sees it as a [string]), but returns this ownership back to
-          the caller, which may assume that [s] is still a valid byte
-          sequence after the call. Note that this is only correct because we
-          know that {!String.length} does not capture its argument -- it could
-          escape by a side-channel such as a memoization combinator.
-
-          The caller may not mutate [s] while the string is borrowed (it has
-          temporarily given up ownership). This affects concurrent programs,
-          but also higher-order functions: if [String.length] returned
-          a closure to be called later, [s] should not be mutated until this
-          closure is fully applied and returns ownership. *)
-      val to_string : t -> string
-
-      (** [of_string s] - unsafely converts a shared string to a byte 
-          sequence that should not be mutated.
-
-          The same ownership discipline that makes [to_string]
-          correct applies to [of_string]: you may use it if you were
-          the owner of the [string] value, and you will own the return
-          [bytes] in the same mode.
-
-          In practice, unique ownership of string values is extremely
-          difficult to reason about correctly. You should always assume
-          strings are shared, never uniquely owned.
-
-          For example, string literals are implicitly shared by the
-          compiler, so you never uniquely own them.
-
-          {[
-            let incorrect = Bytes.Unsafe.of_string "hello"
-            let s = Bytes.of_string "hello"
-          ]}
-
-          The first declaration is incorrect, because the string literal
-          ["hello"] could be shared by the compiler with other parts of the
-          program, and mutating [incorrect] is a bug. You must always use
-          the second version, which performs a copy and is thus correct.
-
-          Assuming unique ownership of strings that are not string
-          literals, but are (partly) built from string literals, is also
-          incorrect. For example, mutating [of_string ("foo" ^ s)]
-          could mutate the shared string ["foo"] -- assuming a rope-like
-          representation of strings. More generally, functions operating on
-          strings will assume shared ownership, they do not preserve unique
-          ownership. It is thus incorrect to assume unique ownership of the
-          result of [of_string].
-
-          The only case we have reasonable confidence is safe is if the
-          produced [bytes] is shared -- used as an immutable byte
-          sequence. This is possibly useful for incremental migration of
-          low-level programs that manipulate immutable sequences of bytes
-          (for example {!Marshal.from_bytes}) and previously used the
-          [string] type for this purpose. *)
-      val of_string : string -> t
-
-      (** The following is for system use only. Do not call directly. *)
-      external get  : t -> int -> char = "%string_unsafe_get"
-      external set  : t -> int -> char -> unit = "%string_unsafe_set"
-      external blit : t -> int -> t -> int -> int -> unit = "caml_blit_string" "noalloc"
-      external fill : t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
-
-    end
-  end
-
-  type bytes = Bytes.t 
-
-  type 'a reader
-  type 'a writer
-
-  (** Data type interface.
-
-      Types that implements this interface have a concrete
-      representation, that can be serialized and deserialized.
-
-      The only requirement is to provide a [version] value, that
-      represents a version number of the representation. Every time
-      the representation changes, the version should be updated.  *)
-  module type Data = sig
-    type t
-
-    (** [Ver v,name,desc] information attached to a particular
-        reader or writer.  *)
-    type info = string * [`Ver of string] * string option
-
-    (** Data representation version. After any change in data
-        representation the version should be increased.
-
-        Serializers that are derived from a data representation must have
-        the same version as a version of the data structure, from which
-        it is derived. This kind of serializers can only read and write
-        data of the same version.
-
-        Other serializers can actually read and write data independent
-        on its representation version. A serializer, that can't store
-        data of current version simply shouldn't be added to a set of
-        serializers.
-
-        It is assumed, that if a reader and a writer has the same name
-        and version, then whatever was written by the writer should be
-        readable by the reader. The round-trip equality is not required,
-        thus it is acceptable if some information is lost.
-
-        It is also possible, that a reader and a writer that has the
-        same name are compatible. In that case it is recommended to use
-        semantic versioning.
-    *)
+    (** Version number  *)
     val version : string
 
-    (** [size_in_bytes ?ver ?fmt datum] returns the amount of bytes
-        that is needed to represent [datum] in the given format and
-        version *)
-    val size_in_bytes : ?ver:string -> ?fmt:string -> t -> int
+    (** A directory for bap specific read-only architecture
+        independent data files.  *)
+    val datadir : string
 
-    (** [of_bytes ?ver ?fmt bytes] deserializes a datum from bytes  *)
-    val of_bytes : ?ver:string -> ?fmt:string -> bytes -> t
+    (** A directory for bap specific object files, libraries, and
+        internal binaries that are not intended to be executed directly
+        by users or shell scripts *)
+    val libdir : string
 
-    (** [to_bytes ?ver ?fmt datum] serializes a datum to a sequence of
-        bytes *)
-    val to_bytes : ?ver:string -> ?fmt:string -> t -> bytes
-
-    (** [blit_to_bytes ?ver ?fmt buffer datum offset] copies a
-        serialized representation of datum into a [buffer], starting from
-        [offset].  *)
-    val blit_to_bytes : ?ver:string -> ?fmt:string -> bytes -> t -> int -> unit
-
-    (** [of_bigstring ?ver ?fmt buf] deserializes a datum from bigstring  *)
-    val of_bigstring : ?ver:string -> ?fmt:string -> bigstring -> t
-
-    (** [of_bigstring ?ver ?fmt datum] serializes a datum to a sequence of
-        bytes represented as bigstring *)
-    val to_bigstring : ?ver:string -> ?fmt:string -> t -> bigstring
-
-    (** [blit_to_bigstring ?ver ?fmt buffer datum offset] copies a
-        serialized representation of datum into a [buffer], starting from
-        [offset].  *)
-    val blit_to_bigstring : ?ver:string -> ?fmt:string -> bigstring -> t -> int -> unit
-
-    (** Input/Output functions for the given datum.*)
-    module Io : sig
-
-      (** [load ?ver ?fmt channel] loads datum from the input channel  *)
-      val load  : ?ver:string -> ?fmt:string -> in_channel -> t
-
-
-      (** [read_all ?ver ?fmt ?rev channel] reads a sequence of datums
-          stored in the storage accessed via [channel] and returns it as a
-          list. If [rev] is [true] (defaults to [false]) then a list will
-          be reversed (slightly faster).  *)
-      val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> in_channel -> t list
-
-      (** [scan ?ver ?fmt channel] creates a stream of datums, that
-          are loaded consequently from the channel *)
-      val scan  : ?ver:string -> ?fmt:string -> in_channel -> (unit -> t option)
-
-      (** [save ?ver ?fmt channel datum] saves [datum] to a [channel] *)
-      val save  : ?ver:string -> ?fmt:string -> out_channel -> t -> unit
-
-
-      (** [save_all ?ver ?fmt data channel] saves a list of data into
-          a [channel] *)
-      val save_all : ?ver:string -> ?fmt:string -> out_channel -> t list -> unit
-
-      (** [dump ?ver ?fmt chan stream] dumps a [stream] (represented
-          by a [next] function) into channel.  *)
-      val dump  : ?ver:string -> ?fmt:string -> out_channel -> (unit -> t option) -> unit
-
-      (** [show ?ver ?fmt datum] saves datum to standard output
-          channel, using a [default_printer] if [fmt] is not
-          specified. Does nothing the printer is not set up.  *)
-      val show  : ?ver:string -> ?fmt:string -> t -> unit
-
-      (** [print ?ver ?fmt ppf] prints datum to a given formatter,
-          using a [default_printer] if [fmt] is left unspecified.  *)
-      val print : ?ver:string -> ?fmt:string -> Format.formatter -> t -> unit
-
-    end
-
-    (** [add_reader ?desc ~ver name reader] registers a new [reader]
-        with a provided [name], version [ver] and optional description
-        [desc] *)
-    val add_reader : ?desc:string -> ver:string -> string -> t reader -> unit
-
-
-    (** [add_writer ?desc ~ver name writer] registers a new [writer]
-        with a provided [name], version [ver] and optional description
-        [desc] *)
-    val add_writer : ?desc:string -> ver:string -> string -> t writer -> unit
-
-    (** [available_reader ()] lists available readers for the data type  *)
-    val available_readers : unit -> info list
-
-    (** [default_reader] returns information about default reader  *)
-    val default_reader : unit -> info
-
-    (** [set_default_reader ?ver name] sets new default reader. If
-        version is not specifed then the latest available version is
-        used. Raises an exception if a reader with a given name doesn't
-        exist.  *)
-    val set_default_reader : ?ver:string -> string -> unit
-
-    (** [with_reader ?ver name operation] temporary sets a default
-        reader to a reader with a specified name and version. The default
-        reader is restored after [operation] is finished.  *)
-    val with_reader : ?ver:string -> string -> (unit -> 'a) -> 'a
-
-
-    (** [available_writer ()] lists available writers for the data type  *)
-    val available_writers : unit -> info list
-
-    (** [default_writer] returns information about default writer  *)
-    val default_writer : unit -> info
-
-    (** [set_default_writer ?ver name] sets new default writer. If
-        version is not specifed then the latest available version is
-        used. Raises an exception if a writer with a given name doesn't
-        exist.  *)
-    val set_default_writer : ?ver:string -> string -> unit
-
-    (** [with_writer ?ver name operation] temporary sets a default
-        writer to a writer with a specified name and version. The default
-        writer is restored after [operation] is finished.  *)
-    val with_writer : ?ver:string -> string -> (unit -> 'a) -> 'a
-
-
-    (** [default_writer] optionally returns an information about
-        default printer *)
-    val default_printer : unit -> info option
-
-    (** [set_default_printer ?ver name] sets new default printer. If
-        version is not specifed then the latest available version is
-        used. Raises an exception if a printer with a given name doesn't
-        exist.  *)
-    val set_default_printer : ?ver:string -> string -> unit
-
-    (** [with_printer ?ver name operation] temporary sets a default
-        printer to a printer with a specified name and version. The default
-        printer is restored after [operation] is finished.  *)
-    val with_printer : ?ver:string -> string -> (unit -> 'a) -> 'a
-
-
-    (** {2 Low level access to serializers}  *)
-
-    (** [find_reader ?ver name] lookups a reader with a given name. If
-        version is not specified, then a reader with maximum version is
-        returned.  *)
-    val find_reader : ?ver:string -> string -> t reader option
-
-    (** [find_writer ?ver name] lookups a writer with a given name. If
-        version is not specified, then a writer with maximum version is
-        returned.  *)
-    val find_writer : ?ver:string -> string -> t writer option
-
+    (** A directory for bap specific configuaration files  *)
+    val confdir : string
   end
 
-  (** ['a printer] defines a type for pretty-printers for a value of
-      type ['a]. This is the type, that is required by [%a] specifier,
-      for [Format.printf]-family of functions. Also, this is the type,
-      that can be installed into OCaml toplevel or debugger.
 
-      Note: `bap.top` library automatically installs all printers. *)
+  (** This module refers to an information bundled with an application.
+      Use [include Self()] syntax to bring this definitions to the
+      scope.
+
+      It is designed to be used inside a plugin, but can be used in
+      a standalone program as well (this is usefull, for debugging
+      plugins, by running them as a standalone applications).
+
+      If run in a standalone mode, then field [name] would be set to
+      [Sys.executable_name] and [argv] to [Sys.argv].
+  *)
+  module Self() : sig
+    (** [name of a plugin]  *)
+    val name : string
+
+    (** [version number]  *)
+    val version : string
+
+    (** A short, one-line description  *)
+    val doc : string
+
+
+    (** [args name] returns an array of arguments designated for a
+        plugin with a given [name].
+
+        The arguments will be extracted from [Sys.argv] array by
+        removing all arguments that doesn't start with
+        [--name-]. Then, from all command arguments that are left, the
+        [--name-] prefix is substituted with [--]. For example, if
+        [argv] contained [ [| "bap"; "-lcallgraph"; "--callgraph"
+        "--callgraph-help"|]] then pass that registered itself under
+        [callgraph] name will receive the following array of arguments
+        [ [| "callgraph"; --help |] ]. That means, that plugins can't
+        accept arguments that are anonymous or short options *)
+    val argv : string array
+  end
+
   type 'a printer = Format.formatter -> 'a -> unit
-
-
-  (** Printable interface is implemented by a significant amount of
-      BAP types.  *)
-  module type Printable = sig
-    type t
-
-    (** [to_string x] returns a human-readable representation of [x]  *)
-    val to_string : t -> string
-
-    (** [str () t] is formatted output function that matches "%a"
-        conversion format specifier in functions, that prints to string,
-        e.g., [sprintf], [failwithf], [errorf] and, suprisingly all
-        [Lwt] printing function, including [Lwt_io.printf] and logging
-        (or any other function with type ('a,unit,string,...)
-        formatN`. Example:
-
-        [Or_error.errorf "type %a is not valid for %a"
-          Type.str ty Exp.str exp] *)
-    val str : unit -> t -> string
-
-    (** synonym for [str]  *)
-    val pps : unit -> t -> string
-
-    (** will print to a standard [output_channel], useful for using in
-        [printf], [fprintf], etc. *)
-    val ppo : out_channel -> t -> unit
-
-    (** prints a sequence of values of type [t] *)
-    val pp_seq : Format.formatter -> t Sequence.t -> unit
-
-
-    (** this will include [pp] function from [Core] that has type
-        {{!printer}[t printer]}, and can be used in [Format.printf]
-        family of functions *)
-    include Pretty_printer.S     with type t := t
-  end
-
-  (** Regular types models a general concept of value, i.e., something
-      that can be used in way similar to regular [int], [string],
-      [char] and other built in types. So that it can be compared, used
-      in maps, sets, hashtables, printer, etc.
-
-      Note: this signature is pretty similar to core's [Identifiable],
-      but doesn't require [of_string] function, that is usually much
-      harder to implement in comparison with [to_string] function. Also,
-      instead of [to_string] it requires [pp] function that can be
-      implemented much more efficiently and elegantly. From the [pp]
-      function the whole plethora of printing functions are derived:
-      [str], [pps], [ppo]. *)
-  module type Regular = sig
-    type t with bin_io, sexp, compare
-    include Printable            with type t := t
-    include Comparable.S_binable with type t := t
-    include Hashable.S_binable   with type t := t
-    include Data with type t := t
-  end
-
-  (** Opaque type is like regular type, except that we can print or
-      examine it in any way. So it can't be serialized or
-      pretty-printed. An {!Opaque.Make} can create an instances of
-      such type.  *)
-  module type Opaque = sig
-    type t
-    include Comparable with type t := t
-    include Hashable   with type t := t
-  end
-
 
   (** Signature for integral type.  *)
   module type Integer = sig
@@ -1215,100 +629,6 @@ module Std : sig
   end
 
 
-  module Data : sig
-
-    (** [copy buf obj pos] is a method to copy object [obj] into a buffer
-        [buf], starting from a position [pos] and will return the number
-        of bytes written.  XXX: we need the amount of bytes beforehand.
-    *)
-    type ('a,'b) copy = 'b -> 'a -> int -> unit
-    (** *)
-    type ('a,'b) dump = 'b -> 'a -> unit
-
-    type lexbuf  = Lexing.lexbuf
-    type scanbuf = Scanf.Scanning.scanbuf
-
-
-    module type Versioned = sig
-      (** type of data  *)
-      type t
-
-      (** version of data representation  *)
-      val version : string
-    end
-
-
-    module type Sexpable = sig
-      include Versioned
-      include Sexpable with type t := t
-    end
-
-    module type Binable = sig
-      include Versioned
-      include Binable with type t := t
-    end
-
-
-    val marshal_reader : (module T with type t = 'a) -> 'a reader
-    val marshal_writer : (module T with type t = 'a) -> 'a writer
-    val sexp_reader : (module Sexpable with type t = 'a) -> 'a reader
-    val sexp_writer : (module Sexpable with type t = 'a) -> 'a writer
-    val bin_reader : (module Binable with type t = 'a) -> 'a reader
-    val bin_writer : (module Binable with type t = 'a) -> 'a writer
-    val pretty_writer : (module Pretty_printer.S with type t = 'a) -> 'a writer
-
-
-
-    module type S = Data
-
-    module Make (T : Versioned) : S with type t := T.t
-
-    module Read : sig
-      type 'a t = 'a reader
-
-      (** A minimal complete definition is any method except
-          [from_channel].
-
-          If a class is defined only with [from_bigstring] or [from_bytes]
-          then [from_channel] function will consume all input and pass it
-          to the correspondings function.  *)
-      val create :
-        ?of_channel     : (in_channel -> 'a) ->
-        ?of_lexbuf      : (lexbuf -> 'a) ->
-        ?of_scanbuf     : (scanbuf -> 'a) ->
-        ?of_bigstring   : (bigstring -> 'a) ->
-        ?of_bytes       : (bytes -> 'a) ->
-        unit -> 'a t
-
-      val of_bytes : 'a t -> bytes -> 'a
-      val of_channel : 'a t -> in_channel -> 'a
-      val of_bigstring : 'a t -> bigstring -> 'a
-    end
-
-    module Write : sig
-      type 'a t = 'a writer
-
-      val create :
-        ?to_bytes  : ('a -> bytes) ->
-        ?to_bigstring : ('a -> bigstring) ->
-        ?dump  : (out_channel -> 'a -> unit) ->
-        ?pp    : (Format.formatter -> 'a -> unit) ->
-        ?size  : ('a -> int) ->
-        ?blit_to_string:('a,string) copy ->
-        ?blit_to_bigstring:('a,bigstring) copy ->
-        unit -> 'a t
-
-      val size : 'a t -> 'a -> int
-      val to_channel : 'a t -> out_channel -> 'a -> unit
-      val to_formatter : 'a t -> Format.formatter -> 'a -> unit
-      val to_bytes : 'a t -> 'a -> bytes
-      val to_bigstring : 'a t -> 'a -> bigstring
-      val blit_to_string : 'a t -> string -> 'a -> int -> unit
-      val blit_to_bigstring : 'a t -> bigstring -> 'a -> int -> unit
-    end
-
-
-  end
 
   module Monad : sig
     module type Basic = Monad.Basic
@@ -1342,57 +662,11 @@ module Std : sig
     module State : State
   end
 
-  (** In order to implement [Regular] interface you need to provide a
-      minimum implementation [M]  *)
-  module Regular : sig
-    module Make( M : sig
-        (** type t should be binable, sexpable and provide compare function  *)
-        type t with bin_io, sexp, compare
-        include Pretty_printer.S with type t := t
-        include Data.Versioned with type t := t
-        val hash : t -> int
-        val module_name : string option
-      end) : Regular with type t := M.t
-  end
-
-  (** creates a module implementing [Opaque] interface.   *)
-  module Opaque : sig
-    module Make(S : sig
-        type t with compare
-        val hash : t -> int
-      end) : Opaque with type t := S.t
-  end
-
-
   (** Lazy sequence  *)
-  module Seq : sig
-    type 'a t = 'a Sequence.t
-    include module type of Sequence with type 'a t := 'a t
-
-    (** for compatibility with Core <= 111.28  *)
-    val filter : 'a t -> f:('a -> bool) -> 'a t
-    val compare : ('a -> 'b -> int) -> 'a t -> 'b t -> int
-
-    val of_array : 'a array -> 'a t
-
-    val cons : 'a -> 'a t -> 'a t
-
-    val is_empty : 'a t -> bool
-
-    val pp : 'a printer -> 'a t printer
-    val pp_bools : bool t printer
-    val pp_chars : char t printer
-    val pp_floats : float t printer
-    val pp_ints : int t printer
-    val pp_strings : string t printer
-
-  end
-
+  module Seq : module type of Seq with type 'a t = 'a Seq.t
   (** type abbreviation for ['a Sequence.t]  *)
-  type 'a seq = 'a Seq.t
+  type 'a seq = 'a Seq.t with bin_io, compare, sexp
 
-  (** [x ^:: xs] is a consing operator for sequences  *)
-  val (^::) : 'a -> 'a seq -> 'a seq
 
   (** Prefix tries.
 
@@ -2032,8 +1306,8 @@ module Std : sig
     (** implements [Regular] interface  *)
     include Regular with type t := t
 
-    (** [create ?register ?fresh name typ] creates a variable with a
-        given [name] and [typ]e.
+    (** [create ?register ?fresh name typ] creates a variable with
+        a given [name] and [typ]e.
 
         A newly created variable has version equal to 0.
 
@@ -2642,7 +1916,7 @@ module Std : sig
         Bili. *)
     class type storage = object('s)
 
-      (** [load a] loads a byte from a given address  [a]  *)
+      (** [load a] loads a byte from a a given address  [a]  *)
       method load : addr -> word option
 
       (** [save a w] stores byte [w] at address [a]  *)
@@ -2704,7 +1978,7 @@ module Std : sig
         Thus, each result has a unique identifier, associated with it,
         that is usually provided by a context. The result is a
         concrete value, that is created whenever an expression is
-        evaluated under given context. Since, context is changed
+        evaluated under a given context. Since, context is changed
         during the evaluation (at least because a new result is
         allocated), two consecutive evaluations of the same expression
         will give different results. (This property is preserved by
@@ -2728,15 +2002,15 @@ module Std : sig
       (** State monad that evaluates to unit  *)
       type 'a u = (unit,'a) Monad.State.t
 
-      (** [undefined id] creates result with a given [id] and
+      (** [undefined id] creates result with a a given [id] and
           undefined value *)
       val undefined : id -> t
 
-      (** [storage s id] creates result with a given [id] and
+      (** [storage s id] creates result with a a given [id] and
           storage [s] as a value *)
       val storage : storage -> id -> t
 
-      (** [word w id] creates result with a given [id] and
+      (** [word w id] creates result with a a given [id] and
           word [w] as a value *)
       val word : word -> id -> t
 
@@ -2803,7 +2077,7 @@ module Std : sig
 
   (** Base class for evaluation contexts.
 
-      All interpreters evaluate terms under given context,
+      All interpreters evaluate terms under a given context,
       wrapped into a state monad. All context must be structural
       subtypes of the [Context.t].
 
@@ -2868,10 +2142,10 @@ module Std : sig
       (** creates a fresh new result, containing an undefined value,
           and returns it with a modified context. *)
       method create_undefined : 's * Bil.result
-      (** creates a fresh new result, containing given word,
+      (** creates a fresh new result, containing a given word,
           and returns it with a modified context. *)
       method create_word : word -> 's * Bil.result
-      (** creates a fresh new result, containing given storage,
+      (** creates a fresh new result, containing a given storage,
           and returns it with a modified context. *)
       method create_storage : Bil.storage -> 's * Bil.result
     end
@@ -3003,15 +2277,15 @@ module Std : sig
       (** a variable is bind to a value.*)
       method update : var -> Bil.result -> 'a u
 
-      (** a byte is loaded from given address  *)
+      (** a byte is loaded from a given address  *)
       method load   : Bil.storage -> addr -> 'a r
 
-      (** a byte is stored to a given address  *)
+      (** a byte is stored to a a given address  *)
       method store  : Bil.storage -> addr -> word -> 'a r
 
       (** {2 Error conditions}  *)
 
-      (** given typing error has occured  *)
+      (** a given typing error has occured  *)
       method type_error : type_error -> 'a r
 
       (** we can't do this!  *)
@@ -3318,7 +2592,7 @@ module Std : sig
         work    *)
     val of_string : string -> t option
 
-    (** [addr_size arch] returns an address size for a given [arch]  *)
+    (** [addr_size arch] returns an address size for a a given [arch]  *)
     val addr_size : t -> addr_size
 
     (** [endian arch] returns a word endianness of the [arch]  *)
@@ -3489,7 +2763,7 @@ module Std : sig
 
     (** A required interface for the type to be lifted to value. *)
     module type S = sig
-      (** In order to construct a value with the given type you must
+      (** In order to construct a value with the a given type you must
           provide an implementation for marshaling functions,
           comparison function and pretty-printing.  *)
       type t with bin_io, compare, sexp
@@ -3604,17 +2878,15 @@ module Std : sig
       val select : 's t -> value -> 's
 
       (** [case tag action matcher] adds an [action] to [matcher] that
-          will be invoked for values with a given [tag] *)
+          will be invoked for values with a a given [tag] *)
       val case : 'a tag -> ('a -> 's) -> 's t -> 's t
 
       (** [default def] creates an empty matcher with default handler [def]. *)
       val default : (unit -> 's) -> 's t
     end
 
-
-
     (** Persistent type identifiers.  *)
-    module Typeid : Regular with type t = typeid
+    module Typeid : Identifiable with type t = typeid
 
     (** Although values of type [value] implements regular interface
         it is recommended to used [dict] data structure instead of
@@ -3684,7 +2956,7 @@ module Std : sig
   (** Universal Heterogeneous Map.  *)
   module Dict : sig
     (** The dictionary can store values of arbitrary type. Only one
-        value of a given tag can be stored in the map. For example, if
+        value of a a given tag can be stored in the map. For example, if
         you have tag [cconv] (calling convention) then it is
         guaranteed that in map there is zero or one value with this
         tag. *)
@@ -3717,16 +2989,13 @@ module Std : sig
         with [tag]  *)
     val remove : t -> 'a tag -> t
 
-    (** [all_pairs dict] is a sequence of all tid value
+    (** [to_sequence dict] is a sequence of all tid value
         entries  *)
-    val all_pairs : t -> (Value.typeid * value) Sequence.t
+    val to_sequence : t -> (Value.typeid * value) seq
 
     (** [data dict] is a sequence of all dict elements  *)
-    val data : t -> Value.t Sequence.t
+    val data : t -> value seq
   end
-
-
-
 
   (** {{!Vector}Resizable array}  *)
   type 'a vector
@@ -3740,7 +3009,7 @@ module Std : sig
     (** a type of vector holding elements of type ['a]  *)
     type 'a t = 'a vector with bin_io, compare, sexp
 
-    (** [create ?capacity default] creates an empty vector with a given
+    (** [create ?capacity default] creates an empty vector with a a given
         [capacity]. It is guaranteed that the default value will never
         be seen by the user unless he put it into the vector explicitely
         with [append] or [set].
@@ -3832,1199 +3101,6 @@ module Std : sig
   val def_t : (blk, def) cls     (** def  *)
   val jmp_t : (blk, jmp) cls     (** jmp  *)
 
-  (** {!Graph} nodes.  *)
-  module type Node = sig
-    (** Semantics of operations is denoted using mathematical model,
-        described in {!Graph} interface.  *)
-
-    type t                      (** node type is opaque  *)
-    type graph
-    type label
-    type edge
-
-    (** [create label] creates a new node, and associates it with a
-        given [label].  *)
-    val create : label -> t
-
-    (** [label n] returns a value associated with a node [n].  *)
-    val label : t -> label
-
-    (** [mem n g] is [true] if [n] is a member of nodes [N] of graph
-        [g].  *)
-    val mem : t -> graph -> bool
-
-    (** [succs node graph] returns a sequence of successors of a
-        [node] in a given [graph] *)
-    val succs : t -> graph -> t seq
-
-    (** [preds node graph] returns a sequence of predecessors of a
-        [node] in a given [graph] *)
-    val preds : t -> graph -> t seq
-
-    (** [inputs node graph] is incomming edges of a [node] in [graph]  *)
-    val inputs : t -> graph -> edge seq
-
-    (** [outputs node graph] is outcomming edges of a [node] in [graph]  *)
-    val outputs : t -> graph -> edge seq
-
-    (** [degree ?dir n] when [in_or_out] is [`In] then returns
-        the amount of incomming edges, otherwise returns the amount of
-        outcomming edges. If parameter [dir] is left absent, then
-        return the amount of adjacent nodes (i.e., a sum of incomming
-        and outcomming edges).  *)
-    val degree : ?dir:[`In | `Out] -> t -> graph -> int
-
-    (** [insert n g] returns new graph [g'] that has a set of nodes
-        [N] extended with node [n]. If [N] was contained [n], then
-        the [g == g']. Use {!update} to change existing nodes.
-
-        Postconditions: {v
-          - N(g') = N(g) ∪ {n}.
-          v}
-    *)
-    val insert : t -> graph -> graph
-
-    (** [update n l g] if node [n] is not in [N(g)] then return [g],
-        else return graph [g] where node [n] is labeled with [l].
-
-        Postconditions: {v
-          - n ∉ N(g) -> n ∉ N(g').
-          - n ∈ N(g) → ν(g')n = l.
-          v}
-    *)
-    val update : t -> label -> graph -> graph
-
-    (** [remove n g] returns graph [g'], with a node [n] removed from
-        a set of nodes [N].
-
-        Postconditions: {v
-          - E(g) ⊆ E(g')
-          - N(g) ⊆ N(g')
-          - N(g') = N(g) \ {n}.
-          v}
-    *)
-    val remove : t -> graph -> graph
-
-    (** [has_edge x y g] is true iff (x,y) ∈ E. *)
-    val has_edge : t -> t -> graph -> bool
-
-    (** [edge x y g] if graph [g] has an edge between nodes [x] and
-        [y] then it is returned.  *)
-    val edge : t -> t -> graph -> edge option
-
-    (** node provides common data structures, like Table, Map, Set,
-        Hash_set, etc.  *)
-    include Opaque with type t := t
-  end
-
-  (** Interface that every Graph edge should provide  *)
-  module type Edge = sig
-    (** Semantics of operations is denoted using mathematical model,
-        described in {!Graph} interface.  *)
-
-    type t
-    type node
-    type graph
-    type label
-
-    (** [create x y l] creates an edge connecting nodes [x] and [y]
-        labeled with a given label [l] *)
-    val create : node -> node -> label -> t
-
-    (** [label e] returns a label of an edge [e]  *)
-    val label : t -> label
-
-    (** [src e] returns a source of an edge [e]  *)
-    val src : t -> node
-
-    (** [dst e] returns a destination of an edge [e] *)
-    val dst : t -> node
-
-    (** [mem e g] is true if [e] ∈ E.  *)
-    val mem : t -> graph -> bool
-
-    (** [insert e g] returns a graph [g'] with a set of edges extended
-        with edge [e]. If [src e] or [dst e] wasn't in the set of nodes
-        [N], then it is extended as well, so that axioms of graph are
-        preserved.
-
-        Postconditions: {v
-          - E(g') = E(g) ∪ {e}.
-          v}
-    *)
-    val insert : t -> graph -> graph
-
-    (** [update e l g] if edge [e] exists in graph [g] then return a
-        new graph [g'] in which edge [e] is associated with label [l].
-        Otherwise return [g] unchanged.
-
-        Postcondition: {v
-          - E(g) ⊆ E(g')
-          - N(g) ⊆ N(g')
-          - e ∉ E(g) → e ∉ E(g').
-          - e ∈ E(g) → ε(g')e = l.
-          v}
-    *)
-    val update : t -> label -> graph -> graph
-
-    (** [remove e g] returns a graph [g'] that doesn't contain edge
-        [e].
-
-        Postconditions: {v
-          - E(g') = E(g) \ {e}.
-          v}
-    *)
-    val remove : t -> graph -> graph
-    include Opaque with type t := t
-  end
-
-
-
-  (** Graph signature.  *)
-  module type Graph = sig
-    (** Graph is mathematical data structure that is used to represent
-        relations between elements of a set. Usually, graph is defined
-        as an ordered pair of two sets - a set of vertices and a set
-        of edges that is a 2-subset of the set of nodes,
-
-        {v G = (V,E). v}
-
-        In Graphlib vertices (called nodes in our parlance) and edges
-        are labeled. That means that we can associate data with edges
-        and nodes. Thus graph should be considered as an associative
-        data structure. And from mathematics perspective graph is
-        represented as an ordered 6-tuple, consisting of a set of nodes,
-        edges, node labels, edge labels, and two functions that maps
-        nodes and edges to their corresponding labels:
-
-        {v G = (N, E, N', E', ν : N -> N', ε : E -> E'), v}
-
-        where set [E] is a subset of [ N × N ].
-
-        With this general framework an unlabeled graph can be
-        represented as:
-
-        {v G = (N, E, N, E, ν = λx.x, ε = λx.x) v}
-
-        Another possible representation of an unlabeled graph would be:
-
-        {v G = (N, E, {u}, {v}, ν = λx.u, ε = λx.v). v}
-
-        Implementations are free to choose any suitable representation
-        of graph data structure, if it conforms to the graph signature
-        and all operations follows the described semantics and
-        properties of a graph structure are preserved.
-
-        The axiomatic semantics of operations on a graph is described by
-        a set of postconditions. To describe the semantics of an
-        operation in terms of input and output arguments, we project
-        graphs to its fields with the following notation
-        [<field>(<graph>)], e.g., [N(g)] is a set of nodes of graph [g].
-
-        Only the strongest postcondition is specified, e.g., if it is
-        specified that [νn = l], then it also means that
-
-        [n ∈ N ∧ ∃u((u,v) ∈ E ∨ (v,u) ∈ E) ∧ l ∈ N' ∧ ...]
-
-        In other words the structure [G] of the graph G is an invariant
-        that is always preserved.
-    *)
-
-    (** type of graph  *)
-    type t
-
-    (** type of nodes *)
-    type node
-
-    (** type of edges  *)
-    type edge
-
-
-    (** Graph nodes.  *)
-    module Node : Node with type graph = t
-                        and type t = node
-                        and type edge = edge
-
-    (** Graph edges  *)
-    module Edge : Edge with type graph = t
-                        and type t = edge
-                        and type node = node
-
-    (** [empty] is an empty graph  *)
-    val empty : t
-
-    (** [nodes g] returns all nodes of graph [g] in an unspecified order  *)
-    val nodes : t -> node seq
-
-    (** [edges g] returns all edges of graph [g] in an unspecified order  *)
-    val edges : t -> edge seq
-
-    (** [is_directed] is true if graph is a directed graph.  *)
-    val is_directed : bool
-
-    (** [number_of_edges g] returns the size of a graph [g].  *)
-    val number_of_edges : t -> int
-
-    (** [number_of_nodes g] returns the order of a graph [g]  *)
-    val number_of_nodes : t -> int
-
-    (** All graphs provides a common interface for any opaque data structure  *)
-    include Opaque with type t := t
-
-    (** All graphs are printable.   *)
-    include Printable with type t := t
-  end
-
-  (** a type abbreviation for a packed module, implementing graph
-      interface.
-      Note: this type prenexes only 3 out of 8 type variables, so,
-      sometimes it is not enough. *)
-  type ('c,'n,'e) graph =
-    (module Graph with type t = 'c
-                   and type node = 'n
-                   and type edge = 'e)
-
-  (** Graph edges classification.
-      For explanations see {{!Graphlib.depth_first_search}DFS}.*)
-  type edge_kind = [
-    | `Tree                     (** edge is a part of a tree  *)
-    | `Back                     (** back edge   *)
-    | `Cross                    (** cross edge  *)
-    | `Forward                  (** forward edge  *)
-  ]
-
-  (** a {!Tree} representation.  *)
-  type 'a tree
-
-  (** a type representing {!Frontier}s  *)
-  type 'a frontier
-
-  (** a {{!Partition}result} of partitioning algorithms  *)
-  type 'a partition
-
-  (** a partition {{!Group}Cell} *)
-  type 'a group
-
-  (** walk without a repetition of edges and inner nodes *)
-  type 'a path
-
-  (** runtime witness of the {{!Equiv}equivalence class} *)
-  type equiv
-
-  (** Tree is a particular subtype of a graph for which
-      each node has only one predecessor, and there is only
-      one path between tree root and any other node.
-      Here is an example of a tree:
-      {v
-                                 (A)
-                                  |
-                          +-------+-------+
-                          |       |       |
-                         (B)     (C)     (D)
-                                  |
-                          +-------+-------+
-                          |       |       |
-                         (E)     (F)     (G)
-                                  |
-                                 (H)
-        v}
-  *)
-  module Tree : sig
-    type 'a t = 'a tree
-
-    (** [children tree x] returns all immediate successors of node
-        [x]. For example, children of node [A] is a sequence of
-        [B,C,D]. But node [B] doesn't have any children at all.*)
-    val children : 'a t -> 'a -> 'a seq
-
-    (** [parent tree n] returns an immediate parent of a given node.
-        Returns [None] only if [n] is a tree root. For example, parent
-        of [F] is [C]. And [A] doesn't have a parent.*)
-    val parent : 'a t -> 'a -> 'a option
-
-    (** [ancestors tree n] returns a sequence of all ancestors of node
-        [n]. An ancestor of a node is either a parent or an ancestor of
-        the parent. For example, ancestors of [G] are [C] and [D]. The
-        root node is the only one, that has an empty set of
-        ancestors. *)
-    val ancestors : 'a t -> 'a -> 'a seq
-
-    (** [descendants tree n] returns a set of all descendants of a
-        given node [n]. Descendant is either a child or a descendant
-        of a child. For example, all nodes in the example [tree]
-        (except the roots itself) are descendants of the root [A].
-        The descendants of [C] are [E,F,G,H].    *)
-    val descendants : 'a t -> 'a -> 'a seq
-
-    (** [is_child_of tree parent child] returns [true] if child is one
-        of [children tree root] *)
-    val is_child_of : 'a t -> parent:'a -> 'a -> bool
-
-    (** [is_ancestor_of tree child x] returns true, if [x] is one of
-        the ancestors of a [child] node.  *)
-    val is_ancestor_of : 'a t -> child:'a -> 'a -> bool
-
-    (** [is_descendant_of ~parent tree x] is [true] for all [x] that
-        are descendants of a [parent] node.  *)
-    val is_descendant_of : 'a t -> parent:'a -> 'a -> bool
-
-    (** [to_sequence tree] enumerates nodes of a [tree] in an
-        unspecified order.  *)
-    val to_sequence : 'a t -> 'a seq
-
-    (** [pp pp_elt] creates a pretty-printer for a node, based on
-        element's pretty-printer [pp_elt]. The tree is printed in a dot
-        format, for the ease of visualization. Example:
-        {[let pp_int_tree = Tree.pp Int.pp]}
-        Note: For all instatiations of [Graph] interface in the
-        [Graphlib] library printable versions of [tree], [partition],
-        [group] etc are provided. For example, for [Graphlib.Int.Bool]
-        graph the printable version of a [tree] is available under
-        [Graphlib.Int.Tree]. All instantiated pretty-printers are
-        automatically installed once the library is loaded into the
-        toplevel. *)
-    val pp : 'a printer -> 'a t printer
-  end
-
-  (** Frontier maps each node into a possibly empty set of nodes.
-      This is used for representing dominance and post-dominance
-      frontiers.  *)
-  module Frontier : sig
-
-    type 'a t = 'a frontier
-
-    (** [enum f x] enumerates frontier of [x]  *)
-    val enum : 'a t -> 'a -> 'a seq
-
-    (** [mem f x y] is true if [y] is in a frontier of [x]  *)
-    val mem : 'a t -> 'a -> 'a -> bool
-
-    (** [to_sequence frontier] enumerates all elements of a [frontier] *)
-    val to_sequence : 'a t -> 'a seq
-
-    (** [pp pp_elt] instantiates a pretty-printer for a given
-        element. See {!Tree.pp} for more information.  *)
-    val pp : 'a printer -> 'a t printer
-  end
-
-  (** Path between two nodes.  *)
-  module Path : sig
-    (** path is a walk without repetitions  *)
-
-    (** representation type  *)
-    type 'e t = 'e path
-
-    (** [start p] the starting edge of a path [p] *)
-    val start : 'e t -> 'e
-
-    (** [finish p] the last edge of a path [p] *)
-    val finish : 'e t -> 'e
-
-    (** [edges p] a sequence of edges from start to finish  *)
-    val edges : 'e t -> 'e seq
-
-    (** [edges_rev p] a reversed sequence from finish to start  *)
-    val edges_rev : 'e t -> 'e seq
-
-    (** [weight p] total weight of a path *)
-    val weight : 'e t -> int
-
-    (** amount of edges in a path *)
-    val length : 'e t -> int
-
-    (** [pp pp_elt] constructs a pretty based on element printer
-        [pp_elt] *)
-    val pp : 'a printer -> 'a t printer
-  end
-
-  (** Result of a set partitioning.
-
-      A partition of a set [S] is a set of non-empty subset of set [S],
-      such that each element in a set of [S] is included in one and only
-      one of the subsets and a union of the subsets forms a set [S].
-
-      All nodes belonging to the same subset (called [group] in our
-      parlance) represents the equivalence class. The equivalence side
-      can be represented by a particular ordinal number or
-      representative, that can be thought about as an ordinary
-      number. See {!Equiv} for the representation of this ordinal
-      numbers. A particular element of an equivalence class plays a
-      role of «representative element». Depending on the nature of
-      partitioning, this role can have different semantics.
-
-      This data structure is used to represent results of partioning of
-      a graph into groups of nodes, for example, to strongly connected
-      components.*)
-  module Partition : sig
-
-    type 'a t = 'a partition
-
-    (** [groups p] returns all partition cells of a partitioning [p] *)
-    val groups : 'a t -> 'a group seq
-
-    (** [group p x] returns a [group] of an element [x]. Note, this
-        function is not total since the set of all values of type ['a] is
-        usually larger than the underlying set that was partitioned.  *)
-    val group : 'a t -> 'a -> 'a group option
-
-    (** [equiv p x y] is true of [x] and [y] belongs to the same
-        equivalence class (i.e., to the same group).  *)
-    val equiv : 'a t -> 'a -> 'a -> bool
-
-    (** [number_of_groups p] returns the amount of groups in a given
-        partitioning [p]. *)
-    val number_of_groups : 'a t -> int
-
-    (** [of_equiv p n] rebuilds a group from an equivalence class
-        ordinal number. *)
-    val of_equiv : 'a t -> equiv -> 'a group option
-  end
-
-  (** Group is a non-empty set that is a result of partitioning of an
-      underlying set [S] into a set of non-intersecting and non-empty
-      subsets that cover set [S]. See {!Partition} for more
-      information.  *)
-  module Group : sig
-
-    type 'a t = 'a group
-
-    (** [enum group] enumerates all elements of a group, including the
-        designated one.  *)
-    val enum : 'a group -> 'a seq
-
-    (** [mem group x] checks membership of [x] in a given group.  *)
-    val mem  : 'a group -> 'a -> bool
-
-    (** [top group] returns the top element of a group also known as a
-        representative element. The function is total since groups is
-        guaranteed to be non-empty.    *)
-    val top  : 'a group -> 'a
-
-    (** [to_equiv g] returns the ordinal number representing the
-        particular group [g] *)
-    val to_equiv : 'a group -> equiv
-  end
-
-  (** Ordinal for representing equivalence. Useful, for indexing
-      elements based on their equivalence. *)
-  module Equiv : sig
-    type t
-    val to_int : t -> int
-    include Regular with type t := t
-  end
-
-  (** Printable auxiliary graph structures  *)
-  module type Aux = sig
-    type node
-    module Tree : Printable with type t = node tree
-    module Frontier : Printable with type t = node frontier
-    module Path : Printable with type t = node path
-    module Partition : Printable with type t = node partition
-    module Group : Printable with type t = node group
-  end
-
-  (** {5 Auxiliary graph data structures}  *)
-
-  (** A type of modules for filtering graphs.
-      See {!Graphlib.filtered} or {!Graphlib.Filtered}  *)
-  module type Predicate = sig
-    type edge
-    type node
-    val edge : edge -> bool
-    val node : node -> bool
-  end
-
-  (** [Isomorphism] is a bijection between type [s] and [t].
-      Usefull for creating graph views and mapping graphs.
-      See {!Graphlib.view} and {!Graphlib.Mapper}.
-  *)
-  module type Isomorphism = sig
-    type s
-    type t
-    val forward  : s -> t
-    val backward : t -> s
-  end
-
-  class type ['n,'e,'s] dfs_visitor = object
-    method start_tree :       'n -> 's -> 's
-    method enter_node : int -> 'n -> 's -> 's
-    method leave_node : int -> 'n -> 's -> 's
-    method enter_edge : edge_kind -> 'e -> 's -> 's
-    method leave_edge : edge_kind -> 'e -> 's -> 's
-  end
-
-
-  (** {4 Visual attributes for graphvizualization.}
-      Consult OCamlGraph library for more information.
-  *)
-
-  type node_attr  = Graph.Graphviz.DotAttributes.vertex
-  type edge_attr  = Graph.Graphviz.DotAttributes.edge
-  type graph_attr = Graph.Graphviz.DotAttributes.graph
-
-  type ('n,'a) labeled = {
-    node : 'n;
-    node_label : 'a;
-  }
-
-
-  (** Generic Graph Library  *)
-  module Graphlib : sig
-
-    (* we need this restatement, since first class modules in
-       4.01 were nominally typed.  *)
-    module type Graph = Graph
-
-    (** [create (module G) ~nodes ~edges ()] creates a graph using
-        implementation provided by [module G].
-        Example:
-        {[
-          module G = Graphlib.String.Bool;;
-          let g = Graphlib.create (module G) ~edges:[
-              "entry", "loop", true;
-              "loop", "exit", false;
-              "loop", "loop", true] ()
-        ]} *)
-    val create :
-      (module Graph with type t = 'c
-                     and type Node.label = 'a
-                     and type Edge.label = 'b) ->
-      ?nodes:'a list ->
-      ?edges:('a * 'a * 'b) list -> unit -> 'c
-
-    (** [to_dot (module G) ~filename:"graph.dot" g] dumps graph [g]
-        using [dot] format. This is a customizable version of printing
-        function. For most cases it will be enough to use [G.pp] or
-        [G.to_string] function. Use this function, if you really need
-        to customize your output.
-
-        @param graph_attrs a list of global graph attributes;
-        @param node_attrs  a list of node specific attributes;
-        @param edge_attrs  a list of edge specific attributes;
-        @param string_of_node used to print nodes;
-        @param string_of_edge used to print edges;
-        @param channel where to output the graph;
-        @param formatter where to output the graph;
-        @param filename where to output the graph;
-
-        Note: if no output parameter is provided, the graph will not be
-        outputted. More than one output targets is OK. For example,
-        [to_dot (module G) ~filename:"graph.dot" ~channel:stdout g] will
-        output graph [g] into both file named ["graph.dot"] and
-        standard output.
-
-        Note: if [string_of_node] function is not provided, then graph
-        nodes will be labeled with the reverse post order number.  *)
-    val to_dot :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?graph_attrs:('c -> graph_attr list) ->
-      ?node_attrs:('n -> node_attr list) ->
-      ?edge_attrs:('e -> edge_attr list) ->
-      ?string_of_node:('n -> string) ->
-      ?string_of_edge:('e -> string) ->
-      ?channel:out_channel ->
-      ?formatter:Format.formatter ->
-      ?filename:string -> 'c -> unit
-
-    (** [depth_first_search (module G) ~init g].  It is the most
-        important algorithm of the Graphlib. It builds a forest of
-        spanning trees of a graph, classifies graph edges and numbers
-        nodes. It is a Swiss-army knife, that is very useful in
-        implementing many other algorithms. You can think of this
-        function as [fold] on steroids. But unlike [fold], that
-        accepts only one function, the [depth_first_search] accepts 5
-        different functions, that will be called on different
-        situations, allowing you to «fill in the blanks» of your
-        algorithm.
-
-        Although [depth_first_search] doesn't allow you to drive the
-        walk itself, there're still ways to do this, using {!filtered}
-        function. That allows you to hide nodes or edges from the
-        walker, thus effectively erasing them from a graph, without
-        even touching it.
-
-        @param rev if true, then the graph [g] is traversed in a
-        reverse direction. This is essentially the same, as reversing
-        the graph, but make sure, that you've adjusted the start
-        node.
-
-        @param start if specified, then the traverse will be started
-        from the node that is equal to node [start]. Otherwise the
-        traverse is started from the first node of a graph as returned
-        by [G.nodes], i.e., usually it is an arbitrary node.
-
-        @param start_tree [node] [state] is called on each new spanning
-        tree started by the algorithm. If all nodes are reachable from
-        the start node, then this function will be called only
-        once. If all nodes of a graph are connected, then this
-        function, will be called only once.
-
-        @param enter_node [pre] [node] [state] is called when a node
-        is first discovered by the traversal. The number is a preorder
-        number, also known as depth-first number or [dfnum]. All nodes
-        are entered in a pre-order.
-
-        @param leave_node [rpost] [node] [state] is called when all
-        successors of a [node] are left (finished). The provided
-        number is a reverse post order number, that also defines a
-        topological sorting order of a graph. All nodes, are left in
-        a post order.
-
-        @param enter_edge [kind] [edge] [state] is called when and
-        [edge] is first discovered. Edge kinds are described below.
-        The destination of the edge may not be discovered (i.e.,
-        entered) yet. But the source is already entered (but not
-        finished).
-
-        @param leave_edge [kind] [edge] [state] is called when the
-        edge destination is at least started.
-
-        {2 Edges classification}
-
-        An edge in a spanning tree, produced by a depth first walk,
-        can belong to one of the following category (kind):
-        - Tree edges constitutes a spanning tree [T] of a graph;
-        - Forward edges go from an ancestor to a descendants in
-          a tree [T];
-        - Back edges go from descendants to ancestors in [T],
-          including node itself (they are also known as cycle
-          edges).
-        - Cross edges - all other edges, i.e., such edges for
-          which doesn't go from ancestors to descendants or vice
-          verse. They are possible since, tree defines only partial
-          ordering.
-
-        With respect to a pre-order and reverse post-ordering
-        numbering the source [x] and a destination [y] of an edge with
-        a given [kind] satisfy to the following inequalities:
-
-        {v
-            +---------+-----------------+---------------------+
-            | Tree    | pre[x] < pre[y] | rpost[x] < rpost[y] |
-            | Forward | pre[x] < pre[y] | rpost[x] < rpost[y] |
-            | Back    | pre[x] ≥ pre[y] | rpost[x] ≥ rpost[y] |
-            | Cross   | pre[x] > pre[y] | rpost[x] < rpost[y] |
-            +---------+-----------------+---------------------+
-          v}
-
-        Note: since there can be more than one valid order of
-        traversal of the same graph, (and thus more than one valid
-        spanning tree), depending on a traversal the same edges can be
-        classified differently. With the only exception, that a back
-        edge will be always a back edge, disregarding the particular
-        order.
-
-        {3 Complexity}
-        The algorithm is linear in time and space (including the stack
-        space). In fact, for small graphs it uses stack, but for large
-        graphs dynamically switches to a heap storage. *)
-    val depth_first_search :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool ->
-      ?start:'n ->
-      ?start_tree:('n -> 's -> 's) ->
-      ?enter_node:(int -> 'n -> 's -> 's) ->
-      ?leave_node:(int -> 'n -> 's -> 's) ->
-      ?enter_edge:(edge_kind -> 'e -> 's -> 's) ->
-      ?leave_edge:(edge_kind -> 'e -> 's -> 's) ->
-      'c -> init:'s -> 's
-
-    (** [depth_first_visit (module G) ~init visitor g] allows to
-        specify visiting functions using object. That opens space for
-        re-usability and using open recursion.  *)
-    val depth_first_visit :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> ?start:'n -> 'c -> init:'s -> ('n,'e,'s) dfs_visitor -> 's
-
-    (** base class with all methods defaults to nothing.  *)
-    class ['n,'e,'s] dfs_identity_visitor : ['n,'e,'s] dfs_visitor
-
-    (** returns a sequence of nodes in reverse post order.  *)
-    val reverse_postorder_traverse :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> ?start:'n -> 'c -> 'n seq
-
-    (** returns a sequence of nodes in post order  *)
-    val postorder_traverse :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> ?start:'n -> 'c -> 'n seq
-
-    (** [dominators (module G) g entry] builds a dominators tree for a
-        given graph.
-
-        Definition: a {b walk} is a sequence of alternating nodes and
-        edges, where each edge's endpoints are the preceding and
-        following nodes in the sequence.
-
-        Definition: a node [v] is {b reachable} if there exists a walk
-        starting from [entry] and ending with [v].
-
-        Definition: node [u] {b dominates} [v] if [u = v] or if all walks
-        from [entry] to [v] contains [u].
-
-        Definition: node [u] {b strictly dominates} [v] if it dominates
-        [v] and [u <> v].
-
-        Definition: node [u] {b immediately dominates} [v] if it
-        strictly dominates [v] and there is no other node that
-        strictly dominates [v] and is dominated by [u].
-
-        Algorithm computes a dominator tree [t] that has the following
-        properties:
-        + Sets of graph nodes and tree nodes are equal;
-        + if node [u] is a parent of node [v], then node [u]
-           immediately dominates node [v];
-        + if node [u] is an ancestors of node [v], then node [u]
-           strictly dominates node [v];
-        + if node [v] is a child of node [u], then node [u]
-           immediately dominates node [v];
-        + if node [v] is a descendant of node [u], then node [u]
-           strictly dominates node [v].
-
-        If every node of graph [g] is reachable from a provided
-        [entry] node, then properties (2) - (5) are reversible, i.e.,
-        an [if] statement can be read as [iff], and the tree is
-        unique.
-
-
-        {b Lemma}: Everything dominates unreachable block.
-
-        {b Proof}: (by contradiction) suppose there exists a node [u] that
-        doesn't dominate unreachable block [v]. That means, that there
-        exists a path from [entry] to [v] that doesn't contain
-        [u]. But that means, at least, that [v] is reachable. This  is
-        a contradiction with the original statement that [v] is
-        unreachable. {b Qed.}
-
-        If some nodes of graph [g] are unreachable from the provided
-        [entry] node, then they are dominated by all other nodes of a
-        graph. It means that the provided system is under constrained
-        and has more then one solution (i.e., there exists more than
-        one tree, that satisfies properties (1) - (5). In a current
-        implementation each unreachable node is immediately dominated
-        by the [entry], if the [entry] is in graph.
-
-        To get a post-dominator tree, reverse the graph by passing
-        [true] to [rev] and pass exit node as a starting node.
-
-        Note: although it is not imposed by the algotihm, but it is a
-        good idea to have an entry node, that doesn't have any
-        predecessors. Usually, this is what is silently assumed in
-        many program analysis textbooks, but is not true in general
-        for control-flow graphs that are reconstructed from binaries *)
-    val dominators :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> 'c -> 'n -> 'n tree
-
-    (** [dom_frontier (module G) g dom_tree] calculates dominance
-        frontiers for all nodes in a graph [g].     *)
-    val dom_frontier :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> 'c -> 'n tree -> 'n frontier
-
-    (** [strong_components (module G) g] partition graph into strongly
-        connected components. The top of each component is a root
-        node, i.e., a node that has the least pre-order number.*)
-    val strong_components :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      'c -> 'n partition
-
-    (** [shortest_path (module G) ?weight ?rev g u v]
-        Find a shortest path from node [u] to node [v].
-
-        @param weight defines a weight of each edge. It defaults to 1.
-        @param rev allows to reverse graph.    *)
-    val shortest_path :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?weight:('e -> int) -> ?rev:bool -> 'c -> 'n -> 'n -> 'e path option
-
-    (** [is_reachable (module G) ?rev g u v] is true if node [v] is
-        reachable from node [u] in graph [g]. If rev is true, then it
-        will solve the same problem but on a reversed graph.  *)
-    val is_reachable :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> 'c -> 'n -> 'n -> bool
-
-    (** [fold_reachable (module G) ?rev ~init ~f g n] applies function
-        [f] to all nodes reachable from node [g] in graph [g]. If
-        [rev] is true, then the graph is reversed.
-
-        For example, the following will build a set of reachable nodes:
-        [fold_reachable (module G) ~init:G.Node.Set.empty ~f:Set.add]
-    *)
-    val fold_reachable :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?rev:bool -> init:'a -> f:('a -> 'n -> 'a) -> 'c -> 'n -> 'a
-
-    (** [compare (module G1) (module G2) g1 g2] compares two graphs,
-        with different implementation but the same node type.  *)
-    val compare :
-      (module Graph with type t = 'a
-                     and type node = 'n) ->
-      (module Graph with type t = 'b
-                     and type node = 'n) ->
-      'a -> 'b -> int
-
-    (** [let module G' = filtered (module G) ?skip_node ?skip_edge ()]
-        creates a new module [G'] that can be used at any place
-        instead of [G], but that will hide nodes and edges, for which
-        functions [skip_node] and [skip_edge] return true.
-
-        Example:
-        {[
-          let killed_edges = G.Edge.Hash_set.create () in
-          let module G = Graphlib.filtered (module G)
-              ~skip_edge:(Hash_set.mem killed_edges) () in
-          let rec loop g () =
-            (* use (module G) as normal *)
-            Hash_set.add killed_edges some_edge;
-            (* all edges added to [killed_edges] will no be visible *)
-        ]} *)
-    val filtered :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e) ->
-      ?skip_node:('n -> bool) ->
-      ?skip_edge:('e -> bool) -> unit ->
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e)
-
-    (** [view (module G) ~node ~edge ~node_label ~edge_label]
-        creates a proxy module, that will transform back and
-        forward elements of graph, using corresponding functions.  *)
-    val view :
-      (module Graph with type t = 'c
-                     and type node = 'n
-                     and type edge = 'e
-                     and type Node.label = 'a
-                     and type Edge.label = 'b) ->
-      node:(('n -> 'f) * ('f -> 'n)) ->
-      edge:(('e -> 'd) * ('d -> 'e)) ->
-      node_label:(('a -> 'p) * ('p -> 'a)) ->
-      edge_label:(('b -> 'r) * ('r -> 'b)) ->
-      (module Graph with type t = 'c
-                     and type node = 'f
-                     and type edge = 'd
-                     and type Node.label = 'p
-                     and type Edge.label = 'r)
-
-
-    (** [To_ocamlgraph(G)] returns a module that implements
-        OCamlGraph interface for a persistent graph.  *)
-    module To_ocamlgraph(G : Graph) :
-      Graph.Sig.P with type t = G.t
-                   and type V.t = G.node
-                   and type E.t = G.edge
-                   and type V.label = G.Node.label
-                   and type E.label = G.Edge.label
-
-    (** [Of_ocamlgraph(O)] creates an adapter module, that implements
-        [Graphlib] interface on top of the module implementing
-        [OCamlGraph] interface.*)
-    module Of_ocamlgraph(G : Graph.Sig.P) :
-      Graph with type t = G.t
-             and type node = G.V.t
-             and type edge = G.E.t
-             and type Node.label = G.V.label
-             and type Edge.label = G.E.label
-
-    (** functorized version of a {!filter} function.  *)
-    module Filtered
-        (G : Graph)
-        (P : Predicate with type node = G.node
-                        and type edge = G.edge) :
-      Graph with type t = G.t
-             and type node = G.node
-             and type edge = G.edge
-             and module Node = G.Node
-             and module Edge = G.Edge
-
-    (** functorized version of {!Graphlib.view} function.  *)
-    module Mapper
-        (G  : Graph)
-        (N  : Isomorphism with type s = G.node)
-        (E  : Isomorphism with type s = G.edge)
-        (NL : Isomorphism with type s = G.Node.label)
-        (EL : Isomorphism with type s = G.Edge.label) :
-      Graph with type t = G.t
-             and type node = N.t
-             and type edge = E.t
-             and type Node.label = NL.t
-             and type Edge.label = EL.t
-
-    (** [Make(Node)(Edge)] creates a module that implements [Graph]
-        interface and has unlabeled nodes of type [Node.t] and edges
-        labeled with [Edge.t] *)
-    module Make(Node : Opaque)(Edge : Opaque) : Graph
-      with type node = Node.t
-       and type Node.label = Node.t
-       and type Edge.label = Edge.t
-
-
-    module Labeled(Node : Opaque)(NL : T)(EL : T) : Graph
-      with type node = (Node.t, NL.t) labeled
-       and type Node.label = (Node.t, NL.t) labeled
-       and type Edge.label = EL.t
-
-
-    (** a common interface for a regular graph.
-        Graphlib comes with a big set of predefined (i.e.,
-        instantiated graphs. Each regular graph is actually a
-        family of graphs indexed by a type of an edge label.
-
-        For example, [Graphlib.Int.Bool] is a graph with [int]s as
-        nodes, and with edges labeled with values of type [bool].
-
-        Each regular graph also provides a printable interface for
-        each auxiliary data structure.  *)
-    module type Graphs = sig
-      type node
-
-      module Bool : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = bool
-      module Unit : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = unit
-      module Value : Graph with type node = node
-                            and type Node.label = node
-                            and type Edge.label = value
-      module Word : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = word
-      module Int : Graph with type node = node
-                          and type Node.label = node
-                          and type Edge.label = int
-      module String : Graph with type node = node
-                             and type Node.label = node
-                             and type Edge.label = string
-      module Exp : Graph with type node = node
-                          and type Node.label = node
-                          and type Edge.label = exp
-
-      module Stmt : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = stmt
-
-      module Var : Graph with type node = node
-                          and type Node.label = node
-                          and type Edge.label = var
-
-      module Tid : Graph with type node = node
-                          and type Node.label = node
-                          and type Edge.label = tid
-
-      module Type : Graph with type node = node
-                           and type Node.label = node
-                           and type Edge.label = typ
-      include Aux with type node := node
-
-    end
-
-    (** {3 Pre-instantiated graphs} *)
-
-    module Int    : Graphs with type node = int
-    module Word   : Graphs with type node = word
-    module Value  : Graphs with type node = value
-    module String : Graphs with type node = string
-    module Var    : Graphs with type node = var
-    module Exp    : Graphs with type node = exp
-    module Stmt   : Graphs with type node = stmt
-    module Tid    : Graphs with type node = tid
-
-    (** Graph view over IR.
-
-        This module implements a graph view on an intermediate
-        representation of a subroutine. To create an instance of a
-        graph, using existing subroutine use {!Sub.to_cfg}. At any
-        moment current sub term can be obtained using {!Sub.of_cfg}
-        function. This is a just a projection operation, so it doesn't
-        take any computing time.
-
-        All [Graph] modification operations, like [insert], [remove]
-        and [update] in [Node] and [Edge] modules are mapped to
-        corresponding [Term] operations. Also, for performance
-        reasons, graph is augmented with auxiliary data structures,
-        that allows to perform most of the operations in O(log(N))
-        time.
-
-        Although this implements all operations of {!Graph} interface
-        it is recommended to use {!Term} or [Builder] interfaces to
-        build and modify underlying terms. The next few sections will
-        clarify the behavior of a graph when it is modified using
-        {!Graph} interface. If you do not want to read the following
-        sections, then better do not use this module to build your
-        terms.
-
-        {2 Inserting nodes}
-
-        When node is inserted into a graph [g] all jumps of a node,
-        that lead to blocks that are already in a graph will be
-        represented as edges. Also, all jumps from other nodes to the
-        inserted node, will be added as edges (assuming that this
-        other nodes are also in the graph g). Thus inserting node can
-        create an arbitrary number of edges, from zero to N. If jump
-        target is not yet in the graph, then jump is not removed from a
-        sequence of jumps of the inserted node, but just ignored.
-
-
-        {2 Updating nodes}
-
-        When node is updated with the same node (but possibly with
-        different set of terms, see {{!sema}description of sameness})
-        then all changes that affects control flow will be
-        applied. For example, if jump is absent in a new version of a
-        block, and this jump corresponds to an edge in the graph, then
-        this edge will be removed.
-
-        {2 Removing nodes}
-
-        The node will be removed from the underlying [sub term], and
-        all edges incident to the removed node will be also removed.
-        This will not affect jmp terms of blk terms.
-
-        {2 Inserting edges}
-
-        Edges in IR graph represents a transfer of a control flow
-        between basic blocks. The basic block in IR is more reach,
-        rather then a node in a graph. For example, in blk term the
-        order of jumps matters. Jump [n] is taken, only if guard
-        conditions of jumps [0] to [n-1] evaluated to [false] (like
-        switch statement in C language). The order of edges in a graph
-        is unspecified. So, some precaution should be taken, to handle
-        edge removing and inserting correctly. Each edge is labeled
-        with abstract label, that represents the jump position in a
-        graph.
-
-        When an edge is created it will look for corresponding jumps
-        in source node. If there exists such jump, and it points to
-        the destination, then it will be left untouched. If it points
-        to a different node, then it will be fixed to point at the
-        given destination. If there is no position in a slot,
-        represented by the given label, then it will be
-        inserted. Dummy jumps will be prepended before the inserted
-        jump, if needed.
-
-        When an edge is inserted into the graph, then source and
-        destination nodes are inserted or updated (depending on whether
-        they were already present in the graph). As a result, the
-        graph must contain at least nodes, incident to the edge, and
-        the edge itself.
-
-        {2 Updating edge}
-
-        Updating an edge is basically the same, as updating incident
-        nodes, given that the edge exists in the graph.
-
-
-        {2 Removing edge}
-
-        Removing an edge is not symmetric with edge insertion. It
-        doesn't remove the incident nodes, but instead removes jumps
-        from the source node to destination. The jumps are removed
-        accurately, so that the order (and semantics) is preserved. If
-        the removed jump was in the middle of the sequence then it is
-        substituted by a dummy jump with [false] guard.
-    *)
-    module Ir : sig
-      type t
-      type edge
-      type node
-
-      (** since in IR the order of edges defines semantics, we provide
-          extra functions *)
-      module Edge : sig
-        include Edge with type graph = t
-                      and type node = node
-                      and type t = edge
-
-        (** [jmps dir e g] enumerates all jumps (including calls,
-            interrupts, indirects, etc), that occurs before if
-            [dir = `before] or after if [dir = `after] an edge [e] *)
-        val jmps  : [`after | `before] -> t -> graph -> jmp term seq
-
-        (** [edges dir e g] enumerates all edges occurring before of
-            after an edge [e] in graph [g] *)
-        val edges : [`after | `before] -> t -> graph -> t seq
-
-        (** [jmp e] returns a jmp term associated with edge [e]  *)
-        val jmp : t -> jmp term
-
-        (** [tid e] returns a tid of a jmp term that is associated
-            with an edge [e] *)
-        val tid : t -> tid
-
-        (** [cond e g] computes a condition expression that is
-            asserted to be [true] if this branch is taken.
-
-            Note: this is not the same as a condition associated with
-            the jmp term itself, it takes into account all conditions
-            preceding the edge.
-        *)
-        val cond : t -> graph -> exp
-
-        include Printable with type t := t
-      end
-
-      module Node : sig
-        include Node with type graph = t
-                      and type t = node
-                      and type edge = edge
-                      and type label = blk term
-        include Printable with type t := t
-      end
-
-      include Graph with type t := t
-                     and type node := node
-                     and type edge := edge
-                     and type Node.label = blk term
-                     and module Node := Node
-                     and module Edge := Edge
-
-      (** {4 Printable interface for auxiliary data structures}  *)
-      include Aux with type node := node
-    end
-
-    (** A call graph representation.  *)
-    module Callgraph : sig
-      (** In this representations, nodes are identifiers of subroutine
-          terms, and edges, representing calls, are marked with a list of
-          callsites, where callsite is denoted by a jump term.  *)
-
-      include Graph with type node = tid
-                     and type Node.label = tid
-                     and type Edge.label = jmp term list
-      val create : program term -> t
-      val pp : Format.formatter -> t -> unit
-      include Aux with type node := node
-    end
-
-
-  end
-
   (** BIR Interpreter  *)
   module Biri : sig
     open Bil.Result
@@ -5106,7 +3182,7 @@ module Std : sig
       (** ignore arguments and set context#next to None  *)
       method eval_exn  : int -> tid -> 'a u
 
-      (** set context#next to the given tid  *)
+      (** set context#next to the a given tid  *)
       method eval_direct : tid -> 'a u
 
       (** ignore argument and set context#next to None  *)
@@ -5691,6 +3767,10 @@ module Std : sig
     (** [register_backend ~name backend] tries to register backend under
         the specified [name]. *)
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
+
+    (** lists all registered backends  *)
+    val available_backends : unit -> string list
+
   end
 
   (** Memory maps.
@@ -5799,124 +3879,43 @@ module Std : sig
     include Container.S1 with type 'a t := 'a t
   end
 
+
+  (** Symbolizer defines a method for assigning symbolic names to addresses  *)
+  type symbolizer
+
+  (** Rooter defines a method for finding function starts in a program  *)
+  type rooter
+
+  (** Brancher defines a method for resolving branch instruction   *)
+  type brancher
+
+  (** Reconstructor  defines a method for reconstructing symbol tables   *)
+  type reconstructor
+
   (** value of type [disasm] is a result of the disassembling of a
-      memory region. To create values of this type use [disassemble]
-      function *)
+      memory region.  *)
   type disasm
 
   (** values of type [insn] represents machine instructions decoded
-      from the given piece of memory *)
+      from the a given piece of memory *)
   type insn with bin_io, compare, sexp_of
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
   type block with compare, sexp_of
 
-  (** [disassemble ?roots arch mem] disassemble provided memory region
-      [mem] using best available algorithm and backend for the specified
-      [arch]. Roots, if provided, should point to memory regions, that
-      are believed to contain code. At best, this should be a list of
-      function starts. If no roots are provided, then the starting
-      address of the provided memory [mem] will be used as a root.
+  type cfg with compare
 
-      The returned value will contain all memory reachable from the
-      given set of roots, at our best knowledge. *)
-  val disassemble : ?roots:addr list -> arch -> mem -> disasm
-
-  (** [disassemble_image image] disassemble given image.
-      Will take executable segments of the image and disassemble it,
-      applying [disassemble] function. If no roots are specified, then
-      symbol table will be used as a source of roots. If file doesn't
-      contain one, then entry point will be used.
+  (** a jump kind.
+      A jump to another block can be conditional or unconditional.
   *)
-  val disassemble_image : ?roots:addr list -> image -> disasm
+  type jump = [
+    | `Jump     (** unconditional jump                  *)
+    | `Cond     (** conditional jump                    *)
+  ] with compare, sexp
+  (** This type defines a relation between two basic blocks.  *)
+  type edge = [jump | `Fall] with compare,sexp
 
-  (** [disassemble_file ?roots path] takes a path to a binary and
-      disassembles it  *)
-  val disassemble_file : ?roots:addr list -> string -> disasm Or_error.t
-
-  (** [disassemble_file ?roots path] takes a path to a binary and
-      disassembles it  *)
-  val disassemble_file_exn : ?roots:addr list -> string -> disasm
-
-  (** [linear_sweep arch mem] will perform a linear sweep disassembly on
-      the specified memory [mem] *)
-  val linear_sweep : arch -> mem -> (mem * insn option) list Or_error.t
-
-  (** [linear_sweep_exn] same as [linear_sweep], but raises an
-      exception, instead of returning [Or_error] monad  *)
-  val linear_sweep_exn : arch -> mem -> (mem * insn option) list
-
-
-  (** Disassembled program.
-
-      This module provides an interface for values of type [disasm]. *)
-  module Disasm : sig
-    type t = disasm
-
-    (** returns all instructions that was successfully decoded in an
-        ascending order of their addresses. Each instruction is
-        accompanied with its block of memory. *)
-    val insns : t -> (mem * insn) seq
-
-    (** returns a mapping from memory regions to basic blocks. One may
-        think this as a whole program CFG that is constructed on the
-        fly.  *)
-    val blocks : t -> block table
-
-    (** performs lookup for an instruction that occupies exactly
-        the given piece of memory. If you need to find all instructions
-        that lies in a given region of memory, use [insns_of_mem] or
-        [insns_of_block] functions.
-    *)
-    val insn_at_mem : t -> mem -> insn option
-
-    (** [insns_of_mem] returns all instructions that occupies memory
-        regions that have intersections with [mem].  *)
-    val insns_at_mem : t -> mem -> (mem * insn) seq
-
-    (** returns a sequence of memory regions occupied by the given
-        instruction.  *)
-    val mems_of_insn : t -> insn -> mem seq
-
-    (** [insn_at_addr t addr] finds instruction to which the [addr]
-        belongs. In other words if instruction at given address is
-        found it doesn't mean, that it starts at this address.
-        Consider comparison with [min_addr] if you need to match
-        starting address only.  *)
-    val insn_at_addr : t -> addr -> (mem * insn) option
-
-    (** returns a blocks of memory that was visited during the
-        disassembly. The regions are merged with [Memory.merge] if
-        possible. So it returns the least possible amount of contiguous
-        memory regions *)
-    val span : t -> mem seq
-
-    type error = [
-      | `Failed of Error.t
-      | `Failed_to_disasm of mem
-      | `Failed_to_lift of mem * insn * Error.t
-    ] with sexp_of
-
-    module Error : Printable with type t := error
-
-    (** returns a list of all errors and warnings that occurred during
-        the disassembling *)
-    val errors : t -> (mem * error) seq
-
-    (** {2 Tags}  *)
-
-    (** start of basic block  *)
-    val block : addr tag
-
-    (** machine instruction  *)
-    val insn : insn tag
-
-    (** address of instruction  *)
-    val insn_addr : addr tag
-
-
-  end
 
   (** Kinds of instructions  *)
   module Kind : sig
@@ -6009,325 +4008,6 @@ module Std : sig
 
   type op = Op.t with bin_io, compare, sexp_of
 
-  type symtab
-
-  (** Reconstructed symbol table.  *)
-  module Symtab : sig
-    (** This data structure holds information about functions that
-        were found in the executable.*)
-
-
-    (** symbol table  *)
-    type t = symtab
-
-    (** symbol table entry  *)
-    type fn
-
-    (** [reconstruct ?name ?roots cfg] reconstructs symbols using a
-        whole program [cfg]. [name] is a naming function, that should
-        return [Some name] for the symbols starting at provided
-        address. If [name] returns [None], then the default naming
-        scheme will be used for that symbol. [roots] is the initial
-        set of function starts. This set will be extended with all
-        targets of calls, found in the [cfg]. Note: it is not required
-        for [roots] to be actually a set - duplicates is ok.  *)
-    val reconstruct :
-      ?name:(addr -> string option) ->
-      ?roots:addr list -> block table -> t
-
-    (** [add_symbol table name entry blocks] extends [table] with a
-        new symbol with a given [name], [entry] block and body
-        [blocks].  *)
-    val add_symbol : t -> string -> block -> block seq -> t
-
-    (** [remove table fn] removes symbol [fn] from [table]  *)
-    val remove : t -> fn -> t
-
-    (** [find_by_name symbols name] finds a symbols with a given name  *)
-    val find_by_name  : t -> string -> fn option
-
-    (** [find_by_start symbols addr] finds a symbol that starts from
-        a given address *)
-    val find_by_start : t -> addr -> fn option
-
-    (** [fns_of_addr symbols addr] return a list of functions that
-        owns [addr]   *)
-    val fns_of_addr : t -> addr -> fn list
-
-    (** [fns_of_mem syms mem] returns a list of functions that
-        dominates over provided memory region [mem] *)
-    val fns_of_mem : t -> mem -> fn list
-
-    (** [create_bound syms fn] creates a predicate that returns [true]
-        for all addresses that belongs to function [f]. The returned
-        predicated is in a staged form, to prevent abuse. To unstage,
-        use function [unstage], e.g.,
-        [let bound = unstage (Symtab.create_bound syms fn)]
-    *)
-    val create_bound : t -> fn -> (addr -> bool) Staged.t
-
-    (** [to_sequence symtab] returns a sequence of functions  *)
-    val to_sequence : t -> fn seq
-
-    (** [name_of_fn fn] returns symbol's name  *)
-    val name_of_fn : fn -> string
-
-    (** [entry_of_fn fn] returns an entry block of a given function [fn]  *)
-    val entry_of_fn : fn -> block
-
-    (** [memory_of_fn syms fn] returns memory covered by function [fn]   *)
-    val memory_of_fn : t -> fn -> unit memmap
-  end
-
-  (** ABI interface.
-      Each ABI object must implement this interface. *)
-  class type abi = object
-    (** unique identifier of the ABI.
-        Used to communicate between to ABI's.
-
-        The order of id parts should be from more specific, to less
-        specific, i.e. in reverse order (so that deriving classes can
-        easily append their own parts). The architecture shouldn't be
-        specified in the id, as two ABIs from different architectures
-        should never met.
-
-        A good start whould be to use:
-        [specific; compiler; os; vendor]
-
-        Example: ["*exit"; "gnueabi"; "linux"; "unknown"]
-
-        Will encode an ABI of [exit] family of functions for ARM linux
-        gnueabi. The recommended printing format for the ABI is to
-        append the arch name and print all constituents of the name from
-        right to left, using "-" symbol as a separator.
-
-        In any case, the meaning of the identifier is specific to a
-        particular family of ABIs, that are, usually inherit the same
-        parent or set of parents. *)
-    method id : string list
-
-    (** [self#specific] is [true] if this ABI is specific
-        for the provided function. The [specific] ABI is always more
-        preferrable to non-specific one. If more than one specific
-        ABIs is applicable for the provided symbol, than the normal
-        resolution process will be used (see method [choose])
-    *)
-    method specific : bool
-
-    (** [self#choose other] used to sort a set of applicable ABI.
-
-        Must return:
-        - [0] if [other] abi is not known or is considered equaly
-        applicable for the given context.
-        - [1] if [other] abi is known, and [self] is preferrable
-        to [other]
-        - [-1] if [other] abi is more preferrable. This value can
-        be even returned when the other abi is not known to [self].
-
-        In case of inconsistency the solving mechanism will consider
-        inconsistent abi's as equal. The examples of inconsistent
-        comparison results are: both abis preferred each other, or
-        both abis claimed that they are preferrable. *)
-    method choose : abi -> int
-
-    (** [return_value] returns an expression, that can be used to return
-        a value from a function. Use [Bil.concat] to represent return
-        value that doesn't fit into one register  *)
-    method return_value : (var * exp) option
-
-    (** [args] returns a list of expressions that represents
-        arguments of the given function. Each expression can be
-        annotated with suggested name  *)
-    method args : (var * exp) list
-
-    (** [vars] returns a list of expressions, that represents
-        local variables of the function  *)
-    method vars : (var * exp) list
-
-    (** [records] returns a list of records, found in the symbol.  *)
-    method records : (var * exp) list list
-  end
-
-  (** symbol name may be provided if known. Also an access
-      to the whole binary image is provided if there is one. *)
-  type abi_constructor = sub term -> abi
-
-
-  (** A BIL model of CPU
-
-      In general this is a model of a processor architecture, involving
-      ALU, processing unit, registers and memory.
-  *)
-
-  (** Abstract interface to CPU  *)
-  module type CPU = sig
-
-    (** {3 Minimum set of required definitions} *)
-
-    (** A set of general purpose registers *)
-    val gpr : Var.Set.t
-
-    (** Memory  *)
-    val mem : var
-
-    (** Program counter.
-        @deprecated this maybe removed, if we decide, that PC register
-        breaks abstraction.*)
-    val pc  : var
-
-    (** Stack pointer  *)
-    val sp  : var
-
-    (** {4 Flag registers}  *)
-    val zf  : var
-    val cf  : var
-    val vf  : var
-    val nf  : var
-
-    (** [addr_of_pc mem] given a memory region, representing some
-        instruction, return a value to which a PC register is set when
-        this instruction is executed by CPU.
-        This function is useful to resolve PC-relative calculations.
-        @deprecated this maybe removed, if we decide, that PC register
-        breaks abstraction.
-    *)
-    val addr_of_pc : mem -> addr
-
-    (** {3 Predicates}  *)
-    val is_reg : var -> bool
-    val is_flag : var -> bool
-
-    val is_sp : var -> bool
-    val is_bp : var -> bool
-    val is_pc : var -> bool
-
-    val is_zf : var -> bool
-    val is_cf : var -> bool
-    val is_vf : var -> bool
-    val is_nf : var -> bool
-    val is_mem : var -> bool
-  end
-
-  (** Application Binary Interface
-
-      Under this name, we're gathering several different concepts, like:
-
-      - calling convention
-      - stack frame organization
-      - data representation
-      - special functions
-
-      Later we may extend the ABI class to handle system calls, type
-      inference and other stuff.
-
-      Each ABI object is constructed specifically to a particular
-      symbol using the following functional constructor, of the
-      following type:
-
-      [?image:image -> ?sym:string -> mem -> block -> abi option]
-
-      ABI constructors are registered in the target specific lifter,
-      and constructed for each symbol. Afterwards a set of most
-      (and equally) applicable ABIs is provided to a calling part,
-      to which it is left the final decision on how to disambiguate
-      them. *)
-  module type ABI = sig
-
-
-    (** creates a set of ABI for the provided symbol.
-        Until [all] parameter is set to true the ABI will be
-        disambiguated, using [choose] method. Only equally
-        valid ABI are returned. *)
-    val create : ?merge:(abi list -> abi) -> sub term -> abi
-
-    (** [merge abis] create an abi that tries to take best from all
-        provided abi. If the input list is empty, then the stub abi
-        will be returned. *)
-    val merge : abi list -> abi
-
-    val merge_id : string list -> string list -> string list
-
-    (** ABI that understands nothing. All methods are dump stubs. *)
-    class stub : abi
-
-    val to_string : arch -> string list -> string
-
-    (** registers given ABI under the given target   *)
-    val register : abi_constructor -> unit
-  end
-
-  (** a jump kind.
-      A jump to another block can be conditional or unconditional.
-  *)
-  type jump = [
-    | `Jump     (** unconditional jump                  *)
-    | `Cond     (** conditional jump                    *)
-  ] with compare, sexp
-  (** This type defines a relation between two basic blocks.  *)
-  type edge = [jump | `Fall] with compare,sexp
-
-  (** Access to block attributes.
-      This interface provides only access to block attributes, but
-      doesn't allow to navigate to other blocks.
-  *)
-  module type Block_accessors = sig
-    type t with compare, sexp_of
-    type insn
-    (** [addr block] address of the first instruction  *)
-    val addr : t -> addr
-
-    (** [memory blk] memory region, occupied by a block*)
-    val memory : t -> mem
-
-    (** [leader blk] the first instruction *)
-    val leader : t -> insn
-
-    (** [terminator blk] last instruction of the block  *)
-    val terminator : t -> insn
-
-    (** [insns blk] returns a list of block instructions  *)
-    val insns : t -> (mem * insn) list
-
-    include Opaque     with type t := t
-    (** all the printing stuff, including [to_string] function *)
-    include Printable  with type t := t
-  end
-
-  (** Navigate to neighborhood blocks.
-
-      The following functions allows you to navigate through blocks
-      without explicitly using graphs. Each neighborhood function
-      returns closest neighbors as a lazy sequence. Please, be cautious,
-      since this can contain loops, i.e. block can contain itself as a
-      predecessor.
-
-      You can use [Block.compare] or [compare_block] functions, to safely
-      compare blocks with each other, without a risk of non-termination.
-  *)
-  module type Block_traverse = sig
-
-    (** block type  *)
-    type t
-
-    (** [dest] type also handles indirect jumps.  *)
-    type dest = [
-      | `Block of t * edge
-      | `Unresolved of    jump
-    ] with compare, sexp_of
-
-    (** [dests blk] block immediate destinations including unresolved
-        one. Successors are returned in the order of execution, e.g.,
-        taken branch comes before the implicit one. *)
-    val dests : t -> dest seq
-
-    (** [succs blk] block immediate successors in the order of
-        execution, .  *)
-    val succs : t -> t seq
-
-    (** [preds blk] block immediate predecessors in unspecified order. *)
-    val preds : t -> t seq
-  end
-
   (** Expert interface to disassembler.
 
       This interface is rather complicated, and is built around two
@@ -6344,14 +4024,11 @@ module Std : sig
     module Basic : sig
       (** predicate to drive the disassembler *)
       type pred = [
-        | `Valid  (** stop on first valid insn  *)
+        | `Valid    (** stop on first valid insn  *)
         |  Kind.t   (** stop on first insn of the specified kind *)
       ] with sexp
 
       (** {2 Basic types }  *)
-      type reg  with bin_io, compare, sexp
-      type imm  with bin_io, compare, sexp
-      type fmm  with bin_io, compare, sexp
       type (+'a,+'k) insn
       type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
       type empty     (** set when information is not stored                *)
@@ -6393,21 +4070,19 @@ module Std : sig
       *)
       type (+'a,+'k,'s,'r) state
 
-      (** [create ?debug_level ?cpu ~backend target] creates a disassembler
-          for the specified [target]. All parameters are backend specific,
-          consult the concrete backend for more information. In general,
-          the greater [debug_level] is, the more debug information will be
-          outputed by a backend. To silent backend set it [0]. This is a
-          default value. Example:
+      (** [with_disasm ?debug_level ?cpu ~backend target] creates a
+          disassembler for the specified [target]. All parameters are
+          backend specific, consult the concrete backend for more
+          information. In general, the greater [debug_level] is, the
+          more debug information will be outputed by a backend. To
+          silent backend set it [0]. This is a default value. Example:
 
           [create ~debug_level:3 ~backend:"llvm" "x86_64"]
       *)
-      val create :
-        ?debug_level:int ->
-        ?cpu:string ->
-        backend:string ->
-        string ->
-        (empty, empty) t Or_error.t
+      val with_disasm :
+        ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+        f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
+
 
       (** enables storing assembler information  *)
       val store_asm : (_,'k) t -> (asm,'k) t
@@ -6475,7 +4150,7 @@ module Std : sig
         init:'s -> mem -> 'r
 
       (** [insn_of_mem dis mem] performes a disassembly of one instruction
-          from the given memory region [mem]. Returns a tuple
+          from the a given memory region [mem]. Returns a tuple
           [imem,insn,`left over] where [imem] stands for a piece of memory
           consumed in a process of disassembly, [insn] can be [Some ins] if
           disassembly was successful, and [None] otherwise. [`left over]
@@ -6550,46 +4225,25 @@ module Std : sig
         module Normalized : Trie with type key = key
         include Trie with type key := key
       end
+
+      val available_backends : unit -> string list
     end
 
-    (** Shingled Disassembler.
-        This disassembler is built on top of [Basic], and it uses a
-        combined approach wherein every byte offset is treated as a
-        potential instruction and conservatively kept, but subsequent
-        passes try to sheer off noise. It uses a short circuiting
-        approach to determine those instruction sequences that lead to
-        what can be definitively established as Data and back
-        propagates such determinations maximally. In this fashion, it
-        is recognized that benign compilers do not produce instruction
-        sequences with any such interpretation sequences other than
-        that determined by a mere single entry. In another note, this
-        disassembler makes use of instruction target analysis and
-        a machine trained Probabilitic Finite State Machine to help
-        further increase accuracy.
-    *)
-    module Shingled : sig
-      (** This is a conservative byte offset disassembler; everything that
-          is returned in a list of type mem * insn option. It is tail
-          recursive  *)
-      val all_shingles : ('a, 'b) Basic.t -> mem -> init:'c ->
-        at:('c -> mem * Basic.full_insn option -> 'c) -> 'c
+    module Linear : sig
+      type t = (mem * insn option) list
 
-      (** Applies a couple of techniques to try and sheer off noise,
-          dropping obviously recognizable data, and attempting a maximal
-          recognition backward propagation of fall through and
-          subsuequently a probabilistic finite state machine for selecting
-          maximally probable execution sequences based on a corpus of
-          trianing data. *)
-      val sheered_shingles :?backend:string -> arch ->
-        ?dis:(Basic.empty, Basic.empty) Basic.t -> mem -> insn memmap
+      (** [Linear.sweep arch mem] will perform a linear sweep
+          disassembly on the specified memory [mem] *)
+      val sweep : arch -> mem -> t Or_error.t
+
+      module With_exn : sig
+        (** [Linear.With_exn.sweep] same as
+            [Linear_sweep.memory], but raises an exception, instead of
+            returning [Or_error] monad *)
+        val sweep : arch -> mem -> t
+      end
     end
 
-    module Shingled_lifter : sig
-      val lift_all : ?backend:string-> ?min_addr:addr -> arch -> string ->
-        bil list
-      val lift_sheered : ?backend:string -> ?min_addr:addr -> arch ->
-        string -> bil memmap
-    end
 
     (** Recursive Descent Disassembler.
         This disassembler is built on top of [Basic] disassembler. It
@@ -6601,11 +4255,6 @@ module Std : sig
         module.  *)
     module Recursive : sig
       type t
-      type block with compare, sexp_of
-      type lifter = mem -> Basic.full_insn -> bil Or_error.t
-      type maybe_insn = Basic.full_insn option * bil option with sexp_of
-      type decoded = mem * maybe_insn with sexp_of
-
       type error = [
         | `Failed_to_disasm of mem
         | `Failed_to_lift of mem * Basic.full_insn * Error.t
@@ -6613,19 +4262,12 @@ module Std : sig
 
       val run :
         ?backend:string ->
-        ?lifter:lifter -> ?roots:addr list -> arch -> mem -> t Or_error.t
+        ?brancher:brancher ->
+        ?rooter:rooter -> arch -> mem -> t Or_error.t
 
-      val blocks : t -> block Table.t
+      val cfg : t -> cfg
 
       val errors : t -> error list
-
-      (** Low-level opaque representation of basic block. *)
-      module Block : sig
-        include Block_accessors
-          with type t = block
-           and type insn := maybe_insn
-        include Block_traverse  with type t := t
-      end
     end
   end
 
@@ -6633,9 +4275,11 @@ module Std : sig
   module Insn : sig
     type t = insn with bin_io, compare, sexp
 
-    type op = Op.t with bin_io, compare, sexp
-
-    include Regular with type t := t
+    (** {3 Creating}
+        The following functions will create [insn] instances from a lower
+        level representation.
+    *)
+    val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
 
     (** returns backend specific name of instruction *)
     val name : t -> string
@@ -6649,39 +4293,29 @@ module Std : sig
     (** instruction operands  *)
     val ops  : t -> op array
 
-    (** {3 Instruction predicates} *)
+    (** {3 Instruction properties} *)
 
-    (** [is_jump] [true] for all jumps  *)
-    val is_jump : t -> bool
+    type must = Must
+    type may = May
+    type 'a property
 
-    (** [is_conditional] [true] for conditional jumps  *)
-    val is_conditional_jump : t -> bool
+    val new_property : 'a -> string -> 'a property
 
-    (** [is_unconditional] iff [is_jump && not is_conditional_jump]  *)
-    val is_unconditional_jump : t -> bool
+    val jump                : must property
+    val conditional         : must property
+    val indirect            : must property
+    val call                : must property
+    val return              : must property
+    val affect_control_flow : may  property
+    val load                : may  property
+    val store               : may  property
 
-    (** [is_indirect_jump] [true] if it is indirect *)
-    val is_indirect_jump : t -> bool
-
-    (** [is_call] is [true] for all call instructions  *)
-    val is_call : t -> bool
-
-    (** [is_return] [true] for returns  *)
-    val is_return : t -> bool
-
-    (** [may_affect_control_flow] is true if it may affect control flow.
-        «may» stays for the fact, that it «may not» affect.
-    *)
-    val may_affect_control_flow : t -> bool
-
-    (** [has_side_effect] is [true] if instruction may load or store  *)
-    val has_side_effect : t -> bool
-
-    (** [may_load] is true if instruction may load data from memory  *)
-    val may_load : t -> bool
-
-    (** [may_store] is true if instruction may store data to memory  *)
-    val may_store : t -> bool
+    val is  : must property -> t -> bool
+    val may : may  property -> t -> bool
+    val must    : must property -> t -> t
+    val mustn't : must property -> t -> t
+    val should    : may  property -> t -> t
+    val shouldn't : may  property -> t -> t
 
 
     (** [pp_adt] prints instruction in ADT format, suitable for reading
@@ -6711,35 +4345,370 @@ module Std : sig
       include Trie with type key := key
     end
 
+    include Regular with type t := t
+  end
 
-    (** {3 Creating}
-        The following functions will create [insn] instances from a lower
-        level representation.
-    *)
-    val of_basic : ?bil:bil -> Disasm_expert.Basic.full_insn -> t
+  (** Access to block attributes.
+      This interface provides only access to block attributes, but
+      doesn't allow to navigate to other blocks.
+  *)
+  module Block : sig
+    type t = block with compare, sexp_of
+    (** [addr block] address of the first instruction  *)
+    val addr : t -> addr
 
+    (** [memory blk] memory region, occupied by a block*)
+    val memory : t -> mem
+
+    (** [leader blk] the first instruction *)
+    val leader : t -> insn
+
+    (** [terminator blk] last instruction of the block  *)
+    val terminator : t -> insn
+
+    (** [insns blk] returns a list of block instructions  *)
+    val insns : t -> (mem * insn) list
+
+    include Opaque     with type t := t
+    (** all the printing stuff, including [to_string] function *)
+    include Printable  with type t := t
   end
 
 
-  (** Basic block of machine instructions.  *)
-  module Block : sig
-    type t = block with compare, sexp_of
-    include Block_accessors with type t := t and type insn := insn
-    include Block_traverse  with type t := t
 
-    (** Graph of blocks.  *)
-    module Graph : Graph
-      with type node = t
-       and type Node.label = t
-       and type Edge.label = edge
+  module Graphs : sig
 
-    (** [to_graph ?bound entry] builds a graph starting with [entry] and
-        spanning all reachable blocks.
-        @param bound if specified, then the resulting graph will
-        contain only blocks [b] for which [bound (Block.addr b)]
-        evaluated to [true]. {!Symtab.create_bound} is an example of
-        such function. *)
-    val to_graph : ?bound:(addr -> bool) -> t -> Graph.t
+
+    module Cfg : Graph with type t = cfg
+                        and type node = block
+                        and type Edge.label = edge
+
+    (** A call graph representation.  *)
+    module Callgraph : sig
+      (** In this representations, nodes are identifiers of subroutine
+          terms, and edges, representing calls, are marked with a list of
+          callsites, where callsite is denoted by a jump term.  *)
+
+      include Graph with type node = tid
+                     and type Node.label = tid
+                     and type Edge.label = jmp term list
+      val create : program term -> t
+      val pp : Format.formatter -> t -> unit
+    end
+
+    (** Graph view over IR.
+
+        This module implements a graph view on an intermediate
+        representation of a subroutine. To create an instance of a
+        graph, using existing subroutine use {!Sub.to_cfg}. At any
+        moment current sub term can be obtained using {!Sub.of_cfg}
+        function. This is a just a projection operation, so it doesn't
+        take any computing time.
+
+        All [Graph] modification operations, like [insert], [remove]
+        and [update] in [Node] and [Edge] modules are mapped to
+        corresponding [Term] operations. Also, for performance
+        reasons, graph is augmented with auxiliary data structures,
+        that allows to perform most of the operations in O(log(N))
+        time.
+
+        Although this implements all operations of {!Graph} interface
+        it is recommended to use {!Term} or [Builder] interfaces to
+        build and modify underlying terms. The next few sections will
+        clarify the behavior of a graph when it is modified using
+        {!Graph} interface. If you do not want to read the following
+        sections, then better do not use this module to build your
+        terms.
+
+        {2 Inserting nodes}
+
+        When node is inserted into a graph [g] all jumps of a node,
+        that lead to blocks that are already in a graph will be
+        represented as edges. Also, all jumps from other nodes to the
+        inserted node, will be added as edges (assuming that this
+        other nodes are also in the graph g). Thus inserting node can
+        create an arbitrary number of edges, from zero to N. If jump
+        target is not yet in the graph, then jump is not removed from a
+        sequence of jumps of the inserted node, but just ignored.
+
+
+        {2 Updating nodes}
+
+        When node is updated with the same node (but possibly with
+        different set of terms, see {{!sema}description of sameness})
+        then all changes that affects control flow will be
+        applied. For example, if jump is absent in a new version of a
+        block, and this jump corresponds to an edge in the graph, then
+        this edge will be removed.
+
+        {2 Removing nodes}
+
+        The node will be removed from the underlying [sub term], and
+        all edges incident to the removed node will be also removed.
+        This will not affect jmp terms of blk terms.
+
+        {2 Inserting edges}
+
+        Edges in IR graph represents a transfer of a control flow
+        between basic blocks. The basic block in IR is more reach,
+        rather then a node in a graph. For example, in blk term the
+        order of jumps matters. Jump [n] is taken, only if guard
+        conditions of jumps [0] to [n-1] evaluated to [false] (like
+        switch statement in C language). The order of edges in a graph
+        is unspecified. So, some precaution should be taken, to handle
+        edge removing and inserting correctly. Each edge is labeled
+        with abstract label, that represents the jump position in a
+        graph.
+
+        When an edge is created it will look for corresponding jumps
+        in source node. If there exists such jump, and it points to
+        the destination, then it will be left untouched. If it points
+        to a different node, then it will be fixed to point at the
+        a given destination. If there is no position in a slot,
+        represented by the a given label, then it will be
+        inserted. Dummy jumps will be prepended before the inserted
+        jump, if needed.
+
+        When an edge is inserted into the graph, then source and
+        destination nodes are inserted or updated (depending on whether
+        they were already present in the graph). As a result, the
+        graph must contain at least nodes, incident to the edge, and
+        the edge itself.
+
+        {2 Updating edge}
+
+        Updating an edge is basically the same, as updating incident
+        nodes, a given that the edge exists in the graph.
+
+
+        {2 Removing edge}
+
+        Removing an edge is not symmetric with edge insertion. It
+        doesn't remove the incident nodes, but instead removes jumps
+        from the source node to destination. The jumps are removed
+        accurately, so that the order (and semantics) is preserved. If
+        the removed jump was in the middle of the sequence then it is
+        substituted by a dummy jump with [false] guard.
+    *)
+    module Ir : sig
+      type t
+      type edge
+      type node
+
+      (** since in IR the order of edges defines semantics, we provide
+          extra functions *)
+      module Edge : sig
+        include Edge with type graph = t
+                      and type node = node
+                      and type t = edge
+
+        (** [jmps dir e g] enumerates all jumps (including calls,
+            interrupts, indirects, etc), that occurs before if
+            [dir = `before] or after if [dir = `after] an edge [e] *)
+        val jmps  : [`after | `before] -> t -> graph -> jmp term seq
+
+        (** [edges dir e g] enumerates all edges occurring before of
+            after an edge [e] in graph [g] *)
+        val edges : [`after | `before] -> t -> graph -> t seq
+
+        (** [jmp e] returns a jmp term associated with edge [e]  *)
+        val jmp : t -> jmp term
+
+        (** [tid e] returns a tid of a jmp term that is associated
+            with an edge [e] *)
+        val tid : t -> tid
+
+        (** [cond e g] computes a condition expression that is
+            asserted to be [true] if this branch is taken.
+
+            Note: this is not the same as a condition associated with
+            the jmp term itself, it takes into account all conditions
+            preceding the edge.
+        *)
+        val cond : t -> graph -> exp
+
+        include Printable with type t := t
+      end
+
+      module Node : sig
+        include Node with type graph = t
+                      and type t = node
+                      and type edge = edge
+                      and type label = blk term
+        include Printable with type t := t
+      end
+
+      include Graph with type t := t
+                     and type node := node
+                     and type edge := edge
+                     and type Node.label = blk term
+                     and module Node := Node
+                     and module Edge := Edge
+
+    end
+
+
+    module Tid : Graph with type node = tid
+                        and type Node.label = tid
+                        and type Edge.label = tid
+
+  end
+
+  (** Disassembled program.
+
+      This module provides an interface for values of type [disasm]. *)
+  module Disasm : sig
+    type t = disasm
+
+    (** [disassemble ?roots arch mem] disassemble provided memory region
+        [mem] using best available algorithm and backend for the specified
+        [arch]. Roots, if provided, should point to memory regions, that
+        are believed to contain code. At best, this should be a list of
+        function starts. If no roots are provided, then the starting
+        address of the provided memory [mem] will be used as a root.
+
+        The returned value will contain all memory reachable from the
+        a given set of roots, at our best knowledge. *)
+    val of_mem :
+      ?backend:string ->
+      ?brancher:brancher ->
+      ?rooter:rooter -> arch -> mem -> t Or_error.t
+
+    (** [disassemble_image image] disassemble a given image.
+        Will take executable segments of the image and disassemble it,
+        applying [disassemble] function. If no roots are specified, then
+        symbol table will be used as a source of roots. If file doesn't
+        contain one, then entry point will be used.
+    *)
+    val of_image :
+      ?backend:string ->
+      ?brancher:brancher -> ?rooter:rooter -> image -> t Or_error.t
+
+    (** [disassemble_file ?roots path] takes a path to a binary and
+        disassembles it  *)
+    val of_file :
+      ?backend:string ->
+      ?brancher:brancher -> ?rooter:rooter ->
+      ?loader:string -> string -> t Or_error.t
+
+    module With_exn : sig
+      val of_mem   : ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> arch -> mem -> t
+      val of_image : ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> image -> t
+      val of_file  : ?backend:string -> ?brancher:brancher ->
+        ?rooter:rooter -> ?loader:string -> string -> t
+    end
+
+    (** returns all instructions that was successfully decoded in an
+        ascending order of their addresses. Each instruction is
+        accompanied with its block of memory. *)
+    val insns : t -> (mem * insn) seq
+
+    (** A whole program CFG.  *)
+    val cfg : t -> cfg
+
+
+    (** {2 Tags}  *)
+
+    (** start of basic block  *)
+    val block : addr tag
+
+    (** machine instruction  *)
+    val insn : insn tag
+
+    (** address of instruction  *)
+    val insn_addr : addr tag
+  end
+
+  type symtab
+
+  (** Reconstructed symbol table.  *)
+  module Symtab : sig
+    (** This data structure holds information about functions that
+        were found in the executable.*)
+
+    (** symbol table  *)
+    type t = symtab with sexp_of
+
+    type fn = string * block * cfg with sexp_of
+
+    (** empty symbol table  *)
+    val empty : t
+
+    (** [add_symbol table name entry blocks] extends [table] with a
+        new symbol with a given [name], [entry] block and body
+        [blocks].  *)
+    val add_symbol : t -> fn -> t
+
+    (** [remove table fn] removes symbol [fn] from [table]  *)
+    val remove : t -> fn -> t
+
+    (** [find_by_name symbols name] finds a symbol with a given namem  *)
+    val find_by_name  : t -> string -> fn option
+
+
+    (** [find_by_start symbols addr] finds a symbol that starts from
+        a given address *)
+    val find_by_start : t -> addr -> fn option
+
+    (** [owners addr] return a list of functions that owns [addr] *)
+    val owners : t -> addr -> fn list
+
+    (** [dominators syms mem] returns a list of functions that
+        dominates over provided memory region [mem] *)
+    val dominators : t -> mem -> fn list
+
+    (** [intersecting_mem syms mem] returns a list of functions, that
+        resides in memory region [mem]  *)
+    val intersecting : t -> mem -> fn list
+
+    (** [to_sequence symtab] returns a sequence of functions  *)
+    val to_sequence : t -> fn seq
+
+    val span : fn -> unit memmap
+  end
+
+
+  type lifter = mem -> Disasm_expert.Basic.full_insn -> bil Or_error.t
+
+  (** A BIL model of CPU
+
+      In general this is a model of a processor architecture, involving
+      ALU, processing unit, registers and memory.
+  *)
+
+  (** Abstract interface to CPU  *)
+  module type CPU = sig
+
+    (** {3 Minimum set of required definitions} *)
+
+    (** A set of general purpose registers *)
+    val gpr : Var.Set.t
+
+    (** Memory  *)
+    val mem : var
+
+    (** Stack pointer  *)
+    val sp  : var
+
+    (** {4 Flag registers}  *)
+    val zf  : var
+    val cf  : var
+    val vf  : var
+    val nf  : var
+
+    (** {3 Predicates}  *)
+    val is_reg : var -> bool
+    val is_flag : var -> bool
+
+    val is_sp : var -> bool
+    val is_bp : var -> bool
+    val is_pc : var -> bool
+
+    val is_zf : var -> bool
+    val is_cf : var -> bool
+    val is_vf : var -> bool
+    val is_nf : var -> bool
+    val is_mem : var -> bool
   end
 
   (** Abstract interface for all targets.
@@ -6753,12 +4722,10 @@ module Std : sig
       {{!AMD64}AMD64}. *)
   module type Target = sig
     module CPU : CPU
-    module ABI : ABI
-
     (** [lift mem insn] lifts provided instruction to BIL.
         Usually you do not need to call this function directly, as
         [disassemble] function will do the lifting. *)
-    val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> bil Or_error.t
+    val lift : lifter
   end
 
   (** [target_of_arch arch] returns a module packed into value, that
@@ -6771,398 +4738,101 @@ module Std : sig
   val target_of_arch : arch -> (module Target)
 
 
-  (** ARM architecture. *)
-  module ARM  : sig
+  (** Register new target architecture. If target for the given arch
+      already exists, then it will be superseeded by the new
+      target.  *)
+  val register_target : arch -> (module Target) -> unit
 
-    val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> bil Or_error.t
+  (** Application Binary Interface
 
-    module ABI : ABI
+      Under this name, we're gathering several different concepts, like:
 
-    (** ARM CPU.
-        Other than common CPU interface, this module also exposes ARM
-        specific registers and flags.    *)
-    module CPU : sig
-      include CPU
-      val spsr : var
-      val cpsr : var
-      val nf : var
-      val zf : var
-      val cf : var
-      val vf : var
-      val qf : var
-      val ge : var array
-      val itstate : var
-      val lr : var
-      val pc : var
-      val sp : var
-      val r0 : var
-      val r1 : var
-      val r2 : var
-      val r3 : var
-      val r4 : var
-      val r5 : var
-      val r6 : var
-      val r7 : var
-      val r8 : var
-      val r9 : var
-      val r10 : var
-      val r11 : var
-      val r12 : var
+      - calling convention
+      - stack frame organization
+      - data representation
+      - special functions
+
+      Later we may extend the ABI class to handle system calls, type
+      inference and other stuff.
+
+      ABI constructors are registered in the target specific lifter,
+      and constructed for each subroutine. Afterwards a set of most
+      (and equally) applicable ABIs is provided to a calling part,
+      to which it is left the final decision on how to disambiguate
+      them. *)
+  module Abi : sig
+    (** Each ABI object must implement this interface. *)
+    class virtual t : object
+      (** unique identifier of the ABI.
+          Used to communicate between to ABI's.
+
+          The order of id parts should be from more specific, to less
+          specific, i.e. in reverse order (so that deriving classes can
+          easily append their own parts). The architecture shouldn't be
+          specified in the id, as two ABIs from different architectures
+          should never met.
+
+          A good start whould be to use:
+          [specific; compiler; os; vendor]
+
+          Example: ["*exit"; "gnueabi"; "linux"; "unknown"]
+
+          Will encode an ABI of [exit] family of functions for ARM linux
+          gnueabi. The recommended printing format for the ABI is to
+          append the arch name and print all constituents of the name from
+          right to left, using "-" symbol as a separator.
+
+          In any case, the meaning of the identifier is specific to a
+          particular family of ABIs, that are, usually inherit the same
+          parent or set of parents. *)
+      method virtual id : string list
+
+      (** [self#specific] is [true] if this ABI is specific
+          for the provided function. The [specific] ABI is always more
+          preferrable to non-specific one. If more than one specific
+          ABIs is applicable for the provided symbol, than the normal
+          resolution process will be used (see method [choose])
+      *)
+      method specific : bool
+
+      (** [self#choose other] used to sort a set of applicable ABI.
+
+          Must return:
+          - [0] if [other] abi is not known or is considered equaly
+          applicable for the a given context.
+          - [1] if [other] abi is known, and [self] is preferrable
+          to [other]
+          - [-1] if [other] abi is more preferrable. This value can
+          be even returned when the other abi is not known to [self].
+
+          In case of inconsistency the solving mechanism will consider
+          inconsistent abi's as equal. The examples of inconsistent
+          comparison results are: both abis preferred each other, or
+          both abis claimed that they are preferrable. *)
+      method choose : t -> int
+
+      (** [return_value] returns an expression, that can be used to return
+          a value from a function. Use [Bil.concat] to represent return
+          value that doesn't fit into one register  *)
+      method return_value : (var * exp) option
+
+      (** [args] returns a list of expressions that represents
+          arguments of the a given function. Each expression can be
+          annotated with suggested name  *)
+      method args : (var * exp) list
+
+      (** [vars] returns a list of expressions, that represents
+          local variables of the function  *)
+      method vars : (var * exp) list
+
+      (** [records] returns a list of records, found in the symbol.  *)
+      method records : (var * exp) list list
     end
-
-
-    (** Arm Instruction Set.  *)
-    module Insn : sig
-      type move = [
-        | `ADCri
-        | `ADCrr
-        | `ADCrsi
-        | `ADCrsr
-        | `ADDri
-        | `ADDrr
-        | `ADDrsi
-        | `ADDrsr
-        | `ANDri
-        | `ANDrr
-        | `ANDrsi
-        | `ANDrsr
-        | `BICri
-        | `BICrr
-        | `BICrsi
-        | `BICrsr
-        | `CMNri
-        | `CMNzrr
-        | `CMNzrsi
-        | `CMNzrsr
-        | `CMPri
-        | `CMPrr
-        | `CMPrsi
-        | `CMPrsr
-        | `EORri
-        | `EORrr
-        | `EORrsi
-        | `EORrsr
-        | `MOVTi16
-        | `MOVi
-        | `MOVi16
-        | `MOVr
-        | `MOVsi
-        | `MOVsr
-        | `MVNi
-        | `MVNr
-        | `MVNsi
-        | `MVNsr
-        | `ORRri
-        | `ORRrr
-        | `ORRrsi
-        | `ORRrsr
-        | `RSBri
-        | `RSBrr
-        | `RSBrsi
-        | `RSBrsr
-        | `RSCri
-        | `RSCrr
-        | `RSCrsi
-        | `RSCrsr
-        | `SBCri
-        | `SBCrr
-        | `SBCrsi
-        | `SBCrsr
-        | `SUBri
-        | `SUBrr
-        | `SUBrsi
-        | `SUBrsr
-        | `TEQri
-        | `TEQrr
-        | `TEQrsi
-        | `TEQrsr
-        | `TSTri
-        | `TSTrr
-        | `TSTrsi
-        | `TSTrsr
-      ] with bin_io, compare, sexp, enumerate
-
-      type bits = [
-        | `BFC
-        | `BFI
-        | `PKHTB
-        | `RBIT
-        | `SBFX
-        | `SWPB
-        | `SXTAB
-        | `SXTAH
-        | `SXTB
-        | `SXTH
-        | `UBFX
-        | `UXTAB
-        | `UXTAH
-        | `UXTB
-        | `UXTH
-        | `REV
-        | `REV16
-        | `CLZ
-      ] with bin_io, compare, sexp, enumerate
-
-      type mult = [
-        | `MLA
-        | `MLS
-        | `MUL
-        | `SMLABB
-        | `SMLAD
-        | `SMLAL
-        | `SMLALBT
-        | `SMLAWB
-        | `SMUAD
-        | `SMULBB
-        | `SMULL
-        | `SMULTB
-        | `UMLAL
-        | `UMULL
-      ] with bin_io, compare, sexp, enumerate
-
-
-      type mem_multi = [
-        | `LDMDA
-        | `LDMDA_UPD
-        | `LDMDB
-        | `LDMDB_UPD
-        | `LDMIA
-        | `LDMIA_UPD
-        | `LDMIB
-        | `LDMIB_UPD
-        | `STMDA
-        | `STMDA_UPD
-        | `STMDB
-        | `STMDB_UPD
-        | `STMIA
-        | `STMIA_UPD
-        | `STMIB
-        | `STMIB_UPD
-      ] with bin_io, compare, sexp, enumerate
-
-
-      type mem = [
-        | mem_multi
-        | `LDRBT_POST_IMM
-        | `LDRBT_POST_REG
-        | `LDRB_POST_IMM
-        | `LDRB_POST_REG
-        | `LDRB_PRE_IMM
-        | `LDRB_PRE_REG
-        | `LDRBi12
-        | `LDRBrs
-        | `LDRD
-        | `LDRD_POST
-        | `LDRD_PRE
-        | `LDREX
-        | `LDREXB
-        | `LDREXD
-        | `LDREXH
-        | `LDRH
-        | `LDRHTr
-        | `LDRH_POST
-        | `LDRH_PRE
-        | `LDRSB
-        | `LDRSBTr
-        | `LDRSB_POST
-        | `LDRSB_PRE
-        | `LDRSH
-        | `LDRSHTi
-        | `LDRSHTr
-        | `LDRSH_POST
-        | `LDRSH_PRE
-        | `LDRT_POST_REG
-        | `LDR_POST_IMM
-        | `LDR_POST_REG
-        | `LDR_PRE_IMM
-        | `LDR_PRE_REG
-        | `LDRi12
-        | `LDRrs
-        | `STRBT_POST_IMM
-        | `STRBT_POST_REG
-        | `STRB_POST_IMM
-        | `STRB_POST_REG
-        | `STRB_PRE_IMM
-        | `STRB_PRE_REG
-        | `STRBi12
-        | `STRBrs
-        | `STRD
-        | `STRD_POST
-        | `STRD_PRE
-        | `STREX
-        | `STREXB
-        | `STREXD
-        | `STREXH
-        | `STRH
-        | `STRHTr
-        | `STRH_POST
-        | `STRH_PRE
-        | `STRT_POST_REG
-        | `STR_POST_IMM
-        | `STR_POST_REG
-        | `STR_PRE_IMM
-        | `STR_PRE_REG
-        | `STRi12
-        | `STRrs
-      ] with bin_io, compare, sexp, enumerate
-
-      type branch = [
-        | `BL
-        | `BLX
-        | `BLX_pred
-        | `BLXi
-        | `BL_pred
-        | `BX
-        | `BX_RET
-        | `BX_pred
-        | `Bcc
-      ] with bin_io, compare, sexp, enumerate
-
-      type special = [
-        | `CPS2p
-        | `DMB
-        | `DSB
-        | `HINT
-        | `MRS
-        | `MSR
-        | `PLDi12
-        | `SVC
-      ] with bin_io, compare, sexp, enumerate
-
-      type t = [
-        | move
-        | bits
-        | mult
-        | mem
-        | branch
-        | special
-      ] with bin_io, compare, sexp, enumerate
-
-      (** [create basic_insn] lifts ARM instruction from a basic instruction  *)
-      val create : ('a,'b) Disasm_expert.Basic.insn -> t option
-      include Regular with type t := t
-    end
-
-    (** ARM Registers.  *)
-    module Reg : sig
-      type nil = [ `Nil ]
-      with bin_io, compare, sexp, enumerate
-
-      (** General purpose registers  *)
-      type gpr = [
-        | `R0
-        | `R1
-        | `R2
-        | `R3
-        | `R4
-        | `R5
-        | `R6
-        | `R7
-        | `R8
-        | `R9
-        | `R10
-        | `R11
-        | `R12
-        | `LR
-        | `PC
-        | `SP
-      ] with bin_io, compare, sexp, enumerate
-
-      type gpr_or_nil = [nil | gpr]
-      with bin_io, compare, sexp, enumerate
-
-      (** conditition code registers  *)
-      type ccr = [
-        | `CPSR
-        | `SPSR
-        | `ITSTATE
-      ] with bin_io, compare, sexp, enumerate
-
-      type ccr_or_nil = [nil | ccr ]
-      with bin_io, compare, sexp, enumerate
-
-      type non_nil = [gpr | ccr]
-      with bin_io, compare, sexp, enumerate
-
-      type t = [nil | non_nil]
-      with bin_io, compare, sexp, enumerate
-
-      (** lifts basic register to a ARM one  *)
-      val create : Disasm_expert.Basic.reg -> t option
-
-      include Regular with type t := t
-    end
-
-
-    (** ARM instruction operands  *)
-    module Op : sig
-      type t =
-        | Reg of Reg.t
-        | Imm of word
-      with bin_io, compare, sexp
-
-      (** lifts operand from a basic one  *)
-      val create : op -> t option
-      include Regular with type t := t
-    end
-
-    (** Condition prefixes.  *)
-    module Cond : sig
-      type t = [
-        | `EQ
-        | `NE
-        | `CS
-        | `CC
-        | `MI
-        | `PL
-        | `VS
-        | `VC
-        | `HI
-        | `LS
-        | `GE
-        | `LT
-        | `GT
-        | `LE
-        | `AL
-      ] with bin_io, compare, sexp, enumerate
-
-      (** decodes condition value from a word  *)
-      val create : word -> t Or_error.t
-      include Regular with type t := t
-    end
+    val create : ?merge:(t list -> t) -> arch -> sub term -> t
+    val register : arch -> (sub term -> t) -> unit
   end
 
-  (** [x86] architecture  *)
-  module IA32 : sig
-    val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> stmt list Or_error.t
-    module ABI : ABI
-    module CPU : sig
-      include CPU
-      val rbp : var
-      val rsp : var
-      val rsi : var
-      val rdi : var
-      val rax : var
-      val rbx : var
-      val rcx : var
-      val rdx : var
-      val r : var array
-    end
-  end
-
-  (** [x86-64] architecture  *)
-  module AMD64 : sig
-
-    val lift : mem -> ('a,'k) Disasm_expert.Basic.insn -> stmt list Or_error.t
-
-    module CPU : sig
-      include CPU
-      include module type of IA32.CPU
-      val r : var array
-    end
-    module ABI : ABI
-  end
-
+  class virtual abi : Abi.t
 
   (** Term identifier  *)
   module Tid : sig
@@ -7278,19 +4948,19 @@ module Std : sig
     val update : ('a,'b) cls -> 'a t -> 'b t -> 'a t
 
     (** [remove t p id] returns a term that doesn't contain element
-        with the given [id] *)
+        with the a given [id] *)
     val remove : ('a,_) cls -> 'a t -> tid -> 'a t
 
     (** [change t p id f] if [p] contains subterm with of a given kind
         [t] and identifier [id], then apply [f] to this
         subterm. Otherwise, apply [f] to [None]. If [f] return [None],
-        then remove this subterm (given it did exist), otherwise,
+        then remove this subterm (a given it did exist), otherwise,
         update parent with a new subterm.  *)
     val change : ('a,'b) cls -> 'a t -> tid -> ('b t option -> 'b t option) -> 'a t
 
 
     (** [enum ?rev t p] enumerate all subterms of type [t] of the
-        given term [p] *)
+        a given term [p] *)
     val enum : ?rev:bool -> ('a,'b) cls -> 'a t -> 'b t seq
 
     (** [to_sequence ?rev t p] is a synonym for [enum]. *)
@@ -7337,12 +5007,12 @@ module Std : sig
     (** [after t ?rev p tid] returns all subterms in term [p] that
         occur after a term with a given [tid]. if [rev] is [true] or
         omitted then terms are returned in the evaluation
-        order. Otherwise they're reversed. If there is no term with a
-        given [tid], then an empty sequence is returned. *)
+        order. Otherwise they're reversed. If there is no term with
+        a given [tid], then an empty sequence is returned. *)
     val after : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
 
     (** [before t ?rev p tid] returns all term that occurs before
-        defintion with given [tid] in blk. If there is no such
+        defintion with a given [tid] in blk. If there is no such
         definition, then the sequence will be empty.  @param rev has
         the same meaning as in {!after}.  *)
     val before : ('a,'b) cls -> ?rev:bool -> 'a t -> tid -> 'b t seq
@@ -7386,7 +5056,7 @@ module Std : sig
     (** [attrs term attrs] returns the set of [attributes] associated
         with a [term]*)
     val attrs : 'a t -> Dict.t
-    (** [get_attr term attr] returns a value of the given [attr] in
+    (** [get_attr term attr] returns a value of the a given [attr] in
         [term] *)
     val get_attr : 'a t -> 'b tag -> 'b option
 
@@ -7411,7 +5081,7 @@ module Std : sig
     val lift : symtab -> program term
 
     (** [to_graph program] creates a callgraph of a [program]  *)
-    val to_graph : t -> Graphlib.Callgraph.t
+    val to_graph : t -> Graphs.Callgraph.t
 
     (** [lookup t program id] is like {{!find}find} but performs deep
         lookup in the whole [program] for a term with a given [id].
@@ -7452,7 +5122,7 @@ module Std : sig
 
     (** [lift entry] takes an basic block of assembler instructions,
         as an entry and lifts it to the subroutine term.  *)
-    val lift : ?bound:(addr -> bool) -> block -> sub term
+    val lift : block -> cfg -> sub term
 
     (** [name sub] returns a subroutine name  *)
     val name : t -> string
@@ -7475,8 +5145,8 @@ module Std : sig
         a user to preserve the SSA form on any transformation.    *)
     val is_ssa : t -> bool
 
-    (** [free_vars sub] computes a set of variables that are free in a
-        given subroutine [sub]. The variable is considered free if it
+    (** [free_vars sub] computes a set of variables that are free in
+        a given subroutine [sub]. The variable is considered free if it
         is used before defined or is not locally bound.  If [sub] is in
         an SSA form, then the set is computed trivially, thanks to a
         naming scheme. If program is not in an SSA form, then a BFS on a
@@ -7493,17 +5163,17 @@ module Std : sig
         This representation is useful, if you need to compute some
         graph relation on a subroutine, that will be later used to
         perform its incremental transformation. *)
-    val to_graph : t -> Graphlib.Tid.Tid.t
+    val to_graph : t -> Graphs.Tid.t
 
     (** [to_cfg sub] builds a graph representation of a subroutine
         [sub]. All graph operations are mapped to corresponding
         [Term] operations. See {!Graphlib.Ir} for more information.*)
-    val to_cfg : t -> Graphlib.Ir.t
+    val to_cfg : t -> Graphs.Ir.t
 
     (** [of_cfg cfg] extracts a [sub term] from a given graph [cfg].
         Since {!Graphlib.Ir} module builds term incrementally this
         operation is just a projection, i.e., it has O(0) complexity.  *)
-    val of_cfg : Graphlib.Ir.t -> t
+    val of_cfg : Graphs.Ir.t -> t
 
     (** Subroutine builder *)
     module Builder : sig
@@ -7561,7 +5231,7 @@ module Std : sig
     (** [lift block] takes a basic block of assembly instructions and
         lifts it to a list of blk terms. The first term in the list
         is the entry. *)
-    val lift : block -> blk term list
+    val lift : cfg -> block -> blk term list
 
 
     (** [from_insn insn] creates an IR representation of a single
@@ -7778,7 +5448,7 @@ module Std : sig
     *)
     type t = jmp term
 
-    (** [create ?cond kind] creates a jump of given kind  *)
+    (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t
 
     (** [create_call ?cond target] transfer control to subroutine
@@ -7987,6 +5657,171 @@ module Std : sig
     include Regular with type t := t
   end
 
+  (** Source of information.
+
+      Source GADT defines types of arguments, that are used to
+      construct objects.
+
+      For example, a symbolizer can be created from one of the a given
+      sources. A project can be also created from a given source, and
+      so on. The [source] type reifies a type of input to the
+      analysis.*)
+  module Source : sig
+    type 'a t =
+      | File : string t          (** external file     *)
+      | Binary : image t         (** structured binary *)
+      | Memory : (mem * arch) t  (** chunk of code   *)
+
+    type 'a source = 'a t
+
+    (** Factory of data processors.
+        Allows to store a registry of processors. *)
+    module type Factory = sig
+      type t
+
+      (** [list source] is a list of names of processors of a given source
+          type. *)
+      val list : 'a source -> string list
+
+      (** [find source name args] finds and constructs a processor
+          that has a given [name] *)
+      val find : 'a source -> string -> 'a -> t option
+
+      (** [register source name cons] registres a data processor
+          constructor under a given [name] in the internal registry of
+          processors. If a processor with a given name already exists,
+          then it will be superceeded by a new one.  *)
+      val register : 'a source -> string -> ('a -> t option) -> unit
+    end
+
+    module Factory(T : T) : Factory with type t := T.t
+  end
+
+  type 'a source = 'a Source.t
+
+  (** Symbolizer maps addresses to function names  *)
+  module Symbolizer : sig
+
+    (** symbolizer data type  *)
+    type t = symbolizer
+
+    (** [create fn] creates a symbolizer for a given function  *)
+    val create : (addr -> string option) -> t
+
+    (** [of_blocks] produces a symbolizer from a serialized
+        sequence of blocks. Each element of the sequence is deconstructed
+        as [(name,ba,ea)], where [name] is a subroutine name, [ba] is a
+        virtual address of a block start, and [ea] is an address of the
+        block end.  *)
+    val of_blocks : (string * addr * addr) seq -> t
+
+
+    (** [resolve symbolizer addr] returns a name of function,
+        to which a given address belongs. If the address is not know to
+        the symbolizer, then the name is constructed from an address *)
+    val resolve : t -> addr -> string
+
+    (** [chain ss] creates a symbolizer, that will try to resolve
+        an address using each symbolizer in order. *)
+    val chain : t list -> t
+
+    (** [empty] is a symbolizer that knows nothing.  *)
+    val empty : t
+
+    (** A factory of symbolizers. Use it register and create
+        symbolizers.  *)
+    module Factory : Source.Factory with type t := t
+  end
+
+  (** Rooter find start of functions in the binary. *)
+  module Rooter : sig
+    type t = rooter
+
+    (** [create seq] creates a rooter from a given sequence of addresses  *)
+    val create : addr seq -> t
+
+    (** [of_image img] create a rooter that will use existing symbol
+        information inside the image, to find roots. *)
+    val of_image : image -> t
+
+    (** [of_blocks] produces a rooter from a serialized
+        sequence of blocks. Each element of the sequence is deconstructed
+        as [(name,ba,ea)], where [name] is a subroutine name, [ba] is a
+        virtual address of a block start, and [ea] is an address of the
+        block end.  *)
+    val of_blocks : (string * addr * addr) seq -> t
+
+
+    (** [roots r] enumerates roots found by rooter [r]  *)
+    val roots : t -> addr seq
+
+    (** [union r1 r2] joins roots from rooters [r1] and [r2]  *)
+    val union : t -> t -> t
+
+    (** A factory of rooters. Useful to register custom rooters  *)
+    module Factory : Source.Factory with type t := t
+  end
+
+  (** Brancher is responsible for resolving destinations of branch
+      instructions.   *)
+  module Brancher : sig
+    open Disasm_expert.Basic
+    type t = brancher
+
+    type dest = addr option * edge with sexp
+    type dests = dest list with sexp
+
+    val create : (mem -> full_insn -> dests) -> t
+
+    val of_bil : arch -> t
+
+    val resolve : t -> mem -> full_insn -> dests
+
+    module Factory : Source.Factory with type t := t
+
+  end
+
+  (** Reconstructor is responsible for reconstructing symbol table
+      from a CFG. It should partition a CFG into a set of possibly
+      intersecting functions. See {!Symtab} module for more
+      information about symbol table and functions. *)
+  module Reconstructor : sig
+    type t = reconstructor
+
+    (** [create f] creates a reconstructor from a given function [f]  *)
+    val create : (cfg -> symtab) -> t
+
+    (** [default name roots] builds a reconstructor from given a
+        function, that maps addresses to function names (see
+        {!Symbolizer}) and a list of known function starts. The
+        reconstructor will extend the list of function start with
+        destinations of call instructions found in the CFG, and then
+        for each function start build a function using the following
+        definition of a function:
+
+           Function is built from the entry block and every block that
+           is reachable from it without using calls, if the block
+           address is greater than the entry block address and less
+           than the address of entry block of the next symbol.
+
+        Note: this is an approximation, that works fine for most cases.  *)
+    val default : (word -> string) -> word list -> t
+
+    (** [of_blocks] produces a reconstructor from a serialized
+        sequence of blocks. Each element of the sequence is deconstructed
+        as [(name,ba,ea)], where [name] is a subroutine name, [ba] is a
+        virtual address of a block start, and [ea] is an address of the
+        block end.  *)
+    val of_blocks : (string * addr * addr) seq -> t
+
+    (** [run reconstructor cfg] reconstructs a symbol table from a
+        given cfg  *)
+    val run : t -> cfg -> symtab
+
+    (** a factory of reconstructors  *)
+    module Factory : Source.Factory with type t := t
+  end
+
   (** Target of analysis.  *)
   module Project : sig
     (** A project groups together all the information recovered from
@@ -7994,6 +5829,9 @@ module Std : sig
         information between {{!section:project}passes}.  *)
 
     type t
+
+    (** IO interface to a project data structure.  *)
+    include Data with type t := t
 
     (** [from_file filename] creates a project from a binary file. The
         file must be in format, supportable by some of our loader plugins,
@@ -8013,46 +5851,58 @@ module Std : sig
         @param roots allows to provide starting approximation of the
         roots for recursive disassembling procedure. Each root should
         be a start of a function.
-
-
     *)
     val from_file :
       ?on_warning:(Error.t -> unit Or_error.t) ->
-      ?backend:string ->
-      ?name:(addr -> string option) ->
-      ?roots:addr list ->
+      ?loader:string ->
+      ?disassembler:string ->
+      ?brancher:brancher ->
+      ?symbolizer:symbolizer ->
+      ?rooter:rooter ->
+      ?reconstructor:reconstructor ->
       string -> t Or_error.t
 
     (** [from_image image] is like {!from_file} but accepts already
         loaded image of a binary file. If [image] was loaded from a
         file, then {!filename} field is set to the name of the file.  *)
     val from_image :
-      ?name:(addr -> string option) ->
-      ?roots:addr list ->
+      ?disassembler:string ->
+      ?brancher:brancher ->
+      ?symbolizer:symbolizer ->
+      ?rooter:rooter ->
+      ?reconstructor:reconstructor ->
       image -> t Or_error.t
 
     (** [from_mem arch mem] creates a project directly from a memory
         object. Parameters [name] and [roots] has the same meaning as
-        in {!from_file}  *)
+            in {!from_file}  *)
     val from_mem :
-      ?name:(addr -> string option) ->
-      ?roots:addr list ->
+      ?disassembler:string ->
+      ?brancher:brancher ->
+      ?symbolizer:symbolizer ->
+      ?rooter:rooter -> ?reconstructor:reconstructor ->
       arch -> mem -> t Or_error.t
 
     (** [from_string arch string] creates a memory object from a
         provided string and uses {!from_mem} to create a project.  *)
     val from_string :
       ?base:addr ->
-      ?name:(addr -> string option) ->
-      ?roots:addr list ->
+      ?disassembler:string ->
+      ?brancher:brancher ->
+      ?symbolizer:symbolizer ->
+      ?rooter:rooter ->
+      ?reconstructor:reconstructor ->
       arch -> string -> t Or_error.t
 
     (** [from_bigstring arch bigstring] is the same as {!from_string}
         but accepts a value of type [bigstring] *)
     val from_bigstring :
       ?base:addr ->
-      ?name:(addr -> string option) ->
-      ?roots:addr list ->
+      ?disassembler:string ->
+      ?brancher:brancher ->
+      ?symbolizer:symbolizer ->
+      ?rooter:rooter ->
+      ?reconstructor:reconstructor ->
       arch -> Bigstring.t -> t Or_error.t
 
     (** [arch project] reveals the architecture of a loaded file  *)
@@ -8077,7 +5927,7 @@ module Std : sig
         arbitrary values.   *)
     val memory : t -> value memmap
 
-    (** [tag_memory project region tag value] tags given [region] of
+    (** [tag_memory project region tag value] tags a given [region] of
         memory in [project] with a given [tag] and [value]. Example:
         [Project.tag_memory project tained color red]
     *)
@@ -8114,7 +5964,7 @@ module Std : sig
     val substitute : t -> mem -> string tag -> string -> t
 
     (** [with_memory project] updates project memory. It is
-        recommended to use {!tag_memory} and {!substitute} instead of this
+            recommended to use {!tag_memory} and {!substitute} instead of this
         function, if possible.  *)
     val with_memory : t -> value memmap -> t
 
@@ -8147,37 +5997,22 @@ module Std : sig
         To add new pass one of the following [register_*] functions
         should be called.*)
 
-    type 'a register = ?deps:string list -> string -> 'a -> unit
-
     (** An error that can occur when loading or running pass.
         - [Not_loaded name] pass with a given [name] wasn't loaded for
-          some reason. This is a very unlikely error, indicating
-          either a logic error in the plugin system implementation or
-          something very weird, that we didn't expect.
+        some reason. This is a very unlikely error, indicating
+        either a logic error in the plugin system implementation or
+        something very weird, that we didn't expect.
 
-        - [Is_duplicate name] more than one plugin were registered
-          under this [name], either it is the same plugin or a name clash
-          between to different we don't know.
 
-        - [Not_found name] when we tried to load plugin with a given
-          [name] we failed to find it in our search paths.
-
-        - [Doesn't_register name] the plugin with a given [name]
-          doesn't register a pass with the same name.
-
-        - [Load_failed (name,problem)] a [problem] has occured, when
-          we tried to dynamically link a plugin with a given [name]
+        - [Not_loaded name] when we tried to load plugin with a given
+        [name] we failed to find it in our search paths.
 
         - [Runtime_error (name,exn)] when plugin with a given [name]
-          was ran it raised an [exn].
+        was run it raised an [exn].
 
     *)
     type error =
       | Not_loaded of string
-      | Is_duplicate of string
-      | Not_found of string
-      | Doesn't_register of string
-      | Load_failed of string * Error.t
       | Runtime_error of string * exn
     with sexp_of
 
@@ -8187,942 +6022,51 @@ module Std : sig
         name. *)
     exception Pass_failed of error with sexp
 
-    (** [register_pass_with_args name pass] registers [pass] that
-        requires command line arguments. The arguments will be passed
-        in the first parameter of the [pass] function.
+    (** [register_pass ?deps ?name pass] registers a [pass]
 
         Parameter [deps] is list of dependencies. Each dependency is a
-        name of a pass, that should be run before the [pass]. If
-        dependency pass is not registered it will be auto-loaded (See
-        {!run_pass}) *)
-    val register_pass_with_args : (string array -> t -> t) register
+        name of a pass, that should be run before the [pass]. The
+        dependencies will be run in a specified order every time the
+        [pass] is run.
 
-    (** [register_pass ?deps name pass] registers project transformation,
-        that doesn't require command line arguments.
-        (See {!register_pass_with_args})*)
-    val register_pass : (t -> t) register
+        To get access to command line arguments use [Plugin.argv] *)
+    val register_pass : ?deps:string list -> ?name:string -> (t -> t) -> unit
 
-    (** [register_pass ?deps name pass] registers [pass] that doesn't modify
+    (** [register_pass ?deps ?name pass] registers [pass] that doesn't modify
         the project effect and is run only for side effect.
-        (See {!register_pass_with_args})  *)
-    val register_pass': (t -> unit) register
+        (See {!register_pass})  *)
+    val register_pass': ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
-    (** [register_pass_with_args' name pass] register a [pass] that
-        requires arguments for a side effect.
-        (See {!register_pass_with_args}) *)
-    val register_pass_with_args' : (string array -> t -> unit) register
-
-    (** [run_pass ?library ?argv project pass] finds a [pass] and
-        applies it to a [project].
+    (** [run_pass project pass] applies [pass] to a [project].
 
         If a pass has dependencies, then they will be run before the
-        pass in some topological order. The dependencies will be
-        auto-loaded if needed. The auto-loading procedure will look
-        for the file with the specified name (modulo hyphens) and
-        [".plugin"] extension in current folder and all folders
-        specified with [library] argument. If nothing found, then it
-        will search for plugins of system ["bap.pass"] using
-        findlib. If the dependency cannot be satisfied [run_pass] will
-        terminate with an error.
-
-        If a pass requires command line arguments then they will be
-        provided to a pass as a first parameter. The arguments will be
-        extracted from [argv] array (which defaults to [Sys.argv]) by
-        removing all arguments that doesn't start with
-        [--name-]. Then, from all command arguments that are left, the
-        [--name-] prefix is substituted with [--]. For example, if
-        [argv] contained [ [| "bap"; "-lcallgraph"; "--callgraph"
-        "--callgraph-help"|]] then pass that registered itself under
-        [callgraph] name will receive the following array of arguments
-        [ [| "callgraph"; --help |] ]. That means, that plugins can't
-        accept arguments that are anonymous or short options.
-
-    *)
-    val run_pass :
-      ?library:string list ->
-      ?argv:string array -> t -> string -> t Or_error.t
-
-
-    (** [passes ?library ()] returns a transitive closure of all
-        passes registered in the system so far.   *)
-    val passes : ?library:string list -> unit -> string list Or_error.t
-
+        pass in some topological order. *)
+    val run_pass : t -> string -> t Or_error.t
 
     (** [run_pass_exn proj] is the same as {!run_pass}, but raises an
         exception on error. Useful to provide custom error
-        handling/printing.  @raise Pass_failed if failed to load, or if
-        plugin failed at runtime.  *)
-    val run_pass_exn :
-      ?library:string list ->
-      ?argv:string array -> t -> string -> t
-
-
-    (** [passes_exn proj] is the same as {!passes}, but raises
-        an exception on error. Useful to provide custom error
         handling/printing.
-        @raise Pass_failed if failed to load some plugin *)
-    val passes_exn : ?library:string list -> unit -> string list
+
+        @raise Pass_failed if failed to load, or if plugin failed at
+        runtime.  *)
+    val run_pass_exn : t -> string -> t
+
+
+    (** [passes ()] returns all currently registered passes.  *)
+    val passes : unit -> string list
+
+
+    val restore_state : t -> unit
+
+    (** A Factory of projects.   *)
+    module Factory : Source.Factory
+      with type t =
+             ?disassembler:string ->
+             ?brancher:brancher ->
+             ?symbolizer:symbolizer ->
+             ?rooter:rooter ->
+             ?reconstructor:reconstructor -> unit -> t Or_error.t
   end
 
   type project = Project.t
-
-  (** Dwarf library
-      This library gives an access to debugging information stored
-      in a binary program.  *)
-  module Dwarf : sig
-    module Leb128 : sig
-      (** an encoded value  *)
-      type t with bin_io, compare, sexp
-
-      (** [encode ~signed v] encodes value [v] in a LEB128 format. If
-          signed is true, then uses signed encoding. *)
-      type 'a encoder = ?signed:bool -> 'a -> t
-      (** [decode leb] decodes a number from LEB128 representation.  *)
-      type 'a decoder = t -> 'a Or_error.t
-
-      (** [size leb] return size in bytes of the number stored in LEB128
-          encoding.  *)
-      val size: t -> int
-      val read: ?signed:bool -> string -> pos_ref:int ref -> t Or_error.t
-      val write: t -> string -> pos:int -> unit
-
-      val to_int:   int   decoder
-      val to_int32: int32 decoder
-      val to_int64: int64 decoder
-
-      val of_int:   int   encoder
-      val of_int32: int32 encoder
-      val of_int64: int64 encoder
-    end
-
-    (** File sections  *)
-    module Section : sig
-      type t =
-        | Info
-        | Abbrev
-        | Str
-      with sexp,bin_io,compare,variants
-    end
-
-    (** Debug Entry Tag  *)
-    module Tag : sig
-      type t =
-        | Compile_unit
-        | Partial_unit
-        | Subprogram
-        | Entry_point
-        | Inlined_subroutine
-        | Unknown of int
-      with sexp,bin_io,compare,variants
-    end
-
-
-    (** Attribute  *)
-    module Attr : sig
-      type t =
-        | Name
-        | Low_pc
-        | High_pc
-        | Entry_pc
-        | Unknown of int
-      with sexp,bin_io,compare,variants
-    end
-
-    type lenspec =
-      | Leb128
-      | One
-      | Two
-      | Four
-      | Eight
-    with sexp,bin_io,compare
-
-    (** Attribute form  *)
-    module Form : sig
-      type t =
-        | Addr
-        | String
-        | Block of lenspec
-        | Const of lenspec
-        | Flag_present
-        | Strp
-        | Ref of lenspec
-        | Indirect
-        | Offset
-        | Expr
-        | Sig
-      with sexp,bin_io,compare,variants
-    end
-
-    type tag  = Tag.t  with sexp,bin_io,compare
-    type attr = Attr.t with sexp,bin_io,compare
-    type form = Form.t with sexp,bin_io,compare
-    type section = Section.t with sexp,bin_io,compare
-    type fn with bin_io, compare, sexp
-
-    (** Current function representation.  *)
-    module Fn : sig
-      type t = fn with bin_io, compare, sexp
-      val pc_lo : t -> addr
-      val pc_hi : t -> addr option
-      include Identifiable.S with type t := t
-    end
-
-
-    (** Buffer is a light abstraction over [string] and [bigstring],
-        that can allow one to share the same string for different sections
-        without explicit copying.
-    *)
-    module Buffer : sig
-      type 'a t
-      (** [create ~pos:0 ] creates a buffer from a data  *)
-      val create: ?pos:int -> 'a -> 'a t
-
-      (** [with_pos buf pos] creates a new buffer that shares data with
-          [buf], but has different starting position  *)
-      val with_pos: 'a t -> int -> 'a t
-
-      (** [with_off buf off] creates a new buffer that shares data with
-          [buf], but has different starting position equal to [pos buf + off] *)
-      val with_off: 'a t -> int -> 'a t
-
-      (** [pos buf] starting position  *)
-      val pos: 'a t -> int
-
-      (** [data pos] actual data.
-
-          Note: it doesn't start from [pos], it start from [0] *)
-      val data: 'a t -> 'a
-    end
-
-    module Data : sig
-      type 'a t
-      type 'a buffer = 'a Buffer.t
-
-      (** [create endian sections] creates data representation from a assoc list
-          of sections. Will complain if there're repeating sections.  *)
-      val create: endian -> (section * 'a buffer) list -> 'a t Or_error.t
-
-      (** [section data] lookups for a [section] in [data]  *)
-      val section: 'a t -> section -> 'a buffer Or_error.t
-
-      (** [endian data] the endianness of [data]  *)
-      val endian: 'a t -> endian
-    end
-
-    (** Function boundary identification.  *)
-    module Fbi : sig
-      type t
-
-      (** [create data] tries to create a DWARF reader, from
-          supplied [data]. May yield an error, if there wasn't sufficient
-          sections, or if format is not understandable.
-
-          To provide information about functions parser needs at least this
-          three sections:
-
-          - .debug_abbrev [Section.Abbr]
-          - .debug_info   [Section.Info]
-          - .debug_str    [Section.Str]
-      *)
-      val create : string Data.t -> t Or_error.t
-
-      (** [functions searcher] enumerates functions  *)
-      val functions : t -> (string * fn) seq
-    end
-  end
-
-  (** Parse binary data in ELF format.  *)
-  module Elf : sig
-    module Types : sig
-      type e_class =
-        | ELFCLASS32
-        | ELFCLASS64
-
-      type e_data =
-        | ELFDATA2LSB
-        | ELFDATA2MSB
-
-      type e_osabi =
-        | ELFOSABI_SYSV
-        | ELFOSABI_HPUX
-        | ELFOSABI_NETBSD
-        | ELFOSABI_LINUX
-        | ELFOSABI_SOLARIS
-        | ELFOSABI_AIX
-        | ELFOSABI_IRIX
-        | ELFOSABI_FREEBSD
-        | ELFOSABI_TRU64
-        | ELFOSABI_MODESTO
-        | ELFOSABI_OPENBSD
-        | ELFOSABI_ARM_AEABI
-        | ELFOSABI_ARM
-        | ELFOSABI_STANDALONE
-        | ELFOSABI_EXT of int
-
-      type e_type =
-        | ET_NONE
-        | ET_REL
-        | ET_EXEC
-        | ET_DYN
-        | ET_CORE
-        | ET_EXT of int
-
-      type e_machine =
-        | EM_NONE
-        | EM_M32
-        | EM_SPARC
-        | EM_386
-        | EM_68K
-        | EM_88K
-        | EM_860
-        | EM_MIPS
-        | EM_S370
-        | EM_MIPS_RS3_LE
-
-        | EM_PARISC
-        | EM_VPP500
-        | EM_SPARC32PLUS
-        | EM_960
-        | EM_PPC
-        | EM_PPC64
-        | EM_S390
-
-        | EM_V800
-        | EM_FR20
-        | EM_RH32
-        | EM_RCE
-        | EM_ARM
-        | EM_ALPHA
-        | EM_SH
-        | EM_SPARCV9
-        | EM_TRICORE
-        | EM_ARC
-        | EM_H8_300
-        | EM_H8_300H
-        | EM_H8S
-        | EM_H8_500
-        | EM_IA_64
-        | EM_MIPS_X
-        | EM_COLDFIRE
-        | EM_68HC12
-        | EM_MMA
-        | EM_PCP
-        | EM_NCPU
-        | EM_NDR1
-        | EM_STARCORE
-        | EM_ME16
-        | EM_ST100
-        | EM_TINYJ
-        | EM_X86_64
-        | EM_PDSP
-
-        | EM_FX66
-        | EM_ST9PLUS
-        | EM_ST7
-        | EM_68HC16
-        | EM_68HC11
-        | EM_68HC08
-        | EM_68HC05
-        | EM_SVX
-        | EM_ST19
-        | EM_VAX
-        | EM_CRIS
-        | EM_JAVELIN
-        | EM_FIREPATH
-        | EM_ZSP
-        | EM_MMIX
-        | EM_HUANY
-        | EM_PRISM
-        | EM_AVR
-        | EM_FR30
-        | EM_D10V
-        | EM_D30V
-        | EM_V850
-        | EM_M32R
-        | EM_MN10300
-        | EM_MN10200
-        | EM_PJ
-        | EM_OPENRISC
-        | EM_ARC_A5
-        | EM_XTENSA
-        | EM_AARCH64
-        | EM_TILEPRO
-        | EM_MICROBLAZE
-        | EM_TILEGX
-        | EM_EXT of int
-
-      type p_type =
-        | PT_NULL
-        | PT_LOAD
-        | PT_DYNAMIC
-        | PT_INTERP
-        | PT_NOTE
-        | PT_SHLIB
-        | PT_PHDR
-        | PT_OTHER of int32
-
-      type p_flag =
-        | PF_X
-        | PF_W
-        | PF_R
-        | PF_EXT of int
-
-      type sh_type =
-        | SHT_NULL
-        | SHT_PROGBITS
-        | SHT_SYMTAB
-        | SHT_STRTAB
-        | SHT_RELA
-        | SHT_HASH
-        | SHT_DYNAMIC
-        | SHT_NOTE
-        | SHT_NOBITS
-        | SHT_REL
-        | SHT_SHLIB
-        | SHT_DYNSYM
-        | SHT_EXT of int32
-
-      type sh_flag =
-        | SHF_WRITE
-        | SHF_ALLOC
-        | SHF_EXECINSTR
-        | SHF_EXT of int
-
-      type segment = {
-        p_type   : p_type;
-        p_flags  : p_flag list;
-        p_vaddr  : int64;
-        p_paddr  : int64;
-        p_align  : int64;
-        p_memsz  : int64;
-        p_filesz : int64;
-        p_offset : int64;
-      }
-
-      type section = {
-        sh_name : int;
-        sh_type : sh_type;
-        sh_flags : sh_flag list;
-        sh_addr : int64;
-        sh_size : int64;
-        sh_link : int32;
-        sh_info : int32;
-        sh_addralign : int64;
-        sh_entsize : int64;
-        sh_offset : int64;
-      }
-
-      type elf = {
-        e_class : e_class;
-        e_data : e_data;
-        e_version : int;
-        e_osabi : e_osabi;
-        e_abiver : int;
-        e_type : e_type;
-        e_machine : e_machine;
-        e_entry : int64;
-        e_shstrndx : int;
-        e_sections : section seq;
-        e_segments : segment seq;
-      }
-
-      type table_info = {
-        table_offset : int64;
-        entry_size : int;
-        entry_num : int;
-      }
-    end
-
-    open Types
-
-    type t = elf
-
-    (** [from_bigstring data] parses data with optional offset
-        provided as [pos] and length as [len]  *)
-    val from_bigstring : ?pos:int -> ?len:int -> Bigstring.t -> t Or_error.t
-
-    (** [section_name data elf section] retrieves name of [section]
-        from [data] *)
-    val section_name : Bigstring.t -> t -> section -> string Or_error.t
-
-    (** [string_of_section data section] extracts the section data as
-        string from the provided [data]   *)
-    val string_of_section : Bigstring.t -> section -> string Or_error.t
-  end
-
-  (** Binary signatures storage  *)
-  module Signatures : sig
-    val save : ?comp:string -> mode:string -> path:string -> arch -> string -> unit
-    val load : ?comp:string -> ?path:string -> mode:string -> arch -> string option
-    val default_path : string
-  end
-
-  (** Byteweight Algorithm implementation *)
-  module Byteweight : sig
-    module type Corpus = sig
-      type t
-      type key
-      val look : t -> length:int -> int -> key option
-    end
-
-    module type S = sig
-      type t with bin_io, sexp
-      type key
-      type corpus
-
-      val create : unit -> t
-      val train : t -> max_length:int -> (key -> bool) -> corpus -> unit
-      val length : t -> int
-
-      val next : t ->
-        length:int ->
-        threshold:float ->
-        corpus -> int -> int option
-
-      val pp : t printer
-    end
-
-    module Make
-        (Corpus : Corpus)
-        (Trie : Trie with type key = Corpus.key) :
-      S with type key = Corpus.key
-         and type corpus = Corpus.t
-
-    module Bytes : sig
-      include S with type key = mem
-                 and type corpus = mem
-      val find : t -> length:int -> threshold:float -> corpus -> addr list
-    end
-  end
-
-  (** Trace is a sequence of events accompanied with meta information.
-
-      The sequence is lazy if possible, i.e., underlying event
-      transports shall not produce events unless they are requested.
-
-      The event is a value of type [value]. Event type is reified with
-      [Value.Tag]. A set of event types in a given trace is an
-      intersection of the following three sets:
-
-      - Event types supported by a trace tool;
-
-      - Event types that are supported by an event transport (i.e.,
-        protocol)
-
-      - Types of events that has occurred in the course of the given
-        trace.
-
-      Since it is worthwhile to know whether a particular event is not the
-      trace because it didn't occur during program execution, but not
-      because it wasn't detected by a trace tool or dropped by a given
-      transport, we provide [supports] function, to query whether the
-      given event type is really supported (and thus might occur) by a
-      given trace.
-
-      The meta information is also represented using [value] type, and
-      thus can contain virtually any data. Meta information is indexed
-      with [tag] value.
-  *)
-  module Trace : sig
-    type event = value with bin_io, sexp, compare
-    type monitor
-    type proto
-    type tool with bin_io, sexp
-    type id
-    type t
-
-    type io_error = [
-      | `Protocol_error of Error.t   (** Data encoding problem         *)
-      | `System_error of Unix.error  (** System error                  *)
-    ]
-
-    type error = [
-      | io_error
-      | `No_provider    (** No provider for a given URI               *)
-      | `Ambiguous_uri  (** More than one provider for a given URI    *)
-    ]
-
-    (** {2 Serialization}
-
-        Serialization is dispatched by a URI describing data source or
-        destination. URI contains enough information to uniquely designate
-        data format and transporting options.
-    *)
-
-
-    (** [load ~monitor uri] fetches trace from a provided [uri].
-        [monitor] is fail_on_error by default. *)
-    val load : ?monitor:monitor -> Uri.t -> (t,error) Result.t
-
-    (** [save uri] pushes trace to a provided [uri] *)
-    val save : Uri.t -> t -> (unit,error) Result.t
-
-    (** {2 Meta attributes}
-
-        Meta information relates to the whole trace.
-
-    *)
-
-    val id : t -> id
-
-    (** [set_attr trace attr value] updates [trace] meta attribute [attr]
-        with a provided value. *)
-    val set_attr : t -> 'a tag -> 'a -> t
-
-    (** [get_attr trace attr] retrieves a value of a given attribute
-        [attr] *)
-    val get_attr : t -> 'a tag -> 'a option
-
-    (** [has_attr trace attr] evaluates to [true] if [trace] has a given
-        attribute [attr] *)
-    val has_attr : t -> 'a tag -> bool
-
-    (** [tool trace] returns a descriptor of a tool that was used to
-        create the [trace]. *)
-    val tool : t -> tool
-
-    (** [meta trace] returns all [trace] attributes as a dictionary  *)
-    val meta : t -> dict
-
-    (** [set_meta trace meta] substitutes meta attributes of a [trace] with
-        attributes taken from a dictionary [meta].*)
-    val set_meta : t -> dict -> t
-
-    (** {2 Querying  data}  *)
-
-    (** [supports trace feature] is [true] if a tool that was used to
-        generate the trace, as well as transporting protocol and
-        underlying format support the given feature. *)
-    val supports : t -> 'a tag -> bool
-
-    (** [memoize trace] eagerly loads all the trace into memory.   *)
-    val memoize : t -> t
-
-    (** [find trace tag] find an event with a given [trace]   *)
-    val find : t -> 'a tag -> 'a option
-
-    (** [find_all trace tag] returns a sequence of all event with a given tag  *)
-    val find_all : t -> 'a tag -> 'a seq
-
-    (** [find_all_matching trace matcher] returns a sequence of events
-        matching with a provided [matcher]. *)
-    val find_all_matching : t -> 'a Value.Match.t -> 'a seq
-
-    (** [fold_matching trace matcher ~f ~init] applies function [f]
-        consequently to all matching trace event. Matching is defined
-        using value [matcher]. The following example will collect all
-        memory operations from a trace:
-        {[
-          let collect_memory_operations trace =
-            List.rev @@
-            fold_matching trace ~init:[] ~f:(fun xs x -> x @ xs)
-              Value.Match.(begin
-                  case memory_load  (fun x  -> [`Load x])  @@
-                  case memory_store (fun x  -> [`Store x]) @@
-                  default           (fun () -> [])
-                end)
-        ]}
-    *)
-    val fold_matching : t -> 'a Value.Match.t -> f:('b -> 'a -> 'b) -> init:'b -> 'b
-
-    (** [contains trace tag] returns [Some true] if a provided event
-        occurs in a trace, [Some false] if it may occur (i.e., is
-        supported), but is not in the trace, and [None] if the event is not
-        supported at all. *)
-    val contains : t -> 'a tag -> bool option
-
-    (** [event trace] returns a sequence of events of the [trace].
-        This function should be used if the above specified functions
-        doesn't answer your needs.*)
-    val events : t -> event seq
-
-    (** {2 Trace construction}  *)
-
-    (** [create tool] creates an trace that will contain events, produced
-        by a specified [tool]. Initially trace contains an empty sequence
-        of events. *)
-    val create : tool -> t
-
-    (** [unfold ~monitor tool ~f ~init] creates a trace by unfolding a function [f].
-        The produces sequence is lazy, i.e., functions are called as
-        demanded. [monitor] is fail_on_error by default. *)
-    val unfold : ?monitor:monitor -> tool -> f:('a -> (event Or_error.t * 'a) option) -> init:'a -> t
-
-    (** [unfold' ~monitor tool ~f] is a simplified version of [unfold] *)
-    val unfold' : ?monitor:monitor -> tool -> f:(unit -> event Or_error.t option) -> t
-
-    (** [add_event trace tag] appends an event to a sequence of events of
-        [trace]. *)
-    val add_event : t -> 'a tag -> 'a -> t
-
-    (** [append trace events] creates a trace with a sequence of events
-        composed from events of the [trace] following the [events],
-        provided as an argument. *)
-    val append : t -> event seq -> t
-
-
-    (** {2 Extension mechanism}
-
-        A trace is a collaborative work of several underlying layers:
-        - a trace tool itself
-        - a transport, that delivers data from the [tool]
-        - a protocol that is used to deliver and interpret data.
-
-        For example, a tools is an instrumented qemu-user, a transport can
-        be just a file, and protocol can be Google protobuf.
-
-        Ideally, this three instances should be totally orthogonal, so
-        that one can match them. In real life, we will strive to support
-        only specific combinations.
-
-        The extension mechanism allows a user to add support for new
-        transports and protocols. The separation between transport and
-        protocol is left beyond the scope of this interface. A user is
-        welcome to built its own protocol stacks and reify them into
-        explicit API.
-
-        The interface is designed to support both static and dynamic trace
-        tools. Although, the interface to control a dynamic tool is also
-        left outside of the trace interface.
-
-        In order to establish a correspondence between a concrete trace
-        instance and a trace generator a unique id is used. Each time a
-        trace is opened a fresh new unique id is generated that is passed
-        to both sides: to the trace (accessible via [id] function) and to
-        the trace reader (passed as a parameter). This [id] can be used
-        from the client side to dynamically control a trace tool.
-
-    *)
-
-    module type S = sig
-      val name: string
-      val supports: 'a tag -> bool
-    end
-
-    module type P = sig
-      include S
-      val probe: Uri.t -> bool
-    end
-
-    val register_tool  : (module S) -> tool
-    val register_proto : (module P) -> proto
-
-    (** Reader interface.  *)
-    module Reader : sig
-      (** This is an interface that should be implemented to add a new
-          backend.
-      *)
-
-      type t = {
-        tool : tool;                (** a tool descriptor read from trace *)
-        meta : dict;                (** meta information read from trace  *)
-        next : unit -> event Or_error.t option;     (** a stream function  *)
-      }
-    end
-
-    type reader = Reader.t
-
-    val register_reader : proto -> (Uri.t -> id -> (reader, io_error) Result.t) -> unit
-
-    val register_writer : proto -> (Uri.t -> t -> (unit, io_error) Result.t) -> unit
-
-    module Id : Regular with type t = id
-
-    (** Monitor defines an error handling policy.*)
-    module Monitor : sig
-      type t = monitor
-
-      (** [ignore_errors] filters good events and silently drops error events  *)
-      val ignore_errors : t
-      (** [warn_on_error on_error] same as [ignore_errors] but calls
-          [on_error] function when an error has occured *)
-      val warn_on_error : (Error.t -> unit) -> t
-
-      (** [fail_on_error] will fail with an [error] [Error.raise error] *)
-      val fail_on_error : t
-
-      (** [stop_on_error] will silently finish a stream in case of error.  *)
-      val stop_on_error : t
-
-      (** [pack_errors pack] will transform any occured error into event
-          using [pack] function.  *)
-      val pack_errors : (Error.t -> event) -> t
-
-      (** [create filter] creates a user defined monitor from function
-          [filter] that is applied to a sequence of events or errors, and
-          returns a sequence of events.  *)
-      val create : (event Or_error.t seq -> event seq) -> t
-    end
-
-    module Move : sig
-      type 'a t = {
-        cell : 'a;
-        data : word;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Chunk : sig
-      type t = {
-        addr : addr;
-        data : string;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Syscall : sig
-      type t = {
-        number : int;
-        args : word array;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Exn : sig
-      type t = {
-        number : int;
-        src : addr option;
-        dst : addr option;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Location : sig
-      type t = {
-        name : string option;
-        addr : addr;
-      } with bin_io, compare, fields, sexp
-    end
-
-    type location = Location.t with bin_io, compare, sexp
-
-    module Call : sig
-      type t = {
-        caller : location;
-        callee : location;
-        args : word array;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Return : sig
-      type t = {
-        caller : string;
-        callee : string;
-      } with bin_io, compare, fields, sexp
-    end
-
-    module Modload : sig
-      type t = {
-        name : string;
-        low : addr;
-        high : addr;
-      } with bin_io, compare, fields, sexp
-    end
-
-    type 'a move = 'a Move.t with bin_io, compare, sexp
-    type chunk = Chunk.t with bin_io, compare, sexp
-    type syscall = Syscall.t with bin_io, compare, sexp
-    type exn = Exn.t with bin_io,compare,sexp
-    type call = Call.t with bin_io,compare,sexp
-    type return = Return.t with bin_io,compare,sexp
-    type modload = Modload.t with bin_io,compare,sexp
-
-    module Event : sig
-
-      (** an read access to a memory cell  *)
-      val memory_load : addr move tag
-
-      (** a write access to a memory cell  *)
-      val memory_store : addr move tag
-
-      (** a value was read from a given register  *)
-      val register_read : var move tag
-
-      (** a value is written to the specified register  *)
-      val register_write : var move tag
-
-      (** this event can used to synchronize traces  *)
-      val timestamp : int64 tag
-
-      (** CPU PC register changed its value  *)
-      val pc_update : addr tag
-
-      (** CPU loaded this memory chunk for execution. This event
-          occurs just before the execution. All side effects of
-          the code execution occurs after this event. *)
-      val code_exec : chunk tag
-
-      (** operating system has performed context switching to a provided
-          thread (process) id. *)
-      val context_switch : int tag
-
-      (** a system call has occured  *)
-      val syscall : syscall tag
-
-      (** a software exception has occured.  *)
-      val exn : exn tag
-
-      (** a control flow transfer from one procedure to another has occured  *)
-      val call : call tag
-
-      (** a return from a call has occured  *)
-      val return : return tag
-
-      (** represent an executable module being loaded *)
-      val modload : modload tag
-    end
-
-    module Tracer : sig
-      type t = {
-        name : string;
-        args : string array;
-        version : string;   (** release or Git hash, or SVN number *)
-      } with bin_io, compare, sexp
-    end
-
-    module Binary : sig
-      type t = {
-        path : string;
-        stripped : bool option;     (* yes, no, unknown *)
-      } with bin_io, compare, sexp
-    end
-
-    module File_stats : sig
-      type t = {
-        size  : int;
-        atime : float;
-        mtime : float;
-        ctime : float;
-      } with bin_io, compare, sexp
-    end
-
-    type tracer = Tracer.t with bin_io, compare, sexp
-    type binary = Binary.t with bin_io, compare, sexp
-    type file_stats = File_stats.t with bin_io, compare, sexp
-
-    module Meta : sig
-
-      (** description of a tracer that was used to create the trace  *)
-      val tracer : tracer tag
-
-      (** description of a target binary (executable) that was traced.*)
-      val binary : binary tag
-
-      (** description of binary architecture. *)
-      val arch : arch tag
-
-      (** file stats of the traced binary  *)
-      val binary_file_stats : file_stats tag
-
-      (** trace creation time  *)
-      val trace_ctime : float tag
-
-      (** trace last modification time  *)
-      val trace_mtime : float tag
-
-      (** a user that created the trace  *)
-      val user : string tag
-
-      (** a name of a host from where trace was born  *)
-      val host : string tag
-
-    end
-  end
-
 end

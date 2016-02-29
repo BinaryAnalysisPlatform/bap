@@ -26,6 +26,19 @@ value bap_disasm_delete_stub(value d) {
 }
 
 /* noalloc */
+value bap_disasm_backends_size_stub(value unit) {
+    return Val_int(bap_disasm_backends_size());
+}
+
+/* alloc */
+value bap_disasm_backend_name_stub(value n) {
+    CAMLparam1(n);
+    CAMLlocal1(s);
+    s = caml_copy_string(bap_disasm_backend_name(Int_val(n)));
+    CAMLreturn(s);
+}
+
+/* noalloc */
 value bap_disasm_set_memory_stub(value d,
                                  value base,
                                  value data,

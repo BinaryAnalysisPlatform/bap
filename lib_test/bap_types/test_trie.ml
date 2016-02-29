@@ -61,6 +61,6 @@ let find _ =
   assert_bool "5.abcdef" (T.find t "abcdef" = None);
   assert_bool "5.nothing" (T.find t "nothing" = None)
 
-let suite = "Trie" >::: [
+let suite () = "Trie" >::: [
     "find" >:: find;
   ]

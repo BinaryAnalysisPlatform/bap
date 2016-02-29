@@ -1,4 +1,5 @@
 REC
 PKG cmdliner
+PKG bap-byteweight
 S .
 B ../_build/src

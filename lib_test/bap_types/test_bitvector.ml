@@ -1,5 +1,6 @@
 open OUnit2
 open Core_kernel.Std
+open Regular.Std
 open Bap.Std
 
 let deadbeef = Word.(of_int32 0xDEADBEEFl)
@@ -72,7 +73,7 @@ let of_binary endian string ~expect ctxt =
     (Word.of_binary endian string)
 
 
-let suite =
+let suite () =
   "Bitvector" >:::
   [
     "13=13+1024|7"   >:: normalized ~n:13 ~add:1024 ~width:7;

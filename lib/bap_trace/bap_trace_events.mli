@@ -1,4 +1,4 @@
-open Bap_types.Std
+open Bap.Std
 open Bap_trace_event_types
 
 (** Common trace events.

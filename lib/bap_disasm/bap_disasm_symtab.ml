@@ -1,128 +1,81 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Image_internal_std
 open Or_error
 
+open Format
+
 module Block = Bap_disasm_block
+module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
+
+
 type block = Block.t with compare,sexp_of
+type cfg = Cfg.t
 
 
-type fn = string * block with compare, sexp_of
+type fn = string * block * cfg
+
+let sexp_of_fn (name,block,cfg) =
+  Sexp.List [sexp_of_string name; sexp_of_addr (Block.addr block)]
+
+module Fn = Opaque.Make(struct
+    type t = fn
+    let compare x y = String.compare (fst3 x) (fst3 y)
+    let hash x = String.hash (fst3 x)
+  end)
 
 type t = {
-  memory : fn memmap;
-  entries: fn Addr.Map.t;
-  names : addr String.Map.t;
-}
+  addrs : fn Addr.Map.t;
+  names : fn String.Map.t;
+  memory : fn Memmap.t;
+} with sexp_of
 
-let recons_symbol starts ((name,entry) as fn) table : fn memmap =
-  let overran =
-    match Map.next_key starts (Block.addr entry) with
-    | None -> (fun _ -> false)
-    | Some (next,_) -> (fun blk -> Block.addr blk >= next) in
-  let rec loop vis table p =
-    let is_call = Insn.is_call (Block.terminator p) in
-    Seq.fold ~init:(vis,table) (Block.dests p)
-      ~f:(fun (vis,table) -> function
-          | `Unresolved _ -> vis,table
-          | `Block (blk,`Fall) when is_call && overran blk -> vis,table
-          | `Block (_,(`Jump|`Cond)) when is_call -> vis,table
-          | `Block (blk,_) ->
-            if Set.mem vis (Block.addr blk)
-            then vis,table
-            else
-              let table = Memmap.add table (Block.memory blk) fn in
-              let vis = Set.add vis (Block.addr blk) in
-              loop vis table blk) in
-  let vis = Set.add Addr.Set.empty (Block.addr entry) in
-  let table = Memmap.add table (Block.memory entry) fn in
-  loop vis table entry |> snd
+type symtab = t with sexp_of
 
-let dest_of_bil bil =
-  (object inherit [word] Bil.finder
-    method! enter_jmp dst goto = match dst with
-      | Bil.Int dst -> goto.return (Some dst)
-      | _ -> goto
-  end)#find_in_bil bil
-
-let dest_of_insn insn =
-  match Insn.bil insn with
-  | _ :: _ as bil -> dest_of_bil bil
-  | [] -> None
-
-let name_of_addr addr =
-  sprintf "sub_%s" @@ Addr.string_of_value addr
-
-let noname _ = None
-
-let find_entries ?(name=noname) ?(roots=[]) cfg =
-  let name addr = match name addr with
-    | Some name -> name
-    | None -> name_of_addr addr in
-  let map = List.fold roots ~init:Addr.Map.empty ~f:(fun map addr ->
-      Map.add map ~key:addr ~data:(name addr)) in
-  Table.fold cfg ~init:map ~f:(fun blk map ->
-      let term = Block.terminator blk in
-      if Insn.is_call term then match dest_of_insn term with
-        | None -> map
-        | Some w -> Map.add map ~key:w ~data:(name w)
-      else map)
+let span ((name,entry,cfg) as fn) =
+  Cfg.nodes cfg |> Seq.fold ~init:Memmap.empty ~f:(fun map blk ->
+      Memmap.add map (Block.memory blk) fn)
 
 let empty = {
-  entries = Addr.Map.empty;
-  memory  = Memmap.empty;
+  addrs = Addr.Map.empty;
   names = String.Map.empty;
+  memory = Memmap.empty;
 }
 
-let reconstruct ?name ?roots cfg : t =
-  let roots = find_entries ?name ?roots cfg in
-  Table.fold cfg ~init:empty ~f:(fun blk tab ->
-      let addr = Block.addr blk in
-      Option.value_map ~default:tab
-        (Map.find roots (Block.addr blk)) ~f:(fun name -> {
-              names = Map.add tab.names ~key:name ~data:addr;
-              memory = recons_symbol roots (name,blk) tab.memory;
-              entries = Map.add tab.entries ~key:addr ~data:(name,blk)
-            }))
+let merge m1 m2 =
+  Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,x) ->
+      Memmap.add m1 mem x)
 
+let remove t (name,entry,_) : t = {
+  names = Map.remove t.names name;
+  addrs = Map.remove t.addrs (Block.addr entry);
+  memory = Memmap.filter t.memory ~f:(fun (n,e,_) ->
+      not(String.(name = n) || Block.(entry = e)))
+}
 
-let add_symbol t name entry blocks : t =
-  let addr = Block.addr entry in
-  let data = (name,entry) in
-  let memory = Seq.fold (entry ^:: blocks) ~init:t.memory
-      ~f:(fun map blk -> Memmap.add map (Block.memory blk) data) in
+let add_symbol t (name,entry,cfg) : t =
+  let data = name,entry,cfg in
+  let t = remove t data in
   {
-    entries = Map.add t.entries ~key:addr ~data;
-    names = Map.add t.names ~key:name ~data:addr;
-    memory
+    addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
+    names = Map.add t.names ~key:name  ~data;
+    memory = merge t.memory (span data);
   }
 
-let remove t ((name,entry) as fn) : t =
-  let memory = Memmap.filter t.memory ~f:(fun f ->
-      (compare_fn f fn = 0)) in
-  {
-    memory;
-    names = Map.remove t.names name;
-    entries = Map.remove t.entries (Block.addr entry);
-  }
+let find_by_start tab = Map.find tab.addrs
+let find_by_name tab = Map.find tab.names
 
-let find_by_start tab = Map.find tab.entries
-let find_by_name tab name =
-  Option.(Map.find tab.names name >>= find_by_start tab)
+let fns_of_seq seq =
+  Seq.map seq ~f:snd |> Seq.to_list |> Fn.Set.of_list |>
+  Set.to_list
 
-let memory_of_fn tab fn =
-  Memmap.filter_map tab.memory
-    ~f:(fun fn' ->
-        Option.some_if (compare_fn fn fn' = 0) ())
-
-let create_bound tab fn =
-  let map = memory_of_fn tab fn in
-  stage (Memmap.contains map)
-
-let fns_of_seq seq = Seq.map seq ~f:snd |> Seq.to_list
-let fns_of_addr t addr = Memmap.lookup t.memory addr |> fns_of_seq
-let fns_of_mem t mem = Memmap.dominators t.memory mem |> fns_of_seq
-let to_sequence t = Map.to_sequence t.entries |> Seq.map ~f:snd
+let owners t addr = Memmap.lookup t.memory addr |> fns_of_seq
+let dominators t mem = Memmap.dominators t.memory mem |> fns_of_seq
+let intersecting t mem = Memmap.intersections t.memory mem |> fns_of_seq
+let to_sequence t =
+  Map.to_sequence t.addrs |> fns_of_seq |> Seq.of_list
 let name_of_fn = fst
 let entry_of_fn = snd
+let span fn = span fn |> Memmap.map ~f:(fun _ -> ())

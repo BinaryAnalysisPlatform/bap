@@ -5,35 +5,29 @@ EXT ounit
 FLG -short-paths
 FLG -w -4-33-40-41-42-43-34-44
 
-PKG camlzip
 PKG core_kernel
 PKG fileutils
-PKG jsonm
-PKG ocamlbuild
-PKG ocamlgraph
-PKG uuidm
 PKG uri
 
 B _build
 B _build/lib/bap
+B _build/lib/bap_types
+B _build/lib/bap_image
 B _build/lib/bap_disasm
+B _build/lib/bap_sema
+B _build/lib/bap_bundle
 B _build/lib/bap_dwarf
 B _build/lib/bap_elf
-B _build/lib/bap_future
-B _build/lib/bap_image
-B _build/lib/bap_sema
-B _build/lib/bap_trace
-B _build/lib/bap_types
-B _build/piqi
+B _build/lib/bap_plugins
+B _build/lib/text_tags
+B _build/lib/regular
+B _build/lib/graphlib
 
 S lib/bap
-S lib/bap_disasm
+S lib/bap_bundle
 S lib/bap_dwarf
 S lib/bap_elf
-S lib/bap_future
-S lib/bap_image
-S lib/bap_sema
-S lib/bap_trace
-S lib/bap_types
-S piqi
-S lwt
+S lib/bap_plugins
+S lib/text_tags
+S lib/regular
+S lib/graphlib

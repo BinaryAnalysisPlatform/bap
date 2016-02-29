@@ -1,0 +1,532 @@
+############# Text tags ###############################
+
+Library "text-tags"
+  Path:  lib/text_tags
+  Build: true
+  FindlibName: text-tags
+  CompiledObject: best
+  BuildDepends: core_kernel
+  Modules: Text_tags
+
+Library "demangle"
+  Path:  lib/bap_demangle
+  Build: true
+  FindlibName: bap-demangle
+  CompiledObject: best
+  BuildDepends: core_kernel
+  Modules: Bap_demangle
+
+################### BAP Frontend ################################
+Flag frontend
+  Description: Build BAP frontend
+  Default: true
+
+# !!!! READ THE FOLLOWING NOTE !!!
+# Frontends that are capable of loading plugins, aka hosts
+# programs, can only depend on the two internal libraries:
+# bap and bap.plugins. They may, however, depend on an arbitrary
+# amount of findlib libraries.
+# The internal library is a library declared with the Library section
+# in the _oasis file.
+# Clarification. We use `findlib.dynload` to track libraries, with which
+# a binary is linked. Unfortunately, internal libraries bypass this mechanism
+# so if some plugin will try to load the same internal library, then it
+# will be loaded as dependency, that will lead to a corruption and
+# hopefully to a segfault.
+# If your frontend needs some internal library, then consider moving
+# the functionality that needs this into a plugin, as frontends are intended
+# only for parsing command-line arguments and dispatching them to bap.
+
+Executable "bap"
+  Path:           src
+  MainIs:         bap_main.ml
+  Build$:         flag(frontend)
+  CompiledObject: best
+  # XXX: Update bapbuild.ml bap_packages if you add something here
+  BuildDepends:   bap, bap.plugins, cmdliner, findlib.dynload
+
+############### BAP Machine Code Frontend #######################
+Flag mc
+  Description: Build BAP Machine Code frontend
+  Default: true
+
+Executable "bap-mc"
+  Path:           src
+  MainIs:         bap_mc.ml
+  Build$:         flag(mc)
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, findlib.dynload
+
+############## BAP FSI Bencmark Game ######################################
+Flag fsi_benchmark
+  Description: Build function start identification benchmark
+  Default: false
+
+Executable "bap-fsi-benchmark"
+  Path:           src
+  MainIs:         fsi_benchmark_main.ml
+  Build$:         flag(fsi_benchmark)
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, fileutils, re.posix, findlib.dynload
+
+
+######################## Piqi library and plugin #############################
+Flag piqi
+  Description: Build piqi serialization library
+  Default: false
+
+Flag piqi
+  Description: Build piqi serialization library
+  Default: false
+
+Library "bap-piqi"
+  Path:         lib/bap_piqi
+  Build$: flag(piqi)
+  FindLibName: bap-piqi
+  BuildTools: ocamlbuild, piqi
+  DataFiles:    *.piqi
+  CompiledObject: best
+  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap,enumerate.syntax
+  Modules:   Bir_piqi, Bil_piqi
+  InternalModules:
+             Stmt_piqi,
+             Stmt_piqi_ext,
+             Ir_piqi,
+             Ir_piqi_ext
+
+Library piqi_printers_plugin
+  Path:   plugins/piqi_printers
+  Build$:  flag(piqi)
+  FindlibName: bap-plugin-piqi_printers
+  CompiledObject: native
+  BuildDepends: bap-piqi
+  InternalModules: Piqi_printers_main
+  XMETADescription: provides piqi serialization for main data types (BIL, IR)
+
+Executable run_piqi_tests
+  Path:		  lib/bap_piqi/test
+  Build$:	  flag(tests) && flag(piqi)
+  CompiledObject: best
+  BuildDepends:	  bap, oUnit, bap-piqi
+  Install:	  false
+  MainIs: run_piqi_tests.ml
+
+Test piqi_tests
+ TestTools: run_piqi_tests
+ Run$: flag(tests) && flag(piqi)
+ Command: $run_piqi_tests -runner sequential
+
+########### Dwarf Library #########################
+
+Flag dwarf
+  Description: Build Bap_dwarf library
+  Default: false
+
+
+Library dwarf
+  Path:          lib/bap_dwarf
+  FindlibName:   bap-dwarf
+  Build$:        flag(dwarf)
+  BuildDepends:  bap, pa_ounit.syntax
+  Modules:       Bap_dwarf
+
+  InternalModules:
+                 Dwarf_data,
+                 Dwarf_fbi,
+                 Dwarf_input,
+                 Dwarf_leb128,
+                 Dwarf_types
+
+Library dwarf_test
+  Path:           lib_test/bap_dwarf
+  Build$:         flag(tests) && flag(dwarf)
+  CompiledObject: best
+  BuildDepends:   bap-dwarf, oUnit
+  Install:        false
+  Modules:        Test_leb128
+
+
+Executable run_dwarf_tests
+  Path:		  lib_test/bap_dwarf
+  Build$:	  flag(tests) && flag(dwarf)
+  CompiledObject: best
+  BuildDepends:	  bap, oUnit, bap-piqi, dwarf_test
+  Install:	  false
+  MainIs: run_tests.ml
+
+Test dwarf_tests
+ TestTools: run_dwarf_tests
+ Run$: flag(tests) && flag(dwarf)
+ Command: $run_dwarf_tests
+
+
+########## Bap_elf Library ########################
+
+Flag elf
+  Description: Build Bap_elf library
+  Default: false
+
+Library elf
+  Path:          lib/bap_elf
+  Build$:        flag(elf)
+  FindlibName:   bap-elf
+  BuildDepends:  bap, bitstring, bitstring.syntax
+  Modules: Bap_elf
+  InternalModules:
+                 Elf_parse,
+                 Elf_types,
+                 Elf_utils,
+                 Elf_internal_utils
+
+############## Elf Native loader ####################
+
+Library elf_loader_plugin
+  Path:             plugins/elf_loader
+  Build$:           flag(elf) && flag(dwarf)
+  FindlibName:      bap-plugin-elf_loader
+  CompiledObject:   best
+  BuildDepends:     bap, bap-elf, bap-dwarf
+  InternalModules:  Elf_loader_main
+  XMETADescription: read ELF and DWARF formats in a pure OCaml
+
+
+############# Byteweight #############################
+
+Flag byteweight_frontend
+  Description: Build bap-byteweight toolkit
+  Default: true
+
+Flag byteweight
+  Description: Build byteweight library
+  Default: true
+
+Executable "bap-byteweight"
+  Path:           src
+  MainIs:         byteweight_main.ml
+  Build$:         flag(byteweight) && flag(byteweight_frontend)
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, bap-byteweight,
+                  cmdliner, curl, fileutils, re.posix
+
+Library byteweight
+  Path:            lib/bap_byteweight
+  FindLibName:     bap-byteweight
+  Build$:          flag(byteweight)
+  CompiledObject:  best
+  Modules:         Bap_byteweight, Bap_byteweight_signatures
+  BuildDepends:    bap, core_kernel, uri
+
+Library byteweight_plugin
+  Path:             plugins/byteweight
+  FindlibName:      bap-plugin-byteweight
+  Build$:           flag(byteweight)
+  CompiledObject:   best
+  BuildDepends:     bap, bap-byteweight, cmdliner
+  InternalModules:  Byteweight_main
+  XMETADescription: find function starts using Byteweight algorithm
+
+
+############# Dump symbols ############################
+
+Library dump_symbols_plugin
+  Path:             plugins/dump_symbols
+  FindlibName:      bap-plugin-dump_symbols
+  CompiledObject:   best
+  BuildDepends:     bap, cmdliner
+  InternalModules:  Dump_symbols_main
+  XMETADescription: dump symbol information as a list of blocks
+
+
+########### Bap_ida Library #############################
+
+Flag ida
+  Description: build IDA intergration library
+  Default: true
+
+Library bap_ida
+  Path:             lib/bap_ida
+  FindlibName:      bap-ida
+  CompiledObject:   best
+  Build$:           flag(ida)
+  Modules:          Bap_ida
+  BuildDepends:     fileutils, re.posix
+  XMETADescription: make calls into IDA
+
+
+########## BAP IDA Plugin ###############################
+
+Library ida_plugin
+  Path:             plugins/ida
+  FindlibName:      bap-plugin-ida
+  CompiledObject:   best
+  Build$:           flag(ida)
+  BuildDepends:     bap, bap-ida, cmdliner
+  Modules:          Ida_main
+  XMETADescription: use ida to provide rooter, symbolizer and reconstructor
+
+Library emit_ida_script_plugin
+  Path:             plugins/emit_ida_script
+  FindlibName:      bap-plugin-emit_ida_script
+  BuildDepends:     bap, cmdliner
+  Modules:          Emit_ida_script_main
+  XMETADescription: extract a python script from the project data type
+
+
+########## Symbol Reader Plugin ############################
+
+Library read_symbols_plugin
+  Path:             plugins/read_symbols
+  FindlibName:      bap-plugin-read_symbols
+  BuildDepends:     bap, cmdliner
+  Modules:          Read_symbols_main
+  XMETADescription: read symbol information from file
+
+
+######### Phoenix Plugin ###################################
+
+Flag phoenix
+  Description: Build phoenix plugin
+  Default: false
+
+Library phoenix_plugin
+  Path:             plugins/phoenix
+  FindlibName:      bap-plugin-phoenix
+  BuildDepends:     bap, cmdliner, text-tags, ocamlgraph, ezjsonm
+  InternalModules:  Phoenix_main,
+                    Phoenix_dot,
+                    Phoenix_helpers,
+                    Phoenix_options,
+                    Phoenix_output,
+                    Phoenix_printing,
+                    Phoenix_root
+  XMETADescription: output project information in a phoenix format
+
+
+########## Print Plugin ####################################
+
+Library print_plugin
+  Path:             plugins/print
+  FindlibName:      bap-plugin-print
+  BuildDepends:     bap, cmdliner, text-tags, bap-demangle
+  InternalModules:  Print_main
+  XMETADescription: print project in various formats
+
+
+########## Cache Plugin ####################################
+
+Library cache_plugin
+  Path:             plugins/cache
+  FindlibName:      bap-plugin-cache
+  BuildDepends:     bap, cmdliner, text-tags, bap-demangle
+  InternalModules:  Cache_main
+  XMETADescription: provide caching services
+
+########## LLVM Disassembler
+
+Flag llvm
+ Description: Build with llvm backend
+ Default: true
+
+Flag llvm_static
+  Description: Links with llvm in a static mode
+  Default: true
+
+Library llvm_plugin
+  XMETADescription: provide loader and disassembler
+  Path:          plugins/llvm
+  Build$:        flag(llvm)
+  BuildDepends:  bap, cmdliner
+  FindlibName:   bap-plugin-llvm
+  InternalModules:
+                 Llvm_binary,
+                 Llvm_loader,
+                 Llvm_types,
+                 Llvm_main
+  CCOpt:         $cc_optimization
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
+  CSources:
+                 llvm_disasm.h,
+                 llvm_disasm.c,
+                 llvm_stubs.c,
+                 llvm_binary_stubs.c,
+                 llvm_binary_stubs.h,
+                 llvm_binary.c,
+                 llvm_binary.h
+
+############# ARM Support ###############
+
+Flag arm
+ Description: Build ARM lifter
+ Default: true
+
+
+Library "bap-arm"
+ XMETADescription: arm lifting
+ Path:             lib/arm
+ Build$:           flag(arm)
+ BuildDepends:     bap
+ FindlibName:      bap-arm
+ Modules:
+                 ARM,
+                 Arm_bit,
+                 Arm_branch,
+                 Arm_cond,
+                 Arm_env,
+                 Arm_flags,
+                 Arm_helpers,
+                 Arm_insn,
+                 Arm_lifter,
+                 Arm_mem,
+                 Arm_mem_shift,
+                 Arm_mov,
+                 Arm_mul,
+                 Arm_op,
+                 Arm_reg,
+                 Arm_shift,
+                 Arm_types,
+                 Arm_utils
+
+
+Library arm_plugin
+  Path:             plugins/arm
+  FindlibName:      bap-plugin-arm
+  BuildDepends:     bap, bap-arm
+  InternalModules:  Arm_main
+  XMETADescription: provide ARM lifter
+
+
+################# X86 support ########
+
+Flag x86
+ Description: Build x86 support
+ Default: true
+
+Library "bap-x86-cpu"
+ XMETADescription: provide x86 lifter
+ Path:             lib/x86_cpu
+ FindlibName:      bap-x86-cpu
+ BuildDepends:     bap
+ Modules:        X86_cpu,
+                 X86_env,
+                 X86_types
+
+Library x86_plugin
+ XMETADescription: provide x86 lifter
+ Path:             plugins/x86
+ FindlibName:      bap-plugin-x86
+ BuildDepends:     bap, bap-x86-cpu
+ InternalModules:
+                 X86_disasm,
+                 X86_lifter,
+                 X86_main,
+                 X86_utils
+
+
+######## Future library #####
+Flag future
+  Description: compile future library
+  Default: true
+
+Library bap_future
+  Path:            lib/bap_future/
+  FindlibName:     bap-future
+  CompiledObject:  best
+  Build$:          flag(future)
+  BuildDepends:    core_kernel
+  InternalModules: Bap_future
+
+Library future_test
+  Path:           lib_test/bap_future
+  Build$:         flag(future) && flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap-future, oUnit
+  Install:        false
+  Modules:        Test_future_std, Test_future, Test_stream
+
+Executable run_future_tests
+  Path:           lib_test/bap_future
+  Build$:         flag(future) && flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap-future, oUnit
+  Install:        false
+  MainIs:        run_future_tests.ml
+
+Test future_tests
+  TestTools: run_future_tests
+  Run$: flag(tests) && flag(future)
+  Command: $run_future_tests
+
+
+########## Benchmarking ###########################
+Flag benchmarks
+  Description: Build and run benchmarks
+  Default: false
+
+Library benchmarks
+  Path:           benchmarks
+  Build$:         flag(tests) && flag(benchmarks)
+  CompiledObject: best
+  BuildDepends:   bap, core, core_bench, threads
+  Install:        false
+  Modules:        Bench_dom, Bench_image
+
+
+Executable run_benchmarks
+  Path:         benchmarks
+  MainIs:       run_benchmarks.ml
+  Install:      false
+  Build$:       flag(tests) && flag(benchmarks)
+  BuildDepends: bap, benchmarks
+  CompiledObject: native
+
+Test benchmarks
+  TestTools: run_benchmarks
+  Run$:         flag(tests) && flag(benchmarks)
+  Command: $run_benchmarks
+
+
+########### Tracing support ######################
+
+Flag traces
+  Description: Build traces library
+  Default: true
+
+Library trace
+  Path:            lib/bap_trace
+  FindLibName:     bap-traces
+  Build$:          flag(traces)
+  CompiledObject:  best
+  Modules:         Bap_traces
+  InternalModules: Bap_trace_binprot,
+                   Bap_trace_events,
+                   Bap_trace_event_types,
+                   Bap_trace_meta,
+                   Bap_trace_meta_types,
+                   Bap_trace_std,
+                   Bap_trace
+  BuildDepends:    bap, core_kernel, uri, uuidm
+
+Library trace_test
+  Path:            lib_test/bap_trace
+  Build$:          flag(tests) && flag(traces)
+  Install:         false
+  CompiledObject:  best
+  Modules:         Test_trace
+  BuildDepends:    bap, bap-traces, oUnit
+
+
+Executable run_trace_tests
+  Path:           lib_test/bap_trace
+  Build$:         flag(traces) && flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap-traces, oUnit
+  Install:        false
+  MainIs:         run_trace_tests.ml
+
+Test trace_tests
+  TestTools: run_trace_tests
+  Run$: flag(tests) && flag(traces)
+  Command: $run_trace_tests

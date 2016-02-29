@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap_types.Std
 open Or_error
 
@@ -26,7 +27,7 @@ type 'a oper = {
 
 type reg_info = {
   reg_code : int;
-  reg_name : string Lazy.t;
+  reg_name : string;
 } with bin_io, sexp
 
 let compare_reg_info {reg_code=x} {reg_code=y} = Int.compare x y
@@ -84,15 +85,15 @@ module Reg = struct
     let data =
       let reg_code = C.insn_op_reg_code dis.id ~insn ~oper in
       let reg_name =
-        if reg_code = 0 then lazy "Nil"
+        if reg_code = 0 then "Nil"
         else
           let off = C.insn_op_reg_name dis.id ~insn ~oper in
-          lazy (Table.lookup dis.reg_table off) in
+          (Table.lookup dis.reg_table off) in
       {reg_code; reg_name} in
     {insn; oper; data}
 
   let code op : int = op.data.reg_code
-  let name {data = {reg_name = lazy x}} : string = x
+  let name {data = {reg_name = x}} : string = x
 
   module T = struct
     type t = reg
@@ -256,7 +257,7 @@ let cpred_of_pred : pred -> C.pred = function
 module Insn = struct
   type ins_info = {
     code : int;
-    name : string Lazy.t;
+    name : string;
     asm  : string;
     kinds: kind list;
     opers: Op.t array;
@@ -264,14 +265,14 @@ module Insn = struct
   type ('a,'k) t = ins_info
 
   let sexp_of_t ins =
-    let lazy name = ins.name in
+    let name = ins.name in
     let ops = Array.to_list ins.opers in
     Sexp.List (Sexp.Atom name :: List.map ops ~f:(fun op ->
         Sexp.Atom (Op.to_string op)))
 
   let compare {code=x} {code=y} = Int.compare x y
 
-  let name {name = lazy x} = x
+  let name {name = x} = x
   let code op = op.code
   let asm  x = x.asm
   let ops  x = x.opers
@@ -285,7 +286,7 @@ module Insn = struct
     let code = C.insn_code dis.id ~insn in
     let name =
       let off = C.insn_name dis.id ~insn in
-      lazy (Table.lookup dis.insn_table off) in
+      Table.lookup dis.insn_table off in
     let asm =
       if asm then
         let data = String.create (C.insn_asm_size dis.id ~insn) in
@@ -492,6 +493,13 @@ let create ?(debug_level=0) ?(cpu="") ~backend triple =
     kinds = false;
   }
 
+
+let close dis = C.delete dis.id
+
+let with_disasm ?debug_level ?cpu ~backend triple ~f =
+  create ?debug_level ?cpu ~backend triple >>= fun dis ->
+  f dis >>| fun res -> close dis; res
+
 type ('a,'k) t = dis
 
 let run ?backlog ?(stop_on=[]) ?invalid ?stopped ?hit dis ~return ~init mem =
@@ -522,6 +530,9 @@ let insn_of_mem dis mem =
     ~invalid:(fun s mem' _ ->
         split mem' >>= fun r -> stop s (mem',None,r))
 
+
+let available_backends () =
+  C.backends_size () |> List.init ~f:C.backend_name
 
 module Trie = struct
 

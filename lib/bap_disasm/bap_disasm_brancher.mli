@@ -1,0 +1,19 @@
+open Bap_types.Std
+open Bap_disasm_source
+open Bap_image_std
+open Bap_disasm_basic
+open Bap_disasm_block
+
+type t
+type brancher = t
+
+type dest = addr option * edge with sexp
+type dests = dest list with sexp
+
+val create : (mem -> full_insn -> dests) -> t
+
+val of_bil : arch -> t
+
+val resolve : t -> mem -> full_insn -> dests
+
+module Factory : Factory with type t := t

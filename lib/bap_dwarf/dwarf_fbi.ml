@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Or_error
 
-open Bap_types.Std
+open Bap.Std
 open Dwarf_types
 
 
@@ -51,7 +51,7 @@ module Fn = struct
           Some Addr.(pc_lo ++ off) in
       pc_hi >>| fun pc_hi -> {pc_lo; pc_hi}
     let hash = Hashtbl.hash
-    let module_name =  "Bap.Std.Dwarf.Fn"
+    let module_name =  "Bap_Dwarf.Std.Fn"
     let version = "0.1"
   end
   include T

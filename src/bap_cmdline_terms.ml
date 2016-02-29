@@ -1,170 +1,220 @@
 open Core_kernel.Std
+open Bap.Std
 open Cmdliner
 open Format
+open Bap_options
+
+module type With_factory = sig
+  module Factory : sig
+    val list : 'a Source.t -> string list
+  end
+end
+
+let enum_processors (source : source) (module T : With_factory) =
+  let ps = match source with
+    | `Memory _ -> T.Factory.list Source.Memory
+    | `Binary   -> T.Factory.list Source.Binary
+    | `File _   -> T.Factory.list Source.File in
+  List.map ps ~f:(fun x -> x,x)
 
 let filename : string Term.t =
   let doc = "Input filename." in
   Arg.(required & pos 0 (some non_dir_file) None &
        info [] ~doc ~docv:"FILE")
 
-let symsfile : string option Term.t =
-  let doc = "Use this file as symbols source" in
-  Arg.(value & opt (some non_dir_file) None &
-       info ["syms"; "s"] ~doc ~docv:"SYMS")
+let brancher source : string option Term.t =
+  match enum_processors source (module Brancher) with
+  | [] | [_] -> Term.const None
+  | names ->
+    let doc = sprintf "Use specified brancher, should be %s" @@
+      Arg.doc_alts_enum names in
+    Arg.(value & opt (some (enum names)) None & info ["brancher"] ~doc)
 
-let loader : string Term.t =
-  let doc = "Backend name for an image loader" in
-  Arg.(value & opt string "llvm" & info ["loader"] ~doc)
+let symbolizers src : string list Term.t =
+  match enum_processors src (module Symbolizer) with
+  | [] | [_] -> Term.const []
+  | names ->
+    let doc =
+      sprintf "Use a specified symbolizer. If an option is specified
+      several times, then symbolizers are merged. Possible values
+      are: %s" @@ Arg.doc_alts_enum names in
+    Arg.(value & opt_all (enum names) [] & info ["symbolizer"] ~doc)
 
-let cfg_format : 'a list Term.t =
-  Arg.(value & vflag_all [`with_name] [
-      `with_name, info ["labels-with-name"]
-        ~doc: "Put block name on graph labels";
-      `with_asm, info ["labels-with-asm"]
-        ~doc:"Put assembler instructions on graph labels";
-      `with_bil, info ["labels-with-bil"]
-        ~doc:"Put bil instructions on graph labels";
-    ])
+let rooters src : string list Term.t =
+  match enum_processors src (module Rooter) with
+  | [] | [_] -> Term.const []
+  | names ->
+    let doc = sprintf "Use a rooter with a given $(docv) . If an
+    option is specified several times, then rooters are
+    merged. Possible values: %s. Since the internal rooter will work
+    only on binaries, that have debugging information, then if no
+    rooter is specified, then it will default to the first rooter in a
+    list of rooters. If you want to disable this behavior and use
+    internal rooter, then specify this explicitly by
+    `--rooter=internal`" @@
+      Arg.doc_alts_enum names in
+    Arg.(value & opt_all (enum names) [] &
+         info ["rooter"] ~doc ~docv:"NAME")
 
-let output_phoenix : _ Term.t =
-  let doc = "Output information about processed binary in a human \
-             readable format. This will emit CFG for each format in \
-             dot format. It will also store BIL and ASM code in html \
-             format.Output folder \
-             can be optionally specified. If omitted, the \
-             basename of the target file will be used as a \
-             directory name." in
-  let vopt = Some (Sys.getcwd ()) in
-  Arg.(value & opt ~vopt (some string) None &
-       info ["phoenix"; "output"] ~doc)
+let reconstructor source : string option Term.t =
+  match enum_processors source (module Reconstructor) with
+  | []  -> Term.const None
+  | names ->
+    let doc = "Use a specified reconstructor" in
+    Arg.(value & opt (some (enum names)) None & info ["reconstructor"] ~doc)
 
-let output_dump : _ list Term.t =
-  let values = [
-    "asm", `with_asm;
-    "bil", `with_bil;
-    "bir", `with_bir;
-  ] in
+let loader source : string Term.t =
+  Image.available_backends () |>
+  List.map ~f:(fun x -> x,x) |> function
+  | [ ]   -> Term.const "<no-loaders-available>"
+  | [x,_] -> Term.const x
+  | _ when source <> `Binary -> Term.const "nil"
+  | backends ->
+    let doc = sprintf
+        "Backend name for an image loader, should be %s" @@
+      Arg.doc_alts_enum backends in
+    Arg.(value & opt (enum backends) "llvm" & info ["loader"] ~doc)
+
+let disassembler () : string Term.t =
+  Disasm_expert.Basic.available_backends () |>
+  List.map ~f:(fun x -> x,x) |> function
+  | [] -> Term.const "<no-disassemblers-available>"
+  | [x,_] -> Term.const x
+  | backends ->
+    let doc = sprintf
+        "Disassembler backend, should be %s" @@
+      Arg.doc_alts_enum backends in
+    Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
+
+
+let symbols source : string list Term.t =
+  let rooters = enum_processors source (module Rooter) in
+  let sybolzs = enum_processors source (module Symbolizer) in
+  match List.filter sybolzs ~f:(List.mem rooters) with
+  | [] | [_] -> Term.const []
+  | names ->
+    let doc =
+      sprintf "Use $(docv) as rooter and symbolizer. This is a
+    shortcut for --rooter=$(docv) --symbolizer=$(docv). You can
+    specify this option several times to mix different sources of
+    information. Possible values %s" @@
+      Arg.doc_alts_enum names in
+    Arg.(value & opt_all (enum names) [] &
+         info ["symbols"] ~doc ~docv:"NAME")
+
+let list_formats, list_formats_doc =
+  let doc =
+    "Print detailed information about available project printers" in
+  Arg.(value & flag & info ["list-formats"] ~doc), doc
+
+let dump_formats () : Bap_fmt_spec.t list Term.t =
+  let fmts = Project.available_writers () |>
+             List.map ~f:(fun (n,_,_) -> n,n) in
   let doc = sprintf
-      "Print dump to standard output. Optional value \
-       defines output format, and can be %s. You can \
-       specify this parameter several times, if you \
-       want both, for example."
-    @@ Arg.doc_alts_enum values in
-  Arg.(value & opt_all ~vopt:`with_asm (enum values) [] &
+      "Print a project using designated format to a specified
+       destination. If format and destination is not specified, then a
+       program will be printed in the IR form to the standard
+       output. The argument consists of format specification, and an
+       optional destination, separated from the format by a colon (:)
+       symbol. The format specification, consists of format name and
+       optional version number, separated from the name by a dash
+       symbol, e.g., `<fmt>` or `<fmt>-<ver>`.  Acceptable format
+       names are %s.  If version is omitted then the latest version of
+       the given format will be used. If destination is not omitted,
+       then data will to the specified destination, otherwise it will
+       be printed to the standard output. The full argument grammar is
+       `fmt ::= <fmt>[-<ver>][:<dst>]'. Examples: `bir', `bir-0.1`,
+       `sexp-0.9:data.sexp`, etc. Use `--list-formats' command line
+       option to get the detailed information about available formats
+       and corresponding versions. This option can be specified
+       several times, to dump the project is several formats (and
+       possibly destinations) simultaneously." @@
+    Arg.doc_alts_enum fmts in
+  let vopt = `stdout,"bir",None in
+  Arg.(value & opt_all ~vopt Bap_fmt_spec.t [] &
        info ["dump"; "d"] ~doc)
 
-let dump_symbols : string option option Term.t =
-  let doc = "Output symbol information. In the output file, each symbol is in format of:
-  (<symbol name> <symbol start address> <symbol end address>), e.g.,
-  (malloc@@GLIBC_2.4 0x11034 0x11038)" in
-  Arg.(value & opt ~vopt:(Some None) (some (some string)) None & info
-         ["dump-symbols"] ~doc)
-
-let demangle : 'a option Term.t =
-  let doc = "Demangle C++ symbols, using either internal \
-             algorithm or a specified external tool, e.g. \
-             c++filt." in
-  let parse = function
-    | "internal" -> `Ok `internal
-    | name -> `Ok (`program name) in
-  let printer fmt = function
-    | `internal -> pp_print_string fmt "internal"
-    | `program name -> pp_print_string fmt name in
-  let spec = parse, printer in
-  Arg.(value & opt ~vopt:(Some `internal) (some spec) None &
-       info ["demangle"] ~doc)
-
-let no_resolve : bool Term.t =
-  let doc = "Do not resolve addresses to symbolic names" in
-  Arg.(value & flag & info ["no-resolve"; "n"] ~doc)
-
-let keep_alive : bool Term.t =
-  let doc = "Keep alive unused temporary variables" in
-  Arg.(value & flag & info ["keep-alive"] ~doc)
-
-let no_inline : bool Term.t =
-  let doc = "Disable inlining temporary variables" in
-  Arg.(value & flag & info ["no-inline"] ~doc)
-
-let keep_consts : bool Term.t =
-  let doc = "Disable constant folding" in
-  Arg.(value & flag & info ["keep-const"] ~doc)
-
-let no_optimizations : bool Term.t =
-  let doc = "Disable all kinds of optimizations" in
-  Arg.(value & flag & info ["no-optimizations"] ~doc)
-
-let binaryarch : _ Term.t =
-  let doc =
-    sprintf
-      "Parse input file as raw binary with specified \
-       architecture, e.g. x86, arm, etc." in
-  Arg.(value & opt (some string) None &
-       info ["binary"] ~doc)
+let source_type : source Term.t =
+  let doc = "Defines a format of the input file. It can be either a
+            `binary' that denotes a structured binary file in a a
+            format that is supported by a loader. It can also be a
+            `<arch>-code' (e.g., `arm-code', `x86-code') if the binary
+            is a raw code for the given <arch>. If the $(docv) is
+            `project`, then the input file must be project data
+            serialized with some format available for project data
+            type. The format can be encoded in the extension. If
+            needed, then a version number can be specifed, separated
+            from the format by a dash, e.g., `myproj.marshal`,
+            `myproj.sexp-1.0', etc. If the format is not specified,
+            then the default reader will be used. The name can be also
+            of the form `<name>-custom', where <name> should be a name
+            of factory method registered for a file source in project
+            factory." in
+  Arg.(value & opt Bap_source_type.t `Binary & info ["source-type"]
+         ~doc ~docv:"NAME")
 
 let verbose : bool Term.t =
   let doc = "Print verbose output" in
   Arg.(value & flag & info ["verbose"; "v"] ~doc)
 
-let bw_disable : bool Term.t =
-  let doc = "Disable root finding with byteweight" in
-  Arg.(value & flag & info ["no-byteweight"] ~doc)
-
-let bw_length : int Term.t =
-  let doc = "Maximum prefix length when byteweighting" in
-  Arg.(value & opt int 16 & info ["byteweight-length"] ~doc)
-
-let bw_threshold : float Term.t =
-  let doc = "Minimum score for the function start" in
-  Arg.(value & opt float 0.9 & info ["byteweight-threshold"] ~doc)
-
-let print_symbols : _ list Term.t =
-  let opts = [
-    "name", `with_name;
-    "addr", `with_addr;
-    "size", `with_size;
-  ] in
-  let doc = sprintf
-      "Print found symbols. Optional value \
-       defines output format, and can be %s. You can \
-       specify this parameter several times, if you \
-       want both, for example."
-    @@ Arg.doc_alts_enum opts in
-  Arg.(value & opt_all ~vopt:`with_name (enum opts) [] &
-       info ["print-symbols"; "p"] ~doc)
-
-let use_ida : string option option Term.t =
-  let doc = "Use IDA to extract symbols from file. \
-             You can optionally provide path to IDA executable,\
-             or executable name." in
-  Arg.(value & opt ~vopt:(Some None)
-         (some (some string)) None & info ["use-ida"] ~doc)
-
-let sigsfile : string option Term.t =
-  let doc = "Path to the signature file. No needed by default, \
-             usually it is enough to run `bap-byteweight update'." in
-  Arg.(value & opt (some non_dir_file) None & info ["sigs"] ~doc)
-
-let emit_ida_script : string option Term.t =
-  let doc = "Emit annotations to IDA based on project annotations to \
-             the specified filename." in
-  Arg.(value & opt (some string) None & info ["emit-ida-script"] ~doc)
-
+let load_doc =
+  "Dynamically loads file $(i,PATH).plugin. A plugin must be compiled
+   with $(b,bapbuild) tool using $(b,bapbuild PATH.plugin) command."
 let load : string list Term.t =
-  let doc = "Load the specified plugin. Plugin must be compiled with \
-             `bapbuild $(docv).plugin'. This option can be specified \
-             several times with different names. " in
-  Arg.(value & opt_all string [] & info ["l"] ~doc ~docv:"NAME")
+  Arg.(value & opt_all string [] & info ["l"] ~doc:load_doc ~docv:"PATH")
+
+let load_path_doc =
+  "Add $(i,PATH) to a set of search paths. Plugins found in the search
+  paths will be loaded automatically."
 
 let load_path : string list Term.t =
-  let doc = "Add $(docv) to a set of search paths. Plugins specified \
-             with `-l` flag will be searched in this paths, if they \
-             are not found in the current folder or in a folder \
-             specified by a `BAP_PLUGIN_PATH' environment variable" in
   Arg.(value & opt_all string [] &
-       info ["load-path"; "L"] ~doc ~docv:"PATH")
+       info ["load-path"; "L"] ~doc:load_path_doc ~docv:"PATH")
 
-let emit_attr : string list Term.t =
-  let doc = "When printing IR emit attribute $(docv)" in
+let list_plugins, list_plugin_doc =
+  let doc = "List available plugins" in
+  Arg.(value & flag & info ["list-plugins"] ~doc), doc
+
+let disable_plugin, disable_plugin_doc =
+  let doc = "Don't load $(i,PLUGIN) automatically" in
   Arg.(value & opt_all string [] &
-       info ["emit-attr"; "A"] ~doc ~docv:"NAME")
+       info ["disable-plugin"] ~doc),doc
+
+let no_auto_load, no_auto_load_doc =
+  let doc = "Disable auto loading of plugins" in
+  Arg.(value & flag & info ["disable-autoload"] ~doc), doc
+
+
+let loader_options = [
+  "-l"; "-L"; "--list-plugins"; "--disable-plugin"; "--disable-autoload"
+]
+
+let common_loader_options = [
+  `S "PLUGIN OPTIONS";
+  `I ("$(b,-l) $(i,PATH)", load_doc);
+  `I ("$(b,-L)$(i,PATH)", load_path_doc);
+  `I ("$(b,--list-plugins)", list_plugin_doc);
+  `I ("$(b,--disable-plugin)", disable_plugin_doc);
+  `I ("$(b,--disable-autoload)", no_auto_load_doc);
+  `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);
+]
+
+
+let options_for_passes = [
+  `S "OPTIONS FOR PASSES";
+  `I begin
+    "$(b,--)$(i,PASS)",
+    "Runs a program $(i,PASS). The $(i,PASS) should be registered in the
+         system, usually by loading or installing corresponding plugin."
+  end;
+  `I begin
+    "$(b,--)$(i,PASS)-$(i,OPTION)",
+    "Passes $(i,OPTION) to a $(i,PASS). The option will be passed as
+         $(b,--OPTION). If $(i,OPTION) is followed by an argument
+        (i.e., a token that doesn't start with a dash), then it will be
+        also passed to the $(i,PASS). Note: it is assumed that all
+        options to passes consumes and optional argument. Make sure,
+        that your flags are followed by some option, otherwise the
+        argument that follows the flag might be consumed by a $(i,PASS)"
+  end;
+]

@@ -1,11 +1,10 @@
 open Core_kernel.Std
+open Regular.Std
+open Graphlib.Std
 open Bap_ir
 open Bap_common
-module Seq = Sequence
 
-module Graph = Bap_graph_regular
-module Dot = Bap_graph_pp.Dot
-module G = Graph.Make(Tid)(struct type t = jmp term list end)
+module G = Graphlib.Make(Tid)(struct type t = jmp term list end)
 
 let create program =
   Term.enum sub_t program |> Seq.fold ~init:G.empty ~f:(fun g sub ->
@@ -26,12 +25,6 @@ let create program =
 
 
 include G
-include Graph.Aux(struct
-    type t = node
-    let pp = Tid.pp
-    let module_name = "Bap.Std.Graphlib.Callgraph"
-    let version = "0.1"
-  end)
 
 include Printable(struct
     type t = G.t
@@ -39,7 +32,7 @@ include Printable(struct
     let version = "0.1"
 
     let pp ppf g =
-      Dot.pp_graph
+      Graphlib.Dot.pp_graph
         ~string_of_node:Tid.name
         ~nodes_of_edge:(fun e -> G.Edge.(src e, dst e))
         ~nodes:(G.nodes g)
