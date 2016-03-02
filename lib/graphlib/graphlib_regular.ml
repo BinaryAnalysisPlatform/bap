@@ -12,7 +12,7 @@ module Make(Node : Opaque)(Label : T) = struct
     src : Node.t;
     dst : Node.t;
     data : edge_label;
-  } with fields
+  } [@@deriving fields]
 
   let compare_edge x y = match Node.compare x.src y.src with
     | 0 -> Node.compare x.dst y.dst
@@ -26,10 +26,10 @@ module Make(Node : Opaque)(Label : T) = struct
   type node_info = {
     inc : arrows;
     out : arrows;
-  } with compare, fields
+  } [@@deriving compare, fields]
 
   type graph = node_info Node.Map.t
-  with compare
+  [@@deriving compare]
 
   let empty_node = {inc = Node.Map.empty; out = Node.Map.empty}
 
@@ -149,12 +149,12 @@ module Make(Node : Opaque)(Label : T) = struct
       remove_arrow Fields_of_node_info.inc e.src e.dst
 
     include Opaque.Make(struct
-        type t = edge with compare
+        type t = edge [@@deriving compare]
         let hash e = Node.hash e.src lxor Node.hash e.dst
       end)
   end
 
-  type t = graph with compare
+  type t = graph [@@deriving compare]
   type node = Node.t
 
   let is_directed = true
@@ -174,7 +174,7 @@ module Make(Node : Opaque)(Label : T) = struct
 
   include Opaque.Make(struct
       open Format
-      type t = graph with compare
+      type t = graph [@@deriving compare]
       let hash g =
         nodes g |> Seq.fold ~init:0 ~f:(fun hash n ->
             Node.hash n lxor hash)
@@ -347,7 +347,7 @@ module Make_factory(P : Product) = struct
 end
 
 module Named(T : sig
-    type t with bin_io, compare, sexp
+    type t [@@deriving bin_io, compare, sexp]
     val name : string
     val hash : t -> int
     val pp : Format.formatter -> t -> unit
@@ -356,9 +356,3 @@ module Named(T : sig
   let module_name = "Graphlib."^T.name
   include Opaque.Make(T)
 end
-
-module PInt = Named(struct include Int let name = "Int" end)
-module PString = Named(struct include String let name = "String" end)
-
-module Int = Make_factory(PInt)
-module String = Make_factory(PString)

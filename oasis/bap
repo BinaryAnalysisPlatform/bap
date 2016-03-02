@@ -48,8 +48,7 @@ Library types
   FindlibName:     types
   CompiledObject:  best
   BuildDepends:    zarith, uuidm, bap.config, regular, graphlib,
-                   variantslib.syntax,
-                   enumerate.syntax
+                   ppx_variants_conv, ppx_enumerate
 
   InternalModules:
                    Bap_addr,
@@ -93,7 +92,7 @@ Library bap_image
   Path:          lib/bap_image/
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, pa_ounit.syntax
+  BuildDepends:  bap.types, ppx_test
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -113,7 +112,7 @@ Library disasm
                  bap.types,
                  camlzip,
                  ocamlgraph,
-                 herelib.syntax
+                 ppx_here
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_abi,
@@ -166,7 +165,7 @@ Library "bap-build"
   #FindlibParent: bap
   CompiledObject: best
   Modules: Bap_build
-  BuildDepends: findlib, ocamlbuild
+  BuildDepends: findlib, ocamlbuild, bap.config
 
 
 Library top

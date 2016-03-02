@@ -13,7 +13,7 @@ module Sub = Ir_sub
 type 'a seq = 'a Seq.t
 
 module Pred = struct
-  type t = Tid.Set.t Tid.Map.t with bin_io, compare, sexp
+  type t = Tid.Set.t Tid.Map.t [@@deriving bin_io, compare, sexp]
   (** [remove src dst preds] remove a predecessor [src] from
       a set of predecessors of [dst] *)
   let remove src dst rdep =
@@ -40,15 +40,17 @@ end
 type t = {
   preds : Pred.t;
   sub  : sub term;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
-type node = blk term with bin_io, compare, sexp
+type graph = t [@@deriving bin_io, compare, sexp]
+
+type node = blk term [@@deriving bin_io, compare, sexp]
 
 type edge = {
   src : blk term;
   dst : blk term;
   pos : int;
-} with bin_io, sexp
+} [@@deriving bin_io, sexp]
 
 let compare_edge x y = match Blk.compare x.src y.src with
   | 0 -> Blk.compare x.dst y.dst
@@ -77,7 +79,7 @@ type difference_kind =
   | Target_change of tid * tid
   | New_jmp of tid
   | Del_jmp of tid
-with variants,sexp
+  [@@deriving variants, sexp]
 
 let jmp_set b = Term.enum jmp_t b |> Seq.map ~f:Term.tid |>
                 Seq.fold ~init:Tid.Set.empty ~f:Set.add
@@ -208,11 +210,11 @@ module Node = struct
     | Some ps -> Set.mem ps (Term.tid src)
 
   include Regular.Make(struct
-      type t = blk term with bin_io, sexp
+      type t = blk term [@@deriving bin_io, sexp]
       let compare x y = Term.(Tid.compare (tid x) (tid y))
       let pp = Blk.pp
       let hash x = Tid.hash (Term.tid x)
-      let module_name = Some "Bap.Std.Graphlib.Ir.Node"
+      let module_name = None
       let version = "0.1"
     end)
 
@@ -222,7 +224,7 @@ module Edge = struct
   type label = int
   type nonrec node = node
   type graph = t
-  type t = edge with compare
+  type t = edge [@@deriving compare]
 
   let null = Exp.Int Bitvector.b0
   let dummy = Jmp.create_goto ~cond:null (Label.indirect null)
@@ -325,8 +327,8 @@ module Edge = struct
       Node.update src src t
 
   include Regular.Make(struct
-      type t = edge with bin_io, compare, sexp
-      let module_name = Some "Bap.Std.Graphlib.Ir.Edge"
+      type t = edge [@@deriving bin_io, compare, sexp]
+      let module_name = None
       let version = "0.1"
       let hash t = Blk.hash t.src lxor Blk.hash t.dst
       let pp ppf x =
@@ -383,8 +385,8 @@ let compare x y = Sub.compare x.sub y.sub
 let is_directed = true
 
 include Regular.Make(struct
-    type nonrec t = t with bin_io, compare, sexp
-    let module_name = Some "Bap.Std.Graphlib.Ir"
+    type nonrec t = graph [@@deriving bin_io, compare, sexp]
+    let module_name = None
     let version = "0.1"
     let hash g = Sub.hash g.sub
     let pp ppf g =

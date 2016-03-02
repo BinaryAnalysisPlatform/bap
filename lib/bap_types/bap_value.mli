@@ -1,11 +1,11 @@
 open Core_kernel.Std
 open Regular.Std
 
-type t with bin_io, compare, sexp
-type value = t with bin_io, compare, sexp
-type typeid with bin_io, compare, sexp
+type t [@@deriving bin_io, compare, sexp]
+type value = t [@@deriving bin_io, compare, sexp]
+type typeid [@@deriving bin_io, compare, sexp]
 type 'a tag
-type dict with bin_io, compare, sexp
+type dict [@@deriving bin_io, compare, sexp]
 type void
 type literal = (void,void,void) format
 
@@ -17,7 +17,7 @@ val tagname : t -> string
 val typeid : t -> typeid
 
 module Dict : sig
-  type t = dict with bin_io, compare, sexp
+  type t = dict [@@deriving bin_io, compare, sexp]
   val empty : t
   val is_empty : t -> bool
   val set : t -> 'a tag -> 'a -> t
@@ -31,7 +31,7 @@ module Dict : sig
 end
 
 module type S = sig
-  type t with bin_io, compare, sexp
+  type t [@@deriving bin_io, compare, sexp]
   val pp : Format.formatter -> t -> unit
 end
 

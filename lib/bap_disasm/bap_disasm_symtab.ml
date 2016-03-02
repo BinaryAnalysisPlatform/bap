@@ -11,7 +11,7 @@ module Cfg = Bap_disasm_rec.Cfg
 module Insn = Bap_disasm_insn
 
 
-type block = Block.t with compare,sexp_of
+type block = Block.t [@@deriving compare, sexp_of]
 type cfg = Cfg.t
 
 
@@ -30,9 +30,9 @@ type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-} with sexp_of
+} [@@deriving sexp_of]
 
-type symtab = t with sexp_of
+type symtab = t [@@deriving sexp_of]
 
 let span ((name,entry,cfg) as fn) =
   Cfg.nodes cfg |> Seq.fold ~init:Memmap.empty ~f:(fun map blk ->

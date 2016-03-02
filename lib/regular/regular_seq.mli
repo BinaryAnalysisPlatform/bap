@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Format
 
-type 'a seq = 'a Sequence.t with bin_io, compare, sexp
+type 'a seq = 'a Sequence.t [@@deriving bin_io, compare, sexp]
 
 val sexp_of_t : ('a -> Sexp.t) -> 'a seq -> Sexp.t
 val t_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a seq

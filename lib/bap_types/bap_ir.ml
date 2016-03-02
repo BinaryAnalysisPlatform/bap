@@ -26,12 +26,12 @@ module Stmt = struct
   include Bap_helpers.Stmt
 end
 
-type dict = Dict.t with bin_io, compare, sexp
+type dict = Dict.t [@@deriving bin_io, compare, sexp]
 type 'a vector = 'a Vec.t
 
 module Tid = struct
   exception Overrun
-  type t = Int63.t with bin_io, compare, sexp
+  type t = Int63.t [@@deriving bin_io, compare, sexp]
 
   module Tid_generator = Bap_state.Make(struct
       type t = Int63.t ref
@@ -48,7 +48,7 @@ module Tid = struct
 
   let nil = Int63.zero
   module Tid = Regular.Make(struct
-      type nonrec t = Int63.t with bin_io, compare, sexp
+      type nonrec t = Int63.t [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Tid"
       let version = "0.1"
 
@@ -96,63 +96,63 @@ module Tid = struct
   include Tid
 end
 
-type tid = Tid.t with bin_io, compare, sexp
+type tid = Tid.t [@@deriving bin_io, compare, sexp]
 
 type 'a term = {
   tid : tid;
   self : 'a;
   dict : dict;
-} with bin_io, compare, fields, sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 type label =
   | Direct of tid
   | Indirect of exp
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 type call = {target : label; return : label option}
-with bin_io, compare, fields, sexp
+[@@deriving bin_io, compare, fields, sexp]
 
 type jmp_kind =
   | Call of call
   | Goto of label
   | Ret  of label
   | Int  of int * tid
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 
-type intent = In | Out | Both with bin_io, compare, sexp
+type intent = In | Out | Both [@@deriving bin_io, compare, sexp]
 
-type jmp = (exp * jmp_kind) with bin_io, compare, sexp
-type def = (var * exp) with bin_io, compare, sexp
-type phi = (var * exp Tid.Map.t) with bin_io, compare, sexp
+type jmp = (exp * jmp_kind) [@@deriving bin_io, compare, sexp]
+type def = (var * exp) [@@deriving bin_io, compare, sexp]
+type phi = (var * exp Tid.Map.t) [@@deriving bin_io, compare, sexp]
 
 type blk = {
   phis : phi term array;
   defs : def term array;
   jmps : jmp term array;
-} with bin_io, compare, fields, sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 type arg = var * exp * intent option
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 type sub = {
   name : string;
   blks : blk term array;
   args : arg term array;
-} with bin_io, compare, fields, sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 
 type path = int array
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 
 type program = {
   subs  : sub term array;
   paths : path Tid.Table.t;
-} with bin_io, fields, sexp
+} [@@deriving bin_io, fields, sexp]
 
 let compare_program x y =
-  let compare x y = <:compare<sub term array>> x y in
+  let compare x y = [%compare:sub term array] x y in
   compare x.subs y.subs
 
 
@@ -429,7 +429,7 @@ module Label = struct
     | Indirect x -> Indirect (indirect x)
 
   include Regular.Make(struct
-      type t = label with bin_io, compare, sexp
+      type t = label [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Label"
       let version = "0.1"
 
@@ -450,7 +450,7 @@ module Call = struct
   let with_noreturn t = {t with return = None}
 
   include Regular.Make(struct
-      type t = call with bin_io, compare, sexp
+      type t = call [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Call"
       let version = "0.1"
 
@@ -485,7 +485,7 @@ module Ir_arg = struct
   let name arg = Var.name (lhs arg)
 
   include Regular.Make(struct
-      type t = arg term with bin_io, compare, sexp
+      type t = arg term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Arg"
       let version = "0.1"
 
@@ -522,7 +522,7 @@ module Ir_def = struct
 
 
   include Regular.Make(struct
-      type t = def term with bin_io, compare, sexp
+      type t = def term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Def"
       let version = "0.1"
 
@@ -572,7 +572,7 @@ module Ir_phi = struct
         Set.union vars (Exp.free_vars e))
 
   include Regular.Make(struct
-      type t = phi term with bin_io, compare, sexp
+      type t = phi term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Phi"
       let version = "0.1"
 
@@ -660,7 +660,7 @@ module Ir_jmp = struct
 
 
   include Regular.Make(struct
-      type t = jmp term with bin_io, compare, sexp
+      type t = jmp term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Jmp"
       let version = "0.1"
 
@@ -871,7 +871,7 @@ module Ir_blk = struct
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> x.tid = id))
 
   include Regular.Make(struct
-      type t = blk term with bin_io, compare, sexp
+      type t = blk term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Blk"
       let version = "0.1"
 
@@ -929,7 +929,7 @@ module Ir_sub = struct
       make_term tid {name; args; blks}
   end
   include Regular.Make(struct
-      type t = sub term with bin_io, compare, sexp
+      type t = sub term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Sub"
       let version = "0.1"
 
@@ -1070,7 +1070,7 @@ module Ir_program = struct
   end
 
   include Regular.Make(struct
-      type t = program term with bin_io, compare, sexp
+      type t = program term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Program"
       let version = "0.1"
 

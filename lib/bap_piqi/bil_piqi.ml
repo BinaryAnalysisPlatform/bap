@@ -244,7 +244,7 @@ and stmts_of_piqi l = List.map ~f:stmt_of_piqi l
 
 open Stmt_piqi_ext
 
-type fmt = [ `json | `pb | `piq | `pib | `xml ] with sexp, enumerate
+type fmt = [ `json | `pb | `piq | `pib | `xml ] [@@deriving sexp, enumerate]
 type out_fmt = [fmt | `json_pretty | `xml_pretty]
 
 let loads f g fmt s = f (g s fmt)

@@ -14,23 +14,23 @@ module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
 module Targets = Bap_disasm_target_factory
 
-type block = Block.t with compare, sexp_of
-type insn = Insn.t with bin_io, compare, sexp
-type op = Op.t with bin_io, compare, sexp
+type block = Block.t [@@deriving compare, sexp_of]
+type insn = Insn.t [@@deriving bin_io, compare, sexp]
+type op = Op.t [@@deriving bin_io, compare, sexp]
 type image = Image.t
 
 type error = [
   | `Failed of Error.t
   | `Errors of error * error
   | Rec.error
-] with sexp_of
+] [@@deriving sexp_of]
 
 type mem_state =
   | Failed of error                (** failed to decode anything    *)
   | Decoded of insn * error option (** decoded with optional errors *)
-with sexp_of
+[@@deriving sexp_of]
 
-type cfg = Rec.cfg with compare
+type cfg = Rec.cfg [@@deriving compare]
 
 type disasm = {
   cfg : cfg;

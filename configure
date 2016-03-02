@@ -33,7 +33,7 @@ if [ $WITHOUT_BAP_LIBRARY = "true" ]; then
 else
     ocaml tools/cat.ml oasis/common oasis/bap oasis/src _oasis
 fi
-
+ocaml tools/cat.ml _tags.in _tags
 ocaml tools/cat.ml myocamlbuild.ml.in myocamlbuild.ml
 ocaml tools/cat.ml setup.ml.in setup.ml
 oasis -quiet setup

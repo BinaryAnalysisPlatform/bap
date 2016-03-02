@@ -1,8 +1,8 @@
 open Core_kernel.Std
 open Bap.Std
 
-type source = Bap_source_type.t with sexp
-type fmt_spec = Bap_fmt_spec.t with sexp
+type source = Bap_source_type.t [@@deriving sexp]
+type fmt_spec = Bap_fmt_spec.t [@@deriving sexp]
 
 type t = {
   filename : string;
@@ -17,4 +17,4 @@ type t = {
   symbols : string list;
   reconstructor : string option;
   passes : string list;
-} with sexp, fields
+} [@@deriving sexp, fields]

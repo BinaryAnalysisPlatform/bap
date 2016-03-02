@@ -7,7 +7,7 @@ module type Corpus = sig
 end
 
 module type S = sig
-  type t with bin_io, sexp
+  type t [@@deriving bin_io, sexp]
   type key
   type corpus
 

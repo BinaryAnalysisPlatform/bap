@@ -1,20 +1,20 @@
 open Format
 
 module type Token = sig
-  type t  with bin_io, compare, sexp
+  type t  [@@deriving bin_io, compare, sexp]
   val hash : t -> int
 end
 
 module type Key = sig
   type t
-  type token with bin_io, compare, sexp
+  type token [@@deriving bin_io, compare, sexp]
   val length : t -> int
   val nth_token : t -> int -> token
   val token_hash : token -> int
 end
 
 module type S = sig
-  type 'a t with bin_io, sexp
+  type 'a t [@@deriving bin_io, sexp]
   type key
   val create : unit -> 'a t
   val add : 'a t -> key:key -> data:'a -> unit

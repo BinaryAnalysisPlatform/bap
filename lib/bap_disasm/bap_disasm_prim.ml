@@ -33,14 +33,14 @@ type pred =
   | May_affect_control_flow
   | May_store
   | May_load
-with compare, sexp
+[@@deriving compare, sexp]
 
 type op =
   | Reg
   | Imm
   | Fmm
   | Insn
-with compare, sexp
+[@@deriving compare, sexp]
 
 
 

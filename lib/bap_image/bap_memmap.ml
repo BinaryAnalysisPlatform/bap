@@ -8,7 +8,7 @@ module Mem = struct
   let compare x y =
     Addr.compare (min_addr x) (min_addr y)
 end
-type mem = Mem.t with sexp_of
+type mem = Mem.t [@@deriving sexp_of]
 
 
 (* instead of a usual [Empty|Node of _] we use [node option] type to
@@ -25,9 +25,9 @@ type +'a node = {
   height : int;
   max_addr : addr;
   min_addr : addr;
-} with fields, sexp_of
+} [@@deriving fields, sexp_of]
 
-type +'a t = 'a node option with sexp_of
+type +'a t = 'a node option [@@deriving sexp_of]
 
 let height = Option.value_map ~default:0 ~f:height
 

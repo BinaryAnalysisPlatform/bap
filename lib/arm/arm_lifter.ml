@@ -224,7 +224,7 @@ let lift_move mem ops (insn : move_insn) : stmt list =
     [Bil.move dest Bil.(var dest lor exp_of_op src lsl int32 16)] |>
     fun ins -> exec ins cond
   | insn,ops ->
-    fail _here_ "ops %s doesn't match move insn %s"
+    fail [%here] "ops %s doesn't match move insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -273,7 +273,7 @@ let lift_bits mem ops (insn : bits_insn ) =
 
   (* bit reverse *)
   | `RBIT, [|dest; src; cond; _|] ->
-    let dest = assert_reg _here_ dest in
+    let dest = assert_reg [%here] dest in
     let v = tmp ~name:"v" reg32_t in
     let r = tmp ~name:"r" reg32_t in
     let s = tmp ~name:"s" reg32_t in
@@ -347,7 +347,7 @@ let lift_bits mem ops (insn : bits_insn ) =
         Env.of_reg dest := var accum;
       ]) cond
   | insn,ops ->
-    fail _here_ "ops %s doesn't match bits insn %s"
+    fail [%here] "ops %s doesn't match bits insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -418,7 +418,7 @@ let lift_mult ops insn =
     lift_smul ~dest ~hidest ~src1 ~src2 ~accum:dest ~hiaccum:hidest BT cond
 
   | insn,ops ->
-    fail _here_ "ops %s doesn't match mult insn %s"
+    fail [%here] "ops %s doesn't match mult insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -497,7 +497,7 @@ let lift_mem_multi ops insn =
     exec insns cond
 
   | _ ->
-    fail _here_ "ops %s doesn't match multi arg insn %s"
+    fail [%here] "ops %s doesn't match multi arg insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -930,7 +930,7 @@ let lift_mem ops insn =
     exec (insns @ result) cond
   | #mem_multi_insn as insn, ops -> lift_mem_multi ops insn
   | insn,ops ->
-    fail _here_ "ops %s doesn't match mem access insn %s"
+    fail [%here] "ops %s doesn't match mem access insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -966,7 +966,7 @@ let lift_branch mem ops insn =
     Branch.lift offset ~link:true ~x:true addr
 
   | insn,ops ->
-    fail _here_ "ops %s doesn't match branch insn %s"
+    fail [%here] "ops %s doesn't match branch insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 
@@ -1025,13 +1025,13 @@ let lift_special ops insn =
   | `CPS2p, _ | `DMB, _ | `DSB, _ | `HINT, _ | `PLDi12, _ -> []
 
   | insn,ops ->
-    fail _here_ "ops %s doesn't match special insn %s"
+    fail [%here] "ops %s doesn't match special insn %s"
       (string_of_ops ops) (Arm_insn.to_string (insn :> insn))
 
 let arm_ops_exn ops () =
   Array.map (ops) ~f:(fun op ->
       Option.value_exn
-        ~here:_here_
+        ~here:[%here]
         ~error:(Error.create "unsupported operand" op Op.sexp_of_t )
         (Arm_op.create op))
 

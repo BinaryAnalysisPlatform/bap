@@ -4,7 +4,7 @@ type t = [
   | `Binary
   | `File of string
   | `Memory of arch
-] with sexp
+] [@@deriving sexp]
 
 exception Unknown_arch of string
 exception Unrecognized_source

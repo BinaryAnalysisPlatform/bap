@@ -1,5 +1,5 @@
 open Core_kernel.Std
-type 'a t with bin_io, compare, sexp
+type 'a t [@@deriving bin_io, compare, sexp]
 val create : ?capacity:int -> 'a -> 'a t
 val append : 'a t -> 'a -> unit
 val nth : 'a t -> int -> 'a option

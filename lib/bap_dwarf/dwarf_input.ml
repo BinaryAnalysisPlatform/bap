@@ -19,15 +19,15 @@ let read_cstring src ~pos_ref : string t =
     pos_ref := (pos + 1); (* move over the null byte  *)
     return dst
 
-TEST_MODULE = struct
+let%test_module _ = (module struct
   let str = "hello\000,\000world\000!\000"
   let pos_ref = ref 0
-  TEST = read_cstring str ~pos_ref = Ok "hello"
-  TEST = read_cstring str ~pos_ref = Ok ","
-  TEST = read_cstring str ~pos_ref = Ok "world"
-  TEST = read_cstring str ~pos_ref = Ok "!"
-  TEST = String.length str = pos_ref.contents
-end
+  let%test _ = read_cstring str ~pos_ref = Ok "hello"
+  let%test _ = read_cstring str ~pos_ref = Ok ","
+  let%test _ = read_cstring str ~pos_ref = Ok "world"
+  let%test _ = read_cstring str ~pos_ref = Ok "!"
+  let%test _ = String.length str = pos_ref.contents
+end)
 
 let read_leb128 inj str ~pos_ref =
   Leb128.read ~signed:false str ~pos_ref >>=

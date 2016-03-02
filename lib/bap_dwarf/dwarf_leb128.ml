@@ -16,7 +16,7 @@ end
 type t = {
   negative : bool;
   data : int list;
-} with sexp,bin_io,compare
+} [@@deriving sexp, bin_io, compare]
 
 type 'a encoder = ?signed:bool -> 'a -> t
 type 'a decoder = t -> 'a Or_error.t

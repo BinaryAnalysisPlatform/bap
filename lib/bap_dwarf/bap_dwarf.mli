@@ -6,7 +6,7 @@ module Std : sig
 
   module Leb128 : sig
     (** an encoded value  *)
-    type t with bin_io, compare, sexp
+    type t [@@deriving bin_io, compare, sexp]
 
     (** [encode ~signed v] encodes value [v] in a LEB128 format. If
         signed is true, then uses signed encoding. *)
@@ -40,7 +40,7 @@ module Std : sig
         | Info
         | Abbrev
         | Str
-      with sexp,bin_io,compare,variants
+      [@@deriving sexp, bin_io, compare, variants]
     end
 
     (** Debug Entry Tag  *)
@@ -52,7 +52,7 @@ module Std : sig
         | Entry_point
         | Inlined_subroutine
         | Unknown of int
-      with sexp,bin_io,compare,variants
+      [@@deriving sexp, bin_io, compare, variants]
     end
 
 
@@ -64,7 +64,7 @@ module Std : sig
         | High_pc
         | Entry_pc
         | Unknown of int
-      with sexp,bin_io,compare,variants
+      [@@deriving sexp, bin_io, compare, variants]
     end
 
     type lenspec =
@@ -73,7 +73,7 @@ module Std : sig
       | Two
       | Four
       | Eight
-    with sexp,bin_io,compare
+    [@@deriving sexp, bin_io, compare]
 
     (** Attribute form  *)
     module Form : sig
@@ -89,18 +89,18 @@ module Std : sig
         | Offset
         | Expr
         | Sig
-      with sexp,bin_io,compare,variants
+      [@@deriving sexp, bin_io, compare, variants]
     end
 
-    type tag  = Tag.t  with sexp,bin_io,compare
-    type attr = Attr.t with sexp,bin_io,compare
-    type form = Form.t with sexp,bin_io,compare
-    type section = Section.t with sexp,bin_io,compare
-    type fn with bin_io, compare, sexp
+    type tag  = Tag.t  [@@deriving sexp, bin_io, compare]
+    type attr = Attr.t [@@deriving sexp, bin_io, compare]
+    type form = Form.t [@@deriving sexp, bin_io, compare]
+    type section = Section.t [@@deriving sexp, bin_io, compare]
+    type fn [@@deriving bin_io, compare, sexp]
 
     (** Current function representation.  *)
     module Fn : sig
-      type t = fn with bin_io, compare, sexp
+      type t = fn [@@deriving bin_io, compare, sexp]
       val pc_lo : t -> addr
       val pc_hi : t -> addr option
       include Identifiable.S with type t := t

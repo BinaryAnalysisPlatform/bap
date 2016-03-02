@@ -6,5 +6,5 @@ module Segment = Image.Segment
 module Symbol  = Image.Symbol
 
 type image = Image.t
-type symbol  = Symbol.t with bin_io, compare, sexp
-type segment = Segment.t with bin_io, compare, sexp
+type symbol  = Symbol.t [@@deriving bin_io, compare, sexp]
+type segment = Segment.t [@@deriving bin_io, compare, sexp]

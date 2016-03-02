@@ -8,19 +8,14 @@ License:     MIT
 Copyrights:  (C) 2016 Carnegie Mellon University
 Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
-BuildTools: ocamlbuild, camlp4o
+BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
      -j 8
      -use-ocamlfind
      -classic-display
-     -plugin-tags "'package(findlib),package(core_kernel)'"
+     -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"
 
-BuildDepends: bin_prot.syntax,
-              camlp4,
-              comparelib.syntax,
-              core_kernel,
-              fieldslib.syntax,
-              sexplib.syntax
+BuildDepends: ppx_jane, core_kernel
 
 FilesAB: lib/bap_config/bap_config.ml.ab
 

@@ -3,7 +3,7 @@ open Regular.Std
 open Bap_common
 
 type var = Bap_var.t
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 (** Different forms of casting *)
 module Cast = struct
@@ -12,11 +12,11 @@ module Cast = struct
     | SIGNED   (** Sign-extending widening cast. *)
     | HIGH     (** Narrowning cast. Keeps the high bits. *)
     | LOW      (** Narrowing cast. Keeps the low bits. *)
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 end
 
 type cast = Cast.cast
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 (** Binary operations implemented in the IR *)
 module Binop = struct
@@ -40,11 +40,11 @@ module Binop = struct
     | LE      (** Unsigned less than or equal to. *)
     | SLT     (** Signed less than. *)
     | SLE     (** Signed less than or equal to. *)
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 end
 
 type binop = Binop.binop
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 
 (** Unary operations implemented in the IR *)
@@ -52,11 +52,11 @@ module Unop = struct
   type unop =
     | NEG (** Negate. (2's complement) *)
     | NOT (** Bitwise not. *)
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 end
 
 type unop = Unop.unop
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 module Exp = struct
   type exp =
@@ -77,10 +77,10 @@ module Exp = struct
     | Extract of nat1 * nat1 * exp
     (** Concat two reg expressions together *)
     | Concat  of exp * exp
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 end
 
-type exp = Exp.exp with bin_io, compare, sexp
+type exp = Exp.exp [@@deriving bin_io, compare, sexp]
 
 module Stmt = struct
   type stmt =
@@ -93,8 +93,8 @@ module Stmt = struct
     | While   of exp * stmt list
     | If      of exp * stmt list * stmt list
     | CpuExn  of int
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 end
 
-type stmt = Stmt.stmt with bin_io, compare, sexp
-type bil = stmt list with bin_io, compare, sexp
+type stmt = Stmt.stmt [@@deriving bin_io, compare, sexp]
+type bil = stmt list [@@deriving bin_io, compare, sexp]

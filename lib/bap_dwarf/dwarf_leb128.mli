@@ -2,7 +2,7 @@
 open Core_kernel.Std
 
 (** an encoded value  *)
-type t with bin_io, compare, sexp
+type t [@@deriving bin_io, compare, sexp]
 
 (** [encode ~signed v] encodes value [v] in a LEB128 format. If
     signed is true, then uses signed encoding. *)

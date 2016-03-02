@@ -3,7 +3,7 @@ open Bap_types.Std
 open Image_common
 
 type perm = R | W | X | Or of perm * perm
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 (** A named contiguous part of file with permissions.  *)
 module Segment = struct
@@ -12,7 +12,7 @@ module Segment = struct
     perm: perm;         (** segment's permissions  *)
     off: int;
     location : location;
-  } with bin_io, compare, fields, sexp
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
 (** Symbol definition, that can span several non-contiguous parts of
@@ -23,14 +23,14 @@ module Symbol = struct
     is_function : bool;
     is_debug : bool;
     locations : location * location list;
-  } with bin_io, compare, fields, sexp
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
 module Section = struct
   type t = {
     name : string;
     location : location;
-  } with bin_io, compare, fields, sexp
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
 module Img = struct
@@ -40,7 +40,7 @@ module Img = struct
     segments : Segment.t * Segment.t list;
     symbols  : Symbol.t list;
     sections : Section.t list;
-  } with bin_io, compare, fields, sexp
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
 type t = Bigstring.t -> Img.t option

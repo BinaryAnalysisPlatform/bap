@@ -6,7 +6,7 @@ open Bap.Std
 module Id = Bap_trace_id
 module Tab = String.Caseless.Table
 
-type event = value with bin_io, sexp, compare
+type event = value [@@deriving bin_io, sexp, compare]
 
 type error_handler = [
   | `Fail
@@ -19,8 +19,8 @@ type error_handler = [
 type users_handler = [ `User of (event Or_error.t seq -> event seq) ]
 type monitor = [ error_handler | users_handler ]
 type proto = string
-type tool  = string with bin_io, sexp
-type id = Id.t with bin_io, compare, sexp
+type tool  = string [@@deriving bin_io, sexp]
+type id = Id.t [@@deriving bin_io, compare, sexp]
 
 module Monitor = struct
   type t = monitor

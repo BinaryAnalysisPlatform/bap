@@ -37,7 +37,7 @@ let repair_reg reg imm ~sign_mask rtype =
   if negate then Bil.(int m_one * reg) else reg
 
 let lift_r_op ~dest1 ?dest2 ?shift ~base ~offset mode sign size operation =
-  let base = assert_reg _here_ base |> Env.of_reg in
+  let base = assert_reg [%here] base |> Env.of_reg in
   let (offset : exp) =
     match offset with
     | `Reg r -> Bil.(var (Env.of_reg r))
@@ -59,16 +59,16 @@ let lift_r_op ~dest1 ?dest2 ?shift ~base ~offset mode sign size operation =
   | `Reg (#gpr_reg as d), None  ->
     Mem.lift_r ~dst1:(Env.of_reg d) ~base ~offset mode sign size
       operation
-  | op1,op2 -> fail _here_ "Unexpected arguments: %s, %s"
+  | op1,op2 -> fail [%here] "Unexpected arguments: %s, %s"
                  (Arm_op.to_string (op1 : Arm_op.t))
                  (string_of_opt_op op2)
 
 let lift_r_exp ~dest1 ?dest2 ~base ~offset mode sign size operation =
-  let dest1 = assert_reg _here_ dest1 |> Env.of_reg in
-  let base = assert_reg _here_ base |> Env.of_reg in
+  let dest1 = assert_reg [%here] dest1 |> Env.of_reg in
+  let base = assert_reg [%here] base |> Env.of_reg in
   match dest2 with
   | Some dest2 ->
-    let dest2 = assert_reg _here_ dest2 |> Env.of_reg in
+    let dest2 = assert_reg [%here] dest2 |> Env.of_reg in
     Mem.lift_r ~dst1:dest1 ~dst2:dest2
       ~base ~offset mode sign size operation
   | None ->
@@ -77,9 +77,9 @@ let lift_r_exp ~dest1 ?dest2 ~base ~offset mode sign size operation =
 
 
 let lift_m dest_list base mode update operation =
-  let base = assert_reg _here_ base in
+  let base = assert_reg [%here] base in
   let dest_list = List.map  dest_list
-      ~f:(fun d -> assert_reg _here_ d |> Env.of_reg) in
+      ~f:(fun d -> assert_reg [%here] d |> Env.of_reg) in
   let base = Env.of_reg base in
   Mem.lift_m dest_list base mode update operation
 
@@ -93,7 +93,7 @@ let mem_offset_reg_or_imm_neg reg_off imm_off =
     repair_imm imm_off ~sign_mask:0x100 ~imm_mask:0xff `NEG
   | `Reg (#gpr_reg as reg) ->
     repair_reg Bil.(var (Env.of_reg reg)) imm_off ~sign_mask:0x100 `NEG
-  | op -> fail _here_ "unexpected operand: %s" (Arm_op.to_string op)
+  | op -> fail [%here] "unexpected operand: %s" (Arm_op.to_string op)
 
 let mem_offset_reg_or_imm_pos reg_off imm_off =
   match reg_off with
@@ -101,4 +101,4 @@ let mem_offset_reg_or_imm_pos reg_off imm_off =
     repair_imm imm_off ~sign_mask:0x100 ~imm_mask:0xff `POS
   | `Reg (#gpr_reg as reg) ->
     repair_reg Bil.(var (Env.of_reg reg)) imm_off ~sign_mask:0x1 `POS
-  | op -> fail _here_ "unexpected operand: %s" (Arm_op.to_string op)
+  | op -> fail [%here] "unexpected operand: %s" (Arm_op.to_string op)

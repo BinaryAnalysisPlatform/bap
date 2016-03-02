@@ -19,7 +19,7 @@ module Std = struct
       url : string sexp_option;
       license : string sexp_option;
       copyrights : string sexp_option;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
 
     let create
         ?(author=getenv "USER")
@@ -186,7 +186,7 @@ module Std = struct
           | `Drop -> ());
       Zip.close_in zin;
       let zout = Zip.open_out bundle.path in
-      Hashtbl.iter files ~f:(fun ~key:name ~data ->
+      Hashtbl.iteri files ~f:(fun ~key:name ~data ->
           match data with
           | `Data s -> Zip.add_entry s zout name
           | `Copy f -> Zip.copy_file_to_entry f zout name

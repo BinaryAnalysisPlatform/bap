@@ -6,7 +6,7 @@ open Cmdliner
 include Self()
 
 let extract name img =
-  let blk_of_sexp x = <:of_sexp<string*int64*int64>> x in
+  let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
   let arch = Image.arch img in
   let width = Arch.addr_size arch |> Size.in_bits in
   let addr = Addr.of_int64 ~width in

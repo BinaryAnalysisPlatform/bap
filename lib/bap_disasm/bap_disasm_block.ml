@@ -5,12 +5,12 @@ open Image_internal_std
 open Bap_disasm_basic
 
 module Insn = Bap_disasm_insn
-type insn = Insn.t with compare, bin_io, sexp
+type insn = Insn.t [@@deriving compare, bin_io, sexp]
 type jump = [
   | `Jump
   | `Cond
-] with compare, sexp
-type edge = [jump | `Fall] with compare,sexp
+] [@@deriving compare, sexp]
+type edge = [jump | `Fall] [@@deriving compare, sexp]
 
 type t = {
   addr : addr;
@@ -18,7 +18,7 @@ type t = {
   insns : (mem * insn) list;
   term : insn;
   lead : insn;
-} with fields, sexp_of
+} [@@deriving fields, sexp_of]
 
 let create mem insns =
   match insns with
@@ -29,7 +29,7 @@ let create mem insns =
     let term = List.last_exn insns |> snd in
     {addr; mem; insns; term; lead}
 
-type repr = addr * int with compare
+type repr = addr * int [@@deriving compare]
 let compare x y =
   let repr x = x.addr,Memory.length x.mem in
   compare_repr (repr x) (repr y)
@@ -39,7 +39,7 @@ let leader = lead
 let terminator = term
 
 include Opaque.Make(struct
-    type nonrec t = t with compare
+    type nonrec t = t [@@deriving compare]
     let hash t = Addr.hash t.addr
   end)
 

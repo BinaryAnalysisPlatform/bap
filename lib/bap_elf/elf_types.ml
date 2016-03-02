@@ -5,12 +5,12 @@ open Bap.Std
 type e_class =
   | ELFCLASS32
   | ELFCLASS64
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type e_data =
   | ELFDATA2LSB
   | ELFDATA2MSB
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type e_osabi =
   | ELFOSABI_SYSV
@@ -28,7 +28,7 @@ type e_osabi =
   | ELFOSABI_ARM
   | ELFOSABI_STANDALONE
   | ELFOSABI_EXT of int
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type e_type =
   | ET_NONE
@@ -37,7 +37,7 @@ type e_type =
   | ET_DYN
   | ET_CORE
   | ET_EXT of int
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type e_machine =
   | EM_NONE
@@ -122,7 +122,7 @@ type e_machine =
   | EM_MICROBLAZE
   | EM_TILEGX
   | EM_EXT of int
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type p_type =
   | PT_NULL
@@ -133,14 +133,14 @@ type p_type =
   | PT_SHLIB
   | PT_PHDR
   | PT_OTHER of int32
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type p_flag =
   | PF_X
   | PF_W
   | PF_R
   | PF_EXT of int
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type sh_type =
   | SHT_NULL
@@ -156,14 +156,14 @@ type sh_type =
   | SHT_SHLIB
   | SHT_DYNSYM
   | SHT_EXT of int32
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type sh_flag =
   | SHF_WRITE
   | SHF_ALLOC
   | SHF_EXECINSTR
   | SHF_EXT of int
-with bin_io,compare,sexp
+[@@deriving bin_io, compare, sexp]
 
 type segment = {
   p_type   : p_type;
@@ -174,7 +174,7 @@ type segment = {
   p_memsz  : int64;
   p_filesz : int64;
   p_offset : int64;
-} with bin_io,compare,fields,sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 type section = {
   sh_name : int;
@@ -187,7 +187,7 @@ type section = {
   sh_addralign : int64;
   sh_entsize : int64;
   sh_offset : int64;
-} with bin_io,compare,fields,sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 
 type elf = {
@@ -202,10 +202,10 @@ type elf = {
   e_shstrndx : int;
   e_sections : section seq;
   e_segments : segment seq;
-} with bin_io,compare,fields,sexp
+} [@@deriving bin_io, compare, fields, sexp]
 
 type table_info = {
   table_offset : int64;
   entry_size : int;
   entry_num : int;
-} with bin_io,compare,fields,sexp
+} [@@deriving bin_io, compare, fields, sexp]

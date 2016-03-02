@@ -33,7 +33,7 @@ module Std = struct
       | Wait {waiters} ->
         v.cell <- Full x;
         List.iter waiters ~f:(fun f -> f x)
-    
+
     let full x = {cell = Full x}
 
     let empty () = {cell = Wait {waiters=[]}}
@@ -114,10 +114,10 @@ module Std = struct
     type 'a t = 'a signal
     let send (Signal send) x = send x
 
-    let repeat (Signal send) ~times x = 
+    let repeat (Signal send) ~times x =
       let rec repeat' = function
         | cnt when cnt < times ->
-          send x; 
+          send x;
           repeat' (cnt + 1)
         | _ -> () in
       repeat' 0
@@ -157,7 +157,7 @@ module Std = struct
       List.iter t.on_unsubs ~f:(fun f -> f id)
 
     let publish t event =
-      Hashtbl.iter t.subs ~f:(fun ~key:id ~data:notify ->
+      Hashtbl.iteri t.subs ~f:(fun ~key:id ~data:notify ->
           try notify id event with exn ->
             unsubscribe t id;
             raise exn)
@@ -211,9 +211,9 @@ module Std = struct
       let finish, promise  = Future.create () in
       let state = ref init in
       let do_nothing () = `finished in
-      let do_publish () = 
+      let do_publish () =
         match f !state with
-        | None -> 
+        | None ->
           Promise.fulfill promise ();
           `finished
         | Some (x,s) ->
@@ -221,11 +221,11 @@ module Std = struct
           publish x;
           `continue in
       let do_send = ref do_publish in
-      let send () = match !do_send () with 
+      let send () = match !do_send () with
         | `finished -> do_send := do_nothing
         | `continue -> () in
       stream, Signal send, finish
-    
+
     let from f =
       let stream,Signal send = create () in
       let send () = f () |> send in
@@ -304,8 +304,8 @@ module Std = struct
               k := None)));
       on_unsubscribe s' (fun _ -> match !k with
           | None -> ()
-          | Some k' -> 
-            unsubscribe s k'; 
+          | Some k' ->
+            unsubscribe s k';
             k := None);
       on_wait s' (fun () -> wait s);
       s'
@@ -363,9 +363,9 @@ module Std = struct
       unsubscribe xs id;
       Promise.fulfill p x
 
-    let before event xs = 
+    let before event xs =
       let future, promise = Future.create () in
-      let buf = Queue.create () in     
+      let buf = Queue.create () in
       let id = subscribe xs (Queue.enqueue buf) in
       Future.upon event
         (fun () -> on_result xs id (Queue.to_list buf) promise);
@@ -373,45 +373,45 @@ module Std = struct
 
     let last_before e xs n =
       let buf = Queue.create () in
-      let add_value x = 
-        if Queue.length buf >= n then 
+      let add_value x =
+        if Queue.length buf >= n then
           ignore (Queue.dequeue buf);
         Queue.enqueue buf x in
       let id = subscribe xs add_value in
       let future, promise = Future.create () in
-      Future.upon e 
+      Future.upon e
         (fun () -> on_result xs id (Queue.to_list buf) promise);
       future
 
-    let take xs n = 
-      let buf = Queue.create () in 
+    let take xs n =
+      let buf = Queue.create () in
       let future, promise = Future.create () in
-      let add_value id x = 
+      let add_value id x =
         if Queue.length buf < n then Queue.enqueue buf x;
         if Queue.length buf = n then
           on_result xs id (Queue.to_list buf) promise in
       watch xs add_value;
       future
 
-    let nth xs n = 
+    let nth xs n =
       let cnt = ref 0 in
       let future, promise = Future.create () in
-      let f id x = 
-        if !cnt = n then 
+      let f id x =
+        if !cnt = n then
           on_result xs id x promise;
         Int.incr cnt; in
       watch xs f;
       future
-      
-    let find xs ~f = 
+
+    let find xs ~f =
       let future, promise = Future.create () in
-      let f id x = 
-        if f x then 
+      let f id x =
+        if f x then
           on_result xs id x promise in
       watch xs f;
       future
 
-    let find_map xs ~f = 
+    let find_map xs ~f =
       let future, promise = Future.create () in
       let f id x = match f x with
         | None -> ()
@@ -419,7 +419,7 @@ module Std = struct
       watch xs f;
       future
 
-    let hd xs = 
+    let hd xs =
       let future, promise = Future.create () in
       let f id x = on_result xs id x promise in
       watch xs f;
@@ -428,7 +428,7 @@ module Std = struct
     let tl xs =
       let s, Signal publish = create () in
       let ign = ref true in
-      let f x = 
+      let f x =
         if !ign then ign := false
         else publish x in
       link xs s f;
@@ -472,7 +472,7 @@ module Std = struct
         | n -> None, n - 1 in
       parse xs ~init:0 ~f:fold
 
-    let split xs ~f = 
+    let split xs ~f =
       let s, Signal push = create () in
       let s', Signal push' = create () in
       link xs s (fun x -> push (fst (f x)));
@@ -481,14 +481,14 @@ module Std = struct
 
     let unzip xs = split xs ~f:ident
 
-    let frame ~clk dat ~init ~f = 
+    let frame ~clk dat ~init ~f =
       let s = sync ~clk dat in
       let s', Signal push = create () in
       let f xs = push (List.fold_left ~init ~f xs) in
       link s s' f;
       s'
 
-    let sample ~clk dat = 
+    let sample ~clk dat =
       let s = sync ~clk dat in
       let s', Signal push = create () in
       let f = function

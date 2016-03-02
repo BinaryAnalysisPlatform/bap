@@ -126,11 +126,11 @@ module Frontier = struct
 end
 
 module Equiv = struct
-  type t = int with bin_io, compare, sexp
+  type t = int [@@deriving bin_io, compare, sexp]
   let to_int = ident
   include Regular.Make(struct
       include Int
-      let module_name = Some "Bap.Std.Equiv"
+      let module_name = Some "Graphlib.Std.Equiv"
       let version = "0.1"
 
     end)
@@ -469,7 +469,7 @@ let compare (type e) (type g) (type n)
     (module E : Graph with type t = e and type node = n)
     (module G : Graph with type t = g and type node = n) e g =
   let module Edges = Set.Make(struct
-      type t = E.Node.t * E.Node.t with compare
+      type t = E.Node.t * E.Node.t [@@deriving compare]
       let sexp_of_t = sexp_of_opaque
       let t_of_sexp = opaque_of_sexp
     end) in
@@ -679,7 +679,7 @@ let idom (type t) (type n) (type e)
         ~leave_node:(fun _ n i ->
             if i >= len then return ();
             node.(i) <- n;
-            Hashtbl.replace pnums ~key:n ~data:i;
+            Hashtbl.set pnums ~key:n ~data:i;
             i + 1) |> (ignore : int -> _));
   let rec lift x y : int = match x,y with
     | -1,_ | _, -1 -> len - 1
@@ -799,7 +799,7 @@ module Path = struct
   type 'a t = {
     edges  : 'a array;
     weight : int;
-  } with bin_io, compare, sexp, fields
+  } [@@deriving bin_io, compare, sexp, fields]
   let create edges weight = {
     edges = Array.of_list_rev edges;
     weight;
@@ -848,7 +848,7 @@ let shortest_path
         match Hashtbl.find dist ev with
         | Some w when w < dev -> ()
         | _ ->
-          Hashtbl.replace dist ev dev;
+          Hashtbl.set dist ev dev;
           Heap.add q (dev, ev, e :: p)) in
   Heap.add q (0, v1, []);
   Hashtbl.set dist v1 0;

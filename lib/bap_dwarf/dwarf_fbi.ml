@@ -14,17 +14,17 @@ module Value = struct
   type hi_addr =
     | Abs of addr
     | Rel of int64
-  with sexp,bin_io,compare
+  [@@deriving sexp, bin_io, compare]
 
   type t =
     | Id of string
     | Lo of addr
     | Hi of hi_addr
-  with sexp,bin_io,compare,variants
+  [@@deriving sexp, bin_io, compare, variants]
 end
 
 type 'a reader = 'a Dwarf_input.reader
-type value = Value.t with sexp,bin_io,compare
+type value = Value.t [@@deriving sexp, bin_io, compare]
 type scheme = value option reader list
 type table = scheme Table.t
 
@@ -35,7 +35,7 @@ module Fn = struct
     type t = {
       pc_hi: addr sexp_option;
       pc_lo: addr;
-    } with sexp,bin_io,compare,fields
+    } [@@deriving sexp, bin_io, compare, fields]
 
     let int_of_int64 off : int Or_error.t =
       Result.of_option
@@ -61,7 +61,7 @@ module Fn = struct
     end)
 end
 
-type fn = Fn.t with sexp,bin_io,compare
+type fn = Fn.t [@@deriving sexp, bin_io, compare]
 type t = (string * fn) Sequence.t
 
 type spec = {

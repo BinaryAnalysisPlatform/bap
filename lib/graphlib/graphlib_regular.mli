@@ -18,6 +18,3 @@ module Aux(M : sig
     include Pretty_printer.S
     val module_name : string
   end) : Aux with type node := M.t
-
-module Int    : S with type node = int
-module String : S with type node = string

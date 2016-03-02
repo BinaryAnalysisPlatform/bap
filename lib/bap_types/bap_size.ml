@@ -56,7 +56,7 @@ let addr_of_int_opt n = Result.ok (addr_of_int n)
 module T = struct
   open Format
 
-  type t = size with bin_io, compare, sexp
+  type t = size [@@deriving bin_io, compare, sexp]
   let module_name = Some "Bap.Std.Size"
   let version = "0.1"
   let pp fmt n =

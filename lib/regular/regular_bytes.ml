@@ -7,7 +7,7 @@ module Binable = Bin_prot.Utils.Make_binable(struct
     module Binable = String
     type t = Std_bytes.t
     let to_binable = Std_bytes.unsafe_to_string
-    let of_binable = Std_bytes.of_string 
+    let of_binable = Std_bytes.of_string
   end)
 
 module Stringable = struct
@@ -19,9 +19,9 @@ end
 module Sexpable = Sexpable.Of_stringable(Stringable)
 
 module type Seq = sig
-  type t with sexp_of
-  type elt 
-  val create: int -> t 
+  type t [@@deriving sexp_of]
+  type elt
+  val create: int -> t
   val length: t -> int
   val get: t -> int -> elt
   val set: t -> int -> elt -> unit
@@ -29,7 +29,7 @@ module type Seq = sig
 end
 
 module Make(S : Seq) = struct
-  type t = S.t with sexp_of
+  type t = S.t [@@deriving sexp_of]
   type elt = S.elt
   let create ~len = S.create len
   let length = S.length
@@ -49,7 +49,7 @@ module T = struct
   include Binable
   include Sexpable
   type elt = Elt.t
-  let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len = 
+  let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
     unsafe_blit src src_pos dst dst_pos len
 
   let init len ~f = init len f
@@ -66,7 +66,7 @@ include Blit.Make(Elt)(B)
 module To_string = Blit.Make_distinct (Elt)(B)(S)
 module From_string = Blit.Make_distinct (Elt)(S)(B)
 
-external length: t -> int = "%string_length" 
+external length: t -> int = "%string_length"
 
 let convert     = T.unsafe_to_string
 let apply t f   = f (convert t)
@@ -82,15 +82,15 @@ let to_array t  = apply t String.to_array
 let to_list t   = apply t String.to_list
 let find_map t  = apply t String.find_map
 let sum m t ~f  = apply t (fun s -> String.sum m s ~f)
-let is_empty t  = apply t String.is_empty 
+let is_empty t  = apply t String.is_empty
 let mem ?(equal = (=)) t elt = String.mem ~equal (convert t) elt
 
 include Identifiable.Make(struct
-    type t = T.t with bin_io, compare, sexp
+    type t = T.t [@@deriving bin_io, compare, sexp]
     let of_string = Stringable.of_string
     let to_string = Stringable.to_string
     let hash = Hashtbl.hash
-    let module_name = "Bap.Std.Bytes"
+    let module_name = "Regular.Std.Bytes"
   end)
 
 module Unsafe = struct
@@ -103,4 +103,3 @@ module Unsafe = struct
   external blit : T.t -> int -> T.t -> int -> int -> unit = "caml_blit_string" "noalloc"
   external fill : T.t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
 end
-

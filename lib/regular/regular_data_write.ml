@@ -11,7 +11,7 @@ type 'a t = {
   pp   : Format.formatter -> 'a -> unit;
   to_bytes : 'a -> bytes;
   to_bigstring : 'a -> bigstring;
-} with fields
+} [@@deriving fields]
 
 let not_sufficient () =
   invalid_arg "Writable class definition is not complete"

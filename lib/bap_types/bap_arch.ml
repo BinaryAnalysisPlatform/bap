@@ -5,7 +5,7 @@ open Bap_common
 module T = struct
   open Arch
   type t = arch
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 
   let hash = Hashtbl.hash
 

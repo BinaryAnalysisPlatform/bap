@@ -9,10 +9,4 @@ module Std = struct
   module Project = Bap_project
   module Self = Bap_self.Create
   type project = Project.t
-  module Graphs = struct
-    module Tid = Bap_tid_graph
-    module Ir = Bap_ir_graph
-    module Callgraph = Bap_ir_callgraph
-    module Cfg = Cfg
-  end
 end

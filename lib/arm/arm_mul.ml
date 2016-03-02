@@ -11,8 +11,8 @@ module Shift = Arm_shift
 module Flags = Arm_flags
 
 let lift_mull ~lodest ~hidest ~src1 ~src2 sign ?addend ~wflag cond =
-  let lodest = assert_reg _here_ lodest in
-  let hidest = assert_reg _here_ hidest in
+  let lodest = assert_reg [%here] lodest in
+  let hidest = assert_reg [%here] hidest in
   let s1_64, s2_64 =
     let cast src = cast_of_sign sign 64 (exp_of_op src) in
     cast src1, cast src2 in
@@ -31,7 +31,7 @@ let lift_mull ~lodest ~hidest ~src1 ~src2 sign ?addend ~wflag cond =
   exec insns ~flags ~wflag cond
 
 let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
-  let dest = assert_reg _here_ dest in
+  let dest = assert_reg [%here] dest in
   let src1 = exp_of_op src1 in
   let src2 = exp_of_op src2 in
   let excast hi lo s = Bil.(cast signed 64 (extract hi lo s)) in
@@ -56,7 +56,7 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
     | None,   None     -> result
     | Some a, None     -> result + cast signed 64 (exp_of_op a)
     | Some a, Some hia -> result + concat (exp_of_op hia) (exp_of_op a)
-    | _ -> fail _here_ "Cannot specify only a hi accumulator" in
+    | _ -> fail [%here] "Cannot specify only a hi accumulator" in
   let qflag =
     match q with
     | Some true ->
@@ -73,5 +73,5 @@ let lift_smul ~dest ?hidest ~src1 ~src2 ?accum ?hiaccum ?q size cond =
         Bil.move res result;
         Bil.move (Env.of_reg dest) Bil.(extract 31 0 (var res));
       ]
-    | _ -> fail _here_ "unexpected operand type" in
+    | _ -> fail [%here] "unexpected operand type" in
   exec (instr @ qflag) cond

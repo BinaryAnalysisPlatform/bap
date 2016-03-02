@@ -106,7 +106,7 @@ end
 type ('n,'a) labeled = {
   node : 'n;
   node_label : 'a;
-} with bin_io, sexp
+} [@@deriving bin_io, sexp]
 
 
 type node_attr = Graph.Graphviz.DotAttributes.vertex

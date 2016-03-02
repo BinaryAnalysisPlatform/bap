@@ -8,7 +8,7 @@ module type Corpus = sig
 end
 
 module type S = sig
-  type t with bin_io, sexp
+  type t [@@deriving bin_io, sexp]
   type key
   type corpus
 
@@ -29,10 +29,10 @@ module Make
     (Trie : Trie with type key = Corpus.key) = struct
 
   module Bin = struct
-    type t = (int * int) Trie.t with bin_io, sexp
+    type t = (int * int) Trie.t [@@deriving bin_io, sexp]
   end
 
-  type t = Bin.t with bin_io, sexp
+  type t = Bin.t [@@deriving bin_io, sexp]
   type corpus = Corpus.t
   type key = Corpus.key
 

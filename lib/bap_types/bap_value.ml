@@ -6,14 +6,14 @@ open Format
 module Typeid = String
 
 module type S = sig
-  type t with bin_io, compare, sexp
+  type t [@@deriving bin_io, compare, sexp]
   val pp : Format.formatter -> t -> unit
 end
 
 type void
 type univ = Univ.t
 type literal = (void,void,void) format
-type typeid = String.t with bin_io, compare, sexp
+type typeid = String.t [@@deriving bin_io, compare, sexp]
 
 type 'a tag = {
   tid : typeid;
@@ -23,9 +23,9 @@ type 'a tag = {
 type t = {
   uuid : typeid;
   data : string
-} with bin_io, sexp
+} [@@deriving bin_io, sexp]
 
-type value = t with bin_io, sexp
+type value = t [@@deriving bin_io, sexp]
 
 type type_info = {
   pp   : Format.formatter -> univ -> unit;
@@ -165,7 +165,7 @@ end
 
 module Dict = struct
 
-  type t = value Typeid.Map.t with bin_io, compare, sexp
+  type t = value Typeid.Map.t [@@deriving bin_io, compare, sexp]
 
   let uuid tag = tag.tid
 
@@ -195,10 +195,12 @@ module Dict = struct
     Map.to_sequence t |> Sequence.map ~f:snd
 end
 
-type dict = Dict.t with bin_io, compare,sexp
+type dict = Dict.t [@@deriving bin_io, compare, sexp]
+
 
 include Regular.Make(struct
-    type nonrec t = t with bin_io, compare, sexp
+    type nonrec t = value [@@deriving bin_io, compare, sexp]
+    let compare = compare
     let hash = Hashtbl.hash
 
     let pp ppf v =

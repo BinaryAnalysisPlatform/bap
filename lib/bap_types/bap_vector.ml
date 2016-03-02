@@ -4,7 +4,7 @@ type 'a t = {
   mutable size : int;
   mutable data : 'a array;
   default : 'a;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
 let create ?(capacity=16) default =
   let capacity = max capacity 1 in

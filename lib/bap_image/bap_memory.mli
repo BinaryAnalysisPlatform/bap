@@ -5,7 +5,7 @@ open Regular.Std
 open Bap_types.Std
 open Image_common
 
-type t with sexp_of
+type t [@@deriving sexp_of]
 
 val create
   : ?pos:int                    (** defaults to [0]  *)

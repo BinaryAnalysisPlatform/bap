@@ -209,10 +209,10 @@ let strlen = List.concat [
    (blk_num, kind).
 *)
 
-type dest_kind = [`Jump | `Cond | `Fall ] with sexp
+type dest_kind = [`Jump | `Cond | `Fall ] [@@deriving sexp]
 
 type graph = (int * int list * (int * dest_kind) list) list
-with sexp_of
+[@@deriving sexp_of]
 
 let graph : graph = [
   1, [],    [3, `Jump];

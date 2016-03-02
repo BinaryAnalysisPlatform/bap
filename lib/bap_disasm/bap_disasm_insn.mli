@@ -3,8 +3,8 @@ open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
 
-type t with bin_io, compare, sexp
-type op = Op.t with bin_io, compare, sexp
+type t [@@deriving bin_io, compare, sexp]
+type op = Op.t [@@deriving bin_io, compare, sexp]
 
 val of_basic : ?bil:bil -> Basic.full_insn -> t
 

@@ -9,12 +9,12 @@ open Image_internal_std
 
 (** {2 Type definitions}  *)
 
-type t with sexp_of            (** image   *)
+type t [@@deriving sexp_of]            (** image   *)
 
 (** segment *)
-type segment with bin_io, compare, sexp
+type segment [@@deriving bin_io, compare, sexp]
 (** symbol  *)
-type symbol with bin_io, compare, sexp
+type symbol [@@deriving bin_io, compare, sexp]
 
 type path = string
 
