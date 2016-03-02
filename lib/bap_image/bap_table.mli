@@ -17,7 +17,7 @@
 open Core_kernel.Std
 open Bap_types.Std
 
-type 'a t with sexp_of
+type 'a t [@@deriving sexp_of]
 type mem = Bap_memory.t
 type 'a hashable = 'a Hashtbl.Hashable.t
 

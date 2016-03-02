@@ -16,11 +16,11 @@ let bits_of_size = function
 let wordm x = Ok (Word.of_int x ~width:32)
 
 let extend ~dest ~src ?src2 sign size ~rot cond =
-  let rot = assert_imm _here_ rot in
-  let dest = assert_reg _here_ dest in
+  let rot = assert_imm [%here] rot in
+  let dest = assert_reg [%here] dest in
   let amount = match Word.Int_err.((!$rot * wordm 8)) with
     | Ok amount -> amount
-    | Error err -> fail _here_ "failed to obtain amount" in
+    | Error err -> fail [%here] "failed to obtain amount" in
   let rotated, (_ : exp) =
     if Word.is_zero amount then
       exp_of_op src, Bil.int (Word.zero 32)
@@ -36,12 +36,12 @@ let extend ~dest ~src ?src2 sign size ~rot cond =
   exec [assn (Env.of_reg dest) final] cond
 
 let bit_extract ~dest ~src sign ~lsb ~widthminus1 cond =
-  let dest = assert_reg _here_ dest in
-  let lsb = assert_imm _here_ lsb in
-  let widthminus1 = assert_imm _here_ widthminus1 in
+  let dest = assert_reg [%here] dest in
+  let lsb = assert_imm [%here] lsb in
+  let widthminus1 = assert_imm [%here] widthminus1 in
   let int_of_imm imm = match Word.to_int imm with
     | Ok imm -> imm
-    | Error err -> fail _here_ "can't cast word to int: %s" @@
+    | Error err -> fail [%here] "can't cast word to int: %s" @@
       Error.to_string_hum err  in
   let low = int_of_imm lsb in
   let high = low + (int_of_imm widthminus1) in
@@ -58,10 +58,10 @@ let get_lsb_width instr : int * int =
   let width = abs (msb - lsb + !$1) in
   match Word.(to_int lsb, to_int width) with
   | Ok lsb, Ok width -> lsb,width
-  | _ -> fail _here_ "failed to get_lsb_width"
+  | _ -> fail [%here] "failed to get_lsb_width"
 
 let bit_field_insert ~dest ~src raw cond =
-  let dest = assert_reg _here_ dest in
+  let dest = assert_reg [%here] dest in
   let d   = Env.of_reg dest in
   let d_e = Bil.var d in
   let lsb, width = get_lsb_width raw in

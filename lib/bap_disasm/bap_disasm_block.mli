@@ -8,9 +8,9 @@ type insn = Bap_disasm_insn.t
 type jump = [
   | `Jump
   | `Cond
-] with compare, sexp
-type edge = [jump | `Fall] with compare,sexp
-type t with compare, sexp_of
+] [@@deriving compare, sexp]
+type edge = [jump | `Fall] [@@deriving compare, sexp]
+type t [@@deriving compare, sexp_of]
 
 val create : mem -> (mem * insn) list -> t
 val addr : t -> addr

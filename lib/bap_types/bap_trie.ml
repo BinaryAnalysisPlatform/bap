@@ -6,7 +6,7 @@ open Bap_trie_intf
 
 module Make(Key : Key) = struct
   module Tokens = Hashtbl.Make_binable(struct
-      type t = Key.token with bin_io, compare, sexp
+      type t = Key.token [@@deriving bin_io, compare, sexp]
       let hash = Key.token_hash
     end)
 
@@ -14,7 +14,7 @@ module Make(Key : Key) = struct
   type 'a t = {
     mutable data : 'a option;
     subs : 'a t Tokens.t;
-  } with bin_io, fields, sexp
+  } [@@deriving bin_io, fields, sexp]
 
   let init v = {data = Some v; subs = Tokens.create ()}
   let create () = {data = None; subs = Tokens.create ()}
@@ -76,7 +76,7 @@ module Make(Key : Key) = struct
       | None -> ()
       | Some v -> fprintf fmt "data =@ %a@," pp_val v in
     let pp_table fmt cs =
-      Tokens.iter cs (fun ~key ~data ->
+      Tokens.iteri cs (fun ~key ~data ->
           let toks = Key.sexp_of_token key in
           fprintf fmt "@[%a ->@ %a@]"
             Sexp.pp toks (pp pp_val) data) in
@@ -87,7 +87,7 @@ end
 module String = struct
   module Common = struct
     type t = string
-    type token = char with bin_io, compare, sexp
+    type token = char [@@deriving bin_io, compare, sexp]
     let length = String.length
     let token_hash = Char.to_int
   end
@@ -106,7 +106,7 @@ end
 module Array = struct
   module Common(T : Token) = struct
     type t = T.t array
-    type token = T.t with bin_io, compare, sexp
+    type token = T.t [@@deriving bin_io, compare, sexp]
     let length = Array.length
     let token_hash = T.hash
   end

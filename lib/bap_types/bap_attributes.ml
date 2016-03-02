@@ -12,13 +12,13 @@ module Color = struct
     | `magenta
     | `cyan
     | `white
-  ] with bin_io, compare, sexp
+  ] [@@deriving bin_io, compare, sexp]
   let pp ppf color =
     Format.fprintf ppf "%a" Sexp.pp (sexp_of_t color)
 end
 
 module Foreground = struct
-  type t = Color.t with bin_io, compare, sexp
+  type t = Color.t [@@deriving bin_io, compare, sexp]
   let to_ascii = function
     | `black   -> "\x1b[30m"
     | `red     -> "\x1b[31m"
@@ -32,7 +32,7 @@ module Foreground = struct
 end
 
 module Background = struct
-  type t = Color.t with bin_io, compare, sexp
+  type t = Color.t [@@deriving bin_io, compare, sexp]
   let to_ascii : t -> string = function
     | `black   -> "\x1b[40m"
     | `red     -> "\x1b[41m"
@@ -46,7 +46,9 @@ module Background = struct
   let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
 end
 
-type color = Color.t with bin_io, compare, sexp
+type color = Color.t [@@deriving bin_io, compare, sexp]
+(* see: https://github.com/janestreet/ppx_sexp_conv/issues/3 *)
+let __color_of_sexp__ = Color.__t_of_sexp__
 
 let comment = register (module String)
     ~name:"comment"

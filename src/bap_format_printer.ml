@@ -10,7 +10,7 @@ let run dir (module Data : Data ) =
   fmts () |> List.fold ~init:String.Map.empty
     ~f:(fun fmts (name, `Ver ver, desc) ->
         Map.add_multi fmts ~key:name ~data:(ver,desc)) |>
-  Map.iter ~f:(fun ~key:name ~data:desc ->
+  Map.iteri ~f:(fun ~key:name ~data:desc ->
       match desc with
       | [] -> ()
       | (v,desc) :: rest ->

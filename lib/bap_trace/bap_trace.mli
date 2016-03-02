@@ -31,10 +31,10 @@ open Bap.Std
     with [tag] value.
 *)
 
-type event = value with bin_io, sexp, compare
+type event = value [@@deriving bin_io, sexp, compare]
 type monitor
 type proto
-type tool with bin_io, sexp
+type tool [@@deriving bin_io, sexp]
 type id
 type t
 

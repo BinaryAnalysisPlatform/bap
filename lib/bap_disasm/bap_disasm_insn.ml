@@ -29,7 +29,7 @@ let load                = prop "load"
 let store               = prop "store"
 
 module Props = struct
-  type t = Z.t with compare
+  type t = Z.t [@@deriving compare]
   module Bits = struct
     type t = Z.t
     let to_string = Z.to_bits
@@ -53,9 +53,9 @@ type t = {
   bil  : bil;
   ops  : Op.t array;
   props : Props.t;
-} with bin_io, fields, compare, sexp
+} [@@deriving bin_io, fields, compare, sexp]
 
-type op = Op.t with bin_io, compare, sexp
+type op = Op.t [@@deriving bin_io, compare, sexp]
 
 let normalize_asm asm =
   String.substr_replace_all asm ~pattern:"\t"
@@ -143,7 +143,7 @@ let pp_adt = Adt.pp
 
 module Trie = struct
   module Key = struct
-    type token = int * Op.t array with bin_io, compare, sexp
+    type token = int * Op.t array [@@deriving bin_io, compare, sexp]
     type t = token array
 
     let length = Array.length
@@ -169,7 +169,7 @@ module Trie = struct
 end
 
 include Regular.Make(struct
-    type nonrec t = t with sexp, bin_io, compare
+    type nonrec t = t [@@deriving sexp, bin_io, compare]
     let hash t = t.code
     let module_name = Some "Bap.Std.Insn"
     let version = "0.1"

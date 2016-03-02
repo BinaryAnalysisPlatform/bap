@@ -11,35 +11,35 @@ type empty
 type asm
 type kinds
 
-type mem = Mem.t with sexp_of
-type kind = Kind.t with compare, sexp
+type mem = Mem.t [@@deriving sexp_of]
+type kind = Kind.t [@@deriving compare, sexp]
 
 type pred = [
   | `Valid
-  |  kind
-] with sexp,compare
+  |  Kind.t
+] [@@deriving sexp, compare]
 
 type 'a oper = {
   oper : int;
   insn : int;
   data : 'a;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
 type reg_info = {
   reg_code : int;
   reg_name : string;
-} with bin_io, sexp
+} [@@deriving bin_io, sexp]
 
 let compare_reg_info {reg_code=x} {reg_code=y} = Int.compare x y
 
 type imm_info = {
   imm_small : int;
   imm_large : int64 sexp_option;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
-type reg = reg_info oper with bin_io, compare, sexp
-type imm = imm_info oper with bin_io, compare, sexp
-type fmm = float    oper with bin_io, compare, sexp
+type reg = reg_info oper [@@deriving bin_io, compare, sexp]
+type imm = imm_info oper [@@deriving bin_io, compare, sexp]
+type fmm = float    oper [@@deriving bin_io, compare, sexp]
 
 module Table = struct
   (* Bigstring.length is very slow... we should report a bug to the
@@ -97,7 +97,7 @@ module Reg = struct
 
   module T = struct
     type t = reg
-    with bin_io, sexp, compare
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Reg"
     let version = "0.1"
@@ -140,7 +140,7 @@ module Imm = struct
 
   module T = struct
     type t = imm
-    with bin_io, sexp, compare
+    [@@deriving bin_io, sexp, compare]
     let module_name = Some "Bap.Std.Imm"
     let version = "0.1"
     let pp fmt t =
@@ -170,7 +170,7 @@ module Fmm = struct
 
   module T = struct
     type t = fmm
-    with bin_io, sexp, compare
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Fmm"
     let version = "0.1"
@@ -188,7 +188,7 @@ module Op = struct
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-    with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
     let pr fmt = Format.fprintf fmt
     let pp fmt = function
@@ -239,7 +239,7 @@ module Op = struct
 end
 
 type op = Op.t
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 let cpred_of_pred : pred -> C.pred = function
   | `Valid -> C.Is_true
@@ -335,23 +335,23 @@ type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
 module Pred = struct
   include Comparable.Make(struct
-      type t = pred with compare, sexp
+      type t = pred [@@deriving compare, sexp]
     end)
 end
 
 module Preds = Pred.Set
-type preds = Preds.t with compare, sexp
+type preds = Preds.t [@@deriving compare, sexp]
 
 type step = {
   mem : mem;
   off : int;
   preds : preds;
-} with sexp_of
+} [@@deriving sexp_of]
 
 type ('a,'k) maybe_insn = mem * ('a,'k) insn option
 
 let sexp_of_maybe_ins (_,insn) =
-  <:sexp_of<insn option>> insn
+  [%sexp_of:insn option] insn
 
 
 type (+'a,+'k,'s,'r) state = {
@@ -365,7 +365,7 @@ type (+'a,+'k,'s,'r) state = {
   invalid : (('a,'k,'s,'r) state -> mem -> 's -> 'r) option sexp_opaque;
   hit : (('a,'k,'s,'r) state -> mem -> (asm,kinds) insn -> 's -> 'r)
       option sexp_opaque;
-} with sexp_of
+} [@@deriving sexp_of]
 
 let create_state ?(backlog=8) ?(stop_on=[]) ?stopped ?invalid ?hit dis
     mem ~return  = {
@@ -544,7 +544,7 @@ module Trie = struct
 
   module Key = struct
     type t = key
-    type token = int * Op.t array with bin_io, compare, sexp
+    type token = int * Op.t array [@@deriving bin_io, compare, sexp]
     let length = fst
     let nth_token (_, State s) i =
       match s.insns.(i) with

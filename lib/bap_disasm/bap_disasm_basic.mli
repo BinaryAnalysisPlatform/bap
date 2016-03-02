@@ -2,24 +2,24 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_types.Std
 
-type mem = Bap_memory.t with sexp_of
-type kind = Bap_insn_kind.t with compare, sexp
+type mem = Bap_memory.t [@@deriving sexp_of]
+type kind = Bap_insn_kind.t [@@deriving compare, sexp]
 
 type pred = [
   | `Valid
   |  kind
-] with sexp
+] [@@deriving sexp]
 
-type reg  with bin_io, compare, sexp
-type imm  with bin_io, compare, sexp
-type fmm  with bin_io, compare, sexp
+type reg  [@@deriving bin_io, compare, sexp]
+type imm  [@@deriving bin_io, compare, sexp]
+type fmm  [@@deriving bin_io, compare, sexp]
 type (+'a,+'k) insn
 type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 type empty
 type asm
 type kinds
 
-type full_insn = (asm,kinds) insn with compare, sexp_of
+type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 type ('a,'k) t
 type (+'a,+'k,'s,'r) state
 
@@ -58,7 +58,7 @@ module Op : sig
     | Reg of reg
     | Imm of imm
     | Fmm of fmm
-  with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 
   module Normalized : sig
     val compare : t -> t -> int
@@ -70,7 +70,7 @@ module Op : sig
   include Regular with type t := t
 end
 
-type op = Op.t with bin_io, compare, sexp
+type op = Op.t [@@deriving bin_io, compare, sexp]
 
 module Insn : sig
   type ('a,'k) t = ('a,'k) insn

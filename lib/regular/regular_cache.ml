@@ -4,7 +4,7 @@ open Regular_data_intf
 type 'a t = {
   load : string -> 'a option;
   save : string -> 'a -> unit;
-} with fields
+} [@@deriving fields]
 
 let create ~load ~save = {load; save}
 

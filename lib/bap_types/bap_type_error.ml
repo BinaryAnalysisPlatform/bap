@@ -2,13 +2,13 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_common
 
-type type_error = [
+type t = [
   | `bad_kind of [`mem | `imm]
   | `bad_type of typ * typ
   | `bad_cast
-] with bin_io, compare, sexp
+] [@@deriving bin_io, compare, sexp]
 
-type t = type_error with bin_io, compare, sexp
+type type_error = t [@@deriving bin_io, compare, sexp]
 
 let bad_mem  = (`bad_kind `mem)
 let bad_imm  = (`bad_kind `imm)
@@ -24,7 +24,7 @@ let to_string : type_error -> string = function
       Bap_type.pps t1 Bap_type.pps t2
 
 include Regular.Make(struct
-    type t = type_error with bin_io, compare, sexp
+    type t = type_error [@@deriving bin_io, compare, sexp]
 
     let pp ppf e =
       Format.fprintf ppf "%s" (to_string e)

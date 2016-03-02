@@ -13,7 +13,7 @@ open Bap_types.Std
 
 type mem = Bap_memory.t
 
-type 'a t with sexp_of
+type 'a t [@@deriving sexp_of]
 
 (** [empty] map  *)
 val empty : 'a t

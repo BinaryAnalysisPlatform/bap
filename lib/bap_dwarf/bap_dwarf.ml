@@ -6,6 +6,6 @@ module Std = struct
     module Data = Dwarf_data
     module Buffer = Data.Buffer
     module Fn = Fbi.Fn
-    type fn = Fn.t with bin_io, compare, sexp
+    type fn = Fn.t [@@deriving bin_io, compare, sexp]
   end
 end

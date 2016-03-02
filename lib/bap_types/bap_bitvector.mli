@@ -2,11 +2,11 @@ open Core_kernel.Std
 open Regular.Std
 
 type t
-exception Width with sexp
+exception Width [@@deriving sexp]
 type endian =
   | LittleEndian
   | BigEndian
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 include Regular with type t := t
 include Comparable.With_zero with type t := t

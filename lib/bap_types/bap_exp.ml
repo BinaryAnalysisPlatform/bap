@@ -200,7 +200,7 @@ module PP = struct
 end
 
 include Regular.Make(struct
-    type t = Bap_bil.exp with bin_io, compare, sexp
+    type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Exp"
     let version = "0.1"

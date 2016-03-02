@@ -22,10 +22,10 @@ type cond = [
   | `GT
   | `LE
   | `AL
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type nil_reg = [ `Nil ]
-with bin_io, compare, sexp, enumerate
+[@@deriving bin_io, compare, sexp, enumerate]
 
 (** General purpose registers  *)
 type gpr_reg = [
@@ -45,31 +45,31 @@ type gpr_reg = [
   | `LR
   | `PC
   | `SP
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type gpr_or_nil = [nil_reg | gpr_reg]
-with bin_io, compare, sexp, enumerate
+[@@deriving bin_io, compare, sexp, enumerate]
 
 (** conditition code registers  *)
 type ccr_reg = [
   | `CPSR
   | `SPSR
   | `ITSTATE
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type ccr_or_nil = [nil_reg | ccr_reg ]
-with bin_io, compare, sexp, enumerate
+[@@deriving bin_io, compare, sexp, enumerate]
 
 type non_nil_reg = [gpr_reg | ccr_reg]
-with bin_io, compare, sexp, enumerate
+[@@deriving bin_io, compare, sexp, enumerate]
 
 type reg = [nil_reg | non_nil_reg]
-with bin_io, compare, sexp, enumerate
+[@@deriving bin_io, compare, sexp, enumerate]
 
 type op = [
   | `Reg of reg
   | `Imm of word
-] with bin_io, compare, sexp
+] [@@deriving bin_io, compare, sexp]
 
 type move_insn = [
   | `ADCri
@@ -138,7 +138,7 @@ type move_insn = [
   | `TSTrr
   | `TSTrsi
   | `TSTrsr
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type bits_insn = [
   | `BFC
@@ -159,7 +159,7 @@ type bits_insn = [
   | `REV
   | `REV16
   | `CLZ
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type mult_insn = [
   | `MLA
@@ -176,7 +176,7 @@ type mult_insn = [
   | `SMULTB
   | `UMLAL
   | `UMULL
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 
 type mem_multi_insn = [
@@ -196,7 +196,7 @@ type mem_multi_insn = [
   | `STMIA_UPD
   | `STMIB
   | `STMIB_UPD
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 
 type mem_insn = [
@@ -262,7 +262,7 @@ type mem_insn = [
   | `STR_PRE_REG
   | `STRi12
   | `STRrs
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type branch_insn = [
   | `BL
@@ -274,7 +274,7 @@ type branch_insn = [
   | `BX_RET
   | `BX_pred
   | `Bcc
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type special_insn = [
   | `CPS2p
@@ -285,7 +285,7 @@ type special_insn = [
   | `MSR
   | `PLDi12
   | `SVC
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 type insn = [
   | move_insn
@@ -294,7 +294,7 @@ type insn = [
   | mem_insn
   | branch_insn
   | special_insn
-] with bin_io, compare, sexp, enumerate
+] [@@deriving bin_io, compare, sexp, enumerate]
 
 (** Memory access operations *)
 

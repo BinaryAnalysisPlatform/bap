@@ -14,7 +14,7 @@ let lift ?dest src1 ?src2 (itype ) ?sreg ?simm raw ~wflag cond =
   let dest : var = match dest with
     | None     -> tmp reg32_t
     | Some (`Reg reg) -> Env.of_reg reg
-    | Some (`Imm _) -> fail _here_ "dest is not a reg" in
+    | Some (`Imm _) -> fail [%here] "dest is not a reg" in
   let s1 : exp = exp_of_op src1 in
   let s2 : exp = match src2 with
     | Some src -> exp_of_op src

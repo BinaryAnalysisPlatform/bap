@@ -60,9 +60,9 @@ module Make(T : Versioned) = struct
   let version = T.version
 
   module Ver = Comparable.Make(struct
-      type t = string with sexp
+      type t = string [@@deriving sexp]
       let sep = '.'
-      type strings = string list with compare
+      type strings = string list [@@deriving compare]
       let compare x y =
         let x = String.split ~on:sep x in
         let y = String.split ~on:sep y in

@@ -13,7 +13,7 @@ module type Printable = sig
 end
 
 module type S = sig
-  type t with bin_io, sexp, compare
+  type t [@@deriving bin_io, sexp, compare]
   include Printable            with type t := t
   include Comparable.S_binable with type t := t
   include Hashable.S_binable   with type t := t
@@ -21,7 +21,7 @@ module type S = sig
 end
 
 module Make(M : sig
-    type t with bin_io, sexp, compare
+    type t [@@deriving bin_io, sexp, compare]
     include Pretty_printer.S with type t := t
     include Versioned with type t := t
     val hash : t -> int

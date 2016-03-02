@@ -5,7 +5,7 @@ module Section = struct
     name : string;
     addr: int64;
     size : int64;
-  } with fields
+  } [@@deriving fields]
 end
 
 
@@ -18,7 +18,7 @@ module Segment = struct
     is_readable: bool;
     is_writable: bool;
     is_executable: bool;
-  } with fields
+  } [@@deriving fields]
 
 end
 
@@ -36,5 +36,5 @@ module Symbol = struct
     kind : kind;
     addr : int64;
     size : int64;
-  } with fields
+  } [@@deriving fields]
 end

@@ -1,11 +1,8 @@
-EXT here
-EXT nonrec
-EXT ounit
-
 FLG -short-paths
 FLG -w -4-33-40-41-42-43-34-44
 
 PKG core_kernel
+PKG ppx_jane
 PKG fileutils
 PKG uri
 

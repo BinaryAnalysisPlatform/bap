@@ -7,7 +7,7 @@ module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
 
-  type t = {bundle : bundle; path : string; name : string} with fields
+  type t = {bundle : bundle; path : string; name : string} [@@deriving fields]
 
   type reason = [
     | `In_core

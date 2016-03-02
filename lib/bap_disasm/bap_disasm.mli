@@ -7,10 +7,10 @@ open Bap_disasm_brancher
 open Bap_disasm_rooter
 
 type disasm
-type insn = Bap_disasm_insn.t with bin_io, compare, sexp
-type op = Op.t with bin_io, compare, sexp_of
-type block = Bap_disasm_block.t with compare, sexp_of
-type cfg = Bap_disasm_rec.Cfg.t with compare
+type insn = Bap_disasm_insn.t [@@deriving bin_io, compare, sexp]
+type op = Op.t [@@deriving bin_io, compare, sexp_of]
+type block = Bap_disasm_block.t [@@deriving compare, sexp_of]
+type cfg = Bap_disasm_rec.Cfg.t [@@deriving compare]
 
 module Disasm : sig
   type t = disasm

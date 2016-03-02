@@ -33,21 +33,21 @@ module Std : sig
     type 'a t = {
       cell : 'a;
       data : word;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Chunk : sig
     type t = {
       addr : addr;
       data : string;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Syscall : sig
     type t = {
       number : int;
       args : word array;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Exn : sig
@@ -55,31 +55,31 @@ module Std : sig
       number : int;
       src : addr option;
       dst : addr option;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Location : sig
     type t = {
       name : string option;
       addr : addr;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
-  type location = Location.t with bin_io, compare, sexp
+  type location = Location.t [@@deriving bin_io, compare, sexp]
 
   module Call : sig
     type t = {
       caller : location;
       callee : location;
       args : word array;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Return : sig
     type t = {
       caller : string;
       callee : string;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   module Modload : sig
@@ -87,16 +87,16 @@ module Std : sig
       name : string;
       low : addr;
       high : addr;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
-  type 'a move = 'a Move.t with bin_io, compare, sexp
-  type chunk = Chunk.t with bin_io, compare, sexp
-  type syscall = Syscall.t with bin_io, compare, sexp
-  type exn = Exn.t with bin_io,compare,sexp
-  type call = Call.t with bin_io,compare,sexp
-  type return = Return.t with bin_io,compare,sexp
-  type modload = Modload.t with bin_io,compare,sexp
+  type 'a move = 'a Move.t [@@deriving bin_io, compare, sexp]
+  type chunk = Chunk.t [@@deriving bin_io, compare, sexp]
+  type syscall = Syscall.t [@@deriving bin_io, compare, sexp]
+  type exn = Exn.t [@@deriving bin_io, compare, sexp]
+  type call = Call.t [@@deriving bin_io, compare, sexp]
+  type return = Return.t [@@deriving bin_io, compare, sexp]
+  type modload = Modload.t [@@deriving bin_io, compare, sexp]
 
   module Event : sig
 
@@ -148,14 +148,14 @@ module Std : sig
       name : string;
       args : string array;
       version : string;   (** release or Git hash, or SVN number *)
-    } with bin_io, compare, sexp
+    } [@@deriving bin_io, compare, sexp]
   end
 
   module Binary : sig
     type t = {
       path : string;
       stripped : bool option;     (* yes, no, unknown *)
-    } with bin_io, compare, sexp
+    } [@@deriving bin_io, compare, sexp]
   end
 
   module File_stats : sig
@@ -164,12 +164,12 @@ module Std : sig
       atime : float;
       mtime : float;
       ctime : float;
-    } with bin_io, compare, sexp
+    } [@@deriving bin_io, compare, sexp]
   end
 
-  type tracer = Tracer.t with bin_io, compare, sexp
-  type binary = Binary.t with bin_io, compare, sexp
-  type file_stats = File_stats.t with bin_io, compare, sexp
+  type tracer = Tracer.t [@@deriving bin_io, compare, sexp]
+  type binary = Binary.t [@@deriving bin_io, compare, sexp]
+  type file_stats = File_stats.t [@@deriving bin_io, compare, sexp]
 
   module Meta : sig
 
@@ -200,10 +200,10 @@ module Std : sig
   end
 
   module Trace : sig
-    type event = value with bin_io, sexp, compare
+    type event = value [@@deriving bin_io, sexp, compare]
     type monitor
     type proto
-    type tool with bin_io, sexp
+    type tool [@@deriving bin_io, sexp]
     type id
     type t
 

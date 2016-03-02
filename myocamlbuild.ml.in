@@ -50,12 +50,16 @@ end
 
 let mark_tags () =
   let open Ocamlbuild_compat in
-  mark_tag_used "pkg_core_bench";
-  mark_tag_used "tests";
-  mark_tag_used "pkg_piqirun"
+  List.iter mark_tag_used [
+    "pkg_core_bench";
+    "tests";
+    "pkg_piqirun";
+    "pkg_core";
+  ]
 
 let () =
   mark_tags ();
   Ocamlbuild_plugin.dispatch (fun hook ->
       dispatch hook;
-      dispatch_default hook)
+      dispatch_default hook;
+      Ppx_driver_ocamlbuild.dispatch hook)

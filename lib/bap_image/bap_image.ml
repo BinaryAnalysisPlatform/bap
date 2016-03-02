@@ -8,7 +8,7 @@ open Image_internal_std
 open Backend
 
 type 'a m = 'a Or_error.t
-type img = Backend.Img.t with sexp_of
+type img = Backend.Img.t [@@deriving sexp_of]
 type path = string
 
 let backends : Backend.t String.Table.t =
@@ -29,7 +29,7 @@ let (+>) = Fn.compose
 
 module Segment = struct
   module T = struct
-    type t = Segment.t with bin_io, compare, sexp
+    type t = Segment.t [@@deriving bin_io, compare, sexp]
     let hash = Addr.hash +> Location.addr +> Segment.location
     let pp fmt t = Format.fprintf fmt "%s" @@ Segment.name t
     let module_name = Some "Bap.Std.Image.Segment"
@@ -52,7 +52,7 @@ end
 
 module Symbol = struct
   module T = struct
-    type t = Symbol.t with bin_io, compare, sexp
+    type t = Symbol.t [@@deriving bin_io, compare, sexp]
     let hash = Addr.hash +> Location.addr +> fst +> Symbol.locations
     let pp fmt t = Format.fprintf fmt "%s" @@ Symbol.name t
     let module_name = Some "Bap.Std.Image.Symbol"
@@ -62,8 +62,8 @@ module Symbol = struct
   include Regular.Make(T)
 end
 
-type segment = Segment.t with bin_io, compare, sexp
-type symbol = Symbol.t with bin_io, compare, sexp
+type segment = Segment.t [@@deriving bin_io, compare, sexp]
+type symbol = Symbol.t [@@deriving bin_io, compare, sexp]
 
 let segment = Value.Tag.register (module Segment)
     ~name:"segment"
@@ -102,14 +102,14 @@ type t = {
   memory_of_symbol : (symbol -> mem * mem seq) Lazy.t sexp_opaque;
   symbols_of_segment : (segment -> symbol seq) Lazy.t sexp_opaque;
   segment_of_symbol : (symbol -> segment) Lazy.t sexp_opaque;
-} with sexp_of
+} [@@deriving sexp_of]
 
 type result = (t * Error.t list) Or_error.t
 
 let memory_error ?here msg mem =
   Error.create ?here msg
     (Memory.min_addr mem, Memory.max_addr mem)
-    <:sexp_of<(addr*addr)>>
+    [%sexp_of:(addr*addr)]
 
 let (++!) e1 e2 = Error.of_list [e1;e2]
 
@@ -283,7 +283,7 @@ let of_backend backend data path : result =
   | Some load -> match load data with
     | Some img -> of_img img data path
     | None -> error "create image" (backend,`path path)
-                <:sexp_of<string * [`path of string option]>>
+                [%sexp_of:string * [`path of string option]]
 
 let autoload data path =
   let bs = String.Table.data backends in
@@ -331,7 +331,7 @@ let memory_of_symbol {memory_of_symbol = lazy f} = f
 let symbols_of_segment {symbols_of_segment = lazy f} = f
 let segment_of_symbol {segment_of_symbol = lazy f} = f
 
-TEST_MODULE = struct
+let%test_module _ = (module struct
 
   let expect ?(print=false) ~errors data_size ss =
     let width = 32 in
@@ -358,14 +358,14 @@ TEST_MODULE = struct
     let has_errors = Validate.errors v <> [] in
     errors = has_errors
 
-  TEST = expect ~errors:true  0 [0,0,0]
-  TEST = expect ~errors:true  1 [0,0,0]
-  TEST = expect ~errors:false 1 [0,0,1]
-  TEST = expect ~errors:true  8 [0,0,4; 2,4,4]
-  TEST = expect ~errors:true  8 [0,0,4; 4,0,4]
-  TEST = expect ~errors:true  7 [0,0,4; 4,4,4]
-  TEST = expect ~errors:true  8 [0,0,4; 4,1,4]
-  TEST = expect ~errors:true  8 [0,2,4; 4,0,4]
-  TEST = expect ~errors:true  8 [0,1,4; 4,0,4]
-  TEST = expect ~errors:true  8 [0,0,4; 4,1,4]
-end
+  let%test _ = expect ~errors:true  0 [0,0,0]
+  let%test _ = expect ~errors:true  1 [0,0,0]
+  let%test _ = expect ~errors:false 1 [0,0,1]
+  let%test _ = expect ~errors:true  8 [0,0,4; 2,4,4]
+  let%test _ = expect ~errors:true  8 [0,0,4; 4,0,4]
+  let%test _ = expect ~errors:true  7 [0,0,4; 4,4,4]
+  let%test _ = expect ~errors:true  8 [0,0,4; 4,1,4]
+  let%test _ = expect ~errors:true  8 [0,2,4; 4,0,4]
+  let%test _ = expect ~errors:true  8 [0,1,4; 4,0,4]
+  let%test _ = expect ~errors:true  8 [0,0,4; 4,1,4]
+end)

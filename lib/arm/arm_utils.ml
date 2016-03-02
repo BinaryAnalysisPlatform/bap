@@ -42,7 +42,7 @@ let exec
     ?(wflag : op option)
     (cond : op) : stmt list =
   (* write to the flags if wflag is CPSR *)
-  let cond = assert_cond _here_ cond in
+  let cond = assert_cond [%here] cond in
   let stmts = match flags, wflag with
     | Some f, Some (`Reg `CPSR) -> stmts @ f
     | _ -> stmts in

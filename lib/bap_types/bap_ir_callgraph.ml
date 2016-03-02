@@ -28,7 +28,7 @@ include G
 
 include Printable(struct
     type t = G.t
-    let module_name = Some "Bap.Std.Graphlib.Callgraph"
+    let module_name = None
     let version = "0.1"
 
     let pp ppf g =

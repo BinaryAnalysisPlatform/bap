@@ -7,9 +7,9 @@ module Source = Bap_disasm_source
 module Targets = Bap_disasm_target_factory
 module Dis = Bap_disasm_basic
 
-type edge = Bap_disasm_block.edge with sexp
-type dest = addr option * edge with sexp
-type dests = dest list with sexp
+type edge = Bap_disasm_block.edge [@@deriving sexp]
+type dest = addr option * edge [@@deriving sexp]
+type dests = dest list [@@deriving sexp]
 type full_insn = Bap_disasm_basic.full_insn
 
 type t = Brancher of (mem -> full_insn -> dests)

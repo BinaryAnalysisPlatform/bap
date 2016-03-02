@@ -56,16 +56,16 @@ module Test_algo(Gl : Graph_for_algo) = struct
   let timestamps ty gr : int * ('n,node_info,_) Map.t =
     Graphlib.depth_first_search ty gr ~init:(0,Node.Map.empty)
       ~enter_node:(fun pre node (time,stamps) ->
-          time + 1, Map.change stamps node @@ function
+          time + 1, Map.change stamps node ~f:(function
           | None -> Some {empty with pre; enter = time}
-          | _ -> assert_failure "Node was entered several times")
+          | _ -> assert_failure "Node was entered several times"))
       ~leave_node:(fun rpost node (time,stamps) ->
-          time + 1, Map.change stamps node @@ function
+          time + 1, Map.change stamps node ~f:(function
           | None -> assert_failure "Node was left without entering"
           | Some info ->
             assert_bool "Lemma 1.2: entry[x] < leave[x]" @@
             (info.enter < time);
-            Some {info with rpost; leave = time})
+            Some {info with rpost; leave = time}))
 
   module Span = struct
     type t = {
@@ -84,9 +84,9 @@ module Test_algo(Gl : Graph_for_algo) = struct
           | Some cs when Set.mem cs child ->
             assert_failure "Child was already adopted"
           | Some cs -> Some (Set.add cs child));
-      iparents = Map.change t.iparents child @@ function
+      iparents = Map.change t.iparents child ~f:(function
         | None -> Some parent
-        | Some parent -> assert_failure "Child has more than one parent";
+        | Some parent -> assert_failure "Child has more than one parent")
     }
 
     let children t parent = match Map.find t.children parent with
@@ -273,7 +273,7 @@ module Construction(Factory : Factory) = struct
      compare function) *)
   module Nodes = G.Node.Set
   module Edges = Set.Make(struct
-      type t = G.Node.t * G.Node.t * G.Node.t with compare
+      type t = G.Node.t * G.Node.t * G.Node.t [@@deriving compare]
       let sexp_of_t = sexp_of_opaque
       let t_of_sexp = opaque_of_sexp
     end)

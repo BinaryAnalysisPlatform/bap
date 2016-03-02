@@ -14,7 +14,7 @@ let shift_of_word op = match Word.to_int op with
   | Ok 3 -> `LSR
   | Ok 4 -> `ROR
   | Ok 5 -> `RRX
-  | _ -> fail _here_ "Imm %s, doesn't stand for shift"
+  | _ -> fail [%here] "Imm %s, doesn't stand for shift"
            (Word.to_string op)
 
 let shift_c ~src shift_type ~shift t =
@@ -51,11 +51,11 @@ let shift_c ~src shift_type ~shift t =
     shifted, carry
 
 let r_shift ~src shift_type ~shift t =
-  let shift_type = assert_imm _here_ shift_type in
+  let shift_type = assert_imm [%here] shift_type in
   shift_c ~src (shift_of_word shift_type) ~shift t
 
 let i_shift ~src shift_type t =
-  let shift_type = assert_imm _here_ shift_type in
+  let shift_type = assert_imm [%here] shift_type in
   let width = bitlen t in
   let mask = Word.of_int 7 ~width in
   let three = Word.of_int 3 ~width in
@@ -68,7 +68,7 @@ let i_shift ~src shift_type t =
     fun shift_amt ->
     return (shift_t, shift_amt) in
   match r with
-  | Error err -> fail _here_ "%s" Error.(to_string_hum err)
+  | Error err -> fail [%here] "%s" Error.(to_string_hum err)
   | Ok (shift_t, shift_amt) ->
     shift_c ~src shift_t ~shift:Bil.(int shift_amt) t
 
@@ -82,7 +82,7 @@ let i_shift ~src shift_type t =
  * typ - the type
  **)
 let mem_shift ~src shift typ =
-  let shift = assert_imm _here_ shift in
+  let shift = assert_imm [%here] shift in
   let width = bitlen typ in
   let word = Word.of_int ~width in
   let wordm n = Ok (word n) in
@@ -100,7 +100,7 @@ let mem_shift ~src shift typ =
   let r = shift_typ shift >>= fun t -> shift_amt shift >>= fun amt ->
     return (t,amt) in
   match r with
-  | Error err -> fail _here_ "%s" Error.(to_string_hum err)
+  | Error err -> fail [%here] "%s" Error.(to_string_hum err)
   | Ok (t,amount) ->
     let exp, _ = shift_c ~src t ~shift:amount typ in
     to_neg shift exp

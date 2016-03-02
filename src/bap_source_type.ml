@@ -10,7 +10,7 @@ type t = [
   | `Binary
   | `File of string
   | `Memory of arch
-] with sexp
+] [@@deriving sexp]
 
 
 let arch_exn str = match Arch.of_string str with

@@ -7,7 +7,7 @@ type 'a t = {
   of_channel : in_channel -> 'a;
   of_bigstring : bigstring -> 'a ;
   of_bytes : bytes -> 'a;
-} with fields
+} [@@deriving fields]
 
 let not_sufficient () =
   invalid_arg "Readable class definition is not complete"

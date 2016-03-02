@@ -22,7 +22,7 @@ end = struct
   let zero = Int63.zero
   let succ = Int63.succ
   include Regular.Make(struct
-      type t = Int63.t with bin_io, compare, sexp
+      type t = Int63.t [@@deriving bin_io, compare, sexp]
       let pp ppf id =
         Format.fprintf ppf "0x%LX" (Int63.to_int64 id)
       let hash = Int63.hash

@@ -4,7 +4,7 @@ open Bap.Std
 
 open Arm_types
 
-type t = cond with bin_io, compare, sexp
+type t = cond [@@deriving bin_io, compare, sexp]
 
 let of_int_exn = function
   | 0 ->  `EQ
@@ -30,7 +30,7 @@ let create w =
   try_with (fun () -> of_int_exn w)
 
 include Regular.Make(struct
-    type t = cond with bin_io, compare, sexp
+    type t = cond [@@deriving bin_io, compare, sexp]
     let hash (cond : t) = Hashtbl.hash cond
     let module_name = Some "Arm.Cond"
     let version = "0.1"

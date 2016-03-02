@@ -3,7 +3,7 @@ open Bap.Std
 open Dwarf_types
 
 type t
-type fn with bin_io, compare, sexp
+type fn [@@deriving bin_io, compare, sexp]
 
 (** [create data] tries to create a DWARF reader, from
     supplied [data]. May yield an error, if there wasn't sufficient
@@ -23,7 +23,7 @@ val functions : t -> (string * fn) Sequence.t
 
 (** Current function representation.  *)
 module Fn : sig
-  type t = fn with bin_io, compare, sexp
+  type t = fn [@@deriving bin_io, compare, sexp]
   val pc_lo : t -> addr
   val pc_hi : t -> addr option
   include Identifiable.S with type t := t

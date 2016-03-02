@@ -7,7 +7,7 @@ module Buffer = struct
   type 'a t = {
     data : 'a;
     pos : int;
-  } with sexp,bin_io,compare,fields
+  } [@@deriving sexp, bin_io, compare, fields]
 
   let with_pos t pos = { t with pos }
   let with_off t off = { t with pos = t.pos + off}
@@ -20,7 +20,7 @@ type 'a buffer = 'a Buffer.t
 
 module Section = struct
   module T = struct
-    type t = Section.t with sexp,bin_io,compare
+    type t = Section.t [@@deriving sexp, bin_io, compare]
   end
   include T
   include Comparable.Make(T)

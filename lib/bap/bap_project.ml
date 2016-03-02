@@ -23,11 +23,11 @@ type t = {
   program : program term;
   symbols : Symtab.t;
   state : state;
-} with fields
+} [@@deriving fields]
 
 
-type bound = [`min | `max] with sexp
-type spec = [`name | bound] with sexp
+type bound = [`min | `max] [@@deriving sexp]
+type spec = [`name | bound] [@@deriving sexp]
 
 type subst = [
   | `section of spec
@@ -36,7 +36,7 @@ type subst = [
   | `block of bound
   | `asm
   | `bil
-] with sexp
+] [@@deriving sexp]
 
 
 let roots rooter = match rooter with
@@ -253,9 +253,9 @@ let register_pass' ?deps ?name v : unit =
 type error =
   | Not_loaded of string
   | Runtime_error of string * exn
-with variants, sexp_of
+[@@deriving variants, sexp_of]
 
-exception Pass_failed of error with sexp
+exception Pass_failed of error [@@deriving sexp]
 let plugin_failure error = raise (Pass_failed error)
 let fail name error = plugin_failure (error name)
 

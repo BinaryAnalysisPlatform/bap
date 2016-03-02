@@ -14,7 +14,7 @@ type t
 type insn = Bap_disasm_insn.t
 type block = Bap_disasm_block.t
 
-type cfg with compare
+type cfg [@@deriving compare]
 module Cfg : Graph with type t = cfg
                     and type node = block
                     and type Edge.label = Bap_disasm_block.edge
@@ -23,7 +23,7 @@ module Cfg : Graph with type t = cfg
 type error = [
   | `Failed_to_disasm of mem
   | `Failed_to_lift of mem * full_insn * Error.t
-] with sexp_of
+] [@@deriving sexp_of]
 
 val run :
   ?backend:string ->

@@ -5,9 +5,9 @@ open Image_internal_std
 type block = Bap_disasm_block.t
 type cfg = Bap_disasm_rec.Cfg.t
 
-type t with sexp_of
-type symtab = t with sexp_of
-type fn = string * block * cfg with sexp_of
+type t [@@deriving sexp_of]
+type symtab = t [@@deriving sexp_of]
+type fn = string * block * cfg [@@deriving sexp_of]
 
 
 val empty : t

@@ -29,12 +29,12 @@ let parse_name filename =
   let name,ver = split_right ~after:'-' filename in
   extension name >>| fun ext -> ext,ver
 
-TEST_MODULE = struct
-  TEST = parse_name "subs" = None
-  TEST = parse_name "subs.sexp" = Some ("sexp",None)
-  TEST = parse_name "subs.sexp-1.0" = Some ("sexp", Some "1.0")
-  TEST = parse_name "subs.local.sexp" = Some ("sexp",None)
-  TEST = parse_name "subs." = Some ("",None)
-  TEST = parse_name "subs-1.0" = None
-  TEST = parse_name "subs.sexp-" = Some ("sexp", Some "")
-end
+let%test_module _ = (module struct
+  let%test _ = parse_name "subs" = None
+  let%test _ = parse_name "subs.sexp" = Some ("sexp",None)
+  let%test _ = parse_name "subs.sexp-1.0" = Some ("sexp", Some "1.0")
+  let%test _ = parse_name "subs.local.sexp" = Some ("sexp",None)
+  let%test _ = parse_name "subs." = Some ("",None)
+  let%test _ = parse_name "subs-1.0" = None
+  let%test _ = parse_name "subs.sexp-" = Some ("sexp", Some "")
+end)

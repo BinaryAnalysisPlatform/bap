@@ -3,8 +3,8 @@ open Bap.Std
 open Cmdliner
 open Format
 
-type output = [`file of string | `stdout] with sexp
-type t = output * string * string option with sexp
+type output = [`file of string | `stdout] [@@deriving sexp]
+type t = output * string * string option [@@deriving sexp]
 
 let parse_fmt fmt = 
   match String.split ~on:'-' fmt with

@@ -23,7 +23,7 @@ module Getters = struct
     int64 : getter;
     int128 : getter;
     int256 : getter;
-  } with fields
+  } [@@deriving fields]
 end
 
 open Getters
@@ -43,7 +43,7 @@ module Repr = struct
     offset  : int;
     base    : addr;
     size    : int;
-  } with sexp_of
+  } [@@deriving sexp_of]
 end
 
 let to_repr mem = {
@@ -445,7 +445,7 @@ module Trie = struct
   module Key(Spec : sig val size : size end ) = struct
     open Spec
     type nonrec t = t
-    type token = word with bin_io, compare, sexp
+    type token = word [@@deriving bin_io, compare, sexp]
 
     let length m = length m / Size.in_bytes size
     let nth_token m n = get ~index:n ~scale:size m |> ok_exn

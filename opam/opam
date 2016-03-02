@@ -47,8 +47,10 @@ depends: [
     "bitstring"
     "camlzip"
     "cmdliner" {>= "0.9.6"}
-    "core_kernel" {>= "112.35.0" & < "113.00.0"}
-    "ezjsonm" {>= "0.4.0" & < "0.4.1" }
+    "ppx_jane" {>= "113.24.01"}
+    "ppx_test"
+    "core_kernel" {>= "113.24.00"}
+    "ezjsonm"
     "faillib"
     "fileutils"
     "FrontC"
@@ -88,4 +90,4 @@ depexts: [
     ]
 ]
 
-available: [ocaml-version >= "4.02.0"]
+available: [ocaml-version >= "4.02.3"]

@@ -11,16 +11,16 @@ type entry = {
   hits    : int;
   path    : string;
   size    : int;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
 type config = {
   max_size : int;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
 type index = {
   config  : config;
   entries : entry String.Map.t;
-} with bin_io, compare, sexp
+} [@@deriving bin_io, compare, sexp]
 
 let (/) = Filename.concat
 
@@ -86,7 +86,7 @@ module Index = struct
     Sys.remove e.path
 
   let remove_files old_index new_index =
-    Map.iter old_index.entries ~f:(fun ~key ~data:e ->
+    Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
         if not (Map.mem new_index.entries key)
         then remove_entry e)
 

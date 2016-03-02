@@ -1,31 +1,20 @@
 module Plugin_rules = struct
   module Fl = Findlib
+
   open Ocamlbuild_plugin
   open Core_kernel.Std
   module Ocamlbuild = Ocamlbuild_pack
 
-  let syntax_packages = List.map [
-      "sexplib";
-      "comparelib";
-      "fieldslib";
-      "variantslib";
-      "bin_prot";
-      "enumerate";
-      "herelib";
-      "pa_ounit";
-    ] ~f:(fun pkg -> pkg ^ "." ^ "syntax")
 
+  let (/) = Pathname.concat
+  let () =
+    let libs = Bap_config.standard_library / "compiler-libs" in
+    Unix.putenv "OCAMLFIND_IGNORE_DUPS_IN" libs
+
+  let syntax_packages = ["ppx_jane"]
   let default_pkgs = ["bap"; "core_kernel"]
 
-  (* there is no way to figure out what libraries were linked into
-     the bap executable in the runtime. Later we can try to figure
-     this out from the _oasis file for example, but right now I will
-     hardcode the dependencies here.
-  *)
-  let bap_packages = [
-  ]
-
-  let packages = default_pkgs @ syntax_packages @ bap_packages
+  let packages = default_pkgs @ syntax_packages
 
 
   let default_tags = [
@@ -35,6 +24,7 @@ module Plugin_rules = struct
     "bin_annot";
     "short_paths";
     "custom";
+    "pp(ppx-jane -dump-ast -inline-test-lib bap)"
   ]
 
   let needs_threads pkgs =
@@ -58,7 +48,6 @@ module Plugin_rules = struct
     Command.jobs := 4;
     Options.(begin
         use_ocamlfind := true;
-        ocaml_syntax := Some "camlp4o";
         ocaml_pkgs := packages;
         tags := default_tags;
         recursive := true;

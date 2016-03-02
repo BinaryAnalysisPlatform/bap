@@ -3,7 +3,7 @@ open Core_kernel.Std
 module Std : sig
   module Bytes : sig
 
-    type t = Bytes.t with bin_io, compare, sexp
+    type t = Bytes.t [@@deriving bin_io, compare, sexp]
 
     include Container.S0   with type t := t with type elt := char
     include Blit.S         with type t := t
@@ -585,7 +585,7 @@ module Std : sig
       function the whole plethora of printing functions are derived:
       [str], [pps], [ppo]. *)
   module type Regular = sig
-    type t with bin_io, sexp, compare
+    type t [@@deriving bin_io, sexp, compare]
     include Printable            with type t := t
     include Comparable.S_binable with type t := t
     include Hashable.S_binable   with type t := t
@@ -604,7 +604,7 @@ module Std : sig
 
   (** Lazy sequence  *)
   module Seq : sig
-    type 'a t = 'a Sequence.t with bin_io, compare, sexp
+    type 'a t = 'a Sequence.t [@@deriving bin_io, compare, sexp]
     include module type of Sequence with type 'a t := 'a t
 
     (** for compatibility with Core <= 111.28  *)
@@ -627,7 +627,7 @@ module Std : sig
   end
 
   (** type abbreviation for ['a Sequence.t]  *)
-  type 'a seq = 'a Seq.t with bin_io, compare, sexp
+  type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
   (** [x ^:: xs] is a consing operator for sequences  *)
   val (^::) : 'a -> 'a seq -> 'a seq
@@ -753,7 +753,7 @@ module Std : sig
   module Regular : sig
     module Make( M : sig
         (** type t should be binable, sexpable and provide compare function  *)
-        type t with bin_io, sexp, compare
+        type t [@@deriving bin_io, sexp, compare]
         include Pretty_printer.S with type t := t
         include Data.Versioned with type t := t
         val hash : t -> int
@@ -764,7 +764,7 @@ module Std : sig
   (** creates a module implementing [Opaque] interface.   *)
   module Opaque : sig
     module Make(S : sig
-        type t with compare
+        type t [@@deriving compare]
         val hash : t -> int
       end) : Opaque with type t := S.t
   end

@@ -28,7 +28,11 @@ let run_unit_tests () =
   run_test_tt_main (suite ())
 
 let run_inline_tests () =
-  Pa_ounit_lib.Runtime.summarize ()
+  let open Ppx_inline_test_lib.Runtime in
+  summarize () |> function
+  | Test_result.Success -> ()
+  | Test_result.Failure -> eprintf "Inline testing failed\n"; exit 1
+  | Test_result.Error ->  eprintf "Inline testing errored\n"; exit 2
 
 let () = match Array.to_list Sys.argv with
   | _ :: "inline-test-runner" :: _ -> run_inline_tests ()

@@ -1,7 +1,7 @@
 open Bap.Std
 
 type fmt = [ `json | `pb | `piq | `pib | `xml ]
-with sexp, enumerate
+[@@deriving sexp, enumerate]
 
 val bil_of_string : fmt -> string -> bil
 val string_of_bil : fmt -> bil -> string

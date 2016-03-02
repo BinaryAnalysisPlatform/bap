@@ -70,9 +70,9 @@ val restore_state : t -> unit
 type error =
   | Not_loaded of string
   | Runtime_error of string * exn
-with sexp_of
+[@@deriving sexp_of]
 
-exception Pass_failed of error with sexp
+exception Pass_failed of error [@@deriving sexp]
 
 val register_pass : ?deps:string list -> ?name:string -> (t -> t) -> unit
 val register_pass': ?deps:string list -> ?name:string -> (t -> unit) -> unit

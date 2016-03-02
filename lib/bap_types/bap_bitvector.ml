@@ -3,9 +3,9 @@ open Regular.Std
 open Or_error
 
 type endian = LittleEndian | BigEndian
-with bin_io, compare, sexp
+  [@@deriving bin_io, compare, sexp]
 
-exception Width with sexp
+exception Width [@@deriving sexp]
 
 module Bignum = struct
   module Repr : Stringable with type t = Z.t = struct
@@ -38,11 +38,11 @@ module Internal = struct
     z : Bignum.t;
     w : int;
     signed : bool;
-  } with bin_io, sexp
+  } [@@deriving bin_io, sexp]
 end
 
 module type Kernel = sig
-  type t = Internal.t with bin_io, compare, sexp
+  type t = Internal.t [@@deriving bin_io, compare, sexp]
   val create : bignum -> int -> t
   val signed : t -> t
   val is_signed: t -> bool
@@ -66,7 +66,7 @@ end
 (** internal representation *)
 module Make(Size : Compare) : Kernel = struct
   open Internal
-  type nonrec t = t with bin_io, sexp
+  type nonrec t = t [@@deriving bin_io, sexp]
 
   let module_name = Some "Bap.Std.Bitvector"
 
@@ -392,7 +392,7 @@ module Mono = Comparable.Make(Make(Size_mono))
 module Trie = struct
   module Common = struct
     type nonrec t = t
-    type token = int with bin_io, compare, sexp
+    type token = int [@@deriving bin_io, compare, sexp]
     let token_hash = Fn.id
 
   end

@@ -4,35 +4,35 @@ open Bap_common
 open Bap_bil
 open Bap_value
 
-type 'a term with bin_io, compare, sexp
-type program with bin_io, compare, sexp
-type sub with bin_io, compare, sexp
-type arg with bin_io, compare, sexp
-type blk with bin_io, compare, sexp
-type phi with bin_io, compare, sexp
-type def with bin_io, compare, sexp
-type jmp with bin_io, compare, sexp
+type 'a term [@@deriving bin_io, compare, sexp]
+type program [@@deriving bin_io, compare, sexp]
+type sub [@@deriving bin_io, compare, sexp]
+type arg [@@deriving bin_io, compare, sexp]
+type blk [@@deriving bin_io, compare, sexp]
+type phi [@@deriving bin_io, compare, sexp]
+type def [@@deriving bin_io, compare, sexp]
+type jmp [@@deriving bin_io, compare, sexp]
 
-type tid with bin_io, compare, sexp
-type call with bin_io, compare, sexp
+type tid [@@deriving bin_io, compare, sexp]
+type call [@@deriving bin_io, compare, sexp]
 
 type label =
   | Direct of tid
   | Indirect of exp
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 type jmp_kind =
   | Call of call
   | Goto of label
   | Ret  of label
   | Int  of int * tid
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 type intent =
   | In
   | Out
   | Both
-with bin_io, compare, sexp
+[@@deriving bin_io, compare, sexp]
 
 type ('a,'b) cls
 

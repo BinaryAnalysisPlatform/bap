@@ -19,7 +19,7 @@ module T = struct
     ind : int;
     typ : typ;
     vir : bool;
-  } with sexp, bin_io,compare
+  } [@@deriving sexp, bin_io, compare]
 
   let hash v = String.hash v.var
   let module_name = Some "Bap.Std.Var"

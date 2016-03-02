@@ -6,7 +6,7 @@ open Bap_common
 open Type
 
 module T = struct
-  type t = typ with bin_io, compare, sexp
+  type t = typ [@@deriving bin_io, compare, sexp]
   let module_name = Some "Bap.Std.Type"
   let version = "0.1"
 

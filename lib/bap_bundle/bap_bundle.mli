@@ -33,7 +33,7 @@ module Std : sig
       url : string option;
       license : string option;
       copyrights : string option;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
 
     val create :
       ?author:string ->

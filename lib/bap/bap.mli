@@ -663,9 +663,10 @@ module Std : sig
   end
 
   (** Lazy sequence  *)
-  module Seq : module type of Seq with type 'a t = 'a Seq.t
+  module Seq : module type of Seq
+    with type 'a t = 'a Sequence.t
   (** type abbreviation for ['a Sequence.t]  *)
-  type 'a seq = 'a Seq.t with bin_io, compare, sexp
+  type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
 
   (** Prefix tries.
@@ -681,7 +682,7 @@ module Std : sig
   *)
   module type Trie = sig
     (** trie can store arbitrary data  *)
-    type 'a t with bin_io, sexp
+    type 'a t [@@deriving bin_io, sexp]
 
     (** a key type that is used to lookup data  *)
     type key
@@ -745,7 +746,7 @@ module Std : sig
 
       (** type of token must implement bin_prot, be comparable and
           sexpable *)
-      type token with bin_io, compare, sexp
+      type token [@@deriving bin_io, compare, sexp]
 
       (** [length key] return the amount of tokens in a [key]  *)
       val length : t -> int
@@ -763,7 +764,7 @@ module Std : sig
 
     (** Minimum required interface for a token data type  *)
     module type Token = sig
-      type t  with bin_io, compare, sexp
+      type t  [@@deriving bin_io, compare, sexp]
       val hash : t -> int
     end
 
@@ -781,11 +782,11 @@ module Std : sig
   end
 
   (** Type to represent machine word  *)
-  type word with bin_io, compare, sexp
+  type word [@@deriving bin_io, compare, sexp]
 
   (** A synonym for [word], that should be used for words
       that are addresses  *)
-  type addr = word with bin_io, compare, sexp
+  type addr = word [@@deriving bin_io, compare, sexp]
 
   (** Type safe operand and register sizes.  *)
   module Size : sig
@@ -797,13 +798,13 @@ module Std : sig
       | `r64
       | `r128
       | `r256
-    ] with variants
+    ] [@@deriving variants]
 
     type 'a p = 'a constraint 'a = [< all]
-    with bin_io, compare, sexp
+                     [@@deriving bin_io, compare, sexp]
 
     type t = all p
-    with bin_io, compare, sexp
+      [@@deriving bin_io, compare, sexp]
 
     (** {3 Lifting from int} *)
 
@@ -848,15 +849,15 @@ module Std : sig
 
   (** size of operand  *)
   type size = Size.t
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   (** size of address  *)
   type addr_size = [ `r32 | `r64 ] Size.p
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   (** just a fancy type abbreviation  *)
   type nat1 = int
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
 
   (** Bitvector -- a type for representing binary values.
@@ -990,13 +991,13 @@ module Std : sig
 
     (** [Width] exception is raised when size-monomorphic operation is
         applied to operands with different sizes. *)
-    exception Width with sexp
+    exception Width [@@deriving sexp]
 
     (** Specifies the order of bytes in a word. *)
     type endian =
       | LittleEndian (** least significant byte comes first  *)
       | BigEndian    (** most  significant byte comes first  *)
-    with bin_io, compare, sexp
+      [@@deriving bin_io, compare, sexp]
 
     (** {2 Constructors} *)
     val of_string : string -> t
@@ -1198,7 +1199,7 @@ module Std : sig
   (** Expose [endian] constructors to [Bap.Std] namespace  *)
   type endian = Bitvector.endian =
       LittleEndian | BigEndian
-  with sexp,bin_io,compare
+    [@@deriving sexp, bin_io, compare]
 
   (** Shortcut for bitvectors that represent words  *)
   module Word : module type of Bitvector
@@ -1250,7 +1251,7 @@ module Std : sig
       | Imm of nat1
       (** [Mem (a,t)] memory with a specifed addr_size *)
       | Mem of addr_size * size
-    with variants
+      [@@deriving variants]
 
     (** BIL type is regular  *)
     include Regular with type t := t
@@ -1258,7 +1259,7 @@ module Std : sig
 
   (** short abbreviation for a type  *)
   type typ = Type.t
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   val bool_t  : typ             (** one bit             *)
   val reg8_t  : typ             (** 8-bit width value   *)
@@ -1278,7 +1279,7 @@ module Std : sig
 
   (** bil variable   *)
   type var
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   (** BIL variable.
 
@@ -1385,7 +1386,7 @@ module Std : sig
         | SIGNED   (** Sign-extending widening cast. *)
         | HIGH     (** Narrowning cast. Keeps the high bits. *)
         | LOW      (** Narrowing cast. Keeps the low bits. *)
-      with bin_io, compare, sexp
+        [@@deriving bin_io, compare, sexp]
 
       (** Binary operations implemented in the BIL *)
       type binop =
@@ -1408,13 +1409,13 @@ module Std : sig
         | LE      (** Unsigned less than or equal to. *)
         | SLT     (** Signed less than. *)
         | SLE     (** Signed less than or equal to. *)
-      with bin_io, compare, sexp
+        [@@deriving bin_io, compare, sexp]
 
       (** Unary operations implemented in the IR *)
       type unop =
         | NEG (** Negate. (2's complement) *)
         | NOT (** Bitwise not. *)
-      with bin_io, compare, sexp
+        [@@deriving bin_io, compare, sexp]
 
       (** BIL expression variants  *)
       type exp =
@@ -1430,7 +1431,7 @@ module Std : sig
         | Ite     of exp * exp * exp    (** if-then-else expression  *)
         | Extract of nat1 * nat1 * exp  (** extract portion of word  *)
         | Concat  of exp * exp          (** concatenate two words  *)
-      with bin_io, compare, sexp
+        [@@deriving bin_io, compare, sexp]
 
       type stmt =
         | Move    of var * exp  (** assign value of expression to variable *)
@@ -1439,7 +1440,7 @@ module Std : sig
         | While   of exp * stmt list (** while loops  *)
         | If      of exp * stmt list * stmt list (** if/then/else statement  *)
         | CpuExn  of int                         (** CPU exception *)
-      with bin_io, compare, sexp
+        [@@deriving bin_io, compare, sexp]
     end
 
     (** include all constructors into Bil namespace *)
@@ -1450,7 +1451,7 @@ module Std : sig
                                   and type exp = exp
                                   and type stmt = stmt
     type t = stmt list
-    with bin_io, compare, sexp
+      [@@deriving bin_io, compare, sexp]
 
 
     include Printable with type t := t
@@ -2065,14 +2066,14 @@ module Std : sig
     end
   end
 
-  type bil   = Bil.t       with bin_io, compare, sexp
-  type binop = Bil.binop   with bin_io, compare, sexp
-  type cast  = Bil.cast    with bin_io, compare, sexp
-  type exp   = Bil.exp     with bin_io, compare, sexp
-  type stmt  = Bil.stmt    with bin_io, compare, sexp
-  type unop  = Bil.unop    with bin_io, compare, sexp
-  type value               with bin_io, compare, sexp
-  type dict                with bin_io, compare, sexp
+  type bil   = Bil.t       [@@deriving bin_io, compare, sexp]
+  type binop = Bil.binop   [@@deriving bin_io, compare, sexp]
+  type cast  = Bil.cast    [@@deriving bin_io, compare, sexp]
+  type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
+  type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
+  type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
+  type value               [@@deriving bin_io, compare, sexp]
+  type dict                [@@deriving bin_io, compare, sexp]
 
 
   (** Base class for evaluation contexts.
@@ -2100,7 +2101,7 @@ module Std : sig
   end
 
   module Type_error : sig
-    type t with bin_io, compare, sexp
+    type t [@@deriving bin_io, compare, sexp]
 
     val bad_mem : t
     val bad_imm : t
@@ -2111,7 +2112,7 @@ module Std : sig
   end
 
   (** A BIL type error  *)
-  type type_error = Type_error.t with bin_io, compare, sexp
+  type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
 
 
   (** BIL Interpreter.*)
@@ -2495,48 +2496,48 @@ module Std : sig
     type x86 = [
       | `x86
       | `x86_64
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type arm = [
       | `armv4
       | `armv5
       | `armv6
       | `armv7
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type armeb = [
       | `armv4eb
       | `armv5eb
       | `armv6eb
       | `armv7eb
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type thumb = [
       | `thumbv4
       | `thumbv5
       | `thumbv6
       | `thumbv7
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type thumbeb = [
       | `thumbv4eb
       | `thumbv5eb
       | `thumbv6eb
       | `thumbv7eb
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type aarch64 = [
       | `aarch64
       | `aarch64_be
     ]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type ppc = [
       | `ppc
       | `ppc64
       | `ppc64le
     ]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type mips = [
       | `mips
@@ -2544,31 +2545,31 @@ module Std : sig
       | `mips64
       | `mips64el
     ]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type sparc = [
       | `sparc
       | `sparcv9
     ]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type nvptx = [
       | `nvptx
       | `nvptx64
     ]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type hexagon = [`hexagon]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type r600 = [`r600]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type systemz = [`systemz]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type xcore = [`xcore]
-    with bin_io, compare, enumerate, sexp
+      [@@deriving bin_io, compare, enumerate, sexp]
 
     type t = [
       | aarch64
@@ -2585,7 +2586,7 @@ module Std : sig
       | systemz
       | x86
       | xcore
-    ] with bin_io, compare, enumerate, sexp, variants
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     (** [of_string s] will try to be clever and to capture all
         commonly known synonyms, e.g., [of_string "i686"] will
@@ -2604,7 +2605,7 @@ module Std : sig
 
   (** architecture  *)
   type arch = Arch.t
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
 
   (** Universal Values.
@@ -2755,7 +2756,7 @@ module Std : sig
   module Value : sig
 
     (** a universal value  *)
-    type t = value with bin_io, compare, sexp
+    type t = value [@@deriving bin_io, compare, sexp]
 
 
     (** Tag constructor of type ['a]  *)
@@ -2766,7 +2767,7 @@ module Std : sig
       (** In order to construct a value with the a given type you must
           provide an implementation for marshaling functions,
           comparison function and pretty-printing.  *)
-      type t with bin_io, compare, sexp
+      type t [@@deriving bin_io, compare, sexp]
       val pp : Format.formatter -> t -> unit
     end
 
@@ -2780,7 +2781,7 @@ module Std : sig
     type literal = (void,void,void) format
 
     (** persistent type identifier  *)
-    type typeid with bin_io, compare, sexp
+    type typeid [@@deriving bin_io, compare, sexp]
 
     (** [create cons x] creates a value using constructor [cons] and
         argument [x] *)
@@ -2908,7 +2909,8 @@ module Std : sig
     | `magenta
     | `cyan
     | `white
-  ] with bin_io, compare, sexp
+  ] [@@deriving bin_io, compare, sexp]
+
 
   (** Color something with a color  *)
   val color : color tag
@@ -2962,7 +2964,7 @@ module Std : sig
         tag. *)
 
     (** type of map *)
-    type t = dict with bin_io, compare, sexp
+    type t = dict [@@deriving bin_io, compare, sexp]
 
     (** an empty instance  *)
     val empty : t
@@ -3007,7 +3009,7 @@ module Std : sig
       DefaultConstructible requirement in C++ version). *)
   module Vector : sig
     (** a type of vector holding elements of type ['a]  *)
-    type 'a t = 'a vector with bin_io, compare, sexp
+    type 'a t = 'a vector [@@deriving bin_io, compare, sexp]
 
     (** [create ?capacity default] creates an empty vector with a a given
         [capacity]. It is guaranteed that the default value will never
@@ -3056,24 +3058,24 @@ module Std : sig
       Program is a tree of terms.
 
   *)
-  type 'a term with bin_io, compare, sexp
+  type 'a term [@@deriving bin_io, compare, sexp]
 
-  type program with bin_io, compare, sexp
-  type sub with bin_io, compare, sexp
-  type arg with bin_io, compare, sexp
-  type blk with bin_io, compare, sexp
-  type phi with bin_io, compare, sexp
-  type def with bin_io, compare, sexp
-  type jmp with bin_io, compare, sexp
+  type program [@@deriving bin_io, compare, sexp]
+  type sub [@@deriving bin_io, compare, sexp]
+  type arg [@@deriving bin_io, compare, sexp]
+  type blk [@@deriving bin_io, compare, sexp]
+  type phi [@@deriving bin_io, compare, sexp]
+  type def [@@deriving bin_io, compare, sexp]
+  type jmp [@@deriving bin_io, compare, sexp]
 
-  type tid with bin_io, compare, sexp
-  type call with bin_io, compare, sexp
+  type tid [@@deriving bin_io, compare, sexp]
+  type call [@@deriving bin_io, compare, sexp]
 
   (** target of control transfer  *)
   type label =
     | Direct of tid             (** direct jump  *)
     | Indirect of exp           (** indirect jump  *)
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   (** control transfer variants  *)
   type jmp_kind =
@@ -3081,14 +3083,14 @@ module Std : sig
     | Goto of label             (** jump inside subroutine      *)
     | Ret  of label             (** return from call to label   *)
     | Int  of int * tid         (** interrupt and return to tid *)
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   (** argument intention  *)
   type intent =
     | In                        (** input argument  *)
     | Out                       (** output argument *)
     | Both                      (** input/output    *)
-  with bin_io, compare, sexp
+    [@@deriving bin_io, compare, sexp]
 
   type ('a,'b) cls
 
@@ -3198,13 +3200,13 @@ module Std : sig
   type image
 
   (** opaque memory  *)
-  type mem with sexp_of
+  type mem [@@deriving sexp_of]
 
   (** a table from memory to ['a]  *)
-  type 'a table with sexp_of
+  type 'a table [@@deriving sexp_of]
 
   (** interval trees from memory regions to ['a] *)
-  type 'a memmap with sexp_of
+  type 'a memmap [@@deriving sexp_of]
 
   (** Iterators lifted into monad  *)
   module type Memory_iterators = sig
@@ -3224,7 +3226,7 @@ module Std : sig
 
   (** Memory region  *)
   module Memory : sig
-    type t = mem with sexp_of
+    type t = mem [@@deriving sexp_of]
 
     val create
       : ?pos:int                    (** defaults to [0]  *)
@@ -3385,7 +3387,7 @@ module Std : sig
       can create a mapping from one set of values to another. See [link]
       function for mode details. *)
   module Table : sig
-    type 'a t = 'a table with sexp_of
+    type 'a t = 'a table [@@deriving sexp_of]
     type 'a hashable = 'a Hashtbl.Hashable.t
 
     (** creates an empty table  *)
@@ -3610,11 +3612,11 @@ module Std : sig
     type t = {
       addr : addr;
       len  : int;
-    } with bin_io, compare, fields, sexp
+    } [@@deriving bin_io, compare, fields, sexp]
   end
 
   (** memory location  *)
-  type location = Location.t with bin_io, compare, sexp
+  type location = Location.t [@@deriving bin_io, compare, sexp]
 
   (** A backend interface.
 
@@ -3626,7 +3628,7 @@ module Std : sig
 
     (** memory access permissions  *)
     type perm = R | W | X | Or of perm * perm
-    with bin_io, compare, sexp
+      [@@deriving bin_io, compare, sexp]
 
     (** A named contiguous part of file with permissions.
         Also, known as segment in ELF.    *)
@@ -3636,7 +3638,7 @@ module Std : sig
         perm: perm;         (** segment's permissions  *)
         off: int;
         location : location;
-      } with bin_io, compare, fields, sexp
+      } [@@deriving bin_io, compare, fields, sexp]
     end
 
     (** Symbol definition, that can span several non-contiguous parts of
@@ -3647,7 +3649,7 @@ module Std : sig
         is_function : bool;
         is_debug : bool;
         locations : location * location list;
-      } with bin_io, compare, fields, sexp
+      } [@@deriving bin_io, compare, fields, sexp]
     end
 
     (** Just a named region of memory.  *)
@@ -3655,7 +3657,7 @@ module Std : sig
       type t = {
         name : string;
         location : location;
-      } with bin_io, compare, fields, sexp
+      } [@@deriving bin_io, compare, fields, sexp]
     end
 
     (** A Img from a backend perspective.  *)
@@ -3666,7 +3668,7 @@ module Std : sig
         segments : Segment.t * Segment.t list;
         symbols  : Symbol.t list;
         sections  : Section.t list;
-      } with bin_io, compare, fields, sexp
+      } [@@deriving bin_io, compare, fields, sexp]
     end
 
     (** the actual interface to be implemented  *)
@@ -3678,12 +3680,12 @@ module Std : sig
   module Image : sig
     (** {2 Type definitions}  *)
 
-    type t = image with sexp_of            (** image   *)
+    type t = image [@@deriving sexp_of]            (** image   *)
 
     (** segment *)
-    type segment with bin_io, compare, sexp
+    type segment [@@deriving bin_io, compare, sexp]
     (** symbol  *)
-    type symbol with bin_io, compare, sexp
+    type symbol [@@deriving bin_io, compare, sexp]
 
     type path = string
 
@@ -3784,7 +3786,7 @@ module Std : sig
   module Memmap : sig
 
     (** memory map, aka interval trees  *)
-    type 'a t = 'a memmap with sexp_of
+    type 'a t = 'a memmap [@@deriving sexp_of]
 
     (** [empty] map  *)
     val empty : 'a t
@@ -3898,13 +3900,13 @@ module Std : sig
 
   (** values of type [insn] represents machine instructions decoded
       from the a given piece of memory *)
-  type insn with bin_io, compare, sexp_of
+  type insn [@@deriving bin_io, compare, sexp_of]
 
   (** [block] is a region of memory that is believed to be a basic block
       of control flow graph to the best of our knowledge. *)
-  type block with compare, sexp_of
+  type block [@@deriving compare, sexp_of]
 
-  type cfg with compare
+  type cfg [@@deriving compare]
 
   (** a jump kind.
       A jump to another block can be conditional or unconditional.
@@ -3912,9 +3914,9 @@ module Std : sig
   type jump = [
     | `Jump     (** unconditional jump                  *)
     | `Cond     (** conditional jump                    *)
-  ] with compare, sexp
+  ] [@@deriving compare, sexp]
   (** This type defines a relation between two basic blocks.  *)
-  type edge = [jump | `Fall] with compare,sexp
+  type edge = [jump | `Fall] [@@deriving compare, sexp]
 
 
   (** Kinds of instructions  *)
@@ -3923,7 +3925,7 @@ module Std : sig
       | `Conditional_branch
       | `Unconditional_branch
       | `Indirect_branch
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type affecting_control = [
       | branch
@@ -3932,30 +3934,30 @@ module Std : sig
       | `Barrier
       | `Terminator
       | `May_affect_control_flow
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type having_side_effect = [
       | `May_load
       | `May_store
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
 
     type t = [
       | affecting_control
       | having_side_effect
-    ] with bin_io, compare, enumerate, sexp
+    ] [@@deriving bin_io, compare, enumerate, sexp]
   end
 
   (** abstract and opaque register  *)
-  type reg with bin_io, compare, sexp
+  type reg [@@deriving bin_io, compare, sexp]
 
   (** opaque immediate value  *)
-  type imm with bin_io, compare, sexp
+  type imm [@@deriving bin_io, compare, sexp]
 
   (** floating point value  *)
-  type fmm with bin_io, compare, sexp
+  type fmm [@@deriving bin_io, compare, sexp]
 
   (** kind of instruction  *)
-  type kind = Kind.t with bin_io, compare, sexp
+  type kind = Kind.t [@@deriving bin_io, compare, sexp]
 
 
   (** Register.  *)
@@ -3994,7 +3996,7 @@ module Std : sig
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-    with bin_io, compare, sexp
+      [@@deriving bin_io, compare, sexp]
     (** Normalized comparison.  *)
     module Normalized : sig
       val compare : t -> t -> int
@@ -4006,7 +4008,7 @@ module Std : sig
     include Regular with type t := t
   end
 
-  type op = Op.t with bin_io, compare, sexp_of
+  type op = Op.t [@@deriving bin_io, compare, sexp_of]
 
   (** Expert interface to disassembler.
 
@@ -4026,7 +4028,7 @@ module Std : sig
       type pred = [
         | `Valid    (** stop on first valid insn  *)
         |  Kind.t   (** stop on first insn of the specified kind *)
-      ] with sexp
+      ] [@@deriving sexp]
 
       (** {2 Basic types }  *)
       type (+'a,+'k) insn
@@ -4035,7 +4037,7 @@ module Std : sig
       type asm       (** set when assembler information is stored        *)
       type kinds     (** set when instruction kind information is stored *)
 
-      type full_insn = (asm,kinds) insn with compare, sexp_of
+      type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 
       (** Disassembler.
 
@@ -4258,7 +4260,7 @@ module Std : sig
       type error = [
         | `Failed_to_disasm of mem
         | `Failed_to_lift of mem * Basic.full_insn * Error.t
-      ] with sexp_of
+      ] [@@deriving sexp_of]
 
       val run :
         ?backend:string ->
@@ -4273,7 +4275,7 @@ module Std : sig
 
   (** Assembly instruction.  *)
   module Insn : sig
-    type t = insn with bin_io, compare, sexp
+    type t = insn [@@deriving bin_io, compare, sexp]
 
     (** {3 Creating}
         The following functions will create [insn] instances from a lower
@@ -4353,7 +4355,12 @@ module Std : sig
       doesn't allow to navigate to other blocks.
   *)
   module Block : sig
-    type t = block with compare, sexp_of
+    type t = block [@@deriving compare, sexp_of]
+
+    (** [create mem insn] creates a block
+        @pre insns is not empty  *)
+    val create : mem -> (mem * insn) list -> t
+
     (** [addr block] address of the first instruction  *)
     val addr : t -> addr
 
@@ -4374,27 +4381,18 @@ module Std : sig
     include Printable  with type t := t
   end
 
-
-
   module Graphs : sig
-
-
     module Cfg : Graph with type t = cfg
                         and type node = block
                         and type Edge.label = edge
 
-    (** A call graph representation.  *)
-    module Callgraph : sig
-      (** In this representations, nodes are identifiers of subroutine
-          terms, and edges, representing calls, are marked with a list of
-          callsites, where callsite is denoted by a jump term.  *)
-
-      include Graph with type node = tid
-                     and type Node.label = tid
-                     and type Edge.label = jmp term list
-      val create : program term -> t
-      val pp : Format.formatter -> t -> unit
-    end
+    (** A call graph representation.
+        In this representations, nodes are identifiers of subroutine
+        terms, and edges, representing calls, are marked with a list of
+        callsites, where callsite is denoted by a jump term.  *)
+    module Callgraph : Graph with type node = tid
+                              and type Node.label = tid
+                              and type Edge.label = jmp term list
 
     (** Graph view over IR.
 
@@ -4627,9 +4625,9 @@ module Std : sig
         were found in the executable.*)
 
     (** symbol table  *)
-    type t = symtab with sexp_of
+    type t = symtab [@@deriving sexp_of]
 
-    type fn = string * block * cfg with sexp_of
+    type fn = string * block * cfg [@@deriving sexp_of]
 
     (** empty symbol table  *)
     val empty : t
@@ -5768,8 +5766,8 @@ module Std : sig
     open Disasm_expert.Basic
     type t = brancher
 
-    type dest = addr option * edge with sexp
-    type dests = dest list with sexp
+    type dest = addr option * edge [@@deriving sexp]
+    type dests = dest list [@@deriving sexp]
 
     val create : (mem -> full_insn -> dests) -> t
 
@@ -6014,13 +6012,13 @@ module Std : sig
     type error =
       | Not_loaded of string
       | Runtime_error of string * exn
-    with sexp_of
+      [@@deriving sexp_of]
 
     (** raised when a pass failed to load or to run. Note: this
         exception is raised only from two functions in this module, that
         state this in their documentation and has [_exn] suffix in their
         name. *)
-    exception Pass_failed of error with sexp
+    exception Pass_failed of error [@@deriving sexp]
 
     (** [register_pass ?deps ?name pass] registers a [pass]
 

@@ -5,10 +5,10 @@ module Location = struct
   type t = {
     addr : addr;
     len  : int;
-  } with bin_io, compare, fields, sexp
+  } [@@deriving bin_io, compare, fields, sexp]
 end
 
-type location = Location.t with bin_io, compare, sexp
+type location = Location.t [@@deriving bin_io, compare, sexp]
 
 module type Memory_iterators = sig
   type t

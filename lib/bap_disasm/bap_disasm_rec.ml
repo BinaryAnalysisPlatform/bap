@@ -16,30 +16,29 @@ module Addrs = Addr.Table
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
 
-type full_insn = Dis.full_insn with sexp_of
-type insn = Insn.t with sexp_of
+type full_insn = Dis.full_insn [@@deriving sexp_of]
+type insn = Insn.t [@@deriving sexp_of]
 type block = Block.t
-type edge = Block.edge with compare, sexp
-type jump = Block.jump with compare, sexp
+type edge = Block.edge [@@deriving compare, sexp]
+type jump = Block.jump [@@deriving compare, sexp]
 type lifter = Targets.lifter
 
 type dis = (Dis.empty, Dis.empty) Dis.t
-
 
 type dst = [
   | `Jump of addr option
   | `Cond of addr option
   | `Fall of addr
-] with sexp
+] [@@deriving sexp]
 
 
 type error = [
   | `Failed_to_disasm of mem
   | `Failed_to_lift of mem * full_insn * Error.t
-] with sexp_of
+] [@@deriving sexp_of]
 
-type maybe_insn = full_insn option * bil option with sexp_of
-type decoded = mem * maybe_insn with sexp_of
+type maybe_insn = full_insn option * bil option [@@deriving sexp_of]
+type decoded = mem * maybe_insn [@@deriving sexp_of]
 
 type dests = Brancher.dests
 
@@ -56,22 +55,22 @@ module Node = struct
 end
 
 module Edge = struct
-  type t = edge with compare
+  type t = edge [@@deriving compare]
   include Opaque.Make(struct
-      type nonrec t = t with compare
+      type nonrec t = t [@@deriving compare]
       let hash = Hashtbl.hash
     end)
 end
 
 module Cfg = Graphlib.Make(Node)(Edge)
 
-type cfg = Cfg.t with compare
+type cfg = Cfg.t [@@deriving compare]
 
 
 (** Interval tree spanning visited memory *)
 module type Span = sig
   type range = addr * addr
-  type t with sexp_of
+  type t [@@deriving sexp_of]
 
   val empty : t
   val add : t -> range -> t
@@ -85,10 +84,10 @@ end
 module Span : Span = struct
   module Range = struct
     module T = struct
-      type t = addr * addr with sexp
+      type t = addr * addr [@@deriving sexp]
       let compare (a1,_) (a2,_) = Addr.compare a1 a2
     end
-    type t = T.t with sexp
+    type t = T.t [@@deriving sexp]
     include Comparable.Make(T)
   end
 
@@ -103,7 +102,7 @@ module Span : Span = struct
   type t =
     | Empty
     | Node of t * range * addr * t
-  with sexp_of
+  [@@deriving sexp_of]
 
   let rec pp fmt = function
     | Empty -> ()
@@ -286,7 +285,7 @@ let create_indexes (dests : dests Addr.Table.t) =
   let leads = Addrs.create () in
   let terms = Addrs.create () in
   let succs = Addrs.create () in
-  Addr.Table.iter dests ~f:(fun ~key:src ~data:dests ->
+  Addr.Table.iteri dests ~f:(fun ~key:src ~data:dests ->
       List.iter dests ~f:(fun dest ->
           Addrs.add_multi succs ~key:src ~data:dest;
           match dest with
@@ -372,7 +371,7 @@ let stage3 s2 =
     preds = filter s2.preds ~f:pred_is_found;
   } in
   let nodes = Addrs.create () in
-  Addrs.iter s2.addrs ~f:(fun ~key:addr ~data:mem ->
+  Addrs.iteri s2.addrs ~f:(fun ~key:addr ~data:mem ->
       s2.disasm mem |> List.filter_map ~f:(function
           | mem,(None,_) -> None
           | mem,(Some insn,bil) ->

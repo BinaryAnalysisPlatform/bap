@@ -11,7 +11,7 @@ type t = {
   bil_formats : string list;
   bir_formats : string list;
   show_kinds: bool;
-} with sexp, fields
+} [@@deriving sexp, fields]
 
 module type Provider = sig
   val options : t

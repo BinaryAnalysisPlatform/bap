@@ -1,7 +1,7 @@
 
 open Core_kernel.Std
 
-type t = Bytes.t with bin_io, compare, sexp
+type t = Bytes.t [@@deriving bin_io, compare, sexp]
 
 include Container.S0   with type t := t with type elt := char
 include Blit.S         with type t := t

@@ -19,22 +19,22 @@ module Move = struct
 end
 
 module Load = struct
-  type t = addr move with bin_io, compare, sexp
+  type t = addr move [@@deriving bin_io, compare, sexp]
   let pp = Move.pp Addr.pp "=>"
 end
 
 module Store = struct
-  type t = addr move with bin_io, compare, sexp
+  type t = addr move [@@deriving bin_io, compare, sexp]
   let pp = Move.pp Addr.pp "<="
 end
 
 module Read = struct
-  type t = var move with bin_io, compare, sexp
+  type t = var move [@@deriving bin_io, compare, sexp]
   let pp = Move.pp Var.pp "=>"
 end
 
 module Write = struct
-  type t = var move with bin_io, compare, sexp
+  type t = var move [@@deriving bin_io, compare, sexp]
   let pp = Move.pp Var.pp "<="
 end
 

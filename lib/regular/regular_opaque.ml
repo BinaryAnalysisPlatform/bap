@@ -10,7 +10,7 @@ module type S = sig
 end
 
 module Make(M : sig
-    type t with compare
+    type t [@@deriving compare]
     val hash : t -> int
   end) = struct
   module M = struct

@@ -230,7 +230,7 @@ module Trie = struct
 
   module Normalized = Trie.Make(struct
       type t = bil
-      type token = stmt with bin_io, sexp, compare
+      type token = stmt [@@deriving bin_io, sexp, compare]
       let length  = List.length
       let nth_token = List.nth_exn
       let token_hash = Hashtbl.hash

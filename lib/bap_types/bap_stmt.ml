@@ -48,7 +48,7 @@ module Infix = struct
 end
 
 include Regular.Make(struct
-    type t = Bap_bil.stmt with bin_io, compare, sexp
+    type t = Bap_bil.stmt [@@deriving bin_io, compare, sexp]
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Stmt"
     let version = "0.1"
@@ -67,7 +67,7 @@ end
 
 module Stmts_data = struct
   module T = struct
-    type t = stmt list with bin_io, sexp
+    type t = stmt list [@@deriving bin_io, sexp]
     let version = "0.1"
   end
   include T

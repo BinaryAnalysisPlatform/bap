@@ -51,7 +51,7 @@ module Make(Env : sig
             Seq.map ~f:(func ~parent false) |>
             Seq.to_list in
           func ~children true parent :: acc) in
-    let children : Ezjsonm.value  = `O Ezjsonm.([
+    let children  = `O Ezjsonm.([
         "text", string filename;
         "id", string (path root); "expanded", bool true;
         "root", bool true; "children", `A funcs

@@ -88,7 +88,7 @@ Library "bap-piqi"
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap,enumerate.syntax
+  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap,ppx_enumerate
   Modules:   Bir_piqi, Bil_piqi
   InternalModules:
              Stmt_piqi,
@@ -129,7 +129,7 @@ Library dwarf
   Path:          lib/bap_dwarf
   FindlibName:   bap-dwarf
   Build$:        flag(dwarf)
-  BuildDepends:  bap, pa_ounit.syntax
+  BuildDepends:  bap, ppx_test
   Modules:       Bap_dwarf
 
   InternalModules:
@@ -172,7 +172,7 @@ Library elf
   Path:          lib/bap_elf
   Build$:        flag(elf)
   FindlibName:   bap-elf
-  BuildDepends:  bap, bitstring, bitstring.syntax
+  BuildDepends:  bap, bitstring, camlp4, bitstring.syntax
   Modules: Bap_elf
   InternalModules:
                  Elf_parse,
