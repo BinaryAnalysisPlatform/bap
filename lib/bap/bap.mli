@@ -3050,13 +3050,14 @@ module Std : sig
     (** implements common accessors for the array, like [find], [fold],
         [iter], etc  *)
     include Container.S1 with type 'a t := 'a t
+
+    val pp : 'a printer -> 'a t printer
   end
 
 
   (** BAP IR.
 
       Program is a tree of terms.
-
   *)
   type 'a term [@@deriving bin_io, compare, sexp]
 
@@ -3605,6 +3606,8 @@ module Std : sig
     (** [regions table] returns in an ascending order of addresses all
         elements mapped in a [table] *)
     val elements : ('a t -> 'a seq) ranged
+
+    val pp : 'a printer -> 'a t printer
   end
 
   (** A locations of a chunk of memory  *)
@@ -3879,6 +3882,8 @@ module Std : sig
     val to_sequence : 'a t -> (mem * 'a) seq
 
     include Container.S1 with type 'a t := 'a t
+
+    val pp : 'a printer -> 'a t printer
   end
 
 

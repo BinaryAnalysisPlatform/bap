@@ -1,5 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
+open Format
+
 type 'a t = {
   mutable size : int;
   mutable data : 'a array;
@@ -118,3 +120,13 @@ let to_list vec =
 
 let min_elt = C.min_elt
 let max_elt = C.max_elt
+
+let pp pp_elem ppf vec =
+  let n = length vec in
+  fprintf ppf "{@[<2>";
+  iteri vec ~f:(fun i x ->
+      if i < n - 1 then fprintf ppf "%a;@ " pp_elem x);
+  if n > 0 then fprintf ppf "%a" pp_elem vec.data.(n-1);
+  fprintf ppf "@]}"
+
+let () = Pretty_printer.register "Bap.Std.Vector.pp"

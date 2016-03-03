@@ -48,7 +48,6 @@ depends: [
     "camlzip"
     "cmdliner" {>= "0.9.6"}
     "ppx_jane" {>= "113.24.01"}
-    "ppx_test"
     "core_kernel" {>= "113.24.00"}
     "ezjsonm"
     "faillib"

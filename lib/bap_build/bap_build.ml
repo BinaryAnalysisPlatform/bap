@@ -20,11 +20,9 @@ module Plugin_rules = struct
   let default_tags = [
     "thread";
     "debug";
-    "annot";
-    "bin_annot";
     "short_paths";
     "custom";
-    "pp(ppx-jane -dump-ast -inline-test-lib bap)"
+    "ppx(ppx-bap)"
   ]
 
   let needs_threads pkgs =

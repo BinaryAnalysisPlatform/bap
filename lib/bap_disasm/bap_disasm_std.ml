@@ -35,9 +35,5 @@ type rooter = Rooter.t
 type symbolizer = Symbolizer.t
 type brancher = Brancher.t
 type reconstructor = Reconstructor.t
-type edge = Block.edge [@@deriving compare, sexp]
-type jump = Block.jump [@@deriving compare, sexp]
-
-(* see: https://github.com/janestreet/ppx_sexp_conv/issues/3 *)
-let __jump_of_sexp__ = Block.__jump_of_sexp__
-let __edge_of_sexp__ = Block.__edge_of_sexp__
+type edge = Block.edge [@@deriving compare, sexp_poly]
+type jump = Block.jump [@@deriving compare, sexp_poly]

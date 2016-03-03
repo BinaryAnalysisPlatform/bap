@@ -19,14 +19,14 @@ let read_cstring src ~pos_ref : string t =
     pos_ref := (pos + 1); (* move over the null byte  *)
     return dst
 
-let%test_module _ = (module struct
+let%test_module "read_cstring" = (module struct
   let str = "hello\000,\000world\000!\000"
   let pos_ref = ref 0
-  let%test _ = read_cstring str ~pos_ref = Ok "hello"
-  let%test _ = read_cstring str ~pos_ref = Ok ","
-  let%test _ = read_cstring str ~pos_ref = Ok "world"
-  let%test _ = read_cstring str ~pos_ref = Ok "!"
-  let%test _ = String.length str = pos_ref.contents
+  let%test "hello" = read_cstring str ~pos_ref = Ok "hello"
+  let%test "comma" = read_cstring str ~pos_ref = Ok ","
+  let%test "world" = read_cstring str ~pos_ref = Ok "world"
+  let%test "emark" = read_cstring str ~pos_ref = Ok "!"
+  let%test "full"  = String.length str = pos_ref.contents
 end)
 
 let read_leb128 inj str ~pos_ref =
@@ -162,7 +162,6 @@ let pair read1 read2 str ~pos_ref =
   read1 str ~pos_ref >>= fun w1 ->
   read2 str ~pos_ref >>= fun w2 ->
   return (w1,w2)
-
 
 let unit_size endian str ~pos_ref =
   read_int32 endian W32 str ~pos_ref >>= function

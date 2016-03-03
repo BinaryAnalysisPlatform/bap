@@ -510,6 +510,9 @@ module Std : sig
     (** [of_equiv p n] rebuilds a group from an equivalence class
         ordinal number. *)
     val of_equiv : 'a t -> equiv -> 'a group option
+
+    (** [pp pp_elem p] prints partition [p] using element printer [pp_elem]  *)
+    val pp : 'a printer -> 'a t printer
   end
 
   (** Group is a non-empty set that is a result of partitioning of an
@@ -524,7 +527,7 @@ module Std : sig
         designated one.  *)
     val enum : 'a group -> 'a seq
 
-    (** [mem group x] checks membership of [x] in a given group.  *)
+    (** [mem group x] checks membership of [x] in a given [group].  *)
     val mem  : 'a group -> 'a -> bool
 
     (** [top group] returns the top element of a group also known as a
@@ -535,6 +538,10 @@ module Std : sig
     (** [to_equiv g] returns the ordinal number representing the
         particular group [g] *)
     val to_equiv : 'a group -> equiv
+
+    (** [pp pp_elem g] prints group [g] using element printer [pp_elem]  *)
+    val pp : 'a printer -> 'a t printer
+
   end
 
   (** Ordinal for representing equivalence. Useful, for indexing

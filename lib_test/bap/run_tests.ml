@@ -17,23 +17,26 @@ let suite () =
     Test_project.suite ();
   ]
 
-
-let run_unit_tests () =
+let load_plugins () =
   Plugins.load () |>
   List.iter ~f:(function
       | _,Ok () -> ()
       | p,Error e ->
         assert_string ("plugin "^Plugin.name p^" failed: " ^
-                       Error.to_string_hum e));
+                       Error.to_string_hum e))
+
+let run_unit_tests () =
+  load_plugins ();
   run_test_tt_main (suite ())
 
 let run_inline_tests () =
-  let open Ppx_inline_test_lib.Runtime in
-  summarize () |> function
-  | Test_result.Success -> ()
-  | Test_result.Failure -> eprintf "Inline testing failed\n"; exit 1
-  | Test_result.Error ->  eprintf "Inline testing errored\n"; exit 2
+  Ppx_inline_test_lib.Runtime.(summarize () |>
+                               Test_result.record;
+                               Test_result.exit ())
 
 let () = match Array.to_list Sys.argv with
   | _ :: "inline-test-runner" :: _ -> run_inline_tests ()
   | _ -> run_unit_tests ()
+
+let pp_set pp_elem pp ppf set =
+  Set.iter set ~f:(fun e -> Format.fprintf ppf "%a " pp_elem e)

@@ -52,31 +52,35 @@ end
 open Format
 let max_printer_depth = ref 100
 
+let pp_comma ppf () = pp_print_string ppf ", "
+
+let pp_body ?max pp_elem ppf seq =
+  mapi seq ~f:(fun i elem () -> match max with
+      | Some m when m = i -> fprintf ppf "..."
+      | _ -> pp_elem ppf elem) |>
+  intersperse ~sep:(pp_comma ppf) |>
+  iter ~f:(fun pp -> pp ())
+
+let pp_head ppf = fprintf ppf "{@[<2>"
+let pp_tail ppf = fprintf ppf "}@]"
+
+let pp_all pp_elem ppf seq =
+  pp_head ppf;
+  pp_body pp_elem ppf seq;
+  pp_tail ppf
+
+
+let pp_some pp_elt ppf xs =
+  let xs = take xs (!max_printer_depth + 1) in
+  pp_head ppf;
+  pp_body ~max:!max_printer_depth pp_elt ppf xs;
+  pp_tail ppf
 
 let pp pp_elt ppf xs =
-  match Sequence.next xs with
-  | None -> fprintf ppf "[: :]"
-  | Some (x, xs) ->
-    fprintf ppf "[:@[<2> %a" pp_elt x;
-    take xs (!max_printer_depth - 1) |>
-    iter ~f:(fprintf ppf ";@;%a" pp_elt);
-    if length_is_bounded_by xs ~max:(!max_printer_depth - 1)
-    then fprintf ppf " @]:]"
-    else fprintf ppf "; ... @]:]"
-
-let pp_bools = pp pp_print_bool
-let pp_chars = pp pp_print_char
-let pp_floats = pp pp_print_float
-let pp_ints = pp pp_print_int
-let pp_strings = pp pp_print_string
-
-let () =
-  let reg name = Pretty_printer.register ("Bap.Std.Seq."^name) in
-  reg "pp_bools";
-  reg "pp_chars";
-  reg "pp_floats";
-  reg "pp_ints";
-  reg "pp_strings";
-
+  if Sys.interactive.contents
+  then pp_some pp_elt ppf xs
+  else pp_all  pp_elt ppf xs
 
 type 'a seq = 'a t [@@deriving bin_io, compare, sexp]
+
+let () = Pretty_printer.register "Regular.Std.Seq.pp"

@@ -618,12 +618,6 @@ module Std : sig
     val is_empty : 'a t -> bool
 
     val pp : 'a printer -> 'a t printer
-    val pp_bools : bool t printer
-    val pp_chars : char t printer
-    val pp_floats : float t printer
-    val pp_ints : int t printer
-    val pp_strings : string t printer
-
   end
 
   (** type abbreviation for ['a Sequence.t]  *)
