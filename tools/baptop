@@ -1,2 +1,2 @@
 #!/bin/sh
-exec utop -require "bap.top" "$@"
+exec utop -ppx ppx-bap -short-paths -require "bap.top" "$@"

@@ -1,8 +1,8 @@
 FLG -short-paths
 FLG -w -4-33-40-41-42-43-34-44
+FLG -ppx 'ppx-jane -as-ppx -inline-test-lib bap'
 
 PKG core_kernel
-PKG ppx_jane
 PKG fileutils
 PKG uri
 

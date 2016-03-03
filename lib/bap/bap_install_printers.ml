@@ -3,6 +3,11 @@ open Bap.Std
 open Or_error
 open Format
 
+
+let install_printer printer =
+  Topdirs.dir_install_printer std_formatter
+    (Longident.parse printer)
+
 let install_printers () =
   List.iter (Pretty_printer.all ()) ~f:(fun printer ->
       let printer =
@@ -11,7 +16,6 @@ let install_printers () =
             ~pattern:"Core"
             ~with_:"Core_kernel"
         else printer in
-      Topdirs.dir_install_printer std_formatter
-        (Longident.parse printer))
+      install_printer printer)
 
-let () = install_printers () 
+let () = install_printers ()

@@ -105,3 +105,6 @@ val remove_dominators : 'a t -> mem -> 'a t
 val to_sequence : 'a t -> (mem * 'a) Sequence.t
 
 include Container.S1 with type 'a t := 'a t
+
+
+val pp : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a t -> unit

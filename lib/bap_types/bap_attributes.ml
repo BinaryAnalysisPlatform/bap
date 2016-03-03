@@ -46,9 +46,7 @@ module Background = struct
   let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
 end
 
-type color = Color.t [@@deriving bin_io, compare, sexp]
-(* see: https://github.com/janestreet/ppx_sexp_conv/issues/3 *)
-let __color_of_sexp__ = Color.__t_of_sexp__
+type color = Color.t [@@deriving bin_io, compare, sexp_poly]
 
 let comment = register (module String)
     ~name:"comment"

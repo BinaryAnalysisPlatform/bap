@@ -31,11 +31,11 @@ let create_man prog =
 
 
 let main () =
-  let utils = ["baptop"] in
+  let utils = ["baptop"; "ppx-bap"] in
   let helps = List.map create_man tools |> List.concat in
   FileUtil.mkdir ~parent:true mandir;
   FileUtil.cp (manpages @ helps) mandir;
   FileUtil.cp (List.map (fun t -> "tools" / t) utils) bindir;
-  List.iter (fun name -> Unix.chmod (bindir / name) 0o700) utils
+  List.iter (fun name -> Unix.chmod (bindir / name) 0o770) utils
 
 let () = main ()

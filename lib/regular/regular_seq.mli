@@ -20,12 +20,6 @@ val max_printer_depth : int ref
 
 val pp : (formatter -> 'a -> unit) -> formatter -> 'a seq -> unit
 
-val pp_bools : formatter -> bool seq -> unit
-val pp_chars : formatter -> char seq -> unit
-val pp_floats : formatter -> float seq -> unit
-val pp_ints : formatter -> int seq -> unit
-val pp_strings : formatter -> string seq -> unit
-
 include Binable.S1 with type 'a t := 'a seq
 module Export : sig
   val (^::) : 'a -> 'a seq -> 'a seq

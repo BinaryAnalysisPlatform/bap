@@ -17,9 +17,9 @@ module Mem = struct
     let hash m = Addr.hash (repr m)
   end
   let sexp_of_t = T.sexp_of_t
-  let to_string mem =
+  let pp ppf mem =
     let a1,a2 = min_addr mem, max_addr mem in
-    Format.asprintf "[%a - %a]" Addr.pp a1 Addr.pp a2
+    Format.fprintf ppf "[%a - %a]" Addr.pp a1 Addr.pp a2
   include Comparable.Make(T)
   include Hashable.Make(T)
 end
@@ -107,6 +107,10 @@ let has_intersections tab (x : mem) : bool =
 
     Otherwise, the only solution (other then just reimplementing our
     own tree) is to sequence all keys and return the head.
+
+    TODO: it looks like that a new `closest_key` function is able to
+    find the matching key. So we can reimplement this function more
+    efficiently.
 *)
 let left_bound tab x =
   let rec search_left p = match prev_key tab.map p with
@@ -422,3 +426,13 @@ let rev_map_exn : type c . (mem,c) r ->
 
 let rev_map ~one_to t tab =
   try_with (fun () -> rev_map_exn one_to t tab)
+
+let pp_comma ppf () =
+  Format.pp_print_string ppf ", "
+
+let pp pp_elem ppf tab =
+  let pp_elem ppf (k,v) =
+    Format.fprintf ppf "%a => %a" Mem.pp k pp_elem v in
+  Seq.pp pp_elem ppf (to_sequence tab)
+
+let () = Pretty_printer.register "Bap.Std.Table.pp"

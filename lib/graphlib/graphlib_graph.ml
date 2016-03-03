@@ -100,6 +100,8 @@ module Tree = struct
     end;
     pp_close_box ppf ();
     fprintf ppf "@]@.}"
+
+  let () = Pretty_printer.register "Graphlib.Std.Tree.pp"
 end
 
 module Frontier = struct
@@ -123,6 +125,8 @@ module Frontier = struct
         | Some set ->
           fprintf ppf "[%a => (%s)]@." pp_elt src
             (string_of_set ~sep:" " pp_elt set))
+
+  let () = Pretty_printer.register "Graphlib.Std.Frontier.pp"
 end
 
 module Equiv = struct
@@ -132,11 +136,10 @@ module Equiv = struct
       include Int
       let module_name = Some "Graphlib.Std.Equiv"
       let version = "0.1"
-
     end)
 end
 
-type equiv = Equiv.t
+type equiv = Equiv.t [@@deriving bin_io, compare, sexp]
 
 module Group = struct
   (* top of set should be included into the set *)
@@ -154,6 +157,8 @@ module Group = struct
   let pp pp_elt ppf t =
     fprintf ppf "{%d: %a => (%s)}"
       t.ord pp_elt t.top (string_of_set ~sep:" " pp_elt t.set)
+
+  let () = Pretty_printer.register "Graphlib.Std.Group.pp"
 end
 
 type 'a group = 'a Group.t
@@ -193,6 +198,8 @@ module Partition = struct
     fprintf ppf "@;@[<v2>partition = {";
     Seq.iter (groups t) ~f:(fprintf ppf "@;%a" (Group.pp pp_elt));
     fprintf ppf "@]@;}"
+
+  let () = Pretty_printer.register "Graphlib.Std.Partition.pp"
 end
 
 type 'a partition = 'a Partition.t
@@ -818,6 +825,7 @@ module Path = struct
     Seq.range 1 (length t) |> Seq.iter  ~f:(fun i ->
         fprintf ppf ", %a" pp_elt t.edges.(i));
     fprintf ppf "}@]"
+  let () = Pretty_printer.register "Graphlib.Std.Path.pp"
 end
 
 type 'a path = 'a Path.t

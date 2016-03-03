@@ -129,7 +129,7 @@ Library dwarf
   Path:          lib/bap_dwarf
   FindlibName:   bap-dwarf
   Build$:        flag(dwarf)
-  BuildDepends:  bap, ppx_test
+  BuildDepends:  bap
   Modules:       Bap_dwarf
 
   InternalModules:
@@ -152,7 +152,7 @@ Executable run_dwarf_tests
   Path:		  lib_test/bap_dwarf
   Build$:	  flag(tests) && flag(dwarf)
   CompiledObject: best
-  BuildDepends:	  bap, oUnit, bap-piqi, dwarf_test
+  BuildDepends:	  bap, oUnit, bap-dwarf, dwarf_test
   Install:	  false
   MainIs: run_tests.ml
 
@@ -160,6 +160,11 @@ Test dwarf_tests
  TestTools: run_dwarf_tests
  Run$: flag(tests) && flag(dwarf)
  Command: $run_dwarf_tests
+
+Test dwarf_inline_tests
+ TestTools: run_dwarf_tests
+ Run$: flag(tests) && flag(dwarf)
+ Command: $run_dwarf_tests inline-test-runner bap -show-counts
 
 
 ########## Bap_elf Library ########################

@@ -10,7 +10,7 @@ Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args
 BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
-     -j 8
+     -j 2
      -use-ocamlfind
      -classic-display
      -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"

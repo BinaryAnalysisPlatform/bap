@@ -242,18 +242,15 @@ module C = Container.Make(
   struct
     type 'a t = 'a node option
     let rec fold m ~init ~f = Option.fold m ~init:init ~f:(fun acc m ->
-        fold m.rhs ~init:(f (fold m.lhs ~init:acc ~f) m.data) ~f
-      )
+        fold m.rhs ~init:(f (fold m.lhs ~init:acc ~f) m.data) ~f)
 
     let rec iter m ~f = Option.iter m ~f:(fun m ->
         iter m.lhs ~f;
         f m.data;
-        iter m.rhs ~f
-      )
+        iter m.rhs ~f)
 
     let iter  = `Custom iter
-  end
-  )
+  end)
 
 let fold = C.fold
 let count = C.count
@@ -270,3 +267,14 @@ let to_list = C.to_list
 let to_array = C.to_array
 let min_elt = C.min_elt
 let max_elt = C.max_elt
+
+let pp pp_elt ppf map =
+  let module M = Bap_memory in
+  let pp_mem ppf mem =
+    let a1,a2 = M.min_addr mem, M.max_addr mem in
+    Format.fprintf ppf "[%a - %a]" Addr.pp a1 Addr.pp a2 in
+  let pp_elt ppf (k,v) =
+    Format.fprintf ppf "%a => %a" pp_mem k pp_elt v in
+  Seq.pp pp_elt ppf (to_sequence map)
+
+let () = Pretty_printer.register "Bap.Std.Memmap.pp"
