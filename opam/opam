@@ -30,7 +30,9 @@ install: [
 ]
 
 remove: [
-  ["ocamlfind" "remove" "bap"]
+  [make "uninstall"]
+  ["rm" "-f" "%{prefix}%/bin/baptop"]
+  ["rm" "-f" "%{prefix}%/bin/ppx-bap"]
   ["rm" "-rf" "%{prefix}%/share/bap"]
   ["rm" "-f" "%{man}%/man1/bap-mc.1"]
   ["rm" "-f" "%{man}%/man1/bap.1"]
