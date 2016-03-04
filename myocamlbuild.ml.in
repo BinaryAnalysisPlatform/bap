@@ -57,9 +57,18 @@ let mark_tags () =
     "pkg_core";
   ]
 
+(* we will pass this manually, util it is fixed *)
+let pr_6184_hack = function
+  | After_rules ->
+    (* Pass -predicates to ocamldep *)
+    pflag ["ocaml"; "ocamldep"] "predicate" (fun s -> S [A "-predicates"; A s])
+  | _ -> ()
+
+
 let () =
   mark_tags ();
   Ocamlbuild_plugin.dispatch (fun hook ->
       dispatch hook;
       dispatch_default hook;
+      pr_6184_hack hook;
       Ppx_driver_ocamlbuild.dispatch hook)
