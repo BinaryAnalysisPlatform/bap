@@ -1,0 +1,17 @@
+Flag phoenix
+  Description: Build phoenix plugin
+  Default: false
+
+Library phoenix_plugin
+  Build$:           flag(everything) || flag(phoenix)
+  Path:             plugins/phoenix
+  FindlibName:      bap-plugin-phoenix
+  BuildDepends:     bap, cmdliner, text-tags, ocamlgraph, ezjsonm
+  InternalModules:  Phoenix_main,
+                    Phoenix_dot,
+                    Phoenix_helpers,
+                    Phoenix_options,
+                    Phoenix_output,
+                    Phoenix_printing,
+                    Phoenix_root
+  XMETADescription: output project information in a phoenix format

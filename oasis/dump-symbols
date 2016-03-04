@@ -1,0 +1,12 @@
+Flag dump_symbols
+  Description: Build dump-symbols plugin
+  Default: false
+
+Library dump_symbols_plugin
+  Build$:           flag(everything) || flag(dump_symbols)
+  Path:             plugins/dump_symbols
+  FindlibName:      bap-plugin-dump_symbols
+  CompiledObject:   best
+  BuildDepends:     bap, cmdliner
+  InternalModules:  Dump_symbols_main
+  XMETADescription: dump symbol information as a list of blocks

@@ -1,0 +1,27 @@
+########## Bap_elf Library ########################
+Flag elf
+  Description: Build Bap_elf library
+  Default: false
+
+Library elf
+  Path:          lib/bap_elf
+  Build$:        flag(everything) || flag(elf)
+  FindlibName:   bap-elf
+  BuildDepends:  bap, bitstring, camlp4, bitstring.syntax
+  Modules: Bap_elf
+  InternalModules:
+                 Elf_parse,
+                 Elf_types,
+                 Elf_utils,
+                 Elf_internal_utils
+
+############## Elf Native loader ####################
+
+Library elf_loader_plugin
+  Path:             plugins/elf_loader
+  Build$:           flag(everything) || flag(elf)
+  FindlibName:      bap-plugin-elf_loader
+  CompiledObject:   best
+  BuildDepends:     bap, bap-elf, bap-dwarf
+  InternalModules:  Elf_loader_main
+  XMETADescription: read ELF and DWARF formats in a pure OCaml

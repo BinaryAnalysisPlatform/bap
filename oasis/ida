@@ -1,0 +1,14 @@
+########### Bap_ida Library #############################
+
+Flag ida
+  Description: Build IDA intergration library
+  Default: false
+
+Library bap_ida
+  Path:             lib/bap_ida
+  FindlibName:      bap-ida
+  CompiledObject:   best
+  Build$:           flag(everything) || flag(ida)
+  Modules:          Bap_ida
+  BuildDepends:     fileutils, re.posix
+  XMETADescription: make calls into IDA

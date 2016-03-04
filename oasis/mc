@@ -1,0 +1,11 @@
+Flag mc
+  Description: Build BAP Machine Code frontend
+  Default: false
+
+Executable "bap-mc"
+  Path:           src
+  MainIs:         bap_mc.ml
+  Build$:         flag(everything) || flag(mc)
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, cmdliner, findlib.dynload

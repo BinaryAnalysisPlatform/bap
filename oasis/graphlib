@@ -1,0 +1,17 @@
+Flag graphlib
+  Description: Build graphlib library
+  Default: false
+
+Library graphlib
+  Path:            lib/graphlib
+  FindlibName:     graphlib
+  Build$:          flag(everything) || flag(graphlib)
+  CompiledObject:  best
+  BuildDepends:    core_kernel, regular, ocamlgraph
+  Modules:         Graphlib
+  InternalModules:
+                   Graphlib_graph,
+                   Graphlib_intf,
+                   Graphlib_regular,
+                   Graphlib_regular_intf,
+                   Graphlib_pp

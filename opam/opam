@@ -12,25 +12,74 @@ build: [
                  "--prefix=%{prefix}%"
                  "--with-cxx=`which clang++`"
                  "--mandir=%{man}%"
-                 "--enable-frontend"
-                 "--enable-mc"
-                 "--enable-byteweight"
-                 "--enable-elf"
-                 "--enable-dwarf"
-                 "--enable-piqi"
-                 "--enable-tests"
+                 "--enable-everything"
                  ]
   [make]
 ]
 
 install: [
+  ["ocamlfind" "remove" "bap"]
+  ["ocamlfind" "remove" "bap-arm"]
+  ["ocamlfind" "remove" "bap-build"]
+  ["ocamlfind" "remove" "bap-byteweight"]
+  ["ocamlfind" "remove" "bap-demangle"]
+  ["ocamlfind" "remove" "bap-dwarf"]
+  ["ocamlfind" "remove" "bap-elf"]
+  ["ocamlfind" "remove" "bap-future"]
+  ["ocamlfind" "remove" "bap-ida"]
+  ["ocamlfind" "remove" "bap-piqi"]
+  ["ocamlfind" "remove" "bap-plugin-arm"]
+  ["ocamlfind" "remove" "bap-plugin-byteweight"]
+  ["ocamlfind" "remove" "bap-plugin-cache"]
+  ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-elf_loader"]
+  ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
+  ["ocamlfind" "remove" "bap-plugin-ida"]
+  ["ocamlfind" "remove" "bap-plugin-llvm"]
+  ["ocamlfind" "remove" "bap-plugin-phoenix"]
+  ["ocamlfind" "remove" "bap-plugin-piqi_printers"]
+  ["ocamlfind" "remove" "bap-plugin-print"]
+  ["ocamlfind" "remove" "bap-plugin-read_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-x86"]
+  ["ocamlfind" "remove" "bap-traces"]
+  ["ocamlfind" "remove" "bap-x86-cpu"]
+  ["ocamlfind" "remove" "graphlib"]
+  ["ocamlfind" "remove" "regular"]
+  ["ocamlfind" "remove" "text-tags"]
   [make "reinstall"]
   ["bap-byteweight" "update"]
   [make "test"]
 ]
 
 remove: [
-  [make "uninstall"]
+  ["ocamlfind" "remove" "bap"]
+  ["ocamlfind" "remove" "bap-arm"]
+  ["ocamlfind" "remove" "bap-build"]
+  ["ocamlfind" "remove" "bap-byteweight"]
+  ["ocamlfind" "remove" "bap-demangle"]
+  ["ocamlfind" "remove" "bap-dwarf"]
+  ["ocamlfind" "remove" "bap-elf"]
+  ["ocamlfind" "remove" "bap-future"]
+  ["ocamlfind" "remove" "bap-ida"]
+  ["ocamlfind" "remove" "bap-piqi"]
+  ["ocamlfind" "remove" "bap-plugin-arm"]
+  ["ocamlfind" "remove" "bap-plugin-byteweight"]
+  ["ocamlfind" "remove" "bap-plugin-cache"]
+  ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-elf_loader"]
+  ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
+  ["ocamlfind" "remove" "bap-plugin-ida"]
+  ["ocamlfind" "remove" "bap-plugin-llvm"]
+  ["ocamlfind" "remove" "bap-plugin-phoenix"]
+  ["ocamlfind" "remove" "bap-plugin-piqi_printers"]
+  ["ocamlfind" "remove" "bap-plugin-print"]
+  ["ocamlfind" "remove" "bap-plugin-read_symbols"]
+  ["ocamlfind" "remove" "bap-plugin-x86"]
+  ["ocamlfind" "remove" "bap-traces"]
+  ["ocamlfind" "remove" "bap-x86-cpu"]
+  ["ocamlfind" "remove" "graphlib"]
+  ["ocamlfind" "remove" "regular"]
+  ["ocamlfind" "remove" "text-tags"]
   ["rm" "-f" "%{prefix}%/bin/baptop"]
   ["rm" "-f" "%{prefix}%/bin/ppx-bap"]
   ["rm" "-rf" "%{prefix}%/share/bap"]

@@ -1,0 +1,11 @@
+Flag symbol_reader
+  Description: Build read-symbols plugin
+  Default: false
+
+Library read_symbols_plugin
+  Build$:           flag(everything) || flag(symbol_reader)
+  Path:             plugins/read_symbols
+  FindlibName:      bap-plugin-read_symbols
+  BuildDepends:     bap, cmdliner
+  Modules:          Read_symbols_main
+  XMETADescription: read symbol information from file
