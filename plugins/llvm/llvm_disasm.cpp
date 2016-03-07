@@ -15,7 +15,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "../../lib/bap_disasm/disasm.hpp"
+#include "disasm.hpp"
 #include "llvm_disasm.h"
 
 template <typename T>

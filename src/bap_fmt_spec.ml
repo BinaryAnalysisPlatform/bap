@@ -1,12 +1,12 @@
 open Core_kernel.Std
-open Bap.Std       
+open Bap.Std
 open Cmdliner
 open Format
 
 type output = [`file of string | `stdout] [@@deriving sexp]
 type t = output * string * string option [@@deriving sexp]
 
-let parse_fmt fmt = 
+let parse_fmt fmt =
   match String.split ~on:'-' fmt with
   | [fmt;ver] -> fmt, Some ver
   | _ -> fmt,None
@@ -16,7 +16,6 @@ let flatten (x,(y,z)) = x,y,z
 let split str = match String.split ~on:':' str with
   | [fmt;dst] -> flatten (`file dst,parse_fmt fmt)
   | _ -> flatten (`stdout,parse_fmt str)
-
 
 let parse str =
   let (_,fmt,ver) as r = split str in
