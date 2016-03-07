@@ -24,3 +24,7 @@ PreConfCommand: $rm setup.data
 PostInstallCommand: ./postinstall.byte
 PostUninstallCommand: $rm $bindir/baptop
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
+
+Flag everything
+  Description: Build every feature by default
+  Default: false

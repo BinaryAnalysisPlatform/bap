@@ -1,0 +1,38 @@
+Flag arm
+ Description: Build ARM lifter
+ Default: false
+
+Library "bap-arm"
+ XMETADescription: arm lifting
+ Path:             lib/arm
+ Build$:           flag(everything) || flag(arm)
+ BuildDepends:     bap
+ FindlibName:      bap-arm
+ Modules:
+                 ARM,
+                 Arm_bit,
+                 Arm_branch,
+                 Arm_cond,
+                 Arm_env,
+                 Arm_flags,
+                 Arm_helpers,
+                 Arm_insn,
+                 Arm_lifter,
+                 Arm_mem,
+                 Arm_mem_shift,
+                 Arm_mov,
+                 Arm_mul,
+                 Arm_op,
+                 Arm_reg,
+                 Arm_shift,
+                 Arm_types,
+                 Arm_utils
+
+
+Library arm_plugin
+  Build$:           flag(everything) || flag(arm)
+  Path:             plugins/arm
+  FindlibName:      bap-plugin-arm
+  BuildDepends:     bap, bap-arm
+  InternalModules:  Arm_main
+  XMETADescription: provide ARM lifter

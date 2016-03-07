@@ -5,7 +5,7 @@ set -e
 rm -f _oasis
 
 FST=true
-WITHOUT_BAP_LIBRARY=false
+
 
 for i in "$@"; do
   if $FST; then
@@ -14,9 +14,6 @@ for i in "$@"; do
   fi
 
   case $i in
-    --without-library)
-      WITHOUT_BAP_LIBRARY=true
-      ;;
     --*=*)
       ARG=${i%%=*}
       VAL=${i##*=}
@@ -28,11 +25,8 @@ for i in "$@"; do
   esac
 done
 
-if [ $WITHOUT_BAP_LIBRARY = "true" ]; then
-    ocaml tools/cat.ml oasis/common oasis/src _oasis
-else
-    ocaml tools/cat.ml oasis/common oasis/bap oasis/src _oasis
-fi
+SECTIONS=`ocaml tools/oasis_sections.ml $@`
+ocaml tools/cat.ml $SECTIONS _oasis
 ocaml tools/cat.ml _tags.in _tags
 ocaml tools/cat.ml myocamlbuild.ml.in myocamlbuild.ml
 ocaml tools/cat.ml setup.ml.in setup.ml

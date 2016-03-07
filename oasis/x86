@@ -1,0 +1,25 @@
+Flag x86
+ Description: Build x86 support
+ Default: false
+
+Library "bap-x86-cpu"
+ Build$:           flag(everything) || flag(x86)
+ XMETADescription: provide x86 lifter
+ Path:             lib/x86_cpu
+ FindlibName:      bap-x86-cpu
+ BuildDepends:     bap
+ Modules:        X86_cpu,
+                 X86_env,
+                 X86_types
+
+Library x86_plugin
+ Build$:           flag(everything) || flag(x86)
+ XMETADescription: provide x86 lifter
+ Path:             plugins/x86
+ FindlibName:      bap-plugin-x86
+ BuildDepends:     bap, bap-x86-cpu
+ InternalModules:
+                 X86_disasm,
+                 X86_lifter,
+                 X86_main,
+                 X86_utils

@@ -1,0 +1,13 @@
+Flag print
+  Description: Build print plugin
+  Default: false
+
+########## Print Plugin ####################################
+
+Library print_plugin
+  Build$:           flag(everything) || flag(print)
+  Path:             plugins/print
+  FindlibName:      bap-plugin-print
+  BuildDepends:     bap, cmdliner, text-tags, bap-demangle
+  InternalModules:  Print_main
+  XMETADescription: print project in various formats

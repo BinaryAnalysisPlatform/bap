@@ -1,0 +1,20 @@
+Flag byteweight
+  Description: Build byteweight library
+  Default: false
+
+Library byteweight
+  Path:            lib/bap_byteweight
+  FindLibName:     bap-byteweight
+  Build$:          flag(everything) || flag(byteweight)
+  CompiledObject:  best
+  Modules:         Bap_byteweight, Bap_byteweight_signatures
+  BuildDepends:    bap, core_kernel, uri
+
+Library byteweight_plugin
+  Path:             plugins/byteweight
+  FindlibName:      bap-plugin-byteweight
+  Build$:           flag(everything) || flag(byteweight)
+  CompiledObject:   best
+  BuildDepends:     bap, bap-byteweight, cmdliner
+  InternalModules:  Byteweight_main
+  XMETADescription: find function starts using Byteweight algorithm

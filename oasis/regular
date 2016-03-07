@@ -1,0 +1,22 @@
+Flag regular
+  Description:     Build regular library
+  Default:         false
+
+Library regular
+  Build$:          flag(everything) || flag(regular)
+  Path:            lib/regular
+  FindlibName:     regular
+  CompiledObject:  best
+  BuildDepends:    core_kernel
+  Modules:         Regular
+  InternalModules:
+                   Regular_bytes,
+                   Regular_cache,
+                   Regular_data,
+                   Regular_data_intf,
+                   Regular_data_types,
+                   Regular_data_write,
+                   Regular_data_read,
+                   Regular_opaque,
+                   Regular_regular,
+                   Regular_seq

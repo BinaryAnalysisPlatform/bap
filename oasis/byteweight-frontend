@@ -1,0 +1,13 @@
+
+Flag byteweight_frontend
+  Description: Build bap-byteweight toolkit
+  Default: false
+
+Executable "bap-byteweight"
+  Path:           src
+  MainIs:         byteweight_main.ml
+  Build$:         flag(everything) || flag(byteweight_frontend)
+  Install:        true
+  CompiledObject: best
+  BuildDepends:   bap, bap.plugins, bap-byteweight,
+                  cmdliner, curl, fileutils, re.posix

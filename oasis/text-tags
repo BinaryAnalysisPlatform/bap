@@ -1,0 +1,11 @@
+Flag text_tags
+  Description: Build text-tags library
+  Default: false
+
+Library "text-tags"
+  Path:  lib/text_tags
+  Build$: flag(everything) || flag(text_tags)
+  FindlibName: text-tags
+  CompiledObject: best
+  BuildDepends: core_kernel
+  Modules: Text_tags

@@ -1,5 +1,10 @@
+Flag bap_std
+  Description: Build BAP Standard Library
+  Default: false
+
 Library bap
   Path:            lib/bap
+  Build$:          flag(everything) || flag(bap_std)
   FindLibName:     bap
   CompiledObject:  best
   BuildDepends:    bap.disasm,
@@ -10,40 +15,10 @@ Library bap
   Modules:         Bap
   InternalModules: Bap_project, Bap_self
 
-Library regular
-  Path:            lib/regular
-  FindlibName:     regular
-  CompiledObject:  best
-  BuildDepends:    core_kernel
-  Modules:         Regular
-  InternalModules:
-                   Regular_bytes,
-                   Regular_cache,
-                   Regular_data,
-                   Regular_data_intf,
-                   Regular_data_types,
-                   Regular_data_write,
-                   Regular_data_read,
-                   Regular_opaque,
-                   Regular_regular,
-                   Regular_seq
-
-
-Library graphlib
-  Path:            lib/graphlib
-  FindlibName:     graphlib
-  CompiledObject:  best
-  BuildDepends:    core_kernel, regular, ocamlgraph
-  Modules:         Graphlib
-  InternalModules:
-                   Graphlib_graph,
-                   Graphlib_intf,
-                   Graphlib_regular,
-                   Graphlib_regular_intf,
-                   Graphlib_pp
 
 Library types
   Path:            lib/bap_types
+  Build$:          flag(everything) || flag(bap_std)
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
@@ -90,6 +65,7 @@ Library types
 
 Library bap_image
   Path:          lib/bap_image/
+  Build$:          flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
   BuildDepends:  bap.types
@@ -106,6 +82,7 @@ Library bap_image
 
 Library disasm
   Path:          lib/bap_disasm
+  Build$:          flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   disasm
   BuildDepends:  bap.image,
@@ -140,6 +117,7 @@ Library disasm
   CSources:      disasm.h, disasm.c, disasm_stubs.c
 
 Library sema
+  Build$:          flag(everything) || flag(bap_std)
   Path:          lib/bap_sema
   FindlibParent: bap
   FindlibName:   sema
@@ -153,6 +131,7 @@ Library sema
                  Bap_sema_free_vars
 
 Library plugins
+  Build$:          flag(everything) || flag(bap_std)
   Path:            lib/bap_plugins
   FindLibParent:   bap
   FindLibName:     plugins
@@ -160,6 +139,7 @@ Library plugins
   BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap.bundle, bap.config
 
 Library "bap-build"
+  Build$:          flag(everything) || flag(bap_std)
   Path: lib/bap_build
   FindlibName: bap-build # will rename later
   #FindlibParent: bap
@@ -169,8 +149,8 @@ Library "bap-build"
 
 
 Library top
-  XMETADescription:
-     Toplevel printers for bap-types and core_kernel
+  XMETADescription: Toplevel printers for bap-types and core_kernel
+  Build$:          flag(everything) || flag(bap_std)
   Path: lib/bap
   FindLibParent: bap
   FindLibName: top
@@ -185,6 +165,7 @@ Library top
                 bap.config
 
 Library config
+  Build$:          flag(everything) || flag(bap_std)
   Path:            lib/bap_config
   FindlibParent:   bap
   FindlibName:     config
@@ -192,84 +173,16 @@ Library config
 
 
 Library bundle
+  Build$:          flag(everything) || flag(bap_std)
   Path:          lib/bap_bundle
   FindlibParent: bap
   FindlibName:   bundle
   BuildDepends:  uri, camlzip, unix, bap.config
   Modules:       Bap_bundle
 
-Library types_test
-  Path:           lib_test/bap_types
-  Build$:         flag(tests)
-  Install:        false
-  CompiledObject: best
-  BuildDepends:   bap, oUnit
-  Modules:        Test_bitvector,
-                  Test_bili,
-                  Test_bytes,
-                  Test_graph,
-                  Test_trie
-
-Library image_test
-  Path:           lib_test/bap_image
-  Build$:         flag(tests)
-  CompiledObject: best
-  BuildDepends:   bap, oUnit
-  Install:        false
-  Modules:        Test_image,
-                  Test_memmap,
-                  Test_table
-
-Library project_test
-  Path:           lib_test/bap_project
-  Build$:         flag(tests)
-  CompiledObject: best
-  BuildDepends:   bap, oUnit
-  Install:        false
-  Modules:        Test_project
-
-Library disasm_test
-  Path:           lib_test/bap_disasm
-  Build$:         flag(tests)
-  CompiledObject: best
-  BuildDepends:   bap, oUnit
-  Install:        false
-  Modules:        Test_disasm
-
-Library sema_test
-  Path:           lib_test/bap_sema
-  Build$:         flag(tests)
-  CompiledObject: best
-  BuildDepends:   bap, oUnit
-  Install:        false
-  Modules:        Test_ir
-
-
-Executable run_tests
-  Path:         lib_test/bap
-  MainIs:       run_tests.ml
-  Install:      false
-  Build$:       flag(tests)
-  BuildDepends: bap.plugins,
-                disasm_test,
-                image_test,
-                oUnit,
-                sema_test,
-                types_test,
-                project_test,
-                findlib.dynload
-  CompiledObject: best
-
-
-Test unit_tests
-  TestTools: run_tests
-  Command: $run_tests -runner sequential
-
-Test inline_tests
-  TestTools: run_tests
-  Command: $run_tests inline-test-runner bap -show-counts
 
 Executable "bapbuild"
+  Build$:          flag(everything) || flag(bap_std)
   Path:           tools
   MainIs:         bapbuild.ml
   Install:        true
@@ -277,6 +190,7 @@ Executable "bapbuild"
   BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs
 
 Executable "bapbundle"
+  Build$:          flag(everything) || flag(bap_std)
   Path:           tools
   MainIs:         bapbundle.ml
   Install:        true
@@ -284,6 +198,7 @@ Executable "bapbundle"
   BuildDepends:   core_kernel, bap.bundle, fileutils
 
 Executable "postinstall"
+  Build$:          flag(everything) || flag(bap_std)
   Path:           tools
   MainIs:         postinstall.ml
   Install:        false

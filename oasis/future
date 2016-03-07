@@ -1,0 +1,33 @@
+######## Future library #####
+Flag future
+  Description: compile future library
+  Default: false
+
+Library bap_future
+  Path:            lib/bap_future/
+  FindlibName:     bap-future
+  CompiledObject:  best
+  Build$:          flag(everything) || flag(future)
+  BuildDepends:    core_kernel
+  InternalModules: Bap_future
+
+Library future_test
+  Path:           lib_test/bap_future
+  Build$:         (flag(everything) || flag(future)) && flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap-future, oUnit
+  Install:        false
+  Modules:        Test_future_std, Test_future, Test_stream
+
+Executable run_future_tests
+  Path:           lib_test/bap_future
+  Build$:         (flag(everything) || flag(future)) && flag(tests)
+  CompiledObject: best
+  BuildDepends:   bap-future, oUnit
+  Install:        false
+  MainIs:        run_future_tests.ml
+
+Test future_tests
+  TestTools: run_future_tests
+  Run$: flag(tests) && (flag(everything) || flag(future))
+  Command: $run_future_tests

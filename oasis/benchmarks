@@ -1,0 +1,26 @@
+########## Benchmarking ###########################
+Flag benchmarks
+  Description: Build and run benchmarks
+  Default: false
+
+Library benchmarks
+  Path:           benchmarks
+  Build$:         flag(tests) && flag(benchmarks)
+  CompiledObject: best
+  BuildDepends:   bap, core, core_bench, threads
+  Install:        false
+  Modules:        Bench_dom, Bench_image
+
+
+Executable run_benchmarks
+  Path:         benchmarks
+  MainIs:       run_benchmarks.ml
+  Install:      false
+  Build$:       flag(tests) && flag(benchmarks)
+  BuildDepends: bap, benchmarks
+  CompiledObject: native
+
+Test benchmarks
+  TestTools: run_benchmarks
+  Run$:         flag(tests) && flag(benchmarks)
+  Command: $run_benchmarks
