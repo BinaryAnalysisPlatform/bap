@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Cmdliner
+open Format
 
 include Self()
 

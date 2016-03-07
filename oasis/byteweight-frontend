@@ -9,5 +9,5 @@ Executable "bap-byteweight"
   Build$:         flag(everything) || flag(byteweight_frontend)
   Install:        true
   CompiledObject: best
-  BuildDepends:   bap, bap.plugins, bap-byteweight,
+  BuildDepends:   bap, bap-byteweight,
                   cmdliner, curl, fileutils, re.posix

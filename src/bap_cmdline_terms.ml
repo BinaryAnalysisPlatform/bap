@@ -110,8 +110,15 @@ let list_formats, list_formats_doc =
 let dump_formats () : Bap_fmt_spec.t list Term.t =
   let fmts = Project.available_writers () |>
              List.map ~f:(fun (n,_,_) -> n,n) in
+  let parse = fst Bap_fmt_spec.t in
+  match fmts with
+  | [] -> Term.const []
+  | (fmt,_) :: _ as fmts ->
+    let vopt = match parse "bir" with
+      | `Ok fmt -> fmt
+      | `Error _ -> `stdout,fmt,None in
   let doc = sprintf
-      "Print a project using designated format to a specified
+      "Print a project using the designated format to a specified
        destination. If format and destination is not specified, then a
        program will be printed in the IR form to the standard
        output. The argument consists of format specification, and an
@@ -130,7 +137,6 @@ let dump_formats () : Bap_fmt_spec.t list Term.t =
        several times, to dump the project is several formats (and
        possibly destinations) simultaneously." @@
     Arg.doc_alts_enum fmts in
-  let vopt = `stdout,"bir",None in
   Arg.(value & opt_all ~vopt Bap_fmt_spec.t [] &
        info ["dump"; "d"] ~doc)
 

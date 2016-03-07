@@ -2,6 +2,8 @@ Flag bap_std
   Description: Build BAP Standard Library
   Default: false
 
+PostInstallCommand: ./postinstall.byte
+
 Library bap
   Path:            lib/bap
   Build$:          flag(everything) || flag(bap_std)
