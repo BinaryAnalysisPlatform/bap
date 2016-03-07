@@ -12,6 +12,7 @@ Library trace
   InternalModules: Bap_trace_binprot,
                    Bap_trace_events,
                    Bap_trace_event_types,
+                   Bap_trace_id,
                    Bap_trace_meta,
                    Bap_trace_meta_types,
                    Bap_trace_std,
