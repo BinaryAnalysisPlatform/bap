@@ -6,11 +6,8 @@ include Bap_disasm_types
 include Bap_disasm
 include Bap_disasm_target_factory
 
-module Abi     = Bap_disasm_abi
 module Insn    = Bap_disasm_insn
 module Block   = Bap_disasm_block
-
-class virtual abi = Abi.t
 
 module Disasm_expert = struct
   type nonrec lifter = lifter

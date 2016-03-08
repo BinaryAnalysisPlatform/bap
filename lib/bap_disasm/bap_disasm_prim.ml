@@ -8,7 +8,7 @@ open Core_kernel.Std
     that retrieves imm value of operand as an int (and thus is a
     "noalloc" function). Values that don't fit, are represented as
     [Int.max_val], and [Int.min_val]. (So this functions actually
-    narrows abit a range of values representable by int type - min_val and
+    narrows a bit a range of values representable by int type - min_val and
     max_val are no longer included, since they're used as sentinels).
 
     All this functions are unsafe. They can cause segfaults or worse,
