@@ -36,6 +36,8 @@ module Std = struct
     let free_vars = FV.free_vars_of_sub
   end
 
+  module Taint = Bap_sema_taint
+
   module Graphs = struct
     module Tid = Bap_tid_graph
     module Ir = Bap_ir_graph
