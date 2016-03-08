@@ -92,8 +92,14 @@ let digest o =
   Digest.(to_hex (string (fs ^ os)))
 
 let process options project =
+  let run_passes init = List.fold ~init ~f:(fun proj pass ->
+      Project.Pass.run_exn pass proj) in
+  let project = Project.passes () |>
+                List.filter ~f:Project.Pass.autorun |>
+                run_passes project in
   let project = options.passes |>
-                List.fold ~init:project ~f:Project.run_pass_exn in
+                List.filter_map ~f:Project.find_pass |>
+                run_passes project in
   List.iter options.dump ~f:(function
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
@@ -243,10 +249,12 @@ let () =
     error "Failed to create a project: %a" Error.pp err
   | Unknown_format fmt ->
     error "Format `%s' is not known" fmt
-  | Project.Pass_failed (Project.Not_loaded p) ->
-    error "Pass `%s' can't be run, because it wasn't loaded" p
-  | Project.Pass_failed (Project.Runtime_error (p,exn)) ->
-    error "Pass `%s' failed at runtime with: %a" p Exn.pp exn
+  | Project.Pass.Failed (Project.Pass.Unsat_dep (p,n)) ->
+    error "Dependency `%s' of pass `%s' is not loaded"
+      n (Project.Pass.name p)
+  | Project.Pass.Failed (Project.Pass.Runtime_error (p,exn)) ->
+    error "Pass `%s' failed at runtime with: %a"
+      (Project.Pass.name p) Exn.pp exn
   | exn ->
     error "Failed with an unexpected exception: %a\nBacktrace:\n%s"
       Exn.pp exn

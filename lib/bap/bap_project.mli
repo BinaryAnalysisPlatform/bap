@@ -6,6 +6,8 @@ open Bap_disasm_std
 open Bap_sema.Std
 
 type t
+type project = t
+type pass [@@deriving sexp_of]
 
 val from_file :
   ?on_warning:(Error.t -> unit Or_error.t) ->
@@ -67,20 +69,32 @@ val has : t -> 'a tag -> bool
 
 val restore_state : t -> unit
 
-type error =
-  | Not_loaded of string
-  | Runtime_error of string * exn
-[@@deriving sexp_of]
 
-exception Pass_failed of error [@@deriving sexp]
+module Pass : sig
+  type t = pass [@@deriving sexp_of]
 
-val register_pass : ?deps:string list -> ?name:string -> (t -> t) -> unit
-val register_pass': ?deps:string list -> ?name:string -> (t -> unit) -> unit
+  type error =
+    | Unsat_dep of pass * string
+    | Runtime_error of pass * exn
+    [@@deriving sexp_of]
 
-val passes : unit -> string list Or_error.t
-val run_pass : t -> string -> t Or_error.t
-val run_pass_exn : t -> string -> t
-val passes : unit -> string list
+  exception Failed of error [@@deriving sexp]
+
+  val run : t -> project -> (project,error) Result.t
+  val run_exn : t -> project -> project
+
+  val name : t -> string
+  val autorun : t -> bool
+end
+
+val find_pass : string -> pass option
+
+val register_pass :
+  ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
+val register_pass':
+  ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
+
+val passes : unit -> pass list
 
 module Factory : Source.Factory
   with type t =

@@ -89,7 +89,8 @@ let run_and_get_passes argv =
           (Plugin.name p) (Error.to_string_hum err));
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~library ~verbose ~exclude;
-  let known_passes = Project.passes () in
+  let known_passes = Project.passes () |>
+                     List.map ~f:Project.Pass.name in
   let known_plugins = List.map known_plugins ~f:Plugin.name in
   let known_names = known_plugins @ known_passes in
   exit_if_plugin_help_was_requested known_names argv;
