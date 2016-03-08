@@ -1,0 +1,7 @@
+PKG bap
+PKG FrontC
+PKG bap-x86-cpu
+PKG bap-arm
+PKG cmdliner
+
+FLG -short-paths
