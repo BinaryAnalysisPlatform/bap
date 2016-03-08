@@ -22,8 +22,9 @@ let selected args =
       | Some f when Sys.file_exists ("oasis" / f) -> f :: fs
       | _ -> fs) []
 
+
 let features args =
-  if List.mem "--enable-everything" args
+  if List.(mem "--enable-everything" args || mem "--help" args)
   then header :: everything
   else header :: selected args
 

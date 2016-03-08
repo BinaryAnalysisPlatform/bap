@@ -6,7 +6,6 @@ module Ssa = Bap_sema_ssa
 module Ir_lift = Bap_sema_lift
 module Ir_graph = Bap_ir_graph
 module FV = Bap_sema_free_vars
-module ABI = Bap_sema_abi
 
 module Std = struct
   include Bap_ir
@@ -35,7 +34,6 @@ module Std = struct
     let ssa = Ssa.sub
     let is_ssa = Ssa.is_transformed
     let free_vars = FV.free_vars_of_sub
-    let infer_args = ABI.infer_args
   end
 
   module Graphs = struct

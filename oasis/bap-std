@@ -94,7 +94,6 @@ Library disasm
                  ppx_here
   InternalModules:
                  Bap_disasm,
-                 Bap_disasm_abi,
                  Bap_disasm_basic,
                  Bap_disasm_block,
                  Bap_disasm_brancher,
@@ -127,7 +126,6 @@ Library sema
                  bap.types
   InternalModules:
                  Bap_sema,
-                 Bap_sema_abi,
                  Bap_sema_lift,
                  Bap_sema_ssa,
                  Bap_sema_free_vars
@@ -184,7 +182,7 @@ Library bundle
 
 
 Executable "bapbuild"
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:         flag(everything) || flag(bap_std)
   Path:           tools
   MainIs:         bapbuild.ml
   Install:        true

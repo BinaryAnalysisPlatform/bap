@@ -1,6 +1,6 @@
 ######## Future library #####
 Flag future
-  Description: compile future library
+  Description: Build future library
   Default: false
 
 Library bap_future
