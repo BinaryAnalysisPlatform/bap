@@ -5729,13 +5729,16 @@ module Std : sig
     module Factory : Source.Factory with type t := t
   end
 
+  type project
+
   (** Target of analysis.  *)
   module Project : sig
     (** A project groups together all the information recovered from
         the underlying binary. It is also used for exchanging
         information between {{!section:project}passes}.  *)
 
-    type t
+    type t = project
+
 
     (** IO interface to a project data structure.  *)
     include Data with type t := t
@@ -5899,35 +5902,12 @@ module Std : sig
     *)
     val has : t -> 'a tag -> bool
 
-    (** {3 Registering and running passes}
+    (** {3 Registering passes}
 
         To add new pass one of the following [register_*] functions
         should be called.*)
 
-    (** An error that can occur when loading or running pass.
-        - [Not_loaded name] pass with a given [name] wasn't loaded for
-        some reason. This is a very unlikely error, indicating
-        either a logic error in the plugin system implementation or
-        something very weird, that we didn't expect.
-
-
-        - [Not_loaded name] when we tried to load plugin with a given
-        [name] we failed to find it in our search paths.
-
-        - [Runtime_error (name,exn)] when plugin with a given [name]
-        was run it raised an [exn].
-
-    *)
-    type error =
-      | Not_loaded of string
-      | Runtime_error of string * exn
-      [@@deriving sexp_of]
-
-    (** raised when a pass failed to load or to run. Note: this
-        exception is raised only from two functions in this module, that
-        state this in their documentation and has [_exn] suffix in their
-        name. *)
-    exception Pass_failed of error [@@deriving sexp]
+    type pass
 
     (** [register_pass ?deps ?name pass] registers a [pass]
 
@@ -5937,30 +5917,69 @@ module Std : sig
         [pass] is run.
 
         To get access to command line arguments use [Plugin.argv] *)
-    val register_pass : ?deps:string list -> ?name:string -> (t -> t) -> unit
+    val register_pass :
+      ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
 
     (** [register_pass ?deps ?name pass] registers [pass] that doesn't modify
         the project effect and is run only for side effect.
         (See {!register_pass})  *)
-    val register_pass': ?deps:string list -> ?name:string -> (t -> unit) -> unit
-
-    (** [run_pass project pass] applies [pass] to a [project].
-
-        If a pass has dependencies, then they will be run before the
-        pass in some topological order. *)
-    val run_pass : t -> string -> t Or_error.t
-
-    (** [run_pass_exn proj] is the same as {!run_pass}, but raises an
-        exception on error. Useful to provide custom error
-        handling/printing.
-
-        @raise Pass_failed if failed to load, or if plugin failed at
-        runtime.  *)
-    val run_pass_exn : t -> string -> t
-
+    val register_pass':
+      ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
     (** [passes ()] returns all currently registered passes.  *)
-    val passes : unit -> string list
+    val passes : unit -> pass list
+
+    val find_pass : string -> pass option
+
+    module Pass : sig
+
+      type t = pass
+      (** An error that can occur when loading or running pass.
+          - [Not_loaded name] pass with a given [name] wasn't loaded for
+          some reason. This is a very unlikely error, indicating
+          either a logic error in the plugin system implementation or
+          something very weird, that we didn't expect.
+
+
+          - [Not_loaded name] when we tried to load plugin with a given
+          [name] we failed to find it in our search paths.
+
+          - [Runtime_error (name,exn)] when plugin with a given [name]
+          was run it raised an [exn].
+
+      *)
+      type error =
+        | Unsat_dep of pass * string
+        | Runtime_error of pass * exn
+        [@@deriving sexp_of]
+
+      (** raised when a pass failed to load or to run. Note: this
+          exception is raised only from two functions in this module, that
+          state this in their documentation and has [_exn] suffix in their
+          name. *)
+      exception Failed of error [@@deriving sexp]
+
+
+      (** [run_pass project pass] applies [pass] to a [project].
+
+          If a pass has dependencies, then they will be run before the
+          pass in some topological order. *)
+      val run : t -> project -> (project,error) Result.t
+
+      (** [run_pass_exn proj] is the same as {!run_pass}, but raises an
+          exception on error. Useful to provide custom error
+          handling/printing.
+
+          @raise Pass_failed if failed to load, or if plugin failed at
+          runtime.  *)
+      val run_exn : t -> project -> project
+
+
+      val name : t -> string
+
+
+      val autorun : t -> bool
+    end
 
 
     val restore_state : t -> unit
@@ -5974,6 +5993,4 @@ module Std : sig
              ?rooter:rooter ->
              ?reconstructor:reconstructor -> unit -> t Or_error.t
   end
-
-  type project = Project.t
 end

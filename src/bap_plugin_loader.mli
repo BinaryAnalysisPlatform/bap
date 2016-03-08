@@ -1,3 +1,5 @@
+open Bap.Std
+
 exception Plugin_not_found of string
 
 (** [run argv] extracts and loads plugins from a command line

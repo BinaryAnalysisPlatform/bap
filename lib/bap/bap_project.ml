@@ -25,6 +25,8 @@ type t = {
   state : state;
 } [@@deriving fields]
 
+type project = t
+
 
 type bound = [`min | `max] [@@deriving sexp]
 type spec = [`name | bound] [@@deriving sexp]
@@ -223,74 +225,64 @@ module DList = Doubly_linked
 
 type pass = {
   name : string;
-  main : t -> t;
-  deps : string list;
-}
+  main : (t -> t) sexp_opaque;
+  deps : string sexp_list;
+  auto : sexp_bool;
+} [@@deriving sexp_of]
 
 let passes : pass DList.t = DList.create ()
 let errors : Error.t String.Table.t = String.Table.create ()
 
 let forget : pass DList.Elt.t -> unit = fun _ -> ()
 
-let find name : pass option =
-  DList.find passes ~f:(fun p -> p.name = name)
 
 let name_of_bundle () =
   let module Self = Bap_self.Create() in
   Self.name
 
-let register_pass ?(deps=[]) ?name main : unit =
+let register_pass ?(autorun=false) ?(deps=[]) ?name main : unit =
   let pref = name_of_bundle () in
   let name = match name with
     | None -> pref
     | Some name -> pref ^ "-" ^ name in
-  DList.insert_last passes {name; main; deps} |> forget
+  DList.insert_last passes {name; main; deps; auto = autorun} |> forget
 
-let register_pass' ?deps ?name v : unit =
-  register_pass ?deps ?name (fun p -> v p; p)
+let register_pass' ?autorun ?deps ?name v : unit =
+  register_pass ?autorun ?deps ?name (fun p -> v p; p)
 
+module Pass = struct
+  type t = pass [@@deriving sexp_of]
+  type error =
+    | Unsat_dep of pass * string
+    | Runtime_error of pass * exn
+    [@@deriving variants, sexp_of]
 
-type error =
-  | Not_loaded of string
-  | Runtime_error of string * exn
-[@@deriving variants, sexp_of]
+  let find name : pass option =
+    DList.find passes ~f:(fun p -> p.name = name)
 
-exception Pass_failed of error [@@deriving sexp]
-let plugin_failure error = raise (Pass_failed error)
-let fail name error = plugin_failure (error name)
+  exception Failed of error [@@deriving sexp]
+  let fail error = raise (Failed error)
 
-let rec run (passed,proj) name =
-  if List.mem passed name then (passed,proj)
-  else
-    let pass = match find name with
-      | Some pass -> pass
-      | None -> fail name not_loaded in
-    let (passed,proj) =
-      List.fold pass.deps ~init:(passed,proj) ~f:run in
-    let proj = try pass.main proj with
-        exn -> plugin_failure (runtime_error name exn) in
-    name :: passed, proj
+  let rec exec proj pass =
+    let deps = List.map pass.deps ~f:(fun name -> match find name with
+        | None -> fail @@ unsat_dep pass name
+        | Some dep -> dep) in
+    let proj = List.fold deps ~init:proj ~f:exec in
+    try pass.main proj with
+      exn -> fail @@ runtime_error pass exn
 
+  let run_exn pass proj = exec proj pass
 
-let run_pass_exn proj pass =
-  run ([],proj) pass |> snd
+  let run pass proj : (project,error) Result.t =
+    try Ok (exec proj pass) with
+    | Failed error -> Error error
 
-let make_error = function
-  | Not_loaded name ->
-    errorf "plugin %s wasn't not loaded in the system" name
-  | Runtime_error (name,exn) ->
-    errorf "plugin %s failed in runtime with exception %s"
-      name (Exn.to_string exn)
+  let name p = p.name
+  let autorun p  = p.auto
+end
 
-let run_pass proj name : t Or_error.t =
-  try Ok (run_pass_exn proj name) with
-  | Pass_failed error -> make_error error
-  | exn -> errorf "unexpected error when running plugins: %s"
-             (Exn.to_string exn)
-
-let passes () =
-  DList.to_list passes |> List.map ~f:(fun p -> p.name)
-
+let passes () = DList.to_list passes
+let find_pass = Pass.find
 
 module Creator = struct
   type nonrec t =

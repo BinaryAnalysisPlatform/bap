@@ -17,9 +17,8 @@ let file : string option Term.t =
   Arg.(value & opt (some string) None & info ["file"] ~doc ~docv:"FILE")
 
 let output oc syms =
-  let sexp_of_sym x = [%sexp_of:string * int64 * int64] x in
   let output sym =
-    Sexp.output_hum oc (sexp_of_sym sym);
+    Sexp.output_hum oc ([%sexp_of:string * int64 * int64] sym);
     output_char oc '\n' in
   let word pro mem = ok_exn (Addr.to_int64 (pro mem)) in
   Symtab.to_sequence syms |> Seq.iter ~f:(fun (name,entry,cfg) ->
