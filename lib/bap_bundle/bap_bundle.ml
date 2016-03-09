@@ -171,7 +171,7 @@ module Std = struct
           let filename = Zip.(entry.filename) in
           let process_file f =
             let name,chan =
-              Filename.open_temp_file bundle.name filename in
+              Filename.open_temp_file "bundle" "entry" in
             Zip.copy_entry_to_channel zin entry chan;
             Out_channel.close chan;
             f name;
