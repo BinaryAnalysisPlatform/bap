@@ -61,7 +61,8 @@ let mark_tags () =
 let pr_6184_hack = function
   | After_rules ->
     (* Pass -predicates to ocamldep *)
-    pflag ["ocaml"; "ocamldep"] "predicate" (fun s -> S [A "-predicates"; A s])
+    pflag ["ocaml"; "ocamldep"] "predicate" (fun s -> S [A "-predicates"; A s]);
+
   | _ -> ()
 
 
