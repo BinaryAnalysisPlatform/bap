@@ -23,7 +23,6 @@ class context p = object
   method next = next
 end
 
-
 type 'a s =
   | Empty
   | First of 'a term
@@ -124,30 +123,21 @@ class ['a] t = object(self)
     set_next (Term.first blk_t sub) >>= fun () ->
     eval_args `enter sub self#eval_arg >>= fun () ->
     self#eval_fun sub >>= fun () ->
-    self#eval_return sub
+    eval_args `leave sub self#eval_arg >>= fun () ->
+    self#leave_term sub_t sub
 
   method private eval_fun sub : 'a u =
     SM.get () >>= fun c -> match c#next with
     | None -> SM.return ()
     | Some p -> match Term.find blk_t sub p with
-      | Some blk -> self#eval_blk blk >>= fun () -> self#eval_fun sub
+      | Some blk ->
+        self#eval_blk blk >>= fun () ->
+        self#eval_fun sub
       | None -> match Term.find sub_t c#program p with
-        | Some sub -> self#eval_sub sub
         | None -> SM.return ()
-
-  method private eval_return sub : 'a u =
-    SM.get () >>= fun c -> match c#next with
-    | None -> SM.return ()
-    | Some p ->
-      self#leave_fun sub >>= fun () ->
-      match Ir_program.parent blk_t c#program p with
-      | None -> SM.return ()
-      | Some sub -> self#eval_fun sub
-
-  method private leave_fun sub =
-    eval_args `leave sub self#eval_arg >>= fun () ->
-    self#leave_term sub_t sub
-
+        | Some calee ->
+          self#eval_sub calee >>= fun () ->
+          self#eval_fun sub
 
   method eval_blk (blk : blk term) : 'a u =
     self#do_enter_term blk_t blk >>= fun () ->
