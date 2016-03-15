@@ -201,6 +201,24 @@ struct symbol {
 
         if (error_code err = sym.getSize(this->size_))
             llvm_binary_fail(err);
+
+        uint32_t flags;
+        if (error_code err = sym.getFlags(flags))
+            llvm_binary_fail(err);
+
+        if (flags & SymbolRef::SF_Undefined) {
+            uint64_t addr;
+            if (error_code err = sym.getValue(addr))
+                llvm_binary_fail(err);
+            // This will not work for x86-64, since they usually zero
+            // the value. BFD library uses index correspondence
+            // between plt entry and relocation, to name the plt
+            // entry. We can't afford this.
+            if (addr) {
+                addr_ = addr;
+                size_ = 8;
+            }
+        }
     }
 
     const std::string& name() const { return name_; }
