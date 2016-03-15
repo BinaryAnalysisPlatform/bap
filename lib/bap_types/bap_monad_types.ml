@@ -10,6 +10,7 @@ module type State = sig
   val put : 's -> (unit,'s) t
   val get : unit -> ('s,'s) t
   val gets : ('s -> 'r) -> ('r,'s) t
+  val update : ('s -> 's) -> (unit,'s) t
   val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
 
 

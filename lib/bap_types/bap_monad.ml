@@ -16,6 +16,7 @@ module State : State = struct
   let state = ident
 
   let modify m f = (); fun s -> m s |> fun (x,s) -> x, f s
+  let update f = get () >>= fun s -> put (f s)
 
   let gets f = get () >>| f
 
