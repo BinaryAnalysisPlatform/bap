@@ -36,9 +36,11 @@ module Std : sig
     val list : ?library:string list -> unit -> plugin list
 
     (** [load ?library ()] loads [all ?library ()] plugins, and
-        returns a list of results *)
+        returns a list of results. Each result is either an
+        [Ok plugin], if [plugin] was loaded, or [Error (path,err)]
+        if plugin from a [path] has failed with an error [err].*)
     val load : ?library:string list ->
-      ?exclude:string list -> unit -> (plugin * unit Or_error.t) list
+      ?exclude:string list -> unit -> (plugin, string * Error.t) Result.t list
   end
 
   val list_loaded_units : unit -> string list

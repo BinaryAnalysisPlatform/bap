@@ -38,6 +38,10 @@ let rooter o src args = match o.rooters with
   | [] -> choose_default_rooter src args
   | ss -> union_rooters ss src args
 
+let rooter o src args = match rooter o src args with
+  | None -> assert false
+  | rooter -> rooter
+
 let project_or_exn = function
   | Ok p -> p
   | Error e -> raise (Failed_to_create_project e)
@@ -108,6 +112,11 @@ let process options project =
 
 
 let create name options source arg =
+  let options = {
+    options with
+    rooters = options.symbols @ options.rooters;
+    symbolizers = options.symbols @ options.symbolizers;
+  } in
   match Project.Factory.find source name arg with
   | None -> raise (Unknown_format name)
   | Some create ->

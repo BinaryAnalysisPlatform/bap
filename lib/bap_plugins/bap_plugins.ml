@@ -130,7 +130,7 @@ module Plugins = struct
   let plugin_paths library =
     [library; paths_of_env (); [Bap_config.libdir]] |> List.concat
 
-  let list ?(library=[]) () =
+  let collect ?(library=[]) () =
     let (/) = Filename.concat in
     plugin_paths library |> List.concat_map ~f:(fun dir ->
         Sys.readdir dir |>
@@ -138,14 +138,24 @@ module Plugins = struct
         List.filter_map ~f:(fun file ->
             let file = dir / file in
             if Filename.check_suffix file ".plugin"
-            then Some (Plugin.of_path file)
+            then
+              try Some (Ok (Plugin.of_path file))
+              with exn -> Some (Error (file,Error.of_exn exn))
             else None))
 
+  let list ?library () =
+    collect ?library () |> List.filter_map ~f:(function
+        | Ok p -> Some p
+        | Error _ -> None)
+
   let load ?library ?(exclude=[]) () =
-    list ?library () |> List.filter_map ~f:(fun p ->
-        if Plugin.name p |> List.mem exclude
-        then None
-        else Some (p, Plugin.load p))
+    collect ?library () |> List.filter_map ~f:(function
+        | Error err -> Some (Error err)
+        | Ok p when List.mem exclude (Plugin.name p) -> None
+        | Ok p -> match Plugin.load p with
+          | Ok () -> Some (Ok p)
+          | Error err -> Some (Error (Plugin.path p, err)))
+
 end
 
 module Std = struct
