@@ -34,15 +34,6 @@ let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
 
 
-let autoload_plugins ~library ~verbose ~exclude =
-  Plugins.load ~library ~exclude () |> List.iter ~f:(function
-      | p,Ok () when verbose ->
-        eprintf "Loaded `%s' from `%s'@."
-          (Plugin.name p) (Plugin.path p);
-      | _,Ok () -> ()
-      | p,Error err ->
-        eprintf "Failed to load plugin `%s' from `%s': %a@."
-          (Plugin.name p) (Plugin.path p) Error.pp err)
 
 let print_plugins_and_exit excluded plugins =
   List.iter plugins ~f:(fun p ->
@@ -68,6 +59,48 @@ let excluded argv =
 
 exception Plugin_not_found of string
 
+let open_plugin_exn name =
+  let name = name ^ ".plugin" in
+  if Sys.file_exists name then Plugin.of_path name
+  else raise (Plugin_not_found name)
+
+let open_plugin ~verbose name =
+  try
+    let p = open_plugin_exn name in
+    if verbose then
+      eprintf "Loader: opened plugin %s\n" @@ Plugin.name p;
+    Some p
+  with
+  | Plugin_not_found name ->
+    eprintf "Loader: can't find plugin %s\n" name;
+    None
+  | exn when verbose ->
+    eprintf "Loader: can't open plugin %s: %a\n"
+      name Exn.pp exn;
+    None
+  | exn ->
+    eprintf "Loader: can't open plugin %s\n" name; None
+
+let load_failed ~verbose p pp err =
+  eprintf "Loader: failed to load plugin from path `%s'\n" p;
+  if verbose then eprintf "Loader: %a\n" pp err
+
+let load_succeed ~verbose p =
+  if verbose then
+    eprintf "Loader: loaded plugin %s\n" @@ Plugin.name p
+
+let load_plugin ~verbose p =
+  let path = Plugin.path p in
+  match Plugin.load p with
+  | Ok () -> load_succeed ~verbose p
+  | Error err -> load_failed ~verbose path Error.pp err
+  | exception exn -> load_failed ~verbose path Exn.pp exn
+
+let autoload_plugins ~library ~verbose ~exclude =
+  Plugins.load ~library ~exclude () |> List.iter ~f:(function
+      | Ok p -> load_succeed ~verbose p
+      | Error (p,err) -> load_failed ~verbose p Error.pp err)
+
 let run_and_get_passes argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
@@ -75,18 +108,10 @@ let run_and_get_passes argv =
   let exclude = get_opt argv disable_plugin ~default:[] in
   let exclude = exclude @ excluded argv in
   let list = get_opt argv list_plugins ~default:false in
-  let plugins = List.map plugins ~f:(fun name ->
-      let name = name ^ ".plugin" in
-      if Sys.file_exists name then Plugin.of_path name
-      else raise (Plugin_not_found name)) in
+  let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
   let known_plugins = Plugins.list ~library () @ plugins in
   if list then print_plugins_and_exit exclude known_plugins;
-  List.iter plugins ~f:(fun p -> match Plugin.load p with
-      | Ok () -> ()
-      | Error err ->
-        Error.raise @@ Error.of_string @@
-        sprintf "failed to load plugin %s: %s"
-          (Plugin.name p) (Error.to_string_hum err));
+  List.iter plugins ~f:(load_plugin ~verbose);
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~library ~verbose ~exclude;
   let known_passes = Project.passes () |>
