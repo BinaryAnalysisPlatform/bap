@@ -331,41 +331,42 @@ let memory_of_symbol {memory_of_symbol = lazy f} = f
 let symbols_of_segment {symbols_of_segment = lazy f} = f
 let segment_of_symbol {segment_of_symbol = lazy f} = f
 
-let%test_module _ = (module struct
+let%test_module "image" =
+  (module struct
+    let expect ?(print=false) ~errors data_size ss =
+      let width = 32 in
+      let segment (addr, off, size) = {
+        Backend.Segment.name = "test-segment";
+        Backend.Segment.perm = R;
+        Backend.Segment.off;
+        Backend.Segment.location = {
+          Location.addr = Addr.of_int ~width addr;
+          Location.len = size;
 
-  let expect ?(print=false) ~errors data_size ss =
-    let width = 32 in
-    let segment (addr, off, size) = {
-      Backend.Segment.name = "test-segment";
-      Backend.Segment.perm = R;
-      Backend.Segment.off;
-      Backend.Segment.location = {
-        Location.addr = Addr.of_int ~width addr;
-        Location.len = size;
+        }
+      } in
+      let data = Bigstring.create data_size in
+      let secs = match List.map ss ~f:segment with
+        | [] -> invalid_arg "empty set of segments"
+        | (s::ss) -> (s,ss) in
+      let v = validate_segments data secs in
+      if print then begin
+        match Validate.(result v) with
+        | Ok () -> eprintf "No errors\n"
+        | Error err -> eprintf "Errors: %s\n" @@ Error.to_string_hum err
+      end;
+      let has_errors = Validate.errors v <> [] in
+      errors = has_errors
 
-      }
-    } in
-    let data = Bigstring.create data_size in
-    let secs = match List.map ss ~f:segment with
-      | [] -> invalid_arg "empty set of segments"
-      | (s::ss) -> (s,ss) in
-    let v = validate_segments data secs in
-    if print then begin
-      match Validate.(result v) with
-      | Ok () -> eprintf "No errors\n"
-      | Error err -> eprintf "Errors: %s\n" @@ Error.to_string_hum err
-    end;
-    let has_errors = Validate.errors v <> [] in
-    errors = has_errors
-
-  let%test _ = expect ~errors:true  0 [0,0,0]
-  let%test _ = expect ~errors:true  1 [0,0,0]
-  let%test _ = expect ~errors:false 1 [0,0,1]
-  let%test _ = expect ~errors:true  8 [0,0,4; 2,4,4]
-  let%test _ = expect ~errors:true  8 [0,0,4; 4,0,4]
-  let%test _ = expect ~errors:true  7 [0,0,4; 4,4,4]
-  let%test _ = expect ~errors:true  8 [0,0,4; 4,1,4]
-  let%test _ = expect ~errors:true  8 [0,2,4; 4,0,4]
-  let%test _ = expect ~errors:true  8 [0,1,4; 4,0,4]
-  let%test _ = expect ~errors:true  8 [0,0,4; 4,1,4]
-end)
+    let%test "" = expect ~errors:true  0 [0,0,0]
+    let%test "" = expect ~errors:true  1 [0,0,0]
+    let%test "" = expect ~errors:false 1 [0,0,1]
+    let%test "" = expect ~errors:true  8 [0,0,4; 2,4,4]
+    let%test "" = expect ~errors:true  8 [0,0,4; 4,0,4]
+    let%test "" = expect ~errors:true  7 [0,0,4; 4,4,4]
+    let%test "" = expect ~errors:true  8 [0,0,4; 4,1,4]
+    let%test "" = expect ~errors:true  8 [0,2,4; 4,0,4]
+    let%test "" = expect ~errors:true  8 [0,1,4; 4,0,4]
+    let%test "" = expect ~errors:true  8 [0,0,4; 4,1,4]
+  end
+  )
