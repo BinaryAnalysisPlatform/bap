@@ -21,7 +21,7 @@ module Plugin = struct
   let setup_dynamic_loader loader =
     load := loader
 
-  let () =
+  let init = lazy begin
     Findlib.(recorded_packages Record_core) |> List.iter ~f:(fun pkg ->
         try
           let preds = Findlib.recorded_predicates () in
@@ -29,6 +29,7 @@ module Plugin = struct
                     Filename.chop_extension in
           Hashtbl.set units ~key ~data:`In_core
         with exn -> ())
+  end
 
   let of_path path =
     let bundle = Bundle.of_uri (Uri.of_string path) in
@@ -106,6 +107,7 @@ module Plugin = struct
           Error.to_string_hum err)
 
   let load plugin =
+    let lazy () = init in
     let m = manifest plugin in
     let mains = Manifest.provides m in
     validate_provided plugin mains >>= fun () ->
