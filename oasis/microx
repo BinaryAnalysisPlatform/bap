@@ -1,0 +1,10 @@
+Flag microx
+  Description: Build microx library
+  Default: false
+
+Library microx
+  Build$:       flag(everything) || flag(microx)
+  Path:         lib/microx
+  FindlibName:  bap-microx
+  BuildDepends: bap
+  Modules:      Microx, Microx_concretizer, Microx_conqueror

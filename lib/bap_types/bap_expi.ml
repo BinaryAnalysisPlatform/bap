@@ -107,7 +107,7 @@ class ['a] t = object(self)
     | Bot -> self#bot
     | Mem mem -> self#type_error TE.bad_mem
     | Imm word -> self#eval addr >>= function
-      | Bot -> storage self#empty
+      | Bot -> self#bot
       | Mem mem -> self#type_error TE.bad_imm
       | Imm addr -> self#eval mem >>= function
         | Bot -> self#store_word self#empty addr word e (Sz.in_bits s)
