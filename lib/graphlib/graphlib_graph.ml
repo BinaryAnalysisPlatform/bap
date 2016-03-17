@@ -593,6 +593,28 @@ class ['n,'e,'s] dfs_identity_visitor : ['n,'e,'s] dfs_visitor =
     method leave_edge _ _ s = s
   end
 
+let union (type t) (type n) (type e)
+    (module G : Graph with type t = t
+                       and type node = n
+                       and type edge = e) g1 g2 =
+
+  depth_first_search (module G) ~init:g1 g2
+    ~enter_node:(fun _ -> G.Node.insert)
+    ~enter_edge:(fun _ -> G.Edge.insert)
+
+let inter (type t) (type n) (type e)
+    (module G : Graph with type t = t
+                       and type node = n
+                       and type edge = e) g1 g2 =
+  let insert_edge other e g =
+    if G.Edge.mem e other then G.Edge.insert e g else g in
+  let insert_node other n g =
+    if G.Node.mem n other then G.Node.insert n g else g in
+  let insert g g1 g2 = depth_first_search (module G) g1 ~init:g
+      ~enter_node:(fun _ -> insert_node g2)
+      ~enter_edge:(fun _ -> insert_edge g2) in
+  insert (insert G.empty g1 g2) g2 g1
+
 let reverse_postorder_traverse graph ?rev ?start g =
   depth_first_search graph ?rev ?start g ~init:[]
     ~leave_node:(fun _ n ns -> n :: ns) |> Seq.of_list
@@ -800,7 +822,6 @@ let strong_components
         then spill_comp v stack else stack) |> function
   | [] -> Partition.create G.Node.comparator comps
   | _ -> assert false
-
 
 module Path = struct
   type 'a t = {

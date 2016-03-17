@@ -20,9 +20,9 @@ let suite () =
 let load_plugins () =
   Plugins.load () |>
   List.iter ~f:(function
-      | _,Ok () -> ()
-      | p,Error e ->
-        assert_string ("plugin "^Plugin.name p^" failed: " ^
+      | Ok _ -> ()
+      | Error (p,e)->
+        assert_string ("failed to load plugin from " ^ p ^ ": " ^
                        Error.to_string_hum e))
 
 let run_unit_tests () =

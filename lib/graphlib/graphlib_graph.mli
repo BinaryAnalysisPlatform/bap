@@ -20,6 +20,16 @@ val create : (module Graph with type t = 'c
 
 
 
+val union :
+  (module Graph with type t = 'c
+                 and type node = 'n
+                 and type edge = 'e) -> 'c -> 'c -> 'c
+
+val inter :
+  (module Graph with type t = 'c
+                 and type node = 'n
+                 and type edge = 'e) -> 'c -> 'c -> 'c
+
 val to_dot :
   (module Graph with type t = 'c
                  and type node = 'n

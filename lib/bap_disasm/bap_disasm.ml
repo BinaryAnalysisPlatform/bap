@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Graphlib.Std
 open Bap_types.Std
 
 open Or_error
@@ -28,7 +29,7 @@ type error = [
 type mem_state =
   | Failed of error                (** failed to decode anything    *)
   | Decoded of insn * error option (** decoded with optional errors *)
-[@@deriving sexp_of]
+  [@@deriving sexp_of]
 
 type cfg = Rec.cfg [@@deriving compare]
 
@@ -76,9 +77,7 @@ module Disasm = struct
     Rec.run ?backend ?brancher ?rooter arch mem >>| of_rec
 
   let merge_segments d1 d2 =
-    let merge g1 g2 =
-      Rec.Cfg.edges g2 |> Seq.fold ~init:g1 ~f:(fun g1 e ->
-          Rec.Cfg.Edge.insert e g1) in
+    let merge = Graphlib.union (module Rec.Cfg) in
     {cfg = merge d1.cfg d2.cfg; err = d1.err @ d2.err}
 
   let of_image ?backend ?brancher ?rooter image =
