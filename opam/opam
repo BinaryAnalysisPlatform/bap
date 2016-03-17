@@ -13,6 +13,7 @@ build: [
                  "--with-cxx=`which clang++`"
                  "--mandir=%{man}%"
                  "--enable-everything"
+                 "--enable-tests"
                  ]
   [make]
 ]

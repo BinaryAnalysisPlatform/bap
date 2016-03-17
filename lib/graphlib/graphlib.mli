@@ -622,6 +622,35 @@ module Std : sig
       ?nodes:'a list ->
       ?edges:('a * 'a * 'b) list -> unit -> 'c
 
+    (** [union (module G) g1 g2] returns a graph [g] that is a union
+        of graphs [g1] and [g2], i.e., contains all nodes and edges
+        from this graphs.
+
+        Postcondition: {v
+          - N(g) = N(g1) ∪ N(g2).
+          - E(g) = E(g1) ∪ E(g2).
+        v}
+    *)
+    val union :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) -> 'c -> 'c -> 'c
+
+    (** [inter (module G) g1 g2] returns a graph [g] that is an
+        intersection of graphs [g1] and [g2], i.e., it contain
+        and edges from this graphs.
+
+        Postcondition: {v
+          - N(g) = N(g1) ∩ N(g2).
+          - E(g) = E(g1) ∩ E(g2).
+        v}
+    *)
+    val inter :
+      (module Graph with type t = 'c
+                     and type node = 'n
+                     and type edge = 'e) -> 'c -> 'c -> 'c
+
+
     (** [to_dot (module G) ~filename:"graph.dot" g] dumps graph [g]
         using [dot] format. This is a customizable version of printing
         function. For most cases it will be enough to use [G.pp] or
