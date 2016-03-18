@@ -1,3 +1,4 @@
 REC
 PKG cmdliner
 PKG bap-microx
+B ../../_build/plugins/propagate_taint
