@@ -5,12 +5,167 @@ open Microx.Std
 open Format
 include Self()
 
-type 'a scheme = {
-  foreground : 'a option;
-  background : 'a option;
-}
 
 type policy = Concretizer.policy
+
+let is_seeded t =
+  Term.has_attr t Taint.reg ||
+  Term.has_attr t Taint.ptr
+
+let is_visited ctxt t  = Map.mem ctxt#visited (Term.tid t)
+
+let has_seed _ctxt t = is_seeded t
+
+let has_tainted what ctxt t =
+  not (Map.is_empty ((what ctxt) (Term.tid t)))
+
+let has_tainted_regs t = has_tainted (fun c -> c#tainted_regs) t
+let has_tainted_ptrs t = has_tainted (fun c -> c#tainted_ptrs) t
+let is_tainted c t = has_tainted_regs c t || has_tainted_ptrs c t
+
+
+module Scheme = struct
+  let colors = [
+    "black",   `black;
+    "red",     `red;
+    "green",   `green;
+    "yellow",  `yellow;
+    "blue",    `blue;
+    "magenta", `magenta;
+    "cyan",    `cyan;
+    "white",   `white;
+  ]
+
+  let expected assoc =
+    List.map ~f:fst assoc |> List.map ~f:(sprintf "%S") |>
+    String.concat ~sep:" | "
+
+  let expect got assoc =
+    `Error (sprintf "got %S expected %s" got @@ expected assoc)
+
+  let color_t s = match List.Assoc.find colors s with
+    | Some c -> `Ok c
+    | None -> expect s colors
+
+  let string s = `Ok s
+  let unit _ = `Ok ()
+  let float s =
+    try `Ok (Float.of_string s) with exn ->
+      `Error (sprintf "got %s expected <float>" s)
+  let tid s = try `Ok (Tid.from_string_exn s) with
+    | Invalid_argument s -> `Error s
+    | exn -> `Error (Exn.to_string exn)
+
+  type tagger = {tag : 'a. 'a term -> 'a term}
+  type 'a result = [`Ok of 'a | `Error of string]
+
+  type tag_parser = string -> string ->
+    [`Ok of tagger | `Error of string] option
+
+  let tag tag parse : string * tag_parser =
+    Value.Tag.name tag, fun name input ->
+      if Value.Tag.name tag <> name then None
+      else Option.some @@ match parse input with
+        | `Ok v -> `Ok {tag = fun t -> Term.set_attr t tag v}
+        | `Error e -> `Error e
+
+  let tags : (string * tag_parser) list = [
+    tag foreground color_t;
+    tag background color_t;
+    tag color color_t;
+    tag comment string;
+    tag python string;
+    tag mark unit;
+    tag weight float;
+    tag Taint.reg tid;
+    tag Taint.ptr tid;
+  ]
+
+  let parse_tag (x : string) y = List.find_map tags ~f:(fun (_,p) -> p x y) |> function
+    | None -> expect x tags
+    | Some thing -> thing
+
+  let conjunct ~f m1 m2 : 'a result = match m1,m2 with
+    | `Ok m1, `Ok m2 -> `Ok (f m1 m2)
+    | `Error e,_ | _,`Error e -> `Error e
+
+  let conjunct_marks =
+    conjunct ~f:(fun m1 m2 -> {tag = fun t -> m2.tag (m1.tag t)})
+
+  let rec parse_marks = function
+    | Sexp.List [Sexp.Atom tag] | Sexp.Atom tag -> parse_tag tag ""
+    | Sexp.List [Sexp.Atom tag; Sexp.Atom v] -> parse_tag tag v
+    | Sexp.List marks ->
+      List.map marks ~f:parse_marks |>
+      List.fold ~init:(`Ok {tag = ident}) ~f:conjunct_marks
+
+  type pred = { matches : 'a. Propagator.result -> 'a term -> bool}
+
+  let preds : (string * pred) list = [
+    "visited",          {matches = is_visited};
+    "has-seed",         {matches = has_seed};
+    "has-tainted-regs", {matches = has_tainted_regs};
+    "has-tainted-ptrs", {matches = has_tainted_ptrs};
+    "has-taint",        {matches = is_tainted};
+  ]
+
+  let nil = `Ok {matches = fun _ _ -> false}
+  let conjunct_preds = conjunct ~f:(fun p1 p2 -> {
+        matches = fun c t -> p1.matches c t && p2.matches c t
+      })
+
+  let parse_pred s = match List.Assoc.find preds s with
+    | Some thing -> `Ok thing
+    | None -> expect s preds
+
+  let rec parse_preds = function
+    | Sexp.Atom p -> parse_pred p
+    | Sexp.List ps ->
+      List.map ps ~f:parse_preds |>
+      List.fold ~f:conjunct_preds ~init:nil
+
+  type marker = { mark : 'a. Propagator.result -> 'a term -> 'a term }
+  type t = marker
+  let default = {mark = fun _ t -> t}
+
+  let marker pred tagger = {
+    mark = fun ctxt t ->
+      if pred.matches ctxt t then tagger.tag t else t
+  }
+
+  let join m1 m2 = {mark = fun ctxt t -> m2.mark ctxt (m1.mark ctxt t)}
+
+  let conjunct_markers = conjunct ~f:join
+
+  let merge ms = List.fold ~init:default ~f:join ms
+
+  let parse_marker ps ms = match parse_preds ps, parse_marks ms with
+    | `Ok ps, `Ok ms -> `Ok (marker ps ms)
+    | `Error e,_|_,`Error e -> `Error e
+
+  let parse = function
+    | Sexp.List [preds; marks] -> parse_marker preds marks
+    | _ -> `Error {|expect "("<preds> <marks>")"|}
+
+  let sexp_error {Sexp.location; err_msg} =
+    `Error (sprintf "Syntax error: %s - %s" location err_msg)
+
+  let parse_string s =
+    try parse (Sexp.of_string s)
+    with Sexp.Parse_error err -> sexp_error err
+       | exn -> `Error "Malformed sexp"
+
+  let parse_file f =
+    try List.map ~f:parse (Sexp.load_sexps f) |>
+        List.fold ~init:(`Ok default) ~f:conjunct_markers
+    with Sexp.Parse_error err -> sexp_error err
+       | Sys_error e -> `Error e
+       | exn -> `Error "Malformed sexp "
+
+  let print ppf t = ()
+
+  let t = parse_string, print
+end
 
 
 type args = {
@@ -19,11 +174,7 @@ type args = {
   deterministic : bool;
   policy : policy;
   interesting : string list;
-  seeded  : color scheme;
-  visited : color scheme;
-  tainted : color scheme;
-  tainted_regs : color scheme;
-  tainted_ptrs : color scheme;
+  marker : Scheme.marker
 } [@@deriving fields]
 
 class bir_mapper = object(self)
@@ -45,25 +196,13 @@ end
 type mapper = {map : 'a. 'a term -> 'a term}
 
 
-let is_seeded t =
-  Term.has_attr t Taint.reg ||
-  Term.has_attr t Taint.ptr
-
-class marker args ctxt = object(self)
+class marker m ctxt = object(self)
   inherit bir_mapper as super
   method! map_term : 't 'p . ('p,'t) cls -> 't term -> 't term = fun _ t ->
-    let is_visited  = Map.mem ctxt#visited (Term.tid t) in
-    let is_seeded =
-      Term.has_attr t Taint.reg || Term.has_attr t Taint.ptr in
     let has_tainted taints = not (Map.is_empty (taints (Term.tid t))) in
     let regs = ctxt#tainted_regs in
     let ptrs = ctxt#tainted_ptrs in
-    let is_tainted = has_tainted regs || has_tainted ptrs in
-    self#mark args.visited is_visited t |>
-    self#mark args.seeded  is_seeded |>
-    self#mark args.tainted is_tainted |>
-    self#mark args.tainted_regs (has_tainted regs) |>
-    self#mark args.tainted_ptrs (has_tainted ptrs) |>
+    m.Scheme.mark ctxt t  |>
     self#taint Taint.regs has_tainted regs |>
     self#taint Taint.ptrs has_tainted ptrs
 
@@ -72,16 +211,6 @@ class marker args ctxt = object(self)
       if tainted taints
       then Term.set_attr t taint (taints (Term.tid t))
       else t
-
-  method private mark : 't . color scheme -> bool -> 't term -> 't term =
-    fun scheme marked t ->
-      let map scheme attr t =
-        if marked
-        then Option.value_map scheme ~default:t
-            ~f:(fun color -> Term.set_attr t attr color)
-        else t in
-      map scheme.foreground foreground t |>
-      map scheme.background background
 end
 
 let contains_seed sub =
@@ -176,15 +305,15 @@ let main args proj =
               ~deterministic:args.deterministic
               ~policy:args.policy
               proj (`Term (Term.tid sub)) in
-          let marker = new marker args ctxt in
+          let marker = new marker args.marker ctxt in
           let prog = Project.program proj |> marker#run in
           let stat = visited_sub sub stat ctxt in
           Project.with_program proj prog, stat) in
   printf "@.Coverage: %a@." pp_coverage stat;
   proj
 
-module Cmdline = struct
 
+module Cmdline = struct
   open Cmdliner
 
   let max_trace : int Term.t =
@@ -197,34 +326,6 @@ module Cmdline = struct
     Arg.(value & opt int 10 &
          info ["max-iterations"] ~doc ~docv:"N")
 
-  let colors = [
-    "black",   `black;
-    "red",     `red;
-    "green",   `green;
-    "yellow",  `yellow;
-    "blue",    `blue;
-    "magenta", `magenta;
-    "cyan",    `cyan;
-    "white",   `white;
-  ]
-
-  let mark name side : color option Term.t =
-    let doc = sprintf "Mark %s terms with the given color.
-    Accepted values are %s" name (Arg.doc_alts_enum colors) in
-    Arg.(value & opt (some (enum colors)) None &
-         info [sprintf "mark-%s-%s" name side]  ~doc)
-
-  let mark_visited_foreground = mark "visited" "foreground"
-  let mark_visited_background = mark "visited" "background"
-  let mark_seeded_foreground = mark "seeded" "foreground"
-  let mark_seeded_background = mark "seeded" "background"
-  let mark_tainted_foreground = mark "tainted" "foreground"
-  let mark_tainted_background = mark "tainted" "background"
-  let mark_tainted_regs_foreground = mark "tainted-regs" "foreground"
-  let mark_tainted_regs_background = mark "tainted-regs" "background"
-  let mark_tainted_ptrs_foreground = mark "tainted-ptrs" "foreground"
-  let mark_tainted_ptrs_background = mark "tainted-ptrs" "background"
-
   let interesting : string list Term.t =
     let doc = "Look only at specified functions" in
     Arg.(value & opt (list string) [] & info ["interesting"] ~doc)
@@ -234,6 +335,15 @@ module Cmdline = struct
               follow only one execution path, without backtracking,
               giving a more feasable result, but much less coverage" in
     Arg.(value & flag & info ["deterministic"] ~doc)
+
+  let scheme : Scheme.t list Term.t =
+    let doc = "Mark terms according the scheme $(docv)" in
+    Arg.(value & opt_all Scheme.t [] &
+         info ["mark-scheme"] ~doc ~docv:"SCHEME")
+
+  let scheme_file : string option Term.t =
+    let doc = "File with color scheme" in
+    Arg.(value & opt (some file) None & info ["mark-scheme-from-file"] ~doc)
 
   module Policy = struct
     type t = policy
@@ -270,15 +380,14 @@ module Cmdline = struct
     Arg.(value & opt Policy.t (`Fixed 0L) & info ["policy"] ~doc)
 
 
-  let create max_trace max_loop deterministic policy interesting
-      seedf seedb visitedf visitedb  taintedf taintedb
-      taintedrf taintedrb  taintedpf taintedpb = {
+  let create
+      max_trace max_loop deterministic policy interesting markers scm = {
     max_trace; max_loop; deterministic; policy; interesting;
-    seeded  = {foreground=seedf;    background=seedb};
-    visited = {foreground=visitedf; background=visitedb};
-    tainted = {foreground=taintedf; background=taintedb};
-    tainted_regs = {foreground=taintedrf; background=taintedrb};
-    tainted_ptrs = {foreground=taintedpf; background=taintedpb};
+    marker = match scm with
+      | None -> Scheme.merge markers
+      | Some file -> match Scheme.parse_file file with
+        | `Ok m -> Scheme.merge (m :: markers)
+        | `Error e -> invalid_arg e
   }
 
   let man = [
@@ -298,8 +407,7 @@ module Cmdline = struct
     use one or more passes that marks points of interest with a taint
     seed, then to use the `propagate-taint` pass to propagate the
     taint, and, finally, to use a pass that will collect and analyze
-    the result. This pass itself doesn't provide any analysis, other
-    than the ability to highlight terms with specific colors.";
+    the result.";
 
 
     `P "The microexecution is performed over a lifted program using
@@ -331,19 +439,38 @@ module Cmdline = struct
     specified amount of iterations. In the deterministic mode it will
     just return from a procedure, otherwise, it will backtrack.";
 
-    `S "EXAMPLE";
-    `Pre " bap exe --saluki-seed --propagate-taint --saluki-solve "
+    `P "Although the pass itself doesn't perform any analysis it can
+    mark terms with attributes. Terms are marked according to a
+    marking scheme specified with $(b,--mark-scheme)=$(i,SCHEME) or
+    $(i,--mark-scheme-file)=$(i,FILE). Each entry of the $(i,FILE), or
+    $(i,SCHEME) argument must conform to the following grammar:";
 
+    `Pre begin sprintf "
+      SCM    ::= (PREDS MARKS)
+      PREDS  ::= PRED | (PRED1 .. PREDn)
+      MARKS  ::= MARK | (MARK1 .. MARKn)
+      MARK   ::= TAG  | (TAG VALUE)
+      PRED   ::= %s
+      TAG    ::= %s
+    " Scheme.(expected preds) Scheme.(expected tags)
+    end;
+
+    `P "Each $(i,SCHEME) is a pair consisting of a set of predicates
+    and a set of marks. If all predicates matches, then all marks are
+    applied to a term. Mark is represented by a pair consisting of tag
+    name and a value. If tag value is of type unit, then it is just a
+    tag.";
+
+    `S "EXAMPLE";
+    `Pre " bap exe --saluki-seed --propagate-taint --saluki-solve ";
+    `Pre {| bap exe --mark-addr=0xBADADR --propagate-taint
+            --propagate-taint-scheme=
+            '((visited has-taint) ((comment "gotcha") (foreground red)))' "|};
   ]
 
   let grammar =
     Term.(pure create $max_trace $max_loop $deterministic
-          $policy $interesting
-          $mark_seeded_foreground $mark_seeded_background
-          $mark_visited_foreground $mark_visited_background
-          $mark_tainted_foreground $mark_tainted_background
-          $mark_tainted_regs_foreground $mark_tainted_regs_background
-          $mark_tainted_ptrs_foreground $mark_tainted_ptrs_background)
+          $policy $interesting $scheme $scheme_file)
 
   let info = Term.info ~man ~doc name
 
