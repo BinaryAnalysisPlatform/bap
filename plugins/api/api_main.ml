@@ -22,6 +22,9 @@ type arg = {
 
 type fn_proto = arg list
 
+type options = {add_headers : string list;
+                use_header : string option}
+
 exception Failed_to_parse of string
 
 include struct
@@ -186,33 +189,57 @@ let fill_args arch fns program =
         List.fold args ~init:sub ~f:(fun sub arg ->
             Term.append arg_t sub (term_of_arg arch sub arg)))
 
-let main bundle proj =
+let main bundle options proj =
   let prog = Project.program proj in
   let arch = Project.arch proj in
-  let args = args_of_bundle bundle in
+  let args =
+    match options.use_header with
+    | Some file -> args_of_file file
+    | None -> args_of_bundle bundle in
   fill_args arch args prog |>
   Project.with_program proj
 
 module Cmdline = struct
   include Cmdliner
-  let headers : string list Term.t =
-    let doc = "C header with function prototypes" in
+
+  let add_headers : string list Term.t =
+    let doc =
+      "Add C header with function prototypes to the plugin database, \
+       which will be used by default if file_header is not specified." in
     Arg.(value & opt (list file) [] & info ["add"] ~doc)
+
+  let file_header : string option Term.t =
+    let doc =
+      "Use a C header with function prototypes. The file is not added \
+       to the plugin database of headers." in
+    Arg.(value & opt (some string) None & info ["file"] ~doc)
+
+  let process_args add_headers use_header = {add_headers; use_header}
 
   let parse argv =
     let info = Term.info ~doc name in
-    let spec = Term.(pure ident $headers) in
+    let spec = Term.(pure process_args $add_headers $file_header) in
     match Term.eval ~argv (spec,info) with
     | `Ok res -> res
     | `Error err -> exit 1
     | `Version | `Help -> exit 0
 end
 
-let insert_headers bundle file =
+let ignore_args : arg list String.Map.t -> unit = ignore
+
+let add_headers bundle file =
   let name = "api/" ^ Filename.basename file in
-  Bundle.insert_file ~name bundle (Uri.of_string file)
+  try
+    args_of_file file |> ignore_args;
+    Bundle.insert_file ~name bundle (Uri.of_string file)
+  with
+  | Parsing.Parse_error ->
+    printf "Could not add header file: parse error."; exit 1
 
 let () =
   let bundle = main_bundle () in
-  List.iter (Cmdline.parse argv) ~f:(insert_headers bundle);
-  Project.register_pass ~autorun:true (main bundle)
+  let options = Cmdline.parse argv in
+  match options.add_headers with
+  | [] ->  Project.register_pass ~autorun:true (main bundle options)
+  | headers -> List.iter headers ~f:(add_headers bundle);
+    exit 0

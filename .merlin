@@ -5,6 +5,7 @@ PKG core_kernel
 PKG fileutils
 PKG uri
 PKG ppx_jane
+PKG camlzip
 
 B _build
 B _build/lib/bap
