@@ -6,10 +6,9 @@ exception Width [@@deriving sexp]
 type endian =
   | LittleEndian
   | BigEndian
-[@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
 include Regular with type t := t
-include Comparable.With_zero with type t := t
 include Bap_integer.S with type t := t
 module Mono : Comparable with type t := t
 val of_string : string -> t
@@ -44,6 +43,15 @@ val (--) : t -> int -> t
 val enum_bytes : t -> endian ->    t Sequence.t
 val enum_chars : t -> endian -> char Sequence.t
 val enum_bits  : t -> endian -> bool Sequence.t
+val validate_positive     : t Validate.check
+val validate_non_negative : t Validate.check
+val validate_negative     : t Validate.check
+val validate_non_positive : t Validate.check
+val is_positive     : t -> bool
+val is_non_negative : t -> bool
+val is_negative     : t -> bool
+val is_non_positive : t -> bool
+
 module Int_err : sig
   val (!$): t -> t Or_error.t
   val i1 :  t -> t Or_error.t

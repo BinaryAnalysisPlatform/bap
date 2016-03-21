@@ -981,7 +981,6 @@ module Std : sig
     (** Bitvector implements a common set of operations that are
         expected from integral values.  *)
     include Regular with type t := t
-    include Comparable.With_zero with type t := t
     include Integer with type t := t
 
     (** A comparable interface with size-monomorphic comparison. *)
@@ -1118,6 +1117,24 @@ module Std : sig
         [order] defines only the ordering of words in a bitvector, bits
         will always be in MSB first order. *)
     val enum_bits  : t -> endian -> bool seq
+
+
+    (** {3 Comparison with zero}
+
+        Note, we're not including [With_zero] interface, since
+        it refers to the `Sign` module, that is available only
+        in core_kernel >= 113.33.00.
+    *)
+
+    val validate_positive     : t Validate.check
+    val validate_non_negative : t Validate.check
+    val validate_negative     : t Validate.check
+    val validate_non_positive : t Validate.check
+    val is_positive     : t -> bool
+    val is_non_negative : t -> bool
+    val is_negative     : t -> bool
+    val is_non_positive : t -> bool
+
 
     (** {2 Arithmetic raised into [Or_error] monad }
 
@@ -1546,282 +1563,7 @@ module Std : sig
     val extract : hi:nat1 -> lo:nat1 -> exp -> exp
     val concat : exp -> exp -> exp
 
-    (** {2:bil_visitor AST Visitors}.
-
-        [visitor] folds arbitrary value over the AST, [finder] is a
-        visitor, that can prematurely finish the traversal, [mapper]
-        that maps AST, allowing limited transformation of its
-        structure.  *)
-
-    (** All visitors provides some information about the current
-        position of the visitor *)
-    class state : object
-      (** the stack of stmts that was already visited, with the last on
-          the top. Not including the currently visiting stmt. *)
-      val preds : stmt list
-
-      (** stmts that are not yet visited  *)
-      val succs : stmt list
-
-      (** a stack of stmts that are parents for the currently visiting
-          entity. The top one is the one that we're currently visiting. *)
-      val stmts_stack : stmt list
-
-      (** a stack of expr, that are parents for the currenly visiting
-          expression *)
-      val exps_stack  : exp  list
-
-      (** is [true] if we're visiting expression that is a jump target *)
-      val in_jmp : bool
-
-      (** is [true] if we're visiting expression that is on the left or
-          right side of the assignment. *)
-      val in_move : bool
-
-      (** is [true] if currently visiting expression or statement is
-          executed under condition.  *)
-      val under_condition : bool
-      (** is [true] if currently visiting expression or statement is
-          executed under loop.  *)
-      val in_loop : bool
-    end
-
-    (** Visitor.
-        Visits AST providing lots of hooks.
-
-        For each AST constructor [C] the visitor provides three methods:
-        [enter_C], [visit_C], [leave_C]. The default implementation for
-        [enter_C] and [leave_C] is to return its argument. The default
-        implementation for [visit_C] is the following:
-        1. call [enter_C]
-        2. visit all children
-        3. call [leave_C].
-
-        It is recommended to override [enter_C] method if you only need
-        to visit [C] constructor without changing a way you're visiting
-        the tree.
-
-        For example, to collect all resolved jumps one could write the
-        following function:
-
-        {[
-          let collect_calls bil = (object(self)
-            inherit [Word.t list] visitor
-            method! enter_int x js = if in_jmp then x :: js else js
-          end)#run bil []
-        ]}
-
-         The default entry point of the visitor is method [run], but
-         you can use any other method as well, for example, if you do
-         not have a statement at all and want to visit expression.
-    *)
-    class ['a] visitor : object
-      inherit state
-      (** Default entry point *)
-      method run : stmt list -> 'a -> 'a
-
-      (** {2 Statements}  *)
-      method enter_stmt : stmt -> 'a -> 'a
-      method visit_stmt : stmt -> 'a -> 'a
-      method leave_stmt : stmt -> 'a -> 'a
-
-      (** [Move(var,exp)]  *)
-      method enter_move : var -> exp -> 'a -> 'a
-      method visit_move : var -> exp -> 'a -> 'a
-      method leave_move : var -> exp -> 'a -> 'a
-
-      (** [Jmp exp]  *)
-      method enter_jmp : exp -> 'a -> 'a
-      method visit_jmp : exp -> 'a -> 'a
-      method leave_jmp : exp -> 'a -> 'a
-
-      (** [While (cond,bil)]  *)
-      method enter_while : cond:exp -> stmt list -> 'a -> 'a
-      method visit_while : cond:exp -> stmt list -> 'a -> 'a
-      method leave_while : cond:exp -> stmt list -> 'a -> 'a
-
-      (** [If (cond,yes,no)]  *)
-      method enter_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a -> 'a
-      method visit_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a -> 'a
-      method leave_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a -> 'a
-
-      (** [CpuExn n]  *)
-      method enter_cpuexn : int -> 'a -> 'a
-      method visit_cpuexn : int -> 'a -> 'a
-      method leave_cpuexn : int -> 'a -> 'a
-
-      (** [Special string]  *)
-      method enter_special : string -> 'a -> 'a
-      method visit_special : string -> 'a -> 'a
-      method leave_special : string -> 'a -> 'a
-
-      (** {2 Expressions}  *)
-      method enter_exp : exp -> 'a -> 'a
-      method visit_exp : exp -> 'a -> 'a
-      method leave_exp : exp -> 'a -> 'a
-
-      (** [Load (src,addr,endian,size)]  *)
-      method enter_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-      method visit_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-      method leave_load : mem:exp -> addr:exp -> endian -> size -> 'a -> 'a
-
-      (** [Store (dst,addr,src,endian,size)]  *)
-      method enter_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-      method visit_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-      method leave_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> 'a -> 'a
-
-      (** [BinOp (op,e1,e2)]  *)
-      method enter_binop : binop -> exp -> exp -> 'a -> 'a
-      method visit_binop : binop -> exp -> exp -> 'a -> 'a
-      method leave_binop : binop -> exp -> exp -> 'a -> 'a
-
-      (** [Unop (op,e)]  *)
-      method enter_unop : unop -> exp -> 'a -> 'a
-      method visit_unop : unop -> exp -> 'a -> 'a
-      method leave_unop : unop -> exp -> 'a -> 'a
-
-      (** [Cast(kind,size,e)]  *)
-      method enter_cast : cast -> nat1 -> exp -> 'a -> 'a
-      method visit_cast : cast -> nat1 -> exp -> 'a -> 'a
-      method leave_cast : cast -> nat1 -> exp -> 'a -> 'a
-
-      (** [Let (v,exp,body)]  *)
-      method enter_let : var -> exp:exp -> body:exp -> 'a -> 'a
-      method visit_let : var -> exp:exp -> body:exp -> 'a -> 'a
-      method leave_let : var -> exp:exp -> body:exp -> 'a -> 'a
-
-      (** [Ite (cond,yes,no)]  *)
-      method enter_ite : cond:exp -> yes:exp -> no:exp -> 'a -> 'a
-      method visit_ite : cond:exp -> yes:exp -> no:exp -> 'a -> 'a
-      method leave_ite : cond:exp -> yes:exp -> no:exp -> 'a -> 'a
-
-      (** [Extract (hi,lo,e)]  *)
-      method enter_extract : hi:nat1 -> lo:nat1 -> exp -> 'a -> 'a
-      method visit_extract : hi:nat1 -> lo:nat1 -> exp -> 'a -> 'a
-      method leave_extract : hi:nat1 -> lo:nat1 -> exp -> 'a -> 'a
-
-      (** [Concat(e1,e2)]  *)
-      method enter_concat : exp -> exp -> 'a -> 'a
-      method visit_concat : exp -> exp -> 'a -> 'a
-      method leave_concat : exp -> exp -> 'a -> 'a
-
-      (** {2 Leaves} *)
-      (** [Int w]  *)
-      method enter_int : word -> 'a -> 'a
-      method visit_int : word -> 'a -> 'a
-      method leave_int : word -> 'a -> 'a
-
-      (** [Var v]  *)
-      method enter_var : var -> 'a -> 'a
-      method visit_var : var -> 'a -> 'a
-      method leave_var : var -> 'a -> 'a
-
-      (** [Unknown (str,typ)]  *)
-      method enter_unknown : string -> typ -> 'a -> 'a
-      method visit_unknown : string -> typ -> 'a -> 'a
-      method leave_unknown : string -> typ -> 'a -> 'a
-    end
-
-    (** A visitor with shortcut.
-        Finder is a specialization of a visitor, that uses [return] as its
-        folding argument. At any time you can stop the traversing by
-        calling [return] function of the provided argument (which is by
-        itself is a record with one field - a function accepting argument
-        of type ['a option]).
-
-        For example, the following function will check whether [x]
-        variable is assigned (i.e., occurs on the left of the
-        assignment operator) in the provided scope.
-        {[
-          let is_assigned x = find (object(self)
-              inherit [unit] finder
-              method! enter_move y _rhs cc =
-                if Var.(x = y) then cc.return (Some ()); cc
-            end)
-        ]}
-
-        There're three [find] functions in the library, that accepts
-        an object of type [finder]:
-
-        - [Bil.finder] searches in the [stmt list] aka [bil]
-        - [Stmt.finder] searches in [stmt]
-        - [Exp.finder] searches in [exp].
-
-        In addition, you can use this object directly, using one of
-        the two provided entry points.  *)
-    class ['a] finder : object
-      inherit ['a option return] visitor
-      method find_in_bil : stmt list -> 'a option
-      method find_in_exp : exp -> 'a option
-    end
-
-    (** AST transformation.
-        mapper allows one to map AST, performing some limited
-        amount of transformations on it. Mapper provides extra
-        flexibility by mapping [stmt] to [stmt list], thus allowing
-        to remove statements from the output (by mapping to empty list) or
-        to map one statement to several. This is particularly useful when
-        you map [if] or [while] statements. *)
-    class mapper : object
-      inherit state
-
-      (** Default entry point.
-          But again, you can use any method as an entry  *)
-      method run : stmt list -> stmt list
-
-      (** {3 Statements}  *)
-      method map_stmt : stmt -> stmt list
-      method map_move : var -> exp -> stmt list
-      method map_jmp : exp -> stmt list
-      method map_while : cond:exp -> stmt list -> stmt list
-      method map_if : cond:exp -> yes:stmt list -> no:stmt list -> stmt list
-      method map_cpuexn : int -> stmt list
-      method map_special : string -> stmt list
-
-      (** {3 Expressions}  *)
-      method map_exp : exp -> exp
-      method map_load : mem:exp -> addr:exp -> endian -> size -> exp
-      method map_store : mem:exp -> addr:exp -> exp:exp -> endian -> size -> exp
-      method map_binop : binop -> exp -> exp -> exp
-      method map_unop : unop -> exp -> exp
-      method map_cast : cast -> nat1 -> exp -> exp
-      method map_let : var -> exp:exp -> body:exp -> exp
-      method map_ite : cond:exp -> yes:exp -> no:exp -> exp
-      method map_extract : hi:nat1 -> lo:nat1 -> exp -> exp
-      method map_concat : exp -> exp -> exp
-      method map_int : word -> exp
-      method map_var : var -> exp
-      method map_sym : var -> var
-      method map_unknown : string -> typ -> exp
-    end
-
-
     (** {2:bil_helpers BIL Helper functions}  *)
-
-
-    (** {3 General purpose iterators}  *)
-
-    (** [fold visitor ~init bil] folds visitor over BIL, passing init
-        value through the tree nodes. See also {!Exp.fold} and
-        {!Stmt.fold}.  *)
-    val fold : 'a #visitor -> init:'a -> stmt list -> 'a
-
-    (** [iter visitor bil] apply a visitor for each node of a BIL
-        forest. See also {!Exp.iter} and {!Stmt.iter}. *)
-    val iter : unit #visitor -> stmt list -> unit
-
-    (** [map mapper bil] map or transform BIL program. See also
-        {!Exp.map}. *)
-    val map : #mapper -> stmt list -> stmt list
-
-    (** [find finder bil] search in [bil] using provided [finder]. See
-        also {!Exp.find} and {!Stmt.find}. *)
-    val find : 'a #finder -> stmt list -> 'a option
-
-    (** [exists finder bil] returns true if [finder] finds
-        something. See also {!Exp.exists} and {!Stmt.exists}.*)
-    val exists : unit #finder -> stmt list -> bool
-
 
     (** [is_referenced x p] is [true] if [x] is referenced in some
         expression or statement in program [p], before it is
@@ -1890,9 +1632,6 @@ module Std : sig
         it is supposed to be run using a fixpoint combinator.
     *)
     val fold_consts : stmt list -> stmt list
-
-    (** [constant_folder] is a class that implements the [fold_consts]  *)
-    class constant_folder : mapper
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
         reached. If the transformation orbit contains non-trivial cycles,
@@ -2372,6 +2111,136 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
+    (** All visitors provides some information about the current
+        position of the visitor *)
+    class state : object
+
+      (** a stack of expr, that are parents for the currenly visiting
+          expression *)
+      val exps_stack  : exp  list
+
+      (** is [true] if currently visiting entry is executed conditionally *)
+      val under_condition : bool
+    end
+
+
+    class ['a] visitor : object
+      inherit state
+
+      method enter_exp : t -> 'a -> 'a
+      method visit_exp : t -> 'a -> 'a
+      method leave_exp : t -> 'a -> 'a
+
+      (** [Load (src,addr,endian,size)]  *)
+      method enter_load : mem:t -> addr:t -> endian -> size -> 'a -> 'a
+      method visit_load : mem:t -> addr:t -> endian -> size -> 'a -> 'a
+      method leave_load : mem:t -> addr:t -> endian -> size -> 'a -> 'a
+
+      (** [Store (dst,addr,src,endian,size)]  *)
+      method enter_store : mem:t -> addr:t -> exp:t -> endian -> size -> 'a -> 'a
+      method visit_store : mem:t -> addr:t -> exp:t -> endian -> size -> 'a -> 'a
+      method leave_store : mem:t -> addr:t -> exp:t -> endian -> size -> 'a -> 'a
+
+      (** [BinOp (op,e1,e2)]  *)
+      method enter_binop : binop -> t -> t -> 'a -> 'a
+      method visit_binop : binop -> t -> t -> 'a -> 'a
+      method leave_binop : binop -> t -> t -> 'a -> 'a
+
+      (** [Unop (op,e)]  *)
+      method enter_unop : unop -> t -> 'a -> 'a
+      method visit_unop : unop -> t -> 'a -> 'a
+      method leave_unop : unop -> t -> 'a -> 'a
+
+      (** [Cast(kind,size,e)]  *)
+      method enter_cast : cast -> nat1 -> t -> 'a -> 'a
+      method visit_cast : cast -> nat1 -> t -> 'a -> 'a
+      method leave_cast : cast -> nat1 -> t -> 'a -> 'a
+
+      (** [Let (v,t,body)]  *)
+      method enter_let : var -> exp:t -> body:t -> 'a -> 'a
+      method visit_let : var -> exp:t -> body:t -> 'a -> 'a
+      method leave_let : var -> exp:t -> body:t -> 'a -> 'a
+
+      (** [Ite (cond,yes,no)]  *)
+      method enter_ite : cond:t -> yes:t -> no:t -> 'a -> 'a
+      method visit_ite : cond:t -> yes:t -> no:t -> 'a -> 'a
+      method leave_ite : cond:t -> yes:t -> no:t -> 'a -> 'a
+
+      (** [Extract (hi,lo,e)]  *)
+      method enter_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
+      method visit_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
+      method leave_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
+
+      (** [Concat(e1,e2)]  *)
+      method enter_concat : t -> t -> 'a -> 'a
+      method visit_concat : t -> t -> 'a -> 'a
+      method leave_concat : t -> t -> 'a -> 'a
+
+      (** {2 Leaves} *)
+      (** [Int w]  *)
+      method enter_int : word -> 'a -> 'a
+      method visit_int : word -> 'a -> 'a
+      method leave_int : word -> 'a -> 'a
+
+      (** [Var v]  *)
+      method enter_var : var -> 'a -> 'a
+      method visit_var : var -> 'a -> 'a
+      method leave_var : var -> 'a -> 'a
+
+      (** [Unknown (str,typ)]  *)
+      method enter_unknown : string -> typ -> 'a -> 'a
+      method visit_unknown : string -> typ -> 'a -> 'a
+      method leave_unknown : string -> typ -> 'a -> 'a
+    end
+
+    (** A visitor with shortcut.
+        Finder is a specialization of a visitor, that uses [return] as its
+        folding argument. At any time you can stop the traversing by
+        calling [return] function of the provided argument (which is by
+        itself is a record with one field - a function accepting argument
+        of type ['a option]).*)
+    class ['a] finder : object
+      inherit ['a option return] visitor
+      method find : t -> 'a option
+    end
+
+
+    (** Exp mapper.
+        By default performs deep identity mapping. Non-leaf methods
+        deconstructs terms, calls corresponding methods on its parts
+        and the constructs it back. So if you're overriding a non-leaf
+        method, then make sure that you called the parent method if
+        you want a normal traversal.
+
+        A usual template for method overriding is:
+        {[
+          object(self)
+            inherit mapper as super
+            method map_X arg=
+              let x = super#map_X arg in
+              do_mapping x
+          end
+        ]}
+    *)
+    class mapper : object
+      inherit state
+      method map_exp : t -> t
+      method map_load : mem:t -> addr:t -> endian -> size -> t
+      method map_store : mem:t -> addr:t -> exp:t -> endian -> size -> t
+      method map_binop : binop -> t -> t -> t
+      method map_unop : unop -> t -> t
+      method map_cast : cast -> nat1 -> t -> t
+      method map_let : var -> exp:t -> body:t -> t
+      method map_ite : cond:t -> yes:t -> no:t -> t
+      method map_extract : hi:nat1 -> lo:nat1 -> t -> t
+      method map_concat : t -> t -> t
+      method map_int : word -> t
+      method map_var : var -> t
+      method map_sym : var -> var
+      method map_unknown : string -> typ -> t
+    end
+
+
     (** [fold visitor ~init exp] traverse the [exp] tree with
         provided [visitor]. For example, the following will collect
         all address that are accessed with a load operation:
@@ -2386,23 +2255,23 @@ module Std : sig
         }]
         See also {!Bil.fold} and {!Stmt.fold}
     *)
-    val fold : 'a #Bil.visitor -> init:'a -> t -> 'a
+    val fold : 'a #visitor -> init:'a -> t -> 'a
 
     (** [iter visitor exp] iterates over all terms of the [exp] using
         provided visitor. See also {!Bil.iter} and {!Stmt.iter}  *)
-    val iter : unit #Bil.visitor -> t -> unit
+    val iter : unit #visitor -> t -> unit
 
     (** [find finder exp] returns [Some thing] if finder finds some
         [thing]. See also {!Bil.find} and {!Stmt.find} *)
-    val find : 'a #Bil.finder -> t -> 'a option
+    val find : 'a #finder -> t -> 'a option
 
     (** [map mapper exp] maps [exp] tree using provided [mapper].
         See also {!Bil.map} *)
-    val map  : #Bil.mapper -> t -> t
+    val map  : #mapper -> t -> t
 
     (** [exists finder exp] is [true] if [finder] finds
         something. See also {!Bil.exists} and {Stmt.exists}  *)
-    val exists : unit #Bil.finder -> t -> bool
+    val exists : unit #finder -> t -> bool
 
     (** [is_referenced x exp] true if [exp] contains [Var x] on one of
         its leafs. See also {!Bil.is_referenced} and {!Stmt.is_referenced}  *)
@@ -2449,22 +2318,187 @@ module Std : sig
   (** [Regular] interface for BIL statements  *)
   module Stmt : sig
     type t = Bil.stmt
+
+
+    (** All visitors provides some information about the current
+        position of the visitor *)
+    class state : object
+      (** the stack of stmts that was already visited, with the last on
+          the top. Not including the currently visiting stmt. *)
+      val preds : stmt list
+
+      (** stmts that are not yet visited  *)
+      val succs : stmt list
+
+      (** a stack of stmts that are parents for the currently visiting
+          entity. The top one is the one that we're currently visiting. *)
+      val stmts_stack : stmt list
+
+      (** is [true] if we're visiting expression that is a jump target *)
+      val in_jmp : bool
+
+      (** is [true] if we're visiting expression that is on the left or
+          right side of the assignment. *)
+      val in_move : bool
+
+      (** is [true] if currently visiting expression or statement is
+          executed under loop.  *)
+      val in_loop : bool
+    end
+
+    (** Visitor.
+        Visits AST providing lots of hooks.
+
+        For each AST constructor [C] the visitor provides three methods:
+        [enter_C], [visit_C], [leave_C]. The default implementation for
+        [enter_C] and [leave_C] is to return its argument. The default
+        implementation for [visit_C] is the following:
+        1. call [enter_C]
+        2. visit all children
+        3. call [leave_C].
+
+        It is recommended to override [enter_C] method if you only need
+        to visit [C] constructor without changing a way you're visiting
+        the tree.
+
+        For example, to collect all resolved jumps one could write the
+        following function:
+
+        {[
+          let collect_calls bil = (object(self)
+            inherit [Word.t list] visitor
+            method! enter_int x js = if in_jmp then x :: js else js
+          end)#run bil []
+        ]}
+
+         The default entry point of the visitor is method [run], but
+         you can use any other method as well, for example, if you do
+         not have a statement at all and want to visit expression.
+    *)
+    class ['a] visitor : object
+      inherit ['a] Exp.visitor
+      inherit state
+      (** Default entry point *)
+      method run : t list -> 'a -> 'a
+
+      (** {2 Statements}  *)
+      method enter_stmt : t -> 'a -> 'a
+      method visit_stmt : t -> 'a -> 'a
+      method leave_stmt : t -> 'a -> 'a
+
+      (** [Move(var,exp)]  *)
+      method enter_move : var -> exp -> 'a -> 'a
+      method visit_move : var -> exp -> 'a -> 'a
+      method leave_move : var -> exp -> 'a -> 'a
+
+      (** [Jmp exp]  *)
+      method enter_jmp : exp -> 'a -> 'a
+      method visit_jmp : exp -> 'a -> 'a
+      method leave_jmp : exp -> 'a -> 'a
+
+      (** [While (cond,bil)]  *)
+      method enter_while : cond:exp -> t list -> 'a -> 'a
+      method visit_while : cond:exp -> t list -> 'a -> 'a
+      method leave_while : cond:exp -> t list -> 'a -> 'a
+
+      (** [If (cond,yes,no)]  *)
+      method enter_if : cond:exp -> yes:t list -> no:t list -> 'a -> 'a
+      method visit_if : cond:exp -> yes:t list -> no:t list -> 'a -> 'a
+      method leave_if : cond:exp -> yes:t list -> no:t list -> 'a -> 'a
+
+      (** [CpuExn n]  *)
+      method enter_cpuexn : int -> 'a -> 'a
+      method visit_cpuexn : int -> 'a -> 'a
+      method leave_cpuexn : int -> 'a -> 'a
+
+      (** [Special string]  *)
+      method enter_special : string -> 'a -> 'a
+      method visit_special : string -> 'a -> 'a
+      method leave_special : string -> 'a -> 'a
+    end
+
+
+    (** A visitor with shortcut.
+        Finder is a specialization of a visitor, that uses [return] as its
+        folding argument. At any time you can stop the traversing by
+        calling [return] function of the provided argument (which is by
+        itself is a record with one field - a function accepting argument
+        of type ['a option]).
+
+        For example, the following function will check whether [x]
+        variable is assigned (i.e., occurs on the left of the
+        assignment operator) in the provided scope.
+        {[
+          let is_assigned x = find (object(self)
+              inherit [unit] finder
+              method! enter_move y _rhs cc =
+                if Var.(x = y) then cc.return (Some ()); cc
+            end)
+        ]}
+
+        There're three [find] functions in the library, that accepts
+        an object of type [finder]:
+
+        - [Bil.finder] searches in the [stmt list] aka [bil]
+        - [Stmt.finder] searches in [stmt]
+        - [Exp.finder] searches in [exp].
+
+        In addition, you can use this object directly, using one of
+        the two provided entry points.  *)
+    class ['a] finder : object
+      inherit ['a option return] visitor
+      method find : t list -> 'a option
+    end
+
+
+    (** AST transformation.
+        mapper allows one to map AST, performing some limited
+        amount of transformations on it. Mapper provides extra
+        flexibility by mapping [stmt] to [stmt list], thus allowing
+        to remove statements from the output (by mapping to empty list) or
+        to map one statement to several. This is particularly useful when
+        you map [if] or [while] statements. *)
+    class mapper : object
+      inherit Exp.mapper
+      inherit state
+
+      (** Default entry point.
+          But again, you can use any method as an entry  *)
+      method run : t list -> t list
+      method map_stmt : t -> t list
+      method map_move : var -> exp -> t list
+      method map_jmp : exp -> t list
+      method map_while : cond:exp -> t list -> t list
+      method map_if : cond:exp -> yes:t list -> no:t list -> t list
+      method map_cpuexn : int -> t list
+      method map_special : string -> t list
+    end
+
+
+    (** [constant_folder] is a class that implements the [fold_consts]  *)
+    class constant_folder : mapper
+
+
     (** [fold ~init visitor stmt] folds a [stmt] with a visitor. See
         {!Bil.fold} and {!Exp.fold} for more details.  *)
-    val fold : 'a #Bil.visitor -> init:'a -> t -> 'a
+    val fold : 'a #visitor -> init:'a -> t -> 'a
 
     (** [iter visitor stmt] iters over a [stmt] with a visitor. See
         {!Bil.iter} and {!Exp.iter} for more details.  *)
-    val iter : unit #Bil.visitor -> t -> unit
+    val iter : unit #visitor -> t -> unit
+
+
+    (** [map mapper bil] applies [mapper] to the program [bil] *)
+    val map : #mapper -> t list -> t list
 
     (** [find finder stmt] performs a lookup into the Bil statement. See
         {!Bil.find} and {!Exp.find} for more details.  *)
-    val find : 'a #Bil.finder -> t -> 'a option
+    val find : 'a #finder -> t -> 'a option
 
 
     (** [exists finder stmt] is [true] iff [find finder stmt <> None].
         See {!Bil.exists} and {!Exp.exists} for more details.  *)
-    val exists : unit #Bil.finder -> t -> bool
+    val exists : unit #finder -> t -> bool
 
     (** [is_referenced x stmt] is true is [x] is used in the [stmt]
         in any place other then right hand side of the assignment. E.g.,
@@ -3066,6 +3100,7 @@ module Std : sig
   type phi [@@deriving bin_io, compare, sexp]
   type def [@@deriving bin_io, compare, sexp]
   type jmp [@@deriving bin_io, compare, sexp]
+  type nil [@@deriving bin_io, compare, sexp]
 
   type tid [@@deriving bin_io, compare, sexp]
   type call [@@deriving bin_io, compare, sexp]
@@ -3095,6 +3130,7 @@ module Std : sig
 
   (** {4 Term type classes}  *)
 
+  val program_t : (nil, program) cls (** program  *)
   val sub_t : (program, sub) cls (** sub  *)
   val arg_t : (sub, arg) cls     (** arg  *)
   val blk_t : (sub, blk) cls     (** blk  *)
@@ -3112,9 +3148,10 @@ module Std : sig
         and preceding block.
     *)
 
-    class context : program term ->  object('s)
+    class context : ?main : sub term -> program term ->  object('s)
         inherit Expi.context
         method program : program term
+        method main : sub term option
         method trace : tid list
         method enter_term : tid -> 's
         method set_next : tid option -> 's
@@ -3129,6 +3166,9 @@ module Std : sig
       (** called for each term, just after the position is updated,
           but before any side effect of term evaluation had occurred.*)
       method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+
+      method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
       (** called after all side effects of the term has occurred  *)
       method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
@@ -4976,6 +5016,119 @@ module Std : sig
 
     (** [del_attr term attr] deletes attribute [attr] from [term]  *)
     val del_attr : 'a t -> 'b tag -> 'a t
+
+
+    (** {2 Higher order mapping}  *)
+
+    (** Mapper perfoms deep identity term mapping. If you override any
+        method make sure that you didn't forget to invoke parent's
+        method, as OCaml will not call it for you.  *)
+    class mapper : object
+      inherit Exp.mapper
+
+      (** [map_term cls t] dispatches [t] to corresponding method *)
+      method map_term : 't 'p. ('p,'t) cls -> 't term -> 't term
+
+      (** [run p] maps each sub in program [p]  *)
+      method run : program term -> program term
+
+      (** [map_sub sub] maps each arg and blk in [sub]  *)
+      method map_sub : sub term -> sub term
+
+      (** [map_arg arg] is [arg]   *)
+      method map_arg : arg term -> arg term
+
+      (** [map_blk blk] is [blk]   *)
+      method map_blk : blk term -> blk term
+
+      (** [map_phi phi] is [phi]   *)
+      method map_phi : phi term -> phi term
+
+      (** [map_def def] is [def]   *)
+      method map_def : def term -> def term
+
+      (** [map_jmp jmp] is [jmp]   *)
+      method map_jmp : jmp term -> jmp term
+    end
+
+    (** Visitor performs deep visiting. As always, don't forget to
+        overrid parent methods. The visitor comes with useful [enter_T]
+        [leave_T] that are no-ops in this visitor, so if you inherit
+        directly from it, then you may not call to the parent method.  *)
+    class ['a] visitor : object
+      inherit ['a] Exp.visitor
+
+      (** [visit_term cls t] dispatch term [t] to corresponding method  *)
+      method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a
+
+      method enter_program : program term -> 'a -> 'a
+      method run           : program term -> 'a -> 'a
+      method leave_program : program term -> 'a -> 'a
+
+      method enter_sub : sub term -> 'a -> 'a
+      method visit_sub : sub term -> 'a -> 'a
+      method leave_sub : sub term -> 'a -> 'a
+
+      method enter_blk : blk term -> 'a -> 'a
+      method visit_blk : blk term -> 'a -> 'a
+      method leave_blk : blk term -> 'a -> 'a
+
+      method enter_arg : arg term -> 'a -> 'a
+      method visit_arg : arg term -> 'a -> 'a
+      method leave_arg : arg term -> 'a -> 'a
+
+      method enter_phi : phi term -> 'a -> 'a
+      method visit_phi : phi term -> 'a -> 'a
+      method leave_phi : phi term -> 'a -> 'a
+
+      method enter_def : def term -> 'a -> 'a
+      method visit_def : def term -> 'a -> 'a
+      method leave_def : def term -> 'a -> 'a
+
+      method enter_jmp : jmp term -> 'a -> 'a
+      method visit_jmp : jmp term -> 'a -> 'a
+      method leave_jmp : jmp term -> 'a -> 'a
+    end
+
+
+    (** [switch cls t ~program ~sub .. ~jmp] performs a pattern
+        matching over a term [t] based on its type class [cls].
+        It is guaranteed that only one function will be called for a
+        term.*)
+    val switch : ('p,'t) cls ->
+      program:(program term -> 'a) ->
+      sub:(sub term -> 'a) ->
+      arg:(arg term -> 'a) ->
+      blk:(blk term -> 'a) ->
+      phi:(phi term -> 'a) ->
+      def:(def term -> 'a) ->
+      jmp:(jmp term -> 'a) -> 't term -> 'a
+
+
+    (** [proj cls t ?case] a special case of pattern matching,
+        where all cases by default returns [None] *)
+    val proj : ('p,'t) cls ->
+      ?program:(program term -> 'a option) ->
+      ?sub:(sub term -> 'a option) ->
+      ?arg:(arg term -> 'a option) ->
+      ?blk:(blk term -> 'a option) ->
+      ?phi:(phi term -> 'a option) ->
+      ?def:(def term -> 'a option) ->
+      ?jmp:(jmp term -> 'a option) ->
+      't term -> 'a option
+
+    (** [cata cls ~init t ?case] performs a pattern matching. All
+        methods by default returns [init].
+        Note: [cata] stands for [catamorphism] *)
+    val cata : ('p,'t) cls -> init:'a ->
+      ?program:(program term -> 'a) ->
+      ?sub:(sub term -> 'a) ->
+      ?arg:(arg term -> 'a) ->
+      ?blk:(blk term -> 'a) ->
+      ?phi:(phi term -> 'a) ->
+      ?def:(def term -> 'a) ->
+      ?jmp:(jmp term -> 'a) ->
+      't term -> 'a
   end
 
   (** Program.  *)

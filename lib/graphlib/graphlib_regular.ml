@@ -29,7 +29,7 @@ module Make(Node : Opaque)(Label : T) = struct
   } [@@deriving compare, fields]
 
   type graph = node_info Node.Map.t
-  [@@deriving compare]
+    [@@deriving compare]
 
   let empty_node = {inc = Node.Map.empty; out = Node.Map.empty}
 
@@ -61,28 +61,40 @@ module Make(Node : Opaque)(Label : T) = struct
         | None -> Some empty_node
         | other -> other)
 
-    let update_arrows field neibs n g : graph =
+    let insert_arrow field info arrs n = match Map.find arrs n with
+      | None -> None
+      | Some l ->
+        let arrs = Map.add arrs ~key:n ~data:l in
+        Some (Field.fset field info arrs)
+
+    let remove_arrow field info arrs n =
+      let arrs = Map.remove arrs n in
+      Some (Field.fset field info arrs)
+
+    let update_arrows update field neibs n g : graph =
       Map.fold neibs ~init:g ~f:(fun ~key:m ~data:_ g ->
-          match Map.find g m with
-          | None -> g
-          | Some info ->
-            let arrs = Fieldslib.Field.get field info in
-            match Map.find arrs n with
-            | None -> g
-            | Some l ->
-              let arrs = Map.add arrs ~key:n ~data:l in
-              let data = Fieldslib.Field.fset field info arrs in
-              Map.add g ~key:m ~data)
+          Map.change g m ~f:(function
+              | None -> None
+              | Some info ->
+                update field info (Field.get field info) n))
+
+    let insert_arrows = update_arrows insert_arrow
+    let remove_arrows = update_arrows remove_arrow
 
     let update n l g : graph = Map.find g n |> function
       | None -> g
       | Some {inc;out} ->
         let n = (create l) in
-        let g = update_arrows Fields_of_node_info.out inc n g in
-        let g = update_arrows Fields_of_node_info.inc out n g in
-        Map.add g ~key:n ~data:{inc;out}
+        Map.add g ~key:n ~data:{inc;out}  |>
+        insert_arrows Fields_of_node_info.out inc n |>
+        insert_arrows Fields_of_node_info.inc out n
 
-    let remove n g = Map.remove g n
+    let remove n g = match Map.find g n with
+      | None -> g
+      | Some {inc;out} ->
+        Map.remove g n |>
+        remove_arrows Fields_of_node_info.out inc n |>
+        remove_arrows Fields_of_node_info.inc out n
 
     let edge src (dst : Node.t) g = match Map.find g src with
       | None -> None
@@ -122,20 +134,18 @@ module Make(Node : Opaque)(Label : T) = struct
     let upsert_arrow src dst field e g =
       Map.change g (src e) (function
           | None ->
-            Some (Fieldslib.Field.fset field empty_node
+            Some (Field.fset field empty_node
                     (Node.Map.singleton (dst e) e.data))
           | Some ns ->
-            let map = Fieldslib.Field.get field ns in
-            Some (Fieldslib.Field.fset field ns
+            let map = Field.get field ns in
+            Some (Field.fset field ns
                     (Map.add map ~key:(dst e) ~data:e.data)))
-
 
     let remove_arrow field arr src g = Map.change g src (function
         | None -> None
         | Some ns ->
-          let set = Fieldslib.Field.get field ns in
-          Some (Fieldslib.Field.fset field ns
-                  (Map.remove set arr)))
+          let set = Field.get field ns in
+          Some (Field.fset field ns (Map.remove set arr)))
 
     let upsert e g =
       upsert_arrow src dst Fields_of_node_info.out e g |>

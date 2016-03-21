@@ -1094,8 +1094,8 @@ end
 
 
 (** Substitute PC with its value  *)
-let resolve_pc mem = Bil.map (object(self)
-    inherit Bil.mapper as super
+let resolve_pc mem = Stmt.map (object(self)
+    inherit Stmt.mapper as super
     method! map_var var =
       if Var.(equal var CPU.pc) then
         Bil.int (CPU.addr_of_pc mem)
