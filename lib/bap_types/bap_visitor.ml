@@ -5,25 +5,13 @@ open Bap_bil
 
 type nat1 = int
 
-class state = object
-  val stmts_stack : stmt list = []
+class exp_state = object
   val exps_stack : exp list = []
-  val preds : stmt list = []
-  val succs : stmt list = []
-  val in_jmp = false
-  val in_move = false
   val under_condition = false
-  val in_loop = false
 end
 
-class ['a] visitor = object (self : 's)
-  inherit state
-  method run stmts x : 'a = match stmts with
-    | [] -> x
-    | s :: ss ->
-      {< succs = ss >}#visit_stmt s x |>
-      {< preds = s :: preds >}#run ss
-
+class ['a] exp_visitor = object(self)
+  inherit exp_state
   method enter_unop op _ x = x
   method leave_unop op _ x = x
   method visit_unop op e x =
@@ -103,6 +91,47 @@ class ['a] visitor = object (self : 's)
   method visit_unknown s t x =
     self#enter_unknown s t x |> self#leave_unknown s t
 
+
+  method enter_exp e x = x
+  method leave_exp e x = x
+  method visit_exp e x : 'a =
+    let x = self#enter_exp e x in
+    let self = {< exps_stack = e :: exps_stack >} in
+    let x = match e with
+      | Exp.Int v -> self#visit_int v x
+      | Exp.UnOp (op,e) -> self#visit_unop op e x
+      | Exp.BinOp (op,e1,e2) -> self#visit_binop op e1 e2 x
+      | Exp.Store (mem,addr,exp,e,s) -> self#visit_store ~mem ~addr ~exp e s x
+      | Exp.Load (mem,addr,e,s) -> self#visit_load ~mem ~addr e s x
+      | Exp.Cast (ct,sz,ex) -> self#visit_cast ct sz ex x
+      | Exp.Let (v,exp,body) -> self#visit_let v ~exp ~body x
+      | Exp.Ite (cond,yes,no) -> self#visit_ite ~cond ~yes ~no x
+      | Exp.Extract (hi,lo,e) -> self#visit_extract ~hi ~lo e x
+      | Exp.Concat (e1,e2) -> self#visit_concat e1 e2 x
+      | Exp.Var v -> self#visit_var v x
+      | Exp.Unknown (s,t) -> self#visit_unknown s t x in
+    self#leave_exp e x
+end
+
+class stmt_state = object
+  val stmts_stack : stmt list = []
+  val preds : stmt list = []
+  val succs : stmt list = []
+  val in_jmp = false
+  val in_move = false
+  val in_loop = false
+end
+
+class ['a] bil_visitor = object (self : 's)
+  inherit ['a] exp_visitor
+  inherit stmt_state
+
+  method run stmts x : 'a = match stmts with
+    | [] -> x
+    | s :: ss ->
+      {< succs = ss >}#visit_stmt s x |>
+      {< preds = s :: preds >}#run ss
+
   method enter_special s x = x
   method leave_special s x = x
   method visit_special s x =
@@ -142,30 +171,10 @@ class ['a] visitor = object (self : 's)
     self#run yes x |> self#run no |>
     self#leave_if ~cond ~yes ~no
 
-  method enter_cpuexn n x = x
+  method enter_cpuexn n x : 'a = x
   method leave_cpuexn n x = x
   method visit_cpuexn n x =
     self#enter_cpuexn n x |> self#leave_cpuexn n
-
-  method enter_exp e x = x
-  method leave_exp e x = x
-  method visit_exp e x : 'a =
-    let x = self#enter_exp e x in
-    let self = {< exps_stack = e :: exps_stack >} in
-    let x = match e with
-      | Exp.Int v -> self#visit_int v x
-      | Exp.UnOp (op,e) -> self#visit_unop op e x
-      | Exp.BinOp (op,e1,e2) -> self#visit_binop op e1 e2 x
-      | Exp.Store (mem,addr,exp,e,s) -> self#visit_store ~mem ~addr ~exp e s x
-      | Exp.Load (mem,addr,e,s) -> self#visit_load ~mem ~addr e s x
-      | Exp.Cast (ct,sz,ex) -> self#visit_cast ct sz ex x
-      | Exp.Let (v,exp,body) -> self#visit_let v ~exp ~body x
-      | Exp.Ite (cond,yes,no) -> self#visit_ite ~cond ~yes ~no x
-      | Exp.Extract (hi,lo,e) -> self#visit_extract ~hi ~lo e x
-      | Exp.Concat (e1,e2) -> self#visit_concat e1 e2 x
-      | Exp.Var v -> self#visit_var v x
-      | Exp.Unknown (s,t) -> self#visit_unknown s t x in
-    self#leave_exp e x
 
   method enter_stmt stmt x = x
   method leave_stmt stmt x = x
@@ -184,30 +193,26 @@ end
 
 exception Found
 
-class ['a] finder = object(self)
-  inherit ['a option return] visitor
-  method find_in_bil stmts : 'a option =
-    with_return (fun cc ->
-        ignore (self#run stmts cc);
-        None)
-  method find_in_exp exp : 'a option =
+class ['a] exp_finder = object(self)
+  inherit ['a option return] exp_visitor
+  method find exp : 'a option =
     with_return (fun cc ->
         ignore (self#visit_exp exp cc);
         None)
 end
 
-class mapper = object (self : 's)
-  inherit state
-  method run stmts : stmt list =
-    let rec loop self acc = function
-      | [] -> List.rev acc
-      | s :: ss ->
-        let self = {< succs = ss>} in
-        let acc = self#map_stmt s :: acc in
-        let self = {< preds = s :: preds >} in
-        loop self acc ss in
-    loop self [] stmts |> List.concat
 
+class ['a] bil_finder = object(self)
+  inherit ['a option return] bil_visitor
+  method find stmts : 'a option =
+    with_return (fun cc ->
+        ignore (self#run stmts cc);
+        None)
+end
+
+
+class exp_mapper = object(self)
+  inherit exp_state
   method map_unop op e =
     Exp.UnOp (op, self#map_exp e)
 
@@ -245,6 +250,38 @@ class mapper = object (self : 's)
 
   method map_unknown s t = Exp.Unknown (s,t)
 
+  method map_exp e : exp =
+    let self = {< exps_stack = e :: exps_stack >} in
+    match e with
+    | Exp.Int v -> self#map_int v
+    | Exp.UnOp (op,e) -> self#map_unop op e
+    | Exp.BinOp (op,e1,e2) -> self#map_binop op e1 e2
+    | Exp.Store (mem,addr,exp,e,s) -> self#map_store ~mem ~addr ~exp e s
+    | Exp.Load (mem,addr,e,s) -> self#map_load ~mem ~addr e s
+    | Exp.Cast (ct,sz,ex) -> self#map_cast ct sz ex
+    | Exp.Let (v,exp,body) -> self#map_let v ~exp ~body
+    | Exp.Ite (cond,yes,no) -> self#map_ite ~cond ~yes ~no
+    | Exp.Extract (hi,lo,e) -> self#map_extract ~hi ~lo e
+    | Exp.Concat (e1,e2) -> self#map_concat e1 e2
+    | Exp.Var v -> self#map_var v
+    | Exp.Unknown (s,t) -> self#map_unknown s t
+end
+
+class bil_mapper = object (self : 's)
+  inherit exp_mapper
+  inherit stmt_state
+
+  method run stmts : stmt list =
+    let rec loop self acc = function
+      | [] -> List.rev acc
+      | s :: ss ->
+        let self = {< succs = ss>} in
+        let acc = self#map_stmt s :: acc in
+        let self = {< preds = s :: preds >} in
+        loop self acc ss in
+    loop self [] stmts |> List.concat
+
+
   method map_special s = [Stmt.Special s]
 
   method map_jmp e =
@@ -264,21 +301,6 @@ class mapper = object (self : 's)
 
   method map_cpuexn n = [Stmt.CpuExn n]
 
-  method map_exp e : exp =
-    let self = {< exps_stack = e :: exps_stack >} in
-    match e with
-    | Exp.Int v -> self#map_int v
-    | Exp.UnOp (op,e) -> self#map_unop op e
-    | Exp.BinOp (op,e1,e2) -> self#map_binop op e1 e2
-    | Exp.Store (mem,addr,exp,e,s) -> self#map_store ~mem ~addr ~exp e s
-    | Exp.Load (mem,addr,e,s) -> self#map_load ~mem ~addr e s
-    | Exp.Cast (ct,sz,ex) -> self#map_cast ct sz ex
-    | Exp.Let (v,exp,body) -> self#map_let v ~exp ~body
-    | Exp.Ite (cond,yes,no) -> self#map_ite ~cond ~yes ~no
-    | Exp.Extract (hi,lo,e) -> self#map_extract ~hi ~lo e
-    | Exp.Concat (e1,e2) -> self#map_concat e1 e2
-    | Exp.Var v -> self#map_var v
-    | Exp.Unknown (s,t) -> self#map_unknown s t
 
   method map_stmt stmt : bil =
     let self = {< stmts_stack = stmt :: stmts_stack >} in
