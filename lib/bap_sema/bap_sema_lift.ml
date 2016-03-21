@@ -36,7 +36,8 @@ type linear =
   | Instr of Ir_blk.elt
 
 (* we're very conservative here *)
-let has_side_effect e scope = (object inherit [bool] Bil.visitor
+let has_side_effect e scope = (object
+  inherit [bool] Stmt.visitor
   method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
   method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
   method! enter_var v r = r || Bil.is_assigned v scope
@@ -181,7 +182,7 @@ let has_jump_under_condition bil =
   with_return (fun {return} ->
       let enter_control ifs = if ifs = 0 then ifs else return true in
       Bil.fold (object
-        inherit [int] Bil.visitor
+        inherit [int] Stmt.visitor
         method! enter_if ~cond ~yes:_ ~no:_ x = x + 1
         method! leave_if ~cond ~yes:_ ~no:_ x = x - 1
         method! enter_jmp _ ifs    = enter_control ifs

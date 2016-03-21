@@ -21,11 +21,11 @@ let run (Reconstructor f) = f
 
 
 let dest_of_bil bil =
-  (object inherit [word] Bil.finder
+  (object inherit [word] Stmt.finder
     method! enter_jmp dst goto = match dst with
       | Bil.Int dst -> goto.return (Some dst)
       | _ -> goto
-  end)#find_in_bil bil
+  end)#find bil
 
 let find_calls name roots cfg =
   let starts = Addr.Table.create () in

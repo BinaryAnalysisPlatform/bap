@@ -62,7 +62,7 @@ let normalize_asm asm =
     ~with_:" " |> String.strip
 
 let lookup_jumps bil = (object
-  inherit [kind list] Bil.visitor
+  inherit [kind list] Stmt.visitor
   method! enter_jmp ex _ =
     match ex with
     | Bil.Int _ when under_condition -> [`Conditional_branch]
@@ -72,7 +72,7 @@ let lookup_jumps bil = (object
 end)#run bil []
 
 let lookup_side_effects bil = (object
-  inherit [kind list] Bil.visitor
+  inherit [kind list] Stmt.visitor
   method! enter_store ~mem:_ ~addr:_ ~exp:_ _ _ acc =
     `May_store :: acc
   method! enter_load ~mem:_ ~addr:_ _ _ acc =

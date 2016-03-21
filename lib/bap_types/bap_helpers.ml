@@ -5,30 +5,38 @@ open Bap_visitor
 
 module Word = Bitvector
 
-let find (finder : 'a #finder) ss : 'a option =
-  finder#find_in_bil ss
-let exists finder ss = finder#find_in_bil ss = Some ()
-let iter (visitor : unit #visitor) ss = visitor#run ss ()
-let fold (visitor : 'a #visitor) ~init ss = visitor#run ss init
+
+let find finder ss : 'a option = finder#find ss
+let exists finder ss = Option.is_some (finder#find ss)
+let iter (visitor : unit #bil_visitor) ss = visitor#run ss ()
+let fold (visitor : 'a #bil_visitor) ~init ss = visitor#run ss init
 let map m = m#run
 
 let is_assigned ?(strict=false) x = exists (object(self)
-    inherit [unit] finder
+    inherit [unit] bil_finder
     method! enter_move y _ cc =
       if Bap_var.(x = y) && not(strict && under_condition)
       then cc.return (Some ());
       cc
   end)
 
+class exp_reference_finder x = object(self)
+  inherit [unit] exp_finder
+  method! enter_var y cc =
+    if Bap_var.(x = y) then cc.return (Some ()); cc
+end
+
 class reference_finder x = object(self)
-  inherit [unit] finder
+  inherit [unit] bil_finder
+  val exp_reference = new exp_reference_finder x
   method! visit_move y rhs goto =
     let goto = self#visit_exp rhs goto in
     if Bap_var.(x = y)
     then goto.return None
     else goto
+
   method! enter_var y cc =
-    if Bap_var.(x = y) then cc.return (Some ()); cc
+    exp_reference#enter_var y cc
 end
 
 let is_referenced x = exists (new reference_finder x)
@@ -49,7 +57,7 @@ let prune_unreferenced
   loop [] stmt
 
 class negative_normalizer = object
-  inherit mapper as super
+  inherit bil_mapper as super
   method! map_binop op e1 e2 = match op,e2 with
     | Binop.PLUS, Exp.Int arg
       when Word.(is_negative (signed arg)) ->
@@ -71,7 +79,7 @@ let rec addr_intersection (x,xs) (y,ys) =
   else addr_intersection (y,ys) (x,xs)
 
 class substitution x y = object(self)
-  inherit mapper as super
+  inherit bil_mapper as super
   method! map_let z ~exp ~body =
     if Bap_var.(z = x)
     then super#map_let z ~exp:(self#map_exp exp) ~body
@@ -97,13 +105,13 @@ let substitute_var x y ss =
     | [] -> List.rev acc in
   loop [] ss
 
-include struct
+module Constant_folder = struct
   open Exp
   let expi = new Bap_expi.t
   let ctxt = new Bap_expi.context
 
-  class constant_folder = object
-    inherit mapper as super
+  class main = object
+    inherit bil_mapper as super
     method! map_exp e =
       let r = Bap_monad.State.eval (expi#eval_exp e) ctxt in
       match Bap_result.value r  with
@@ -174,7 +182,7 @@ include struct
       | _ -> super#map_while ~cond bil
   end
 end
-let fold_consts = (new constant_folder)#run
+let fold_consts = (new Constant_folder.main)#run
 
 let fix compare f x  =
   let rec loop slow fast =
@@ -188,7 +196,7 @@ let fix compare f x  =
 let fixpoint = fix compare_bil
 
 class rewriter x y = object
-  inherit mapper as super
+  inherit bil_mapper as super
   method! map_exp z =
     let z = super#map_exp z in
     if Bap_exp.(z = x) then y else z
@@ -204,7 +212,7 @@ module Trie = struct
   let pruned ty = Exp.Unknown ("<pruned>", ty)
 
   let normalize_values =
-    map (object inherit mapper
+    map (object inherit bil_mapper
       method! map_sym var =
         let name = Bap_var.name var in
         let ty = Bap_var.typ var in
@@ -242,15 +250,20 @@ end
 module VS = Bap_var.Set
 
 module Exp = struct
+  class state = exp_state
+  class ['a] visitor = ['a] exp_visitor
+  class ['a] finder  = ['a] exp_finder
+  class mapper = exp_mapper
+
   let find (finder : 'a #finder) es : 'a option =
-    finder#find_in_exp es
-  let exists finder ss = finder#find_in_exp ss = Some ()
+    finder#find es
+  let exists finder ss = finder#find ss = Some ()
   let iter (visitor : unit #visitor) ss = visitor#visit_exp ss ()
   let fold (visitor : 'a #visitor) ~init ss = visitor#visit_exp ss init
   let map m = m#map_exp
-  let is_referenced x = exists (new reference_finder x)
+  let is_referenced x = exists (new exp_reference_finder x)
   let normalize_negatives = (new negative_normalizer)#map_exp
-  let fold_consts = (new constant_folder)#map_exp
+  let fold_consts = (new Constant_folder.main)#map_exp
   let fixpoint = fix compare_exp
 
   let substitute x y = map (new rewriter x y)
@@ -278,16 +291,22 @@ module Exp = struct
 end
 
 module Stmt = struct
+  class state = stmt_state
+  class ['a] visitor = ['a] bil_visitor
+  class ['a] finder  = ['a] bil_finder
+  class mapper = bil_mapper
+  class constant_folder = Constant_folder.main
+
   let find (finder : 'a #finder) s : 'a option =
-    finder#find_in_bil [s]
-  let exists finder ss = finder#find_in_bil [ss] = Some ()
+    finder#find [s]
+  let exists finder ss = finder#find [ss] = Some ()
   let iter (visitor : unit #visitor) ss = visitor#visit_stmt ss ()
   let fold (visitor : 'a #visitor) ~init ss = visitor#visit_stmt ss init
-  let map (m : #mapper) = m#map_stmt
+  let map (m : #mapper) = m#run
   let assigns ?strict x stmt = is_assigned ?strict x [stmt]
   let is_referenced x ss = is_referenced x [ss]
   let fixpoint = fix compare_stmt
-  let substitute x y = map (new rewriter x y)
+  let substitute x y = (new rewriter x y)#map_stmt
 
   let rec free_vars (s : stmt) = match s with
     | Stmt.Move (_,e)

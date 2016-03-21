@@ -4,10 +4,10 @@ open Bap_bil
 open Bap_ir
 open Bap_result
 
-class context : program term ->  object('s)
+class context : ?main : sub term -> program term ->  object('s)
     inherit Bap_expi.context
-
     method program : program term
+    method main : sub term option
     method trace : tid list
     method enter_term : tid -> 's
     method set_next : tid option -> 's
@@ -19,6 +19,9 @@ class ['a] t : object
   inherit ['a] Bap_expi.t
 
   method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+
+  method eval : 't 'p. ('p,'t) cls -> 't term -> 'a u
+
   method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
   method eval_sub : sub term -> 'a u

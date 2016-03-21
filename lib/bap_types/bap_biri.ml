@@ -12,10 +12,14 @@ module SM = Bap_monad.State
 open SM.Monad_infix
 
 
-class context p = object
+class context ?main p = object
   inherit Bap_expi.context
   val trace : tid list = []
   val next : tid option = None
+
+  method main = match main with
+    | Some main -> Some main
+    | None -> Term.first sub_t p
   method program : program term = p
   method trace = trace
   method enter_term t = {< trace = t :: trace >}
@@ -67,14 +71,15 @@ let set_next term : #context u =
     2. if [f] is applied to [t], then [next] is set to the successor
        of [t], just before the application, where
        successor of t is
-       - next element in sequence if [] is not the last one
+       - next element in sequence if [t] is not the last one
        - [t'] if [t] is last and [c] is not [None], and [t'] is the
-         first element of non empty sequence of term of class [c]
-       - [t'] if [t] is last and [c] is [None] and [t'] is
-         first element of non empty sequence of term of class [c']
+         first element of non empty sequence of terms of class [c]
+       - [t'] if [t] is last and [c] is not [None] and sequence of terms
+         of class [c] is empty and [t'] is first element of non empty
+         sequence of term of class [c']
        - None otherwise
 *)
-let eval_terms f c1 c2 c3 blk : #context u =
+let eval_terms eval c1 c2 c3 blk : #context u =
   let set_next next = match next with
     | Some thing as next -> set_next next
     | None -> match c2 with
@@ -88,7 +93,7 @@ let eval_terms f c1 c2 c3 blk : #context u =
     SM.get () >>= fun c -> match c#next with
     | None -> SM.return ()
     | Some tid when Tid.(Term.tid t1 <> tid) -> SM.return ()
-    | _ -> set_next next >>= fun () -> f t1 in
+    | _ -> set_next next >>= fun () -> eval c1 t1 in
   let terms = Term.enum c1 blk in
   set_next (Seq.hd terms) >>= fun () ->
   Seq.fold terms ~init:(SM.return Empty)
@@ -118,46 +123,53 @@ class ['a] t = object(self)
   method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun _ _ ->
     SM.return ()
 
+  method eval : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun cls t ->
+    self#do_enter_term cls t >>= fun () ->
+    Term.switch cls t
+      ~program:(fun p -> SM.get () >>= fun ctxt ->
+                 match ctxt#main with
+                 | None -> SM.return ()
+                 | Some main -> self#eval sub_t main)
+      ~sub:self#eval_sub
+      ~arg:self#eval_arg
+      ~blk:self#eval_blk
+      ~phi:self#eval_phi
+      ~def:self#eval_def
+      ~jmp:self#eval_jmp >>= fun () ->
+    self#leave_term cls t
+
   method eval_sub sub : 'a u =
-    self#do_enter_term sub_t sub >>= fun () ->
     set_next (Term.first blk_t sub) >>= fun () ->
-    eval_args `enter sub self#eval_arg >>= fun () ->
+    eval_args `enter sub (self#eval arg_t) >>= fun () ->
     self#eval_fun sub >>= fun () ->
-    eval_args `leave sub self#eval_arg >>= fun () ->
-    self#leave_term sub_t sub
+    eval_args `leave sub (self#eval arg_t)
 
   method private eval_fun sub : 'a u =
     SM.get () >>= fun c -> match c#next with
     | None -> SM.return ()
     | Some p -> match Term.find blk_t sub p with
       | Some blk ->
-        self#eval_blk blk >>= fun () ->
+        self#eval blk_t blk >>= fun () ->
         self#eval_fun sub
       | None -> match Term.find sub_t c#program p with
         | None -> SM.return ()
         | Some calee ->
-          self#eval_sub calee >>= fun () ->
+          self#eval sub_t calee >>= fun () ->
           self#eval_fun sub
 
   method eval_blk (blk : blk term) : 'a u =
-    self#do_enter_term blk_t blk >>= fun () ->
     set_next None >>= fun () ->
-    eval_terms self#eval_phi phi_t (Some jmp_t) (Some phi_t) blk >>= fun () ->
-    eval_terms self#eval_def def_t (Some jmp_t)  None        blk >>= fun () ->
-    eval_terms self#eval_jmp jmp_t None  None                blk >>= fun () ->
-    self#leave_term blk_t blk
+    eval_terms self#eval phi_t (Some def_t) (Some jmp_t) blk >>= fun () ->
+    eval_terms self#eval def_t (Some jmp_t)  None        blk >>= fun () ->
+    eval_terms self#eval jmp_t None  None                blk
 
   method eval_arg arg : 'a u =
-    self#do_enter_term arg_t arg   >>= fun () ->
-    self#eval_exp (Ir_arg.rhs arg) >>= fun v ->
-    self#update (Ir_arg.lhs arg) v >>= fun () ->
-    self#leave_term arg_t arg
+    self#eval_exp (Ir_arg.rhs arg) >>=
+    self#update (Ir_arg.lhs arg)
 
   method eval_def def : 'a u =
-    self#do_enter_term def_t def   >>= fun () ->
-    self#eval_exp (Ir_def.rhs def) >>= fun v ->
-    self#update (Ir_def.lhs def) v >>= fun () ->
-    self#leave_term def_t def
+    self#eval_exp (Ir_def.rhs def) >>=
+    self#update (Ir_def.lhs def)
 
   method eval_phi phi : 'a u =
     self#do_enter_term phi_t phi >>= fun () ->

@@ -44,14 +44,14 @@ let free_vars_of_sub sub  =
   else dom_free_vars sub
 
 let has_sub_exp x = Exp.exists (object
-    inherit [unit] Bil.finder
+    inherit [unit] Exp.finder
     method! enter_exp exp search =
       if Exp.equal exp x then search.return (Some ())
       else search
   end)
 
 let substitute_exp x y = Exp.map (object
-    inherit Bil.mapper
+    inherit Exp.mapper
     method! map_exp exp =
       if Exp.equal exp x then y else x
   end)
