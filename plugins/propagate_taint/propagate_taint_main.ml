@@ -109,7 +109,6 @@ module Scheme = struct
     "has-taint",        {matches = is_tainted};
   ]
 
-  let nil = `Ok {matches = fun _ _ -> false}
   let conjunct_preds = conjunct ~f:(fun p1 p2 -> {
         matches = fun c t -> p1.matches c t && p2.matches c t
       })
@@ -120,9 +119,9 @@ module Scheme = struct
 
   let rec parse_preds = function
     | Sexp.Atom p -> parse_pred p
-    | Sexp.List ps ->
-      List.map ps ~f:parse_preds |>
-      List.fold ~f:conjunct_preds ~init:nil
+    | Sexp.List [] -> `Error "Expected non-empty set of predicates"
+    | Sexp.List ps -> List.map ps ~f:parse_preds
+                      |> List.reduce_exn ~f:conjunct_preds
 
   type marker = { mark : 'a. Propagator.result -> 'a term -> 'a term }
   type t = marker
@@ -444,8 +443,8 @@ module Cmdline = struct
     `S "EXAMPLE";
     `Pre " bap exe --saluki-seed --propagate-taint --saluki-solve ";
     `Pre {| bap exe --mark-addr=0xBADADR --propagate-taint
-            --propagate-taint-scheme=
-            '((visited has-taint) ((comment "gotcha") (foreground red)))' "|};
+            --propagate-taint-mark-scheme=
+            '((visited has-taint) ((comment "gotcha") (foreground red)))' |};
   ]
 
   let grammar =
