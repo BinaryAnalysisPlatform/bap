@@ -1,0 +1,11 @@
+Flag taint
+  Description: Build a tainter plugin
+  Default: false
+
+Library taint_plugin
+  Build$:  flag(everything) || flag(taint)
+  Path: plugins/taint
+  FindlibName: bap-plugin-taint
+  BuildDepends: bap, cmdliner
+  InternalModules: Taint_main
+  XMETADescription: taint specified terms
