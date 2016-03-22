@@ -193,9 +193,8 @@ class marker m ctxt = object(self)
 end
 
 let contains_seed sub =
-  let has t p = Term.enum t p |> Seq.exists ~f:is_seeded in
-  has arg_t sub || Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
-      has phi_t blk || has def_t blk)
+  Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
+      Term.enum def_t blk |> Seq.exists ~f:is_seeded)
 
 let seeded callgraph subs =
   let callers sub =
@@ -203,7 +202,7 @@ let seeded callgraph subs =
       ~rev:true ~init:Tid.Set.empty ~f:Set.add (Term.tid sub) in
   Seq.filter subs ~f:contains_seed |>
   Seq.fold ~init:Tid.Set.empty ~f:(fun subs sub ->
-      Set.union subs @@ callers sub)
+      Set.add (Set.union subs @@ callers sub) (Term.tid sub))
 
 let tids_of_sub sub =
   let terms t p =
