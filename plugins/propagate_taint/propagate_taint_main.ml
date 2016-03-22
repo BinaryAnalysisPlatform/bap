@@ -177,40 +177,20 @@ type args = {
   marker : Scheme.marker
 } [@@deriving fields]
 
-class bir_mapper = object(self)
-  method run p = Term.map sub_t ~f:(fun t -> self#map_sub t) p
-  method map_term : 't 'p . ('p,'t) cls ->  't term -> 't term = fun _ t -> t
-  method map_sub sub = self#map_term sub_t sub |>
-                       Term.map arg_t ~f:(fun t -> self#map_arg t) |>
-                       Term.map blk_t ~f:(fun t -> self#map_blk t)
-  method map_blk blk = self#map_term blk_t blk |>
-                       Term.map phi_t ~f:(fun t -> self#map_phi t) |>
-                       Term.map def_t ~f:(fun t -> self#map_def t) |>
-                       Term.map jmp_t ~f:(fun t -> self#map_jmp t)
-  method map_arg : arg term -> arg term = self#map_term arg_t
-  method map_phi : phi term -> phi term = self#map_term phi_t
-  method map_def : def term -> def term = self#map_term def_t
-  method map_jmp : jmp term -> jmp term = self#map_term jmp_t
-end
-
-type mapper = {map : 'a. 'a term -> 'a term}
-
-
 class marker m ctxt = object(self)
-  inherit bir_mapper as super
-  method! map_term : 't 'p . ('p,'t) cls -> 't term -> 't term = fun _ t ->
+  inherit Term.mapper as super
+  method! map_term cls t =
+    let t = super#map_term cls t in
     let has_tainted taints = not (Map.is_empty (taints (Term.tid t))) in
+    let taint taint tainted taints t =
+      if tainted taints
+      then Term.set_attr t taint (taints (Term.tid t))
+      else t in
     let regs = ctxt#tainted_regs in
     let ptrs = ctxt#tainted_ptrs in
     m.Scheme.mark ctxt t  |>
-    self#taint Taint.regs has_tainted regs |>
-    self#taint Taint.ptrs has_tainted ptrs
-
-  method private taint : 't . 'a -> 'b -> 'c -> 't term -> 't term =
-    fun taint tainted taints t ->
-      if tainted taints
-      then Term.set_attr t taint (taints (Term.tid t))
-      else t
+    taint Taint.regs has_tainted regs |>
+    taint Taint.ptrs has_tainted ptrs
 end
 
 let contains_seed sub =

@@ -11,7 +11,6 @@ type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
 
 let rand64 lo hi = Int64.(Random.int64 (hi+(hi-lo)) + lo)
 
-let () = Random.self_init ()
 
 let rec generate = function
   | `Fixed x -> Word.of_int64 x
@@ -21,7 +20,12 @@ let rec generate = function
 class ['a] main ?(memory=fun _ -> None) ?(policy=def_policy) () =
   object(self)
     inherit ['a] expi as super
+
     method! eval_unknown _ t = self#emit t
+
+    initializer match policy with
+      | `Fixed _ -> ()
+      | _ -> Random.self_init ()
 
     method! lookup v =
       super#lookup v >>= fun r ->

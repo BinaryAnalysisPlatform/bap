@@ -185,7 +185,8 @@ module Std = struct
   type dict  = Value.dict  [@@deriving bin_io, compare, sexp]
   type 'a tag = 'a Value.tag
 
-  class ['a] bil_visitor = ['a] Bap_visitor.visitor
+  class ['a] exp_visitor = ['a] Bap_visitor.bil_visitor
+  class ['a] bil_visitor = ['a] Bap_visitor.bil_visitor
 
   module Vector = Bap_vector
 

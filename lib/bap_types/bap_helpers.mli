@@ -5,13 +5,13 @@ open Bap_bil
 open Bap_visitor
 open Bap_result
 
-val find : 'a #finder -> bil -> 'a option
-val exists : unit #finder -> bil -> bool
-val iter : unit #visitor -> bil -> unit
-val fold : 'a #visitor -> init:'a -> bil -> 'a
-val map : #mapper -> bil -> bil
+val find   : <find : 'a -> 'b option; ..> -> 'a -> 'b option
+val exists : <find : 'a -> 'b option; ..> -> 'a -> bool
+val iter : unit #bil_visitor -> bil -> unit
+val fold : 'a #bil_visitor -> init:'a -> bil -> 'a
+val map : #bil_mapper -> bil -> bil
 
-class rewriter : exp -> exp -> mapper
+class rewriter : exp -> exp -> bil_mapper
 val is_referenced : var -> bil -> bool
 val is_assigned : ?strict:bool -> var -> bil -> bool
 val prune_unreferenced :
@@ -39,8 +39,6 @@ val free_vars : bil -> Bap_var.Set.t
 *)
 val fold_consts : bil -> bil
 
-(** [constant_folder] is a class that implements the [fold_consts]  *)
-class constant_folder : mapper
 
 (** [fixpoint f] applies transformation [f] until fixpoint is
     reached. If the transformation orbit contains non-trivial cycles,
@@ -50,6 +48,11 @@ val fixpoint : (bil -> bil) -> (bil -> bil)
 
 
 module Exp : sig
+  class state : exp_state
+  class ['a] visitor : ['a] exp_visitor
+  class mapper  : exp_mapper
+  class ['a] finder : ['a] exp_finder
+
   val fold : 'a #visitor -> init:'a -> exp -> 'a
   val iter : unit #visitor -> exp -> unit
   val find : 'a #finder -> exp -> 'a option
@@ -65,45 +68,28 @@ module Exp : sig
 end
 
 module Stmt : sig
+  class state : stmt_state
+  class ['a] visitor : ['a] bil_visitor
+  class mapper  : bil_mapper
+  class ['a] finder : ['a] bil_finder
   val fold : 'a #visitor -> init:'a -> stmt -> 'a
   val iter : unit #visitor -> stmt -> unit
   val find : 'a #finder -> stmt -> 'a option
+  val map : #mapper -> bil -> bil
   val exists : unit #finder -> stmt -> bool
   val substitute : exp -> exp -> stmt -> bil
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
   val eval : stmt list -> (#Bap_bili.context as 'a) -> 'a
+
+  (** [constant_folder] is a class that implements the [fold_consts]  *)
+  class constant_folder : bil_mapper
 end
 
-(** Bil provides two prefix tries trees.
-
-    The default one is not normalized and will compare bil statements
-    literally. This means that comparison is sensitive to variable
-    names and immediate values. Depending on your context it may be
-    find or not. For example, two [SP] variables may compare as different
-    if one of them was obtained from different compilation (and met
-    the other one through some persistant storage, e.g., file on hard
-    disk). Moreover, BIL obtained from different lifters will have
-    different names for the same registers. All this issues are
-    addressed in normalized [Trie].
-*)
 module Trie : sig
   type normalized_bil
-
-  (** [normalize ?subst bil] normalize BIL. If [subst] is provided,
-      then substitute each occurence of the fst expression to the
-      snd expression before the normalization. The effect of
-      normalization is the following:
-
-      1. All immediate values are compared equal
-      2. All variables are compared nominally
-      3. BIL is simplified to reduce the syntactic differences
-      (but the comparison is still syntactic, and (x + 2) will
-      be compared differently to (2 + x).
-  *)
   val normalize : ?subst:(exp * exp) list -> bil -> normalized_bil
-
   module Normalized : Trie with type key = normalized_bil
   include Trie with type key = bil
 end

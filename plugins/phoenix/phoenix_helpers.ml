@@ -26,7 +26,7 @@ module Make(Env : sig
       | `r64 -> reg64_t in
     let make_var name =
       Bil.var (Var.create name jump_type) in
-    (object inherit Bil.mapper as super
+    (object inherit Stmt.mapper as super
       method! map_int addr =
         Symtab.owners syms addr |> List.hd |> function
         | Some (sym,entry,_) ->
@@ -40,7 +40,7 @@ module Make(Env : sig
 
   (** substitute loads with the value of corresponding memory *)
   let resolve_indirects =
-    Bil.map (object inherit Bil.mapper as super
+    Stmt.map (object inherit Stmt.mapper as super
       method! map_load ~mem ~addr endian scale =
         let exp = super#map_load ~mem ~addr endian scale in
         match addr with
@@ -55,7 +55,8 @@ module Make(Env : sig
     end)
 
   (* we're very conservative here *)
-  let has_side_effect e scope = (object inherit [bool] Bil.visitor
+  let has_side_effect e scope = (object
+    inherit [bool] Exp.visitor
     method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
     method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
     method! enter_var v r = r || Bil.is_assigned v scope
