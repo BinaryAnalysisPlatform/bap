@@ -189,8 +189,8 @@ module Std : sig
 
       {3:vector Vector}
 
-      Vector is an implementation of STL like vectors with logarithmic
-      push back.
+      Vector is an implementation of C++ STL like vectors with
+      logarithmic push back.
 
       {3:tries Tries}
 
@@ -2929,64 +2929,6 @@ module Std : sig
 
   type 'a tag = 'a Value.tag
 
-
-  (** {3 Some predefined tags} *)
-
-  type color = [
-    | `black
-    | `red
-    | `green
-    | `yellow
-    | `blue
-    | `magenta
-    | `cyan
-    | `white
-  ] [@@deriving bin_io, compare, sexp]
-
-
-  (** Color something with a color  *)
-  val color : color tag
-
-
-  (** print marked entity with the specified color.  (the same
-      as color, but pretty printing function will output ascii escape
-      sequence of corresponding color.  *)
-  val foreground : color tag
-
-
-  (** print marked entity with specified color. See [foreground].  *)
-  val background : color tag
-
-  (** A human readable comment *)
-  val comment : string tag
-
-  (** A command in python language *)
-  val python : string tag
-
-  (** A command in shell language *)
-  val shell : string tag
-
-  (** Mark something as marked *)
-  val mark : unit tag
-
-  (** Give a weight *)
-  val weight : float tag
-
-  (** The real virtual address of a target  *)
-  val target_addr : addr tag
-
-  (** Symbolic name of a target  *)
-  val target_name : string tag
-
-  (** Name of a subroutine  *)
-  val subroutine_name : string tag
-
-  (** Address of a subroutine entry point  *)
-  val subroutine_addr : addr tag
-
-  (** A name of a file  *)
-  val filename : string tag
-
   (** Universal Heterogeneous Map.  *)
   module Dict : sig
     (** The dictionary can store values of arbitrary type. Only one
@@ -3234,6 +3176,63 @@ module Std : sig
   (** BIR {{!Biri}interpreter}  *)
   class ['a] biri : ['a] Biri.t
 
+
+  (** {3 Some predefined tags} *)
+
+  type color = [
+    | `black
+    | `red
+    | `green
+    | `yellow
+    | `blue
+    | `magenta
+    | `cyan
+    | `white
+  ] [@@deriving bin_io, compare, sexp]
+
+
+  (** Color something with a color  *)
+  val color : color tag
+
+
+  (** print marked entity with the specified color.  (the same
+      as color, but pretty printing function will output ascii escape
+      sequence of corresponding color.  *)
+  val foreground : color tag
+
+
+  (** print marked entity with specified color. See [foreground].  *)
+  val background : color tag
+
+  (** A human readable comment *)
+  val comment : string tag
+
+  (** A command in python language *)
+  val python : string tag
+
+  (** A command in shell language *)
+  val shell : string tag
+
+  (** Mark something as marked *)
+  val mark : unit tag
+
+  (** Give a weight *)
+  val weight : float tag
+
+  (** The real virtual address of a target  *)
+  val target_addr : addr tag
+
+  (** Symbolic name of a target  *)
+  val target_name : string tag
+
+  (** Name of a subroutine  *)
+  val subroutine_name : string tag
+
+  (** Address of a subroutine entry point  *)
+  val subroutine_addr : addr tag
+
+  (** A name of a file  *)
+  val filename : string tag
 
   (** an image loaded into memory  *)
   type image
@@ -5018,6 +5017,20 @@ module Std : sig
     val del_attr : 'a t -> 'b tag -> 'a t
 
 
+    (** {Predefined attributes}  *)
+
+    (** a term was artificially produced from a term with a given tid.   *)
+    val origin : tid tag
+
+    (** a term was introduced artificially by an analysis.  *)
+    val synthetic : unit tag
+
+    (** a term is identified as always non dead  *)
+    val live : unit tag
+
+    (** a term is identified as dead  *)
+    val dead : unit tag
+
     (** {2 Higher order mapping}  *)
 
     (** Mapper perfoms deep identity term mapping. If you override any
@@ -5234,6 +5247,72 @@ module Std : sig
         Since {!Graphlib.Ir} module builds term incrementally this
         operation is just a projection, i.e., it has O(0) complexity.  *)
     val of_cfg : Graphs.Ir.t -> t
+
+
+    (** other names for the given subroutine.*)
+    val aliases : string list tag
+
+    (** A subrountine's parameter(s) denoting the allocated size are
+        specified by one or two integer arguments supplied to the
+        attribute. The allocated size is either the value of the single
+        function argument specified or the product of the two function
+        arguments specified.  *)
+    val alloc_size : (arg term, arg term * arg term) Either.t tag
+
+
+    (** A subroutine doesn't examine any values except its arguments,
+        and have no effects except the return value. Basically this is
+        just slightly more strict class than the pure attribute below,
+        since function is not allowed to read global memory.  Note that a
+        function that has pointer arguments and examines the data
+        pointed to is not const. Likewise, a function that
+        calls a non-const function usually is not be const. It does not
+        make sense for a const function to return void *)
+    val const : unit tag
+
+    (** A subroutine have no effects except the return value and their
+        return value depends only on the parameters and/or global
+        variables.  *)
+    val pure : unit tag
+
+    (** A subroutine is a stub  *)
+    val stub : unit tag
+
+    (** A subroutine is visible outside of the compilation unit  *)
+    val extern : unit tag
+
+    (** a subroutine doesn't contain any calls in any disguise, i.e.,
+        no longjmps, indirect calls, exceptions, etc.    *)
+    val leaf : unit tag
+
+    (** A subroutine is malloc-like, i.e., the pointer P returned
+        by the subroutine cannot alias any other pointer valid when the
+        function returns, and moreover no pointers to valid objects occur
+        in any storage addressed by P. *)
+    val malloc : unit tag
+
+    (** A subroutine will not return (either loop infinitely or abort
+        a program)  *)
+    val noreturn : unit tag
+
+    (** A subroutine may return more than one time. Examples of such
+        functions are setjmp and vfork *)
+    val returns_twice : unit tag
+
+    (** A subroutine doesn't throw exceptions  *)
+    val nothrow : unit tag
+
+    (** format(lang,arg) the specified argument of a subroutine is
+        actually a format string written in a corresponding DSL. *)
+    val format : ([`printf | `scanf | `strftime | `strfmon] * arg term) tag
+
+    (** a caller of the subroutine with this attribute must use its
+        return value. This is useful for subroutines where not checking the
+        result is either a security problem or always a bug, such as
+        [realloc] *)
+    val warn_unused_result : unit tag
+
+
 
     (** Subroutine builder *)
     module Builder : sig

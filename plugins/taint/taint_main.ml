@@ -6,7 +6,7 @@ open Format
 type strain =
   | Addr of int64
   | Tid of string
-  | Def of string
+  | Use of string
   [@@deriving variants]
 
 let grammar = {|
@@ -34,13 +34,13 @@ module Strain = struct
     try Ok (Int64.of_string s)
     with exn -> expect "0x<hex-digits>" ~got:s
 
-  let def  s = Ok (Def s)
+  let use  s = Ok (Use s)
   let term s = Ok (Tid s)
   let addr s = word s >>| addr
   let atom = function
     | Atom s when is_addr s -> addr s
     | Atom s when is_term s -> term s
-    | Atom s when is_var s  -> def s
+    | Atom s when is_var s  -> use s
     | s -> expect "<tid> | <var> | <addr>"
              ~got:(Sexp.to_string s)
 
@@ -57,7 +57,7 @@ module Strain = struct
 
   let to_string = function
     | Addr a -> sprintf "%0Lx" a
-    | Tid s | Def s  -> s
+    | Tid s | Use s -> s
 
   let parser s = match parse s with
     | Ok r -> `Ok r
@@ -73,20 +73,24 @@ end
 
 
 module Marker = struct
-
   let sats strains def =
     let tid = Term.tid def in
     List.for_all strains ~f:(function
         | Tid name -> Tid.name tid = name
-        | Def name -> Var.name (Def.lhs def) = name
+        | Use name ->
+          Set.exists ~f:(fun v -> Var.name v = name) (Def.free_vars def)
         | Addr a -> match Term.get_attr def Disasm.insn_addr with
           | None -> false
           | Some addr -> match Addr.to_int64 addr with
             | Error _ -> false
             | Ok x -> Int64.equal a x)
 
+  let seed t = match Term.get_attr t Term.origin with
+    | None -> Term.tid t
+    | Some t -> t
+
   let mark taint strains def =
-    let mark def = Term.set_attr def taint (Term.tid def) in
+    let mark def = Term.set_attr def taint (seed def) in
     List.fold strains ~init:def ~f:(fun def strains ->
         if sats strains def then mark def else def)
 
@@ -122,27 +126,27 @@ module Cmdline = struct
 Injects taints into a program based on a specification. It is possible
 to taint a value stored in a register, or a value pointed by a value
 stored in a register. The former is called a "register taint", the
-latter is called a "pointer taint". They're controlled respectively with
-$(b,--taint-reg=)$(i,STRAIN) and $(b,--taint-ptr=)$(i,STRAIN) command
-line arguments.  The $(i,STRAIN) value describes what definitions
-should be tainted. It can be either an address, a variable, a tid or a
-list of strains. If address is passed then a definition is tainted if
-it corresponds to an instruction with the specified address. If a
-variable is passed, the the definition is tainted if it defines a
-variable with the given name. Finally, if tid is specified, then a
-definition must have the specified tid to be tainted. If several
-strains are specified, then all conditions must be satisfied. Consider
-ther following examples, |};
+latter is called a "pointer taint". They're controlled, respectively,
+with $(b,--taint-reg=)$(i,STRAIN) and $(b,--taint-ptr=)$(i,STRAIN)
+command line arguments.  The $(i,STRAIN) value describes what
+definitions should be tainted. It can be either an address, a
+variable, a tid or a list of strains. If an address is passed then a
+definition is tainted if it corresponds to an instruction with the
+specified address. If a variable is passed, the the definition is
+tainted if it uses a variable with the given name. Finally, if tid
+is specified, then a definition must have the specified tid to be
+tainted. If several strains are specified, then all conditions must be
+satisfied. Consider ther following examples, |};
     `Pre {|
      --taint-reg=0xBAD
      --taint-ptr=strcpy_dst
-     --taint-reg="(malloc_return 0xBAD)"
+     --taint-reg="(0xBAD malloc_return)"
 |};
     `P {|
 The first example will taint a value stored in a register
 defined by an instruction at address $(i,0xBAD). The second
 example will taint a value that is pointed by a variable
-$(i,strcpy_dst) that is defined after each call to a $(i,strcpy). (Note:
+$(i,strcpy_dst) that is used after each call to a $(i,strcpy). (Note:
 this functionality relies on API plugin, that is responsible for
 embedding this definitions at the call sites). The third example will
 taint values returned by a $(i,malloc) only at the specified call site
@@ -160,6 +164,7 @@ language follows:";
 end
 
 let () = match Cmdline.parse () with
-  | `Ok pass -> Project.register_pass ~autorun:true pass
+  | `Ok pass ->
+    Project.register_pass ~deps:["callsites"] ~autorun:true pass
   | `Version | `Help -> exit 0
   | `Error _ -> exit 1

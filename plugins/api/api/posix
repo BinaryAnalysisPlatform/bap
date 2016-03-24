@@ -11,39 +11,48 @@ typedef int wchar_t;
 
 // stdlib.h
 
-void          _Exit(int code);
-long          a64l(const char *);
-void          abort(void);
-int           abs(int x);
+void          _Exit(int code)
+    __attribute__((noreturn));
+long          a64l(const char *)
+    __attribute__((warn_unused_result));
+
+void          abort(void) __attribute__((noreturn));
+int           abs(int x) __attribute__((__const__));
 int           atexit(void (*callback)(void));
-double        atof(const char *);
-int           atoi(const char *);
-long          atol(const char *);
-long long     atoll(const char *);
+double        atof(const char *)  __attribute__((pure, warn_unused_result));
+int           atoi(const char *)  __attribute__((pure, warn_unused_result));
+long          atol(const char *)  __attribute__((pure, warn_unused_result));
+long long     atoll(const char *) __attribute__((pure, warn_unused_result));
 void         *bsearch(const void *key,
                       const void *base,
                       size_t nmemb,
                       size_t size,
-                      int (*compare)(const void *, const void *));
-void         *calloc(size_t nmemb, size_t size);
-div_t         div(int numenator, int denominator);
+                      int (*compare)(const void *, const void *))
+    __attribute__((pure, warn_unused_result));
+
+void         *calloc(size_t nmemb, size_t size)
+    __attribute__((malloc, warn_unused_result, alloc_size(1,2)));
+div_t         div(int numenator, int denominator)
+    __attribute__((__const__, warn_unused_result));
 double        drand48(void);
 double        erand48(unsigned short [3]);
-void          exit(int code);
+void          exit(int code) __attribute__((noreturn));
 void          free(void *ptr);
-char         *getenv(const char *name);
-int           getsubopt(char **, char *const *, char **);
+char         *getenv(const char *name) __attribute__((warn_unused_result));
+int           getsubopt(char **, char *const *, char **) __attribute__((warn_unused_result));
 int           grantpt(int);
 char         *initstate(unsigned, char *, size_t);
 long          jrand48(unsigned short [3]);
 char         *l64a(long);
-long          labs(long);
+long          labs(long) __attribute__((__const__, warn_unused_result));
 void          lcong48(unsigned short [7]);
-ldiv_t        ldiv(long, long);
-long long     llabs(long long);
-lldiv_t       lldiv(long long, long long);
+ldiv_t        ldiv(long, long) __attribute__((__const__, warn_unused_result));
+long long     llabs(long long) __attribute__((__const__, warn_unused_result));
+lldiv_t       lldiv(long long, long long) __attribute__((__const__, warn_unused_result));
 long          lrand48(void);
-void         *malloc(size_t size);
+void         *malloc(size_t size)
+    __attribute__((malloc, warn_unused_result, alloc_size(1)));
+
 int           mblen(const char *, size_t);
 size_t        mbstowcs(wchar_t *, const char *, size_t);
 int           mbtowc(wchar_t *, const char *, size_t);
@@ -51,16 +60,16 @@ char         *mkdtemp(char *);
 int           mkstemp(char *);
 long          mrand48(void);
 long          nrand48(unsigned short [3]);
-int           posix_memalign(void **, size_t, size_t);
-int           posix_openpt(int);
+int           posix_memalign(void **, size_t, size_t) __attribute__((warn_unused_result));
+int           posix_openpt(int) __attribute__((warn_unused_result));
 char         *ptsname(int);
 int           putenv(char *name);
 void          qsort(void *base, size_t nmemb, size_t size, int (*compare)(const void *, const void *));
 int           rand(void);
 int           rand_r(unsigned *);
 long          random(void);
-void         *realloc(void *ptr, size_t size);
-char         *realpath(const char *input, char *output);
+void         *realloc(void *ptr, size_t size) __attribute__((warn_unused_result));
+char         *realpath(const char * restrict input, char * restrict output);
 unsigned short *seed48(unsigned short [3]);
 int           setenv(const char *, const char *, int);
 void          setkey(const char *);
@@ -68,15 +77,15 @@ char         *setstate(char *);
 void          srand(unsigned);
 void          srand48(long);
 void          srandom(unsigned);
-double        strtod(const char *, char **);
-float         strtof(const char *, char **);
-long          strtol(const char *, char **, int);
-long double   strtold(const char *, char **);
-long long     strtoll(const char *, char **, int);
-unsigned long strtoul(const char *, char **, int);
+double        strtod (const char * restrict nptr, char ** restrict endptr);
+float         strtof (const char * restrict nptr, char ** restrict endptr);
+long          strtol (const char * restrict nptr, char ** restrict endptr, int base);
+long double   strtold(const char * restrict nptr, char ** restrict endptr);
+long long     strtoll(const char * restrict nptr, char ** restrict endptr, int base);
+unsigned long strtoul(const char * restrict nptr, char ** restrict endptr, int base);
 unsigned long long
-              strtoull(const char *, char **, int);
-int           system(const char *command);
+              strtoull(const char * restrict nptr, char ** restrict endptr, int base);
+int           system(const char *command) __attribute__((warn_unused_result));
 int           unlockpt(int);
 int           unsetenv(const char *);
 size_t        wcstombs(char *, const wchar_t *, size_t);
@@ -85,14 +94,15 @@ int           wctomb(char *, wchar_t);
 // stdio.h
 typedef void * FILE;
 
-char *fgets(char *s, int size, FILE *stream);
-char *gets(char *s);
-FILE *fdopen(int fd, const char *mode);
-FILE *fopen(const char *path, const char *mode);
-FILE *freopen(const char *path, const char *mode, FILE *stream);
+char *fgets(char * restrict s, int size, FILE * restrict stream)
+    __attribute__((warn_unused_result));
+char *gets(char * restrict s) __attribute__((warn_unused_result));
+FILE *fdopen(int fd, const char *mode) __attribute__((warn_unused_result));
+FILE *fopen(const char *path, const char *mode) __attribute__((warn_unused_result));
+FILE *freopen(const char *path, const char *mode, FILE *stream) __attribute__((warn_unused_result));
 int fclose(FILE *fp);
-int feof(FILE *stream);
-int ferror(FILE *stream);
+int feof(FILE *stream) __attribute__((warn_unused_result));
+int ferror(FILE *stream) __attribute__((warn_unused_result));
 int fgetc(FILE *stream);
 int fgetc(FILE *stream);
 int fileno(FILE *stream);
@@ -104,41 +114,43 @@ int putchar(int c);
 int putc(int c, FILE *stream);
 int puts(const char *s);
 int ungetc(int c, FILE *stream);
-size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
-size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
+    __attribute__((warn_unused_result));
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
+    __attribute__((warn_unused_result));
 void clearerr(FILE *stream);
 
 
 // string.h
 
 void    *memccpy(void *, const void *, int, size_t);
-void    *memchr(const void *, int, size_t);
-int      memcmp(const void *, const void *, size_t);
+void    *memchr(const void *, int, size_t)  __attribute__((pure));
+int      memcmp(const void *, const void *, size_t) __attribute__((pure));
 void    *memcpy(void *dst, const void *src, size_t n);
 void    *memmove(void *, const void *, size_t);
 void    *memset(void *, int, size_t);
-int strcasecmp(const char *s1, const char *s2);
-int strncasecmp(const char *s1, const char *s2, size_t n);
-char *index(const char *s, int c);
-char *rindex(const char *s, int c);
+int strcasecmp(const char *s1, const char *s2)  __attribute__((pure));
+int strncasecmp(const char *s1, const char *s2, size_t n)  __attribute__((pure));
+char *index(const char *s, int c)  __attribute__((pure));
+char *rindex(const char *s, int c)  __attribute__((pure));
 char *stpcpy(char *dest, const char *src);
 char *strcat(char *dest, const char *src);
-char *strchr(const char *s, int c);
-int strcmp(const char *s1, const char *s2);
-int strcoll(const char *s1, const char *s2);
+char *strchr(const char *s, int c)  __attribute__((pure));
+int strcmp(const char *s1, const char *s2)  __attribute__((pure));
+int strcoll(const char *s1, const char *s2)  __attribute__((pure));
 char *strcpy(char *dest, const char *src);
-size_t strcspn(const char *s, const char *reject);
-char *strdup(const char *s);
+size_t strcspn(const char *s, const char *reject) __attribute__((pure));
+char *strdup(const char *s) __attribute__((malloc));
 char *strfry(char *string);
-size_t strlen(const char *s);
+size_t strlen(const char *s) __attribute__((pure));
 char *strncat(char *dest, const char *src, size_t n);
-int strncmp(const char *s1, const char *s2, size_t n);
+int strncmp(const char *s1, const char *s2, size_t n) __attribute__((pure));
 char *strncpy(char *dest, const char *src, size_t n);
-char *strpbrk(const char *s, const char *accept);
-char *strrchr(const char *s, int c);
+char *strpbrk(const char *s, const char *accept) __attribute__((pure));
+char *strrchr(const char *s, int c) __attribute__((pure));
 char *strsep(char **stringp, const char *delim);
-size_t strspn(const char *s, const char *accept);
-char *strstr(const char *haystack, const char *needle);
+size_t strspn(const char *s, const char *accept) __attribute__((pure));
+char *strstr(const char *haystack, const char *needle) __attribute__((pure));
 char *strtok(char *s, const char *delim);
 size_t strxfrm(char *dest, const char *src, size_t n);
 
@@ -189,20 +201,20 @@ char        *crypt(const char *key, const char *salt);
 int          dup(int);
 int          dup2(int, int);
 void         _exit(int);
-void         encrypt(char [64], int);
-int          execl(const char *, const char *, ...);
-int          execle(const char *, const char *, ...);
-int          execlp(const char *, const char *, ...);
-int          execv(const char *, char *const []);
+void         encrypt(char block[64], int flags);
+int          execl(const char *path, const char *arg, ...);
+int          execle(const char *path, const char *arg, ...);
+int          execlp(const char *path, const char *arg, ...);
+int          execv(const char *path, char *const argv[]);
 int          execve(const char *, char *const [], char *const []);
 int          execvp(const char *, char *const []);
-int          faccessat(int, const char *, int, int);
+int          faccessat(int, const char *, int, int) __attribute__((warn_unused_result));
 int          fchdir(int);
 int          fchown(int, uid_t, gid_t);
 int          fchownat(int, const char *, uid_t, gid_t, int);
 int          fdatasync(int);
 int          fexecve(int, char *const [], char *const []);
-pid_t        fork(void);
+pid_t        fork(void) __attribute__((returns_twice));
 long         fpathconf(int, int);
 int          fsync(int);
 int          ftruncate(int, off_t);
@@ -228,37 +240,40 @@ int          link(const char *, const char *);
 int          linkat(int, const char *, int, const char *, int);
 int          lockf(int, int, off_t);
 off_t        lseek(int, off_t, int);
-int          nice(int);
+int          nice(int) __attribute__((warn_unused_result));
 long         pathconf(const char *, int);
 int          pause(void);
 int          pipe(int [2]);
-ssize_t      pread(int, void *, size_t, off_t);
-ssize_t      pwrite(int, const void *, size_t, off_t);
-ssize_t      read(int, void *, size_t);
+ssize_t      pread(int fd, void *buf, size_t nbytes, off_t off)
+    __attribute__((warn_unused_result));
+ssize_t      pwrite(int fd, const void *buf, size_t nbytes, off_t off)
+    __attribute__((warn_unused_result));
+ssize_t      read(int fd, void *buf, size_t nbytes) __attribute__((warn_unused_result));
 ssize_t      readv(int fd, const struct iovec *iov, int iovcnt);
-ssize_t      readlink(const char *, char *, size_t);
-ssize_t      readlinkat(int, const char *, char *, size_t);
+    __attribute__((warn_unused_result));
+ssize_t      readlink(const char *, char *, size_t) __attribute__((warn_unused_result));
+ssize_t      readlinkat(int, const char *, char *, size_t)     __attribute__((warn_unused_result));
 int          rmdir(const char *);
-int          setegid(gid_t);
-int          seteuid(uid_t);
-int          setgid(gid_t);
+int          setegid(gid_t) __attribute__((warn_unused_result));
+int          seteuid(uid_t) __attribute__((warn_unused_result));
+int          setgid(gid_t) __attribute__((warn_unused_result));
 int          setpgid(pid_t, pid_t);
 pid_t        setpgrp(void);
-int          setregid(gid_t, gid_t);
-int          setreuid(uid_t, uid_t);
+int          setregid(gid_t, gid_t) __attribute__((warn_unused_result));
+int          setreuid(uid_t, uid_t) __attribute__((warn_unused_result));
 pid_t        setsid(void);
-int          setuid(uid_t);
+int          setuid(uid_t) __attribute__((warn_unused_result));
 unsigned     sleep(unsigned);
 void         swab(const void *, void *, ssize_t);
-int          symlink(const char *, const char *);
-int          symlinkat(const char *, int, const char *);
+int          symlink(const char *, const char *) __attribute__((warn_unused_result));
+int          symlinkat(const char *, int, const char *) __attribute__((warn_unused_result));
 void         sync(void);
 long         sysconf(int);
 pid_t        tcgetpgrp(int);
 int          tcsetpgrp(int, pid_t);
-int          truncate(const char *, off_t);
+int          truncate(const char *file, off_t length) __attribute__((warn_unused_result));
 char        *ttyname(int);
 int          ttyname_r(int, char *, size_t);
-int          unlink(const char *);
-int          unlinkat(int, const char *, int);
-ssize_t      write(int, const void *, size_t);
+int          unlink(const char *name);
+int          unlinkat(int fd, const char *name, int flags);
+ssize_t      write(int, const void *, size_t) __attribute__((warn_unused_result));

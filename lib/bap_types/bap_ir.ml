@@ -5,7 +5,6 @@ open Bap_bil
 
 module Value = Bap_value
 module Dict = Value.Dict
-module Seq = Sequence
 module Vec = Bap_vector
 module Var = Bap_var
 
@@ -694,7 +693,25 @@ module Term = struct
   let get_attr t = Dict.find t.dict
   let del_attr t tag = {t with dict = Dict.remove t.dict tag}
   let has_attr t tag = get_attr t tag <> None
+
   let length t p = Array.length (t.get p.self)
+
+  let origin = Bap_value.Tag.register (module Tid)
+      ~name:"origin"
+      ~uuid:"fa804594-d2fc-4865-824a-3ad481963f54"
+
+  let synthetic = Bap_value.Tag.register (module Unit)
+      ~name:"synthetic"
+      ~uuid:"a83b26b5-902e-4aaf-bfa1-503e3ced0b1a"
+
+
+  let live = Bap_value.Tag.register (module Unit)
+      ~name:"live"
+      ~uuid:"4d3871ab-9481-4d41-97a3-cd3136acfa90"
+
+  let dead = Bap_value.Tag.register (module Unit)
+      ~name:"dead"
+      ~uuid:"6009fb21-2a6c-4511-9aa4-92b2894debc7"
 
   let change t p tid f =
     Array.findi (t.get p.self) ~f:(fun _ x -> x.tid = tid) |> function
@@ -1126,6 +1143,87 @@ module Ir_sub = struct
 
   let name sub = sub.self.name
   let with_name sub name = {sub with self = {sub.self with name}}
+
+  module Enum(T : Bap_value.S) = struct
+    type t = T.t list [@@deriving bin_io, compare,sexp]
+    let pp ppf xs =
+      List.map xs ~f:(Format.asprintf "%a" T.pp) |>
+      String.concat ~sep:", " |>
+      Format.fprintf ppf "%s"
+  end
+
+  module Aliases = Enum(String)
+  module Fmt = struct
+    type fmt =
+      [`printf | `scanf | `strftime | `strfmon]
+      [@@deriving bin_io, compare, sexp]
+    type t = fmt * arg term [@@deriving bin_io, compare, sexp]
+    let pp ppf (fmt,arg) =
+      Format.fprintf ppf "%a, %a"
+        Sexp.pp (sexp_of_fmt fmt) Ir_arg.pp arg
+  end
+
+  module Args = struct
+    type t = (arg term, arg term * arg term) Either.t
+      [@@deriving bin_io, compare, sexp]
+    let pp ppf = function
+      | First x -> Format.fprintf ppf "(%s)" (Ir_arg.name x)
+      | Second (x,y) ->
+        Format.fprintf ppf "(%s, %s)" (Ir_arg.name x) (Ir_arg.name y)
+  end
+
+
+  let aliases = Bap_value.Tag.register (module Aliases)
+      ~name:"aliases"
+      ~uuid:"ed73c040-d798-4fc9-96a0-d3c12a870955"
+
+  let alloc_size = Bap_value.Tag.register (module Args)
+      ~name:"alloc_size"
+      ~uuid:"74ab1380-3b35-42ee-a45e-ad29fd02d234"
+
+  let const = Bap_value.Tag.register (module Unit)
+      ~name:"const"
+      ~uuid:"b8795164-2e19-4469-9776-d41a6e6afe2e"
+
+  let pure = Bap_value.Tag.register (module Unit)
+      ~name:"pure"
+      ~uuid:"2c477ecb-0de8-4e8e-8cba-052eb67c628a"
+
+  let stub = Bap_value.Tag.register (module Unit)
+      ~name:"stub"
+      ~uuid:"c9eaf8a5-783d-4e01-9bf2-5d012602475f"
+
+  let extern = Bap_value.Tag.register (module Unit)
+      ~name:"extern"
+      ~uuid:"7965a2ee-ae72-4eb6-88c1-6f2b6108915f"
+
+  let leaf = Bap_value.Tag.register (module Unit)
+      ~name:"leaf"
+      ~uuid:"0688a9ac-9e55-4e37-a9e5-ac0a4e4af59e"
+
+  let malloc = Bap_value.Tag.register (module Unit)
+      ~name:"malloc"
+      ~uuid:"b9237d20-07c2-462f-938d-91e4d438fd07"
+
+  let noreturn = Bap_value.Tag.register (module Unit)
+      ~name:"noreturn"
+      ~uuid:"1f2941fb-d227-418d-a1d5-9f9d288a585f"
+
+  let nothrow = Bap_value.Tag.register (module Unit)
+      ~name:"nothrow"
+      ~uuid:"32058b19-95ca-46e3-bee0-d0a3694fd5b1"
+
+  let returns_twice = Bap_value.Tag.register (module Unit)
+      ~name:"return_twice"
+      ~uuid:"40166004-ea98-431b-81b0-4e74a0b681ee"
+
+  let warn_unused_result = Bap_value.Tag.register (module Unit)
+      ~name:"warn_unused_result"
+      ~uuid:"094b53c8-d71a-4dc6-9bb1-83bdf27d1da9"
+
+  let format = Bap_value.Tag.register (module Fmt)
+      ~name:"format"
+      ~uuid:"8b954fbf-e6e4-43cd-8981-b7a0a524b525"
 
   module Builder = struct
     type t =
