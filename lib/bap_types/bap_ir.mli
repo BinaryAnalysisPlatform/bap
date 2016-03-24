@@ -93,6 +93,11 @@ module Term : sig
   val del_attr : 'a t -> 'b tag -> 'a t
   val has_attr : 'a t -> 'b tag -> bool
 
+  val origin : tid tag
+  val synthetic : unit tag
+  val live : unit tag
+  val dead : unit tag
+
   class mapper : object
     inherit exp_mapper
     method run : program term -> program term
@@ -184,8 +189,6 @@ module Ir_program : sig
   include Regular with type t := t
 end
 
-
-
 module Ir_sub : sig
   type t = sub term
   val create : ?tid:tid -> ?name:string -> unit -> t
@@ -198,6 +201,20 @@ module Ir_sub : sig
     val add_arg : t -> arg term -> unit
     val result : t -> sub term
   end
+
+  val aliases : string list tag
+  val alloc_size : (arg term, arg term * arg term) Either.t tag
+  val const : unit tag
+  val pure : unit tag
+  val stub : unit tag
+  val extern : unit tag
+  val leaf : unit tag
+  val malloc : unit tag
+  val noreturn : unit tag
+  val returns_twice : unit tag
+  val warn_unused_result : unit tag
+  val nothrow : unit tag
+  val format : ([`printf | `scanf | `strftime | `strfmon] * arg term) tag
   include Regular with type t := t
 end
 
@@ -232,7 +249,6 @@ module Ir_blk : sig
   val uses_var : t -> var -> bool
   val free_vars : t -> Bap_var.Set.t
   val occurs : t -> after:tid -> tid -> bool
-
 
   module Builder : sig
     type t

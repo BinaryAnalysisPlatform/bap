@@ -3,6 +3,7 @@ open Bap_bundle.Std
 open Bap.Std
 include Self()
 open Cabs
+open Option.Monad_infix
 
 type arg_size =
   | Word                        (** same size as CPU word  *)
@@ -20,12 +21,21 @@ type arg = {
   arg_size : arg_size;
 }
 
-type fn_proto = arg list
+type attr = {
+  attr_name : string;
+  attr_args : string list;
+}
 
-type options = {add_headers : string list;
-                use_header : string option}
+type fn_proto = {
+  args : arg list;
+  attrs : attr list;
+}
 
-exception Failed_to_parse of string
+type options = {
+  add_headers : string list;
+  use_header : string option
+}
+
 
 include struct
   let stack mem sp endian sz off =
@@ -103,6 +113,27 @@ let string_of_single_name n (_,_,name) = arg_of_name n name
 
 let args_of_single_names = List.filter_mapi ~f:string_of_single_name
 
+let unuglify = String.strip ~drop:(fun c -> c = '_')
+
+let id_of_attr = function
+  | GNU_CST
+      ( CONST_INT id
+      | CONST_FLOAT id
+      | CONST_CHAR id
+      | CONST_STRING id) -> Some (unuglify id)
+  | _ -> None
+
+let attr = function
+  | GNU_EXTENSION | GNU_INLINE | GNU_CST _ | GNU_NONE -> None
+  | GNU_ID id -> Some {attr_name = unuglify id; attr_args=[]}
+  | GNU_CALL (id,args) -> Some {
+      attr_name = unuglify id;
+      attr_args = List.filter_map  ~f:id_of_attr args
+    }
+
+let make_attrs = List.filter_map ~f:attr
+
+
 let ret_word n = {
   arg_pos = n;
   arg_name = if n = Ret_1 then "result_ext" else "result";
@@ -115,8 +146,8 @@ let push = List.map ~f:(fun a -> match a with
     | a -> a)
 
 let fn_of_definition = function
-  | DECDEF (_,_,[(name, PROTO (ret,args,false),[],NOTHING)])
-  | FUNDEF ((_,_,(name, PROTO (ret,args,false),[], NOTHING)), _) ->
+  | DECDEF (_,_,[(name, PROTO (ret,args,_vararg),attrs,NOTHING)])
+  | FUNDEF ((_,_,(name, PROTO (ret,args,_vararg),attrs,NOTHING)), _) ->
     let args = args_of_single_names args in
     let args = match ret with
       | VOID -> args
@@ -124,7 +155,7 @@ let fn_of_definition = function
         {(ret_word (Arg 0)) with arg_intent = Some In} :: push args
       | INT (LONG_LONG,_) -> args @ [ret_word Ret_0; ret_word Ret_1]
       | _ -> args @ [ret_word Ret_0] in
-    Some (name,args)
+    Some (name,{args; attrs = make_attrs attrs})
   | _ -> None
 
 let fns_of_definitions =
@@ -133,7 +164,7 @@ let fns_of_definitions =
       | None -> fns
       | Some (name,data) -> Map.add fns ~key:name ~data)
 
-let args_of_file file =
+let protos_of_file file =
   let open Frontc in
   match Frontc.parse_file file stderr with
   | PARSING_ERROR -> raise Parsing.Parse_error
@@ -148,7 +179,7 @@ let is_api name =
   | ["api"; _] -> true
   | _ -> false
 
-let args_of_bundle bundle =
+let protos_of_bundle bundle =
   Bundle.list bundle |> List.filter ~f:is_api |>
   List.fold ~init:String.Map.empty ~f:(fun args file ->
       let name = Filename.temp_file "api" ".h" in
@@ -157,7 +188,7 @@ let args_of_bundle bundle =
       | Some uri ->
         let dst = Uri.path uri in
         let finally () = Sys.remove dst in
-        let args' = protect ~f:(fun () -> args_of_file dst) ~finally in
+        let args' = protect ~f:(fun () -> protos_of_file dst) ~finally in
         merge_args args args')
 
 let (>:) s1 s2 e =
@@ -181,26 +212,102 @@ let term_of_arg arch sub {arg_name; arg_size; arg_intent; arg_pos} =
   let var = Var.create (Sub.name sub ^ "_" ^ arg_name) typ in
   Arg.create ?intent:arg_intent var exp
 
+exception Attr_type   of string * string
+exception Attr_index  of int * int
+exception Attr_arity  of string
+
+let set_attr sub {attr_name; attr_args} =
+  let set tag = Term.set_attr sub tag () in
+  let int n = try Int.of_string n with exn ->
+    raise (Attr_type ("<int>",n)) in
+  let nth n =
+    let len = Term.length arg_t sub and n = int n - 1 in
+    if n < len then Term.nth_exn arg_t sub n
+    else raise (Attr_index (len,n)) in
+  let set_alloc_size sub args =
+    let args = match args with
+      | [size] -> First (nth size)
+      | [nmemb;size] -> Second (nth nmemb, nth size)
+      | _ -> raise (Attr_arity "1 | 2") in
+    Term.set_attr sub Sub.alloc_size args in
+  let lang = function
+    | "printf" -> `printf
+    | "scanf" -> `scanf
+    | "strftime" -> `strftime
+    | "strfmon"  -> `strfmon
+    | s -> raise (Attr_type ("<lang>",s)) in
+  let set_format = function
+    | [l;n] -> Term.set_attr sub Sub.format (lang l, nth n)
+    | _ -> raise (Attr_arity "2") in
+  match attr_name with
+  | "const"    -> set Sub.const
+  | "pure"     -> set Sub.pure
+  | "malloc"   -> set Sub.malloc
+  | "noreturn" -> set Sub.noreturn
+  | "returns_twice" -> set Sub.returns_twice
+  | "nothrow"  -> set Sub.nothrow
+  | "warn_unused_result" -> set Sub.warn_unused_result
+  | "alloc_size" -> set_alloc_size sub attr_args
+  | "format" -> set_format attr_args
+  | s -> sub
+
+let set_attr sub ({attr_name=name} as attr) =
+  try set_attr sub attr with
+  | Attr_type (exp,got) ->
+    eprintf "%s: wrong type for attribute %s - expected %s, got %S\n"
+      (Sub.name sub) name exp got;
+    sub
+  | Attr_index (max,ind) ->
+    eprintf "%s: wrong index for attribute %s - %d < %d\n"
+      (Sub.name sub) name ind max;
+    sub
+  | Attr_arity exp ->
+    eprintf "%s: wrong arity for attribute %s - expected %s\n"
+      (Sub.name sub) name exp;
+    sub
+
+let set_attrs attrs sub =
+  List.fold attrs ~init:sub ~f:set_attr
+
 let fill_args arch fns program =
   Term.map sub_t program ~f:(fun sub ->
       match Map.find fns (Sub.name sub) with
       | None -> sub
-      | Some args ->
+      | Some {args; attrs} ->
         List.fold args ~init:sub ~f:(fun sub arg ->
-            Term.append arg_t sub (term_of_arg arch sub arg)))
+            Term.append arg_t sub (term_of_arg arch sub arg)) |>
+        set_attrs attrs)
 
 let main bundle options proj =
   let prog = Project.program proj in
   let arch = Project.arch proj in
-  let args =
-    match options.use_header with
-    | Some file -> args_of_file file
-    | None -> args_of_bundle bundle in
+  let args = protos_of_bundle bundle in
+  let args = match options.use_header with
+    | Some file -> merge_args args (protos_of_file file)
+    | None -> args in
   fill_args arch args prog |>
   Project.with_program proj
 
 module Cmdline = struct
   include Cmdliner
+
+  let man = [
+    `S "DESCRIPTION";
+    `P "Use API definition to annotate subroutines. The API is
+    specified using C syntax, extended with GNU attributes. The plugin
+    has an embedded knowledge of a big subset of POSIX standard, but
+    new interfaces can be added.";
+    `P "The plugin will insert arg terms, based on the C function declarations
+    and definitions. Known gnu attributes will be mapped to
+    corresponding $(b,Sub) attributes, e.g., a subroutine annotated with
+    $(b,__attribute__((noreturn))) will have IR attribute
+    $(b,Sub.noreturn).";
+    `S "NOTES";
+    `P "A file with API shouldn't contain preprocessor directives, as
+    preproccessing is not run. If it has, then consider running cpp
+    manually. Also, all types and structures must be defined. An
+    undefined type will result in a parsing error."
+  ]
 
   let add_headers : string list Term.t =
     let doc =
@@ -210,14 +317,14 @@ module Cmdline = struct
 
   let file_header : string option Term.t =
     let doc =
-      "Use a C header with function prototypes. The file is not added \
+      "Use specified API. The file is not added
        to the plugin database of headers." in
     Arg.(value & opt (some string) None & info ["file"] ~doc)
 
   let process_args add_headers use_header = {add_headers; use_header}
 
   let parse argv =
-    let info = Term.info ~doc name in
+    let info = Term.info ~doc ~man name in
     let spec = Term.(pure process_args $add_headers $file_header) in
     match Term.eval ~argv (spec,info) with
     | `Ok res -> res
@@ -225,12 +332,12 @@ module Cmdline = struct
     | `Version | `Help -> exit 0
 end
 
-let ignore_args : arg list String.Map.t -> unit = ignore
+let ignore_protos : fn_proto String.Map.t -> unit = ignore
 
 let add_headers bundle file =
   let name = "api/" ^ Filename.basename file in
   try
-    args_of_file file |> ignore_args;
+    protos_of_file file |> ignore_protos;
     Bundle.insert_file ~name bundle (Uri.of_string file)
   with
   | Parsing.Parse_error ->
