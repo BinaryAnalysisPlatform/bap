@@ -112,7 +112,10 @@ module Term : sig
 
   class ['a] visitor : object
     inherit ['a] exp_visitor
-    method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a
+
+    method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
+    method visit_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
+    method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
 
     method enter_program : program term -> 'a -> 'a
     method run           : program term -> 'a -> 'a

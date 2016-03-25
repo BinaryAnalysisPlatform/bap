@@ -74,10 +74,10 @@ let insert_defs prog sub =
   let insert intent blk jmp sub =
     Option.value_map (blk_with_def intent blk jmp sub)
       ~default:sub ~f:(Term.update blk_t sub) in
-  Term.enum blk_t sub |> Seq.fold ~init:sub ~f:(fun sub blk ->
-      Term.enum jmp_t blk |> Seq.fold ~init:sub ~f:(fun sub jmp ->
-          insert In  blk jmp sub |>
-          insert Out blk jmp))
+  List.fold [In;Out] ~init:sub ~f:(fun sub intent ->
+      Term.enum blk_t sub |> Seq.fold ~init:sub ~f:(fun sub blk ->
+          Term.enum jmp_t blk |> Seq.fold ~init:sub ~f:(fun sub jmp ->
+              insert intent blk jmp sub)))
 
 let fill_calls program =
   Term.map sub_t program ~f:(insert_defs program)

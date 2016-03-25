@@ -3,34 +3,7 @@ open Bap.Std
 
 module SM = Monad.State
 open SM.Monad_infix
-
 open Format
-
-let debug_enabled = ref false
-
-let fdebug ppf = match debug_enabled with
-  | {contents=true} -> fprintf ppf
-  | {contents=false} -> ifprintf ppf
-
-let debug fmt = fdebug Format.err_formatter fmt
-
-let def_summary _ = None
-
-
-let skip () = SM.return false
-let pass () = SM.return true
-
-let summaries = String.Map.of_alist_exn [
-  ]
-
-let def_summary call = match Call.target call with
-  | Indirect _ -> None
-  | Direct tid ->
-    Map.find summaries (Tid.name tid)
-
-let target_of_goto jmp = match Jmp.kind jmp with
-  | Goto (Direct tid) -> Some tid
-  | _ -> None
 
 let visit vis tid = Map.change vis tid ~f:(function
     | None   -> Some 1
@@ -70,7 +43,7 @@ class context
   method visited = vis
   method checkpoints = cps
 
-  method backtrack = match List.hd callstack with
+  method backtrack : 's option = match List.hd callstack with
     | None -> None
     | Some sub ->
       let key = Term.tid sub in
@@ -78,10 +51,10 @@ class context
       | None -> None
       | Some ps -> match List.filter ps ~f:(fun (p,_) -> not(Map.mem vis p)) with
         | [] -> None
-        | (p,ctxt) :: ps ->
+        | (p,old) :: ps ->
           let self = {< cps = Map.add cps ~key ~data:ps >} in
-          let self = ctxt#merge self in
-          Some (self#set_next (Some p))
+          let old = old#merge self in
+          Some (old#set_next (Some p))
 
   method add_checkpoint p = match List.hd callstack with
     | None -> self
@@ -124,14 +97,14 @@ class context
 
   method will_return tid = match callstack with
     | cur :: _ ->
-      let will_jump = Term.find blk_t cur tid <> None in
-      let will_call = Term.find sub_t   p tid <> None in
-      not(will_jump || will_call)
+      let blk = Option.value_exn blk in
+      let will what = what tid <> None in
+      let fall = Term.find jmp_t blk in
+      let jump = Term.find blk_t cur in
+      let call = Term.find sub_t   p in
+      not(will fall || will jump || will call)
     | _ -> false
 end
-
-let update f =
-  SM.get () >>= fun s -> SM.put (f s)
 
 class ['a] main ?(deterministic=false) p =
   object(self)
@@ -140,21 +113,21 @@ class ['a] main ?(deterministic=false) p =
 
     method! enter_term cls t =
       let tid = Term.tid t in
-      update (fun ctxt -> ctxt#visit_term tid) >>= fun () ->
+      SM.update (fun ctxt -> ctxt#visit_term tid) >>= fun () ->
       super#enter_term cls t
 
     method! eval_blk blk =
       if Term.length jmp_t blk = 0
       then self#return
       else
-        update (fun ctxt -> ctxt#enter_blk blk) >>= fun () ->
+        SM.update (fun ctxt -> ctxt#enter_blk blk) >>= fun () ->
         self#add_checkpoints >>= fun () ->
         super#eval_blk blk
 
     method! eval_sub sub =
-      update (fun ctxt -> ctxt#enter_sub sub) >>= fun () ->
+      SM.update (fun ctxt -> ctxt#enter_sub sub) >>= fun () ->
       super#eval_sub sub >>= fun () ->
-      update (fun ctxt -> ctxt#leave_sub sub)
+      SM.update (fun ctxt -> ctxt#leave_sub sub)
 
     method! eval_jmp jmp =
       SM.get () >>= fun ctxt ->
@@ -170,10 +143,10 @@ class ['a] main ?(deterministic=false) p =
         | Some dst -> SM.return ()
         | None -> self#return
 
-    method private break = update @@ fun ctxt -> ctxt#set_next None
+    method private break = SM.update @@ fun ctxt -> ctxt#set_next None
 
     method private return =
-      update @@ fun ctxt -> match ctxt#backtrack with
+      SM.update @@ fun ctxt -> match ctxt#backtrack with
       | None -> ctxt#return
       | Some next -> next
 
@@ -184,11 +157,10 @@ class ['a] main ?(deterministic=false) p =
         Term.enum jmp_t blk |>
         Seq.fold ~init:(SM.return ()) ~f:(fun m jmp ->
             m >>= fun () ->
-            update (fun ctxt -> ctxt#visit_term (Term.tid jmp)) >>= fun () ->
+            SM.update (fun ctxt -> ctxt#visit_term (Term.tid jmp)) >>= fun () ->
             self#next_of_jmp jmp >>= function
             | None -> SM.return ()
-            | Some tid ->
-              update (fun ctxt -> ctxt#add_checkpoint tid))
+            | Some tid -> SM.update (fun ctxt -> ctxt#add_checkpoint tid))
       | _ -> SM.return ()
 
     method private next_of_jmp jmp =
@@ -211,7 +183,7 @@ class ['a] main ?(deterministic=false) p =
       match Call.return call with
       | None | Some (Indirect _) -> self#break
       | Some (Direct ret) ->
-        update (fun ctxt -> ctxt#store_return ret) >>= fun () ->
+        SM.update (fun ctxt -> ctxt#store_return ret) >>= fun () ->
         super#eval_call call
 
   end

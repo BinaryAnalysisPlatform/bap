@@ -111,6 +111,13 @@ let mark regs ptrs proj =
   Marker.run ~regs ~ptrs |>
   Project.with_program proj
 
+let main regs ptrs = match regs,ptrs with
+  | [],[] -> ()
+  | regs,ptrs ->
+    Project.register_pass ~deps:["callsites"] ~autorun:true
+      (mark regs ptrs)
+
+
 module Cmdline = struct
   open Cmdliner
 
@@ -158,13 +165,12 @@ language follows:";
 
   let info = Term.info ~doc ~man name
   let grammar =
-    Term.(pure mark $(taints "reg") $(taints "ptr"))
+    Term.(pure main $(taints "reg") $(taints "ptr"))
 
   let parse () = Term.eval ~argv (grammar,info)
 end
 
 let () = match Cmdline.parse () with
-  | `Ok pass ->
-    Project.register_pass ~deps:["callsites"] ~autorun:true pass
+  | `Ok () -> ()
   | `Version | `Help -> exit 0
   | `Error _ -> exit 1

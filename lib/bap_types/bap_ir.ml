@@ -847,15 +847,21 @@ module Term = struct
 
   class ['a] visitor = object(self)
     inherit ['a] Bil.exp_visitor
+
+    method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
+    method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
     method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a =
-      fun cls t x -> switch cls t
+      fun cls t x ->
+        let x = self#enter_term cls t x in
+        switch cls t
           ~program:(fun t -> self#run t x)
           ~sub:(fun t -> self#visit_sub t x)
           ~arg:(fun t -> self#visit_arg t x)
           ~blk:(fun t -> self#visit_blk t x)
           ~phi:(fun t -> self#visit_phi t x)
           ~def:(fun t -> self#visit_def t x)
-          ~jmp:(fun t -> self#visit_jmp t x)
+          ~jmp:(fun t -> self#visit_jmp t x) |>
+        self#leave_term cls t
 
     method enter_program p x = x
     method leave_program p x = x

@@ -5071,8 +5071,11 @@ module Std : sig
     class ['a] visitor : object
       inherit ['a] Exp.visitor
 
+      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
       (** [visit_term cls t] dispatch term [t] to corresponding method  *)
-      method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a
+      method visit_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
+      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
+
 
       method enter_program : program term -> 'a -> 'a
       method run           : program term -> 'a -> 'a
@@ -5318,7 +5321,8 @@ module Std : sig
     module Builder : sig
       type t
       (** initializes empty subroutine builder.  *)
-      val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string -> unit -> t
+      val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string ->
+        unit -> t
       (** appends a block to a subroutine  *)
       val add_blk : t -> blk term -> unit
       (** appends an argument  *)

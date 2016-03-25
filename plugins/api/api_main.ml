@@ -121,6 +121,7 @@ let id_of_attr = function
       | CONST_FLOAT id
       | CONST_CHAR id
       | CONST_STRING id) -> Some (unuglify id)
+  | GNU_ID id -> Some (unuglify id)
   | _ -> None
 
 let attr = function
@@ -238,7 +239,9 @@ let set_attr sub {attr_name; attr_args} =
     | s -> raise (Attr_type ("<lang>",s)) in
   let set_format = function
     | [l;n] -> Term.set_attr sub Sub.format (lang l, nth n)
-    | _ -> raise (Attr_arity "2") in
+    | ss ->
+      eprintf "Got: %s\n" @@ String.concat ss ~sep:",";
+      raise (Attr_arity "2") in
   match attr_name with
   | "const"    -> set Sub.const
   | "pure"     -> set Sub.pure
