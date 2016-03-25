@@ -14,7 +14,9 @@ val run :
   max_steps : int ->
   max_loop : int ->
   deterministic : bool ->
-  policy : Concretizer.policy ->
+  ?random_seed:int ->
+  reg_policy : Concretizer.policy ->
+  mem_policy : Concretizer.policy ->
   project -> [
     | `Name of string
     | `Term of tid] -> result

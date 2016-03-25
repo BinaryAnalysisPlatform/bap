@@ -4,4 +4,7 @@ type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
 
 class ['a] main :
   ?memory:(addr -> word option) ->
-  ?policy:policy -> unit -> ['a] expi
+  ?lookup:(var -> word option) ->
+  ?random_seed:int ->
+  ?reg_policy:policy ->
+  ?mem_policy:policy -> unit -> ['a] expi

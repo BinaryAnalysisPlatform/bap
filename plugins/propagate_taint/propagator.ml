@@ -28,7 +28,6 @@ let taints_of_tid taints tid =
   | None -> Var.Map.empty
   | Some ts -> ts
 
-
 class context ?max_steps ?max_loop p  = object(self : 's)
   inherit Taint.context as taints
   inherit Conqueror.context ?max_steps ?max_loop p as super
@@ -51,7 +50,7 @@ class context ?max_steps ?max_loop p  = object(self : 's)
   method tainted_regs = taints_of_tid tvs
   method tainted_ptrs = taints_of_tid tms
 
-  method merge runner =
+  method! merge runner =
     let self = super#merge runner in
     self#merge_taints runner
 
@@ -76,6 +75,9 @@ let taint_term t ctxt v =
   | Some seed,None -> taint_reg ctxt v seed
   | Some x, Some y -> taint_ptr (taint_reg ctxt v x) v y
 
+let is_seeded t =
+  Term.has_attr t Taint.reg || Term.has_attr t Taint.ptr
+
 let memory_lookup proj addr =
   let memory = Project.memory proj in
   Memmap.lookup memory addr |> Seq.hd |> function
@@ -84,13 +86,22 @@ let memory_lookup proj addr =
     | Ok w -> Some w
     | _ -> None
 
-class ['a] main ?deterministic ?policy proj =
+let register_lookup proj =
+  let arch = Project.arch proj in
+  let width = Arch.addr_size arch |> Size.in_bits in
+  let mem_start = Word.of_int64 ~width 0x40000000L in
+  let module Target = (val target_of_arch arch) in
+  fun var -> Option.some_if (Target.CPU.is_sp var) mem_start
+
+class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
   let prog = Project.program proj in
   let memory = memory_lookup proj in
+  let lookup = register_lookup proj in
   object(self)
     constraint 'a = #context
     inherit ['a] Conqueror.main ?deterministic prog as super
-    inherit ['a] Concretizer.main ~memory ?policy () as concrete
+    inherit ['a] Concretizer.main ~memory ~lookup
+        ?random_seed ?reg_policy ?mem_policy () as concrete
     inherit ['a] Taint.propagator
 
     method! lookup v =
@@ -105,12 +116,14 @@ class ['a] main ?deterministic ?policy proj =
         SM.return r
 
     method! eval_def def =
-      self#lookup (Def.lhs def) >>= fun x ->
-      super#eval_def def >>= fun () ->
-      SM.get () >>= fun ctxt ->
-      SM.put (taint_term def ctxt x) >>= fun () ->
-      self#lookup (Def.lhs def) >>= fun x ->
-      self#update (Def.lhs def) x
+      if is_seeded def then
+        self#lookup (Def.lhs def) >>= fun x ->
+        super#eval_def def >>= fun () ->
+        SM.get () >>= fun ctxt ->
+        SM.put (taint_term def ctxt x) >>= fun () ->
+        self#lookup (Def.lhs def) >>= fun x ->
+        self#update (Def.lhs def) x
+      else super#eval_def def
   end
 
 exception Entry_point_not_found
@@ -133,9 +146,10 @@ let run_from_point p biri point =
   run_from_tid p biri (tid_of_ident point)
 
 let run
-    ~max_steps ~max_loop ~deterministic ~policy proj point =
+    ~max_steps ~max_loop ~deterministic
+    ?random_seed ~reg_policy ~mem_policy proj point =
   let p = Project.program proj in
   let ctxt = new context ~max_steps ~max_loop p in
-  let biri = new main ~deterministic ~policy proj in
+  let biri = new main ~deterministic ?random_seed ~reg_policy ~mem_policy proj in
   let res = run_from_point p biri point in
   (Monad.State.exec res ctxt :> result)

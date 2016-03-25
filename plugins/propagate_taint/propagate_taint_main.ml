@@ -166,12 +166,13 @@ module Scheme = struct
   let t = parse_string, print
 end
 
-
 type args = {
   max_trace : int;
   max_loop  : int;
   deterministic : bool;
-  policy : policy;
+  random_seed : int option;
+  reg_policy : policy;
+  mem_policy : policy;
   interesting : string list;
   marker : Scheme.marker
 } [@@deriving fields]
@@ -281,7 +282,9 @@ let main args proj =
               ~max_steps:args.max_trace
               ~max_loop:args.max_loop
               ~deterministic:args.deterministic
-              ~policy:args.policy
+              ?random_seed:args.random_seed
+              ~reg_policy:args.reg_policy
+              ~mem_policy:args.mem_policy
               proj (`Term (Term.tid sub)) in
           let marker = new marker args.marker ctxt in
           let prog = Project.program proj |> marker#run in
@@ -348,19 +351,28 @@ module Cmdline = struct
     let t : t Arg.converter = parser,printer
   end
 
-  let policy : policy Term.t =
-    let doc = "Input generation policy. If set to a fixed value,
-      e.g. `0', then all unknown data will be concretized to this
+  let policy key name default : policy Term.t =
+    let doc = sprintf "Input generation policy. If set to a fixed value,
+      e.g. `0', then all undefined %s will be concretized to this
       value. If set to an interval, e.g., `(0 5)', then values will
       be randomly picked from this interval (boundaries including).
       If set to `random', then values will be picked randomly from a
-      domain, defined by a type of value." in
-    Arg.(value & opt Policy.t (`Fixed 0L) & info ["policy"] ~doc)
+      domain, defined by a type of value." name in
+    Arg.(value & opt Policy.t default &
+         info [sprintf "%s-value" key] ~doc)
 
+
+  let random_seed : int option Term.t =
+    let doc =
+      "Initialize random number generator with the given seed" in
+    Arg.(value & opt (some int) None & info ["random-seed"] ~doc)
 
   let create
-      max_trace max_loop deterministic policy interesting markers scm = {
-    max_trace; max_loop; deterministic; policy; interesting;
+      max_trace max_loop deterministic
+      random_seed reg_policy mem_policy
+      interesting markers scm = {
+    max_trace; max_loop; deterministic;
+    random_seed; reg_policy; mem_policy; interesting;
     marker = match scm with
       | None -> Scheme.merge markers
       | Some file -> match Scheme.parse_file file with
@@ -448,7 +460,10 @@ module Cmdline = struct
 
   let grammar =
     Term.(pure create $max_trace $max_loop $deterministic
-          $policy $interesting $scheme $scheme_file)
+          $random_seed
+          $(policy "reg" "registers" (`Random))
+          $(policy "mem" "memory locations" `Random)
+          $interesting $scheme $scheme_file)
 
   let info = Term.info ~man ~doc name
 
