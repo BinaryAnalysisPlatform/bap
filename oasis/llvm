@@ -7,7 +7,7 @@ Flag llvm_static
   Default: true
 
 Library llvm_plugin
-  XMETADescription: provide loader and disassembler
+  XMETADescription: provide loader and disassembler using LLVM library
   Path:          plugins/llvm
   Build$:        flag(everything) || flag(llvm)
   BuildDepends:  bap, cmdliner
