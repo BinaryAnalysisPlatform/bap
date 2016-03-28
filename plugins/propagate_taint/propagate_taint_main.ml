@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Regular.Std
 open Graphlib.Std
 open Bap.Std
 open Microx.Std
@@ -7,22 +8,26 @@ include Self()
 
 
 type policy = Concretizer.policy
+  [@@deriving sexp_of]
 
-let is_seeded t =
-  Term.has_attr t Taint.reg ||
-  Term.has_attr t Taint.ptr
+include struct
+  open Propagator.Result
 
-let is_visited ctxt t  = Map.mem ctxt#visited (Term.tid t)
+  let is_seeded t =
+    Term.has_attr t Taint.reg ||
+    Term.has_attr t Taint.ptr
 
-let has_seed _ctxt t = is_seeded t
+  let is_visited r t  = is_visited r (Term.tid t)
 
-let has_tainted what ctxt t =
-  not (Map.is_empty ((what ctxt) (Term.tid t)))
+  let has_seed _ctxt t = is_seeded t
 
-let has_tainted_regs t = has_tainted (fun c -> c#tainted_regs) t
-let has_tainted_ptrs t = has_tainted (fun c -> c#tainted_ptrs) t
-let is_tainted c t = has_tainted_regs c t || has_tainted_ptrs c t
+  let has_tainted what r t =
+    not (Var.Map.is_empty (what r (Term.tid t)))
 
+  let has_tainted_regs r = has_tainted tainted_regs r
+  let has_tainted_ptrs t = has_tainted tainted_ptrs t
+  let is_tainted c t = has_tainted_regs c t || has_tainted_ptrs c t
+end
 
 module Scheme = struct
   let colors = [
@@ -124,6 +129,7 @@ module Scheme = struct
                       |> List.reduce_exn ~f:conjunct_preds
 
   type marker = { mark : 'a. Propagator.result -> 'a term -> 'a term }
+    [@@deriving sexp_of]
   type t = marker
   let default = {mark = fun _ t -> t}
 
@@ -175,9 +181,9 @@ type args = {
   mem_policy : policy;
   interesting : string list;
   marker : Scheme.marker
-} [@@deriving fields]
+} [@@deriving fields, sexp_of]
 
-class marker m ctxt = object(self)
+class marker m res = object(self)
   inherit Term.mapper as super
   method! map_term cls t =
     let t = super#map_term cls t in
@@ -186,9 +192,9 @@ class marker m ctxt = object(self)
       if tainted taints
       then Term.set_attr t taint (taints (Term.tid t))
       else t in
-    let regs = ctxt#tainted_regs in
-    let ptrs = ctxt#tainted_ptrs in
-    m.Scheme.mark ctxt t  |>
+    let regs = Propagator.Result.tainted_regs res in
+    let ptrs = Propagator.Result.tainted_ptrs res in
+    m.Scheme.mark res t  |>
     taint Taint.regs has_tainted regs |>
     taint Taint.ptrs has_tainted ptrs
 end
@@ -216,53 +222,92 @@ let tids_of_sub sub =
       terms def_t blk ++
       terms jmp_t blk ++ sum)
 
-type stats = {
-  sub_count : int;
-  sub_total : int;
-  visited : Tid.Set.t;
-  terms : Tid.Set.t;
-}
+module State = struct
+  module Taints = Propagator.Result
+  type t = {
+    sub_count : int;
+    sub_total : int;
+    visited : Tid.Set.t;
+    terms : Tid.Set.t;
+    taints : Taints.t;
+  } [@@deriving bin_io, compare, sexp]
 
-let stats sub_total = {
-  sub_count = 0;
-  sub_total;
-  visited = Tid.Set.empty;
-  terms = Tid.Set.empty;
-}
+  let create sub_total = {
+    sub_count = 0;
+    sub_total;
+    visited = Tid.Set.empty;
+    terms = Tid.Set.empty;
+    taints = Taints.empty;
+  }
 
-let percent (x,y) =
-  if y = 0 then 0
-  else Int.of_float (100. *. (float x /. float y))
+  let keys = Map.fold ~init:Tid.Set.empty ~f:(fun ~key ~data set ->
+      Set.add set key)
 
-let pp_ratio ppf (x,y) =
-  fprintf ppf "[%d/%d] %3d%%" x y (percent (x,y))
+  let update_taints t taints = {
+    t with
+    taints = Taints.union t.taints taints;
+    visited = Set.union t.visited @@
+      keys (Propagator.Result.visited taints);
+  }
 
-let pp_progressbar ppf {sub_count=x; sub_total=y} =
-  fprintf ppf "%a" pp_ratio (x,y)
+  let percent (x,y) =
+    if y = 0 then 0
+    else Int.of_float (100. *. (float x /. float y))
 
-let coverage visited terms =
-  let x = Set.length (Set.inter terms visited) in
-  let y = Set.length terms in
-  x,y
+  let pp_ratio ppf (x,y) =
+    fprintf ppf "[%d/%d] %3d%%" x y (percent (x,y))
 
-let pp_coverage ppf {visited; terms} =
-  pp_ratio ppf (coverage visited terms)
+  let pp_progressbar ppf {sub_count=x; sub_total=y} =
+    fprintf ppf "%a" pp_ratio (x,y)
 
-let entered_sub stat sub = {
-  stat with
-  sub_count = stat.sub_count + 1;
-  terms = Set.union stat.terms (tids_of_sub sub)
-}
+  let coverage visited terms =
+    let x = Set.length (Set.inter terms visited) in
+    let y = Set.length terms in
+    x,y
 
-let keys = Map.fold ~init:Tid.Set.empty ~f:(fun ~key ~data set ->
-    Set.add set key)
+  let pp_coverage ppf {visited; terms} =
+    pp_ratio ppf (coverage visited terms)
 
-let visited_sub sub stat res = {
-  stat with
-  visited = Set.union stat.visited @@ keys res#visited;
-}
+  let entered_sub stat sub = {
+    stat with
+    sub_count = stat.sub_count + 1;
+    terms = Set.union stat.terms (tids_of_sub sub)
+  }
 
-let main args proj =
+  let taints t = t.taints
+
+  include Regular.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
+      let version = version
+      let module_name = None
+      let hash = Hashtbl.hash
+      let pp = pp_progressbar
+    end)
+end
+
+let digest_project proj =
+  let buf = Buffer.create 0x4000 in
+  let ppf = formatter_of_buffer buf in
+  Text_tags.install ppf "attr";
+  Text_tags.Attr.show "tainted_reg";
+  Text_tags.Attr.show "tainted_ptr";
+  (object
+    inherit [unit] Term.visitor
+    method enter_arg t () = fprintf ppf "%a" Arg.pp t
+    method enter_def t () = fprintf ppf "%a" Def.pp t
+    method enter_jmp t () = fprintf ppf "%a" Jmp.pp t
+  end)#run (Project.program proj) ();
+  pp_print_flush ppf ();
+  Digest.string (Buffer.contents buf)
+
+let digest_args args =
+  sexp_of_args args |> Sexp.to_string_mach |> Digest.string
+
+let digest args proj =
+  Digest.string (digest_args args ^ digest_project proj)
+
+
+let process args proj =
   let prog = Project.program proj in
   let callgraph = Program.to_graph prog in
   let is_interesting = match args.interesting with
@@ -271,28 +316,34 @@ let main args proj =
   let subs = Term.enum sub_t prog |>
              Seq.filter ~f:is_interesting |>
              seeded callgraph in
-  let proj,stat =
-    Term.enum sub_t prog |>
-    Seq.filter ~f:(fun sub -> Set.mem subs (Term.tid sub)) |>
-    Seq.fold ~init:(proj,stats (Set.length subs))
-      ~f:(fun (proj,stat) sub ->
-          let stat = entered_sub stat sub in
-          eprintf "%-40s %a\r%!" (Sub.name sub) pp_progressbar stat;
-          let ctxt = Propagator.run
-              ~max_steps:args.max_trace
-              ~max_loop:args.max_loop
-              ~deterministic:args.deterministic
-              ?random_seed:args.random_seed
-              ~reg_policy:args.reg_policy
-              ~mem_policy:args.mem_policy
-              proj (`Term (Term.tid sub)) in
-          let marker = new marker args.marker ctxt in
-          let prog = Project.program proj |> marker#run in
-          let stat = visited_sub sub stat ctxt in
-          Project.with_program proj prog, stat) in
-  printf "@.Coverage: %a@." pp_coverage stat;
-  proj
+  Term.enum sub_t prog |>
+  Seq.filter ~f:(fun sub -> Set.mem subs (Term.tid sub)) |>
+  Seq.fold ~init:(State.create (Set.length subs)) ~f:(fun s sub ->
+      let s = State.entered_sub s sub in
+      eprintf "%-40s %a\r%!" (Sub.name sub) State.pp_progressbar s;
+      Propagator.run
+        ~max_steps:args.max_trace
+        ~max_loop:args.max_loop
+        ~deterministic:args.deterministic
+        ?random_seed:args.random_seed
+        ~reg_policy:args.reg_policy
+        ~mem_policy:args.mem_policy
+        proj (`Term (Term.tid sub)) |>
+      State.update_taints s)
 
+let main args proj =
+  let digest = digest args proj in
+  let state = match State.Cache.load digest with
+    | Some s -> s
+    | None ->
+      let s = process args proj in
+      State.Cache.save digest s;
+      s in
+  printf "@.Coverage: %a@." State.pp_coverage state;
+
+  let marker = new marker args.marker (State.taints state) in
+  Project.program proj |> marker#run |>
+  Project.with_program proj
 
 module Cmdline = struct
   open Cmdliner
