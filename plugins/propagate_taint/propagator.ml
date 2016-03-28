@@ -116,14 +116,12 @@ class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
         SM.return r
 
     method! eval_def def =
-      if is_seeded def then
-        self#lookup (Def.lhs def) >>= fun x ->
+      if is_seeded def then begin
         super#eval_def def >>= fun () ->
+        super#lookup (Def.lhs def) >>= fun x ->
         SM.get () >>= fun ctxt ->
-        SM.put (taint_term def ctxt x) >>= fun () ->
-        self#lookup (Def.lhs def) >>= fun x ->
-        self#update (Def.lhs def) x
-      else super#eval_def def
+        SM.put (taint_term def ctxt x)
+      end else super#eval_def def
   end
 
 exception Entry_point_not_found
