@@ -1,7 +1,8 @@
 open Core_kernel.Std
 open Regular_data_types
 
-type bytes = Regular_bytes.t
+type bytes = Regular_bytes.t [@@deriving bin_io, compare, sexp]
+type digest = string [@@deriving bin_io, compare, sexp]
 
 type 'a reader = 'a Regular_data_read.t
 type 'a writer = 'a Regular_data_write.t
@@ -30,8 +31,8 @@ module type Data = sig
     val print : ?ver:string -> ?fmt:string -> Format.formatter -> t -> unit
   end
   module Cache : sig
-    val load : string -> t option
-    val save : string -> t -> unit
+    val load : digest -> t option
+    val save : digest -> t -> unit
   end
   val add_reader : ?desc:string -> ver:string -> string -> t reader -> unit
   val add_writer : ?desc:string -> ver:string -> string -> t writer -> unit

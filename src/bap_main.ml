@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_plugins.Std
+open Regular.Std
 open Bap.Std
 open Or_error
 open Format
@@ -66,7 +67,9 @@ let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
   exit 0
 
-let args filename passes argv =
+let args filename argv =
+  let passes = Project.passes () |>
+               List.map ~f:Project.Pass.name in
   let transparent_args =
     "-d" :: "--dump" ::
     "-v" :: "--verbose" ::
@@ -91,9 +94,9 @@ let args filename passes argv =
   Sexp.to_string_mach
 
 let digest o =
-  let fs = Digest.file o.filename in
-  let os = Digest.string (args o.filename o.passes Sys.argv) in
-  Digest.(to_hex (string (fs ^ os)))
+  Data.Cache.digest ~namespace:"project" "%s%s"
+    (Digest.file o.filename)
+    (args o.filename Sys.argv)
 
 let process options project =
   let run_passes init = List.fold ~init ~f:(fun proj pass ->

@@ -6,7 +6,6 @@ open Microx.Std
 open Format
 include Self()
 
-
 type policy = Concretizer.policy
   [@@deriving sexp_of]
 
@@ -286,26 +285,28 @@ module State = struct
 end
 
 let digest_project proj =
-  let buf = Buffer.create 0x4000 in
-  let ppf = formatter_of_buffer buf in
-  Text_tags.install ppf "attr";
-  Text_tags.Attr.show "tainted_reg";
-  Text_tags.Attr.show "tainted_ptr";
+  let module Digest = Data.Cache.Digest in
+  let add_taint tag t dst = match Term.get_attr t tag with
+    | None -> dst
+    | Some v -> Digest.add dst "%a" Tid.pp v in
   (object
-    inherit [unit] Term.visitor
-    method enter_arg t () = fprintf ppf "%a" Arg.pp t
-    method enter_def t () = fprintf ppf "%a" Def.pp t
-    method enter_jmp t () = fprintf ppf "%a" Jmp.pp t
-  end)#run (Project.program proj) ();
-  pp_print_flush ppf ();
-  Digest.string (Buffer.contents buf)
+    inherit [Digest.t] Term.visitor
+    method enter_term cls t dst =
+      add_taint Taint.reg t dst |>
+      add_taint Taint.ptr t
+    method enter_arg t dst = Digest.add dst "%a" Arg.pp t
+    method enter_def t dst = Digest.add dst "%a" Def.pp t
+    method enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+  end)#run
+    (Project.program proj)
+    (Data.Cache.Digest.create ~namespace:"propagate_taint")
 
 let digest_args args =
   sexp_of_args args |> Sexp.to_string_mach |> Digest.string
 
 let digest args proj =
-  Digest.string (digest_args args ^ digest_project proj)
-
+  Data.Cache.Digest.(add_sexp (digest_project proj)
+                       sexp_of_args args)
 
 let process args proj =
   let prog = Project.program proj in

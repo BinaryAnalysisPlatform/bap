@@ -19,7 +19,7 @@ type config = {
 
 type index = {
   config  : config;
-  entries : entry String.Map.t;
+  entries : entry Data.Cache.Digest.Map.t;
 } [@@deriving bin_io, compare, sexp]
 
 let (/) = Filename.concat
@@ -32,11 +32,10 @@ module Index = struct
   }
   let empty = {
     config = default_config;
-    entries = String.Map.empty;
+    entries = Data.Cache.Digest.Map.empty;
   }
   let perm = 0o770
   let getenv opt = try Some (Sys.getenv opt) with Not_found -> None
-
 
   let rec mkdir path =
     let par = Filename.dirname path in
@@ -132,7 +131,7 @@ let size file =
 
 let cleanup () =
   Index.update ~f:(fun _ idx ->
-      {idx with entries = String.Map.empty});
+      {idx with entries = Data.Cache.Digest.Map.empty});
   exit 0
 
 let set_size size =
