@@ -5,7 +5,7 @@ module SM = Monad.State
 open SM.Monad_infix
 
 type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
-
+  [@@deriving sexp_of]
 
 let rand64 lo hi = Int64.(Random.int64 (hi+(hi-lo)) + lo)
 

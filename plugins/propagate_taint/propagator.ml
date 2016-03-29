@@ -1,17 +1,74 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap.Std
 open Microx.Std
+
 open Format
 module SM = Monad.State
 open SM.Monad_infix
 
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
+  [@@deriving bin_io, compare, sexp]
 
-class type result = object
-  method visited : int Tid.Map.t
-  method tainted_regs : tid -> Taint.map
-  method tainted_ptrs : tid -> Taint.map
+module Result = struct
+  type t = {
+    visited : int Tid.Map.t;
+    tainted_regs : taints;
+    tainted_ptrs : taints;
+  } [@@deriving bin_io, compare, sexp]
+
+
+  let empty = {
+    visited = Tid.Map.empty;
+    tainted_regs = Tid.Map.empty;
+    tainted_ptrs = Tid.Map.empty;
+  }
+
+  let of_context ctxt = {
+    visited = ctxt#visited;
+    tainted_regs = ctxt#tvs;
+    tainted_ptrs = ctxt#tms;
+  }
+
+  let taints_of_tid taints tid : Taint.map =
+    Map.find taints tid |> function
+    | None -> Var.Map.empty
+    | Some ts -> ts
+
+  let tainted_regs t = taints_of_tid t.tainted_regs
+  let tainted_ptrs t = taints_of_tid t.tainted_ptrs
+  let visited t = t.visited
+
+  let is_tainted t tid =
+    Map.mem t.tainted_regs tid || Map.mem t.tainted_ptrs tid
+
+  let union_maps x y ~f =
+    Map.merge x y ~f:(fun ~key -> function
+        | `Left s | `Right s -> Some s
+        | `Both (s1,s2) -> Some (f s1 s2))
+
+  let union_taints : taints -> taints -> taints =
+    union_maps ~f:(union_maps ~f:Set.union)
+
+  let is_visited t tid = Map.mem t.visited tid
+
+  let union x y = {
+    visited = union_maps ~f:max x.visited y.visited;
+    tainted_regs = union_taints x.tainted_regs y.tainted_regs;
+    tainted_ptrs = union_taints x.tainted_ptrs y.tainted_ptrs;
+  }
+
+  include Regular.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
+      let module_name = None
+      let version = "0.1"
+      let hash = Hashtbl.hash
+      let pp ppf t = Format.fprintf ppf "<taints>"
+    end)
 end
+
+type result = Result.t
+  [@@deriving bin_io, compare, sexp]
 
 let propagate taints vars tid v r : taints =
   let ts = taints r in
@@ -23,10 +80,6 @@ let propagate taints vars tid v r : taints =
           | None -> Some ts
           | Some ts' -> Some (Set.union ts ts')))
 
-let taints_of_tid taints tid =
-  Map.find taints tid |> function
-  | None -> Var.Map.empty
-  | Some ts -> ts
 
 class context ?max_steps ?max_loop p  = object(self : 's)
   inherit Taint.context as taints
@@ -47,8 +100,6 @@ class context ?max_steps ?max_loop p  = object(self : 's)
     | Bil.Imm a ->
       {< tms = propagate taints#ptr_taints tms tid v a >}
 
-  method tainted_regs = taints_of_tid tvs
-  method tainted_ptrs = taints_of_tid tms
 
   method! merge runner =
     let self = super#merge runner in
@@ -150,4 +201,4 @@ let run
   let ctxt = new context ~max_steps ~max_loop p in
   let biri = new main ~deterministic ?random_seed ~reg_policy ~mem_policy proj in
   let res = run_from_point p biri point in
-  (Monad.State.exec res ctxt :> result)
+  (Monad.State.exec res ctxt |> Result.of_context)

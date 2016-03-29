@@ -1,6 +1,7 @@
 open Bap.Std
 
 type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
+  [@@deriving sexp_of]
 
 class ['a] main :
   ?memory:(addr -> word option) ->
