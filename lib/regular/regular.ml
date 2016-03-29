@@ -31,5 +31,4 @@ module Std = struct
   include Seq.Export
 
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
-
 end

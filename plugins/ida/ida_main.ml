@@ -26,7 +26,7 @@ let register ida =
     let ida = match ida with
       | None -> "default"
       | Some ida -> ida in
-    Digest.(to_hex (string(file path ^ string ida))) in
+    Data.Cache.digest ~namespace:"ida" "%s%s" (Digest.file path) ida in
   let syms_of_ida ida path =
     try Some Ida.(with_file ?ida path get_symbols) with
       exn ->

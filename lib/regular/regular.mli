@@ -302,10 +302,12 @@ module Std : sig
     end
   end
 
-  type bytes = Bytes.t
+  type bytes = Bytes.t [@@deriving bin_io, compare, sexp]
 
   type 'a reader
   type 'a writer
+
+  type digest [@@deriving bin_io, compare, sexp]
 
   (** ['a printer] defines a type for pretty-printers for a value of
       type ['a]. This is the type, that is required by [%a] specifier,
@@ -433,10 +435,41 @@ module Std : sig
 
         Store and retrieve data from cache. The cache can seen as a
         persistant weak key-value storage. Data stored here can
-        disappear with time, but can survive for a long time. The
+        disappear at any time, but can survive for a long time. The
         library by itself doesn't provide a caching service for any
         type, only the interface. The caching service can be added
         externally (e.g., via plugin system).
+
+        The caching infrastructure provides only facilities for
+        storing and loading data. In fact this is just a weak
+        key-value storage. A weak, because storage is allowed to
+        to loose data.
+
+        As a key, we use [digest] that is underneath the hood is and
+        md5 sum of arguments used to build the cached data.
+
+        Let's take for example a function that builds some control
+        flow graphs. It has three parameters, one is an optional
+        [debug], that doesn't affect the algorithm, and the rest two
+        has type [string] and [int] correspondingly. The following
+        code will try to load result from a cache, using a digest of
+        the arguments, and if is not available, the the graph will be
+        computed and stored in the cache. This function will work even
+        if there is no caching service. Of course, there will be no
+        benefits, since the [save] function will just immediately
+        forget its argument.
+
+        {[
+          let compute_graph ?(debug=false) x y : Graphs.Cfg.t =
+            let digest =
+              Data.Cache.digest ~namespace:"example" "%s%d" x y in
+            match Graphs.Cfg.Cache.load digest with
+            | Some g -> g
+            | None ->
+              let g = build_graph ?debug x y in
+              Graphs.Cfg.Cache.save digest g;
+              g
+        ]}
 
         Note: it is only reasonable to use caching for data types,
         that take reasonable amount of time to create.
@@ -444,11 +477,11 @@ module Std : sig
     module Cache : sig
 
       (** [load id] load data previously stored under give [id]  *)
-      val load : string -> t option
+      val load : digest -> t option
 
       (** [save id data] store data under given [id]. If something is
           already stored, then it will be overwritten.*)
-      val save : string -> t -> unit
+      val save : digest -> t -> unit
     end
 
 
@@ -719,26 +752,111 @@ module Std : sig
       val blit_to_bigstring : 'a t -> bigstring -> 'a -> int -> unit
     end
 
+    (** Generic caching.
 
+        Use [T.Cache] module if you want to cache values of type
+        [T.t].
+
+        Use {!Data.Cache.digest} to build digests of the data for
+        caching.
+
+
+    *)
     module Cache : sig
+
+      (** cacher type class  *)
       type 'a t
 
+      (** [create ~load ~save] creates a cache provider.  *)
       val create :
-        load:(string -> 'a option) ->
-        save:(string -> 'a -> unit) -> 'a t
+        load:(digest -> 'a option) ->
+        save:(digest -> 'a -> unit) -> 'a t
 
-      val load : 'a t -> string -> 'a option
+      (** [digest ~namespace fmt x y z ...] a variadic function to
+          create data digests. Use it like a printf, e.g.,
+          {[
+            type t = {name : string; parent : string; lang : string}
 
-      val save : 'a t -> string -> 'a -> unit
+            let digest t = Data.Cache.digest ~namespace:"student" "%s%s"
+                t.name t.parent
+          ]}
 
+          In the example, we created a digest that will ignore [lang]
+          field of the data type (that is assumed to be transparent to
+          the cached computation).
+
+          Note: [digest] function will first eagerly build the whole
+          string and then convert it to the digest. So it has O(N)
+          complexity in space and time, where N is the total size of
+          all constituting elements. If N is too big (hundreds of
+          megabytes) then use [Digest] module for building digests
+          incrementally.*)
+      val digest : namespace:string ->
+        ('a,Format.formatter,unit,digest) format4 -> 'a
+
+
+      (** Data digesting for caching.*)
+      module Digest : sig
+        include Identifiable with type t = digest
+
+        (** [create ~namespace] create a digest initialized with the
+            given [namespace]. Since a caching service is using a flat
+            namespace of keys, the [namespace] parameter is used to
+            distinguish data build by different functions that have
+            the same parameters digests. A module name is a good
+            candidate for the namespace. *)
+        val create : namespace:string -> t
+
+        (** [add digest fmt x y z ...] is a variadic function that
+            builds a string from arguments [x y z ...] using specified
+            format [fmt] and adds this string to the digest. *)
+        val add : t -> ('a,Format.formatter,unit,t) format4 -> 'a
+
+        (** [add_sexp d sexp_of x] is [add d "%a" Sexp.pp (sexp_of x)] *)
+        val add_sexp : t -> ('a -> Sexp.t) -> 'a -> t
+      end
+
+      (** [load cls digest] loads entry with a given [digest] from the
+          cache. Note, this is a generic function, if you want to load
+          a value of type [T.t] use [T.Cache.load] function.*)
+      val load : 'a t -> digest -> 'a option
+
+      (** [save cls digest x] stores entry [x] with a given [digest]
+          to the cache. Note, this is a generic function, if you want
+          to store a value of type [T.t] use [T.Cache.save] function.*)
+      val save : 'a t -> digest -> 'a -> unit
+
+      (** service signature  *)
       type service = {
         create : 'a . 'a reader -> 'a writer -> 'a t
       }
 
+      (** Service injection point.
+
+          By default the library doesn't provide any caching
+          services. All data stored in the cache is forgotten.
+
+          The caching service is provided by plugins, who register
+          itself using [Service.provide] function. Only one caching
+          service can be active at given moment.
+
+          Note: this interface is for implementing caching for data
+          type. If you're using data type whose module [T] implements
+          interface {!Data}, then you can just use [T.Data.Cache]
+          module. If you need to add caching to your custom data type,
+          then use {!Regular}, {!Opaque} or {!Data.Make} functors (in
+          the order of preference).*)
       module Service : sig
+
+        (** [provide service] will substitute current caching service
+            with a new [service]. *)
         val provide : service -> unit
+
+        (** [request reader writer] returns a caching service for
+            type ['a].    *)
         val request : 'a reader -> 'a writer -> 'a t
       end
+
     end
   end
 
