@@ -15,14 +15,6 @@ let callee call prog = match Call.target call with
 let require x = Option.some_if x ()
 
 let def_of_arg arg =
-  let x = Bil.var (Arg.lhs arg) in
-  match Arg.rhs arg with
-  | Bil.Var var -> Some (Def.create var x)
-  | Bil.Load (Bil.Var m as mem,a,e,s) ->
-    Some (Def.create m (Bil.store ~mem ~addr:a x e s))
-  | _ -> None
-
-let use_of_arg arg =
   let x = Arg.lhs arg in
   let e = Arg.rhs arg in
   Some (Def.create x e)
@@ -51,10 +43,9 @@ let add_def intent blk def =
   else Term.append  def_t blk def
 
 let defs_of_args call intent args : def term seq =
-  let make_def = if intent = In then use_of_arg else def_of_arg in
   Seq.filter_map args ~f:(fun arg ->
       require (intent_matches arg intent) >>= fun () ->
-      make_def arg >>| transfer_attrs call)
+      def_of_arg arg >>| transfer_attrs call)
 
 let target intent sub blk call =
   if intent = Out

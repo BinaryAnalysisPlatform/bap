@@ -82,19 +82,13 @@ class context = object(self)
   val tvs : set values = Values.empty
   val tas : set Addr.Map.t = Addr.Map.empty
 
-  (** T(r) <- T(r) U T *)
   method taint_reg r ts =
-    let tvs' = Values.change tvs (Bil.Result.id r) ~f:(function
-        | None -> Some ts
-        | Some ts' -> Some (Taints.union ts ts')) in
-    {< tvs = tvs' >}
+    {< tvs = Values.add tvs ~key:(Bil.Result.id r) ~data:ts >}
 
   method taint_ptr a (s : size) ts =
     let addrs = Seq.init (Size.in_bytes s) ~f:(fun n -> Addr.(a++n)) in
     let tas' = Seq.fold addrs ~init:tas ~f:(fun tas a ->
-        Map.change tas a (function
-            | None -> Some ts
-            | Some ts' -> Some (Set.union ts ts'))) in
+        Map.add tas ~key:a ~data:ts) in
     {< tas = tas' >}
 
   (** T(r) = { t : t |-> v}  *)
@@ -164,18 +158,19 @@ class ['a] propagator = object(self)
   method private eval2 e1 e2 r3 =
     self#eval_exp e1 >>= fun r1 ->
     self#eval_exp e2 >>= fun r2 ->
-    self#propagate r1 r3 >>= fun () ->
-    self#propagate r2 r3 >>= fun () ->
+    self#propagate [r1;r2] r3 >>= fun () ->
     SM.return r3
 
   method private eval e rr =
     self#eval_exp e >>= fun re ->
-    self#propagate re rr >>= fun () ->
+    self#propagate [re] rr >>= fun () ->
     SM.return rr
 
-  method private propagate rd rr =
+  method private propagate args rr =
     SM.get () >>= fun ctxt ->
-    SM.put (ctxt#taint_reg rr (ctxt#reg_taints rd))
+    let taints = Taints.union_list @@
+      List.map args ~f:(fun a -> ctxt#reg_taints a) in
+    SM.put (ctxt#taint_reg rr taints)
 end
 
 module Map = Taint_map

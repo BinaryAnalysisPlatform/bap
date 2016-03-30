@@ -14,6 +14,7 @@ module Bil = struct
 end
 
 module Exp = struct
+  type t = exp
   include Bap_exp
   include Exp
   include Bap_helpers.Exp
@@ -377,6 +378,28 @@ module Ir_arg = struct
   }
   let name arg = Var.name (lhs arg)
 
+
+  let warn_unused = Bap_value.Tag.register (module Unit)
+      ~name:"warn_unused"
+      ~uuid:"7aa17c89-cc9b-4ed2-8700-620cb9e09491"
+
+  let format = Bap_value.Tag.register (module String)
+      ~name:"format"
+      ~uuid:"d864c411-73eb-48b2-a7e9-33b51fa540c9"
+
+  let alloc_size = Bap_value.Tag.register (module Unit)
+      ~name:"alloc_size"
+      ~uuid:"b29905b3-4fb5-486e-8064-9b63cadc6174"
+
+  let restricted = Bap_value.Tag.register (module Unit)
+      ~name:"restricted"
+      ~uuid:"5ee30262-aed9-4aa8-a8e3-34a061104420"
+
+  let nonnull = Bap_value.Tag.register (module Unit)
+      ~name:"nonnull"
+      ~uuid:"3c0a6181-9a9c-4cf4-aa37-8ceebd773952"
+
+
   include Regular.Make(struct
       type t = arg term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Arg"
@@ -712,6 +735,18 @@ module Term = struct
   let dead = Bap_value.Tag.register (module Unit)
       ~name:"dead"
       ~uuid:"6009fb21-2a6c-4511-9aa4-92b2894debc7"
+
+  let precondition = Bap_value.Tag.register (module Exp)
+      ~name:"precondition"
+      ~uuid:"f08c88e1-56f5-4148-822a-ac2dff34bda5"
+
+  let invariant = Bap_value.Tag.register (module Exp)
+      ~name:"invariant"
+      ~uuid:"743d712b-7ee4-46da-b3b7-98d3ca5e618b"
+
+  let postcondition = Bap_value.Tag.register (module Exp)
+      ~name:"postcondition"
+      ~uuid:"f248e4c1-9efc-4c70-a864-e34706e2082b"
 
   let change t p tid f =
     Array.findi (t.get p.self) ~f:(fun _ x -> x.tid = tid) |> function
@@ -1159,15 +1194,6 @@ module Ir_sub = struct
   end
 
   module Aliases = Enum(String)
-  module Fmt = struct
-    type fmt =
-      [`printf | `scanf | `strftime | `strfmon]
-      [@@deriving bin_io, compare, sexp]
-    type t = fmt * arg term [@@deriving bin_io, compare, sexp]
-    let pp ppf (fmt,arg) =
-      Format.fprintf ppf "%a, %a"
-        Sexp.pp (sexp_of_fmt fmt) Ir_arg.pp arg
-  end
 
   module Args = struct
     type t = (arg term, arg term * arg term) Either.t
@@ -1182,10 +1208,6 @@ module Ir_sub = struct
   let aliases = Bap_value.Tag.register (module Aliases)
       ~name:"aliases"
       ~uuid:"ed73c040-d798-4fc9-96a0-d3c12a870955"
-
-  let alloc_size = Bap_value.Tag.register (module Args)
-      ~name:"alloc_size"
-      ~uuid:"74ab1380-3b35-42ee-a45e-ad29fd02d234"
 
   let const = Bap_value.Tag.register (module Unit)
       ~name:"const"
@@ -1222,14 +1244,6 @@ module Ir_sub = struct
   let returns_twice = Bap_value.Tag.register (module Unit)
       ~name:"return_twice"
       ~uuid:"40166004-ea98-431b-81b0-4e74a0b681ee"
-
-  let warn_unused_result = Bap_value.Tag.register (module Unit)
-      ~name:"warn_unused_result"
-      ~uuid:"094b53c8-d71a-4dc6-9bb1-83bdf27d1da9"
-
-  let format = Bap_value.Tag.register (module Fmt)
-      ~name:"format"
-      ~uuid:"8b954fbf-e6e4-43cd-8981-b7a0a524b525"
 
   module Builder = struct
     type t =
