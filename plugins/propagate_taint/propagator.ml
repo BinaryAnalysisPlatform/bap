@@ -5,6 +5,7 @@ open Microx.Std
 
 open Format
 module SM = Monad.State
+open SM.Let_syntax
 open SM.Monad_infix
 
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
@@ -119,7 +120,7 @@ let taint_ptr ctxt x seed =
   | Bil.Imm a ->
     ctxt#taint_ptr a `r8 (Tid.Set.singleton seed)
 
-let taint_term t ctxt v =
+let taint_result t ctxt v =
   match Term.get_attr t Taint.reg, Term.get_attr t Taint.ptr with
   | None,None -> ctxt
   | None,Some seed -> taint_ptr ctxt v seed
@@ -144,6 +145,12 @@ let register_lookup proj =
   let module Target = (val target_of_arch arch) in
   fun var -> Option.some_if (Target.CPU.is_sp var) mem_start
 
+let foreach seq ~f =
+  SM.get () >>= fun ctxt ->
+  Seq.fold seq ~init:(SM.return ()) ~f:(fun m x ->
+      m >>= fun () -> f x) >>= fun () ->
+  SM.return ()
+
 class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
   let prog = Project.program proj in
   let memory = memory_lookup proj in
@@ -167,13 +174,18 @@ class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
         SM.return r
 
     method! eval_def def =
-      if is_seeded def then begin
-        super#eval_def def >>= fun () ->
-        super#lookup (Def.lhs def) >>= fun x ->
-        SM.get () >>= fun ctxt ->
-        SM.put (taint_term def ctxt x)
-      end else super#eval_def def
+      self#taint_free_vars def >>= fun () ->
+      super#eval_def def
+
+    method private taint_free_vars def =
+      if is_seeded def
+      then foreach (Set.to_sequence (Def.free_vars def)) ~f:(fun var ->
+          self#lookup var >>= fun r ->
+          self#update var r >>= fun () ->
+          SM.update (fun ctxt -> taint_result def ctxt r))
+      else SM.return ()
   end
+
 
 exception Entry_point_not_found
 

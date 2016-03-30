@@ -1,7 +1,10 @@
-PKG bap
+REC
 PKG FrontC
 PKG bap-x86-cpu
 PKG bap-arm
 PKG cmdliner
+
+B ../../_build/lib/arm
+B ../../_build/lib/x86_cpu
 
 FLG -short-paths

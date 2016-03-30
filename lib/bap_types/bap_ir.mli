@@ -97,6 +97,10 @@ module Term : sig
   val synthetic : unit tag
   val live : unit tag
   val dead : unit tag
+  val precondition : exp tag
+  val invariant : exp tag
+  val postcondition : exp tag
+
 
   class mapper : object
     inherit exp_mapper
@@ -206,7 +210,6 @@ module Ir_sub : sig
   end
 
   val aliases : string list tag
-  val alloc_size : (arg term, arg term * arg term) Either.t tag
   val const : unit tag
   val pure : unit tag
   val stub : unit tag
@@ -215,9 +218,7 @@ module Ir_sub : sig
   val malloc : unit tag
   val noreturn : unit tag
   val returns_twice : unit tag
-  val warn_unused_result : unit tag
   val nothrow : unit tag
-  val format : ([`printf | `scanf | `strftime | `strfmon] * arg term) tag
   include Regular with type t := t
 end
 
@@ -329,6 +330,13 @@ module Ir_arg : sig
   val intent : t -> intent option
   val with_intent : t -> intent -> t
   val with_unknown_intent : t -> t
+
+  val alloc_size : unit tag
+  val format : string tag
+  val warn_unused : unit tag
+  val restricted : unit tag
+  val nonnull : unit tag
+
   include Regular with type t := t
 end
 

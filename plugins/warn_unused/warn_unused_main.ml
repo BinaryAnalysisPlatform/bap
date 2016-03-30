@@ -3,8 +3,6 @@ open Bap.Std
 include Self()
 open Format
 
-
-(* TODO mark only defs, not uses. *)
 let taint prog = (object(self)
   inherit Term.mapper as super
   method! map_def def =
@@ -20,9 +18,13 @@ let taint prog = (object(self)
   method private process def taint call = match Call.target call with
     | Indirect _ -> def
     | Direct callee -> match Term.find sub_t prog callee with
-      | Some sub when Term.has_attr sub Sub.warn_unused_result ->
-        Term.set_attr def Taint.reg taint
-      | _ -> def
+      | None -> def
+      | Some sub ->
+        if Term.enum arg_t sub |> Seq.exists ~f:(fun arg ->
+            Var.(Arg.lhs arg = Def.lhs def) &&
+            Term.has_attr arg Arg.warn_unused)
+        then Term.set_attr def Taint.reg taint
+        else def
 end)#run prog
 
 let collect_seeds prog = (object
@@ -34,16 +36,18 @@ let collect_seeds prog = (object
 end)#run prog Tid.Set.empty
 
 
+let sanitize t seeds =
+  if Term.has_attr t Taint.reg then seeds
+  else match Term.get_attr t Taint.regs with
+    | None -> seeds
+    | Some taints ->
+      Map.fold taints ~init:seeds ~f:(fun ~key:v ~data:taints seeds ->
+          Set.diff seeds taints)
+
 let solve prog seeds = (object
   inherit [Tid.Set.t] Term.visitor
-  method! enter_term cls t seeds =
-    if Term.has_attr t Taint.reg then seeds
-    else match Term.get_attr t Taint.regs with
-      | None ->
-        seeds
-      | Some taints ->
-        Map.fold taints ~init:seeds ~f:(fun ~key:v ~data:taints seeds ->
-            Set.diff seeds taints)
+  method! enter_def = sanitize
+  method! enter_jmp = sanitize
 end)#run prog seeds
 
 let marker unchecked = object

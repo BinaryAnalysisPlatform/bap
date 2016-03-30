@@ -14,16 +14,17 @@ type pos =
   | Ret_1
   | Arg of int
 
-type arg = {
-  arg_name : string;
-  arg_pos  : pos;
-  arg_intent : intent option;
-  arg_size : arg_size;
-}
-
 type attr = {
   attr_name : string;
   attr_args : string list;
+}
+
+type arg = {
+  arg_name : string;
+  arg_pos  : pos;
+  arg_intent : intent;
+  arg_size : arg_size;
+  arg_attrs : attr list;
 }
 
 type fn_proto = {
@@ -35,6 +36,10 @@ type options = {
   add_headers : string list;
   use_header : string option
 }
+
+exception Attr_type   of string * string
+exception Attr_index  of int * int
+exception Attr_arity  of string
 
 
 include struct
@@ -85,10 +90,15 @@ include struct
     | _ -> raise Not_found
 end
 
-let intent_of_type = function
-  | PTR (CONST _) -> Some In
-  | PTR (_) -> Some Both
-  | _ -> Some In
+let points = function
+  | PTR t | RESTRICT_PTR t | ARRAY (t,_) -> Some t
+  | _ -> None
+
+let intent_of_type t = match points t with
+  | None -> In
+  | Some pointee -> match pointee with
+    | CONST _ -> In
+    | _ -> Both
 
 let size_of_type typ = match typ with
   | PTR _ -> Word
@@ -100,18 +110,57 @@ let size_of_type typ = match typ with
   | DOUBLE true -> Size `r128
   | _ -> Word
 
-let arg_of_name n = function
+let attr attr_name attr_args = {attr_name; attr_args}
+
+let arg_attrs attrs n =
+  let int n =
+    try Int.of_string n with exn -> raise (Attr_type ("<int>",n)) in
+  let alloc_size args =
+    let attr = attr "alloc_size" [] in
+    List.map args ~f:int |> function
+    | [i] when i = n -> Some attr
+    | [i;j] when i = n || j = n -> Some attr
+    | [_] | [_;_] -> None
+    | _ -> raise (Attr_arity "1 | 2") in
+  let format = function
+    | [l;i] when int i = n -> Some (attr "format" [l])
+    | [_;_] -> None
+    | _ -> raise (Attr_arity "2") in
+  let nonnull = function
+    | [i] when int i = n -> Some (attr "nonnull" [])
+    | [_] -> None
+    | _ -> raise (Attr_arity "1") in
+  List.filter_map attrs ~f:(fun {attr_name; attr_args} ->
+      let pick p = p attr_args in
+      match attr_name with
+      | "alloc_size" -> pick alloc_size
+      | "format" -> pick format
+      | "nonnull" -> pick nonnull
+      | _ -> None)
+
+let restricted = function
+  | RESTRICT_PTR _ -> [attr "restricted" []]
+  | _ -> []
+
+let warn_unused = List.filter_map ~f:(function
+    | {attr_name="warn_unused_result"} -> Some (attr "warn_unused" [])
+    | _ -> None)
+
+let arg_of_name attrs n = function
   | (_,VOID,_,_) -> None
   | (name,typ,_,_) -> Some {
       arg_pos = Arg n;
       arg_name = if name <> "" then name else sprintf "x%d" (n+1);
       arg_intent = intent_of_type typ;
       arg_size = size_of_type typ;
+      arg_attrs = restricted typ @ arg_attrs attrs n;
     }
 
-let string_of_single_name n (_,_,name) = arg_of_name n name
+let string_of_single_name attrs n (_,_,name) =
+  arg_of_name attrs n name
 
-let args_of_single_names = List.filter_mapi ~f:string_of_single_name
+let args_of_single_names attrs =
+  List.filter_mapi ~f:(string_of_single_name attrs)
 
 let unuglify = String.strip ~drop:(fun c -> c = '_')
 
@@ -135,11 +184,12 @@ let attr = function
 let make_attrs = List.filter_map ~f:attr
 
 
-let ret_word n = {
+let ret_word attrs n = {
   arg_pos = n;
   arg_name = if n = Ret_1 then "result_ext" else "result";
-  arg_intent = Some Out;
-  arg_size = Word; (* compiler will cast return value itself *)
+  arg_intent = Out;
+  arg_size = Word;
+  arg_attrs = warn_unused attrs;
 }
 
 let push = List.map ~f:(fun a -> match a with
@@ -149,14 +199,16 @@ let push = List.map ~f:(fun a -> match a with
 let fn_of_definition = function
   | DECDEF (_,_,[(name, PROTO (ret,args,_vararg),attrs,NOTHING)])
   | FUNDEF ((_,_,(name, PROTO (ret,args,_vararg),attrs,NOTHING)), _) ->
-    let args = args_of_single_names args in
+    let attrs = make_attrs attrs in
+    let ret_word = ret_word attrs in
+    let args = args_of_single_names attrs args in
     let args = match ret with
       | VOID -> args
       | STRUCT _ | CONST (STRUCT _) ->
-        {(ret_word (Arg 0)) with arg_intent = Some In} :: push args
+        {(ret_word (Arg 0)) with arg_intent = In} :: push args
       | INT (LONG_LONG,_) -> args @ [ret_word Ret_0; ret_word Ret_1]
       | _ -> args @ [ret_word Ret_0] in
-    Some (name,{args; attrs = make_attrs attrs})
+    Some (name,{args; attrs})
   | _ -> None
 
 let fns_of_definitions =
@@ -198,7 +250,21 @@ let (>:) s1 s2 e =
   | n when n > 0 -> Bil.(cast high n e)
   | n -> Bil.(cast low n e)
 
-let term_of_arg arch sub {arg_name; arg_size; arg_intent; arg_pos} =
+let set_arg_attrs attrs arg =
+  let set tag arg = Term.set_attr arg tag () in
+  let set_format = function
+    | [dsl] -> fun arg -> Term.set_attr arg Arg.format dsl
+    | _ -> assert false in
+  List.fold_right attrs ~init:arg ~f:(fun {attr_name; attr_args} ->
+      match attr_name with
+      | "alloc_size" -> set Arg.alloc_size
+      | "nonnull" -> set Arg.nonnull
+      | "warn_unused" -> set Arg.warn_unused
+      | "format" -> set_format attr_args
+      | _ -> ident)
+
+let term_of_arg arch sub
+    {arg_name; arg_size; arg_intent; arg_pos; arg_attrs} =
   let word_size = Arch.addr_size arch in
   let size = match arg_size with
     | Word -> (word_size :> Size.t)
@@ -211,37 +277,13 @@ let term_of_arg arch sub {arg_name; arg_size; arg_intent; arg_pos} =
      to return the size for us. *)
   let exp = (word_size >: size) exp in
   let var = Var.create (Sub.name sub ^ "_" ^ arg_name) typ in
-  Arg.create ?intent:arg_intent var exp
+  Arg.create ~intent:arg_intent var exp |>
+  set_arg_attrs arg_attrs
 
-exception Attr_type   of string * string
-exception Attr_index  of int * int
-exception Attr_arity  of string
 
 let set_attr sub {attr_name; attr_args} =
   let set tag = Term.set_attr sub tag () in
-  let int n = try Int.of_string n with exn ->
-    raise (Attr_type ("<int>",n)) in
-  let nth n =
-    let len = Term.length arg_t sub and n = int n - 1 in
-    if n < len then Term.nth_exn arg_t sub n
-    else raise (Attr_index (len,n)) in
-  let set_alloc_size sub args =
-    let args = match args with
-      | [size] -> First (nth size)
-      | [nmemb;size] -> Second (nth nmemb, nth size)
-      | _ -> raise (Attr_arity "1 | 2") in
-    Term.set_attr sub Sub.alloc_size args in
-  let lang = function
-    | "printf" -> `printf
-    | "scanf" -> `scanf
-    | "strftime" -> `strftime
-    | "strfmon"  -> `strfmon
-    | s -> raise (Attr_type ("<lang>",s)) in
-  let set_format = function
-    | [l;n] -> Term.set_attr sub Sub.format (lang l, nth n)
-    | ss ->
-      eprintf "Got: %s\n" @@ String.concat ss ~sep:",";
-      raise (Attr_arity "2") in
+  (* Term.set_attr sub Sub.alloc_size args in *)
   match attr_name with
   | "const"    -> set Sub.const
   | "pure"     -> set Sub.pure
@@ -249,9 +291,6 @@ let set_attr sub {attr_name; attr_args} =
   | "noreturn" -> set Sub.noreturn
   | "returns_twice" -> set Sub.returns_twice
   | "nothrow"  -> set Sub.nothrow
-  | "warn_unused_result" -> set Sub.warn_unused_result
-  | "alloc_size" -> set_alloc_size sub attr_args
-  | "format" -> set_format attr_args
   | s -> sub
 
 let set_attr sub ({attr_name=name} as attr) =
@@ -268,6 +307,7 @@ let set_attr sub ({attr_name=name} as attr) =
     eprintf "%s: wrong arity for attribute %s - expected %s\n"
       (Sub.name sub) name exp;
     sub
+
 
 let set_attrs attrs sub =
   List.fold attrs ~init:sub ~f:set_attr

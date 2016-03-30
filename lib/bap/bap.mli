@@ -5031,6 +5031,17 @@ module Std : sig
     (** a term is identified as dead  *)
     val dead : unit tag
 
+
+    (** precondition must on the entrance to the subroutine *)
+    val precondition : exp tag
+
+    (** invariant must be always true while the term is evaluated  *)
+    val invariant : exp tag
+
+    (** must hold just after the term is left  *)
+    val postcondition : exp tag
+
+
     (** {2 Higher order mapping}  *)
 
     (** Mapper perfoms deep identity term mapping. If you override any
@@ -5255,12 +5266,6 @@ module Std : sig
     (** other names for the given subroutine.*)
     val aliases : string list tag
 
-    (** A subrountine's parameter(s) denoting the allocated size are
-        specified by one or two integer arguments supplied to the
-        attribute. The allocated size is either the value of the single
-        function argument specified or the product of the two function
-        arguments specified.  *)
-    val alloc_size : (arg term, arg term * arg term) Either.t tag
 
 
     (** A subroutine doesn't examine any values except its arguments,
@@ -5304,18 +5309,6 @@ module Std : sig
 
     (** A subroutine doesn't throw exceptions  *)
     val nothrow : unit tag
-
-    (** format(lang,arg) the specified argument of a subroutine is
-        actually a format string written in a corresponding DSL. *)
-    val format : ([`printf | `scanf | `strftime | `strfmon] * arg term) tag
-
-    (** a caller of the subroutine with this attribute must use its
-        return value. This is useful for subroutines where not checking the
-        result is either a security problem or always a bug, such as
-        [realloc] *)
-    val warn_unused_result : unit tag
-
-
 
     (** Subroutine builder *)
     module Builder : sig
@@ -5734,6 +5727,35 @@ module Std : sig
 
     (** removes the intent from an argument  *)
     val with_unknown_intent : t -> t
+
+
+    (** {2 Attributes}  *)
+
+    (** a caller of the subroutine must use an argument tagged with
+        this attribute. This is useful for subroutines where not
+        checking the result is either a security problem or always a
+        bug, such as [realloc] *)
+    val warn_unused : unit tag
+
+
+    (** the size of allocated memory is the product of arguments
+        marked with [alloc_size] attribute  *)
+    val alloc_size : unit tag
+
+
+    (** format(DSL) the specified argument of a subroutine is
+        actually a format string written in a corresponding DSL. *)
+    val format : string tag
+
+
+    (** a contract requirement that this argument is not aliased with
+        any other arguments of the subroutine. See [restrict] keyword in C
+        standard for the full contract. *)
+    val restricted : unit tag
+
+    (** a contract requirement that this argument is not NULL.  *)
+    val nonnull : unit tag
+
     include Regular with type t := t
   end
 
@@ -5868,10 +5890,19 @@ module Std : sig
     val merge : map -> map -> map
 
     class context :  object('s)
+      (** taint result with the given set of taints  *)
       method taint_reg : Bil.result -> set -> 's
+
+      (** taint memory region [addr, addr+size] with the given set of taints  *)
       method taint_ptr : addr -> size -> set -> 's
+
+      (** returns a set of taints associated with a given result of computation  *)
       method reg_taints : Bil.result -> set
+
+      (** returns a set of taints associated with a given address   *)
       method ptr_taints : addr -> set
+
+      (** returns all known taints.  *)
       method all_taints : set
     end
 
