@@ -112,7 +112,7 @@ let size_of_type typ = match typ with
 
 let attr attr_name attr_args = {attr_name; attr_args}
 
-let arg_attrs attrs n =
+let arg_attr n {attr_name; attr_args} =
   let int n =
     try Int.of_string n with exn -> raise (Attr_type ("<int>",n)) in
   let alloc_size args =
@@ -123,20 +123,32 @@ let arg_attrs attrs n =
     | [_] | [_;_] -> None
     | _ -> raise (Attr_arity "1 | 2") in
   let format = function
-    | [l;i] when int i = n -> Some (attr "format" [l])
-    | [_;_] -> None
+    | [l;i;_] when int i = n -> Some (attr "format" [l])
+    | [_;_;_] -> None
     | _ -> raise (Attr_arity "2") in
-  let nonnull = function
-    | [i] when int i = n -> Some (attr "nonnull" [])
-    | [_] -> None
-    | _ -> raise (Attr_arity "1") in
-  List.filter_map attrs ~f:(fun {attr_name; attr_args} ->
-      let pick p = p attr_args in
-      match attr_name with
-      | "alloc_size" -> pick alloc_size
-      | "format" -> pick format
-      | "nonnull" -> pick nonnull
-      | _ -> None)
+  let nonnull args =
+    Option.some_if (List.exists args ~f:(fun i -> int i = n))
+      (attr "nonnul" []) in
+  let pick p = p attr_args in
+  match attr_name with
+  | "alloc_size" -> pick alloc_size
+  | "format" -> pick format
+  | "nonnull" -> pick nonnull
+  | _ -> None
+
+let arg_attr n a =
+  try arg_attr n a with
+  | Attr_type (exp,got) ->
+    eprintf "%s: wrong type for attribute expected %s, got %S\n"
+      a.attr_name exp got;
+    None
+  | Attr_arity exp ->
+    eprintf "%s: expected attribute with arity %s\n" a.attr_name exp;
+    None
+
+let arg_attrs attrs n =
+  List.filter_map attrs ~f:(arg_attr n)
+
 
 let restricted = function
   | RESTRICT_PTR _ -> [attr "restricted" []]
