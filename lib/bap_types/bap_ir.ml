@@ -380,7 +380,7 @@ module Ir_arg = struct
 
 
   let warn_unused = Bap_value.Tag.register (module Unit)
-      ~name:"warn_unused"
+      ~name:"warn-unused"
       ~uuid:"7aa17c89-cc9b-4ed2-8700-620cb9e09491"
 
   let format = Bap_value.Tag.register (module String)
@@ -388,7 +388,7 @@ module Ir_arg = struct
       ~uuid:"d864c411-73eb-48b2-a7e9-33b51fa540c9"
 
   let alloc_size = Bap_value.Tag.register (module Unit)
-      ~name:"alloc_size"
+      ~name:"alloc-size"
       ~uuid:"b29905b3-4fb5-486e-8064-9b63cadc6174"
 
   let restricted = Bap_value.Tag.register (module Unit)
@@ -735,6 +735,10 @@ module Term = struct
   let dead = Bap_value.Tag.register (module Unit)
       ~name:"dead"
       ~uuid:"6009fb21-2a6c-4511-9aa4-92b2894debc7"
+
+  let visited = Bap_value.Tag.register (module Unit)
+      ~name:"visited"
+      ~uuid:"0e162aa3-153f-44a3-88e7-6e42d876e760"
 
   let precondition = Bap_value.Tag.register (module Exp)
       ~name:"precondition"
@@ -1242,7 +1246,7 @@ module Ir_sub = struct
       ~uuid:"32058b19-95ca-46e3-bee0-d0a3694fd5b1"
 
   let returns_twice = Bap_value.Tag.register (module Unit)
-      ~name:"return_twice"
+      ~name:"returns-twice"
       ~uuid:"40166004-ea98-431b-81b0-4e74a0b681ee"
 
   module Builder = struct

@@ -6,170 +6,7 @@ open Microx.Std
 open Format
 include Self()
 
-type policy = Concretizer.policy
-  [@@deriving sexp_of]
-
-include struct
-  open Propagator.Result
-
-  let is_seeded t =
-    Term.has_attr t Taint.reg ||
-    Term.has_attr t Taint.ptr
-
-  let is_visited r t  = is_visited r (Term.tid t)
-
-  let has_seed _ctxt t = is_seeded t
-
-  let has_tainted what r t =
-    not (Var.Map.is_empty (what r (Term.tid t)))
-
-  let has_tainted_regs r = has_tainted tainted_regs r
-  let has_tainted_ptrs t = has_tainted tainted_ptrs t
-  let is_tainted c t = has_tainted_regs c t || has_tainted_ptrs c t
-end
-
-module Scheme = struct
-  let colors = [
-    "black",   `black;
-    "red",     `red;
-    "green",   `green;
-    "yellow",  `yellow;
-    "blue",    `blue;
-    "magenta", `magenta;
-    "cyan",    `cyan;
-    "white",   `white;
-  ]
-
-  let expected assoc =
-    List.map ~f:fst assoc |> List.map ~f:(sprintf "%S") |>
-    String.concat ~sep:" | "
-
-  let expect got assoc =
-    `Error (sprintf "got %S expected %s" got @@ expected assoc)
-
-  let color_t s = match List.Assoc.find colors s with
-    | Some c -> `Ok c
-    | None -> expect s colors
-
-  let string s = `Ok s
-  let unit _ = `Ok ()
-  let float s =
-    try `Ok (Float.of_string s) with exn ->
-      `Error (sprintf "got %s expected <float>" s)
-  let tid s = try `Ok (Tid.from_string_exn s) with
-    | Invalid_argument s -> `Error s
-    | exn -> `Error (Exn.to_string exn)
-
-  type tagger = {tag : 'a. 'a term -> 'a term}
-  type 'a result = [`Ok of 'a | `Error of string]
-
-  type tag_parser = string -> string ->
-    [`Ok of tagger | `Error of string] option
-
-  let tag tag parse : string * tag_parser =
-    Value.Tag.name tag, fun name input ->
-      if Value.Tag.name tag <> name then None
-      else Option.some @@ match parse input with
-        | `Ok v -> `Ok {tag = fun t -> Term.set_attr t tag v}
-        | `Error e -> `Error e
-
-  let tags : (string * tag_parser) list = [
-    tag foreground color_t;
-    tag background color_t;
-    tag color color_t;
-    tag comment string;
-    tag python string;
-    tag mark unit;
-    tag weight float;
-    tag Taint.reg tid;
-    tag Taint.ptr tid;
-  ]
-
-  let parse_tag (x : string) y = List.find_map tags ~f:(fun (_,p) -> p x y) |> function
-    | None -> expect x tags
-    | Some thing -> thing
-
-  let conjunct ~f m1 m2 : 'a result = match m1,m2 with
-    | `Ok m1, `Ok m2 -> `Ok (f m1 m2)
-    | `Error e,_ | _,`Error e -> `Error e
-
-  let conjunct_marks =
-    conjunct ~f:(fun m1 m2 -> {tag = fun t -> m2.tag (m1.tag t)})
-
-  let rec parse_marks = function
-    | Sexp.List [Sexp.Atom tag] | Sexp.Atom tag -> parse_tag tag ""
-    | Sexp.List [Sexp.Atom tag; Sexp.Atom v] -> parse_tag tag v
-    | Sexp.List marks ->
-      List.map marks ~f:parse_marks |>
-      List.fold ~init:(`Ok {tag = ident}) ~f:conjunct_marks
-
-  type pred = { matches : 'a. Propagator.result -> 'a term -> bool}
-
-  let preds : (string * pred) list = [
-    "visited",          {matches = is_visited};
-    "has-seed",         {matches = has_seed};
-    "has-tainted-regs", {matches = has_tainted_regs};
-    "has-tainted-ptrs", {matches = has_tainted_ptrs};
-    "has-taint",        {matches = is_tainted};
-  ]
-
-  let conjunct_preds = conjunct ~f:(fun p1 p2 -> {
-        matches = fun c t -> p1.matches c t && p2.matches c t
-      })
-
-  let parse_pred s = match List.Assoc.find preds s with
-    | Some thing -> `Ok thing
-    | None -> expect s preds
-
-  let rec parse_preds = function
-    | Sexp.Atom p -> parse_pred p
-    | Sexp.List [] -> `Error "Expected non-empty set of predicates"
-    | Sexp.List ps -> List.map ps ~f:parse_preds
-                      |> List.reduce_exn ~f:conjunct_preds
-
-  type marker = { mark : 'a. Propagator.result -> 'a term -> 'a term }
-    [@@deriving sexp_of]
-  type t = marker
-  let default = {mark = fun _ t -> t}
-
-  let marker pred tagger = {
-    mark = fun ctxt t ->
-      if pred.matches ctxt t then tagger.tag t else t
-  }
-
-  let join m1 m2 = {mark = fun ctxt t -> m2.mark ctxt (m1.mark ctxt t)}
-
-  let conjunct_markers = conjunct ~f:join
-
-  let merge ms = List.fold ~init:default ~f:join ms
-
-  let parse_marker ps ms = match parse_preds ps, parse_marks ms with
-    | `Ok ps, `Ok ms -> `Ok (marker ps ms)
-    | `Error e,_|_,`Error e -> `Error e
-
-  let parse = function
-    | Sexp.List [preds; marks] -> parse_marker preds marks
-    | _ -> `Error {|expect "("<preds> <marks>")"|}
-
-  let sexp_error {Sexp.location; err_msg} =
-    `Error (sprintf "Syntax error: %s - %s" location err_msg)
-
-  let parse_string s =
-    try parse (Sexp.of_string s)
-    with Sexp.Parse_error err -> sexp_error err
-       | exn -> `Error "Malformed sexp"
-
-  let parse_file f =
-    try List.map ~f:parse (Sexp.load_sexps f) |>
-        List.fold ~init:(`Ok default) ~f:conjunct_markers
-    with Sexp.Parse_error err -> sexp_error err
-       | Sys_error e -> `Error e
-       | exn -> `Error "Malformed sexp "
-
-  let print ppf t = ()
-
-  let t = parse_string, print
-end
+type policy = Concretizer.policy  [@@deriving sexp_of]
 
 type args = {
   max_trace : int;
@@ -179,24 +16,31 @@ type args = {
   reg_policy : policy;
   mem_policy : policy;
   interesting : string list;
-  marker : Scheme.marker
 } [@@deriving fields, sexp_of]
 
-class marker m res = object(self)
+let map_if cond t ~f = if cond then f t else t
+
+class marker res = object(self)
   inherit Term.mapper as super
   method! map_term cls t =
+    let module State = Propagator.Result in
     let t = super#map_term cls t in
-    let has_tainted taints = not (Map.is_empty (taints (Term.tid t))) in
-    let taint taint tainted taints t =
-      if tainted taints
-      then Term.set_attr t taint (taints (Term.tid t))
-      else t in
-    let regs = Propagator.Result.tainted_regs res in
-    let ptrs = Propagator.Result.tainted_ptrs res in
-    m.Scheme.mark res t  |>
-    taint Taint.regs has_tainted regs |>
-    taint Taint.ptrs has_tainted ptrs
+    let tid = Term.tid t in
+    let taint taint taints =
+      let taints = taints tid in
+      map_if (not (Map.is_empty taints)) ~f:(fun t ->
+          Term.set_attr t taint taints) in
+    let regs = State.tainted_regs res in
+    let ptrs = State.tainted_ptrs res in
+    map_if (State.is_visited res tid) t ~f:(fun t ->
+        Term.set_attr t Term.visited ()) |>
+    taint Taint.regs regs |>
+    taint Taint.ptrs ptrs
 end
+
+let is_seeded t =
+  Term.has_attr t Taint.reg ||
+  Term.has_attr t Taint.ptr
 
 let contains_seed sub =
   Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
@@ -342,7 +186,7 @@ let main args proj =
       s in
   printf "@.Coverage: %a@." State.pp_coverage state;
 
-  let marker = new marker args.marker (State.taints state) in
+  let marker = new marker (State.taints state) in
   Project.program proj |> marker#run |>
   Project.with_program proj
 
@@ -369,14 +213,6 @@ module Cmdline = struct
               giving a more feasable result, but much less coverage" in
     Arg.(value & flag & info ["deterministic"] ~doc)
 
-  let scheme : Scheme.t list Term.t =
-    let doc = "Mark terms according the scheme $(docv)" in
-    Arg.(value & opt_all Scheme.t [] &
-         info ["mark-scheme"] ~doc ~docv:"SCHEME")
-
-  let scheme_file : string option Term.t =
-    let doc = "File with color scheme" in
-    Arg.(value & opt (some file) None & info ["mark-scheme-from-file"] ~doc)
 
   module Policy = struct
     type t = policy
@@ -422,14 +258,9 @@ module Cmdline = struct
   let create
       max_trace max_loop deterministic
       random_seed reg_policy mem_policy
-      interesting markers scm = {
+      interesting = {
     max_trace; max_loop; deterministic;
     random_seed; reg_policy; mem_policy; interesting;
-    marker = match scm with
-      | None -> Scheme.merge markers
-      | Some file -> match Scheme.parse_file file with
-        | `Ok m -> Scheme.merge (m :: markers)
-        | `Error e -> invalid_arg e
   }
 
   let man = [
@@ -481,33 +312,6 @@ module Cmdline = struct
     specified amount of iterations. In the deterministic mode it will
     just return from a procedure, otherwise, it will backtrack.";
 
-    `P "Although the pass itself doesn't perform any analysis it can
-    mark terms with attributes. Terms are marked according to a
-    marking scheme specified with $(b,--mark-scheme)=$(i,SCHEME) or
-    $(i,--mark-scheme-file)=$(i,FILE). Each entry of the $(i,FILE), or
-    $(i,SCHEME) argument must conform to the following grammar:";
-
-    `Pre begin sprintf "
-      SCM    ::= (PREDS MARKS)
-      PREDS  ::= PRED | (PRED1 .. PREDn)
-      MARKS  ::= MARK | (MARK1 .. MARKn)
-      MARK   ::= TAG  | (TAG VALUE)
-      PRED   ::= %s
-      TAG    ::= %s
-    " Scheme.(expected preds) Scheme.(expected tags)
-    end;
-
-    `P "Each $(i,SCHEME) is a pair consisting of a set of predicates
-    and a set of marks. If all predicates matches, then all marks are
-    applied to a term. Mark is represented by a pair consisting of tag
-    name and a value. If tag value is of type unit, then it is just a
-    tag.";
-
-    `S "EXAMPLE";
-    `Pre " bap exe --saluki-seed --propagate-taint --saluki-solve ";
-    `Pre {| bap exe --mark-addr=0xBADADR --propagate-taint
-            --propagate-taint-mark-scheme=
-            '((visited has-taint) ((comment "gotcha") (foreground red)))' |};
   ]
 
   let grammar =
@@ -515,7 +319,7 @@ module Cmdline = struct
           $random_seed
           $(policy "reg" "registers" (`Random))
           $(policy "mem" "memory locations" `Random)
-          $interesting $scheme $scheme_file)
+          $interesting)
 
   let info = Term.info ~man ~doc name
 

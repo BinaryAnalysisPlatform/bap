@@ -67,9 +67,6 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 
-val restore_state : t -> unit
-
-
 module Pass : sig
   type t = pass [@@deriving sexp_of]
 
@@ -87,12 +84,13 @@ module Pass : sig
   val autorun : t -> bool
 end
 
+
 val find_pass : string -> pass option
 
 val register_pass :
-  ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
+  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
 val register_pass':
-  ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
+  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
 val passes : unit -> pass list
 
@@ -103,4 +101,8 @@ module Factory : Source.Factory
          ?symbolizer:symbolizer ->
          ?rooter:rooter ->
          ?reconstructor:reconstructor -> unit -> t Or_error.t
+
+
+val restore_state : t -> unit
+
 include Data with type t := t

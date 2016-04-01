@@ -627,7 +627,6 @@ module Std : sig
   end
 
 
-
   module Monad : sig
     module type Basic = Monad.Basic
     module type Basic2 = Monad.Basic2
@@ -4121,7 +4120,7 @@ module Std : sig
           more debug information will be outputed by a backend. To
           silent backend set it [0]. This is a default value. Example:
 
-          [create ~debug_level:3 ~backend:"llvm" "x86_64"]
+          [with_disasm ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
       *)
       val with_disasm :
         ?debug_level:int -> ?cpu:string -> backend:string -> string ->
@@ -5031,6 +5030,8 @@ module Std : sig
     (** a term is identified as dead  *)
     val dead : unit tag
 
+    (** to mark a term as visited by some algorithm  *)
+    val visited : unit tag
 
     (** precondition must on the entrance to the subroutine *)
     val precondition : exp tag
@@ -5156,9 +5157,10 @@ module Std : sig
       ?def:(def term -> 'a) ->
       ?jmp:(jmp term -> 'a) ->
       't term -> 'a
+
   end
 
-  (** Program.  *)
+  (** Program in Intermediate representation.  *)
   module Program : sig
     (** Program is a collection of function terms. *)
 
@@ -6293,7 +6295,15 @@ module Std : sig
 
     type pass
 
-    (** [register_pass ?deps ?name pass] registers a [pass]
+    (** [register_pass ?autorun ?runonce ?deps ?name pass] registers a
+        [pass] over a project.
+
+        If [autorun] is [true], then the host program will run this
+        pass automatically. If [runonce] is true, then for a given
+        project the pass will be run only once. Each repeating
+        attempts to run the pass will be ignored. The [runonce]
+        parameter defaults to [false] when [autorun] is [false], and
+        to [true] otherwise.
 
         Parameter [deps] is list of dependencies. Each dependency is a
         name of a pass, that should be run before the [pass]. The
@@ -6302,13 +6312,17 @@ module Std : sig
 
         To get access to command line arguments use [Plugin.argv] *)
     val register_pass :
-      ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
+      ?autorun:bool ->           (** defaults to [false] *)
+      ?runonce:bool ->           (** defaults to [autorun]  *)
+      ?deps:string list -> ?name:string -> (t -> t) -> unit
 
-    (** [register_pass ?deps ?name pass] registers [pass] that doesn't modify
+    (** [register_pass' pass] registers [pass] that doesn't modify
         the project effect and is run only for side effect.
         (See {!register_pass})  *)
     val register_pass':
-      ?autorun:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
+      ?autorun:bool ->           (** defaults to [false] *)
+      ?runonce:bool ->           (** defaults to [autorun]  *)
+      ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
     (** [passes ()] returns all currently registered passes.  *)
     val passes : unit -> pass list
@@ -6364,7 +6378,6 @@ module Std : sig
 
       val autorun : t -> bool
     end
-
 
     val restore_state : t -> unit
 

@@ -23,6 +23,7 @@ type t = {
   program : program term;
   symbols : Symtab.t;
   state : state;
+  passes  : string list;
 } [@@deriving fields]
 
 type project = t
@@ -70,7 +71,7 @@ let from_mem
   let memory =
     Memmap.add Memmap.empty mem (Value.create Image.section "bap.user") in
   let storage = Dict.empty in
-  Ok ({arch; disasm; memory; storage; program; symbols; state})
+  Ok ({arch; disasm; memory; storage; program; symbols; state; passes=[]})
 
 let null arch : addr =
   Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -107,7 +108,7 @@ let from_image ?disassembler:backend ?brancher ?symbolizer ?rooter ?
       ~default:Dict.empty
       ~f:(fun name -> Dict.set Dict.empty filename name) in
   let arch = Image.arch img in
-  return {arch; disasm; memory; storage; program; symbols; state}
+  return {arch; disasm; memory; storage; program; symbols; state; passes=[]}
 
 let ok _ = Ok ()
 
@@ -227,11 +228,11 @@ type pass = {
   name : string;
   main : (t -> t) sexp_opaque;
   deps : string sexp_list;
-  auto : sexp_bool;
+  auto : bool;
+  once : bool;
 } [@@deriving sexp_of]
 
 let passes : pass DList.t = DList.create ()
-let errors : Error.t String.Table.t = String.Table.create ()
 
 let forget : pass DList.Elt.t -> unit = fun _ -> ()
 
@@ -240,15 +241,15 @@ let name_of_bundle () =
   let module Self = Bap_self.Create() in
   Self.name
 
-let register_pass ?(autorun=false) ?(deps=[]) ?name main : unit =
+let register_pass ?(autorun=false) ?(runonce=autorun) ?(deps=[]) ?name main : unit =
   let pref = name_of_bundle () in
   let name = match name with
     | None -> pref
     | Some name -> pref ^ "-" ^ name in
-  DList.insert_last passes {name; main; deps; auto = autorun} |> forget
+  DList.insert_last passes {name; main; deps; once = runonce; auto = autorun} |> forget
 
-let register_pass' ?autorun ?deps ?name v : unit =
-  register_pass ?autorun ?deps ?name (fun p -> v p; p)
+let register_pass' ?autorun ?runonce ?deps ?name v : unit =
+  register_pass ?autorun ?runonce ?deps ?name (fun p -> v p; p)
 
 module Pass = struct
   type t = pass [@@deriving sexp_of]
@@ -263,13 +264,23 @@ module Pass = struct
   exception Failed of error [@@deriving sexp]
   let fail error = raise (Failed error)
 
+  let is_evaled pass proj =
+    List.exists proj.passes ~f:(fun name -> name = pass.name)
+
+  let eval pass proj = {
+    (pass.main proj) with
+    passes = pass.name :: proj.passes
+  }
+
   let rec exec proj pass =
-    let deps = List.map pass.deps ~f:(fun name -> match find name with
-        | None -> fail @@ unsat_dep pass name
-        | Some dep -> dep) in
-    let proj = List.fold deps ~init:proj ~f:exec in
-    try pass.main proj with
-      exn -> fail @@ runtime_error pass exn
+    if pass.once && is_evaled pass proj then proj
+    else
+      let deps = List.map pass.deps ~f:(fun name -> match find name with
+          | None -> fail @@ unsat_dep pass name
+          | Some dep -> dep) in
+      let proj = List.fold deps ~init:proj ~f:exec in
+      try eval pass proj with
+        exn -> fail @@ runtime_error pass exn
 
   let run_exn pass proj = exec proj pass
 
@@ -302,6 +313,7 @@ include Data.Make(struct
     type nonrec t = t
     let version = "0.1"
   end)
+
 
 
 let () =

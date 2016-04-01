@@ -16,12 +16,12 @@ type map = set Var.Map.t [@@deriving bin_io, compare, sexp]
 type 'a values = 'a Values.t
 
 let reg = Value.Tag.register
-    ~name:"tainted_reg"
+    ~name:"tainted-reg"
     ~uuid:"1ab9a363-db8f-4ab4-9fb4-5ff54de97c5c"
     (module Tid)
 
 let ptr = Value.Tag.register
-    ~name:"tainted_ptr"
+    ~name:"tainted-ptr"
     ~uuid:"ef2d20e5-b04d-41da-ab20-5d98ddc2f78e"
     (module Tid)
 
@@ -59,12 +59,12 @@ module Taint_map = struct
 end
 
 let regs : map tag = Value.Tag.register
-    ~name:"tainted_regs"
+    ~name:"tainted-regs"
     ~uuid:"03c90a60-e19f-43cc-8049-fdeb23973396"
     (module Taint_map)
 
 let ptrs : map tag = Value.Tag.register
-    ~name:"tainted_ptrs"
+    ~name:"tainted-ptrs"
     ~uuid:"ecf96df5-f706-4f95-a421-3fa9b91ad8bd"
     (module Taint_map)
 

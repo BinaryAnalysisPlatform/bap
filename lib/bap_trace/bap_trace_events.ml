@@ -89,22 +89,22 @@ end
 
 let memory_load =
   Value.Tag.register (module Load)
-    ~name:"memory_load"
+    ~name:"memory-load"
     ~uuid:"9546a981-de85-4e5c-8d59-73a15bf5c7bd"
 
 let memory_store =
   Value.Tag.register (module Store)
-    ~name:"memory_store"
+    ~name:"memory-store"
     ~uuid:"d5995d83-76be-410d-94a9-b0cfcb91f2de"
 
 let register_read =
   Value.Tag.register (module Read)
-    ~name:"register_read"
+    ~name:"register-read"
     ~uuid:"ded5dc91-dafc-4316-9c6c-4dad4e40a273"
 
 let register_write =
   Value.Tag.register (module Write)
-    ~name:"register_write"
+    ~name:"register-write"
     ~uuid:"395f5f37-5aed-4bd2-a51f-1c7216b5cd7c"
 
 let timestamp =
@@ -114,17 +114,17 @@ let timestamp =
 
 let pc_update =
   Value.Tag.register (module Addr)
-    ~name:"pc_update"
+    ~name:"pc-update"
     ~uuid:"98ea397e-d726-43be-9ec5-bf226d67578f"
 
 let code_exec =
   Value.Tag.register (module Chunk)
-    ~name:"code_exec"
+    ~name:"code-exec"
     ~uuid:"b8b3af3a-d1aa-4bf0-a36f-4ea6d0dd2bbf"
 
 let context_switch =
   Value.Tag.register (module Int)
-    ~name:"context_switch"
+    ~name:"context-switch"
     ~uuid:"7f1d322a-d2cc-4e42-8e7a-081080751268"
 
 let syscall =
