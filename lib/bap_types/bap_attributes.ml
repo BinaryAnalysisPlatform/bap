@@ -73,19 +73,19 @@ let weight = register (module Float)
     ~uuid:"657366ea-9a28-4e5e-8341-c545d861732b"
 
 let target_addr = register (module Bap_bitvector)
-    ~name:"target_addr"
+    ~name:"target-addr"
     ~uuid:"7bcef7c0-0b37-4167-887a-eba0d68891fe"
 
 let target_name = register (module String)
-    ~name:"target_name"
+    ~name:"target-name"
     ~uuid:"35d9334f-7c17-46f7-8ff9-9430aa1293ac"
 
 let subroutine_addr = register (module Bap_bitvector)
-    ~name:"subroutine_addr"
+    ~name:"subroutine-addr"
     ~uuid:"76bfd31c-05fb-48af-bfc1-721720710f0f"
 
 let subroutine_name = register (module String)
-    ~name:"subroutine_name"
+    ~name:"subroutine-name"
     ~uuid:"86fe023d-2637-4d92-baac-a420f518f250"
 
 let filename = register (module String)

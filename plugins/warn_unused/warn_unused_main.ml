@@ -31,8 +31,8 @@ let collect_seeds prog = (object
   inherit [Tid.Set.t] Term.visitor
   method! enter_term cls t seeds =
     match Term.get_attr t Taint.reg with
-    | None -> seeds
-    | Some seed -> Set.add seeds seed
+    | Some seed when Term.has_attr t Term.visited -> Set.add seeds seed
+    | _ -> seeds
 end)#run prog Tid.Set.empty
 
 

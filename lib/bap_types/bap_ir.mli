@@ -97,6 +97,7 @@ module Term : sig
   val synthetic : unit tag
   val live : unit tag
   val dead : unit tag
+  val visited : unit tag
   val precondition : exp tag
   val invariant : exp tag
   val postcondition : exp tag
@@ -178,7 +179,6 @@ module Term : sig
     ?def:(def term -> 'a) ->
     ?jmp:(jmp term -> 'a) ->
     't term -> 'a
-
 end
 
 module Ir_program : sig
