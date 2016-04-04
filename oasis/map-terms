@@ -1,0 +1,19 @@
+Flag map_terms
+  Description: Build map plugin and bml library
+  Default: false
+
+Library "bap-bml"
+  XMETADescription: BAP Mapping Language
+  Path: lib/bap_bml
+  Build$: flag(everything) || flag(map_terms)
+  BuildDepends: bap
+  FindlibName: bap-bml
+  Modules: Bap_bml
+
+Library map_terms_plugin
+  Build$: flag(everything) || flag(map_terms)
+  Path: plugins/map_terms
+  FindlibName: bap-plugin-map_terms
+  BuildDepends: bap, bap-bml, cmdliner
+  InternalModules: Map_terms_main
+  XMETADescription: map terms using BML DSL
