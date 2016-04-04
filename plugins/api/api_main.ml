@@ -41,11 +41,10 @@ exception Attr_type   of string * string
 exception Attr_index  of int * int
 exception Attr_arity  of string
 
-
 include struct
   let stack mem sp endian sz off =
     let width = Size.in_bits sz in
-    let off = Word.of_int ~width (off * (Size.in_bytes sz)) in
+    let off = Word.of_int ~width (off * Size.in_bytes sz) in
     let mem = Bil.var mem in
     let addr = if Word.is_zero off
       then Bil.(var sp)
