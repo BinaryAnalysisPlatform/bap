@@ -2,14 +2,6 @@ Flag api
   Description: Build API plugin
   Default: false
 
-Library bap_api
-  Build$:           flag(everything) || flag(api)
-  Path:             lib/bap_api
-  FindlibName:      bap-api
-  CompiledObject:   best
-  BuildDepends:     bap
-  Modules:          Bap_api, Bap_api_abi, Bap_api_attr
-
 Library api_plugin
   Build$:           flag(everything) || flag(api)
   Path:             plugins/api

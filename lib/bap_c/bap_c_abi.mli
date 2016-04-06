@@ -1,8 +1,4 @@
-open Core_kernel.Std
-open Regular.Std
 open Bap.Std
-open Bap_api
-
 (** ABI dispatching interface.
 
 
@@ -26,29 +22,29 @@ open Bap_api
 *)
 
 
-type 'a language
-
 
 (** [register arch name f] registers an abi function [f] for abi with
     the given [name] and [arch]. If an abi for the given pair is
     already registered, then it will be overriden. *)
 
-type 'a t = 'a language -> sub term -> sub term
-val register : 'a language -> arch -> string -> 'a t -> unit
+type t = proto -> sub term -> sub term
+
+
+val register : arch -> string -> t -> unit
 
 (** [override_resolver arch resolve] overrides resolver for the given
     architecture. For each function having a [name] and a list of
     [attrubutes] a [resolve name attributes] must evaluate to
     [abi_name]. *)
-val override_resolver : 'a language -> arch -> ('a -> string) -> unit
+val override_resolver : arch -> (proto -> string) -> unit
 
 (** [apply arch proto sub] returns a right hand side expression representing
     positional argument at the given position [pos] *)
-val apply : 'a language -> arch -> 'a t
+val apply : arch -> t
 
 (** [known_abi arch] is a list of names of ABI currently registered for the given
     architecture [arch] *)
-val known_abi : 'a language -> arch -> string list
+val known_abi : arch -> string list
 
 
 

@@ -59,7 +59,7 @@ module MS_64 = struct
     | Arg 1 -> var rdx
     | Arg 2 -> var r.(0)
     | Arg 3 -> var r.(1)
-    | Arg n -> stack Int.(n+1)
+    | Arg n -> stack n
 end
 
 module FASTCALL = struct
