@@ -1,9 +1,20 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_api
+open Bap_c.Std
+
+module Stack = Bap_abi.Stack
+
+type pos =
+  | Ret_0
+  | Ret_1
+  | Arg of int
 
 
-module Stack = Bap_api_abi.Stack
+module type abi = sig
+  val arch : arch
+  val name : string
+  val abi : pos -> exp
+end
 
 module SysV = struct
   include X86_cpu.AMD64
@@ -70,15 +81,8 @@ module FASTCALL = struct
     | other -> abi other
 end
 
-
-module type abi = sig
-  val arch : arch
-  val name : string
-  val abi : pos -> exp
-end
-
-let register (module Abi : abi) =
-  Bap_api_abi.register Abi.arch Abi.name Abi.abi
+let register (module Abi : abi) = ()
+(* Bap_api_abi.register Abi.arch Abi.name Abi.abi *)
 
 let abis : (module abi) list = [
   (module SysV);
@@ -88,6 +92,25 @@ let abis : (module abi) list = [
   (module MS_32);
   (module MS_64);
 ]
+
+
+let size_of_integer_type (m : C.Data.model) (t : C.Type.integer) : size =
+  match m,t with
+  | _,#C.Type.char -> `r8
+  | _,#C.Type.short -> `r16
+  | `ILP64,#C.Type.int -> `r64
+  | `LP32,#C.Type.int -> `r32
+  | (`ILP32|`LLP64|`LP64),#C.Type.int -> `r64
+  | (`ILP64|`LP64), #C.Type.long -> `r64
+  | (`LP32|`ILP32|`LLP64),#C.Type.long -> `r32
+  | _,#C.Type.long_long -> `r64
+
+
+
+
+let args_of_proto (module Abi : abi) {C.Type.args; return} = ()
+
+
 
 let x64_cc_attrs = ["ms_abi"; "sysv_abi"]
 let x32_cc_attrs = x64_cc_attrs @ ["cdecl"; "fastcall"; "thiscall"; "stdcall";]
@@ -100,15 +123,15 @@ let default = function `x86 -> x32_default | `x86_64 -> x64_default
 let gnu_resolver default cc_attrs name attrs =
   let cc_attrs = ["cdecl"; "fastcall"; "thiscall"; "stdcall";
                   "ms_abi"; "sysv_abi" ] in
-  List.find attrs ~f:(fun x -> List.mem cc_attrs x.attr_name) |> function
+  List.find attrs ~f:(fun x -> List.mem cc_attrs x.C.Type.attr_name) |> function
   | None -> default
-  | Some x -> match String.chop_suffix ~suffix:"_abi" x.attr_name with
+  | Some x -> match String.chop_suffix ~suffix:"_abi" x.C.Type.attr_name with
     | None -> name
     | Some name -> name
 
-let register_resolver ?default_abi:abi (arch : Arch.x86) =
-  Bap_api_abi.override_resolver (arch :> arch)
-    (gnu_resolver (default arch abi) (cc_attrs arch))
+let register_resolver ?default_abi:abi (arch : Arch.x86) = ()
+(* Bap_api_abi.override_resolver (arch :> arch) *)
+(*   (gnu_resolver (default arch abi) (cc_attrs arch)) *)
 
 let register () =
   List.iter abis ~f:register

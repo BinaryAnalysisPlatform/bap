@@ -1,4 +1,5 @@
 open Bap.Std
+open Bap_language.Std
 (** ABI dispatching interface.
 
     ABI tranfers a high-level API for the given language into a
@@ -24,9 +25,6 @@ open Bap.Std
     for each particular function, c.f., GNU attributes, fortran C
     annotation, etc.
 *)
-
-
-type 'a language
 
 (** [register language arch name f] registers an abi with the given [name]
     and transformation [f] for the [language] and architecture [arch].
@@ -56,3 +54,21 @@ val apply : 'a language -> arch -> 'a -> sub term -> sub term
 (** [known langauge] returns a list of known targets and
     application binary interfaces. *)
 val known : 'a language -> (arch * string list) list
+
+
+(** Stack abstraction.
+
+    Most architectures use stack to pass arguments. This is a helper
+    module, that implements a default stack structure.
+*)
+module Stack : sig
+  type direction = [`up | `down]
+  (** [create ?direction arch] creates a [stack] abstraction for the
+      given architecture. A [stack n], evaluates to an expression that
+      loads a word of size [s] from address [SP # n * s], where [s] is
+      a word size for the given architecture; [#] is [+] if the stack
+      grows downward and [-] if it grows upwards. The [direction]
+      parameter specifies the stack growth direction and defaults to
+      [`down] ward *)
+  val create : ?direction:direction -> arch -> (int -> exp)
+end

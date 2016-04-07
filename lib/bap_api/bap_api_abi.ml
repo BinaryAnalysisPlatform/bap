@@ -37,21 +37,3 @@ let apply abi pos = match Hashtbl.find abis abi with
 let known_abi arch =
   Hashtbl.keys abis|> List.filter_map ~f:(fun abi ->
       Option.some_if (abi.arch = arch) abi.name)
-
-module Stack = struct
-  type direction = [`up | `down]
-  let create ?(direction=`down) arch =
-    let module Target = (val target_of_arch arch) in
-    let sz = (Arch.addr_size arch :> Size.t) in
-    let width = Size.in_bits sz in
-    let endian = Arch.endian arch in
-    let mem = Bil.var Target.CPU.mem in
-    let sp = Target.CPU.sp in
-    fun off ->
-      let off = Word.of_int ~width (off * Size.in_bytes sz) in
-      let addr = if Word.is_zero off
-        then Bil.(var sp)
-        else Bil.(var sp + int off) in
-      Bil.load ~mem ~addr endian sz
-
-end
