@@ -94,20 +94,6 @@ let abis : (module abi) list = [
 ]
 
 
-let size_of_integer_type (m : C.Data.model) (t : C.Type.integer) : size =
-  match m,t with
-  | _,#C.Type.char -> `r8
-  | _,#C.Type.short -> `r16
-  | `ILP64,#C.Type.int -> `r64
-  | `LP32,#C.Type.int -> `r32
-  | (`ILP32|`LLP64|`LP64),#C.Type.int -> `r64
-  | (`ILP64|`LP64), #C.Type.long -> `r64
-  | (`LP32|`ILP32|`LLP64),#C.Type.long -> `r32
-  | _,#C.Type.long_long -> `r64
-
-
-
-
 let args_of_proto (module Abi : abi) {C.Type.args; return} = ()
 
 
