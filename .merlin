@@ -20,6 +20,7 @@ B _build/lib/bap_plugins
 B _build/lib/text_tags
 B _build/lib/regular
 B _build/lib/graphlib
+B _build/lib/microx
 
 S lib/bap
 S lib/bap_bundle
@@ -29,3 +30,4 @@ S lib/bap_plugins
 S lib/text_tags
 S lib/regular
 S lib/graphlib
+S lib/microx
