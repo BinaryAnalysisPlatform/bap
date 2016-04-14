@@ -1,9 +1,8 @@
 open Core_kernel.Std
 
-
-
 module type State = sig
-  type (+'a,'s) t
+  type ('a,'s) t
+  type 'a result
 
   include Monad.S2 with type ('a,'s) t := ('a,'s) t
 
@@ -14,7 +13,7 @@ module type State = sig
   val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
 
 
-  val run : ('a,'s) t -> 's -> 'a * 's
-  val eval : ('a,'s) t -> 's -> 'a
-  val exec : ('a,'s) t -> 's -> 's
+  val run : ('a,'s) t -> 's -> ('a * 's) result
+  val eval : ('a,'s) t -> 's -> 'a result
+  val exec : ('a,'s) t -> 's -> 's result
 end
