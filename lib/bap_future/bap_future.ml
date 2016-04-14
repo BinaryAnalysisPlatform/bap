@@ -290,7 +290,14 @@ module Std = struct
         if l1 > capacity && l2 > capacity && ratio l1 l2 > 2 &&
            (len > l1 || len > l2) then  wait src in
       link s1 s (step s1 q1);
-      link s2 s (step s1 q2);
+      link s2 s (step s2 q2);
+      s
+
+    let either s1 s2 =
+      let s, Signal publish = create () in
+      let step inj x = publish (inj x) in
+      link s1 s (step Either.first);
+      link s2 s (step Either.second);
       s
 
     let once s =

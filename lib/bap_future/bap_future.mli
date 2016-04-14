@@ -354,6 +354,9 @@ module Std : sig
     val filter : 'a t -> f:('a -> bool) -> 'a t
 
 
+    (** [either xs ys] is a discriminated union of two streams.  *)
+    val either : 'a t -> 'b t -> ('a,'b) Either.t t
+
     (** [merge xs ys f] merges streams [xs] and [ys] using function
         [f].  *)
     val merge : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
@@ -404,9 +407,9 @@ module Std : sig
         ]} *)
     val foldw : ?stride:int -> 'a t -> int -> init:'b -> f:('b -> 'a -> 'b) -> 'b t
 
-    (** [frame ~clk s ~init ~f] will gather elements of [s] into frames, 
-        where the start of the new frame is signaled by a stream [clk]. 
-        The function is very similar to [foldw] except, that the window 
+    (** [frame ~clk s ~init ~f] will gather elements of [s] into frames,
+        where the start of the new frame is signaled by a stream [clk].
+        The function is very similar to [foldw] except, that the window
         is determined dynamically by a [clk] stream. This function is
         useful to build custom time scales.
 
@@ -484,7 +487,7 @@ module Std : sig
         fulfilled.  *)
     val upon : unit future -> 'a t -> 'a future
 
-    (** [before e xs] returns a list that contains elements of 
+    (** [before e xs] returns a list that contains elements of
         the stream [xs] that occurred before the event [e] *)
     val before: unit future -> 'a t -> 'a list future
 

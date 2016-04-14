@@ -1,3 +1,9 @@
 PKG compiler-libs
 PKG findlib
+B ../../_build/lib/bap_types
+B ../../_build/lib/bap_image
+B ../../_build/lib/bap_disasm
+B ../../_build/lib/bap_sema
+B ../../_build/lib/bap_bundle
+
 REC
