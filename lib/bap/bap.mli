@@ -3017,6 +3017,9 @@ module Std : sig
     (** [tagname value] returns a constructor name of the [value]  *)
     val tagname : t -> string
 
+    (** [typeid value] returns a type identifier of the [value]  *)
+    val typeid : t -> typeid
+
     (** Variants of values.  *)
     module Tag : sig
       type 'a t = 'a tag
