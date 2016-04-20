@@ -1,10 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
-(** Trace is a sequence of events accompanied with meta information.
-
-    The sequence is lazy if possible, i.e., underlying event
-    transports shall not produce events unless they are requested.
+(** Trace is a stream of events plus meta information.
 
     The event is a value of type [value]. Event type is reified with
     [Value.Tag]. A set of event types in a given trace is an
@@ -147,14 +144,17 @@ module Std : sig
     type t = {
       name : string;
       args : string array;
-      version : string;   (** release or Git hash, or SVN number *)
+      envp : string array;
+      version : string;
     } [@@deriving bin_io, compare, sexp]
   end
 
   module Binary : sig
     type t = {
       path : string;
-      stripped : bool option;     (* yes, no, unknown *)
+      args : string array;
+      envp : string array;
+      md5sum : string;
     } [@@deriving bin_io, compare, sexp]
   end
 
@@ -167,9 +167,20 @@ module Std : sig
     } [@@deriving bin_io, compare, sexp]
   end
 
+  module Trace_stats : sig
+    type t = {
+      user : string;   (** Name of a trace creator  *)
+      host : string;   (** A host where trace was created *)
+      time : float;   (** Time when tracing started  *)
+    } [@@deriving bin_io, compare, sexp]
+  end
+
+  type trace
   type tracer = Tracer.t [@@deriving bin_io, compare, sexp]
   type binary = Binary.t [@@deriving bin_io, compare, sexp]
   type file_stats = File_stats.t [@@deriving bin_io, compare, sexp]
+  type trace_stats = Trace_stats.t [@@deriving bin_io, compare, sexp]
+
 
   module Meta : sig
 
@@ -185,27 +196,38 @@ module Std : sig
     (** file stats of the traced binary  *)
     val binary_file_stats : file_stats tag
 
-    (** trace creation time  *)
-    val trace_ctime : float tag
-
-    (** trace last modification time  *)
-    val trace_mtime : float tag
-
-    (** a user that created the trace  *)
-    val user : string tag
-
-    (** a name of a host from where trace was born  *)
-    val host : string tag
+    val trace_stats : trace_stats tag
 
   end
 
   module Trace : sig
+    (** Trace is a stream of events plus meta data. It can be viewed as
+        an input channel. In fact, [Trace.t] is an abstract data type
+        usually inhabited with codata, i.e., some entity with hidden
+        state. The [Trace] may be an interface to a remote server, virtual
+        machine or just a file. So treat the trace as something that works
+        as an input channel.
+
+        Since it is worthwhile to know whether a particular event is not the
+        trace because it didn't occur during program execution, but not
+        because it wasn't detected by a trace tool or dropped by a given
+        transport, we provide [supports] function, to query whether the
+        given event type is really supported (and thus might occur) by a
+        given trace.
+
+        The meta information is also represented using [value] type,
+        and thus can contain virtually any data. Meta information is
+        indexed with [tag] value. Unlike the events, that are codata,
+        meta is a regular data, obtained from a trace source at the
+        time of trace creation and is not changed magically in the trace
+        lifetime. *)
+
     type event = value [@@deriving bin_io, sexp, compare]
     type monitor
     type proto
     type tool [@@deriving bin_io, sexp]
     type id
-    type t
+    type t = trace
 
     type io_error = [
       | `Protocol_error of Error.t   (** Data encoding problem         *)
@@ -220,7 +242,7 @@ module Std : sig
 
     (** {2 Serialization}
 
-        Serialization is dispatched by a URI describing data source or
+        Serialization is dispatched by an URI describing data source or
         destination. URI contains enough information to uniquely designate
         data format and transporting options.
     *)
@@ -233,12 +255,19 @@ module Std : sig
     (** [save uri] pushes trace to a provided [uri] *)
     val save : Uri.t -> t -> (unit,error) Result.t
 
+
+    (** {2 Creating}  *)
+
+    (** [create tool next] creates a new trace from the observer
+        [next].  *)
+    val create : ?monitor:monitor -> tool -> (unit -> event Or_error.t option) -> t
+
     (** {2 Meta attributes}
 
         Meta information relates to the whole trace.
-
     *)
 
+    (** Trace global unique identifier. *)
     val id : t -> id
 
     (** [set_attr trace attr value] updates [trace] meta attribute [attr]
@@ -268,73 +297,39 @@ module Std : sig
 
     (** [supports trace feature] is [true] if a tool that was used to
         generate the trace, as well as transporting protocol and
-        underlying format support the a given feature. *)
+        underlying format support the given feature. *)
     val supports : t -> 'a tag -> bool
 
-    (** [memoize trace] eagerly loads all the trace into memory.   *)
-    val memoize : t -> t
 
-    (** [find trace tag] find an event with a given [trace]   *)
-    val find : t -> 'a tag -> 'a option
+    (** [read_all trace tag] reads all event of the a given type *)
+    val read_all : t -> 'a tag -> 'a seq
 
-    (** [find_all trace tag] returns a sequence of all event with a given tag  *)
-    val find_all : t -> 'a tag -> 'a seq
-
-    (** [find_all_matching trace matcher] returns a sequence of events
+    (** [read_all_matching trace matcher] reads all events
         matching with a provided [matcher]. *)
-    val find_all_matching : t -> 'a Value.Match.t -> 'a seq
+    val read_all_matching : t -> 'a Value.Match.t -> 'a seq
 
-    (** [fold_matching trace matcher ~f ~init] applies function [f]
-        consequently to all matching trace event. Matching is defined
-        using value [matcher]. The following example will collect all
-        memory operations from a trace:
-        {[
-          let collect_memory_operations trace =
-            List.rev @@
-            fold_matching trace ~init:[] ~f:(fun xs x -> x @ xs)
-              Value.Match.(begin
-                  case memory_load  (fun x  -> [`Load x])  @@
-                  case memory_store (fun x  -> [`Store x]) @@
-                  default           (fun () -> [])
-                end)
-        ]}
-    *)
-    val fold_matching : t -> 'a Value.Match.t -> f:('b -> 'a -> 'b) -> init:'b -> 'b
+    (** [read_events trace] reads a sequence of events from the [trace].*)
+    val read_events : t -> event seq
 
-    (** [contains trace tag] returns [Some true] if a provided event
-        occurs in a trace, [Some false] if it may occur (i.e., is
-        supported), but is not in the trace, and [None] if the event is not
-        supported at all. *)
-    val contains : t -> 'a tag -> bool option
+    (** [next trace tag] reads and discards events until an event with a
+        given tag is found. *)
+    val next : t -> 'a tag -> 'a option
 
-    (** [event trace] returns a sequence of events of the [trace].
-        This function should be used if the above specified functions
-        doesn't answer your needs.*)
-    val events : t -> event seq
+    (** [next_event trace] reads next event from the trace  *)
+    val next_event : t -> event option
 
-    (** {2 Trace construction}  *)
 
-    (** [create tool] creates an trace that will contain events, produced
-        by a specified [tool]. Initially trace contains an empty sequence
-        of events. *)
-    val create : tool -> t
+    (** [next_matching trace matcher] reads and discards trace events
+        until an event matching with the [matcher] is found.*)
+    val next_matching : t -> 'a Value.Match.t -> 'a option
 
-    (** [unfold ~monitor tool ~f ~init] creates a trace by unfolding a function [f].
-        The produces sequence is lazy, i.e., functions are called as
-        demanded. [monitor] is fail_on_error by default. *)
-    val unfold : ?monitor:monitor -> tool -> f:('a -> (event Or_error.t * 'a) option) -> init:'a -> t
+    (** {2 Transformations} *)
 
-    (** [unfold' ~monitor tool ~f] is a simplified version of [unfold] *)
-    val unfold' : ?monitor:monitor -> tool -> f:(unit -> event Or_error.t option) -> t
 
-    (** [add_event trace tag] appends an event to a sequence of events of
-        [trace]. *)
-    val add_event : t -> 'a tag -> 'a -> t
+    (** [filter_map t ~f] will return a trace where all events a
+        filter-mapped with the provided function [f] *)
+    val filter_map : t -> f:(event -> event option) -> t
 
-    (** [append trace events] creates a trace with a sequence of events
-        composed from events of the [trace] following the [events],
-        provided as an argument. *)
-    val append : t -> event seq -> t
 
 
     (** {2 Extension mechanism}
@@ -404,9 +399,18 @@ module Std : sig
 
     module Id : Regular with type t = id
 
+    type step = [
+      | `Stop
+      | `Skip
+      | `Fail
+      | `Make of event
+    ]
+
     (** Monitor defines an error handling policy.*)
     module Monitor : sig
       type t = monitor
+
+
 
       (** [ignore_errors] filters good events and silently drops error events  *)
       val ignore_errors : t
@@ -421,13 +425,22 @@ module Std : sig
       val stop_on_error : t
 
       (** [pack_errors pack] will transform any occured error into event
-            using [pack] function.  *)
+          using [pack] function.  *)
       val pack_errors : (Error.t -> event) -> t
 
       (** [create filter] creates a user defined monitor from function
           [filter] that is applied to a sequence of events or errors, and
           returns a sequence of events.  *)
-      val create : (event Or_error.t seq -> event seq) -> t
+      val create : (Error.t -> step) -> t
     end
   end
+
+  module Traces : sig
+    val to_list : unit -> trace list
+    val enum : unit -> trace seq
+    val add : trace -> unit
+    val remove : trace -> unit
+  end
+
+
 end

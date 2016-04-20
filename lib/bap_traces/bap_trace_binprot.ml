@@ -1,10 +1,11 @@
 
 open Core_kernel.Std
 open Regular.Std
+open Bap.Std
 open Result
 open Bin_prot
 
-open Bap.Std
+module Trace = Bap_trace
 
 module Proto = struct
 
@@ -35,12 +36,12 @@ module Proto = struct
     let buf = Utils.bin_dump ~header:true writer value in
     Out_channel.output_string chan (Bigstring.to_string buf)
 
-  let read_tool   = read  Bap_trace.bin_reader_tool
+  let read_tool   = read  Trace.bin_reader_tool
   let read_meta   = read  Dict.bin_reader_t
-  let read_event  = read  Bap_trace.bin_reader_event
-  let write_tool  = write Bap_trace.bin_writer_tool
+  let read_event  = read  Trace.bin_reader_event
+  let write_tool  = write Trace.bin_writer_tool
   let write_meta  = write Dict.bin_writer_t
-  let write_event = write Bap_trace.bin_writer_event
+  let write_event = write Trace.bin_writer_event
 
 end
 
@@ -53,11 +54,11 @@ module TraceWriter = struct
     with Unix.Unix_error (er,_,_) -> Error (`System_error er)
 
   let write uri t =
-    make_channel (Uri.path uri) >>=
-    fun ch ->
-    Proto.write_tool (Bap_trace.tool t) ch;
-    Proto.write_meta (Bap_trace.meta t) ch;
-    Seq.iter ~f:(fun ev -> Proto.write_event ev ch) (Bap_trace.events t);
+    make_channel (Uri.path uri) >>= fun ch ->
+    Proto.write_tool (Trace.tool t) ch;
+    Proto.write_meta (Trace.meta t) ch;
+    Trace.read_events t |>
+    Seq.iter ~f:(fun ev -> Proto.write_event ev ch);
     Ok (Out_channel.close ch)
 
 end
@@ -86,7 +87,7 @@ module TraceReader = struct
     let next () = next_event ch in
     err_of_opt Proto.read_tool ch >>=
     fun tool -> err_of_opt Proto.read_meta ch >>=
-    fun meta -> Ok (Bap_trace.Reader.({tool; meta; next;}))
+    fun meta -> Ok (Trace.Reader.({tool; meta; next;}))
 
   let read uri id =
     make_channel (Uri.path uri) >>=
@@ -97,7 +98,7 @@ module TraceReader = struct
 end
 
 let register () =
-  let open Bap_trace in
+  let open Trace in
   let proto = register_proto (module Proto : P) in
   register_reader proto TraceReader.read;
   register_writer proto TraceWriter.write

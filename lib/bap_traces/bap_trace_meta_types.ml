@@ -5,18 +5,19 @@ module Tracer = struct
   type t = {
     name : string;
     args : string array;
+    envp : string array;
     version : string;   (** release or Git hash, or SVN number *)
   } [@@deriving bin_io, compare, sexp]
 end
 
-
 module Binary = struct
   type t = {
     path : string;
-    stripped : bool option;     (* yes, no, unknown *)
+    args : string array;
+    envp : string array;
+    md5sum : string;
   } [@@deriving bin_io, compare, sexp]
 end
-
 
 module File_stats = struct
   type t = {
@@ -27,7 +28,15 @@ module File_stats = struct
   } [@@deriving bin_io, compare, sexp]
 end
 
+module Trace_stats = struct
+  type t = {
+    user : string;   (** Name of a trace creator  *)
+    host : string;   (** A host where trace was created *)
+    time : float;    (** Time when tracing started  *)
+  } [@@deriving bin_io, compare, sexp]
+end
 
 type tracer = Tracer.t [@@deriving bin_io, compare, sexp]
 type binary = Binary.t [@@deriving bin_io, compare, sexp]
 type file_stats = File_stats.t [@@deriving bin_io, compare, sexp]
+type trace_stats = Trace_stats.t [@@deriving bin_io, compare, sexp]
