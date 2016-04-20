@@ -1,0 +1,12 @@
+Flag trace
+  Description: Build BAP trace dump utility
+  Default: false
+
+Library trace_plugin
+  Path:           plugins/trace
+  Build$:         flag(everything) || flag(trace)
+  FindlibName:    bap-plugin-trace
+  CompiledObject: best
+  Modules: Trace_main
+  BuildDepends:   bap, cmdliner, bap-traces
+  XMETADescription: manage execution traces

@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Graphlib.Std
+open Bap_future.Std
 
 module Std : sig
 
@@ -3046,6 +3047,7 @@ module Std : sig
       val same : 'a t -> 'b t -> bool
       val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
       val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
+      val typeid : 'a t -> typeid
     end
 
 
@@ -6513,6 +6515,9 @@ module Std : sig
     val passes : unit -> pass list
 
     val find_pass : string -> pass option
+
+    (** time duration in seconds  *)
+    type second = float
 
     module Pass : sig
 
