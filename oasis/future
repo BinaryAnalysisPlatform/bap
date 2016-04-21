@@ -9,7 +9,7 @@ Library bap_future
   CompiledObject:  best
   Build$:          flag(everything) || flag(future)
   BuildDepends:    core_kernel
-  InternalModules: Bap_future
+  Modules: Bap_future
 
 Library future_test
   Path:           lib_test/bap_future
@@ -25,7 +25,7 @@ Executable run_future_tests
   CompiledObject: best
   BuildDepends:   bap-future, oUnit
   Install:        false
-  MainIs:        run_future_tests.ml
+  MainIs:         run_future_tests.ml
 
 Test future_tests
   TestTools: run_future_tests
