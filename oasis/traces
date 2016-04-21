@@ -2,9 +2,9 @@ Flag traces
   Description: Build traces library
   Default: false
 
-Library trace
+Library traces
   Build$:          flag(everything) || flag(traces)
-  Path:            lib/bap_trace
+  Path:            lib/bap_traces
   FindLibName:     bap-traces
   Build$:          flag(everything) || flag(traces)
   CompiledObject:  best
@@ -16,27 +16,28 @@ Library trace
                    Bap_trace_meta,
                    Bap_trace_meta_types,
                    Bap_trace_std,
+                   Bap_trace_traces,
                    Bap_trace
   BuildDepends:    bap, core_kernel, uri, uuidm
 
-Library trace_test
-  Path:            lib_test/bap_trace
+Library traces_test
+  Path:            lib_test/bap_traces
   Build$:          flag(tests) && (flag(everything) || flag(traces))
   Install:         false
   CompiledObject:  best
-  Modules:         Test_trace
+  Modules:         Test_traces
   BuildDepends:    bap, bap-traces, oUnit
 
 
-Executable run_trace_tests
-  Path:           lib_test/bap_trace
+Executable run_traces_tests
+  Path:           lib_test/bap_traces
   Build$:         (flag(everything) || flag(traces)) && flag(tests)
   CompiledObject: best
   BuildDepends:   bap-traces, oUnit
   Install:        false
-  MainIs:         run_trace_tests.ml
+  MainIs:         run_traces_tests.ml
 
-Test trace_tests
-  TestTools: run_trace_tests
+Test traces_tests
+  TestTools: run_traces_tests
   Run$: flag(tests) && (flag(everything) || flag(traces))
-  Command: $run_trace_tests
+  Command: $run_traces_tests

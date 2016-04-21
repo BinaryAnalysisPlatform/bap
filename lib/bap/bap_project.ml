@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Regular.Std
+open Bap_future.Std
 open Bap_plugins.Std
 open Bap_bundle.Std
 open Bap_types.Std
@@ -230,9 +231,14 @@ type pass = {
   deps : string sexp_list;
   auto : bool;
   once : bool;
+  starts     : float stream sexp_opaque;
+  finishes   : float stream sexp_opaque;
+  failures   : float stream sexp_opaque;
+  successes  : float stream sexp_opaque;
 } [@@deriving sexp_of]
 
 let passes : pass DList.t = DList.create ()
+let pass_registrations,pass_registered = Stream.create ()
 
 let forget : pass DList.Elt.t -> unit = fun _ -> ()
 
@@ -246,11 +252,35 @@ let register_pass ?(autorun=false) ?(runonce=autorun) ?(deps=[]) ?name main : un
   let name = match name with
     | None -> pref
     | Some name -> pref ^ "-" ^ name in
-  DList.insert_last passes {name; main; deps; once = runonce; auto = autorun} |> forget
+  let starts,started = Stream.create () in
+  let successes,succeded = Stream.create () in
+  let failures,failed = Stream.create () in
+  let finishes =
+    Stream.either successes failures |>
+    Stream.map ~f:Either.value in
+  let now () = Unix.gettimeofday () in
+  let main project =
+    Signal.send started (now ());
+    try
+      let project = main project in
+      Signal.send succeded (now ());
+      project
+    with exn ->
+      Signal.send failed (now ());
+      raise exn in
+  let pass = {
+    name; main; deps;
+    once = runonce; auto = autorun;
+    starts; finishes;
+    failures; successes;
+  } in
+  DList.insert_last passes pass |> forget;
+  Signal.send pass_registered pass
 
 let register_pass' ?autorun ?runonce ?deps ?name v : unit =
   register_pass ?autorun ?runonce ?deps ?name (fun p -> v p; p)
 
+type second = float
 module Pass = struct
   type t = pass [@@deriving sexp_of]
   type error =
@@ -290,6 +320,10 @@ module Pass = struct
 
   let name p = p.name
   let autorun p  = p.auto
+  let starts p = p.starts
+  let finishes p = p.finishes
+  let failures p = p.failures
+  let successes p = p.successes
 end
 
 let passes () = DList.to_list passes

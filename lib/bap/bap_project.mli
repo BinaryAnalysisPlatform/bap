@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Regular.Std
+open Bap_future.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
@@ -67,6 +68,8 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 
+type second = float
+
 module Pass : sig
   type t = pass [@@deriving sexp_of]
 
@@ -82,6 +85,12 @@ module Pass : sig
 
   val name : t -> string
   val autorun : t -> bool
+
+
+  val starts    : t -> second stream
+  val finishes  : t -> second stream
+  val successes : t -> second stream
+  val failures  : t -> second stream
 end
 
 
@@ -92,7 +101,10 @@ val register_pass :
 val register_pass':
   ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
 
+
+val pass_registrations : pass stream
 val passes : unit -> pass list
+
 
 module Factory : Source.Factory
   with type t =
