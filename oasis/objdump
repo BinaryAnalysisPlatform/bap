@@ -1,0 +1,12 @@
+Flag objdump
+  Description: Build objdump plugin
+  Default: false
+
+Library objdump_plugin
+  Build$:           flag(everything) || flag(ida_plugin)
+  Path:             plugins/objdump
+  FindlibName:      bap-plugin-objdump
+  CompiledObject:   best
+  BuildDepends:     bap, cmdliner, re.pcre
+  Modules:          Objdump
+  XMETADescription: use objdump to provide a symbolizer 
