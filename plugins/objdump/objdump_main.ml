@@ -43,12 +43,13 @@ let parse_func_start l =
   else
     None
 
-let run_objdump cmd opts file : symbolizer =
+let run_objdump cmd opts arch file : symbolizer =
   let fullcmd = cmd ^ " " ^ opts ^ " " ^ file in
   let names = Addr.Table.create () in
   let ic = Unix.open_process_in fullcmd in
+  let width = Arch.addr_size arch |> Size.in_bits in
   let add name addr =
-    Hashtbl.set names ~key:(Addr.of_int64 addr) ~data:name in
+    Hashtbl.set names ~key:(Addr.of_int64 ~width addr) ~data:name in
   In_channel.iter_lines ~f:(fun line -> match parse_func_start line with
       | None -> ()
       | Some (name,addr) -> add name addr) ic;
@@ -58,8 +59,9 @@ let run_objdump cmd opts file : symbolizer =
   Symbolizer.create (Hashtbl.find names)
 
 let register opts cmd =
-  let symbolizer = Stream.map Project.Info.file ~f:(fun file ->
-      Or_error.try_with (fun () -> run_objdump cmd opts file)) in
+  let symbolizer =
+    Stream.merge Project.Info.arch Project.Info.file ~f:(fun arch file ->
+        Or_error.try_with (fun () -> run_objdump cmd opts arch file)) in
   Symbolizer.Factory.register name symbolizer
 
 let main cmd opts =

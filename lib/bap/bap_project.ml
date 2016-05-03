@@ -477,11 +477,15 @@ let passes () = DList.to_list passes
 let find_pass = Pass.find
 
 let () =
+  (* a FSM accepting image,file,image,file,.. sequence *)
   let stream f =
-    Stream.either Info.img Info.file |> Stream.map ~f:(function
-        | First img -> Ok (f img)
-        | Second file ->
-          Or_error.errorf "expected structural binary, got raw") in
+    Stream.either Info.img Info.file |>
+    Stream.parse ~init:`start ~f:(fun state info -> match state,info with
+        | _,First img -> Some (Ok (f img)),`ok
+        | `ok,Second file -> None,`start
+        | `start,Second file ->
+          Some (Or_error.errorf "expected structural binary, got raw"),
+          `start) in
   let rooter = stream Rooter.of_image in
   let symbolizer = stream Symbolizer.of_image in
   Rooter.Factory.register "internal" rooter;
