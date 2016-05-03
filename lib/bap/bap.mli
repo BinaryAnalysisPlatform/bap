@@ -584,6 +584,11 @@ module Std : sig
         [ [| "callgraph"; --help |] ]. That means, that plugins can't
         accept arguments that are anonymous or short options *)
     val argv : string array
+
+    val debug   : ('a,Format.formatter,unit) format -> 'a
+    val info    : ('a,Format.formatter,unit) format -> 'a
+    val warning : ('a,Format.formatter,unit) format -> 'a
+    val error   : ('a,Format.formatter,unit) format -> 'a
   end
 
   type 'a printer = Format.formatter -> 'a -> unit
@@ -4786,6 +4791,9 @@ module Std : sig
   module Disasm : sig
     type t = disasm
 
+    (** [create cfg]   *)
+    val create : cfg -> t
+
     (** [disassemble ?roots arch mem] disassemble provided memory region
         [mem] using best available algorithm and backend for the specified
         [arch]. Roots, if provided, should point to memory regions, that
@@ -4823,6 +4831,10 @@ module Std : sig
       val of_file  : ?backend:string -> ?brancher:brancher ->
         ?rooter:rooter -> ?loader:string -> string -> t
     end
+
+    (** [merge d1 d2] is a union of control flow graphs and erros of
+        the two disassemblers.  *)
+    val merge : t -> t -> t
 
     (** returns all instructions that was successfully decoded in an
         ascending order of their addresses. Each instruction is
@@ -6011,21 +6023,9 @@ module Std : sig
     include Regular with type t := t
   end
 
-  (** Source of information.
-
-      Source GADT defines types of arguments, that are used to
-      construct objects.
-
-      For example, a symbolizer can be created from one of the a given
-      sources. A project can be also created from a given source, and
-      so on. The [source] type reifies a type of input to the
-      analysis.*)
+  (** Source of information.*)
   module Source : sig
-    type 'a t =
-      | File : string t          (** external file     *)
-      | Binary : image t         (** structured binary *)
-      | Memory : (mem * arch) t  (** chunk of code   *)
-
+    type 'a t = 'a Or_error.t stream
     type 'a source = 'a t
 
     (** Factory of data processors.
@@ -6033,22 +6033,20 @@ module Std : sig
     module type Factory = sig
       type t
 
-      (** [list source] is a list of names of processors of a given source
-          type. *)
-      val list : 'a source -> string list
+      (** [list source] is a list of names of source providers *)
+      val list : unit -> string list
 
-      (** [find source name args] finds and constructs a processor
-          that has a given [name] *)
-      val find : 'a source -> string -> 'a -> t option
+      (** [create name args] finds a source provider with the
+          given name and creates it *)
+      val find : string -> t source option
 
-      (** [register source name cons] registres a data processor
-          constructor under a given [name] in the internal registry of
-          processors. If a processor with a given name already exists,
-          then it will be superceeded by a new one.  *)
-      val register : 'a source -> string -> ('a -> t option) -> unit
+      (** [register name cons] registers a method that creates a given
+          source of information. If a method with the given name already
+          exists, then it will be superceeded by a new one.  *)
+      val register : string -> t source -> unit
     end
 
-    module Factory(T : T) : Factory with type t := T.t
+    module Factory(T : T) : Factory with type t = T.t
   end
 
   (** Abstract taint.
@@ -6210,7 +6208,7 @@ module Std : sig
 
     (** A factory of symbolizers. Use it register and create
         symbolizers.  *)
-    module Factory : Source.Factory with type t := t
+    module Factory : Source.Factory with type t = t
   end
 
   (** Rooter find start of functions in the binary. *)
@@ -6239,7 +6237,7 @@ module Std : sig
     val union : t -> t -> t
 
     (** A factory of rooters. Useful to register custom rooters  *)
-    module Factory : Source.Factory with type t := t
+    module Factory : Source.Factory with type t = t
   end
 
   (** Brancher is responsible for resolving destinations of branch
@@ -6257,7 +6255,7 @@ module Std : sig
 
     val resolve : t -> mem -> full_insn -> dests
 
-    module Factory : Source.Factory with type t := t
+    module Factory : Source.Factory with type t = t
 
   end
 
@@ -6299,8 +6297,51 @@ module Std : sig
     val run : t -> cfg -> symtab
 
     (** a factory of reconstructors  *)
-    module Factory : Source.Factory with type t := t
+    module Factory : Source.Factory with type t = t
   end
+
+  module Event : sig
+    type t = ..
+    type event = t = ..
+
+
+    val stream : t stream
+
+    val send : t -> unit
+
+
+    (** [register_printer f] when event [e] is printed, [f e] must be
+        [None] if [f] is not a subset of events, that is intended to be
+        printed by an [f]. If it is [Some str], then [str] is printed
+        out.
+
+        If more than one printer returns [Some thing] for the same event,
+        then the last registered has the precedence.
+    *)
+    val register_printer : (t -> string option) -> unit
+
+    module Log : sig
+      type level =
+        | Debug
+        | Info
+        | Warning
+        | Error
+
+      type info = {
+        level : level;
+        section : string;
+        message : string;
+      }
+
+      type event += Message of info
+
+      val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+    end
+
+    include Printable with type t := t
+  end
+
+  type event = Event.t = ..
 
   type project
 
@@ -6311,82 +6352,143 @@ module Std : sig
         information between {{!section:project}passes}.  *)
 
     type t = project
-
+    type input
 
     (** IO interface to a project data structure.  *)
     include Data with type t := t
 
-    (** [from_file filename] creates a project from a binary file. The
-        file must be in format, supportable by some of our loader plugins,
-        e.g., ELF, COFF, MACH-O, etc. A provided [filename] is stored
-        in a {!filename} field of a project.
+    (** [from_file filename] creates a project from a provided input
+        source. The reconstruction is a multi-pass process driven by
+        the following input variables, provided by a user:
 
-        @param on_warning is a function that will be called if some
-        non-critical problem has occurred during loading file;
+        - [brancher] decides instruction successors;
+        - [rooter] decides function starts;
+        - [symbolizer] decides function names;
+        - [reconstructor] provides algorithm for symtab reconstruction;
 
-        @param name is a naming function, that allows to specify a
-        name for a function starting at give address. If [None] is
-        provided, then the default naming scheme will be used, i.e.,
-        [sub_ADDR].
+        The project is built incrementally and iteratively until a
+        fixpoint is reached. The fixpoint is reached when an
+        information stops to flow from the input variables.
 
-        @param backend allows to choose loader plugin
+        The overall algorithm of can depicted with the following
+        diargram, where boxes denote data and ovals denote processes:
 
-        @param roots allows to provide starting approximation of the
-        roots for recursive disassembling procedure. Each root should
-        be a start of a function.
+        {v
+               +---------+   +---------+   +---------+
+               | brancher|   |code/data|   |  rooter |
+               +----+----+   +----+----+   +----+----+
+                    |             |             |
+                    |             v             |
+                    |        -----------        |
+                    +------>(   disasm  )<------+
+                             -----+-----
+                                  |
+                                  v
+              +----------+   +---------+   +----------+
+              |symbolizer|   |   CFG   |   | reconstr +
+              +-----+----+   +----+----+   +----+-----+
+                    |             |             |
+                    |             v             |
+                    |        -----------        |
+                    +------>(  reconstr )<------+
+                             -----+-----
+                                  |
+                                  v
+                             +---------+
+                             |  symtab |
+                             +----+----+
+                                  |
+                                  v
+                             -----------
+                            (  lift IR  )
+                             -----+-----
+                                  |
+                                  v
+                             +---------+
+                             | program |
+                             +---------+
+
+       v}
+
+
+        The input variables, are represented with stream of
+        values. Basically, they can be viewed as cells, that depends
+        on some input. When input changes, the value is recomputed and
+        passed to the stream. Circular dependencies are allowed, so a
+        rooter may actually depend on the [program] term. In case of
+        circular dependencies, the above algorithm will be run
+        iteratively, until a fixpoint is reached. A criterium for the
+        fixpoint, is when no data need to be recomputed. And the data
+        must be recomputed when its input is changed or needs to be
+        recomputed.
+
+        User provided input can depend on any information, but a good
+        start is the information provided by the {!Info} module. It
+        contains several variables, that are guaranteed to be defined
+        in the process of reconstruction.
+
+        For example, let's assume, that a [create_source] function
+        actually requires a filename as its input, to create a source
+        [t], then it can be created as easily as:
+
+        [Stream.map Input.file ~f:create_source]
+
+        As a more complex, example let's assume, that a source now
+        requires that both [arch] and [file] are known. We can combine
+        two different streams of information with a [merge] function:
+
+        [Stream.merge Input.file Input.arch ~f:create_source], where
+        [create_source] is a function of type: [string -> arch -> t].
+
+        If the source requires more than two arguments, then a
+        [Stream.Variadic], that is a generalization of a merge
+        function can be used. Suppose, that a source of information
+        requires three inputs: filename, architecture and compiler
+        name. Then we first define a list of arguments,
+
+        [let args = Stream.Variadic.(args Input.arch $Input.file $Compiler.name)]
+
+        and apply them to our function [create_source]:
+
+        [Stream.Variadic.(apply ~f:create_source args].
+
+
+        Sources, specified in the examples above, will call a [create_source]
+        when all arguments changes. This is an expected behavior for
+        the [arch] and [file] variables, since the do not change during
+        the program computation. Mixing constant and non-constant
+        (with respect to a computation) variables is not that easy, but
+        still can be achieved using [either] and [parse] combinators.
+        For example, let's assume, that a [source] requires [arch] and
+        [cfg] as its input:
+
+        {[
+          Stream.either Input.arch Input.cfg |>
+          Stream.parse inputs ~init:nil ~f:(fun create -> function
+              | First arch -> None, create_source arch
+              | Second cfg -> Some (create cfg), create)
+        ]}
+
+        In the example, we parse the stream that contains either
+        architectures or control flow graphs with a state of type,
+        [cfg -> t Or_error.t]. Every time an architecture is changed,
+        (i.e., a new project is started), we recreate a our state,
+        by calling the [create_source] function. Since, we can't
+        proof, that architecture will be decided before the [cfg], or
+        decided at all we need to provide an initial [nil] function.
+        It can return either a bottom value, e.g.,
+        [let nil _ = Or_error.of_string "expected arch"]
+
+        or it can just provide an empty information.
     *)
-    val from_file :
-      ?on_warning:(Error.t -> unit Or_error.t) ->
-      ?loader:string ->
+    val create :
       ?disassembler:string ->
-      ?brancher:brancher ->
-      ?symbolizer:symbolizer ->
-      ?rooter:rooter ->
-      ?reconstructor:reconstructor ->
-      string -> t Or_error.t
+      ?brancher:brancher source ->
+      ?symbolizer:symbolizer source ->
+      ?rooter:rooter source ->
+      ?reconstructor:reconstructor source ->
+      input -> t Or_error.t
 
-    (** [from_image image] is like {!from_file} but accepts already
-        loaded image of a binary file. If [image] was loaded from a
-        file, then {!filename} field is set to the name of the file.  *)
-    val from_image :
-      ?disassembler:string ->
-      ?brancher:brancher ->
-      ?symbolizer:symbolizer ->
-      ?rooter:rooter ->
-      ?reconstructor:reconstructor ->
-      image -> t Or_error.t
-
-    (** [from_mem arch mem] creates a project directly from a memory
-        object. Parameters [name] and [roots] has the same meaning as
-            in {!from_file}  *)
-    val from_mem :
-      ?disassembler:string ->
-      ?brancher:brancher ->
-      ?symbolizer:symbolizer ->
-      ?rooter:rooter -> ?reconstructor:reconstructor ->
-      arch -> mem -> t Or_error.t
-
-    (** [from_string arch string] creates a memory object from a
-        provided string and uses {!from_mem} to create a project.  *)
-    val from_string :
-      ?base:addr ->
-      ?disassembler:string ->
-      ?brancher:brancher ->
-      ?symbolizer:symbolizer ->
-      ?rooter:rooter ->
-      ?reconstructor:reconstructor ->
-      arch -> string -> t Or_error.t
-
-    (** [from_bigstring arch bigstring] is the same as {!from_string}
-        but accepts a value of type [bigstring] *)
-    val from_bigstring :
-      ?base:addr ->
-      ?disassembler:string ->
-      ?brancher:brancher ->
-      ?symbolizer:symbolizer ->
-      ?rooter:rooter ->
-      ?reconstructor:reconstructor ->
-      arch -> Bigstring.t -> t Or_error.t
 
     (** [arch project] reveals the architecture of a loaded file  *)
     val arch : t -> arch
@@ -6474,6 +6576,45 @@ module Std : sig
         e.g., [if Project.has project mark]
     *)
     val has : t -> 'a tag -> bool
+
+    (** Information obtained during project reconstruction.
+
+        These pieces of information are guaranteed to be discovered
+        during the project reconstruction. See {!Project.create}
+        function for more information on the reconstruction process. *)
+    module Info : sig
+      (** occurs everytime a new file is opened. The value is a filename  *)
+      val file : string stream
+
+      (** occurs once input architecture is known  *)
+      val arch : arch stream
+
+      (** occurs once input memory is loaded  *)
+      val data : value memmap stream
+
+      (** occurs once code segment is discovered  *)
+      val code : value memmap stream
+
+      (** occurs everytime a whole program control flow graph is changed  *)
+      val cfg : cfg stream
+
+      (** occurs everytime a symbol table is changed  *)
+      val symtab : symtab stream
+
+      (** occurs every time a program term is changed during the
+          project reconstruction process.   *)
+      val program : program term stream
+    end
+
+    module Input : sig
+      type t = input
+      val file : ?loader:string -> filename:string -> t
+      val binary : ?base:addr -> arch -> filename:string -> t
+      val create : arch -> string -> code:value memmap -> data: value memmap -> t
+      val register_loader : string -> (string -> t) -> unit
+      val available_loaders : unit -> string list
+    end
+
 
     (** {3 Registering passes}
 
@@ -6576,14 +6717,5 @@ module Std : sig
     (**/**)
     val restore_state : t -> unit
     (**/**)
-
-    (** A Factory of projects.   *)
-    module Factory : Source.Factory
-      with type t =
-             ?disassembler:string ->
-             ?brancher:brancher ->
-             ?symbolizer:symbolizer ->
-             ?rooter:rooter ->
-             ?reconstructor:reconstructor -> unit -> t Or_error.t
   end
 end

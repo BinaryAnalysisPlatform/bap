@@ -30,9 +30,7 @@ let run_unit_tests () =
   run_test_tt_main (suite ())
 
 let run_inline_tests () =
-  Ppx_inline_test_lib.Runtime.(summarize () |>
-                               Test_result.record;
-                               Test_result.exit ())
+  Ppx_inline_test_lib.Runtime.exit ()
 
 let () = match Array.to_list Sys.argv with
   | _ :: "inline-test-runner" :: _ -> run_inline_tests ()

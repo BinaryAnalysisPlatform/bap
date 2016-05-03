@@ -216,7 +216,7 @@ struct symbol {
             // entry. We can't afford this.
             if (addr) {
                 addr_ = addr;
-                size_ = 8;
+                size_ = 4;
             }
         }
     }

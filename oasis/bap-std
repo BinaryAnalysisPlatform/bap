@@ -16,7 +16,7 @@ Library bap
                    bap.types,
                    bap-future
   Modules:         Bap
-  InternalModules: Bap_project, Bap_self
+  InternalModules: Bap_event, Bap_project, Bap_self
 
 
 Library types
@@ -90,6 +90,7 @@ Library disasm
   FindlibName:   disasm
   BuildDepends:  bap.image,
                  bap.types,
+                 bap-future,
                  camlzip,
                  ocamlgraph,
                  ppx_here

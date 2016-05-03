@@ -5,54 +5,21 @@ open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_sema.Std
+open Bap_event
 
 type t
 type project = t
 type pass [@@deriving sexp_of]
+type input
+type second = float
 
-val from_file :
-  ?on_warning:(Error.t -> unit Or_error.t) ->
-  ?loader:string ->
+val create :
   ?disassembler:string ->
-  ?brancher:brancher ->
-  ?symbolizer:symbolizer ->
-  ?rooter:rooter ->
-  ?reconstructor:reconstructor ->
-  string -> t Or_error.t
-
-val from_image :
-  ?disassembler:string ->
-  ?brancher:brancher ->
-  ?symbolizer:symbolizer ->
-  ?rooter:rooter ->
-  ?reconstructor:reconstructor ->
-  image -> t Or_error.t
-
-val from_mem :
-  ?disassembler:string ->
-  ?brancher:brancher ->
-  ?symbolizer:symbolizer ->
-  ?rooter:rooter ->
-  ?reconstructor:reconstructor ->
-  arch -> mem -> t Or_error.t
-
-val from_string :
-  ?base:addr ->
-  ?disassembler:string ->
-  ?brancher:brancher ->
-  ?symbolizer:symbolizer ->
-  ?rooter:rooter ->
-  ?reconstructor:reconstructor ->
-  arch -> string -> t Or_error.t
-
-val from_bigstring :
-  ?base:addr ->
-  ?disassembler:string ->
-  ?brancher:brancher ->
-  ?symbolizer:symbolizer ->
-  ?rooter:rooter ->
-  ?reconstructor:reconstructor ->
-  arch -> Bigstring.t -> t Or_error.t
+  ?brancher:brancher source ->
+  ?symbolizer:symbolizer source ->
+  ?rooter:rooter source ->
+  ?reconstructor:reconstructor source ->
+  input -> t Or_error.t
 
 val arch : t -> arch
 val program : t -> program term
@@ -68,7 +35,25 @@ val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
 
-type second = float
+module Info : sig
+  val file : string stream
+  val arch : arch stream
+  val data : value memmap stream
+  val code : value memmap stream
+  val cfg : cfg stream
+  val symtab : symtab stream
+  val program : program term stream
+end
+
+module Input : sig
+  type t = input
+  val file : ?loader:string -> filename:string -> t
+  val binary : ?base:addr -> arch -> filename:string -> t
+
+  val create : arch -> string -> code:value memmap -> data: value memmap -> t
+  val register_loader : string -> (string -> t) -> unit
+  val available_loaders : unit -> string list
+end
 
 module Pass : sig
   type t = pass [@@deriving sexp_of]
@@ -86,7 +71,6 @@ module Pass : sig
   val name : t -> string
   val autorun : t -> bool
 
-
   val starts    : t -> second stream
   val finishes  : t -> second stream
   val successes : t -> second stream
@@ -97,23 +81,15 @@ end
 val find_pass : string -> pass option
 
 val register_pass :
-  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string -> (t -> t) -> unit
+  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string
+  -> (t -> t) -> unit
 val register_pass':
-  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string -> (t -> unit) -> unit
+  ?autorun:bool -> ?runonce:bool -> ?deps:string list -> ?name:string
+  -> (t -> unit) -> unit
 
 
 val pass_registrations : pass stream
 val passes : unit -> pass list
-
-
-module Factory : Source.Factory
-  with type t =
-         ?disassembler:string ->
-         ?brancher:brancher ->
-         ?symbolizer:symbolizer ->
-         ?rooter:rooter ->
-         ?reconstructor:reconstructor -> unit -> t Or_error.t
-
 
 val restore_state : t -> unit
 

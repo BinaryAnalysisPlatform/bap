@@ -6,7 +6,9 @@ module Std = struct
   include Bap_image_std
   include Bap_disasm_std
   include Bap_sema.Std
+  module Event = Bap_event
   module Project = Bap_project
   module Self = Bap_self.Create
   type project = Project.t
+  type event = Event.t = ..
 end

@@ -1,3 +1,5 @@
 REC
 PKG cmdliner
+PKG curl
 B ../_build/src
+B ../_build/lib/bap_byteweight

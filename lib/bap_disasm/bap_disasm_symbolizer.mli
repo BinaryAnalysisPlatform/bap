@@ -17,4 +17,5 @@ val resolve : t -> addr -> string
 
 val chain : t list -> t
 
-module Factory : Factory with type t := t
+
+module Factory : Factory with type t = t

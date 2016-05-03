@@ -15,8 +15,7 @@ type cfg = Bap_disasm_rec.Cfg.t [@@deriving compare]
 module Disasm : sig
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
-  val create : ?errors:Bap_disasm_rec.error list ->
-    cfg -> disasm
+  val create : cfg -> disasm
   val of_mem : (arch -> mem -> disasm Or_error.t) disassembler
   val of_image : (image -> disasm Or_error.t) disassembler
   val of_file : (?loader:string -> string -> disasm Or_error.t) disassembler
@@ -27,6 +26,7 @@ module Disasm : sig
     val of_file : (?loader:string -> string -> disasm) disassembler
   end
 
+  val merge : t -> t -> t
   val insns : t -> (mem * insn) seq
   val cfg : t -> cfg
   val errors : t -> Bap_disasm_rec.error list

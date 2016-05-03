@@ -2,36 +2,57 @@ open Core_kernel.Std
 open Bap.Std
 open Cmdliner
 open Format
+open Bap_future.Std
 
 include Self()
 
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 
-let find_roots path length threshold arch mem : addr list  =
+let create_finder path length threshold arch  =
   match Sigs.load ?path ~mode:"bytes" arch with
-  | None ->
-    eprintf "No signatures found@.Please, use `bap-byteweight update' \
-             to get the latest available signatures.@.%!";
-    []
-  | Some data ->
+  | Error `No_signatures ->
+    info "signature database is not available";
+    info "advice - use `bap-byteweight` to install signatures";
+    Or_error.errorf "no signatures"
+  | Error (`Corrupted err) ->
+    let path = Option.value path ~default:Sigs.default_path in
+    error "signature database is corrupted: %s" err;
+    info "advice - delete signatures at `%s'" path;
+    info "advice - use `bap-byteweight` to install signatures";
+    Or_error.errorf "corrupted database"
+  | Error (`No_entry err) ->
+    error "no signatures for specified compiler and architecture";
+    info "advice - try to use default compiler entry";
+    info "advice - create new entries with `bap-byteweight' tool";
+    Or_error.errorf "no entry"
+  | Error (`Sys_error err) ->
+    error "signature loading was prevented by a system error: %s" err;
+    Or_error.errorf "system error"
+  | Ok data ->
     let bw = Binable.of_string (module BW) data in
-    BW.find bw ~length ~threshold mem
+    Ok (BW.find bw ~length ~threshold)
 
 let main path length threshold =
-  let find arch mem = find_roots path length threshold arch mem in
-  let rooter xs =
-    xs |> Seq.of_list |> Rooter.create |> Option.some in
-  let of_mem (mem,arch) = rooter (find arch mem) in
-  let of_image img =
-    let arch = Image.arch img in
-    Image.segments img |>
-    Table.foldi ~init:[] ~f:(fun mem sec roots ->
-        if Image.Segment.is_executable sec
-        then find arch mem @ roots
-        else roots) |> rooter in
-  Rooter.Factory.register Source.Memory name of_mem;
-  Rooter.Factory.register Source.Binary name of_image
+  let finder arch = create_finder path length threshold arch in
+  let find finder mem =
+    Memmap.to_sequence mem |>
+    Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,v) ->
+        Set.union roots @@ Addr.Set.of_list (finder mem)) in
+  let find_roots arch mem = match finder arch with
+    | Error _ as err ->
+      warning "unable to provide rooter service";
+      err
+    | Ok finder -> match find finder mem with
+      | roots when Set.is_empty roots ->
+        info "no roots was found";
+        info "advice - check your compiler's signatures";
+        Ok (Rooter.create Seq.empty)
+      | roots -> Ok (roots |> Set.to_sequence |> Rooter.create)  in
+  let rooter =
+    let open Project.Info in
+    Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
+  Rooter.Factory.register name rooter
 
 module Cmdline = struct
 

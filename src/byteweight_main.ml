@@ -1,8 +1,10 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_plugins.Std
-open Or_error
+open Result.Monad_infix
 open Format
+
+include Self()
 
 (** list of posix regexes of files that are ignored during
     training.  *)
@@ -17,23 +19,31 @@ let ignored = [
 module BW = Bap_byteweight.Bytes
 module Sigs = Bap_byteweight_signatures
 
-let train_on_file meth length db path : unit t =
-  Image.create path >>| fun (img,warns) ->
+let train_on_file meth length db path : (unit,'a) Result.t =
+  Image.create path >>= fun (img,warns) ->
   let arch = Image.arch img in
   let symtab = Addr.Table.create () in
   Table.iteri (Image.symbols img) ~f:(fun mem _ ->
       Addr.Table.add_exn symtab ~key:(Memory.min_addr mem) ~data:());
   let test mem = Addr.Table.mem symtab (Memory.min_addr mem) in
-  let bw = if not (Sys.file_exists db) then BW.create ()
+  let bw = if not (Sys.file_exists db) then Ok (BW.create ())
     else match Sigs.load ~mode:"bytes" ~path:db arch with
-      | Some s when meth = `update ->
-        Binable.of_string (module BW) s
-      | _ -> BW.create () in
+      | Ok s -> if meth = `update
+        then Ok (Binable.of_string (module BW) s)
+        else Ok (BW.create ())
+      | Error _ when meth = `rewrite -> Ok (BW.create ())
+      | Error e ->
+        Or_error.errorf "can't update entry, because %s"
+          (Sigs.string_of_error e)  in
+  bw >>= fun bw ->
   Table.iteri (Image.segments img) ~f:(fun mem sec ->
       if Image.Segment.is_executable sec then
         BW.train bw ~max_length:length test mem);
   let data = Binable.to_string (module BW) bw in
-  Sigs.save ~mode:"bytes" ~path:db arch data
+  Sigs.save ~mode:"bytes" ~path:db arch data |>
+  Result.map_error ~f:(fun e ->
+      Error.createf "signatures are not updated: %s" @@
+      Sigs.string_of_error e)
 
 let matching =
   let open FileUtil in
@@ -66,15 +76,15 @@ let train meth length comp db paths =
   printf "Signatures are stored in %s\n%!" db;
   Ok ()
 
-let create_bw img path : BW.t t =
+let create_bw img path =
   let arch = Image.arch img in
-  let data = Sigs.load ?path ~mode:"bytes" arch in
-  Result.of_option data
-    ~error:(Error.of_string "failed to read signatures from database")
-  >>| fun data ->
+  Sigs.load ?path ~mode:"bytes" arch |>
+  Result.map_error ~f:(fun e ->
+      Error.createf "failed to read signatures from a database: %s"
+        (Sigs.string_of_error e)) >>| fun data ->
   Binable.of_string (module BW) data
 
-let find threshold length comp path input : unit t =
+let find threshold length comp path input =
   Image.create input >>= fun (img,_warns) ->
   create_bw img path >>= fun bw ->
   Table.iteri (Image.segments img) ~f:(fun mem sec ->
@@ -87,7 +97,7 @@ let find threshold length comp path input : unit t =
         loop 0);
   Ok ()
 
-let symbols print_name print_size input : unit t =
+let symbols print_name print_size input =
   Image.create input >>| fun (img,_warns) ->
   let syms = Image.symbols img in
   Table.iteri syms ~f:(fun mem sym ->
@@ -98,7 +108,7 @@ let symbols print_name print_size input : unit t =
       printf "%a %s%s\n" Addr.pp addr size name);
   printf "Outputted %d symbols\n" (Table.length syms)
 
-let dump info length threshold path (input : string) : unit t =
+let dump info length threshold path (input : string) =
   Image.create input >>= fun (img, _warns) ->
   match info with
   | `BW ->
@@ -141,10 +151,10 @@ let fetch fname url =
 
 let fetch fname url = try Ok (fetch fname url) with
   | Curl.CurlException (err,n,_) ->
-    errorf "failed to fetch: %s" (Curl.strerror err)
+    Or_error.errorf "failed to fetch: %s" (Curl.strerror err)
   | exn -> Or_error.of_exn exn
 
-let install src dst = try_with begin fun () ->
+let install src dst = Or_error.try_with begin fun () ->
     create_parent_dir dst;
     FileUtil.cp [src] dst;
     printf "Installed signatures to %s\n" dst;
