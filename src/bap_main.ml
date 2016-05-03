@@ -128,7 +128,6 @@ let main o =
       and brancher = brancher o
       and reconstructor = reconstructor o
       and symbolizer = symbolizer o in
-      debug "reading input";
       let input =
         Project.Input.file ~loader:o.loader ~filename: o.filename in
       Project.create input ~disassembler:o.disassembler

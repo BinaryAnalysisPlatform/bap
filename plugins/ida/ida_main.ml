@@ -24,7 +24,6 @@ end
 
 
 let extract ida path arch =
-  debug "extracting from %a-%s" Arch.pp arch path;
   let id =
     let ida = match ida with
       | None -> "default"
@@ -37,10 +36,7 @@ let extract ida path arch =
         warning "didn't find any symbols";
         info "this plugin doesn't work with IDA Free";
         []
-      | syms ->
-        eprintf "We're here\n";
-        debug "got non-empty set of symbols";
-        Symbols.Cache.save id syms; syms in
+      | syms -> Symbols.Cache.save id syms; syms in
   let size = Arch.addr_size arch in
   let width = Size.in_bits size in
   let addr = Addr.of_int64 ~width in
@@ -53,11 +49,11 @@ let register_source (module T : Target) ida =
     let open Project.Info in
     let extract file arch = Or_error.try_with (fun () ->
         extract ida file arch |> T.of_blocks) in
-    Stream.Variadic.(apply (args file $ arch) ~f:extract) in
+    Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
 let register ida =
-  info "IDA is found, providing services";
+  info "IDA was found, providing services";
   register_source (module Rooter) ida;
   register_source (module Symbolizer) ida;
   register_source (module Reconstructor) ida
