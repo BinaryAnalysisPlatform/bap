@@ -1,87 +1,102 @@
 open Core_kernel.Std
 open Regular.Std
+open Bap_future.Std
 open Bap.Std
 open Bap_ida.Std
 
-open Cmdliner
 open Format
-open Option.Monad_infix
+open Result.Monad_infix
 
 include Self()
-
-let path : string option Term.t =
-  let doc = "Use IDA to extract symbols from file. \
-             You can optionally provide path to IDA executable,\
-             or executable name." in
-  Arg.(value & opt (some string) None & info ["path"] ~doc)
 
 module Symbols = Data.Make(struct
     type t = (string * int64 * int64) list
     let version = "0.1"
   end)
 
+module type Target = sig
+  type t
+  val of_blocks : (string * addr * addr) seq -> t
+  module Factory : sig
+    val register : string -> t source -> unit
+  end
+end
 
-let register ida =
-  let make_id ida path =
+
+let extract ida path arch =
+  debug "extracting from %a-%s" Arch.pp arch path;
+  let id =
     let ida = match ida with
       | None -> "default"
       | Some ida -> ida in
     Data.Cache.digest ~namespace:"ida" "%s%s" (Digest.file path) ida in
-  let syms_of_ida ida path =
-    try Some Ida.(with_file ?ida path get_symbols) with
-      exn ->
-      eprintf "Warning: IDA failed: %a@." Exn.pp exn; None  in
-  let syms ida path =
-    let id = make_id ida path in
-    match Symbols.Cache.load id with
-    | Some syms -> Some syms
-    | None -> match syms_of_ida ida path with
-      | None -> None
-      | Some syms ->
-        Symbols.Cache.save id syms;
-        Some syms in
-  let extract img =
-    let arch = Image.arch img in
-    let size = Arch.addr_size arch in
-    let width = Size.in_bits size in
-    let addr = Addr.of_int64 ~width in
-    let ida = match size with
-      | `r32 -> ida
-      | `r64 -> match ida with
-        | None -> Some "idaq64"
-        | Some ida when
-            String.is_suffix ida "64" ||
-            String.is_suffix ida "64.exe" -> Some ida
-        | _some_other_ida ->
-          eprintf "Warning: use 64 bit IDA with 64-bit binaries@.";
-          ida in
-    Image.filename img >>= syms ida >>|
-    List.map ~f:(fun (n,s,e) -> n, addr s, addr e) >>| Seq.of_list in
-  let rooter img = extract img >>| Rooter.of_blocks in
-  let symbolizer img = extract img >>| Symbolizer.of_blocks in
-  let reconstructor img = extract img >>| Reconstructor.of_blocks in
-  Rooter.Factory.register Source.Binary name rooter;
-  Symbolizer.Factory.register Source.Binary name symbolizer;
-  Reconstructor.Factory.register Source.Binary name reconstructor
+  let syms = match Symbols.Cache.load id with
+    | Some syms -> syms
+    | None -> match Ida.(with_file ?ida path get_symbols) with
+      | [] ->
+        warning "didn't find any symbols";
+        info "this plugin doesn't work with IDA Free";
+        []
+      | syms ->
+        eprintf "We're here\n";
+        debug "got non-empty set of symbols";
+        Symbols.Cache.save id syms; syms in
+  let size = Arch.addr_size arch in
+  let width = Size.in_bits size in
+  let addr = Addr.of_int64 ~width in
+  List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
+  Seq.of_list
+
+
+let register_source (module T : Target) ida =
+  let source =
+    let open Project.Info in
+    let extract file arch = Or_error.try_with (fun () ->
+        extract ida file arch |> T.of_blocks) in
+    Stream.Variadic.(apply (args file $ arch) ~f:extract) in
+  T.Factory.register name source
+
+let register ida =
+  info "IDA is found, providing services";
+  register_source (module Rooter) ida;
+  register_source (module Symbolizer) ida;
+  register_source (module Reconstructor) ida
+
 
 let main ida =
   if Ida.exists ?ida () then register ida
   else match ida with
-    | None -> ()
+    | None ->
+      info "can't find IDA instance, IDA plugin is disabled";
+      info "advice - if you have IDA installed, provide a path to it"
     | Some _ ->
-      eprintf "Error: IDA was request, but we failed to find it@.";
+      error "IDA was request, but we failed to find it@.";
+      info "advice - if you have IDA installed, provide a path to it";
       exit 1
 
-let man = [
-  `S "DESCRIPTION";
-  `P "This plugin provides rooter, symbolizer and reconstuctor services"
-]
+module Main = struct
+  open Cmdliner
+  let man = [
+    `S "DESCRIPTION";
+    `P "This plugin provides rooter, symbolizer and reconstuctor services.";
+    `P "If IDA instance is found on the machine, or specified by a
+  user, it will be queried for the specified information."
 
-let info = Term.info name ~version ~doc ~man
+  ]
 
-let () =
-  let run = Term.(const main $path) in
-  match Term.eval ~argv ~catch:false (run,info) with
-  | `Ok () -> ()
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+
+  let path : string option Term.t =
+    let doc = "Use IDA to extract symbols from file. \
+               You can optionally provide path to IDA executable,\
+               or executable name." in
+    Arg.(value & opt (some string) None & info ["path"] ~doc)
+
+  let info = Term.info name ~version ~doc ~man
+
+  let () =
+    let run = Term.(const main $path) in
+    match Term.eval ~argv ~catch:false (run,info) with
+    | `Ok () -> ()
+    | `Help | `Version -> exit 0
+    | `Error _ -> exit 1
+end

@@ -9,12 +9,19 @@ PKG camlzip
 
 B _build
 B _build/lib/bap
-B _build/lib/regular
-B _build/lib/graphlib
-B _build/lib/bap_future
-B _build/lib/bap_plugins
 B _build/lib/bap_bundle
 B _build/lib/bap_config
+B _build/lib/bap_disasm
+B _build/lib/bap_dwarf
+B _build/lib/bap_elf
+B _build/lib/bap_future
+B _build/lib/bap_image
+B _build/lib/bap_plugins
+B _build/lib/bap_sema
+B _build/lib/bap_types
+B _build/lib/graphlib
+B _build/lib/regular
+B _build/lib/text_tags
 
 S lib/bap
 S lib/regular

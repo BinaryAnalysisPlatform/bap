@@ -65,10 +65,3 @@ let of_bil arch = create (dests_of_bil arch)
 
 
 module Factory = Source.Factory(struct type nonrec t = t end)
-
-let of_image img = Some (of_bil (Image.arch img))
-let of_mem (_,arch) = Some (of_bil arch)
-
-let () =
-  Factory.register Source.Binary "internal" of_image;
-  Factory.register Source.Memory "internal" of_mem;

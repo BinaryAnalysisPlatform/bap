@@ -6,32 +6,28 @@ open Bap_options
 
 module type With_factory = sig
   module Factory : sig
-    val list : 'a Source.t -> string list
+    val list : unit -> string list
   end
 end
 
-let enum_processors (source : source) (module T : With_factory) =
-  let ps = match source with
-    | `Memory _ -> T.Factory.list Source.Memory
-    | `Binary   -> T.Factory.list Source.Binary
-    | `File _   -> T.Factory.list Source.File in
-  List.map ps ~f:(fun x -> x,x)
+let enum_processors (module T : With_factory) =
+  T.Factory.list () |> List.map ~f:(fun x -> x,x)
 
 let filename : string Term.t =
   let doc = "Input filename." in
   Arg.(required & pos 0 (some non_dir_file) None &
        info [] ~doc ~docv:"FILE")
 
-let brancher source : string option Term.t =
-  match enum_processors source (module Brancher) with
+let brancher () : string option Term.t =
+  match enum_processors (module Brancher) with
   | [] | [_] -> Term.const None
   | names ->
     let doc = sprintf "Use specified brancher, should be %s" @@
       Arg.doc_alts_enum names in
     Arg.(value & opt (some (enum names)) None & info ["brancher"] ~doc)
 
-let symbolizers src : string list Term.t =
-  match enum_processors src (module Symbolizer) with
+let symbolizers () : string list Term.t =
+  match enum_processors (module Symbolizer) with
   | [] | [_] -> Term.const []
   | names ->
     let doc =
@@ -40,35 +36,29 @@ let symbolizers src : string list Term.t =
       are: %s" @@ Arg.doc_alts_enum names in
     Arg.(value & opt_all (enum names) [] & info ["symbolizer"] ~doc)
 
-let rooters src : string list Term.t =
-  match enum_processors src (module Rooter) with
-  | [] | [_] -> Term.const []
-  | names ->
+let rooters () : string list Term.t =
+  match enum_processors (module Rooter) with
+  | [] -> Term.const []
+  | [x,_] -> Term.const [x]
+  | (x,_) :: _ as names ->
     let doc = sprintf "Use a rooter with a given $(docv) . If an
     option is specified several times, then rooters are
-    merged. Possible values: %s. Since the internal rooter will work
-    only on binaries, that have debugging information, then if no
-    rooter is specified, then it will default to the first rooter in a
-    list of rooters. If you want to disable this behavior and use
-    internal rooter, then specify this explicitly by
-    `--rooter=internal`" @@
-      Arg.doc_alts_enum names in
-    Arg.(value & opt_all (enum names) [] &
+    merged. Possible values: %s." @@ Arg.doc_alts_enum names in
+    Arg.(value & opt_all (enum names) [x] &
          info ["rooter"] ~doc ~docv:"NAME")
 
-let reconstructor source : string option Term.t =
-  match enum_processors source (module Reconstructor) with
+let reconstructor () : string option Term.t =
+  match enum_processors (module Reconstructor) with
   | []  -> Term.const None
   | names ->
     let doc = "Use a specified reconstructor" in
     Arg.(value & opt (some (enum names)) None & info ["reconstructor"] ~doc)
 
-let loader source : string Term.t =
-  Image.available_backends () |>
+let loader () : string Term.t =
+  Project.Input.available_loaders () |>
   List.map ~f:(fun x -> x,x) |> function
-  | [ ]   -> Term.const "<no-loaders-available>"
+  | []   -> Term.const "<no-loaders-available>"
   | [x,_] -> Term.const x
-  | _ when source <> `Binary -> Term.const "nil"
   | backends ->
     let doc = sprintf
         "Backend name for an image loader, should be %s" @@
@@ -86,10 +76,9 @@ let disassembler () : string Term.t =
       Arg.doc_alts_enum backends in
     Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
-
-let symbols source : string list Term.t =
-  let rooters = enum_processors source (module Rooter) in
-  let sybolzs = enum_processors source (module Symbolizer) in
+let symbols () : string list Term.t =
+  let rooters = enum_processors (module Rooter) in
+  let sybolzs = enum_processors (module Symbolizer) in
   match List.filter sybolzs ~f:(List.mem rooters) with
   | [] | [_] -> Term.const []
   | names ->
@@ -117,8 +106,8 @@ let dump_formats () : Bap_fmt_spec.t list Term.t =
     let vopt = match parse "bir" with
       | `Ok fmt -> fmt
       | `Error _ -> `stdout,fmt,None in
-  let doc = sprintf
-      "Print a project using the designated format to a specified
+    let doc = sprintf
+        "Print a project using the designated format to a specified
        destination. If format and destination is not specified, then a
        program will be printed in the IR form to the standard
        output. The argument consists of format specification, and an
@@ -136,9 +125,9 @@ let dump_formats () : Bap_fmt_spec.t list Term.t =
        and corresponding versions. This option can be specified
        several times, to dump the project is several formats (and
        possibly destinations) simultaneously." @@
-    Arg.doc_alts_enum fmts in
-  Arg.(value & opt_all ~vopt Bap_fmt_spec.t [] &
-       info ["dump"; "d"] ~doc)
+      Arg.doc_alts_enum fmts in
+    Arg.(value & opt_all ~vopt Bap_fmt_spec.t [] &
+         info ["dump"; "d"] ~doc)
 
 let source_type : source Term.t =
   let doc = "Defines a format of the input file. It can be either a
@@ -161,7 +150,7 @@ let source_type : source Term.t =
 
 let verbose : bool Term.t =
   let doc = "Print verbose output" in
-  Arg.(value & flag & info ["verbose"; "v"] ~doc)
+  Arg.(value & flag & info ["verbose"] ~doc)
 
 let load_doc =
   "Dynamically loads file $(i,PATH).plugin. A plugin must be compiled

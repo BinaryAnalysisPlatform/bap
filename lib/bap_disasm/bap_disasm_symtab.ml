@@ -12,17 +12,16 @@ module Insn = Bap_disasm_insn
 
 
 type block = Block.t [@@deriving compare, sexp_of]
-type cfg = Cfg.t
+type cfg = Cfg.t [@@deriving compare]
 
 
-type fn = string * block * cfg
+type fn = string * block * cfg [@@deriving compare]
 
 let sexp_of_fn (name,block,cfg) =
   Sexp.List [sexp_of_string name; sexp_of_addr (Block.addr block)]
 
 module Fn = Opaque.Make(struct
-    type t = fn
-    let compare x y = String.compare (fst3 x) (fst3 y)
+    type t = fn [@@deriving compare]
     let hash x = String.hash (fst3 x)
   end)
 
@@ -32,7 +31,12 @@ type t = {
   memory : fn Memmap.t;
 } [@@deriving sexp_of]
 
-type symtab = t [@@deriving sexp_of]
+
+
+let compare t1 t2 =
+  Addr.Map.compare Fn.compare t1.addrs t2.addrs
+
+type symtab = t [@@deriving compare, sexp_of]
 
 let span ((name,entry,cfg) as fn) =
   Cfg.nodes cfg |> Seq.fold ~init:Memmap.empty ~f:(fun map blk ->

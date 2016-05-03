@@ -1,7 +1,8 @@
 open Core_kernel.Std
-open Re_perl
+open Bap_future.Std
 open Bap.Std
 open Regular.Std
+open Re_perl
 open Cmdliner
 open Format
 open Option.Monad_infix
@@ -52,20 +53,21 @@ let run_objdump cmd opts file : symbolizer =
       | None -> ()
       | Some (name,addr) -> add name addr) ic;
   In_channel.close ic;
+  if Hashtbl.length names = 0
+  then warning "failed to obtain symbols";
   Symbolizer.create (Hashtbl.find names)
 
 let register opts cmd =
-  let symbolizer img =
-    Image.filename img >>| run_objdump cmd opts
-  in
-  Symbolizer.Factory.register Source.Binary name symbolizer
+  let symbolizer = Stream.map Project.Info.file ~f:(fun file ->
+      Or_error.try_with (fun () -> run_objdump cmd opts file)) in
+  Symbolizer.Factory.register name symbolizer
 
 let main cmd opts =
   let is_executable exe =
     try Some (FileUtil.which exe) with Not_found -> None in
   let command = List.find_map ~f:is_executable in
   match cmd with
-    Some s -> register opts s (* a specific path to objdump  given *)
+  | Some s -> register opts s (* a specific path to objdump  given *)
   | None ->
     (* no specific path; lets try to infer, and return () even if *)
     (* we fail *)

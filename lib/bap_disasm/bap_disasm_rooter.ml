@@ -29,8 +29,3 @@ let of_blocks blocks =
           | Some a when Addr.(a < sa) -> Some a
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
-
-
-
-let () =
-  Factory.register Source.Binary "internal" (fun img -> Some (of_image img))

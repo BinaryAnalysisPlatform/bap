@@ -1,2 +1,3 @@
 PKG cmdliner
 REC
+B ../../_build/lib/bap_byteweight

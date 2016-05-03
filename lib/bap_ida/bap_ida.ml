@@ -88,17 +88,8 @@ module Ida = struct
         | [_;path] -> Some (String.strip path)
         | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
-  let locate exe =
-    let ends_with = Re.execp (Re_posix.re (exe ^ "$") |> Re.compile) in
-    let ends_with = FileUtil.Custom ends_with in
-    pread "locate %s" exe |>
-    FileUtil.(filter (And (ends_with, And (Is_file, Is_exec))))
-    |> function
-    | [] -> exe
-    | x :: _ -> x
-
   let find exe =
-    try FileUtil.which exe with Not_found -> locate exe
+    try FileUtil.which exe with Not_found -> exe
 
   let is_headless ida =
     Re.execp (Re_posix.re ".*/?idal(64)?" |> Re.compile) ida

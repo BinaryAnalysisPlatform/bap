@@ -10,8 +10,6 @@ type symbolizer = t
 let name_of_addr addr =
   sprintf "sub_%s" @@ Addr.string_of_value addr
 
-
-
 let create fn = Symbolizer fn
 
 let run (Symbolizer f) a = f a
@@ -36,7 +34,7 @@ let of_image img =
     | Some sym -> Some (Image.Symbol.name sym) in
   create find
 
-let of_blocks seq = 
+let of_blocks seq =
   let syms = Addr.Table.create () in
   Seq.iter seq ~f:(fun (name,addr,_) ->
       Hashtbl.set syms ~key:addr ~data:name);
@@ -45,7 +43,3 @@ let of_blocks seq =
 module Factory = Factory(struct type nonrec t = t end)
 
 let internal_image_symbolizer = (fun img -> Some (of_image img))
-
-let () =
-  Factory.register Binary "internal" internal_image_symbolizer;
-

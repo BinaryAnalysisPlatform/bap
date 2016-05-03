@@ -1,5 +1,5 @@
 language: c
-install: wget https://raw.githubusercontent.com/ocaml/ocaml-travisci-skeleton/master/.travis-opam.sh
+install: wget https://raw.githubusercontent.com/talex5/ocaml-travisci-skeleton/containers/.travis-opam.sh
 script: bash -ex .travis-opam.sh
 sudo: false
 addons:
