@@ -1,0 +1,9 @@
+(* OASIS_START *)
+(* OASIS_STOP *)
+#4 "oasis/common.ocamlbuild.ml.in"
+let oasis_env =
+  BaseEnvLight.load
+    ~filename:MyOCamlbuildBase.env_filename
+    ~allow_empty:true
+    ()
+let expand s = BaseEnvLight.var_expand s oasis_env

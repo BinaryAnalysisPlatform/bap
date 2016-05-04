@@ -1,0 +1,49 @@
+#load "unix.cma";;
+(* OASIS_START *)
+(* OASIS_STOP *)
+#5 "oasis/common.setup.ml.in"
+let definition_end = BaseEnv.var_ignore
+
+let ctxt = !BaseContext.default
+
+(** [add_variable ?define ~doc name] defines a variable with a [name]
+    and short description [doc]. The variable can be set via the
+    command line with [--var=value] syntax, or through the environment,
+    e.g., [var=value ./configure]
+
+    Note: A variable name must conform to OCaml variable name
+    requirements. In the command line a variable name is dashified,
+    i.e., all underscores are mapped to dashes.
+
+    Parameter [define] is some function, that is applied to [None] if
+    a variable wasn't set explicitly by a user and to [Some x], if a
+    user set the variable to string [x]. A function should return a
+    final value of a variable.
+*)
+let add_variable ?define ~doc (name : string) : unit =
+  let value = ref None in
+  let set x = value := Some x in
+  let get () = match define with
+    | Some f -> f !value
+    | None -> match !value with
+      | None -> "#undefined"
+      | Some x -> x in
+  let dashify x = "--" ^ String.map (function '_' -> '-' | c -> c) x in
+  BaseEnv.var_define
+    ~hide:false ~dump:true
+    ~short_desc:(fun () -> doc)
+    ~cli:(BaseEnv.CLIUser [dashify name,Arg.String set,"str " ^ doc])
+    name get |>
+  definition_end
+
+
+let getvar var : string option =
+  try Some (BaseEnv.var_get var) with exn -> None
+
+let is_defined var : bool =
+  match getvar var with None -> false | _ -> true
+
+let is_undefined var : bool = not (is_defined var)
+
+let is_set_to var value : bool =
+  is_defined var && BaseEnv.var_get var = value

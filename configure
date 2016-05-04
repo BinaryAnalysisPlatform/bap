@@ -26,9 +26,14 @@ for i in "$@"; do
 done
 
 SECTIONS=`ocaml tools/oasis_sections.ml $@`
-ocaml tools/cat.ml $SECTIONS _oasis
-ocaml tools/cat.ml _tags.in _tags
-ocaml tools/cat.ml myocamlbuild.ml.in myocamlbuild.ml
-ocaml tools/cat.ml setup.ml.in setup.ml
-oasis -quiet setup
-ocaml setup.ml -quiet -configure "$@"
+TAGS=`ocaml tools/collect.ml tags $SECTIONS`
+PLUGINS=`ocaml tools/collect.ml ocamlbuild.ml $SECTIONS`
+SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
+AB=`ocaml tools/collect.ml files.ab $SECTIONS`
+
+ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
+ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $PLUGINS myocamlbuild.ml.in myocamlbuild.ml
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
+oasis setup
+ocaml setup.ml -configure "$@"
