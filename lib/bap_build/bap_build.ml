@@ -22,7 +22,6 @@ module Plugin_rules = struct
     "debug";
     "short_paths";
     "custom";
-    "ppx(ppx-bap)"
   ]
 
   let needs_threads pkgs =
