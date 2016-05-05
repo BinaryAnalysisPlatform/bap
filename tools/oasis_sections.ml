@@ -2,9 +2,12 @@ let (/) = Filename.concat
 
 let header = "common"
 
+let has_extension name =
+  String.contains name '.'
+
 let everything =
   Sys.readdir "oasis" |> Array.to_list |>
-  List.filter (fun sec -> sec <> header)
+  List.filter (fun sec -> sec <> header && not (has_extension sec))
 
 let enable_feature arg =
   let length = String.length arg in

@@ -1,10 +1,3 @@
-#load "unix.cma";;
-(* OASIS_START *)
-(* OASIS_STOP *)
-let definition_end = BaseEnv.var_ignore
-
-let ctxt = !BaseContext.default
-
 let piqic () : unit =
   let chop str = try
       Filename.chop_extension str
@@ -139,13 +132,6 @@ let llvm_lib () : unit =
        BaseEnv.var_get lib) |>
   definition_end
 
-let is_defined var : bool =
-  try (BaseEnv.var_get var) |> ignore; true with exn -> false
-
-let is_undefined var : bool = not (is_defined var)
-
-let is_set_to var value : bool =
-  is_defined var && BaseEnv.var_get var = value
 
 
 let check =
@@ -163,8 +149,6 @@ let install_headers hdrs =
       match lib.OASISTypes.lib_findlib_name with
       | Some "bap" -> (cs, bs, lib, hdrs)
       | _ -> (cs, bs, lib, [])
-
-
 
 let define definitions =
   List.iter (fun f -> try f () with exn -> ()) definitions

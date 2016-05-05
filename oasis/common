@@ -17,7 +17,6 @@ XOCamlbuildExtraArgs:
 
 BuildDepends: ppx_jane, core_kernel
 
-FilesAB: lib/bap_config/bap_config.ml.ab
 
 PreConfCommand: $rm setup.data
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data

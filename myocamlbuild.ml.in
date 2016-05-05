@@ -1,12 +1,4 @@
-(* OASIS_START *)
-(* OASIS_STOP *)
-let oasis_env =
-  BaseEnvLight.load
-    ~filename:MyOCamlbuildBase.env_filename
-    ~allow_empty:true
-    ()
 let nonempty = function (A s) -> String.length s <> 0 | _ -> true
-let expand s = BaseEnvLight.var_expand s oasis_env;;
 
 (* the piqi support is rather fragile *)
 let piqic_rule () : unit =
