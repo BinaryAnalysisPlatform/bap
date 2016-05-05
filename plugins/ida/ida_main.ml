@@ -23,15 +23,12 @@ module type Target = sig
 end
 
 
-let extract ida path arch =
+let extract path arch =
   let id =
-    let ida = match ida with
-      | None -> "default"
-      | Some ida -> ida in
-    Data.Cache.digest ~namespace:"ida" "%s%s" (Digest.file path) ida in
+    Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
   let syms = match Symbols.Cache.load id with
     | Some syms -> syms
-    | None -> match Ida.(with_file ?ida path get_symbols) with
+    | None -> match Ida.(with_file path get_symbols) with
       | [] ->
         warning "didn't find any symbols";
         info "this plugin doesn't work with IDA Free";
@@ -44,31 +41,20 @@ let extract ida path arch =
   Seq.of_list
 
 
-let register_source (module T : Target) ida =
+let register_source (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with (fun () ->
-        extract ida file arch |> T.of_blocks) in
+        extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
-let register ida =
-  info "IDA was found, providing services";
-  register_source (module Rooter) ida;
-  register_source (module Symbolizer) ida;
-  register_source (module Reconstructor) ida
 
 
-let main ida =
-  if Ida.exists ?ida () then register ida
-  else match ida with
-    | None ->
-      info "can't find IDA instance, IDA plugin is disabled";
-      info "advice - if you have IDA installed, provide a path to it"
-    | Some _ ->
-      error "IDA was request, but we failed to find it@.";
-      info "advice - if you have IDA installed, provide a path to it";
-      exit 1
+let main () =
+  register_source (module Rooter);
+  register_source (module Symbolizer);
+  register_source (module Reconstructor)
 
 module Main = struct
   open Cmdliner
@@ -90,7 +76,7 @@ module Main = struct
   let info = Term.info name ~version ~doc ~man
 
   let () =
-    let run = Term.(const main $path) in
+    let run = Term.(const main $ const ()) in
     match Term.eval ~argv ~catch:false (run,info) with
     | `Ok () -> ()
     | `Help | `Version -> exit 0

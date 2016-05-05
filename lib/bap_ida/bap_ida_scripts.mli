@@ -19,3 +19,4 @@ val extract_symbols : string -> string
 *)
 
 val extract_script : value memmap -> string
+    x
