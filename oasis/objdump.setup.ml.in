@@ -1,0 +1,7 @@
+let define = function
+  | None | Some "#undefined" -> "[]"
+  | Some xs -> xs
+
+
+let () =
+  add_variable ~define ~doc:"A list (OCaml syntax) of supported targets" "objdump_targets"

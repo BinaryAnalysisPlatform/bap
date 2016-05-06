@@ -88,7 +88,9 @@ module Ida = struct
 
 
   let require req check =
-    if check then Ok () else Error (Error.of_string req)
+    if check
+    then Ok ()
+    else Or_error.errorf "IDA configuration failure: %s" req
 
   let ida () =
     let open Bap_ida_config in
