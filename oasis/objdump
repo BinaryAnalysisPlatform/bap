@@ -3,7 +3,7 @@ Flag objdump
   Default: false
 
 Library objdump_plugin
-  Build$:           flag(everything) || flag(ida_plugin)
+  Build$:           flag(everything) || flag(objdump)
   Path:             plugins/objdump
   FindlibName:      bap-plugin-objdump
   CompiledObject:   best
