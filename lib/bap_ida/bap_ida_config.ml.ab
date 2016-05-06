@@ -1,0 +1,2 @@
+let ida_path = "$ida_path"
+let is_headless = $ida_headless

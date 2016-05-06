@@ -18,4 +18,4 @@ let of_truth truth ~testbin : addr seq Or_error.t =
 let of_tool tool ~testbin : addr seq Or_error.t =
   if tool = "bap-byteweight"
   then Find_starts.with_byteweight testbin
-  else Find_starts.with_ida ~which_ida:tool testbin
+  else Find_starts.with_ida testbin
