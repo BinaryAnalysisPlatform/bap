@@ -1,7 +1,11 @@
-let define = function
-  | None | Some "#undefined" -> "[]"
-  | Some xs -> xs
 
 
 let () =
-  add_variable ~define ~doc:"A list (OCaml syntax) of supported targets" "objdump_targets"
+  add_variable  ~doc:"A list (OCaml syntax) of supported targets" "objdump_targets"
+    ~define:(function
+        | None -> "[]"
+        | Some xs -> xs);
+  add_variable ~doc:"A path to [g]objdump binary" "objdump_path"
+    ~define:(function
+        | None -> "objdump"
+        | Some x -> x)
