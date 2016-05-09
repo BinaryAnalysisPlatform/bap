@@ -47,7 +47,6 @@ module Std : sig
   module Command : sig
     type 'a t = 'a command
 
-    val create : script:string -> process:(string -> 'a) -> 'a t
-
+    val create : [`python | `idc] -> script:string -> process:(string -> 'a) -> 'a t
   end
 end

@@ -12,11 +12,12 @@ type ida = {
 type 'a command = {
   script  : string;
   process : string -> 'a;
+  language : [`python | `idc ]
 }
 
 module Command = struct
   type 'a t = 'a command
-  let create ~script ~process = {script; process}
+  let create language ~script ~process = {script; process; language}
 end
 
 module Ida = struct
@@ -145,7 +146,8 @@ module Ida = struct
     Buffer.contents b
 
   let exec self command =
-    let script,out = Filename.open_temp_file "bap_" ".py" in
+    let ext = if command.language = `idc then ".idc" else ".py" in
+    let script,out = Filename.open_temp_file "bap_" ext in
     let result = Filename.temp_file "bap_" ".ida_out" in
     substitute command.script ("output", result) |>
     Out_channel.output_string out;
@@ -162,24 +164,60 @@ module Ida = struct
     let f ida = exec ida command in
     protectx ~f ida ~finally:close
 
-  let get_symbols =
-    Command.create
-      ~script:"
-from idautils import *
-Wait()
-with open('$output', 'w+') as out:
-    for ea in Segments():
-        fs = Functions(SegStart(ea), SegEnd(ea))
-        for f in fs:
-            out.write ('(%s 0x%x 0x%x)\\n' % (
-                GetFunctionName(f),
-                GetFunctionAttr(f, FUNCATTR_START),
-                GetFunctionAttr(f, FUNCATTR_END)))
+  (*   let get_symbols = *)
+  (*     Command.create *)
+  (*       ~script:" *)
+           (* from idautils import * *)
+           (* Wait() *)
+           (* with open('$output', 'w+') as out: *)
+           (*     for ea in Segments(): *)
+           (*         fs = Functions(SegStart(ea), SegEnd(ea)) *)
+           (*         for f in fs: *)
+           (*             out.write ('(%s 0x%x 0x%x)\\n' % ( *)
+           (*                 GetFunctionName(f), *)
+           (*                 GetFunctionAttr(f, FUNCATTR_START), *)
+           (*                 GetFunctionAttr(f, FUNCATTR_END))) *)
 
-idc.Exit(0)"
-      ~process:(In_channel.with_file ~f:(fun ch ->
-          let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
-          Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
+           (* idc.Exit(0)" *)
+  (*       ~process:(In_channel.with_file ~f:(fun ch -> *)
+  (*           let blk_of_sexp x = [%of_sexp:string*int64*int64] x in *)
+  (*           Sexp.input_sexps ch |> List.map ~f:blk_of_sexp)) *)
+
+
+  module Get_symbols = struct
+    let script =
+      {|
+       #include <idc.idc>
+
+       static main() {
+       Wait();
+       auto ea,x;
+       auto file;
+
+       file = fopen("$output", "w+");
+
+       for (ea=NextFunction(0); ea != BADADDR; ea=NextFunction(ea) ) {
+         fprintf(file, "(%s 0x%08lX 0x%08lX)\n",
+                      GetFunctionName(ea), ea,
+                      GetFunctionAttr(ea,FUNCATTR_END));
+       }
+
+       fclose(file);
+       Exit(0);
+       }
+    |}
+
+    let process name =
+      let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
+      In_channel.with_file name ~f:(fun ch ->
+          Sexp.input_sexps ch |> List.map ~f:blk_of_sexp)
+
+
+    let command = Command.create `idc ~script ~process
+  end
+
+  let get_symbols = Get_symbols.command
+
 end
 
 
