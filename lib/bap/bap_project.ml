@@ -189,6 +189,10 @@ let pp_disasm_error ppf = function
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
 
+let union_memory m1 m2 =
+  Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
+      Memmap.add m1 mem v)
+
 let create_exn
     ?disassembler:backend
     ?brancher
@@ -256,7 +260,7 @@ let create_exn
       disasm = Disasm.create g;
       program = MVar.read program;
       symbols = MVar.read symtab;
-      arch; memory=data; storage; state; passes=[]
+      arch; memory=union_memory code data; storage; state; passes=[]
     } in
   loop ()
 

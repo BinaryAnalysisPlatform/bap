@@ -49,12 +49,105 @@ let register_source (module T : Target) =
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
+let loader_script =
+  {|
+from idautils import *
+from idaapi import *
 
+Wait()
+
+with open ('$output', 'w+') as out:
+    info = idaapi.get_inf_structure()
+    size = "r32" if info.is_32bit else "r64"
+    out.write ("(%s %s (" % (info.get_proc_name()[1], size))
+    for seg in Segments():
+        out.write ("\n(%s %s %d (0x%X %d))" % (
+            get_segm_name(seg),
+            "code" if segtype(seg) == SEG_CODE else "data",
+            get_fileregion_offset(seg),
+            seg, getseg(seg).size()))
+    out.write("))\n")
+idc.Exit(0)
+|}
+
+type perm = [`code | `data] [@@deriving sexp]
+type section = string * perm * int * (int64 * int)
+  [@@deriving sexp]
+
+type image = string * addr_size * section list [@@deriving sexp]
+
+module Img = Data.Make(struct
+    type t = image
+    let version = "0.1"
+  end)
+
+
+exception Unsupported_architecture of string
+
+let arch_of_procname size = function
+  | "8086" | "80286r" | "80286p"
+  | "80386r" | "80386p"
+  | "80486r" | "80486p"
+  | "80586r" | "80586p"
+  | "80686p" | "k62" | "p2" | "p3" | "athlon" | "p4" | "metapc" ->
+    if size = `r32 then `x86 else `x86_64
+  | "ppc" ->  if size = `r64 then `ppc64 else `ppc
+  | "ppcl" ->  `ppc64
+  | "arm" ->  `armv7
+  | "armb" ->  `armv7eb
+  | "mipsl" ->  if size = `r64 then `mips64el else `mipsel
+  | "mipsb" ->  if size = `r64 then `mips64  else `mips
+  | "sparcb" -> if size = `r64 then `sparcv9 else `sparc
+  | s -> raise (Unsupported_architecture s)
+
+let read_image name =
+  In_channel.with_file name ~f:(fun ch ->
+      Sexp.input_sexp ch |> image_of_sexp)
+
+let load_image = Command.create `python
+    ~script:loader_script
+    ~process:read_image
+
+
+let mapfile path : Bigstring.t =
+  let fd = Unix.(openfile path [O_RDONLY] 0o400) in
+  let size = Unix.((fstat fd).st_size) in
+  let data = Bigstring.map_file ~shared:false fd size in
+  Unix.close fd;
+  data
+
+let loader path =
+  let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
+      (Digest.file path) in
+  let (proc,size,sections) = match Img.Cache.load id with
+    | Some img -> img
+    | None ->
+      let img = Ida.with_file path load_image in
+      Img.Cache.save id img;
+      img in
+  let bits = mapfile path in
+  let arch = arch_of_procname size proc in
+  let endian = Arch.endian arch in
+  let addr = Addr.of_int64 ~width:(Size.in_bits size) in
+  let code,data = List.fold sections
+      ~init:(Memmap.empty,Memmap.empty)
+      ~f:(fun (code,data) (name,perm,pos,(beg,len)) ->
+          match Memory.create ~pos ~len endian (addr beg) bits with
+          | Error err ->
+            info "skipping section %s: %a" name Error.pp err;
+            code,data
+          | Ok mem ->
+            let sec = Value.create Image.section name in
+            if perm = `code
+            then Memmap.add code mem sec, data
+            else code, Memmap.add data mem sec) in
+  Project.Input.create arch path ~code ~data
 
 let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
-  register_source (module Reconstructor)
+  register_source (module Reconstructor);
+  Project.Input.register_loader name loader
 
 module Main = struct
   open Cmdliner
