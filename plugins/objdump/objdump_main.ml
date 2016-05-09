@@ -10,9 +10,9 @@ open Objdump_config
 include Self()
 
 let objdump_opts = "-rd --no-show-raw-insn"
-(* a list of common names for objdump *)
+
 let objdump_cmds =
-  "objdump" ::
+  objdump ::
   List.map targets ~f:(fun p -> p^"-objdump") |>
   String.Set.stable_dedup_list |>
   List.map ~f:(fun cmd -> cmd ^ " " ^ objdump_opts)
@@ -60,7 +60,7 @@ let popen cmd =
     info "command `%s' was terminated by a signal" cmd;
     None
 
-let run_objdump arch file  =
+let run_objdump arch file =
   let popen = fun cmd -> popen (cmd ^ " " ^ file) in
   let lines = List.find_map objdump_cmds ~f:popen in
   let names = Addr.Table.create () in
