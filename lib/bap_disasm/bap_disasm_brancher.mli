@@ -16,4 +16,4 @@ val of_bil : arch -> t
 
 val resolve : t -> mem -> full_insn -> dests
 
-module Factory : Factory with type t := t
+module Factory : Factory with type t = t

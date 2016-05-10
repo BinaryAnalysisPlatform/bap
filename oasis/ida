@@ -10,5 +10,6 @@ Library bap_ida
   CompiledObject:   best
   Build$:           flag(everything) || flag(ida)
   Modules:          Bap_ida
+  InternalModules:  Bap_ida_config
   BuildDepends:     fileutils, re.posix
   XMETADescription: make calls into IDA

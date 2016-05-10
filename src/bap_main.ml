@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_plugins.Std
+open Bap_future.Std
 open Regular.Std
 open Bap.Std
 open Or_error
@@ -7,41 +8,44 @@ open Format
 open Cmdliner
 open Bap_options
 open Bap_source_type
+include Self()
 
 exception Failed_to_load_file of Error.t
 exception Failed_to_create_project of Error.t
 exception Unknown_format of string
 
-let brancher o src args =
-  Option.(o.brancher >>= fun b -> Brancher.Factory.find src b args)
 
-let reconstructor o src args =
-  Option.(o.reconstructor >>= fun b -> Reconstructor.Factory.find src b args)
+let find_source (type t) (module F : Source.Factory with type t = t)
+    field o = Option.(field o >>= F.find)
 
-let symbolizer o src args = match o.symbolizers with
+let brancher = find_source (module Brancher.Factory) brancher
+let reconstructor =
+  find_source (module Reconstructor.Factory) reconstructor
+
+(* This can be seen as an non-optimal merging strategy, as we're
+   postponing the emission of the information until everyone is
+   ready. Instead, we can emit the information as soon as possible,
+   thus allowing the information to flow into the algorithm at early
+   stages. But it will still work correctly.
+*)
+let merge_streams ss ~f : 'a Source.t option =
+  List.reduce ss ~f:(Stream.merge ~f:(fun a b -> match a,b with
+      | Ok a, Ok b -> Ok (f a b)
+      | Error a, Error b -> Error (Error.of_list [a;b])
+      | Error e,_|_,Error e -> Error e))
+
+let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
-  | ss ->
-    List.filter_map ss ~f:(fun s -> Symbolizer.Factory.find src s args) |>
-    Symbolizer.chain |>
-    Option.some
+  | names -> match List.filter_map names ~f:create with
+    | [] -> assert false
+    | ss -> merge_streams ss ~f
 
-let choose_default_rooter src args =
-  match Rooter.Factory.list src with
-  | r :: _ -> Rooter.Factory.find src r args
-  | _ -> None
+let symbolizer =
+  merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
+      Symbolizer.chain [s1;s2])
 
-let union_rooters ss src args =
-  List.filter_map ss ~f:(fun s ->
-      Rooter.Factory.find src s args) |>
-  List.reduce ~f:Rooter.union
-
-let rooter o src args = match o.rooters with
-  | [] -> choose_default_rooter src args
-  | ss -> union_rooters ss src args
-
-let rooter o src args = match rooter o src args with
-  | None -> assert false
-  | rooter -> rooter
+let rooter =
+  merge_sources Rooter.Factory.find rooters ~f:Rooter.union
 
 let project_or_exn = function
   | Ok p -> p
@@ -113,24 +117,6 @@ let process options project =
             Project.Io.save ~fmt ?ver ch project)
       | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
 
-
-let create name options source arg =
-  let options = {
-    options with
-    rooters = options.symbols @ options.rooters;
-    symbolizers = options.symbols @ options.symbolizers;
-  } in
-  match Project.Factory.find source name arg with
-  | None -> raise (Unknown_format name)
-  | Some create ->
-    let make cons = cons options source arg in
-    create
-      ~disassembler:options.disassembler
-      ?brancher:(make brancher)
-      ?symbolizer:(make symbolizer)
-      ?rooter:(make rooter)
-      ?reconstructor:(make reconstructor) () |> project_or_exn
-
 let main o =
   let digest = digest o in
   let project = match Project.Cache.load digest with
@@ -138,14 +124,18 @@ let main o =
       Project.restore_state proj;
       proj
     | None ->
-      let project = match o.source with
-        | `File fmt -> create fmt o Source.File o.filename
-        | `Binary -> create "builtin" o Source.Binary (image o)
-        | `Memory arch ->
-          let memory = memory arch o.filename, arch in
-          create "builtin" o Source.Memory memory in
-      Project.Cache.save digest project;
-      project in
+      let rooter = rooter o
+      and brancher = brancher o
+      and reconstructor = reconstructor o
+      and symbolizer = symbolizer o in
+      let input =
+        Project.Input.file ~loader:o.loader ~filename: o.filename in
+      Project.create input ~disassembler:o.disassembler
+        ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+      | Error err -> raise (Failed_to_create_project err)
+      | Ok project ->
+        Project.Cache.save digest project;
+        project in
   process o project
 
 let program_info =
@@ -211,15 +201,15 @@ let program source =
   Term.(const create
         $filename
         $(disassembler ())
-        $(loader source)
+        $(loader ())
         $(dump_formats ())
         $source_type
         $verbose
-        $(brancher source)
-        $(symbolizers source)
-        $(rooters source)
-        $(symbols source)
-        $(reconstructor source)),
+        $(brancher ())
+        $(symbolizers ())
+        $(rooters ())
+        $(symbols ())
+        $(reconstructor ())),
   program_info
 
 let parse_source argv =
@@ -229,14 +219,15 @@ let parse_source argv =
   | Some src,(`Version|`Help) -> src
   | _ -> raise Unrecognized_source
 
-
-let parse () =
+let run_loader () =
   let argv,passes = Bap_plugin_loader.run_and_get_passes Sys.argv in
   let print_formats =
     Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
     fst |> Option.value ~default:false in
   if print_formats then print_formats_and_exit ();
-  let source = parse_source argv in
+  argv,passes
+
+let parse passes argv =
   match Cmdliner.Term.eval ~argv ~catch:false (program source) with
   | `Ok opts -> { opts with Bap_options.passes }
   | _ -> exit 0
@@ -245,9 +236,11 @@ let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
 
 let () =
-  at_exit (pp_print_flush err_formatter);
   Printexc.record_backtrace true;
-  try main (parse ()); exit 0 with
+  Bap_log.start ();
+  at_exit (pp_print_flush err_formatter);
+  let argv,passes = run_loader () in
+  try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch
       (String.concat ~sep:"," (List.map Arch.all ~f:Arch.to_string))
@@ -256,7 +249,7 @@ let () =
   | Bap_plugin_loader.Plugin_not_found name ->
     error "Can't find a plugin bundle `%s'" name
   | Failed_to_load_file err ->
-    error "Failed to load a code file: %a" Error.pp err
+    error "Failed to load a file with code: %a" Error.pp err
   | Failed_to_create_project err ->
     error "Failed to create a project: %a" Error.pp err
   | Unknown_format fmt ->

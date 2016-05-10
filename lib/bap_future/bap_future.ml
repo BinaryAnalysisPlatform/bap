@@ -2,6 +2,38 @@ open Core_kernel.Std
 
 module Std = struct
 
+  module type Applicable = sig
+    type 'a t
+    val map   : 'a t -> f:('a -> 'b) -> 'b t
+    val apply : ('a -> 'b) t -> 'a t -> 'b t
+  end
+
+  module type Variadic = sig
+    type ('a,'b) t
+    type 'a arg
+    val args : 'a arg -> ('a -> 'b,'b) t
+    val ($) : ('a, 'b -> 'c) t -> 'b arg -> ('a,'c) t
+    val apply : f:'a -> ('a,'b) t -> 'b arg
+  end
+
+  module Variadic = struct
+    module Make(T : Applicable) : Variadic with type 'a arg = 'a T.t =
+    struct
+      open T
+      type 'a arg = 'a t
+      type ('a,'b) t = {run : 'a -> 'b arg}
+      let args a = {run = fun f -> map ~f a}
+      let ($) args b = {run = fun f -> apply (args.run f) @@ b}
+      let apply ~f args = args.run f
+    end
+
+    include Make(struct
+        type 'a t = 'a
+        let map x ~f = f x
+        let apply f x = f x
+      end)
+  end
+
   module Future = struct
     type 'a waiters = {
       mutable waiters : ('a -> unit) list
@@ -85,6 +117,14 @@ module Std = struct
         let return = full
       end)
 
+    let apply fx x = bind fx (fun f -> map x ~f)
+    module Variadic = Variadic.Make(struct
+        type nonrec 'a t = 'a t
+        let apply = apply
+        let map = map
+      end)
+
+
     module App = Applicative.Of_monad(struct
         type nonrec 'a t = 'a t
         include Monad
@@ -157,7 +197,9 @@ module Std = struct
       List.iter t.on_unsubs ~f:(fun f -> f id)
 
     let publish t event =
-      Hashtbl.iteri t.subs ~f:(fun ~key:id ~data:notify ->
+      (* we cannot use Hashtbl.iteri, since we mayb modify table in
+         the loop body  *)
+      Hashtbl.to_alist t.subs |> List.iter ~f:(fun (id,notify) ->
           try notify id event with exn ->
             unsubscribe t id;
             raise exn)
@@ -290,7 +332,14 @@ module Std = struct
         if l1 > capacity && l2 > capacity && ratio l1 l2 > 2 &&
            (len > l1 || len > l2) then  wait src in
       link s1 s (step s1 q1);
-      link s2 s (step s1 q2);
+      link s2 s (step s2 q2);
+      s
+
+    let either s1 s2 =
+      let s, Signal publish = create () in
+      let step inj x = publish (inj x) in
+      link s1 s (step Either.first);
+      link s2 s (step Either.second);
       s
 
     let once s =
@@ -497,7 +546,16 @@ module Std = struct
       link s s' f;
       s'
 
+    type 'a stream = 'a t
+
+    module Variadic = Variadic.Make(struct
+        type 'a t = 'a stream
+        let map = map
+        let apply = apply
+      end)
   end
 
+
   type 'a stream = 'a Stream.t
+
 end

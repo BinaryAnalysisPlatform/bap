@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_future.Std
 open OUnit2
 open Format
 open Word_size
@@ -48,10 +49,21 @@ let test_substitute case : test list =
   let max_addr = addr (case.addr + String.length case.code - 1) in
   let base = Addr.of_int case.addr ~width:(addr_width case) in
   let name addr = Option.some_if Addr.(base = addr) sub_name in
-  let symbolizer = Symbolizer.create name in
-  let rooter = [base] |> Seq.of_list |> Rooter.create in
-  let p = Project.from_string ~rooter ~base ~symbolizer case.arch case.code |>
-          ok_exn in
+  let symbolizer = Stream.map Project.Info.arch (fun _ ->
+      Ok (Symbolizer.create name)) in
+  let new_rooter _ = Ok ([base] |> Seq.of_list |> Rooter.create) in
+  let rooter = Stream.map Project.Info.arch ~f:new_rooter in
+  let input =
+    let file = "/dev/null" in
+    let mem =
+      Memory.create LittleEndian base (Bigstring.of_string case.code)
+      |> ok_exn in
+    let code =
+      Memmap.add Memmap.empty mem (Value.create Image.section "bap.test") in
+    let data = code in
+    Project.Input.create case.arch file ~code ~data in
+
+  let p = Project.create ~rooter ~symbolizer input |> ok_exn in
   let mem,_ = Memmap.lookup (Project.memory p) base |> Seq.hd_exn in
   let test expect s =
     let p = Project.substitute p mem tag s in

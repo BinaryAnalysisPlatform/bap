@@ -1,16 +1,27 @@
 open Core_kernel.Std
 open Bap_bundle.Std
+open Format
+
+module Event = Bap_event
 
 module Create() = struct
   let bundle = main_bundle ()
 
+  let main =
+    let base = Filename.basename Sys.executable_name in
+    try Filename.chop_extension base with _ -> base
+
+
   let manifest =
     try Bundle.manifest bundle
-    with exn -> Manifest.create Sys.executable_name
+    with exn -> Manifest.create main
 
   let name = Manifest.name manifest
   let version = Manifest.version manifest
   let doc = Manifest.desc manifest
+
+  let has_verbose =
+    Array.exists ~f:(function "--verbose" | _ -> false)
 
   let filter_args name =
     let prefix = "--" ^ name ^ "-" in
@@ -27,6 +38,26 @@ module Create() = struct
     fst |> List.rev |> Array.of_list
 
   let argv =
-    if name = Sys.executable_name then Sys.argv
+    if name = main then Sys.argv
     else filter_args name
+
+  let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
+    | exception Not_found -> false
+    | "false" | "0" -> false
+    | _ -> true
+
+  let is_verbose = has_verbose argv ||
+                   has_var ("DEBUG_"^name) ||
+                   has_var ("DEBUG")
+
+  open Event.Log
+
+  let debug = (); match is_verbose with
+    | false -> fun fmt -> ifprintf std_formatter fmt
+    | true ->  fun fmt -> message Debug ~section:name fmt
+
+  let info f = message Info ~section:name f
+  let warning f = message Warning ~section:name f
+  let error f = message Error ~section:name f
+
 end

@@ -1,13 +1,36 @@
 open Core_kernel.Std
 open Bap_bundle.Std
+open Bap_future.Std
 open Or_error.Monad_infix
+
 
 
 module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
 
-  type t = {bundle : bundle; path : string; name : string} [@@deriving fields]
+  type t = {
+    path : string;
+    name : string;
+    bundle : bundle sexp_opaque;
+    loaded : unit future sexp_opaque;
+    finish : unit promise sexp_opaque;
+  } [@@deriving fields, sexp_of]
+
+
+
+
+  type system_event = [
+    | `Opening  of string
+    | `Loading of t
+    | `Linking of string
+    | `Loaded  of t
+    | `Errored of string * Error.t
+  ] [@@deriving sexp_of]
+
+
+  let system_events,event = Stream.create ()
+  let notify (value : system_event) = Signal.send event value
 
   type reason = [
     | `In_core
@@ -32,11 +55,16 @@ module Plugin = struct
   end
 
   let of_path path =
-    let bundle = Bundle.of_uri (Uri.of_string path) in
-    {
-      name = Bundle.manifest bundle |> Manifest.name;
-      path; bundle
-    }
+    try
+      notify (`Opening path);
+      let bundle = Bundle.of_uri (Uri.of_string path) in
+      let name = Bundle.manifest bundle |> Manifest.name in
+      let loaded,finish = Future.create () in
+      {name; path; bundle; loaded; finish}
+    with exn ->
+      let err = Error.of_exn exn in
+      notify (`Errored (path,err));
+      raise exn
 
   let manifest p = Bundle.manifest p.bundle
   let name p = manifest p |> Manifest.name
@@ -56,6 +84,7 @@ module Plugin = struct
   let load_unit ~reason ~name pkg : unit or_error =
     let open Format in
     try
+      notify (`Linking pkg);
       !load pkg;
       Hashtbl.set units ~key:name ~data:reason;
       Ok ()
@@ -106,22 +135,36 @@ module Plugin = struct
           Or_error.errorf "Failed to load %s: %s" entry @@
           Error.to_string_hum err)
 
+  let try_load (plugin : t) =
+    if Future.is_decided plugin.loaded
+    then Ok ()
+    else
+      let lazy () = init in
+      notify (`Loading plugin);
+      let m = manifest plugin in
+      let mains = Manifest.provides m in
+      validate_provided plugin mains >>= fun () ->
+      let reqs = Manifest.requires m |>
+                 List.filter ~f:(fun r -> not (Hashtbl.mem units r)) in
+      let main = Manifest.main m in
+      let old_bundle = main_bundle () in
+      set_main_bundle (bundle plugin);
+      load_entries plugin reqs >>= fun () ->
+      load_entry ~don't_register:true plugin main >>| fun () ->
+      let reason = `Provided_by plugin.name in
+      set_main_bundle old_bundle;
+      Promise.fulfill plugin.finish ();
+      notify (`Loaded plugin);
+      List.iter mains ~f:(fun unit ->
+          Hashtbl.set units ~key:unit ~data:reason)
+
   let load plugin =
-    let lazy () = init in
-    let m = manifest plugin in
-    let mains = Manifest.provides m in
-    validate_provided plugin mains >>= fun () ->
-    let reqs = Manifest.requires m |>
-               List.filter ~f:(fun r -> not (Hashtbl.mem units r)) in
-    let main = Manifest.main m in
-    let old_bundle = main_bundle () in
-    set_main_bundle (bundle plugin);
-    load_entries plugin reqs >>= fun () ->
-    load_entry ~don't_register:true plugin main >>| fun () ->
-    let reason = `Provided_by plugin.name in
-    set_main_bundle old_bundle;
-    List.iter mains ~f:(fun unit ->
-        Hashtbl.set units ~key:unit ~data:reason)
+    match try_load plugin with
+    | Error err as result ->
+      notify (`Errored (plugin.name,err));
+      result
+    | result -> result
+
 end
 
 module Plugins = struct
@@ -157,6 +200,47 @@ module Plugins = struct
         | Ok p -> match Plugin.load p with
           | Ok () -> Some (Ok p)
           | Error err -> Some (Error (Plugin.path p, err)))
+
+  let loaded,finished = Future.create ()
+
+  let load ?library ?exclude () =
+    if Future.is_decided loaded
+    then []
+    else begin
+      let r = load ?library ?exclude () in
+      Promise.fulfill finished ();
+      r
+    end
+
+  (* we will record all events from the plugin subsystem,
+     and if a bad thing happens, we will dump the full history.
+     We will clean the history once all plugins are loaded, to prevent
+     a memory leak.  *)
+  let setup_default_handler () =
+    let events_backtrace = ref [] in
+    Stream.observe Plugin.system_events (fun ev -> match ev with
+        | `Errored (name,err) ->
+          let backtrace = String.concat ~sep:"\n" @@
+            List.map !events_backtrace ~f:(fun ev ->
+                Format.asprintf "%a" Sexp.pp
+                  (Plugin.sexp_of_system_event ev)) in
+          Format.eprintf "An error has occured while loading `%s': %a\n
+                          Events backtrace:\n%s\n
+                          Aborting program ...\n%!"
+            name Error.pp err backtrace;
+          exit 1
+        | ev ->
+          events_backtrace := ev :: !events_backtrace);
+    Future.upon loaded (fun () -> events_backtrace := [])
+
+
+  let run ?(don't_setup_handlers=false) ?library ?exclude () =
+    if not don't_setup_handlers
+    then setup_default_handler ();
+    load ?library ?exclude () |> ignore
+
+  let events = Plugin.system_events
+  type event = Plugin.system_event [@@deriving sexp_of]
 
 end
 

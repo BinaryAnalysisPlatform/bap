@@ -1,0 +1,11 @@
+
+
+let () =
+  add_variable  ~doc:"A list (OCaml syntax) of supported targets" "objdump_targets"
+    ~define:(function
+        | None -> "[]"
+        | Some xs -> xs);
+  add_variable ~doc:"A path to [g]objdump binary" "objdump_path"
+    ~define:(function
+        | None -> "objdump"
+        | Some x -> x)

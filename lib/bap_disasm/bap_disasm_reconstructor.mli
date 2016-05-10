@@ -16,4 +16,4 @@ val default : (word -> string) -> word list -> t
 val of_blocks : (string * addr * addr) seq -> t
 val run : t -> cfg -> symtab
 
-module Factory : Factory with type t := t
+module Factory : Factory with type t = t

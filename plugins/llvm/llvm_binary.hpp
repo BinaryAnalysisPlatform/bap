@@ -93,10 +93,10 @@ struct segment {
         init_macho_segment(s);
     }
 
-    segment(const coff_section &s)
+    segment(const pe32_header &hdr, const coff_section &s)
         : name_(s.Name)
         , offset_(static_cast<uint32_t>(s.PointerToRawData))
-        , addr_(static_cast<uint32_t>(s.VirtualAddress))
+        , addr_(static_cast<uint32_t>(s.VirtualAddress + hdr.ImageBase))
         , size_(static_cast<uint32_t>(s.SizeOfRawData))
         , is_readable_(static_cast<uint32_t>(s.Characteristics) &
                        COFF::IMAGE_SCN_MEM_READ)
@@ -167,6 +167,10 @@ std::vector<segment> read(const MachOObjectFile* obj) {
 
 std::vector<segment> read(const COFFObjectFile* obj) {
     std::vector<segment> segments;
+    const pe32_header *pe32;
+    if (error_code err = obj->getPE32Header(pe32))
+        llvm_binary_fail(err);
+
     for (auto it = obj->begin_sections();
          it != obj->end_sections(); ++it) {
         const coff_section *s = obj->getCOFFSection(it);
@@ -174,7 +178,7 @@ std::vector<segment> read(const COFFObjectFile* obj) {
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
              c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(segment(*s));
+            segments.push_back(segment(*pe32, *s));
     }
     return segments;
 }
@@ -187,6 +191,13 @@ using namespace llvm::object;
 
 struct symbol {
     typedef SymbolRef::Type kind_type;
+
+    symbol(const SymbolRef& sym, uint64_t addr, uint64_t size)
+        : symbol(sym) {
+        addr_ = addr;
+        size_ = size;
+    }
+
     explicit symbol(const SymbolRef& sym) {
         StringRef name;
         if(error_code err = sym.getName(name))
@@ -201,25 +212,8 @@ struct symbol {
 
         if (error_code err = sym.getSize(this->size_))
             llvm_binary_fail(err);
-
-        uint32_t flags;
-        if (error_code err = sym.getFlags(flags))
-            llvm_binary_fail(err);
-
-        if (flags & SymbolRef::SF_Undefined) {
-            uint64_t addr;
-            if (error_code err = sym.getValue(addr))
-                llvm_binary_fail(err);
-            // This will not work for x86-64, since they usually zero
-            // the value. BFD library uses index correspondence
-            // between plt entry and relocation, to name the plt
-            // entry. We can't afford this.
-            if (addr) {
-                addr_ = addr;
-                size_ = 8;
-            }
-        }
     }
+
 
     const std::string& name() const { return name_; }
     kind_type kind() const { return kind_; }
@@ -249,6 +243,47 @@ std::vector<symbol> read(const ObjectFile* obj) {
     read(obj->begin_symbols(),
          obj->end_symbols(),
          std::back_inserter(symbols));
+    return symbols;
+}
+
+
+
+
+std::vector<symbol> read(const COFFObjectFile * obj) {
+    std::vector<symbol> symbols;
+
+    const pe32_header *pe32;
+    if (error_code err = obj->getPE32Header(pe32))
+        llvm_binary_fail(err);
+
+    for (auto it = obj->begin_symbols(); it != obj->end_symbols(); ++it) {
+        auto sym = obj->getCOFFSymbol(it);
+
+        if (!sym) llvm_binary_fail("not a coff symbol");
+
+        const coff_section *sec = nullptr;
+        if (sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
+            continue;
+
+        if (error_code ec = obj->getSection(sym->SectionNumber, sec))
+            llvm_binary_fail(ec);
+
+        if (!sec) continue;
+
+        uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym->Value;
+
+        for (auto it = obj->begin_symbols(); it != obj->end_symbols(); ++it) {
+            auto next = obj->getCOFFSymbol(it);
+            if (next->SectionNumber == sym->SectionNumber) {
+                auto new_size = next->Value > sym->Value ?
+                    next->Value - sym->Value : size;
+                size = new_size < size ? new_size : size;
+            }
+        }
+
+        auto addr = sec->VirtualAddress + pe32->ImageBase + sym->Value;
+        symbols.push_back(symbol(*it,addr,size));
+    }
     return symbols;
 }
 

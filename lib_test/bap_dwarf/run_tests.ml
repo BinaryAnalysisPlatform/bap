@@ -9,9 +9,7 @@ let suite =
   ]
 
 let run_inline_tests () =
-  Ppx_inline_test_lib.Runtime.(summarize () |>
-                               Test_result.record;
-                               Test_result.exit ())
+  Ppx_inline_test_lib.Runtime.exit ()
 
 let () =
   if Array.mem Sys.argv "inline-test-runner"

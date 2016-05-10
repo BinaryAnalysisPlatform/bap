@@ -96,6 +96,153 @@ module Std : sig
   type 'a signal
 
 
+  (** Applicable is an abstraction lying between Arrow, Monad and
+      Applicative. It can be seen as a more general form of
+      [Applicative] that lacks [return] (or [pure]) operation. Since
+      return operation is not available for co-inductive type, we cannot
+      use the [Applicative] functor for [Streams].  *)
+  module type Applicable = sig
+    type 'a t
+    val map   : 'a t -> f:('a -> 'b) -> 'b t
+    val apply : ('a -> 'b) t -> 'a t -> 'b t
+  end
+
+  module type Variadic = sig
+    (** [('f,'r) t] is a list of arguments, where ['f] defines the
+        arrow type of the arguments, and ['r] is the return type.
+        C.f., ['f] and ['r] with the first and last parameter of
+        the [format] type constuctor.
+    *)
+    type ('f,'r) t
+
+    (** ['a arg] is an Applicable value  *)
+    type 'a arg
+
+    (** [args x] creates a singleton list of arguments that can be
+        applied to a function that takes [x] argument, and returns a value
+        of type ['b].*)
+    val args : 'a arg -> ('a -> 'b,'b) t
+
+    (** [args $x] appends argument [x] to a list of arguments [args].  *)
+    val ($) : ('a, 'b -> 'c) t -> 'b arg -> ('a,'c) t
+
+    (** [apply args ~f] applies function [f] to arguments [args].*)
+    val apply : f:'f -> ('f,'r) t -> 'r arg
+  end
+
+  (** Variadic arguments.
+
+      [Variadic], abstracts a common idiom of a function applied to a
+      variable number of arguments. A common examples of such function
+      would be OCaml's standard [printf] and [scanf] functions. A more
+      general examples, are monadic parsers, such as [MParser],
+      command line parsers such as [Cmdliner] and [Core]'s
+      [Command]. They all are using the same trick to collect
+      arguments of different type and pass it to a function, s.t. that
+      the function type actually defines the type of collected
+      arguments. Both [Cmdliner] and [Command] relies on [Applicative]
+      functor defined in [1]. However, it requires a [return]
+      function, that is not possible to provide in general for
+      co-inductive types, that can only be observed or mapped. It is
+      still possible to implement a variadic interface using the
+      restricted [Applicable] interface given only one restriction: it
+      is not possible to create an empty variadic list of arguments
+      (that can be considered as a benefit).
+
+
+      Here are some examples, that highlights common use cases of the
+      variadic structure. Suppose, we have several future values of
+      different types, that we would like to merge with some function
+      [f], to be concrete let's assume, that we're waiting for:
+
+      [arch : arch future] - program architecture to be defined;
+      [lang : lang future] - a programming language;
+      [abi  : abi future]  - an ABI;
+      [api  : api future]  - an api specification
+
+      And we have a function [typecheck] of type
+
+      {[arch -> lang -> abi -> api -> pass future]},
+
+      that will typecheck a binary program, according to the typing
+      rules of the specified programming [lang]uage, binary interface,
+      and type environment [api]. Given the [Variadic] interface we
+      can write it as
+
+      [Future.Variadic.(apply (args arch $lang $abi $api) ~f:typecheck]
+
+      Note, since future implements a more powerful Monad interface,
+      it is still possible to apply a [typecheck] function without
+      using the variadic interface, e.g.,
+
+      {[
+        arch >>= fun arch ->
+        lang >>= fun lang ->
+        abi >>= fun abi ->
+        api >>= fun api ->
+        typecheck arch lang abi api
+      ]}
+
+      However, this is less general, as it specifies a concrete order
+      of argument bindings, it is also requires a much less general
+      monad interface with bind and return operations, that are in
+      general not available for coinductive types, for example for
+      [stream] type. If we substitute [future] type constructor in the
+      above example with a [stream] constructor we will no be able to
+      implement the latter solution, as we lack the monad  interface.
+
+      Using a stream for this particular example, makes sense, since,
+      the specified properties, can be defined on a module level, so
+      they can be defined multiple times for each project. In that
+      case function typecheck will be applied for each quartet of the
+      arguments.
+
+      When used with collections, such as list, sequences, sets, etc,
+      the pattern can be used to generalize cartesian product from a
+      function taking a pair of arguments, to a function taking
+      arbitrary amount of arguments.
+
+      For collection, the Variadic can be used to generalize cartesian
+      product to [N] arguments:
+
+      {[
+        module AList = struct
+          include List
+          let apply fs xs =
+            cartesian_product fs xs >>| fun (f,x) -> f x
+        end
+        module Varags = Variadic.Make(AList)
+
+        let cartesian_product = Varags.apply
+      ]}
+
+      For option and error monad, with the following definition of
+      [apply],
+
+      {[let apply f x = match f,x with
+          | Some f, Some x -> Some (f x)
+          | None -> None]}
+
+      The produced [Varargs.apply] will be a generalization of
+      [Option.merge], i.e., it will apply function [f] to [N]
+      arguments of different types, if all of them are not zero (i.e.,
+      [None], [Error].
+
+
+      [1] : {v
+      Applicative Programming with Effects.
+      Conor McBride and Ross Paterson.
+      Journal of Functional Programming 18:1 (2008), pages 1-13.
+      http://staff.city.ac.uk/~ross/papers/Applicative.pdf
+    v}
+
+
+  *)
+  module Variadic : sig
+    module Make(T : Applicable) : Variadic with type 'a arg = 'a T.t
+    include Variadic with type 'a arg = 'a
+  end
+
   (** Future is an object whose value will be decided somewhere in the
       future, if that future has occurred.
 
@@ -130,7 +277,7 @@ module Std : sig
     type 'a t = 'a future
     include Monad.S with type 'a t := 'a t
     include Applicative.S with type 'a t := 'a t
-
+    module Variadic : Variadic with type 'a arg = 'a t
     module Args : Applicative.Args with type 'a arg := 'a t
 
     (** [create ()] creates a new future. The function returns a pair
@@ -211,6 +358,9 @@ module Std : sig
   module Stream : sig
     type 'a t = 'a stream
     type id
+
+    module Variadic : Variadic with type 'a arg = 'a t
+
 
     (** [create ()] retuns a stream and a signal handler that is used
         to feed the stream. Every time a value is signaled, it will
@@ -354,11 +504,17 @@ module Std : sig
     val filter : 'a t -> f:('a -> bool) -> 'a t
 
 
+    (** [either xs ys] is a discriminated union of two streams.  *)
+    val either : 'a t -> 'b t -> ('a,'b) Either.t t
+
     (** [merge xs ys f] merges streams [xs] and [ys] using function
-        [f].  *)
+        [f]. *)
     val merge : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
 
+    (** [apply fs xs] apply stream of functions [fs] to a stream of
+        values xs, producing a stream of results.*)
     val apply : ('a -> 'b) t -> 'a t -> 'b t
+
 
     val split : 'a t -> f:('a -> 'b * 'c) -> 'b t * 'c t
 
@@ -370,7 +526,7 @@ module Std : sig
 
     (** [parse ss ~init ~f] parses stream [ss] and builds new stream
         [ss']. Function [f] is applied to each consecutive element of
-        the list [ss] with a state [s]. If function [f] returns
+        the stream [ss] with a state [s]. If function [f] returns
         [None,s'], then no value is produced in the output state and
         state [s'] is passed to the next invocation of function
         [f]. If it returns [Some x, s'], then value [x] is produced by
@@ -404,9 +560,9 @@ module Std : sig
         ]} *)
     val foldw : ?stride:int -> 'a t -> int -> init:'b -> f:('b -> 'a -> 'b) -> 'b t
 
-    (** [frame ~clk s ~init ~f] will gather elements of [s] into frames, 
-        where the start of the new frame is signaled by a stream [clk]. 
-        The function is very similar to [foldw] except, that the window 
+    (** [frame ~clk s ~init ~f] will gather elements of [s] into frames,
+        where the start of the new frame is signaled by a stream [clk].
+        The function is very similar to [foldw] except, that the window
         is determined dynamically by a [clk] stream. This function is
         useful to build custom time scales.
 
@@ -484,7 +640,7 @@ module Std : sig
         fulfilled.  *)
     val upon : unit future -> 'a t -> 'a future
 
-    (** [before e xs] returns a list that contains elements of 
+    (** [before e xs] returns a list that contains elements of
         the stream [xs] that occurred before the event [e] *)
     val before: unit future -> 'a t -> 'a list future
 

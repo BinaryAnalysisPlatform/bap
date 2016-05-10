@@ -3,7 +3,7 @@ open Bap_disasm_source
 open Bap_image_std
 
 type t
-type rooter = t 
+type rooter = t
 
 val create : addr seq -> t
 
@@ -18,4 +18,4 @@ val roots : t -> addr seq
 val union : t -> t -> t
 
 
-module Factory : Factory with type t := t
+module Factory : Factory with type t = t

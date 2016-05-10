@@ -13,9 +13,10 @@ Library bap
                    bap.image,
                    bap.plugins,
                    bap.sema,
-                   bap.types
+                   bap.types,
+                   bap-future
   Modules:         Bap
-  InternalModules: Bap_project, Bap_self
+  InternalModules: Bap_event, Bap_project, Bap_self
 
 
 Library types
@@ -89,6 +90,7 @@ Library disasm
   FindlibName:   disasm
   BuildDepends:  bap.image,
                  bap.types,
+                 bap-future,
                  camlzip,
                  ocamlgraph,
                  ppx_here
@@ -137,7 +139,7 @@ Library plugins
   FindLibParent:   bap
   FindLibName:     plugins
   Modules:         Bap_plugins
-  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap.bundle, bap.config
+  BuildDepends:    core_kernel, dynlink, fileutils, findlib, bap.bundle, bap.config, bap-future
 
 Library "bap-build"
   Build$:          flag(everything) || flag(bap_std)

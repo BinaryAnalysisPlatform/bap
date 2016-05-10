@@ -15,7 +15,7 @@ module Std : sig
   (** Interaction with ida instance  *)
   module Ida : sig
     (** exception External_command_failed occurs when the external IDA
-        command is not executed successfully *)
+        command was not executed successfully *)
     exception Failed of string
 
     exception Not_in_path
@@ -24,13 +24,9 @@ module Std : sig
     (** IDA instance *)
     type t = ida
 
-    (** [create ?ida target] create an IDA instance that will work with
-        [target] executable. [ida] is an optional hint, that can be
-        either a full path to [ida] executable, or just an executable
-        name *)
-    val create : ?ida:string -> string -> t
-
-    val exists : ?ida:string -> unit -> bool
+    (** [create target] create an IDA instance that will work with
+        [target] executable. *)
+    val create : string -> t
 
     val exec : t -> 'a command -> 'a
 
@@ -38,9 +34,9 @@ module Std : sig
     val close : t -> unit
 
 
-    (** [with_file ?ida target analysis] creates ida instance on [target],
+    (** [with_file target analysis] creates ida instance on [target],
         perform [analysis] and close [ida] *)
-    val with_file : ?ida:string -> string -> 'a command -> 'a
+    val with_file : string -> 'a command -> 'a
 
 
     (** [Ida.exec ida get_symbols] extract symbols from binary *)
@@ -51,7 +47,6 @@ module Std : sig
   module Command : sig
     type 'a t = 'a command
 
-    val create : script:string -> process:(string -> 'a) -> 'a t
-
+    val create : [`python | `idc] -> script:string -> process:(string -> 'a) -> 'a t
   end
 end

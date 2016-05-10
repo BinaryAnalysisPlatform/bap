@@ -1,87 +1,177 @@
 open Core_kernel.Std
 open Regular.Std
+open Bap_future.Std
 open Bap.Std
 open Bap_ida.Std
 
-open Cmdliner
 open Format
-open Option.Monad_infix
+open Result.Monad_infix
 
 include Self()
-
-let path : string option Term.t =
-  let doc = "Use IDA to extract symbols from file. \
-             You can optionally provide path to IDA executable,\
-             or executable name." in
-  Arg.(value & opt (some string) None & info ["path"] ~doc)
 
 module Symbols = Data.Make(struct
     type t = (string * int64 * int64) list
     let version = "0.1"
   end)
 
+module type Target = sig
+  type t
+  val of_blocks : (string * addr * addr) seq -> t
+  module Factory : sig
+    val register : string -> t source -> unit
+  end
+end
 
-let register ida =
-  let make_id ida path =
-    let ida = match ida with
-      | None -> "default"
-      | Some ida -> ida in
-    Data.Cache.digest ~namespace:"ida" "%s%s" (Digest.file path) ida in
-  let syms_of_ida ida path =
-    try Some Ida.(with_file ?ida path get_symbols) with
-      exn ->
-      eprintf "Warning: IDA failed: %a@." Exn.pp exn; None  in
-  let syms ida path =
-    let id = make_id ida path in
-    match Symbols.Cache.load id with
-    | Some syms -> Some syms
-    | None -> match syms_of_ida ida path with
-      | None -> None
-      | Some syms ->
-        Symbols.Cache.save id syms;
-        Some syms in
-  let extract img =
-    let arch = Image.arch img in
-    let size = Arch.addr_size arch in
-    let width = Size.in_bits size in
-    let addr = Addr.of_int64 ~width in
-    let ida = match size with
-      | `r32 -> ida
-      | `r64 -> match ida with
-        | None -> Some "idaq64"
-        | Some ida when
-            String.is_suffix ida "64" ||
-            String.is_suffix ida "64.exe" -> Some ida
-        | _some_other_ida ->
-          eprintf "Warning: use 64 bit IDA with 64-bit binaries@.";
-          ida in
-    Image.filename img >>= syms ida >>|
-    List.map ~f:(fun (n,s,e) -> n, addr s, addr e) >>| Seq.of_list in
-  let rooter img = extract img >>| Rooter.of_blocks in
-  let symbolizer img = extract img >>| Symbolizer.of_blocks in
-  let reconstructor img = extract img >>| Reconstructor.of_blocks in
-  Rooter.Factory.register Source.Binary name rooter;
-  Symbolizer.Factory.register Source.Binary name symbolizer;
-  Reconstructor.Factory.register Source.Binary name reconstructor
 
-let main ida =
-  if Ida.exists ?ida () then register ida
-  else match ida with
-    | None -> ()
-    | Some _ ->
-      eprintf "Error: IDA was request, but we failed to find it@.";
-      exit 1
+let extract path arch =
+  let id =
+    Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
+  let syms = match Symbols.Cache.load id with
+    | Some syms -> syms
+    | None -> match Ida.(with_file path get_symbols) with
+      | [] ->
+        warning "didn't find any symbols";
+        info "this plugin doesn't work with IDA Free";
+        []
+      | syms -> Symbols.Cache.save id syms; syms in
+  let size = Arch.addr_size arch in
+  let width = Size.in_bits size in
+  let addr = Addr.of_int64 ~width in
+  List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
+  Seq.of_list
 
-let man = [
-  `S "DESCRIPTION";
-  `P "This plugin provides rooter, symbolizer and reconstuctor services"
-]
 
-let info = Term.info name ~version ~doc ~man
+let register_source (module T : Target) =
+  let source =
+    let open Project.Info in
+    let extract file arch = Or_error.try_with (fun () ->
+        extract file arch |> T.of_blocks) in
+    Stream.merge file arch ~f:extract in
+  T.Factory.register name source
 
-let () =
-  let run = Term.(const main $path) in
-  match Term.eval ~argv ~catch:false (run,info) with
-  | `Ok () -> ()
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+let loader_script =
+  {|
+from idautils import *
+from idaapi import *
+
+Wait()
+
+with open ('$output', 'w+') as out:
+    info = idaapi.get_inf_structure()
+    size = "r32" if info.is_32bit else "r64"
+    out.write ("(%s %s (" % (info.get_proc_name()[1], size))
+    for seg in Segments():
+        out.write ("\n(%s %s %d (0x%X %d))" % (
+            get_segm_name(seg),
+            "code" if segtype(seg) == SEG_CODE else "data",
+            get_fileregion_offset(seg),
+            seg, getseg(seg).size()))
+    out.write("))\n")
+idc.Exit(0)
+|}
+
+type perm = [`code | `data] [@@deriving sexp]
+type section = string * perm * int * (int64 * int)
+  [@@deriving sexp]
+
+type image = string * addr_size * section list [@@deriving sexp]
+
+module Img = Data.Make(struct
+    type t = image
+    let version = "0.1"
+  end)
+
+
+exception Unsupported_architecture of string
+
+let arch_of_procname size = function
+  | "8086" | "80286r" | "80286p"
+  | "80386r" | "80386p"
+  | "80486r" | "80486p"
+  | "80586r" | "80586p"
+  | "80686p" | "k62" | "p2" | "p3" | "athlon" | "p4" | "metapc" ->
+    if size = `r32 then `x86 else `x86_64
+  | "ppc" ->  if size = `r64 then `ppc64 else `ppc
+  | "ppcl" ->  `ppc64
+  | "arm" ->  `armv7
+  | "armb" ->  `armv7eb
+  | "mipsl" ->  if size = `r64 then `mips64el else `mipsel
+  | "mipsb" ->  if size = `r64 then `mips64  else `mips
+  | "sparcb" -> if size = `r64 then `sparcv9 else `sparc
+  | s -> raise (Unsupported_architecture s)
+
+let read_image name =
+  In_channel.with_file name ~f:(fun ch ->
+      Sexp.input_sexp ch |> image_of_sexp)
+
+let load_image = Command.create `python
+    ~script:loader_script
+    ~process:read_image
+
+
+let mapfile path : Bigstring.t =
+  let fd = Unix.(openfile path [O_RDONLY] 0o400) in
+  let size = Unix.((fstat fd).st_size) in
+  let data = Bigstring.map_file ~shared:false fd size in
+  Unix.close fd;
+  data
+
+let loader path =
+  let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
+      (Digest.file path) in
+  let (proc,size,sections) = match Img.Cache.load id with
+    | Some img -> img
+    | None ->
+      let img = Ida.with_file path load_image in
+      Img.Cache.save id img;
+      img in
+  let bits = mapfile path in
+  let arch = arch_of_procname size proc in
+  let endian = Arch.endian arch in
+  let addr = Addr.of_int64 ~width:(Size.in_bits size) in
+  let code,data = List.fold sections
+      ~init:(Memmap.empty,Memmap.empty)
+      ~f:(fun (code,data) (name,perm,pos,(beg,len)) ->
+          match Memory.create ~pos ~len endian (addr beg) bits with
+          | Error err ->
+            info "skipping section %s: %a" name Error.pp err;
+            code,data
+          | Ok mem ->
+            let sec = Value.create Image.section name in
+            if perm = `code
+            then Memmap.add code mem sec, data
+            else code, Memmap.add data mem sec) in
+  Project.Input.create arch path ~code ~data
+
+let main () =
+  register_source (module Rooter);
+  register_source (module Symbolizer);
+  register_source (module Reconstructor);
+  Project.Input.register_loader name loader
+
+module Main = struct
+  open Cmdliner
+  let man = [
+    `S "DESCRIPTION";
+    `P "This plugin provides rooter, symbolizer and reconstuctor services.";
+    `P "If IDA instance is found on the machine, or specified by a
+  user, it will be queried for the specified information."
+
+  ]
+
+
+  let path : string option Term.t =
+    let doc = "Use IDA to extract symbols from file. \
+               You can optionally provide path to IDA executable,\
+               or executable name." in
+    Arg.(value & opt (some string) None & info ["path"] ~doc)
+
+  let info = Term.info name ~version ~doc ~man
+
+  let () =
+    let run = Term.(const main $ const ()) in
+    match Term.eval ~argv ~catch:false (run,info) with
+    | `Ok () -> ()
+    | `Help | `Version -> exit 0
+    | `Error _ -> exit 1
+end

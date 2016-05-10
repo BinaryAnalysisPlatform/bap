@@ -65,8 +65,8 @@ module Disasm = struct
   type t = disasm
   type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
 
-  let create ?(errors=[]) cfg = {
-    cfg; err = errors
+  let create  cfg = {
+    cfg; err = [];
   }
 
   let insns t = insns_of_blocks t.cfg
@@ -76,7 +76,7 @@ module Disasm = struct
   let of_mem ?backend ?brancher ?rooter arch mem =
     Rec.run ?backend ?brancher ?rooter arch mem >>| of_rec
 
-  let merge_segments d1 d2 =
+  let merge d1 d2 =
     let merge = Graphlib.union (module Rec.Cfg) in
     {cfg = merge d1.cfg d2.cfg; err = d1.err @ d2.err}
 
@@ -88,7 +88,7 @@ module Disasm = struct
       ~f:(fun mem sec dis ->
           dis >>= fun dis ->
           if Image.Segment.is_executable sec then
-            of_mem ?backend ?brancher ~rooter arch mem >>| merge_segments dis
+            of_mem ?backend ?brancher ~rooter arch mem >>| merge dis
           else return dis)
 
   let of_file ?backend ?brancher ?rooter ?loader filename =

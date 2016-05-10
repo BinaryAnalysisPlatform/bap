@@ -1,13 +1,20 @@
 open Core_kernel.Std
 open Regular.Std
+open Graphlib.Std
+open Bap_future.Std
 open Bap_plugins.Std
 open Bap_bundle.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
 open Bap_sema.Std
-open Or_error
+open Or_error.Monad_infix
 open Format
+
+module Event = Bap_event
+include Bap_self.Create()
+
+let find name = FileUtil.which name
 
 type state = {
   tids : Tid.Tid_generator.t;
@@ -26,8 +33,81 @@ type t = {
   passes  : string list;
 } [@@deriving fields]
 
-type project = t
+module Info = struct
+  let file,got_file = Stream.create ()
+  let arch,got_arch = Stream.create ()
+  let data,got_data = Stream.create ()
+  let code,got_code = Stream.create ()
+  let img, got_img  = Stream.create ()
+  let cfg, got_cfg  = Stream.create ()
+  let symtab,got_symtab = Stream.create ()
+  let program,got_program = Stream.create ()
+end
 
+module Input = struct
+  type result = {
+    arch : arch;
+    data : value memmap;
+    code : value memmap;
+    file : string;
+  }
+
+  type t = unit -> result
+
+  let create arch file ~code ~data () = {
+    arch; file; code; data
+  }
+
+  let loaders = String.Table.create ()
+  let register_loader name loader =
+    Hashtbl.set loaders ~key:name ~data:loader
+
+  let is_code v =
+    Value.get Image.segment v |>
+    Option.value_map ~default:false ~f:Image.Segment.is_executable
+
+  let filter_code mem = Memmap.filter mem ~f:is_code
+
+  let of_image file img = {
+    arch = Image.arch img;
+    data = Image.memory img;
+    code = filter_code (Image.memory img);
+    file;
+  }
+
+  let of_image ?loader filename =
+    Image.create ?backend:loader filename >>| fun (img,warns) ->
+    List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
+    Signal.send Info.got_img img;
+    of_image filename img
+
+  let from_image ?loader filename () =
+    of_image ?loader filename |> ok_exn
+
+  let file ?loader ~filename = match loader with
+    | None -> from_image filename
+    | Some name -> match Hashtbl.find loaders name with
+      | None -> from_image ?loader filename
+      | Some load -> load filename
+
+  let null arch : addr =
+    Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
+
+  let binary ?base arch ~filename () =
+    let big = Bap_fileutils.readfile filename in
+    if Bigstring.length big = 0 then invalid_arg "file is empty";
+    let base = Option.value base ~default:(null arch) in
+    let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
+    let section = Value.create Image.section "bap.user" in
+    let data = Memmap.add Memmap.empty mem section in
+    {arch; data; code = data; file = filename}
+
+  let available_loaders () =
+    Hashtbl.keys loaders @ Image.available_backends ()
+end
+
+type input = Input.t
+type project = t
 
 type bound = [`min | `max] [@@deriving sexp]
 type spec = [`name | bound] [@@deriving sexp]
@@ -46,77 +126,149 @@ let roots rooter = match rooter with
   | None -> []
   | Some r -> Rooter.roots r |> Seq.to_list
 
+
 let fresh_state () = {
   tids = Tid.Tid_generator.fresh ();
   name = Tid.Name_resolver.fresh ();
   vars = Var.Id.fresh ();
 }
 
-let from_mem
+module MVar = struct
+  type 'a t = {
+    mutable value   : 'a Or_error.t;
+    mutable updated : bool;
+    compare : 'a -> 'a -> int;
+  }
+
+  let create ?(compare=fun _ _ -> 1) x =
+    {value=Ok x; updated=true; compare}
+  let peek x = ok_exn x.value
+  let read x = x.updated <- false; peek x
+  let is_updated x = x.updated
+  let write x v =
+    if x.compare (ok_exn x.value) v <> 0 then x.updated <- true;
+    x.value <- Ok v
+
+  let fail x err =
+    x.value <- Error err;
+    x.updated <- true
+
+  let ignore x =
+    Result.iter_error x.value ~f:Error.raise;
+    x.updated <- false
+
+  let from_source s =
+    let x = create None in
+    Stream.observe s (function
+        | Ok v -> write x (Some v)
+        | Error e -> fail x e);
+    x
+
+  let from_optional_source = function
+    | None -> create None
+    | Some s -> from_source s
+end
+
+let phase_triggered phase mvar =
+  let trigger = MVar.is_updated mvar in
+  if trigger then Signal.send phase (MVar.read mvar);
+  trigger
+
+module Cfg = Graphs.Cfg
+
+let empty_disasm = Disasm.create Cfg.empty
+
+let pp_mem ppf mem =
+  fprintf ppf "%s"
+    (Addr.string_of_value (Memory.min_addr mem))
+
+let pp_disasm_error ppf = function
+  | `Failed_to_disasm mem ->
+    fprintf ppf "can't disassemble insnt at address %a" pp_mem mem
+  | `Failed_to_lift (mem,insn,err) ->
+    fprintf ppf "<%s>: %a"
+      (Disasm_expert.Basic.Insn.asm insn) Error.pp err
+
+let union_memory m1 m2 =
+  Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
+      Memmap.add m1 mem v)
+
+let create_exn
     ?disassembler:backend
     ?brancher
-    ?(symbolizer=Symbolizer.empty)
+    ?symbolizer
     ?rooter
     ?reconstructor
-    arch mem  =
+    (read : input)  =
   let state = fresh_state () in
-  Disasm.of_mem ?backend ?brancher ?rooter arch mem >>= fun disasm ->
-  let cfg = Disasm.cfg disasm in
-  let symbols = match reconstructor with
-    | Some r -> Reconstructor.run r cfg
-    | None ->
-      let name = Symbolizer.resolve symbolizer in
-      Reconstructor.(run (default name (roots rooter)) cfg) in
-  let program = Program.lift symbols in
-  let memory =
-    Memmap.add Memmap.empty mem (Value.create Image.section "bap.user") in
   let storage = Dict.empty in
-  Ok ({arch; disasm; memory; storage; program; symbols; state; passes=[]})
+  let mrooter = MVar.from_optional_source rooter in
+  let mbrancher = MVar.from_optional_source brancher in
+  let msymbolizer = MVar.from_optional_source symbolizer in
+  let mreconstructor = MVar.from_optional_source reconstructor in
+  let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
+  let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
+  let program = MVar.create ~compare:Program.compare (Program.create ()) in
+  let {Input.arch; data; code; file} = read () in
+  Signal.send Info.got_file file;
+  Signal.send Info.got_arch arch;
+  Signal.send Info.got_data data;
+  Signal.send Info.got_code code;
+  let rec loop () =
+    let updated = MVar.is_updated mbrancher || MVar.is_updated mrooter in
+    let brancher = MVar.read mbrancher
+    and rooter   = MVar.read mrooter in
+    let disassemble () =
+      let run mem =
+        let dis =
+          Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
+        Disasm.errors dis |>
+        List.iter ~f:(fun e -> warning "%a" pp_disasm_error e);
+        Disasm.cfg dis in
+      Memmap.to_sequence code |>
+      Seq.fold ~init:Cfg.empty ~f:(fun cfg (mem,_) ->
+          Graphlib.union (module Cfg) cfg (run mem)) |>
+      MVar.write cfg  in
+    if updated then disassemble ();
+    let is_cfg_updated = phase_triggered Info.got_cfg cfg in
+    let g = MVar.read cfg in
+    let reconstruct () =
+      if is_cfg_updated || MVar.is_updated msymbolizer then
+        let symbolizer = match MVar.read msymbolizer with
+          | None -> Symbolizer.empty
+          | Some s -> s in
+        let name = Symbolizer.resolve symbolizer in
+        let syms =
+          Reconstructor.(run (default name (roots rooter)) g) in
+        MVar.write symtab syms in
+    if is_cfg_updated || MVar.is_updated mreconstructor
+    then match MVar.read mreconstructor with
+      | Some r ->
+        MVar.ignore msymbolizer;
+        MVar.write symtab (Reconstructor.run r g)
+      | None -> reconstruct ()
+    else reconstruct ();
+    let is_symtab_updated = phase_triggered Info.got_symtab symtab in
+    if is_symtab_updated
+    then MVar.write program (Program.lift (MVar.read symtab));
+    let _ = phase_triggered Info.got_program program in
+    if MVar.is_updated mrooter ||
+       MVar.is_updated mbrancher ||
+       MVar.is_updated msymbolizer ||
+       MVar.is_updated mreconstructor then loop ()
+    else {
+      disasm = Disasm.create g;
+      program = MVar.read program;
+      symbols = MVar.read symtab;
+      arch; memory=union_memory code data; storage; state; passes=[]
+    } in
+  loop ()
 
-let null arch : addr =
-  Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
-
-let from_bigstring
-    ?base ?disassembler ?brancher
-    ?symbolizer ?rooter ?reconstructor arch big : t Or_error.t =
-  let base = Option.value base ~default:(null arch) in
-  Memory.create (Arch.endian arch) base big >>=
-  from_mem ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor arch
-
-let from_string
-    ?base ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor arch s : t Or_error.t =
-  from_bigstring ?disassembler ?base ?brancher ?symbolizer ?rooter ?reconstructor
-    arch (Bigstring.of_string s)
-
-let from_image ?disassembler:backend ?brancher ?symbolizer ?rooter ?
-    reconstructor img =
-  let state = fresh_state () in
-  let symbolizer = Option.value symbolizer
-      ~default:(Symbolizer.of_image img) in
-  let rooter = Option.value rooter ~default:(Rooter.of_image img) in
-  Disasm.of_image ?backend ?brancher ~rooter img >>= fun disasm ->
-  let cfg = Disasm.cfg disasm in
-  let symbols = match reconstructor with
-    | Some r -> Reconstructor.run r cfg
-    | None ->
-      let name = Symbolizer.resolve symbolizer in
-      let roots = Rooter.roots rooter |> Seq.to_list in
-      Reconstructor.(run (default name roots) cfg) in
-  let program = Program.lift symbols in
-  let memory = Image.memory img in
-  let storage = Option.value_map (Image.filename img)
-      ~default:Dict.empty
-      ~f:(fun name -> Dict.set Dict.empty filename name) in
-  let arch = Image.arch img in
-  return {arch; disasm; memory; storage; program; symbols; state; passes=[]}
-
-let ok _ = Ok ()
-
-let from_file ?(on_warning=ok)
-    ?loader ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor filename =
-  Image.create ?backend:loader filename >>= fun (img,warns) ->
-  List.map warns ~f:on_warning |> Or_error.combine_errors_unit
-  >>= fun () -> from_image ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor img
+let create
+    ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
+  Or_error.try_with (fun () ->
+      create_exn
+        ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
 let restore_state t =
   Tid.Tid_generator.store t.state.tids;
@@ -230,9 +382,14 @@ type pass = {
   deps : string sexp_list;
   auto : bool;
   once : bool;
+  starts     : float stream sexp_opaque;
+  finishes   : float stream sexp_opaque;
+  failures   : float stream sexp_opaque;
+  successes  : float stream sexp_opaque;
 } [@@deriving sexp_of]
 
 let passes : pass DList.t = DList.create ()
+let pass_registrations,pass_registered = Stream.create ()
 
 let forget : pass DList.Elt.t -> unit = fun _ -> ()
 
@@ -246,11 +403,35 @@ let register_pass ?(autorun=false) ?(runonce=autorun) ?(deps=[]) ?name main : un
   let name = match name with
     | None -> pref
     | Some name -> pref ^ "-" ^ name in
-  DList.insert_last passes {name; main; deps; once = runonce; auto = autorun} |> forget
+  let starts,started = Stream.create () in
+  let successes,succeded = Stream.create () in
+  let failures,failed = Stream.create () in
+  let finishes =
+    Stream.either successes failures |>
+    Stream.map ~f:Either.value in
+  let now () = Unix.gettimeofday () in
+  let main project =
+    Signal.send started (now ());
+    try
+      let project = main project in
+      Signal.send succeded (now ());
+      project
+    with exn ->
+      Signal.send failed (now ());
+      raise exn in
+  let pass = {
+    name; main; deps;
+    once = runonce; auto = autorun;
+    starts; finishes;
+    failures; successes;
+  } in
+  DList.insert_last passes pass |> forget;
+  Signal.send pass_registered pass
 
 let register_pass' ?autorun ?runonce ?deps ?name v : unit =
   register_pass ?autorun ?runonce ?deps ?name (fun p -> v p; p)
 
+type second = float
 module Pass = struct
   type t = pass [@@deriving sexp_of]
   type error =
@@ -290,46 +471,31 @@ module Pass = struct
 
   let name p = p.name
   let autorun p  = p.auto
+  let starts p = p.starts
+  let finishes p = p.finishes
+  let failures p = p.failures
+  let successes p = p.successes
 end
 
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
-module Creator = struct
-  type nonrec t =
-    ?disassembler:string ->
-    ?brancher:brancher ->
-    ?symbolizer:symbolizer ->
-    ?rooter:rooter ->
-    ?reconstructor:reconstructor -> unit -> t Or_error.t
-end
-module Factory = struct
-  include Source.Factory(Creator)
-  include Creator
-end
-
+let () =
+  (* a FSM accepting image,file,image,file,.. sequence *)
+  let stream f =
+    Stream.either Info.img Info.file |>
+    Stream.parse ~init:`start ~f:(fun state info -> match state,info with
+        | _,First img -> Some (Ok (f img)),`ok
+        | `ok,Second file -> None,`start
+        | `start,Second file ->
+          Some (Or_error.errorf "expected structural binary, got raw"),
+          `start) in
+  let rooter = stream Rooter.of_image in
+  let symbolizer = stream Symbolizer.of_image in
+  Rooter.Factory.register "internal" rooter;
+  Symbolizer.Factory.register "internal" symbolizer
 
 include Data.Make(struct
     type nonrec t = t
     let version = "0.1"
   end)
-
-
-
-let () =
-  let make f src =
-    Some (fun ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor () ->
-        f ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor src) in
-  let from_memory ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor (mem,arch) =
-    from_mem ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor arch mem in
-  let from_binary ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor img =
-    from_image ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor img in
-  let from_file ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor file =
-    let fmt,ver = match Bap_fileutils.parse_name file with
-      | None -> None,None
-      | Some (fmt,ver) -> Some fmt, ver in
-    let load = Io.load ?fmt ?ver in
-    try_with (fun () -> In_channel.with_file file ~binary:true ~f:load) in
-  Factory.register Source.Binary "builtin" (make from_binary);
-  Factory.register Source.Memory "builtin" (make from_memory);
-  Factory.register Source.File   "builtin" (make from_file)

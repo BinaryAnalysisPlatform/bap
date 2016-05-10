@@ -29,3 +29,5 @@ _oasis
 /man/bap-byteweight.1
 /man/bap.1
 /lib/bap_config/bap_config.ml
+/lib/bap_ida/bap_ida_config.ml
+/plugins/objdump/objdump_config.ml
