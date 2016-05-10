@@ -15,18 +15,18 @@ type complex = [`cfloat | `cdouble | `clong_double]
 type floating = [real | complex]
 type basic = [integer | floating]
 
-type cv
-type cvr = bool
+type cv = unit
+type cvr = Bool.t
 
 type 'a qualifier = {
-  const : bool;
-  volatile : bool;
+  const : Bool.t;
+  volatile : Bool.t;
   restrict : 'a;
 }
 
 type attr = {
   attr_name : string;
-  attr_args : string;
+  attr_args : string list;
 }
 
 type ('a,'b) spec = {
@@ -35,21 +35,21 @@ type ('a,'b) spec = {
   spec : 'b;
 }
 
-type no_qualifier
+type no_qualifier = unit
 
 type t = [
   | `Void
   | `Basic of (cv qualifier,basic) spec
   | `Pointer of (cvr qualifier, t) spec
   | `Array of (no_qualifier, (t * Int.t option)) spec
-  | `Structure of (no_qualifier, t list) spec
-  | `Union of (no_qualifier, t list) spec
+  | `Structure of (no_qualifier, (string * t) list) spec
+  | `Union of (no_qualifier, (string * t) list) spec
   | `Function of (no_qualifier, proto) spec
 ]
 and proto = {
   return : t;
-  args   : t list;
-  variadic : bool;
+  args   : (string * t) list;
+  variadic : Bool.t;
 }
 
 type scalar = [

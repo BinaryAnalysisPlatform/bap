@@ -6,6 +6,8 @@ open Bap_c_data
 type real_size = [`r32 | `r64 | `r128]
 type 'a unqualified = (no_qualifier, 'a) spec
 
+type bits = Int.t
+
 class base (m : model) = object(self)
   method integer (t : integer) : size =
     match m,t with
@@ -19,7 +21,7 @@ class base (m : model) = object(self)
     | _,#long_long -> `r64
     | _,`enum x -> self#enum x
 
-  method enum _ = self#integer `uint   (* not standrard compiliant *)
+  method enum _ = self#integer `uint   (* approximation *)
 
   method real (v : real) : real_size = match v with
     | `float -> `r32

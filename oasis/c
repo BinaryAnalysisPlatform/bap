@@ -7,7 +7,7 @@ Library bap_c
   Path: lib/bap_c
   FindlibName: bap-c
   CompiledObject: best
-  BuildDepends: bap, bap-language
+  BuildDepends: bap
   Modules: Bap_c,
            Bap_c_attr,
            Bap_c_data,

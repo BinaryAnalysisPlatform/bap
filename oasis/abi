@@ -1,11 +1,3 @@
 Flag abi
   Description: Build ABI library
   Default: false
-
-Library bap_abi
-  Build$:           flag(everything) || flag(abi)
-  Path:             lib/bap_abi
-  FindlibName:      bap-abi
-  CompiledObject:   best
-  BuildDepends:     bap, bap-language
-  Modules:          Bap_abi
