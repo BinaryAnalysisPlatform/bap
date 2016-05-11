@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Regular.Std
-open Bap_future.Std
 open Bap.Std
 
 (** A high level programming language.
@@ -107,65 +106,24 @@ open Bap.Std
     framework, that maps API languages to ABI implementations.
 *)
 
-(** The promise to set the propery. This promise should be
-    taken by only one system component, if there is more than
-    one component, trying to decide the language, then it will
-    provoke a runtime error.  *)
 
 module Std : sig
 
-  module type Property = sig
-    type t
-    type 'a key
+  type 'a language
 
-    val decided : t future
-    val decide : t promise
+  module Language : sig
+    type 'a t = 'a language
 
-    module Key : sig
-      val create : t -> 'a key
-      val propery : 'a key -> t
-    end
+    val create : name:string -> 'a language
+    val name : 'a language -> string
 
-    module type Table = sig
+    module Property(T : T1) : sig
       type t
-      type 'a data
+      type 'a data = 'a T.t
 
       val create : unit -> t
-      val set : t -> 'a key -> 'a data -> unit
-      val get : t -> 'a key -> 'a data option
-    end
-    module Table(T : T1) : Table with type 'a data = 'a T.t
-  end
-
-  module type Named = sig
-    type t
-    type name = ..
-
-    val create : string -> name -> t
-    val name : t -> name
-
-    include Printable with type t := t
-    module Name : sig
-      type t = name = ..
-      include Printable with type t := t
+      val set : t -> 'a language -> 'a data -> unit
+      val get : t -> 'a language -> 'a data option
     end
   end
-
-  module type Named_property = sig
-    include Property
-    include Named with type t := t
-  end
-
-  type language
-  type compiler
-  type platform
-
-  module Arch : Property with type t = arch
-
-  module Language : Named_property with type t = language
-  module Compiler : Named_property with type t = compiler
-  module Platform : Named_property with type t = platform
-
-
-
 end

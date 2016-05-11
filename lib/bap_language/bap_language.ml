@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Regular.Std
-open Bap_future.Std
 open Bap_plugins.Std
 open Format
 
@@ -16,9 +15,6 @@ module Std = struct
   }
 
   type 'a key = 'a Tid.t
-
-  let chosen,choose = Future.create ()
-
 
   let name_to_string = ref (fun _ -> "<language>")
 
