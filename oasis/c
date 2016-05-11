@@ -11,4 +11,5 @@ Library bap_c
   Modules: Bap_c,
            Bap_c_attr,
            Bap_c_data,
+           Bap_c_size,
            Bap_c_type

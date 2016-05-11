@@ -14,7 +14,7 @@ type bits = Int.t
 
     The entry method is the [bits] method.
 *)
-class virtual base : size -> model -> object
+class base :  model -> object
     (** returns a size of the data type representation if type
         definition is complete. Otherwise [None] is returned.
         The size is computed with respect to padding and alignment
@@ -40,8 +40,8 @@ class virtual base : size -> model -> object
     method array : (no_qualifier, t * Int.t option) spec -> bits option
 
     (** returns   *)
-    method union : (no_qualifier, t list) spec -> bits option
-    method structure : (no_qualifier, t list) spec -> bits option
+    method union : (no_qualifier, (string * t) list) spec -> bits option
+    method structure : (no_qualifier, (string * t) list) spec -> bits option
 
 
     method integer : integer -> size

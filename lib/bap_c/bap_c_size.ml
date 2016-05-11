@@ -33,13 +33,14 @@ class base (m : model) = object(self)
     | `r64 -> `r128
     | `r128 -> `r256
 
-  method complex t : size = self#double_size (self#real t)
+  method complex : complex -> size = function
+    | `cfloat -> self#double_size (self#real `float)
+    | `cdouble -> self#double_size (self#real `double)
+    | `clong_double -> self#double_size (self#real `long_double)
 
   method floating : floating -> size = function
     | #real as t -> (self#real t :> size)
-    | `cfloat -> self#complex `float
-    | `cdouble -> self#complex `double
-    | `clong_double -> self#complex `long_double
+    | #complex as t -> (self#complex t :> size)
 
   method basic : basic -> size = function
     | #integer as t -> self#integer t
@@ -64,7 +65,7 @@ class base (m : model) = object(self)
     | None -> 0
     | Some width -> min width max_align
 
-  method padded t = function
+  method private padded t = function
     | None -> None
     | Some sz -> Some (sz + self#padding t sz)
 
@@ -84,15 +85,15 @@ class base (m : model) = object(self)
         | None -> None
         | Some x -> Some (n * x)
 
-  method union : t list unqualified -> Int.t option = fun {spec=fields} ->
-    List.map fields ~f:self#bits |> Option.all |> function
+  method union : 'f list unqualified -> Int.t option = fun {spec=fields} ->
+    List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
     | None -> None
     | Some ss -> List.max_elt ~cmp:Int.compare ss |> function
       | None -> None
       | Some s -> Some s
 
-  method structure : t list unqualified -> Int.t option = fun {spec=fields} ->
-    List.fold fields ~init:(Some 0) ~f:(fun sz field -> match sz with
+  method structure : 'f list unqualified -> Int.t option = fun {spec=fields} ->
+    List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
         | None -> None
         | Some sz -> match self#bits field with
           | None -> None
