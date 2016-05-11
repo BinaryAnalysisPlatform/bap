@@ -28,16 +28,8 @@ let cv = C.Type.{
     restrict = ();
   }
 
-let cvr = C.Type.{
-    const = false;
-    volatile = false;
-    restrict = false;
-  }
-
-let restricted cvr = C.Type.{
-    cvr with restrict = true;
-  }
-
+let cvr = C.Type.{ cv with restrict = false}
+let restricted cvr = C.Type.{cvr with restrict = true}
 let no_qualifier = ()
 
 let spec qualifier t = C.Type.{
@@ -100,43 +92,47 @@ let with_attrs attrs : C.Type.t -> C.Type.t =
   | `Union t -> `Union (add t)
   | `Function t -> `Function (add t)
 
-let const t = C.Type.{
-    t with qualifier = {t.qualifier with const = true}
-  }
+type qualifier = {
+  apply : 'a 'b.('a C.Type.qualifier,'b) C.Type.spec ->
+    ('a C.Type.qualifier,'b) C.Type.spec
+}
 
-let volatile t = C.Type.{
-    t with qualifier = {t.qualifier with volatile = true}
-  }
+let const = {
+  apply = fun t -> C.Type.{
+      t with qualifier = {t.qualifier with const = true}
+    }
+}
 
+let volatile = {
+  apply = fun t -> C.Type.{
+      t with qualifier = {t.qualifier with volatile = true}
+    }
+}
 
 let qualify f : C.Type.t -> C.Type.t =
   function
-  | `Basic t -> `Basic (const t)
-  | `Pointer t -> `Pointer (const t)
+  | `Basic t -> `Basic (f.apply t)
+  | `Pointer t -> `Pointer (f.apply t)
   | x -> x
 
 let ctype gamma t =
   let rec ctype : base_type -> C.Type.t = function
-    | NO_TYPE
-    | VOID -> `Void
+    | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _ | VOID -> `Void
     | CHAR sign -> basic @@ char sign
     | INT (size,sign) -> basic @@ int size sign
     | FLOAT _ -> basic @@ `float
     | DOUBLE long -> basic @@ if long then `long_double else `double
-    | BITFIELD (_,_) -> `Void
     | PTR t -> pointer @@ ctype t
     | RESTRICT_PTR t -> restrict @@ ctype t
     | ARRAY (et,ice) -> array (size ice) @@ ctype et
     | STRUCT (_,fs) -> structure @@ fields (name_groups fs)
     | UNION (_,fs) -> union @@ fields (name_groups fs)
     | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
-    | OLD_PROTO _ -> `Void
     | NAMED_TYPE name -> gamma name
-    | ENUM (_,_) -> `Void
+    | ENUM (_,fs) -> basic @@ `enum (List.length fs)
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
-    | TYPE_LINE (_,_,_) -> `Void
   and fields = List.map ~f:(fun (n,t,a) ->
       n, with_attrs (gnu_attrs a) @@ ctype t) in
   ctype t
