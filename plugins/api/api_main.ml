@@ -2,85 +2,120 @@ open Core_kernel.Std
 open Bap_bundle.Std
 open Bap.Std
 include Self()
-open Cabs
-open Option.Monad_infix
 
-type options = {
-  add_headers : string list;
-  use_header : string option
-}
+module type Api = Bap_api.S
 
-(* let main bundle options proj = *)
-(*   let prog = Project.program proj in *)
-(*   let arch = Project.arch proj in *)
-(*   let args = protos_of_bundle bundle in *)
-(*   let args = match options.use_header with *)
-(*     | Some file -> merge_args args (protos_of_file file) *)
-(*     | None -> args in *)
-(*   fill_args arch args prog |> *)
-(*   Project.with_program proj *)
 
-let main _ _ p = p
+let in_language ~language name =
+  match String.split ~on:'/' name with
+  | ["api"; lang; _] -> lang = language
+  | _ -> false
+
+let get_file bundle lang filename =
+  let name = Filename.temp_file "api" "lang" in
+  let file = Filename.concat lang filename in
+  match Bundle.get_file ~name bundle (Uri.of_string file) with
+  | None ->
+    Sys.remove filename;
+    None
+  | Some uri -> Some (Uri.path uri)
+
+let files bundle language  =
+  Bundle.list bundle |> List.filter ~f:(in_language ~language)
+
+let mapper bundle (module Api : Api) =
+  let get_file = get_file bundle Api.language in
+  let files = files bundle Api.language in
+  Result.(Api.parse get_file files >>| Api.mapper)
+
+let main proj =
+  let bundle = main_bundle () in
+  Bap_api.processors () |>
+  List.map ~f:(mapper bundle ) |>
+  Result.all |> function
+  | Error e ->
+    error "api wasn't applied: %a" Error.pp e;
+    proj
+  | Ok mappers ->
+    let prog = Project.program proj in
+    List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog) |>
+    Project.with_program proj
+
+
+type api = {lang : string; file : string}
+
+let add_files api =
+  let bundle = main_bundle () in
+  List.map api ~f:(fun api ->
+      Some ("api/" ^ api.lang ^ "/" ^ Filename.basename api.file),
+      Uri.of_string api.file) |>
+  Bundle.insert_files bundle
+
+let rem_files api =
+  main_bundle () |>
+  Bundle.update ~f:(fun file -> match String.split file ~on:'/' with
+      | ["api"; lang; file] ->
+        if List.exists api ~f:(fun x ->
+            x.lang = lang && x.file = Filename.basename file)
+        then `Drop
+        else `Copy
+      | "api" :: _ ->
+        warning "removing from the bundle a malformed entry: %s" file;
+        `Drop
+      | _ -> `Copy)
+
 
 module Cmdline = struct
   include Cmdliner
 
   let man = [
     `S "DESCRIPTION";
-    `P "Use API definition to annotate subroutines. The API is
-    specified using C syntax, extended with GNU attributes. The plugin
-    has an embedded knowledge of a big subset of POSIX standard, but
-    new interfaces can be added.";
-    `P "The plugin will insert arg terms, based on the C function declarations
-    and definitions. Known gnu attributes will be mapped to
-    corresponding $(b,Sub) attributes, e.g., a subroutine annotated with
-    $(b,__attribute__((noreturn))) will have IR attribute
-    $(b,Sub.noreturn).";
-    `S "NOTES";
-    `P "A file with API shouldn't contain preprocessor directives, as
-    preproccessing is not run. If it has, then consider running cpp
-    manually. Also, all types and structures must be defined. An
-    undefined type will result in a parsing error."
+    `P "Automatically apply API bundled in the plugin. "
   ]
 
-  let add_headers : string list Term.t =
-    let doc =
-      "Add C header with function prototypes to the plugin database, \
-       which will be used by default if file_header is not specified." in
-    Arg.(value & opt (list file) [] & info ["add"] ~doc)
+  module Api = struct
+    type t = api
+    let parser str = match String.split str ~on:':' with
+      | [lang;file] -> `Ok {lang;file}
+      | _ -> `Error "expected <lang>:<file>"
+    let printer ppf t =
+      Format.fprintf ppf "%s:%s" t.lang t.file
+    let t = parser,printer
+  end
 
-  let file_header : string option Term.t =
-    let doc =
-      "Use specified API. The file is not added
-       to the plugin database of headers." in
-    Arg.(value & opt (some string) None & info ["file"] ~doc)
+  let add_api : Api.t list Term.t =
+    let doc = "Add specified api module(s) and exit. Each module
+      should be of the form <lang>:<file>, where <lang> is the
+      language in which API is written, and <file> is a path to
+      the specification. Multiple modules can be added by specifying
+      this option several times." in
+    Arg.(value & opt (list Api.t) [] & info ["add"] ~doc)
 
-  let process_args add_headers use_header = {add_headers; use_header}
+  let rem_api : Api.t list Term.t =
+    let doc = "Removed specified api module from the bundle and exit. The value
+    format is the same, as in the $(b,api-add) option." in
+    Arg.(value & opt (list Api.t) [] & info ["rem"; "remove"] ~doc)
 
-  let parse argv =
-    let info = Term.info ~doc ~man name in
-    let spec = Term.(pure process_args $add_headers $file_header) in
-    match Term.eval ~argv (spec,info) with
-    | `Ok res -> res
-    | `Error err -> exit 1
-    | `Version | `Help -> exit 0
+
+  let dispatch add rem = match add,rem with
+    | [],[] -> Project.register_pass ~autorun:true main
+    | add,rem -> add_files add; rem_files rem; exit 0
+
+  let args =
+    Term.(pure dispatch $add_api $rem_api),
+    Term.info ~doc ~man name
 end
 
 
 let add_headers bundle file =
   let name = "api/" ^ Filename.basename file in
   try
-    (* todo call a parser and check the result *)
-    (* protos_of_file file |> ignore_protos; *)
     Bundle.insert_file ~name bundle (Uri.of_string file)
   with
   | Parsing.Parse_error ->
     printf "Could not add header file: parse error."; exit 1
 
-let () =
-  let bundle = main_bundle () in
-  let options = Cmdline.parse argv in
-  match options.add_headers with
-  | [] ->  Project.register_pass ~autorun:true (main bundle options)
-  | headers -> List.iter headers ~f:(add_headers bundle);
-    exit 0
+let () = match Cmdliner.Term.eval Cmdline.args with
+  | `Ok res -> res
+  | `Error err -> exit 1
+  | `Version | `Help -> exit 0
