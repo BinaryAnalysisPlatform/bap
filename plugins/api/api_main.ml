@@ -115,7 +115,7 @@ let add_headers bundle file =
   | Parsing.Parse_error ->
     printf "Could not add header file: parse error."; exit 1
 
-let () = match Cmdliner.Term.eval Cmdline.args with
+let () = match Cmdliner.Term.eval ~argv Cmdline.args with
   | `Ok res -> res
   | `Error err -> exit 1
   | `Version | `Help -> exit 0

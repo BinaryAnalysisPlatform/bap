@@ -22,24 +22,20 @@ let char sign : C.Type.basic = match sign with
   | SIGNED   -> `schar
   | UNSIGNED -> `uchar
 
-let cv = C.Type.{
+let cv = C.Type.Qualifier.{
     const = false;
     volatile = false;
     restrict = ();
   }
 
-let cvr = C.Type.{ cv with restrict = false}
-let restricted cvr = C.Type.{cvr with restrict = true}
+let cvr = C.Type.Qualifier.{ cv with restrict = false}
+let restricted cvr = C.Type.Qualifier.{cvr with restrict = true}
 let no_qualifier = ()
 
-let spec qualifier t = C.Type.{
-    attrs = [];
-    spec=t;
-    qualifier;
-  }
+let spec qualifier t = C.Type.Spec.{t; attrs = []; qualifier}
 
 let basic t = `Basic (spec cv t)
-let pointer t = `Pointer (spec (cvr ) t)
+let pointer t = `Pointer (spec cvr t)
 let restrict t = `Pointer (spec (restricted cvr) t)
 
 
@@ -47,13 +43,14 @@ let size = function
   | CONSTANT CONST_INT s -> Some (Int.of_string s)
   | _ -> None
 
-let array size t = `Array (spec no_qualifier (t,size))
+let array size t = `Array (spec cvr (t,size))
 
 let structure fields = `Structure (spec no_qualifier fields)
 let union fields = `Union (spec no_qualifier fields)
-let func variadic return args = `Function (spec no_qualifier C.Type.{
-    return; args; variadic
-  })
+let func variadic return args =
+  `Function (spec no_qualifier C.Type.Proto.{
+      return; args; variadic
+    })
 
 let name_groups : name_group list -> 'a list =
   List.concat_map ~f:(fun (_,_,ns) ->
@@ -64,11 +61,10 @@ let single_names : single_name list -> 'a list =
 
 let rec gnu_attr = function
   | GNU_NONE -> None
-  | GNU_CALL (name,args) -> Some C.Type.{
-      attr_name = name;
-      attr_args = gnu_attrs_args args
+  | GNU_CALL (name,args) -> Some C.Type.Attr.{
+      name; args = gnu_attrs_args args
     }
-  | GNU_ID s -> Some C.Type.{attr_name = s; attr_args = []}
+  | GNU_ID s -> Some C.Type.Attr.{name = s; args = []}
   | GNU_CST _
   | GNU_EXTENSION
   | GNU_INLINE  -> None
@@ -82,7 +78,7 @@ and gnu_attrs_args = List.filter_map ~f:(function
 let gnu_attrs = List.filter_map ~f:gnu_attr
 
 let with_attrs attrs : C.Type.t -> C.Type.t =
-  let add t = C.Type.{ t with attrs = t.attrs @ attrs} in
+  let add t = C.Type.Spec.{ t with attrs = t.attrs @ attrs} in
   function
   | `Void -> `Void
   | `Basic t -> `Basic (add t)
@@ -98,14 +94,15 @@ type qualifier = {
 }
 
 let const = {
-  apply = fun t -> C.Type.{
-      t with qualifier = {t.qualifier with const = true}
-    }
+  apply = fun t -> C.Type.Spec.{
+      t with qualifier = C.Type.Qualifier.{
+      t.qualifier with const = true}}
 }
 
 let volatile = {
-  apply = fun t -> C.Type.{
-      t with qualifier = {t.qualifier with volatile = true}
+  apply = fun t -> C.Type.Spec.{
+      t with qualifier = C.Type.Qualifier.{
+      t.qualifier with volatile = true}
     }
 }
 

@@ -37,7 +37,7 @@ class base :  model -> object
     (** [array spec] if array [spec] is complete, then returns a
         product of the bitwidth of array size and array's element
         type, otherwise returns [None] *)
-    method array : (no_qualifier, t * Int.t option) spec -> bits option
+    method array : (cvr qualifier, t * Int.t option) spec -> bits option
 
     (** returns   *)
     method union : (no_qualifier, (string * t) list) spec -> bits option

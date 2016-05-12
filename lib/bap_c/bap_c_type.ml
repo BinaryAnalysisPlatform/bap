@@ -18,39 +18,57 @@ type basic = [integer | floating]
 type cv = unit
 type cvr = Bool.t
 
-type 'a qualifier = {
-  const : Bool.t;
-  volatile : Bool.t;
-  restrict : 'a;
-}
+module Qualifier = struct
+  type 'a t = {
+    const : Bool.t;
+    volatile : Bool.t;
+    restrict : 'a;
+  }
+end
 
-type attr = {
-  attr_name : string;
-  attr_args : string list;
-}
+type 'a qualifier = 'a Qualifier.t
 
-type ('a,'b) spec = {
-  attrs : attr list;
-  qualifier : 'a;
-  spec : 'b;
-}
+module Attr = struct
+  type t = {
+    name : string;
+    args : string list;
+  }
+end
+
+type attr = Attr.t
+
+module Spec = struct
+  type ('a,'b) t = {
+    attrs : attr list;
+    qualifier : 'a;
+    t : 'b;
+  }
+end
+
+type ('a,'b) spec = ('a,'b) Spec.t
 
 type no_qualifier = unit
 
-type t = [
-  | `Void
-  | `Basic of (cv qualifier,basic) spec
-  | `Pointer of (cvr qualifier, t) spec
-  | `Array of (no_qualifier, (t * Int.t option)) spec
-  | `Structure of (no_qualifier, (string * t) list) spec
-  | `Union of (no_qualifier, (string * t) list) spec
-  | `Function of (no_qualifier, proto) spec
-]
-and proto = {
-  return : t;
-  args   : (string * t) list;
-  variadic : Bool.t;
-}
+module rec T : sig
+  type t = [
+    | `Void
+    | `Basic of (cv qualifier,basic) spec
+    | `Pointer of (cvr qualifier, t) spec
+    | `Array of (cvr qualifier, (t * Int.t option)) spec
+    | `Structure of (no_qualifier, (string * t) list) spec
+    | `Union of (no_qualifier, (string * t) list) spec
+    | `Function of (no_qualifier, Proto.t) spec
+  ]
+end = T
+and Proto : sig
+  type t = {
+    return : T.t;
+    args   : (string * T.t) list;
+    variadic : Bool.t;
+  }
+end = Proto
+
+type t = T.t
 
 type scalar = [
   | `Basic of (cv qualifier,basic) spec

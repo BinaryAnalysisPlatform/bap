@@ -47,7 +47,7 @@ class base (m : model) = object(self)
     | #floating as t -> self#floating t
 
   method scalar : scalar -> size = function
-    | `Basic {spec} -> self#basic spec
+    | `Basic {Spec.t} -> self#basic t
     | `Pointer _ -> match m with
       | #model32 -> `r32
       | #model64 -> `r64
@@ -78,21 +78,21 @@ class base (m : model) = object(self)
     | `Structure s -> self#padded t (self#structure s)
 
 
-  method array : (t * Int.t option) unqualified -> Int.t option =
-    fun {spec=(t,size)} -> match size with
+  method array : _  -> Int.t option =
+    fun {Spec.t=(t,size)} -> match size with
       | None -> None
       | Some n -> match self#bits t with
         | None -> None
         | Some x -> Some (n * x)
 
-  method union : 'f list unqualified -> Int.t option = fun {spec=fields} ->
+  method union : 'f list unqualified -> Int.t option = fun {Spec.t=fields} ->
     List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
     | None -> None
     | Some ss -> List.max_elt ~cmp:Int.compare ss |> function
       | None -> None
       | Some s -> Some s
 
-  method structure : 'f list unqualified -> Int.t option = fun {spec=fields} ->
+  method structure : 'f list unqualified -> Int.t option = fun {Spec.t=fields} ->
     List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
         | None -> None
         | Some sz -> match self#bits field with
