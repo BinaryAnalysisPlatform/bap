@@ -22,15 +22,21 @@ class base :  model -> object
     *)
     method bits : t -> bits option
 
-    (** [alignemt t] calculates an alignment restriction for data
-        type [t]. The default implementation is equal to min of
-        bitwidth of the type t and bitwidth of a pointer.   *)
+    (** [alignment t] calculates an alignment restriction for data
+        type [t]. The default aligment rules are the following:
+        - if type is scalar then the alignment is [sizeof(t)];
+        - if type is [elt\[\]] then the alignment is [sizeof(elt)];
+        - if type is structure or union, the the alignment of is
+          the maximum alignment of a field;
+        - if type is function, then aligment is equal to sizeof
+        pointer
+        - if type is void then alignment is 8 bits.*)
     method alignment : t -> bits
 
     (** [padding t off] computes a required padding at given offset
         that should be inserted before value of type [t] to satisfy
         the aligment restriction for [t], as determined by the
-        [alignement] method.  *)
+        [alignment] method.  *)
     method padding : t -> bits -> bits
 
 

@@ -1,2 +1,4 @@
 REC
 B ../../_build/lib/arm
+B ../../_build/lib/bap_c
+S ../../lib/bap_c

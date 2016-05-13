@@ -22,7 +22,7 @@ module SysV = struct
   let name = "sysv"
   let arch = `x86_64
   let stack = Stack.create arch
-  let abi = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rdi
@@ -84,40 +84,40 @@ end
 let register (module Abi : abi) = ()
 (* Bap_api_abi.register Abi.arch Abi.name Abi.abi *)
 
-let abis : (module abi) list = [
-  (module SysV);
-  (module CDECL);
-  (module STDCALL);
-  (module FASTCALL);
-  (module MS_32);
-  (module MS_64);
-]
+(* let abis : (module abi) list = [ *)
+(*   (module SysV); *)
+(*   (module CDECL); *)
+(*   (module STDCALL); *)
+(*   (module FASTCALL); *)
+(*   (module MS_32); *)
+(*   (module MS_64); *)
+(* ] *)
 
 
-let args_of_proto (module Abi : abi) {C.Type.args; return} = ()
+(* let args_of_proto (module Abi : abi) {C.Type.args; return} = () *)
 
 
 
-let x64_cc_attrs = ["ms_abi"; "sysv_abi"]
-let x32_cc_attrs = x64_cc_attrs @ ["cdecl"; "fastcall"; "thiscall"; "stdcall";]
-let cc_attrs = function `x86 -> x32_cc_attrs | `x86_64 -> x64_cc_attrs
+(* let x64_cc_attrs = ["ms_abi"; "sysv_abi"] *)
+(* let x32_cc_attrs = x64_cc_attrs @ ["cdecl"; "fastcall"; "thiscall"; "stdcall";] *)
+(* let cc_attrs = function `x86 -> x32_cc_attrs | `x86_64 -> x64_cc_attrs *)
 
-let x32_default = Option.value ~default:CDECL.name
-let x64_default = Option.value ~default:SysV.name
-let default = function `x86 -> x32_default | `x86_64 -> x64_default
+(* let x32_default = Option.value ~default:CDECL.name *)
+(* let x64_default = Option.value ~default:SysV.name *)
+(* let default = function `x86 -> x32_default | `x86_64 -> x64_default *)
 
-let gnu_resolver default cc_attrs name attrs =
-  let cc_attrs = ["cdecl"; "fastcall"; "thiscall"; "stdcall";
-                  "ms_abi"; "sysv_abi" ] in
-  List.find attrs ~f:(fun x -> List.mem cc_attrs x.C.Type.attr_name) |> function
-  | None -> default
-  | Some x -> match String.chop_suffix ~suffix:"_abi" x.C.Type.attr_name with
-    | None -> name
-    | Some name -> name
+(* let gnu_resolver default cc_attrs name attrs = *)
+(*   let cc_attrs = ["cdecl"; "fastcall"; "thiscall"; "stdcall"; *)
+(*                   "ms_abi"; "sysv_abi" ] in *)
+(*   List.find attrs ~f:(fun x -> List.mem cc_attrs x.C.Type.attr_name) |> function *)
+(*   | None -> default *)
+(*   | Some x -> match String.chop_suffix ~suffix:"_abi" x.C.Type.attr_name with *)
+(*     | None -> name *)
+(*     | Some name -> name *)
 
-let register_resolver ?default_abi:abi (arch : Arch.x86) = ()
-(* Bap_api_abi.override_resolver (arch :> arch) *)
-(*   (gnu_resolver (default arch abi) (cc_attrs arch)) *)
+(* let register_resolver ?default_abi:abi (arch : Arch.x86) = () *)
+(* (\* Bap_api_abi.override_resolver (arch :> arch) *\) *)
+(* (\*   (gnu_resolver (default arch abi) (cc_attrs arch)) *\) *)
 
-let register () =
-  List.iter abis ~f:register
+(* let register () = *)
+(*   List.iter abis ~f:register *)

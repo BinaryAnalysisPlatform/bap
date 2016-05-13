@@ -8,6 +8,7 @@ type 'a unqualified = (no_qualifier, 'a) spec
 
 type bits = Int.t
 
+
 class base (m : model) = object(self)
   method integer (t : integer) : size =
     match m,t with
@@ -57,13 +58,21 @@ class base (m : model) = object(self)
     let align = self#alignment t in
     (align - offset mod align) mod align
 
-  method alignment t : Int.t =
-    let max_align = match m with
+  method alignment (t : t) : Int.t =
+    let pointer_size = match m with
       | #model32 -> 32
       | #model64 -> 64 in
-    match self#bits t with
-    | None -> 0
-    | Some width -> min width max_align
+    let byte = 8 in
+    match t with
+    | `Void -> byte
+    | `Array {Spec.t=(elt,_)} -> self#alignment elt
+    | `Structure {Spec.t=fs} | `Union {Spec.t=fs} ->
+      List.fold fs ~init:byte ~f:(fun align (_,t) ->
+          max align (self#alignment t))
+    | `Function _ -> pointer_size
+    | #scalar -> match self#bits t with
+      | None -> byte
+      | Some width -> width
 
   method private padded t = function
     | None -> None

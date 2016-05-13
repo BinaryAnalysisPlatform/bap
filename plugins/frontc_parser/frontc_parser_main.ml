@@ -143,9 +143,11 @@ let parse_defs defs =
   let rec parse = function
     | DECDEF (_,_,[name,t,a,_])
     | FUNDEF ((_,_,(name,t,a,_)),_)
-    | TYPEDEF ((_,_,[name,t,a,_]),_) ->
+    | TYPEDEF ((_,_,[name,t,a,_]),_)
+    | ONLYTYPEDEF (_,_,[name,t,a,_]) ->
       add name (with_attrs (gnu_attrs a) (ctype gamma t))
-    |  _ -> () in
+    |  _ ->
+      printf "skipping def" in
   List.iter ~f:parse defs;
   Hashtbl.to_alist env
 
