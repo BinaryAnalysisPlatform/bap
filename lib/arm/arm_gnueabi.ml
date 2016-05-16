@@ -4,13 +4,7 @@ open Bap_c.Std
 
 let size = object(self)
   inherit C.Size.base `ILP32
-  method! integer = function
-    | #C.Type.char -> `r8
-    | #C.Type.short -> `r16
-    | #C.Type.int -> `r32
-    | #C.Type.long -> `r64
-    | #C.Type.long_long -> `r64
-    | `enum sz -> self#integer `uint
+  method! enum s = self#integer `uint
 end
 
 
@@ -149,6 +143,7 @@ let align ncrn t =
     | _ -> []
   else ncrn
 
+
 let arg sub n int exps =
   let exp = List.reduce_exn exps ~f:Bil.concat in
   let typ = Type.imm (List.length exps * 32) in
@@ -157,25 +152,23 @@ let arg sub n int exps =
 
 let retregs = function
   | #C.Type.scalar as t ->
-    List.take regs (Size.in_bytes (size#scalar t) / 4), [], regs
+    List.take regs (Size.in_bytes (size#scalar t) / 4), Out, regs
   | non_fundamental -> match size#bits non_fundamental with
-    | Some sz when sz <= 32 -> List.take regs 1,[],regs
-    | _ -> match non_fundamental with
-      | `Void -> [],[],regs
-      | _ -> List.take regs 1, List.take regs 1, List.tl_exn regs
+    | Some sz when sz <= 32 -> List.take regs 1,Out,regs
+    | _ -> List.take regs 1, Both, List.tl_exn regs
 
-let ret sub t =
-  let ret,hidden,regs = retregs t in
-  arg sub "result" Out ret,
-  List.map hidden ~f:(fun exp -> arg sub "return" Both [exp]),
-  regs
+let ret sub = function
+  | `Void -> [],regs
+  | other as t ->
+    let exps,int,regs = retregs t in
+    [arg sub "result" int exps], regs
 
 let args sub {C.Type.Proto.return; args=ps} =
-  let ret,this,regs = ret sub return in
+  let this,regs = ret sub return in
   let _,_,args =
-    List.fold ps ~init:(regs,mems,this) ~f:(fun (regs,mems,args) (n,t) ->
+    List.fold ps ~init:(regs,mems,[]) ~f:(fun (regs,mems,args) (n,t) ->
         let words = Option.value (size#bits t) ~default:32 / 32 in
         let exps,regs = List.split_n (align regs t) words in
         let rest,mems = Seq.split_n mems (words - List.length exps) in
         regs,mems,arg sub n (C.Abi.arg_intent t) (exps@rest)::args) in
-  List.rev (ret::args)
+  List.rev (this@args)

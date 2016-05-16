@@ -6,7 +6,6 @@ include Self()
 open Cabs
 open Option.Monad_infix
 
-
 let int size sign : C.Type.basic = match size,sign with
   | (NO_SIZE,(NO_SIGN|SIGNED)) -> `sint
   | (SHORT,(NO_SIGN|SIGNED)) -> `sshort
@@ -30,7 +29,7 @@ let cv = C.Type.Qualifier.{
 
 let cvr = C.Type.Qualifier.{ cv with restrict = false}
 let restricted cvr = C.Type.Qualifier.{cvr with restrict = true}
-let no_qualifier = ()
+let no_qualifier = `no_qualifier
 
 let spec qualifier t = C.Type.Spec.{t; attrs = []; qualifier}
 
@@ -47,14 +46,18 @@ let array size t = `Array (spec cvr (t,size))
 
 let structure fields = `Structure (spec no_qualifier fields)
 let union fields = `Union (spec no_qualifier fields)
+let enum fields = basic (`enum (List.length fields))
 let func variadic return args =
+  let args = match args with
+    | [_,`Void] -> []
+    | args -> args in
   `Function (spec no_qualifier C.Type.Proto.{
       return; args; variadic
     })
 
-let name_groups : name_group list -> 'a list =
+let name_groups s : name_group list -> 'a list =
   List.concat_map ~f:(fun (_,_,ns) ->
-      List.map ns ~f:(fun (n,t,attrs,_) -> n,t,attrs))
+      List.map ns ~f:(fun (n,t,attrs,_) -> s^"."^n,t,attrs))
 
 let single_names : single_name list -> 'a list =
   List.map ~f:(fun (_,s,(n,t,attrs,_)) -> n,t,attrs)
@@ -106,13 +109,16 @@ let volatile = {
     }
 }
 
-let qualify f : C.Type.t -> C.Type.t =
+let rec qualify f : C.Type.t -> C.Type.t =
   function
   | `Basic t -> `Basic (f.apply t)
   | `Pointer t -> `Pointer (f.apply t)
+  | `Structure s -> `Structure C.Type.Spec.{
+      s with t = List.map s.t ~f:(fun (n,t) -> n, qualify f t)
+    }
   | x -> x
 
-let ctype gamma t =
+let ctype gamma lookup t =
   let rec ctype : base_type -> C.Type.t = function
     | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _ | VOID -> `Void
     | CHAR sign -> basic @@ char sign
@@ -122,11 +128,14 @@ let ctype gamma t =
     | PTR t -> pointer @@ ctype t
     | RESTRICT_PTR t -> restrict @@ ctype t
     | ARRAY (et,ice) -> array (size ice) @@ ctype et
-    | STRUCT (_,fs) -> structure @@ fields (name_groups fs)
-    | UNION (_,fs) -> union @@ fields (name_groups fs)
+    | STRUCT (n,[]) -> lookup structure n
+    | UNION  (n,[]) -> lookup union n
+    | ENUM   (n,[]) -> lookup enum n
+    | STRUCT (n,fs) -> structure @@ fields (name_groups n fs)
+    | UNION (n,fs) -> union @@ fields (name_groups n fs)
     | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
     | NAMED_TYPE name -> gamma name
-    | ENUM (_,fs) -> basic @@ `enum (List.length fs)
+    | ENUM (name,fs) -> enum fs
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
@@ -136,24 +145,29 @@ let ctype gamma t =
 
 let parse_defs defs =
   let env = String.Table.create () in
+  let tags = String.Table.create () in
   let gamma name = match Hashtbl.find env name with
     | Some t -> t
     | None -> `Void in
+  let lookup what name = match Hashtbl.find tags name with
+    | Some t -> t
+    | None -> what [] in
   let add name t = Hashtbl.set env ~key:name ~data:t in
+  let tag name t = Hashtbl.set tags ~key:name ~data:t in
   let rec parse = function
     | DECDEF (_,_,[name,t,a,_])
     | FUNDEF ((_,_,(name,t,a,_)),_)
     | TYPEDEF ((_,_,[name,t,a,_]),_)
     | ONLYTYPEDEF (_,_,[name,t,a,_]) ->
-      add name (with_attrs (gnu_attrs a) (ctype gamma t))
-    |  _ ->
-      printf "skipping def" in
+      add name (with_attrs (gnu_attrs a) (ctype gamma lookup t))
+    | ONLYTYPEDEF (STRUCT (n,_) | UNION (n,_) | ENUM (n,_) as t,_,_) ->
+      tag n (ctype gamma lookup t)
+    |  _ -> () in
   List.iter ~f:parse defs;
   Hashtbl.to_alist env
 
-
 let parse name = match Frontc.parse_file name stderr with
   | Frontc.PARSING_ERROR ->
-    error "failed to parse intput, see stderr for messages";
+    error "failed to parse input, see stderr for messages";
     []
   | Frontc.PARSING_OK defs -> parse_defs defs

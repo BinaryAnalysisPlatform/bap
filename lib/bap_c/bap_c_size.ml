@@ -14,9 +14,9 @@ class base (m : model) = object(self)
     match m,t with
     | _,#char -> `r8
     | _,#short -> `r16
-    | `LP32,#int -> `r16
-    | (`ILP32|`LLP64|`LP64),#int -> `r32
-    | `ILP64,#int -> `r64
+    | `LP32,#cint -> `r16
+    | (`ILP32|`LLP64|`LP64),#cint -> `r32
+    | `ILP64,#cint -> `r64
     | (`LP32|`ILP32|`LLP64),#long -> `r32
     | (`ILP64|`LP64), #long -> `r64
     | _,#long_long -> `r64
