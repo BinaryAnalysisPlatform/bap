@@ -16,7 +16,7 @@ let string_of_color c = Sexp.to_string (sexp_of_color c)
 let read_file name =
   let bundle = main_bundle () in
   match Bundle.get_data bundle name with
-  | None -> invalid_argf "Can't find %s" name ()
+  | None -> assert false
   | Some s -> s
 
 (** Each function in this module should return a string that should be
