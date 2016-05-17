@@ -35,7 +35,7 @@ let read_file name =
             BADADDR otherwise.*)
 module Py = struct
   (** this is emitted at the start of the script *)
-  let prologue = read_file "prologue.py"
+  let prologue = read_file "python/prologue.py"
 
   (** this is emitted at the end of the script *)
   let epilogue =
