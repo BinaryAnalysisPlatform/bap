@@ -119,9 +119,10 @@ module Cmdline = struct
   open Cmdliner
   let man = [
     `S "DESCRIPTION";
-    `P "Iterates through memory tagged with text objects that have
-      a `python' tag, and dumps them into a python script, that
-      can be later loaded into the IDA. "
+    `P "Iterates through memory for tagged BIR attributes,
+      and dumps them into a python script, that can be later
+      loaded into IDA. The special `color' tag causes the
+      respective address to be colored."
   ]
 
   let info = Term.info name ~version ~doc ~man
@@ -134,7 +135,7 @@ module Cmdline = struct
            ~doc ~docv:"NAME")
 
   let attrs =
-    let doc = "emit specified BIR attribute" in
+    let doc = "Emit specified BIR attribute" in
     Arg.(value & opt_all string [] & info ["attr"] ~doc)
 
   let args = Term.(const main $dst $attrs),info
