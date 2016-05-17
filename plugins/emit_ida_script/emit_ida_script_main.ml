@@ -44,7 +44,14 @@ module Py = struct
 |}
 
   let color s = sprintf "SetColor($addr, CIC_ITEM, 0x%06x)" (idacode_of_color s)
-  let comment s = sprintf "add_to_comment($addr, '%s', '%s')" (Value.tagname s) (Value.to_string s)
+  let comment s =
+    sprintf "add_to_comment($addr, '%s', '%s')"
+            (Value.tagname s) (Value.to_string s)
+  let foreground s =
+    sprintf "add_to_comment($addr, 'foreground', '%s')" (string_of_color s)
+  let background s =
+    sprintf "add_to_comment($addr, 'background', '%s')" (string_of_color s)
+
 end
 
 (** [emit_attr buffer sub_name insn_addr attr] emits into the [buffer]
@@ -68,6 +75,8 @@ let emit_attr buf sub_name addr attr =
       Buffer.add_char buf '\n') in
   switch attr @@
   case color Py.color @@
+  case foreground Py.foreground @@
+  case background Py.background @@
   default (fun () ->
       Buffer.add_substitute buf substitute (Py.comment attr);
       Buffer.add_char buf '\n')
