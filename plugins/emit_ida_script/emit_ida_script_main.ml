@@ -72,19 +72,20 @@ let emit_attr buf sub_name addr attr =
       Buffer.add_substitute buf substitute (Py.comment attr);
       Buffer.add_char buf '\n')
 
-let program_visitor buf =
+let program_visitor buf attrs =
   object
     inherit [string * word option] Term.visitor
     method! leave_term _ t (name,addr) =
       Term.attrs t |> Dict.to_sequence |> Seq.iter ~f:(fun (_,x) ->
-          emit_attr buf name addr x);
+          let attr = Value.tagname x in
+          if List.mem attrs attr then emit_attr buf name addr x);
       name,addr
     method! enter_term _ t (name,_) =
       name,Term.get_attr t Disasm.insn_addr
     method! enter_sub sub (_,addr) = Sub.name sub,addr
   end
 
-let extract_script data code =
+let extract_script data code attrs =
   let open Value.Match in
   let buf = Buffer.create 4096 in
   Buffer.add_string buf Py.prologue;
@@ -92,15 +93,15 @@ let extract_script data code =
       switch x @@
       case python (fun line -> Buffer.add_string buf line) @@
       default ignore);
-  (program_visitor buf)#run code ("",None) |> ignore;
+  (program_visitor buf attrs)#run code ("",None) |> ignore;
   Buffer.add_string buf Py.epilogue;
   Buffer.contents buf
 
 
-let main dst project =
+let main dst attrs project =
   let data = Project.memory project in
   let code = Project.program project in
-  let data = extract_script data code in
+  let data = extract_script data code attrs in
   match dst with
   | None -> print_string data
   | Some dst -> Out_channel.write_all dst ~data
@@ -123,7 +124,11 @@ module Cmdline = struct
     Arg.(value & opt (some string) None & info ["file"]
            ~doc ~docv:"NAME")
 
-  let args = Term.(const main $dst),info
+  let attrs =
+    let doc = "emit specified BIR attribute" in
+    Arg.(value & opt_all string [] & info ["attr"] ~doc)
+
+  let args = Term.(const main $dst $attrs),info
 end
 
 let () =
