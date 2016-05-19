@@ -13,6 +13,7 @@ let idacode_of_color = function
   | `magenta -> 0xFFB2FF
   | `cyan    -> 0xFFFFB2
   | `white   -> 0xFFFFFF
+  | `gray    -> 0xEAEAEA
   | _ -> invalid_arg "unexpected color"
 
 let string_of_color c = Sexp.to_string (sexp_of_color c)

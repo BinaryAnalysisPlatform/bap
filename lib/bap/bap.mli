@@ -3379,6 +3379,7 @@ module Std : sig
     | `magenta
     | `cyan
     | `white
+    | `gray
   ] [@@deriving bin_io, compare, sexp]
 
 
