@@ -136,6 +136,7 @@ module Color = struct
     "magenta", `magenta;
     "cyan",    `cyan;
     "white",   `white;
+    "gray",    `gray;
   ]
 
   let grammar = List.map colors ~f:fst |> String.concat ~sep:" | "

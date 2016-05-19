@@ -5,9 +5,15 @@ include Self()
 
 (** ida uses a strange color coding, bgr, IIRC  *)
 let idacode_of_color = function
-  | `green -> 0x99ff99
-  | `red -> 0xCCCCFF
-  | `yellow -> 0xC2FFFF
+  | `black   -> 0x000000
+  | `red     -> 0xCCCCFF
+  | `green   -> 0x99FF99
+  | `yellow  -> 0xC2FFFF
+  | `blue    -> 0xFFB2B2
+  | `magenta -> 0xFFB2FF
+  | `cyan    -> 0xFFFFB2
+  | `white   -> 0xFFFFFF
+  | `gray    -> 0xEAEAEA
   | _ -> invalid_arg "unexpected color"
 
 let string_of_color c = Sexp.to_string (sexp_of_color c)

@@ -140,7 +140,8 @@ module Cmdline = struct
           desc (enum attrs))
 
   let colors = bold [
-      "black"; "red"; "green"; "yellow"; "blue"; "magenta"; "cyan"; "white"
+      "black"; "red"; "green"; "yellow"; "blue"; "magenta"; "cyan";
+      "white"; "gray"
     ]
 
   module Predicates = struct

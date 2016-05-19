@@ -12,6 +12,7 @@ module Color = struct
     | `magenta
     | `cyan
     | `white
+    | `gray
   ] [@@deriving bin_io, compare, sexp]
   let pp ppf color =
     Format.fprintf ppf "%a" Sexp.pp (sexp_of_t color)
@@ -28,6 +29,7 @@ module Foreground = struct
     | `magenta -> "\x1b[35m"
     | `cyan    -> "\x1b[36m"
     | `white   -> "\x1b[37m"
+    | `gray    -> "\x1b[1;30m"
   let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
 end
 
@@ -42,6 +44,7 @@ module Background = struct
     | `magenta -> "\x1b[45m"
     | `cyan    -> "\x1b[46m"
     | `white   -> "\x1b[47m"
+    | `gray    -> "\x1b[1;40m"
 
   let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
 end
