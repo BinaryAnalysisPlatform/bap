@@ -1,0 +1,11 @@
+let (/) = Filename.concat
+
+let define = function
+  | Some thing -> thing
+  | None ->
+    try Sys.getenv "IDAUSR" / "plugins"
+    with Not_found -> try Sys.getenv "HOME" / ".idapro" / "plugins"
+      with Not_found -> failwith "Please specify path for IDA plugin"
+
+let () =
+  add_variable ~define ~doc:"A directory with IDA plugins" "ida_plugin_path"
