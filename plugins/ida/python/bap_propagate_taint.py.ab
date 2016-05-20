@@ -17,11 +17,9 @@ def taint_and_color(ptr_or_reg):
 
     idaapi.refresh_idaview_anyway()
 
-    # TODO : Figure out how to get rid of the opam dependency here
     idc.Exec(
         "\
-        eval `opam config env`; \
-        bap \"{input_file_path}\" \
+        $(bindir)/bap \"{input_file_path}\" \
         --taint-{ptr_or_reg}=0x{taint_location:X} \
         --taint \
         --propagate-taint \
