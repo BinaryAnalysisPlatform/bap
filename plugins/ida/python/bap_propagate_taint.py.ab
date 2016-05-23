@@ -4,6 +4,21 @@ import tempfile
 
 class BAP_Taint(idaapi.plugin_t):
 
+    callbacks = {
+        'ptr': [],
+        'reg': []
+    }
+
+    @classmethod
+    def do_callbacks(cls, ptr_or_reg):
+        assert(ptr_or_reg == 'reg' or ptr_or_reg == 'ptr')
+        data = {
+            'ea': idc.ScreenEA(),
+            'ptr_or_reg': ptr_or_reg
+        }
+        for callback in cls.callbacks[ptr_or_reg]:
+            callback(data)
+
     def taint_and_color(self, ptr_or_reg):
 
         args = {
@@ -45,6 +60,8 @@ class BAP_Taint(idaapi.plugin_t):
 
         idc.Refresh()  # Force the color information to show up
 
+        self.do_callbacks(ptr_or_reg)
+
     def taint_reg_and_color(self):
         self.taint_and_color('reg')
 
@@ -74,6 +91,15 @@ class BAP_Taint(idaapi.plugin_t):
     def run(self, arg):
         pass
 
+    @classmethod
+    def install_callback(cls, callback_fn, ptr_or_reg = None):
+        if ptr_or_reg is None:
+            cls.install_callback(callback_fn, 'ptr')
+            cls.install_callback(callback_fn, 'reg')
+        elif ptr_or_reg == 'ptr' or ptr_or_reg == 'reg':
+            cls.callbacks[ptr_or_reg].append(callback_fn)
+        else:
+            print "Invalid ptr_or_reg value passed {}".format(repr(ptr_or_reg))
 
 def PLUGIN_ENTRY():
     return BAP_Taint()
