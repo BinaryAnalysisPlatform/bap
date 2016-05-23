@@ -10,7 +10,7 @@ Library ida_plugin
   BuildDepends:     bap, bap-ida, cmdliner
   Modules:          Ida_main
   XMETADescription: use ida to provide rooter, symbolizer and reconstructor
-  DataFiles:        python/bap_propagate_taint.py ($ida_plugin_path)
+  DataFiles:        python/*.py ($ida_plugin_path)
 
 Library emit_ida_script_plugin
   Build$:           flag(everything) || flag(ida_plugin)
