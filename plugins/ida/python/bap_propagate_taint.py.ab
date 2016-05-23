@@ -2,63 +2,78 @@ import idautils
 import tempfile
 
 
-def taint_and_color(ptr_or_reg):
+class BAP_Taint(idaapi.plugin_t):
 
-    args = {
-        'input_file_path': idc.GetInputFilePath(),
-        'taint_location': idc.ScreenEA(),
-        'ida_script_location': tempfile.mkstemp(suffix='.py',
-                                                prefix='ida-bap-')[1],
-        'ptr_or_reg': ptr_or_reg
-    }
+    def taint_and_color(self, ptr_or_reg):
 
-    idc.Message('-------- STARTING TAINT ANALYSIS --------------\n')
-    idc.SetStatus(IDA_STATUS_WAITING)
+        args = {
+            'input_file_path': idc.GetInputFilePath(),
+            'taint_location': idc.ScreenEA(),
+            'ida_script_location': tempfile.mkstemp(suffix='.py',
+                                                    prefix='ida-bap-')[1],
+            'ptr_or_reg': ptr_or_reg
+        }
 
-    idaapi.refresh_idaview_anyway()
+        idc.Message('-------- STARTING TAINT ANALYSIS --------------\n')
+        idc.SetStatus(IDA_STATUS_WAITING)
 
-    idc.Exec(
-        "\
-        $(bindir)/bap \"{input_file_path}\" \
-        --taint-{ptr_or_reg}=0x{taint_location:X} \
-        --taint \
-        --propagate-taint \
-        --map-terms-with='((true) (color gray))' \
-        --map-terms-with='((is-visited) (color white))' \
-        --map-terms-with='((has-taints) (color red))' \
-        --map-terms-with='((taints) (color yellow))' \
-        --map-terms \
-        --emit-ida-script-attr=color \
-        --emit-ida-script-file={ida_script_location} \
-        --emit-ida-script \
-        ".format(**args)
-    )
+        idaapi.refresh_idaview_anyway()
 
-    idc.Message('-------- DONE WITH TAINT ANALYSIS -------------\n\n')
-    idc.SetStatus(IDA_STATUS_READY)
+        idc.Exec(
+            "\
+            $(bindir)/bap \"{input_file_path}\" \
+            --taint-{ptr_or_reg}=0x{taint_location:X} \
+            --taint \
+            --propagate-taint \
+            --map-terms-with='((true) (color gray))' \
+            --map-terms-with='((is-visited) (color white))' \
+            --map-terms-with='((has-taints) (color red))' \
+            --map-terms-with='((taints) (color yellow))' \
+            --map-terms \
+            --emit-ida-script-attr=color \
+            --emit-ida-script-file={ida_script_location} \
+            --emit-ida-script \
+            ".format(**args)
+        )
 
-    idaapi.IDAPython_ExecScript(args['ida_script_location'], globals())
+        idc.Message('-------- DONE WITH TAINT ANALYSIS -------------\n\n')
+        idc.SetStatus(IDA_STATUS_READY)
 
-    idc.Exec("rm -f {ida_script_location}".format(**args))  # Cleanup
+        idaapi.IDAPython_ExecScript(args['ida_script_location'], globals())
 
-    idc.Refresh()  # Force the color information to show up
+        idc.Exec("rm -f {ida_script_location}".format(**args))  # Cleanup
+
+        idc.Refresh()  # Force the color information to show up
+
+    def taint_reg_and_color(self):
+        self.taint_and_color('reg')
+
+    def taint_ptr_and_color(self):
+        self.taint_and_color('ptr')
+
+    def add_hotkey(self, hotkey, func):
+        hotkey_ctx = idaapi.add_hotkey(hotkey, func)
+        if hotkey_ctx is None:
+            print("Failed to register {} for {}".format(hotkey, func))
+        else:
+            print("Registered {} for {}".format(hotkey, func))
+
+    flags = idaapi.PLUGIN_FIX
+    comment = "BAP Taint Plugin"
+    help = "BAP Taint Plugin"
+    wanted_name = "BAP Taint Plugin"
+    wanted_hotkey = ""
+
+    def init(self):
+        self.add_hotkey("Shift-A", self.taint_reg_and_color)
+        self.add_hotkey("Ctrl-Shift-A", self.taint_ptr_and_color)
+
+    def term(self):
+        pass
+
+    def run(self, arg):
+        pass
 
 
-def taint_reg_and_color():
-    taint_and_color('reg')
-
-
-def taint_ptr_and_color():
-    taint_and_color('ptr')
-
-
-def add_hotkey(hotkey, func):
-    hotkey_ctx = idaapi.add_hotkey(hotkey, func)
-    if hotkey_ctx is None:
-        print("Failed to register {} for {}".format(hotkey, func))
-    else:
-        print("Registered {} for {}".format(hotkey, func))
-
-
-add_hotkey("Shift-A", taint_reg_and_color)
-add_hotkey("Ctrl-Shift-A", taint_ptr_and_color)
+def PLUGIN_ENTRY():
+    return BAP_Taint()
