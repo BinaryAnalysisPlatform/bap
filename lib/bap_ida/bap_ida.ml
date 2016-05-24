@@ -172,6 +172,9 @@ from idautils import *
 from idaapi import *
 
 def func_name_propagate_thunk(ea):
+    current_name = get_func_name2(ea)
+    if current_name[0].isalpha():
+        return current_name
     func = get_func(ea)
     temp_ptr = ea_pointer()
     ea_new = BADADDR
