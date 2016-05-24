@@ -196,9 +196,9 @@ with open('$output', 'w+') as out:
 
 idc.Exit(0)"
       ~process:(fun name ->
-        let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
-        In_channel.with_file name ~f:(fun ch ->
-          Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
+          let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
+          In_channel.with_file name ~f:(fun ch ->
+              Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
 
 end
 
