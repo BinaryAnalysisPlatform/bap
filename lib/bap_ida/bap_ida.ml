@@ -182,7 +182,13 @@ def func_name_propagate_thunk(ea):
         ea_new = calc_thunk_func_target(func, temp_ptr.cast())
     if ea_new != BADADDR:
         ea = ea_new
-    return get_func_name2(ea)
+    propagated_name = get_func_name2(ea)
+    if len(propagated_name) > 0:
+        return propagated_name
+    else:
+        return current_name
+        # Fallback to non-propagated name for the weird times that IDA gives
+        #     a 0 length name
 
 Wait()
 with open('$output', 'w+') as out:
