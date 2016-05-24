@@ -41,7 +41,10 @@ class BAP_Taint_Pseudocode(idaapi.plugin_t):
 
         ea_color = idaapi.get_item_color(ea)
 
-        assert(ea_color & BGR_MASK in coloring_order)
+        if ea_color & BGR_MASK not in coloring_order:
+        # Since BAP didn't color it, we can't infer anything
+            return current_color
+
         assert(current_color & BGR_MASK in coloring_order)
 
         ea_idx = coloring_order.index(ea_color & BGR_MASK)
