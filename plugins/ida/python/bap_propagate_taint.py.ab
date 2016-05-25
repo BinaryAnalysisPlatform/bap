@@ -1,5 +1,4 @@
 import idautils
-import tempfile
 
 
 class BAP_Taint(idaapi.plugin_t):
@@ -20,6 +19,7 @@ class BAP_Taint(idaapi.plugin_t):
             callback(data)
 
     def taint_and_color(self, ptr_or_reg):
+        import tempfile
 
         args = {
             'input_file_path': idc.GetInputFilePath(),
