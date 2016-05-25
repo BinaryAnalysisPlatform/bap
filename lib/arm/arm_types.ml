@@ -106,6 +106,7 @@ type move_insn = [
   | `MOVr
   | `MOVsi
   | `MOVsr
+  | `MOVPCLR
   | `MVNi
   | `MVNr
   | `MVNsi
