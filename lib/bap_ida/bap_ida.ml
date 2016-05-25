@@ -164,59 +164,47 @@ module Ida = struct
     let f ida = exec ida command in
     protectx ~f ida ~finally:close
 
-  (*   let get_symbols = *)
-  (*     Command.create *)
-  (*       ~script:" *)
-           (* from idautils import * *)
-           (* Wait() *)
-           (* with open('$output', 'w+') as out: *)
-           (*     for ea in Segments(): *)
-           (*         fs = Functions(SegStart(ea), SegEnd(ea)) *)
-           (*         for f in fs: *)
-           (*             out.write ('(%s 0x%x 0x%x)\\n' % ( *)
-           (*                 GetFunctionName(f), *)
-           (*                 GetFunctionAttr(f, FUNCATTR_START), *)
-           (*                 GetFunctionAttr(f, FUNCATTR_END))) *)
+  let get_symbols =
+    Command.create
+      `python
+      ~script:"
+from idautils import *
+from idaapi import *
 
-           (* idc.Exit(0)" *)
-  (*       ~process:(In_channel.with_file ~f:(fun ch -> *)
-  (*           let blk_of_sexp x = [%of_sexp:string*int64*int64] x in *)
-  (*           Sexp.input_sexps ch |> List.map ~f:blk_of_sexp)) *)
+def func_name_propagate_thunk(ea):
+    current_name = get_func_name2(ea)
+    if current_name[0].isalpha():
+        return current_name
+    func = get_func(ea)
+    temp_ptr = ea_pointer()
+    ea_new = BADADDR
+    if func.flags & FUNC_THUNK == FUNC_THUNK:
+        ea_new = calc_thunk_func_target(func, temp_ptr.cast())
+    if ea_new != BADADDR:
+        ea = ea_new
+    propagated_name = get_func_name2(ea)
+    if len(current_name) > len(propagated_name) > 0:
+        return propagated_name
+    else:
+        return current_name
+        # Fallback to non-propagated name for the weird times that IDA gives
+        #     a 0 length name, or finds a longer import name
 
+Wait()
+with open('$output', 'w+') as out:
+    for ea in Segments():
+        fs = Functions(SegStart(ea), SegEnd(ea))
+        for f in fs:
+            out.write ('(%s 0x%x 0x%x)\\n' % (
+                func_name_propagate_thunk(f),
+                GetFunctionAttr(f, FUNCATTR_START),
+                GetFunctionAttr(f, FUNCATTR_END)))
 
-  module Get_symbols = struct
-    let script =
-      {|
-       #include <idc.idc>
-
-       static main() {
-       Wait();
-       auto ea,x;
-       auto file;
-
-       file = fopen("$output", "w+");
-
-       for (ea=NextFunction(0); ea != BADADDR; ea=NextFunction(ea) ) {
-         fprintf(file, "(%s 0x%08lX 0x%08lX)\n",
-                      GetFunctionName(ea), ea,
-                      GetFunctionAttr(ea,FUNCATTR_END));
-       }
-
-       fclose(file);
-       Exit(0);
-       }
-    |}
-
-    let process name =
-      let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
-      In_channel.with_file name ~f:(fun ch ->
-          Sexp.input_sexps ch |> List.map ~f:blk_of_sexp)
-
-
-    let command = Command.create `idc ~script ~process
-  end
-
-  let get_symbols = Get_symbols.command
+idc.Exit(0)"
+      ~process:(fun name ->
+          let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
+          In_channel.with_file name ~f:(fun ch ->
+              Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
 
 end
 
