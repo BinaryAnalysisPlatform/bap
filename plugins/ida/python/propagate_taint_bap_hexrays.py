@@ -98,12 +98,17 @@ class BAP_Taint_Pseudocode(idaapi.plugin_t):
 
                 def cfunc_from_ea(ea):
                     func = idaapi.get_func(ea)
+                    if func is None:
+                        return None
                     cfunc = idaapi.decompile(func)
                     return cfunc
 
                 def autocolorize_callback(data):
                     ea = data['ea']
-                    self.autocolorize_function(cfunc_from_ea(ea))
+                    cfunc = cfunc_from_ea(ea)
+                    if cfunc is None:
+                        return
+                    self.autocolorize_function(cfunc)
 
                 idaapi.load_and_run_plugin('bap_propagate_taint', 0)
                 BAP_Taint.install_callback(autocolorize_callback)
