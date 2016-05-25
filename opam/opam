@@ -121,8 +121,8 @@ depends: [
     "bitstring"
     "camlzip"
     "cmdliner" {>= "0.9.6"}
-    "ppx_jane" {>= "113.24.01"}
-    "core_kernel" {>= "113.24.00"}
+    "ppx_jane" {>= "113.33.03" & < "113.34.00"}
+    "core_kernel" {>= "113.33.00" & < "113.34.00"}
     "ezjsonm"
     "faillib"
     "fileutils"
