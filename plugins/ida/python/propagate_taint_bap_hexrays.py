@@ -1,13 +1,13 @@
 bap_color = {
-    'black'  : 0x000000,
-    'red'    : 0xCCCCFF,
-    'green'  : 0x99FF99,
-    'yellow' : 0xC2FFFF,
-    'blue'   : 0xFFB2B2,
+    'black':   0x000000,
+    'red':     0xCCCCFF,
+    'green':   0x99FF99,
+    'yellow':  0xC2FFFF,
+    'blue':    0xFFB2B2,
     'magenta': 0xFFB2FF,
-    'cyan'   : 0xFFFFB2,
-    'white'  : 0xFFFFFF,
-    'gray'   : 0xEAEAEA,
+    'cyan':    0xFFFFB2,
+    'white':   0xFFFFFF,
+    'gray':    0xEAEAEA,
 }
 
 

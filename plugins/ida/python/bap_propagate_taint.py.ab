@@ -92,7 +92,7 @@ class BAP_Taint(idaapi.plugin_t):
         pass
 
     @classmethod
-    def install_callback(cls, callback_fn, ptr_or_reg = None):
+    def install_callback(cls, callback_fn, ptr_or_reg=None):
         if ptr_or_reg is None:
             cls.install_callback(callback_fn, 'ptr')
             cls.install_callback(callback_fn, 'reg')
@@ -100,6 +100,7 @@ class BAP_Taint(idaapi.plugin_t):
             cls.callbacks[ptr_or_reg].append(callback_fn)
         else:
             print "Invalid ptr_or_reg value passed {}".format(repr(ptr_or_reg))
+
 
 def PLUGIN_ENTRY():
     return BAP_Taint()
