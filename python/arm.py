@@ -74,6 +74,7 @@ class MOVi16(Move) : pass
 class MOVr(Move) : pass
 class MOVsi(Move) : pass
 class MOVsr(Move) : pass
+class MOVPCLR(Move) : pass
 class MVNi(Move) : pass
 class MVNr(Move) : pass
 class MVNsi(Move) : pass
