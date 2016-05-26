@@ -2,16 +2,6 @@ Flag ida_plugin
   Description: Build IDA plugin
   Default: false
 
-Library ida_plugin
-  Build$:           flag(everything) || flag(ida_plugin)
-  Path:             plugins/ida
-  FindlibName:      bap-plugin-ida
-  CompiledObject:   best
-  BuildDepends:     bap, bap-ida, cmdliner
-  Modules:          Ida_main
-  XMETADescription: use ida to provide rooter, symbolizer and reconstructor
-  DataFiles:        python/*.py ($ida_plugin_path)
-
 Library emit_ida_script_plugin
   Build$:           flag(everything) || flag(ida_plugin)
   Path:             plugins/emit_ida_script
@@ -19,3 +9,11 @@ Library emit_ida_script_plugin
   BuildDepends:     bap, cmdliner
   Modules:          Emit_ida_script_main
   XMETADescription: extract a python script from the project data type
+
+Library ida_python_plugins
+  Build$:           flag(everything) || flag(ida_plugin)
+  Path:             plugins/ida/python
+  FindlibName:      bap-plugin-ida-python
+  BuildDepends:     bap, bap-plugin-taint, bap-plugin-propagate_taint, bap-plugin-map_terms
+  XMETADescription: IDA python plugin scripts
+  DataFiles:        *.py ($ida_plugin_path)
