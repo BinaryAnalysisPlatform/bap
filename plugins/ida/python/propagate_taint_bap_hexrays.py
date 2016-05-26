@@ -86,35 +86,47 @@ class BAP_Taint_Pseudocode(idaapi.plugin_t):
     wanted_hotkey = ""
 
     def init(self):
-        if idaapi.init_hexrays_plugin():
-            def hexrays_event_callback(event, *args):
-                if event == idaapi.hxe_text_ready:
-                    vu, = args
-                    self.autocolorize_function(vu.cfunc)
-                return 0
+        try:
+            if idaapi.init_hexrays_plugin():
+                def hexrays_event_callback(event, *args):
+                    if event == idaapi.hxe_text_ready:
+                        vu, = args
+                        self.autocolorize_function(vu.cfunc)
+                    return 0
 
-            idaapi.install_hexrays_callback(hexrays_event_callback)
+                idaapi.install_hexrays_callback(hexrays_event_callback)
 
-            def cfunc_from_ea(ea):
-                func = idaapi.get_func(ea)
-                cfunc = idaapi.decompile(func)
-                return cfunc
+                def cfunc_from_ea(ea):
+                    func = idaapi.get_func(ea)
+                    if func is None:
+                        return None
+                    cfunc = idaapi.decompile(func)
+                    return cfunc
 
-            def autocolorize_callback(data):
-                ea = data['ea']
-                self.autocolorize_function(cfunc_from_ea(ea))
+                def autocolorize_callback(data):
+                    ea = data['ea']
+                    cfunc = cfunc_from_ea(ea)
+                    if cfunc is None:
+                        return
+                    self.autocolorize_function(cfunc)
 
-            idaapi.load_and_run_plugin('bap_propagate_taint', 0)
-            BAP_Taint.install_callback(autocolorize_callback)
+                idaapi.load_and_run_plugin('bap_propagate_taint', 0)
+                BAP_Taint.install_callback(autocolorize_callback)
 
-            print "Finished installing callbacks for Taint Analysis in Hex-Rays"
+                print "Finished installing callbacks for Taint Analysis \
+                       in Hex-Rays"
 
-        else:
+            else:
+                print "Hex-Rays not loaded"
 
-            print "Hex-Rays not loaded"
+        except AttributeError:
+            print "init_hexrays_plugin() not found. Skipping Hex-Rays plugin."
 
     def term(self):
-        idaapi.term_hexrays_plugin()
+        try:
+            idaapi.term_hexrays_plugin()
+        except AttributeError:
+            pass
 
     def run(self, arg):
         pass
