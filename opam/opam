@@ -134,7 +134,7 @@ depends: [
     "ocurl" {<= "0.7.1"}
     "optcomp"
     "re"
-    "uri"
+    "uri" {>= "1.9.0"}
     "utop"
     "zarith"
     "uuidm"

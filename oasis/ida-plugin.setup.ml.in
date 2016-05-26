@@ -5,7 +5,7 @@ let define = function
   | None ->
     try Sys.getenv "IDAUSR" / "plugins"
     with Not_found -> try Sys.getenv "HOME" / ".idapro" / "plugins"
-      with Not_found -> failwith "Please specify path for IDA plugin"
+      with Not_found -> failwith "Please specify path for IDA plugins"
 
 let () =
-  add_variable ~define ~doc:"A directory with IDA plugins" "ida_plugin_path"
+  add_variable ~define ~doc:"A directory for IDA plugins" "ida_plugin_path"
