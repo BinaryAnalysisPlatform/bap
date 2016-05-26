@@ -13,3 +13,12 @@ Library bap_ida
   InternalModules:  Bap_ida_config
   BuildDepends:     fileutils, re.posix
   XMETADescription: make calls into IDA
+
+Library bap_ida_rsr
+  Build$:           flag(everything) || flag(ida)
+  Path:             plugins/ida
+  FindlibName:      bap-plugin-ida_rsr
+  CompiledObject:   best
+  BuildDepends:     bap, bap-ida, cmdliner
+  Modules:          Ida_main
+  XMETADescription: use ida to provide rooter, symbolizer and reconstructor
