@@ -5,6 +5,7 @@ include Self()
 
 module type Api = Bap_api.S
 
+let bundle = main_bundle ()
 
 let in_language ~language name =
   match String.split ~on:'/' name with
@@ -14,6 +15,7 @@ let in_language ~language name =
 let get_file bundle lang filename =
   let name = Filename.temp_file "api" "lang" in
   let file = Filename.concat lang filename in
+  debug "opening file %s" file;
   match Bundle.get_file ~name bundle (Uri.of_string file) with
   | None ->
     Sys.remove filename;
@@ -29,7 +31,10 @@ let mapper bundle (module Api : Api) =
   Result.(Api.parse get_file files >>| Api.mapper)
 
 let main proj =
-  let bundle = main_bundle () in
+  debug "getting a bundle";
+  debug "got the bundle";
+  debug "have %d api processors registered\n"
+    (Bap_api.processors () |> List.length);
   Bap_api.processors () |>
   List.map ~f:(mapper bundle ) |>
   Result.all |> function
@@ -37,6 +42,7 @@ let main proj =
     error "api wasn't applied: %a" Error.pp e;
     proj
   | Ok mappers ->
+    debug "mappers are ready, applying";
     let prog = Project.program proj in
     List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog) |>
     Project.with_program proj
