@@ -51,7 +51,7 @@ def add_to_comment_string(comm, key, value):
 
     kv = ['BAP', [key,value]]
     for e in sexp2list(BAP_dict[5:-1]): # Remove outermost '(BAP', ')'
-        if isinstance(e, list) and len(e) == 2: # It is of the '(k v)' type
+        if isinstance(e, list) and len(e) >= 2: # It is of the '(k v)' type
             if e[0] != key: # Don't append if same as required key
                 kv.append(e)
         else:
