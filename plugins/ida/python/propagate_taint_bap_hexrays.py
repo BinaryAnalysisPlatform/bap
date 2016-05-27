@@ -118,11 +118,11 @@ class BAP_Taint_Pseudocode(idaapi.plugin_t):
                         return
                     self._autocolorize_function(cfunc)
 
-                idaapi.load_and_run_plugin('bap_propagate_taint', 0)
+                idaapi.load_and_run_plugin('bap_propagate_taint.py', 0)
                 BAP_Taint.install_callback(autocolorize_callback)
 
-                print "Finished installing callbacks for Taint Analysis \
-                       in Hex-Rays"
+                print ("Finished installing callbacks for Taint Analysis" +
+                       " in Hex-Rays")
 
             else:
                 print "Hex-Rays not loaded"
