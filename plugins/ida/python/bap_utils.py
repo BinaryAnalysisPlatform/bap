@@ -4,7 +4,7 @@ import idaapi
 
 
 def sexp2list(s):
-    """Convert S-Expression to List"""
+    """Convert S-Expression to List."""
     sexp = [[]]
     word = ''
     for c in s:
@@ -26,14 +26,14 @@ def sexp2list(s):
 
 
 def list2sexp(l):
-    """Convert List to S-Expression"""
+    """Convert List to S-Expression."""
     if isinstance(l, str):
         return l
     return '(' + ' '.join(list2sexp(e) for e in l) + ')'
 
 
 def add_to_comment_string(comm, key, value):
-    """Add key:value to comm string"""
+    """Add key:value to comm string."""
     if '(BAP ' in comm:
         start_loc = comm.index('(BAP ')
         bracket_count = 0
