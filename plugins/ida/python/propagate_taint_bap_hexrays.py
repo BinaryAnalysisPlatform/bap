@@ -17,6 +17,7 @@ bap_color = {
 }
 
 from simpleline_modifier_hexrays import SimpleLine_Modifier_Hexrays
+import bap_utils
 
 
 class BAP_Taint_Pseudocode(SimpleLine_Modifier_Hexrays):
@@ -72,16 +73,9 @@ class BAP_Taint_Pseudocode(SimpleLine_Modifier_Hexrays):
         try:
             if idaapi.init_hexrays_plugin():
 
-                def cfunc_from_ea(ea):
-                    func = idaapi.get_func(ea)
-                    if func is None:
-                        return None
-                    cfunc = idaapi.decompile(func)
-                    return cfunc
-
                 def autocolorize_callback(data):
                     ea = data['ea']
-                    cfunc = cfunc_from_ea(ea)
+                    cfunc = bap_utils.cfunc_from_ea(ea)
                     if cfunc is None:
                         return
                     self.run_over_cfunc(cfunc)

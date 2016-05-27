@@ -88,6 +88,15 @@ def add_to_comment_string(comm, key, value):
     return comm[:start_loc] + list2sexp(kv) + comm[end_loc:]
 
 
+def cfunc_from_ea(ea):
+    """Get cfuncptr_t from EA."""
+    func = idaapi.get_func(ea)
+    if func is None:
+        return None
+    cfunc = idaapi.decompile(func)
+    return cfunc
+
+
 class DoNothing(idaapi.plugin_t):
     """
     Do Nothing.
