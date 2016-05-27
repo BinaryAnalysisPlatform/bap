@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_c_type
 open Bap_c_data
+open Bap_c_type
 
 
 type bits = Int.t
@@ -31,13 +31,13 @@ class base :  model -> object
         - if type is function, then aligment is equal to sizeof
         pointer
         - if type is void then alignment is 8 bits.*)
-    method alignment : t -> bits
+    method alignment : t -> size
 
     (** [padding t off] computes a required padding at given offset
         that should be inserted before value of type [t] to satisfy
         the aligment restriction for [t], as determined by the
         [alignment] method.  *)
-    method padding : t -> bits -> bits
+    method padding : t -> bits -> size option
 
 
     (** [array spec] if array [spec] is complete, then returns a
@@ -51,6 +51,7 @@ class base :  model -> object
 
 
     method integer : integer -> size
+    method pointer : addr_size
 
     method enum : Int.t -> size
     method real : real -> [`r32 | `r64 | `r128]

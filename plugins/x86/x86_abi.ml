@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_c.Std
 
-module Stack = Bap_abi.Stack
+module Stack = C.Abi.Stack
 
 type pos =
   | Ret_0
@@ -11,9 +11,10 @@ type pos =
 
 
 module type abi = sig
-  val arch : arch
+  val arch : Arch.x86
   val name : string
-  val abi : pos -> exp
+  val size : C.Size.base
+  val arg  : pos -> exp
 end
 
 module SysV = struct
@@ -32,6 +33,10 @@ module SysV = struct
     | Arg 4 -> var r.(0)
     | Arg 5 -> var r.(1)
     | Arg n -> stack Int.(n-6)
+
+  let size = object
+    inherit C.Size.base `LP64
+  end
 end
 
 module CDECL = struct
@@ -40,16 +45,17 @@ module CDECL = struct
   let name = "cdecl"
   let arch = `x86
   let stack = Stack.create arch
-  let abi = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg n -> stack n
+
+  let size = object
+    inherit C.Size.base `ILP32
+  end
 end
 
-(* in our abstraction they are the same.
-   In STDCALL callee cleans the stack, in CDECL
-   caller cleans, the layout is still the same.
-*)
+(* in our abstraction they are the same, as they have the same layout.*)
 module STDCALL = struct
   include CDECL
   let name = "stdcall"
@@ -63,7 +69,7 @@ end
 module MS_64 = struct
   include SysV
   let name = "ms"
-  let abi = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rcx
@@ -71,6 +77,13 @@ module MS_64 = struct
     | Arg 2 -> var r.(0)
     | Arg 3 -> var r.(1)
     | Arg n -> stack n
+
+  let size = object
+    inherit C.Size.base `LLP64 as super
+    method! alignment = function
+      | `Basic {C.Type.Spec.t=#C.Type.short} -> 32
+      | t -> super#alignment t
+  end
 end
 
 module FASTCALL = struct
@@ -78,10 +91,32 @@ module FASTCALL = struct
   let abi = function
     | Arg 0 -> var rcx
     | Arg 1 -> var rdx
-    | other -> abi other
+    | other -> arg other
 end
 
-let register (module Abi : abi) = ()
+exception Unsupported
+
+let api (module Abi : abi) {C.Type.Proto.return; args} =
+  let word = Arch.addr_size (Abi.arch :> arch) |> Size.in_bits in
+  let ret = match Abi.size#bits return with
+    | None -> []
+    | Some width -> match Size.of_int_opt width with
+      | None -> raise Unsupported
+      | Some sz ->
+        if width = word * 2
+        then [C.Data.(Imm (sz,Top)), Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1)]
+        else if width = word
+        then [C.Data.(Imm (sz,Top)), Abi.arg Ret_0]
+        else raise Unsupported in
+  let args = List.mapi args ~f:(fun i (n,t) -> match Abi.size#bits t with
+      | None -> raise Unsupported
+      | Some size -> match Size.of_int_opt size with
+        | Some sz when size = word -> C.Data.(Imm (sz,Top)), Abi.arg (Arg i)
+        | _ -> raise Unsupported) in
+  ret,args
+
+
+
 (* Bap_api_abi.register Abi.arch Abi.name Abi.abi *)
 
 (* let abis : (module abi) list = [ *)

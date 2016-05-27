@@ -6,5 +6,6 @@ module Std = struct
     module Size = Bap_c_size
     module Type = Bap_c_type
     module Parser = Bap_c_parser
+    include Bap_c_term_attributes
   end
 end

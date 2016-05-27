@@ -2,6 +2,8 @@
 
 # TODO rewrite it as an ocaml script for portability
 
+set -uex
+
 cd plugins
 
 for plugin in `ls`; do

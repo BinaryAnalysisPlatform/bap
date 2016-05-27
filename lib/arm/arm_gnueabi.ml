@@ -31,16 +31,25 @@ let arg sub n int exps =
 
 let retregs = function
   | #C.Type.scalar as t ->
-    List.take regs (Size.in_bytes (size#scalar t) / 4), Out, regs
+    List.take regs (Size.in_bytes (size#scalar t) / 4), [], regs
   | non_fundamental -> match size#bits non_fundamental with
-    | Some sz when sz <= 32 -> List.take regs 1,Out,regs
-    | _ -> List.take regs 1, Both, List.tl_exn regs
+    | Some sz when sz <= 32 -> List.take regs 1,[],regs
+    | _ -> List.take regs 1, List.take regs 1, List.tl_exn regs
+
+(* let size_value t = match size#bits t with *)
+(*   | None -> C.Data.Top *)
+(*   | Some sz -> *)
+
+
 
 let ret sub = function
-  | `Void -> [],regs
-  | other as t ->
-    let exps,int,regs = retregs t in
-    [arg sub "result" int exps], regs
+  | `Void -> None,[],regs
+  | other as t -> match retregs t with
+    | [],_,rest -> None,[],rest
+    | rets,hids,rest ->
+      assert false
+(* let rets,hids,rest = retregs t in *)
+(* [arg sub "result" int exps], regs *)
 
 let args sub {C.Type.Proto.return; args=ps} =
   let this,regs = ret sub return in
@@ -52,41 +61,13 @@ let args sub {C.Type.Proto.return; args=ps} =
         regs,mems,arg sub n (C.Abi.arg_intent t) (exps@rest)::args) in
   List.rev (this@args)
 
-let mapper gamma = object
-  inherit Term.mapper as super
-  method! map_sub sub =
-    let name = Sub.name sub in
-    match gamma name with
-    | Some (`Function {C.Type.Spec.t}) ->
-      List.fold (args name t) ~init:sub ~f:(Term.append arg_t)
-    | _ -> super#map_sub sub
-end
-
-module Api = struct
-  let language = "c"
-  type t = Term.mapper
-  let parse get_api intfs =
-    let gamma = String.Table.create () in
-    List.iter intfs ~f:(fun api ->
-        match get_api api with
-        | None -> warning "Can't open interface: %s" api
-        | Some file ->
-          match C.Parser.run file with
-          | Error e ->
-            warning "Failed to parse api `%s': %a" api Error.pp e
-          | Ok api ->
-            List.iter api ~f:(fun (key,t) ->
-                Hashtbl.set gamma ~key ~data:t));
-    Ok (mapper (Hashtbl.find gamma))
-  let mapper = ident
-end
+let api = C.Abi.create_api_processor args
 
 let setup () =
   let id = ref None in
   Stream.observe  Project.Info.arch (function
       | #Arch.arm ->
         Option.iter !id ~f:Bap_api.retract;
-        let api : Bap_api.t = (module Api) in
         info "using armeabi ABI";
         id := Some (Bap_api.process api)
       | _ -> Option.iter !id ~f:Bap_api.retract)

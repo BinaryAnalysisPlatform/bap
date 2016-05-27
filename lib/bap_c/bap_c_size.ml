@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_c_type
 open Bap_c_data
+open Bap_c_type
 
 type real_size = [`r32 | `r64 | `r128]
 type 'a unqualified = (no_qualifier, 'a) spec
@@ -21,6 +21,10 @@ class base (m : model) = object(self)
     | (`ILP64|`LP64), #long -> `r64
     | _,#long_long -> `r64
     | _,`enum x -> self#enum x
+
+  method pointer : addr_size = match m with
+    | #model32 -> `r32
+    | #model64 -> `r64
 
   method enum _ = self#integer `uint   (* approximation *)
 
@@ -49,42 +53,33 @@ class base (m : model) = object(self)
 
   method scalar : scalar -> size = function
     | `Basic {Spec.t} -> self#basic t
-    | `Pointer _ -> match m with
-      | #model32 -> `r32
-      | #model64 -> `r64
+    | `Pointer _ -> (self#pointer :> size)
 
+  method padding t offset : size option =
+    let align = Size.in_bits (self#alignment t) in
+    match (align - offset mod align) mod align with
+    | 0 -> None
+    | n -> Some (Size.of_int_exn n)
 
-  method padding t offset =
-    let align = self#alignment t in
-    (align - offset mod align) mod align
-
-  method alignment (t : t) : Int.t =
-    let pointer_size = match m with
-      | #model32 -> 32
-      | #model64 -> 64 in
-    let byte = 8 in
+  method alignment (t : Bap_c_type.t) : size =
+    let byte = `r8 in
     match t with
     | `Void -> byte
     | `Array {Spec.t=(elt,_)} -> self#alignment elt
     | `Structure {Spec.t=fs} | `Union {Spec.t=fs} ->
       List.fold fs ~init:byte ~f:(fun align (_,t) ->
           max align (self#alignment t))
-    | `Function _ -> pointer_size
-    | #scalar -> match self#bits t with
-      | None -> byte
-      | Some width -> width
+    | `Function _ -> (self#pointer :> size)
+    | #scalar as t -> self#scalar t
 
-  method private padded t = function
-    | None -> None
-    | Some sz -> Some (sz + self#padding t sz)
 
   method bits : t -> Int.t option = fun t -> match t with
     | `Void -> None
     | #scalar as t -> Some (Size.in_bits (self#scalar t))
     | `Function _ -> None
-    | `Union s -> self#padded t (self#union s)
+    | `Union s -> self#union s
     | `Array s -> self#array s
-    | `Structure s -> self#padded t (self#structure s)
+    | `Structure s -> self#structure s
 
 
   method array : _  -> Int.t option =
@@ -107,6 +102,8 @@ class base (m : model) = object(self)
         | Some sz -> match self#bits field with
           | None -> None
           | Some sz' ->
-            let pad = self#padding field sz in
+            let pad = match self#padding field sz with
+              | None -> 0
+              | Some sz -> Size.in_bits sz in
             Some (sz + sz' + pad))
 end
