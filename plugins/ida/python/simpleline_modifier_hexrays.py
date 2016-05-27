@@ -52,7 +52,10 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
                 if is_addr_code(line):
                     addr_tag = int(line[2:skipcode_index], 16)
                     anchor.value = addr_tag
-                    if anchor.is_citem_anchor():
+                    if (
+                        anchor.is_citem_anchor() and
+                        not anchor.is_blkcmt_anchor()
+                    ):
                         line_ea = ea_from_addr_tag(addr_tag)
                         if line_ea != idaapi.BADADDR:
                             ea_list.append(line_ea)
