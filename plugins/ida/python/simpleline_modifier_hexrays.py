@@ -41,7 +41,7 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
                     s[1] == chr(idaapi.COLOR_ADDR))
 
         anchor = idaapi.ctree_anchor_t()
-        line = simpleline.line[:]  # Copy
+        line = sl.line[:]  # Copy
         ea_list = []
 
         while len(line) > 0:
@@ -53,7 +53,7 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
                     addr_tag = int(line[2:skipcode_index], 16)
                     anchor.value = addr_tag
                     if anchor.is_citem_anchor():
-                        line_ea = ea_from_tag(addr_tag)
+                        line_ea = ea_from_addr_tag(addr_tag)
                         if line_ea != idaapi.BADADDR:
                             ea_list.append(line_ea)
                 line = line[skipcode_index:]  # Skip the colorcodes
@@ -85,7 +85,7 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
                 def hexrays_event_callback(event, *args):
                     if event == idaapi.hxe_text_ready:
                         vu, = args
-                        self._run_over_cfunc(vu.cfunc)
+                        self.run_over_cfunc(vu.cfunc)
                     return 0
 
                 idaapi.install_hexrays_callback(hexrays_event_callback)
