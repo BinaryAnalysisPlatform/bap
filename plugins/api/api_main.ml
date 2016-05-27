@@ -12,18 +12,19 @@ let in_language ~language name =
   | ["api"; lang; _] -> lang = language
   | _ -> false
 
+let (/) = Filename.concat
+
 let get_file bundle lang filename =
   let name = Filename.temp_file "api" "lang" in
-  let file = Filename.concat lang filename in
-  debug "opening file %s" file;
+  let file = "api" / lang / filename in
+  info "applying %s" file;
   match Bundle.get_file ~name bundle (Uri.of_string file) with
-  | None ->
-    Sys.remove filename;
-    None
+  | None -> None
   | Some uri -> Some (Uri.path uri)
 
 let files bundle language  =
-  Bundle.list bundle |> List.filter ~f:(in_language ~language)
+  Bundle.list bundle |> List.filter ~f:(in_language ~language) |>
+  List.map ~f:Filename.basename
 
 let mapper bundle (module Api : Api) =
   let get_file = get_file bundle Api.language in
@@ -31,10 +32,6 @@ let mapper bundle (module Api : Api) =
   Result.(Api.parse get_file files >>| Api.mapper)
 
 let main proj =
-  debug "getting a bundle";
-  debug "got the bundle";
-  debug "have %d api processors registered\n"
-    (Bap_api.processors () |> List.length);
   Bap_api.processors () |>
   List.map ~f:(mapper bundle ) |>
   Result.all |> function
@@ -42,7 +39,6 @@ let main proj =
     error "api wasn't applied: %a" Error.pp e;
     proj
   | Ok mappers ->
-    debug "mappers are ready, applying";
     let prog = Project.program proj in
     List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog) |>
     Project.with_program proj

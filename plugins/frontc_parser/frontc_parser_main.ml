@@ -166,8 +166,10 @@ let parse_defs defs =
   List.iter ~f:parse defs;
   Hashtbl.to_alist env
 
-let parse name = match Frontc.parse_file name stderr with
+let parser name = match Frontc.parse_file name stderr with
   | Frontc.PARSING_ERROR ->
-    error "failed to parse input, see stderr for messages";
-    []
-  | Frontc.PARSING_OK defs -> parse_defs defs
+    Or_error.errorf "failed to parse input, see stderr for messages"
+  | Frontc.PARSING_OK defs -> Ok (parse_defs defs)
+
+
+let () = C.Parser.provide parser

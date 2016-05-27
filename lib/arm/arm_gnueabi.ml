@@ -68,11 +68,9 @@ module Api = struct
   let parse get_api intfs =
     let gamma = String.Table.create () in
     List.iter intfs ~f:(fun api ->
-        debug "opening %s" api;
         match get_api api with
         | None -> warning "Can't open interface: %s" api
         | Some file ->
-          debug "parsing %s" api;
           match C.Parser.run file with
           | Error e ->
             warning "Failed to parse api `%s': %a" api Error.pp e
