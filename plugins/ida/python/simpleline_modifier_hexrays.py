@@ -20,6 +20,8 @@ Note: You will need to add a PLUGIN_ENTRY() function, to your plugin code,
 that returns an object of your plugin, which uses this Class as a super class.
 """
 
+import idaapi
+
 
 class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
     """Modifies each simpleline_t in Pseudocode view."""
@@ -108,3 +110,16 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
         Ignored since callbacks are installed.
         """
         pass
+
+import bap_utils
+
+
+class DoNothingSLM(bap_utils.DoNothing):
+    """Do Nothing. Subclassed to prevent IDA from complaining."""
+
+    pass
+
+
+def PLUGIN_ENTRY():
+    """Do not count this file as a plugin."""
+    return DoNothingSLM()
