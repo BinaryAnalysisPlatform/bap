@@ -11,7 +11,9 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
     def _simpleline_modify(cls, cfunc, sl):
         sl_dict = {}
 
-        for ea in set(cls.get_ea_list(cfunc, sl)):
+        ea_set = set(cls.get_ea_list(cfunc, sl))
+
+        for ea in ea_set:
             ea_comm = GetCommentEx(ea, repeatable=0)
             if ea_comm is None:
                 continue
@@ -27,16 +29,18 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
             BAP_dict = ['BAP']
             for k, v in sl_dict.items():
                 BAP_dict += [[k] + v]
-            sl.line += ' // ' + bap_utils.list2sexp(BAP_dict)
-            # A cleaner way might be to use
-            #   idaapi.get_user_cmt()
-            #   idaapi.set_user_cmt()
-            #   idaapi.restore_user_cmts()
-            # and related functions
-            #
-            # Current technique might require refreshing the view for
-            # propagating the changes properly (without repetitively saying
-            # "// (BAP ...)" )
+            BAP_comment = bap_utils.list2sexp(BAP_dict)
+
+            t = idaapi.treeloc_t()
+            t.ea = max(ea_set)
+            t.itp = idaapi.ITP_BLOCK1  # Block comment before the statement
+            cfunc.set_user_cmt(t, BAP_comment)
+            cfunc.save_user_cmts()
+
+            # TODO: Currently, the plugin requires you to refresh to be able
+            #       to see the added BAP comments. Might be nice if it
+            #       internally did that, thought it might be hard since
+            #       the plugin installs itself as a refresh text callback
 
     comment = "BAP Comment on Pseudocode"
     help = "BAP Comment on Pseudocode"
