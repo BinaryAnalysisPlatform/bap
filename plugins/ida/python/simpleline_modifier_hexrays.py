@@ -96,6 +96,8 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
         except AttributeError:
             print "init_hexrays_plugin() not found. Skipping Hex-Rays plugin."
 
+        return idaapi.PLUGIN_KEEP
+
     def term(self):
         """Terminate Plugin."""
         try:
