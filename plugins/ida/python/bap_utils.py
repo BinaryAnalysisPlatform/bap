@@ -32,8 +32,15 @@ def list2sexp(l):
     return '(' + ' '.join(list2sexp(e) for e in l) + ')'
 
 
-def add_to_comment_string(comm, key, value):
-    """Add key:value to comm string."""
+def get_bap_comment(comm):
+    """
+    Get '(BAP )' style comment from given string.
+
+    Returns tuple (BAP_dict, start_loc, end_loc)
+        BAP_dict: The '(BAP )' style comment
+        start_loc: comm[:start_loc] was before the BAP comment
+        end_loc: comm[end_loc:] was after the BAP comment
+    """
     if '(BAP ' in comm:
         start_loc = comm.index('(BAP ')
         bracket_count = 0
@@ -57,8 +64,21 @@ def add_to_comment_string(comm, key, value):
         end_loc = len(comm)
         BAP_dict = '(BAP )'
 
+    return (BAP_dict, start_loc, end_loc)
+
+
+def get_bap_list(BAP_dict):
+    """Return a list containing all the values in the BAP comment."""
+    outer_removed = BAP_dict[5:-1]  # Remove outermost '(BAP', ')'
+    return sexp2list(outer_removed)
+
+
+def add_to_comment_string(comm, key, value):
+    """Add key:value to comm string."""
+    BAP_dict, start_loc, end_loc = get_bap_comment(comm)
+
     kv = ['BAP', [key, value]]
-    for e in sexp2list(BAP_dict[5:-1]):  # Remove outermost '(BAP', ')'
+    for e in get_bap_list(BAP_dict):
         if isinstance(e, list) and len(e) == 2:  # It is of the '(k v)' type
             if e[0] != key:  # Don't append if same as required key
                 kv.append(e)
