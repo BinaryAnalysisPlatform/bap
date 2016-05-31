@@ -6,7 +6,7 @@ Library "bap-arm"
  XMETADescription: arm lifting
  Path:             lib/arm
  Build$:           flag(everything) || flag(arm)
- BuildDepends:     bap
+ BuildDepends:     bap, bap-c, bap-api
  FindlibName:      bap-arm
  Modules:
                  ARM,
@@ -34,5 +34,5 @@ Library arm_plugin
   Path:             plugins/arm
   FindlibName:      bap-plugin-arm
   BuildDepends:     bap, bap-arm
-  InternalModules:  Arm_main
+  InternalModules:  Arm_main, Arm_gnueabi
   XMETADescription: provide ARM lifter

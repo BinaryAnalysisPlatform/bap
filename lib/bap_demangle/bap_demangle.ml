@@ -24,29 +24,33 @@ let demangle_internal str =
     match extract_name pos with
     | None | Some "" -> List.rev acc
     | Some name -> extract_names (name::acc) in
-  match extract_names [] |> String.concat ~sep:"." with
+  match extract_names [] |> String.concat ~sep:"::" with
   | "" -> str
   | s  -> s
 
-let demangle_external ?(prog="c++filt") name =
-  let command = sprintf "%s %s" prog name in
-  let inp = Unix.open_process_in command in
-  let r = In_channel.input_all inp in
-  In_channel.close inp;
-  String.strip r
-
-let maybe_mangled name =
-  String.length name > 2 &&
-  name.[0] = '_' &&
-  Char.is_uppercase name.[1] &&
-  Char.is_alpha name.[1]
-
 module Std = struct
-  module Demangle = struct
-    let run ?tool name =
-      if maybe_mangled name then match tool with
-        | Some prog -> demangle_external ~prog name
-        | None -> demangle_internal name
-      else name
-  end 
-end 
+  type demangler = {
+    name : string;
+    run : string -> string
+  }
+
+  module Demangler = struct
+    type t = demangler
+    let create name run = {name; run}
+    let run d = d.run
+    let name d = d.name
+  end
+
+  module Demanglers = struct
+    let demanglers = ref []
+    let register d = demanglers := d :: !demanglers
+    let available () = !demanglers
+  end
+
+  let internal = {
+    name = "internal";
+    run = demangle_internal;
+  }
+
+  let () = Demanglers.register internal
+end

@@ -2,11 +2,20 @@ Flag api
   Description: Build API plugin
   Default: false
 
+Library bap_api
+  Build$:           flag(everything) || flag(api)
+  Path:             lib/bap_api
+  FindlibName:      bap-api
+  CompiledObject:   best
+  BuildDepends:     bap
+  Modules:          Bap_api
+
+
 Library api_plugin
   Build$:           flag(everything) || flag(api)
   Path:             plugins/api
   FindlibName:      bap-plugin-api
   CompiledObject:   best
-  BuildDepends:     bap, cmdliner, FrontC, bap-x86-cpu, bap-arm
-  Modules:          Api_main
+  BuildDepends:     bap, bap-api, cmdliner
+  InternalModules:  Api_main
   XMETADescription: add parameters to subroutines based on known API

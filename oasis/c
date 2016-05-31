@@ -1,0 +1,19 @@
+Flag c
+  Description: C language support
+  Default: false
+
+Library bap_c
+  Build$: flag(everything) || flag(c)
+  XMETADescription: C language abstraction
+  Path: lib/bap_c
+  FindlibName: bap-c
+  CompiledObject: best
+  BuildDepends: bap, bap-api
+  Modules: Bap_c,
+           Bap_c_abi,
+           Bap_c_attr,
+           Bap_c_data,
+           Bap_c_size,
+           Bap_c_type,
+           Bap_c_parser,
+           Bap_c_term_attributes
