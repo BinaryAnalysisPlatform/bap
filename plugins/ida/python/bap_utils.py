@@ -115,6 +115,26 @@ def cfunc_from_ea(ea):
     return cfunc
 
 
+def dump_loader_info(output_filename):
+    """Dump information for BAP's loader into output_filename."""
+    from idautils import Segments
+    import idc
+
+    idaapi.autoWait()
+
+    with open(output_filename, 'w+') as out:
+        info = idaapi.get_inf_structure()
+        size = "r32" if info.is_32bit else "r64"
+        out.write("(%s %s (" % (info.get_proc_name()[1], size))
+        for seg in Segments():
+            out.write("\n(%s %s %d (0x%X %d))" % (
+                idaapi.get_segm_name(seg),
+                "code" if idaapi.segtype(seg) == idaapi.SEG_CODE else "data",
+                idaapi.get_fileregion_offset(seg),
+                seg, idaapi.getseg(seg).size()))
+        out.write("))\n")
+
+
 class DoNothing(idaapi.plugin_t):
     """
     Do Nothing.
