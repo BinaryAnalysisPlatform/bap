@@ -87,7 +87,7 @@ class BAP_Taint_Pseudocode(SimpleLine_Modifier_Hexrays):
                        " in Hex-Rays")
 
             else:
-                print "Hex-Rays not loaded"
+                return idaapi.PLUGIN_SKIP
 
         except AttributeError:
             print "init_hexrays_plugin() not found. Skipping Hex-Rays plugin."

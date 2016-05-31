@@ -94,7 +94,7 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
                 idaapi.install_hexrays_callback(hexrays_event_callback)
 
             else:
-                print "Hex-Rays not loaded"
+                return idaapi.PLUGIN_SKIP
 
         except AttributeError:
             print "init_hexrays_plugin() not found. Skipping Hex-Rays plugin."
