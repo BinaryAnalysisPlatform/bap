@@ -106,6 +106,7 @@ class BAP_Taint(idaapi.plugin_t):
         """Initialize Plugin."""
         self._add_hotkey("Shift-A", self._taint_reg_and_color)
         self._add_hotkey("Ctrl-Shift-A", self._taint_ptr_and_color)
+        return idaapi.PLUGIN_KEEP
 
     def term(self):
         """Terminate Plugin."""
