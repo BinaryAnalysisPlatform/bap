@@ -135,6 +135,53 @@ def dump_loader_info(output_filename):
         out.write("))\n")
 
 
+def dump_symbol_info(output_filename):
+    """Dump information for BAP's symbolizer into output_filename."""
+    from idautils import Segments, Functions
+    from idc import (
+        SegStart, SegEnd, GetFunctionAttr,
+        FUNCATTR_START, FUNCATTR_END
+    )
+
+    try:
+        from idaapi import get_func_name2 as get_func_name
+        # Since get_func_name is deprecated (at least from IDA 6.9)
+    except ImportError:
+        pass
+        # Older versions of IDA don't have get_func_name2
+        # so we just use the older name get_func_name
+
+    def func_name_propagate_thunk(ea):
+        current_name = get_func_name(ea)
+        if current_name[0].isalpha():
+            return current_name
+        func = idaapi.get_func(ea)
+        temp_ptr = idaapi.ea_pointer()
+        ea_new = idaapi.BADADDR
+        if func.flags & idaapi.FUNC_THUNK == idaapi.FUNC_THUNK:
+            ea_new = idaapi.calc_thunk_func_target(func, temp_ptr.cast())
+        if ea_new != idaapi.BADADDR:
+            ea = ea_new
+        propagated_name = get_func_name(ea)
+        if len(current_name) > len(propagated_name) > 0:
+            return propagated_name
+        else:
+            return current_name
+            # Fallback to non-propagated name for weird times that IDA gives
+            #     a 0 length name, or finds a longer import name
+
+    idaapi.autoWait()
+
+    with open(output_filename, 'w+') as out:
+        for ea in Segments():
+            fs = Functions(SegStart(ea), SegEnd(ea))
+            for f in fs:
+                out.write('(%s 0x%x 0x%x)\n' % (
+                    func_name_propagate_thunk(f),
+                    GetFunctionAttr(f, FUNCATTR_START),
+                    GetFunctionAttr(f, FUNCATTR_END)))
+
+
 class DoNothing(idaapi.plugin_t):
     """
     Do Nothing.
