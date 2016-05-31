@@ -35,6 +35,9 @@ let lift_move mem ops (insn : move_insn) : stmt list =
   | `MOVsi, [|dest; src; shift_imm; cond; _; wflag|] ->
     lift ~dest src `MOV ~simm:shift_imm mem cond ~wflag
 
+  | `MOVPCLR, [|cond; wflag|] ->
+    lift ~dest:(`Reg `PC) (`Reg `LR) `MOV mem cond ~wflag
+
   | `MVNi, [|dest; src; cond; _; wflag|]
   | `MVNr, [|dest; src; cond; _; wflag|] ->
     lift ~dest src `MVN mem cond ~wflag

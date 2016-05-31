@@ -1,19 +1,33 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_bundle.Std
 include Self()
 
 (** ida uses a strange color coding, bgr, IIRC  *)
 let idacode_of_color = function
-  | `green -> 0x99ff99
-  | `red -> 0xCCCCFF
-  | `yellow -> 0xC2FFFF
+  | `black   -> 0x000000
+  | `red     -> 0xCCCCFF
+  | `green   -> 0x99FF99
+  | `yellow  -> 0xC2FFFF
+  | `blue    -> 0xFFB2B2
+  | `magenta -> 0xFFB2FF
+  | `cyan    -> 0xFFFFB2
+  | `white   -> 0xFFFFFF
+  | `gray    -> 0xEAEAEA
   | _ -> invalid_arg "unexpected color"
 
 let string_of_color c = Sexp.to_string (sexp_of_color c)
 
+(** Access stored data from the plugin bundle *)
+let read_file name =
+  let bundle = main_bundle () in
+  match Bundle.get_data bundle name with
+  | None -> assert false
+  | Some s -> s
+
 (** Each function in this module should return a string that should be
     a valid piece of python code. Except for the prologue and epilogue
-    all pieces should be independable of each other, so that they can
+    all pieces should be independent of each other, so that they can
     be emited to the script in an arbitrary order.
 
     The emitted code can contain substitutions. Each substitution is a
@@ -26,23 +40,24 @@ let string_of_color c = Sexp.to_string (sexp_of_color c)
     "addr" - an address of instruction that produced the term, or
             BADADDR otherwise.*)
 module Py = struct
-  (** this is emited to the start of the script *)
-  let prologue =
-    {|
-from idautils import *
-Wait()
-    |}
+  (** this is emitted at the start of the script *)
+  let prologue = read_file "python/prologue.py"
 
-  (**   *)
+  (** this is emitted at the end of the script *)
   let epilogue =
     {|
 # eplogue code if needed
-    |}
+|}
 
-  let print s = sprintf "print %S" s
-  let color s = sprintf "# $addr colorize to %s" (string_of_color s)
-  let foreground s = sprintf "SetFunctionAttribute(${sub_name}, %s)" (string_of_color s)
-  let background s = sprintf "# background %s" (string_of_color s)
+  let color s = sprintf "SetColor($addr, CIC_ITEM, 0x%06x)" (idacode_of_color s)
+  let comment s =
+    sprintf "add_to_comment($addr, '%s', '%s')"
+            (Value.tagname s) (Value.to_string s)
+  let foreground s =
+    sprintf "add_to_comment($addr, 'foreground', '%s')" (string_of_color s)
+  let background s =
+    sprintf "add_to_comment($addr, 'background', '%s')" (string_of_color s)
+
 end
 
 (** [emit_attr buffer sub_name insn_addr attr] emits into the [buffer]
@@ -57,33 +72,35 @@ let emit_attr buf sub_name addr attr =
   let substitute = function
     | "sub_name" -> sub_name
     | "addr" ->
-      Option.value_map addr ~f:Addr.string_of_value
+      Option.value_map
+        addr ~f:(fun a -> "0x" ^ Addr.string_of_value a)
         ~default:"BADADDR"
     | s -> s in
   let case tag f = case tag (fun attr ->
       Buffer.add_substitute buf substitute (f attr);
       Buffer.add_char buf '\n') in
   switch attr @@
-  case comment Py.print @@
   case color Py.color @@
-  case background Py.background @@
   case foreground Py.foreground @@
-  default ignore
+  case background Py.background @@
+  default (fun () ->
+      Buffer.add_substitute buf substitute (Py.comment attr);
+      Buffer.add_char buf '\n')
 
-let program_visitor buf =
+let program_visitor buf attrs =
   object
     inherit [string * word option] Term.visitor
     method! leave_term _ t (name,addr) =
       Term.attrs t |> Dict.to_sequence |> Seq.iter ~f:(fun (_,x) ->
-          emit_attr buf name addr x);
+          let attr = Value.tagname x in
+          if List.mem attrs attr then emit_attr buf name addr x);
       name,addr
     method! enter_term _ t (name,_) =
       name,Term.get_attr t Disasm.insn_addr
-
     method! enter_sub sub (_,addr) = Sub.name sub,addr
   end
 
-let extract_script data code =
+let extract_script data code attrs =
   let open Value.Match in
   let buf = Buffer.create 4096 in
   Buffer.add_string buf Py.prologue;
@@ -91,15 +108,15 @@ let extract_script data code =
       switch x @@
       case python (fun line -> Buffer.add_string buf line) @@
       default ignore);
-  (program_visitor buf)#run code ("",None) |> ignore;
+  (program_visitor buf attrs)#run code ("",None) |> ignore;
   Buffer.add_string buf Py.epilogue;
   Buffer.contents buf
 
 
-let main dst project =
+let main dst attrs project =
   let data = Project.memory project in
   let code = Project.program project in
-  let data = extract_script data code in
+  let data = extract_script data code attrs in
   match dst with
   | None -> print_string data
   | Some dst -> Out_channel.write_all dst ~data
@@ -108,9 +125,10 @@ module Cmdline = struct
   open Cmdliner
   let man = [
     `S "DESCRIPTION";
-    `P "Iterates through memory tagged with text objects that have
-      a `python' tag, and dumps them into a python script, that
-      can be later loaded into the IDA. "
+    `P "Iterates through memory for tagged BIR attributes,
+      and dumps them into a python script, that can be later
+      loaded into IDA. The special `color' tag causes the
+      respective address to be colored."
   ]
 
   let info = Term.info name ~version ~doc ~man
@@ -122,7 +140,11 @@ module Cmdline = struct
     Arg.(value & opt (some string) None & info ["file"]
            ~doc ~docv:"NAME")
 
-  let args = Term.(const main $dst),info
+  let attrs =
+    let doc = "Emit specified BIR attribute" in
+    Arg.(value & opt_all string [] & info ["attr"] ~doc)
+
+  let args = Term.(const main $dst $attrs),info
 end
 
 let () =

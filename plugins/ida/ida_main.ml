@@ -84,7 +84,7 @@ module Img = Data.Make(struct
 
 exception Unsupported_architecture of string
 
-let arch_of_procname size = function
+let arch_of_procname size name = match String.lowercase name with
   | "8086" | "80286r" | "80286p"
   | "80386r" | "80386p"
   | "80486r" | "80486p"
