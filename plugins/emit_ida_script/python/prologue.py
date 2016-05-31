@@ -3,25 +3,31 @@ from idautils import *
 def sexp2list(s):
     sexp = [[]]
     word = ''
+    in_str = False
     for c in s:
-        if c == '(':
+        if c == '(' and not in_str:
             sexp.append([])
-        elif c == ')':
+        elif c == ')' and not in_str:
             if word:
                 sexp[-1].append(word)
                 word = ''
             temp = sexp.pop()
             sexp[-1].append(temp)
-        elif c == ' ':
+        elif c in (' ', '\n', '\t') and not in_str:
             if word:
                 sexp[-1].append(word)
             word = ''
+        elif c == '\"':
+            in_str = not in_str
         else:
             word += c
     return sexp[0]
 
 def list2sexp(l):
     if isinstance(l, str):
+        for special_char in (' ', '\n', '\t', '(', ')', '\"'):
+            if special_char in l:
+                return '\"' + l + '\"'
         return l
     return '(' + ' '.join(list2sexp(e) for e in l) + ')'
 
@@ -51,7 +57,7 @@ def add_to_comment_string(comm, key, value):
 
     kv = ['BAP', [key,value]]
     for e in sexp2list(BAP_dict[5:-1]): # Remove outermost '(BAP', ')'
-        if isinstance(e, list) and len(e) == 2: # It is of the '(k v)' type
+        if isinstance(e, list) and len(e) >= 2: # It is of the '(k v)' type
             if e[0] != key: # Don't append if same as required key
                 kv.append(e)
         else:
