@@ -28,7 +28,9 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
             BAP_dict = ['BAP']
             for k, v in sl_dict.items():
                 BAP_dict += [[k] + v]
-            sl.line += ' // ' + bap_utils.list2sexp(BAP_dict)
+            sl.line += '\x01\x0c // \x01\x0c'  # start comment coloring
+            sl.line += bap_utils.list2sexp(BAP_dict)
+            sl.line += '\x02\x0c\x02\x0c'  # stop comment coloring
 
     comment = "BAP Comment on Pseudocode"
     help = "BAP Comment on Pseudocode"
