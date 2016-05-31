@@ -51,9 +51,10 @@ let create_proto ?return ?(hidden=[]) params =
 exception Failed of error
 let fail x = raise (Failed x)
 
-let data size t =
+let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
   let open Bap_c_data in
   let rec data = function
+    | `Void -> Seq []
     | `Basic {Spec.t} -> Imm (size#basic t, Top)
     | `Pointer {Spec.t} -> Ptr (data t)
     | `Array {Spec.t=(t,None)} -> Ptr (data t)
@@ -66,7 +67,7 @@ let data size t =
             let off' = match size#bits t with
               | None -> off + Size.in_bits size#pointer (* or assert false *)
               | Some sz -> off + sz in
-            match size#padding off with
+            match size#padding t off with
             | None ->  off', data t :: seq
             | Some pad -> off, data t :: Imm (pad,Set []) :: seq) in
       Seq (List.rev ss)
@@ -74,7 +75,8 @@ let data size t =
       let sz = match size#bits t with
         | None -> Size.in_bits size#pointer
         | Some sz -> sz in
-      Seq (List.init (sz/8) ~f:(fun _ -> Imm (`r8,Set []))) in
+      Seq (List.init (sz/8) ~f:(fun _ -> Imm (`r8,Set [])))
+    | `Function _ -> Ptr (Imm ((size#pointer :> size),Top)) in
   data t
 
 
@@ -114,7 +116,7 @@ let create_api_processor arch args : Bap_api.t =
   let module Api = struct
     let language = "c"
     type t = Term.mapper
-    let parse get_api intfs =
+    let parse_exn get_api intfs =
       let gamma = String.Table.create () in
       List.iter intfs ~f:(fun api ->
           match get_api api with
@@ -125,7 +127,10 @@ let create_api_processor arch args : Bap_api.t =
             | Ok api ->
               List.iter api ~f:(fun (key,t) ->
                   Hashtbl.set gamma ~key ~data:t));
-      Ok (mapper (Hashtbl.find gamma))
+      mapper (Hashtbl.find gamma)
+
+    let parse get ifs = Or_error.try_with (fun () -> parse_exn get ifs)
+
     let mapper = ident
   end in
   (module Api)

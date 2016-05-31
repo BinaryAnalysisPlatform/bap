@@ -18,6 +18,8 @@ type proto = {
   params : param list;
 }
 
+val data : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.t
+
 val create_proto :
   ?return:param ->
   ?hidden:(Bap_c_type.t * param) list -> param list -> proto
