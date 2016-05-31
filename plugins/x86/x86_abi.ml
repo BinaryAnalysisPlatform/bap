@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_c.Std
+open Bap_future.Std
+include Self()
 
 module Stack = C.Abi.Stack
 
@@ -17,12 +19,14 @@ module type abi = sig
   val arg  : pos -> exp
 end
 
+type abi = (module abi)
+
 module SysV = struct
   include X86_cpu.AMD64
   include Bil
   let name = "sysv"
   let arch = `x86_64
-  let stack = Stack.create arch
+  let stack n = Stack.create arch n
   let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
@@ -44,7 +48,7 @@ module CDECL = struct
   include Bil
   let name = "cdecl"
   let arch = `x86
-  let stack = Stack.create arch
+  let stack n = Stack.create arch n
   let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
@@ -81,7 +85,7 @@ module MS_64 = struct
   let size = object
     inherit C.Size.base `LLP64 as super
     method! alignment = function
-      | `Basic {C.Type.Spec.t=#C.Type.short} -> 32
+      | `Basic {C.Type.Spec.t=#C.Type.short} -> `r32
       | t -> super#alignment t
   end
 end
@@ -96,63 +100,60 @@ end
 
 exception Unsupported
 
-let api (module Abi : abi) {C.Type.Proto.return; args} =
+let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
   let word = Arch.addr_size (Abi.arch :> arch) |> Size.in_bits in
-  let ret = match Abi.size#bits return with
-    | None -> []
+  let return = match Abi.size#bits return with
+    | None -> None
     | Some width -> match Size.of_int_opt width with
       | None -> raise Unsupported
       | Some sz ->
+        let data = C.Abi.data Abi.size return in
         if width = word * 2
-        then [C.Data.(Imm (sz,Top)), Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1)]
+        then Some (data, Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1))
         else if width = word
-        then [C.Data.(Imm (sz,Top)), Abi.arg Ret_0]
+        then Some (data, Abi.arg Ret_0)
         else raise Unsupported in
-  let args = List.mapi args ~f:(fun i (n,t) -> match Abi.size#bits t with
+  let params = List.mapi args ~f:(fun i (n,t) ->
+      match Abi.size#bits t with
       | None -> raise Unsupported
       | Some size -> match Size.of_int_opt size with
-        | Some sz when size = word -> C.Data.(Imm (sz,Top)), Abi.arg (Arg i)
+        | Some sz when size = word ->
+          C.Abi.data Abi.size t, Abi.arg (Arg i)
         | _ -> raise Unsupported) in
-  ret,args
+  C.Abi.{return; params; hidden=[]}
+
+let api abi proto =
+  try Some (supported_api abi proto) with Unsupported -> None
 
 
+let supported () : (module abi) list = [
+  (module SysV);
+  (module CDECL);
+  (module STDCALL);
+  (module MS_32);
+  (module MS_64);
+  (module FASTCALL);
 
-(* Bap_api_abi.register Abi.arch Abi.name Abi.abi *)
+]
 
-(* let abis : (module abi) list = [ *)
-(*   (module SysV); *)
-(*   (module CDECL); *)
-(*   (module STDCALL); *)
-(*   (module FASTCALL); *)
-(*   (module MS_32); *)
-(*   (module MS_64); *)
-(* ] *)
+let name (module Abi : abi) = Abi.name
+
+let default_abi arch : (module abi) = match arch with
+  | `x86 -> (module CDECL)
+  | `x86_64 -> (module SysV)
 
 
-(* let args_of_proto (module Abi : abi) {C.Type.args; return} = () *)
-
-
-
-(* let x64_cc_attrs = ["ms_abi"; "sysv_abi"] *)
-(* let x32_cc_attrs = x64_cc_attrs @ ["cdecl"; "fastcall"; "thiscall"; "stdcall";] *)
-(* let cc_attrs = function `x86 -> x32_cc_attrs | `x86_64 -> x64_cc_attrs *)
-
-(* let x32_default = Option.value ~default:CDECL.name *)
-(* let x64_default = Option.value ~default:SysV.name *)
-(* let default = function `x86 -> x32_default | `x86_64 -> x64_default *)
-
-(* let gnu_resolver default cc_attrs name attrs = *)
-(*   let cc_attrs = ["cdecl"; "fastcall"; "thiscall"; "stdcall"; *)
-(*                   "ms_abi"; "sysv_abi" ] in *)
-(*   List.find attrs ~f:(fun x -> List.mem cc_attrs x.C.Type.attr_name) |> function *)
-(*   | None -> default *)
-(*   | Some x -> match String.chop_suffix ~suffix:"_abi" x.C.Type.attr_name with *)
-(*     | None -> name *)
-(*     | Some name -> name *)
-
-(* let register_resolver ?default_abi:abi (arch : Arch.x86) = () *)
-(* (\* Bap_api_abi.override_resolver (arch :> arch) *\) *)
-(* (\*   (gnu_resolver (default arch abi) (cc_attrs arch)) *\) *)
-
-(* let register () = *)
-(*   List.iter abis ~f:register *)
+let setup ?abi () =
+  let id = ref None in
+  Stream.observe Project.Info.arch (function
+      | #Arch.x86 as arch ->
+        let abi = match abi with
+          | None -> default_abi arch
+          | Some abi -> abi in
+        let module Abi = (val abi) in
+        Option.iter !id ~f:Bap_api.retract;
+        info "using %s ABI" Abi.name;
+        let api =
+          C.Abi.create_api_processor (Abi.arch :> arch) (api abi) in
+        id := Some (Bap_api.process api)
+      | _ -> Option.iter !id ~f:Bap_api.retract)

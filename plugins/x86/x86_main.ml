@@ -36,4 +36,5 @@ end
 
 let () =
   register_target `x86    (module IA32);
-  register_target `x86_64 (module AMD64)
+  register_target `x86_64 (module AMD64);
+  X86_abi.setup ()

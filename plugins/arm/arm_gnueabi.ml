@@ -49,7 +49,7 @@ let args {C.Type.Proto.return; args=ps} =
         let exps,regs = List.split_n (align regs t) words in
         let rest,mems = Seq.split_n mems (words - List.length exps) in
         regs,mems, (C.Abi.data size t, (concat (exps@rest))) :: args) in
-  C.Abi.{return; hidden; params = List.rev params}
+  Some C.Abi.{return; hidden; params = List.rev params}
 
 let api arch = C.Abi.create_api_processor arch args
 
@@ -61,5 +61,3 @@ let setup () =
         info "using armeabi ABI";
         id := Some (Bap_api.process (api arch))
       | _ -> Option.iter !id ~f:Bap_api.retract)
-
-let () = setup ()

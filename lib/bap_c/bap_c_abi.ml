@@ -92,13 +92,16 @@ let create_arg addr_size intent name t (data,exp) sub =
 
 let create_api_processor arch args : Bap_api.t =
   let addr_size = Arch.addr_size arch in
-  let mapper gamma = object
+  let mapper gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
       let name = Sub.name sub in
       match gamma name with
-      | Some (`Function {Bap_c_type.Spec.t}) ->
-        let {return; hidden; params} = args t in
+      | Some (`Function {Bap_c_type.Spec.t}) -> self#apply_args sub t
+      | _ -> super#map_sub sub
+    method private apply_args sub t = match args t with
+      | None -> super#map_sub sub
+      | Some {return; hidden; params} ->
         let args =
           List.map2_exn params t.Bap_c_type.Proto.args ~f:(fun a (n,t) ->
               create_arg addr_size (arg_intent t) n t a sub) in
@@ -111,7 +114,6 @@ let create_api_processor arch args : Bap_api.t =
             let n = "hidden" ^ if i = 0 then "" else Int.to_string i in
             create_arg addr_size Both n t a sub) in
         List.fold (args@hid@ret) ~init:sub ~f:(Term.append arg_t)
-      | _ -> super#map_sub sub
   end in
   let module Api = struct
     let language = "c"

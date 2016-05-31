@@ -24,7 +24,7 @@ val create_proto :
   ?return:param ->
   ?hidden:(Bap_c_type.t * param) list -> param list -> proto
 
-val create_api_processor : arch -> (Bap_c_type.proto -> proto) -> Bap_api.t
+val create_api_processor : arch -> (Bap_c_type.proto -> proto option) -> Bap_api.t
 
 module Stack : sig
   (** [stack = create ?growsup arch] is a function that returns

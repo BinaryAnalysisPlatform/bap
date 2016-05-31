@@ -15,7 +15,6 @@ Library "bap-arm"
                  Arm_cond,
                  Arm_env,
                  Arm_flags,
-                 Arm_gnueabi,
                  Arm_helpers,
                  Arm_insn,
                  Arm_lifter,
@@ -35,5 +34,5 @@ Library arm_plugin
   Path:             plugins/arm
   FindlibName:      bap-plugin-arm
   BuildDepends:     bap, bap-arm
-  InternalModules:  Arm_main
+  InternalModules:  Arm_main, Arm_gnueabi
   XMETADescription: provide ARM lifter
