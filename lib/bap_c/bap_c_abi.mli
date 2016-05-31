@@ -20,11 +20,7 @@ type proto = {
 
 val data : #Bap_c_size.base -> Bap_c_type.t -> Bap_c_data.t
 
-val create_proto :
-  ?return:param ->
-  ?hidden:(Bap_c_type.t * param) list -> param list -> proto
-
-val create_api_processor : arch -> (Bap_c_type.proto -> proto option) -> Bap_api.t
+val create_api_processor : ?demangle:(string -> string) -> arch -> (Bap_c_type.proto -> proto option) -> Bap_api.t
 
 module Stack : sig
   (** [stack = create ?growsup arch] is a function that returns

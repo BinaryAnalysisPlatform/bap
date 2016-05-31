@@ -80,40 +80,45 @@ let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
   data t
 
 
-let create_arg addr_size intent name t (data,exp) sub =
+let create_arg i addr_size intent name t (data,exp) sub =
   let typ = match data with
     | Bap_c_data.Imm (sz,_) -> Type.Imm (Size.in_bits sz)
     | _ -> Type.Imm (Size.in_bits addr_size) in
+  let name = if name = "" then sprintf "arg%d" (i+1) else name in
   let var = Var.create (Sub.name sub ^ "_" ^ name) typ in
   let arg = Arg.create ~intent var exp in
   let arg = Term.set_attr arg Attrs.data data in
   let arg = Term.set_attr arg Attrs.t t in
   arg
 
-let create_api_processor arch args : Bap_api.t =
+let create_api_processor ?(demangle=ident) arch args : Bap_api.t =
   let addr_size = Arch.addr_size arch in
   let mapper gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
+      let sub = Sub.with_name sub (demangle (Sub.name sub)) in
       let name = Sub.name sub in
+      Tid.set_name (Term.tid sub) name;
       match gamma name with
       | Some (`Function {Bap_c_type.Spec.t}) -> self#apply_args sub t
       | _ -> super#map_sub sub
     method private apply_args sub t = match args t with
       | None -> super#map_sub sub
       | Some {return; hidden; params} ->
+        let params = List.mapi params ~f:(fun i a -> i,a) in
         let args =
-          List.map2_exn params t.Bap_c_type.Proto.args ~f:(fun a (n,t) ->
-              create_arg addr_size (arg_intent t) n t a sub) in
+          List.map2_exn params t.Bap_c_type.Proto.args ~f:(fun (i,a) (n,t) ->
+              create_arg i addr_size (arg_intent t) n t a sub) in
         let ret = match return with
           | None -> []
           | Some ret ->
             let t = t.Bap_c_type.Proto.return in
-            [create_arg addr_size Out "result" t ret sub] in
+            [create_arg 0 addr_size Out "result" t ret sub] in
         let hid = List.mapi hidden ~f:(fun i (t,a) ->
             let n = "hidden" ^ if i = 0 then "" else Int.to_string i in
-            create_arg addr_size Both n t a sub) in
+            create_arg 0 addr_size Both n t a sub) in
         List.fold (args@hid@ret) ~init:sub ~f:(Term.append arg_t)
+
   end in
   let module Api = struct
     let language = "c"

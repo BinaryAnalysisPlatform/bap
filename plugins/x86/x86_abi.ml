@@ -17,6 +17,7 @@ module type abi = sig
   val name : string
   val size : C.Size.base
   val arg  : pos -> exp
+  val demangle : string -> string
 end
 
 type abi = (module abi)
@@ -41,6 +42,7 @@ module SysV = struct
   let size = object
     inherit C.Size.base `LP64
   end
+  let demangle = ident
 end
 
 module CDECL = struct
@@ -57,6 +59,8 @@ module CDECL = struct
   let size = object
     inherit C.Size.base `ILP32
   end
+
+  let demangle = ident
 end
 
 (* in our abstraction they are the same, as they have the same layout.*)
@@ -92,10 +96,32 @@ end
 
 module FASTCALL = struct
   include CDECL
-  let abi = function
+  let name = "fastcall"
+  let arg = function
     | Arg 0 -> var rcx
     | Arg 1 -> var rdx
     | other -> arg other
+end
+
+module WATCOM_STACK = struct
+  include CDECL
+  let name = "watcom-stack"
+  let demangle s = match String.chop_suffix s ~suffix:"_" with
+    | None -> s
+    | Some s -> s
+end
+
+
+module WATCOM_REGS = struct
+  include WATCOM_STACK
+  let name = "watcom-regs"
+  let arg = function
+    | Arg 0 -> var rax
+    | Arg 1 -> var rdx
+    | Arg 2 -> var rbx
+    | Arg 3 -> var rcx
+    | Arg n -> stack Int.(n-4)
+    | ret -> arg ret
 end
 
 exception Unsupported
@@ -133,27 +159,31 @@ let supported () : (module abi) list = [
   (module MS_32);
   (module MS_64);
   (module FASTCALL);
-
+  (module WATCOM_STACK);
+  (module WATCOM_REGS)
 ]
 
 let name (module Abi : abi) = Abi.name
+let arch (module Abi : abi) = Abi.arch
 
 let default_abi arch : (module abi) = match arch with
   | `x86 -> (module CDECL)
   | `x86_64 -> (module SysV)
 
 
-let setup ?abi () =
+let setup ?(abi=fun _ -> None) () =
   let id = ref None in
   Stream.observe Project.Info.arch (function
       | #Arch.x86 as arch ->
-        let abi = match abi with
+        let abi = match abi arch with
           | None -> default_abi arch
           | Some abi -> abi in
         let module Abi = (val abi) in
         Option.iter !id ~f:Bap_api.retract;
         info "using %s ABI" Abi.name;
         let api =
-          C.Abi.create_api_processor (Abi.arch :> arch) (api abi) in
+          C.Abi.create_api_processor
+            ~demangle:Abi.demangle
+            (Abi.arch :> arch) (api abi) in
         id := Some (Bap_api.process api)
       | _ -> Option.iter !id ~f:Bap_api.retract)
