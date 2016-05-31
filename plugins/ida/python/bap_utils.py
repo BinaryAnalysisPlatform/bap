@@ -7,19 +7,22 @@ def sexp2list(s):
     """Convert S-Expression to List."""
     sexp = [[]]
     word = ''
+    in_str = False
     for c in s:
-        if c == '(':
+        if c == '(' and not in_str:
             sexp.append([])
-        elif c == ')':
+        elif c == ')' and not in_str:
             if word:
                 sexp[-1].append(word)
                 word = ''
             temp = sexp.pop()
             sexp[-1].append(temp)
-        elif c == ' ':
+        elif c in (' ', '\n', '\t') and not in_str:
             if word:
                 sexp[-1].append(word)
             word = ''
+        elif c == '\"':
+            in_str = not in_str
         else:
             word += c
     return sexp[0]
@@ -28,6 +31,9 @@ def sexp2list(s):
 def list2sexp(l):
     """Convert List to S-Expression."""
     if isinstance(l, str):
+        for special_char in (' ', '\n', '\t', '(', ')', '\"'):
+            if special_char in l:
+                return '\"' + l + '\"'
         return l
     return '(' + ' '.join(list2sexp(e) for e in l) + ')'
 
