@@ -50,15 +50,18 @@ def get_bap_comment(comm):
     if '(BAP ' in comm:
         start_loc = comm.index('(BAP ')
         bracket_count = 0
+        in_str = False
         for i in range(start_loc, len(comm)):
-            if comm[i] == '(':
+            if comm[i] == '(' and not in_str:
                 bracket_count += 1
-            elif comm[i] == ')':
+            elif comm[i] == ')' and not in_str:
                 bracket_count -= 1
                 if bracket_count == 0:
                     end_loc = i + 1
                     BAP_dict = comm[start_loc:end_loc]
                     break
+            elif comm[i] == '\"':
+                in_str = not in_str
         else:
             # Invalid bracketing.
             # Someone messed up the dict.
