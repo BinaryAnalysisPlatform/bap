@@ -14,10 +14,10 @@ Library bap_ida
   BuildDepends:     fileutils, re.posix
   XMETADescription: make calls into IDA
 
-Library bap_ida_rsr
+Library bap_ida_plugin
   Build$:           flag(everything) || flag(ida)
   Path:             plugins/ida
-  FindlibName:      bap-plugin-ida_rsr
+  FindlibName:      bap-plugin-ida
   CompiledObject:   best
   BuildDepends:     bap, bap-ida, cmdliner
   Modules:          Ida_main
