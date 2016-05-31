@@ -97,6 +97,15 @@ def add_to_comment_string(comm, key, value):
     return comm[:start_loc] + list2sexp(kv) + comm[end_loc:]
 
 
+def add_to_comment(ea, key, value):
+    """Add key:value to comm string at EA."""
+    old_comm = idaapi.get_cmt(ea, 0)
+    if old_comm is None:
+        old_comm = ''
+    new_comm = add_to_comment_string(old_comm, key, value)
+    idaapi.set_cmt(ea, new_comm, 0)
+
+
 def cfunc_from_ea(ea):
     """Get cfuncptr_t from EA."""
     func = idaapi.get_func(ea)
