@@ -19,8 +19,9 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
             for e in bap_utils.get_bap_list(ea_BAP_dict):
                 if isinstance(e, list) and len(e) >= 2:  # i.e. '(k v)' type
                     val_list = sl_dict.get(e[0], [])
-                    if e[1:] not in val_list:
-                        val_list.append(e[1:])
+                    sexp = bap_utils.list2sexp(e[1:])
+                    if sexp not in val_list:
+                        val_list.append(sexp)
                     sl_dict[e[0]] = val_list
 
         if len(sl_dict) > 0:
@@ -28,15 +29,6 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
             for k, v in sl_dict.items():
                 BAP_dict += [[k] + v]
             sl.line += ' // ' + bap_utils.list2sexp(BAP_dict)
-            # A cleaner way might be to use
-            #   idaapi.get_user_cmt()
-            #   idaapi.set_user_cmt()
-            #   idaapi.restore_user_cmts()
-            # and related functions
-            #
-            # Current technique might require refreshing the view for
-            # propagating the changes properly (without repetitively saying
-            # "// (BAP ...)" )
 
     comment = "BAP Comment on Pseudocode"
     help = "BAP Comment on Pseudocode"
