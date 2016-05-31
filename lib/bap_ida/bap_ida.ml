@@ -171,8 +171,16 @@ module Ida = struct
 from idautils import *
 from idaapi import *
 
+try:
+      from idaapi import get_func_name2 as get_func_name
+      # Since get_func_name is deprecated (at least from IDA 6.9)
+except ImportError:
+      pass
+      # Older versions of IDA don't have get_func_name2
+      # so we just use the older name get_func_name
+
 def func_name_propagate_thunk(ea):
-    current_name = get_func_name2(ea)
+    current_name = get_func_name(ea)
     if current_name[0].isalpha():
         return current_name
     func = get_func(ea)
@@ -182,7 +190,7 @@ def func_name_propagate_thunk(ea):
         ea_new = calc_thunk_func_target(func, temp_ptr.cast())
     if ea_new != BADADDR:
         ea = ea_new
-    propagated_name = get_func_name2(ea)
+    propagated_name = get_func_name(ea)
     if len(current_name) > len(propagated_name) > 0:
         return propagated_name
     else:

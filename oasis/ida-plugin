@@ -15,5 +15,5 @@ Library ida_python_plugins
   Path:             plugins/ida/python
   FindlibName:      bap-plugin-ida-python
   BuildDepends:     bap, bap-plugin-taint, bap-plugin-propagate_taint, bap-plugin-map_terms
-  XMETADescription: IDA python plugin scripts
+  XMETADescription: call bap from IDA Pro
   DataFiles:        *.py ($ida_plugin_path)
