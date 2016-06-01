@@ -68,7 +68,7 @@ class BAP_BIR_Attr(idaapi.plugin_t):
         idc.SetStatus(IDA_STATUS_WAITING)
         idaapi.refresh_idaview_anyway()
 
-        run_bap_with(args['args_from_user'].format(args))
+        run_bap_with(args['args_from_user'].format(**args))
 
         idc.SetStatus(IDA_STATUS_READY)
 
