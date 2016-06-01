@@ -1,0 +1,5 @@
+REC
+PKG FrontC
+PKG cmdliner
+
+B ../../_build/lib/bap_c

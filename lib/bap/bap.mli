@@ -5949,12 +5949,6 @@ module Std : sig
         actually a format string written in a corresponding DSL. *)
     val format : string tag
 
-
-    (** a contract requirement that this argument is not aliased with
-        any other arguments of the subroutine. See [restrict] keyword in C
-        standard for the full contract. *)
-    val restricted : unit tag
-
     (** a contract requirement that this argument is not NULL.  *)
     val nonnull : unit tag
 
