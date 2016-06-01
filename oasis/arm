@@ -33,6 +33,6 @@ Library arm_plugin
   Build$:           flag(everything) || flag(arm)
   Path:             plugins/arm
   FindlibName:      bap-plugin-arm
-  BuildDepends:     bap, bap-arm
-  InternalModules:  Arm_main
+  BuildDepends:     bap-abi, bap-arm, bap-c
+  InternalModules:  Arm_main, Arm_gnueabi
   XMETADescription: provide ARM lifter

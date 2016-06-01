@@ -1,0 +1,6 @@
+#use "topfind"
+#require "bap.top"
+#require "bap-c";;
+#require "FrontC";;
+open Bap.Std;;
+open Bap_c.Std;;

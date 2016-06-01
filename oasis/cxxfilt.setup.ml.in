@@ -1,0 +1,10 @@
+
+let () =
+  add_variable  ~doc:"A list (OCaml syntax) of supported targets" "cxxfilt_targets"
+    ~define:(function
+        | None -> "[]"
+        | Some xs -> xs);
+  add_variable ~doc:"A path to cxxfilt binary" "cxxfilt_path"
+    ~define:(function
+        | None -> "cxxfilt"
+        | Some x -> x)

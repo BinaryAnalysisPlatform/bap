@@ -1,3 +1,4 @@
 PKG cmdliner
-PKG bap-demangle
+
+B ../../_build/lib/bap_demangle
 REC

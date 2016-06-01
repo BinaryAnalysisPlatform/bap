@@ -2,10 +2,19 @@ Flag demangle
   Description: Build demangle library
   Default: false
 
-Library "demangle"
+Library "bap-demangle"
   Path:  lib/bap_demangle
   Build$: flag(everything) || flag(demangle)
   FindlibName: bap-demangle
   CompiledObject: best
   BuildDepends: core_kernel
   Modules: Bap_demangle
+
+Library "demangle_plugin"
+  Path: plugins/demangle
+  Build$: flag(everything) || flag(demangle)
+  FindlibName: bap-plugin-demangle
+  CompiledObject: best
+  BuildDepends: core_kernel, bap-demangle, bap, cmdliner
+  InternalModules: Demangle_main
+  XMETADescription: demangle subroutine names

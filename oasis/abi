@@ -1,0 +1,20 @@
+Flag abi
+  Description: Build ABI disaptching library
+  Default: false
+
+Library bap_abi
+  Build$:           flag(everything) || flag(abi)
+  Path:             lib/bap_abi
+  FindlibName:      bap-abi
+  CompiledObject:   best
+  BuildDepends:     bap
+  Modules:          Bap_abi
+
+Library abi_plugin
+  Build$:           flag(everything) || flag(abi)
+  Path:             plugins/abi
+  FindlibName:      bap-plugin-abi
+  CompiledObject:   best
+  BuildDepends:     bap, bap-abi
+  InternalModules:  Abi_main
+  XMETADescription: apply abi information to a project
