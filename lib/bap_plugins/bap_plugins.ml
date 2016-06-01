@@ -120,7 +120,7 @@ module Plugin = struct
         | `In_core -> "host program"
         | `Provided_by p -> "plugin " ^ p
         | `Requested_by p -> "library from plugin " ^ p in
-      Or_error.errorf "a name %s clashes with a %s" main with_whom
+      Or_error.errorf "a name %S clashes with a %s" main with_whom
 
   let validate_provided plugin mains =
     List.map mains ~f:(validate_unit plugin) |>

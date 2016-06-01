@@ -109,7 +109,6 @@ module Markers = struct
 
     let () =
       unit alloc_size;
-      unit restricted;
       unit nonnull;
   end
 

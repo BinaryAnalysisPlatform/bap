@@ -1,0 +1,12 @@
+Flag cxxfilt
+  Description: Build c++filt wrapper
+  Default: false
+
+Library "cxxfilt_plugin"
+  Path: plugins/cxxfilt
+  Build$: flag(everything) || flag(cxxfilt)
+  FindlibName: bap-plugin-cxxfilt
+  CompiledObject: best
+  BuildDepends: core_kernel, bap-demangle
+  InternalModules: Cxxfilt_main, Cxxfilt_config
+  XMETADescription: provide c++filt based demangler

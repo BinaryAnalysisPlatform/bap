@@ -3,4 +3,5 @@ open Bap.Std
 
 let () =
   List.iter Arch.all_of_arm ~f:(fun arch ->
-      register_target (arch :> arch) (module ARM))
+      register_target (arch :> arch) (module ARM));
+  Arm_gnueabi.setup ()
