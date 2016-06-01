@@ -88,13 +88,6 @@ class BAP_Taint(idaapi.plugin_t):
     def _taint_ptr_and_color(self):
         self._taint_and_color('ptr')
 
-    def _add_hotkey(self, hotkey, func):
-        hotkey_ctx = idaapi.add_hotkey(hotkey, func)
-        if hotkey_ctx is None:
-            print("Failed to register {} for {}".format(hotkey, func))
-        else:
-            print("Registered {} for {}".format(hotkey, func))
-
     flags = idaapi.PLUGIN_FIX
     comment = "BAP Taint Plugin"
     help = "BAP Taint Plugin"
@@ -103,8 +96,9 @@ class BAP_Taint(idaapi.plugin_t):
 
     def init(self):
         """Initialize Plugin."""
-        self._add_hotkey("Shift-A", self._taint_reg_and_color)
-        self._add_hotkey("Ctrl-Shift-A", self._taint_ptr_and_color)
+        from bap_utils import add_hotkey
+        add_hotkey("Shift-A", self._taint_reg_and_color)
+        add_hotkey("Ctrl-Shift-A", self._taint_ptr_and_color)
         return idaapi.PLUGIN_KEEP
 
     def term(self):
