@@ -51,22 +51,8 @@ let register_source (module T : Target) =
 
 let loader_script =
   {|
-from idautils import *
-from idaapi import *
-
-Wait()
-
-with open ('$output', 'w+') as out:
-    info = idaapi.get_inf_structure()
-    size = "r32" if info.is_32bit else "r64"
-    out.write ("(%s %s (" % (info.get_proc_name()[1], size))
-    for seg in Segments():
-        out.write ("\n(%s %s %d (0x%X %d))" % (
-            get_segm_name(seg),
-            "code" if segtype(seg) == SEG_CODE else "data",
-            get_fileregion_offset(seg),
-            seg, getseg(seg).size()))
-    out.write("))\n")
+from bap_utils import dump_loader_info
+dump_loader_info('$output')
 idc.Exit(0)
 |}
 

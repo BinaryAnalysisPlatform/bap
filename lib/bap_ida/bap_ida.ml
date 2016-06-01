@@ -168,46 +168,8 @@ module Ida = struct
     Command.create
       `python
       ~script:"
-from idautils import *
-from idaapi import *
-
-try:
-      from idaapi import get_func_name2 as get_func_name
-      # Since get_func_name is deprecated (at least from IDA 6.9)
-except ImportError:
-      pass
-      # Older versions of IDA don't have get_func_name2
-      # so we just use the older name get_func_name
-
-def func_name_propagate_thunk(ea):
-    current_name = get_func_name(ea)
-    if current_name[0].isalpha():
-        return current_name
-    func = get_func(ea)
-    temp_ptr = ea_pointer()
-    ea_new = BADADDR
-    if func.flags & FUNC_THUNK == FUNC_THUNK:
-        ea_new = calc_thunk_func_target(func, temp_ptr.cast())
-    if ea_new != BADADDR:
-        ea = ea_new
-    propagated_name = get_func_name(ea)
-    if len(current_name) > len(propagated_name) > 0:
-        return propagated_name
-    else:
-        return current_name
-        # Fallback to non-propagated name for the weird times that IDA gives
-        #     a 0 length name, or finds a longer import name
-
-Wait()
-with open('$output', 'w+') as out:
-    for ea in Segments():
-        fs = Functions(SegStart(ea), SegEnd(ea))
-        for f in fs:
-            out.write ('(%s 0x%x 0x%x)\\n' % (
-                func_name_propagate_thunk(f),
-                GetFunctionAttr(f, FUNCATTR_START),
-                GetFunctionAttr(f, FUNCATTR_END)))
-
+from bap_utils import dump_symbol_info
+dump_symbol_info('$output')
 idc.Exit(0)"
       ~process:(fun name ->
           let blk_of_sexp x = [%of_sexp:string*int64*int64] x in

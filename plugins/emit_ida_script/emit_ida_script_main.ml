@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_bundle.Std
 include Self()
 
 (** ida uses a strange color coding, bgr, IIRC  *)
@@ -18,13 +17,6 @@ let idacode_of_color = function
 
 let string_of_color c = Sexp.to_string (sexp_of_color c)
 
-(** Access stored data from the plugin bundle *)
-let read_file name =
-  let bundle = main_bundle () in
-  match Bundle.get_data bundle name with
-  | None -> assert false
-  | Some s -> s
-
 (** Each function in this module should return a string that should be
     a valid piece of python code. Except for the prologue and epilogue
     all pieces should be independent of each other, so that they can
@@ -41,7 +33,13 @@ let read_file name =
             BADADDR otherwise.*)
 module Py = struct
   (** this is emitted at the start of the script *)
-  let prologue = read_file "python/prologue.py"
+  let prologue =
+    {|
+from idautils import *
+from bap_utils import add_to_comment
+
+Wait()
+|}
 
   (** this is emitted at the end of the script *)
   let epilogue =
@@ -52,7 +50,7 @@ module Py = struct
   let color s = sprintf "SetColor($addr, CIC_ITEM, 0x%06x)" (idacode_of_color s)
   let comment s =
     sprintf "add_to_comment($addr, '%s', '%s')"
-            (Value.tagname s) (Value.to_string s)
+      (Value.tagname s) (Value.to_string s)
   let foreground s =
     sprintf "add_to_comment($addr, 'foreground', '%s')" (string_of_color s)
   let background s =
