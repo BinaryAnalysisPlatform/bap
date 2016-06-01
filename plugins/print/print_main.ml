@@ -11,8 +11,16 @@ include Self()
 
 let create_demangler = function
   | None -> ident
-  | Some `internal -> fun x -> Demangle.run x
-  | Some (`program tool) -> Demangle.run ~tool
+  | Some name ->
+    Demanglers.available () |>
+    List.find ~f:(fun d -> Demangler.name d = name) |> function
+    | None ->
+      error "Unknown demangler";
+      info "Available demanglers are: %s" @@
+      String.concat ~sep:", "
+        List.(Demanglers.available () >>| Demangler.name);
+      invalid_argf "Bad demangler option" ()
+    | Some d -> Demangler.run d
 
 
 let should_print = function
@@ -37,8 +45,8 @@ let sec_name memory fn sub =
   | None -> "bap.virtual"
   | Some name -> name
 
-let print_symbols subs secs demangle fmts ppf proj =
-  let demangle = create_demangler demangle in
+let print_symbols subs secs demangler fmts ppf proj =
+  let demangle = create_demangler demangler in
   let symtab = Project.symbols proj in
   Symtab.to_sequence symtab |>
   Seq.filter ~f:(fun ((name,entry,cfg) as fn) ->
@@ -177,19 +185,9 @@ let main attrs ansi_colors demangle symbol_fmts subs secs =
 module Cmdline = struct
   open Cmdliner
 
-  let demangle : 'a option Term.t =
-    let doc = "Demangle C++ symbols, using either internal \
-               algorithm or a specified external tool, e.g. \
-               c++filt." in
-    let parse = function
-      | "internal" -> `Ok `internal
-      | name -> `Ok (`program name) in
-    let printer fmt = function
-      | `internal -> pp_print_string fmt "internal"
-      | `program name -> pp_print_string fmt name in
-    let spec = parse, printer in
-    Arg.(value & opt ~vopt:(Some `internal) (some spec) None &
-         info ["demangled"] ~doc)
+  let demangle : string option Term.t =
+    let doc = "Demangle symbols, using the specified demangler" in
+    Arg.(value & opt (some string) None & info ["demangled-with"] ~doc)
 
   let bir_attr : string list Term.t =
     let doc = "When printing IR emit an attribute $(docv)" in

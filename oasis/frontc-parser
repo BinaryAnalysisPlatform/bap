@@ -1,0 +1,12 @@
+Flag frontc_parser
+  Description: Build FrontC based C parser
+  Default: false
+
+Library frontc_parser_plugin
+  Build$: flag(everything) || flag(frontc_parser)
+  XMETADescription: parse c files with FrontC
+  Path: plugins/frontc_parser
+  FindlibName: bap-plugin-frontc_parser
+  CompiledObject: best
+  BuildDepends: bap, bap-c, FrontC
+  InternalModules: Frontc_parser_main

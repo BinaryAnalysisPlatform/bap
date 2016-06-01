@@ -212,6 +212,20 @@ def run_bap_with(argument_string):
     idc.Exec("rm -f \"{symbol_file_location}\"".format(**args))  # Cleanup
 
 
+def add_hotkey(hotkey, func):
+    """
+    Assign hotkey to run func.
+
+    If a pre-existing action for the hotkey exists, then this function will
+    remove that action and replace it with func.
+    """
+    hotkey_ctx = idaapi.add_hotkey(hotkey, func)
+    if hotkey_ctx is None:
+        print("Failed to register {} for {}".format(hotkey, func))
+    else:
+        print("Registered {} for {}".format(hotkey, func))
+
+
 class DoNothing(idaapi.plugin_t):
     """
     Do Nothing.
