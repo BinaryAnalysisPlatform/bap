@@ -43,7 +43,7 @@ class BAP_BIR_Attr(idaapi.plugin_t):
             'ida_script_location': tempfile.mkstemp(suffix='.py',
                                                     prefix='ida-bap-')[1],
             'args_from_user': idaapi.askstr(0, '', 'Args to pass to BAP'),
-            'bir_attr': idaapi.askstr(0, '', 'BIR Attributes')
+            'bir_attr': idaapi.askstr(0, 'comment', 'BIR Attributes')
         }
 
         if args['args_from_user'] is None:
