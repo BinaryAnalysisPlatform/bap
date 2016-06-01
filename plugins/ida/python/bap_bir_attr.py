@@ -46,19 +46,20 @@ class BAP_BIR_Attr(idaapi.plugin_t):
             'bir_attr': idaapi.askstr(0, '', 'BIR Attributes')
         }
 
-        args['args_from_user'] = args['args_from_user'].format(**args)
+        if args['args_from_user'] is None:
+            args['args_from_user'] = ''
 
-        idc.SetStatus(IDA_STATUS_WAITING)
-        idaapi.refresh_idaview_anyway()
-
-        run_bap_with(
-            "\
-            {args_from_user} \
+        if args['bir_attr'] is not None:
+            args['args_from_user'] += "\
             --emit-ida-script-attr={bir_attr} \
             --emit-ida-script-file={ida_script_location} \
             --emit-ida-script \
             ".format(**args)
-        )
+
+        idc.SetStatus(IDA_STATUS_WAITING)
+        idaapi.refresh_idaview_anyway()
+
+        run_bap_with(args['args_from_user'].format(args))
 
         idc.SetStatus(IDA_STATUS_READY)
 
