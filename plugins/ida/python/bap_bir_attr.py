@@ -35,6 +35,12 @@ class BAP_BIR_Attr(idaapi.plugin_t):
 
     @classmethod
     def run_bap(cls):
+        """
+        Ask user for BAP args to pass, BIR attributes to print; and run BAP.
+
+        Allows users to also use {screen_ea} in the BAP args to get the
+        address at the location pointed to by the cursor.
+        """
         import tempfile
         from bap_utils import run_bap_with
 
@@ -43,15 +49,18 @@ class BAP_BIR_Attr(idaapi.plugin_t):
             'ida_script_location': tempfile.mkstemp(suffix='.py',
                                                     prefix='ida-bap-')[1],
             'args_from_user': idaapi.askstr(0, '', 'Args to pass to BAP'),
-            'bir_attr': idaapi.askstr(0, 'comment', 'BIR Attributes')
+            'bir_attr': idaapi.askstr(0, 'comment',
+                                      'BIR Attributes (comma separated)')
         }
 
         if args['args_from_user'] is None:
             args['args_from_user'] = ''
 
         if args['bir_attr'] is not None:
+            for attr in args['bir_attr'].split(','):
+                attr = attr.strip()  # For users who prefer "x, y, z" style
+                args['args_from_user'] += " --emit-ida-script-attr=" + attr
             args['args_from_user'] += "\
-            --emit-ida-script-attr={bir_attr} \
             --emit-ida-script-file={ida_script_location} \
             --emit-ida-script \
             ".format(**args)
