@@ -124,8 +124,7 @@ module Cmdline = struct
 
   let parse () = match Term.eval ~argv (Term.pure (),info) with
     | `Version | `Help -> exit 0
-    | `Error _ -> exit 1
-    | `Ok () -> match Array.find argv ~f:not_a_pass with
+    | _ -> match Array.find argv ~f:not_a_pass with
       | None -> ()
       | Some pass -> eprintf "Unknown pass: %s" pass; exit 1
 end
