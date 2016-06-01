@@ -19,9 +19,8 @@ class BAP_Comment_Pseudocode(SimpleLine_Modifier_Hexrays):
             for e in bap_utils.get_bap_list(ea_BAP_dict):
                 if isinstance(e, list) and len(e) >= 2:  # i.e. '(k v)' type
                     val_list = sl_dict.get(e[0], [])
-                    sexp = bap_utils.list2sexp(e[1:])
-                    if sexp not in val_list:
-                        val_list.append(sexp)
+                    if e[1:] not in val_list:
+                        val_list.append(e[1:])
                     sl_dict[e[0]] = val_list
 
         if len(sl_dict) > 0:
