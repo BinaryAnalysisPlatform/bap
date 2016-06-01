@@ -182,6 +182,36 @@ def dump_symbol_info(output_filename):
                     GetFunctionAttr(f, FUNCATTR_END)))
 
 
+def run_bap_with(argument_string):
+    """
+    Run bap with the given argument_string.
+
+    Uses the currently open file, dumps latest symbols from IDA and runs
+    BAP with the argument_string
+    """
+    import idc
+    import tempfile
+
+    args = {
+        'input_file_path': idc.GetInputFilePath(),
+        'symbol_file_location': tempfile.mkstemp(suffix='.sym',
+                                                 prefix='ida-bap-')[1],
+        'remaining_args': argument_string
+    }
+
+    dump_symbol_info(args['symbol_file_location'])
+
+    idc.Exec(
+        "\
+        $(bindir)/bap \"{input_file_path}\" \
+        --read-symbols-from={symbol_file_location} --symbolizer=file \
+        {remaining_args} \
+        ".format(**args)
+    )
+
+    idc.Exec("rm -f \"{symbol_file_location}\"".format(**args))  # Cleanup
+
+
 class DoNothing(idaapi.plugin_t):
     """
     Do Nothing.

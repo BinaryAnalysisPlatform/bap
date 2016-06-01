@@ -41,14 +41,12 @@ class BAP_Taint(idaapi.plugin_t):
 
     def _taint_and_color(self, ptr_or_reg):
         import tempfile
+        from bap_utils import run_bap_with
 
         args = {
-            'input_file_path': idc.GetInputFilePath(),
             'taint_location': idc.ScreenEA(),
             'ida_script_location': tempfile.mkstemp(suffix='.py',
                                                     prefix='ida-bap-')[1],
-            'symbol_file_location': tempfile.mkstemp(suffix='.sym',
-                                                     prefix='ida-bap-')[1],
             'ptr_or_reg': ptr_or_reg
         }
 
@@ -57,12 +55,8 @@ class BAP_Taint(idaapi.plugin_t):
 
         idaapi.refresh_idaview_anyway()
 
-        dump_symbol_info(args['symbol_file_location'])
-
-        idc.Exec(
+        run_bap_with(
             "\
-            $(bindir)/bap \"{input_file_path}\" \
-            --read-symbols-from={symbol_file_location} --symbolizer=file \
             --taint-{ptr_or_reg}=0x{taint_location:X} \
             --taint \
             --propagate-taint \
@@ -82,8 +76,7 @@ class BAP_Taint(idaapi.plugin_t):
 
         idaapi.IDAPython_ExecScript(args['ida_script_location'], globals())
 
-        idc.Exec("rm -f \"{ida_script_location}\" \"{symbol_file_location}\""
-                 .format(**args))  # Cleanup
+        idc.Exec("rm -f \"{ida_script_location}\"".format(**args))  # Cleanup
 
         idc.Refresh()  # Force the color information to show up
 
