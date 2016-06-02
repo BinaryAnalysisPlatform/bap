@@ -162,7 +162,7 @@ def dump_symbol_info(output_filename):
             ea_new = idaapi.calc_thunk_func_target(func, temp_ptr.cast())
         if ea_new != idaapi.BADADDR:
             ea = ea_new
-        propagated_name = get_func_name(ea)
+        propagated_name = get_func_name(ea) or ''  # Ensure it is not `None`
         if len(current_name) > len(propagated_name) > 0:
             return propagated_name
         else:
