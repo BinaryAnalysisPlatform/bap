@@ -25,7 +25,8 @@ for i in "$@"; do
   esac
 done
 
-SECTIONS=`ocaml tools/oasis_sections.ml $@`
+SECTIONS=`ocaml tools/oasis_sections.ml --sections $@`
+ARGS=`ocaml tools/oasis_sections.ml --args $@`
 TAGS=`ocaml tools/collect.ml tags $SECTIONS`
 PLUGINS=`ocaml tools/collect.ml ocamlbuild.ml $SECTIONS`
 SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
@@ -36,4 +37,4 @@ ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
 ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $PLUGINS myocamlbuild.ml.in myocamlbuild.ml
 ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
 oasis -quiet setup
-ocaml setup.ml -quiet -configure "$@"
+ocaml setup.ml -quiet -configure $ARGS
