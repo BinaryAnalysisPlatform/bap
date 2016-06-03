@@ -27,6 +27,7 @@ done
 
 SECTIONS=`ocaml tools/oasis_sections.ml --sections $@`
 ARGS=`ocaml tools/oasis_sections.ml --args $@`
+ARGS=$(eval 'echo' $ARGS)  # Workaround to expand unexpanded arguments
 TAGS=`ocaml tools/collect.ml tags $SECTIONS`
 PLUGINS=`ocaml tools/collect.ml ocamlbuild.ml $SECTIONS`
 SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
