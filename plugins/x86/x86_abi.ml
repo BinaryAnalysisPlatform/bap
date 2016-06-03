@@ -131,21 +131,29 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
   let return = match Abi.size#bits return with
     | None -> None
     | Some width -> match Size.of_int_opt width with
-      | None -> raise Unsupported
+      | None ->
+        warning "size of return object doesn't fit into word sizes";
+        raise Unsupported
       | Some sz ->
         let data = C.Abi.data Abi.size return in
-        if width = word * 2
+        if width > word && width <= word * 2
         then Some (data, Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1))
-        else if width = word
+        else if width <= word
         then Some (data, Abi.arg Ret_0)
-        else raise Unsupported in
+        else
+          (warning "size of return object doesn't fit into double word\n";
+           raise Unsupported) in
   let params = List.mapi args ~f:(fun i (n,t) ->
       match Abi.size#bits t with
-      | None -> raise Unsupported
+      | None ->
+        warning "size of %i'th parameter is unknown" i;
+        raise Unsupported
       | Some size -> match Size.of_int_opt size with
-        | Some sz when size = word ->
+        | Some sz when size <= word ->
           C.Abi.data Abi.size t, Abi.arg (Arg i)
-        | _ -> raise Unsupported) in
+        | _ ->
+          warning "argument %d doesn't fit into word" i;
+          raise Unsupported) in
   C.Abi.{return; params; hidden=[]}
 
 
@@ -167,7 +175,9 @@ let find name = supported() |> List.find ~f:(fun (module Abi) ->
     Abi.name = name || Abi.name ^ "_abi" = name)
 
 let api abi proto =
-  try Some (supported_api abi proto) with Unsupported -> None
+  try Some (supported_api abi proto) with Unsupported ->
+    warning "skipped function due to unsupported abi";
+    None
 
 
 let default_abi arch : (module abi) = match arch with
@@ -181,6 +191,7 @@ let dispatch default sub attrs proto =
           Abi.name = name || Abi.name ^ "_abi" = name)) |> function
             | None -> default
             | Some abi -> abi in
+  info "applying %s to %s" (name abi) (Sub.name sub);
   api abi proto
 
 
