@@ -80,6 +80,26 @@ class BAP_BIR_Attr(idaapi.plugin_t):
 
         cls._do_callbacks()
 
+    @classmethod
+    def clear_bap_comments(cls):
+        """Ask user for confirmation and then clear (BAP ..) comments."""
+        from bap_utils import get_bap_comment, all_valid_ea
+        from idaapi import ASKBTN_CANCEL, ASKBTN_YES
+
+        if idaapi.askyn_c(ASKBTN_CANCEL,
+                          "Delete all (BAP ..) comments?") != ASKBTN_YES:
+            return
+
+        for ea in all_valid_ea():
+            old_comm = idaapi.get_cmt(ea, 0)
+            if old_comm is None:
+                continue
+            _, start_loc, end_loc = get_bap_comment(old_comm)
+            new_comm = old_comm[:start_loc] + old_comm[end_loc:]
+            idaapi.set_cmt(ea, new_comm, 0)
+
+        cls._do_callbacks()
+
     flags = idaapi.PLUGIN_FIX
     comment = "BAP BIR Attr Plugin"
     help = "BAP BIR Attr Plugin"
@@ -90,6 +110,7 @@ class BAP_BIR_Attr(idaapi.plugin_t):
         """Initialize Plugin."""
         from bap_utils import add_hotkey
         add_hotkey("Shift-S", self.run_bap)
+        add_hotkey("Ctrl-Shift-S", self.clear_bap_comments)
         return idaapi.PLUGIN_KEEP
 
     def term(self):
