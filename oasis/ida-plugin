@@ -8,12 +8,5 @@ Library emit_ida_script_plugin
   FindlibName:      bap-plugin-emit_ida_script
   BuildDepends:     bap, cmdliner
   Modules:          Emit_ida_script_main
-  XMETADescription: extract a python script from the project data type
-
-Library ida_python_plugins
-  Build$:           flag(everything) || flag(ida_plugin)
-  Path:             plugins/ida/python
-  FindlibName:      bap-plugin-ida-python
-  BuildDepends:     bap, bap-plugin-taint, bap-plugin-propagate_taint, bap-plugin-map_terms
-  XMETADescription: call bap from IDA Pro
-  DataFiles:        *.py ($ida_plugin_path)
+  DataFiles:        python/*.py ($ida_plugin_path)
+  XMETADescription: extract a IDA python script from bap
