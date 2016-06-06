@@ -86,7 +86,9 @@ class SimpleLine_Modifier_Hexrays(idaapi.plugin_t):
         try:
             if idaapi.init_hexrays_plugin():
                 def hexrays_event_callback(event, *args):
-                    if event == idaapi.hxe_text_ready:
+                    if event == idaapi.hxe_refresh_pseudocode:
+                        # We use this event instead of hxe_text_ready because
+                        #   MacOSX doesn't seem to work well with it
                         vu, = args
                         self.run_over_cfunc(vu.cfunc)
                     return 0
