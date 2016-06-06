@@ -158,7 +158,7 @@ def dump_symbol_info(output_filename):
         from idaapi import get_func_name2 as get_func_name
         # Since get_func_name is deprecated (at least from IDA 6.9)
     except ImportError:
-        pass
+        from idaapi import get_func_name
         # Older versions of IDA don't have get_func_name2
         # so we just use the older name get_func_name
 
@@ -173,7 +173,7 @@ def dump_symbol_info(output_filename):
             ea_new = idaapi.calc_thunk_func_target(func, temp_ptr.cast())
         if ea_new != idaapi.BADADDR:
             ea = ea_new
-        propagated_name = get_func_name(ea)
+        propagated_name = get_func_name(ea) or ''  # Ensure it is not `None`
         if len(current_name) > len(propagated_name) > 0:
             return propagated_name
         else:
