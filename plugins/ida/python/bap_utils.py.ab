@@ -182,17 +182,80 @@ def dump_symbol_info(output_filename):
                     GetFunctionAttr(f, FUNCATTR_END)))
 
 
+class BAP_View(idaapi.plugin_t):
+    """
+    BAP View Plugin to read latest BAP execution trace.
+
+    Keybindings:
+        Ctrl-Alt-Shift-S  : Open/Refresh BAP View
+    """
+
+    _view = None
+
+    @classmethod
+    def _get_view(cls):
+        """Get the BAP View, creating it if necessary."""
+        if cls._view is None:
+            cls._view = idaapi.simplecustviewer_t()
+            created_view = cls._view.Create('BAP View')
+            if not created_view:
+                cls._view = None
+        return cls._view
+
+    @classmethod
+    def update(cls, text):
+        """Clear the BAP View and insert the text, ready to be displayed."""
+        v = cls._get_view()
+        if v is not None:
+            v.ClearLines()
+            for line in text.split('\n'):
+                v.AddLine(line)
+
+    @classmethod
+    def show(cls):
+        """Display BAP View to the user."""
+        v = cls._get_view()
+        if v is not None:
+            v.Refresh()  # Ensure latest information gets to the screen
+            v.Show()  # Actually show it on the screen
+
+    flags = idaapi.PLUGIN_FIX
+    wanted_hotkey = ""
+    comment = "BAP View"
+    help = "BAP View"
+    wanted_name = "BAP View"
+
+    def init(self):
+        """Initialize BAP view to load whenever hotkey is pressed."""
+        add_hotkey('Ctrl-Alt-Shift-S', self.show)
+        return idaapi.PLUGIN_KEEP
+
+    def term(self):
+        """Close BAP View, if it exists."""
+        v = self._get_view()
+        if v is not None:
+            v.Close()
+
+    def run(self, arg):
+        """Ignore, since callbacks are installed."""
+        pass
+
+
 def run_bap_with(argument_string):
     """
     Run bap with the given argument_string.
 
     Uses the currently open file, dumps latest symbols from IDA and runs
     BAP with the argument_string
+
+    Also updates the 'BAP View'
     """
     import idc
     import tempfile
 
     args = {
+        'bap_output_file': tempfile.mkstemp(suffix='.out',
+                                            prefix='ida-bap-')[1],
         'input_file_path': idc.GetInputFilePath(),
         'symbol_file_location': tempfile.mkstemp(suffix='.sym',
                                                  prefix='ida-bap-')[1],
@@ -204,12 +267,17 @@ def run_bap_with(argument_string):
     idc.Exec(
         "\
         $(bindir)/bap \"{input_file_path}\" \
-        --read-symbols-from={symbol_file_location} --symbolizer=file \
+        --read-symbols-from=\"{symbol_file_location}\" --symbolizer=file \
         {remaining_args} \
+        -d > {bap_output_file} 2>&1 \
         ".format(**args)
     )
 
-    idc.Exec("rm -f \"{symbol_file_location}\"".format(**args))  # Cleanup
+    with open(args['bap_output_file'], 'r') as f:
+        BAP_View.update(f.read())
+
+    idc.Exec("rm -f \"{symbol_file_location}\" \
+             \"{bap_output_file}\"".format(**args))  # Cleanup
 
 
 def add_hotkey(hotkey, func):
@@ -264,5 +332,5 @@ class DoNothing(idaapi.plugin_t):
 
 
 def PLUGIN_ENTRY():
-    """Do not count this file as a plugin."""
-    return DoNothing()
+    """Install BAP_View upon entry."""
+    return BAP_View()
