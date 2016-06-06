@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_c_type
 
+include Self()
+
 module Registry(T : T) = struct
   let registry : T.t list ref = ref []
   let register x = registry := x :: !registry
@@ -20,7 +22,6 @@ module Gnu = struct
     register pass
 
   exception Attr_type   of string * string
-  exception Attr_index  of string
   exception Attr_arity  of string
 
   let int n =
@@ -32,7 +33,10 @@ module Gnu = struct
 
   let mark_arg attr v sub i =
     match Term.nth arg_t sub (int i - 1) with
-    | None -> raise (Attr_index i)
+    | None ->
+      warning "failed to apply attribute %s to sub: %s"
+        (Value.Tag.name attr) (Sub.name sub);
+      sub
     | Some arg -> set attr v arg sub
 
 

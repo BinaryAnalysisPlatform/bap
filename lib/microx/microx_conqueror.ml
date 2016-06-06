@@ -37,7 +37,7 @@ class context
   val callstack : sub term list = []
   val steps_left = max_steps
   val vis : int Tid.Map.t = Tid.Map.empty (* visited *)
-  val cps : 's checkpoint list Tid.Map.t = Tid.Map.empty
+  val cps : 's Tid.Map.t Tid.Map.t = Tid.Map.empty
   val rets : tid list = []
 
   method visited = vis
@@ -49,9 +49,12 @@ class context
       let key = Term.tid sub in
       match Map.find cps key with
       | None -> None
-      | Some ps -> match List.filter ps ~f:(fun (p,_) -> not(Map.mem vis p)) with
-        | [] -> None
-        | (p,old) :: ps ->
+      | Some ps ->
+        let ps = Map.filter_keys ps ~f:(fun p -> not(Map.mem vis p)) in
+        match Map.min_elt ps with
+        | None -> None
+        | Some (p,old) ->
+          let ps = Map.remove ps p in
           let self = {< cps = Map.add cps ~key ~data:ps >} in
           let old = old#merge self in
           Some (old#set_next (Some p))
@@ -61,7 +64,11 @@ class context
     | Some sub ->
       let key = Term.tid sub in
       if Map.mem vis p then self
-      else {< cps = Map.add_multi cps ~key ~data:(p,self) >}
+      else {<
+        cps = Map.update cps key ~f:(function
+            | None -> Tid.Map.singleton p self
+            | Some ps -> Map.add ps p self)
+      >}
 
   method merge runner = {<
     vis = runner#visited;
@@ -117,12 +124,8 @@ class ['a] main ?(deterministic=false) p =
       super#enter_term cls t
 
     method! eval_blk blk =
-      if Term.length jmp_t blk = 0
-      then self#return
-      else
-        SM.update (fun ctxt -> ctxt#enter_blk blk) >>= fun () ->
-        self#add_checkpoints >>= fun () ->
-        super#eval_blk blk
+      SM.update (fun ctxt -> ctxt#enter_blk blk) >>= fun () ->
+      super#eval_blk blk
 
     method! eval_sub sub =
       SM.update (fun ctxt -> ctxt#enter_sub sub) >>= fun () ->
@@ -130,6 +133,7 @@ class ['a] main ?(deterministic=false) p =
       SM.update (fun ctxt -> ctxt#leave_sub sub)
 
     method! eval_jmp jmp =
+      self#add_checkpoints >>= fun () ->
       SM.get () >>= fun ctxt ->
       match ctxt#step with
       | None -> self#break

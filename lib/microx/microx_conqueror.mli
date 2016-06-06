@@ -10,7 +10,7 @@ class context :
     method visited : int Tid.Map.t
 
     method add_checkpoint : tid -> 's
-    method checkpoints : (tid * 's) list Tid.Map.t
+    method checkpoints : 's Tid.Map.t Tid.Map.t
     method backtrack : 's option
     method merge : 's -> 's
 
