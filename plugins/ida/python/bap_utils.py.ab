@@ -235,7 +235,7 @@ class BAP_View(idaapi.plugin_t):
     def init(self):
         """Initialize BAP view to load whenever hotkey is pressed."""
         add_hotkey('Ctrl-Alt-Shift-S', self.show)
-        self.update('')  # Ensure that the file exists to be opened
+        self.update('\n BAP has not been run yet.')
         return idaapi.PLUGIN_KEEP
 
     def term(self):
@@ -245,7 +245,6 @@ class BAP_View(idaapi.plugin_t):
         if v is not None:
             v.Close()
         idc.Exec("rm -f {}".format(self._get_store_path()))  # Cleanup
-
 
     def run(self, arg):
         """Ignore, since callbacks are installed."""
@@ -275,7 +274,7 @@ def run_bap_with(argument_string):
 
     dump_symbol_info(args['symbol_file_location'])
 
-    idc.Exec(
+    command = (
         "\
         $(bindir)/bap \"{input_file_path}\" \
         --read-symbols-from=\"{symbol_file_location}\" --symbolizer=file \
@@ -284,8 +283,21 @@ def run_bap_with(argument_string):
         ".format(**args)
     )
 
+    idc.Exec(command)
+
     with open(args['bap_output_file'], 'r') as f:
-        BAP_View.update(f.read())
+        BAP_View.update(
+            "BAP execution string\n" +
+            "--------------------\n" +
+            "\n" +
+            '\n    --'.join(('bap'+argument_string).split('--')) +
+            "\n" +
+            "\n" +
+            "Output\n" +
+            "------\n" +
+            "\n" +
+            f.read()
+        )
 
     # Force close BAP View
     # This forces the user to re-open the new view if needed
