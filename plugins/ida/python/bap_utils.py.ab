@@ -287,6 +287,15 @@ def run_bap_with(argument_string):
     with open(args['bap_output_file'], 'r') as f:
         BAP_View.update(f.read())
 
+    # Force close BAP View
+    # This forces the user to re-open the new view if needed
+    # This "hack" is needed since IDA decides to give a different BAP_View
+    #   class here, than the cls parameter it sends to BAP_View
+    # TODO: Fix this
+    tf = idaapi.find_tform("BAP View")
+    if tf:
+        idaapi.close_tform(tf, 0)
+
     idc.Exec("rm -f \"{symbol_file_location}\" \
              \"{bap_output_file}\"".format(**args))  # Cleanup
 
