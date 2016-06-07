@@ -56,7 +56,7 @@ let llvm_config () : unit =
        let macosx = BaseEnv.var_get "system" = "macosx" in
        let vers = match BaseEnv.var_get "llvm_version" with
          | "" -> []
-         | ver when macosx -> ["-mp-" ^ ver; ver]
+         | ver when macosx -> ["-mp-" ^ ver; "-" ^ ver]
          | ver -> ["-" ^ ver] in
        find_map vers ~f:(fun ver ->
            try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
