@@ -36,7 +36,7 @@ module Py = struct
   let prologue =
     {|
 from idautils import *
-from bap_utils import add_to_comment
+from bap_ida_python.utils.ida import add_to_comment
 
 Wait()
 |}
