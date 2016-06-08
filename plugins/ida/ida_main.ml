@@ -51,7 +51,7 @@ let register_source (module T : Target) =
 
 let loader_script =
   {|
-from bap_utils import dump_loader_info
+from bap_ida_python.utils.ida import dump_loader_info
 dump_loader_info('$output')
 idc.Exit(0)
 |}
