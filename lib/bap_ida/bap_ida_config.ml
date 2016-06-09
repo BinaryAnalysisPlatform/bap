@@ -15,19 +15,38 @@ let config_alist_of_sexp sexp =
   | Sexp.List _ -> raise Sexp_Error_BAP_Dict
 
 let config_read filename =
-  let alist = In_channel.with_file
-      filename ~f:(fun ch -> Sexp.input_sexp ch|> config_alist_of_sexp) in
-  match Map.of_alist String.comparator alist with
-  | `Ok map -> map
-  | _ -> assert false
+  try
+    try
+      let alist = In_channel.with_file
+          filename ~f:(fun ch -> Sexp.input_sexp ch
+                                 |> config_alist_of_sexp)
+      in
+      match Map.of_alist String.comparator alist with
+      | `Ok map -> Some map
+      | _ -> None
+    with Sexp_Error_BAP_Dict -> None
+  with Sys_error _ -> None
+
 
 let config = config_read config_file
 
 let get_config key =
-  match Map.find config key with
-  | Some v -> v
-  | None -> assert false
+  match config with
+  | Some m -> Map.find m key
+  | None -> None
 
-let ida_path = get_config "ida_path"
+let config_exists key =
+  match get_config key with
+  | Some _ -> true
+  | None -> false
 
-let is_headless = false (* TODO Read this from config *)
+let ida_path : string = match get_config "ida_path" with
+  | Some path -> path
+  | None -> ""
+
+let is_headless : bool = match get_config "is_headless" with
+  | Some ("True"|"true") -> true
+  | Some _ -> false
+  | None -> false
+
+let is_plugin_loadable : bool = config_exists "ida_path"
