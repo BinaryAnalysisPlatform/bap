@@ -96,6 +96,8 @@ module Ida = struct
   let ida () =
     let open Bap_ida_config in
     let (/) = Filename.concat in
+    require "ida plugin should be loadable"
+      is_plugin_loadable >>= fun () ->
     require "path must exist"
       (Sys.file_exists ida_path) >>= fun () ->
     require "path must be a folder"
