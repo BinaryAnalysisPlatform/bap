@@ -6,10 +6,11 @@ let config_file =
 
 let config_alist_of_sexp sexp =
   let kv_of_sexp = pair_of_sexp string_of_sexp string_of_sexp in
+  let open Sexp in
   match sexp with
-  | Sexp.List ((Sexp.Atom "BAP")::kv_list) -> List.map ~f:kv_of_sexp kv_list
-  | Sexp.Atom _ -> of_sexp_error "config must be a list" sexp
-  | Sexp.List _ -> of_sexp_error "config must start with \"(BAP\"" sexp
+  | List ((Atom "BAP")::kv_list) -> List.map ~f:kv_of_sexp kv_list
+  | Atom _ -> of_sexp_error "config must be a list" sexp
+  | List _ -> of_sexp_error "config must start with \"(BAP\"" sexp
 
 let config_read filename =
   try
