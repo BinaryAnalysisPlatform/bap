@@ -4,31 +4,19 @@ let config_file =
   let (/) = Filename.concat in
   Sys.getenv "HOME" / ".bap" / "config"
 
-type bap_dict =
-  | BAP of string
-  | KV of string*string
+exception Sexp_Error_BAP_Dict
 
-let bap_dict_of_sexp sexp = match sexp with
-  | Sexp.Atom atom -> BAP atom
-  | Sexp.List [Atom k; Atom v] -> KV (k,v)
-  | Sexp.List _ -> Sexplib.Conv_error.no_variant_match "bap_dict" sexp
-
-let stripkv kv_list =
-  List.map kv_list ~f:(
-    fun x -> match x with
-      | BAP _ -> assert false
-      | KV (k,v) -> (k,v)
-  )
+let config_alist_of_sexp sexp =
+  let kv_of_sexp = pair_of_sexp string_of_sexp string_of_sexp in
+  let alist_of_sexp = list_of_sexp kv_of_sexp in
+  match sexp with
+  | Sexp.List ((Sexp.Atom "BAP")::kv_list) -> alist_of_sexp sexp
+  | Sexp.Atom _ -> raise Sexp_Error_BAP_Dict
+  | Sexp.List _ -> raise Sexp_Error_BAP_Dict
 
 let config_read filename =
-  let config_pair = In_channel.with_file
-      filename ~f:(fun ch -> Sexp.input_sexp ch
-                             |> list_of_sexp bap_dict_of_sexp) in
-  let kv_list = match config_pair with
-    | (BAP "BAP") :: x -> x
-    | _ -> assert false
-  in
-  let alist = stripkv kv_list in
+  let alist = In_channel.with_file
+      filename ~f:(fun ch -> Sexp.input_sexp ch|> config_alist_of_sexp) in
   match Map.of_alist String.comparator alist with
   | `Ok map -> map
   | _ -> assert false
