@@ -61,10 +61,11 @@ module Create() = struct
   let error f = message Error ~section:name f
 
   module Config = struct
+    let plugin_name = name
     include Bap_config
 
     let (/) = Filename.concat
-    let confdir = confdir / name
+    let confdir = confdir / plugin_name
     let conf_filename = confdir / "config"
 
     exception Improper_format of string
