@@ -111,16 +111,16 @@ module Create() = struct
       let write_lines () = Out_channel.write_lines
           conf_filename conf_lines in
       try
-        write_lines()
+        write_lines ()
       with Sys_error _ ->
         let dir_permissions = 0o755 in
         let makedir_and_write_lines () =
-          Unix.mkdir confdir dir_permissions; write_lines() in
+          Unix.mkdir confdir dir_permissions; write_lines () in
         try
-          makedir_and_write_lines()
+          makedir_and_write_lines ()
         with Unix.Unix_error (Unix.ENOENT, _, _) ->
           Unix.mkdir (Filename.dirname confdir) dir_permissions;
-          makedir_and_write_lines()
+          makedir_and_write_lines ()
   end
 
 end
