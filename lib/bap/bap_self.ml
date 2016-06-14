@@ -75,13 +75,11 @@ module Create() = struct
       let prefix_chop_key (k, v) =
         match String.chop_prefix ~prefix k with
         | Some k -> Some (k, v)
-        | None -> None
-      in
+        | None -> None in
       let plugin_filter_map str =
         match String.split str ~on:'=' with
         | [k; v] -> prefix_chop_key (k, v)
-        | _ -> None
-      in
+        | _ -> None in
       Unix.environment () |>
       Array.to_list |>
       List.filter_map ~f:plugin_filter_map
@@ -90,16 +88,14 @@ module Create() = struct
       let string_splitter str =
         match String.split str ~on:'=' with
         | [k; v] -> (k, v)
-        | _ -> raise (Improper_format str)
-      in
+        | _ -> raise (Improper_format str) in
       let split_filter = List.map ~f:string_splitter in
       let conf_file_options =
         try
           In_channel.with_file
             conf_filename ~f:(fun ch -> In_channel.input_lines ch
                                         |> split_filter)
-        with Sys_error _ -> []
-      in
+        with Sys_error _ -> [] in
       get_env_options () |>
       List.fold ~init:conf_file_options
         ~f:(fun o (k, v) -> List.Assoc.add o k v)
