@@ -33,6 +33,7 @@ let standard_library = "$standard_library"
 
 exception Duplicate_key of string
 exception Improper_format of string
+exception Directory_probably_not_exists of string
 
 let string_splitter str =
   match String.split str ~on:'=' with
@@ -62,4 +63,6 @@ let set ~name ~data =
                    Map.add ~key:name ~data |>
                    Map.to_alist |>
                    List.map ~f:(fun (k, v) -> k ^ "=" ^ v) in
-  Out_channel.write_lines filename conf_lines
+  try
+    Out_channel.write_lines filename conf_lines
+  with Sys_error _ -> raise (Directory_probably_not_exists confdir)
