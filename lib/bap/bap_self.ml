@@ -68,8 +68,6 @@ module Create() = struct
     let confdir = confdir / plugin_name
     let conf_filename = confdir / "config"
 
-    exception Improper_format of string
-
     let get_env_options () =
       let prefix = "BAP_" ^ String.uppercase plugin_name ^ "_" in
       let prefix_chop_key (k, v) =
@@ -79,7 +77,7 @@ module Create() = struct
       let plugin_filter_map str =
         match String.split str ~on:'=' with
         | k :: vs -> prefix_chop_key (k, String.concat ~sep:"=" vs)
-        | _ -> None in
+        | [] -> None in
       Unix.environment () |>
       Array.to_list |>
       List.filter_map ~f:plugin_filter_map
@@ -88,7 +86,7 @@ module Create() = struct
       let string_splitter str =
         match String.split str ~on:'=' with
         | k :: vs -> k, String.concat ~sep:"=" vs
-        | _ -> raise (Improper_format str) in
+        | [] -> invalid_arg "empty string" in
       let split_filter = List.map ~f:string_splitter in
       try
         In_channel.with_file
