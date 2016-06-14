@@ -68,7 +68,6 @@ module Create() = struct
     let conf_filename = confdir / "config"
 
     exception Improper_format of string
-    exception Directory_probably_not_exists of string
 
     let options () =
       let string_splitter str =
@@ -90,9 +89,12 @@ module Create() = struct
       let old_conf = options () in
       let new_conf = List.Assoc.add old_conf name data in
       let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
+      let write_lines () = Out_channel.write_lines
+          conf_filename conf_lines in
       try
-        Out_channel.write_lines conf_filename conf_lines
-      with Sys_error _ -> raise (Directory_probably_not_exists confdir)
+        write_lines()
+      with Sys_error _ ->
+        Unix.mkdir confdir 0755; write_lines()
   end
 
 end
