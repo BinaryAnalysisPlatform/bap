@@ -1,3 +1,5 @@
+open Core_kernel.Std
+
 let (/) = Filename.concat
 let name = "$pkg_name"
 let version = "$pkg_version"
@@ -28,3 +30,33 @@ let suffix_program = "$suffix_program"
 let debug = "$debug"
 let profile = "$profile"
 let standard_library = "$standard_library"
+
+let string_splitter str =
+  match String.split str ~on:'=' with
+  | [a; b] -> Some (a, b)
+  | _ -> None
+
+let options () =
+  let filename = confdir / "temporary.conf" in
+  let split_filter = List.filter_map ~f:string_splitter in
+  In_channel.with_file filename ~f:(fun ch -> In_channel.input_lines ch
+                                              |> split_filter)
+
+exception Duplicate_key of string
+
+let option_map_exn () =
+  match options () |> Map.of_alist String.comparator with
+  | `Duplicate_key k -> raise (Duplicate_key k)
+  | `Ok m -> m
+
+let get name =
+  let search_for = option_map_exn () |> Map.find in
+  search_for name
+
+let set ~name ~data =
+  let filename = confdir / "temporary.conf" in
+  let conf_lines = option_map_exn () |>
+                   Map.add ~key:name ~data |>
+                   Map.to_alist |>
+                   List.map ~f:(fun (k, v) -> k ^ "=" ^ v) in
+  Out_channel.write_lines filename conf_lines
