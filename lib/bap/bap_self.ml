@@ -84,27 +84,28 @@ module Create() = struct
       Array.to_list |>
       List.filter_map ~f:plugin_filter_map
 
-    let options () =
+    let conf_file_options () =
       let string_splitter str =
         match String.split str ~on:'=' with
         | [k; v] -> (k, v)
         | _ -> raise (Improper_format str) in
       let split_filter = List.map ~f:string_splitter in
-      let conf_file_options =
-        try
-          In_channel.with_file
-            conf_filename ~f:(fun ch -> In_channel.input_lines ch
-                                        |> split_filter)
-        with Sys_error _ -> [] in
+      try
+        In_channel.with_file
+          conf_filename ~f:(fun ch -> In_channel.input_lines ch
+                                      |> split_filter)
+      with Sys_error _ -> []
+
+    let options () =
       get_env_options () |>
-      List.fold ~init:conf_file_options
+      List.fold ~init:(conf_file_options ())
         ~f:(fun o (k, v) -> List.Assoc.add o k v)
 
     let get = options () |> List.Assoc.find ~equal:String.Caseless.equal
 
     let set ~name ~data =
       let name = String.lowercase name in
-      let old_conf = options () in
+      let old_conf = conf_file_options () in
       let remaining_conf = List.Assoc.remove old_conf name in
       let new_conf = List.Assoc.add remaining_conf name data in
       let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
