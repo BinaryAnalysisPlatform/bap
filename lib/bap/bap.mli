@@ -546,6 +546,15 @@ module Std : sig
 
     (** A directory for bap specific configuaration files  *)
     val confdir : string
+
+    (** Get configuration value for a plugin that calls it *)
+    val get : string -> string option
+
+    (** Set configuration value for a plugin that calls it *)
+    val set : name:string -> data:string -> unit
+
+    (** List all known configuration values for a plugin that calls it *)
+    val options : unit -> (string * string) list
   end
 
 
