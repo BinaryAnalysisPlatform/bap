@@ -63,12 +63,12 @@ module Create() = struct
   module Config = struct
     include Bap_config
 
+    let (/) = Filename.concat
+    let confdir = confdir / name
+    let conf_filename = confdir / "config"
+
     exception Improper_format of string
     exception Directory_probably_not_exists of string
-
-    let conf_filename =
-      let (/) = Filename.concat in
-      confdir / name ^ ".conf"
 
     let options () =
       let string_splitter str =
