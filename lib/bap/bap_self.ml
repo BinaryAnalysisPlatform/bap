@@ -100,10 +100,7 @@ module Create() = struct
       List.fold ~init:conf_file_options
         ~f:(fun o (k, v) -> List.Assoc.add o k v)
 
-    let get name =
-      let name = String.uppercase name in
-      let search_for = options () |> List.Assoc.find in
-      search_for name
+    let get = options () |> List.Assoc.find ~equal:String.Caseless.equal
 
     let set ~name ~data =
       let name = String.uppercase name in
