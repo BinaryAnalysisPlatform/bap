@@ -93,22 +93,21 @@ module Create() = struct
         | _ -> raise (Improper_format str)
       in
       let split_filter = List.map ~f:string_splitter in
-      try
-        In_channel.with_file conf_filename ~f:(fun ch -> In_channel.input_lines ch
-                                                         |> split_filter)
-      with Sys_error _ -> []
-
-    let get_env name =
-      let search_for = get_env_options () |> List.Assoc.find in
-      search_for name
+      let conf_file_options =
+        try
+          In_channel.with_file
+            conf_filename ~f:(fun ch -> In_channel.input_lines ch
+                                        |> split_filter)
+        with Sys_error _ -> []
+      in
+      get_env_options () |>
+      List.fold ~init:conf_file_options
+        ~f:(fun o (k, v) -> List.Assoc.add o k v)
 
     let get name =
       let name = String.uppercase name in
-      match get_env name with
-      | Some v -> Some v
-      | None ->
-        let search_for = options () |> List.Assoc.find in
-        search_for name
+      let search_for = options () |> List.Assoc.find in
+      search_for name
 
     let set ~name ~data =
       let name = String.uppercase name in
