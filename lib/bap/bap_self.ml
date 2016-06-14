@@ -70,6 +70,22 @@ module Create() = struct
 
     exception Improper_format of string
 
+    let get_env_options () =
+      let prefix = "BAP_" ^ String.uppercase plugin_name ^ "_" in
+      let prefix_chop_key (k, v) =
+        match String.chop_prefix ~prefix k with
+        | Some k -> Some (k, v)
+        | None -> None
+      in
+      let plugin_filter_map str =
+        match String.split str ~on:'=' with
+        | [k; v] -> prefix_chop_key (k, v)
+        | _ -> None
+      in
+      Unix.environment () |>
+      Array.to_list |>
+      List.filter_map ~f:plugin_filter_map
+
     let options () =
       let string_splitter str =
         match String.split str ~on:'=' with
@@ -82,11 +98,20 @@ module Create() = struct
                                                          |> split_filter)
       with Sys_error _ -> []
 
-    let get name =
-      let search_for = options () |> List.Assoc.find in
+    let get_env name =
+      let search_for = get_env_options () |> List.Assoc.find in
       search_for name
 
+    let get name =
+      let name = String.uppercase name in
+      match get_env name with
+      | Some v -> Some v
+      | None ->
+        let search_for = options () |> List.Assoc.find in
+        search_for name
+
     let set ~name ~data =
+      let name = String.uppercase name in
       let old_conf = options () in
       let new_conf = List.Assoc.add old_conf name data in
       let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
