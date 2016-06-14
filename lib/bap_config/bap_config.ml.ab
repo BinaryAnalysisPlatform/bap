@@ -1,5 +1,3 @@
-open Core_kernel.Std
-
 let (/) = Filename.concat
 let name = "$pkg_name"
 let version = "$pkg_version"
@@ -30,32 +28,3 @@ let suffix_program = "$suffix_program"
 let debug = "$debug"
 let profile = "$profile"
 let standard_library = "$standard_library"
-
-exception Improper_format of string
-exception Directory_probably_not_exists of string
-
-let options () =
-  let filename = confdir / "temporary.conf" in
-  let string_splitter str =
-    match String.split str ~on:'=' with
-    | [k; v] -> (k, v)
-    | _ -> raise (Improper_format str)
-  in
-  let split_filter = List.map ~f:string_splitter in
-  try
-    In_channel.with_file filename ~f:(fun ch -> In_channel.input_lines ch
-                                                |> split_filter)
-  with Sys_error _ -> []
-
-let get name =
-  let search_for = options () |> List.Assoc.find in
-  search_for name
-
-let set ~name ~data =
-  let filename = confdir / "temporary.conf" in
-  let old_conf = options () in
-  let new_conf = List.Assoc.add old_conf name data in
-  let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
-  try
-    Out_channel.write_lines filename conf_lines
-  with Sys_error _ -> raise (Directory_probably_not_exists confdir)

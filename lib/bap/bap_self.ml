@@ -60,4 +60,39 @@ module Create() = struct
   let warning f = message Warning ~section:name f
   let error f = message Error ~section:name f
 
+  module Config = struct
+    include Bap_config
+
+    exception Improper_format of string
+    exception Directory_probably_not_exists of string
+
+    let conf_filename =
+      let (/) = Filename.concat in
+      confdir / name ^ ".conf"
+
+    let options () =
+      let string_splitter str =
+        match String.split str ~on:'=' with
+        | [k; v] -> (k, v)
+        | _ -> raise (Improper_format str)
+      in
+      let split_filter = List.map ~f:string_splitter in
+      try
+        In_channel.with_file conf_filename ~f:(fun ch -> In_channel.input_lines ch
+                                                         |> split_filter)
+      with Sys_error _ -> []
+
+    let get name =
+      let search_for = options () |> List.Assoc.find in
+      search_for name
+
+    let set ~name ~data =
+      let old_conf = options () in
+      let new_conf = List.Assoc.add old_conf name data in
+      let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
+      try
+        Out_channel.write_lines conf_filename conf_lines
+      with Sys_error _ -> raise (Directory_probably_not_exists confdir)
+  end
+
 end
