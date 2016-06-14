@@ -94,7 +94,13 @@ module Create() = struct
       try
         write_lines()
       with Sys_error _ ->
-        Unix.mkdir confdir 0755; write_lines()
+        let makedir_and_write_lines () =
+          Unix.mkdir confdir 0755; write_lines() in
+        try
+          makedir_and_write_lines()
+        with Unix.Unix_error (Unix.ENOENT, _, _) ->
+          Unix.mkdir (Filename.dirname confdir) 0755;
+          makedir_and_write_lines()
   end
 
 end
