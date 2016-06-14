@@ -78,7 +78,7 @@ module Create() = struct
         | None -> None in
       let plugin_filter_map str =
         match String.split str ~on:'=' with
-        | [k; v] -> prefix_chop_key (k, v)
+        | k :: vs -> prefix_chop_key (k, String.concat ~sep:"=" vs)
         | _ -> None in
       Unix.environment () |>
       Array.to_list |>
@@ -87,7 +87,7 @@ module Create() = struct
     let conf_file_options () =
       let string_splitter str =
         match String.split str ~on:'=' with
-        | [k; v] -> (k, v)
+        | k :: vs -> k, String.concat ~sep:"=" vs
         | _ -> raise (Improper_format str) in
       let split_filter = List.map ~f:string_splitter in
       try
