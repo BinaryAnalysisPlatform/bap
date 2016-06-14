@@ -31,18 +31,21 @@ let debug = "$debug"
 let profile = "$profile"
 let standard_library = "$standard_library"
 
+exception Duplicate_key of string
+exception Improper_format of string
+
 let string_splitter str =
   match String.split str ~on:'=' with
-  | [a; b] -> Some (a, b)
-  | _ -> None
+  | [a; b] -> (a, b)
+  | _ -> raise (Improper_format str)
 
 let options () =
   let filename = confdir / "temporary.conf" in
-  let split_filter = List.filter_map ~f:string_splitter in
-  In_channel.with_file filename ~f:(fun ch -> In_channel.input_lines ch
-                                              |> split_filter)
-
-exception Duplicate_key of string
+  let split_filter = List.map ~f:string_splitter in
+  try
+    In_channel.with_file filename ~f:(fun ch -> In_channel.input_lines ch
+                                                |> split_filter)
+  with Sys_error _ -> []
 
 let option_map_exn () =
   match options () |> Map.of_alist String.comparator with
