@@ -103,7 +103,7 @@ module Create() = struct
     let get = options () |> List.Assoc.find ~equal:String.Caseless.equal
 
     let set ~name ~data =
-      let name = String.uppercase name in
+      let name = String.lowercase name in
       let old_conf = options () in
       let new_conf = List.Assoc.add old_conf name data in
       let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
