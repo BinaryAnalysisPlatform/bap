@@ -94,12 +94,13 @@ module Create() = struct
       try
         write_lines()
       with Sys_error _ ->
+        let dir_permissions = 0o755 in
         let makedir_and_write_lines () =
-          Unix.mkdir confdir 0755; write_lines() in
+          Unix.mkdir confdir dir_permissions; write_lines() in
         try
           makedir_and_write_lines()
         with Unix.Unix_error (Unix.ENOENT, _, _) ->
-          Unix.mkdir (Filename.dirname confdir) 0755;
+          Unix.mkdir (Filename.dirname confdir) dir_permissions;
           makedir_and_write_lines()
   end
 
