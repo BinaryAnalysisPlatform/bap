@@ -35,13 +35,13 @@ exception Duplicate_key of string
 exception Improper_format of string
 exception Directory_probably_not_exists of string
 
-let string_splitter str =
-  match String.split str ~on:'=' with
-  | [a; b] -> (a, b)
-  | _ -> raise (Improper_format str)
-
 let options () =
   let filename = confdir / "temporary.conf" in
+  let string_splitter str =
+    match String.split str ~on:'=' with
+    | [k; v] -> (k, v)
+    | _ -> raise (Improper_format str)
+  in
   let split_filter = List.map ~f:string_splitter in
   try
     In_channel.with_file filename ~f:(fun ch -> In_channel.input_lines ch
