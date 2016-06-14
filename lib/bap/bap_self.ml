@@ -105,7 +105,8 @@ module Create() = struct
     let set ~name ~data =
       let name = String.lowercase name in
       let old_conf = options () in
-      let new_conf = List.Assoc.add old_conf name data in
+      let remaining_conf = List.Assoc.remove old_conf name in
+      let new_conf = List.Assoc.add remaining_conf name data in
       let conf_lines = List.map new_conf ~f:(fun (k, v) -> k ^ "=" ^ v) in
       let write_lines () = Out_channel.write_lines
           conf_filename conf_lines in
