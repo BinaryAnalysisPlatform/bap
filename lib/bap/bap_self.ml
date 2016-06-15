@@ -76,10 +76,14 @@ module Create() = struct
         let (/) = Filename.concat in
         Bap_config.confdir / plugin_name / "config" in
       let string_splitter str =
+        let str = String.strip str in
         match String.split str ~on:'=' with
-        | k :: vs -> k, String.concat ~sep:"=" vs
-        | [] -> invalid_arg "empty string" in
-      let split_filter = List.map ~f:string_splitter in
+        | k :: _ when String.prefix k 1 = "#" -> None
+        | [""] | [] -> None
+        | [k] -> invalid_argf
+                   "Maybe comment out \"%s\" using # in config file?" k ()
+        | k :: vs -> Some (k, String.concat ~sep:"=" vs) in
+      let split_filter = List.filter_map ~f:string_splitter in
       try
         In_channel.with_file
           conf_filename ~f:(fun ch -> In_channel.input_lines ch
