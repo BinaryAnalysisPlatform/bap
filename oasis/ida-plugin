@@ -8,5 +8,4 @@ Library emit_ida_script_plugin
   FindlibName:      bap-plugin-emit_ida_script
   BuildDepends:     bap, cmdliner
   Modules:          Emit_ida_script_main
-  DataFiles:        python/*.py ($ida_plugin_path)
   XMETADescription: extract a IDA python script from bap
