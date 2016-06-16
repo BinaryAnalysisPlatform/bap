@@ -14,6 +14,9 @@ build: [
   "--mandir=%{man}%"
   "--enable-everything"
   "--enable-tests"
+  "--%{conf-ida:enable}%-ida"
+  "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
+  "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
   "--%{conf-binutils:enable}%-objdump"
   "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
   "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
@@ -181,6 +184,7 @@ depexts: [
 ]
 
 depopts: [
+   "conf-ida"
    "conf-binutils"
 ]
 
