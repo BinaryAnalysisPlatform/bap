@@ -130,11 +130,11 @@ module Create() = struct
     let term_info = ref (Term.info ~doc plugin_name)
 
     type manpage_block = [
-        `I of string * string |
-        `Noblank |
-        `P of string |
-        `Pre of string |
-        `S of string
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
     ] list
 
     let manpage (man:manpage_block) : unit =

@@ -632,11 +632,11 @@ module Std : sig
 
       (* TODO Write some documentation here *)
       type manpage_block = [
-          `I of string * string |
-          `Noblank |
-          `P of string |
-          `Pre of string |
-          `S of string
+        | `I of string * string
+        | `Noblank
+        | `P of string
+        | `Pre of string
+        | `S of string
       ] list
 
       val manpage : manpage_block -> unit

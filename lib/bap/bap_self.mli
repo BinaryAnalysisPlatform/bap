@@ -33,11 +33,11 @@ module Create() : sig
     val extract : unit -> 'a t -> 'a
 
     type manpage_block = [
-        `I of string * string |
-        `Noblank |
-        `P of string |
-        `Pre of string |
-        `S of string
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
     ] list
 
     val manpage : manpage_block -> unit
