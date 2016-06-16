@@ -1,5 +1,6 @@
 PKG compiler-libs
 PKG findlib
+PKG cmdliner
 B ../../_build/lib/bap_types
 B ../../_build/lib/bap_image
 B ../../_build/lib/bap_disasm
