@@ -88,7 +88,8 @@ module Create() = struct
         | [""] | [] -> None
         | [k] -> invalid_argf
                    "Maybe comment out %S using # in config file?" k ()
-        | k :: vs -> Some (k, String.concat ~sep:"=" vs) in
+        | k :: vs -> Some (String.strip k,
+                           String.strip (String.concat ~sep:"=" vs)) in
       let split_filter = List.filter_map ~f:string_splitter in
       try
         In_channel.with_file
