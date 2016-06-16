@@ -147,8 +147,24 @@ module Create() = struct
       | `Version | `Help -> exit 0
 
     let bool = Arg.bool
+    let char = Arg.char
     let int = Arg.int
+    let nativeint = Arg.nativeint
+    let int32 = Arg.int32
+    let int64 = Arg.int64
+    let float = Arg.float
     let string = Arg.string
+    let enum = Arg.enum
+    let file = Arg.file
+    let dir = Arg.dir
+    let non_dir_file = Arg.non_dir_file
+    let list = Arg.list
+    let array = Arg.array
+    let pair = Arg.pair
+    let t2 = Arg.t2
+    let t3 = Arg.t3
+    let t4 = Arg.t4
+
   end
 
 end

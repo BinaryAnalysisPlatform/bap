@@ -617,9 +617,80 @@ module Std : sig
       type 'a printer = Format.formatter -> 'a -> unit
       type 'a converter = 'a parser * 'a printer
 
-      val int : int converter
+      (** [bool] converts values with {!bool_of_string}. *)
       val bool : bool converter
+
+      (** [char] converts values by ensuring the argument has a single char. *)
+      val char : char converter
+
+      (** [int] converts values with {!int_of_string}. *)
+      val int : int converter
+
+      (** [nativeint] converts values with {!Nativeint.of_string}. *)
+      val nativeint : nativeint converter
+
+      (** [int32] converts values with {!Int32.of_string}. *)
+      val int32 : int32 converter
+
+      (** [int64] converts values with {!Int64.of_string}. *)
+      val int64 : int64 converter
+
+      (** [float] converts values with {!float_of_string}. *)
+      val float : float converter
+
+      (** [string] converts values with the identity function. *)
       val string : string converter
+
+      (** [enum l p] converts values such that unambiguous prefixes of
+          string names in [l] map to the corresponding value of type ['a].
+
+          {b Warning.} The type ['a] must be comparable with
+          {!Pervasives.compare}.
+
+          @raise Invalid_argument if [l] is empty. *)
+      val enum : (string * 'a) list -> 'a converter
+
+      (** [file] converts a value with the identity function and
+          checks with {!Sys.file_exists} that a file with that name exists. *)
+      val file : string converter
+
+      (** [dir] converts a value with the identity function and checks
+          with {!Sys.file_exists} and {!Sys.is_directory}
+          that a directory with that name exists. *)
+      val dir : string converter
+
+      (** [non_dir_file] converts a value with the identity function and checks
+          with {!Sys.file_exists} and {!Sys.is_directory}
+          that a non directory file with that name exists. *)
+      val non_dir_file : string converter
+
+      (** [list sep c] splits the argument at each [sep] (defaults to [','])
+          character and converts each substrings with [c]. *)
+      val list : ?sep:char -> 'a converter -> 'a list converter
+
+      (** [array sep c] splits the argument at each [sep] (defaults to [','])
+          character and converts each substring with [c]. *)
+      val array : ?sep:char -> 'a converter -> 'a array converter
+
+      (** [pair sep c0 c1] splits the argument at the {e first} [sep] character
+          (defaults to [',']) and respectively converts the substrings with
+          [c0] and [c1]. *)
+      val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+      (** {!t2} is {!pair}. *)
+      val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+      (** [t3 sep c0 c1 c2] splits the argument at the {e first} two [sep]
+          characters (defaults to [',']) and respectively converts the
+          substrings with [c0], [c1] and [c2]. *)
+      val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+        ('a * 'b * 'c) converter
+
+      (** [t4 sep c0 c1 c2 c3] splits the argument at the {e first} three [sep]
+          characters (defaults to [',']) respectively converts the substrings
+          with [c0], [c1], [c2] and [c3]. *)
+      val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+        'd converter -> ('a * 'b * 'c * 'd) converter
 
       val create :
         'a converter -> default:'a ->
