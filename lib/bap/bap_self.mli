@@ -26,10 +26,10 @@ module Create() : sig
 
     val param :
       'a converter -> default:'a ->
-      ?docv:string -> doc:string -> name:string -> 'a param
+      ?docv:string -> ?doc:string -> name:string -> 'a param
 
     val flag :
-      ?docv:string -> doc:string -> name:string -> bool param
+      ?docv:string -> ?doc:string -> name:string -> bool param
 
     type 'a reader = 'a param -> 'a
     val parse : unit -> 'a reader

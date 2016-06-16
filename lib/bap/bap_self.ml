@@ -123,14 +123,15 @@ module Create() = struct
         | None -> value in
       ref value
 
-    let param converter ~default ?(docv="VAL") ~doc ~name : 'a param =
+    let param converter ~default ?(docv="VAL") ?(doc="UNDOCUMENTED") ~name =
       let param = get_param ~converter ~default ~name in
       let t =
         Arg.(value @@ opt converter !param @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () -> param := x) $ t $ (!main));
       param
 
-    let flag ?docv ~doc ~name : bool param = assert false
+    let flag ?(docv="VAL") ?(doc="UNDOCUMENTED") ~name : bool param =
+      assert false
     (* TODO Implement this *)
 
     let term_info = ref (Term.info ~doc plugin_name)

@@ -625,12 +625,12 @@ module Std : sig
       (** Create a parameter *)
       val param :
         'a converter -> default:'a ->
-        ?docv:string -> doc:string -> name:string -> 'a param
+        ?docv:string -> ?doc:string -> name:string -> 'a param
 
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
       val flag :
-        ?docv:string -> doc:string -> name:string -> bool param
+        ?docv:string -> ?doc:string -> name:string -> bool param
 
       (** Reads a value from a parameter *)
       type 'a reader = 'a param -> 'a
