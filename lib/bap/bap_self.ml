@@ -124,14 +124,14 @@ module Create() = struct
         | None -> value in
       ref value
 
-    let param converter ~default ?(docv="VAL") ?(doc="UNDOCUMENTED") ~name =
+    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") ~name =
       let param = get_param ~converter ~default ~name in
       let t =
         Arg.(value @@ opt converter !param @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () -> param := x) $ t $ (!main));
       param
 
-    let flag ?(docv="VAL") ?(doc="UNDOCUMENTED") ~name : bool param =
+    let flag ?(docv="VAL") ?(doc="Undocumented") ~name : bool param =
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info [name] ~doc ~docv) in
