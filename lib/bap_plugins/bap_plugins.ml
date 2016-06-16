@@ -3,8 +3,6 @@ open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix
 
-
-
 module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
@@ -16,9 +14,6 @@ module Plugin = struct
     loaded : unit future sexp_opaque;
     finish : unit promise sexp_opaque;
   } [@@deriving fields, sexp_of]
-
-
-
 
   type system_event = [
     | `Opening  of string
@@ -39,6 +34,7 @@ module Plugin = struct
   ]
 
   let load = ref Dynlink.loadfile
+  let crc : Digest.t String.Table.t = String.Table.create ()
   let units : reason String.Table.t = String.Table.create ()
 
   let setup_dynamic_loader loader =
@@ -84,7 +80,7 @@ module Plugin = struct
   let load_unit ~reason ~name pkg : unit or_error =
     let open Format in
     try
-      notify (`Linking pkg);
+      notify (`Linking name);
       !load pkg;
       Hashtbl.set units ~key:name ~data:reason;
       Ok ()
@@ -250,4 +246,5 @@ module Std = struct
   module Plugins = Plugins
   let setup_dynamic_loader = Plugin.setup_dynamic_loader
   let list_loaded_units () = Hashtbl.keys Plugin.units
+
 end

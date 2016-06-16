@@ -1,9 +1,12 @@
 open Core_kernel.Std
 open Bap_plugins.Std
+open Bap_future.Std
 open Bap.Std
 open Bap_cmdline_terms
 open Cmdliner
 open Format
+
+include Self()
 
 type action = Keep | Drop
 
@@ -32,8 +35,6 @@ let filter_options ~known_plugins ~known_passes ~argv =
 
 let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
-
-
 
 let print_plugins_and_exit excluded plugins =
   List.iter plugins ~f:(fun p ->
@@ -81,25 +82,16 @@ let open_plugin ~verbose name =
   | exn ->
     eprintf "Loader: can't open plugin %s\n" name; None
 
-let load_failed ~verbose p pp err =
-  eprintf "Loader: failed to load plugin from path `%s'\n" p;
-  if verbose then eprintf "Loader: %a\n" pp err
+(** We will not ignore errors on plugins loaded explicitly
+    by a user with `-l` option. *)
+let load_plugin p = ok_exn (Plugin.load p)
 
-let load_succeed ~verbose p =
-  if verbose then
-    eprintf "Loader: loaded plugin %s\n" @@ Plugin.name p
-
-let load_plugin ~verbose p =
-  let path = Plugin.path p in
-  match Plugin.load p with
-  | Ok () -> load_succeed ~verbose p
-  | Error err -> load_failed ~verbose path Error.pp err
-  | exception exn -> load_failed ~verbose path Exn.pp exn
 
 let autoload_plugins ~library ~verbose ~exclude =
-  Plugins.load ~library ~exclude () |> List.iter ~f:(function
-      | Ok p -> load_succeed ~verbose p
-      | Error (p,err) -> load_failed ~verbose p Error.pp err)
+  Plugins.run ~library ~exclude ()
+    ~don't_setup_handlers:true
+(* we don't want to fail the whole platform if some
+   plugin has failed, we will just emit an error message.  *)
 
 let run_and_get_passes argv =
   let library = get_opt argv load_path ~default:[] in
@@ -111,7 +103,7 @@ let run_and_get_passes argv =
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
   let known_plugins = Plugins.list ~library () @ plugins in
   if list then print_plugins_and_exit exclude known_plugins;
-  List.iter plugins ~f:(load_plugin ~verbose);
+  List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~library ~verbose ~exclude;
   let known_passes = Project.passes () |>
@@ -125,3 +117,14 @@ let run_and_get_passes argv =
   Array.(to_list @@ filter_map argv ~f:to_pass)
 
 let run argv = fst (run_and_get_passes argv)
+
+
+let () = Stream.observe Plugins.events (function
+    | `Loaded p ->
+      info "Loaded %s from %S" (Plugin.name p) (Plugin.path p)
+    | `Loading p ->
+      debug "Loading %s from %S" (Plugin.name p) (Plugin.path p)
+    | `Opening p -> debug "Opening bundle %s" p
+    | `Errored (path,err) ->
+      error "Failed to load plugin %S: %a" path Error.pp err
+    | `Linking lib -> debug "Linking library %s" lib)
