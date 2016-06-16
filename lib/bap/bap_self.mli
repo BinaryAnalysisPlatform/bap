@@ -12,12 +12,37 @@ module Create() : sig
   val warning : ('a,formatter,unit) format -> 'a
   val error   : ('a,formatter,unit) format -> 'a
 
-  module Param : sig
-    type 'a t
+  module Config : sig
+    val version : string
+    val datadir : string
+    val libdir : string
+    val confdir : string
+
+    type 'a param
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter = 'a parser * 'a printer
+
+    val param :
+      'a converter -> default:'a ->
+      ?docv:string -> doc:string -> name:string -> 'a param
+
+    val flag :
+      ?docv:string -> doc:string -> name:string -> bool param
+
+    type 'a reader = 'a param -> 'a
+    val parse : unit -> 'a reader
+
+    type manpage_block = [
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
+    ]
+
+    val manpage : manpage_block list -> unit
 
     val bool : bool converter
     val char : char converter
@@ -39,25 +64,6 @@ module Create() : sig
       ('a * 'b * 'c) converter
     val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
       'd converter -> ('a * 'b * 'c * 'd) converter
-
-    val create :
-      'a converter -> default:'a ->
-      ?docv:string -> doc:string -> name:string -> 'a t
-
-    val flag :
-      ?docv:string -> doc:string -> name:string -> bool t
-
-    val extract : unit -> 'a t -> 'a
-
-    type manpage_block = [
-      | `I of string * string
-      | `Noblank
-      | `P of string
-      | `Pre of string
-      | `S of string
-    ] list
-
-    val manpage : manpage_block -> unit
 
   end
 

@@ -61,10 +61,16 @@ module Create() = struct
   let warning f = message Warning ~section:name f
   let error f = message Error ~section:name f
 
-  module Param = struct
+  module Config = struct
     let plugin_name = name
+    include Bap_config
 
-    type 'a t = 'a ref
+    (* Discourage access to directories of other plugins *)
+    let confdir =
+      let (/) = Filename.concat in
+      confdir / plugin_name
+
+    type 'a param = 'a ref
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter = 'a parser * 'a printer
@@ -74,7 +80,7 @@ module Create() = struct
     let conf_file_options : (string, string) List.Assoc.t =
       let conf_filename =
         let (/) = Filename.concat in
-        Bap_config.confdir / plugin_name / "config" in
+        Bap_config.confdir / "config" in
       let string_splitter str =
         let str = String.strip str in
         match String.split str ~on:'=' with
@@ -117,14 +123,14 @@ module Create() = struct
         | None -> value in
       ref value
 
-    let create converter ~default ?(docv="VAL") ~doc ~name : 'a t =
+    let param converter ~default ?(docv="VAL") ~doc ~name : 'a param =
       let param = get_param ~converter ~default ~name in
       let t =
         Arg.(value @@ opt converter !param @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () -> param := x) $ t $ (!main));
       param
 
-    let flag ?docv ~doc ~name : bool t = assert false
+    let flag ?docv ~doc ~name : bool param = assert false
     (* TODO Implement this *)
 
     let term_info = ref (Term.info ~doc plugin_name)
@@ -135,12 +141,13 @@ module Create() = struct
       | `P of string
       | `Pre of string
       | `S of string
-    ] list
+    ]
 
-    let manpage (man:manpage_block) : unit =
+    let manpage (man:manpage_block list) : unit =
       term_info := Term.info ~doc ~man plugin_name
 
-    let extract () : 'a t -> 'a =
+    type 'a reader = 'a param -> 'a
+    let parse () : 'a reader =
       match Term.eval (!main, !term_info) with
       | `Error _ -> exit 1
       | `Ok _ -> (fun p -> !p)
