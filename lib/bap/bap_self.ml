@@ -81,7 +81,7 @@ module Create() = struct
         | k :: _ when String.prefix k 1 = "#" -> None
         | [""] | [] -> None
         | [k] -> invalid_argf
-                   "Maybe comment out \"%s\" using # in config file?" k ()
+                   "Maybe comment out %S using # in config file?" k ()
         | k :: vs -> Some (k, String.concat ~sep:"=" vs) in
       let split_filter = List.filter_map ~f:string_splitter in
       try
@@ -108,9 +108,9 @@ module Create() = struct
       let parse str =
         let parse, _ = converter in
         match parse str with
-        | `Error err
-          -> invalid_argf
-               "Could not parse \"%s\" for name \"%s\"" str name ()
+        | `Error err ->
+          invalid_argf "Could not parse %S for parameter %S: %s"
+            str name err ()
         | `Ok v -> v in
       let value = match str with
         | Some v -> parse v
