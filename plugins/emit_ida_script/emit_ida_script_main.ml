@@ -119,34 +119,21 @@ let main dst attrs project =
   | None -> print_string data
   | Some dst -> Out_channel.write_all dst ~data
 
-module Cmdline = struct
-  open Cmdliner
-  let man = [
-    `S "DESCRIPTION";
-    `P "Iterates through memory for tagged BIR attributes,
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "Iterates through memory for tagged BIR attributes,
       and dumps them into a python script, that can be later
       loaded into IDA. The special `color' tag causes the
       respective address to be colored."
-  ]
-
-  let info = Term.info name ~version ~doc ~man
-
-  let dst : string option Term.t =
-    let doc = "Dump annotations to the specified file $(docv). If
-            not specified, then the script will dumped into the
-            standard output" in
-    Arg.(value & opt (some string) None & info ["file"]
-           ~doc ~docv:"NAME")
-
-  let attrs =
-    let doc = "Emit specified BIR attribute" in
-    Arg.(value & opt_all string [] & info ["attr"] ~doc)
-
-  let args = Term.(const main $dst $attrs),info
-end
-
-let () =
-  match Cmdliner.Term.eval ~argv Cmdline.args with
-  | `Ok main -> Project.register_pass' main
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+    ] in
+  let dst = Config.(param (some string) "file" ~default:None ~docv:"NAME"
+                      ~doc:"Dump annotations to the specified file $(docv). If
+                            not specified, then the script will dumped into the
+                            standard output") in
+  let attrs = Config.(param_all string "attr"
+                        ~doc: "Emit specified BIR attribute. Can be specified
+                               multiple times.") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      let main = main !dst !attrs in
+      Project.register_pass' main )
