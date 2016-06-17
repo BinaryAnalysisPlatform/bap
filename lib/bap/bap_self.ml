@@ -172,7 +172,7 @@ module Create() = struct
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
       let evaluate_cmdline_args () =
-        match Term.eval (!main, !term_info) with
+        match Term.eval ~argv (!main, !term_info) with
         | `Error _ -> exit 1
         | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
         | `Version | `Help -> exit 0 in
