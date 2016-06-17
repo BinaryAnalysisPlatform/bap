@@ -1,20 +1,7 @@
 open Core_kernel.Std
 open Graphlib.Std
 open Bap.Std
-open Cmdliner
 include Self()
-
-let man = [
-  `S "DESCRIPTION";
-  `P "Output symbol information. In the output file, each symbol is in format of:
-     `(<symbol name> <symbol start address> <symbol end address>)', e.g.,
-     `(malloc 0x11034 0x11038)'"
-]
-let info = Term.info name ~version ~doc ~man
-
-let file : string option Term.t =
-  let doc = "Dump symbols to the specified $(docv)" in
-  Arg.(value & opt (some string) None & info ["file"] ~doc ~docv:"FILE")
 
 let output oc syms =
   let output sym =
@@ -37,8 +24,15 @@ let main file proj =
   | None -> output stdout syms
 
 let () =
-  let main = Term.(const main $file) in
-  match Term.eval ~argv ~catch:false (main,info) with
-  | `Ok main -> Project.register_pass' main
-  | `Error _ -> exit 1
-  | _ -> exit 0
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "Output symbol information. In the output file, each symbol
+          is in format of:
+          `(<symbol name> <symbol start address> <symbol end address>)', e.g.,
+          `(malloc 0x11034 0x11038)'"
+    ] in
+  let file = Config.(param (some string) "file" ~default:None ~docv:"FILE"
+                       ~doc:"Dump symbols to the specified $(docv)") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      let main = main !file in
+      Project.register_pass' main)
