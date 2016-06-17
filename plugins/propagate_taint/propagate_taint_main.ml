@@ -191,77 +191,6 @@ let main args proj =
   Project.with_program proj
 
 module Cmdline = struct
-  open Cmdliner
-
-  let max_trace : int Term.t =
-    let doc = "Limit maximum trace length to $(docv)" in
-    Arg.(value & opt int 1_000_000 &
-         info ["max-trace"] ~doc ~docv:"BLOCKS")
-
-  let max_loop : int Term.t =
-    let doc = "Limit loop to $(docv) iterations" in
-    Arg.(value & opt int 10 &
-         info ["max-iterations"] ~doc ~docv:"N")
-
-  let interesting : string list Term.t =
-    let doc = "Look only at specified functions" in
-    Arg.(value & opt (list string) [] & info ["interesting"] ~doc)
-
-  let deterministic : bool Term.t =
-    let doc = "Run in a deterministic mode. In this mode we will
-              follow only one execution path, without backtracking,
-              giving a more feasable result, but much less coverage" in
-    Arg.(value & flag & info ["deterministic"] ~doc)
-
-
-  module Policy = struct
-    type t = policy
-
-
-    let num = Int64.of_string
-    let error = `Error "policy ::= random | <num> | (<num> <num>)"
-
-    let fixed n = try `Ok (`Fixed (num n)) with exn -> error
-    let interval b e =
-      try `Ok (`Interval (num b, num e)) with exn -> error
-
-    let parser input = match Sexp.of_string input with
-      | Sexp.Atom "random" -> `Ok `Random
-      | Sexp.Atom n -> fixed n
-      | Sexp.List [Sexp.Atom b; Sexp.Atom e] -> interval b e
-      | _ -> error
-
-    let printer ppf = function
-      | `Random -> fprintf ppf "random"
-      | `Fixed n -> fprintf ppf "%Ld" n
-      | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
-
-    let t : t Arg.converter = parser,printer
-  end
-
-  let policy key name default : policy Term.t =
-    let doc = sprintf "Input generation policy. If set to a fixed value,
-      e.g. `0', then all undefined %s will be concretized to this
-      value. If set to an interval, e.g., `(0 5)', then values will
-      be randomly picked from this interval (boundaries including).
-      If set to `random', then values will be picked randomly from a
-      domain, defined by a type of value." name in
-    Arg.(value & opt Policy.t default &
-         info [sprintf "%s-value" key] ~doc)
-
-
-  let random_seed : int option Term.t =
-    let doc =
-      "Initialize random number generator with the given seed" in
-    Arg.(value & opt (some int) None & info ["random-seed"] ~doc)
-
-  let create
-      max_trace max_loop deterministic
-      random_seed reg_policy mem_policy
-      interesting = {
-    max_trace; max_loop; deterministic;
-    random_seed; reg_policy; mem_policy; interesting;
-  }
 
   let man = [
     `S "DESCRIPTION";
@@ -314,21 +243,77 @@ module Cmdline = struct
 
   ]
 
-  let grammar =
-    Term.(pure create $max_trace $max_loop $deterministic
-          $random_seed
-          $(policy "reg" "registers" (`Random))
-          $(policy "mem" "memory locations" `Random)
-          $interesting)
+  let max_trace = Config.(param int "max-trace"
+                            ~default:1_000_000 ~docv:"BLOCKS"
+                            ~doc:"Limit maximum trace length to $(docv)")
 
-  let info = Term.info ~man ~doc name
+  let max_loop = Config.(param int "max-iterations"
+                           ~default:10 ~docv:"N"
+                           ~doc:"Limit loop to $(docv) iterations")
 
-  let args argv = match Term.eval ~argv (grammar,info) with
-    | `Ok args -> args
-    | `Version | `Help -> exit 0
-    | `Error _ -> exit 1
+  let interesting = Config.(param (list string) "interesting" ~default:[]
+                              ~doc:"Look only at specified functions")
+
+  let deterministic = Config.(flag "deterministic"
+                                ~doc:"Run in a deterministic mode. \
+                                      In this mode we will follow only \
+                                      one execution path, without \
+                                      backtracking, giving a more \
+                                      feasable result, but much less \
+                                      coverage")
+  module Policy = struct
+    type t = policy
+
+
+    let num = Int64.of_string
+    let error = `Error "policy ::= random | <num> | (<num> <num>)"
+
+    let fixed n = try `Ok (`Fixed (num n)) with exn -> error
+    let interval b e =
+      try `Ok (`Interval (num b, num e)) with exn -> error
+
+    let parser input = match Sexp.of_string input with
+      | Sexp.Atom "random" -> `Ok `Random
+      | Sexp.Atom n -> fixed n
+      | Sexp.List [Sexp.Atom b; Sexp.Atom e] -> interval b e
+      | _ -> error
+
+    let printer ppf = function
+      | `Random -> fprintf ppf "random"
+      | `Fixed n -> fprintf ppf "%Ld" n
+      | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
+
+    let t : t Config.converter = parser,printer
+  end
+
+  let policy key name default : policy Config.param =
+    let doc = sprintf "Input generation policy. If set to a fixed value,
+      e.g. `0', then all undefined %s will be concretized to this
+      value. If set to an interval, e.g., `(0 5)', then values will
+      be randomly picked from this interval (boundaries including).
+      If set to `random', then values will be picked randomly from a
+      domain, defined by a type of value." name in
+    Config.(param Policy.t (sprintf "%s-value" key) ~default ~doc)
+
+  let random_seed : int option Config.param =
+    let doc =
+      "Initialize random number generator with the given seed" in
+    Config.(param (some int) "random-seed" ~default:None ~doc)
+
+  let create
+      max_trace max_loop deterministic
+      random_seed reg_policy mem_policy
+      interesting = {
+    max_trace; max_loop; deterministic;
+    random_seed; reg_policy; mem_policy; interesting;
+  }
+
+  let () =
+    let reg = policy "reg" "registers" `Random in
+    let mem = policy "mem" "memory locations" `Random in
+    Config.when_ready (fun {Config.get=(!)} ->
+        let args = create !max_trace !max_loop !deterministic
+            !random_seed !reg !mem !interesting in
+        Project.register_pass (main args))
+
 end
-
-let () =
-  let args = Cmdline.args argv in
-  Project.register_pass (main args)
