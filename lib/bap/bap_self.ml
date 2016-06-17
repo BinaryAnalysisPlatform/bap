@@ -135,6 +135,16 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
+    let param_all converter ~default ?(docv="VAL")
+        ?(doc="Uncodumented") ~name : 'a list param =
+      let future, promise = Future.create () in
+      let param = get_param ~converter:(Arg.list converter) ~default ~name in
+      let t =
+        Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      future
+
     let flag ?(docv="VAL") ?(doc="Undocumented") ~name : bool param =
       let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in

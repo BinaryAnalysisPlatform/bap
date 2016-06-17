@@ -29,6 +29,10 @@ module Create() : sig
       'a converter -> default:'a ->
       ?docv:string -> ?doc:string -> name:string -> 'a param
 
+    val param_all :
+      'a converter -> default:'a list ->
+      ?docv:string -> ?doc:string -> name:string -> 'a list param
+
     val flag :
       ?docv:string -> ?doc:string -> name:string -> bool param
 

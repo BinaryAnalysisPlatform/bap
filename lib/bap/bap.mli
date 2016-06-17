@@ -629,6 +629,10 @@ module Std : sig
         'a converter -> default:'a ->
         ?docv:string -> ?doc:string -> name:string -> 'a param
 
+      val param_all :
+        'a converter -> default:'a list ->
+        ?docv:string -> ?doc:string -> name:string -> 'a list param
+
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
       val flag :
