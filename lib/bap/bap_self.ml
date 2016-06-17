@@ -156,6 +156,8 @@ module Create() = struct
     let manpage (man:manpage_block list) : unit =
       term_info := Term.info ~doc ~man plugin_name
 
+    let determined (p:'a param) : 'a future = p
+
     type reader = {get : 'a. 'a param -> 'a}
     let request on_config_ready : unit =
       match Term.eval (!main, !term_info) with

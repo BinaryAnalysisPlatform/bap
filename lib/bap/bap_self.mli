@@ -1,5 +1,6 @@
 open Format
 open Core_kernel.Std
+open Bap_future.Std
 
 module Create() : sig
   val name : string
@@ -30,6 +31,8 @@ module Create() : sig
 
     val flag :
       ?docv:string -> ?doc:string -> name:string -> bool param
+
+    val determined : 'a param -> 'a future
 
     type reader = {get : 'a. 'a param -> 'a}
     val on_config_ready : (reader -> unit) -> unit

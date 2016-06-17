@@ -634,6 +634,9 @@ module Std : sig
       val flag :
         ?docv:string -> ?doc:string -> name:string -> bool param
 
+      (** Provides a future determined on when the config can be read *)
+      val determined : 'a param -> 'a future
+
       (** A witness that can read configured params *)
       type reader = {get : 'a. 'a param -> 'a}
 
