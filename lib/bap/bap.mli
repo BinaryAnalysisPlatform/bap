@@ -589,11 +589,11 @@ module Std : sig
 
           (* ... *)
 
-          let on_config_ready {Config.get=(!)} =
-            do_stuff !path !debug (* ... *)
-
           let main () =
-            Config.request on_config_ready
+            Config.when_ready
+              (fun {Config.get=(!)} ->
+                 do_stuff !path !debug (* ... *)
+              )
         ]}
     *)
     module Config : sig
