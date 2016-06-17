@@ -31,8 +31,8 @@ module Create() : sig
     val flag :
       ?docv:string -> ?doc:string -> name:string -> bool param
 
-    type 'a reader = 'a param -> 'a
-    val parse : unit -> 'a reader
+    type reader = {get : 'a. 'a param -> 'a}
+    val parse : (reader -> unit) -> unit
 
     type manpage_block = [
       | `I of string * string

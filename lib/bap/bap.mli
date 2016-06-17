@@ -589,9 +589,11 @@ module Std : sig
 
           (* ... *)
 
-          let main () =
-            let (!) = Config.parse () in
+          let configured {Config.get=(!)} =
             do_stuff !path !debug (* ... *)
+
+          let main () =
+            Config.parse configured
         ]}
     *)
     module Config : sig
@@ -632,11 +634,12 @@ module Std : sig
       val flag :
         ?docv:string -> ?doc:string -> name:string -> bool param
 
-      (** Reads a value from a parameter *)
-      type 'a reader = 'a param -> 'a
+      (** A witness that can read configured params *)
+      type reader = {get : 'a. 'a param -> 'a}
 
-      (** Parse command line arguments and return a param reader *)
-      val parse : unit -> 'a reader
+      (** [parse configured] parses configuration and command line
+          arguments and calls [configured (reader:Config.reader)] *)
+      val parse : (reader -> unit) -> unit
 
       (** The type for a block of man page text.
 

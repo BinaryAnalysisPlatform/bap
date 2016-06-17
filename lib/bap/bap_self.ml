@@ -151,11 +151,11 @@ module Create() = struct
     let manpage (man:manpage_block list) : unit =
       term_info := Term.info ~doc ~man plugin_name
 
-    type 'a reader = 'a param -> 'a
-    let parse () : 'a reader =
+    type reader = {get : 'a. 'a param -> 'a}
+    let parse configured : unit =
       match Term.eval (!main, !term_info) with
       | `Error _ -> exit 1
-      | `Ok _ -> (fun p -> !p)
+      | `Ok _ -> configured {get = (fun p -> !p)}
       | `Version | `Help -> exit 0
 
     let bool = Arg.bool
