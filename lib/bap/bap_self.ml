@@ -126,7 +126,7 @@ module Create() = struct
         | None -> value in
       value
 
-    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") ~name =
+    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") name =
       let future, promise = Future.create () in
       let param = get_param ~converter ~default ~name in
       let t =
@@ -136,7 +136,7 @@ module Create() = struct
       future
 
     let param_all converter ?(default=[]) ?(docv="VAL")
-        ?(doc="Uncodumented") ~name : 'a list param =
+        ?(doc="Uncodumented") name : 'a list param =
       let future, promise = Future.create () in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
@@ -145,7 +145,7 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?(docv="VAL") ?(doc="Undocumented") ~name : bool param =
+    let flag ?(docv="VAL") ?(doc="Undocumented") name : bool param =
       let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =

@@ -584,7 +584,7 @@ module Std : sig
 
         {[
           let path = Config.(param string ~doc:"a path to file"
-                               ~default:"input.txt" ~name:"path")
+                               ~default:"input.txt" "path")
           let debug = Config.(flag (* ... *) )
 
           (* ... *)
@@ -627,20 +627,19 @@ module Std : sig
       (** Create a parameter *)
       val param :
         'a converter -> default:'a ->
-        ?docv:string -> ?doc:string -> name:string -> 'a param
+        ?docv:string -> ?doc:string -> string -> 'a param
 
       (** Create a parameter which accepts a list at command line by
-          repetition of argument [name]. Behaves the same as
-          [param (list 'a) ...] in all other respects. Defaults to an
-          empty list if unspecified. *)
+          repetition of argument. Similar to [param (list 'a) ...]
+          in all other respects. Defaults to an empty list if unspecified. *)
       val param_all :
         'a converter -> ?default:'a list ->
-        ?docv:string -> ?doc:string -> name:string -> 'a list param
+        ?docv:string -> ?doc:string -> string -> 'a list param
 
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
       val flag :
-        ?docv:string -> ?doc:string -> name:string -> bool param
+        ?docv:string -> ?doc:string -> string -> bool param
 
       (** Provides a future determined on when the config can be read *)
       val determined : 'a param -> 'a future

@@ -27,14 +27,14 @@ module Create() : sig
 
     val param :
       'a converter -> default:'a ->
-      ?docv:string -> ?doc:string -> name:string -> 'a param
+      ?docv:string -> ?doc:string -> string -> 'a param
 
     val param_all :
       'a converter -> ?default:'a list ->
-      ?docv:string -> ?doc:string -> name:string -> 'a list param
+      ?docv:string -> ?doc:string -> string -> 'a list param
 
     val flag :
-      ?docv:string -> ?doc:string -> name:string -> bool param
+      ?docv:string -> ?doc:string -> string -> bool param
 
     val determined : 'a param -> 'a future
 
