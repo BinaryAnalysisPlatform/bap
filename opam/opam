@@ -179,8 +179,14 @@ depexts: [
         "graphviz"
         "curl"
         "libzip"
-     ]
-    ]
+     ]]
+     [["osx" "brew"] [
+        "gmp"
+        "homebrew/versions/llvm34"
+        "graphviz"
+        "curl"
+        "libzip"
+    ]]
 ]
 
 depopts: [
