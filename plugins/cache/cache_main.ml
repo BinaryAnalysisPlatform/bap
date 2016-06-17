@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 open Format
-open Cmdliner
 include Self()
 
 type entry = {
@@ -183,34 +182,19 @@ let main clean size info dir =
   Option.iter size ~f:set_size;
   Data.Cache.Service.provide {Data.Cache.create}
 
-let man = [
-  `S "DESCRIPTION";
-  `P "Provide caching service for all data types."
-]
-
-let info = Term.info name ~version ~doc ~man
-
-let clean =
-  let doc = "Cleanup all caches" in
-  Arg.(value & flag & info ["clean"] ~doc)
-
-let set_size =
-  let doc =
-    "Set maximum total size of cached data to $(docv) MB. The
-  option value will persist between different runs of the program" in
-  Arg.(value & opt (some int) None & info ["size"] ~doc ~docv:"N")
-
-let dir =
-  let doc = "Use $(docv) as a cache directory" in
-  Arg.(value & opt (some string) None & info ["dir"] ~doc ~docv:"DIR")
-
-let print_info =
-  let doc = "Print information about the cache and exit" in
-  Arg.(value & flag & info ["info"] ~doc)
-
 let () =
-  let spec = Term.(const main $clean $set_size $print_info $dir) in
-  match Term.eval ~argv ~catch:false (spec,info) with
-  | `Ok () -> ()
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "Provide caching service for all data types."
+    ] in
+  let clean = Config.(flag "clean" ~doc:"Cleanup all caches") in
+  let set_size = Config.(param (some int) "size" ~default:None ~docv:"N"
+                           ~doc:"Set maximum total size of cached data to
+                                 $(docv) MB. The option value will persist
+                                 between different runs of the program") in
+  let dir = Config.(param (some string) "dir" ~default:None ~docv:"DIR"
+                      ~doc:"Use $(docv) as a cache directory") in
+  let print_info = Config.(flag "info" ~doc:"Print information about the
+                                             cache and exit") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      main !clean !set_size !print_info !dir)
