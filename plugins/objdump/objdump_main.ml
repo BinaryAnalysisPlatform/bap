@@ -3,7 +3,6 @@ open Bap_future.Std
 open Bap.Std
 open Regular.Std
 open Re_perl
-open Cmdliner
 open Format
 open Option.Monad_infix
 open Objdump_config
@@ -77,8 +76,8 @@ let main () =
   Stream.merge Project.Info.arch Project.Info.file ~f:run_objdump |>
   Symbolizer.Factory.register name
 
-let info =
-  let man = [
+let () =
+  Config.manpage [
     `S "DESCRIPTION";
     `P "This plugin provides a symbolizer based on objdump. \
         Note that we parse objdump output, thus this symbolizer \
@@ -88,12 +87,5 @@ let info =
     `P  "$(b, bap --symbolizer=objdump --dump-symbols) $(i,executable)";
     `P  "To use the internal extractor and *not* this plugin:";
     `P  "$(b, bap --symbolizer=internal --dump-symbols) $(i,executable)";
-  ] in
-  Term.info ~man ~doc name ~version
-
-let () =
-  let run = Term.(const main $const ()) in
-  match Term.eval ~argv ~catch:false (run, info) with
-  | `Ok () -> ()
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+  ];
+  Config.when_ready (fun _ -> main ())
