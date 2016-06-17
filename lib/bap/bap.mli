@@ -629,8 +629,12 @@ module Std : sig
         'a converter -> default:'a ->
         ?docv:string -> ?doc:string -> name:string -> 'a param
 
+      (** Create a parameter which accepts a list at command line by
+          repetition of argument [name]. Behaves the same as
+          [param (list 'a) ...] in all other respects. Defaults to an
+          empty list if unspecified. *)
       val param_all :
-        'a converter -> default:'a list ->
+        'a converter -> ?default:'a list ->
         ?docv:string -> ?doc:string -> name:string -> 'a list param
 
       (** Create a boolean parameter that is set to true if user

@@ -135,7 +135,7 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all converter ~default ?(docv="VAL")
+    let param_all converter ?(default=[]) ?(docv="VAL")
         ?(doc="Uncodumented") ~name : 'a list param =
       let future, promise = Future.create () in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
