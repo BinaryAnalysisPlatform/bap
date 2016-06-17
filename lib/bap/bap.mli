@@ -589,11 +589,11 @@ module Std : sig
 
           (* ... *)
 
-          let configured {Config.get=(!)} =
+          let on_config_ready {Config.get=(!)} =
             do_stuff !path !debug (* ... *)
 
           let main () =
-            Config.parse configured
+            Config.request on_config_ready
         ]}
     *)
     module Config : sig
@@ -637,9 +637,9 @@ module Std : sig
       (** A witness that can read configured params *)
       type reader = {get : 'a. 'a param -> 'a}
 
-      (** [parse configured] parses configuration and command line
-          arguments and calls [configured (reader:Config.reader)] *)
-      val parse : (reader -> unit) -> unit
+      (** [request on_config_ready] parses configuration and command line
+          arguments and calls [on_config_ready (reader:Config.reader)] *)
+      val request : (reader -> unit) -> unit
 
       (** The type for a block of man page text.
 

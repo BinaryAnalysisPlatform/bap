@@ -157,10 +157,10 @@ module Create() = struct
       term_info := Term.info ~doc ~man plugin_name
 
     type reader = {get : 'a. 'a param -> 'a}
-    let parse configured : unit =
+    let request on_config_ready : unit =
       match Term.eval (!main, !term_info) with
       | `Error _ -> exit 1
-      | `Ok _ -> configured {get = (fun p -> Future.peek_exn p)}
+      | `Ok _ -> on_config_ready {get = (fun p -> Future.peek_exn p)}
       | `Version | `Help -> exit 0
 
     let bool = Arg.bool
