@@ -640,9 +640,11 @@ module Std : sig
       (** A witness that can read configured params *)
       type reader = {get : 'a. 'a param -> 'a}
 
-      (** [request on_config_ready] parses configuration and command line
-          arguments and calls [on_config_ready (reader:Config.reader)] *)
-      val request : (reader -> unit) -> unit
+      (** [when_ready f] requests the system to call function [f] once
+          configuration parameters are  established and stabilized. An
+          access function will be passed to the function [f],  that can be
+          used to safely dereference parameters.  *)
+      val when_ready : (reader -> unit) -> unit
 
       (** The type for a block of man page text.
 

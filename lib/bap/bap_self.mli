@@ -35,7 +35,7 @@ module Create() : sig
     val determined : 'a param -> 'a future
 
     type reader = {get : 'a. 'a param -> 'a}
-    val on_config_ready : (reader -> unit) -> unit
+    val when_ready : (reader -> unit) -> unit
 
     type manpage_block = [
       | `I of string * string

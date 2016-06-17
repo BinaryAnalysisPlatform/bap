@@ -159,10 +159,10 @@ module Create() = struct
     let determined (p:'a param) : 'a future = p
 
     type reader = {get : 'a. 'a param -> 'a}
-    let request on_config_ready : unit =
+    let when_ready f : unit =
       match Term.eval (!main, !term_info) with
       | `Error _ -> exit 1
-      | `Ok _ -> on_config_ready {get = (fun p -> Future.peek_exn p)}
+      | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
       | `Version | `Help -> exit 0
 
     let bool = Arg.bool
