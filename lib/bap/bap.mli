@@ -590,8 +590,10 @@ module Std : sig
           (* ... *)
 
           let main () =
-            let (!) = Config.parse () in
-            do_stuff !path !debug (* ... *)
+            Config.when_ready
+              (fun {Config.get=(!)} ->
+                 do_stuff !path !debug (* ... *)
+              )
         ]}
     *)
     module Config : sig
@@ -632,11 +634,17 @@ module Std : sig
       val flag :
         ?docv:string -> ?doc:string -> name:string -> bool param
 
-      (** Reads a value from a parameter *)
-      type 'a reader = 'a param -> 'a
+      (** Provides a future determined on when the config can be read *)
+      val determined : 'a param -> 'a future
 
-      (** Parse command line arguments and return a param reader *)
-      val parse : unit -> 'a reader
+      (** A witness that can read configured params *)
+      type reader = {get : 'a. 'a param -> 'a}
+
+      (** [when_ready f] requests the system to call function [f] once
+          configuration parameters are  established and stabilized. An
+          access function will be passed to the function [f],  that can be
+          used to safely dereference parameters.  *)
+      val when_ready : (reader -> unit) -> unit
 
       (** The type for a block of man page text.
 

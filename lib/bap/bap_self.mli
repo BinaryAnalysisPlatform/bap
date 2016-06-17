@@ -1,5 +1,6 @@
 open Format
 open Core_kernel.Std
+open Bap_future.Std
 
 module Create() : sig
   val name : string
@@ -31,8 +32,10 @@ module Create() : sig
     val flag :
       ?docv:string -> ?doc:string -> name:string -> bool param
 
-    type 'a reader = 'a param -> 'a
-    val parse : unit -> 'a reader
+    val determined : 'a param -> 'a future
+
+    type reader = {get : 'a. 'a param -> 'a}
+    val when_ready : (reader -> unit) -> unit
 
     type manpage_block = [
       | `I of string * string

@@ -1,5 +1,7 @@
 open Core_kernel.Std
 open Bap_bundle.Std
+open Bap_future.Std
+open Bap_plugins.Std
 open Format
 open Cmdliner
 
@@ -70,7 +72,7 @@ module Create() = struct
       let (/) = Filename.concat in
       confdir / plugin_name
 
-    type 'a param = 'a ref
+    type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter = 'a parser * 'a printer
@@ -122,21 +124,25 @@ module Create() = struct
       let value = match str with
         | Some v -> parse v
         | None -> value in
-      ref value
+      value
 
     let param converter ~default ?(docv="VAL") ?(doc="Undocumented") ~name =
+      let future, promise = Future.create () in
       let param = get_param ~converter ~default ~name in
       let t =
-        Arg.(value @@ opt converter !param @@ info [name] ~doc ~docv) in
-      main := Term.(const (fun x () -> param := x) $ t $ (!main));
-      param
+        Arg.(value @@ opt converter param @@ info [name] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      future
 
     let flag ?(docv="VAL") ?(doc="Undocumented") ~name : bool param =
+      let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info [name] ~doc ~docv) in
-      main := Term.(const (fun x () -> param := !param || x) $ t $ (!main));
-      param
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise (param || x)) $ t $ (!main));
+      future
 
     let term_info = ref (Term.info ~doc plugin_name)
 
@@ -151,12 +157,23 @@ module Create() = struct
     let manpage (man:manpage_block list) : unit =
       term_info := Term.info ~doc ~man plugin_name
 
-    type 'a reader = 'a param -> 'a
-    let parse () : 'a reader =
-      match Term.eval (!main, !term_info) with
-      | `Error _ -> exit 1
-      | `Ok _ -> (fun p -> !p)
-      | `Version | `Help -> exit 0
+    let determined (p:'a param) : 'a future = p
+
+    type reader = {get : 'a. 'a param -> 'a}
+    let when_ready f : unit =
+      let evaluate_cmdline_args () =
+        match Term.eval (!main, !term_info) with
+        | `Error _ -> exit 1
+        | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
+        | `Version | `Help -> exit 0 in
+      Stream.watch Plugins.events (fun subscription -> function
+          | `Errored (name,_) when plugin_name = name ->
+            Stream.unsubscribe Plugins.events subscription
+          | `Loaded p when Plugin.name p = plugin_name ->
+            evaluate_cmdline_args ();
+            Stream.unsubscribe Plugins.events subscription
+          | _ -> () )
+
 
     let bool = Arg.bool
     let char = Arg.char
