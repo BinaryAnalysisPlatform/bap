@@ -168,7 +168,7 @@ module Ida = struct
     Command.create
       `python
       ~script:"
-from bap_utils import dump_symbol_info
+from bap.utils.ida import dump_symbol_info
 dump_symbol_info('$output')
 idc.Exit(0)"
       ~process:(fun name ->

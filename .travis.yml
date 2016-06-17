@@ -1,6 +1,12 @@
 language: c
 script: bash -ex .travis-opam.sh
 sudo: false
+cache:
+  directories:
+    - $HOME/.opam
+  before_cache:
+    - opam remove bap -y
+    - rm -rf $HOME/.opam/log
 addons:
   apt:
     sources:

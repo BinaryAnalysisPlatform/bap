@@ -119,11 +119,22 @@ module Cmdline = struct
   ]
 
   let info = Term.info ~version ~man ~doc name
-  let passes = [name; "taint"; "mark"; "print"]
+  let passes = [name; "--taint"; "--mark"; "--print"]
   let not_a_pass s = not (List.mem passes s)
 
-  let parse () = match Term.eval ~argv (Term.pure (),info) with
+  let pass name =
+    let doc = sprintf "run $mname-%s pass" name in
+    Arg.(value & flag & info [name] ~doc)
+  let taint = pass "taint"
+  let print = pass "print"
+  let mark  = pass "mark"
+
+  let ignore_args _ _ _ = ()
+  let passes = Term.(pure ignore_args $taint $print $mark)
+
+  let parse () = match Term.eval ~argv (passes,info) with
     | `Version | `Help -> exit 0
+    | `Error _ -> exit 1
     | _ -> match Array.find argv ~f:not_a_pass with
       | None -> ()
       | Some pass -> eprintf "Unknown pass: %s" pass; exit 1
