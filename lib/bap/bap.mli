@@ -745,6 +745,12 @@ module Std : sig
       val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
         'd converter -> ('a * 'b * 'c * 'd) converter
 
+      (** [some none c] is like the converter [c] except it returns
+          [Some] value. It is used for command line arguments
+          that default to [None] when absent. [none] is what to print to
+          document the absence (defaults to [""]). *)
+      val some : ?none:string -> 'a converter -> 'a option converter
+
     end
 
   end

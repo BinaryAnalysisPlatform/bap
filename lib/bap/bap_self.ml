@@ -193,6 +193,7 @@ module Create() = struct
     let t2 = Arg.t2
     let t3 = Arg.t3
     let t4 = Arg.t4
+    let some = Arg.some
 
   end
 

@@ -67,6 +67,7 @@ module Create() : sig
       ('a * 'b * 'c) converter
     val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
       'd converter -> ('a * 'b * 'c * 'd) converter
+    val some : ?none:string -> 'a converter -> 'a option converter
 
   end
 
