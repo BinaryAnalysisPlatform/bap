@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap_bundle.Std
 open Bap_future.Std
+open Bap_plugins.Std
 open Format
 open Cmdliner
 
@@ -160,10 +161,19 @@ module Create() = struct
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      match Term.eval (!main, !term_info) with
-      | `Error _ -> exit 1
-      | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
-      | `Version | `Help -> exit 0
+      let evaluate_cmdline_args () =
+        match Term.eval (!main, !term_info) with
+        | `Error _ -> exit 1
+        | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
+        | `Version | `Help -> exit 0 in
+      Stream.watch Plugins.events (fun subscription -> function
+          | `Errored (name,_) when plugin_name = name ->
+            Stream.unsubscribe Plugins.events subscription
+          | `Loaded p when Plugin.name p = plugin_name ->
+            evaluate_cmdline_args ();
+            Stream.unsubscribe Plugins.events subscription
+          | _ -> () )
+
 
     let bool = Arg.bool
     let char = Arg.char
