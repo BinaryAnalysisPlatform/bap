@@ -303,8 +303,12 @@ module Cmdline = struct
 end
 
 let () =
-  match Cmdline.eval Sys.argv with
+  Log.start ();
+  let args = Bap_plugin_loader.run Sys.argv in
+  match Cmdline.eval args with
   | `Ok Ok () -> ()
-  | `Ok Error err -> eprintf "Program failed: %s\n"
-                       Error.(to_string_hum err)
+  | `Ok Error err ->
+    eprintf "Program failed: %s\n%!"
+      Error.(to_string_hum err);
+    exit 2
   | _ -> exit 1

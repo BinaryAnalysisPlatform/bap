@@ -17,7 +17,7 @@ Library bap
                    bap-future,
                    cmdliner
   Modules:         Bap
-  InternalModules: Bap_event, Bap_project, Bap_self
+  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 
 
 Library types

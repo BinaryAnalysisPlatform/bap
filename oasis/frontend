@@ -2,22 +2,6 @@ Flag frontend
   Description: Build BAP frontend
   Default: false
 
-# !!!! READ THE FOLLOWING NOTE !!!
-# Frontends that are capable of loading plugins, aka hosts
-# programs, can only depend on the two internal libraries:
-# bap and bap.plugins. They may, however, depend on an arbitrary
-# amount of findlib libraries.
-# The internal library is a library declared with the Library section
-# in the _oasis file.
-# Clarification. We use `findlib.dynload` to track libraries, with which
-# a binary is linked. Unfortunately, internal libraries bypass this mechanism
-# so if some plugin will try to load the same internal library, then it
-# will be loaded as dependency, that will lead to a corruption and
-# hopefully to a segfault.
-# If your frontend needs some internal library, then consider moving
-# the functionality that needs this into a plugin, as frontends are intended
-# only for parsing command-line arguments and dispatching them to bap.
-
 Executable "bap"
   Path:           src
   MainIs:         bap_main.ml

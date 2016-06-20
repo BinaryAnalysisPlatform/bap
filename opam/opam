@@ -72,7 +72,7 @@ install: [
   ["ocamlfind" "remove" "bap-api"]
   ["ocamlfind" "remove" "bap-bml"]
   [make "reinstall"]
-  ["bap-byteweight" "update"]
+  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v0.9.9/sigs.zip"]
   [make "test"]
 ]
 
@@ -179,8 +179,14 @@ depexts: [
         "graphviz"
         "curl"
         "libzip"
-     ]
-    ]
+     ]]
+     [["osx" "brew"] [
+        "gmp"
+        "homebrew/versions/llvm34"
+        "graphviz"
+        "curl"
+        "libzip"
+    ]]
 ]
 
 depopts: [

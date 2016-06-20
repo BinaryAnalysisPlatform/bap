@@ -280,6 +280,7 @@ let start options =
   Program.main ()
 
 let _main : unit =
+  Log.start ();
   let argv = Bap_plugin_loader.run Sys.argv in
   try match Cmdline.parse argv >>= start with
     | Ok _ -> exit 0
