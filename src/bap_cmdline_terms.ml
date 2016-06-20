@@ -28,23 +28,24 @@ let brancher () : string option Term.t =
 
 let symbolizers () : string list Term.t =
   match enum_processors (module Symbolizer) with
-  | [] | [_] -> Term.const []
+  | [] -> Term.const []
+  | [x,_] -> Term.const [x]
   | names ->
     let doc =
       sprintf "Use a specified symbolizer. If an option is specified
       several times, then symbolizers are merged. Possible values
       are: %s" @@ Arg.doc_alts_enum names in
-    Arg.(value & opt_all (enum names) [] & info ["symbolizer"] ~doc)
+    Arg.(value & opt_all (enum names) ["internal"] & info ["symbolizer"] ~doc)
 
 let rooters () : string list Term.t =
   match enum_processors (module Rooter) with
   | [] -> Term.const []
   | [x,_] -> Term.const [x]
-  | (x,_) :: _ as names ->
+  | names ->
     let doc = sprintf "Use a rooter with a given $(docv) . If an
     option is specified several times, then rooters are
     merged. Possible values: %s." @@ Arg.doc_alts_enum names in
-    Arg.(value & opt_all (enum names) [x] &
+    Arg.(value & opt_all (enum names) ["internal"] &
          info ["rooter"] ~doc ~docv:"NAME")
 
 let reconstructor () : string option Term.t =

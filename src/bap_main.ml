@@ -124,6 +124,11 @@ let main o =
       Project.restore_state proj;
       proj
     | None ->
+      let o = {
+        o with
+        symbolizers = o.symbols @ o.symbolizers;
+        rooters = o.symbols @ o.rooters;
+      } in
       let rooter = rooter o
       and brancher = brancher o
       and reconstructor = reconstructor o
