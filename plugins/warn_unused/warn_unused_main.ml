@@ -129,8 +129,7 @@ module Cmdline = struct
   let print_p = pass "print"
   let mark_p  = pass "mark"
 
-  let ignore_args _ _ _ = ()
-  let passes {Config.get=(!)} = ignore_args !taint_p !print_p !mark_p
+  let passes {Config.get=(!)} = ignore !taint_p, !print_p, !mark_p
 
   let () =
     let check_passes () = match Array.find argv ~f:not_a_pass with
