@@ -2,7 +2,7 @@ Flag byteweight
   Description: Build byteweight library
   Default: false
 
-Library byteweight
+Library bap_byteweight
   Path:            lib/bap_byteweight
   FindLibName:     bap-byteweight
   Build$:          flag(everything) || flag(byteweight)

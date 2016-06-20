@@ -117,14 +117,3 @@ let run_and_get_passes argv =
   Array.(to_list @@ filter_map argv ~f:to_pass)
 
 let run argv = fst (run_and_get_passes argv)
-
-
-let () = Stream.observe Plugins.events (function
-    | `Loaded p ->
-      info "Loaded %s from %S" (Plugin.name p) (Plugin.path p)
-    | `Loading p ->
-      debug "Loading %s from %S" (Plugin.name p) (Plugin.path p)
-    | `Opening p -> debug "Opening bundle %s" p
-    | `Errored (path,err) ->
-      error "Failed to load plugin %S: %a" path Error.pp err
-    | `Linking lib -> debug "Linking library %s" lib)
