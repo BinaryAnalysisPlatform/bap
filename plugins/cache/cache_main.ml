@@ -9,11 +9,11 @@ type entry = {
   ctime   : float;
   hits    : int;
   path    : string;
-  size    : int;
+  size    : int64;
 } [@@deriving bin_io, compare, sexp]
 
 type config = {
-  max_size : int;
+  max_size : int64;
 } [@@deriving bin_io, compare, sexp]
 
 type index = {
@@ -27,7 +27,7 @@ module Index = struct
   let index_file = "index"
   let lock_file = "lock"
   let default_config = {
-    max_size = 5_000_000_000;
+    max_size = 5_000_000_000L;
   }
   let empty = {
     config = default_config;
@@ -58,8 +58,8 @@ module Index = struct
     cache_dir
 
   let size idx =
-    Map.fold idx.entries ~init:0 ~f:(fun ~key:_ ~data:e size ->
-        size + e.size)
+    Map.fold idx.entries ~init:0L ~f:(fun ~key:_ ~data:e size ->
+        Int64.(size + e.size))
 
   (* freq is a frequence of accesses to the cache entry in
      access per second. *)
@@ -76,7 +76,7 @@ module Index = struct
 
   let rec clean idx =
     let size = size idx in
-    if size > 0 && size > idx.config.max_size
+    if size > 0L && size > idx.config.max_size
     then clean (evict_entry idx)
     else idx
 
@@ -126,7 +126,7 @@ module Index = struct
 end
 
 let size file =
-  Unix.((stat file).st_size)
+  Unix.LargeFile.((stat file).st_size)
 
 let cleanup () =
   Index.update ~f:(fun _ idx ->
@@ -135,14 +135,14 @@ let cleanup () =
 
 let set_size size =
   Index.update ~f:(fun _ idx ->
-      {idx with config = {max_size = size * 1024 * 1024}});
+      {idx with config = {max_size = Int64.(size * 1024L * 1024L)}});
   exit 0
 
 let print_info () =
   Index.run ~f:(fun idx ->
-      let mb s = Int.(s / 1024 / 1024) in
-      printf "Maximum size: %5d MB@\n" @@ mb idx.config.max_size;
-      printf "Current size: %5d MB@\n" @@ mb (Index.size idx));
+      let mb s = Int64.(s / 1024L / 1024L) in
+      printf "Maximum size: %5Ld MB@\n" @@ mb idx.config.max_size;
+      printf "Current size: %5Ld MB@\n" @@ mb (Index.size idx));
   exit 0
 
 let set_dir dir = match dir with
@@ -188,7 +188,7 @@ let () =
       `P "Provide caching service for all data types."
     ] in
   let clean = Config.(flag "clean" ~doc:"Cleanup all caches") in
-  let set_size = Config.(param (some int) "size" ~default:None ~docv:"N"
+  let set_size = Config.(param (some int64) "size" ~default:None ~docv:"N"
                            ~doc:"Set maximum total size of cached data to
                                  $(docv) MB. The option value will persist
                                  between different runs of the program") in
