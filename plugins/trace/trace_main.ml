@@ -83,8 +83,8 @@ module Cmdline = struct
       err_formatter fmt
 
   let () =
-    Future.upon Plugins.loaded (fun () ->
-        Config.when_ready (fun {Config.get=(!)} ->
+    Config.when_ready (fun {Config.get=(!)} ->
+        Future.upon Plugins.loaded (fun () ->
             match main !dump !load with
             | Ok `Done -> ()
             | Ok `Exit -> exit 0
