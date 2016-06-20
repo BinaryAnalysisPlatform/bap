@@ -9,6 +9,7 @@ module Std = struct
   module Event = Bap_event
   module Project = Bap_project
   module Self = Bap_self.Create
+  module Log = Bap_log
   type project = Project.t
   type event = Event.t = ..
 end

@@ -241,7 +241,7 @@ let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Not_found -> () in
-  Bap_log.start ();
+  Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
   try main (parse passes argv); exit 0 with
