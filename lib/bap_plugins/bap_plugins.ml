@@ -47,7 +47,11 @@ module Plugin = struct
           let key = Findlib.package_property preds pkg "archive" |>
                     Filename.chop_extension in
           Hashtbl.set units ~key ~data:`In_core
-        with exn -> ())
+        with exn -> ());
+    Findlib.recorded_predicates () |> List.iter ~f:(fun pred ->
+        match String.chop_prefix pred ~prefix:"used_" with
+        | None -> ()
+        | Some lib -> Hashtbl.set units ~key:lib ~data:`In_core)
   end
 
   let of_path path =

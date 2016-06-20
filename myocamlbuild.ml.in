@@ -54,7 +54,10 @@ let pr_6184_hack = function
   | After_rules ->
     (* Pass -predicates to ocamldep *)
     pflag ["ocaml"; "ocamldep"] "predicate" (fun s -> S [A "-predicates"; A s]);
-
+    package_default.MyOCamlbuildBase.lib_ocaml |>
+    List.iter (fun (lib,_,_) ->
+        flag ["ocaml"; "link"; "use_"^lib]
+          (S [A "-predicates"; A ("used_"^lib)]));
   | _ -> ()
 
 
