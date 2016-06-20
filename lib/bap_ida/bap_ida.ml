@@ -7,6 +7,7 @@ type ida = {
   exe : string;
   curses : string option;
   mutable trash : string list;
+  debug : int;
 } [@@deriving sexp]
 
 type 'a command = {
@@ -124,11 +125,14 @@ module Ida = struct
     FileUtil.cp [target] exe;
     let idb = idb ida in
     let ida = Filename.quote ida in
+    let debug =
+      try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with exn -> 0 in
     let self = {
       ida;
       exe;
       curses;
-      trash = [exe; idb exe; asm exe]
+      trash = [exe; idb exe; asm exe];
+      debug;
     } in
 
     if Sys.file_exists (idb target) then (
@@ -153,11 +157,13 @@ module Ida = struct
     Out_channel.output_string out;
     Out_channel.close out;
     self.trash <- script :: result :: self.trash;
-    run self @@ shell "%s -A -S%s %s" self.ida script self.exe;
+    let auto = if self.debug > 1 then "" else "-A" in
+    run self @@ shell "%s %s -S%s %s" self.ida auto script self.exe;
     command.process result
 
   let close self =
-    FileUtil.rm self.trash
+    if self.debug < 2 then
+      FileUtil.rm self.trash
 
   let with_file target command =
     let ida = create target in
