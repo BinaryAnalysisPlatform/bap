@@ -151,10 +151,10 @@ module Plugin = struct
       set_main_bundle (bundle plugin);
       load_entries plugin reqs >>= fun () ->
       load_entry ~don't_register:true plugin main >>| fun () ->
-      let reason = `Provided_by plugin.name in
-      set_main_bundle old_bundle;
       Promise.fulfill plugin.finish ();
       notify (`Loaded plugin);
+      set_main_bundle old_bundle;
+      let reason = `Provided_by plugin.name in
       List.iter mains ~f:(fun unit ->
           Hashtbl.set units ~key:unit ~data:reason)
 
