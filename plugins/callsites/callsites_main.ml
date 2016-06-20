@@ -78,10 +78,8 @@ let main proj =
   let prog = Project.program proj in
   Project.with_program proj (fill_calls prog)
 
-module Cmdline = struct
-  open Cmdliner
-
-  let man = [
+let () =
+  Config.manpage [
     `S "DESCRIPTION";
     `P "This pass will inject artifical definitions of a subroutine
       arguments at call sites. Consider function $(b,malloc) that has
@@ -97,18 +95,9 @@ module Cmdline = struct
       000001c3: malloc_size := R0
       0000015b: call @malloc with return %0000015c";
     `P "And prepend another to the block to which malloc will return:";
-
     `Pre "
       0000015c:
       000001c4: R0 := malloc_result
       ...";
-  ]
-
-  let info = Term.info ~man ~doc name
-  let run () = Term.eval ~argv (Term.const main,info)
-end
-
-let () = match Cmdline.run () with
-  | `Ok pass -> Project.register_pass pass
-  | `Version | `Help -> exit 0
-  | `Error _ -> exit 1
+  ];
+  Config.when_ready (fun _ -> Project.register_pass main)

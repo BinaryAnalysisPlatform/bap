@@ -126,7 +126,7 @@ module Create() = struct
         | None -> value in
       value
 
-    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") ~name =
+    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") name =
       let future, promise = Future.create () in
       let param = get_param ~converter ~default ~name in
       let t =
@@ -135,7 +135,17 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?(docv="VAL") ?(doc="Undocumented") ~name : bool param =
+    let param_all converter ?(default=[]) ?(docv="VAL")
+        ?(doc="Uncodumented") name : 'a list param =
+      let future, promise = Future.create () in
+      let param = get_param ~converter:(Arg.list converter) ~default ~name in
+      let t =
+        Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      future
+
+    let flag ?(docv="VAL") ?(doc="Undocumented") name : bool param =
       let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =
@@ -162,7 +172,7 @@ module Create() = struct
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
       let evaluate_cmdline_args () =
-        match Term.eval (!main, !term_info) with
+        match Term.eval ~argv (!main, !term_info) with
         | `Error _ -> exit 1
         | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
         | `Version | `Help -> exit 0 in
@@ -193,6 +203,7 @@ module Create() = struct
     let t2 = Arg.t2
     let t3 = Arg.t3
     let t4 = Arg.t4
+    let some = Arg.some
 
   end
 

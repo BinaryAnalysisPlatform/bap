@@ -116,14 +116,7 @@ let main regs ptrs = match regs,ptrs with
     Project.register_pass ~deps:["callsites"] ~autorun:true
       (mark regs ptrs)
 
-
 module Cmdline = struct
-  open Cmdliner
-
-  let taints kind : strain list list Term.t =
-    let doc = sprintf "Taint %s value of definition matching
-     with the specification" kind in
-    Arg.(value & opt_all Strain.t [] & info [kind] ~doc)
 
   let man = [
     `S "DESCRIPTION";
@@ -162,14 +155,15 @@ language follows:";
     `Pre grammar
   ]
 
-  let info = Term.info ~doc ~man name
-  let grammar =
-    Term.(pure main $(taints "reg") $(taints "ptr"))
+  let taints kind : strain list list Config.param =
+    let doc = sprintf "Taint %s value of definition matching
+     with the specification" kind in
+    Config.(param_all Strain.t kind ~doc)
 
-  let parse () = Term.eval ~argv (grammar,info)
+  let () =
+    let reg = taints "reg" in
+    let ptr = taints "ptr" in
+    Config.manpage man;
+    Config.when_ready (fun {Config.get=(!)} -> main !reg !ptr)
+
 end
-
-let () = match Cmdline.parse () with
-  | `Ok () -> ()
-  | `Version | `Help -> exit 0
-  | `Error _ -> exit 1

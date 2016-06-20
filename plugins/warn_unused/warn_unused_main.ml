@@ -86,7 +86,7 @@ let run pass proj =
   pass unchecked proj
 
 module Cmdline = struct
-  open Cmdliner
+
   let man = [
     `S "SYNOPSIS";
     `Pre "
@@ -118,31 +118,27 @@ module Cmdline = struct
     end
   ]
 
-  let info = Term.info ~version ~man ~doc name
   let passes = [name; "--taint"; "--mark"; "--print"]
-  let not_a_pass s = not (List.mem passes s)
 
   let pass name =
     let doc = sprintf "run $mname-%s pass" name in
-    Arg.(value & flag & info [name] ~doc)
-  let taint = pass "taint"
-  let print = pass "print"
-  let mark  = pass "mark"
+    Config.(flag name ~doc)
 
-  let ignore_args _ _ _ = ()
-  let passes = Term.(pure ignore_args $taint $print $mark)
+  let taint_p = pass "taint"
+  let print_p = pass "print"
+  let mark_p  = pass "mark"
 
-  let parse () = match Term.eval ~argv (passes,info) with
-    | `Version | `Help -> exit 0
-    | `Error _ -> exit 1
-    | _ -> match Array.find argv ~f:not_a_pass with
-      | None -> ()
-      | Some pass -> eprintf "Unknown pass: %s" pass; exit 1
+  let passes {Config.get=(!)} = ignore !taint_p, !print_p, !mark_p
+
+  let () =
+    Config.manpage man;
+    Config.when_ready (fun {Config.get=(!)} ->
+        Project.register_pass ~deps:["callsites"] ~name:"taint" taint;
+        Project.register_pass' ~name:"print" (run print);
+        Project.register_pass  ~name:"mark" (run mark);
+        Project.register_pass'
+          ignore ~deps:[name^"-taint"; "propagate-taint";
+                        name^"-print"]
+      )
+
 end
-
-let () =
-  Cmdline.parse ();
-  Project.register_pass ~deps:["callsites"] ~name:"taint" taint;
-  Project.register_pass' ~name:"print" (run print);
-  Project.register_pass  ~name:"mark" (run mark);
-  Project.register_pass' ignore ~deps:[name^"-taint"; "propagate-taint"; name^"-print"]

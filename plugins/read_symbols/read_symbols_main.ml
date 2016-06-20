@@ -34,25 +34,16 @@ let register syms =
   register (module Symbolizer);
   register (module Reconstructor)
 
-let man = [
-  `S "DESCRIPTION";
-  `P "Read symbol information from a file and provide rooter,
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "Read symbol information from a file and provide rooter,
     symbolizer and a reconstructor, based on this information."
-]
-
-module Main = struct
-  open Cmdliner
-  let info = Term.info name ~version ~doc ~man
-
-  let symsfile : string option Term.t =
-    let doc = "Use this file as symbols source" in
-    Arg.(value & opt (some non_dir_file) None &
-         info ["from";] ~doc ~docv:"SYMS")
-
-  let () =
-    match Term.eval ~argv (symsfile,info) with
-    | `Ok (Some file) -> register file
-    | `Ok None -> ()
-    | `Help | `Version -> exit 0
-    | `Error _ -> exit 1
-end
+    ] in
+  let symsfile = Config.(param (some non_dir_file) "from"
+                           ~default:None ~docv:"SYMS"
+                           ~doc:"Use this file as symbols source") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      match !symsfile with
+      | Some file -> register file
+      | None -> () )
