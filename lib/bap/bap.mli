@@ -6871,4 +6871,11 @@ module Std : sig
     val restore_state : t -> unit
     (**/**)
   end
+
+  module Log : sig
+
+    (** Start logging events. Only events of type [Event.Log] are
+        logged.  *)
+    val start : unit -> unit
+  end
 end

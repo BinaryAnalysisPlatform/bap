@@ -1,8 +1,7 @@
 open Core_kernel.Std
 open Bap_future.Std
-open Bap.Std
+open Bap_plugins.Std
 open Format
-include Self()
 
 let perm = 0o770
 let getenv opt = try Some (Sys.getenv opt) with Not_found -> None
@@ -41,17 +40,17 @@ let rec rotate max_logs file =
     FileUtil.mv file next
 
 let string_of_level = function
-  | Event.Log.Debug -> "debug"
-  | Event.Log.Info -> "info"
-  | Event.Log.Warning -> "warning"
-  | Event.Log.Error -> "error"
+  | Bap_event.Log.Debug -> "debug"
+  | Bap_event.Log.Info -> "info"
+  | Bap_event.Log.Warning -> "warning"
+  | Bap_event.Log.Error -> "error"
 
-let print ppf {Event.Log.level; section; message} =
+let print ppf {Bap_event.Log.level; section; message} =
   fprintf ppf "%s.%s> %s@." section (string_of_level level) message
 
 let print_message ppf msg =
   print ppf msg;
-  let open Event.Log in match msg.level with
+  let open Bap_event.Log in match msg.level with
   | Error -> print err_formatter msg
   | _ -> ()
 
@@ -68,9 +67,27 @@ let open_log_channel () =
     eprintf "log.info> will continue logging to stderr@.";
     err_formatter
 
+let log_plugin_events () =
+  let open Bap_event.Log in
+  let section = "loader" in
+  Stream.observe Plugins.events (function
+      | `Loaded p ->
+        message Info ~section
+          "Loaded %s from %S" (Plugin.name p) (Plugin.path p)
+      | `Loading p ->
+        message Debug ~section "Loading %s from %S" (Plugin.name p) (Plugin.path p)
+      | `Opening p ->
+        message Debug ~section "Opening bundle %s" p
+      | `Errored (path,err) ->
+        message Error ~section
+          "Failed to load plugin %S: %a" path Error.pp err
+      | `Linking lib ->
+        message Debug ~section "Linking library %s" lib)
+
 
 let start () =
   let ppf = open_log_channel () in
-  Stream.observe Event.stream (function
-      | Event.Log.Message message -> print_message ppf message
-      | e -> fprintf ppf "%a@." Event.pp e)
+  Stream.observe Bap_event.stream (function
+      | Bap_event.Log.Message message -> print_message ppf message
+      | e -> fprintf ppf "%a@." Bap_event.pp e);
+  log_plugin_events ()
