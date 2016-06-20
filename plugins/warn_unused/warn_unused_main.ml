@@ -119,7 +119,6 @@ module Cmdline = struct
   ]
 
   let passes = [name; "--taint"; "--mark"; "--print"]
-  let not_a_pass s = not (List.mem passes s)
 
   let pass name =
     let doc = sprintf "run $mname-%s pass" name in
@@ -132,12 +131,8 @@ module Cmdline = struct
   let passes {Config.get=(!)} = ignore !taint_p, !print_p, !mark_p
 
   let () =
-    let check_passes () = match Array.find argv ~f:not_a_pass with
-      | None -> ()
-      | Some pass -> eprintf "Unknown pass: %s" pass; exit 1 in
     Config.manpage man;
     Config.when_ready (fun {Config.get=(!)} ->
-        check_passes ();
         Project.register_pass ~deps:["callsites"] ~name:"taint" taint;
         Project.register_pass' ~name:"print" (run print);
         Project.register_pass  ~name:"mark" (run mark);
