@@ -43,7 +43,6 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-elf_loader"]
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
-  ["ocamlfind" "remove" "bap-plugin-ida-python"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-phoenix"]
@@ -95,7 +94,6 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-elf_loader"]
   ["ocamlfind" "remove" "bap-plugin-emit_ida_script"]
   ["ocamlfind" "remove" "bap-plugin-ida"]
-  ["ocamlfind" "remove" "bap-plugin-ida-python"]
   ["ocamlfind" "remove" "bap-plugin-objdump"]
   ["ocamlfind" "remove" "bap-plugin-llvm"]
   ["ocamlfind" "remove" "bap-plugin-phoenix"]
@@ -151,7 +149,7 @@ depends: [
     "ounit" {build}
     "ocamlgraph"
     "ocamlfind" {>= "1.5.6" & < "2.0"}
-    "ocurl" {<= "0.7.1"}
+    "ocurl" {>= "0.7.7"}
     "optcomp"
     "re"
     "uri" {>= "1.9.0"}
