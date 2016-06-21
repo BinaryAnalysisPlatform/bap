@@ -148,20 +148,19 @@ let create_api_processor arch abi : Bap_api.t =
   (module Api)
 
 module Stack = struct
-  let create ?(growsup=false) arch =
+  let create ?(growsup=false) arch off =
     let module Target = (val target_of_arch arch) in
     let sz = (Arch.addr_size arch :> Size.t) in
     let width = Size.in_bits sz in
     let endian = Arch.endian arch in
     let mem = Bil.var Target.CPU.mem in
     let sp = Target.CPU.sp in
-    fun off ->
-      let off = Word.of_int ~width (off * Size.in_bytes sz) in
-      let addr = if Word.is_zero off
-        then Bil.(var sp)
-        else if growsup
-        then Bil.(var sp - int off)
-        else Bil.(var sp + int off) in
-      Bil.load ~mem ~addr endian sz
+    let off = Word.of_int ~width (off * Size.in_bytes sz) in
+    let addr = if Word.is_zero off
+      then Bil.(var sp)
+      else if growsup
+      then Bil.(var sp - int off)
+      else Bil.(var sp + int off) in
+    Bil.load ~mem ~addr endian sz
 
 end
