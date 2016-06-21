@@ -44,8 +44,10 @@ let rooters () : string list Term.t =
   | names ->
     let doc = sprintf "Use a rooter with a given $(docv) . If an
     option is specified several times, then rooters are
-    merged. Possible values: %s." @@ Arg.doc_alts_enum names in
-    Arg.(value & opt_all (enum names) ["internal"] &
+    merged. If not specified, then all available rooters will be
+    merged together. Possible values: %s." @@ Arg.doc_alts_enum names in
+    let default = List.map names ~f:fst in
+    Arg.(value & opt_all (enum names) default &
          info ["rooter"] ~doc ~docv:"NAME")
 
 let reconstructor () : string option Term.t =
