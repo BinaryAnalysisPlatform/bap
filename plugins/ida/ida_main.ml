@@ -23,12 +23,12 @@ module type Target = sig
 end
 
 
-let extract ?ida_path path arch =
+let extract ?ida_path ?is_headless path arch =
   let id =
     Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
   let syms = match Symbols.Cache.load id with
     | Some syms -> syms
-    | None -> match Ida.(with_file ?ida_path path get_symbols) with
+    | None -> match Ida.(with_file ?ida_path ?is_headless path get_symbols) with
       | [] ->
         warning "didn't find any symbols";
         info "this plugin doesn't work with IDA Free";
@@ -41,11 +41,11 @@ let extract ?ida_path path arch =
   Seq.of_list
 
 
-let register_source ?ida_path (module T : Target) =
+let register_source ?ida_path ?is_headless (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with (fun () ->
-        extract ?ida_path file arch |> T.of_blocks) in
+        extract ?ida_path ?is_headless file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
@@ -102,13 +102,13 @@ let mapfile path : Bigstring.t =
   Unix.close fd;
   data
 
-let loader ?ida_path path =
+let loader ?ida_path ?is_headless path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
       (Digest.file path) in
   let (proc,size,sections) = match Img.Cache.load id with
     | Some img -> img
     | None ->
-      let img = Ida.with_file ?ida_path path load_image in
+      let img = Ida.with_file ?ida_path ?is_headless path load_image in
       Img.Cache.save id img;
       img in
   let bits = mapfile path in
@@ -129,9 +129,9 @@ let loader ?ida_path path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
-let main ida_path () =
-  let register_source = register_source ?ida_path in
-  let loader = loader ?ida_path in
+let main ida_path is_headless () =
+  let register_source = register_source ?ida_path ?is_headless in
+  let loader = loader ?ida_path ?is_headless in
   register_source (module Rooter);
   register_source (module Symbolizer);
   register_source (module Reconstructor);
@@ -151,10 +151,14 @@ module Main = struct
     let doc = "Path to IDA directory." in
     Arg.(value & opt (some string) None & info ["path"] ~doc)
 
+  let headless : bool option Term.t =
+    let doc = "Use headless curses based IDA." in
+    Arg.(value & opt (some bool) None & info ["headless"] ~doc)
+
   let info = Term.info name ~version ~doc ~man
 
   let () =
-    let run = Term.(const main $ path $ const ()) in
+    let run = Term.(const main $ path $ headless $ const ()) in
     match Term.eval ~argv ~catch:false (run,info) with
     | `Ok () -> ()
     | `Help | `Version -> exit 0
