@@ -24,19 +24,23 @@ module Std : sig
     (** IDA instance *)
     type t = ida
 
-    (** [create target] create an IDA instance that will work with
-        [target] executable. *)
-    val create : string -> t
+    (** [create ?ida_path ?is_headless target] creates an IDA instance
+        that will work with [target] executable. [ida_path] is path to
+        IDA directory. [is_headless] specifies whether curses based IDA
+        should be used. *)
+    val create : ?ida_path:string -> ?is_headless:bool -> string -> t
 
     val exec : t -> 'a command -> 'a
 
     (** [close ida] finish interaction with IDA and clean all resources *)
     val close : t -> unit
 
-
-    (** [with_file target analysis] creates ida instance on [target],
-        perform [analysis] and close [ida] *)
-    val with_file : string -> 'a command -> 'a
+    (** [with_file ?ida_path ?is_headless target analysis] creates ida
+        instance on [target], perform [analysis] and close [ida], using
+        [ida_path] as IDA directory, and [is_headless] for whether curses
+        based IDA should be used. *)
+    val with_file :
+      ?ida_path:string -> ?is_headless:bool -> string -> 'a command -> 'a
 
 
     (** [Ida.exec ida get_symbols] extract symbols from binary *)

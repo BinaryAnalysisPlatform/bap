@@ -94,8 +94,7 @@ module Ida = struct
     then Ok ()
     else Or_error.errorf "IDA configuration failure: %s" req
 
-  let ida () =
-    let open Bap_ida_config in
+  let ida ida_path is_headless =
     let (/) = Filename.concat in
     require "path must exist"
       (Sys.file_exists ida_path) >>= fun () ->
@@ -115,11 +114,17 @@ module Ida = struct
     then ida_path/"idal64"
     else ida_path/"idaq64"
 
-  let create target =
+  let create ?ida_path ?is_headless target =
+    let ida_path = match ida_path with
+      | None -> Bap_ida_config.ida_path
+      | Some x -> x in
+    let is_headless = match is_headless with
+      | None -> Bap_ida_config.is_headless
+      | Some x -> x in
     if not (Sys.file_exists target)
     then invalid_argf "Can't find target executable" ();
-    let ida = ok_exn (ida ()) in
-    let curses = if Sys.os_type = "Unix" && Bap_ida_config.is_headless
+    let ida = ok_exn (ida ida_path is_headless) in
+    let curses = if Sys.os_type = "Unix" && is_headless
       then find_curses () else None in
     let exe = Filename.temp_file "bap_" "_ida" in
     FileUtil.cp [target] exe;
@@ -165,8 +170,8 @@ module Ida = struct
     if self.debug < 2 then
       FileUtil.rm self.trash
 
-  let with_file target command =
-    let ida = create target in
+  let with_file ?ida_path ?is_headless target command =
+    let ida = create ?ida_path ?is_headless target in
     let f ida = exec ida command in
     protectx ~f ida ~finally:close
 
