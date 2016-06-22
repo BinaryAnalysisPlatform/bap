@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_plugins.Std
+open Bap_future.Std
 open Format
 open Cmdliner
 
@@ -85,7 +86,8 @@ let print formatter tool result print_metrics : unit =
   output_metric_value formatter result print_metrics
 
 let compare_against bin tool_name truth_name print_metrics : unit =
-  let open Or_error in
+  let module EF = Monad.T.Or_error.Make(Future) in
+  let open EF in
   (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
    Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
    let result =
@@ -101,11 +103,12 @@ let compare_against bin tool_name truth_name print_metrics : unit =
      let recl = ratio false_negative in
      let f_05 = 1.5 *. prec *. recl /. (0.5 *. prec +. recl) in
      {false_positive;false_negative;true_positive;prec;recl;f_05} in
-   print std_formatter tool_name result print_metrics) |> function
-  | Ok _ -> ()
-  | Error err ->
-    printf "Function start is not recognized properly due to
-  the following error:\n %a" Error.pp err
+   print std_formatter tool_name result print_metrics)
+  |> (fun x -> Future.upon x (function
+      | Ok _ -> ()
+      | Error err ->
+        printf "Function start is not recognized properly due to \
+                the following error:\n %a" Error.pp err))
 
 
 let compare_against_t = Term.(pure compare_against $bin $tool $truth $print_metrics)
