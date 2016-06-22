@@ -23,7 +23,7 @@ module type Target = sig
 end
 
 
-let extract ?ida_path ?is_headless path arch =
+let extract ida_path is_headless path arch =
   let id =
     Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
   let syms = match Symbols.Cache.load id with
@@ -41,11 +41,11 @@ let extract ?ida_path ?is_headless path arch =
   Seq.of_list
 
 
-let register_source ?ida_path ?is_headless (module T : Target) =
+let register_source ida_path is_headless (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with (fun () ->
-        extract ?ida_path ?is_headless file arch |> T.of_blocks) in
+        extract ida_path is_headless file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
@@ -102,7 +102,7 @@ let mapfile path : Bigstring.t =
   Unix.close fd;
   data
 
-let loader ?ida_path ?is_headless path =
+let loader ida_path is_headless path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
       (Digest.file path) in
   let (proc,size,sections) = match Img.Cache.load id with
@@ -130,8 +130,8 @@ let loader ?ida_path ?is_headless path =
   Project.Input.create arch path ~code ~data
 
 let main ida_path is_headless =
-  let register_source = register_source ?ida_path ?is_headless in
-  let loader = loader ?ida_path ?is_headless in
+  let register_source = register_source ida_path is_headless in
+  let loader = loader ida_path is_headless in
   register_source (module Rooter);
   register_source (module Symbolizer);
   register_source (module Reconstructor);
