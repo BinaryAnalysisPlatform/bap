@@ -129,7 +129,7 @@ let loader ?ida_path ?is_headless path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
-let main ida_path is_headless () =
+let main ida_path is_headless =
   let register_source = register_source ?ida_path ?is_headless in
   let loader = loader ?ida_path ?is_headless in
   register_source (module Rooter);
@@ -137,30 +137,18 @@ let main ida_path is_headless () =
   register_source (module Reconstructor);
   Project.Input.register_loader name loader
 
-module Main = struct
-  open Cmdliner
-  let man = [
-    `S "DESCRIPTION";
-    `P "This plugin provides rooter, symbolizer and reconstuctor services.";
-    `P "If IDA instance is found on the machine, or specified by a
-  user, it will be queried for the specified information."
-
-  ]
-
-  let path : string option Term.t =
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "This plugin provides rooter, symbolizer and reconstuctor services.";
+      `P "If IDA instance is found on the machine, or specified by a
+        user, it will be queried for the specified information."
+    ] in
+  let path =
     let doc = "Path to IDA directory." in
-    Arg.(value & opt (some string) None & info ["path"] ~doc)
-
-  let headless : bool option Term.t =
+    Config.(param (some string) "path" ~default:None ~doc) in
+  let headless =
     let doc = "Use headless curses based IDA." in
-    Arg.(value & opt (some bool) None & info ["headless"] ~doc)
-
-  let info = Term.info name ~version ~doc ~man
-
-  let () =
-    let run = Term.(const main $ path $ headless $ const ()) in
-    match Term.eval ~argv ~catch:false (run,info) with
-    | `Ok () -> ()
-    | `Help | `Version -> exit 0
-    | `Error _ -> exit 1
-end
+    Config.(param (some bool) "headless" ~default:None ~doc) in
+  Config.when_ready (fun {Config.get=(!)} ->
+      main !path !headless)
