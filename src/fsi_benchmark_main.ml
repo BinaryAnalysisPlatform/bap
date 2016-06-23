@@ -81,10 +81,9 @@ let string_of_metric = function
   | `with_FP -> "FP"
 
 let print formatter tool result print_metrics : unit =
-  fprintf formatter "Tool";
   List.iter print_metrics ~f:(fun m -> fprintf formatter "\t%s"
                                @@ string_of_metric m);
-  fprintf formatter "\ntool";
+  fprintf formatter "\n";
   output_metric_value formatter result print_metrics
 
 let compare_against bin tool_name truth_name print_metrics : unit =
