@@ -47,14 +47,14 @@ class base :  model -> object
     method array : (cvr qualifier, t * Int.t option) spec -> bits option
 
     (** returns   *)
-    method union : (no_qualifier, (string * t) list) spec -> bits option
-    method structure : (no_qualifier, (string * t) list) spec -> bits option
+    method union : (no_qualifier, (field * t) list) spec -> bits option
+    method structure : (no_qualifier, (field * t) list) spec -> bits option
 
 
     method integer : integer -> size
     method pointer : addr_size
 
-    method enum : Int.t -> size
+    method enum : (field * string option) list -> size
     method real : real -> [`r32 | `r64 | `r128]
     method complex : complex -> size
     method floating : floating -> size

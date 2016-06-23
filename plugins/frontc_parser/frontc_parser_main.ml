@@ -46,7 +46,7 @@ let array size t = `Array (spec cvr (t,size))
 
 let structure fields = `Structure (spec no_qualifier fields)
 let union fields = `Union (spec no_qualifier fields)
-let enum fields = basic (`enum (List.length fields))
+let enum fields : C.Type.t = basic (`enum fields)
 let func variadic return args =
   let args = match args with
     | [_,`Void] -> []
@@ -118,7 +118,14 @@ let rec qualify f : C.Type.t -> C.Type.t =
     }
   | x -> x
 
-let ctype gamma lookup t =
+let field tag name = {C.Type.Field.tag; name}
+
+type tag = {
+  lookup : 'a. ('a list -> C.Type.t) -> string -> C.Type.t
+}
+
+
+let ctype gamma {lookup} t =
   let rec ctype : base_type -> C.Type.t = function
     | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _ | VOID -> `Void
     | CHAR sign -> basic @@ char sign
@@ -131,19 +138,33 @@ let ctype gamma lookup t =
     | STRUCT (n,[]) -> lookup structure n
     | UNION  (n,[]) -> lookup union n
     | ENUM   (n,[]) -> lookup enum n
-    | STRUCT (n,fs) -> structure @@ fields (name_groups n fs)
-    | UNION (n,fs) -> union @@ fields (name_groups n fs)
-    | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
+    | STRUCT (n,fs) -> structure @@ fields (field n) (name_groups n fs)
+    | UNION (n,fs) -> union @@ fields (field n) (name_groups n fs)
+    | PROTO (r,args,v) -> func v (ctype r) @@ fields ident (single_names args)
     | NAMED_TYPE name -> gamma name
-    | ENUM (name,fs) -> enum fs
+    | ENUM (name,fs) -> enum @@ enum_items name fs
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
-  and fields = List.map ~f:(fun (n,t,a) ->
-      n, with_attrs (gnu_attrs a) @@ ctype t) in
+  and enum_items tag =
+    List.map ~f:(fun (name,exp) -> match exp with
+        | CONSTANT (CONST_INT x) -> field tag name, Some x
+        | _ -> field tag name, None)
+  and fields : 'a.  (string -> 'a) -> 'b -> ('a * 'c) list = fun field ->
+    List.map ~f:(fun (name,t,a) ->
+        field name, with_attrs (gnu_attrs a) @@ ctype t) in
   ctype t
 
-let parse_defs defs =
+let repr sizeof size types =
+  List.find types ~f:(fun t ->
+      sizeof#integer (t :> C.Type.integer) = size)
+
+let is_signed = function
+  | #C.Type.signed -> true
+  | #C.Type.unsigned -> false
+
+
+let parse (size : C.Size.base) parse lexbuf =
   let env = String.Table.create () in
   let tags = String.Table.create () in
   let gamma name = match Hashtbl.find env name with
@@ -154,22 +175,42 @@ let parse_defs defs =
     | None -> what [] in
   let add name t = Hashtbl.set env ~key:name ~data:t in
   let tag name t = Hashtbl.set tags ~key:name ~data:t in
-  let rec parse = function
+  let typedef_int sz t =
+    let bits = Size.in_bits sz in
+    let sign = if is_signed t then "" else "u" in
+    let name = sprintf "%sint%d_t" sign bits in
+    Clexer.add_type name;
+    add name (basic (t :> C.Type.basic)) in
+  List.iter [`r8; `r16; `r32; `r64] ~f:(fun sz ->
+      let def types =
+        Option.iter (repr size sz types) ~f:(typedef_int sz) in
+      def C.Type.all_of_unsigned;
+      def C.Type.all_of_signed);
+  let process = function
     | DECDEF (_,_,[name,t,a,_])
     | FUNDEF ((_,_,(name,t,a,_)),_)
     | TYPEDEF ((_,_,[name,t,a,_]),_)
     | ONLYTYPEDEF (_,_,[name,t,a,_]) ->
-      add name (with_attrs (gnu_attrs a) (ctype gamma lookup t))
+      add name (with_attrs (gnu_attrs a) (ctype gamma {lookup} t))
     | ONLYTYPEDEF (STRUCT (n,_) | UNION (n,_) | ENUM (n,_) as t,_,_) ->
-      tag n (ctype gamma lookup t)
+      tag n (ctype gamma {lookup} t)
     |  _ -> () in
-  List.iter ~f:parse defs;
+  List.iter ~f:process (parse lexbuf);
   Hashtbl.to_alist env
 
-let parser name = match Frontc.parse_file name stderr with
-  | Frontc.PARSING_ERROR ->
-    Or_error.errorf "failed to parse input, see stderr for messages"
-  | Frontc.PARSING_OK defs -> Ok (parse_defs defs)
-
+let parser size name =
+  In_channel.with_file name ~f:(fun input ->
+      let open Clexer in
+      init {
+        !current_handle with
+        h_in_channel = input;
+        h_file_name = name;
+        h_out_channel = stderr;
+      };
+      init_lexicon ();
+      let lexbuf = Lexing.from_function (get_buffer current_handle) in
+      let parser = Cparser.file initial in
+      try Ok (parse size parser lexbuf) with exn ->
+        Or_error.of_exn exn)
 
 let () = C.Parser.provide parser

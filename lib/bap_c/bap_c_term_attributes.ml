@@ -36,24 +36,27 @@ module Type = struct
   let pp_to ppf () = pr ppf "@ ->@ "
   let pp_sc ppf () = pr ppf ";@ "
 
+  let pp_list pp_sep field = pp_print_list ~pp_sep field
+
   let rec pp ppf : t -> unit = function
     | `Void -> pr ppf "void"
     | `Basic spec -> pp_spec pp_cv pp_basic ppf spec
     | `Pointer {Spec.t; qualifier} -> pr ppf "%a %aptr" pp t pp_cvr qualifier
     | `Array {Spec.t=(et,sz);qualifier} ->
       pr ppf "%a %aptr%a" pp et pp_cvr qualifier pp_size sz
-    | `Structure {Spec.t} -> pr ppf "@[<2>{%a}@]" (pp_fields pp_sc) t
-    | `Union {Spec.t} -> pr ppf "@[<2>{%a}@]" (pp_fields pp_or) t
+    | `Structure {Spec.t} -> pr ppf "@[<2>{%a}@]" (pp_list pp_sc pp_field) t
+    | `Union {Spec.t} -> pr ppf "@[<2>{%a}@]" (pp_list pp_or pp_field) t
     | `Function {Spec.t} -> pp_proto ppf t
-  and pp_fields pp_sep = pp_print_list ~pp_sep pp_field
   and pp_field ppf = function
-    | "",t -> pp ppf t
-    | (n,t) -> pr ppf "%s:%a" n pp t
+    | ({Field.tag;name},t) -> pr ppf "%s.%s:%a" tag name pp t
+  and pp_arg ppf = function
+    | "",t -> pr ppf "%a" pp t
+    | n,t -> pr ppf "%s:%a" n pp t
   and pp_proto ppf {Proto.return; args} =
     pr ppf "%a@ ->@ %a" pp_args args pp return
   and pp_args ppf = function
     | [] -> pp ppf `Void
-    | args -> pp_fields pp_to ppf args
+    | args -> (pp_list pp_to pp_arg ppf) args
 end
 
 

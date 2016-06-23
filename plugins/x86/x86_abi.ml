@@ -213,7 +213,7 @@ let setup ?(abi=fun _ -> None) () =
           insert_args = dispatch abi;
           apply_attrs = fun _ -> ident
         } in
-      let api = C.Abi.create_api_processor (Abi.arch :> arch) abi in
+      let api = C.Abi.create_api_processor Abi.size abi in
       Bap_api.process api;
       demangle Abi.demangle (Project.program proj) |>
       Project.with_program proj

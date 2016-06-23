@@ -20,7 +20,7 @@ class base (m : model) = object(self)
     | (`LP32|`ILP32|`LLP64),#long -> `r32
     | (`ILP64|`LP64), #long -> `r64
     | _,#long_long -> `r64
-    | _,`enum x -> self#enum x
+    | _,`enum fields -> self#enum fields
 
   method pointer : addr_size = match m with
     | #model32 -> `r32

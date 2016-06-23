@@ -54,17 +54,16 @@ type t = {
   apply_attrs : attr list -> sub term -> sub term;
 }
 
-(** [create_api_processor arch t] packs processor for the given
-    architecture [arch] into an api processor. The api processor will
-    insert arg terms into each recognized subroutine, propagate some
-    known C attributes into corresponding BIR attributes, annotate
-    each inserted arg term with its corresponding C type and datum
-    model, and annotate each regognized subroutine with its C
-    prototype.
+(** [create_api_processor size t] packs an api processor. The
+    processor will insert arg terms into each recognized subroutine,
+    propagate some known C attributes into corresponding BIR
+    attributes, annotate each inserted arg term with its corresponding
+    C type and datum model, and annotate each regognized subroutine
+    with its C prototype.
 
     The api processor relies on an availability of a front end parser
     for C language.*)
-val create_api_processor : arch -> t -> Bap_api.t
+val create_api_processor : #Bap_c_size.base -> t -> Bap_api.t
 
 
 (** [data size t] creates an abstraction of data that is represented

@@ -93,8 +93,8 @@ let create_arg i addr_size intent name t (data,exp) sub =
   let arg = Term.set_attr arg Attrs.t t in
   arg
 
-let create_api_processor arch abi : Bap_api.t =
-  let addr_size = Arch.addr_size arch in
+let create_api_processor size abi : Bap_api.t =
+  let addr_size = size#pointer in
   let mapper gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
@@ -134,7 +134,7 @@ let create_api_processor arch abi : Bap_api.t =
           match get_api api with
           | None -> fail (`Unknown_interface api)
           | Some file ->
-            match Bap_c_parser.run file with
+            match Bap_c_parser.run (size :> Bap_c_size.base) file with
             | Error e -> fail (`Parser_error (api,e))
             | Ok api ->
               List.iter api ~f:(fun (key,t) ->
