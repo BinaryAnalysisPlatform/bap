@@ -22,13 +22,13 @@ let of_tool tool ~testbin : addr seq Or_error.t future =
   let module EF = Monad.T.Or_error.Make(Future) in
   let rooter = Rooter.Factory.find tool in
   let rooter = Option.value_exn rooter in
+  let rooter_fe = Stream.hd rooter in
   let input = Project.Input.file testbin in
   let _ = match Project.create ~rooter input with
     | Ok x -> x
     | Error e -> Error.raise e in
-  let rooter = Stream.hd rooter in
   let open EF in
-  rooter >>= (fun r ->
+  rooter_fe >>= (fun r ->
       let future, promise = Future.create () in
       Future.upon Plugins.loaded (fun () ->
           let addr_seq = Rooter.roots r in
