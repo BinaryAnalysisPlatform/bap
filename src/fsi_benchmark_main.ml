@@ -29,8 +29,8 @@ let bin : string Term.t =
 let tool : string Term.t =
   let doc = "The tool of the function start result that we are going to
   evaluate. If user wants to evaluate bap-byteweight, one can use
-  \"bap-byteweight\". If user want to evaluate IDA, one can use
-  \"idaq\", \"idal\", \"idaq64\" or the specific path of IDA." in
+  \"byteweight\". If user want to evaluate IDA, one can use
+  \"ida\"." in
   Arg.(required & pos 1 (some string) (Some "bap-byteweight") & info [] ~docv:"tool" ~doc)
 
 let truth : string Term.t =
@@ -78,7 +78,7 @@ let string_of_metric = function
   | `with_FP -> "FP"
 
 let print formatter tool result print_metrics : unit =
-  let tool_name = if tool = "bap-byteweight" then "BW" else "IDA" in
+  let tool_name = if tool = "byteweight" then "BW" else "IDA" in
   fprintf formatter "Tool";
   List.iter print_metrics ~f:(fun m -> fprintf formatter "\t%s"
                                @@ string_of_metric m);
