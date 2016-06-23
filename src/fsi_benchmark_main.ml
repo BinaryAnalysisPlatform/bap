@@ -26,12 +26,15 @@ let bin : string Term.t =
   let doc = "The testing stripped binary." in
   Arg.(required & pos 0 (some non_dir_file) None & info [] ~docv:"binary" ~doc)
 
-let tool : string Term.t =
-  let doc = "The tool of the function start result that we are going to
-  evaluate. If user wants to evaluate bap-byteweight, one can use
-  \"byteweight\". If user want to evaluate IDA, one can use
-  \"ida\"." in
-  Arg.(required & pos 1 (some string) None & info [] ~docv:"tool" ~doc)
+let tool () : string Term.t =
+  match Rooter.Factory.list () |> List.map ~f:(fun x -> x,x) with
+  | [x,_] -> Term.const x
+  | [] -> assert false
+  | names ->
+    let doc = sprintf "The tool of the function start result \
+                       that we are going to evaluate. Possible \
+                       values: %s." @@ Arg.doc_alts_enum names in
+    Arg.(required & pos 1 (some (enum names)) None & info [] ~docv:"tool" ~doc)
 
 let truth : string Term.t =
   let doc =
@@ -78,58 +81,51 @@ let string_of_metric = function
   | `with_FP -> "FP"
 
 let print formatter tool result print_metrics : unit =
-  let tool_name = if tool = "byteweight" then "BW" else "IDA" in
   fprintf formatter "Tool";
   List.iter print_metrics ~f:(fun m -> fprintf formatter "\t%s"
                                @@ string_of_metric m);
-  fprintf formatter "\n%s" tool_name;
+  fprintf formatter "\ntool";
   output_metric_value formatter result print_metrics
 
 let compare_against bin tool_name truth_name print_metrics : unit =
-  let rooters = Rooter.Factory.list () in
-  let valid_tool = List.mem rooters tool_name in
-  if not valid_tool
-  then printf "Error: Cannot use tool %S.\n" tool_name
-  else
-    let module EF = Monad.T.Or_error.Make(Future) in
-    let open EF in
-    (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
-     Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
-     let result =
-       let to_set seq = Seq.fold seq ~init:Addr.Set.empty
-           ~f:Addr.Set.add in
-       let tool = to_set tool in
-       let truth = to_set truth in
-       let false_positive = Set.(length (diff tool truth)) in
-       let false_negative = Set.(length (diff truth tool)) in
-       let true_positive = Set.length truth - false_negative in
-       let ratio x = Float.(of_int true_positive / (of_int true_positive + of_int x)) in
-       let prec = ratio false_positive in
-       let recl = ratio false_negative in
-       let f_05 = 1.5 *. prec *. recl /. (0.5 *. prec +. recl) in
-       {false_positive;false_negative;true_positive;prec;recl;f_05} in
-     print std_formatter tool_name result print_metrics)
-    |> (fun x -> Future.upon x (function
-        | Ok _ -> ()
-        | Error err ->
-          printf "Function start is not recognized properly due to \
-                  the following error:\n %a" Error.pp err))
+  let module EF = Monad.T.Or_error.Make(Future) in
+  let open EF in
+  (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
+   Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
+   let result =
+     let to_set seq = Seq.fold seq ~init:Addr.Set.empty
+         ~f:Addr.Set.add in
+     let tool = to_set tool in
+     let truth = to_set truth in
+     let false_positive = Set.(length (diff tool truth)) in
+     let false_negative = Set.(length (diff truth tool)) in
+     let true_positive = Set.length truth - false_negative in
+     let ratio x = Float.(of_int true_positive / (of_int true_positive + of_int x)) in
+     let prec = ratio false_positive in
+     let recl = ratio false_negative in
+     let f_05 = 1.5 *. prec *. recl /. (0.5 *. prec +. recl) in
+     {false_positive;false_negative;true_positive;prec;recl;f_05} in
+   print std_formatter tool_name result print_metrics)
+  |> (fun x -> Future.upon x (function
+      | Ok _ -> ()
+      | Error err ->
+        printf "Function start is not recognized properly due to \
+                the following error:\n %a" Error.pp err))
 
 
-let compare_against_t = Term.(pure compare_against $bin $tool $truth $print_metrics)
+let compare_against_t () = Term.(pure compare_against $bin $tool () $truth $print_metrics)
 
 let info =
   let doc = "function start identification benchmark game" in
   let man = [
     `S "DESCRIPTION";
     `P "Compares function start identification algorithms to
-        the ground truth. The latter should be provided by a user.
-        Currently two tools are supported: bap-byteweight and ida.";
+        the ground truth. The latter should be provided by a user.";
   ] @ Bap_cmdline_terms.common_loader_options in
   Term.info "bap-fsi-benchmark" ~doc ~man
 
 let () =
   let argv = Bap_plugin_loader.run Sys.argv in
-  match Term.eval ~argv (compare_against_t, info) with
+  match Term.eval ~argv (compare_against_t (), info) with
   | `Error _ -> exit 1
   | _ -> exit 0
