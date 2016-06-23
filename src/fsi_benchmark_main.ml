@@ -31,7 +31,7 @@ let tool : string Term.t =
   evaluate. If user wants to evaluate bap-byteweight, one can use
   \"byteweight\". If user want to evaluate IDA, one can use
   \"ida\"." in
-  Arg.(required & pos 1 (some string) (Some "bap-byteweight") & info [] ~docv:"tool" ~doc)
+  Arg.(required & pos 1 (some string) None & info [] ~docv:"tool" ~doc)
 
 let truth : string Term.t =
   let doc =
