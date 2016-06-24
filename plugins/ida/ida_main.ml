@@ -22,13 +22,24 @@ module type Target = sig
   end
 end
 
+let get_symbols =
+  Command.create
+    `python
+    ~script:"
+from bap.utils.ida import dump_symbol_info
+dump_symbol_info('$output')
+idc.Exit(0)"
+    ~parser:(fun name ->
+        let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
+        In_channel.with_file name ~f:(fun ch ->
+            Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
 
-let extract ida_path is_headless path arch =
+let extract path arch =
   let id =
     Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
   let syms = match Symbols.Cache.load id with
     | Some syms -> syms
-    | None -> match Ida.(with_file ?ida_path ?is_headless path get_symbols) with
+    | None -> match Ida.(with_file path get_symbols) with
       | [] ->
         warning "didn't find any symbols";
         info "this plugin doesn't work with IDA Free";
@@ -41,11 +52,11 @@ let extract ida_path is_headless path arch =
   Seq.of_list
 
 
-let register_source ida_path is_headless (module T : Target) =
+let register_source (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with (fun () ->
-        extract ida_path is_headless file arch |> T.of_blocks) in
+        extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
@@ -92,7 +103,7 @@ let read_image name =
 
 let load_image = Command.create `python
     ~script:loader_script
-    ~process:read_image
+    ~parser:read_image
 
 
 let mapfile path : Bigstring.t =
@@ -102,13 +113,13 @@ let mapfile path : Bigstring.t =
   Unix.close fd;
   data
 
-let loader ida_path is_headless path =
+let loader path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
       (Digest.file path) in
   let (proc,size,sections) = match Img.Cache.load id with
     | Some img -> img
     | None ->
-      let img = Ida.with_file ?ida_path ?is_headless path load_image in
+      let img = Ida.with_file path load_image in
       Img.Cache.save id img;
       img in
   let bits = mapfile path in
@@ -129,9 +140,7 @@ let loader ida_path is_headless path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
-let main ida_path is_headless =
-  let register_source = register_source ida_path is_headless in
-  let loader = loader ida_path is_headless in
+let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
   register_source (module Reconstructor);
@@ -146,9 +155,10 @@ let () =
     ] in
   let path =
     let doc = "Path to IDA directory." in
-    Config.(param (some string) "path" ~default:None ~doc) in
+    Config.(param string "path" ~default:Bap_ida_config.ida_path ~doc) in
   let headless =
     let doc = "Use headless curses based IDA." in
-    Config.(param (some bool) "headless" ~default:None ~doc) in
+    Config.(param bool "headless" ~default:Bap_ida_config.is_headless ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
-      main !path !headless)
+      Bap_ida_service.register !path !headless;
+      main ())
