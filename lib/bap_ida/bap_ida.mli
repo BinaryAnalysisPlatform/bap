@@ -1,10 +1,12 @@
 (** IDA integration.
 
-    This module provides an experimental integration with IDA,
-    just as a proof of concept. It runs IDA in a batch mode, to
-    obtain database, then runs a script on database that extract
-    symbol
+    This module provides for a interface to ingegrate with IDA, by
+    running IDA in batch mode, obtain database, run script on
+    database.
 
+    Plugins can be written to provide this service, or to use the
+    service provided by other plugins (usually provided by
+    plugins/ida) through this interface.
 *)
 module Std : sig
 
@@ -33,20 +35,36 @@ module Std : sig
     (** [close ida] finish interaction with IDA and clean all resources *)
     val close : t -> unit
 
-
     (** [with_file target analysis] creates ida instance on [target],
         perform [analysis] and close [ida] *)
     val with_file : string -> 'a command -> 'a
 
-
-    (** [Ida.exec ida get_symbols] extract symbols from binary *)
-    val get_symbols :  (string * int64 * int64) list command
   end
 
-
+  (** Commands that can be passed into an IDA session *)
   module Command : sig
     type 'a t = 'a command
 
-    val create : [`python | `idc] -> script:string -> process:(string -> 'a) -> 'a t
+    type language = [`python | `idc]
+
+    val create : language -> script:string -> parser:(string -> 'a) -> 'a t
+
+    val language : 'a t -> language
+
+    val script : 'a t -> string
+
+    val parser : 'a t -> (string -> 'a)
+  end
+
+  (** Allow plugins to specify that they can provide IDA service *)
+  module Service : sig
+    type t = {
+      exec  : 'a. 'a command -> 'a;
+      close : unit -> unit;
+    }
+
+    (** [provide creator] provides for a service that can perform the
+        roles of [Ida.create], [Ida.exec], [Ida.close] *)
+    val provide : (string -> t) -> unit
   end
 end
