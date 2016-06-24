@@ -30,3 +30,4 @@ S lib/bap_future
 S lib/bap_plugins
 S lib/bap_bundle
 S lib/bap_config
+S ../core_kernel.113.33.00/src

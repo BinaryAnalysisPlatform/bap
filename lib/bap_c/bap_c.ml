@@ -15,7 +15,14 @@ module Std = struct
     module Attr = Bap_c_attr
     module Data = Bap_c_data
     module Size = Bap_c_size
-    module Type = Bap_c_type
+    module Type = struct
+      include Bap_c_type
+      module Mapper = struct
+        include Bap_c_type_mapper_intf
+        include Bap_c_type_mapper
+      end
+      include Bap_c_type_printer
+    end
     module Parser = Bap_c_parser
     include Bap_c_term_attributes
   end

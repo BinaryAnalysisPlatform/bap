@@ -42,11 +42,16 @@ let size = function
   | CONSTANT CONST_INT s -> Some (Int.of_string s)
   | _ -> None
 
-let array size t = `Array (spec cvr (t,size))
+let array size t : C.Type.t =
+  `Array (spec cvr {C.Type.Array.element=t; size})
 
-let structure fields = `Structure (spec no_qualifier fields)
-let union fields = `Union (spec no_qualifier fields)
-let enum fields = basic (`enum (List.length fields))
+let structure name fields : C.Type.t =
+  `Structure (spec no_qualifier {C.Type.Compound.fields; name})
+
+let union name fields : C.Type.t =
+  `Union (spec no_qualifier {C.Type.Compound.fields; name})
+
+let enum _ fields : C.Type.t = basic (`enum fields)
 let func variadic return args =
   let args = match args with
     | [_,`Void] -> []
@@ -55,9 +60,9 @@ let func variadic return args =
       return; args; variadic
     })
 
-let name_groups s : name_group list -> 'a list =
+let name_groups : name_group list -> 'a list =
   List.concat_map ~f:(fun (_,_,ns) ->
-      List.map ns ~f:(fun (n,t,attrs,_) -> s^"."^n,t,attrs))
+      List.map ns ~f:(fun (n,t,attrs,_) -> n,t,attrs))
 
 let single_names : single_name list -> 'a list =
   List.map ~f:(fun (_,s,(n,t,attrs,_)) -> n,t,attrs)
@@ -114,11 +119,20 @@ let rec qualify f : C.Type.t -> C.Type.t =
   | `Basic t -> `Basic (f.apply t)
   | `Pointer t -> `Pointer (f.apply t)
   | `Structure s -> `Structure C.Type.Spec.{
-      s with t = List.map s.t ~f:(fun (n,t) -> n, qualify f t)
+      s with
+      t = C.Type.Compound.{
+          s.t with
+          fields = List.map s.t.fields ~f:(fun (n,t) -> n, qualify f t)
+        }
     }
   | x -> x
 
-let ctype gamma lookup t =
+
+type tag = {
+  lookup : 'a. (string -> 'a list -> C.Type.t) -> string -> C.Type.t
+}
+
+let ctype gamma {lookup} t =
   let rec ctype : base_type -> C.Type.t = function
     | NO_TYPE | TYPE_LINE _ | OLD_PROTO _ | BITFIELD _ | VOID -> `Void
     | CHAR sign -> basic @@ char sign
@@ -131,19 +145,49 @@ let ctype gamma lookup t =
     | STRUCT (n,[]) -> lookup structure n
     | UNION  (n,[]) -> lookup union n
     | ENUM   (n,[]) -> lookup enum n
-    | STRUCT (n,fs) -> structure @@ fields (name_groups n fs)
-    | UNION (n,fs) -> union @@ fields (name_groups n fs)
+    | STRUCT (n,fs) -> structure n @@ fields (name_groups fs)
+    | UNION (n,fs) -> union n @@ fields (name_groups fs)
     | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
     | NAMED_TYPE name -> gamma name
-    | ENUM (name,fs) -> enum fs
+    | ENUM (name,fs) -> enum name @@ enum_items name fs
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
-  and fields = List.map ~f:(fun (n,t,a) ->
-      n, with_attrs (gnu_attrs a) @@ ctype t) in
+  and enum_items tag =
+    List.map ~f:(fun (name,exp) -> match exp with
+        | CONSTANT (CONST_INT x) ->
+          name, Option.try_with (fun () -> Int64.of_string x)
+        | _ -> name, None)
+  and fields =
+    List.map ~f:(fun (name,t,a) ->
+        name, with_attrs (gnu_attrs a) @@ ctype t) in
   ctype t
 
-let parse_defs defs =
+let repr sizeof size types =
+  List.find types ~f:(fun t ->
+      sizeof#integer (t :> C.Type.integer) = size)
+
+let is_signed = function
+  | #C.Type.signed -> true
+  | #C.Type.unsigned -> false
+
+let resolver lookup = object(self)
+  inherit [unit] C.Type.Mapper.base
+  method map_union = self#resolve
+  method map_structure = self#resolve
+
+  method private resolve t = match t with
+    | {C.Type.Compound.fields=[]} -> self#lookup t
+    | _ -> t
+
+  method private lookup {C.Type.Compound.fields; name} =
+    match lookup name with
+    | Some `Structure {C.Type.Spec.t}
+    | Some `Union {C.Type.Spec.t} -> C.Type.Compound.{t with name}
+    | _ -> {C.Type.Compound.fields; name}
+end
+
+let parse (size : C.Size.base) parse lexbuf =
   let env = String.Table.create () in
   let tags = String.Table.create () in
   let gamma name = match Hashtbl.find env name with
@@ -151,25 +195,47 @@ let parse_defs defs =
     | None -> `Void in
   let lookup what name = match Hashtbl.find tags name with
     | Some t -> t
-    | None -> what [] in
+    | None -> what name [] in
   let add name t = Hashtbl.set env ~key:name ~data:t in
   let tag name t = Hashtbl.set tags ~key:name ~data:t in
-  let rec parse = function
+  let typedef_int sz t =
+    let bits = Size.in_bits sz in
+    let sign = if is_signed t then "" else "u" in
+    let name = sprintf "%sint%d_t" sign bits in
+    Clexer.add_type name;
+    add name (basic (t :> C.Type.basic)) in
+  List.iter [`r8; `r16; `r32; `r64] ~f:(fun sz ->
+      let def types =
+        Option.iter (repr size sz types) ~f:(typedef_int sz) in
+      def C.Type.all_of_unsigned;
+      def C.Type.all_of_signed);
+  let process = function
     | DECDEF (_,_,[name,t,a,_])
     | FUNDEF ((_,_,(name,t,a,_)),_)
     | TYPEDEF ((_,_,[name,t,a,_]),_)
     | ONLYTYPEDEF (_,_,[name,t,a,_]) ->
-      add name (with_attrs (gnu_attrs a) (ctype gamma lookup t))
+      add name (with_attrs (gnu_attrs a) (ctype gamma {lookup} t))
     | ONLYTYPEDEF (STRUCT (n,_) | UNION (n,_) | ENUM (n,_) as t,_,_) ->
-      tag n (ctype gamma lookup t)
+      tag n (ctype gamma {lookup} t)
     |  _ -> () in
-  List.iter ~f:parse defs;
+  List.iter ~f:process (parse lexbuf);
+  let resolve = (resolver (Hashtbl.find tags))#run in
+  Hashtbl.map_inplace env ~f:resolve;
   Hashtbl.to_alist env
 
-let parser name = match Frontc.parse_file name stderr with
-  | Frontc.PARSING_ERROR ->
-    Or_error.errorf "failed to parse input, see stderr for messages"
-  | Frontc.PARSING_OK defs -> Ok (parse_defs defs)
-
+let parser size name =
+  In_channel.with_file name ~f:(fun input ->
+      let open Clexer in
+      init {
+        !current_handle with
+        h_in_channel = input;
+        h_file_name = name;
+        h_out_channel = stderr;
+      };
+      init_lexicon ();
+      let lexbuf = Lexing.from_function (get_buffer current_handle) in
+      let parser = Cparser.file initial in
+      try Ok (parse size parser lexbuf) with exn ->
+        Or_error.of_exn exn)
 
 let () = C.Parser.provide parser

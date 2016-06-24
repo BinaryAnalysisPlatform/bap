@@ -11,23 +11,58 @@
     declarations.
 *)
 open Core_kernel.Std
+open Bap.Std
 
-type bool = [`bool] [@@deriving bin_io,compare,sexp]
-type char = [ `schar | `char | `uchar] [@@deriving bin_io,compare,sexp]
-type short = [`sshort | `ushort] [@@deriving bin_io,compare,sexp]
-type cint = [`uint | `sint] [@@deriving bin_io,compare,sexp]
-type long = [`slong | `ulong] [@@deriving bin_io,compare,sexp]
-type long_long = [`slong_long | `ulong_long] [@@deriving bin_io,compare,sexp]
-type signed   = [`schar | `sshort | `sint | `slong | `slong_long]
+
+type char =
+  [ `schar | `char | `uchar]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type short =
+  [`sshort | `ushort]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type cint =
+  [`uint | `sint]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type long =
+  [`slong | `ulong]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type long_long =
+  [`slong_long | `ulong_long]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type signed =
+  [`schar | `sshort | `sint | `slong | `slong_long]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type unsigned =
+  [`uchar | `ushort | `uint | `ulong | `ulong_long]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type enum =
+  [`enum of (string * int64 option) list]
   [@@deriving bin_io,compare,sexp]
-type unsigned = [`uchar | `ushort | `uint | `ulong | `ulong_long]
+
+type integer =
+  [char | signed | unsigned | enum]
   [@@deriving bin_io,compare,sexp]
-type enum = [`enum of Int.t] [@@deriving bin_io,compare,sexp]
-type integer = [char | signed | unsigned | enum] [@@deriving bin_io,compare,sexp]
-type real = [`float | `double | `long_double] [@@deriving bin_io,compare,sexp]
-type complex = [`cfloat | `cdouble | `clong_double] [@@deriving bin_io,compare,sexp]
-type floating = [real | complex] [@@deriving bin_io,compare,sexp]
-type basic = [integer | floating] [@@deriving bin_io,compare,sexp]
+
+type real =
+  [`float | `double | `long_double]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type complex =
+  [`cfloat | `cdouble | `clong_double]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type floating = [real | complex]
+  [@@deriving bin_io,compare,sexp,enumerate]
+
+type basic = [integer | floating]
+  [@@deriving bin_io,compare,sexp]
 
 
 type cv = unit [@@deriving bin_io,compare,sexp]
@@ -76,15 +111,32 @@ module Proto = struct
   } [@@deriving bin_io, compare, sexp]
 end
 
+module Compound = struct
+  type 'a t = {
+    name : string;
+    fields : (string * 'a) list;
+  } [@@deriving bin_io, compare, sexp]
+end
+
+module Array = struct
+  type 'a t = {
+    element : 'a;
+    size : Int.t option
+  } [@@deriving bin_io, compare, sexp]
+end
+
 type t = [
   | `Void
-  | `Basic of (cv qualifier,basic) spec
-  | `Pointer of (cvr qualifier, t) spec
-  | `Array of (cvr qualifier, (t * Int.t option)) spec
-  | `Structure of (no_qualifier, (string * t) list) spec
-  | `Union of (no_qualifier, (string * t) list) spec
-  | `Function of (no_qualifier, proto) spec
-] and proto = t Proto.t [@@deriving bin_io, compare, sexp]
+  | `Basic     of (cv  qualifier, basic) spec
+  | `Pointer   of (cvr qualifier, t) spec
+  | `Array     of (cvr qualifier, array) spec
+  | `Structure of (no_qualifier,  compound) spec
+  | `Union     of (no_qualifier,  compound) spec
+  | `Function  of (no_qualifier,  proto) spec
+] [@@deriving bin_io, compare, sexp]
+and proto     = t Proto.t [@@deriving bin_io, compare, sexp]
+and compound  = t Compound.t [@@deriving bin_io, compare, sexp]
+and array     = t Array.t [@@deriving bin_io, compare, sexp]
 
 
 type scalar = [
