@@ -22,6 +22,17 @@ module type Target = sig
   end
 end
 
+let get_symbols =
+  Command.create
+    `python
+    ~script:"
+from bap.utils.ida import dump_symbol_info
+dump_symbol_info('$output')
+idc.Exit(0)"
+    ~parser:(fun name ->
+        let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
+        In_channel.with_file name ~f:(fun ch ->
+            Sexp.input_sexps ch |> List.map ~f:blk_of_sexp))
 
 let extract path arch =
   let id =
@@ -92,7 +103,7 @@ let read_image name =
 
 let load_image = Command.create `python
     ~script:loader_script
-    ~process:read_image
+    ~parser:read_image
 
 
 let mapfile path : Bigstring.t =
@@ -129,35 +140,55 @@ let loader path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
+let require req check =
+  if check
+  then Ok ()
+  else Or_error.errorf "IDA configuration failure: %s" req
+
+let checked ida_path is_headless =
+  let (/) = Filename.concat in
+  require "path must exist"
+    (Sys.file_exists ida_path) >>= fun () ->
+  require "path must be a folder"
+    (Sys.is_directory ida_path) >>= fun () ->
+  require "can't use headless on windows"
+    (is_headless ==> not Sys.win32) >>= fun () ->
+  require "idaq exists"
+    (Sys.file_exists (ida_path/"idaq")) >>= fun () ->
+  require "idaq64 exists"
+    (Sys.file_exists (ida_path/"idaq64")) >>= fun () ->
+  require "idal exists"
+    (Sys.file_exists (ida_path/"idal")) >>= fun () ->
+  require "idal64 exists"
+    (Sys.file_exists (ida_path/"idal64")) >>= fun () ->
+  require "bap-ida-python installed"
+    (Sys.file_exists
+       (ida_path/"plugins"/"plugin_loader_bap.py"))  >>| fun () ->
+  ida_path
+
+
 let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
   register_source (module Reconstructor);
   Project.Input.register_loader name loader
 
-module Main = struct
-  open Cmdliner
-  let man = [
-    `S "DESCRIPTION";
-    `P "This plugin provides rooter, symbolizer and reconstuctor services.";
-    `P "If IDA instance is found on the machine, or specified by a
-  user, it will be queried for the specified information."
-
-  ]
-
-
-  let path : string option Term.t =
-    let doc = "Use IDA to extract symbols from file. \
-               You can optionally provide path to IDA executable,\
-               or executable name." in
-    Arg.(value & opt (some string) None & info ["path"] ~doc)
-
-  let info = Term.info name ~version ~doc ~man
-
-  let () =
-    let run = Term.(const main $ const ()) in
-    match Term.eval ~argv ~catch:false (run,info) with
-    | `Ok () -> ()
-    | `Help | `Version -> exit 0
-    | `Error _ -> exit 1
-end
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "This plugin provides rooter, symbolizer and reconstuctor services.";
+      `P "If IDA instance is found on the machine, or specified by a
+        user, it will be queried for the specified information."
+    ] in
+  let path =
+    let doc = "Path to IDA directory." in
+    Config.(param string "path" ~default:Bap_ida_config.ida_path ~doc) in
+  let headless =
+    let doc = "Use headless curses based IDA." in
+    Config.(param bool "headless" ~default:Bap_ida_config.is_headless ~doc) in
+  Config.when_ready (fun {Config.get=(!)} ->
+      match checked !path !headless with
+      | Result.Ok path -> Bap_ida_service.register path !headless; main ()
+      | Result.Error e -> error "%S. Service not registered."
+                            (Error.to_string_hum e)
+    )
