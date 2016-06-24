@@ -140,6 +140,33 @@ let loader path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
+let require req check =
+  if check
+  then Ok ()
+  else Or_error.errorf "IDA configuration failure: %s" req
+
+let checked ida_path is_headless =
+  let (/) = Filename.concat in
+  require "path must exist"
+    (Sys.file_exists ida_path) >>= fun () ->
+  require "path must be a folder"
+    (Sys.is_directory ida_path) >>= fun () ->
+  require "can't use headless on windows"
+    (is_headless ==> not Sys.win32) >>= fun () ->
+  require "idaq exists"
+    (Sys.file_exists (ida_path/"idaq")) >>= fun () ->
+  require "idaq64 exists"
+    (Sys.file_exists (ida_path/"idaq64")) >>= fun () ->
+  require "idal exists"
+    (Sys.file_exists (ida_path/"idal")) >>= fun () ->
+  require "idal64 exists"
+    (Sys.file_exists (ida_path/"idal64")) >>= fun () ->
+  require "bap-ida-python installed"
+    (Sys.file_exists
+       (ida_path/"plugins"/"plugin_loader_bap.py"))  >>| fun () ->
+  ida_path
+
+
 let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
@@ -160,5 +187,8 @@ let () =
     let doc = "Use headless curses based IDA." in
     Config.(param bool "headless" ~default:Bap_ida_config.is_headless ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
-      Bap_ida_service.register !path !headless;
-      main ())
+      match checked !path !headless with
+      | Result.Ok path -> Bap_ida_service.register path !headless; main ()
+      | Result.Error e -> error "%S. Service not registered."
+                            (Error.to_string_hum e)
+    )

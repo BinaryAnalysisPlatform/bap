@@ -116,31 +116,6 @@ let close (self:ida) =
   if self.debug < 2 then
     FileUtil.rm self.trash
 
-let require req check =
-  if check
-  then Ok ()
-  else Or_error.errorf "IDA configuration failure: %s" req
-
-let ida ida_path is_headless =
-  let (/) = Filename.concat in
-  require "path must exist"
-    (Sys.file_exists ida_path) >>= fun () ->
-  require "path must be a folder"
-    (Sys.is_directory ida_path) >>= fun () ->
-  require "can't use headless on windows"
-    (is_headless ==> not Sys.win32) >>= fun () ->
-  require "idaq exists"
-    (Sys.file_exists (ida_path/"idaq")) >>= fun () ->
-  require "idaq64 exists"
-    (Sys.file_exists (ida_path/"idaq64")) >>= fun () ->
-  require "idal exists"
-    (Sys.file_exists (ida_path/"idal")) >>= fun () ->
-  require "idal64 exists"
-    (Sys.file_exists (ida_path/"idal64")) >>| fun () ->
-  if is_headless
-  then ida_path/"idal64"
-  else ida_path/"idaq64"
-
 (* we're looking for libcurses library in loader database, excluding
    64-bit libraries.
 *)
@@ -154,7 +129,11 @@ let find_curses () =
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
 let register ida_path is_headless : unit =
-  let ida = ok_exn (ida ida_path is_headless) in
+  let ida =
+    let (/) = Filename.concat in
+    if is_headless
+    then ida_path/"idal64"
+    else ida_path/"idaq64" in
   let curses = if Sys.os_type = "Unix" && is_headless
     then find_curses () else None in
   let idb = idb ida in
