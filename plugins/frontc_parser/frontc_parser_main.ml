@@ -175,11 +175,16 @@ let resolver lookup = object(self)
   inherit [unit] C.Type.Mapper.base
   method map_union = self#resolve
   method map_structure = self#resolve
-  method private resolve {C.Type.Compound.fields=[]; name} =
+
+  method private resolve t = match t with
+    | {C.Type.Compound.fields=[]} -> self#lookup t
+    | _ -> t
+
+  method private lookup {C.Type.Compound.fields; name} =
     match lookup name with
-    | Some `Structure {C.Type.Spec.t} -> t
-    | Some `Union {C.Type.Spec.t} -> t
-    | _ -> {C.Type.Compound.fields=[]; name}
+    | Some `Structure {C.Type.Spec.t}
+    | Some `Union {C.Type.Spec.t} -> C.Type.Compound.{t with name}
+    | _ -> {C.Type.Compound.fields; name}
 end
 
 let parse (size : C.Size.base) parse lexbuf =
