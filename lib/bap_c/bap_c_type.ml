@@ -13,9 +13,6 @@
 open Core_kernel.Std
 open Bap.Std
 
-type bool =
-  [`bool]
-  [@@deriving bin_io,compare,sexp,enumerate]
 
 type char =
   [ `schar | `char | `uchar]
@@ -45,17 +42,8 @@ type unsigned =
   [`uchar | `ushort | `uint | `ulong | `ulong_long]
   [@@deriving bin_io,compare,sexp,enumerate]
 
-module Field = struct
-  type t = {
-    tag  : string;
-    name : string;
-  } [@@deriving bin_io,compare,sexp,fields]
-end
-
-type field = Field.t [@@deriving bin_io, compare, sexp]
-
 type enum =
-  [`enum of (field * string option) list]
+  [`enum of (string * int64 option) list]
   [@@deriving bin_io,compare,sexp]
 
 type integer =
@@ -123,15 +111,32 @@ module Proto = struct
   } [@@deriving bin_io, compare, sexp]
 end
 
+module Compound = struct
+  type 'a t = {
+    name : string;
+    fields : (string * 'a) list;
+  } [@@deriving bin_io, compare, sexp]
+end
+
+module Array = struct
+  type 'a t = {
+    element : 'a;
+    size : Int.t option
+  } [@@deriving bin_io, compare, sexp]
+end
+
 type t = [
   | `Void
-  | `Basic of (cv qualifier,basic) spec
-  | `Pointer of (cvr qualifier, t) spec
-  | `Array of (cvr qualifier, (t * Int.t option)) spec
-  | `Structure of (no_qualifier, (field * t) list) spec
-  | `Union of (no_qualifier, (field * t) list) spec
-  | `Function of (no_qualifier, proto) spec
-] and proto = t Proto.t [@@deriving bin_io, compare, sexp]
+  | `Basic     of (cv  qualifier, basic) spec
+  | `Pointer   of (cvr qualifier, t) spec
+  | `Array     of (cvr qualifier, array) spec
+  | `Structure of (no_qualifier,  compound) spec
+  | `Union     of (no_qualifier,  compound) spec
+  | `Function  of (no_qualifier,  proto) spec
+] [@@deriving bin_io, compare, sexp]
+and proto     = t Proto.t [@@deriving bin_io, compare, sexp]
+and compound  = t Compound.t [@@deriving bin_io, compare, sexp]
+and array     = t Array.t [@@deriving bin_io, compare, sexp]
 
 
 type scalar = [

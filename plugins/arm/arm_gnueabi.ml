@@ -59,7 +59,7 @@ let abi = C.Abi.{
 let api arch = C.Abi.create_api_processor arch abi
 
 let main proj = match Project.arch proj with
-  | #Arch.arm as arch ->
+  | #Arch.arm ->
     info "using armeabi ABI";
     Bap_api.process (api size);
     proj

@@ -15,5 +15,8 @@ Library bap_c
            Bap_c_data,
            Bap_c_size,
            Bap_c_type,
+           Bap_c_type_mapper,
+           Bap_c_type_mapper_intf,
+           Bap_c_type_printer,
            Bap_c_parser,
            Bap_c_term_attributes

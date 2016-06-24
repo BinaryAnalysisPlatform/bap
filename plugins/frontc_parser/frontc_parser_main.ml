@@ -42,11 +42,16 @@ let size = function
   | CONSTANT CONST_INT s -> Some (Int.of_string s)
   | _ -> None
 
-let array size t = `Array (spec cvr (t,size))
+let array size t : C.Type.t =
+  `Array (spec cvr {C.Type.Array.element=t; size})
 
-let structure fields = `Structure (spec no_qualifier fields)
-let union fields = `Union (spec no_qualifier fields)
-let enum fields : C.Type.t = basic (`enum fields)
+let structure name fields : C.Type.t =
+  `Structure (spec no_qualifier {C.Type.Compound.fields; name})
+
+let union name fields : C.Type.t =
+  `Union (spec no_qualifier {C.Type.Compound.fields; name})
+
+let enum _ fields : C.Type.t = basic (`enum fields)
 let func variadic return args =
   let args = match args with
     | [_,`Void] -> []
@@ -114,16 +119,18 @@ let rec qualify f : C.Type.t -> C.Type.t =
   | `Basic t -> `Basic (f.apply t)
   | `Pointer t -> `Pointer (f.apply t)
   | `Structure s -> `Structure C.Type.Spec.{
-      s with t = List.map s.t ~f:(fun (n,t) -> n, qualify f t)
+      s with
+      t = C.Type.Compound.{
+          s.t with
+          fields = List.map s.t.fields ~f:(fun (n,t) -> n, qualify f t)
+        }
     }
   | x -> x
 
-let field tag name = {C.Type.Field.tag; name}
 
 type tag = {
-  lookup : 'a. ('a list -> C.Type.t) -> string -> C.Type.t
+  lookup : 'a. (string -> 'a list -> C.Type.t) -> string -> C.Type.t
 }
-
 
 let ctype gamma {lookup} t =
   let rec ctype : base_type -> C.Type.t = function
@@ -138,21 +145,22 @@ let ctype gamma {lookup} t =
     | STRUCT (n,[]) -> lookup structure n
     | UNION  (n,[]) -> lookup union n
     | ENUM   (n,[]) -> lookup enum n
-    | STRUCT (n,fs) -> structure @@ fields (field n) (name_groups n fs)
-    | UNION (n,fs) -> union @@ fields (field n) (name_groups n fs)
-    | PROTO (r,args,v) -> func v (ctype r) @@ fields ident (single_names args)
+    | STRUCT (n,fs) -> structure n @@ fields (name_groups n fs)
+    | UNION (n,fs) -> union n @@ fields (name_groups n fs)
+    | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
     | NAMED_TYPE name -> gamma name
-    | ENUM (name,fs) -> enum @@ enum_items name fs
+    | ENUM (name,fs) -> enum name @@ enum_items name fs
     | CONST t -> qualify const @@ ctype t
     | VOLATILE t -> qualify volatile @@ ctype t
     | GNU_TYPE (a,t) -> with_attrs (gnu_attrs a) @@ ctype t
   and enum_items tag =
     List.map ~f:(fun (name,exp) -> match exp with
-        | CONSTANT (CONST_INT x) -> field tag name, Some x
-        | _ -> field tag name, None)
-  and fields : 'a.  (string -> 'a) -> 'b -> ('a * 'c) list = fun field ->
+        | CONSTANT (CONST_INT x) ->
+          name, Option.try_with (fun () -> Int64.of_string x)
+        | _ -> name, None)
+  and fields =
     List.map ~f:(fun (name,t,a) ->
-        field name, with_attrs (gnu_attrs a) @@ ctype t) in
+        name, with_attrs (gnu_attrs a) @@ ctype t) in
   ctype t
 
 let repr sizeof size types =
@@ -163,6 +171,29 @@ let is_signed = function
   | #C.Type.signed -> true
   | #C.Type.unsigned -> false
 
+let resolve {lookup} name t : C.Type.t =
+  let open C.Type in
+  let rec update t = match t with
+    | `Void -> t
+    | `Array ({Spec.t={Array.element; size}} as spec) ->
+      `Array {spec with Spec.t = {Array.element = update element; size}}
+    | `Basic _ -> t
+    | `Function ({Spec.t={Proto.args; return; variadic}} as spec) ->
+      let args = map_fields args and return = update return in
+      `Function {spec with Spec.t = {Proto.args; return; variadic}}
+    | `Pointer ({Spec.t} as spec) ->
+      `Pointer {spec with Spec.t = update t}
+    | `Union ({Spec.t={Compound.fields; name}} as spec) ->
+      let fields = map_fields fields in
+      `Union {spec with Spec.t = {Compound.fields; name}}
+    | `Structure ({Spec.t={Compound.fields; name}} as spec) ->
+      let fields = map_fields fields in
+      `Structure {spec with Spec.t = {Compound.fields; name}}
+
+  and map_fields  = List.map ~f:(fun (n,t) -> n, update t) in
+
+  update t
+
 
 let parse (size : C.Size.base) parse lexbuf =
   let env = String.Table.create () in
@@ -172,7 +203,7 @@ let parse (size : C.Size.base) parse lexbuf =
     | None -> `Void in
   let lookup what name = match Hashtbl.find tags name with
     | Some t -> t
-    | None -> what [] in
+    | None -> what name [] in
   let add name t = Hashtbl.set env ~key:name ~data:t in
   let tag name t = Hashtbl.set tags ~key:name ~data:t in
   let typedef_int sz t =
@@ -196,6 +227,8 @@ let parse (size : C.Size.base) parse lexbuf =
       tag n (ctype gamma {lookup} t)
     |  _ -> () in
   List.iter ~f:process (parse lexbuf);
+  Hashtbl.mapi_inplace env ~f:(fun ~key:name ~data:t ->
+      resolve {lookup} name t);
   Hashtbl.to_alist env
 
 let parser size name =

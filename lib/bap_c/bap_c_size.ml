@@ -65,9 +65,10 @@ class base (m : model) = object(self)
     let byte = `r8 in
     match t with
     | `Void -> byte
-    | `Array {Spec.t=(elt,_)} -> self#alignment elt
-    | `Structure {Spec.t=fs} | `Union {Spec.t=fs} ->
-      List.fold fs ~init:byte ~f:(fun align (_,t) ->
+    | `Array {Spec.t={Array.element}} -> self#alignment element
+    | `Structure {Spec.t={Compound.fields}}
+    | `Union {Spec.t={Compound.fields}} ->
+      List.fold fields ~init:byte ~f:(fun align (_,t) ->
           max align (self#alignment t))
     | `Function _ -> (self#pointer :> size)
     | #scalar as t -> self#scalar t
@@ -81,29 +82,30 @@ class base (m : model) = object(self)
     | `Array s -> self#array s
     | `Structure s -> self#structure s
 
-
   method array : _  -> Int.t option =
-    fun {Spec.t=(t,size)} -> match size with
+    fun {Spec.t={Array.element=t; size}} -> match size with
       | None -> None
       | Some n -> match self#bits t with
         | None -> None
         | Some x -> Some (n * x)
 
-  method union : 'f list unqualified -> Int.t option = fun {Spec.t=fields} ->
-    List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
-    | None -> None
-    | Some ss -> List.max_elt ~cmp:Int.compare ss |> function
+  method union : compound unqualified -> Int.t option =
+    fun {Spec.t={Compound.fields}} ->
+      List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
       | None -> None
-      | Some s -> Some s
-
-  method structure : 'f list unqualified -> Int.t option = fun {Spec.t=fields} ->
-    List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
+      | Some ss -> List.max_elt ~cmp:Int.compare ss |> function
         | None -> None
-        | Some sz -> match self#bits field with
+        | Some s -> Some s
+
+  method structure : compound unqualified -> Int.t option =
+    fun {Spec.t={Compound.fields}} ->
+      List.fold fields ~init:(Some 0) ~f:(fun sz (_,field) -> match sz with
           | None -> None
-          | Some sz' ->
-            let pad = match self#padding field sz with
-              | None -> 0
-              | Some sz -> Size.in_bits sz in
-            Some (sz + sz' + pad))
+          | Some sz -> match self#bits field with
+            | None -> None
+            | Some sz' ->
+              let pad = match self#padding field sz with
+                | None -> 0
+                | Some sz -> Size.in_bits sz in
+              Some (sz + sz' + pad))
 end

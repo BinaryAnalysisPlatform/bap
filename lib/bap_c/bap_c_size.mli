@@ -44,17 +44,17 @@ class base :  model -> object
     (** [array spec] if array [spec] is complete, then returns a
         product of the bitwidth of array size and array's element
         type, otherwise returns [None] *)
-    method array : (cvr qualifier, t * Int.t option) spec -> bits option
+    method array : (cvr qualifier, array) spec -> bits option
 
     (** returns   *)
-    method union : (no_qualifier, (field * t) list) spec -> bits option
-    method structure : (no_qualifier, (field * t) list) spec -> bits option
+    method union : (no_qualifier, compound) spec -> bits option
+    method structure : (no_qualifier, compound) spec -> bits option
 
 
     method integer : integer -> size
     method pointer : addr_size
 
-    method enum : (field * string option) list -> size
+    method enum : (string * int64 option) list -> size
     method real : real -> [`r32 | `r64 | `r128]
     method complex : complex -> size
     method floating : floating -> size

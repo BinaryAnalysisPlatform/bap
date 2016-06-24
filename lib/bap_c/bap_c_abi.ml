@@ -15,16 +15,17 @@ let rec lvalue (t : ctype) = match t with
   | `Void -> true
   | `Basic t -> is_mutable t
   | `Pointer ({Spec.t} as p) -> is_mutable p || lvalue t
-  | `Array ({Spec.t=(t,_)} as p) -> is_mutable p || lvalue t
+  | `Array ({Spec.t={Array.element=t}} as p) -> is_mutable p || lvalue t
   | `Function _ -> false
-  | `Structure {Spec.t=fs} | `Union {Spec.t=fs} ->
-    List.exists fs ~f:(fun (_,t) -> lvalue t)
+  | `Structure {Spec.t={Compound.fields}}
+  | `Union     {Spec.t={Compound.fields}} ->
+    List.exists fields ~f:(fun (_,t) -> lvalue t)
 
 let arg_intent : ctype -> intent = function
   | `Void -> In
   | `Basic _ -> In
   | `Pointer {Spec.t} when lvalue t -> Both
-  | `Array {Spec.t=(e,_)} when lvalue e -> Both
+  | `Array {Spec.t={Array.element=e}} when lvalue e -> Both
   | `Pointer _ | `Array _ -> In
   | `Function _ -> In
   | `Union _
@@ -59,11 +60,11 @@ let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
     | `Void -> Seq []
     | `Basic {Spec.t} -> Imm (size#basic t, Top)
     | `Pointer {Spec.t} -> Ptr (data t)
-    | `Array {Spec.t=(t,None)} -> Ptr (data t)
-    | `Array {Spec.t=(t,Some n)} ->
+    | `Array {Spec.t={Array.element=t; size=None}} -> Ptr (data t)
+    | `Array {Spec.t={Array.element=t; size=Some n}} ->
       let et = data t in
       Ptr (Seq (List.init n ~f:(fun _ -> et)))
-    | `Structure {Spec.t=fs} ->
+    | `Structure {Spec.t={Compound.fields=fs}} ->
       let _,ss =
         List.fold fs ~init:(0,[]) ~f:(fun (off,seq) (_,t) ->
             let off' = match size#bits t with
