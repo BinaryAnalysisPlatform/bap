@@ -30,7 +30,7 @@ let rec pp ppf : t -> unit = function
   | `Basic spec -> pp_spec pp_cv pp_basic ppf spec
   | `Pointer {Spec.t; qualifier} -> pr ppf "%a %aptr" pp t pp_cvr qualifier
   | `Array {Spec.t={Array.element=et; size};qualifier} ->
-    pr ppf "%a %aptr%a" pp et pp_cvr qualifier pp_size size
+    pr ppf "%a %aptr[%a]" pp et pp_cvr qualifier pp_size size
   | `Structure {Spec.t={Compound.fields; name}} ->
     pr ppf "@[<2>%s.{%a}@]" name (pp_list pp_sc pp_field) fields
   | `Union {Spec.t={Compound.fields; name}} ->

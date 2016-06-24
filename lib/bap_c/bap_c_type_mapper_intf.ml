@@ -35,7 +35,7 @@ open Bap_c_type
 module type S = sig
   type ('a,'e) m
 
-  class type ['e] base = object
+  class ['e] base : object
     method run : t -> (t,'e) m
 
     method enter_type : t -> (unit,'e) m

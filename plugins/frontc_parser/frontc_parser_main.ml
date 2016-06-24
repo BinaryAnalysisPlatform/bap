@@ -60,9 +60,9 @@ let func variadic return args =
       return; args; variadic
     })
 
-let name_groups s : name_group list -> 'a list =
+let name_groups : name_group list -> 'a list =
   List.concat_map ~f:(fun (_,_,ns) ->
-      List.map ns ~f:(fun (n,t,attrs,_) -> s^"."^n,t,attrs))
+      List.map ns ~f:(fun (n,t,attrs,_) -> n,t,attrs))
 
 let single_names : single_name list -> 'a list =
   List.map ~f:(fun (_,s,(n,t,attrs,_)) -> n,t,attrs)
@@ -145,8 +145,8 @@ let ctype gamma {lookup} t =
     | STRUCT (n,[]) -> lookup structure n
     | UNION  (n,[]) -> lookup union n
     | ENUM   (n,[]) -> lookup enum n
-    | STRUCT (n,fs) -> structure n @@ fields (name_groups n fs)
-    | UNION (n,fs) -> union n @@ fields (name_groups n fs)
+    | STRUCT (n,fs) -> structure n @@ fields (name_groups fs)
+    | UNION (n,fs) -> union n @@ fields (name_groups fs)
     | PROTO (r,args,v) -> func v (ctype r) @@ fields (single_names args)
     | NAMED_TYPE name -> gamma name
     | ENUM (name,fs) -> enum name @@ enum_items name fs
@@ -171,29 +171,16 @@ let is_signed = function
   | #C.Type.signed -> true
   | #C.Type.unsigned -> false
 
-let resolve {lookup} name t : C.Type.t =
-  let open C.Type in
-  let rec update t = match t with
-    | `Void -> t
-    | `Array ({Spec.t={Array.element; size}} as spec) ->
-      `Array {spec with Spec.t = {Array.element = update element; size}}
-    | `Basic _ -> t
-    | `Function ({Spec.t={Proto.args; return; variadic}} as spec) ->
-      let args = map_fields args and return = update return in
-      `Function {spec with Spec.t = {Proto.args; return; variadic}}
-    | `Pointer ({Spec.t} as spec) ->
-      `Pointer {spec with Spec.t = update t}
-    | `Union ({Spec.t={Compound.fields; name}} as spec) ->
-      let fields = map_fields fields in
-      `Union {spec with Spec.t = {Compound.fields; name}}
-    | `Structure ({Spec.t={Compound.fields; name}} as spec) ->
-      let fields = map_fields fields in
-      `Structure {spec with Spec.t = {Compound.fields; name}}
-
-  and map_fields  = List.map ~f:(fun (n,t) -> n, update t) in
-
-  update t
-
+let resolver lookup = object(self)
+  inherit [unit] C.Type.Mapper.base
+  method map_union = self#resolve
+  method map_structure = self#resolve
+  method private resolve {C.Type.Compound.fields=[]; name} =
+    match lookup name with
+    | Some `Structure {C.Type.Spec.t} -> t
+    | Some `Union {C.Type.Spec.t} -> t
+    | _ -> {C.Type.Compound.fields=[]; name}
+end
 
 let parse (size : C.Size.base) parse lexbuf =
   let env = String.Table.create () in
@@ -227,8 +214,8 @@ let parse (size : C.Size.base) parse lexbuf =
       tag n (ctype gamma {lookup} t)
     |  _ -> () in
   List.iter ~f:process (parse lexbuf);
-  Hashtbl.mapi_inplace env ~f:(fun ~key:name ~data:t ->
-      resolve {lookup} name t);
+  let resolve = (resolver (Hashtbl.find tags))#run in
+  Hashtbl.map_inplace env ~f:resolve;
   Hashtbl.to_alist env
 
 let parser size name =
