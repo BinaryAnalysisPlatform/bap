@@ -72,7 +72,7 @@ module Cmdline = struct
 
   let dump : Uri.t option Config.param =
     let doc = "Dump a trace specified by $(docv)" in
-    Config.(param (some uri) "dump" ~default:None ~docv:"URI" ~doc)
+    Config.(param (some uri) "dump" ~docv:"URI" ~doc)
 
   let load : Uri.t list Config.param =
     let doc = "Load trace from the specified $(docv). The option maybe

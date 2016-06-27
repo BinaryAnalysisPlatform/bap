@@ -127,7 +127,7 @@ let () =
       loaded into IDA. The special `color' tag causes the
       respective address to be colored."
     ] in
-  let dst = Config.(param (some string) "file" ~default:None ~docv:"NAME"
+  let dst = Config.(param (some string) "file" ~docv:"NAME"
                       ~doc:"Dump annotations to the specified file $(docv). If
                             not specified, then the script will dumped into the
                             standard output") in
