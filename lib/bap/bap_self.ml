@@ -75,7 +75,7 @@ module Create() = struct
     type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter = 'a parser * 'a printer
+    type 'a converter = 'a parser * 'a printer * 'a
 
     let main = ref Term.(const ())
 
@@ -108,7 +108,13 @@ module Create() = struct
         Some (Sys.getenv name)
       with Not_found -> None
 
-    let get_param ~(converter:'a converter) ~default ~name =
+    let get_conv : 'a converter -> 'a Arg.converter =
+      fun (parser, printer, _) -> parser, printer
+
+    let default : 'a converter -> 'a =
+      fun (_, _ , default) -> default
+
+    let get_param ~(converter) ~default ~name =
       let value = default in
       let str = get_from_conf_file name in
       let str = match get_from_env name with
@@ -126,8 +132,14 @@ module Create() = struct
         | None -> value in
       value
 
-    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") name =
+    let param converter ?default ?(docv="VAL") ?(doc="Undocumented") name =
       let future, promise = Future.create () in
+      let default =
+        let _, _, converter_default = converter in
+        match default with
+        | Some x -> x
+        | None -> converter_default in
+      let converter = get_conv converter in
       let param = get_param ~converter ~default ~name in
       let t =
         Arg.(value @@ opt converter param @@ info [name] ~doc ~docv) in
@@ -135,9 +147,10 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all converter ?(default=[]) ?(docv="VAL")
+    let param_all (converter:'a converter) ?(default=[]) ?(docv="VAL")
         ?(doc="Uncodumented") name : 'a list param =
       let future, promise = Future.create () in
+      let converter = get_conv converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
         Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
@@ -184,26 +197,40 @@ module Create() = struct
             Stream.unsubscribe Plugins.events subscription
           | _ -> () )
 
+    let converter : 'a Arg.converter -> 'a -> 'a converter =
+      fun (parser, printer) default -> parser, printer, default
 
-    let bool = Arg.bool
-    let char = Arg.char
-    let int = Arg.int
-    let nativeint = Arg.nativeint
-    let int32 = Arg.int32
-    let int64 = Arg.int64
-    let float = Arg.float
-    let string = Arg.string
-    let enum = Arg.enum
-    let file = Arg.file
-    let dir = Arg.dir
-    let non_dir_file = Arg.non_dir_file
-    let list = Arg.list
-    let array = Arg.array
-    let pair = Arg.pair
-    let t2 = Arg.t2
-    let t3 = Arg.t3
-    let t4 = Arg.t4
-    let some = Arg.some
+    let unspecified_default = invalid_arg "default unspecified"
+
+    let bool = converter Arg.bool false
+    let char = converter Arg.char '\x00'
+    let int = converter Arg.int 0
+    let nativeint = converter Arg.nativeint Nativeint.zero
+    let int32 = converter Arg.int32 Int32.zero
+    let int64 = converter Arg.int64 Int64.zero
+    let float = converter Arg.float 0.
+    let string = converter Arg.string ""
+    let enum x = converter (Arg.enum x) unspecified_default
+    let file = converter Arg.file unspecified_default
+    let dir = converter Arg.dir unspecified_default
+    let non_dir_file = converter Arg.non_dir_file unspecified_default
+    let list ?sep x = converter (Arg.list ?sep (get_conv x)) []
+    let array ?sep x = converter (Arg.array ?sep (get_conv x)) (Array.empty ())
+    let pair ?sep x y =
+      converter (Arg.pair ?sep (get_conv x) (get_conv y)) (default x, default y)
+    let t2 = pair
+    let t3 ?sep x y z =
+      let a = get_conv x in
+      let b = get_conv y in
+      let c = get_conv z in
+      converter (Arg.t3 ?sep a b c) (default x, default y, default z)
+    let t4 ?sep w x y z =
+      let a = get_conv w in
+      let b = get_conv x in
+      let c = get_conv y in
+      let d = get_conv z in
+      converter (Arg.t4 ?sep a b c d) (default w, default x, default y, default z)
+    let some ?none x = converter (Arg.some ?none (get_conv x)) None
 
   end
 

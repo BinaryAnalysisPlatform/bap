@@ -621,12 +621,12 @@ module Std : sig
       (** Converts an 'a to a string *)
       type 'a printer = Format.formatter -> 'a -> unit
 
-      (** Interconversion between string and 'a type *)
-      type 'a converter = 'a parser * 'a printer
+      (** Interconversion between string and 'a type, along with a default *)
+      type 'a converter = 'a parser * 'a printer * 'a
 
       (** Create a parameter *)
       val param :
-        'a converter -> default:'a ->
+        'a converter -> ?default:'a ->
         ?docv:string -> ?doc:string -> string -> 'a param
 
       (** Create a parameter which accepts a list at command line by

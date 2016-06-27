@@ -251,7 +251,7 @@ module Cmdline = struct
                            ~default:10 ~docv:"N"
                            ~doc:"Limit loop to $(docv) iterations")
 
-  let interesting = Config.(param (list string) "interesting" ~default:[]
+  let interesting = Config.(param (list string) "interesting"
                               ~doc:"Look only at specified functions")
 
   let deterministic = Config.(flag "deterministic"
@@ -283,7 +283,8 @@ module Cmdline = struct
       | `Fixed n -> fprintf ppf "%Ld" n
       | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
 
-    let t : t Config.converter = parser,printer
+    let t : t Config.converter =
+      parser,printer,invalid_arg "Unspecified default"
   end
 
   let policy key name default : policy Config.param =
@@ -298,7 +299,7 @@ module Cmdline = struct
   let random_seed : int option Config.param =
     let doc =
       "Initialize random number generator with the given seed" in
-    Config.(param (some int) "random-seed" ~default:None ~doc)
+    Config.(param (some int) "random-seed" ~doc)
 
   let create
       max_trace max_loop deterministic
