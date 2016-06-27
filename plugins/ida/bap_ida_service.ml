@@ -1,8 +1,5 @@
-open Core_kernel.Std
-open Bap.Std
+open! Core_kernel.Std
 open Bap_ida.Std
-open Word_size
-open Result.Monad_infix
 
 type ida = {
   ida : string;
@@ -12,12 +9,15 @@ type ida = {
   debug : int;
 } [@@deriving sexp]
 
-type config = {
-  ida : string;
-  curses : string option;
-  idb : string -> string;
-  debug : int;
-}
+module Config = struct
+  type t = {
+    ida : string;
+    curses : string option;
+    idb : string -> string;
+    debug : int;
+  }
+end
+type config = Config.t
 
 type 'a command = 'a Command.t
 
@@ -70,15 +70,11 @@ let run (t:ida) cmd =
   clean ();
   Sys.chdir cwd
 
-let create config target =
+let create {Config.ida; idb; debug; curses} target =
   if not (Sys.file_exists target)
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
   FileUtil.cp [target] exe;
-  let ida = config.ida in
-  let curses = config.curses in
-  let idb = config.idb in
-  let debug = config.debug in
   let self = {
     ida;
     exe;
@@ -141,7 +137,7 @@ let register ida_path is_headless : unit =
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with exn -> 0 in
   let config = {
-    ida;
+    Config.ida;
     curses;
     idb;
     debug
@@ -150,5 +146,5 @@ let register ida_path is_headless : unit =
     let self = create config target in
     let exec cmd = exec self cmd in
     let close () = close self in
-    { exec; close } in
+    Service.{ exec; close } in
   Service.provide create
