@@ -150,5 +150,5 @@ let register ida_path is_headless : unit =
     let self = create config target in
     let exec cmd = exec self cmd in
     let close () = close self in
-    { exec; close } in
+    Service.{ exec; close } in
   Service.provide create
