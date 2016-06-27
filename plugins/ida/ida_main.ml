@@ -153,15 +153,15 @@ let checked ida_path is_headless =
     (Sys.is_directory ida_path) >>= fun () ->
   require "can't use headless on windows"
     (is_headless ==> not Sys.win32) >>= fun () ->
-  require "idaq exists"
+  require "idaq must exist"
     (Sys.file_exists (ida_path/"idaq")) >>= fun () ->
-  require "idaq64 exists"
+  require "idaq64 must exist"
     (Sys.file_exists (ida_path/"idaq64")) >>= fun () ->
-  require "idal exists"
+  require "idal must exist"
     (Sys.file_exists (ida_path/"idal")) >>= fun () ->
-  require "idal64 exists"
+  require "idal64 must exist"
     (Sys.file_exists (ida_path/"idal64")) >>= fun () ->
-  require "bap-ida-python installed"
+  require "bap-ida-python must be installed"
     (Sys.file_exists
        (ida_path/"plugins"/"plugin_loader_bap.py"))  >>| fun () ->
   ida_path
