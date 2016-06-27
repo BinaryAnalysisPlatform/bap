@@ -68,7 +68,7 @@ module Strain = struct
     String.concat ~sep:" " |>
     Format.fprintf ppf "(%s)"
 
-  let t = parser,pp,invalid_arg "Undefined default"
+  let t = parser,pp,[]
 end
 
 

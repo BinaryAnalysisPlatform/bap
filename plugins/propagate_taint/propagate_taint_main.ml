@@ -283,8 +283,8 @@ module Cmdline = struct
       | `Fixed n -> fprintf ppf "%Ld" n
       | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
 
-    let t : t Config.converter =
-      parser,printer,invalid_arg "Unspecified default"
+    let t default : t Config.converter =
+      parser,printer,default
   end
 
   let policy key name default : policy Config.param =
@@ -294,7 +294,7 @@ module Cmdline = struct
       be randomly picked from this interval (boundaries including).
       If set to `random', then values will be picked randomly from a
       domain, defined by a type of value." name in
-    Config.(param Policy.t (sprintf "%s-value" key) ~default ~doc)
+    Config.(param (Policy.t default) (sprintf "%s-value" key) ~doc)
 
   let random_seed : int option Config.param =
     let doc =
