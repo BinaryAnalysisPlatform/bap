@@ -1,8 +1,5 @@
-open Core_kernel.Std
-open Bap.Std
+open! Core_kernel.Std
 open Bap_ida.Std
-open Word_size
-open Result.Monad_infix
 
 type ida = {
   ida : string;
