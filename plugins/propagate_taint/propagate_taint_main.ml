@@ -283,7 +283,8 @@ module Cmdline = struct
       | `Fixed n -> fprintf ppf "%Ld" n
       | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
 
-    let t : t Config.converter = parser,printer
+    let t : t Config.converter =
+      parser,printer,invalid_arg "Unspecified default"
   end
 
   let policy key name default : policy Config.param =

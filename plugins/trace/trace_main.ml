@@ -67,7 +67,8 @@ module Cmdline = struct
     | None -> Uri.with_scheme uri (Some "file")
     | Some _ -> uri
 
-  let uri = (fun s -> `Ok (uri_of_string s)), Uri.pp_hum
+  let uri = (fun s -> `Ok (uri_of_string s)), Uri.pp_hum,
+            invalid_arg "Unspecified default"
 
   let dump : Uri.t option Config.param =
     let doc = "Dump a trace specified by $(docv)" in
