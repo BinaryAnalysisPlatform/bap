@@ -200,8 +200,6 @@ module Create() = struct
     let converter : 'a Arg.converter -> 'a -> 'a converter =
       fun (parser, printer) default -> parser, printer, default
 
-    let unspecified_default = invalid_arg "default unspecified"
-
     let bool = converter Arg.bool false
     let char = converter Arg.char '\x00'
     let int = converter Arg.int 0
@@ -210,10 +208,12 @@ module Create() = struct
     let int64 = converter Arg.int64 Int64.zero
     let float = converter Arg.float 0.
     let string = converter Arg.string ""
-    let enum x = converter (Arg.enum x) unspecified_default
-    let file = converter Arg.file unspecified_default
-    let dir = converter Arg.dir unspecified_default
-    let non_dir_file = converter Arg.non_dir_file unspecified_default
+    let enum x =
+      let _, default = List.hd_exn x in
+      converter (Arg.enum x) default
+    let file = converter Arg.file ""
+    let dir = converter Arg.dir ""
+    let non_dir_file = converter Arg.non_dir_file ""
     let list ?sep x = converter (Arg.list ?sep (get_conv x)) []
     let array ?sep x = converter (Arg.array ?sep (get_conv x)) (Array.empty ())
     let pair ?sep x y =

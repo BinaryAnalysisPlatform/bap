@@ -701,7 +701,7 @@ module Std : sig
       (** [string] converts values with the identity function. *)
       val string : string converter
 
-      (** [enum l p] converts values such that unambiguous prefixes of
+      (** [enum l] converts values such that unambiguous prefixes of
           string names in [l] map to the corresponding value of type ['a].
 
           {b Warning.} The type ['a] must be comparable with
