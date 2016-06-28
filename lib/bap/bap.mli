@@ -624,7 +624,19 @@ module Std : sig
       (** Interconversion between string and 'a type, along with a default *)
       type 'a converter = 'a parser * 'a printer * 'a
 
-      (** Create a parameter *)
+      (** [param conv ~default ~docv ~doc name] creates a parameter
+          which is referred to on the command line, environment
+          variable, and config file using the value of [name], with
+          the type defined by [conv], using the [default] value if
+          unspecified by user.
+
+          The [default] is optional, and falls back to the
+          default defined by [conv].
+
+          [doc] is the man page information of the argument. The
+          variable ["$(docv)"] can be used to refer to the value of
+          [docv]. [docv] is a variable name used in the man page to
+          stand for their value. *)
       val param :
         'a converter -> ?default:'a ->
         ?docv:string -> ?doc:string -> string -> 'a param
