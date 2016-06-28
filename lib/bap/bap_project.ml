@@ -479,13 +479,9 @@ let passes () = DList.to_list passes
 let find_pass = Pass.find
 
 let () =
-  let stream nil f =
-    Stream.either Info.img Info.code |>
-    Stream.map ~f:(function
-        | First img -> Ok (f img)
-        | Second _ -> Ok nil) in
-  let rooter = stream Rooter.empty Rooter.of_image in
-  let symbolizer = stream Symbolizer.empty Symbolizer.of_image in
+  let stream f = Stream.map Info.img ~f:(fun img -> Ok (f img)) in
+  let rooter = stream Rooter.of_image in
+  let symbolizer = stream Symbolizer.of_image in
   Rooter.Factory.register "internal" rooter;
   Symbolizer.Factory.register "internal" symbolizer
 
