@@ -527,6 +527,9 @@ module Std : sig
       access to permission information.  *)
 
 
+  (** Converts an 'a to a string *)
+  type 'a printer = Format.formatter -> 'a -> unit
+
 
   (** {1:api BAP API}  *)
 
@@ -618,15 +621,27 @@ module Std : sig
       (** Parse a string to an 'a *)
       type 'a parser = string -> [ `Ok of 'a | `Error of string ]
 
-      (** Converts an 'a to a string *)
-      type 'a printer = Format.formatter -> 'a -> unit
+      (** Type for converting [string] <-> ['a]. Also defines a default
+          value for the ['a] type. *)
+      type 'a converter
 
-      (** Interconversion between string and 'a type *)
-      type 'a converter = 'a parser * 'a printer
+      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
-      (** Create a parameter *)
+      (** [param conv ~default ~docv ~doc name] creates a parameter
+          which is referred to on the command line, environment
+          variable, and config file using the value of [name], with
+          the type defined by [conv], using the [default] value if
+          unspecified by user.
+
+          The [default] is optional, and falls back to the
+          default defined by [conv].
+
+          [doc] is the man page information of the argument. The
+          variable ["$(docv)"] can be used to refer to the value of
+          [docv]. [docv] is a variable name used in the man page to
+          stand for their value. *)
       val param :
-        'a converter -> default:'a ->
+        'a converter -> ?default:'a ->
         ?docv:string -> ?doc:string -> string -> 'a param
 
       (** Create a parameter which accepts a list at command line by
@@ -701,7 +716,7 @@ module Std : sig
       (** [string] converts values with the identity function. *)
       val string : string converter
 
-      (** [enum l p] converts values such that unambiguous prefixes of
+      (** [enum l] converts values such that unambiguous prefixes of
           string names in [l] map to the corresponding value of type ['a].
 
           {b Warning.} The type ['a] must be comparable with
@@ -761,8 +776,6 @@ module Std : sig
     end
 
   end
-
-  type 'a printer = Format.formatter -> 'a -> unit
 
   (** Signature for integral type.  *)
   module type Integer = sig

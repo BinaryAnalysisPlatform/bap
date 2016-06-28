@@ -251,7 +251,7 @@ module Cmdline = struct
                            ~default:10 ~docv:"N"
                            ~doc:"Limit loop to $(docv) iterations")
 
-  let interesting = Config.(param (list string) "interesting" ~default:[]
+  let interesting = Config.(param (list string) "interesting"
                               ~doc:"Look only at specified functions")
 
   let deterministic = Config.(flag "deterministic"
@@ -283,7 +283,8 @@ module Cmdline = struct
       | `Fixed n -> fprintf ppf "%Ld" n
       | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
 
-    let t : t Config.converter = parser,printer
+    let t default : t Config.converter =
+      Config.converter parser printer default
   end
 
   let policy key name default : policy Config.param =
@@ -293,12 +294,12 @@ module Cmdline = struct
       be randomly picked from this interval (boundaries including).
       If set to `random', then values will be picked randomly from a
       domain, defined by a type of value." name in
-    Config.(param Policy.t (sprintf "%s-value" key) ~default ~doc)
+    Config.(param (Policy.t default) (sprintf "%s-value" key) ~doc)
 
   let random_seed : int option Config.param =
     let doc =
       "Initialize random number generator with the given seed" in
-    Config.(param (some int) "random-seed" ~default:None ~doc)
+    Config.(param (some int) "random-seed" ~doc)
 
   let create
       max_trace max_loop deterministic
