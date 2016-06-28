@@ -40,8 +40,7 @@ let () =
       `P "Read symbol information from a file and provide rooter,
     symbolizer and a reconstructor, based on this information."
     ] in
-  let symsfile = Config.(param (some non_dir_file) "from"
-                           ~default:None ~docv:"SYMS"
+  let symsfile = Config.(param (some non_dir_file) "from" ~docv:"SYMS"
                            ~doc:"Use this file as symbols source") in
   Config.when_ready (fun {Config.get=(!)} ->
       match !symsfile with

@@ -23,10 +23,12 @@ module Create() : sig
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter = 'a parser * 'a printer
+    type 'a converter
+
+    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
     val param :
-      'a converter -> default:'a ->
+      'a converter -> ?default:'a ->
       ?docv:string -> ?doc:string -> string -> 'a param
 
     val param_all :

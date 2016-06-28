@@ -31,7 +31,7 @@ let () =
           `(<symbol name> <symbol start address> <symbol end address>)', e.g.,
           `(malloc 0x11034 0x11038)'"
     ] in
-  let file = Config.(param (some string) "file" ~default:None ~docv:"FILE"
+  let file = Config.(param (some string) "file" ~docv:"FILE"
                        ~doc:"Dump symbols to the specified $(docv)") in
   Config.when_ready (fun {Config.get=(!)} ->
       let main = main !file in
