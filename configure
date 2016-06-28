@@ -25,7 +25,7 @@ for i in "$@"; do
   esac
 done
 
-SECTIONS=`ocaml tools/oasis_sections.ml --sections $@`
+SECTIONS=`ocaml tools/oasis_sections.ml --sections "$@"`
 TAGS=`ocaml tools/collect.ml tags $SECTIONS`
 PLUGINS=`ocaml tools/collect.ml ocamlbuild.ml $SECTIONS`
 SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
@@ -36,7 +36,9 @@ ARGS=`ocaml tools/oasis_sections.ml --args "$@"`
 set --
 while read -r arg; do
     set -- "$@" "$arg"
-done <<< "$ARGS"
+done <<EOF
+    $ARGS
+EOF
 
 ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
 ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
