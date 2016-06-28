@@ -527,6 +527,9 @@ module Std : sig
       access to permission information.  *)
 
 
+  (** Converts an 'a to a string *)
+  type 'a printer = Format.formatter -> 'a -> unit
+
 
   (** {1:api BAP API}  *)
 
@@ -617,9 +620,6 @@ module Std : sig
 
       (** Parse a string to an 'a *)
       type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-
-      (** Converts an 'a to a string *)
-      type 'a printer = Format.formatter -> 'a -> unit
 
       (** Type for converting [string] <-> ['a]. Also defines a default
           value for the ['a] type. *)
@@ -776,8 +776,6 @@ module Std : sig
     end
 
   end
-
-  type 'a printer = Format.formatter -> 'a -> unit
 
   (** Signature for integral type.  *)
   module type Integer = sig
