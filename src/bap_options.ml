@@ -14,7 +14,6 @@ type t = {
   brancher        : string option;
   symbolizers     : string list;
   rooters         : string list;
-  symbols         : string list;
   reconstructor   : string option;
   passes          : string list;
 } [@@deriving sexp, fields]
