@@ -284,7 +284,7 @@ module Cmdline = struct
       | `Interval (n,m) -> fprintf ppf "(%Ld %Ld)" n m
 
     let t default : t Config.converter =
-      parser,printer,default
+      Config.converter parser printer default
   end
 
   let policy key name default : policy Config.param =

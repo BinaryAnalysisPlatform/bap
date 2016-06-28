@@ -68,7 +68,7 @@ module Strain = struct
     String.concat ~sep:" " |>
     Format.fprintf ppf "(%s)"
 
-  let t = parser,pp,[]
+  let t = Config.converter parser pp []
 end
 
 

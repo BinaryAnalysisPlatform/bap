@@ -621,8 +621,11 @@ module Std : sig
       (** Converts an 'a to a string *)
       type 'a printer = Format.formatter -> 'a -> unit
 
-      (** Interconversion between string and 'a type, along with a default *)
-      type 'a converter = 'a parser * 'a printer * 'a
+      (** Type for converting [string] <-> ['a]. Also defines a default
+          value for the ['a] type. *)
+      type 'a converter
+
+      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
       (** [param conv ~default ~docv ~doc name] creates a parameter
           which is referred to on the command line, environment
