@@ -204,6 +204,8 @@ module Create() = struct
             Stream.unsubscribe Plugins.events subscription
           | _ -> () )
 
+    let doc_enum = Arg.doc_alts_enum
+
     let of_arg : 'a Arg.converter -> 'a -> 'a converter =
       fun (parser, printer) default -> converter parser printer default
 

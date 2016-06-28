@@ -62,6 +62,7 @@ module Create() : sig
     val float : float converter
     val string : string converter
     val enum : (string * 'a) list -> 'a converter
+    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
     val file : string converter
     val dir : string converter
     val non_dir_file : string converter

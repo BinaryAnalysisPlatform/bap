@@ -725,6 +725,13 @@ module Std : sig
           @raise Invalid_argument if [l] is empty. *)
       val enum : (string * 'a) list -> 'a converter
 
+      (** [doc_enum l] documents the possible string names in the [l]
+          map according to the number of alternatives. If [quoted] is
+          [true] (default), the tokens are quoted. The resulting
+          string can be used in sentences of the form ["$(docv) must
+          be %s"]. *)
+      val doc_enum : ?quoted:bool -> (string * 'a) list -> string
+
       (** [file] converts a value with the identity function and
           checks with {!Sys.file_exists} that a file with that name exists. *)
       val file : string converter
