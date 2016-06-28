@@ -18,7 +18,7 @@ Library llvm_plugin
                  Llvm_types,
                  Llvm_main
   CCOpt:         $cc_optimization
-  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
+  CCLib:         $llvm_lib $cxxlibs $llvm_ldflags -lpthread -lffi -ltinfo -ldl -lm
   CSources:
                  llvm_disasm.h,
                  llvm_disasm.c,

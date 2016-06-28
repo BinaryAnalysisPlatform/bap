@@ -1,4 +1,6 @@
-#include <llvm/ADT/OwningPtr.h>
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/Triple.h>
+#include <llvm/ADT/Twine.h>
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCContext.h>
 #include <llvm/MC/MCDisassembler.h>
@@ -7,7 +9,6 @@
 #include <llvm/MC/MCRegisterInfo.h>
 #include <llvm/Support/DataTypes.h>
 #include <llvm/Support/FormattedStream.h>
-#include <llvm/Support/MemoryObject.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Target/TargetInstrInfo.h>
@@ -31,39 +32,6 @@ void initialize_llvm() {
 }
 
 using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
-
-class MemoryObject : public llvm::MemoryObject {
-    memory mem;
-public:
-    MemoryObject(memory mem) : mem(mem) {}
-
-    uint64_t getBase() const {
-        return mem.base;
-    }
-
-    uint64_t getExtent() const {
-        return mem.loc.len;
-    }
-
-    int readByte(uint64_t pc, uint8_t *ptr) const {
-        int offset = pc - getBase();
-        if (offset < 0 || offset >= getExtent())
-            return -1;
-        *ptr = mem.data[mem.loc.off + offset];
-        return 0;
-    }
-
-    int readBytes(uint64_t addr, uint64_t size, uint8_t *buf) const {
-        int offset = addr - getBase();
-        if (offset + size > getExtent() || offset < 0)
-            return -1;
-
-        const char *ptr = &mem.data[mem.loc.off + offset];
-        memcpy(buf, ptr, size);
-        return 0;
-    }
-};
-
 
 class llvm_disassembler;
 
@@ -100,14 +68,14 @@ class llvm_disassembler : public disassembler_interface {
     shared_ptr<const llvm::MCInstrInfo>     ins_info;
     shared_ptr<const llvm::MCSubtargetInfo> sub_info;
     shared_ptr<const llvm::MCAsmInfo>       asm_info;
-    shared_ptr<const llvm::MCContext>      ctx;
-    shared_ptr<llvm::MCDisassembler>       dis;
-    shared_ptr<const llvm::MemoryObject>   mem;
-    shared_ptr<llvm::MCInstPrinter>       printer;
+    shared_ptr<const llvm::MCContext>       ctx;
+    shared_ptr<llvm::MCDisassembler>        dis;
+    shared_ptr<llvm::MCInstPrinter>         printer;
     const int debug_level;
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
     insn current;
+    memory mem;
 
 
     llvm_disassembler(int debug_level)
@@ -121,6 +89,8 @@ public:
         // returned value is not allocted
         const llvm::Target *target =
             llvm::TargetRegistry::lookupTarget(triple, error);
+
+        llvm::Triple TheTriple(target->getName());
 
         if (!target) {
             if (debug_level > 0)
@@ -177,7 +147,7 @@ public:
         }
 
 
-        llvm::OwningPtr<llvm::MCRelocationInfo>
+        std::unique_ptr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
 
         if (!rel_info) {
@@ -186,13 +156,13 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        llvm::OwningPtr<llvm::MCSymbolizer>
+        std::unique_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
                            nullptr, // getOpInfo
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
-                           &*ctx, rel_info.take()));
+                           &*ctx, std::move(rel_info))); 
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -200,10 +170,10 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
+        // TODO
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
-                     (asm_info->getAssemblerDialect(),
-                      *asm_info, *ins_info, *reg_info, *sub_info));
+                     (TheTriple, asm_info->getAssemblerDialect(), *asm_info, *ins_info, *reg_info));
 
         if (!printer) {
             if (debug_level > 0)
@@ -214,7 +184,7 @@ public:
         printer->setPrintImmHex(true);
 
         shared_ptr<llvm::MCDisassembler>
-            dis(target->createMCDisassembler(*sub_info));
+            dis(target->createMCDisassembler(*sub_info, *ctx));
 
         if (!dis) {
             if (debug_level > 0)
@@ -222,12 +192,8 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        dis->setSymbolizer(symbolizer);
-        dis->setupForSymbolicDisassembly(
-            nullptr, // getOpInfo
-            nullptr, // SymbolLookUp
-            nullptr, // DisInfo,
-            &*ctx, rel_info);
+        // TODO
+        dis->setSymbolizer(std::move(symbolizer));
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
         self->printer  = printer;
@@ -252,23 +218,31 @@ public:
     }
 
     void set_memory(memory m) {
-        mem.reset(new MemoryObject(m));
+        mem = memory(m);
     }
 
+    // TODO
     void step(int64_t pc) {
         mcinst.clear();
-        uint64_t size = 0;
-        auto status = dis->getInstruction
-            (mcinst, size, *mem, pc,
+        uint64_t size = 0;        
+	    
+        auto status = llvm::MCDisassembler::SoftFail;
+        int off = pc - mem.base;
+        int len = mem.loc.len - off;
+
+	    if (len > 0) {
+	        auto data = llvm::ArrayRef<uint8_t>(&mem.data[mem.loc.off+off], len);
+	       
+	        status = dis->getInstruction
+            (mcinst, size, data, pc,
              (debug_level > 2 ? llvm::errs() : llvm::nulls()),
              llvm::nulls());
+	    }
 
-        int off = (int)(pc - mem->getBase());
-
-        if (off < mem->getExtent() && size == 0) {
+        if (off < mem.loc.len && size == 0) {
             size += 1;
-        }
-
+        } 
+        
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
@@ -277,11 +251,12 @@ public:
             }
             current = valid_insn(loc);
         } else {
-            if (debug_level > 0)
+            if (debug_level > 0) {
                 std::cerr << "failed to decode insn at"
                           << " pc " << pc
                           << " offset " << off
                           << " skipping " << size << " bytes\n";
+            }
             current = invalid_insn(loc);
         }
     }
@@ -294,7 +269,7 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
-            printer->printInst(&mcinst, stream, "");
+            printer->printInst(&mcinst, stream, "", *sub_info); // + *sub_info
             return stream.str();
         } else {
             return "";
@@ -390,17 +365,17 @@ private:
     pred_fun fun_of_pred(bap_disasm_insn_p_type pred) const {
         using namespace llvm;
         switch (pred) {
-        case is_return : return &MCInstrDesc::isReturn;
-        case is_call   : return &MCInstrDesc::isCall;
-        case is_barrier: return &MCInstrDesc::isBarrier;
-        case is_terminator: return &MCInstrDesc::isTerminator;
-        case is_branch: return &MCInstrDesc::isBranch;
-        case is_indirect_branch : return &MCInstrDesc::isIndirectBranch;
-        case is_conditional_branch : return &MCInstrDesc::isConditionalBranch;
-        case is_unconditional_branch : return &MCInstrDesc::isUnconditionalBranch;
-        case may_load : return &MCInstrDesc::mayLoad;
-        case may_store : return &MCInstrDesc::mayStore;
-        default : return nullptr;
+            case is_return : return &MCInstrDesc::isReturn;
+            case is_call   : return &MCInstrDesc::isCall;
+            case is_barrier: return &MCInstrDesc::isBarrier;
+            case is_terminator: return &MCInstrDesc::isTerminator;
+            case is_branch: return &MCInstrDesc::isBranch;
+            case is_indirect_branch : return &MCInstrDesc::isIndirectBranch;
+            case is_conditional_branch : return &MCInstrDesc::isConditionalBranch;
+            case is_unconditional_branch : return &MCInstrDesc::isUnconditionalBranch;
+            case may_load : return &MCInstrDesc::mayLoad;
+            case may_store : return &MCInstrDesc::mayStore;
+            default : return nullptr;
         }
     }
 
@@ -435,6 +410,7 @@ private:
 struct create_llvm_disassembler : disasm_factory {
     result<disassembler_interface>
     create(const char *triple, const char *cpu, int debug_level) {
+        //debug_level = 4;
         auto llvm = llvm_disassembler::create(triple, cpu, debug_level);
         result<disassembler_interface> r;
         r.dis = llvm.dis;
