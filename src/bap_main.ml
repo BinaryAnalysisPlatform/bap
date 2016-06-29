@@ -124,11 +124,6 @@ let main o =
       Project.restore_state proj;
       proj
     | None ->
-      let o = {
-        o with
-        symbolizers = o.symbols @ o.symbolizers;
-        rooters = o.symbols @ o.rooters;
-      } in
       let rooter = rooter o
       and brancher = brancher o
       and reconstructor = reconstructor o
@@ -200,8 +195,8 @@ let program_info =
   Term.info "bap" ~version:Config.version ~doc ~man
 let program source =
   let create
-      a b c d e f g i j k l = Bap_options.Fields.create
-      a b c d e f g i j k l [] in
+      a b c d e f g i j k = Bap_options.Fields.create
+      a b c d e f g i j k [] in
   let open Bap_cmdline_terms in
   Term.(const create
         $filename
@@ -213,7 +208,6 @@ let program source =
         $(brancher ())
         $(symbolizers ())
         $(rooters ())
-        $(symbols ())
         $(reconstructor ())),
   program_info
 
