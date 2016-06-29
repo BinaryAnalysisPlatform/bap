@@ -32,13 +32,15 @@ SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
 AB=`ocaml tools/collect.ml files.ab $SECTIONS`
 
 # Correct for "--disable" type of arguments
-ARGS=`ocaml tools/oasis_sections.ml --args "$@"`
-set --
-while read -r arg; do
-    set -- "$@" "$arg"
-done <<EOF
+if ! $FST; then
+    ARGS=`ocaml tools/oasis_sections.ml --args "$@"`
+    set --
+    while read -r arg; do
+        set -- "$@" "$arg"
+    done <<EOF
     $ARGS
 EOF
+fi
 
 ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
 ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
