@@ -372,6 +372,7 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct image {
+	OwningPtr<object::Binary> binary_;
     virtual uint64_t entry() const = 0;
     virtual Triple::ArchType arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
@@ -447,7 +448,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<T> ptr)//, std::default_delete<object::Binary>> ptr)
+    explicit objectfile_image(std::unique_ptr<T> ptr)
         : arch_(image_arch(*ptr))
         , entry_(image_entry(*ptr))
         , segments_(seg::read(*ptr))
