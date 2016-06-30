@@ -627,6 +627,10 @@ module Std : sig
 
       val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
+      (** Default deprecation warning message, for easy deprecation of
+          parameters. *)
+      val deprecated : string
+
       (** [param conv ~default ~docv ~doc name] creates a parameter
           which is referred to on the command line, environment
           variable, and config file using the value of [name], with
@@ -639,21 +643,29 @@ module Std : sig
           [doc] is the man page information of the argument. The
           variable ["$(docv)"] can be used to refer to the value of
           [docv]. [docv] is a variable name used in the man page to
-          stand for their value. *)
+          stand for their value.
+
+          A user can optionally add [deprecated] to a parameter that
+          is to be deprecated soon. This will cause the parameter to be
+          usable as normal, but will emit a warning to the user if they
+          try to use it.
+          Example usage: [Config.(param ~deprecated int "--old")].
+      *)
       val param :
-        'a converter -> ?default:'a ->
+        'a converter -> ?deprecated:string -> ?default:'a ->
         ?docv:string -> ?doc:string -> string -> 'a param
 
       (** Create a parameter which accepts a list at command line by
           repetition of argument. Similar to [param (list 'a) ...]
           in all other respects. Defaults to an empty list if unspecified. *)
       val param_all :
-        'a converter -> ?default:'a list ->
+        'a converter -> ?deprecated:string -> ?default:'a list ->
         ?docv:string -> ?doc:string -> string -> 'a list param
 
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
       val flag :
+        ?deprecated:string ->
         ?docv:string -> ?doc:string -> string -> bool param
 
       (** Provides a future determined on when the config can be read *)

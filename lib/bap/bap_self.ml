@@ -91,6 +91,8 @@ module Create() = struct
     type 'a converter = 'a Converter.t
     let converter = Converter.t
 
+    let deprecated = "Please refer to --help."
+
     let main = ref Term.(const ())
 
     let conf_file_options : (string, string) List.Assoc.t =
@@ -140,7 +142,22 @@ module Create() = struct
         | None -> value in
       value
 
-    let param converter ?default ?(docv="VAL") ?(doc="Undocumented") name =
+    let warn_if_deprecated name msg =
+      match msg with
+      | Some msg ->
+        eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
+          name plugin_name msg
+      | None -> ()
+
+    let check_deprecated doc deprecated =
+      match deprecated with
+      | Some _ -> "DEPRECATED. " ^ doc
+      | None -> doc
+
+    let param converter ?deprecated ?default ?(docv="VAL")
+        ?(doc="Undocumented") name =
+      let warn_if_deprecated () = warn_if_deprecated name deprecated in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let default =
         match default with
@@ -151,26 +168,33 @@ module Create() = struct
       let t =
         Arg.(value @@ opt converter param @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () ->
+          warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all (converter:'a converter) ?(default=[]) ?(docv="VAL")
+    let param_all (converter:'a converter) ?deprecated ?(default=[]) ?(docv="VAL")
         ?(doc="Uncodumented") name : 'a list param =
+      let warn_if_deprecated () = warn_if_deprecated name deprecated in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
         Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () ->
+          warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?(docv="VAL") ?(doc="Undocumented") name : bool param =
+    let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented") name : bool param =
+      let warn_if_deprecated () = warn_if_deprecated name deprecated in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info [name] ~doc ~docv) in
       main := Term.(const (fun x () ->
+          warn_if_deprecated ();
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
 
