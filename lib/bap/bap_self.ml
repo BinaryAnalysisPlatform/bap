@@ -154,7 +154,7 @@ module Create() = struct
       | Some _ -> "DEPRECATED. " ^ doc
       | None -> doc
 
-    let param converter ?deprecated ?default ?(docv="VAL")
+    let param converter ?deprecated ?default ?as_flag ?(docv="VAL")
         ?(doc="Undocumented") ?(synonyms=[]) name =
       let warn_if_deprecated () = warn_if_deprecated name deprecated in
       let doc = check_deprecated doc deprecated in
@@ -166,21 +166,25 @@ module Create() = struct
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
       let t =
-        Arg.(value @@ opt converter param @@ info (name::synonyms) ~doc ~docv) in
+        Arg.(value
+             @@ opt ?vopt:as_flag converter param
+             @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all (converter:'a converter) ?deprecated ?(default=[]) ?(docv="VAL")
-        ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
+    let param_all (converter:'a converter) ?deprecated ?(default=[]) ?as_flag
+        ?(docv="VAL") ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
       let warn_if_deprecated () = warn_if_deprecated name deprecated in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
-        Arg.(value @@ opt_all converter param @@ info (name::synonyms) ~doc ~docv) in
+        Arg.(value
+             @@ opt_all ?vopt:as_flag converter param
+             @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));

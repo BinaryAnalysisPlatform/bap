@@ -31,14 +31,14 @@ module Create() : sig
 
 
     val param :
-      'a converter -> ?deprecated:string -> ?default:'a ->
+      'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
       ?docv:string -> ?doc:string -> ?synonyms:string list ->
       string -> 'a param
 
     val param_all :
       'a converter -> ?deprecated:string -> ?default:'a list ->
-      ?docv:string -> ?doc:string -> ?synonyms:string list ->
-      string -> 'a list param
+      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->  string -> 'a list param
 
     val flag :
       ?deprecated:string ->

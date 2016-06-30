@@ -655,9 +655,27 @@ module Std : sig
           arguments referring to the same parameters. However, this is
           usually discouraged, and considered proper usage only in rare
           scenarios.
+
+          Also, a developer can use the [~as_flag] to specify a
+          default value that the argument takes if it is used like a
+          flag. This behaviour can be understood better through the
+          following example.
+
+              Consider [Config.(param (some int) ~as_flag:(Some 10) "x")].
+
+              This results in 3 possible command line invocations:
+
+              1. No [--x] - Results in [default] value (specifically
+                            here, [None]).
+
+              2. Only [--x] - This causes it to have the value [as_flag]
+                              (specifically here,[Some 10]).
+
+              3. [--x=20] - This causes it to have the value from the
+                            command line (specifically here, [Some 20]).
       *)
       val param :
-        'a converter -> ?deprecated:string -> ?default:'a ->
+        'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
         ?docv:string -> ?doc:string -> ?synonyms:string list ->
         string -> 'a param
 
@@ -666,8 +684,8 @@ module Std : sig
           in all other respects. Defaults to an empty list if unspecified. *)
       val param_all :
         'a converter -> ?deprecated:string -> ?default:'a list ->
-        ?docv:string -> ?doc:string -> ?synonyms:string list ->
-        string -> 'a list param
+        ?as_flag:'a -> ?docv:string -> ?doc:string ->
+        ?synonyms:string list ->  string -> 'a list param
 
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
