@@ -86,7 +86,7 @@ module Scheme = struct
     | Ok r -> `Ok r
     | Error e -> `Error e
 
-  let arg = parse_arg, (fun ppf _ -> ())
+  let arg = Config.converter parse_arg (fun ppf _ -> ()) ([],[])
 end
 
 class marker (patts : Scheme.t) = object(self)
@@ -110,20 +110,16 @@ let main patts file proj =
   Project.with_program proj
 
 module Cmdline = struct
-  open Cmdliner
 
-  let scheme : Scheme.t Term.t =
+  let scheme : Scheme.t Config.param =
     let doc = "Map terms according the $(docv)" in
-    Arg.(value & opt_all Scheme.arg [] &
-         info ["with"] ~doc ~docv:"PATTERN")
+    Config.(param_all Scheme.arg "with" ~docv:"PATTERN" ~doc)
 
-  let file : string option Term.t =
+  let file : string option Config.param =
     let doc = "Read patterns from the $(docv)" in
-    Arg.(value & opt (some file) None &
-         info ["using"] ~doc ~docv:"FILE")
+    Config.(param (some file) "using" ~docv:"FILE" ~doc)
 
   let bold = List.map ~f:(sprintf "$(b,%s)")
-
 
   let term = ["synthetic"; "live"; "dead"; "visited"]
   let sub = [
@@ -132,7 +128,9 @@ module Cmdline = struct
   ]
   let arg = ["alloc-size"; "restricted"; "nonnull"]
 
-  let enum xs = Arg.doc_alts ~quoted:false (bold xs)
+  let enum (xs:string list) : string =
+    let xs = bold xs |> List.map ~f:(fun s -> s,()) in
+    Config.doc_enum ~quoted:false xs
 
   let attr attrs name desc =
     `I (sprintf "$(b,(%s))" name,
@@ -145,7 +143,6 @@ module Cmdline = struct
     ]
 
   module Predicates = struct
-
 
     let color attr =
       `I (sprintf "$(b,(has-%s COLOR))" attr,
@@ -256,15 +253,9 @@ module Cmdline = struct
     example @
     see_also
 
-  let info  = Term.info ~doc ~man name
-  let start = Term.(const main $scheme $file)
-  let parse () = Term.eval ~argv ~catch:false (start,info)
+  let () =
+    Config.manpage man;
+    Config.when_ready (fun {Config.get=(!)} ->
+        try Project.register_pass (main !scheme !file) with
+        | Parse_error msg -> eprintf "Parsing error: %s\n%!" msg)
 end
-
-let () = match Cmdline.parse () with
-  | `Ok pass -> Project.register_pass pass
-  | `Version | `Help -> exit 0
-  | `Error _ -> exit 1
-  | exception Parse_error msg ->
-    eprintf "Parsing error: %s\n%!" msg;
-    exit 2
