@@ -504,7 +504,8 @@ image* create(const char* data, std::size_t size) {
     OwningPtr<object::Binary> binary;
     if (error_code ec = createBinary(buff, binary))
         llvm_binary_fail(ec);
-    return create_image(std::move(binary));
+	std::unique_ptr<object::Binary> b(std::move(binary));
+    return create_image(binary));
 }
 
 } //namespace img
