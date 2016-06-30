@@ -257,7 +257,6 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct image {
-	std::unique_ptr<object::Binary> binary_;
     virtual uint64_t entry() const = 0;
     virtual Triple::ArchType arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
