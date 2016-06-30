@@ -38,7 +38,7 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
-
+	/*
 template <typename T>
 int distance(content_iterator<T> begin, content_iterator<T> end) {
     std::error_code ec;
@@ -53,27 +53,15 @@ int distance(content_iterator<T> begin, content_iterator<T> end) {
 }
 
 template <typename T>
-int distance(iterator_range<T> range)
-{
-    auto begin = range.begin();
-    auto end = range.end();
-    std::error_code ec;
-    int n = 0;
-    while (begin != end) {   
-        ++n;
-        begin.increment(ec);
-        if (ec)
-            llvm_binary_fail(ec);              
-    }
-    return n;  
+int distance(iterator_range<T> r) {
+	return distance(r.begin(), r.end());
 }
-
-std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile* obj)
-{
+	*/
+	
+std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile* obj) {
     std::vector<MachOObjectFile::LoadCommandInfo> cmds;
     iterator_range<MachOObjectFile::load_command_iterator> info_list = obj->load_commands();
-    for (MachOObjectFile::LoadCommandInfo info : info_list)
-    {
+    for (MachOObjectFile::LoadCommandInfo info : info_list) {
         cmds.push_back(info);
     }
     return cmds;
@@ -184,8 +172,7 @@ std::vector<segment> read(const COFFObjectFile* obj) {
     const pe32_header *pe32;
     if (std::error_code err = obj->getPE32Header(pe32))
         llvm_binary_fail(err);
-    COFFObjectFile::section_iterator_range sections = obj->sections();
-    for (auto it : sections) {
+	for (auto it : obj->sections()) {
         const coff_section *s = obj->getCOFFSection(it);
         uint32_t c = static_cast<uint32_t>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
@@ -204,22 +191,23 @@ using namespace llvm::object;
 
 struct symbol {
     typedef SymbolRef::Type kind_type;
-
-    symbol(const SymbolRef& sym, uint64_t addr, uint64_t size)
+	/*
+	symbol(const SymbolRef& sym, uint64_t addr, uint64_t size)
         : symbol(sym) {
         addr_ = addr;
         size_ = size;
     }
-
+	*/
 	symbol(const SymbolRef& sym, uint64_t size)
 		: symbol(sym) {
 		size_ = size;
+		std::cerr << "Name: " << name_ << " Address: " << addr_ << " Kind: " << kind_ << " Size: " << size_ << "\n";
 	}
-
+	
     explicit symbol(const SymbolRef& sym) {
 		auto name = sym.getName();
-        if (std::error_code ec = name.getError())
-            llvm_binary_fail(ec);
+		if (std::error_code ec = name.getError())
+			llvm_binary_fail(ec);
         this->name_ = name->str();
 
 		auto addr = sym.getAddress();
@@ -228,9 +216,9 @@ struct symbol {
 		this->addr_ = addr.get();
 
 		this->kind_ = sym.getType();
-		this->size_ = sym.getCommonSize();
+		//this->size_ = sym.getCommonSize();
 	}
-
+	
     const std::string& name() const { return name_; }
     kind_type kind() const { return kind_; }
     uint64_t addr() const { return addr_; }
@@ -241,7 +229,7 @@ private:
     uint64_t addr_;
     uint64_t size_;
 };
-
+	/*
 template <typename OutputIterator>
 OutputIterator read(symbol_iterator begin,
                     symbol_iterator end,
@@ -249,27 +237,15 @@ OutputIterator read(symbol_iterator begin,
     return std::transform(begin, end, out,
                           [](const SymbolRef& s) { return symbol(s); });
 }
-
+	*/
 std::vector<symbol> read(const ObjectFile* obj) {
 	std::vector<symbol> symbols;
-	auto symbol_sizes = llvm::object::computeSymbolSizes(*obj);
-
+	auto symbol_sizes = computeSymbolSizes(*obj);
 	for (auto s : symbol_sizes)
 		symbols.push_back(symbol(s.first, s.second));
-	
-	/*
-    int size = std::distance(obj->symbols().begin(),
-							 obj->symbols().end()); 
-    std::vector<symbol> symbols;
-    symbols.reserve(size);
-
-    read(obj->symbols().begin(),
-         obj->symbols().end(),
-         std::back_inserter(symbols));
-	*/
-    return symbols;
+	return symbols;
 }
-
+	/*
 std::vector<symbol> read(const COFFObjectFile * obj) {
   	std::vector<symbol> symbols;
 	auto symbol_sizes = llvm::object::computeSymbolSizes(*obj);
@@ -312,29 +288,13 @@ std::vector<symbol> read(const COFFObjectFile * obj) {
 
 template <typename ELFT>
 std::vector<symbol> read(const ELFObjectFile<ELFT>* obj) {
-    //int size1 = std::distance(obj->symbols().begin(), obj->symbols().end());
-    //int size2 = std::distance(obj->dynamic_symbol_begin(), 
-    //                            obj->dynamic_symbol_end());
-
     std::vector<symbol> symbols;
-    //symbols.reserve(size1+size2);
-
 	auto symbol_sizes = llvm::object::computeSymbolSizes(*obj);
 	for (auto s : symbol_sizes)
 		symbols.push_back(symbol(s.first, s.second));
-	
-	/*
-    auto it = read(obj->symbols().begin(),
-                   obj->symbols().end(),
-                   std::back_inserter(symbols));
-    
-    read(obj->dynamic_symbol_begin(),
-         obj->dynamic_symbol_end(),
-         it);
-	*/
     return symbols;
 }
-
+	*/
 
 } //namespace sym
 
@@ -363,7 +323,7 @@ private:
 };
 
 std::vector<section> read(const ObjectFile* obj) {
-    int size = std::distance(obj->sections().begin(), 
+    auto size = std::distance(obj->sections().begin(), 
                              obj->sections().end());
     std::vector<section> sections;
     sections.reserve(size);
@@ -382,6 +342,7 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct image {
+	std::unique_ptr<object::Binary> binary_;
     virtual uint64_t entry() const = 0;
     virtual Triple::ArchType arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
@@ -457,12 +418,13 @@ uint64_t image_entry(const COFFObjectFile* obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(const T* obj)
+    explicit objectfile_image(const T* obj, std::unique_ptr<object::Binary> binary)
         : arch_(image_arch(obj))
         , entry_(image_entry(obj))
         , segments_(seg::read(obj))
         , symbols_(sym::read(obj))
-        , sections_(sec::read(obj))
+		, sections_(sec::read(obj))
+		, binary_(std::move(binary))	  
         {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
@@ -475,50 +437,52 @@ protected:
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
     std::vector<sec::section> sections_;
+	std::unique_ptr<object::Binary> binary_;
 };
 
 template <typename T>
-image* create_image(const ObjectFile* obj) {
+image* create_image(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
     if (const T* ptr = dyn_cast<T>(obj))
-        return new objectfile_image<T>(ptr);
+        return new objectfile_image<T>(ptr, std::move(binary));
     llvm_binary_fail("Unrecognized object format");
 }
 
-image* create_image_elf(const ObjectFile* obj) {
-    if (const ELF32LEObjectFile *elf = dyn_cast<ELF32LEObjectFile>(obj))
-        return create_image<ELF32LEObjectFile>(elf);
+image* create_image_elf(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
+	if (const ELF32LEObjectFile *elf = dyn_cast<ELF32LEObjectFile>(obj))
+        return create_image<ELF32LEObjectFile>(elf, std::move(binary));
 
     if (const ELF32BEObjectFile *elf = dyn_cast<ELF32BEObjectFile>(obj))
-        return create_image<ELF32BEObjectFile>(elf);
+        return create_image<ELF32BEObjectFile>(elf, std::move(binary));
 
     if (const ELF64LEObjectFile *elf = dyn_cast<ELF64LEObjectFile>(obj))
-        return create_image<ELF64LEObjectFile>(elf);
+        return create_image<ELF64LEObjectFile>(elf, std::move(binary));
 
     if (const ELF64BEObjectFile *elf = dyn_cast<ELF64BEObjectFile>(obj))
-        return create_image<ELF64BEObjectFile>(elf);
+        return create_image<ELF64BEObjectFile>(elf, std::move(binary));
     llvm_binary_fail("Unrecognized ELF format");
 }
 
-image* create_image(const ObjectFile* obj) {
+image* create_image(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
 	if (obj->isCOFF())
-        return create_image<COFFObjectFile>(obj);
-    if (obj->isELF())
-        return create_image_elf(obj);
-    if (obj->isMachO())
-        return create_image<MachOObjectFile>(obj);
-    llvm_binary_fail("Unrecognized object format");
+		return create_image<COFFObjectFile>(obj, std::move(binary));
+	if (obj->isELF())
+		return create_image_elf(obj, std::move(binary));
+	if (obj->isMachO())
+		return create_image<MachOObjectFile>(obj, std::move(binary));
+	llvm_binary_fail("Unrecognized object format");
 }
-
-image* create_image(const Archive* arch) {
+	
+image* create_image(const Archive* arch, std::unique_ptr<object::Binary> binary) {
     llvm_binary_fail("Archive loading unimplemented");
 }
 
-image* create_image(const Binary* binary) {
-    if (const Archive *arch = dyn_cast<Archive>(binary))
-        return create_image(arch);
-    if (const ObjectFile *obj = dyn_cast<ObjectFile>(binary))
-        return create_image(obj);
-    llvm_binary_fail("Unrecognized binary format");
+image* create_image(std::unique_ptr<object::Binary> binary) {
+	const Binary* b = binary.get();
+	if (const Archive *arch = dyn_cast<Archive>(b))
+		return create_image(arch, std::move(binary));
+	if (const ObjectFile *obj = dyn_cast<ObjectFile>(b))
+		create_image(obj, std::move(binary));
+	llvm_binary_fail("Unrecognized binary format");
 }
 
 image* create(const char* data, std::size_t size) {
@@ -527,7 +491,7 @@ image* create(const char* data, std::size_t size) {
     ErrorOr<std::unique_ptr<object::Binary>> binary = createBinary(buf);
     if (std::error_code ec = binary.getError())
         llvm_binary_fail(ec);
-    return create_image(binary->get());
+	return create_image(std::move(*binary));
 }
 
 } //namespace img

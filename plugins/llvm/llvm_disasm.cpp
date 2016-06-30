@@ -170,7 +170,6 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        // TODO
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (TheTriple, asm_info->getAssemblerDialect(), *asm_info, *ins_info, *reg_info));
@@ -221,7 +220,6 @@ public:
         mem = memory(m);
     }
 
-    // TODO
     void step(int64_t pc) {
         mcinst.clear();
         uint64_t size = 0;        
