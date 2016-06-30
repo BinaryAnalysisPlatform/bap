@@ -38,25 +38,6 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
-	/*
-template <typename T>
-int distance(content_iterator<T> begin, content_iterator<T> end) {
-    std::error_code ec;
-    int n = 0;
-    while (begin != end) {
-        ++n;
-        begin.increment(ec);
-        if (ec)
-            llvm_binary_fail(ec);
-    }
-    return n;
-}
-
-template <typename T>
-int distance(iterator_range<T> r) {
-	return distance(r.begin(), r.end());
-}
-	*/
 	
 std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile* obj) {
     std::vector<MachOObjectFile::LoadCommandInfo> cmds;
@@ -191,13 +172,7 @@ using namespace llvm::object;
 
 struct symbol {
     typedef SymbolRef::Type kind_type;
-	/*
-	symbol(const SymbolRef& sym, uint64_t addr, uint64_t size)
-        : symbol(sym) {
-        addr_ = addr;
-        size_ = size;
-    }
-	*/
+
 	symbol(const SymbolRef& sym, uint64_t size)
 		: symbol(sym) {
 		size_ = size;
@@ -216,8 +191,7 @@ struct symbol {
 		this->addr_ = addr.get();
 
 		this->kind_ = sym.getType();
-		//this->size_ = sym.getCommonSize();
-	}
+   	}
 	
     const std::string& name() const { return name_; }
     kind_type kind() const { return kind_; }
@@ -229,15 +203,7 @@ private:
     uint64_t addr_;
     uint64_t size_;
 };
-	/*
-template <typename OutputIterator>
-OutputIterator read(symbol_iterator begin,
-                    symbol_iterator end,
-                    OutputIterator out) {
-    return std::transform(begin, end, out,
-                          [](const SymbolRef& s) { return symbol(s); });
-}
-	*/
+
 std::vector<symbol> read(const ObjectFile* obj) {
 	std::vector<symbol> symbols;
 	auto symbol_sizes = computeSymbolSizes(*obj);
@@ -245,56 +211,6 @@ std::vector<symbol> read(const ObjectFile* obj) {
 		symbols.push_back(symbol(s.first, s.second));
 	return symbols;
 }
-	/*
-std::vector<symbol> read(const COFFObjectFile * obj) {
-  	std::vector<symbol> symbols;
-	auto symbol_sizes = llvm::object::computeSymbolSizes(*obj);
-
-	const pe32_header *pe32;
-	if (std::error_code err = obj->getPE32Header(pe32))
-		llvm_binary_fail(err);
-
-	ObjectFile::symbol_iterator_range symbol_range = obj->symbols();
-	for (auto it : symbol_range) {
-		auto sym = obj->getCOFFSymbol(it);
-
-		//if (!sym) ...
-		
-		const coff_section *sec = nullptr;
-		if (sym.getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED)
-			continue;
-
-		if (std::error_code ec = obj->getSection(sym.getSectionNumber(), sec))
-			llvm_binary_fail(ec);
-
-		if (!sec) continue;
-
-	  	uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym.getValue();
-
-   		for (auto it : symbol_range) {
-	  		auto next = obj->getCOFFSymbol(it);
-   			if (next.getSectionNumber() == sym.getSectionNumber()) {
-   				auto new_size = next.getValue() > sym.getValue() ?
-   					next.getValue() - sym.getValue() : size;
-   				size = new_size < size ? new_size : size;
-   			}
-   		}
-
-		auto addr = sec->VirtualAddress + pe32->ImageBase + sym.getValue();
-		symbols.push_back(symbol(it,addr,size));
-   	}
-	return symbols;
-}
-
-template <typename ELFT>
-std::vector<symbol> read(const ELFObjectFile<ELFT>* obj) {
-    std::vector<symbol> symbols;
-	auto symbol_sizes = llvm::object::computeSymbolSizes(*obj);
-	for (auto s : symbol_sizes)
-		symbols.push_back(symbol(s.first, s.second));
-    return symbols;
-}
-	*/
 
 } //namespace sym
 
