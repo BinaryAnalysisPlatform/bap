@@ -229,7 +229,7 @@ public:
         int len = mem.loc.len - off;
 
 	    if (len > 0) {
-	        auto data = llvm::ArrayRef<uint8_t>(&mem.data[mem.loc.off+off], len);
+	        auto data = llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
 	       
 	        status = dis->getInstruction
             (mcinst, size, data, pc,

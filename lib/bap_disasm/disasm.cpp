@@ -124,7 +124,7 @@ public:
         };
     }
 
-    void set_memory(int64_t addr, const uint8_t *data, int offset, int length) {
+    void set_memory(int64_t addr, const char *data, int offset, int length) {
         this->base = addr;
         this->off  = 0;
         dis->set_memory({data, addr, {offset, length}});
@@ -317,7 +317,7 @@ static inline shared_ptr<disassembler> get(int d) {
 
 
 void bap_disasm_set_memory(int d, int64_t base, const char *data, int off, int len) {
-    get(d)->set_memory(base, (const uint8_t*)data, off, len);
+    get(d)->set_memory(base, data, off, len);
 }
 
 void bap_disasm_store_predicates(int d, int v) {

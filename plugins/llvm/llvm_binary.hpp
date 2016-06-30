@@ -176,7 +176,6 @@ struct symbol {
 	symbol(const SymbolRef& sym, uint64_t size)
 		: symbol(sym) {
 		size_ = size;
-		std::cerr << "Name: " << name_ << " Address: " << addr_ << " Kind: " << kind_ << " Size: " << size_ << "\n";
 	}
 	
     explicit symbol(const SymbolRef& sym) {
