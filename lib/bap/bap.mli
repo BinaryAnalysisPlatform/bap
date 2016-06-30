@@ -650,23 +650,31 @@ module Std : sig
           usable as normal, but will emit a warning to the user if they
           try to use it.
           Example usage: [Config.(param ~deprecated int "--old")].
+
+          Additionally, [synonyms] can be added to allow multiple
+          arguments referring to the same parameters. However, this is
+          usually discouraged, and considered proper usage only in rare
+          scenarios.
       *)
       val param :
         'a converter -> ?deprecated:string -> ?default:'a ->
-        ?docv:string -> ?doc:string -> string -> 'a param
+        ?docv:string -> ?doc:string -> ?synonyms:string list ->
+        string -> 'a param
 
       (** Create a parameter which accepts a list at command line by
           repetition of argument. Similar to [param (list 'a) ...]
           in all other respects. Defaults to an empty list if unspecified. *)
       val param_all :
         'a converter -> ?deprecated:string -> ?default:'a list ->
-        ?docv:string -> ?doc:string -> string -> 'a list param
+        ?docv:string -> ?doc:string -> ?synonyms:string list ->
+        string -> 'a list param
 
       (** Create a boolean parameter that is set to true if user
           mentions it in the command line arguments *)
       val flag :
         ?deprecated:string ->
-        ?docv:string -> ?doc:string -> string -> bool param
+        ?docv:string -> ?doc:string -> ?synonyms:string list ->
+        string -> bool param
 
       (** Provides a future determined on when the config can be read *)
       val determined : 'a param -> 'a future

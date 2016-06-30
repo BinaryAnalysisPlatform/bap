@@ -32,15 +32,18 @@ module Create() : sig
 
     val param :
       'a converter -> ?deprecated:string -> ?default:'a ->
-      ?docv:string -> ?doc:string -> string -> 'a param
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a param
 
     val param_all :
       'a converter -> ?deprecated:string -> ?default:'a list ->
-      ?docv:string -> ?doc:string -> string -> 'a list param
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a list param
 
     val flag :
       ?deprecated:string ->
-      ?docv:string -> ?doc:string -> string -> bool param
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> bool param
 
     val determined : 'a param -> 'a future
 

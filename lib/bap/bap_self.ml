@@ -155,7 +155,7 @@ module Create() = struct
       | None -> doc
 
     let param converter ?deprecated ?default ?(docv="VAL")
-        ?(doc="Undocumented") name =
+        ?(doc="Undocumented") ?(synonyms=[]) name =
       let warn_if_deprecated () = warn_if_deprecated name deprecated in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
@@ -166,33 +166,34 @@ module Create() = struct
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
       let t =
-        Arg.(value @@ opt converter param @@ info [name] ~doc ~docv) in
+        Arg.(value @@ opt converter param @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));
       future
 
     let param_all (converter:'a converter) ?deprecated ?(default=[]) ?(docv="VAL")
-        ?(doc="Uncodumented") name : 'a list param =
+        ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
       let warn_if_deprecated () = warn_if_deprecated name deprecated in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
-        Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
+        Arg.(value @@ opt_all converter param @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           warn_if_deprecated ();
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented") name : bool param =
+    let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented")
+        ?(synonyms=[]) name : bool param =
       let warn_if_deprecated () = warn_if_deprecated name deprecated in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let param = get_param ~converter:Arg.bool ~default:false ~name in
       let t =
-        Arg.(value @@ flag @@ info [name] ~doc ~docv) in
+        Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           warn_if_deprecated ();
           Promise.fulfill promise (param || x)) $ t $ (!main));
