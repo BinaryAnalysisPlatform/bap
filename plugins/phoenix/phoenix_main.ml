@@ -16,14 +16,30 @@ let run options project =
   let dest = Phoenix.store () in
   printf "Stored data to %s@." dest
 
-let label_with x y =
+(* Deprecated since, by design choice, this no longer maintains order
+   of input. However, the [--label-with] will maintain order of
+   input. *)
+let dep_label_with x y =
   let name = sprintf "labels-with-%s" x in
   let doc = sprintf "Put %s on graph labels" y in
-  Config.(flag name ~doc)
+  Config.(flag ~deprecated:"Use --label-with=.. instead." name ~doc)
 
-let with_name = label_with "name" "block name"
-let with_asm  = label_with "asm"  "assembler instructions"
-let with_bil  = label_with "bil"  "bil instructions"
+let with_name = dep_label_with "name" "block name"
+let with_asm  = dep_label_with "asm"  "assembler instructions"
+let with_bil  = dep_label_with "bil"  "bil instructions"
+
+let labels_with : _ Config.param =
+  let doc =
+    "Put block name, assembler instructions, or bil instructions on
+     graph labels using `name', `asm', or `bil' respectively. Can be
+     specified as a list of multiple elements separated by commas." in
+  let possibilities = [
+    "name", `with_name;
+    "asm",  `with_asm;
+    "bil",  `with_bil;
+  ] in
+  Config.(param (list (enum possibilities)) ~default:[`with_name]
+            "labels-with" ~doc)
 
 let output_folder : string Config.param =
   let doc = "Output data into the specified folder" in
@@ -66,13 +82,11 @@ let () =
   Config.manpage man;
   Config.when_ready (fun {Config.get=(!)} ->
       let cfg_format =
-        let self = [] in
+        let self = !labels_with in
         let self = if !with_name then `with_name :: self else self in
         let self = if !with_asm  then `with_asm  :: self else self in
         let self = if !with_bil  then `with_bil  :: self else self in
-        match self with
-        | [] -> [`with_name]
-        | _ as x -> x in
+        self in
       let options = create
           !output_folder
           cfg_format
