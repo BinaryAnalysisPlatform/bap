@@ -27,16 +27,23 @@ module Create() : sig
 
     val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
+    val deprecated : string
+
+
     val param :
-      'a converter -> ?default:'a ->
-      ?docv:string -> ?doc:string -> string -> 'a param
+      'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a param
 
     val param_all :
-      'a converter -> ?default:'a list ->
-      ?docv:string -> ?doc:string -> string -> 'a list param
+      'a converter -> ?deprecated:string -> ?default:'a list ->
+      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->  string -> 'a list param
 
     val flag :
-      ?docv:string -> ?doc:string -> string -> bool param
+      ?deprecated:string ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> bool param
 
     val determined : 'a param -> 'a future
 
