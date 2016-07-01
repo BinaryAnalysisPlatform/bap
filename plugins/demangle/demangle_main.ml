@@ -18,24 +18,17 @@ let main = function
     Project.register_pass ~autorun:true (apply demangler)
 
 
-let () = Future.upon Plugins.loaded (fun () ->
-    let open Cmdliner in
-    let demangler : demangler option Term.t =
-      let demanglers =
-        Demanglers.available () |>
-        List.map ~f:(fun d -> Demangler.name d, d) in
-      let doc = sprintf "Demangle all function names using $(docv),
-        that should be %s" @@
-        Arg.doc_alts_enum demanglers in
-      Arg.(value & opt (some (enum demanglers)) None &
-           info ~doc ~docv:"DEMANGLER" ["with"]) in
-    let man = [
+let () =
+  let () = Config.manpage [
       `S "DESCRIPTION";
       `P "Apply specified demangler to all subroutine names";
     ] in
-    let info = Term.info name ~version ~doc ~man in
-    let args = Term.(const main $demangler),info in
-    match Term.eval ~argv args with
-    | `Ok () -> ()
-    | `Help | `Version -> exit 0
-    | `Error _ -> exit 1)
+  let demangler : demangler option Config.param =
+    let demanglers =
+      Demanglers.available () |>
+      List.map ~f:(fun d -> Demangler.name d, d) in
+    let doc = sprintf "Demangle all function names using $(docv),
+      that should be %s" @@ Config.doc_enum demanglers in
+    Config.(param (some (enum demanglers)) "with" ~docv:"DEMANGLER" ~doc) in
+  Config.when_ready (fun {Config.get=(!)} ->
+      Future.upon Plugins.loaded (fun () -> main !demangler))

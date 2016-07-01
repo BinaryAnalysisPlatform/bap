@@ -68,8 +68,6 @@ let rem_files api =
 
 
 module Cmdline = struct
-  include Cmdliner
-
   let man = [
     `S "DESCRIPTION";
     `P "Automatically apply API bundled in the plugin. "
@@ -82,30 +80,30 @@ module Cmdline = struct
       | _ -> `Error "expected <lang>:<file>"
     let printer ppf t =
       Format.fprintf ppf "%s:%s" t.lang t.file
-    let t = parser,printer
+    let t = Config.converter parser printer {lang="";file=""}
   end
 
-  let add_api : Api.t list Term.t =
+  let add_api : Api.t list Config.param =
     let doc = "Add specified api module(s) and exit. Each module
       should be of the form <lang>:<file>, where <lang> is the
       language in which API is written, and <file> is a path to
       the specification. Multiple modules can be added by specifying
       this option several times." in
-    Arg.(value & opt (list Api.t) [] & info ["add"] ~doc)
+    Config.(param (list Api.t) "add" ~doc)
 
-  let rem_api : Api.t list Term.t =
+  let remove_api : Api.t list Config.param =
     let doc = "Removed specified api module from the bundle and exit. The value
     format is the same, as in the $(b,api-add) option." in
-    Arg.(value & opt (list Api.t) [] & info ["rem"; "remove"] ~doc)
-
+    Config.(param (list Api.t) "remove" ~synonyms:["rem"] ~doc)
 
   let dispatch add rem = match add,rem with
     | [],[] -> Project.register_pass ~autorun:true ~deps:["abi"] main
     | add,rem -> add_files add; rem_files rem; exit 0
 
-  let args =
-    Term.(pure dispatch $add_api $rem_api),
-    Term.info ~doc ~man name
+  let () =
+    Config.manpage man;
+    Config.when_ready (fun {Config.get=(!)} ->
+        dispatch !add_api !remove_api)
 end
 
 
@@ -116,8 +114,3 @@ let add_headers bundle file =
   with
   | Parsing.Parse_error ->
     printf "Could not add header file: parse error."; exit 1
-
-let () = match Cmdliner.Term.eval ~argv Cmdline.args with
-  | `Ok () -> ()
-  | `Error err -> exit 1
-  | `Version | `Help -> exit 0
