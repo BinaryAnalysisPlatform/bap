@@ -1180,7 +1180,7 @@ module Std : sig
                      [@@deriving bin_io, compare, sexp]
 
     type t = all p
-      [@@deriving bin_io, compare, sexp]
+
 
     (** {3 Lifting from int} *)
 
@@ -2216,7 +2216,7 @@ module Std : sig
   end
 
   module Type_error : sig
-    type t [@@deriving bin_io, compare, sexp]
+    type t
 
     val bad_mem : t
     val bad_imm : t
@@ -2996,7 +2996,7 @@ module Std : sig
       | systemz
       | x86
       | xcore
-    ] [@@deriving bin_io, compare, enumerate, sexp]
+    ] [@@deriving enumerate]
 
     (** [of_string s] will try to be clever and to capture all
         commonly known synonyms, e.g., [of_string "i686"] will
@@ -3166,7 +3166,7 @@ module Std : sig
   module Value : sig
 
     (** a universal value  *)
-    type t = value [@@deriving bin_io, compare, sexp]
+    type t = value
 
 
     (** Tag constructor of type ['a]  *)
@@ -3474,12 +3474,33 @@ module Std : sig
 
     class context : ?main : sub term -> program term ->  object('s)
         inherit Expi.context
+
+        (** a static model of a program  *)
         method program : program term
+
+        (** an entry point, aka main function  *)
         method main : sub term option
-        method trace : tid list
-        method enter_term : tid -> 's
+
+        (** [enter_term cls t ] is called every time an interpreter
+            enters a term, i.e., just before the evaluation starts.
+
+            This method sets [curr] to [Term.tid t].
+        *)
+        method enter_term : 't 'p . ('p,'t) cls -> 't term -> 's
+
+        (** is called every time an interpreter is going to leave a
+            term, i.e., just after the evaluation finished (and all
+            side effects occured.   *)
+        method leave_term : 't 'p . ('p,'t) cls -> 't term -> 's
+
+        (** [set_next tid] sets next tid to be executed  *)
         method set_next : tid option -> 's
+
+        (** [next] tid to be executed. If is [None] then evaluation halts.  *)
         method next : tid option
+
+        (** [curr] is the current tid.  *)
+        method curr : tid
       end
 
     (** base class for BIR interpreters  *)
@@ -3988,8 +4009,8 @@ module Std : sig
       -> ?until:mem   (** defaults to the highest mapped area  *)
       -> 'a
 
-    val exists   : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
-    val for_all  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+    val existsi  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+    val for_alli : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
     val exists   : ('a t -> f:(      'a -> bool) -> bool) ranged
     val for_all  : ('a t -> f:(      'a -> bool) -> bool) ranged
 
@@ -4421,7 +4442,7 @@ module Std : sig
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-      [@@deriving bin_io, compare, sexp]
+
     (** Normalized comparison.  *)
     module Normalized : sig
       val compare : t -> t -> int
@@ -4700,7 +4721,7 @@ module Std : sig
 
   (** Assembly instruction.  *)
   module Insn : sig
-    type t = insn [@@deriving bin_io, compare, sexp]
+    type t = insn
 
     (** {3 Creating}
         The following functions will create [insn] instances from a lower
@@ -4780,7 +4801,7 @@ module Std : sig
       doesn't allow to navigate to other blocks.
   *)
   module Block : sig
-    type t = block [@@deriving compare, sexp_of]
+    type t = block
 
     (** [create mem insn] creates a block
         @pre insns is not empty  *)

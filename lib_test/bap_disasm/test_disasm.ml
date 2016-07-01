@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Bap_plugins.Std
 open Bap.Std
 open Result
 open OUnit2
@@ -212,7 +211,7 @@ let strlen = List.concat [
 type dest_kind = [`Jump | `Cond | `Fall ] [@@deriving sexp]
 
 type graph = (int * int list * (int * dest_kind) list) list
-[@@deriving sexp_of]
+  [@@deriving sexp_of]
 
 let graph : graph = [
   1, [],    [3, `Jump];

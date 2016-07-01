@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Bap_common
-open Bap_bil
 open Bap_ir
 open Bap_result
 
@@ -12,19 +11,20 @@ module SM = Bap_monad.State
 open SM.Monad_infix
 
 
-class context ?main p = object
+class context ?main p = object(self : 's)
   inherit Bap_expi.context
-  val trace : tid list = []
   val next : tid option = None
-
+  val curr = Term.tid p
   method main = match main with
     | Some main -> Some main
     | None -> Term.first sub_t p
   method program : program term = p
-  method trace = trace
-  method enter_term t = {< trace = t :: trace >}
+  method enter_term : 't 'p . ('p,'t) cls -> 't term -> 's =
+    fun _ t -> {< curr = Term.tid t >}
+  method leave_term : 't 'p . ('p,'t) cls -> 't term -> 's = fun _ _ -> self
   method set_next t = {< next = t >}
   method next = next
+  method curr = curr
 end
 
 type 'a s =
@@ -34,11 +34,6 @@ type 'a s =
 
 let bad_phi phi =
   Ir_phi.select_or_unknown phi (Tid.create ())
-
-let resolve_phi phi trace =
-  match List.find_map trace ~f:(Ir_phi.select phi) with
-  | None -> bad_phi phi
-  | Some exp -> exp
 
 let eval_args scope sub f : 'a u =
   let open Bap_ir in
@@ -114,8 +109,12 @@ class ['a] t = object(self)
   inherit ['a] Bap_expi.t
 
   method private do_enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun cls t ->
-    update_context (fun c -> c#enter_term (Term.tid t)) >>= fun () ->
+    update_context (fun (c : 'a) -> c#enter_term cls t) >>= fun () ->
     self#enter_term cls t
+
+  method private do_leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun cls t ->
+    update_context (fun (c : 'a) -> c#leave_term cls t) >>= fun () ->
+    self#leave_term cls t
 
   method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a u = fun _ _ ->
     SM.return ()
@@ -174,7 +173,7 @@ class ['a] t = object(self)
   method eval_phi phi : 'a u =
     self#do_enter_term phi_t phi >>= fun () ->
     SM.get () >>= fun c ->
-    self#eval_exp (resolve_phi phi c#trace) >>= fun v ->
+    self#eval_exp (bad_phi phi) >>= fun v ->
     self#update (Ir_phi.lhs phi) v >>= fun () ->
     self#leave_term phi_t phi
 

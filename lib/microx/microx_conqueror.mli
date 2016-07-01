@@ -1,33 +1,49 @@
-open Core_kernel.Std
 open Bap.Std
 
-class context :
-  ?max_steps:int ->
-  ?max_loop:int ->
-  program term -> object('s)
+module Limit : sig
+  class virtual t : object('s)
+    method virtual update : 't 'p. ('p,'t) cls -> 't term -> 's
+    method virtual reached : bool
+  end
+
+  val nothing : t
+  val all : t list -> t
+  val max_trace_length : int -> t
+  val max_loop_length : int -> t
+end
+
+module Crawler : sig
+  class type ['c] t = object('s)
+    method save : tid -> 'c -> 's
+    method visit : tid  -> 's
+    method visited : Tid.Set.t
+    method backtrack : ('s * 'c) option
+  end
+
+  class ['a] exponential : ['a] t
+
+  class ['a] linear : object('s)
+    inherit ['a] t
+    val checkpoints : 'a Tid.Map.t
+    method prune : tid -> 's
+  end
+
+  class ['a] deterministic : ['a] t
+
+end
+
+type limit = Limit.t
+type 's crawler = 's Crawler.t
+
+class context : limit -> 's crawler -> program term -> object('s)
     inherit Biri.context
-
-    method visited : int Tid.Map.t
-
-    method add_checkpoint : tid -> 's
-    method checkpoints : 's Tid.Map.t Tid.Map.t
-    method backtrack : 's option
-    method merge : 's -> 's
-
-    method return : 's
-    method store_return : tid -> 's
-
-    method visit_term : tid -> 's
-    method enter_sub : sub term -> 's
-    method leave_sub : sub term -> 's
-    method enter_blk : blk term -> 's
-    method blk : blk term option
-    method step : 's option
-    method will_loop : tid -> bool
-    method will_return : tid -> bool
+    method limit : limit
+    method with_limit : limit -> 's
+    method crawler : 's crawler
+    method with_crawler : 's crawler -> 's
   end
 
-class ['a] main : ?deterministic:bool -> program term -> object
-    inherit ['a] biri
-    constraint 'a = #context
-  end
+class ['a] main : object
+  inherit ['a] biri
+  constraint 'a = #context
+end
