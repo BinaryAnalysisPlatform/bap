@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Bap.Std
-open Cmdliner
 open Format
 open Bap_future.Std
 
@@ -54,37 +53,23 @@ let main path length threshold =
     Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
   Rooter.Factory.register name rooter
 
-module Cmdline = struct
-
-  let length : int Term.t =
-    let doc = "Maximum prefix length when byteweighting" in
-    Arg.(value & opt int 16 & info ["length"] ~doc)
-
-  let threshold : float Term.t =
-    let doc = "Minimum score for the function start" in
-    Arg.(value & opt float 0.9 & info ["threshold"] ~doc)
-
-  let sigsfile : string option Term.t =
-    let doc = "Path to the signature file. No needed by default, \
-               usually it is enough to run `bap-byteweight update'." in
-    Arg.(value & opt (some non_dir_file) None & info ["sigs"] ~doc)
-
-  let t = Term.(const main $sigsfile $length $threshold)
-end
-
-let man = [
-  `S "DESCRIPTION";
-  `P "This plugin will provide a rooter service. The algorithm is
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "This plugin will provide a rooter service. The algorithm is
       described at [1].";
-  `P "[1]: Bao, Tiffany, et al. \"Byteweight: Learning to recognize
+      `P "[1]: Bao, Tiffany, et al. \"Byteweight: Learning to recognize
     functions in binary code.\" 23rd USENIX Security Symposium (USENIX
     Security 14). 2014."
-]
-
-let info = Term.info name ~version ~doc ~man
-
-let () =
-  match Term.eval ~argv ~catch:false (Cmdline.t,info) with
-  | `Ok () -> ()
-  | `Help | `Version -> exit 0
-  | `Error _ -> exit 1
+    ] in
+  let length : int Config.param =
+    let doc = "Maximum prefix length when byteweighting" in
+    Config.(param int ~default:16 "length" ~doc) in
+  let threshold : float Config.param =
+    let doc = "Minimum score for the function start" in
+    Config.(param float ~default:0.9 "threshold" ~doc) in
+  let sigsfile : string option Config.param =
+    let doc = "Path to the signature file. No needed by default, \
+               usually it is enough to run `bap-byteweight update'." in
+    Config.(param (some non_dir_file) "sigs" ~doc) in
+  Config.when_ready (fun {Config.get=(!)} -> main !sigsfile !length !threshold)
