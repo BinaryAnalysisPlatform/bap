@@ -82,11 +82,13 @@ let () =
   Config.manpage man;
   Config.when_ready (fun {Config.get=(!)} ->
       let cfg_format =
-        let self = !labels_with in
-        let self = if !with_name then `with_name :: self else self in
-        let self = if !with_asm  then `with_asm  :: self else self in
-        let self = if !with_bil  then `with_bil  :: self else self in
-        self in
+        let deprecated_options =
+          [`with_name, !with_name;
+           `with_asm,  !with_asm;
+           `with_bil,  !with_bil] |>
+          List.filter ~f:snd |>
+          List.map ~f:fst in
+        deprecated_options @ !labels_with in
       let options = create
           !output_folder
           cfg_format
