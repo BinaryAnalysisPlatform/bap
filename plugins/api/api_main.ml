@@ -94,11 +94,7 @@ module Cmdline = struct
   let remove_api : Api.t list Config.param =
     let doc = "Removed specified api module from the bundle and exit. The value
     format is the same, as in the $(b,api-add) option." in
-    Config.(param (list Api.t) "remove" ~doc)
-
-  let rem_api : Api.t list Config.param =
-    let doc = "Alias for --remove" in
-    Config.(param (list Api.t) "rem" ~doc)
+    Config.(param (list Api.t) "remove" ~synonyms:["rem"] ~doc)
 
   let dispatch add rem = match add,rem with
     | [],[] -> Project.register_pass ~autorun:true ~deps:["abi"] main
@@ -107,9 +103,7 @@ module Cmdline = struct
   let () =
     Config.manpage man;
     Config.when_ready (fun {Config.get=(!)} ->
-        let add = !add_api in
-        let rem = !rem_api @ !remove_api in
-        dispatch add rem)
+        dispatch !add_api !remove_api)
 end
 
 
