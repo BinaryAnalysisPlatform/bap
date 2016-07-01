@@ -23,18 +23,27 @@ module Create() : sig
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter = 'a parser * 'a printer
+    type 'a converter
+
+    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+
+    val deprecated : string
+
 
     val param :
-      'a converter -> default:'a ->
-      ?docv:string -> ?doc:string -> string -> 'a param
+      'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a param
 
     val param_all :
-      'a converter -> ?default:'a list ->
-      ?docv:string -> ?doc:string -> string -> 'a list param
+      'a converter -> ?deprecated:string -> ?default:'a list ->
+      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->  string -> 'a list param
 
     val flag :
-      ?docv:string -> ?doc:string -> string -> bool param
+      ?deprecated:string ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> bool param
 
     val determined : 'a param -> 'a future
 
@@ -60,6 +69,7 @@ module Create() : sig
     val float : float converter
     val string : string converter
     val enum : (string * 'a) list -> 'a converter
+    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
     val file : string converter
     val dir : string converter
     val non_dir_file : string converter

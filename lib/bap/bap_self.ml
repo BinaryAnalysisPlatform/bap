@@ -75,7 +75,37 @@ module Create() = struct
     type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter = 'a parser * 'a printer
+
+    module Converter = struct
+      type 'a t = {
+        parser : 'a parser;
+        printer : 'a printer;
+        default : 'a;
+      }
+
+      let t parser printer default : 'a t = {parser; printer; default}
+      let to_arg conv : 'a Arg.converter = conv.parser, conv.printer
+      let default conv = conv.default
+
+      let deprecation_wrap ~converter ?deprecated ~name =
+        let warn_if_deprecated () =
+          match deprecated with
+          | Some msg ->
+            eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
+              name plugin_name msg
+          | None -> () in
+        {converter with parser=(fun s -> warn_if_deprecated ();
+                                 converter.parser s)}
+
+      let of_arg (conv:'a Arg.converter) (default:'a) : 'a t =
+        let parser, printer = conv in
+        t parser printer default
+    end
+
+    type 'a converter = 'a Converter.t
+    let converter = Converter.t
+
+    let deprecated = "Please refer to --help."
 
     let main = ref Term.(const ())
 
@@ -108,7 +138,7 @@ module Create() = struct
         Some (Sys.getenv name)
       with Not_found -> None
 
-    let get_param ~(converter:'a converter) ~default ~name =
+    let get_param ~(converter) ~default ~name =
       let value = default in
       let str = get_from_conf_file name in
       let str = match get_from_env name with
@@ -126,30 +156,57 @@ module Create() = struct
         | None -> value in
       value
 
-    let param converter ~default ?(docv="VAL") ?(doc="Undocumented") name =
+    let check_deprecated doc deprecated =
+      match deprecated with
+      | Some _ -> "DEPRECATED. " ^ doc
+      | None -> doc
+
+    let param converter ?deprecated ?default ?as_flag ?(docv="VAL")
+        ?(doc="Undocumented") ?(synonyms=[]) name =
+      let converter = Converter.deprecation_wrap
+          ~converter ?deprecated ~name in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
+      let default =
+        match default with
+        | Some x -> x
+        | None -> Converter.default converter in
+      let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
       let t =
-        Arg.(value @@ opt converter param @@ info [name] ~doc ~docv) in
+        Arg.(value
+             @@ opt ?vopt:as_flag converter param
+             @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all converter ?(default=[]) ?(docv="VAL")
-        ?(doc="Uncodumented") name : 'a list param =
+    let param_all (converter:'a converter) ?deprecated ?(default=[]) ?as_flag
+        ?(docv="VAL") ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
+      let converter = Converter.deprecation_wrap
+          ~converter ?deprecated ~name in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
+      let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
-        Arg.(value @@ opt_all converter param @@ info [name] ~doc ~docv) in
+        Arg.(value
+             @@ opt_all ?vopt:as_flag converter param
+             @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?(docv="VAL") ?(doc="Undocumented") name : bool param =
+    let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented")
+        ?(synonyms=[]) name : bool param =
+      let converter = Converter.deprecation_wrap
+          ~converter:(Converter.of_arg Arg.bool false) ?deprecated ~name in
+      let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
-      let param = get_param ~converter:Arg.bool ~default:false ~name in
+      let converter = Converter.to_arg converter in
+      let param = get_param ~converter ~default:false ~name in
       let t =
-        Arg.(value @@ flag @@ info [name] ~doc ~docv) in
+        Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
@@ -184,26 +241,47 @@ module Create() = struct
             Stream.unsubscribe Plugins.events subscription
           | _ -> () )
 
+    let doc_enum = Arg.doc_alts_enum
 
-    let bool = Arg.bool
-    let char = Arg.char
-    let int = Arg.int
-    let nativeint = Arg.nativeint
-    let int32 = Arg.int32
-    let int64 = Arg.int64
-    let float = Arg.float
-    let string = Arg.string
-    let enum = Arg.enum
-    let file = Arg.file
-    let dir = Arg.dir
-    let non_dir_file = Arg.non_dir_file
-    let list = Arg.list
-    let array = Arg.array
-    let pair = Arg.pair
-    let t2 = Arg.t2
-    let t3 = Arg.t3
-    let t4 = Arg.t4
-    let some = Arg.some
+    let of_arg = Converter.of_arg
+
+    let bool = of_arg Arg.bool false
+    let char = of_arg Arg.char '\x00'
+    let int = of_arg Arg.int 0
+    let nativeint = of_arg Arg.nativeint Nativeint.zero
+    let int32 = of_arg Arg.int32 Int32.zero
+    let int64 = of_arg Arg.int64 Int64.zero
+    let float = of_arg Arg.float 0.
+    let string = of_arg Arg.string ""
+    let enum x =
+      let _, default = List.hd_exn x in
+      of_arg (Arg.enum x) default
+    let file = of_arg Arg.file ""
+    let dir = of_arg Arg.dir ""
+    let non_dir_file = of_arg Arg.non_dir_file ""
+    let list ?sep x = of_arg (Arg.list ?sep (Converter.to_arg x)) []
+    let array ?sep x =
+      let default = Array.empty () in
+      of_arg (Arg.array ?sep (Converter.to_arg x)) default
+    let pair ?sep x y =
+      let default = Converter.(default x, default y) in
+      of_arg Converter.(Arg.pair ?sep (to_arg x) (to_arg y)) default
+    let t2 = pair
+    let t3 ?sep x y z =
+      let a = Converter.to_arg x in
+      let b = Converter.to_arg y in
+      let c = Converter.to_arg z in
+      let default = Converter.(default x, default y, default z) in
+      of_arg (Arg.t3 ?sep a b c) default
+    let t4 ?sep w x y z =
+      let a = Converter.to_arg w in
+      let b = Converter.to_arg x in
+      let c = Converter.to_arg y in
+      let d = Converter.to_arg z in
+      let default = Converter.(default w, default x, default y,
+                               default z) in
+      of_arg (Arg.t4 ?sep a b c d) default
+    let some ?none x = of_arg (Arg.some ?none (Converter.to_arg x)) None
 
   end
 
