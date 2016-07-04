@@ -436,7 +436,7 @@ struct objectfile_image : image {
         , segments_(seg::read(obj))
         , symbols_(sym::read(obj))
         , sections_(sec::read(obj))
-	, binary_(std::move(binary))
+        , binary_(std::move(binary))
         {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
