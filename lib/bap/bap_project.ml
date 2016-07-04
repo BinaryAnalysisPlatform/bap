@@ -2,8 +2,6 @@ open Core_kernel.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
-open Bap_plugins.Std
-open Bap_bundle.Std
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std
@@ -16,11 +14,15 @@ include Bap_self.Create()
 
 let find name = FileUtil.which name
 
-type state = {
-  tids : Tid.Tid_generator.t;
-  name : Tid.Name_resolver.t;
-  vars : Var.Id.t;
-}
+module State = struct
+  type t = {
+    tids : Tid.Tid_generator.t;
+    name : Tid.Name_resolver.t;
+    vars : Var.Id.t;
+  }
+end
+
+type state = State.t
 
 type t = {
   arch    : arch;
@@ -127,11 +129,11 @@ let roots rooter = match rooter with
   | Some r -> Rooter.roots r |> Seq.to_list
 
 
-let fresh_state () = {
-  tids = Tid.Tid_generator.fresh ();
-  name = Tid.Name_resolver.fresh ();
-  vars = Var.Id.fresh ();
-}
+let fresh_state () = State.{
+    tids = Tid.Tid_generator.fresh ();
+    name = Tid.Name_resolver.fresh ();
+    vars = Var.Id.fresh ();
+  }
 
 module MVar = struct
   type 'a t = {
@@ -270,17 +272,13 @@ let create
       create_exn
         ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 
-let restore_state t =
-  Tid.Tid_generator.store t.state.tids;
-  Tid.Name_resolver.store t.state.name
+let restore_state {state={State.tids; name}} =
+  Tid.Tid_generator.store tids;
+  Tid.Name_resolver.store name
 
 let with_memory = Field.fset Fields.memory
 let with_symbols = Field.fset Fields.symbols
 let with_program = Field.fset Fields.program
-
-let tag_memory t tag mem x =
-  with_memory t @@
-  Memmap.add t.memory mem (Value.create tag x)
 
 let with_storage = Field.fset Fields.storage
 
@@ -481,15 +479,7 @@ let passes () = DList.to_list passes
 let find_pass = Pass.find
 
 let () =
-  (* a FSM accepting image,file,image,file,.. sequence *)
-  let stream f =
-    Stream.either Info.img Info.file |>
-    Stream.parse ~init:`start ~f:(fun state info -> match state,info with
-        | _,First img -> Some (Ok (f img)),`ok
-        | `ok,Second file -> None,`start
-        | `start,Second file ->
-          Some (Or_error.errorf "expected structural binary, got raw"),
-          `start) in
+  let stream f = Stream.map Info.img ~f:(fun img -> Ok (f img)) in
   let rooter = stream Rooter.of_image in
   let symbolizer = stream Symbolizer.of_image in
   Rooter.Factory.register "internal" rooter;

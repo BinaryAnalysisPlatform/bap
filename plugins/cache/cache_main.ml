@@ -188,11 +188,11 @@ let () =
       `P "Provide caching service for all data types."
     ] in
   let clean = Config.(flag "clean" ~doc:"Cleanup all caches") in
-  let set_size = Config.(param (some int64) "size" ~default:None ~docv:"N"
+  let set_size = Config.(param (some int64) "size" ~docv:"N"
                            ~doc:"Set maximum total size of cached data to
                                  $(docv) MB. The option value will persist
                                  between different runs of the program") in
-  let dir = Config.(param (some string) "dir" ~default:None ~docv:"DIR"
+  let dir = Config.(param (some string) "dir" ~docv:"DIR"
                       ~doc:"Use $(docv) as a cache directory") in
   let print_info = Config.(flag "info" ~doc:"Print information about the
                                              cache and exit") in
