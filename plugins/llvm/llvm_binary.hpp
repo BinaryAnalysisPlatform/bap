@@ -430,7 +430,7 @@ uint64_t image_entry(const COFFObjectFile* obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(const T* obj)
+    explicit objectfile_image(const T* obj, std::unique_ptr<object::Binary> binary)
         : arch_(image_arch(obj))
         , entry_(image_entry(obj))
         , segments_(seg::read(obj))
@@ -490,9 +490,9 @@ image* create_image(const Archive* arch, std::unique_ptr<object::Binary> binary)
 
 image* create_image(std::unique_ptr<object::Binary> binary) {
     const Binary* b = binary.get();
-    if (const Archive *arch = dyn_cast<Archive>(binary))
+    if (const Archive *arch = dyn_cast<Archive>(b))
         return create_image(arch, std::move(binary));
-    if (const ObjectFile *obj = dyn_cast<ObjectFile>(binary))
+    if (const ObjectFile *obj = dyn_cast<ObjectFile>(b))
         return create_image(obj, std::move(binary));
     llvm_binary_fail("Unrecognized binary format");
 }
