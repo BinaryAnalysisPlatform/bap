@@ -21,17 +21,13 @@ end = struct
   let global = ref Term.(const ())
 
   let plugin_help plugin_name terminfo grammar : unit Term.t =
-    let formats = ["pager", `Pager;
-                   "plain", `Plain;
-                   "groff", `Groff;] in
-    let format_to_str fmt = List.Assoc.find (
-        List.map ~f:(fun (a,b) -> (b,a)) formats) fmt in
+    let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
     let name = plugin_name ^ "-help" in
     let doc = "Show help for " ^
               plugin_name ^
               " plugin in format $(docv), (pager, plain or groff)" in
     let help = Arg.(value @@
-                    opt ~vopt:(Some `Pager) (some (enum formats)) None @@
+                    opt ~vopt:(Some "pager") (some (enum formats)) None @@
                     info [name] ~doc ~docv:"FMT") in
     Term.(const (fun h () ->
         match h with
@@ -39,7 +35,7 @@ end = struct
         | Some v ->
           match eval ~argv:[|plugin_name;
                              "--help";
-                             Option.value_exn (format_to_str v)
+                             v
                            |] (grammar, terminfo) with
           | `Error _ -> exit 1
           | `Ok _ -> assert false
