@@ -315,18 +315,10 @@ module Create() = struct
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      let evaluate_cmdline_args () =
-        match Term.eval ~argv (!main, !term_info) with
-        | `Error _ -> exit 1
-        | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
-        | `Version | `Help -> exit 0 in
-      Stream.watch Plugins.events (fun subscription -> function
-          | `Errored (name,_) when plugin_name = name ->
-            Stream.unsubscribe Plugins.events subscription
-          | `Loaded p when Plugin.name p = plugin_name ->
-            evaluate_cmdline_args ();
-            Stream.unsubscribe Plugins.events subscription
-          | _ -> () )
+      CmdlineGrammar.(
+        add (plugin_help plugin_name !term_info !main);
+        when_ready (fun () ->
+            f {get = (fun p -> Future.peek_exn p)}))
 
     let doc_enum = Arg.doc_alts_enum
 
