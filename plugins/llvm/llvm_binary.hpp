@@ -332,14 +332,14 @@ uint64_t image_entry(const COFFObjectFile* obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(const T* obj, std::unique_ptr<object::Binary> binary)
-        : arch_(image_arch(obj))
-        , entry_(image_entry(obj))
-        , segments_(seg::read(obj))
-        , symbols_(sym::read(obj))
-	, sections_(sec::read(obj))
-	, binary_(std::move(binary))	  
-        {}
+    explicit objectfile_image(std::unique_ptr<object::Binary> binary)
+	: arch_(image_arch(dyn_cast<T>(binary.get())))
+	, entry_(image_entry(dyn_cast<T>(binary.get())))
+	, segments_(seg::read(dyn_cast<T>(binary.get())))
+	, symbols_(sym::read(dyn_cast<T>(binary.get())))
+	, sections_(sec::read(dyn_cast<T>(binary.get())))
+	, binary_(std::move(binary))
+    {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
     const std::vector<seg::segment>& segments() const { return segments_; }
@@ -356,8 +356,8 @@ protected:
 
 template <typename T>
 image* create_image(std::unique_ptr<object::Binary> binary) {
-    if (const T* ptr = dyn_cast<T>(binary.get()))
-        return new objectfile_image<T>(ptr, std::move(binary));
+    if (dyn_cast<T>(binary.get()))
+        return new objectfile_image<T>(std::move(binary));
     llvm_binary_fail("Unrecognized object format");
 }
 
