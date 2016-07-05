@@ -69,15 +69,6 @@ end = struct
         | `Error _ -> exit 1
         | `Ok () -> Promise.fulfill front_end_promise ()
         | `Version | `Help -> exit 0)
-
-  (* Ensures that all plugins can get their options while the front
-     ends are still being updated. _Must_ be removed after plugins are updated. *)
-  let temporary_workaround =
-    Future.upon Plugins.loaded (fun () ->
-        match Term.eval_peek_opts !global with
-        | _, `Error _ -> exit 1
-        | _, `Ok () -> Promise.fulfill front_end_promise ()
-        | _, `Version | _, `Help -> exit 0)
 end
 
 module Create() = struct
@@ -323,10 +314,13 @@ module Create() = struct
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      CmdlineGrammar.(
-        add (plugin_help plugin_name !term_info !main);
-        when_ready (fun () ->
-            f {get = (fun p -> Future.peek_exn p)}))
+      let open CmdlineGrammar in
+      let grammar = if is_plugin
+        then plugin_help plugin_name !term_info !main
+        else (front_end !term_info; !main) in
+      add grammar;
+      when_ready (fun () ->
+          f {get = (fun p -> Future.peek_exn p)})
 
     let doc_enum = Arg.doc_alts_enum
 
