@@ -70,6 +70,14 @@ end = struct
         | `Ok () -> Promise.fulfill front_end_promise ()
         | `Version | `Help -> exit 0)
 
+  (* Ensures that all plugins can get their options while the front
+     ends are still being updated. _Must_ be removed after plugins are updated. *)
+  let temporary_workaround =
+    Future.upon Plugins.loaded (fun () ->
+        match Term.eval_peek_opts !global with
+        | _, `Error _ -> exit 1
+        | _, `Ok () -> Promise.fulfill front_end_promise ()
+        | _, `Version | _, `Help -> exit 0)
 end
 
 module Create() = struct
