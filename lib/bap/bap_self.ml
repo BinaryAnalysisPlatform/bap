@@ -7,6 +7,52 @@ open Cmdliner
 
 module Event = Bap_event
 
+module CmdlineGrammar : sig
+  (** [plugin_help name info g] takes a grammar [g] and returns a new
+      grammar that accepts help for [name] and creates a manpage using
+      [info]. *)
+  val plugin_help : string -> Term.info -> unit Term.t -> unit Term.t
+
+  (** [add grammar] adds a grammar to the global grammar which will
+      be used by the front end. *)
+  val add : unit Term.t -> unit
+end = struct
+
+  let global = ref Term.(const ())
+
+  let plugin_help plugin_name terminfo grammar : unit Term.t =
+    let formats = ["pager", `Pager;
+                   "plain", `Plain;
+                   "groff", `Groff;] in
+    let format_to_str fmt = List.Assoc.find (
+        List.map ~f:(fun (a,b) -> (b,a)) formats) fmt in
+    let name = plugin_name ^ "-help" in
+    let doc = "Show help for " ^
+              plugin_name ^
+              " plugin in format $(docv), (pager, plain or groff)" in
+    let help = Arg.(value @@
+                    opt ~vopt:(Some `Pager) (some (enum formats)) None @@
+                    info [name] ~doc ~docv:"FMT") in
+    Term.(const (fun h () ->
+        match h with
+        | None -> ()
+        | Some v ->
+          match eval ~argv:[|plugin_name;
+                             "--help";
+                             Option.value_exn (format_to_str v)
+                           |] (grammar, terminfo) with
+          | `Error _ -> exit 1
+          | `Ok _ -> assert false
+          | `Version -> assert false
+          | `Help -> exit 0
+      ) $ help $ grammar)
+
+  let add g =
+    let combine = Term.const (fun () () -> ()) in
+    global := Term.(combine $ g $ (!global))
+
+end
+
 module Create() = struct
   let bundle = main_bundle ()
 
