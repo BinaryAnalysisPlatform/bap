@@ -337,8 +337,8 @@ struct objectfile_image : image {
         , entry_(image_entry(obj))
         , segments_(seg::read(obj))
         , symbols_(sym::read(obj))
-		, sections_(sec::read(obj))
-		, binary_(std::move(binary))	  
+	, sections_(sec::read(obj))
+	, binary_(std::move(binary))	  
         {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
@@ -351,52 +351,53 @@ protected:
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
     std::vector<sec::section> sections_;
-	std::unique_ptr<object::Binary> binary_;
+    std::unique_ptr<object::Binary> binary_;
 };
 
 template <typename T>
-image* create_image(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
-    if (const T* ptr = dyn_cast<T>(obj))
+image* create_image(std::unique_ptr<object::Binary> binary) {
+    if (const T* ptr = dyn_cast<T>(binary.get()))
         return new objectfile_image<T>(ptr, std::move(binary));
     llvm_binary_fail("Unrecognized object format");
 }
 
-image* create_image_elf(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
-	if (const ELF32LEObjectFile *elf = dyn_cast<ELF32LEObjectFile>(obj))
-        return create_image<ELF32LEObjectFile>(elf, std::move(binary));
+image* create_image_elf(std::unique_ptr<object::Binary> binary) {
+    const Binary* bin = binary.get();
+    if (dyn_cast<ELF32LEObjectFile>(bin))
+	return create_image<ELF32LEObjectFile>(std::move(binary));
 
-    if (const ELF32BEObjectFile *elf = dyn_cast<ELF32BEObjectFile>(obj))
-        return create_image<ELF32BEObjectFile>(elf, std::move(binary));
+    if (dyn_cast<ELF32BEObjectFile>(bin))
+        return create_image<ELF32BEObjectFile>(std::move(binary));
 
-    if (const ELF64LEObjectFile *elf = dyn_cast<ELF64LEObjectFile>(obj))
-        return create_image<ELF64LEObjectFile>(elf, std::move(binary));
+    if (dyn_cast<ELF64LEObjectFile>(bin))
+        return create_image<ELF64LEObjectFile>(std::move(binary));
 
-    if (const ELF64BEObjectFile *elf = dyn_cast<ELF64BEObjectFile>(obj))
-        return create_image<ELF64BEObjectFile>(elf, std::move(binary));
+    if (dyn_cast<ELF64BEObjectFile>(bin))
+        return create_image<ELF64BEObjectFile>(std::move(binary));
     llvm_binary_fail("Unrecognized ELF format");
 }
 
-image* create_image(const ObjectFile* obj, std::unique_ptr<object::Binary> binary) {
-	if (obj->isCOFF())
-		return create_image<COFFObjectFile>(obj, std::move(binary));
-	if (obj->isELF())
-		return create_image_elf(obj, std::move(binary));
-	if (obj->isMachO())
-		return create_image<MachOObjectFile>(obj, std::move(binary));
-	llvm_binary_fail("Unrecognized object format");
+image* create_image_obj(std::unique_ptr<object::Binary> binary) {
+    if (binary->isCOFF())
+	return create_image<COFFObjectFile>(std::move(binary));
+    if (binary->isELF())
+	return create_image_elf(std::move(binary));
+    if (binary->isMachO())
+	return create_image<MachOObjectFile>(std::move(binary));
+    llvm_binary_fail("Unrecognized object format");
 }
 	
-image* create_image(const Archive* arch, std::unique_ptr<object::Binary> binary) {
+image* create_image_arch(std::unique_ptr<object::Binary> binary) {
     llvm_binary_fail("Archive loading unimplemented");
 }
 
-image* create_image(std::unique_ptr<object::Binary> binary) {
-	const Binary* b = binary.get();
-	if (const Archive *arch = dyn_cast<Archive>(b))
-		return create_image(arch, std::move(binary));
-	if (const ObjectFile *obj = dyn_cast<ObjectFile>(b))
-		create_image(obj, std::move(binary));
-	llvm_binary_fail("Unrecognized binary format");
+image* create(std::unique_ptr<object::Binary> binary) {
+    const Binary* bin = binary.get();
+    if (dyn_cast<Archive>(bin))
+	return create_image_arch(std::move(binary));
+    if (dyn_cast<ObjectFile>(bin))
+	create_image_obj(std::move(binary));
+    llvm_binary_fail("Unrecognized binary format");
 }
 
 image* create(const char* data, std::size_t size) {
@@ -405,7 +406,7 @@ image* create(const char* data, std::size_t size) {
     ErrorOr<std::unique_ptr<object::Binary>> binary = createBinary(buf);
     if (std::error_code ec = binary.getError())
         llvm_binary_fail(ec);
-	return create_image(std::move(*binary));
+    return create(std::move(*binary));
 }
 
 } //namespace img
