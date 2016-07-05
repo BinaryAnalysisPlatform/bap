@@ -16,9 +16,23 @@ module CmdlineGrammar : sig
   (** [add grammar] adds a grammar to the global grammar which will
       be used by the front end. *)
   val add : unit Term.t -> unit
+
+  (** [when_ready f] evaluates [f ()] when the whole grammar is known
+      and all arguments have been parsed. *)
+  val when_ready : (unit -> unit) -> unit
+
+  (** [front_end info] sets up evaluation of grammar upon loading of
+      all plugins *)
+  val front_end : Term.info -> unit
+
 end = struct
 
   let global = ref Term.(const ())
+
+  let eval_complete, front_end_promise = Future.create ()
+
+  let when_ready f =
+    Future.upon eval_complete f
 
   let plugin_help plugin_name terminfo grammar : unit Term.t =
     let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
@@ -46,6 +60,15 @@ end = struct
   let add g =
     let combine = Term.const (fun () () -> ()) in
     global := Term.(combine $ g $ (!global))
+
+  let term_info, term_info_promise = Future.create ()
+
+  let front_end term_info =
+    Future.upon Plugins.loaded (fun () ->
+        match Term.eval (!global, term_info) with
+        | `Error _ -> exit 1
+        | `Ok () -> Promise.fulfill front_end_promise ()
+        | `Version | `Help -> exit 0)
 
 end
 
