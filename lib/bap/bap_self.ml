@@ -520,10 +520,7 @@ module Create() = struct
 
       let when_ready (cmd:command) f : unit =
         if is_plugin then cannot_use_frontend () else
-          let open CmdlineGrammar in
-          let grammar = !(cmd.main) in (* TODO SOMETHING HERE *)
-          add grammar;
-          when_ready_frontend cmd (fun () ->
+          CmdlineGrammar.when_ready_frontend cmd (fun () ->
               f {get = (fun p -> Future.peek_exn p)})
 
     end
