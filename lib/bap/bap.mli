@@ -830,6 +830,109 @@ module Std : sig
 
     end
 
+    (** This module provides access to a more diverse set of command
+        line arguments types, specifically to frontends. Using this
+        from plugins can and will lead to undefined behaviour. *)
+    module Frontend : sig
+
+      (** The [Frontend.Config] module provides functions that are
+          very similar in spirit to the [Config] functions. However, they
+          are meant to be used only by frontends. *)
+      module Config : sig
+        val version : string
+        val datadir : string
+        val libdir : string
+        val confdir : string
+
+        type 'a param = 'a Config.param
+        type 'a parser = 'a Config.parser
+        type 'a converter = 'a Config.converter
+
+        val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+
+        val deprecated : string
+
+        (** Useful to create command line commands, each of which are
+            allowed to have different command line grammars. This is
+            equivalent to the way [git add] has [add] as its command,
+            and has a completely different grammar from [git status]
+            which has [status] as its command.
+            [doc] describes a short description of the command.
+            If [plugin_grammar] is set to [true] (default), then all
+            command line options specified by plugins are available
+            for that particular command. *)
+        type command
+        val command : ?plugin_grammar:bool -> doc:string -> string -> command
+
+        (** The [default_command] defines the command that is run
+            when the user does not specify any command at the command
+            line. *)
+        val default_command : command
+
+        (** Creates a parameter and attaches it to all the commands
+            in [commands] (defaults to default command). Behaves like
+            [Config.param] in all other respects. *)
+        val param :
+          ?commands:command list -> 'a converter -> ?deprecated:string ->
+          ?default:'a -> ?as_flag:'a -> ?docv:string -> ?doc:string ->
+          ?synonyms:string list -> string -> 'a param
+
+        (** See [param] and [Config.param_all]. *)
+        val param_all :
+          ?commands:command list -> 'a converter -> ?deprecated:string ->
+          ?default:'a list -> ?as_flag:'a -> ?docv:string -> ?doc:string ->
+          ?synonyms:string list ->  string -> 'a list param
+
+        (** See [param] and [Config.flag] *)
+        val flag :
+          ?commands:command list -> ?deprecated:string -> ?docv:string ->
+          ?doc:string -> ?synonyms:string list -> string -> bool param
+
+        val determined : 'a param -> 'a future
+
+        type reader = {get : 'a. 'a param -> 'a}
+
+        (** [when_ready command ~plugin_grammar f] requests the system
+            to call function [f] once configuration parameters are
+            established and stabilized for the [command]. Only one of
+            the many commands that are registered will actually have
+            [f] executed.
+            Behaves similar to [Config.when_ready] in
+            all other respects. *)
+        val when_ready : command -> (reader -> unit) -> unit
+
+        type manpage_block = Config.manpage_block
+
+        (** Create a manpage for the specific command in the frontend. *)
+        val manpage : command -> manpage_block list -> unit
+
+        (** Standard converters. Work exactly same as [Config] ones *)
+
+        val bool : bool converter
+        val char : char converter
+        val int : int converter
+        val nativeint : nativeint converter
+        val int32 : int32 converter
+        val int64 : int64 converter
+        val float : float converter
+        val string : string converter
+        val enum : (string * 'a) list -> 'a converter
+        val doc_enum : ?quoted:bool -> (string * 'a) list -> string
+        val file : string converter
+        val dir : string converter
+        val non_dir_file : string converter
+        val list : ?sep:char -> 'a converter -> 'a list converter
+        val array : ?sep:char -> 'a converter -> 'a array converter
+        val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+        val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+        val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+          ('a * 'b * 'c) converter
+        val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+          'd converter -> ('a * 'b * 'c * 'd) converter
+        val some : ?none:string -> 'a converter -> 'a option converter
+      end
+    end
+
   end
 
   (** Signature for integral type.  *)

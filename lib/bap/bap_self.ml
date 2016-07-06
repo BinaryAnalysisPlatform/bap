@@ -189,7 +189,7 @@ module Create() = struct
     let conf_file_options : (string, string) List.Assoc.t =
       let conf_filename =
         let (/) = Filename.concat in
-        Bap_config.confdir / "config" in
+        confdir / "config" in
       let string_splitter str =
         let str = String.strip str in
         match String.split str ~on:'=' with
@@ -243,13 +243,13 @@ module Create() = struct
       if is_plugin then plugin_name ^ "-" ^ name
       else name
 
-    let param converter ?deprecated ?default ?as_flag ?(docv="VAL")
-        ?(doc="Undocumented") ?(synonyms=[]) name =
+    let param' main (future, promise) converter ?deprecated ?default
+        ?as_flag ?(docv="VAL") ?(doc="Undocumented") ?(synonyms=[])
+        name =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter ?deprecated ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
-      let future, promise = Future.create () in
       let default =
         match default with
         | Some x -> x
@@ -264,13 +264,20 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let param_all (converter:'a converter) ?deprecated ?(default=[]) ?as_flag
-        ?(docv="VAL") ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
+    let param
+        converter ?deprecated ?default ?as_flag ?docv
+        ?doc ?synonyms name =
+      param' main (Future.create ())
+        converter ?deprecated ?default ?as_flag ?docv
+        ?doc ?synonyms name
+
+    let param_all' main (future, promise) (converter:'a converter)
+        ?deprecated ?(default=[]) ?as_flag ?(docv="VAL")
+        ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter ?deprecated ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
-      let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
@@ -281,14 +288,20 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
-    let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented")
-        ?(synonyms=[]) name : bool param =
+    let param_all
+        converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+        name =
+      param_all' main (Future.create ())
+        converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+        name
+
+    let flag' main (future, promise) ?deprecated ?(docv="VAL")
+        ?(doc="Undocumented") ?(synonyms=[]) name : bool param =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter:(Converter.of_arg Arg.bool false) ?deprecated
           ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
-      let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default:false ~name in
       let t =
@@ -296,6 +309,11 @@ module Create() = struct
       main := Term.(const (fun x () ->
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
+
+    let flag
+        ?deprecated ?docv ?doc ?synonyms name =
+      flag' main (Future.create ())
+        ?deprecated ?docv ?doc ?synonyms name
 
     let term_info =
       ref (Term.info ~doc (if is_plugin then plugin_name
@@ -367,6 +385,91 @@ module Create() = struct
       of_arg (Arg.t4 ?sep a b c d) default
     let some ?none x = of_arg (Arg.some ?none (Converter.to_arg x)) None
 
+  end
+
+  module Frontend = struct
+    module Config = struct
+      include Config
+      include Bap_config
+
+      let deprecated = Config.deprecated
+
+      type command = {
+        name : string option;
+        main : unit Term.t ref;
+        plugin_grammar : bool;
+        man : manpage_block list option ref;
+        doc : string;
+      }
+
+      let command ?(plugin_grammar=true) ~doc name = {
+        name = Some name;
+        main = ref Term.(const ());
+        plugin_grammar;
+        man = ref None;
+        doc;
+      }
+
+      let default_command = {
+        name = None;
+        main = ref Term.(const ());
+        plugin_grammar = true;
+        man = ref None;
+        doc;
+      }
+
+      let to_info cmd =
+        let name = match cmd.name with
+          | Some x -> x
+          | None -> executable_name in
+        let man = !(cmd.man) in
+        Term.info ~doc:cmd.doc ?man name
+
+      let param ?(commands=[default_command])
+          converter ?deprecated ?default ?as_flag ?docv
+          ?doc ?synonyms name =
+        let future, promise = Future.create () in
+        commands |>
+        List.map ~f:(fun c ->
+            param' c.main (future, promise)
+              converter ?deprecated ?default ?as_flag ?docv
+              ?doc ?synonyms name) |>
+        List.hd_exn
+
+      let param_all ?(commands=[default_command])
+          converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+          name =
+        let future, promise = Future.create () in
+        commands |>
+        List.map ~f:(fun c ->
+            param_all' c.main (future, promise)
+              converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+              name) |>
+        List.hd_exn
+
+      let flag ?(commands=[default_command])
+          ?deprecated ?docv ?doc ?synonyms name =
+        let future, promise = Future.create () in
+        commands |>
+        List.map ~f:(fun c ->
+            flag' main (future, promise)
+              ?deprecated ?docv ?doc ?synonyms name) |>
+        List.hd_exn
+
+      let when_ready command f : unit =
+        let open CmdlineGrammar in
+        let grammar = if is_plugin
+          then assert false
+          else !(command.main) (* TODO SOMETHING HERE *)
+        in
+        add grammar;
+        when_ready (fun () ->
+            f {get = (fun p -> Future.peek_exn p)})
+
+      let manpage command man : unit =
+        command.man := Some man
+
+    end
   end
 
 end
