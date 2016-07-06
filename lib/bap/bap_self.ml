@@ -117,6 +117,9 @@ module Command = struct
     cmd.man := Some man
 end
 
+(** [CmdlineGrammar] is a module purely internal to Bap_self and SHOULD
+    NOT be exposed to outside world directly. It allows for making the
+    single grammar possible. *)
 module CmdlineGrammar : sig
   (** [plugin_help name info g] takes a grammar [g] and returns a new
       grammar that accepts help for [name] and creates a manpage using
@@ -127,20 +130,23 @@ module CmdlineGrammar : sig
       be used by the front end. *)
   val add : unit Term.t -> unit
 
-  (** [when_ready f] evaluates [f ()] when the whole grammar is known
-      and all arguments have been parsed. *)
-  val when_ready : (unit -> unit) -> unit
+  (** [when_ready_plugin f] evaluates [f ()] when the whole grammar is known
+      and all arguments have been parsed. Should be called by plugins
+      only. *)
+  val when_ready_plugin : (unit -> unit) -> unit
 
-  val add_command : Command.t -> unit
+  (** [when_ready_frontend cmd f] adds the command [cmd] and calls [f]
+      when ready. Should be called by frontends only. *)
+  val when_ready_frontend : Command.t -> (unit -> unit) -> unit
 
 end = struct
 
   let plugin_global = ref Term.(const ())
 
-  let eval_complete, front_end_promise = Future.create ()
+  let eval_plugins_complete, eval_plugins_promise = Future.create ()
 
-  let when_ready f =
-    Future.upon eval_complete f
+  let when_ready_plugin f =
+    Future.upon eval_plugins_complete f
 
   let plugin_help plugin_name terminfo grammar : unit Term.t =
     let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
@@ -172,13 +178,15 @@ end = struct
 
   let commands : Command.t list ref = ref []
 
-  let add_command cmd =
-    commands := cmd :: !commands
+  let when_ready_frontend cmd f =
+    commands := cmd :: !commands;
+    () (* TODO Set up handler for f as callback *)
 
-  let evalable (cmd:Command.t) : (unit Term.t * Term.info) =
+  let evalable (cmd:Command.t) : (Command.t Term.t * Term.info) =
     let grammar = if cmd.plugin_grammar
       then Term.(combine $ !(cmd.main) $ !plugin_global)
       else !(cmd.main) in
+    let grammar = Term.(const (fun () -> cmd) $ grammar) in
     let info =
       Term.(info ?man:!(cmd.man) ~doc:cmd.doc cmd.name) in
     grammar, info
@@ -201,7 +209,10 @@ end = struct
       | _ as xs -> eval_choice xs in
     match result with
     | `Error _ -> exit 1
-    | `Ok () -> Promise.fulfill front_end_promise ()
+    | `Ok cmd ->
+      if cmd.plugin_grammar
+      then Promise.fulfill eval_plugins_promise ()
+      else ()
     | `Version | `Help -> exit 0
 
   let () =
@@ -443,7 +454,7 @@ module Create() = struct
         let open CmdlineGrammar in
         let grammar = plugin_help plugin_name !term_info !main in
         add grammar;
-        when_ready (fun () ->
+        when_ready_plugin (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
       else must_use_frontend ()
 
@@ -512,7 +523,7 @@ module Create() = struct
           let open CmdlineGrammar in
           let grammar = !(cmd.main) in (* TODO SOMETHING HERE *)
           add grammar;
-          when_ready (fun () ->
+          when_ready_frontend cmd (fun () ->
               f {get = (fun p -> Future.peek_exn p)})
 
     end
