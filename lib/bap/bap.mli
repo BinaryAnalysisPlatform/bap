@@ -877,6 +877,26 @@ module Std : sig
           ?commands:command list -> ?deprecated:string -> ?docv:string ->
           ?doc:string -> ?synonyms:string list -> string -> bool param
 
+        (** [pos n] defines a positional argument at position n.
+            See [param] for details on rest of arguments.
+
+            Note on differences from [param]: Positional parameters
+                  will not read from anywhere other than command line
+                  arguments. Also, they are not allowed to be deprecated
+                  (since it doesn't logically make sense to deprecate
+                  a positional argument) *)
+        val pos :
+          ?commands:command list -> 'a converter -> ?default:'a ->
+          ?docv:string -> ?doc:string -> int -> 'a param
+
+        (** [pos_all] defines a list of positional arguments. See
+            [param], [param_all], and [pos] for further details on
+            arguments. *)
+        val pos_all :
+          ?commands:command list -> 'a converter -> ?default:'a list ->
+          ?docv:string -> ?doc:string -> unit -> 'a list param
+
+
         (** [when_ready command ~plugin_grammar f] requests the system
             to call function [f] once configuration parameters are
             established and stabilized for the [command]. Only one of

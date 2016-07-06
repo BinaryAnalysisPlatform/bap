@@ -114,6 +114,14 @@ module Create() : sig
         ?commands:command list -> ?deprecated:string -> ?docv:string ->
         ?doc:string -> ?synonyms:string list -> string -> bool param
 
+      val pos :
+        ?commands:command list -> 'a converter -> ?default:'a ->
+        ?docv:string -> ?doc:string -> int -> 'a param
+
+      val pos_all :
+        ?commands:command list -> 'a converter -> ?default:'a list ->
+        ?docv:string -> ?doc:string -> unit -> 'a list param
+
       val when_ready : command -> (reader -> unit) -> unit
 
       val manpage : command -> manpage_block list -> unit

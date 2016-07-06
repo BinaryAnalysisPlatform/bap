@@ -437,6 +437,33 @@ module Create() = struct
           ?deprecated ?docv ?doc ?synonyms name
       else must_use_frontend ()
 
+    let pos' main (future, promise) converter ?default ?(docv="VAL")
+        ?(doc="Undocumented") n =
+      let default =
+        match default with
+        | Some x -> x
+        | None -> Converter.default converter in
+      let converter = Converter.to_arg converter in
+      let t =
+        Arg.(value
+             @@ pos n converter default
+             @@ info [] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      future
+
+    let pos_all' main (future, promise) (converter:'a converter)
+        ?(default=[]) ?(docv="VAL") ?(doc="Undocumented") n
+      : 'a list param =
+      let converter = Converter.to_arg converter in
+      let t =
+        Arg.(value
+             @@ pos_all converter default
+             @@ info [] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      future
+
     let term_info =
       ref (Term.info ~doc (if is_plugin then plugin_name
                            else executable_name))
@@ -488,35 +515,75 @@ module Create() = struct
           converter ?deprecated ?default ?as_flag ?docv
           ?doc ?synonyms name =
         if is_plugin then cannot_use_frontend () else
-          let future, promise = Future.create () in
-          commands |>
-          List.map ~f:(fun c ->
-              param' c.main (future, promise)
-                converter ?deprecated ?default ?as_flag ?docv
-                ?doc ?synonyms name) |>
-          List.hd_exn
+          let result =
+            let future, promise = Future.create () in
+            commands |>
+            List.map ~f:(fun c ->
+                param' c.main (future, promise)
+                  converter ?deprecated ?default ?as_flag ?docv
+                  ?doc ?synonyms name) |>
+            List.hd in
+          match result with
+          | Some x -> x
+          | None -> invalid_arg "Cannot call param without any commands"
 
       let param_all ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
           name =
         if is_plugin then cannot_use_frontend () else
-          let future, promise = Future.create () in
-          commands |>
-          List.map ~f:(fun c ->
-              param_all' c.main (future, promise)
-                converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-                name) |>
-          List.hd_exn
+          let result =
+            let future, promise = Future.create () in
+            commands |>
+            List.map ~f:(fun c ->
+                param_all' c.main (future, promise)
+                  converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+                  name) |>
+            List.hd in
+          match result with
+          | Some x -> x
+          | None -> invalid_arg "Cannot call param_all without any commands"
 
       let flag ?(commands=[default_command])
           ?deprecated ?docv ?doc ?synonyms name =
         if is_plugin then cannot_use_frontend () else
-          let future, promise = Future.create () in
-          commands |>
-          List.map ~f:(fun c ->
-              flag' main (future, promise)
-                ?deprecated ?docv ?doc ?synonyms name) |>
-          List.hd_exn
+          let result =
+            let future, promise = Future.create () in
+            commands |>
+            List.map ~f:(fun c ->
+                flag' main (future, promise)
+                  ?deprecated ?docv ?doc ?synonyms name) |>
+            List.hd in
+          match result with
+          | Some x -> x
+          | None -> invalid_arg "Cannot call flag without any commands"
+
+      let pos ?(commands=[default_command])
+          converter ?default ?docv ?doc n =
+        if is_plugin then cannot_use_frontend () else
+          let result =
+            let future, promise = Future.create () in
+            commands |>
+            List.map ~f:(fun c ->
+                pos' main (future, promise)
+                  converter ?default ?docv ?doc n) |>
+            List.hd in
+          match result with
+          | Some x -> x
+          | None -> invalid_arg "Cannot call pos without and commands"
+
+      let pos_all ?(commands=[default_command])
+          converter ?default ?docv ?doc () =
+        if is_plugin then cannot_use_frontend () else
+          let result =
+            let future, promise = Future.create () in
+            commands |>
+            List.map ~f:(fun c ->
+                pos_all' main (future, promise)
+                  converter ?default ?docv ?doc ()) |>
+            List.hd in
+          match result with
+          | Some x -> x
+          | None -> invalid_arg "Cannot call pos without and commands"
 
       let when_ready (cmd:command) f : unit =
         if is_plugin then cannot_use_frontend () else
