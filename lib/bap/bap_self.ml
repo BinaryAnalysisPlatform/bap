@@ -121,7 +121,7 @@ module CmdlineGrammar : sig
       [info]. *)
   val plugin_help : string -> Term.info -> unit Term.t -> unit Term.t
 
-  (** [add grammar] adds a grammar to the global grammar which will
+  (** [add grammar] adds a grammar to the global grammar which can
       be used by the front end. *)
   val add : unit Term.t -> unit
 
@@ -129,13 +129,11 @@ module CmdlineGrammar : sig
       and all arguments have been parsed. *)
   val when_ready : (unit -> unit) -> unit
 
-  (** [front_end info] sets up evaluation of grammar upon loading of
-      all plugins *)
-  val front_end : Term.info -> unit
+  val add_command : Command.t -> unit
 
 end = struct
 
-  let global = ref Term.(const ())
+  let plugin_global = ref Term.(const ())
 
   let eval_complete, front_end_promise = Future.create ()
 
@@ -165,18 +163,52 @@ end = struct
           | `Help -> exit 0
       ) $ help $ grammar)
 
+  let combine = Term.const (fun () () -> ())
+
   let add g =
-    let combine = Term.const (fun () () -> ()) in
-    global := Term.(combine $ g $ (!global))
+    plugin_global := Term.(combine $ g $ (!plugin_global))
 
   let term_info, term_info_promise = Future.create ()
 
-  let front_end term_info =
-    Future.upon Plugins.loaded (fun () ->
-        match Term.eval (!global, term_info) with
-        | `Error _ -> exit 1
-        | `Ok () -> Promise.fulfill front_end_promise ()
-        | `Version | `Help -> exit 0)
+  let commands : Command.t list ref = ref []
+
+  let add_command cmd =
+    commands := cmd :: !commands
+
+  let evalable (cmd:Command.t) : (unit Term.t * Term.info) =
+    let grammar = if cmd.plugin_grammar
+      then Term.(combine $ !(cmd.main) $ !plugin_global)
+      else !(cmd.main) in
+    let info =     let cmdname = match cmd.name with
+        | Some x -> x
+        | None -> "" in (* TODO: Change this line to have executable
+                           name *)
+      Term.(info ?man:!(cmd.man) ~doc:cmd.doc cmdname) in
+    grammar, info
+
+  let eval_choice (cmds:Command.t list) =
+    let default_cmd =
+      match List.filter ~f:(fun cmd -> Option.is_none cmd.name) cmds with
+      | [x] -> evalable x
+      | _ -> assert false in
+    let remaining_cmds =
+      match List.filter ~f:(fun cmd -> Option.is_some cmd.name) cmds with
+      | [] -> assert false
+      | _ as xs -> List.map ~f:evalable xs in
+    Term.eval_choice default_cmd remaining_cmds
+
+  let evaluate_terms () =
+    let result = match !commands with
+      | [] -> assert false
+      | [x] -> Term.eval (evalable x)
+      | _ as xs -> eval_choice xs in
+    match result with
+    | `Error _ -> exit 1
+    | `Ok () -> Promise.fulfill front_end_promise ()
+    | `Version | `Help -> exit 0
+
+  let () =
+    Future.upon Plugins.loaded evaluate_terms
 end
 
 module Create() = struct
@@ -403,7 +435,8 @@ module Create() = struct
       let open CmdlineGrammar in
       let grammar = if is_plugin
         then plugin_help plugin_name !term_info !main
-        else (front_end !term_info; !main) in
+        else (!main) in (* TODO Need to pass
+                           term_info here somehow *)
       add grammar;
       when_ready (fun () ->
           f {get = (fun p -> Future.peek_exn p)})
