@@ -15,6 +15,8 @@
 #include <llvm/Object/Archive.h>
 #include <llvm/Support/Compiler.h>
 
+using std::move;
+
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
 LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const llvm::error_code& ec) {
@@ -64,17 +66,23 @@ std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFil
     }
     return cmds;
 }
-
-template<typename Derived, typename Base, typename Del>
-std::unique_ptr<Derived, Del> dynamic_unique_ptr_cast(std::unique_ptr<Base, Del>&& ptr) {
-    if (Derived* result = dyn_cast<Derived>(ptr.get())) {
-	ptr.release();
-	return std::unique_ptr<Derived, Del>(result, std::move(ptr.get_deleter()));
-    }
-    return std::unique_ptr<Derived, Del>(nullptr, ptr.get_deleter());
-}   
     
 } // namespace utils
+
+namespace {
+using namespace llvm;
+using namespace llvm::object;
+
+template<typename Derived, typename Base>
+std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
+    if (Derived* d = dyn_cast<Derived>(ptr.get())) {
+	ptr.release();
+	return std::unique_ptr<Derived>(d);
+    }
+    return std::unique_ptr<Derived>(nullptr);
+}   
+
+} // namespace
 
 namespace seg {
 using namespace llvm;
@@ -409,7 +417,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint;
     } else {
-        // llvm version 3.4 doesn't support pe32plus_header,
+	// llvm version 3.4 doesn't support pe32plus_header,
         // but in version 3.5 it does. So, later one will be
         // able to write obj->getPE32PlusHeader(hdr) for 64-bit files.
         uint64_t cur_ptr = 0;
@@ -439,13 +447,13 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<T, std::default_delete<object::Binary>> ptr)
+    explicit objectfile_image(std::unique_ptr<T> ptr)//, std::default_delete<object::Binary>> ptr)
         : arch_(image_arch(*ptr))
         , entry_(image_entry(*ptr))
         , segments_(seg::read(*ptr))
         , symbols_(sym::read(*ptr))
         , sections_(sec::read(*ptr))
-        , binary_(std::move(ptr))
+        , binary_(move(ptr))
     {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
@@ -458,40 +466,40 @@ protected:
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
     std::vector<sec::section> sections_;
-    std::unique_ptr<T, std::default_delete<object::Binary>> binary_;
+    std::unique_ptr<T> binary_;
 };
 
 template <typename T>
 image* create_image(std::unique_ptr<object::Binary> binary) {
-    if (std::unique_ptr<T, std::default_delete<object::Binary>> ptr = 
-	utils::dynamic_unique_ptr_cast<T, object::Binary, std::default_delete<object::Binary>>(std::move(binary))) {
-	return new objectfile_image<T>(std::move(ptr));
+    if (std::unique_ptr<T> ptr = 
+	dynamic_unique_ptr_cast<T, object::Binary>(move(binary))) {
+	return new objectfile_image<T>(move(ptr));
     }
     llvm_binary_fail("Unrecognized object format");
 }
 
 image* create_image_elf(std::unique_ptr<object::Binary> binary) {
     if (isa<ELF32LEObjectFile>(*binary))
-        return create_image<ELF32LEObjectFile>(std::move(binary));
+        return create_image<ELF32LEObjectFile>(move(binary));
 
     if (isa<ELF32BEObjectFile>(*binary))
-        return create_image<ELF32BEObjectFile>(std::move(binary));
+        return create_image<ELF32BEObjectFile>(move(binary));
 
     if (isa<ELF64LEObjectFile>(*binary))
-        return create_image<ELF64LEObjectFile>(std::move(binary));
+        return create_image<ELF64LEObjectFile>(move(binary));
 
     if (isa<ELF64BEObjectFile>(*binary))
-        return create_image<ELF64BEObjectFile>(std::move(binary));
+        return create_image<ELF64BEObjectFile>(move(binary));
     llvm_binary_fail("Unrecognized ELF format");
 }
 
 image* create_image_obj(std::unique_ptr<object::Binary> binary) {
     if (binary->isCOFF())
-        return create_image<COFFObjectFile>(std::move(binary));
+        return create_image<COFFObjectFile>(move(binary));
     if (binary->isELF())
-        return create_image_elf(std::move(binary));
+        return create_image_elf(move(binary));
     if (binary->isMachO())
-        return create_image<MachOObjectFile>(std::move(binary));
+        return create_image<MachOObjectFile>(move(binary));
     llvm_binary_fail("Unrecognized object format");
 }
 
@@ -501,9 +509,9 @@ image* create_image_arch(std::unique_ptr<object::Binary> binary) {
 
 image* create(std::unique_ptr<object::Binary> binary) {
     if (isa<Archive>(*binary))
-        return create_image_arch(std::move(binary));
+        return create_image_arch(move(binary));
     if (isa<ObjectFile>(*binary))
-        return create_image_obj(std::move(binary));
+        return create_image_obj(move(binary));
     llvm_binary_fail("Unrecognized binary format");
 }
 
@@ -514,7 +522,7 @@ image* create(const char* data, std::size_t size) {
     if (error_code ec = createBinary(buff, bin))
         llvm_binary_fail(ec);
     std::unique_ptr<object::Binary> binary(bin.take());
-    return create(std::move(binary));
+    return create(move(binary));
 }
 
 } //namespace img
