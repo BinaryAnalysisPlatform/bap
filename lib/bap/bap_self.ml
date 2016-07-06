@@ -126,9 +126,9 @@ module CmdlineGrammar : sig
       [info]. *)
   val plugin_help : string -> Term.info -> unit Term.t -> unit Term.t
 
-  (** [add grammar] adds a grammar to the global grammar which can
+  (** [add_plugin grammar] adds a grammar to the global grammar which can
       be used by the front end. *)
-  val add : unit Term.t -> unit
+  val add_plugin : unit Term.t -> unit
 
   (** [when_ready_plugin f] evaluates [f ()] when the whole grammar is known
       and all arguments have been parsed. Should be called by plugins
@@ -173,7 +173,7 @@ end = struct
 
   let combine = Term.const (fun () () -> ())
 
-  let add g =
+  let add_plugin g =
     plugin_global := Term.(combine $ g $ (!plugin_global))
 
   let commands : (Command.t, unit -> unit) List.Assoc.t ref = ref []
@@ -453,7 +453,7 @@ module Create() = struct
       if is_plugin then
         let open CmdlineGrammar in
         let grammar = plugin_help plugin_name !term_info !main in
-        add grammar;
+        add_plugin grammar;
         when_ready_plugin (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
       else must_use_frontend ()
