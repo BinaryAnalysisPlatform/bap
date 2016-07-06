@@ -396,31 +396,42 @@ module Create() = struct
       include Config
       include Bap_config
 
-      type command = {
-        name : string option;
-        main : unit Term.t ref;
-        plugin_grammar : bool;
-        man : manpage_block list option ref;
-        doc : string;
-      }
+      module Command = struct
 
-      let command ?(plugin_grammar=true) ~doc name = {
-        name = Some name;
-        main = ref Term.(const ());
-        plugin_grammar;
-        man = ref None;
-        doc;
-      }
+        type t = {
+          name : string option;
+          main : unit Term.t ref;
+          plugin_grammar : bool;
+          man : manpage_block list option ref;
+          doc : string;
+        }
 
-      let default_command = {
-        name = None;
-        main = ref Term.(const ());
-        plugin_grammar = true;
-        man = ref None;
-        doc;
-      }
+        let t ?(plugin_grammar=true) ~doc name = {
+          name = Some name;
+          main = ref Term.(const ());
+          plugin_grammar;
+          man = ref None;
+          doc;
+        }
 
-      let to_info cmd =
+        let default = {
+          name = None;
+          main = ref Term.(const ());
+          plugin_grammar = true;
+          man = ref None;
+          doc;
+        }
+
+        let set_man cmd man : unit =
+          cmd.man := Some man
+      end
+
+      type command = Command.t
+      let command = Command.t
+      let default_command = Command.default
+      let manpage = Command.set_man
+
+      let to_info (cmd:command) =
         let name = match cmd.name with
           | Some x -> x
           | None -> executable_name in
@@ -458,18 +469,15 @@ module Create() = struct
               ?deprecated ?docv ?doc ?synonyms name) |>
         List.hd_exn
 
-      let when_ready command f : unit =
+      let when_ready (cmd:command) f : unit =
         let open CmdlineGrammar in
         let grammar = if is_plugin
           then assert false
-          else !(command.main) (* TODO SOMETHING HERE *)
+          else !(cmd.main) (* TODO SOMETHING HERE *)
         in
         add grammar;
         when_ready (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
-
-      let manpage command man : unit =
-        command.man := Some man
 
     end
   end
