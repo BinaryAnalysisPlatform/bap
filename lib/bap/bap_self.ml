@@ -176,11 +176,10 @@ end = struct
   let add g =
     plugin_global := Term.(combine $ g $ (!plugin_global))
 
-  let commands : Command.t list ref = ref []
+  let commands : (Command.t, unit -> unit) List.Assoc.t ref = ref []
 
   let when_ready_frontend cmd f =
-    commands := cmd :: !commands;
-    () (* TODO Set up handler for f as callback *)
+    commands := List.Assoc.add !commands cmd f
 
   let evalable (cmd:Command.t) : (Command.t Term.t * Term.info) =
     let grammar = if cmd.plugin_grammar
@@ -205,11 +204,12 @@ end = struct
   let evaluate_terms () =
     let result = match !commands with
       | [] -> assert false
-      | [x] -> Term.eval (evalable x)
-      | _ as xs -> eval_choice xs in
+      | [x,_] -> Term.eval (evalable x)
+      | _ as xs -> eval_choice (List.map ~f:fst xs) in
     match result with
     | `Error _ -> exit 1
     | `Ok cmd ->
+      List.Assoc.find_exn !commands cmd ();
       if cmd.plugin_grammar
       then Promise.fulfill eval_plugins_promise ()
       else ()
