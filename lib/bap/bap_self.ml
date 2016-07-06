@@ -42,6 +42,14 @@ module Config = struct
   type 'a converter = 'a Converter.t
   let converter = Converter.t
 
+  type manpage_block = [
+    | `I of string * string
+    | `Noblank
+    | `P of string
+    | `Pre of string
+    | `S of string
+  ]
+
   module Converters = struct
     let of_arg = Converter.of_arg
 
@@ -83,6 +91,28 @@ module Config = struct
       of_arg (Arg.t4 ?sep a b c d) default
     let some ?none x = of_arg (Arg.some ?none (Converter.to_arg x)) None
   end
+end
+
+module Command = struct
+
+  type t = {
+    name : string option;
+    main : unit Term.t ref;
+    plugin_grammar : bool;
+    man : Config.manpage_block list option ref;
+    doc : string;
+  }
+
+  let t ?(plugin_grammar=true) ~doc name = {
+    name = Some name;
+    main = ref Term.(const ());
+    plugin_grammar;
+    man = ref None;
+    doc;
+  }
+
+  let set_man cmd man : unit =
+    cmd.man := Some man
 end
 
 module CmdlineGrammar : sig
@@ -362,14 +392,6 @@ module Create() = struct
       ref (Term.info ~doc (if is_plugin then plugin_name
                            else executable_name))
 
-    type manpage_block = [
-      | `I of string * string
-      | `Noblank
-      | `P of string
-      | `Pre of string
-      | `S of string
-    ]
-
     let manpage (man:manpage_block list) : unit =
       term_info := Term.info ~doc ~man (if is_plugin then plugin_name
                                         else executable_name)
@@ -397,25 +419,10 @@ module Create() = struct
       include Config
       include Bap_config
 
-      module Command = struct
+      type command = Command.t
+      let command = Command.t
 
-        type t = {
-          name : string option;
-          main : unit Term.t ref;
-          plugin_grammar : bool;
-          man : manpage_block list option ref;
-          doc : string;
-        }
-
-        let t ?(plugin_grammar=true) ~doc name = {
-          name = Some name;
-          main = ref Term.(const ());
-          plugin_grammar;
-          man = ref None;
-          doc;
-        }
-
-        let default = {
+      let default_command = Command.{
           name = None;
           main = ref Term.(const ());
           plugin_grammar = true;
@@ -423,13 +430,6 @@ module Create() = struct
           doc;
         }
 
-        let set_man cmd man : unit =
-          cmd.man := Some man
-      end
-
-      type command = Command.t
-      let command = Command.t
-      let default_command = Command.default
       let manpage = Command.set_man
 
       let to_info (cmd:command) =
