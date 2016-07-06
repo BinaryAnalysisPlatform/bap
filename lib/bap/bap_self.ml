@@ -177,7 +177,8 @@ end = struct
     let grammar = if cmd.plugin_grammar
       then Term.(combine $ !(cmd.main) $ !plugin_global)
       else !(cmd.main) in
-    let info =     let cmdname = match cmd.name with
+    let info =
+      let cmdname = match cmd.name with
         | Some x -> x
         | None -> "" in (* TODO: Change this line to have executable
                            name *)
