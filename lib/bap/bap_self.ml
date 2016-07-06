@@ -285,13 +285,19 @@ module Create() = struct
       if is_plugin then plugin_name ^ "-" ^ name
       else name
 
+    let preprocess ?deprecated name converter doc =
+      let name = complete_param name in
+      let converter = Converter.deprecation_wrap
+          ~converter ?deprecated ~name ~is_plugin ~
+          plugin_name in
+      let doc = check_deprecated doc deprecated in
+      name, converter, doc
+
     let param' main (future, promise) converter ?deprecated ?default
         ?as_flag ?(docv="VAL") ?(doc="Undocumented") ?(synonyms=[])
         name =
-      let name = complete_param name in
-      let converter = Converter.deprecation_wrap
-          ~converter ?deprecated ~name ~is_plugin ~plugin_name in
-      let doc = check_deprecated doc deprecated in
+      let name, converter, doc = preprocess ?deprecated
+          name converter doc in
       let default =
         match default with
         | Some x -> x
@@ -316,10 +322,8 @@ module Create() = struct
     let param_all' main (future, promise) (converter:'a converter)
         ?deprecated ?(default=[]) ?as_flag ?(docv="VAL")
         ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
-      let name = complete_param name in
-      let converter = Converter.deprecation_wrap
-          ~converter ?deprecated ~name ~is_plugin ~plugin_name in
-      let doc = check_deprecated doc deprecated in
+      let name, converter, doc = preprocess ?deprecated
+          name converter doc in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter:(Arg.list converter) ~default ~name in
       let t =
@@ -339,11 +343,8 @@ module Create() = struct
 
     let flag' main (future, promise) ?deprecated ?(docv="VAL")
         ?(doc="Undocumented") ?(synonyms=[]) name : bool param =
-      let name = complete_param name in
-      let converter = Converter.deprecation_wrap
-          ~converter:(Converter.of_arg Arg.bool false) ?deprecated
-          ~name ~is_plugin ~plugin_name in
-      let doc = check_deprecated doc deprecated in
+      let name, converter, doc = preprocess ?deprecated
+          name (Converter.of_arg Arg.bool false) doc in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default:false ~name in
       let t =
