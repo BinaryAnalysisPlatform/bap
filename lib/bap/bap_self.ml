@@ -444,10 +444,7 @@ module Create() = struct
     let when_ready f : unit =
       if is_plugin then
         let open CmdlineGrammar in
-        let grammar = if is_plugin
-          then plugin_help plugin_name !term_info !main
-          else (!main) in (* TODO Need to pass
-                             term_info here somehow *)
+        let grammar = plugin_help plugin_name !term_info !main in
         add grammar;
         when_ready (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
@@ -464,8 +461,14 @@ module Create() = struct
       include Config
       include Bap_config
 
+      let cannot_use_frontend () =
+        invalid_argf "Cannot use Frontend interface for plugin %S"
+          plugin_name ()
+
       type command = Command.t
-      let command = Command.t
+      let command =
+        if is_plugin then cannot_use_frontend () else
+          Command.t
 
       let default_command = Command.{
           name = None;
@@ -475,7 +478,8 @@ module Create() = struct
           doc;
         }
 
-      let manpage = Command.set_man
+      let manpage = if is_plugin then cannot_use_frontend ()
+        else Command.set_man
 
       let to_info (cmd:command) =
         let name = match cmd.name with
@@ -487,43 +491,44 @@ module Create() = struct
       let param ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv
           ?doc ?synonyms name =
-        let future, promise = Future.create () in
-        commands |>
-        List.map ~f:(fun c ->
-            param' c.main (future, promise)
-              converter ?deprecated ?default ?as_flag ?docv
-              ?doc ?synonyms name) |>
-        List.hd_exn
+        if is_plugin then cannot_use_frontend () else
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              param' c.main (future, promise)
+                converter ?deprecated ?default ?as_flag ?docv
+                ?doc ?synonyms name) |>
+          List.hd_exn
 
       let param_all ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
           name =
-        let future, promise = Future.create () in
-        commands |>
-        List.map ~f:(fun c ->
-            param_all' c.main (future, promise)
-              converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-              name) |>
-        List.hd_exn
+        if is_plugin then cannot_use_frontend () else
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              param_all' c.main (future, promise)
+                converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+                name) |>
+          List.hd_exn
 
       let flag ?(commands=[default_command])
           ?deprecated ?docv ?doc ?synonyms name =
-        let future, promise = Future.create () in
-        commands |>
-        List.map ~f:(fun c ->
-            flag' main (future, promise)
-              ?deprecated ?docv ?doc ?synonyms name) |>
-        List.hd_exn
+        if is_plugin then cannot_use_frontend () else
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              flag' main (future, promise)
+                ?deprecated ?docv ?doc ?synonyms name) |>
+          List.hd_exn
 
       let when_ready (cmd:command) f : unit =
-        let open CmdlineGrammar in
-        let grammar = if is_plugin
-          then assert false
-          else !(cmd.main) (* TODO SOMETHING HERE *)
-        in
-        add grammar;
-        when_ready (fun () ->
-            f {get = (fun p -> Future.peek_exn p)})
+        if is_plugin then cannot_use_frontend () else
+          let open CmdlineGrammar in
+          let grammar = !(cmd.main) in (* TODO SOMETHING HERE *)
+          add grammar;
+          when_ready (fun () ->
+              f {get = (fun p -> Future.peek_exn p)})
 
     end
   end
