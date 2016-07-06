@@ -41,6 +41,48 @@ module Config = struct
   end
   type 'a converter = 'a Converter.t
   let converter = Converter.t
+
+  module Converters = struct
+    let of_arg = Converter.of_arg
+
+    let bool = of_arg Arg.bool false
+    let char = of_arg Arg.char '\x00'
+    let int = of_arg Arg.int 0
+    let nativeint = of_arg Arg.nativeint Nativeint.zero
+    let int32 = of_arg Arg.int32 Int32.zero
+    let int64 = of_arg Arg.int64 Int64.zero
+    let float = of_arg Arg.float 0.
+    let string = of_arg Arg.string ""
+    let enum x =
+      let _, default = List.hd_exn x in
+      of_arg (Arg.enum x) default
+    let file = of_arg Arg.file ""
+    let dir = of_arg Arg.dir ""
+    let non_dir_file = of_arg Arg.non_dir_file ""
+    let list ?sep x = of_arg (Arg.list ?sep (Converter.to_arg x)) []
+    let array ?sep x =
+      let default = Array.empty () in
+      of_arg (Arg.array ?sep (Converter.to_arg x)) default
+    let pair ?sep x y =
+      let default = Converter.(default x, default y) in
+      of_arg Converter.(Arg.pair ?sep (to_arg x) (to_arg y)) default
+    let t2 = pair
+    let t3 ?sep x y z =
+      let a = Converter.to_arg x in
+      let b = Converter.to_arg y in
+      let c = Converter.to_arg z in
+      let default = Converter.(default x, default y, default z) in
+      of_arg (Arg.t3 ?sep a b c) default
+    let t4 ?sep w x y z =
+      let a = Converter.to_arg w in
+      let b = Converter.to_arg x in
+      let c = Converter.to_arg y in
+      let d = Converter.to_arg z in
+      let default = Converter.(default w, default x, default y,
+                               default z) in
+      of_arg (Arg.t4 ?sep a b c d) default
+    let some ?none x = of_arg (Arg.some ?none (Converter.to_arg x)) None
+  end
 end
 
 module CmdlineGrammar : sig
@@ -345,45 +387,7 @@ module Create() = struct
 
     let doc_enum = Arg.doc_alts_enum
 
-    let of_arg = Converter.of_arg
-
-    let bool = of_arg Arg.bool false
-    let char = of_arg Arg.char '\x00'
-    let int = of_arg Arg.int 0
-    let nativeint = of_arg Arg.nativeint Nativeint.zero
-    let int32 = of_arg Arg.int32 Int32.zero
-    let int64 = of_arg Arg.int64 Int64.zero
-    let float = of_arg Arg.float 0.
-    let string = of_arg Arg.string ""
-    let enum x =
-      let _, default = List.hd_exn x in
-      of_arg (Arg.enum x) default
-    let file = of_arg Arg.file ""
-    let dir = of_arg Arg.dir ""
-    let non_dir_file = of_arg Arg.non_dir_file ""
-    let list ?sep x = of_arg (Arg.list ?sep (Converter.to_arg x)) []
-    let array ?sep x =
-      let default = Array.empty () in
-      of_arg (Arg.array ?sep (Converter.to_arg x)) default
-    let pair ?sep x y =
-      let default = Converter.(default x, default y) in
-      of_arg Converter.(Arg.pair ?sep (to_arg x) (to_arg y)) default
-    let t2 = pair
-    let t3 ?sep x y z =
-      let a = Converter.to_arg x in
-      let b = Converter.to_arg y in
-      let c = Converter.to_arg z in
-      let default = Converter.(default x, default y, default z) in
-      of_arg (Arg.t3 ?sep a b c) default
-    let t4 ?sep w x y z =
-      let a = Converter.to_arg w in
-      let b = Converter.to_arg x in
-      let c = Converter.to_arg y in
-      let d = Converter.to_arg z in
-      let default = Converter.(default w, default x, default y,
-                               default z) in
-      of_arg (Arg.t4 ?sep a b c d) default
-    let some ?none x = of_arg (Arg.some ?none (Converter.to_arg x)) None
+    include Config.Converters
 
   end
 
@@ -391,8 +395,6 @@ module Create() = struct
     module Config = struct
       include Config
       include Bap_config
-
-      let deprecated = Config.deprecated
 
       type command = {
         name : string option;
