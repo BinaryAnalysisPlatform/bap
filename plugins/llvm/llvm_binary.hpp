@@ -39,13 +39,22 @@ namespace utils {
 using namespace llvm;
 using namespace llvm::object;
 	
-std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile* obj) {
+std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile& obj) {
     std::vector<MachOObjectFile::LoadCommandInfo> cmds;
-    iterator_range<MachOObjectFile::load_command_iterator> info_list = obj->load_commands();
+    iterator_range<MachOObjectFile::load_command_iterator> info_list = obj.load_commands();
     for (MachOObjectFile::LoadCommandInfo info : info_list) {
         cmds.push_back(info);
     }
     return cmds;
+}
+
+template<typename Derived, typename Base, typename Del>
+std::unique_ptr<Derived, Del> dynamic_unique_ptr_cast(std::unique_ptr<Base, Del>&& ptr) {
+    if (Derived* result = dyn_cast<Derived>(ptr.get())) {
+	ptr.release();
+	return std::unique_ptr<Derived, Del>(result, std::move(ptr.get_deleter()));
+    }
+    return std::unique_ptr<Derived, Del>(nullptr, ptr.get_deleter());
 }
 
 } // namespace utils
@@ -121,9 +130,9 @@ private:
 };
 
 template<typename T>
-std::vector<segment> read(const ELFObjectFile<T>* obj) {
-    auto begin = obj->getELFFile()->program_header_begin();
-    auto end = obj->getELFFile()->program_header_end();
+std::vector<segment> read(const ELFObjectFile<T>& obj) {
+    auto begin = obj.getELFFile()->program_header_begin();
+    auto end = obj.getELFFile()->program_header_end();
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
     for (int pos = 0; begin != end; ++begin, ++pos) {
@@ -134,27 +143,27 @@ std::vector<segment> read(const ELFObjectFile<T>* obj) {
     return segments;
 }
 
-std::vector<segment> read(const MachOObjectFile* obj) {
+std::vector<segment> read(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
     std::vector<command_info> cmds = utils::load_commands(obj);
     std::vector<segment> segments;
     for (std::size_t i = 0; i < cmds.size(); ++i) {
         command_info info = cmds.at(i);
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-            segments.push_back(segment(obj->getSegment64LoadCommand(info)));
+            segments.push_back(segment(obj.getSegment64LoadCommand(info)));
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-            segments.push_back(segment(obj->getSegmentLoadCommand(info)));
+            segments.push_back(segment(obj.getSegmentLoadCommand(info)));
     }
     return segments;
 }
 
-std::vector<segment> read(const COFFObjectFile* obj) {
+std::vector<segment> read(const COFFObjectFile& obj) {
     std::vector<segment> segments;
     const pe32_header *pe32;
-    if (std::error_code err = obj->getPE32Header(pe32))
+    if (std::error_code err = obj.getPE32Header(pe32))
         llvm_binary_fail(err);
-	for (auto it : obj->sections()) {
-        const coff_section *s = obj->getCOFFSection(it);
+	for (auto it : obj.sections()) {
+        const coff_section *s = obj.getCOFFSection(it);
         uint32_t c = static_cast<uint32_t>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
@@ -173,24 +182,24 @@ using namespace llvm::object;
 struct symbol {
     typedef SymbolRef::Type kind_type;
 
-	symbol(const SymbolRef& sym, uint64_t size)
-		: symbol(sym) {
-		size_ = size;
-	}
+    symbol(const SymbolRef& sym, uint64_t size)
+	: symbol(sym) {
+	size_ = size;
+    }
 	
     explicit symbol(const SymbolRef& sym) {
-		auto name = sym.getName();
-		if (std::error_code ec = name.getError())
-			llvm_binary_fail(ec);
-        this->name_ = name->str();
+	auto name = sym.getName();
+	if (std::error_code ec = name.getError())
+	    llvm_binary_fail(ec);
+	this->name_ = name->str();
 
-		auto addr = sym.getAddress();
-		if (std::error_code ec = addr.getError())
-			llvm_binary_fail(ec);
-		this->addr_ = addr.get();
-
-		this->kind_ = sym.getType();
-   	}
+	auto addr = sym.getAddress();
+	if (std::error_code ec = addr.getError())
+	    llvm_binary_fail(ec);
+	this->addr_ = addr.get();
+	
+	this->kind_ = sym.getType();
+    }
 	
     const std::string& name() const { return name_; }
     kind_type kind() const { return kind_; }
@@ -203,12 +212,12 @@ private:
     uint64_t size_;
 };
 
-std::vector<symbol> read(const ObjectFile* obj) {
-	std::vector<symbol> symbols;
-	auto symbol_sizes = computeSymbolSizes(*obj);
-	for (auto s : symbol_sizes)
-		symbols.push_back(symbol(s.first, s.second));
-	return symbols;
+std::vector<symbol> read(const ObjectFile& obj) {
+    std::vector<symbol> symbols;
+    auto symbol_sizes = computeSymbolSizes(obj);
+    for (auto s : symbol_sizes)
+	symbols.push_back(symbol(s.first, s.second));
+    return symbols;
 }
 
 } //namespace sym
@@ -224,8 +233,8 @@ struct section {
             llvm_binary_fail(err);
         this->name_ = name.str();
 	  
-		this->addr_ = sec.getAddress();
-		this->size_ = sec.getSize();
+	this->addr_ = sec.getAddress();
+	this->size_ = sec.getSize();
     }
     const std::string& name() const { return name_; }
     uint64_t addr() const { return addr_; }
@@ -237,14 +246,14 @@ private:
     uint64_t size_;
 };
 
-std::vector<section> read(const ObjectFile* obj) {
-    auto size = std::distance(obj->sections().begin(), 
-                             obj->sections().end());
+std::vector<section> read(const ObjectFile& obj) {
+    auto size = std::distance(obj.sections().begin(), 
+                             obj.sections().end());
     std::vector<section> sections;
     sections.reserve(size);
 
-    std::transform(obj->sections().begin(),
-                   obj->sections().end(),
+    std::transform(obj.sections().begin(),
+                   obj.sections().end(),
                    std::back_inserter(sections),
                    [](const SectionRef& s) { return section(s); });
     return sections;
@@ -265,16 +274,16 @@ struct image {
     virtual ~image() {}
 };
 
-Triple::ArchType image_arch(const ObjectFile* obj) {
-    return static_cast<Triple::ArchType>(obj->getArch());
+Triple::ArchType image_arch(const ObjectFile& obj) {
+    return static_cast<Triple::ArchType>(obj.getArch());
 }
 
 template <typename ELFT>
-uint64_t image_entry(const ELFObjectFile<ELFT>* obj) {
-    return obj -> getELFFile() -> getHeader() -> e_entry;
+uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
+    return obj.getELFFile()->getHeader()->e_entry;
 }
 
-uint64_t image_entry(const MachOObjectFile* obj) {
+uint64_t image_entry(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
     typedef std::vector<command_info> commands;
     typedef std::vector<command_info>::const_iterator const_iterator;
@@ -293,52 +302,33 @@ uint64_t image_entry(const MachOObjectFile* obj) {
     }
 }
 
-uint64_t image_entry(const COFFObjectFile* obj) {
-    if (obj->getBytesInAddress() == 4) {
+uint64_t image_entry(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
-        if (std::error_code ec = obj -> getPE32Header(hdr))
+        if (std::error_code ec = obj.getPE32Header(hdr))
             llvm_binary_fail(ec);
         if (!hdr)
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint;
     } else {
-        // llvm version 3.4 doesn't support pe32plus_header,
-        // but in version 3.5 it does. So, later one will be
-        // able to write obj->getPE32PlusHeader(hdr) for 64-bit files.
-        uint64_t cur_ptr = 0;
-        const char * buf = (obj->getData()).data();
-        const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
-        uint8_t b0 = start[0];
-        uint8_t b1 = start[1];
-        if (b0 == 0x4d && b1 == 0x5a) { // Check if this is a PE/COFF file.
-            // A pointer at offset 0x3C points to the PE header.
-            cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
-            // Check the PE magic bytes.
-            if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
-                llvm_binary_fail("PE header not found");
-            cur_ptr += 4; // Skip the PE magic bytes.
-            cur_ptr += sizeof(coff_file_header);
-            const pe32plus_header *hdr =
-                reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-            if (hdr->Magic == 0x20b)
-                return hdr->AddressOfEntryPoint;
-            else
-                llvm_binary_fail("PEplus header not found");
-        } else {
-            llvm_binary_fail("PEplus header not found");
-        }
+	const pe32plus_header* hdr = 0;
+	if (error_code ec = obj.getPE32PlusHeader(hdr))
+	    llvm_binary_fail(ec);
+	if (!hdr)
+	    llvm_binary_fail("PEplus header no found");
+	return hdr->AddressOfEntryPoint;
     }
 };
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<object::Binary> binary)
-	: arch_(image_arch(dyn_cast<T>(binary.get())))
-	, entry_(image_entry(dyn_cast<T>(binary.get())))
-	, segments_(seg::read(dyn_cast<T>(binary.get())))
-	, symbols_(sym::read(dyn_cast<T>(binary.get())))
-	, sections_(sec::read(dyn_cast<T>(binary.get())))
-	, binary_(std::move(binary))
+    explicit objectfile_image(std::unique_ptr<T, std::default_delete<object::Binary>> ptr)
+	: arch_(image_arch(*ptr))
+	, entry_(image_entry(*ptr))
+	, segments_(seg::read(*ptr))
+	, symbols_(sym::read(*ptr))
+	, sections_(sec::read(*ptr))
+	, binary_(std::move(ptr))
     {}
     Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
@@ -356,23 +346,25 @@ protected:
 
 template <typename T>
 image* create_image(std::unique_ptr<object::Binary> binary) {
-    if (dyn_cast<T>(binary.get()))
-        return new objectfile_image<T>(std::move(binary));
+    if (std::unique_ptr<T, std::default_delete<object::Binary>> ptr =
+	utils::dynamic_unique_ptr_cast<T, object::Binary, std::default_delete<object::Binary>>(std::move(binary))) {
+	std::cout << "suuuuuuuuuuuuup\n";
+	return new objectfile_image<T>(std::move(ptr));
+    }    
     llvm_binary_fail("Unrecognized object format");
 }
 
 image* create_image_elf(std::unique_ptr<object::Binary> binary) {
-    const Binary* bin = binary.get();
-    if (dyn_cast<ELF32LEObjectFile>(bin))
+    if (isa<ELF32LEObjectFile>(*binary))
 	return create_image<ELF32LEObjectFile>(std::move(binary));
 
-    if (dyn_cast<ELF32BEObjectFile>(bin))
+    if (isa<ELF32BEObjectFile>(*binary))
         return create_image<ELF32BEObjectFile>(std::move(binary));
 
-    if (dyn_cast<ELF64LEObjectFile>(bin))
+    if (isa<ELF64LEObjectFile>(*binary))
         return create_image<ELF64LEObjectFile>(std::move(binary));
 
-    if (dyn_cast<ELF64BEObjectFile>(bin))
+    if (isa<ELF64BEObjectFile>(*binary))
         return create_image<ELF64BEObjectFile>(std::move(binary));
     llvm_binary_fail("Unrecognized ELF format");
 }
@@ -392,10 +384,9 @@ image* create_image_arch(std::unique_ptr<object::Binary> binary) {
 }
 
 image* create(std::unique_ptr<object::Binary> binary) {
-    const Binary* bin = binary.get();
-    if (dyn_cast<Archive>(bin))
+    if (isa<Archive>(*binary))
 	return create_image_arch(std::move(binary));
-    if (dyn_cast<ObjectFile>(bin))
+    if (isa<ObjectFile>(*binary))
 	create_image_obj(std::move(binary));
     llvm_binary_fail("Unrecognized binary format");
 }
