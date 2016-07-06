@@ -2,6 +2,13 @@ open Format
 open Core_kernel.Std
 open Bap_future.Std
 
+module Config : sig
+  type 'a param
+  type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+  type 'a printer = Format.formatter -> 'a -> unit
+  type 'a converter
+end
+
 module Create() : sig
   val name : string
   val version : string
@@ -19,11 +26,10 @@ module Create() : sig
     val libdir : string
     val confdir : string
 
-    type 'a param
-
-    type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-    type 'a printer = Format.formatter -> 'a -> unit
-    type 'a converter
+    type 'a param = 'a Config.param
+    type 'a parser = 'a Config.parser
+    type 'a printer = 'a Config.printer
+    type 'a converter = 'a Config.converter
 
     val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 

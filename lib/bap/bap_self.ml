@@ -7,6 +7,42 @@ open Cmdliner
 
 module Event = Bap_event
 
+module Config = struct
+  type 'a param = 'a future
+  type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+  type 'a printer = Format.formatter -> 'a -> unit
+  module Converter = struct
+    type 'a t = {
+      parser : 'a parser;
+      printer : 'a printer;
+      default : 'a;
+    }
+
+    let t parser printer default : 'a t = {parser; printer; default}
+    let to_arg conv : 'a Arg.converter = conv.parser, conv.printer
+    let default conv = conv.default
+
+    let deprecation_wrap ~converter ?deprecated ~name ~is_plugin ~plugin_name =
+      let warn_if_deprecated () =
+        match deprecated with
+        | Some msg ->
+          if is_plugin then
+            eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
+              name plugin_name msg
+          else eprintf "WARNING: %S option is deprecated. %s\n"
+              name msg
+        | None -> () in
+      {converter with parser=(fun s -> warn_if_deprecated ();
+                               converter.parser s)}
+
+    let of_arg (conv:'a Arg.converter) (default:'a) : 'a t =
+      let parser, printer = conv in
+      t parser printer default
+  end
+  type 'a converter = 'a Converter.t
+  let converter = Converter.t
+end
+
 module CmdlineGrammar : sig
   (** [plugin_help name info g] takes a grammar [g] and returns a new
       grammar that accepts help for [name] and creates a manpage using
@@ -133,6 +169,8 @@ module Create() = struct
   module Config = struct
     let plugin_name = name
     let executable_name = main
+
+    include Config
     include Bap_config
 
     (* Discourage access to directories of other plugins *)
@@ -141,42 +179,6 @@ module Create() = struct
         let (/) = Filename.concat in
         confdir / plugin_name
       else confdir
-
-    type 'a param = 'a future
-    type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-    type 'a printer = Format.formatter -> 'a -> unit
-
-    module Converter = struct
-      type 'a t = {
-        parser : 'a parser;
-        printer : 'a printer;
-        default : 'a;
-      }
-
-      let t parser printer default : 'a t = {parser; printer; default}
-      let to_arg conv : 'a Arg.converter = conv.parser, conv.printer
-      let default conv = conv.default
-
-      let deprecation_wrap ~converter ?deprecated ~name =
-        let warn_if_deprecated () =
-          match deprecated with
-          | Some msg ->
-            if is_plugin then
-              eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
-                name plugin_name msg
-            else eprintf "WARNING: %S option is deprecated. %s\n"
-                name msg
-          | None -> () in
-        {converter with parser=(fun s -> warn_if_deprecated ();
-                                 converter.parser s)}
-
-      let of_arg (conv:'a Arg.converter) (default:'a) : 'a t =
-        let parser, printer = conv in
-        t parser printer default
-    end
-
-    type 'a converter = 'a Converter.t
-    let converter = Converter.t
 
     let deprecated =
       if is_plugin then "Please refer to --" ^ plugin_name ^ "-help"
@@ -245,7 +247,7 @@ module Create() = struct
         ?(doc="Undocumented") ?(synonyms=[]) name =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
-          ~converter ?deprecated ~name in
+          ~converter ?deprecated ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let default =
@@ -266,7 +268,7 @@ module Create() = struct
         ?(docv="VAL") ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
-          ~converter ?deprecated ~name in
+          ~converter ?deprecated ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let converter = Converter.to_arg converter in
@@ -283,7 +285,8 @@ module Create() = struct
         ?(synonyms=[]) name : bool param =
       let name = complete_param name in
       let converter = Converter.deprecation_wrap
-          ~converter:(Converter.of_arg Arg.bool false) ?deprecated ~name in
+          ~converter:(Converter.of_arg Arg.bool false) ?deprecated
+          ~name ~is_plugin ~plugin_name in
       let doc = check_deprecated doc deprecated in
       let future, promise = Future.create () in
       let converter = Converter.to_arg converter in

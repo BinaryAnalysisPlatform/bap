@@ -533,6 +533,16 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
+
+  (** This module defines the types used by the [Self().Config]. They
+      are defined outside of [Self()] since they remain the same
+      irrespective of which plugin/frontend they are called from. *)
+  module Config : sig
+    type 'a param
+    type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+    type 'a converter
+  end
+
   (** This module refers to an information bundled with an application.
       Use [include Self()] syntax to bring this definitions to the
       scope.
@@ -616,14 +626,14 @@ module Std : sig
       val confdir : string
 
       (** An abstract parameter type that can be later read using a reader *)
-      type 'a param
+      type 'a param = 'a Config.param
 
       (** Parse a string to an 'a *)
-      type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+      type 'a parser = 'a Config.parser
 
       (** Type for converting [string] <-> ['a]. Also defines a default
           value for the ['a] type. *)
-      type 'a converter
+      type 'a converter = 'a Config.converter
 
       val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 

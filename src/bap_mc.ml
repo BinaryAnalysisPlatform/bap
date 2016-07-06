@@ -255,7 +255,7 @@ module Cmdline = struct
         `P "llvm-mc"] in
     Term.(const create $(disassembler ()) $src $addr $max_insns $arch $show_insn_size
           $insn_formats $bil_formats $bir_formats $show_kinds),
-    Term.info "bap-mc" ~doc ~man ~version:Config.version
+    Term.info "bap-mc" ~doc ~man ~version:Bap_config.version
 
   let exitf n =
     kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
