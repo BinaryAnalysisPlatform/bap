@@ -168,8 +168,6 @@ end = struct
   let add g =
     plugin_global := Term.(combine $ g $ (!plugin_global))
 
-  let term_info, term_info_promise = Future.create ()
-
   let commands : Command.t list ref = ref []
 
   let add_command cmd =
