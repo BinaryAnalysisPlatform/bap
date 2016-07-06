@@ -473,10 +473,6 @@ module Create() = struct
       let manpage = if is_plugin then cannot_use_frontend ()
         else Command.set_man
 
-      let to_info (cmd:command) =
-        let man = !(cmd.man) in
-        Term.info ~doc:cmd.doc ?man cmd.name
-
       let param ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv
           ?doc ?synonyms name =
