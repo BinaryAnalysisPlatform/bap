@@ -501,15 +501,15 @@ module Create() = struct
           plugin_name ()
 
       type command = Command.t
-      let command =
+      let command ?plugin_grammar ~doc name =
         if is_plugin then cannot_use_frontend () else
-          Command.t ~is_default:false
+          Command.t ~is_default:false ?plugin_grammar ~doc name
 
       let default_command = Command.t ~is_default:true
           ~plugin_grammar:true ~doc executable_name
 
-      let manpage = if is_plugin then cannot_use_frontend ()
-        else Command.set_man
+      let manpage cmd man = if is_plugin then cannot_use_frontend ()
+        else Command.set_man cmd man
 
       let param ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv
