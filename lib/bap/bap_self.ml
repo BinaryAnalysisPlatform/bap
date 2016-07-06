@@ -374,12 +374,17 @@ module Create() = struct
           Promise.fulfill promise x) $ t $ (!main));
       future
 
+    let must_use_frontend () =
+      invalid_arg "Must use the Frontend interface for frontends"
+
     let param
         converter ?deprecated ?default ?as_flag ?docv
         ?doc ?synonyms name =
-      param' main (Future.create ())
-        converter ?deprecated ?default ?as_flag ?docv
-        ?doc ?synonyms name
+      if is_plugin then
+        param' main (Future.create ())
+          converter ?deprecated ?default ?as_flag ?docv
+          ?doc ?synonyms name
+      else must_use_frontend ()
 
     let param_all' main (future, promise) (converter:'a converter)
         ?deprecated ?(default=[]) ?as_flag ?(docv="VAL")
@@ -399,9 +404,11 @@ module Create() = struct
     let param_all
         converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
         name =
-      param_all' main (Future.create ())
-        converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-        name
+      if is_plugin then
+        param_all' main (Future.create ())
+          converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+          name
+      else must_use_frontend ()
 
     let flag' main (future, promise) ?deprecated ?(docv="VAL")
         ?(doc="Undocumented") ?(synonyms=[]) name : bool param =
@@ -417,29 +424,34 @@ module Create() = struct
 
     let flag
         ?deprecated ?docv ?doc ?synonyms name =
-      flag' main (Future.create ())
-        ?deprecated ?docv ?doc ?synonyms name
+      if is_plugin then
+        flag' main (Future.create ())
+          ?deprecated ?docv ?doc ?synonyms name
+      else must_use_frontend ()
 
     let term_info =
       ref (Term.info ~doc (if is_plugin then plugin_name
                            else executable_name))
 
     let manpage (man:manpage_block list) : unit =
-      term_info := Term.info ~doc ~man (if is_plugin then plugin_name
-                                        else executable_name)
+      if is_plugin then
+        term_info := Term.info ~doc ~man plugin_name
+      else must_use_frontend ()
 
     let determined (p:'a param) : 'a future = p
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      let open CmdlineGrammar in
-      let grammar = if is_plugin
-        then plugin_help plugin_name !term_info !main
-        else (!main) in (* TODO Need to pass
-                           term_info here somehow *)
-      add grammar;
-      when_ready (fun () ->
-          f {get = (fun p -> Future.peek_exn p)})
+      if is_plugin then
+        let open CmdlineGrammar in
+        let grammar = if is_plugin
+          then plugin_help plugin_name !term_info !main
+          else (!main) in (* TODO Need to pass
+                             term_info here somehow *)
+        add grammar;
+        when_ready (fun () ->
+            f {get = (fun p -> Future.peek_exn p)})
+      else must_use_frontend ()
 
     let doc_enum = Arg.doc_alts_enum
 
