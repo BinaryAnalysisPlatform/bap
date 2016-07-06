@@ -96,19 +96,21 @@ end
 module Command = struct
 
   type t = {
-    name : string option;
+    name : string;
     main : unit Term.t ref;
     plugin_grammar : bool;
     man : Config.manpage_block list option ref;
     doc : string;
+    is_default : bool
   }
 
-  let t ?(plugin_grammar=true) ~doc name = {
-    name = Some name;
+  let t ~is_default ?(plugin_grammar=true) ~doc name = {
+    name = name;
     main = ref Term.(const ());
     plugin_grammar;
     man = ref None;
     doc;
+    is_default
   }
 
   let set_man cmd man : unit =
@@ -178,20 +180,16 @@ end = struct
       then Term.(combine $ !(cmd.main) $ !plugin_global)
       else !(cmd.main) in
     let info =
-      let cmdname = match cmd.name with
-        | Some x -> x
-        | None -> "" in (* TODO: Change this line to have executable
-                           name *)
-      Term.(info ?man:!(cmd.man) ~doc:cmd.doc cmdname) in
+      Term.(info ?man:!(cmd.man) ~doc:cmd.doc cmd.name) in
     grammar, info
 
   let eval_choice (cmds:Command.t list) =
     let default_cmd =
-      match List.filter ~f:(fun cmd -> Option.is_none cmd.name) cmds with
+      match List.filter ~f:(fun cmd -> cmd.is_default) cmds with
       | [x] -> evalable x
       | _ -> assert false in
     let remaining_cmds =
-      match List.filter ~f:(fun cmd -> Option.is_some cmd.name) cmds with
+      match List.filter ~f:(fun cmd -> not cmd.is_default) cmds with
       | [] -> assert false
       | _ as xs -> List.map ~f:evalable xs in
     Term.eval_choice default_cmd remaining_cmds
@@ -467,25 +465,17 @@ module Create() = struct
       type command = Command.t
       let command =
         if is_plugin then cannot_use_frontend () else
-          Command.t
+          Command.t ~is_default:false
 
-      let default_command = Command.{
-          name = None;
-          main = ref Term.(const ());
-          plugin_grammar = true;
-          man = ref None;
-          doc;
-        }
+      let default_command = Command.t ~is_default:true
+          ~plugin_grammar:true ~doc executable_name
 
       let manpage = if is_plugin then cannot_use_frontend ()
         else Command.set_man
 
       let to_info (cmd:command) =
-        let name = match cmd.name with
-          | Some x -> x
-          | None -> executable_name in
         let man = !(cmd.man) in
-        Term.info ~doc:cmd.doc ?man name
+        Term.info ~doc:cmd.doc ?man cmd.name
 
       let param ?(commands=[default_command])
           converter ?deprecated ?default ?as_flag ?docv
