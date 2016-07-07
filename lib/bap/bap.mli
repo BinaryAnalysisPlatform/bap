@@ -654,6 +654,9 @@ module Std : sig
       ?docv:string -> ?doc:string -> ?synonyms:string list ->
       string -> bool param
 
+    (** Wrap a value in a parameter, not allowing users to input for this *)
+    val const : 'a -> 'a param
+
     (** Provides a future determined on when the config can be read *)
     val determined : 'a param -> 'a future
 

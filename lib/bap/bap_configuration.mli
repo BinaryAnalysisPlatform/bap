@@ -30,6 +30,8 @@ module Config : sig
     ?docv:string -> ?doc:string -> ?synonyms:string list ->
     string -> bool param
 
+  val const : 'a -> 'a param
+
   val determined : 'a param -> 'a future
 
   type reader = {get : 'a. 'a param -> 'a}

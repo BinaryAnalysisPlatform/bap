@@ -397,6 +397,9 @@ module Config = struct
         ?deprecated ?docv ?doc ?synonyms name
     else must_use_frontend ()
 
+  let const x =
+    Future.return x
+
   let pos' main (future, promise) converter ?default ?(docv="VAL")
       ?(doc="Undocumented") n =
     let converter = Converter.to_arg converter in
