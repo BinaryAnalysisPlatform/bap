@@ -497,7 +497,6 @@ module Create() = struct
   module Frontend = struct
     module Config = struct
       include Config
-      include Bap_config
 
       let cannot_use_frontend () =
         invalid_argf "Cannot use Frontend interface for plugin %S"
