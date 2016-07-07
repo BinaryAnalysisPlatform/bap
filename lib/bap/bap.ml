@@ -8,8 +8,8 @@ module Std = struct
   include Bap_sema.Std
   module Event = Bap_event
   module Project = Bap_project
-  module Config = Bap_self.Config
-  module Frontend = Bap_self.Frontend
+  module Config = Bap_configuration.Config
+  module Frontend = Bap_configuration.Frontend
   module Self = Bap_self.Create
   module Log = Bap_log
   type project = Project.t
