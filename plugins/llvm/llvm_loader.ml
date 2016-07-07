@@ -65,8 +65,8 @@ let of_data data : Backend.Img.t option =
     let sections =
       Binary.sections b |> List.map ~f:(to_section arch) in
     Backend.Img.Fields.create ~arch ~entry ~segments ~symbols ~sections in
-  Option.try_with of_data_exn
-
+  try Some (of_data_exn ()) with
+  | exn -> error "Can't create binary: %a%!" Exn.pp exn; None
 
 let () =
   match Image.register_backend ~name of_data with

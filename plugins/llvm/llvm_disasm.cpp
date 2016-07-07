@@ -228,16 +228,16 @@ public:
         int off = pc - mem.base;
         int len = mem.loc.len - off;
 
-	    if (len > 0) {
-	        auto data = llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
+	if (len > 0) {
+	    auto data = llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
 	       
-	        status = dis->getInstruction
-            (mcinst, size, data, pc,
-             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-             llvm::nulls());
-	    }
+	    status = dis->getInstruction
+		(mcinst, size, data, pc,
+		 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+		 llvm::nulls());
+	}
 
-        if (off < mem.loc.len && size == 0) {
+	if (off < mem.loc.len && size == 0) {
             size += 1;
         } 
         
@@ -267,7 +267,7 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
-            printer->printInst(&mcinst, stream, "", *sub_info); // + *sub_info
+            printer->printInst(&mcinst, stream, "", *sub_info);
             return stream.str();
         } else {
             return "";
@@ -408,7 +408,6 @@ private:
 struct create_llvm_disassembler : disasm_factory {
     result<disassembler_interface>
     create(const char *triple, const char *cpu, int debug_level) {
-        //debug_level = 4;
         auto llvm = llvm_disassembler::create(triple, cpu, debug_level);
         result<disassembler_interface> r;
         r.dis = llvm.dis;
