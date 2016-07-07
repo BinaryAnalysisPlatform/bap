@@ -299,7 +299,7 @@ module Create() = struct
       if is_plugin then "Please refer to --" ^ plugin_name ^ "-help"
       else "Please refer to --help."
 
-    let main = ref Term.(const ())
+    let plugin_grammar = ref Term.(const ())
 
     let conf_file_options : (string, string) List.Assoc.t =
       let conf_filename =
@@ -392,7 +392,7 @@ module Create() = struct
         converter ?deprecated ?default ?as_flag ?docv
         ?doc ?synonyms name =
       if is_plugin then
-        param' main (Future.create ())
+        param' plugin_grammar (Future.create ())
           converter ?deprecated ?default ?as_flag ?docv
           ?doc ?synonyms name
       else must_use_frontend ()
@@ -416,7 +416,7 @@ module Create() = struct
         converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
         name =
       if is_plugin then
-        param_all' main (Future.create ())
+        param_all' plugin_grammar (Future.create ())
           converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
           name
       else must_use_frontend ()
@@ -436,7 +436,7 @@ module Create() = struct
     let flag
         ?deprecated ?docv ?doc ?synonyms name =
       if is_plugin then
-        flag' main (Future.create ())
+        flag' plugin_grammar (Future.create ())
           ?deprecated ?docv ?doc ?synonyms name
       else must_use_frontend ()
 
@@ -482,7 +482,7 @@ module Create() = struct
     let when_ready f : unit =
       if is_plugin then
         let open CmdlineGrammar in
-        let grammar = plugin_help plugin_name !term_info !main in
+        let grammar = plugin_help plugin_name !term_info !plugin_grammar in
         add_plugin grammar;
         when_ready_plugin (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
