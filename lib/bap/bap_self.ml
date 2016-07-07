@@ -182,6 +182,7 @@ end = struct
     commands := List.Assoc.add !commands cmd f
 
   let evalable (cmd:Command.t) : (Command.t Term.t * Term.info) =
+    let open Command in
     let grammar = if cmd.plugin_grammar
       then Term.(combine $ !(cmd.main) $ !plugin_global)
       else !(cmd.main) in
@@ -191,6 +192,7 @@ end = struct
     grammar, info
 
   let eval_choice (cmds:Command.t list) =
+    let open Command in
     let default_cmd =
       match List.filter ~f:(fun cmd -> cmd.is_default) cmds with
       | [x] -> evalable x
@@ -202,6 +204,7 @@ end = struct
     Term.eval_choice default_cmd remaining_cmds
 
   let evaluate_terms () =
+    let open Command in
     let result = match !commands with
       | [] -> assert false
       | [x,_] -> Term.eval (evalable x)
@@ -519,7 +522,7 @@ module Create() = struct
             let future, promise = Future.create () in
             commands |>
             List.map ~f:(fun c ->
-                param' c.main (future, promise)
+                param' c.Command.main (future, promise)
                   converter ?deprecated ?default ?as_flag ?docv
                   ?doc ?synonyms name) |>
             List.hd in
@@ -535,7 +538,7 @@ module Create() = struct
             let future, promise = Future.create () in
             commands |>
             List.map ~f:(fun c ->
-                param_all' c.main (future, promise)
+                param_all' c.Command.main (future, promise)
                   converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
                   name) |>
             List.hd in
@@ -550,7 +553,7 @@ module Create() = struct
             let future, promise = Future.create () in
             commands |>
             List.map ~f:(fun c ->
-                flag' main (future, promise)
+                flag' c.Command.main (future, promise)
                   ?deprecated ?docv ?doc ?synonyms name) |>
             List.hd in
           match result with
@@ -564,7 +567,7 @@ module Create() = struct
             let future, promise = Future.create () in
             commands |>
             List.map ~f:(fun c ->
-                pos' main (future, promise)
+                pos' c.Command.main (future, promise)
                   converter ?default ?docv ?doc n) |>
             List.hd in
           match result with
@@ -578,7 +581,7 @@ module Create() = struct
             let future, promise = Future.create () in
             commands |>
             List.map ~f:(fun c ->
-                pos_all' main (future, promise)
+                pos_all' c.Command.main (future, promise)
                   converter ?default ?docv ?doc ()) |>
             List.hd in
           match result with
