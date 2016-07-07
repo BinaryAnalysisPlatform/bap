@@ -7,7 +7,65 @@ open Cmdliner
 
 module Event = Bap_event
 
-module Config = struct
+module Create() = struct
+  let bundle = main_bundle ()
+
+  let main =
+    let base = Filename.basename Sys.executable_name in
+    try Filename.chop_extension base with _ -> base
+
+
+  let manifest =
+    try Bundle.manifest bundle
+    with exn -> Manifest.create main
+
+  let name = Manifest.name manifest
+  let version = Manifest.version manifest
+  let doc = Manifest.desc manifest
+
+  let has_verbose =
+    Array.exists ~f:(function "--verbose" | _ -> false)
+
+  let filter_args name =
+    let prefix = "--" ^ name ^ "-" in
+    let is_key = String.is_prefix ~prefix:"-" in
+    Array.fold Sys.argv ~init:([],`drop) ~f:(fun (args,act) arg ->
+        let take arg = (prefix ^ arg) :: args in
+        if arg = Sys.argv.(0) then (name::args,`drop)
+        else match String.chop_prefix arg ~prefix, act with
+          | None,`take when is_key arg -> args,`drop
+          | None,`take -> arg::args,`drop
+          | None,`drop -> args,`drop
+          | Some arg,_ when String.mem arg '=' -> take arg,`drop
+          | Some arg,_ -> take arg,`take) |>
+    fst |> List.rev |> Array.of_list
+
+  let argv =
+    if name = main then Sys.argv
+    else filter_args name
+
+  let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
+    | exception Not_found -> false
+    | "false" | "0" -> false
+    | _ -> true
+
+  let is_verbose = has_verbose argv ||
+                   has_var ("DEBUG_"^name) ||
+                   has_var ("DEBUG")
+
+  open Event.Log
+
+  let debug = (); match is_verbose with
+    | false -> fun fmt -> ifprintf std_formatter fmt
+    | true ->  fun fmt -> message Debug ~section:name fmt
+
+  let info f = message Info ~section:name f
+  let warning f = message Warning ~section:name f
+  let error f = message Error ~section:name f
+
+end
+
+module Config' = struct
   type 'a param = 'a future
   type 'a parser = string -> [ `Ok of 'a | `Error of string ]
   type 'a printer = Format.formatter -> 'a -> unit
@@ -26,9 +84,9 @@ module Config = struct
       let warn_if_deprecated () =
         match deprecated with
         | Some msg ->
-          if is_plugin then
+          if is_plugin () then
             eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
-              name plugin_name msg
+              name (plugin_name ()) msg
           else eprintf "WARNING: %S option is deprecated. %s\n"
               name msg
         | None -> () in
@@ -99,7 +157,7 @@ module Command = struct
     name : string;
     main : unit Term.t ref;
     plugin_grammar : bool;
-    man : Config.manpage_block list option ref;
+    man : Config'.manpage_block list option ref;
     doc : string;
     is_default : bool
   }
@@ -222,377 +280,331 @@ end = struct
     Future.upon Plugins.loaded evaluate_terms
 end
 
-module Create() = struct
+module Config = struct
   let bundle = main_bundle ()
 
-  let main =
+  let executable_name () =
     let base = Filename.basename Sys.executable_name in
     try Filename.chop_extension base with _ -> base
 
-
   let manifest =
     try Bundle.manifest bundle
-    with exn -> Manifest.create main
+    with exn -> Manifest.create (executable_name ())
 
-  let name = Manifest.name manifest
-  let version = Manifest.version manifest
-  let doc = Manifest.desc manifest
+  let doc () = Manifest.desc manifest
 
-  let is_plugin =
-    name <> main
+  let is_plugin () =
+    Manifest.name manifest <> executable_name ()
 
-  let has_verbose =
-    Array.exists ~f:(function "--verbose" | _ -> false)
+  let must_use_frontend () =
+    invalid_arg "Must use the Frontend interface for frontends"
 
-  let filter_args name =
-    let prefix = "--" ^ name ^ "-" in
-    let is_key = String.is_prefix ~prefix:"-" in
-    Array.fold Sys.argv ~init:([],`drop) ~f:(fun (args,act) arg ->
-        let take arg = (prefix ^ arg) :: args in
-        if arg = Sys.argv.(0) then (name::args,`drop)
-        else match String.chop_prefix arg ~prefix, act with
-          | None,`take when is_key arg -> args,`drop
-          | None,`take -> arg::args,`drop
-          | None,`drop -> args,`drop
-          | Some arg,_ when String.mem arg '=' -> take arg,`drop
-          | Some arg,_ -> take arg,`take) |>
-    fst |> List.rev |> Array.of_list
+  let plugin_name () =
+    if is_plugin ()
+    then Manifest.name manifest
+    else must_use_frontend ()
 
-  let argv =
-    if name = main then Sys.argv
-    else filter_args name
+  include Config'
+  include Bap_config
 
-  let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
-    | exception Not_found -> false
-    | "false" | "0" -> false
-    | _ -> true
+  let deprecated =
+    if is_plugin () then "Please refer to --" ^ plugin_name () ^ "-help"
+    else "Please refer to --help."
 
-  let is_verbose = has_verbose argv ||
-                   has_var ("DEBUG_"^name) ||
-                   has_var ("DEBUG")
+  let plugin_grammar = ref Term.(const ())
 
-  open Event.Log
+  let conf_file_options : (string, string) List.Assoc.t =
+    let conf_filename =
+      let (/) = Filename.concat in
+      let confdir =
+        if is_plugin () then
+          let (/) = Filename.concat in
+          confdir / plugin_name ()
+        else confdir in
+      confdir / "config" in
+    let string_splitter str =
+      let str = String.strip str in
+      match String.split str ~on:'=' with
+      | k :: _ when String.prefix k 1 = "#" -> None
+      | [""] | [] -> None
+      | [k] -> invalid_argf
+                 "Maybe comment out %S using # in config file?" k ()
+      | k :: vs -> Some (String.strip k,
+                         String.strip (String.concat ~sep:"=" vs)) in
+    let split_filter = List.filter_map ~f:string_splitter in
+    try
+      In_channel.with_file
+        conf_filename ~f:(fun ch -> In_channel.input_lines ch
+                                    |> split_filter)
+    with Sys_error _ -> []
 
-  let debug = (); match is_verbose with
-    | false -> fun fmt -> ifprintf std_formatter fmt
-    | true ->  fun fmt -> message Debug ~section:name fmt
+  let get_from_conf_file name =
+    List.Assoc.find conf_file_options ~equal:String.Caseless.equal name
 
-  let info f = message Info ~section:name f
-  let warning f = message Warning ~section:name f
-  let error f = message Error ~section:name f
+  let get_from_env name =
+    let name = if is_plugin () then plugin_name () ^ "_" ^ name else name in
+    let name = String.uppercase (executable_name () ^ "_" ^ name) in
+    try
+      Some (Sys.getenv name)
+    with Not_found -> None
 
+  let get_param ~(converter) ~default ~name =
+    let value = default in
+    let str = get_from_conf_file name in
+    let str = match get_from_env name with
+      | Some _ as v -> v
+      | None -> str in
+    let parse str =
+      let parse, _ = converter in
+      match parse str with
+      | `Error err ->
+        invalid_argf "Could not parse %S for parameter %S: %s"
+          str name err ()
+      | `Ok v -> v in
+    let value = match str with
+      | Some v -> parse v
+      | None -> value in
+    value
+
+  let check_deprecated doc deprecated =
+    match deprecated with
+    | Some _ -> "DEPRECATED. " ^ doc
+    | None -> doc
+
+  let complete_param name =
+    if is_plugin () then plugin_name () ^ "-" ^ name
+    else name
+
+  let preprocess ?deprecated name converter doc =
+    let name = complete_param name in
+    let converter = Converter.deprecation_wrap
+        ~converter ?deprecated ~name ~is_plugin ~plugin_name in
+    let doc = check_deprecated doc deprecated in
+    name, converter, doc
+
+  let param' main (future, promise) converter ?deprecated ?default
+      ?as_flag ?(docv="VAL") ?(doc="Undocumented") ?(synonyms=[])
+      name =
+    let name, converter, doc = preprocess ?deprecated
+        name converter doc in
+    let default =
+      match default with
+      | Some x -> x
+      | None -> Converter.default converter in
+    let converter = Converter.to_arg converter in
+    let param = get_param ~converter ~default ~name in
+    let t =
+      Arg.(value
+           @@ opt ?vopt:as_flag converter param
+           @@ info (name::synonyms) ~doc ~docv) in
+    main := Term.(const (fun x () ->
+        Promise.fulfill promise x) $ t $ (!main));
+    future
+
+  let param
+      converter ?deprecated ?default ?as_flag ?docv
+      ?doc ?synonyms name =
+    if is_plugin () then
+      param' plugin_grammar (Future.create ())
+        converter ?deprecated ?default ?as_flag ?docv
+        ?doc ?synonyms name
+    else must_use_frontend ()
+
+  let param_all' main (future, promise) (converter:'a converter)
+      ?deprecated ?(default=[]) ?as_flag ?(docv="VAL")
+      ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
+    let name, converter, doc = preprocess ?deprecated
+        name converter doc in
+    let converter = Converter.to_arg converter in
+    let param = get_param ~converter:(Arg.list converter) ~default ~name in
+    let t =
+      Arg.(value
+           @@ opt_all ?vopt:as_flag converter param
+           @@ info (name::synonyms) ~doc ~docv) in
+    main := Term.(const (fun x () ->
+        Promise.fulfill promise x) $ t $ (!main));
+    future
+
+  let param_all
+      converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+      name =
+    if is_plugin () then
+      param_all' plugin_grammar (Future.create ())
+        converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+        name
+    else must_use_frontend ()
+
+  let flag' main (future, promise) ?deprecated ?(docv="VAL")
+      ?(doc="Undocumented") ?(synonyms=[]) name : bool param =
+    let name, converter, doc = preprocess ?deprecated
+        name (Converter.of_arg Arg.bool false) doc in
+    let converter = Converter.to_arg converter in
+    let param = get_param ~converter ~default:false ~name in
+    let t =
+      Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
+    main := Term.(const (fun x () ->
+        Promise.fulfill promise (param || x)) $ t $ (!main));
+    future
+
+  let flag
+      ?deprecated ?docv ?doc ?synonyms name =
+    if is_plugin () then
+      flag' plugin_grammar (Future.create ())
+        ?deprecated ?docv ?doc ?synonyms name
+    else must_use_frontend ()
+
+  let pos' main (future, promise) converter ?default ?(docv="VAL")
+      ?(doc="Undocumented") n =
+    let default =
+      match default with
+      | Some x -> x
+      | None -> Converter.default converter in
+    let converter = Converter.to_arg converter in
+    let t =
+      Arg.(value
+           @@ pos n converter default
+           @@ info [] ~doc ~docv) in
+    main := Term.(const (fun x () ->
+        Promise.fulfill promise x) $ t $ (!main));
+    future
+
+  let pos_all' main (future, promise) (converter:'a converter)
+      ?(default=[]) ?(docv="VAL") ?(doc="Undocumented") n
+    : 'a list param =
+    let converter = Converter.to_arg converter in
+    let t =
+      Arg.(value
+           @@ pos_all converter default
+           @@ info [] ~doc ~docv) in
+    main := Term.(const (fun x () ->
+        Promise.fulfill promise x) $ t $ (!main));
+    future
+
+  let term_info =
+    ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()
+                                  else executable_name ()))
+
+  let manpage (man:manpage_block list) : unit =
+    if is_plugin () then
+      term_info := Term.info ~doc:(doc ()) ~man (plugin_name ())
+    else must_use_frontend ()
+
+  let determined (p:'a param) : 'a future = p
+
+  type reader = {get : 'a. 'a param -> 'a}
+  let when_ready f : unit =
+    if is_plugin () then
+      let open CmdlineGrammar in
+      let grammar = plugin_help (plugin_name ()) !term_info !plugin_grammar in
+      add_plugin grammar;
+      when_ready_plugin (fun () ->
+          f {get = (fun p -> Future.peek_exn p)})
+    else must_use_frontend ()
+
+  let doc_enum = Arg.doc_alts_enum
+
+  include Config'.Converters
+
+end
+
+module Frontend = struct
   module Config = struct
-    let plugin_name = name
-    let executable_name = main
-
     include Config
-    include Bap_config
 
-    (* Discourage access to directories of other plugins *)
-    let confdir =
-      if is_plugin then
-        let (/) = Filename.concat in
-        confdir / plugin_name
-      else confdir
+    let cannot_use_frontend () =
+      invalid_argf "Cannot use Frontend interface for plugin %S"
+        (plugin_name ()) ()
 
-    let deprecated =
-      if is_plugin then "Please refer to --" ^ plugin_name ^ "-help"
-      else "Please refer to --help."
+    type command = Command.t
+    let command ?plugin_grammar ~doc name =
+      if is_plugin () then cannot_use_frontend () else
+        Command.t ~is_default:false ?plugin_grammar ~doc name
 
-    let plugin_grammar = ref Term.(const ())
+    let default_command = Command.t ~is_default:true
+        ~plugin_grammar:true ~doc:(doc ()) (executable_name ())
 
-    let conf_file_options : (string, string) List.Assoc.t =
-      let conf_filename =
-        let (/) = Filename.concat in
-        confdir / "config" in
-      let string_splitter str =
-        let str = String.strip str in
-        match String.split str ~on:'=' with
-        | k :: _ when String.prefix k 1 = "#" -> None
-        | [""] | [] -> None
-        | [k] -> invalid_argf
-                   "Maybe comment out %S using # in config file?" k ()
-        | k :: vs -> Some (String.strip k,
-                           String.strip (String.concat ~sep:"=" vs)) in
-      let split_filter = List.filter_map ~f:string_splitter in
-      try
-        In_channel.with_file
-          conf_filename ~f:(fun ch -> In_channel.input_lines ch
-                                      |> split_filter)
-      with Sys_error _ -> []
+    let manpage cmd man =
+      if is_plugin () then cannot_use_frontend ()
+      else Command.set_man cmd man
 
-    let get_from_conf_file name =
-      List.Assoc.find conf_file_options ~equal:String.Caseless.equal name
-
-    let get_from_env name =
-      let name = if is_plugin then plugin_name ^ "_" ^ name else name in
-      let name = String.uppercase (executable_name ^ "_" ^ name) in
-      try
-        Some (Sys.getenv name)
-      with Not_found -> None
-
-    let get_param ~(converter) ~default ~name =
-      let value = default in
-      let str = get_from_conf_file name in
-      let str = match get_from_env name with
-        | Some _ as v -> v
-        | None -> str in
-      let parse str =
-        let parse, _ = converter in
-        match parse str with
-        | `Error err ->
-          invalid_argf "Could not parse %S for parameter %S: %s"
-            str name err ()
-        | `Ok v -> v in
-      let value = match str with
-        | Some v -> parse v
-        | None -> value in
-      value
-
-    let check_deprecated doc deprecated =
-      match deprecated with
-      | Some _ -> "DEPRECATED. " ^ doc
-      | None -> doc
-
-    let complete_param name =
-      if is_plugin then plugin_name ^ "-" ^ name
-      else name
-
-    let preprocess ?deprecated name converter doc =
-      let name = complete_param name in
-      let converter = Converter.deprecation_wrap
-          ~converter ?deprecated ~name ~is_plugin ~
-          plugin_name in
-      let doc = check_deprecated doc deprecated in
-      name, converter, doc
-
-    let param' main (future, promise) converter ?deprecated ?default
-        ?as_flag ?(docv="VAL") ?(doc="Undocumented") ?(synonyms=[])
-        name =
-      let name, converter, doc = preprocess ?deprecated
-          name converter doc in
-      let default =
-        match default with
-        | Some x -> x
-        | None -> Converter.default converter in
-      let converter = Converter.to_arg converter in
-      let param = get_param ~converter ~default ~name in
-      let t =
-        Arg.(value
-             @@ opt ?vopt:as_flag converter param
-             @@ info (name::synonyms) ~doc ~docv) in
-      main := Term.(const (fun x () ->
-          Promise.fulfill promise x) $ t $ (!main));
-      future
-
-    let must_use_frontend () =
-      invalid_arg "Must use the Frontend interface for frontends"
-
-    let param
+    let param ?(commands=[default_command])
         converter ?deprecated ?default ?as_flag ?docv
         ?doc ?synonyms name =
-      if is_plugin then
-        param' plugin_grammar (Future.create ())
-          converter ?deprecated ?default ?as_flag ?docv
-          ?doc ?synonyms name
-      else must_use_frontend ()
+      if is_plugin () then cannot_use_frontend () else
+        let result =
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              param' c.Command.main (future, promise)
+                converter ?deprecated ?default ?as_flag ?docv
+                ?doc ?synonyms name) |>
+          List.hd in
+        match result with
+        | Some x -> x
+        | None -> invalid_arg "Cannot call param without any commands"
 
-    let param_all' main (future, promise) (converter:'a converter)
-        ?deprecated ?(default=[]) ?as_flag ?(docv="VAL")
-        ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
-      let name, converter, doc = preprocess ?deprecated
-          name converter doc in
-      let converter = Converter.to_arg converter in
-      let param = get_param ~converter:(Arg.list converter) ~default ~name in
-      let t =
-        Arg.(value
-             @@ opt_all ?vopt:as_flag converter param
-             @@ info (name::synonyms) ~doc ~docv) in
-      main := Term.(const (fun x () ->
-          Promise.fulfill promise x) $ t $ (!main));
-      future
-
-    let param_all
+    let param_all ?(commands=[default_command])
         converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
         name =
-      if is_plugin then
-        param_all' plugin_grammar (Future.create ())
-          converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-          name
-      else must_use_frontend ()
-
-    let flag' main (future, promise) ?deprecated ?(docv="VAL")
-        ?(doc="Undocumented") ?(synonyms=[]) name : bool param =
-      let name, converter, doc = preprocess ?deprecated
-          name (Converter.of_arg Arg.bool false) doc in
-      let converter = Converter.to_arg converter in
-      let param = get_param ~converter ~default:false ~name in
-      let t =
-        Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
-      main := Term.(const (fun x () ->
-          Promise.fulfill promise (param || x)) $ t $ (!main));
-      future
-
-    let flag
-        ?deprecated ?docv ?doc ?synonyms name =
-      if is_plugin then
-        flag' plugin_grammar (Future.create ())
-          ?deprecated ?docv ?doc ?synonyms name
-      else must_use_frontend ()
-
-    let pos' main (future, promise) converter ?default ?(docv="VAL")
-        ?(doc="Undocumented") n =
-      let default =
-        match default with
+      if is_plugin () then cannot_use_frontend () else
+        let result =
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              param_all' c.Command.main (future, promise)
+                converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
+                name) |>
+          List.hd in
+        match result with
         | Some x -> x
-        | None -> Converter.default converter in
-      let converter = Converter.to_arg converter in
-      let t =
-        Arg.(value
-             @@ pos n converter default
-             @@ info [] ~doc ~docv) in
-      main := Term.(const (fun x () ->
-          Promise.fulfill promise x) $ t $ (!main));
-      future
+        | None -> invalid_arg "Cannot call param_all without any commands"
 
-    let pos_all' main (future, promise) (converter:'a converter)
-        ?(default=[]) ?(docv="VAL") ?(doc="Undocumented") n
-      : 'a list param =
-      let converter = Converter.to_arg converter in
-      let t =
-        Arg.(value
-             @@ pos_all converter default
-             @@ info [] ~doc ~docv) in
-      main := Term.(const (fun x () ->
-          Promise.fulfill promise x) $ t $ (!main));
-      future
+    let flag ?(commands=[default_command])
+        ?deprecated ?docv ?doc ?synonyms name =
+      if is_plugin () then cannot_use_frontend () else
+        let result =
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              flag' c.Command.main (future, promise)
+                ?deprecated ?docv ?doc ?synonyms name) |>
+          List.hd in
+        match result with
+        | Some x -> x
+        | None -> invalid_arg "Cannot call flag without any commands"
 
-    let term_info =
-      ref (Term.info ~doc (if is_plugin then plugin_name
-                           else executable_name))
+    let pos ?(commands=[default_command])
+        converter ?default ?docv ?doc n =
+      if is_plugin () then cannot_use_frontend () else
+        let result =
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              pos' c.Command.main (future, promise)
+                converter ?default ?docv ?doc n) |>
+          List.hd in
+        match result with
+        | Some x -> x
+        | None -> invalid_arg "Cannot call pos without and commands"
 
-    let manpage (man:manpage_block list) : unit =
-      if is_plugin then
-        term_info := Term.info ~doc ~man plugin_name
-      else must_use_frontend ()
+    let pos_all ?(commands=[default_command])
+        converter ?default ?docv ?doc () =
+      if is_plugin () then cannot_use_frontend () else
+        let result =
+          let future, promise = Future.create () in
+          commands |>
+          List.map ~f:(fun c ->
+              pos_all' c.Command.main (future, promise)
+                converter ?default ?docv ?doc ()) |>
+          List.hd in
+        match result with
+        | Some x -> x
+        | None -> invalid_arg "Cannot call pos without and commands"
 
-    let determined (p:'a param) : 'a future = p
-
-    type reader = {get : 'a. 'a param -> 'a}
-    let when_ready f : unit =
-      if is_plugin then
-        let open CmdlineGrammar in
-        let grammar = plugin_help plugin_name !term_info !plugin_grammar in
-        add_plugin grammar;
-        when_ready_plugin (fun () ->
+    let when_ready (cmd:command) f : unit =
+      if is_plugin () then cannot_use_frontend () else
+        CmdlineGrammar.when_ready_frontend cmd (fun () ->
             f {get = (fun p -> Future.peek_exn p)})
-      else must_use_frontend ()
-
-    let doc_enum = Arg.doc_alts_enum
-
-    include Config.Converters
 
   end
-
-  module Frontend = struct
-    module Config = struct
-      include Config
-
-      let cannot_use_frontend () =
-        invalid_argf "Cannot use Frontend interface for plugin %S"
-          plugin_name ()
-
-      type command = Command.t
-      let command ?plugin_grammar ~doc name =
-        if is_plugin then cannot_use_frontend () else
-          Command.t ~is_default:false ?plugin_grammar ~doc name
-
-      let default_command = Command.t ~is_default:true
-          ~plugin_grammar:true ~doc executable_name
-
-      let manpage cmd man = if is_plugin then cannot_use_frontend ()
-        else Command.set_man cmd man
-
-      let param ?(commands=[default_command])
-          converter ?deprecated ?default ?as_flag ?docv
-          ?doc ?synonyms name =
-        if is_plugin then cannot_use_frontend () else
-          let result =
-            let future, promise = Future.create () in
-            commands |>
-            List.map ~f:(fun c ->
-                param' c.Command.main (future, promise)
-                  converter ?deprecated ?default ?as_flag ?docv
-                  ?doc ?synonyms name) |>
-            List.hd in
-          match result with
-          | Some x -> x
-          | None -> invalid_arg "Cannot call param without any commands"
-
-      let param_all ?(commands=[default_command])
-          converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-          name =
-        if is_plugin then cannot_use_frontend () else
-          let result =
-            let future, promise = Future.create () in
-            commands |>
-            List.map ~f:(fun c ->
-                param_all' c.Command.main (future, promise)
-                  converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
-                  name) |>
-            List.hd in
-          match result with
-          | Some x -> x
-          | None -> invalid_arg "Cannot call param_all without any commands"
-
-      let flag ?(commands=[default_command])
-          ?deprecated ?docv ?doc ?synonyms name =
-        if is_plugin then cannot_use_frontend () else
-          let result =
-            let future, promise = Future.create () in
-            commands |>
-            List.map ~f:(fun c ->
-                flag' c.Command.main (future, promise)
-                  ?deprecated ?docv ?doc ?synonyms name) |>
-            List.hd in
-          match result with
-          | Some x -> x
-          | None -> invalid_arg "Cannot call flag without any commands"
-
-      let pos ?(commands=[default_command])
-          converter ?default ?docv ?doc n =
-        if is_plugin then cannot_use_frontend () else
-          let result =
-            let future, promise = Future.create () in
-            commands |>
-            List.map ~f:(fun c ->
-                pos' c.Command.main (future, promise)
-                  converter ?default ?docv ?doc n) |>
-            List.hd in
-          match result with
-          | Some x -> x
-          | None -> invalid_arg "Cannot call pos without and commands"
-
-      let pos_all ?(commands=[default_command])
-          converter ?default ?docv ?doc () =
-        if is_plugin then cannot_use_frontend () else
-          let result =
-            let future, promise = Future.create () in
-            commands |>
-            List.map ~f:(fun c ->
-                pos_all' c.Command.main (future, promise)
-                  converter ?default ?docv ?doc ()) |>
-            List.hd in
-          match result with
-          | Some x -> x
-          | None -> invalid_arg "Cannot call pos without and commands"
-
-      let when_ready (cmd:command) f : unit =
-        if is_plugin then cannot_use_frontend () else
-          CmdlineGrammar.when_ready_frontend cmd (fun () ->
-              f {get = (fun p -> Future.peek_exn p)})
-
-    end
-  end
-
 end
