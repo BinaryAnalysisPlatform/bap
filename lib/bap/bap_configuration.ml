@@ -221,27 +221,27 @@ end = struct
 end
 
 module Config = struct
-  let bundle = main_bundle ()
+  let bundle () = main_bundle ()
 
   let executable_name () =
     let base = Filename.basename Sys.executable_name in
     try Filename.chop_extension base with _ -> base
 
-  let manifest =
-    try Bundle.manifest bundle
+  let manifest () =
+    try Bundle.manifest (bundle ())
     with exn -> Manifest.create (executable_name ())
 
-  let doc () = Manifest.desc manifest
+  let doc () = Manifest.desc (manifest ())
 
   let is_plugin () =
-    Manifest.name manifest <> executable_name ()
+    Manifest.name (manifest ()) <> executable_name ()
 
   let must_use_frontend () =
     invalid_arg "Must use the Frontend interface for frontends"
 
   let plugin_name () =
     if is_plugin ()
-    then Manifest.name manifest
+    then Manifest.name (manifest ())
     else must_use_frontend ()
 
   include Config'
