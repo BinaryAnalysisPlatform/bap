@@ -828,20 +828,27 @@ module Std : sig
         ?doc:string -> ?synonyms:string list -> string -> bool param
 
       (** [pos n] defines a positional argument at position n.
+
           See [param] for details on rest of arguments.
 
           Note on differences from [param]: Positional parameters
                 will not read from anywhere other than command line
                 arguments. Also, they are not allowed to be deprecated
                 (since it doesn't logically make sense to deprecate
-                a positional argument) *)
+                a positional argument).
+                Additionally, positional arguments are required to be
+                specified on command line, and are made optional only
+                if a default value is set for them. *)
       val pos :
         ?commands:command list -> 'a converter -> ?default:'a ->
         ?docv:string -> ?doc:string -> int -> 'a param
 
       (** [pos_all] defines a list of positional arguments. See
           [param], [param_all], and [pos] for further details on
-          arguments. *)
+          arguments.
+
+          Note: Unless default is specified, empty lists are
+                disallowed as positional arguments. *)
       val pos_all :
         ?commands:command list -> 'a converter -> ?default:'a list ->
         ?docv:string -> ?doc:string -> unit -> 'a list param

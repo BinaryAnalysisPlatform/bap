@@ -399,27 +399,35 @@ module Config = struct
 
   let pos' main (future, promise) converter ?default ?(docv="VAL")
       ?(doc="Undocumented") n =
-    let default =
-      match default with
-      | Some x -> x
-      | None -> Converter.default converter in
     let converter = Converter.to_arg converter in
     let t =
-      Arg.(value
-           @@ pos n converter default
-           @@ info [] ~doc ~docv) in
+      match default with
+      | Some default ->
+        Arg.(value
+             @@ pos n converter default
+             @@ info [] ~doc ~docv)
+      | None ->
+        Arg.(required
+             @@ pos n (some converter) None
+             @@ info [] ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
     future
 
   let pos_all' main (future, promise) (converter:'a converter)
-      ?(default=[]) ?(docv="VAL") ?(doc="Undocumented") n
+      ?default ?(docv="VAL") ?(doc="Undocumented") n
     : 'a list param =
     let converter = Converter.to_arg converter in
     let t =
-      Arg.(value
-           @@ pos_all converter default
-           @@ info [] ~doc ~docv) in
+      match default with
+      | Some default ->
+        Arg.(value
+             @@ pos_all converter default
+             @@ info [] ~doc ~docv)
+      | None ->
+        Arg.(non_empty
+             @@ pos_all converter []
+             @@ info [] ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
     future
