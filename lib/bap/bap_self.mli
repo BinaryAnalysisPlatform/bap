@@ -7,6 +7,8 @@ module Config : sig
   type 'a parser = string -> [ `Ok of 'a | `Error of string ]
   type 'a printer = Format.formatter -> 'a -> unit
   type 'a converter
+
+  val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 end
 
 module Create() : sig
@@ -21,17 +23,15 @@ module Create() : sig
   val error   : ('a,formatter,unit) format -> 'a
 
   module Config : sig
+    include module type of Config with type 'a param = 'a Config.param
+                                   and type 'a parser = 'a Config.parser
+                                   and type 'a printer = 'a Config.printer
+                                   and type 'a converter = 'a Config.converter
+
     val version : string
     val datadir : string
     val libdir : string
     val confdir : string
-
-    type 'a param = 'a Config.param
-    type 'a parser = 'a Config.parser
-    type 'a printer = 'a Config.printer
-    type 'a converter = 'a Config.converter
-
-    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
     val deprecated : string
 

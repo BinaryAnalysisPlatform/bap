@@ -538,9 +538,18 @@ module Std : sig
       are defined outside of [Self()] since they remain the same
       irrespective of which plugin/frontend they are called from. *)
   module Config : sig
+
+    (** An abstract parameter type that can be later read using a reader *)
     type 'a param
+
+    (** Parse a string to an 'a *)
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+
+    (** Type for converting [string] <-> ['a]. Also defines a default
+        value for the ['a] type. *)
     type 'a converter
+    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+
   end
 
   (** This module refers to an information bundled with an application.
@@ -610,6 +619,10 @@ module Std : sig
         ]}
     *)
     module Config : sig
+      include module type of Config with type 'a param = 'a Config.param
+                                     and type 'a parser = 'a Config.parser
+                                     and type 'a converter = 'a Config.converter
+
       (** Version number  *)
       val version : string
 
@@ -624,18 +637,6 @@ module Std : sig
 
       (** A directory for bap specific configuration files  *)
       val confdir : string
-
-      (** An abstract parameter type that can be later read using a reader *)
-      type 'a param = 'a Config.param
-
-      (** Parse a string to an 'a *)
-      type 'a parser = 'a Config.parser
-
-      (** Type for converting [string] <-> ['a]. Also defines a default
-          value for the ['a] type. *)
-      type 'a converter = 'a Config.converter
-
-      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
 
       (** Default deprecation warning message, for easy deprecation of
           parameters. *)
