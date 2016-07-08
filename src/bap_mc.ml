@@ -260,8 +260,6 @@ module Cmdline = struct
              bap-mc  --show-inst --show-bil");
         `S "SEE ALSO";
         `P "llvm-mc"] in
-    let disassembler = Config.(const "llvm") in (* TEMP To be fixed
-                                                   when bap_cmdline_terms is updated *)
     Config.(descr doc);
     Config.(manpage default_command man);
     Config.(when_ready default_command (fun {Config.get=(!)} ->
