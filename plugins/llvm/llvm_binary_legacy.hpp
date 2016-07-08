@@ -447,7 +447,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<T> ptr)//, std::default_delete<object::Binary>> ptr)
+    explicit objectfile_image(std::unique_ptr<T> ptr)
         : arch_(image_arch(*ptr))
         , entry_(image_entry(*ptr))
         , segments_(seg::read(*ptr))
