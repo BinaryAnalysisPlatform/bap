@@ -856,6 +856,11 @@ module Std : sig
         ?commands:command list -> 'a converter -> ?default:'a list ->
         ?docv:string -> ?doc:string -> unit -> 'a list param
 
+      (** [post_check ~f p] ensures that the parameter [p] lies
+          within one of the values specified in the list returned by
+          [f]. The strings returned by [f] are used in the error message
+          returned if none of the values match. *)
+      val post_check : f:(unit -> (string * 'a) list) -> 'a param -> 'a param
 
       (** [when_ready command ~plugin_grammar f] requests the system
           to call function [f] once configuration parameters are

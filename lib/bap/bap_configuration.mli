@@ -103,6 +103,8 @@ module Frontend : sig
       ?commands:command list -> 'a converter -> ?default:'a list ->
       ?docv:string -> ?doc:string -> unit -> 'a list param
 
+    val post_check : f:(unit -> (string * 'a) list) -> 'a param -> 'a param
+
     val when_ready : command -> (reader -> unit) -> unit
 
     val manpage : command -> manpage_block list -> unit

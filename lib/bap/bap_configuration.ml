@@ -454,6 +454,22 @@ module Config = struct
         Promise.fulfill promise x) $ t $ (!main));
     future
 
+  let doc_enum = Arg.doc_alts_enum
+
+  (* (unit -> (string * 'a) list) -> 'a param -> 'a param *)
+  let post_check ~f p =
+    Future.(
+      p >>= (fun x ->
+          let values = f () in
+          let allowed = List.map ~f:snd values in
+          if List.mem allowed x then
+            return x
+          else
+            invalid_argf "Unrecognized value. Must be %s"
+              (doc_enum values) ()
+        ))
+
+
   let term_info =
     ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()
                                   else executable_name ()))
@@ -475,8 +491,6 @@ module Config = struct
       when_ready_plugin (fun () ->
           f {get = (fun p -> Future.peek_exn p)})
     else must_use_frontend ()
-
-  let doc_enum = Arg.doc_alts_enum
 
   include Config'.Converters
 
