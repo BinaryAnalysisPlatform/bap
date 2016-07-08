@@ -34,9 +34,4 @@ let of_tool tool ~testbin : addr seq Or_error.t future =
     | Ok x -> x
     | Error e -> Error.raise e in
   let open EF in
-  rooter_fe >>= (fun r ->
-      let future, promise = Future.create () in
-      Future.upon Plugins.loaded (fun () ->
-          let addr_seq = Rooter.roots r in
-          Promise.fulfill promise (Or_error.return addr_seq));
-      future)
+  rooter_fe >>= (fun r -> return (Rooter.roots r))
