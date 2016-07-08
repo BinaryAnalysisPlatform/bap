@@ -287,7 +287,6 @@ Triple::ArchType image_arch(const ObjectFile& obj) {
 
 template <typename ELFT>
 uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
-    std::cout << "ELF object image entry is: " << obj.getELFFile()->getHeader()->e_entry << "\n";
     return obj.getELFFile()->getHeader()->e_entry;
 }
 

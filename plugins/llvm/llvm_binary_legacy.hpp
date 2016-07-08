@@ -1,5 +1,5 @@
-#ifndef LLVM_BINARY_HPP
-#define LLVM_BINARY_HPP
+#ifndef LLVM_BINARY_LEGACY_HPP
+#define LLVM_BINARY_LEGACY_HPP
 
 #include <memory>
 #include <numeric>
@@ -527,4 +527,4 @@ image* create(const char* data, std::size_t size) {
 
 } //namespace img
 
-#endif //LLVM_BINARY_HPP
+#endif //LLVM_BINARY_LEGACY_HPP
