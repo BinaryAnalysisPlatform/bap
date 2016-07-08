@@ -26,15 +26,10 @@ let bin : string Config.param =
   let doc = "The testing stripped binary." in
   Config.(pos non_dir_file ~docv:"binary" ~doc 0)
 
-let tool () : string Config.param =
-  match Rooter.Factory.list () |> List.map ~f:(fun x -> x,x) with
-  | [x,_] -> Config.const x
-  | [] -> assert false
-  | names ->
-    let doc = sprintf "The tool of the function start result \
-                       that we are going to evaluate. Possible \
-                       values: %s." @@ Config.doc_enum names in
-    Config.(pos (enum names) ~docv:"tool" ~doc 1)
+let tool : string Config.param =
+  let doc = sprintf "The tool of the function start result \
+                     that we are going to evaluate." in
+  Config.(pos string ~docv:"tool" ~doc 1)
 
 let truth : string Config.param =
   let doc =
@@ -121,6 +116,6 @@ let () =
     Config.(descr "function start identification benchmark game");
     Config.(manpage default_command man);
     Config.(when_ready default_command (fun {Config.get=(!)} ->
-        compare_against !bin !(tool ()) !truth !print_metrics)) in
+        compare_against !bin !tool !truth !print_metrics)) in
   let _ = Bap_plugin_loader.run Sys.argv in
   ()
