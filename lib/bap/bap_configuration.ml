@@ -218,6 +218,7 @@ end = struct
     | `Version | `Help -> exit 0
 
   let () =
+    Bap_log.start ();
     Future.upon Plugins.loaded evaluate_terms
 end
 
