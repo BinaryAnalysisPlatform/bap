@@ -210,7 +210,8 @@ end = struct
     match result with
     | `Error _ -> exit 1
     | `Ok cmd ->
-      List.Assoc.find_exn !commands cmd ();
+      List.Assoc.find_exn ~equal:(fun a b ->
+          a.Command.name = b.Command.name) !commands cmd ();
       if cmd.plugin_grammar
       then Promise.fulfill eval_plugins_promise ()
       else ()
