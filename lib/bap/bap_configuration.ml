@@ -465,8 +465,8 @@ module Config = struct
             if List.mem allowed x then
               return x
             else
-              invalid_argf "Unrecognized value. Must be %s"
-                (doc_enum values) ()
+              invalid_argf "Unrecognized value for %s. Must be %s"
+                (fst p) (doc_enum values) ()
           ))
 
 
