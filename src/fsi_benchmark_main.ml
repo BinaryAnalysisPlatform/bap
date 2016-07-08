@@ -3,7 +3,7 @@ open Bap.Std
 open Bap_plugins.Std
 open Bap_future.Std
 open Format
-open Cmdliner
+open Frontend
 
 type metrics = [
   | `with_F
@@ -22,31 +22,30 @@ type evaluation = {
   recl: float;
   f_05: float}
 
-let bin : string Term.t =
+let bin : string Config.param =
   let doc = "The testing stripped binary." in
-  Arg.(required & pos 0 (some non_dir_file) None & info [] ~docv:"binary" ~doc)
+  Config.(pos non_dir_file ~docv:"binary" ~doc 0)
 
-let tool () : string Term.t =
+let tool () : string Config.param =
   match Rooter.Factory.list () |> List.map ~f:(fun x -> x,x) with
-  | [x,_] -> Term.const x
+  | [x,_] -> Config.const x
   | [] -> assert false
   | names ->
     let doc = sprintf "The tool of the function start result \
                        that we are going to evaluate. Possible \
-                       values: %s." @@ Arg.doc_alts_enum names in
-    Arg.(required & pos 1 (some (enum names)) None & info [] ~docv:"tool" ~doc)
+                       values: %s." @@ Config.doc_enum names in
+    Config.(pos (enum names) ~docv:"tool" ~doc 1)
 
-let truth : string Term.t =
+let truth : string Config.param =
   let doc =
     "The ground truth. The ground truth can be an unstripped
   binary, or a .scm file with symbol information. In .scm file, each symbol should
   be in format of:
   (<symbol name> <symbol start address> <symbol end address>), e.g.
   (malloc@@GLIBC_2.4 0x11034 0x11038)" in
-  Arg.(required & pos 2 (some non_dir_file) None
-       & info [] ~docv:"ground-truth" ~doc)
+  Config.(pos non_dir_file ~docv:"ground-truth" ~doc 2)
 
-let print_metrics : metrics list Term.t =
+let print_metrics : metrics list Config.param =
   let opts = [
     "precision", `with_prec;
     "recall", `with_recl;
@@ -57,8 +56,8 @@ let print_metrics : metrics list Term.t =
   ] in
   let doc = "Print metrics. User can choose to print -cprecision, -crecall,
   -cF_measure, -cTP, -cFP and -cFN." in
-  Arg.(value & opt_all (enum opts) (List.map ~f:snd opts) &
-       info ["with-metrics"; "c"] ~doc)
+  Config.(param_all (enum opts) ~default:(List.map ~f:snd opts)
+            "with-metrics" ~synonyms:["c"] ~doc)
 
 let output_metric_value formatter r metrics : unit =
   let output_ratio = fprintf formatter "\t%.2g" in
@@ -111,20 +110,16 @@ let compare_against bin tool_name truth_name print_metrics : unit =
         printf "Function start is not recognized properly due to \
                 the following error:\n %a" Error.pp err))
 
-
-let compare_against_t () = Term.(pure compare_against $bin $tool () $truth $print_metrics)
-
-let info =
-  let doc = "function start identification benchmark game" in
-  let man = [
-    `S "DESCRIPTION";
-    `P "Compares function start identification algorithms to
+let man = [
+  `S "DESCRIPTION";
+  `P "Compares function start identification algorithms to
         the ground truth. The latter should be provided by a user.";
-  ] @ Bap_cmdline_terms.common_loader_options in
-  Term.info "bap-fsi-benchmark" ~doc ~man
+] @ Bap_cmdline_terms.common_loader_options
 
 let () =
-  let argv = Bap_plugin_loader.run Sys.argv in
-  match Term.eval ~argv (compare_against_t (), info) with
-  | `Error _ -> exit 1
-  | _ -> exit 0
+  let () =
+    Config.(manpage default_command man);
+    Config.(when_ready default_command (fun {Config.get=(!)} ->
+        compare_against !bin !(tool ()) !truth !print_metrics)) in
+  let _ = Bap_plugin_loader.run Sys.argv in
+  ()
