@@ -862,6 +862,11 @@ module Std : sig
           returned if none of the values match. *)
       val post_check : f:(unit -> (string * 'a) list) -> 'a param -> 'a param
 
+      (** [post_check_all ~f ps] ensures that all values of [ps] lie
+          within those specified by [f]. *)
+      val post_check_all : f:(unit -> (string * 'a) list) ->
+        'a list param -> 'a list param
+
       (** [when_ready command ~plugin_grammar f] requests the system
           to call function [f] once configuration parameters are
           established and stabilized for the [command]. Only one of

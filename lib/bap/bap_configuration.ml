@@ -456,7 +456,6 @@ module Config = struct
 
   let doc_enum = Arg.doc_alts_enum
 
-  (* (unit -> (string * 'a) list) -> 'a param -> 'a param *)
   let post_check ~f p =
     fst p, Future.(
         snd p >>= (fun x ->
@@ -466,9 +465,18 @@ module Config = struct
               return x
             else
               invalid_argf "Unrecognized value for %s. Must be %s"
-                (fst p) (doc_enum values) ()
-          ))
+                (fst p) (doc_enum values) ()))
 
+  let post_check_all ~f ps =
+    fst ps, Future.(
+        snd ps >>= (fun xs ->
+            let values = f () in
+            let allowed = List.map ~f:snd values in
+            if List.for_all xs ~f:(fun x -> List.mem allowed x) then
+              return xs
+            else
+              invalid_argf "Unrecognized value for %s. Must be %s"
+                (fst ps) (doc_enum values) ()))
 
   let term_info =
     ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()

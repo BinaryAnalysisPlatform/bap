@@ -104,6 +104,8 @@ module Frontend : sig
       ?docv:string -> ?doc:string -> unit -> 'a list param
 
     val post_check : f:(unit -> (string * 'a) list) -> 'a param -> 'a param
+    val post_check_all : f:(unit -> (string * 'a) list) ->
+      'a list param -> 'a list param
 
     val when_ready : command -> (reader -> unit) -> unit
 
