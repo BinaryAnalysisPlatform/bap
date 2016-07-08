@@ -99,17 +99,26 @@ module Command = struct
     plugin_grammar : bool;
     man : Config'.manpage_block list option ref;
     doc : string ref;
-    is_default : bool
+    is_default : bool;
+    future : unit future;
+    promise : unit promise;
   }
 
-  let t ~is_default ?(plugin_grammar=true) ~doc name = {
-    name = name;
-    main = ref Term.(const ());
-    plugin_grammar;
-    man = ref None;
-    doc;
-    is_default
-  }
+  let t ~is_default ?(plugin_grammar=true) ~doc name =
+    let future, promise = Future.create () in
+    {
+      name = name;
+      main = ref Term.(const ());
+      plugin_grammar;
+      man = ref None;
+      doc;
+      is_default;
+      future;
+      promise;
+    }
+
+  let equal a b =
+    a.name = b.name
 
   let set_man cmd man : unit =
     cmd.man := Some man
@@ -174,10 +183,16 @@ end = struct
   let add_plugin g =
     plugin_global := Term.(combine $ g $ (!plugin_global))
 
-  let commands : (Command.t, unit -> unit) List.Assoc.t ref = ref []
+  let commands : Command.t list ref = ref []
 
   let when_ready_frontend cmd f =
-    commands := List.Assoc.add !commands cmd f
+    let open Command in
+    Future.upon cmd.future f;
+    if List.mem ~equal !commands cmd
+    then invalid_argf
+        "There must be only one \"when_ready\" for command %S"
+        cmd.name ()
+    else commands := cmd :: !commands
 
   let evalable (cmd:Command.t) : (Command.t Term.t * Term.info) =
     let open Command in
@@ -201,18 +216,17 @@ end = struct
       | _ as xs -> List.map ~f:evalable xs in
     Term.eval_choice default_cmd remaining_cmds
 
-  let evaluate_terms () =
+  let evaluate_terms () : unit =
     let open Command in
     let result = match !commands with
       | [] -> assert false
-      | [x,_] -> Term.eval (evalable x)
-      | _ as xs -> eval_choice (List.map ~f:fst xs) in
+      | [x] -> Term.eval (evalable x)
+      | _ as xs -> eval_choice xs in
     match result with
     | `Error _ -> exit 1
     | `Ok cmd ->
-      let command_callback =
-        List.Assoc.find_exn ~equal:(fun a b ->
-            a.Command.name = b.Command.name) !commands cmd in
+      let command_callback () =
+        Promise.fulfill cmd.Command.promise () in
       let plugin_callback = fun () ->
         if cmd.plugin_grammar
         then Promise.fulfill eval_plugins_promise ()
