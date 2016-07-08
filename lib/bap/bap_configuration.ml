@@ -98,7 +98,7 @@ module Command = struct
     main : unit Term.t ref;
     plugin_grammar : bool;
     man : Config'.manpage_block list option ref;
-    doc : string;
+    doc : string ref;
     is_default : bool
   }
 
@@ -186,7 +186,7 @@ end = struct
       else !(cmd.main) in
     let grammar = Term.(const (fun () -> cmd) $ grammar) in
     let info =
-      Term.(info ?man:!(cmd.man) ~doc:cmd.doc cmd.name) in
+      Term.(info ?man:!(cmd.man) ~doc:!(cmd.doc) cmd.name) in
     grammar, info
 
   let eval_choice (cmds:Command.t list) =
@@ -474,14 +474,19 @@ module Frontend = struct
     type command = Command.t
     let command ?plugin_grammar ~doc name =
       if is_plugin () then cannot_use_frontend () else
-        Command.t ~is_default:false ?plugin_grammar ~doc name
+        Command.t ~is_default:false ?plugin_grammar
+          ~doc:(ref doc) name
 
     let default_command = Command.t ~is_default:true
-        ~plugin_grammar:true ~doc:(doc ()) (executable_name ())
+        ~plugin_grammar:true ~doc:(ref "description not provided")
+        (executable_name ())
 
     let manpage cmd man =
       if is_plugin () then cannot_use_frontend ()
       else Command.set_man cmd man
+
+    let descr doc =
+      default_command.Command.doc := doc
 
     let param ?(commands=[default_command])
         converter ?deprecated ?default ?as_flag ?docv

@@ -107,5 +107,7 @@ module Frontend : sig
 
     val manpage : command -> manpage_block list -> unit
 
+    val descr : string -> unit
+
   end
 end

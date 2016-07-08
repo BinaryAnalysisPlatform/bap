@@ -118,6 +118,7 @@ let man = [
 
 let () =
   let () =
+    Config.(descr "function start identification benchmark game");
     Config.(manpage default_command man);
     Config.(when_ready default_command (fun {Config.get=(!)} ->
         compare_against !bin !(tool ()) !truth !print_metrics)) in

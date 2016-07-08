@@ -869,6 +869,9 @@ module Std : sig
       (** Create a manpage for the specific command in the frontend. *)
       val manpage : command -> manpage_block list -> unit
 
+      (** Set up short description for the frontend. *)
+      val descr : string -> unit
+
     end
 
   end
