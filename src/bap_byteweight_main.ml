@@ -204,34 +204,39 @@ module Cmdline = struct
 
   let filename : string Config.param =
     let doc = "Input filename." in
-    Config.(pos non_dir_file ~docv:"FILE" ~doc 0)
+    Config.(pos ~commands:[dumpc; findc; symbolsc] non_dir_file
+              ~docv:"FILE" ~doc 0)
 
   let database_in : string option Config.param =
     let doc = "Path to signature database" in
-    Config.(param (some non_dir_file) "d" ~synonyms:["db"] ~doc)
+    Config.(param ~commands:[dumpc; findc] (some non_dir_file)
+              "d" ~synonyms:["db"] ~doc)
 
   let database : string option Config.param =
     let doc = "Update or create database at $(docv)" in
-    Config.(param (some string) "db" ~synonyms:["d"]
+    Config.(param ~commands:[trainc] (some string) "db" ~synonyms:["d"]
               ~docv:"DBPATH" ~doc)
 
   let files : string list Config.param =
     let doc = "Input files and directories" in
-    Config.(pos_all file ~docv:"FILE" ~doc ())
+    Config.(pos_all ~commands:[trainc] file ~docv:"FILE" ~doc ())
 
   let compiler : string option Config.param =
     let doc = "Assume the training set is compiled by $(docv)" in
-    Config.(param (some string) "comp" ~docv:"COMPILER" ~doc)
+    Config.(param ~commands:[trainc] (some string) "comp"
+              ~docv:"COMPILER" ~doc)
 
   let length : int Config.param =
     let doc = "Maximum prefix length" in
-    Config.(param int "length" ~synonyms:["l"] ~default:16 ~doc)
+    Config.(param ~commands:[trainc; dumpc; findc] int
+              "length" ~synonyms:["l"] ~default:16 ~doc)
 
   let meth : [`update | `rewrite] Config.param =
     let enums = ["update", `update; "rewrite", `rewrite] in
     let doc = sprintf "If entry exists then %s it." @@
       Config.doc_enum enums in
-    Config.(param (enum enums) "method" ~synonyms:["m"]
+    Config.(param ~commands:[trainc] (enum enums)
+              "method" ~synonyms:["m"]
               ~default:`update ~doc)
 
   let threshold : float Config.param =
@@ -240,7 +245,7 @@ module Cmdline = struct
                number of occurences of a given sequence in \
                the training set, and m is how many times \
                it has occured at the function start position." in
-    Config.(param float "threshold" ~synonyms:["t"]
+    Config.(param ~commands:[dumpc] float "threshold" ~synonyms:["t"]
               ~default:0.5 ~docv:"THRESHOLD" ~doc)
 
   let url : string Config.param =
@@ -248,33 +253,37 @@ module Cmdline = struct
     let default = sprintf
         "https://github.com/BinaryAnalysisPlatform/bap/\
          releases/download/v%s/sigs.zip" Config.version in
-    Config.(param string "url" ~default ~doc)
+    Config.(param ~commands:[fetchc; updatec] string "url"
+              ~default ~doc)
 
   let src : string Config.param =
-    Config.(pos non_dir_file ~default:"sigs.zip" ~docv:"SRC"
-              ~doc:"Signatures file" 0)
+    Config.(pos ~commands:[installc] non_dir_file ~default:"sigs.zip"
+              ~docv:"SRC" ~doc:"Signatures file" 0)
 
   let dst : string Config.param =
-    Config.(pos string ~default:Sigs.default_path ~docv:"DST"
+    Config.(pos ~commands:[installc; updatec] string
+              ~default:Sigs.default_path ~docv:"DST"
               ~doc:"Destination" 1)
 
   let output : string Config.param =
     let doc = "Output filename" in
-    Config.(param string "o" ~default:"sigs.zip" ~doc)
+    Config.(param ~commands:[fetchc] string "o"
+              ~default:"sigs.zip" ~doc)
 
   let print_name : bool Config.param =
     let doc = "Print symbol's name." in
-    Config.(flag "print-name" ~synonyms:["n"] ~doc)
+    Config.(flag ~commands:[symbolsc] "print-name" ~synonyms:["n"] ~doc)
 
   let print_size : bool Config.param =
     let doc = "Print symbol's size." in
-    Config.(flag "print-size" ~synonyms:["s"] ~doc)
+    Config.(flag ~commands:[symbolsc] "print-size" ~synonyms:["s"] ~doc)
 
   let tool : [`BW | `SymTbl] Config.param =
     let enums = ["byteweight", `BW; "symbols", `SymTbl] in
     let doc = sprintf "The info to be dumped. %s"
       @@ Config.doc_enum enums in
-    Config.(param (enum enums) "info" ~synonyms:["i"] ~default:`BW ~doc)
+    Config.(param ~commands:[dumpc] (enum enums)
+              "info" ~synonyms:["i"] ~default:`BW ~doc)
 
   let usage choices =
     eprintf "usage: bap-byteweight [--version] [--help] \
