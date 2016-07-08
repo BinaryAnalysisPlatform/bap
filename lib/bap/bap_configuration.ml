@@ -6,7 +6,7 @@ open Cmdliner
 open Format
 
 module Config' = struct
-  type 'a param = 'a future
+  type 'a param = string * 'a future
   type 'a parser = string -> [ `Ok of 'a | `Error of string ]
   type 'a printer = Format.formatter -> 'a -> unit
   module Converter = struct
@@ -362,7 +362,7 @@ module Config = struct
            @@ info (name::synonyms) ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
-    future
+    name, future
 
   let param
       converter ?deprecated ?default ?as_flag ?docv
@@ -386,7 +386,7 @@ module Config = struct
            @@ info (name::synonyms) ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
-    future
+    name, future
 
   let param_all
       converter ?deprecated ?default ?as_flag ?docv ?doc ?synonyms
@@ -407,7 +407,7 @@ module Config = struct
       Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise (param || x)) $ t $ (!main));
-    future
+    name, future
 
   let flag
       ?deprecated ?docv ?doc ?synonyms name =
@@ -416,8 +416,8 @@ module Config = struct
         ?deprecated ?docv ?doc ?synonyms name
     else must_use_frontend ()
 
-  let const x =
-    Future.return x
+  let const x : 'a param =
+    "", Future.return x
 
   let pos' main (future, promise) converter ?default ?(docv="VAL")
       ?(doc="Undocumented") n =
@@ -434,7 +434,7 @@ module Config = struct
              @@ info [] ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
-    future
+    docv ^ " argument", future
 
   let pos_all' main (future, promise) (converter:'a converter)
       ?default ?(docv="VAL") ?(doc="Undocumented") n
@@ -452,22 +452,22 @@ module Config = struct
              @@ info [] ~doc ~docv) in
     main := Term.(const (fun x () ->
         Promise.fulfill promise x) $ t $ (!main));
-    future
+    docv ^ " argument", future
 
   let doc_enum = Arg.doc_alts_enum
 
   (* (unit -> (string * 'a) list) -> 'a param -> 'a param *)
   let post_check ~f p =
-    Future.(
-      p >>= (fun x ->
-          let values = f () in
-          let allowed = List.map ~f:snd values in
-          if List.mem allowed x then
-            return x
-          else
-            invalid_argf "Unrecognized value. Must be %s"
-              (doc_enum values) ()
-        ))
+    fst p, Future.(
+        snd p >>= (fun x ->
+            let values = f () in
+            let allowed = List.map ~f:snd values in
+            if List.mem allowed x then
+              return x
+            else
+              invalid_argf "Unrecognized value. Must be %s"
+                (doc_enum values) ()
+          ))
 
 
   let term_info =
@@ -479,7 +479,7 @@ module Config = struct
       term_info := Term.info ~doc:(doc ()) ~man (plugin_name ())
     else must_use_frontend ()
 
-  let determined (p:'a param) : 'a future = p
+  let determined (p:'a param) : 'a future = snd p
 
   type reader = {get : 'a. 'a param -> 'a}
   let when_ready f : unit =
@@ -489,7 +489,7 @@ module Config = struct
           !(plugin_grammar ()) in
       add_plugin grammar;
       when_ready_plugin (fun () ->
-          f {get = (fun p -> Future.peek_exn p)})
+          f {get = (fun p -> Future.peek_exn (snd p))})
     else must_use_frontend ()
 
   include Config'.Converters
@@ -598,7 +598,7 @@ module Frontend = struct
     let when_ready (cmd:command) f : unit =
       if is_plugin () then cannot_use_frontend () else
         CmdlineGrammar.when_ready_frontend cmd (fun () ->
-            f {get = (fun p -> Future.peek_exn p)})
+            f {get = (fun p -> Future.peek_exn (snd p))})
 
   end
 end
