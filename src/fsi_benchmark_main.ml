@@ -112,10 +112,8 @@ let man = [
 ] @ Bap_cmdline_terms.common_loader_options
 
 let () =
-  let () =
-    Config.(descr "function start identification benchmark game");
-    Config.(manpage default_command man);
-    Config.(when_ready default_command (fun {Config.get=(!)} ->
-        compare_against !bin !tool !truth !print_metrics)) in
-  let _ = Bap_plugin_loader.run Sys.argv in
-  ()
+  Config.(descr "function start identification benchmark game");
+  Config.(manpage default_command man);
+  Config.(when_ready default_command (fun {Config.get=(!)} ->
+      compare_against !bin !tool !truth !print_metrics));
+  Plugins.run ();
