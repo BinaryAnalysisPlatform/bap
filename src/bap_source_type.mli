@@ -1,4 +1,5 @@
 open Bap.Std
+open Frontend
 
 type t = [
   | `Binary
@@ -10,4 +11,4 @@ exception Unknown_arch of string
 exception Unrecognized_source
 
 
-val t : t Cmdliner.Arg.converter
+val converter : t Config.converter
