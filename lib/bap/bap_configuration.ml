@@ -210,11 +210,14 @@ end = struct
     match result with
     | `Error _ -> exit 1
     | `Ok cmd ->
-      List.Assoc.find_exn ~equal:(fun a b ->
-          a.Command.name = b.Command.name) !commands cmd ();
-      if cmd.plugin_grammar
-      then Promise.fulfill eval_plugins_promise ()
-      else ()
+      let command_callback =
+        List.Assoc.find_exn ~equal:(fun a b ->
+            a.Command.name = b.Command.name) !commands cmd in
+      let plugin_callback = fun () ->
+        if cmd.plugin_grammar
+        then Promise.fulfill eval_plugins_promise ()
+        else () in
+      plugin_callback(); command_callback ()
     | `Version | `Help -> exit 0
 
   let () =
