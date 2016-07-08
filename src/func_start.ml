@@ -21,7 +21,13 @@ let of_truth truth ~testbin : addr seq Or_error.t future =
 let of_tool tool ~testbin : addr seq Or_error.t future =
   let module EF = Monad.T.Or_error.Make(Future) in
   let rooter = Rooter.Factory.find tool in
-  let rooter = Option.value_exn rooter in
+  let rooter =
+    match rooter with
+    | Some x -> x
+    | None -> invalid_argf "Unknown tool %S. Possible options: %s"
+                tool (Rooter.Factory.list ()
+                      |> List.map ~f:(fun x -> x,x)
+                      |> Config.doc_enum) () in
   let rooter_fe = Stream.hd rooter in
   let input = Project.Input.file testbin in
   let _ = match Project.create ~rooter input with
