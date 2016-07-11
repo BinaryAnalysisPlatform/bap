@@ -338,8 +338,7 @@ end = struct
           match eval ~argv (grammar, terminfo) with
           | `Error _ -> exit 1
           | `Ok _ -> assert false
-          | `Version -> assert false
-          | `Help -> exit 0 in
+          | `Version | `Help -> exit 0 in
         match h with
         | None -> if v then check_result (version ()) else ()
         | Some t -> check_result (help t)
