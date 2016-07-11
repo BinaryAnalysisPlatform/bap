@@ -114,4 +114,6 @@ module Frontend : sig
     val descr : string -> unit
 
   end
+
+  val start : unit -> unit
 end

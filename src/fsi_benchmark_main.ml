@@ -116,4 +116,4 @@ let () =
   Config.(manpage default_command man);
   Config.(when_ready default_command (fun {Config.get=(!)} ->
       compare_against !bin !tool !truth !print_metrics));
-  Plugins.run ();
+  Frontend.start ();

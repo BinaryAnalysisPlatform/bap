@@ -273,7 +273,7 @@ module Cmdline = struct
           | Ok _ -> exit 0
           | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
       ));
-    Plugins.run ()
+    Frontend.start ()
 
   let () =
     try main () with

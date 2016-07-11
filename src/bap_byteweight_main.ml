@@ -317,6 +317,6 @@ module Cmdline = struct
         update !url !dst));
     Config.when_ready symbolsc (fun {Config.get=(!)} -> ok_exn (
         symbols !print_name !print_size !filename));
-    Plugins.run ()
+    Frontend.start ()
 
 end

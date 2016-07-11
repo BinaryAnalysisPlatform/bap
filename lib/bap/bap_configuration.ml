@@ -609,4 +609,7 @@ module Frontend = struct
             f {get = (fun p -> Future.peek_exn (snd p))})
 
   end
+
+  let start () =
+    Plugins.run ()
 end

@@ -881,8 +881,11 @@ module Std : sig
 
       (** Set up short description for the frontend. *)
       val descr : string -> unit
-
     end
+
+    (** Start all necessary front end work (including parsing of
+        parameters etc.) *)
+    val start : unit -> unit
 
   end
 
