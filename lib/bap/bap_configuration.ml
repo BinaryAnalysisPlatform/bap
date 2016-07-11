@@ -241,6 +241,7 @@ module Command = struct
 
   type t = {
     name : string;
+    version : string;
     main : unit Term.t ref;
     plugin_grammar : bool;
     man : Config'.manpage_block list option ref;
@@ -250,10 +251,11 @@ module Command = struct
     promise : unit promise;
   }
 
-  let t ~is_default ?(plugin_grammar=true) ~doc name =
+  let t ~is_default ?(plugin_grammar=true) ~doc ~version name =
     let future, promise = Future.create () in
     {
       name = name;
+      version;
       main = ref Term.(const ());
       plugin_grammar;
       man = ref None;
@@ -362,7 +364,7 @@ end = struct
       else !(cmd.main) in
     let grammar = Term.(const (fun () -> cmd) $ grammar) in
     let info =
-      Term.(info ?man:!(cmd.man) ~doc:!(cmd.doc) cmd.name) in
+      Term.(info ?man:!(cmd.man) ~doc:!(cmd.doc) cmd.name ~version:cmd.version) in
     grammar, info
 
   let eval_choice (cmds:Command.t list) =
@@ -430,6 +432,9 @@ module Config = struct
 
   include Config'
   include Bap_config
+
+  let ver () =
+    Manifest.version (manifest ())
 
   let deprecated =
     if is_plugin () then "Please refer to --" ^ plugin_name () ^ "-help"
@@ -648,11 +653,13 @@ module Config = struct
 
   let term_info =
     ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()
-                                  else executable_name ()))
+                                  else executable_name ())
+           ~version:(ver ()))
 
   let manpage (man:manpage_block list) : unit =
     if is_plugin () then
       term_info := Term.info ~doc:(doc ()) ~man (plugin_name ())
+          ~version:(ver ())
     else must_use_frontend ()
 
   let determined (p:'a param) : 'a future = snd p
@@ -690,11 +697,11 @@ module Frontend = struct
     let command ?plugin_grammar ~doc name =
       if is_plugin () then cannot_use_frontend () else
         Command.t ~is_default:false ?plugin_grammar
-          ~doc:(ref doc) name
+          ~doc:(ref doc) name ~version:(ver ())
 
     let default_command = Command.t ~is_default:true
         ~plugin_grammar:true ~doc:(ref "description not provided")
-        (executable_name ())
+        (executable_name ()) ~version:(ver ())
 
     let manpage cmd man =
       if is_plugin () then cannot_use_frontend ()
