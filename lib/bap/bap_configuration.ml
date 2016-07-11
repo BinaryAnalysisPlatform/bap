@@ -653,9 +653,15 @@ module Config = struct
       let open CmdlineGrammar in
       let grammar = plugin_help (plugin_name ()) !term_info
           !(plugin_grammar ()) in
+      let plugin_bundle = main_bundle () in
       add_plugin grammar;
       when_ready_plugin (fun () ->
-          f {get = (fun p -> Future.peek_exn (snd p))})
+          (* Ensure that [f] is executed in the right context *)
+          let old_bundle = main_bundle () in
+          set_main_bundle plugin_bundle;
+          f {get = (fun p -> Future.peek_exn (snd p))};
+          (* Set back the context *)
+          set_main_bundle old_bundle)
     else must_use_frontend ()
 
   include Config'.Converters
