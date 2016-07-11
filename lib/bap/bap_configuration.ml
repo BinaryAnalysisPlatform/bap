@@ -799,8 +799,8 @@ module Frontend = struct
   let start () =
     try CmdlineGrammar.start () with
     | Err.User msg ->
-      eprintf "Config.error> %s" msg; exit 1
+      eprintf "Config.error> %s\n" msg; exit 1
     | Err.Dev msg ->
-      eprintf "Config.error> Message to developer: %s" msg; exit 1
+      eprintf "Config.error> Message to developer: %s\n" msg; exit 1
 
 end
