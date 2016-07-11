@@ -9,11 +9,9 @@
 /*.byte
 /*.docdir
 /*.native
-/Makefile
 /_build/
 /_tags
 /configure
-/doc
 /lib/bap_types/bap_config.ml
 /myocamlbuild.ml
 /postinstall.ml
@@ -36,3 +34,4 @@ x86-binaries
 x86_64-binaries
 test-args
 [#]*[#]
+/plugins/_build/
