@@ -318,27 +318,32 @@ end = struct
     Future.upon eval_plugins_complete f
 
   let plugin_help plugin_name terminfo grammar : unit Term.t =
-    let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
-    let name = plugin_name ^ "-help" in
-    let doc = "Show help for " ^
-              plugin_name ^
-              " plugin in format $(docv), (pager, plain or groff)" in
-    let help = Arg.(value @@
-                    opt ~vopt:(Some "pager") (some (enum formats)) None @@
-                    info [name] ~doc ~docv:"FMT") in
-    Term.(const (fun h () ->
-        match h with
-        | None -> ()
-        | Some v ->
-          match eval ~argv:[|plugin_name;
-                             "--help";
-                             v
-                           |] (grammar, terminfo) with
+    let help =
+      let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
+      let name = plugin_name ^ "-help" in
+      let doc = "Show help for " ^
+                plugin_name ^
+                " plugin in format $(docv), (pager, plain or groff)" in
+      Arg.(value @@
+           opt ~vopt:(Some "pager") (some (enum formats)) None @@
+           info [name] ~doc ~docv:"FMT") in
+    let version =
+      let name = plugin_name ^ "-version" in
+      let doc = "Show version information of " ^ plugin_name in
+      Arg.(value @@ flag @@ info [name] ~doc) in
+    Term.(const (fun h v () ->
+        let help t = [|plugin_name; "--help"; t|] in
+        let version () = [|plugin_name; "--version"|] in
+        let check_result argv =
+          match eval ~argv (grammar, terminfo) with
           | `Error _ -> exit 1
           | `Ok _ -> assert false
           | `Version -> assert false
-          | `Help -> exit 0
-      ) $ help $ grammar)
+          | `Help -> exit 0 in
+        match h with
+        | None -> if v then check_result (version ()) else ()
+        | Some t -> check_result (help t)
+      ) $ help $ version $ grammar)
 
   let combine = Term.const (fun () () -> ())
 
