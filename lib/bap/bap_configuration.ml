@@ -146,9 +146,16 @@ module CmdlineGrammar : sig
       when ready. Should be called by frontends only. *)
   val when_ready_frontend : Command.t -> (unit -> unit) -> unit
 
+  (** Does any pre-processing (if necessary) on the argv, along with
+      recognizing options like [--no-PLUGIN] etc.  *)
+  val preprocess_plugins : unit -> unit
 end = struct
 
   let plugin_global = ref Term.(const ())
+  let argv = ref Sys.argv
+
+  let preprocess_plugins () =
+    ()
 
   let eval_plugins_complete, eval_plugins_promise = Future.create ()
 
@@ -214,13 +221,13 @@ end = struct
       match List.filter ~f:(fun cmd -> not cmd.is_default) cmds with
       | [] -> assert false
       | _ as xs -> List.map ~f:evalable xs in
-    Term.eval_choice default_cmd remaining_cmds
+    Term.eval_choice ~argv:!argv default_cmd remaining_cmds
 
   let evaluate_terms () : unit =
     let open Command in
     let result = match !commands with
       | [] -> assert false
-      | [x] -> Term.eval (evalable x)
+      | [x] -> Term.eval ~argv:!argv (evalable x)
       | _ as xs -> eval_choice xs in
     match result with
     | `Error _ -> exit 1
@@ -611,5 +618,6 @@ module Frontend = struct
   end
 
   let start () =
+    CmdlineGrammar.preprocess_plugins ();
     Plugins.run ()
 end
