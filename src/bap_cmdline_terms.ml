@@ -129,47 +129,6 @@ let verbose : bool Config.param =
   let doc = "Print verbose output" in
   Config.(flag "verbose" ~doc)
 
-let load, load_doc =
-  let doc =
-    "Dynamically loads file $(i,PATH).plugin. A plugin must be
-     compiled with $(b,bapbuild) tool using $(b,bapbuild PATH.plugin)
-     command." in
-  Config.(param_all string "l" ~docv:"PATH" ~doc), doc
-
-let load_path, load_path_doc =
-  let doc =
-    "Add $(i,PATH) to a set of search paths. Plugins found in the
-    search paths will be loaded automatically." in
-  Config.(param_all string "L" ~synonyms:["load-path"]
-            ~docv:"PATH" ~doc), doc
-
-let list_plugins, list_plugin_doc =
-  let doc = "List available plugins" in
-  Config.(flag "list-plugins" ~doc), doc
-
-let disable_plugin, disable_plugin_doc =
-  let doc = "Don't load $(i,PLUGIN) automatically" in
-  Config.(param_all string "disable-plugin" ~doc), doc
-
-let no_auto_load, no_auto_load_doc =
-  let doc = "Disable auto loading of plugins" in
-  Config.(flag "disable-autoload" ~doc), doc
-
-let loader_options = [
-  "-l"; "-L"; "--list-plugins"; "--disable-plugin"; "--disable-autoload"
-]
-
-let common_loader_options = [
-  `S "PLUGIN OPTIONS";
-  `I ("$(b,-l) $(i,PATH)", load_doc);
-  `I ("$(b,-L)$(i,PATH)", load_path_doc);
-  `I ("$(b,--list-plugins)", list_plugin_doc);
-  `I ("$(b,--disable-plugin)", disable_plugin_doc);
-  `I ("$(b,--disable-autoload)", no_auto_load_doc);
-  `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);
-]
-
-
 let options_for_passes = [
   `S "OPTIONS FOR PASSES";
   `I begin

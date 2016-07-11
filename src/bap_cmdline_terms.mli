@@ -16,12 +16,4 @@ val rooters : string list Config.param
 val symbols : string list Config.param
 val reconstructor : string option Config.param
 
-val load : string list Config.param
-val load_path : string list Config.param
-val list_plugins : bool Config.param
-val disable_plugin : string list Config.param
-val no_auto_load : bool Config.param
-
-val loader_options : string list
-val common_loader_options : Config.manpage_block list
 val options_for_passes    : Config.manpage_block list

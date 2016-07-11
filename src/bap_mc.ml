@@ -246,20 +246,18 @@ module Cmdline = struct
           llvm-mc functionality using the BAP disassembly backend.";
       `S "OPTIONS";
       `I ("$(b,--list-formats)=$(i,TYPE)", list_formats_doc);
-    ] @ Bap_cmdline_terms.common_loader_options
-      @ [
-        `S "EXAMPLES";
-        `P "The following hex representations are supported:"; `Noblank;
-        `Pre "
+      `S "EXAMPLES";
+      `P "The following hex representations are supported:"; `Noblank;
+      `Pre "
          0x31 0xd2 0x48 0xf7 0xf3
          \\\\x31\\\\xd2\\\\x48\\\\xf7\\\\xf3
          31 d2 48 f7 f3
          31d248f7f3";
-        `I ("INPUT: Supplied via stdin or on the command-line",
-            "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
-             bap-mc  --show-inst --show-bil");
-        `S "SEE ALSO";
-        `P "llvm-mc"] in
+      `I ("INPUT: Supplied via stdin or on the command-line",
+          "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
+           bap-mc  --show-inst --show-bil");
+      `S "SEE ALSO";
+      `P "llvm-mc"] in
     Config.(descr doc);
     Config.(manpage default_command man);
     Config.(when_ready default_command (fun {Config.get=(!)} ->

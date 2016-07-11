@@ -109,7 +109,7 @@ let man = [
   `S "DESCRIPTION";
   `P "Compares function start identification algorithms to
         the ground truth. The latter should be provided by a user.";
-] @ Bap_cmdline_terms.common_loader_options
+]
 
 let () =
   Config.(descr "function start identification benchmark game");
