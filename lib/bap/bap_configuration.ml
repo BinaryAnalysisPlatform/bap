@@ -5,6 +5,17 @@ open Bap_future.Std
 open Cmdliner
 open Format
 
+module Err = struct
+  exception Dev of string
+  exception User of string
+
+  let user fmt =
+    ksprintf (fun x () -> raise (User x)) fmt
+
+  let dev fmt =
+    ksprintf (fun x () -> raise (Dev x)) fmt
+end
+
 module PluginLoader = struct
 
   let load =
@@ -340,8 +351,7 @@ end = struct
     let open Command in
     Future.upon cmd.future f;
     if List.mem ~equal !commands cmd
-    then invalid_argf
-        "There must be only one \"when_ready\" for command %S"
+    then Err.dev "There must be only one \"when_ready\" for command %S"
         cmd.name ()
     else commands := cmd :: !commands
 
@@ -411,7 +421,7 @@ module Config = struct
     Manifest.name (manifest ()) <> executable_name ()
 
   let must_use_frontend () =
-    invalid_arg "Must use the Frontend interface for frontends"
+    Err.dev "Must use the Frontend interface for frontends" ()
 
   let plugin_name () =
     if is_plugin ()
@@ -445,7 +455,7 @@ module Config = struct
       match String.split str ~on:'=' with
       | k :: _ when String.prefix k 1 = "#" -> None
       | [""] | [] -> None
-      | [k] -> invalid_argf
+      | [k] -> Err.user
                  "Maybe comment out %S using # in config file?" k ()
       | k :: vs -> Some (String.strip k,
                          String.strip (String.concat ~sep:"=" vs)) in
@@ -476,7 +486,7 @@ module Config = struct
       let parse, _ = converter in
       match parse str with
       | `Error err ->
-        invalid_argf "Could not parse %S for parameter %S: %s"
+        Err.user "Could not parse %S for parameter %S: %s"
           str name err ()
       | `Ok v -> v in
     let value = match str with
@@ -620,7 +630,7 @@ module Config = struct
                 if List.mem allowed x then
                   return x
                 else
-                  invalid_argf "Unrecognized value for %s. Must be %s"
+                  Err.user "Unrecognized value for %s. Must be %s"
                     (fst p) (doc_enum values) ())))
 
   let post_check_all ~f ps =
@@ -633,7 +643,7 @@ module Config = struct
                 then
                   return xs
                 else
-                  invalid_argf "Unrecognized value for %s. Must be %s"
+                  Err.user "Unrecognized value for %s. Must be %s"
                     (fst ps) (doc_enum values) ())))
 
   let term_info =
@@ -673,7 +683,7 @@ module Frontend = struct
     include Config
 
     let cannot_use_frontend () =
-      invalid_argf "Cannot use Frontend interface for plugin %S"
+      Err.dev "Cannot use Frontend interface for plugin %S"
         (plugin_name ()) ()
 
     type command = Command.t
@@ -775,6 +785,10 @@ module Frontend = struct
   end
 
   let start () =
-    CmdlineGrammar.start ()
+    try CmdlineGrammar.start () with
+    | Err.User msg ->
+      eprintf "Config.error> %s" msg; exit 1
+    | Err.Dev msg ->
+      eprintf "Config.error> Message to developer: %s" msg; exit 1
 
 end
