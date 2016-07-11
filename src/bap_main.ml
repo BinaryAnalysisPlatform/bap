@@ -3,9 +3,9 @@ open Bap_plugins.Std
 open Bap_future.Std
 open Regular.Std
 open Bap.Std
+open Frontend
 open Or_error
 open Format
-open Cmdliner
 open Bap_options
 open Bap_source_type
 include Self()
@@ -117,6 +117,14 @@ let process options project =
             Project.Io.save ~fmt ?ver ch project)
       | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
 
+let passes : string list Config.param =
+  let f () = Project.passes () |>
+             List.map ~f:Project.Pass.name |>
+             List.map ~f:(fun x -> x,x) in
+  let doc = "Runs passes (comma delimitted)." in
+  Config.(post_check_all ~f (param (list string) "p"
+                               ~synonyms:["pass";"passes"] ~doc))
+
 let main o =
   let digest = digest o in
   let project = match Project.Cache.load digest with
@@ -138,7 +146,29 @@ let main o =
         project in
   process o project
 
-let program_info =
+let program {Config.get=(!)} =
+  let create
+      a b c d e f g i j k l = Bap_options.Fields.create
+      a b c d e f g i j k l in
+  let open Bap_cmdline_terms in
+  let options = create
+      !filename
+      !disassembler
+      !loader
+      !dump_formats
+      !source_type
+      !verbose
+      !brancher
+      !symbolizers
+      !rooters
+      !reconstructor
+      !passes in
+  let print_formats () =
+    if !list_formats then print_formats_and_exit () else () in
+  print_formats ();
+  main options
+
+let cmdline () =
   let doc = "Binary Analysis Platform" in
   let man = [
     `S "SYNOPSIS";
@@ -184,52 +214,16 @@ let program_info =
     to build your standalone applications, or to build BAP itself.");
     `S "OPTIONS";
     `I ("$(b,--list-formats)", Bap_cmdline_terms.list_formats_doc)
-  ] @ Bap_cmdline_terms.common_loader_options
-    @ Bap_cmdline_terms.options_for_passes
+  ] @ Bap_cmdline_terms.options_for_passes
     @ [
       `S "BUGS";
       `P "Report bugs to \
           https://github.com/BinaryAnalysisPlatform/bap/issues";
       `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
     ] in
-  Term.info "bap" ~version:Config.version ~doc ~man
-let program source =
-  let create
-      a b c d e f g i j k = Bap_options.Fields.create
-      a b c d e f g i j k [] in
-  let open Bap_cmdline_terms in
-  Term.(const create
-        $filename
-        $(disassembler ())
-        $(loader ())
-        $(dump_formats ())
-        $source_type
-        $verbose
-        $(brancher ())
-        $(symbolizers ())
-        $(rooters ())
-        $(reconstructor ())),
-  program_info
-
-let parse_source argv =
-  let source_type = Bap_cmdline_terms.source_type in
-  match Term.eval_peek_opts ~argv source_type with
-  | _,`Ok src -> src
-  | Some src,(`Version|`Help) -> src
-  | _ -> raise Unrecognized_source
-
-let run_loader () =
-  let argv,passes = Bap_plugin_loader.run_and_get_passes Sys.argv in
-  let print_formats =
-    Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
-    fst |> Option.value ~default:false in
-  if print_formats then print_formats_and_exit ();
-  argv,passes
-
-let parse passes argv =
-  match Cmdliner.Term.eval ~argv ~catch:false (program source) with
-  | `Ok opts -> { opts with Bap_options.passes }
-  | _ -> exit 0
+  Config.(descr doc);
+  Config.(manpage default_command man);
+  Config.(when_ready default_command program)
 
 let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
@@ -240,17 +234,13 @@ let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Not_found -> () in
-  Log.start ();
   at_exit (pp_print_flush err_formatter);
-  let argv,passes = run_loader () in
-  try main (parse passes argv); exit 0 with
+  try cmdline (); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch
       (String.concat ~sep:"," (List.map Arch.all ~f:Arch.to_string))
   | Unrecognized_source ->
     error "Invalid format of source type argument"
-  | Bap_plugin_loader.Plugin_not_found name ->
-    error "Can't find a plugin bundle `%s'" name
   | Failed_to_load_file err ->
     error "Failed to load a file with code: %a" Error.pp err
   | Failed_to_create_project err ->
