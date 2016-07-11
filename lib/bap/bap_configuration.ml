@@ -286,6 +286,10 @@ module CmdlineGrammar : sig
       recognizing options like [--no-PLUGIN] etc. and then starts off
       the loading of plugins, and command line processing. *)
   val start : unit -> unit
+
+  (** This future is ready plugins have finished callbacks (i.e. to
+      register themselves) *)
+  val post_plugin : unit future
 end = struct
 
   let plugin_global = ref PluginLoader.global_term
@@ -327,6 +331,8 @@ end = struct
 
   let add_plugin g =
     plugin_global := Term.(combine $ g $ (!plugin_global))
+
+  let post_plugin, post_plugin_promise = Future.create ()
 
   let commands : Command.t list ref = ref []
 
@@ -376,7 +382,11 @@ end = struct
         if cmd.plugin_grammar
         then Promise.fulfill eval_plugins_promise ()
         else () in
-      plugin_callback(); command_callback ()
+      let postprocess_callback () =
+        Promise.fulfill post_plugin_promise () in
+      plugin_callback();
+      postprocess_callback ();
+      command_callback ()
     | `Version | `Help -> exit 0
 
   let () =
@@ -604,24 +614,27 @@ module Config = struct
   let post_check ~f p =
     fst p, Future.(
         snd p >>= (fun x ->
-            let values = f () in
-            let allowed = List.map ~f:snd values in
-            if List.mem allowed x then
-              return x
-            else
-              invalid_argf "Unrecognized value for %s. Must be %s"
-                (fst p) (doc_enum values) ()))
+            CmdlineGrammar.post_plugin >>= (fun () ->
+                let values = f () in
+                let allowed = List.map ~f:snd values in
+                if List.mem allowed x then
+                  return x
+                else
+                  invalid_argf "Unrecognized value for %s. Must be %s"
+                    (fst p) (doc_enum values) ())))
 
   let post_check_all ~f ps =
     fst ps, Future.(
         snd ps >>= (fun xs ->
-            let values = f () in
-            let allowed = List.map ~f:snd values in
-            if List.for_all xs ~f:(fun x -> List.mem allowed x) then
-              return xs
-            else
-              invalid_argf "Unrecognized value for %s. Must be %s"
-                (fst ps) (doc_enum values) ()))
+            CmdlineGrammar.post_plugin >>= (fun () ->
+                let values = f () in
+                let allowed = List.map ~f:snd values in
+                if List.for_all xs ~f:(fun x -> List.mem allowed x)
+                then
+                  return xs
+                else
+                  invalid_argf "Unrecognized value for %s. Must be %s"
+                    (fst ps) (doc_enum values) ())))
 
   let term_info =
     ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()
