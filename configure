@@ -1,0 +1,50 @@
+#!/bin/sh
+
+set -e
+
+rm -f _oasis
+
+FST=true
+
+
+for i in "$@"; do
+  if $FST; then
+    set --
+    FST=false
+  fi
+
+  case $i in
+    --*=*)
+      ARG=${i%%=*}
+      VAL=${i##*=}
+      set -- "$@" "$ARG" "$VAL"
+      ;;
+    *)
+      set -- "$@" "$i"
+      ;;
+  esac
+done
+
+SECTIONS=`ocaml tools/oasis_sections.ml --sections "$@"`
+TAGS=`ocaml tools/collect.ml tags $SECTIONS`
+PLUGINS=`ocaml tools/collect.ml ocamlbuild.ml $SECTIONS`
+SETUPS=`ocaml tools/collect.ml setup.ml $SECTIONS`
+AB=`ocaml tools/collect.ml files.ab $SECTIONS`
+
+# Correct for "--disable" type of arguments
+if ! $FST; then
+    ARGS=`ocaml tools/oasis_sections.ml --args "$@"`
+    set --
+    while read -r arg; do
+        set -- "$@" "$arg"
+    done <<EOF
+    $ARGS
+EOF
+fi
+
+ocaml tools/cat.ml '"\n# $name\n"' -- $SECTIONS $AB _oasis
+ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $PLUGINS myocamlbuild.ml.in myocamlbuild.ml
+ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
+oasis -quiet setup
+ocaml setup.ml -quiet -configure "$@"
