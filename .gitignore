@@ -31,3 +31,8 @@ _oasis
 /lib/bap_config/bap_config.ml
 /plugins/ida/bap_ida_config.ml
 /plugins/objdump/objdump_config.ml
+arm-binaries
+x86-binaries
+x86_64-binaries
+test-args
+[#]*[#]
