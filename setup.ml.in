@@ -75,11 +75,11 @@ let llvm var () : unit =
        let llvm_config = BaseEnv.var_get "llvm_config" in
        let llvm_version = BaseEnv.var_get "llvm_version" in
        let extract v =
-	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in 
+         OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in 
        if llvm_version > "3.4" && var = "ldflags"
        then extract var ^ extract "system-libs"
        else extract var) |>
-    definition_end
+  definition_end
 
 let cxx_flags () : unit =
   BaseEnv.var_define
