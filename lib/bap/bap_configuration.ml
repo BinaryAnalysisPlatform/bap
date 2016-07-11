@@ -5,6 +5,148 @@ open Bap_future.Std
 open Cmdliner
 open Format
 
+module PluginLoader = struct
+
+  let load, load_doc =
+    let doc =
+      "Dynamically loads file $(i,PATH).plugin. A plugin must be
+     compiled with $(b,bapbuild) tool using $(b,bapbuild PATH.plugin)
+     command." in
+    Arg.(value @@ opt_all string [] @@ info ["l"] ~docv:"PATH" ~doc),
+    doc
+
+  let load_path, load_path_doc =
+    let doc =
+      "Add $(i,PATH) to a set of search paths. Plugins found in the
+    search paths will be loaded automatically." in
+    Arg.(value @@ opt_all string []
+         @@ info ["L"; "load-path"] ~docv:"PATH" ~doc), doc
+
+  let list_plugins, list_plugins_doc =
+    let doc = "List available plugins" in
+    Arg.(value @@ flag @@ info ["list-plugins"] ~doc), doc
+
+  let disable_plugin, disable_plugin_doc =
+    let doc = "Don't load $(i,PLUGIN) automatically" in
+    Arg.(value @@ opt_all string []
+         @@ info ["disable-plugin"] ~doc), doc
+
+  let no_auto_load, no_auto_load_doc =
+    let doc = "Disable auto loading of plugins" in
+    Arg.(value @@ flag @@ info ["disable-autoload"] ~doc), doc
+
+  let loader_options = [
+    "-l"; "-L"; "--list-plugins"; "--disable-plugin"; "--disable-autoload"
+  ]
+
+  let common_loader_options = [
+    `S "PLUGIN OPTIONS";
+    `I ("$(b,-l) $(i,PATH)", load_doc);
+    `I ("$(b,-L)$(i,PATH)", load_path_doc);
+    `I ("$(b,--list-plugins)", list_plugins_doc);
+    `I ("$(b,--disable-plugin)", disable_plugin_doc);
+    `I ("$(b,--disable-autoload)", no_auto_load_doc);
+    `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);
+  ]
+
+  exception Plugin_not_found of string
+
+  let open_plugin_exn name =
+    let name = name ^ ".plugin" in
+    if Sys.file_exists name then Plugin.of_path name
+    else raise (Plugin_not_found name)
+
+  let open_plugin ~verbose name =
+    try
+      let p = open_plugin_exn name in
+      if verbose then
+        eprintf "Loader: opened plugin %s\n" @@ Plugin.name p;
+      Some p
+    with
+    | Plugin_not_found name ->
+      eprintf "Loader: can't find plugin %s\n" name;
+      None
+    | exn when verbose ->
+      eprintf "Loader: can't open plugin %s: %a\n"
+        name Exn.pp exn;
+      None
+    | exn ->
+      eprintf "Loader: can't open plugin %s\n" name; None
+
+  (* We will not ignore errors on plugins loaded explicitly
+      by a user with `-l` option. *)
+  let load_plugin p = ok_exn (Plugin.load p)
+
+
+  let autoload_plugins ~library ~verbose ~exclude =
+    Plugins.run ~library ~exclude ()
+      ~don't_setup_handlers:true
+  (* we don't want to fail the whole platform if some
+     plugin has failed, we will just emit an error message.  *)
+
+
+  let get_opt ~default argv opt  =
+    Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
+
+  let excluded argv =
+    let module Pat = String.Search_pattern in
+    let pat = Pat.create "--no-" in
+    Array.fold ~init:[] argv ~f:(fun plugins opt ->
+        match Pat.index pat opt with
+        | Some 0 -> Pat.replace_first pat opt "" :: plugins
+        | _ -> plugins)
+
+  let print_plugins_and_exit excluded plugins =
+    List.iter plugins ~f:(fun p ->
+        let status = if List.mem excluded (Plugin.name p)
+          then "[-]" else "[+]" in
+        printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p));
+    exit 0
+
+  let verbose =
+    let doc = "Print verbose output" in
+    Arg.(value @@ flag @@ info ["verbose"] ~doc)
+
+  type action = Keep | Drop
+
+  let filter_option options prefix =
+    let is_long = String.is_prefix ~prefix:"--" in
+    let is_our = String.is_prefix ~prefix in
+    let is_key = String.is_prefix ~prefix:"-" in
+    List.fold options ~init:([],Keep) ~f:(fun (opts,act) opt ->
+        match act with
+        | _ when prefix = opt -> (opts,Keep)
+        | _ when is_our opt && is_long opt ->
+          if String.mem opt '=' then (opts,Keep) else (opts,Drop)
+        | _ when is_our opt -> (opts,Keep)
+        | Drop when is_key opt && not(is_our opt) -> (opt::opts,Keep)
+        | Keep -> (opt::opts,Keep)
+        | Drop -> (opts,Keep)) |>
+    fst |> List.rev
+
+  let filter_options ~known_plugins ~argv =
+    let opts = Array.to_list argv in
+    let prefixes = "--no" :: loader_options in
+    List.fold prefixes ~init:opts ~f:filter_option |> Array.of_list
+
+  let run_and_get_argv argv : string array =
+    let verbose = get_opt argv verbose ~default:false in
+    let library = get_opt argv load_path ~default:[] in
+    let plugins = get_opt argv load ~default:[] in
+    let exclude = get_opt argv disable_plugin ~default:[] in
+    let exclude = exclude @ excluded argv in
+    let list = get_opt argv list_plugins ~default:false in
+    let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
+    let known_plugins = Plugins.list ~library () @ plugins in
+    if list then print_plugins_and_exit exclude known_plugins;
+    List.iter plugins ~f:load_plugin;
+    let noautoload = get_opt argv no_auto_load ~default:false in
+    if not noautoload then autoload_plugins ~library ~verbose ~exclude;
+    let known_plugins = List.map known_plugins ~f:Plugin.name in
+    filter_options ~known_plugins ~argv
+
+end
+
 module Config' = struct
   type 'a param = string * 'a future
   type 'a parser = string -> [ `Ok of 'a | `Error of string ]
@@ -121,7 +263,11 @@ module Command = struct
     a.name = b.name
 
   let set_man cmd man : unit =
+    let man = if cmd.plugin_grammar
+      then man @ PluginLoader.common_loader_options
+      else man in
     cmd.man := Some man
+
 end
 
 (** [CmdlineGrammar] is a module purely internal to Bap_configuration
@@ -147,15 +293,17 @@ module CmdlineGrammar : sig
   val when_ready_frontend : Command.t -> (unit -> unit) -> unit
 
   (** Does any pre-processing (if necessary) on the argv, along with
-      recognizing options like [--no-PLUGIN] etc.  *)
-  val preprocess_plugins : unit -> unit
+      recognizing options like [--no-PLUGIN] etc. and then starts off
+      the loading of plugins, and command line processing. *)
+  val start : unit -> unit
 end = struct
 
   let plugin_global = ref Term.(const ())
   let argv = ref Sys.argv
 
-  let preprocess_plugins () =
-    ()
+  let start () =
+    argv := PluginLoader.run_and_get_argv Sys.argv;
+    Plugins.run ()
 
   let eval_plugins_complete, eval_plugins_promise = Future.create ()
 
@@ -618,6 +766,6 @@ module Frontend = struct
   end
 
   let start () =
-    CmdlineGrammar.preprocess_plugins ();
-    Plugins.run ()
+    CmdlineGrammar.start ()
+
 end
