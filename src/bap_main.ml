@@ -223,7 +223,8 @@ let cmdline () =
     ] in
   Config.(descr doc);
   Config.(manpage default_command man);
-  Config.(when_ready default_command program)
+  Config.(when_ready default_command program);
+  Frontend.start ()
 
 let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
