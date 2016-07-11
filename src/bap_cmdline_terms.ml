@@ -22,7 +22,8 @@ let filename : string Config.param =
 
 let brancher : string option Config.param =
   let f () = enum_processors (module Brancher) ()
-             |> List.map ~f:(fun (x,y) -> x,Some y) in
+             |> List.map ~f:(fun (x,y) -> x,Some y)
+             |> List.cons ("", None) in
   let doc = "Use specified brancher" in
   Config.(post_check ~f (param (some string) "brancher" ~doc))
 
@@ -43,7 +44,8 @@ let rooters : string list Config.param =
 
 let reconstructor : string option Config.param =
   let f () = enum_processors (module Reconstructor) ()
-             |> List.map ~f:(fun (x,y) -> x,Some y) in
+             |> List.map ~f:(fun (x,y) -> x,Some y)
+             |> List.cons ("", None) in
   let doc = "Use a specified reconstructor" in
   Config.(post_check ~f (param (some string) "reconstructor" ~doc))
 
