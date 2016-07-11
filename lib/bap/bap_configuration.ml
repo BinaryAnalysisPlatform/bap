@@ -7,47 +7,41 @@ open Format
 
 module PluginLoader = struct
 
-  let load, load_doc =
+  let load =
     let doc =
-      "Dynamically loads file $(i,PATH).plugin. A plugin must be
+      "Dynamically loads file $(docv).plugin. A plugin must be
      compiled with $(b,bapbuild) tool using $(b,bapbuild PATH.plugin)
      command." in
-    Arg.(value @@ opt_all string [] @@ info ["l"] ~docv:"PATH" ~doc),
-    doc
+    Arg.(value @@ opt_all string [] @@ info ["l"] ~docv:"PATH" ~doc)
 
-  let load_path, load_path_doc =
+  let load_path =
     let doc =
-      "Add $(i,PATH) to a set of search paths. Plugins found in the
+      "Add $(docv) to a set of search paths. Plugins found in the
     search paths will be loaded automatically." in
     Arg.(value @@ opt_all string []
-         @@ info ["L"; "load-path"] ~docv:"PATH" ~doc), doc
+         @@ info ["L"; "load-path"] ~docv:"PATH" ~doc)
 
-  let list_plugins, list_plugins_doc =
+  let list_plugins =
     let doc = "List available plugins" in
-    Arg.(value @@ flag @@ info ["list-plugins"] ~doc), doc
+    Arg.(value @@ flag @@ info ["list-plugins"] ~doc)
 
-  let disable_plugin, disable_plugin_doc =
-    let doc = "Don't load $(i,PLUGIN) automatically" in
+  let disable_plugin =
+    let doc = "Don't load $(docv) automatically" in
     Arg.(value @@ opt_all string []
-         @@ info ["disable-plugin"] ~doc), doc
+         @@ info ["disable-plugin"] ~docv:"PLUGIN" ~doc)
 
-  let no_auto_load, no_auto_load_doc =
+  let no_auto_load =
     let doc = "Disable auto loading of plugins" in
-    Arg.(value @@ flag @@ info ["disable-autoload"] ~doc), doc
+    Arg.(value @@ flag @@ info ["disable-autoload"] ~doc)
 
-  let loader_options = [
-    "-l"; "-L"; "--list-plugins"; "--disable-plugin"; "--disable-autoload"
-  ]
-
-  let common_loader_options = [
-    `S "PLUGIN OPTIONS";
-    `I ("$(b,-l) $(i,PATH)", load_doc);
-    `I ("$(b,-L)$(i,PATH)", load_path_doc);
-    `I ("$(b,--list-plugins)", list_plugins_doc);
-    `I ("$(b,--disable-plugin)", disable_plugin_doc);
-    `I ("$(b,--disable-autoload)", no_auto_load_doc);
-    `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);
-  ]
+  let global_term =
+    let combine _ _ _ _ _ = () in
+    Term.(const combine
+          $ load
+          $ load_path
+          $ list_plugins
+          $ disable_plugin
+          $ no_auto_load)
 
   exception Plugin_not_found of string
 
@@ -126,8 +120,7 @@ module PluginLoader = struct
 
   let filter_options ~known_plugins ~argv =
     let opts = Array.to_list argv in
-    let prefixes = "--no" :: loader_options in
-    List.fold prefixes ~init:opts ~f:filter_option |> Array.of_list
+    filter_option opts "--no" |> Array.of_list
 
   let run_and_get_argv argv : string array =
     let verbose = get_opt argv verbose ~default:false in
@@ -263,9 +256,6 @@ module Command = struct
     a.name = b.name
 
   let set_man cmd man : unit =
-    let man = if cmd.plugin_grammar
-      then man @ PluginLoader.common_loader_options
-      else man in
     cmd.man := Some man
 
 end
@@ -298,7 +288,7 @@ module CmdlineGrammar : sig
   val start : unit -> unit
 end = struct
 
-  let plugin_global = ref Term.(const ())
+  let plugin_global = ref PluginLoader.global_term
   let argv = ref Sys.argv
 
   let start () =
