@@ -596,37 +596,54 @@ module Config = struct
   let pos' main (future, promise) converter ?default ?(docv="VAL")
       ?(doc="Undocumented") n =
     let converter = Converter.to_arg converter in
-    let t =
-      match default with
-      | Some default ->
-        Arg.(value
-             @@ pos n converter default
-             @@ info [] ~doc ~docv)
-      | None ->
-        Arg.(required
-             @@ pos n (some converter) None
-             @@ info [] ~doc ~docv) in
-    main := Term.(const (fun x () ->
-        Promise.fulfill promise x) $ t $ (!main));
-    docv ^ " argument", future
+    match default with
+    | Some default ->
+      let t = Arg.(value
+                   @@ pos n converter default
+                   @@ info [] ~doc ~docv) in
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      docv ^ " argument", future
+    | None ->
+      let t = Arg.(value
+                   @@ pos n (some converter) None
+                   @@ info [] ~doc ~docv) in
+      let f, p = Future.create () in
+      main := Term.(const (fun x () ->
+          Promise.fulfill p x) $ t $ (!main));
+      Future.upon CmdlineGrammar.post_plugin (fun () ->
+          Future.upon f (function
+              | None -> Err.user "Required argument %s is missing\n"
+                          docv ()
+              | Some x -> Promise.fulfill promise x));
+      docv ^ " argument", future
 
   let pos_all' main (future, promise) (converter:'a converter)
       ?default ?(docv="VAL") ?(doc="Undocumented") n
     : 'a list param =
     let converter = Converter.to_arg converter in
     let t =
-      match default with
-      | Some default ->
-        Arg.(value
-             @@ pos_all converter default
-             @@ info [] ~doc ~docv)
-      | None ->
-        Arg.(non_empty
-             @@ pos_all converter []
-             @@ info [] ~doc ~docv) in
-    main := Term.(const (fun x () ->
-        Promise.fulfill promise x) $ t $ (!main));
-    docv ^ " argument", future
+      let d = match default with
+        | Some d -> d
+        | None -> [] in
+      Arg.(value
+           @@ pos_all converter d
+           @@ info [] ~doc ~docv) in
+    match default with
+    | Some default ->
+      main := Term.(const (fun x () ->
+          Promise.fulfill promise x) $ t $ (!main));
+      docv ^ " argument", future
+    | None ->
+      let f, p = Future.create () in
+      main := Term.(const (fun x () ->
+          Promise.fulfill p x) $ t $ (!main));
+      Future.upon CmdlineGrammar.post_plugin (fun () ->
+          Future.upon f (function
+              | [] -> Err.user "Required argument %s cannot be empty\n"
+                        docv ()
+              | _ as x -> Promise.fulfill promise x));
+      docv ^ " argument", future
 
   let doc_enum = Arg.doc_alts_enum
 
