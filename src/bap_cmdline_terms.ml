@@ -130,22 +130,3 @@ let source_type : source Config.param =
 let verbose : bool Config.param =
   let doc = "Print verbose output to log file" in
   Config.(flag "verbose" ~doc)
-
-let options_for_passes = [
-  `S "OPTIONS FOR PASSES";
-  `I begin
-    "$(b,--)$(i,PASS)",
-    "Runs a program $(i,PASS). The $(i,PASS) should be registered in the\
-     system, usually by loading or installing corresponding plugin."
-  end;
-  `I begin
-    "$(b,--)$(i,PASS)-$(i,OPTION)",
-    "Passes $(i,OPTION) to a $(i,PASS). The option will be passed as\
-     $(b,--OPTION). If $(i,OPTION) is followed by an argument\
-     (i.e., a token that doesn't start with a dash), then it will be\
-     also passed to the $(i,PASS). Note: it is assumed that all\
-     options to passes consumes and optional argument. Make sure,\
-     that your flags are followed by some option, otherwise the\
-     argument that follows the flag might be consumed by a $(i,PASS)"
-  end;
-]

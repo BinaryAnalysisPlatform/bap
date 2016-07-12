@@ -16,4 +16,3 @@ val rooters : string list Config.param
 val symbols : string list Config.param
 val reconstructor : string option Config.param
 
-val options_for_passes    : Config.manpage_block list

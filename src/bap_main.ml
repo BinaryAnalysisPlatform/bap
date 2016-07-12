@@ -217,14 +217,12 @@ let cmdline () =
     extended with our rules. It is not needed (but still can be used)
     to build your standalone applications, or to build BAP itself.");
     `S "OPTIONS";
-    `I ("$(b,--list-formats)", Bap_cmdline_terms.list_formats_doc)
-  ] @ Bap_cmdline_terms.options_for_passes
-    @ [
-      `S "BUGS";
-      `P "Report bugs to \
-          https://github.com/BinaryAnalysisPlatform/bap/issues";
-      `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
-    ] in
+    `I ("$(b,--list-formats)", Bap_cmdline_terms.list_formats_doc);
+    `S "BUGS";
+    `P "Report bugs to \
+        https://github.com/BinaryAnalysisPlatform/bap/issues";
+    `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
+  ] in
   Config.(descr doc);
   Config.(manpage default_command man);
   Config.(when_ready default_command program);
