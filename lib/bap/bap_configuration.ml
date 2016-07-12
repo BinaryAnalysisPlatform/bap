@@ -450,6 +450,17 @@ module Config = struct
     String.Table.find_or_add plugin_grammars (plugin_name ())
       ~default:(fun () -> ref Term.(const ()))
 
+  let term_infos = String.Table.create ()
+
+  let term_info () =
+    let name = (if is_plugin () then plugin_name ()
+                else executable_name ()) in
+    let default () =
+      let doc = doc () in
+      let version = ver () in
+      ref (Term.info ~doc ~version name) in
+    String.Table.find_or_add term_infos name ~default
+
   let conf_file_options : (string, string) List.Assoc.t =
     let conf_filename =
       let (/) = Filename.concat in
@@ -672,14 +683,9 @@ module Config = struct
                   Err.user "Unrecognized value for %s. Must be %s"
                     (fst ps) (doc_enum values) ())))
 
-  let term_info =
-    ref (Term.info ~doc:(doc ()) (if is_plugin () then plugin_name ()
-                                  else executable_name ())
-           ~version:(ver ()))
-
   let manpage (man:manpage_block list) : unit =
     if is_plugin () then
-      term_info := Term.info ~doc:(doc ()) ~man (plugin_name ())
+      term_info () := Term.info ~doc:(doc ()) ~man (plugin_name ())
           ~version:(ver ())
     else must_use_frontend ()
 
@@ -689,7 +695,7 @@ module Config = struct
   let when_ready f : unit =
     if is_plugin () then
       let open CmdlineGrammar in
-      let grammar = plugin_help (plugin_name ()) !term_info
+      let grammar = plugin_help (plugin_name ()) !(term_info ())
           !(plugin_grammar ()) in
       let plugin_bundle = main_bundle () in
       add_plugin grammar;
