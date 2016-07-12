@@ -420,6 +420,7 @@ module Config = struct
   let manifest () =
     try Bundle.manifest (bundle ())
     with exn -> Manifest.create (executable_name ())
+                  ~version:Bap_config.version
 
   let doc () = Manifest.desc (manifest ())
 
