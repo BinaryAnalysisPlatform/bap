@@ -66,6 +66,25 @@ std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFil
     }
     return cmds;
 }
+
+const pe32plus_header* getPE32PlusHeader(const COFFObjectFile& obj) {
+    uint64_t cur_ptr = 0;
+    const char * buf = (obj.getData()).data();
+    const uint8_t * start = reinterpret_cast<const uint8_t *>(buf);
+    uint8_t b0 = start[0];
+    uint8_t b1 = start[1];
+    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
+	// a pointer at offset 0x3C points to the
+	cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
+        // check the PE magic bytes.
+        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
+            llvm_binary_fail("PE Plus header not found");
+        cur_ptr += 4; // skip the PE magic bytes.
+        cur_ptr += sizeof(coff_file_header);
+        return reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
+    }
+    return NULL;
+}
     
 } // namespace utils
 
@@ -118,10 +137,23 @@ struct segment {
         , is_readable_(static_cast<uint32_t>(s.Characteristics) &
                        COFF::IMAGE_SCN_MEM_READ)
         , is_writable_(static_cast<uint32_t>(s.Characteristics) &
+		       COFF::IMAGE_SCN_MEM_WRITE)
+	, is_executable_(static_cast<uint32_t>(s.Characteristics) &
+			 COFF::IMAGE_SCN_MEM_EXECUTE)
+    {}
+
+    segment(const pe32plus_header &hdr, const coff_section &s)
+        : name_(s.Name)
+        , offset_(static_cast<uint64_t>(s.PointerToRawData))
+	, addr_(static_cast<uint64_t>(s.VirtualAddress + hdr.ImageBase))
+        , size_(static_cast<uint64_t>(s.SizeOfRawData))
+        , is_readable_(static_cast<uint64_t>(s.Characteristics) &
+                       COFF::IMAGE_SCN_MEM_READ)
+        , is_writable_(static_cast<uint64_t>(s.Characteristics) &
                        COFF::IMAGE_SCN_MEM_WRITE)
-        , is_executable_(static_cast<uint32_t>(s.Characteristics) &
+        , is_executable_(static_cast<uint64_t>(s.Characteristics) &
                          COFF::IMAGE_SCN_MEM_EXECUTE)
-        {}
+    {}
 
     const std::string& name() const { return name_; }
     uint64_t offset() const { return offset_; }
@@ -182,22 +214,48 @@ std::vector<segment> read(const MachOObjectFile& obj) {
     return segments;
 }
 
-std::vector<segment> read(const COFFObjectFile& obj) {
+std::vector<segment> readPE32(const COFFObjectFile& obj) {
     std::vector<segment> segments;
     const pe32_header *pe32;
     if (error_code err = obj.getPE32Header(pe32))
-        llvm_binary_fail(err);
+	llvm_binary_fail(err);
+
+    for (auto it = obj.begin_sections();
+	 it != obj.end_sections(); ++it) {
+	const coff_section *s = obj.getCOFFSection(it);
+	uint32_t c = static_cast<uint32_t>(s->Characteristics);
+	if ( c & COFF::IMAGE_SCN_CNT_CODE ||
+	     c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
+	     c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
+	    segments.push_back(segment(*pe32, *s));
+    }
+    return segments;
+}
+
+std::vector<segment> readPE32Plus(const COFFObjectFile& obj) {
+    std::vector<segment> segments;
+    const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+    if (!pe32plus)
+	llvm_binary_fail("Failed to extract PE32+ header");
 
     for (auto it = obj.begin_sections();
          it != obj.end_sections(); ++it) {
         const coff_section *s = obj.getCOFFSection(it);
-        uint32_t c = static_cast<uint32_t>(s->Characteristics);
+        uint64_t c = static_cast<uint64_t>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
              c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(segment(*pe32, *s));
+            segments.push_back(segment(*pe32plus, *s));
     }
     return segments;
+}
+
+std::vector<segment> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	return readPE32(obj);
+    } else {
+	return readPE32Plus(obj);
+    }
 }
 
 } //namespace seg
@@ -264,9 +322,45 @@ std::vector<symbol> read(const ObjectFile& obj) {
 }
 
 
+std::vector<symbol> readPE32Plus(const COFFObjectFile& obj) {
+    std::vector<symbol> symbols;
 
+    const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+    if (!pe32plus)
+	llvm_binary_fail("Failed to extract PE32+ header");
 
-std::vector<symbol> read(const COFFObjectFile& obj) {
+    for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
+	auto sym = obj.getCOFFSymbol(it);
+
+	if (!sym) llvm_binary_fail("not a coff symbol");
+
+	const coff_section *sec = nullptr;
+	if (sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
+	    continue;
+
+	if (error_code ec = obj.getSection(sym->SectionNumber, sec))
+	    llvm_binary_fail(ec);
+
+	if (!sec) continue;
+
+	uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym->Value;
+
+	for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
+	    auto next = obj.getCOFFSymbol(it);
+	    if (next->SectionNumber == sym->SectionNumber) {
+                auto new_size = next->Value > sym->Value ?
+                    next->Value - sym->Value : size;
+                size = new_size < size ? new_size : size;
+	    }
+	}
+
+	auto addr = sec->VirtualAddress + pe32plus->ImageBase + sym->Value;
+	symbols.push_back(symbol(*it,addr,size));
+    }
+    return symbols;
+}
+
+std::vector<symbol> readPE32(const COFFObjectFile& obj) {
     std::vector<symbol> symbols;
 
     const pe32_header *pe32;
@@ -302,6 +396,14 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
         symbols.push_back(symbol(*it,addr,size));
     }
     return symbols;
+}
+
+std::vector<symbol> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	return readPE32(obj);
+    } else {
+	return readPE32Plus(obj);
+    }
 }
 
 template <typename ELFT>
@@ -433,9 +535,9 @@ uint64_t image_entry(const COFFObjectFile& obj) {
                 llvm_binary_fail("PE header not found");
             cur_ptr += 4; // Skip the PE magic bytes.
             cur_ptr += sizeof(coff_file_header);
-            const pe32plus_header *hdr =
+	    const pe32plus_header *hdr =
                 reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-            if (hdr->Magic == 0x20b)
+	    if (hdr->Magic == 0x20b)
                 return hdr->AddressOfEntryPoint;
             else
                 llvm_binary_fail("PEplus header not found");
@@ -447,7 +549,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 
 template <typename T>
 struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<T> ptr)//, std::default_delete<object::Binary>> ptr)
+    explicit objectfile_image(std::unique_ptr<T> ptr)
         : arch_(image_arch(*ptr))
         , entry_(image_entry(*ptr))
         , segments_(seg::read(*ptr))
