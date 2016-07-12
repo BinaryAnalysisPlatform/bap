@@ -4,6 +4,7 @@ open Format
 open Bap.Std
 open Bap_plugins.Std
 open Mc_options
+open Frontend
 
 exception Bad_user_input
 exception Bad_insn of mem * int * int
@@ -152,58 +153,54 @@ let print_data_formats data_type =
   | `bir  -> print (module Blk)
 
 module Cmdline = struct
-  open Cmdliner
+
   open Bap_cmdline_terms
 
   let arch =
     let doc = "Target architecture" in
-    Arg.(value & opt string "x86_64" & info ["arch"] ~docv:"ARCH" ~doc)
+    Config.(param string "arch" ~default:"x86_64" ~docv:"ARCH" ~doc)
 
   let show_kinds =
     let doc = "Output instruction kinds." in
-    Arg.(value & flag & info ["show-kinds"] ~doc)
+    Config.(flag "show-kinds" ~doc)
 
   let show_insn_size =
     let doc = "Output recognized instruction length" in
-    Arg.(value & flag & info ["show-size"] ~doc)
+    Config.(flag "show-size" ~doc)
 
-  let list_formats_types = [
-    "insn", `insn;
-    "inst", `insn;
-    "bil",  `bil;
-    "bir",  `bir;
-  ]
-  let list_formats_doc = sprintf
-      "Print available formats for the given data $(i,TYPE). \
-       The $(i,TYPE) must be %s" @@
-    Arg.doc_alts_enum list_formats_types
-  let list_formats_option = "list-formats"
   let list_formats =
-    Arg.(value & opt (some (enum list_formats_types)) None &
-         info [list_formats_option] ~doc:list_formats_doc)
+    let types = [
+      "insn", `insn;
+      "inst", `insn;
+      "bil",  `bil;
+      "bir",  `bir;
+    ] in
+    let doc = sprintf
+        "Print available formats for the given data $(i,TYPE). \
+         The $(i,TYPE) must be %s" @@
+      Config.doc_enum types in
+    Config.(param (some (enum types)) "list-formats" ~doc)
 
   let insn_formats =
     let doc = sprintf
         "Print instructions, using specified format $(docv). \
          $(docv) can be %s. Defaults to `asm'." @@
       format_info Insn.available_writers in
-    Arg.(value & opt_all ~vopt:"pretty" string [] &
-         info ["show-inst"; "show-insn"] ~doc)
+    Config.(param_all string "show-insn" ~synonyms:["show-inst"]
+              ~as_flag:"pretty" ~doc)
 
   let bil_formats =
     let doc = sprintf
         "Output BIL code. Optional value specifies format \
          and can be %s. Defaults to `pretty`, i.e., in a BIL \
          concrete syntax" @@ format_info Stmt.available_writers in
-    Arg.(value & opt_all ~vopt:"pretty" string [] &
-         info ["show-bil"] ~doc)
+    Config.(param_all string "show-bil" ~as_flag:"pretty" ~doc)
 
   let bir_formats =
     let doc = sprintf
         "Output for each instruction in particular. Accepted \
          values are %s" @@ format_info Blk.available_writers in
-    Arg.(value & opt_all ~vopt:"pretty" string [] &
-         info ["show-bir"] ~doc)
+    Config.(param_all string "show-bir" ~as_flag:"pretty" ~doc)
 
   let addr =
     let doc = "Specify an address of first byte, as though \
@@ -211,22 +208,32 @@ module Cmdline = struct
                and accordingly interpreted. Be careful that \
                you appropriately use 0x prefix for hex and \
                leave it without for decimal." in
-    Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
+    Config.(param string "addr" ~default:"0x0" ~doc)
 
   let max_insns =
     let doc = "Specify a number of instructions to disassemble.\
                Good for ensuring that only one instruction is ever\
-               lifted or disassembled from a byte blob. Default is all" in
-    Arg.(value & opt (some int) None & info ["max-insns"] ~doc)
+               lifted or disassembled from a byte blob. Default is\
+               all" in
+    Config.(param (some int) "max-insns" ~doc)
 
   let create a b c d e f g h i j =
     Mc_options.Fields.create a b c d e f g h i j
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
-    Arg.(value & pos 0 (some string) None & info [] ~docv:"DATA" ~doc)
+    Config.(pos (some string) ~default:None ~docv:"DATA" ~doc 0)
 
-  let program () =
+  let start options =
+    let module Program = Program(struct
+        let options = options
+      end) in
+    Program.main ()
+
+  let exitf n =
+    kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
+
+  let main () =
     let doc = "BAP machine instruction playground" in
     let man = [
       `S "SYNOPSIS";
@@ -239,67 +246,51 @@ module Cmdline = struct
           llvm-mc functionality using the BAP disassembly backend.";
       `S "OPTIONS";
       `I ("$(b,--list-formats)=$(i,TYPE)", list_formats_doc);
-    ] @ Bap_cmdline_terms.common_loader_options
-      @ [
-        `S "EXAMPLES";
-        `P "The following hex representations are supported:"; `Noblank;
-        `Pre "
+      `S "EXAMPLES";
+      `P "The following hex representations are supported:"; `Noblank;
+      `Pre "
          0x31 0xd2 0x48 0xf7 0xf3
          \\\\x31\\\\xd2\\\\x48\\\\xf7\\\\xf3
          31 d2 48 f7 f3
          31d248f7f3";
-        `I ("INPUT: Supplied via stdin or on the command-line",
-            "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
-             bap-mc  --show-inst --show-bil");
-        `S "SEE ALSO";
-        `P "llvm-mc"] in
-    Term.(const create $(disassembler ()) $src $addr $max_insns $arch $show_insn_size
-          $insn_formats $bil_formats $bir_formats $show_kinds),
-    Term.info "bap-mc" ~doc ~man ~version:Config.version
+      `I ("INPUT: Supplied via stdin or on the command-line",
+          "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
+           bap-mc  --show-inst --show-bil");
+      `S "SEE ALSO";
+      `P "llvm-mc"] in
+    Config.(descr doc);
+    Config.(manpage default_command man);
+    Config.(when_ready default_command (fun {Config.get=(!)} ->
+        match !list_formats with
+        | Some typ -> print_data_formats typ; exit 0
+        | None ->
+          let args = create !disassembler !src !addr !max_insns
+              !arch !show_insn_size !insn_formats !bil_formats
+              !bir_formats !show_kinds in
+          match Ok args >>= start with
+          | Ok _ -> exit 0
+          | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
+      ));
+    Frontend.start ()
 
-  let exitf n =
-    kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
+  let () =
+    try main () with
+    | Bad_user_input ->
+      exitf 65 "Could not parse: malformed input"
+    | No_input -> exitf 66 "Could not read from stdin"
+    | Unknown_arch ->
+      exitf 64 "Unknown architecture. Supported architectures:\n%s" @@
+      String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string
+    | Trailing_data left ->
+      exitf 65 "%d bytes were left non disassembled" left
+    | Create_mem err ->
+      exitf 65 "Unable to create a memory: %a" Error.pp err
+    | Bad_insn (mem,boff,stop)->
+      let dump = Memory.hexdump mem in
+      let line = boff / 16 in
+      let pos off = line * 77 + (off mod 16) * 3 + 9 in
+      dump.[pos boff] <- '(';
+      dump.[pos stop] <- ')';
+      exitf 66 "Invalid instruction at offset %d:\n%s" boff dump
 
-  let parse argv =
-    match Cmdliner.Term.eval_peek_opts ~argv list_formats with
-    | Some (Some typ),_ -> print_data_formats typ; exit 0
-    | _ -> match Term.eval ~argv (program ()) ~catch:false with
-      | `Ok opts -> Ok opts
-      | `Error `Parse -> exit 64
-      | `Error _ -> exit 2
-      | _ -> exit 1
 end
-
-let exitf n =
-  kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
-
-let start options =
-  let module Program = Program(struct
-      let options = options
-    end) in
-  Program.main ()
-
-let _main : unit =
-  Log.start ();
-  let argv = Bap_plugin_loader.run Sys.argv in
-  try match Cmdline.parse argv >>= start with
-    | Ok _ -> exit 0
-    | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
-  with
-  | Bad_user_input ->
-    exitf 65 "Could not parse: malformed input"
-  | No_input -> exitf 66 "Could not read from stdin"
-  | Unknown_arch ->
-    exitf 64 "Unknown architecture. Supported architectures:\n%s" @@
-    String.concat ~sep:"\n" @@ List.map Arch.all ~f:Arch.to_string
-  | Trailing_data left ->
-    exitf 65 "%d bytes were left non disassembled" left
-  | Create_mem err ->
-    exitf 65 "Unable to create a memory: %a" Error.pp err
-  | Bad_insn (mem,boff,stop)->
-    let dump = Memory.hexdump mem in
-    let line = boff / 16 in
-    let pos off = line * 77 + (off mod 16) * 3 + 9 in
-    dump.[pos boff] <- '(';
-    dump.[pos stop] <- ')';
-    exitf 66 "Invalid instruction at offset %d:\n%s" boff dump

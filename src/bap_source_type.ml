@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
+open Frontend
 open Format
-open Cmdliner
 
 exception Unknown_arch of string
 exception Unrecognized_source
@@ -33,4 +33,4 @@ let pp ppf = function
   | `Binary -> fprintf ppf "binary"
   | `File fmt -> fprintf ppf "%s-data" fmt
 
-let t : 'a Arg.converter = parse,pp
+let converter = Config.converter parse pp `Binary

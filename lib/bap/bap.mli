@@ -533,6 +533,363 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
+
+  (** This module allows plugins to access BAP configuration variables.
+
+          When reading the values for the configuration variables, the
+          decreasing order of precedence for the values is:
+          - Command line arguments
+          - Environment variables
+          - Configuration file
+          - Default fallback value
+
+          Example usage:
+
+      {[
+        let path = Config.(param string ~doc:"a path to file"
+                             ~default:"input.txt" "path")
+        let debug = Config.(flag (* ... *) )
+
+        (* ... *)
+
+        let main () =
+          Config.when_ready
+            (fun {Config.get=(!)} ->
+               do_stuff !path !debug (* ... *)
+            )
+      ]}
+  *)
+  module Config : sig
+
+    (** Version number  *)
+    val version : string
+
+    (** A directory for bap specific read-only architecture
+        independent data files.  *)
+    val datadir : string
+
+    (** A directory for bap specific object files, libraries, and
+        internal binaries that are not intended to be executed directly
+        by users or shell scripts *)
+    val libdir : string
+
+    (** A directory for bap specific configuration files  *)
+    val confdir : string
+
+    (** An abstract parameter type that can be later read using a reader *)
+    type 'a param
+
+    (** Parse a string to an 'a *)
+    type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+
+    (** Type for converting [string] <-> ['a]. Also defines a default
+        value for the ['a] type. *)
+    type 'a converter
+    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+
+    (** Default deprecation warning message, for easy deprecation of
+        parameters. *)
+    val deprecated : string
+
+    (** [param conv ~default ~docv ~doc name] creates a parameter
+        which is referred to on the command line, environment
+        variable, and config file using the value of [name], with
+        the type defined by [conv], using the [default] value if
+        unspecified by user.
+
+        The [default] is optional, and falls back to the
+        default defined by [conv].
+
+        [doc] is the man page information of the argument. The
+        variable ["$(docv)"] can be used to refer to the value of
+        [docv]. [docv] is a variable name used in the man page to
+        stand for their value.
+
+        A user can optionally add [deprecated] to a parameter that
+        is to be deprecated soon. This will cause the parameter to be
+        usable as normal, but will emit a warning to the user if they
+        try to use it.
+        Example usage: [Config.(param ~deprecated int "--old")].
+
+        Additionally, [synonyms] can be added to allow multiple
+        arguments referring to the same parameters. However, this is
+        usually discouraged, and considered proper usage only in rare
+        scenarios.
+
+        Also, a developer can use the [~as_flag] to specify a
+        default value that the argument takes if it is used like a
+        flag. This behaviour can be understood better through the
+        following example.
+
+            Consider [Config.(param (some int) ~as_flag:(Some 10) "x")].
+
+            This results in 3 possible command line invocations:
+
+            1. No [--x] - Results in [default] value (specifically
+                          here, [None]).
+
+            2. Only [--x] - This causes it to have the value [as_flag]
+                            (specifically here,[Some 10]).
+
+            3. [--x=20] - This causes it to have the value from the
+                          command line (specifically here, [Some 20]).
+    *)
+    val param :
+      'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> 'a param
+
+    (** Create a parameter which accepts a list at command line by
+        repetition of argument. Similar to [param (list 'a) ...]
+        in all other respects. Defaults to an empty list if unspecified. *)
+    val param_all :
+      'a converter -> ?deprecated:string -> ?default:'a list ->
+      ?as_flag:'a -> ?docv:string -> ?doc:string ->
+      ?synonyms:string list ->  string -> 'a list param
+
+    (** Create a boolean parameter that is set to true if user
+        mentions it in the command line arguments *)
+    val flag :
+      ?deprecated:string ->
+      ?docv:string -> ?doc:string -> ?synonyms:string list ->
+      string -> bool param
+
+    (** Wrap a value in a parameter, not allowing users to input for this *)
+    val const : 'a -> 'a param
+
+    (** Provides a future determined on when the config can be read *)
+    val determined : 'a param -> 'a future
+
+    (** A witness that can read configured params *)
+    type reader = {get : 'a. 'a param -> 'a}
+
+    (** [when_ready f] requests the system to call function [f] once
+        configuration parameters are  established and stabilized. An
+        access function will be passed to the function [f],  that can be
+        used to safely dereference parameters.  *)
+    val when_ready : (reader -> unit) -> unit
+
+    (** The type for a block of man page text.
+
+        - [`S s] introduces a new section [s].
+        - [`P t] is a new paragraph with text [t].
+        - [`Pre t] is a new preformatted paragraph with text [t].
+        - [`I (l,t)] is an indented paragraph with label [l] and text [t].
+        - [`Noblank] suppresses the blank line introduced between two blocks.
+
+        Except in [`Pre], whitespace and newlines are not significant
+        and are all collapsed to a single space. In labels [l] and text
+        strings [t], the syntax ["$(i,italic text)"] and ["$(b,bold
+        text)"] can be used to respectively produce italic and bold
+        text. *)
+    type manpage_block = [
+      | `I of string * string
+      | `Noblank
+      | `P of string
+      | `Pre of string
+      | `S of string
+    ]
+
+    (** Create a manpage for the plugin *)
+    val manpage : manpage_block list -> unit
+
+    (** [bool] converts values with {!bool_of_string}. *)
+    val bool : bool converter
+
+    (** [char] converts values by ensuring the argument has a single char. *)
+    val char : char converter
+
+    (** [int] converts values with {!int_of_string}. *)
+    val int : int converter
+
+    (** [nativeint] converts values with {!Nativeint.of_string}. *)
+    val nativeint : nativeint converter
+
+    (** [int32] converts values with {!Int32.of_string}. *)
+    val int32 : int32 converter
+
+    (** [int64] converts values with {!Int64.of_string}. *)
+    val int64 : int64 converter
+
+    (** [float] converts values with {!float_of_string}. *)
+    val float : float converter
+
+    (** [string] converts values with the identity function. *)
+    val string : string converter
+
+    (** [enum l] converts values such that unambiguous prefixes of
+        string names in [l] map to the corresponding value of type ['a].
+
+        {b Warning.} The type ['a] must be comparable with
+        {!Pervasives.compare}.
+
+        @raise Invalid_argument if [l] is empty. *)
+    val enum : (string * 'a) list -> 'a converter
+
+    (** [doc_enum l] documents the possible string names in the [l]
+        map according to the number of alternatives. If [quoted] is
+        [true] (default), the tokens are quoted. The resulting
+        string can be used in sentences of the form ["$(docv) must
+        be %s"]. *)
+    val doc_enum : ?quoted:bool -> (string * 'a) list -> string
+
+    (** [file] converts a value with the identity function and
+        checks with {!Sys.file_exists} that a file with that name exists. *)
+    val file : string converter
+
+    (** [dir] converts a value with the identity function and checks
+        with {!Sys.file_exists} and {!Sys.is_directory}
+        that a directory with that name exists. *)
+    val dir : string converter
+
+    (** [non_dir_file] converts a value with the identity function and checks
+        with {!Sys.file_exists} and {!Sys.is_directory}
+        that a non directory file with that name exists. *)
+    val non_dir_file : string converter
+
+    (** [list sep c] splits the argument at each [sep] (defaults to [','])
+        character and converts each substrings with [c]. *)
+    val list : ?sep:char -> 'a converter -> 'a list converter
+
+    (** [array sep c] splits the argument at each [sep] (defaults to [','])
+        character and converts each substring with [c]. *)
+    val array : ?sep:char -> 'a converter -> 'a array converter
+
+    (** [pair sep c0 c1] splits the argument at the {e first} [sep] character
+        (defaults to [',']) and respectively converts the substrings with
+        [c0] and [c1]. *)
+    val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+    (** {!t2} is {!pair}. *)
+    val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+    (** [t3 sep c0 c1 c2] splits the argument at the {e first} two [sep]
+        characters (defaults to [',']) and respectively converts the
+        substrings with [c0], [c1] and [c2]. *)
+    val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+      ('a * 'b * 'c) converter
+
+    (** [t4 sep c0 c1 c2 c3] splits the argument at the {e first} three [sep]
+        characters (defaults to [',']) respectively converts the substrings
+        with [c0], [c1], [c2] and [c3]. *)
+    val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+      'd converter -> ('a * 'b * 'c * 'd) converter
+
+    (** [some none c] is like the converter [c] except it returns
+        [Some] value. It is used for command line arguments
+        that default to [None] when absent. [none] is what to print to
+        document the absence (defaults to [""]). *)
+    val some : ?none:string -> 'a converter -> 'a option converter
+
+  end
+
+  (** This module provides access to a more diverse set of command
+      line arguments types, specifically to frontends. Using this
+      from plugins can and will lead to undefined behaviour. *)
+  module Frontend : sig
+
+    (** The [Frontend.Config] module provides functions that are
+        very similar in spirit to the [Config] functions. However, they
+        are meant to be used only by frontends. *)
+    module Config : sig
+      include module type of Config
+
+      (** Useful to create command line commands, each of which are
+          allowed to have different command line grammars. This is
+          equivalent to the way [git add] has [add] as its command,
+          and has a completely different grammar from [git status]
+          which has [status] as its command.
+          [doc] describes a short description of the command.
+          If [plugin_grammar] is set to [true] (default), then all
+          command line options specified by plugins are available
+          for that particular command. *)
+      type command
+      val command : ?plugin_grammar:bool -> doc:string -> string -> command
+
+      (** The [default_command] defines the command that is run
+          when the user does not specify any command at the command
+          line. *)
+      val default_command : command
+
+      (** Creates a parameter and attaches it to all the commands
+          in [commands] (defaults to default command). Behaves like
+          [Config.param] in all other respects. *)
+      val param :
+        ?commands:command list -> 'a converter -> ?deprecated:string ->
+        ?default:'a -> ?as_flag:'a -> ?docv:string -> ?doc:string ->
+        ?synonyms:string list -> string -> 'a param
+
+      (** See [param] and [Config.param_all]. *)
+      val param_all :
+        ?commands:command list -> 'a converter -> ?deprecated:string ->
+        ?default:'a list -> ?as_flag:'a -> ?docv:string -> ?doc:string ->
+        ?synonyms:string list ->  string -> 'a list param
+
+      (** See [param] and [Config.flag] *)
+      val flag :
+        ?commands:command list -> ?deprecated:string -> ?docv:string ->
+        ?doc:string -> ?synonyms:string list -> string -> bool param
+
+      (** [pos n] defines a positional argument at position n.
+
+          See [param] for details on rest of arguments.
+
+          Note on differences from [param]: Positional parameters
+                will not read from anywhere other than command line
+                arguments. Also, they are not allowed to be deprecated
+                (since it doesn't logically make sense to deprecate
+                a positional argument).
+                Additionally, positional arguments are required to be
+                specified on command line, and are made optional only
+                if a default value is set for them. *)
+      val pos :
+        ?commands:command list -> 'a converter -> ?default:'a ->
+        ?docv:string -> ?doc:string -> int -> 'a param
+
+      (** [pos_all] defines a list of positional arguments. See
+          [param], [param_all], and [pos] for further details on
+          arguments.
+
+          Note: Unless default is specified, empty lists are
+                disallowed as positional arguments. *)
+      val pos_all :
+        ?commands:command list -> 'a converter -> ?default:'a list ->
+        ?docv:string -> ?doc:string -> unit -> 'a list param
+
+      (** [post_check ~f p] ensures that the parameter [p] lies
+          within one of the values specified in the list returned by
+          [f]. The strings returned by [f] are used in the error message
+          returned if none of the values match. *)
+      val post_check : f:(unit -> (string * 'a) list) -> 'a param -> 'a param
+
+      (** [post_check_all ~f ps] ensures that all values of [ps] lie
+          within those specified by [f]. *)
+      val post_check_all : f:(unit -> (string * 'a) list) ->
+        'a list param -> 'a list param
+
+      (** [when_ready command ~plugin_grammar f] requests the system
+          to call function [f] once configuration parameters are
+          established and stabilized for the [command]. Only one of
+          the many commands that are registered will actually have
+          [f] executed.
+          Behaves similar to [Config.when_ready] in
+          all other respects. *)
+      val when_ready : command -> (reader -> unit) -> unit
+
+      (** Create a manpage for the specific command in the frontend. *)
+      val manpage : command -> manpage_block list -> unit
+
+      (** Set up short description for the frontend. *)
+      val descr : string -> unit
+    end
+
+    (** Start all necessary front end work (including parsing of
+        parameters etc.) *)
+    val start : unit -> unit
+
+  end
+
+
   (** This module refers to an information bundled with an application.
       Use [include Self()] syntax to bring this definitions to the
       scope.
@@ -573,252 +930,6 @@ module Std : sig
     val info    : ('a,Format.formatter,unit) format -> 'a
     val warning : ('a,Format.formatter,unit) format -> 'a
     val error   : ('a,Format.formatter,unit) format -> 'a
-
-    (** This module allows plugins to access BAP configuration variables.
-
-        When reading the values for the configuration variables, the
-        decreasing order of precedence for the values is:
-        - Command line arguments
-        - Environment variables
-        - Configuration file
-        - Default fallback value
-
-        Example usage:
-
-        {[
-          let path = Config.(param string ~doc:"a path to file"
-                               ~default:"input.txt" "path")
-          let debug = Config.(flag (* ... *) )
-
-          (* ... *)
-
-          let main () =
-            Config.when_ready
-              (fun {Config.get=(!)} ->
-                 do_stuff !path !debug (* ... *)
-              )
-        ]}
-    *)
-    module Config : sig
-      (** Version number  *)
-      val version : string
-
-      (** A directory for bap specific read-only architecture
-          independent data files.  *)
-      val datadir : string
-
-      (** A directory for bap specific object files, libraries, and
-          internal binaries that are not intended to be executed directly
-          by users or shell scripts *)
-      val libdir : string
-
-      (** A directory for bap specific configuration files  *)
-      val confdir : string
-
-      (** An abstract parameter type that can be later read using a reader *)
-      type 'a param
-
-      (** Parse a string to an 'a *)
-      type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-
-      (** Type for converting [string] <-> ['a]. Also defines a default
-          value for the ['a] type. *)
-      type 'a converter
-
-      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
-
-      (** Default deprecation warning message, for easy deprecation of
-          parameters. *)
-      val deprecated : string
-
-      (** [param conv ~default ~docv ~doc name] creates a parameter
-          which is referred to on the command line, environment
-          variable, and config file using the value of [name], with
-          the type defined by [conv], using the [default] value if
-          unspecified by user.
-
-          The [default] is optional, and falls back to the
-          default defined by [conv].
-
-          [doc] is the man page information of the argument. The
-          variable ["$(docv)"] can be used to refer to the value of
-          [docv]. [docv] is a variable name used in the man page to
-          stand for their value.
-
-          A user can optionally add [deprecated] to a parameter that
-          is to be deprecated soon. This will cause the parameter to be
-          usable as normal, but will emit a warning to the user if they
-          try to use it.
-          Example usage: [Config.(param ~deprecated int "--old")].
-
-          Additionally, [synonyms] can be added to allow multiple
-          arguments referring to the same parameters. However, this is
-          usually discouraged, and considered proper usage only in rare
-          scenarios.
-
-          Also, a developer can use the [~as_flag] to specify a
-          default value that the argument takes if it is used like a
-          flag. This behaviour can be understood better through the
-          following example.
-
-              Consider [Config.(param (some int) ~as_flag:(Some 10) "x")].
-
-              This results in 3 possible command line invocations:
-
-              1. No [--x] - Results in [default] value (specifically
-                            here, [None]).
-
-              2. Only [--x] - This causes it to have the value [as_flag]
-                              (specifically here,[Some 10]).
-
-              3. [--x=20] - This causes it to have the value from the
-                            command line (specifically here, [Some 20]).
-      *)
-      val param :
-        'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
-        ?docv:string -> ?doc:string -> ?synonyms:string list ->
-        string -> 'a param
-
-      (** Create a parameter which accepts a list at command line by
-          repetition of argument. Similar to [param (list 'a) ...]
-          in all other respects. Defaults to an empty list if unspecified. *)
-      val param_all :
-        'a converter -> ?deprecated:string -> ?default:'a list ->
-        ?as_flag:'a -> ?docv:string -> ?doc:string ->
-        ?synonyms:string list ->  string -> 'a list param
-
-      (** Create a boolean parameter that is set to true if user
-          mentions it in the command line arguments *)
-      val flag :
-        ?deprecated:string ->
-        ?docv:string -> ?doc:string -> ?synonyms:string list ->
-        string -> bool param
-
-      (** Provides a future determined on when the config can be read *)
-      val determined : 'a param -> 'a future
-
-      (** A witness that can read configured params *)
-      type reader = {get : 'a. 'a param -> 'a}
-
-      (** [when_ready f] requests the system to call function [f] once
-          configuration parameters are  established and stabilized. An
-          access function will be passed to the function [f],  that can be
-          used to safely dereference parameters.  *)
-      val when_ready : (reader -> unit) -> unit
-
-      (** The type for a block of man page text.
-
-          - [`S s] introduces a new section [s].
-          - [`P t] is a new paragraph with text [t].
-          - [`Pre t] is a new preformatted paragraph with text [t].
-          - [`I (l,t)] is an indented paragraph with label [l] and text [t].
-          - [`Noblank] suppresses the blank line introduced between two blocks.
-
-          Except in [`Pre], whitespace and newlines are not significant
-          and are all collapsed to a single space. In labels [l] and text
-          strings [t], the syntax ["$(i,italic text)"] and ["$(b,bold
-          text)"] can be used to respectively produce italic and bold
-          text. *)
-      type manpage_block = [
-        | `I of string * string
-        | `Noblank
-        | `P of string
-        | `Pre of string
-        | `S of string
-      ]
-
-      (** Create a manpage for the plugin *)
-      val manpage : manpage_block list -> unit
-
-      (** [bool] converts values with {!bool_of_string}. *)
-      val bool : bool converter
-
-      (** [char] converts values by ensuring the argument has a single char. *)
-      val char : char converter
-
-      (** [int] converts values with {!int_of_string}. *)
-      val int : int converter
-
-      (** [nativeint] converts values with {!Nativeint.of_string}. *)
-      val nativeint : nativeint converter
-
-      (** [int32] converts values with {!Int32.of_string}. *)
-      val int32 : int32 converter
-
-      (** [int64] converts values with {!Int64.of_string}. *)
-      val int64 : int64 converter
-
-      (** [float] converts values with {!float_of_string}. *)
-      val float : float converter
-
-      (** [string] converts values with the identity function. *)
-      val string : string converter
-
-      (** [enum l] converts values such that unambiguous prefixes of
-          string names in [l] map to the corresponding value of type ['a].
-
-          {b Warning.} The type ['a] must be comparable with
-          {!Pervasives.compare}.
-
-          @raise Invalid_argument if [l] is empty. *)
-      val enum : (string * 'a) list -> 'a converter
-
-      (** [doc_enum l] documents the possible string names in the [l]
-          map according to the number of alternatives. If [quoted] is
-          [true] (default), the tokens are quoted. The resulting
-          string can be used in sentences of the form ["$(docv) must
-          be %s"]. *)
-      val doc_enum : ?quoted:bool -> (string * 'a) list -> string
-
-      (** [file] converts a value with the identity function and
-          checks with {!Sys.file_exists} that a file with that name exists. *)
-      val file : string converter
-
-      (** [dir] converts a value with the identity function and checks
-          with {!Sys.file_exists} and {!Sys.is_directory}
-          that a directory with that name exists. *)
-      val dir : string converter
-
-      (** [non_dir_file] converts a value with the identity function and checks
-          with {!Sys.file_exists} and {!Sys.is_directory}
-          that a non directory file with that name exists. *)
-      val non_dir_file : string converter
-
-      (** [list sep c] splits the argument at each [sep] (defaults to [','])
-          character and converts each substrings with [c]. *)
-      val list : ?sep:char -> 'a converter -> 'a list converter
-
-      (** [array sep c] splits the argument at each [sep] (defaults to [','])
-          character and converts each substring with [c]. *)
-      val array : ?sep:char -> 'a converter -> 'a array converter
-
-      (** [pair sep c0 c1] splits the argument at the {e first} [sep] character
-          (defaults to [',']) and respectively converts the substrings with
-          [c0] and [c1]. *)
-      val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
-
-      (** {!t2} is {!pair}. *)
-      val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
-
-      (** [t3 sep c0 c1 c2] splits the argument at the {e first} two [sep]
-          characters (defaults to [',']) and respectively converts the
-          substrings with [c0], [c1] and [c2]. *)
-      val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
-        ('a * 'b * 'c) converter
-
-      (** [t4 sep c0 c1 c2 c3] splits the argument at the {e first} three [sep]
-          characters (defaults to [',']) respectively converts the substrings
-          with [c0], [c1], [c2] and [c3]. *)
-      val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
-        'd converter -> ('a * 'b * 'c * 'd) converter
-
-      (** [some none c] is like the converter [c] except it returns
-          [Some] value. It is used for command line arguments
-          that default to [None] when absent. [none] is what to print to
-          document the absence (defaults to [""]). *)
-      val some : ?none:string -> 'a converter -> 'a option converter
-
-    end
 
   end
 

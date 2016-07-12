@@ -1,6 +1,5 @@
 open Bap.Std
 open Core_kernel.Std
-open Cmdliner
 open Bap_future.Std
 
 (** [of_truth truth ~testbin] given the test binary [testbin], returns

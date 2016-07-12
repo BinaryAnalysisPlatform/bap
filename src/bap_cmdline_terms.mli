@@ -1,26 +1,19 @@
-open Cmdliner
+open Bap.Std
+open Frontend
 open Bap_options
 
-val filename : string Term.t
-val loader : unit -> string Term.t
-val disassembler : unit -> string Term.t
-val list_formats : bool Term.t
+val filename : string Config.param
+val loader : string Config.param
+val disassembler : string Config.param
+val list_formats : bool Config.param
 val list_formats_doc : string
-val dump_formats : unit -> fmt_spec list Term.t
-val source_type : source Term.t
-val verbose : bool Term.t
-val brancher : unit -> string option Term.t
-val symbolizers : unit -> string list Term.t
-val rooters : unit -> string list Term.t
-val symbols : unit -> string list Term.t
-val reconstructor : unit -> string option Term.t
+val dump_formats : fmt_spec list Config.param
+val source_type : source Config.param
+val verbose : bool Config.param
+val brancher : string option Config.param
+val symbolizers : string list Config.param
+val rooters : string list Config.param
+val symbols : string list Config.param
+val reconstructor : string option Config.param
 
-val load : string list Term.t
-val load_path : string list Term.t
-val list_plugins : bool Term.t
-val disable_plugin : string list Term.t
-val no_auto_load : bool Term.t
-
-val loader_options : string list
-val common_loader_options : Manpage.block list
-val options_for_passes    : Manpage.block list
+val options_for_passes    : Config.manpage_block list

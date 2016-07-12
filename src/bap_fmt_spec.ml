@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Cmdliner
+open Frontend
 open Format
 
 type output = [`file of string | `stdout] [@@deriving sexp]
@@ -31,4 +31,7 @@ let printer ppf spec = match spec with
   | `stdout,fmt,Some v -> fprintf ppf "%s-%s" fmt v
   | `stdout,fmt,None   -> fprintf ppf "%s" fmt
 
-let t : t Arg.converter = parse,printer
+let as_flag : t = (`stdout, "bir", None)
+
+let converter : t Config.converter =
+  Config.converter parse printer as_flag

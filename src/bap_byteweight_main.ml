@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Frontend
 open Bap_plugins.Std
 open Result.Monad_infix
 open Format
@@ -171,144 +172,151 @@ let update url dst =
   if Sys.file_exists old then FileUtil.rm [old]
 
 module Cmdline = struct
-  open Cmdliner
 
-  let filename : string Term.t =
+  let dumpc =
+    let doc =
+      "Dump the function starts in a given executable by given tool" in
+    Config.(command "dump" ~doc)
+
+  let trainc =
+    let doc = "Train byteweight on the specified set of files" in
+    Config.(command "train" ~doc)
+
+  let findc =
+    let doc = "Output all function starts in a given executable" in
+    Config.(command "find" ~doc)
+
+  let fetchc =
+    let doc = "Fetch signatures from the specified url" in
+    Config.(command "fetch" ~doc)
+
+  let installc =
+    let doc = "Install signatures" in
+    Config.(command "install" ~doc)
+
+  let updatec =
+    let doc = "Download and install latest signatures" in
+    Config.(command "update" ~doc)
+
+  let symbolsc =
+    let doc = "Print file's symbol table if any." in
+    Config.(command "symbols" ~doc)
+
+  let filename : string Config.param =
     let doc = "Input filename." in
-    Arg.(required & pos 0 (some non_dir_file) None &
-         info [] ~doc ~docv:"FILE")
+    Config.(pos ~commands:[dumpc; findc; symbolsc] non_dir_file
+              ~docv:"FILE" ~doc 0)
 
-  let database_in : string option Term.t =
+  let database_in : string option Config.param =
     let doc = "Path to signature database" in
-    Arg.(value & opt (some non_dir_file) None &
-         info ["db"; "d"] ~doc)
+    Config.(param ~commands:[dumpc; findc] (some non_dir_file)
+              "d" ~synonyms:["db"] ~doc)
 
-  let database : string option Term.t =
+  let database : string option Config.param =
     let doc = "Update or create database at $(docv)" in
-    Arg.(value & opt (some string) None &
-         info ["db"; "d"] ~doc ~docv:"DBPATH")
+    Config.(param ~commands:[trainc] (some string) "db" ~synonyms:["d"]
+              ~docv:"DBPATH" ~doc)
 
-  let files : string list Term.t =
+  let files : string list Config.param =
     let doc = "Input files and directories" in
-    Arg.(non_empty & pos_all file [] & info [] ~doc ~docv:"FILE")
+    Config.(pos_all ~commands:[trainc] file ~docv:"FILE" ~doc ())
 
-  let compiler : string option Term.t =
+  let compiler : string option Config.param =
     let doc = "Assume the training set is compiled by $(docv)" in
-    Arg.(value & opt (some string) None &
-         info ["comp"] ~doc ~docv:"COMPILER")
+    Config.(param ~commands:[trainc] (some string) "comp"
+              ~docv:"COMPILER" ~doc)
 
-  let length : int Term.t =
+  let length : int Config.param =
     let doc = "Maximum prefix length" in
-    Arg.(value & opt int 16 & info ["length"; "l"] ~doc)
+    Config.(param ~commands:[trainc; dumpc; findc] int
+              "length" ~synonyms:["l"] ~default:16 ~doc)
 
-  let meth : [`update | `rewrite] Term.t =
+  let meth : [`update | `rewrite] Config.param =
     let enums = ["update", `update; "rewrite", `rewrite] in
     let doc = sprintf "If entry exists then %s it." @@
-      Arg.doc_alts_enum enums in
-    Arg.(value & opt (enum enums) `update &
-         info ["method"; "m"] ~doc)
+      Config.doc_enum enums in
+    Config.(param ~commands:[trainc] (enum enums)
+              "method" ~synonyms:["m"]
+              ~default:`update ~doc)
 
-  let threshold : float Term.t =
+  let threshold : float Config.param =
     let doc = "Decide that sequence starts a function \
                if m / n > $(docv),  where n is the total \
                number of occurences of a given sequence in \
                the training set, and m is how many times \
                it has occured at the function start position." in
-    Arg.(value & opt float 0.5 &
-         info ["threshold"; "t"] ~doc ~docv:"THRESHOLD")
+    Config.(param ~commands:[dumpc] float "threshold" ~synonyms:["t"]
+              ~default:0.5 ~docv:"THRESHOLD" ~doc)
 
-  let url : string Term.t =
+  let url : string Config.param =
     let doc = "Url of the binary signatures" in
     let default = sprintf
         "https://github.com/BinaryAnalysisPlatform/bap/\
          releases/download/v%s/sigs.zip" Config.version in
-    Arg.(value & opt string default & info ["url"] ~doc)
+    Config.(param ~commands:[fetchc; updatec] string "url"
+              ~default ~doc)
 
-  let src : string Term.t =
-    Arg.(value & pos 0 non_dir_file "sigs.zip" & info []
-           ~doc:"Signatures file" ~docv:"SRC")
-  let dst : string Term.t =
-    Arg.(value & pos 1 string Sigs.default_path &
-         info [] ~doc:"Destination" ~docv:"DST")
+  let src : string Config.param =
+    Config.(pos ~commands:[installc] non_dir_file ~default:"sigs.zip"
+              ~docv:"SRC" ~doc:"Signatures file" 0)
 
-  let output : string Term.t =
+  let dst : string Config.param =
+    Config.(pos ~commands:[installc; updatec] string
+              ~default:Sigs.default_path ~docv:"DST"
+              ~doc:"Destination" 1)
+
+  let output : string Config.param =
     let doc = "Output filename" in
-    Arg.(value & opt string "sigs.zip" & info ["o"] ~doc)
+    Config.(param ~commands:[fetchc] string "o"
+              ~default:"sigs.zip" ~doc)
 
-  let print_name : bool Term.t =
+  let print_name : bool Config.param =
     let doc = "Print symbol's name." in
-    Arg.(value & flag & info ["print-name"; "n"] ~doc)
+    Config.(flag ~commands:[symbolsc] "print-name" ~synonyms:["n"] ~doc)
 
-  let print_size : bool Term.t =
+  let print_size : bool Config.param =
     let doc = "Print symbol's size." in
-    Arg.(value & flag & info ["print-size"; "s"] ~doc)
+    Config.(flag ~commands:[symbolsc] "print-size" ~synonyms:["s"] ~doc)
 
-  let tool : [`BW | `SymTbl] Term.t =
+  let tool : [`BW | `SymTbl] Config.param =
     let enums = ["byteweight", `BW; "symbols", `SymTbl] in
-    let doc = sprintf "The info to be dumped. %s" @@ Arg.doc_alts_enum enums in
-    Arg.(value & opt (enum enums) `BW & info ["info"; "i"] ~doc)
-
-  let dump =
-    let doc = "Dump the function starts in a given executable by given tool" in
-    Term.(pure dump $tool $length $threshold $database_in $filename),
-    Term.info "dump" ~doc
-
-  let train =
-    let doc = "Train byteweight on the specified set of files" in
-    Term.(pure train $meth $length $compiler $database $files),
-    Term.info "train" ~doc
-
-  let find =
-    let doc = "Output all function starts in a given executable" in
-    Term.(pure find $threshold $length $compiler $database_in $filename),
-    Term.info "find" ~doc
-
-  let fetch =
-    let doc = "Fetch signatures from the specified url" in
-    Term.(pure fetch $output $url), Term.info "fetch" ~doc
-
-  let install =
-    let doc = "Install signatures" in
-    Term.(pure install $src $dst), Term.info "install" ~doc
-
-  let update =
-    let doc = "Download and install latest signatures" in
-    Term.(pure update $url $dst), Term.info "update" ~doc
-
-  let symbols =
-    let doc = "Print file's symbol table if any." in
-    Term.(pure symbols $print_name $print_size $filename),
-    Term.info "symbols" ~doc
+    let doc = sprintf "The info to be dumped. %s"
+      @@ Config.doc_enum enums in
+    Config.(param ~commands:[dumpc] (enum enums)
+              "info" ~synonyms:["i"] ~default:`BW ~doc)
 
   let usage choices =
     eprintf "usage: bap-byteweight [--version] [--help] \
              <command> [<args>]\n";
     eprintf "where <command> := %s.\n"
-      (String.concat ~sep:" | " choices);
-    Ok ()
+      (String.concat ~sep:" | " choices)
 
-  let default =
+  let () =
     let doc = "byteweight toolkit" in
     let man = [
       `S "DESCRIPTION";
       `P "A toolkit for training, fetching, testing
           and installing byteweight signatures.";
     ] in
-    Term.(pure usage $ choice_names),
-    Term.info "bap-byteweight"
-      ~version:Config.version ~doc ~man
+    Config.descr doc;
+    Config.(manpage default_command man);
+    Config.(when_ready default_command (fun {Config.get=(!)} ->
+        usage ["dump"; "train"; "find"; "fetch"; "install"; "update";
+               "symbols"]));
+    Config.when_ready dumpc (fun {Config.get=(!)} -> ok_exn (
+        dump !tool !length !threshold !database_in !filename));
+    Config.when_ready trainc (fun {Config.get=(!)} -> ok_exn (
+        train !meth !length !compiler !database !files));
+    Config.when_ready findc (fun {Config.get=(!)} -> ok_exn (
+        find !threshold !length !compiler !database_in !filename));
+    Config.when_ready fetchc (fun {Config.get=(!)} -> ok_exn (
+        fetch !output !url));
+    Config.when_ready installc (fun {Config.get=(!)} -> ok_exn (
+        install !src !dst));
+    Config.when_ready updatec (fun {Config.get=(!)} -> ok_exn (
+        update !url !dst));
+    Config.when_ready symbolsc (fun {Config.get=(!)} -> ok_exn (
+        symbols !print_name !print_size !filename));
+    Frontend.start ()
 
-  let eval argv = Term.eval_choice ~argv default
-      [train; find; fetch; install; update; symbols; dump]
 end
-
-let () =
-  Log.start ();
-  let args = Bap_plugin_loader.run Sys.argv in
-  match Cmdline.eval args with
-  | `Ok Ok () -> ()
-  | `Ok Error err ->
-    eprintf "Program failed: %s\n%!"
-      Error.(to_string_hum err);
-    exit 2
-  | _ -> exit 1

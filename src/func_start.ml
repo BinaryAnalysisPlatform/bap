@@ -21,16 +21,17 @@ let of_truth truth ~testbin : addr seq Or_error.t future =
 let of_tool tool ~testbin : addr seq Or_error.t future =
   let module EF = Monad.T.Or_error.Make(Future) in
   let rooter = Rooter.Factory.find tool in
-  let rooter = Option.value_exn rooter in
+  let rooter =
+    match rooter with
+    | Some x -> x
+    | None -> invalid_argf "Unknown tool %S. Possible options: %s"
+                tool (Rooter.Factory.list ()
+                      |> List.map ~f:(fun x -> x,x)
+                      |> Config.doc_enum) () in
   let rooter_fe = Stream.hd rooter in
   let input = Project.Input.file testbin in
   let _ = match Project.create ~rooter input with
     | Ok x -> x
     | Error e -> Error.raise e in
   let open EF in
-  rooter_fe >>= (fun r ->
-      let future, promise = Future.create () in
-      Future.upon Plugins.loaded (fun () ->
-          let addr_seq = Rooter.roots r in
-          Promise.fulfill promise (Or_error.return addr_seq));
-      future)
+  rooter_fe >>= (fun r -> return (Rooter.roots r))
