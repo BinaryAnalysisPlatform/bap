@@ -32,6 +32,11 @@ void initialize_llvm() {
 
 using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
 
+bool ends_with(const std::string& str, const std::string &suffix) {
+    auto n = str.length(), m = suffix.length();
+    return n >= m && str.compare(n-m,m,suffix) == 0;
+}
+
 class MemoryObject : public llvm::MemoryObject {
     memory mem;
 public:
@@ -108,6 +113,7 @@ class llvm_disassembler : public disassembler_interface {
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
     insn current;
+    std::vector<int> prefixes;
 
 
     llvm_disassembler(int debug_level)
@@ -245,6 +251,7 @@ public:
         self->dis = dis;
         self->ins_tab = self->create_table(ins_info->getNumOpcodes(), ins_info);
         self->reg_tab = self->create_table(reg_info->getNumRegs(), reg_info);
+        self->init_prefixes();
         return {self, 0};
     }
 
@@ -261,34 +268,52 @@ public:
         mem.reset(new MemoryObject(m));
     }
 
+    bool is_prefix() const {
+        return std::binary_search(prefixes.begin(),
+                                  prefixes.end(),
+                                  current.code);
+    }
+
     void step(int64_t pc) {
         mcinst.clear();
-        uint64_t size = 0;
-        auto status = dis->getInstruction
-            (mcinst, size, *mem, pc,
-             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-             llvm::nulls());
+        auto base = mem->getBase();
 
-        int off = (int)(pc - mem->getBase());
-
-        if (off < mem->getExtent() && size == 0) {
-            size += 1;
-        }
-
-        location loc = {off, (int)size};
-
-        if (status == llvm::MCDisassembler::Success) {
-            if (debug_level > 1) {
-                std::cerr << "read: '" << get_asm() << "'\n";
-            }
-            current = valid_insn(loc);
-        } else {
-            if (debug_level > 0)
-                std::cerr << "failed to decode insn at"
-                          << " pc " << pc
-                          << " offset " << off
-                          << " skipping " << size << " bytes\n";
+        if (pc < base || pc > base + mem->getExtent()) {
+            location loc = {(int)pc - base, 1};
             current = invalid_insn(loc);
+        } else {
+            uint64_t size = 0;
+            auto status = dis->getInstruction
+                (mcinst, size, *mem, pc,
+                 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+                 llvm::nulls());
+
+            int off = (int)(pc - base);
+
+            if (off < mem->getExtent() && size == 0) {
+                size += 1;
+            }
+
+            location loc = {off, (int)size};
+
+            if (status == llvm::MCDisassembler::Success) {
+                if (debug_level > 1) {
+                    std::cerr << "read: '" << get_asm() << "'\n";
+                }
+                current = valid_insn(loc);
+                if (is_prefix() && size != 0) {
+                    step(pc+size);
+                    location ext = {loc.off, loc.len + current.loc.len};
+                    current = valid_insn(ext);
+                }
+            } else {
+                if (debug_level > 0)
+                    std::cerr << "failed to decode insn at"
+                              << " pc " << pc
+                              << " offset " << off
+                              << " skipping " << size << " bytes\n";
+                current = invalid_insn(loc);
+            }
         }
     }
 
@@ -436,6 +461,13 @@ private:
         return {p, size};
     }
 
+    void init_prefixes() {
+        for (int i = 0; i < ins_info->getNumOpcodes(); i++) {
+            if (ends_with(ins_info->getName(i), "_PREFIX")) {
+                prefixes.push_back(i);
+            }
+        }
+    }
 };
 
 struct create_llvm_disassembler : disasm_factory {
