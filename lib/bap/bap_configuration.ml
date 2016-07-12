@@ -109,7 +109,7 @@ module PluginLoader = struct
     exit 0
 
   let verbose =
-    let doc = "Print verbose output" in
+    let doc = "Print verbose output to log file" in
     Arg.(value @@ flag @@ info ["verbose"] ~doc)
 
   type action = Keep | Drop

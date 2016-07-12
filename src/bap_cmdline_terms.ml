@@ -128,7 +128,7 @@ let source_type : source Config.param =
             ~docv:"NAME" ~doc)
 
 let verbose : bool Config.param =
-  let doc = "Print verbose output" in
+  let doc = "Print verbose output to log file" in
   Config.(flag "verbose" ~doc)
 
 let options_for_passes = [
