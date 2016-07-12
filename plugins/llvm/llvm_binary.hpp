@@ -70,7 +70,7 @@ namespace seg {
 using namespace llvm;
 using namespace llvm::object;
 
-struct segment {
+struct segment {    
     template <typename T>
     segment(const Elf_Phdr_Impl<T>& hdr, int pos)
         : offset_(hdr.p_offset)
@@ -83,7 +83,7 @@ struct segment {
         oss << std::setfill('0') << std::setw(2) << pos ;
         name_ = oss.str();
     }
-
+    
     segment(const MachO::segment_command &s) {
         init_macho_segment(s);
     }
@@ -91,7 +91,7 @@ struct segment {
     segment(const MachO::segment_command_64 &s) {
         init_macho_segment(s);
     }
-
+    
     segment(const pe32_header &hdr, const coff_section &s)
         : name_(s.Name)
         , offset_(static_cast<uint32_t>(s.PointerToRawData))
@@ -104,7 +104,20 @@ struct segment {
         , is_executable_(static_cast<uint32_t>(s.Characteristics) &
                          COFF::IMAGE_SCN_MEM_EXECUTE)
         {}
-
+    
+    segment(const pe32plus_header &hdr, const coff_section &s)
+	: name_(s.Name)
+	, offset_(static_cast<uint64_t>(s.PointerToRawData))
+	, addr_(static_cast<uint64_t>(s.VirtualAddress + hdr.ImageBase))
+	, size_(static_cast<uint64_t>(s.SizeOfRawData))
+	, is_readable_(static_cast<uint64_t>(s.Characteristics) &
+		       COFF::IMAGE_SCN_MEM_READ)
+	, is_writable_(static_cast<uint64_t>(s.Characteristics) &
+		       COFF::IMAGE_SCN_MEM_WRITE)
+	, is_executable_(static_cast<uint64_t>(s.Characteristics) &
+			 COFF::IMAGE_SCN_MEM_EXECUTE)
+    {}
+    
     const std::string& name() const { return name_; }
     uint64_t offset() const { return offset_; }
     uint64_t addr() const { return addr_; }
@@ -164,12 +177,12 @@ std::vector<segment> read(const MachOObjectFile& obj) {
     return segments;
 }
 
-std::vector<segment> read(const COFFObjectFile& obj) {
+std::vector<segment> readPE32(const COFFObjectFile& obj) {
     std::vector<segment> segments;
     const pe32_header *pe32;
     if (std::error_code err = obj.getPE32Header(pe32))
         llvm_binary_fail(err);
-	for (auto it : obj.sections()) {
+    for (auto it : obj.sections()) {
         const coff_section *s = obj.getCOFFSection(it);
         uint32_t c = static_cast<uint32_t>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
@@ -180,6 +193,30 @@ std::vector<segment> read(const COFFObjectFile& obj) {
     return segments;
 }
 
+std::vector<segment> readPE32Plus(const COFFObjectFile& obj) {
+    std::vector<segment> segments;
+    const pe32plus_header *pe32plus;
+    if (std::error_code err = obj.getPE32PlusHeader(pe32plus))
+	llvm_binary_fail(err);
+    for (auto it : obj.sections()) {
+	const coff_section *s = obj.getCOFFSection(it);
+	uint64_t c = static_cast<uint64_t>(s->Characteristics);
+	if ( c & COFF::IMAGE_SCN_CNT_CODE ||
+	     c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
+	     c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
+	    segments.push_back(segment(*pe32plus, *s));
+    }
+    return segments;
+}
+
+std::vector<segment> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	return readPE32(obj);
+    } else {
+	return readPE32Plus(obj);
+    }
+}
+    
 } //namespace seg
 
 namespace sym {
