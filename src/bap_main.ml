@@ -151,6 +151,10 @@ let program {Config.get=(!)} =
       a b c d e f g i j k l = Bap_options.Fields.create
       a b c d e f g i j k l in
   let open Bap_cmdline_terms in
+  let rooters =
+    match !rooters with
+    | [] -> Rooter.Factory.list ()
+    | _ as x -> x in
   let options = create
       !filename
       !disassembler
@@ -160,7 +164,7 @@ let program {Config.get=(!)} =
       !verbose
       !brancher
       !symbolizers
-      !rooters
+      rooters
       !reconstructor
       !passes in
   let print_formats () =
