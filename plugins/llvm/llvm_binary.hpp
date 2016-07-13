@@ -196,47 +196,32 @@ segment make_segment(T image_base, const coff_section &s) {
 		   COFF::IMAGE_SCN_MEM_EXECUTE);
 }
 
-std::vector<segment> readPE32(const COFFObjectFile& obj) {
+template <typename T>
+std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
-    const pe32_header *pe32;
-    if (error_code err = obj.getPE32Header(pe32))
-	llvm_binary_fail(err);
-
-    for (auto it = obj.begin_sections();
-	 it != obj.end_sections(); ++it) {
-	const coff_section *s = obj.getCOFFSection(it);
-	uint32_t c = static_cast<uint32_t>(s->Characteristics);
-	if ( c & COFF::IMAGE_SCN_CNT_CODE ||
-	     c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
-	     c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-	    segments.push_back(make_segment<uint32_t>(pe32->ImageBase, *s));
-    }
-    return segments;
-}
-
-std::vector<segment> readPE32Plus(const COFFObjectFile& obj) {
-    std::vector<segment> segments;
-    const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
-    if (!pe32plus)
-	llvm_binary_fail("Failed to extract PE32+ header");
-
     for (auto it = obj.begin_sections();
          it != obj.end_sections(); ++it) {
         const coff_section *s = obj.getCOFFSection(it);
-        uint64_t c = static_cast<uint64_t>(s->Characteristics);
+        T c = static_cast<T>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
              c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(make_segment<uint64_t>(pe32plus->ImageBase, *s));
+            segments.push_back(make_segment<T>(image_base, *s));
     }
     return segments;
 }
 
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
-	return readPE32(obj);
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-	return readPE32Plus(obj);
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+        if (!pe32plus)
+            llvm_binary_fail("Failed to extract PE32+ header");
+	return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
 }
 
