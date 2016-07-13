@@ -288,52 +288,8 @@ std::vector<symbol> read(const ObjectFile& obj) {
     return symbols;
 }
 
-
-std::vector<symbol> readPE32Plus(const COFFObjectFile& obj) {
+std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
     std::vector<symbol> symbols;
-
-    const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
-    if (!pe32plus)
-	llvm_binary_fail("Failed to extract PE32+ header");
-
-    for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
-	auto sym = obj.getCOFFSymbol(it);
-
-	if (!sym) llvm_binary_fail("not a coff symbol");
-
-	const coff_section *sec = nullptr;
-	if (sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
-	    continue;
-
-	if (error_code ec = obj.getSection(sym->SectionNumber, sec))
-	    llvm_binary_fail(ec);
-
-	if (!sec) continue;
-
-	uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym->Value;
-
-	for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
-	    auto next = obj.getCOFFSymbol(it);
-	    if (next->SectionNumber == sym->SectionNumber) {
-                auto new_size = next->Value > sym->Value ?
-                    next->Value - sym->Value : size;
-                size = new_size < size ? new_size : size;
-	    }
-	}
-
-	auto addr = sec->VirtualAddress + pe32plus->ImageBase + sym->Value;
-	symbols.push_back(symbol(*it,addr,size));
-    }
-    return symbols;
-}
-
-std::vector<symbol> readPE32(const COFFObjectFile& obj) {
-    std::vector<symbol> symbols;
-
-    const pe32_header *pe32;
-    if (error_code err = obj.getPE32Header(pe32))
-        llvm_binary_fail(err);
-
     for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
         auto sym = obj.getCOFFSymbol(it);
 
@@ -359,7 +315,7 @@ std::vector<symbol> readPE32(const COFFObjectFile& obj) {
             }
         }
 
-        auto addr = sec->VirtualAddress + pe32->ImageBase + sym->Value;
+        auto addr = sec->VirtualAddress + image_base + sym->Value;
         symbols.push_back(symbol(*it,addr,size));
     }
     return symbols;
@@ -367,9 +323,15 @@ std::vector<symbol> readPE32(const COFFObjectFile& obj) {
 
 std::vector<symbol> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
-	return readPE32(obj);
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return read(obj, pe32->ImageBase);
     } else {
-	return readPE32Plus(obj);
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	if (!pe32plus)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	return read(obj, pe32plus->ImageBase);
     }
 }
 
@@ -486,31 +448,13 @@ uint64_t image_entry(const COFFObjectFile& obj) {
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint;
     } else {
-	// llvm version 3.4 doesn't support pe32plus_header,
-        // but in version 3.5 it does. So, later one will be
-        // able to write obj->getPE32PlusHeader(hdr) for 64-bit files.
-        uint64_t cur_ptr = 0;
-        const char * buf = (obj.getData()).data();
-        const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
-        uint8_t b0 = start[0];
-        uint8_t b1 = start[1];
-        if (b0 == 0x4d && b1 == 0x5a) { // Check if this is a PE/COFF file.
-            // A pointer at offset 0x3C points to the PE header.
-            cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
-            // Check the PE magic bytes.
-            if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
-                llvm_binary_fail("PE header not found");
-            cur_ptr += 4; // Skip the PE magic bytes.
-            cur_ptr += sizeof(coff_file_header);
-	    const pe32plus_header *hdr =
-                reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-	    if (hdr->Magic == 0x20b)
-                return hdr->AddressOfEntryPoint;
-            else
-                llvm_binary_fail("PEplus header not found");
-        } else {
-            llvm_binary_fail("PEplus header not found");
-        }
+	const pe32plus_header *hdr = utils::getPE32PlusHeader(obj);
+	if (!hdr)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	if (hdr->Magic == 0x20b)
+	    return hdr->AddressOfEntryPoint;
+	else
+	    llvm_binary_fail("PEplus header not found");
     }
 };
 
