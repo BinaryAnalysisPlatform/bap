@@ -18,6 +18,7 @@ module type abi = sig
   val size : C.Size.base
   val arg  : pos -> exp
   val demangle : string -> string
+  val autodetect : project -> bool
 end
 
 type abi = (module abi)
@@ -43,6 +44,7 @@ module SysV = struct
     inherit C.Size.base `LP64
   end
   let demangle = ident
+  let autodetect _ = false
 end
 
 module CDECL = struct
@@ -61,6 +63,7 @@ module CDECL = struct
   end
 
   let demangle = ident
+  let autodetect _ = false
 end
 
 (* in our abstraction they are the same, as they have the same layout.*)
@@ -69,9 +72,19 @@ module STDCALL = struct
   let name = "stdcall"
 end
 
+let strip_leading_underscore s =
+  match String.chop_prefix s ~prefix:"_" with
+  | None -> s
+  | Some s -> s
+
+let has_symbol fn proj =
+  Option.is_some (Symtab.find_by_name (Project.symbols proj) fn)
+
 module MS_32 = struct
   include STDCALL
   let name = "ms"
+  let demangle = strip_leading_underscore
+  let autodetect = has_symbol "__GetPEImageBase"
 end
 
 module MS_64 = struct
@@ -92,6 +105,7 @@ module MS_64 = struct
       | `Basic {C.Type.Spec.t=#C.Type.short} -> `r32
       | t -> super#alignment t
   end
+  let autodetect = has_symbol "_GetPEImageBase"
 end
 
 module FASTCALL = struct
@@ -146,7 +160,7 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
   let params = List.mapi args ~f:(fun i (n,t) ->
       match Abi.size#bits t with
       | None ->
-        warning "size of %i'th parameter is unknown" i;
+        warning "size of %a parameter is unknown" C.Type.pp t;
         raise Unsupported
       | Some size -> match Size.of_int_opt size with
         | Some sz when size <= word ->
@@ -171,8 +185,10 @@ let supported () : (module abi) list = [
 
 let name (module Abi : abi) = Abi.name
 let arch (module Abi : abi) = Abi.arch
-let find name = supported() |> List.find ~f:(fun (module Abi) ->
+let find name = supported () |> List.find ~f:(fun (module Abi) ->
     Abi.name = name || Abi.name ^ "_abi" = name)
+let auto proj = supported () |> List.find ~f:(fun (module Abi) ->
+    Abi.autodetect proj)
 
 let api abi proto =
   try Some (supported_api abi proto) with Unsupported ->
@@ -205,8 +221,14 @@ let setup ?(abi=fun _ -> None) () =
   let main proj = match Project.arch proj with
     | #Arch.x86 as arch ->
       let abi = match abi arch with
-        | None -> default_abi arch
-        | Some abi -> abi in
+        | Some abi -> abi
+        | None -> match auto proj with
+          | Some abi ->
+            info "autodetected ABI";
+            abi
+          | None ->
+            info "can't detect ABI, falling back to default";
+            default_abi arch in
       let module Abi = (val abi) in
       info "using %s ABI" Abi.name;
       let abi = C.Abi.{
