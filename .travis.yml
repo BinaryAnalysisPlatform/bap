@@ -31,6 +31,7 @@ addons:
     - ocaml-nox
     - time
     - aspcud
+    - dejagnu
 
 env:
   - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest TESTS=false
