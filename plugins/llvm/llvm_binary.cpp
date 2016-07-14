@@ -46,31 +46,31 @@ extern "C" {
 
 
     const char* segment_name(const seg::segment* s) {
-        return s->name().c_str();
+        return s->name.c_str();
     }
 
     uint64_t segment_offset(const seg::segment* s) {
-        return s->offset();
+        return s->offset;
     }
 
     uint64_t segment_addr(const seg::segment* s) {
-        return s->addr();
+        return s->addr;
     }
 
     uint64_t segment_size(const seg::segment* s) {
-        return s->size();
+        return s->size;
     }
 
     bool segment_is_readable(const seg::segment* s) {
-        return s->is_readable();
+        return s->is_readable;
     }
 
     bool segment_is_writable(const seg::segment* s) {
-        return s->is_writable();
+        return s->is_writable;
     }
 
     bool segment_is_executable(const seg::segment* s) {
-        return s->is_executable();
+        return s->is_executable;
     }
 
     const char* section_name(const sec::section* s) {

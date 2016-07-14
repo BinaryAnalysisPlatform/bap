@@ -108,41 +108,13 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct segment {
-    segment(std::string name, uint64_t offset, uint64_t addr, 
-	    uint64_t size, bool r, bool w, bool x)
-	: name_(name)
-	, offset_(offset)
-	, addr_(addr)
-	, size_(size)
-	, is_readable_(r)
-	, is_writable_(w)
-	, is_executable_(x)
-    {}
-
-    template <typename S>
-    segment(const S &s)  
-	: segment(s.segname, s.fileoff, s.vmaddr, s.filesize,
-		  s.initprot & MachO::VM_PROT_READ,
-		  s.initprot & MachO::VM_PROT_WRITE,
-		  s.initprot & MachO::VM_PROT_EXECUTE)
-    {} 
-
-    const std::string& name() const { return name_; }
-    uint64_t offset() const { return offset_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-    bool is_readable() const { return is_readable_; }
-    bool is_writable() const { return is_writable_; }
-    bool is_executable() const { return is_executable_; }
-
-private:
-    std::string name_;
-    uint64_t offset_;
-    uint64_t addr_;
-    uint64_t size_;
-    bool is_readable_;
-    bool is_writable_;
-    bool is_executable_;
+    std::string name;
+    uint64_t offset;
+    uint64_t addr;
+    uint64_t size;
+    bool is_readable;
+    bool is_writable;
+    bool is_executable;
 };
 
 
@@ -156,16 +128,24 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
         if (begin -> p_type == ELF::PT_LOAD) {
 	    std::ostringstream oss;
 	    oss << std::setfill('0') << std::setw(2) << pos;
-	    segments.push_back(segment(oss.str(), 
-				       begin->p_offset,
-				       begin->p_vaddr, 
-				       begin->p_filesz, 
-				       begin->p_flags & ELF::PF_R, 
-				       begin->p_flags & ELF::PF_W, 
-				       begin->p_flags & ELF::PF_X));
+	    segments.push_back(segment{oss.str(), 
+			begin->p_offset,
+			begin->p_vaddr, 
+			begin->p_filesz, 
+			begin->p_flags & ELF::PF_R, 
+			begin->p_flags & ELF::PF_W, 
+			begin->p_flags & ELF::PF_X});
 	}
     }
     return segments;
+}
+
+template <typename S>
+segment make_segment(const S &s) {
+    return segment{s.segname, s.fileoff, s.vmaddr, s.filesize,
+	    s.initprot & MachO::VM_PROT_READ,
+	    s.initprot & MachO::VM_PROT_WRITE,
+	    s.initprot & MachO::VM_PROT_EXECUTE};
 }
 
 std::vector<segment> read(const MachOObjectFile& obj) {
@@ -175,25 +155,25 @@ std::vector<segment> read(const MachOObjectFile& obj) {
     for (std::size_t i = 0; i < cmds.size(); ++i) {
         command_info info = cmds.at(i);
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-            segments.push_back(segment(obj.getSegment64LoadCommand(info)));
+            segments.push_back(make_segment(obj.getSegment64LoadCommand(info)));
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-            segments.push_back(segment(obj.getSegmentLoadCommand(info)));
+            segments.push_back(make_segment(obj.getSegmentLoadCommand(info)));
     }
     return segments;
 }
 
 template <typename T>
 segment make_segment(T image_base, const coff_section &s) {
-    return segment(s.Name, 
-		   static_cast<T>(s.PointerToRawData),
-		   static_cast<T>(s.VirtualAddress + image_base),
-		   static_cast<T>(s.SizeOfRawData),
-		   static_cast<T>(s.Characteristics) &
-		   COFF::IMAGE_SCN_MEM_READ,
-		   static_cast<T>(s.Characteristics) &
-		   COFF::IMAGE_SCN_MEM_WRITE,
-		   static_cast<T>(s.Characteristics) &
-		   COFF::IMAGE_SCN_MEM_EXECUTE);
+    return segment{s.Name, 
+	    static_cast<T>(s.PointerToRawData),
+	    static_cast<T>(s.VirtualAddress + image_base),
+	    static_cast<T>(s.SizeOfRawData),
+	    static_cast<T>(s.Characteristics) &
+	    COFF::IMAGE_SCN_MEM_READ,
+	    static_cast<T>(s.Characteristics) &
+	    COFF::IMAGE_SCN_MEM_WRITE,
+	    static_cast<T>(s.Characteristics) &
+	    COFF::IMAGE_SCN_MEM_EXECUTE};
 }
 
 template <typename T>
