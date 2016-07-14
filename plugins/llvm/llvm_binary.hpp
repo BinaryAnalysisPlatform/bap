@@ -343,28 +343,27 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct section {
-    explicit section(const SectionRef& sec) {
-        StringRef name;
-        if(error_code err = sec.getName(name))
-            llvm_binary_fail(err);
-        this->name_ = name.str();
-        if (error_code err = sec.getAddress(this->addr_))
-            llvm_binary_fail(err);
-
-        if (error_code err = sec.getSize(this->size_))
-            llvm_binary_fail(err);
-    }
-    const std::string& name() const { return name_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-
-private:
-    std::string name_;
-    uint64_t addr_;
-    uint64_t size_;
+    std::string name;
+    uint64_t addr;
+    uint64_t size;
 };
 
-std::vector<section> read(const ObjectFile& obj) {
+section make_section(const SectionRef &sec) {
+    StringRef name;
+    if (error_code err = sec.getName(name))
+	llvm_binary_fail(err);
+    
+    uint64_t addr;
+    if (error_code err = sec.getAddress(addr))
+	llvm_binary_fail(err);
+
+    uint64_t size;
+    if (error_code err = sec.getSize(size))
+	llvm_binary_fail(err);
+    return section{name.str(), addr, size};
+}
+
+std::vector<section> read(const ObjectFile &obj) {
     int size = utils::distance(obj.begin_sections(),
                                obj.end_sections());
     std::vector<section> sections;
@@ -372,8 +371,37 @@ std::vector<section> read(const ObjectFile& obj) {
     std::transform(obj.begin_sections(),
                    obj.end_sections(),
                    std::back_inserter(sections),
-                   [](const SectionRef& s) { return section(s); });
+                   [](const SectionRef& s) { return make_section(s); });
     return sections;
+}
+
+section make_section(const coff_section &s, const uint64_t image_base) {
+    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
+}
+
+template <typename T>
+std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
+    std::vector<section> sections;
+    for (auto it = obj.begin_sections();
+         it != obj.end_sections(); ++it) {
+        const coff_section *s = obj.getCOFFSection(it);
+        sections.push_back(make_section(*s, image_base));
+    }
+    return sections;
+} 
+
+std::vector<section> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return readPE(obj, pe32->ImageBase);
+    } else {
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	if (!pe32plus)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	return readPE(obj, pe32plus->ImageBase);
+    }    
 }
 
 } //namespace sec
