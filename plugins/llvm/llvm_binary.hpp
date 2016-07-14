@@ -132,9 +132,9 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
 			begin->p_offset,
 			begin->p_vaddr, 
 			begin->p_filesz, 
-			begin->p_flags & ELF::PF_R, 
-			begin->p_flags & ELF::PF_W, 
-			begin->p_flags & ELF::PF_X});
+			static_cast<bool>(begin->p_flags & ELF::PF_R), 
+			static_cast<bool>(begin->p_flags & ELF::PF_W), 
+			static_cast<bool>(begin->p_flags & ELF::PF_X)});
 	}
     }
     return segments;
@@ -143,9 +143,9 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
 template <typename S>
 segment make_segment(const S &s) {
     return segment{s.segname, s.fileoff, s.vmaddr, s.filesize,
-	    s.initprot & MachO::VM_PROT_READ,
-	    s.initprot & MachO::VM_PROT_WRITE,
-	    s.initprot & MachO::VM_PROT_EXECUTE};
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
 std::vector<segment> read(const MachOObjectFile& obj) {
@@ -168,12 +168,12 @@ segment make_segment(T image_base, const coff_section &s) {
 	    static_cast<T>(s.PointerToRawData),
 	    static_cast<T>(s.VirtualAddress + image_base),
 	    static_cast<T>(s.SizeOfRawData),
-	    static_cast<T>(s.Characteristics) &
-	    COFF::IMAGE_SCN_MEM_READ,
-	    static_cast<T>(s.Characteristics) &
-	    COFF::IMAGE_SCN_MEM_WRITE,
-	    static_cast<T>(s.Characteristics) &
-	    COFF::IMAGE_SCN_MEM_EXECUTE};
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_READ),
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_WRITE),
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_EXECUTE)};
 }
 
 template <typename T>
