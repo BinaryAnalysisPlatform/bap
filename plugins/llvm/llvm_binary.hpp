@@ -211,49 +211,40 @@ namespace sym {
 using namespace llvm;
 using namespace llvm::object;
 
+typedef SymbolRef::Type kind_type;
+
 struct symbol {
-    typedef SymbolRef::Type kind_type;
-
-    symbol(const SymbolRef& sym, uint64_t addr, uint64_t size)
-        : symbol(sym) {
-        addr_ = addr;
-        size_ = size;
-    }
-
-    explicit symbol(const SymbolRef& sym) {
-        StringRef name;
-        if(error_code err = sym.getName(name))
-            llvm_binary_fail(err);
-        this->name_ = name.str();
-
-        if (error_code err = sym.getType(this->kind_))
-            llvm_binary_fail(err);
-
-        if (error_code err = sym.getAddress(this->addr_))
-            llvm_binary_fail(err);
-
-        if (error_code err = sym.getSize(this->size_))
-            llvm_binary_fail(err);
-    }
-
-
-    const std::string& name() const { return name_; }
-    kind_type kind() const { return kind_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-private:
-    std::string name_;
-    kind_type kind_;
-    uint64_t addr_;
-    uint64_t size_;
+    std::string name;
+    kind_type kind;
+    uint64_t addr;
+    uint64_t size;
 };
 
+symbol make_symbol(const SymbolRef &sym) {
+    StringRef name;
+    if(error_code err = sym.getName(name))
+	llvm_binary_fail(err);
+    
+    kind_type kind;
+    if (error_code err = sym.getType(kind))
+	llvm_binary_fail(err);
+
+    uint64_t addr;
+    if (error_code err = sym.getAddress(addr))
+	llvm_binary_fail(err);
+
+    uint64_t size;
+    if (error_code err = sym.getSize(size))
+	llvm_binary_fail(err);
+    return symbol{name.str(), kind, addr, size};
+}
+
 template <typename OutputIterator>
-OutputIterator read(symbol_iterator begin,
-                    symbol_iterator end,
-                    OutputIterator out) {
+OutputIterator read(symbol_iterator begin, 
+		    symbol_iterator end,
+		    OutputIterator out) {
     return std::transform(begin, end, out,
-                          [](const SymbolRef& s) { return symbol(s); });
+			  [](const SymbolRef& s) { return make_symbol(s); });
 }
 
 std::vector<symbol> read(const ObjectFile& obj) {
@@ -266,6 +257,17 @@ std::vector<symbol> read(const ObjectFile& obj) {
          obj.end_symbols(),
          std::back_inserter(symbols));
     return symbols;
+}
+
+symbol make_symbol(const SymbolRef& sym, uint64_t addr, uint64_t size) {
+    StringRef name;
+    if(error_code err = sym.getName(name))
+	llvm_binary_fail(err);
+
+    kind_type kind;
+    if (error_code err = sym.getType(kind))
+	llvm_binary_fail(err);
+    return symbol{name.str(), kind, addr, size};
 }
 
 std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
@@ -296,7 +298,7 @@ std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
         }
 
         auto addr = sec->VirtualAddress + image_base + sym->Value;
-        symbols.push_back(symbol(*it,addr,size));
+        symbols.push_back(make_symbol(*it,addr,size));
     }
     return symbols;
 }

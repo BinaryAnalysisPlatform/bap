@@ -86,19 +86,19 @@ extern "C" {
     }
 
     const char* symbol_name(const sym::symbol* s) {
-        return s->name().c_str();
+        return s->name.c_str();
     }
 
     int symbol_kind(const sym::symbol* s) {
-        return s->kind();
+        return s->kind;
     }
 
     uint64_t symbol_addr(const sym::symbol* s) {
-        return s->addr();
+        return s->addr;
     }
 
     uint64_t symbol_size(const sym::symbol* s) {
-        return s->size();
+        return s->size;
     }
 
 }
