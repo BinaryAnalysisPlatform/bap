@@ -74,15 +74,15 @@ extern "C" {
     }
 
     const char* section_name(const sec::section* s) {
-        return s->name().c_str();
+        return s->name.c_str();
     }
 
     uint64_t section_addr(const sec::section* s) {
-        return s->addr();
+        return s->addr;
     }
 
     uint64_t section_size(const sec::section* s) {
-        return s->size();
+        return s->size;
     }
 
     const char* symbol_name(const sym::symbol* s) {
