@@ -34,12 +34,18 @@ let features args =
   then header :: everything_except disabled_args
   else header :: selected enabled args
 
+let special_args =
+  List.concat @@ List.map (fun f -> [enabled^f; disabled^f])
+    ["docs"; "tests"; "llvm-static"; "debug"]
+
 let filtered args =
   let enabled_args = selected enabled args in
   let disabled_args = selected disabled args in
-  List.(filter (fun arg -> not (mem arg (
-      map (fun f -> enabled^f) enabled_args @
-      map (fun f -> disabled^f) disabled_args))) args)
+  List.(filter (fun arg ->
+      mem arg special_args ||
+      not (mem arg (
+          map (fun f -> enabled^f) enabled_args @
+          map (fun f -> disabled^f) disabled_args))) args)
 
 let main args =
   match args with
