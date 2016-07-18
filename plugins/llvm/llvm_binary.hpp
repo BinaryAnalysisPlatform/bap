@@ -235,36 +235,6 @@ std::vector<section> read(const ObjectFile &obj) {
     return sections;
 }
 
-/*
-section make_section(const coff_section &s, const uint64_t image_base) {
-    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
-}
-
-template <typename T>
-std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
-    std::vector<section> sections;
-    for (auto it = obj.begin_sections();
-         it != obj.end_sections(); ++it) {
-        const coff_section *s = obj.getCOFFSection(it);
-        sections.push_back(make_section(*s, image_base));
-    }
-    return sections;
-} 
-
-std::vector<section> read(const COFFObjectFile& obj) {
-    if (obj.getBytesInAddress() == 4) {
-	const pe32_header *pe32;
-	if (error_code err = obj.getPE32Header(pe32))
-	    llvm_binary_fail(err);
-	return readPE(obj, pe32->ImageBase);
-    } else {
-	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
-	if (!pe32plus)
-	    llvm_binary_fail("Failed to extract PE32+ header");
-	return readPE(obj, pe32plus->ImageBase);
-    }    
-}
-*/
 } //namespace sec
 
 namespace img {
