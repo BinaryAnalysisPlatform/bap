@@ -70,84 +70,16 @@ namespace seg {
 using namespace llvm;
 using namespace llvm::object;
 
-struct segment {    
-    template <typename T>
-    segment(const Elf_Phdr_Impl<T>& hdr, int pos)
-        : offset_(hdr.p_offset)
-        , addr_(hdr.p_vaddr)
-        , size_(hdr.p_filesz)
-        , is_readable_(hdr.p_flags & ELF::PF_R)
-        , is_writable_(hdr.p_flags & ELF::PF_W)
-        , is_executable_(hdr.p_flags & ELF::PF_X) {
-        std::ostringstream oss;
-        oss << std::setfill('0') << std::setw(2) << pos ;
-        name_ = oss.str();
-    }
-    
-    segment(const MachO::segment_command &s) {
-        init_macho_segment(s);
-    }
-
-    segment(const MachO::segment_command_64 &s) {
-        init_macho_segment(s);
-    }
-    
-    segment(const pe32_header &hdr, const coff_section &s)
-        : name_(s.Name)
-        , offset_(static_cast<uint32_t>(s.PointerToRawData))
-        , addr_(static_cast<uint32_t>(s.VirtualAddress + hdr.ImageBase))
-        , size_(static_cast<uint32_t>(s.SizeOfRawData))
-        , is_readable_(static_cast<uint32_t>(s.Characteristics) &
-                       COFF::IMAGE_SCN_MEM_READ)
-        , is_writable_(static_cast<uint32_t>(s.Characteristics) &
-                       COFF::IMAGE_SCN_MEM_WRITE)
-        , is_executable_(static_cast<uint32_t>(s.Characteristics) &
-                         COFF::IMAGE_SCN_MEM_EXECUTE)
-        {}
-    
-    segment(const pe32plus_header &hdr, const coff_section &s)
-	: name_(s.Name)
-	, offset_(static_cast<uint64_t>(s.PointerToRawData))
-	, addr_(static_cast<uint64_t>(s.VirtualAddress + hdr.ImageBase))
-	, size_(static_cast<uint64_t>(s.SizeOfRawData))
-	, is_readable_(static_cast<uint64_t>(s.Characteristics) &
-		       COFF::IMAGE_SCN_MEM_READ)
-	, is_writable_(static_cast<uint64_t>(s.Characteristics) &
-		       COFF::IMAGE_SCN_MEM_WRITE)
-	, is_executable_(static_cast<uint64_t>(s.Characteristics) &
-			 COFF::IMAGE_SCN_MEM_EXECUTE)
-    {}
-    
-    const std::string& name() const { return name_; }
-    uint64_t offset() const { return offset_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-    bool is_readable() const { return is_readable_; }
-    bool is_writable() const { return is_writable_; }
-    bool is_executable() const { return is_executable_; }
-
-private:
-
-    template <typename S>
-    void init_macho_segment(const S &s) {
-        name_ = s.segname;
-        offset_ = s.fileoff;
-        addr_ = s.vmaddr;
-        size_ = s.filesize;
-        is_readable_ = s.initprot & MachO::VM_PROT_READ;
-        is_writable_ = s.initprot & MachO::VM_PROT_WRITE;
-        is_executable_ = s.initprot & MachO::VM_PROT_EXECUTE;
-    }
-
-private:
-    std::string name_;
-    uint64_t offset_;
-    uint64_t addr_;
-    uint64_t size_;
-    bool is_readable_;
-    bool is_writable_;
-    bool is_executable_;
+struct segment {
+    std::string name;
+    uint64_t offset;
+    uint64_t addr;
+    uint64_t size;
+    bool is_readable;
+    bool is_writable;
+    bool is_executable;
 };
+
 
 template<typename T>
 std::vector<segment> read(const ELFObjectFile<T>& obj) {
@@ -155,12 +87,29 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
     auto end = obj.getELFFile()->program_header_end();
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
+    //auto current = begin;
     for (int pos = 0; begin != end; ++begin, ++pos) {
         if (begin -> p_type == ELF::PT_LOAD) {
-            segments.push_back(segment(*begin, pos));
-        }
+	    std::ostringstream oss;
+	    oss << std::setfill('0') << std::setw(2) << pos;
+	    segments.push_back(segment{oss.str(), 
+			begin->p_offset,
+			begin->p_vaddr, 
+			begin->p_filesz, 
+			static_cast<bool>(begin->p_flags & ELF::PF_R), 
+			static_cast<bool>(begin->p_flags & ELF::PF_W), 
+			static_cast<bool>(begin->p_flags & ELF::PF_X)});
+	}
     }
     return segments;
+}
+
+template <typename S>
+segment make_segment(const S &s) {
+    return segment{s.segname, s.fileoff, s.vmaddr, s.filesize,
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
+	    static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
 std::vector<segment> read(const MachOObjectFile& obj) {
@@ -170,97 +119,86 @@ std::vector<segment> read(const MachOObjectFile& obj) {
     for (std::size_t i = 0; i < cmds.size(); ++i) {
         command_info info = cmds.at(i);
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-            segments.push_back(segment(obj.getSegment64LoadCommand(info)));
+            segments.push_back(make_segment(obj.getSegment64LoadCommand(info)));
         if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-            segments.push_back(segment(obj.getSegmentLoadCommand(info)));
+            segments.push_back(make_segment(obj.getSegmentLoadCommand(info)));
     }
     return segments;
 }
 
-std::vector<segment> readPE32(const COFFObjectFile& obj) {
+template <typename T>
+segment make_segment(T image_base, const coff_section &s) {
+    return segment{s.Name, 
+	    static_cast<T>(s.PointerToRawData),
+	    static_cast<T>(s.VirtualAddress + image_base),
+	    static_cast<T>(s.SizeOfRawData),
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_READ),
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_WRITE),
+	    static_cast<bool>((s.Characteristics) &
+			      COFF::IMAGE_SCN_MEM_EXECUTE)};
+}
+
+template <typename T>
+std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
-    const pe32_header *pe32;
-    if (std::error_code err = obj.getPE32Header(pe32))
-        llvm_binary_fail(err);
     for (auto it : obj.sections()) {
         const coff_section *s = obj.getCOFFSection(it);
-        uint32_t c = static_cast<uint32_t>(s->Characteristics);
+        T c = static_cast<T>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
              c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(segment(*pe32, *s));
-    }
-    return segments;
-}
-
-std::vector<segment> readPE32Plus(const COFFObjectFile& obj) {
-    std::vector<segment> segments;
-    const pe32plus_header *pe32plus;
-    if (std::error_code err = obj.getPE32PlusHeader(pe32plus))
-	llvm_binary_fail(err);
-    for (auto it : obj.sections()) {
-	const coff_section *s = obj.getCOFFSection(it);
-	uint64_t c = static_cast<uint64_t>(s->Characteristics);
-	if ( c & COFF::IMAGE_SCN_CNT_CODE ||
-	     c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
-	     c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-	    segments.push_back(segment(*pe32plus, *s));
+            segments.push_back(make_segment<T>(image_base, *s));
     }
     return segments;
 }
 
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
-	return readPE32(obj);
+	const pe32_header *pe32;
+	if (std::error_code ec = obj.getPE32Header(pe32))
+	    llvm_binary_fail(ec);
+	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-	return readPE32Plus(obj);
+	const pe32plus_header *pe32plus;
+        if (std::error_code ec = obj.getPE32PlusHeader(pe32plus))
+            llvm_binary_fail(ec);
+        return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
 }
-    
+
 } //namespace seg
 
 namespace sym {
 using namespace llvm;
 using namespace llvm::object;
 
+typedef SymbolRef::Type kind_type;
+
 struct symbol {
-    typedef SymbolRef::Type kind_type;
-
-    symbol(const SymbolRef& sym, uint64_t size)
-	: symbol(sym) {
-	size_ = size;
-    }
-	
-    explicit symbol(const SymbolRef& sym) {
-	auto name = sym.getName();
-	if (std::error_code ec = name.getError())
-	    llvm_binary_fail(ec);
-	this->name_ = name->str();
-
-	auto addr = sym.getAddress();
-	if (std::error_code ec = addr.getError())
-	    llvm_binary_fail(ec);
-	this->addr_ = addr.get();
-	
-	this->kind_ = sym.getType();
-    }
-	
-    const std::string& name() const { return name_; }
-    kind_type kind() const { return kind_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-private:
-    std::string name_;
-    kind_type kind_;
-    uint64_t addr_;
-    uint64_t size_;
+    std::string name;
+    kind_type kind;
+    uint64_t addr;
+    uint64_t size;
 };
 
+symbol make_symbol(const SymbolRef& sym, uint64_t size) {
+    auto name = sym.getName();
+    if (std::error_code ec = name.getError())
+        llvm_binary_fail(ec);
+
+    auto addr = sym.getAddress();
+    if (std::error_code ec = addr.getError())
+        llvm_binary_fail(ec);
+    
+    return symbol{name->str(), sym.getType(), addr.get(), size};
+}
 std::vector<symbol> read(const ObjectFile& obj) {
     std::vector<symbol> symbols;
     auto symbol_sizes = computeSymbolSizes(obj);
     for (auto s : symbol_sizes)
-	symbols.push_back(symbol(s.first, s.second));
+	symbols.push_back(make_symbol(s.first, s.second));
     return symbols;
 }
 
@@ -271,27 +209,21 @@ using namespace llvm;
 using namespace llvm::object;
 
 struct section {
-    explicit section(const SectionRef& sec) {
-        StringRef name;
-        if(std::error_code err = sec.getName(name))
-            llvm_binary_fail(err);
-        this->name_ = name.str();
-	  
-	this->addr_ = sec.getAddress();
-	this->size_ = sec.getSize();
-    }
-    const std::string& name() const { return name_; }
-    uint64_t addr() const { return addr_; }
-    uint64_t size() const { return size_; }
-
-private:
-    std::string name_;
-    uint64_t addr_;
-    uint64_t size_;
+    std::string name;
+    uint64_t addr;
+    uint64_t size;
 };
 
-std::vector<section> read(const ObjectFile& obj) {
-    auto size = std::distance(obj.sections().begin(), 
+section make_section(const SectionRef &sec) {
+    StringRef name;
+    if (std::error_code ec = sec.getName(name))
+	llvm_binary_fail(ec);
+    
+    return section{name.str(), sec.getAddress(), sec.getSize()};
+}
+
+std::vector<section> read(const ObjectFile &obj) {
+    auto size = std::distance(obj.sections().begin(),
                              obj.sections().end());
     std::vector<section> sections;
     sections.reserve(size);
@@ -299,10 +231,40 @@ std::vector<section> read(const ObjectFile& obj) {
     std::transform(obj.sections().begin(),
                    obj.sections().end(),
                    std::back_inserter(sections),
-                   [](const SectionRef& s) { return section(s); });
+                   [](const SectionRef& s) { return make_section(s); });
     return sections;
 }
 
+/*
+section make_section(const coff_section &s, const uint64_t image_base) {
+    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
+}
+
+template <typename T>
+std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
+    std::vector<section> sections;
+    for (auto it = obj.begin_sections();
+         it != obj.end_sections(); ++it) {
+        const coff_section *s = obj.getCOFFSection(it);
+        sections.push_back(make_section(*s, image_base));
+    }
+    return sections;
+} 
+
+std::vector<section> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return readPE(obj, pe32->ImageBase);
+    } else {
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	if (!pe32plus)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	return readPE(obj, pe32plus->ImageBase);
+    }    
+}
+*/
 } //namespace sec
 
 namespace img {
