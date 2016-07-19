@@ -39,40 +39,36 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
-//! Use anonymous namespace if enclosing functions are not used
-//! outside of the module
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
 
-//! this function essentially translates an object of type
-//! iterator_range<MachOObjectFile::load_command_iterator> to an object of type
-//! std::vector<MachOObjectFile::LoadCommandInfo>
-//! that is later only used for iteration in a very weird way.
-//! to conclude we don't need this function at all
-std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile& obj) {
-    std::vector<MachOObjectFile::LoadCommandInfo> cmds;
-    iterator_range<MachOObjectFile::load_command_iterator> info_list = obj.load_commands();
-    for (MachOObjectFile::LoadCommandInfo info : info_list) {
-        cmds.push_back(info);
+const pe32plus_header* getPE32PlusHeader(const COFFObjectFile& obj) {
+    uint64_t cur_ptr = 0;
+    const char *buf = (obj.getData()).data();
+    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
+    uint8_t b0 = start[0];
+    uint8_t b1 = start[1];
+    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
+        // a pointer at offset 0x3C points to the
+        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
+        // check the PE magic bytes.
+        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
+            llvm_binary_fail("PE Plus header not found");
+        cur_ptr += 4; // skip the PE magic bytes.
+        cur_ptr += sizeof(coff_file_header);
+        return reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
     }
-    return cmds;
+    return NULL;
 }
 
-} // namespace utils
+} //namespace utils
 
 namespace {
-//! using directive inside of unnamed namespace actually polutes the whole
-//! (global) namespace that follows after the using.
-//! also it is not really needed.
-//! finally, it is better not to use using directives (not using declarations)
-//! at all in general, and in header files in general, as their precise meaning
-//! depends on where and how your header would be included.
-using namespace llvm;
 
 template<typename Derived, typename Base>
 std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
-    if (Derived* d = dyn_cast<Derived>(ptr.get())) {
+    if (Derived* d = llvm::dyn_cast<Derived>(ptr.get())) {
 	ptr.release();
 	return std::unique_ptr<Derived>(d);
     }
@@ -102,19 +98,18 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
     auto end = obj.getELFFile()->program_header_end();
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
-    //! do not comment out code (and commit it)
-    //auto current = begin;
-    for (int pos = 0; begin != end; ++begin, ++pos) {
-        if (begin -> p_type == ELF::PT_LOAD) {
+    auto it = begin;
+    for (int pos = 0; it != end; ++it, ++pos) {
+        if (it -> p_type == ELF::PT_LOAD) {
 	    std::ostringstream oss;
 	    oss << std::setfill('0') << std::setw(2) << pos;
 	    segments.push_back(segment{oss.str(),
-			begin->p_offset,
-			begin->p_vaddr,
-			begin->p_filesz,
-			static_cast<bool>(begin->p_flags & ELF::PF_R),
-			static_cast<bool>(begin->p_flags & ELF::PF_W),
-			static_cast<bool>(begin->p_flags & ELF::PF_X)});
+			it->p_offset,
+			it->p_vaddr,
+			it->p_filesz,
+			static_cast<bool>(it->p_flags & ELF::PF_R),
+			static_cast<bool>(it->p_flags & ELF::PF_W),
+			static_cast<bool>(it->p_flags & ELF::PF_X)});
 	}
     }
     return segments;
@@ -129,15 +124,13 @@ segment make_segment(const S &s) {
 }
 
 std::vector<segment> read(const MachOObjectFile& obj) {
-    typedef MachOObjectFile::LoadCommandInfo command_info;
-    std::vector<command_info> cmds = utils::load_commands(obj);
+    auto cmds = obj.load_commands();
     std::vector<segment> segments;
-    for (std::size_t i = 0; i < cmds.size(); ++i) {
-        command_info info = cmds.at(i);
-        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-            segments.push_back(make_segment(obj.getSegment64LoadCommand(info)));
-        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-            segments.push_back(make_segment(obj.getSegmentLoadCommand(info)));
+    for (auto it : cmds) {
+        if (it.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
+            segments.push_back(make_segment(obj.getSegment64LoadCommand(it)));
+        if (it.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
+            segments.push_back(make_segment(obj.getSegmentLoadCommand(it)));
     }
     return segments;
 }
@@ -159,8 +152,7 @@ segment make_segment(T image_base, const coff_section &s) {
 template <typename T>
 std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
-    for (auto it = obj.begin_sections();
-         it != obj.end_sections(); ++it) {
+    for (auto it : obj.sections()) {
         const coff_section *s = obj.getCOFFSection(it);
         T c = static_cast<T>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
@@ -174,13 +166,18 @@ std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
 	const pe32_header *pe32;
-	if (error_code err = obj.getPE32Header(pe32))
-	    llvm_binary_fail(err);
+	if (error_code ec = obj.getPE32Header(pe32))
+	    llvm_binary_fail(ec);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
-        if (!pe32plus)
-            llvm_binary_fail("Failed to extract PE32+ header");
+        const pe32plus_header *pe32plus;
+        // 3.8
+        if (error_code ec = obj.getPE32PlusHeader(pe32plus))
+            llvm_binary_fail(ec);
+        // 3.4
+        //pe32plus = utils::getPE32PlusHeader(obj);
+        //if (!pe32plus)
+        //    llvm_binary_fail("Failed to extract PE32+ header");
 	return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
 }
@@ -260,18 +257,15 @@ using namespace llvm::object;
 
 struct image {
     virtual uint64_t entry() const = 0;
-    //! we need to change this member function to return std::string
-    //! instead of LLVM specific ArchType. That will make our image
-    //! abstraction totally independent of LLVM
-    virtual Triple::ArchType arch() const = 0;
+    virtual std::string arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
     virtual const std::vector<sym::symbol>& symbols() const = 0;
     virtual const std::vector<sec::section>& sections() const = 0;
     virtual ~image() {}
 };
 
-Triple::ArchType image_arch(const ObjectFile& obj) {
-    return static_cast<Triple::ArchType>(obj.getArch());
+std::string image_arch(const ObjectFile& obj) {
+    return llvm::Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
 }
 
 template <typename ELFT>
@@ -283,13 +277,12 @@ uint64_t image_entry(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
     typedef std::vector<command_info> commands;
     typedef std::vector<command_info>::const_iterator const_iterator;
-    commands cmds = utils::load_commands(obj);
-    const_iterator it =
-        std::find_if(cmds.begin(), cmds.end(),
+    MachOObjectFile::load_command_iterator it =
+        std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
                      [](const command_info &info){
                          return
                          info.C.cmd == MachO::LoadCommandType::LC_MAIN;});
-    if (it != cmds.end()) {
+    if (it != obj.end_load_commands()) {
         const MachO::entry_point_command *entry_cmd =
             reinterpret_cast<const MachO::entry_point_command*>(it->Ptr);
         return entry_cmd->entryoff;
@@ -326,19 +319,17 @@ struct objectfile_image : image {
 	, sections_(sec::read(*ptr))
 	, binary_(move(ptr))
     {}
-    Triple::ArchType arch() const { return arch_; }
+    std::string arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
     const std::vector<seg::segment>& segments() const { return segments_; }
     const std::vector<sym::symbol>& symbols() const { return symbols_; }
     const std::vector<sec::section>& sections() const { return sections_; }
 protected:
-    Triple::ArchType arch_;
+    std::string arch_;
     uint64_t entry_;
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
     std::vector<sec::section> sections_;
-    //! woow? why is it public?
-public:
     std::unique_ptr<T> binary_;
 };
 
