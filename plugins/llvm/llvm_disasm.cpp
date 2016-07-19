@@ -146,7 +146,10 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-
+        //! instead of using explcit typenames we can switch to `auto`
+        //! and backport it to LLVM-3.4 version. This comment extends to all
+        //! typerenaming changes in the local scope (i.e., in the scope that allows
+        //! usage of `auto` instead of type)
         std::unique_ptr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
 
@@ -156,13 +159,16 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
+        //! concerning using `std::move` here, we can make this change
+        //! external to the constructor by overloading the `move`
+        //! (non-std) function for the two kinds of smart pointers
         std::unique_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
                            nullptr, // getOpInfo
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
-                           &*ctx, std::move(rel_info))); 
+                           &*ctx, std::move(rel_info)));
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -222,15 +228,15 @@ public:
 
     void step(int64_t pc) {
         mcinst.clear();
-        uint64_t size = 0;        
-	    
+        uint64_t size = 0;
+
         auto status = llvm::MCDisassembler::SoftFail;
         int off = pc - mem.base;
         int len = mem.loc.len - off;
 
 	if (len > 0) {
 	    auto data = llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
-	       
+
 	    status = dis->getInstruction
 		(mcinst, size, data, pc,
 		 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
@@ -239,8 +245,8 @@ public:
 
 	if (off < mem.loc.len && size == 0) {
             size += 1;
-        } 
-        
+        }
+
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
@@ -363,17 +369,17 @@ private:
     pred_fun fun_of_pred(bap_disasm_insn_p_type pred) const {
         using namespace llvm;
         switch (pred) {
-            case is_return : return &MCInstrDesc::isReturn;
-            case is_call   : return &MCInstrDesc::isCall;
-            case is_barrier: return &MCInstrDesc::isBarrier;
-            case is_terminator: return &MCInstrDesc::isTerminator;
-            case is_branch: return &MCInstrDesc::isBranch;
-            case is_indirect_branch : return &MCInstrDesc::isIndirectBranch;
-            case is_conditional_branch : return &MCInstrDesc::isConditionalBranch;
-            case is_unconditional_branch : return &MCInstrDesc::isUnconditionalBranch;
-            case may_load : return &MCInstrDesc::mayLoad;
-            case may_store : return &MCInstrDesc::mayStore;
-            default : return nullptr;
+        case is_return : return &MCInstrDesc::isReturn;
+        case is_call   : return &MCInstrDesc::isCall;
+        case is_barrier: return &MCInstrDesc::isBarrier;
+        case is_terminator: return &MCInstrDesc::isTerminator;
+        case is_branch: return &MCInstrDesc::isBranch;
+        case is_indirect_branch : return &MCInstrDesc::isIndirectBranch;
+        case is_conditional_branch : return &MCInstrDesc::isConditionalBranch;
+        case is_unconditional_branch : return &MCInstrDesc::isUnconditionalBranch;
+        case may_load : return &MCInstrDesc::mayLoad;
+        case may_store : return &MCInstrDesc::mayStore;
+        default : return nullptr;
         }
     }
 
