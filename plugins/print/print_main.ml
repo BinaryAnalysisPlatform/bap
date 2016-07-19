@@ -182,25 +182,23 @@ let main attrs ansi_colors demangle symbol_fmts subs secs =
     ~desc:"print BIL instructions in Sexp format" pp_disasm_bil_sexp
 
 
-module Cmdline = struct
-  open Cmdliner
-
-  let demangle : string option Term.t =
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P "Setup various output formats for project data"
+    ] in
+  let demangle : string option Config.param =
     let doc = "Demangle symbols, using the specified demangler" in
-    Arg.(value & opt (some string) None & info ["demangled-with"] ~doc)
-
-  let bir_attr : string list Term.t =
+    Config.(param (some string) "demangled-with" ~doc) in
+  let bir_attr : string list Config.param =
     let doc = "When printing IR emit an attribute $(docv)" in
-    Arg.(value & opt_all string [] &
-         info ["bir-attr"] ~doc ~docv:"NAME")
-
-  let ansi_colors : bool Term.t =
+    Config.(param_all string "bir-attr" ~docv:"NAME" ~doc) in
+  let ansi_colors : bool Config.param =
     let doc =
       "Allow coloring output with ansi color escape sequences" in
     let default = Unix.isatty Unix.stdout in
-    Arg.(value & opt bool default & info ["with-colors"] ~doc)
-
-  let print_symbols : _ list Term.t =
+    Config.(param bool ~default "with-colors" ~doc) in
+  let print_symbols : _ list Config.param =
     let opts = [
       "name", `with_name;
       "addr", `with_addr;
@@ -211,38 +209,14 @@ module Cmdline = struct
          defines output format, and can be %s. You can \
          specify this parameter several times, if you \
          want both, for example."
-      @@ Arg.doc_alts_enum opts in
-    Arg.(value & opt_all (enum opts) [`with_name] &
-         info ["symbol-format"] ~doc)
-
-  let subs : string list Term.t =
+      @@ Config.doc_enum opts in
+    let default = [`with_name] in
+    Config.(param_all (enum opts) ~default "symbol-format" ~doc) in
+  let subs : string list Config.param =
     let doc = "Only display information for symbol $(docv)" in
-    Arg.(value & opt_all string [] & info ["symbol"] ~doc ~docv:"NAME")
-
-  let secs : string list Term.t =
+    Config.(param_all string "symbol" ~docv:"NAME" ~doc) in
+  let secs : string list Config.param =
     let doc = "Only display information for section $(docv)" in
-    Arg.(value & opt_all string [] & info ["section"] ~doc ~docv:"NAME")
-
-  let man = [
-    `S "DESCRIPTION";
-    `P "Setup various output formats for project data"
-  ]
-
-  let info = Term.info ~doc ~version name
-
-  let main = Term.(const main
-                   $bir_attr
-                   $ansi_colors
-                   $demangle
-                   $print_symbols
-                   $subs
-                   $secs)
-
-  let parse () = Term.eval ~argv ~catch:false (main,info)
-end
-
-let () =
-  match Cmdline.parse () with
-  | `Ok () -> ()
-  | `Version | `Help -> exit 0
-  | `Error _ -> exit 1
+    Config.(param_all string "section" ~docv:"NAME" ~doc) in
+  Config.when_ready (fun {Config.get=(!)} ->
+      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs)
