@@ -9,8 +9,11 @@
 /*.byte
 /*.docdir
 /*.native
+/Makefile
 /_build/
 /_tags
+/configure
+/doc
 /lib/bap_types/bap_config.ml
 /myocamlbuild.ml
 /postinstall.ml
@@ -28,9 +31,3 @@ _oasis
 /lib/bap_config/bap_config.ml
 /plugins/ida/bap_ida_config.ml
 /plugins/objdump/objdump_config.ml
-arm-binaries
-x86-binaries
-x86_64-binaries
-test-args
-[#]*[#]
-/plugins/_build/
