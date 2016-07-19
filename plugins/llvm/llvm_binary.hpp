@@ -18,10 +18,12 @@
 #include <llvm/Support/Compiler.h>
 
 using std::move;
+using std::error_code;
+
 
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
-LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const std::error_code ec) {
+LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const error_code ec) {
     llvm_binary_fail(ec.message().c_str());
 }
 
@@ -29,7 +31,7 @@ namespace llvm { namespace object {
 
 template <typename T>
 content_iterator<T>& operator++(content_iterator<T>& a) {
-    std::error_code ec;
+    error_code ec;
     a.increment(ec);
     if(ec) llvm_binary_fail(ec);
     return a;
@@ -40,7 +42,7 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
-	
+
 std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile& obj) {
     std::vector<MachOObjectFile::LoadCommandInfo> cmds;
     iterator_range<MachOObjectFile::load_command_iterator> info_list = obj.load_commands();
@@ -63,7 +65,7 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
     }
     return std::unique_ptr<Derived>(nullptr);
 }
-    
+
 } // namespace
 
 namespace seg {
@@ -92,12 +94,12 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
         if (begin -> p_type == ELF::PT_LOAD) {
 	    std::ostringstream oss;
 	    oss << std::setfill('0') << std::setw(2) << pos;
-	    segments.push_back(segment{oss.str(), 
+	    segments.push_back(segment{oss.str(),
 			begin->p_offset,
-			begin->p_vaddr, 
-			begin->p_filesz, 
-			static_cast<bool>(begin->p_flags & ELF::PF_R), 
-			static_cast<bool>(begin->p_flags & ELF::PF_W), 
+			begin->p_vaddr,
+			begin->p_filesz,
+			static_cast<bool>(begin->p_flags & ELF::PF_R),
+			static_cast<bool>(begin->p_flags & ELF::PF_W),
 			static_cast<bool>(begin->p_flags & ELF::PF_X)});
 	}
     }
@@ -128,7 +130,7 @@ std::vector<segment> read(const MachOObjectFile& obj) {
 
 template <typename T>
 segment make_segment(T image_base, const coff_section &s) {
-    return segment{s.Name, 
+    return segment{s.Name,
 	    static_cast<T>(s.PointerToRawData),
 	    static_cast<T>(s.VirtualAddress + image_base),
 	    static_cast<T>(s.SizeOfRawData),
@@ -157,12 +159,12 @@ std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
 	const pe32_header *pe32;
-	if (std::error_code ec = obj.getPE32Header(pe32))
+	if (error_code ec = obj.getPE32Header(pe32))
 	    llvm_binary_fail(ec);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
 	const pe32plus_header *pe32plus;
-        if (std::error_code ec = obj.getPE32PlusHeader(pe32plus))
+        if (error_code ec = obj.getPE32PlusHeader(pe32plus))
             llvm_binary_fail(ec);
         return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
@@ -185,13 +187,13 @@ struct symbol {
 
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
     auto name = sym.getName();
-    if (std::error_code ec = name.getError())
+    if (error_code ec = name.getError())
         llvm_binary_fail(ec);
 
     auto addr = sym.getAddress();
-    if (std::error_code ec = addr.getError())
+    if (error_code ec = addr.getError())
         llvm_binary_fail(ec);
-    
+
     return symbol{name->str(), sym.getType(), addr.get(), size};
 }
 std::vector<symbol> read(const ObjectFile& obj) {
@@ -216,9 +218,9 @@ struct section {
 
 section make_section(const SectionRef &sec) {
     StringRef name;
-    if (std::error_code ec = sec.getName(name))
+    if (error_code ec = sec.getName(name))
 	llvm_binary_fail(ec);
-    
+
     return section{name.str(), sec.getAddress(), sec.getSize()};
 }
 
@@ -281,14 +283,14 @@ uint64_t image_entry(const MachOObjectFile& obj) {
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
-        if (std::error_code ec = obj.getPE32Header(hdr))
+        if (error_code ec = obj.getPE32Header(hdr))
 	    llvm_binary_fail(ec);
         if (!hdr)
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint;
     } else {
 	const pe32plus_header* hdr = 0;
-	if (std::error_code ec = obj.getPE32PlusHeader(hdr))
+	if (error_code ec = obj.getPE32PlusHeader(hdr))
 	    llvm_binary_fail(ec);
 	if (!hdr)
 	    llvm_binary_fail("PEplus header no found");
@@ -326,7 +328,7 @@ image* create_image(std::unique_ptr<object::Binary> binary) {
     if (std::unique_ptr<T> ptr =
 	dynamic_unique_ptr_cast<T, object::Binary>(move(binary))) {
 	return new objectfile_image<T>(move(ptr));
-    }    
+    }
     llvm_binary_fail("Unrecognized object format");
 }
 
@@ -354,7 +356,7 @@ image* create_image_obj(std::unique_ptr<object::Binary> binary) {
 	return create_image<MachOObjectFile>(move(binary));
     llvm_binary_fail("Unrecognized object format");
 }
-	
+
 image* create_image_arch(std::unique_ptr<object::Binary> binary) {
     llvm_binary_fail("Archive loading unimplemented");
 }
@@ -371,7 +373,7 @@ image* create(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
-    if (std::error_code ec = binary.getError())
+    if (error_code ec = binary.getError())
 	llvm_binary_fail(ec);
     return create(move(*binary));
 }
