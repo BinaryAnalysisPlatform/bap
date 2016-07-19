@@ -144,7 +144,7 @@ std::vector<segment> read(const MachOObjectFile& obj) {
 
 template <typename T>
 segment make_segment(T image_base, const coff_section &s) {
-    return segment{s.Name,
+    return segment{s.Name, 
 	    static_cast<T>(s.PointerToRawData),
 	    static_cast<T>(s.VirtualAddress + image_base),
 	    static_cast<T>(s.SizeOfRawData),
@@ -159,7 +159,8 @@ segment make_segment(T image_base, const coff_section &s) {
 template <typename T>
 std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
-    for (auto it : obj.sections()) {
+    for (auto it = obj.begin_sections();
+         it != obj.end_sections(); ++it) {
         const coff_section *s = obj.getCOFFSection(it);
         T c = static_cast<T>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
@@ -173,14 +174,14 @@ std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
 	const pe32_header *pe32;
-	if (error_code ec = obj.getPE32Header(pe32))
-	    llvm_binary_fail(ec);
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-	const pe32plus_header *pe32plus;
-        if (error_code ec = obj.getPE32PlusHeader(pe32plus))
-            llvm_binary_fail(ec);
-        return readPE<uint64_t>(obj, pe32plus->ImageBase);
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+        if (!pe32plus)
+            llvm_binary_fail("Failed to extract PE32+ header");
+	return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
 }
 
