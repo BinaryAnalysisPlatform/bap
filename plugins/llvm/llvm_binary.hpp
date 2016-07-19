@@ -39,10 +39,16 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
+
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
 
+//! this function essentially translates an object of type
+//! iterator_range<MachOObjectFile::load_command_iterator> to an object of type
+//! std::vector<MachOObjectFile::LoadCommandInfo>
+//! that is later only used for iteration in a very weird way.
+//! to conclude we don't need this function at all
 std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile& obj) {
     std::vector<MachOObjectFile::LoadCommandInfo> cmds;
     iterator_range<MachOObjectFile::load_command_iterator> info_list = obj.load_commands();
