@@ -144,7 +144,7 @@ std::vector<segment> read(const MachOObjectFile& obj) {
 
 template <typename T>
 segment make_segment(T image_base, const coff_section &s) {
-    return segment{s.Name, 
+    return segment{s.Name,
 	    static_cast<T>(s.PointerToRawData),
 	    static_cast<T>(s.VirtualAddress + image_base),
 	    static_cast<T>(s.SizeOfRawData),
@@ -241,7 +241,7 @@ section make_section(const SectionRef &sec) {
 
 std::vector<section> read(const ObjectFile &obj) {
     auto size = std::distance(obj.sections().begin(),
-                             obj.sections().end());
+                              obj.sections().end());
     std::vector<section> sections;
     sections.reserve(size);
 
@@ -260,6 +260,9 @@ using namespace llvm::object;
 
 struct image {
     virtual uint64_t entry() const = 0;
+    //! we need to change this member function to return std::string
+    //! instead of LLVM specific ArchType. That will make our image
+    //! abstraction totally independent of LLVM
     virtual Triple::ArchType arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
     virtual const std::vector<sym::symbol>& symbols() const = 0;
@@ -334,6 +337,7 @@ protected:
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
     std::vector<sec::section> sections_;
+    //! woow? why is it public?
 public:
     std::unique_ptr<T> binary_;
 };
