@@ -39,7 +39,8 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
-
+//! Use anonymous namespace if enclosing functions are not used
+//! outside of the module
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
@@ -61,6 +62,12 @@ std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFil
 } // namespace utils
 
 namespace {
+//! using directive inside of unnamed namespace actually polutes the whole
+//! (global) namespace that follows after the using.
+//! also it is not really needed.
+//! finally, it is better not to use using directives (not using declarations)
+//! at all in general, and in header files in general, as their precise meaning
+//! depends on where and how your header would be included.
 using namespace llvm;
 
 template<typename Derived, typename Base>
@@ -95,6 +102,7 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
     auto end = obj.getELFFile()->program_header_end();
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
+    //! do not comment out code (and commit it)
     //auto current = begin;
     for (int pos = 0; begin != end; ++begin, ++pos) {
         if (begin -> p_type == ELF::PT_LOAD) {
