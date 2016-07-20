@@ -16,10 +16,13 @@
 #include <llvm/Object/Archive.h>
 #include <llvm/Object/SymbolSize.h>
 #include <llvm/Support/Compiler.h>
+#include <llvm/Config/llvm-config.h>
 
 using std::move;
-using std::error_code;
 
+#ifndef LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+using std::error_code;
+#endif
 
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
@@ -171,14 +174,15 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
         const pe32plus_header *pe32plus;
-        // 3.8
+        #ifndef LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         if (error_code ec = obj.getPE32PlusHeader(pe32plus))
             llvm_binary_fail(ec);
-        // 3.4
-        //pe32plus = utils::getPE32PlusHeader(obj);
-        //if (!pe32plus)
-        //    llvm_binary_fail("Failed to extract PE32+ header");
-	return readPE<uint64_t>(obj, pe32plus->ImageBase);
+        #else
+        pe32plus = utils::getPE32PlusHeader(obj);
+        if (!pe32plus)
+            llvm_binary_fail("Failed to extract PE32+ header");
+        #endif
+        return readPE<uint64_t>(obj, pe32plus->ImageBase);
     }
 }
 

@@ -197,7 +197,6 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        // TODO
         dis->setSymbolizer(std::move(symbolizer));
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
