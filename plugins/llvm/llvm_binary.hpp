@@ -20,9 +20,24 @@
 
 using std::move;
 
-#ifndef LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#include <llvm/ADT/iterator_range.h>
+#include <llvm/Object/SymbolSize.h>
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#include <llvm/ADT/OwningPtr.h>
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 using std::error_code;
 #endif
+
+/*
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+using llvm::error_code;
+#endif
+*/
 
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
@@ -174,7 +189,7 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
         const pe32plus_header *pe32plus;
-        #ifndef LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         if (error_code ec = obj.getPE32PlusHeader(pe32plus))
             llvm_binary_fail(ec);
         #else
@@ -201,6 +216,7 @@ struct symbol {
     uint64_t size;
 };
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
     auto name = sym.getName();
     if (error_code ec = name.getError())
@@ -212,6 +228,7 @@ symbol make_symbol(const SymbolRef& sym, uint64_t size) {
 
     return symbol{name->str(), sym.getType(), addr.get(), size};
 }
+
 std::vector<symbol> read(const ObjectFile& obj) {
     std::vector<symbol> symbols;
     auto symbol_sizes = computeSymbolSizes(obj);
@@ -219,6 +236,126 @@ std::vector<symbol> read(const ObjectFile& obj) {
 	symbols.push_back(make_symbol(s.first, s.second));
     return symbols;
 }
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+symbol make_symbol(const SymbolRef &sym) {
+    StringRef name;
+    if(error_code err = sym.getName(name))
+	llvm_binary_fail(err);
+    
+    kind_type kind;
+    if (error_code err = sym.getType(kind))
+	llvm_binary_fail(err);
+
+    uint64_t addr;
+    if (error_code err = sym.getAddress(addr))
+	llvm_binary_fail(err);
+
+    uint64_t size;
+    if (error_code err = sym.getSize(size))
+	llvm_binary_fail(err);
+    return symbol{name.str(), kind, addr, size};
+}
+
+template <typename OutputIterator>
+OutputIterator read(symbol_iterator begin, 
+		    symbol_iterator end,
+		    OutputIterator out) {
+    return std::transform(begin, end, out,
+			  [](const SymbolRef& s) { return make_symbol(s); });
+}
+
+std::vector<symbol> read(const ObjectFile& obj) {
+    int size = utils::distance(obj.begin_symbols(),
+                               obj.end_symbols());
+    std::vector<symbol> symbols;
+    symbols.reserve(size);
+
+    read(obj.begin_symbols(),
+         obj.end_symbols(),
+         std::back_inserter(symbols));
+    return symbols;
+}
+
+symbol make_symbol(const SymbolRef& sym, uint64_t addr, uint64_t size) {
+    StringRef name;
+    if(error_code err = sym.getName(name))
+	llvm_binary_fail(err);
+
+    kind_type kind;
+    if (error_code err = sym.getType(kind))
+	llvm_binary_fail(err);
+    return symbol{name.str(), kind, addr, size};
+}
+
+std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
+    std::vector<symbol> symbols;
+    for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
+        auto sym = obj.getCOFFSymbol(it);
+
+        if (!sym) llvm_binary_fail("not a coff symbol");
+
+        const coff_section *sec = nullptr;
+        if (sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
+            continue;
+
+        if (error_code ec = obj.getSection(sym->SectionNumber, sec))
+            llvm_binary_fail(ec);
+
+        if (!sec) continue;
+
+        uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym->Value;
+
+        for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
+            auto next = obj.getCOFFSymbol(it);
+            if (next->SectionNumber == sym->SectionNumber) {
+                auto new_size = next->Value > sym->Value ?
+                    next->Value - sym->Value : size;
+                size = new_size < size ? new_size : size;
+            }
+        }
+
+        auto addr = sec->VirtualAddress + image_base + sym->Value;
+        symbols.push_back(make_symbol(*it,addr,size));
+    }
+    return symbols;
+}
+
+std::vector<symbol> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return read(obj, pe32->ImageBase);
+    } else {
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	if (!pe32plus)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	return read(obj, pe32plus->ImageBase);
+    }
+}
+
+template <typename ELFT>
+std::vector<symbol> read(const ELFObjectFile<ELFT>& obj) {
+    int size1 = utils::distance(obj.begin_symbols(),
+                                obj.end_symbols());
+    int size2 = utils::distance(obj.begin_dynamic_symbols(),
+                                obj.end_dynamic_symbols());
+
+    std::vector<symbol> symbols;
+    symbols.reserve(size1+size2);
+
+    auto it = read(obj.begin_symbols(),
+                   obj.end_symbols(),
+                   std::back_inserter(symbols));
+
+    read(obj.begin_dynamic_symbols(),
+         obj.end_dynamic_symbols(),
+         it);
+    return symbols;
+}
+#endif
 
 } //namespace sym
 
@@ -237,7 +374,18 @@ section make_section(const SectionRef &sec) {
     if (error_code ec = sec.getName(name))
 	llvm_binary_fail(ec);
 
+    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+    uint64_t addr;
+    if (error_code err = sec.getAddress(addr))
+	llvm_binary_fail(err);
+
+    uint64_t size;
+    if (error_code err = sec.getSize(size))
+	llvm_binary_fail(err);
+    return section{name.str(), addr, size};
+    #else
     return section{name.str(), sec.getAddress(), sec.getSize()};
+    #endif
 }
 
 std::vector<section> read(const ObjectFile &obj) {
@@ -245,7 +393,6 @@ std::vector<section> read(const ObjectFile &obj) {
                               obj.sections().end());
     std::vector<section> sections;
     sections.reserve(size);
-
     std::transform(obj.sections().begin(),
                    obj.sections().end(),
                    std::back_inserter(sections),
@@ -279,7 +426,7 @@ uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
 
 uint64_t image_entry(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
-    typedef std::vector<command_info> commands;
+    //typedef std::vector<command_info> commands;
     typedef std::vector<command_info>::const_iterator const_iterator;
     MachOObjectFile::load_command_iterator it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
@@ -385,11 +532,23 @@ image* create(std::unique_ptr<object::Binary> binary) {
 
 image* create(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
+    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
     if (error_code ec = binary.getError())
 	llvm_binary_fail(ec);
     return create(move(*binary));
+
+    #else
+
+    MemoryBuffer* buff(MemoryBuffer::getMemBufferCopy(data_ref, "binary"));
+    OwningPtr<object::Binary> bin;
+    if (error_code ec = createBinary(buff, bin))
+        llvm_binary_fail(ec);
+    std::unique_ptr<object::Binary> binary(bin.take());
+    return create(move(binary));
+    #endif
 }
 
 } //namespace img
