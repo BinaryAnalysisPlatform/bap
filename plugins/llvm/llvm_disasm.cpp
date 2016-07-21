@@ -1,6 +1,3 @@
-#include <llvm/ADT/ArrayRef.h>
-#include <llvm/ADT/Triple.h>
-#include <llvm/ADT/Twine.h>
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCContext.h>
 #include <llvm/MC/MCDisassembler.h>
@@ -19,6 +16,39 @@
 #include "disasm.hpp"
 #include "llvm_disasm.h"
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/Triple.h>
+#include <llvm/ADT/Twine.h>
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#include <llvm/ADT/OwningPtr.h>
+#include <llvm/MC/MCAsmInfo.h>
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR <= 5
+#include <llvm/Support/MemoryObject.h>
+#endif
+
+// pull template out of header guard
+//template <typename T>
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
+template <typename T>
+using smart_ptr = std::unique_ptr<T>;
+template <class T>
+typename std::remove_reference<T>::type&& move(smart_ptr<T>&& t) {
+    return std::move(t);
+}
+#else
+template <typename T>
+using smart_ptr = OwningPtr<T>;
+template <typename T>
+T* move(smart_ptr<T>&& t) {
+    return t.take();
+}
+#endif
+
 template <typename T>
 using shared_ptr = std::shared_ptr<T>;
 
@@ -32,6 +62,40 @@ void initialize_llvm() {
 }
 
 using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR <= 5
+class MemoryObject : public llvm::MemoryObject {
+    memory mem;
+public:
+    MemoryObject(memory mem) : mem(mem) {}
+
+    uint64_t getBase() const {
+        return mem.base;
+    }
+
+    uint64_t getExtent() const {
+        return mem.loc.len;
+    }
+
+    int readByte(uint64_t pc, uint8_t *ptr) const {
+        int offset = pc - getBase();
+        if (offset < 0 || offset >= getExtent())
+            return -1;
+        *ptr = mem.data[mem.loc.off + offset];
+        return 0;
+    }
+
+    int readBytes(uint64_t addr, uint64_t size, uint8_t *buf) const {
+        int offset = addr - getBase();
+        if (offset + size > getExtent() || offset < 0)
+            return -1;
+
+        const char *ptr = &mem.data[mem.loc.off + offset];
+        memcpy(buf, ptr, size);
+        return 0;
+    }
+};
+#endif
 
 class llvm_disassembler;
 
@@ -75,8 +139,11 @@ class llvm_disassembler : public disassembler_interface {
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
     insn current;
+    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     memory mem;
-
+    #else
+    shared_ptr<const llvm::MemoryObject>    mem;
+    #endif
 
     llvm_disassembler(int debug_level)
         : debug_level(debug_level), current(invalid_insn({0,0})) {}
@@ -90,7 +157,9 @@ public:
         const llvm::Target *target =
             llvm::TargetRegistry::lookupTarget(triple, error);
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         llvm::Triple TheTriple(target->getName());
+        #endif
 
         if (!target) {
             if (debug_level > 0)
@@ -150,7 +219,7 @@ public:
         //! and backport it to LLVM-3.4 version. This comment extends to all
         //! typerenaming changes in the local scope (i.e., in the scope that allows
         //! usage of `auto` instead of type)
-        std::unique_ptr<llvm::MCRelocationInfo>
+        smart_ptr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
 
         if (!rel_info) {
@@ -159,16 +228,13 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        //! concerning using `std::move` here, we can make this change
-        //! external to the constructor by overloading the `move`
-        //! (non-std) function for the two kinds of smart pointers
-        std::unique_ptr<llvm::MCSymbolizer>
+        smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
                            nullptr, // getOpInfo
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
-                           &*ctx, std::move(rel_info)));
+                           &*ctx, move(rel_info)));
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -176,10 +242,19 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (TheTriple, asm_info->getAssemblerDialect(), *asm_info, *ins_info, *reg_info));
+        #endif
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+        shared_ptr<llvm::MCInstPrinter>
+            printer (target->createMCInstPrinter
+                     (asm_info->getAssemblerDialect(),
+                      *asm_info, *ins_info, *reg_info, *sub_info))
+        #endif
+        
         if (!printer) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create instruction printer");
@@ -188,8 +263,15 @@ public:
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info, *ctx));
+        #endif
+        
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+        shared_ptr<llvm::MCDisassembler>
+            dis(target->createMCDisassembler(*sub_info));
+        #endif
 
         if (!dis) {
             if (debug_level > 0)
@@ -197,7 +279,16 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        dis->setSymbolizer(std::move(symbolizer));
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
+        dis->setSymbolizer(move(symbolizer));
+        #else
+        dis->setSymbolizer(symbolizer);
+        dis->setupForSymbolicDisassembly(
+            nullptr, // getOpInfo
+            nullptr, // SymbolLookUp
+            nullptr, // DisInfo,
+            &*ctx, rel_info);
+        #endif
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
         self->printer  = printer;
@@ -222,13 +313,18 @@ public:
     }
 
     void set_memory(memory m) {
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
         mem = memory(m);
+        #else
+        mem.reset(new MemoryObject(m));
+        #endif
     }
 
     void step(int64_t pc) {
         mcinst.clear();
         uint64_t size = 0;
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 6
         auto status = llvm::MCDisassembler::SoftFail;
         int off = pc - mem.base;
         int len = mem.loc.len - off;
@@ -245,6 +341,14 @@ public:
 	if (off < mem.loc.len && size == 0) {
             size += 1;
         }
+        #else
+        auto status = dis->getInstruction
+            (mcinst, size, *mem, pc,
+             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+             llvm::nulls());
+
+        int off = (int)(pc - mem->getBase());
+        #endif
 
         location loc = {off, (int)size};
 

@@ -427,7 +427,7 @@ uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
 uint64_t image_entry(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
     //typedef std::vector<command_info> commands;
-    typedef std::vector<command_info>::const_iterator const_iterator;
+    //typedef std::vector<command_info>::const_iterator const_iterator;
     MachOObjectFile::load_command_iterator it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
                      [](const command_info &info){
