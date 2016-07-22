@@ -9,12 +9,10 @@
 #include <iomanip>
 #include <sstream>
 
-#include <llvm/ADT/iterator_range.h>
 #include <llvm/Object/ELFObjectFile.h>
 #include <llvm/Object/COFF.h>
 #include <llvm/Object/MachO.h>
 #include <llvm/Object/Archive.h>
-#include <llvm/Object/SymbolSize.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Config/llvm-config.h>
 
@@ -31,6 +29,8 @@ using std::move;
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 using std::error_code;
+#else
+using llvm::error_code;
 #endif
 
 /*
@@ -80,6 +80,36 @@ const pe32plus_header* getPE32PlusHeader(const COFFObjectFile& obj) {
     return NULL;
 }
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+std::vector<MachOObjectFile::LoadCommandInfo> load_commands(const MachOObjectFile& obj) {
+    std::size_t cmd_count = 0;
+    if (obj.is64Bit())
+        cmd_count = obj.getHeader64().ncmds;
+    else
+        cmd_count = obj.getHeader().ncmds;
+    std::vector<MachOObjectFile::LoadCommandInfo> cmds;
+    MachOObjectFile::LoadCommandInfo info = obj.getFirstLoadCommandInfo();
+    for (std::size_t i = 0; i < cmd_count; ++i) {
+        cmds.push_back(info);
+        info = obj.getNextLoadCommandInfo(info);
+    }
+    return cmds;
+}
+
+template <typename T>
+int distance(content_iterator<T> begin, content_iterator<T> end) {
+    error_code ec;
+    int n = 0;
+    while (begin != end) {
+        ++n;
+        begin.increment(ec);
+        if (ec)
+            llvm_binary_fail(ec);
+    }
+    return n;
+}
+#endif
+
 } //namespace utils
 
 namespace {
@@ -112,8 +142,13 @@ struct segment {
 
 template<typename T>
 std::vector<segment> read(const ELFObjectFile<T>& obj) {
+    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     auto begin = obj.getELFFile()->program_header_begin();
     auto end = obj.getELFFile()->program_header_end();
+    #else
+    auto begin = obj.getELFFile()->begin_program_headers();
+    auto end = obj.getELFFile()->end_program_headers();
+    #endif    
     std::vector<segment> segments;
     segments.reserve(std::distance(begin, end));
     auto it = begin;
@@ -141,6 +176,7 @@ segment make_segment(const S &s) {
 	    static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 std::vector<segment> read(const MachOObjectFile& obj) {
     auto cmds = obj.load_commands();
     std::vector<segment> segments;
@@ -152,6 +188,23 @@ std::vector<segment> read(const MachOObjectFile& obj) {
     }
     return segments;
 }
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+std::vector<segment> read(const MachOObjectFile& obj) {
+    typedef MachOObjectFile::LoadCommandInfo command_info;
+    std::vector<command_info> cmds = utils::load_commands(obj);
+    std::vector<segment> segments;
+    for (std::size_t i = 0; i < cmds.size(); ++i) {
+        command_info info = cmds.at(i);
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
+            segments.push_back(make_segment(obj.getSegment64LoadCommand(info)));
+        if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
+            segments.push_back(make_segment(obj.getSegmentLoadCommand(info)));
+    }
+    return segments;
+}
+#endif
 
 template <typename T>
 segment make_segment(T image_base, const coff_section &s) {
@@ -167,6 +220,7 @@ segment make_segment(T image_base, const coff_section &s) {
 			      COFF::IMAGE_SCN_MEM_EXECUTE)};
 }
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 template <typename T>
 std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
@@ -180,6 +234,24 @@ std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     }
     return segments;
 }
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+template <typename T>
+std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
+    std::vector<segment> segments;
+    for (auto it = obj.begin_sections();
+         it != obj.end_sections(); ++it) {
+        const coff_section *s = obj.getCOFFSection(it);
+        T c = static_cast<T>(s->Characteristics);
+        if ( c & COFF::IMAGE_SCN_CNT_CODE ||
+             c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
+             c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
+            segments.push_back(make_segment<T>(image_base, *s));
+    }
+    return segments;
+}
+#endif
 
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
@@ -329,10 +401,16 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(err);
 	return read(obj, pe32->ImageBase);
     } else {
-	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
-	if (!pe32plus)
-	    llvm_binary_fail("Failed to extract PE32+ header");
-	return read(obj, pe32plus->ImageBase);
+        const pe32plus_header *pe32plus;
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(pe32plus))
+            llvm_binary_fail(ec);
+        #else
+        pe32plus = utils::getPE32PlusHeader(obj);
+        if (!pe32plus)
+            llvm_binary_fail("Failed to extract PE32+ header");
+        #endif
+        return read(obj, pe32plus->ImageBase);
     }
 }
 
@@ -388,6 +466,7 @@ section make_section(const SectionRef &sec) {
     #endif
 }
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 std::vector<section> read(const ObjectFile &obj) {
     auto size = std::distance(obj.sections().begin(),
                               obj.sections().end());
@@ -399,6 +478,50 @@ std::vector<section> read(const ObjectFile &obj) {
                    [](const SectionRef& s) { return make_section(s); });
     return sections;
 }
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+std::vector<section> read(const ObjectFile &obj) {
+    int size = utils::distance(obj.begin_sections(),
+                               obj.end_sections());
+    std::vector<section> sections;
+    sections.reserve(size);
+    std::transform(obj.begin_sections(),
+                   obj.end_sections(),
+                   std::back_inserter(sections),
+                   [](const SectionRef& s) { return make_section(s); });
+    return sections;
+}
+
+section make_section(const coff_section &s, const uint64_t image_base) {
+    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
+}
+
+template <typename T>
+std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
+    std::vector<section> sections;
+    for (auto it = obj.begin_sections();
+         it != obj.end_sections(); ++it) {
+        const coff_section *s = obj.getCOFFSection(it);
+        sections.push_back(make_section(*s, image_base));
+    }
+    return sections;
+} 
+
+std::vector<section> read(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+	const pe32_header *pe32;
+	if (error_code err = obj.getPE32Header(pe32))
+	    llvm_binary_fail(err);
+	return readPE(obj, pe32->ImageBase);
+    } else {
+	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	if (!pe32plus)
+	    llvm_binary_fail("Failed to extract PE32+ header");
+	return readPE(obj, pe32plus->ImageBase);
+    }
+}
+#endif
 
 } //namespace sec
 
@@ -424,10 +547,12 @@ uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
     return obj.getELFFile()->getHeader()->e_entry;
 }
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 uint64_t image_entry(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
-    //typedef std::vector<command_info> commands;
-    //typedef std::vector<command_info>::const_iterator const_iterator;
+    typedef std::vector<command_info> commands;
+    typedef std::vector<command_info>::const_iterator const_iterator;
+    const pe32plus_header *pe32plus;
     MachOObjectFile::load_command_iterator it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
                      [](const command_info &info){
@@ -441,6 +566,28 @@ uint64_t image_entry(const MachOObjectFile& obj) {
         llvm_binary_fail("LC_MAIN not found, binary version < 10.8");
     }
 }
+#endif
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+uint64_t image_entry(const MachOObjectFile& obj) {
+    typedef MachOObjectFile::LoadCommandInfo command_info;
+    typedef std::vector<command_info> commands;
+    typedef std::vector<command_info>::const_iterator const_iterator;
+    commands cmds = utils::load_commands(obj);
+    const_iterator it =
+        std::find_if(cmds.begin(), cmds.end(),
+                     [](const command_info &info){
+                         return
+                         info.C.cmd == MachO::LoadCommandType::LC_MAIN;});
+    if (it != cmds.end()) {
+        const MachO::entry_point_command *entry_cmd =
+            reinterpret_cast<const MachO::entry_point_command*>(it->Ptr);
+        return entry_cmd->entryoff;
+    } else {
+        llvm_binary_fail("LC_MAIN not found, binary version < 10.8");
+    }
+}
+#endif
 
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
@@ -451,12 +598,16 @@ uint64_t image_entry(const COFFObjectFile& obj) {
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint;
     } else {
-	const pe32plus_header* hdr = 0;
-	if (error_code ec = obj.getPE32PlusHeader(hdr))
-	    llvm_binary_fail(ec);
-	if (!hdr)
-	    llvm_binary_fail("PEplus header no found");
-	return hdr->AddressOfEntryPoint;
+        const pe32plus_header *hdr = 0;
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(hdr))
+            llvm_binary_fail(ec);        
+        #else
+        hdr = utils::getPE32PlusHeader(obj);
+        if (!hdr)
+            llvm_binary_fail("Failed to extract PE32+ header");
+        #endif
+        return hdr->AddressOfEntryPoint;
     }
 }
 

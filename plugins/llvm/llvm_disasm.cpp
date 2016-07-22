@@ -42,9 +42,9 @@ typename std::remove_reference<T>::type&& move(smart_ptr<T>&& t) {
 }
 #else
 template <typename T>
-using smart_ptr = OwningPtr<T>;
-template <typename T>
-T* move(smart_ptr<T>&& t) {
+using smart_ptr = llvm::OwningPtr<T>;
+template <class T>
+inline T* move(smart_ptr<T>&& t) {
     return t.take();
 }
 #endif
@@ -228,6 +228,7 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
@@ -235,6 +236,17 @@ public:
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
                            &*ctx, move(rel_info)));
+        #endif 
+
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+        smart_ptr<llvm::MCSymbolizer>
+            symbolizer(target->createMCSymbolizer(
+                           triple,
+                           nullptr, // getOpInfo
+                           nullptr, // SymbolLookUp
+                           nullptr, // DisInfo
+                           &*ctx, rel_info.take()));
+        #endif
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -252,7 +264,7 @@ public:
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (asm_info->getAssemblerDialect(),
-                      *asm_info, *ins_info, *reg_info, *sub_info))
+                      *asm_info, *ins_info, *reg_info, *sub_info));
         #endif
         
         if (!printer) {
@@ -376,7 +388,11 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
+            #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
             printer->printInst(&mcinst, stream, "", *sub_info);
+            #else
+            printer->printInst(&mcinst, stream, "");
+            #endif
             return stream.str();
         } else {
             return "";
