@@ -16,8 +16,6 @@
 #include <llvm/Support/Compiler.h>
 #include <llvm/Config/llvm-config.h>
 
-using std::move;
-
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/Object/SymbolSize.h>
@@ -27,6 +25,8 @@ using std::move;
 std::cerr << LLVM_PREFIX << " is not supported."
 std::exit(0); 
 #endif
+
+using std::move;
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 using std::error_code;
@@ -53,6 +53,7 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
@@ -77,6 +78,7 @@ const pe32plus_header* getPE32PlusHeader(const COFFObjectFile& obj) {
 }
 
 } //namespace utils
+#endif
 
 namespace {
 
@@ -89,7 +91,14 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
     return std::unique_ptr<Derived>(nullptr);
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
+    const llvm::object::pe32plus_header *hdr = 0;
+    if (error_code ec = obj.getPE32PlusHeader(hdr))
+        llvm_binary_fail(ec);
+    return hdr->AddressOfEntryPoint;
+}
+#else
 typedef llvm::object::MachOObjectFile macho;
 typedef macho::LoadCommandInfo command_info;
 
@@ -120,6 +129,13 @@ std::vector<command_info> load_commands(const macho& obj) {
     }
     return cmds;
 }
+
+uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
+    const llvm::object::pe32plus_header *hdr = utils::getPE32PlusHeader(obj);;
+    if (!hdr)
+        llvm_binary_fail("Failed to extract PE32+ header");
+    return hdr->AddressOfEntryPoint;
+}
 #endif
 
 } // namespace
@@ -148,6 +164,14 @@ template <typename ELFT>
 const typename ELFFile<ELFT>::Elf_Phdr* elf_header_end(const ELFFile<ELFT> *elf) {
     return elf->program_header_end();
 }
+
+iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachOObjectFile &obj) {
+    return obj.load_commands();
+}
+
+llvm::object::ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
+    return obj.sections();
+}
 #else
 template <typename ELFT>
 const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_begin(const ELFFile<ELFT> *elf) {
@@ -157,7 +181,22 @@ const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_begin(const ELFFile<ELFT>
 template <typename ELFT>
 const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_end(const ELFFile<ELFT> *elf) {
     return elf->end_program_headers();
-} 
+}
+
+std::vector<llvm::object::section_iterator> sections(const COFFObjectFile &obj) {
+    std::vector<llvm::object::section_iterator> sections;
+    for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it) {
+        sections.push_back(it);
+    }
+    return sections;     
+}
+
+uint64_t getPE32PlusImageBase(const COFFObjectFile &obj) {
+    pe32plus = utils::getPE32PlusHeader(obj);
+    if (!pe32plus)
+        llvm_binary_fail("Failed to extract PE32+ header");
+    
+}
 #endif
 
 template<typename T>
@@ -191,12 +230,6 @@ segment make_segment(const S &s) {
 	    static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachOObjectFile &obj) {
-    return obj.load_commands();
-}
-#endif
-
 std::vector<segment> read(const MachOObjectFile& obj) {
     auto cmds = load_commands(obj);
     std::vector<segment> segments;
@@ -223,20 +256,6 @@ segment make_segment(T image_base, const coff_section &s) {
 			      COFF::IMAGE_SCN_MEM_EXECUTE)};
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-llvm::object::ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
-    return obj.sections();
-}
-#else
-std::vector<llvm::object::section_iterator> sections(const COFFObjectFile &obj) {
-    std::vector<llvm::object::section_iterator> sections;
-    for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it) {
-        sections.push_back(it);
-    }
-    return sections;     
-}
-#endif
-
 template <typename T>
 std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
     std::vector<segment> segments;
@@ -258,16 +277,8 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(ec);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-        const pe32plus_header *pe32plus;
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-        if (error_code ec = obj.getPE32PlusHeader(pe32plus))
-            llvm_binary_fail(ec);
-        #else
-        pe32plus = utils::getPE32PlusHeader(obj);
-        if (!pe32plus)
-            llvm_binary_fail("Failed to extract PE32+ header");
-        #endif
-        return readPE<uint64_t>(obj, pe32plus->ImageBase);
+        uint64_t image_base = getPE32PlusEntry(obj);
+        return readPE<uint64_t>(obj, image_base);
     }
 }
 
@@ -438,26 +449,15 @@ struct section {
     uint64_t size;
 };
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
 	llvm_binary_fail(ec);
-
-    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-    uint64_t addr;
-    if (error_code err = sec.getAddress(addr))
-	llvm_binary_fail(err);
-
-    uint64_t size;
-    if (error_code err = sec.getSize(size))
-	llvm_binary_fail(err);
-    return section{name.str(), addr, size};
-    #else
+    
     return section{name.str(), sec.getAddress(), sec.getSize()};
-    #endif
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 llvm::object::section_iterator begin_sections(const ObjectFile &obj) {
     return obj.sections().begin();
 }
@@ -466,6 +466,21 @@ llvm::object::section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 #else
+section make_section(const SectionRef &sec) {
+    StringRef name;
+    if (error_code ec = sec.getName(name))
+	llvm_binary_fail(ec);
+
+    uint64_t addr;
+    if (error_code err = sec.getAddress(addr))
+	llvm_binary_fail(err);
+
+    uint64_t size;
+    if (error_code err = sec.getSize(size))
+	llvm_binary_fail(err);
+    return section{name.str(), addr, size};
+}
+
 llvm::object::section_iterator begin_sections(const ObjectFile &obj) {
     return obj.begin_sections();
 }
@@ -473,20 +488,7 @@ llvm::object::section_iterator begin_sections(const ObjectFile &obj) {
 llvm::object::section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
 }
-#endif
 
-std::vector<section> read(const ObjectFile &obj) {
-    auto size = distance(begin_sections(obj), end_sections(obj));
-    std::vector<section> sections;
-    sections.reserve(size);
-    std::transform(begin_sections(obj),
-                   end_sections(obj),
-                   std::back_inserter(sections),
-                   [](const SectionRef& s) { return make_section(s); });
-    return sections;
-}
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 section make_section(const coff_section &s, const uint64_t image_base) {
     return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
 }
@@ -517,6 +519,17 @@ std::vector<section> read(const COFFObjectFile& obj) {
 }
 #endif
 
+std::vector<section> read(const ObjectFile &obj) {
+    auto size = distance(begin_sections(obj), end_sections(obj));
+    std::vector<section> sections;
+    sections.reserve(size);
+    std::transform(begin_sections(obj),
+                   end_sections(obj),
+                   std::back_inserter(sections),
+                   [](const SectionRef& s) { return make_section(s); });
+    return sections;
+}
+
 } //namespace sec
 
 namespace img {
@@ -525,15 +538,15 @@ using namespace llvm::object;
 
 struct image {
     virtual uint64_t entry() const = 0;
-    virtual std::string arch() const = 0;
+    virtual Triple::ArchType arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
     virtual const std::vector<sym::symbol>& symbols() const = 0;
     virtual const std::vector<sec::section>& sections() const = 0;
     virtual ~image() {}
 };
 
-std::string image_arch(const ObjectFile& obj) {
-    return llvm::Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
+Triple::ArchType image_arch(const ObjectFile& obj) {
+    return static_cast<Triple::ArchType>(obj.getArch());;
 }
 
 template <typename ELFT>
@@ -541,32 +554,9 @@ uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
     return obj.getELFFile()->getHeader()->e_entry;
 }
 
-/* TODO
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-llvm::object::MachOObjectFile::load_command_iterator begin_load_commands(const llvm::object::MachOObjectFile &obj) {
-    return obj.begin_load_commands();
-}
-
-llvm::object::MachOObjectFile::load_command_iterator end_load_commands(const llvm::object::MachOObjectFile& obj) {
-    return obj.end_load_commands();
-}
-#else
-int begin_load_commands(const MachOObjectFile &obj) {
-
-}
-
-int end_load_commands(const MachOObjectFile& obj) {
-
-}
-#endif
-*/
-
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 uint64_t image_entry(const MachOObjectFile& obj) {
-    std::cout << "fuck\n";
     typedef MachOObjectFile::LoadCommandInfo command_info;
-    //typedef std::vector<command_info> commands;
-    //typedef std::vector<command_info>::const_iterator const_iterator;
     auto it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
                      [](const command_info &info){
@@ -601,6 +591,7 @@ uint64_t image_entry(const MachOObjectFile& obj) {
 }
 #endif
 
+/*
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 uint64_t getPE32PlusEntry(const COFFObjectFile &obj) {
     const pe32plus_header *hdr = 0;
@@ -616,6 +607,7 @@ uint64_t getPE32PlusEntry(const COFFObjectFile &obj) {
     return hdr->AddressOfEntryPoint;
 }
 #endif
+*/
 
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
@@ -639,14 +631,14 @@ struct objectfile_image : image {
 	, symbols_(sym::read(*ptr))
 	, sections_(sec::read(*ptr))
 	, binary_(move(ptr))
-        {std::cout<<"hello from objectfileimage constructor\n";}
-    std::string arch() const { return arch_; }
+    {}
+    Triple::ArchType arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
     const std::vector<seg::segment>& segments() const { return segments_; }
     const std::vector<sym::symbol>& symbols() const { return symbols_; }
     const std::vector<sec::section>& sections() const { return sections_; }
 protected:
-    std::string arch_;
+    Triple::ArchType arch_;
     uint64_t entry_;
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
@@ -712,7 +704,7 @@ image* create(const char* data, std::size_t size) {
 #else
 image* create(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
-   MemoryBuffer* buff(MemoryBuffer::getMemBufferCopy(data_ref, "binary"));
+    MemoryBuffer* buff(MemoryBuffer::getMemBufferCopy(data_ref, "binary"));
     OwningPtr<object::Binary> bin;
     if (error_code ec = createBinary(buff, bin))
         llvm_binary_fail(ec);
