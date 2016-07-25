@@ -224,7 +224,7 @@ segment make_segment(T image_base, const coff_section &s) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-llvm::section_iterator_range sections(const COFFObjectFile &obj) {
+llvm::object::ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
     return obj.sections();
 }
 #else
@@ -308,7 +308,6 @@ std::vector<symbol> read(const ObjectFile& obj) {
 }
 #else
 // TODO - refactoring this 3.4 code block
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 symbol make_symbol(const SymbolRef &sym) {
     StringRef name;
     if(error_code err = sym.getName(name))
@@ -542,7 +541,7 @@ uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
     return obj.getELFFile()->getHeader()->e_entry;
 }
 
-// TODO
+/* TODO
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 llvm::object::MachOObjectFile::load_command_iterator begin_load_commands(const llvm::object::MachOObjectFile &obj) {
     return obj.begin_load_commands();
@@ -560,13 +559,15 @@ int end_load_commands(const MachOObjectFile& obj) {
 
 }
 #endif
+*/
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 uint64_t image_entry(const MachOObjectFile& obj) {
+    std::cout << "fuck\n";
     typedef MachOObjectFile::LoadCommandInfo command_info;
-    typedef std::vector<command_info> commands;
-    typedef std::vector<command_info>::const_iterator const_iterator;
-    const_iterator it =
+    //typedef std::vector<command_info> commands;
+    //typedef std::vector<command_info>::const_iterator const_iterator;
+    auto it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
                      [](const command_info &info){
                          return
@@ -638,7 +639,7 @@ struct objectfile_image : image {
 	, symbols_(sym::read(*ptr))
 	, sections_(sec::read(*ptr))
 	, binary_(move(ptr))
-    {}
+        {std::cout<<"hello from objectfileimage constructor\n";}
     std::string arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
     const std::vector<seg::segment>& segments() const { return segments_; }
