@@ -190,13 +190,6 @@ std::vector<llvm::object::section_iterator> sections(const COFFObjectFile &obj) 
     }
     return sections;     
 }
-
-uint64_t getPE32PlusImageBase(const COFFObjectFile &obj) {
-    pe32plus = utils::getPE32PlusHeader(obj);
-    if (!pe32plus)
-        llvm_binary_fail("Failed to extract PE32+ header");
-    
-}
 #endif
 
 template<typename T>
