@@ -20,20 +20,16 @@
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 #include <llvm/ADT/OwningPtr.h>
 #include <llvm/MC/MCAsmInfo.h>
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR <= 5
 #include <llvm/Support/MemoryObject.h>
+#else
+#error LLVM version is not supported 
 #endif
 
-// pull template out of header guard
 //template <typename T>
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 template <typename T>
 using smart_ptr = std::unique_ptr<T>;
 template <class T>
@@ -54,7 +50,6 @@ using shared_ptr = std::shared_ptr<T>;
 
 namespace bap {
 
-
 void initialize_llvm() {
     LLVMInitializeAllTargetInfos();
     LLVMInitializeAllTargetMCs();
@@ -63,7 +58,11 @@ void initialize_llvm() {
 
 using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR <= 5
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+class MemoryObject {
+
+};
+#else
 class MemoryObject : public llvm::MemoryObject {
     memory mem;
 public:
@@ -139,11 +138,11 @@ class llvm_disassembler : public disassembler_interface {
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
     insn current;
-    #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     memory mem;
-    #else
+#else
     shared_ptr<const llvm::MemoryObject>    mem;
-    #endif
+#endif
 
     llvm_disassembler(int debug_level)
         : debug_level(debug_level), current(invalid_insn({0,0})) {}
@@ -157,15 +156,15 @@ public:
         const llvm::Target *target =
             llvm::TargetRegistry::lookupTarget(triple, error);
 
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-        llvm::Triple TheTriple(target->getName());
-        #endif
-
         if (!target) {
             if (debug_level > 0)
                 output_error(triple, cpu, "target not found", error);
             return {NULL, bap_disasm_unsupported_target};
         }
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        llvm::Triple TheTriple(target->getName());
+#endif
 
         // target's createMC* functions allocates a new instance each time:
         // cf., Target/X86/MCTargetDesc/X86MCTargetDesc.cpp
@@ -215,10 +214,6 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        //! instead of using explcit typenames we can switch to `auto`
-        //! and backport it to LLVM-3.4 version. This comment extends to all
-        //! typerenaming changes in the local scope (i.e., in the scope that allows
-        //! usage of `auto` instead of type)
         smart_ptr<llvm::MCRelocationInfo>
             rel_info(target->createMCRelocationInfo(triple, *ctx));
 
@@ -228,7 +223,7 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
@@ -236,9 +231,7 @@ public:
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
                            &*ctx, move(rel_info)));
-        #endif 
-
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#else
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
@@ -246,7 +239,7 @@ public:
                            nullptr, // SymbolLookUp
                            nullptr, // DisInfo
                            &*ctx, rel_info.take()));
-        #endif
+#endif
 
         if (!symbolizer) {
             if (debug_level > 0)
@@ -254,18 +247,16 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (TheTriple, asm_info->getAssemblerDialect(), *asm_info, *ins_info, *reg_info));
-        #endif
-
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#else
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (asm_info->getAssemblerDialect(),
                       *asm_info, *ins_info, *reg_info, *sub_info));
-        #endif
+#endif
         
         if (!printer) {
             if (debug_level > 0)
@@ -275,15 +266,13 @@ public:
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
 
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info, *ctx));
-        #endif
-        
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#else
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info));
-        #endif
+#endif
 
         if (!dis) {
             if (debug_level > 0)
@@ -291,16 +280,16 @@ public:
             return {nullptr, bap_disasm_unsupported_target};
         }
 
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         dis->setSymbolizer(move(symbolizer));
-        #else
+#else
         dis->setSymbolizer(symbolizer);
         dis->setupForSymbolicDisassembly(
             nullptr, // getOpInfo
             nullptr, // SymbolLookUp
             nullptr, // DisInfo,
             &*ctx, rel_info);
-        #endif
+#endif
 
         shared_ptr<llvm_disassembler> self(new llvm_disassembler(debug_level));
         self->printer  = printer;
@@ -323,20 +312,22 @@ public:
     table reg_table() const {
         return reg_tab;
     }
-
-    void set_memory(memory m) {
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 5
+    
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+    void set_memory(memory m) {    
         mem = memory(m);
-        #else
-        mem.reset(new MemoryObject(m));
-        #endif
     }
+#else
+    void set_memory(memory m) {
+        mem.reset(new MemoryObject(m));
+    }
+#endif
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     void step(int64_t pc) {
         mcinst.clear();
         uint64_t size = 0;
-
-        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 6
+        
         auto status = llvm::MCDisassembler::SoftFail;
         int off = pc - mem.base;
         int len = mem.loc.len - off;
@@ -353,15 +344,7 @@ public:
 	if (off < mem.loc.len && size == 0) {
             size += 1;
         }
-        #else
-        auto status = dis->getInstruction
-            (mcinst, size, *mem, pc,
-             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-             llvm::nulls());
-
-        int off = (int)(pc - mem->getBase());
-        #endif
-
+        
         location loc = {off, (int)size};
 
         if (status == llvm::MCDisassembler::Success) {
@@ -379,7 +362,37 @@ public:
             current = invalid_insn(loc);
         }
     }
+#else
+     void step(int64_t pc) {
+        mcinst.clear();
+        uint64_t size = 0;
 
+        auto status = dis->getInstruction
+            (mcinst, size, *mem, pc,
+             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+             llvm::nulls());
+
+        int off = (int)(pc - mem->getBase());
+
+        location loc = {off, (int)size};
+
+        if (status == llvm::MCDisassembler::Success) {
+            if (debug_level > 1) {
+                std::cerr << "read: '" << get_asm() << "'\n";
+            }
+            current = valid_insn(loc);
+        } else {
+            if (debug_level > 0) {
+                std::cerr << "failed to decode insn at"
+                          << " pc " << pc
+                          << " offset " << off
+                          << " skipping " << size << " bytes\n";
+            }
+            current = invalid_insn(loc);
+        }
+    } 
+#endif
+    
     insn get_insn() const {
         return current;
     }
@@ -388,11 +401,11 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
-            #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
             printer->printInst(&mcinst, stream, "", *sub_info);
-            #else
+#else
             printer->printInst(&mcinst, stream, "");
-            #endif
+#endif
             return stream.str();
         } else {
             return "";
