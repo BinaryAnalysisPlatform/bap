@@ -155,6 +155,9 @@ struct segment {
 };
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+using namespace llvm;
+using namespace llvm::object;
+
 template <typename ELFT>
 const typename ELFFile<ELFT>::Elf_Phdr* elf_header_begin(const ELFFile<ELFT> *elf) {
     return elf->program_header_begin();
@@ -169,10 +172,13 @@ iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachO
     return obj.load_commands();
 }
 
-llvm::object::ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
+ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
     return obj.sections();
 }
 #else
+using namespace llvm;
+using namespace llvm::object;
+
 template <typename ELFT>
 const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_begin(const ELFFile<ELFT> *elf) {
     return elf->begin_program_headers();
@@ -183,8 +189,8 @@ const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_end(const ELFFile<ELFT> *
     return elf->end_program_headers();
 }
 
-std::vector<llvm::object::section_iterator> sections(const COFFObjectFile &obj) {
-    std::vector<llvm::object::section_iterator> sections;
+std::vector<section_iterator> sections(const COFFObjectFile &obj) {
+    std::vector<section_iterator> sections;
     for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it) {
         sections.push_back(it);
     }
@@ -443,6 +449,9 @@ struct section {
 };
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+using namespace llvm;
+using namespace llvm::object;
+
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
@@ -451,14 +460,17 @@ section make_section(const SectionRef &sec) {
     return section{name.str(), sec.getAddress(), sec.getSize()};
 }
 
-llvm::object::section_iterator begin_sections(const ObjectFile &obj) {
+section_iterator begin_sections(const ObjectFile &obj) {
     return obj.sections().begin();
 }
 
-llvm::object::section_iterator end_sections(const ObjectFile &obj) {
+section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 #else
+using namespace llvm;
+using namespace llvm::object;
+
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
@@ -474,11 +486,11 @@ section make_section(const SectionRef &sec) {
     return section{name.str(), addr, size};
 }
 
-llvm::object::section_iterator begin_sections(const ObjectFile &obj) {
+section_iterator begin_sections(const ObjectFile &obj) {
     return obj.begin_sections();
 }
 
-llvm::object::section_iterator end_sections(const ObjectFile &obj) {
+section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
 }
 
@@ -583,24 +595,6 @@ uint64_t image_entry(const MachOObjectFile& obj) {
     }
 }
 #endif
-
-/*
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-uint64_t getPE32PlusEntry(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = 0;
-    if (error_code ec = obj.getPE32PlusHeader(hdr))
-        llvm_binary_fail(ec);
-    return hdr->AddressOfEntryPoint;
-}
-#else
-uint64_t getPE32PlusEntry(const COFFObjectFile &obj) {
-    const pe32plus_header *hdr = utils::getPE32PlusHeader(obj);;
-    if (!hdr)
-        llvm_binary_fail("Failed to extract PE32+ header");
-    return hdr->AddressOfEntryPoint;
-}
-#endif
-*/
 
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
