@@ -60,7 +60,21 @@ using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 class MemoryObject {
+    memory mem;
+public:
+    MemoryObject(memory mem) : mem(mem) {}
 
+    uint64_t getBase() const {
+        return mem.base;
+    }
+
+    uint64_t getLocLen() {
+        return mem.loc.len;
+    }
+    
+    llvm::ArrayRef<uint8_t> createArrayRef(int len, int off) {
+        return llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
+    }
 };
 #else
 class MemoryObject : public llvm::MemoryObject {
@@ -139,7 +153,7 @@ class llvm_disassembler : public disassembler_interface {
     llvm::MCInst mcinst;
     insn current;
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-    memory mem;
+    shared_ptr<MemoryObject>                mem; 
 #else
     shared_ptr<const llvm::MemoryObject>    mem;
 #endif
@@ -313,15 +327,9 @@ public:
         return reg_tab;
     }
     
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-    void set_memory(memory m) {    
-        mem = memory(m);
-    }
-#else
     void set_memory(memory m) {
         mem.reset(new MemoryObject(m));
     }
-#endif
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     void step(int64_t pc) {
@@ -329,19 +337,19 @@ public:
         uint64_t size = 0;
         
         auto status = llvm::MCDisassembler::SoftFail;
-        int off = pc - mem.base;
-        int len = mem.loc.len - off;
+        int off = pc - mem->getBase();
+        int len = mem->getLocLen() - off;
 
 	if (len > 0) {
-	    auto data = llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
-
+            auto data = mem->createArrayRef(len, off);
+            
 	    status = dis->getInstruction
 		(mcinst, size, data, pc,
 		 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
 		 llvm::nulls());
 	}
 
-	if (off < mem.loc.len && size == 0) {
+	if (off < mem->getLocLen() && size == 0) {
             size += 1;
         }
         
