@@ -13,7 +13,12 @@
 #include <llvm/Target/TargetInstrInfo.h>
 
 #include <cstring>
+#include <cstdint>
+#include <limits>
+#include <typeinfo>
 #include <iostream>
+
+
 
 #include "disasm.hpp"
 #include "llvm_disasm.h"
@@ -100,6 +105,7 @@ static const bap_disasm_insn_p_type supported[] = {
     may_store
 };
 
+
 class llvm_disassembler : public disassembler_interface {
     shared_ptr<const llvm::MCRegisterInfo>  reg_info;
     shared_ptr<const llvm::MCInstrInfo>     ins_info;
@@ -139,6 +145,7 @@ public:
                 output_error(triple, cpu, "target not found", error);
             return {NULL, bap_disasm_unsupported_target};
         }
+
 
         // target's createMC* functions allocates a new instance each time:
         // cf., Target/X86/MCTargetDesc/X86MCTargetDesc.cpp
@@ -274,13 +281,15 @@ public:
                                   current.code);
     }
 
-    void step(int64_t pc) {
+    void step(uint64_t pc) {
         mcinst.clear();
         auto base = mem->getBase();
 
-        if (pc < base || pc > base + mem->getExtent()) {
-            location loc = {(int)pc - base, 1};
-            current = invalid_insn(loc);
+        if (pc < base) {
+            current = invalid_insn(location{0,1});
+        } else if (pc > base + mem->getExtent()) {
+            auto off = static_cast<int>(mem->getExtent() - 1);
+            current = invalid_insn(location{off,1});
         } else {
             uint64_t size = 0;
             auto status = dis->getInstruction
@@ -288,13 +297,10 @@ public:
                  (debug_level > 2 ? llvm::errs() : llvm::nulls()),
                  llvm::nulls());
 
-            int off = (int)(pc - base);
-
-            if (off < mem->getExtent() && size == 0) {
-                size += 1;
-            }
-
-            location loc = {off, (int)size};
+            location loc = {
+                static_cast<int>(pc - base),
+                static_cast<int>(size)
+            };
 
             if (status == llvm::MCDisassembler::Success) {
                 if (debug_level > 1) {
@@ -303,15 +309,17 @@ public:
                 current = valid_insn(loc);
                 if (is_prefix() && size != 0) {
                     step(pc+size);
-                    location ext = {loc.off, loc.len + current.loc.len};
-                    current = valid_insn(ext);
+                    if (is_valid()) {
+                        location ext = {loc.off, loc.len + current.loc.len};
+                        current = valid_insn(ext);
+                    }
                 }
             } else {
                 if (debug_level > 0)
                     std::cerr << "failed to decode insn at"
                               << " pc " << pc
-                              << " offset " << off
-                              << " skipping " << size << " bytes\n";
+                              << " offset " << loc.off
+                              << " skipping " << loc.len << " bytes\n";
                 current = invalid_insn(loc);
             }
         }
@@ -336,7 +344,7 @@ public:
     bool satisfies(bap_disasm_insn_p_type p) const {
         bool current_invalid = current.code == 0;
         if (p == is_invalid) {
-            return current_invalid;
+            return is_valid();
         } else if (current_invalid) {
             return false;
         } else if (p == is_true) {
@@ -360,6 +368,7 @@ public:
         }
         return false;
     }
+
 
 private:
     insn valid_insn(location loc) const {
@@ -385,6 +394,10 @@ private:
 
     insn invalid_insn(location loc) const {
         return {0, 0L, loc};
+    }
+
+    bool is_valid() const {
+        return current.code == 0;
     }
 
     operand create_operand(llvm::MCOperand mcop, location loc) const {
