@@ -67,7 +67,7 @@ public:
 
 class llvm_disassembler;
 
-static void output_error(const char *triple, const char *cpu,
+static void output_error(std::string triple, const char *cpu,
                          std::string error, std::string tail="") {
     std::cerr
         << "llvm_disasm: failed to create llvm_disassmbler for:\n"
@@ -115,12 +115,15 @@ class llvm_disassembler : public disassembler_interface {
 
 public:
     static result<llvm_disassembler>
-    create(const char *triple, const char *cpu, int debug_level) {
+    create(const char *name, const char *cpu, int debug_level) {
         std::string error;
+        llvm::Triple t(llvm::Triple::normalize(name));
 
         // returned value is not allocted
         const llvm::Target *target =
-            llvm::TargetRegistry::lookupTarget(triple, error);
+            llvm::TargetRegistry::lookupTarget(name, t, error);
+
+        std::string triple = t.getTriple();
 
         if (!target) {
             if (debug_level > 0)
