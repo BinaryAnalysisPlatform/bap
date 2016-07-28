@@ -309,7 +309,14 @@ public:
                 current = valid_insn(loc);
                 if (is_prefix() && size != 0) {
                     step(pc+size);
-                    if (is_valid()) {
+
+                    // a standalone prefix is not a valid instruction
+                    if (current.loc.len == 0) {
+                        current = invalid_insn(loc);
+                    }
+
+                    // a prefix to invalid instruction is invalid instruction
+                    if (current.code != 0) {
                         location ext = {loc.off, loc.len + current.loc.len};
                         current = valid_insn(ext);
                     }
@@ -342,10 +349,10 @@ public:
 
     // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
-        bool current_invalid = current.code == 0;
+        auto current_is_invalid = current.code == 0;
         if (p == is_invalid) {
-            return is_valid();
-        } else if (current_invalid) {
+            return current_is_invalid;
+        } else if (current_is_invalid) {
             return false;
         } else if (p == is_true) {
             return true;
@@ -394,10 +401,6 @@ private:
 
     insn invalid_insn(location loc) const {
         return {0, 0L, loc};
-    }
-
-    bool is_valid() const {
-        return current.code == 0;
     }
 
     operand create_operand(llvm::MCOperand mcop, location loc) const {
