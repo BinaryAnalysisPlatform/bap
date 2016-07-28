@@ -78,11 +78,13 @@ public:
         return mem.base;
     }
 
-    uint64_t getLocLen() {
+    uint64_t getExtent() {
         return mem.loc.len;
     }
 
-    llvm::ArrayRef<uint8_t> createArrayRef(int len, int off) {
+    llvm::ArrayRef<uint8_t> view(uint64_t pc) {
+        int off = pc - this->getBase();
+        int len = this->getExtent() - off;
         return llvm::ArrayRef<uint8_t>((const uint8_t*)&mem.data[mem.loc.off+off], len);
     }
 };
@@ -117,6 +119,10 @@ public:
         const char *ptr = &mem.data[mem.loc.off + offset];
         memcpy(buf, ptr, size);
         return 0;
+    }
+
+    llvm::MemoryObject view(uint64_t) {
+        return this;
     }
 };
 #endif
@@ -347,56 +353,16 @@ public:
         mem.reset(new MemoryObject(m));
     }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-    void step(uint64_t pc) {
-        mcinst.clear();
-        uint64_t size = 0;
-
-        auto status = llvm::MCDisassembler::SoftFail;
-        int off = pc - mem->getBase();
-        int len = mem->getLocLen() - off;
-
-	if (len > 0) {
-            auto data = mem->createArrayRef(len, off);
-
-	    status = dis->getInstruction
-		(mcinst, size, data, pc,
-		 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-		 llvm::nulls());
-	}
-
-	if (off < mem->getLocLen() && size == 0) {
-            size += 1;
-        }
-
-        location loc = {off, (int)size};
-
-        if (status == llvm::MCDisassembler::Success) {
-            if (debug_level > 1) {
-                std::cerr << "read: '" << get_asm() << "'\n";
-            }
-            current = valid_insn(loc);
-        } else {
-            if (debug_level > 0) {
-                std::cerr << "failed to decode insn at"
-                          << " pc " << pc
-                          << " offset " << off
-                          << " skipping " << size << " bytes\n";
-            }
-            current = invalid_insn(loc);
-        }
-    }
-#else
     bool is_prefix() const {
         return std::binary_search(prefixes.begin(),
                                   prefixes.end(),
                                   current.code);
     }
-
+    
     void step(uint64_t pc) {
         mcinst.clear();
         auto base = mem->getBase();
-
+        
         if (pc < base) {
             current = invalid_insn(location{0,1});
         } else if (pc > base + mem->getExtent()) {
@@ -404,11 +370,17 @@ public:
             current = invalid_insn(location{off,1});
         } else {
             uint64_t size = 0;
-            auto status = dis->getInstruction
-                (mcinst, size, *mem, pc,
-                 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-                 llvm::nulls());
+            int off = pc - mem->getBase();
+            int len = mem->getExtent() - off;
 
+            auto status = llvm::MCDisassembler::SoftFail;
+            if (len > 0) {
+                status = dis->getInstruction
+                    (mcinst, size, mem->view(pc), pc,
+                     (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+                     llvm::nulls());
+            }
+            
             location loc = {
                 static_cast<int>(pc - base),
                 static_cast<int>(size)
@@ -443,8 +415,7 @@ public:
             }
         }
     }
-#endif
-
+    
     insn get_insn() const {
         return current;
     }
