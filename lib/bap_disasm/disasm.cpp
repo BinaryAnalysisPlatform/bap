@@ -82,7 +82,7 @@ class disassembler {
     vector<string>  asms;
     string asm_cache;
     vector<predicates> insn_preds;
-    int64_t base;
+    uint64_t base;
     int off;
     bool store_preds, store_asms;
 
@@ -124,7 +124,7 @@ public:
         };
     }
 
-    void set_memory(int64_t addr, const char *data, int offset, int length) {
+    void set_memory(uint64_t addr, const char *data, int offset, int length) {
         this->base = addr;
         this->off  = 0;
         dis->set_memory({data, addr, {offset, length}});
@@ -315,7 +315,7 @@ static inline shared_ptr<disassembler> get(int d) {
 }
 
 
-void bap_disasm_set_memory(int d, int64_t base, const char *data, int off, int len) {
+void bap_disasm_set_memory(int d, uint64_t base, const char *data, int off, int len) {
     get(d)->set_memory(base, data, off, len);
 }
 
