@@ -111,7 +111,7 @@ module Program(Conf : Mc_options.Provider) = struct
     let input = read_input options.src in
     let mem = create_memory arch input addr in
     let backend = options.disassembler in
-    Dis.with_disasm ~backend (options.arch) ~f:(fun dis ->
+    Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
         let bytes = Dis.run dis mem ~return:ident ~init:0
             ~stop_on:[`Valid] ~invalid:(bad_insn addr)
             ~hit:(fun state mem insn bytes ->
