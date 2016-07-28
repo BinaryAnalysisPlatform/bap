@@ -118,12 +118,15 @@ public:
     create(const char *name, const char *cpu, int debug_level) {
         std::string error;
         llvm::Triple t(llvm::Triple::normalize(name));
+        std::string triple = t.getTriple();
 
         // returned value is not allocted
         const llvm::Target *target =
-            llvm::TargetRegistry::lookupTarget(name, t, error);
+            llvm::TargetRegistry::lookupTarget(name,t,error);;
 
-        std::string triple = t.getTriple();
+        if (!target) {
+            target = llvm::TargetRegistry::lookupTarget("", t, error);
+        }
 
         if (!target) {
             if (debug_level > 0)
