@@ -22,8 +22,7 @@
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 #include <llvm/ADT/OwningPtr.h>
 #else
-std::cerr << LLVM_PREFIX << " is not supported."
-std::exit(0); 
+#error LLVM version not supported.
 #endif
 
 using std::move;
@@ -543,15 +542,17 @@ using namespace llvm::object;
 
 struct image {
     virtual uint64_t entry() const = 0;
-    virtual Triple::ArchType arch() const = 0;
+    virtual const std::string &arch() const = 0;
     virtual const std::vector<seg::segment>& segments() const = 0;
     virtual const std::vector<sym::symbol>& symbols() const = 0;
     virtual const std::vector<sec::section>& sections() const = 0;
     virtual ~image() {}
 };
 
-Triple::ArchType image_arch(const ObjectFile& obj) {
-    return static_cast<Triple::ArchType>(obj.getArch());;
+std::string image_arch(const ObjectFile& obj) {
+    const Triple::ArchType arch_type = static_cast<Triple::ArchType>(obj.getArch());
+    const std::string arch = Triple::getArchTypeName(arch_type);
+    return arch;
 }
 
 template <typename ELFT>
@@ -619,13 +620,13 @@ struct objectfile_image : image {
 	, sections_(sec::read(*ptr))
 	, binary_(move(ptr))
     {}
-    Triple::ArchType arch() const { return arch_; }
+    const std::string &arch() const { return arch_; }
     uint64_t entry() const { return entry_; }
     const std::vector<seg::segment>& segments() const { return segments_; }
     const std::vector<sym::symbol>& symbols() const { return symbols_; }
     const std::vector<sec::section>& sections() const { return sections_; }
 protected:
-    Triple::ArchType arch_;
+    const std::string arch_;
     uint64_t entry_;
     std::vector<seg::segment> segments_;
     std::vector<sym::symbol> symbols_;
