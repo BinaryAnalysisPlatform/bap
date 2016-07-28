@@ -144,7 +144,7 @@ const char* bap_disasm_backend_name(int i);
  * */
 void bap_disasm_set_memory(
     bap_disasm_type disasm,
-    int64_t base,
+    uint64_t base,
     const char *data,
     int off,
     int len);
