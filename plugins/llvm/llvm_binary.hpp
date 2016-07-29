@@ -53,6 +53,8 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 }} //namespace llvm::object
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+//! I don't think that there is any reason to have non-anonymous
+//! namespace here.
 namespace utils {
 using namespace llvm;
 using namespace llvm::object;
