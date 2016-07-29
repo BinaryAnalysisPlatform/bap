@@ -298,6 +298,105 @@ struct symbol {
 };
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+//! This is our error handling policy for LLVM
+//! We distinguish between two kinds of errors:
+//! 1. logical errors
+//! 2. runtime errors
+//!
+//! A logic_error means that there is a bug in a programmer's head or
+//! DNA. Only valid thing that can be done, is to abort and fix the
+//! program. This kind of errors are usually handled with some kind of
+//! abnormal and fast exit.
+//!
+//! A runtime error is an error that is anticipated. A good example,
+//! is the connection error. In fact, runtime errors, are not errors at
+//! all but just a possible outcome of a computation. Thus if we were
+//! in OCaml or Rust or any other normal language, then we can use
+//! algebraic data types to encode this, but we're not.
+//
+//! So the policy for us, is to abort a program on a first kind of
+//! error. And handle the anticipated error conditions using a normal
+//! control flow. We can't use exceptions, as they are disabled by
+//! LLVM. So, we need to use an old C if/else chaining.
+//!
+//! This is an example of a logic error:
+//!
+//!    auto name = sym.getName();
+//!    if (error_code ec = name.getError())
+//!       llvm_binary_fail(ec);
+//!
+//! We assert that a symbol must have a name, we don't know what to do
+//! if there is no name for a symbol. We just abort the program. Instead,
+//! of repeating this pattern every time, we can write a function
+//!
+//! template <typename T>
+//! T value_or_fail(const ErrorOr<T>& e) {
+//!     if (error_code ec = e.getError())
+//!         llvm_binary_fail(ec);
+//!     return e.get();
+//! }
+//!
+//! And now we can rewrite `make_symbol` in a more concise, clean and
+//! readable way:
+//!
+//! symbol make_symbol(const SymbolRef& sym, uint64_t size) {
+//!     auto name = value_or_fail(sym.getName());
+//!     auto addr = value_or_fail(sym.getAddress());
+//!     return symbol{name->str(), sym.getType(), addr, size};
+//! }
+//!
+//! So, now it is obvious, that we have two failure points, based on
+//! our assumptions, that every symbol in a binary must have a name
+//! and an address. This is not true by the way. So we push this
+//! precondition to the `make_symbol` function, and we're saying that
+//! this `make_symbol` function is defined only for symbols with names
+//! and addresses. If someone has called on a wrong symbol, then it is
+//! the logic error, and we fail.
+//!
+//! Now we can start to check, that indeed in all context were we're
+//! called this precondition is satisfied. And it can be only
+//! satisfied, if there is an explicit check. It is easy to find, that
+//! there're no checks. And it looks like, that no such guarantee is
+//! made by LLVM functions that we're calling.
+//!
+//! The conclusion. The `make_symbol` function is logically
+//! incorrect. It makes wrong assumptions. Do not document this
+//! assumptions and is called is a such manner, that it can be easily
+//! broken.
+//!
+//! Suggested solutions:
+//! 1. make `make_symbol` function non total, and return `ErrorOr<symbol>`
+//! 2. make `make_symbol` total and define a special invalid symbol.
+//!
+//! I would suggest the last. Although it is usually a bad idea. But
+//! in our case, the function `make_symbol` is just a mapping from
+//! llvm symbol representation to our symbol representation. That is
+//! intermediate, and later will be mapped again to an OCaml symbol
+//! representation. The OCaml representation doesn't make any
+//! assumptions, and perform carefull validation of all the input
+//! information. That actually means, that we do not need to perform
+//! any validation here (why do the double work). So we just create a
+//! 4-tuple and give it back. And if any symbol didn't have an address
+//! or valid name, then it will be filtered out later.
+//!
+//! To handle such approach in a generic way we may define the
+//! following template function:
+//!
+//! template <typename T>
+//! T value_or_default(const ErrorOr<T> &x, T def=T()) {
+//!     if (x) return x.get();
+//!     else return def;
+//! }
+//!
+//! It will extract a value from ErrorOr<T> or if there is no value,
+//! then it will
+//!
+//! symbol make_symbol(const SymbolRef& sym, uint64_t size) {
+//!     auto name = value_or_default(sym.getName())->str();
+//!     auto addr = value_or_default(sym.getAddress());
+//!     return symbol{name, sym.getType(), addr, size};
+//! }
+//!
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
     auto name = sym.getName();
     if (error_code ec = name.getError())
@@ -642,6 +741,26 @@ protected:
     std::unique_ptr<T> binary_;
 };
 
+//! return NULL in case of error in the following functions, use
+//! `std::cerr` to output diagnostics.  Justification. Current
+//! implementation of `llvm_binary_fail` shouldn't ever be called in
+//! C++ program. It will raise an OCaml exception that will basically
+//! transfer a control flow to an exception handler directly into
+//! OCaml code with a simple jump instruction. It will break all
+//! assumptions of a C++ compiler, and all automatic variables will
+//! not be destructed, that will lead to an incosistent state, and
+//! every consequent call to C/C++ runtime is undefined. We didn't hit
+//! any specific issues so far, because, we indeed bail out as soon as
+//! we get the exception, but it is not guaranteed, that this behavior
+//! will not change. So, soon I will substitute `llvm_binary_fail`
+//! with a function that will pring a diagnostic message and
+//! exit/abort. That means, that we should not call `llvm_binary_fail`
+//! function any more for just bailing out to OCaml, and must assume,
+//! that a call to this function terminates a program. Later we will
+//! fix the error handling, but so far, the first step would be to rid
+//! of `llvm_binary_fail` calls in places where it is not
+//! appropriate. I.e., it should be called only for reporting logical
+//! errors. An unsupported binary is not a logic error.
 template <typename T>
 image* create_image(std::unique_ptr<object::Binary> binary) {
     if (std::unique_ptr<T> ptr =
