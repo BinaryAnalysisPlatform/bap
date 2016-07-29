@@ -275,8 +275,8 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(ec);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-        uint64_t image_base = getPE32PlusEntry(obj);
-        return readPE<uint64_t>(obj, image_base);
+        const pe32plus_header *pe32 = utils::getPE32PlusHeader(obj);
+        return readPE<uint64_t>(obj, pe32->ImageBase);
     }
 }
 
