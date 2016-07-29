@@ -120,10 +120,6 @@ public:
         memcpy(buf, ptr, size);
         return 0;
     }
-
-    llvm::MemoryObject view(uint64_t) {
-        return this;
-    }
 };
 #endif
 
@@ -358,6 +354,16 @@ public:
                                   prefixes.end(),
                                   current.code);
     }
+
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+    llvm::ArrayRef<uint8_t> view(uint64_t pc) {
+        return mem->view(pc);
+    }
+#else
+    const llvm::MemoryObject& view(uint64_t pc) {
+        return *mem;
+    }
+#endif
     
     void step(uint64_t pc) {
         mcinst.clear();
@@ -376,7 +382,7 @@ public:
             auto status = llvm::MCDisassembler::SoftFail;
             if (len > 0) {
                 status = dis->getInstruction
-                    (mcinst, size, mem->view(pc), pc,
+                    (mcinst, size, view(pc), pc,
                      (debug_level > 2 ? llvm::errs() : llvm::nulls()),
                      llvm::nulls());
             }
