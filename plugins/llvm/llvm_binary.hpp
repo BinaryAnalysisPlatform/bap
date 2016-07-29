@@ -193,7 +193,7 @@ std::vector<section_iterator> sections(const COFFObjectFile &obj) {
     for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it) {
         sections.push_back(it);
     }
-    return sections;     
+    return sections;
 }
 #endif
 
@@ -321,7 +321,7 @@ symbol make_symbol(const SymbolRef &sym) {
     StringRef name;
     if(error_code err = sym.getName(name))
 	llvm_binary_fail(err);
-    
+
     kind_type kind;
     if (error_code err = sym.getType(kind))
 	llvm_binary_fail(err);
@@ -337,7 +337,7 @@ symbol make_symbol(const SymbolRef &sym) {
 }
 
 template <typename OutputIterator>
-OutputIterator read(symbol_iterator begin, 
+OutputIterator read(symbol_iterator begin,
 		    symbol_iterator end,
 		    OutputIterator out) {
     return std::transform(begin, end, out,
@@ -416,6 +416,7 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
 
 template <typename ELFT>
 std::vector<symbol> read(const ELFObjectFile<ELFT>& obj) {
+    //!! identation
     int size1 = distance(obj.begin_symbols(),
                                 obj.end_symbols());
     int size2 = distance(obj.begin_dynamic_symbols(),
@@ -451,11 +452,13 @@ struct section {
 using namespace llvm;
 using namespace llvm::object;
 
+
+//! rewrite using `value_or_default` function
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
 	llvm_binary_fail(ec);
-    
+
     return section{name.str(), sec.getAddress(), sec.getSize()};
 }
 
@@ -506,7 +509,7 @@ std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
         sections.push_back(make_section(*s, image_base));
     }
     return sections;
-} 
+}
 
 std::vector<section> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
