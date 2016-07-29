@@ -600,6 +600,9 @@ uint64_t image_entry(const MachOObjectFile& obj) {
 }
 #endif
 
+//!! I suspect, that an address of the entry point should also be
+//!! shifted by the ImageBase. Please, consult the PE32 documentation
+//!! from MSDN
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
