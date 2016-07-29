@@ -200,7 +200,10 @@ let program source =
                                a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
-    let doc = "Runs passes (comma separated)" in
+    let doc =
+      "Runs passes (comma separated). This option replaces the \
+       previously existing $(b,--)$(i,PASS) options which are now \
+       deprecated and will soon be removed." in
     Arg.(value & opt (list string) [] &
          info ["p"; "pass"; "passes"] ~doc ~docv:"PASS") in
   Term.(const create
