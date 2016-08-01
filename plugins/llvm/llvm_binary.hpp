@@ -298,6 +298,25 @@ struct symbol {
 };
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+template <typename T>
+T value_or_default(const ErrorOr<T> &e, T def=T()) {
+    if (e) return e.get();
+    return def;
+}
+
+template <typename T>
+T value_or_fail(const ErrorOr<T> &e) {
+    if (error_code ec = e.getError())
+	llvm_binary_fail(ec);
+    return e.get();
+}
+
+symbol make_symbol(const SymbolRef& sym, uint64_t size) {
+    auto name = value_or_fail(sym.getName())->str();
+    auto addr = value_or_fail(sym.getAddress());
+    return symbol{name->str(), sym.getType(), addr, size}; 
+}
+
 //! This is our error handling policy for LLVM
 //! We distinguish between two kinds of errors:
 //! 1. logical errors
@@ -397,17 +416,6 @@ struct symbol {
 //!     return symbol{name, sym.getType(), addr, size};
 //! }
 //!
-symbol make_symbol(const SymbolRef& sym, uint64_t size) {
-    auto name = sym.getName();
-    if (error_code ec = name.getError())
-        llvm_binary_fail(ec);
-
-    auto addr = sym.getAddress();
-    if (error_code ec = addr.getError())
-        llvm_binary_fail(ec);
-
-    return symbol{name->str(), sym.getType(), addr.get(), size};
-}
 
 std::vector<symbol> read(const ObjectFile& obj) {
     std::vector<symbol> symbols;
