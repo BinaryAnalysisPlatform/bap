@@ -63,14 +63,7 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
     }
     return std::unique_ptr<Derived>(nullptr);
 }
-
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
-    const llvm::object::pe32plus_header *hdr = 0;
-    if (error_code ec = obj.getPE32PlusHeader(hdr))
-        llvm_binary_fail(ec);
-    return hdr->AddressOfEntryPoint;
-}
 #else
 typedef llvm::object::MachOObjectFile macho;
 typedef macho::LoadCommandInfo command_info;
@@ -263,13 +256,19 @@ std::vector<segment> readPE(const COFFObjectFile& obj, const T image_base) {
 
 std::vector<segment> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
-	const pe32_header *pe32;
-	if (error_code ec = obj.getPE32Header(pe32))
+	const pe32_header *hdr;
+	if (error_code ec = obj.getPE32Header(hdr))
 	    llvm_binary_fail(ec);
-	return readPE<uint32_t>(obj, pe32->ImageBase);
+	return readPE<uint32_t>(obj, hdr->ImageBase);
     } else {
-        const pe32plus_header *pe32 = getPE32PlusHeader(obj);
-        return readPE<uint64_t>(obj, pe32->ImageBase);
+        const pe32plus_header *hdr;
+        #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(hdr))
+            llvm_binary_fail(ec);
+        #else
+        pe32 = getPE32PlusHeader(obj);
+        #endif
+        return readPE<uint64_t>(obj, hdr->ImageBase);
     }
 }
 
@@ -296,9 +295,9 @@ T value_or_default(const ErrorOr<T> &e, T def=T()) {
 }
 
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
-    auto name = value_or_fail(sym.getName())->str();
-    auto addr = value_or_fail(sym.getAddress());
-    return symbol{name->str(), sym.getType(), addr, size}; 
+    auto name = value_or_default(sym.getName()).str();
+    auto addr = value_or_default(sym.getAddress());
+    return symbol{name, sym.getType(), addr, size}; 
 }
 
 std::vector<symbol> read(const ObjectFile& obj) {
@@ -601,7 +600,15 @@ uint64_t image_entry(const COFFObjectFile& obj) {
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     } else {
-        const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        const pe32plus_header *hdr = 0;
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(hdr))
+            llvm_binary_fail(ec);
+        if (!hdr)
+            llvm_binary_fail("PE+ header not found");
+#else
+        hdr = getPE32PlusHeader(obj);
+#endif
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
