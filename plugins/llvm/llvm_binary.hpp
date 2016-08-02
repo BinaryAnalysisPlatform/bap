@@ -59,24 +59,7 @@ namespace utils {
 using namespace llvm;
 using namespace llvm::object;
 
-const pe32plus_header* getPE32PlusHeader(const COFFObjectFile& obj) {
-    uint64_t cur_ptr = 0;
-    const char *buf = (obj.getData()).data();
-    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
-    uint8_t b0 = start[0];
-    uint8_t b1 = start[1];
-    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
-        // a pointer at offset 0x3C points to the
-        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
-        // check the PE magic bytes.
-        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
-            llvm_binary_fail("PE Plus header not found");
-        cur_ptr += 4; // skip the PE magic bytes.
-        cur_ptr += sizeof(coff_file_header);
-        return reinterpret_cast<const pe32plus_header *>(start + cur_ptr);
-    }
-    return NULL;
-}
+
 
 } //namespace utils
 #endif
@@ -129,6 +112,25 @@ std::vector<command_info> load_commands(const macho& obj) {
         info = obj.getNextLoadCommandInfo(info);
     }
     return cmds;
+}
+
+const llvm::object::pe32plus_header* getPE32PlusHeader(const llvm::object::COFFObjectFile& obj) {
+    uint64_t cur_ptr = 0;
+    const char *buf = (obj.getData()).data();
+    const uint8_t *start = reinterpret_cast<const uint8_t *>(buf);
+    uint8_t b0 = start[0];
+    uint8_t b1 = start[1];
+    if (b0 == 0x4d && b1 == 0x5a) { // check if this is a PE/COFF file
+        // a pointer at offset 0x3C points to the
+        cur_ptr += *reinterpret_cast<const uint16_t *>(start + 0x3c);
+        // check the PE magic bytes.
+        if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
+            llvm_binary_fail("PE Plus header not found");
+        cur_ptr += 4; // skip the PE magic bytes.
+        cur_ptr += sizeof(coff_file_header);
+        return reinterpret_cast<const llvm::object::pe32plus_header *>(start + cur_ptr);
+    }
+    return NULL;
 }
 
 uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
@@ -297,7 +299,15 @@ struct symbol {
     uint64_t size;
 };
 
+template <typename T>
+T value_or_default(const ErrorOr<T> &x, T def=T()) {
+    if (x) return x.get();
+    else return def;
+}
+
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
+
 //! This is our error handling policy for LLVM
 //! We distinguish between two kinds of errors:
 //! 1. logical errors
@@ -417,7 +427,6 @@ std::vector<symbol> read(const ObjectFile& obj) {
     return symbols;
 }
 #else
-// TODO - refactoring this 3.4 code block
 symbol make_symbol(const SymbolRef &sym) {
     StringRef name;
     if(error_code err = sym.getName(name))
@@ -701,9 +710,6 @@ uint64_t image_entry(const MachOObjectFile& obj) {
 }
 #endif
 
-//!! I suspect, that an address of the entry point should also be
-//!! shifted by the ImageBase. Please, consult the PE32 documentation
-//!! from MSDN
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
@@ -711,9 +717,10 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 	    llvm_binary_fail(ec);
         if (!hdr)
             llvm_binary_fail("PE header not found");
-        return hdr->AddressOfEntryPoint;
+        return hdr->AddressOfEntryPoint + hdr->ImageBase;
     } else {
-        return getPE32PlusEntry(obj);
+        pe32plus_header *hdr =  getPE32PlusHeader(obj);
+        return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
 
@@ -741,33 +748,14 @@ protected:
     std::unique_ptr<T> binary_;
 };
 
-//! return NULL in case of error in the following functions, use
-//! `std::cerr` to output diagnostics.  Justification. Current
-//! implementation of `llvm_binary_fail` shouldn't ever be called in
-//! C++ program. It will raise an OCaml exception that will basically
-//! transfer a control flow to an exception handler directly into
-//! OCaml code with a simple jump instruction. It will break all
-//! assumptions of a C++ compiler, and all automatic variables will
-//! not be destructed, that will lead to an incosistent state, and
-//! every consequent call to C/C++ runtime is undefined. We didn't hit
-//! any specific issues so far, because, we indeed bail out as soon as
-//! we get the exception, but it is not guaranteed, that this behavior
-//! will not change. So, soon I will substitute `llvm_binary_fail`
-//! with a function that will pring a diagnostic message and
-//! exit/abort. That means, that we should not call `llvm_binary_fail`
-//! function any more for just bailing out to OCaml, and must assume,
-//! that a call to this function terminates a program. Later we will
-//! fix the error handling, but so far, the first step would be to rid
-//! of `llvm_binary_fail` calls in places where it is not
-//! appropriate. I.e., it should be called only for reporting logical
-//! errors. An unsupported binary is not a logic error.
 template <typename T>
 image* create_image(std::unique_ptr<object::Binary> binary) {
     if (std::unique_ptr<T> ptr =
 	dynamic_unique_ptr_cast<T, object::Binary>(move(binary))) {
 	return new objectfile_image<T>(move(ptr));
     }
-    llvm_binary_fail("Unrecognized object format");
+    std::cerr << "Unrecognized object format\n";
+    return NULL;
 }
 
 image* create_image_elf(std::unique_ptr<object::Binary> binary) {
@@ -782,7 +770,8 @@ image* create_image_elf(std::unique_ptr<object::Binary> binary) {
 
     if (isa<ELF64BEObjectFile>(*binary))
         return create_image<ELF64BEObjectFile>(move(binary));
-    llvm_binary_fail("Unrecognized ELF format");
+    std::cerr << "Unrecognized ELF format\n";
+    return NULL;
 }
 
 image* create_image_obj(std::unique_ptr<object::Binary> binary) {
@@ -792,11 +781,13 @@ image* create_image_obj(std::unique_ptr<object::Binary> binary) {
 	return create_image_elf(move(binary));
     if (binary->isMachO())
 	return create_image<MachOObjectFile>(move(binary));
-    llvm_binary_fail("Unrecognized object format");
+    std::cerr << "Unrecognized object format\n";
+    return NULL;
 }
 
 image* create_image_arch(std::unique_ptr<object::Binary> binary) {
-    llvm_binary_fail("Archive loading unimplemented");
+    std::cerr << "Archive loading unimplemented\n";
+    return NULL;
 }
 
 image* create(std::unique_ptr<object::Binary> binary) {
@@ -804,7 +795,8 @@ image* create(std::unique_ptr<object::Binary> binary) {
 	return create_image_arch(move(binary));
     if (isa<ObjectFile>(*binary))
 	return create_image_obj(move(binary));
-    llvm_binary_fail("Unrecognized binary format");
+    std::cerr << "Unrecognized binary format\n";
+    return NULL;
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
@@ -812,8 +804,10 @@ image* create(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
-    if (error_code ec = binary.getError())
-	llvm_binary_fail(ec);
+    if (error_code ec = binary.getError()) {
+	std::cerr << ec << "\n";
+        return NULL;    
+    }
     return create(move(*binary));
 }
 #else
@@ -821,8 +815,10 @@ image* create(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBuffer* buff(MemoryBuffer::getMemBufferCopy(data_ref, "binary"));
     OwningPtr<object::Binary> bin;
-    if (error_code ec = createBinary(buff, bin))
-        llvm_binary_fail(ec);
+    if (error_code ec = createBinary(buff, bin)) {
+	std::cerr << ec << "\n";
+        return NULL;
+    }
     std::unique_ptr<object::Binary> binary(bin.take());
     return create(move(binary));
 }
