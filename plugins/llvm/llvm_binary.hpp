@@ -52,17 +52,6 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-//! I don't think that there is any reason to have non-anonymous
-//! namespace here.
-namespace utils {
-using namespace llvm;
-using namespace llvm::object;
-
-
-
-} //namespace utils
-#endif
 
 namespace {
 
@@ -127,14 +116,14 @@ const llvm::object::pe32plus_header* getPE32PlusHeader(const llvm::object::COFFO
         if (std::memcmp(start + cur_ptr, "PE\0\0", 4) != 0)
             llvm_binary_fail("PE Plus header not found");
         cur_ptr += 4; // skip the PE magic bytes.
-        cur_ptr += sizeof(coff_file_header);
+        cur_ptr += sizeof(llvm::object::coff_file_header);
         return reinterpret_cast<const llvm::object::pe32plus_header *>(start + cur_ptr);
     }
     return NULL;
 }
 
 uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
-    const llvm::object::pe32plus_header *hdr = utils::getPE32PlusHeader(obj);;
+    const llvm::object::pe32plus_header *hdr = getPE32PlusHeader(obj);;
     if (!hdr)
         llvm_binary_fail("Failed to extract PE32+ header");
     return hdr->AddressOfEntryPoint;
@@ -279,7 +268,7 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(ec);
 	return readPE<uint32_t>(obj, pe32->ImageBase);
     } else {
-        const pe32plus_header *pe32 = utils::getPE32PlusHeader(obj);
+        const pe32plus_header *pe32 = getPE32PlusHeader(obj);
         return readPE<uint64_t>(obj, pe32->ImageBase);
     }
 }
@@ -306,7 +295,24 @@ T value_or_default(const ErrorOr<T> &x, T def=T()) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+template <typename T>
+T value_or_default(const ErrorOr<T> &e, T def=T()) {
+    if (e) return e.get();
+    return def;
+}
 
+template <typename T>
+T value_or_fail(const ErrorOr<T> &e) {
+    if (error_code ec = e.getError())
+	llvm_binary_fail(ec);
+    return e.get();
+}
+
+symbol make_symbol(const SymbolRef& sym, uint64_t size) {
+    auto name = value_or_fail(sym.getName())->str();
+    auto addr = value_or_fail(sym.getAddress());
+    return symbol{name->str(), sym.getType(), addr, size}; 
+}
 
 //! This is our error handling policy for LLVM
 //! We distinguish between two kinds of errors:
@@ -407,17 +413,6 @@ T value_or_default(const ErrorOr<T> &x, T def=T()) {
 //!     return symbol{name, sym.getType(), addr, size};
 //! }
 //!
-symbol make_symbol(const SymbolRef& sym, uint64_t size) {
-    auto name = sym.getName();
-    if (error_code ec = name.getError())
-        llvm_binary_fail(ec);
-
-    auto addr = sym.getAddress();
-    if (error_code ec = addr.getError())
-        llvm_binary_fail(ec);
-
-    return symbol{name->str(), sym.getType(), addr.get(), size};
-}
 
 std::vector<symbol> read(const ObjectFile& obj) {
     std::vector<symbol> symbols;
@@ -517,7 +512,7 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(err);
 	return read(obj, pe32->ImageBase);
     } else {
-        const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+        const pe32plus_header *pe32plus = getPE32PlusHeader(obj);
         if (!pe32plus)
             llvm_binary_fail("Failed to extract PE32+ header");
         return read(obj, pe32plus->ImageBase);
@@ -628,7 +623,7 @@ std::vector<section> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(err);
 	return readPE(obj, pe32->ImageBase);
     } else {
-	const pe32plus_header *pe32plus = utils::getPE32PlusHeader(obj);
+	const pe32plus_header *pe32plus = getPE32PlusHeader(obj);
 	if (!pe32plus)
 	    llvm_binary_fail("Failed to extract PE32+ header");
 	return readPE(obj, pe32plus->ImageBase);
@@ -719,7 +714,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
             llvm_binary_fail("PE header not found");
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     } else {
-        pe32plus_header *hdr =  getPE32PlusHeader(obj);
+        const pe32plus_header *hdr = getPE32PlusHeader(obj);
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
