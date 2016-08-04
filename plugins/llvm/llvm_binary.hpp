@@ -182,12 +182,8 @@ const typename ELFFile<ELFT>::Elf_Phdr_Iter elf_header_end(const ELFFile<ELFT> *
 
 std::vector<section_iterator> sections(const COFFObjectFile &obj) {
     std::vector<section_iterator> sections;
-    int i = 0
-    for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it) {
+    for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it)
         sections.push_back(it);
-        i++;
-    }
-    std::cout << "In sections for COFF file... number of sections is " << i << "\n";
     return sections;
 }
 #endif
@@ -277,7 +273,6 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 #else
         hdr = getPE32PlusHeader(obj);
 #endif
-        std::cout << "ImageBase = " << hdr->ImageBase << "\n";
         return readPE<uint64_t>(obj, hdr->ImageBase);
     }
 }
@@ -301,19 +296,45 @@ struct symbol {
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
     auto name = value_or_default(sym.getName()).str();
     auto addr = value_or_default(sym.getAddress());
-    //std::cout << "Symbol name: " << name << ", address: " << addr << "\n";
+    std::cout << "Symbol{ name=" << name << ", address= " << addr << ", size=" << size << "}\n";
     return symbol{name, sym.getType(), addr, size}; 
 }
 
 std::vector<symbol> read(const ObjectFile& obj) {
     std::vector<symbol> symbols;
     auto symbol_sizes = computeSymbolSizes(obj);
-    int i = 0;
-    for (auto s : symbol_sizes) {
+    for (auto s : symbol_sizes) 
 	symbols.push_back(make_symbol(s.first, s.second));
-        i++;
+    return symbols;
+}
+
+std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
+    std::vector<symbol> symbols;
+    for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
+        auto sym = obj.getCOFFSymbol(*it);
+        
+        const coff_section *sec = nullptr;
+        if (sym.getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED)
+            continue;
+
+        if (error_code ec = obj.getSection(sym.getSectionNumber(), sec))
+            llvm_binary_fail(ec);
+
+        if (!sec) continue;
+
+        uint64_t size = (sec->VirtualAddress + sec->SizeOfRawData) - sym.getValue();
+
+        for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
+            auto next = obj.getCOFFSymbol(*it);
+            if (next.getSectionNumber() == sym.getSectionNumber()) {
+                auto new_size = next.getValue() > sym.getValue() ?
+                    next.getValue() - sym.getValue() : size;
+                size = new_size < size ? new_size : size;
+            }
+        }
+        
+        symbols.push_back(make_symbol(*it, size));
     }
-    std::cout << "In read(objectfile)... number of symbols is " << i <<"\n";
     return symbols;
 }
 #else
@@ -333,8 +354,6 @@ symbol make_symbol(const SymbolRef &sym) {
     uint64_t size;
     if (error_code err = sym.getSize(size))
 	llvm_binary_fail(err);
-
-    std::cout << "In make_symbol - name: " << name.str() << "\n";
     
     return symbol{name.str(), kind, addr, size};
 }
@@ -356,6 +375,26 @@ std::vector<symbol> read(const ObjectFile& obj) {
     read(obj.begin_symbols(),
          obj.end_symbols(),
          std::back_inserter(symbols));
+    return symbols;
+}
+
+template <typename ELFT>
+std::vector<symbol> read(const ELFObjectFile<ELFT>& obj) {
+    int size1 = distance(obj.begin_symbols(),
+                         obj.end_symbols());
+    int size2 = distance(obj.begin_dynamic_symbols(),
+                         obj.end_dynamic_symbols());
+
+    std::vector<symbol> symbols;
+    symbols.reserve(size1+size2);
+
+    auto it = read(obj.begin_symbols(),
+                   obj.end_symbols(),
+                   std::back_inserter(symbols));
+
+    read(obj.begin_dynamic_symbols(),
+         obj.end_dynamic_symbols(),
+         it);
     return symbols;
 }
 
@@ -402,6 +441,7 @@ std::vector<symbol> read(const COFFObjectFile& obj, const uint64_t image_base) {
     }
     return symbols;
 }
+#endif
 
 std::vector<symbol> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
@@ -410,33 +450,19 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(err);
 	return read(obj, pe32->ImageBase);
     } else {
-        const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        const pe32plus_header *hdr;
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(hdr))
+            llvm_binary_fail(ec);
+#else
+        hdr = getPE32PlusHeader(obj);
         if (!hdr)
             llvm_binary_fail("Failed to extract PE32+ header");
+#endif
         return read(obj, hdr->ImageBase);
     }
 }
-
-template <typename ELFT>
-std::vector<symbol> read(const ELFObjectFile<ELFT>& obj) {
-    int size1 = distance(obj.begin_symbols(),
-                         obj.end_symbols());
-    int size2 = distance(obj.begin_dynamic_symbols(),
-                         obj.end_dynamic_symbols());
-
-    std::vector<symbol> symbols;
-    symbols.reserve(size1+size2);
-
-    auto it = read(obj.begin_symbols(),
-                   obj.end_symbols(),
-                   std::back_inserter(symbols));
-
-    read(obj.begin_dynamic_symbols(),
-         obj.end_dynamic_symbols(),
-         it);
-    return symbols;
-}
-#endif
+//#endif
 
 } //namespace sym
 
@@ -461,7 +487,13 @@ section make_section(const SectionRef &sec) {
     if (error_code ec = sec.getName(name))
 	llvm_binary_fail(ec);
 
+    std::cout << "Section{ Name=" << name.str() << ", Address=" << sec.getAddress() << ", Size=" << sec.getSize() << " }\n"; 
     return section{name.str(), sec.getAddress(), sec.getSize()};
+}
+
+section make_section(const coff_section *s, const uint64_t image_base) {
+    std::cout << "COFF Section{ Name=" << s->Name << ", Address=" << (s->VirtualAddress+image_base) << ", Size=" << s->SizeOfRawData << " }\n";
+    return section{s->Name, s->VirtualAddress + image_base, s->SizeOfRawData};
 }
 
 section_iterator begin_sections(const ObjectFile &obj) {
@@ -470,6 +502,18 @@ section_iterator begin_sections(const ObjectFile &obj) {
 
 section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
+}
+
+template <typename T>
+std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
+    auto size = distance(begin_sections(obj), end_sections(obj));
+    std::vector<section> sections;
+    sections.reserve(size);
+    std::transform(begin_sections(obj),
+                   end_sections(obj),
+                   std::back_inserter(sections),
+                   [&obj, image_base](const SectionRef& s) { return make_section(obj.getCOFFSection(s), image_base); });
+    return sections;
 }
 #else
 using namespace llvm;
@@ -505,13 +549,14 @@ section make_section(const coff_section &s, const uint64_t image_base) {
 template <typename T>
 std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
     std::vector<section> sections;
-    for (auto it = obj.begin_sections();
-         it != obj.end_sections(); ++it) {
+    for (auto it = begin_sections(obj);
+         it != end_sections(obj); ++it) {
         const coff_section *s = obj.getCOFFSection(it);
         sections.push_back(make_section(*s, image_base));
     }
     return sections;
 }
+#endif
 
 std::vector<section> read(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
@@ -520,14 +565,19 @@ std::vector<section> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail(err);
 	return readPE(obj, hdr->ImageBase);
     } else {
-        const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        const pe32plus_header *hdr = 0;
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+        if (error_code ec = obj.getPE32PlusHeader(hdr))
+            llvm_binary_fail(ec);
+#else
+        hdr = getPE32PlusHeader(obj);
 	if (!hdr)
 	    llvm_binary_fail("Failed to extract PE32+ header");
-        std::cout << "In read(coff)... ImageBase = " << hdr->ImageBase << "\n";
+#endif
         return readPE(obj, hdr->ImageBase);
     }
 }
-#endif
+//#endif
 
 std::vector<section> read(const ObjectFile &obj) {
     auto size = distance(begin_sections(obj), end_sections(obj));
@@ -610,7 +660,6 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 	    llvm_binary_fail(ec);
         if (!hdr)
             llvm_binary_fail("PE header not found");
-        std::cout << "In image entry - returning: " << hdr->AddressOfEntryPoint + hdr->ImageBase << "\n";
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     } else {
         const pe32plus_header *hdr = 0;
@@ -622,7 +671,6 @@ uint64_t image_entry(const COFFObjectFile& obj) {
 #else
         hdr = getPE32PlusHeader(obj);
 #endif
-        std::cout << "In image entry pe32+ - returning: " << hdr->AddressOfEntryPoint + hdr->ImageBase << "\n";
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
