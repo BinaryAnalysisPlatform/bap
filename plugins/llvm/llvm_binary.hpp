@@ -540,6 +540,10 @@ section make_section(const SectionRef &sec) {
     return section{name.str(), addr, size};
 }
 
+section make_section(const coff_section &s, const uint64_t image_base) {
+    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
+}
+
 section_iterator begin_sections(const ObjectFile &obj) {
     return obj.begin_sections();
 }
@@ -548,8 +552,7 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
 }
 
-template <typename T>
-std::vector<section> readPE(const COFFObjectFile &obj, const T image_base) {
+std::vector<section> readPE(const COFFObjectFile &obj, const uint64_t image_base) {
     std::vector<section> sections;
     for (auto it = begin_sections(obj);
          it != end_sections(obj); ++it) {
@@ -571,10 +574,6 @@ std::vector<section> read(const COFFObjectFile& obj) {
 	    llvm_binary_fail("Failed to extract PE32+ header");
         return readPE(obj, hdr->ImageBase);
     }
-}
-
-section make_section(const coff_section &s, const uint64_t image_base) {
-    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
 }
 #endif
 
