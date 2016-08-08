@@ -589,9 +589,6 @@ struct image {
 };
 
 std::string image_arch(const ObjectFile& obj) {
-    //const Triple::ArchType arch_type = static_cast<Triple::ArchType>(obj.getArch());
-    //const std::string arch = Triple::getArchTypeName(arch_type);
-    //return arch;
     return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
 }
 
@@ -668,6 +665,7 @@ uint64_t image_entry(const COFFObjectFile& obj) {
         const pe32plus_header *hdr = getPE32PlusHeader(obj);
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
+}
 #endif
 
 template <typename T>
