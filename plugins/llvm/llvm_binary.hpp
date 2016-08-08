@@ -120,13 +120,6 @@ const llvm::object::pe32plus_header* getPE32PlusHeader(const llvm::object::COFFO
     }
     return NULL;
 }
-
-uint64_t getPE32PlusEntry(const llvm::object::COFFObjectFile &obj) {
-    const llvm::object::pe32plus_header *hdr = getPE32PlusHeader(obj);;
-    if (!hdr)
-        llvm_binary_fail("Failed to extract PE32+ header");
-    return hdr->AddressOfEntryPoint;
-}
 #endif
 
 } // namespace
@@ -232,10 +225,6 @@ std::vector<segment> read(const MachOObjectFile& obj) {
 }
 
 segment make_segment(const coff_section &s, uint64_t image_base) {
-    std::cout << "segment{ name=" << s.Name << ", offset=" << static_cast<uint64_t>(s.PointerToRawData) << ", address="<<
-        static_cast<uint64_t>(s.VirtualAddress + image_base) << ", size=" <<
-        static_cast<uint64_t>(s.SizeOfRawData) << "\n";
-            
     return segment{s.Name,
 	    static_cast<uint64_t>(s.PointerToRawData),
 	    static_cast<uint64_t>(s.VirtualAddress + image_base),
@@ -245,8 +234,8 @@ segment make_segment(const coff_section &s, uint64_t image_base) {
 	    static_cast<bool>((s.Characteristics) &
 			      COFF::IMAGE_SCN_MEM_WRITE),
 	    static_cast<bool>((s.Characteristics) &
-			      COFF::IMAGE_SCN_MEM_EXECUTE)};}
-
+			      COFF::IMAGE_SCN_MEM_EXECUTE)};
+}
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 std::vector<segment> read(const COFFObjectFile& obj) {
@@ -284,6 +273,8 @@ std::vector<segment> read(const COFFObjectFile& obj) {
 	return readPE(obj, hdr->ImageBase);
     } else {
         const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        if (!hdr)
+            llvm_binary_fail("Failed to extract PE32+ header");
         return readPE(obj, hdr->ImageBase);
     }
 }
@@ -308,7 +299,6 @@ struct symbol {
 symbol make_symbol(const SymbolRef& sym, uint64_t size) {
     auto name = value_or_default(sym.getName()).str();
     auto addr = value_or_default(sym.getAddress());
-    std::cout << "Symbol{ name=" << name << ", address=" << addr << ", size=" << size << "}\n";
     return symbol{name, sym.getType(), addr, size}; 
 }
 
@@ -353,19 +343,19 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
 symbol make_symbol(const SymbolRef &sym) {
     StringRef name;
     if(error_code err = sym.getName(name))
-	llvm_binary_fail(err);
+	name = StringRef("INVALID SYMBOL");
 
     kind_type kind;
     if (error_code err = sym.getType(kind))
-	llvm_binary_fail(err);
+	kind = kind_type::ST_Unknown;
 
     uint64_t addr;
     if (error_code err = sym.getAddress(addr))
-	llvm_binary_fail(err);
+	addr = 0;
 
     uint64_t size;
     if (error_code err = sym.getSize(size))
-	llvm_binary_fail(err);
+	size = 0;
     
     return symbol{name.str(), kind, addr, size};
 }
@@ -413,11 +403,11 @@ std::vector<symbol> read(const ELFObjectFile<ELFT>& obj) {
 symbol make_symbol(const SymbolRef& sym, uint64_t addr, uint64_t size) {
     StringRef name;
     if(error_code err = sym.getName(name))
-	llvm_binary_fail(err);
+	name = StringRef("INVALID SYMBOL");
 
     kind_type kind;
     if (error_code err = sym.getType(kind))
-	llvm_binary_fail(err);
+	kind = kind_type::ST_Unknown;
     return symbol{name.str(), kind, addr, size};
 }
 
@@ -485,19 +475,15 @@ struct section {
 using namespace llvm;
 using namespace llvm::object;
 
-//! rewrite using `value_or_default` function
-//! SectionRef does not implement ErrorOr<T> class 
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
-	llvm_binary_fail(ec);
+        llvm_binary_fail(ec);
 
-    std::cout << "Section{ Name=" << name.str() << ", Address=" << sec.getAddress() << ", Size=" << sec.getSize() << " }\n"; 
     return section{name.str(), sec.getAddress(), sec.getSize()};
 }
 
 section make_section(const coff_section &s, const uint64_t image_base) {
-    std::cout << "COFF Section{ Name=" << s.Name << ", Address=" << (s.VirtualAddress+image_base) << ", Size=" << s.SizeOfRawData << " }\n";
     return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
 }
 
@@ -509,7 +495,6 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 
-template <typename T>
 std::vector<section> read(const COFFObjectFile &obj) {
     auto size = distance(begin_sections(obj), end_sections(obj));
     std::vector<section> sections;
@@ -528,7 +513,7 @@ using namespace llvm::object;
 section make_section(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
-	llvm_binary_fail(ec);
+        llvm_binary_fail(ec);
 
     uint64_t addr;
     if (error_code err = sec.getAddress(addr))
@@ -604,9 +589,10 @@ struct image {
 };
 
 std::string image_arch(const ObjectFile& obj) {
-    const Triple::ArchType arch_type = static_cast<Triple::ArchType>(obj.getArch());
-    const std::string arch = Triple::getArchTypeName(arch_type);
-    return arch;
+    //const Triple::ArchType arch_type = static_cast<Triple::ArchType>(obj.getArch());
+    //const std::string arch = Triple::getArchTypeName(arch_type);
+    //return arch;
+    return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
 }
 
 template <typename ELFT>
@@ -651,6 +637,7 @@ uint64_t image_entry(const MachOObjectFile& obj) {
 }
 #endif
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 uint64_t image_entry(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
@@ -661,17 +648,27 @@ uint64_t image_entry(const COFFObjectFile& obj) {
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     } else {
         const pe32plus_header *hdr = 0;
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
         if (error_code ec = obj.getPE32PlusHeader(hdr))
             llvm_binary_fail(ec);
         if (!hdr)
             llvm_binary_fail("PE+ header not found");
-#else
-        hdr = getPE32PlusHeader(obj);
-#endif
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
+#else
+uint64_t image_entry(const COFFObjectFile& obj) {
+    if (obj.getBytesInAddress() == 4) {
+        const pe32_header* hdr = 0;
+        if (error_code ec = obj.getPE32Header(hdr))
+	    llvm_binary_fail(ec);
+        if (!hdr)
+            llvm_binary_fail("PE header not found");
+        return hdr->AddressOfEntryPoint + hdr->ImageBase;
+    } else {
+        const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        return hdr->AddressOfEntryPoint + hdr->ImageBase;
+    }
+#endif
 
 template <typename T>
 struct objectfile_image : image {
