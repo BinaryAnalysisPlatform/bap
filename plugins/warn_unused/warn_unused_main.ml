@@ -51,11 +51,11 @@ let solve prog seeds = (object
 end)#run prog seeds
 
 let marker unchecked = object
-  inherit Term.mapper
+  inherit Term.mapper as super
   method! map_term cls t =
     if Set.mem unchecked (Term.tid t)
     then Term.set_attr t Term.dead ()
-    else t
+    else super#map_term cls t
 end
 
 let printer unchecked = object

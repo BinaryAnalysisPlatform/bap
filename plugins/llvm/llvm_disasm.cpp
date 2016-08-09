@@ -13,7 +13,12 @@
 #include <llvm/Target/TargetInstrInfo.h>
 
 #include <cstring>
+#include <cstdint>
+#include <limits>
+#include <typeinfo>
 #include <iostream>
+
+
 
 #include "disasm.hpp"
 #include "llvm_disasm.h"
@@ -31,6 +36,11 @@ void initialize_llvm() {
 }
 
 using pred_fun = std::function<bool(const llvm::MCInstrDesc&)>;
+
+bool ends_with(const std::string& str, const std::string &suffix) {
+    auto n = str.length(), m = suffix.length();
+    return n >= m && str.compare(n-m,m,suffix) == 0;
+}
 
 class MemoryObject : public llvm::MemoryObject {
     memory mem;
@@ -67,7 +77,7 @@ public:
 
 class llvm_disassembler;
 
-static void output_error(const char *triple, const char *cpu,
+static void output_error(std::string triple, const char *cpu,
                          std::string error, std::string tail="") {
     std::cerr
         << "llvm_disasm: failed to create llvm_disassmbler for:\n"
@@ -95,6 +105,7 @@ static const bap_disasm_insn_p_type supported[] = {
     may_store
 };
 
+
 class llvm_disassembler : public disassembler_interface {
     shared_ptr<const llvm::MCRegisterInfo>  reg_info;
     shared_ptr<const llvm::MCInstrInfo>     ins_info;
@@ -108,6 +119,7 @@ class llvm_disassembler : public disassembler_interface {
     table ins_tab, reg_tab;
     llvm::MCInst mcinst;
     insn current;
+    std::vector<int> prefixes;
 
 
     llvm_disassembler(int debug_level)
@@ -115,18 +127,25 @@ class llvm_disassembler : public disassembler_interface {
 
 public:
     static result<llvm_disassembler>
-    create(const char *triple, const char *cpu, int debug_level) {
+    create(const char *name, const char *cpu, int debug_level) {
         std::string error;
+        llvm::Triple t(llvm::Triple::normalize(name));
+        std::string triple = t.getTriple();
 
         // returned value is not allocted
         const llvm::Target *target =
-            llvm::TargetRegistry::lookupTarget(triple, error);
+            llvm::TargetRegistry::lookupTarget(name,t,error);;
+
+        if (!target) {
+            target = llvm::TargetRegistry::lookupTarget("", t, error);
+        }
 
         if (!target) {
             if (debug_level > 0)
                 output_error(triple, cpu, "target not found", error);
             return {NULL, bap_disasm_unsupported_target};
         }
+
 
         // target's createMC* functions allocates a new instance each time:
         // cf., Target/X86/MCTargetDesc/X86MCTargetDesc.cpp
@@ -239,6 +258,7 @@ public:
         self->dis = dis;
         self->ins_tab = self->create_table(ins_info->getNumOpcodes(), ins_info);
         self->reg_tab = self->create_table(reg_info->getNumRegs(), reg_info);
+        self->init_prefixes();
         return {self, 0};
     }
 
@@ -255,34 +275,60 @@ public:
         mem.reset(new MemoryObject(m));
     }
 
-    void step(int64_t pc) {
+    bool is_prefix() const {
+        return std::binary_search(prefixes.begin(),
+                                  prefixes.end(),
+                                  current.code);
+    }
+
+    void step(uint64_t pc) {
         mcinst.clear();
-        uint64_t size = 0;
-        auto status = dis->getInstruction
-            (mcinst, size, *mem, pc,
-             (debug_level > 2 ? llvm::errs() : llvm::nulls()),
-             llvm::nulls());
+        auto base = mem->getBase();
 
-        int off = (int)(pc - mem->getBase());
-
-        if (off < mem->getExtent() && size == 0) {
-            size += 1;
-        }
-
-        location loc = {off, (int)size};
-
-        if (status == llvm::MCDisassembler::Success) {
-            if (debug_level > 1) {
-                std::cerr << "read: '" << get_asm() << "'\n";
-            }
-            current = valid_insn(loc);
+        if (pc < base) {
+            current = invalid_insn(location{0,1});
+        } else if (pc > base + mem->getExtent()) {
+            auto off = static_cast<int>(mem->getExtent() - 1);
+            current = invalid_insn(location{off,1});
         } else {
-            if (debug_level > 0)
-                std::cerr << "failed to decode insn at"
-                          << " pc " << pc
-                          << " offset " << off
-                          << " skipping " << size << " bytes\n";
-            current = invalid_insn(loc);
+            uint64_t size = 0;
+            auto status = dis->getInstruction
+                (mcinst, size, *mem, pc,
+                 (debug_level > 2 ? llvm::errs() : llvm::nulls()),
+                 llvm::nulls());
+
+            location loc = {
+                static_cast<int>(pc - base),
+                static_cast<int>(size)
+            };
+
+            if (status == llvm::MCDisassembler::Success) {
+                if (debug_level > 1) {
+                    std::cerr << "read: '" << get_asm() << "'\n";
+                }
+                current = valid_insn(loc);
+                if (is_prefix() && size != 0) {
+                    step(pc+size);
+
+                    // a standalone prefix is not a valid instruction
+                    if (current.loc.len == 0) {
+                        current = invalid_insn(loc);
+                    }
+
+                    // a prefix to invalid instruction is invalid instruction
+                    if (current.code != 0) {
+                        location ext = {loc.off, loc.len + current.loc.len};
+                        current = valid_insn(ext);
+                    }
+                }
+            } else {
+                if (debug_level > 0)
+                    std::cerr << "failed to decode insn at"
+                              << " pc " << pc
+                              << " offset " << loc.off
+                              << " skipping " << loc.len << " bytes\n";
+                current = invalid_insn(loc);
+            }
         }
     }
 
@@ -303,10 +349,10 @@ public:
 
     // invalid instruction doesn't satisfy any predicate except is_invalid.
     bool satisfies(bap_disasm_insn_p_type p) const {
-        bool current_invalid = current.code == 0;
+        auto current_is_invalid = current.code == 0;
         if (p == is_invalid) {
-            return current_invalid;
-        } else if (current_invalid) {
+            return current_is_invalid;
+        } else if (current_is_invalid) {
             return false;
         } else if (p == is_true) {
             return true;
@@ -329,6 +375,7 @@ public:
         }
         return false;
     }
+
 
 private:
     insn valid_insn(location loc) const {
@@ -430,6 +477,13 @@ private:
         return {p, size};
     }
 
+    void init_prefixes() {
+        for (int i = 0; i < ins_info->getNumOpcodes(); i++) {
+            if (ends_with(ins_info->getName(i), "_PREFIX")) {
+                prefixes.push_back(i);
+            }
+        }
+    }
 };
 
 struct create_llvm_disassembler : disasm_factory {

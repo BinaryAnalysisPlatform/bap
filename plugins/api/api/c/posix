@@ -9,7 +9,7 @@ typedef int ldiv_t;
 typedef int lldiv_t;
 typedef int wchar_t;
 
-int main(int argc, const char *argv[]);
+int main(int argc, const char **argv);
 
 // stdlib.h
 

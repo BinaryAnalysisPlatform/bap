@@ -35,7 +35,7 @@ struct operand;
 // to disassembler, that involves the instruction are undefined.
 struct disassembler_interface {
     // disassemble one instruction, starting from addres \a pc.
-    virtual void step(int64_t pc) = 0;
+    virtual void step(uint64_t pc) = 0;
 
     // directs disassembler to a specifed memory region
     virtual void set_memory(memory) = 0;
@@ -97,7 +97,7 @@ struct insn {
 
 struct memory {
     const char *data;
-    int64_t     base;
+    uint64_t     base;
     location    loc;
 };
 

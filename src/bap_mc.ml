@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Or_error
 open Format
 open Bap.Std
 open Bap_plugins.Std
@@ -18,11 +17,9 @@ module Program(Conf : Mc_options.Provider) = struct
   open Conf
   module Dis = Disasm_expert.Basic
 
-  let no_disassembly state (start_addr, boff) =
-    let mem = Dis.memory state in
-    let addr = Addr.((Dis.addr state) - start_addr) in
-    let stop = (Addr.to_int addr |> ok_exn) in
-    raise (Bad_insn (mem, boff, stop))
+  let bad_insn addr state mem start =
+    let stop = Addr.(Dis.addr state - addr |> to_int |> ok_exn) in
+    raise (Bad_insn (Dis.memory state, start, stop))
 
   let escape_0x =
     String.substr_replace_all ~pattern:"0x" ~with_:"\\x"
@@ -69,7 +66,7 @@ module Program(Conf : Mc_options.Provider) = struct
   let print_insn_size should_print mem =
     if should_print then
       let len = Memory.length mem in
-      printf "%#x\n" len
+      printf "%#x@\n" len
 
   let print_insn insn_formats insn =
     let insn = Insn.of_basic insn in
@@ -95,7 +92,7 @@ module Program(Conf : Mc_options.Provider) = struct
         printf "%s" @@ String.concat ~sep:"\n"
           (List.map bs ~f:(Blk.to_bytes ~fmt)))
 
-  let make_print arch mem insn =
+  let print arch mem insn =
     let module Target = (val target_of_arch arch) in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
@@ -103,47 +100,32 @@ module Program(Conf : Mc_options.Provider) = struct
     print_bir Target.lift mem insn;
     if options.show_kinds then print_kinds insn
 
-  let check max_insn counter = match max_insn with
-    | None -> true
-    | Some max_insn -> counter < max_insn
-
-  let step print state mem insn (addr, counter) =
-    if (check options.max_insn counter) then (
-      print mem insn;
-      Dis.step state (Dis.addr state, counter+1)
-    ) else Dis.stop state (Dis.addr state, counter)
-
   let main () =
     let arch = match Arch.of_string options.arch with
       | None -> raise Unknown_arch
       | Some arch -> arch in
-    let extension = match Arch.addr_size arch with
+    let size = match Arch.addr_size arch with
       | `r32 -> ":32"
       | `r64 -> ":64" in
-    let addr = Addr.of_string (options.addr ^ extension) in
-    let print =
-      make_print arch in
+    let addr = Addr.of_string (options.addr ^ size) in
     let input = read_input options.src in
+    let mem = create_memory arch input addr in
     let backend = options.disassembler in
     Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
-        let invalid state mem pos = no_disassembly state pos in
-        let pos, dis_insn_count  =
-          Dis.run dis ~return:(fun x -> x)
-            ~stop_on:[`Valid] ~invalid
-            ~hit:(step print) ~init:(addr, 0)
-            (create_memory arch input addr) in
-        let bytes_disassembled = Addr.(pos - addr) |> Addr.to_int |> ok_exn in
-        let len = String.length input in
-        match options.max_insn with
-        | None ->
-          if bytes_disassembled <> len then
-            raise (Trailing_data (len - bytes_disassembled));
-          return 0
-        | _ -> return 0)
+        let bytes = Dis.run dis mem ~return:ident ~init:0
+            ~stop_on:[`Valid] ~invalid:(bad_insn addr)
+            ~hit:(fun state mem insn bytes ->
+                print arch mem insn;
+                if options.only_one then Dis.stop state bytes
+                else Dis.step state (bytes + Memory.length mem)) in
+        match String.length input - bytes with
+        | 0 -> Or_error.return ()
+        | _ when options.only_one -> Or_error.return ()
+        | n -> raise (Trailing_data n))
 end
 
 let format_info get_fmts =
-  get_fmts () |> List.map  ~f:fst3 |> String.concat ~sep:", "
+  get_fmts () |> List.map ~f:fst3 |> String.concat ~sep:", "
 
 let print_data_formats data_type =
   let print = Bap_format_printer.run `writers in
@@ -203,19 +185,12 @@ module Cmdline = struct
     Config.(param_all string "show-bir" ~as_flag:"pretty" ~doc)
 
   let addr =
-    let doc = "Specify an address of first byte, as though \
-               the instructions occur at a certain address, \
-               and accordingly interpreted. Be careful that \
-               you appropriately use 0x prefix for hex and \
-               leave it without for decimal." in
+    let doc = "Specify an address of first byte" in
     Config.(param string "addr" ~default:"0x0" ~doc)
 
-  let max_insns =
-    let doc = "Specify a number of instructions to disassemble.\
-               Good for ensuring that only one instruction is ever\
-               lifted or disassembled from a byte blob. Default is\
-               all" in
-    Config.(param (some int) "max-insns" ~doc)
+  let only_one =
+    let doc = "Stop after the first instruction is decoded" in
+    Config.(flag "only-one" ~doc)
 
   let create a b c d e f g h i j =
     Mc_options.Fields.create a b c d e f g h i j
@@ -264,10 +239,10 @@ module Cmdline = struct
         match !list_formats with
         | Some typ -> print_data_formats typ; exit 0
         | None ->
-          let args = create !disassembler !src !addr !max_insns
+          let args = create !disassembler !src !addr !only_one
               !arch !show_insn_size !insn_formats !bil_formats
               !bir_formats !show_kinds in
-          match Ok args >>= start with
+          match start args with
           | Ok _ -> exit 0
           | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)
       ));

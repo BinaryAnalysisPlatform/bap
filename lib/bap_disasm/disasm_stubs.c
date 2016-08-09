@@ -4,6 +4,8 @@
 #include <caml/alloc.h>
 #include <assert.h>
 
+#include <stdint.h>
+
 #include "disasm.h"
 
 
