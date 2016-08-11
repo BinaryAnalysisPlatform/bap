@@ -23,6 +23,7 @@ using std::move;
 using std::error_code;
 using std::distance;
 
+// TODO: move llvm_binary_fail function out of LLVM version specific files
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
 LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const error_code ec) {
@@ -44,16 +45,7 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 namespace {
 using namespace llvm;
 using namespace llvm::object;
-/*
-template<typename Derived, typename Base>
-std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
-    if (Derived* d = llvm::dyn_cast<Derived>(ptr.get())) {
-	ptr.release();
-	return std::unique_ptr<Derived>(d);
-    }
-    return std::unique_ptr<Derived>(nullptr);
-}
-*/
+
 template <typename T>
 T value_or_default(const llvm::ErrorOr<T> &e, T def=T()) {
     if (e) return e.get();
@@ -63,23 +55,6 @@ T value_or_default(const llvm::ErrorOr<T> &e, T def=T()) {
 uint64_t getImageBase(const COFFObjectFile &obj) {
     return obj.getImageBase();
 }
-
-/* LLVM 3.4
-/ Needed: getPE32PlusHeader(const COFFObjectFile &obj)
-uint64_t getImageBase(const COFFObjectFile &obj) {
-    if (obj.getBytesInAddress() == 4) {
-        const pe32_header *hdr;
-        if (error_code ec = obj.getPE32Header(hdr))
-            llvm_binary_fail(ec);
-        return hdr->ImageBase;
-    } else {
-        const pe32plus_header *hdr = getPE32PlusHeader(obj);
-        if (!hdr)
-            llvm_binary_fail("Failed to extract PE32+ header");
-        return hdr->ImageBase;
-    }
-}
-*/
 
 } // namespace
 
@@ -116,7 +91,6 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj
 }
 
 std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile& obj) {
-    std::cout << "In COFFObjectFile read function for LLVM 3.8 code\n";
     std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
         auto sym = obj.getCOFFSymbol(*it);

@@ -26,4 +26,6 @@ Library llvm_plugin
                  llvm_binary_stubs.c,
                  llvm_binary_stubs.h,
                  llvm_binary.c,
-                 llvm_binary.h
+                 llvm_binary.h,
+                 llvm_binary_38.c,
+                 llvm_binary_38.h
