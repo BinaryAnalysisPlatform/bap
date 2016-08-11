@@ -24,36 +24,11 @@
 #error LLVM version not supported.
 #endif
 
-using std::move;
-
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-using std::error_code;
 using std::distance;
-#else
-using llvm::error_code;
 #endif
 
-/*
-extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
-
-LLVM_ATTRIBUTE_NORETURN void llvm_binary_fail (const error_code ec) {
-    llvm_binary_fail(ec.message().c_str());
-}
-*/
-/*
-namespace llvm { namespace object {
-
-template <typename T>
-content_iterator<T>& operator++(content_iterator<T>& a) {
-    error_code ec;
-    a.increment(ec);
-    //if(ec) llvm_binary_fail(ec);
-    if (ec) std::cerr << ec << "\n";
-    return a;
-}
-
-}} //namespace llvm::object
-*/
+using std::move;
 
 namespace {
 
@@ -108,7 +83,7 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
     auto begin = elf_header_begin(obj.getELFFile());
     auto end = elf_header_end(obj.getELFFile());
     std::vector<segment> segments;
-    segments.reserve(std::distance(begin, end));
+    segments.reserve(distance(begin, end));
     auto it = begin;
     for (int pos = 0; it != end; ++it, ++pos) {
         if (it -> p_type == ELF::PT_LOAD) {
@@ -181,7 +156,6 @@ std::vector<symbol> read(const ObjectFile &obj) {
     return symbols;
 }
 
-/*
 std::vector<symbol> read(const COFFObjectFile &obj) {
     std::vector<symbol> symbols;
     auto symbol_sizes = getSymbolSizes(obj);
@@ -189,7 +163,6 @@ std::vector<symbol> read(const COFFObjectFile &obj) {
         symbols.push_back(make_symbol(it.first, it.second));
     return symbols;
 }
-*/
 
 } //namespace sym
 
@@ -204,7 +177,6 @@ struct section {
 };
 
 section make_section(const SectionRef &sec) {
-    // There is probably a more efficient way to do this
     auto name = getName(sec);
     auto addr = getAddr(sec);
     auto size = getSize(sec);
@@ -213,7 +185,6 @@ section make_section(const SectionRef &sec) {
 }
 
 section make_section(const coff_section &s, const uint64_t image_base) {
-    // There is probably a more efficient way to do this
     auto name = getName(s);
     auto addr = getAddr(s);
     auto size = getSize(s);
@@ -236,6 +207,7 @@ std::vector<section> read(const COFFObjectFile &obj) {
     std::vector<section> sections;
     auto size = distance(begin_sections(obj), end_sections(obj));
     uint64_t image_base = getImageBase(obj);
+// TODO
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     std::cout << "In 3.8 section read of COFFObjectFile...\n";
     sections.reserve(size);
@@ -361,8 +333,6 @@ image* create(std::unique_ptr<object::Binary> binary) {
 }
 
 image* create(const char* data, std::size_t size) {
-    //auto binary = get_binary(data, size);
-    //return create(move(binary));
     return create(move(get_binary(data, size)));
 }
 
