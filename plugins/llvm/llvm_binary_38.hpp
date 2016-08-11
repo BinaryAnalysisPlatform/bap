@@ -16,23 +16,12 @@
 #include <llvm/Support/Compiler.h>
 #include <llvm/Config/llvm-config.h>
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/Object/SymbolSize.h>
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
-#include <llvm/ADT/OwningPtr.h>
-#else
-#error LLVM version not supported.
-#endif
 
 using std::move;
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 using std::error_code;
 using std::distance;
-#else
-using llvm::error_code;
-#endif
 
 extern "C" void llvm_binary_fail(const char*) LLVM_ATTRIBUTE_NORETURN ;
 
@@ -52,26 +41,49 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 }} //namespace llvm::object
 
-
 namespace {
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+using namespace llvm;
+using namespace llvm::object;
+/*
+template<typename Derived, typename Base>
+std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
+    if (Derived* d = llvm::dyn_cast<Derived>(ptr.get())) {
+	ptr.release();
+	return std::unique_ptr<Derived>(d);
+    }
+    return std::unique_ptr<Derived>(nullptr);
+}
+*/
 template <typename T>
 T value_or_default(const llvm::ErrorOr<T> &e, T def=T()) {
     if (e) return e.get();
     return def;
 }
-#else
 
-#endif
+uint64_t getImageBase(const COFFObjectFile &obj) {
+    return obj.getImageBase();
+}
+
+/* LLVM 3.4
+/ Needed: getPE32PlusHeader(const COFFObjectFile &obj)
+uint64_t getImageBase(const COFFObjectFile &obj) {
+    if (obj.getBytesInAddress() == 4) {
+        const pe32_header *hdr;
+        if (error_code ec = obj.getPE32Header(hdr))
+            llvm_binary_fail(ec);
+        return hdr->ImageBase;
+    } else {
+        const pe32plus_header *hdr = getPE32PlusHeader(obj);
+        if (!hdr)
+            llvm_binary_fail("Failed to extract PE32+ header");
+        return hdr->ImageBase;
+    }
+}
+*/
 
 } // namespace
 
 namespace seg {
-using namespace llvm;
-using namespace llvm::object;
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 using namespace llvm;
 using namespace llvm::object;
 
@@ -92,27 +104,6 @@ iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachO
 ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
     return obj.sections();
 }
-#else
-
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-std::vector<segment> read(const COFFObjectFile& obj) {
-    std::vector<segment> segments;
-    uint64_t image_base = obj.getImageBase();
-    for (auto it : sections(obj)) {
-        const coff_section *s = obj.getCOFFSection(it);
-        uint64_t c = static_cast<uint64_t>(s->Characteristics);
-        if ( c & COFF::IMAGE_SCN_CNT_CODE ||
-             c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
-             c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(make_segment(*s, image_base));
-    }
-    return segments;
-}
-#else
-
-#endif
 
 } //namespace seg
 
@@ -120,23 +111,13 @@ namespace sym {
 using namespace llvm;
 using namespace llvm::object;
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-symbol make_symbol(const SymbolRef& sym, uint64_t size) {
-    auto name = value_or_default(sym.getName()).str();
-    auto addr = value_or_default(sym.getAddress());
-    return symbol{name, sym.getType(), addr, size}; 
+std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj) {
+    return computeSymbolSizes(obj);
 }
 
-std::vector<symbol> read(const ObjectFile& obj) {
-    std::vector<symbol> symbols;
-    auto symbol_sizes = computeSymbolSizes(obj);
-    for (auto s : symbol_sizes) 
-	symbols.push_back(make_symbol(s.first, s.second));
-    return symbols;
-}
-
-std::vector<symbol> read(const COFFObjectFile& obj) {
-    std::vector<symbol> symbols;
+std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile& obj) {
+    std::cout << "In COFFObjectFile read function for LLVM 3.8 code\n";
+    std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
         auto sym = obj.getCOFFSymbol(*it);
         
@@ -160,13 +141,10 @@ std::vector<symbol> read(const COFFObjectFile& obj) {
             }
         }
         
-        symbols.push_back(make_symbol(*it, size));
+        symbol_sizes.push_back(std::make_pair(*it, size));
     }
-    return symbols;
+    return symbol_sizes;
 }
-#else
-
-#endif
 
 } //namespace sym
 
@@ -174,20 +152,32 @@ namespace sec {
 using namespace llvm;
 using namespace llvm::object;
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-using namespace llvm;
-using namespace llvm::object;
-
-section make_section(const SectionRef &sec) {
+std::string getName(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
         llvm_binary_fail(ec);
 
-    return section{name.str(), sec.getAddress(), sec.getSize()};
+    return name.str();
 }
 
-section make_section(const coff_section &s, const uint64_t image_base) {
-    return section{s.Name, s.VirtualAddress + image_base, s.SizeOfRawData};
+uint64_t getAddr(const SectionRef &sec) {
+    return sec.getAddress();
+}
+
+uint64_t getSize(const SectionRef &sec) {
+    return sec.getSize();
+}
+
+std::string getName(const coff_section &s) {
+    return s.Name;
+}
+
+uint64_t getAddr(const coff_section &s) {
+    return s.VirtualAddress;
+}
+
+uint64_t getSize(const coff_section &s) {
+    return s.SizeOfRawData;
 }
 
 section_iterator begin_sections(const ObjectFile &obj) {
@@ -198,29 +188,13 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 
-std::vector<section> read(const COFFObjectFile &obj) {
-    auto size = distance(begin_sections(obj), end_sections(obj));
-    std::vector<section> sections;
-    uint64_t image_base = obj.getImageBase();
-    sections.reserve(size);
-    std::transform(begin_sections(obj),
-                   end_sections(obj),
-                   std::back_inserter(sections),
-                   [&obj, image_base](const SectionRef& s) { return make_section(*obj.getCOFFSection(s), image_base); });
-    return sections;
-}
-#else
-
-#endif
-
 } //namespace sec
 
 namespace img {
 using namespace llvm;
 using namespace llvm::object;
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-uint64_t image_entry(const MachOObjectFile& obj) {
+uint64_t image_entry_macho(const MachOObjectFile& obj) {
     typedef MachOObjectFile::LoadCommandInfo command_info;
     auto it =
         std::find_if(obj.begin_load_commands(), obj.end_load_commands(),
@@ -235,12 +209,8 @@ uint64_t image_entry(const MachOObjectFile& obj) {
         llvm_binary_fail("LC_MAIN not found, binary version < 10.8");
     }
 }
-#else
 
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-uint64_t image_entry(const COFFObjectFile& obj) {
+uint64_t image_entry_coff(const COFFObjectFile& obj) {
     if (obj.getBytesInAddress() == 4) {
         const pe32_header* hdr = 0;
         if (error_code ec = obj.getPE32Header(hdr))
@@ -257,12 +227,8 @@ uint64_t image_entry(const COFFObjectFile& obj) {
         return hdr->AddressOfEntryPoint + hdr->ImageBase;
     }
 }
-#else
 
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-image* create(const char* data, std::size_t size) {
+std::unique_ptr<object::Binary> get_binary(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
@@ -270,12 +236,9 @@ image* create(const char* data, std::size_t size) {
 	std::cerr << ec << "\n";
         return NULL;    
     }
-    return create(move(*binary));
+    return move(*binary);
 }
-#else
-
-#endif
 
 } //namespace img
 
-#endif //LLVM_BINARY_HPP
+#endif //LLVM_BINARY_38_HPP
