@@ -16,10 +16,6 @@
 #include <typeinfo>
 #include <iostream>
 
-#define LLVM_VERSION_MAJOR 3
-#define LLVM_VERSION_MINOR 8
-
-
 #include "disasm.hpp"
 #include "llvm_disasm.h"
 

@@ -40,6 +40,8 @@ content_iterator<T>& operator++(content_iterator<T>& a) {
 
 
 namespace {
+using namespace llvm;
+using namespace llvm::object;
 
 typedef llvm::object::MachOObjectFile macho;
 typedef macho::LoadCommandInfo command_info;
@@ -144,7 +146,7 @@ std::string name_or_default(const SymbolRef &sym) {
     return name.str();
 }
 
-std::string addr_or_default(const SymbolRef &sym) {
+uint64_t addr_or_default(const SymbolRef &sym) {
     uint64_t addr;
     if (error_code err = sym.getAddress(addr))
 	addr = 0;
@@ -162,13 +164,18 @@ kind_type get_type(const SymbolRef &sym) {
 
 uint64_t addr_or_default(const SymbolRef &sym, const COFFObjectFile &obj) {
     uint64_t image_base = getImageBase(obj);
-    auto sym = getImageBase(obj);
+
+    auto it = symbol_iterator(sym);
+    auto coff_sym = obj.getCOFFSymbol(it);
     
     const coff_section *sec = nullptr;
-    if (sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
+    if (coff_sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
 	return 0;
 
-    auto addr = sec->VirtualAddress + image_base + sym->Value;
+    if (error_code ec = obj.getSection(coff_sym->SectionNumber, sec))
+	llvm_binary_fail(ec);
+
+    auto addr = sec->VirtualAddress + image_base + coff_sym->Value;
     return addr;
 }
 
@@ -211,8 +218,7 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile&
 	    }
 	}
 
-	auto addr = sec->VirtualAddress + image_base + sym->Value;
-	symbols.push_back((std::make_pair(*it, size));
+	symbol_sizes.push_back(std::make_pair(*it, size));
     }
     return symbol_sizes;
 }
@@ -220,19 +226,18 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile&
 std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj) {
     int size = distance(obj.begin_symbols(),
 			obj.end_symbols());
-    std::vector<symbol> symbol_sizes;
+    std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     symbol_sizes.reserve(size);
 
-    /*
-    for (auto it = obj.begin_symbols(); it != end_symbols(); ++it) {
-	symbol_sizes.push_back(std::make_pair(it, get_size(it));
+    for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
+	symbol_sizes.push_back(std::make_pair(*it, get_size(*it)));
     }
-    */
-
+    
+    /*
     getSymbolSizes(obj.begin_symbols, 
 		   obj.end_symbols, 
 		   symbol_sizes);
-
+    */
     return symbol_sizes;
 }
 
@@ -245,13 +250,13 @@ OutputIterator getSymbolSizes(symbol_iterator begin,
 }
 
 template <typename ELFT>
-std::vector<symbol> getSymbolSizes(const ELFObjectFile<ELFT>& obj) {
+std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ELFObjectFile<ELFT>& obj) {
     int size1 = distance(obj.begin_symbols(),
 			 obj.end_symbols());
     int size2 = distance(obj.begin_dynamic_symbols(),
 			 obj.end_dynamic_symbols());
 
-    std::vector<symbol> symbol_sizes;
+    std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     symbol_sizes.reserve(size1+size2);
 
     auto it = getSymbolSizes(obj.begin_symbols(),
@@ -264,19 +269,11 @@ std::vector<symbol> getSymbolSizes(const ELFObjectFile<ELFT>& obj) {
     return symbol_sizes;
 }
 
-#endif
-
 } //namespace sym
 
 namespace sec {
 using namespace llvm;
 using namespace llvm::object;
-
-struct section {
-    std::string name;
-    uint64_t addr;
-    uint64_t size;
-};
 
 std::string getName(const SectionRef &sec) {
     StringRef name;
@@ -375,4 +372,4 @@ std::unique_ptr<object::Binary> get_binary(const char* data, std::size_t size) {
 
 } //namespace img
 
-#endif //LLVM_BINARY_HPP
+#endif //LLVM_BINARY_34_HPP

@@ -83,7 +83,7 @@ std::vector<segment> read(const ELFObjectFile<T>& obj) {
     auto begin = elf_header_begin(obj.getELFFile());
     auto end = elf_header_end(obj.getELFFile());
     std::vector<segment> segments;
-    segments.reserve(distance(begin, end));
+    segments.reserve(std::distance(begin, end));
     auto it = begin;
     for (int pos = 0; it != end; ++it, ++pos) {
         if (it -> p_type == ELF::PT_LOAD) {
