@@ -16,6 +16,8 @@
 #include <typeinfo>
 #include <iostream>
 
+#define LLVM_VERSION_MAJOR 3
+#define LLVM_VERSION_MINOR 8
 
 
 #include "disasm.hpp"
@@ -67,6 +69,14 @@ bool ends_with(const std::string& str, const std::string &suffix) {
     auto n = str.length(), m = suffix.length();
     return n >= m && str.compare(n-m,m,suffix) == 0;
 }
+
+
+//! Here is how we will handle the memory representation differences
+//! in two versions. We will use `bap::memory` as data
+//! representation. Both versions will provide a function `view(mem)`
+//! that will return an object, that is expected by a
+//! disassembler. This will allow us to handle all the checks
+//! identically on both versions.
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 class MemoryObject {
@@ -345,6 +355,7 @@ public:
         return reg_tab;
     }
 
+    //! this member function will not be needed anymore
     void set_memory(memory m) {
         mem.reset(new MemoryObject(m));
     }
@@ -364,11 +375,11 @@ public:
         return *mem;
     }
 #endif
-    
+
     void step(uint64_t pc) {
         mcinst.clear();
         auto base = mem->getBase();
-        
+
         if (pc < base) {
             current = invalid_insn(location{0,1});
         } else if (pc > base + mem->getExtent()) {
@@ -386,7 +397,7 @@ public:
                      (debug_level > 2 ? llvm::errs() : llvm::nulls()),
                      llvm::nulls());
             }
-            
+
             location loc = {
                 static_cast<int>(pc - base),
                 static_cast<int>(size)
@@ -421,7 +432,7 @@ public:
             }
         }
     }
-    
+
     insn get_insn() const {
         return current;
     }

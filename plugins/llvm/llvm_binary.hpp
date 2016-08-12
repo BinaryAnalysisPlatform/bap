@@ -142,10 +142,17 @@ struct symbol {
     uint64_t size;
 };
 
-symbol make_symbol(const SymbolRef& sym, uint64_t size) {
-    auto name = value_or_default(sym.getName()).str();
-    auto addr = value_or_default(sym.getAddress());
-    return symbol{name, sym.getType(), addr, size}; 
+symbol make_symbol(const SymbolRef &sym, uint64_t size) {
+    auto name = name_or_default(sym);
+    auto addr = addr_or_default(sym);
+    auto type = get_type(sym);
+    return symbol{name, type, addr, size}; 
+}
+
+symbol make_symbol(const SymbolRef &sym, uint64_t size, uint64_t addr) {
+    auto name = name_or_default(sym);
+    auto type = get_type(sym);
+    return symbol{name, type, addr, size}; 
 }
 
 std::vector<symbol> read(const ObjectFile &obj) {
@@ -157,6 +164,17 @@ std::vector<symbol> read(const ObjectFile &obj) {
 }
 
 std::vector<symbol> read(const COFFObjectFile &obj) {
+    std::vector<symbol> symbols;
+    auto symbol_sizes = getSymbolSizes(obj);
+    for (auto it : symbol_sizes) {
+        uint64_t addr = addr_or_default(it.first, obj);
+        symbols.push_back(make_symbol(it.first, it.second, addr));
+    }
+    return symbols;
+}
+
+template <typename ELFT>
+std::vector<symbol> read(const ELFObjectFile<ELFT> &obj) {
     std::vector<symbol> symbols;
     auto symbol_sizes = getSymbolSizes(obj);
     for (auto it : symbol_sizes)
@@ -191,6 +209,38 @@ section make_section(const coff_section &s, const uint64_t image_base) {
 
     return section{name, addr + image_base, size};
 }
+
+//! I would suggest to use iterator_range instead of `begin_things` and
+//! `end_things` pair of functions. And also its ok to simplify the
+//! function to the following:
+//!
+//! template <typename T>
+//! std::vector<section> read(const T &obj) {
+//!     std::vector<section> sections;
+//!     for (auto sec : sections(obj)) {
+//!         sections.push_back(make_section(sec));
+//!     }
+//!     return sections;
+//! }
+//!
+//! There is no need here to reserve here or to complicate code with
+//! the `std::transform`.
+//!
+//! This will define a read function for any type `T` for which the
+//! following is defined:
+//! - sections(obj) returning an object iterable over type `S`;
+//! - make_section(sec) returning an object of type section,
+//! where `obj` is a value of type `T` and `sec` is a value of type
+//! `S`.
+//!
+//! This mimicks, to some extent, type classes. And this is how I plan
+//! to handle support for multiple versions. We will have very generic
+//! functions, defined over a set of types which must implement some
+//! interface. And the implementation will be injected by a particular
+//! module that implements support for a given version. But later
+//! about this.
+
+
 
 std::vector<section> read(const ObjectFile &obj) {
     auto size = distance(begin_sections(obj), end_sections(obj));

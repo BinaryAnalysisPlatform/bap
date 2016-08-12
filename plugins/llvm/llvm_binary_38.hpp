@@ -52,6 +52,10 @@ T value_or_default(const llvm::ErrorOr<T> &e, T def=T()) {
     return def;
 }
 
+iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachOObjectFile &obj) {
+    return obj.load_commands();
+}
+
 uint64_t getImageBase(const COFFObjectFile &obj) {
     return obj.getImageBase();
 }
@@ -72,10 +76,6 @@ const typename ELFFile<ELFT>::Elf_Phdr* elf_header_end(const ELFFile<ELFT> *elf)
     return elf->program_header_end();
 }
 
-iterator_range<MachOObjectFile::load_command_iterator> load_commands(const MachOObjectFile &obj) {
-    return obj.load_commands();
-}
-
 ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
     return obj.sections();
 }
@@ -85,6 +85,24 @@ ObjectFile::section_iterator_range sections(const COFFObjectFile &obj) {
 namespace sym {
 using namespace llvm;
 using namespace llvm::object;
+
+typedef SymbolRef::Type kind_type;
+
+std::string name_or_default(const SymbolRef &sym) {
+    return value_or_default(sym.getName()).str();
+}
+
+uint64_t addr_or_default(const SymbolRef &sym) {
+    return value_or_default(sym.getAddress());
+}
+
+uint64_t addr_or_default(const SymbolRef &sym, const COFFObjectFile &obj) {
+    return value_or_default(sym.getAddress());
+}
+
+kind_type get_type(const SymbolRef &sym) {
+    return sym.getType();
+}
 
 std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj) {
     return computeSymbolSizes(obj);
