@@ -233,11 +233,6 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj
 	symbol_sizes.push_back(std::make_pair(*it, get_size(*it)));
     }
     
-    /*
-    getSymbolSizes(obj.begin_symbols, 
-		   obj.end_symbols, 
-		   symbol_sizes);
-    */
     return symbol_sizes;
 }
 
@@ -317,6 +312,11 @@ section_iterator begin_sections(const ObjectFile &obj) {
 
 section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
+}
+
+const coff_section* 
+getCOFFSection(const COFFObjectFile &obj, section_iterator it) {
+    return obj.getCOFFSection(it);
 }
 
 } //namespace sec

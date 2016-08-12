@@ -180,6 +180,11 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 
+const coff_section*
+getCOFFSection(const COFFObjectFile &obj, section_iterator it) {
+    return obj.getCOFFSection(*it);
+}
+
 } //namespace sec
 
 namespace img {

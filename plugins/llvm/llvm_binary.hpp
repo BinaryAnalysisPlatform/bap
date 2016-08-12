@@ -257,21 +257,10 @@ std::vector<section> read(const COFFObjectFile &obj) {
     std::vector<section> sections;
     auto size = distance(begin_sections(obj), end_sections(obj));
     uint64_t image_base = getImageBase(obj);
-// TODO
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-    std::cout << "In 3.8 section read of COFFObjectFile...\n";
-    sections.reserve(size);
-    std::transform(begin_sections(obj),
-                   end_sections(obj),
-                   std::back_inserter(sections),
-                   [&obj, image_base](const SectionRef& s) { return make_section(*obj.getCOFFSection(s), image_base); });
-#else
-    for (auto it = begin_sections(obj);
-         it != end_sections(obj); ++it) {
-        const coff_section *s = obj.getCOFFSection(it);
-        sections.push_back(make_section(*s, image_base));
+    for (auto it = begin_sections(obj); it != end_sections(obj); ++it) {
+	const coff_section *s = getCOFFSection(obj, it);
+	sections.push_back(make_section(*s, image_base));
     }
-#endif
     return sections;
 }
 
