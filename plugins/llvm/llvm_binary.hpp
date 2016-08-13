@@ -210,37 +210,13 @@ section make_section(const coff_section &s, const uint64_t image_base) {
     return section{name, addr + image_base, size};
 }
 
-//! I would suggest to use iterator_range instead of `begin_things` and
-//! `end_things` pair of functions. And also its ok to simplify the
-//! function to the following:
-//!
-//! template <typename T>
-//! std::vector<section> read(const T &obj) {
-//!     std::vector<section> sections;
-//!     for (auto sec : sections(obj)) {
-//!         sections.push_back(make_section(sec));
-//!     }
-//!     return sections;
-//! }
-//!
-//! There is no need here to reserve here or to complicate code with
-//! the `std::transform`.
-//!
-//! This will define a read function for any type `T` for which the
-//! following is defined:
-//! - sections(obj) returning an object iterable over type `S`;
-//! - make_section(sec) returning an object of type section,
-//! where `obj` is a value of type `T` and `sec` is a value of type
-//! `S`.
-//!
-//! This mimicks, to some extent, type classes. And this is how I plan
-//! to handle support for multiple versions. We will have very generic
-//! functions, defined over a set of types which must implement some
-//! interface. And the implementation will be injected by a particular
-//! module that implements support for a given version. But later
-//! about this.
-
-
+std::vector<section> read(const ObjectFile &obj) {
+    std::vector<section> sections;
+    for (auto sec : sections(obj)) {
+        sections.push_back(make_section(sec));
+    }
+    return sections;
+}
 
 std::vector<section> read(const ObjectFile &obj) {
     auto size = distance(begin_sections(obj), end_sections(obj));
