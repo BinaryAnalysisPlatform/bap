@@ -212,30 +212,17 @@ section make_section(const coff_section &s, const uint64_t image_base) {
 
 std::vector<section> read(const ObjectFile &obj) {
     std::vector<section> sections;
-    for (auto sec : sections(obj)) {
+    for (auto sec : obj_sections(obj))
         sections.push_back(make_section(sec));
-    }
-    return sections;
-}
-
-std::vector<section> read(const ObjectFile &obj) {
-    auto size = distance(begin_sections(obj), end_sections(obj));
-    std::vector<section> sections;
-    sections.reserve(size);
-    std::transform(begin_sections(obj),
-                   end_sections(obj),
-                   std::back_inserter(sections),
-                   [](const SectionRef& s) { return make_section(s); });
     return sections;
 }
 
 std::vector<section> read(const COFFObjectFile &obj) {
     std::vector<section> sections;
-    auto size = distance(begin_sections(obj), end_sections(obj));
     uint64_t image_base = getImageBase(obj);
-    for (auto it = begin_sections(obj); it != end_sections(obj); ++it) {
-	const coff_section *s = getCOFFSection(obj, it);
-	sections.push_back(make_section(*s, image_base));
+    for (auto sec : obj_sections(obj)) {
+        const coff_section *s = getCOFFSection(obj, sec);
+        sections.push_back(make_section(*s, image_base));
     }
     return sections;
 }
