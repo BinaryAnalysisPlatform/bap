@@ -314,6 +314,13 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
 }
 
+std::vector<section_iterator> obj_sections(const ObjectFile &obj) {
+    std::vector<section_iterator> sections;
+    for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it)
+	sections.push_back(it);
+    return sections;
+}
+
 const coff_section* 
 getCOFFSection(const COFFObjectFile &obj, section_iterator it) {
     return obj.getCOFFSection(it);

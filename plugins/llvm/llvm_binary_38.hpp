@@ -180,6 +180,10 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.sections().end();
 }
 
+ObjectFile::section_iterator_range obj_sections(const ObjectFile &obj) {
+    return obj.sections();
+}
+
 const coff_section*
 getCOFFSection(const COFFObjectFile &obj, section_iterator it) {
     return obj.getCOFFSection(*it);
