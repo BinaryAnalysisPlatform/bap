@@ -314,10 +314,10 @@ section_iterator end_sections(const ObjectFile &obj) {
     return obj.end_sections();
 }
 
-std::vector<section_iterator> obj_sections(const ObjectFile &obj) {
-    std::vector<section_iterator> sections;
+std::vector<SectionRef> obj_sections(const ObjectFile &obj) {
+    std::vector<SectionRef> sections;
     for (auto it = obj.begin_sections(); it != obj.end_sections(); ++it)
-	sections.push_back(it);
+	sections.push_back(*it);
     return sections;
 }
 
