@@ -195,10 +195,19 @@ let program_info =
   Term.info "bap" ~version:Config.version ~doc ~man
 let program source =
   let create
-      a b c d e f g i j k = Bap_options.Fields.create
-      a b c d e f g i j k [] in
+      passopt
+      a b c d e f g i j k = (Bap_options.Fields.create
+                               a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
+  let passopt : string list Term.t =
+    let doc =
+      "Runs passes (comma separated). This option replaces the \
+       previously existing $(b,--)$(i,PASS) options which are now \
+       deprecated and will soon be removed." in
+    Arg.(value & opt (list string) [] &
+         info ["p"; "pass"; "passes"] ~doc ~docv:"PASS") in
   Term.(const create
+        $passopt
         $filename
         $(disassembler ())
         $(loader ())
@@ -228,7 +237,9 @@ let run_loader () =
 
 let parse passes argv =
   match Cmdliner.Term.eval ~argv ~catch:false (program source) with
-  | `Ok opts -> { opts with Bap_options.passes }
+  | `Ok (opts, passopt) ->
+    let passes = passopt @ passes in
+    { opts with Bap_options.passes }
   | _ -> exit 0
 
 let error fmt =
