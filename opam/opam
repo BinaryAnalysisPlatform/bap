@@ -172,6 +172,7 @@ depexts: [
         "clang"
         "llvm"
         "m4"
+        "dejagnu"
      ]]
      [["osx" "macports"] [
         "gmp"
