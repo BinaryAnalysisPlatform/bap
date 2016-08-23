@@ -27,6 +27,11 @@ val with_disasm :
   ?debug_level:int -> ?cpu:string -> backend:string -> string ->
   f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
 
+val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+  (empty, empty) t Or_error.t
+
+val close : (_,_) t -> unit
+
 val store_asm : (_,'k) t -> (asm,'k) t
 
 val store_kinds : ('a,_) t -> ('a,kinds) t
