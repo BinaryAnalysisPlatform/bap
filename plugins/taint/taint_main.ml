@@ -78,7 +78,7 @@ module Marker = struct
     List.for_all strains ~f:(function
         | Tid name -> Tid.name tid = name
         | Var name -> Var.name (Def.lhs def) = name
-        | Addr a -> match Term.get_attr def Disasm.insn_addr with
+        | Addr a -> match Term.get_attr def address with
           | None -> false
           | Some addr -> match Addr.to_int64 addr with
             | Error _ -> false

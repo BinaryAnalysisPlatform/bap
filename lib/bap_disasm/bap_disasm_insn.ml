@@ -190,4 +190,5 @@ let () =
   add_writer ~desc:"Abstract Data Type pretty printing format"
     ~ver:version "adt";
   Data.Write.create ~pp:pp_asm () |>
-  add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm"
+  add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm";
+  set_default_printer "asm"

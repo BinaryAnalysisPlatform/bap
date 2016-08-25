@@ -84,10 +84,10 @@ let arch =
 
 let binary_file_stats =
   Value.Tag.register (module File_stats)
-    ~name:"file_stats"
+    ~name:"file-stats"
     ~uuid:"f7cde0f9-633d-4a9a-8e71-28fef521bee5"
 
 let trace_stats =
   Value.Tag.register (module Trace_stats)
-    ~name:"trace_stats"
+    ~name:"trace-stats"
     ~uuid:"c33eea1b-bca3-4cfe-91b5-52949e8f3c6b"
