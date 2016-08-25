@@ -3640,17 +3640,8 @@ module Std : sig
   (** Give a weight *)
   val weight : float tag
 
-  (** The real virtual address of a target  *)
-  val target_addr : addr tag
-
-  (** Symbolic name of a target  *)
-  val target_name : string tag
-
-  (** Name of a subroutine  *)
-  val subroutine_name : string tag
-
-  (** Address of a subroutine entry point  *)
-  val subroutine_addr : addr tag
+  (** A virtual address of an entity  *)
+  val address : addr tag
 
   (** A name of a file  *)
   val filename : string tag
@@ -5087,14 +5078,8 @@ module Std : sig
 
     (** {2 Tags}  *)
 
-    (** start of basic block  *)
-    val block : addr tag
-
     (** machine instruction  *)
     val insn : insn tag
-
-    (** address of instruction  *)
-    val insn_addr : addr tag
   end
 
   type symtab
@@ -6741,6 +6726,12 @@ module Std : sig
 
     (** [with_symbols project symbols] updates [project] symbols  *)
     val with_symbols : t -> symtab -> t
+
+    (** returns an attribute storage of the project  *)
+    val storage : t -> dict
+
+    (** updates the attribute storage  *)
+    val with_storage : t -> dict -> t
 
     (** [memory t] returns the memory as an interval tree marked with
         arbitrary values.   *)

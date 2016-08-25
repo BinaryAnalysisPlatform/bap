@@ -203,7 +203,6 @@ let create_exn
     ?reconstructor
     (read : input)  =
   let state = fresh_state () in
-  let storage = Dict.empty in
   let mrooter = MVar.from_optional_source rooter in
   let mbrancher = MVar.from_optional_source brancher in
   let msymbolizer = MVar.from_optional_source symbolizer in
@@ -262,7 +261,9 @@ let create_exn
       disasm = Disasm.create g;
       program = MVar.read program;
       symbols = MVar.read symtab;
-      arch; memory=union_memory code data; storage; state; passes=[]
+      arch; memory=union_memory code data;
+      storage = Dict.set Dict.empty filename file;
+      state; passes=[]
     } in
   loop ()
 

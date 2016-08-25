@@ -77,13 +77,16 @@ module Bil = struct
   let pp ppf bil = pr ppf "(%a)" Stmt.pps bil
 end
 
+
 let pp_stmt = Stmt.pp
 let pp_exp = Exp.pp
+let pp_var = Var.pp_var
 
 let () =
   let desc = "Abstract Data Type pretty printing format" in
   let ver = Bap_exp.version and name = "adt" in
   let create pp = Data.Write.create ~pp  () in
+  create Var.pp_var |> Bap_var.add_writer ~desc ~ver name;
   create Exp.pp  |> Bap_exp.add_writer ~desc ~ver name;
   create Stmt.pp |> Bap_stmt.add_writer ~desc ~ver name;
   create Bil.pp  |> Bap_stmt.Stmts_data.add_writer ~desc ~ver name

@@ -31,6 +31,4 @@ module Disasm : sig
   val cfg : t -> cfg
   val errors : t -> Bap_disasm_rec.error list
   val insn : insn tag
-  val block : addr tag
-  val insn_addr : addr tag
 end

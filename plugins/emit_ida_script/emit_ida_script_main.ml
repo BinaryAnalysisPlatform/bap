@@ -94,7 +94,7 @@ let program_visitor buf attrs =
           if List.mem attrs attr then emit_attr buf name addr x);
       name,addr
     method! enter_term _ t (name,_) =
-      name,Term.get_attr t Disasm.insn_addr
+      name,Term.get_attr t address
     method! enter_sub sub (_,addr) = Sub.name sub,addr
   end
 

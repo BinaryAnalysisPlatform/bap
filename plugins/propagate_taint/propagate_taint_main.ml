@@ -184,7 +184,7 @@ let main args proj =
       let s = process args proj in
       State.Cache.save digest s;
       s in
-  printf "@.Coverage: %a@." State.pp_coverage state;
+  eprintf "@.Coverage: %a@." State.pp_coverage state;
 
   let marker = new marker (State.taints state) in
   Project.program proj |> marker#run |>
