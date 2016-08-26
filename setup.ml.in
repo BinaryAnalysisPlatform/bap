@@ -33,7 +33,8 @@ let llvm_version () : unit =
     ~cli:BaseEnv.CLIWith
     ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
     "llvm_version"
-    (fun () -> "3.4") |>
+    (fun () ->
+       OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"]) |>
   definition_end
 
 let rec find_map xs ~f =
@@ -43,6 +44,9 @@ let rec find_map xs ~f =
     | None -> find_map xs ~f
     | yay -> yay
 
+let strip_patch ver =
+  if String.length ver <> 5 then ver
+  else String.sub ver 0 3
 
 let llvm_config () : unit =
   BaseEnv.var_define
@@ -57,7 +61,7 @@ let llvm_config () : unit =
        let vers = match BaseEnv.var_get "llvm_version" with
          | "" -> []
          | ver when macosx -> ["-mp-" ^ ver; "-" ^ ver]
-         | ver -> ["-" ^ ver] in
+         | ver -> ["-" ^ ver; "-" ^ strip_patch ver] in
        find_map vers ~f:(fun ver ->
            try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
            with Not_found -> None) |> function
@@ -76,7 +80,7 @@ let llvm var () : unit =
        let llvm_version = BaseEnv.var_get "llvm_version" in
        let extract v =
 	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in
-       if llvm_version > "3.4" && var = "ldflags"
+       if strip_patch llvm_version > "3.4" && var = "ldflags"
        then extract var ^ extract "system-libs"
        else extract var) |>
     definition_end
@@ -106,11 +110,7 @@ let llvm_mainlib () : unit =
     ~dump:true
     ~short_desc:(fun () -> "main LLVM library")
     "llvm_mainlib"
-    (fun () ->
-       let llvm_config = BaseEnv.var_get "llvm_config" in
-       let ver =
-         OASISExec.run_read_one_line ~ctxt llvm_config ["--version"] in
-       "-lLLVM-"^ver) |>
+    (fun () -> "-lLLVM-"^BaseEnv.var_get "llvm_version") |>
   definition_end
 
 let cc_optimization () : unit =

@@ -10,7 +10,7 @@ extern "C" {
     }
 
     const char* image_arch(const img::image* m) {
-        return (llvm::Triple::getArchTypeName(m->arch()));
+        return m->arch().c_str();
     }
 
     uint64_t image_entry(const img::image* m) {
