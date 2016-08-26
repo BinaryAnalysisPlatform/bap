@@ -1,3 +1,4 @@
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 #ifndef LLVM_BINARY_34_HPP
 #define LLVM_BINARY_34_HPP
 
@@ -137,7 +138,7 @@ using namespace llvm;
 using namespace llvm::object;
 
 typedef SymbolRef::Type kind_type;
- 
+
 std::string name_or_default(const SymbolRef &sym) {
     StringRef name;
     if(error_code err = sym.getName(name))
@@ -167,7 +168,7 @@ uint64_t addr_or_default(const SymbolRef &sym, const COFFObjectFile &obj) {
 
     auto it = symbol_iterator(sym);
     auto coff_sym = obj.getCOFFSymbol(it);
-    
+
     const coff_section *sec = nullptr;
     if (coff_sym->SectionNumber == COFF::IMAGE_SYM_UNDEFINED)
 	return 0;
@@ -232,7 +233,7 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj
     for (auto it = obj.begin_symbols(); it != obj.end_symbols(); ++it) {
 	symbol_sizes.push_back(std::make_pair(*it, get_size(*it)));
     }
-    
+
     return symbol_sizes;
 }
 
@@ -282,7 +283,7 @@ uint64_t getAddr(const SectionRef &sec) {
     uint64_t addr;
     if (error_code err = sec.getAddress(addr))
 	llvm_binary_fail(err);
-    
+
     return addr;
 }
 
@@ -321,7 +322,7 @@ std::vector<SectionRef> obj_sections(const ObjectFile &obj) {
     return sections;
 }
 
-const coff_section* 
+const coff_section*
 getCOFFSection(const COFFObjectFile &obj, section_iterator it) {
     return obj.getCOFFSection(it);
 }
@@ -380,3 +381,4 @@ std::unique_ptr<object::Binary> get_binary(const char* data, std::size_t size) {
 } //namespace img
 
 #endif //LLVM_BINARY_34_HPP
+#endif //LLVM=3.4

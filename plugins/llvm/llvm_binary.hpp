@@ -16,17 +16,8 @@
 #include <llvm/Support/Compiler.h>
 #include <llvm/Config/llvm-config.h>
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 #include "llvm_binary_38.hpp"
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 #include "llvm_binary_34.hpp"
-#else
-#error LLVM version not supported.
-#endif
-
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-using std::distance;
-#endif
 
 using std::move;
 
@@ -146,13 +137,13 @@ symbol make_symbol(const SymbolRef &sym, uint64_t size) {
     auto name = name_or_default(sym);
     auto addr = addr_or_default(sym);
     auto type = get_type(sym);
-    return symbol{name, type, addr, size}; 
+    return symbol{name, type, addr, size};
 }
 
 symbol make_symbol(const SymbolRef &sym, uint64_t size, uint64_t addr) {
     auto name = name_or_default(sym);
     auto type = get_type(sym);
-    return symbol{name, type, addr, size}; 
+    return symbol{name, type, addr, size};
 }
 
 std::vector<symbol> read(const ObjectFile &obj) {

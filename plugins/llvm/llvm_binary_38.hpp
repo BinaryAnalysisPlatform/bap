@@ -1,3 +1,5 @@
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
 #ifndef LLVM_BINARY_38_HPP
 #define LLVM_BINARY_38_HPP
 
@@ -112,7 +114,7 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile&
     std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
         auto sym = obj.getCOFFSymbol(*it);
-        
+
         const coff_section *sec = nullptr;
         if (sym.getSectionNumber() == COFF::IMAGE_SYM_UNDEFINED)
             continue;
@@ -132,7 +134,7 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile&
                 size = new_size < size ? new_size : size;
             }
         }
-        
+
         symbol_sizes.push_back(std::make_pair(*it, size));
     }
     return symbol_sizes;
@@ -235,11 +237,14 @@ std::unique_ptr<object::Binary> get_binary(const char* data, std::size_t size) {
     auto binary = createBinary(buf);
     if (error_code ec = binary.getError()) {
 	std::cerr << ec << "\n";
-        return NULL;    
+        return NULL;
     }
     return move(*binary);
 }
 
 } //namespace img
 
+using std::distance;
+
 #endif //LLVM_BINARY_38_HPP
+#endif // LLVM=3.8
