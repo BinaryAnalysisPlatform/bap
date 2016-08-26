@@ -14,10 +14,10 @@ let create_mapping prog =
   let add t a = Hashtbl.set addrs ~key:a ~data:(Term.tid t) in
   Term.enum sub_t prog |> Seq.iter ~f:(fun sub ->
       Term.enum blk_t sub |> Seq.iter  ~f:(fun blk ->
-          match Term.get_attr blk Disasm.block with
+          match Term.get_attr blk address with
           | Some addr -> add blk addr
           | None -> ());
-      match Term.get_attr sub subroutine_addr with
+      match Term.get_attr sub address with
       | Some addr -> add sub addr
       | None -> ());
   Hashtbl.find addrs

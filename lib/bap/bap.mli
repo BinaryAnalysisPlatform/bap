@@ -3640,17 +3640,8 @@ module Std : sig
   (** Give a weight *)
   val weight : float tag
 
-  (** The real virtual address of a target  *)
-  val target_addr : addr tag
-
-  (** Symbolic name of a target  *)
-  val target_name : string tag
-
-  (** Name of a subroutine  *)
-  val subroutine_name : string tag
-
-  (** Address of a subroutine entry point  *)
-  val subroutine_addr : addr tag
+  (** A virtual address of an entity  *)
+  val address : addr tag
 
   (** A name of a file  *)
   val filename : string tag
@@ -4535,19 +4526,29 @@ module Std : sig
       *)
       type (+'a,+'k,'s,'r) state
 
-      (** [with_disasm ?debug_level ?cpu ~backend target] creates a
+      (** [with_disasm ?debug_level ?cpu ~backend ~f target] creates a
+          disassembler passing all options to [create] function and
+          applies function [f] to it. Once [f] is evaluated the
+          disassembler is closed with [close] function.  *)
+      val with_disasm :
+        ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+        f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
+
+      (** [create ?debug_level ?cpu ~backend target] creates a
           disassembler for the specified [target]. All parameters are
           backend specific, consult the concrete backend for more
           information. In general, the greater [debug_level] is, the
           more debug information will be outputed by a backend. To
           silent backend set it [0]. This is a default value. Example:
 
-          [with_disasm ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
+          [create ~debug_level:3 ~backend:"llvm" "x86_64" ~f:process]
       *)
-      val with_disasm :
-        ?debug_level:int -> ?cpu:string -> backend:string -> string ->
-        f:((empty, empty) t -> 'a Or_error.t) -> 'a Or_error.t
+      val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
+        (empty, empty) t Or_error.t
 
+
+      (** [close d] closes a disassembler [d].   *)
+      val close : (_,_) t -> unit
 
       (** enables storing assembler information  *)
       val store_asm : (_,'k) t -> (asm,'k) t
@@ -5077,14 +5078,8 @@ module Std : sig
 
     (** {2 Tags}  *)
 
-    (** start of basic block  *)
-    val block : addr tag
-
     (** machine instruction  *)
     val insn : insn tag
-
-    (** address of instruction  *)
-    val insn_addr : addr tag
   end
 
   type symtab
@@ -6731,6 +6726,12 @@ module Std : sig
 
     (** [with_symbols project symbols] updates [project] symbols  *)
     val with_symbols : t -> symtab -> t
+
+    (** returns an attribute storage of the project  *)
+    val storage : t -> dict
+
+    (** updates the attribute storage  *)
+    val with_storage : t -> dict -> t
 
     (** [memory t] returns the memory as an interval tree marked with
         arbitrary values.   *)

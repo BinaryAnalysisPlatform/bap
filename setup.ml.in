@@ -75,7 +75,7 @@ let llvm var () : unit =
        let llvm_config = BaseEnv.var_get "llvm_config" in
        let llvm_version = BaseEnv.var_get "llvm_version" in
        let extract v =
-	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in 
+	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in
        if llvm_version > "3.4" && var = "ldflags"
        then extract var ^ extract "system-libs"
        else extract var) |>
@@ -150,10 +150,10 @@ let check =
 
 let install_headers hdrs =
   InternalInstallPlugin.lib_hook :=
-    fun (cs, bs, lib) ->
+    fun (cs, bs, lib, dirs) ->
       match lib.OASISTypes.lib_findlib_name with
-      | Some "bap" -> (cs, bs, lib, hdrs)
-      | _ -> (cs, bs, lib, [])
+      | Some "bap" -> (cs, bs, lib, dirs, hdrs)
+      | _ -> (cs, bs, lib, dirs, [])
 
 let define definitions =
   List.iter (fun f -> try f () with exn -> ()) definitions

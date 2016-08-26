@@ -86,7 +86,7 @@ let label_of_fall cfg block =
       Label.indirect Bil.(int (Block.addr blk)))
 
 let annotate_insn term insn = Term.set_attr term Disasm.insn insn
-let annotate_addr term addr = Term.set_attr term Disasm.insn_addr addr
+let annotate_addr term addr = Term.set_attr term address addr
 
 let linear_of_stmt ?addr return insn stmt : linear list =
   let (~@) t = match addr with
@@ -208,7 +208,7 @@ let blk cfg block : blk term list =
       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
-  List.rev (Term.set_attr b Disasm.block (Block.addr block) :: bs)
+  List.rev (Term.set_attr b address (Block.addr block) :: bs)
 
 (* extracts resolved calls from the blk *)
 let call_of_blk blk =
@@ -277,7 +277,7 @@ let lift_sub entry cfg =
       Ir_sub.Builder.add_blk sub
         (Term.map jmp_t blk ~f:(resolve_jmp ~local:true addrs)));
   let sub = Ir_sub.Builder.result sub in
-  Term.set_attr sub subroutine_addr (Block.addr entry)
+  Term.set_attr sub address (Block.addr entry)
 
 
 let program symtab =

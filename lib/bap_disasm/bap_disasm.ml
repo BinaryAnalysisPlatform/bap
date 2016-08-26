@@ -107,13 +107,4 @@ module Disasm = struct
   let insn  = Value.Tag.register (module Insn)
       ~name:"insn"
       ~uuid:"8e2a3998-bf07-4a52-a791-f74ea190630a"
-
-  let block = Value.Tag.register (module Addr)
-      ~name:"disasm_block"
-      ~uuid:"d261d12c-23b9-4bc0-9d0b-a6700bf59377"
-
-  let insn_addr = Value.Tag.register (module Addr)
-      ~name:"insn_addr"
-      ~uuid:"38713d83-8a16-49f8-a753-40fcf91fe264"
-
 end
