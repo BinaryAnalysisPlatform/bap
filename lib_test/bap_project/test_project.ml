@@ -26,7 +26,7 @@ let x86 = {
   addr = 10;
   code = "\x89\x34\x24";
   asm  = "movl %esi, (%esp)";
-  bil  = "mem32 := mem32 with [low:32[ESP],el]:u32 <- low:32[ESI]";
+  bil  = "mem32 := mem32 with [ESP,el]:u32 <- ESI";
 }
 
 let normalize = String.filter ~f:(function
