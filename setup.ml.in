@@ -81,7 +81,7 @@ let llvm var () : unit =
        let extract v =
 	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in
        if strip_patch llvm_version > "3.4" && var = "ldflags"
-       then extract var ^ extract "system-libs"
+       then extract var ^ " " ^ extract "system-libs"
        else extract var) |>
     definition_end
 
