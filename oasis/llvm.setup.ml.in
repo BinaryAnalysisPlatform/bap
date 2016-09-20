@@ -27,7 +27,10 @@ let llvm_version () : unit =
     ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
     "llvm_version"
     (fun () ->
-       OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"]) |>
+       try
+         ignore @@ OASISFileUtil.which ~ctxt "llvm-config";
+         OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"]
+       with Not_found -> "3.4") |>
   definition_end
 
 let llvm_config () : unit =
@@ -42,7 +45,7 @@ let llvm_config () : unit =
        let macosx = BaseEnv.var_get "system" = "macosx" in
        let vers = match BaseEnv.var_get "llvm_version" with
          | "" -> []
-         | ver when macosx -> ["-mp-" ^ ver; "-" ^ ver]
+         | ver when macosx -> ["-mp-" ^ strip_patch ver; "-" ^ strip_patch ver]
          | ver -> ["-" ^ ver; "-" ^ strip_patch ver] in
        find_map vers ~f:(fun ver ->
            try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
