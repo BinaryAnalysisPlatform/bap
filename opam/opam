@@ -151,7 +151,7 @@ depends: [
     "ounit" {build}
     "ocamlgraph"
     "ocamlfind" {>= "1.5.6" & < "2.0"}
-    "ocurl" {>= "0.7.7"}
+    "ocurl" {= "0.7.7"}
     "optcomp"
     "re"
     "uri" {>= "1.9.0"}
