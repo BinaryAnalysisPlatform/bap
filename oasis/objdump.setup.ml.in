@@ -1,5 +1,3 @@
-
-
 let () =
   add_variable  ~doc:"A list (OCaml syntax) of supported targets" "objdump_targets"
     ~define:(function

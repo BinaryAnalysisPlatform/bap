@@ -1,0 +1,19 @@
+let nonempty = function (A s) -> String.length s <> 0 | _ -> true
+
+(* the piqi support is rather fragile *)
+let piqic_rule () : unit =
+  rule "piqic: piqi -> .ml & _ext.ml"
+    ~prods:["%_piqi.ml"; "%_piqi_ext.ml"]
+    ~deps:["%.piqi"]
+    (fun env _ ->
+       Cmd (S (List.filter nonempty [
+           A (expand "${piqic}");
+           A (expand "${piqic_flags}");
+           A "-C";
+           A "lib/bap_piqi";
+           A "-I";
+           A "../lib/bap_piqi";
+           A (env "%.piqi");
+           A"--multi-format"])));;
+
+let () = Rules.add piqic_rule

@@ -1,0 +1,88 @@
+let strip_patch ver =
+  if String.length ver <> 5 then ver
+  else String.sub ver 0 3
+
+
+let llvm var () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "llvm-config --"^var)
+    ("llvm_"^var)
+    (fun () ->
+       let llvm_config = BaseEnv.var_get "llvm_config" in
+       let llvm_version = BaseEnv.var_get "llvm_version" in
+       let extract v =
+	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in
+       if strip_patch llvm_version > "3.4" && var = "ldflags"
+       then extract var ^ extract "system-libs"
+       else extract var) |>
+    definition_end
+
+let llvm_version () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
+    "llvm_version"
+    (fun () ->
+       OASISExec.run_read_one_line ~ctxt "llvm-config" ["--version"]) |>
+  definition_end
+
+let llvm_config () : unit =
+  BaseEnv.var_define
+    ~hide:false
+    ~dump:true
+    ~cli:BaseEnv.CLIWith
+    ~short_desc:(fun () -> "llvm-config executable")
+    "llvm_config"
+    (fun () ->
+       (* default macports if we're on mac os x *)
+       let macosx = BaseEnv.var_get "system" = "macosx" in
+       let vers = match BaseEnv.var_get "llvm_version" with
+         | "" -> []
+         | ver when macosx -> ["-mp-" ^ ver; "-" ^ ver]
+         | ver -> ["-" ^ ver; "-" ^ strip_patch ver] in
+       find_map vers ~f:(fun ver ->
+           try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
+           with Not_found -> None) |> function
+       | Some path -> path
+       | None -> raise Not_found) |>
+  definition_end
+
+let llvm_mainlib () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "main LLVM library")
+    "llvm_mainlib"
+    (fun () -> "-lLLVM-"^BaseEnv.var_get "llvm_version") |>
+  definition_end
+
+
+let llvm_lib () : unit =
+  BaseEnv.var_define
+    ~hide:true
+    ~dump:true
+    ~short_desc:(fun () -> "LLVM library(ies) to link with")
+    "llvm_lib"
+    (fun () ->
+       let llvm_static = BaseEnv.var_get "llvm_static" in
+       let lib = if llvm_static = "true"
+         then "llvm_libs"
+         else "llvm_mainlib" in
+       BaseEnv.var_get lib) |>
+  definition_end
+
+let () =
+  define [
+    llvm_version;
+    llvm_config;
+    llvm_mainlib;
+    llvm "cxxflags";
+    llvm "ldflags";
+    llvm "cflags";
+    llvm "libs";
+    llvm_lib
+  ]
