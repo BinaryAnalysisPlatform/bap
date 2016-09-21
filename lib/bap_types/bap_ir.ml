@@ -92,7 +92,7 @@ module Tid = struct
     let set_name_resolver resolver = names := resolver
   end
 
-  let (!) = from_string_exn
+  let (!!) = from_string_exn
   include Tid
 end
 

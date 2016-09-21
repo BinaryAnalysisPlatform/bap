@@ -5481,7 +5481,7 @@ module Std : sig
     val from_string_exn : string -> tid
 
     (** infix notation for [from_string_exn]  *)
-    val (!) : string -> tid
+    val (!!) : string -> tid
 
     include Regular.S with type t := t
   end

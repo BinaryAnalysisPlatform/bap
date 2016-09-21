@@ -53,7 +53,7 @@ module Tid : sig
   val name : t -> string
   val from_string : string -> tid Or_error.t
   val from_string_exn : string -> tid
-  val (!) : string -> tid
+  val (!!) : string -> tid
   include Regular.S with type t := t
   module Tid_generator : Bap_state.S
   module Name_resolver : Bap_state.S
