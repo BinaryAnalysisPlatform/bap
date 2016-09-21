@@ -64,4 +64,4 @@ let dests_of_bil arch =
 let of_bil arch = create (dests_of_bil arch)
 
 
-module Factory = Source.Factory(struct type nonrec t = t end)
+module Factory = Source.Factory.Make(struct type nonrec t = t end)

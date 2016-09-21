@@ -26,23 +26,25 @@ type model64 = [
 (** The following table summarize all models of integer
     representation.
 
-    [{v
+    {v
        LP32	 ILP32	 ILP64	 LLP64	 LP64
  char	  8	    8	     8	     8	    8
  short	 16	   16	    16	    16	   16
  int	 16	   32	    64	    32	   32
  long	 32	   32	    64	    32	   64
  addr    32	   32	    64	    64	   64
- v}]
+ v}
 *)
 type model = [model32 | model64]
 
 (** Abstract value lattice. The lattice is complete, and
     [Set []] is the supremum, i.e., the bot.*)
 type value =
-  | Top                        (** any possible value  *)
-  | Set of word list            (** one of the  *)
-  [@@deriving bin_io, compare, sexp]
+  | Top
+  (** any possible value  *)
+  | Set of word list
+  (** one of the specified *)
+[@@deriving bin_io, compare, sexp]
 
 
 (** abstraction of a С datum.
@@ -52,7 +54,13 @@ type value =
     size and value lattice, or a sequence of data, or a pointer to a
     datum.*)
 type t =
-  | Imm of Size.t * value       (** {Imm (size,value)}  *)
+  | Imm of Size.t * value
+  (** [Imm (size,value)] *)
   | Seq of t list
-  | Ptr of t            (** {Ptr (type,size)}   *)
+  (** [Seq (t1,..,tN)]   *)
+  | Ptr of t
+  (** [Ptr (type,size)]  *)
   [@@deriving bin_io, compare, sexp]
+
+
+(**  *)

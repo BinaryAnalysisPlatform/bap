@@ -96,38 +96,21 @@ module Std : sig
   type 'a signal
 
 
-  (** Applicable is an abstraction lying between Arrow, Monad and
-      Applicative. It can be seen as a more general form of
-      [Applicative] that lacks [return] (or [pure]) operation. Since
-      return operation is not available for co-inductive type, we cannot
-      use the [Applicative] functor for [Streams].  *)
-  module type Applicable = sig
-    type 'a t
-    val map   : 'a t -> f:('a -> 'b) -> 'b t
-    val apply : ('a -> 'b) t -> 'a t -> 'b t
-  end
+  module Applicable : sig
+    (** Applicable is an abstraction lying between Arrow, Monad and
+        Applicative. It can be seen as a more general form of
+        [Applicative] that lacks [return] (or [pure]) operation. Since
+        return operation is not available for co-inductive type, we cannot
+        use the [Applicative] functor for [Streams].  *)
+    module type S = sig
+      type 'a t
 
-  module type Variadic = sig
-    (** [('f,'r) t] is a list of arguments, where ['f] defines the
-        arrow type of the arguments, and ['r] is the return type.
-        C.f., ['f] and ['r] with the first and last parameter of
-        the [format] type constuctor.
-    *)
-    type ('f,'r) t
+      (** [map xs ~f] transform [xs] with [f]  *)
+      val map   : 'a t -> f:('a -> 'b) -> 'b t
 
-    (** ['a arg] is an Applicable value  *)
-    type 'a arg
-
-    (** [args x] creates a singleton list of arguments that can be
-        applied to a function that takes [x] argument, and returns a value
-        of type ['b].*)
-    val args : 'a arg -> ('a -> 'b,'b) t
-
-    (** [args $x] appends argument [x] to a list of arguments [args].  *)
-    val ($) : ('a, 'b -> 'c) t -> 'b arg -> ('a,'c) t
-
-    (** [apply args ~f] applies function [f] to arguments [args].*)
-    val apply : f:'f -> ('f,'r) t -> 'r arg
+      (** [apply fs xs] apply functions [fs] to [xs]  *)
+      val apply : ('a -> 'b) t -> 'a t -> 'b t
+    end
   end
 
   (** Variadic arguments.
@@ -138,7 +121,7 @@ module Std : sig
       general examples, are monadic parsers, such as [MParser],
       command line parsers such as [Cmdliner] and [Core]'s
       [Command]. They all are using the same trick to collect
-      arguments of different type and pass it to a function, s.t. that
+      arguments of different type and pass it to a function, s.t.
       the function type actually defines the type of collected
       arguments. Both [Cmdliner] and [Command] relies on [Applicative]
       functor defined in [1]. However, it requires a [return]
@@ -229,19 +212,44 @@ module Std : sig
       [None], [Error].
 
 
-      [1] : {v
-      Applicative Programming with Effects.
-      Conor McBride and Ross Paterson.
-      Journal of Functional Programming 18:1 (2008), pages 1-13.
-      http://staff.city.ac.uk/~ross/papers/Applicative.pdf
+      @see <http://staff.city.ac.uk/~ross/papers/Applicative.pdf> {v
+      [1]: Applicative Programming with Effects.
+           Conor McBride and Ross Paterson.
+           Journal of Functional Programming 18:1 (2008), pages 1-13.
     v}
-
 
   *)
   module Variadic : sig
-    module Make(T : Applicable) : Variadic with type 'a arg = 'a T.t
-    include Variadic with type 'a arg = 'a
+
+    (** Variadic argument list.  *)
+    module type S = sig
+
+      (** [('f,'r) t] is a list of arguments, where ['f] defines the
+          arrow type of the arguments, and ['r] is the return type.
+          C.f., ['f] and ['r] with the first and last parameter of
+          the [format] type constuctor.
+      *)
+      type ('f,'r) t
+
+      (** ['a arg] is an Applicable value  *)
+      type 'a arg
+
+      (** [args x] creates a singleton list of arguments that can be
+          applied to a function that takes [x] argument, and returns a value
+          of type ['b].*)
+      val args : 'a arg -> ('a -> 'b,'b) t
+
+      (** [args $x] appends argument [x] to a list of arguments [args].  *)
+      val ($) : ('a, 'b -> 'c) t -> 'b arg -> ('a,'c) t
+
+      (** [apply args ~f] applies function [f] to arguments [args].*)
+      val apply : f:'f -> ('f,'r) t -> 'r arg
+    end
+
+    module Make(T : Applicable.S) : S with type 'a arg = 'a T.t
+    include S with type 'a arg = 'a
   end
+
 
   (** Future is an object whose value will be decided somewhere in the
       future, if that future has occurred.
@@ -259,8 +267,8 @@ module Std : sig
       decidable (i.e., only one path is possible). The latter is
       preferred if different variants are possible.
 
-      A future is a monad, and most of the code should work with the
-      future via the monadic interface, e.g.,
+      A future is a monad, and it is preferred to work with the future
+      via the monadic interface, e.g.,
 
       {[
         let first_insn mem pc : mem Or_error.t future =
@@ -274,10 +282,11 @@ module Std : sig
       defined asynchronously. Once can also think of futures and
       threads as a software pattern to work with callbacks. *)
   module Future : sig
+
     type 'a t = 'a future
     include Monad.S with type 'a t := 'a t
     include Applicative.S with type 'a t := 'a t
-    module Variadic : Variadic with type 'a arg = 'a t
+    module Variadic : Variadic.S with type 'a arg = 'a t
     module Args : Applicative.Args with type 'a arg := 'a t
 
     (** [create ()] creates a new future. The function returns a pair
@@ -359,7 +368,7 @@ module Std : sig
     type 'a t = 'a stream
     type id
 
-    module Variadic : Variadic with type 'a arg = 'a t
+    module Variadic : Variadic.S with type 'a arg = 'a t
 
 
     (** [create ()] retuns a stream and a signal handler that is used

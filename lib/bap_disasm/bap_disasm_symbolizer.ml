@@ -40,6 +40,6 @@ let of_blocks seq =
       Hashtbl.set syms ~key:addr ~data:name);
   create (Hashtbl.find syms)
 
-module Factory = Factory(struct type nonrec t = t end)
+module Factory = Factory.Make(struct type nonrec t = t end)
 
 let internal_image_symbolizer = (fun img -> Some (of_image img))

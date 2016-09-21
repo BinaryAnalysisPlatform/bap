@@ -30,6 +30,8 @@ module Std : sig
         [target] executable. *)
     val create : string -> t
 
+
+    (** [exec ida command] execute the given [command].  *)
     val exec : t -> 'a command -> 'a
 
     (** [close ida] finish interaction with IDA and clean all resources *)
@@ -47,12 +49,25 @@ module Std : sig
 
     type language = [`python | `idc]
 
+    (** [create lang ~script ~parser] create a command that will
+        execute a [script], written in a given language, at then
+        parse the output using the specified parser function.
+
+        If a script needs to output information, it must use a
+        filename [$output] (that will be substituted with the real
+        file name).
+
+        The parse name will get the name of the output file, so that
+        it can read and parse it. *)
     val create : language -> script:string -> parser:(string -> 'a) -> 'a t
 
+    (** [language command] is a script language  *)
     val language : 'a t -> language
 
+    (** [script command] the script text *)
     val script : 'a t -> string
 
+    (** [parser command] the associated parser function.  *)
     val parser : 'a t -> (string -> 'a)
   end
 
@@ -64,7 +79,10 @@ module Std : sig
     }
 
     (** [provide creator] provides for a service that can perform the
-        roles of [Ida.create], [Ida.exec], [Ida.close] *)
+        roles of [Ida.create], [Ida.exec], [Ida.close].
+
+        The [creator] function accepts a path to a target file and
+        returns an instance of ida service.*)
     val provide : (string -> t) -> unit
   end
 end

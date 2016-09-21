@@ -4,7 +4,7 @@ open Regular.Std
 open Bap_common
 open Bap_bil
 
-include Regular with type t := exp
+include Regular.S with type t := exp
 
 module Cast : sig
   val unsigned : cast

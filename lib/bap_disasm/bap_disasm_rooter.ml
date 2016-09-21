@@ -13,7 +13,7 @@ let union (Rooter r1) (Rooter r2) =
   Rooter (Seq.append r1 r2)
 let empty = create Seq.empty
 
-module Factory = Source.Factory(struct type nonrec t = t end)
+module Factory = Source.Factory.Make(struct type nonrec t = t end)
 
 let of_image img =
   Image.symbols img |>

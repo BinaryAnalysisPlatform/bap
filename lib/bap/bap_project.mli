@@ -96,4 +96,4 @@ val passes : unit -> pass list
 
 val restore_state : t -> unit
 
-include Data with type t := t
+include Data.S with type t := t

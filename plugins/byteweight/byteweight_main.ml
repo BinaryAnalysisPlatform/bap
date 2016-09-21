@@ -57,10 +57,13 @@ let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
       `P "This plugin will provide a rooter service. The algorithm is
-      described at [1].";
+      described in [1]. The $(b,SEE ALSO) section contains links for
+      other plugins, that provides rooters";
       `P "[1]: Bao, Tiffany, et al. \"Byteweight: Learning to recognize
     functions in binary code.\" 23rd USENIX Security Symposium (USENIX
-    Security 14). 2014."
+    Security 14). 2014.";
+      `S "SEE ALSO";
+      `P "$(b,bap-byteweight)(1), $(b,bap-plugin-ida)(1), $(b,bap-plugin-read-symbols)(1)"
     ] in
   let length : int Config.param =
     let doc = "Maximum prefix length when byteweighting" in

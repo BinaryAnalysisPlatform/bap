@@ -404,7 +404,7 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
       end)
   end
 
-  include Printable(struct
+  include Printable.Make(struct
       type nonrec t = t
       let module_name = None
       let version = "0.1"
@@ -947,8 +947,8 @@ struct
 
   module Edge = G.Edge
 
-  include (G : Opaque with type t := t)
-  include (G : Printable with type t := t)
+  include (G : Opaque.S with type t := t)
+  include (G : Printable.S with type t := t)
 end
 
 
@@ -1046,8 +1046,8 @@ module Mapper
       end)
   end
 
-  include (G : Opaque with type t := t)
-  include (G : Printable with type t := t)
+  include (G : Opaque.S with type t := t)
+  include (G : Printable.S with type t := t)
 end
 
 

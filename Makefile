@@ -5,7 +5,7 @@ build: setup.ml
 
 .PHONY: doc
 doc:
-	ocaml bapdoc.ml
+	make -C doc
 
 test: build
 	$(SETUP) -test $(BAPTESTFLAGS)

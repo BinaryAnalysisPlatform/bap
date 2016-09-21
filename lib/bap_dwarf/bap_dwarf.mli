@@ -2,32 +2,10 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 
+
+
+(** DWARF parser  *)
 module Std : sig
-
-  module Leb128 : sig
-    (** an encoded value  *)
-    type t [@@deriving bin_io, compare, sexp]
-
-    (** [encode ~signed v] encodes value [v] in a LEB128 format. If
-        signed is true, then uses signed encoding. *)
-    type 'a encoder = ?signed:bool -> 'a -> t
-    (** [decode leb] decodes a number from LEB128 representation.  *)
-    type 'a decoder = t -> 'a Or_error.t
-
-    (** [size leb] return size in bytes of the number stored in LEB128
-        encoding.  *)
-    val size: t -> int
-    val read: ?signed:bool -> string -> pos_ref:int ref -> t Or_error.t
-    val write: t -> string -> pos:int -> unit
-
-    val to_int:   int   decoder
-    val to_int32: int32 decoder
-    val to_int64: int64 decoder
-
-    val of_int:   int   encoder
-    val of_int32: int32 encoder
-    val of_int64: int64 encoder
-  end
 
   (** Dwarf library
       This library gives an access to debugging information stored
@@ -98,10 +76,15 @@ module Std : sig
     type section = Section.t [@@deriving sexp, bin_io, compare]
     type fn [@@deriving bin_io, compare, sexp]
 
-    (** Current function representation.  *)
+    (** Function representation.  *)
     module Fn : sig
       type t = fn [@@deriving bin_io, compare, sexp]
+
+      (** [pc_lo fn] the lowest address of a function (the entry point)  *)
       val pc_lo : t -> addr
+
+
+      (** [pc_hi fn] the highest address (if known)  *)
       val pc_hi : t -> addr option
       include Identifiable.S with type t := t
     end
@@ -168,5 +151,30 @@ module Std : sig
       (** [functions searcher] enumerates functions  *)
       val functions : t -> (string * fn) seq
     end
+  end
+
+  module Leb128 : sig
+    (** an encoded value  *)
+    type t [@@deriving bin_io, compare, sexp]
+
+    (** [encode ~signed v] encodes value [v] in a LEB128 format. If
+        signed is true, then uses signed encoding. *)
+    type 'a encoder = ?signed:bool -> 'a -> t
+    (** [decode leb] decodes a number from LEB128 representation.  *)
+    type 'a decoder = t -> 'a Or_error.t
+
+    (** [size leb] return size in bytes of the number stored in LEB128
+        encoding.  *)
+    val size: t -> int
+    val read: ?signed:bool -> string -> pos_ref:int ref -> t Or_error.t
+    val write: t -> string -> pos:int -> unit
+
+    val to_int:   int   decoder
+    val to_int32: int32 decoder
+    val to_int64: int64 decoder
+
+    val of_int:   int   encoder
+    val of_int32: int32 encoder
+    val of_int64: int64 encoder
   end
 end

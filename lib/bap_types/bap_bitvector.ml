@@ -5,8 +5,6 @@ open Or_error
 type endian = LittleEndian | BigEndian
   [@@deriving bin_io, compare, sexp]
 
-exception Width [@@deriving sexp]
-
 module Bignum = struct
   module Repr : Stringable with type t = Z.t = struct
     type t = Z.t
@@ -30,7 +28,8 @@ module Size_poly = struct
 end
 
 module Size_mono = struct
-  let compare x y = if Int.(x <> y) then raise Width else 0
+  let compare x y =
+    if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
 end
 
 module Internal = struct
@@ -60,7 +59,7 @@ module type Kernel = sig
   val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
-  include Data.Versioned with type t := t
+  include Data.Versioned.S with type t := t
 end
 
 (** internal representation *)
@@ -71,7 +70,6 @@ module Make(Size : Compare) : Kernel = struct
   let module_name = Some "Bap.Std.Bitvector"
 
   let version = "0.1"
-
 
   let znorm z w = Bignum.(z land ((one lsl w) - one))
 
@@ -183,16 +181,12 @@ let to_int64 = unop (safe Bignum.to_int64)
 let string_of_value ?(hex=true) =
   unop (Bignum.format (if hex then "0x%x" else "%d"))
 
-
-
 let of_binary ?width endian num  =
   let num = match endian with
     | LittleEndian -> num
     | BigEndian -> String.rev num in
   let w = Option.value width ~default:(String.length num * 8) in
   create (Bignum.of_bits num) w
-
-
 
 let nsucc t n = with_z t Bignum.(z t + of_int n)
 let npred t n = with_z t Bignum.(z t - of_int n)

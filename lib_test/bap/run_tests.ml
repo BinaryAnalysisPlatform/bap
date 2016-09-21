@@ -29,8 +29,12 @@ let run_unit_tests () =
   load_plugins ();
   run_test_tt_main (suite ())
 
+
+(* JS is changing the inline test interface every minor release,
+   so we need either wait until they stabilize it, or to move,
+   to something better.  *)
 let run_inline_tests () =
-  Ppx_inline_test_lib.Runtime.exit ()
+  eprintf "Warning: ignoring inline tests\n"
 
 let () = match Array.to_list Sys.argv with
   | _ :: "inline-test-runner" :: _ -> run_inline_tests ()

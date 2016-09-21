@@ -26,7 +26,7 @@ let create program =
 
 include G
 
-include Printable(struct
+include Printable.Make(struct
     type t = G.t
     let module_name = None
     let version = "0.1"

@@ -2,10 +2,12 @@ open Core_kernel.Std
 
 module Std = struct
 
-  module type Applicable = sig
-    type 'a t
-    val map   : 'a t -> f:('a -> 'b) -> 'b t
-    val apply : ('a -> 'b) t -> 'a t -> 'b t
+  module Applicable = struct
+    module type S = sig
+      type 'a t
+      val map   : 'a t -> f:('a -> 'b) -> 'b t
+      val apply : ('a -> 'b) t -> 'a t -> 'b t
+    end
   end
 
   module type Variadic = sig
@@ -17,7 +19,8 @@ module Std = struct
   end
 
   module Variadic = struct
-    module Make(T : Applicable) : Variadic with type 'a arg = 'a T.t =
+    module type S = Variadic
+    module Make(T : Applicable.S) : Variadic with type 'a arg = 'a T.t =
     struct
       open T
       type 'a arg = 'a t

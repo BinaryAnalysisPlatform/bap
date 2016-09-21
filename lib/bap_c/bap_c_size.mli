@@ -46,14 +46,16 @@ class base :  model -> object
         type, otherwise returns [None] *)
     method array : (cvr qualifier, array) spec -> bits option
 
-    (** returns   *)
+    (** if spec is complete then returns a size of the biggest
+        element, including padding *)
     method union : (no_qualifier, compound) spec -> bits option
-    method structure : (no_qualifier, compound) spec -> bits option
 
+    (**  if spec is complete then returns a total size of the
+    structure, including padding. *)
+    method structure : (no_qualifier, compound) spec -> bits option
 
     method integer : integer -> size
     method pointer : addr_size
-
     method enum : (string * int64 option) list -> size
     method real : real -> [`r32 | `r64 | `r128]
     method complex : complex -> size

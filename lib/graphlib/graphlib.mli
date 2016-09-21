@@ -33,22 +33,22 @@ open Regular.Std
       as a function, not a functor. Thus making there use syntactically
       easier. Also, {!Graphlib} heavily uses optional and keyword
       parameters. For die-hards, many algorithms still have functor
-      interface.
+      a interface.
 
       All {!Graphlib} algorithms accept a first-class module with
       graph implementation as a first argument. You can think of this
       parameter as an explicit type class. Later, when modular
       implicits will be accepted in OCaml, this parameter can be
-      omitted. But for now, we need to pass it.
+      omitted. But for now, we need to pass them.
 
       A recommended way to work with {!Graphlib} is to bind the
       chosen implementation with some short name, usually [G] would be
       a good choice:
 
-   {[module G = Graphlib.String.Bool]}
+      {[module G = Graphlib.Make(String)(Bool)]}
 
       This will bind name [G] with a graph implementation that has
-      [string] nodes, with edges marked by values of type [bool].
+      [string] nodes, with edges labeled by values of type [bool].
 
       To create a graph of type [G.t] one can use a generic
       {!Graphlib.create} function:
@@ -146,7 +146,7 @@ module Std : sig
 
     (** node provides common data structures, like Table, Map, Set,
         Hash_set, etc.  *)
-    include Opaque with type t := t
+    include Opaque.S with type t := t
   end
 
   (** Interface that every Graph edge should provide  *)
@@ -207,7 +207,7 @@ module Std : sig
           v}
     *)
     val remove : t -> graph -> graph
-    include Opaque with type t := t
+    include Opaque.S with type t := t
   end
 
 
@@ -301,10 +301,10 @@ module Std : sig
     val number_of_nodes : t -> int
 
     (** All graphs provides a common interface for any opaque data structure  *)
-    include Opaque with type t := t
+    include Opaque.S with type t := t
 
     (** All graphs are printable.   *)
-    include Printable with type t := t
+    include Printable.S with type t := t
   end
 
   (** a type abbreviation for a packed module, implementing graph
@@ -549,7 +549,7 @@ module Std : sig
   module Equiv : sig
     type t
     val to_int : t -> int
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
 
@@ -584,7 +584,7 @@ module Std : sig
   end
 
 
-  (** {4 Visual attributes for graphvizualization.}
+  (** {4 Visual attributes for graph vizualization.}
       Consult OCamlGraph library for more information.
   *)
 
@@ -601,9 +601,40 @@ module Std : sig
   (** Generic Graph Library  *)
   module Graphlib : sig
 
-    (* we need this restatement, since first class modules in
-       4.01 were nominally typed.  *)
-    module type Graph = Graph
+    (** [Make(Node)(Edge)] creates a module that implements [Graph]
+        interface and has unlabeled nodes of type [Node.t] and edges
+        labeled with [Edge.t]
+
+        In [Core_kernel] basically any type that is reasonable to be
+        used as a graph node, satisfies the {!Opaque.S} interface. So,
+        a new graph structure can be implemented directly, e.g.,
+        {[module G = Graphlib.Make(Int64)(Unit)]}
+
+        If a type doesn't satisfy the [Opaque] interface, then it can
+        be easily derived with [Opaque.Make] if [compare] and [hash]
+        functions are provided.
+
+    *)
+    module Make(Node : Opaque.S)(Edge : T) : Graph
+      with type node = Node.t
+       and type Node.label = Node.t
+       and type Edge.label = Edge.t
+
+
+
+    (** [Labeled(Node)(Node_label)(Edge_label)] creates a graph
+        structure with both nodes and edges labeled with abitrary
+        types.
+
+        Contrary to [Make] functor, where a node and a node label are
+        unified, the [Labeled] functor creates a graph data structure,
+        where they are different. Moreover, the node label is pure
+        abstract and can be any type, including functional.*)
+    module Labeled(Node : Opaque.S)(NL : T)(EL : T) : Graph
+      with type node = (Node.t, NL.t) labeled
+       and type Node.label = (Node.t, NL.t) labeled
+       and type Edge.label = EL.t
+
 
     (** [create (module G) ~nodes ~edges ()] creates a graph using
         implementation provided by [module G].
@@ -776,9 +807,11 @@ module Std : sig
         order.
 
         {3 Complexity}
-        The algorithm is linear in time and space (including the stack
-        space). In fact, for small graphs it uses stack, but for large
-        graphs dynamically switches to a heap storage. *)
+
+        The algorithm is linear in time. It uses constant stack
+        space. In fact, for small graphs it uses stack, but for large
+        graphs dynamically switches to a heap storage. The space
+        complexity is bounded by linear function of the graph depth.  *)
     val depth_first_search :
       (module Graph with type t = 'c
                      and type node = 'n
@@ -1034,21 +1067,13 @@ module Std : sig
              and type Node.label = NL.t
              and type Edge.label = EL.t
 
-    (** [Make(Node)(Edge)] creates a module that implements [Graph]
-        interface and has unlabeled nodes of type [Node.t] and edges
-        labeled with [Edge.t] *)
-    module Make(Node : Opaque)(Edge : T) : Graph
-      with type node = Node.t
-       and type Node.label = Node.t
-       and type Edge.label = Edge.t
 
 
-    module Labeled(Node : Opaque)(NL : T)(EL : T) : Graph
-      with type node = (Node.t, NL.t) labeled
-       and type Node.label = (Node.t, NL.t) labeled
-       and type Edge.label = EL.t
-
+    (** name generation scheme  *)
     type scheme
+
+
+    (** a function that gives a name for a value of type ['a]  *)
     type 'a symbolizer = ('a -> string)
 
     (** [create_scheme ~next init] create a name generator, that will
@@ -1068,7 +1093,34 @@ module Std : sig
     val by_given_order : scheme -> ('a -> 'a -> int) -> 'a Sequence.t -> 'a symbolizer
     val by_natural_order : scheme -> ('a -> 'a -> int) -> 'a Sequence.t -> 'a symbolizer
 
+
+    (** Generic dot printer.  *)
     module Dot : sig
+
+
+      (** [pp_graph ~nodes_of_edge ~nodes ~edges ppf] - generic dot
+          printer.
+
+          This function is useful for implementing custom dot
+          printers. Use it if the default dot printer {!Graph.pp}
+          doesn't suit your needs.
+
+          For the purpose of this function a graph can be represented
+          with three values:
+            - [nodes_of_edge] returns the source and destination nodes
+              of an edge;
+            - [nodes] is a sequence of nodes;
+            - [edges] is a sequence of edges;
+
+          @param name the name of the graph.
+          @param attrs graphviz attributes of the graph.
+          @param string_of_node name of a node.
+          @param node_label text representation of the node label.
+          @param edge_label text representation of the edge label.
+
+          All optional parameters default to a null value, so that
+          if a parameter is not specified, then a corresponding entry
+          will not be printed. *)
       val pp_graph :
         ?name:string ->
         ?attrs:string list ->

@@ -45,7 +45,7 @@ val segment_of_symbol  : t -> symbol -> segment
 
 module Segment : sig
   type t = segment
-  include Regular with type t := t
+  include Regular.S with type t := t
   val name : t -> string
   val is_writable   : t -> bool
   val is_readable   : t -> bool
@@ -54,7 +54,7 @@ end
 
 module Symbol : sig
   type t = symbol
-  include Regular with type t := t
+  include Regular.S with type t := t
   val name : t -> string
   val is_function : t -> bool
   val is_debug : t -> bool

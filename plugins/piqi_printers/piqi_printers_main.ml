@@ -1,6 +1,22 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
+include Self()
+
+
+let () = Config.manpage [
+    `S "DESCRIPTION";
+    `P
+      "Provide a serialization for BIR and BIL, using piqi
+      serialization files. The plugin provides five formats
+      of serialization: JSON, protobuf, textual, binary and XML.";
+    `P
+      "The serialization routines can be use programmatically, using
+      the Data interface, or from a print plugin";
+
+    `S "SEE ALSO";
+    `P "$(b,regular)(3), $(b,bap-plugin-print)(1), $(b,bap-piqi)(3)"
+  ]
 
 module Bil = struct
   open Bil_piqi
@@ -45,4 +61,4 @@ module Bil = struct
 
 end
 
-let () = Bil.register ()
+let () = Config.when_ready @@ fun _ -> Bil.register ()

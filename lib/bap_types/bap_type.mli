@@ -1,10 +1,7 @@
-(** Extends [typ] interface.  *)
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
 
-(** This definitions will be placed in a global namespace after you
-    open an [Bap_types.Std] module *)
 module Export : sig
   val bool_t  : typ
   val reg8_t  : typ
@@ -17,4 +14,4 @@ module Export : sig
   val mem64_t : size -> typ
 end
 
-include Regular with type t := typ
+include Regular.S with type t := typ

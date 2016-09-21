@@ -7,7 +7,9 @@ external init : unit -> int = "disasm_llvm_init_stub" "noalloc"
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Uses LLVM-MC library to provide disassembler and file loader"
+      `P "Uses LLVM library to provide disassembler and file loader" ;
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-elf-loader)(1)";
     ] in
   let x86_syntax =
     let names = ["att", "att"; "intel", "intel"] in

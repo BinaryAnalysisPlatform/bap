@@ -1,4 +1,3 @@
-(** Extends [arch] interface  *)
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
@@ -9,5 +8,4 @@ val addr_size : arch -> addr_size
 
 val endian : arch -> endian
 
-(** [arch] type implements [Idenfifiable]  interface  *)
-include Regular with type t := arch
+include Regular.S with type t := arch

@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_common
 type t
-include Regular with type t := t
+include Regular.S with type t := t
 val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t
 val with_index : t -> int -> t
 val index : t -> int

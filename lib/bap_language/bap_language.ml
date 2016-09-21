@@ -28,7 +28,7 @@ module Std = struct
 
     let name = Tid.name
 
-    include Printable(struct
+    include Printable.Make(struct
         type t = language
         let module_name = Some "Bap_language.Std.Language"
         let pp ppf {repr} =
@@ -37,7 +37,7 @@ module Std = struct
 
     module Name = struct
       type t = name = ..
-      include Printable(struct
+      include Printable.Make(struct
           type t = name
           let module_name = Some "Bap_language.Std.Language.Name"
           let pp ppf n =

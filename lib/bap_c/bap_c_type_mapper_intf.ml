@@ -3,7 +3,9 @@ open Bap_c_type
 (** Type mapper, visitor, iterator, finder all in one.
 
     The interface is wrapped into a monad, that allows, by choosing a
-    proper monad implement all the above morphisms and iterators.
+    proper monad implement all the above morphisms and iterators. If
+    you're afraid of the monads, then calm down and continue reading,
+    there is a way to use this interface without any monads.
 
     Each syntactical element [t:T] of the type system is represented
     with three methods:
@@ -31,6 +33,25 @@ open Bap_c_type
         method private my_transformation t = t
       end
     ]}
+
+
+    All method calls are bound with monadic operations. This makes it
+    possible to parametrize visitor with different computation strategies
+    (depending on a binding strategy of a monad).
+
+    If the monad is a null monad, where bind is a reverse application,
+    and returns is an identity, then we have a normal execution and
+    the whole visitor degrade to a regular visitor/mapper without any
+    monads. Such visitor is instantiated as {!C.Type.Mapper.base}.
+
+    The other two useful monads, are [State] and [Search]. The visitor
+    in these monads is instantiated as {!C.Type.Mapper.State.base} and
+    {!C.Type.Mapper.Finder.base} correspondingly. The former is useful
+    to implement a regular visitor, that will fold an abitrary value
+    over the type structure, or to implement a mapper, that can also
+    have a state. The latter, is useful for implementing a search with
+    a shortcut, i.e., when the searching is terminated as soon as the
+    target is found.
 *)
 module type S = sig
   type ('a,'e) m

@@ -34,4 +34,4 @@ val pp_set : Format.formatter -> set -> unit
 
 val pp_map : Format.formatter -> map -> unit
 
-module Map : Regular with type t = map
+module Map : Regular.S with type t = map

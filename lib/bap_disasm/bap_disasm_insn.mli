@@ -42,4 +42,4 @@ module Trie : sig
   module Normalized : Trie with type key = key
   include Trie with type key := key
 end
-include Regular with type t := t
+include Regular.S with type t := t

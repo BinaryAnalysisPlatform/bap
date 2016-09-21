@@ -70,7 +70,10 @@ let rem_files api =
 module Cmdline = struct
   let man = [
     `S "DESCRIPTION";
-    `P "Automatically apply API bundled in the plugin. "
+    `P "Automatically apply API bundled in the plugin. ";
+    `S "SEE ALSO";
+    `P "$(b,bap-api)(3), $(b,bap-plugin-frontc-parser)(1)"
+
   ]
 
   module Api = struct

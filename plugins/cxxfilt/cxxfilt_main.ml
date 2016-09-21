@@ -1,7 +1,16 @@
 open Core_kernel.Std
+open Bap.Std
 open Bap_demangle.Std
 open Cxxfilt_config
+include Self()
 
+let () = Config.manpage [
+    `S "DESCRIPTION";
+    `P "A demangler that relies on a $(b,c++filt) utility";
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-demangle)(1), $(b,bap-demangle)(3)"
+
+  ]
 
 let demangle prog name =
   let command = sprintf "%s -p %s" prog name in
@@ -23,5 +32,6 @@ let run name =
 
 
 let () =
+  Config.when_ready @@ fun _ ->
   let demangler = Demangler.create "c++filt" run in
   Demanglers.register demangler

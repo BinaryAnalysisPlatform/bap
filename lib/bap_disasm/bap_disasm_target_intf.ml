@@ -14,7 +14,6 @@ module type CPU = sig
   val is_flag : var -> bool
   val is_sp : var -> bool
   val is_bp : var -> bool
-  val is_pc : var -> bool
   val is_zf : var -> bool
   val is_cf : var -> bool
   val is_vf : var -> bool

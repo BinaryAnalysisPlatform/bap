@@ -107,7 +107,7 @@ module Std = struct
       let put_data b ~name ~data =
         b.data <- (`Name name,data) :: b.data
 
-      let flush ?(sign=false) b uri =
+      let flush b uri =
         let path = Uri.path uri in
         let zip = Zip.open_out path in
         List.iter b.files ~f:(fun (name,uri) ->

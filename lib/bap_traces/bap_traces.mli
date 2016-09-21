@@ -1,226 +1,37 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
-(** Trace is a stream of events plus meta information.
 
-    The event is a value of type [value]. Event type is reified with
-    [Value.Tag]. A set of event types in a given trace is an
-    intersection of the following three sets:
-
-    - Event types supported by a trace tool;
-
-    - Event types that are supported by an event transport (i.e.,
-    protocol)
-
-    - Types of events that has occurred in the course of the a given
-    trace.
-
-    Since it is worthwhile to know whether a particular event is not the
-    trace because it didn't occur during program execution, but not
-    because it wasn't detected by a trace tool or dropped by a given
-    transport, we provide [supports] function, to query whether the
-    a given event type is really supported (and thus might occur) by a given trace.
-
-    The meta information is also represented using [value] type, and
-    thus can contain virtually any data. Meta information is indexed
-    with [tag] value.
-*)
+(** Traces of execution. *)
 module Std : sig
-  module Move : sig
-    type 'a t = {
-      cell : 'a;
-      data : word;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
 
-  module Chunk : sig
-    type t = {
-      addr : addr;
-      data : string;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
 
-  module Syscall : sig
-    type t = {
-      number : int;
-      args : word array;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  module Exn : sig
-    type t = {
-      number : int;
-      src : addr option;
-      dst : addr option;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  module Location : sig
-    type t = {
-      name : string option;
-      addr : addr;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  type location = Location.t [@@deriving bin_io, compare, sexp]
-
-  module Call : sig
-    type t = {
-      caller : location;
-      callee : location;
-      args : word array;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  module Return : sig
-    type t = {
-      caller : string;
-      callee : string;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  module Modload : sig
-    type t = {
-      name : string;
-      low : addr;
-      high : addr;
-    } [@@deriving bin_io, compare, fields, sexp]
-  end
-
-  type 'a move = 'a Move.t [@@deriving bin_io, compare, sexp]
-  type chunk = Chunk.t [@@deriving bin_io, compare, sexp]
-  type syscall = Syscall.t [@@deriving bin_io, compare, sexp]
-  type exn = Exn.t [@@deriving bin_io, compare, sexp]
-  type call = Call.t [@@deriving bin_io, compare, sexp]
-  type return = Return.t [@@deriving bin_io, compare, sexp]
-  type modload = Modload.t [@@deriving bin_io, compare, sexp]
-
-  module Event : sig
-
-    (** an read access to a memory cell  *)
-    val memory_load : addr move tag
-
-    (** a write access to a memory cell  *)
-    val memory_store : addr move tag
-
-    (** a value was read from a given register  *)
-    val register_read : var move tag
-
-    (** a value is written to the specified register  *)
-    val register_write : var move tag
-
-    (** this event can used to synchronize traces  *)
-    val timestamp : int64 tag
-
-    (** CPU PC register changed its value  *)
-    val pc_update : addr tag
-
-    (** CPU loaded this memory chunk for execution. This event
-          occurs just before the execution. All side effects of
-          the code execution occurs after this event. *)
-    val code_exec : chunk tag
-
-    (** operating system has performed context switching to a provided
-        thread (process) id. *)
-    val context_switch : int tag
-
-    (** a system call has occured  *)
-    val syscall : syscall tag
-
-    (** a software exception has occured.  *)
-    val exn : exn tag
-
-    (** a control flow transfer from one procedure to another has occured  *)
-    val call : call tag
-
-    (** a return from a call has occured  *)
-    val return : return tag
-
-    (** represent an executable module being loaded *)
-    val modload : modload tag
-  end
-
-  module Tracer : sig
-    type t = {
-      name : string;
-      args : string array;
-      envp : string array;
-      version : string;
-    } [@@deriving bin_io, compare, sexp]
-  end
-
-  module Binary : sig
-    type t = {
-      path : string;
-      args : string array;
-      envp : string array;
-      md5sum : string;
-    } [@@deriving bin_io, compare, sexp]
-  end
-
-  module File_stats : sig
-    type t = {
-      size  : int;
-      atime : float;
-      mtime : float;
-      ctime : float;
-    } [@@deriving bin_io, compare, sexp]
-  end
-
-  module Trace_stats : sig
-    type t = {
-      user : string;   (** Name of a trace creator  *)
-      host : string;   (** A host where trace was created *)
-      time : float;   (** Time when tracing started  *)
-    } [@@deriving bin_io, compare, sexp]
-  end
-
+  (** the trace  *)
   type trace
-  type tracer = Tracer.t [@@deriving bin_io, compare, sexp]
-  type binary = Binary.t [@@deriving bin_io, compare, sexp]
-  type file_stats = File_stats.t [@@deriving bin_io, compare, sexp]
-  type trace_stats = Trace_stats.t [@@deriving bin_io, compare, sexp]
 
 
-  module Meta : sig
+  (** Trace is a stream of events plus meta data.
 
-    (** description of a tracer that was used to create the trace  *)
-    val tracer : tracer tag
+      It can be viewed as an input channel. In fact, [Trace.t] is an
+      abstract data type usually inhabited with codata, i.e., some
+      entity with hidden state. The [Trace] may be an interface to a
+      remote server, virtual machine or just a file. So treat the
+      trace as something that works as an input channel.
 
-    (** description of a target binary (executable) that was traced.*)
-    val binary : binary tag
+      Since it is worthwhile to know whether a particular event is not the
+      trace because it didn't occur during program execution, but not
+      because it wasn't detected by a trace tool or dropped by a given
+      transport, we provide [supports] function, to query whether the
+      given event type is really supported (and thus might occur) by a
+      given trace.
 
-    (** description of binary architecture. *)
-    val arch : arch tag
-
-    (** file stats of the traced binary  *)
-    val binary_file_stats : file_stats tag
-
-    val trace_stats : trace_stats tag
-
-  end
-
+      The meta information is also represented using [value] type,
+      and thus can contain virtually any data. Meta information is
+      indexed with [tag] value. Unlike the events, that are codata,
+      meta is a regular data, obtained from a trace source at the
+      time of trace creation and is not changed magically in the trace
+      lifetime. *)
   module Trace : sig
-    (** Trace is a stream of events plus meta data. It can be viewed as
-        an input channel. In fact, [Trace.t] is an abstract data type
-        usually inhabited with codata, i.e., some entity with hidden
-        state. The [Trace] may be an interface to a remote server, virtual
-        machine or just a file. So treat the trace as something that works
-        as an input channel.
-
-        Since it is worthwhile to know whether a particular event is not the
-        trace because it didn't occur during program execution, but not
-        because it wasn't detected by a trace tool or dropped by a given
-        transport, we provide [supports] function, to query whether the
-        given event type is really supported (and thus might occur) by a
-        given trace.
-
-        The meta information is also represented using [value] type,
-        and thus can contain virtually any data. Meta information is
-        indexed with [tag] value. Unlike the events, that are codata,
-        meta is a regular data, obtained from a trace source at the
-        time of trace creation and is not changed magically in the trace
-        lifetime. *)
 
     type event = value [@@deriving bin_io, sexp, compare]
     type monitor
@@ -397,7 +208,7 @@ module Std : sig
 
     val register_writer : proto -> (Uri.t -> t -> (unit, io_error) Result.t) -> unit
 
-    module Id : Regular with type t = id
+    module Id : Regular.S with type t = id
 
     type step = [
       | `Stop
@@ -409,8 +220,6 @@ module Std : sig
     (** Monitor defines an error handling policy.*)
     module Monitor : sig
       type t = monitor
-
-
 
       (** [ignore_errors] filters good events and silently drops error events  *)
       val ignore_errors : t
@@ -435,12 +244,242 @@ module Std : sig
     end
   end
 
+
+  (** Loaded traces.
+
+      This is a static container for the traces. Frontends and plugins
+      can load traces and add it to the repository.
+
+  *)
   module Traces : sig
+
+
+    (** [to_list ()] returns a list of currently loaded traces.  *)
     val to_list : unit -> trace list
+
+    (** [enum ()] enumerates all currently loaded traces  *)
     val enum : unit -> trace seq
+
+
+    (** [add trace] registers a [trace] into the repository  *)
     val add : trace -> unit
+
+    (** [remove trace] removes a [trace] from the repository, do
+        nothing if it wasn't registered.  *)
     val remove : trace -> unit
   end
 
+
+  (** {2 Trace Events}
+
+      The trace may contain arbitrary events. The events below is a
+      good starting point. Other libraries may add more event. *)
+
+
+
+
+  (** {3 Supporting data types}  *)
+
+
+  (** Represent a movement of data  *)
+  module Move : sig
+    type 'a t = {
+      cell : 'a;                 (** source or destination  *)
+      data : word;              (** moved data   *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+
+  (** Represent a memory chunk.  *)
+  module Chunk : sig
+    type t = {
+      addr : addr;              (** an address of the first byte *)
+      data : string;            (** the bytes *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+
+  (** a system call  *)
+  module Syscall : sig
+    type t = {
+      number : int;             (** system call number *)
+      args : word array;        (** arguments passed to a system call *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+
+  (** hardware exception  *)
+  module Exn : sig
+    type t = {
+      number : int;             (** an exception number *)
+      src : addr option;        (** a source address *)
+      dst : addr option;        (** a destination address *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+  (** A code location *)
+  module Location : sig
+    type t = {
+      name : string option;     (** a symbolic name *)
+      addr : addr;              (** a virtual address *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+  type location = Location.t [@@deriving bin_io, compare, sexp]
+
+
+  (** A subroutine call.   *)
+  module Call : sig
+    type t = {
+      caller : location;        (** location of a caller *)
+      callee : location;        (** location of a calee *)
+      args : word array;        (** call arguments *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+
+  (** A return from a call.  *)
+  module Return : sig
+    type t = {
+      caller : string;          (** caller name *)
+      callee : string;          (** calee name *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+
+  (** linking event  *)
+  module Modload : sig
+    type t = {
+      name : string;            (** a name of linked module *)
+      low : addr;               (** the lowest mapped address *)
+      high : addr;              (** the hightest mapped address *)
+    } [@@deriving bin_io, compare, fields, sexp]
+  end
+
+  type 'a move = 'a Move.t [@@deriving bin_io, compare, sexp]
+  type chunk = Chunk.t [@@deriving bin_io, compare, sexp]
+  type syscall = Syscall.t [@@deriving bin_io, compare, sexp]
+  type exn = Exn.t [@@deriving bin_io, compare, sexp]
+  type call = Call.t [@@deriving bin_io, compare, sexp]
+  type return = Return.t [@@deriving bin_io, compare, sexp]
+  type modload = Modload.t [@@deriving bin_io, compare, sexp]
+
+  (** Types of events.  *)
+  module Event : sig
+
+    (** an read access to a memory cell  *)
+    val memory_load : addr move tag
+
+    (** a write access to a memory cell  *)
+    val memory_store : addr move tag
+
+    (** a value was read from a given register  *)
+    val register_read : var move tag
+
+    (** a value is written to the specified register  *)
+    val register_write : var move tag
+
+    (** this event can used to synchronize traces  *)
+    val timestamp : int64 tag
+
+    (** CPU PC register changed its value  *)
+    val pc_update : addr tag
+
+    (** CPU loaded this memory chunk for execution. This event
+          occurs just before the execution. All side effects of
+          the code execution occurs after this event. *)
+    val code_exec : chunk tag
+
+    (** operating system has performed context switching to a provided
+        thread (process) id. *)
+    val context_switch : int tag
+
+    (** a system call has occured  *)
+    val syscall : syscall tag
+
+    (** a software exception has occured.  *)
+    val exn : exn tag
+
+    (** a control flow transfer from one procedure to another has occured  *)
+    val call : call tag
+
+    (** a return from a call has occured  *)
+    val return : return tag
+
+    (** a module (shared library) is dynamically linked into a host program. *)
+    val modload : modload tag
+  end
+
+
+
+  (** {2 Meta information}  *)
+
+  (** Information about a tracer tool. *)
+  module Tracer : sig
+    type t = {
+      name : string;            (** name of a tool *)
+      args : string array;      (** the tool arguments *)
+      envp : string array;      (** environment variables *)
+      version : string;         (** tool version *)
+    } [@@deriving bin_io, compare, sexp]
+  end
+
+
+  (** Information about a traced binary.  *)
+  module Binary : sig
+    type t = {
+      path : string;            (** a path to the binary *)
+      args : string array;      (** arguments passed to the binary *)
+      envp : string array;      (** environment variables *)
+      md5sum : string;          (** digest of the binary contents *)
+    } [@@deriving bin_io, compare, sexp]
+  end
+
+
+  (** File information.  *)
+  module File_stats : sig
+    type t = {
+      size  : int;              (** size of a file *)
+      atime : float;            (** last access time *)
+      mtime : float;            (** last modification time  *)
+      ctime : float;            (** the creation time *)
+    } [@@deriving bin_io, compare, sexp]
+  end
+
+  (** Information about the trace itself  *)
+  module Trace_stats : sig
+    type t = {
+      user : string;   (** Name of a trace creator  *)
+      host : string;   (** A host where trace was created *)
+      time : float;   (** Time when tracing started  *)
+    } [@@deriving bin_io, compare, sexp]
+  end
+
+  type tracer = Tracer.t [@@deriving bin_io, compare, sexp]
+  type binary = Binary.t [@@deriving bin_io, compare, sexp]
+  type file_stats = File_stats.t [@@deriving bin_io, compare, sexp]
+  type trace_stats = Trace_stats.t [@@deriving bin_io, compare, sexp]
+
+
+
+  (** Types of meta information.  *)
+  module Meta : sig
+
+    (** description of a tracer that was used to create the trace  *)
+    val tracer : tracer tag
+
+    (** description of a target binary (executable) that was traced.*)
+    val binary : binary tag
+
+    (** description of binary architecture. *)
+    val arch : arch tag
+
+    (** file stats of the traced binary  *)
+    val binary_file_stats : file_stats tag
+
+    (** generic information about the trace.  *)
+    val trace_stats : trace_stats tag
+
+  end
 
 end

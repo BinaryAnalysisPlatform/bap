@@ -7,6 +7,6 @@ Library "cxxfilt_plugin"
   Build$: flag(everything) || flag(cxxfilt)
   FindlibName: bap-plugin-cxxfilt
   CompiledObject: best
-  BuildDepends: core_kernel, bap-demangle
+  BuildDepends: core_kernel, bap-demangle, bap
   InternalModules: Cxxfilt_main, Cxxfilt_config
   XMETADescription: provide c++filt based demangler
