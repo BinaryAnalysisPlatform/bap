@@ -293,6 +293,8 @@ module Cmdline = struct
       `S "DESCRIPTION";
       `P "A toolkit for training, fetching, testing
           and installing byteweight signatures.";
+      `S "SEE ALSO";
+      `P "$(b,bap)(1), $(b,bap-plugin-byteweight)(1)"
     ] in
     Term.(pure usage $ choice_names),
     Term.info "bap-byteweight"
@@ -311,4 +313,5 @@ let () =
     eprintf "Program failed: %s\n%!"
       Error.(to_string_hum err);
     exit 2
+  | `Version | `Help -> ()
   | _ -> exit 1

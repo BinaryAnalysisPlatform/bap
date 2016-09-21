@@ -21,7 +21,7 @@ module Edge : sig
   val tid : t -> tid
   val cond : t -> graph -> exp
 
-  include Printable with type t := t
+  include Printable.S with type t := t
 end
 
 module Node : sig
@@ -29,7 +29,7 @@ module Node : sig
                 and type t = node
                 and type edge = edge
                 and type label = blk term
-  include Printable with type t := t
+  include Printable.S with type t := t
 end
 
 include Graph with type t := t

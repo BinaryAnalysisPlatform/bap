@@ -457,7 +457,7 @@ module Trie = struct
   module R64 = Trie.Make(Key(struct let size = `r64 end))
 end
 
-include Printable(struct
+include Printable.Make(struct
     open Format
     type nonrec t = t
 

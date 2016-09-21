@@ -7,10 +7,13 @@ module Std = struct
   module Bytes = Regular_bytes
   module Regular = Regular_regular
   module Opaque = Regular_opaque
-  module Printable = Regular.Printable
+  module Printable = struct
+    module type S = Regular.Printable
+    module Make = Regular.Printable
+  end
   module type Opaque = Opaque.S
   module type Regular = Regular.S
-  module type Printable = Regular.Printable
+  module type Printable = Printable.S
 
   include Regular_data_intf
 

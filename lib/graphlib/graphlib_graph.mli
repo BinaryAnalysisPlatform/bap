@@ -227,7 +227,7 @@ end
 module Equiv : sig
   type t
   val to_int : t -> int
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 

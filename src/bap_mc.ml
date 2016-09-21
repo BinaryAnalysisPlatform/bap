@@ -229,7 +229,7 @@ module Cmdline = struct
             "echo \"0x31 0xd2 0x48 0xf7 0xf3\" | \
              bap-mc  --show-inst --show-bil");
         `S "SEE ALSO";
-        `P "llvm-mc"] in
+        `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
     Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
           $insn_formats $bil_formats $bir_formats $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version
@@ -242,9 +242,9 @@ module Cmdline = struct
     | Some (Some typ),_ -> print_data_formats typ; exit 0
     | _ -> match Term.eval ~argv (program ()) ~catch:false with
       | `Ok opts -> Ok opts
+      | `Version | `Help -> exit 0
       | `Error `Parse -> exit 64
       | `Error _ -> exit 2
-      | _ -> exit 1
 end
 
 let exitf n =

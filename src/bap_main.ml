@@ -15,7 +15,7 @@ exception Failed_to_create_project of Error.t
 exception Unknown_format of string
 
 
-let find_source (type t) (module F : Source.Factory with type t = t)
+let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
 
 let brancher = find_source (module Brancher.Factory) brancher
@@ -190,7 +190,8 @@ let program_info =
       `S "BUGS";
       `P "Report bugs to \
           https://github.com/BinaryAnalysisPlatform/bap/issues";
-      `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
+      `S "SEE ALSO";
+      `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
 let program source =
@@ -244,7 +245,6 @@ let parse passes argv =
 
 let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
-
 
 let () =
   let () =

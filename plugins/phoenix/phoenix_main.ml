@@ -75,7 +75,9 @@ let man = [
       format. This will emit CFG for each format in dot format. It
       will also store BIL and ASM code in html format.Output folder
       can be optionally specified. If omitted, the basename of the
-      target file will be used as a directory name."
+      target file will be used as a directory name.";
+  `S "SEE ALSO";
+  `P "$(b,bap-plugin-print)(1), $(b,text-tags)(3)"
 ]
 
 let () =

@@ -1,12 +1,10 @@
-(** Extends [stmt] interface  *)
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
 open Bap_bil
 
-include Regular with type t := stmt
+include Regular.S with type t := stmt
 
-(** [pp_stmts] pretty prints a sequence of statements.  *)
 val pp_stmts : Format.formatter -> stmt list -> unit
 
 module Stmt : sig
@@ -22,5 +20,5 @@ module Infix : sig
   val (:=) : var -> exp -> stmt
 end
 
-module Stmts_pp : Printable with type t = stmt list
-module Stmts_data : Data with type t = stmt list
+module Stmts_pp : Printable.S with type t = stmt list
+module Stmts_data : Data.S with type t = stmt list

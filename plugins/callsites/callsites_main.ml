@@ -99,5 +99,7 @@ let () =
       0000015c:
       000001c4: R0 := malloc_result
       ...";
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-api)(1)"
   ];
   Config.when_ready (fun _ -> Project.register_pass main)

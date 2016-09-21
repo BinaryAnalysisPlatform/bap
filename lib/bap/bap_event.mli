@@ -39,4 +39,4 @@ module Log : sig
   val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
 end
 
-include Printable with type t := t
+include Printable.S with type t := t

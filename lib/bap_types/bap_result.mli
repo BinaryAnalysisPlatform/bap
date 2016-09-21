@@ -29,7 +29,7 @@ val word : word -> id -> t
 val id : t -> id
 val value : t -> value
 
-module Value : Printable with type t = value
+module Value : Printable.S with type t = value
 
 module Storage : sig
   class linear : storage
@@ -37,9 +37,9 @@ module Storage : sig
 end
 
 module Id : sig
-  include Regular with type t = id
+  include Regular.S with type t = id
   val zero : t
   val succ : t -> t
 end
 
-include Printable with type t := t
+include Printable.S with type t := t

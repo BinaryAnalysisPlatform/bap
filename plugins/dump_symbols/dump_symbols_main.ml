@@ -29,7 +29,9 @@ let () =
       `P "Output symbol information. In the output file, each symbol
           is in format of:
           `(<symbol name> <symbol start address> <symbol end address>)', e.g.,
-          `(malloc 0x11034 0x11038)'"
+          `(malloc 0x11034 0x11038)'";
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-print)(1), $(b,bap-fsi-benchmark)(1)"
     ] in
   let file = Config.(param (some string) "file" ~docv:"FILE"
                        ~doc:"Dump symbols to the specified $(docv)") in

@@ -13,7 +13,10 @@ module type S2 = Monad.S2
 module Make(M : Basic) : S with type 'a t := 'a M.t
 module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
 
-module State : State with type 'a result = 'a
+module State : sig
+  module type S = State
+  include State with type 'a result = 'a
+end
 
 module T : sig
   module Option : sig

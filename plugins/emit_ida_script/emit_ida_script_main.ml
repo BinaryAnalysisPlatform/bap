@@ -125,7 +125,9 @@ let () =
       `P "Iterates through memory for tagged BIR attributes,
       and dumps them into a python script, that can be later
       loaded into IDA. The special `color' tag causes the
-      respective address to be colored."
+      respective address to be colored.";
+      `S "SEE ALSO";
+      `P "$(b,bap-ida)(3), $(b,bap-plugin-ida)(1)"
     ] in
   let dst = Config.(param (some string) "file" ~docv:"NAME"
                       ~doc:"Dump annotations to the specified file $(docv). If

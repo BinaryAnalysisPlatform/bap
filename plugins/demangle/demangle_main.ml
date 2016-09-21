@@ -22,6 +22,8 @@ let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
       `P "Apply specified demangler to all subroutine names";
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-cxxfilt)(1)"
     ] in
   let demangler : demangler option Config.param =
     let demanglers =

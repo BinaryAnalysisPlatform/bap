@@ -4,13 +4,16 @@ open Bap_image_std
 open Bap_disasm_source_intf
 open Bap_future.Std
 
-module Factory(T : T) = struct
-  type t = T.t
-  let factory = String.Table.create ()
+module Factory = struct
+  module type S = Factory
+  module Make(T : T) = struct
+    type t = T.t
+    let factory = String.Table.create ()
 
-  let register name source =
-    Hashtbl.set factory ~key:name ~data:source
+    let register name source =
+      Hashtbl.set factory ~key:name ~data:source
 
-  let list () = Hashtbl.keys factory
-  let find = Hashtbl.find factory
+    let list () = Hashtbl.keys factory
+    let find = Hashtbl.find factory
+  end
 end

@@ -152,7 +152,9 @@ taint values returned by a $(i,malloc) only at the specified call site
 address. You can specify these options several times.|};
     `P "The full grammar specification of strain specification
 language follows:";
-    `Pre grammar
+    `Pre grammar;
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-propagate-taint)(1), $(b,bap-plugin-map-terms)(1)"
   ]
 
   let taints kind : strain list list Config.param =

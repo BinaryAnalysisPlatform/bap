@@ -115,7 +115,9 @@ module Cmdline = struct
     `I begin
       "$(b,--$mname)",
       "Same as $(b,--$mname-taint --propagate-taint --$mname-print)"
-    end
+    end;
+    `S "SEE ALSO";
+    `P "$(b,bap-api)(1), $(b,bap-plugin-propagate-taint)(1), $(b,bap-plugin-taint)(1)"
   ]
 
   let passes = [name; "--taint"; "--mark"; "--print"]

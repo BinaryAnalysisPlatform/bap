@@ -45,7 +45,7 @@ let main dump_uri loads =
   | None,loads -> load loads
 
 module Cmdline = struct
-  let man = [
+  let () = Config.manpage [
     `S "SYNOPSIS";
     `Pre "
         $(b,bap) --$(b,$mname-dump)=$(i,URI)
@@ -58,7 +58,9 @@ module Cmdline = struct
        specified traces, so that they can be used by
        analysis. The loaded traces must be runs of the analyzed
        $(i,BINARY). The loaded traces are accessible via the
-       $(b,Traces) of the traces library."
+       $(b,Traces) of the traces library.";
+    `S "SEE ALSO";
+    `P "$(b,bap-trace)(3)"
   ]
 
   let uri_of_string str =

@@ -12,20 +12,11 @@ type ('a,'b) dump = 'b -> 'a -> unit
 type lexbuf  = Lexing.lexbuf
 type scanbuf = Scanf.Scanning.scanbuf
 
-module type Versioned = sig
-  (** type of data  *)
-  type t
-
-  (** version of data representation  *)
-  val version : string
+module Versioned = struct
+  module type S = sig
+    type t
+    val version : string
+  end
 end
 
-module type Sexpable = sig
-  include Versioned
-  include Sexpable with type t := t
-end
-
-module type Binable = sig
-  include Versioned
-  include Binable with type t := t
-end
+module type Versioned = Versioned.S

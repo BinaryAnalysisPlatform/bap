@@ -192,7 +192,7 @@ let main args proj =
 
 module Cmdline = struct
 
-  let man = [
+  let () = Config.manpage [
     `S "DESCRIPTION";
 
     `P "A taint propagation framework, that uses microexecution to
@@ -241,6 +241,8 @@ module Cmdline = struct
     specified amount of iterations. In the deterministic mode it will
     just return from a procedure, otherwise, it will backtrack.";
 
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-taint)(1), $(b,bap-plugin-map-terms)(1)"
   ]
 
   let max_trace = Config.(param int "max-trace"

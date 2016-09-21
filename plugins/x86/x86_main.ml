@@ -33,6 +33,8 @@ let () =
       `P "To choose a correct ABI for a binary compiled for MS Windows
     x64 target, use the following:";
       `P "$(b,bap) FILE --x86-64=ms";
+      `S "SEE ALSO";
+      `P "$(b,bap-x86-cpu)(3), $(b,bap-plugin-abi)(1), $(b,bap-plugin-arm)(1)"
     ] in
   let abi arch name =
     let abis = X86_abi.supported () |> List.filter_map ~f:(fun abi ->

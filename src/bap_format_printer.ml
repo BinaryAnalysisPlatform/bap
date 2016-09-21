@@ -3,7 +3,7 @@ open Regular.Std
 open Bap.Std
 open Format
 
-let run dir (module Data : Data ) =
+let run dir (module Data : Data.S ) =
   let fmts = match dir with
     | `readers -> Data.available_readers
     | `writers -> Data.available_writers in

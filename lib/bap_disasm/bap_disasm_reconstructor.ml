@@ -92,4 +92,4 @@ let of_blocks syms =
 
 let default name roots = create (reconstruct name roots)
 
-module Factory = Source.Factory(struct type nonrec t = t end)
+module Factory = Source.Factory.Make(struct type nonrec t = t end)

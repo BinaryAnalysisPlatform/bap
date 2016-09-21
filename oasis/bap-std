@@ -15,7 +15,8 @@ Library bap
                    bap.sema,
                    bap.types,
                    bap-future,
-                   cmdliner
+                   cmdliner,
+                   regular
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 

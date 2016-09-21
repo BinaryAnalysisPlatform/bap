@@ -338,7 +338,12 @@ let () =
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Setup various output formats for project data"
+      `P "Setup various output formats for project data.";
+      `S "SEE ALSO";
+      `P
+        "$(b,bap-plugin-phoenix)(1), $(b,bap-plugin-piqi-printers)(1),
+         $(b,bap-plugin-dump-symbols)(1)"
+
     ] in
   let demangle : string option Config.param =
     let doc = "Demangle symbols, using the specified demangler" in

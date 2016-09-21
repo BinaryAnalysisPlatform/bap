@@ -14,7 +14,7 @@ type value =
   | Bot
 
 module Id : sig
-  include Regular
+  include Regular.S
   val zero : t
   val succ : t -> t
 end = struct
@@ -65,7 +65,7 @@ end
 
 module Value = struct
   type t = value
-  include Printable(struct
+  include Printable.Make(struct
       type t = value
       let module_name = Some "Bap.Std.Bil.Result.Value"
       let version = "0.1"
@@ -77,7 +77,7 @@ module Value = struct
     end)
 end
 
-include Printable(struct
+include Printable.Make(struct
     type t = result
 
     let pp ppf r =

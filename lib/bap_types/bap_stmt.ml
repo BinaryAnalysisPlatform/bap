@@ -58,7 +58,7 @@ include Regular.Make(struct
 
 module Stmts_pp = struct
   type t = stmt list
-  include Printable(struct
+  include Printable.Make(struct
       type nonrec t = t
       let pp = pp_stmts
       let module_name = Some "Bap.Std.Bil"

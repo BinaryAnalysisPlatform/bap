@@ -34,7 +34,6 @@ module Plugin = struct
   ]
 
   let load = ref Dynlink.loadfile
-  let crc : Digest.t String.Table.t = String.Table.create ()
   let units : reason String.Table.t = String.Table.create ()
 
   let setup_dynamic_loader loader =

@@ -72,7 +72,7 @@ module Op : sig
   end
 
   val pp_adt : Format.formatter -> t -> unit
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 type op = Op.t [@@deriving bin_io, compare, sexp]
@@ -93,7 +93,7 @@ module Reg : sig
   type t = reg
   val code : t -> int
   val name : t -> string
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Imm : sig
@@ -101,13 +101,13 @@ module Imm : sig
   val to_word  : t -> width:int -> word option
   val to_int64 : t -> int64
   val to_int   : t -> int option
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Fmm : sig
   type t = fmm
   val to_float : t -> float
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Trie : sig

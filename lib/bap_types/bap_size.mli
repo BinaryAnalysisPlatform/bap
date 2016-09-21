@@ -40,4 +40,4 @@ val to_addr_size : size -> addr_size Or_error.t
 val in_bits  : 'a Size.p -> int
 val in_bytes : 'a Size.p -> int
 
-include Regular with type t := size
+include Regular.S with type t := size

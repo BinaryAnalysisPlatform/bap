@@ -2,8 +2,14 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 
+
+
+(** ELF file format reader.  *)
 module Std : sig
+
+  (** ELF data structures.  *)
   module Elf : sig
+
     type e_class =
       | ELFCLASS32
       | ELFCLASS64

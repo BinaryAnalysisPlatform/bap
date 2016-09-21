@@ -1,3 +1,5 @@
+(** BAP Standard Library  *)
+
 open Core_kernel.Std
 open Regular.Std
 open Graphlib.Std
@@ -5,11 +7,13 @@ open Bap_future.Std
 
 module Std : sig
 
-  (** {1 Binary Analysis Platform Library}  *)
 
   (** {2 Overview}
 
-      BAP has a layered architecture consisting of four
+
+      {3 Layered Architecture}
+
+      The BAP library has a layered architecture consisting of four
       layers. Although the layers are not really observable from outside
       of the library, they make it easier to learn the library, as
       they introduce new concepts sequentially. On top of this layers,
@@ -49,70 +53,78 @@ module Std : sig
 
       The {{!bfl}Foundation library} defines {{!Bil}BAP Instruction
       language} data types, as well as other useful data structures,
-      like {!Value}, {!Trie}, {!Vector}, {!Graph}, etc. The
+      like {!Value}, {!Trie}, {!Vector}, etc. The
       {{!section:image}Memory model} layer is responsible for loading
-      and parsing binary objects and representing them in computer
+      and parsing binary objects and representing them in a computer
       memory. It also defines a few useful data structures that are
-      used extensively by later layers, like {!Table} and
+      used extensively by later layers, e.g., {!Table} and
       {!Memmap}. The next layer performs
       {{!section:disasm}disassembly} and lifting to BIL. Finally, the
       {{!section:sema}semantic analysis} layer transforms a binary
-      into an IR representation, that is suitable for writing analysis.
+      into an IR representation, that is suitable for writing
+      analysis.
 
-      Another important point of view is the BAP plugin architecture.
-      Similar to GIMP or Frama-C, BAP features a pluggable architecture
-      with a number of extension points. For example, even the LLVM
-      disassembler is considered a type of plugin.  Currently we
-      support three such extension points in BAP:
+      {3 Plugin Architecture}
 
-      - {{!Backend}loaders} - to add new binary object loaders;
-      - disassemblers - to add new disassemblers;
-      - {{!section:project}program analysis} - to write analysis.
+      The standard library tries to be as extensible as possible. We
+      are aware, that there are not good solutions for some problems, so
+      we don't want to force our way of doing things. In short, we're
+      trying to provide mechanisms, not policies. We achive this by
+      employing the dependency injection principle. By inversing the
+      dependency we allow the library to depend on a user code. For
+      example, a user code can teach the library how to disassemble
+      the binary or even how to reconstruct the CFG. In fact, the
+      library by itself doesn't contain the disassembler or lifter, or
+      any architecture specific code. Everything is injected later by
+      corresponding plugins.
 
-      The latter category of plugins is most widely used. Therefore,
-      when we use the term "plugin" without making a distinction, we
-      refer to a program analysis plugin. The following figure
-      provides an overview of the BAP system.
+      The library defines a fixed set of extension points. (Other
+      libraries, that constitute the Platform and follow the same
+      principle, can define their own extension points, so the
+      following set is not complete):
 
-      {v
-        +---------------------------------------------+
-        |  +----------------+    +-----------------+  |
-        |  |    Loader      |    |  Disassembler   |  |
-        |  |    Plugins     |    |    Plugins      |  |
-        |  +-------+--------+    +--------+--------+  |
-        |          |                      |           |
-        |  +-------+----------------------+--------+  |
-        |  |                                       |  |
-        |  |             BAP Library               |  |
-        |  |                                       |  |
-        |  +-------+-------------------------------+  |
-        |          ^                      ^           |
-        |          |                      |           |
-        |  +-------+--------+    +--------+--------+  |
-        |  |                |    |                 |  |
-        |  |  BAP toolkit   |<-->|   BAP Plugins   |  |
-        |  |                |    |                 |  |
-        |  +----------------+    +-----------------+  |
-        +---------------------------------------------+
-      v}
 
-      All plugins have full access to the library; an important
-      consequence is that they can and should open [Bap.Std]. The BAP
-      library uses backend loader and disassembler plugins to provide
-      its services. Program analysis plugins are loaded by BAP
-      toolkit utilities. These utilities extend plugin functionality
-      by providing access to the state of the target of analysis or,
-      in our parlance, to the {{!project}project}. (See
-      {!section:project}).
+      - loader - add new file formats (see {!Image.register_backend} or {!Project.Input});
+      - target - add new architecture (see {!register_target});
+      - disassembler - plug in a disassembler (see 'disasm.hpp' for c++ disassembler interface);
+      - attributes - extend the attribute type ({!Value.Tag.register});
+      - symbolizer - add names to functions (see {!Symbolizer});
+      - rooter - find function starts (see {!Rooter});
+      - brancher - resolve jump destinations (see {!Brancher})
+      - reconstructor - CFG reconstruction algorithm (see
+        {!Reconstructor});
+      - analysis - write your own arbitrary analysis pass (see
+        {!Project.register_pass})
 
-      Other than library itself, and the BAP toolkit, there are two
-      additional libraries that are bundled with BAP:
 
-      - [bap.plugins] to dynamically load code into BAP;
-      - [bap.serialization] to serialize BAP data structures in
-        different formats.
+      The {!Regular.Std} library, that forms a foundation for the BAP
+      Standard Library, also follows the dependency injection
+      principle, so every data type that implements regular interface,
+      can be dynamically extended with:
+
+      - pretty printing function;
+      - serialization subroutines;
+      - caching.
+
+      {3 Writing the analysis}
+
+      A common use case, is to write some analysis that will take the
+      program in some representation and then either output result of
+      analysis in a human or machine readable way, or transform the
+      program, in a way that can be employed by other
+      analysis. Following a naming convention of a more established
+      community of compiler writers, we name such analysis a _pass_.
+
+      The library itself doesn't run any analysis, it part of the job of a
+      frontend to run it. In particular, the [bap] frontend, will run
+      the analyses based on a command line specification. See [bap
+      --help] for more information.
+
+      We use {!Project} data structure to represent a program and all
+      associated knowledge that we were capable to infer.  To learn
+      how to use the project data structure continue to
+      {!section:project}.
   *)
-
 
   (** {2:bfl Foundation Library}
 
@@ -126,18 +138,14 @@ module Std : sig
       - {{!Exp}exp}  - {{!Bil}BIL} expression sub-language;
       - {{!Stmt}stmt} - {{!Bil}BIL} statements;
       - {{!Bitvector}bitvector} - a bitvector data structure
-        to represent immediate data, used usually by their aliases
-      - {!word} and {!addr};
+        to represent immediate data, used usually by their aliases {!word} and {!addr};
       - {{!Value}value} - an extensible variant type;
       - {{!Dict}dict} - an extensible record;
-      - {{!Vector}vector} - array that can grow;
-      - {{!Seq}'a seq} - slightly extended Core [Sequence], aka lazy
-        list;
+      - {{!Vector}vector} - an array that can grow;
       - {{!Trie}Trie} - prefix trees;
-      - {{!Graph}Graph} - graph implementations and library.
 
 
-      Most of the types implement the {{!Regular}Regular}
+      Most of the types implement the {{!Regular.Std.Regular.S}Regular}
       interface. This interface is very similar to Core's
       [Identifiable], and is supposed to represent a type that is as
       common as a built-in type. One should expect to find any
@@ -153,25 +161,24 @@ module Std : sig
       - [to_string], [str], [pp], [ppo], [pps] functions
       for pretty-printing.
 
-      Most types usually provide much more. For each type, there is a
-      module with the same name that implements its interface. For
-      example, type [exp] is indeed a type abbreviation for [Exp.t],
-      and module [Exp] contains all functions and types related to
-      type [exp]. For example, to create a hashtable of statements,
-      just type:
+      It is a convention, that for each type, there is a module with
+      the same name that implements its interface. For example, type
+      [exp] is a type abbreviation for [Exp.t], and module [Exp]
+      contains all functions and types related to type [exp]. For
+      example, to create a hashtable of statements, just type:
 
-      [let table = Stmt.Table.create ()]
+      [let table = Exp.Table.create ()]
 
-      If a type is a variant type (i.e., defines constructors) then for
-      each constructor named [Name], there exists a corresponding
+      If a type is a variant type (i.e., it defines constructors) then
+      for each constructor named [Name], there exists a corresponding
       function named [name] that will accept the same number of
-      arguments as the arity of the constructor. For example, a
-      [Bil.Int] can be constructed with the [Bil.int] function that
-      has type [word -> exp]. If a constructor has several arguments
-      of the same type we usually disambiguate them with keywords,
-      e.g., [Bil.Load of (exp,exp,endian,size)] has function
-      {{!Bil.load}Bil.load} with type:
-      [mem:exp -> addr:exp -> endian -> size -> exp]
+      arguments as the arity of the constructor (also named a
+      _functional constructor_). For example, a [Bil.Int] can be
+      constructed with the [Bil.int] function that has type [word ->
+      exp]. If a constructor has several arguments of the same type we
+      usually disambiguate using labels, e.g., [Bil.Load of
+      (exp,exp,endian,size)] has function {{!Bil.load}Bil.load} with
+      type: [mem:exp -> addr:exp -> endian -> size -> exp]
 
       {3:value Value}
 
@@ -184,13 +191,13 @@ module Std : sig
       {3:dict Dict}
 
       Like {{!Value}value} is an extensible sum type, {{!Dict}dict}
-      can be viewed as extensible product type. Dict is a sequence of
-      values of type {!value}, with {{!Value.Tag}tags} used as field
-      names. Of course, fields are unique.
+      can be viewed as an extensible product type. Dict is a sequence
+      of values of type {!value}, with {{!Value.Tag}tags} used as
+      field names. Of course, fields are unique.
 
       {3:vector Vector}
 
-      Vector is an implementation of C++ STL like vectors with
+      {!Vector} is an implementation of C++ STL like vectors with
       logarithmic push back.
 
       {3:tries Tries}
@@ -205,15 +212,12 @@ module Std : sig
       our data structures. For example, {{!Bitvector}Word} has several
       {{!Bitvector.Trie}tries} inside.
 
-      For common strings, there's {!Trie.String}.
-
-
-  *)
+      For the common string trie, there's {!Trie.String}.  *)
 
   (** {2:image Memory model}
 
-      This layer provides everything you need to work with binary
-      objects:
+      This layer is responsible for the representation of binaries. It
+      provides interfaces for the memory objects:
 
       - {{!Memory}mem} - a contiguous array of bytes, indexed with
        absolute addresses;
@@ -236,13 +240,8 @@ module Std : sig
 
   (** {2:disasm Disassembler}
 
-      This layer consists of disassemblers and lifters. They are
-      tightly integrated, but in general we can disassemble all
-      supported {{!Arch.t}architectures}. Currently we lift only arm,
-      x86 and x86_64.
-
-
-      There are two interfaces to disassemblers:
+      This layer defines interfaces for disassemblers. Two interfaces
+      are provided:
 
       - {{!Disasm}Disasm} - a regular interface that hides all
        complexities, but may not always be very flexible.
@@ -253,19 +252,16 @@ module Std : sig
       To disassemble files or data with the regular interface, use
       one of the following functions:
 
-      - {{!disassemble}disassemble} - to disassemble a region of
-        memory;
-      - {{!disassemble_image}disassemble_image} - to disassemble a
-        loaded binary object;
-      - {{!disassemble_file}disassemble_file} or
-        {{!disassemble_file_exn}disassemble_file} - to disassemble
-        file.
+      - {!Disasm.of_mem} - to disassemble a region of memory;
+      - {!Disasm.of_image} - to disassemble a loaded binary object;
+      - {!Disasm.of_file} - to disassemble file.
 
       All these functions perform disassembly by recursive descent,
-      reconstruct the control flow graph, and perform lifting. The
-      result of disassembly is represented by the abstract value of
-      type {{!Disasm}disasm}. Two main data structures that are used
-      to represent disassembled program are:
+      reconstruct the control flow graph, and perform lifting.
+
+      The result of disassembly is represented by the abstract value
+      of type {{!Disasm}disasm}. Two main data structures that are
+      used to represent disassembled program are:
 
       - {{!Insn}insn} - a machine instruction;
       - {{!Block}block} - a basic block, i.e., a linear sequence of
@@ -298,65 +294,51 @@ module Std : sig
       v}
 
 
-      A disassembled program is represented as a set of
-      interconnected {{!Block}basic blocks}. You can navigate between
-      blocks using {{!Block_traverse.succs}Block.succs} and
-      {{!Block_traverse.preds}Block.preds} functions, or you can
-      transform a set of blocks into a real {{!Block.Cfg}graph} using
-      the {{!Block.to_graph}Block.to_graph} function. Sometimes it
-      is enough to traverse program using
-      {{!Block.dfs}depth-first search}.
+      A disassembled program is represented as a set of interconnected
+      {{!Block}basic blocks}, called a whole program control flow
+      graph (CFG) and it is indeed represented as a graph
+      {!Graphs.Cfg}.  See {{!Graphlib.Std}graphlib} for more
+      information on graphs.
 
       Each block is a container to a sequence of machine
       instructions. It is guaranteed that there's at least one
-      instruction in the block, thus the
-      {{!Block_accessors.leader}Block.leader} and
-      {{!Block_accessors.terminator}Block.terminator} functions are
-      total.
+      instruction in the block, thus the {{!Block.leader}Block.leader}
+      and {{!Block.terminator}Block.terminator} functions are total.
 
       Each {{!Insn}machine instruction} is represented by its
       [opcode], [name] and [array] of operands (these are machine and
-      disassembler specific), a set of predicates (describing
+      disassembler specific), a set of predicates (that approximates
       instruction semantics on a very high level), and a sequence of
       {{!Bil}BIL} statements that precisely define the semantics of
       the instruction.
 
+      The expert interface exposes low level interface that provides
+      facilities for building custom implementations of
+      disassemblers. The interface to the disassembler backend is
+      exposed via the {!Disasm_expert.Basic} module. New backends can
+      be added by implementing the 'disasm.hpp' interface.
+
       Modules of type {{!CPU}CPU} provide a high level abstraction of
-      the CPU and allow one to reason about instruction semantics
-      independently from the target platform. The module type
-      {{!Target}Target} brings [CPU] and [ABI] together. To get an
-      instance of this module, you can use the
-      {{!target_of_arch}target_of_arch} function. For accessing all
-      information about target platform, use the following modules
-      that expose low-level and platform-specific details:
-
-      - {{!ARM}ARM}
-      - {{!IA32}IA32}
-      - {{!AMD64}AMD64}
-
-
-      If you do not need cfg reconstruction, you can use
-      {{!linear_sweep}linear_sweep} function to disassemble a given
-      memory region. If you need more granularity, then you can use
-      the expert interface accordingly:
-
-      - {{!Disasm_expert.Basic}Basic} - provides access to a low-level
-        disassembler on top of which all other disassemblers are
-        built;
-      - {{!Disasm_expert.Recursive}Recursive} - an interface to a
-        recursive descent algorithm.
+      the machine CPU and allow one to reason about the instruction
+      semantics independently from the target platform. The module
+      type {{!Target}Target} brings [CPU] and [ABI] together. To get
+      an instance of this module, you can use the
+      {{!target_of_arch}target_of_arch} function. Architecture
+      specific implementations of the [Target] interface may (and
+      usually do) provide more information, see corresponding support
+      libraries for {!ARM} and {{!X86_cpu}x86} architectures.
   *)
 
   (** {2:sema Semantic Analysis}
 
-      On semantic level the disassembled program is lifted into the
-      intermediate representation (IR) suitable for writing analysis.
+      On the semantic level the disassembled program is lifted into
+      the BAP Intermediate Representation (BIR). BIR is a
+      semi-graphical representation of BIL (where BIL represents a
+      program as Abstract Syntax Tree). The BIR provides mechanisms to
+      express richer relationships between program terms and it also
+      easier to use for most use cases, especially for data dependency
+      analysis.
 
-      IR is closely related to BIL. In fact it even reuses expression
-      sub-language of BIL. But unlike BIL, IR is flat, (i.e., it
-      doesn't contain recursive statements), and unstructured (no
-      [while], [if], only jumps). Thus IR is much more low-level, so
-      it is harder to read, but easier to analyze programmatically.
 
       The program in IR is build of terms. In fact the program itself
       is also a term. There're only 7 kinds of terms:
@@ -369,23 +351,24 @@ module Std : sig
       - {{!Phi}phi} - phi-node in the SSA form;
       - {{!Jmp}jmp} - a transfer of control.
 
-      Unlike expressions and statements in BIL, IR's terms are
-      {e concrete entities}.  Concrete entity is such entity that can
+      Unlike expressions and statements in BIL, IR's terms are {e
+      concrete entities}.  Concrete entity is such entity that can
       change in time and space, as well as come in and out of
       existence.  Contrary, {e abstract entity} is eternal and
       unchangeable.  {e Identity} denotes the sameness of a concrete
       entity as it changes in time.  Abstract entities don't have an
       identity since they are immutable.  Program is built of concrete
-      entities called terms.  Terms have {e attributes} that can change in
-      time, without affecting the identity of a term.  Attributes are
-      abstract entities.  In each particular point of space and time a
-      term is represented by a snapshot of all its attributes,
-      colloquially called {e value}.  Functions that change the value of a
-      term in fact returns a new value with different set of
-      attributes.  For example, [def] term has two attributes: left
-      hand side (lhs), that associates definition with abstract
-      variable, and right hand side (rhs) that associates [def] with
-      an abstract expression. Suppose, that the definition was:
+      entities called terms.  Terms have {e attributes} that can
+      change in time, without affecting the identity of a term.
+      Attributes are abstract entities.  In each particular point of
+      space and time a term is represented by a snapshot of all its
+      attributes, colloquially called {e value}.  Functions that
+      change the value of a term in fact return a new value with
+      different set of attributes.  For example, [def] term has two
+      attributes: left hand side (lhs), that associates definition
+      with abstract variable, and right hand side (rhs) that
+      associates [def] with an abstract expression. Suppose, that the
+      definition was:
 
       {[
         # let d_1 = Def.create x Bil.(var y + var z);;
@@ -456,13 +439,11 @@ module Std : sig
 
       There're two general approaches to obtain a value of type
       {{!Project}project}:
-      - create it manually using one of the [Project.from_*] function;
-      - to write a plugin to a [bap] utility
+      - create it manually using {!Project.create} function;
+      - write a plugin to the [bap] frontend.
 
       Although the first approach is simplistic and gives you a full
-      control, we still recommend to use the latter, as [bap] utility
-      will provide you integration with different tools, like IDA, as
-      well as interaction with a user and other plugins.
+      control, we still recommend to use the latter.
 
       To write a program analysis plugin (or pass in short) you need to
       implement a function with one of the following interfaces:
@@ -471,20 +452,16 @@ module Std : sig
         {{!Project.register_pass}register_pass};
       - [project -> unit] and register it with
          {{!Project.register_pass'}register_pass'};
-      - [string array -> project -> project] and register it with
-        {{!Project.register_pass_with_args}register_pass_with_args};
-      - [string array -> project -> unit] and register it with
-        {{!Project.register_pass_with_args'}register_pass_with_args'}.
 
-      Once loaded from the [bap] utility (see [man bap]) this function
-      will be invoked with a value of type {{!Project.t}project} that
-      provides access to all information gathered over the binary so
-      far. If the registered function returns a non [unit] type, then it
-      can functionally update the project state, e.g., add
-      annotations, discover new symbols, make corrections, and even
-      change the architecture and re-disassemble everything.
+      Once loaded from the [bap] frontend (see [bap --help]) this
+      function will be invoked with a value of type
+      {{!Project.t}project} that provides access to all information
+      gathered from the input source. If the registered function
+      returns a non [unit] type, then it can functionally update the
+      project state, e.g., add annotations, discover new symbols,
+      transform program representation, etc.
 
-      {3 Example}
+      {4 Example}
 
       The following plugin prints all sections in a file:
 
@@ -498,22 +475,25 @@ module Std : sig
               Option.iter (Value.get Image.section x) ~f:(fun name ->
                   printf "Section: %s@.%a@." name Memory.pp mem))
 
-        let () = Project.register_pass' "print-sections" print_sections
+        let () = Project.register_pass' print_sections
       ]}
 
-      {3 Exchanging information}
+      Note: this functionality is provided by the [print] plugin.
 
-      For exchanging information in a type safe manner, we use
-      {{!Value}universal values}. Values can be attached to a
+      {3 Passing information between passes}
+
+      To pass data from one pass to another in a type safe manner, we
+      use {{!Value}universal values}. Values can be attached to a
       particular memory region, IR terms, or put into the [storage]
       dictionary. For the first case we use the {{!Memmap}memmap} data
       structure.  It is an interval tree containing all the memory
       regions that are used during analysis. For the [storage] we use
-      [Dict] data structure.
+      [Dict] data structure. Also, each program term, has its own
+      dictionary.
 
-      {3 Memory marks}
+      {3 Memory annotations}
 
-      By default the memory is marked with the following marks:
+      By default the memory is annotated with the following attributes:
 
       - {{!Image.section}section} -- for regions of memory that had a
       particular name in the original binary. For example, in ELF,
@@ -527,340 +507,123 @@ module Std : sig
       access to permission information.  *)
 
 
-  (** Converts an 'a to a string *)
-  type 'a printer = Format.formatter -> 'a -> unit
-
-
   (** {1:api BAP API}  *)
 
-  (** This module refers to an information bundled with an application.
-      Use [include Self()] syntax to bring this definitions to the
-      scope.
-
-      It is designed to be used inside a plugin, but can be used in
-      a standalone program as well (this is usefull, for debugging
-      plugins, by running them as a standalone applications).
-
-      If run in a standalone mode, then field [name] would be set to
-      [Sys.executable_name] and [argv] to [Sys.argv].
-  *)
-  module Self() : sig
-    (** [name of a plugin]  *)
-    val name : string
-
-    (** [version number]  *)
-    val version : string
-
-    (** A short, one-line description  *)
-    val doc : string
-
-
-    (** [args name] returns an array of arguments designated for a
-        plugin with a given [name].
-
-        The arguments will be extracted from [Sys.argv] array by
-        removing all arguments that doesn't start with
-        [--name-]. Then, from all command arguments that are left, the
-        [--name-] prefix is substituted with [--]. For example, if
-        [argv] contained [ [| "bap"; "-lcallgraph"; "--callgraph"
-        "--callgraph-help"|]] then pass that registered itself under
-        [callgraph] name will receive the following array of arguments
-        [ [| "callgraph"; --help |] ]. That means, that plugins can't
-        accept arguments that are anonymous or short options *)
-    val argv : string array
-
-    val debug   : ('a,Format.formatter,unit) format -> 'a
-    val info    : ('a,Format.formatter,unit) format -> 'a
-    val warning : ('a,Format.formatter,unit) format -> 'a
-    val error   : ('a,Format.formatter,unit) format -> 'a
-
-    (** This module allows plugins to access BAP configuration variables.
-
-        When reading the values for the configuration variables, the
-        decreasing order of precedence for the values is:
-        - Command line arguments
-        - Environment variables
-        - Configuration file
-        - Default fallback value
-
-        Example usage:
-
-        {[
-          let path = Config.(param string ~doc:"a path to file"
-                               ~default:"input.txt" "path")
-          let debug = Config.(flag (* ... *) )
-
-          (* ... *)
-
-          let main () =
-            Config.when_ready
-              (fun {Config.get=(!)} ->
-                 do_stuff !path !debug (* ... *)
-              )
-        ]}
-    *)
-    module Config : sig
-      (** Version number  *)
-      val version : string
-
-      (** A directory for bap specific read-only architecture
-          independent data files.  *)
-      val datadir : string
-
-      (** A directory for bap specific object files, libraries, and
-          internal binaries that are not intended to be executed directly
-          by users or shell scripts *)
-      val libdir : string
-
-      (** A directory for bap specific configuration files  *)
-      val confdir : string
-
-      (** An abstract parameter type that can be later read using a reader *)
-      type 'a param
-
-      (** Parse a string to an 'a *)
-      type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-
-      (** Type for converting [string] <-> ['a]. Also defines a default
-          value for the ['a] type. *)
-      type 'a converter
-
-      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
-
-      (** Default deprecation warning message, for easy deprecation of
-          parameters. *)
-      val deprecated : string
-
-      (** [param conv ~default ~docv ~doc name] creates a parameter
-          which is referred to on the command line, environment
-          variable, and config file using the value of [name], with
-          the type defined by [conv], using the [default] value if
-          unspecified by user.
-
-          The [default] is optional, and falls back to the
-          default defined by [conv].
-
-          [doc] is the man page information of the argument. The
-          variable ["$(docv)"] can be used to refer to the value of
-          [docv]. [docv] is a variable name used in the man page to
-          stand for their value.
-
-          A user can optionally add [deprecated] to a parameter that
-          is to be deprecated soon. This will cause the parameter to be
-          usable as normal, but will emit a warning to the user if they
-          try to use it.
-          Example usage: [Config.(param ~deprecated int "--old")].
-
-          Additionally, [synonyms] can be added to allow multiple
-          arguments referring to the same parameters. However, this is
-          usually discouraged, and considered proper usage only in rare
-          scenarios.
-
-          Also, a developer can use the [~as_flag] to specify a
-          default value that the argument takes if it is used like a
-          flag. This behaviour can be understood better through the
-          following example.
-
-              Consider [Config.(param (some int) ~as_flag:(Some 10) "x")].
-
-              This results in 3 possible command line invocations:
-
-              1. No [--x] - Results in [default] value (specifically
-                            here, [None]).
-
-              2. Only [--x] - This causes it to have the value [as_flag]
-                              (specifically here,[Some 10]).
-
-              3. [--x=20] - This causes it to have the value from the
-                            command line (specifically here, [Some 20]).
-      *)
-      val param :
-        'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
-        ?docv:string -> ?doc:string -> ?synonyms:string list ->
-        string -> 'a param
-
-      (** Create a parameter which accepts a list at command line by
-          repetition of argument. Similar to [param (list 'a) ...]
-          in all other respects. Defaults to an empty list if unspecified. *)
-      val param_all :
-        'a converter -> ?deprecated:string -> ?default:'a list ->
-        ?as_flag:'a -> ?docv:string -> ?doc:string ->
-        ?synonyms:string list ->  string -> 'a list param
-
-      (** Create a boolean parameter that is set to true if user
-          mentions it in the command line arguments *)
-      val flag :
-        ?deprecated:string ->
-        ?docv:string -> ?doc:string -> ?synonyms:string list ->
-        string -> bool param
-
-      (** Provides a future determined on when the config can be read *)
-      val determined : 'a param -> 'a future
-
-      (** A witness that can read configured params *)
-      type reader = {get : 'a. 'a param -> 'a}
-
-      (** [when_ready f] requests the system to call function [f] once
-          configuration parameters are  established and stabilized. An
-          access function will be passed to the function [f],  that can be
-          used to safely dereference parameters.  *)
-      val when_ready : (reader -> unit) -> unit
-
-      (** The type for a block of man page text.
-
-          - [`S s] introduces a new section [s].
-          - [`P t] is a new paragraph with text [t].
-          - [`Pre t] is a new preformatted paragraph with text [t].
-          - [`I (l,t)] is an indented paragraph with label [l] and text [t].
-          - [`Noblank] suppresses the blank line introduced between two blocks.
-
-          Except in [`Pre], whitespace and newlines are not significant
-          and are all collapsed to a single space. In labels [l] and text
-          strings [t], the syntax ["$(i,italic text)"] and ["$(b,bold
-          text)"] can be used to respectively produce italic and bold
-          text. *)
-      type manpage_block = [
-        | `I of string * string
-        | `Noblank
-        | `P of string
-        | `Pre of string
-        | `S of string
-      ]
-
-      (** Create a manpage for the plugin *)
-      val manpage : manpage_block list -> unit
-
-      (** [bool] converts values with {!bool_of_string}. *)
-      val bool : bool converter
-
-      (** [char] converts values by ensuring the argument has a single char. *)
-      val char : char converter
-
-      (** [int] converts values with {!int_of_string}. *)
-      val int : int converter
-
-      (** [nativeint] converts values with {!Nativeint.of_string}. *)
-      val nativeint : nativeint converter
-
-      (** [int32] converts values with {!Int32.of_string}. *)
-      val int32 : int32 converter
-
-      (** [int64] converts values with {!Int64.of_string}. *)
-      val int64 : int64 converter
-
-      (** [float] converts values with {!float_of_string}. *)
-      val float : float converter
-
-      (** [string] converts values with the identity function. *)
-      val string : string converter
-
-      (** [enum l] converts values such that unambiguous prefixes of
-          string names in [l] map to the corresponding value of type ['a].
-
-          {b Warning.} The type ['a] must be comparable with
-          {!Pervasives.compare}.
-
-          @raise Invalid_argument if [l] is empty. *)
-      val enum : (string * 'a) list -> 'a converter
-
-      (** [doc_enum l] documents the possible string names in the [l]
-          map according to the number of alternatives. If [quoted] is
-          [true] (default), the tokens are quoted. The resulting
-          string can be used in sentences of the form ["$(docv) must
-          be %s"]. *)
-      val doc_enum : ?quoted:bool -> (string * 'a) list -> string
-
-      (** [file] converts a value with the identity function and
-          checks with {!Sys.file_exists} that a file with that name exists. *)
-      val file : string converter
-
-      (** [dir] converts a value with the identity function and checks
-          with {!Sys.file_exists} and {!Sys.is_directory}
-          that a directory with that name exists. *)
-      val dir : string converter
-
-      (** [non_dir_file] converts a value with the identity function and checks
-          with {!Sys.file_exists} and {!Sys.is_directory}
-          that a non directory file with that name exists. *)
-      val non_dir_file : string converter
-
-      (** [list sep c] splits the argument at each [sep] (defaults to [','])
-          character and converts each substrings with [c]. *)
-      val list : ?sep:char -> 'a converter -> 'a list converter
-
-      (** [array sep c] splits the argument at each [sep] (defaults to [','])
-          character and converts each substring with [c]. *)
-      val array : ?sep:char -> 'a converter -> 'a array converter
-
-      (** [pair sep c0 c1] splits the argument at the {e first} [sep] character
-          (defaults to [',']) and respectively converts the substrings with
-          [c0] and [c1]. *)
-      val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
-
-      (** {!t2} is {!pair}. *)
-      val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
-
-      (** [t3 sep c0 c1 c2] splits the argument at the {e first} two [sep]
-          characters (defaults to [',']) and respectively converts the
-          substrings with [c0], [c1] and [c2]. *)
-      val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
-        ('a * 'b * 'c) converter
-
-      (** [t4 sep c0 c1 c2 c3] splits the argument at the {e first} three [sep]
-          characters (defaults to [',']) respectively converts the substrings
-          with [c0], [c1], [c2] and [c3]. *)
-      val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
-        'd converter -> ('a * 'b * 'c * 'd) converter
-
-      (** [some none c] is like the converter [c] except it returns
-          [Some] value. It is used for command line arguments
-          that default to [None] when absent. [none] is what to print to
-          document the absence (defaults to [""]). *)
-      val some : ?none:string -> 'a converter -> 'a option converter
 
+
+  (** Machine integer as a sequence of bits.  *)
+  module Integer : sig
+
+
+    (** The minimal interface of the machine integer.  *)
+    module type Base = sig
+      type t
+
+      (** element neutral to the addition  *)
+      val zero : t
+
+      (** element neutral to the multiplication  *)
+      val one  : t
+
+      (** [succ n] successor of [n]  *)
+      val succ : t -> t
+
+      (** [pred n] is a predecessor of [n] *)
+      val pred : t -> t
+
+      (** [abs x] absolute value of [x] *)
+      val abs  : t -> t
+
+      (** [neg x] = [-x] *)
+      val neg  : t -> t
+
+      (** [add x y] is [x + y] *)
+      val add     : t -> t -> t
+
+      (** [sub x y] is [x - y] *)
+      val sub     : t -> t -> t
+
+
+      (** [mul x y] is [x * y]  *)
+      val mul     : t -> t -> t
+
+      (** [div x y] is [x / y]  *)
+      val div     : t -> t -> t
+
+      (** [modulo  x y] is [x mod y]  *)
+      val modulo  : t -> t -> t
+
+      (** [lnot x] is a logical negation of [x] (1-complement) *)
+      val lnot    : t -> t
+      (** [logand x y] is a conjunction of [x] and [y]  *)
+      val logand  : t -> t -> t
+
+      (** [logor x y] is a disjunction of [x] and [y]  *)
+      val logor   : t -> t -> t
+
+      (** [logxor x y] is exclusive or between [x] and [y]  *)
+      val logxor  : t -> t -> t
+
+      (** [lshift x y] shift [x] by [y] bits left *)
+      val lshift  : t -> t -> t
+
+      (** [rshift x y] shift [x] by [y] bits to the right  *)
+      val rshift  : t -> t -> t
+
+      (** [arshift x y] shift [x] by [y] bits to the right and fill with
+          the sign bit.  *)
+      val arshift : t -> t -> t
     end
 
+    (** Signature for integral type.  *)
+    module type S = sig
+      type t
+
+      include Base with type t := t
+
+      (** {3 A common set of infix operators} *)
+
+      (** [~-x = neg x]  *)
+      val ( ~-)  : t -> t
+
+      (** [x + y = add x y]  *)
+      val ( + )  : t -> t -> t
+
+      (** [x - y = sub x y]  *)
+      val ( - )  : t -> t -> t
+
+      (** [x * y = mul x y]  *)
+      val ( * )  : t -> t -> t
+
+      (** [x / y = div x y]  *)
+      val ( / )  : t -> t -> t
+
+      (** [x mod y = modulo x y]  *)
+      val (mod)  : t -> t -> t
+
+      (** [x land y = logand x y]  *)
+      val (land) : t -> t -> t
+
+      (** [x lor y = logor x y]  *)
+      val (lor)  : t -> t -> t
+
+      (** [lxor x y = logxor x y]  *)
+      val (lxor) : t -> t -> t
+
+      (** [x lsl y = lshift x y]  *)
+      val (lsl)  : t -> t -> t
+
+      (** [x lsr y] = rshift x y  *)
+      val (lsr)  : t -> t -> t
+
+      (** [x asr y = arshift x y]  *)
+      val (asr)  : t -> t -> t
+    end
+
+
+    (** Derive {!S} from the minimal implementation.  *)
+    module Make(T : Base) : S with type t = T.t
   end
-
-  (** Signature for integral type.  *)
-  module type Integer = sig
-    type t
-    val zero : t
-    val one  : t
-
-    val succ : t -> t
-    val pred : t -> t
-    val abs  : t -> t
-    val neg  : t -> t
-
-    val add     : t -> t -> t
-    val sub     : t -> t -> t
-    val mul     : t -> t -> t
-    val div     : t -> t -> t
-    val modulo  : t -> t -> t
-    val lnot    : t -> t
-    val logand  : t -> t -> t
-    val logor   : t -> t -> t
-    val logxor  : t -> t -> t
-    val lshift  : t -> t -> t
-    val rshift  : t -> t -> t
-    val arshift : t -> t -> t
-
-    (** A common set of infix operators  *)
-    val ( ~-)  : t -> t
-    val ( + )  : t -> t -> t
-    val ( - )  : t -> t -> t
-    val ( * )  : t -> t -> t
-    val ( / )  : t -> t -> t
-    val (mod)  : t -> t -> t
-    val (land) : t -> t -> t
-    val (lor)  : t -> t -> t
-    val (lxor) : t -> t -> t
-    val (lsl)  : t -> t -> t
-    val (lsr)  : t -> t -> t
-    val (asr)  : t -> t -> t
-  end
-
 
   (** Monad is an interface, that is pervasives through many data
       types. Such types are called monadic. Monad interface is
@@ -902,85 +665,6 @@ module Std : sig
     module type S = Monad.S
     module type S2 = Monad.S2
 
-    (** State monad interface.
-
-        State monad is an interface to a computation that has a
-        limited side effect. The side effect is defined by the
-        following two functions:
-        - [put s]  -- that will store value [s]
-        - [get ()] -- that will extract the value.
-
-
-        There're few functions derived on [get] and [put], like
-        [gets], [update], [modify], but the minimal algebra is
-        [put] and [set].
-
-
-        The value of type [('a,'s) t] bears a computation that
-        has an access to the state of type ['s], and evaluates
-        to a value of type ['a]. It can be said, that ['s] reifies
-        effect of computation of value ['a].
-
-    *)
-    module type State = sig
-
-      (** [('a,'s) t] computation that evaluates to ['a] and state ['s] *)
-      type ('a,'s) t
-
-      (** ['a result] is a type that represents result of computation.*)
-      type 'a result
-
-      include Monad.S2 with type ('a,'s) t := ('a,'s) t
-
-      (** [put s] creates a computation that has effect [s] and unit
-          value.  This operation effectively updates the state by
-          overriding the existent one with the new one. An imperative
-          counterpart of this operation is a statement that performs
-          side effect, e.g., {[put x]} is somewhat equivalent to
-          {[let state = ref init
-            let put x = state := x
-          ]}
-
-          except that [state] is not hidden in the language heap, but is
-          reified into a value of type ['s].
-      *)
-      val put : 's -> (unit,'s) t
-
-      (** [get ()] creates a computation that evalates to a value,
-          that holds the state. This operation extracts the state, and
-          gives an access for it. The [get ()] is somewhat equivalent
-          to the imperative operator [(!)], i.e.,
-          {[
-            let state = ref init
-            let get () = !state
-          ]} *)
-      val get : unit -> ('s,'s) t
-
-      (** [gets f] is a computation whose value is [f state]) *)
-      val gets : ('s -> 'r) -> ('r,'s) t
-      (** [update f] is [get () >>= fun s -> put (f s)]  *)
-      val update : ('s -> 's) -> (unit,'s) t
-
-      (** [modify c f] is a computation with state [f], where
-          [s] is [c >>= get ()], i.e., an effect of computation [c].*)
-      val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-
-
-      (** Running state computations.  *)
-
-      (** [run c init] runs computation [c] with initial state
-          [init]. Result contains a pair of the computation result
-          and total effect.  *)
-      val run : ('a,'s) t -> 's -> ('a * 's) result
-
-      (** [eval c init] contains a value computed by computation [c]
-          under initial state [init].   *)
-      val eval : ('a,'s) t -> 's -> 'a result
-
-      (** [exec c init] contains an final effect produced by a
-          computation [c] under initial state [init].  *)
-      val exec : ('a,'s) t -> 's -> 's result
-    end
 
     module Make(M : Basic) : S with type 'a t := 'a M.t
     module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
@@ -988,7 +672,90 @@ module Std : sig
     (** State monad.
         See {!modtype:State} for more info.
     *)
-    module State : State with type 'a result = 'a
+    module State : sig
+
+      (** State monad interface.
+
+          State monad is an interface to a computation that has a
+          limited side effect. The side effect is defined by the
+          following two functions:
+          - [put s]  -- that will store value [s]
+          - [get ()] -- that will extract the value.
+
+
+          There're few functions derived on [get] and [put], like
+          [gets], [update], [modify], but the minimal algebra is
+          [put] and [set].
+
+
+          The value of type [('a,'s) t] bears a computation that
+          has an access to the state of type ['s], and evaluates
+          to a value of type ['a]. It can be said, that ['s] reifies
+          effect of computation of value ['a].
+
+      *)
+      module type S = sig
+
+        (** [('a,'s) t] computation that evaluates to ['a] and state ['s] *)
+        type ('a,'s) t
+
+        (** ['a result] is a type that represents result of computation.*)
+        type 'a result
+
+        include Monad.S2 with type ('a,'s) t := ('a,'s) t
+
+        (** [put s] creates a computation that has effect [s] and unit
+            value.  This operation effectively updates the state by
+            overriding the existent one with the new one. An imperative
+            counterpart of this operation is a statement that performs
+            side effect, e.g., {[put x]} is somewhat equivalent to
+            {[let state = ref init
+              let put x = state := x
+            ]}
+
+            except that [state] is not hidden in the language heap, but is
+            reified into a value of type ['s].
+        *)
+        val put : 's -> (unit,'s) t
+
+        (** [get ()] creates a computation that evalates to a value,
+            that holds the state. This operation extracts the state, and
+            gives an access for it. The [get ()] is somewhat equivalent
+            to the imperative operator [(!)], i.e.,
+            {[
+              let state = ref init
+              let get () = !state
+            ]} *)
+        val get : unit -> ('s,'s) t
+
+        (** [gets f] is a computation whose value is [f state]) *)
+        val gets : ('s -> 'r) -> ('r,'s) t
+        (** [update f] is [get () >>= fun s -> put (f s)]  *)
+        val update : ('s -> 's) -> (unit,'s) t
+
+        (** [modify c f] is a computation with state [f], where
+            [s] is [c >>= get ()], i.e., an effect of computation [c].*)
+        val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
+
+
+        (** Running state computations.  *)
+
+        (** [run c init] runs computation [c] with initial state
+            [init]. Result contains a pair of the computation result
+            and total effect.  *)
+        val run : ('a,'s) t -> 's -> ('a * 's) result
+
+        (** [eval c init] contains a value computed by computation [c]
+            under initial state [init].   *)
+        val eval : ('a,'s) t -> 's -> 'a result
+
+        (** [exec c init] contains an final effect produced by a
+            computation [c] under initial state [init].  *)
+        val exec : ('a,'s) t -> 's -> 's result
+      end
+
+      include S with type 'a result = 'a
+    end
 
 
     (** Monad transformers.
@@ -1018,7 +785,6 @@ module Std : sig
         actually behaves like an intersection of the outer and inner
         monad.
     *)
-
     module T : sig
 
       (** Option Monad Transformer  *)
@@ -1071,7 +837,7 @@ module Std : sig
           module of non-existent [Monad.S3] type.
       *)
       module State : sig
-        module Make(M : S) : State with type 'a result = 'a M.t
+        module Make(M : S) : State.S with type 'a result = 'a M.t
       end
     end
   end
@@ -1083,68 +849,6 @@ module Std : sig
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
 
-  (** Prefix tries.
-
-         Trie is a mutable table, that can be seen as a specialized
-         form of a hash table.
-
-         Use [Trie.Make] functor to create modules, implementing this
-         signature.  Also look at already predefined modules, like
-         [String] (see below), [Bitvector.Trie], [Bil.Trie],
-         [Insn.Trie], etc.
-
-  *)
-  module type Trie = sig
-    (** trie can store arbitrary data  *)
-    type 'a t [@@deriving bin_io, sexp]
-
-    (** a key type that is used to lookup data  *)
-    type key
-
-    (** [create ()] creates new empty trie  *)
-    val create : unit -> 'a t
-
-    (** [add trie ~key ~data] adds [data] associated with [key], if
-        [trie] already has some data associated with the [key], then
-        it will be overwritten *)
-    val add : 'a t -> key:key -> data:'a -> unit
-
-    (** [change trie key f] if trie has [data] associated with [key] then
-        [f] will be called with [Some data], otherwise it will be called
-        with [None]. If [f] returns [None] then there will be no data
-        associated with [key], if [f] returns [Some thing], then [thing]
-        will be bound to [key] *)
-    val change : 'a t -> key -> ('a option -> 'a option) -> unit
-
-    (** [find trie key] finds data associated with [key]  *)
-    val find : 'a t -> key -> 'a option
-
-    (** [walk trie key ~init ~f] walks down the tree starting from the
-        root and ending with the last token of the key. Function [f]
-        is fold over values associated with all substrings of the key,
-        starting from a zero substring. *)
-    val walk : 'a t -> key -> init:'b -> f:('b -> 'a option -> 'b) -> 'b
-
-    (** [remove trie key] removes value bound with [key] if any.  *)
-    val remove : 'a t -> key -> unit
-
-    (** [longest_match trie k] find the value associated with a
-        longest substring of a key [k]. Returns a pair - a length of
-        matched key and data, associated with that key. *)
-    val longest_match : 'a t -> key -> (int * 'a) option
-
-    (** [length trie] returns the amount of entries in the [trie]  *)
-    val length : 'a t -> int
-
-    (** [pp pp_val] creates a printer for a given value printer
-        [pp_val]. Example:
-
-        [let int_trie = String.Trie.pp pp_int]
-
-        will create a printer for a [String.Trie] that is populated by
-        integers.  *)
-    val pp : 'a printer -> 'a t printer
-  end
 
   (** Constructs a trie  *)
   module Trie : sig
@@ -1173,8 +877,73 @@ module Std : sig
       val token_hash : token -> int
     end
 
+
+    (** Prefix trie interface.
+
+        Trie is a mutable table, that can be seen as a specialized
+        form of a hash table.
+
+        Use [Trie.Make] functor to create modules, implementing this
+        signature.  Also look at already predefined modules, like
+        [String] (see below), [Bitvector.Trie], [Bil.Trie],
+        [Insn.Trie], etc.
+
+    *)
+    module type S = sig
+      (** trie can store arbitrary data  *)
+      type 'a t [@@deriving bin_io, sexp]
+
+      (** a key type that is used to lookup data  *)
+      type key
+
+      (** [create ()] creates new empty trie  *)
+      val create : unit -> 'a t
+
+      (** [add trie ~key ~data] adds [data] associated with [key], if
+          [trie] already has some data associated with the [key], then
+          it will be overwritten *)
+      val add : 'a t -> key:key -> data:'a -> unit
+
+      (** [change trie key f] if trie has [data] associated with [key] then
+          [f] will be called with [Some data], otherwise it will be called
+          with [None]. If [f] returns [None] then there will be no data
+          associated with [key], if [f] returns [Some thing], then [thing]
+          will be bound to [key] *)
+      val change : 'a t -> key -> ('a option -> 'a option) -> unit
+
+      (** [find trie key] finds data associated with [key]  *)
+      val find : 'a t -> key -> 'a option
+
+      (** [walk trie key ~init ~f] walks down the tree starting from the
+          root and ending with the last token of the key. Function [f]
+          is fold over values associated with all substrings of the key,
+          starting from a zero substring. *)
+      val walk : 'a t -> key -> init:'b -> f:('b -> 'a option -> 'b) -> 'b
+
+      (** [remove trie key] removes value bound with [key] if any.  *)
+      val remove : 'a t -> key -> unit
+
+      (** [longest_match trie k] find the value associated with a
+          longest substring of a key [k]. Returns a pair - a length of
+          matched key and data, associated with that key. *)
+      val longest_match : 'a t -> key -> (int * 'a) option
+
+      (** [length trie] returns the amount of entries in the [trie]  *)
+      val length : 'a t -> int
+
+      (** [pp pp_val] creates a printer for a given value printer
+          [pp_val]. Example:
+
+          [let int_trie = String.Trie.pp pp_int]
+
+          will create a printer for a [String.Trie] that is populated by
+          integers.  *)
+      val pp : 'a printer -> 'a t printer
+    end
+
+
     (** Create a trie for a given [Key]  *)
-    module Make(Key : Key) : Trie with type key = Key.t
+    module Make(Key : Key) : S with type key = Key.t
 
     (** Minimum required interface for a token data type  *)
     module type Token = sig
@@ -1184,14 +953,14 @@ module Std : sig
 
     (** Prefix and suffix tries for specified token types.  *)
     module Array : sig
-      module Prefix(Tok : Token) : Trie with type key = Tok.t array
-      module Suffix(Tok : Token) : Trie with type key = Tok.t array
+      module Prefix(Tok : Token) : S with type key = Tok.t array
+      module Suffix(Tok : Token) : S with type key = Tok.t array
     end
 
     (** Predefined prefix and suffix string tries.    *)
     module String : sig
-      module Prefix : Trie with type key = string
-      module Suffix : Trie with type key = string
+      module Prefix : S with type key = string
+      module Suffix : S with type key = string
     end
   end
 
@@ -1215,10 +984,10 @@ module Std : sig
     ] [@@deriving variants]
 
     type 'a p = 'a constraint 'a = [< all]
-                     [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
 
     type t = all p
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     (** {3 Lifting from int} *)
 
@@ -1258,20 +1027,17 @@ module Std : sig
     (** [in_bytes sz] returns size in bytes  *)
     val in_bytes : 'a p -> int
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** size of operand  *)
   type size = Size.t
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   (** size of address  *)
   type addr_size = [ `r32 | `r64 ] Size.p
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
-  (** just a fancy type abbreviation  *)
-  type nat1 = int
-    [@@deriving bin_io, compare, sexp]
 
 
   (** Bitvector -- a type for representing binary values.
@@ -1356,7 +1122,7 @@ module Std : sig
         let q = signed x < zero   (* p = true *)
       ]}
 
-      {2 Clarification on string representation }
+      {2:bv_string Clarification on string representation }
 
       As a part of [Identifiable] interface bitvector provides a pair of
       complement functions: [to_string] and [of_string], that provides
@@ -1396,33 +1162,50 @@ module Std : sig
 
     (** Bitvector implements a common set of operations that are
         expected from integral values.  *)
-    include Regular with type t := t
-    include Integer with type t := t
+    include Regular.S with type t := t
+    include Integer.S with type t := t
 
     (** A comparable interface with size-monomorphic comparison. *)
     module Mono : Comparable with type t := t
-
-    (** [Width] exception is raised when size-monomorphic operation is
-        applied to operands with different sizes. *)
-    exception Width [@@deriving sexp]
 
     (** Specifies the order of bytes in a word. *)
     type endian =
       | LittleEndian (** least significant byte comes first  *)
       | BigEndian    (** most  significant byte comes first  *)
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     (** {2 Constructors} *)
+
+    (** [of_string s] parses a bitvector from a string representation
+    defined in section {!bv_string}.    *)
     val of_string : string -> t
+
+    (** [of_bool x] is a bitvector with length [1] and value [b0] if
+        [x] is false and [b1] otherwise.  *)
     val of_bool  : bool -> t
+
+    (** [of_int ~width n] creates a bitvector of the specified
+        bit-[width] with the value equal to [n]. If bits of the [n]
+        that doesn't fit into [width] are ignored. *)
     val of_int   : width:int -> int -> t
+
+    (** [of_int32 ?width n] creates a bitvector of the specified
+        bit-[width] with the value equal to [n]. If bits of the [n]
+        that doesn't fit into [width] are ignored. Parameter [width]
+        defaults to [32]. *)
     val of_int32 : ?width:int -> int32 -> t
+
+    (** [of_int32 ?width n] creates a bitvector of the specified
+        bit-[width] with the value equal to [n]. If bits of the [n]
+        that doesn't fit into [width] are ignored. Parameter [width]
+        defaults to [32]. *)
     val of_int64 : ?width:int -> int64 -> t
 
     (** {2 Some predefined constant constructors }  *)
 
     (** [b0 = of_bool false] is a zero bit  *)
     val b0 : t
+
     (** [b1 = of_bool true] is a one bit  *)
     val b1 : t
 
@@ -1431,29 +1214,39 @@ module Std : sig
     (** [one width] number one with a specified [width], is a shortcut for
         [of_int 1 ~width]*)
     val one: int -> t
+
     (** [zero width] zero with a specified [width], is a shortcut for
         [of_int 0 ~width]*)
     val zero: int -> t
 
     (** [ones width] is a number with a specified [width], and all bits
-        set to 1. It is a shortcut for [of_int (lnot 0) ~width]*)
+        set to 1. It is a shortcut for [lnot (zero width)]*)
     val ones : int -> t
 
     (** [of_binary ?width endian num] creates a bitvector from a string
         interpreted as a sequence of bytes in a specified order.
 
-        The result is always positive.
-
-        [num] argument is copied
-
+        The result is always positive. [num] argument is not shared.
         [width] defaults to [String.length num]
     *)
     val of_binary : ?width:int -> endian -> string -> t
 
     (** {2 Conversions to built-in integers }  *)
+
+
+    (** [to_int x] projects [x] in to OCaml [int].  *)
     val to_int   : t -> int   Or_error.t
+
+    (** [to_int32 x] projects [x] in to [int32]  *)
     val to_int32 : t -> int32 Or_error.t
+
+    (** [to_int64 x] projects [x] in to [int64]  *)
     val to_int64 : t -> int64 Or_error.t
+
+    (** [string_of_value ?hex x] returns a textual representation of
+        [x] value. If [hex] is true (defaul), then it is in
+        hexadecimal format without a leading (0x). Otherwise the
+        decimal format is used. *)
     val string_of_value : ?hex:bool -> t -> string
 
     (** [signed t] casts t to a signed type, so that any operations
@@ -1497,11 +1290,11 @@ module Std : sig
     (** [b1 @. b2] is [concat b1 b2] *)
     val (@.): t -> t -> t
 
-    (** [succ n] returns next value after [n]. Of course it is not
-        guaranteed that [succ n > n]*)
+    (** [succ n] returns next value after [n]. It is not guaranteed that
+        [signed (succ n) > signed n]*)
     val succ : t -> t
 
-    (** [pred n] returns a value preceding [n]  *)
+    (** [pred n] returns a value preceding [n].  *)
     val pred : t -> t
 
     (** [nsucc m n] is [Fn.apply_n_times ~n succ m], but more
@@ -1531,7 +1324,8 @@ module Std : sig
 
     (** [enum_bits x order] returns bits of [x] in a specified [order].
         [order] defines only the ordering of words in a bitvector, bits
-        will always be in MSB first order. *)
+        will always be in MSB first order. The length of the sequence
+        is always a power of [8].  *)
     val enum_bits  : t -> endian -> bool seq
 
 
@@ -1542,13 +1336,33 @@ module Std : sig
         in core_kernel >= 113.33.00.
     *)
 
+    (** [validate_positive] validates that a value is positive.  *)
     val validate_positive     : t Validate.check
+
+    (** [validate_non_negative] validates that a value is non negative.  *)
     val validate_non_negative : t Validate.check
+
+    (** [validate_negative] validates that a value is negative.  *)
     val validate_negative     : t Validate.check
+
+    (** [validate_non_positive] validates that a value is not positive.  *)
     val validate_non_positive : t Validate.check
+
+    (** [is_positive x] is true if [x] is greater than zero. Always
+        true if [x] is unsigned. *)
     val is_positive     : t -> bool
+
+    (** [is_non_negative x] is true if [x] is greater than or equal to
+        zero. Tautology if [x] is unsigned. *)
     val is_non_negative : t -> bool
+
+    (** [is_negative x] is true if [x] is strictly less than zero. It
+        is a contradiction if [x] is not signed.  *)
     val is_negative     : t -> bool
+
+
+    (** [is_non_positive x] is true if [x] is less than zero. It is a
+        contradiction if [x] is not signed.  *)
     val is_non_positive : t -> bool
 
 
@@ -1569,17 +1383,31 @@ module Std : sig
 
         [Z.(!$v1 + !$v2 / !$v3)]. *)
     module Int_err : sig
+
+
       (** [!$v] lifts [v] to an Or_error monad. It is, essentially, the
           same as [Ok v] *)
       val (!$): t -> t Or_error.t
 
       (** The following lifter will check that their operand has a
           corresponding width. *)
+
+      (** [i1 x] is [Ok x] iff [bitwidth x = 1]  *)
       val i1 :  t -> t Or_error.t
+
+      (** [i4 x] is [Ok x] iff [bitwidth x = 4]  *)
       val i4 :  t -> t Or_error.t
+
+      (** [i8 x] is [Ok x] iff [bitwidth x = 8]  *)
       val i8 :  t -> t Or_error.t
+
+      (** [i16 x] is [Ok x] iff [bitwidth x = 16]  *)
       val i16 : t -> t Or_error.t
+
+      (** [i32 x] is [Ok x] iff [bitwidth x = 32]  *)
       val i32 : t -> t Or_error.t
+
+      (** [i64 x] is [Ok x] iff [bitwidth x = 64]  *)
       val i64 : t -> t Or_error.t
 
       (** [int w v] will be [Ok] if [v] has width [w] *)
@@ -1589,7 +1417,7 @@ module Std : sig
           [w], i.e. either [i64] or [i32]  *)
       val of_word_size : Word_size.t -> t -> t Or_error.t
 
-      include Integer with type t = t Or_error.t
+      include Integer.S with type t = t Or_error.t
       include Monad.Infix with type 'a t := 'a Or_error.t
     end
 
@@ -1599,7 +1427,7 @@ module Std : sig
         operations not lifted into [Or_error] monad, but raising
         [Width] exception if operands sizes mismatch.
     *)
-    module Int_exn : Integer with type t = t
+    module Int_exn : Integer.S with type t = t
 
     (** Prefix trees for bitvectors.
 
@@ -1617,12 +1445,12 @@ module Std : sig
         - [Trie.Little.Byte] - is a little endian byte tree. *)
     module Trie : sig
       module Big : sig
-        module Bits : Trie  with type key = t
-        module Bytes : Trie with type key = t
+        module Bits  : Trie.S  with type key = t
+        module Bytes : Trie.S with type key = t
       end
       module Little : sig
-        module Bits : Trie with type key = t
-        module Bytes : Trie with type key = t
+        module Bits  : Trie.S with type key = t
+        module Bytes : Trie.S with type key = t
       end
     end
   end
@@ -1630,7 +1458,7 @@ module Std : sig
   (** Expose [endian] constructors to [Bap.Std] namespace  *)
   type endian = Bitvector.endian =
       LittleEndian | BigEndian
-    [@@deriving sexp, bin_io, compare]
+  [@@deriving sexp, bin_io, compare]
 
   (** Shortcut for bitvectors that represent words  *)
   module Word : module type of Bitvector
@@ -1678,19 +1506,19 @@ module Std : sig
   module Type : sig
     (** type is either an immediate value of memory reference *)
     type t =
+      | Imm of int
       (** [Imm n] - n-bit immediate   *)
-      | Imm of nat1
-      (** [Mem (a,t)] memory with a specifed addr_size *)
       | Mem of addr_size * size
-      [@@deriving variants]
+      (** [Mem (a,t)] memory with a specifed addr_size *)
+    [@@deriving variants]
 
     (** BIL type is regular  *)
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** short abbreviation for a type  *)
   type typ = Type.t
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   val bool_t  : typ             (** one bit             *)
   val reg8_t  : typ             (** 8-bit width value   *)
@@ -1710,7 +1538,7 @@ module Std : sig
 
   (** bil variable   *)
   type var
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   (** BIL variable.
 
@@ -1736,7 +1564,7 @@ module Std : sig
     type t = var
 
     (** implements [Regular] interface  *)
-    include Regular with type t := t
+    include Regular.S with type t := t
 
     (** [create ?register ?fresh name typ] creates a variable with
         a given [name] and [typ]e.
@@ -1786,12 +1614,17 @@ module Std : sig
 
 
 
-  (** Main BIL module
+  (** Main BIL module.
 
-      This module defines BIL language and is useful to write BIL
-      programs and expressions.
+      The module specifies Binary Instruction Language (BIL). A language to
+      define a semantics of instructions. The semantics of the BIL
+      language is defined at [[1]].
 
-      Example:
+      The language is defined using algebraic types. For each BIL
+      constructor a smart constructor is defined with the same (if
+      syntax allows) name. This allows to use BIL as a DSL embedded
+      into OCaml:
+
       {[Bil.([
           v := src lsr i32 1;
           r := src;
@@ -1804,10 +1637,16 @@ module Std : sig
           ];
           dst := var r lsl var s;
         ])]}
+
       where [i32] is defined as
       [let i32 x = Bil.int (Word.of_int ~width:32 x)]
       and [v,r,s] are some variables of type [var]; and
       [src, dst] are expressions of type [exp].
+
+
+      @see
+      <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
+      [[1]]: BIL Semantics.
   *)
   module Bil : sig
     module Types : sig
@@ -1817,7 +1656,7 @@ module Std : sig
         | SIGNED   (** Sign-extending widening cast. *)
         | HIGH     (** Narrowning cast. Keeps the high bits. *)
         | LOW      (** Narrowing cast. Keeps the low bits. *)
-        [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
 
       (** Binary operations implemented in the BIL *)
       type binop =
@@ -1840,13 +1679,13 @@ module Std : sig
         | LE      (** Unsigned less than or equal to. *)
         | SLT     (** Signed less than. *)
         | SLE     (** Signed less than or equal to. *)
-        [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
 
       (** Unary operations implemented in the IR *)
       type unop =
-        | NEG (** Negate. (2's complement) *)
-        | NOT (** Bitwise not. *)
-        [@@deriving bin_io, compare, sexp]
+        | NEG (** Negate.   (2's complement) *)
+        | NOT (** Bitwise not.(1's complement) *)
+      [@@deriving bin_io, compare, sexp]
 
       (** BIL expression variants  *)
       type exp =
@@ -1856,13 +1695,13 @@ module Std : sig
         | UnOp    of unop * exp         (** unary operation *)
         | Var     of var                (** variable *)
         | Int     of word               (** immediate value *)
-        | Cast    of cast * nat1 * exp  (** casting  *)
+        | Cast    of cast * int * exp  (** casting  *)
         | Let     of var * exp * exp    (** let-binding  *)
         | Unknown of string * typ       (** unknown or undefined value *)
         | Ite     of exp * exp * exp    (** if-then-else expression  *)
-        | Extract of nat1 * nat1 * exp  (** extract portion of word  *)
+        | Extract of int * int * exp  (** extract portion of word  *)
         | Concat  of exp * exp          (** concatenate two words  *)
-        [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
 
       type stmt =
         | Move    of var * exp  (** assign value of expression to variable *)
@@ -1871,7 +1710,7 @@ module Std : sig
         | While   of exp * stmt list (** while loops  *)
         | If      of exp * stmt list * stmt list (** if/then/else statement  *)
         | CpuExn  of int                         (** CPU exception *)
-        [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
     end
 
     (** include all constructors into Bil namespace *)
@@ -1882,101 +1721,238 @@ module Std : sig
                                   and type exp = exp
                                   and type stmt = stmt
     type t = stmt list
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
 
-    include Printable with type t := t
-    include Data      with type t := t
+    include Printable.S with type t := t
+    include Data.S      with type t := t
 
     (** Infix operators  *)
     module Infix : sig
+
+      (** [x := y -> Move (x,y)]  *)
       val (:=) : var -> exp -> stmt
 
       (** {2 Arithmetic operations} *)
+
+      (** [x + y -> BinOp (PLUS,x,y)]   *)
       val ( + )   : exp -> exp -> exp
+
+      (** [x - y -> BinOp(MINUS,x,y)]  *)
       val ( - )   : exp -> exp -> exp
+
+      (** [x * y -> BinOp(TIMES,x,y)]  *)
       val ( * )   : exp -> exp -> exp
+
+      (** [x / y -> BinOp(DIVIDE,x,y)]  *)
       val ( / )   : exp -> exp -> exp
+
+      (** [x /$ y -> BinOp(SDIVIDE,x,y)]  *)
       val ( /$ )  : exp -> exp -> exp
+
+      (** [x mod y -> BinOp (MOD,x,y)]  *)
       val ( mod ) : exp -> exp -> exp
+
+      (** [x %$ y -> BinOp (SMOD,x,y)]  *)
       val ( %$ )  : exp -> exp -> exp
 
       (** {2 Bit operations} *)
+
+      (** [x lsl y = BinOp (LSHIFT,x,y)]  *)
       val ( lsl ) : exp -> exp -> exp
+
+      (** [x lsr y = BinOp (RSHIFT,x,y)]  *)
       val ( lsr ) : exp -> exp -> exp
+
+      (** [x asr y = BinOp (ARSHIFT,x,y)]  *)
       val ( asr ) : exp -> exp -> exp
+
+      (** [x land y = BinOp (AND,x,y)]  *)
       val ( land) : exp -> exp -> exp
+
+      (** [x lor y = BinOp (OR,x,y)]  *)
       val ( lor ) : exp -> exp -> exp
+
+      (** [x lxor y = BinOp (XOR,x,y)]  *)
       val ( lxor) : exp -> exp -> exp
+
+      (** [lnot x = UnOp (NOT,x,y)]  *)
       val lnot    : exp -> exp
 
       (** {2 Equality tests} *)
+
+      (** [x = y -> BinOp(EQ,x,y)]  *)
       val ( = )   : exp -> exp -> exp
+
+      (** [x = y -> BinOp(NEQ,x,y)]  *)
       val ( <> )   : exp -> exp -> exp
+
+      (** [x < y -> BinOp(LT,x,y)]  *)
       val ( < )   : exp -> exp -> exp
+
+      (** [x > y -> Binop(LT,y,x) ]  *)
       val ( > )   : exp -> exp -> exp
+
+      (** [x <= y -> Binop(LE,x,y)]  *)
       val ( <= )   : exp -> exp -> exp
+
+      (** [x <= y -> Binop(LE,y,x)]  *)
       val ( >= )   : exp -> exp -> exp
+
+      (** {3 Signed comparison}  *)
+
+
+      (** [x <$ x -> Binop(SLT,x,y)]  *)
       val ( <$ )  : exp -> exp -> exp
+
+      (** [x >$ x -> Binop(SLT,y,x)]  *)
       val ( >$ )  : exp -> exp -> exp
+
+      (** [x <=$ x -> Binop(SLE,x,y)]  *)
       val ( <=$ ) : exp -> exp -> exp
+
+      (** [x >=$ x -> Binop(SLE,y,x)]  *)
       val ( >=$ ) : exp -> exp -> exp
 
       (** {2 Misc operations} *)
-      (** [a ^ b] contatenate [a] and [b]  *)
+
+      (** [a ^ b -> Concat (a,b)] *)
       val ( ^ )   : exp -> exp -> exp
     end
+
+    (** Bring infix operations into scope of the [Bil] module.  *)
     include module type of Infix
 
     (** {2 Functional constructors}  *)
 
-    (** [move v x] evaluate [x] and assign its value to [v]  *)
+    (** [move v x -> Move (v,x)]  *)
     val move : var -> exp -> stmt
 
-    (** [jmp t] evaluate expression [t] to absolute address and
-        transfer control to that address *)
+    (** [jmp x -> Jmp x] *)
     val jmp : exp -> stmt
 
+    (** [special msg -> Special msg]  *)
     val special : string -> stmt
+
+    (** [while_ cond stmts -> While (cond,stmts)]  *)
     val while_ : exp -> stmt list -> stmt
+
+    (** [if_ cond s1 s2 -> If(cond,s1,s2)]  *)
     val if_ : exp -> stmt list -> stmt list -> stmt
+
+    (** [cpuexn number -> CpuExn number]  *)
     val cpuexn : int -> stmt
+
+    (** [unsigned -> UNSIGNED]  *)
     val unsigned : cast
+
+    (** [signed -> SIGNED]  *)
     val signed : cast
+
+    (** [high -> HIGH]  *)
     val high : cast
+
+    (** [low -> LOW]  *)
     val low : cast
+
+    (** [plus -> PLUS]  *)
     val plus : binop
+
+    (** [minus -> MINUS]  *)
     val minus : binop
+
+    (** [times -> TIMES]  *)
     val times : binop
+
+    (** [divide -> DIVIDE]  *)
     val divide : binop
+
+    (** [sdivide -> SDIVIDE]  *)
     val sdivide : binop
+
+    (** [modulo -> MOD]  *)
     val modulo : binop
+
+    (** [smodulo -> SMOD]  *)
     val smodulo : binop
+
+    (** [lshift -> LSHIFT]  *)
     val lshift : binop
+
+    (** [rshift -> RSHIFT]  *)
     val rshift : binop
+
+    (** [arshift -> ARSHIFT]  *)
     val arshift : binop
+
+    (** [bit_and -> AND]  *)
     val bit_and : binop
+
+    (** [bit_or -> OR]  *)
     val bit_or  : binop
+
+    (** [bit_xor -> XOR]  *)
     val bit_xor : binop
+
+    (** [eq -> EQ]  *)
     val eq : binop
+
+    (** [neq -> NEQ]  *)
     val neq : binop
+
+    (** [lt -> LT]  *)
     val lt : binop
+
+    (** [le -> LE]  *)
     val le : binop
+
+    (** [slt -> SLT]  *)
     val slt : binop
+
+    (** [sle -> SLE]  *)
     val sle : binop
+
+    (** [neg -> NEG]  *)
     val neg : unop
+
+    (** [not -> NOT]  *)
     val not : unop
+
+    (** [load ~mem ~addr endian size -> Load (mem,addr,endian,size)]  *)
     val load : mem:exp -> addr:exp -> endian -> size -> exp
+
+    (** [store ~mem ~addr exp endian size -> Store(mem,addr,endian,size)]  *)
     val store : mem:exp -> addr:exp -> exp -> endian -> size -> exp
+
+    (** [binop op x y -> BinOp(op,x,y)]   *)
     val binop : binop -> exp -> exp -> exp
+
+    (** [unop op x -> UnOp(op,x)]  *)
     val unop : unop -> exp -> exp
+
+    (** [var v -> Var v]   *)
     val var : var -> exp
-    val int : Bitvector.t -> exp
-    val cast : cast -> nat1 -> exp -> exp
+
+    (** [int w -> Int w]  *)
+    val int : word -> exp
+
+    (** [cast t w x -> Cast (t,w,x)]  *)
+    val cast : cast -> int -> exp -> exp
+
+    (** [let_ var value expr -> Let(var,value,expr)]  *)
     val let_ : var -> exp -> exp -> exp
+
+    (** [unknown msg typ -> Unknown(msg,typ)]  *)
     val unknown : string -> typ -> exp
+
+    (** [ite ~if_:cond ~then_:e1 ~else_:e2 -> Ite (cond,e1,e2)]  *)
     val ite : if_:exp -> then_:exp -> else_:exp -> exp
-    val extract : hi:nat1 -> lo:nat1 -> exp -> exp
+
+    (** [extract ~hi ~lo x -> Extract (hi,lo,x)]  *)
+    val extract : hi:int -> lo:int -> exp -> exp
+
+
+    (** [concat x y -> Concat (x,y)]  *)
     val concat : exp -> exp -> exp
 
     (** {2:bil_helpers BIL Helper functions}  *)
@@ -2014,9 +1990,6 @@ module Std : sig
         that were added to a program artificially and are not
         represented physically in a program). See {!Var.is_virtual}
         for more information on virtual variables.
-
-
-
     *)
     val prune_unreferenced :
       ?such_that:(var -> bool) ->
@@ -2156,33 +2129,39 @@ module Std : sig
       (** State monad that evaluates to unit  *)
       type 'a u = (unit,'a) Monad.State.t
 
-      (** [undefined id] creates result with a a given [id] and
+      (** [undefined id] creates a result with the given [id] and
           undefined value *)
       val undefined : id -> t
 
-      (** [storage s id] creates result with a a given [id] and
+      (** [storage s id] creates a result with the given [id] and
           storage [s] as a value *)
       val storage : storage -> id -> t
 
-      (** [word w id] creates result with a a given [id] and
+      (** [word w id] creates a result with the given [id] and
           word [w] as a value *)
       val word : word -> id -> t
 
-      (** returns result identifier  *)
+      (** returns result's identifier  *)
       val id : t -> id
 
-      (** returns result value  *)
+      (** returns result's value  *)
       val value : t -> value
 
-      (** Result identifier.  *)
+      (** Result identifier.
+          Result is totally ordered regular value. *)
       module Id : sig
-        include Regular with type t = id
+        include Regular.S with type t = id
+
+
+        (** [zero] identifier  *)
         val zero : t
+
+        (** [succ x] successor  *)
         val succ : t -> t
       end
 
-      module Value : Printable with type t = value
-      include Printable with type t := t
+      module Value : Printable.S with type t = value
+      include Printable.S with type t := t
     end
 
     (** Tries on BIL.
@@ -2214,8 +2193,8 @@ module Std : sig
       *)
       val normalize : ?subst:(exp * exp) list -> stmt list -> normalized_bil
 
-      module Normalized : Trie with type key = normalized_bil
-      include Trie with type key = stmt list
+      module Normalized : Trie.S with type key = normalized_bil
+      include Trie.S with type key = stmt list
     end
   end
 
@@ -2247,28 +2226,53 @@ module Std : sig
   *)
   module Context : sig
     class t : object('s)
+
+      (** [self#lokup var] evaluate variable [var] to a value that was
+          previously bound to it. Returns [None] if it is unbound.  *)
       method lookup : var -> Bil.result option
+
+
+      (** [self#update var x] bind variable [var] to value [x]. Returns a a
+          context updated with the new binding.  *)
       method update : var -> Bil.result -> 's
-      method bindings : (var * Bil.result) Sequence.t
+
+
+      (** [self#bindings] returns a current list of bindings. Useful,
+          for debugging and introspection.  *)
+      method bindings : (var * Bil.result) seq
     end
   end
 
+  (** BIL type errors.
+
+      A type error will occur during the evaluation of a BIL program
+      that is not well typed.  *)
   module Type_error : sig
     type t [@@deriving bin_io, compare, sexp]
 
+
+    (** [bad_mem] error occurs when a value of type [mem] was expected  *)
     val bad_mem : t
+
+    (** [bad_imm] error occurs when a value of type [imm] was expected *)
     val bad_imm : t
+
+    (** [bad_cast] error occurs when parameters to the cast operation
+        are not valid.  *)
     val bad_cast : t
+
+    (** [bad_type ~exp ~got] error happens when we expect a value of
+        type [exp] but got a value of type [got].  *)
     val bad_type : exp:typ -> got:typ -> t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** A BIL type error  *)
   type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
 
 
-  (** BIL Interpreter.*)
+  (** Expression Language Interpreter.*)
   module Expi : sig
     open Bil.Result
     (**
@@ -2279,10 +2283,11 @@ module Std : sig
        [Exp.eval] function, that expose an easy interface to concrete
        evaluation of expressions.
 
-       Expi implements an operational semantics described in [1].
+       Expi implements an operational semantics described in [[1]].
 
-
-       [1]: https://github.com/BinaryAnalysisPlatform/bil
+      @see
+      <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
+      [[1]]: BIL Semantics.
     *)
 
 
@@ -2296,9 +2301,11 @@ module Std : sig
       (** creates a fresh new result, containing an undefined value,
           and returns it with a modified context. *)
       method create_undefined : 's * Bil.result
+
       (** creates a fresh new result, containing a given word,
           and returns it with a modified context. *)
       method create_word : word -> 's * Bil.result
+
       (** creates a fresh new result, containing a given storage,
           and returns it with a modified context. *)
       method create_storage : Bil.storage -> 's * Bil.result
@@ -2339,7 +2346,7 @@ module Std : sig
         To run the computation use [Monad.State.eval] function, that
         accepts a state monad and an initial value. Here we can
         provide any subtype of [Expi.context] as an initial
-        value. Let start with a [Expi.context] as first approximation:
+        value. Let start with a [Expi.context] as a first approximation:
 
         {v
         let x = Monad.State.eval r (new Expi.context);;
@@ -2367,7 +2374,7 @@ module Std : sig
             inherit Expi.context
             val events : (exp * Bil.result) list = []
             method add_event exp res = {< events = (exp,res) :: events >}
-            method events = List.rev events
+            method show_events = List.rev events
           end
         ]}
 
@@ -2451,7 +2458,9 @@ module Std : sig
       (** called when context doesn't know the variable  *)
       method undefined_var  : var  -> 'a r
 
+
       (** {2 Evaluation methods}  *)
+
       method eval_exp : exp -> 'a r
       method eval_var : var -> 'a r
       method eval_int : word -> 'a r
@@ -2459,11 +2468,11 @@ module Std : sig
       method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
       method eval_binop : binop -> exp -> exp -> 'a r
       method eval_unop  : unop -> exp -> 'a r
-      method eval_cast  : cast -> nat1 -> exp -> 'a r
+      method eval_cast  : cast -> int -> exp -> 'a r
       method eval_let : var -> exp -> exp -> 'a r
       method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
       method eval_concat : exp -> exp -> 'a r
-      method eval_extract : nat1 -> nat1 -> exp -> 'a r
+      method eval_extract : int -> int -> exp -> 'a r
       method eval_unknown : string -> typ -> 'a r
     end
   end
@@ -2527,7 +2536,7 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
-    (** All visitors provides some information about the current
+    (** All visitors provide some information about the current
         position of the visitor *)
     class state : object
 
@@ -2539,7 +2548,27 @@ module Std : sig
       val under_condition : bool
     end
 
+    (** expression visitor.
 
+        A class for observing expression trees.
+
+        Visits AST providing lots of hooks.
+
+        For each AST constructor [C] the visitor provides three methods:
+        [enter_C], [visit_C], [leave_C]. The default implementation for
+        [enter_C] and [leave_C] is to return its argument. The default
+        implementation for [visit_C] is the following:
+        1. call [enter_C]
+        2. visit all children
+        3. call [leave_C].
+
+        It is recommended to override [enter_C] method if you only need
+        to visit [C] constructor without changing a way you're visiting
+        the tree.
+
+        See also {!Bil.visitor} and {!Term.visitor} for visiting a
+        program in AST and Graph representation, respectively.
+    *)
     class ['a] visitor : object
       inherit state
 
@@ -2568,9 +2597,9 @@ module Std : sig
       method leave_unop : unop -> t -> 'a -> 'a
 
       (** [Cast(kind,size,e)]  *)
-      method enter_cast : cast -> nat1 -> t -> 'a -> 'a
-      method visit_cast : cast -> nat1 -> t -> 'a -> 'a
-      method leave_cast : cast -> nat1 -> t -> 'a -> 'a
+      method enter_cast : cast -> int -> t -> 'a -> 'a
+      method visit_cast : cast -> int -> t -> 'a -> 'a
+      method leave_cast : cast -> int -> t -> 'a -> 'a
 
       (** [Let (v,t,body)]  *)
       method enter_let : var -> exp:t -> body:t -> 'a -> 'a
@@ -2583,9 +2612,9 @@ module Std : sig
       method leave_ite : cond:t -> yes:t -> no:t -> 'a -> 'a
 
       (** [Extract (hi,lo,e)]  *)
-      method enter_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
-      method visit_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
-      method leave_extract : hi:nat1 -> lo:nat1 -> t -> 'a -> 'a
+      method enter_extract : hi:int -> lo:int -> t -> 'a -> 'a
+      method visit_extract : hi:int -> lo:int -> t -> 'a -> 'a
+      method leave_extract : hi:int -> lo:int -> t -> 'a -> 'a
 
       (** [Concat(e1,e2)]  *)
       method enter_concat : t -> t -> 'a -> 'a
@@ -2645,10 +2674,10 @@ module Std : sig
       method map_store : mem:t -> addr:t -> exp:t -> endian -> size -> t
       method map_binop : binop -> t -> t -> t
       method map_unop : unop -> t -> t
-      method map_cast : cast -> nat1 -> t -> t
+      method map_cast : cast -> int -> t -> t
       method map_let : var -> exp:t -> body:t -> t
       method map_ite : cond:t -> yes:t -> no:t -> t
-      method map_extract : hi:nat1 -> lo:nat1 -> t -> t
+      method map_extract : hi:int -> lo:int -> t -> t
       method map_concat : t -> t -> t
       method map_int : word -> t
       method map_var : var -> t
@@ -2724,19 +2753,20 @@ module Std : sig
         occurs in the expression [exp]. *)
     val free_vars : t -> Var.Set.t
 
-
+    (** [eval x] evaluate expression [x] to a value.  *)
     val eval : exp -> Bil.value
 
-    include Regular with type t := t
+    include Regular.S with type t := t
     val pp_adt : t printer
   end
 
   (** [Regular] interface for BIL statements  *)
   module Stmt : sig
+
     type t = Bil.stmt
 
 
-    (** All visitors provides some information about the current
+    (** All visitors provide some information about the current
         position of the visitor *)
     class state : object
       (** the stack of stmts that was already visited, with the last on
@@ -2834,7 +2864,7 @@ module Std : sig
     end
 
 
-    (** A visitor with shortcut.
+    (** A visitor with a shortcut.
         Finder is a specialization of a visitor, that uses [return] as its
         folding argument. At any time you can stop the traversing by
         calling [return] function of the provided argument (which is by
@@ -2932,10 +2962,11 @@ module Std : sig
         occurs in the [stmt]. *)
     val free_vars : t -> Var.Set.t
 
-
+    (** [eval prog] eval BIL program under given context. Returns the
+        context which contains all effects of computations.  *)
     val eval : t list -> (#Bili.context as 'a) -> 'a
 
-    include Regular with type t := t
+    include Regular.S with type t := t
     val pp_adt : t printer
   end
 
@@ -2978,14 +3009,14 @@ module Std : sig
       | `aarch64
       | `aarch64_be
     ]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type ppc = [
       | `ppc
       | `ppc64
       | `ppc64le
     ]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type mips = [
       | `mips
@@ -2993,31 +3024,31 @@ module Std : sig
       | `mips64
       | `mips64el
     ]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type sparc = [
       | `sparc
       | `sparcv9
     ]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type nvptx = [
       | `nvptx
       | `nvptx64
     ]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type hexagon = [`hexagon]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type r600 = [`r600]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type systemz = [`systemz]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type xcore = [`xcore]
-      [@@deriving bin_io, compare, enumerate, sexp]
+    [@@deriving bin_io, compare, enumerate, sexp]
 
     type t = [
       | aarch64
@@ -3048,12 +3079,12 @@ module Std : sig
     val endian : t -> endian
 
     (** [arch] type implements [Regular]  interface  *)
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** architecture  *)
   type arch = Arch.t
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
 
   (** Universal Values.
@@ -3167,10 +3198,7 @@ module Std : sig
       {[if Value.is loc then Value.get_exn loc main_pos]}.
 
       Underneath the hood, the values of type [value] is just a pair
-      of an original value and runtime type information. For
-      performance reasons the RTTI is usually just an integer. But
-      for serialization we use persistent UUID for storing RTTI type.
-      To get it, one can use [Value.typeid] function.
+      of an original value and runtime type information.
 
       The comparison of two values of type [value] is actually a
       multi-method, as it has the following behavior:
@@ -3178,21 +3206,17 @@ module Std : sig
       1. If both values has the same type, then use [compare]
          function, that was provided for this type.
       2. If values are of different types, that are known to
-         the type system, then compare them using RTTI
+         the type system, then compare them using RTTI, and ignore the
+         value.
       3. If at least one of the values is of the unknown type,
          (i.e., type wasn't registered in the type system), then
          use polymorphic compare on a tuple of UUID and binary
          representation of the values.
 
-      This algorithm implies that ordering may change a little bit
-      between different compiler versions and different programs, as
-      RTTI is generated from scratch at every program start. If it
-      really matters (usually it doesn't), then you should use
-      [typeid] as key. In that case the ordering would be stable
-      across space time. In any case it is not recommended to use data
-      structures where [value]s are used as keys. For this case, we
-      provide {{!Dict}Dict} data structure, that is a heterogeneous
-      dictionary of values.
+      The rules above guarantee, that values with different RTTI id
+      are never equal. It also guarantees that the ordering will be
+      preserved between different builds of a program, and even
+      between different versions of the compiler.
 
       {2 Thread safety}
 
@@ -3344,7 +3368,7 @@ module Std : sig
     (** Although values of type [value] implements regular interface
         it is recommended to used [dict] data structure instead of
         those, that are provided by [Regular] interface.x *)
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   type 'a tag = 'a Value.tag
@@ -3471,7 +3495,7 @@ module Std : sig
   type label =
     | Direct of tid             (** direct jump  *)
     | Indirect of exp           (** indirect jump  *)
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   (** control transfer variants  *)
   type jmp_kind =
@@ -3479,14 +3503,14 @@ module Std : sig
     | Goto of label             (** jump inside subroutine      *)
     | Ret  of label             (** return from call to label   *)
     | Int  of int * tid         (** interrupt and return to tid *)
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   (** argument intention  *)
   type intent =
     | In                        (** input argument  *)
     | Out                       (** output argument *)
     | Both                      (** input/output    *)
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   type ('a,'b) cls
 
@@ -3774,7 +3798,7 @@ module Std : sig
 
     (** {2 Printing and outputing}  *)
 
-    include Printable with type t := t
+    include Printable.S with type t := t
 
     (** [hexdump t out] outputs hexdump (as per [hexdump -C]) of the
         memory to formatter [out]  *)
@@ -3814,10 +3838,10 @@ module Std : sig
 
     (** Tries over memory  *)
     module Trie : sig
-      module R8  : Trie with type key = t
-      module R16 : Trie with type key = t
-      module R32 : Trie with type key = t
-      module R64 : Trie with type key = t
+      module R8  : Trie.S with type key = t
+      module R16 : Trie.S with type key = t
+      module R32 : Trie.S with type key = t
+      module R64 : Trie.S with type key = t
     end
   end
 
@@ -4004,14 +4028,13 @@ module Std : sig
         function with type ['f] (do not forget that ['f] can be an arrow
         type).
 
-        [start] and [until] parameters allows to narrow iteration to some
-        subset of table. If they are unspecified then iteration would be
-        performed on all table entries in an ascending order of
-        addresses. If they are specified, then if [start <= until], then
-        iteration will be performed in the same order but on a specified
-        subset. In the case, when [start > until], iteration will be
-        performed in a decreasing order.
-    *)
+        [start] and [until] parameters narrows iteration to some
+        subset of table. If they are unspecified then iteration would
+        be performed on all table entries in an ascending order of
+        addresses. If they are specified, then if [start <= until],
+        then iteration will be performed in the same order but on a
+        specified subset. In the case, when [start > until], iteration
+        will be performed in a decreasing order.  *)
     type 'a ranged
       = ?start:mem   (** defaults to the lowest mapped region *)
       -> ?until:mem   (** defaults to the highest mapped area  *)
@@ -4080,7 +4103,7 @@ module Std : sig
 
     (** memory access permissions  *)
     type perm = R | W | X | Or of perm * perm
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     (** A named contiguous part of file with permissions.
         Also, known as segment in ELF.    *)
@@ -4200,7 +4223,7 @@ module Std : sig
         permissions. The same as segment in ELF.    *)
     module Segment : sig
       type t = segment
-      include Regular with type t := t
+      include Regular.S with type t := t
       val name : t -> string
       val is_writable   : t -> bool
       val is_readable   : t -> bool
@@ -4210,7 +4233,7 @@ module Std : sig
     (** Symbol.  *)
     module Symbol : sig
       type t = symbol
-      include Regular with type t := t
+      include Regular.S with type t := t
       val name : t -> string
       val is_function : t -> bool
       val is_debug : t -> bool
@@ -4423,7 +4446,7 @@ module Std : sig
 
     (** name of a register  *)
     val name : t -> string
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
 
@@ -4433,14 +4456,14 @@ module Std : sig
     val to_word  : t -> width:int -> word option
     val to_int64 : t -> int64
     val to_int   : t -> int option
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Floating point immediate operand  *)
   module Fmm : sig
     type t = fmm
     val to_float : t -> float
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Operand *)
@@ -4450,7 +4473,7 @@ module Std : sig
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
     (** Normalized comparison.  *)
     module Normalized : sig
       val compare : t -> t -> int
@@ -4459,7 +4482,7 @@ module Std : sig
     end
 
     val pp_adt : Format.formatter -> t -> unit
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   type op = Op.t [@@deriving bin_io, compare, sexp_of]
@@ -4485,12 +4508,34 @@ module Std : sig
       ] [@@deriving sexp]
 
       (** {2 Basic types }  *)
-      type (+'a,+'k) insn
-      type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
-      type empty     (** set when information is not stored                *)
-      type asm       (** set when assembler information is stored        *)
-      type kinds     (** set when instruction kind information is stored *)
 
+
+      (** [insn] basic instruction.
+
+          See {!Insn} module for a more detailed description.
+
+          @typevar 'a = {{!asm}asm} | {{!empty}empty}, denotes whether assembly
+          representation is available for the given instruction.
+
+          @typevar 'k = {{!kind}kind} | {{!empty}empty}, denotes whether semantics
+          kinds are available for the given instruction.*)
+      type (+'a,+'k) insn
+
+      (** [insns] is a list of pairs, where each pair consists of a
+          memory region occupied by an instruction, and the instruction
+          itself.  *)
+      type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
+
+      (** witnesses the absence of the information *)
+      type empty
+
+      (** witnesses a presence of the assembly string *)
+      type asm
+
+      (** witnesses a presence of the semantic kinds *)
+      type kinds
+
+      (** abbreviate an instruction with full information.  *)
       type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 
       (** Disassembler.
@@ -4521,9 +4566,11 @@ module Std : sig
           functions of the [run] function. It shouldn't be stored
           anywhere.
           First two type variables are bound correspondingly to two
-          variables of the disassmbler [('a,'k) t] type. Third type variable,
-          is for user data type, that can be used to pass extra information
-      *)
+          variables of the disassmbler [('a,'k) t] type. The last pair
+          of type variables are bounded to input and output types of
+          user functions. They are made different, so that a function
+          can be run in an arbitrary monad. For simple cases, the can
+          be made the same. *)
       type (+'a,+'k,'s,'r) state
 
       (** [with_disasm ?debug_level ?cpu ~backend ~f target] creates a
@@ -4668,14 +4715,40 @@ module Std : sig
           This instruction is an opaque pointer into C-backend, thus
           it is protected with phantom types. *)
       module Insn : sig
+
         type ('a,'k) t = ('a,'k) insn
+
+        (** [sexp_of_t insn] returns a sexp representation of [insn]  *)
         val sexp_of_t : ('a,'k) t -> Sexp.t
+
+        (** [compare i1 i2] compares instruction [i1] and [i2]  *)
         val compare : ('a,'k) t -> ('a,'k) t -> int
+
+        (** [code insn] returns an integer code, that is bijective
+            with instruction opcode. It might not be the actual opcode, it
+            may also change between different backends, and different
+            versions of the same backend. *)
         val code : ('a,'k) t -> int
+
+        (** [name insn] returns a textual representation of the
+            instruction name. It might be the mnemonics, or a name,
+            specific to a backend. The name is guaranteed to biject with
+            the opcode (and thus to [code]).  *)
         val name : ('a,'k) t -> string
+
+        (** [kinds insn] returns a high-level semantic information
+            about the instruction. See {!Kind} for the description of
+            semantic codes.  *)
         val kinds : ('a,kinds) t -> Kind.t list
+
+        (** [is insn kind] checks whether instruction [insn] belongs
+            to the semantic [kind] *)
         val is : ('a,kinds) t -> Kind.t -> bool
+
+        (** [asm insn] returns assembly representation of the instruction  *)
         val asm : (asm,'k) t -> string
+
+        (** [ops insn] gives an access to [insn]'s operands.   *)
         val ops  : ('a,'k) t -> op array
       end
 
@@ -4688,14 +4761,18 @@ module Std : sig
             amount of instructions  *)
         val key_of_first_insns : (_,_,_,_) state -> len:int -> key option
 
-        module Normalized : Trie with type key = key
-        include Trie with type key := key
+        module Normalized : Trie.S with type key = key
+        include Trie.S with type key := key
       end
 
+      (** enumerates names of available disassembler backends.  *)
       val available_backends : unit -> string list
     end
 
+    (** A simple linear sweep disassembler.  *)
     module Linear : sig
+
+      (** output type of a disassembler.  *)
       type t = (mem * insn option) list
 
       (** [Linear.sweep arch mem] will perform a linear sweep
@@ -4710,35 +4787,70 @@ module Std : sig
       end
     end
 
-
-    (** Recursive Descent Disassembler.
-        This disassembler is built on top of [Basic] disassembler. It
-        uses work list algorithm to implement recursive descent
-        disassembly and lazily reconstructs the whole program CFG.
+    (** Recursive Descent Disassembler.  This disassembler is built on
+        top of [Basic] disassembler. It uses the work list algorithm
+        to implement recursive descent disassembly and reconstructs
+        the whole program CFG.
 
         This is an expert-level module, and it is suggested to use
         high-level [Disasm] interface, that is built ontop of this
         module.  *)
     module Recursive : sig
+
       type t
+
+      (** [error] domain of errors.  *)
       type error = [
         | `Failed_to_disasm of mem
         | `Failed_to_lift of mem * Basic.full_insn * Error.t
       ] [@@deriving sexp_of]
 
+      (** [run ?backend ?brancher ?rooter arch mem] disassemble and
+          reconstruct a CFG of the code in [mem], assuming
+          architecture [arch].
+
+          @param backend a backend name (default is implementation defined).
+          @param brancher what {{!Brancher}brancher} to use
+          (defaults to {!Brancher.of_bil}.
+          @param rooter what {{!Rooter}rooter} to use (defaults to
+          {!Rooter.empty}). *)
       val run :
         ?backend:string ->
         ?brancher:brancher ->
         ?rooter:rooter -> arch -> mem -> t Or_error.t
 
+      (** [cfg t] returns a control flow graph, representing the code
+          in the input region of memory. Note, this is not a subroutine CFG,
+          is is a whole segment graph.  *)
       val cfg : t -> cfg
 
+
+      (** [errors disasm] returns a list of non-critical errors, that
+          happened during the disassembly (e.g., unknown opcodes and
+          unlifted instructions.  *)
       val errors : t -> error list
     end
   end
 
-  (** Assembly instruction.  *)
+  (** Assembly instruction.
+
+      On a high level, the instruction is a pair of the opcode and
+      operands. A BIL code, that describes semantics of the
+      instruction may be attached to it. Also, semantic tags (or flags)
+      may add further information about the instruction.
+
+      The instruction are usually created by a low level machinery,
+      and analyzed on the later stages. So, usually, there is no need
+      to create one manually.
+
+      For example, each block is a sequence of instructions (see
+      {!Block.insns}), also with each non-synthetic term there is an
+      an {!Disasm.insn} field, that stores an instruction from which
+      the term was born.
+  *)
   module Insn : sig
+
+
     type t = insn [@@deriving bin_io, compare, sexp]
 
     (** {3 Creating}
@@ -4759,7 +4871,22 @@ module Std : sig
     (** instruction operands  *)
     val ops  : t -> op array
 
-    (** {3 Instruction properties} *)
+    (** {3 Instruction properties}
+
+        A property or a semantic tag is some kind of attribute
+        associated with an instruction. Usually a property is a
+        boolean, it either holds or not. In our case we employ modular
+        logic, and a property can have an intermediate state between
+        true and false. That means, that we have two kinds of
+        relations, strong "must" and weaker "may".  The [must]
+        property is known to be a property associated with the
+        instruction. It is a strong knowledge. For example, if an
+        instruction has [jump] property, then it is guaranteed to be a
+        jump instruction. On the other hand, the [may] property
+        represent some uncertain knowledge. For example, the [load]
+        property is [may] as it designates that an instruction may
+        access the main memory, or may not access, as it depends on some
+        information, that cannot be deduced statically.  *)
 
     type must = Must
     type may = May
@@ -4767,20 +4894,50 @@ module Std : sig
 
     val new_property : 'a -> string -> 'a property
 
+
+    (** the instruction performs a non-regular control flow *)
     val jump                : must property
+
+    (** under some dynamic condition the instruction may perform a
+        non-regular control flow *)
     val conditional         : must property
+
+    (** the instruction is jump with a target that is not a constant  *)
     val indirect            : must property
+
+    (** the instruction is a call to subroutine.  *)
     val call                : must property
+
+    (** instruction is a return from a call  *)
     val return              : must property
+
+    (** the instruction may perform a non-regular control flow  *)
     val affect_control_flow : may  property
+
+    (** the instruction may load from memory  *)
     val load                : may  property
+
+    (** the instruction may store to memory  *)
     val store               : may  property
 
+
+    (** [is property insn] is [true] if [insn] has [property]  *)
     val is  : must property -> t -> bool
+
+    (** [may propery insn] is [true] if [insn] has [property]  *)
     val may : may  property -> t -> bool
+
+
+    (** [must property insn] postulate that [insn] must have the [property]  *)
     val must    : must property -> t -> t
+
+    (** [must property insn] postulate that [insn] must not have the [property]  *)
     val mustn't : must property -> t -> t
+
+    (** [must property insn] postulate that [insn] may have the [property]  *)
     val should    : may  property -> t -> t
+
+    (** [must property insn] postulate that [insn] shouldn't have the [property]  *)
     val shouldn't : may  property -> t -> t
 
 
@@ -4807,28 +4964,38 @@ module Std : sig
           it to [key] *)
       val key_of_insns : t list -> key
 
-      module Normalized : Trie with type key = key
-      include Trie with type key := key
+      module Normalized : Trie.S with type key = key
+      include Trie.S with type key := key
     end
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
-  (** Access to block attributes.
-      This interface provides only access to block attributes, but
-      doesn't allow to navigate to other blocks.
+  (** Basic block.
+
+      Basic block is piece of code, that has single entry and single
+      exit. It can be seen as a container for instructions. Also,
+      basic blocks are nodes of control flow graphs.
+
+
+      The following invariants must be preserved:
+      - there is no known jump in the program, that points to an
+        instruction that is not a leader of a basic block;
+      - any jump instruction is a terminator of some basic block;
+      - each basic block consists of at least one instruction.
   *)
   module Block : sig
     type t = block [@@deriving compare, sexp_of]
 
     (** [create mem insn] creates a block
-        @pre insns is not empty  *)
+        Preconditions:
+        - [insns <> []]  *)
     val create : mem -> (mem * insn) list -> t
 
-    (** [addr block] address of the first instruction  *)
+    (** [addr block = Memory.min_addr (memory block)] address of the first instruction  *)
     val addr : t -> addr
 
-    (** [memory blk] memory region, occupied by a block*)
+    (** [memory blk] a memory region, occupied by a block*)
     val memory : t -> mem
 
     (** [leader blk] the first instruction *)
@@ -4837,15 +5004,39 @@ module Std : sig
     (** [terminator blk] last instruction of the block  *)
     val terminator : t -> insn
 
-    (** [insns blk] returns a list of block instructions  *)
+    (** [insns blk] returns a list of block instructions.*)
     val insns : t -> (mem * insn) list
 
-    include Opaque     with type t := t
+    (** Since [block] contains a region of memory, that is not regular,
+        the block itself is also non-regular. But it is, at least,
+        printable.  *)
+    include Opaque.S     with type t := t
     (** all the printing stuff, including [to_string] function *)
-    include Printable  with type t := t
+    include Printable.S  with type t := t
   end
 
+  (** BAP Common Graphs.
+
+      This module contains several graph structures, that are used
+      across BAP.
+
+      The idiomatic use case is to bind the chosen graph to a shorter
+      name and use it as a first class module with different functions
+      in {{!Graphlib.Std}graphlib} library, e.g.,
+
+      {[
+        module G = Graphs.Cfg
+
+        let insns cfg =
+          Graphlib.reverse_postorder_traverse (module G) cfg |>
+          Seq.map ~f:Block.insns |>
+          Seq.concat_map ~f:Seq.of_list
+      ]}
+  *)
   module Graphs : sig
+
+
+    (** Control Flow Graph with a machine basic block as a node.  *)
     module Cfg : Graph with type t = cfg
                         and type node = block
                         and type Edge.label = edge
@@ -4871,8 +5062,7 @@ module Std : sig
         and [update] in [Node] and [Edge] modules are mapped to
         corresponding [Term] operations. Also, for performance
         reasons, graph is augmented with auxiliary data structures,
-        that allows to perform most of the operations in O(log(N))
-        time.
+        that performs most of the operations in O(log(N)) time.
 
         Although this implements all operations of {!Graph} interface
         it is recommended to use {!Term} or [Builder] interfaces to
@@ -4989,15 +5179,18 @@ module Std : sig
         *)
         val cond : t -> graph -> exp
 
-        include Printable with type t := t
+        include Printable.S with type t := t
       end
 
+      (** IR Graph node.
+
+          Node is labeled by the [blk term].*)
       module Node : sig
         include Node with type graph = t
                       and type t = node
                       and type edge = edge
                       and type label = blk term
-        include Printable with type t := t
+        include Printable.S with type t := t
       end
 
       include Graph with type t := t
@@ -5006,19 +5199,21 @@ module Std : sig
                      and type Node.label = blk term
                      and module Node := Node
                      and module Edge := Edge
-
     end
 
 
+    (** Graph of Term identifiers.
+
+        This is a graph where all information is distilled to term
+        identifiers and relations between them, that are also labeled with
+        term identifiers.  *)
     module Tid : Graph with type node = tid
                         and type Node.label = tid
                         and type Edge.label = tid
-
   end
 
   (** Disassembled program.
-
-      This module provides an interface for values of type [disasm]. *)
+      An interface for diassembling things. *)
   module Disasm : sig
     type t = disasm
 
@@ -5056,9 +5251,19 @@ module Std : sig
       ?brancher:brancher -> ?rooter:rooter ->
       ?loader:string -> string -> t Or_error.t
 
+
+    (** [With_exn.f] is the same as [f] except that it throws an
+        exception instead of returning [Error].  *)
     module With_exn : sig
-      val of_mem   : ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> arch -> mem -> t
-      val of_image : ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> image -> t
+
+      (** see {!Disasm.of_mem}  *)
+      val of_mem   : ?backend:string -> ?brancher:brancher ->
+        ?rooter:rooter -> arch -> mem -> t
+      (** see {!Disasm.of_image}  *)
+      val of_image : ?backend:string -> ?brancher:brancher ->
+        ?rooter:rooter -> image -> t
+
+      (** see {!Disasm.of_file} *)
       val of_file  : ?backend:string -> ?brancher:brancher ->
         ?rooter:rooter -> ?loader:string -> string -> t
     end
@@ -5078,7 +5283,7 @@ module Std : sig
 
     (** {2 Tags}  *)
 
-    (** machine instruction  *)
+    (** machine instruction.  *)
     val insn : insn tag
   end
 
@@ -5092,6 +5297,7 @@ module Std : sig
     (** symbol table  *)
     type t = symtab [@@deriving sexp_of]
 
+    (** [(name,entry,graph)] a simple representation of a function *)
     type fn = string * block * cfg [@@deriving sexp_of]
 
     (** empty symbol table  *)
@@ -5107,7 +5313,6 @@ module Std : sig
 
     (** [find_by_name symbols name] finds a symbol with a given namem  *)
     val find_by_name  : t -> string -> fn option
-
 
     (** [find_by_start symbols addr] finds a symbol that starts from
         a given address *)
@@ -5127,22 +5332,25 @@ module Std : sig
     (** [to_sequence symtab] returns a sequence of functions  *)
     val to_sequence : t -> fn seq
 
+    (** [span fn] returns a memory map of a region occupied by a
+        function [fn] *)
     val span : fn -> unit memmap
   end
 
 
   type lifter = mem -> Disasm_expert.Basic.full_insn -> bil Or_error.t
 
+
+
   (** A BIL model of CPU
 
       In general this is a model of a processor architecture, involving
       ALU, processing unit, registers and memory.
-  *)
 
-  (** Abstract interface to CPU  *)
+      The definitions in this module are so generic, that they
+      present on all processors.
+ *)
   module type CPU = sig
-
-    (** {3 Minimum set of required definitions} *)
 
     (** A set of general purpose registers *)
     val gpr : Var.Set.t
@@ -5154,23 +5362,53 @@ module Std : sig
     val sp  : var
 
     (** {4 Flag registers}  *)
+
+
+    (** zero flag  *)
     val zf  : var
+
+    (** carry flag  *)
     val cf  : var
+
+
+    (** overflow flag  *)
     val vf  : var
+
+
+    (** negative flag  *)
     val nf  : var
 
     (** {3 Predicates}  *)
+
+
+    (** [is_reg var] true if [var] is a processor register  *)
     val is_reg : var -> bool
+
+    (** [is_flag reg] is true if [reg] is a flag register   *)
     val is_flag : var -> bool
 
-    val is_sp : var -> bool
-    val is_bp : var -> bool
-    val is_pc : var -> bool
 
+    (** [is_sp x = Var.same x sp] *)
+    val is_sp : var -> bool
+
+    (** [is_bp x] is true if [x] can be possibly used as a base
+        pointer register.  *)
+    val is_bp : var -> bool
+
+
+    (** [is_zf x = Var.same x zf] *)
     val is_zf : var -> bool
+
+    (** [is_cf x = Var.same x cf] *)
     val is_cf : var -> bool
+
+    (** [is_vf x = Var.same x vf] *)
     val is_vf : var -> bool
+
+    (** [is_nf x = Var.same x nf] *)
     val is_nf : var -> bool
+
+    (** [is_mem x = Var.same x mem] *)
     val is_mem : var -> bool
   end
 
@@ -5181,10 +5419,14 @@ module Std : sig
       {{!target_of_arch}target_of_arch} function. Code written using
       this interface is cross-platform, i.e., target agnostic. If you
       want to write target-specific code, then use directly
-      corresponding modules: {{!ARM}ARM}, {{!IA32}IA32},
+      corresponding libraries: {{!ARM}ARM}, {{!IA32}IA32},
       {{!AMD64}AMD64}. *)
   module type Target = sig
+
+
+    (** access to the CPU variables.  *)
     module CPU : CPU
+
     (** [lift mem insn] lifts provided instruction to BIL.
         Usually you do not need to call this function directly, as
         [disassemble] function will do the lifting. *)
@@ -5196,8 +5438,7 @@ module Std : sig
       {!Target} and can be unpacked locally with:
       {[
         let module Target = (val target_of_arch arch) in
-      ]}
-  *)
+      ]} *)
   val target_of_arch : arch -> (module Target)
 
 
@@ -5242,12 +5483,12 @@ module Std : sig
     (** infix notation for [from_string_exn]  *)
     val (!) : string -> tid
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
-  (** IR language term.  *)
-  module Term : sig
-    (** Term is a building block of the
+  (** IR language term.
+
+      Term is a building block of the
         {{!sema}Intermediate Representation} of the binary program.
 
         This module provides functions that are overloaded for
@@ -5259,16 +5500,16 @@ module Std : sig
 
         Give a block
 
-        {[# let b = Blk.create ();;]}
-        {v val b : Blk.t =
+      {[# let b = Blk.create ();;]}
+      {v val b : Blk.t =
           00000003: v}
 
 
         We can append a definition to it with an overloaded
         [Term.append]
 
-        {[# let b = Term.append def_t b d_1;;]}
-        {v val b : blk term =
+      {[# let b = Term.append def_t b d_1;;]}
+      {v val b : blk term =
           00000003:
           00000001: x := y + z
           v}
@@ -5276,13 +5517,12 @@ module Std : sig
         Update a value of a definition in the block:
 
 
-        {[# let b = Term.update def_t b d_2;;]}
-        {v val b : blk term =
+      {[# let b = Term.update def_t b d_2;;]}
+      {v val b : blk term =
           00000003:
           00000001: x := true
-          v}
-
-    *)
+          v} *)
+  module Term : sig
 
     (** term type  *)
     type 'a t = 'a term
@@ -5624,7 +5864,7 @@ module Std : sig
       val result : t -> program term
     end
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Subroutine.  *)
@@ -5692,8 +5932,6 @@ module Std : sig
     (** other names for the given subroutine.*)
     val aliases : string list tag
 
-
-
     (** A subroutine doesn't examine any values except its arguments,
         and have no effects except the return value. Basically this is
         just slightly more strict class than the pure attribute below,
@@ -5739,11 +5977,14 @@ module Std : sig
     (** Subroutine builder *)
     module Builder : sig
       type t
+
       (** initializes empty subroutine builder.  *)
       val create : ?tid:tid -> ?args:int -> ?blks:int -> ?name:string ->
         unit -> t
+
       (** appends a block to a subroutine  *)
       val add_blk : t -> blk term -> unit
+
       (** appends an argument  *)
       val add_arg : t -> arg term -> unit
 
@@ -5751,32 +5992,32 @@ module Std : sig
       val result : t -> sub term
     end
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
-  (** Block.  *)
-  module Blk : sig
-    (** Logically block consists of a set of {{!Phi}phi nodes}, a
-        sequence of {{!Def}definitions} and a sequence of out-coming
-        edges, aka {{!Jmp}jumps}. A colloquial term for this three
-        entities is a {e block element}.
+  (** Basic block.
 
-        The order of Phi-nodes can be specified in any order, as
-        they execute simultaneously . Definitions are stored in the
-        order of execution. Jumps are specified in the order in which
-        they should be taken, i.e., jmp_n is taken only after
-        jmp_n-1 and if and only if the latter was not taken. For
-        example, if block ends with N jumps, where each n-th jump
-        have destination named t_n and condition c_n then it
-        would have the semantics as per the following OCaml program:
+      Logically block consists of a set of {{!Phi}phi nodes}, a
+      sequence of {{!Def}definitions} and a sequence of out-coming
+      edges, aka {{!Jmp}jumps}. A colloquial term for this three
+      entities is a {e block element}.
 
-        {v
+      The order of Phi-nodes can be specified in any order, as
+      they execute simultaneously . Definitions are stored in the
+      order of execution. Jumps are specified in the order in which
+      they should be taken, i.e., jmp_n is taken only after
+      jmp_n-1 and if and only if the latter was not taken. For
+      example, if block ends with N jumps, where each n-th jump
+      have destination named t_n and condition c_n then it
+      would have the semantics as per the following OCaml program:
+
+      {v
             if c_1 then jump t_1 else
             if c_2 then jump t_2 else
             if c_N then jump t_N else
             stop
-          v}
-    *)
+      v} *)
+  module Blk : sig
 
     type t = blk term
 
@@ -5849,26 +6090,30 @@ module Std : sig
 
     (** [map_exp b ~f] applies function [f] for each expression in
         block [b]. By default function [f] will be applied to all
-        values of type [exp], including right hand sides of
-        phi-nodes, definitions, jump conditions and targets. [skip]
-        parameter allows to skip expressions from a given term kind.*)
+        values of type [exp], including right hand sides of phi-nodes,
+        definitions, jump conditions and targets.  If [skip] parameter
+        is specified, then terms of corresponding kind will be
+        skipped, i.e., function [f] will not be applied to them. *)
     val map_exp :
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> f:(exp -> exp) -> t
 
 
     (** [substitute ?skip blk x y] substitutes each occurrence of
-        expression [x] with expression [y] in block [blk]. See
-        {!map_exp} for [skip] parameter. The substitution is performed
-        deeply.  *)
+        expression [x] with expression [y] in block [blk]. The
+        substitution is performed deeply. If [skip] parameter is
+        specified, then terms of corresponding kind will be left
+        untouched.  *)
     val substitute :
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> exp -> exp -> t
 
     (** [map_lhs blk ~f] applies [f] to every left hand side variable
-        in def and phi subterms of [blk]. Parameter [skip] allows to
-        ignore particular terms.  E.g.,
-        [map_lhs ~skip:[`phi] ~f:(substitute vars)].*)
+        in def and phi subterms of [blk]. If [skip] parameter is
+        specified, then terms of corresponding kind will be left
+        untouched. E.g., [map_lhs ~skip:[`phi] ~f:(substitute vars)]
+        will perform a substitution only on definitions (and will
+        ignore phi-nodes) *)
     val map_lhs :
       ?skip:[`phi | `def ] list -> (** defaults to [[]]  *)
       t -> f:(var -> var) -> t
@@ -5903,10 +6148,9 @@ module Std : sig
     (** Builder interface.  *)
     module Builder : sig
       (** This interface provides an efficient way to build new
-          blocks. It is also useful, when rebuilding existing block,
-          as it allows to specify the [tid] of the block. It is a user
-          responsibility to preserve the uniqueness of tidentifiers
-          throughout the program instance.  *)
+          blocks. It is also useful, when rebuilding existing block.
+          It is the user responsibility to preserve the uniqueness of
+          identifiers throughout the program instance.  *)
       type t
 
       (** [create ~tid ~phis ~defs ~jmp ()] creates a block builder.
@@ -5943,7 +6187,7 @@ module Std : sig
       val result  : t -> blk term
     end
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Definition.  *)
@@ -5983,7 +6227,7 @@ module Std : sig
         for more information.  *)
     val free_vars : t -> Var.Set.t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** A control transfer operation.  *)
@@ -6054,7 +6298,7 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** PHI-node  *)
@@ -6121,7 +6365,7 @@ module Std : sig
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Subroutine argument.  *)
@@ -6176,7 +6420,7 @@ module Std : sig
     (** a contract requirement that this argument is not NULL.  *)
     val nonnull : unit tag
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** A control transfer to another subroutine.  *)
@@ -6215,7 +6459,7 @@ module Std : sig
     (** marks call as a "noreturn"  *)
     val with_noreturn : t -> t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Target of a control flow transfer.  *)
@@ -6239,33 +6483,39 @@ module Std : sig
     (** updates the label  *)
     val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t
 
-    include Regular with type t := t
+    include Regular.S with type t := t
   end
 
   (** Source of information.*)
   module Source : sig
+
     type 'a t = 'a Or_error.t stream
     type 'a source = 'a t
 
+
     (** Factory of data processors.
-        Allows to store a registry of processors. *)
-    module type Factory = sig
-      type t
+        Registry of sources of information. *)
+    module Factory : sig
 
-      (** [list source] is a list of names of source providers *)
-      val list : unit -> string list
+      (** Factory interface  *)
+      module type S = sig
+        type t
 
-      (** [create name args] finds a source provider with the
-          given name and creates it *)
-      val find : string -> t source option
+        (** [list source] is a list of names of source providers *)
+        val list : unit -> string list
 
-      (** [register name cons] registers a method that creates a given
-          source of information. If a method with the given name already
-          exists, then it will be superceeded by a new one.  *)
-      val register : string -> t source -> unit
+        (** [create name args] finds a source provider with the
+            given name and creates it *)
+        val find : string -> t source option
+
+        (** [register name cons] registers a method that creates a given
+            source of information. If a method with the given name already
+            exists, then it will be superceeded by a new one.  *)
+        val register : string -> t source -> unit
+      end
+
+      module Make(T : T) : S with type t = T.t
     end
-
-    module Factory(T : T) : Factory with type t = T.t
   end
 
   (** Abstract taint.
@@ -6385,12 +6635,14 @@ module Std : sig
       inherit ['a] expi
     end
 
-
+    (** print a set of taints  *)
     val pp_set : set printer
 
+
+    (** print a taint map  *)
     val pp_map : map printer
 
-    module Map : Regular with type t = map
+    module Map : Regular.S with type t = map
   end
 
 
@@ -6427,10 +6679,10 @@ module Std : sig
 
     (** A factory of symbolizers. Use it register and create
         symbolizers.  *)
-    module Factory : Source.Factory with type t = t
+    module Factory : Source.Factory.S with type t = t
   end
 
-  (** Rooter find start of functions in the binary. *)
+  (** Rooter finds starts of functions in the binary. *)
   module Rooter : sig
     type t = rooter
 
@@ -6456,7 +6708,7 @@ module Std : sig
     val union : t -> t -> t
 
     (** A factory of rooters. Useful to register custom rooters  *)
-    module Factory : Source.Factory with type t = t
+    module Factory : Source.Factory.S with type t = t
   end
 
   (** Brancher is responsible for resolving destinations of branch
@@ -6465,16 +6717,29 @@ module Std : sig
     open Disasm_expert.Basic
     type t = brancher
 
+
+    (** destination target (if known) and edge classification (see {!edge})  *)
     type dest = addr option * edge [@@deriving sexp]
+
     type dests = dest list [@@deriving sexp]
 
+
+    (** [create resolve] creates a brancher from [resolve] function,
+    that accepts a memory region, occupied by an instruction, the
+    instruction itself and returns a list of destination.  *)
     val create : (mem -> full_insn -> dests) -> t
 
+
+    (** [of_bil arch] creates a brancher that will use a BIL code to
+        statically deduce the instruction destinations.  *)
     val of_bil : arch -> t
 
+
+    (** [resolve brancher mem insn] returns a list of destinations of
+    the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
-    module Factory : Source.Factory with type t = t
+    module Factory : Source.Factory.S with type t = t
 
   end
 
@@ -6516,16 +6781,26 @@ module Std : sig
     val run : t -> cfg -> symtab
 
     (** a factory of reconstructors  *)
-    module Factory : Source.Factory with type t = t
+    module Factory : Source.Factory.S with type t = t
   end
 
+
+  (** Event subsystem.
+
+      The event subsystem is a way of communicating between different
+      subsystems of BAP.  *)
   module Event : sig
+
     type t = ..
     type event = t = ..
 
 
+
+    (** global [stream] of events  *)
     val stream : t stream
 
+
+    (** [send event] to the {!stream}  *)
     val send : t -> unit
 
 
@@ -6535,10 +6810,11 @@ module Std : sig
         out.
 
         If more than one printer returns [Some thing] for the same event,
-        then the last registered has the precedence.
-    *)
+        then the last registered has the precedence.*)
     val register_printer : (t -> string option) -> unit
 
+
+    (** Logging event.*)
     module Log : sig
       type level =
         | Debug
@@ -6554,27 +6830,50 @@ module Std : sig
 
       type event += Message of info
 
+
+      (** [message level ~section fmt ...] send a message of the
+          specified [level] and [section].
+
+          Do not use this function directly, instead include the
+          instantiation of a [Self] functor, and use corresponding
+          logging functions, e.g.,
+
+          {v
+            include Self()
+            (* ... *)
+            info "created some %s" "thing"
+          v} *)
       val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
     end
 
-    include Printable with type t := t
+    include Printable.S with type t := t
   end
 
   type event = Event.t = ..
 
   type project
 
-  (** Target of analysis.  *)
+  (** Disassembled program.
+
+      Project contains data that we were able to reconstruct during
+      the disassembly, semantic analysis, and other arbitrary amount of
+      analyses.
+
+      Actually, project allows to associate arbitrary data with memory
+      regions, program terms, and even attach them globally to
+      itself. So it can be seen as a knowledge base of deeply
+      interconnected facts.
+
+      Other than delivering information, from the bap to a passes, it
+      can be also used as a communication media between different
+      passes, (see {!section:project}).*)
   module Project : sig
-    (** A project groups together all the information recovered from
-        the underlying binary. It is also used for exchanging
-        information between {{!section:project}passes}.  *)
 
     type t = project
     type input
 
     (** IO interface to a project data structure.  *)
-    include Data with type t := t
+    include Data.S with type t := t
 
     (** [from_file filename] creates a project from a provided input
         source. The reconstruction is a multi-pass process driven by
@@ -6831,12 +7130,42 @@ module Std : sig
       val program : program term stream
     end
 
+
+    (** Input information.
+
+        This module abstracts input type.
+ *)
     module Input : sig
       type t = input
+
+
+      (** [file ?loader ~filename] input data from a file, using the
+          specified loader. If [loader] is not specified, then some existing
+          loader will be used. If it is specified, then it is first looked
+          up in the [available_loaders] and if it is not found, then it will
+          be looked up in the {!Image.available_backends}.  *)
       val file : ?loader:string -> filename:string -> t
+
+
+      (** [binary ?base arch ~filename] create an input from a binary
+          file, that is a pure code.
+          @param base is an virtual address of the first byte (defaults to 0).*)
       val binary : ?base:addr -> arch -> filename:string -> t
+
+
+      (** [create arch filename ~code ~data] creates an input from a
+          file, using two memory maps. The [code] memmap spans the code in
+          the file, and [data] spans the data. *)
       val create : arch -> string -> code:value memmap -> data: value memmap -> t
+
+
+      (** [register_loader name load] register a loader under provided
+          [name]. The [load] function will be called the filename, and it
+          must return the [input] value. *)
       val register_loader : string -> (string -> t) -> unit
+
+
+      (** [available_loaders ()] returns a list of names of currently known loaders.  *)
       val available_loaders : unit -> string list
     end
 
@@ -6880,14 +7209,25 @@ module Std : sig
     (** [passes ()] returns all currently registered passes.  *)
     val passes : unit -> pass list
 
+
+    (** [find_pass name] returns a pass with the given name.  *)
     val find_pass : string -> pass option
 
     (** time duration in seconds  *)
     type second = float
 
+
+    (** A program analysis pass.
+
+        Pass is essentially a function that takes a project data
+        structures, and returns a new project, possibly modified.
+
+        Passes may depend on other passes, and have a few properties,
+        associated with them. *)
     module Pass : sig
 
       type t = pass
+
       (** An error that can occur when loading or running pass.
           - [Not_loaded name] pass with a given [name] wasn't loaded for
           some reason. This is a very unlikely error, indicating
@@ -6905,7 +7245,7 @@ module Std : sig
       type error =
         | Unsat_dep of pass * string
         | Runtime_error of pass * exn
-        [@@deriving sexp_of]
+      [@@deriving sexp_of]
 
       (** raised when a pass failed to load or to run. Note: this
           exception is raised only from two functions in this module, that
@@ -6929,11 +7269,11 @@ module Std : sig
       val run_exn : t -> project -> project
 
 
-      (** [name plugin] is a plugin name  *)
+      (** [name pass] is a pass name  *)
       val name : t -> string
 
 
-      (** [autorun plugin] is [true] if a [plugin] was created with
+      (** [autorun pass] is [true] if a [pass] was created with
           autorun option *)
       val autorun : t -> bool
 
@@ -6944,6 +7284,326 @@ module Std : sig
     (**/**)
   end
 
+  (** A self reflection.
+
+      This is a generative functor module refers to an information bundled with an application.
+      Use [include Self()] syntax to bring this definitions to the
+      scope.
+
+      It is designed to be used inside a plugin, but can be used in
+      a standalone program as well (this is usefull, for debugging
+      plugins, by running them as a standalone applications).
+
+      If run in a standalone mode, then field [name] would be set to
+      [Sys.executable_name] and [argv] to [Sys.argv].
+  *)
+  module Self() : sig
+    (** [name of a plugin]  *)
+    val name : string
+
+    (** [version number]  *)
+    val version : string
+
+    (** A short, one-line description  *)
+    val doc : string
+
+
+    (** [args name] returns an array of arguments designated for a
+        plugin with a given [name].
+
+        The arguments will be extracted from [Sys.argv] array by
+        removing all arguments that doesn't start with
+        [--name-]. Then, from all command arguments that are left, the
+        [--name-] prefix is substituted with [--]. For example, if
+        [argv] contained [ [| "bap"; "-lcallgraph"; "--callgraph"
+        "--callgraph-help"|]] then pass that registered itself under
+        [callgraph] name will receive the following array of arguments
+        [ [| "callgraph"; --help |] ]. That means, that plugins can't
+        accept arguments that are anonymous or short options *)
+    val argv : string array
+
+
+    (** [debug fmt ...] send a debug message  *)
+    val debug   : ('a,Format.formatter,unit) format -> 'a
+
+    (** [info fmt ...] send an info message  *)
+    val info    : ('a,Format.formatter,unit) format -> 'a
+
+    (** [warning fmt ...] send a warning message  *)
+    val warning : ('a,Format.formatter,unit) format -> 'a
+
+    (** [error fmt ...] send an error message  *)
+    val error   : ('a,Format.formatter,unit) format -> 'a
+
+    (** This module allows plugins to access BAP configuration variables.
+
+        When reading the values for the configuration variables, the
+        decreasing order of precedence for the values is:
+        - Command line arguments
+        - Environment variables
+        - Configuration file
+        - Default fallback value
+
+        Example usage:
+
+        {[
+          let path = Config.(param string ~doc:"a path to file"
+                               ~default:"input.txt" "path")
+          let debug = Config.(flag (* ... *) )
+
+          (* ... *)
+
+          let main () =
+            Config.when_ready
+              (fun {Config.get=(!)} ->
+                 do_stuff !path !debug (* ... *)
+              )
+        ]}
+    *)
+    module Config : sig
+      (** Version number  *)
+      val version : string
+
+      (** A directory for bap specific read-only architecture
+          independent data files.  *)
+      val datadir : string
+
+      (** A directory for bap specific object files, libraries, and
+          internal binaries that are not intended to be executed directly
+          by users or shell scripts *)
+      val libdir : string
+
+      (** A directory for bap specific configuration files  *)
+      val confdir : string
+
+      (** An abstract parameter type that can be later read using a reader *)
+      type 'a param
+
+      (** Parse a string to an 'a *)
+      type 'a parser = string -> [ `Ok of 'a | `Error of string ]
+
+      (** Type for converting [string] <-> ['a]. Also defines a default
+          value for the ['a] type. *)
+      type 'a converter
+
+      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+
+      (** Default deprecation warning message, for easy deprecation of
+          parameters. *)
+      val deprecated : string
+
+      (** [param conv ~default ~docv ~doc name] creates a parameter
+          which is referred to on the command line, environment
+          variable, and config file using the value of [name], with
+          the type defined by [conv], using the [default] value if
+          unspecified by user.
+
+          The [default] is optional, and falls back to the
+          default defined by [conv].
+
+          [doc] is the man page information of the argument. The
+          variable ["$(docv)"] can be used to refer to the value of
+          [docv]. [docv] is a variable name used in the man page to
+          stand for their value.
+
+          A user can optionally add [deprecated] to a parameter that
+          is to be deprecated soon. This will cause the parameter to be
+          usable as normal, but will emit a warning to the user if they
+          try to use it.
+          Example usage: [Config.(param ~deprecated int "--old")].
+
+          Additionally, [synonyms] can be added to allow multiple
+          arguments referring to the same parameters. However, this is
+          usually discouraged, and considered proper usage only in rare
+          scenarios.
+
+          Also, a developer can use the [~as_flag] to specify a
+          default value that the argument takes if it is used like a
+          flag. This behaviour can be understood better through the
+          following example.
+
+              Consider [Config.(param (some int) ~as_flag:(Some 10) "x")].
+
+              This results in 3 possible command line invocations:
+
+              1. No [--x] - Results in [default] value (specifically
+                            here, [None]).
+
+              2. Only [--x] - This causes it to have the value [as_flag]
+                              (specifically here,[Some 10]).
+
+              3. [--x=20] - This causes it to have the value from the
+                            command line (specifically here, [Some 20]).
+      *)
+      val param :
+        'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
+        ?docv:string -> ?doc:string -> ?synonyms:string list ->
+        string -> 'a param
+
+      (** Create a parameter which accepts a list at command line by
+          repetition of argument. Similar to [param (list 'a) ...]
+          in all other respects. Defaults to an empty list if unspecified. *)
+      val param_all :
+        'a converter -> ?deprecated:string -> ?default:'a list ->
+        ?as_flag:'a -> ?docv:string -> ?doc:string ->
+        ?synonyms:string list ->  string -> 'a list param
+
+      (** Create a boolean parameter that is set to true if user
+          mentions it in the command line arguments *)
+      val flag :
+        ?deprecated:string ->
+        ?docv:string -> ?doc:string -> ?synonyms:string list ->
+        string -> bool param
+
+      (** Provides a future determined on when the config can be read *)
+      val determined : 'a param -> 'a future
+
+      (** A witness that can read configured params *)
+      type reader = {get : 'a. 'a param -> 'a}
+
+      (** [when_ready f] requests the system to call function [f] once
+          configuration parameters are  established and stabilized. An
+          access function will be passed to the function [f],  that can be
+          used to safely dereference parameters.  *)
+      val when_ready : (reader -> unit) -> unit
+
+      (** The type for a block of man page text.
+
+          - [`S s] introduces a new section [s].
+          - [`P t] is a new paragraph with text [t].
+          - [`Pre t] is a new preformatted paragraph with text [t].
+          - [`I (l,t)] is an indented paragraph with label [l] and text [t].
+          - [`Noblank] suppresses the blank line introduced between two blocks.
+
+          Except in [`Pre], whitespace and newlines are not significant
+          and are all collapsed to a single space. In labels [l] and text
+          strings [t], the syntax ["$(i,italic text)"] and ["$(b,bold
+          text)"] can be used to respectively produce italic and bold
+          text. *)
+      type manpage_block = [
+        | `I of string * string
+        | `Noblank
+        | `P of string
+        | `Pre of string
+        | `S of string
+      ]
+
+      (** Create a manpage for the plugin *)
+      val manpage : manpage_block list -> unit
+
+      (** [bool] converts values with {!bool_of_string}. *)
+      val bool : bool converter
+
+      (** [char] converts values by ensuring the argument has a single char. *)
+      val char : char converter
+
+      (** [int] converts values with {!int_of_string}. *)
+      val int : int converter
+
+      (** [nativeint] converts values with {!Nativeint.of_string}. *)
+      val nativeint : nativeint converter
+
+      (** [int32] converts values with {!Int32.of_string}. *)
+      val int32 : int32 converter
+
+      (** [int64] converts values with {!Int64.of_string}. *)
+      val int64 : int64 converter
+
+      (** [float] converts values with {!float_of_string}. *)
+      val float : float converter
+
+      (** [string] converts values with the identity function. *)
+      val string : string converter
+
+      (** [enum l] converts values such that unambiguous prefixes of
+          string names in [l] map to the corresponding value of type ['a].
+
+          {b Warning.} The type ['a] must be comparable with
+          {!Pervasives.compare}.
+
+          @raise Invalid_argument if [l] is empty. *)
+      val enum : (string * 'a) list -> 'a converter
+
+      (** [doc_enum l] documents the possible string names in the [l]
+          map according to the number of alternatives. If [quoted] is
+          [true] (default), the tokens are quoted. The resulting
+          string can be used in sentences of the form ["$(docv) must
+          be %s"]. *)
+      val doc_enum : ?quoted:bool -> (string * 'a) list -> string
+
+      (** [file] converts a value with the identity function and
+          checks with {!Sys.file_exists} that a file with that name exists. *)
+      val file : string converter
+
+      (** [dir] converts a value with the identity function and checks
+          with {!Sys.file_exists} and {!Sys.is_directory}
+          that a directory with that name exists. *)
+      val dir : string converter
+
+      (** [non_dir_file] converts a value with the identity function and checks
+          with {!Sys.file_exists} and {!Sys.is_directory}
+          that a non directory file with that name exists. *)
+      val non_dir_file : string converter
+
+      (** [list sep c] splits the argument at each [sep] (defaults to [','])
+          character and converts each substrings with [c]. *)
+      val list : ?sep:char -> 'a converter -> 'a list converter
+
+      (** [array sep c] splits the argument at each [sep] (defaults to [','])
+          character and converts each substring with [c]. *)
+      val array : ?sep:char -> 'a converter -> 'a array converter
+
+      (** [pair sep c0 c1] splits the argument at the {e first} [sep] character
+          (defaults to [',']) and respectively converts the substrings with
+          [c0] and [c1]. *)
+      val pair : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+      (** {!t2} is {!pair}. *)
+      val t2 : ?sep:char -> 'a converter -> 'b converter -> ('a * 'b) converter
+
+      (** [t3 sep c0 c1 c2] splits the argument at the {e first} two [sep]
+          characters (defaults to [',']) and respectively converts the
+          substrings with [c0], [c1] and [c2]. *)
+      val t3 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+        ('a * 'b * 'c) converter
+
+      (** [t4 sep c0 c1 c2 c3] splits the argument at the {e first} three [sep]
+          characters (defaults to [',']) respectively converts the substrings
+          with [c0], [c1], [c2] and [c3]. *)
+      val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
+        'd converter -> ('a * 'b * 'c * 'd) converter
+
+      (** [some none c] is like the converter [c] except it returns
+          [Some] value. It is used for command line arguments
+          that default to [None] when absent. [none] is what to print to
+          document the absence (defaults to [""]). *)
+      val some : ?none:string -> 'a converter -> 'a option converter
+
+    end
+
+  end
+
+  (** Default Logger.
+
+      The logger will capture {!Event.Log} events and print them into
+      the log file, that is located at [$BAP_LOG_DIR/log] or, if
+      [$BAP_LOG_DIR] is undefined, then it is in the
+      [$XDG_STATE_HOME/bap/log] folder, and if this variable is also
+      undefined, then the log will be at [$HOME/.local/stat/bap] or if
+      even $HOME is undefined, then it will be in the system
+      temporary folder under name [bap.log].
+
+      Every time a logger is started the logs in the folder will be
+      rotated. Previous logs will be accessed as [NAME~AGE],
+      where [NAME] is the name of the log file, and [AGE] is the age
+      of the log (in calls to [start] function). For example, if the
+      name is [log], then the previous log will be in the file
+      [log~1].
+
+      The maximum age of the log can be set via environment variable
+      [BAP_BACKLOG] and it defaults to [99], i.e., the oldest log file
+      will have name [log~99].
+  *)
   module Log : sig
 
     (** Start logging events. Only events of type [Event.Log] are
