@@ -1,3 +1,4 @@
+
 let define_headless = function
   | Some "true" when BaseEnv.var_get "system" <> "linux" ->
     invalid_arg "headless mode is supported only on linux"

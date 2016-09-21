@@ -3,6 +3,9 @@
 (* OASIS_STOP *)
 #5 "oasis/common.setup.ml.in"
 let definition_end = BaseEnv.var_ignore
+let define definitions =
+  List.iter (fun f -> try f () with exn -> ()) definitions
+
 
 let ctxt = !BaseContext.default
 
@@ -47,3 +50,11 @@ let is_undefined var : bool = not (is_defined var)
 
 let is_set_to var value : bool =
   is_defined var && BaseEnv.var_get var = value
+
+
+let rec find_map xs ~f =
+  match xs with
+  | [] -> None
+  | x :: xs -> match f x with
+    | None -> find_map xs ~f
+    | yay -> yay

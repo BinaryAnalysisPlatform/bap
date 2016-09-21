@@ -1,46 +1,20 @@
-let nonempty = function (A s) -> String.length s <> 0 | _ -> true
-
-(* the piqi support is rather fragile *)
-let piqic_rule () : unit =
-  rule "piqic: piqi -> .ml & _ext.ml"
-    ~prods:["%_piqi.ml"; "%_piqi_ext.ml"]
-    ~deps:["%.piqi"]
-    (fun env _ ->
-       Cmd (S (List.filter nonempty [
-           A (expand "${piqic}");
-           A (expand "${piqic_flags}");
-           A "-C";
-           A "lib/bap_piqi";
-           A "-I";
-           A "../lib/bap_piqi";
-           A (env "%.piqi");
-           A"--multi-format"])));;
-
 let cxx_rule () =
   let deps = ["%.hpp"; "%.cpp"; "%.h"] and prod = "%.o" in
-  let action env _ = Cmd (S [
-      Sh (expand "${cxx} ${cxxflags} ${llvm_cxxflags}");
-      A "-c"; P (env "%.cpp"); A "-o"; P (env "%.o")]) in
+  let action env _ =
+    let src = env "%.cpp" and obj = env "%.o" in
+    let cxx = expand "${cxx} ${cc_optimization} ${cxxflags}" in
+    let tags = tags_of_pathname src ++ "c++" ++ "compile" in
+    Cmd (S [Sh cxx; T tags; A "-c"; P src; A "-o"; Px obj]) in
   rule "cxx: hpp & cpp & h -> o" ~deps ~prod action
 
-let dispatch = function
-  | Before_rules ->
-    piqic_rule ();
-    cxx_rule ();
-  | After_rules ->
-    List.iter
-      (fun tag ->
-         pflag ["ocaml"; tag] "pa_ounit_lib"
-           (fun s -> S[A"-ppopt"; A"-pa-ounit-lib"; A"-ppopt"; A s]))
-      ["ocamldep"; "compile"; "doc"];
-  | _ -> ()
+let () = Rules.add cxx_rule
 
-module Ocamlbuild_compat = struct
-  let mark_tag_used = ignore
-  include Ocamlbuild_plugin
-end
 
 let mark_tags () =
+  let module Ocamlbuild_compat = struct
+    let mark_tag_used = ignore
+    include Ocamlbuild_plugin
+  end in
   let open Ocamlbuild_compat in
   List.iter mark_tag_used [
     "pkg_core_bench";
@@ -54,17 +28,24 @@ let pr_6184_hack = function
   | After_rules ->
     (* Pass -predicates to ocamldep *)
     pflag ["ocaml"; "ocamldep"] "predicate" (fun s -> S [A "-predicates"; A s]);
+  | _ -> ()
+
+
+let predicate_used_libs = function
+  | After_rules ->
     package_default.MyOCamlbuildBase.lib_ocaml |>
     List.iter (fun (lib,_,_) ->
         flag ["ocaml"; "link"; "use_"^lib]
-          (S [A "-predicates"; A ("used_"^lib)]));
+          (S [A "-predicates"; A ("used_"^lib)]))
   | _ -> ()
+
 
 
 let () =
   mark_tags ();
-  Ocamlbuild_plugin.dispatch (fun hook ->
-      dispatch hook;
-      dispatch_default hook;
-      pr_6184_hack hook;
-      Ppx_driver_ocamlbuild.dispatch hook)
+  Ocamlbuild_plugin.dispatch (fun stage ->
+      Rules.dispatch stage;
+      dispatch_default stage;
+      pr_6184_hack stage;
+      predicate_used_libs stage;
+      Ppx_driver_ocamlbuild.dispatch stage)
