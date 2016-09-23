@@ -4,8 +4,8 @@
 [![docs](https://img.shields.io/badge/doc-1.0.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.0.0/argot_index.html)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
-[![PyPI](https://img.shields.io/pypi/dm/bap.svg)](https://pypi.python.org/pypi/bap/)
-[![License](https://img.shields.io/github/license/bap/bap.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
+[![pip](https://img.shields.io/badge/pip-1.1.0-green.svg)](https://pypi.python.org/pypi/bap/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 
 Binary Analysis Platform is a framework for writing program analysis
 tools, that target binary files. The framework consists of a bunch
@@ -92,7 +92,7 @@ OK, if the previous example doesn't make any sense for you, then you
 can try our
 [Python bindings](https://github.com/BinaryAnalysisPlatform/bap-python).
 Install them with `pip install bap` (you still need to install `bap`
-before hand).
+before hand). Here is the same example, but in Python:
 
 ```python
 import bap
@@ -127,7 +127,7 @@ print results. Just run:
 $ baptop
 ```
 
-Now, you can play with BAP. The following example, will open a file,
+Now, you can play with BAP. The following example will open a file,
 build callgraph of a program, and a control flow graph and dominance
 tree of a function.
 
