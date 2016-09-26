@@ -10,7 +10,7 @@ type t = {
 
 module Abi = Regular.Make(struct
     type nonrec t = t [@@deriving bin_io, compare, sexp]
-    let version = "0.1"
+    let version = "1.0.0"
     let module_name = Some "Bap_api_abi"
     let hash = Hashtbl.hash
     let pp ppf {arch;name} =

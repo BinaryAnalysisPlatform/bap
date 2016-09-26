@@ -29,7 +29,7 @@ include G
 include Printable.Make(struct
     type t = G.t
     let module_name = None
-    let version = "0.1"
+    let version = "1.0.0"
 
     let pp ppf g =
       Graphlib.Dot.pp_graph

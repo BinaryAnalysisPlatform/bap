@@ -31,5 +31,5 @@ include Regular.Make(struct
 
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Type_error"
-    let version = "0.1"
+    let version = "1.0.0"
   end)

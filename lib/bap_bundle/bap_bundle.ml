@@ -23,7 +23,7 @@ module Std = struct
 
     let create
         ?(author=getenv "USER")
-        ?(version="0.1")
+        ?(version="1.0.0")
         ?main
         ?(date=Unix.time ())
         ?(desc = "description not provided")
