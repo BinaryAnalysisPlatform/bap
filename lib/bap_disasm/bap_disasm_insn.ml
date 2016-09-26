@@ -172,7 +172,7 @@ include Regular.Make(struct
     type nonrec t = t [@@deriving sexp, bin_io, compare]
     let hash t = t.code
     let module_name = Some "Bap.Std.Insn"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let string_of_ops ops =
       Array.map ops ~f:Op.to_string |> Array.to_list |>

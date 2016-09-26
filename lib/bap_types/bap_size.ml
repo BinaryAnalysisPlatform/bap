@@ -58,7 +58,7 @@ module T = struct
 
   type t = size [@@deriving bin_io, compare, sexp]
   let module_name = Some "Bap.Std.Size"
-  let version = "0.1"
+  let version = "1.0.0"
   let pp fmt n =
     fprintf fmt "u%u" (in_bits n)
 
