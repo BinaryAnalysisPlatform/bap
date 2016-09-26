@@ -17,13 +17,13 @@ serve as entry points.
 
 We use the OPAM package manager to handle installation. After you've
 successfully [installed](https://opam.ocaml.org/doc/Install.html)
-opam, do the following:
+OPAM, do the following:
 
 ```bash
-$ opam init --comp=4.02.3    # install the compiler
-$ opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository
-$ eval `opam config env`               # activate opam environment
-$ opam depext --install bap            # install bap
+opam init --comp=4.02.3    # install the compiler
+opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository
+eval `opam config env`               # activate opam environment
+opam depext --install bap            # install bap
 ```
 
 Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation).
@@ -69,7 +69,7 @@ By default, the `--dump` options used the IR format, but you can
 choose from various other formats. Use the `--list-formats` option to
 get the list. However, formats are provided by plugins, so just
 because you don't see your preferred format listed doesn't mean you
-can't generate it. Check opam for plugins which may provide the format
+can't generate it. Check OPAM for plugins which may provide the format
 you want to read (the bap-piqi plugin provides protobuf, xml, and
 json, which cover many use cases).
 
@@ -138,9 +138,9 @@ bapbundle install jmp.plugin
 
 Now we can test it:
 ```
-$ bap /bin/true --pass=jmps
+$ bap /bin/true --pass=jmp
 ratio = 974/7514 = 0.129625
-$ bap /bin/ls --pass=jmps
+$ bap /bin/ls --pass=jmp
 ratio = 8917/64557 = 0.138126
 ```
 
@@ -208,8 +208,8 @@ Note: if you do not want to use `baptop` or `utop`, then you can
 execute the following in any OCaml top-level:
 
 ```ocaml
-# #use "topfind";;
-# #require "bap.top";;
+#use "topfind";;
+#require "bap.top";;
 ```
 
 ## RPC
@@ -226,9 +226,9 @@ transporting protocol you would like.
 # Learning
 
 Other than
-[API](http://binaryanalysisplatform.github.io/bap/api/v1.0.0/argot_index.html)
+[API](https://binaryanalysisplatform.github.io/bap/api/v1.0.0/argot_index.html)
 documentation, we have
-[blog](http://binaryanalysisplatform.github.io/bap_plugins/) and
+[blog](https://binaryanalysisplatform.github.io/) and
 [wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
 can find some useful information. Also, we have a permanently manned
 chat in case of emergency. Look at the badge on top of the README
@@ -245,5 +245,5 @@ problem fix will make us really happy. However, we will only accepted
 pull requests that have MIT license.
 
 If you wrote analysis with BAP, then don't hesitate to
-[release](https://opam.ocaml.org/doc/Packaging.html) it to opam, for
+[release](https://opam.ocaml.org/doc/Packaging.html) it to OPAM, for
 the benefit of the community.
