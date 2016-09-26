@@ -462,7 +462,7 @@ include Printable.Make(struct
     type nonrec t = t
 
     let module_name = Some "Bap.Std.Memory"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let print_word fmt word =
       let width = Word.bitwidth word / 4 in

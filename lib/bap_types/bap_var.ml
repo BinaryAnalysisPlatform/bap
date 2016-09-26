@@ -23,7 +23,7 @@ module T = struct
 
   let hash v = String.hash v.var
   let module_name = Some "Bap.Std.Var"
-  let version = "0.1"
+  let version = "1.0.0"
   let pp fmt v =
     Format.fprintf fmt "%s%s" v.var
       (if v.ind <> 0 then sprintf ".%d" v.ind else "" )

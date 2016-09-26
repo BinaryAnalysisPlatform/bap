@@ -488,5 +488,5 @@ let () =
 
 include Data.Make(struct
     type nonrec t = t
-    let version = "0.1"
+    let version = "1.0.0"
   end)

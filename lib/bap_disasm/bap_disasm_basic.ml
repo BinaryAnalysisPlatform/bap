@@ -106,7 +106,7 @@ module Reg = struct
       [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Reg"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let pp fmt t =
       Format.fprintf fmt "%s" @@ name t
@@ -148,7 +148,7 @@ module Imm = struct
     type t = imm
       [@@deriving bin_io, sexp, compare]
     let module_name = Some "Bap.Std.Imm"
-    let version = "0.1"
+    let version = "1.0.0"
     let pp fmt t =
       let x = to_int64 t in
       if Int64.is_negative x then
@@ -179,7 +179,7 @@ module Fmm = struct
       [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Fmm"
-    let version = "0.1"
+    let version = "1.0.0"
     let hash t = Float.hash (to_float t)
     let pp fmt t =
       Format.fprintf fmt "%a" Float.pp (to_float t)
@@ -209,7 +209,7 @@ module Op = struct
 
 
     let module_name = Some "Bap.Std.Op"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let hash = function
       | Reg r -> Reg.hash r

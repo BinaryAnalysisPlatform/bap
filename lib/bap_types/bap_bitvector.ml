@@ -69,7 +69,7 @@ module Make(Size : Compare) : Kernel = struct
 
   let module_name = Some "Bap.Std.Bitvector"
 
-  let version = "0.1"
+  let version = "1.0.0"
 
   let znorm z w = Bignum.(z land ((one lsl w) - one))
 

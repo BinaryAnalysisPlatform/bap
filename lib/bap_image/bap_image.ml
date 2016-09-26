@@ -33,7 +33,7 @@ module Segment = struct
     let hash = Addr.hash +> Location.addr +> Segment.location
     let pp fmt t = Format.fprintf fmt "%s" @@ Segment.name t
     let module_name = Some "Bap.Std.Image.Segment"
-    let version = "0.1"
+    let version = "1.0.0"
   end
 
   let name = Segment.name
@@ -56,7 +56,7 @@ module Symbol = struct
     let hash = Addr.hash +> Location.addr +> fst +> Symbol.locations
     let pp fmt t = Format.fprintf fmt "%s" @@ Symbol.name t
     let module_name = Some "Bap.Std.Image.Symbol"
-    let version = "0.1"
+    let version = "1.0.0"
   end
   include Symbol
   include Regular.Make(T)

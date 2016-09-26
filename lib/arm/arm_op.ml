@@ -18,7 +18,7 @@ let create : op -> Arm.op option =
 include Regular.Make(struct
     type t = Arm.op [@@deriving bin_io, compare, sexp]
     let module_name = Some "Arm.Op"
-    let version = "0.1"
+    let version = "1.0.0"
     let pp fmt op =
       Format.fprintf fmt "%a" Sexp.pp (sexp_of_t op)
     let hash op = Hashtbl.hash op

@@ -11,7 +11,7 @@ include Self()
 
 module Symbols = Data.Make(struct
     type t = (string * int64 * int64) list
-    let version = "0.1"
+    let version = "1.0.0"
   end)
 
 module type Target = sig
@@ -75,7 +75,7 @@ type image = string * addr_size * section list [@@deriving sexp]
 
 module Img = Data.Make(struct
     type t = image
-    let version = "0.1"
+    let version = "1.0.0"
   end)
 
 
