@@ -11,7 +11,7 @@ include Self()
 
 module Symbols = Data.Make(struct
     type t = (string * int64 * int64) list
-    let version = "0.1"
+    let version = "1.0.0"
   end)
 
 module type Target = sig
@@ -75,7 +75,7 @@ type image = string * addr_size * section list [@@deriving sexp]
 
 module Img = Data.Make(struct
     type t = image
-    let version = "0.1"
+    let version = "1.0.0"
   end)
 
 
@@ -178,7 +178,9 @@ let () =
       `S "DESCRIPTION";
       `P "This plugin provides rooter, symbolizer and reconstuctor services.";
       `P "If IDA instance is found on the machine, or specified by a
-        user, it will be queried for the specified information."
+        user, it will be queried for the specified information.";
+      `S "SEE ALSO";
+      `P "$(b,bap-ida)(3), $(b,regular)(3),$(b,bap-plugin-byteweight)(1), $(b,bap-plugin-objdump)(1)"
     ] in
   let path =
     let doc = "Path to IDA directory." in

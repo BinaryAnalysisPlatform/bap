@@ -21,9 +21,16 @@ type error = [
 val save : ?comp:string -> mode:string -> path:string -> arch -> bytes ->
   (unit,error) Result.t
 
+
+(** [load ?comp ?path ~mode arch] finds a signature for the specified
+    [arch-comp-path] tripple. The [path] defaults to [default_path].*)
 val load : ?comp:string -> ?path:string -> mode:string -> arch ->
   (bytes,error) Result.t
 
+
+(** default path for the signatures database  *)
 val default_path : string
 
+
+(** a human readable representation of an error.  *)
 val string_of_error : error -> string

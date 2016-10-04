@@ -4,6 +4,7 @@ include Monad
 
 
 module State = struct
+  module type S = State
   type ('a,'s) t = 's -> ('a * 's)
   type 'a result = 'a
   include Monad.Make2(struct

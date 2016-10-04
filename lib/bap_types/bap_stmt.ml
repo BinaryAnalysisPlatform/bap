@@ -51,14 +51,14 @@ include Regular.Make(struct
     type t = Bap_bil.stmt [@@deriving bin_io, compare, sexp]
     let hash = Hashtbl.hash
     let module_name = Some "Bap.Std.Stmt"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let pp = pp
   end)
 
 module Stmts_pp = struct
   type t = stmt list
-  include Printable(struct
+  include Printable.Make(struct
       type nonrec t = t
       let pp = pp_stmts
       let module_name = Some "Bap.Std.Bil"
@@ -68,7 +68,7 @@ end
 module Stmts_data = struct
   module T = struct
     type t = stmt list [@@deriving bin_io, sexp]
-    let version = "0.1"
+    let version = "1.0.0"
   end
   include T
   include Data.Make(T)

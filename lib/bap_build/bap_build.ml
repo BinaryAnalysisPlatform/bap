@@ -153,6 +153,7 @@ module Plugin_rules = struct
                    make_list_option "-provides" in
     Cmd (S [
         A "bapbundle"; A "pack";
+        T (Tags.of_list ["bundle"; "library"; "plugin"]);
         A "-name"; A (dashify (env "%"));
         A "-main"; A (env "%.cmxs");
         A "-main"; A (env "%.cma");

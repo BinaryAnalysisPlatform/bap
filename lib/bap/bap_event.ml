@@ -18,7 +18,7 @@ let send (ev : t) = Signal.send new_event ev
 
 let string_of_event = Caml.Printexc.to_string
 
-include Printable(struct
+include Printable.Make(struct
     type nonrec t = t
     let module_name = Some "Bap.Std.Event"
     let pp ppf e =

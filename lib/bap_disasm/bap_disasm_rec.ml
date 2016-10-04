@@ -251,7 +251,7 @@ let next dis s =
   let visited = Span.add s.visited (s.addr, Dis.addr dis) in
   loop {s with visited}
 
-let stop_on = [`May_affect_control_flow; `May_load]
+let stop_on = [`Valid]
 
 let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
   let roots =
@@ -263,7 +263,7 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
               roots; inits = roots;
               dests = Addr.Table.create (); errors = []; lift} in
   Memory.view ~from:addr base >>= fun mem ->
-  Dis.run disasm mem ~stop_on:[`May_affect_control_flow] ~return ~init
+  Dis.run disasm mem ~stop_on ~return ~init
     ~hit:(fun d mem insn s -> next d (update s mem insn (brancher mem insn)))
     ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
     ~stopped:next

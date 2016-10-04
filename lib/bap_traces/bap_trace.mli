@@ -65,7 +65,7 @@ val register_reader : proto -> (Uri.t -> id -> (reader, io_error) Result.t) -> u
 
 val register_writer : proto -> (Uri.t -> t -> (unit, io_error) Result.t) -> unit
 
-module Id : Regular with type t = id
+module Id : Regular.S with type t = id
 
 type step = [
   | `Stop

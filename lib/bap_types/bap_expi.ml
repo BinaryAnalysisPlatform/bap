@@ -41,6 +41,10 @@ let word w =
 let storage s =
   create_result (fun ctxt -> ctxt#create_storage s)
 
+let is_shift = function
+  | Binop.LSHIFT | Binop.RSHIFT | Binop.ARSHIFT -> true
+  | _ -> false
+
 class ['a] t = object(self)
   constraint 'a = #context
 
@@ -140,7 +144,8 @@ class ['a] t = object(self)
     | Bot,_ | _,Bot -> self#bot
     | Mem v,_ | _, Mem v -> self#type_error TE.bad_imm
     | Imm u, Imm v ->
-      try word @@ match op with
+      if is_shift op || Int.(bitwidth u = bitwidth v)
+      then try word @@ match op with
         | Binop.PLUS -> u + v
         | Binop.MINUS -> u - v
         | Binop.TIMES -> u * v
@@ -160,8 +165,9 @@ class ['a] t = object(self)
         | Binop.LE -> Bitvector.(of_bool (u <= v))
         | Binop.SLT -> Bitvector.(of_bool (signed u < signed v))
         | Binop.SLE  -> Bitvector.(of_bool (signed u <= signed v))
-      with Width -> self#type_error @@ TE.bad_type (imm_t u) (imm_t v)
-         | Division_by_zero -> self#division_by_zero ()
+        with Division_by_zero -> self#division_by_zero ()
+      else self#type_error @@ TE.bad_type (imm_t u) (imm_t v)
+
 
   method eval_unop op u = self#eval u >>= function
     | Bot -> self#bot

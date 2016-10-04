@@ -58,8 +58,8 @@ module Std = struct
 
   module Bil = struct
     type t = Bap_bil.bil [@@deriving bin_io, compare, sexp]
-    include (Bap_stmt.Stmts_pp : Printable with type t := t)
-    include (Bap_stmt.Stmts_data : Data with type t := t)
+    include (Bap_stmt.Stmts_pp : Printable.S with type t := t)
+    include (Bap_stmt.Stmts_data : Data.S with type t := t)
     module Types = struct
       include Bap_bil.Cast
       include Bap_bil.Binop
@@ -107,7 +107,7 @@ module Std = struct
   module Exp = struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Exp
-    include (Bap_exp : Regular with type t := t)
+    include (Bap_exp : Regular.S with type t := t)
     let pp_adt = Bap_bil_adt.pp_exp
   end
 
@@ -115,7 +115,7 @@ module Std = struct
   module Stmt = struct
     type t = Bap_bil.stmt [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Stmt
-    include (Bap_stmt : Regular with type t := t)
+    include (Bap_stmt : Regular.S with type t := t)
     let pp_adt = Bap_bil_adt.pp_stmt
   end
 

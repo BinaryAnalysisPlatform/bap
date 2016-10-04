@@ -22,7 +22,7 @@ type jumptarget =
   | Jabs of operand
   | Jrel of addr * addr (* next ins address, offset *)
 
-(* See section 4.1 of the Intel® 64 and IA-32 Architectures Software
+(** See section 4.1 of the Intel® 64 and IA-32 Architectures Software
    Developer’s Manual, Volumes 2A & 2B: Instruction Set Reference
    (order numbers 253666 and 253667) *)
 module Pcmpstr = struct
@@ -37,7 +37,7 @@ module Pcmpstr = struct
 
   type outselectmask = Bitmask | Bytemask (* For PCMPESTRM/PCMPISTRM, represents bit mask/word mask. *)
 
-  (* See Section 4.1 of Intel manual for more
+  (** See Section 4.1 of Intel manual for more
      information on the immediate control byte.
 
      i[0]:
@@ -95,20 +95,20 @@ type cast_type = cast
 
 type opcode =
   | Bswap of (typ * operand)
-  | Retn of ((typ * operand) option) * bool (* bytes to release, far/near ret *)
+  | Retn of ((typ * operand) option) * bool (** bytes to release, far/near ret *)
   | Nop
-  | Mov of typ * operand * operand * (Exp.t option) (* dst, src, condition *)
+  | Mov of typ * operand * operand * (Exp.t option) (** dst, src, condition *)
   | Movs of typ
-  | Movzx of typ * operand * typ * operand (* dsttyp, dst, srctyp, src *)
-  | Movsx of typ * operand * typ * operand (* dsttyp, dst, srctyp, src *)
-  | Movdq of typ * operand * typ * operand * bool (* dst type, dst op, src type, src op, aligned *)
+  | Movzx of typ * operand * typ * operand (** dsttyp, dst, srctyp, src *)
+  | Movsx of typ * operand * typ * operand (** dsttyp, dst, srctyp, src *)
+  | Movdq of typ * operand * typ * operand * bool (** dst type, dst op, src type, src op, aligned *)
   | Movoffset of (typ * operand) * offsetinfo list
-  (* dest type, dest, (src copy length, src type, src, src src offset, src dest offset)* *)
+  (** dest type, dest, (src copy length, src type, src, src src offset, src dest offset)* *)
   | Lea of typ * operand * Exp.t
-  | Call of operand * addr (* addr is RA *)
+  | Call of operand * addr (** addr is RA *)
   | Shift of binop * typ * operand * operand
   | Shiftd of binop * typ * operand * operand * operand
-  | Rotate of binop * typ * operand * operand * bool (* left or right, type, src/dest op, shift op, use carry flag *)
+  | Rotate of binop * typ * operand * operand * bool (** left or right, type, src/dest op, shift op, use carry flag *)
   | Bt of typ * operand * operand
   | Bs of typ * operand * operand * direction
   | Jump of jumptarget
@@ -122,7 +122,7 @@ type opcode =
   | Pop of typ * operand
   | Pushf of typ
   | Popf of typ
-  | Popcnt of typ * operand * operand (* size, src, dest *)
+  | Popcnt of typ * operand * operand (** size, src, dest *)
   | Sahf
   | Lahf
   | Add of (typ * operand * operand)
@@ -143,10 +143,10 @@ type opcode =
   | Ptest of (typ * operand * operand)
   | Not of (typ * operand)
   | Neg of (typ * operand)
-  | Mul of (typ * operand) (* typ, src *)
-  | Imul of typ * (bool * operand) * operand * operand (* typ, (true if one operand form, dst operand), src1, src2 *)
-  | Div of typ * operand (* typ, src *)
-  | Idiv of typ * operand (* typ, src *)
+  | Mul of (typ * operand) (** typ, src *)
+  | Imul of typ * (bool * operand) * operand * operand (** typ, (true if one operand form, dst operand), src1, src2 *)
+  | Div of typ * operand (** typ, src *)
+  | Idiv of typ * operand (** typ, src *)
   | Cld
   | Rdtsc
   | Cpuid
@@ -157,10 +157,10 @@ type opcode =
   | Fldcw of operand
   | Fld of operand
   | Fst of (operand * bool)
-  | Punpck of (typ * typ * order * operand * operand * operand option) (* dest size, element size, low/high elements, dest, src, optional VEX src *)
-  | Ppackedbinop of (typ * typ * binopf * string * operand * operand * operand option) (* Perform a generic packed binary operation. dest size, element size, binop, assembly string, dest, src, optional VEX src *)
+  | Punpck of (typ * typ * order * operand * operand * operand option) (** dest size, element size, low/high elements, dest, src, optional VEX src *)
+  | Ppackedbinop of (typ * typ * binopf * string * operand * operand * operand option) (** Perform a generic packed binary operation. dest size, element size, binop, assembly string, dest, src, optional VEX src *)
   | Pbinop of (typ * binopf * string * operand * operand * operand option)
-  | Pmov of (typ * typ * typ * operand * operand * cast_type * string) (* Packed move. dest size, dest elt size, src elt size, dest, src, ext(signed/zero), name *)
+  | Pmov of (typ * typ * typ * operand * operand * cast_type * string) (** Packed move. dest size, dest elt size, src elt size, dest, src, ext(signed/zero), name *)
   | Pmovmskb of (typ * operand * operand)
   | Pcmp of (typ * typ * binop * string * operand * operand * operand option)
   | Palignr of (typ * operand * operand * operand option * operand)
@@ -169,44 +169,44 @@ type opcode =
   | Pshufd of typ * operand * operand * operand option * operand
   | Leave of typ
   | Interrupt of operand
-  | Interrupt3 (* Trap to debugger *)
+  | Interrupt3 (** Trap to debugger *)
   | Sysenter
   | Syscall
 
-(* See Table 2-4: REX Prefix Fields. *)
+(** See Table 2-4: REX Prefix Fields. *)
 type rex = {
-  rex_w : bool; (* Bit 3: 1 = 64-bit operand size *)
-  rex_r : bool; (* Bit 2: Extension of ModR/M reg field *)
-  rex_x : bool; (* Bit 1: Extension of SIB index field *)
-  rex_b : bool; (* Bit 0: Extension of ModR/M r/m field, SIB base
+  rex_w : bool; (** Bit 3: 1 = 64-bit operand size *)
+  rex_r : bool; (** Bit 2: Extension of ModR/M reg field *)
+  rex_x : bool; (** Bit 1: Extension of SIB index field *)
+  rex_b : bool; (** Bit 0: Extension of ModR/M r/m field, SIB base
                    field, or opcode reg field *)
 }
 
 type vex = {
-  vex_nr : bool; (* inverted rex_r bit *)
-  vex_nx : bool; (* inverted rex_x bit *)
-  vex_nb : bool; (* inverted rex_b bit *)
-  vex_map_select : int; (* Specifies the opcode map to use *)
-  vex_we : bool; (* For int instructions, equivalent to rex.w. For non-int instructions, opcode extension bit. *)
-  vex_v : int; (* additional instruction operand (XMM or YMM register) *)
-  vex_l : bool; (* 0 = 128-bit operands (xmm), 1 = 256-bit vector operands (ymm) *)
-  vex_pp : int; (* Specifies mandatory prefix (0=none, 1=pref_opsize 2=repz 3=repnz) *)
+  vex_nr : bool; (** inverted rex_r bit *)
+  vex_nx : bool; (** inverted rex_x bit *)
+  vex_nb : bool; (** inverted rex_b bit *)
+  vex_map_select : int; (** Specifies the opcode map to use *)
+  vex_we : bool; (** For int instructions, equivalent to rex.w. For non-int instructions, opcode extension bit. *)
+  vex_v : int; (** additional instruction operand (XMM or YMM register) *)
+  vex_l : bool; (** 0 = 128-bit operands (xmm), 1 = 256-bit vector operands (ymm) *)
+  vex_pp : int; (** Specifies mandatory prefix (0=none, 1=pref_opsize 2=repz 3=repnz) *)
 }
 
 type prefix = {
   addrsize : typ;
-  opsize   : typ; (* General operand size *)
-  bopsize  : typ; (* Operand size that defaults to machine size
+  opsize   : typ; (** General operand size *)
+  bopsize  : typ; (** Operand size that defaults to machine size
                      (e.g. for pop) *)
-  mopsize  : typ; (* Multi-scalar operand size *)
+  mopsize  : typ; (** Multi-scalar operand size *)
   repeat   : bool;
   nrepeat  : bool;
   addrsize_override : bool;
   opsize_override : bool;
   rex : rex option;
   vex : vex option;
-  r_extend : int; (* extended r bit *)
-  rm_extend : int; (* extended rm bit or sib base *)
-  sib_extend : int; (* extended sib index bit *)
-  (* add more as needed *)
+  r_extend : int; (** extended r bit *)
+  rm_extend : int; (** extended rm bit or sib base *)
+  sib_extend : int; (** extended sib index bit *)
+  (** add more as needed *)
 }

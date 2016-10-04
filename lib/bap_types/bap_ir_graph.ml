@@ -215,7 +215,7 @@ module Node = struct
       let pp = Blk.pp
       let hash x = Tid.hash (Term.tid x)
       let module_name = None
-      let version = "0.1"
+      let version = "1.0.0"
     end)
 
 end
@@ -329,7 +329,7 @@ module Edge = struct
   include Regular.Make(struct
       type t = edge [@@deriving bin_io, compare, sexp]
       let module_name = None
-      let version = "0.1"
+      let version = "1.0.0"
       let hash t = Blk.hash t.src lxor Blk.hash t.dst
       let pp ppf x =
         Option.iter (Term.nth jmp_t x.src x.pos) ~f:(Jmp.pp ppf)
@@ -387,7 +387,7 @@ let is_directed = true
 include Regular.Make(struct
     type nonrec t = graph [@@deriving bin_io, compare, sexp]
     let module_name = None
-    let version = "0.1"
+    let version = "1.0.0"
     let hash g = Sub.hash g.sub
     let pp ppf g =
       let node_label blk =

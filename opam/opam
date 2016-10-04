@@ -147,11 +147,11 @@ depends: [
     "faillib"
     "fileutils"
     "FrontC"
-    "oasis" {build & >= "0.4.0"}
+    "oasis" {build & = "0.4.7"}
     "ounit" {build}
-    "ocamlgraph"
+    "ocamlgraph" {>= "1.8.6" }
     "ocamlfind" {>= "1.5.6" & < "2.0"}
-    "ocurl" {>= "0.7.7"}
+    "ocurl" {= "0.7.7"}
     "optcomp"
     "re"
     "uri" {>= "1.9.0"}
@@ -172,6 +172,7 @@ depexts: [
         "clang"
         "llvm"
         "m4"
+        "dejagnu"
      ]]
      [["osx" "macports"] [
         "gmp"

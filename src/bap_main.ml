@@ -15,7 +15,7 @@ exception Failed_to_create_project of Error.t
 exception Unknown_format of string
 
 
-let find_source (type t) (module F : Source.Factory with type t = t)
+let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
 
 let brancher = find_source (module Brancher.Factory) brancher
@@ -190,15 +190,25 @@ let program_info =
       `S "BUGS";
       `P "Report bugs to \
           https://github.com/BinaryAnalysisPlatform/bap/issues";
-      `S "SEE ALSO"; `P "$(b,bap-mc)(1)"
+      `S "SEE ALSO";
+      `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
 let program source =
   let create
-      a b c d e f g i j k = Bap_options.Fields.create
-      a b c d e f g i j k [] in
+      passopt
+      a b c d e f g i j k = (Bap_options.Fields.create
+                               a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
+  let passopt : string list Term.t =
+    let doc =
+      "Runs passes (comma separated). This option replaces the \
+       previously existing $(b,--)$(i,PASS) options which are now \
+       deprecated and will soon be removed." in
+    Arg.(value & opt (list string) [] &
+         info ["p"; "pass"; "passes"] ~doc ~docv:"PASS") in
   Term.(const create
+        $passopt
         $filename
         $(disassembler ())
         $(loader ())
@@ -228,12 +238,13 @@ let run_loader () =
 
 let parse passes argv =
   match Cmdliner.Term.eval ~argv ~catch:false (program source) with
-  | `Ok opts -> { opts with Bap_options.passes }
+  | `Ok (opts, passopt) ->
+    let passes = passopt @ passes in
+    { opts with Bap_options.passes }
   | _ -> exit 0
 
 let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
-
 
 let () =
   let () =

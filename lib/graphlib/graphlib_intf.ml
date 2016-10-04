@@ -20,7 +20,7 @@ module type Node = sig
   val remove : t -> graph -> graph
   val has_edge : t -> t -> graph -> bool
   val edge : t -> t -> graph -> edge option
-  include Opaque with type t := t
+  include Opaque.S with type t := t
 end
 
 module type Edge = sig
@@ -36,7 +36,7 @@ module type Edge = sig
   val insert : t -> graph -> graph
   val update : t -> label -> graph -> graph
   val remove : t -> graph -> graph
-  include Opaque with type t := t
+  include Opaque.S with type t := t
 end
 
 module type Graph = sig
@@ -62,8 +62,8 @@ module type Graph = sig
   val number_of_edges : t -> int
   val number_of_nodes : t -> int
 
-  include Opaque with type t := t
-  include Printable with type t := t
+  include Opaque.S with type t := t
+  include Printable.S with type t := t
 end
 
 type ('c,'n,'e) graph =

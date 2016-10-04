@@ -78,7 +78,7 @@ module Marker = struct
     List.for_all strains ~f:(function
         | Tid name -> Tid.name tid = name
         | Var name -> Var.name (Def.lhs def) = name
-        | Addr a -> match Term.get_attr def Disasm.insn_addr with
+        | Addr a -> match Term.get_attr def address with
           | None -> false
           | Some addr -> match Addr.to_int64 addr with
             | Error _ -> false
@@ -152,7 +152,9 @@ taint values returned by a $(i,malloc) only at the specified call site
 address. You can specify these options several times.|};
     `P "The full grammar specification of strain specification
 language follows:";
-    `Pre grammar
+    `Pre grammar;
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-propagate-taint)(1), $(b,bap-plugin-map-terms)(1)"
   ]
 
   let taints kind : strain list list Config.param =

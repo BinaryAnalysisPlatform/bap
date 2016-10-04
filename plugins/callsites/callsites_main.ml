@@ -35,7 +35,7 @@ let transfer_attrs t1 t2 =
   let t2 = Term.set_attr t2 Term.synthetic () in
   Term.set_attr t2 Term.origin (Term.tid t1) |>
   transfer_attr Disasm.insn t1 |>
-  transfer_attr Disasm.insn_addr t1
+  transfer_attr address t1
 
 let add_def intent blk def =
   if intent = Out
@@ -99,5 +99,7 @@ let () =
       0000015c:
       000001c4: R0 := malloc_result
       ...";
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-api)(1)"
   ];
   Config.when_ready (fun _ -> Project.register_pass main)

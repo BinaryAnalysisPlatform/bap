@@ -4,6 +4,16 @@ open Bap_c.Std
 include Self()
 open Cabs
 
+let () = Config.manpage [
+    `S "DESCRIPTION";
+    `P
+      "A parser for C header files, that uses FrontC library as a
+     backend. The parser understands GNU attribute syntax, that can
+     be used to pass arbitrary semantic information in the header.";
+    `S "SEE ALSO";
+    `P "$(b,bap-api)(3), $(b,bap-c)(3), $(b,bap-plugin-api)(1)"
+  ]
+
 let int size sign : C.Type.basic = match size,sign with
   | (NO_SIZE,(NO_SIGN|SIGNED)) -> `sint
   | (SHORT,(NO_SIGN|SIGNED)) -> `sshort
@@ -236,4 +246,4 @@ let parser size name =
       try Ok (parse size parser lexbuf) with exn ->
         Or_error.of_exn exn)
 
-let () = C.Parser.provide parser
+let () = Config.when_ready @@ fun _ -> C.Parser.provide parser

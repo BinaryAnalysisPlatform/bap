@@ -1,20 +1,3 @@
-let piqic () : unit =
-  let chop str = try
-      Filename.chop_extension str
-    with _ -> str in
-  let piqic_path = BaseCheck.prog_best "piqic_path" ["piqic-ocaml"; "piqic"] () in
-  BaseEnv.var_define "piqic_flags" (fun () ->
-      if chop (Filename.basename (BaseEnv.var_get "piqic")) = "piqic"
-      then "ocaml"
-      else "") |>
-  definition_end;
-  BaseEnv.var_define "piqic" (fun () ->
-      if List.mem (BaseStandardVar.os_type ()) ["Cygwin"; "Win32"]
-      then
-        String.concat " "
-          (OASISExec.run_read_output ~ctxt "cygpath" [piqic_path])
-      else piqic_path) |>
-  definition_end
 
 let cxx () : unit =
   BaseEnv.var_define
@@ -26,69 +9,13 @@ let cxx () : unit =
     (fun () -> OASISFileUtil.which ~ctxt "c++") |>
   definition_end
 
-let llvm_version () : unit =
-  BaseEnv.var_define
-    ~hide:false
-    ~dump:true
-    ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "llvm version (e.g., 3.4)")
-    "llvm_version"
-    (fun () -> "3.4") |>
-  definition_end
-
-let rec find_map xs ~f =
-  match xs with
-  | [] -> None
-  | x :: xs -> match f x with
-    | None -> find_map xs ~f
-    | yay -> yay
-
-
-let llvm_config () : unit =
-  BaseEnv.var_define
-    ~hide:false
-    ~dump:true
-    ~cli:BaseEnv.CLIWith
-    ~short_desc:(fun () -> "llvm-config executable")
-    "llvm_config"
-    (fun () ->
-       (* default macports if we're on mac os x *)
-       let macosx = BaseEnv.var_get "system" = "macosx" in
-       let vers = match BaseEnv.var_get "llvm_version" with
-         | "" -> []
-         | ver when macosx -> ["-mp-" ^ ver; "-" ^ ver]
-         | ver -> ["-" ^ ver] in
-       find_map vers ~f:(fun ver ->
-           try Some (OASISFileUtil.which ~ctxt ("llvm-config" ^ ver))
-           with Not_found -> None) |> function
-       | Some path -> path
-       | None -> raise Not_found) |>
-  definition_end
-
-let llvm var () : unit =
-  BaseEnv.var_define
-    ~hide:true
-    ~dump:true
-    ~short_desc:(fun () -> "llvm-config --"^var)
-    ("llvm_"^var)
-    (fun () ->
-       let llvm_config = BaseEnv.var_get "llvm_config" in
-       let llvm_version = BaseEnv.var_get "llvm_version" in
-       let extract v =
-	 OASISExec.run_read_one_line ~ctxt llvm_config ["--"^v] in
-       if llvm_version > "3.4" && var = "ldflags"
-       then extract var ^ extract "system-libs"
-       else extract var) |>
-  definition_end
-
-
 let cxx_flags () : unit =
   BaseEnv.var_define
     ~hide:true
     ~dump:true
     ~short_desc:(fun () -> "c++ flags")
     "cxxflags"
-    (fun () -> "-std=c++11 -I$standard_library -I$libdir/bap -Ilib/bap_disasm") |>
+    (fun () -> "-std=c++11 -fPIC -I$standard_library -I$libdir/bap -Ilib/bap_disasm") |>
   definition_end
 
 let cxx_libs () : unit =
@@ -101,18 +28,6 @@ let cxx_libs () : unit =
     (fun () -> if BaseEnv.var_get "system" = "macosx" then "-lc++" else "-lstdc++") |>
   definition_end
 
-let llvm_mainlib () : unit =
-  BaseEnv.var_define
-    ~hide:true
-    ~dump:true
-    ~short_desc:(fun () -> "main LLVM library")
-    "llvm_mainlib"
-    (fun () ->
-       let llvm_config = BaseEnv.var_get "llvm_config" in
-       let ver =
-         OASISExec.run_read_one_line ~ctxt llvm_config ["--version"] in
-       "-lLLVM-"^ver) |>
-  definition_end
 
 let cc_optimization () : unit =
   BaseEnv.var_define
@@ -123,22 +38,6 @@ let cc_optimization () : unit =
     "cc_optimization"
     (fun () -> "-O2") |>
   definition_end
-
-let llvm_lib () : unit =
-  BaseEnv.var_define
-    ~hide:true
-    ~dump:true
-    ~short_desc:(fun () -> "LLVM library(ies) to link with")
-    "llvm_lib"
-    (fun () ->
-       let llvm_static = BaseEnv.var_get "llvm_static" in
-       let lib = if llvm_static = "true"
-         then "llvm_libs"
-         else "llvm_mainlib" in
-       BaseEnv.var_get lib) |>
-  definition_end
-
-
 
 let check =
   let open OASISMessage in
@@ -151,13 +50,11 @@ let check =
 
 let install_headers hdrs =
   InternalInstallPlugin.lib_hook :=
-    fun (cs, bs, lib) ->
+    fun (cs, bs, lib, dirs) ->
       match lib.OASISTypes.lib_findlib_name with
-      | Some "bap" -> (cs, bs, lib, hdrs)
-      | _ -> (cs, bs, lib, [])
+      | Some "bap" -> (cs, bs, lib, dirs, hdrs)
+      | _ -> (cs, bs, lib, dirs, [])
 
-let define definitions =
-  List.iter (fun f -> try f () with exn -> ()) definitions
 
 let () =
 
@@ -165,19 +62,10 @@ let () =
   BaseEnv.var_get "standard_library";
 
   define [
-    piqic;
     cxx;
     cxx_flags;
     cxx_libs;
     cc_optimization;
-    llvm_version;
-    llvm_config;
-    llvm_mainlib;
-    llvm "cxxflags";
-    llvm "ldflags";
-    llvm "cflags";
-    llvm "libs";
-    llvm_lib;
   ];
 
   install_headers [

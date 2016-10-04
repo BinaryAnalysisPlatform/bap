@@ -30,7 +30,7 @@ include Regular.Make(struct
     include Stringable
     let hash = Hashtbl.hash
     let module_name = None
-    let version = "0.1"
+    let version = "1.0.0"
 
     let pp ppf t = Uuidm.print ppf t
   end)

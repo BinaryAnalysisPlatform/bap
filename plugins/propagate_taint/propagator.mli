@@ -17,7 +17,7 @@ module Result : sig
   val is_tainted : t -> tid -> bool
   val is_visited : t -> tid -> bool
   val visited : t -> int Tid.Map.t
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 

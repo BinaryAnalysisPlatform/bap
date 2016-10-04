@@ -222,7 +222,7 @@ module Cmdline = struct
   ]
 
   let see_also = [
-    `S "SEE ALSO"; `P "$(b,bap-taint)(1), $(b, bap-bml)(3)"
+    `S "SEE ALSO"; `P "$(b,bap-plugin-taint)(1), $(b,bap-bml)(3)"
   ]
 
   let man = [

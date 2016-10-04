@@ -19,7 +19,7 @@ let log_folder = match getenv "BAP_LOG_DIR" with
   | None -> match getenv "XDG_STATE_HOME" with
     | Some dir -> dir / "bap"
     | None -> match getenv "HOME" with
-      | None -> Filename.get_temp_dir_name () / "bap"
+      | None -> Filename.get_temp_dir_name () / "bap.log"
       | Some home -> home / ".local" / "state" / "bap"
 
 let max_logs = match getenv "BAP_BACKLOG" with

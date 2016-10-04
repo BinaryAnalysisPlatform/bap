@@ -3,13 +3,15 @@ open Bap.Std
 
 (** BML - Bap Mapping Language.
 
-    A small DSL for mapping terms. See [bap --help-map] for full
+    A small DSL for mapping terms. See [bap --map-terms-help] for full
     language grammar and description. This library implements BML's
     standard library and can be used to extend the language with new
     predicates and mapper. Just implement them and register using
     corresponding module.
 *)
 
+
+(** A parser error  *)
 exception Parse_error of string
 
 (** Interface to a registry.

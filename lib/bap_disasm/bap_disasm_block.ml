@@ -45,7 +45,7 @@ include Opaque.Make(struct
 
 
 
-include Printable(struct
+include Printable.Make(struct
     type nonrec t = t
     let pp ppf x =
       Format.fprintf ppf "[%a,%a]"

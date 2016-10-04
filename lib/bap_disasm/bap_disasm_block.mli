@@ -18,5 +18,5 @@ val memory : t -> mem
 val leader : t -> insn
 val terminator : t -> insn
 val insns : t -> (mem * insn) list
-include Opaque     with type t := t
-include Printable  with type t := t
+include Opaque.S     with type t := t
+include Printable.S  with type t := t

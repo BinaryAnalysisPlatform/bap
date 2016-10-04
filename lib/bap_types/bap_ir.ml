@@ -50,7 +50,7 @@ module Tid = struct
   module Tid = Regular.Make(struct
       type nonrec t = Int63.t [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Tid"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = Int63.hash
 
@@ -92,7 +92,7 @@ module Tid = struct
     let set_name_resolver resolver = names := resolver
   end
 
-  let (!) = from_string_exn
+  let (!!) = from_string_exn
   include Tid
 end
 
@@ -324,7 +324,7 @@ module Label = struct
   include Regular.Make(struct
       type t = label [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Label"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = Hashtbl.hash
       let pp ppf = function
@@ -345,7 +345,7 @@ module Call = struct
   include Regular.Make(struct
       type t = call [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Call"
-      let version = "0.1"
+      let version = "1.0.0"
 
 
       let pp_return ppf lab = match lab with
@@ -403,7 +403,7 @@ module Ir_arg = struct
   include Regular.Make(struct
       type t = arg term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Arg"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
 
@@ -440,7 +440,7 @@ module Ir_def = struct
   include Regular.Make(struct
       type t = def term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Def"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
 
@@ -490,7 +490,7 @@ module Ir_phi = struct
   include Regular.Make(struct
       type t = phi term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Phi"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
 
@@ -578,7 +578,7 @@ module Ir_jmp = struct
   include Regular.Make(struct
       type t = jmp term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Jmp"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
 
@@ -1158,7 +1158,7 @@ module Ir_blk = struct
   include Regular.Make(struct
       type t = blk term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Blk"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
 
@@ -1276,7 +1276,7 @@ module Ir_sub = struct
   include Regular.Make(struct
       type t = sub term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Sub"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
       let pp_self ppf self =
@@ -1418,7 +1418,7 @@ module Ir_program = struct
   include Regular.Make(struct
       type t = program term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Program"
-      let version = "0.1"
+      let version = "1.0.0"
 
       let hash = hash_of_term
       let pp_self ppf self =

@@ -203,7 +203,10 @@ let options_for_passes = [
   `I begin
     "$(b,--)$(i,PASS)",
     "Runs a program $(i,PASS). The $(i,PASS) should be registered in the
-         system, usually by loading or installing corresponding plugin."
+         system, usually by loading or installing corresponding
+         plugin. DEPRECATED. This option will be removed in the near
+         future. Instead, it is advisable to use the $(b,-p) option to
+         specify passes."
   end;
   `I begin
     "$(b,--)$(i,PASS)-$(i,OPTION)",

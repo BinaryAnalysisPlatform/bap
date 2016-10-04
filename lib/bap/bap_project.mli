@@ -26,6 +26,8 @@ val program : t -> program term
 val with_program : t -> program term -> t
 val symbols : t -> symtab
 val with_symbols : t -> symtab -> t
+val storage : t -> dict
+val with_storage : t -> dict -> t
 val memory : t -> value memmap
 val disasm : t -> disasm
 val with_memory : t -> value memmap -> t
@@ -94,4 +96,4 @@ val passes : unit -> pass list
 
 val restore_state : t -> unit
 
-include Data with type t := t
+include Data.S with type t := t

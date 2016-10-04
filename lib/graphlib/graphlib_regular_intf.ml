@@ -4,11 +4,11 @@ open Graphlib_graph
 
 module type Aux = sig
   type node
-  module Tree : Printable with type t = node tree
-  module Frontier : Printable with type t = node frontier
-  module Path : Printable with type t = node path
-  module Partition : Printable with type t = node partition
-  module Group : Printable with type t = node group
+  module Tree : Printable.S with type t = node tree
+  module Frontier : Printable.S with type t = node frontier
+  module Path : Printable.S with type t = node path
+  module Partition : Printable.S with type t = node partition
+  module Group : Printable.S with type t = node group
 end
 
 

@@ -8,6 +8,14 @@ open Backend
 
 open Elf
 
+include Self()
+
+let () = Config.manpage [
+    `S "DESCRIPTION";
+    `P "An ELF image loader written in pure OCaml.";
+    `S "SEE ALSO";
+    `P "$(b,bap-elf)(3), $(bap-plugin-llvm)(1)"
+  ]
 
 let name = "bap-elf"
 
@@ -178,6 +186,7 @@ let of_data (data : Bigstring.t) : Img.t option =
     None
 
 let () =
+  Config.when_ready @@ fun _ ->
   match Image.register_backend ~name of_data with
   | `Ok -> ()
   | `Duplicate ->

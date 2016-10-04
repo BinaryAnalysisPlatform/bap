@@ -31,7 +31,7 @@ module Taint_map = struct
       open Format
 
       type t = map [@@deriving bin_io, compare, sexp]
-      let version = "0.1"
+      let version = "1.0.0"
       let module_name = None
 
       let pp_list pp ppf xs =

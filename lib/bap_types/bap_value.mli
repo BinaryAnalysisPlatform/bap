@@ -56,6 +56,6 @@ module Match : sig
   val default : (unit -> 's) -> 's t
 end
 
-module Typeid : Identifiable with type t = typeid
+module Typeid : Identifiable.S with type t = typeid
 
-include Regular with type t := t
+include Regular.S with type t := t

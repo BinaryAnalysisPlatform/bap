@@ -4,7 +4,7 @@ type t = {
   disassembler : string;
   src : string option;
   addr : string;
-  max_insn : int option;
+  only_one : bool;
   arch : string;
   show_insn_size : bool;
   insn_formats : string list;

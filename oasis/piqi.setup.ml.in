@@ -1,0 +1,22 @@
+let piqic () : unit =
+  let chop str = try
+      Filename.chop_extension str
+    with _ -> str in
+  let piqic_path = BaseCheck.prog_best "piqic_path" ["piqic-ocaml"; "piqic"] () in
+  BaseEnv.var_define "piqic_flags" (fun () ->
+      if chop (Filename.basename (BaseEnv.var_get "piqic")) = "piqic"
+      then "ocaml"
+      else "") |>
+  definition_end;
+  BaseEnv.var_define "piqic" (fun () ->
+      if List.mem (BaseStandardVar.os_type ()) ["Cygwin"; "Win32"]
+      then
+        String.concat " "
+          (OASISExec.run_read_output ~ctxt "cygpath" [piqic_path])
+      else piqic_path) |>
+  definition_end
+
+
+
+
+let () = define [piqic]

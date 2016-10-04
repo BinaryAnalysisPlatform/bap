@@ -172,7 +172,7 @@ include Regular.Make(struct
     type nonrec t = t [@@deriving sexp, bin_io, compare]
     let hash t = t.code
     let module_name = Some "Bap.Std.Insn"
-    let version = "0.1"
+    let version = "1.0.0"
 
     let string_of_ops ops =
       Array.map ops ~f:Op.to_string |> Array.to_list |>
@@ -190,4 +190,5 @@ let () =
   add_writer ~desc:"Abstract Data Type pretty printing format"
     ~ver:version "adt";
   Data.Write.create ~pp:pp_asm () |>
-  add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm"
+  add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm";
+  set_default_printer "asm"

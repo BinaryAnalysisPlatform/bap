@@ -1,0 +1,20 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(2) do |config|
+  config.vm.box = "ubuntu/trusty64"
+  config.vm.provider "virtualbox" do |vb|
+      vb.memory = "4096"
+  end
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+sudo add-apt-repository --yes ppa:avsm/ppa
+sudo apt-get update
+sudo apt-get --yes install opam
+opam init --auto-setup --comp=4.02.3 --yes
+opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository
+eval `opam config env`
+opam depext bap --install --yes
+sudo apt-get install python-pip --yes
+sudo pip install bap
+SHELL
+end

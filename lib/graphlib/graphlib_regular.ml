@@ -4,7 +4,7 @@ open Graphlib_intf
 open Graphlib_regular_intf
 open Format
 
-module Make(Node : Opaque)(Label : T) = struct
+module Make(Node : Opaque.S)(Label : T) = struct
 
   type edge_label = Label.t
 
@@ -190,7 +190,7 @@ module Make(Node : Opaque)(Label : T) = struct
             Node.hash n lxor hash)
     end)
 
-  include Printable(struct
+  include Printable.Make(struct
       type nonrec t = t
       let module_name = None
 
@@ -217,7 +217,7 @@ end
 module Printable_graph(Graph_pp : Printable_graph) = struct
   open Graph_pp
   include G
-  include Printable(struct
+  include Printable.Make(struct
       type t = G.t
 
       let pp_label ppf lab = match asprintf "%a" pp_edge lab with
@@ -242,7 +242,7 @@ end
 
 
 
-module Labeled(Node : Opaque)(NL : T)(EL : T) = struct
+module Labeled(Node : Opaque.S)(NL : T)(EL : T) = struct
   module Labeled_node = struct
     type t = (Node.t, NL.t) labeled
     include Opaque.Make(struct
@@ -262,7 +262,7 @@ end
 
 module type Product = sig
   type t
-  include Opaque with type t := t
+  include Opaque.S with type t := t
   include Pp with type t := t
 end
 
@@ -273,7 +273,7 @@ module Aux(P : Pp) = struct
 
   module Tree = struct
     type t = P.t tree
-    include Printable(struct
+    include Printable.Make(struct
         type nonrec t = t
         let pp = Tree.pp P.pp
         let module_name = make_name "Tree"
@@ -282,7 +282,7 @@ module Aux(P : Pp) = struct
 
   module Frontier = struct
     type t = P.t frontier
-    include Printable(struct
+    include Printable.Make(struct
         type nonrec t = t
         let pp = Frontier.pp P.pp
         let module_name = make_name "Frontier"
@@ -291,7 +291,7 @@ module Aux(P : Pp) = struct
 
   module Group = struct
     type t = P.t group
-    include Printable(struct
+    include Printable.Make(struct
         type nonrec t = t
         let pp = Group.pp P.pp
         let module_name = make_name "Group"
@@ -300,7 +300,7 @@ module Aux(P : Pp) = struct
 
   module Partition = struct
     type t = P.t partition
-    include Printable(struct
+    include Printable.Make(struct
         type nonrec t = t
         let pp = Partition.pp P.pp
         let module_name = make_name "Partition"
@@ -309,7 +309,7 @@ module Aux(P : Pp) = struct
 
   module Path = struct
     type t = P.t path
-    include Printable(struct
+    include Printable.Make(struct
         type nonrec t = t
         let pp = Path.pp P.pp
         let module_name = make_name "Path"

@@ -51,11 +51,11 @@ let solve prog seeds = (object
 end)#run prog seeds
 
 let marker unchecked = object
-  inherit Term.mapper
+  inherit Term.mapper as super
   method! map_term cls t =
     if Set.mem unchecked (Term.tid t)
     then Term.set_attr t Term.dead ()
-    else t
+    else super#map_term cls t
 end
 
 let printer unchecked = object
@@ -115,7 +115,9 @@ module Cmdline = struct
     `I begin
       "$(b,--$mname)",
       "Same as $(b,--$mname-taint --propagate-taint --$mname-print)"
-    end
+    end;
+    `S "SEE ALSO";
+    `P "$(b,bap-api)(1), $(b,bap-plugin-propagate-taint)(1), $(b,bap-plugin-taint)(1)"
   ]
 
   let passes = [name; "--taint"; "--mark"; "--print"]

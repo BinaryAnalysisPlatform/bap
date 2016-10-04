@@ -38,7 +38,12 @@ let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
       `P "Read symbol information from a file and provide rooter,
-    symbolizer and a reconstructor, based on this information."
+    symbolizer and a reconstructor, based on this information. Once
+  symbols are read, use $(b,--)$(i,SERVICE)=$(b,file) to use them.
+  where $(i,SERVICE) is one of $(b,rooter), $(b,symbolizer) or $(b,reconstructor).
+";
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
     ] in
   let symsfile = Config.(param (some non_dir_file) "from" ~docv:"SYMS"
                            ~doc:"Use this file as symbols source") in

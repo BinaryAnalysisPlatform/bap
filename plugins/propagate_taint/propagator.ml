@@ -62,7 +62,7 @@ module Result = struct
   include Regular.Make(struct
       type nonrec t = t [@@deriving bin_io, compare, sexp]
       let module_name = None
-      let version = "0.1"
+      let version = "1.0.0"
       let hash = Hashtbl.hash
       let pp ppf t = Format.fprintf ppf "<taints>"
     end)

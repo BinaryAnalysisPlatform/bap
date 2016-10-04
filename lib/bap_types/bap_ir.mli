@@ -53,8 +53,8 @@ module Tid : sig
   val name : t -> string
   val from_string : string -> tid Or_error.t
   val from_string_exn : string -> tid
-  val (!) : string -> tid
-  include Regular with type t := t
+  val (!!) : string -> tid
+  include Regular.S with type t := t
   module Tid_generator : Bap_state.S
   module Name_resolver : Bap_state.S
 end
@@ -193,7 +193,7 @@ module Ir_program : sig
     val result : t -> program term
   end
 
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_sub : sig
@@ -219,7 +219,7 @@ module Ir_sub : sig
   val noreturn : unit tag
   val returns_twice : unit tag
   val nothrow : unit tag
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_blk : sig
@@ -270,7 +270,7 @@ module Ir_blk : sig
     val add_elt : t -> elt -> unit
     val result  : t -> blk term
   end
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_def : sig
@@ -283,7 +283,7 @@ module Ir_def : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_jmp : sig
@@ -301,7 +301,7 @@ module Ir_jmp : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_phi : sig
@@ -318,7 +318,7 @@ module Ir_phi : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Ir_arg : sig
@@ -337,7 +337,7 @@ module Ir_arg : sig
   val restricted : unit tag
   val nonnull : unit tag
 
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Call : sig
@@ -349,7 +349,7 @@ module Call : sig
   val with_return : t -> label -> t
   val with_noreturn : t -> t
 
-  include Regular with type t := t
+  include Regular.S with type t := t
 end
 
 module Label : sig
@@ -358,5 +358,5 @@ module Label : sig
   val direct : tid -> t
   val indirect : exp -> t
   val change : ?direct:(tid -> tid) -> ?indirect:(exp -> exp) -> t -> t
-  include Regular with type t := t
+  include Regular.S with type t := t
 end

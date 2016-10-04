@@ -185,7 +185,13 @@ let main clean size info dir =
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Provide caching service for all data types."
+      `P
+        "Provide caching service for all data types. The caching entry
+         point is defined in the $(i,Data) module of the $(i,Regular)
+         library.";
+      `S "SEE ALSO";
+      `P "$(b,regular)(3)";
+
     ] in
   let clean = Config.(flag "clean" ~doc:"Cleanup all caches") in
   let set_size = Config.(param (some int64) "size" ~docv:"N"

@@ -14,7 +14,7 @@ type value =
   | Bot
 
 module Id : sig
-  include Regular
+  include Regular.S
   val zero : t
   val succ : t -> t
 end = struct
@@ -27,7 +27,7 @@ end = struct
         Format.fprintf ppf "0x%LX" (Int63.to_int64 id)
       let hash = Int63.hash
       let module_name = Some "Bap.Std.Bil.Result.Id"
-      let version = "0.1"
+      let version = "1.0.0"
     end)
 end
 
@@ -65,10 +65,10 @@ end
 
 module Value = struct
   type t = value
-  include Printable(struct
+  include Printable.Make(struct
       type t = value
       let module_name = Some "Bap.Std.Bil.Result.Value"
-      let version = "0.1"
+      let version = "1.0.0"
       let pp ppf x =
         Format.fprintf ppf "%s" @@ match x with
         | Imm w -> Bap_bitvector.to_string w
@@ -77,12 +77,12 @@ module Value = struct
     end)
 end
 
-include Printable(struct
+include Printable.Make(struct
     type t = result
 
     let pp ppf r =
       Format.fprintf ppf "[%a] %a" Id.pp (id r) Value.pp (value r);;
     let module_name = Some "Bap.Std.Bil.Result"
-    let version = "0.1"
+    let version = "1.0.0"
 
   end)

@@ -1,9 +1,21 @@
 (* OASIS_START *)
 (* OASIS_STOP *)
-#4 "oasis/common.ocamlbuild.ml.in"
+
 let oasis_env =
   BaseEnvLight.load
-    ~filename:MyOCamlbuildBase.env_filename
     ~allow_empty:true
     ()
 let expand s = BaseEnvLight.var_expand s oasis_env
+
+type rule = unit -> unit
+
+module Rules : sig
+  val add : rule -> unit
+  val dispatch : hook -> unit
+end = struct
+  let rules : (unit -> unit) list ref  = ref []
+  let add rule = rules := rule :: !rules
+  let dispatch = function
+    | Before_rules -> !rules |> List.iter (fun rule -> rule ())
+    | _ -> ()
+end

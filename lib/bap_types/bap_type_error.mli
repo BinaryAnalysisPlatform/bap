@@ -15,4 +15,4 @@ val bad_type : exp:typ -> got:typ -> t
 
 type type_error = t [@@deriving bin_io, compare, sexp]
 
-include Regular with type t := t
+include Regular.S with type t := t

@@ -49,11 +49,6 @@ end
 
 module Blocks = struct
   open Sexp
-  (** The following attributes will be outputed:
-
-      [id] will be outputed if there is no [title] [title] will be
-      outputed if present with quotes removed.  if neither [id] or
-      [title] attributes are found, then *)
 
   let filter_attrs tag : string option =
     match Sexp.of_string tag with
@@ -107,12 +102,12 @@ module Attr = struct
   let attrs = String.Hash_set.create ()
   let show = Hash_set.add attrs
   let hide = Hash_set.remove attrs
-  let colorify = ref (Unix.isatty Unix.stdout) 
-  let print_colors enabled = 
+  let colorify = ref (Unix.isatty Unix.stdout)
+  let print_colors enabled =
     colorify := enabled
 
   (* ideally, we should clean in a [print_close_tag] method,
-     but, thanks to bug #6769 in Format library
+     but, thanks to a bug #6769 in Format library
      (see OCaml Mantis), we need to hijack the newline method,
      and use this ugly reference  *)
   let clean = ref true

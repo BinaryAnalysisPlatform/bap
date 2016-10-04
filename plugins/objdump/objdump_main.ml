@@ -87,5 +87,7 @@ let () =
     `P  "$(b, bap --symbolizer=objdump --dump-symbols) $(i,executable)";
     `P  "To use the internal extractor and *not* this plugin:";
     `P  "$(b, bap --symbolizer=internal --dump-symbols) $(i,executable)";
+    `S  "SEE ALSO";
+    `P  "$(b,bap-plugin-ida)(1)"
   ];
   Config.when_ready (fun _ -> main ())
