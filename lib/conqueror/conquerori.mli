@@ -1,5 +1,3 @@
-open Core_kernel.Std
-open Bap_common
 open Bap_bil
 open Bap_ir
 open Bap_result
@@ -8,10 +6,11 @@ class context : ?main : sub term -> program term ->  object('s)
     inherit Bap_expi.context
     method program : program term
     method main : sub term option
-    method trace : tid list
-    method enter_term : tid -> 's
+    method enter_term : 't 'p . ('p,'t) cls -> 't term -> 's
+    method leave_term : 't 'p . ('p,'t) cls -> 't term -> 's
     method set_next : tid option -> 's
     method next : tid option
+    method curr : tid
   end
 
 class ['a] t : object
