@@ -20,7 +20,23 @@ val register_read : var move tag
 (** a value is written to the specified register  *)
 val register_write : var move tag
 
-(** this event can used to synchronize traces  *)
+(** this event can used to synchronize traces.
+    The semantics is unspecified and remains open, so that a particular
+    user can define its own meaning. But, the idea behind it, is that
+    this event introduces a countable ordering. Basically, one can
+    define a timeline, based on its own definition of a timescale.
+    To keep it more concrete, here are the examples of different time
+    scales:
+    1. every new event (except the timestamp itself) increments the
+       clock (basically all events are interleaved with the timestamp events)
+    2. every new instruction increments the clock (e.g., timestamp is
+       inserted after each `code_exec` event)
+    3. the clock is incremented every cpu cycle (e.g., timestamps are
+       incremented after each `code_exec` for the number of cpu cycles,
+       that the executed instruction took)
+    4. the clock is incremented every realtime second (e.g., obvious)
+    5. the clock is incremented every realtime second,  and is initialized
+       with the number of second that has passed since the start of the Epoch. *)
 val timestamp : int64 tag
 
 (** CPU PC register changed its value  *)
