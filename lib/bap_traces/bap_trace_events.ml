@@ -87,6 +87,23 @@ module Modload = struct
     Format.fprintf fmt "%s: %a - %a" t.name Addr.pp t.low Addr.pp t.high
 end
 
+let ppv name pp fmt t = Format.fprintf fmt "%s: %a" name pp t
+
+module Context_switch = struct
+  type t = int [@@deriving bin_io, compare, sexp]
+  let pp = ppv "context-switch" Int.pp
+end
+
+module Time_stamp = struct
+  type t = int64 [@@deriving bin_io, compare, sexp]
+  let pp = ppv "timestamp" Int64.pp
+end
+
+module Pc_update = struct
+  type t = addr [@@deriving bin_io, compare, sexp]
+  let pp = ppv "pc-update" Word.pp
+end
+
 let memory_load =
   Value.Tag.register (module Load)
     ~name:"memory-load"
@@ -108,12 +125,12 @@ let register_write =
     ~uuid:"395f5f37-5aed-4bd2-a51f-1c7216b5cd7c"
 
 let timestamp =
-  Value.Tag.register (module Int64)
+  Value.Tag.register (module Time_stamp)
     ~name:"timestamp"
     ~uuid:"0feea5c2-b471-48e4-a10f-c7e18cbf21a9"
 
 let pc_update =
-  Value.Tag.register (module Addr)
+  Value.Tag.register (module Pc_update)
     ~name:"pc-update"
     ~uuid:"98ea397e-d726-43be-9ec5-bf226d67578f"
 
@@ -123,7 +140,7 @@ let code_exec =
     ~uuid:"b8b3af3a-d1aa-4bf0-a36f-4ea6d0dd2bbf"
 
 let context_switch =
-  Value.Tag.register (module Int)
+  Value.Tag.register (module Context_switch)
     ~name:"context-switch"
     ~uuid:"7f1d322a-d2cc-4e42-8e7a-081080751268"
 
