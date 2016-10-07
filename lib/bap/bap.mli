@@ -789,14 +789,35 @@ module Std : sig
 
       (** Option Monad Transformer  *)
       module Option : sig
-        module Make (M : S ) : S  with type 'a t = 'a option M.t
-        module Make2(M : S2) : S2 with type ('a,'b) t = ('a option,'b) M.t
+        module Make (M : S ) : sig
+          include S with type 'a t = 'a option M.t
+
+          (** [lift inner] lifts option monad into the outer monad M.t  *)
+          val lift : 'a option -> 'a t
+        end
+
+        module Make2(M : S2) : sig
+          include S2 with type ('a,'b) t = ('a option,'b) M.t
+
+          (** [lift inner] lifts option monad into the outer monad M.t  *)
+          val lift : 'a option -> ('a,'b) t
+        end
       end
 
       (** Or_error Monad Transformer  *)
       module Or_error : sig
-        module Make (M : S ) : S  with type 'a t = 'a Or_error.t M.t
-        module Make2(M : S2) : S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+        module Make (M : S ) : sig
+          include S with type 'a t = 'a Or_error.t M.t
+          (** [lift inner] lifts Or_error monad into the outer monad M.t  *)
+          val lift : 'a Or_error.t -> 'a t
+        end
+
+        module Make2(M : S2) : sig
+          include S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+
+          (** [lift inner] lifts Or_error monad into the outer monad M.t  *)
+          val lift : 'a Or_error.t -> ('a,'b) t
+        end
       end
 
       (** Result Monad Transformer.
@@ -804,10 +825,15 @@ module Std : sig
           We do not provide [Make2] because its result would be a
           non-existent [Monad.S3].*)
       module Result : sig
-        module Make(M : S) : S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+        module Make(M : S) : sig
+          include S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+
+          (** [lift result] lifts result into the outer monad M.t  *)
+          val lift : ('a,'e) Result.t -> ('a,'e) t
+        end
       end
 
-      (** Result Monad Transformer.
+      (** State Monad Transformer.
 
           [module STM = Monad.T.State.Make(M)] is not a monad [M], but a
           state monad which build computations that are interleaved
@@ -837,7 +863,15 @@ module Std : sig
           module of non-existent [Monad.S3] type.
       *)
       module State : sig
-        module Make(M : S) : State.S with type 'a result = 'a M.t
+        module Make(M : S) : sig
+          include State.S with type 'a result = 'a M.t
+
+          (** [lift result] lifts monad M into monad [('a,'e) t]
+              Since, [T.State] is not actually a transformer, as
+              the result is an interleave of two monads, the direction
+              of lift is changed (the opposite direction doesn't make sense). *)
+          val lift : 'a M.t -> ('a,'e) t
+        end
       end
     end
   end
@@ -1177,7 +1211,7 @@ module Std : sig
     (** {2 Constructors} *)
 
     (** [of_string s] parses a bitvector from a string representation
-    defined in section {!bv_string}.    *)
+        defined in section {!bv_string}.    *)
     val of_string : string -> t
 
     (** [of_bool x] is a bitvector with length [1] and value [b0] if
@@ -2285,9 +2319,9 @@ module Std : sig
 
        Expi implements an operational semantics described in [[1]].
 
-      @see
-      <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
-      [[1]]: BIL Semantics.
+       @see
+       <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
+       [[1]]: BIL Semantics.
     *)
 
 
@@ -2311,100 +2345,106 @@ module Std : sig
       method create_storage : Bil.storage -> 's * Bil.result
     end
 
-    (** Expression interpreter.
+    module type S = sig
 
-        Expi is a base class for all other interpreters (see {!bili}
-        and {!biri}, that do all the hard work. Expi recognizes a
-        language defined by [exp] type. It evaluates arbitrary
-        expressions under provided {{!Context}context}.
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      (** Expression interpreter.
+
+          Expi is a base class for all other interpreters (see {!bili}
+          and {!biri}, that do all the hard work. Expi recognizes a
+          language defined by [exp] type. It evaluates arbitrary
+          expressions under provided {{!Context}context}.
 
 
-        To create new interpreter use operator [new]:
+          To create new interpreter use operator [new]:
 
-        {v
+          {v
         let expi = new expi;;
         val expi : _#Expi.context expi = <obj>
         v}
 
-        Note: The type [_#Expi.context] is weakly polymorphic subtype of
-        [Expi.context][1]. Basically, this means, that the type is not
-        generalized and will be instantiated when used and fixed
-        afterwards.
+          Note: The type [_#Expi.context] is weakly polymorphic subtype of
+          [Expi.context][1]. Basically, this means, that the type is not
+          generalized and will be instantiated when used and fixed
+          afterwards.
 
-        {v
+          {v
         let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
         val r : _#Expi.context Bil.Result.r = <abstr>
         v}
 
-        The returned value is a state monad parametrized by a subtype
-        of class [Expi.context]. The state monad is a chain of
-        computations, where each computation is merely a function from
-        state to a state paired with the result of computation. The
-        state is accessible inside the computation and can be
-        changed.
+          The returned value is a state monad parametrized by a subtype
+          of class [Expi.context]. The state monad is a chain of
+          computations, where each computation is merely a function from
+          state to a state paired with the result of computation. The
+          state is accessible inside the computation and can be
+          changed.
 
-        To run the computation use [Monad.State.eval] function, that
-        accepts a state monad and an initial value. Here we can
-        provide any subtype of [Expi.context] as an initial
-        value. Let start with a [Expi.context] as a first approximation:
+          To run the computation use [Monad.State.eval] function, that
+          accepts a state monad and an initial value. Here we can
+          provide any subtype of [Expi.context] as an initial
+          value. Let start with a [Expi.context] as a first approximation:
 
-        {v
+          {v
         let x = Monad.State.eval r (new Expi.context);;
         val x : Bil.result = [0x3] true
         v}
 
-        The expression evaluates to [true], and the result is tagged
-        with an identifier [[0x3]]. The [Exp.context] assigns a unique
-        identifier for each freshly created result. Tag [[0x3]] means
-        that this was the third value created under provided context.
+          The expression evaluates to [true], and the result is tagged
+          with an identifier [[0x3]]. The [Exp.context] assigns a unique
+          identifier for each freshly created result. Tag [[0x3]] means
+          that this was the third value created under provided context.
 
-        If the only thing, that you need is just to evaluate an
-        expression, then you can just use [Exp.eval] function:
+          If the only thing, that you need is just to evaluate an
+          expression, then you can just use [Exp.eval] function:
 
-        {v
+          {v
         Exp.eval Bil.(int Word.b0 lor int Word.b1);;
         - : Bil.value = true
         v}
 
-        The main strength of [expi] is its extensibility. Let's write
-        a expression evaluator that will record a trace of evaluation:
+          The main strength of [expi] is its extensibility. Let's write
+          a expression evaluator that will record a trace of evaluation:
 
-        {[
-          class context = object
-            inherit Expi.context
-            val events : (exp * Bil.result) list = []
-            method add_event exp res = {< events = (exp,res) :: events >}
-            method show_events = List.rev events
-          end
-        ]}
+          {[
+            class context = object
+              inherit Expi.context
+              val events : (exp * Bil.result) list = []
+              method add_event exp res = {< events = (exp,res) :: events >}
+              method show_events = List.rev events
+            end
+          ]}
 
-        {[
-          class ['a] exp_tracer = object
-            constraint 'a = #context
-            inherit ['a] expi as super
-            method! eval_exp e =
-              let open Monad.State in
-              super#eval_exp e >>= fun r ->
-              get () >>= fun ctxt ->
-              put (ctxt#add_event e r) >>= fun () ->
-              return r
-          end;;
-        ]}
+          {[
+            class ['a] exp_tracer = object
+              constraint 'a = #context
+              inherit ['a] expi as super
+              method! eval_exp e =
+                let open Monad.State in
+                super#eval_exp e >>= fun r ->
+                get () >>= fun ctxt ->
+                put (ctxt#add_event e r) >>= fun () ->
+                return r
+            end;;
+          ]}
 
-        Note : We made our [exp_tracer] class polymorphic as a
-        courtesy to our fellow programmer, that may want to reuse it.
-        We can define it by inheriting from [expi] parametrized with
-        our context type, like this: [inherit [context] expi]
+          Note : We made our [exp_tracer] class polymorphic as a
+          courtesy to our fellow programmer, that may want to reuse it.
+          We can define it by inheriting from [expi] parametrized with
+          our context type, like this: [inherit [context] expi]
 
-        Also, there is no need to write a [constraint], as it will be
-        inferred automatically.
+          Also, there is no need to write a [constraint], as it will be
+          inferred automatically.
 
-        Now, let's try to use our tracer. We will use
-        [Monad.State.run] function, that returns both, the evaluated
-        value and the context. (We can also use [Monad.State.exec], if
-        we're not interested in value at all):
+          Now, let's try to use our tracer. We will use
+          [Monad.State.run] function, that returns both, the evaluated
+          value and the context. (We can also use [Monad.State.exec], if
+          we're not interested in value at all):
 
-        {v
+          {v
         let expi = new exp_tracer;;
         val expi : _#context exp_tracer = <obj>
         # let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
@@ -2417,65 +2457,75 @@ module Std : sig
         [(false, [0x1] false); (true, [0x2] true); (false | true, [0x3] true)]
         v}
 
-        [1]: The weakness of the type variable is introduced by
-        a value restriction and can't be relaxed since it is invariant
-        in state monad.
-    *)
-    class ['a] t : object
-      constraint 'a = #context
+          [1]: The weakness of the type variable is introduced by
+          a value restriction and can't be relaxed since it is invariant
+          in state monad.
+      *)
+      class ['a] t : object
+        constraint 'a = #context
 
-      (** {2 Interaction with environment} *)
-
-
-      (** creates an empty storage. If you want to provide
-          your own implementation of storage, then it is definitely
-          the right place.  *)
-      method empty  : Bil.storage
-
-      (** a variable is looked up in a context *)
-      method lookup : var -> 'a r
-
-      (** a variable is bind to a value.*)
-      method update : var -> Bil.result -> 'a u
-
-      (** a byte is loaded from a given address  *)
-      method load   : Bil.storage -> addr -> 'a r
-
-      (** a byte is stored to a a given address  *)
-      method store  : Bil.storage -> addr -> word -> 'a r
-
-      (** {2 Error conditions}  *)
-
-      (** a given typing error has occured  *)
-      method type_error : type_error -> 'a r
-
-      (** we can't do this!  *)
-      method division_by_zero : unit -> 'a r
-
-      (** called when storage doesn't contain the addr  *)
-      method undefined_addr : addr -> 'a r
-
-      (** called when context doesn't know the variable  *)
-      method undefined_var  : var  -> 'a r
+        (** {2 Interaction with environment} *)
 
 
-      (** {2 Evaluation methods}  *)
+        (** creates an empty storage. If you want to provide
+            your own implementation of storage, then it is definitely
+            the right place.  *)
+        method empty  : Bil.storage
 
-      method eval_exp : exp -> 'a r
-      method eval_var : var -> 'a r
-      method eval_int : word -> 'a r
-      method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
-      method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
-      method eval_binop : binop -> exp -> exp -> 'a r
-      method eval_unop  : unop -> exp -> 'a r
-      method eval_cast  : cast -> int -> exp -> 'a r
-      method eval_let : var -> exp -> exp -> 'a r
-      method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
-      method eval_concat : exp -> exp -> 'a r
-      method eval_extract : int -> int -> exp -> 'a r
-      method eval_unknown : string -> typ -> 'a r
+        (** a variable is looked up in a context *)
+        method lookup : var -> 'a r
+
+        (** a variable is bind to a value.*)
+        method update : var -> Bil.result -> 'a u
+
+        (** a byte is loaded from a given address  *)
+        method load   : Bil.storage -> addr -> 'a r
+
+        (** a byte is stored to a a given address  *)
+        method store  : Bil.storage -> addr -> word -> 'a r
+
+        (** {2 Error conditions}  *)
+
+        (** a given typing error has occured  *)
+        method type_error : type_error -> 'a r
+
+        (** we can't do this!  *)
+        method division_by_zero : unit -> 'a r
+
+        (** called when storage doesn't contain the addr  *)
+        method undefined_addr : addr -> 'a r
+
+        (** called when context doesn't know the variable  *)
+        method undefined_var  : var  -> 'a r
+
+
+        (** {2 Evaluation methods}  *)
+
+        method eval_exp : exp -> 'a r
+        method eval_var : var -> 'a r
+        method eval_int : word -> 'a r
+        method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
+        method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
+        method eval_binop : binop -> exp -> exp -> 'a r
+        method eval_unop  : unop -> exp -> 'a r
+        method eval_cast  : cast -> int -> exp -> 'a r
+        method eval_let : var -> exp -> exp -> 'a r
+        method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
+        method eval_concat : exp -> exp -> 'a r
+        method eval_extract : int -> int -> exp -> 'a r
+        method eval_unknown : string -> typ -> 'a r
+      end
     end
+
+    module Make(M : Monad.State.S) : S
+      with type ('a,'e) state = ('a,'e) M.t
+
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
+
   end
+
+
+
 
   (** Expression {{!Expi}interpreter}  *)
   class ['a] expi : ['a] Expi.t
@@ -2513,19 +2563,30 @@ module Std : sig
       method with_pc : Bil.value -> 's
     end
 
-    (** Base class for BIL interpreters   *)
-    class ['a] t : object
-      constraint 'a = #context
-      inherit ['a] expi
-      method eval : stmt list -> 'a u
-      method eval_stmt : stmt -> 'a u
-      method eval_move : var -> exp -> 'a u
-      method eval_jmp : exp -> 'a u
-      method eval_while : cond:exp -> body:stmt list -> 'a u
-      method eval_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a u
-      method eval_cpuexn : int -> 'a u
-      method eval_special : string -> 'a u
+    module type S = sig
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** Base class for BIL interpreters   *)
+      class ['a] t : object
+        constraint 'a = #context
+        inherit ['a] Expi.t
+        method eval : stmt list -> 'a u
+        method eval_stmt : stmt -> 'a u
+        method eval_move : var -> exp -> 'a u
+        method eval_jmp : exp -> 'a u
+        method eval_while : cond:exp -> body:stmt list -> 'a u
+        method eval_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a u
+        method eval_cpuexn : int -> 'a u
+        method eval_special : string -> 'a u
+      end
     end
+
+    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
   (** BIL {{!Bili}interpreter} *)
@@ -3544,77 +3605,89 @@ module Std : sig
         method next : tid option
       end
 
-    (** base class for BIR interpreters  *)
-    class ['a] t : object
-      constraint 'a = #context
-      inherit ['a] expi
+    module type S = sig
 
-      (** called for each term, just after the position is updated,
-          but before any side effect of term evaluation had occurred.*)
-      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** base class for BIR interpreters  *)
+      class ['a] t : object
+        constraint 'a = #context
+        inherit ['a] Expi.t
+
+        (** called for each term, just after the position is updated,
+            but before any side effect of term evaluation had occurred.*)
+        method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
 
-      method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
+        method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
-      (** called after all side effects of the term has occurred  *)
-      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+        (** called after all side effects of the term has occurred  *)
+        method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
-      (** Evaluates a subroutine with the following algorithm:
+        (** Evaluates a subroutine with the following algorithm:
 
-          0. next <- first block of subroutine and goto 1
-          1. eval all in and in/out arguments and goto 2
-          2. if next is some blk then eval it and goto 2 else goto 3
-          3. if next is some sub then eval it and goto 2 else goto 4
-          4. eval all out and in/out arguments.
-      *)
-      method eval_sub : sub term -> 'a u
+            0. next <- first block of subroutine and goto 1
+            1. eval all in and in/out arguments and goto 2
+            2. if next is some blk then eval it and goto 2 else goto 3
+            3. if next is some sub then eval it and goto 2 else goto 4
+            4. eval all out and in/out arguments.
+        *)
+        method eval_sub : sub term -> 'a u
 
-      (** evaluate argument by first evaluating its right hand side,
-          and then assigning the result to the left hand side.*)
-      method eval_arg : arg term -> 'a u
+        (** evaluate argument by first evaluating its right hand side,
+            and then assigning the result to the left hand side.*)
+        method eval_arg : arg term -> 'a u
 
-      (** evaluate all terms in a given block, starting with phi
-          nodes, then proceeding to def nodes and finally evaluating
-          all jmp terms until either jump is taken or jump condition
-          is undefined.
-          After the evaluation the context#next will point next
-          destination.  *)
-      method eval_blk : blk term -> 'a u
+        (** evaluate all terms in a given block, starting with phi
+            nodes, then proceeding to def nodes and finally evaluating
+            all jmp terms until either jump is taken or jump condition
+            is undefined.
+            After the evaluation the context#next will point next
+            destination.  *)
+        method eval_blk : blk term -> 'a u
 
-      (** evaluate definition by assigning the result of the right
-          hand side to the definition variable  *)
-      method eval_def : def term -> 'a u
+        (** evaluate definition by assigning the result of the right
+            hand side to the definition variable  *)
+        method eval_def : def term -> 'a u
 
-      (** based on trace select an expression and assign its
-          value to the left hand side of phi node.   *)
-      method eval_phi : phi term -> 'a u
+        (** based on trace select an expression and assign its
+            value to the left hand side of phi node.   *)
+        method eval_phi : phi term -> 'a u
 
-      (** evaluate condition, and if it is false, then do nothing,
-          otherwise evaluate jump target (see below) *)
-      method eval_jmp : jmp term -> 'a u
+        (** evaluate condition, and if it is false, then do nothing,
+            otherwise evaluate jump target (see below) *)
+        method eval_jmp : jmp term -> 'a u
 
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_goto : label -> 'a u
+        (** evaluate label, using [eval_direct] or [eval_indirect], based
+            on the label variant *)
+        method eval_goto : label -> 'a u
 
-      (** evaluate target label, using [eval_direct] or
-          [eval_indirect], based on the label variant.
-          Ignores return label.  *)
-      method eval_call : call -> 'a u
+        (** evaluate target label, using [eval_direct] or
+            [eval_indirect], based on the label variant.
+            Ignores return label.  *)
+        method eval_call : call -> 'a u
 
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_ret  : label -> 'a u
+        (** evaluate label, using [eval_direct] or [eval_indirect], based
+            on the label variant *)
+        method eval_ret  : label -> 'a u
 
-      (** ignore arguments and set context#next to None  *)
-      method eval_exn  : int -> tid -> 'a u
+        (** ignore arguments and set context#next to None  *)
+        method eval_exn  : int -> tid -> 'a u
 
-      (** set context#next to the a given tid  *)
-      method eval_direct : tid -> 'a u
+        (** set context#next to the a given tid  *)
+        method eval_direct : tid -> 'a u
 
-      (** ignore argument and set context#next to None  *)
-      method eval_indirect : exp -> 'a u
+        (** ignore argument and set context#next to None  *)
+        method eval_indirect : exp -> 'a u
+      end
     end
+
+    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
   (** BIR {{!Biri}interpreter}  *)
@@ -5349,7 +5422,7 @@ module Std : sig
 
       The definitions in this module are so generic, that they
       present on all processors.
- *)
+  *)
   module type CPU = sig
 
     (** A set of general purpose registers *)
@@ -6725,8 +6798,8 @@ module Std : sig
 
 
     (** [create resolve] creates a brancher from [resolve] function,
-    that accepts a memory region, occupied by an instruction, the
-    instruction itself and returns a list of destination.  *)
+        that accepts a memory region, occupied by an instruction, the
+        instruction itself and returns a list of destination.  *)
     val create : (mem -> full_insn -> dests) -> t
 
 
@@ -6736,7 +6809,7 @@ module Std : sig
 
 
     (** [resolve brancher mem insn] returns a list of destinations of
-    the instruction [insn], that occupies memory region [mem].  *)
+        the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
     module Factory : Source.Factory.S with type t = t
@@ -7134,7 +7207,7 @@ module Std : sig
     (** Input information.
 
         This module abstracts input type.
- *)
+    *)
     module Input : sig
       type t = input
 
