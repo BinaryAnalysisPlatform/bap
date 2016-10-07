@@ -20,20 +20,40 @@ end
 
 module T : sig
   module Option : sig
-    module Make (M : S ) : S  with type 'a t = 'a option M.t
-    module Make2(M : S2) : S2 with type ('a,'b) t = ('a option,'b) M.t
+    module Make (M : S ) : sig
+      include S with type 'a t = 'a option M.t
+      val lift : 'a option -> 'a t
+    end
+
+    module Make2(M : S2) : sig
+      include S2 with type ('a,'b) t = ('a option,'b) M.t
+      val lift : 'a option -> ('a,'b) t
+    end
   end
 
   module Or_error : sig
-    module Make (M : S ) : S  with type 'a t = 'a Or_error.t M.t
-    module Make2(M : S2) : S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+    module Make (M : S ) : sig
+      include S with type 'a t = 'a Or_error.t M.t
+      val lift : 'a Or_error.t -> 'a t
+    end
+
+    module Make2(M : S2) : sig
+      include S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+      val lift : 'a Or_error.t -> ('a,'b) t
+    end
   end
 
   module Result : sig
-    module Make(M : S) : S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+    module Make(M : S) : sig
+      include S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+      val lift : ('a,'e) Result.t -> ('a,'e) t
+    end
   end
 
   module State : sig
-    module Make(M : S) : State with type 'a result = 'a M.t
+    module Make(M : S) : sig
+      include State with type 'a result = 'a M.t
+      val lift : 'a M.t -> ('a,'e) t
+    end
   end
 end

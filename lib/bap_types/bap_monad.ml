@@ -3,29 +3,49 @@ open Bap_monad_types
 include Monad
 
 
+module StateT(M : Monad.S) = struct
+  type ('a,'b) storage = {
+    x : 'a;
+    s : 'b;
+  }
+  type ('a,'s) t = {run : 's -> ('a, 's) storage M.t }
+  type 'a result = 'a M.t
+  include Monad.Make2(struct
+    type nonrec ('a,'s) t = ('a,'s) t
+    let return x = {run = fun s -> M.return {x;s}}
+    let bind m f = {
+      run = fun s -> M.bind (m.run s) (fun {x;s} ->
+          (f x).run s)
+    }
+    let map = `Define_using_bind
+  end)
+  let put s    = {run = fun _ -> M.return {x=();s}}
+  let get ()   = {run = fun s -> M.return {x=s;s}}
+  let gets f   = {run = fun s -> M.return {x=f s;s}}
+  let update f = {run = fun s -> M.return {x=();s = f s}}
+  let modify (m : ('a,'s) t) f = {run = fun s ->
+      M.bind (m.run s)
+        (fun {x;s} -> M.return {x; s = f s})}
+  let run m s = M.(m.run s >>| fun {x;s} -> (x,s))
+  let eval m s = M.(run m s >>| fst)
+  let exec m s = M.(run m s >>| snd)
+  let lift m = {run = fun s ->
+      M.bind m (fun x -> M.return {x;s})}
+end
+
+module Id = struct
+  type 'a t = 'a
+  include Monad.Make(struct
+      type 'a t = 'a
+      let return = ident
+      let bind m f = m |> f
+      let map = `Custom (fun x ~f -> f x)
+    end)
+end
+
 module State = struct
   module type S = State
-  type ('a,'s) t = 's -> ('a * 's)
-  type 'a result = 'a
-  include Monad.Make2(struct
-      type nonrec ('a,'s) t = ('a,'s) t
-      let return x = (); fun s -> (x,s)
-      let bind m f = (); fun s -> m s |> fun (x,s) -> f x s
-      let map = `Define_using_bind
-    end)
-  let put s = (); fun _ -> ((),s)
-  let get () = (); fun s -> (s,s)
-  let state = ident
-
-  let modify m f = (); fun s -> m s |> fun (x,s) -> x, f s
-  let update f = get () >>= fun s -> put (f s)
-
-  let gets f = get () >>| f
-
-  let run m s = m s
-
-  let eval m s = fst @@ run m s
-  let exec m s = snd @@ run m s
+  include StateT(Id)
 end
 
 module T = struct
@@ -54,7 +74,7 @@ module T = struct
               | None -> M.return None)
           let map = `Define_using_bind
         end)
-      let lift m   = M.return m
+      let lift (m : 'a option) : ('a,'b) t = M.return m
     end
   end
 
@@ -103,27 +123,6 @@ module T = struct
   end
 
   module State = struct
-    module Make(M : Monad.S) = struct
-      type ('a,'s) t = 's -> ('a * 's) M.t
-      type 'a result = 'a M.t
-      include Monad.Make2(struct
-          type nonrec ('a,'s) t = ('a,'s) t
-          let return x s = M.return (x,s)
-          let bind m f s = M.bind (m s) (fun (x,s) -> f x s)
-          let map = `Define_using_bind
-        end)
-
-      let mlift1 f x = M.(x >>= fun x -> return (f x))
-
-      let get () = (); fun s -> M.return (s,s)
-      let put s = (); fun _ -> M.return ((),s)
-      let modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t =
-        fun m f ->  (); fun s -> M.bind (m s) (fun (x,s) -> M.return (x, f s))
-      let update f = get () >>= fun s -> put (f s)
-      let gets f = get () >>| f
-      let run m s = m s
-      let eval m s = mlift1 fst (run m s)
-      let exec m s = mlift1 snd (run m s)
-    end
+    module Make = StateT
   end
 end
