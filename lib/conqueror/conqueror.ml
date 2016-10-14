@@ -92,52 +92,80 @@ module Limit = struct
 end
 
 module Crawler = struct
-
-  class ['c] t = object(self : 's)
-    val visited = Tid.Set.empty
-    method save : tid -> 'c -> 's = fun _ _ -> self
-    method visit t = {< visited = Set.add visited t >}
-    method visited = visited
-    method backtrack : ('s * 'c) option = None
+  class type bookkeeping = object('s)
+    method visit : tid  -> 's
+    method visited : Tid.Set.t
   end
 
-  (* don't store any checkpoints, no backtracking  *)
-  class ['s] deterministic = object
-    inherit ['s] t
+  class type ['c] backtracking = object('s)
+    method save : tid -> 'c -> 's
+    method backtrack : ('s * 'c) option
+  end
+
+  class type ['c] t = object('s)
+    inherit bookkeeping
+    inherit ['c] backtracking
+  end
+
+
+  module Mixin = struct
+    class ['c] with_bookkeeping = object(_ : 's)
+      val visited = Tid.Set.empty
+      method visit t = {< visited = Set.add visited t >}
+      method visited = visited
+    end
+
+    class ['c] without_backtracking = object(self : 's)
+      method backtrack : ('s * 'c) option = None
+      method save : tid -> 'c -> 's = fun _ _ -> self
+    end
+
+    class ['c] with_backtracking = object(self : 's)
+      val checkpoints : 'c Tid.Map.t = Tid.Map.empty
+      method save tid ctxt =
+        {< checkpoints = Map.add checkpoints ~key:tid ~data:ctxt >}
+
+      method backtrack = match Map.min_elt checkpoints with
+        | None -> None
+        | Some (k,v) ->
+          Some ({< checkpoints = Map.remove checkpoints k>},v)
+    end
+  end
+
+  class ['s] consistent = object
+    inherit ['s] Mixin.with_bookkeeping
+    inherit ['s] Mixin.without_backtracking
   end
 
   (* store all checkpoints, and backtrack to them all *)
   class ['s] exponential = object(self)
-    val checkpoints : 's Tid.Map.t = Tid.Map.empty
-    inherit ['s] deterministic
-    method! save tid ctxt =
-      {< checkpoints = Map.add checkpoints ~key:tid ~data:ctxt >}
-
-    method! backtrack = match Map.min_elt checkpoints with
-      | None -> None
-      | Some (k,v) ->
-        Some ({< checkpoints = Map.remove checkpoints k>},v)
+    inherit ['s] Mixin.with_bookkeeping
+    inherit ['s] Mixin.with_backtracking
   end
 
   (* don't backtrack to visited destinations, same implementation as
      exponential, but prune visited destinations *)
   class ['s] linear = object
     inherit ['s] exponential as super
-    method! visit tid =
-      (super#visit tid)#prune tid
-    method prune tid = {<
-      checkpoints = Map.remove checkpoints tid
-    >}
+    method! visit tid = (super#visit tid)#prune tid
+    method prune tid = {< checkpoints = Map.remove checkpoints tid >}
   end
+
+  type 'a factory = unit -> 'a t
+  let linear () = (new linear :> 'a t)
+  let consistent () = (new consistent :> 'a t)
+  let exponential () =  (new exponential :> 'a t)
 end
 
 type limit = Limit.t
 type 's crawler = 's Crawler.t
 
-class context limit crawler p = object(self : 's)
+class context
+    ?(limit=Limit.nothing)
+    ?(crawler=Crawler.consistent) p = object(self : 's)
   inherit Biri.context p
   val limit : limit = limit
-  val crawler : 's crawler = crawler
+  val crawler : 's crawler = crawler ()
   method limit = limit
   method crawler = crawler
   method with_crawler c = {< crawler = c >}
@@ -167,24 +195,25 @@ class ['a] main = object(self)
 
   method! eval_blk blk =
     super#eval_blk blk >>= fun () ->
-    self#add_checkpoints blk >>= fun () ->
+    SM.get () >>= fun ctxt ->
+    let chosen = ctxt#next in
+    self#add_checkpoints blk chosen >>= fun () ->
     SM.get () >>= fun ctxt ->
     if ctxt#limit#reached then self#finish
     else match ctxt#next with
       | None -> self#finish
       | _ -> SM.return ()
 
-  method private add_checkpoints blk =
+  method private add_checkpoints blk chosen =
     Term.enum jmp_t blk |>
     Seq.fold ~init:(SM.return ()) ~f:(fun m jmp ->
         m >>= fun () -> self#next_of_jmp jmp >>= fun dst ->
         SM.update (fun ctxt ->
             let src = Term.tid jmp in
-            let ctxt = ctxt#crawler#visit src |>
-                       ctxt#with_crawler in
-            ctxt#set_next dst |>
-            ctxt#crawler#save src|>
-            ctxt#with_crawler))
+            let ctxt = ctxt#with_crawler (ctxt#crawler#visit src) in
+            if dst = chosen then ctxt
+            else ctxt#with_crawler @@
+              ctxt#crawler#save src (ctxt#set_next dst)))
 
   method private next_of_jmp jmp =
     let goto dst =

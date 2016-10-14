@@ -2,9 +2,8 @@ open Core_kernel.Std
 open Bap_types.Std
 open Regular.Std
 open Bap_ir
+open Bap_monad_types
 
-module SM = Monad.State
-open SM.Monad_infix
 
 module Taint = Tid
 module Taints = Taint.Set
@@ -120,57 +119,74 @@ let pp_map ppf (map : map) =
       Format.fprintf ppf "@[<2>%a => %a@]}"
         Var.pp key pp_set data)
 
-
-class ['a] propagator = object(self)
-  constraint 'a = #context
-  inherit ['a] expi as super
-
-  method! eval_binop op e1 e2 =
-    super#eval_binop op e1 e2 >>= self#eval2 e1 e2
-  method! eval_unop op e =
-    super#eval_unop op e >>= self#eval e
-  method! eval_cast ct n e =
-    super#eval_cast ct n e >>= self#eval e
-  method! eval_concat e1 e2 =
-    super#eval_concat e1 e2 >>= self#eval2 e1 e2
-  method! eval_extract n1 n2 e =
-    super#eval_extract n1 n2 e >>= self#eval e
-
-  method! eval_store ~mem ~addr v e s =
-    self#eval_exp v >>= fun rv ->
-    super#eval_store ~mem ~addr v e s >>= fun rr ->
-    self#eval_exp addr >>| Bil.Result.value >>= function
-    | Bil.Bot | Bil.Mem _ -> SM.return rr
-    | Bil.Imm a ->
-      SM.get () >>= fun ctxt ->
-      SM.put (ctxt#taint_ptr a s (ctxt#reg_taints rv)) >>= fun () ->
-      SM.return rr
-
-  method! eval_load ~mem ~addr e s =
-    super#eval_load ~mem ~addr e s >>= fun r ->
-    super#eval_exp addr >>| Bil.Result.value >>= function
-    | Bil.Bot | Bil.Mem _ -> SM.return r
-    | Bil.Imm a ->
-      SM.get () >>= fun ctxt ->
-      SM.put (ctxt#taint_reg r (ctxt#ptr_taints a)) >>= fun () ->
-      SM.return r
-
-  method private eval2 e1 e2 r3 =
-    self#eval_exp e1 >>= fun r1 ->
-    self#eval_exp e2 >>= fun r2 ->
-    self#propagate [r1;r2] r3 >>= fun () ->
-    SM.return r3
-
-  method private eval e rr =
-    self#eval_exp e >>= fun re ->
-    self#propagate [re] rr >>= fun () ->
-    SM.return rr
-
-  method private propagate args rr =
-    SM.get () >>= fun ctxt ->
-    let taints = Taints.union_list @@
-      List.map args ~f:(fun a -> ctxt#reg_taints a) in
-    SM.put (ctxt#taint_reg rr taints)
+module type S = sig
+  type ('a,'e) state
+  module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+  class ['a] propagator : object('s)
+    constraint 'a = #context
+    inherit ['a] Expi.t
+  end
 end
 
+module Make(SM : State) = struct
+  open SM.Monad_infix
+  module Expi = Bap_expi.Make(SM)
+
+  type ('a,'e) state = ('a,'e) SM.t
+
+  class ['a] propagator = object(self)
+    constraint 'a = #context
+    inherit ['a] Expi.t as super
+
+    method! eval_binop op e1 e2 =
+      super#eval_binop op e1 e2 >>= self#eval2 e1 e2
+    method! eval_unop op e =
+      super#eval_unop op e >>= self#eval e
+    method! eval_cast ct n e =
+      super#eval_cast ct n e >>= self#eval e
+    method! eval_concat e1 e2 =
+      super#eval_concat e1 e2 >>= self#eval2 e1 e2
+    method! eval_extract n1 n2 e =
+      super#eval_extract n1 n2 e >>= self#eval e
+
+    method! eval_store ~mem ~addr v e s =
+      self#eval_exp v >>= fun rv ->
+      super#eval_store ~mem ~addr v e s >>= fun rr ->
+      self#eval_exp addr >>| Bil.Result.value >>= function
+      | Bil.Bot | Bil.Mem _ -> SM.return rr
+      | Bil.Imm a ->
+        SM.get () >>= fun ctxt ->
+        SM.put (ctxt#taint_ptr a s (ctxt#reg_taints rv)) >>= fun () ->
+        SM.return rr
+
+    method! eval_load ~mem ~addr e s =
+      super#eval_load ~mem ~addr e s >>= fun r ->
+      super#eval_exp addr >>| Bil.Result.value >>= function
+      | Bil.Bot | Bil.Mem _ -> SM.return r
+      | Bil.Imm a ->
+        SM.get () >>= fun ctxt ->
+        SM.put (ctxt#taint_reg r (ctxt#ptr_taints a)) >>= fun () ->
+        SM.return r
+
+    method private eval2 e1 e2 r3 =
+      self#eval_exp e1 >>= fun r1 ->
+      self#eval_exp e2 >>= fun r2 ->
+      self#propagate [r1;r2] r3 >>= fun () ->
+      SM.return r3
+
+    method private eval e rr =
+      self#eval_exp e >>= fun re ->
+      self#propagate [re] rr >>= fun () ->
+      SM.return rr
+
+    method private propagate args rr =
+      SM.get () >>= fun ctxt ->
+      let taints = Taints.union_list @@
+        List.map args ~f:(fun a -> ctxt#reg_taints a) in
+      SM.put (ctxt#taint_reg rr taints)
+  end
+
+end
+
+include Make(Bap_monad.State)
 module Map = Taint_map

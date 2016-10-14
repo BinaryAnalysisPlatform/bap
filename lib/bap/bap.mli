@@ -760,6 +760,10 @@ module Std : sig
 
     (** Monad transformers.
 
+
+        TODO: Fix the documentation, it is wrong, Inner should be
+        Outer and vice verse.
+
         [module IO = Monad.T.Inner(Outer)] is a monad
         [Inner] wrapped into monad [Outer]. For example, monad
         [module OLwt = Monad.T.Option(Lwt)] will
@@ -6635,29 +6639,33 @@ module Std : sig
       method all_taints : set
     end
 
-    (** Propagate taint through expressions.
+    module type S = sig
+      type ('a,'e) state
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** Propagate taint through expressions.
 
 
-        {2 Semantics}
+          {2 Semantics}
 
-        {3 Grammar}
+          {3 Grammar}
 
-        The following syntactic forms are used in propagation rules:
+          The following syntactic forms are used in propagation rules:
 
-        [*a] - load from address [a], where [a] is immediate value;
-        [*a <- v] - store value [v] at address [a];
-        [exp ~> v] - expression reduces to value [v];
-        [v -> t] - value [v] is tainted by a taint [t];
-        [<bop>] - BIL binary operation or BIL concat expression;
-        [<uop>] - BIL unary, extract or cast expression.
+          [*a] - load from address [a], where [a] is immediate value;
+          [*a <- v] - store value [v] at address [a];
+          [exp ~> v] - expression reduces to value [v];
+          [v -> t] - value [v] is tainted by a taint [t];
+          [<bop>] - BIL binary operation or BIL concat expression;
+          [<uop>] - BIL unary, extract or cast expression.
 
 
-        {3 Rules}
+          {3 Rules}
 
-        Value [v] is tainted by taint [t], denoted as [v -> t], if there
-        exists a deriviation of the following rules, proving this fact.
+          Value [v] is tainted by taint [t], denoted as [v -> t], if there
+          exists a deriviation of the following rules, proving this fact.
 
-        {v
+          {v
 
     *a ~> v
     a -> t
@@ -6686,27 +6694,32 @@ module Std : sig
 
     v}
 
-        Note 1: this class overrides only methods, that computes non-leaf
-        expressions, leaving a space for extension for derived classes.
+          Note 1: this class overrides only methods, that computes non-leaf
+          expressions, leaving a space for extension for derived classes.
 
-        Note 2: we do not propagate taint from condition to branches in the
-        if/then/else expression, since we're propagating only data
-        dependency, not control dependency.
+          Note 2: we do not propagate taint from condition to branches in the
+          if/then/else expression, since we're propagating only data
+          dependency, not control dependency.
 
-        Although, one can argue, that in expression [if c then x else y]
-        the result depends on [c], since if we change [c] we will get
-        different results, there is a good reason for not propagating this
-        dependency - the consistency with BIR and BIL. Consider, BIL's
-        [if] statement or BIR's conditional jump. If we will start to
-        propagate taint from condition in [ite] expression, then we should
-        also propagate it in BIL's and BIR's conditionals. Unfortunatelly
-        the latter is not possible.
+          Although, one can argue, that in expression [if c then x else y]
+          the result depends on [c], since if we change [c] we will get
+          different results, there is a good reason for not propagating this
+          dependency - the consistency with BIR and BIL. Consider, BIL's
+          [if] statement or BIR's conditional jump. If we will start to
+          propagate taint from condition in [ite] expression, then we should
+          also propagate it in BIL's and BIR's conditionals. Unfortunatelly
+          the latter is not possible.
 
-    *)
-    class ['a] propagator : object('s)
-      constraint 'a = #context
-      inherit ['a] expi
+      *)
+      class ['a] propagator : object('s)
+        constraint 'a = #context
+        inherit ['a] Expi.t
+      end
     end
+
+    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
 
     (** print a set of taints  *)
     val pp_set : set printer
