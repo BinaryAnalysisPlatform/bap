@@ -1456,15 +1456,12 @@ module Cont = struct
   module type S = sig
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
+    val call : cc:(('a -> ('r,'e) t) -> ('a,'e) t) -> ('a,'e) t
   end
 
   let cont k = Cont k
 
-
-  let ($) = (@@)
-  let f x = (@@) x
-
-  module Make(M : Monad.S)
+  module Make2(M : Monad.S)
     : S  with type ('a,'e) t := ('a,'e) T(M).t
           and type ('a,'e) e := ('a,'e) T(M).e
           and type 'a m := 'a T(M).m
@@ -1477,6 +1474,8 @@ module Cont = struct
       let lift m = cont @@ fun k -> m >>= k
       let bind m f = cont @@ fun k ->
         run m @@ fun x -> run (f x) k
+      let call ~cc = cont @@ fun k ->
+        run (cc (fun x -> cont @@ fun _ -> k x)) k
       let map = `Define_using_bind
     end
     include Base
@@ -1489,7 +1488,7 @@ module Cont = struct
       type ('a,'e) t = ('a,'e) T(Ident).t
       type 'a m = 'a
       type ('a,'e) e = ('a -> 'e) -> 'e
-      include Make(Ident)
+      include Make2(Ident)
     end
   include Self
 end
