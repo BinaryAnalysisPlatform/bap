@@ -123,17 +123,17 @@ end
 
 module Fail = struct
   module type S = sig
-    type error
+    type 'a error
     type 'a t
-    val fail : error -> 'a t
-    val catch : 'a t -> (error -> 'a t) -> 'a t
+    val fail : _ error -> 'a t
+    val catch : 'a t -> (_ error -> 'a t) -> 'a t
   end
 
   module type S2 = sig
-    type error
+    type 'a error
     type ('a,'e) t
-    val fail : error -> ('a,'e) t
-    val catch : ('a,'e) t -> (error -> ('a,'e) t) -> ('a,'e) t
+    val fail : 'e error -> ('a,'e) t
+    val catch : ('a,'e) t -> ('e error -> ('a,'e) t) -> ('a,'e) t
   end
 end
 
@@ -586,7 +586,6 @@ module Ident
       let map = `Custom (fun x ~f -> f x)
     end)
 
-
   let unit = ()
   module Fn = struct
     let ignore = ignore
@@ -688,16 +687,18 @@ module OptionT = struct
     include Trans.S
     include Monad.S   with type 'a t := 'a t
     include Choice.S  with type 'a t := 'a t
-    include Fail.S    with type 'a t := 'a t
     include Plus.S    with type 'a t := 'a t
+    include Fail.S    with type 'a t := 'a t
+                       and type 'a error = unit
   end
 
   module type S2 = sig
     include Trans.S2
     include Monad.S2   with type ('a,'e) t := ('a,'e) t
     include Choice.S2  with type ('a,'e) t := ('a,'e) t
-    include Fail.S2    with type ('a,'e) t := ('a,'e) t
     include Plus.S2    with type ('a,'e) t := ('a,'e) t
+    include Fail.S2    with type ('a,'e) t := ('a,'e) t
+                        and type 'a error = unit
   end
 
   module T1(M : T1) = struct
@@ -712,7 +713,6 @@ module OptionT = struct
     type ('a,'e) e = ('a,'e) t
   end
 
-
   module Make2(M : Monad.S2)
     : S2 with type ('a,'e) t := ('a,'e) T2(M).t
           and type ('a,'e) m := ('a,'e) T2(M).m
@@ -721,13 +721,13 @@ module OptionT = struct
     open M.Syntax
     module Basic = struct
       include T2(M)
-      let return x = Option.return x |> M.return
+      let return x = M.return (Some x)
       let bind m f = M.bind m (function
           | Some r -> f r
           | None -> M.return None)
       let map = `Define_using_bind
     end
-    type error = unit
+    type 'a error = unit
     let fail () = M.return None
     let run = ident
 
@@ -755,6 +755,7 @@ module OptionT = struct
          and type 'a e := 'a T1(M).e
   = Make2(struct
     type ('a,'e) t = 'a M.t
+    type 'a error = unit
     include (M : Monad.S with type 'a t := 'a M.t)
   end)
 
@@ -763,15 +764,102 @@ end
 
 module ResultT = struct
 
+  type ('a,'e) result = ('a,'e) Core_kernel.Std.result =
+    | Ok of 'a
+    | Error of 'e
+
   module type S = sig
+    type err
     include Trans.S
-    include Monad.S with type 'a t := 'a t
-  end
-  module type S2 = sig
-    include Trans.S2
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+    include Monad.S   with type 'a t := 'a t
+    include Fail.S  with type 'a t := 'a t with type 'a error = err
+    (* include Choice.S  with type 'a t := 'a t *)
+    (* include Plus.S    with type 'a t := 'a t *)
   end
 
+  module type S2 = sig
+    include Trans.S1
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+    include Fail.S2  with type ('a,'e) t := ('a,'e) t with type 'a error = 'a
+  end
+
+  module type Sp = sig
+    include Trans.S1
+    include Monad.S2   with type ('a,'e) t := ('a,'e) t
+    include Fail.S2    with type ('a,'e) t := ('a,'e) t
+  end
+
+  module Tp(T : T1)(M : Monad.S) = struct
+    type 'a error = 'a T.t
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a,'e error) result m
+    type ('a,'e) e = ('a,'e error) result m
+  end
+
+  module Makep(T : T1)(M : Monad.S) : Sp
+    with type ('a,'e) t := ('a,'e) Tp(T)(M).t
+     and type 'a m  := 'a Tp(T)(M).m
+     and type ('a,'e) e := ('a,'e) Tp(T)(M).e
+     and type 'a error = 'a Tp(T)(M).error
+  = struct
+    open M.Syntax
+    module Base = struct
+      include Tp(T)(M)
+      let return x = M.return (Ok x)
+      let bind m f  : ('a,'e) t = m >>= function
+        | Ok r -> f r
+        | Error err -> M.return (Error err)
+
+      let fail err = M.return (Error err)
+      let run = ident
+      let catch m f = m >>= function
+        | Error err -> f err
+        | other -> M.return other
+
+      let lift m = m >>| fun x -> Ok x
+      let map = `Define_using_bind
+
+    end
+    include Base
+    include Monad.Make2(Base)
+  end
+
+
+  module T1(T : T)(M : Monad.S) = struct
+    type error = T.t
+    type 'a m = 'a M.t
+    type 'a t = ('a,error) result m
+    type 'a e = ('a,error) result m
+  end
+
+  module T2(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a,'e) result m
+    type ('a,'e) e = ('a,'e) result m
+  end
+
+  module Make(T : T)(M : Monad.S) : S
+    with type 'a t := 'a T1(T)(M).t
+     and type 'a m := 'a T1(T)(M).m
+     and type 'a e := 'a T1(T)(M).e
+     and type err := T.t
+    = struct
+      type err = T.t
+      include Makep(struct type 'a t = T.t end)(M)
+    end
+
+  module Make2(M : Monad.S) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type 'a m     := 'a     T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+    = Makep(struct type 'a t = 'a end)(M)
+
+  module Error = struct
+    module Make = Make(struct type t = Error.t end)
+    include Make(Ident)
+  end
+
+  include Make(Ident)
 end
 
 module ListT = struct
@@ -1010,9 +1098,7 @@ module Writer = struct
 end
 
 module Reader = struct
-
   type ('a,'e) reader = Reader of ('e -> 'a)
-
 
   module type S = sig
     include Trans.S
@@ -1020,7 +1106,6 @@ module Reader = struct
     val read : unit -> env t
     include Monad.S with type 'a t := 'a t
   end
-
 
   module type S2 = sig
     include Trans.S1
@@ -1034,6 +1119,7 @@ module Reader = struct
     val read : unit -> ('e env, 'e ) t
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
   end
+
 
   module Tp(T : T1)(M : Monad.S) = struct
     type 'a env = 'a T.t
