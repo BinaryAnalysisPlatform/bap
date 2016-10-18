@@ -1299,7 +1299,7 @@ module State = struct
     type ('a,'e) e = 'e -> ('a * 'e) m
   end
 
-  module Make1(T : T)(M : Monad.S): S
+  module Make(T : T)(M : Monad.S): S
     with type 'a t := 'a T1(T)(M).t
      and type 'a m := 'a T1(T)(M).m
      and type 'a e := 'a T1(T)(M).e
@@ -1454,6 +1454,13 @@ module Cont = struct
   end
 
   module type S = sig
+    include Trans.S
+    include Monad.S with type 'a t := 'a t
+    type  r
+    val call : cc:(('a -> _ t) -> 'a t) -> 'a t
+  end
+
+  module type S2 = sig
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
     val call : cc:(('a -> ('r,'e) t) -> ('a,'e) t) -> ('a,'e) t
@@ -1461,14 +1468,29 @@ module Cont = struct
 
   let cont k = Cont k
 
-  module Make2(M : Monad.S)
-    : S  with type ('a,'e) t := ('a,'e) T(M).t
-          and type ('a,'e) e := ('a,'e) T(M).e
-          and type 'a m := 'a T(M).m
+  module Tp(T : T1)(M : Monad.S) = struct
+    type 'a r = 'a T.t
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a, 'e r m) cont
+    type ('a,'e) e = ('a -> 'e r m) -> 'e r m
+  end
+
+  module type Sp = sig
+    include Trans.S1
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+    type 'a r
+    val call : cc:(('a -> ('r,'e r) t) -> ('a,'e r) t) -> ('a,'e r) t
+  end
+
+  module Makep(T : T1)(M : Monad.S) : Sp
+    with type ('a,'e) t := ('a,'e) Tp(T)(M).t
+     and type ('a,'e) e := ('a,'e) Tp(T)(M).e
+     and type 'a m := 'a Tp(T)(M).m
+     and type 'a r := 'a Tp(T)(M).r
   = struct
     open M.Syntax
     module Base = struct
-      include T(M)
+      include Tp(T)(M)
       let run (Cont k) f = k f
       let return x = cont @@ fun k -> k x
       let lift m = cont @@ fun k -> m >>= k
@@ -1482,8 +1504,34 @@ module Cont = struct
     include Monad.Make2(Base)
   end
 
+  module T1(T : T)(M : Monad.S) = struct
+    type r = T.t
+    type 'a m = 'a M.t
+    type 'a t = ('a,r m) cont
+    type 'a e = ('a -> r m) -> r m
+  end
+
+  module T2(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a, 'e m) cont
+    type ('a,'e) e = ('a -> 'e m) -> 'e m
+  end
+
+  module Make(T : T)(M : Monad.S): S
+    with type 'a t := 'a T1(T)(M).t
+     and type 'a m := 'a T1(T)(M).m
+     and type 'a e := 'a T1(T)(M).e
+     and type r := T.t
+    = Makep(struct type 'a t = T.t end)(M)
+
+  module Make2(M : Monad.S) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type 'a m     := 'a     T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+    = Makep(struct type 'a t = 'a end)(M)
+
   module Self :
-    S with type 'a m = 'a and type ('a,'e) e = (('a -> 'e) -> 'e)
+    S2 with type 'a m = 'a and type ('a,'e) e = (('a -> 'e) -> 'e)
     = struct
       type ('a,'e) t = ('a,'e) T(Ident).t
       type 'a m = 'a
