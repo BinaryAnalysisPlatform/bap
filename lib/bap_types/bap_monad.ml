@@ -763,7 +763,6 @@ module OptionT = struct
 end
 
 module ResultT = struct
-
   type ('a,'e) result = ('a,'e) Core_kernel.Std.result =
     | Ok of 'a
     | Error of 'e
@@ -773,8 +772,6 @@ module ResultT = struct
     include Trans.S
     include Monad.S   with type 'a t := 'a t
     include Fail.S  with type 'a t := 'a t with type 'a error = err
-    (* include Choice.S  with type 'a t := 'a t *)
-    (* include Plus.S    with type 'a t := 'a t *)
   end
 
   module type S2 = sig
@@ -859,7 +856,20 @@ module ResultT = struct
     include Make(Ident)
   end
 
-  include Make(Ident)
+  module Exception = struct
+    module Make = Make(struct type t = exn end)
+    include Make(Ident)
+  end
+
+  module Self : S2
+    with type ('a,'e) t = ('a,'e) result
+     and type 'a m = 'a
+     and type ('a,'e) e = ('a,'e) result
+    = struct
+      include T2(Ident)
+      include Make2(Ident)
+    end
+    include Self
 end
 
 module ListT = struct
@@ -1189,7 +1199,7 @@ end
 
 module State = struct
 
-  module type S = sig
+  module type S2 = sig
     include Trans.S1
     include Monad.S2 with type ('a,'s) t := ('a,'s) t
     val put : 's -> (unit,'s) t
@@ -1201,6 +1211,34 @@ module State = struct
     val exec : ('a,'s) t -> 's -> 's m
   end
 
+  module type S = sig
+    include Trans.S
+    include Monad.S with type 'a t := 'a t
+    type env
+    val put : env -> unit t
+    val get : unit -> env t
+    val gets : (env -> 'r) -> 'r t
+    val update : (env -> env) -> unit t
+    val modify : 'a t -> (env -> env) -> 'a t
+    val eval : 'a t -> env -> 'a m
+    val exec : 'a t -> env-> env m
+  end
+
+
+  module type Sp = sig
+    include Trans.S1
+    include Monad.S2 with type ('a,'s) t := ('a,'s) t
+    type 'a env
+    val put : 's env -> (unit,'s) t
+    val get : unit -> ('s env,'s) t
+    val gets : ('s env -> 'r) -> ('r,'s) t
+    val update : ('s env -> 's env) -> (unit,'s) t
+    val modify : ('a,'s) t -> ('s env -> 's env) -> ('a,'s) t
+    val eval : ('a,'s) t -> 's env -> 'a m
+    val exec : ('a,'s) t -> 's env -> 's env m
+  end
+
+
   type ('a,'b) storage = {
     x : 'a;
     s : 'b;
@@ -1208,23 +1246,26 @@ module State = struct
 
   type ('a,'e) state = State of ('e -> 'a)
 
-  module T(M : Monad.S) = struct
+
+  module Tp(T : T1)(M : Monad.S) = struct
+    type 'a env = 'a T.t
     type 'a m = 'a M.t
-    type ('a,'e) t = (('a,'e) storage m, 'e) state
-    type ('a,'e) e = 'e -> ('a * 'e) m
+    type ('a,'e) t = (('a,'e env) storage m, 'e env) state
+    type ('a,'e) e = 'e env -> ('a * 'e env) m
   end
 
-  module Make(M : Monad.S) : S
-    with type ('a,'e) t := ('a,'e) T(M).t
-     and type 'a m     := 'a     T(M).m
-     and type ('a,'e) e := ('a,'e) T(M).e
+  module Makep(T : T1)(M : Monad.S) : Sp
+    with type ('a,'e) t := ('a,'e) Tp(T)(M).t
+     and type 'a m     := 'a     Tp(T)(M).m
+     and type ('a,'e) e := ('a,'e) Tp(T)(M).e
+     and type 'a env   := 'a Tp(T)(M).env
   = struct
     open M.Monad_infix
     let make run = State run
     let (=>) (State run) x = run x
     type 'a result = 'a M.t
     module Basic = struct
-      include T(M)
+      include Tp(T)(M)
       let return x = make @@ fun s -> M.return {x;s}
       let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s
       let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s}
@@ -1245,7 +1286,33 @@ module State = struct
     include Monad.Make2(Basic)
   end
 
-  include Make(Ident)
+  module T1(T : T)(M : Monad.S) = struct
+    type env = T.t
+    type 'a m = 'a M.t
+    type 'a t = (('a,env) storage m, env) state
+    type 'a e = env -> ('a * env) m
+  end
+
+  module T2(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = (('a,'e) storage m, 'e) state
+    type ('a,'e) e = 'e -> ('a * 'e) m
+  end
+
+  module Make1(T : T)(M : Monad.S): S
+    with type 'a t := 'a T1(T)(M).t
+     and type 'a m := 'a T1(T)(M).m
+     and type 'a e := 'a T1(T)(M).e
+     and type env := T.t
+    = Makep(struct type 'a t = T.t end)(M)
+
+  module Make2(M : Monad.S) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type 'a m     := 'a     T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+    = Makep(struct type 'a t = 'a end)(M)
+
+  include Make2(Ident)
 end
 
 module Fun = struct
