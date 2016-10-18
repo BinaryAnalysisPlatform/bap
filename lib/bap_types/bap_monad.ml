@@ -187,7 +187,33 @@ module Choice = struct
   end
 end
 
+module Trans = struct
+  module type S = sig
+    type 'a t
+    type 'a m
+    type 'a e                    (* essence of effect *)
 
+    val lift : 'a m -> 'a t
+    val run : 'a t -> 'a e
+  end
+
+  module type S1 = sig
+    type ('a,'e) t
+    type 'a m
+    type ('a,'e) e
+    val lift : 'a m -> ('a,'e) t
+    val run : ('a,'e) t -> ('a,'e) e
+  end
+
+  module type S2 = sig
+    type ('a,'e) t
+    type ('a,'e) m
+    type ('a,'e) e
+
+    val lift : ('a,'e) m -> ('a,'e) t
+    val run : ('a,'e) t -> ('a,'e) e
+  end
+end
 
 module Collection = struct
   module type Basic = sig
@@ -243,12 +269,11 @@ module Collection = struct
     val filter : 'a t -> f:('a -> bool m) -> 'a t m
     val filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
   end
-
-
 end
 
 module Monad = struct
   module type Basic = Monad.Basic
+  module type Basic2 = Monad.Basic2
   module type S = sig
     type 'a t
 
@@ -374,7 +399,7 @@ module Monad = struct
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
   end
 
-  module Make2(M : Monad.Basic2) : S2 with type ('a,'e) t := ('a,'e) M.t = struct
+  module Make2(M : Basic2) : S2 with type ('a,'e) t := ('a,'e) M.t = struct
     include Monad.Make2(M)
 
     let unit = return ()
@@ -474,7 +499,6 @@ module Monad = struct
 
         let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
 
-
         let all_ignore = iter ~f:Fn.ignore
 
         let reduce xs ~f = fold xs ~init:None ~f:(fun acc y ->
@@ -544,14 +568,11 @@ module Monad = struct
     include Syntax
   end
 
-
-  module Make(M : Monad.Basic) : S with type 'a t := 'a M.t = struct
-    include Make2(struct
-        type ('a, 'e) t = 'a M.t
-        include (M : Monad.Basic with type 'a t := 'a M.t)
-      end)
-  end
-
+  module Make(M : Monad.Basic) : S with type 'a t := 'a M.t =
+    Make2(struct
+      type ('a, 'e) t = 'a M.t
+      include (M : Monad.Basic with type 'a t := 'a M.t)
+    end)
 end
 
 module Ident
@@ -662,16 +683,9 @@ module Ident
   include Syntax
 end
 
-
-
-
 module OptionT = struct
   module type S = sig
-    type 'a t
-    type 'a m
-    val unwrap : 'a t -> 'a option m
-
-    val lift : 'a m -> 'a t
+    include Trans.S
     include Monad.S   with type 'a t := 'a t
     include Choice.S  with type 'a t := 'a t
     include Fail.S    with type 'a t := 'a t
@@ -679,62 +693,34 @@ module OptionT = struct
   end
 
   module type S2 = sig
-    type ('a,'e) t
-    type ('a,'e) m
-    val lift : ('a,'e) m -> ('a,'e) t
-    val unwrap : ('a,'e) t -> ('a option,'e) m
+    include Trans.S2
     include Monad.S2   with type ('a,'e) t := ('a,'e) t
     include Choice.S2  with type ('a,'e) t := ('a,'e) t
     include Fail.S2    with type ('a,'e) t := ('a,'e) t
     include Plus.S2    with type ('a,'e) t := ('a,'e) t
   end
 
-  module Make(M : Monad.S) :
-    S with type 'a t = 'a option M.t
-       and type 'a m = 'a M.t
-  = struct
-    open M.Syntax
-    module Basic = struct
-      type 'a m = 'a M.t
-      type 'a t = 'a option m
-      let return x = Option.return x |> M.return
-      let bind m f = M.bind m (function
-          | Some r -> f r
-          | None -> M.return None)
-      let map = `Define_using_bind
-    end
-    type error = unit
-    let fail () = M.return None
-    let unwrap = ident
+  module T1(M : T1) = struct
+    type 'a t = 'a option M.t
+    type 'a m = 'a M.t
+    type 'a e = 'a t
+  end
 
-    let catch m f = m >>= function
-      | None -> f ()
-      | other -> M.return other
-
-    let plus m1 m2 = m1 >>= function
-      | Some m1 -> M.return (Some m1)
-      | None -> m2
-
-    include Choice.Make(struct
-        type 'a t = 'a Basic.t
-        let pure    = Basic.return
-        let zero () = M.return None
-      end)
-
-    include Basic
-    include Monad.Make(Basic)
-    let lift = M.map ~f:Option.return
+  module T2(M : T2) = struct
+    type ('a,'e) t = ('a option, 'e) M.t
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) e = ('a,'e) t
   end
 
 
   module Make2(M : Monad.S2)
-    : S2 with type ('a,'e) t = ('a option,'e) M.t
-          and type ('a,'e) m = ('a,'e) M.t
+    : S2 with type ('a,'e) t := ('a,'e) T2(M).t
+          and type ('a,'e) m := ('a,'e) T2(M).m
+          and type ('a,'e) e := ('a,'e) T2(M).e
   = struct
     open M.Syntax
     module Basic = struct
-      type ('a,'e) m = ('a,'e) M.t
-      type ('a,'e) t = ('a option,'e) m
+      include T2(M)
       let return x = Option.return x |> M.return
       let bind m f = M.bind m (function
           | Some r -> f r
@@ -743,7 +729,7 @@ module OptionT = struct
     end
     type error = unit
     let fail () = M.return None
-    let unwrap = ident
+    let run = ident
 
     let catch m f = m >>= function
       | None -> f ()
@@ -763,59 +749,230 @@ module OptionT = struct
     let lift = M.map ~f:Option.return
   end
 
+  module Make(M : Monad.S)
+    : S with type 'a m := 'a T1(M).m
+         and type 'a t := 'a T1(M).t
+         and type 'a e := 'a T1(M).e
+  = Make2(struct
+    type ('a,'e) t = 'a M.t
+    include (M : Monad.S with type 'a t := 'a M.t)
+  end)
+
   include Make(Ident)
 end
 
+module ResultT = struct
+
+  module type S = sig
+    include Trans.S
+    include Monad.S with type 'a t := 'a t
+  end
+  module type S2 = sig
+    include Trans.S2
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+end
 
 module ListT = struct
   module type S = sig
-    type 'a t
-    type 'a m
-    val unwrap : 'a t -> 'a option m
-
-    val lift : 'a m -> 'a t
+    include Trans.S
     include Monad.S   with type 'a t := 'a t
     include Choice.S  with type 'a t := 'a t
-    include Fail.S    with type 'a t := 'a t
     include Plus.S    with type 'a t := 'a t
   end
 
   module type S2 = sig
-    type ('a,'e) t
-    type ('a,'e) m
-    val lift : ('a,'e) m -> ('a,'e) t
-    val unwrap : ('a,'e) t -> ('a option,'e) m
+    include Trans.S2
     include Monad.S2   with type ('a,'e) t := ('a,'e) t
     include Choice.S2  with type ('a,'e) t := ('a,'e) t
-    include Fail.S2    with type ('a,'e) t := ('a,'e) t
     include Plus.S2    with type ('a,'e) t := ('a,'e) t
   end
-end
-module ListM = struct
-  module type S = sig
+
+  module T1(M : T1) = struct
+    type 'a t = 'a list M.t
+    type 'a m = 'a M.t
+    type 'a e = 'a t
   end
+
+  module T2(M : T2) = struct
+    type ('a,'e) t = ('a list, 'e) M.t
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) e = ('a,'e) t
+  end
+
+  module Make2(M : Monad.S2)
+    : S2 with type ('a,'e) m := ('a,'e) T2(M).m
+          and type ('a,'e) t := ('a,'e) T2(M).t
+          and type ('a,'e) e := ('a,'e) T2(M).e
+  = struct
+    open M.Syntax
+    type 'a result = 'a list
+    module Base = struct
+      include T2(M)
+      let return x = M.return [x]
+      let bind xsm f = xsm >>= fun xs ->
+        List.fold xs ~init:(!![]) ~f:(fun ysm x ->
+            ysm >>= fun ys -> f x >>| fun xs ->
+            List.rev_append xs @@ ys) >>| List.rev
+      let map xsm ~f = xsm >>| List.map ~f
+      let map = `Custom map
+    end
+    include Choice.Make2(struct
+        type ('a,'e) t = ('a,'e) T2(M).t
+        let pure x = M.return [x]
+        let zero () = M.return []
+      end)
+
+    module MT = Monad.Make2(Base)
+    let plus xsm ysm =
+      xsm >>= fun xs -> ysm >>= fun ys ->
+      M.return (xs @ ys)
+
+    let run = ident
+    let lift m = m >>| fun x -> [x]
+    include MT
+  end
+
+  module Make(M: Monad.S)
+    : S with type 'a m := 'a T1(M).m
+         and type 'a t := 'a T1(M).t
+         and type 'a e := 'a T1(M).e =
+    Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
+
+  module ListM :
+    S with type 'a t = 'a list and type 'a m = 'a = struct
+    include T1(Ident)
+    include Make(Ident)
+  end
+
+  include ListM
 end
 
+
+module Seq = struct
+  module type S = ListT.S
+  module type S2 = ListT.S2
+  module T1(M : T1) = struct
+    type 'a t = 'a Sequence.t M.t
+    type 'a m = 'a M.t
+    type 'a e = 'a t
+  end
+
+  module T2(M : T2) = struct
+    type ('a,'e) t = ('a Sequence.t, 'e) M.t
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) e = ('a,'e) t
+  end
+
+  module Make2(M : Monad.S2)
+    : S2 with type ('a,'e) m := ('a,'e) T2(M).m
+          and type ('a,'e) t := ('a,'e) T2(M).t
+          and type ('a,'e) e := ('a,'e) T2(M).e
+  = struct
+    open M.Syntax
+    type 'a result = 'a Sequence.t
+    module Base = struct
+      include T2(M)
+      let return x = M.return @@ Sequence.singleton x
+      let bind xsm f = xsm >>= fun xs ->
+        Sequence.fold xs ~init:(!!Sequence.empty) ~f:(fun ysm x ->
+            ysm >>= fun ys -> f x >>| fun xs ->
+             Sequence.append xs ys)
+      let map xsm ~f = xsm >>| Sequence.map ~f
+      let map = `Custom map
+    end
+
+    include Choice.Make2(struct
+        type ('a,'e) t = ('a,'e) T2(M).t
+        let pure x = Base.return x
+        let zero () = M.return Sequence.empty
+      end)
+
+    module MT = Monad.Make2(Base)
+    let plus xsm ysm =
+      xsm >>= fun xs -> ysm >>= fun ys ->
+      M.return (Sequence.append xs ys)
+
+    let run = ident
+    let lift m = m >>| Sequence.singleton
+    include MT
+  end
+
+  module Make(M : Monad.S)
+      : S with type 'a m := 'a T1(M).m
+           and type 'a t := 'a T1(M).t
+           and type 'a e := 'a T1(M).e
+    = Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
+
+  module SeqM : S
+    with type 'a t = 'a Sequence.t
+     and type 'a m = 'a
+     and type 'a e = 'a Sequence.t =
+  struct
+    include T1(Ident)
+    include Make(Ident)
+  end
+  include SeqM
+end
 
 module Writer = struct
 
   module type S = sig
-    type 'a t
     type state
+    include Trans.S
     val write : state -> unit t
     val read : 'a t -> state t
     val listen : 'a t -> ('a * state) t
-    val run : 'a t -> ('a * state)
-    val exec : unit t -> state
+    val exec : unit t -> state m
     val ignore : 'a t -> unit t
+    val lift : 'a m -> 'a t
+    include Monad.S with type 'a t := 'a t
   end
 
-  module Make(T : Monoid.S)(M : Monad.S) = struct
+  module type S2 = sig
+    type state
+    include Trans.S2
+    val write : state -> (unit,'e) t
+    val read : ('a,'e) t -> (state,'e) t
+    val listen : ('a,'e) t -> (('a * state),'e) t
+    val exec : (unit,'e) t -> (state,'e) m
+    val ignore : ('a,'e) t -> (unit,'e) t
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  type ('a,'s) writer = Writer of ('a * 's)
+
+  module T1(T : Monoid.S)(M : Monad.S) = struct
+    type state = T.t
+    type 'a m = 'a M.t
+    type 'a t = ('a,state) writer m
+    type 'a e = ('a * state) m
+  end
+
+  module T2(T : Monoid.S)(M : Monad.S2) = struct
+    type state = T.t
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) t = (('a,state) writer,'e) M.t
+    type ('a,'e) e = ('a * state, 'e) m
+  end
+
+  module Make2(T : Monoid.S)(M : Monad.S2)
+    : S2 with type ('a,'e) m := ('a,'e) T2(T)(M).m
+          and type ('a,'e) t := ('a,'e) T2(T)(M).t
+          and type ('a,'e) e := ('a,'e) T2(T)(M).e
+          and type state := T2(T)(M).state
+  = struct
     open M.Syntax
     let (+) = T.plus
     module Base = struct
-      type 'a writer = Writer of ('a * T.t)
-      type 'a t = 'a writer M.t
+      include T2(T)(M)
       let writer x = Writer x
       let return x = M.return @@ writer (x,T.zero)
       let bind m f =
@@ -833,43 +990,155 @@ module Writer = struct
     let run m = m >>| fun (Writer (x,e)) -> (x,e)
     let exec m = m >>| fun (Writer ((),e)) -> e
     let ignore m = m >>= fun (Writer (_,e)) -> returnw ((),e)
-    include Monad.Make(Base)
+    let lift m = M.map m ~f:(fun x -> Writer (x,T.zero))
+    include Monad.Make2(Base)
   end
 
+  module Make(T : Monoid.S)(M : Monad.S)
+    : S with type 'a m := 'a T1(T)(M).m
+         and type 'a t := 'a T1(T)(M).t
+         and type 'a e := 'a T1(T)(M).e
+         and type state := T1(T)(M).state
+  = struct
+    module M = struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end
+    type state = T.t
+    include Make2(T)(M)
+  end
 end
 
 module Reader = struct
-  module Make(M : Monad.S) = struct
+
+  type ('a,'e) reader = Reader of ('e -> 'a)
+
+
+  module type S = sig
+    include Trans.S
+    type env
+    val read : unit -> env t
+    include Monad.S with type 'a t := 'a t
+  end
+
+
+  module type S2 = sig
+    include Trans.S1
+    val read : unit -> ('e,'e) t
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  module type Sp = sig
+    type 'a env
+    include Trans.S1
+    val read : unit -> ('e env, 'e ) t
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  module Tp(T : T1)(M : Monad.S) = struct
+    type 'a env = 'a T.t
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a m, 'e env) reader
+    type ('a,'e) e = 'e env -> 'a m
+  end
+
+  module Makep(T : T1)(M : Monad.S) : Sp
+    with type ('a,'e) t := ('a,'e) Tp(T)(M).t
+     and type 'a m     := 'a     Tp(T)(M).m
+     and type ('a,'e) e := ('a,'e) Tp(T)(M).e
+     and type 'a env   := 'a Tp(T)(M).env
+  = struct
     module Base = struct
+      include Tp(T)(M)
       open M.Monad_infix
-      type ('a,'e) t = Reader of ('e -> 'a M.t)
       let (=>) (Reader run) x = run x
       let reader comp = Reader comp
       let return x = reader @@ fun _ -> M.return x
       let bind m f = reader @@ fun s -> m => s >>= fun x -> f x => s
       let map m ~f = reader @@ fun s -> m => s >>| f
+      let read () = reader @@ fun s -> M.return s
+      let lift m  = reader @@ fun s -> m
+      let run m s = m => s
       let map = `Custom map
     end
     include Base
     include Monad.Make2(Base)
   end
-  include Make(Ident)
+
+  module T1(T : T)(M : Monad.S) = struct
+    type env = T.t
+    type 'a m = 'a M.t
+    type 'a t = ('a m, env) reader
+    type 'a e = env -> 'a m
+  end
+
+  module T2(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a m,'e) reader
+    type ('a,'e) e = 'e -> 'a m
+  end
+
+  module Make(T : T)(M : Monad.S): S
+    with type 'a t := 'a T1(T)(M).t
+     and type 'a m := 'a T1(T)(M).m
+     and type 'a e := 'a T1(T)(M).e
+     and type env := T.t
+    = Makep(struct type 'a t = T.t end)(M)
+
+  module Make2(M : Monad.S) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type 'a m     := 'a     T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+    = Makep(struct type 'a t = 'a end)(M)
+
+  module Self : S2
+    with type 'a m = 'a
+     and type ('a,'e) e = 'e -> 'a
+  = struct
+    include T2(Ident)
+    include Make2(Ident)
+  end
 end
 
+
 module State = struct
-  module Make(M : Monad.S) = struct
+
+  module type S = sig
+    include Trans.S1
+    include Monad.S2 with type ('a,'s) t := ('a,'s) t
+    val put : 's -> (unit,'s) t
+    val get : unit -> ('s,'s) t
+    val gets : ('s -> 'r) -> ('r,'s) t
+    val update : ('s -> 's) -> (unit,'s) t
+    val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
+    val eval : ('a,'s) t -> 's -> 'a m
+    val exec : ('a,'s) t -> 's -> 's m
+  end
+
+  type ('a,'b) storage = {
+    x : 'a;
+    s : 'b;
+  }
+
+  type ('a,'e) state = State of ('e -> 'a)
+
+  module T(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = (('a,'e) storage m, 'e) state
+    type ('a,'e) e = 'e -> ('a * 'e) m
+  end
+
+  module Make(M : Monad.S) : S
+    with type ('a,'e) t := ('a,'e) T(M).t
+     and type 'a m     := 'a     T(M).m
+     and type ('a,'e) e := ('a,'e) T(M).e
+  = struct
     open M.Monad_infix
-    type ('a,'b) storage = {
-      x : 'a;
-      s : 'b;
-    }
-    type ('a,'s) state =
-        State of ('s -> ('a, 's) storage M.t)
     let make run = State run
     let (=>) (State run) x = run x
     type 'a result = 'a M.t
     module Basic = struct
-      type nonrec ('a,'s) t = ('a,'s) state
+      include T(M)
       let return x = make @@ fun s -> M.return {x;s}
       let bind m f = make @@ fun s -> m=>s >>= fun {x;s} -> f x => s
       let map m ~f = make @@ fun s -> m=>s >>| fun {x;s} -> {x=f x;s}
@@ -889,15 +1158,188 @@ module State = struct
     include Basic
     include Monad.Make2(Basic)
   end
-  module type S = State
+
   include Make(Ident)
 end
 
-(* module Option = struct *)
-(*   (\* add guard, when, unless *\) *)
-(*   module Make(M : Monad.S) = struct end *)
-(* end *)
+module Fun = struct
+  module type S = sig
+    include Trans.S
+    include Monad.S with type 'a t := 'a t
+  end
 
+  module type S2 = sig
+    include Trans.S2
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  type 'a thunk = Thunk of (unit -> 'a)
+
+  module T(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type 'a t = 'a m thunk
+    type 'a e = 'a m
+  end
+
+  module T2(M : Monad.S2) = struct
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) t = ('a,'e) m thunk
+    type ('a,'e) e = ('a,'e) m
+  end
+
+  let thunk f = Thunk f
+
+  module Make2(M : Monad.S2) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type ('a,'e) m := ('a,'e) T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+  = struct
+    open M.Syntax
+    module Base = struct
+      include T2(M)
+      let run (Thunk f) = f ()
+      let return x = thunk @@ fun () -> M.return x
+      let bind m f = thunk @@ fun () -> run m >>= fun x -> run (f x)
+      let map m ~f = thunk @@ fun () -> run m >>| f
+      let lift m   = thunk @@ fun () -> m
+      let map = `Custom map
+    end
+    include Base
+    include Monad.Make2(Base)
+  end
+
+  module Make(M : Monad.S) : S
+    with type 'a t := 'a T(M).t
+     and type 'a m := 'a T(M).m
+     and type 'a e := 'a T(M).e
+    = Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
+
+  module Self : S with type 'a m = 'a and type 'a e = 'a = struct
+    type 'a t = 'a thunk
+    type 'a m = 'a
+    type 'a e = 'a
+    include Make(Ident)
+  end
+
+  include Self
+end
+
+module LazyT = struct
+  module type S = sig
+    include Trans.S
+    include Monad.S with type 'a t := 'a t
+  end
+
+  module type S2 = sig
+    include Trans.S2
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  module T1(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type 'a t = 'a m Lazy.t
+    type 'a e = 'a m
+  end
+
+  module T2(M : Monad.S2) = struct
+    type ('a,'e) m = ('a,'e) M.t
+    type ('a,'e) t = ('a,'e) m Lazy.t
+    type ('a,'e) e = ('a,'e) m
+  end
+
+  module Make2(M : Monad.S2) : S2
+    with type ('a,'e) t := ('a,'e) T2(M).t
+     and type ('a,'e) m := ('a,'e) T2(M).m
+     and type ('a,'e) e := ('a,'e) T2(M).e
+  = struct
+    open M.Syntax
+    module Base = struct
+      include T2(M)
+      let return x = lazy (M.return x)
+      let bind m f = lazy (Lazy.force m >>= fun x ->
+                           Lazy.force (f x))
+      let map = `Define_using_bind
+      let run = Lazy.force
+      let lift x = lazy x
+    end
+    include Base
+    include Monad.Make2(Base)
+  end
+
+  module Make(M : Monad.S) : S
+    with type 'a t := 'a T1(M).t
+     and type 'a m := 'a T1(M).m
+     and type 'a e := 'a T1(M).e
+    = Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
+
+  module Self : S
+    with type 'a t = 'a Lazy.t
+     and type 'a m = 'a
+     and type 'a e = 'a
+    = struct
+      type 'a t = 'a Lazy.t
+      type 'a m = 'a
+      type 'a e = 'a
+      include Make(Ident)
+    end
+    include Self
+end
+
+module Cont = struct
+  type ('a,'r) cont = Cont of (('a -> 'r) -> 'r)
+
+  module T(M : Monad.S) = struct
+    type 'a m = 'a M.t
+    type ('a,'e) t = ('a, 'e m) cont
+    type ('a,'e) e = ('a -> 'e m) -> 'e m
+  end
+
+  module type S = sig
+    include Trans.S1
+    include Monad.S2 with type ('a,'e) t := ('a,'e) t
+  end
+
+  let cont k = Cont k
+
+
+  let ($) = (@@)
+  let f x = (@@) x
+
+  module Make(M : Monad.S)
+    : S  with type ('a,'e) t := ('a,'e) T(M).t
+          and type ('a,'e) e := ('a,'e) T(M).e
+          and type 'a m := 'a T(M).m
+  = struct
+    open M.Syntax
+    module Base = struct
+      include T(M)
+      let run (Cont k) f = k f
+      let return x = cont @@ fun k -> k x
+      let lift m = cont @@ fun k -> m >>= k
+      let bind m f = cont @@ fun k ->
+        run m @@ fun x -> run (f x) k
+      let map = `Define_using_bind
+    end
+    include Base
+    include Monad.Make2(Base)
+  end
+
+  module Self :
+    S with type 'a m = 'a and type ('a,'e) e = (('a -> 'e) -> 'e)
+    = struct
+      type ('a,'e) t = ('a,'e) T(Ident).t
+      type 'a m = 'a
+      type ('a,'e) e = ('a -> 'e) -> 'e
+      include Make(Ident)
+    end
+  include Self
+end
 
 module T = struct
 
@@ -974,6 +1416,6 @@ module T = struct
   end
 
   module State = struct
-    module Make = StateT
+    module Make = State
   end
 end
