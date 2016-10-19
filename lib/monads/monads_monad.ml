@@ -1,183 +1,15 @@
 open Core_kernel.Std
-open Bap_monad_types
 
-module Monoid = struct
-  module type Base = sig
-    type t
-    val zero : t
-    val plus : t -> t -> t
-  end
-  module type S = sig
-    include Base
-    val concat : t list -> t
-    val (@@) : t -> t -> t
-  end
-  module Make(M : Base) = struct
-    include M
-    let concat = List.fold ~init:zero ~f:plus
-    let (@@) = plus
-  end
+module Monoid = Monads_monoid
+module Types = Monads_types
+module Trans = Types.Trans
+module type Monad = Types.Monad.S
+module type Monad2 = Types.Monad.S2
 
-  module Unit : S with type t = unit = struct
-    type t = unit
-    let zero = ()
-    let plus _ _ = ()
-    let concat _ = ()
-    let (@@) = plus
-  end
-
-  module Stack = struct
-    module Make(T : T) : S with type t = T.t list = struct
-      type t = T.t list
-      let zero = []
-      let plus = List.rev_append
-      let (@@) = plus
-      let concat = List.fold ~init:zero ~f:plus
-    end
-  end
-
-  module String = struct
-    module Builder : sig
-      include S
-      val add : t -> string -> t
-      val run : t -> string
-    end = struct
-      module Base = struct
-        type t = Rope.t
-        let zero = Rope.of_string ""
-        let plus = Rope.(^)
-      end
-      include Make(Base)
-      let add t x = Rope.(t ^ of_string x)
-      let run = Rope.to_string
-    end
-
-    type t = string
-    let zero = ""
-    let plus = (^)
-    let (@@) = (^)
-    let concat xs = String.concat xs
-  end
-
-  module Set = struct
-    module Make(S : Set.S) = struct
-      let zero = S.empty
-      let plus = Set.union
-      let (@@) = plus
-      let concat = List.fold ~init:zero ~f:plus
-    end
-  end
-
-  module List = struct
-    module Make(T : T) : S with type t = T.t list = struct
-      type t = T.t list
-      let zero = []
-      let plus = (@)
-      let (@@) = (@)
-      let concat = List.concat
-    end
-  end
-
-  module Int = struct
-    module Sum = Make(struct
-        type t = int
-        let zero = 0
-        let plus = (+)
-      end)
-    module Product = Make(struct
-        type t = int
-        let zero = 1
-        let plus = ( * )
-      end)
-    include Sum
-  end
-
-  module Float = struct
-    module Sum = Make(struct
-        type t = float
-        let zero = 0.
-        let plus = (+.)
-      end)
-    module Product = Make(struct
-        type t = float
-        let zero = 1.
-        let plus = ( *. )
-      end)
-    include Sum
-  end
-end
-
-module Plus = struct
-  module type S = sig
-    type 'a t
-    val zero : unit -> 'a t
-    val plus : 'a t -> 'a t -> 'a t
-  end
-
-  module type S2 = sig
-    type ('a,'e) t
-    val zero : unit -> ('a,'e) t
-    val plus : ('a,'e) t -> ('a,'e) t -> ('a,'e) t
-  end
-end
-
-module Fail = struct
-  module type S = sig
-    type 'a error
-    type 'a t
-    val fail : _ error -> 'a t
-    val catch : 'a t -> (_ error -> 'a t) -> 'a t
-  end
-
-  module type S2 = sig
-    type 'a error
-    type ('a,'e) t
-    val fail : 'e error -> ('a,'e) t
-    val catch : ('a,'e) t -> ('e error -> ('a,'e) t) -> ('a,'e) t
-  end
-end
-
+module Plus = Types.Plus
+module Fail = Types.Fail
 module Choice = struct
-  module type Basic = sig
-    type 'a t
-    val pure : 'a -> 'a t
-    val zero : unit -> 'a t
-  end
-
-  module type S = sig
-    type 'a t
-    include Basic with type 'a t := 'a t
-    val accept : 'a -> 'a t
-    val reject : unit -> 'a t
-    val guard : bool -> unit t
-    val on : bool -> unit t -> unit t
-    val unless : bool -> unit t -> unit t
-  end
-
-  module type Basic2 = sig
-    type ('a,'e) t
-    val pure : 'a -> ('a,'e) t
-    val zero : unit -> ('a,'e) t
-  end
-
-  module type S2 = sig
-    type ('a,'e) t
-    include Basic2 with type ('a,'e) t := ('a,'e) t
-    val accept : 'a -> ('a,'e) t
-    val reject : unit -> ('a,'e) t
-    val guard : bool -> (unit,'e) t
-    val on : bool -> (unit,'e) t -> (unit,'e) t
-    val unless : bool -> (unit,'e) t -> (unit,'e) t
-  end
-
-  module Make(M : Basic) : S with type 'a t := 'a M.t = struct
-    include M
-    let accept = pure and reject = zero
-    let guard c          = if c then accept () else reject ()
-    let on c action      = if c then action    else accept ()
-    let unless c action  = if c then accept () else action
-  end
-
+  include Types.Choice
   module Make2(M : Basic2) : S2 with type ('a,'e) t := ('a,'e) M.t = struct
     include M
     let accept = pure and reject = zero
@@ -185,221 +17,19 @@ module Choice = struct
     let on c action      = if c then action    else accept ()
     let unless c action  = if c then accept () else action
   end
-end
 
-module Trans = struct
-  module type S = sig
-    type 'a t
-    type 'a m
-    type 'a e                    (* essence of effect *)
-
-    val lift : 'a m -> 'a t
-    val run : 'a t -> 'a e
-  end
-
-  module type S1 = sig
-    type ('a,'e) t
-    type 'a m
-    type ('a,'e) e
-    val lift : 'a m -> ('a,'e) t
-    val run : ('a,'e) t -> ('a,'e) e
-  end
-
-  module type S2 = sig
-    type ('a,'e) t
-    type ('a,'e) m
-    type ('a,'e) e
-
-    val lift : ('a,'e) m -> ('a,'e) t
-    val run : ('a,'e) t -> ('a,'e) e
-  end
-end
-
-module Collection = struct
-  module type Basic = sig
-    type 'a t
-    val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
-    include Plus.S   with type 'a t := 'a t
-    include Monad.S with type 'a t := 'a t
-  end
-
-
-
-  module type S2 = sig
-    type ('a,'e) m
-    type 'a t
-    val all : ('a,'e) m t -> ('a t, 'e) m
-    val all_ignore : ('a,'e) m t -> (unit,'e) m
-    val rev_map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
-    val map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
-    val iter : 'a t -> f:('a -> (unit,'e) m) -> (unit,'e) m
-    val fold : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
-    val reduce : 'a t -> f:('a -> 'a -> ('a,'e) m) -> ('a option,'e) m
-    val exists : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
-    val for_all : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
-    val count : 'a t -> f:('a -> (bool,'e) m) -> (int,'e) m
-    val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> ('a,'e) m) -> ('a,'e) m
-    val find : 'a t -> f:('a -> (bool,'e) m) -> ('a option,'e) m
-    val find_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b option,'e) m
-    val rev_filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t, 'e) m
-    val rev_filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
-    val filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t,'e) m
-    val filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
-  end
-
-  module type S = sig
-    type 'a m
-    type 'a t
-
-    val all : 'a m t -> 'a t m
-    val all_ignore : 'a m t -> unit m
-    val rev_map : 'a t -> f:('a -> 'b m) -> 'b t m
-    val map : 'a t -> f:('a -> 'b m) -> 'b t m
-    val iter : 'a t -> f:('a -> unit m) -> unit m
-    val fold : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
-    val reduce : 'a t -> f:('a -> 'a -> 'a m) -> 'a option m
-    val exists : 'a t -> f:('a -> bool m) -> bool m
-    val for_all : 'a t -> f:('a -> bool m) -> bool m
-    val count : 'a t -> f:('a -> bool m) -> int m
-    val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> 'a m) -> 'a m
-    val find : 'a t -> f:('a -> bool m) -> 'a option m
-    val find_map : 'a t -> f:('a -> 'b option m) -> 'b option m
-    val rev_filter : 'a t -> f:('a -> bool m) -> 'a t m
-    val rev_filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
-    val filter : 'a t -> f:('a -> bool m) -> 'a t m
-    val filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
-  end
+  module Make(M : Basic) : S with type 'a t := 'a M.t =
+    Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Basic with type 'a t := 'a M.t)
+    end)
 end
 
 module Monad = struct
-  module type Basic = Monad.Basic
-  module type Basic2 = Monad.Basic2
-  module type S = sig
-    type 'a t
-
-    module Fn : sig
-      val id : 'a -> 'a t
-      val ignore : 'a t -> unit t
-      val nothing : unit -> unit t
-      val non : ('a -> bool t) -> 'a -> bool t
-      val apply_n_times : n:int -> ('a -> 'a t) -> 'a -> 'a t
-      val compose : ('b -> 'c t) -> ('a -> 'b t) -> ('a -> 'c t)
-    end
-
-    module Pair : sig
-      val fst: ('a * 'b) t -> 'a t
-      val snd: ('a * 'b) t -> 'b t
-    end
-
-    module Triple : sig
-      val fst : ('a * 'b * 'c) t -> 'a t
-      val snd : ('a * 'b * 'c) t -> 'b t
-      val trd : ('a * 'b * 'c) t -> 'c t
-    end
-
-    module Lift : sig
-      val nullary : 'a -> 'a t
-      val unary   : ('a -> 'b) -> ('a t -> 'b t)
-      val binary  : ('a -> 'b -> 'c) -> ('a t -> 'b t -> 'c t)
-      val ternary : ('a -> 'b -> 'c -> 'd) -> ('a t -> 'b t -> 'c t -> 'd t)
-      val quaternary : ('a -> 'b -> 'c -> 'd -> 'e) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t)
-      val quinary : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
-    end
-
-    module Exn : sig
-      val expect : ?finally:(unit -> unit t) -> f:(unit -> 'a t) -> catch:(exn -> 'a t) -> 'a t
-    end
-
-    module Collection : sig
-      module type S = Collection.S with type 'a m := 'a t
-      module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
-    end
-
-    module List : Collection.S with type 'a t := 'a list
-    module Seq : Collection.S with type 'a t := 'a Sequence.t
-
-
-    module Syntax : sig
-      val (>>=) : 'a t -> ('a -> 'b t) -> 'b t
-      val (>>|) : 'a t -> ('a -> 'b) -> 'b t
-      val (>=>) : ('a -> 'b t) -> ('b -> 'c t) -> ('a -> 'c t)
-      val (!!)  : 'a -> 'a t
-      val (!$)   : ('a -> 'b) -> ('a t -> 'b t)
-      val (!$$)  : ('a -> 'b -> 'c) -> ('a t -> 'b t -> 'c t)
-      val (!$$$) : ('a -> 'b -> 'c -> 'd) -> ('a t -> 'b t -> 'c t -> 'd t)
-      val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t)
-      val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
-    end
-    include module type of Syntax
-    include Monad.S with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    type ('a,'e) t
-
-    module Fn : sig
-      val id : 'a -> ('a,'e) t
-      val ignore : ('a,'e) t -> (unit,'e) t
-      val nothing : unit -> (unit,'e) t
-      val non : ('a -> (bool,'e) t) -> 'a -> (bool,'e) t
-      val apply_n_times : n:int -> ('a -> ('a,'e) t) -> 'a -> ('a,'e) t
-      val compose : ('b -> ('c,'e) t) -> ('a -> ('b,'e) t) -> ('a -> ('c,'e) t)
-    end
-
-    module Pair : sig
-      val fst: (('a * 'b),'e) t -> ('a,'e) t
-      val snd: (('a * 'b),'e) t -> ('b,'e) t
-    end
-
-    module Triple : sig
-      val fst : (('a * 'b * 'c),'e) t -> ('a,'e) t
-      val snd : (('a * 'b * 'c),'e) t -> ('b,'e) t
-      val trd : (('a * 'b * 'c),'e) t -> ('c,'e) t
-    end
-
-    module Lift : sig
-      val nullary : 'a -> ('a,'e) t
-      val unary   : ('a -> 'b) -> (('a,'e) t -> ('b,'e) t)
-      val binary  : ('a -> 'b -> 'c) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t)
-      val ternary : ('a -> 'b -> 'c -> 'd) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t -> ('d,'e) t)
-      val quaternary : ('a -> 'b -> 'c -> 'd -> 'e) -> (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t)
-      val quinary : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
-        (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
-    end
-
-    module Exn : sig
-      val expect :
-        ?finally:(unit -> (unit,'s) t) ->
-        f:(unit -> ('a,'s) t) ->
-        catch:(exn -> ('a,'s) t) -> ('a,'s) t
-    end
-
-    module Collection : sig
-      module type S = Collection.S2 with type ('a,'e) m := ('a,'e) t
-      module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
-    end
-
-    module List : Collection.S with type 'a t := 'a list
-    module Seq : Collection.S with type 'a t := 'a Sequence.t
-
-
-    module Syntax : sig
-      val (>>=) : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
-      val (>>|) : ('a,'e) t -> ('a -> 'b) -> ('b,'e) t
-      val (>=>) : ('a -> ('b,'e) t) -> ('b -> ('c,'e) t) -> ('a -> ('c,'e) t)
-      val (!!) : 'a -> ('a,'e) t
-      val (!$)   : ('a -> 'b) -> (('a,'e) t -> ('b,'e) t)
-      val (!$$)  : ('a -> 'b -> 'c) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t)
-      val (!$$$) : ('a -> 'b -> 'c -> 'd) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t -> ('d,'e) t)
-      val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t)
-      val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
-        (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
-    end
-    include module type of Syntax
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-  end
-
-  module Make2(M : Basic2) : S2 with type ('a,'e) t := ('a,'e) M.t = struct
+  include Types.Monad
+  module Make2(M : Basic2)
+    : S2 with type ('a,'e) t := ('a,'e) M.t
+  = struct
     include Monad.Make2(M)
 
     let unit = return ()
@@ -467,8 +97,8 @@ module Monad = struct
     end
 
     module Collection  = struct
-      module type S = Collection.S2 with type ('a,'e) m := ('a,'e) M.t
-      module Make(T : Collection.Basic) : Collection.S2
+      module type S = Types.Collection.S2 with type ('a,'e) m := ('a,'e) M.t
+      module Make(T : Types.Collection.Basic) : Types.Collection.S2
         with type 'a t := 'a T.t
          and type ('a,'e) m = ('a,'e) M.t = struct
         type ('a,'e) m = ('a,'e) M.t
@@ -616,8 +246,9 @@ module Ident
   end
 
   module Collection = struct
-    module type S = Collection.S with type 'a m := 'a t
-    module Make(T : Collection.Basic) : S with type 'a t := 'a T.t = struct
+    module type S = Types.Collection.S with type 'a m := 'a t
+    module Make(T : Types.Collection.Basic) :
+      S with type 'a t := 'a T.t = struct
       include M.Collection.Make(T)
       let all = ident
       let all_ignore = ignore
@@ -683,23 +314,7 @@ module Ident
 end
 
 module OptionT = struct
-  module type S = sig
-    include Trans.S
-    include Monad.S   with type 'a t := 'a t
-    include Choice.S  with type 'a t := 'a t
-    include Plus.S    with type 'a t := 'a t
-    include Fail.S    with type 'a t := 'a t
-                       and type 'a error = unit
-  end
-
-  module type S2 = sig
-    include Trans.S2
-    include Monad.S2   with type ('a,'e) t := ('a,'e) t
-    include Choice.S2  with type ('a,'e) t := ('a,'e) t
-    include Plus.S2    with type ('a,'e) t := ('a,'e) t
-    include Fail.S2    with type ('a,'e) t := ('a,'e) t
-                        and type 'a error = unit
-  end
+  include Types.Option
 
   module T1(M : T1) = struct
     type 'a t = 'a option M.t
@@ -763,23 +378,10 @@ module OptionT = struct
 end
 
 module ResultT = struct
-  type ('a,'e) result = ('a,'e) Core_kernel.Std.result =
+  include Types.Result
+  type ('a,'e) result = ('a,'e) Result.t =
     | Ok of 'a
     | Error of 'e
-
-  module type S = sig
-    type err
-    include Trans.S
-    include Monad.S   with type 'a t := 'a t
-    include Fail.S  with type 'a t := 'a t with type 'a error = err
-  end
-
-  module type S2 = sig
-    include Trans.S1
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-    include Fail.S2  with type ('a,'e) t := ('a,'e) t with type 'a error = 'a
-  end
-
   module type Sp = sig
     include Trans.S1
     include Monad.S2   with type ('a,'e) t := ('a,'e) t
@@ -821,7 +423,6 @@ module ResultT = struct
     include Monad.Make2(Base)
   end
 
-
   module T1(T : T)(M : Monad.S) = struct
     type error = T.t
     type 'a m = 'a M.t
@@ -852,12 +453,39 @@ module ResultT = struct
     = Makep(struct type 'a t = 'a end)(M)
 
   module Error = struct
-    module Make = Make(struct type t = Error.t end)
+    module T(M : Monad.S) = struct
+      type 'a m = 'a M.t
+      type 'a t = 'a Or_error.t m
+      type 'a e = 'a Or_error.t m
+    end
+
+    module Make(M : Monad.S) : S
+      with type 'a t := 'a T(M).t
+       and type 'a m := 'a T(M).m
+       and type 'a e := 'a T(M).e
+       and type err := Error.t
+      = Make(struct type t = Error.t end)(M)
+    type 'a t = 'a Or_error.t
+    type 'a m = 'a
+    type 'a e = 'a Or_error.t
     include Make(Ident)
   end
 
   module Exception = struct
-    module Make = Make(struct type t = exn end)
+    module T(M : Monad.S) = struct
+      type 'a m = 'a M.t
+      type 'a t = ('a,exn) Result.t m
+      type 'a e = ('a,exn) Result.t m
+    end
+
+    module Make(M : Monad.S) : S
+      with type 'a t := 'a T(M).t
+       and type 'a m := 'a T(M).m
+       and type 'a e := 'a T(M).e
+       and type err := exn
+      = Make(struct type t = exn end)(M)
+
+    include T(Ident)
     include Make(Ident)
   end
 
@@ -873,20 +501,7 @@ module ResultT = struct
 end
 
 module ListT = struct
-  module type S = sig
-    include Trans.S
-    include Monad.S   with type 'a t := 'a t
-    include Choice.S  with type 'a t := 'a t
-    include Plus.S    with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    include Trans.S2
-    include Monad.S2   with type ('a,'e) t := ('a,'e) t
-    include Choice.S2  with type ('a,'e) t := ('a,'e) t
-    include Plus.S2    with type ('a,'e) t := ('a,'e) t
-  end
-
+  include Types.List
   module T1(M : T1) = struct
     type 'a t = 'a list M.t
     type 'a m = 'a M.t
@@ -942,7 +557,7 @@ module ListT = struct
     end)
 
   module ListM :
-    S with type 'a t = 'a list and type 'a m = 'a = struct
+    S with type 'a t = 'a list and type 'a m = 'a and type 'a e = 'a list = struct
     include T1(Ident)
     include Make(Ident)
   end
@@ -950,10 +565,8 @@ module ListT = struct
   include ListM
 end
 
-
 module Seq = struct
-  module type S = ListT.S
-  module type S2 = ListT.S2
+  include Types.List
   module T1(M : T1) = struct
     type 'a t = 'a Sequence.t M.t
     type 'a m = 'a M.t
@@ -1021,29 +634,7 @@ module Seq = struct
 end
 
 module Writer = struct
-
-  module type S = sig
-    type state
-    include Trans.S
-    val write : state -> unit t
-    val read : 'a t -> state t
-    val listen : 'a t -> ('a * state) t
-    val exec : unit t -> state m
-    val ignore : 'a t -> unit t
-    val lift : 'a m -> 'a t
-    include Monad.S with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    type state
-    include Trans.S2
-    val write : state -> (unit,'e) t
-    val read : ('a,'e) t -> (state,'e) t
-    val listen : ('a,'e) t -> (('a * state),'e) t
-    val exec : (unit,'e) t -> (state,'e) m
-    val ignore : ('a,'e) t -> (unit,'e) t
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-  end
+  include Types.Writer
 
   type ('a,'s) writer = Writer of ('a * 's)
 
@@ -1108,20 +699,8 @@ module Writer = struct
 end
 
 module Reader = struct
+  include Types.Reader
   type ('a,'e) reader = Reader of ('e -> 'a)
-
-  module type S = sig
-    include Trans.S
-    type env
-    val read : unit -> env t
-    include Monad.S with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    include Trans.S1
-    val read : unit -> ('e,'e) t
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-  end
 
   module type Sp = sig
     type 'a env
@@ -1188,42 +767,19 @@ module Reader = struct
     = Makep(struct type 'a t = 'a end)(M)
 
   module Self : S2
-    with type 'a m = 'a
+    with type ('a,'e) t = ('a,'e) reader
+     and type 'a m = 'a
      and type ('a,'e) e = 'e -> 'a
   = struct
     include T2(Ident)
     include Make2(Ident)
   end
+  include Self
 end
 
 
 module State = struct
-
-  module type S2 = sig
-    include Trans.S1
-    include Monad.S2 with type ('a,'s) t := ('a,'s) t
-    val put : 's -> (unit,'s) t
-    val get : unit -> ('s,'s) t
-    val gets : ('s -> 'r) -> ('r,'s) t
-    val update : ('s -> 's) -> (unit,'s) t
-    val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-    val eval : ('a,'s) t -> 's -> 'a m
-    val exec : ('a,'s) t -> 's -> 's m
-  end
-
-  module type S = sig
-    include Trans.S
-    include Monad.S with type 'a t := 'a t
-    type env
-    val put : env -> unit t
-    val get : unit -> env t
-    val gets : (env -> 'r) -> 'r t
-    val update : (env -> env) -> unit t
-    val modify : 'a t -> (env -> env) -> 'a t
-    val eval : 'a t -> env -> 'a m
-    val exec : 'a t -> env-> env m
-  end
-
+  include Types.State
 
   module type Sp = sig
     include Trans.S1
@@ -1312,23 +868,15 @@ module State = struct
      and type ('a,'e) e := ('a,'e) T2(M).e
     = Makep(struct type 'a t = 'a end)(M)
 
+  include T2(Ident)
   include Make2(Ident)
 end
 
 module Fun = struct
-  module type S = sig
-    include Trans.S
-    include Monad.S with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    include Trans.S2
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-  end
-
+  include Types.Fun
   type 'a thunk = Thunk of (unit -> 'a)
 
-  module T(M : Monad.S) = struct
+  module T1(M : Monad.S) = struct
     type 'a m = 'a M.t
     type 'a t = 'a m thunk
     type 'a e = 'a m
@@ -1362,35 +910,22 @@ module Fun = struct
   end
 
   module Make(M : Monad.S) : S
-    with type 'a t := 'a T(M).t
-     and type 'a m := 'a T(M).m
-     and type 'a e := 'a T(M).e
+    with type 'a t := 'a T1(M).t
+     and type 'a m := 'a T1(M).m
+     and type 'a e := 'a T1(M).e
     = Make2(struct
       type ('a,'e) t = 'a M.t
       include (M : Monad.S with type 'a t := 'a M.t)
     end)
 
-  module Self : S with type 'a m = 'a and type 'a e = 'a = struct
-    type 'a t = 'a thunk
-    type 'a m = 'a
-    type 'a e = 'a
-    include Make(Ident)
-  end
 
-  include Self
+  include T1(Ident)
+  include Make(Ident)
+
 end
 
 module LazyT = struct
-  module type S = sig
-    include Trans.S
-    include Monad.S with type 'a t := 'a t
-  end
-
-  module type S2 = sig
-    include Trans.S2
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-  end
-
+  include Types.Lazy
   module T1(M : Monad.S) = struct
     type 'a m = 'a M.t
     type 'a t = 'a m Lazy.t
@@ -1445,6 +980,8 @@ module LazyT = struct
 end
 
 module Cont = struct
+  include Types.Cont
+
   type ('a,'r) cont = Cont of (('a -> 'r) -> 'r)
 
   module T(M : Monad.S) = struct
@@ -1453,18 +990,6 @@ module Cont = struct
     type ('a,'e) e = ('a -> 'e m) -> 'e m
   end
 
-  module type S = sig
-    include Trans.S
-    include Monad.S with type 'a t := 'a t
-    type  r
-    val call : cc:(('a -> _ t) -> 'a t) -> 'a t
-  end
-
-  module type S2 = sig
-    include Trans.S1
-    include Monad.S2 with type ('a,'e) t := ('a,'e) t
-    val call : cc:(('a -> ('r,'e) t) -> ('a,'e) t) -> ('a,'e) t
-  end
 
   let cont k = Cont k
 
@@ -1531,7 +1056,9 @@ module Cont = struct
     = Makep(struct type 'a t = 'a end)(M)
 
   module Self :
-    S2 with type 'a m = 'a and type ('a,'e) e = (('a -> 'e) -> 'e)
+    S2 with type ('a,'e) t = ('a,'e) cont
+        and type 'a m = 'a
+        and type ('a,'e) e = (('a -> 'e) -> 'e)
     = struct
       type ('a,'e) t = ('a,'e) T(Ident).t
       type 'a m = 'a
@@ -1542,8 +1069,6 @@ module Cont = struct
 end
 
 module T = struct
-
-
   module Option = struct
     module Make(M : Monad.S) = struct
       type 'a t = 'a option M.t
@@ -1619,3 +1144,10 @@ module T = struct
     module Make = State
   end
 end
+
+module Lazy = LazyT
+module List = ListT
+module Result = ResultT
+module Option = OptionT
+include Monad
+module Collection = Types.Collection
