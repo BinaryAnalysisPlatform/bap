@@ -27,6 +27,7 @@ end
 
 module Monad = struct
   include Types.Monad
+
   module Make2(M : Basic2)
     : S2 with type ('a,'e) t := ('a,'e) M.t
   = struct
@@ -203,6 +204,64 @@ module Monad = struct
       type ('a, 'e) t = 'a M.t
       include (M : Monad.Basic with type 'a t := 'a M.t)
     end)
+
+  module Core2(M : Core2) = struct
+    type ('a,'e) t = ('a,'e) M.t
+    include Make2(struct
+        include M
+        let map = `Custom map
+      end)
+    let join = M.join
+    let ignore_m = M.ignore_m
+    let all = M.all
+    let all_ignore = M.all_ignore
+  end
+
+  (* the intended usage of this module is
+
+     [F(Core(M))] to upcast a monad of type [Core]
+     to a monad of type [S], to make it possible
+     we shouldn't erase types from this monad, otherwise
+     this functor would be much harder to use.
+
+     Since we can't erase types, we can't implement Core
+     module via the Core2. So we need to repeat the code.
+     Since, the code doesn't contain any implementation (just
+     renaming) it can be considered OK.
+
+ *)
+  module Core(M : Core) = struct
+    type 'a t = 'a M.t
+    include Make(struct
+        include M
+        let map = `Custom map
+      end)
+    let join = M.join
+    let ignore_m = M.ignore_m
+    let all = M.all
+    let all_ignore = M.all_ignore
+  end
+
+  (* this module allows fast and dirty translation from a minimal
+     monad representation to our maximal. We will not erase types
+     from the resulting structure, as this functor is expected to
+     be used as a type caster, e.g. [Monad.State.Make(Monad.Minimal(M)]
+ *)
+  module Minimal( M : Minimal) = struct
+    type 'a t = 'a M.t
+    include Make(struct
+        include M
+        let map = `Define_using_bind
+      end)
+  end
+  module Minimal2( M : Minimal2) = struct
+    type ('a,'e) t = ('a,'e) M.t
+    include Make2(struct
+        include M
+        let map = `Define_using_bind
+      end)
+  end
+
 end
 
 module Ident

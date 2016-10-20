@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 open Microx.Std
+open Monads.Std
 
 open Format
 module SM = Monad.State
@@ -158,9 +159,9 @@ class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
   object(self)
     constraint 'a = #context
     inherit ['a] Conqueror.main ?deterministic prog as super
-    inherit ['a] Concretizer.main ~memory ~lookup
+    inherit! ['a] Concretizer.main ~memory ~lookup
         ?random_seed ?reg_policy ?mem_policy () as concrete
-    inherit ['a] Taint.propagator
+    inherit! ['a] Taint.propagator
 
     method! lookup v =
       concrete#lookup v >>= fun r ->

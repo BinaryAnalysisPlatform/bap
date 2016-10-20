@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Monads.Std
 open Bap_plugins.Std
 open Bap_future.Std
 open Format
@@ -80,6 +81,8 @@ let string_of_metric = function
   | `with_FN -> "FN"
   | `with_FP -> "FP"
 
+
+
 let print formatter tool result print_metrics : unit =
   List.iter print_metrics ~f:(fun m -> fprintf formatter "\t%s"
                                @@ string_of_metric m);
@@ -87,8 +90,8 @@ let print formatter tool result print_metrics : unit =
   output_metric_value formatter result print_metrics
 
 let compare_against bin tool_name truth_name print_metrics : unit =
-  let module EF = Monad.T.Or_error.Make(Future) in
-  let open EF in
+  let module EF = Monad.Result.Error.Make(Future) in
+  let open EF.Syntax in
   (Func_start.of_tool tool_name ~testbin:bin >>| fun tool ->
    Func_start.of_truth truth_name ~testbin:bin >>| fun truth ->
    let result =

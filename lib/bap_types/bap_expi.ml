@@ -1,13 +1,12 @@
 open Core_kernel.Std
+open Monads.Std
 open Regular.Std
 open Bap_common
 open Bap_bil
 open Bap_result
-open Bap_monad_types
 open Bap_expi_types
 
 module Sz = Bap_size
-module Monad = Bap_monad
 module TE = Bap_type_error
 
 module type S = Expi.S
@@ -28,7 +27,7 @@ let bool_t = Type.Imm 1
 let (^^) = Bitvector.concat
 let succ = Bitvector.succ
 
-module Make(SM : State) = struct
+module Make(SM : Monad.State.S2) = struct
   open SM
 
   type ('a,'e) state = ('a,'e) SM.t

@@ -1,9 +1,9 @@
 open Core_kernel.Std
+open Monads.Std
 open Bap_common
 open Bap_bil
 open Bap_ir
 open Bap_result
-open Bap_monad_types
 open Bap_biri_types
 
 module Seq = Sequence
@@ -40,7 +40,7 @@ let resolve_phi phi trace =
   | Some exp -> exp
 
 
-module Make(SM : State) = struct
+module Make(SM : Monad.State.S2) = struct
   open SM.Monad_infix
 
   type ('a,'e) state = ('a,'e) SM.t
@@ -49,13 +49,12 @@ module Make(SM : State) = struct
 
   let eval_args scope sub f : 'a u =
     let open Bap_ir in
-    Term.enum arg_t sub |> Seq.fold ~init:(SM.return ())
-      ~f:(fun m a -> m >>= fun () ->
-           match scope, Ir_arg.intent a with
-           | _, None
-           | `enter, (Some In  |Some Both)
-           | `leave, (Some Out |Some Both) -> f a
-           | _ -> SM.return ())
+    Term.enum arg_t sub |> SM.Seq.iter
+      ~f:(fun a -> match scope, Ir_arg.intent a with
+          | _, None
+          | `enter, (Some In  |Some Both)
+          | `leave, (Some Out |Some Both) -> f a
+          | _ -> SM.return ())
 
   let expect_bool w : Bap_type_error.t =
     let w = Word.bitwidth w in
@@ -103,8 +102,8 @@ module Make(SM : State) = struct
       | _ -> set_next next >>= fun () -> eval c1 t1 in
     let terms = Term.enum c1 blk in
     set_next (Seq.hd terms) >>= fun () ->
-    Seq.fold terms ~init:(SM.return Empty)
-      ~f:(fun m t -> m >>= function
+    SM.Seq.fold terms ~init:Empty
+      ~f:(fun m t -> match m with
         | Empty -> SM.return (First t)
         | First t1 -> set_next (Some t1) >>| fun () -> Ready (t1,t)
         | Ready (t1,t2) ->
@@ -224,4 +223,4 @@ module Make(SM : State) = struct
   end
 end
 
-include Make(Bap_monad.State)
+include Make(Monad.State)

@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Monads.Std
 open Bap_common
 open Bap_bil
 open Bap_visitor
@@ -113,7 +114,7 @@ module Constant_folder = struct
   class main = object
     inherit bil_mapper as super
     method! map_exp e =
-      let r = Bap_monad.State.eval (expi#eval_exp e) ctxt in
+      let r = Monad.State.eval (expi#eval_exp e) ctxt in
       match Bap_result.value r  with
       | Bap_result.Imm w -> Exp.Int w
       | _ -> super#map_exp e
@@ -286,7 +287,7 @@ module Exp = struct
     open Bap_expi
     let eval exp =
       let expi = new t and ctxt = new context in
-      Bap_monad.State.eval (expi#eval_exp exp) ctxt |> Bap_result.value
+      Monad.State.eval (expi#eval_exp exp) ctxt |> Bap_result.value
   end
 end
 
@@ -329,7 +330,7 @@ module Stmt = struct
 
   let eval stmts ctxt =
     let bili = new Bap_bili.t in
-    Bap_monad.State.exec (bili#eval stmts) ctxt
+    Monad.State.exec (bili#eval stmts) ctxt
 end
 
 let free_vars = Stmt.bil_free_vars

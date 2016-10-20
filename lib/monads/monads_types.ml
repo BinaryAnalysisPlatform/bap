@@ -152,6 +152,22 @@ end
 module Monad = struct
   module type Basic = Monad.Basic
   module type Basic2 = Monad.Basic2
+
+  module type Core = Monad.S
+  module type Core2 = Monad.S2
+
+  module type Minimal = sig
+    type 'a t
+    val return : 'a -> 'a t
+    val bind : 'a t -> ('a -> 'b t) -> 'b t
+  end
+
+  module type Minimal2 = sig
+    type ('a,'e) t
+    val return : 'a -> ('a,'e) t
+    val bind : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
+  end
+
   module type S = sig
     type 'a t
 
@@ -403,25 +419,6 @@ module State = struct
     val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
     val eval : ('a,'s) t -> 's -> 'a m
     val exec : ('a,'s) t -> 's -> 's m
-  end
-
-
-  module type Legacy = sig
-    type ('a,'s) t
-    type 'a result
-
-    include Monad.S2 with type ('a,'s) t := ('a,'s) t
-
-    val put : 's -> (unit,'s) t
-    val get : unit -> ('s,'s) t
-    val gets : ('s -> 'r) -> ('r,'s) t
-    val update : ('s -> 's) -> (unit,'s) t
-    val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-
-
-    val run : ('a,'s) t -> 's -> ('a * 's) result
-    val eval : ('a,'s) t -> 's -> 'a result
-    val exec : ('a,'s) t -> 's -> 's result
   end
 end
 

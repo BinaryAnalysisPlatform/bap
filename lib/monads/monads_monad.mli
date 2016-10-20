@@ -8,12 +8,21 @@ module type Basic2 = Types.Monad.Basic2
 
 module type S = Types.Monad.S
 module type S2 = Types.Monad.S2
+module type Core = Monad.S
+module type Core2 = Monad.S2
+module type Minimal = Types.Monad.Minimal
+module type Minimal2 = Types.Monad.Minimal2
 module type Monad = S
 module type Monad2 = S2
 module Collection : module type of Types.Collection
 
 module Make(M : Basic) : Monad with type 'a t := 'a M.t
 module Make2(M : Basic2) : Monad2 with type ('a,'s) t := ('a,'s) M.t
+
+module Core(M : Core) : Monad with type 'a t = 'a M.t
+module Core2(M : Core2) : Monad2 with type ('a,'e) t = ('a,'e) M.t
+module Minimal(M : Minimal) : Monad with type 'a t = 'a M.t
+module Minimal2(M : Minimal2) : Monad2 with type ('a,'e) t = ('a,'e) M.t
 
 module Plus : module type of Types.Plus
 module Fail : module type of Types.Fail

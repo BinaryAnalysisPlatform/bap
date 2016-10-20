@@ -55,6 +55,7 @@ Library types
                    Bap_integer,
                    Bap_integer_intf,
                    Bap_monad,
+                   Bap_monad_types,
                    Bap_result,
                    Bap_size,
                    Bap_state,

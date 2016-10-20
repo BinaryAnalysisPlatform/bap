@@ -31,4 +31,6 @@ S lib/bap_future
 S lib/bap_plugins
 S lib/bap_bundle
 S lib/bap_config
+S lib/bap_types
+S lib/monads
 S ../core_kernel.113.33.00/src

@@ -1,8 +1,8 @@
 open Core_kernel.Std
+open Monads.Std
 open Bap_types.Std
 open Regular.Std
 open Bap_ir
-open Bap_monad_types
 
 
 module Taint = Tid
@@ -128,8 +128,8 @@ module type S = sig
   end
 end
 
-module Make(SM : State) = struct
-  open SM.Monad_infix
+module Make(SM : Monad.State.S2) = struct
+  open SM.Syntax
   module Expi = Bap_expi.Make(SM)
 
   type ('a,'e) state = ('a,'e) SM.t
@@ -188,5 +188,5 @@ module Make(SM : State) = struct
 
 end
 
-include Make(Bap_monad.State)
+include Make(Monad.State)
 module Map = Taint_map

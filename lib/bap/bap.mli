@@ -1,6 +1,7 @@
 (** BAP Standard Library  *)
 
 open Core_kernel.Std
+open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
@@ -625,262 +626,60 @@ module Std : sig
     module Make(T : Base) : S with type t = T.t
   end
 
-  (** Monad is an interface, that is pervasives through many data
-      types. Such types are called monadic. Monad interface is
-      practical for both data (list, option, etc), and codata (Future,
-      Lwt, Deferred, Lazy, Continuation). The interpretation of each
-      monad interface is different for each data type. But in general
-      monad interface consists of two functions:
-        - [return : 'a -> 'a t]
-        - [bind : 'a t -> ('a -> 'b t) -> 'b t].
-
-      This is a minimal definition. Many functions can be inferred
-      based on this interface, see [Monad.S] for the full list.
-
-
-      [Option] monad, as well as [Or_error] and [Result] monads, is suitable
-      for building control flow. They can be seen as a reification of
-      exception. A chain of such monads link with the [bind] function,
-      will break as soon as monadic zero value occurs.
-
-      [Future], as well as [Lwt] or [Async], provides a safe access to
-      codata, i.e., to a value that is defined somewhere outside of
-      the main program, or to a value that is represented by an
-      effectful computation, not by inductive data. [Lwt] and [Async]
-      are also so called [IO] monads, that reifies side-effects,
-      mostly [IO]. [State] monad is another example of reification of
-      computation effect. The [State] monad is useful to build purely
-      functional computation with side-effects. The side-effect, e.g.,
-      writing to a memory cell, is reified into an OCaml value, and
-      practically becomes a first class value, i.e., it can be stored,
-      printed, etc.
-  *)
-  module Monad : sig
-    module type Basic = Monad.Basic
-    module type Basic2 = Monad.Basic2
-
-    module type Infix = Monad.Infix
-    module type Infix2 = Monad.Infix2
-
-    module type S = Monad.S
-    module type S2 = Monad.S2
-
-
-    module Make(M : Basic) : S with type 'a t := 'a M.t
-    module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
-
-    (** State monad.
-        See {!modtype:State} for more info.
-    *)
-    module State : sig
-
-      (** State monad interface.
-
-          State monad is an interface to a computation that has a
-          limited side effect. The side effect is defined by the
-          following two functions:
-          - [put s]  -- that will store value [s]
-          - [get ()] -- that will extract the value.
-
-
-          There're few functions derived on [get] and [put], like
-          [gets], [update], [modify], but the minimal algebra is
-          [put] and [set].
-
-
-          The value of type [('a,'s) t] bears a computation that
-          has an access to the state of type ['s], and evaluates
-          to a value of type ['a]. It can be said, that ['s] reifies
-          effect of computation of value ['a].
-
-      *)
-      module type S = sig
-
-        (** [('a,'s) t] computation that evaluates to ['a] and state ['s] *)
-        type ('a,'s) t
-
-        (** ['a result] is a type that represents result of computation.*)
-        type 'a result
-
-        include Monad.S2 with type ('a,'s) t := ('a,'s) t
-
-        (** [put s] creates a computation that has effect [s] and unit
-            value.  This operation effectively updates the state by
-            overriding the existent one with the new one. An imperative
-            counterpart of this operation is a statement that performs
-            side effect, e.g., {[put x]} is somewhat equivalent to
-            {[let state = ref init
-              let put x = state := x
-            ]}
-
-            except that [state] is not hidden in the language heap, but is
-            reified into a value of type ['s].
-        *)
-        val put : 's -> (unit,'s) t
-
-        (** [get ()] creates a computation that evalates to a value,
-            that holds the state. This operation extracts the state, and
-            gives an access for it. The [get ()] is somewhat equivalent
-            to the imperative operator [(!)], i.e.,
-            {[
-              let state = ref init
-              let get () = !state
-            ]} *)
-        val get : unit -> ('s,'s) t
-
-        (** [gets f] is a computation whose value is [f state]) *)
-        val gets : ('s -> 'r) -> ('r,'s) t
-        (** [update f] is [get () >>= fun s -> put (f s)]  *)
-        val update : ('s -> 's) -> (unit,'s) t
-
-        (** [modify c f] is a computation with state [f], where
-            [s] is [c >>= get ()], i.e., an effect of computation [c].*)
-        val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-
-
-        (** Running state computations.  *)
-
-        (** [run c init] runs computation [c] with initial state
-            [init]. Result contains a pair of the computation result
-            and total effect.  *)
-        val run : ('a,'s) t -> 's -> ('a * 's) result
-
-        (** [eval c init] contains a value computed by computation [c]
-            under initial state [init].   *)
-        val eval : ('a,'s) t -> 's -> 'a result
-
-        (** [exec c init] contains an final effect produced by a
-            computation [c] under initial state [init].  *)
-        val exec : ('a,'s) t -> 's -> 's result
-      end
-
-      include S with type 'a result = 'a
-    end
-
-
-    (** Monad transformers.
-
-
-        TODO: Fix the documentation, it is wrong, Inner should be
-        Outer and vice verse.
-
-        [module IO = Monad.T.Inner(Outer)] is a monad
-        [Inner] wrapped into monad [Outer]. For example, monad
-        [module OLwt = Monad.T.Option(Lwt)] will
-        allow to work with optional values in the [Lwt] IO monad,
-        e.g.,
-
-        {[
-          open OLwt
-          let require p = if p then return (Some ()) else return None
-          let authenticate user passwd =
-            read_credentials >>= fun (u,p) ->
-            require (user = u) >>= fun () ->
-            require (passwd = p)
-        ]}
-
-
-        Not all monands are transformable into anothers. For example,
-        in general it is not possible to wrap IO monad into other monad
-        (but it is possible to in the opposite direction). State monad
-        here is a special case, although it is very similiar to the IO
-        monad it still can be wrapped into some other monad. However,
-        this wrapping is more like intersection, as the returned monad
-        actually behaves like an intersection of the outer and inner
-        monad.
-    *)
-    module T : sig
-
-      (** Option Monad Transformer  *)
-      module Option : sig
-        module Make (M : S ) : sig
-          include S with type 'a t = 'a option M.t
-
-          (** [lift inner] lifts option monad into the outer monad M.t  *)
-          val lift : 'a option -> 'a t
-        end
-
-        module Make2(M : S2) : sig
-          include S2 with type ('a,'b) t = ('a option,'b) M.t
-
-          (** [lift inner] lifts option monad into the outer monad M.t  *)
-          val lift : 'a option -> ('a,'b) t
-        end
-      end
-
-      (** Or_error Monad Transformer  *)
-      module Or_error : sig
-        module Make (M : S ) : sig
-          include S with type 'a t = 'a Or_error.t M.t
-          (** [lift inner] lifts Or_error monad into the outer monad M.t  *)
-          val lift : 'a Or_error.t -> 'a t
-        end
-
-        module Make2(M : S2) : sig
-          include S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
-
-          (** [lift inner] lifts Or_error monad into the outer monad M.t  *)
-          val lift : 'a Or_error.t -> ('a,'b) t
-        end
-      end
-
-      (** Result Monad Transformer.
-
-          We do not provide [Make2] because its result would be a
-          non-existent [Monad.S3].*)
-      module Result : sig
-        module Make(M : S) : sig
-          include S2 with type ('a,'e) t = ('a,'e) Result.t M.t
-
-          (** [lift result] lifts result into the outer monad M.t  *)
-          val lift : ('a,'e) Result.t -> ('a,'e) t
-        end
-      end
-
-      (** State Monad Transformer.
-
-          [module STM = Monad.T.State.Make(M)] is not a monad [M], but a
-          state monad which build computations that are interleaved
-          with computations of monad [M]. For example, let's take
-          the [Future] as the outer monad:
-
-          [module STF = Monad.T.State.Make(Future)] will build a
-          computation that can access values that are defined in the
-          future, as a consequence, [STF.run] result will be a value that
-          would be defined in the future. The computation built with
-          [STF] monad will not try to access any future values until [run] is
-          called. Once it is called, each step of the computation will
-          first wait until the future occurs (i.e., future value is
-          defined) and then perform update of the state.
-
-          As an another example, given some [IO] monad, a computation
-          built with [monad STIO = Monad.T.State.Make(IO)] will not
-          perform any I/O until it is actually ran or evaluated. And
-          the result of the run would be [('a,'s) IO.t], that actually
-          may not perform actual IO (i.e., system calls) until it is
-          run (this, of course, depends on the implementation of IO,
-          as [Core.Async] will not perform any operations until the
-          scheduler is run, but [Lwt] will trigger the I/O and defer
-          until it is finished).
-
-          Note: We do not provide [Make2] because its result would be a
-          module of non-existent [Monad.S3] type.
-      *)
+  (**/**)
+  module Legacy : sig
+    [@@@deprecated "Definitions in this module are deprecated"]
+    module Monad : sig
+      [@@@deprecated
+        "The module is deprecated in favor of new monads library"]
+      open Core_kernel.Std
+      module type Basic = Monad.Basic
+      module type Basic2 = Monad.Basic2
+      module type Infix = Monad.Infix
+      module type Infix2 = Monad.Infix2
+      module type S = Monad.S
+      module type S2 = Monad.S2
+      module Make(M : Basic) : S with type 'a t := 'a M.t
+      module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
       module State : sig
-        module Make(M : S) : sig
-          include State.S with type 'a result = 'a M.t
-
-          (** [lift result] lifts monad M into monad [('a,'e) t]
-              Since, [T.State] is not actually a transformer, as
-              the result is an interleave of two monads, the direction
-              of lift is changed (the opposite direction doesn't make sense). *)
-          val lift : 'a M.t -> ('a,'e) t
+        module type S = sig
+          type ('a,'s) t
+          type 'a result
+          include Monad.S2 with type ('a,'s) t := ('a,'s) t
+          val put : 's -> (unit,'s) t
+          val get : unit -> ('s,'s) t
+          val gets : ('s -> 'r) -> ('r,'s) t
+          val update : ('s -> 's) -> (unit,'s) t
+          val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
+          val run : ('a,'s) t -> 's -> ('a * 's) result
+          val eval : ('a,'s) t -> 's -> 'a result
+          val exec : ('a,'s) t -> 's -> 's result
+        end
+        include S with type 'a result = 'a
+                   and type ('a,'e) t = ('a,'e) Monads.Std.Monad.State.t
+      end
+      module T : sig
+        module Option : sig
+          module Make (M : S ) : S  with type 'a t = 'a option M.t
+          module Make2(M : S2) : S2 with type ('a,'b) t = ('a option,'b) M.t
+        end
+        module Or_error : sig
+          module Make (M : S ) : S  with type 'a t = 'a Or_error.t M.t
+          module Make2(M : S2) : S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+        end
+        module Result : sig
+          module Make(M : S) : S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+        end
+        module State : sig
+          module Make(M : S) : State.S with type 'a result = 'a M.t
         end
       end
     end
   end
 
-  (** Lazy sequence  *)
+ (**/**)
+
+ (** Lazy sequence  *)
   module Seq : module type of Seq
     with type 'a t = 'a Sequence.t
   (** type abbreviation for ['a Sequence.t]  *)
@@ -1456,7 +1255,7 @@ module Std : sig
       val of_word_size : Word_size.t -> t -> t Or_error.t
 
       include Integer.S with type t = t Or_error.t
-      include Monad.Infix with type 'a t := 'a Or_error.t
+      include Legacy.Monad.Infix with type 'a t := 'a Or_error.t
     end
 
     (** Arithmetic that raises exceptions.
@@ -2521,11 +2320,10 @@ module Std : sig
       end
     end
 
-    module Make(M : Monad.State.S) : S
+    module Make(M : Monad.State.S2) : S
       with type ('a,'e) state = ('a,'e) M.t
 
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
-
   end
 
 
@@ -2589,7 +2387,7 @@ module Std : sig
       end
     end
 
-    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
@@ -3690,7 +3488,7 @@ module Std : sig
       end
     end
 
-    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
@@ -3890,7 +3688,7 @@ module Std : sig
                                           and type 'a m = 'a Or_error.t
 
     (** lifts iterators to monad [M]  *)
-    module Make_iterators( M : Monad.S )
+    module Make_iterators( M : Legacy.Monad.S )
       : Memory_iterators with type t := t
                           and type 'a m = 'a M.t
 
@@ -6717,7 +6515,7 @@ module Std : sig
       end
     end
 
-    module Make(M : Monad.State.S) : S with type ('a,'e) state = ('a,'e) M.t
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
 
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
 
@@ -7696,4 +7494,10 @@ module Std : sig
         logged.  *)
     val start : unit -> unit
   end
+
+  (**/**)
+  module Monad : module type of Legacy.Monad
+  [@@deprecated "use the `monads' library instead of this module"]
+  (**/**)
+
 end

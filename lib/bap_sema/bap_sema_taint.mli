@@ -1,8 +1,8 @@
 open Bap_types.Std
+open Monads.Std
 open Regular.Std
 open Bap_ir
 open Bap_expi_types
-open Bap_monad_types
 
 type t = tid
 
@@ -35,9 +35,8 @@ module type S = sig
   end
 end
 
-module Make(M : State) : S with type ('a,'e) state = ('a,'e) M.t
-include S with type ('a,'e) state = ('a,'e) Bap_monad.State.t
-
+module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
+include S with type ('a,'e) state = ('a,'e) Monad.State.t
 
 val pp_set : Format.formatter -> set -> unit
 

@@ -1,13 +1,12 @@
 open Core_kernel.Std
+open Monads.Std
 open Bap_common
 open Bap_bil
 open Bap_result
-open Bap_monad_types
 open Bap_bili_types
 
 module Sz = Bap_size
 module TE = Bap_type_error
-module Monad = Bap_monad
 
 class context = object
   inherit Bap_expi.context
@@ -21,15 +20,13 @@ let bool_t = Type.Imm 1
 
 module type S = Bili.S
 
-module Make(SM : Monad.State.S) = struct
+module Make(SM : Monad.State.S2) = struct
   open SM
   type ('a,'e) state = ('a,'e) SM.t
   type 'a u = (unit,'a) state
   type 'a r = (Bap_result.result,'a) state
 
   module Expi = Bap_expi.Make(SM)
-
-
 
   class ['a] t = object(self)
     constraint 'a = #context
@@ -42,8 +39,7 @@ module Make(SM : Monad.State.S) = struct
       get () >>= fun s -> put @@ s#with_pc addr
 
     method eval (ss : stmt list) : 'a u =
-      List.fold ss ~init:(return ()) ~f:(fun x s ->
-          x >>= fun () -> self#eval_stmt s)
+      List.iter ss ~f:self#eval_stmt
 
     method eval_stmt (s : stmt) : 'a u = match s with
       | Stmt.Move (v,u) -> self#eval_move v u
