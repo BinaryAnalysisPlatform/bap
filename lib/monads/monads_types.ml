@@ -391,9 +391,6 @@ module Reader = struct
   end
 end
 
-
-
-
 module State = struct
 
   module type S = sig
@@ -406,7 +403,7 @@ module State = struct
     val update : (env -> env) -> unit t
     val modify : 'a t -> (env -> env) -> 'a t
     val eval : 'a t -> env -> 'a m
-    val exec : 'a t -> env-> env m
+    val exec : 'a t -> env -> env m
   end
 
   module type S2 = sig
