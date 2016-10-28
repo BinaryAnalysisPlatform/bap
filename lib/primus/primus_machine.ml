@@ -3,9 +3,32 @@ open Bap.Std
 open Monads.Std
 open Primus_types
 
+module Error : sig
+  type t = private error
+  val register : (error -> string) -> error -> t
+  val to_string : t -> string
+end= struct
+  type t = error = ..
+  let str = ref (fun _ -> None)
+
+  let to_string err = match !str err with
+    | None -> assert false
+    | Some msg -> msg
+
+  let register to_string err =
+    str := (fun e -> match !str e with
+        | None -> Some (to_string e)
+        | msg -> msg);
+    err
+end
+
+
+type ('a,'e) result = ('a,'e) Monad.Result.result =
+  | Ok of 'a
+  | Error of 'e
 
 module Multi = struct
-  module Make(M : Monad.S) = struct
+  module Make(M : Monad.S) : Machine = struct
     module SM = struct
       include Monad.State.Multi.T2(M)
       include Monad.State.Multi.Make2(M)
@@ -15,36 +38,52 @@ module Multi = struct
       local : Univ_map.t;
       global : Univ_map.t;
     }
-    type ('a,'e) t = ('a,'e state) SM.t
-    type ('a,'e) e = ('a,'e) SM.e
+    type _ error = Error.t
+    type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
+    type ('a,'e) e = (('a,Error.t) result,'e) SM.e
     type 'a m = 'a M.t
     module Basic = struct
-      type ('a,'e) t = ('a,'e state) SM.t
-      let return = SM.return
-      let bind = SM.bind
-      let map = `Custom SM.map
+      open SM.Syntax
+      type nonrec ('a,'e) t = ('a,'e) t
+      let return x = SM.return (Ok x)
+
+      let bind (m : ('a,'e) t) (f : 'a -> ('b,'e) t) : ('b,'e) t = m >>= function
+        | Ok r -> f r
+        | Error err -> SM.return (Error err)
+      let map = `Define_using_bind
     end
+
+    module Fail = struct
+      let fail err = SM.return (Error err)
+      let catch m f = SM.bind m (function
+          | Error err -> f err
+          | ok -> SM.return ok)
+    end
+
+    include Fail
     include Monad.Make2(Basic)
 
     type id = Monad.State.Multi.id
     module Id = Monad.State.Multi.Id
 
+    let lifts m = SM.map m ~f:(fun x -> Ok x)
+
     let with_global_context f =
-      SM.current ()       >>= fun id ->
-      SM.switch SM.global >>= fun () ->
+      lifts (SM.current ())       >>= fun id ->
+      lifts (SM.switch SM.global) >>= fun () ->
       f ()                >>= fun r  ->
-      SM.switch id        >>| fun () ->
+      lifts (SM.switch id)        >>| fun () ->
       r
 
-    let get_local () = SM.gets @@ fun s -> s.local
+    let get_local () = lifts (SM.gets @@ fun s -> s.local)
     let get_global () = with_global_context @@ fun () ->
-      SM.gets @@ fun s -> s.global
+      SM.gets @@ fun s -> Ok s.global
 
-    let set_local local = SM.update @@ fun s ->
+    let set_local local = lifts @@ SM.update @@ fun s ->
       {s with local}
 
     let set_global global = with_global_context @@ fun () ->
-      SM.update @@ fun s -> {s with global}
+      lifts (SM.update @@ fun s -> {s with global})
 
     module State(S : sig
         val get : unit -> (Univ_map.t,'e) t
@@ -72,7 +111,7 @@ module Multi = struct
         S.get () >>= fun d ->
         match Dict.find d data.key with
         | Some r -> return r
-        | None -> SM.get () >>= fun {ctxt} ->
+        | None -> lifts (SM.get ()) >>= fun {ctxt} ->
           return (data.init (ctxt :> Context.t))
 
       let put data x =
@@ -94,13 +133,13 @@ module Multi = struct
         let set = set_global
       end)
 
-    let put ctxt = SM.update @@ fun s -> {s with ctxt}
-    let get () = SM.gets @@ fun s -> s.ctxt
+    let put ctxt = lifts @@ SM.update @@ fun s -> {s with ctxt}
+    let get () = lifts (SM.gets @@ fun s -> s.ctxt)
     let gets f = get () >>| f
     let update f = get () >>= fun s -> put (f s)
-    let modify m f = m >>= fun x -> update f >>= fun () -> SM.return x
+    let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
-    let run m ctxt =
+    let run : ('a,'e) t -> ('a,'e) e = fun m ctxt ->
       M.bind (SM.run m {
           global = Univ_map.empty;
           local = Univ_map.empty;
@@ -108,46 +147,35 @@ module Multi = struct
 
     let eval m s = M.map (run m s) ~f:fst
     let exec m s = M.map (run m s) ~f:snd
-    let lift = SM.lift
-    let status = SM.status
-    let forks = SM.forks
-    let kill = SM.kill
-    let fork = SM.fork
-    let ancestor = SM.ancestor
-    let parent = SM.parent
-    let switch = SM.switch
+    let lift x = lifts (SM.lift x)
+    let status x = lifts (SM.status x)
+    let forks () = lifts (SM.forks ())
+    let kill id = lifts (SM.kill id)
+    let fork () = lifts (SM.fork ())
+    let ancestor x  = lifts (SM.ancestor x)
+    let parent () = lifts (SM.parent ())
+    let switch id = lifts (SM.switch id)
     let global = SM.global
-    let current = SM.current
+    let current () = lifts (SM.current ())
+
   end
 end
 
 
-module Error : sig
-  type t = private error
-  val register : (error -> string) -> error -> t
-  val to_string : t -> string
-end= struct
-  type t = error = ..
-  let str = ref (fun _ -> None)
 
-  let to_string err = match !str err with
-    | None -> assert false
-    | Some msg -> msg
+(* module Make(M : Monad.S) : Machine = struct *)
+(*   module ErrorM = struct *)
+(*     type 'a m = 'a M.t *)
+(*     type 'a t = ('a,Error.t) Monad.Result.result m *)
+(*     type 'a e = ('a,Error.t) Monad.Result.result m *)
+(*     include Monad.Result.Make(Error)(M) *)
+(*   end *)
 
-  let register to_string err =
-    str := (fun e -> match !str e with
-        | None -> Some (to_string e)
-        | msg -> msg);
-    err
-end
+(*   include Multi.Make(ErrorM) *)
 
-module Make(M : Monad.S) = struct
-  module ErrorM : Monad.S = struct
-    type 'a m = 'a M.t
-    type 'a t = ('a,Error.t) Monad.Result.result m
-    type 'a e = ('a,Error.t) Monad.Result.result m
-    include Monad.Result.Make(Error)(M)
-  end
+(*   type 'a error = Error.t *)
 
-  include Multi.Make(ErrorM)
-end
+(*   let fail err = lift (ErrorM.fail err) *)
+
+(*   let catch m f = (ErrorM.run m) *)
+(* end *)

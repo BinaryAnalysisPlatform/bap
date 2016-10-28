@@ -687,8 +687,6 @@ module Std : sig
         val gets : (env -> 'r) -> 'r t
         val update : (env -> env) -> unit t
         val modify : 'a t -> (env -> env) -> 'a t
-        val eval : 'a t -> env -> 'a m
-        val exec : 'a t -> env -> env m
       end
 
       module type S2 = sig
@@ -699,8 +697,6 @@ module Std : sig
         val gets : ('s -> 'r) -> ('r,'s) t
         val update : ('s -> 's) -> (unit,'s) t
         val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-        val eval : ('a,'s) t -> 's -> 'a m
-        val exec : ('a,'s) t -> 's -> 's m
       end
 
       module Multi : sig
@@ -788,6 +784,10 @@ module Std : sig
       include S2 with type ('a,'e) t = (('a,'e) storage, 'e) state
                   and type 'a m = 'a
                   and type ('a,'e) e = 'e -> ('a * 'e)
+
+      val eval : ('a,'e) t -> 'e -> 'a
+      val exec : ('a,'e) t -> 'e -> 'e
+
 
       module T1(T : T)(M : Monad) : sig
         type env = T.t

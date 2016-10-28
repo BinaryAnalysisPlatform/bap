@@ -1149,6 +1149,8 @@ module State = struct
 
   include T2(Ident)
   include Make2(Ident)
+  let eval m s = fst (run m s)
+  let exec m s = snd (run m s)
 end
 
 module Fun = struct

@@ -264,6 +264,8 @@ module State : sig
   include S2 with type ('a,'e) t = (('a,'e) storage, 'e) state
               and type 'a m = 'a
               and type ('a,'e) e = 'e -> ('a * 'e)
+  val eval : ('a,'e) t -> 'e -> 'a
+  val exec : ('a,'e) t -> 'e -> 'e
 
   module T1(T : T)(M : Monad) : sig
     type env = T.t

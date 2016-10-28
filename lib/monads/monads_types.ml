@@ -402,8 +402,6 @@ module State = struct
     val gets : (env -> 'r) -> 'r t
     val update : (env -> env) -> unit t
     val modify : 'a t -> (env -> env) -> 'a t
-    val eval : 'a t -> env -> 'a m
-    val exec : 'a t -> env -> env m
   end
 
   module type S2 = sig
@@ -414,8 +412,6 @@ module State = struct
     val gets : ('s -> 'r) -> ('r,'s) t
     val update : ('s -> 's) -> (unit,'s) t
     val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-    val eval : ('a,'s) t -> 's -> 'a m
-    val exec : ('a,'s) t -> 's -> 's m
   end
 end
 
