@@ -1,0 +1,18 @@
+Flag primus
+  Description: Microexecution framework
+  Default: false
+
+Library primus
+  Build$: flag(everything) || flag(c)
+  XMETADescription: microexecution framework
+  Path: lib/primus
+  FindlibName: primus
+  CompiledObject: best
+  BuildDepends: bap
+  Modules: Primus
+  InternalModules: Primus_context,
+                   Primus_infeasible,
+                   Primus_machine,
+                   Primus_observer,
+                   Primus_scheduler,
+                   Primus_storage

@@ -288,6 +288,42 @@ module State : sig
     with type ('a,'e) t := ('a,'e) T2(M).t
      and type 'a m     := 'a     T2(M).m
      and type ('a,'e) e := ('a,'e) T2(M).e
+
+  module Multi : sig
+    include module type of Types.Multi
+    type 'a contexts
+
+    type id
+    module Id : Identifiable with type t = id
+
+    module T1(T : T)(M : Monad) : sig
+      type env = T.t
+      type 'a m = 'a M.t
+      type 'a t = (('a,env contexts) storage m, env contexts) state
+      type 'a e = env -> ('a * env) m
+    end
+
+    module T2(M : Monad) : sig
+      type 'a m = 'a M.t
+      type ('a,'e) t = (('a,'e contexts) storage m, 'e contexts) state
+      type ('a,'e) e = 'e -> ('a * 'e) m
+    end
+
+    module Make(T : T)(M : Monad): S
+      with type 'a t := 'a T1(T)(M).t
+       and type 'a m := 'a T1(T)(M).m
+       and type 'a e := 'a T1(T)(M).e
+       and type env := T.t
+       and type id := id
+       and module Id := Id
+
+    module Make2(M : Monad) : S2
+      with type ('a,'e) t := ('a,'e) T2(M).t
+       and type 'a m     := 'a     T2(M).m
+       and type ('a,'e) e := ('a,'e) T2(M).e
+       and type id := id
+       and module Id := Id
+  end
 end
 
 module Fun : sig

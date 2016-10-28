@@ -703,6 +703,88 @@ module Std : sig
         val exec : ('a,'s) t -> 's -> 's m
       end
 
+      module Multi : sig
+        type status = [`Current | `Live | `Dead]
+
+        type 'a contexts
+
+        type id
+        module Id : Identifiable with type t = id
+
+        module type S = sig
+          include Trans.S
+          type id
+
+          module Id : Identifiable.S with type t = id
+
+          val global : id
+
+          val fork : unit -> unit t
+          val switch : id -> unit t
+          val parent : unit -> id t
+          val ancestor : id list -> id t
+          val current : unit -> id t
+          val kill : id -> unit t
+          val forks : unit -> id Sequence.t t
+          val status : id -> status t
+
+          include S with type 'a t := 'a t
+                     and type 'a e := 'a e
+                     and type 'a m := 'a m
+        end
+
+        module type S2 = sig
+          include Trans.S1
+          type id
+
+          module Id : Identifiable.S with type t = id
+
+
+          val global : id
+
+          val fork : unit -> (unit,'e) t
+          val switch : id -> (unit,'e) t
+          val parent : unit -> (id,'e) t
+          val ancestor : id list -> (id,'e) t
+          val current : unit -> (id,'e) t
+          val kill : id -> (unit,'e) t
+          val forks : unit -> (id Sequence.t,'e) t
+          val status : id -> (status,'e) t
+
+          include S2 with type ('a,'e) t := ('a,'e) t
+                      and type ('a,'e) e := ('a,'e) e
+                      and type 'a m := 'a m
+        end
+
+        module T1(T : T)(M : Monad) : sig
+          type env = T.t
+          type 'a m = 'a M.t
+          type 'a t = (('a,env contexts) storage m, env contexts) state
+          type 'a e = env -> ('a * env) m
+        end
+
+        module T2(M : Monad) : sig
+          type 'a m = 'a M.t
+          type ('a,'e) t = (('a,'e contexts) storage m, 'e contexts) state
+          type ('a,'e) e = 'e -> ('a * 'e) m
+        end
+
+        module Make(T : T)(M : Monad): S
+          with type 'a t := 'a T1(T)(M).t
+           and type 'a m := 'a T1(T)(M).m
+           and type 'a e := 'a T1(T)(M).e
+           and type env := T.t
+           and type id := id
+           and module Id := Id
+
+        module Make2(M : Monad) : S2
+          with type ('a,'e) t := ('a,'e) T2(M).t
+           and type 'a m     := 'a     T2(M).m
+           and type ('a,'e) e := ('a,'e) T2(M).e
+           and type id := id
+           and module Id := Id
+      end
+
       include S2 with type ('a,'e) t = (('a,'e) storage, 'e) state
                   and type 'a m = 'a
                   and type ('a,'e) e = 'e -> ('a * 'e)

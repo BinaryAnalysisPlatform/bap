@@ -419,6 +419,58 @@ module State = struct
   end
 end
 
+module Multi = struct
+
+  type status = [`Current | `Live | `Dead]
+
+
+  module type S = sig
+    include Trans.S
+    type id
+
+    module Id : Identifiable.S with type t = id
+
+    val global : id
+
+    val fork : unit -> unit t
+    val switch : id -> unit t
+    val parent : unit -> id t
+    val ancestor : id list -> id t
+    val current : unit -> id t
+    val kill : id -> unit t
+    val forks : unit -> id Sequence.t t
+    val status : id -> status t
+
+    include State.S with type 'a t := 'a t
+               and type 'a e := 'a e
+               and type 'a m := 'a m
+  end
+
+  module type S2 = sig
+    include Trans.S1
+    type id
+
+    module Id : Identifiable.S with type t = id
+
+
+    val global : id
+
+    val fork : unit -> (unit,'e) t
+    val switch : id -> (unit,'e) t
+    val parent : unit -> (id,'e) t
+    val ancestor : id list -> (id,'e) t
+    val current : unit -> (id,'e) t
+    val kill : id -> (unit,'e) t
+    val forks : unit -> (id Sequence.t,'e) t
+    val status : id -> (status,'e) t
+
+    include State.S2 with type ('a,'e) t := ('a,'e) t
+                and type ('a,'e) e := ('a,'e) e
+                and type 'a m := 'a m
+  end
+end
+
+
 
 module Fun = struct
   module type S = sig
