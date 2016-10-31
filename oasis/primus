@@ -11,7 +11,9 @@ Library primus
   BuildDepends: bap
   Modules: Primus
   InternalModules: Primus_context,
+                   Primus_error,
                    Primus_infeasible,
+                   Primus_interpreter,
                    Primus_machine,
                    Primus_observer,
                    Primus_scheduler,

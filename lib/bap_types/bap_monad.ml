@@ -61,6 +61,8 @@ module T = struct
       type 'a result = 'a M.t
       include Monad.State.T2(M)
       include Monad.State.Make2(M)
+      let eval m s = M.(run m s >>| fst)
+      let exec m s = M.(run m s >>| snd)
     end
   end
 end
