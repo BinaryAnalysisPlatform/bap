@@ -14,6 +14,11 @@ module type State = sig
   val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
 end
 
+(* TODO: splt Machine into a Deterministic part, and a *)
+(* non-deterministic.  *)
+module type Deterministic = sig
+end
+
 module type Machine = sig
   type ('a,'e) t
   type 'a m

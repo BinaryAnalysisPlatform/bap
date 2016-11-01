@@ -2,6 +2,9 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 
+open Primus_types
+module Rng = Primus_random
+
 module Scheduler = struct
   module type S = sig
     type  t
@@ -111,29 +114,11 @@ module Explorer = struct
   end
 end
 
-module type Rng = sig
-  type t
-  type dom
-  val next  : t -> t
-  val value : t -> dom
-end
-
-module LCG = struct
-  type t = int
-  type dom = int
-  let a = 1103515245
-  let c = 12345
-  let m = 31
-  let next x = (a * x + c) mod 31
-  let value = ident
-end
-
-
 (* pick the next thread on a random basis *)
 module Random = struct
   module Make
       (Dom : Int_intf.S)
-      (Rng : Rng with type dom = Dom.t)
+      (Rng : Rng.Rng with type dom = Dom.t)
       (SM : Monad.State.Multi.S2) : Scheduler.S = struct
     open SM.Syntax
 
@@ -166,5 +151,5 @@ module Random = struct
 
   end
 
-  module Fast = Make(Int)(LCG)
+  module Fast = Make(Int)(Rng.LCG)
 end

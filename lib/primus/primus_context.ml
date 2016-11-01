@@ -28,6 +28,7 @@ module Level = struct
     | Phi of phi level0
     | Def of def level0
     | Jmp of jmp level0
+  [@@deriving variants]
 
   type name =
     [`top | `sub | `arg | `blk | `phi | `def | `jmp]
@@ -57,36 +58,34 @@ module Level = struct
           (string_of_sexp (sexp_of_name dst))
       | exn -> None)
 
+  let accept level args = Ok (level args)
+  let reject level dst = Error (Broken_invariant {level; dst})
 
-  (* let next level cls t  = *)
-  (*   Term.switch cls t *)
-  (*     ~program:(fun p -> match level with *)
-  (*         | Top _ -> Ok (Top {me=p; up=Nil}) *)
-  (*         | _ -> None) *)
-  (*     ~sub:(fun sub -> match level with *)
-  (*         | Top top | Sub {up=top} -> *)
-  (*           Some {< level = Sub {me=sub; up=top} >} *)
-  (*         | _ -> None) *)
-  (*     ~arg:(fun arg -> match level with *)
-  (*         | Sub sub | Blk {up=sub} -> *)
-  (*           Some {< level = Arg {me=arg; up=sub} >} *)
-  (*         | _ -> None) *)
-  (*     ~blk:(fun blk -> match level with *)
-  (*         | Blk {up=sub} | Sub sub | Arg {up=sub} -> *)
-  (*           Some {< level = Blk {me=blk; up=sub} >} *)
-  (*         | _ -> None) *)
-  (*     ~phi:(fun phi -> match level with *)
-  (*         | Blk blk | Phi {up=blk} -> *)
-  (*           Some {< level = Phi {me=phi; up=blk} >} *)
-  (*         | _ -> None) *)
-  (*     ~def:(fun def -> match level with *)
-  (*         | Blk blk | Phi {up=blk} | Def {up=blk}-> *)
-  (*           Some {< level = Def {me=def; up=blk} >} *)
-  (*         | _ -> None) *)
-  (*     ~jmp:(fun jmp -> match level with *)
-  (*         | Blk blk | Phi {up=blk} | Def {up=blk} | Jmp {up=blk} -> *)
-  (*           Some {< level = Jmp {me=jmp; up=blk} >} *)
-  (*         | _ -> None) *)
+  let next level cls t  =
+    let reject = reject level in
+    Term.switch cls t
+      ~program:(fun p -> match level with
+          | Top _ -> accept top {me=p; up=Nil}
+          | _ -> reject `top)
+      ~sub:(fun me -> match level with
+          | Top up | Sub {up} -> accept sub {me; up}
+          | _ -> reject `sub)
+      ~arg:(fun me -> match level with
+          | Sub up | Blk {up} -> accept arg {me;up}
+          | _ -> reject `arg)
+      ~blk:(fun me -> match level with
+          | Blk {up} | Sub up | Arg {up} -> accept blk {me;up}
+          | _ -> reject `blk)
+      ~phi:(fun me -> match level with
+          | Blk up | Phi {up} -> accept phi {me;up}
+          | _ -> reject `phi)
+      ~def:(fun me -> match level with
+          | Blk up | Phi {up} | Def {up} -> accept def {me;up}
+          | _ -> reject `def)
+      ~jmp:(fun me -> match level with
+          | Blk up | Phi {up} | Def {up} | Jmp {up} ->
+            accept jmp {me;up}
+          | _ -> reject `jmp)
 
 end
 
@@ -98,6 +97,7 @@ class t ?main proj =
     inherit Biri.context ?main prog
     val level = Top {me=prog; up=Nil}
     method project = proj
+    method with_level level = {< level = level >}
     method curr =
       let (!) {me} = Term.tid me in
       match level with
