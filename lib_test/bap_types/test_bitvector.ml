@@ -49,10 +49,13 @@ let binary op ~width ~expect x y ctxt =
   let (!$) = Word.of_int ~width in
   assert_equal ~ctxt
     ~printer:Word.to_string
+    ~cmp:Word.equal
     !$expect (op !$x !$y)
 
 let sub = binary Word.Int_exn.sub
 let lshift = binary Word.Int_exn.lshift
+let rshift = binary Word.Int_exn.rshift
+let arshift = binary Word.Int_exn.arshift
 
 let is yes ctxt = assert_bool "doesn't hold" yes
 
@@ -216,6 +219,9 @@ let suite () =
     "lognot:13" >:: lognot 0 ~-1 ~width:4;
     "sub" >:: sub ~width:8 ~expect:0xFF 0 1;
     "lshift" >:: lshift ~width:8 ~expect:0x0 0x1 0xA ;
+    "rshift" >:: rshift ~width:8 ~expect:0x3f 0xFF 0x2 ;
+    "arshift" >:: arshift ~width:8 ~expect:0xff 0xFF 0x2 ;
+
     (* a small cheatsheet for a bit numbering *)
     (** D    A    D    5    *)
     (** FEDC_BA98_7654_3210 *)
