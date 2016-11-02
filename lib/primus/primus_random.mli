@@ -1,36 +1,49 @@
 open Core_kernel.Std
 
-module type Generator = sig
-  type t
-  type dom
-  val next : t -> t
-  val value : t -> dom
-end
+module Iterator = Primus_iterator
 
 module type S = sig
-  include Generator
-  val min : dom
-  val max : dom
-  val next  : t -> t
-  val value : t -> dom
+  include Iterator.Infinite.S
+  val t : (t,dom) Iterator.t
 end
 
 module LCG : sig
-  include S with type dom = int
-  val create : dom -> t
+  module type S = sig
+    include S with type dom = int
+    val create : dom -> t
+  end
+  include S
 end
 
-module Unit(U : S with type dom = int) : sig
-  include S with type dom = float
-  val create : U.t -> t
+
+module Unit : sig
+  module type S = sig
+    include S with type dom = float
+    type u
+    val create : u -> t
+  end
+  module Make (U : Iterator.Infinite.S with type dom = int)
+    : S with type u = U.t
+  include S with type u = LCG.t
 end
 
+module Geometric : sig
+  module type S = sig
+    include S
+    type u
+    val create : p:float -> u -> t
+    val param : t -> float
+  end
 
-module Geometric (Dom : sig
+  module type Dom = sig
     include Floatable
     val max_value : t
-  end)(U : S with type dom = int) : sig
-  include S with type dom = Dom.t
-  val create : p:float -> U.t -> t
-  val param : t -> float
+  end
+
+  module Make(D : Dom)(U : Iterator.Infinite.S with type dom = int) :
+    S with type dom = D.t and type u = U.t
+
+  module Float : S with type dom = float and type u = LCG.t
+  module Int   : S with type dom = int   and type u = LCG.t
+
 end

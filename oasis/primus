@@ -12,8 +12,10 @@ Library primus
   Modules: Primus
   InternalModules: Primus_context,
                    Primus_error,
+                   Primus_generator,
                    Primus_infeasible,
                    Primus_interpreter,
+                   Primus_iterator,
                    Primus_machine,
                    Primus_observer,
                    Primus_random,
