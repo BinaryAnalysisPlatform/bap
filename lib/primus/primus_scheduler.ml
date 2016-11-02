@@ -118,7 +118,7 @@ end
 module Random = struct
   module Make
       (Dom : Int_intf.S)
-      (Rng : Rng.Rng with type dom = Dom.t)
+      (Rng : Rng.S with type dom = Dom.t)
       (SM : Monad.State.Multi.S2) : Scheduler.S = struct
     open SM.Syntax
 

@@ -72,14 +72,47 @@ module Byte = struct
           | Observed n -> None
           | s -> Some (value s,s))
   end
-
-  module Uniform = struct
-    let domain : int array = Seq.to_array Det.enum;
-
-    module With_memory = struct
-      type state = int
+end
 
 
-    end
+let uniform_coverage ~total ~trials =
+  ~-.(expm1 (float trials *. log1p( ~-.(1. /. float total))))
+
+module Uniform = struct
+  module Memoryless(Rng : Rng.S with type dom = int) = struct
+    type t = {
+      rng : Rng.t;
+      dom : int array;
+      trials : int;
+    }
+
+    let create dom rng = {rng; dom; trials = 0}
+
+    let observe t = {t with rng = Rng.next t.rng; trials = t.trials + 1}
+
+    let value {dom; rng} = dom.(Rng.value rng mod Array.length dom)
+
+    let coverage {dom; trials} =
+      uniform_coverage ~total:(Array.length dom) ~trials
+
   end
+
+
+
+  module With_memory = struct
+    type state = One of int | Cons of int * state
+
+    let of_array xs =
+      let rec loop i acc =
+        if i < 0 then acc
+        else loop (i-1) (Cons (xs.(i),acc)) in
+      match Array.length xs with
+      | 0 -> invalid_arg "domain must be non empty"
+      | 1 -> One xs.(0)
+      | n -> loop (n-1) (One xs.(n-1))
+
+
+
+  end
+
 end

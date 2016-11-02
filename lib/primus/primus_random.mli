@@ -7,7 +7,7 @@ module type Generator = sig
   val value : t -> dom
 end
 
-module type Rng = sig
+module type S = sig
   include Generator
   val min : dom
   val max : dom
@@ -16,12 +16,12 @@ module type Rng = sig
 end
 
 module LCG : sig
-  include Rng with type dom = int
+  include S with type dom = int
   val create : dom -> t
 end
 
-module Unit(U : Rng with type dom = int) : sig
-  include Rng with type dom = float
+module Unit(U : S with type dom = int) : sig
+  include S with type dom = float
   val create : U.t -> t
 end
 
@@ -29,8 +29,8 @@ end
 module Geometric (Dom : sig
     include Floatable
     val max_value : t
-  end)(U : Rng with type dom = int) : sig
-  include Rng with type dom = Dom.t
+  end)(U : S with type dom = int) : sig
+  include S with type dom = Dom.t
   val create : p:float -> U.t -> t
   val param : t -> float
 end

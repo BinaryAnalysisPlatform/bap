@@ -16,6 +16,8 @@ module type Rng = sig
   val value : t -> dom
 end
 
+module type S = Rng
+
 
 module LCG : sig
   include Rng with type dom = int
