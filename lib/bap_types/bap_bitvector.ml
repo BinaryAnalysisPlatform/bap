@@ -275,7 +275,9 @@ module Safe = struct
     let shift dir (x : m) (y : m) : m =
       x >>= fun x -> y >>= fun y ->
       if unop Bignum.fits_int y
-      then Ok (with_z x ((dir (z x) (Bignum.to_int (z y)))))
+      then
+        let shift arg = dir arg (Bignum.to_int (z y)) in
+        Ok (T.lift1 shift x)
       else Or_error.errorf
           "cannot perform shift, because rhs doesn't fit int: %s" @@
         to_string y
