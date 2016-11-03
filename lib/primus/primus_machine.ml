@@ -14,12 +14,24 @@ module Make(M : Monad.S) : Machine = struct
     include Monad.State.Multi.T2(M)
     include Monad.State.Multi.Make2(M)
   end
-  type 'e state = {
+
+  type ('m,'a) observers = Observers of ('a -> 'm) list
+
+  module Observers = Univ_map.Make1(struct
+      type ('a,'m) t = ('a,'m) observers
+      let sexp_of_t _ _ = sexp_of_opaque
+    end)
+
+
+
+  type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
+  and 'e state = {
     ctxt : 'e;
     local : Univ_map.t;
     global : Univ_map.t;
+    observers : (unit,'e) t Observers.t
   }
-  type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
+
   type ('a,'e) e = (('a,Error.t) result,'e) SM.e
   type 'a m = 'a M.t
   module Basic = struct
@@ -49,7 +61,7 @@ module Make(M : Monad.S) : Machine = struct
 
   let lifts m = SM.map m ~f:(fun x -> Ok x)
 
-  let with_global_context f =
+  let with_global_context (f : (unit -> ('a,'b) t)) =
     lifts (SM.current ())       >>= fun id ->
     lifts (SM.switch SM.global) >>= fun () ->
     f ()                >>= fun r  ->
@@ -65,6 +77,39 @@ module Make(M : Monad.S) : Machine = struct
 
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
+
+  (* we can actually factor out the type 'a Observation.t of the monad *)
+  module Observation = struct
+    type ('a,'e) m = ('a,'e) t
+
+    let provide ?inspect ~name =
+      let k = Univ_map.Key.create ~name sexp_of_opaque in
+      k,k
+
+    let observers () = lifts (SM.gets @@ fun s -> s.observers)
+
+    let set_observers observers = with_global_context @@ fun () ->
+      lifts (SM.update @@ fun s -> {s with observers})
+
+    let make (key : 'a Univ_map.Key.t) (obs : 'a) =
+      with_global_context @@ fun () ->
+      observers () >>= fun observers ->
+      match Observers.find observers key with
+      | None -> lifts (SM.return ())
+      | Some (Observers (os : ('a -> (unit,'e) t) list)) ->
+        List.iter os ~f:(fun observe -> observe obs)
+
+    let observe key observer =
+      with_global_context @@ fun () ->
+      observers () >>= fun observers ->
+      set_observers (Observers.update observers key ~f:(function
+          | None -> Observers [observer]
+          | Some (Observers observers) ->
+            Observers (observer::observers)))
+
+    type 'a u = 'a Univ_map.Key.t
+    type 'a t = 'a u
+  end
 
   module State(S : sig
       val get : unit -> (Univ_map.t,'e) t
@@ -124,6 +169,7 @@ module Make(M : Monad.S) : Machine = struct
     M.bind (SM.run m {
         global = Univ_map.empty;
         local = Univ_map.empty;
+        observers = Observers.empty;
         ctxt}) @@ fun (x,{ctxt}) -> M.return (x,ctxt)
 
   let eval m s = M.map (run m s) ~f:fst
@@ -138,4 +184,5 @@ module Make(M : Monad.S) : Machine = struct
   let switch id = lifts (SM.switch id)
   let global = SM.global
   let current () = lifts (SM.current ())
+
 end

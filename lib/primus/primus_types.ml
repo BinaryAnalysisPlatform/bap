@@ -14,6 +14,18 @@ module type State = sig
   val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
 end
 
+module type Observation = sig
+  type ('a,'e) m
+  type 'a t
+  type 'a u
+
+  val provide : ?inspect:('a -> Sexp.t) -> name:string -> 'a t * 'a u
+
+  val observe : 'a t -> ('a -> (unit,'e) m) -> (unit,'e) m
+
+  val make : 'a u -> 'a -> (unit,'e) m
+end
+
 (* TODO: splt Machine into a Deterministic part, and a *)
 (* non-deterministic.  *)
 module type Deterministic = sig
@@ -23,6 +35,7 @@ module type Machine = sig
   type ('a,'e) t
   type 'a m
 
+  module Observation : Observation with type ('a,'e) m := ('a,'e) t
   module Local  : State with type ('a,'e) m := ('a,'e) t
   module Global : State with type ('a,'e) m := ('a,'e) t
   include Monad.Fail.S2 with type ('a,'e) t := ('a,'e) t

@@ -1,14 +1,22 @@
 open Core_kernel.Std
 open Bap.Std
 
-module Context = Primus_context
-module Random = Primus_random
-module Iterator = Primus_iterator
+open Primus_types
 
+module Context = Primus_context
+module Storage = Primus_storage
+
+type cell = Storage.cell = Addr of addr | Var of var
+
+
+
+
+module type Observer = sig
+  type ('a,'e) m constraint 'e = #Context.t
+end
 
 module type S = sig
   type ('a,'e) m constraint 'e = #Context.t
-  type cell
   val step : ('p,'t) cls -> 't term -> (unit,'e) m
 
   (* each call to observe creates a new value.
@@ -38,4 +46,48 @@ module type S = sig
       observer.
   *)
   val observed : cell -> (bool,'e) m
+end
+
+module type T = functor (M : Machine) -> S
+
+type t = (module T)
+
+module Null(Machine : Machine) : S = struct
+  open Machine.Syntax
+  type ('a,'e) m = ('a,'e) Machine.t constraint 'e = #Context.t
+  let zero = Word.zero 8
+
+  type state = {
+    addrs : Addr.Set.t;
+    vars  : Var.Set.t;
+  }
+
+  let empty = {
+    addrs = Addr.Set.empty;
+    vars = Var.Set.empty;
+  }
+
+  let state =
+    Machine.Local.create ~name:"null-observer" (fun _ -> empty)
+
+  let update cell t = match cell with
+    | Addr a -> {t with addrs = Set.add t.addrs a }
+    | Var  v -> {t with vars = Set.add t.vars v  }
+
+  let is_observed cell t = match cell with
+    | Addr a -> Set.mem t.addrs a
+    | Var  v -> Set.mem t.vars v
+
+  let coverage cell t =
+    if is_observed cell t then 1. /. 256. else 0.
+
+
+  let step cls t = Machine.return ()
+  let observe cell =
+    Machine.Local.update state (update cell) >>= fun () ->
+    Machine.return zero
+  let observed _ = Machine.return false
+  let coverage cell =
+    Machine.Local.get state >>| (coverage cell)
+
 end
