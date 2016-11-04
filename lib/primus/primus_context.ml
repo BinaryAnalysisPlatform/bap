@@ -38,20 +38,22 @@ module Level = struct
 
   type Error.t += Broken_invariant of invariant
 
-  let string_of_level = function
-    | Top _ -> "top"
-    | Sub _ -> "sub"
-    | Arg _ -> "arg"
-    | Blk _ -> "blk"
-    | Phi _ -> "phi"
-    | Def _ -> "def"
-    | Jmp _ -> "jmp"
+  let (^^) name {me} = sprintf "%s(%s)" name (Term.name me)
+
+  let to_string = function
+    | Top t -> "top" ^^ t
+    | Sub t -> "sub" ^^ t
+    | Arg t -> "arg" ^^ t
+    | Blk t -> "blk" ^^ t
+    | Phi t -> "phi" ^^ t
+    | Def t -> "def" ^^ t
+    | Jmp t -> "jmp" ^^ t
 
   let () = Error.add_printer (function
       | Broken_invariant {level; dst} -> Option.some @@ sprintf
           "Level transition - broken invariant: \
            No transition is defined from the %s level to the %s level"
-          (string_of_level level)
+          (to_string level)
           (string_of_sexp (sexp_of_name dst))
       | exn -> None)
 
@@ -86,6 +88,8 @@ module Level = struct
 
 end
 
+type level = Level.t
+
 open Level
 
 class t ?main proj =
@@ -94,8 +98,9 @@ class t ?main proj =
     inherit Biri.context ?main prog
     val level = Top {me=prog; up=Nil}
     method project = proj
+    method level = level
     method with_level level = {< level = level >}
-    method curr =
+    method current =
       let (!) {me} = Term.tid me in
       match level with
       | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
