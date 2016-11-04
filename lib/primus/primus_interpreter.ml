@@ -81,11 +81,15 @@ let address_written,address_was_written =
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
+  type ('a,'e) state = ('a,'e) Machine.t
+  type 'a r = (Bil.result,'a) state
+  type 'a u = (unit,'a) Machine.t
+  module Expi = Expi.Make(Machine)
   module Biri = Biri.Make(Machine)
 
   let make_observation = Machine.Observation.make
 
-  class ['e] base  =
+  class ['e] t  =
     object
       inherit ['e] Biri.t as super
       constraint 'e = #Context.t
