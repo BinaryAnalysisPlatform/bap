@@ -6,9 +6,8 @@ open Primus_types
 module Error = Primus_error
 module Observation = Primus_observation
 
-type ('a,'e) result = ('a,'e) Monad.Result.result =
-  | Ok of 'a
-  | Error of 'e
+let components : component list ref = ref []
+let add_component comp = components := comp :: !components
 
 
 module Make(M : Monad.S) : Machine
@@ -27,8 +26,8 @@ module Make(M : Monad.S) : Machine
   }
   and 'e observations = (unit,'e) t Observation.observations
 
-  type ('a,'e) e = (('a,Error.t) result,'e) SM.e
   type 'a m = 'a M.t
+  type ('a,'e) e = 'e -> (('a,Error.t) result * 'e) m
   module Basic = struct
     open SM.Syntax
     type nonrec ('a,'e) t = ('a,'e) t
@@ -158,6 +157,7 @@ module Make(M : Monad.S) : Machine
   let update f = get () >>= fun s -> put (f s)
   let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
+
   let run : ('a,'e) t -> ('a,'e) e = fun m ctxt ->
     M.bind (SM.run m {
         global = Univ_map.empty;
@@ -180,6 +180,19 @@ module Make(M : Monad.S) : Machine
 
 end
 
+module Main(Machine : Machine) = struct
+  open Machine.Syntax
+
+  let init_components () =
+    Machine.List.iter !components ~f:(fun (module Component) ->
+        let module Comp = Component.Make(Machine) in
+        Comp.init ())
+
+  let run m init =
+    Machine.run (init_components () >>= fun () -> m) init
+
+end
+
 
 module Test = struct
   module Machine = Make(Monad.Ident)
@@ -197,7 +210,6 @@ module Test = struct
       let arch = Project.arch ctxt#project in
       Format.printf "undefined var in %a\n" Arch.pp arch;
       Machine.return ()
-
-
   end
+
 end
