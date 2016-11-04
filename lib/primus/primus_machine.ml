@@ -4,33 +4,28 @@ open Monads.Std
 open Primus_types
 
 module Error = Primus_error
+module Observation = Primus_observation
 
 type ('a,'e) result = ('a,'e) Monad.Result.result =
   | Ok of 'a
   | Error of 'e
 
-module Make(M : Monad.S) : Machine = struct
+
+module Make(M : Monad.S) : Machine
+= struct
   module SM = struct
     include Monad.State.Multi.T2(M)
     include Monad.State.Multi.Make2(M)
   end
-
-  type ('m,'a) observers = Observers of ('a -> 'm) list
-
-  module Observers = Univ_map.Make1(struct
-      type ('a,'m) t = ('a,'m) observers
-      let sexp_of_t _ _ = sexp_of_opaque
-    end)
-
-
 
   type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
   and 'e state = {
     ctxt : 'e;
     local : Univ_map.t;
     global : Univ_map.t;
-    observers : (unit,'e) t Observers.t
+    observations : 'e observations
   }
+  and 'e observations = (unit,'e) t Observation.observations
 
   type ('a,'e) e = (('a,Error.t) result,'e) SM.e
   type 'a m = 'a M.t
@@ -81,34 +76,32 @@ module Make(M : Monad.S) : Machine = struct
   (* we can actually factor out the type 'a Observation.t of the monad *)
   module Observation = struct
     type ('a,'e) m = ('a,'e) t
+    type nonrec 'a observation = 'a observation
+    type nonrec 'a statement = 'a statement
 
-    let provide ?inspect ~name =
-      let k = Univ_map.Key.create ~name sexp_of_opaque in
+    let provide ?inspect name =
+      let named s = Sexp.(List [Atom "observation"; Atom name; s]) in
+      let sexp_of = match inspect with
+        | None -> fun _ -> named @@ Sexp.List []
+        | Some f -> fun n -> named @@ f n in
+      let k = Univ_map.Key.create ~name sexp_of in
       k,k
 
-    let observers () = lifts (SM.gets @@ fun s -> s.observers)
 
-    let set_observers observers = with_global_context @@ fun () ->
-      lifts (SM.update @@ fun s -> {s with observers})
+    let observations () = lifts (SM.gets @@ fun s -> s.observations)
 
-    let make (key : 'a Univ_map.Key.t) (obs : 'a) =
+    let set_observations observations = with_global_context @@ fun () ->
+      lifts (SM.update @@ fun s -> {s with observations})
+
+    let make key obs =
       with_global_context @@ fun () ->
-      observers () >>= fun observers ->
-      match Observers.find observers key with
-      | None -> lifts (SM.return ())
-      | Some (Observers (os : ('a -> (unit,'e) t) list)) ->
-        List.iter os ~f:(fun observe -> observe obs)
+      observations () >>= fun os ->
+      Observation.with_observers os key ~f:(List.iter ~f:(fun observe -> observe obs))
 
     let observe key observer =
       with_global_context @@ fun () ->
-      observers () >>= fun observers ->
-      set_observers (Observers.update observers key ~f:(function
-          | None -> Observers [observer]
-          | Some (Observers observers) ->
-            Observers (observer::observers)))
-
-    type 'a u = 'a Univ_map.Key.t
-    type 'a t = 'a u
+      observations () >>= fun os ->
+      set_observations (Observation.add_observer os key observer)
   end
 
   module State(S : sig
@@ -124,10 +117,10 @@ module Make(M : Monad.S) : Machine = struct
       init : Context.t -> 'a; (* must be total...*)
     }
 
-    let create ?(observe=sexp_of_opaque) ~name init =
+    let create ?(inspect=sexp_of_opaque) ~name init =
       let sexp x = Sexp.List [
           Sexp.Atom (sprintf "%s:%s" name S.typ);
-          observe x;
+          inspect x;
         ] in {
         key = Key.create ~name sexp;
         init
@@ -169,7 +162,7 @@ module Make(M : Monad.S) : Machine = struct
     M.bind (SM.run m {
         global = Univ_map.empty;
         local = Univ_map.empty;
-        observers = Observers.empty;
+        observations = Primus_observation.empty;
         ctxt}) @@ fun (x,{ctxt}) -> M.return (x,ctxt)
 
   let eval m s = M.map (run m s) ~f:fst
@@ -185,4 +178,26 @@ module Make(M : Monad.S) : Machine = struct
   let global = SM.global
   let current () = lifts (SM.current ())
 
+end
+
+
+module Test = struct
+  module Machine = Make(Monad.Ident)
+  open Machine.Syntax
+
+  module Interpreter = struct
+    let (undefined_var : var observation),undefined =
+      Observation.provide "undefined-variable"
+  end
+
+  module Concretizer = struct
+    let init () : (unit,#Context.t) Machine.t =
+      Machine.Observation.observe Interpreter.undefined_var @@ fun var ->
+      Machine.get () >>= fun ctxt ->
+      let arch = Project.arch ctxt#project in
+      Format.printf "undefined var in %a\n" Arch.pp arch;
+      Machine.return ()
+
+
+  end
 end

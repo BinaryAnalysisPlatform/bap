@@ -3,45 +3,34 @@ open Bap.Std
 open Monads.Std
 
 type error = Primus_error.t
+type 'a observation = 'a Primus_observation.t
+type 'a statement = 'a Primus_observation.statement
+
+module Context = Primus_context
 
 module type State = sig
   type ('a,'e) m
   type 'a t
-  val create : ?observe:('a -> Sexp.t) -> name:string -> (Context.t -> 'a) -> 'a t
+  val create : ?inspect:('a -> Sexp.t) -> name:string -> (Context.t -> 'a) -> 'a t
 
   val get : 'a t -> ('a,#Context.t) m
   val put : 'a t -> 'a -> (unit,#Context.t) m
   val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
 end
 
-module type Observation = sig
-  type ('a,'e) m
-  type 'a t
-  type 'a u
-
-  val provide : ?inspect:('a -> Sexp.t) -> name:string -> 'a t * 'a u
-
-  val observe : 'a t -> ('a -> (unit,'e) m) -> (unit,'e) m
-
-  val make : 'a u -> 'a -> (unit,'e) m
-end
-
-(* TODO: splt Machine into a Deterministic part, and a *)
-(* non-deterministic.  *)
-module type Deterministic = sig
-end
 
 module type Machine = sig
   type ('a,'e) t
   type 'a m
 
-  module Observation : Observation with type ('a,'e) m := ('a,'e) t
+  module Observation : sig
+    val observe : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
+    val make : 'a statement -> 'a -> (unit,'e) t
+  end
   module Local  : State with type ('a,'e) m := ('a,'e) t
   module Global : State with type ('a,'e) m := ('a,'e) t
   include Monad.Fail.S2 with type ('a,'e) t := ('a,'e) t
                          and type 'a error = error
   include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
                                 and type 'a m := 'a m
-
-
 end

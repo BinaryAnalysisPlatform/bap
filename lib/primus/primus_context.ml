@@ -1,9 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Primus_types
-
-module Machine = Primus_machine
 module Error = Primus_error
 
 module Level = struct
