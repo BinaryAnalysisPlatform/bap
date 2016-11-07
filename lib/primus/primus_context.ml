@@ -97,7 +97,9 @@ class t ?main proj =
   object(self : 's)
     inherit Biri.context ?main prog
     val level = Top {me=prog; up=Nil}
+    val proj  = proj
     method project = proj
+    method with_project p = {< proj = p >}
     method level = level
     method with_level level = {< level = level >}
     method current =

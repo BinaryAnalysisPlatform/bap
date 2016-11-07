@@ -180,16 +180,26 @@ module Make(M : Monad.S) : Machine
 
 end
 
+let finished,finish =
+  Observation.provide ~inspect:sexp_of_unit "machine-finished"
+
+
 module Main(Machine : Machine) = struct
   open Machine.Syntax
+
 
   let init_components () =
     Machine.List.iter !components ~f:(fun (module Component) ->
         let module Comp = Component.Make(Machine) in
         Comp.init ())
 
+
   let run m init =
-    Machine.run (init_components () >>= fun () -> m) init
+    let comp =
+      init_components () >>= fun () -> m >>= fun x ->
+      Machine.Observation.make finish () >>= fun () ->
+      Machine.return x in
+    Machine.run comp init
 
 end
 

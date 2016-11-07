@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 
-type error = Primus_error.t
+type error =  Primus_error.t = ..
 type 'a observation = 'a Primus_observation.t
 type 'a statement = 'a Primus_observation.statement
 type ('a,'e) result = ('a,'e) Monad.Result.result =

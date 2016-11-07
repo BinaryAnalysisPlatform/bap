@@ -37,6 +37,7 @@ class t : ?main:sub term -> project ->
   object('s)
     inherit Biri.context
     method project : project
+    method with_project : project -> 's
     method current : tid
     method level : level
     method with_level : level -> 's
