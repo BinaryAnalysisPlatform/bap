@@ -17,6 +17,7 @@ Library primus
                    Primus_interpreter,
                    Primus_iterator,
                    Primus_machine,
+                   Primus_memory,
                    Primus_observation,
                    Primus_observer,
                    Primus_random,
