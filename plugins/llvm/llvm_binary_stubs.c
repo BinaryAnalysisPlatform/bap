@@ -6,7 +6,7 @@
 #include <caml/compatibility.h>
 #include <inttypes.h>
 #include <stdbool.h>
-
+#include <stdio.h>
 #include "llvm_binary_stubs.h"
 #include "llvm_binary.h"
 
@@ -126,8 +126,12 @@ CAMLprim value llvm_binary_create_stub(value arg) {
     const struct caml_ba_array* array = Caml_ba_array_val(arg);
     if (array->num_dims != 1)
         caml_invalid_argument("invalid bigarray dimension");
+    if (!array->dim[0])
+        caml_invalid_argument("Unexpected EOF");
     const struct image* obj =
         image_create((const char*)(array->data), array->dim[0]);
+    if (!obj) 
+        caml_failwith("Bad file format");
     CAMLreturn(image_to_value(obj));
 }
 
