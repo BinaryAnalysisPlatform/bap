@@ -21,6 +21,7 @@ module type S = sig
   type t
   type ('a,'e) m
   type policy = [`random of t option | `static of word]
+                [@@deriving sexp_of]
 
   val lcg : int -> t
 

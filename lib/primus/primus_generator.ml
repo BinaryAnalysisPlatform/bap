@@ -140,6 +140,10 @@ module Make(Machine : Machine) = struct
   type t = {next : 'e . unit -> (int,'e context) Machine.t}
   type policy = [`random of t option | `static of word]
 
+  let sexp_of_policy = function
+    | `static x -> Sexp.(List [Atom "static"; sexp_of_word x])
+    | `random _ -> Sexp.Atom "random"
+
 
   let with_init (type rng)
       (module Rng : Iterator.Infinite.S

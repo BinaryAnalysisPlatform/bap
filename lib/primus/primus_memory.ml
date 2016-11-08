@@ -66,8 +66,42 @@ module Make(Machine : Machine)
 
   let zero = Word.of_int ~width:8 0
 
-  let sexp_of_t = sexp_of_opaque
-  let state = Machine.Local.create ~inspect:sexp_of_t ~name:"memory"
+    let sexp_of_memory sexp_of_value {base; len; value} =
+    Sexp.(List [sexp_of_word base;
+                sexp_of_int len;
+                sexp_of_value value])
+
+
+  let sexp_of_region sexp_of_mem {mem; readonly; executable} =
+    let flags = [
+      "R";
+      if readonly then "" else "W";
+      if executable then "X" else "";
+    ] |> String.concat ~sep:"" in
+    Sexp.(List [sexp_of_mem mem; Atom flags])
+
+  let sexp_of_word x = Sexp.Atom (Word.string_of_value x)
+  let sexp_of_random _ = Sexp.Atom "random"
+  let sexp_of_region = sexp_of_region
+
+  let inspect_memory {values; layers} =
+    let values =
+      Map.to_sequence values |> Seq.map ~f:(fun (key,value) ->
+          Sexp.(List [sexp_of_word key; sexp_of_word value])) |>
+      Seq.to_list_rev in
+    let layers = List.map layers ~f:(function
+        | Static r ->
+          sexp_of_region (sexp_of_memory sexp_of_word) r
+        | Random r ->
+          sexp_of_region (sexp_of_memory sexp_of_random) r
+        | Memory r ->
+          sexp_of_region (sexp_of_mem) r) in
+    Sexp.(List [
+      List [Atom "values"; List values];
+      List [Atom "layers"; List layers];
+    ])
+
+  let state = Machine.Local.create ~inspect:inspect_memory ~name:"memory"
       (fun _ -> {values = Addr.Map.empty; layers = []})
 
   let inside {base;len} addr =
@@ -76,7 +110,6 @@ module Make(Machine : Machine)
   let update state f =
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
-
 
   let find_layer addr = List.find ~f:(function
       | Static {mem} -> inside mem addr

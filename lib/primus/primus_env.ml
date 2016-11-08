@@ -36,7 +36,30 @@ module Make(Machine : Machine) :
       random : policy Var.Map.t;
     }
 
-    let state = Machine.Local.create ~name:"environment" (fun _ -> {
+    let inspect_environment {values;random} =
+      let keys =
+        Set.union
+          (Var.Set.of_list (Map.keys values))
+          (Var.Set.of_list (Map.keys random)) in
+      let sexp_of_var sexp_of_value var value = Sexp.(List [
+          Atom (Var.name var);
+          sexp_of_value value;
+          Atom (Type.to_string (Var.typ var))
+        ]) in
+      let sexp_of_word x = Sexp.Atom (Word.string_of_value x) in
+      let sexp_of_policy = Generator.sexp_of_policy in
+      let bindings =
+        Set.fold keys ~init:[] ~f:(fun acc var ->
+            match Map.find values var with
+            | Some value -> sexp_of_var sexp_of_word var value :: acc
+            | None -> match Map.find random var with
+              | Some policy -> sexp_of_var sexp_of_policy var policy ::acc
+              | None -> assert false)  in
+      Sexp.List bindings
+
+    let state = Machine.Local.create
+        ~inspect:inspect_environment
+        ~name:"environment" (fun _ -> {
           values = Var.Map.empty;
           random = Var.Map.empty;
         })
@@ -50,8 +73,6 @@ module Make(Machine : Machine) :
       Machine.Local.update state ~f:(fun s -> {
             s with values = Map.add s.values ~key:var ~data:word
           })
-
-
 
     let word = Word.of_int ~width:8
 
