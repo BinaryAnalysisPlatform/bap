@@ -72,7 +72,7 @@ let address_access,address_will_be_read =
   Observation.provide ~inspect:sexp_of_addr "address-access"
 
 let address_read,address_was_read =
-  Observation.provide ~inspect:[%sexp_of: addr * bil_result] "address-read"
+  Observation.provide ~inspect:[%sexp_of: addr * word] "address-read"
 
 let address_written,address_was_written =
   Observation.provide ~inspect:[%sexp_of: addr * word]
@@ -82,11 +82,14 @@ let address_written,address_was_written =
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
+  module Expi = Expi.Make(Machine)
+  module Biri = Biri.Make(Machine)
+  module Memory = Primus_memory.Make(Machine)
+
   type ('a,'e) state = ('a,'e) Machine.t
   type 'a r = (Bil.result,'a) state
   type 'a u = (unit,'a) Machine.t
-  module Expi = Expi.Make(Machine)
-  module Biri = Biri.Make(Machine)
+
 
   let make_observation = Machine.Observation.make
 
@@ -136,20 +139,22 @@ module Make (Machine : Machine) = struct
         super#update var r >>= fun () ->
         make_observation variable_was_written (var,r)
 
-      (* we need to overload storage, so that
-         all memory accesses will be driven via the context. The
-         Primus machine and its interperter is the specialization of
-         the general Bil interperter.*)
-      method! load mem addr =
+      method! load _ addr =
         make_observation address_will_be_read addr >>= fun () ->
-        super#load mem addr >>= fun r ->
+        Memory.load addr >>= fun r ->
         make_observation address_was_read (addr,r) >>= fun () ->
-        Machine.return r
+        super#eval_int r
 
       method! store mem addr data =
         super#store mem addr data >>= fun r ->
+        Memory.store addr data >>= fun () ->
         make_observation address_was_written (addr,data) >>= fun () ->
         Machine.return r
+
+      method! empty : Bil.storage = object(self)
+        method load _ = None
+        method save _ _ = self
+      end
 
     end
 end

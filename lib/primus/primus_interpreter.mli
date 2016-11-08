@@ -31,7 +31,7 @@ val variable_read : (var * Bil.result) observation
 val variable_written : (var * Bil.result) observation
 
 val address_access : addr observation
-val address_read : (addr * Bil.result) observation
+val address_read : (addr * word) observation
 val address_written : (addr * word) observation
 
 module Make (Machine : Machine) : sig
