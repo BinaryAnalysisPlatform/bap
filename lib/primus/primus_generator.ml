@@ -2,16 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 
 open Primus_types
-
-module Iterator = Primus_iterator
-module Random   = Primus_random
-
-
-(** Generate values from a finite domain *)
-module type Progress = sig
-  type t
-  val coverage : t -> float
-end
+include Primus_generator_types
 
 (** Generate all possible values of a byte.
 
@@ -54,11 +45,7 @@ let uniform_coverage ~total ~trials =
 
 module Uniform = struct
   module Byte = struct
-    module type S = sig
-      type rng
-      include Iterator.Infinite.S with type dom = int
-      val create : rng -> t
-    end
+    module type S = Byte
     module Make(Rng : Random.S with type dom = int)
       : S with type rng = Rng.t
     = struct
@@ -147,13 +134,12 @@ module Uniform = struct
   end
 end
 
-
-
-
 module Make(Machine : Machine) = struct
   open Machine.Syntax
   type 'e context = 'e constraint 'e = #Context.t
   type t = {next : 'e . unit -> (int,'e context) Machine.t}
+  type policy = [`random of t option | `static of word]
+
 
   let with_init (type rng)
       (module Rng : Iterator.Infinite.S
@@ -176,4 +162,13 @@ module Make(Machine : Machine) = struct
         Uniform.Byte.create (Random.LCG.create seed))
 
   let next t = t.next ()
+
+  module Seeded = struct
+    let create rng =
+      Machine.current () >>| fun id ->
+      rng (Machine.Id.hash id)
+
+    let byte () = create byte
+    let lcg () = create lcg
+  end
 end

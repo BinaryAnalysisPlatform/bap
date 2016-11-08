@@ -12,18 +12,19 @@ val segmentation_fault : addr observation
 module type S = sig
   type t
   type ('a,'e) m
-  type rng
-  type mode = [`random of rng option | `static of word]
+
+  module Generator : Primus_generator.S with type ('a,'e) m := ('a,'e) m
 
   val load : addr -> (word,#Context.t) m
-  val store : addr -> word -> (unit,#Context.t) m
+  val save : addr -> word -> (unit,#Context.t) m
 
   val add_text : mem -> (unit,#Context.t) m
   val add_data : mem -> (unit,#Context.t) m
   val allocate :
     ?readonly:bool ->
     ?executable:bool ->
-    ?mode:mode -> addr -> int -> (unit,#Context.t) m
+    ?policy:Generator.policy ->
+    addr -> int -> (unit,#Context.t) m
 end
 
 

@@ -147,7 +147,7 @@ module Make (Machine : Machine) = struct
 
       method! store mem addr data =
         super#store mem addr data >>= fun r ->
-        Memory.store addr data >>= fun () ->
+        Memory.save addr data >>= fun () ->
         make_observation address_was_written (addr,data) >>= fun () ->
         Machine.return r
 
