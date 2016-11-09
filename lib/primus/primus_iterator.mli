@@ -1,30 +1,19 @@
 open Core_kernel.Std
+open Primus_generator_types
 
-module type Base = sig
-  type t
-  type dom
-  val min : dom
-  val max : dom
-  val value : t -> dom
-end
+module type Base = Iterator.Base
 
 type ('a,'e) t
 
 
 module Finite : sig
-  module type S = sig
-    include Base
-    val next : t -> t option
-  end
+  module type S = Iterator.Finite
 
   val create : (module S with type t = 'a and type dom = 'e) -> ('a,'e) t
 end
 
 module Infinite : sig
-  module type S = sig
-    include Base
-    val next : t -> t
-  end
+  module type S = Iterator.Infinite
 
   val create : (module S with type t = 'a and type dom = 'e) -> ('a,'e) t
 end

@@ -1,7 +1,11 @@
 module Std = struct
-  module Machine = Primus_machine
   module Context = Primus_context
+  module Env = Primus_env
+  module Error = Primus_error
+  module Generator = Primus_generator
+  module Interpreter = Primus_interpreter
+  module Machine = Primus_machine
+  module Memory = Primus_memory
   module Scheduler = Primus_scheduler
-  module Storage = Primus_storage
-  module Observer = Primus_observer
+  module Observation = Primus_observation
 end

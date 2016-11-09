@@ -9,6 +9,9 @@ module Observation = Primus_observation
 let components : component list ref = ref []
 let add_component comp = components := comp :: !components
 
+module type Component = Component
+module type S = Machine
+type nonrec component = component
 
 module Make(M : Monad.S) : Machine
 = struct

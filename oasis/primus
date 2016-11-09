@@ -21,7 +21,5 @@ Library primus
                    Primus_machine,
                    Primus_memory,
                    Primus_observation,
-                   Primus_observer,
                    Primus_random,
-                   Primus_scheduler,
-                   Primus_storage
+                   Primus_scheduler

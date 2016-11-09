@@ -2,7 +2,14 @@ open Core_kernel.Std
 open Bap.Std
 
 open Primus_types
-include Primus_generator_types
+open Primus_generator_types
+
+module Random   = Primus_random
+module Iterator = Primus_iterator
+
+module type S = Generator
+module type Progress = Generator.Progress
+
 
 (** Generate all possible values of a byte.
 
@@ -16,7 +23,7 @@ include Primus_generator_types
 
 *)
 module Bytes : sig
-  include Iterator.Finite.S with type dom = int
+  include Primus_iterator.Finite.S with type dom = int
   include Progress with type t := t
 end = struct
   type t = Observe of int
@@ -45,7 +52,7 @@ let uniform_coverage ~total ~trials =
 
 module Uniform = struct
   module Byte = struct
-    module type S = Byte
+    module type S = Generator.Byte
     module Make(Rng : Random.S with type dom = int)
       : S with type rng = Rng.t
     = struct
@@ -134,7 +141,9 @@ module Uniform = struct
   end
 end
 
-module Make(Machine : Machine) = struct
+module Make(Machine : Machine)
+    : S with type ('a,'e) m := ('a,'e) Machine.t
+= struct
   open Machine.Syntax
   type 'e context = 'e constraint 'e = #Context.t
   type t = {next : 'e . unit -> (int,'e context) Machine.t}
