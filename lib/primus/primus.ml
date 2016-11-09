@@ -4,6 +4,7 @@ module Std = struct
   module Error = Primus_error
   module Generator = Primus_generator
   module Interpreter = Primus_interpreter
+  module Linker = Primus_linker
   module Machine = Primus_machine
   module Memory = Primus_memory
   module Scheduler = Primus_scheduler

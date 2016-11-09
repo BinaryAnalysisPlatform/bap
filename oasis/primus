@@ -18,6 +18,7 @@ Library primus
                    Primus_infeasible,
                    Primus_interpreter,
                    Primus_iterator,
+                   Primus_linker,
                    Primus_machine,
                    Primus_memory,
                    Primus_observation,

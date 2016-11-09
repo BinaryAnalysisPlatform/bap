@@ -11,6 +11,12 @@ type ('a,'e) result = ('a,'e) Monad.Result.result =
   | Ok of 'a
   | Error of 'e
 
+type name = [
+  | `tid of tid
+  | `addr of addr
+  | `symbol of string
+] [@@deriving sexp_of]
+
 module Context = Primus_context
 
 module type State = sig
@@ -83,6 +89,20 @@ module type Env = sig
   val add : var -> Generator.policy -> (unit,#Context.t) m
 end
 
+module type Linker = sig
+  type ('a,'e) m
+
+  type 'e context = 'e constraint 'e = #Context.t
+  type code = { exec : 'e. unit -> (unit,'e context) m}
+
+
+  val link :
+    ?addr:addr ->
+    ?name:string ->
+    code:code -> tid -> (unit,#Context.t) m
+
+  val exec : name -> (unit,#Context.t) m
+end
 
 
 module type Machine = sig
