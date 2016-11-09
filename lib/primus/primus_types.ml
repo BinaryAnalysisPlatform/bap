@@ -102,6 +102,10 @@ module type Linker = sig
     code:code -> tid -> (unit,#Context.t) m
 
   val exec : name -> (unit,#Context.t) m
+
+  val is_linked : name -> (bool,#Context.t) m
+
+  val resolve : name -> (string option,#Context.t) m
 end
 
 
@@ -125,10 +129,8 @@ end
 
 
 
-module type Component = sig
-  module Make(Machine : Machine) : sig
+module type Component = functor (Machine : Machine) -> sig
     val init : unit -> (unit,#Context.t) Machine.t
-  end
 end
 
 type component = (module Component)

@@ -69,4 +69,23 @@ module Make(Machine : Machine) = struct
     | None -> Machine.fail (Unbound_name name)
     | Some code -> code.exec ()
 
+  let is_linked name =
+    Machine.Local.get state >>| code_of_name name >>| Option.is_some
+
+
+  let find_by_tid {names} tid =
+    Map.to_sequence names |> Seq.find_map ~f:(fun (name,tid') ->
+        if Tid.equal tid tid' then Some name else None)
+
+  let find_by_addr s addr  =
+    Map.to_sequence s.addrs |>
+    Seq.find ~f:(fun (a,tid) -> Addr.equal addr a) |> function
+    | Some (_,tid) -> find_by_tid s tid
+    | None -> None
+
+  let resolve name =
+    Machine.Local.get state >>| fun c -> match name with
+    | `symbol name -> Some name
+    | `addr addr -> find_by_addr c addr
+    | `tid  tid  -> find_by_tid c tid
 end

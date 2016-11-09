@@ -75,7 +75,6 @@ module Make(M : Monad.S) : Machine
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
 
-  (* we can actually factor out the type 'a Observation.t of the monad *)
   module Observation = struct
     type ('a,'e) m = ('a,'e) t
     type nonrec 'a observation = 'a observation
@@ -193,7 +192,7 @@ module Main(Machine : Machine) = struct
 
   let init_components () =
     Machine.List.iter !components ~f:(fun (module Component) ->
-        let module Comp = Component.Make(Machine) in
+        let module Comp = Component(Machine) in
         Comp.init ())
 
 
@@ -203,26 +202,5 @@ module Main(Machine : Machine) = struct
       Machine.Observation.make finish () >>= fun () ->
       Machine.return x in
     Machine.run comp init
-
-end
-
-
-module Test = struct
-  module Machine = Make(Monad.Ident)
-  open Machine.Syntax
-
-  module Interpreter = struct
-    let (undefined_var : var observation),undefined =
-      Observation.provide "undefined-variable"
-  end
-
-  module Concretizer = struct
-    let init () : (unit,#Context.t) Machine.t =
-      Machine.Observation.observe Interpreter.undefined_var @@ fun var ->
-      Machine.get () >>= fun ctxt ->
-      let arch = Project.arch ctxt#project in
-      Format.printf "undefined var in %a\n" Arch.pp arch;
-      Machine.return ()
-  end
 
 end

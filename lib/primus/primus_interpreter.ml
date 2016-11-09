@@ -79,12 +79,27 @@ let address_written,address_was_written =
     "address-written"
 
 
+let sexp_of_name = function
+  | `symbol name -> Sexp.Atom name
+  | `tid tid -> Sexp.Atom (Tid.name tid)
+  | `addr addr -> Sexp.Atom (Addr.string_of_value addr)
+
+let sexp_of_call name = Sexp.List [
+    Sexp.Atom "call";
+    sexp_of_name name;
+]
+
+let call,calling =
+  Observation.provide ~inspect:sexp_of_call "call"
+
+
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
   module Expi = Expi.Make(Machine)
   module Biri = Biri.Make(Machine)
   module Memory = Primus_memory.Make(Machine)
+  module Linker = Primus_linker.Make(Machine)
 
   type ('a,'e) state = ('a,'e) Machine.t
   type 'a r = (Bil.result,'a) state
@@ -155,6 +170,18 @@ module Make (Machine : Machine) = struct
         method load _ = None
         method save _ _ = self
       end
+
+      method! eval_call call = match Call.target call with
+        | Direct tid ->
+          make_observation calling (`tid tid) >>= fun () ->
+          Linker.exec (`tid tid)
+        | Indirect exp ->
+          super#eval_exp exp >>| Bil.Result.value >>= function
+          | Bil.Imm dst ->
+            make_observation calling (`addr dst) >>= fun () ->
+            Linker.exec (`addr dst)
+          | _ -> super#eval_call call
+
 
     end
 end
