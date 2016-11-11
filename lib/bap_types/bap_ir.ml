@@ -1300,29 +1300,16 @@ module Ir_program = struct
       paths = Tid.Table.create ();
     }
 
-  let def_of_path {self} : path -> def term = function
-    | [| i; j; k |] -> self.subs.(i).self.blks.(j).self.defs.(k)
-    | _ -> assert false
+  let proj1 t cs = t.self.subs.(cs.(0))
+  let proj2 f t cs = (f (proj1 t cs).self).(cs.(1))
+  let proj3 f g t cs = (g (proj2 f t cs).self).(cs.(2))
 
-  let phi_of_path {self} : path -> phi term = function
-    | [| i; j; k |] -> self.subs.(i).self.blks.(j).self.phis.(k)
-    | _ -> assert false
-
-  let jmp_of_path {self} : path -> jmp term = function
-    | [| i; j; k |] -> self.subs.(i).self.blks.(j).self.jmps.(k)
-    | _ -> assert false
-
-  let blk_of_path {self} : path -> blk term = function
-    | [| i; j |] -> self.subs.(i).self.blks.(j)
-    | _ -> assert false
-
-  let arg_of_path {self} : path -> arg term = function
-    | [| i; j |] -> self.subs.(i).self.args.(j)
-    | _ -> assert false
-
-  let sub_of_path {self} : path -> sub term = function
-    | [| i |] -> self.subs.(i)
-    | _ -> assert false
+  let def_of_path = proj3 blks defs
+  let phi_of_path = proj3 blks phis
+  let jmp_of_path = proj3 blks jmps
+  let blk_of_path = proj2 blks
+  let arg_of_path = proj2 args
+  let sub_of_path = proj1
 
   let get_1st get prog tid : (path * 'a) option =
     with_return (fun {return} ->
@@ -1388,8 +1375,7 @@ module Ir_program = struct
     match lookup t p tid with
     | None -> None
     | Some _ ->
-      let child = Tid.Table.find_exn p.self.paths tid in
-      let path = Array.subo ~len:(Array.length child - 1) child in
+      let path = Tid.Table.find_exn p.self.paths tid in
       match t.par with
       | Blk -> Some (blk_of_path p path)
       | Arg -> Some (arg_of_path p path)
