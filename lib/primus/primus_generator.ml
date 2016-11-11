@@ -4,184 +4,76 @@ open Bap.Std
 open Primus_types
 open Primus_generator_types
 
-module Random   = Primus_random
 module Iterator = Primus_iterator
-
-module type S = Generator
-module type Progress = Generator.Progress
-
-
-(** Generate all possible values of a byte.
-
-    The values are generated in the following order:
-
-    [0, 255, 1, 254, ..., 256-n, n, ..., 129, 128],
-
-    or, if a byte is treated as signed, then:
-
-    [0,-1,1,-2,2,...,-n,n,-128,128]
-
-*)
-module Bytes : sig
-  include Primus_iterator.Finite.S with type dom = int
-  include Progress with type t := t
-end = struct
-  type t = Observe of int
-  type dom = int
-
-  let min = 0
-  let max = 255
-
-  let next = function
-    | Observe 128 -> None
-    | Observe n when n < 128 -> Some (Observe (256-(n+1)))
-    | Observe n -> Some (Observe (256 - n))
-
-  let value (Observe n) = n
-
-  let coverage = function
-    | Observe n when n > 128 -> float (256-n) /. 128.
-    | Observe n -> float n /. 128.
-end
-
-let bytes = Iterator.Finite.create (module Bytes)
 
 
 let uniform_coverage ~total ~trials =
   ~-.(expm1 (float trials *. log1p( ~-.(1. /. float total))))
 
-module Uniform = struct
-  module Byte = struct
-    module type S = Generator.Byte
-    module Make(Rng : Random.S with type dom = int)
-      : S with type rng = Rng.t
-    = struct
-      type dom = int
-      type rng = Rng.t
-      type t = Rng.t
 
-      let min = 0
-      let max = 255
-      let size = max - min + 1
-      let create = ident
-      let next = Rng.next
-      let value rng = Rng.value rng mod size
-    end
-    module Basic = Make(Random.LCG)
-    include (Basic : S with type rng = Random.LCG.t)
-  end
 
-  module type S = sig
-    include Iterator.Infinite.S with type dom = int
-    include Progress with type t := t
-    type rng
-    val create : rng -> t
-  end
+let generators : Univ_map.t state = Primus_machine.State.declare
+    ~name:"rng-states"
+    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3"
+    (fun _ -> Univ_map.empty)
 
-  module Memoryless = struct
-    module type S = S
-    module Make(Rng : Random.S with type dom = int)
-      : S with type rng := Rng.t
-    = struct
-      type dom = int
-      type t = {
-        rng : Rng.t;
-        trials : int;
-      }
 
-      let min = 0
-      let max = 255
-      let size = 256
+module States = Univ_map.With_default
 
-      let create rng = {rng; trials = 0}
+type 'a gen = {
+  state : 'a States.Key.t;
+  next : 'a -> 'a;
+  value : 'a -> int;
+  min : int;
+  max : int;
+}
 
-      let next t = {rng = Rng.next t.rng; trials = t.trials + 1}
-      let value {rng} = Rng.value rng mod size
-      let coverage {trials} =
-        uniform_coverage ~total:size ~trials
-    end
-  end
+type t =
+  | Gen : 'a gen -> t
+  | Wait : (int -> t) -> t
+  | Static : int -> t
 
-  module With_memory = struct
-    module type S = S
-    module Make(R : Random.S with type dom = int)
-      : S with type rng := R.t
-    = struct
-      type dom = int
-      type rng = R.t
-      type t = {
-        dom : int array;
-        pos : int;
-      }
-      let min = 0
-      let max = 255
+let rec sexp_of_t = function
+  | Static x -> Sexp.(List [Atom "static"; sexp_of_int x])
+  | Gen {min;max} -> Sexp.Atom (sprintf "(%d,%d)" min max)
+  | Wait create -> Sexp.List [Sexp.Atom "create 0:"; sexp_of_t (create 0)]
 
-      let permute_in_place xs rng =
-        Seq.take (Iterator.enum R.t rng) (Array.length xs) |>
-        Seq.map ~f:(fun i -> i mod Array.length xs) |>
-        Seq.iteri ~f:(fun i j ->
-            let z = xs.(i) in
-            xs.(i) <- xs.(j);
-            xs.(j) <- z)
+let create (type rng)
+    (module Rng : Iterator.Infinite.S
+      with type t = rng and type dom = int) init =
+  let state = States.Key.create
+      ~default:init ~name:"rng-state" sexp_of_opaque in
+  Gen {state; next=Rng.next; value=Rng.value; min=Rng.min; max=Rng.max}
 
-      let next {pos; dom} =
-        if pos + 1 < Array.length dom
-        then {pos = pos + 1; dom}
-        else {pos = 0; dom}
+let static value = Static value
 
-      let create rng =
-        let dom = Array.init 256 ident in
-        permute_in_place dom rng;
-        next {dom; pos=(-1)}
 
-      let value {dom; pos} = dom.(pos)
-      let coverage {dom;pos} =
-        (float pos +. 1.) /. float (Array.length dom)
-    end
+module Random = struct
+  open Primus_random
+  let lcg seed =
+    create (module LCG) (LCG.create seed)
+
+  let byte seed =
+    create (module Byte) (Byte.create (LCG.create seed))
+
+  module Seeded = struct
+    let create make = Wait make
+    let lcg = Wait lcg
+    let byte = Wait byte
   end
 end
 
-module Make(Machine : Machine)
-    : S with type ('a,'e) m := ('a,'e) Machine.t
-= struct
+module Make(Machine : Machine) = struct
   open Machine.Syntax
-  type 'e context = 'e constraint 'e = #Context.t
-  type t = {next : 'e . unit -> (int,'e context) Machine.t}
-  type policy = [`random of t option | `static of word]
-
-  let sexp_of_policy = function
-    | `static x -> Sexp.(List [Atom "static"; sexp_of_word x])
-    | `random _ -> Sexp.Atom "random"
-
-
-  let with_init (type rng)
-      (module Rng : Iterator.Infinite.S
-        with type t = rng and type dom = int) init =
-    let state = Machine.Local.create ~name:"rng" init in {
-      next = fun () ->
-        Machine.Local.get state >>= fun rng ->
-        let x = Rng.value rng in
-        Machine.Local.put state (Rng.next rng) >>= fun () ->
-        Machine.return x
-    }
-
-  let create rng_t rng = with_init rng_t (fun _ -> rng)
-
-  let lcg seed =
-    with_init (module Random.LCG) (fun _ -> Random.LCG.create seed)
-
-  let byte seed =
-    with_init (module Uniform.Byte) (fun _ ->
-        Uniform.Byte.create (Random.LCG.create seed))
-
-  let next t = t.next ()
-
-  module Seeded = struct
-    let create rng =
-      Machine.current () >>| fun id ->
-      rng (Machine.Id.hash id)
-
-    let byte () = create byte
-    let lcg () = create lcg
-  end
+  let rec next = function
+    | Gen {state; next; value} ->
+      Machine.Local.get generators >>= fun states ->
+      let gen = States.find states state in
+      let states = States.set states state (next gen) in
+      Machine.Local.put generators states >>| fun () ->
+      value gen
+    | Wait create ->
+      Machine.current () >>= fun id ->
+      next (create (Machine.Id.hash id))
+    | Static n -> Machine.return n
 end

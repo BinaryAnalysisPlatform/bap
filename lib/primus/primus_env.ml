@@ -4,6 +4,7 @@ open Primus_types
 
 module Context = Primus_context
 module Observation = Primus_observation
+module Generator = Primus_generator
 
 
 type error += Undefined_var of var
@@ -11,49 +12,49 @@ type error += Undefined_var of var
 let undefined_variable,undefined =
   Observation.provide ~inspect:sexp_of_var "undefined-variable"
 
-module type S = Env
 
-module Make(Machine : Machine) :
-  S with type ('a,'e) m := ('a,'e) Machine.t
-  = struct
-    open Machine.Syntax
-    module Generator = Primus_generator.Make(Machine)
 
-    type ('a,'e) m = ('a,'e) Machine.t
-    type policy = Generator.policy
+type t = {
+  values : word Var.Map.t;
+  random : Generator.t Var.Map.t;
+}
 
-    type t = {
-      values : word Var.Map.t;
-      random : policy Var.Map.t;
-    }
-
-    let inspect_environment {values;random} =
-      let keys =
-        Set.union
-          (Var.Set.of_list (Map.keys values))
-          (Var.Set.of_list (Map.keys random)) in
-      let sexp_of_var sexp_of_value var value = Sexp.(List [
-          Atom (Var.name var);
-          sexp_of_value value;
-          Atom (Type.to_string (Var.typ var))
-        ]) in
-      let sexp_of_word x = Sexp.Atom (Word.string_of_value x) in
-      let sexp_of_policy = Generator.sexp_of_policy in
-      let bindings =
-        Set.fold keys ~init:[] ~f:(fun acc var ->
-            match Map.find values var with
-            | Some value -> sexp_of_var sexp_of_word var value :: acc
-            | None -> match Map.find random var with
-              | Some policy -> sexp_of_var sexp_of_policy var policy ::acc
-              | None -> assert false)  in
-      Sexp.List bindings
-
-    let state = Machine.Local.create
-        ~inspect:inspect_environment
-        ~name:"environment" (fun _ -> {
+let state = Primus_machine.State.declare
+    ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
+    ~name:"environment" (fun _ -> {
           values = Var.Map.empty;
           random = Var.Map.empty;
         })
+
+let inspect_environment {values;random} =
+  let keys =
+    Set.union
+      (Var.Set.of_list (Map.keys values))
+      (Var.Set.of_list (Map.keys random)) in
+  let sexp_of_var sexp_of_value var value = Sexp.(List [
+      Atom (Var.name var);
+      sexp_of_value value;
+      Atom (Type.to_string (Var.typ var))
+    ]) in
+  let sexp_of_word x = Sexp.Atom (Word.string_of_value x) in
+  let sexp_of_policy = Generator.sexp_of_t in
+  let bindings =
+    Set.fold keys ~init:[] ~f:(fun acc var ->
+        match Map.find values var with
+        | Some value -> sexp_of_var sexp_of_word var value :: acc
+        | None -> match Map.find random var with
+          | Some policy -> sexp_of_var sexp_of_policy var policy ::acc
+          | None -> assert false)  in
+  Sexp.List bindings
+
+    let word = Word.of_int ~width:8
+
+
+module Make(Machine : Machine) = struct
+    open Machine.Syntax
+    type ('a,'e) m = ('a,'e) Machine.t
+
+    module Generator = Primus_generator.Make(Machine)
 
     let add var policy =
       Machine.Local.update state ~f:(fun s -> {
@@ -65,17 +66,6 @@ module Make(Machine : Machine) :
             s with values = Map.add s.values ~key:var ~data:word
           })
 
-    let word = Word.of_int ~width:8
-
-    let rec generate var = function
-      | `static value -> Machine.return value
-      | `random (Some value) -> Generator.next value >>| word
-      | `random None ->
-        Generator.Seeded.byte () >>= fun rng ->
-        let policy = `random (Some rng) in
-        add var policy >>= fun () ->
-        generate var policy
-
     let get var =
       Machine.Local.get state >>= fun t ->
       match Map.find t.values var with
@@ -84,8 +74,6 @@ module Make(Machine : Machine) :
         | None ->
           Machine.Observation.make undefined var >>= fun () ->
           Machine.fail (Undefined_var var)
-        | Some policy ->
-          generate var policy >>= fun value ->
-          set var value >>= fun () ->
-          Machine.return value
+        | Some gen -> Generator.next gen >>| word
+
 end

@@ -3,7 +3,8 @@ open Bap.Std
 open Monads.Std
 
 open Primus_types
-module Rng = Primus_random
+module Iterator = Primus_iterator
+module RNG = Primus_random
 
 module Scheduler = struct
   module type S = sig
@@ -118,7 +119,7 @@ end
 module Random = struct
   module Make
       (Dom : Int_intf.S)
-      (Rng : Rng.S with type dom = Dom.t)
+      (Rng : Iterator.Infinite.S with type dom = Dom.t)
       (SM : Monad.State.Multi.S2) : Scheduler.S = struct
     open SM.Syntax
 
@@ -151,5 +152,5 @@ module Random = struct
 
   end
 
-  module Fast = Make(Int)(Rng.LCG)
+  module Fast = Make(Int)(RNG.LCG)
 end

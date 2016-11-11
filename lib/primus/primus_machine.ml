@@ -13,7 +13,10 @@ module type Component = Component
 module type S = Machine
 type nonrec component = component
 
-module Make(M : Monad.S) : Machine
+
+module State = Primus_state
+
+module Make(M : Monad.S)
 = struct
   module SM = struct
     include Monad.State.Multi.T2(M)
@@ -23,9 +26,10 @@ module Make(M : Monad.S) : Machine
   type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
   and 'e state = {
     ctxt : 'e;
-    local : Univ_map.t;
-    global : Univ_map.t;
-    observations : 'e observations
+    local  : State.Bag.t;
+    global : State.Bag.t;
+    states : int String.Map.t;
+    observations : 'e observations;
   }
   and 'e observations = (unit,'e) t Observation.observations
 
@@ -80,15 +84,6 @@ module Make(M : Monad.S) : Machine
     type nonrec 'a observation = 'a observation
     type nonrec 'a statement = 'a statement
 
-    let provide ?inspect name =
-      let named s = Sexp.(List [Atom "observation"; Atom name; s]) in
-      let sexp_of = match inspect with
-        | None -> fun _ -> named @@ Sexp.List []
-        | Some f -> fun n -> named @@ f n in
-      let k = Univ_map.Key.create ~name sexp_of in
-      k,k
-
-
     let observations () = lifts (SM.gets @@ fun s -> s.observations)
 
     let set_observations observations = with_global_context @@ fun () ->
@@ -105,49 +100,34 @@ module Make(M : Monad.S) : Machine
       set_observations (Observation.add_observer os key observer)
   end
 
-  module State(S : sig
-      val get : unit -> (Univ_map.t,'e) t
-      val set : Univ_map.t -> (unit,'e) t
+  module Make_state(S : sig
+      val get : unit -> (State.Bag.t,'e) t
+      val set : State.Bag.t -> (unit,'e) t
       val typ : string
     end) = struct
-    module Dict = Univ_map
-    module Key = Dict.Key
     type ('a,'e) m = ('a,'e) t
-    type 'a t = {
-      key : 'a Key.t;
-      init : Context.t -> 'a; (* must be total...*)
-    }
+    let get state =
+      S.get () >>= fun states ->
+      State.Bag.with_state states state
+        ~ready:return
+        ~create:(fun make ->
+            lifts (SM.get ()) >>= fun {ctxt} ->
+            return (make (ctxt :> Context.t)))
 
-    let create ?(inspect=sexp_of_opaque) ~name init =
-      let sexp x = Sexp.List [
-          Sexp.Atom (sprintf "%s:%s" name S.typ);
-          inspect x;
-        ] in {
-        key = Key.create ~name sexp;
-        init
-      }
-
-    let get data =
-      S.get () >>= fun d ->
-      match Dict.find d data.key with
-      | Some r -> return r
-      | None -> lifts (SM.get ()) >>= fun {ctxt} ->
-        return (data.init (ctxt :> Context.t))
-
-    let put data x =
-      S.get () >>= fun d -> S.set (Dict.set d data.key x)
+    let put state x =
+      S.get () >>= fun states -> S.set (State.Bag.set states state x)
 
     let update data ~f =
       get data >>= fun s -> put data (f s)
   end
 
-  module Local = State(struct
+  module Local = Make_state(struct
       let typ = "local"
       let get = get_local
       let set = set_local
     end)
 
-  module Global = State(struct
+  module Global = Make_state(struct
       let typ = "global"
       let get = get_global
       let set = set_global
@@ -159,12 +139,12 @@ module Make(M : Monad.S) : Machine
   let update f = get () >>= fun s -> put (f s)
   let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
-
   let run : ('a,'e) t -> ('a,'e) e = fun m ctxt ->
     M.bind (SM.run m {
-        global = Univ_map.empty;
-        local = Univ_map.empty;
+        global = State.Bag.empty;
+        local = State.Bag.empty;
         observations = Primus_observation.empty;
+        states = String.Map.empty;
         ctxt}) @@ fun (x,{ctxt}) -> M.return (x,ctxt)
 
   let eval m s = M.map (run m s) ~f:fst
@@ -179,7 +159,6 @@ module Make(M : Monad.S) : Machine
   let switch id = lifts (SM.switch id)
   let global = SM.global
   let current () = lifts (SM.current ())
-
 end
 
 let finished,finish =
@@ -194,7 +173,6 @@ module Main(Machine : Machine) = struct
     Machine.List.iter !components ~f:(fun (module Component) ->
         let module Comp = Component(Machine) in
         Comp.init ())
-
 
   let run m init =
     let comp =

@@ -21,82 +21,76 @@ let segmentation_fault, segfault =
   Observation.provide ~inspect:sexp_of_segmentation_fault
     "segmentation-fault"
 
-module type S = Memory
+type dynamic = {base : addr; len : int; value : Generator.t }
+type region =
+  | Dynamic of dynamic
+  | Static  of mem
 
-module Make(Machine : Machine)
-  : S with type ('a,'e) m := ('a,'e) Machine.t  = struct
-  open Machine.Syntax
+type perms = {readonly : bool; executable : bool}
+type layer = {mem : region; perms : perms}
 
-  module Generator = Primus_generator.Make(Machine)
-
-  type ('a,'e) m = ('a,'e) Machine.t
-  type 'a memory = {base : addr; len : int; value : 'a }
-  type 'a region = {mem : 'a; readonly : bool; executable : bool}
-  type constant = word
-  type random   = Generator.t
-  type mapped   = mem
-  type layer =
-    | Static of constant memory region
-    | Random of random memory region
-    | Memory of mapped region
-
-  type t = {
-    values : word Addr.Map.t;
-    layers : layer list;
-  }
+type t = {
+  values : word Addr.Map.t;
+  layers : layer list;
+}
 
 
-  let zero = Word.of_int ~width:8 0
+let zero = Word.of_int ~width:8 0
 
-    let sexp_of_memory sexp_of_value {base; len; value} =
-    Sexp.(List [sexp_of_word base;
-                sexp_of_int len;
-                sexp_of_value value])
+let sexp_of_dynamic {base; len; value} =
+  Sexp.(List [sexp_of_word base;
+              sexp_of_int len;
+              Generator.sexp_of_t value])
 
+let sexp_of_mem = function
+  | Dynamic mem -> sexp_of_dynamic mem
+  | Static  mem -> sexp_of_mem mem
 
-  let sexp_of_region sexp_of_mem {mem; readonly; executable} =
-    let flags = [
-      "R";
-      if readonly then "" else "W";
-      if executable then "X" else "";
-    ] |> String.concat ~sep:"" in
-    Sexp.(List [sexp_of_mem mem; Atom flags])
+let sexp_of_layer {mem; perms={readonly; executable}} =
+  let flags = [
+    "R";
+    if readonly then "" else "W";
+    if executable then "X" else "";
+  ] |> String.concat ~sep:"" in
+  Sexp.(List [sexp_of_mem mem; Atom flags])
 
-  let sexp_of_word x = Sexp.Atom (Word.string_of_value x)
-  let sexp_of_random _ = Sexp.Atom "random"
-  let sexp_of_region = sexp_of_region
-
-  let inspect_memory {values; layers} =
-    let values =
-      Map.to_sequence values |> Seq.map ~f:(fun (key,value) ->
-          Sexp.(List [sexp_of_word key; sexp_of_word value])) |>
-      Seq.to_list_rev in
-    let layers = List.map layers ~f:(function
-        | Static r ->
-          sexp_of_region (sexp_of_memory sexp_of_word) r
-        | Random r ->
-          sexp_of_region (sexp_of_memory sexp_of_random) r
-        | Memory r ->
-          sexp_of_region (sexp_of_mem) r) in
-    Sexp.(List [
+let inspect_memory {values; layers} =
+  let values =
+    Map.to_sequence values |> Seq.map ~f:(fun (key,value) ->
+        Sexp.(List [sexp_of_word key; sexp_of_word value])) |>
+    Seq.to_list_rev in
+  let layers = List.map layers ~f:(sexp_of_layer) in
+  Sexp.(List [
       List [Atom "values"; List values];
       List [Atom "layers"; List layers];
     ])
 
-  let state = Machine.Local.create ~inspect:inspect_memory ~name:"memory"
-      (fun _ -> {values = Addr.Map.empty; layers = []})
+let state = Primus_machine.State.declare
+    ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
+    ~inspect:inspect_memory
+    ~name:"memory"
+    (fun _ -> {values = Addr.Map.empty; layers = []})
 
-  let inside {base;len} addr =
-    Addr.(addr >= base) && Addr.(base ++ len < addr)
+let inside {base;len} addr =
+  Addr.(addr >= base) && Addr.(base ++ len < addr)
+
+let find_layer addr = List.find ~f:(function
+    | {mem=Dynamic mem} -> inside mem addr
+    | {mem=Static  mem} -> Memory.contains mem addr)
+
+let is_mapped addr {layers} = find_layer addr layers <> None
+
+
+module Make(Machine : Machine) = struct
+  open Machine.Syntax
+
+  module Generate = Generator.Make(Machine)
+
+  type ('a,'e) m = ('a,'e) Machine.t
 
   let update state f =
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
-
-  let find_layer addr = List.find ~f:(function
-      | Static {mem} -> inside mem addr
-      | Random {mem} -> inside mem addr
-      | Memory {mem} -> Memory.contains mem addr)
 
   let segfault addr = Machine.fail (Segmentation_fault addr)
 
@@ -104,21 +98,16 @@ module Make(Machine : Machine)
     | None -> segfault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
-      | None -> match layer with
-        | Static {mem={value}} -> Machine.return value
-        | Random {mem={value}} -> Generator.next value >>| Word.of_int ~width:8
-        | Memory {mem} -> match Memory.get ~addr mem with
+      | None -> match layer.mem with
+        | Dynamic {value} -> Generate.next value >>| Word.of_int ~width:8
+        | Static mem -> match Memory.get ~addr mem with
           | Ok value -> Machine.return value
           | Error _ -> failwith "Primus.Memory.read"
 
-  let is_mapped addr {layers} = find_layer addr layers <> None
-
-  let is_readonly
-      (Memory {readonly} | Random {readonly} | Static {readonly}) = readonly
 
   let write addr value {values;layers} = match find_layer addr layers with
     | None -> segfault addr
-    | Some layer when is_readonly layer -> segfault addr
+    | Some {perms={readonly=true}} -> segfault addr
     | Some _ -> Machine.return {
         layers;
         values = Map.add values ~key:addr ~data:value;
@@ -127,44 +116,21 @@ module Make(Machine : Machine)
   let add_layer layer t = {t with layers = layer :: t.layers}
   let (++) = add_layer
 
-
-  let set_stack ?(size=8*1024*1024) ?rng base =
-    let rng = match rng with
-      | Some rng -> Machine.return rng
-      | None -> Generator.Seeded.byte () in
-    rng >>= fun rng ->
-    update state @@ add_layer (Random {
-      mem = {base; len=size; value=rng};
-      readonly = false;
-      executable = false;
-    })
-
   let allocate
-      ?(readonly=true)
-      ?(executable=true)
-      ?(policy=`static zero)
+      ?(readonly=false)
+      ?(executable=false)
+      ?(generator=Generator.Random.Seeded.byte)
       base len =
+    update state @@ add_layer {
+      perms={readonly; executable};
+      mem = Dynamic {base;len; value=generator}
+    }
 
-    let layer = match policy with
-      | `static value -> Machine.return (Static {
-          mem = {base;len;value};
-          readonly; executable;
-        })
-      | `random (Some value) -> Machine.return (Random {
-          mem = {base; len; value};
-          readonly; executable
-        })
-      | `random None ->
-        Generator.Seeded.byte () >>| fun value -> Random {
-          mem = {base; len; value};
-          readonly; executable
-        } in
-    layer >>= fun layer -> update state @@ add_layer layer
 
-  let add_mem mem ~readonly ~executable =
-    update state @@ add_layer (Memory {mem; readonly; executable})
-  let add_text mem = add_mem mem ~readonly:true  ~executable:true
-  let add_data mem = add_mem mem ~readonly:false ~executable:false
+  let map ?(readonly=false) ?(executable=false) mem =
+    update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})
+  let add_text mem = map mem ~readonly:true  ~executable:true
+  let add_data mem = map mem ~readonly:false ~executable:false
 
   let load addr =
     Machine.Local.get state >>= read addr

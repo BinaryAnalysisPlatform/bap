@@ -67,13 +67,14 @@ module Level = struct
           | Top _ -> accept top {me=p; up=Nil}
           | _ -> reject `top)
       ~sub:(fun me -> match level with
-          | Top up | Sub {up} -> accept sub {me; up}
+          | Top up | Sub {up} | Jmp {up={up={up}}} ->
+            accept sub {me; up}
           | _ -> reject `sub)
       ~arg:(fun me -> match level with
-          | Sub up | Blk {up} -> accept arg {me;up}
+          | Sub up | Arg {up} | Jmp {up={up}}  -> accept arg {me;up}
           | _ -> reject `arg)
       ~blk:(fun me -> match level with
-          | Blk {up} | Sub up | Arg {up} -> accept blk {me;up}
+          | Jmp {up={up}} | Sub up | Arg {up} -> accept blk {me;up}
           | _ -> reject `blk)
       ~phi:(fun me -> match level with
           | Blk up | Phi {up} -> accept phi {me;up}
@@ -85,7 +86,6 @@ module Level = struct
           | Blk up | Phi {up} | Def {up} | Jmp {up} ->
             accept jmp {me;up}
           | _ -> reject `jmp)
-
 end
 
 type level = Level.t

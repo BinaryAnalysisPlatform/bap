@@ -1,24 +1,26 @@
+open Bap.Std
 open Primus_generator_types
 open Primus_types
 
-module Random = Primus_random
+type t [@@deriving sexp_of]
 
-(** Generate values from a finite domain *)
-module type Progress = sig
-  type t
-  val coverage : t -> float
-end
+val create :
+  (module Iterator.Infinite
+    with type t = 'a
+     and type dom = int) -> 'a -> t
 
-module Uniform : sig
-  module Byte : sig
-    module type S = Generator.Byte
-    module Make(Rng : Random.S with type dom = int)
-      : S with type rng = Rng.t
-    include S with type rng = Random.LCG.t
+val static : int -> t
+
+module Random : sig
+  val lcg : int -> t
+  val byte : int -> t
+  module Seeded : sig
+    val create : (int -> t) -> t
+    val lcg : t
+    val byte : t
   end
 end
 
-module type S = Generator
-
-module Make( Machine : Machine) : S
-  with type ('a,'e) m := ('a,'e) Machine.t
+module Make( Machine : Machine) : sig
+  val next : t -> (int,#Context.t) Machine.t
+end

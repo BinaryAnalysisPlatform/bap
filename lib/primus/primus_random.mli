@@ -2,14 +2,10 @@ open Core_kernel.Std
 
 module Iterator = Primus_iterator
 
-module type S = sig
-  include Iterator.Infinite.S
-  val t : (t,dom) Iterator.t
-end
 
 module LCG : sig
   module type S = sig
-    include S with type dom = int
+    include Iterator.Infinite.S with type dom = int
     val create : dom -> t
   end
   include S
@@ -18,7 +14,7 @@ end
 
 module Unit : sig
   module type S = sig
-    include S with type dom = float
+    include Iterator.Infinite.S with type dom = float
     type u
     val create : u -> t
   end
@@ -29,7 +25,7 @@ end
 
 module Geometric : sig
   module type S = sig
-    include S
+    include Iterator.Infinite.S
     type u
     val create : p:float -> u -> t
     val param : t -> float
@@ -45,5 +41,17 @@ module Geometric : sig
 
   module Float : S with type dom = float and type u = LCG.t
   module Int   : S with type dom = int   and type u = LCG.t
+end
 
+
+
+module Byte : sig
+  module type S = sig
+    include Iterator.Infinite.S with type dom = int
+    type rng
+    val create : rng -> t
+  end
+  module Make(Rng : Iterator.Infinite.S with type dom = int)
+    : S with type rng = Rng.t
+  include S with type rng = LCG.t
 end

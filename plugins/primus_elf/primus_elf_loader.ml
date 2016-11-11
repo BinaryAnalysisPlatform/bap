@@ -1,3 +1,4 @@
+open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 
@@ -46,6 +47,7 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
           alloc mem)
 
   let init () =
+    printf "Setting up the stack\n";
     setup_stack () >>= fun () ->
     load_segments ()
 end

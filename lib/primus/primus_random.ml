@@ -2,12 +2,7 @@ open Core_kernel.Std
 open Primus_types
 
 module Iterator = Primus_iterator
-
-module type S = sig
-  include Iterator.Infinite.S
-  val t : (t,dom) Iterator.t
-end
-
+module type S = Iterator.Infinite.S
 
 module LCG = struct
   module type S = sig
@@ -134,4 +129,28 @@ module Geometric = struct
 
   module Float = Make(Float)(LCG)
   module Int   = Make(Int)(LCG)
+end
+
+
+module Byte = struct
+  module type S = sig
+    include Iterator.Infinite.S with type dom = int
+    type rng
+    val create : rng -> t
+  end
+  module Make(Rng : Iterator.Infinite.S with type dom = int)
+  = struct
+    type dom = int
+    type rng = Rng.t
+    type t = Rng.t
+
+    let min = 0
+    let max = 255
+    let size = max - min + 1
+    let create = ident
+    let next = Rng.next
+    let value rng = Rng.value rng mod size
+  end
+  module Basic = Make(LCG)
+  include Basic
 end

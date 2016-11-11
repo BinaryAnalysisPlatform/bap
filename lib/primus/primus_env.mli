@@ -1,8 +1,11 @@
 open Bap.Std
 open Primus_types
 
-module Context = Primus_context
+module Generator = Primus_generator
 
-module type S = Env
-
-module Make(Machine : Machine) : S with type ('a,'e) m := ('a,'e) Machine.t
+module Make(Machine : Machine) : sig
+  type ('a,'e) m = ('a,'e) Machine.t
+  val get : var -> (word,#Context.t) m
+  val set : var -> word -> (unit,#Context.t) m
+  val add : var -> Generator.t -> (unit,#Context.t) m
+end
