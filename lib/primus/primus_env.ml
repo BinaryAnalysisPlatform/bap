@@ -1,10 +1,12 @@
 open Core_kernel.Std
 open Bap.Std
 open Primus_types
+open Format
 
 module Context = Primus_context
 module Observation = Primus_observation
 module Generator = Primus_generator
+module Error = Primus_error
 
 
 type error += Undefined_var of var
@@ -12,14 +14,34 @@ type error += Undefined_var of var
 let undefined_variable,undefined =
   Observation.provide ~inspect:sexp_of_var "undefined-variable"
 
-
+let () = Error.add_printer (function
+    | Undefined_var v ->
+      Some (sprintf "Undefined variable `%s'" (Var.name v))
+    | _ -> None)
 
 type t = {
   values : word Var.Map.t;
   random : Generator.t Var.Map.t;
 }
 
+let sexp_of_values values =
+  Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,w) ->
+      Sexp.List [
+        Sexp.Atom (Var.name v);
+        Sexp.Atom (Type.to_string (Var.typ v));
+        Sexp.Atom (Word.string_of_value w)
+      ]) |> Seq.to_list_rev)
+
+let sexp_of_random = Var.Map.sexp_of_t Generator.sexp_of_t
+
+let sexp_of_env {values; random} = Sexp.List [
+    sexp_of_values values;
+    sexp_of_random random;
+  ]
+
+
 let state = Primus_machine.State.declare
+    ~inspect:sexp_of_env
     ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
     ~name:"environment" (fun _ -> {
           values = Var.Map.empty;
@@ -47,7 +69,7 @@ let inspect_environment {values;random} =
           | None -> assert false)  in
   Sexp.List bindings
 
-    let word = Word.of_int ~width:8
+let word = Word.of_int ~width:8
 
 
 module Make(Machine : Machine) = struct
@@ -59,21 +81,41 @@ module Make(Machine : Machine) = struct
     let add var policy =
       Machine.Local.update state ~f:(fun s -> {
         s with random = Map.add s.random ~key:var ~data:policy
-      })
-
-    let set var word =
-      Machine.Local.update state ~f:(fun s -> {
-            s with values = Map.add s.values ~key:var ~data:word
           })
 
+    let set var x =
+      Machine.get () >>= fun ctxt ->
+      let ctxt,res = ctxt#create_word x in
+      Machine.put (ctxt#update var res)
+
+    let gen_word gen width =
+      assert (width > 0);
+      let rec next x =
+        if Word.bitwidth x >= width
+        then Machine.return (Word.extract_exn ~hi:(width+1) x)
+        else Generator.next gen >>= fun y ->
+          next (Word.concat x (word y)) in
+      Generator.next gen >>| word >>= next
+
     let get var =
-      Machine.Local.get state >>= fun t ->
-      match Map.find t.values var with
-      | Some value -> Machine.return value
-      | None -> match Map.find t.random var with
-        | None ->
+      Machine.get () >>= fun ctxt ->
+      match ctxt#lookup var with
+      | Some res -> Machine.return res
+      | None -> match Var.typ var with
+        | Type.Mem (_,_) ->
           Machine.Observation.make undefined var >>= fun () ->
           Machine.fail (Undefined_var var)
-        | Some gen -> Generator.next gen >>| word
+        | Type.Imm width ->
+          Machine.Local.get state >>= fun t ->
+          match Map.find t.random var with
+          | None ->
+            Machine.Observation.make undefined var >>= fun () ->
+            Machine.fail (Undefined_var var)
+          | Some gen ->
+            gen_word gen width >>= fun w ->
+            let ctxt,res = ctxt#create_word w in
+            Machine.put (ctxt#update var res) >>= fun () ->
+            Machine.return res
+
 
 end

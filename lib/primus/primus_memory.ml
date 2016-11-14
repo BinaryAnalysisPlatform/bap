@@ -8,6 +8,7 @@ module Observation = Primus_observation
 module Iterator = Primus_iterator
 module Random  = Primus_random
 module Generator = Primus_generator
+module Error = Primus_error
 
 
 type error += Segmentation_fault of addr
@@ -20,6 +21,12 @@ let sexp_of_segmentation_fault addr =
 let segmentation_fault, segfault =
   Observation.provide ~inspect:sexp_of_segmentation_fault
     "segmentation-fault"
+
+let () = Error.add_printer (function
+    | Segmentation_fault here ->
+      Some (sprintf "Segmentation fault at %s"
+              (Addr.string_of_value here))
+    | _ -> None)
 
 type dynamic = {base : addr; len : int; value : Generator.t }
 type region =
@@ -72,7 +79,7 @@ let state = Primus_machine.State.declare
     (fun _ -> {values = Addr.Map.empty; layers = []})
 
 let inside {base;len} addr =
-  Addr.(addr >= base) && Addr.(base ++ len < addr)
+  Addr.(addr >= base) && Addr.(addr < base ++ len)
 
 let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
@@ -95,7 +102,9 @@ module Make(Machine : Machine) = struct
   let segfault addr = Machine.fail (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
-    | None -> segfault addr
+    | None ->
+      eprintf "Didn't find a value in %d layers\n" (List.length layers);
+      segfault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None -> match layer.mem with
@@ -106,8 +115,14 @@ module Make(Machine : Machine) = struct
 
 
   let write addr value {values;layers} = match find_layer addr layers with
-    | None -> segfault addr
-    | Some {perms={readonly=true}} -> segfault addr
+    | None ->
+      eprintf "Didn't find a writable layer in %d layers\n"
+        (List.length layers);
+      segfault addr
+    | Some {perms={readonly=true}} ->
+      eprintf "Trying to write into a readonly memory\n";
+
+      segfault addr
     | Some _ -> Machine.return {
         layers;
         values = Map.add values ~key:addr ~data:value;

@@ -26,13 +26,22 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
 
   let setup_stack () =
     target () >>= fun (module Target) ->
-    make_addr stack_base >>= fun bottom ->
-    let base = Addr.(bottom -- stack_size) in
-    Env.set Target.CPU.sp base >>= fun () ->
+    make_addr stack_base >>= fun top ->
+    let bottom = Addr.(top -- stack_size) in
+    Env.set Target.CPU.sp top >>= fun () ->
     Memory.allocate
       ~readonly:false
       ~executable:false
-      base stack_size
+     bottom stack_size
+
+
+  let setup_registers () =
+    let zero = Primus_generator.static 0 in
+    target () >>= fun (module Target) ->
+    Set.to_sequence Target.CPU.gpr |>
+    Machine.Seq.iter ~f:(fun reg ->
+        Env.add reg zero)
+
 
   let load_segments () =
     proj () >>| Project.memory >>= fun memory ->
@@ -47,7 +56,7 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
           alloc mem)
 
   let init () =
-    printf "Setting up the stack\n";
     setup_stack () >>= fun () ->
-    load_segments ()
+    load_segments () >>= fun () ->
+    setup_registers ()
 end

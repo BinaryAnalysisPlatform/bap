@@ -90,6 +90,11 @@ module Make(M : Monad.S)
       lifts (SM.update @@ fun s -> {s with observations})
 
     let make key obs =
+      let event = Observation.of_statement key in
+      Format.printf "%a@\n"
+        Sexp.pp_hum (Sexp.List [
+            Sexp.Atom ("observation-" ^ Observation.name event);
+            Observation.inspect event obs]);
       with_global_context @@ fun () ->
       observations () >>= fun os ->
       Observation.with_observers os key ~f:(List.iter ~f:(fun observe -> observe obs))
@@ -115,7 +120,12 @@ module Make(M : Monad.S)
             return (make (ctxt :> Context.t)))
 
     let put state x =
-      S.get () >>= fun states -> S.set (State.Bag.set states state x)
+      S.get () >>= fun states ->
+      Format.printf "%a@\n"
+        Sexp.pp_hum (Sexp.List [
+            Sexp.Atom ("set-" ^ State.name state);
+            State.inspect state x]);
+      S.set (State.Bag.set states state x)
 
     let update data ~f =
       get data >>= fun s -> put data (f s)

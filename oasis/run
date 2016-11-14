@@ -1,0 +1,12 @@
+Flag run
+  Description: build run plugin
+  Default: false
+
+Library run_plugin
+  Build$: flag(everything) || flag(run)
+  Path: plugins/run
+  FindlibName: bap-plugin-run
+  CompiledObject: best
+  BuildDepends: bap, primus, cmdliner
+  InternalModules: Run_main
+  XMETADescription: a pass that will run a program

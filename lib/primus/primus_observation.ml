@@ -6,14 +6,13 @@ type 'a t = 'a observation
 
 type ('m,'a) observers = Observers of ('a -> 'm) list
 
-let provide ?inspect name =
-  let named s = Sexp.(List [Atom "observation"; Atom name; s]) in
-  let sexp_of = match inspect with
-    | None -> fun _ -> named @@ Sexp.List []
-    | Some f -> fun n -> named @@ f n in
-  let k = Univ_map.Key.create ~name sexp_of in
+let provide ?(inspect=sexp_of_opaque) name =
+  let k = Univ_map.Key.create ~name inspect in
   k,k
 
+let inspect = Univ_map.Key.to_sexp
+let name = Univ_map.Key.name
+let of_statement = ident
 
 module Map = Univ_map.Make1(struct
     type ('a,'m) t = ('a,'m) observers

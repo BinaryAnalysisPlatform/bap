@@ -8,6 +8,7 @@ module Observation = Primus_observation
 
 
 let sexp_of_tid t = Sexp.Atom (Tid.name t)
+let sexp_of_var v = Sexp.Atom (Var.name v)
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
@@ -100,6 +101,7 @@ module Make (Machine : Machine) = struct
   module Biri = Biri.Make(Machine)
   module Memory = Primus_memory.Make(Machine)
   module Linker = Primus_linker.Make(Machine)
+  module Env = Primus_env.Make(Machine)
 
   type ('a,'e) state = ('a,'e) Machine.t
   type 'a r = (Bil.result,'a) state
@@ -146,9 +148,12 @@ module Make (Machine : Machine) = struct
 
       method! lookup var =
         make_observation variable_will_be_looked_up var >>= fun () ->
-        super#lookup var >>= fun r ->
-        make_observation variable_was_read (var,r) >>= fun () ->
-        Machine.return r
+        match Var.typ var with
+        | Type.Mem _ -> super#lookup var
+        | _ ->
+          Env.get var >>= fun r ->
+          make_observation variable_was_read (var,r) >>= fun () ->
+          Machine.return r
 
       method! update var r =
         super#update var r >>= fun () ->
