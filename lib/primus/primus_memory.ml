@@ -9,7 +9,7 @@ module Iterator = Primus_iterator
 module Random  = Primus_random
 module Generator = Primus_generator
 module Error = Primus_error
-
+open Primus_sexp
 
 type error += Segmentation_fault of addr
 type error += Stack_overflow of addr
@@ -44,10 +44,20 @@ type t = {
 
 let zero = Word.of_int ~width:8 0
 
+let sexp_of_word w = Sexp.Atom (Word.string_of_value w)
+
 let sexp_of_dynamic {base; len; value} =
-  Sexp.(List [sexp_of_word base;
-              sexp_of_int len;
-              Generator.sexp_of_t value])
+  Sexp.(List [
+      Sexp.Atom "dynamic";
+      sexp_of_word base;
+      sexp_of_int len;
+      Generator.sexp_of_t value])
+
+let sexp_of_mem mem = Sexp.List [
+    Sexp.Atom "static";
+    sexp_of_word (Memory.min_addr mem);
+    sexp_of_int (Memory.length mem);
+  ]
 
 let sexp_of_mem = function
   | Dynamic mem -> sexp_of_dynamic mem
@@ -64,7 +74,7 @@ let sexp_of_layer {mem; perms={readonly; executable}} =
 let inspect_memory {values; layers} =
   let values =
     Map.to_sequence values |> Seq.map ~f:(fun (key,value) ->
-        Sexp.(List [sexp_of_word key; sexp_of_word value])) |>
+        Sexp.(List [sexp_of_word key; sexp_of_byte value])) |>
     Seq.to_list_rev in
   let layers = List.map layers ~f:(sexp_of_layer) in
   Sexp.(List [

@@ -30,7 +30,7 @@ module Level : sig
   val next : t -> ('p,'t) cls -> 't term -> (t,Primus_error.t) Monad.Result.result
 end
 
-type level = Level.t
+type level = Level.t [@@deriving sexp_of]
 
 
 class t : ?main:sub term -> project ->

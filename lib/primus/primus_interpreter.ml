@@ -5,17 +5,16 @@ open Primus_types
 
 module Context = Primus_context
 module Observation = Primus_observation
+module State = Primus_state
 
+open Primus_sexp
 
-let sexp_of_tid t = Sexp.Atom (Tid.name t)
-let sexp_of_var v = Sexp.Atom (Var.name v)
+let sexp_of_level = Primus_context.sexp_of_level
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
 let leave_term, term_left =
   Observation.provide ~inspect:sexp_of_tid "leave-term"
-
-let sexp_of_level level = Sexp.Atom (Context.Level.to_string level)
 
 let enter_level,level_entered =
   Observation.provide ~inspect:sexp_of_level "enter-level"
@@ -56,28 +55,34 @@ let leave_jmp,jmp_left =
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
 
-let variable_access,variable_will_be_looked_up =
-  Observation.provide ~inspect:sexp_of_var "variable-access"
 
-(* TODO: add sexp_of to the Bil.Result.t *)
-let sexp_of_bil_result r = Sexp.Atom (Bil.Result.to_string r)
-type bil_result = Bil.Result.t
+let variable_access,variable_will_be_looked_up =
+  Observation.provide ~inspect:(fun v ->
+      Sexp.Atom (Var.name v)) "variable-access"
 
 let variable_read,variable_was_read =
-  Observation.provide ~inspect:[%sexp_of: var * bil_result] "variable-read"
+  Observation.provide ~inspect:sexp_of_binding "variable-read"
 
 let variable_written,variable_was_written =
-  Observation.provide ~inspect:[%sexp_of: var * bil_result] "variable-written"
+  Observation.provide ~inspect:sexp_of_binding "variable-written"
 
 let address_access,address_will_be_read =
-  Observation.provide ~inspect:sexp_of_addr "address-access"
+  Observation.provide ~inspect:sexp_of_word "address-access"
 
 let address_read,address_was_read =
-  Observation.provide ~inspect:[%sexp_of: addr * word] "address-read"
+  Observation.provide ~inspect:sexp_of_move "address-read"
 
 let address_written,address_was_written =
-  Observation.provide ~inspect:[%sexp_of: addr * word]
+  Observation.provide ~inspect:sexp_of_move
     "address-written"
+
+let pc_change,pc_changed =
+  Observation.provide ~inspect:sexp_of_word "pc-changed"
+
+let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
+
+let exec_insn,insn_entered =
+  Observation.provide ~inspect:sexp_of_word "exec-insn"
 
 
 let sexp_of_name = function
@@ -94,6 +99,16 @@ let call,calling =
   Observation.provide ~inspect:sexp_of_call "call"
 
 
+type state = {
+  pc : addr;
+}
+
+let sexp_of_state {pc} = Sexp.List [
+    Sexp.List [Sexp.Atom "program-counter"; sexp_of_word pc];
+]
+
+let sexp_of_state {pc} = [%sexp {pc : word = pc}]
+
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
@@ -103,12 +118,17 @@ module Make (Machine : Machine) = struct
   module Linker = Primus_linker.Make(Machine)
   module Env = Primus_env.Make(Machine)
 
-  type ('a,'e) state = ('a,'e) Machine.t
-  type 'a r = (Bil.result,'a) state
+  type 'a r = (Bil.result,'a) Machine.t
   type 'a u = (unit,'a) Machine.t
 
 
   let make_observation = Machine.Observation.make
+
+
+  let observe_term cls t = Term.switch cls t
+      ~program:(make_observation top_entered)
+      ~sub:(make_observation sub_entered)
+
 
   class ['e] t  =
     object
@@ -133,6 +153,7 @@ module Make (Machine : Machine) = struct
             ~phi:(make_observation phi_entered)
             ~def:(make_observation def_entered)
             ~jmp:(make_observation jmp_entered)
+
 
       method! leave_term cls t =
         super#leave_term cls t >>= fun () ->

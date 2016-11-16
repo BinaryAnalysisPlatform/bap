@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 
+module Generator = Primus_generator
+
 module type Param = sig
   val stack_size : int
   val stack_base : int64
@@ -18,11 +20,9 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
   let arch () = proj () >>| Project.arch
   let target () = arch () >>| target_of_arch
 
-
   let make_addr addr =
     arch () >>| Arch.addr_size >>| fun size ->
     Addr.of_int64 ~width:(Size.in_bits size) addr
-
 
   let setup_stack () =
     target () >>= fun (module Target) ->
@@ -34,14 +34,13 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
       ~executable:false
      bottom stack_size
 
-
   let setup_registers () =
-    let zero = Primus_generator.static 0 in
     target () >>= fun (module Target) ->
     Set.to_sequence Target.CPU.gpr |>
-    Machine.Seq.iter ~f:(fun reg ->
-        Env.add reg zero)
-
+    Seq.mapi ~f:(fun i reg -> i,reg) |>
+    Machine.Seq.iter ~f:(fun (i,reg) ->
+        let value = Generator.Random.byte i in
+        Env.add reg value)
 
   let load_segments () =
     proj () >>| Project.memory >>= fun memory ->

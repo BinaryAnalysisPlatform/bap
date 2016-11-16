@@ -3,6 +3,8 @@ open Bap.Std
 
 module Error = Primus_error
 
+open Primus_sexp
+
 module Level = struct
   type nil = Nil
   type top = program
@@ -60,6 +62,22 @@ module Level = struct
   let accept level args = Ok (level args)
   let reject level dst = Error (Broken_invariant {level; dst})
 
+
+  let level name f x = list [atom name; atom (f x)]
+  let (>>) = Fn.compose
+  let leaf name str t = list [
+      atom name; atom (String.strip (str t));
+    ]
+
+  let sexp_of_level = function
+    | Top _   -> atom "top"
+    | Sub {me} -> level "sub" Sub.name me
+    | Arg {me} -> level "arg" (Var.name >> Arg.lhs) me
+    | Blk {me} -> level "blk" (Tid.name >> Term.tid ) me
+    | Phi {me} -> leaf "phi" Phi.to_string me
+    | Def {me} -> leaf "def" Def.to_string me
+    | Jmp {me} -> leaf "jmp" Jmp.to_string me
+
   let next level cls t  =
     let reject = reject level in
     Term.switch cls t
@@ -90,6 +108,7 @@ end
 
 type level = Level.t
 
+let sexp_of_level = Level.sexp_of_level
 open Level
 
 class t ?main proj =

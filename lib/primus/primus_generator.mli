@@ -11,12 +11,15 @@ val create :
 
 val static : int -> t
 
+val unfold : ?min:int -> ?max:int -> ?seed:int ->
+  f:('a * int -> 'a * int) -> 'a -> t
+
 module Random : sig
-  val lcg : int -> t
+  val lcg : ?min:int -> ?max:int -> int -> t
   val byte : int -> t
   module Seeded : sig
     val create : (int -> t) -> t
-    val lcg : t
+    val lcg : ?min:int -> ?max:int -> unit -> t
     val byte : t
   end
 end

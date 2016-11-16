@@ -5,10 +5,51 @@ open Monads.Std
 
 open Format
 
+type value =
+  | Data of string
+  | Word of Generator.t
+
+
+type parameters = {
+ argv  : value list;
+ envp  : (string * value) list;
+ entry : string option;
+ memory : (addr * value) list;
+ stack  : value list;
+ variables : (string * value) list;
+}
+
+
+module Parameters = struct
+  open Sexp
+  type t = parameters
+
+  let int = int_of_string
+
+  let parse_generator = function
+    | List [Atom x; Atom y; Atom z] ->
+      Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
+    | List [Atom x; Atom y] ->
+      Generator.Random.Seeded.lcg ~min:(int x) ~max:(int y) ()
+    | Atom x -> Generator.static (int x)
+    | _ -> invalid_arg "Parse error:
+     expected 'value := const | (min max) | (min max seed)'"
+
+  let int_literal x = try ignore (int x); true with exn -> false
+
+  let parse_value = function
+    | Atom x when not (int_literal x) -> Data x
+    | gen -> Word (parse_generator gen)
+
+
+end
+
 module Mach = Machine.Make(Monad.Ident)
 module Main = Machine.Main(Mach)
 module Interpreter = Interpreter.Make(Mach)
 module Linker = Linker.Make(Mach)
+module Environment(Machine : Machine.S) = struct
+end
 
 let pp_backtrace ppf ctxt =
   let prog = ctxt#program in

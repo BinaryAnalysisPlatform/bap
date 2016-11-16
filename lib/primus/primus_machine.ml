@@ -93,7 +93,7 @@ module Make(M : Monad.S)
       let event = Observation.of_statement key in
       Format.printf "%a@\n"
         Sexp.pp_hum (Sexp.List [
-            Sexp.Atom ("observation-" ^ Observation.name event);
+            Sexp.Atom (Observation.name event);
             Observation.inspect event obs]);
       with_global_context @@ fun () ->
       observations () >>= fun os ->

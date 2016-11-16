@@ -9,8 +9,8 @@ Library primus
   FindlibName: primus
   CompiledObject: best
   BuildDepends: bap, uuidm
-  Modules: Primus
-  InternalModules: Primus_context,
+  Modules: Primus,
+                   Primus_context,
                    Primus_env,
                    Primus_error,
                    Primus_generator,
@@ -19,9 +19,11 @@ Library primus
                    Primus_interpreter,
                    Primus_iterator,
                    Primus_linker,
+                   Primus_lisp,
                    Primus_machine,
                    Primus_memory,
                    Primus_observation,
                    Primus_random,
                    Primus_scheduler,
+                   Primus_sexp,
                    Primus_state

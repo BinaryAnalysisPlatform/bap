@@ -35,8 +35,12 @@ type t =
 
 let rec sexp_of_t = function
   | Static x -> Sexp.(List [Atom "static"; sexp_of_int x])
-  | Gen {min;max} -> Sexp.Atom (sprintf "(%d,%d)" min max)
-  | Wait create -> Sexp.List [Sexp.Atom "create 0:"; sexp_of_t (create 0)]
+  | Gen {min;max} -> Sexp.List [
+      Sexp.Atom "interval";
+      sexp_of_int min;
+      sexp_of_int max;
+    ]
+  | Wait create -> Sexp.List [Sexp.Atom "project-0"; sexp_of_t (create 0)]
 
 let create (type rng)
     (module Rng : Iterator.Infinite.S
@@ -45,20 +49,38 @@ let create (type rng)
       ~default:init ~name:"rng-state" sexp_of_opaque in
   Gen {state; next=Rng.next; value=Rng.value; min=Rng.min; max=Rng.max}
 
+let unfold (type gen)
+    ?(min=Int.min_value)
+    ?(max=Int.max_value)
+    ?(seed=0)
+    ~f init  =
+  let module Gen = struct
+    type t = gen * int
+    type dom = int
+    let min = min
+    let max = max
+    let next = f
+    let value = snd
+  end in
+  create (module Gen) (init,seed)
+
 let static value = Static value
 
 
 module Random = struct
   open Primus_random
-  let lcg seed =
-    create (module LCG) (LCG.create seed)
 
-  let byte seed =
-    create (module Byte) (Byte.create (LCG.create seed))
+  let lcg ?(min=LCG.min) ?(max=LCG.max) seed =
+    let lcg = LCG.create seed in
+    unfold ~min ~max ~f:(fun (lcg,value) ->
+        let x = LCG.value lcg in
+        (LCG.next lcg, min + x mod (max-min+1))) lcg
+
+  let byte seed = lcg ~min:0 ~max:255 seed
 
   module Seeded = struct
     let create make = Wait make
-    let lcg = Wait lcg
+    let lcg ?min ?max () = Wait (fun seed -> lcg ?min ?max seed)
     let byte = Wait byte
   end
 end
