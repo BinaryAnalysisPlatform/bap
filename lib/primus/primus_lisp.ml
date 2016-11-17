@@ -27,11 +27,23 @@ type exp =
   | Rep of exp * exp
 
 
+type hook = [`enter | `leave] [@@deriving sexp]
+type advice = {
+  advised : string;
+  advisor : string;
+  where : hook;
+}
+
+type attr = {
+  attr : string;
+  vals : string list
+}
+
 type meta = {
   name : string;
   docs : string;
-  attrs : (string * string list) list;
-  hooks : ([`enter | `leave] * string) list;
+  attrs : attr list;
+  hooks : (hook * string) list;
 }
 
 type func = {
@@ -41,6 +53,12 @@ type func = {
 
 type 'a def = {meta : meta; code : 'a}
 type 'a defs = Defs of 'a def list
+
+type stmt =
+  | Advice of advice
+  | Defun  of func def
+  | Attrs  of attr list
+  | Macro
 
 module Parse = struct
   open Sexp
@@ -163,41 +181,63 @@ module Parse = struct
     | s -> expects "(s1 s2 ..)" s
 
   let parse_attrs = List.map ~f:(function
-      | Atom x -> (x,[])
-      | List [Atom x; Atom v] -> (x, [v])
-      | List [Atom x; List vs] -> (x, List.map ~f:atom vs)
+      | Atom x -> {attr=x; vals=[]}
+      | List [Atom x; Atom v] -> {attr=x; vals=[v]}
+      | List [Atom x; List vs] -> {attr=x; vals=List.map ~f:atom vs}
       | s -> expects "v | (v x) | (v (x1 ... xm)" s)
 
 
-  let defun ?(docs="undocumented") ?(attrs=[]) name p body = {
+  let defun ?(docs="undocumented") ?(attrs=[]) name p body = Defun {
     meta = {name; docs; attrs = parse_attrs attrs; hooks = []};
     code = {args=params p; body = List.map ~f:exp body}
   }
 
-  let advice where advised advisor =
-    List.map ~f:(fun (name,func) ->
-        if name = advised then name, {
-          func with hooks = (where,advisor) :: func.hooks
-        } else name,func)
 
-  let def = function
+
+  let stmt = function
     | List (Atom "defun" :: Atom n :: p ::
             List (Atom "declare" :: attrs) :: Atom docs :: b) ->
-      Some (defun ~docs ~attrs n p b)
+      defun ~docs ~attrs n p b
     | List (Atom "defun" :: Atom n :: p ::
             List (Atom "declare" :: attrs) :: b) ->
-      Some (defun ~attrs n p b)
+      defun ~attrs n p b
     | List (Atom "defun" :: Atom n :: p ::
             Atom docs :: b) ->
-      Some (defun ~docs n p b)
-    | List (Atom "defun" :: Atom n :: p :: b) -> Some (defun n p b)
+      defun ~docs n p b
+    | List (Atom "defun" :: Atom n :: p :: b) -> defun n p b
     | List [Atom "defmacro"; Atom name; p; Atom _; body]
     | List [Atom "defmacro"; Atom name; p; body] ->
-      add_macro name (metaparams p) body;
-      None
+      add_macro name (metaparams p) body; Macro
+    | List [Atom "advice"; h; Atom f1; Atom "with"; Atom f2] ->
+      Advice {advised=f1; advisor=f2; where = hook_of_sexp h}
+    | List (Atom "declare" :: attrs) -> Attrs (parse_attrs attrs)
     | s -> expects "(defun ...) | (defmacro ..)" s
 
-  let defs = List.filter_map ~f:def
+
+  let advice ads =
+    List.map ~f:(fun def ->
+        List.fold ads ~init:def ~f:(fun def {where; advised; advisor} ->
+            if String.(def.meta.name = advised) then {
+              def with meta = {
+                def.meta with hooks = (where,advisor) :: def.meta.hooks
+              }} else def))
+
+    let attribute attrs =
+      List.map ~f:(fun def ->
+          {def with meta = {def.meta with attrs = def.meta.attrs @ attrs }})
+
+
+  let defs sexps =
+    let stmts = List.map ~f:stmt sexps in
+    let ads,defs,attrs =
+      List.fold stmts ~init:([],[],[]) ~f:(fun (ads,defs,attrs) -> function
+          | Advice a -> a::ads,defs,attrs
+          | Defun d  -> ads,d::defs,attrs
+          | Attrs a  -> ads,defs,a@attrs
+          | Macro    -> ads,defs,attrs) in
+    defs |> attribute attrs |> advice ads
+
+
   let string data = defs (scan_sexps (Lexing.from_string data))
   let file name = defs (Sexp.load_sexps name)
 end
