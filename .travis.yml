@@ -34,4 +34,4 @@ addons:
     - dejagnu
 
 env:
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest TESTS=false
+  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=latest TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true

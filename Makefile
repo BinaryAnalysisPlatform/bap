@@ -7,9 +7,6 @@ build: setup.ml
 doc:
 	make -C doc
 
-test: build
-	$(SETUP) -test $(BAPTESTFLAGS)
-
 all:
 	$(SETUP) -all $(BAPALLFLAGS)
 
@@ -32,7 +29,19 @@ distclean:
 
 .PHONY: clean disclean reinstall
 
+.PHONY: test
+
 .PHONY: check
+
+test: build
+ifeq ("$(BAP_RUN_TEST)","true")
+	$(SETUP) -test $(BAPTESTFLAGS)
+endif
+
 check:
-	if [ -d .git ]; then git submodule init; git submodule update; fi
+ifeq ("$(BAP_RUN_CHECK)","true")
+	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite
+endif
+
+
