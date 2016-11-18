@@ -18,7 +18,7 @@ type exp =
   | Var of var
   | Ite of exp * exp * exp
   | Let of var * exp * exp
-  | Ext of int * int * exp
+  | Ext of exp * exp * exp
   | Bop of bop * exp * exp
   | Uop of uop * exp
   | App of string * exp list
@@ -151,7 +151,7 @@ module Parse = struct
       Ite (exp c, exp e1, exp e2)
     | List (Atom "let" :: List bs :: e) -> let' bs e
     | List [Atom "coerce"; e1; e2; e3] ->
-      Ext (int e1, int e2, exp e3)
+      Ext (exp e1, exp e2, exp e3)
     | List [Atom "neg"; e] -> Uop (Neg, exp e)
     | List [Atom "not"; e] -> Uop (Not, exp e)
     | List (Atom "prog" :: es) -> Seq (exps es,None)
@@ -285,11 +285,24 @@ module Builtins(Machine : Machine) = struct
     | [] -> Word.of_int ~width width
     | x :: xs -> Word.of_int ~width (Word.bitwidth x)
 
+
+  let negone = Word.ones 8
+  let zero = Word.zero 8
+
+  let exit _ =
+    Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
+    Machine.return Word.b0
+
+  let abort = exit
+
+
   let defs () = Defs [
       builtin "is-zero" is_zero;
       builtin "is-positive" is_positive;
       builtin "is-negative" is_negative;
       builtin "word-width"  word_width;
+      builtin "abort" abort;
+      builtin "exit" exit;
   ]
 end
 
@@ -304,6 +317,7 @@ let state = Primus_state.declare ~inspect
        })
 
 type error += Runtime_error
+type error += Abort of int
 
 
 let bil_of_lisp op =
@@ -389,7 +403,7 @@ module Machine(Machine : Machine) = struct
       | Var v -> lookup v
       | Ite (c,e1,e2) -> ite c e1 e2
       | Let (v,e1,e2) -> let_ v e1 e2
-      | Ext (lo,hi,e) -> eval e >>= ext lo hi
+      | Ext (lo,hi,e) -> ext lo hi e
       | App (n,args) -> app n args
       | Rep (c,e) -> rep c e
       | Bop (op,e1,e2) -> bop op e1 e2
@@ -405,7 +419,15 @@ module Machine(Machine : Machine) = struct
       eval e1 >>= fun w ->
       Machine.Local.update state (fun s -> {s with env = (v,w)::s.env})
       >>=  fun () -> eval e2
-    and ext lo hi w = cast (biri#eval_extract lo hi (Bil.Int w))
+    and ext lo hi w =
+      let eval_to_int e =
+        eval e >>| Word.to_int >>= function
+        | Ok n -> Machine.return n
+        | Error _ -> Machine.fail Runtime_error in
+      eval_to_int lo >>= fun lo ->
+      eval_to_int hi >>= fun hi ->
+      eval w >>= fun w ->
+      cast (biri#eval_extract lo hi (Bil.Int w))
     and cast r = r >>= fun r -> match Bil.Result.value r with
       | Bil.Bot -> Machine.fail Runtime_error
       | Bil.Mem _ -> Machine.fail Runtime_error
