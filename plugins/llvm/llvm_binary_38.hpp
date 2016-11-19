@@ -236,7 +236,7 @@ std::unique_ptr<object::Binary> get_binary(const char* data, std::size_t size) {
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
     if (error_code ec = binary.getError()) {
-	std::cerr << ec << "\n";
+        std::cerr << ec.message() << std::endl;
         return NULL;
     }
     return move(*binary);
