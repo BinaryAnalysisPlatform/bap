@@ -2,11 +2,11 @@
 
 
 (defun endian (f x y)
-  (declare (endian little))
+  (declare (context (endian little)))
   (f y x))
 
 (defun endian (f x y)
-  (declare (endian big))
+  (declare (context (endian big)))
   (f x y))
 
 (defmacro nth-byte-of-word (t x i)

@@ -11,7 +11,7 @@ type uop = Neg | Not [@@deriving sexp]
 type typ = Word | Type of int [@@deriving sexp]
 type 'a scalar = {value : 'a; typ : typ}[@@deriving sexp]
 type word = int64 scalar [@@deriving sexp]
-type var = string scalar[@@derving sexp]
+type var = string scalar[@@deriving sexp]
 
 type exp =
   | Int of word
@@ -25,25 +25,25 @@ type exp =
   | Seq of exp list * bool option
   | Set of var * exp
   | Rep of exp * exp
+  | Err of string
 
 
 type hook = [`enter | `leave] [@@deriving sexp]
-type advice = {
-  advised : string;
-  advisor : string;
-  where : hook;
+type attrs = Univ_map.t
+
+type filepos = {
+  file  : string;
+  range : Sexp.Annotated.range;
 }
 
-type attr = {
-  attr : string;
-  vals : string list
-}
+type loc = Builtin | Filepos of filepos
 
 type meta = {
   name : string;
   docs : string;
-  attrs : attr list;
+  attrs : attrs;
   hooks : (hook * string) list;
+  loc : loc;
 }
 
 type func = {
@@ -51,44 +51,296 @@ type func = {
   body : exp list;
 }
 
-type 'a def = {meta : meta; code : 'a}
-type 'a defs = Defs of 'a def list
+type macro = {
+  param : string list;
+  subst : Sexp.t;
+}
 
-type stmt =
-  | Advice of advice
-  | Defun  of func def
-  | Attrs  of attr list
-  | Macro
+type 'a def = {meta : meta; code : 'a}
+type 'a defs = 'a def list
+
+let expect what got =
+  invalid_argf "Parser error: expected %s, got %s"
+    what got ()
+
+let expects what got = expect what (Sexp.to_string got)
+
+module Attrs = struct
+  type t = attrs
+
+  type 'a attr = {
+    key : 'a Univ_map.Key.t;
+    add : 'a -> 'a -> 'a;
+    parse : Sexp.t list -> 'a;
+  }
+
+  type parser = Parser of (t -> Sexp.t list -> t)
+
+  let parsers : parser String.Table.t = String.Table.create ()
+
+  let make_parser attr attrs sexp =
+    let value = attr.parse sexp in
+    Univ_map.update attrs attr.key ~f:(function
+        | None -> value
+        | Some value' -> attr.add value value')
+
+  let register ~name ~add ~sexp_of ~of_sexp =
+    let attr = {
+      key = Univ_map.Key.create ~name sexp_of;
+      add;
+      parse = of_sexp;
+    } in
+    let parser = Parser (make_parser attr) in
+    Hashtbl.add_exn parsers ~key:name ~data:parser;
+    attr.key
+
+  let expected_parsers () =
+    String.Table.keys parsers |> String.concat ~sep:" | "
+
+  let parse attrs name values = match Hashtbl.find parsers name with
+    | None -> expect (expected_parsers ()) name
+    | Some (Parser run) -> run attrs values
+
+  let parse attrs = function
+    | Sexp.List (Sexp.Atom name :: values) -> parse attrs name values
+    | s -> expects "(name value ...)" s
+end
+
+module Contexts = struct
+  module Feature = String
+  module Name = String
+
+  type t = Feature.Set.t Name.Map.t
+  let empty = Name.Map.empty
+
+  let of_project proj = Name.Map.of_alist_exn [
+      "arch",
+      Feature.Set.of_list [
+        Arch.to_string (Project.arch proj);
+      ]
+    ]
+
+  let sexp_of_context (name,values) =
+    Sexp.List (List.map (name :: Set.to_list values)
+                 ~f:(fun x -> Sexp.Atom x))
+
+  let sexp_of (cs : t) =
+    Sexp.List (Sexp.Atom "context" ::
+               (Map.to_alist cs |> List.map ~f:sexp_of_context))
+
+  let value = function
+    | Sexp.Atom x -> x
+    | s -> expects "(a1 a2 ... am)" s
+
+  let context_of_sexp = function
+    | Sexp.List (Sexp.Atom name :: values) ->
+      name, Feature.Set.of_list (List.map values ~f:value)
+    | s -> expects "(a1 a1 ... am)" s
+
+
+  let push cs name vs =
+    Map.update cs name ~f:(function
+        | None -> vs
+        | Some vs' -> Set.union vs vs')
+
+
+  let of_sexp : Sexp.t list -> t =
+    List.fold ~init:Name.Map.empty ~f:(fun cs sexp ->
+        let (name,vs) = context_of_sexp sexp in
+        push cs name vs)
+
+  let add cs cs' =
+    Map.fold cs ~init:cs' ~f:(fun ~key:name ~data:vs cs' ->
+        push cs' name vs)
+
+  let t = Attrs.register
+      ~name:"context"
+      ~add:add
+      ~sexp_of ~of_sexp
+
+  let (<=) = Set.subset
+end
+
+module Macro = struct
+  open Sexp
+
+  let bind macro cs =
+    let rec bind ps cs = match macro.code.param, cs with
+      | [],[] -> []
+      | [p],cs -> [p,cs]
+      | (p::ps),(c::cs) -> (p,[c]) :: bind ps cs
+      | _ -> raise Not_found in
+    try Some (bind macro.code.param cs) with Not_found -> None
+
+  let rec subst bs : Sexp.t -> Sexp.t = function
+    | List xs -> List (List.concat_map xs ~f:(function
+        | List xs -> [list bs xs]
+        | Atom x -> atom bs x))
+    | Atom x -> Atom x
+  and list bs xs = List (List.map ~f:(subst bs) xs)
+  and atom bs x = match List.Assoc.find bs x with
+    | None -> [Atom x]
+    | Some cs -> cs
+
+
+  let apply macro code = match bind macro code with
+    | None -> assert false
+    | Some cs -> subst cs macro.code.subst
+end
+
+module Resolve = struct
+  type stage = loc list
+  type resolution = {
+    stage1 : stage; (* definitions with the given name *)
+    stage2 : stage; (* definitions applicable to the ctxt *)
+    stage3 : stage; (* most specific definitions *)
+    stage4 : stage; (* applicable definitions *)
+  }
+
+  type error += Failed of resolution
+
+  (* all definitions with the given name *)
+  let stage1 defs name =
+    List.filter_map defs ~f:(fun def ->
+        if def.meta.name <> name then None
+        else match Univ_map.find def.meta.attrs Contexts.t with
+          | None -> Some (def,Contexts.empty)
+          | Some ctxts -> Some (def,ctxts))
+
+  (* all definitions that satisfy the [ctxts] constraint *)
+  let stage2 ctxts =
+    List.filter ~f:(fun (def,ctxts') ->
+        Map.for_alli ctxts' ~f:(fun ~key:name' ~data:ctxt' ->
+            Map.existsi ctxts ~f:(fun ~key:name ~data:ctxt ->
+                name' = name && Contexts.(ctxt' <= ctxt))))
+
+  (* remove all definitions that has a class that is a supertype
+     (i.e., less specific) of the same class of some other
+     definition.
+
+     This is a final step in the context resolution, if there are more
+     than one candidates left, then the context is ambigious, as we
+     have more than one candidate that is applicable to it.*)
+  let stage3 s2  =
+    List.filter s2 ~f:(fun (_,ctxts') ->
+        Map.for_alli ctxts' ~f:(fun ~key:cls' ~data:ctxt' ->
+            List.for_all s2 ~f:(fun (_,ctxts) ->
+            Map.for_alli ctxts ~f:(fun ~key:cls ~data:ctxt ->
+                cls <> cls' || Context.(ctxt <= ctxt')))))
+
+  let typechecks arch (v,w) =
+    let word_size = Size.in_bits (Arch.addr_size arch) in
+    let size = Word.bitwidth w in
+    match v.typ with
+    | Word -> size = word_size
+    | Type n -> size = n
+
+
+  let overload_defun arch args s3 =
+    List.filter s3 ~f:(fun (def,cs) ->
+        match List.zip def.code.args args with
+        | Some bs -> List.for_all bs ~f:(typechecks arch)
+        | None -> false)
+
+
+  let overload_builtin s3 = s3
+  let overload_macro code s3 =
+    List.filter s3 ~f:(fun (macro,_) -> Option.is_some (Macro.bind macro code))
+
+  let locs = List.map ~f:(fun (def,_) -> def.meta.loc)
+
+  let run overload ctxts defs name =
+    let s1 = stage1 defs name in
+    let s2 = stage2 ctxts s1 in
+    let s3 = stage3 s2 in
+    let s4 = overload s3 in
+    let result = match s4 with
+      | [def,_] -> Some def
+      | _ -> None in
+    {
+      stage1 = locs s1;
+      stage2 = locs s2;
+      stage3 = locs s3;
+      stage4 = locs s4;
+    }, result
+
+
+  let defun ctxts defs name arch args =
+    run (overload_defun arch args) ctxts defs name
+
+  let macro ctxts defs name code =
+    run (overload_macro code) ctxts defs name
+
+  let builtin ctxts defs name =
+    run overload_builtin ctxts defs name
+end
+
+module Type_annot = struct
+  let parse sz = Type (int_of_string (String.strip sz))
+end
+
+module Variable = struct
+  type t = var
+
+  let parse x = match String.split x ~on:':' with
+    | [x;sz] -> {value=x; typ = Type_annot.parse sz}
+    | _ -> {value=x;typ=Word}
+
+  let to_string = function
+    | {value;typ = Word} -> value
+    | {value;typ = Type n} -> sprintf "%s:%d" value n
+
+  let sexp_of_t v = Sexp.Atom (to_string v)
+end
+
+module Variables = struct
+  type t = var list
+
+  let var = function
+    | Sexp.Atom v -> Variable.parse v
+    | s -> expects "(v1 .. vm)" s
+
+  let of_sexp = List.map ~f:var
+  let sexp_of vs = Sexp.List (List.map vs ~f:Variable.sexp_of_t)
+
+  let global = Attrs.register
+      ~name:"global"
+      ~add:List.append
+      ~sexp_of ~of_sexp
+
+  let static = Attrs.register
+      ~name:"static"
+      ~add:List.append
+      ~sexp_of ~of_sexp
+end
 
 module Parse = struct
   open Sexp
 
-  let expect what got =
-    invalid_argf "Parser error: expected %s, got %s"
-      what got ()
-
-  let expects what got = expect what (Sexp.to_string got)
-
   let atom = function
     | Atom x -> x
-    | s -> expects "int" s
+    | s -> expects "atom" s
 
-  let typ sz = Type (int_of_string (String.strip sz))
+  let typ = Type_annot.parse
 
-  let word x = match String.split x ~on:':' with
+  let char x = Int {
+      value = Int64.of_int (Char.to_int (Char.of_string x));
+      typ = Type 8
+    }
+
+  let word x =
+    if Char.(x.[0] = '?') then char (String.subo ~pos:1 x)
+    else match String.split x ~on:':' with
     | [x] ->  Int {value=Int64.of_string x; typ=Word}
     | [x;sz] -> Int {
         value = Int64.of_string (String.strip x);
         typ   = typ sz
       }
-    | _ -> expect "int ::= <lit> | <lit>:<typ>" x
+    | _ -> expect "int ::= ?<char> | <lit> | <lit>:<typ>" x
 
 
   let is_word x = try ignore (word x);true with _ -> false
-  let var x = match String.split x ~on:':' with
-    | [x;sz] -> {value=x; typ = typ sz}
-    | _ -> {value=x;typ=Word}
-
+  let var = Variable.parse
   let int x = int_of_string (atom x)
 
   let bop op = match atom op with
@@ -114,63 +366,45 @@ module Parse = struct
   let is_keyword op = List.mem ["if"; "let"; "neg"; "not"; "bits"] op
   let nil = Int {value=0L; typ=Word}
 
-  let negate = function
-    | [] -> expect "(/= e1 e2 ..)" "(/=)"
-    | exps -> List [Atom "not"; List (Atom "=" :: exps)]
+  let macros : macro def list ref = ref []
 
-  let macro = ref [
-    "/=", negate;
-  ]
+  let is_macro op =
+    List.exists macros.contents ~f:(fun m -> String.(m.meta.name = op))
 
-  let is_macro op = List.Assoc.mem !macro op
+  let subst ctxts name ops =
+    match Resolve.macro ctxts !macros name ops with
+    | _,None -> List [Atom "error"; Atom "unresolved macro"]
+    | _,Some macro -> Macro.apply macro ops
 
-  let add_macro (name : string) (ps : string list) (body) : unit =
-    let rec bind ps cs = match ps,cs with
-      | [p],cs -> [p,cs]
-      | (p::ps),(c::cs) -> (p,[c]) :: bind ps cs
-      | _ -> invalid_arg "invalid macro arity" in
-    let rec subst bs : Sexp.t -> Sexp.t = function
-      | List xs -> List (List.concat_map xs ~f:(function
-          | List xs -> [list bs xs]
-          | Atom x -> atom bs x))
-      | Atom x -> Atom x
-    and list bs xs = List (List.map ~f:(subst bs) xs)
-    and atom bs x = match List.Assoc.find bs x with
-        | None -> [Atom x]
-        | Some cs -> cs in
-    let apply code = subst (bind ps code) body in
-    macro := List.Assoc.add !macro name apply
-
-  let subst name =
-    (List.Assoc.find_exn !macro name)
-
-  let rec exp = function
-    | Atom x when is_word x -> word x
-    | Atom x -> Var (var x)
-    | List [Atom "if"; c; e1; e2] ->
-      Ite (exp c, exp e1, exp e2)
-    | List (Atom "let" :: List bs :: e) -> let' bs e
-    | List [Atom "coerce"; e1; e2; e3] ->
-      Ext (exp e1, exp e2, exp e3)
-    | List [Atom "neg"; e] -> Uop (Neg, exp e)
-    | List [Atom "not"; e] -> Uop (Not, exp e)
-    | List (Atom "prog" :: es) -> Seq (exps es,None)
-    | List (Atom "while" :: c :: es) -> Rep (exp c, Seq (exps es,None))
-    | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
-    | List (Atom op ::_) when is_keyword op -> handle_error exp
-    | List (op :: arg :: args) when is_bop op ->
-      List.fold ~f:(bop op) ~init:(exp arg) (exps args)
-    | List (Atom op :: exps) when is_macro op ->
-      exp (subst op exps)
-    | List (Atom op :: args) -> App (op, exps args)
-    | List [] -> nil
-    | s ->  expects "(<ident> exps..)" s
-  and exps = List.map ~f:exp
-  and let' bs e =
-    List.fold_right bs ~init:(Seq (exps e,None)) ~f:(fun b e ->
-        match b with
-        | List [Atom v; x] -> Let (var v,exp x,e)
-        | s -> expects "(var exp)" s)
+  let exp ctxts =
+    let rec exp = function
+      | Atom x when is_word x -> word x
+      | Atom x -> Var (var x)
+      | List [Atom "if"; c; e1; e2] ->
+        Ite (exp c, exp e1, exp e2)
+      | List (Atom "let" :: List bs :: e) -> let' bs e
+      | List [Atom "coerce"; e1; e2; e3] ->
+        Ext (exp e1, exp e2, exp e3)
+      | List [Atom "neg"; e] -> Uop (Neg, exp e)
+      | List [Atom "not"; e] -> Uop (Not, exp e)
+      | List (Atom "prog" :: es) -> Seq (exps es,None)
+      | List (Atom "while" :: c :: es) -> Rep (exp c, Seq (exps es,None))
+      | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
+      | List (Atom op ::_) when is_keyword op -> handle_error exp
+      | List (op :: arg :: args) when is_bop op ->
+        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
+      | List (Atom op :: exps) when is_macro op ->
+        exp (subst ctxts op exps)
+      | List (Atom op :: args) -> App (op, exps args)
+      | List [] -> nil
+      | s ->  expects "(<ident> exps..)" s
+    and exps = List.map ~f:exp
+    and let' bs e =
+      List.fold_right bs ~init:(Seq (exps e,None)) ~f:(fun b e ->
+          match b with
+          | List [Atom v; x] -> Let (var v,exp x,e)
+          | s -> expects "(var exp)" s) in
+    exp
 
   let params = function
     | List vars -> List.map ~f:(fun x -> var (atom x)) vars
@@ -180,66 +414,161 @@ module Parse = struct
     | List vars -> List.map ~f:atom vars
     | s -> expects "(s1 s2 ..)" s
 
-  let parse_attrs = List.map ~f:(function
-      | Atom x -> {attr=x; vals=[]}
-      | List [Atom x; Atom v] -> {attr=x; vals=[v]}
-      | List [Atom x; List vs] -> {attr=x; vals=List.map ~f:atom vs}
-      | s -> expects "v | (v x) | (v (x1 ... xm)" s)
-
-
-  let defun ?(docs="undocumented") ?(attrs=[]) name p body = Defun {
-    meta = {name; docs; attrs = parse_attrs attrs; hooks = []};
-    code = {args=params p; body = List.map ~f:exp body}
+  type parser_state = {
+    global_attrs : attrs;
+    parse_module : string -> parser_state -> parser_state;
+    defs : func defs;
+    current : filepos;
+    constraints : Contexts.t;
   }
 
+  let add_def defs def = def :: defs
 
+  let parse_declarations attrs =
+    List.fold ~init:attrs ~f:Attrs.parse
 
-  let stmt = function
-    | List (Atom "defun" :: Atom n :: p ::
-            List (Atom "declare" :: attrs) :: Atom docs :: b) ->
-      defun ~docs ~attrs n p b
-    | List (Atom "defun" :: Atom n :: p ::
-            List (Atom "declare" :: attrs) :: b) ->
-      defun ~attrs n p b
-    | List (Atom "defun" :: Atom n :: p ::
-            Atom docs :: b) ->
-      defun ~docs n p b
-    | List (Atom "defun" :: Atom n :: p :: b) -> defun n p b
-    | List [Atom "defmacro"; Atom name; p; Atom _; body]
-    | List [Atom "defmacro"; Atom name; p; body] ->
-      add_macro name (metaparams p) body; Macro
-    | List [Atom "advice"; h; Atom f1; Atom "with"; Atom f2] ->
-      Advice {advised=f1; advisor=f2; where = hook_of_sexp h}
-    | List (Atom "declare" :: attrs) -> Attrs (parse_attrs attrs)
+  let defun ?(docs="undocumented") ?(attrs=[]) name p body state = {
+    state with
+    defs = add_def state.defs {
+        meta = {
+          name;
+          docs;
+          attrs = parse_declarations state.global_attrs attrs;
+          hooks = [];
+          loc = Filepos state.current;
+        };
+        code = {
+          args=params p;
+          body = List.map ~f:(exp state.constraints) body
+        }
+      }
+  }
+
+  let defmacro ?(docs="undocumented") ?(attrs=[]) name ps body state =
+    macros := {
+      meta = {
+        name;
+        docs;
+        attrs = parse_declarations state.global_attrs attrs;
+        hooks = [];
+        loc = Filepos state.current;
+      };
+      code = {
+        param = metaparams ps;
+        subst  = body;
+      }
+    } :: !macros;
+    state
+
+  let add_advice ~advisor ~advised where state = {
+    state with
+    defs =
+      List.map state.defs ~f:(fun def ->
+          if String.(def.meta.name = advised) then {
+            def with meta = {
+              def.meta with hooks = (where,advisor) :: def.meta.hooks
+            }} else def)
+  }
+
+  let stmt state = function
+    | List (Atom "defun" ::
+            Atom name ::
+            params ::
+            List (Atom "declare" :: attrs) ::
+            Atom docs ::
+            body) ->
+      defun ~docs ~attrs name params body state
+    | List (Atom "defun" ::
+            Atom name ::
+            params ::
+            List (Atom "declare" :: attrs) ::
+            body) ->
+      defun ~attrs name params body state
+    | List (Atom "defun" ::
+            Atom name ::
+            params ::
+            Atom docs ::
+            body) ->
+      defun ~docs name params body state
+    | List (Atom "defun" ::
+            Atom name ::
+            params ::
+            body) ->
+      defun name params body state
+    | List [Atom "defmacro";
+            Atom name;
+            params;
+            List (Atom "declare" :: attrs);
+            Atom docs;
+            body] ->
+      defmacro ~docs ~attrs name params body state
+    | List [Atom "defmacro";
+            Atom name;
+            params;
+            List (Atom "declare" :: attrs);
+            body] ->
+      defmacro ~attrs name params body state
+    | List [Atom "defmacro";
+            Atom name;
+            params;
+            Atom docs;
+            body] ->
+      defmacro ~docs name params body state
+    | List [Atom "defmacro";
+            Atom name;
+            params;
+            body] ->
+      defmacro name params body state
+    | List [Atom "advice"; h; Atom f1; Atom ":with"; Atom f2] ->
+      add_advice ~advised:f1 ~advisor:f2 (hook_of_sexp h) state
+    | List (Atom "declare" :: attrs) -> {
+        state with global_attrs =
+                     parse_declarations state.global_attrs attrs
+      }
+    | List [Atom "require"; Atom name] ->
+      state.parse_module name state
     | s -> expects "(defun ...) | (defmacro ..)" s
 
+  let make_pos ~line ~col ~offset = Sexp.Annotated.{
+      line; col; offset;
+    }
 
-  let advice ads =
-    List.map ~f:(fun def ->
-        List.fold ads ~init:def ~f:(fun def {where; advised; advisor} ->
-            if String.(def.meta.name = advised) then {
-              def with meta = {
-                def.meta with hooks = (where,advisor) :: def.meta.hooks
-              }} else def))
+  let dummy_pos = make_pos ~line:0 ~col:0 ~offset:0
 
-    let attribute attrs =
-      List.map ~f:(fun def ->
-          {def with meta = {def.meta with attrs = def.meta.attrs @ attrs }})
+  let make_range ~start_pos ~end_pos = Sexp.Annotated.{
+      start_pos; end_pos
+    }
+
+  let dummy_range = make_range ~start_pos:dummy_pos ~end_pos:dummy_pos
+
+  let make_loc range name = Sexp.Annotated.{
+      file = name; range;
+    }
+
+  let update_range loc range = Sexp.Annotated.{
+      loc with range
+    }
+
+  let update_file loc name = Sexp.Annotated.{
+      loc with name
+    }
+
+  let annotated_stmt state sexp =
+    let range = Sexp.Annotated.get_range sexp in
+    let sexp = Sexp.Annotated.get_sexp sexp in
+    stmt {state with current = update_range state.current range} sexp
 
 
-  let defs sexps =
-    let stmts = List.map ~f:stmt sexps in
-    let ads,defs,attrs =
-      List.fold stmts ~init:([],[],[]) ~f:(fun (ads,defs,attrs) -> function
-          | Advice a -> a::ads,defs,attrs
-          | Defun d  -> ads,d::defs,attrs
-          | Attrs a  -> ads,defs,a@attrs
-          | Macro    -> ads,defs,attrs) in
-    defs |> attribute attrs |> advice ads
+  let rec defs cs name =
+    List.fold ~f:annotated_stmt ~init:{
+      current = make_loc dummy_range name;
+      global_attrs = Univ_map.empty;
+      defs = [];
+      constraints=cs;
+      parse_module = (fun name state -> defs cs name (Annotated.load_sexps name));
+    }
 
-
-  let string data = defs (scan_sexps (Lexing.from_string data))
-  let file name = defs (Sexp.load_sexps name)
+  let file cs name = defs cs name (Annotated.load_sexps name)
 end
 
 
@@ -250,12 +579,12 @@ module type Builtins = functor (Machine : Machine) ->  sig
   val defs : unit -> (Word.t list -> (Word.t,#Context.t) Machine.t) defs
 end
 
-
 type state = {
   builtins : (module Builtins);
   defs : func defs;
   width : int;
   env : (var * Word.t) list;
+  contexts : Contexts.t;
 }
 
 
@@ -264,14 +593,17 @@ let inspect_def {meta={name; docs}} = Sexp.List [
     Sexp.Atom docs;
   ]
 
-let inspect {defs = Defs ds} =
-  Sexp.List (List.map ds ~f:inspect_def)
+let inspect {defs} =
+  Sexp.List (List.map defs ~f:inspect_def)
 
 let width_of_ctxt ctxt =
   Size.in_bits (Arch.addr_size (Project.arch ctxt#project))
 
-let builtin ?(attrs=[]) ?(hooks=[]) ?(docs="undocumented") name code =
-  {meta = {name;docs; hooks; attrs}; code}
+let builtin
+    ?(attrs=Univ_map.empty)
+    ?(hooks=[])
+    ?(docs="undocumented") name code =
+  {meta = {name;docs; hooks; attrs; loc=Builtin}; code}
 
 module Builtins(Machine : Machine) = struct
   open Machine.Syntax
@@ -296,7 +628,7 @@ module Builtins(Machine : Machine) = struct
   let abort = exit
 
 
-  let defs () = Defs [
+  let defs () = [
       builtin "is-zero" is_zero;
       builtin "is-positive" is_positive;
       builtin "is-negative" is_negative;
@@ -312,11 +644,12 @@ let state = Primus_state.declare ~inspect
     (fun ctxt -> {
          env = [];
          builtins = (module Builtins);
-         defs = Defs [];
+         defs = [];
          width = width_of_ctxt ctxt;
+         contexts = Contexts.of_project ctxt#project;
        })
 
-type error += Runtime_error
+type error += Runtime_error of string
 type error += Abort of int
 
 
@@ -340,6 +673,8 @@ let bil_of_lisp op =
   | Cat  -> concat
   | Eq   -> binop eq
   | Le   -> binop le
+
+
 
 
 module Machine(Machine : Machine) = struct
@@ -374,25 +709,23 @@ module Machine(Machine : Machine) = struct
 
   let width () = Machine.Local.get state >>| fun {width} -> width
 
-  let resolve_name (Defs defs) name args =
-    match List.find defs ~f:(fun d -> d.meta.name = name) with
-    | None -> None
-    | Some {code} -> Some code
-
   let eval_builtin name args =
-    Machine.Local.get state >>= fun {builtins=(module Builtins)} ->
-    let module Builtins = Builtins(Machine) in
-    match resolve_name (Builtins.defs ()) name args with
-    | None -> Machine.fail Runtime_error
-    | Some code -> code args
+    Machine.Local.get state >>= fun {contexts; builtins=(module Make)} ->
+    let module Builtins = Make(Machine) in
+    match Resolve.builtin contexts (Builtins.defs ()) name with
+    | _,None -> Machine.fail (Runtime_error "unbound builtin")
+    | _,Some def -> def.code args
 
   let rec eval_lisp biri name args =
+    Machine.get () >>= fun ctxt ->
+    let arch = Project.arch ctxt#project in
     Machine.Local.get state >>= fun state ->
-    match resolve_name state.defs name args with
-    | None -> eval_builtin name args
-    | Some fn -> match List.zip fn.args args with
+    match Resolve.defun state.contexts state.defs name arch args with
+    | {Resolve.stage1=[]},None -> eval_builtin name args
+    | resolution,None -> Machine.fail (Resolve.Failed resolution)
+    | _,Some fn -> match List.zip fn.code.args args with
       | None -> assert false
-      | Some bs -> eval_body biri fn.body
+      | Some bs -> eval_body biri fn.code.body
 
   and eval_body biri body = eval_exp biri (Seq (body,None))
 
@@ -410,6 +743,7 @@ module Machine(Machine : Machine) = struct
       | Uop (op,e) -> uop op e
       | Seq (es,short) -> seq es short
       | Set (v,e) -> eval e >>= set v
+      | Err msg -> Machine.fail (Runtime_error msg)
     and rep c e =
       eval c >>= fun r -> if Word.is_zero r then Machine.return r
       else eval e >>= fun _ -> rep c e
@@ -423,14 +757,14 @@ module Machine(Machine : Machine) = struct
       let eval_to_int e =
         eval e >>| Word.to_int >>= function
         | Ok n -> Machine.return n
-        | Error _ -> Machine.fail Runtime_error in
+        | Error _ -> Machine.fail (Runtime_error "expected smallint") in
       eval_to_int lo >>= fun lo ->
       eval_to_int hi >>= fun hi ->
       eval w >>= fun w ->
       cast (biri#eval_extract lo hi (Bil.Int w))
     and cast r = r >>= fun r -> match Bil.Result.value r with
-      | Bil.Bot -> Machine.fail Runtime_error
-      | Bil.Mem _ -> Machine.fail Runtime_error
+      | Bil.Bot -> Machine.fail (Runtime_error "got bot")
+      | Bil.Mem _ -> Machine.fail (Runtime_error "got mem")
       | Bil.Imm w -> Machine.return w
     and lookup v =
       Machine.Local.get state >>= fun {env; width} ->
@@ -469,7 +803,4 @@ module Machine(Machine : Machine) = struct
         | Not -> Bil.NOT in
       cast @@ biri#eval_exp Bil.(UnOp (op,Int e)) in
     eval exp
-
-
-
 end

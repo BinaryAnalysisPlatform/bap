@@ -58,7 +58,9 @@
 
 
 (defun getopt (argc argv opts)
-  (declare (static (last-idx last-ofs)))
+  (declare
+   (context (arch arm linux gnueabi) (endian little))
+   (static (last-idx last-ofs)))
   (when (= 0 optind)
     (set optind 1)
     (set lastidx 0))
