@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_c.Std
 
 open Primus_types
 
@@ -117,6 +118,7 @@ module Make (Machine : Machine) = struct
   module Memory = Primus_memory.Make(Machine)
   module Linker = Primus_linker.Make(Machine)
   module Env = Primus_env.Make(Machine)
+  module Lisp_machine = Primus_lisp.Machine(Machine)
 
   type 'a r = (Bil.result,'a) Machine.t
   type 'a u = (unit,'a) Machine.t
@@ -129,9 +131,10 @@ module Make (Machine : Machine) = struct
       ~program:(make_observation top_entered)
       ~sub:(make_observation sub_entered)
 
+  type error += Runtime_error
 
   class ['e] t  =
-    object
+    object(self)
       inherit ['e] Biri.t as super
       constraint 'e = #Context.t
 
@@ -197,16 +200,53 @@ module Make (Machine : Machine) = struct
         method save _ _ = self
       end
 
-      method! eval_call call = match Call.target call with
+      method private handle_indirect_call exp =
+        super#eval_exp exp >>| Bil.Result.value >>= function
+        | Bil.Imm dst -> Linker.exec (`addr dst)
+        | _ -> Machine.return ()
+
+      method private eval_lisp_return arg r =
+        match Arg.rhs arg with
+        | Bil.Var v ->
+          self#eval_int r >>= fun r ->
+          self#update v r
+        | _ -> Machine.return ()
+
+      method! eval_call call =
+        match Call.target call with
+        | Indirect exp -> self#handle_indirect_call exp
         | Direct tid ->
           make_observation calling (`tid tid) >>= fun () ->
-          Linker.exec (`tid tid)
-        | Indirect exp ->
-          super#eval_exp exp >>| Bil.Result.value >>= function
-          | Bil.Imm dst ->
-            make_observation calling (`addr dst) >>= fun () ->
-            Linker.exec (`addr dst)
-          | _ -> super#eval_call call
+          Machine.get () >>= fun ctxt ->
+          match Term.find sub_t ctxt#program tid with
+          | None -> super#eval_call call
+          | Some sub ->
+            let name = Sub.name sub in
+            Lisp_machine.is_bound name >>= function
+            | false -> Linker.exec (`symbol name)
+            | true -> match Term.get_attr sub C.proto with
+              | None -> Linker.exec (`symbol name)
+              | Some proto ->
+                let args = proto.C.Type.Proto.args in
+                let arity = List.length args in
+                Seq.take (Term.enum arg_t sub) arity |>
+                Machine.Seq.map ~f:(fun arg ->
+                    self#eval_arg arg >>= fun () ->
+                    self#lookup (Arg.lhs arg) >>= fun r ->
+                    match Bil.Result.value r with
+                    | Bil.Imm w -> Machine.return w
+                    | v -> Machine.fail Runtime_error) >>= fun bs ->
+                Lisp_machine.run self name (Seq.to_list bs) >>= fun r ->
+                match proto with
+                | {C.Type.Proto.return=`Void} ->
+                  Machine.return ()
+                | _ -> match Term.last arg_t sub with
+                  | None ->
+                    (* issue a warning? or assertion? *)
+                    Machine.return ()
+                  | Some arg -> self#eval_lisp_return arg r
+
+
 
 
     end

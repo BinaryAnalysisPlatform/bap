@@ -161,6 +161,21 @@ module Contexts = struct
   let (<=) = Set.subset
 end
 
+module External = struct
+  type t = string list
+
+  let sexp_of x = Sexp.List (List.map x ~f:(fun s -> Sexp.Atom s))
+  let of_sexp = List.map ~f:(function
+      | Sexp.Atom x -> x
+      | s -> expects "(external name1 .. nameM)" s)
+
+  let t = Attrs.register
+      ~name:"external"
+      ~add:List.append
+      ~sexp_of ~of_sexp
+
+end
+
 module Macro = struct
   open Sexp
 
@@ -183,9 +198,7 @@ module Macro = struct
     | Some cs -> cs
 
 
-  let apply macro code = match bind macro code with
-    | None -> assert false
-    | Some cs -> subst cs macro.code.subst
+  let apply macro cs = subst cs macro.code.subst
 end
 
 module Resolve = struct
@@ -236,16 +249,15 @@ module Resolve = struct
     | Type n -> size = n
 
 
-  let overload_defun arch args s3 =
-    List.filter s3 ~f:(fun (def,cs) ->
-        match List.zip def.code.args args with
-        | Some bs -> List.for_all bs ~f:(typechecks arch)
-        | None -> false)
+  let overload_macro code s3 =
+    List.filter_map s3 ~f:(fun (macro,_) ->
+        Option.(Macro.bind macro code >>| fun bs -> macro,bs))
 
+  let overload_defun arch args s3 =
+    List.filter_map s3 ~f:(fun (def,cs) ->
+        Option.(List.zip def.code.args args >>| fun bs -> def,bs))
 
   let overload_builtin s3 = s3
-  let overload_macro code s3 =
-    List.filter s3 ~f:(fun (macro,_) -> Option.is_some (Macro.bind macro code))
 
   let locs = List.map ~f:(fun (def,_) -> def.meta.loc)
 
@@ -255,7 +267,7 @@ module Resolve = struct
     let s3 = stage3 s2 in
     let s4 = overload s3 in
     let result = match s4 with
-      | [def,_] -> Some def
+      | [f] -> Some f
       | _ -> None in
     {
       stage1 = locs s1;
@@ -374,7 +386,7 @@ module Parse = struct
   let subst ctxts name ops =
     match Resolve.macro ctxts !macros name ops with
     | _,None -> List [Atom "error"; Atom "unresolved macro"]
-    | _,Some macro -> Macro.apply macro ops
+    | _,Some (macro,bs) -> Macro.apply macro bs
 
   let exp ctxts =
     let rec exp = function
@@ -680,6 +692,8 @@ let bil_of_lisp op =
 module Machine(Machine : Machine) = struct
   open Machine.Syntax
 
+  module Linker = Primus_linker.Make(Machine)
+
   let getenv () =
     Machine.Local.get state >>| fun s -> s.env
 
@@ -693,7 +707,7 @@ module Machine(Machine : Machine) = struct
 
   let env_replace xs x w = env_update xs x ~f:(fun _ -> w)
 
-  module Biri = Primus_interpreter.Make(Machine)
+  module Expi = Expi.Make(Machine)
 
   let word width value typ =
     let width = match typ with
@@ -713,23 +727,26 @@ module Machine(Machine : Machine) = struct
     Machine.Local.get state >>= fun {contexts; builtins=(module Make)} ->
     let module Builtins = Make(Machine) in
     match Resolve.builtin contexts (Builtins.defs ()) name with
-    | _,None -> Machine.fail (Runtime_error "unbound builtin")
-    | _,Some def -> def.code args
+    | _,None -> Linker.exec (`symbol name) >>= fun () ->
+      Machine.return Word.b0
+    | _,Some (def,_) -> def.code args
 
   let rec eval_lisp biri name args =
     Machine.get () >>= fun ctxt ->
     let arch = Project.arch ctxt#project in
-    Machine.Local.get state >>= fun state ->
-    match Resolve.defun state.contexts state.defs name arch args with
+    Machine.Local.get state >>= fun s ->
+    match Resolve.defun s.contexts s.defs name arch args with
     | {Resolve.stage1=[]},None -> eval_builtin name args
     | resolution,None -> Machine.fail (Resolve.Failed resolution)
-    | _,Some fn -> match List.zip fn.code.args args with
-      | None -> assert false
-      | Some bs -> eval_body biri fn.code.body
+    | _,Some (fn,bs) ->
+      Machine.Local.put state {
+        s with env = bs @ s.env
+      } >>= fun () ->
+      eval_body biri fn.code.body
 
   and eval_body biri body = eval_exp biri (Seq (body,None))
 
-  and eval_exp (biri : 'a #Biri.t) exp : (Word.t,#Context.t) Machine.t =
+  and eval_exp biri  exp : (Word.t,#Context.t) Machine.t =
     let int v t = width () >>| fun width -> word width v t in
     let rec eval = function
       | Int {value;typ} -> int value typ
@@ -803,4 +820,14 @@ module Machine(Machine : Machine) = struct
         | Not -> Bil.NOT in
       cast @@ biri#eval_exp Bil.(UnOp (op,Int e)) in
     eval exp
+
+  let run (biri : #Context.t #Expi.t) name args =
+    eval_lisp biri name args
+
+  let is_bound name =
+    Machine.Local.get state >>| fun {defs} ->
+    List.exists defs ~f:(fun def ->
+        match Univ_map.find def.meta.attrs External.t with
+        | Some names -> List.mem names name
+        | None -> false)
 end
