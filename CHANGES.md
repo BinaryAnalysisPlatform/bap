@@ -1,3 +1,11 @@
+1.1.0
+=====
+
+### Bug fixes
+1. PR#586 fixed segfault with short or damaged files fed to bap.
+
+
+
 1.0.0
 =====
 

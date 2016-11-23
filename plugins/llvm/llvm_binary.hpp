@@ -302,11 +302,11 @@ image* create_image_elf(std::unique_ptr<object::Binary> binary) {
 
 image* create_image_obj(std::unique_ptr<object::Binary> binary) {
     if (binary->isCOFF())
-	return create_image<COFFObjectFile>(move(binary));
+        return create_image<COFFObjectFile>(move(binary));
     if (binary->isELF())
-	return create_image_elf(move(binary));
+        return create_image_elf(move(binary));
     if (binary->isMachO())
-	return create_image<MachOObjectFile>(move(binary));
+        return create_image<MachOObjectFile>(move(binary));
     std::cerr << "Unrecognized object format\n";
     return NULL;
 }
@@ -317,10 +317,12 @@ image* create_image_arch(std::unique_ptr<object::Binary> binary) {
 }
 
 image* create(std::unique_ptr<object::Binary> binary) {
+    if (!binary)
+        return NULL;
     if (isa<Archive>(*binary))
-	return create_image_arch(move(binary));
+        return create_image_arch(move(binary));
     if (isa<ObjectFile>(*binary))
-	return create_image_obj(move(binary));
+        return create_image_obj(move(binary));
     std::cerr << "Unrecognized binary format\n";
     return NULL;
 }
