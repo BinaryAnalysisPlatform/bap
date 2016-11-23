@@ -7,14 +7,14 @@
   (memory-write dst (memory read src)))
 
 (defmacro copy-byte-shift (dst src)
-  (copy-byte dst src)
-  (incr dst)
-  (incr src))
+  (prog (copy-byte dst src)
+        (incr dst)
+        (incr src)))
 
 (defmacro copy-byte-shift-left (dst src)
-  (copy-byte dst src)
-  (decr dst)
-  (decr src))
+  (prog (copy-byte dst src)
+        (decr dst)
+        (decr src)))
 
 (defmacro make-copy (copy-byte dst src len)
   (let ((ret dst))

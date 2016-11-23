@@ -271,6 +271,10 @@ let () =
   | Project.Pass.Failed (Project.Pass.Unsat_dep (p,n)) ->
     error "Dependency `%s' of pass `%s' is not loaded"
       n (Project.Pass.name p)
+  | Project.Pass.Failed (
+      Project.Pass.Runtime_error
+        (p, (Failure msg | Invalid_argument msg))) ->
+    error "Failed in pass %s: %s\n" (Project.Pass.name p) msg
   | Project.Pass.Failed (Project.Pass.Runtime_error (p,exn)) ->
     error "Pass `%s' failed at runtime with: %a"
       (Project.Pass.name p) Exn.pp exn

@@ -40,8 +40,6 @@ module Parameters = struct
   let parse_value = function
     | Atom x when not (int_literal x) -> Data x
     | gen -> Word (parse_generator gen)
-
-
 end
 
 module Mach = Machine.Make(Monad.Ident)

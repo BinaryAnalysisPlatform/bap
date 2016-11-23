@@ -82,7 +82,6 @@ let data (size : #Bap_c_size.base) (t : Bap_c_type.t) =
     | `Function _ -> Ptr (Imm ((size#pointer :> size),Top)) in
   data t
 
-
 let create_arg i addr_size intent name t (data,exp) sub =
   let typ = match data with
     | Bap_c_data.Imm (sz,_) -> Type.Imm (Size.in_bits sz)

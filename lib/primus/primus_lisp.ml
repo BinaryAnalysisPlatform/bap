@@ -426,13 +426,17 @@ module Parse = struct
     | List vars -> List.map ~f:atom vars
     | s -> expects "(s1 s2 ..)" s
 
-  type parser_state = {
-    global_attrs : attrs;
-    parse_module : string -> parser_state -> parser_state;
-    defs : func defs;
-    current : filepos;
-    constraints : Contexts.t;
-  }
+  module State = struct
+    type t = {
+      global_attrs : attrs;
+      parse_module : string -> t -> t;
+      defs : func defs;
+      current : filepos;
+      features : String.Set.t;
+      constraints : Contexts.t;
+    }
+  end
+  open State
 
   let add_def defs def = def :: defs
 
@@ -541,6 +545,25 @@ module Parse = struct
       state.parse_module name state
     | s -> expects "(defun ...) | (defmacro ..)" s
 
+
+  let update_range loc range = Sexp.Annotated.{
+      loc with range
+    }
+
+  let update_file loc name = Sexp.Annotated.{
+      loc with name
+    }
+
+  let annotated_stmt state sexp =
+    let range = Sexp.Annotated.get_range sexp in
+    let sexp = Sexp.Annotated.get_sexp sexp in
+    stmt {state with current = update_range state.current range} sexp
+
+  let defs state = List.fold ~f:annotated_stmt ~init:state
+end
+
+module Load = struct
+
   let make_pos ~line ~col ~offset = Sexp.Annotated.{
       line; col; offset;
     }
@@ -557,35 +580,47 @@ module Parse = struct
       file = name; range;
     }
 
-  let update_range loc range = Sexp.Annotated.{
-      loc with range
-    }
+  let load_sexps = Sexp.Annotated.load_sexps
 
-  let update_file loc name = Sexp.Annotated.{
-      loc with name
-    }
+  let file_of_feature paths feature =
+    eprintf "looking %s in %s\n" feature (String.concat paths ~sep:":");
+    let name = feature ^ ".lisp" in
+    List.find_map paths ~f:(fun path ->
+        Sys.readdir path |> Array.find_map ~f:(fun file ->
+            if String.(file = name)
+            then Some (Filename.concat path file)
+            else None))
 
-  let annotated_stmt state sexp =
-    let range = Sexp.Annotated.get_range sexp in
-    let sexp = Sexp.Annotated.get_sexp sexp in
-    stmt {state with current = update_range state.current range} sexp
+  let feature
+      ?(features=String.Set.empty)
+      ?(paths=[Filename.current_dir_name])
+      ?(defs=[]) cs feature =
+    let open Parse.State in
+    let rec load features defs feature =
+      if Set.mem features feature then features,defs
+      else match file_of_feature paths feature with
+        | Some name ->
+          let state = Parse.State.{
+              current = make_loc dummy_range name;
+              global_attrs = Univ_map.empty;
+              defs;
+              constraints=cs;
+              features = Set.add features feature;
+              parse_module = (fun feature s ->
+                  let features,defs = load s.features s.defs feature in
+                  {s with features; defs})
+            } in
+          let result = Parse.defs state (load_sexps name) in
+          result.features, result.defs
+        | None ->
+          invalid_argf "Lisp loader: can't find module %s"
+            feature () in
+    load features defs feature
 
-
-  let rec defs cs name =
-    List.fold ~f:annotated_stmt ~init:{
-      current = make_loc dummy_range name;
-      global_attrs = Univ_map.empty;
-      defs = [];
-      constraints=cs;
-      parse_module = (fun name state -> defs cs name (Annotated.load_sexps name));
-    }
-
-  let file cs name = defs cs name (Annotated.load_sexps name)
 end
 
 
 module State = Primus_state
-
 
 module type Builtins = functor (Machine : Machine) ->  sig
   val defs : unit -> (Word.t list -> (Word.t,#Context.t) Machine.t) defs
@@ -593,10 +628,12 @@ end
 
 type state = {
   builtins : (module Builtins);
+  modules : String.Set.t;
   defs : func defs;
   width : int;
   env : (var * Word.t) list;
   contexts : Contexts.t;
+  paths : string list;
 }
 
 
@@ -650,13 +687,19 @@ module Builtins(Machine : Machine) = struct
   ]
 end
 
+let default_search_paths = [
+  Filename.current_dir_name;
+]
+
 let state = Primus_state.declare ~inspect
     ~name:"lisp-library"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun ctxt -> {
          env = [];
          builtins = (module Builtins);
+         modules = String.Set.empty;
          defs = [];
+         paths = [Filename.current_dir_name];
          width = width_of_ctxt ctxt;
          contexts = Contexts.of_project ctxt#project;
        })
@@ -830,4 +873,19 @@ module Machine(Machine : Machine) = struct
         match Univ_map.find def.meta.attrs External.t with
         | Some names -> List.mem names name
         | None -> false)
+
+  let load_feature name =
+    Machine.Local.update state ~f:(fun s ->
+        let modules,defs = Load.feature
+            ~paths:s.paths
+            ~features:s.modules
+            ~defs:s.defs s.contexts name in
+        {s with modules; defs})
+
+
+  let add_directory path =
+    Machine.Local.update state ~f:(fun s -> {
+          s with paths = path :: s.paths
+        })
+
 end
