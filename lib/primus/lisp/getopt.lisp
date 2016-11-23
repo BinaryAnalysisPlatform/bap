@@ -10,15 +10,20 @@
 (defun getopt-arg-char (argv n)
   (array-get byte (getopt-arg argv) n))
 
+(defun points-to-dash (p)
+  (points-to char_t p ?-))
+(defun points-to-colon (p)
+  (points-to char_t p ?:))
+
 (defun getopt-finished (argc argv)
   (or (> optind argc)
       (is-zero (getopt-arg argv))
-      (not (points-to ?- (getopt-arg argv)))
+      (not (points-to-dash (getopt-arg argv)))
       (points-to-null (getopt-arg argv))))
 
 (defun getopt-nearly-finished (argv)
   (let ((p (getopt-arg argv)))
-    (and (points-to ?-   (ptr+ p 1))
+    (and (points-to-dash (ptr+ p 1))
          (points-to-null (ptr+ p 2)))))
 
 (defun getopt-update-optopt (argv last-ofs)
@@ -28,22 +33,21 @@
   (set optarg (array-get ptr_t argv (+1 optind))))
 
 (defun getopt-found (argv p last-ofs)
-  (or (points-to ?: (ptr+ 2 p))
+  (or (points-to-colon (ptr+ 2 p))
       (getopt-arg-char argv (+ 2 last-ofs))))
 
 (defun getopt-reset-optarg-if-needed (argv last-ofs)
   (when (points-to-null (getopt-arg-char argv (+ 2 last-ofs)))
     (set optarg 0)))
 
-
 (defun getopt-expects-argument (p)
-  (points-to ?: (ptr+ 1 p)))
+  (points-to-colon (ptr+ 1 p)))
 
 (defun getopt-missing-argument ())
 
 (defun getopt-no-argument (argv opts)
   (incr optind)
-  (when (not (points-to ?: opts))
+  (when (not (points-to-colon opts))
     (getopt-missing-argument))
   ?:)
 
@@ -58,9 +62,7 @@
 
 
 (defun getopt (argc argv opts)
-  (declare
-   (context (arch arm linux gnueabi) (endian little))
-   (static (last-idx last-ofs)))
+  (declare (external "getopt"))
   (when (= 0 optind)
     (set optind 1)
     (set lastidx 0))
