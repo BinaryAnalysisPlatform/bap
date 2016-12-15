@@ -31,3 +31,4 @@ _oasis
 /lib/bap_config/bap_config.ml
 /plugins/ida/bap_ida_config.ml
 /plugins/objdump/objdump_config.ml
+/plugins/x86/x86_llvm_config.ml

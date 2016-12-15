@@ -61,7 +61,6 @@ let strings_of_insn insn =
             List.map ~f:(Op.to_string) in
   (name :: ops)
 
-
 let insn_of_mem arch data ctxt =
   let mem = memory_of_string data in
   Dis.with_disasm ~backend:"llvm" arch ~f:(fun dis ->
@@ -73,10 +72,25 @@ let insn_of_mem arch data ctxt =
           (String.length data) (Memory.length mem);
         return (strings_of_insn insn))
 
+let assert_equal_regexp s s' =
+  let pat = sprintf "%s.?" s in
+  let msg =
+    sprintf "failed to find %s by pattern %s in %s" s' pat s in
+  assert_bool msg Str.(string_match (regexp pat) s' 0)
+
+let assert_strings_equal ctxt ss ss' =
+  match ss, ss' with
+  | name :: ss, name' :: ss' ->
+    assert_equal_regexp name name';
+    assert_equal ~ctxt ss ss'
+  | _ -> assert_string "got different strings"
+
 let test_insn_of_mem  (arch,samples) ctxt =
   let test (data,expect,_) =
-    assert_equal ~ctxt ~printer
-      (Ok expect) (insn_of_mem arch data ctxt)  in
+    match insn_of_mem arch data ctxt with
+    | Ok strs ->
+      assert_strings_equal ctxt expect strs
+    | Error err -> assert_string (Error.to_string_hum err) in
   List.iter samples ~f:test
 
 let test_run_all (arch,samples) ctxt =
@@ -94,8 +108,7 @@ let test_run_all (arch,samples) ctxt =
               ~f:(fun (data,exp,kinds) -> function
                   | (_,None) -> assert_string "bad instruction"
                   | (mem, Some r) ->
-                    assert_equal ~ctxt ~printer
-                      (Ok exp) (Ok (strings_of_insn r));
+                    assert_strings_equal ctxt exp (strings_of_insn r);                    
                     assert_equal ~ctxt ~printer:Int.to_string
                       (String.length data) (Memory.length mem);
                     List.iter kinds ~f:(fun expected ->
@@ -368,3 +381,4 @@ let suite () = "Disasm.Basic" >::: [
     "sub"                   >:: test_micro_cfg sub;
     "call1_3ret"            >:: call1_3ret;
   ]
+

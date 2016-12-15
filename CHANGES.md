@@ -3,8 +3,7 @@
 
 ### Bug fixes
 1. PR#586 fixed segfault with short or damaged files fed to bap.
-
-
+2. PR#590 fixed llvm 3.8 specific issues
 
 1.0.0
 =====

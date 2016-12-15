@@ -63,42 +63,6 @@ type mov_mr = [
   | `MOV64mr
 ] [@@deriving bin_io, sexp, compare, enumerate]
 
-(** valid only in x86-32 mode *)
-type mov_oa_ia32 = [
-  | `MOV8o8a
-  | `MOV16o16a
-  | `MOV32o32a
-] [@@deriving bin_io, sexp, compare, enumerate]
-
-(** valid only in x86-64 mode *)
-type mov_oa_amd64 = [
-  | `MOV64o8a
-  | `MOV64o16a
-  | `MOV64o32a
-  | `MOV64o64a
-] [@@deriving bin_io, sexp, compare, enumerate]
-
-type mov_oa = [mov_oa_ia32 | mov_oa_amd64]
-  [@@deriving bin_io, sexp, compare, enumerate]
-
-(** valid only in x86-32 mode *)
-type mov_ao_ia32 = [
-  | `MOV8ao8
-  | `MOV16ao16
-  | `MOV32ao32
-] [@@deriving bin_io, sexp, compare, enumerate]
-
-(** valid only in x86-64 mode *)
-type mov_ao_amd64 = [
-  | `MOV64ao8
-  | `MOV64ao16
-  | `MOV64ao32
-  | `MOV64ao64
-] [@@deriving bin_io, sexp, compare, enumerate]
-
-type mov_ao = [mov_ao_ia32 | mov_ao_amd64]
- [@@deriving bin_io, sexp, compare, enumerate]
-
 type mov_rs_ia32 = [
   | `MOV16rs
   | `MOV32rs
@@ -145,8 +109,6 @@ type mov_ia32 = [
   | mov_mi_ia32
   | mov_rm_ia32
   | mov_mr_ia32
-  | mov_oa_ia32
-  | mov_ao_ia32
   | mov_rs_ia32
   | mov_ms_ia32
   | mov_sr_ia32
@@ -159,15 +121,10 @@ type mov_amd64 = [
   | mov_mi
   | mov_rm
   | mov_mr
-  | mov_oa_amd64
-  | mov_ao_amd64
   | mov_rs
   | mov_ms
   | mov_sr
   | mov_sm
 ] [@@deriving bin_io, sexp, compare, enumerate]
 
-type mov = [
-  | mov_ia32
-  | mov_amd64
-] [@@deriving bin_io, sexp, compare, enumerate]
+type mov = mov_amd64 [@@deriving bin_io, sexp, compare, enumerate]

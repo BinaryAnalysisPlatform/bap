@@ -3,15 +3,7 @@ open Bap.Std
 open X86_tools_types
   
 module Make(CPU : X86CPU) : FR = struct
-  type t = [
-    | `CF
-    | `PF
-    | `AF
-    | `ZF
-    | `SF
-    | `DF
-    | `OF
-  ] [@@ deriving sexp]
+  type t = cpu_flag 
 
   let var = function
     | `CF -> CPU.cf
