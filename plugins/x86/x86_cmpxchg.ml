@@ -1,9 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
-open X86_opcode
+open X86_opcode_cmpxchg
 open X86_asm.Reg
 
-module Make (Tools : X86_tools.S) = struct
+module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
   open Tools
 
   let local_var name width =
@@ -57,16 +57,29 @@ module Make (Tools : X86_tools.S) = struct
         Ok bil)
 
   let cmpxchg (op:cmpxchg) =
-    match op with
-    | #cmpxchg_rr as op -> cmpxchg_rr op
-    | #cmpxchg_rm as op -> cmpxchg_rm op
+    let open Or_error in
+    let lift =
+      match op with
+      | #cmpxchg_rr as op -> cmpxchg_rr op
+      | #cmpxchg_rm as op -> cmpxchg_rm op in
+    fun mem insn ->
+      lift mem insn >>= fun bil ->
+      match op with
+      | #cmpxchg_rm when X86_prefix.exists `xF0 mem -> Ok (PR.lock bil)
+      | _ -> Ok bil
+
+  let register what =
+    let name op =
+      sexp_of_cmpxchg (op :> cmpxchg) |> Sexp.to_string in
+    List.iter (what :> cmpxchg list)
+      ~f:(fun op -> Backend.register (name op) (cmpxchg op))
 end
 
-module IA32 = Make (X86_tools.IA32)
-module AMD64 = Make (X86_tools.AMD64)
+module IA32 = Make (X86_tools.IA32) (X86_backend.IA32)
+module AMD64 = Make (X86_tools.AMD64) (X86_backend.AMD64)
 
 let () =
-  List.iter (all_of_cmpxchg_ia32 :> cmpxchg list) ~f:(fun op ->
-      X86_backend.IA32.register (op :> X86_opcode.t) (IA32.cmpxchg op));
-  List.iter (all_of_cmpxchg :> cmpxchg list) ~f:(fun op ->
-      X86_backend.AMD64.register (op :> X86_opcode.t) AMD64.(cmpxchg op));
+  IA32.register all_of_cmpxchg_rr_ia32;
+  IA32.register all_of_cmpxchg_rm_ia32;
+  AMD64.register all_of_cmpxchg_rr;
+  AMD64.register all_of_cmpxchg_rm

@@ -14,10 +14,10 @@ let r ~f mem insn =
   | [| Op.Reg reg |] -> f mem reg
   | _ -> invalid_operands ~here:[%here] insn
 
-
 let i ~f mem insn =
   match Insn.ops insn with
   | [| Op.Imm imm |] -> f mem imm
+  | [| Op.Imm imm; Op.Reg reg |] -> f mem imm
   | _ -> invalid_operands ~here:[%here] insn
 
 let m ~f mem insn =
@@ -36,6 +36,11 @@ let ri ~f mem insn =
   | [| Op.Reg reg; Op.Imm imm |] -> f mem reg imm
   | _ -> invalid_operands ~here:[%here] insn
 
+let ir ~f mem insn =
+  match Insn.ops insn with
+  | [| Op.Imm imm; Op.Reg reg |] -> f mem imm reg
+  | _ -> invalid_operands ~here:[%here] insn
+
 let rm ~f mem insn =
   match Insn.ops insn with
   | [| Op.Reg reg; Op.Reg base; Op.Imm scale; Op.Reg index;
@@ -49,7 +54,6 @@ let mr ~f mem insn =
        Op.Imm disp; Op.Reg seg; Op.Reg reg |] ->
     f mem ~seg ~base ~scale ~index ~disp reg
   | _ -> invalid_operands ~here:[%here] insn
-
 
 let mi ~f mem insn =
   match Insn.ops insn with

@@ -32,7 +32,7 @@ Library disasm_test
   Path:           lib_test/bap_disasm
   Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
   CompiledObject: best
-  BuildDepends:   bap, oUnit
+  BuildDepends:   bap, oUnit, str
   Install:        false
   Modules:        Test_disasm
 

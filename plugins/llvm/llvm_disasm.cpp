@@ -386,7 +386,7 @@ public:
             int off = pc - mem->getBase();
             int len = mem->getExtent() - off;
 
-            auto status = llvm::MCDisassembler::SoftFail;
+            auto status = llvm::MCDisassembler::Fail;
             if (len > 0) {
                 status = dis->getInstruction
                     (mcinst, size, view(pc), pc,
@@ -399,11 +399,18 @@ public:
                 static_cast<int>(size)
             };
 
-            if (status == llvm::MCDisassembler::Success) {
+            if (status == llvm::MCDisassembler::Fail) {
+                if (debug_level > 0)
+                    std::cerr << "failed to decode insn at"
+                              << " pc " << pc
+                              << " offset " << loc.off
+                              << " skipping " << loc.len << " bytes\n";
+                current = invalid_insn(loc);
+            } else {
+                current = valid_insn(loc);
                 if (debug_level > 1) {
                     std::cerr << "read: '" << get_asm() << "'\n";
                 }
-                current = valid_insn(loc);
                 if (is_prefix() && size != 0) {
                     step(pc+size);
 
@@ -418,13 +425,6 @@ public:
                         current = valid_insn(ext);
                     }
                 }
-            } else {
-                if (debug_level > 0)
-                    std::cerr << "failed to decode insn at"
-                              << " pc " << pc
-                              << " offset " << loc.off
-                              << " skipping " << loc.len << " bytes\n";
-                current = invalid_insn(loc);
             }
         }
     }

@@ -110,6 +110,19 @@ std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ObjectFile &obj
     return computeSymbolSizes(obj);
 }
 
+template <typename ELFT>
+std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const ELFObjectFile<ELFT> &obj) {
+    typedef typename ELFFile<ELFT>::Elf_Shdr sec_hdr;
+    
+    std::size_t sym_count = std::distance(obj.symbol_begin(), obj.symbol_end());
+    auto sections = obj.getELFFile()->sections();   
+    bool is_dyn = std::any_of(sections.begin(), sections.end(),
+                              [](const sec_hdr &hdr) { return (hdr.sh_type == ELF::SHT_DYNSYM); });
+    if (!sym_count && !is_dyn)
+        return std::vector<std::pair<SymbolRef, uint64_t>>();
+    return computeSymbolSizes(obj);
+}
+
 std::vector<std::pair<SymbolRef, uint64_t>> getSymbolSizes(const COFFObjectFile& obj) {
     std::vector<std::pair<SymbolRef, uint64_t>> symbol_sizes;
     for (auto it = obj.symbol_begin(); it != obj.symbol_end(); ++it) {
