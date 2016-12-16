@@ -10,10 +10,8 @@ open Bap_options
 open Bap_source_type
 include Self()
 
-exception Failed_to_load_file of Error.t
 exception Failed_to_create_project of Error.t
-exception Unknown_format of string
-
+exception Pass_not_found of string
 
 let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
@@ -46,26 +44,6 @@ let symbolizer =
 
 let rooter =
   merge_sources Rooter.Factory.find rooters ~f:Rooter.union
-
-let project_or_exn = function
-  | Ok p -> p
-  | Error e -> raise (Failed_to_create_project e)
-
-let memory arch file =
-  let width_of_arch = arch |> Arch.addr_size |> Size.in_bits in
-  let addr = Addr.of_int 0 ~width:width_of_arch in
-  Memory.of_file (Arch.endian arch) addr file |> function
-  | Ok mem -> mem
-  | Error err -> raise (Failed_to_load_file err)
-
-let image options =
-  match Image.create ~backend:options.loader options.filename with
-  | Ok (img,[]) -> img
-  | Ok (img,warns) ->
-    if options.verbose then
-      List.iter warns ~f:(fun err -> eprintf "Warning: %a" Error.pp err);
-    img
-  | Error err -> raise (Failed_to_load_file err)
 
 let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
@@ -109,7 +87,9 @@ let process options project =
                 List.filter ~f:Project.Pass.autorun |>
                 run_passes project in
   let project = options.passes |>
-                List.filter_map ~f:Project.find_pass |>
+                List.map ~f:(fun p -> match Project.find_pass p with
+                    | Some p -> p
+                    | None -> raise (Pass_not_found p)) |>
                 run_passes project in
   List.iter options.dump ~f:(function
       | `file dst,fmt,ver ->
@@ -241,6 +221,7 @@ let parse passes argv =
   | `Ok (opts, passopt) ->
     let passes = passopt @ passes in
     { opts with Bap_options.passes }
+  | `Error _ -> exit 1;
   | _ -> exit 0
 
 let error fmt =
@@ -262,18 +243,15 @@ let () =
     error "Invalid format of source type argument"
   | Bap_plugin_loader.Plugin_not_found name ->
     error "Can't find a plugin bundle `%s'" name
-  | Failed_to_load_file err ->
-    error "Failed to load a file with code: %a" Error.pp err
   | Failed_to_create_project err ->
     error "Failed to create a project: %a" Error.pp err
-  | Unknown_format fmt ->
-    error "Format `%s' is not known" fmt
   | Project.Pass.Failed (Project.Pass.Unsat_dep (p,n)) ->
     error "Dependency `%s' of pass `%s' is not loaded"
       n (Project.Pass.name p)
   | Project.Pass.Failed (Project.Pass.Runtime_error (p,exn)) ->
     error "Pass `%s' failed at runtime with: %a"
       (Project.Pass.name p) Exn.pp exn
+  | Pass_not_found p -> error "Failed to find pass: %s" p
   | exn ->
     error "Failed with an unexpected exception: %a\nBacktrace:\n%s"
       Exn.pp exn
