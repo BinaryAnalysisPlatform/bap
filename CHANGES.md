@@ -4,6 +4,11 @@
 ### Bug fixes
 1. PR#586 fixed segfault with short or damaged files fed to bap.
 2. PR#590 fixed llvm 3.8 specific issues
+3. PR#592 fixed a bug in lifting x86 PSHUFD/PSHUFB instructions
+
+### Features
+1. PR#593 bapbundle: it is no longer needed to specify the .plugin extension
+
 
 1.0.0
 =====

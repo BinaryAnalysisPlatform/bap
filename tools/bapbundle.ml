@@ -53,12 +53,19 @@ let named_resource r = match String.split ~on:'=' r with
   | [name;file] -> Some name, file
   | _ -> None,r
 
-let open_bundle () = match target.contents with
+let normalized x =
+  let suffix = ".plugin" in
+  let with_suffix name =
+    if Filename.check_suffix name suffix then name
+    else name ^ suffix in
+  let is_plugin x = Sys.file_exists (with_suffix x) in
+  if is_plugin x then with_suffix x else x
+
+let open_bundle () = match normalized (target.contents) with
   | "" -> raise Target_unspecified
   | x when Sys.is_directory x -> raise Target_is_directory
   | x when Sys.file_exists x -> Bundle.of_uri (Uri.of_string x)
   | x -> raise Target_doesn't_exist
-
 
 module Update = struct
   let resources = ref []
@@ -178,6 +185,7 @@ module Install = struct
 
   let main () =
     if target.contents = "" then raise Target_unspecified;
+    target := normalized !target;
     if Sys.file_exists !target
     then if Sys.is_directory !target
       then raise Target_is_directory
@@ -189,7 +197,7 @@ module Remove = struct
   let args = [destdir_arg]
   let main () =
     if target.contents = "" then raise Target_unspecified;
-    let file = Filename.concat !destdir !target in
+    let file = normalized @@ Filename.concat !destdir !target in
     if Sys.file_exists file
     then Sys.remove file
 end
@@ -233,7 +241,7 @@ let usage_msg = "USAGE
 DESCRIPTION
 
   Manages BAP bundles. If you're looking for a way to
-  create a bundle, then bapbuild is the tool that you're
+  create a bundle, then bapbundle is the tool that you're
   looking for.
 
   See bapbundle(1) man-page for a full manual.
