@@ -37,7 +37,7 @@ let main proj =
   Result.all |> function
   | Error e ->
     error "api wasn't applied: %a" Error.pp e;
-    proj
+    exit 1
   | Ok mappers ->
     let prog = Project.program proj in
     List.fold mappers ~init:prog ~f:(fun prog map -> map#run prog) |>
