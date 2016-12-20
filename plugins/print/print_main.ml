@@ -233,7 +233,7 @@ let pp_addr ppf addr =
 
 let setup_tabs ppf =
   pp_print_as ppf 50 "";
-  pp_set_tab ppf ()
+  pp_set_tab ppf () [@ocaml.warning "-3"]
 
 let print_disasm pp_insn subs secs ppf proj =
   let memory = Project.memory proj in
@@ -256,7 +256,7 @@ let print_disasm pp_insn subs secs ppf proj =
                   let mem = Block.memory blk in
                   fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
                   Block.insns blk |> List.iter ~f:(pp_insn ppf))));
-  pp_close_tbox ppf ()
+  pp_close_tbox ppf () [@ocaml.warning "-3"]
 
 let pp_bil fmt ppf (mem,insn) =
   let pp_bil ppf = Bil.Io.print ~fmt ppf in
@@ -268,7 +268,7 @@ let pp_insn fmt ppf (mem,insn) =
   Memory.pp ppf mem;
   pp_print_tab ppf ();
   Insn.Io.print ~fmt ppf insn;
-  fprintf ppf "@\n"
+  fprintf ppf "@\n" [@ocaml.warning "-3"]
 
 let main attrs ansi_colors demangle symbol_fmts subs secs =
   let ver = version in

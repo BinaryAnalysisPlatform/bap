@@ -137,11 +137,12 @@ module Constant_folder = struct
       | NEQ, e1, e2 when equal e1 e2 -> Int Word.b0
       | (LT|SLT), e1, e2 when equal e1 e2 -> Int Word.b0
       | (PLUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), Int v, e
+        when Word.is_zero v -> e
       | (PLUS|MINUS|LSHIFT|RSHIFT|ARSHIFT|OR|XOR), e, Int v
         when Word.is_zero v -> e
-      | (TIMES|AND),e,Int v
+      | (TIMES|AND),e,Int v when Word.is_one v -> e
       | (TIMES|AND), Int v, e when Word.is_one v -> e
-      | (TIMES|AND), e, Int v
+      | (TIMES|AND), e, Int v when Word.is_zero v -> Int v
       | (TIMES|AND), Int v, e when Word.is_zero v -> Int v
       | (OR|AND), v1, v2 when equal v1 v2 -> v1
       | (XOR), v1, v2 when equal v1 v2 -> zero v1 v2

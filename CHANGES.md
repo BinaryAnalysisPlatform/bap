@@ -6,6 +6,7 @@
 2. PR#590 fixed llvm 3.8 specific issues
 3. PR#592 fixed a bug in lifting x86 PSHUFD/PSHUFB instructions
 4. PR#595 fixed bap exit status
+5. PR#596 fixed most of compilation warnings
 
 ### Features
 1. PR#593 bapbundle: it is no longer needed to specify the .plugin extension

@@ -162,6 +162,8 @@ module PP = struct
     let a e = format_of_string
         (if is_imm e then "%a" else "(%a)") in
     let pr s = fprintf fmt s in
+    let is_b0 x = Bitvector.(x = b0) in
+    let is_b1 x = Bitvector.(x = b1) in
     match exp with
     | Load (Var _ as mem, idx, edn, s) ->
       pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
@@ -176,11 +178,10 @@ module PP = struct
       pr "extract: %d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
       pr (a le ^^ "." ^^ a re) pp le pp re
-    | BinOp (EQ,e, Int x) | BinOp (EQ,Int x, e)
-      when Bitvector.(x = b1) -> pr ("%a") pp e
-    | BinOp (EQ,e, Int x) | BinOp (EQ,Int x, e)
-      when Bitvector.(x = b0) ->
-      pr ("%a(%a)") pp_unop Unop.NOT pp e
+    | BinOp (EQ,e, Int x) when is_b1 x -> pr ("%a") pp e
+    | BinOp (EQ,Int x, e) when is_b1 x -> pr ("%a") pp e
+    | BinOp (EQ,e, Int x) when is_b0 x -> pr ("%a(%a)") pp_unop Unop.NOT pp e
+    | BinOp (EQ,Int x, e) when is_b0 x -> pr ("%a(%a)") pp_unop Unop.NOT pp e
     | BinOp (op, le, re) ->
       pr (a le ^^ " %a " ^^ a re) pp le pp_binop op pp re
     | UnOp (NOT, BinOp(LE,le,re)) ->

@@ -33,13 +33,12 @@ module Make(Env : sig val project : project end) = struct
 
   let pp_bil : bil pp = Bil.pp
 
-
   let pp_insn_line fmt (mem,insn) =
     pp_print_cut fmt ();
     pp_print_tab fmt ();
     Memory.pp fmt mem;
     pp_print_tab fmt ();
-    Insn.pp fmt insn
+    Insn.pp fmt insn [@ocaml.warning "-3"]
 
   let pp_nothing _ () = ()
   let pp_insns = pp_list ~sep:pp_nothing pp_insn_line
@@ -82,7 +81,7 @@ module Make(Env : sig val project : project end) = struct
     pp_print_as fmt 25 "";
     pp_set_tab fmt ();
     pp_print_as fmt 20 "";
-    pp_set_tab fmt ()
+    pp_set_tab fmt ()  [@ocaml.warning "-3"]
 
   (** prints a code as html document  *)
   let pp_code pp fmt v =
@@ -97,5 +96,5 @@ module Make(Env : sig val project : project end) = struct
        (href ../../../css/code-panel.css))>@}@}@{<body>%a@;@}@}" pp v;
     pp_close_tbox fmt ();
     pp_close_box fmt ();
-    pp_print_flush fmt ()
+    pp_print_flush fmt () [@ocaml.warning "-3"]
 end

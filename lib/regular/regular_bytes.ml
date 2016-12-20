@@ -1,4 +1,3 @@
-
 module Std_bytes = Bytes
 
 open Core_kernel.Std
@@ -94,6 +93,8 @@ include Identifiable.Make(struct
   end)
 
 module Unsafe = struct
+  [@@@ocaml.warning "-3"]
+
   let of_string = T.unsafe_of_string
   let to_string = T.unsafe_to_string
 

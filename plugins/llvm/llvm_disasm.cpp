@@ -482,7 +482,7 @@ private:
     insn valid_insn(location loc) const {
         insn ins;
 
-        for (int i = 0; i < mcinst.getNumOperands(); ++i) {
+        for (std::size_t i = 0; i < mcinst.getNumOperands(); ++i) {
             const llvm::MCOperand &op = mcinst.getOperand(i);
             if (!op.isValid() || op.isExpr()) {
                 if (debug_level > 0) {
@@ -579,7 +579,7 @@ private:
     }
 
     void init_prefixes() {
-        for (int i = 0; i < ins_info->getNumOpcodes(); i++) {
+        for (std::size_t i = 0; i < ins_info->getNumOpcodes(); i++) {
             if (ends_with(ins_info->getName(i), "_PREFIX")) {
                 prefixes.push_back(i);
             }
