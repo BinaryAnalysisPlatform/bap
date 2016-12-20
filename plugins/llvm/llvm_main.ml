@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 include Self()
 
+[@@@ocaml.warning "-3"]
+
 external init : unit -> int = "disasm_llvm_init_stub" "noalloc"
 
 let () =

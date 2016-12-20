@@ -1,4 +1,3 @@
-
 open Core_kernel.Std
 
 type t = Bytes.t [@@deriving bin_io, compare, sexp]
@@ -41,6 +40,8 @@ val capitalize : t -> t
 val uncapitalize : t -> t
 
 module Unsafe : sig
+  [@@@ocaml.warning "-3"]
+
   val to_string : t -> string
   val of_string : string -> t
   external get  : t -> int -> char = "%string_unsafe_get"
@@ -48,4 +49,3 @@ module Unsafe : sig
   external blit : t -> int -> t -> int -> int -> unit = "caml_blit_string" "noalloc"
   external fill : t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
 end
-
