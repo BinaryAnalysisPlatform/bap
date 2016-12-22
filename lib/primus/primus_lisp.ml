@@ -375,7 +375,10 @@ module Parse = struct
   let bop x e1 e2 = Bop (bop x, e1, e2)
 
   let handle_error _ = assert false
-  let is_keyword op = List.mem ["if"; "let"; "neg"; "not"; "bits"] op
+
+  let keywords = [
+    "if"; "let"; "neg"; "not"; "coerce"]
+  let is_keyword op = List.mem keywords op
   let nil = Int {value=0L; typ=Word}
 
   let macros : macro def list ref = ref []

@@ -49,3 +49,24 @@
     (decr n)
     (incr p))
   (if (points-to char_t p c) p 0))
+
+(defun memset (p c n)
+  (let ((p p))
+    (while n
+      (memory-write p c)
+      (incr p)))
+  p)
+
+(defun compare (x y)
+  (if (< x y) -1 (if (> x y) 1) 0))
+
+(defun memcmp (p1 p2 n)
+  (let ((res 0) (i 0))
+    (while (and (< i n) (not res))
+      (set res (compare (memory-read p1) (memory-read p2)))
+      (incr p1 p2 i))))
+
+
+;; (defun memmem (p m c n)
+;;   (if (> m n) 0
+;;     (prog )))

@@ -11,6 +11,18 @@
 (defun -1 (x) (- x 1))
 
 (defun non-zero (x) (non (is-zero x)))
-(defmacro incr (x) (set x (+1 x)))
-(defmacro decr (x) (set x (-1 x)))
 (defmacro += (x y) (set x (+ x y)))
+
+
+(defmacro incr (x) (set x (+1 x)))
+(defmacro incr (x xs)
+  (prog (incr x) (incr xs)))
+
+(defmacro decr (x) (set x (-1 x)))
+(defmacro decr (x xs)
+  (prog (decr x) (decr xs)))
+
+
+
+(defun compare (x y)
+  (if (< x y) -1 (if (> x y) 1) 0))
