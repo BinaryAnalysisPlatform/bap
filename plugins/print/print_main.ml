@@ -238,8 +238,8 @@ let setup_tabs ppf =
 let print_disasm pp_insn subs secs ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
-  pp_open_tbox ppf ();
-  setup_tabs ppf;
+  pp_open_tbox ppf () [@ocaml.warning "-3"];
+  setup_tabs ppf [@ocaml.warning "-3"];
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
@@ -266,9 +266,9 @@ let pp_bil fmt ppf (mem,insn) =
 
 let pp_insn fmt ppf (mem,insn) =
   Memory.pp ppf mem;
-  pp_print_tab ppf ();
+  pp_print_tab ppf ()  [@ocaml.warning "-3"];
   Insn.Io.print ~fmt ppf insn;
-  fprintf ppf "@\n" [@ocaml.warning "-3"]
+  fprintf ppf "@\n"
 
 let main attrs ansi_colors demangle symbol_fmts subs secs =
   let ver = version in
