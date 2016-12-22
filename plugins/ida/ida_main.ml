@@ -22,13 +22,16 @@ module type Target = sig
   end
 end
 
+let request =
+  sprintf "
+from bap.utils import ida
+ida.service.request(service='%s', output='$output')
+"
+
 let get_symbols =
   Command.create
     `python
-    ~script:"
-from bap.utils.ida import dump_symbol_info
-dump_symbol_info('$output')
-idc.Exit(0)"
+    ~script:(request "symbols")
     ~parser:(fun name ->
         let blk_of_sexp x = [%of_sexp:string*int64*int64] x in
         In_channel.with_file name ~f:(fun ch ->
@@ -60,12 +63,6 @@ let register_source (module T : Target) =
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
 
-let loader_script =
-  {|
-from bap.utils.ida import dump_loader_info
-dump_loader_info('$output')
-idc.Exit(0)
-|}
 
 type perm = [`code | `data] [@@deriving sexp]
 type section = string * perm * int * (int64 * int)
@@ -102,7 +99,7 @@ let read_image name =
       Sexp.input_sexp ch |> image_of_sexp)
 
 let load_image = Command.create `python
-    ~script:loader_script
+    ~script:(request "loader")
     ~parser:read_image
 
 
