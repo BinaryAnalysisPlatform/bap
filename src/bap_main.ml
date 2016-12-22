@@ -248,10 +248,11 @@ let () =
   | Project.Pass.Failed (Project.Pass.Unsat_dep (p,n)) ->
     error "Dependency `%s' of pass `%s' is not loaded"
       n (Project.Pass.name p)
-  | Project.Pass.Failed (Project.Pass.Runtime_error (p,exn)) ->
-    error "Pass `%s' failed at runtime with: %a"
-      (Project.Pass.name p) Exn.pp exn
   | Pass_not_found p -> error "Failed to find pass: %s" p
+  | Project.Pass.Failed
+      (Project.Pass.Runtime_error (p, Exn.Reraised (backtrace, exn))) ->
+    error "Pass `%s' failed at runtime with: %a\nBacktrace:\n%s"
+      (Project.Pass.name p) Exn.pp exn backtrace
   | exn ->
     error "Failed with an unexpected exception: %a\nBacktrace:\n%s"
       Exn.pp exn

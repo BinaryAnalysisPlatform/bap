@@ -2,16 +2,17 @@
 =====
 
 ### Bug fixes
-1. PR#586 fixed segfault with short or damaged files fed to bap.
-2. PR#590 fixed llvm 3.8 specific issues
-3. PR#592 fixed a bug in lifting x86 PSHUFD/PSHUFB instructions
-4. PR#595 fixed bap exit status
-5. PR#596 fixed most of compilation warnings
-6. PR#597 fixed api plugin exit status
+1. PR#586 segfault with short or damaged files fed to bap.
+2. PR#590 llvm 3.8 specific issues
+3. PR#592 a bug in lifting x86 PSHUFD/PSHUFB instructions
+4. PR#595 bap exit status
+5. PR#596 most of the compilation warnings
 
 
 ### Features
 1. PR#593 bapbundle: it is no longer needed to specify the .plugin extension
+2. PR#597 API pass will stop processing in case of the error
+7. PR#599 print backtraces from passes
 
 
 1.0.0
