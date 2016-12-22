@@ -30,15 +30,12 @@ let string_of_color c = Sexp.to_string (sexp_of_color c)
     (i.e., valid names are):
     "sub_name" - name of a parent subroutine
     "addr" - an address of instruction that produced the term, or
-            BADADDR otherwise.*)
+            None otherwise.*)
 module Py = struct
   (** this is emitted at the start of the script *)
   let prologue =
     {|
-from idautils import *
-from bap.utils.ida import add_to_comment
-
-Wait()
+from bap.utils import ida
 |}
 
   (** this is emitted at the end of the script *)
@@ -47,14 +44,20 @@ Wait()
 # eplogue code if needed
 |}
 
-  let color s = sprintf "SetColor($addr, CIC_ITEM, 0x%06x)" (idacode_of_color s)
+
+  let escape = unstage @@ String.Escaping.escape
+      ~escapeworthy:['\''; '\\'; '$']
+      ~escape_char:'\\'
+
+
+  let color s = sprintf "ida.set_color($addr, 0x%06x)" (idacode_of_color s)
   let comment s =
-    sprintf "add_to_comment($addr, '%s', '%s')"
-      (Value.tagname s) (Value.to_string s)
+    sprintf "ida.comment.add($addr, '%s', '%s')"
+      (escape (Value.tagname s)) (escape (Value.to_string s))
   let foreground s =
-    sprintf "add_to_comment($addr, 'foreground', '%s')" (string_of_color s)
+    sprintf "ida.comment.add($addr, 'foreground', '%s')" (string_of_color s)
   let background s =
-    sprintf "add_to_comment($addr, 'background', '%s')" (string_of_color s)
+    sprintf "ida.comment.add($addr, 'background', '%s')" (string_of_color s)
 
 end
 
@@ -69,10 +72,7 @@ let emit_attr buf sub_name addr attr =
   let open Value.Match in
   let substitute = function
     | "sub_name" -> sub_name
-    | "addr" ->
-      Option.value_map
-        addr ~f:(fun a -> "0x" ^ Addr.string_of_value a)
-        ~default:"BADADDR"
+    | "addr" -> "0x" ^ Addr.string_of_value addr
     | s -> s in
   let case tag f = case tag (fun attr ->
       Buffer.add_substitute buf substitute (f attr);
@@ -89,10 +89,13 @@ let program_visitor buf attrs =
   object
     inherit [string * word option] Term.visitor
     method! leave_term _ t (name,addr) =
-      Term.attrs t |> Dict.to_sequence |> Seq.iter ~f:(fun (_,x) ->
-          let attr = Value.tagname x in
-          if List.mem attrs attr then emit_attr buf name addr x);
-      name,addr
+      match addr with
+      | None -> name,addr
+      | Some addr ->
+        Term.attrs t |> Dict.to_sequence |> Seq.iter ~f:(fun (_,x) ->
+            let attr = Value.tagname x in
+            if List.mem attrs attr then emit_attr buf name addr x);
+        name,Some addr
     method! enter_term _ t (name,_) =
       name,Term.get_attr t address
     method! enter_sub sub (_,addr) = Sub.name sub,addr
