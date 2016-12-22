@@ -2,48 +2,36 @@
 =====
 
 ### Bug fixes
-1. PR#586 fixed segfault with short or damaged files fed to bap.
-2. PR#590 fixed llvm 3.8 specific issues
-3. PR#592 fixed a bug in lifting x86 PSHUFD/PSHUFB instructions
-4. PR#595 fixed bap exit status
-5. PR#596 fixed most of compilation warnings
-6. PR#597 fixed api plugin exit status
+- PR#586 segfault with short or damaged files fed to bap.
+- PR#590 llvm 3.8 specific issues
+- PR#592 a bug in lifting x86 PSHUFD/PSHUFB instructions
+- PR#595 bap exit status
+- PR#596 most of the compilation warnings
 
 
 ### Features
-1. PR#593 bapbundle: it is no longer needed to specify the .plugin extension
+- PR#593 bapbundle: it is no longer needed to specify the .plugin extension
+- PR#597 API pass will stop processing in case of the error
+- PR#599 print backtraces from passes
 
 
 1.0.0
 =====
 
-1. A more powerful plugin system
-
-2. Split Bap.Std into several libraries.
-
-3. The disassembler layer is severly rewritten
-
-4. Made project storable and loadable
-
-5. Added new injection points
-
-6. Added BIL interpreters
-
-7. Removed bap-server
-
-8. New python interface (see https://BinaryAnalysisPlatform/bap-python)
-
-9. New ida integration, that works in both directions
-
-10. Multipass disassembling
-
-11. llvm-3.8 support (#546)
-
-12. new x86 lifter (#549)
-
-13. new testsuite with functional tests (#520)
-
-14. extensible API/ABI (#448)
+- A powerful plugin system
+- Split Bap.Std into several libraries.
+- The disassembler layer is severly rewritten
+- Made project storable and loadable
+- Added new injection points
+- Added BIL interpreters
+- Removed bap-server
+- New python interface (see https://BinaryAnalysisPlatform/bap-python)
+- New ida integration, that works in both directions
+- Multipass disassembling
+- llvm-3.8 support (#546)
+- new x86 lifter (#549)
+- new testsuite with functional tests (#520)
+- extensible API/ABI (#448)
 
 0.9.9
 =====

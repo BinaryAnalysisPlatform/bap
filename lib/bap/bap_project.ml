@@ -442,7 +442,12 @@ module Pass = struct
     DList.find passes ~f:(fun p -> p.name = name)
 
   exception Failed of error [@@deriving sexp]
-  let fail error = raise (Failed error)
+
+  let fail = function
+    | Unsat_dep _ as err -> raise (Failed err)
+    | Runtime_error (pass,exn) ->
+      let backtrace = Caml.Printexc.get_backtrace () in
+      raise (Failed (Runtime_error (pass, Exn.Reraised (backtrace, exn))))
 
   let is_evaled pass proj =
     List.exists proj.passes ~f:(fun name -> name = pass.name)
