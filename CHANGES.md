@@ -8,12 +8,11 @@
 - PR#595 bap exit status
 - PR#596 most of the compilation warnings
 
-
 ### Features
 - PR#593 bapbundle: it is no longer needed to specify the .plugin extension
 - PR#597 API pass will stop processing in case of the error
 - PR#599 print backtraces from passes
-
+- PR#600 documented memory interface
 
 1.0.0
 =====

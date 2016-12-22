@@ -37,8 +37,8 @@ val link : one_to:('b,'r) r -> 'a hashable -> 'a t -> 'b t -> 'a -> 'r
 val rev_map : one_to:(mem,'r) r -> 'a hashable -> 'a t -> ('a -> 'r) Or_error.t
 type 'a ranged = ?start:mem -> ?until:mem -> 'a
 
-val exists   : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
-val for_all  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+val existsi  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+val for_alli : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
 val exists   : ('a t -> f:(      'a -> bool) -> bool) ranged
 val for_all  : ('a t -> f:(      'a -> bool) -> bool) ranged
 
