@@ -8,13 +8,13 @@ include Identifiable.S with type t := t
 module To_string   : Blit.S_distinct with type src := t with type dst := string
 module From_string : Blit.S_distinct with type src := string with type dst := t
 
-external create : int -> t = "caml_create_string"
+val create : int -> t
 val make : int -> char -> t
 val init : int -> f:(int -> char) -> t
 val empty : t
-external length: t -> int = "%string_length"
-external get : t -> int -> char = "%string_safe_get"
-external set : t -> int -> char -> unit = "%string_safe_set"
+val length : t -> int
+val get : t -> int -> char
+val set : t -> int -> char -> unit
 val copy : t -> t
 val of_string : string -> t
 val to_string : t -> string
