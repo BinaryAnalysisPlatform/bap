@@ -20,6 +20,7 @@ B _build/lib/bap_plugins
 B _build/lib/bap_sema
 B _build/lib/bap_types
 B _build/lib/graphlib
+B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
 
@@ -30,4 +31,5 @@ S lib/bap_future
 S lib/bap_plugins
 S lib/bap_bundle
 S lib/bap_config
+S lib/bap_llvm
 S ../core_kernel.113.33.00/src

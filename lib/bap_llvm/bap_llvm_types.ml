@@ -38,3 +38,7 @@ module Symbol = struct
     size : int64;
   } [@@deriving fields]
 end
+
+type section = Section.t
+type segment = Segment.t
+type symbol = Symbol.t

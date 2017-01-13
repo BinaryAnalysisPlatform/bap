@@ -6,21 +6,19 @@ Flag llvm_static
   Description: Links with llvm in a static mode
   Default: true
 
-Library llvm_plugin
-  XMETADescription: provide loader and disassembler using LLVM library
-  Path:          plugins/llvm
+Library bap_llvm
+  Path:          lib/bap_llvm
   Build$:        flag(everything) || flag(llvm)
-  BuildDepends:  bap, cmdliner
-  FindlibName:   bap-plugin-llvm
+  BuildDepends:  bap
+  FindlibName:   bap-llvm
+  Modules:       Bap_llvm_disasm, Bap_llvm_loader
   InternalModules:
-                 Llvm_binary,
-                 Llvm_loader,
-                 Llvm_types,
-                 Llvm_main
+                 Bap_llvm_config,
+                 Bap_llvm_binary,
+                 Bap_llvm_types
   CCOpt:         $cc_optimization
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
-  CSources:
-                 llvm_disasm.h,
+  CSources:      llvm_disasm.h,
                  llvm_disasm.c,
                  llvm_stubs.c,
                  llvm_binary_stubs.c,
@@ -31,3 +29,11 @@ Library llvm_plugin
                  llvm_binary_34.h,
                  llvm_binary_38.c,
                  llvm_binary_38.h
+
+Library llvm_plugin
+  XMETADescription: provide loader and disassembler using LLVM library
+  Path:          plugins/llvm
+  Build$:        flag(everything) || flag(llvm)
+  BuildDepends:  bap, cmdliner, bap-llvm
+  FindlibName:   bap-plugin-llvm
+  InternalModules: Llvm_main
