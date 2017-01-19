@@ -17,7 +17,7 @@ Library x86_plugin
  XMETADescription: provide x86 lifter
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
- BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, cmdliner
+ BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, cmdliner
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_asm,
@@ -27,7 +27,6 @@ Library x86_plugin
                    X86_cmpxchg,
                    X86_disasm,
                    X86_lifter,
-                   X86_llvm_config,
                    X86_main,
                    X86_mov,
                    X86_mov_offset,
@@ -52,4 +51,3 @@ Library x86_plugin
                    X86_tools_types,
                    X86_tools_vector,
                    X86_utils
-

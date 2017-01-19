@@ -23,14 +23,14 @@ module type Semantics = sig
   val lift : X86_asm.reg -> semantics -> bool -> lifter
 end
 
-module Insn_semantics(Tools : X86_tools.S) = struct 
+module Insn_semantics(Tools : X86_tools.S) = struct
   open Tools
 
   let mem_to_reg reg off =
     let mem = MM.of_offset off in
     Ok [MM.load mem ~size:(RR.width reg) |> RR.set reg ]
-      
-  let reg_to_mem reg off =    
+
+  let reg_to_mem reg off =
     let mem = MM.of_offset off in
     Ok [RR.get reg |> MM.store mem ~size:(RR.width reg)]
 
@@ -69,10 +69,10 @@ module Ver_34 = struct
     let asm_of_t t = match t with
       | MOV64o8a  -> `AL
       | MOV64o16a -> `AX
-      | MOV64o32a -> `EAX      
+      | MOV64o32a -> `EAX
       | MOV64o64a -> `RAX
 
-    let semantics = Mem_to_reg 
+    let semantics = Mem_to_reg
   end
 
   module Mov_ao_ia32 = struct
@@ -80,7 +80,7 @@ module Ver_34 = struct
     [@@deriving bin_io, sexp, compare, enumerate]
 
     let asm_of_t t = match t with
-      | MOV8ao8   -> `AL      
+      | MOV8ao8   -> `AL
       | MOV16ao16 -> `AX
       | MOV32ao32 -> `EAX
 
@@ -94,7 +94,7 @@ module Ver_34 = struct
     let asm_of_t t = match t with
       | MOV64ao8  -> `AL
       | MOV64ao16 -> `AX
-      | MOV64ao32 -> `EAX      
+      | MOV64ao32 -> `EAX
       | MOV64ao64 -> `RAX
 
     let semantics = Reg_to_mem
@@ -119,7 +119,7 @@ module Ver_38 = struct
       | MOV8o16a  | MOV8o32a  -> `AL
       | MOV16o16a | MOV16o32a -> `AX
       | MOV32o16a | MOV32o32a -> `EAX
-        
+
     let semantics = Reg_to_mem
   end
 
@@ -150,7 +150,7 @@ module Ver_38 = struct
       | MOV8ao16  | MOV8ao32  -> `AL
       | MOV16ao16 | MOV16ao32 -> `AX
       | MOV32ao16 | MOV32ao32 -> `EAX
-        
+
     let semantics = Mem_to_reg
   end
 
@@ -162,7 +162,7 @@ module Ver_38 = struct
       | MOV8ao64  -> `AL
       | MOV16ao64 -> `AX
       | MOV32ao64 -> `EAX
-      | MOV64ao32 | MOV64ao64 -> `RAX 
+      | MOV64ao32 | MOV64ao64 -> `RAX
 
     let semantics = Mem_to_reg
   end
@@ -179,7 +179,7 @@ module Make(V : Version) = struct
     let module L = (val insn : S) in
     let module B = (val back : X86_backend.S) in
     let module S = (val sema : Semantics) in
-    List.iter L.all (fun op ->        
+    List.iter L.all (fun op ->
         let f = S.lift (L.asm_of_t op) L.semantics V.allow_nil in
         let s = L.sexp_of_t op |> Sexp.to_string in
         B.register s f)
@@ -195,5 +195,5 @@ module T_34 = Make(Ver_34)
 module T_38 = Make(Ver_38)
 
 let () =
-  if X86_llvm_config.llvm_version = "3.4" then T_34.register ()
+  if Bap_llvm_disasm.version = "3.4" then T_34.register ()
   else T_38.register ()
