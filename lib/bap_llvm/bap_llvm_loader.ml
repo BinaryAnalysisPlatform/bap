@@ -2,9 +2,9 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_llvm_types
 
-include Self()
-
 module Binary = Bap_llvm_binary
+
+
 
 let make_addr arch addr =
   match Arch.addr_size arch with
@@ -70,9 +70,7 @@ let of_data data : Backend.Img.t option =
   | exn -> Format.eprintf "Can't create binary: %a%!" Exn.pp exn; None
 
 let init () =
-  match Image.register_backend ~name of_data with
+  match Image.register_backend ~name:"llvm" of_data with
   | `Ok -> Ok ()
   | `Duplicate ->
-    Error
-      (Error.of_string
-         (sprintf "llvm loader: name «%s» is already used\n" name))
+    Error (Error.of_string "llvm loader: duplicate name")
