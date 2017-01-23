@@ -1,0 +1,21 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(2) do |config|
+  config.vm.box = "debian/jessie64"
+  config.vm.provider "virtualbox" do |vb|
+      vb.memory = "4096"
+  end
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+sudo apt-get update
+sudo apt-get --yes install clang
+sudo apt-get --yes install opam
+opam init --auto-setup --comp=4.02.3 --yes
+eval `opam config env`
+opam install depext --yes
+opam depext conf-llvm.3.4 --install --yes
+opam depext bap --install --yes
+sudo apt-get install python-pip --yes
+sudo pip install bap
+SHELL
+end
