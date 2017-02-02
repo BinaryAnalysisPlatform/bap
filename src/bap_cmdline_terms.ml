@@ -184,7 +184,8 @@ let no_auto_load, no_auto_load_doc =
 
 
 let loader_options = [
-  "-l"; "-L"; "--list-plugins"; "--disable-plugin"; "--disable-autoload"
+  "-l"; "-L"; "--load-path";
+  "--list-plugins"; "--disable-plugin"; "--disable-autoload"
 ]
 
 let common_loader_options = [
