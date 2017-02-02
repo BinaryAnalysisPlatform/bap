@@ -10,6 +10,10 @@ module Ascii : sig
     module Caseless : Alphabet
     include Alphabet
   end
+  module Alphanum : sig
+    module Caseless : Alphabet
+    include Alphabet
+  end
   module Digits : Alphabet
   module Printable : Alphabet
   include Alphabet

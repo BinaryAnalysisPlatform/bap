@@ -6,6 +6,64 @@ open Format
 
 include Self()
 
+module Param = struct
+  open Config;;
+
+  manpage [
+    `S "DESCRIPTION";
+
+    `P "Beagle is an obfuscated string solver that uses CPU emulation
+    for discovering and decoding strings. Beagle can also be used as
+    an advanced data cross-referrence tool. Beagle combines
+    Microexecution with digital signal processing techniques and
+    efficient dictionary search. Data that pass through a CPU emulator
+    is processed with a low-pass filter and string-like patterns are
+    detected. At the final step, words are recovered from a detected
+    shuffled sequence of characters. For this we employ a
+    scrabble-like algorithm, that will detect all possible words, that
+    can be built from a given sequence of characters. The algorithm is
+    parameterized by a dictionary. It can be just an English
+    dictionary, but it can be also a dictionary built from signatures
+    obtained from a known compromised software. The dictionary search
+    algorithm uses a special trie data structure with a search
+    procedure that doesn't depend on the size of a dictionary or the
+    size of a character sequence.  " ];;
+
+  let no_strings = flag "ignore-strings"
+      ~doc:"don't put static strings into the initial dictionary"
+
+  let dicts = param (list file) "dictionary"
+      ~doc:"Add dictionary file(s)."
+
+  let words = param (list string) "words"
+      ~doc:"Add specified words to the dictionary."
+
+  let pwords = flag "print-words"
+      ~doc:"Print all buildable words."
+
+  let pchars =flag "print-chars" ~doc:"Print all observed letters."
+
+  let pstrings = flag "print-strings" ~doc:"Print static strings"
+
+  let no_words = flag "no-words"
+      ~doc:"Don't try to build words from a dictionary"
+
+  let alphabet :
+    (module Trapper.Alphabet) param =
+    param Trapper.(enum [
+      "printable", (module Ascii.Printable : Trapper.Alphabet);
+      "ascii", (module Ascii);
+      "alpha", (module Ascii.Alpha);
+      "alpha.caseless", (module Ascii.Alpha.Caseless);
+      "alphanum", (module Ascii.Alphanum);
+      "alphanum.caseless", (module Ascii.Alphanum.Caseless);
+      "digits", (module Ascii.Digits);
+    ]) "alphabet"
+      ~doc:"Build words from the specified alphabet";
+
+end
+
+
 let memory_lookup proj addr =
   let memory = Project.memory proj in
   Memmap.lookup memory addr |> Seq.hd |> function
@@ -22,24 +80,24 @@ let register_lookup proj =
   fun var -> Option.some_if (Target.CPU.is_sp var) mem_start
 
 
-module Alphabet = Trapper.Ascii
-
-
 module Strings = struct
   type state =
     | String of addr * int * char list
     | Data
 
   let to_ascii word = match Word.to_int word with
-    | Ok n when n < 128 -> Char.of_int n
-    | _ -> None
+    | Error _ -> assert false
+    | Ok n -> match Char.of_int_exn n with
+      | '\x00' -> Some '\x00'
+      | ch when Char.is_print ch || Char.is_whitespace ch -> Some ch
+      | _ -> None
 
   let make_string len chars =
     let bytes = Bytes.create len in
     List.iteri chars ~f:(fun i c -> bytes.[len-i-1] <- c);
     Bytes.to_string bytes
 
-  let scan mem =
+  let scan (mem,sec) =
     let addr = Memory.min_addr mem in
     let rec next strings state disp =
       match Memory.get mem ~disp ~addr with
@@ -67,7 +125,7 @@ module Strings = struct
 
   let extract memmap =
     let ms = Memmap.to_sequence memmap in
-    Seq.(ms >>| fst >>| scan |> reduce ~f:union) |> function
+    Seq.(ms >>| scan |> reduce ~f:union) |> function
     | None -> Addr.Map.empty
     | Some m -> m
 
@@ -77,7 +135,7 @@ module Beagle = struct
   let len = 8
 
   let p0 = 0.0
-  let p1 = 1. /. float Trapper.Ascii.Printable.length
+  let p1 = 1. /. float Trapper.Ascii.Alphanum.length
   let threshold = p1
   let alpha = 0.1
 
@@ -112,8 +170,10 @@ module Beagle = struct
   let uniform _ = p1
   let pdf c = uniform c
 
+  let smells ch = Char.is_print ch
+
   let phi c = match Char.of_int c with
-    | Some ch when Char.is_print ch -> Some (ch,1. -. pdf ch)
+    | Some ch when smells ch -> Some (ch,1. -. pdf ch)
     | _ -> None
 
   let smooth t x = t *. (1. -. alpha) +. alpha *. x
@@ -275,37 +335,18 @@ let run proj strings =
             strings = collect_strings prey.strings ctxt
           }))
 
-
-module Escaped = struct
-  type t = string [@@deriving bin_io, compare, sexp]
-  let max = 60
-
-  let ppcut ppf str =
-    fprintf ppf "%S...%d+" (String.subo str ~len:max)
-      (max - String.length str)
-
-  let pp ppf str =
-    if String.length str < 60
-    then fprintf ppf "%S" str
-    else ppcut ppf str
-end
-
-
 module Words = struct
   type t = String.Set.t [@@deriving bin_io, compare, sexp]
 
-  let max = 16
-
-  let escape x = asprintf "%a" Escaped.pp x
+  let max = 80
 
   let pp ppf set =
-    let words = Set.to_sequence ~order:`Decreasing set in
-    if Seq.length_is_bounded_by ~max words
-    then Seq.pp Escaped.pp ppf words
-    else
-      let rest = sprintf "...,+%d more" (Seq.length words - max) in
-      let words = Seq.(take words max >>| escape) in
-      Seq.pp String.pp ppf Seq.(append words (singleton  rest))
+    let words = Set.to_list set |> String.concat ~sep:", " in
+    let words = if String.length words < max then words
+        else String.subo ~len:max words in
+    fprintf ppf "%s" (String.escaped words)
+
+  let to_string set = asprintf "%a" pp set
 end
 
 
@@ -324,9 +365,15 @@ let strings = Value.Tag.register (module Words)
     ~name:"beagle-strings"
 
 
-module Trapper = Trapper.Make(Alphabet)
-
-let marker dict {chars=cs; strings=ss} =
+let create_marker {Config.get=(!!)} statics {chars=cs; strings=ss} =
+  let module Alphabet = (val !!Param.alphabet) in
+  let module Trapper = Trapper.Make(Alphabet) in
+  let add_statics trapper =
+    Map.fold statics ~init:trapper ~f:(fun ~key ~data dict ->
+        Trapper.add_word dict data) in
+  let dict = Trapper.of_files !!Param.dicts in
+  let dict = if !!Param.no_strings then dict else add_statics dict in
+  let dict = List.fold !!Param.words ~f:Trapper.add_word ~init:dict in
   let add_chars t =
     match Map.find cs (Term.tid t) with
     | None -> t
@@ -351,27 +398,46 @@ let marker dict {chars=cs; strings=ss} =
       let t = super#map_term cls t in
       add_chars t |>
       add_string
+
   end
 
 let print_strings = Map.iteri ~f:(fun ~key ~data ->
-    if String.length data > 3 then
-      printf "%a: %S\n" Addr.pp key data)
+    if String.length data > 3 then printf "%s\n" (String.escaped data))
 
-let add_strings trapper strings =
-  Map.fold strings ~init:trapper ~f:(fun ~key ~data dict ->
-    Trapper.add_word dict data)
 
-let main dicts proj =
+let create_printer {Config.get=(!!)} =
+  let pchars = !!Param.pchars
+  and pwords = !!Param.pwords
+  and pstrings = !!Param.pstrings in
+
+  let pr guard tag t =
+    if guard then Option.iter (Term.get_attr t tag)
+        ~f: (fun t -> printf "%s\n" @@ Words.to_string t) in
+  object
+    inherit [unit] Term.visitor as self
+    method! enter_term cls t () =
+      pr pchars chars t;
+      pr pwords words t;
+      pr pstrings strings t;
+    method print_program prog =
+      if pchars || pwords || pstrings then
+        self#run prog ()
+
+    method print_strings strings =
+      if pstrings then print_strings strings
+  end
+
+let main conf proj =
   let strings = Strings.extract (Project.memory proj) in
+  let printer = create_printer conf in
+  printer#print_strings strings;
   let preys = run proj strings in
-  let words = add_strings (Trapper.of_files dicts) strings in
-  let marker = marker words preys in
-  Project.with_program proj (marker#run (Project.program proj))
+  let marker = create_marker conf strings preys in
+  let prog = marker#run (Project.program proj) in
+  printer#print_program prog;
+  Project.with_program proj prog
 
 
-let () =
-  let dicts =
-    Config.(param (list file) "dictionary"
-              ~doc:"Add dictionary file(s)") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      Project.register_pass (main !dicts))
+
+
+let () = Config.when_ready (fun conf -> Project.register_pass (main conf))
