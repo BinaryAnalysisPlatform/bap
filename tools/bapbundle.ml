@@ -12,7 +12,7 @@ exception Target_doesn't_exist
 let target = ref ""
 let manifest = ref (Manifest.create "")
 let modified = String.Hash_set.create ()
-let destdir = ref Bap_config.libdir
+let destdir = ref Bap_config.plugindir
 
 let destdir_arg =
   "-destdir", Arg.Set_string destdir,

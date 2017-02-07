@@ -206,7 +206,7 @@ module Plugins = struct
     with Not_found -> []
 
   let plugin_paths library =
-    [library; paths_of_env (); [Bap_config.libdir]] |> List.concat |>
+    [library; paths_of_env (); [Bap_config.plugindir]] |> List.concat |>
     List.filter ~f:Sys.file_exists |>
     List.filter ~f:Sys.is_directory
 
