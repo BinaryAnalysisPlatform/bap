@@ -213,7 +213,6 @@ module Plugins = struct
   let collect ?(library=[]) () =
     let (/) = Filename.concat in
     plugin_paths library |> List.concat_map ~f:(fun dir ->
-        eprintf "Reading %s" dir;
         Sys.readdir dir |>
         Array.to_list |>
         List.filter_map ~f:(fun file ->
