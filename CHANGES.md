@@ -1,3 +1,8 @@
+1.2.0
+### Features
+- PR#609 compilation with ocaml 4.04.0
+- PR#621 don't store api files in api plugin
+
 1.1.0
 =====
 
