@@ -4,14 +4,22 @@
 #include <caml/custom.h>
 #include <caml/bigarray.h>
 #include <caml/compatibility.h>
+#include <caml/callback.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include "llvm_binary_stubs.h"
 #include "llvm_binary.h"
 
-Noreturn void llvm_binary_fail(const char* message) {
-    caml_failwith(message);
+#define None_val (Val_int(0))
+#define Some_tag 0
+
+void bap_notify_error(const char *msg) {
+    printf("Llvm backend error: %s\n", msg);
+}
+
+void bap_notify_warning(const char *msg) {
+    printf("Llvm backend warning: %s\n", msg);
 }
 
 static const struct image* image_from_value(value v) {
@@ -20,7 +28,7 @@ static const struct image* image_from_value(value v) {
 
 static void custom_finalize_image(value v) {
     CAMLparam1(v);
-    image_destroy(image_from_value(v));
+    bap_llvm_image_destroy(image_from_value(v));
     CAMLreturn0;
 }
 
@@ -40,122 +48,62 @@ static value image_to_value(const struct image* img) {
     CAMLreturn(v);
 }
 
-static value segment_to_value(const struct segment* s) {
-    CAMLparam0();
-    CAMLlocal1(result);
-    result = caml_alloc(7, 0);
-    Store_field(result, 0, caml_copy_string(segment_name(s)));
-    Store_field(result, 1, caml_copy_int64(segment_offset(s)));
-    Store_field(result, 2, caml_copy_int64(segment_addr(s)));
-    Store_field(result, 3, caml_copy_int64(segment_size(s)));
-    Store_field(result, 4, Val_bool(segment_is_readable(s)));
-    Store_field(result, 5, Val_bool(segment_is_writable(s)));
-    Store_field(result, 6, Val_bool(segment_is_executable(s)));
-    CAMLreturn(result);
-}
-
-static value section_to_value(const struct section* s) {
-    CAMLparam0();
-    CAMLlocal1(result);
-    result = caml_alloc(3, 0);
-    Store_field(result, 0, caml_copy_string(section_name(s)));
-    Store_field(result, 1, caml_copy_int64(section_addr(s)));
-    Store_field(result, 2, caml_copy_int64(section_size(s)));
-    CAMLreturn(result);
-}
-
-static value symbol_to_value(const struct symbol* s) {
-    CAMLparam0();
-    CAMLlocal1(result);
-    result = caml_alloc(4, 0);
-    Store_field(result, 0, caml_copy_string(symbol_name(s)));
-    Store_field(result, 1, Val_int(symbol_kind(s)));
-    Store_field(result, 2, caml_copy_int64(symbol_addr(s)));
-    Store_field(result, 3, caml_copy_int64(symbol_size(s)));
-    CAMLreturn(result);
-
-}
-
-static value image_sections_to_value(const struct image* img) {
-    CAMLparam0();
-    CAMLlocal2(result, cons);
-    result = Val_emptylist;
-    size_t i = image_section_count(img);
-    while (i != 0) {
-        cons = caml_alloc(2, 0);
-        Store_field(cons, 0,
-                    section_to_value(image_section_from_index(img, --i)));// head
-        Store_field(cons, 1, result); // tail
-        result = cons;
-    }
-    CAMLreturn (result);
-}
-
-static value image_segments_to_value(const struct image* img) {
-    CAMLparam0();
-    CAMLlocal2(result, cons);
-    result = Val_emptylist;
-    size_t i = image_segment_count(img);
-    while (i != 0) {
-        cons = caml_alloc(2, 0);
-        Store_field(cons, 0,
-                    segment_to_value(image_segment_from_index(img, --i)));// head
-        Store_field(cons, 1, result); // tail
-        result = cons;
-    }
-    CAMLreturn (result);
-}
-
-static value image_symbols_to_value(const struct image* img) {
-    CAMLparam0();
-    CAMLlocal2(result, cons);
-    result = Val_emptylist;
-    size_t i = image_symbol_count(img);
-    while (i != 0) {
-        cons = caml_alloc(2, 0);
-        Store_field (cons, 0,
-                     symbol_to_value(image_symbol_from_index(img, --i)));// head
-        Store_field (cons, 1, result); // tail
-        result = cons;
-    }
-    CAMLreturn (result);
-}
-
-CAMLprim value llvm_binary_create_stub(value arg) {
+value bap_llvm_binary_create_stub(value arg) {
     CAMLparam1(arg);
+    CAMLlocal1(result);
     const struct caml_ba_array* array = Caml_ba_array_val(arg);
-    if (array->num_dims != 1)
-        caml_invalid_argument("invalid bigarray dimension");
-    if (!array->dim[0])
-        caml_invalid_argument("Unexpected EOF");
+    if (array->num_dims != 1) {
+        bap_notify_error("invalid bigarray dimension");
+        CAMLreturn(None_val);
+    }
+    if (!array->dim[0]) {
+        bap_notify_error("Unexpected EOF");
+        CAMLreturn(None_val);
+    }
     const struct image* obj =
-        image_create((const char*)(array->data), array->dim[0]);
-    if (!obj) 
-        caml_failwith("Bad file format");
-    CAMLreturn(image_to_value(obj));
+        bap_llvm_image_create((const char*)(array->data), array->dim[0]);
+    if (!obj) {
+        bap_notify_error("Bad file format");
+        CAMLreturn(None_val);
+    }
+    result = caml_alloc(1, Some_tag);
+    Store_field(result, 0, image_to_value(obj));
+    CAMLreturn(result);
 }
 
-CAMLprim value llvm_binary_arch_stub(value arg) {
-    CAMLparam1(arg);
-    CAMLreturn(caml_copy_string(image_arch(image_from_value(arg))));
-}
 
-CAMLprim value llvm_binary_entry_stub(value arg) {
-    CAMLparam1(arg);
-    CAMLreturn(caml_copy_int64(image_entry(image_from_value(arg))));
-}
+#define BAP_LLVM_STUB(name, to_value)                                       \
+    value bap_llvm_binary_##name##_stub(value img) {                        \
+        CAMLparam1(img);                                                    \
+        CAMLreturn(to_value(bap_llvm_image_##name(image_from_value(img)))); \
+    }
 
-CAMLprim value llvm_binary_segments_stub(value arg) {
-    CAMLparam1(arg);
-    CAMLreturn(image_segments_to_value(image_from_value(arg)));
-}
+#define BAP_LLVM_STUB_I(name, to_value)                                                 \
+    value bap_llvm_binary_##name##_stub(value img, value i) {                           \
+        CAMLparam2(img, i);                                                             \
+        CAMLreturn(to_value(bap_llvm_image_##name(image_from_value(img), Int_val(i)))); \
+    }
 
-CAMLprim value llvm_binary_symbols_stub(value arg) {
-    CAMLparam1(arg);
-    CAMLreturn(image_symbols_to_value(image_from_value(arg)));
-}
+BAP_LLVM_STUB(arch, caml_copy_string)
+BAP_LLVM_STUB(entry, caml_copy_int64)
+BAP_LLVM_STUB(segments_number, Val_int) /* noalloc */
+BAP_LLVM_STUB(sections_number, Val_int) /* noalloc */
+BAP_LLVM_STUB(symbols_number, Val_int)  /* noalloc */
 
-CAMLprim value llvm_binary_sections_stub(value arg) {
-    CAMLparam1(arg);
-    CAMLreturn(image_sections_to_value(image_from_value(arg)));
-}
+BAP_LLVM_STUB_I(segment_name, caml_copy_string)
+BAP_LLVM_STUB_I(segment_addr, caml_copy_int64)
+BAP_LLVM_STUB_I(segment_size, caml_copy_int64)
+BAP_LLVM_STUB_I(segment_offset, caml_copy_int64)
+BAP_LLVM_STUB_I(segment_is_writable, Val_bool)   /* noalloc */
+BAP_LLVM_STUB_I(segment_is_readable, Val_bool)   /* noalloc */
+BAP_LLVM_STUB_I(segment_is_executable, Val_bool) /* noalloc */
+
+BAP_LLVM_STUB_I(symbol_name, caml_copy_string)
+BAP_LLVM_STUB_I(symbol_addr, caml_copy_int64)
+BAP_LLVM_STUB_I(symbol_size, caml_copy_int64)
+BAP_LLVM_STUB_I(symbol_is_fun, Val_bool)   /* noalloc */
+BAP_LLVM_STUB_I(symbol_is_debug, Val_bool) /* noalloc */
+
+BAP_LLVM_STUB_I(section_name, caml_copy_string)
+BAP_LLVM_STUB_I(section_addr, caml_copy_int64)
+BAP_LLVM_STUB_I(section_size, caml_copy_int64)
