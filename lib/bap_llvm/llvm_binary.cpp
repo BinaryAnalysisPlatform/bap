@@ -1,104 +1,50 @@
+#include <stdio.h>
 #include "llvm_binary.hpp"
 
 extern "C" {
-    const img::image* image_create(const char* data, size_t size) {
-        return img::create(data, size);
+
+#define BAP_LLVM_IMAGE_PROPERTY(return_type, name, field, property)  \
+    return_type bap_llvm_image_##name(const img::image* m) {         \
+        return m->field.property;                                    \
     }
 
-    void image_destroy(const img::image* m) {
-        delete m;
+#define BAP_LLVM_IMAGE_PROPERTY_I(return_type, field, property)                       \
+    return_type bap_llvm_image_##field##_##property(const img::image* m, size_t i) {  \
+        assert(i < m->field##s.size());                                               \
+        return m->field##s[i].property;                                               \
     }
 
-    const char* image_arch(const img::image* m) {
-        return m->arch().c_str();
+#define BAP_LLVM_IMAGE_PROPERTY_I_NAME(return_type, field, property)                 \
+    return_type bap_llvm_image_##field##_##property(const img::image* m, size_t i) { \
+        assert(i < m->field##s.size());                                              \
+        return m->field##s[i].property.c_str();                                      \
     }
 
-    uint64_t image_entry(const img::image* m) {
-        return m->entry();
-    }
+    const img::image* bap_llvm_image_create(const char* data, size_t size) { return img::create(data, size); }
+    void bap_llvm_image_destroy(const img::image* m) { delete m; }
+    const char* bap_llvm_image_arch(const img::image* m) { return m->arch.c_str(); }
+    uint64_t bap_llvm_image_entry(const img::image* m) { return m->entry; }
 
-    size_t image_segment_count(const img::image* m) {
-        return m->segments().size();
-    }
+    BAP_LLVM_IMAGE_PROPERTY(size_t, segments_number, segments, size())
+    BAP_LLVM_IMAGE_PROPERTY(size_t, sections_number, sections, size())
+    BAP_LLVM_IMAGE_PROPERTY(size_t, symbols_number, symbols, size())
 
-    size_t image_section_count(const img::image* m) {
-        return m->sections().size();
-    }
+    BAP_LLVM_IMAGE_PROPERTY_I_NAME(const char *, segment, name)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t,  segment, offset)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, segment, addr)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, segment, size)
+    BAP_LLVM_IMAGE_PROPERTY_I(bool, segment, is_readable)
+    BAP_LLVM_IMAGE_PROPERTY_I(bool, segment, is_writable)
+    BAP_LLVM_IMAGE_PROPERTY_I(bool, segment, is_executable)
 
-    size_t image_symbol_count(const img::image* m) {
-        return m->symbols().size();
-    }
+    BAP_LLVM_IMAGE_PROPERTY_I_NAME(const char *, section, name)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, section, addr)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, section, size)
 
-    const sec::section* image_section_from_index(const img::image* m,
-                                                 size_t i) {
-        return &m->sections()[i];
-    }
-
-    const sym::symbol* image_symbol_from_index(const img::image* m,
-                                      size_t i) {
-        return &m->symbols()[i];
-    }
-
-    const seg::segment* image_segment_from_index(const img::image* m,
-                                                 size_t i) {
-        return &m->segments()[i];
-    }
-
-
-    const char* segment_name(const seg::segment* s) {
-        return s->name.c_str();
-    }
-
-    uint64_t segment_offset(const seg::segment* s) {
-        return s->offset;
-    }
-
-    uint64_t segment_addr(const seg::segment* s) {
-        return s->addr;
-    }
-
-    uint64_t segment_size(const seg::segment* s) {
-        return s->size;
-    }
-
-    bool segment_is_readable(const seg::segment* s) {
-        return s->is_readable;
-    }
-
-    bool segment_is_writable(const seg::segment* s) {
-        return s->is_writable;
-    }
-
-    bool segment_is_executable(const seg::segment* s) {
-        return s->is_executable;
-    }
-
-    const char* section_name(const sec::section* s) {
-        return s->name.c_str();
-    }
-
-    uint64_t section_addr(const sec::section* s) {
-        return s->addr;
-    }
-
-    uint64_t section_size(const sec::section* s) {
-        return s->size;
-    }
-
-    const char* symbol_name(const sym::symbol* s) {
-        return s->name.c_str();
-    }
-
-    int symbol_kind(const sym::symbol* s) {
-        return s->kind;
-    }
-
-    uint64_t symbol_addr(const sym::symbol* s) {
-        return s->addr;
-    }
-
-    uint64_t symbol_size(const sym::symbol* s) {
-        return s->size;
-    }
+    BAP_LLVM_IMAGE_PROPERTY_I_NAME(const char *, symbol, name)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, symbol, addr)
+    BAP_LLVM_IMAGE_PROPERTY_I(uint64_t, symbol, size)
+    BAP_LLVM_IMAGE_PROPERTY_I(bool, symbol, is_fun)
+    BAP_LLVM_IMAGE_PROPERTY_I(bool, symbol, is_debug)
 
 }

@@ -8,6 +8,8 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <tuple>
+#include <cstdlib>
 
 #include <llvm/Object/ELFObjectFile.h>
 #include <llvm/Object/COFF.h>
@@ -16,23 +18,22 @@
 #include <llvm/Support/Compiler.h>
 #include <llvm/Config/llvm-config.h>
 
-#include "llvm_binary_38.hpp"
 #include "llvm_binary_34.hpp"
+#include "llvm_binary_38.hpp"
+#include "llvm_error_or.hpp"
 
-using std::move;
-
-namespace {
-
-template<typename Derived, typename Base>
-std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base>&& ptr) {
-    if (Derived* d = llvm::dyn_cast<Derived>(ptr.get())) {
-	ptr.release();
-	return std::unique_ptr<Derived>(d);
-    }
-    return std::unique_ptr<Derived>(nullptr);
+extern "C" {
+    void bap_notify_error(const char*);
+    void bap_notify_warning(const char*);
 }
 
-} // namespace
+void bap_notify_error(const std::string & message) {
+    bap_notify_error(message.c_str());
+}
+
+void bap_notify_warning(const std::string & message) {
+    bap_notify_warning(message.c_str());
+}
 
 namespace seg {
 using namespace llvm;
@@ -48,74 +49,79 @@ struct segment {
     bool is_executable;
 };
 
+typedef std::vector<segment> segments;
+
 template <typename S>
 segment make_segment(const S &s) {
     return segment{s.segname, s.fileoff, s.vmaddr, s.filesize,
-	    static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
-	    static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
-	    static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
+            static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
+            static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
+            static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
 segment make_segment(const coff_section &s, uint64_t image_base) {
     return segment{s.Name,
-	    static_cast<uint64_t>(s.PointerToRawData),
-	    static_cast<uint64_t>(s.VirtualAddress + image_base),
-	    static_cast<uint64_t>(s.SizeOfRawData),
-	    static_cast<bool>((s.Characteristics) &
-			      COFF::IMAGE_SCN_MEM_READ),
-	    static_cast<bool>((s.Characteristics) &
-			      COFF::IMAGE_SCN_MEM_WRITE),
-	    static_cast<bool>((s.Characteristics) &
-			      COFF::IMAGE_SCN_MEM_EXECUTE)};
+            static_cast<uint64_t>(s.PointerToRawData),
+            static_cast<uint64_t>(s.VirtualAddress + image_base),
+            static_cast<uint64_t>(s.SizeOfRawData),
+            static_cast<bool>((s.Characteristics) &
+                              COFF::IMAGE_SCN_MEM_READ),
+            static_cast<bool>((s.Characteristics) &
+                              COFF::IMAGE_SCN_MEM_WRITE),
+            static_cast<bool>((s.Characteristics) &
+                              COFF::IMAGE_SCN_MEM_EXECUTE)};
 }
 
 template<typename T>
-std::vector<segment> read(const ELFObjectFile<T>& obj) {
+error_or<segments> read(const ELFObjectFile<T>& obj) {
     auto begin = elf_header_begin(obj.getELFFile());
-    auto end = elf_header_end(obj.getELFFile());
-    std::vector<segment> segments;
-    segments.reserve(std::distance(begin, end));
+    auto end   = elf_header_end(obj.getELFFile());
+    segments s;
+    s.reserve(std::distance(begin, end));
     auto it = begin;
     for (int pos = 0; it != end; ++it, ++pos) {
         if (it -> p_type == ELF::PT_LOAD) {
-	    std::ostringstream oss;
-	    oss << std::setfill('0') << std::setw(2) << pos;
-	    segments.push_back(segment{oss.str(),
-			it->p_offset,
-			it->p_vaddr,
-			it->p_filesz,
-			static_cast<bool>(it->p_flags & ELF::PF_R),
-			static_cast<bool>(it->p_flags & ELF::PF_W),
-			static_cast<bool>(it->p_flags & ELF::PF_X)});
-	}
+            std::ostringstream oss;
+            oss << std::setfill('0') << std::setw(2) << pos;
+            s.push_back(segment{oss.str(),
+                        it->p_offset,
+                        it->p_vaddr,
+                        it->p_filesz,
+                        static_cast<bool>(it->p_flags & ELF::PF_R),
+                        static_cast<bool>(it->p_flags & ELF::PF_W),
+                        static_cast<bool>(it->p_flags & ELF::PF_X)});
+        }
     }
-    return segments;
+    return success(std::move(s));
 }
 
-std::vector<segment> read(const MachOObjectFile& obj) {
+error_or<segments> read(const MachOObjectFile& obj) {
     auto cmds = load_commands(obj);
-    std::vector<segment> segments;
+    segments s;
     for (auto it : cmds) {
         if (it.C.cmd == MachO::LoadCommandType::LC_SEGMENT_64)
-            segments.push_back(make_segment(obj.getSegment64LoadCommand(it)));
+            s.push_back(make_segment(obj.getSegment64LoadCommand(it)));
         if (it.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
-            segments.push_back(make_segment(obj.getSegmentLoadCommand(it)));
+            s.push_back(make_segment(obj.getSegmentLoadCommand(it)));
     }
-    return segments;
+    return success(std::move(s));
 }
 
-std::vector<segment> read(const COFFObjectFile& obj) {
-    std::vector<segment> segments;
-    uint64_t image_base = getImageBase(obj);
-    for (auto it : sections(obj)) {
+error_or<segments> read(const COFFObjectFile& obj) {
+    auto image_base = getImageBase(obj);
+    auto obj_sections = sec::sections_range(obj);
+    if (auto er = image_base || obj_sections)
+        return failure(er.message());
+    segments segs;
+    for (auto it : *obj_sections) {
         const coff_section *s = obj.getCOFFSection(it);
         uint64_t c = static_cast<uint64_t>(s->Characteristics);
         if ( c & COFF::IMAGE_SCN_CNT_CODE ||
              c & COFF::IMAGE_SCN_CNT_INITIALIZED_DATA ||
              c & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA )
-            segments.push_back(make_segment(*s, image_base));
+            segs.push_back(make_segment(*s, *image_base));
     }
-    return segments;
+    return std::move(success(std::move(segs)) << obj_sections.warnings() << image_base.warnings());
 }
 
 } //namespace seg
@@ -128,54 +134,51 @@ typedef SymbolRef::Type kind_type;
 
 struct symbol {
     std::string name;
-    kind_type kind;
+    bool is_fun;
+    bool is_debug;
     uint64_t addr;
     uint64_t size;
 };
 
-symbol make_symbol(const SymbolRef &sym, uint64_t size) {
-    auto name = name_or_default(sym);
-    auto addr = addr_or_default(sym);
-    auto type = get_type(sym);
-    return symbol{name, type, addr, size};
-}
+typedef std::vector<symbol> symbols;
 
-symbol make_symbol(const SymbolRef &sym, uint64_t size, uint64_t addr) {
-    auto name = name_or_default(sym);
-    auto type = get_type(sym);
-    return symbol{name, type, addr, size};
-}
-
-std::vector<symbol> read(const ObjectFile &obj) {
-    std::vector<symbol> symbols;
-    auto symbol_sizes = getSymbolSizes(obj);
-    for (auto it : symbol_sizes)
-        symbols.push_back(make_symbol(it.first, it.second));
-    return symbols;
-}
-
-std::vector<symbol> read(const COFFObjectFile &obj) {
-    std::vector<symbol> symbols;
-    auto symbol_sizes = getSymbolSizes(obj);
-    for (auto it : symbol_sizes) {
-        uint64_t addr = addr_or_default(it.first, obj);
-        symbols.push_back(make_symbol(it.first, it.second, addr));
+error_or<symbol> make_symbol(const SymbolRef &sym, uint64_t size, error_or<uint64_t> addr) {
+    auto name = get_name(sym);
+    auto kind = get_kind(sym);
+    if (auto er = name || kind || addr) {
+        name << addr.warnings() << kind.warnings();
+        info & w = name.warning();
+        w << "skipping symbol ";
+        std::string str = " error while extracting ";
+        if (!name) w << str << "name: ";
+        if (!addr) w << *name << str << "address: ";
+        if (!kind) w << *name << " at " << std::hex << *addr << std::hex << str << "kind: ";
+        w << er.message();
+        return name;
     }
-    return symbols;
+    bool is_fun = *kind == SymbolRef::ST_Function;
+    bool is_dbg = *kind == SymbolRef::ST_Debug;
+    return std::move(success(symbol{*name, is_fun, is_dbg, *addr, size}) << name.warnings());
 }
 
-template <typename ELFT>
-std::vector<symbol> read(const ELFObjectFile<ELFT> &obj) {
-    std::vector<symbol> symbols;
+template <typename T>
+error_or<symbols> read(const T &obj) {
     auto symbol_sizes = getSymbolSizes(obj);
-    for (auto it : symbol_sizes)
-        symbols.push_back(make_symbol(it.first, it.second));
-    return symbols;
+    if (!symbol_sizes) return symbol_sizes;
+    error_or<symbols> syms = success(symbols());
+    syms << symbol_sizes.warnings() ;
+    for (auto it : *symbol_sizes) {
+        auto sym = make_symbol(it.first, it.second, get_addr(it.first, obj));
+        if (sym) syms->push_back(*sym);
+        syms << sym.warnings();
+    }
+    return syms;
 }
 
 } //namespace sym
 
 namespace sec {
+
 using namespace llvm;
 using namespace llvm::object;
 
@@ -185,52 +188,66 @@ struct section {
     uint64_t size;
 };
 
-section make_section(const SectionRef &sec) {
-    auto name = getName(sec);
-    auto addr = getAddr(sec);
-    auto size = getSize(sec);
+typedef std::vector<section> sections;
 
-    return section{name, addr, size};
+error_or<section> make_section(const SectionRef &sec) {
+    auto descr = get_section(sec);
+    if (!descr) return descr;
+    std::string name;
+    uint64_t addr, size;
+    std::tie(name, addr, size) = *descr;
+    return std::move(success(section{name, addr, size}) << descr.warnings());
 }
 
 section make_section(const coff_section &s, const uint64_t image_base) {
-    auto name = getName(s);
-    auto addr = getAddr(s);
-    auto size = getSize(s);
-
+    std::string name;
+    uint64_t addr, size;
+    std::tie(name, addr, size) = get_section(s);
     return section{name, addr + image_base, size};
 }
 
-std::vector<section> read(const ObjectFile &obj) {
-    std::vector<section> sections;
-    for (auto sec : obj_sections(obj))
-        sections.push_back(make_section(sec));
-    return sections;
+error_or<sections> read(const ObjectFile &obj) {
+    auto obj_secs = sections_range(obj);
+    if (!obj_secs) return obj_secs;
+    error_or<sections> secs = success(sections());
+    secs << obj_secs.warnings();
+    for (section_iterator it : *obj_secs) {
+        auto sec = make_section(*it);
+        if (!sec) return sec;
+        secs->push_back(*sec);
+        secs << sec.warnings();
+    }
+    return secs;
 }
 
-std::vector<section> read(const COFFObjectFile &obj) {
-    std::vector<section> sections;
-    uint64_t image_base = getImageBase(obj);
-    for (auto sec : obj_sections(obj)) {
-        const coff_section *s = getCOFFSection(obj, sec);
-        sections.push_back(make_section(*s, image_base));
+error_or<sections> read(const COFFObjectFile &obj) {
+    auto image_base = getImageBase(obj);
+    auto obj_secs = sections_range(obj);
+    if (auto er = image_base || obj_secs)
+        return failure(er.message());
+    error_or<sections> secs = success(sections());
+    secs << image_base.warnings() << obj_secs.warnings();
+    for (section_iterator it : *obj_secs) {
+        const coff_section *s = getCOFFSection(obj, it);
+        secs->push_back(make_section(*s, *image_base));
     }
-    return sections;
+    return secs;
 }
 
 } //namespace sec
 
 namespace img {
+
+using std::move;
 using namespace llvm;
 using namespace llvm::object;
 
 struct image {
-    virtual uint64_t entry() const = 0;
-    virtual const std::string &arch() const = 0;
-    virtual const std::vector<seg::segment>& segments() const = 0;
-    virtual const std::vector<sym::symbol>& symbols() const = 0;
-    virtual const std::vector<sec::section>& sections() const = 0;
-    virtual ~image() {}
+    std::string arch;
+    uint64_t entry;
+    seg::segments segments;
+    sym::symbols  symbols;
+    sec::sections sections;
 };
 
 std::string image_arch(const ObjectFile& obj) {
@@ -238,97 +255,101 @@ std::string image_arch(const ObjectFile& obj) {
 }
 
 template <typename ELFT>
-uint64_t image_entry(const ELFObjectFile<ELFT>& obj) {
-    return obj.getELFFile()->getHeader()->e_entry;
+error_or<uint64_t> image_entry(const ELFObjectFile<ELFT>& obj) {
+    return error_or<uint64_t>(obj.getELFFile()->getHeader()->e_entry);
 }
 
-uint64_t image_entry(const MachOObjectFile &obj) {
+error_or<uint64_t> image_entry(const MachOObjectFile &obj) {
     return image_entry_macho(obj);
 }
 
-uint64_t image_entry(const COFFObjectFile &obj) {
+error_or<uint64_t> image_entry(const COFFObjectFile &obj) {
     return image_entry_coff(obj);
 }
 
-template <typename T>
-struct objectfile_image : image {
-    explicit objectfile_image(std::unique_ptr<T> ptr)
-	: arch_(image_arch(*ptr))
-	, entry_(image_entry(*ptr))
-	, segments_(seg::read(*ptr))
-	, symbols_(sym::read(*ptr))
-	, sections_(sec::read(*ptr))
-	, binary_(move(ptr))
-    {}
-    const std::string &arch() const { return arch_; }
-    uint64_t entry() const { return entry_; }
-    const std::vector<seg::segment>& segments() const { return segments_; }
-    const std::vector<sym::symbol>& symbols() const { return symbols_; }
-    const std::vector<sec::section>& sections() const { return sections_; }
-protected:
-    const std::string arch_;
-    uint64_t entry_;
-    std::vector<seg::segment> segments_;
-    std::vector<sym::symbol> symbols_;
-    std::vector<sec::section> sections_;
-    std::unique_ptr<T> binary_;
-};
-
-template <typename T>
-image* create_image(std::unique_ptr<object::Binary> binary) {
-    if (std::unique_ptr<T> ptr =
-	dynamic_unique_ptr_cast<T, object::Binary>(move(binary))) {
-	return new objectfile_image<T>(move(ptr));
+void print_warnings(const std::vector<std::string> &warns) {
+    if(const char* env_p = std::getenv("BAP_DEBUG")) {
+        if (std::string(env_p) == "1")
+            for (auto w : warns)
+                bap_notify_warning(w);
     }
-    std::cerr << "Unrecognized object format\n";
-    return NULL;
 }
 
-image* create_image_elf(std::unique_ptr<object::Binary> binary) {
+template <typename T>
+image* create_image(error_or<object::Binary> &binary) {
+    if (auto ptr = llvm::dyn_cast<T>(binary.get())) {
+        auto arch     = image_arch(*ptr);
+        auto entry    = image_entry(*ptr);
+        auto segments = seg::read(*ptr);
+        auto symbols  = sym::read(*ptr);
+        auto sections = sec::read(*ptr);
+
+        if (auto er = entry || segments || symbols || sections) {
+            bap_notify_error(er.message());
+            return nullptr;
+        }
+        binary << entry.warnings() << segments.warnings() << symbols.warnings() << sections.warnings();
+        print_warnings(binary.warnings());
+
+        return (new image
+            {arch, *entry, move(*segments), move(*symbols), move(*sections)});
+
+    }
+    bap_notify_error("Unrecognized object format");
+    return nullptr;
+}
+
+image* create_image_elf(error_or<object::Binary> &binary) {
     if (isa<ELF32LEObjectFile>(*binary))
-	return create_image<ELF32LEObjectFile>(move(binary));
+        return create_image<ELF32LEObjectFile>(binary);
 
     if (isa<ELF32BEObjectFile>(*binary))
-        return create_image<ELF32BEObjectFile>(move(binary));
+        return create_image<ELF32BEObjectFile>(binary);
 
     if (isa<ELF64LEObjectFile>(*binary))
-        return create_image<ELF64LEObjectFile>(move(binary));
+        return create_image<ELF64LEObjectFile>(binary);
 
     if (isa<ELF64BEObjectFile>(*binary))
-        return create_image<ELF64BEObjectFile>(move(binary));
-    std::cerr << "Unrecognized ELF format\n";
-    return NULL;
+        return create_image<ELF64BEObjectFile>(binary);
+
+    bap_notify_error("Unrecognized ELF format");
+    return nullptr;
 }
 
-image* create_image_obj(std::unique_ptr<object::Binary> binary) {
+image* create_image_obj(error_or<object::Binary> &binary) {
     if (binary->isCOFF())
-        return create_image<COFFObjectFile>(move(binary));
+        return create_image<COFFObjectFile>(binary);
     if (binary->isELF())
-        return create_image_elf(move(binary));
+        return create_image_elf(binary);
     if (binary->isMachO())
-        return create_image<MachOObjectFile>(move(binary));
-    std::cerr << "Unrecognized object format\n";
-    return NULL;
+        return create_image<MachOObjectFile>(binary);
+    bap_notify_error("Unrecognized object format");
+    return nullptr;
 }
 
-image* create_image_arch(std::unique_ptr<object::Binary> binary) {
-    std::cerr << "Archive loading unimplemented\n";
-    return NULL;
+image* create_image_arch(error_or<object::Binary> &binary) {
+    bap_notify_error("Archive loading unimplemented");
+    return nullptr;
 }
 
-image* create(std::unique_ptr<object::Binary> binary) {
+image* create(error_or<object::Binary> &binary) {
     if (!binary)
-        return NULL;
+        return nullptr;
     if (isa<Archive>(*binary))
-        return create_image_arch(move(binary));
+        return create_image_arch(binary);
     if (isa<ObjectFile>(*binary))
-        return create_image_obj(move(binary));
-    std::cerr << "Unrecognized binary format\n";
-    return NULL;
+        return create_image_obj(binary);
+    bap_notify_error("Unrecognized binary format");
+    return nullptr;
 }
 
 image* create(const char* data, std::size_t size) {
-    return create(move(get_binary(data, size)));
+    error_or<object::Binary> bin = get_binary(data, size);
+    if (!bin) {
+        bap_notify_error(bin.message());
+        return nullptr;
+    }
+    return create(bin);
 }
 
 } //namespace img
