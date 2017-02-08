@@ -31,6 +31,31 @@ let pr_6184_hack = function
   | _ -> ()
 
 
+let chop_extension file =
+  try Filename.chop_extension file
+  with exn -> invalid_arg ("Failed to chop extension from '" ^ file ^ "'")
+
+let unit_of_package pkg =
+  let open MyOCamlbuildFindlib in
+  let ocamlfind s =
+    run_and_read (exec_from_conf "ocamlfind" ^ " " ^ s) in
+  let archive = ocamlfind ("query -format %a -predicates byte " ^ pkg) in
+  if String.length archive > 3
+  then Some (chop_extension archive)
+  else None
+
+let predicate_used_packages = function
+  | After_rules ->
+    MyOCamlbuildFindlib.find_packages () |>
+    List.iter (fun pkg -> match unit_of_package pkg with
+        | None -> ()
+        | Some lib ->
+          flag ["ocaml"; "link"; "pkg_"^pkg]
+            (S [A "-predicates"; A ("used_"^lib)]))
+  | _ -> ()
+
+
+
 let predicate_used_libs = function
   | After_rules ->
     package_default.MyOCamlbuildBase.lib_ocaml |>
@@ -48,4 +73,5 @@ let () =
       dispatch_default stage;
       pr_6184_hack stage;
       predicate_used_libs stage;
+      predicate_used_packages stage;
       Ppx_driver_ocamlbuild.dispatch stage)

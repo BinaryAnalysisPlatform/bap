@@ -1,6 +1,7 @@
 OASISFormat: 0.4
 Name:        bap
 Version:     1.1.0
+OCamlVersion: >= 4.02
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>

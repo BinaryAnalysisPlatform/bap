@@ -2,7 +2,7 @@ Flag bap_std
   Description: Build BAP Standard Library
   Default: false
 
-PostInstallCommand: ./postinstall.byte
+PostInstallCommand: ./postinstall.native
 
 Library bap
   Path:            lib/bap
@@ -207,5 +207,5 @@ Executable "postinstall"
   Path:           tools
   MainIs:         postinstall.ml
   Install:        false
-  CompiledObject: byte
+  CompiledObject: best
   BuildDepends:   bap.config, fileutils

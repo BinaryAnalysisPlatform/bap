@@ -1,4 +1,8 @@
+ifeq (is$(BAP_DEBUG), $(filter is$(BAP_DEBUG),is is0 isno isdisable isfalse))
 SETUP = ocaml setup.ml -quiet
+else
+SETUP = ocaml setup.ml
+endif
 
 build: setup.ml
 	$(SETUP) -build $(BAPBUILDFLAGS)
@@ -43,5 +47,3 @@ ifeq ("$(BAP_RUN_CHECK)","true")
 	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite
 endif
-
-
