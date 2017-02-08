@@ -1,76 +1,94 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_llvm_types
 
-module Binary = Bap_llvm_binary
-
-
+open Bap_llvm_binary
 
 let make_addr arch addr =
   match Arch.addr_size arch with
   | `r32 -> Addr.of_int64 ~width:32 addr
   | `r64 -> Addr.of_int64 ~width:64 addr
 
-let to_segment arch s : Backend.Segment.t option =
-  let module S = Segment in
-  let name = S.name s in
+let make_segment arch bin ind =
+  let name = segment_name bin ind in
   let perm = Backend.([
-      S.is_readable s, R;
-      S.is_writable s, W;
-      S.is_executable s, X ] |>
+      segment_is_readable bin ind, R;
+      segment_is_writable bin ind, W;
+      segment_is_executable bin ind, X ] |>
       List.filter_map ~f:(fun (e, p) -> if e then Some p else None) |>
       List.reduce ~f:(fun p1 p2 -> Or (p1, p2))) in
-  let off = S.offset s |> Int64.to_int_exn in
+  let off = segment_offset bin ind |> Int64.to_int_exn in
+  let size = segment_size bin ind in
   let location = Location.Fields.create
-      ~addr:(S.addr s |> make_addr arch)
-      ~len:(S.size s |> Int64.to_int_exn) in
+      ~addr:(segment_addr bin ind |> make_addr arch)
+      ~len:(Int64.to_int_exn size) in
   match perm with
-  | Some perm when S.size s <> Int64.zero ->
+  | Some perm when size <> 0L ->
     Backend.Segment.Fields.create ~name ~perm ~off ~location |>
     Option.some
   | _ -> None
 
-let to_symbol arch s : Backend.Symbol.t option =
-  let module S = Symbol in
-  let name = S.name s in
-  let is_function = S.kind s = S.Function in
-  let is_debug = S.kind s = S.Debug in
+let make_symbol arch bin ind =
+  let name = symbol_name bin ind in
+  let is_function = symbol_is_fun bin ind in
+  let is_debug = symbol_is_debug bin ind in
+  let addr = symbol_addr bin ind in
+  let size = symbol_size bin ind in
   let locations = Location.Fields.create
-      ~addr:(S.addr s |> make_addr arch)
-      ~len:(S.size s |> Int64.to_int_exn), [] in
-  if S.size s <> Int64.zero then
+      ~addr:(make_addr arch addr)
+      ~len:(Int64.to_int_exn size), [] in
+  if size <> 0L then
     Backend.Symbol.Fields.create ~name ~is_function ~is_debug ~locations |>
     Option.some
   else None
 
-let to_section arch s : Backend.Section.t =
-  let module S = Section in
-  let name = S.name s in
+let make_section arch bin ind =
+  let name = section_name bin ind in
+  let addr = section_addr bin ind in
+  let size = section_size bin ind in
   let location = Location.Fields.create
-      ~addr:(S.addr s |> make_addr arch)
-      ~len:(S.size s |> Int64.to_int_exn) in
-  Backend.Section.Fields.create ~name ~location
+      ~addr:(make_addr arch addr)
+      ~len:(Int64.to_int_exn size) in
+  Some (Backend.Section.Fields.create ~name ~location)
+
+let collection arch bin (f,max) =
+  List.init (max bin) ~f:(f arch bin) |>
+  List.filter_opt
+
+let nonempty = function
+  | [] -> None
+  | hd :: tl -> Some (hd, tl)
+
+let segment = make_segment, segments_number
+let section = make_section, sections_number
+let symbol  = make_symbol, symbols_number
+
+let with_err_message msg f x = match f x with
+  | None -> eprintf "%s\n" msg; None
+  | r -> r
+
+let arch_of_string arch =
+  with_err_message
+    (sprintf "unknown arch %s\n" arch) Arch.of_string arch
+
+let collect_segments arch bin =
+  collection arch bin segment |>
+  with_err_message "segments list is empty" nonempty
+
+let create_binary data =
+  with_err_message "create binary failed" create_binary data
 
 let of_data data : Backend.Img.t option =
-  let of_data_exn () =
-    let b = Binary.create data in
-    let arch = Binary.arch b |>
-               Arch.of_string |>
-               (fun v -> Option.value_exn v) in
-    let entry = Binary.entry b |> make_addr arch in
-    let segments =
-      Binary.segments b |> List.filter_map ~f:(to_segment arch) |>
-      (fun s -> List.hd_exn s, List.tl_exn s) in
-    let symbols =
-      Binary.symbols b |> List.filter_map ~f:(to_symbol arch) in
-    let sections =
-      Binary.sections b |> List.map ~f:(to_section arch) in
-    Backend.Img.Fields.create ~arch ~entry ~segments ~symbols ~sections in
-  try Some (of_data_exn ()) with
-  | exn -> Format.eprintf "Can't create binary: %a%!" Exn.pp exn; None
+  let open Option in
+  create_binary data >>= fun bin ->
+  arch_of_string (image_arch bin) >>= fun arch ->
+  collect_segments arch bin >>= fun segments ->
+  let entry = make_addr arch (image_entry bin) in
+  let symbols = collection arch bin symbol in
+  let sections = collection arch bin section in
+  Some (Backend.Img.Fields.create
+          ~arch ~entry ~segments ~symbols ~sections)
 
 let init () =
   match Image.register_backend ~name:"llvm" of_data with
   | `Ok -> Ok ()
-  | `Duplicate ->
-    Error (Error.of_string "llvm loader: duplicate name")
+  | `Duplicate -> Or_error.errorf "llvm loader: duplicate name"
