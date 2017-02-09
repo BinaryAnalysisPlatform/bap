@@ -289,6 +289,7 @@ let set t tag x =
 
 let get t = Dict.find t.storage
 let has t = Dict.mem t.storage
+let del t tag = with_storage t @@ Dict.remove t.storage tag
 
 let subst_of_string = function
   | "section" | "section_name" -> Some (`section `name)
