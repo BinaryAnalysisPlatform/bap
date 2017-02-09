@@ -69,6 +69,9 @@ vagrant up
 buildrpm bap_$VERSION.deb
 buildrpm libbap_$VERSION.deb
 buildrpm libbap-dev_$VERSION.deb
+alien --to-tgz bap_$VERSION.deb
+alien --to-tgz libbap_$VERSION.deb
+alien --to-tgz libbap-dev_$VERSION.deb
 }
 
 build ubuntu trusty64 3.4
