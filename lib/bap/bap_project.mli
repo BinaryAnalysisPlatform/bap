@@ -36,6 +36,7 @@ val substitute : t -> mem -> string tag  -> string -> t
 val set : t -> 'a tag -> 'a -> t
 val get : t -> 'a tag -> 'a option
 val has : t -> 'a tag -> bool
+val del : t -> 'a tag -> t
 
 
 module Info : sig

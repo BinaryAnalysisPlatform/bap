@@ -7172,9 +7172,11 @@ module Std : sig
 
     (** [has project field] checks whether field exists or not. Useful
         for fields of type unit, that actually isomorphic to bool fields,
-        e.g., [if Project.has project mark]
-    *)
+        e.g., [if Project.has project mark] *)
     val has : t -> 'a tag -> bool
+
+    (** [del project attr] removes an attribute from a project *)
+    val del : t -> 'a tag -> t
 
     (** Information obtained during project reconstruction.
 
