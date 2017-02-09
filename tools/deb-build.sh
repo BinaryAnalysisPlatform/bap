@@ -4,37 +4,43 @@ set -e
 
 GITHUB=https://github.com/BinaryAnalysisPlatform/
 SOURCE=$GITHUB/bap
-BINDINGS=/home/ivg/factory/bap-bindings
-BINARIES="bap bap-mc bapbundle bap-byteweight"
+BINDINGS=$GITHUB/bap-bindings
+BINARIES="bap bap-mc bapbundle"
 PREFIX=/usr/local
-VERSION=1.1.0
+VERSION=${VERSION:-1.2.0}
 OCAML=4.02.3
+LLVM_VERSION=${LLVM_VERSION:-3.4}
 ARCH=$(dpkg-architecture -qDEB_BUILD_ARCH)
 
 CONFDIR=$PREFIX/etc/bap
 SWITCH=$(date +%s)
-OLDSWITCH=$(opam config var switch)
+OLDSWITCH="undefined"
 SIGURL=$GITHUB/bap/releases/download/v$VERSION/sigs.zip
 
 TMPDIR=$(mktemp -d)
 
 echo "Getting fresh OCaml compiler"
-sudo apt-get install opam
 
-opam switch -A$OCAML $SWITCH
+if [ -d $HOME/.opam ]; then
+    OLDSWITCH=$(opam config var switch)
+    opam switch -A$OCAML $SWITCH
+else
+    opam init --comp=$OCAML
+    SWITCH=$OCAML
+fi
 
-eval `opam config env`
+
+eval $(opam config env)
+echo OCaml is at `which ocaml`
+which ocaml
 
 echo "Looking in the dev-repo for the current list of dependencies"
 opam pin add bap --dev-repo --yes -n
-echo "Installing bap system dependencies"
-opam install depext --yes
-opam depext bap --yes
 echo "Installing OCaml dependenices from OPAM"
 opam install --deps-only bap --yes
-echo "Done. Cleaning up..."
+echo "Installed dependencies. Cleaning up..."
 opam pin remove bap
-echo "Clone a fresh repo"
+echo "Cloning a fresh repo"
 
 [ -d bap-repo ] || git clone $SOURCE bap-repo
 echo "Installing ocamlfind to the system path"
@@ -47,14 +53,14 @@ cd bap-repo
 git pull
 ./configure --enable-everything \
             --disable-ida --disable-fsi-benchmark \
-            --with-llvm-version=3.4 \
+            --with-llvm-version=$LLVM_VERSION \
             --libdir=$(opam config var lib) \
             --plugindir=$PREFIX/lib/bap \
             --prefix=$PREFIX \
             --sysconfdir=$CONFDIR
 
 make
-sudo make reinstall
+sudo sh -c "PATH=$PATH make reinstall"
 cd ..
 
 echo "Packing a bap debian package"
@@ -91,6 +97,8 @@ sudo chown -R root:root bap/bap_$VERSION
 dpkg-deb --build bap/bap_$VERSION
 
 echo "now building the bindings"
+
+opam install ctypes ctypes-foreign --yes
 
 [ -d bap-bindings ] || git clone $BINDINGS bap-bindings
 
@@ -172,7 +180,12 @@ dpkg-deb --build bap/libbap-dev_$VERSION
 
 echo "time to clean up..."
 cd bap-repo
-sudo make uninstall
+sudo sh -c "PATH=$PATH make uninstall"
 cd ..
-opam switch $OLDSWITCH
-opam switch remove $SWITCH
+
+if [ $SWITCH != $OCAML ]; then
+    opam switch $OLDSWITCH
+    opam switch remove $SWITCH --yes
+else
+    rm -rf ~/.opam
+fi
