@@ -1,8 +1,8 @@
 open Core_kernel.Std
 open Bap.Std
-open X86_opcode
+open X86_opcode_btx
 
-module Make (Tools : X86_tools.S) = struct
+module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
   open Tools
   let set_flags op base off =
     let op = match op with
@@ -126,19 +126,29 @@ module Make (Tools : X86_tools.S) = struct
           List.concat [load; flags; side] in
         Ok bil)
 
-  let btx (op:X86_opcode.btx) =
-    match op with
-    | #btx_rr as op -> btx_rr op
-    | #btx_ri as op -> btx_ri op
-    | #btx_mi as op -> btx_mi op
-    | #btx_mr as op -> btx_mr op
+  let btx (op:btx) =
+    let open Or_error in
+    let lift = match op with
+      | #btx_rr as op -> btx_rr op
+      | #btx_ri as op -> btx_ri op
+      | #btx_mi as op -> btx_mi op
+      | #btx_mr as op -> btx_mr op in
+    fun mem insn ->
+      lift mem insn >>= fun bil ->
+      match op with
+      | #bt_crs_mem when X86_prefix.exists `xF0 mem -> Ok (PR.lock bil)
+      | _ -> Ok bil
+
+  let register what =
+    let name op = sexp_of_btx (op :> btx) |> Sexp.to_string in
+    List.iter (what :> btx list)
+      ~f:(fun op -> Backend.register (name op) (btx op))
+
 end
 
-module IA32 = Make (X86_tools.IA32)
-module AMD64 = Make (X86_tools.AMD64)
+module IA32 = Make (X86_tools.IA32) (X86_backend.IA32)
+module AMD64 = Make (X86_tools.AMD64) (X86_backend.AMD64)
 
 let () =
-  List.iter (all_of_btx_ia32 :> btx list) ~f:(fun op ->
-      X86_backend.IA32.register (op :> X86_opcode.t) (IA32.btx op));
-  List.iter (all_of_btx :> btx list) ~f:(fun op ->
-      X86_backend.AMD64.register (op :> X86_opcode.t) (AMD64.btx op));
+  IA32.register all_of_btx_ia32;
+  AMD64.register all_of_btx

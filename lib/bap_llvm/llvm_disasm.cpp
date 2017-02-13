@@ -200,7 +200,7 @@ public:
         if (!target) {
             if (debug_level > 0)
                 output_error(triple, cpu, "target not found", error);
-            return {NULL, bap_disasm_unsupported_target};
+            return { NULL, {bap_disasm_unsupported_target} };
         }
 
         // target's createMC* functions allocates a new instance each time:
@@ -212,7 +212,7 @@ public:
         if (!reg_info) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to obtain registers information");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
         const shared_ptr<const llvm::MCInstrInfo>
@@ -221,7 +221,7 @@ public:
         if (!ins_info) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to obtain instructions information");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
         shared_ptr<const llvm::MCSubtargetInfo>
@@ -230,7 +230,7 @@ public:
         if (!sub_info) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to obtain subtarget information");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
         shared_ptr<const llvm::MCAsmInfo>
@@ -239,7 +239,7 @@ public:
         if (!asm_info) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to obtain assembler information");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, { bap_disasm_unsupported_target} };
         }
 
         shared_ptr<llvm::MCContext> ctx
@@ -248,7 +248,7 @@ public:
         if (!ctx) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create disassembly context");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
         smart_ptr<llvm::MCRelocationInfo>
@@ -257,7 +257,7 @@ public:
         if (!rel_info) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to obtain relocation information");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
@@ -281,7 +281,7 @@ public:
         if (!symbolizer) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create symbolizer");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
@@ -298,7 +298,7 @@ public:
         if (!printer) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create instruction printer");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
@@ -314,7 +314,7 @@ public:
         if (!dis) {
             if (debug_level > 0)
                 output_error(triple, cpu, "failed to create the disassembler");
-            return {nullptr, bap_disasm_unsupported_target};
+            return {nullptr, {bap_disasm_unsupported_target} };
         }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
@@ -339,7 +339,7 @@ public:
         self->ins_tab = self->create_table(ins_info->getNumOpcodes(), ins_info);
         self->reg_tab = self->create_table(reg_info->getNumRegs(), reg_info);
         self->init_prefixes();
-        return {self, 0};
+        return {self, {0} };
     }
 
 
@@ -386,7 +386,7 @@ public:
             int off = pc - mem->getBase();
             int len = mem->getExtent() - off;
 
-            auto status = llvm::MCDisassembler::SoftFail;
+            auto status = llvm::MCDisassembler::Fail;
             if (len > 0) {
                 status = dis->getInstruction
                     (mcinst, size, view(pc), pc,
@@ -399,11 +399,18 @@ public:
                 static_cast<int>(size)
             };
 
-            if (status == llvm::MCDisassembler::Success) {
+            if (status == llvm::MCDisassembler::Fail) {
+                if (debug_level > 0)
+                    std::cerr << "failed to decode insn at"
+                              << " pc " << pc
+                              << " offset " << loc.off
+                              << " skipping " << loc.len << " bytes\n";
+                current = invalid_insn(loc);
+            } else {
+                current = valid_insn(loc);
                 if (debug_level > 1) {
                     std::cerr << "read: '" << get_asm() << "'\n";
                 }
-                current = valid_insn(loc);
                 if (is_prefix() && size != 0) {
                     step(pc+size);
 
@@ -418,13 +425,6 @@ public:
                         current = valid_insn(ext);
                     }
                 }
-            } else {
-                if (debug_level > 0)
-                    std::cerr << "failed to decode insn at"
-                              << " pc " << pc
-                              << " offset " << loc.off
-                              << " skipping " << loc.len << " bytes\n";
-                current = invalid_insn(loc);
             }
         }
     }
@@ -482,7 +482,7 @@ private:
     insn valid_insn(location loc) const {
         insn ins;
 
-        for (int i = 0; i < mcinst.getNumOperands(); ++i) {
+        for (std::size_t i = 0; i < mcinst.getNumOperands(); ++i) {
             const llvm::MCOperand &op = mcinst.getOperand(i);
             if (!op.isValid() || op.isExpr()) {
                 if (debug_level > 0) {
@@ -579,7 +579,7 @@ private:
     }
 
     void init_prefixes() {
-        for (int i = 0; i < ins_info->getNumOpcodes(); i++) {
+        for (std::size_t i = 0; i < ins_info->getNumOpcodes(); i++) {
             if (ends_with(ins_info->getName(i), "_PREFIX")) {
                 prefixes.push_back(i);
             }

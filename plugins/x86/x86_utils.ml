@@ -36,7 +36,7 @@ let int_exp n width = BV.of_int n ~width |> Bil.int
  * so that we can avoid calling Typecheck.infer_ast *)
 let extract_element_symbolic_with_width t e n et =
   let t = !!t in
-  Bil.(cast low t (e lsl (n * (int_exp t et))))
+  Bil.(cast low t (e lsr (n * (int_exp t et))))
 
 let extract_byte_symbolic_with_width e n et =
   extract_element_symbolic_with_width (Type.imm 8) e n et

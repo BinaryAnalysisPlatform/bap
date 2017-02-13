@@ -36,17 +36,19 @@ module type MM = sig
   val store : t -> size:size -> exp -> stmt
 end
 
+type cpu_flag = [
+  | `CF
+  | `PF
+  | `AF
+  | `ZF
+  | `SF
+  | `DF
+  | `OF
+]
+
 (** Flags representation *)
 module type FR = sig
-  type t = [
-    | `CF
-    | `PF
-    | `AF
-    | `ZF
-    | `SF
-    | `DF
-    | `OF
-  ]
+  type t = cpu_flag
   val var : t -> var
   val get : t -> exp
   val set : t -> exp -> stmt
@@ -55,50 +57,44 @@ module type FR = sig
   val after_add : sum:exp -> size ->  op1:exp -> op2:exp -> stmt list
 end
 
-(* Interrupt Vector *)
+type interrupt_vector = [
+  | `DE  (** Divide-by-Zero-Error *)
+  | `DB  (** Debug *)
+  | `NMI (** Non-Maskable-Interrupt *)
+  | `BP  (** Breakpoint *)
+  | `OF  (** Overflow *)
+  | `BR  (** Bound-Range *)
+  | `UD  (** Invalid-Opcode *)
+  | `NM  (** Device-Not-Available *)
+  | `DF  (** Double-Fault *)
+  | `TS  (** Invalid-TSS *)
+  | `NP  (** Segment-Not-Present *)
+  | `SS  (** Stack *)
+  | `GP  (** General-Protection *)
+  | `PF  (** Page-Fault *)
+  | `MF  (** x87 Floating-Point Exception-Pending *)
+  | `AC  (** Alignment-Check *)
+  | `MC  (** Machine-Check *)
+  | `XF  (** SIMD Floating-Point *)
+  | `SX  (** Security Exception  *)
+  | `INTR of int (** External Interrupts (Maskable) *)
+  | `SOFTWARE of int (** Software Interrupts *)
+]
+
+(** Interrupt Vector *)
 module type IV = sig
-  type t = [
-    | `DE (* Divide-by-Zero-Error *)
-    | `DB (* Debug *)
-    | `NMI (* Non-Maskable-Interrupt *)
-    | `BP (* Breakpoint *)
-    | `OF (* Overflow *)
-    | `BR (* Bound-Range *)
-    | `UD (* Invalid-Opcode *)
-    | `NM (* Device-Not-Available *)
-    | `DF (* Double-Fault *)
-    | `TS (* Invalid-TSS *)
-    | `NP (* Segment-Not-Present *)
-    | `SS (* Stack *)
-    | `GP (* General-Protection *)
-    | `PF (* Page-Fault *)
-    | `MF (* x87 Floating-Point Exception-Pending *)
-    | `AC (* Alignment-Check *)
-    | `MC (* Machine-Check *)
-    | `XF (* SIMD Floating-Point *)
-    | `SX (* Security Exception *)
-    | `INTR of int (* External Interrupts (Maskable) *)
-    | `SOFTWARE of int (* Software Interrupts *)
-  ]
+  type t = interrupt_vector
 
   val to_int : t -> int
 end
 
 (** Prefix representation *)
 module type PR = sig
-  type t = [
-    | `LOCK_PREFIX
-    | `REP_PREFIX
-    | `REPE_PREFIX
-    | `REPNE_PREFIX
-    | `EXCEPTION of int
-    | `NONE
-  ]
+  type t = X86_prefix.t
 
-  val parse : mem -> X86_opcode.t -> t
-  val lock : bil -> bil
-  val rep : mem -> bil -> bil
-  val repe : mem -> bil -> bil
+  val lock  : bil -> bil
+  val rep   : mem -> bil -> bil
+  val repe  : mem -> bil -> bil
   val repne : mem -> bil -> bil
 end
 
@@ -112,15 +108,15 @@ module type S = sig
 end
 
 module type X86CPU = sig
- type regs = private [< X86_asm.reg]
- val arch : Arch.x86
- val avaliable : X86_asm.reg -> bool
- val cf : var
- val pf : var
- val af : var
- val zf : var
- val sf : var
- val oF : var
- val df : var
- include X86_env.ModeVars
+  type regs = private [< X86_asm.reg]
+  val arch : Arch.x86
+  val avaliable : X86_asm.reg -> bool
+  val cf : var
+  val pf : var
+  val af : var
+  val zf : var
+  val sf : var
+  val oF : var
+  val df : var
+  include X86_env.ModeVars
 end

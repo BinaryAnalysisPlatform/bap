@@ -42,7 +42,7 @@ type op =
   | Insn
 [@@deriving compare, sexp]
 
-
+[@@@ocaml.warning "-3"]
 
 external create
   : backend:string

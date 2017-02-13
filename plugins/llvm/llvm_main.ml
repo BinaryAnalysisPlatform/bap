@@ -2,7 +2,16 @@ open Core_kernel.Std
 open Bap.Std
 include Self()
 
-external init : unit -> int = "disasm_llvm_init_stub" "noalloc"
+let () =
+  match Bap_llvm_loader.init () with
+  | Ok () -> ()
+  | Error er -> eprintf "%s\n" (Error.to_string_hum er)
+
+let disasm_init x86_syntax =
+  match Bap_llvm_disasm.init ~x86_syntax () with
+  | Ok () -> ()
+  | Error er ->
+    eprintf "%s\n" (Error.to_string_hum er)
 
 let () =
   let () = Config.manpage [
@@ -17,7 +26,8 @@ let () =
       @@ Config.doc_enum names in
     Config.(param (enum names) ~default:"att" "x86-syntax" ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
-      Unix.putenv "BAP_LLVM_OPTIONS" ("-x86-asm-syntax=" ^ !x86_syntax);
-      let r = init () in
-      if r < 0 then
-        eprintf "LLVM initialization failed with error %d\n" r)
+      match !x86_syntax with
+      | "att" | "intel" as s ->
+        let syn = Bap_llvm_disasm.x86_syntax_of_sexp (Sexp.of_string s) in
+        disasm_init syn
+      | s -> eprintf "unknown x86-asm-syntax: %s" s)

@@ -247,7 +247,25 @@ type btx_mr = [
   | btc_mr
   | btr_mr
   | bts_mr
-]  [@@deriving bin_io, sexp, compare, enumerate]
+] [@@deriving bin_io, sexp, compare, enumerate]
+
+type bt_crs_mem_ia32 = [
+  | btc_mi_ia32
+  | btr_mi_ia32
+  | bts_mi_ia32
+  | btc_mr_ia32
+  | btr_mr_ia32
+  | bts_mr_ia32
+] [@@deriving bin_io, sexp, compare, enumerate]
+
+type bt_crs_mem = [
+  | btc_mi
+  | btr_mi
+  | bts_mi
+  | btc_mr
+  | btr_mr
+  | bts_mr
+] [@@deriving bin_io, sexp, compare, enumerate]
 
 (** btx_ia32, btx_amd64 *)
 

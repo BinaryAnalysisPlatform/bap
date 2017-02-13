@@ -39,14 +39,17 @@ module Plugin = struct
   let setup_dynamic_loader loader =
     load := loader
 
+  (* this function requires working Findlib infrastructure. *)
+  let unit_of_package pkg =
+    let preds = Findlib.recorded_predicates () in
+    try
+      Findlib.package_property preds pkg "archive" |>
+      Filename.chop_extension
+    with exn -> pkg  (* fails if the infrastructure is broken *)
+
   let init = lazy begin
     Findlib.(recorded_packages Record_core) |> List.iter ~f:(fun pkg ->
-        try
-          let preds = Findlib.recorded_predicates () in
-          let key = Findlib.package_property preds pkg "archive" |>
-                    Filename.chop_extension in
-          Hashtbl.set units ~key ~data:`In_core
-        with exn -> ());
+        Hashtbl.set units ~key:(unit_of_package pkg) ~data:`In_core);
     Findlib.recorded_predicates () |> List.iter ~f:(fun pred ->
         match String.chop_prefix pred ~prefix:"used_" with
         | None -> ()
@@ -78,7 +81,7 @@ module Plugin = struct
     Findlib.resolve_path ~base:dir file
 
   let find_library name =
-    try Some (find_library_exn name) with Not_found -> None
+    try Some (find_library_exn name) with exn -> None
 
   let load_unit ~reason ~name pkg : unit or_error =
     let open Format in
@@ -92,6 +95,37 @@ module Plugin = struct
       Or_error.error_string (Dynlink.error_message err)
     | exn -> Or_error.of_exn exn
 
+
+  let is_debugging () =
+    try Sys.getenv "BAP_DEBUG" <> "0" with Not_found -> false
+
+  let do_if_not_debugging f x =
+    if is_debugging () then () else f x
+
+  (** [load_entry plugin name] loads a compilation unit with the
+      specified [name] required by [plugin]. The compilation unit
+      should not be alread linked to the main program. The unit is
+      looked in the plugin bundle first and, if not found, looked in the
+      system using the [Findlib] library. If the [findlib]
+      infrastructure is not available (and a unit wasn't found in
+      the bundle) returns an error, otherwise returns unit.
+
+      The loaded unit is recorded in the internal registry of units,
+      linked into the host program (unless the `don't_register` option
+      is set to [true]).
+
+      We track compilation units by their names, where the name
+      consists of the base name of library with the extension
+      chopped. This is a slightly better granularity, than tracking
+      only the library names, but still not the ideal. Ideally, this
+      should be tracked by the language runtime.
+
+      Note: we need to track loaded units in order to prevent the
+      linking of the same compilation unit twice, as if that happens a
+      memory of a unit is corrupted (the global roots are
+      overwritten). This is a known bug/issue in the OCaml runtime
+      that we need to workaround.
+  *)
   let load_entry ?(don't_register=false) plugin name =
     let suffix = if Dynlink.is_native then ".cmxs" else ".cma" in
     let name = Filename.basename name in
@@ -102,7 +136,7 @@ module Plugin = struct
     | Some uri ->
       let path = Uri.to_string uri in
       let result = load_unit ~reason ~name path in
-      Sys.remove path;
+      do_if_not_debugging Sys.remove path;
       result
     | None -> match find_library name with
       | Some lib ->
@@ -172,7 +206,9 @@ module Plugins = struct
     with Not_found -> []
 
   let plugin_paths library =
-    [library; paths_of_env (); [Bap_config.libdir]] |> List.concat
+    [library; paths_of_env (); [Bap_config.plugindir]] |> List.concat |>
+    List.filter ~f:Sys.file_exists |>
+    List.filter ~f:Sys.is_directory
 
   let collect ?(library=[]) () =
     let (/) = Filename.concat in

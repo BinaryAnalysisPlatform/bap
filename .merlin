@@ -22,6 +22,7 @@ B _build/lib/bap_types
 B _build/lib/graphlib
 B _build/lib/monads
 B _build/lib/primus
+B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
 
@@ -35,4 +36,5 @@ S lib/bap_config
 S lib/bap_types
 S lib/monads
 S lib/primus
+S lib/bap_llvm
 S ../core_kernel.113.33.00/src

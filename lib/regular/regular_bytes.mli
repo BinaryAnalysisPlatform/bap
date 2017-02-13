@@ -1,4 +1,3 @@
-
 open Core_kernel.Std
 
 type t = Bytes.t [@@deriving bin_io, compare, sexp]
@@ -9,13 +8,13 @@ include Identifiable.S with type t := t
 module To_string   : Blit.S_distinct with type src := t with type dst := string
 module From_string : Blit.S_distinct with type src := string with type dst := t
 
-external create : int -> t = "caml_create_string"
+val create : int -> t
 val make : int -> char -> t
 val init : int -> f:(int -> char) -> t
 val empty : t
-external length: t -> int = "%string_length"
-external get : t -> int -> char = "%string_safe_get"
-external set : t -> int -> char -> unit = "%string_safe_set"
+val length : t -> int
+val get : t -> int -> char
+val set : t -> int -> char -> unit
 val copy : t -> t
 val of_string : string -> t
 val to_string : t -> string
@@ -41,6 +40,8 @@ val capitalize : t -> t
 val uncapitalize : t -> t
 
 module Unsafe : sig
+  [@@@ocaml.warning "-3"]
+
   val to_string : t -> string
   val of_string : string -> t
   external get  : t -> int -> char = "%string_unsafe_get"
@@ -48,4 +49,3 @@ module Unsafe : sig
   external blit : t -> int -> t -> int -> int -> unit = "caml_blit_string" "noalloc"
   external fill : t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
 end
-

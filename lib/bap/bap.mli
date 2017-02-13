@@ -3561,14 +3561,41 @@ module Std : sig
   module type Memory_iterators = sig
     type t
     type 'a m
+
+    (** [fold ~word_size ~init ~f t] folds over elements of [t],
+        so a result is [f (... (f (f a elt_1) elt_2) ...) elt_n]  *)
     val fold     : ?word_size:size -> t -> init:'b -> f:(word -> 'b -> 'b m) -> 'b m
+
+    (** [iter ~word_size ~f t] applies [f] to elements of [t] *)
     val iter     : ?word_size:size -> t -> f:(word -> unit m) -> unit m
+
+    (** [foldi ~word_size ~init ~f t] is like {!fold}, but also passes
+        an address to the [f] *)
     val foldi    : ?word_size:size -> t -> init:'b -> f:(addr -> word -> 'b -> 'b m) -> 'b m
+
+    (** [iteri ~word_size ~f t] is like {!iter}, but also passes
+        an address to the [f] *)
     val iteri    : ?word_size:size -> t -> f:(addr -> word -> unit m) -> unit m
+
+    (** [exists ~word_size ~f t] checks if at least one element of [t]
+        satisfies the predicate [f] *)
     val exists   : ?word_size:size -> t -> f:(addr -> word -> bool m) -> bool m
+
+    (** [for_all ~word_size ~f t] checks if all elements of [t]
+        satisfies the predicate [f] *)
     val for_all  : ?word_size:size -> t -> f:(addr -> word -> bool m) -> bool m
+
+    (** [count ~word_size ~f t] is the number of elements in [t]
+        that satisfies the predicate [f]. *)
     val count    : ?word_size:size -> t -> f:(addr -> word -> bool m) -> int m
+
+    (** [find_if ~word_size ~f t] returns the first element of
+        [t] that satisfies the predicate [p] or None if no elements
+        satisfied *)
     val find_if  : ?word_size:size -> t -> f:(addr -> word -> bool m) -> word option m
+
+    (** [find_map ~word_size ~f t] returns the first evaluation
+        of [f] that returns [Some] or None if [f] always returns [None] *)
     val find_map : ?word_size:size -> t -> f:(addr -> word -> 'a option m) ->
       'a option m
   end
@@ -3915,45 +3942,93 @@ module Std : sig
       -> ?until:mem   (** defaults to the highest mapped area  *)
       -> 'a
 
-    val exists   : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
-    val for_all  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+    (** [exists ~start ~until ~f table] checks if at least one
+        element of [table] satisfies the predicate [f]. *)
     val exists   : ('a t -> f:(      'a -> bool) -> bool) ranged
+
+    (** [for_all ~start ~until ~f table] checks if all elements
+        of [table] satisfies the predicate [f]. *)
     val for_all  : ('a t -> f:(      'a -> bool) -> bool) ranged
 
+    (** [existsi ~start ~until ~f table] is like {!exists}, but
+        also passes the memory as an argument. *)
+    val existsi   : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+
+    (** [for_alli ~start ~until ~f table] is like {!for_all}, but
+        also passes the memory as an argument. *)
+    val for_alli  : ('a t -> f:(mem -> 'a -> bool) -> bool) ranged
+
+    (** [count ~start ~until ~f table] returns the number of elements
+        [table] that satisfy the predicate [p] *)
     val count    : ('a t -> f:('a -> bool) -> int) ranged
+
+    (** [find_if ~start ~until ~f table] returns the first element of
+        [table] that satisfies the predicate [p] or None if no elements
+        satisfied *)
     val find_if  : ('a t -> f:('a -> bool) -> 'a option) ranged
+
+    (** [find_map ~start ~until ~f table] returns the first evaluation
+        of [f] that returns [Some] or None if [f] always returns [None] *)
     val find_map : ('a t -> f:('a -> 'b option) -> 'b option) ranged
+
+    (** [fold ~start ~until ~init ~f table] returns a fold over
+        [table] in form [f elt_n ( ... (f elt_2 (f (elt_1 acc))) ... )] *)
     val fold  : ('a t -> init:'b -> f:('a -> 'b -> 'b) -> 'b) ranged
+
+    (** [iter ~start ~until ~f table] applies function [f] in turn to
+        elements of [table] *)
     val iter  : ('a t -> f:('a -> unit) -> unit) ranged
 
+    (** [find_mapi ~start ~until ~f table] is like {!find_map}, but
+        also passes the memory as an argument. *)
     val find_mapi : ('a t -> f:(mem -> 'a -> 'b option) -> 'b option) ranged
+
+    (** [foldi ~start ~until ~f table] is like {!fold}, but
+        also passes the memory as an argument. *)
     val foldi: ('a t -> init:'b -> f:(mem -> 'a -> 'b -> 'b) -> 'b) ranged
+
+    (** [ieri ~start ~until ~f table] is like {!iter}, but
+        also passes the memory as an argument. *)
     val iteri : ('a t -> f:(mem -> 'a -> unit) -> unit) ranged
 
+    (** [map ~start ~until ~f table] applies [f] to elements of
+        [table] and builds new table with results returned by [f] *)
     val map : ('a t -> f:('a -> 'b) -> 'b t) ranged
+
+    (** [mapi ~start ~until ~f table] is like {!map}, but
+        also passes the memory as an argument. *)
     val mapi : ('a t -> f:(mem -> 'a -> 'b) -> 'b t) ranged
 
-    (** removes all mappings that do not satisfy the predicate  *)
+    (** [filter ~start ~until ~f table] removes all mappings from
+        [table] that doesn't satisfies the predicate [f] *)
     val filter : ('a t -> f:('a -> bool) -> 'a t) ranged
+
+    (** [filter_map ~start ~until ~f table] return a subtable of
+        [table] containing only elements for which [f] returns
+        [Some] *)
     val filter_map : ('a t -> f:('a -> 'b option) -> 'b t) ranged
 
+    (** [filteri ~start ~until ~f table] is like {!filter}, but
+        also passes the memory as an argument. *)
     val filteri : ('a t -> f:(mem -> 'a -> bool) -> 'a t) ranged
+
+    (** [filter_mapi ~start ~until ~f table] is like {!filter_map}, but
+        also passes the memory as an argument. *)
     val filter_mapi : ('a t -> f:(mem -> 'a -> 'b option) -> 'b t) ranged
 
-
-    (** [to_sequence tab] converts the table [t] to a
+    (** [to_sequence ~start ~until table] converts the [table] to a
         sequence of key-value pairs.  *)
     val to_sequence : ('a t -> (mem * 'a) seq) ranged
-
 
     (** [regions table] returns in an ascending order of addresses all
         memory regions mapped in a [table] *)
     val regions : ('a t -> mem seq) ranged
 
-    (** [regions table] returns in an ascending order of addresses all
+    (** [elements table] returns in an ascending order of addresses all
         elements mapped in a [table] *)
     val elements : ('a t -> 'a seq) ranged
 
+    (** [pp printer] - creates a printer for table from value printer *)
     val pp : 'a printer -> 'a t printer
   end
 
@@ -6981,9 +7056,11 @@ module Std : sig
 
     (** [has project field] checks whether field exists or not. Useful
         for fields of type unit, that actually isomorphic to bool fields,
-        e.g., [if Project.has project mark]
-    *)
+        e.g., [if Project.has project mark] *)
     val has : t -> 'a tag -> bool
+
+    (** [del project attr] removes an attribute from a project *)
+    val del : t -> 'a tag -> t
 
     (** Information obtained during project reconstruction.
 

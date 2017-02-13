@@ -233,13 +233,13 @@ let pp_addr ppf addr =
 
 let setup_tabs ppf =
   pp_print_as ppf 50 "";
-  pp_set_tab ppf ()
+  pp_set_tab ppf () [@ocaml.warning "-3"]
 
 let print_disasm pp_insn subs secs ppf proj =
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
-  pp_open_tbox ppf ();
-  setup_tabs ppf;
+  pp_open_tbox ppf () [@ocaml.warning "-3"];
+  setup_tabs ppf [@ocaml.warning "-3"];
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
@@ -256,7 +256,7 @@ let print_disasm pp_insn subs secs ppf proj =
                   let mem = Block.memory blk in
                   fprintf ppf "%a:@\n" pp_addr (Memory.min_addr mem);
                   Block.insns blk |> List.iter ~f:(pp_insn ppf))));
-  pp_close_tbox ppf ()
+  pp_close_tbox ppf () [@ocaml.warning "-3"]
 
 let pp_bil fmt ppf (mem,insn) =
   let pp_bil ppf = Bil.Io.print ~fmt ppf in
@@ -266,7 +266,7 @@ let pp_bil fmt ppf (mem,insn) =
 
 let pp_insn fmt ppf (mem,insn) =
   Memory.pp ppf mem;
-  pp_print_tab ppf ();
+  pp_print_tab ppf ()  [@ocaml.warning "-3"];
   Insn.Io.print ~fmt ppf insn;
   fprintf ppf "@\n"
 

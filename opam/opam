@@ -71,6 +71,7 @@ install: [
   ["ocamlfind" "remove" "bap-abi"]
   ["ocamlfind" "remove" "bap-api"]
   ["ocamlfind" "remove" "bap-bml"]
+  ["ocamlfind" "remove" "bap-llvm"]
   [make "reinstall"]
   ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v0.9.9/sigs.zip"]
   [make "test"]
@@ -123,6 +124,7 @@ remove: [
   ["ocamlfind" "remove" "bap-abi"]
   ["ocamlfind" "remove" "bap-api"]
   ["ocamlfind" "remove" "bap-bml"]
+  ["ocamlfind" "remove" "bap-llvm"]
   ["rm" "-f" "%{prefix}%/bin/baptop"]
   ["rm" "-f" "%{prefix}%/bin/ppx-bap"]
   ["rm" "-rf" "%{prefix}%/share/bap"]
@@ -141,7 +143,7 @@ depends: [
     "bitstring"
     "camlzip"
     "cmdliner" {>= "0.9.6"}
-    "ppx_jane" {>= "113.33.03" & < "113.34.00"}
+    "ppx_jane" {>= "113.33.00" & < "113.34.00"}
     "core_kernel" {>= "113.33.00" & < "113.34.00"}
     "ezjsonm"
     "faillib"

@@ -830,7 +830,7 @@ module Std : sig
     (** [create n] returns a new byte sequence of length [n]. The
         sequence is uninitialized and contains arbitrary bytes.
         Raise [Invalid_argument] if [n < 0] or [n > ]{!Sys.max_string_length}. *)
-    external create : int -> t = "caml_create_string"
+    val create : int -> t
 
     (** [make n c] returns a new byte sequence of length [n], filled with
         the byte [c].
@@ -847,16 +847,16 @@ module Std : sig
     val empty : t
 
     (** [length t] returns the length (number of bytes) of [t]. *)
-    external length: t -> int = "%string_length"
+    val length: t -> int
 
     (** [get s n] returns the byte at index [n] in [s].
         Raise [Invalid_argument] if [n] not a valid index in [s]. *)
-    external get : t -> int -> char = "%string_safe_get"
+    val get : t -> int -> char
 
     (** [set s n c] modifies [s] in place, replacing the byte at index [n]
         with [c].
         Raise [Invalid_argument] if [n] is not a valid index in [s]. *)
-    external set : t -> int -> char -> unit = "%string_safe_set"
+    val set : t -> int -> char -> unit
 
     (** [copy t] returns a new byte sequence that contains the same
         bytes as [t]. *)
@@ -1113,8 +1113,12 @@ module Std : sig
       (** The following is for system use only. Do not call directly. *)
       external get  : t -> int -> char = "%string_unsafe_get"
       external set  : t -> int -> char -> unit = "%string_unsafe_set"
+
+      [@@@ocaml.warning "-3"]
+
       external blit : t -> int -> t -> int -> int -> unit = "caml_blit_string" "noalloc"
       external fill : t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
+
       (**/**)
     end
   end

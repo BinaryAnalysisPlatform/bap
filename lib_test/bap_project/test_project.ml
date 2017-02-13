@@ -16,9 +16,9 @@ type case = {
 let arm = {
   arch = `armv7;
   addr = 16;
-  code = "\x00\x20\xA0\xE3";
-  bil  = "R2 := 0x0:32";
-  asm  = "mov r2, #0x0";
+  code = "\x01\x20\xA0\xE1";
+  bil  = "R2 := R1";
+  asm  = "mov r2, r1";
 }
 
 let x86 = {

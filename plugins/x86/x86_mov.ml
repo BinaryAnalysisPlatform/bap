@@ -1,9 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
-open X86_opcode
+open X86_opcode_mov
 open X86_asm.Reg
 
-module Make (Tools : X86_tools.S) = struct
+module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
   open Tools
 
 
@@ -42,38 +42,6 @@ module Make (Tools : X86_tools.S) = struct
     X86_operands.mr ~f:(fun mem ~seg ~base ~scale ~index ~disp reg ->
         let mem = MM.of_mem mem ~seg ~base ~scale ~index ~disp in
         let reg = RR.of_mc_exn reg in
-        Ok [RR.get reg |>
-            MM.store mem ~size:(RR.width reg)])
-
-  let mov_oa (op:mov_oa) =
-    X86_operands.i ~f:(fun _mem off ->
-        let mem = MM.of_offset off in
-        let reg =
-          let asm = match op with
-            | `MOV8o8a
-            | `MOV64o8a -> `AL
-            | `MOV16o16a
-            | `MOV64o16a -> `AX
-            | `MOV32o32a
-            | `MOV64o32a -> `EAX
-            | `MOV64o64a -> `RAX in
-          RR.of_asm_exn asm in
-        Ok [MM.load mem ~size:(RR.width reg) |>
-            RR.set reg])
-
-  let mov_ao (op:mov_ao) =
-    X86_operands.i ~f:(fun _mem off ->
-        let mem = MM.of_offset off in
-        let reg =
-          let asm = match op with
-            | `MOV8ao8
-            | `MOV64ao8 -> `AL
-            | `MOV16ao16
-            | `MOV64ao16 -> `AX
-            | `MOV32ao32
-            | `MOV64ao32 -> `EAX
-            | `MOV64ao64 -> `RAX in
-          RR.of_asm_exn asm in
         Ok [RR.get reg |>
             MM.store mem ~size:(RR.width reg)])
 
@@ -117,26 +85,27 @@ module Make (Tools : X86_tools.S) = struct
         Ok [MM.load mem ~size:(RR.width reg) |>
             RR.set reg])
 
-  let mov (op:X86_opcode.mov) =
+  let mov (op:mov) =
     match op with
     | #mov_rr as op -> mov_rr op
     | #mov_ri as op -> mov_ri op
     | #mov_rm as op -> mov_rm op
     | #mov_mr as op -> mov_mr op
     | #mov_mi as op -> mov_mi op
-    | #mov_oa as op -> mov_oa op
-    | #mov_ao as op -> mov_ao op
     | #mov_rs as op -> mov_rs op
     | #mov_ms as op -> mov_ms op
     | #mov_sr as op -> mov_sr op
     | #mov_sm as op -> mov_sm op
+
+  let register what =
+    let name op = sexp_of_mov (op :> mov) |> Sexp.to_string in
+    List.iter (what :> mov list) ~f:(fun op ->
+        Backend.register (name op) (mov op))
 end
 
-module IA32 = Make (X86_tools.IA32)
-module AMD64 = Make (X86_tools.AMD64)
+module IA32 = Make (X86_tools.IA32) (X86_backend.IA32)
+module AMD64 = Make (X86_tools.AMD64) (X86_backend.AMD64)
 
 let () =
-  List.iter (all_of_mov_ia32 :> mov list) ~f:(fun op ->
-      X86_backend.IA32.register (op :> X86_opcode.t) (IA32.mov op));
-  List.iter (all_of_mov_amd64 :> mov list) ~f:(fun op ->
-      X86_backend.AMD64.register (op :> X86_opcode.t) AMD64.(mov op));
+  IA32.register all_of_mov_ia32;
+  AMD64.register all_of_mov_amd64

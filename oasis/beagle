@@ -1,0 +1,20 @@
+Flag beagle
+  Description: Build beagle obfuscated string solver
+  Default: false
+
+Library beagle_plugin
+  Build$: flag(everything) || flag(beagle)
+  Path: plugins/beagle
+  FindlibName: bap-plugin-beagle
+  BuildDepends: bap, cmdliner, bap-microx, bap-beagle-prey
+  InternalModules: Beagle_main, Beagle_trapper
+  XMETADescription: microx powered obfuscated string solver
+
+
+Library beagle_prey
+  Build$: flag(everything) || flag(beagle)
+  Path: lib/beagle
+  FindlibName: bap-beagle-prey
+  Modules: Beagle_prey
+  BuildDepends: bap
+  Xmetadescription: beagle attributes

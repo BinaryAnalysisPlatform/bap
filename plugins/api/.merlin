@@ -2,5 +2,7 @@ REC
 PKG cmdliner
 
 B ../../_build/lib/bap_api
+B ../../_build/plugins/api
+S.
 
 FLG -short-paths

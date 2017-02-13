@@ -8,11 +8,12 @@ exception Provides_field_syntax_error
 exception Target_unspecified
 exception Target_is_directory
 exception Target_doesn't_exist
+exception Destdir_is_not_a_dir
 
 let target = ref ""
 let manifest = ref (Manifest.create "")
 let modified = String.Hash_set.create ()
-let destdir = ref Bap_config.libdir
+let destdir = ref Bap_config.plugindir
 
 let destdir_arg =
   "-destdir", Arg.Set_string destdir,
@@ -53,12 +54,19 @@ let named_resource r = match String.split ~on:'=' r with
   | [name;file] -> Some name, file
   | _ -> None,r
 
-let open_bundle () = match target.contents with
+let normalized x =
+  let suffix = ".plugin" in
+  let with_suffix name =
+    if Filename.check_suffix name suffix then name
+    else name ^ suffix in
+  let is_plugin x = Sys.file_exists (with_suffix x) in
+  if is_plugin x then with_suffix x else x
+
+let open_bundle () = match normalized (target.contents) with
   | "" -> raise Target_unspecified
   | x when Sys.is_directory x -> raise Target_is_directory
   | x when Sys.file_exists x -> Bundle.of_uri (Uri.of_string x)
   | x -> raise Target_doesn't_exist
-
 
 module Update = struct
   let resources = ref []
@@ -178,6 +186,11 @@ module Install = struct
 
   let main () =
     if target.contents = "" then raise Target_unspecified;
+    target := normalized !target;
+    if not (Sys.file_exists !destdir)
+    then FileUtil.mkdir ~parent:true !destdir;
+    if not (Sys.is_directory !destdir)
+    then raise Destdir_is_not_a_dir;
     if Sys.file_exists !target
     then if Sys.is_directory !target
       then raise Target_is_directory
@@ -189,7 +202,7 @@ module Remove = struct
   let args = [destdir_arg]
   let main () =
     if target.contents = "" then raise Target_unspecified;
-    let file = Filename.concat !destdir !target in
+    let file = normalized @@ Filename.concat !destdir !target in
     if Sys.file_exists file
     then Sys.remove file
 end
@@ -233,7 +246,7 @@ let usage_msg = "USAGE
 DESCRIPTION
 
   Manages BAP bundles. If you're looking for a way to
-  create a bundle, then bapbuild is the tool that you're
+  create a bundle, then bapbundle is the tool that you're
   looking for.
 
   See bapbundle(1) man-page for a full manual.
@@ -260,15 +273,17 @@ let () =
   Arg.parse_dynamic args dispatch usage_msg;
   try !main () with
   | Provides_field_syntax_error ->
-    error "An entry in provides list should be <name> | <name>=<path>"
+    error "An entry in the provides list should be <name> | <name>=<path>"
   | Target_unspecified ->
-    usage "Please specify <bundle>"
+    usage "Please, specify the bundle name"
   | Target_is_directory ->
-    error "The <bundle> is a directory"
+    error "The specified bundle is a directory"
   | Target_doesn't_exist ->
-    error "Can't open <bundle> file, it doesn't exist"
+    error "Can't open the specified bundle file, it doesn't exist"
   | Not_a_bundle ->
-    error "The provided <bundle> file is either malformed or not a bundle"
+    error "The provided bundle file is either malformed or is not a bundle"
+  | Destdir_is_not_a_dir ->
+    error "The destination should be a directory, not a file"
   | Sys_error err ->
     error "%s" err
   | exn ->

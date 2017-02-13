@@ -1,4 +1,3 @@
-
 module Std_bytes = Bytes
 
 open Core_kernel.Std
@@ -66,8 +65,10 @@ include Blit.Make(Elt)(B)
 module To_string = Blit.Make_distinct (Elt)(B)(S)
 module From_string = Blit.Make_distinct (Elt)(S)(B)
 
-external length: t -> int = "%string_length"
-
+let create = Std_bytes.create
+let length = Std_bytes.length
+let get = Std_bytes.get
+let set = Std_bytes.set
 let convert     = T.unsafe_to_string
 let apply t f   = f (convert t)
 let fold t      = apply t String.fold
@@ -94,6 +95,8 @@ include Identifiable.Make(struct
   end)
 
 module Unsafe = struct
+  [@@@ocaml.warning "-3"]
+
   let of_string = T.unsafe_of_string
   let to_string = T.unsafe_to_string
 

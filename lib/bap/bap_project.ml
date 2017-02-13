@@ -289,6 +289,7 @@ let set t tag x =
 
 let get t = Dict.find t.storage
 let has t = Dict.mem t.storage
+let del t tag = with_storage t @@ Dict.remove t.storage tag
 
 let subst_of_string = function
   | "section" | "section_name" -> Some (`section `name)
@@ -442,7 +443,12 @@ module Pass = struct
     DList.find passes ~f:(fun p -> p.name = name)
 
   exception Failed of error [@@deriving sexp]
-  let fail error = raise (Failed error)
+
+  let fail = function
+    | Unsat_dep _ as err -> raise (Failed err)
+    | Runtime_error (pass,exn) ->
+      let backtrace = Caml.Printexc.get_backtrace () in
+      raise (Failed (Runtime_error (pass, Exn.Reraised (backtrace, exn))))
 
   let is_evaled pass proj =
     List.exists proj.passes ~f:(fun name -> name = pass.name)

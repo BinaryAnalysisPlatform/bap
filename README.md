@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![docs](https://img.shields.io/badge/doc-1.0.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.0.0/argot_index.html)
+[![docs](https://img.shields.io/badge/doc-1.2.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.2.0/argot_index.html)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.1.0-green.svg)](https://pypi.python.org/pypi/bap/)
@@ -11,13 +11,33 @@ Binary Analysis Platform is a framework for writing program analysis
 tools, that target binary files. The framework consists of a plethora
 of libraries, plugins, and frontends. The libraries provide code
 reusability, the plugins facilitate extensibility, and the frontends
-serve as entry points.
+serve as entry points. The Framework is written in OCaml, but bindings
+to [C](https://github.com/BinaryAnalysisPlatform/bap-bindings),
+[Python](https://github.com/BinaryAnalysisPlatform/bap-python) and
+[Rust](https://github.com/maurer/bap-rust) languages are available.
+The C-bindings expose the majority part of the interface.
 
 # <a name="Installation"></a>Installation
 
-We use the OPAM package manager to handle installation. After you've
-successfully [installed](https://opam.ocaml.org/doc/Install.html)
-OPAM, do the following:
+## Binary
+
+We provide binary packages packed for Debian and Red Hat
+derivatives. For other distributions we provide tgz archives. To
+install bap on a Debian derivative:
+
+```bash
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.2.0/{bap,libbap,libbap-dev}_1.2.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_1.2.0.deb
+```
+
+## From sources
+
+The binary release doesn't contain OCaml runtime, and is suitable only
+if you are not going to extend BAP using OCaml programming language
+(the recommended way). We recommend to use the OPAM package manager to
+install BAP and a development environment.  After you've successfully
+[installed](https://opam.ocaml.org/doc/Install.html) OPAM, do the
+following:
 
 ```bash
 opam init --comp=4.02.3    # install the compiler
@@ -173,6 +193,52 @@ count.run(proj.program)
 print("ratio = {0}/{1} = {2}".format(count.jmps, count.total,
                                      count.jmps/float(count.total)))
 ```
+
+## C
+
+The same program in C will take too much space, and will not fit into
+the README format, but this is an example, of a simple diassembler in C:
+
+```c
+#include <stdio.h>
+#include <bap.h>
+
+char data[] = "\x48\x8d\x00";
+
+int main(int argc, const char **argv) {
+    bap_init(argc, argv);
+
+    if (bap_load_plugins() < 0) {
+        fprintf(stderr, "Failed to load BAP plugins\n");
+        return 1;
+    }
+
+    bap_disasm_basic_t *dis = bap_disasm_basic_create(BAP_ARCH_X86_64);
+
+    if (!dis) {
+        fprintf(stderr, "can't create a disassembler: %s\n", bap_error_get());
+    }
+
+    const int len = sizeof(data) - 1;
+    bap_code_t *code = bap_disasm_basic_next(dis, data, sizeof(data) - 1, 0x80000);
+    if (!code) {
+        fprintf(stderr, "can't disassemble instruction: %s\n", bap_error_get());
+        return 1;
+    }
+    bap_code_print(code);
+    bap_release(code);
+    bap_disasm_basic_close(dis);
+    return 0;
+}
+```
+
+The example can be compiled with the following command (assuming that
+the code is in the `example.c` file):
+
+```
+make LDLIBS=-lbap example
+```
+
 
 
 ## baptop

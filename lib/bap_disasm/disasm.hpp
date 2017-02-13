@@ -68,7 +68,6 @@ struct reg {
 
 typedef int64_t imm;
 typedef double  fmm;
-class insn;
 
 
 struct operand {
