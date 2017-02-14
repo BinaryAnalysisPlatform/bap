@@ -80,15 +80,15 @@ let main proj =
   | None -> invalid_arg "run: no main function"
   | Some main -> match Main.run (interp#eval sub_t main) init with
     | (Ok (),ctxt) ->
-      info "evaluation finished after %d steps at term: %a\n"
+      info "evaluation finished after %d steps at term: %a"
         (List.length ctxt#trace) Tid.pp ctxt#current;
       let result = Var.create "main_result" reg32_t in
       let () = match ctxt#lookup result with
-        | None -> warning "result is unknown\n";
+        | None -> warning "result is unknown";
         | Some r -> match Bil.Result.value r with
-          | Bil.Bot -> warning "result is undefined\n";
-          | Bil.Imm w -> info "result is %a\n" Word.pp w;
-          | Bil.Mem _ -> warning "result is unsound\n" in
+          | Bil.Bot -> warning "result is undefined";
+          | Bil.Imm w -> info "result is %a" Word.pp w;
+          | Bil.Mem _ -> warning "result is unsound" in
       debug "CPU State:@\n%a@\n" pp_bindings ctxt;
       debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
       ctxt#project;

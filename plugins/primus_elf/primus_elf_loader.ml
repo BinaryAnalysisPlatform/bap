@@ -73,10 +73,10 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
 
   let save_args array ptr =
     Seq.of_array array |>
-    Machine.Seq.fold ~init:(ptr,[]) ~f:(fun (ptr,ptrs) str ->
-        save_string str ptr >>=
+    Machine.Seq.fold ~init:(ptr,[]) ~f:(fun (ptr',ptrs) str ->
+        save_string str ptr' >>=
         save_string "\x00"  >>| fun ptr ->
-        (ptr,ptr::ptrs)) >>| fun (ptr,ptrs) ->
+        (ptr,ptr'::ptrs)) >>| fun (ptr,ptrs) ->
     ptr, List.rev ptrs
 
   let save_word endian word ptr =
@@ -90,7 +90,7 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     Machine.List.fold addrs ~init:ptr ~f:(fun ptr addr ->
         save_word endian addr ptr)
 
-  let setup_kernel_frame () =
+  let setup_main_frame () =
     target () >>= fun (module Target) ->
     arch () >>= fun arch ->
     Machine.get () >>= fun ctxt ->
@@ -104,14 +104,14 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     let frame_size args = bytes_in_array args in
     let table_size args = bytes_in_addr * (Array.length args + 1) in
     let total_size =
-      3 * bytes_in_addr +       (* argc, argv, envp *)
+      bytes_in_addr +    (* argc *)
       table_size ctxt#argv + table_size ctxt#envp +
       frame_size ctxt#argv + table_size ctxt#envp in
     let argv_frame_ptr =
-      3 * bytes_in_addr +
+      bytes_in_addr +
       table_size  ctxt#argv + table_size ctxt#envp |>
       Addr.nsucc sp in
-    let argv_table_ptr = 3 * bytes_in_addr |> Addr.nsucc sp in
+    let argv_table_ptr = Addr.nsucc sp bytes_in_addr in
     Memory.allocate
       ~readonly:false
       ~executable:false
@@ -129,14 +129,12 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     save_string null end_of_envp_table >>=
     fun _argv_frame_ptr ->
     assert (argv_frame_ptr = _argv_frame_ptr);
-    save_word endian argc sp >>=
-    save_word endian argv_table_ptr >>=
-    save_word endian envp_table_ptr >>= fun _ ->
+    save_word endian argc sp >>= fun _ ->
     Machine.return ()
 
   let init () =
     setup_stack () >>= fun () ->
-    setup_kernel_frame () >>= fun () ->
+    setup_main_frame () >>= fun () ->
     load_segments () >>= fun () ->
     setup_registers ()
 end
