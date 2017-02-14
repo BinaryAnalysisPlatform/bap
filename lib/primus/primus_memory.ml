@@ -131,7 +131,6 @@ module Make(Machine : Machine) = struct
       segfault addr
     | Some {perms={readonly=true}} ->
       eprintf "Trying to write into a readonly memory\n";
-
       segfault addr
     | Some _ -> Machine.return {
         layers;

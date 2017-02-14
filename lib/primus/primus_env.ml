@@ -122,6 +122,4 @@ module Make(Machine : Machine) = struct
             let ctxt,res = ctxt#create_word w in
             Machine.put (ctxt#update var res) >>= fun () ->
             Machine.return res
-
-
 end

@@ -33,9 +33,13 @@ end
 type level = Level.t [@@deriving sexp_of]
 
 
-class t : ?main:sub term -> project ->
+class t :
+  ?envp: string array ->
+  ?argv: string array -> ?main:sub term -> project ->
   object('s)
     inherit Biri.context
+    method argv : string array
+    method envp : string array
     method project : project
     method with_project : project -> 's
     method current : tid

@@ -22,7 +22,5 @@
 (defmacro decr (x xs)
   (prog (decr x) (decr xs)))
 
-
-
 (defun compare (x y)
-  (if (< x y) -1 (if (> x y) 1) 0))
+  (if (< x y) -1 (if (> x y) 1 0)))

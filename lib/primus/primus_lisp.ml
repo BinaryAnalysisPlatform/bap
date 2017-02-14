@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_c.Std
 open Primus_types
 
 type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
@@ -212,13 +213,23 @@ module Resolve = struct
 
   type error += Failed of resolution
 
+
+  let has_name def name =
+    def.meta.name = name ||
+    match Univ_map.find def.meta.attrs External.t with
+    | None -> false
+    | Some names -> List.mem names name
+
+
   (* all definitions with the given name *)
   let stage1 defs name =
     List.filter_map defs ~f:(fun def ->
-        if def.meta.name <> name then None
-        else match Univ_map.find def.meta.attrs Contexts.t with
+        if has_name def name
+        then match Univ_map.find def.meta.attrs Contexts.t with
           | None -> Some (def,Contexts.empty)
-          | Some ctxts -> Some (def,ctxts))
+          | Some ctxts -> Some (def,ctxts)
+        else None)
+
 
   (* all definitions that satisfy the [ctxts] constraint *)
   let stage2 ctxts =
@@ -374,7 +385,14 @@ module Parse = struct
 
   let bop x e1 e2 = Bop (bop x, e1, e2)
 
-  let handle_error _ = assert false
+
+  let bad_form pos op got =
+    let open Sexp.Annotated in
+    invalid_argf {|File "%s", line %d \
+    parser error: invalid usage of form %s. \
+                   Don't know how to handle %s|}
+      pos.file pos.range.start_pos.line op (Sexp.to_string got) ()
+
 
   let keywords = [
     "if"; "let"; "neg"; "not"; "coerce"]
@@ -391,7 +409,7 @@ module Parse = struct
     | _,None -> List [Atom "error"; Atom "unresolved macro"]
     | _,Some (macro,bs) -> Macro.apply macro bs
 
-  let exp ctxts =
+  let exp pos ctxts =
     let rec exp = function
       | Atom x when is_word x -> word x
       | Atom x -> Var (var x)
@@ -405,7 +423,7 @@ module Parse = struct
       | List (Atom "prog" :: es) -> Seq (exps es,None)
       | List (Atom "while" :: c :: es) -> Rep (exp c, Seq (exps es,None))
       | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
-      | List (Atom op ::_) when is_keyword op -> handle_error exp
+      | List (Atom op ::_ ) as exp when is_keyword op -> bad_form pos op exp
       | List (op :: arg :: args) when is_bop op ->
         List.fold ~f:(bop op) ~init:(exp arg) (exps args)
       | List (Atom op :: exps) when is_macro op ->
@@ -458,7 +476,7 @@ module Parse = struct
         };
         code = {
           args=params p;
-          body = List.map ~f:(exp state.constraints) body
+          body = List.map ~f:(exp state.current state.constraints) body
         }
       }
   }
@@ -586,7 +604,6 @@ module Load = struct
   let load_sexps = Sexp.Annotated.load_sexps
 
   let file_of_feature paths feature =
-    eprintf "looking %s in %s\n" feature (String.concat paths ~sep:":");
     let name = feature ^ ".lisp" in
     List.find_map paths ~f:(fun path ->
         Sys.readdir path |> Array.find_map ~f:(fun file ->
@@ -657,6 +674,9 @@ let builtin
     ?(docs="undocumented") name code =
   {meta = {name;docs; hooks; attrs; loc=Builtin}; code}
 
+type error += Runtime_error of string
+type error += Abort of int
+
 module Builtins(Machine : Machine) = struct
   open Machine.Syntax
   let all f args = Machine.return (Word.of_bool (List.exists args ~f))
@@ -673,20 +693,32 @@ module Builtins(Machine : Machine) = struct
   let negone = Word.ones 8
   let zero = Word.zero 8
 
-  let exit _ =
-    Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
-    Machine.return Word.b0
+  let exit = function
+    | [rval] ->
+      Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
+      Machine.return rval
+    | _ -> Machine.fail (Runtime_error "exit requires only one argument")
 
-  let abort = exit
+  let machine_int x =
+    Machine.get () >>| width_of_ctxt >>| fun width -> Word.of_int ~width x
 
+  let output_char = function
+    | [] | [_] -> machine_int 0
+    | fd :: words ->
+      if Word.is_zero fd
+      then
+        List.iter words ~f:(fun w ->
+            Word.enum_chars w LittleEndian |>
+            Seq.hd |> Option.iter ~f:(print_char));
+      machine_int (List.length words)
 
   let defs () = [
       builtin "is-zero" is_zero;
       builtin "is-positive" is_positive;
       builtin "is-negative" is_negative;
       builtin "word-width"  word_width;
-      builtin "abort" abort;
-      builtin "exit" exit;
+      builtin "output-char" output_char;
+      builtin "exit-with" exit;
   ]
 end
 
@@ -707,8 +739,6 @@ let state = Primus_state.declare ~inspect
          contexts = Contexts.of_project ctxt#project;
        })
 
-type error += Runtime_error of string
-type error += Abort of int
 
 
 let bil_of_lisp op =
@@ -732,9 +762,6 @@ let bil_of_lisp op =
   | Eq   -> binop eq
   | Le   -> binop le
 
-
-
-
 module Machine(Machine : Machine) = struct
   open Machine.Syntax
 
@@ -746,6 +773,9 @@ module Machine(Machine : Machine) = struct
   let putenv env =
     Machine.Local.update state ~f:(fun s -> {s with env})
 
+  let failf fmt = Format.ksprintf
+      (fun msg -> fun () -> Machine.fail (Runtime_error msg)) fmt
+
   let rec env_update xs x ~f = match xs with
     | [] -> []
     | (x',w) :: xs when x' = x -> (x,f w) :: xs
@@ -753,7 +783,7 @@ module Machine(Machine : Machine) = struct
 
   let env_replace xs x w = env_update xs x ~f:(fun _ -> w)
 
-  module Expi = Expi.Make(Machine)
+  module Biri = Biri.Make(Machine)
 
   let word width value typ =
     let width = match typ with
@@ -769,6 +799,39 @@ module Machine(Machine : Machine) = struct
 
   let width () = Machine.Local.get state >>| fun {width} -> width
 
+
+  let eval_sub biri = function
+    | [] -> failf "invoke-subroutine: requires at least one argument" ()
+    | sub_addr :: sub_args ->
+      Machine.get () >>= fun ctxt ->
+      Term.enum sub_t ctxt#program |>
+      Seq.find ~f:(fun sub -> match Term.get_attr sub address with
+          | None -> false
+          | Some addr -> Word.(addr = sub_addr)) |> function
+      | None ->
+        failf "invoke-subroutine: no function for %a" Addr.pps
+          sub_addr ()
+      | Some sub ->
+        match Term.get_attr sub C.proto with
+        | None ->
+          failf "invoke-subroutine: can't invoke subroutine %s - %s"
+            (Sub.name sub) "type information is not available" ()
+        | Some {C.Type.Proto.args} ->
+          (* todo: code duplication from the interpreter *)
+          Seq.zip (Term.enum arg_t sub) (Seq.of_list sub_args) |>
+          Machine.Seq.iter ~f:(fun (arg,value) ->
+              match Arg.rhs arg with
+              | Bil.Var v ->
+                biri#eval_int value >>=
+                biri#update v
+              | exp ->
+                failf "%s: can't pass argument %s - %s %a"
+                  "invoke-subroutine" (Arg.lhs arg |> Var.name)
+                  "unsupported ABI" Exp.pps exp ()) >>= fun () ->
+          Linker.exec (`addr sub_addr) >>= fun () ->
+          biri#eval_sub sub >>= fun () ->
+          Machine.return Word.b1
+
   let eval_builtin name args =
     Machine.Local.get state >>= fun {contexts; builtins=(module Make)} ->
     let module Builtins = Make(Machine) in
@@ -782,7 +845,8 @@ module Machine(Machine : Machine) = struct
     let arch = Project.arch ctxt#project in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.defs name arch args with
-    | {Resolve.stage1=[]},None -> eval_builtin name args
+    | {Resolve.stage1=[]},None ->
+      eval_builtin name args
     | resolution,None -> Machine.fail (Resolve.Failed resolution)
     | _,Some (fn,bs) ->
       Machine.Local.put state {
@@ -792,7 +856,7 @@ module Machine(Machine : Machine) = struct
 
   and eval_body biri body = eval_exp biri (Seq (body,None))
 
-  and eval_exp biri  exp : (Word.t,#Context.t) Machine.t =
+  and eval_exp biri exp : (Word.t,#Context.t) Machine.t =
     let int v t = width () >>| fun width -> word width v t in
     let rec eval = function
       | Int {value;typ} -> int value typ
@@ -820,7 +884,7 @@ module Machine(Machine : Machine) = struct
       let eval_to_int e =
         eval e >>| Word.to_int >>= function
         | Ok n -> Machine.return n
-        | Error _ -> Machine.fail (Runtime_error "expected smallint") in
+        | Error _ -> failf "expected smallint" () in
       eval_to_int lo >>= fun lo ->
       eval_to_int hi >>= fun hi ->
       eval w >>= fun w ->
@@ -835,7 +899,9 @@ module Machine(Machine : Machine) = struct
       | Some w -> Machine.return w
       | None -> cast (biri#lookup (var width v))
     and app n args =
-      Machine.List.map args ~f:eval >>= eval_lisp biri n
+      Machine.List.map args ~f:eval >>= fun args -> match n with
+      | "invoke-subroutine" -> eval_sub biri args
+      | n -> eval_lisp biri n args
     and seq es short =
      let rec loop f = function
       | [] -> Machine.return Word.b0
@@ -867,15 +933,16 @@ module Machine(Machine : Machine) = struct
       cast @@ biri#eval_exp Bil.(UnOp (op,Int e)) in
     eval exp
 
-  let run (biri : #Context.t #Expi.t) name args =
-    eval_lisp biri name args
-
   let is_bound name =
     Machine.Local.get state >>| fun {defs} ->
     List.exists defs ~f:(fun def ->
         match Univ_map.find def.meta.attrs External.t with
         | Some names -> List.mem names name
         | None -> false)
+
+  let run (biri : #Context.t #Biri.t) name args =
+    eval_lisp biri name args
+
 
   let load_feature name =
     Machine.Local.update state ~f:(fun s ->

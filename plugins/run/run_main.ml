@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 open Monads.Std
-
+include Self()
 open Format
 
 type value =
@@ -71,31 +71,30 @@ let pp_binding ppf (v,r) =
     | Bil.Mem m -> "<mem>"
 let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 
-
 let main proj =
   let prog = Project.program proj in
-  let init = new Context.t proj in
+  let init = new Context.t ~argv:[|"name"; "hello"; "world"|] proj in
   let interp = new Interpreter.t in
   Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
-      Sub.name sub = "main") |> function
+      Sub.name sub = "_start") |> function
   | None -> invalid_arg "run: no main function"
   | Some main -> match Main.run (interp#eval sub_t main) init with
     | (Ok (),ctxt) ->
-      printf "evaluation finished after %d steps at term: %a\n"
+      info "evaluation finished after %d steps at term: %a\n"
         (List.length ctxt#trace) Tid.pp ctxt#current;
       let result = Var.create "main_result" reg32_t in
       let () = match ctxt#lookup result with
-        | None -> printf "result is unknown\n";
+        | None -> warning "result is unknown\n";
         | Some r -> match Bil.Result.value r with
-          | Bil.Bot -> printf "result is undefined\n";
-          | Bil.Imm w -> printf "result is %a\n" Word.pp w;
-          | Bil.Mem _ -> printf "result is unsound\n" in
-      printf "CPU State:@\n%a@\n" pp_bindings ctxt;
-      printf "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
+          | Bil.Bot -> warning "result is undefined\n";
+          | Bil.Imm w -> info "result is %a\n" Word.pp w;
+          | Bil.Mem _ -> warning "result is unsound\n" in
+      debug "CPU State:@\n%a@\n" pp_bindings ctxt;
+      debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
       ctxt#project;
     | (Error err,ctxt) ->
-      printf "program failed with %s\n" (Error.to_string err);
-      printf "Backtrace:@\n%a@\n" pp_backtrace ctxt;
+      debug "program failed with %s\n" (Error.to_string err);
+      debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
       ctxt#project
 
 let () = Project.register_pass main

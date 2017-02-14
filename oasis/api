@@ -19,4 +19,4 @@ Library api_plugin
   BuildDepends:     bap, bap-api, cmdliner, fileutils
   InternalModules:  Api_main, Api_config
   XMETADescription: add parameters to subroutines based on known API
-  DataFiles:        api/c/posix ($datadir/bap-api/c)
+  DataFiles:        api/c/*.h ($datadir/bap-api/c)

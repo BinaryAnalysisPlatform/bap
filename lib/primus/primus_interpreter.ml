@@ -131,7 +131,13 @@ module Make (Machine : Machine) = struct
       ~program:(make_observation top_entered)
       ~sub:(make_observation sub_entered)
 
-  type error += Runtime_error
+  type error += Runtime_error of string
+
+  let () =
+    Primus_error.add_printer (function
+        | Runtime_error msg ->
+          Some (sprintf "Primus runtime error: %s" msg)
+        | _ -> None)
 
   class ['e] t  =
     object(self)
@@ -173,7 +179,10 @@ module Make (Machine : Machine) = struct
       method! lookup var =
         make_observation variable_will_be_looked_up var >>= fun () ->
         match Var.typ var with
-        | Type.Mem _ -> super#lookup var
+        | Type.Mem _ ->
+          Machine.get () >>= fun ctxt ->
+          let (ctxt,v) = ctxt#create_storage self#empty in
+          Machine.put ctxt >>= fun () -> Machine.return v
         | _ ->
           Env.get var >>= fun r ->
           make_observation variable_was_read (var,r) >>= fun () ->
@@ -200,7 +209,7 @@ module Make (Machine : Machine) = struct
         method save _ _ = self
       end
 
-      method private handle_indirect_call exp =
+      method! eval_indirect exp =
         super#eval_exp exp >>| Bil.Result.value >>= function
         | Bil.Imm dst -> Linker.exec (`addr dst)
         | _ -> Machine.return ()
@@ -212,9 +221,14 @@ module Make (Machine : Machine) = struct
           self#update v r
         | _ -> Machine.return ()
 
+      method private set_next_block call =
+        match Call.return  call with
+        | None -> Machine.return ()
+        | Some dst -> super#eval_ret dst
+
       method! eval_call call =
         match Call.target call with
-        | Indirect exp -> self#handle_indirect_call exp
+        | Indirect exp -> self#eval_indirect exp
         | Direct tid ->
           make_observation calling (`tid tid) >>= fun () ->
           Machine.get () >>= fun ctxt ->
@@ -223,9 +237,12 @@ module Make (Machine : Machine) = struct
           | Some sub ->
             let name = Sub.name sub in
             Lisp_machine.is_bound name >>= function
-            | false -> Linker.exec (`symbol name)
+            | false ->
+              Linker.exec (`symbol name)
             | true -> match Term.get_attr sub C.proto with
-              | None -> Linker.exec (`symbol name)
+              | None ->
+                (* todo: issue a warning or failure *)
+                Linker.exec (`symbol name)
               | Some proto ->
                 let args = proto.C.Type.Proto.args in
                 let arity = List.length args in
@@ -235,7 +252,9 @@ module Make (Machine : Machine) = struct
                     self#lookup (Arg.lhs arg) >>= fun r ->
                     match Bil.Result.value r with
                     | Bil.Imm w -> Machine.return w
-                    | v -> Machine.fail Runtime_error) >>= fun bs ->
+                    | v ->
+                      Machine.fail (Runtime_error "unbound arg")) >>= fun bs ->
+                self#set_next_block call >>= fun () ->
                 Lisp_machine.run self name (Seq.to_list bs) >>= fun r ->
                 match proto with
                 | {C.Type.Proto.return=`Void} ->
@@ -244,10 +263,7 @@ module Make (Machine : Machine) = struct
                   | None ->
                     (* issue a warning? or assertion? *)
                     Machine.return ()
-                  | Some arg -> self#eval_lisp_return arg r
-
-
-
-
+                  | Some arg ->
+                    self#eval_lisp_return arg r
     end
 end

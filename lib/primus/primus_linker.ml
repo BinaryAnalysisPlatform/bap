@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 open Primus_types
 
 type name = [
@@ -28,7 +29,14 @@ let empty = {
   addrs = Addr.Map.empty;
 }
 
-let code_of_sub sub : code =
+
+
+let () = Primus_error.add_printer (function
+    | Unbound_name name ->
+      Some (asprintf "Linker: unbound %a" Sexp.pp (sexp_of_name name))
+    | _ -> None)
+
+let code_of_term sub : code =
   let module Code(Machine : Machine) = struct
     let exec () =
       Machine.update @@ fun ctxt ->
@@ -36,16 +44,24 @@ let code_of_sub sub : code =
   end in
   (module Code)
 
+let link_code t s =
+  let tid = Term.tid t in
+  { s with
+    codes = Map.add s.codes ~key:tid ~data:(code_of_term t);
+    addrs = match Term.get_attr t address with
+      | None -> s.addrs
+      | Some addr -> Map.add s.addrs ~key:addr ~data:tid
+  }
+
 let init_state program =
-  Term.enum sub_t program |> Seq.fold ~init:empty ~f:(fun s sub ->
-      let tid = Term.tid sub in
-      {
-        codes = Map.add s.codes ~key:tid ~data:(code_of_sub sub);
-        names = Map.add s.names ~key:(Sub.name sub) ~data:tid;
-        addrs = match Term.get_attr sub address with
-          | None -> s.addrs
-          | Some addr -> Map.add s.addrs ~key:addr ~data:tid
-      })
+  (object
+    inherit [t] Term.visitor
+    method! enter_blk = link_code
+    method! enter_sub t s =
+      let s = link_code t s in
+      {s with
+       names = Map.add s.names ~key:(Sub.name t) ~data:(Term.tid t)}
+  end)#run program empty
 
 let find k1 m1 m2 = match Map.find m1 k1 with
   | None -> None
@@ -103,18 +119,4 @@ module Make(Machine : Machine) = struct
     | `symbol name -> Some name
     | `addr addr -> find_by_addr c addr
     | `tid  tid  -> find_by_tid c tid
-end
-
-module Unit(M : Machine) = struct
-  let exec () = M.return ()
-end
-
-
-module Test(Machine : Machine) = struct
-  module Linker = Make(Machine)
-
-  let tid = Tid.create ()
-  let _ =
-    Linker.link tid
-      ~code:(module Unit)
 end

@@ -111,12 +111,16 @@ type level = Level.t
 let sexp_of_level = Level.sexp_of_level
 open Level
 
-class t ?main proj =
+class t ?(envp=[| |]) ?(argv=[| |]) ?main proj =
   let prog = Project.program proj in
   object(self : 's)
     inherit Biri.context ?main prog
     val level = Top {me=prog; up=Nil}
     val proj  = proj
+    val argv : string array = argv
+    val envp : string array = envp
+    method argv = argv
+    method envp = envp
     method project = proj
     method with_project p = {< proj = p >}
     method level = level
