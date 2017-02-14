@@ -5,28 +5,24 @@ open Monads.Std
 include Self()
 open Format
 
-type value =
-  | Data of string
-  | Word of Generator.t
-
+type value = Generator.t
 
 type parameters = {
- argv  : value list;
- envp  : (string * value) list;
+ argv  : string list;
+ envp  : (string * string) list;
  entry : string option;
  memory : (addr * value) list;
- stack  : value list;
  variables : (string * value) list;
 }
 
 
-module Parameters = struct
+module Param = struct
   open Sexp
   type t = parameters
 
   let int = int_of_string
 
-  let parse_generator = function
+  let parse_value = function
     | List [Atom x; Atom y; Atom z] ->
       Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
     | List [Atom x; Atom y] ->
@@ -35,11 +31,23 @@ module Parameters = struct
     | _ -> invalid_arg "Parse error:
      expected 'value := const | (min max) | (min max seed)'"
 
-  let int_literal x = try ignore (int x); true with exn -> false
+  open Config;;
 
-  let parse_value = function
-    | Atom x when not (int_literal x) -> Data x
-    | gen -> Word (parse_generator gen)
+  manpage [
+    `S "DESCRIPTION";
+    `P "Run program in the Primus emulator. ";
+  ];;
+
+  let argv = param (array string)  "argv"
+      ~doc:"Program command line arguments";;
+
+  let envp = param (array string) "env"
+      ~doc:"Program environemt as a list of VAR=VAL pairs";;
+
+  let entry = param (some string) "entry-point"
+      ~doc: "When specified, then start the execution from $(docv),
+      otherwise the execution will be started from a default entry point";;
+
 end
 
 module Mach = Machine.Make(Monad.Ident)
@@ -71,9 +79,10 @@ let pp_binding ppf (v,r) =
     | Bil.Mem m -> "<mem>"
 let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 
-let main proj =
+let main {Config.get=(!)} proj =
+  let open Param in
   let prog = Project.program proj in
-  let init = new Context.t ~argv:[|"name"; "hello"; "world"|] proj in
+  let init = new Context.t ~envp:!envp ~argv:!argv proj in
   let interp = new Interpreter.t in
   Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
       Sub.name sub = "_start") |> function
@@ -97,4 +106,6 @@ let main proj =
       debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
       ctxt#project
 
-let () = Project.register_pass main
+let () =
+  Config.when_ready (fun conf ->
+      Project.register_pass (main conf))
