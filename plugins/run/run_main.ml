@@ -84,27 +84,37 @@ let main {Config.get=(!)} proj =
   let prog = Project.program proj in
   let init = new Context.t ~envp:!envp ~argv:!argv proj in
   let interp = new Interpreter.t in
-  Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
-      Sub.name sub = "_start") |> function
-  | None -> invalid_arg "run: no main function"
-  | Some main -> match Main.run (interp#eval sub_t main) init with
-    | (Ok (),ctxt) ->
-      info "evaluation finished after %d steps at term: %a"
-        (List.length ctxt#trace) Tid.pp ctxt#current;
-      let result = Var.create "main_result" reg32_t in
-      let () = match ctxt#lookup result with
-        | None -> warning "result is unknown";
-        | Some r -> match Bil.Result.value r with
-          | Bil.Bot -> warning "result is undefined";
-          | Bil.Imm w -> info "result is %a" Word.pp w;
-          | Bil.Mem _ -> warning "result is unsound" in
-      debug "CPU State:@\n%a@\n" pp_bindings ctxt;
-      debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
-      ctxt#project;
-    | (Error err,ctxt) ->
-      debug "program failed with %s\n" (Error.to_string err);
-      debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
-      ctxt#project
+  let subs = Term.enum sub_t prog in
+  let is_entry_point = match !entry with
+    | Some name -> fun sub -> Sub.name sub = name
+    | None -> fun sub -> Term.has_attr sub Sub.entry_point in
+  let entry = match Seq.find subs ~f:is_entry_point with
+    | Some entry -> entry
+    | None when Option.is_some !entry ->
+      invalid_arg "can't find the specified entry point"
+    | None ->
+      Seq.find subs ~f:(fun sub -> not (Term.has_attr sub Sub.stub)) |>
+      function
+      | Some entry -> entry
+      | None -> invalid_arg "unable to find a suitable entry point" in
+  match Main.run (interp#eval sub_t entry) init with
+  | (Ok (),ctxt) ->
+    info "evaluation finished after %d steps at term: %a"
+      (List.length ctxt#trace) Tid.pp ctxt#current;
+    let result = Var.create "main_result" reg32_t in
+    let () = match ctxt#lookup result with
+      | None -> warning "result is unknown";
+      | Some r -> match Bil.Result.value r with
+        | Bil.Bot -> warning "result is undefined";
+        | Bil.Imm w -> info "result is %a" Word.pp w;
+        | Bil.Mem _ -> warning "result is unsound" in
+    debug "CPU State:@\n%a@\n" pp_bindings ctxt;
+    debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
+    ctxt#project;
+  | (Error err,ctxt) ->
+    debug "program failed with %s\n" (Error.to_string err);
+    debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
+    ctxt#project
 
 let () =
   Config.when_ready (fun conf ->

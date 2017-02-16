@@ -1249,6 +1249,10 @@ module Ir_sub = struct
       ~name:"returns-twice"
       ~uuid:"40166004-ea98-431b-81b0-4e74a0b681ee"
 
+  let entry_point = Bap_value.Tag.register (module Unit)
+      ~name:"entry-point"
+      ~uuid:"d1eaff96-4ed4-4405-9305-63508440ccc1"
+
   module Builder = struct
     type t =
       tid option * arg term vector * blk term vector * string option

@@ -52,12 +52,13 @@ module Input = struct
     data : value memmap;
     code : value memmap;
     file : string;
+    finish : t -> t;
   }
 
   type t = unit -> result
 
-  let create arch file ~code ~data () = {
-    arch; file; code; data
+  let create ?(finish=ident)arch file ~code ~data () = {
+    arch; file; code; data; finish;
   }
 
   let loaders = String.Table.create ()
@@ -70,18 +71,27 @@ module Input = struct
 
   let filter_code mem = Memmap.filter mem ~f:is_code
 
-  let of_image file img = {
+  let of_image finish file img = {
     arch = Image.arch img;
     data = Image.memory img;
     code = filter_code (Image.memory img);
     file;
+    finish;
   }
 
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     Signal.send Info.got_img img;
-    of_image filename img
+    let finish proj = {
+      proj with
+      program = Term.map sub_t proj.program ~f:(fun sub ->
+          match Term.get_attr sub address with
+          | Some a when Addr.equal a (Image.entry_point img) ->
+            Term.set_attr sub Sub.entry_point ()
+          | _ -> sub)
+    } in
+    of_image finish filename img
 
   let from_image ?loader filename () =
     of_image ?loader filename |> ok_exn
@@ -102,7 +112,7 @@ module Input = struct
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
     let data = Memmap.add Memmap.empty mem section in
-    {arch; data; code = data; file = filename}
+    {arch; data; code = data; file = filename; finish = ident}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
@@ -210,7 +220,7 @@ let create_exn
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let {Input.arch; data; code; file} = read () in
+  let {Input.arch; data; code; file; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
@@ -257,7 +267,7 @@ let create_exn
        MVar.is_updated mbrancher ||
        MVar.is_updated msymbolizer ||
        MVar.is_updated mreconstructor then loop ()
-    else {
+    else finish {
       disasm = Disasm.create g;
       program = MVar.read program;
       symbols = MVar.read symtab;

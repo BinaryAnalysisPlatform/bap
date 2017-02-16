@@ -5924,6 +5924,9 @@ module Std : sig
     (** A subroutine doesn't throw exceptions  *)
     val nothrow : unit tag
 
+    (** a subroutine is the binary entry point *)
+    val entry_point : unit tag
+
     (** Subroutine builder *)
     module Builder : sig
       type t
@@ -6446,7 +6449,6 @@ module Std : sig
     (** Factory of data processors.
         Registry of sources of information. *)
     module Factory : sig
-
       (** Factory interface  *)
       module type S = sig
         type t
@@ -7116,8 +7118,14 @@ module Std : sig
 
       (** [create arch filename ~code ~data] creates an input from a
           file, using two memory maps. The [code] memmap spans the code in
-          the file, and [data] spans the data. *)
-      val create : arch -> string -> code:value memmap -> data: value memmap -> t
+          the file, and [data] spans the data. An optional [finish]
+          function can be used to propagate to the project any
+          additional information that is available to the loader. It
+          defaults to [ident].
+*)
+      val create :
+        ?finish:(project -> project) ->
+        arch -> string -> code:value memmap -> data: value memmap -> t
 
 
       (** [register_loader name load] register a loader under provided
