@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_c_type
-
+open Monads.Std
 
 module Attrs = Bap_c_term_attributes
 
@@ -93,11 +93,64 @@ let create_arg i addr_size intent name t (data,exp) sub =
   let arg = Term.set_attr arg Attrs.t t in
   arg
 
+
+
+let find_by_name prog name =
+  Term.enum sub_t prog |> Seq.find ~f:(fun sub -> Sub.name sub = name)
+
+let find_first_caller prog tid =
+  Term.enum sub_t prog |> Seq.find ~f:(fun sub ->
+      Term.enum blk_t sub |> Seq.exists ~f:(fun blk ->
+          Term.enum jmp_t blk |> Seq.exists ~f:(fun jmp ->
+              match Jmp.kind jmp with
+              | Call c -> Call.target c = Direct tid
+              | _ -> false)))
+
+let proj_int = function Bil.Int x -> Some x | _ -> None
+
+let detect_main_address prog =
+  let open Monad.Option.Syntax in
+  find_by_name prog "__libc_start_main" >>= fun start ->
+  find_first_caller prog (Term.tid start) >>= fun caller ->
+  Term.first blk_t caller >>= fun entry ->
+  Term.first arg_t start >>= fun arg ->
+  let defs = Term.enum def_t ~rev:true entry in
+  match Arg.rhs arg with
+  | Bil.Var reg ->
+    Seq.find defs ~f:(fun def ->
+        Var.same (Def.lhs def) reg) >>| Def.rhs >>= proj_int
+  | Bil.Load (_,addr,_,_) ->
+    Seq.find_map defs ~f:(fun def -> match Def.rhs def with
+        | Bil.Store (m,a,e,_,_) when Exp.equal addr a -> Some e
+        | _ -> None) >>= proj_int
+  | _ -> None
+
+
+let stage2 stage1 = object
+  inherit Term.mapper
+  method! run prog =
+    let prog = stage1#run prog in
+    match find_by_name prog "main" with
+    | Some _ -> prog
+    | None -> match detect_main_address prog with
+      | None -> prog
+      | Some addr ->
+        Term.map sub_t prog ~f:(fun sub ->
+            match Term.get_attr sub address with
+            | Some a when Addr.equal addr a ->
+              Sub.with_name sub "main"
+            | _ -> sub)
+end
+
 let create_api_processor size abi : Bap_api.t =
   let addr_size = size#pointer in
-  let mapper gamma = object(self)
+  let stage1 gamma = object(self)
     inherit Term.mapper as super
     method! map_sub sub =
+      if Term.has_attr sub Attrs.proto then sub
+      else self#apply_proto sub
+
+    method private apply_proto sub =
       let name = Sub.name sub in
       match gamma name with
       | Some (`Function {Bap_c_type.Spec.t; attrs}) ->
@@ -106,6 +159,7 @@ let create_api_processor size abi : Bap_api.t =
         let sub = List.fold_right ~init:sub attrs ~f:Bap_c_attr.apply in
         abi.apply_attrs attrs sub
       | _ -> super#map_sub sub
+
     method private apply_args sub attrs t =
       match abi.insert_args sub attrs t with
       | None -> super#map_sub sub
@@ -128,7 +182,7 @@ let create_api_processor size abi : Bap_api.t =
   let module Api = struct
     let language = "c"
     type t = Term.mapper
-    let parse_exn get_api intfs =
+    let parse_exn get_api intfs : t =
       let gamma = String.Table.create () in
       List.iter intfs ~f:(fun api ->
           match get_api api with
@@ -139,7 +193,7 @@ let create_api_processor size abi : Bap_api.t =
             | Ok api ->
               List.iter api ~f:(fun (key,t) ->
                   Hashtbl.set gamma ~key ~data:t));
-      mapper (Hashtbl.find gamma)
+      stage2 (stage1 (Hashtbl.find gamma))
 
     let parse get ifs = Or_error.try_with (fun () -> parse_exn get ifs)
 
