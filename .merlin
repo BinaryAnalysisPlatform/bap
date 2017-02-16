@@ -1,5 +1,5 @@
 FLG -short-paths
-FLG -w +a-4-6-9-27-44-45-41-32-33-34
+FLG -w +a-4-6-9-27-44-45-41-32-33-34-48
 
 PKG core_kernel
 PKG fileutils
