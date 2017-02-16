@@ -27,6 +27,25 @@ let bool_t = Type.Imm 1
 let (^^) = Bitvector.concat
 let succ = Bitvector.succ
 
+let reduce_let exp =
+  let open Exp in
+  let rec (/) d x = match x with
+    | Load (x,y,e,s) -> Load (d/x, d/y, e, s)
+    | Store (x,y,z,e,s) -> Store (d/x, d/y, d/z, e, s)
+    | BinOp (b,x,y) -> BinOp (b, d/x, d/y)
+    | UnOp (o,x) -> UnOp (o, d/x)
+    | Int _ | Unknown _ as x -> x
+    | Cast (c,n,x) -> Cast (c,n,d/x)
+    | Ite (x,y,z) -> Ite (d/x, d/y, d/z)
+    | Extract (n,m,x) -> Extract (n,m, d/x)
+    | Concat (x,y) -> Concat (d/x, d/y)
+    | Let (v,x,y) -> ((v,d/x)::d)/y
+    | Var x as var -> match List.Assoc.find d x with
+      | None -> var
+      | Some exp -> exp in
+  []/exp
+
+
 module Make(SM : Monad.State.S2) = struct
   open SM
 
@@ -202,12 +221,7 @@ module Make(SM : Monad.State.S2) = struct
       with exn -> None
 
     method eval_let var u body =
-      self#eval_exp u >>= fun u ->
-      self#lookup var >>= fun w ->
-      self#update var u >>= fun () ->
-      self#eval_exp body >>= fun r ->
-      self#update var w >>= fun () ->
-      return r
+      self#eval_exp (reduce_let Exp.(Let (var,u,body)))
 
     method eval_unknown _ _ = self#bot
 
