@@ -433,6 +433,7 @@ module OptionT = struct
     include (M : Monad.S with type 'a t := 'a M.t)
   end)
 
+  include T1(Ident)
   include Make(Ident)
 end
 

@@ -37,6 +37,11 @@ module Ident : Monad with type 'a t = 'a
 
 module Option : sig
   include module type of Types.Option
+
+  include S with type 'a t = 'a option
+             and type 'a m = 'a
+             and type 'a e = 'a option
+
   module T1(M : T1) : sig
     type 'a t = 'a option M.t
     type 'a m = 'a M.t

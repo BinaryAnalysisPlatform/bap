@@ -385,6 +385,11 @@ module Std : sig
         include Fail.S2    with type ('a,'e) t := ('a,'e) t
                             and type 'a error = unit
       end
+
+      include S with type 'a t = 'a option
+                 and type 'a m = 'a
+                 and type 'a e = 'a option
+
       module T1(M : T1) : sig
         type 'a t = 'a option M.t
         type 'a m = 'a M.t
