@@ -9,9 +9,5 @@ module Std = struct
   module Memory = Primus_memory
   module Scheduler = Primus_scheduler
   module Observation = Primus_observation
-  module Lisp = struct
-    module Machine = struct
-      module Make = Primus_lisp.Machine
-    end
-  end
+  module Lisp = Primus_lisp
 end

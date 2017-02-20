@@ -26,13 +26,6 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load") in
 
   Config.when_ready (fun {Config.get=(!)} ->
-      let libs = Stdlib.library :: !libs in
+      let paths = Stdlib.library :: !libs in
       let features = "init" :: !features in
-      let module Main(Machine : Machine.S) = struct
-        open Machine.Syntax
-        module Lisp = Lisp.Machine.Make(Machine)
-        let init () =
-          Machine.List.iter libs ~f:Lisp.add_directory >>= fun () ->
-          Machine.List.iter features ~f:Lisp.load_feature
-      end in
-  Machine.add_component (module Main))
+      Lisp.init ~paths features)

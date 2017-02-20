@@ -12,8 +12,9 @@ type name = [
 type error += Unbound_name of name
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : unit -> (unit,#Context.t) Machine.t
+  val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
 end
+
 
 type code = (module Code)
 
@@ -37,12 +38,9 @@ let () = Primus_error.add_printer (function
     | _ -> None)
 
 let code_of_term sub : code =
-  let module Code(Machine : Machine) = struct
-    let exec () =
-      Machine.update @@ fun ctxt ->
-      ctxt#set_next (Some (Term.tid sub))
-  end in
-  (module Code)
+  (module functor (_ : Machine) -> struct
+    let exec self = self#eval_sub sub
+  end)
 
 let link_code t s =
   let tid = Term.tid t in
@@ -56,7 +54,6 @@ let link_code t s =
 let init_state program =
   (object
     inherit [t] Term.visitor
-    method! enter_blk = link_code
     method! enter_sub t s =
       let s = link_code t s in
       {s with
@@ -92,6 +89,8 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
   type ('a,'e) m = ('a,'e) Machine.t
 
+  module Biri = Biri.Make(Machine)
+
 
   let link ?addr ?name ~code tid =
     Machine.Local.update state ~f:(fun s ->
@@ -104,12 +103,12 @@ module Make(Machine : Machine) = struct
           | Some addr -> Map.add s.addrs  ~key:addr ~data:tid in
         {codes; names; addrs})
 
-  let exec name =
+  let exec name biri =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> Machine.fail (Unbound_name name)
     | Some (module Code) ->
       let module Code = Code(Machine) in
-      Code.exec ()
+      Code.exec (biri :> _ Biri.t)
 
   let is_linked name =
     Machine.Local.get state >>| code_of_name name >>| Option.is_some

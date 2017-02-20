@@ -213,16 +213,15 @@ module Resolve = struct
 
   type error += Failed of resolution
 
-
-  let has_name def name =
-    def.meta.name = name ||
+  let interns def name = def.meta.name = name
+  let externs def name =
     match Univ_map.find def.meta.attrs External.t with
     | None -> false
     | Some names -> List.mem names name
 
 
   (* all definitions with the given name *)
-  let stage1 defs name =
+  let stage1 has_name defs name =
     List.filter_map defs ~f:(fun def ->
         if has_name def name
         then match Univ_map.find def.meta.attrs Contexts.t with
@@ -252,6 +251,7 @@ module Resolve = struct
             Map.for_alli ctxts ~f:(fun ~key:cls ~data:ctxt ->
                 cls <> cls' || Context.(ctxt <= ctxt')))))
 
+  (* XXX: looks like I forgot to apply SFINAE to the resolution *)
   let typechecks arch (v,w) =
     let word_size = Size.in_bits (Arch.addr_size arch) in
     let size = Word.bitwidth w in
@@ -272,8 +272,8 @@ module Resolve = struct
 
   let locs = List.map ~f:(fun (def,_) -> def.meta.loc)
 
-  let run overload ctxts defs name =
-    let s1 = stage1 defs name in
+  let run namespace overload ctxts defs name =
+    let s1 = stage1 namespace defs name in
     let s2 = stage2 ctxts s1 in
     let s3 = stage3 s2 in
     let s4 = overload s3 in
@@ -287,15 +287,17 @@ module Resolve = struct
       stage4 = locs s4;
     }, result
 
+  let extern ctxts defs name arch args =
+    run externs (overload_defun arch args) ctxts defs name
 
   let defun ctxts defs name arch args =
-    run (overload_defun arch args) ctxts defs name
+    run interns (overload_defun arch args) ctxts defs name
 
   let macro ctxts defs name code =
-    run (overload_macro code) ctxts defs name
+    run interns (overload_macro code) ctxts defs name
 
   let builtin ctxts defs name =
-    run overload_builtin ctxts defs name
+    run interns overload_builtin ctxts defs name
 end
 
 module Type_annot = struct
@@ -611,6 +613,7 @@ module Load = struct
             then Some (Filename.concat path file)
             else None))
 
+  (* TODO: check for cycles *)
   let feature
       ?(features=String.Set.empty)
       ?(paths=[Filename.current_dir_name])
@@ -675,6 +678,7 @@ let builtin
   {meta = {name;docs; hooks; attrs; loc=Builtin}; code}
 
 type error += Runtime_error of string
+type error += Link_error of string
 type error += Abort of int
 
 module Builtins(Machine : Machine) = struct
@@ -739,8 +743,6 @@ let state = Primus_state.declare ~inspect
          contexts = Contexts.of_project ctxt#project;
        })
 
-
-
 let bil_of_lisp op =
   let open Bil in
   let binop op e1 e2 = BinOp (op,e1,e2) in
@@ -762,9 +764,14 @@ let bil_of_lisp op =
   | Eq   -> binop eq
   | Le   -> binop le
 
-module Machine(Machine : Machine) = struct
-  open Machine.Syntax
+module type Config = sig
+  val paths : string list
+  val features : string list
 
+end
+
+module Lisp(Machine : Machine) = struct
+  open Machine.Syntax
   module Linker = Primus_linker.Make(Machine)
 
   let getenv () =
@@ -773,8 +780,11 @@ module Machine(Machine : Machine) = struct
   let putenv env =
     Machine.Local.update state ~f:(fun s -> {s with env})
 
-  let failf fmt = Format.ksprintf
-      (fun msg -> fun () -> Machine.fail (Runtime_error msg)) fmt
+  let error kind = Format.ksprintf
+      (fun msg -> fun () -> Machine.fail (Runtime_error msg))
+
+  let failf fmt = error (fun m -> Runtime_error m) fmt
+  let linkerf fmt = error (fun m -> Link_error m) fmt
 
   let rec env_update xs x ~f = match xs with
     | [] -> []
@@ -782,8 +792,6 @@ module Machine(Machine : Machine) = struct
     | xw :: xs -> xw :: env_update xs x ~f
 
   let env_replace xs x w = env_update xs x ~f:(fun _ -> w)
-
-  module Biri = Biri.Make(Machine)
 
   let word width value typ =
     let width = match typ with
@@ -817,7 +825,6 @@ module Machine(Machine : Machine) = struct
           failf "invoke-subroutine: can't invoke subroutine %s - %s"
             (Sub.name sub) "type information is not available" ()
         | Some {C.Type.Proto.args} ->
-          (* todo: code duplication from the interpreter *)
           Seq.zip (Term.enum arg_t sub) (Seq.of_list sub_args) |>
           Machine.Seq.iter ~f:(fun (arg,value) ->
               match Arg.rhs arg with
@@ -828,16 +835,14 @@ module Machine(Machine : Machine) = struct
                 failf "%s: can't pass argument %s - %s %a"
                   "invoke-subroutine" (Arg.lhs arg |> Var.name)
                   "unsupported ABI" Exp.pps exp ()) >>= fun () ->
-          Linker.exec (`addr sub_addr) >>= fun () ->
-          biri#eval_sub sub >>= fun () ->
+          Linker.exec (`addr sub_addr) biri >>= fun () ->
           Machine.return Word.b1
 
-  let eval_builtin name args =
+  let eval_builtin biri name args =
     Machine.Local.get state >>= fun {contexts; builtins=(module Make)} ->
     let module Builtins = Make(Machine) in
     match Resolve.builtin contexts (Builtins.defs ()) name with
-    | _,None -> Linker.exec (`symbol name) >>= fun () ->
-      Machine.return Word.b0
+    | _,None -> failf "unresolved name %s" name ()
     | _,Some (def,_) -> def.code args
 
   let rec eval_lisp biri name args =
@@ -845,13 +850,10 @@ module Machine(Machine : Machine) = struct
     let arch = Project.arch ctxt#project in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.defs name arch args with
-    | {Resolve.stage1=[]},None ->
-      eval_builtin name args
+    | {Resolve.stage1=[]},None -> eval_builtin biri name args
     | resolution,None -> Machine.fail (Resolve.Failed resolution)
     | _,Some (fn,bs) ->
-      Machine.Local.put state {
-        s with env = bs @ s.env
-      } >>= fun () ->
+      Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
       eval_body biri fn.code.body
 
   and eval_body biri body = eval_exp biri (Seq (body,None))
@@ -933,16 +935,105 @@ module Machine(Machine : Machine) = struct
       cast @@ biri#eval_exp Bil.(UnOp (op,Int e)) in
     eval exp
 
-  let is_bound name =
-    Machine.Local.get state >>| fun {defs} ->
-    List.exists defs ~f:(fun def ->
+end
+
+module Component(Config : Config)(Machine : Machine) = struct
+  open Machine.Syntax
+  module Linker = Primus_linker.Make(Machine)
+
+
+  let error kind = Format.ksprintf
+      (fun msg -> fun () -> Machine.fail (kind msg))
+
+  let failf fmt = error (fun m -> Runtime_error m) fmt
+  let linkerf fmt = error (fun m -> Link_error m) fmt
+
+
+  let collect_externals s =
+    List.fold ~init:String.Map.empty s.defs ~f:(fun toload def ->
         match Univ_map.find def.meta.attrs External.t with
-        | Some names -> List.mem names name
-        | None -> false)
+        | Some names ->
+          List.fold names ~init:toload ~f:(fun toload name ->
+              Map.add_multi toload ~key:name ~data:def)
+        | _ -> toload) |>
+    Map.to_sequence
 
-  let run (biri : #Context.t #Biri.t) name args =
-    eval_lisp biri name args
+ let link_feature (name,defs) =
+    Machine.get () >>= fun ctxt ->
+    Machine.Local.get state >>= fun s ->
+    let arch = Project.arch ctxt#project in
+    Term.enum sub_t ctxt#program |>
+    Seq.find ~f:(fun s -> Sub.name s = name) |> function
+    | None -> Machine.return ()
+    | Some sub -> match Term.get_attr sub C.proto with
+      | None ->
+        linkerf "can't link a Lisp function without a prototype" ()
+      | Some proto ->
+        let args = Term.enum arg_t sub |> Seq.to_list in
+        let args,ret = match proto.C.Type.Proto.return with
+          | `Void -> args,None
+          | _ -> List.(take args (List.length args - 1), last args) in
+        match Resolve.extern s.contexts defs name arch args with
+        | _,None ->
+          linkerf "linker error: wrong function type: %s" name ()
+        | _,Some (fn,bs) ->
+          let module Code(Machine : Machine) = struct
+            module Lisp = Lisp(Machine)
+            open Machine.Syntax
 
+            let failf ppf = Format.ksprintf
+                (fun msg -> fun () -> Machine.fail (Runtime_error msg)) ppf
+
+            let eval_args self =
+              Machine.List.map bs ~f:(fun (var,arg) ->
+                  self#eval_arg arg >>= fun () ->
+                  self#lookup (Arg.lhs arg) >>= fun r ->
+                  match Bil.Result.value r with
+                  | Bil.Imm w -> Machine.return (var,w)
+                  | Bil.Mem _ -> failf "type error, got mem as arg" ()
+                  | Bil.Bot ->
+                    failf "An argument %a has an undefined value"
+                      Arg.pps arg ()) >>= fun bs ->
+              Machine.Local.get state >>= fun s ->
+              Machine.Local.put state {s with env = bs @ s.env}
+
+            let eval_ret self r = match ret with
+              | None -> Machine.return ()
+              | Some v ->
+                self#eval_int r >>= fun r ->
+                self#update (Arg.lhs v) r
+
+            let where_to_return jmp = match Jmp.kind jmp with
+              | Goto _  | Ret _ -> None
+              | Int (_,ret) -> Some (Direct ret)
+              | Call call -> Call.return call
+
+            let return_to_caller self jmp = match where_to_return jmp with
+              | None -> Machine.return () (* or set_next None? *)
+              | Some target -> self#eval_ret target
+
+            let eval_finish self level =
+              let module Level = Context.Level in
+              match level with
+              | Level.Jmp {Level.me=jmp} -> return_to_caller self jmp
+              | level ->
+                invalid_argf "broken invariant - %s (%s)"
+                  "a call to lisp from unexpected level"
+                  (Level.to_string level) ()
+
+            let exec self =
+              Machine.get () >>= fun ctxt ->
+              let level = ctxt#level in
+              eval_args self >>= fun () ->
+              Lisp.eval_body self fn.code.body >>=
+              eval_ret self >>= fun () ->
+              eval_finish self level
+          end in
+          Linker.link ~code:(module Code) (Term.tid sub)
+
+  let link_features () =
+    Machine.Local.get state >>| collect_externals >>=
+    Machine.Seq.iter ~f:link_feature
 
   let load_feature name =
     Machine.Local.update state ~f:(fun s ->
@@ -952,10 +1043,26 @@ module Machine(Machine : Machine) = struct
             ~defs:s.defs s.contexts name in
         {s with modules; defs})
 
+  let load_features fs =
+    Machine.List.iter fs ~f:load_feature
 
   let add_directory path =
     Machine.Local.update state ~f:(fun s -> {
           s with paths = path :: s.paths
         })
 
+  let init () =
+    Machine.List.iter Config.paths ~f:add_directory >>= fun () ->
+    load_features Config.features >>=
+    link_features
+
 end
+
+
+let init ?(paths=[]) features  =
+  let module Config = struct
+    let paths = paths
+    let features = features
+  end in
+  let module Lisp = Component(Config) in
+  Primus_machine.add_component (module Lisp)

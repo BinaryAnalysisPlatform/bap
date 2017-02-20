@@ -26,4 +26,5 @@ Library primus
                    Primus_random,
                    Primus_scheduler,
                    Primus_sexp,
-                   Primus_state
+                   Primus_state,
+                   Primus_types

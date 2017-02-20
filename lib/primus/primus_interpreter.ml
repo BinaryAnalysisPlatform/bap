@@ -110,15 +110,24 @@ let sexp_of_state {pc} = Sexp.List [
 
 let sexp_of_state {pc} = [%sexp {pc : word = pc}]
 
+let state = Primus_machine.State.declare
+    ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
+    ~name:"interpreter"
+    (fun ctxt -> (object(self)
+        inherit [tid Addr.Map.t] Term.visitor
+        method! enter_blk term addrs =
+          match Term.get_attr term address with
+          | None -> addrs
+          | Some addr -> Map.add addrs ~key:addr ~data:(Term.tid term)
+      end)#run ctxt#program Addr.Map.empty)
+
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
-  module Expi = Expi.Make(Machine)
   module Biri = Biri.Make(Machine)
   module Memory = Primus_memory.Make(Machine)
   module Linker = Primus_linker.Make(Machine)
   module Env = Primus_env.Make(Machine)
-  module Lisp_machine = Primus_lisp.Machine(Machine)
 
   type 'a r = (Bil.result,'a) Machine.t
   type 'a u = (unit,'a) Machine.t
@@ -138,6 +147,9 @@ module Make (Machine : Machine) = struct
         | Runtime_error msg ->
           Some (sprintf "Primus runtime error: %s" msg)
         | _ -> None)
+
+  let failf fmt = Format.kasprintf (fun msg ->
+    fun () -> Machine.fail (Runtime_error msg)) fmt
 
   class ['e] t  =
     object(self)
@@ -209,61 +221,30 @@ module Make (Machine : Machine) = struct
         method save _ _ = self
       end
 
-      method! eval_indirect exp =
+      method private eval_jmp_target exp =
         super#eval_exp exp >>| Bil.Result.value >>= function
-        | Bil.Imm dst -> Linker.exec (`addr dst)
-        | _ -> Machine.return ()
+        | Bil.Bot -> failf "undefined jump destination" ()
+        | Bil.Mem _ -> failf "type error in a jump" ()
+        | Bil.Imm dst -> Machine.return dst
 
-      method private eval_lisp_return arg r =
-        match Arg.rhs arg with
-        | Bil.Var v ->
-          self#eval_int r >>= fun r ->
-          self#update v r
-        | _ -> Machine.return ()
+      method! eval_indirect exp =
+        let open Context.Level in
+        self#eval_jmp_target exp >>= fun dst ->
+        Machine.Local.get state >>= fun addrs ->
+        match Map.find addrs dst with
+        | Some tid -> self#eval_direct tid
+        | None -> super#eval_indirect exp
 
-      method private set_next_block call =
-        match Call.return  call with
-        | None -> Machine.return ()
-        | Some dst -> super#eval_ret dst
+      method private eval_indirect_call exp =
+        self#eval_jmp_target exp >>= fun dst ->
+        make_observation calling (`addr dst) >>= fun () ->
+        Linker.exec (`addr dst) self
 
       method! eval_call call =
         match Call.target call with
-        | Indirect exp -> self#eval_indirect exp
+        | Indirect exp -> self#eval_indirect_call exp
         | Direct tid ->
           make_observation calling (`tid tid) >>= fun () ->
-          Machine.get () >>= fun ctxt ->
-          match Term.find sub_t ctxt#program tid with
-          | None -> super#eval_call call
-          | Some sub ->
-            let name = Sub.name sub in
-            Lisp_machine.is_bound name >>= function
-            | false ->
-              Linker.exec (`symbol name)
-            | true -> match Term.get_attr sub C.proto with
-              | None ->
-                (* todo: issue a warning or failure *)
-                Linker.exec (`symbol name)
-              | Some proto ->
-                let args = proto.C.Type.Proto.args in
-                let arity = List.length args in
-                Seq.take (Term.enum arg_t sub) arity |>
-                Machine.Seq.map ~f:(fun arg ->
-                    self#eval_arg arg >>= fun () ->
-                    self#lookup (Arg.lhs arg) >>= fun r ->
-                    match Bil.Result.value r with
-                    | Bil.Imm w -> Machine.return w
-                    | v ->
-                      Machine.fail (Runtime_error "unbound arg")) >>= fun bs ->
-                self#set_next_block call >>= fun () ->
-                Lisp_machine.run self name (Seq.to_list bs) >>= fun r ->
-                match proto with
-                | {C.Type.Proto.return=`Void} ->
-                  Machine.return ()
-                | _ -> match Term.last arg_t sub with
-                  | None ->
-                    (* issue a warning? or assertion? *)
-                    Machine.return ()
-                  | Some arg ->
-                    self#eval_lisp_return arg r
+          Linker.exec (`tid tid) self
     end
 end
