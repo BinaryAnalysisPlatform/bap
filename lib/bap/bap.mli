@@ -4094,6 +4094,12 @@ module Std : sig
         symbols  : Symbol.t list;
         sections  : Section.t list;
       } [@@deriving bin_io, compare, fields, sexp]
+
+      (** Image tag. Can be used to store images in universal
+          dictionaries, for example if a project was reconstructed from an
+          image, then the image will be stored in the project
+          dictionary. *)
+      val t : t tag
     end
 
     (** the actual interface to be implemented  *)
@@ -4140,32 +4146,71 @@ module Std : sig
 
     (** {2 Attributes}  *)
 
+    (** [entry_point addr] is an address from which a kernel should start *)
     val entry_point : t -> addr
+    (** [filename image] a name of file from which an image was
+        loaded (if any) *)
     val filename : t -> string option
+
+    (** [arch image] code architecture   *)
     val arch: t -> arch
+
+    (** [addr_size image] same as [Arch.addr_size (Image.arch image)] *)
     val addr_size : t -> addr_size
+
+    (** [endian image] same as [Arch.endian (Image.arch image)]  *)
     val endian : t -> endian
 
-    val data : t -> Bigstring.t
 
     (** {2 Tables }  *)
+
+    (** [words image size] returns a mapping from addresses to words
+        of the specified [size]. For example, [Image.words img `r8]
+        returns all bytes. *)
     val words : t -> size -> word table
+
+    (** [segments image] returns a mapping from addresses to segments  *)
     val segments : t -> segment table
+
+    (** [symbols image] returns a mapping from addresses to symbols *)
     val symbols : t -> symbol table
 
     (** {2 Tags}  *)
+
+    (** tags a segment  *)
     val segment : segment tag
+
+    (** tags a symbol *)
     val symbol  : string tag
+
+    (** tags a section  *)
     val section : string tag
 
     (** returns memory, annotated with tags  *)
     val memory : t -> value memmap
 
     (** {2 Mappings }  *)
+
+
+    (** [memory_of_segment img seg] returns a memory region occupied
+        by the segment [seg].  *)
     val memory_of_segment  : t -> segment -> mem
-    (** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)
+
+    (** [memory_of_symbol sym] returns a sequence of memory regions
+        that belong to the [sym] symbol. The sequence is represented
+        as a pair, where the first element is the starting memory
+        region, and the second elemnt is (a possible empty) sequence
+        of the rest memory regions (in case if a symbol occupies a
+        non-contigious region of memory).*)
     val memory_of_symbol   : t -> symbol -> mem * mem seq
+
+
+    (** [symbols_of_segment img seg] all symbols that belong to the
+        [seg] segment.  *)
     val symbols_of_segment : t -> segment -> symbol seq
+
+
+    (** [segment_of_symbol image sym] a segment to which [sym] belongs.*)
     val segment_of_symbol  : t -> symbol -> segment
 
     (** Image Segments.
@@ -4174,9 +4219,19 @@ module Std : sig
     module Segment : sig
       type t = segment
       include Regular.S with type t := t
+
+      (** [name segment] a name associated with the segment (usually
+      meaningless). Guaranteed to be unique across other segments of
+      the same image. *)
       val name : t -> string
+
+      (** [is_writable segment]  *)
       val is_writable   : t -> bool
+
+      (** [is_readable segment]  *)
       val is_readable   : t -> bool
+
+      (** [is_executable segment]  *)
       val is_executable : t -> bool
     end
 
@@ -4184,8 +4239,16 @@ module Std : sig
     module Symbol : sig
       type t = symbol
       include Regular.S with type t := t
+
+
+      (** [name sym] symbol's name  *)
       val name : t -> string
+
+      (** [is_function sym] is true if [sym] is a function.  *)
       val is_function : t -> bool
+
+
+      (** [is_debug sym] is true if [sym] is a debug symbol.  *)
       val is_debug : t -> bool
     end
 
@@ -4198,6 +4261,22 @@ module Std : sig
     (** lists all registered backends  *)
     val available_backends : unit -> string list
 
+
+    (** {2 Internals}
+
+        Access to the low-level internals.
+    *)
+
+    (** [data image] returns image data. Usually it is a memory mapped
+        input file, or it is whatever was passed to [of_[big]string]. *)
+    val data : t -> Bigstring.t
+
+    (** [backend_image image] is a low-level representation of a
+        program image. Since the Image interface imposes more invariants,
+        the low-level representation can contain strictly more
+        information. For example, segments that are not backed with any
+        data are not representable with the high-level image representation.  *)
+    val backend_image : t -> Backend.Img.t
   end
 
   (** Memory maps.

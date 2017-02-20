@@ -53,7 +53,6 @@ end
 module Mach = Machine.Make(Monad.Ident)
 module Main = Machine.Main(Mach)
 module Interpreter = Interpreter.Make(Mach)
-module Linker = Linker.Make(Mach)
 module Environment(Machine : Machine.S) = struct
 end
 
@@ -101,6 +100,7 @@ let main {Config.get=(!)} proj =
   | (Ok (),ctxt) ->
     info "evaluation finished after %d steps at term: %a"
       (List.length ctxt#trace) Tid.pp ctxt#current;
+    eprintf "Backtrace:@\n%a@\n" pp_backtrace ctxt;
     let result = Var.create "main_result" reg32_t in
     let () = match ctxt#lookup result with
       | None -> warning "result is unknown";
@@ -112,8 +112,8 @@ let main {Config.get=(!)} proj =
     debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
     ctxt#project;
   | (Error err,ctxt) ->
-    debug "program failed with %s\n" (Error.to_string err);
-    debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
+    error "program failed with %s\n" (Error.to_string err);
+    info "Backtrace:@\n%a@\n" pp_backtrace ctxt;
     ctxt#project
 
 let () =

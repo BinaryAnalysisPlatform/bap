@@ -233,7 +233,7 @@ module Make (Machine : Machine) = struct
         Machine.Local.get state >>= fun addrs ->
         match Map.find addrs dst with
         | Some tid -> self#eval_direct tid
-        | None -> super#eval_indirect exp
+        | None -> Linker.exec (`addr dst) self (* in case of a tail-call *)
 
       method private eval_indirect_call exp =
         self#eval_jmp_target exp >>= fun dst ->

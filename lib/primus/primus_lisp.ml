@@ -513,8 +513,8 @@ module Parse = struct
     | List (Atom "defun" ::
             Atom name ::
             params ::
-            List (Atom "declare" :: attrs) ::
             Atom docs ::
+            List (Atom "declare" :: attrs) ::
             body) ->
       defun ~docs ~attrs name params body state
     | List (Atom "defun" ::
@@ -537,8 +537,8 @@ module Parse = struct
     | List [Atom "defmacro";
             Atom name;
             params;
-            List (Atom "declare" :: attrs);
             Atom docs;
+            List (Atom "declare" :: attrs);
             body] ->
       defmacro ~docs ~attrs name params body state
     | List [Atom "defmacro";

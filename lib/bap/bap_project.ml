@@ -82,9 +82,11 @@ module Input = struct
   let of_image ?loader filename =
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
+    let backend = Image.backend_image img in
     Signal.send Info.got_img img;
     let finish proj = {
       proj with
+      storage = Dict.set proj.storage Backend.Img.t backend;
       program = Term.map sub_t proj.program ~f:(fun sub ->
           match Term.get_attr sub address with
           | Some a when Addr.equal a (Image.entry_point img) ->

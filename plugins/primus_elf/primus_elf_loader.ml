@@ -47,17 +47,34 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
         let value = Generator.Random.byte i in
         Env.add reg value)
 
+  let rec is set = function
+    | Backend.Or (p1,p2) -> is set p1 || is set p2
+    | bit -> bit = set
+
   let load_segments () =
-    proj () >>| Project.memory >>= fun memory ->
-    Memmap.to_sequence memory |>
-    Machine.Seq.iter ~f:(fun (mem,tag) ->
+    proj () >>= fun proj ->
+    Memmap.to_sequence (Project.memory proj) |>
+    Machine.Seq.fold ~init:String.Set.empty ~f:(fun segs (mem,tag) ->
         match Value.get Image.segment tag with
-        | None -> Machine.return ()
+        | None -> Machine.return segs
         | Some seg ->
           let alloc =
             if Image.Segment.is_executable seg
             then Memory.add_text else Memory.add_data in
-          alloc mem)
+          alloc mem >>| fun () ->
+          Set.add segs (Image.Segment.name seg)) >>= fun loaded ->
+    match Project.get proj Backend.Img.t with
+    | None -> Machine.return ()
+    | Some {Backend.Img.segments=s,ss} ->
+      Machine.List.iter (s::ss)
+        ~f:(fun {Backend.Segment.name; perm;
+                 location={Location.addr; len}} ->
+            if Set.mem loaded name then Machine.return ()
+            else Memory.allocate
+                   ~readonly:(not (is Backend.W perm))
+                   ~executable:(is Backend.X perm)
+                   ~generator:(Generator.static 0)
+                   addr len)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->

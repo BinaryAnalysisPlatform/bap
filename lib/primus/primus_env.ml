@@ -16,7 +16,7 @@ let undefined_variable,undefined =
 
 let () = Error.add_printer (function
     | Undefined_var v ->
-      Some (sprintf "Undefined variable `%s'" (Var.name v))
+      Some (sprintf "undefined variable `%s'" (Var.name v))
     | _ -> None)
 
 type t = {

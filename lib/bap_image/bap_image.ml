@@ -81,6 +81,9 @@ let file = Value.Tag.register (module String)
     ~name:"file"
     ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
 
+
+
+
 type words = {
   r8  : word table Lazy.t;
   r16 : word table Lazy.t;
@@ -239,6 +242,8 @@ let create_segment_of_symbol_table syms secs =
       | Some (_,sec) ->
         Symbol.Table.add_exn tab ~key:sym ~data:sec);
   Symbol.Table.find_exn tab
+
+let backend_image t = t.img
 
 let of_img img data name =
   let open Img in
