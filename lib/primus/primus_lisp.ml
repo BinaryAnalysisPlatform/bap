@@ -114,11 +114,17 @@ module Contexts = struct
   type t = Feature.Set.t Name.Map.t
   let empty = Name.Map.empty
 
+  let attr proj attr = match Project.get proj attr with
+    | Some x -> [x]
+    | None -> []
+
+  let features = Feature.Set.of_list
+
   let of_project proj = Name.Map.of_alist_exn [
-      "arch",
-      Feature.Set.of_list [
+      "arch", features @@ [
         Arch.to_string (Project.arch proj);
-      ]
+      ] @ attr proj Bap_abi.name;
+      "abi", features @@ attr proj Bap_abi.name;
     ]
 
   let sexp_of_context (name,values) =
@@ -181,25 +187,31 @@ module Macro = struct
   open Sexp
 
   let bind macro cs =
-    let rec bind ps cs = match macro.code.param, cs with
+    let rec bind ps cs = match ps, cs with
       | [],[] -> []
+      | _ :: _, [] | [], _ :: _ -> raise Not_found
       | [p],cs -> [p,cs]
-      | (p::ps),(c::cs) -> (p,[c]) :: bind ps cs
-      | _ -> raise Not_found in
-    try Some (bind macro.code.param cs) with Not_found -> None
-
-  let rec subst bs : Sexp.t -> Sexp.t = function
-    | List xs -> List (List.concat_map xs ~f:(function
-        | List xs -> [list bs xs]
-        | Atom x -> atom bs x))
-    | Atom x -> Atom x
-  and list bs xs = List (List.map ~f:(subst bs) xs)
-  and atom bs x = match List.Assoc.find bs x with
-    | None -> [Atom x]
-    | Some cs -> cs
+      | (p::ps),(c::cs) -> (p,[c]) :: bind ps cs in
+    match macro.code.param, cs with
+    | [p], _ :: _ :: _ -> None
+    | ps,cs -> try Some (bind ps cs) with Not_found -> None
 
 
-  let apply macro cs = subst cs macro.code.subst
+  let subst bs body =
+    let rec sub = function
+      | List xs -> [List (List.concat_map xs ~f:sub)]
+      | Atom x -> match List.Assoc.find bs x with
+        | None -> [Atom x]
+        | Some cs -> cs in
+    match body with
+    | List xs -> List (List.concat_map xs ~f:sub)
+    | Atom x -> match List.Assoc.find bs x with
+      | None -> Atom x
+      | Some [x] -> x
+      | Some xs -> invalid_argf "invalid substitution" ()
+
+  let apply macro cs =
+    subst cs macro.code.subst
 end
 
 module Resolve = struct
@@ -213,6 +225,10 @@ module Resolve = struct
 
   type error += Failed of resolution
 
+  type 'a candidate = 'a def * Contexts.t
+  type 'a candidates = 'a candidate list
+
+
   let interns def name = def.meta.name = name
   let externs def name =
     match Univ_map.find def.meta.attrs External.t with
@@ -221,7 +237,7 @@ module Resolve = struct
 
 
   (* all definitions with the given name *)
-  let stage1 has_name defs name =
+  let stage1 has_name defs name : 'a candidates =
     List.filter_map defs ~f:(fun def ->
         if has_name def name
         then match Univ_map.find def.meta.attrs Contexts.t with
@@ -231,7 +247,7 @@ module Resolve = struct
 
 
   (* all definitions that satisfy the [ctxts] constraint *)
-  let stage2 ctxts =
+  let stage2 (ctxts : Contexts.t) : 'a candidates -> 'a candidates =
     List.filter ~f:(fun (def,ctxts') ->
         Map.for_alli ctxts' ~f:(fun ~key:name' ~data:ctxt' ->
             Map.existsi ctxts ~f:(fun ~key:name ~data:ctxt ->
@@ -244,12 +260,13 @@ module Resolve = struct
      This is a final step in the context resolution, if there are more
      than one candidates left, then the context is ambigious, as we
      have more than one candidate that is applicable to it.*)
-  let stage3 s2  =
+
+  let stage3 (s2 : 'a candidates) : 'a candidates =
     List.filter s2 ~f:(fun (_,ctxts') ->
         Map.for_alli ctxts' ~f:(fun ~key:cls' ~data:ctxt' ->
             List.for_all s2 ~f:(fun (_,ctxts) ->
             Map.for_alli ctxts ~f:(fun ~key:cls ~data:ctxt ->
-                cls <> cls' || Context.(ctxt <= ctxt')))))
+                String.(cls <> cls') || Contexts.(ctxt <= ctxt')))))
 
   (* XXX: looks like I forgot to apply SFINAE to the resolution *)
   let typechecks arch (v,w) =
@@ -259,8 +276,7 @@ module Resolve = struct
     | Word -> size = word_size
     | Type n -> size = n
 
-
-  let overload_macro code s3 =
+  let overload_macro code (s3 : 'a candidates) =
     List.filter_map s3 ~f:(fun (macro,_) ->
         Option.(Macro.bind macro code >>| fun bs -> macro,bs))
 
@@ -396,8 +412,7 @@ module Parse = struct
       pos.file pos.range.start_pos.line op (Sexp.to_string got) ()
 
 
-  let keywords = [
-    "if"; "let"; "neg"; "not"; "coerce"]
+  let keywords = ["if"; "let"; "neg"; "not"; "coerce"]
   let is_keyword op = List.mem keywords op
   let nil = Int {value=0L; typ=Word}
 
@@ -415,11 +430,9 @@ module Parse = struct
     let rec exp = function
       | Atom x when is_word x -> word x
       | Atom x -> Var (var x)
-      | List [Atom "if"; c; e1; e2] ->
-        Ite (exp c, exp e1, exp e2)
+      | List [Atom "if"; c; e1; e2] -> Ite (exp c,exp e1,exp e2)
       | List (Atom "let" :: List bs :: e) -> let' bs e
-      | List [Atom "coerce"; e1; e2; e3] ->
-        Ext (exp e1, exp e2, exp e3)
+      | List [Atom "coerce"; e1; e2; e3] -> Ext (exp e1,exp e2,exp e3)
       | List [Atom "neg"; e] -> Uop (Neg, exp e)
       | List [Atom "not"; e] -> Uop (Not, exp e)
       | List (Atom "prog" :: es) -> Seq (exps es,None)
@@ -683,6 +696,8 @@ type error += Abort of int
 
 module Builtins(Machine : Machine) = struct
   open Machine.Syntax
+  module Memory = Primus_memory.Make(Machine)
+
   let all f args = Machine.return (Word.of_bool (List.exists args ~f))
   let is_zero args = all Word.is_zero args
   let is_positive args = all Word.is_positive args
@@ -716,6 +731,19 @@ module Builtins(Machine : Machine) = struct
             Seq.hd |> Option.iter ~f:(print_char));
       machine_int (List.length words)
 
+  let memory_read = function
+    | [x] -> Memory.load x
+    | _ ->
+      let msg = "memory-read requires one argument" in
+      Machine.fail (Runtime_error msg)
+
+  let memory_write = function
+    | [a;x] -> Memory.save a x >>| fun () -> Addr.succ a
+    | _ ->
+      let msg = "memory-write requires two arguments" in
+      Machine.fail (Runtime_error msg)
+
+
   let defs () = [
       builtin "is-zero" is_zero;
       builtin "is-positive" is_positive;
@@ -723,6 +751,8 @@ module Builtins(Machine : Machine) = struct
       builtin "word-width"  word_width;
       builtin "output-char" output_char;
       builtin "exit-with" exit;
+      builtin "memory-read" memory_read;
+      builtin "memory-write" memory_write;
   ]
 end
 
@@ -958,6 +988,8 @@ module Component(Config : Config)(Machine : Machine) = struct
         | _ -> toload) |>
     Map.to_sequence
 
+  (* probably we should allow to link argumentless functions?  without
+     having a prototype? This may make things much easier. *)
  let link_feature (name,defs) =
     Machine.get () >>= fun ctxt ->
     Machine.Local.get state >>= fun s ->
@@ -975,7 +1007,8 @@ module Component(Config : Config)(Machine : Machine) = struct
           | _ -> List.(take args (List.length args - 1), last args) in
         match Resolve.extern s.contexts defs name arch args with
         | _,None ->
-          linkerf "linker error: wrong function type: %s" name ()
+          linkerf "linker error: %s %s" name
+            "is not provided or has a wrong type" ()
         | _,Some (fn,bs) ->
           let module Code(Machine : Machine) = struct
             module Lisp = Lisp(Machine)

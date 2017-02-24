@@ -7,4 +7,4 @@ module Param = struct
 end
 
 
-let () = Machine.add_component (module Primus_elf_loader.Make(Param))
+let () = Machine.add_component (module Primus_loader_basic.Make(Param))

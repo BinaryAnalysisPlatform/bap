@@ -237,7 +237,7 @@ let setup ?(abi=fun _ -> None) () =
         } in
       let api = C.Abi.create_api_processor Abi.size abi in
       Bap_api.process api;
-      demangle Abi.demangle (Project.program proj) |>
-      Project.with_program proj
+      let prog = demangle Abi.demangle (Project.program proj) in
+      Project.set (Project.with_program proj prog) Bap_abi.name Abi.name
     | _ -> proj in
   Bap_abi.register_pass main

@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_c.Std
 
+open Format
 open Primus_types
 
 module Context = Primus_context
@@ -230,10 +231,13 @@ module Make (Machine : Machine) = struct
       method! eval_indirect exp =
         let open Context.Level in
         self#eval_jmp_target exp >>= fun dst ->
-        Machine.Local.get state >>= fun addrs ->
-        match Map.find addrs dst with
-        | Some tid -> self#eval_direct tid
-        | None -> Linker.exec (`addr dst) self (* in case of a tail-call *)
+        Machine.Local.get state >>= fun blocks ->
+        Linker.is_linked (`addr dst) >>= fun is_linked ->
+        match Map.find blocks dst with
+        | Some tid when not is_linked -> self#eval_direct tid
+        | _ ->
+          make_observation calling (`addr dst) >>= fun () ->
+          Linker.exec (`addr dst) self (* in case of a tail-call *)
 
       method private eval_indirect_call exp =
         self#eval_jmp_target exp >>= fun dst ->

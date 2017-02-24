@@ -41,7 +41,7 @@ using namespace llvm::object;
 
 struct segment {
     std::string name;
-    uint64_t offset;
+    int offset;
     uint64_t addr;
     uint64_t size;
     bool is_readable;
@@ -60,10 +60,11 @@ segment make_segment(const S &s) {
 }
 
 segment make_segment(const coff_section &s, uint64_t image_base) {
+    int offset = s.SizeOfRawData == 0 ? -1 : s.PointerToRawData;
     return segment{s.Name,
-            static_cast<uint64_t>(s.PointerToRawData),
+            static_cast<int>(offset),
             static_cast<uint64_t>(s.VirtualAddress + image_base),
-            static_cast<uint64_t>(s.SizeOfRawData),
+            static_cast<uint64_t>(s.VirtualSize),
             static_cast<bool>((s.Characteristics) &
                               COFF::IMAGE_SCN_MEM_READ),
             static_cast<bool>((s.Characteristics) &

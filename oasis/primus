@@ -8,7 +8,7 @@ Library primus
   Path: lib/primus
   FindlibName: primus
   CompiledObject: best
-  BuildDepends: bap, bap-c, uuidm
+  BuildDepends: bap, bap-abi, bap-c, uuidm
   Modules: Primus,
                    Primus_context,
                    Primus_env,

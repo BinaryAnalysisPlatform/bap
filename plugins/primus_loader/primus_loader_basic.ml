@@ -40,12 +40,10 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
      bottom stack_size
 
   let setup_registers () =
+    let zero = Generator.static 0 in
     target () >>= fun (module Target) ->
     Set.to_sequence Target.CPU.gpr |>
-    Seq.mapi ~f:(fun i reg -> i,reg) |>
-    Machine.Seq.iter ~f:(fun (i,reg) ->
-        let value = Generator.Random.byte i in
-        Env.add reg value)
+    Machine.Seq.iter ~f:(fun reg -> Env.add reg zero)
 
   let rec is set = function
     | Backend.Or (p1,p2) -> is set p1 || is set p2
@@ -67,9 +65,9 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     | None -> Machine.return ()
     | Some {Backend.Img.segments=s,ss} ->
       Machine.List.iter (s::ss)
-        ~f:(fun {Backend.Segment.name; perm;
+        ~f:(fun {Backend.Segment.name; perm; off;
                  location={Location.addr; len}} ->
-            if Set.mem loaded name then Machine.return ()
+            if off >= 0 then Machine.return ()
             else Memory.allocate
                    ~readonly:(not (is Backend.W perm))
                    ~executable:(is Backend.X perm)

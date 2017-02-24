@@ -20,3 +20,16 @@
       (incr argc)
       (ptr+1 p))
     (invoke-subroutine main argc args)))
+
+
+(defun security-init-cookie ()
+  "Windows CRT buffer overrun protection"
+  (declare (external "__security_init_cookie")
+           (context (abi "ms"))) ; actually we should overload by runtime
+  0)
+
+
+;; Although CRT statically adds its stuff to each binary we will stub it,
+;; since CRT uses segmented memory model to access TLS data, and the this
+;; model is not currently supported by our lifter. Until we add a support
+;; at least partial, we need to bypass this function.

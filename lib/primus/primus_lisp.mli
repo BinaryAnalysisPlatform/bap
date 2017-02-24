@@ -40,39 +40,5 @@ open Primus_types
 
 
 *)
-(* module Machine(Machine : Machine) : sig *)
-(*   (\** [add_directory dirname] adds [dirname] to the list of *)
-(*       directories with lisp modules. If different directories provide *)
-(*       features with the same name, then a feature from the last added *)
-(*       directory will be used.  *\) *)
-(*   val add_directory : string -> (unit,#Context.t) Machine.t *)
-
-(*   (\** [load_features features] loads specified [features] into the *)
-(*       Lisp machine. The feature list should be consistent, see below. *)
-
-(*       A feature with a given [name] is provided by a lisp file *)
-(*       [name.lisp]. The namespace of features is flat, i.e., it doesn't *)
-(*       matter in which directory a file, which provides the feature, is *)
-(*       residing. *)
-
-(*       Each lisp module may request more features using the [require] *)
-(*       form, so loading one feature may end up in loading a whole set *)
-(*       of features. See the [primus_lisp_library] plugin for more *)
-(*       information about available features. *)
-
-(*       A lisp module may provide functions with an external linkage, *)
-(*       that will be linked with a program in the process of *)
-(*       loading. During the linkage all overloaded names will be *)
-(*       resolved, and linked. That has two consequences. First, the *)
-(*       [features] set should be consistent, i.e., all sets of *)
-(*       candidates should be resolvable, otherwise the linkage will *)
-(*       fail. Second, if a function is already linked in the previous *)
-(*       phase, it will not be linked anymore, aka weak symbol semantics. *)
-(*       Basically, these two consequences mean, that it is better to *)
-(*       load all features at once. *)
-(*   *\) *)
-(*   val load_features : string list -> (unit,#Context.t) Machine.t *)
-(* end *)
-
 
 val init : ?paths:string list -> string list -> unit

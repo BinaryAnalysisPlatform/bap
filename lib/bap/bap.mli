@@ -4172,6 +4172,13 @@ module Std : sig
     (** [segments image] returns a mapping from addresses to segments  *)
     val segments : t -> segment table
 
+
+    (** [virutals image] is a list of virtual memory segments, i.e.,
+        segments, that are not stored statically in a file, but should
+        be loaded by a loader into a process memory, e.g., the bss
+        segment *)
+    val virtuals : t -> Backend.Segment.t list
+
     (** [symbols image] returns a mapping from addresses to symbols *)
     val symbols : t -> symbol table
 

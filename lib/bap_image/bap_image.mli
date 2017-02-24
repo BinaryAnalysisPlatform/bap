@@ -29,7 +29,7 @@ val backend_image : t -> Backend.Img.t
 
 val words : t -> size -> word table
 val segments : t -> segment table
-
+val virtuals : t -> Backend.Segment.t list
 val symbols : t -> symbol table
 
 

@@ -163,12 +163,12 @@ let validate_no_intersections (s,ss) : Validate.t =
   let (vs,_) = List.fold ss ~init:([],s) ~f:(fun (vs,s1) s2 ->
       let loc1,loc2 = location s1, location s2 in
       let open Location in
-      let v1 =
-        Addr.(validate_lbound  loc2.addr
-                ~min:(Incl (loc1.addr ++ loc1.len))) in
-      let v2 =
-        Int.validate_lbound s2.off ~min:(Incl (s1.off + loc1.len))  in
-      (v1 :: v2 :: vs, s2)) in
+      let problem = sprintf "%s memory overlaps with %s" s1.name s2.name in
+      let v1 = Validate.name problem @@ Addr.validate_lbound
+          loc2.addr ~min:(Incl Addr.(loc1.addr ++ loc1.len)) in
+      (* let v2 = *)
+      (*   Int.validate_lbound s2.off ~min:(Incl (s1.off + loc1.len))  in *)
+      (v1 :: vs, s2)) in
   Validate.name_list "segments shouldn't intersect" vs
 
 let validate_segment data s : Validate.t =
@@ -191,12 +191,20 @@ let validate_segments data (s,ss) : Validate.t =
     validate_no_intersections (s,ss)
   ]
 
+let is_virtual s = Backend.Segment.off s < 0
+
 let create_segments arch data (s,ss) =
   let endian = Arch.endian arch in
+  (* a segment with the negative offset is virtual, we can't represent
+     them in the Image, since the are not backed by static memory. But
+     we will keep them, for analyses that require them.  *)
+  List.filter (s::ss) ~f:(Fn.non is_virtual) |> function
+  | [] -> return Table.empty
+  | s::ss ->
   Validate.result (validate_segments data (s,ss)) >>= fun () ->
   List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
-      let loc, pos = Backend.Segment.(location s, off s) in
-      let len, addr = Location.(len loc, addr loc) in
+      let {Location.len; addr}, pos =
+        Backend.Segment.(location s, off s) in
       Memory.create ~pos ~len endian addr data >>= fun mem ->
       tab >>= fun tab -> Table.add tab mem s)
 
@@ -284,6 +292,10 @@ let of_img img data name =
 
 let data t = t.data
 let memory t = t.memory
+
+let virtuals {img={Img.segments=(s,ss)}} =
+  List.filter (s::ss) ~f:is_virtual
+
 
 let of_backend backend data path : result =
   match String.Table.find backends backend with

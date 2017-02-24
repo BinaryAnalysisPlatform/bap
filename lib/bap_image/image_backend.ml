@@ -47,7 +47,7 @@ module Img = struct
     include Regular.Make(struct
       type nonrec t = t [@@deriving bin_io, compare, sexp]
       let version = "1.0.0"
-      let module_name = Some "Bap.Std.Backend.Img"
+      let module_name = None
       let hash = Hashtbl.hash
       let pp ppf x = Sexp.pp ppf (sexp_of_t x)
     end)
