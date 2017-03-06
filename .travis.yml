@@ -1,4 +1,6 @@
 language: c
+before_install: if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew upgrade; fi
+install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
 script: bash -ex .travis-opam.sh
 sudo: false
 cache:
@@ -32,8 +34,20 @@ addons:
     - time
     - aspcud
     - dejagnu
-
 env:
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=system OPAM_SWITCH=$OCAML_VERSION TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=4.03.0 OPAM_SWITCH=$OCAML_VERSION TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true
-  - FORK_USER=talex5 FORK_BRANCH=containers OPAMYES=true PACKAGE=bap OCAML_VERSION=4.04.0 OPAM_SWITCH=$OCAML_VERSION TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true
+  global:
+  - FORK_USER=talex5
+  - FORK_BRANCH=containers
+  - OPAMYES=true
+  - PACKAGE=bap
+  - TESTS=false
+  - BAP_RUN_TEST=true
+  - BAP_RUN_CHECK=true
+  - OPAM_SWITCH=$OCAML_VERSION
+  matrix:
+  - OCAML_VERSION=system 
+  - OCAML_VERSION=4.03.0
+  - OCAML_VERSION=4.04.0
+os:
+  - linux
+  - osx
