@@ -6,6 +6,6 @@ Library warn_unused_plugin
   Build$:  flag(everything) || flag(warn_unused)
   Path: plugins/warn_unused
   FindlibName: bap-plugin-warn_unused
-  BuildDepends: bap, cmdliner
+  BuildDepends: bap
   InternalModules: Warn_unused_main
   XMETADescription: warn about unused results of certain functions

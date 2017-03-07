@@ -15,6 +15,6 @@ Library "demangle_plugin"
   Build$: flag(everything) || flag(demangle)
   FindlibName: bap-plugin-demangle
   CompiledObject: best
-  BuildDepends: core_kernel, bap-demangle, bap, cmdliner
+  BuildDepends: core_kernel, bap-demangle, bap
   InternalModules: Demangle_main
   XMETADescription: demangle subroutine names

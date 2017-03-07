@@ -8,5 +8,5 @@ Library trace_plugin
   FindlibName:    bap-plugin-trace
   CompiledObject: best
   Modules: Trace_main
-  BuildDepends:   bap, cmdliner, bap-traces
+  BuildDepends:   bap, bap-traces
   XMETADescription: manage execution traces
