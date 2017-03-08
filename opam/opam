@@ -28,6 +28,7 @@ build: [
 install: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
+  ["ocamlfind" "remove" "bap-beagle-prey"]
   ["ocamlfind" "remove" "bap-build"]
   ["ocamlfind" "remove" "bap-byteweight"]
   ["ocamlfind" "remove" "bap-demangle"]
@@ -38,6 +39,7 @@ install: [
   ["ocamlfind" "remove" "bap-piqi"]
   ["ocamlfind" "remove" "bap-plugin-arm"]
   ["ocamlfind" "remove" "bap-plugin-api"]
+  ["ocamlfind" "remove" "bap-plugin-beagle"]
   ["ocamlfind" "remove" "bap-plugin-byteweight"]
   ["ocamlfind" "remove" "bap-plugin-cache"]
   ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
@@ -81,6 +83,7 @@ install: [
 remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
+  ["ocamlfind" "remove" "bap-beagle-prey"]
   ["ocamlfind" "remove" "bap-build"]
   ["ocamlfind" "remove" "bap-byteweight"]
   ["ocamlfind" "remove" "bap-demangle"]
@@ -91,6 +94,7 @@ remove: [
   ["ocamlfind" "remove" "bap-piqi"]
   ["ocamlfind" "remove" "bap-plugin-arm"]
   ["ocamlfind" "remove" "bap-plugin-api"]
+  ["ocamlfind" "remove" "bap-plugin-beagle"]
   ["ocamlfind" "remove" "bap-plugin-byteweight"]
   ["ocamlfind" "remove" "bap-plugin-cache"]
   ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
@@ -142,7 +146,7 @@ depends: [
     "base-unix"
     "bitstring"
     "camlzip"
-    "cmdliner" {>= "0.9.6"}
+    "cmdliner" {= "0.9.8"}
     "ppx_jane" {>= "113.33.00" & < "113.34.00"}
     "core_kernel" {>= "113.33.00" & < "113.34.00"}
     "ezjsonm"
