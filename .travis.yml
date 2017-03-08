@@ -49,7 +49,7 @@ os:
 matrix:
   exclude:
     - os: osx
-      env: CAML_VERSION=4.03
+      env: OCAML_VERSION=4.03
     - os: osx
       env: OCAML_VERSION=4.04
   allow_failures:
