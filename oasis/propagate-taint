@@ -6,6 +6,6 @@ Library propagate_taint_plugin
   Build$:  flag(everything) || flag(propagate_taint)
   Path: plugins/propagate_taint
   FindlibName: bap-plugin-propagate_taint
-  BuildDepends: bap, bap-microx, cmdliner
+  BuildDepends: bap, bap-microx
   InternalModules: Propagate_taint_main, Propagator
   XMETADescription: propagate taints through a program

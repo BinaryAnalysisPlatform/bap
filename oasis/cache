@@ -6,6 +6,6 @@ Library cache_plugin
   Build$:           flag(everything) || flag(cache)
   Path:             plugins/cache
   FindlibName:      bap-plugin-cache
-  BuildDepends:     bap, cmdliner
+  BuildDepends:     bap
   InternalModules:  Cache_main
   XMETADescription: provide caching services

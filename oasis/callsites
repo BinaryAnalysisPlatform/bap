@@ -7,6 +7,6 @@ Library callsites_plugin
   Path:             plugins/callsites
   FindlibName:      bap-plugin-callsites
   CompiledObject:   best
-  BuildDepends:     bap, cmdliner
+  BuildDepends:     bap
   Modules:          Callsites_main
   XMETADescription: annotate callsites with subroutine's arguments

@@ -7,6 +7,6 @@ Library dump_symbols_plugin
   Path:             plugins/dump_symbols
   FindlibName:      bap-plugin-dump_symbols
   CompiledObject:   best
-  BuildDepends:     bap, cmdliner
+  BuildDepends:     bap
   InternalModules:  Dump_symbols_main
   XMETADescription: dump symbol information as a list of blocks
