@@ -10,16 +10,11 @@
   (exit-with (invoke-subroutine main argc argv)))
 
 
-;; in bionic init get only argv, so we need to
-;; compute the number of arguments manually.
 (defun init (args on-exit main)
   "bionic initialization function"
   (declare (external "__libc_init"))
-  (let ((argc 0) (p args))
-    (while (/= (points-to-null p))
-      (incr argc)
-      (ptr+1 p))
-    (invoke-subroutine main argc args)))
+  (invoke-subroutine main args (ptr+1 ptr_t args)))
+
 
 
 (defun security-init-cookie ()

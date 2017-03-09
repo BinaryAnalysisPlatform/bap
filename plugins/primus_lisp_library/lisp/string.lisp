@@ -47,7 +47,7 @@
       (copy-byte dst src)
       (incr src)
       (decr len)
-      (when (points-to char_t dst)
+      (when (points-to char_t dst c)
         (set found (+ 1 dst)))
       (incr dst))
     found))

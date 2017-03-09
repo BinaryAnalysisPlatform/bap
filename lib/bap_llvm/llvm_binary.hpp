@@ -53,7 +53,8 @@ typedef std::vector<segment> segments;
 
 template <typename S>
 segment make_segment(const S &s) {
-    return segment{s.segname, s.fileoff, s.vmaddr, s.filesize,
+    int off = s.vmsize == 0 ? -1 : s.fileoff;
+    return segment{s.segname, off, s.vmaddr, s.vmsize,
             static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
             static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
             static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
@@ -84,10 +85,11 @@ error_or<segments> read(const ELFObjectFile<T>& obj) {
         if (it -> p_type == ELF::PT_LOAD) {
             std::ostringstream oss;
             oss << std::setfill('0') << std::setw(2) << pos;
+            int offset = it->p_filesz == 0 ? -1 : it->p_offset;
             s.push_back(segment{oss.str(),
-                        it->p_offset,
+                        offset,
                         it->p_vaddr,
-                        it->p_filesz,
+                        it->p_memsz,
                         static_cast<bool>(it->p_flags & ELF::PF_R),
                         static_cast<bool>(it->p_flags & ELF::PF_W),
                         static_cast<bool>(it->p_flags & ELF::PF_X)});

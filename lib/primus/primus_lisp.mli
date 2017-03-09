@@ -41,4 +41,50 @@ open Primus_types
 
 *)
 
+(** a primitive that can be called from lisp code  *)
+module Primitive : sig
+  type 'a t
+  val create : ?docs:string -> string -> (word list -> 'a) -> 'a t
+end
+
+module type Primitives = functor (Machine : Machine) ->  sig
+
+  (** each primitive is an OCaml function that takes a list of words
+      and returns a word. A primitive linkage is internal to the Lisp
+      machine, so it is visible only to Lisp functions.
+      If you want to implement a stub function in OCaml, then you
+      should work directly with the Linker module. The primitives
+      extend only the Lisp machine.
+  *)
+  val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+end
+
+type primitives = (module Primitives)
+
+
+(** Creates a Lisp machine.
+
+    You can extend the machine with primitive functions implemented in
+    OCaml.
+*)
+
+type error += Runtime_error of string
+
+module Make (Machine : Machine) : sig
+  val failf : ('a, unit, string, unit -> ('b, 'c) Machine.t) format4 -> 'a
+  val link_primitives : primitives -> (unit, #Context.t) Machine.t
+end
+
+
+(** [init ~paths features] initialize the Lisp machine, load all
+    [features] lookin in the specified set of paths, and register a
+    Primus machine component that will use the Linker component to
+    link into the program all definitions with the external linkage
+    (i.e., those with the external attribute).
+
+    The function should be called only once, by a component that is
+    responsible for Lisp machine initialization. By default it is the
+    lisp_library_plugin. The function will raise an exception if it is
+    called twice.
+*)
 val init : ?paths:string list -> string list -> unit

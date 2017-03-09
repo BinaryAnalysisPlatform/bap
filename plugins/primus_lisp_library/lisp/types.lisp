@@ -4,7 +4,7 @@
 (defun char () 8)
 (defun int32_t () 32)
 (defun int64_t () 64)
-(defun ptr_t () (word-size))
+(defun ptr_t () (word-width))
 
 (defmacro cast (type x) (coerce x 0 (type)))
 (defmacro sizeof (type) (type))

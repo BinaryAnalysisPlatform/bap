@@ -1,5 +1,5 @@
-(defmacro when ($cond$ $body$)
-  (if $cond$ $body$ ()))
+(defmacro when (cnd body)
+  (if cnd body ()))
 
 (defmacro until ($cond$ $body$)
   (if (not $cond) $body ()))

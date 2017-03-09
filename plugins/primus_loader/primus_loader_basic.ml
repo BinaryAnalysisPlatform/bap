@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Primus.Std
+open Format
 
 module Generator = Primus_generator
 
@@ -14,7 +15,8 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
   open Machine.Syntax
 
   module Env = Env.Make(Machine)
-  module Memory = Memory.Make(Machine)
+  module Mem = Memory.Make(Machine)
+  module Memory = Bap.Std.Memory
 
   let proj () = Machine.get () >>| fun ctxt -> ctxt#project
   let arch () = proj () >>| Project.arch
@@ -24,20 +26,27 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     arch () >>| Arch.addr_size >>| fun size ->
     Addr.of_int64 ~width:(Size.in_bits size) addr
 
+  let set_word name x =
+    eprintf "Setting %s to %a@\n%!" name Word.pp x;
+    let t = Type.imm (Word.bitwidth x) in
+    let var = Var.create name t in
+    Env.set var x
 
-  (* top points to the end of the stack, ala STL end pointer.
-     (note: memory beyond top is readable, as it is the place,
+  (* bottom points to the end of the stack, ala STL end pointer.
+     Note: bottom is usually depicted at the top of the stack
+     structure, and it is the highest address.
+     Note: memory beyond top is readable, as it is the place,
      where kernel should put argc, argv, and other infor to a
      user process *)
   let setup_stack () =
     target () >>= fun (module Target) ->
-    make_addr stack_base >>= fun top ->
-    let bottom = Addr.(top -- stack_size) in
-    Env.set Target.CPU.sp top >>= fun () ->
-    Memory.allocate
+    make_addr stack_base >>= fun bottom ->
+    let top = Addr.(bottom -- stack_size) in
+    Env.set Target.CPU.sp bottom >>= fun () ->
+    Mem.allocate
       ~readonly:false
       ~executable:false
-     bottom stack_size
+     top stack_size
 
   let setup_registers () =
     let zero = Generator.static 0 in
@@ -49,30 +58,41 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     | Backend.Or (p1,p2) -> is set p1 || is set p2
     | bit -> bit = set
 
+  let load_virtuals () =
+    proj () >>= fun proj ->
+    make_addr 0L >>= fun null ->
+    match Project.get proj Backend.Img.t with
+    | None -> Machine.return null
+    | Some {Backend.Img.segments=s,ss} ->
+      Machine.List.fold ~init:null (s::ss)
+        ~f:(fun endp {Backend.Segment.name; perm; off;
+                 location={Location.addr; len}} ->
+            if off >= 0 then Machine.return endp
+            else Mem.allocate
+                ~readonly:(not (is Backend.W perm))
+                ~executable:(is Backend.X perm)
+                ~generator:(Generator.static 0) addr len >>| fun () ->
+           Addr.max endp Addr.(addr ++ len))
+
   let load_segments () =
     proj () >>= fun proj ->
+    make_addr 0L >>= fun null ->
     Memmap.to_sequence (Project.memory proj) |>
-    Machine.Seq.fold ~init:String.Set.empty ~f:(fun segs (mem,tag) ->
+    Machine.Seq.fold ~init:null ~f:(fun endp (mem,tag) ->
         match Value.get Image.segment tag with
-        | None -> Machine.return segs
+        | None -> Machine.return endp
         | Some seg ->
           let alloc =
             if Image.Segment.is_executable seg
-            then Memory.add_text else Memory.add_data in
-          alloc mem >>| fun () ->
-          Set.add segs (Image.Segment.name seg)) >>= fun loaded ->
-    match Project.get proj Backend.Img.t with
-    | None -> Machine.return ()
-    | Some {Backend.Img.segments=s,ss} ->
-      Machine.List.iter (s::ss)
-        ~f:(fun {Backend.Segment.name; perm; off;
-                 location={Location.addr; len}} ->
-            if off >= 0 then Machine.return ()
-            else Memory.allocate
-                   ~readonly:(not (is Backend.W perm))
-                   ~executable:(is Backend.X perm)
-                   ~generator:(Generator.static 0)
-                   addr len)
+            then Mem.add_text else Mem.add_data in
+          let maddr = Memory.max_addr mem in
+          let update_ends = match Image.Segment.name seg with
+            | ".text" -> set_word "etext" maddr
+            | ".data" -> set_word "edata" maddr
+            | _ -> Machine.return () in
+          alloc mem >>= fun () ->
+          update_ends >>| fun ()  ->
+          Addr.max endp maddr)
 
   let bytes_in_array =
     Array.fold ~init:0 ~f:(fun sum str ->
@@ -83,7 +103,7 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
   let save_string str ptr =
     String.to_list str |>
     Machine.List.fold ~init:ptr ~f:(fun ptr char ->
-        Memory.save ptr (word_of_char char) >>| fun () ->
+        Mem.save ptr (word_of_char char) >>| fun () ->
         Word.succ ptr)
 
   let save_args array ptr =
@@ -97,9 +117,8 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
   let save_word endian word ptr =
     Word.enum_bytes word endian |>
     Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
-        Memory.save ptr byte >>| fun () ->
+        Mem.save ptr byte >>| fun () ->
         Word.succ ptr)
-
 
   let save_table endian addrs ptr =
     Machine.List.fold addrs ~init:ptr ~f:(fun ptr addr ->
@@ -127,7 +146,7 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
       table_size  ctxt#argv + table_size ctxt#envp |>
       Addr.nsucc sp in
     let argv_table_ptr = Addr.nsucc sp bytes_in_addr in
-    Memory.allocate
+    Mem.allocate
       ~readonly:false
       ~executable:false
       sp total_size >>= fun () ->
@@ -145,11 +164,15 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     fun _argv_frame_ptr ->
     assert (argv_frame_ptr = _argv_frame_ptr);
     save_word endian argc sp >>= fun _ ->
-    Machine.return ()
+    set_word "environ" envp_table_ptr
 
   let init () =
     setup_stack () >>= fun () ->
     setup_main_frame () >>= fun () ->
-    load_segments () >>= fun () ->
+    load_segments () >>= fun e1 ->
+    load_virtuals () >>= fun e2 ->
+    let endp = Addr.max e1 e2 in
+    set_word "endp" endp >>= fun () ->
+    set_word "brk"  endp >>= fun () ->
     setup_registers ()
 end

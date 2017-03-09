@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 open Bap_c.Std
 open Primus_types
 
@@ -37,7 +38,7 @@ type filepos = {
   range : Sexp.Annotated.range;
 }
 
-type loc = Builtin | Filepos of filepos
+type loc = Primitive | Filepos of filepos
 
 type meta = {
   name : string;
@@ -59,6 +60,41 @@ type macro = {
 
 type 'a def = {meta : meta; code : 'a}
 type 'a defs = 'a def list
+
+(* for external usage *)
+
+type library = {
+  mutable paths : string list;
+  mutable features : string list;
+  mutable initialized : bool;
+}
+
+let library = {
+  paths = [];
+  features = [];
+  initialized = false;
+}
+
+module Primitive = struct
+  type 'a t = (Word.t list -> 'a) def
+  let create ?(docs="") name code : 'a t =
+    {meta = {name;docs; hooks=[]; attrs=Univ_map.empty; loc=Primitive}; code}
+end
+
+module type Primitives = functor (Machine : Machine) ->  sig
+
+  (** each primitive is an OCaml function that takes a list of words
+      and returns a word. A primitive linkage is internal to the Lisp
+      machine, so it is visible only to Lisp functions.
+      If you want to implement a stub function in OCaml, then you
+      should work directly with the Linker module. The primitives
+      extend only the Lisp machine.
+  *)
+  val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+end
+
+type primitives = (module Primitives)
+
 
 let expect what got =
   invalid_argf "Parser error: expected %s, got %s"
@@ -118,6 +154,10 @@ module Contexts = struct
     | Some x -> [x]
     | None -> []
 
+  let endian proj = Project.arch proj |>
+                    Arch.endian |> function
+                    | LittleEndian -> "little"
+                    | BigEndian -> "big"
   let features = Feature.Set.of_list
 
   let of_project proj = Name.Map.of_alist_exn [
@@ -125,6 +165,7 @@ module Contexts = struct
         Arch.to_string (Project.arch proj);
       ] @ attr proj Bap_abi.name;
       "abi", features @@ attr proj Bap_abi.name;
+      "endian", features [endian proj]
     ]
 
   let sexp_of_context (name,values) =
@@ -166,6 +207,8 @@ module Contexts = struct
       ~sexp_of ~of_sexp
 
   let (<=) = Set.subset
+  let pp ppf ctxt =
+    Sexp.pp_hum ppf (sexp_of ctxt)
 end
 
 module External = struct
@@ -223,10 +266,41 @@ module Resolve = struct
     stage4 : stage; (* applicable definitions *)
   }
 
-  type error += Failed of resolution
-
   type 'a candidate = 'a def * Contexts.t
   type 'a candidates = 'a candidate list
+
+  type error += Failed of string * Contexts.t * resolution
+
+  let pp_loc ppf loc = match loc with
+    | Primitive -> fprintf ppf "<primitive>"
+    | Filepos {file; range={Sexp.Annotated.start_pos = {
+        Sexp.Annotated.line;
+      }}} ->
+      fprintf ppf "File %s, line %d" file line
+
+  let pp_stage ppf locs =
+    List.iter locs ~f:(fun loc ->
+        fprintf ppf "%a@\n" pp_loc loc)
+
+  let pp ppf {stage1; stage2; stage3; stage4} =
+    fprintf ppf "Initial set of candidates: @\n%a@\n\
+                 Candidates that satisfy current context: @\n%a@\n\
+                 Most specific candidates: @\n%a@\n\
+                 Candidates with compatible types and arity: @\n%a@\n\ "
+      pp_stage stage1
+      pp_stage stage2
+      pp_stage stage3
+      pp_stage stage4
+
+  let string_of_error name ctxts resolution =
+    asprintf
+      "unable to find a candidate for definition %s@\n\
+       evaluation context@\n%a@\n@\n%a"
+      name Contexts.pp ctxts pp resolution
+
+  let () = Primus_error.add_printer (function
+      | Failed (n,c,r) -> Some (string_of_error n c r)
+      | _ -> None)
 
 
   let interns def name = def.meta.name = name
@@ -284,7 +358,7 @@ module Resolve = struct
     List.filter_map s3 ~f:(fun (def,cs) ->
         Option.(List.zip def.code.args args >>| fun bs -> def,bs))
 
-  let overload_builtin s3 = s3
+  let overload_primitive s3 = s3
 
   let locs = List.map ~f:(fun (def,_) -> def.meta.loc)
 
@@ -312,8 +386,8 @@ module Resolve = struct
   let macro ctxts defs name code =
     run interns (overload_macro code) ctxts defs name
 
-  let builtin ctxts defs name =
-    run interns overload_builtin ctxts defs name
+  let primitive ctxts defs name =
+    run interns overload_primitive ctxts defs name
 end
 
 module Type_annot = struct
@@ -423,7 +497,7 @@ module Parse = struct
 
   let subst ctxts name ops =
     match Resolve.macro ctxts !macros name ops with
-    | _,None -> List [Atom "error"; Atom "unresolved macro"]
+    | res,None -> failwith (Resolve.string_of_error name ctxts res)
     | _,Some (macro,bs) -> Macro.apply macro bs
 
   let exp pos ctxts =
@@ -479,7 +553,7 @@ module Parse = struct
   let parse_declarations attrs =
     List.fold ~init:attrs ~f:Attrs.parse
 
-  let defun ?(docs="undocumented") ?(attrs=[]) name p body state = {
+  let defun ?(docs="") ?(attrs=[]) name p body state = {
     state with
     defs = add_def state.defs {
         meta = {
@@ -496,7 +570,7 @@ module Parse = struct
       }
   }
 
-  let defmacro ?(docs="undocumented") ?(attrs=[]) name ps body state =
+  let defmacro ?(docs="") ?(attrs=[]) name ps body state =
     macros := {
       meta = {
         name;
@@ -658,12 +732,9 @@ end
 
 module State = Primus_state
 
-module type Builtins = functor (Machine : Machine) ->  sig
-  val defs : unit -> (Word.t list -> (Word.t,#Context.t) Machine.t) defs
-end
 
 type state = {
-  builtins : (module Builtins);
+  primitives : primitives list;
   modules : String.Set.t;
   defs : func defs;
   width : int;
@@ -684,88 +755,22 @@ let inspect {defs} =
 let width_of_ctxt ctxt =
   Size.in_bits (Arch.addr_size (Project.arch ctxt#project))
 
-let builtin
-    ?(attrs=Univ_map.empty)
-    ?(hooks=[])
-    ?(docs="undocumented") name code =
-  {meta = {name;docs; hooks; attrs; loc=Builtin}; code}
 
 type error += Runtime_error of string
 type error += Link_error of string
-type error += Abort of int
 
-module Builtins(Machine : Machine) = struct
-  open Machine.Syntax
-  module Memory = Primus_memory.Make(Machine)
+let () = Primus_error.add_printer (function
+    | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
+    | Link_error msg -> Some ("primus linker error - " ^ msg)
+    | _ -> None)
 
-  let all f args = Machine.return (Word.of_bool (List.exists args ~f))
-  let is_zero args = all Word.is_zero args
-  let is_positive args = all Word.is_positive args
-  let is_negative args = all Word.is_negative args
-  let word_width args =
-    Machine.get () >>| width_of_ctxt >>| fun width ->
-    match args with
-    | [] -> Word.of_int ~width width
-    | x :: xs -> Word.of_int ~width (Word.bitwidth x)
-
-
-  let negone = Word.ones 8
-  let zero = Word.zero 8
-
-  let exit = function
-    | [rval] ->
-      Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
-      Machine.return rval
-    | _ -> Machine.fail (Runtime_error "exit requires only one argument")
-
-  let machine_int x =
-    Machine.get () >>| width_of_ctxt >>| fun width -> Word.of_int ~width x
-
-  let output_char = function
-    | [] | [_] -> machine_int 0
-    | fd :: words ->
-      if Word.is_zero fd
-      then
-        List.iter words ~f:(fun w ->
-            Word.enum_chars w LittleEndian |>
-            Seq.hd |> Option.iter ~f:(print_char));
-      machine_int (List.length words)
-
-  let memory_read = function
-    | [x] -> Memory.load x
-    | _ ->
-      let msg = "memory-read requires one argument" in
-      Machine.fail (Runtime_error msg)
-
-  let memory_write = function
-    | [a;x] -> Memory.save a x >>| fun () -> Addr.succ a
-    | _ ->
-      let msg = "memory-write requires two arguments" in
-      Machine.fail (Runtime_error msg)
-
-
-  let defs () = [
-      builtin "is-zero" is_zero;
-      builtin "is-positive" is_positive;
-      builtin "is-negative" is_negative;
-      builtin "word-width"  word_width;
-      builtin "output-char" output_char;
-      builtin "exit-with" exit;
-      builtin "memory-read" memory_read;
-      builtin "memory-write" memory_write;
-  ]
-end
-
-let default_search_paths = [
-  Filename.current_dir_name;
-]
 
 let state = Primus_state.declare ~inspect
     ~name:"lisp-library"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun ctxt -> {
          env = [];
-         builtins = (module Builtins);
+         primitives = [];
          modules = String.Set.empty;
          defs = [];
          paths = [Filename.current_dir_name];
@@ -793,12 +798,6 @@ let bil_of_lisp op =
   | Cat  -> concat
   | Eq   -> binop eq
   | Le   -> binop le
-
-module type Config = sig
-  val paths : string list
-  val features : string list
-
-end
 
 module Lisp(Machine : Machine) = struct
   open Machine.Syntax
@@ -868,10 +867,12 @@ module Lisp(Machine : Machine) = struct
           Linker.exec (`addr sub_addr) biri >>= fun () ->
           Machine.return Word.b1
 
-  let eval_builtin biri name args =
-    Machine.Local.get state >>= fun {contexts; builtins=(module Make)} ->
-    let module Builtins = Make(Machine) in
-    match Resolve.builtin contexts (Builtins.defs ()) name with
+  let eval_primitive biri name args =
+    Machine.Local.get state >>= fun {contexts; primitives} ->
+    let defs = List.concat_map primitives (fun (module Make) ->
+        let module Primitives = Make(Machine) in
+        Primitives.defs ()) in
+    match Resolve.primitive contexts defs name with
     | _,None -> failf "unresolved name %s" name ()
     | _,Some (def,_) -> def.code args
 
@@ -880,8 +881,9 @@ module Lisp(Machine : Machine) = struct
     let arch = Project.arch ctxt#project in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.defs name arch args with
-    | {Resolve.stage1=[]},None -> eval_builtin biri name args
-    | resolution,None -> Machine.fail (Resolve.Failed resolution)
+    | {Resolve.stage1=[]},None -> eval_primitive biri name args
+    | resolution,None ->
+      Machine.fail (Resolve.Failed (name, s.contexts, resolution))
     | _,Some (fn,bs) ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
       eval_body biri fn.code.body
@@ -895,7 +897,7 @@ module Lisp(Machine : Machine) = struct
       | Var v -> lookup v
       | Ite (c,e1,e2) -> ite c e1 e2
       | Let (v,e1,e2) -> let_ v e1 e2
-      | Ext (lo,hi,e) -> ext lo hi e
+      | Ext (hi,lo,e) -> ext hi lo e
       | App (n,args) -> app n args
       | Rep (c,e) -> rep c e
       | Bop (op,e1,e2) -> bop op e1 e2
@@ -912,15 +914,15 @@ module Lisp(Machine : Machine) = struct
       eval e1 >>= fun w ->
       Machine.Local.update state (fun s -> {s with env = (v,w)::s.env})
       >>=  fun () -> eval e2
-    and ext lo hi w =
+    and ext hi lo w =
       let eval_to_int e =
         eval e >>| Word.to_int >>= function
         | Ok n -> Machine.return n
         | Error _ -> failf "expected smallint" () in
-      eval_to_int lo >>= fun lo ->
       eval_to_int hi >>= fun hi ->
+      eval_to_int lo >>= fun lo ->
       eval w >>= fun w ->
-      cast (biri#eval_extract lo hi (Bil.Int w))
+      cast (biri#eval_extract hi lo (Bil.Int w))
     and cast r = r >>= fun r -> match Bil.Result.value r with
       | Bil.Bot -> Machine.fail (Runtime_error "got bot")
       | Bil.Mem _ -> Machine.fail (Runtime_error "got mem")
@@ -967,7 +969,7 @@ module Lisp(Machine : Machine) = struct
 
 end
 
-module Component(Config : Config)(Machine : Machine) = struct
+module Make(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Primus_linker.Make(Machine)
 
@@ -1041,9 +1043,12 @@ module Component(Config : Config)(Machine : Machine) = struct
               | Int (_,ret) -> Some (Direct ret)
               | Call call -> Call.return call
 
-            let return_to_caller self jmp = match where_to_return jmp with
-              | None -> Machine.return () (* or set_next None? *)
-              | Some target -> self#eval_ret target
+            let return_to_caller self jmp =
+              Machine.get () >>= fun ctxt ->
+              match where_to_return jmp with
+              | Some target when Option.is_some ctxt#next ->
+                self#eval_ret target
+              | _ -> Machine.put (ctxt#set_next None)
 
             let eval_finish self level =
               let module Level = Context.Level in
@@ -1085,17 +1090,20 @@ module Component(Config : Config)(Machine : Machine) = struct
         })
 
   let init () =
-    Machine.List.iter Config.paths ~f:add_directory >>= fun () ->
-    load_features Config.features >>=
+    Machine.List.iter library.paths ~f:add_directory >>= fun () ->
+    load_features library.features >>=
     link_features
 
+  let link_primitives p =
+    Machine.Local.update state ~f:(fun s ->
+        {s with primitives = p :: s.primitives})
 end
 
 
 let init ?(paths=[]) features  =
-  let module Config = struct
-    let paths = paths
-    let features = features
-  end in
-  let module Lisp = Component(Config) in
-  Primus_machine.add_component (module Lisp)
+  if library.initialized
+  then invalid_argf "Lisp library is already initialized" ();
+  library.initialized <- true;
+  library.paths <- paths;
+  library.features <- features;
+  Primus_machine.add_component (module Make)
