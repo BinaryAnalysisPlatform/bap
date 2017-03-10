@@ -6,7 +6,7 @@
 
 (defun copy-byte (dst src)
   "copies byte from address SRC to DST"
-  (memory-write dst (memory read src)))
+  (memory-write dst (memory-read src)))
 
 (defmacro copy-byte-shift (dst src)
   "copies byte from DST to SRC and increments SRC and DST"

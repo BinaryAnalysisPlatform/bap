@@ -52,12 +52,16 @@
       (incr dst))
     found))
 
-(defun strchr (p c n)
-  (declare (external "strchr"))
+(defun memchr (p c n)
+  (declare (external "memchr"))
   (while (and n (not (points-to char_t p c)))
     (decr n)
     (incr p))
   (if (points-to char_t p c) p 0))
+
+(defun strchr (p c)
+  (declare (external "strchr"))
+  (memchr (p c (+ (strlen p) 1))))
 
 (defun memset (p c n)
   (declare (external "memset"))

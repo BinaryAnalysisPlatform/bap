@@ -29,6 +29,14 @@ module Primitives(Machine : Machine.S) = struct
       Machine.return rval
     | _ -> Lisp.failf "exit requires only one argument" ()
 
+  let allocate = function
+    | [addr; size] ->
+      let n = Word.to_int size in
+      if Result.is_error n
+      then Machine.return negone
+      else Memory.allocate addr (Or_error.ok_exn n) >>| fun () -> zero
+    | _ -> Lisp.failf "allocate requires two arguments" ()
+
   let machine_int x =
     Machine.get () >>| width_of_ctxt >>| fun width -> Word.of_int ~width x
 
@@ -61,6 +69,7 @@ module Primitives(Machine : Machine.S) = struct
       primitive "exit-with" exit;
       primitive "memory-read" memory_read;
       primitive "memory-write" memory_write;
+      primitive "memory-allocate" allocate;
   ]
 end
 
