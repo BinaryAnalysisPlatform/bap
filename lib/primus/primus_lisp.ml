@@ -14,7 +14,6 @@ type typ = Word | Type of int [@@deriving sexp]
 type 'a scalar = {value : 'a; typ : typ}[@@deriving sexp]
 type word = int64 scalar [@@deriving sexp]
 type var = string scalar[@@deriving sexp]
-
 type exp =
   | Int of word
   | Var of var
@@ -27,7 +26,9 @@ type exp =
   | Seq of exp list * bool option
   | Set of var * exp
   | Rep of exp * exp
+  | Msg of fmt list * exp list
   | Err of string
+and fmt = Lit of string | Exp of exp | Pos of int
 
 
 type hook = [`enter | `leave] [@@deriving sexp]
@@ -66,12 +67,14 @@ type 'a defs = 'a def list
 type library = {
   mutable paths : string list;
   mutable features : string list;
+  mutable log : formatter;
   mutable initialized : bool;
 }
 
 let library = {
   paths = [];
   features = [];
+  log = err_formatter;
   initialized = false;
 }
 
@@ -480,13 +483,16 @@ module Parse = struct
 
   let bad_form pos op got =
     let open Sexp.Annotated in
-    invalid_argf {|File "%s", line %d \
+    invalid_argf {|\nFile "%s", line %d \
     parser error: invalid usage of form %s. \
-                   Don't know how to handle %s|}
-      pos.file pos.range.start_pos.line op (Sexp.to_string got) ()
+                   Don't know how to handle\n%s|}
+      pos.file pos.range.start_pos.line op (Sexp.to_string_hum got) ()
 
 
-  let keywords = ["if"; "let"; "neg"; "not"; "coerce"]
+  let keywords = [
+    "if"; "let"; "neg"; "not";
+    "coerce"; "msg"; "while";"set"
+  ]
   let is_keyword op = List.mem keywords op
   let nil = Int {value=0L; typ=Word}
 
@@ -500,18 +506,20 @@ module Parse = struct
     | res,None -> failwith (Resolve.string_of_error name ctxts res)
     | _,Some (macro,bs) -> Macro.apply macro bs
 
+
   let exp pos ctxts =
     let rec exp = function
       | Atom x when is_word x -> word x
       | Atom x -> Var (var x)
-      | List [Atom "if"; c; e1; e2] -> Ite (exp c,exp e1,exp e2)
+      | List (Atom "if" :: c :: e1 :: es) -> Ite (exp c,exp e1,prog es)
       | List (Atom "let" :: List bs :: e) -> let' bs e
       | List [Atom "coerce"; e1; e2; e3] -> Ext (exp e1,exp e2,exp e3)
       | List [Atom "neg"; e] -> Uop (Neg, exp e)
       | List [Atom "not"; e] -> Uop (Not, exp e)
-      | List (Atom "prog" :: es) -> Seq (exps es,None)
-      | List (Atom "while" :: c :: es) -> Rep (exp c, Seq (exps es,None))
+      | List (Atom "prog" :: es) -> prog es
+      | List (Atom "while" :: c :: es) -> Rep (exp c, prog es)
       | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
+      | List (Atom "msg" :: Atom msg :: es) -> Msg (fmt msg, exps es)
       | List (Atom op ::_ ) as exp when is_keyword op -> bad_form pos op exp
       | List (op :: arg :: args) when is_bop op ->
         List.fold ~f:(bop op) ~init:(exp arg) (exps args)
@@ -521,11 +529,60 @@ module Parse = struct
       | List [] -> nil
       | s ->  expects "(<ident> exps..)" s
     and exps = List.map ~f:exp
+    and prog es = Seq (exps es, None)
     and let' bs e =
-      List.fold_right bs ~init:(Seq (exps e,None)) ~f:(fun b e ->
+      List.fold_right bs ~init:(prog e) ~f:(fun b e ->
           match b with
           | List [Atom v; x] -> Let (var v,exp x,e)
-          | s -> expects "(var exp)" s) in
+          | s -> expects "(var exp)" s)
+    and fmt fmt =
+      let nil = `Lit [] in
+      let str cs = String.of_char_list (List.rev cs) in
+      let is_atm c = Char.(c = '-' || is_alphanum c) in
+      let push_nothing = ident in
+      let push s xs = s :: xs in
+      let push_lit s = push (Lit s) in
+      let push_pos x = push (Pos (Char.to_int x)) in
+      let push_chars cs = push_lit (str cs) in
+      let push_exp str =
+        eprintf "Pushing %s\n%!" str;
+        push (Exp (exp (Sexp.of_string str))) in
+      let lit parse xs = function
+        | '\\' -> parse (push_chars xs) `Esc
+        | '$'  -> parse (push_chars xs) `Exp
+        | x    -> parse push_nothing (`Lit (x::xs)) in
+      let esc parse = function
+        | '\\' -> parse (push_lit "\\") nil
+        | 'n'  -> parse (push_lit "\n") nil
+        | '$'  -> parse (push_lit "$") nil
+        | c    -> parse (push_lit (sprintf "\\%c" c)) nil in
+      let exp parse = function
+        | '(' as c -> parse push_nothing (`Lst ([c],1))
+        | c when Char.is_digit c -> parse (push_pos c) nil
+        | c when Char.is_alpha c -> parse push_nothing (`Atm [c])
+        | c -> invalid_argf "msg - invalid format got $%c" c () in
+      let atm parse xs = function
+        | c when is_atm c -> parse push_nothing (`Atm (c::xs))
+        | c -> parse (push_exp (str xs)) (`Lit [c]) in
+      let lst parse xs (lev : int) = function
+        | '(' as c -> parse push_nothing (`Lst (c::xs,lev+1))
+        | ')' as c -> if Int.(lev = 1)
+          then parse (push_exp (str (c::xs))) nil
+          else parse push_nothing (`Lst (c::xs,lev-1))
+        | c -> parse push_nothing (`Lst (c::xs, lev)) in
+      let rec parse off spec state =
+        let step push state = parse (off+1) (push spec) state in
+        if Int.(off < String.length fmt) then match state with
+          | `Lit xs -> lit step xs fmt.[off]
+          | `Esc -> esc step fmt.[off]
+          | `Exp -> exp step fmt.[off]
+          | `Atm xs -> atm step xs fmt.[off]
+          | `Lst (xs,lev) -> lst step xs lev fmt.[off]
+        else List.rev @@ match state with
+          | `Lit xs -> push_chars xs spec
+          | `Atm xs -> push_exp (str xs) spec
+          | _ -> invalid_argf "invalid format string '%s'" fmt () in
+      parse 0 [] nil in
     exp
 
   let params = function
@@ -564,7 +621,7 @@ module Parse = struct
           loc = Filepos state.current;
         };
         code = {
-          args=params p;
+          args = params p;
           body = List.map ~f:(exp state.current state.constraints) body
         }
       }
@@ -904,6 +961,7 @@ module Lisp(Machine : Machine) = struct
       | Uop (op,e) -> uop op e
       | Seq (es,short) -> seq es short
       | Set (v,e) -> eval e >>= set v
+      | Msg (fmt,es) -> msg fmt es
       | Err msg -> Machine.fail (Runtime_error msg)
     and rep c e =
       eval c >>= fun r -> if Word.is_zero r then Machine.return r
@@ -964,7 +1022,17 @@ module Lisp(Machine : Machine) = struct
       let op = match op with
         | Neg -> Bil.NEG
         | Not -> Bil.NOT in
-      cast @@ biri#eval_exp Bil.(UnOp (op,Int e)) in
+      cast @@ biri#eval_exp Bil.(UnOp (op,Int e))
+    and msg fmt es =
+      let pp_exp e = eval e >>| fprintf library.log "%a" Word.pp in
+      Machine.List.iter fmt ~f:(function
+          | Lit s -> Machine.return (pp_print_string library.log s)
+          | Exp e -> pp_exp e
+          | Pos n -> match List.nth es n with
+            | None -> Machine.fail (Runtime_error "fmt pos")
+            | Some e -> pp_exp e) >>= fun () ->
+      pp_print_newline library.log ();
+      Machine.return Word.b0 in
     eval exp
 
 end
@@ -1100,10 +1168,11 @@ module Make(Machine : Machine) = struct
 end
 
 
-let init ?(paths=[]) features  =
+let init ?(log=std_formatter) ?(paths=[]) features  =
   if library.initialized
   then invalid_argf "Lisp library is already initialized" ();
   library.initialized <- true;
   library.paths <- paths;
   library.features <- features;
+  library.log <- log;
   Primus_machine.add_component (module Make)

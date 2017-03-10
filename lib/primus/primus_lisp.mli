@@ -1,4 +1,5 @@
 open Bap.Std
+open Format
 open Primus_types
 
 
@@ -87,4 +88,4 @@ end
     lisp_library_plugin. The function will raise an exception if it is
     called twice.
 *)
-val init : ?paths:string list -> string list -> unit
+val init : ?log:formatter -> ?paths:string list -> string list -> unit
