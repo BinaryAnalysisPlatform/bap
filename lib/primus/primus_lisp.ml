@@ -544,9 +544,7 @@ module Parse = struct
       let push_lit s = push (Lit s) in
       let push_pos x = push (Pos (Char.to_int x)) in
       let push_chars cs = push_lit (str cs) in
-      let push_exp str =
-        eprintf "Pushing %s\n%!" str;
-        push (Exp (exp (Sexp.of_string str))) in
+      let push_exp str = push (Exp (exp (Sexp.of_string str))) in
       let lit parse xs = function
         | '\\' -> parse (push_chars xs) `Esc
         | '$'  -> parse (push_chars xs) `Exp
@@ -1024,7 +1022,12 @@ module Lisp(Machine : Machine) = struct
         | Not -> Bil.NOT in
       cast @@ biri#eval_exp Bil.(UnOp (op,Int e))
     and msg fmt es =
-      let pp_exp e = eval e >>| fprintf library.log "%a" Word.pp in
+      let pp_exp e =
+        Machine.catch
+          (eval e >>| fprintf library.log "%a" Word.pp)
+        (fun err ->
+          fprintf library.log "<%s>" (Primus_error.to_string err);
+          Machine.return ()) in
       Machine.List.iter fmt ~f:(function
           | Lit s -> Machine.return (pp_print_string library.log s)
           | Exp e -> pp_exp e
