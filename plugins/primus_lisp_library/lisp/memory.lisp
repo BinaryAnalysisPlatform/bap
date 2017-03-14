@@ -11,14 +11,12 @@
 (defmacro copy-byte-shift (dst src)
   "copies byte from DST to SRC and increments SRC and DST"
   (prog (copy-byte dst src)
-        (incr dst)
-        (incr src)))
+        (incr dst src)))
 
 (defmacro copy-byte-shift-left (dst src)
   "copies byte from DST to SRC and decrements SRC and DST"
   (prog (copy-byte dst src)
-        (decr dst)
-        (decr src)))
+        (decr dst src)))
 
 (defmacro make-copy (copy-byte dst src len)
   (let ((ret dst))

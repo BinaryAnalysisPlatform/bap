@@ -6,5 +6,6 @@
 (defun int64_t () 64)
 (defun ptr_t () (word-width))
 
-(defmacro cast (type x) (coerce x 0 (type)))
-(defmacro sizeof (type) (type))
+(defmacro cast (type x) (coerce  (-1 (type)) 0 x))
+(defmacro bitwidth (type) (type))
+(defmacro sizeof (type) (/ (bitwidth type) 8))

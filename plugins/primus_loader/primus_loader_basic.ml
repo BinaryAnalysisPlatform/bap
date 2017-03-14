@@ -27,7 +27,6 @@ module Make(Param : Param)(Machine : Machine.S)  = struct
     Addr.of_int64 ~width:(Size.in_bits size) addr
 
   let set_word name x =
-    eprintf "Setting %s to %a@\n%!" name Word.pp x;
     let t = Type.imm (Word.bitwidth x) in
     let var = Var.create name t in
     Env.set var x

@@ -23,7 +23,7 @@ type exp =
   | Bop of bop * exp * exp
   | Uop of uop * exp
   | App of string * exp list
-  | Seq of exp list * bool option
+  | Seq of exp list
   | Set of var * exp
   | Rep of exp * exp
   | Msg of fmt list * exp list
@@ -474,6 +474,8 @@ module Parse = struct
     | ">>s" -> Asr
     | "=" -> Eq
     | "<" -> Le
+    | "&" -> And
+    | "|" -> Or
     | _ -> bop_of_sexp op
 
   let is_bop x = try ignore (bop x); true with exn -> false
@@ -520,16 +522,17 @@ module Parse = struct
       | List (Atom "while" :: c :: es) -> Rep (exp c, prog es)
       | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
       | List (Atom "msg" :: Atom msg :: es) -> Msg (fmt msg, exps es)
+      | List [Atom "fail"; Atom msg] -> Err msg
       | List (Atom op ::_ ) as exp when is_keyword op -> bad_form pos op exp
-      | List (op :: arg :: args) when is_bop op ->
-        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
       | List (Atom op :: exps) when is_macro op ->
         exp (subst ctxts op exps)
+      | List (op :: arg :: args) when is_bop op ->
+        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
       | List (Atom op :: args) -> App (op, exps args)
       | List [] -> nil
       | s ->  expects "(<ident> exps..)" s
     and exps = List.map ~f:exp
-    and prog es = Seq (exps es, None)
+    and prog es = Seq (exps es)
     and let' bs e =
       List.fold_right bs ~init:(prog e) ~f:(fun b e ->
           match b with
@@ -668,6 +671,11 @@ module Parse = struct
     | List (Atom "defun" ::
             Atom name ::
             params ::
+            Atom const :: []) ->
+      defun name params [Atom const] state
+    | List (Atom "defun" ::
+            Atom name ::
+            params ::
             Atom docs ::
             body) ->
       defun ~docs name params body state
@@ -787,13 +795,14 @@ end
 
 module State = Primus_state
 
+type bindings = (var * Word.t) list [@@deriving sexp]
 
 type state = {
   primitives : primitives list;
   modules : String.Set.t;
   defs : func defs;
   width : int;
-  env : (var * Word.t) list;
+  env : bindings;
   contexts : Contexts.t;
   paths : string list;
 }
@@ -804,8 +813,7 @@ let inspect_def {meta={name; docs}} = Sexp.List [
     Sexp.Atom docs;
   ]
 
-let inspect {defs} =
-  Sexp.List (List.map defs ~f:inspect_def)
+let inspect {env} = sexp_of_bindings env
 
 let width_of_ctxt ctxt =
   Size.in_bits (Arch.addr_size (Project.arch ctxt#project))
@@ -821,7 +829,7 @@ let () = Primus_error.add_printer (function
 
 
 let state = Primus_state.declare ~inspect
-    ~name:"lisp-library"
+    ~name:"lisp-env"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun ctxt -> {
          env = [];
@@ -854,15 +862,50 @@ let bil_of_lisp op =
   | Eq   -> binop eq
   | Le   -> binop le
 
+
+module Trace = struct
+  module Observation = Primus_observation
+  let sexp_of_word x =
+    let v = Word.string_of_value x in
+    let w = Int.to_string (Word.bitwidth x) in
+    Sexp.Atom (v ^ ":" ^ w)
+  let sexp_of_binding (_,x) = sexp_of_word x
+
+  let sexp_of_enter ({meta={name}},bs) =
+    Sexp.List (Sexp.Atom name :: List.map bs ~f:sexp_of_binding)
+
+  let sexp_of_leave (call,result) =
+    Sexp.List (Sexp.Atom "#result-of" ::
+               sexp_of_enter call ::
+               [sexp_of_word result])
+
+  let enter,entered =
+    Observation.provide ~inspect:sexp_of_enter "lisp-call"
+
+  let leave,left =
+    Observation.provide ~inspect:sexp_of_leave "lisp-return"
+
+end
+
+module Locals(Machine : Machine) = struct
+  open Machine.Syntax
+
+  let rec update xs x ~f = match xs with
+    | [] -> []
+    | (x',w) :: xs when x' = x -> (x,f w) :: xs
+    | xw :: xs -> xw :: update xs x ~f
+
+  let replace xs x w = update xs x ~f:(fun _ -> w)
+
+  let push v w s = {s with env = (v,w)::s.env}
+  let pop n ({env} as s) = {s with env = List.drop env n}
+end
+
 module Lisp(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Primus_linker.Make(Machine)
+  module Env = Locals(Machine)
 
-  let getenv () =
-    Machine.Local.get state >>| fun s -> s.env
-
-  let putenv env =
-    Machine.Local.update state ~f:(fun s -> {s with env})
 
   let error kind = Format.ksprintf
       (fun msg -> fun () -> Machine.fail (Runtime_error msg))
@@ -870,12 +913,7 @@ module Lisp(Machine : Machine) = struct
   let failf fmt = error (fun m -> Runtime_error m) fmt
   let linkerf fmt = error (fun m -> Link_error m) fmt
 
-  let rec env_update xs x ~f = match xs with
-    | [] -> []
-    | (x',w) :: xs when x' = x -> (x,f w) :: xs
-    | xw :: xs -> xw :: env_update xs x ~f
 
-  let env_replace xs x w = env_update xs x ~f:(fun _ -> w)
 
   let word width value typ =
     let width = match typ with
@@ -941,9 +979,13 @@ module Lisp(Machine : Machine) = struct
       Machine.fail (Resolve.Failed (name, s.contexts, resolution))
     | _,Some (fn,bs) ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
-      eval_body biri fn.code.body
+      Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
+      eval_body biri fn.code.body >>= fun r ->
+      Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
+      Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+      Machine.return r
 
-  and eval_body biri body = eval_exp biri (Seq (body,None))
+  and eval_body biri body = eval_exp biri (Seq body)
 
   and eval_exp biri exp : (Word.t,#Context.t) Machine.t =
     let int v t = width () >>| fun width -> word width v t in
@@ -957,7 +999,7 @@ module Lisp(Machine : Machine) = struct
       | Rep (c,e) -> rep c e
       | Bop (op,e1,e2) -> bop op e1 e2
       | Uop (op,e) -> uop op e
-      | Seq (es,short) -> seq es short
+      | Seq es -> seq es
       | Set (v,e) -> eval e >>= set v
       | Msg (fmt,es) -> msg fmt es
       | Err msg -> Machine.fail (Runtime_error msg)
@@ -968,8 +1010,10 @@ module Lisp(Machine : Machine) = struct
       eval c >>= fun w -> if Word.is_zero w then eval e2 else eval e1
     and let_ v e1 e2 =
       eval e1 >>= fun w ->
-      Machine.Local.update state (fun s -> {s with env = (v,w)::s.env})
-      >>=  fun () -> eval e2
+      Machine.Local.update state ~f:(Env.push v w) >>=  fun () ->
+      eval e2 >>= fun r ->
+      Machine.Local.update state ~f:(Env.pop 1) >>= fun () ->
+      Machine.return r
     and ext hi lo w =
       let eval_to_int e =
         eval e >>| Word.to_int >>= function
@@ -992,20 +1036,17 @@ module Lisp(Machine : Machine) = struct
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | "invoke-subroutine" -> eval_sub biri args
       | n -> eval_lisp biri n args
-    and seq es short =
-     let rec loop f = function
+    and seq es =
+     let rec loop = function
       | [] -> Machine.return Word.b0
       | e :: [] -> eval e
-      | e :: es -> eval e >>= fun r ->
-        if f (Word.is_zero r)
-        then Machine.return Word.b0
-        else loop f es in
-     loop (fun r -> Some r = short) es
+      | e :: es -> eval e >>= fun _ -> loop es in
+     loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
       if List.Assoc.mem s.env v
       then
-        Machine.Local.put state {s with env = env_replace s.env v w}
+        Machine.Local.put state {s with env = Env.replace s.env v w}
         >>= fun () -> Machine.return w
       else
         biri#eval_int w >>= fun r ->
@@ -1043,7 +1084,7 @@ end
 module Make(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Primus_linker.Make(Machine)
-
+  module Env = Locals(Machine)
 
   let error kind = Format.ksprintf
       (fun msg -> fun () -> Machine.fail (kind msg))
@@ -1100,14 +1141,17 @@ module Make(Machine : Machine) = struct
                   | Bil.Bot ->
                     failf "An argument %a has an undefined value"
                       Arg.pps arg ()) >>= fun bs ->
-              Machine.Local.get state >>= fun s ->
-              Machine.Local.put state {s with env = bs @ s.env}
+              Machine.Local.update state
+                ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
+              Machine.return bs
 
             let eval_ret self r = match ret with
               | None -> Machine.return ()
-              | Some v ->
-                self#eval_int r >>= fun r ->
-                self#update (Arg.lhs v) r
+              | Some v -> match Arg.rhs v with
+                | Bil.Var reg ->
+                  self#eval_int r >>= fun r ->
+                  self#update reg r
+                | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
             let where_to_return jmp = match Jmp.kind jmp with
               | Goto _  | Ret _ -> None
@@ -1132,11 +1176,15 @@ module Make(Machine : Machine) = struct
 
             let exec self =
               Machine.get () >>= fun ctxt ->
-              let level = ctxt#level in
-              eval_args self >>= fun () ->
-              Lisp.eval_body self fn.code.body >>=
-              eval_ret self >>= fun () ->
-              eval_finish self level
+              eval_args self >>= fun bs ->
+              Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
+              Lisp.eval_body self fn.code.body >>= fun r ->
+              Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
+
+
+              Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+              eval_ret self r >>= fun () ->
+              eval_finish self ctxt#level
           end in
           Linker.link ~code:(module Code) (Term.tid sub)
 
@@ -1157,7 +1205,7 @@ module Make(Machine : Machine) = struct
 
   let add_directory path =
     Machine.Local.update state ~f:(fun s -> {
-          s with paths = path :: s.paths
+          s with paths = s.paths @ [path]
         })
 
   let init () =

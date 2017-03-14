@@ -38,7 +38,8 @@
     (while n
       (incr p)
       (decr n)
-      (endian cat x (memory-read p)))))
+      (endian cat x (memory-read p)))
+    x))
 
 (defmacro write-word (t p x)
   "writes a word of type T to address P"
@@ -53,7 +54,7 @@
 
 (defmacro points-to (t p v)
   "reads a word from address P and compares it with V"
-  (= (read-word t p) v))
+  (= (read-word t p) (cast t v)))
 
 (defmacro array-get (t p n)
   "gets N-th element of an array P"

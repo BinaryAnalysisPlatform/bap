@@ -26,6 +26,6 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load") in
 
   Config.when_ready (fun {Config.get=(!)} ->
-      let paths = Stdlib.library :: !libs in
+      let paths = !libs @ [Stdlib.library]  in
       let features = "init" :: !features in
       Lisp.init ~paths features)

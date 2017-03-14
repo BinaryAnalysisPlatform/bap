@@ -1,5 +1,5 @@
 (defmacro when (cnd body)
-  (if cnd body ()))
+  (if cnd (prog body) ()))
 
 (defmacro until ($cond$ $body$)
   (if (not $cond) $body ()))
@@ -21,5 +21,17 @@
 (defmacro decr (x xs)
   (prog (decr x) (decr xs)))
 
+(defmacro and (x) x)
+(defmacro and (x xs) (if x (and xs) x))
+
+(defmacro or (x) x)
+(defmacro or (x xs) (if x x (or xs)))
+
 (defun compare (x y)
   (if (< x y) -1 (if (> x y) 1 0)))
+
+
+(defmacro assert (c m)
+  (when (not c)
+    (msg m)
+    (fail m)))
