@@ -1,9 +1,10 @@
+open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 
 module Param = struct
   let stack_size = 8 * 1024 * 1024
-  let stack_base = 0x16_000_000L
+  let stack_base = Int64.(1L * 1024L * 1024L * 1024L)
 end
 
 
