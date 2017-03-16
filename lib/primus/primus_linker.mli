@@ -23,11 +23,11 @@ module Make(Machine : Machine) : sig
   val link :
     ?addr:addr ->
     ?name:string ->
-    code:code -> tid -> (unit,#Context.t) m
+    ?tid:tid ->
+    code -> (unit,#Context.t) m
 
   val exec : name -> (#Context.t as 'a) #Biri.t -> (unit,'a) m
 
   val is_linked : name -> (bool,#Context.t) m
 
-  val resolve : name -> (string option,#Context.t) m
 end

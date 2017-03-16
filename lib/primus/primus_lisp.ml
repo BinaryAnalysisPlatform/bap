@@ -1144,91 +1144,96 @@ module Make(Machine : Machine) = struct
         | _ -> toload) |>
     Map.to_sequence
 
-  (* probably we should allow to link argumentless functions?  without
-     having a prototype? This may make things much easier. *)
- let link_feature (name,defs) =
-    Machine.get () >>= fun ctxt ->
-    Machine.Local.get state >>= fun s ->
-    let arch = Project.arch ctxt#project in
+  let find_sub ctxt name =
     Term.enum sub_t ctxt#program |>
     Seq.find ~f:(fun s -> Sub.name s = name) |> function
-    | None -> Machine.return ()
-    | Some sub -> match Term.get_attr sub C.proto with
-      | None ->
-        linkerf "can't link a Lisp function without a prototype" ()
+    | None -> [],None,None,None
+    | Some sub ->
+      let tid = Some (Term.tid sub) in
+      let addr = Term.get_attr sub address in
+      match Term.get_attr sub C.proto with
+      | None -> [],None,tid,addr
       | Some proto ->
         let args = Term.enum arg_t sub |> Seq.to_list in
         let args,ret = match proto.C.Type.Proto.return with
           | `Void -> args,None
           | _ -> List.(take args (List.length args - 1), last args) in
-        match Resolve.extern s.contexts defs name arch args with
-        | _,None ->
-          linkerf "linker error: %s %s" name
-            "is not provided or has a wrong type" ()
-        | _,Some (fn,bs) ->
-          let module Code(Machine : Machine) = struct
-            module Lisp = Lisp(Machine)
-            open Machine.Syntax
+        args,ret,tid,addr
 
-            let failf ppf = Format.ksprintf
-                (fun msg -> fun () -> Machine.fail (Runtime_error msg)) ppf
+  let link_feature (name,defs) =
+    Machine.get () >>= fun ctxt ->
+    Machine.Local.get state >>= fun s ->
+    let arch = Project.arch ctxt#project in
+    let args,ret,tid,addr = find_sub ctxt name in
+    match Resolve.extern s.contexts defs name arch args with
+    | _,None ->
+      eprintf "Lisp: %s\n" name;
+      Machine.return ()
+    | _,Some (fn,bs) ->
+      eprintf "Lisp: linking %s\n" name;
+      let module Code(Machine : Machine) = struct
+        module Lisp = Lisp(Machine)
+        open Machine.Syntax
 
-            let eval_args self =
-              Machine.List.map bs ~f:(fun (var,arg) ->
-                  self#eval_arg arg >>= fun () ->
-                  self#lookup (Arg.lhs arg) >>= fun r ->
-                  match Bil.Result.value r with
-                  | Bil.Imm w -> Machine.return (var,w)
-                  | Bil.Mem _ -> failf "type error, got mem as arg" ()
-                  | Bil.Bot ->
-                    failf "An argument %a has an undefined value"
-                      Arg.pps arg ()) >>= fun bs ->
-              Machine.Local.update state
-                ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
-              Machine.return bs
+        let failf ppf = Format.ksprintf
+            (fun msg -> fun () -> Machine.fail (Runtime_error msg)) ppf
 
-            let eval_ret self r = match ret with
-              | None -> Machine.return ()
-              | Some v -> match Arg.rhs v with
-                | Bil.Var reg ->
-                  self#eval_int r >>= fun r ->
-                  self#update reg r
-                | e -> failf "unknown return semantics: %a" Exp.pps e ()
+        let eval_args self =
+          Machine.List.map bs ~f:(fun (var,arg) ->
+              self#eval_arg arg >>= fun () ->
+              self#lookup (Arg.lhs arg) >>= fun r ->
+              match Bil.Result.value r with
+              | Bil.Imm w -> Machine.return (var,w)
+              | Bil.Mem _ -> failf "type error, got mem as arg" ()
+              | Bil.Bot ->
+                failf "An argument %a has an undefined value"
+                  Arg.pps arg ()) >>= fun bs ->
+          Machine.Local.update state
+            ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
+          Machine.return bs
 
-            let where_to_return jmp = match Jmp.kind jmp with
-              | Goto _  | Ret _ -> None
-              | Int (_,ret) -> Some (Direct ret)
-              | Call call -> Call.return call
+        let eval_ret self r = match ret with
+          | None -> Machine.return ()
+          | Some v -> match Arg.rhs v with
+            | Bil.Var reg ->
+              self#eval_int r >>= fun r ->
+              self#update reg r
+            | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
-            let return_to_caller self jmp =
-              Machine.get () >>= fun ctxt ->
-              match where_to_return jmp with
-              | Some target when Option.is_some ctxt#next ->
-                self#eval_ret target
-              | _ -> Machine.put (ctxt#set_next None)
+        let where_to_return jmp = match Jmp.kind jmp with
+          | Goto _  | Ret _ -> None
+          | Int (_,ret) -> Some (Direct ret)
+          | Call call -> Call.return call
 
-            let eval_finish self level =
-              let module Level = Context.Level in
-              match level with
-              | Level.Jmp {Level.me=jmp} -> return_to_caller self jmp
-              | level ->
-                invalid_argf "broken invariant - %s (%s)"
-                  "a call to lisp from unexpected level"
-                  (Level.to_string level) ()
+        let return_to_caller self jmp =
+          Machine.get () >>= fun ctxt ->
+          match where_to_return jmp with
+          | Some target when Option.is_some ctxt#next ->
+            self#eval_ret target
+          | _ -> Machine.put (ctxt#set_next None)
 
-            let exec self =
-              Machine.get () >>= fun ctxt ->
-              eval_args self >>= fun bs ->
-              Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-              Lisp.eval_body self fn.code.body >>= fun r ->
-              Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
+        let eval_finish self level =
+          let module Level = Context.Level in
+          match level with
+          | Level.Jmp {Level.me=jmp} -> return_to_caller self jmp
+          | level ->
+            invalid_argf "broken invariant - %s (%s)"
+              "a call to lisp from unexpected level"
+              (Level.to_string level) ()
+
+        let exec self =
+          Machine.get () >>= fun ctxt ->
+          eval_args self >>= fun bs ->
+          Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
+          Lisp.eval_body self fn.code.body >>= fun r ->
+          Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
 
 
-              Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
-              eval_ret self r >>= fun () ->
-              eval_finish self ctxt#level
-          end in
-          Linker.link ~code:(module Code) (Term.tid sub)
+          Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+          eval_ret self r >>= fun () ->
+          eval_finish self ctxt#level
+      end in
+      Linker.link ?addr ?tid ~name (module Code)
 
   let link_features () =
     Machine.Local.get state >>| collect_externals >>=
