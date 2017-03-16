@@ -103,24 +103,34 @@ let call,calling =
 
 type state = {
   pc : addr;
+  blks : tid Addr.Map.t;
 }
 
-let sexp_of_state {pc} = Sexp.List [
-    Sexp.List [Sexp.Atom "program-counter"; sexp_of_word pc];
-]
+let sexp_of_state {pc} =
+    Sexp.List [Sexp.Atom "program-counter"; sexp_of_word pc]
 
-let sexp_of_state {pc} = [%sexp {pc : word = pc}]
+
+let collect_blks prog =
+  (object(self)
+    inherit [tid Addr.Map.t] Term.visitor
+    method! enter_blk term addrs =
+      match Term.get_attr term address with
+      | None -> addrs
+      | Some addr -> Map.add addrs ~key:addr ~data:(Term.tid term)
+  end)#run prog Addr.Map.empty
+
+let null ctxt =
+  let size = Arch.addr_size (Project.arch ctxt#project) in
+  Addr.zero (Size.in_bits size)
 
 let state = Primus_machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
     ~name:"interpreter"
-    (fun ctxt -> (object(self)
-        inherit [tid Addr.Map.t] Term.visitor
-        method! enter_blk term addrs =
-          match Term.get_attr term address with
-          | None -> addrs
-          | Some addr -> Map.add addrs ~key:addr ~data:(Term.tid term)
-      end)#run ctxt#program Addr.Map.empty)
+    ~inspect:sexp_of_state
+    (fun ctxt -> {
+         pc = null ctxt;
+         blks = collect_blks ctxt#program
+       })
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
@@ -152,6 +162,15 @@ module Make (Machine : Machine) = struct
   let failf fmt = Format.kasprintf (fun msg ->
     fun () -> Machine.fail (Runtime_error msg)) fmt
 
+  let update_program_counter t =
+    match Term.get_attr t address with
+    | None -> Machine.return ()
+    | Some addr ->
+      Machine.Local.get state >>= fun {pc} ->
+      if Addr.equal addr pc then Machine.return ()
+      else Machine.Local.update state ~f:(fun s -> {s with pc=addr})
+
+
   class ['e] t  =
     object(self)
       inherit ['e] Biri.t as super
@@ -159,6 +178,7 @@ module Make (Machine : Machine) = struct
 
       method! enter_term cls t =
         super#enter_term cls t >>= fun () ->
+        update_program_counter t >>= fun () ->
         Machine.get () >>= fun ctxt ->
         make_observation term_entered (Term.tid t) >>= fun () ->
         match Context.Level.next ctxt#level cls t with
@@ -231,9 +251,9 @@ module Make (Machine : Machine) = struct
       method! eval_indirect exp =
         let open Context.Level in
         self#eval_jmp_target exp >>= fun dst ->
-        Machine.Local.get state >>= fun blocks ->
+        Machine.Local.get state >>= fun {blks} ->
         Linker.is_linked (`addr dst) >>= fun is_linked ->
-        match Map.find blocks dst with
+        match Map.find blks dst with
         | Some tid when not is_linked -> self#eval_direct tid
         | _ ->
           make_observation calling (`addr dst) >>= fun () ->
