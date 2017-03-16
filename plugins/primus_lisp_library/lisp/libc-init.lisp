@@ -4,11 +4,10 @@
 (require pointers)
 (require memory)
 
-(defun init (main argc argv)
+(defun init (main argc argv auxv)
   "GNU libc initialization stub"
   (declare (external "__libc_start_main"))
   (exit-with (invoke-subroutine main argc argv)))
-
 
 (defun init (args on-exit main)
   "bionic initialization function"
