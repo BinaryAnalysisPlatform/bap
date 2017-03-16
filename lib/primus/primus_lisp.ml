@@ -930,6 +930,40 @@ module Lisp(Machine : Machine) = struct
   let width () = Machine.Local.get state >>| fun {width} -> width
 
 
+  let stack_slot exp =
+    let open Bil.Types in match exp with
+    | BinOp (PLUS, Var sp, Int off) -> Some (sp,`down,off)
+    | BinOp (MINUS,Var sp, Int off) -> Some (sp,`up,off)
+    | _ -> None
+
+  let update_frame slot addr n =
+    match slot, stack_slot addr with
+    | slot,None -> slot
+    | None, Some (sp,dir,off) ->
+      Some (sp,dir,Word.(off ++ Size.in_bytes n))
+    | Some (sp,dir,off), Some (sp',dir',off') ->
+      if Var.same sp sp' && dir = dir' then
+        let off = Word.max off off' in
+        Some (sp,dir,Word.(off ++ Size.in_bytes n))
+      else Some (sp,dir,off)
+
+
+  let find_max_slot =
+    Seq.fold ~init:None ~f:(fun slot arg ->
+      match Arg.rhs arg with
+      | Bil.Load (_,addr,_,n) -> update_frame slot addr n
+      | _ -> slot)
+
+  let allocate_stack_frame biri args =
+    match find_max_slot args with
+    | None -> Machine.return None
+    | Some (sp,dir,max) ->
+      let sign = if dir = `down then Bil.MINUS else Bil.PLUS in
+      biri#lookup sp >>= fun old ->
+      biri#eval_exp Bil.(binop sign (var sp) (int max)) >>=
+      biri#update sp >>= fun () ->
+      Machine.return (Some (sp,old))
+
   let eval_sub biri = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
@@ -947,18 +981,26 @@ module Lisp(Machine : Machine) = struct
           failf "invoke-subroutine: can't invoke subroutine %s - %s"
             (Sub.name sub) "type information is not available" ()
         | Some {C.Type.Proto.args} ->
-          Seq.zip (Term.enum arg_t sub) (Seq.of_list sub_args) |>
+          let args = Term.enum arg_t sub in
+          allocate_stack_frame biri args >>= fun frame ->
+          Seq.zip args (Seq.of_list sub_args) |>
           Machine.Seq.iter ~f:(fun (arg,value) ->
               match Arg.rhs arg with
               | Bil.Var v ->
-                biri#eval_int value >>=
-                biri#update v
+                biri#eval_int value >>= biri#update v
+              | Bil.Load (mem,addr,endian,size) ->
+                biri#eval_store ~mem ~addr (Bil.int value) endian size
+                >>= fun _mem -> Machine.return ()
               | exp ->
                 failf "%s: can't pass argument %s - %s %a"
                   "invoke-subroutine" (Arg.lhs arg |> Var.name)
                   "unsupported ABI" Exp.pps exp ()) >>= fun () ->
           Linker.exec (`addr sub_addr) biri >>= fun () ->
-          Machine.return Word.b1
+          match frame with
+          | Some (sp,bp) ->
+            biri#update sp bp >>= fun () ->
+            Machine.return Word.b1
+          | None -> Machine.return Word.b1
 
   let eval_primitive biri name args =
     Machine.Local.get state >>= fun {contexts; primitives} ->
