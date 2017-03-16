@@ -138,7 +138,7 @@ let stage2 stage1 = object
         Term.map sub_t prog ~f:(fun sub ->
             match Term.get_attr sub address with
             | Some a when Addr.equal addr a ->
-              Sub.with_name sub "main"
+              stage1#map_sub (Sub.with_name sub "main")
             | _ -> sub)
 end
 
