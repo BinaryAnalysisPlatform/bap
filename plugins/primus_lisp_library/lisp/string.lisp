@@ -52,16 +52,31 @@
       (incr dst))
     found))
 
+
+(defmacro find-character (dir p c n)
+  (prog
+   (while (and n (not (points-to char p c)))
+    (decr n)
+    (dir p))
+   (if (points-to char p c) p 0)))
+
 (defun memchr (p c n)
   (declare (external "memchr"))
-  (while (and n (not (points-to char p c)))
-    (decr n)
-    (incr p))
-  (if (points-to char p c) p 0))
+  (find-character incr p c n))
+
+
+(defun memrchr (p c n)
+  (declare (external "memrchr"))
+  (find-character decr p c n))
+
 
 (defun strchr (p c)
   (declare (external "strchr"))
   (memchr p c (+ (strlen p) 1)))
+
+(defun strrchr (p c)
+  (declare (external "strrchr"))
+  (memrchr p c (+ (strlen p) 1)))
 
 (defun memset (p c n)
   (declare (external "memset"))

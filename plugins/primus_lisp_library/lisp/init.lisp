@@ -2,7 +2,7 @@
   (if cnd (prog body) ()))
 
 (defmacro until ($cond$ $body$)
-  (if (not $cond) $body ()))
+  (while (not $cond) $body))
 
 
 (defun > (x y) (< y x))
