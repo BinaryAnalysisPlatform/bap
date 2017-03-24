@@ -1,4 +1,3 @@
-
 let cxx () : unit =
   BaseEnv.var_define
     ~hide:false
@@ -56,6 +55,20 @@ let install_headers hdrs =
       | _ -> (cs, bs, lib, dirs, [])
 
 
+let llvm_check () =
+  let error = OASISMessage.(error ~ctxt) in
+  match getvar "llvm_config", getvar "llvm_version" with
+  | Some cfg, Some ver ->
+    let cfg_ver = strip_patch @@
+      OASISExec.run_read_one_line ~ctxt cfg ["--version"] in
+    let ver = strip_patch ver in
+    if cfg_ver <> ver then
+      let () = error
+          "consistency check failed: provided different versions \
+           of llvm-config (%s) and llvm-version (%s)\n" cfg_ver ver in
+      exit 1
+  | _ -> ()
+
 let () =
 
   Unix.putenv "OCAMLFIND_IGNORE_DUPS_IN" @@
@@ -84,3 +97,5 @@ let () =
     ["serialization", "true"], ["piqic"],
     "Failed find piqic compiler";
   ];
+
+  llvm_check ()
