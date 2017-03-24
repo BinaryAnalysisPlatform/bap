@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Primus.Std
 open Format
 
 module Words = struct
@@ -31,3 +32,28 @@ let words = Value.Tag.register (module Words)
 let strings = Value.Tag.register (module Words)
     ~uuid:"386efa37-85b0-4b48-b04d-8bafd5160670"
     ~name:"beagle-strings"
+
+
+
+type t = {
+  terms : tid seq;
+  chars : string;
+}
+
+
+let create terms chars = {terms; chars}
+let terms t = t.terms
+let data t = t.chars
+
+let inspect_prey {chars} = Sexp.Atom chars
+
+let detected,finished =
+  Observation.provide ~inspect:inspect_prey "beagle-prey"
+
+let inspect (prey,words) =
+  Sexp.List [
+    inspect_prey prey;
+    String.Set.sexp_of_t words;
+  ]
+
+let caught,catch = Observation.provide ~inspect "beagle"

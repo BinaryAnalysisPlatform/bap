@@ -1,0 +1,6 @@
+REC
+B ../../_build/lib/microx
+B ../../_build/lib/beagle
+B ../../_build/lib/primus
+B ../../_build/lib/bap_strings
+B ../../_build/plugins/beagle

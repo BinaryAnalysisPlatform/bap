@@ -6,7 +6,7 @@ Library beagle_plugin
   Build$: flag(everything) || flag(beagle)
   Path: plugins/beagle
   FindlibName: bap-plugin-beagle
-  BuildDepends: bap, bap-microx, bap-beagle-prey
+  BuildDepends: bap, bap-microx, bap-beagle-prey, bap-strings
   InternalModules: Beagle_main, Beagle_trapper
   XMETADescription: microx powered obfuscated string solver
 
@@ -16,5 +16,5 @@ Library beagle_prey
   Path: lib/beagle
   FindlibName: bap-beagle-prey
   Modules: Beagle_prey
-  BuildDepends: bap
+  BuildDepends: bap, primus
   Xmetadescription: beagle attributes

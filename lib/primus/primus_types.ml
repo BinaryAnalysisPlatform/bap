@@ -5,7 +5,7 @@ open Monads.Std
 open Primus_generator_types
 
 module Context = Primus_context
-
+class context = Context.t
 
 type error =  Primus_error.t = ..
 type 'a observation = 'a Primus_observation.t

@@ -8,6 +8,7 @@ module type S = Machine
 
 type nonrec component = component
 
+val finished : unit observation
 
 module State = Primus_state
 module Make(M : Monad.S) : Machine with type 'a m = 'a M.t

@@ -1,7 +1,14 @@
 open Bap.Std
 
+(** symbol encoding *)
 module type Alphabet = sig
+  (** total number of symbols in the alphabet *)
   val length : int
+
+
+  (** [index x] maps [x] to the [n]'th symbol of an alphabet, if [x]
+      is a representation of that symbols, returns a number that is
+      outside of [[0,len-1]] interval if it is not.*)
   val index : char -> int
 end
 
