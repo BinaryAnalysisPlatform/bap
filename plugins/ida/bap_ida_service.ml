@@ -1,6 +1,7 @@
-open! Core_kernel.Std
+open Core_kernel.Std
 open Bap_ida.Std
 
+type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
 
 type ida = {
   ida : string;
@@ -12,15 +13,33 @@ type ida = {
 
 module Config = struct
   type t = {
-    ida : string;
+    ida_path : string;
+    ida_kind : ida_kind option;
     curses : string option;
-    idb : string -> string;
-    debug : int;
+    debug  : int;
   }
 end
 type config = Config.t
 
 type 'a command = 'a Command.t
+
+let ext = FilePath.replace_extension
+
+let ida_of_suffix filename =
+  let exists suf = Sys.file_exists (ext filename suf) in
+  if exists "i64" then  Some `idaq64
+  else if exists "idb" then Some `idaq
+  else None
+
+let find_ida target path kind =
+  let kind = match kind with
+    | Some kind -> kind
+    | None -> match ida_of_suffix target with
+      | Some ida -> ida
+      | None -> `idaq64 in
+  let s = Sexp.to_string (sexp_of_ida_kind kind) in
+  let ida = Filename.concat path s in
+  Filename.quote ida
 
 let run cmd =
   let inp = Unix.open_process_in cmd in
@@ -31,9 +50,6 @@ let system cmd =
   if Sys.command cmd <> 0 then raise (Ida.Failed cmd)
 let pread cmd = ksprintf run cmd
 let shell cmd = ksprintf (fun cmd () -> system cmd) cmd
-
-let ext p e =
-  FilePath.(add_extension (chop_extension p) e)
 
 let idb ida p =
   if Filename.check_suffix ida "64"
@@ -71,11 +87,19 @@ let run (t:ida) cmd =
   clean ();
   Sys.chdir cwd
 
-let create {Config.ida; idb; debug; curses} target =
+let check_path path = match Bap_ida_check.check_path path with
+  | Ok () -> ()
+  | Error e ->
+    eprintf "failed to check ida path: %s." (Error.to_string_hum e);
+    exit 1
+
+let create {Config.ida_path; ida_kind; debug; curses} target =
   if not (Sys.file_exists target)
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
   FileUtil.cp [target] exe;
+  let ida = find_ida target ida_path ida_kind in
+  let idb = idb ida in
   let self = {
     ida;
     exe;
@@ -88,6 +112,7 @@ let create {Config.ida; idb; debug; curses} target =
     if Sys.file_exists (asm target) then
       FileUtil.cp [asm target] (asm exe);
   ) else (
+    check_path ida_path;
     run self @@ shell "%s -A -B %s" self.ida self.exe;
   );
   self
@@ -125,22 +150,15 @@ let find_curses () =
       | [_;path] -> Some (String.strip path)
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
-let register ida_path is_headless : unit =
-  let ida =
-    let (/) = Filename.concat in
-    if is_headless
-    then ida_path/"idal64"
-    else ida_path/"idaq64" in
+let register ida_path ida_kind is_headless : unit =
   let curses = if Sys.os_type = "Unix" && is_headless
     then find_curses () else None in
-  let idb = idb ida in
-  let ida = Filename.quote ida in
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with exn -> 0 in
   let config = {
-    Config.ida;
+    Config.ida_path;
+    ida_kind;
     curses;
-    idb;
     debug
   } in
   let create (target:string) : Service.t =
