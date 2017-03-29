@@ -70,10 +70,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       Option.map ~f:(fun s -> Word.of_int ~width:2 s |> Bil.int) shift
 
     let make_disp disp =
-      Option.some_if (disp <> 0) disp |>
-      Option.map ~f:(fun disp ->
-          Word.of_int ~width:(Size.in_bits addr_size) disp |>
-          Bil.int)
+      Option.some @@ Bil.int @@
+      Word.of_int ~width:(Size.in_bits addr_size) disp
 
     let addr {seg; base; scale; index; disp} =
       let seg = Option.map ~f:(fun seg -> make_value seg) seg in
