@@ -1,8 +1,8 @@
 open Bap.Std
-open Primus_types
+open Bap_primus_types
 
-module Context = Primus_context
-module Generator = Primus_generator
+module Context = Bap_primus_context
+module Generator = Bap_primus_generator
 
 type error += Segmentation_fault of addr
 type error += Stack_overflow of addr

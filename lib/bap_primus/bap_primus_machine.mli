@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Monads.Std
-open Primus_types
+open Bap_primus_types
 
 
 module type Component = Component
@@ -10,7 +10,7 @@ type nonrec component = component
 
 val finished : unit observation
 
-module State = Primus_state
+module State = Bap_primus_state
 module Make(M : Monad.S) : Machine with type 'a m = 'a M.t
 
 (* think about: add more stuff  to the main? Like preinstantiated  *)

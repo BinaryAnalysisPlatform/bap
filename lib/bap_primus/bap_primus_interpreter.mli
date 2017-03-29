@@ -1,9 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Primus_types
+open Bap_primus_types
 
-module Context = Primus_context
+module Context = Bap_primus_context
 
 val enter_term : tid observation
 val leave_term : tid observation
@@ -39,6 +39,6 @@ module Make (Machine : Machine) : sig
     with type ('a,'e) state = ('a,'e) Machine.t
   class ['a] t : object
     inherit ['a] Biri.t
-    constraint 'a = #Primus_context.t
+    constraint 'a = #Bap_primus_context.t
   end
 end

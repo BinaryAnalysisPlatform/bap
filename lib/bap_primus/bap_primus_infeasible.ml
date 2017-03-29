@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 
-open Primus_types
+open Bap_primus_types
 
 (*
 

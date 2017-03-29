@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Format
-open Primus_types
+open Bap_primus_types
 
 type name = [
   | `tid of tid
@@ -34,7 +34,7 @@ let empty = {
 
 
 
-let () = Primus_error.add_printer (function
+let () = Bap_primus_error.add_printer (function
     | Unbound_name name ->
       Some (asprintf "Linker: unbound %a" Sexp.pp (sexp_of_name name))
     | _ -> None)
@@ -75,7 +75,7 @@ let code_of_name name s = match name with
   | `addr addr -> find addr s.addrs s.codes
   | `tid tid -> find tid s.terms s.codes
 
-let state = Primus_machine.State.declare
+let state = Bap_primus_machine.State.declare
     ~uuid:"38bf35bf-1091-4220-bf75-de79db9de4d2"
     ~name:"linker"
     (fun ctxt -> init_state ctxt#program)

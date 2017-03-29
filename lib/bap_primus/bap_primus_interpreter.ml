@@ -3,15 +3,15 @@ open Bap.Std
 open Bap_c.Std
 
 open Format
-open Primus_types
+open Bap_primus_types
 
-module Context = Primus_context
-module Observation = Primus_observation
-module State = Primus_state
+module Context = Bap_primus_context
+module Observation = Bap_primus_observation
+module State = Bap_primus_state
 
-open Primus_sexp
+open Bap_primus_sexp
 
-let sexp_of_level = Primus_context.sexp_of_level
+let sexp_of_level = Bap_primus_context.sexp_of_level
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
@@ -123,7 +123,7 @@ let null ctxt =
   let size = Arch.addr_size (Project.arch ctxt#project) in
   Addr.zero (Size.in_bits size)
 
-let state = Primus_machine.State.declare
+let state = Bap_primus_machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
     ~name:"interpreter"
     ~inspect:sexp_of_state
@@ -136,9 +136,9 @@ module Make (Machine : Machine) = struct
   open Machine.Syntax
 
   module Biri = Biri.Make(Machine)
-  module Memory = Primus_memory.Make(Machine)
-  module Linker = Primus_linker.Make(Machine)
-  module Env = Primus_env.Make(Machine)
+  module Memory = Bap_primus_memory.Make(Machine)
+  module Linker = Bap_primus_linker.Make(Machine)
+  module Env = Bap_primus_env.Make(Machine)
 
   type 'a r = (Bil.result,'a) Machine.t
   type 'a u = (unit,'a) Machine.t
@@ -154,9 +154,9 @@ module Make (Machine : Machine) = struct
   type error += Runtime_error of string
 
   let () =
-    Primus_error.add_printer (function
+    Bap_primus_error.add_printer (function
         | Runtime_error msg ->
-          Some (sprintf "Primus runtime error: %s" msg)
+          Some (sprintf "Bap_primus runtime error: %s" msg)
         | _ -> None)
 
   let failf fmt = Format.kasprintf (fun msg ->

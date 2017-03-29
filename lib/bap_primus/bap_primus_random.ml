@@ -1,7 +1,7 @@
 open Core_kernel.Std
-open Primus_types
+open Bap_primus_types
 
-module Iterator = Primus_iterator
+module Iterator = Bap_primus_iterator
 module type S = Iterator.Infinite.S
 
 module LCG = struct

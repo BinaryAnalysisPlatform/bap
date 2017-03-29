@@ -1,6 +1,6 @@
 open Core_kernel.Std
 
-module Iterator = Primus_iterator
+module Iterator = Bap_primus_iterator
 
 
 module LCG : sig

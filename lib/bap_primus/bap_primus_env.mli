@@ -1,7 +1,7 @@
 open Bap.Std
-open Primus_types
+open Bap_primus_types
 
-module Generator = Primus_generator
+module Generator = Bap_primus_generator
 
 
 module Make(Machine : Machine) : sig

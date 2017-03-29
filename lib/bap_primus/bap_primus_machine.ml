@@ -1,10 +1,10 @@
 open Core_kernel.Std
 open Bap.Std
 open Monads.Std
-open Primus_types
+open Bap_primus_types
 
-module Error = Primus_error
-module Observation = Primus_observation
+module Error = Bap_primus_error
+module Observation = Bap_primus_observation
 
 let components : component list ref = ref []
 let add_component comp = components := comp :: !components
@@ -14,7 +14,7 @@ module type S = Machine
 type nonrec component = component
 
 
-module State = Primus_state
+module State = Bap_primus_state
 
 module Make(M : Monad.S)
 = struct
@@ -148,7 +148,7 @@ module Make(M : Monad.S)
     M.bind (SM.run m {
         global = State.Bag.empty;
         local = State.Bag.empty;
-        observations = Primus_observation.empty;
+        observations = Bap_primus_observation.empty;
         states = String.Map.empty;
         ctxt}) @@ fun (x,{ctxt}) -> M.return (x,ctxt)
 

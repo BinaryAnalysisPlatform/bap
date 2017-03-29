@@ -1,6 +1,6 @@
 open Bap.Std
 open Format
-open Primus_types
+open Bap_primus_types
 
 
 (** Lisp machine.

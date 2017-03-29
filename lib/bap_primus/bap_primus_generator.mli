@@ -1,6 +1,6 @@
 open Bap.Std
-open Primus_generator_types
-open Primus_types
+open Bap_primus_generator_types
+open Bap_primus_types
 
 type t [@@deriving sexp_of]
 

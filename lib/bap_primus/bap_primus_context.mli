@@ -27,7 +27,7 @@ module Level : sig
 
   val to_string : t -> string
 
-  val next : t -> ('p,'t) cls -> 't term -> (t,Primus_error.t) Monad.Result.result
+  val next : t -> ('p,'t) cls -> 't term -> (t,Bap_primus_error.t) Monad.Result.result
 end
 
 type level = Level.t [@@deriving sexp_of]

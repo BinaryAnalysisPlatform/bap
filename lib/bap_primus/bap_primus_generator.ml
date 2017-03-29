@@ -1,10 +1,10 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Primus_types
-open Primus_generator_types
+open Bap_primus_types
+open Bap_primus_generator_types
 
-module Iterator = Primus_iterator
+module Iterator = Bap_primus_iterator
 
 
 let uniform_coverage ~total ~trials =
@@ -12,7 +12,7 @@ let uniform_coverage ~total ~trials =
 
 
 
-let generators : Univ_map.t state = Primus_machine.State.declare
+let generators : Univ_map.t state = Bap_primus_machine.State.declare
     ~name:"rng-states"
     ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3"
     (fun _ -> Univ_map.empty)
@@ -68,7 +68,7 @@ let static value = Static value
 
 
 module Random = struct
-  open Primus_random
+  open Bap_primus_random
 
   let lcg ?(min=LCG.min) ?(max=LCG.max) seed =
     let lcg = LCG.create seed in

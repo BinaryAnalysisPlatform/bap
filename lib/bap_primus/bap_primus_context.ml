@@ -1,9 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
 
-module Error = Primus_error
+module Error = Bap_primus_error
 
-open Primus_sexp
+open Bap_primus_sexp
 
 module Level = struct
   type nil = Nil

@@ -1,12 +1,12 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus_types
+open Bap_primus_types
 open Format
 
-module Context = Primus_context
-module Observation = Primus_observation
-module Generator = Primus_generator
-module Error = Primus_error
+module Context = Bap_primus_context
+module Observation = Bap_primus_observation
+module Generator = Bap_primus_generator
+module Error = Bap_primus_error
 
 
 type error += Undefined_var of var
@@ -46,7 +46,7 @@ let sexp_of_env {values; random} = Sexp.List [
     sexp_of_random random;
   ]
 
-let state = Primus_machine.State.declare
+let state = Bap_primus_machine.State.declare
     ~inspect:sexp_of_env
     ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
     ~name:"environment" (fun _ -> {
@@ -82,7 +82,7 @@ module Make(Machine : Machine) = struct
     open Machine.Syntax
     type ('a,'e) m = ('a,'e) Machine.t
 
-    module Generator = Primus_generator.Make(Machine)
+    module Generator = Bap_primus_generator.Make(Machine)
 
     let add var policy =
       Machine.Local.update state ~f:(fun s -> {

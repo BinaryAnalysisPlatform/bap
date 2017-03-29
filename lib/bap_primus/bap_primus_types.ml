@@ -2,15 +2,15 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 
-open Primus_generator_types
+open Bap_primus_generator_types
 
-module Context = Primus_context
+module Context = Bap_primus_context
 class context = Context.t
 
-type error =  Primus_error.t = ..
-type 'a observation = 'a Primus_observation.t
-type 'a statement = 'a Primus_observation.statement
-type 'a state = ('a,Context.t) Primus_state.t
+type error =  Bap_primus_error.t = ..
+type 'a observation = 'a Bap_primus_observation.t
+type 'a statement = 'a Bap_primus_observation.statement
+type 'a state = ('a,Context.t) Bap_primus_state.t
 type ('a,'e) result = ('a,'e) Monad.Result.result =
   | Ok of 'a
   | Error of 'e

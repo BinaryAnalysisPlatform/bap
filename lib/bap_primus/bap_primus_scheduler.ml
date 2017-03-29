@@ -2,9 +2,9 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 
-open Primus_types
-module Iterator = Primus_iterator
-module RNG = Primus_random
+open Bap_primus_types
+module Iterator = Bap_primus_iterator
+module RNG = Bap_primus_random
 
 module Scheduler = struct
   module type S = sig

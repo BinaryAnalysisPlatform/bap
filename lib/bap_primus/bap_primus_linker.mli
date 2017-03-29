@@ -1,5 +1,5 @@
 open Bap.Std
-open Primus_types
+open Bap_primus_types
 
 
 type name = [

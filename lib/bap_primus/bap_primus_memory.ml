@@ -1,15 +1,15 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Primus_types
+open Bap_primus_types
 
-module Context = Primus_context
-module Observation = Primus_observation
-module Iterator = Primus_iterator
-module Random  = Primus_random
-module Generator = Primus_generator
-module Error = Primus_error
-open Primus_sexp
+module Context = Bap_primus_context
+module Observation = Bap_primus_observation
+module Iterator = Bap_primus_iterator
+module Random  = Bap_primus_random
+module Generator = Bap_primus_generator
+module Error = Bap_primus_error
+open Bap_primus_sexp
 
 type error += Segmentation_fault of addr
 type error += Stack_overflow of addr
@@ -82,7 +82,7 @@ let inspect_memory {values; layers} =
       List [Atom "layers"; List layers];
     ])
 
-let state = Primus_machine.State.declare
+let state = Bap_primus_machine.State.declare
     ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
     ~inspect:inspect_memory
     ~name:"memory"
@@ -121,7 +121,7 @@ module Make(Machine : Machine) = struct
         | Dynamic {value} -> Generate.next value >>| Word.of_int ~width:8
         | Static mem -> match Memory.get ~addr mem with
           | Ok value -> Machine.return value
-          | Error _ -> failwith "Primus.Memory.read"
+          | Error _ -> failwith "Bap_primus.Memory.read"
 
 
   let write addr value {values;layers} = match find_layer addr layers with

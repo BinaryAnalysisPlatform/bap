@@ -1,5 +1,5 @@
 open Core_kernel.Std
-open Primus_generator_types
+open Bap_primus_generator_types
 
 module type Base = Iterator.Base
 

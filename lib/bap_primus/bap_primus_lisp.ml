@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Format
 open Bap_c.Std
-open Primus_types
+open Bap_primus_types
 
 type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
          | Lsl | Lsr | Asr | And | Or | Xor | Cat
@@ -301,7 +301,7 @@ module Resolve = struct
        evaluation context@\n%a@\n@\n%a"
       name Contexts.pp ctxts pp resolution
 
-  let () = Primus_error.add_printer (function
+  let () = Bap_primus_error.add_printer (function
       | Failed (n,c,r) -> Some (string_of_error n c r)
       | _ -> None)
 
@@ -793,7 +793,7 @@ module Load = struct
 end
 
 
-module State = Primus_state
+module State = Bap_primus_state
 
 type bindings = (var * Word.t) list [@@deriving sexp]
 
@@ -822,13 +822,13 @@ let width_of_ctxt ctxt =
 type error += Runtime_error of string
 type error += Link_error of string
 
-let () = Primus_error.add_printer (function
+let () = Bap_primus_error.add_printer (function
     | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
     | Link_error msg -> Some ("primus linker error - " ^ msg)
     | _ -> None)
 
 
-let state = Primus_state.declare ~inspect
+let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun ctxt -> {
@@ -864,7 +864,7 @@ let bil_of_lisp op =
 
 
 module Trace = struct
-  module Observation = Primus_observation
+  module Observation = Bap_primus_observation
   let sexp_of_word x =
     let v = Word.string_of_value x in
     let w = Int.to_string (Word.bitwidth x) in
@@ -903,7 +903,7 @@ end
 
 module Lisp(Machine : Machine) = struct
   open Machine.Syntax
-  module Linker = Primus_linker.Make(Machine)
+  module Linker = Bap_primus_linker.Make(Machine)
   module Env = Locals(Machine)
 
 
@@ -1109,7 +1109,7 @@ module Lisp(Machine : Machine) = struct
         Machine.catch
           (eval e >>| fprintf library.log "%a" Word.pp)
         (fun err ->
-          fprintf library.log "<%s>" (Primus_error.to_string err);
+          fprintf library.log "<%s>" (Bap_primus_error.to_string err);
           Machine.return ()) in
       Machine.List.iter fmt ~f:(function
           | Lit s -> Machine.return (pp_print_string library.log s)
@@ -1125,7 +1125,7 @@ end
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
-  module Linker = Primus_linker.Make(Machine)
+  module Linker = Bap_primus_linker.Make(Machine)
   module Env = Locals(Machine)
 
   let error kind = Format.ksprintf
@@ -1273,4 +1273,4 @@ let init ?(log=std_formatter) ?(paths=[]) features  =
   library.paths <- paths;
   library.features <- features;
   library.log <- log;
-  Primus_machine.add_component (module Make)
+  Bap_primus_machine.add_component (module Make)
