@@ -5,6 +5,7 @@ module Monoid = Monads_monoid
 
 module type Basic = Types.Monad.Basic
 module type Basic2 = Types.Monad.Basic2
+module Syntax = Types.Monad.Syntax
 
 module type S = Types.Monad.S
 module type S2 = Types.Monad.S2
@@ -34,6 +35,7 @@ module Choice : sig
 end
 
 module Ident : Monad with type 'a t = 'a
+
 
 module Option : sig
   include module type of Types.Option

@@ -215,6 +215,34 @@ module Std : sig
       end
     end
 
+    module Syntax : sig
+      module type S = sig
+        type 'a t
+        val (>>=) : 'a t -> ('a -> 'b t) -> 'b t
+        val (>>|) : 'a t -> ('a -> 'b) -> 'b t
+        val (>=>) : ('a -> 'b t) -> ('b -> 'c t) -> ('a -> 'c t)
+        val (!!)  : 'a -> 'a t
+        val (!$)   : ('a -> 'b) -> ('a t -> 'b t)
+        val (!$$)  : ('a -> 'b -> 'c) -> ('a t -> 'b t -> 'c t)
+        val (!$$$) : ('a -> 'b -> 'c -> 'd) -> ('a t -> 'b t -> 'c t -> 'd t)
+        val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t)
+        val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
+      end
+
+      module type S2 = sig
+        type ('a,'e) t
+        val (>>=) : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
+        val (>>|) : ('a,'e) t -> ('a -> 'b) -> ('b,'e) t
+        val (>=>) : ('a -> ('b,'e) t) -> ('b -> ('c,'e) t) -> ('a -> ('c,'e) t)
+        val (!!) : 'a -> ('a,'e) t
+        val (!$)   : ('a -> 'b) -> (('a,'e) t -> ('b,'e) t)
+        val (!$$)  : ('a -> 'b -> 'c) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t)
+        val (!$$$) : ('a -> 'b -> 'c -> 'd) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t -> ('d,'e) t)
+        val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t)
+        val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
+          (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
+      end
+    end
     module type S = sig
       type 'a t
 
@@ -260,19 +288,9 @@ module Std : sig
       module Seq : Collection.S with type 'a t := 'a Sequence.t
 
 
-      module Syntax : sig
-        val (>>=) : 'a t -> ('a -> 'b t) -> 'b t
-        val (>>|) : 'a t -> ('a -> 'b) -> 'b t
-        val (>=>) : ('a -> 'b t) -> ('b -> 'c t) -> ('a -> 'c t)
-        val (!!)  : 'a -> 'a t
-        val (!$)   : ('a -> 'b) -> ('a t -> 'b t)
-        val (!$$)  : ('a -> 'b -> 'c) -> ('a t -> 'b t -> 'c t)
-        val (!$$$) : ('a -> 'b -> 'c -> 'd) -> ('a t -> 'b t -> 'c t -> 'd t)
-        val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t)
-        val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
-      end
-      include module type of Syntax
+      include Syntax.S with type 'a t := 'a t
       include Monad.S with type 'a t := 'a t
+      module Syntax : Syntax.S with type 'a t := 'a t
     end
 
     module type S2 = sig
@@ -324,20 +342,9 @@ module Std : sig
       module Seq : Collection.S with type 'a t := 'a Sequence.t
 
 
-      module Syntax : sig
-        val (>>=) : ('a,'e) t -> ('a -> ('b,'e) t) -> ('b,'e) t
-        val (>>|) : ('a,'e) t -> ('a -> 'b) -> ('b,'e) t
-        val (>=>) : ('a -> ('b,'e) t) -> ('b -> ('c,'e) t) -> ('a -> ('c,'e) t)
-        val (!!) : 'a -> ('a,'e) t
-        val (!$)   : ('a -> 'b) -> (('a,'e) t -> ('b,'e) t)
-        val (!$$)  : ('a -> 'b -> 'c) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t)
-        val (!$$$) : ('a -> 'b -> 'c -> 'd) -> (('a,'e) t -> ('b,'e) t -> ('c,'e) t -> ('d,'e) t)
-        val (!$$$$) : ('a -> 'b -> 'c -> 'd -> 'e) -> (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t)
-        val (!$$$$$) : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) ->
-          (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
-      end
-      include module type of Syntax
+      include Syntax.S2 with type ('a,'e) t := ('a,'e) t
       include Monad.S2 with type ('a,'e) t := ('a,'e) t
+      module Syntax : Syntax.S2 with type ('a,'e) t := ('a,'e) t
     end
 
     module type Core = Monad.S
