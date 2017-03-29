@@ -115,7 +115,7 @@ type beagle = Beagle of tid Strings.Detector.t
 type hunter = Hunter of (string -> String.Set.t)
 
 let hunters_club =
-  Machine.State.declare
+  Primus.Machine.State.declare
   ~uuid:"1fa35cfe-f720-473c-a5ac-50fa8fa9f1fd"
   ~name:"beagle-hunters-club"
   (fun _ -> {
@@ -126,7 +126,7 @@ let hunters_club =
 
 
 let beagle =
-  Machine.State.declare
+  Primus.Machine.State.declare
     ~uuid:"5d404352-722d-4ea1-bddb-aa4e4dc65c1d"
     ~name:"beagle"
     (fun _ ->
@@ -139,7 +139,7 @@ let beagle =
                  (make_alphabet (get alphabet))))
 
 let hunter =
-  Machine.State.declare
+  Primus.Machine.State.declare
     ~uuid:"14d5eef5-4b04-418d-8a9f-3a20f52a5e10"
     ~name:"beagle-hunter"
     (fun _ ->
@@ -155,50 +155,50 @@ let hunter =
        Hunter (build))
 
 
-module Hunter(Primus : Machine.S) = struct
-  open Primus.Syntax
+module Hunter(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
 
   let save_address addr =
-    Primus.Global.update hunters_club ~f:(fun t ->
+    Machine.Global.update hunters_club ~f:(fun t ->
         {t with addrs = Set.add t.addrs addr})
 
   let process_byte char =
-    Primus.get () >>= fun ctxt ->
-    Primus.Local.get beagle >>= fun (Beagle d) ->
+    Machine.get () >>= fun ctxt ->
+    Machine.Local.get beagle >>= fun (Beagle d) ->
     let d = Strings.Detector.step d ctxt#current char in
     eprintf "%03d => %a: %a - %a"
       (Char.to_int char)
       Tid.pp ctxt#current
       Strings.Detector.pp_stats d
       Strings.Detector.pp d;
-    Strings.Detector.when_decided d (Primus.return ())
+    Strings.Detector.when_decided d (Machine.return ())
       ~f:(fun d ->
           let terms = Strings.Detector.data ~rev:false d in
           let chars = Strings.Detector.chars d in
           let prey = Beagle_prey.create (Seq.of_list terms) chars in
-          Primus.Observation.make Beagle_prey.finished prey) >>=
+          Machine.Observation.make Beagle_prey.finished prey) >>=
     fun () ->
-    Primus.Local.put beagle (Beagle d)
+    Machine.Local.put beagle (Beagle d)
 
   let got_prey d =
     let terms = Strings.Detector.data ~rev:false d in
     let chars = Strings.Detector.chars d in
     let prey = Beagle_prey.create (Seq.of_list terms) chars in
-    Primus.Observation.make Beagle_prey.finished prey
+    Machine.Observation.make Beagle_prey.finished prey
 
   let gohome () =
-    Primus.Local.get beagle >>= fun (Beagle b) ->
+    Machine.Local.get beagle >>= fun (Beagle b) ->
     match Strings.Detector.abort b with
-    | None -> Primus.return ()
+    | None -> Machine.return ()
     | Some d -> got_prey d
 
   let process_word w =
-    Primus.get () >>= fun ctxt ->
-    Primus.Local.get beagle >>= fun (Beagle d) ->
+    Machine.get () >>= fun ctxt ->
+    Machine.Local.get beagle >>= fun (Beagle d) ->
     Word.enum_chars w LittleEndian |>
-    Primus.Seq.fold ~init:d ~f:(fun d char ->
+    Machine.Seq.fold ~init:d ~f:(fun d char ->
         match char with
-        | '\255' | '\000'..'\010' -> Primus.return d
+        | '\255' | '\000'..'\010' -> Machine.return d
         | char ->
           let d = Strings.Detector.step d ctxt#current char in
           eprintf "%03d => %a: %a - %a@\n%!"
@@ -206,63 +206,63 @@ module Hunter(Primus : Machine.S) = struct
             Tid.pp ctxt#current
             Strings.Detector.pp_stats d
             Strings.Detector.pp d;
-          Strings.Detector.when_decided d (Primus.return ())
+          Strings.Detector.when_decided d (Machine.return ())
             ~f:got_prey >>= fun () ->
-            Primus.return d) >>= fun d ->
-    Primus.Local.put beagle (Beagle d)
+            Machine.return d) >>= fun d ->
+    Machine.Local.put beagle (Beagle d)
 
 
   let process_memory (a,w) = process_word w
 
   let process_variable (_,r) = match Bil.Result.value r with
-    | Bil.Mem _ | Bil.Bot -> Primus.return ()
+    | Bil.Mem _ | Bil.Bot -> Machine.return ()
     | Bil.Imm w ->
       let id = Bil.Result.id r in
-      Primus.Global.get hunters_club >>= fun {checked} ->
+      Machine.Global.get hunters_club >>= fun {checked} ->
       if Set.mem checked id
-      then Primus.return ()
+      then Machine.return ()
       else process_word w >>= fun () ->
-        Primus.Global.update hunters_club ~f:(fun club ->
+        Machine.Global.update hunters_club ~f:(fun club ->
             {club with checked = Set.add club.checked id})
 
 
   let hunt prey =
     let key = Beagle_prey.data prey in
-    Primus.Global.get hunters_club >>= fun {cache} ->
+    Machine.Global.get hunters_club >>= fun {cache} ->
     match Map.find cache key with
     | None ->
-      Primus.Local.get hunter >>= fun (Hunter hunt) ->
+      Machine.Local.get hunter >>= fun (Hunter hunt) ->
       let data = hunt key in
-      Primus.Global.update hunters_club ~f:(fun club ->
+      Machine.Global.update hunters_club ~f:(fun club ->
         {club with cache = Map.add club.cache ~key ~data}) >>= fun () ->
-      Primus.Observation.make Beagle_prey.catch (prey,data)
+      Machine.Observation.make Beagle_prey.catch (prey,data)
     | Some data ->
-      Primus.Observation.make Beagle_prey.catch (prey,data)
+      Machine.Observation.make Beagle_prey.catch (prey,data)
 
   let print_prey prey =
     if Param.(get pchars)
     then printf "chars: %s\n%!" (Beagle_prey.data prey);
-    Primus.return ()
+    Machine.return ()
 
 
   let print_result (prey,words) =
     if Param.(get pwords)
     then Set.iter words ~f:(printf "word: %s\n");
-    Primus.return ()
+    Machine.return ()
 
 
   let init () =
-    let (>>>) = Primus.Observation.observe in
-    Primus.all_ignore Interpreter.[
+    let (>>>) = Machine.Observation.observe in
+    Machine.all_ignore Primus.Interpreter.[
       address_access   >>> save_address;
       (* variable_read    >>> process_variable; *)
       (* variable_written >>> process_variable; *)
       address_written >>> process_memory;
-      Machine.finished >>> gohome;
+      Primus.Machine.finished >>> gohome;
       Beagle_prey.detected >>> print_prey;
       Beagle_prey.detected >>> hunt;
       Beagle_prey.caught >>> print_result;
     ]
 end
 
-let () = (Config.when_ready (fun _ -> Machine.add_component (module Hunter)))
+let () = (Config.when_ready (fun _ -> Primus.Machine.add_component (module Hunter)))

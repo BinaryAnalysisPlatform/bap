@@ -48,7 +48,7 @@ let data t = t.chars
 let inspect_prey {chars} = Sexp.Atom chars
 
 let detected,finished =
-  Observation.provide ~inspect:inspect_prey "beagle-prey"
+  Primus.Observation.provide ~inspect:inspect_prey "beagle-prey"
 
 let inspect (prey,words) =
   Sexp.List [
@@ -56,4 +56,4 @@ let inspect (prey,words) =
     String.Set.sexp_of_t words;
   ]
 
-let caught,catch = Observation.provide ~inspect "beagle"
+let caught,catch = Primus.Observation.provide ~inspect "beagle"

@@ -2,11 +2,11 @@ open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 
-module Component(Machine : Machine.S) = struct
+module Component(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
-  module Env = Env.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
 
-  let zero = Generator.static 0
+  let zero = Primus.Generator.static 0
 
   let initialize_flags flags =
     Machine.Seq.iter (Set.to_sequence flags) ~f:(fun reg ->

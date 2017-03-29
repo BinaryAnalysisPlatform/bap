@@ -10,13 +10,12 @@ module type Param = sig
   val stack_base : int64
 end
 
-module Make(Param : Param)(Machine : Machine.S)  = struct
+module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   open Param
   open Machine.Syntax
 
-  module Env = Env.Make(Machine)
-  module Mem = Memory.Make(Machine)
-  module Memory = Bap.Std.Memory
+  module Env = Primus.Env.Make(Machine)
+  module Mem = Primus.Memory.Make(Machine)
 
   let proj () = Machine.get () >>| fun ctxt -> ctxt#project
   let arch () = proj () >>| Project.arch

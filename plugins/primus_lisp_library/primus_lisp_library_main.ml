@@ -28,4 +28,4 @@ let () =
   Config.when_ready (fun {Config.get=(!)} ->
       let paths = !libs @ [Stdlib.library]  in
       let features = "init" :: !features in
-      Lisp.init ~paths features)
+      Primus.Lisp.init ~paths features)

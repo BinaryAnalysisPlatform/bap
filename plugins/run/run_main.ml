@@ -5,7 +5,7 @@ open Monads.Std
 include Self()
 open Format
 
-type value = Generator.t
+type value = Primus.Generator.t
 
 type parameters = {
  argv  : string list;
@@ -24,10 +24,10 @@ module Param = struct
 
   let parse_value = function
     | List [Atom x; Atom y; Atom z] ->
-      Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
+      Primus.Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
     | List [Atom x; Atom y] ->
-      Generator.Random.Seeded.lcg ~min:(int x) ~max:(int y) ()
-    | Atom x -> Generator.static (int x)
+      Primus.Generator.Random.Seeded.lcg ~min:(int x) ~max:(int y) ()
+    | Atom x -> Primus.Generator.static (int x)
     | _ -> invalid_arg "Parse error:
      expected 'value := const | (min max) | (min max seed)'"
 
@@ -50,10 +50,10 @@ module Param = struct
 
 end
 
-module Mach = Machine.Make(Monad.Ident)
-module Main = Machine.Main(Mach)
-module Interpreter = Interpreter.Make(Mach)
-module Environment(Machine : Machine.S) = struct
+module Machine = Primus.Machine.Make(Monad.Ident)
+module Main = Primus.Machine.Main(Machine)
+module Interpreter = Primus.Interpreter.Make(Machine)
+module Environment(Machine : Primus.Machine.S) = struct
 end
 
 let pp_backtrace ppf ctxt =
@@ -81,7 +81,7 @@ let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 let main {Config.get=(!)} proj =
   let open Param in
   let prog = Project.program proj in
-  let init = new Context.t ~envp:!envp ~argv:!argv proj in
+  let init = new Primus.Context.t ~envp:!envp ~argv:!argv proj in
   let interp = new Interpreter.t in
   let subs = Term.enum sub_t prog in
   let is_entry_point = match !entry with
@@ -112,7 +112,7 @@ let main {Config.get=(!)} proj =
     debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
     ctxt#project;
   | (Error err,ctxt) ->
-    error "program failed with %s\n" (Error.to_string err);
+    error "program failed with %s\n" (Primus.Error.to_string err);
     info "Backtrace:@\n%a@\n" pp_backtrace ctxt;
     ctxt#project
 

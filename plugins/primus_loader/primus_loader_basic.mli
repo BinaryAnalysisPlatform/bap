@@ -46,4 +46,4 @@ module type Param = sig
   val stack_base : int64
 end
 
-module Make(P : Param) : Machine.Component
+module Make(P : Param) : Primus.Machine.Component

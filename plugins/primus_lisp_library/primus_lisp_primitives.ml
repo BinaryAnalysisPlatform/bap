@@ -2,11 +2,11 @@ open Core_kernel.Std
 open Bap.Std
 open Primus.Std
 
-module Primitives(Machine : Machine.S) = struct
+module Primitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
-  module Primitive = Lisp.Primitive
-  module Lisp = Lisp.Make(Machine)
-  module Memory = Memory.Make(Machine)
+  module Primitive = Primus.Lisp.Primitive
+  module Lisp = Primus.Lisp.Make(Machine)
+  module Memory = Primus.Memory.Make(Machine)
 
   let all f args = Machine.return (Word.of_bool (List.exists args ~f))
   let is_zero args = all Word.is_zero args
@@ -74,10 +74,9 @@ module Primitives(Machine : Machine.S) = struct
 end
 
 
-module Component(Machine : Machine.S) = struct
-  module Lisp = Lisp.Make(Machine)
-  let init () =
-    Lisp.link_primitives (module Primitives)
+module Component(Machine : Primus.Machine.S) = struct
+  module Lisp = Primus.Lisp.Make(Machine)
+  let init () = Lisp.link_primitives (module Primitives)
 end
 
-let () = Machine.add_component (module Component)
+let () = Primus.Machine.add_component (module Component)

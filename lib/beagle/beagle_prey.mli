@@ -12,18 +12,18 @@ type words = Words.t
 
 type t
 
-val caught : (t * words) Observation.t
+val caught : (t * words) Primus.observation
 
 
 
 (** made when a prey is detected  *)
-val detected : t Observation.t
+val detected : t Primus.observation
 
 
 (** a statement that a prey was detected  *)
-val finished : t Observation.statement
+val finished : t Primus.statement
 
-val catch : (t * words) Observation.statement
+val catch : (t * words) Primus.statement
 
 (** [create terms chars] the result of beagle hunting stating that
     during the execution of a sequence of [terms] we observed [chars]

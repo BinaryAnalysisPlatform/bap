@@ -8,4 +8,4 @@ module Param = struct
 end
 
 
-let () = Machine.add_component (module Primus_loader_basic.Make(Param))
+let () = Primus.Machine.add_component (module Primus_loader_basic.Make(Param))
