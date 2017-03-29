@@ -1,5 +1,5 @@
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 include Self()
 
 module Stdlib = Primus_lisp_library_config

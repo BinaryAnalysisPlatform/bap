@@ -1,4 +1,4 @@
-open Primus.Std
+open Bap_primus.Std
 
 
 (** Basic generic loader that works more or less correctly for all

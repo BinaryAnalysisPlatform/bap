@@ -6,7 +6,7 @@ Flag primus_lisp_library
 Library primus_lisp_library_plugin
   Build$:       flag(everything) || flag(primus_lisp_library)
   Path:         plugins/primus_lisp_library
-  BuildDepends: primus, cmdliner
+  BuildDepends: bap-primus, cmdliner
   FindlibName:     bap-plugin-primus_lisp_library
   CompiledObject:  best
   InternalModules: Primus_lisp_library_main,

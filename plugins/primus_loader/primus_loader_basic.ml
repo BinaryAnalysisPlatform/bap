@@ -1,9 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 open Format
 
-module Generator = Primus_generator
+module Generator = Primus.Generator
 
 module type Param = sig
   val stack_size : int

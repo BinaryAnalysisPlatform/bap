@@ -16,5 +16,5 @@ Library beagle_prey
   Path: lib/beagle
   FindlibName: bap-beagle-prey
   Modules: Beagle_prey
-  BuildDepends: bap, primus
+  BuildDepends: bap, bap-primus
   Xmetadescription: beagle attributes

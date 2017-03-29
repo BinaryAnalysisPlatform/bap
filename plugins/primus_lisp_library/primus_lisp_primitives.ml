@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 
 module Primitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax

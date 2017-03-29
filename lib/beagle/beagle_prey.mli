@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 
 module Words : sig
   type t = String.Set.t

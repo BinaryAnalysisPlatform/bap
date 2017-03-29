@@ -12,7 +12,6 @@ module Error = Bap_primus_error
 open Bap_primus_sexp
 
 type error += Segmentation_fault of addr
-type error += Stack_overflow of addr
 
 let sexp_of_segmentation_fault addr =
   Sexp.List [Sexp.Atom "Segmentation fault"; sexp_of_addr addr]

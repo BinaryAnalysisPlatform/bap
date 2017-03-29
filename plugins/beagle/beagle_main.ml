@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Regular.Std
 open Monads.Std
-open Primus.Std
+open Bap_primus.Std
 open Bap_strings.Std
 open Bap_future.Std
 open Format

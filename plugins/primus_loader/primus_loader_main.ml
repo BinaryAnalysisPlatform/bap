@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 
 module Param = struct
   let stack_size = 8 * 1024 * 1024

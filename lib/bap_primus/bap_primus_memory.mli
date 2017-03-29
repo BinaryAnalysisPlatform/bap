@@ -5,7 +5,6 @@ module Context = Bap_primus_context
 module Generator = Bap_primus_generator
 
 type error += Segmentation_fault of addr
-type error += Stack_overflow of addr
 
 val segmentation_fault : addr observation
 

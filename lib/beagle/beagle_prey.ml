@@ -1,6 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
-open Primus.Std
+open Bap_primus.Std
 open Format
 
 module Words = struct

@@ -9,7 +9,8 @@ Library primus
   FindlibName: bap-primus
   CompiledObject: best
   BuildDepends: bap, bap-abi, bap-c, uuidm
-  Modules: Bap_primus,
+  Modules: Bap_primus
+  InternalModules:
            Bap_primus_context,
            Bap_primus_env,
            Bap_primus_error,
