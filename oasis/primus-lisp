@@ -1,16 +1,16 @@
-Flag primus_lisp_library
+Flag primus_lisp
   Description: Build Primus Lisp Library
   Default: false
 
 
 Library primus_lisp_library_plugin
-  Build$:       flag(everything) || flag(primus_lisp_library)
-  Path:         plugins/primus_lisp_library
+  Build$:       flag(everything) || flag(primus_lisp)
+  Path:         plugins/primus_lisp
   BuildDepends: bap-primus, cmdliner
-  FindlibName:     bap-plugin-primus_lisp_library
+  FindlibName:     bap-plugin-primus_lisp
   CompiledObject:  best
-  InternalModules: Primus_lisp_library_main,
-                   Primus_lisp_library_config,
+  InternalModules: Primus_lisp_main,
+                   Primus_lisp_config,
                    Primus_lisp_primitives
   XMETADescription: install and load Primus lisp libraries
   DataFiles:        lisp/*.lisp ($primus_lisp_library_path)

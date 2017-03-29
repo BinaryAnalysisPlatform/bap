@@ -2,7 +2,7 @@ open Bap.Std
 open Bap_primus.Std
 include Self()
 
-module Stdlib = Primus_lisp_library_config
+module Lisp_config = Primus_lisp_config
 
 let () =
   Config.manpage [
@@ -26,6 +26,6 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load") in
 
   Config.when_ready (fun {Config.get=(!)} ->
-      let paths = !libs @ [Stdlib.library]  in
+      let paths = !libs @ [Lisp_config.library]  in
       let features = "init" :: !features in
       Primus.Lisp.init ~paths features)
