@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open X86_tools_types
 
+
 module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
 
   let addr_size = Arch.addr_size (CPU.arch :> arch)
@@ -69,9 +70,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
         | s -> Error.failwiths "invalid memory scale" s sexp_of_int in
       Option.map ~f:(fun s -> Word.of_int ~width:2 s |> Bil.int) shift
 
-    let make_disp disp =
-      Option.some @@ Bil.int @@
-      Word.of_int ~width:(Size.in_bits addr_size) disp
+    let disp_exp disp =
+      Bil.int @@ Word.of_int ~width:(Size.in_bits addr_size) disp
 
     let addr {seg; base; scale; index; disp} =
       let seg = Option.map ~f:(fun seg -> make_value seg) seg in
@@ -83,7 +83,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
           ~default:None
           ~f:make_scale scale in
       let index = Option.map ~f:make_value index in
-      let disp = make_disp disp in
+      let default = disp_exp disp in
+      let disp = Option.some_if (disp <> 0) (disp_exp disp) in
 
       let ( + ) op1 op2 = match op1, op2 with
         | Some op1, Some op2 -> Bil.(op1 + op2) |> Option.some
@@ -95,8 +96,13 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
         | Some op1, Some op2 -> Bil.(op2 lsl op1) |> Option.some
         | None, (Some _ as op) -> op
         | _, None -> None in
-      Option.value_exn (seg + (base + scale*index + disp))
+
+      match seg + (base + scale * index + disp) with
+      | None -> default
+      | Some x -> x
+
   end
+
 
   module Relative = struct
     type t = IM.t
