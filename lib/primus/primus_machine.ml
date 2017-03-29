@@ -55,7 +55,10 @@ module Make(M : Monad.S)
 
   type _ error = Error.t
   include Fail
-  include Monad.Make2(Basic)
+  module M2 = Monad.Make2(Basic)
+  open M2
+
+
 
   type id = Monad.State.Multi.id
   module Id = Monad.State.Multi.Id
@@ -90,7 +93,7 @@ module Make(M : Monad.S)
       lifts (SM.update @@ fun s -> {s with observations})
 
     let make key obs =
-      let event = Observation.of_statement key in
+      (* let event = Observation.of_statement key in *)
       with_global_context @@ fun () ->
       observations () >>= fun os ->
       Observation.with_observers os key ~f:(List.iter ~f:(fun observe -> observe obs))
@@ -161,6 +164,14 @@ module Make(M : Monad.S)
   let switch id = lifts (SM.switch id)
   let global = SM.global
   let current () = lifts (SM.current ())
+
+  module Syntax = struct
+    include M2.Syntax
+    let (>>>) = Observation.observe
+  end
+
+  include (M2 : Monad.S2 with type ('a,'e) t := ('a,'e) t
+                          and module Syntax := Syntax)
 end
 
 let finished,finish =

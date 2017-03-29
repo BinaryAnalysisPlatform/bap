@@ -32,9 +32,16 @@ module type Machine = sig
     val observe : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
     val make : 'a statement -> 'a -> (unit,'e) t
   end
+
+  module Syntax : sig
+    include Monad.Syntax.S2 with type ('a,'e) t := ('a,'e) t
+    val (>>>) : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
+  end
+
   include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
                                 and type 'a m := 'a m
                                 and type ('a,'e) e = 'e -> (('a, error) result * 'e) m
+                                and module Syntax := Syntax
   module Local  : State with type ('a,'e) m := ('a,'e) t
                          and type 'a t := 'a state
   module Global : State with type ('a,'e) m := ('a,'e) t
