@@ -1,4 +1,4 @@
-open Bap.Std
+open Core_kernel.Std
 
 (** symbol encoding *)
 module type Alphabet = sig
@@ -35,7 +35,6 @@ module Make(A : Alphabet) : sig
   val of_files : string list -> t
 
   val add_word : t -> string -> t
-  val build : t -> string -> string seq
+  val build : t -> string -> string Sequence.t
   val is_buildable : t -> string -> bool
-
 end

@@ -8,4 +8,6 @@ Library strings
   Path:         lib/bap_strings
   FindlibName:  bap-strings
   BuildDepends: bap
-  Modules:      Bap_strings, Bap_strings_detector
+  Modules:      Bap_strings,
+                Bap_strings_detector,
+                Bap_strings_unscrambler

@@ -7,7 +7,7 @@ Library beagle_plugin
   Path: plugins/beagle
   FindlibName: bap-plugin-beagle
   BuildDepends: bap, bap-microx, bap-beagle-prey, bap-strings
-  InternalModules: Beagle_main, Beagle_trapper
+  InternalModules: Beagle_main
   XMETADescription: microx powered obfuscated string solver
 
 

@@ -7,10 +7,7 @@ open Bap_strings.Std
 open Bap_future.Std
 open Format
 
-open Beagle_prey
-
-module Trapper = Beagle_trapper
-module type Alphabet = Trapper.Alphabet
+module type Alphabet = Strings.Unscrambler.Alphabet
 
 include Self()
 
@@ -70,8 +67,8 @@ module Param = struct
 
   let alphabet :
     (module Alphabet) param =
-    param Trapper.(enum [
-        "printable", (module Ascii.Printable : Trapper.Alphabet);
+    param Strings.Unscrambler.(enum [
+        "printable", (module Ascii.Printable : Alphabet);
         "alpha", (module Ascii.Alpha);
         "alpha.caseless", (module Ascii.Alpha.Caseless);
         "alphanum", (module Ascii.Alphanum);
@@ -145,12 +142,12 @@ let hunter =
     (fun _ ->
        let (!!) = Param.get in
        let module Alphabet = (val !!Param.alphabet) in
-       let module Trapper = Trapper.Make(Alphabet) in
-       let dict = Trapper.of_files !!Param.dicts in
+       let module Unscrambler = Strings.Unscrambler.Make(Alphabet) in
+       let dict = Unscrambler.of_files !!Param.dicts in
        let dict = List.fold !!Param.words
-           ~f:Trapper.add_word ~init:dict in
+           ~f:Unscrambler.add_word ~init:dict in
        let build input =
-         Trapper.build dict input |>
+         Unscrambler.build dict input |>
          Seq.fold ~init:String.Set.empty ~f:Set.add in
        Hunter (build))
 
