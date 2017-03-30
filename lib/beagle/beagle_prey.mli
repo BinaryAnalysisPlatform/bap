@@ -14,8 +14,6 @@ type t
 
 val caught : (t * words) Primus.observation
 
-
-
 (** made when a prey is detected  *)
 val detected : t Primus.observation
 
@@ -56,3 +54,8 @@ val strings : words tag
 (** a set of words that can be built from a specified alphabet with
     the observed characters. *)
 val words : words tag
+
+
+
+(** statically discovered strings  *)
+val statics : string Addr.Map.t tag

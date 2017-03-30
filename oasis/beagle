@@ -18,3 +18,10 @@ Library beagle_prey
   Modules: Beagle_prey
   BuildDepends: bap, bap-primus
   Xmetadescription: beagle attributes
+
+Library strings_plugin
+  Build$:       flag(everything) || flag(beagle)
+  Path:         plugins/strings
+  FindlibName:  bap-plugin-strings
+  BuildDepends: bap, bap-strings, bap-beagle-prey
+  InternalModules: Strings_main

@@ -3,11 +3,12 @@ Flag strings
   Default: false
 
 
-Library strings
+Library bap_strings
   Build$:       flag(everything) || flag(strings)
   Path:         lib/bap_strings
   FindlibName:  bap-strings
-  BuildDepends: bap
+  BuildDepends: core_kernel
   Modules:      Bap_strings,
                 Bap_strings_detector,
-                Bap_strings_unscrambler
+                Bap_strings_unscrambler,
+                Bap_strings_scanner

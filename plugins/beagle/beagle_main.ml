@@ -249,7 +249,6 @@ module Hunter(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    let (>>>) = Machine.Observation.observe in
     Machine.all_ignore Primus.Interpreter.[
       address_access   >>> save_address;
       (* variable_read    >>> process_variable; *)
@@ -262,4 +261,8 @@ module Hunter(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let () = (Config.when_ready (fun _ -> Primus.Machine.add_component (module Hunter)))
+let main proj =
+  Primus.Machine.add_component (module Hunter)
+
+let () = (Config.when_ready (fun _ ->
+  Project.register_pass' ~deps:["strings-mark"] main))

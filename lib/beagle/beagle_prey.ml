@@ -17,6 +17,15 @@ module Words = struct
   let to_string set = asprintf "%a" pp set
 end
 
+module Statics = struct
+  type t = string Addr.Map.t [@@deriving bin_io, compare, sexp]
+
+  let pp ppf =
+    Map.iteri ~f:(fun ~key:addr ~data:str ->
+        printf "%s: %s@\n" (Addr.string_of_value addr) str)
+end
+
+
 type words = Words.t
 
 
@@ -34,6 +43,9 @@ let strings = Value.Tag.register (module Words)
     ~name:"beagle-strings"
 
 
+let statics = Value.Tag.register (module Statics)
+    ~uuid:"eab82922-2c46-47bf-94ac-1ccb5de5daca"
+    ~name:"static-strings"
 
 type t = {
   terms : tid seq;
