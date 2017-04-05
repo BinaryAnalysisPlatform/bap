@@ -9,10 +9,10 @@
 open Core_kernel.Std
 open Monads.Std
 
-type t
-type spec = t
+type spec
 type entry
-type ('a,'k) attribute
+type ('a,'k) typeinfo constraint 'k = _ -> _
+type ('a,'k) attribute = unit -> ('a,'k) typeinfo
 
 
 (** type that describes an attribute.
@@ -27,9 +27,9 @@ type ('a,'k) attribute
     attribute for instance), and ['a] variable is extended every time a
     new field is added to a scheme.
 *)
-type ('k,'d) scheme
-
-
+type ('f,'k) scheme
+  constraint 'f = _ -> _
+  constraint 'k = _ -> _
 
 module Type : sig
   type 'a t
@@ -71,7 +71,7 @@ module Attribute : sig
   val define :
     desc:string ->
     name:string ->
-    ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) t
+    ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
 end
 
 
@@ -107,36 +107,56 @@ module Monad : sig
   type 'a t
   include Monad.S with type 'a t := 'a t
 
-
-
   (** [provide] provides the given attribute. If an attribute is
       provided several times with the same value, then it is the same as
       providing it once. If an attribute is provided several times
       with different values, then all values are stored in the
       specification. *)
-  val provide : (_,()) attribute -> 'a -> unit t
+  val provide : (_, 'a -> unit t) attribute -> 'a
 
 
   (** [require attr ~that:sat] requires a mandatory attribute that
       satisfies predicate [sat]. It is an error, if such attribute
       does't exist *)
-  val require : ?that:('a -> bool) -> 'a attribute -> 'a t
-
+  val require : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
 
   (** [request attr ~that:sat] looks up for an attribute that
       satisfies the given predicate [sat]. It is not an error, if the
       attribute is either not provided or doesn't satisfy the
       predicate.  *)
-  val request : ?that:('a -> bool) -> 'a attribute -> 'a t
+  val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
 
 
   (** [foreach attr ~that:sat] retrieves a list of attributes that
       satisfy the predicate [sat]. It is not an error, if such
       attributes are not provided, or none of the provided satisfy the
       predicate.  *)
-  val foreach : ?that:('a -> bool) -> 'a attribute -> 'a list t
+  val foreach : ?that:('a -> bool) -> ('a,_) attribute -> 'a list t
 
   (** [run comp spec] runs a computation [comp] agains [spec]. Returns
       the value computed by the computation, on an error if it fails.  *)
-  val run : 'a t -> spec -> 'a Or_error.t
+  val run : 'a t -> spec -> ('a * spec) Or_error.t
+
+  val eval : 'a t -> spec -> 'a Or_error.t
+  val exec : 'a t -> spec -> spec Or_error.t
+end
+
+module Spec : sig
+  type t  = spec
+
+  val empty : spec
+
+  val load : in_channel -> spec Or_error.t
+
+  val save : spec -> out_channel -> unit
+
+  val from_string : string -> spec Or_error.t
+
+  val to_string : spec -> string
+
+  val pp : Format.formatter -> spec -> unit
+
+  val put : ((spec -> spec Or_error.t) -> 'a) -> ('b,'c -> 'a) attribute -> 'c
+
+  val get : spec -> ('a,_) attribute -> 'a list Or_error.t
 end
