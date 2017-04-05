@@ -12,16 +12,47 @@ open Monads.Std
 type t
 type spec = t
 type entry
-type 'a attribute
+type ('a,'k) attribute
 
-type ('a,'b) scheme
+
+(** type that describes an attribute.
+
+
+    The two type variables describe the constructor and destructor
+    interface. The ['a] variable, the accessor, describes how an
+    attribute can be constructed. The ['s] variable, describes how an
+    attribute can be packed in the database. These two types come
+    along and differ only in a return type. The general form of a type
+    variable is [('a -> 'r) -> 'r], where ['r] is the return type (a type of
+    attribute for instance), and ['a] variable is extended every time a
+    new field is added to a scheme.
+*)
+type ('k,'d) scheme
+
+
 
 module Type : sig
   type 'a t
   type 'a field
 
-  val scheme : 'a field -> ('a -> 'b,'b) scheme
-  val ($) : ('a,'b -> 'c) scheme -> 'b field -> ('a,'c) scheme
+
+
+  (** [scheme field] defines a scheme with one field.   *)
+  val scheme : 'a field -> (('a -> 'r) -> 'r, ('a -> 'p) -> 'p) scheme
+
+
+  (** [scheme $field] adds a [field] to a [scheme].
+
+      The [scheme] had type [(('a -> 'r) -> 'r, ('a -> 'p) -> 'p) scheme],
+      then the type of a resulting scheme would be
+      [[(('a -> 'b -> 'r) -> 'r, ('a -> 'b -> 'p) -> 'p) scheme]], i.e., a type
+      of [$field] will be attached to the scheme.
+
+
+  *)
+  val ($) :
+    ('a -> 'b -> 'r, 'd -> 'b -> 'p) scheme -> 'b field ->
+    ('a -> 'r, 'd -> 'p) scheme
 
 
   val int : int64 t
@@ -31,23 +62,18 @@ module Type : sig
 
   val def  : string -> 'a t -> 'a field
   val (%:) : string -> 'a t -> 'a field
-
 end
 
 
 module Attribute : sig
-  type 'a t = 'a attribute
-  type uuid
+  type ('a,'k) t = ('a,'k) attribute
 
-  val register :
+  val define :
     desc:string ->
     name:string ->
-    ('f,'r) scheme -> 'f -> 'r t
+    ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) t
 end
 
-val empty : t
-val get : t -> 'a attribute -> 'a list
-val add : t -> 'a attribute -> 'a -> t
 
 
 
@@ -88,7 +114,7 @@ module Monad : sig
       providing it once. If an attribute is provided several times
       with different values, then all values are stored in the
       specification. *)
-  val provide : 'a attribute -> 'a -> unit t
+  val provide : (_,()) attribute -> 'a -> unit t
 
 
   (** [require attr ~that:sat] requires a mandatory attribute that
