@@ -324,7 +324,7 @@ module Spec = struct
 
   let load channel = of_sexp (Sexp.input_sexp channel)
   let save spec channel =  (Sexp.output_hum channel (to_sexp spec))
-  let from_string str = of_sexp (Sexp.of_string str)
+  let from_string str = of_sexp (Sexp.of_string (String.strip str))
   let to_string x = Sexp.to_string_hum (to_sexp x)
   let pp ppf x = Sexp.pp_hum ppf (to_sexp x)
 
@@ -396,7 +396,6 @@ module Monad = struct
 
   let eval m spec = Or_error.map ~f:fst (run m spec)
   let exec m spec = Or_error.map ~f:snd (run m spec)
-
 
 end
 
