@@ -284,8 +284,43 @@ module Spec = struct
       !!{scheme; entries}
     | _ -> errorf "expected ((scheme <decls>) (body <defns>))"
 
+  let dump_header {Type.fname; tname} =
+    if String.for_all fname ~f:(Char.is_digit)
+    then Sexp.Atom tname
+    else Sexp.(List [Atom fname; Atom tname])
 
-  let to_sexp _ = failwith "unimplemented"
+  let dump_signature = List.map ~f:dump_header
+
+  let dump_decl (name,s) =
+    Sexp.(List (Atom "declare" :: Atom name :: dump_signature s))
+
+  let dump_scheme scheme =
+    Map.to_alist scheme |> List.map ~f:dump_decl
+
+  let dump_value scheme name {fields} =
+    match Map.find scheme name with
+    | None -> invalid_argf "can't find a header for attribute %s" name ()
+    | Some sign ->
+      List.map sign ~f:(fun {Type.fname} ->
+          match Map.find fields fname with
+          | None -> invalid_argf "malformed data base - \
+                                  attribute %s misses field %s"
+                      name fname ()
+          | Some value -> Sexp.Atom value)
+
+  let dump_attr scheme (name,values) =
+    List.map values ~f:(fun v ->
+        Sexp.(List (Atom name :: dump_value scheme name v)) )
+
+
+  let dump_body scheme entries =
+    Map.to_alist entries |> List.concat_map ~f:(dump_attr scheme)
+
+  let to_sexp {scheme; entries} =
+    Sexp.List [
+      Sexp.List (Sexp.Atom "scheme" :: dump_scheme scheme);
+      Sexp.List (Sexp.Atom "body" :: dump_body scheme entries)
+    ]
 
   let load channel = of_sexp (Sexp.input_sexp channel)
   let save spec channel =  (Sexp.output_hum channel (to_sexp spec))
@@ -296,8 +331,6 @@ module Spec = struct
 end
 
 type ('a,'k) attribute = ('a,'k) Attribute.t
-
-
 
 type spec = Spec.t
 
