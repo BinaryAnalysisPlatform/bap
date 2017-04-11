@@ -64,21 +64,21 @@ module Type = struct
     parse = atom int64_of_sexp;
     pack = pack sexp_of_int64;
     compare = compare_int64;
-    syntax = "INTEGER";
+    syntax = "integer";
   }
 
   let bool = {
     parse = atom bool_of_sexp;
     pack = pack sexp_of_bool;
     compare = compare_bool;
-    syntax = "BOOL";
+    syntax = "bool";
   }
 
   let string = {
     parse = atom string_of_sexp;
     pack = pack sexp_of_string;
     compare = compare_string;
-    syntax = "STRING";
+    syntax = "string";
   }
 
   let enum variants = {
@@ -173,24 +173,25 @@ module Spec = struct
     List.remove_consecutive_duplicates
       ~equal:(fun x y -> compare x y = 0)
 
-  let update_scheme scheme name sign =
-    match Map.find scheme name with
+  let update_scheme name sign spec =
+    match Map.find spec.scheme name with
     | Some s when Type.compare_signature s sign <> 0 ->
       Type.signature_mismatch ~expect:s ~got:sign
-    | _ -> Ok (Map.add scheme ~key:name ~data:sign)
+    | _ -> Ok {
+        spec with scheme = Map.add spec.scheme ~key:name ~data:sign
+      }
 
-
-  let add entries name packed =
-    Map.add_multi entries ~key:name ~data:packed
+  let update_entries name packed spec = Ok {
+      spec with entries =
+                  Map.add_multi spec.entries ~key:name ~data: packed
+    }
 
   let put k attr =
     let {Attribute.name; save; sign} = attr () in
     save (fun packed ->
-        k (fun {scheme; entries} ->
-            match update_scheme scheme name sign with
-            | Error happens -> Error happens
-            | Ok scheme -> Ok {scheme; entries = add entries name packed}))
-
+        k (fun spec ->
+            Or_error.(update_scheme name sign spec >>=
+                      update_entries name packed)))
 
   let get {scheme;entries} attr =
     let {Attribute.name; read; sign} = attr () in
@@ -213,7 +214,6 @@ module Spec = struct
     then Ok name
     else errorf "bad field name %s, expected [a..z][a..z-]*" name
 
-
   let parse_fdecl = function
     | i, Sexp.Atom tname ->
       parse_tname tname >>| fun tname ->
@@ -226,31 +226,11 @@ module Spec = struct
       errorf "expected <decl> ::= \
               <field-type> | (<field-name> <field-type>)"
 
-  let parse_decl = function
-    | Sexp.List (Sexp.Atom "declare" :: Sexp.Atom name :: flds) ->
-      Parse.List.map ~f:parse_fdecl (tabulate flds) >>| fun flds ->
-      name,flds
-    | _ -> errorf "expected (declare <field-decls>)"
-
-  let parse_decls declarations =
-    Parse.List.map declarations ~f:parse_decl >>=
-    Parse.List.fold ~init:String.Map.empty ~f:(fun decls (name,sign) ->
-        if Map.mem decls name
-        then errorf "Multiple declarations of attirbute %s" name
-        else Ok (Map.add decls ~key:name ~data:sign))
-
   let parse_fdefn = function
     | Sexp.Atom x -> Ok (`Positional x)
     | Sexp.List [Sexp.Atom fname; Sexp.Atom x] -> Ok (`Named (fname,x))
     | _ -> errorf "expected <attribute-value> ::= \
                   <field-value> | (<field-name> <field-value>)"
-
-  let parse_defn = function
-    | Sexp.List (Sexp.Atom name :: flds) ->
-      Parse.List.map flds ~f:parse_fdefn >>| fun es -> name,es
-    | _ ->
-      errorf "expected <attribute> ::= \
-             (<attribute-name> <attribute-value> ..)"
 
   let positional header pos x =
     match List.Assoc.find header pos with
@@ -262,42 +242,44 @@ module Spec = struct
       | None -> errorf "unknown field %s" name
       | Some _ -> Ok (name,x)
 
-  let parse_defns scheme defs =
-    Parse.List.map defs ~f:parse_defn >>=
-    Parse.List.fold ~init:String.Map.empty ~f:(fun entries (name,values) ->
-        match Map.find scheme name with
-        | None -> errorf "%s is not declared in the scheme" name
-        | Some header ->
-          let header = tabulate header in
-          Parse.List.map (tabulate values) ~f:(function
-            | pos, `Positional x -> positional header pos x
-            | _, `Named (fnam,x) -> named header fnam x) >>=
-          String.Map.of_alist_or_error >>| fun fields ->
-          add entries name {fields})
+  let nest_defn scheme name values =
+    match Map.find scheme name with
+    | None -> errorf "%s is not declared in the scheme" name
+    | Some header ->
+      let header = tabulate header in
+      Parse.List.map (tabulate values) ~f:(function
+          | pos, `Positional x -> positional header pos x
+          | _, `Named (fnam,x) -> named header fnam x) >>=
+      String.Map.of_alist_or_error
 
-  let of_sexp = function
-    | Sexp.List [
-        Sexp.List (Sexp.Atom "scheme" :: ds);
-        Sexp.List (Sexp.Atom "body" :: bs)] ->
-      parse_decls ds >>= fun scheme ->
-      parse_defns scheme bs >>= fun entries ->
-      !!{scheme; entries}
-    | _ -> errorf "expected ((scheme <decls>) (body <defns>))"
+  let parse_entry spec = function
+    | Sexp.List (Sexp.Atom "declare" :: Sexp.Atom name :: flds) ->
+      Parse.List.map ~f:parse_fdecl (tabulate flds) >>= fun sign ->
+      update_scheme name sign  spec
+    | Sexp.List (Sexp.Atom "declare" :: _) ->
+      errorf "expected (declare <attribute-name> <field-decls>)"
+    | Sexp.List (Sexp.Atom name :: flds) ->
+      Parse.List.map flds ~f:parse_fdefn >>=
+      nest_defn spec.scheme name >>= fun fields ->
+      update_entries name {fields} spec
+    | _ -> errorf "expected <ogre-entry> ::= \
+                  | (declare <attribute-name> <field-decls>)\
+                  | (<attribute-name> <attribute-value>)"
 
-  let dump_header {Type.fname; tname} =
+  let of_sexps =
+    Parse.List.fold ~init:empty ~f:parse_entry
+
+  let sexp_of_header {Type.fname; tname} =
     if String.for_all fname ~f:(Char.is_digit)
     then Sexp.Atom tname
     else Sexp.(List [Atom fname; Atom tname])
 
-  let dump_signature = List.map ~f:dump_header
+  let sexp_of_decl (name,s) =
+    Sexp.(List (Atom "declare" :: Atom name ::
+                List.map ~f:sexp_of_header s))
 
-  let dump_decl (name,s) =
-    Sexp.(List (Atom "declare" :: Atom name :: dump_signature s))
 
-  let dump_scheme scheme =
-    Map.to_alist scheme |> List.map ~f:dump_decl
-
-  let dump_value scheme name {fields} =
+  let sexps_of_value scheme name {fields} =
     match Map.find scheme name with
     | None -> invalid_argf "can't find a header for attribute %s" name ()
     | Some sign ->
@@ -308,26 +290,46 @@ module Spec = struct
                       name fname ()
           | Some value -> Sexp.Atom value)
 
-  let dump_attr scheme (name,values) =
-    List.map values ~f:(fun v ->
-        Sexp.(List (Atom name :: dump_value scheme name v)) )
+  let sexp_of_attr scheme name value =
+    Sexp.(List (Atom name :: sexps_of_value scheme name value))
 
+  let pp_scheme ppf {scheme} =
+    fprintf ppf "@[<v0>";
+    Map.iteri scheme ~f:(fun ~key:n ~data:s ->
+        fprintf ppf "@[%a@]@;" Sexp.pp_hum (sexp_of_decl (n,s)));
+    fprintf ppf "@]"
 
-  let dump_body scheme entries =
-    Map.to_alist entries |> List.concat_map ~f:(dump_attr scheme)
+  let pp_body ppf {scheme; entries} =
+    fprintf ppf "@[<v>";
+    Map.iteri entries ~f:(fun ~key:n ~data:vs ->
+        List.iter vs ~f:(fun v ->
+            fprintf ppf "@[%a@]@;"
+              Sexp.pp_hum (sexp_of_attr scheme n v)));
+    fprintf ppf "@]"
 
-  let to_sexp {scheme; entries} =
-    Sexp.List [
-      Sexp.List (Sexp.Atom "scheme" :: dump_scheme scheme);
-      Sexp.List (Sexp.Atom "body" :: dump_body scheme entries)
-    ]
+  let pp ppf t =
+    fprintf ppf "%a@\n%a" pp_scheme t pp_body t
 
-  let load channel = of_sexp (Sexp.input_sexp channel)
-  let save spec channel =  (Sexp.output_hum channel (to_sexp spec))
-  let from_string str = of_sexp (Sexp.of_string (String.strip str))
-  let to_string x = Sexp.to_string_hum (to_sexp x)
-  let pp ppf x = Sexp.pp_hum ppf (to_sexp x)
+  let load channel = Or_error.try_with_join (fun () ->
+      of_sexps (Sexp.input_sexps channel))
 
+  let from_file name =
+    Or_error.try_with_join (fun () -> In_channel.with_file name ~f:load)
+
+  let save spec ch =
+    let ppf = formatter_of_out_channel ch in
+    pp ppf spec;
+    pp_print_flush ppf ()
+
+  let to_file spec name =
+    Or_error.try_with @@ fun () -> Out_channel.with_file name ~f:(save spec)
+
+  let from_string str =
+    Or_error.try_with_join (fun () ->
+        Sexp.scan_sexps (String.strip str |> Lexing.from_string) |>
+        of_sexps)
+
+  let to_string x = asprintf "%a" pp x
 end
 
 type ('a,'k) attribute = ('a,'k) Attribute.t
@@ -399,9 +401,6 @@ module Monad = struct
 
 end
 
-
-
-
 module Example = struct
   open Monad
 
@@ -420,8 +419,7 @@ module Example = struct
     type address = Addr of int64 * bool * string [@@deriving variants]
     type comment = Cmnt of int64 * string [@@deriving variants]
 
-    let scheme1 = Type.(scheme address $flag)
-
+    (* scheme t1 $ t2 ... $tn *)
     let comment () =
       Attribute.define
         ~desc:"a comment to an address"

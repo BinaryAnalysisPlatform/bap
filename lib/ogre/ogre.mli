@@ -150,9 +150,13 @@ module Spec : sig
 
   val save : spec -> out_channel -> unit
 
+  val from_file : string -> spec Or_error.t
+
   val from_string : string -> spec Or_error.t
 
   val to_string : spec -> string
+
+  val to_file : spec -> string -> unit Or_error.t
 
   val pp : Format.formatter -> spec -> unit
 
