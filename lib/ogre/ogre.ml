@@ -25,11 +25,12 @@ module Writer = struct
 end
 
 module Type = struct
+  type typ = Int | Str | Bool [@@deriving compare,enumerate]
   type 'a t = {
     parse : string -> 'a option;
     pack : 'a -> string;
     compare : 'a -> 'a -> int;
-    syntax : string;
+    typ : typ;
   }
 
   type 'a field = {
@@ -39,7 +40,7 @@ module Type = struct
 
   type header = {
     fname : string;
-    tname : string;
+    ftype : typ;
   } [@@deriving compare]
 
   type signature = header list [@@deriving compare]
@@ -64,27 +65,29 @@ module Type = struct
     parse = atom int64_of_sexp;
     pack = pack sexp_of_int64;
     compare = compare_int64;
-    syntax = "integer";
+    typ = Int;
   }
 
   let bool = {
     parse = atom bool_of_sexp;
     pack = pack sexp_of_bool;
     compare = compare_bool;
-    syntax = "bool";
+    typ = Bool;
   }
 
   let string = {
     parse = atom string_of_sexp;
     pack = pack sexp_of_string;
     compare = compare_string;
-    syntax = "string";
+    typ = Str;
   }
 
-  let enum variants = {
-    string with
-    syntax = "(" ^ String.concat ~sep:" | " variants ^ ")";
-  }
+  let string_of_typ = function
+    | Int -> "int"
+    | Str -> "str"
+    | Bool -> "bool"
+
+  let names = all_of_typ |> List.map ~f:(fun t -> string_of_typ t,t)
 
   let get {fields} f = Option.(Map.find fields f.name >>= f.t.parse)
 
@@ -96,7 +99,7 @@ module Type = struct
   let empty = {fields = String.Map.empty}
 
   let scheme field = {
-    signature = [{fname = field.name; tname = field.t.syntax}];
+    signature = [{fname = field.name; ftype = field.t.typ}];
     save = (fun k x -> k (add field x empty));
     read = fun ent k -> match get ent field with
       | None -> None
@@ -106,7 +109,7 @@ module Type = struct
   let ($) {read; save; signature} fld = {
     signature = [{
         fname = fld.name;
-        tname = fld.t.syntax;
+        ftype = fld.t.typ;
       }] @ signature ;
     save = (fun k -> save (fun ent x -> k (add fld x ent)));
     read = fun ent k -> match read ent k with
@@ -152,7 +155,8 @@ end
 
 type ('a,'k) typeinfo = ('a,'k) Attribute.info
 
-module Spec = struct
+
+module Doc = struct
   module Parse = Monad.Result.Error
   open Parse.Syntax
 
@@ -173,24 +177,24 @@ module Spec = struct
     List.remove_consecutive_duplicates
       ~equal:(fun x y -> compare x y = 0)
 
-  let update_scheme name sign spec =
-    match Map.find spec.scheme name with
+  let update_scheme name sign doc =
+    match Map.find doc.scheme name with
     | Some s when Type.compare_signature s sign <> 0 ->
       Type.signature_mismatch ~expect:s ~got:sign
     | _ -> Ok {
-        spec with scheme = Map.add spec.scheme ~key:name ~data:sign
+        doc with scheme = Map.add doc.scheme ~key:name ~data:sign
       }
 
-  let update_entries name packed spec = Ok {
-      spec with entries =
-                  Map.add_multi spec.entries ~key:name ~data: packed
+  let update_entries name packed doc = Ok {
+      doc with entries =
+                  Map.add_multi doc.entries ~key:name ~data: packed
     }
 
   let put k attr =
     let {Attribute.name; save; sign} = attr () in
     save (fun packed ->
-        k (fun spec ->
-            Or_error.(update_scheme name sign spec >>=
+        k (fun doc ->
+            Or_error.(update_scheme name sign doc >>=
                       update_entries name packed)))
 
   let get {scheme;entries} attr =
@@ -202,10 +206,13 @@ module Spec = struct
 
   let tabulate xs = List.mapi xs ~f:(fun i x -> (i,x))
 
+
   let parse_tname name =
-    if List.mem ["integer"; "bool"; "string"] name
-    then Ok name
-    else errorf "expected <field-type> ::= integer | bool | string"
+    List.Assoc.find Type.names name |> function
+    | Some typ -> Ok typ
+    | None ->
+      errorf "expected <field-type> ::= %s"
+        (List.map Type.names ~f:fst |> String.concat ~sep:" | ")
 
   let parse_fname name =
     if Char.is_alpha name.[0] &&
@@ -216,12 +223,12 @@ module Spec = struct
 
   let parse_fdecl = function
     | i, Sexp.Atom tname ->
-      parse_tname tname >>| fun tname ->
-      {Type.fname = sprintf "%d" i; tname}
+      parse_tname tname >>| fun ftype ->
+      {Type.fname = sprintf "%d" i; ftype}
     | _, Sexp.List [Sexp.Atom fname; Sexp.Atom tname] ->
       parse_fname fname >>= fun fname ->
-      parse_tname tname >>| fun tname ->
-      {Type.tname; Type.fname}
+      parse_tname tname >>| fun ftype ->
+      {Type.ftype; fname}
     | _ ->
       errorf "expected <decl> ::= \
               <field-type> | (<field-name> <field-type>)"
@@ -252,16 +259,16 @@ module Spec = struct
           | _, `Named (fnam,x) -> named header fnam x) >>=
       String.Map.of_alist_or_error
 
-  let parse_entry spec = function
+  let parse_entry doc = function
     | Sexp.List (Sexp.Atom "declare" :: Sexp.Atom name :: flds) ->
       Parse.List.map ~f:parse_fdecl (tabulate flds) >>= fun sign ->
-      update_scheme name sign  spec
+      update_scheme name sign  doc
     | Sexp.List (Sexp.Atom "declare" :: _) ->
       errorf "expected (declare <attribute-name> <field-decls>)"
     | Sexp.List (Sexp.Atom name :: flds) ->
       Parse.List.map flds ~f:parse_fdefn >>=
-      nest_defn spec.scheme name >>= fun fields ->
-      update_entries name {fields} spec
+      nest_defn doc.scheme name >>= fun fields ->
+      update_entries name {fields} doc
     | _ -> errorf "expected <ogre-entry> ::= \
                   | (declare <attribute-name> <field-decls>)\
                   | (<attribute-name> <attribute-value>)"
@@ -269,7 +276,8 @@ module Spec = struct
   let of_sexps =
     Parse.List.fold ~init:empty ~f:parse_entry
 
-  let sexp_of_header {Type.fname; tname} =
+  let sexp_of_header {Type.fname; ftype} =
+    let tname = Type.string_of_typ ftype in
     if String.for_all fname ~f:(Char.is_digit)
     then Sexp.Atom tname
     else Sexp.(List [Atom fname; Atom tname])
@@ -316,13 +324,13 @@ module Spec = struct
   let from_file name =
     Or_error.try_with_join (fun () -> In_channel.with_file name ~f:load)
 
-  let save spec ch =
+  let save doc ch =
     let ppf = formatter_of_out_channel ch in
-    pp ppf spec;
+    pp ppf doc;
     pp_print_flush ppf ()
 
-  let to_file spec name =
-    Or_error.try_with @@ fun () -> Out_channel.with_file name ~f:(save spec)
+  let to_file doc name =
+    Or_error.try_with @@ fun () -> Out_channel.with_file name ~f:(save doc)
 
   let from_string str =
     Or_error.try_with_join (fun () ->
@@ -334,11 +342,162 @@ end
 
 type ('a,'k) attribute = ('a,'k) Attribute.t
 
-type spec = Spec.t
+type doc = Doc.t
+
+module Exp = struct
+  type column = {attr : string option; field : string}
+  type bop = And | Or | Lt | Imp | Add | Sub [@@deriving sexp]
+  type uop = Not [@@deriving sexp]
+  type exp =
+    | True
+    | Int of int64
+    | Str of string
+    | Var of string
+    | Bop of bop * exp * exp
+    | Uop of uop * exp
+  [@@deriving sexp]
+
+  let bool = function
+    | true -> True
+    | false -> Uop (Not,True)
+
+  let var x = Var x
+  let int x = Int x
+
+  let less compare x y = bool (compare x y < 0)
+
+  let rec simpl = function
+    | Bop (And,Uop (Not,True),_)
+    | Bop (And,_,Uop (Not,True)) -> Uop (Not,True)
+    | Bop (And,True,e)
+    | Bop (And,e,True) -> simpl e
+    | Bop (Or, Uop (Not,True),e)
+    | Bop (Or, e, Uop (Not,True)) -> simpl e
+    | Bop (Or, True,_)
+    | Bop (Or, _,True) -> True
+    | Bop (Imp, True, x) -> simpl x
+    | Bop (Imp, Uop (Not,True),_) -> True
+    | Bop (Lt,Int x, Int y) -> less compare_int64 x y
+    | Bop (Lt,Str x, Str y) -> less compare_string x y
+    | Bop (Add,Int 0L,x)
+    | Bop (Add,x,Int 0L) -> simpl x
+    | Bop (Sub,x,Int 0L) -> simpl x
+    | Bop (Add,Int x, Int y) -> Int Int64.(x + y)
+    | Bop (Sub,Int x, Int y) -> Int Int64.(x - y)
+    | Uop (Not,(Uop (Not,x))) -> simpl x
+    | Uop (op,e) -> Uop (op, simpl e)
+    | Bop (op,x,y) -> Bop (op,simpl x, simpl y)
+    | e -> e
+
+  module Syntax = struct
+    let (&&) x y = simpl (Bop (And,x,y))
+    let (||) x y = simpl (Bop (Or,x,y))
+    let (==>) x y = simpl (Bop (Imp,x,y))
+    let not x = simpl (Uop (Not,x))
+    let (<) x y = simpl (Bop(Lt,x,y))
+    let (=) x y = simpl (not (x < y) && not (y < x))
+    let (>) x y = simpl (y < x)
+    let (<=) x y = simpl (not (y < x))
+    let (>=) x y = simpl (not (y > x))
+    let (+) x y = simpl (Bop (Add,x,y))
+    let (-) x y = simpl (Bop (Sub,x,y))
+  end
+
+  let validate_exp doc = Ok ()
+
+  module Seq = Sequence
+
+  let linearlize map =
+    Map.to_sequence map |>
+    Seq.map ~f:(fun (name,values) ->
+        Seq.of_list values |>
+        Seq.map ~f:(fun value -> name,value))
+
+  let rec n_cross_product xs =
+    let open Seq in match next xs with
+    | None -> singleton empty
+    | Some (row,rows) ->
+      row >>= fun elt ->
+      n_cross_product rows >>|
+      append (singleton elt)
+
+  let cross map =
+    linearlize map |> n_cross_product
+
+  let parser t inj value = match t.Type.parse value with
+    | None -> None
+    | Some x -> Some (inj x)
+
+  let parsers = [
+    parser Type.int (fun x -> Int x);
+    parser Type.string (fun x -> Str x);
+    parser Type.bool (function
+        | true -> True
+        | false -> Uop (Not,True))
+  ]
+
+  let lift x =
+    List.find_map parsers ~f:(fun parse -> parse x) |> function
+    | None -> invalid_argf "internal error - bad value" ()
+    | Some x -> x
+
+  let bind_attr name {fields} {attr; field} =
+    printf "checking attribute %s@\n" name;
+    if attr = Some name || attr = None
+    then Map.find fields field |> Option.map ~f:lift
+    else None
+
+  let bind_var var columns row =
+    Seq.concat_map row ~f:(fun (name,value) ->
+        List.filter_map columns ~f:(bind_attr name value) |>
+        Seq.of_list) |> Seq.to_list |> function
+    | [] -> None
+    | x :: xs ->
+      let cs = simpl (List.fold xs ~init:True ~f:(fun e y ->
+        Syntax.(e && x = y))) in
+      Some (x, cs)
+
+  let bind_vars vars row =
+    List.fold vars ~init:(True,String.Map.empty)
+      ~f:(fun (cs,bs) (var,cols) -> match bind_var var cols row with
+        | None -> cs,bs
+        | Some (v,cs') -> Syntax.(cs && cs'), Map.add bs ~key:var ~data:v)
+
+  let rec subst bind = function
+    | True | Int _ | Str _ as x -> x
+    | Uop (op,x) -> simpl (Uop (op, subst bind x))
+    | Bop (op,x,y) -> simpl (Bop (op,subst bind x,subst bind y))
+    | Var n -> match bind n with
+      | None -> Var n
+      | Some e -> subst bind e
+
+  let sat e = match simpl e with
+    | True -> Some true
+    | Uop (Not,True) -> Some false
+    | _ -> None
+
+  let eval vars exp {Doc.scheme; entries} =
+    let module Error = Monad.Result.Error in
+    let open Error.Syntax in
+    Error.Seq.filter (cross entries) ~f:(fun row ->
+        let cs,bs = bind_vars vars row in
+        printf "inferred constraint: %a@\n"
+          Sexp.pp_hum (sexp_of_exp cs);
+        printf "applying substitution:@\n%a@\nto expression:@\n%a@\n"
+          Sexp.pp_hum (String.Map.sexp_of_t sexp_of_exp bs)
+          Sexp.pp_hum (sexp_of_exp Syntax.(cs && exp));
+        let exp = subst (Map.find bs) Syntax.(cs && exp) in
+        match sat exp with
+        | None ->
+          printf "%a@\n" Sexp.pp_hum (sexp_of_exp exp);
+          Or_error.errorf "bad expression"
+        | Some r -> Ok r)
+
+end
 
 module Monad = struct
   module Choice_or_error = Monad.Option.Make(Monad.Result.Error)
-  module M = Monad.State.Make(Spec)(struct
+  module M = Monad.State.Make(Doc)(struct
       type 'a t = 'a option Or_error.t
       include Choice_or_error
     end)
@@ -346,10 +505,11 @@ module Monad = struct
   module Lst = List
   include M
 
+
   type 'a m = 'a option Or_error.t
   type ('a,'e) storage = ('a,'e) Monad.State.storage
   type ('a,'e) state = ('a,'e) Monad.State.state
-  type 'a t = (('a,spec) storage m, spec) state
+  type 'a t = (('a,doc) storage m, doc) state
 
   let failf fmt =
     let buf = Buffer.create 512 in
@@ -359,14 +519,15 @@ module Monad = struct
       M.lift (Or_error.error_string (Buffer.contents buf)) in
     kfprintf kon ppf fmt
 
+
   let foreach ?(that=fun _ -> true) attr : 'a list t =
-    get () >>= fun spec -> match Spec.get spec attr with
+    get () >>= fun doc -> match Doc.get doc attr with
     | Error err -> M.lift (Error err)
     | Ok xs -> M.lift (Ok (Some (Lst.filter ~f:that xs)))
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in
-    get () >>= fun spec -> match Spec.get spec attr with
+    get () >>= fun doc -> match Doc.get doc attr with
     | Error err -> M.lift (Error err)
     | Ok [] -> failf "%s is not provided" name ()
     | Ok xs -> match Lst.filter ~f:that xs with
@@ -376,7 +537,7 @@ module Monad = struct
 
   let request ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "requested attribute %s" (Attribute.name attr) in
-    get () >>= fun spec -> match Spec.get spec attr with
+    get () >>= fun doc -> match Doc.get doc attr with
     | Error err -> M.lift (Error err)
     | Ok [] -> M.lift (Ok None)
     | Ok xs -> match Lst.filter ~f:that xs with
@@ -385,19 +546,14 @@ module Monad = struct
       | _  -> failf "%s values are ambigious" name ()
 
   let provide (attr : (_,'b -> unit t) attribute) =
-    Spec.put (fun save ->
-        get () >>= fun spec -> match save spec with
+    Doc.put (fun save ->
+        get () >>= fun doc -> match save doc with
         | Error err -> failf "failed to save an attribute" ()
-        | Ok spec -> put spec) attr
+        | Ok doc -> put doc) attr
 
-  let run m spec =
-    match run m spec with
-    | Error err -> Error err
-    | Ok None -> Or_error.errorf "result is empty"
-    | Ok Some x -> Ok x
-
-  let eval m spec = Or_error.map ~f:fst (run m spec)
-  let exec m spec = Or_error.map ~f:snd (run m spec)
+  let take f = Or_error.map ~f:(Option.map ~f)
+  let eval m doc = take fst (run m doc)
+  let exec m doc = take snd (run m doc)
 
 end
 
@@ -437,7 +593,7 @@ module Example = struct
 
   open Attrs
 
-  let packed = Spec.put ident entry_point 0xDEADBEEFL false "hope" Spec.empty
+  let packed = Doc.put ident entry_point 0xDEADBEEFL false "hope" Doc.empty
 
 
   let save_entry_point () : unit t =
@@ -446,3 +602,12 @@ module Example = struct
     return ()
 
 end
+
+
+let doc = ok_exn (Doc.from_file "test.ogre")
+let vars = Exp.["x", [
+    {attr=Some "student"; field = "teacher"};
+    {attr=Some "teacher"; field="id"}
+  ]]
+
+let test () = Exp.eval vars Exp.(Syntax.(var "x" = int 0L)) doc

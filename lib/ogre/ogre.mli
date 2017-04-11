@@ -5,11 +5,10 @@
 
  *)
 
-
 open Core_kernel.Std
 open Monads.Std
 
-type spec
+type doc
 type entry
 type ('a,'k) typeinfo constraint 'k = _ -> _
 type ('a,'k) attribute = unit -> ('a,'k) typeinfo
@@ -74,15 +73,12 @@ module Attribute : sig
     ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
 end
 
-
-
-
-(** Monadic interface to the loader specification.
+(** Monadic interface to the loader docification.
 
 
     Provides a simple monadic query language with which it is possible
     to construct first class queries and computations, that can be
-    applied to loader specifications.
+    applied to loader docifications.
 
     {[
       let segments () =
@@ -107,11 +103,12 @@ module Monad : sig
   type 'a t
   include Monad.S with type 'a t := 'a t
 
+
   (** [provide] provides the given attribute. If an attribute is
       provided several times with the same value, then it is the same as
       providing it once. If an attribute is provided several times
       with different values, then all values are stored in the
-      specification. *)
+      docification. *)
   val provide : (_, 'a -> unit t) attribute -> 'a
 
 
@@ -133,34 +130,34 @@ module Monad : sig
       predicate.  *)
   val foreach : ?that:('a -> bool) -> ('a,_) attribute -> 'a list t
 
-  (** [run comp spec] runs a computation [comp] agains [spec]. Returns
+  (** [run comp doc] runs a computation [comp] agains [doc]. Returns
       the value computed by the computation, on an error if it fails.  *)
-  val run : 'a t -> spec -> ('a * spec) Or_error.t
+  val run : 'a t -> doc -> ('a * doc) option Or_error.t
 
-  val eval : 'a t -> spec -> 'a Or_error.t
-  val exec : 'a t -> spec -> spec Or_error.t
+  val eval : 'a t -> doc -> 'a option Or_error.t
+  val exec : 'a t -> doc -> doc option Or_error.t
 end
 
-module Spec : sig
-  type t  = spec
+module Doc : sig
+  type t  = doc
 
-  val empty : spec
+  val empty : doc
 
-  val load : in_channel -> spec Or_error.t
+  val load : in_channel -> doc Or_error.t
 
-  val save : spec -> out_channel -> unit
+  val save : doc -> out_channel -> unit
 
-  val from_file : string -> spec Or_error.t
+  val from_file : string -> doc Or_error.t
 
-  val from_string : string -> spec Or_error.t
+  val from_string : string -> doc Or_error.t
 
-  val to_string : spec -> string
+  val to_string : doc -> string
 
-  val to_file : spec -> string -> unit Or_error.t
+  val to_file : doc -> string -> unit Or_error.t
 
-  val pp : Format.formatter -> spec -> unit
+  val pp : Format.formatter -> doc -> unit
 
-  val put : ((spec -> spec Or_error.t) -> 'a) -> ('b,'c -> 'a) attribute -> 'c
+  val put : ((doc -> doc Or_error.t) -> 'a) -> ('b,'c -> 'a) attribute -> 'c
 
-  val get : spec -> ('a,_) attribute -> 'a list Or_error.t
+  val get : doc -> ('a,_) attribute -> 'a list Or_error.t
 end
