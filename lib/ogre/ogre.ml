@@ -128,7 +128,7 @@ module Type = struct
   let (%:) = def
 end
 
-
+type 'a field = 'a Type.field
 type ('a,'s) scheme = ('a,'s) Type.scheme
 
 module Attribute = struct
@@ -343,26 +343,30 @@ end
 type ('a,'k) attribute = ('a,'k) Attribute.t
 
 type doc = Doc.t
+type 'a column = {attr : 'a; field : string}
+[@@deriving compare,sexp]
 
 module Exp = struct
-  type column = {attr : string option; field : string}
   type bop = And | Or | Lt | Imp | Add | Sub [@@deriving sexp]
   type uop = Not [@@deriving sexp]
+  type var = string column [@@deriving compare, sexp]
   type exp =
     | True
     | Int of int64
     | Str of string
-    | Var of string
+    | Var of var
     | Bop of bop * exp * exp
     | Uop of uop * exp
   [@@deriving sexp]
+  type t = exp [@@deriving sexp]
+
+  module Vars = Map.Make(struct
+      type t = var [@@deriving compare,sexp]
+    end)
 
   let bool = function
     | true -> True
     | false -> Uop (Not,True)
-
-  let var x = Var x
-  let int x = Int x
 
   let less compare x y = bool (compare x y < 0)
 
@@ -390,12 +394,17 @@ module Exp = struct
     | e -> e
 
   module Syntax = struct
+    let bool = bool
+    let var x = Var x
+    let int x = Int x
+    let float x = invalid_arg "floats are not implemented"
     let (&&) x y = simpl (Bop (And,x,y))
     let (||) x y = simpl (Bop (Or,x,y))
     let (==>) x y = simpl (Bop (Imp,x,y))
     let not x = simpl (Uop (Not,x))
     let (<) x y = simpl (Bop(Lt,x,y))
     let (=) x y = simpl (not (x < y) && not (y < x))
+    let (<>) x y = simpl (not (x = y))
     let (>) x y = simpl (y < x)
     let (<=) x y = simpl (not (y < x))
     let (>=) x y = simpl (not (y > x))
@@ -441,27 +450,42 @@ module Exp = struct
     | None -> invalid_argf "internal error - bad value" ()
     | Some x -> x
 
-  let bind_attr name {fields} {attr; field} =
-    printf "checking attribute %s@\n" name;
+  let lookup_var name {fields} {attr; field} =
     if attr = Some name || attr = None
     then Map.find fields field |> Option.map ~f:lift
     else None
 
-  let bind_var var columns row =
-    Seq.concat_map row ~f:(fun (name,value) ->
-        List.filter_map columns ~f:(bind_attr name value) |>
-        Seq.of_list) |> Seq.to_list |> function
-    | [] -> None
-    | x :: xs ->
-      let cs = simpl (List.fold xs ~init:True ~f:(fun e y ->
-        Syntax.(e && x = y))) in
-      Some (x, cs)
+  (* join on one variable represented by an equivalence class *)
+  let unify_var columns row =
+    let columns = Seq.of_list columns in
+    Seq.fold row ~init:True ~f:(fun exp (name,value) ->
+        Seq.filter_map columns ~f:(lookup_var name value) |>
+        Seq.next |> function
+        | None -> exp
+        | Some (r,es) -> Seq.fold es ~init:exp ~f:(fun e p ->
+            simpl Syntax.(e && p = r)))
 
+  (* build a constraint that will unify all equivalence classes *)
+  let unify joins row =
+    Seq.of_list joins |>
+    Seq.fold ~init:True ~f:(fun exp cls ->
+        simpl Syntax.(exp && unify_var cls row))
+
+
+  (* @pre: all attributes are unique
+     @pre: variables are type checked
+     @pre: the database is typechecked
+     @pre: row degree is greater than zero
+  *)
   let bind_vars vars row =
-    List.fold vars ~init:(True,String.Map.empty)
-      ~f:(fun (cs,bs) (var,cols) -> match bind_var var cols row with
-        | None -> cs,bs
-        | Some (v,cs') -> Syntax.(cs && cs'), Map.add bs ~key:var ~data:v)
+    List.fold vars ~init:Vars.empty ~f:(fun vars {attr; field} ->
+        Seq.find_map row ~f:(fun (name,{fields}) ->
+            if name <> attr then None
+            else match Map.find fields field with
+              | None -> failwithf "%s doesn't have %s" name field ()
+              | Some v -> Some (lift v)) |> function
+        | None -> failwithf "didn't find attribute %s" attr ()
+        | Some x -> Map.add vars ~key:{attr;field} ~data:x)
 
   let rec subst bind = function
     | True | Int _ | Str _ as x -> x
@@ -476,132 +500,141 @@ module Exp = struct
     | Uop (Not,True) -> Some false
     | _ -> None
 
-  let eval vars exp {Doc.scheme; entries} =
+  let rec vars : exp -> var list = function
+    | True | Int _ | Str _ -> []
+    | Var v -> [v]
+    | Bop (_,x,y) -> vars x @ vars y
+    | Uop (_,x) -> vars x
+
+  let eval joins exp {Doc.scheme; entries} =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
+    let vars = vars exp in
     Error.Seq.filter (cross entries) ~f:(fun row ->
-        let cs,bs = bind_vars vars row in
-        printf "inferred constraint: %a@\n"
-          Sexp.pp_hum (sexp_of_exp cs);
-        printf "applying substitution:@\n%a@\nto expression:@\n%a@\n"
-          Sexp.pp_hum (String.Map.sexp_of_t sexp_of_exp bs)
-          Sexp.pp_hum (sexp_of_exp Syntax.(cs && exp));
+        let cs = unify joins row in
+        let bs = bind_vars vars row in
         let exp = subst (Map.find bs) Syntax.(cs && exp) in
         match sat exp with
-        | None ->
-          printf "%a@\n" Sexp.pp_hum (sexp_of_exp exp);
-          Or_error.errorf "bad expression"
+        | None -> Or_error.errorf "bad expression"
         | Some r -> Ok r)
 
+  (* printf "%a@\n" Sexp.pp_hum (sexp_of_exp exp); *)
+  (* printf "inferred constraint: %a@\n" *)
+  (*   Sexp.pp_hum (sexp_of_exp cs); *)
+  (* printf "applying substitution:@\n%a@\nto expression:@\n%a@\n" *)
+  (*   Sexp.pp_hum (Vars.sexp_of_t sexp_of_exp bs) *)
+  (*   Sexp.pp_hum (sexp_of_exp Syntax.(cs && exp)); *)
+
+
+  include Syntax
 end
 
-module Monad = struct
-  module Choice_or_error = Monad.Option.Make(Monad.Result.Error)
-  module M = Monad.State.Make(Doc)(struct
-      type 'a t = 'a option Or_error.t
-      include Choice_or_error
-    end)
 
-  module Lst = List
-  include M
+(* module Monad = struct *)
+(*   type 'a seq = 'a Sequence.t *)
+(*   type row = {row : entry String.Map.t} *)
+(*   type state = { *)
+(*     doc : Doc.t; *)
+(*     sel : row seq; *)
+(*   } *)
+
+(*   module M = Monad.State.Make(Doc)(struct *)
+(*       type 'a t = 'a seq Or_error.t *)
+(*       include Monad.Seq.Make(Monad.Result.Error) *)
+(*     end) *)
+
+(*   include M *)
+
+(*   type 'a m = 'a seq Or_error.t *)
+(*   type ('a,'e) storage = ('a,'e) Monad.State.storage *)
+(*   type ('a,'e) statem = ('a,'e) Monad.State.state *)
+(*   type 'a t = (('a,doc) storage m, doc) statem *)
+
+(*   let failf fmt = *)
+(*     let buf = Buffer.create 512 in *)
+(*     let ppf = formatter_of_buffer buf in *)
+(*     let kon ppf () = *)
+(*       pp_print_flush ppf (); *)
+(*       M.lift (Or_error.error_string (Buffer.contents buf)) in *)
+(*     kfprintf kon ppf fmt *)
+
+(*   let require ?(that=fun _ -> true) attr : 'a t = *)
+(*     let name = sprintf "required attribute %s" (Attribute.name attr) in *)
+(*     get () >>= fun doc -> match Doc.get doc attr with *)
+(*     | Error err -> M.lift (Error err) *)
+(*     | Ok [] -> failf "%s is not provided" name () *)
+(*     | Ok xs -> match Lst.filter ~f:that xs with *)
+(*       | [x] ->  M.lift (Ok (Some x)) *)
+(*       | [] -> failf "%s doesn't satisfy the constraint" name () *)
+(*       | _  -> failf "%s values are ambigious" name () *)
+
+(*   let request ?(that=fun _ -> true) attr : 'a t = *)
+(*     let name = sprintf "requested attribute %s" (Attribute.name attr) in *)
+(*     get () >>= fun doc -> match Doc.get doc attr with *)
+(*     | Error err -> M.lift (Error err) *)
+(*     | Ok [] -> M.lift (Ok None) *)
+(*     | Ok xs -> match Lst.filter ~f:that xs with *)
+(*       | [x] ->  M.lift (Ok (Some x)) *)
+(*       | [] -> failf "%s doesn't satisfy the constraint" name () *)
+(*       | _  -> failf "%s values are ambigious" name () *)
+
+(*   let provide (attr : (_,'b -> unit t) attribute) = *)
+(*     Doc.put (fun save -> *)
+(*         get () >>= fun doc -> match save doc with *)
+(*         | Error err -> failf "failed to save an attribute" () *)
+(*         | Ok doc -> put doc) attr *)
+
+(*   (\* let take f = Or_error.map ~f:(Option.map ~f) *\) *)
+(*   (\* let eval m doc = take fst (run m doc) *\) *)
+(*   (\* let exec m doc = take snd (run m doc) *\) *)
+
+(* end *)
+
+(* module Example = struct *)
+(*   open Monad *)
+
+(*   module Attrs : sig *)
+(*     type address *)
+(*     type comment *)
+
+(*     val comment : (comment, (int64 -> string -> 'a) -> 'a) attribute *)
+(*     val entry_point : (address, (int64 -> bool -> string -> 'a) -> 'a) attribute *)
+
+(*   end = struct *)
+(*     let address = Type.("address" %: int) *)
+(*     let flag = Type.("flag" %: bool) *)
+(*     let comm = Type.("comm" %: string) *)
+
+(*     type address = Addr of int64 * bool * string [@@deriving variants] *)
+(*     type comment = Cmnt of int64 * string [@@deriving variants] *)
+
+(*     (\* scheme t1 $ t2 ... $tn *\) *)
+(*     let comment () = *)
+(*       Attribute.define *)
+(*         ~desc:"a comment to an address" *)
+(*         ~name:"comment" *)
+(*         Type.(scheme address $comm) *)
+(*         cmnt *)
+
+(*     let entry_point () = *)
+(*       Attribute.define *)
+(*         ~desc:"executable entry-point" *)
+(*         ~name:"entry-point" *)
+(*         Type.(scheme address $flag $comm) *)
+(*         addr *)
+(*   end *)
+
+(*   open Attrs *)
+
+(*   let packed = Doc.put ident entry_point 0xDEADBEEFL false "hope" Doc.empty *)
 
 
-  type 'a m = 'a option Or_error.t
-  type ('a,'e) storage = ('a,'e) Monad.State.storage
-  type ('a,'e) state = ('a,'e) Monad.State.state
-  type 'a t = (('a,doc) storage m, doc) state
+(*   let save_entry_point () : unit t = *)
+(*     provide entry_point 0xDEADBEEFL false "hope" >>= fun () -> *)
+(*     provide comment 0xDEADBEAFL "here" >>= fun () -> *)
+(*     return () *)
 
-  let failf fmt =
-    let buf = Buffer.create 512 in
-    let ppf = formatter_of_buffer buf in
-    let kon ppf () =
-      pp_print_flush ppf ();
-      M.lift (Or_error.error_string (Buffer.contents buf)) in
-    kfprintf kon ppf fmt
-
-
-  let foreach ?(that=fun _ -> true) attr : 'a list t =
-    get () >>= fun doc -> match Doc.get doc attr with
-    | Error err -> M.lift (Error err)
-    | Ok xs -> M.lift (Ok (Some (Lst.filter ~f:that xs)))
-
-  let require ?(that=fun _ -> true) attr : 'a t =
-    let name = sprintf "required attribute %s" (Attribute.name attr) in
-    get () >>= fun doc -> match Doc.get doc attr with
-    | Error err -> M.lift (Error err)
-    | Ok [] -> failf "%s is not provided" name ()
-    | Ok xs -> match Lst.filter ~f:that xs with
-      | [x] ->  M.lift (Ok (Some x))
-      | [] -> failf "%s doesn't satisfy the constraint" name ()
-      | _  -> failf "%s values are ambigious" name ()
-
-  let request ?(that=fun _ -> true) attr : 'a t =
-    let name = sprintf "requested attribute %s" (Attribute.name attr) in
-    get () >>= fun doc -> match Doc.get doc attr with
-    | Error err -> M.lift (Error err)
-    | Ok [] -> M.lift (Ok None)
-    | Ok xs -> match Lst.filter ~f:that xs with
-      | [x] ->  M.lift (Ok (Some x))
-      | [] -> failf "%s doesn't satisfy the constraint" name ()
-      | _  -> failf "%s values are ambigious" name ()
-
-  let provide (attr : (_,'b -> unit t) attribute) =
-    Doc.put (fun save ->
-        get () >>= fun doc -> match save doc with
-        | Error err -> failf "failed to save an attribute" ()
-        | Ok doc -> put doc) attr
-
-  let take f = Or_error.map ~f:(Option.map ~f)
-  let eval m doc = take fst (run m doc)
-  let exec m doc = take snd (run m doc)
-
-end
-
-module Example = struct
-  open Monad
-
-  module Attrs : sig
-    type address
-    type comment
-
-    val comment : (comment, (int64 -> string -> 'a) -> 'a) attribute
-    val entry_point : (address, (int64 -> bool -> string -> 'a) -> 'a) attribute
-
-  end = struct
-    let address = Type.("address" %: int)
-    let flag = Type.("flag" %: bool)
-    let comm = Type.("comm" %: string)
-
-    type address = Addr of int64 * bool * string [@@deriving variants]
-    type comment = Cmnt of int64 * string [@@deriving variants]
-
-    (* scheme t1 $ t2 ... $tn *)
-    let comment () =
-      Attribute.define
-        ~desc:"a comment to an address"
-        ~name:"comment"
-        Type.(scheme address $comm)
-        cmnt
-
-    let entry_point () =
-      Attribute.define
-        ~desc:"executable entry-point"
-        ~name:"entry-point"
-        Type.(scheme address $flag $comm)
-        addr
-  end
-
-  open Attrs
-
-  let packed = Doc.put ident entry_point 0xDEADBEEFL false "hope" Doc.empty
-
-
-  let save_entry_point () : unit t =
-    provide entry_point 0xDEADBEEFL false "hope" >>= fun () ->
-    provide comment 0xDEADBEAFL "here" >>= fun () ->
-    return ()
-
-end
+(* end *)
 
 
 let doc = ok_exn (Doc.from_file "test.ogre")
@@ -610,4 +643,163 @@ let vars = Exp.["x", [
     {attr=Some "teacher"; field="id"}
   ]]
 
-let test () = Exp.eval vars Exp.(Syntax.(var "x" = int 0L)) doc
+(* let test () = Exp.eval vars Exp.(Syntax.(var "x" = int 0L)) doc *)
+
+
+(* module Ex = struct *)
+
+(*   let _ = *)
+(*     from students >>= fun s -> *)
+(*     from teachers >>= fun t -> *)
+(*     Join.(on [ *)
+(*         [classid@any]; *)
+(*         [teacher@student; id@t]]) >>= fun () -> *)
+(*     Let.(vars ["gpa" = gpa@s]) >>= fun () -> *)
+(*     Where.(var "gpa" > float 3.5) >>= fun () -> *)
+(*     select t >>= fun {Teacher.name} -> *)
+(*     group  s >>= fun students -> *)
+(*     return {Best.teacher=name; students} *)
+
+(*     let _ = *)
+(*       from loadable >>= fun l -> *)
+(*       from names >>= fun n -> *)
+(*       from permissions >>= fun p -> *)
+(*       Let.(vars [ *)
+(*           "x" = exec@p; *)
+(*           "w" = write@p]) >>= fun () -> *)
+(*       Join.(on [ *)
+(*           [off@any]; [len@any]; *)
+(*         ]) >>= fun () -> *)
+(*       Select.(var "x" && var "y") >>= fun () -> *)
+(*       require l >>= {Loadable.len;off} -> *)
+(*       require n >>= {Names.name} -> *)
+(*       return {Exec.off; len; name} *)
+
+
+(* end *)
+
+module type Students = sig
+
+  val classid : int64 field
+  val teacher : int64 field
+  val id : int64 field
+  val gpa : float field
+  type student
+  type teacher
+  val students : (student, string -> string) attribute
+  val teachers : (teacher, string -> string) attribute
+
+end
+
+module type Query = sig
+
+  type 'a t
+  type exp
+  type join
+  type 'a tables
+
+  val from : ('a,_) attribute -> (('a -> 'r) -> 'r) tables
+
+  val (@) : _ field -> (_,_) attribute -> exp
+
+  val select :
+    ?where:exp ->
+    ?join:join list list ->
+    'a tables -> 'a t
+
+  val field : ?from: (_,_) attribute -> _ field -> join
+  val (&) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
+
+  val int : int64 -> exp
+  val bool : bool -> exp
+  val float : float -> exp
+
+  val (&&) : exp -> exp -> exp
+  val (||) : exp -> exp -> exp
+  val (==>) : exp -> exp -> exp
+  val not : exp -> exp
+  val (<) : exp -> exp -> exp
+  val (>) : exp -> exp -> exp
+  val (=) : exp -> exp -> exp
+  val (<>) : exp -> exp -> exp
+  val (<=) : exp -> exp -> exp
+  val (>=) : exp -> exp -> exp
+  val (+) : exp -> exp -> exp
+  val (-) : exp -> exp -> exp
+end
+
+module Query : Query = struct
+  type 'a seq = 'a Sequence.t
+  type exp = Exp.t
+  type row = {row : entry String.Map.t}
+  type join = string option column
+  type 'f tables = {
+    read : row -> 'f;
+  }
+
+  type 'f t = {
+    where : exp;
+    join : join list list;
+    tables : 'f tables;
+  }
+
+  let get_exn {row} attr =
+    let {Attribute.name; read} = attr () in
+    match Map.find row name with
+    | None -> invalid_argf "internal error - missing table %s" name ()
+    | Some entry -> match read entry with
+      | None -> invalid_argf "internal error - broken table %s" name ()
+      | Some x -> x
+
+
+  let from attr = {
+    read = fun row k -> k (get_exn row attr)
+  }
+
+  let (&) {read} attr = {
+    read = fun row k -> read row k (get_exn row attr)
+  }
+
+  let (@) {Type.name=fname} attr =
+    let {Attribute.name=aname} = attr () in
+    Exp.var {attr=aname; field = fname}
+
+  let field ?from {Type.name} = {
+    attr = Option.map from ~f:(fun attr ->
+        let {Attribute.name} = attr () in name);
+    field = name;
+  }
+
+  let select ?(where=Exp.True) ?(join=[]) tables = {
+    where; join; tables;
+  }
+
+  include Exp.Syntax
+end
+
+module Select = struct
+  module Select = Monad.Reader
+  open Select.Syntax
+
+  type ('a,'e) t = ('a,'e) Monad.Reader.t
+
+  let get () : (_,_) t =
+    Select.read () >>| fun k ->
+    k "hello" 42 'c'
+
+end
+
+
+module Test(Db : Students) = struct
+  open Db
+  open Query
+  let query = select
+      ~where:(gpa@students > float 3.5)
+      ~join:[
+        [field classid];
+        [
+          field teacher ~from:students;
+          field id ~from:teachers
+        ]]
+      (from students & teachers)
+end
