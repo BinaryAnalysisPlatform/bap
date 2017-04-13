@@ -25,11 +25,11 @@ module Writer = struct
 end
 
 module Type = struct
-  type typ = Int | Str | Bool [@@deriving compare,enumerate]
+  type typ = Int | Str | Bool | Float
+  [@@deriving compare,enumerate,sexp]
   type 'a t = {
     parse : string -> 'a option;
     pack : 'a -> string;
-    compare : 'a -> 'a -> int;
     typ : typ;
   }
 
@@ -41,7 +41,7 @@ module Type = struct
   type header = {
     fname : string;
     ftype : typ;
-  } [@@deriving compare]
+  } [@@deriving compare, sexp]
 
   type signature = header list [@@deriving compare]
 
@@ -64,28 +64,32 @@ module Type = struct
   let int = {
     parse = atom int64_of_sexp;
     pack = pack sexp_of_int64;
-    compare = compare_int64;
     typ = Int;
   }
 
   let bool = {
     parse = atom bool_of_sexp;
     pack = pack sexp_of_bool;
-    compare = compare_bool;
     typ = Bool;
   }
 
   let string = {
     parse = atom string_of_sexp;
     pack = pack sexp_of_string;
-    compare = compare_string;
     typ = Str;
+  }
+
+  let float = {
+    parse = atom float_of_sexp;
+    pack = pack sexp_of_float;
+    typ = Float;
   }
 
   let string_of_typ = function
     | Int -> "int"
     | Str -> "str"
     | Bool -> "bool"
+    | Float -> "float"
 
   let names = all_of_typ |> List.map ~f:(fun t -> string_of_typ t,t)
 
@@ -343,7 +347,7 @@ end
 type ('a,'k) attribute = ('a,'k) Attribute.t
 
 type doc = Doc.t
-type 'a column = {attr : 'a; field : string}
+type 'a column = {attr : 'a; field : Type.header}
 [@@deriving compare,sexp]
 
 module Exp = struct
@@ -354,6 +358,7 @@ module Exp = struct
     | True
     | Int of int64
     | Str of string
+    | Flt of float
     | Var of var
     | Bop of bop * exp * exp
     | Uop of uop * exp
@@ -383,11 +388,14 @@ module Exp = struct
     | Bop (Imp, Uop (Not,True),_) -> True
     | Bop (Lt,Int x, Int y) -> less compare_int64 x y
     | Bop (Lt,Str x, Str y) -> less compare_string x y
-    | Bop (Add,Int 0L,x)
-    | Bop (Add,x,Int 0L) -> simpl x
-    | Bop (Sub,x,Int 0L) -> simpl x
+    | Bop (Lt,Flt x, Flt y) -> less compare_float x y
+    | Bop (Add,(Int 0L | Flt 0.),x)
+    | Bop (Add,x,(Int 0L | Flt 0.)) -> simpl x
+    | Bop (Sub,x,(Int 0L | Flt 0.)) -> simpl x
     | Bop (Add,Int x, Int y) -> Int Int64.(x + y)
     | Bop (Sub,Int x, Int y) -> Int Int64.(x - y)
+    | Bop (Add,Flt x, Flt y) -> Flt Float.(x + y)
+    | Bop (Sub,Flt x, Flt y) -> Flt Float.(x - y)
     | Uop (Not,(Uop (Not,x))) -> simpl x
     | Uop (op,e) -> Uop (op, simpl e)
     | Bop (op,x,y) -> Bop (op,simpl x, simpl y)
@@ -397,7 +405,7 @@ module Exp = struct
     let bool = bool
     let var x = Var x
     let int x = Int x
-    let float x = invalid_arg "floats are not implemented"
+    let float x = Flt x
     let (&&) x y = simpl (Bop (And,x,y))
     let (||) x y = simpl (Bop (Or,x,y))
     let (==>) x y = simpl (Bop (Imp,x,y))
@@ -433,26 +441,25 @@ module Exp = struct
   let cross map =
     linearlize map |> n_cross_product
 
-  let parser t inj value = match t.Type.parse value with
-    | None -> None
-    | Some x -> Some (inj x)
+  let parser {Type.parse; typ} inj =
+    typ, fun value -> match parse value with
+    | None -> failwith "expression parse error"
+    | Some x -> inj x
 
   let parsers = [
     parser Type.int (fun x -> Int x);
     parser Type.string (fun x -> Str x);
+    parser Type.float (fun x -> Flt x);
     parser Type.bool (function
         | true -> True
         | false -> Uop (Not,True))
   ]
 
-  let lift x =
-    List.find_map parsers ~f:(fun parse -> parse x) |> function
-    | None -> invalid_argf "internal error - bad value" ()
-    | Some x -> x
+  let lift ftype = List.Assoc.find_exn parsers ftype
 
-  let lookup_var name {fields} {attr; field} =
+  let lookup_var name {fields} {attr; field={Type.fname;ftype}} =
     if attr = Some name || attr = None
-    then Map.find fields field |> Option.map ~f:lift
+    then Map.find fields fname |> Option.map ~f:(lift ftype)
     else None
 
   (* join on one variable represented by an equivalence class *)
@@ -478,17 +485,18 @@ module Exp = struct
      @pre: row degree is greater than zero
   *)
   let bind_vars vars row =
-    List.fold vars ~init:Vars.empty ~f:(fun vars {attr; field} ->
+    List.fold vars ~init:Vars.empty ~f:(fun vars var ->
+        let {field={Type.fname; ftype}; attr} = var in
         Seq.find_map row ~f:(fun (name,{fields}) ->
             if name <> attr then None
-            else match Map.find fields field with
-              | None -> failwithf "%s doesn't have %s" name field ()
-              | Some v -> Some (lift v)) |> function
+            else match Map.find fields fname with
+              | None -> failwithf "%s doesn't have %s" name fname ()
+              | Some v -> Some (lift ftype v)) |> function
         | None -> failwithf "didn't find attribute %s" attr ()
-        | Some x -> Map.add vars ~key:{attr;field} ~data:x)
+        | Some x -> Map.add vars ~key:var ~data:x)
 
   let rec subst bind = function
-    | True | Int _ | Str _ as x -> x
+    | True | Int _ | Str _ | Flt _ as x -> x
     | Uop (op,x) -> simpl (Uop (op, subst bind x))
     | Bop (op,x,y) -> simpl (Bop (op,subst bind x,subst bind y))
     | Var n -> match bind n with
@@ -501,7 +509,7 @@ module Exp = struct
     | _ -> None
 
   let rec vars : exp -> var list = function
-    | True | Int _ | Str _ -> []
+    | True | Int _ | Str _ | Flt _ -> []
     | Var v -> [v]
     | Bop (_,x,y) -> vars x @ vars y
     | Uop (_,x) -> vars x
@@ -637,11 +645,6 @@ end
 (* end *)
 
 
-let doc = ok_exn (Doc.from_file "test.ogre")
-let vars = Exp.["x", [
-    {attr=Some "student"; field = "teacher"};
-    {attr=Some "teacher"; field="id"}
-  ]]
 
 (* let test () = Exp.eval vars Exp.(Syntax.(var "x" = int 0L)) doc *)
 
@@ -760,14 +763,17 @@ module Query : Query = struct
     read = fun row k -> read row k (get_exn row attr)
   }
 
-  let (@) {Type.name=fname} attr =
-    let {Attribute.name=aname} = attr () in
-    Exp.var {attr=aname; field = fname}
+  let header_of_field {Type.name=fname; t={Type.typ}} =
+    {Type.fname; ftype = typ}
 
-  let field ?from {Type.name} = {
+  let (@) field attr =
+    let {Attribute.name=aname} = attr () in
+    Exp.var {attr=aname; field = header_of_field field}
+
+  let field ?from fld = {
     attr = Option.map from ~f:(fun attr ->
         let {Attribute.name} = attr () in name);
-    field = name;
+    field = header_of_field fld;
   }
 
   let select ?(where=Exp.True) ?(join=[]) tables = {
