@@ -58,7 +58,7 @@ module Type = struct
     typ = Bool;
   }
 
-  let string = {
+  let str = {
     parse = atom string_of_sexp;
     pack = pack sexp_of_string;
     typ = Str;
@@ -132,7 +132,7 @@ module Attribute = struct
 
   type ('a,'k) t = unit -> ('a,'k) info
 
-  let define  ~desc ~name {Type.signature; read; save} cons = {
+  let declare ?(desc="") ~name {Type.signature; read; save} cons = {
     name; desc; sign = signature;
     read = (fun entry -> read entry cons);
     save = save;
@@ -143,6 +143,7 @@ module Attribute = struct
 end
 
 type ('a,'k) typeinfo = ('a,'k) Attribute.info
+let declare = Attribute.declare
 
 
 module Doc = struct
@@ -409,11 +410,6 @@ module Exp = struct
 
   module Seq = Sequence
 
-  let linearlize map =
-    Map.to_sequence map |>
-    Seq.map ~f:(fun (name,values) ->
-        Seq.of_list values |>
-        Seq.map ~f:(fun value -> name,value))
 
   let rec n_cross_product xs =
     let open Seq in match next xs with
@@ -423,8 +419,13 @@ module Exp = struct
       n_cross_product rows >>|
       append (singleton elt)
 
-  let cross map =
-    linearlize map |> n_cross_product
+  let select names map =
+    Map.to_sequence map |>
+    Seq.filter_map ~f:(fun (name,values) ->
+        if Set.mem names name
+        then Some (Seq.of_list values |>
+                   Seq.map ~f:(fun value -> name,value))
+        else None)
 
   let parser {Type.parse; typ} inj =
     typ, fun value -> match parse value with
@@ -433,7 +434,7 @@ module Exp = struct
 
   let parsers = [
     parser Type.int (fun x -> Int x);
-    parser Type.string (fun x -> Str x);
+    parser Type.str (fun x -> Str x);
     parser Type.float (fun x -> Flt x);
     parser Type.bool (function
         | true -> True
@@ -450,12 +451,12 @@ module Exp = struct
   (* join on one variable represented by an equivalence class *)
   let unify_var columns row =
     let columns = Seq.of_list columns in
-    Seq.fold row ~init:True ~f:(fun exp (name,value) ->
-        Seq.filter_map columns ~f:(lookup_var name value) |>
-        Seq.next |> function
-        | None -> exp
-        | Some (r,es) -> Seq.fold es ~init:exp ~f:(fun e p ->
-            simpl Syntax.(e && p = r)))
+    Seq.concat_map row  ~f:(fun (name,value) ->
+        Seq.filter_map columns ~f:(lookup_var name value)) |>
+    Seq.next |> function
+    | None -> True
+    | Some (r,es) ->
+      Seq.fold es ~init:True ~f:(fun e p -> simpl Syntax.(e && (p = r)))
 
   (* build a constraint that will unify all equivalence classes *)
   let unify joins row =
@@ -501,12 +502,13 @@ module Exp = struct
 
 
 
-  let eval joins exp {Doc.scheme; entries} : row seq Or_error.t  =
+  let eval names joins exp {Doc.scheme; entries} : row seq Or_error.t  =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
     let errorf msg = Or_error.errorf msg in
     let vars = vars exp in
-    Error.Seq.filter (cross entries) ~f:(fun row ->
+    n_cross_product (select names entries) |>
+    Error.Seq.filter ~f:(fun row ->
         let cs = unify joins row in
         let bs = bind_vars vars row in
         let exp = subst (Map.find bs) Syntax.(cs && exp) in
@@ -528,6 +530,7 @@ module Query = struct
   type exp = Exp.t
   type join = string option column
   type 'f tables = {
+    names : String.Set.t;
     read : row -> 'f;
   }
 
@@ -540,17 +543,19 @@ module Query = struct
   let get_exn {row} attr =
     let {Attribute.name; read} = attr () in
     match Map.find row name with
-    | None -> invalid_argf "internal error - missing table %s" name ()
+    | None -> failwithf "missing table %s" name ()
     | Some entry -> match read entry with
-      | None -> invalid_argf "internal error - broken table %s" name ()
+      | None -> failwithf "can't parse attribute %s" name ()
       | Some x -> x
 
 
   let from attr = {
+    names = String.Set.singleton (Attribute.name attr);
     read = fun row k -> k (get_exn row attr)
   }
 
-  let (&) {read} attr = {
+  let ($) {read; names} attr = {
+    names = Set.add names @@ Attribute.name attr;
     read = fun row k -> read row k (get_exn row attr)
   }
 
@@ -576,52 +581,70 @@ end
 
 type 'a query = 'a Query.t
 
-module Monad = struct
-  type 'a seq = 'a Sequence.t
+
+module type S = sig
+  include Monad.S
+  include Monad.Trans.S with type 'a t := 'a t
+  val require : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
+  val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a option t
+  val foreach : ('a -> 'b t) query -> f:'a -> 'b seq t
+  val provide : (_, 'a -> unit t) attribute -> 'a
+  val run : 'a t -> doc -> ('a * doc) Or_error.t m
+  val failf : ('a, formatter, unit, unit -> 'b t) format4 -> 'a
+  val eval : 'a t -> doc -> 'a  Or_error.t m
+  val exec : 'a t -> doc -> doc Or_error.t m
+end
+
+module Make(B : Monad.S) = struct
   type state = {
     doc : Doc.t;
   }
 
-  module M = Monad.State.Make(Doc)(Monad.Result.Error)
+  module EM = struct
+    type 'a t = 'a Or_error.t B.t
+    include Monad.Result.Error.Make(B)
+  end
+
+  module M = Monad.State.Make(Doc)(EM)
   open M.Syntax
 
-  type 'a m = 'a Or_error.t
-  type ('a,'e) storage = ('a,'e) Monad.State.storage
-  type ('a,'e) statem = ('a,'e) Monad.State.state
-  type 'a t = (('a,doc) storage m, doc) statem
+  type 'a t = 'a Monad.State.T1(Doc)(EM).t
+  type 'a m = 'a B.t
+  type 'a e = doc -> ('a * doc) Or_error.t m
 
   let failf fmt =
     let buf = Buffer.create 512 in
     let ppf = formatter_of_buffer buf in
     let kon ppf () =
       pp_print_flush ppf ();
-      M.lift (Or_error.error_string (Buffer.contents buf)) in
+      let err = Or_error.error_string (Buffer.contents buf) in
+      (M.lift (B.return err)) in
     kfprintf kon ppf fmt
 
 
-  let foreach ({Query.where; join; tables} : ('a -> 'b t) Query.t) ~f
+  let foreach {Query.where; join; tables={Query.read; names}} ~f
     : 'b seq t =
-    M.get () >>= fun doc -> match Exp.eval join where doc with
-    | Error err -> M.lift (Error err)
-    | Ok rows -> M.Seq.map rows ~f:(fun row -> tables.Query.read row f)
+    M.get () >>= fun doc -> match Exp.eval names join where doc with
+    | Error err -> M.lift (B.return (Error err))
+    | Ok rows -> M.Seq.map rows ~f:(fun row -> read row f)
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in
     M.get () >>= fun doc -> match Doc.get doc attr with
-    | Error err -> M.lift (Error err)
+    | Error err -> M.lift (B.return (Error err))
     | Ok [] -> failf "%s is not provided" name ()
     | Ok xs -> match List.filter ~f:that xs with
-      | [x] ->  M.lift (Ok x)
+      | [x] ->  M.lift (B.return (Ok x))
       | [] -> failf "%s doesn't satisfy the constraint" name ()
       | _  -> failf "%s values are ambigious" name ()
 
   let request ?(that=fun _ -> true) attr : 'a option t =
     let name = sprintf "requested attribute %s" (Attribute.name attr) in
     M.get () >>= fun doc -> match Doc.get doc attr with
-    | Error err -> M.lift (Error err)
-    | Ok [] -> M.lift (Ok None)
+    | Error err -> M.lift (B.return (Error err))
+    | Ok [] -> M.lift (B.return (Ok None))
     | Ok xs -> match List.filter ~f:that xs with
-      | [x] ->  M.lift (Ok (Some x))
+      | [x] ->  M.lift (B.return (Ok (Some x)))
       | [] -> failf "%s doesn't satisfy the constraint" name ()
       | _  -> failf "%s values are ambigious" name ()
 
@@ -633,6 +656,11 @@ module Monad = struct
 
   include M
 
-  let eval m env = run m env |> Or_error.map ~f:fst
-  let exec m env = run m env |> Or_error.map ~f:snd
+  let liftm  = B.map ~f:(fun x -> (Ok x))
+  let lift x = lift (liftm x)
+  let take f m = B.map m ~f:(Or_error.map ~f)
+  let eval m env = take fst (run m env)
+  let exec m env = take snd (run m env)
 end
+
+include Make(Monad.Ident)

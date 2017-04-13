@@ -7,6 +7,7 @@
 
 open Core_kernel.Std
 open Monads.Std
+open Format
 
 type doc
 type entry
@@ -58,21 +59,19 @@ module Type : sig
 
   val int : int64 t
   val bool : bool t
-  val string : string t
+  val str : string t
+  val float : float t
 
   val def  : string -> 'a t -> 'a field
   val (%:) : string -> 'a t -> 'a field
 end
 
 
-module Attribute : sig
-  type ('a,'k) t = ('a,'k) attribute
 
-  val define :
-    desc:string ->
-    name:string ->
-    ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
-end
+val declare :
+  ?desc:string ->
+  name:string ->
+  ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
 
 
 module Query : sig
@@ -92,7 +91,7 @@ module Query : sig
     'a tables -> 'a t
 
   val field : ?from: (_,_) attribute -> _ field -> join
-  val (&) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
+  val ($) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
 
   val int : int64 -> exp
   val bool : bool -> exp
@@ -112,12 +111,35 @@ module Query : sig
   val (-) : exp -> exp -> exp
 end
 
+
+module Doc : sig
+  type t  = doc
+
+  val empty : doc
+
+  val load : in_channel -> doc Or_error.t
+
+  val save : doc -> out_channel -> unit
+
+  val from_file : string -> doc Or_error.t
+
+  val from_string : string -> doc Or_error.t
+
+  val to_string : doc -> string
+
+  val to_file : doc -> string -> unit Or_error.t
+
+  val pp : Format.formatter -> doc -> unit
+end
+
+
+
 (** Monadic interface.
 
 *)
-module Monad : sig
-  type 'a t
-  include Monad.S with type 'a t := 'a t
+module type S = sig
+  include Monad.S
+  include Monad.Trans.S with type 'a t := 'a t
 
   (** [require attr ~that:sat] requires a mandatory attribute that
       satisfies predicate [sat]. It is an error, if such attribute
@@ -146,32 +168,16 @@ module Monad : sig
 
   (** [run comp doc] runs a computation [comp] agains [doc]. Returns
       the value computed by the computation, on an error if it fails.  *)
-  val run : 'a t -> doc -> ('a * doc) Or_error.t
+  val run : 'a t -> doc -> ('a * doc) Or_error.t m
 
-  val eval : 'a t -> doc -> 'a  Or_error.t
-  val exec : 'a t -> doc -> doc Or_error.t
+  val failf : ('a, formatter, unit, unit -> 'b t) format4 -> 'a
+
+  val eval : 'a t -> doc -> 'a  Or_error.t m
+  val exec : 'a t -> doc -> doc Or_error.t m
 end
 
-module Doc : sig
-  type t  = doc
+module Make(M : Monad.S) : S with type 'a m := 'a M.t
 
-  val empty : doc
-
-  val load : in_channel -> doc Or_error.t
-
-  val save : doc -> out_channel -> unit
-
-  val from_file : string -> doc Or_error.t
-
-  val from_string : string -> doc Or_error.t
-
-  val to_string : doc -> string
-
-  val to_file : doc -> string -> unit Or_error.t
-
-  val pp : Format.formatter -> doc -> unit
-
-  val put : ((doc -> doc Or_error.t) -> 'a) -> ('b,'c -> 'a) attribute -> 'c
-
-  val get : doc -> ('a,_) attribute -> 'a list Or_error.t
-end
+include S with type 'a m = 'a
+           and type 'a t = 'a Make(Monad.Ident).t
+           and type 'a e = doc -> ('a * doc) Or_error.t
