@@ -12,6 +12,9 @@ type doc
 type entry
 type ('a,'k) typeinfo constraint 'k = _ -> _
 type ('a,'k) attribute = unit -> ('a,'k) typeinfo
+type 'a seq = 'a Sequence.t
+type 'a field
+type 'a query
 
 
 (** type that describes an attribute.
@@ -32,7 +35,6 @@ type ('f,'k) scheme
 
 module Type : sig
   type 'a t
-  type 'a field
 
 
 
@@ -57,7 +59,6 @@ module Type : sig
   val int : int64 t
   val bool : bool t
   val string : string t
-  val enum : string list -> string t
 
   val def  : string -> 'a t -> 'a field
   val (%:) : string -> 'a t -> 'a field
@@ -73,44 +74,50 @@ module Attribute : sig
     ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
 end
 
-(** Monadic interface to the loader docification.
 
+module Query : sig
 
-    Provides a simple monadic query language with which it is possible
-    to construct first class queries and computations, that can be
-    applied to loader docifications.
+  type 'a t = 'a query
+  type exp
+  type join
+  type 'a tables
 
-    {[
-      let segments () =
-        foreach loadable >>=
-        List.map ~f:(fun (loc,off) ->
-            require name ~that:(belongs loc) >>= fun name ->
-            request permision ~that:(belong loc) >>= fun perm ->
-            return {name; off; perm; location = loc})
+  val from : ('a,_) attribute -> (('a -> 'r) -> 'r) tables
 
+  val (@) : _ field -> (_,_) attribute -> exp
 
-      let image () =
-        require arch >>= fun arch ->
-        segment () >>= fun seg ->
+  val select :
+    ?where:exp ->
+    ?join:join list list ->
+    'a tables -> 'a t
 
+  val field : ?from: (_,_) attribute -> _ field -> join
+  val (&) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
 
+  val int : int64 -> exp
+  val bool : bool -> exp
+  val float : float -> exp
 
-    ]}
+  val (&&) : exp -> exp -> exp
+  val (||) : exp -> exp -> exp
+  val (==>) : exp -> exp -> exp
+  val not : exp -> exp
+  val (<) : exp -> exp -> exp
+  val (>) : exp -> exp -> exp
+  val (=) : exp -> exp -> exp
+  val (<>) : exp -> exp -> exp
+  val (<=) : exp -> exp -> exp
+  val (>=) : exp -> exp -> exp
+  val (+) : exp -> exp -> exp
+  val (-) : exp -> exp -> exp
+end
 
+(** Monadic interface.
 
 *)
 module Monad : sig
   type 'a t
   include Monad.S with type 'a t := 'a t
-
-
-  (** [provide] provides the given attribute. If an attribute is
-      provided several times with the same value, then it is the same as
-      providing it once. If an attribute is provided several times
-      with different values, then all values are stored in the
-      docification. *)
-  val provide : (_, 'a -> unit t) attribute -> 'a
-
 
   (** [require attr ~that:sat] requires a mandatory attribute that
       satisfies predicate [sat]. It is an error, if such attribute
@@ -121,21 +128,28 @@ module Monad : sig
       satisfies the given predicate [sat]. It is not an error, if the
       attribute is either not provided or doesn't satisfy the
       predicate.  *)
-  val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
+  val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a option t
 
 
-  (** [foreach attr ~that:sat] retrieves a list of attributes that
-      satisfy the predicate [sat]. It is not an error, if such
-      attributes are not provided, or none of the provided satisfy the
-      predicate.  *)
-  val foreach : ?that:('a -> bool) -> ('a,_) attribute -> 'a list t
+  (** [foreach query ~f:action] *)
+  val foreach : ('a -> 'b t) query -> f:'a -> 'b seq t
+
+
+  (** [provide] provides the given attribute. If an attribute is
+      provided several times with the same value, then it is the same as
+      providing it once. If an attribute is provided several times
+      with different values, then all values are stored in the
+      docification. *)
+  val provide : (_, 'a -> unit t) attribute -> 'a
+
+
 
   (** [run comp doc] runs a computation [comp] agains [doc]. Returns
       the value computed by the computation, on an error if it fails.  *)
-  val run : 'a t -> doc -> ('a * doc) option Or_error.t
+  val run : 'a t -> doc -> ('a * doc) Or_error.t
 
-  val eval : 'a t -> doc -> 'a option Or_error.t
-  val exec : 'a t -> doc -> doc option Or_error.t
+  val eval : 'a t -> doc -> 'a  Or_error.t
+  val exec : 'a t -> doc -> doc Or_error.t
 end
 
 module Doc : sig
