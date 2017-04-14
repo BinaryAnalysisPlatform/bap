@@ -109,6 +109,13 @@ module Type = struct
 
   let pack t x = t.pack x
 
+  let ok t x = Option.is_some (t.parse x)
+  let check = function
+    | Int -> ok int
+    | Str -> ok str
+    | Bool -> ok bool
+    | Float -> ok float
+
   let signature_mismatch ~expect:s1 ~got:s2 =
     Or_error.errorf "signature mismatch"
 
@@ -173,7 +180,25 @@ module Doc = struct
         doc with scheme = Map.add doc.scheme ~key:name ~data:sign
       }
 
-  let update_entries name packed doc = Ok {
+  let typecheck_entry name {fields} {scheme} =
+    match Map.find scheme name with
+    | None -> errorf "The attribute %s is not declared" name
+    | Some sign ->
+      Error.List.fold sign ~init:0 ~f:(fun fnum {Type.fname; ftype} ->
+          match Map.find fields fname with
+          | None ->
+            errorf "attribute %S didn't provide \
+                    a value for the field %S" name fname
+          | Some value when Type.check ftype value -> Ok (fnum + 1)
+          | Some bad ->
+            errorf "value %S is not in a domain of values of\
+                    field '%s.%s'" bad name fname) >>= fun checked ->
+      if checked = Map.length fields then Ok ()
+      else errorf "attribute %S has an arity %d, while a value with \
+                   arity %d was provided" name checked (Map.length fields)
+
+  let update_entries name packed doc =
+    typecheck_entry name packed doc >>| fun () -> {
       doc with entries =
                  Map.add_multi doc.entries ~key:name ~data: packed
     }
