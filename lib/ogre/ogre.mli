@@ -4,7 +4,10 @@
     extensibility, i.e., adding new types of knowledge doesn't break
     the storage. It also has a well-specified open representation, so
     that any tool written in any language (or even a human itself) can
-    create, modify and understand the contents (like XML).
+    create, modify and understand the contents (like XML). Ogre
+    provides data persitance and, more importantly, a type safe way of
+    querying and updating the data. The query language is rich enough,
+    and supports joins and boolean constraints
 
     It can be seen as a document NoSQL database engine. As a backing
     storage Ogre uses S-Expressions, and the structure of a document
@@ -26,15 +29,37 @@
     is a proposition that a student named [Joe] has a GPA rate
     [3.5]. Thus a proposition is a tuple with named fields. All
     propositions must be well-typed, so the predicate [student] should
-    be declared before used.
+    be declared before used. The field values maybe stored (and are by
+    default) without the names in the order in which they are
+    specified in the declaration, e.g., the following definition is
+    equivalent to the previous one:
+
+    {v (student Joe 3.5) v}
+
+    Given, that the predicate is declared as:
+
+    {v (declare student (name str) (gpa float))v}
+
+    where the declaration has the following syntax:
+
+    {v
+       <declaration ::= (declare <attribute-name> <field> <field>..)
+       <field> ::= (<field-name> <field-type>)
+       <field-type> ::= int | str | bool | float
+    v}
+
+    Each declaration declare an attribute, that defines a type of the
+    propositions. Unlike the SQL, we denote each tuple type with the
+    word attribute, as under our model each document describes some
+    knowledge (an attribute) about some abstract entity. For example,
+    a document "college.ogre" that contains definitions of attributes
+    named [student], [teacher], [class], [assignments] is a set of
+    knowledge about a college. Thus an attribute maps to a SQL notion
+    of table (or a relvar). Correspondingly, a column of a table (that
+    is usually referred as an attribute in the relational model), maps
+    to Ogre's field.
 
 
-
-
-
-    Each fact attributes some knowledge about the abstract entity that
-    is described by the document. A family of facts is denoted by an
-    attribute.
 
 *)
 

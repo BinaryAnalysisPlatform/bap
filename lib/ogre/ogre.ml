@@ -507,12 +507,14 @@ module Exp = struct
     let vars = vars exp in
     n_cross_product (select names entries) |>
     Error.Seq.filter ~f:(fun row ->
-        let cs = unify joins row in
-        let bs = bind_vars vars row in
-        let exp = subst (Map.find bs) Syntax.(cs && exp) in
-        match sat exp with
-        | None -> errorf "bad expression"
-        | Some r -> Ok r) >>=
+        if Seq.is_empty row then Ok false
+        else
+          let cs = unify joins row in
+          let bs = bind_vars vars row in
+          let exp = subst (Map.find bs) Syntax.(cs && exp) in
+          match sat exp with
+          | None -> errorf "bad expression"
+          | Some r -> Ok r) >>=
     Error.Seq.map ~f:(fun attrs ->
         let init = {row=String.Map.empty} in
         Error.Seq.fold ~init attrs ~f:(fun {row} (name,entry) ->
