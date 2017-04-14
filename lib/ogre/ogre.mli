@@ -67,14 +67,48 @@ open Core_kernel.Std
 open Monads.Std
 open Format
 
+
+(** the document  *)
 type doc
-type entry
+
+
+(** type information associated with an attribute  *)
 type ('a,'k) typeinfo constraint 'k = _ -> _
+
+(** a decriptor of an attribute.
+
+    Used to construct attribute values, and to query
+    documents. Created with [declare] function.
+
+    Note, that due to a value restriction, an attribute should be
+    defined as a function returning a type information.*)
 type ('a,'k) attribute = unit -> ('a,'k) typeinfo
-type 'a seq = 'a Sequence.t
+
+
+(** [t field] a descriptor of an attribute field.
+
+    Used to construct attributes, and to construct variables that
+    reference particular fields of an attribute.
+
+    the type variable [t] range is [float], [int64], [string] or
+    [bool].*)
 type 'a field
+
+(** [attrs query] constructs a query type.
+
+    Created using the [Query] module. The [attrs] type variable
+    encodes the types of requested attributes. For example,
+
+    [((student -> teacher -> 'a) -> 'a) query]
+
+    represents a query for two attributes of type [student] and
+    [teacher] correspondingly. It is represented as a continuation,
+    denoting the fact, that the query can be executed later for an
+    arbitrary result.*)
 type 'a query
 
+(** a result of a selection.  *)
+type 'a seq = 'a Sequence.t
 
 (** type that describes an attribute.
 
@@ -92,104 +126,415 @@ type ('f,'k) scheme
   constraint 'f = _ -> _
   constraint 'k = _ -> _
 
+
+(** [let attr () = declare ~name scheme] declares an attribute named
+    with [name], and having a type described by the [scheme].
+
+    Due to a value restriction, each attribute should be defined as
+    a thunk (a function).
+
+*)
+val declare : name:string -> ('f -> 'a, 'k) scheme -> 'f -> ('a, 'k) typeinfo
+
+
+
+(** Ogre type system.
+
+    Ogre type system is extremly simple, it has only four types:
+    1. boolean - a logical type that has only two values (true,false);
+    2. int - an integral number that maps to OCaml's [int64];
+    3. float - a real number that maps to OCaml's [float];
+    4. str - an arbitrary string, represented as [string] in OCaml.
+
+
+    A scheme is a first class value, that  describes how to construct
+    attributes from fields, and how to deconstruct them.
+
+    A field is a pair of a name and a type, and is used to reference
+    to construct attributes, and to reference to attribute objects in
+    queries.
+  *)
 module Type : sig
+
+
+  (** type descriptor.  *)
   type 'a t
 
+
+  (** [int] is represented with OCaml's int64, and has a
+      corresponding representation *)
+  val int : int64 t
+
+
+  (** [bool] is either [true] or [false].  *)
+  val bool : bool t
+
+  (** [str] represented by a sequence of characters. If the sequence
+      contains whitespaces or parenthesis then the sequence should be
+      delimited with quotes. Note, the requirements are for the
+      database backend implementations. A user of the library
+      shouldn't be bothered by the representation.*)
+  val str : string t
+  val float : float t
 
 
   (** [scheme field] defines a scheme with one field.   *)
   val scheme : 'a field -> (('a -> 'r) -> 'r, ('a -> 'p) -> 'p) scheme
 
 
-  (** [scheme $field] adds a [field] to a [scheme].
+  (** [scm $field] adds a [field] to a scheme [scm].
 
-      The [scheme] had type [(('a -> 'r) -> 'r, ('a -> 'p) -> 'p) scheme],
-      then the type of a resulting scheme would be
-      [[(('a -> 'b -> 'r) -> 'r, ('a -> 'b -> 'p) -> 'p) scheme]], i.e., a type
-      of [$field] will be attached to the scheme.
+      Usually, all the fields are combined in a one expression,
+      starting with the call to a function [scheme], e.g.,
 
+      [scheme name $ age $ salary]
 
-  *)
+      The [scheme] had type [(('a -> 'r) -> 'r, ('a -> 'p) -> 'p) scheme], then
+      the type of a resulting scheme would be [[(('a -> 'b -> 'r) -> 'r, ('a ->
+      'b -> 'p) -> 'p) scheme]], i.e., a type of [$field] will be attached
+      to the scheme.
+
+      For example, the [scheme name $age $salary] expression will have
+      a type (assuming, that name, age and salary are represented with
+      string, int, and int, correspondingly):
+
+      {[(string -> int64 -> int64 -> 'a) -> 'a,
+        (string -> int64 -> int64 -> 'b) -> 'b]}
+
+      The scheme is used to construct an attribute. See below.*)
   val ($) :
     ('a -> 'b -> 'r, 'd -> 'b -> 'p) scheme -> 'b field ->
     ('a -> 'r, 'd -> 'p) scheme
 
 
-  val int : int64 t
-  val bool : bool t
-  val str : string t
-  val float : float t
 
+  (** [def name t] defines a field with the give [name] and type [t].  *)
   val def  : string -> 'a t -> 'a field
+
+
+  (** [name : t] is the same as [def name t]  *)
   val (%:) : string -> 'a t -> 'a field
 end
 
+(** Domain specific language for constructing queries.
+
+    Currently only a select query is supported.
+
+    Currently, the expression language permits construction arithmetic
+    and logical expressions on the base types (int, float, str and
+    bool).
 
 
-val declare :
-  ?desc:string ->
-  name:string ->
-  ('f -> 'a, 'c -> 'd) scheme -> 'f -> ('a, 'c -> 'd) typeinfo
-
-
+*)
 module Query : sig
 
   type 'a t = 'a query
+
+
+  (** logical expression language, defined as
+      {v
+      exp ::= str [string]
+            | int [int64]
+            | float [float]
+            | bool [bool]
+            | ['a attribute].(['b field])
+            | exp <bop> exp
+            | <uop> exp
+
+      bop ::=  <aop> | <lop> | <cop>
+      uop ::=  not
+      aop ::= + | -
+      lop ::= || | && | ==>
+      cop ::= < | > | = | <> | <= | >=
+      v}
+
+      In the grammar above, the names delimited in brackets represent
+      types of OCaml values, that should be passed at these syntactic
+      locations (sort of an unquoting), for example, [str "hello"] is
+      an expression, as well as [student.(gpa)] assuming that
+      [student] is a value of type ['a attribute] and [gpa] is a field
+      of type ['b field].
+
+      Not all expressions are well-formed, as they also must obey to
+      the typing rules. The typing rules are simple (informally):
+
+      0. [x <bop> y] is wff if [x] and [y] are of the same type;
+      1. [x.(y)] is wff if [y] is a field of attribute [x];
+      2. [x <aop> y] is wff if [x] and [y] are float or int;
+      3. [not x] is wff if [x] is bool
+      4. [x <lop> y] is wff if [x] and [y] are bool
+      5. [x <cop> y] has type bool.
+  *)
   type exp
+
+
+  (** join statement.
+
+      The [join] statement is a list of equality classes. Each
+      equality class defines a query constraint, requiring all
+      elements of the class to be equal. The elements of the class are
+      field variables, constructed with the [field] function. There
+      are two kinds of the field variables:
+
+      - A fully qualified field variable, defined with the expression
+        [field y ~from:x].
+
+      - An unqualified field variable, defined as [field y].
+
+
+      A fully qualified variable matches only with the corresponding
+      field expression, e.g., an equality class
+
+      [[field teacher ~from:student; field id ~from:teacher]]
+
+      emposes a constraint [student.(teacher) = teacher.(id)], and is
+      roughly equivalent to the SQL's
+
+      [INNER JOIN teacher ON student.id = teacher.id]
+
+      Note:  it is OK to use [where] clause instead of the [join]
+      clause to join attributes, if it makes the query more
+      readable. There is no performance penalty.
+
+      The unqualified variable matches with the same fields ignoring
+      the attribute name, for example, an equality class [field
+      classid], will impose an equality constraint on values from all
+      [classid] fields of the selected attributes. Given a concrete
+      select query:
+
+      {[select (from student $teacher) ~join:[[field classid]]]}
+
+      a constraint [student.(classid) = teacher.(classid)] is
+      constructed. Another way to construct the same selection is:
+
+      {[select (from student $teacher)
+          ~where:student.(classid) = teacher.(classid)
+      ]} *)
   type join
+
+
+  (** a selection of attributes.
+
+      The tables clause can be constructed using the following grammar:
+
+      {v tables ::= from attr | <tables> $ attr v}
+
+      In other words, there are two constructors, a prefix [from
+      attr], and an infix [attr1 $ attr2], e.g.,
+
+      [from students $ teachers $ classes] *)
   type 'a tables
 
-  val from : ('a,_) attribute -> (('a -> 'r) -> 'r) tables
-  val ($) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
+  (** [select ~where ~join (from t1 t2 ... tm)] selects attributes
+      [t1], [t2], ..., [tm], join them by the fields specified in the
+      [join] clause, and filters those that satisfy the condition
+      defined with the [where] clause.
+
+      Examples:
+
+      Select all students that has the GPA rate greater than 3.8.
+      {[
+        select
+          ~where:(student.(gpa) > float 3.8)
+          (from students)
+      ]}
 
 
+      Select all students and their corresponding teachers, that have
+      a GPA greater than 3.8 (assuming that teacher is a foreign key
+      to the table of teachers).
+      {[
+        select
+          ~where:(student.(gpa) > float 3.8)
+          ~join:[[field teacher ~from:student; field id ~from:teacher]]
+          (from students)
+      ]}
+
+
+      You may notice, that the [select] query lacks the SQL's [WHAT]
+      clause, i.e., it is not possible or needed to specify columns. The
+      reason for this, is that the query used as a value that is
+      passed to some command constructor, (e.g.,[foreach]), that can
+      work with fields individually, e.g., the following is a complete
+      correspondance of the SQL's:
+
+      {v SELECT name FROM students WHERE gpa > 3.5 v}
+
+      {[
+        foreach Query.(select
+                         ~where:(student.(gpa) > float 3.8)
+                         (from students))
+          ~f:(fun s -> return (Student.name s))
+      ]}
+
+      It is nearly three times as long, but in return it is type-safe,
+      and composable.*)
   val select :
     ?where:exp ->
     ?join:join list list ->
     'a tables -> 'a t
 
+
+  (** [from attr] adds an attribute [attr] to the query. An attribute
+      can be referenced in the query if it occurs in the from
+      clause. Otherwise the query is not well-formed.  *)
+  val from : ('a,_) attribute -> (('a -> 'r) -> 'r) tables
+
+
+  (** [attrs $ attr] appends an attribute [attr] to the sequence of
+      chosen attributes [attrs].*)
+  val ($) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
+
+  (** [field name] creates an unqualified join variable.
+      [filed name ~from:attr] creates a qualified join variable.
+
+      See the {!join} type description, for the explanation of the
+      [join] expressions and joining.  *)
   val field : ?from: (_,_) attribute -> _ field -> join
 
+
+  (** Defines a subscripting syntax for creating field variables.
+
+      An OCaml expression [x.(y)] is a syntactic sugar to
+      [Array.get x y], thus an expression [x.(y)] in the scope of the
+      [Query] module takes an attribute as [x] and a field as [y] and
+      returns an [exp] that denotes a field variable of attribute [x]
+      that ranges over the values of field [y].*)
   module Array : sig
+
+
+    (** [attr.(field)] creates a field variable that ranges over
+        values of [field] that belongs to the attribute [attr].
+
+        See the module description if you don't understand how it works.*)
     val get : (_,_) attribute -> _ field -> exp
   end
 
+
+  (** [str x] creates a string constant.  *)
+  val str : string -> exp
+
+
+  (** [int x] creates an integer constant  *)
   val int : int64 -> exp
+
+  (** [bool x] creates a logic constant  *)
   val bool : bool -> exp
+
+
+  (** [float x] creates a real number constant.  *)
   val float : float -> exp
 
+
+  (** [x && y] conjunction  *)
   val (&&) : exp -> exp -> exp
+
+
+  (** [x || y] disjunction  *)
   val (||) : exp -> exp -> exp
+
+
+  (** [x ==> y] implication.
+
+      Be aware that the precedence of OCaml operator ==> is higher than
+      a common precedence of the implication operator in mathematics.
+
+      That means, that an expression [x && y ==> x && z] is parsed as
+      [x && (y ==> x) && z].
+
+      The rule of the thumb is to always put parenthesis in an
+      expression, that has an implication, as even if you're aware of
+      the precedence issue, it is not known to a reader of your code,
+      whether you were aware, or wrote this code by a mistake.*)
   val (==>) : exp -> exp -> exp
+
+
+  (** [not x] logical negation.  *)
   val not : exp -> exp
+
+
+  (** [x < y] less than  *)
   val (<) : exp -> exp -> exp
+
+
+  (** [x > y] greater than  *)
   val (>) : exp -> exp -> exp
+
+
+  (** [x = y] equality  *)
   val (=) : exp -> exp -> exp
+
+
+  (** [x <> y] nonequality  *)
   val (<>) : exp -> exp -> exp
+
+
+  (** [x <= y] less than or equal  *)
   val (<=) : exp -> exp -> exp
+
+
+  (** [x >= y] greater or equal *)
   val (>=) : exp -> exp -> exp
+
+
+  (** [x + y] summation  *)
   val (+) : exp -> exp -> exp
+
+
+  (** [x - y] subtracting  *)
   val (-) : exp -> exp -> exp
 end
 
 
+
+(** An Ogre document.
+
+    A concrete representation of a database.
+
+  *)
 module Doc : sig
   type t  = doc
 
+
+  (** [empty] creates an empty document  *)
   val empty : doc
 
+
+  (** [merge d1 d2] merges two documents in one. Returns an error,
+      if documents contain inconsistent declarations.*)
+  val merge : doc -> doc -> doc Or_error.t
+
+
+  (** [load chan] loads a document from a channel, returns an error if
+      a document is not well-formed, raises an exception if a system error
+      has occured.  *)
   val load : in_channel -> doc Or_error.t
 
+
+  (** [save doc out] stores the document in a channel. Raises an
+      exception in case of a system error. *)
   val save : doc -> out_channel -> unit
 
+
+  (** [from_file name] reads a document from a file with the given
+      [name], returns an error, if a document is not well-formed, raises
+      an exception if a system error has occured. *)
   val from_file : string -> doc Or_error.t
 
+
+  (** [from_string data] parses document from [data]. Returns an error
+      if a document is not well-formed. *)
   val from_string : string -> doc Or_error.t
 
+
+  (** [to_string doc] returns a textual representation of a document  *)
   val to_string : doc -> string
 
-  val to_file : doc -> string -> unit Or_error.t
 
+  (** [to_file doc name] stores a document to a file with the given name.  *)
+  val to_file : doc -> string -> unit
+
+  (** [pp ppf doc] prints a [doc] in the specified formatter [ppf]  *)
   val pp : Format.formatter -> doc -> unit
 end
 

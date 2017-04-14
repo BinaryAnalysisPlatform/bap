@@ -122,7 +122,6 @@ type ('a,'s) scheme = ('a,'s) Type.scheme
 module Attribute = struct
   type ('a,'k) info = {
     name : string;
-    desc : string;
     sign : Type.signature;
     read : entry -> 'a option;
     save : (entry -> 'd) -> 'c
@@ -131,8 +130,8 @@ module Attribute = struct
 
   type ('a,'k) t = unit -> ('a,'k) info
 
-  let declare ?(desc="") ~name {Type.signature; read; save} cons = {
-    name; desc; sign = signature;
+  let declare ~name {Type.signature; read; save} cons = {
+    name; sign = signature;
     read = (fun entry -> read entry cons);
     save = save;
   }
@@ -146,8 +145,8 @@ let declare = Attribute.declare
 
 
 module Doc = struct
-  module Parse = Monad.Result.Error
-  open Parse.Syntax
+  module Error = Monad.Result.Error
+  open Error.Syntax
 
   type t = {
     scheme  : Type.signature String.Map.t;
@@ -178,6 +177,15 @@ module Doc = struct
       doc with entries =
                  Map.add_multi doc.entries ~key:name ~data: packed
     }
+
+  let merge doc {scheme; entries} =
+    Map.to_sequence scheme |>
+    Error.Seq.fold ~init:doc ~f:(fun doc (name,sign) ->
+      update_scheme name sign doc) >>= fun doc ->
+    Map.to_sequence entries |>
+    Error.Seq.fold ~init:doc ~f:(fun doc (name,values) ->
+        Error.List.fold values ~init:doc ~f:(fun doc value ->
+          update_entries name value doc))
 
 
   let put k attr =
@@ -244,19 +252,19 @@ module Doc = struct
     | None -> errorf "%s is not declared in the scheme" name
     | Some header ->
       let header = tabulate header in
-      Parse.List.map (tabulate values) ~f:(function
+      Error.List.map (tabulate values) ~f:(function
           | pos, `Positional x -> positional header pos x
           | _, `Named (fnam,x) -> named header fnam x) >>=
       String.Map.of_alist_or_error
 
   let parse_entry doc = function
     | Sexp.List (Sexp.Atom "declare" :: Sexp.Atom name :: flds) ->
-      Parse.List.map ~f:parse_fdecl (tabulate flds) >>= fun sign ->
+      Error.List.map ~f:parse_fdecl (tabulate flds) >>= fun sign ->
       update_scheme name sign  doc
     | Sexp.List (Sexp.Atom "declare" :: _) ->
       errorf "expected (declare <attribute-name> <field-decls>)"
     | Sexp.List (Sexp.Atom name :: flds) ->
-      Parse.List.map flds ~f:parse_fdefn >>=
+      Error.List.map flds ~f:parse_fdefn >>=
       nest_defn doc.scheme name >>= fun fields ->
       update_entries name {fields} doc
     | _ -> errorf "expected <ogre-entry> ::= \
@@ -264,7 +272,7 @@ module Doc = struct
                    | (<attribute-name> <attribute-value>)"
 
   let of_sexps =
-    Parse.List.fold ~init:empty ~f:parse_entry
+    Error.List.fold ~init:empty ~f:parse_entry
 
   let sexp_of_header {Type.fname; ftype} =
     let tname = Type.string_of_typ ftype in
@@ -311,8 +319,7 @@ module Doc = struct
   let load channel = Or_error.try_with_join (fun () ->
       of_sexps (Sexp.input_sexps channel))
 
-  let from_file name =
-    Or_error.try_with_join (fun () -> In_channel.with_file name ~f:load)
+  let from_file name = In_channel.with_file name ~f:load
 
   let save doc ch =
     let ppf = formatter_of_out_channel ch in
@@ -320,7 +327,7 @@ module Doc = struct
     pp_print_flush ppf ()
 
   let to_file doc name =
-    Or_error.try_with @@ fun () -> Out_channel.with_file name ~f:(save doc)
+    Out_channel.with_file name ~f:(save doc)
 
   let from_string str =
     Or_error.try_with_join (fun () ->
@@ -389,6 +396,7 @@ module Exp = struct
 
   module Syntax = struct
     let bool = bool
+    let str x = Str x
     let var x = Var x
     let int x = Int x
     let float x = Flt x
