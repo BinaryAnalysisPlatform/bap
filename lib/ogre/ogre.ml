@@ -60,7 +60,7 @@ module Type = struct
 
   let str = {
     parse = atom string_of_sexp;
-    pack = pack sexp_of_string;
+    pack = ident;
     typ = Str;
   }
 
@@ -81,8 +81,7 @@ module Type = struct
   let get {fields} f = Option.(Map.find fields f.name >>= f.t.parse)
 
   let add {name; t} x {fields} = {
-    fields =
-      Map.add fields ~key:name ~data:(t.pack x)
+    fields = Map.add fields ~key:name ~data:(t.pack x)
   }
 
   let empty = {fields = String.Map.empty}
@@ -96,10 +95,10 @@ module Type = struct
   }
 
   let ($) {read; save; signature} fld = {
-    signature = [{
+    signature = signature @ [{
         fname = fld.name;
         ftype = fld.t.typ;
-      }] @ signature ;
+      }];
     save = (fun k -> save (fun ent x -> k (add fld x ent)));
     read = fun ent k -> match read ent k with
       | None -> None
@@ -177,8 +176,9 @@ module Doc = struct
 
   let update_entries name packed doc = Ok {
       doc with entries =
-                  Map.add_multi doc.entries ~key:name ~data: packed
+                 Map.add_multi doc.entries ~key:name ~data: packed
     }
+
 
   let put k attr =
     let {Attribute.name; save; sign} = attr () in
@@ -227,7 +227,7 @@ module Doc = struct
     | Sexp.Atom x -> Ok (`Positional x)
     | Sexp.List [Sexp.Atom fname; Sexp.Atom x] -> Ok (`Named (fname,x))
     | _ -> errorf "expected <attribute-value> ::= \
-                  <field-value> | (<field-name> <field-value>)"
+                   <field-value> | (<field-name> <field-value>)"
 
   let positional header pos x =
     match List.Assoc.find header pos with
@@ -236,8 +236,8 @@ module Doc = struct
 
   let named hdr name x =
     List.find hdr ~f:(fun (_,{Type.fname}) -> name = fname) |> function
-      | None -> errorf "unknown field %s" name
-      | Some _ -> Ok (name,x)
+    | None -> errorf "unknown field %s" name
+    | Some _ -> Ok (name,x)
 
   let nest_defn scheme name values =
     match Map.find scheme name with
@@ -260,15 +260,15 @@ module Doc = struct
       nest_defn doc.scheme name >>= fun fields ->
       update_entries name {fields} doc
     | _ -> errorf "expected <ogre-entry> ::= \
-                  | (declare <attribute-name> <field-decls>)\
-                  | (<attribute-name> <attribute-value>)"
+                   | (declare <attribute-name> <field-decls>)\
+                   | (<attribute-name> <attribute-value>)"
 
   let of_sexps =
     Parse.List.fold ~init:empty ~f:parse_entry
 
   let sexp_of_header {Type.fname; ftype} =
     let tname = Type.string_of_typ ftype in
-    if String.for_all fname ~f:(Char.is_digit)
+    if String.for_all fname ~f:Char.is_digit
     then Sexp.Atom tname
     else Sexp.(List [Atom fname; Atom tname])
 
@@ -429,8 +429,8 @@ module Exp = struct
 
   let parser {Type.parse; typ} inj =
     typ, fun value -> match parse value with
-    | None -> failwith "expression parse error"
-    | Some x -> inj x
+      | None -> failwith "expression parse error"
+      | Some x -> inj x
 
   let parsers = [
     parser Type.int (fun x -> Int x);
@@ -500,8 +500,6 @@ module Exp = struct
     | Bop (_,x,y) -> vars x @ vars y
     | Uop (_,x) -> vars x
 
-
-
   let eval names joins exp {Doc.scheme; entries} : row seq Or_error.t  =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
@@ -562,9 +560,11 @@ module Query = struct
   let header_of_field {Type.name=fname; t={Type.typ}} =
     {Type.fname; ftype = typ}
 
-  let (@) field attr =
-    let {Attribute.name=aname} = attr () in
-    Exp.var {attr=aname; field = header_of_field field}
+  module Array = struct
+    let get attr field =
+      let {Attribute.name=aname} = attr () in
+      Exp.var {attr=aname; field = header_of_field field}
+  end
 
   let field ?from fld = {
     attr = Option.map from ~f:(fun attr ->
@@ -589,10 +589,11 @@ module type S = sig
   val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a option t
   val foreach : ('a -> 'b t) query -> f:'a -> 'b seq t
   val provide : (_, 'a -> unit t) attribute -> 'a
-  val run : 'a t -> doc -> ('a * doc) Or_error.t m
+  val fail : Error.t -> 'a t
   val failf : ('a, formatter, unit, unit -> 'b t) format4 -> 'a
   val eval : 'a t -> doc -> 'a  Or_error.t m
   val exec : 'a t -> doc -> doc Or_error.t m
+  val run : 'a t -> doc -> ('a * doc) Or_error.t m
 end
 
 module Make(B : Monad.S) = struct
@@ -608,7 +609,8 @@ module Make(B : Monad.S) = struct
   module M = Monad.State.Make(Doc)(EM)
   open M.Syntax
 
-  type 'a t = 'a Monad.State.T1(Doc)(EM).t
+  type 'a monad = 'a Monad.State.T1(Doc)(EM).t
+  type 'a t = 'a monad
   type 'a m = 'a B.t
   type 'a e = doc -> ('a * doc) Or_error.t m
 
@@ -648,7 +650,8 @@ module Make(B : Monad.S) = struct
       | [] -> failf "%s doesn't satisfy the constraint" name ()
       | _  -> failf "%s values are ambigious" name ()
 
-  let provide (attr : (_,'b -> unit t) attribute) =
+
+  let provide (attr : (_, 'a -> unit monad) attribute) : 'a =
     Doc.put (fun save ->
         M.get () >>= fun doc -> match save doc with
         | Error err -> failf "failed to save an attribute" ()
@@ -656,6 +659,7 @@ module Make(B : Monad.S) = struct
 
   include M
 
+  let fail err = M.lift (B.return (Error err))
   let liftm  = B.map ~f:(fun x -> (Ok x))
   let lift x = lift (liftm x)
   let take f m = B.map m ~f:(Or_error.map ~f)
