@@ -4262,11 +4262,15 @@ module Std : sig
     (** {2 Backend Interface}  *)
 
     (** [register_backend ~name backend] tries to register backend under
-        the specified [name]. *)
+        the specified [name]. Deprecated, use register_loader instead *)
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
 
     (** lists all registered backends  *)
     val available_backends : unit -> string list
+
+    (** [register_loader ~name backend] register backend under
+        the specified [name] and raise Invalid_argument if name is in use *)
+    val register_loader : name:string -> (Bigstring.t -> Ogre.doc option Or_error.t) -> unit
 
 
     (** {2 Internals}

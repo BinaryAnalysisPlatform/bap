@@ -16,6 +16,7 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
+                   ogre,
                    regular
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
@@ -76,10 +77,11 @@ Library bap_image
   Build$:          flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types
+  BuildDepends:  bap.types, ogre
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
+                 Bap_image_ogre,
                  Bap_image_std,
                  Bap_memmap,
                  Bap_memory,
