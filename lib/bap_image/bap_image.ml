@@ -200,19 +200,23 @@ let validate_segments data (s,ss) : Validate.t =
 let is_virtual s = Backend.Segment.off s < 0
 
 let create_segments arch data (s,ss) =
+  let cmp_addr x y =
+    let addr s = Location.addr @@ Backend.Segment.location s in
+    Addr.compare (addr x) (addr y) in
   let endian = Arch.endian arch in
   (* a segment with the negative offset is virtual, we can't represent
      them in the Image, since the are not backed by static memory. But
      we will keep them, for analyses that require them.  *)
-  List.filter (s::ss) ~f:(Fn.non is_virtual) |> function
+  List.filter (s::ss) ~f:(Fn.non is_virtual) |>
+  List.sort ~cmp:cmp_addr  |> function
   | [] -> return Table.empty
   | s::ss ->
-  Validate.result (validate_segments data (s,ss)) >>= fun () ->
-  List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
-      let {Location.len; addr}, pos =
-        Backend.Segment.(location s, off s) in
-      Memory.create ~pos ~len endian addr data >>= fun mem ->
-      tab >>= fun tab -> Table.add tab mem s)
+    Validate.result (validate_segments data (s,ss)) >>= fun () ->
+    List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
+        let {Location.len; addr}, pos =
+          Backend.Segment.(location s, off s) in
+        Memory.create ~pos ~len endian addr data >>= fun mem ->
+        tab >>= fun tab -> Table.add tab mem s)
 
 (** [words_of_table word_size table] maps all memory mapped by [table]
     to words of size [word_size]. If size of mapped region is not enough
@@ -250,8 +254,7 @@ let register_loader ~name backend =
 let register_backend ~name backend =
   let load str = match backend str with
     | None ->
-      Or_error.error_string @@
-      sprintf
+      Or_error.error_string @@ sprintf
         "file corrupted or %s backend is not able to process it" name
     | Some img ->
       match Bap_image_ogre.doc_of_image img with
@@ -325,7 +328,7 @@ let load_with_doc (backend,load) data path = match load data with
     of_img img data path
   | Ok None ->
     Or_error.error_string @@
-      sprintf "backend %s is not able to drive this file" backend
+    sprintf "backend %s is not able to drive this file" backend
   | Error _ -> error "create image" (backend,`path path)
                  [%sexp_of:string * [`path of string option]]
 
