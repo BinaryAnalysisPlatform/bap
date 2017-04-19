@@ -21,32 +21,31 @@ module Scheme = struct
   let addr = "addr"  %: int
   let name = "name"  %: str
   let root = "root"  %: int
-  let is_set = "set" %: bool
+  let readable   = "r" %: bool
+  let writable   = "w" %: bool
+  let executable = "x" %: bool
 
   let location () = scheme addr $ len
   let declare name scheme f = Ogre.declare ~name scheme f
-  let flag name = declare name (location () $ is_set) region
   let named n scheme f = declare n (scheme $ name) f
-
   let arch    () = declare "arch" (scheme name) ident
-  let mapped  () = declare "mapped" (location () $ off) region
   let segment () = declare "segment" (location ()) void_region
   let section () = declare "section" (location ()) void_region
   let code_start   () = declare "code-start" (scheme addr) ident
   let entry_point  () = declare "entry-point" (scheme addr) ident
   let value_chunk  () = declare "value-chunk" (location () $ root) region
   let named_region () = named "named-region" (location ()) region
-  let named_symbol () = named "named-symbol" (scheme addr) Tuple.T2.create
-  let executable () = flag "executable"
-  let writable () = flag "writable"
-  let readable () = flag "readable"
+  let named_symbol () = named "named-symbol" (scheme addr) (fun x y -> x,y)
+  let rwx scheme = scheme $ readable $ writable $ executable
+  let mapped () =
+    declare "mapped" (location () $ off |> rwx)
+      (fun addr len off r w x -> region addr len off, (r,w,x))
 end
 
-let make_perm w x =
-  [w, W; true, R; x, X] |>
+let make_perm r w x =
+  [w, W; r, R; x, X] |>
   List.filter_map ~f:(fun (e, p) -> if e then Some p else None) |>
-  List.reduce ~f:(fun p1 p2 -> Or (p1, p2)) |>
-  Option.value_exn
+  List.reduce ~f:(fun p1 p2 -> Or (p1, p2))
 
 let make_image arch entry segments sections symbols =
   match Seq.to_list segments with
@@ -91,31 +90,22 @@ module Image(M : Monad.S) = struct
     foreach
       Query.(begin
           select
-            (from segment $ mapped $ named_region $ writable $ executable)
+            (from segment $ mapped $ named_region)
             ~join:[[field addr];
                    [field len ~from:segment;
                     field len ~from:named_region]]
         end)
-      ~f:(fun {addr;len} {data=off} {data=name} {data=w} {data=x} ->
+      ~f:(fun {addr; len} ({data=off}, (r,w,x)) {data=name} ->
           location width addr len >>= fun location ->
           int_of_int64 off >>= fun off ->
-          let perm = make_perm w x in
-          return (Segment.Fields.create ~name ~off ~perm ~location))
+          match make_perm r w x with
+          | Some perm ->
+            return (Segment.Fields.create ~name ~off ~perm ~location)
+          | None ->
+            failf
+              "didn't find permissions for segment at 0x%Ld" addr ())
 
   let sections w =
-    foreach
-      Query.(select (from section))
-      ~f:(fun {addr=address; len=length} ->
-          foreach Query.(
-              select (from named_region)
-                ~where:(named_region.(addr) = int address &&
-                        named_region.(len) = int length))
-            ~f:(fun {data=name} ->
-                location w address length >>= fun location ->
-                return (Section.Fields.create ~name ~location))) >>=
-    fun s -> return (Sequence.concat s)
-
-  let sections' w =
     foreach
       Query.(begin
           select (from section $ named_region)
@@ -166,7 +156,8 @@ module Image(M : Monad.S) = struct
     sections w >>= fun sections ->
     symbols  w >>= fun symbols  ->
     match make_image arch entry segments sections symbols with
-    | None -> failf "segments list is empty" ()
+    | None ->
+      failf "segments list is empty" ()
     | Some img -> return img
 end
 
@@ -192,13 +183,11 @@ module Spec(M : Monad.S) = struct
     let addr, len = Location.(addr loc, len loc) in
     let len = Int64.of_int len in
     let perm = Segment.perm s in
+    let r,w,x = checked R perm, checked W perm, checked X perm in
     int64_of_word addr >>= fun addr ->
     provide segment addr len >>= fun () ->
-    provide mapped addr len (Int64.of_int @@ Segment.off s) >>= fun () ->
-    provide named_region addr len (Segment.name s) >>= fun () ->
-    provide writable addr len (checked W perm) >>= fun () ->
-    provide readable addr len (checked R perm) >>= fun () ->
-    provide executable addr len (checked X perm)
+    provide mapped addr len (Int64.of_int @@ Segment.off s) r w x >>= fun () ->
+    provide named_region addr len (Segment.name s)
 
   let section s =
     let loc = Section.location s in
