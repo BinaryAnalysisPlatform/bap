@@ -141,7 +141,7 @@ typedef std::tuple<std::string, uint64_t, uint64_t> section_descr;
 error_or<std::string> getName(const SectionRef &sec) {
     StringRef name;
     if (error_code ec = sec.getName(name))
-        failure(ec.message());
+        return failure(ec.message());
     return success(name.str());
 }
 
