@@ -6,7 +6,7 @@ type entry = {
   fields : string String.Map.t
 } [@@deriving compare]
 
-type row = {row : entry String.Map.t}
+type row = {row : entry array}
 type 'a seq = 'a Sequence.t
 
 module Type = struct
@@ -131,7 +131,7 @@ module Attribute = struct
     name : string;
     sign : Type.signature;
     read : entry -> 'a option;
-    save : (entry -> 'd) -> 'c
+    save : (entry -> 'd) -> 'c;
   } constraint 'k = 'c -> 'd
 
 
@@ -368,10 +368,14 @@ type doc = Doc.t
 type 'a column = {attr : 'a; field : Type.header}
 [@@deriving compare,sexp]
 
+
+
+
 module Exp = struct
+  type name = Name of string | Pos of int [@@deriving compare,sexp]
   type bop = And | Or | Lt | Imp | Add | Sub [@@deriving sexp]
   type uop = Not [@@deriving sexp]
-  type var = string column [@@deriving compare, sexp]
+  type var = name column [@@deriving compare, sexp]
   type exp =
     | True
     | Int of int64
@@ -383,9 +387,14 @@ module Exp = struct
   [@@deriving sexp]
   type t = exp [@@deriving sexp]
 
-  module Vars = Map.Make(struct
+
+  module Var = Comparable.Make(struct
       type t = var [@@deriving compare,sexp]
     end)
+
+  let string_of_name = function
+    | Name s -> s
+    | Pos n -> sprintf "#%d" n
 
   let bool = function
     | true -> True
@@ -443,7 +452,6 @@ module Exp = struct
 
   module Seq = Sequence
 
-
   let rec n_cross_product xs =
     let open Seq in match next xs with
     | None -> singleton empty
@@ -452,13 +460,17 @@ module Exp = struct
       n_cross_product rows >>|
       append (singleton elt)
 
-  let select names map =
-    Map.to_sequence map |>
-    Seq.filter_map ~f:(fun (name,values) ->
-        if Set.mem names name
-        then Some (Seq.of_list values |>
-                   Seq.map ~f:(fun value -> name,value))
-        else None)
+
+  let has_all_attributes names data =
+    List.for_all names ~f:(Map.mem data)
+
+
+  let select names data =
+    Seq.of_list names |>
+    Seq.map ~f:(fun name -> match Map.find data name with
+        | None -> failwithf "precondition fails for %s" name ()
+        | Some values ->
+          Seq.of_list values |> Seq.map ~f:(fun value -> name,value))
 
   let parser {Type.parse; typ} inj =
     typ, fun value -> match parse value with
@@ -491,69 +503,84 @@ module Exp = struct
     | Some (r,es) ->
       Seq.fold es ~init:True ~f:(fun e p -> simpl Syntax.(e && (p = r)))
 
+
   (* build a constraint that will unify all equivalence classes *)
   let unify joins row =
     Seq.of_list joins |>
     Seq.fold ~init:True ~f:(fun exp cls ->
         simpl Syntax.(exp && unify_var cls row))
 
+  let matches var pos offs = match var with
+    | Pos p -> p = pos
+    | Name n -> match Map.find offs n with
+      | None -> invalid_argf "bad name %s" n ()
+      | Some p -> p = pos
 
   (* @pre: all attributes are unique
      @pre: variables are type checked
      @pre: the database is typechecked
      @pre: row degree is greater than zero
   *)
-  let bind_vars vars row =
-    List.fold vars ~init:Vars.empty ~f:(fun vars var ->
+  let bind_vars offs vars row =
+    Set.fold vars ~init:Var.Map.empty ~f:(fun bs var ->
         let {field={Type.fname; ftype}; attr} = var in
-        Seq.find_map row ~f:(fun (name,{fields}) ->
-            if name <> attr then None
-            else match Map.find fields fname with
-              | None -> failwithf "%s doesn't have %s" name fname ()
-              | Some v -> Some (lift ftype v)) |> function
-        | None -> failwithf "didn't find attribute %s" attr ()
-        | Some x -> Map.add vars ~key:var ~data:x)
+        Array.foldi ~init:bs row ~f:(fun fn bs ({fields}) ->
+            if matches attr fn offs
+            then match Map.find fields fname with
+              | None -> failwithf "bad field %s" fname ()
+              | Some v -> match Map.find bs var with
+                | None -> Map.add bs ~key:var ~data:(lift ftype v)
+                | Some v' ->
+                  failwithf "variable %s is ambiguous"
+                    (string_of_name attr) ()
+            else bs))
 
-  let rec subst bind = function
+
+  let rec subst bs = function
     | True | Int _ | Str _ | Flt _ as x -> x
-    | Uop (op,x) -> simpl (Uop (op, subst bind x))
-    | Bop (op,x,y) -> simpl (Bop (op,subst bind x,subst bind y))
-    | Var n -> match bind n with
+    | Uop (op,x) -> simpl (Uop (op, subst bs x))
+    | Bop (op,x,y) -> simpl (Bop (op,subst bs x,subst bs y))
+    | Var n -> match Map.find bs n with
       | None -> Var n
-      | Some e -> subst bind e
+      | Some e -> subst bs e
 
   let sat e = match simpl e with
     | True -> Some true
     | Uop (Not,True) -> Some false
     | _ -> None
 
-  let rec vars : exp -> var list = function
-    | True | Int _ | Str _ | Flt _ -> []
-    | Var v -> [v]
-    | Bop (_,x,y) -> vars x @ vars y
-    | Uop (_,x) -> vars x
+  let vars exp =
+    let rec collect vars = function
+      | True | Int _ | Str _ | Flt _ -> vars
+      | Var v -> Set.add vars v
+      | Bop (_,x,y) -> collect (collect vars x) y
+      | Uop (_,x) -> collect vars x in
+    collect Var.Set.empty exp
+
+  let offsets names =
+    List.foldi names ~init:String.Map.empty ~f:(fun pos offs name ->
+        Map.add offs ~key:name ~data:pos)
 
   let eval names joins exp {Doc.scheme; entries} : row seq Or_error.t  =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
-    let errorf msg = Or_error.errorf msg in
     let vars = vars exp in
-    n_cross_product (select names entries) |>
-    Error.Seq.filter ~f:(fun row ->
-        if Seq.is_empty row then Ok false
-        else
-          let cs = unify joins row in
-          let bs = bind_vars vars row in
-          let exp = subst (Map.find bs) Syntax.(cs && exp) in
-          match sat exp with
-          | None -> errorf "bad expression"
-          | Some r -> Ok r) >>=
-    Error.Seq.map ~f:(fun attrs ->
-        let init = {row=String.Map.empty} in
-        Error.Seq.fold ~init attrs ~f:(fun {row} (name,entry) ->
-            match Map.find row name with
-            | Some _ -> errorf "duplicate column"
-            | None -> Ok {row = Map.add row ~key:name ~data:entry}))
+    let offs = offsets names in
+    if has_all_attributes names entries
+    then
+      n_cross_product (select names entries) |>
+      Error.Seq.filter_map ~f:(fun row ->
+          if Seq.is_empty row then Ok None
+          else
+            let cs = unify joins row in
+            let row = Seq.map row ~f:snd |> Seq.to_array in
+            let bs = bind_vars offs vars row in
+            let exp = subst bs Syntax.(cs && exp) in
+            match sat exp with
+            | None -> Or_error.error_string "bad expression"
+            | Some false -> Ok None
+            | Some true -> Ok (Some {row}))
+    else Ok Seq.empty
 
   include Syntax
 end
@@ -563,7 +590,8 @@ module Query = struct
   type exp = Exp.t
   type join = string option column
   type 'f tables = {
-    names : String.Set.t;
+    arity : int;
+    names : string list;
     read : row -> 'f;
   }
 
@@ -573,23 +601,23 @@ module Query = struct
     tables : 'f tables;
   }
 
-  let get_exn {row} attr =
+  let get_exn {row} attr pos =
     let {Attribute.name; read} = attr () in
-    match Map.find row name with
-    | None -> failwithf "missing table %s" name ()
-    | Some entry -> match read entry with
-      | None -> failwithf "can't parse attribute %s" name ()
-      | Some x -> x
+    match read (Array.get row pos) with
+    | None -> failwithf "can't parse attribute %s" name ()
+    | Some x -> x
 
 
   let from attr = {
-    names = String.Set.singleton (Attribute.name attr);
-    read = fun row k -> k (get_exn row attr)
+    names = [Attribute.name attr];
+    arity = 1;
+    read = fun row k -> k (get_exn row attr 0)
   }
 
-  let ($) {read; names} attr = {
-    names = Set.add names @@ Attribute.name attr;
-    read = fun row k -> read row k (get_exn row attr)
+  let ($) {read; names; arity} attr = {
+    names = names @ [Attribute.name attr];
+    arity = arity + 1;
+    read = fun row k -> read row k (get_exn row attr arity)
   }
 
   let header_of_field {Type.name=fname; t={Type.typ}} =
@@ -598,7 +626,12 @@ module Query = struct
   module Array = struct
     let get attr field =
       let {Attribute.name=aname} = attr () in
-      Exp.var {attr=aname; field = header_of_field field}
+      Exp.var {attr=Exp.Name aname; field = header_of_field field}
+  end
+
+  module String = struct
+    let get field p =
+      Exp.var {attr = Exp.Pos p; field = header_of_field field}
   end
 
   let field ?from fld = {
@@ -673,7 +706,7 @@ module Make(B : Monad.S) = struct
     | Ok xs -> match List.filter ~f:that xs with
       | [x] ->  M.lift (B.return (Ok x))
       | [] -> failf "%s doesn't satisfy the constraint" name ()
-      | _  -> failf "%s values are ambigious" name ()
+      | _  -> failf "%s values are ambiguous" name ()
 
   let request ?(that=fun _ -> true) attr : 'a option t =
     let name = sprintf "requested attribute %s" (Attribute.name attr) in
@@ -683,8 +716,7 @@ module Make(B : Monad.S) = struct
     | Ok xs -> match List.filter ~f:that xs with
       | [x] ->  M.lift (B.return (Ok (Some x)))
       | [] -> failf "%s doesn't satisfy the constraint" name ()
-      | _  -> failf "%s values are ambigious" name ()
-
+      | _  -> failf "%s values are ambiguous" name ()
 
   let provide (attr : (_, 'a -> unit monad) attribute) : 'a =
     Doc.put (fun save ->
