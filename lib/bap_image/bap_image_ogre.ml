@@ -96,10 +96,9 @@ module Image(M : Monad.S) = struct
 
   let segments width =
     select_foreach
-      (from segment $ mapped $ named_region $
-       readable $ writable $ executable)
+      (from segment $ mapped $ named_region $ writable $ executable)
       ~join:(join_named_region segment)
-      ~f:(fun {addr;len} {data=off} {data=name} _ {data=w} {data=x} ->
+      ~f:(fun {addr;len} {data=off} {data=name} {data=w} {data=x} ->
           location width addr len >>= fun location ->
           int_of_int64 off >>= fun off ->
           let perm = make_perm w x in
