@@ -16,11 +16,11 @@ module Scheme = struct
   let region addr len data = {addr; len; data}
   let void_region addr len = {addr; len; data = ()}
 
-  let len  = "len" %: int
-  let off  = "off" %: int
+  let len  = "len"  %: int
+  let off  = "off"  %: int
   let addr = "addr"  %: int
   let name = "name"  %: str
-  let root = "root " %: int
+  let root = "root"  %: int
   let is_set = "set" %: bool
 
   let location () = scheme addr $ len
@@ -43,9 +43,9 @@ module Scheme = struct
 end
 
 let make_perm w x =
-    [w, W; true, R; x, X] |>
-    List.filter_map ~f:(fun (e, p) -> if e then Some p else None) |>
-    List.reduce ~f:(fun p1 p2 -> Or (p1, p2)) |>
+  [w, W; true, R; x, X] |>
+  List.filter_map ~f:(fun (e, p) -> if e then Some p else None) |>
+  List.reduce ~f:(fun p1 p2 -> Or (p1, p2)) |>
   Option.value_exn
 
 let make_image arch entry segments sections symbols =
@@ -63,10 +63,6 @@ module Image(M : Monad.S) = struct
   module M = Ogre.Make(M)
   open Scheme
   open M
-
-  let ($) = Query.($)
-  let from = Query.from
-  let field = Query.field
 
   let word_of_int64 width = Word.of_int64 ~width
 
@@ -91,13 +87,15 @@ module Image(M : Monad.S) = struct
     int_of_int64 len >>= fun len ->
     return (Location.Fields.create ~addr ~len)
 
-  let join_named_region tab =
-    [[field addr];[field len ~from:tab;field len ~from:named_region]]
-
   let segments width =
-    select_foreach
-      (from segment $ mapped $ named_region $ writable $ executable)
-      ~join:(join_named_region segment)
+    foreach
+      Query.(begin
+          select
+            (from segment $ mapped $ named_region $ writable $ executable)
+            ~join:[[field addr];
+                   [field len ~from:segment;
+                    field len ~from:named_region]]
+        end)
       ~f:(fun {addr;len} {data=off} {data=name} {data=w} {data=x} ->
           location width addr len >>= fun location ->
           int_of_int64 off >>= fun off ->
@@ -105,36 +103,58 @@ module Image(M : Monad.S) = struct
           return (Segment.Fields.create ~name ~off ~perm ~location))
 
   let sections w =
-    select_foreach (from section $ named_region)
-      ~join:(join_named_region section)
+    foreach
+      Query.(select (from section))
+      ~f:(fun {addr=address; len=length} ->
+          foreach Query.(
+              select (from named_region)
+                ~where:(named_region.(addr) = int address &&
+                        named_region.(len) = int length))
+            ~f:(fun {data=name} ->
+                location w address length >>= fun location ->
+                return (Section.Fields.create ~name ~location))) >>=
+    fun s -> return (Sequence.concat s)
+
+  let sections' w =
+    foreach
+      Query.(begin
+          select (from section $ named_region)
+            ~join:[[field addr];
+                   [field len ~from:section;
+                    field len ~from:named_region]]
+        end)
       ~f:(fun {addr; len;} {data=name} ->
           location w addr len >>= fun location ->
           return (Section.Fields.create ~name ~location))
 
   let symbol_locations width root_addr =
-    select_foreach (from value_chunk)
-      ~where:Query.(value_chunk.(root) = int root_addr)
+    foreach
+      Query.(select (from value_chunk)
+               ~where:(value_chunk.(root) = int root_addr))
       ~f:(fun {addr; len} -> location width addr len)
 
   let symbol_name address =
-    select_foreach (from named_symbol)
-      ~where:Query.(named_symbol.(addr) = int address)
+    foreach
+      Query.(select (from named_symbol)
+               ~where:(named_symbol.(addr) = int address))
       ~f:(fun (_,name) -> return name) >>= fun names ->
     match Sequence.to_list names with
     | [] -> return ""
     | name :: _ -> return name
 
   let symbols w =
-    select_foreach (from code_start) ~f:(fun addr ->
-        symbol_name addr >>= fun name ->
-        symbol_locations w addr >>= fun locations ->
-        match Sequence.to_list locations with
-        | [] -> return None
-        | loc::locs ->
-          let locations = loc,locs in
-          return @@ Option.some @@
-          Symbol.Fields.create ~name
-            ~is_function:true ~is_debug:false ~locations)
+    foreach
+      Query.(select (from code_start))
+      ~f:(fun addr ->
+          symbol_name addr >>= fun name ->
+          symbol_locations w addr >>= fun locations ->
+          match Sequence.to_list locations with
+          | [] -> return None
+          | loc::locs ->
+            let locations = loc,locs in
+            return @@ Option.some @@
+            Symbol.Fields.create ~name
+              ~is_function:true ~is_debug:false ~locations)
 
   let image () =
     arch () >>= fun arch ->
@@ -188,18 +208,18 @@ module Spec(M : Monad.S) = struct
     provide section addr len >>= fun () ->
     provide named_region addr len (Section.name s)
 
-  let code name is_fun loc =
+  let code name loc =
     let len = Int64.of_int @@ Location.len loc in
     int64_of_word (Location.addr loc) >>= fun addr ->
     provide named_symbol addr name >>= fun () ->
     provide value_chunk addr len addr >>= fun () ->
-    if is_fun then provide code_start addr
-    else return ()
+    provide code_start addr
 
   let symbol s =
     let loc, locs = Symbol.locations s in
-    let is_fun = Symbol.is_function s in
-    List.iter ~f:(code (Symbol.name s) is_fun) (loc::locs)
+    if Symbol.is_function s then
+      List.iter ~f:(code (Symbol.name s)) (loc::locs)
+    else return ()
 
   let of_image img =
     arch  (Img.arch  img) >>= fun () ->

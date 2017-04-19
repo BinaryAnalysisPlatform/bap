@@ -249,7 +249,9 @@ let register_loader ~name backend =
   match String.Table.add backends ~key:name ~data:backend with
   | `Ok -> ()
   | `Duplicate ->
-    raise (Invalid_argument (sprintf "%s loader is already in use" name))
+    raise
+      (Invalid_argument
+         (sprintf "%s loader is already in use" name))
 
 let register_backend ~name backend =
   let load str = match backend str with
