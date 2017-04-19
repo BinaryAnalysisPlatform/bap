@@ -233,11 +233,12 @@ module Query : sig
 
   (** logical expression language, defined as
       {v
-      exp ::= str [string]
-            | int [int64]
-            | float [float]
-            | bool [bool]
-            | ['a attribute].(['b field])
+      exp ::= str `string`
+            | int `int64`
+            | float `float`
+            | bool `bool`
+            | `'a attribute`.(`'b field`)
+            | `'b field`.[`int`]
             | exp <bop> exp
             | <uop> exp
 
@@ -248,7 +249,7 @@ module Query : sig
       cop ::= < | > | = | <> | <= | >=
       v}
 
-      In the grammar above, the names delimited in brackets represent
+      In the grammar above, the names delimited with backticks represent
       types of OCaml values, that should be passed at these syntactic
       locations (sort of an unquoting), for example, [str "hello"] is
       an expression, as well as [student.(gpa)] assuming that
@@ -386,7 +387,7 @@ module Query : sig
   val ($) : ('a -> 'b -> 'r) tables -> ('b,_) attribute -> ('a -> 'r) tables
 
   (** [field name] creates an unqualified join variable.
-      [filed name ~from:attr] creates a qualified join variable.
+      [field name ~from:attr] creates a qualified join variable.
 
       See the {!join} type description, for the explanation of the
       [join] expressions and joining.  *)
@@ -408,6 +409,25 @@ module Query : sig
 
         See the module description if you don't understand how it works.*)
     val get : (_,_) attribute -> _ field -> exp
+  end
+
+
+  (** Defines field subscripting syntax.
+
+      It is also possible to reference a field of a  column by
+      the column's number in the selection. For example, in a query
+
+      {[select (from students $ students)
+          ~join:[[field name]]
+          ~where:(id.[0] <> id.[1])]}
+
+      a variable [id.[0]] will be bound to the field [id] of the
+      first column of a selection, and [id.[1]] will be bound to the
+      second one.*)
+  module String : sig
+    (** [filed.(n)] creates a field variable that ranges over values
+        of [field] that belongs to the n'th attribute of a selection.*)
+    val get : _ field -> int -> exp
   end
 
 
