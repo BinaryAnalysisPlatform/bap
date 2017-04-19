@@ -89,7 +89,7 @@ error_or<segments> read(const ELFObjectFile<T>& obj) {
             s.push_back(segment{oss.str(),
                         offset,
                         it->p_vaddr,
-                        it->p_filesz, //p_memsz,
+                        it->p_filesz, //it->p_memsz,
                         static_cast<bool>(it->p_flags & ELF::PF_R),
                         static_cast<bool>(it->p_flags & ELF::PF_W),
                         static_cast<bool>(it->p_flags & ELF::PF_X)});
