@@ -4262,14 +4262,18 @@ module Std : sig
     (** {2 Backend Interface}  *)
 
     (** [register_backend ~name backend] tries to register backend under
-        the specified [name]. Deprecated, use register_loader instead *)
+        the specified [name]. *)
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
+    [@@deprecated "use register_loader instead"]
 
     (** lists all registered backends  *)
     val available_backends : unit -> string list
 
     (** [register_loader ~name backend] register backend under
-        the specified [name] and raise Invalid_argument if name is in use *)
+        the specified [name] and raise Invalid_argument if name is in
+        use. [backend] function returns [Ok (Some doc)] if backend
+        able to process file, [Ok None] if backend doesn't support
+        type of a given file and [Error er] in case a file is corrupted. *)
     val register_loader : name:string -> (Bigstring.t -> Ogre.doc option Or_error.t) -> unit
 
 

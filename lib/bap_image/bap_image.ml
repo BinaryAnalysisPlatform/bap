@@ -256,8 +256,8 @@ let register_loader ~name backend =
 let register_backend ~name backend =
   let load str = match backend str with
     | None ->
-      Or_error.error_string @@ sprintf
-        "file corrupted or %s backend is not able to process it" name
+      Or_error.errorf
+        "file is corrupted or %s backend is not able to process it" name
     | Some img ->
       match Bap_image_ogre.doc_of_image img with
       | Error er as r -> r
@@ -329,8 +329,8 @@ let load_with_doc (backend,load) data path = match load data with
     Bap_image_ogre.image_of_doc doc >>= fun img ->
     of_img img data path
   | Ok None ->
-    Or_error.error_string @@
-    sprintf "backend %s is not able to drive this file" backend
+    Or_error.errorf
+      "backend %s is not able to drive this file" backend
   | Error _ -> error "create image" (backend,`path path)
                  [%sexp_of:string * [`path of string option]]
 
@@ -345,8 +345,7 @@ let autoload data path =
     | Ok (Some doc) -> Some doc
     | _ -> None in
   match List.filter_map ~f:run bs with
-  | [] -> Or_error.error_string @@
-    sprintf "didn't find a suitable loader"
+  | [] -> Or_error.errorf "didn't find a suitable loader"
   | doc::docs ->
     EM.List.fold docs ~init:doc ~f:Ogre.Doc.merge >>= fun doc ->
     Bap_image_ogre.image_of_doc doc >>= fun img ->
