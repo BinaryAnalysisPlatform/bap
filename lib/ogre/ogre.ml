@@ -373,20 +373,24 @@ type 'a column = {attr : 'a; field : Type.header}
 
 module Exp = struct
   type name = Name of string | Pos of int [@@deriving compare,sexp]
-  type bop = And | Or | Lt | Imp | Add | Sub [@@deriving sexp]
+  type bop = And | Or | Lt | Add | Sub [@@deriving sexp]
   type uop = Not [@@deriving sexp]
   type var = name column [@@deriving compare, sexp]
-  type exp =
+  type 'a exp =
     | True
     | Int of int64
     | Str of string
     | Flt of float
-    | Var of var
-    | Bop of bop * exp * exp
-    | Uop of uop * exp
+    | Var of 'a
+    | Bop of bop * 'a exp * 'a exp
+    | Uop of uop * 'a exp
   [@@deriving sexp]
-  type t = exp [@@deriving sexp]
 
+  type t = var exp [@@deriving sexp]
+
+  type ivar = {i : int; j : int; typ : Type.typ}
+
+  type indexed = ivar exp
 
   module Var = Comparable.Make(struct
       type t = var [@@deriving compare,sexp]
@@ -402,6 +406,9 @@ module Exp = struct
 
   let less compare x y = bool (compare x y < 0)
 
+  let not x = Uop (Not,x)
+
+  (** preserves NNF, pushes disjuncts inwards, short-circuits expressions  *)
   let rec simpl = function
     | Bop (And,Uop (Not,True),_)
     | Bop (And,_,Uop (Not,True)) -> Uop (Not,True)
@@ -411,8 +418,6 @@ module Exp = struct
     | Bop (Or, e, Uop (Not,True)) -> simpl e
     | Bop (Or, True,_)
     | Bop (Or, _,True) -> True
-    | Bop (Imp, True, x) -> simpl x
-    | Bop (Imp, Uop (Not,True),_) -> True
     | Bop (Lt,Int x, Int y) -> less compare_int64 x y
     | Bop (Lt,Str x, Str y) -> less compare_string x y
     | Bop (Lt,Flt x, Flt y) -> less compare_float x y
@@ -424,6 +429,11 @@ module Exp = struct
     | Bop (Add,Flt x, Flt y) -> Flt Float.(x + y)
     | Bop (Sub,Flt x, Flt y) -> Flt Float.(x - y)
     | Uop (Not,(Uop (Not,x))) -> simpl x
+    | Uop (Not,Bop (Or,x,y)) -> simpl (Bop (And, not x, not y))
+    | Uop (Not,Bop (And,x,y)) -> simpl (Bop (Or, not x, not y))
+    | Bop (Or, Bop (And, x,y),z)
+    | Bop (Or, z, Bop (And,x,y)) ->
+      simpl (Bop (And, Bop (Or,z,x), Bop (Or,z,y)))
     | Uop (op,e) -> Uop (op, simpl e)
     | Bop (op,x,y) -> Bop (op,simpl x, simpl y)
     | e -> e
@@ -436,7 +446,7 @@ module Exp = struct
     let float x = Flt x
     let (&&) x y = simpl (Bop (And,x,y))
     let (||) x y = simpl (Bop (Or,x,y))
-    let (==>) x y = simpl (Bop (Imp,x,y))
+    let (==>) x y = simpl (Bop (Or,Uop(Not,x),y))
     let not x = simpl (Uop (Not,x))
     let (<) x y = simpl (Bop(Lt,x,y))
     let (=) x y = simpl (not (x < y) && not (y < x))
@@ -463,7 +473,6 @@ module Exp = struct
 
   let has_all_attributes names data =
     List.for_all names ~f:(Map.mem data)
-
 
   let select names data =
     Seq.of_list names |>
@@ -535,19 +544,36 @@ module Exp = struct
                     (string_of_name attr) ()
             else bs))
 
+  let sat lookup exp =
+    let rec eval = function
+      | True | Int _ | Str _ | Flt _ as r -> r
+      | Var n -> lookup n
+      | Uop (op,x) -> uop op x
+      | Bop (op,x,y) -> bop op x y
+    and uop Not x = simpl (eval x)
+    and bop op x y = match op with
+      | And -> eval_and x y
+      | Or -> eval_or x y
+      | op -> simpl (Bop (op,eval x,eval y))
+    and eval_and x y = match eval x with
+      | True -> eval y
+      | Uop (Not,True) as r -> r
+      | _ -> failwith "type error: and ~> bot"
+    and eval_or x y = match eval x with
+      | True -> True
+      | Uop (Not,True) -> eval y
+      | _ -> failwith "type error: or ~> bot" in
+    match eval exp with
+    | True -> true
+    | Uop (Not,True) -> false
+    | _ -> failwith "sat ~> bot"
 
-  let rec subst bs = function
+  let rec subst sub = function
     | True | Int _ | Str _ | Flt _ as x -> x
-    | Uop (op,x) -> simpl (Uop (op, subst bs x))
-    | Bop (op,x,y) -> simpl (Bop (op,subst bs x,subst bs y))
-    | Var n -> match Map.find bs n with
-      | None -> Var n
-      | Some e -> subst bs e
+    | Uop (op,x) -> simpl (Uop (op, subst sub x))
+    | Bop (op,x,y) -> simpl (Bop (op,subst sub x,subst sub y))
+    | Var n -> sub n
 
-  let sat e = match simpl e with
-    | True -> Some true
-    | Uop (Not,True) -> Some false
-    | _ -> None
 
   let vars exp =
     let rec collect vars = function
@@ -561,26 +587,43 @@ module Exp = struct
     List.foldi names ~init:String.Map.empty ~f:(fun pos offs name ->
         Map.add offs ~key:name ~data:pos)
 
-  let eval names joins exp {Doc.scheme; entries} : row seq Or_error.t  =
+  let normalize_vars offs =
+    subst (function
+        | {attr=Pos n} as v -> (Var v)
+        | {attr=Name n} as v -> match Map.find offs n with
+          | None -> invalid_argf "%s is unbound" n ()
+          | Some n -> Var {v with attr = Pos n})
+
+
+  (* let var_indices names scheme = *)
+  (*   List.map names  *)
+  (*     Map.fold scheme ~init:0 ~f:(fun ~key:name ~data:sign sum -> *)
+  (*         match Map.find counts name with *)
+  (*         | None -> sum *)
+  (*         | Some m -> sum + m * List.length sign) in *)
+  (*   max_index *)
+
+
+  let eval names joins exp {Doc.scheme; entries} : row seq =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
     let vars = vars exp in
     let offs = offsets names in
+    let exp = normalize_vars offs exp in
     if has_all_attributes names entries
     then
       n_cross_product (select names entries) |>
-      Error.Seq.filter_map ~f:(fun row ->
-          if Seq.is_empty row then Ok None
-          else
-            let cs = unify joins row in
-            let row = Seq.map row ~f:snd |> Seq.to_array in
-            let bs = bind_vars offs vars row in
-            let exp = subst bs Syntax.(cs && exp) in
-            match sat exp with
-            | None -> Or_error.error_string "bad expression"
-            | Some false -> Ok None
-            | Some true -> Ok (Some {row}))
-    else Ok Seq.empty
+      Seq.filter_map ~f:(fun row ->
+          if Seq.is_empty row then None
+          else match simpl (unify joins row) with
+            | Uop (Not,True) -> None
+            | cs ->
+              let row = Seq.map row ~f:snd |> Seq.to_array in
+              let bs = bind_vars offs vars row in
+              if sat (Map.find_exn bs) (Bop (And,cs,exp))
+              then (Some {row})
+              else None)
+    else Seq.empty
 
   include Syntax
 end
@@ -695,8 +738,8 @@ module Make(B : Monad.S) = struct
   let foreach {Query.where; join; tables={Query.read; names}} ~f
     : 'b seq t =
     M.get () >>= fun doc -> match Exp.eval names join where doc with
-    | Error err -> M.lift (B.return (Error err))
-    | Ok rows -> M.Seq.map rows ~f:(fun row -> read row f)
+    (* | Error err -> M.lift (B.return (Error err)) *)
+    | rows -> M.Seq.map rows ~f:(fun row -> read row f)
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in
