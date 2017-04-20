@@ -63,4 +63,6 @@ end
 
 val register_backend : name:string -> Image_backend.t -> [ `Ok | `Duplicate ]
 
+val register_loader : name:string -> (Bigstring.t -> Ogre.doc option Or_error.t) -> unit
+
 val available_backends : unit -> string list

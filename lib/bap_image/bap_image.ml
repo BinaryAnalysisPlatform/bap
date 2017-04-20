@@ -1,17 +1,23 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_types.Std
+open Monads.Std
 open Or_error
 
 open Image_common
 open Image_internal_std
 open Backend
 
+module Bap_image_ogre = Bap_image_ogre.Make(Monad.Ident)
+module EM = Monad.Result.Error
+
 type 'a m = 'a Or_error.t
 type img = Backend.Img.t [@@deriving sexp_of]
 type path = string
 
-let backends : Backend.t String.Table.t =
+type ogrefied_backend = Bigstring.t -> Ogre.doc option Or_error.t
+
+let backends : ogrefied_backend String.Table.t =
   String.Table.create ()
 
 
@@ -194,19 +200,23 @@ let validate_segments data (s,ss) : Validate.t =
 let is_virtual s = Backend.Segment.off s < 0
 
 let create_segments arch data (s,ss) =
+  let cmp_addr x y =
+    let addr s = Location.addr @@ Backend.Segment.location s in
+    Addr.compare (addr x) (addr y) in
   let endian = Arch.endian arch in
   (* a segment with the negative offset is virtual, we can't represent
      them in the Image, since the are not backed by static memory. But
      we will keep them, for analyses that require them.  *)
-  List.filter (s::ss) ~f:(Fn.non is_virtual) |> function
+  List.filter (s::ss) ~f:(Fn.non is_virtual) |>
+  List.sort ~cmp:cmp_addr  |> function
   | [] -> return Table.empty
   | s::ss ->
-  Validate.result (validate_segments data (s,ss)) >>= fun () ->
-  List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
-      let {Location.len; addr}, pos =
-        Backend.Segment.(location s, off s) in
-      Memory.create ~pos ~len endian addr data >>= fun mem ->
-      tab >>= fun tab -> Table.add tab mem s)
+    Validate.result (validate_segments data (s,ss)) >>= fun () ->
+    List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
+        let {Location.len; addr}, pos =
+          Backend.Segment.(location s, off s) in
+        Memory.create ~pos ~len endian addr data >>= fun mem ->
+        tab >>= fun tab -> Table.add tab mem s)
 
 (** [words_of_table word_size table] maps all memory mapped by [table]
     to words of size [word_size]. If size of mapped region is not enough
@@ -235,8 +245,26 @@ let create_words secs = {
   r256 = lazy (words_of_table `r256 secs);
 }
 
+let register_loader ~name backend =
+  match String.Table.add backends ~key:name ~data:backend with
+  | `Ok -> ()
+  | `Duplicate ->
+    raise
+      (Invalid_argument
+         (sprintf "%s loader is already in use" name))
+
 let register_backend ~name backend =
-  String.Table.add backends ~key:name ~data:backend
+  let load str = match backend str with
+    | None ->
+      Or_error.errorf
+        "file is corrupted or %s backend is not able to process it" name
+    | Some img ->
+      match Bap_image_ogre.doc_of_image img with
+      | Error er as r -> r
+      | Ok doc -> Ok (Some doc) in
+  try
+    register_loader ~name load; `Ok
+  with Invalid_argument _ -> `Duplicate
 
 let available_backends () = Hashtbl.keys backends
 
@@ -296,21 +324,32 @@ let memory t = t.memory
 let virtuals {img={Img.segments=(s,ss)}} =
   List.filter (s::ss) ~f:is_virtual
 
+let load_with_doc (backend,load) data path = match load data with
+  | Ok (Some doc) ->
+    Bap_image_ogre.image_of_doc doc >>= fun img ->
+    of_img img data path
+  | Ok None ->
+    Or_error.errorf
+      "backend %s is not able to drive this file" backend
+  | Error _ -> error "create image" (backend,`path path)
+                 [%sexp_of:string * [`path of string option]]
 
 let of_backend backend data path : result =
   match String.Table.find backends backend with
   | None -> errorf "no such backend: '%s'" backend
-  | Some load -> match load data with
-    | Some img -> of_img img data path
-    | None -> error "create image" (backend,`path path)
-                [%sexp_of:string * [`path of string option]]
+  | Some load -> load_with_doc (backend, load) data path
 
 let autoload data path =
   let bs = String.Table.data backends in
-  match List.filter_map bs ~f:(fun load -> load data) with
-  | [img] -> of_img img data path
-  | [] -> errorf "Autoloader: no suitable backend found"
-  | _  -> errorf "Autoloader: can't resolve proper backend"
+  let run load = match load data with
+    | Ok (Some doc) -> Some doc
+    | _ -> None in
+  match List.filter_map ~f:run bs with
+  | [] -> Or_error.errorf "didn't find a suitable loader"
+  | doc::docs ->
+    EM.List.fold docs ~init:doc ~f:Ogre.Doc.merge >>= fun doc ->
+    Bap_image_ogre.image_of_doc doc >>= fun img ->
+    of_img img data path
 
 let create_image path ?(backend="llvm") data : result =
   if backend = "auto" then autoload data path
