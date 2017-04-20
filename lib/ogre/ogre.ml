@@ -72,6 +72,7 @@ module Type = struct
     typ = Float;
   }
 
+
   let string_of_typ = function
     | Int -> "int"
     | Str -> "str"
@@ -117,6 +118,15 @@ module Type = struct
     | Str -> ok str
     | Bool -> ok bool
     | Float -> ok float
+
+  let rewrite t x =
+    Option.value_exn (t.parse x) |> t.pack
+
+  let normalize = function
+    | Int -> rewrite int
+    | Str -> rewrite str
+    | Bool -> rewrite bool
+    | Float -> rewrite float
 
   let signature_mismatch ~expect:s1 ~got:s2 =
     Or_error.errorf "signature mismatch"
@@ -199,10 +209,19 @@ module Doc = struct
       else errorf "attribute %S has an arity %d, while a value with \
                    arity %d was provided" name checked (Map.length fields)
 
+  let normalize_entry name {fields} {scheme} =
+    let sign = Map.find_exn scheme name in
+    Map.mapi fields ~f:(fun ~key ~data ->
+        let {Type.ftype} =
+          List.find_exn sign ~f:(fun {Type.fname} -> fname = key) in
+        Type.normalize ftype data)
+
   let update_entries name packed doc =
-    typecheck_entry name packed doc >>| fun () -> {
+    typecheck_entry name packed doc >>| fun () ->
+    let packed = {fields = normalize_entry name packed doc} in
+    {
       doc with entries =
-                 Map.add_multi doc.entries ~key:name ~data: packed
+                 Map.add_multi doc.entries ~key:name ~data:packed
     }
 
   let merge doc {scheme; entries} =
@@ -230,7 +249,6 @@ module Doc = struct
 
 
   let tabulate xs = List.mapi xs ~f:(fun i x -> (i,x))
-
 
   let parse_tname name =
     List.Assoc.find Type.names name |> function
@@ -375,7 +393,7 @@ type 'a column = {attr : 'a; field : Type.header}
 
 module Exp = struct
   type name = Name of string | Pos of int [@@deriving compare,sexp]
-  type bop = And | Or | Lt | Add | Sub [@@deriving compare, sexp]
+  type bop = And | Or | Lt | Eq | Add | Sub [@@deriving compare, sexp]
   type uop = Not [@@deriving compare, sexp]
   type var = name column [@@deriving compare, sexp]
   type 'a exp =
@@ -406,6 +424,7 @@ module Exp = struct
     | false -> Uop (Not,True)
 
   let less compare x y = bool (compare x y < 0)
+  let eq compare x y = bool (compare x y = 0)
 
   let not x = Uop (Not,x)
 
@@ -422,6 +441,9 @@ module Exp = struct
     | Bop (Lt,Int x, Int y) -> less compare_int64 x y
     | Bop (Lt,Str x, Str y) -> less compare_string x y
     | Bop (Lt,Flt x, Flt y) -> less compare_float x y
+    | Bop (Eq,Int x, Int y) -> eq compare_int64 x y
+    | Bop (Eq,Str x, Str y) -> eq compare_string x y
+    | Bop (Eq,Flt x, Flt y) -> eq compare_float x y
     | Bop (Add,(Int 0L | Flt 0.),x)
     | Bop (Add,x,(Int 0L | Flt 0.)) -> simpl x
     | Bop (Sub,x,(Int 0L | Flt 0.)) -> simpl x
@@ -450,7 +472,7 @@ module Exp = struct
     let (==>) x y = simpl (Bop (Or,Uop(Not,x),y))
     let not x = simpl (Uop (Not,x))
     let (<) x y = simpl (Bop(Lt,x,y))
-    let (=) x y = simpl (not (x < y) && not (y < x))
+    let (=) x y = simpl (Bop (Eq,x,y))
     let (<>) x y = simpl (not (x = y))
     let (>) x y = simpl (y < x)
     let (<=) x y = simpl (not (y < x))
@@ -519,35 +541,10 @@ module Exp = struct
     List.fold joins ~init:True ~f:(fun exp cls ->
         Syntax.(exp && unify_var cls row))
 
-  let matches var pos offs = match var with
-    | Pos p -> p = pos
-    | Name n -> match Map.find offs n with
-      | None -> invalid_argf "bad name %s" n ()
-      | Some p -> p = pos
-
-  (* @pre: all attributes are unique
-     @pre: variables are type checked
-     @pre: the database is typechecked
-     @pre: row degree is greater than zero
-  *)
-  let bind_vars offs vars row =
-    Set.fold vars ~init:Var.Map.empty ~f:(fun bs var ->
-        let {field={Type.fname; ftype}; attr} = var in
-        Array.foldi ~init:bs row ~f:(fun fn bs ({fields}) ->
-            if matches attr fn offs
-            then match Map.find fields fname with
-              | None -> failwithf "bad field %s" fname ()
-              | Some v -> match Map.find bs var with
-                | None -> Map.add bs ~key:var ~data:(lift ftype v)
-                | Some v' ->
-                  failwithf "variable %s is ambiguous"
-                    (string_of_name attr) ()
-            else bs))
-
-  let sat lookup exp =
+  let sat row exp =
     let rec eval = function
       | True | Int _ | Str _ | Flt _ as r -> r
-      | Var n -> lookup n
+      | Var get -> get row
       | Uop (op,x) -> uop op x
       | Bop (op,x,y) -> bop op x y
     and uop Not x = simpl (Uop (Not,eval x))
@@ -574,25 +571,9 @@ module Exp = struct
     | Bop (op,x,y) -> simpl (Bop (op,subst sub x,subst sub y))
     | Var n -> sub n
 
-
-  let vars exp =
-    let rec collect vars = function
-      | True | Int _ | Str _ | Flt _ -> vars
-      | Var v -> Set.add vars v
-      | Bop (_,x,y) -> collect (collect vars x) y
-      | Uop (_,x) -> collect vars x in
-    collect Var.Set.empty exp
-
   let offsets names =
     List.foldi names ~init:String.Map.empty ~f:(fun pos offs name ->
         Map.add offs ~key:name ~data:pos)
-
-  let normalize_vars offs =
-    subst (function
-        | {attr=Pos n} as v -> (Var v)
-        | {attr=Name n} as v -> match Map.find offs n with
-          | None -> invalid_argf "%s is unbound" n ()
-          | Some n -> Var {v with attr = Pos n})
 
   let names_index names =
     let offs = offsets names in
@@ -600,27 +581,26 @@ module Exp = struct
     | Name s -> Map.find_exn offs s
     | Pos n -> n
 
-  let index_vars names exp =
-    let index_of_name = names_index names in
-    let rec index subst = function
-      | True | Int _ | Str _ | Flt _ as x -> subst,x
-      | Bop (op,x,y) ->
-        let subst,x = index subst x in
-        let subst,y = index subst y in
-        subst, Bop (op,x,y)
-      | Uop (op,x) ->
-        let subst,x = index subst x in
-        subst, Uop(op,x)
-      | Var {attr = name; field = {Type.fname; ftype} as fld} ->
-        let pos,gets = subst in
-        let idx = index_of_name name in
-        let get row =
-          lift ftype (Map.find_exn row.(idx).fields fname) in
-        (pos+1,get::gets), Var {attr=pos; field=fld} in
-    let (_,gets),exp = index (0,[]) exp in
-    let subs = Array.of_list_rev gets in
-    let sub row {attr=off} = subs.(off) row in
-    sub,exp
+
+  let normalize_vars names =
+    let offs = names_index names in
+    subst (fun {attr=n; field} -> Var {attr = (offs n); field})
+
+  let get_indiced {attr = idx; field = {Type.fname; ftype}} row =
+    lift ftype (Map.find_exn row.(idx).fields fname)
+
+
+  let rec lambda = function
+    | True | Int _ | Str _ | Flt _ as x -> x
+    | Bop (Eq,
+           Var {attr=x;field={Type.fname=n1}},
+           Var {attr=y;field={Type.fname=n2}}) ->
+      Var (fun row ->
+          bool String.(Map.find_exn row.(x).fields n1 =
+                       Map.find_exn row.(y).fields n2))
+    | Bop (op,x,y) -> Bop (op,lambda x, lambda y)
+    | Uop (op,x) -> Uop(op,lambda x)
+    | Var n -> Var (get_indiced n)
 
   let vars_of_join names scheme = function
     | {attr = Some name; field} -> [{attr = Name name; field}]
@@ -649,13 +629,13 @@ module Exp = struct
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
     let cs = unify names scheme joins in
-    let sub,exp = index_vars names Syntax.(cs && exp) in
-    let exp = simpl exp in
+    let exp = normalize_vars names Syntax.(cs && exp) |>
+              simpl |> lambda in
     if has_all_attributes names entries
     then n_cross_product (select names entries) |>
          Seq.filter_map ~f:(fun row ->
              let row = Seq.map row ~f:snd |> Seq.to_array in
-             if Array.length row > 0 && sat (sub row) exp
+             if Array.length row > 0 && sat row exp
              then Some {row}
              else None)
     else Seq.empty
