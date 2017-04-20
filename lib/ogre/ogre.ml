@@ -712,7 +712,7 @@ module type S = sig
   include Monad.Trans.S with type 'a t := 'a t
   val require : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
   val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a option t
-  val foreach : ('a -> 'b t) query -> f:'a -> 'b seq t
+  val foreach : ('a -> 'b) query -> f:'a -> 'b seq t
   val provide : (_, 'a -> unit t) attribute -> 'a
   val fail : Error.t -> 'a t
   val failf : ('a, formatter, unit, unit -> 'b t) format4 -> 'a
@@ -755,14 +755,16 @@ module Make(B : Monad.S) = struct
       ~finish:M.return
 
 
+
   let foreach {Query.where; join; tables={Query.read; names}} ~f
     : 'b seq t =
-    M.get () >>= fun doc -> match Exp.eval names join where doc with
+    M.get () >>| fun doc ->
+    Sequence.map (Exp.eval names join where doc) ~f:(fun row ->
+        read row f)
     (* | Error err -> M.lift (B.return (Error err)) *)
-    | rows ->
-      foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>|
-      Sequence.of_list
-      (* M.Seq.map rows ~f:(fun row -> read row f) *)
+    (* | rows -> *)
+    (*   foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>| *)
+    (*   Sequence.of_list *)
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in

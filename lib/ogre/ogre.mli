@@ -637,7 +637,7 @@ module type S = sig
 
       See the [Query] module documentation for more information about
       the query EDSL.*)
-  val foreach : ('a -> 'b t) query -> f:'a -> 'b seq t
+  val foreach : ('a -> 'b) query -> f:'a -> 'b seq t
 
 
   (** [provide attr v1 v2 ... vm] stores the constituents of an
