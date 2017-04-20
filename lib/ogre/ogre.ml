@@ -46,6 +46,8 @@ module Type = struct
   let atom parse s =
     try Some (parse (Sexp.Atom s)) with exn -> None
 
+  let header_equal x y = compare_header x y = 0
+
   let int = {
     parse = atom int64_of_sexp;
     pack = pack sexp_of_int64;
@@ -373,8 +375,8 @@ type 'a column = {attr : 'a; field : Type.header}
 
 module Exp = struct
   type name = Name of string | Pos of int [@@deriving compare,sexp]
-  type bop = And | Or | Lt | Add | Sub [@@deriving sexp]
-  type uop = Not [@@deriving sexp]
+  type bop = And | Or | Lt | Add | Sub [@@deriving compare, sexp]
+  type uop = Not [@@deriving compare, sexp]
   type var = name column [@@deriving compare, sexp]
   type 'a exp =
     | True
@@ -384,13 +386,12 @@ module Exp = struct
     | Var of 'a
     | Bop of bop * 'a exp * 'a exp
     | Uop of uop * 'a exp
-  [@@deriving sexp]
+  [@@deriving compare, sexp]
 
-  type t = var exp [@@deriving sexp]
+  type t = var exp [@@deriving compare, sexp]
 
-  type ivar = {i : int; j : int; typ : Type.typ}
-
-  type indexed = ivar exp
+  type ivar = int column [@@deriving compare, sexp]
+  type indexed = ivar exp [@@deriving compare, sexp]
 
   module Var = Comparable.Make(struct
       type t = var [@@deriving compare,sexp]
@@ -510,14 +511,13 @@ module Exp = struct
     Seq.next |> function
     | None -> True
     | Some (r,es) ->
-      Seq.fold es ~init:True ~f:(fun e p -> simpl Syntax.(e && (p = r)))
+      Seq.fold es ~init:True ~f:(fun e p -> Syntax.(e && (p = r)))
 
 
   (* build a constraint that will unify all equivalence classes *)
   let unify joins row =
-    Seq.of_list joins |>
-    Seq.fold ~init:True ~f:(fun exp cls ->
-        simpl Syntax.(exp && unify_var cls row))
+    List.fold joins ~init:True ~f:(fun exp cls ->
+        Syntax.(exp && unify_var cls row))
 
   let matches var pos offs = match var with
     | Pos p -> p = pos
@@ -550,7 +550,7 @@ module Exp = struct
       | Var n -> lookup n
       | Uop (op,x) -> uop op x
       | Bop (op,x,y) -> bop op x y
-    and uop Not x = simpl (eval x)
+    and uop Not x = simpl (Uop (Not,eval x))
     and bop op x y = match op with
       | And -> eval_and x y
       | Or -> eval_or x y
@@ -594,37 +594,71 @@ module Exp = struct
           | None -> invalid_argf "%s is unbound" n ()
           | Some n -> Var {v with attr = Pos n})
 
+  let names_index names =
+    let offs = offsets names in
+    function
+    | Name s -> Map.find_exn offs s
+    | Pos n -> n
 
-  (* let var_indices names scheme = *)
-  (*   List.map names  *)
-  (*     Map.fold scheme ~init:0 ~f:(fun ~key:name ~data:sign sum -> *)
-  (*         match Map.find counts name with *)
-  (*         | None -> sum *)
-  (*         | Some m -> sum + m * List.length sign) in *)
-  (*   max_index *)
+  let index_vars names exp =
+    let index_of_name = names_index names in
+    let rec index subst = function
+      | True | Int _ | Str _ | Flt _ as x -> subst,x
+      | Bop (op,x,y) ->
+        let subst,x = index subst x in
+        let subst,y = index subst y in
+        subst, Bop (op,x,y)
+      | Uop (op,x) ->
+        let subst,x = index subst x in
+        subst, Uop(op,x)
+      | Var {attr = name; field = {Type.fname; ftype} as fld} ->
+        let pos,gets = subst in
+        let idx = index_of_name name in
+        let get row =
+          lift ftype (Map.find_exn row.(idx).fields fname) in
+        (pos+1,get::gets), Var {attr=pos; field=fld} in
+    let (_,gets),exp = index (0,[]) exp in
+    let subs = Array.of_list_rev gets in
+    let sub row {attr=off} = subs.(off) row in
+    sub,exp
+
+  let vars_of_join names scheme = function
+    | {attr = Some name; field} -> [{attr = Name name; field}]
+    | {attr = None; field} ->
+      List.filter_mapi names ~f:(fun pos name ->
+          match Map.find scheme name with
+          | None -> None
+          | Some sign ->
+            if List.mem sign field ~equal:Type.header_equal
+            then Some {attr = Pos pos; field }
+            else None)
+
+  let unify_class names scheme cls =
+    match List.concat_map cls ~f:(vars_of_join names scheme) with
+    | [] | [_] -> True
+    | x::y::vs ->
+      List.fold vs ~init:Syntax.(var x = var y) ~f:(fun cs z ->
+        Syntax.(cs && var x = var z))
+
+  let unify names scheme joins =
+    List.fold joins ~init:True ~f:(fun cs cls ->
+        Syntax.(cs && unify_class names scheme cls))
 
 
   let eval names joins exp {Doc.scheme; entries} : row seq =
     let module Error = Monad.Result.Error in
     let open Error.Syntax in
-    let vars = vars exp in
-    let offs = offsets names in
-    let exp = normalize_vars offs exp in
+    let cs = unify names scheme joins in
+    let sub,exp = index_vars names Syntax.(cs && exp) in
+    let exp = simpl exp in
     if has_all_attributes names entries
-    then
-      n_cross_product (select names entries) |>
-      Seq.filter_map ~f:(fun row ->
-          if Seq.is_empty row then None
-          else match simpl (unify joins row) with
-            | Uop (Not,True) -> None
-            | cs ->
-              let row = Seq.map row ~f:snd |> Seq.to_array in
-              let bs = bind_vars offs vars row in
-              if sat (Map.find_exn bs) (Bop (And,cs,exp))
-              then (Some {row})
-              else None)
+    then n_cross_product (select names entries) |>
+         Seq.filter_map ~f:(fun row ->
+             let row = Seq.map row ~f:snd |> Seq.to_array in
+             if Array.length row > 0 && sat (sub row) exp
+             then Some {row}
+             else None)
     else Seq.empty
-
   include Syntax
 end
 
@@ -735,11 +769,20 @@ module Make(B : Monad.S) = struct
     kfprintf kon ppf fmt
 
 
+  let foldm xs ~init ~f =
+    Sequence.delayed_fold xs ~init
+      ~f:(fun s a ~k -> f s a >>= k)
+      ~finish:M.return
+
+
   let foreach {Query.where; join; tables={Query.read; names}} ~f
     : 'b seq t =
     M.get () >>= fun doc -> match Exp.eval names join where doc with
     (* | Error err -> M.lift (B.return (Error err)) *)
-    | rows -> M.Seq.map rows ~f:(fun row -> read row f)
+    | rows ->
+      foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>|
+      Sequence.of_list
+      (* M.Seq.map rows ~f:(fun row -> read row f) *)
 
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in
