@@ -58,165 +58,156 @@ let make_image arch entry segments sections symbols =
     Img.Fields.create ~arch ~entry ~segments ~sections ~symbols
 
 module Image(M : Monad.S) = struct
-  module Query = Ogre.Query
-  module M = Ogre.Make(M)
+  module Fact = Ogre.Make(M)
+  open Fact.Syntax
   open Scheme
-  open M
-
-  let word_of_int64 width = Word.of_int64 ~width
 
   let int_of_int64 x = match Int64.to_int x with
-    | None -> failf "unable to convert int64 to int" ()
-    | Some x -> return x
+    | None -> Fact.failf "unable to convert int64 to int" ()
+    | Some x -> Fact.return x
 
-  let select_foreach ?join ?where ~f from =
-    foreach (Query.select ?join ?where from) ~f
+  let arch =
+    Fact.require arch >>= fun s -> match Arch.of_string s with
+    | Some s -> Fact.return s
+    | None -> Fact.failf "unknown/unsupported architecture %s" s ()
 
-  let arch () =
-    require arch >>= fun s -> match Arch.of_string s with
-    | Some s -> return s
-    | None -> failf "unknown arch %s" s ()
 
-  let entry w =
-    require entry_point >>= fun e ->
-    return (word_of_int64 w e)
+  let addr_width = arch >>| Arch.addr_size >>| Size.in_bits
 
-  let location width addr len =
-    let addr = word_of_int64 width addr in
-    int_of_int64 len >>= fun len ->
-    return (Location.Fields.create ~addr ~len)
+  let entry =
+    addr_width >>= fun width ->
+    Fact.require entry_point >>| Word.of_int64 ~width
 
-  let segments width =
-    foreach
-      Query.(begin
-          select
-            (from segment $ mapped $ named_region)
-            ~join:[[field addr];
-                   [field len ~from:segment;
-                    field len ~from:named_region]]
-        end)
-      ~f:(fun {addr; len} ({data=off}, (r,w,x)) {data=name} ->
-          location width addr len >>= fun location ->
-          int_of_int64 off >>= fun off ->
-          match make_perm r w x with
-          | Some perm ->
-            return (Segment.Fields.create ~name ~off ~perm ~location)
-          | None ->
-            failf
-              "didn't find permissions for segment at 0x%Ld" addr ())
+  let location ~addr ~len =
+    addr_width >>= fun width ->
+    let addr = Word.of_int64 ~width addr in
+    int_of_int64 len >>| fun len ->
+    Location.Fields.create ~addr ~len
 
-  let sections w =
-    foreach
-      Query.(begin
-          select (from section $ named_region)
-            ~join:[[field addr];
-                   [field len ~from:section;
-                    field len ~from:named_region]]
-        end)
-      ~f:(fun {addr; len;} {data=name} ->
-          location w addr len >>= fun location ->
-          return (Section.Fields.create ~name ~location))
+  let segments =
+    addr_width >>= fun width ->
+    Fact.foreach Ogre.Query.(begin
+        select (from segment $ mapped $ named_region)
+          ~join:[[field addr];
+                 [field len ~from:segment;
+                  field len ~from:named_region]]
+      end) ~f:(fun {addr; len} ({data=off}, (r,w,x)) {data=name} ->
+        location ~addr ~len >>= fun location ->
+        int_of_int64 off >>= fun off ->
+        match make_perm r w x with
+        | Some perm ->
+          Segment.Fields.create ~name ~off ~perm ~location |>
+          Fact.return
+        | None ->
+          Fact.failf "can't find permissions for a \
+                      segment at the address: 0x%Ld" addr ()) >>=
+    Fact.Seq.all
 
-  let symbol_locations width root_addr =
-    foreach
-      Query.(select (from value_chunk)
-               ~where:(value_chunk.(root) = int root_addr))
-      ~f:(fun {addr; len} -> location width addr len)
+  let sections =
+    Fact.foreach Ogre.Query.(begin
+        select (from section $ named_region)
+          ~join:[[field addr];
+                 [field len ~from:section;
+                  field len ~from:named_region]]
+      end) ~f:(fun {addr; len;} {data=name} ->
+        location ~addr ~len >>| fun location ->
+        Section.Fields.create ~name ~location) >>=
+    Fact.Seq.all
 
-  let symbol_name address =
-    foreach
-      Query.(select (from named_symbol)
-               ~where:(named_symbol.(addr) = int address))
-      ~f:(fun (_,name) -> return name) >>= fun names ->
-    match Sequence.to_list names with
-    | [] -> return ""
-    | name :: _ -> return name
+  let symbol_locations start =
+    Fact.foreach Ogre.Query.(begin
+        select ~where:(value_chunk.(root) = int start)
+          (from value_chunk)
+      end) ~f:(fun {addr; len} -> location ~addr ~len) >>=
+    Fact.Seq.all
 
-  let symbols w =
-    foreach
-      Query.(select (from code_start))
-      ~f:(fun addr ->
-          symbol_name addr >>= fun name ->
-          symbol_locations w addr >>= fun locations ->
+
+  let symbol_name start =
+    Fact.foreach Ogre.Query.(begin
+        select ~where:(named_symbol.(addr) = int start)
+          (from named_symbol)
+      end) ~f:snd >>| Seq.hd
+
+  let symbols =
+    Fact.foreach Ogre.Query.(begin
+        select ~join:[[field addr]]
+          (from code_start)
+      end) ~f:(fun addr ->
+        symbol_name addr >>= function
+        | None -> Fact.return None
+        | Some name ->
+          symbol_locations addr >>= fun locations ->
           match Sequence.to_list locations with
-          | [] -> return None
+          | [] -> Fact.return None
           | loc::locs ->
-            let locations = loc,locs in
-            return @@ Option.some @@
             Symbol.Fields.create ~name
-              ~is_function:true ~is_debug:false ~locations)
+              ~is_function:true
+              ~is_debug:false
+              ~locations:(loc,locs) |>
+            Option.some |>
+            Fact.return) >>=
+    Fact.Seq.all
 
-  let image () =
-    arch () >>= fun arch ->
-    let w = match Arch.addr_size arch with
-      | `r32 -> 32
-      | `r64 -> 64 in
-    entry    w >>= fun entry ->
-    segments w >>= fun segments ->
-    sections w >>= fun sections ->
-    symbols  w >>= fun symbols  ->
+  let image =
+    arch >>= fun arch ->
+    entry    >>= fun entry ->
+    segments >>= fun segments ->
+    sections >>= fun sections ->
+    symbols  >>= fun symbols  ->
     match make_image arch entry segments sections symbols with
-    | None ->
-      failf "segments list is empty" ()
-    | Some img -> return img
+    | None -> Fact.failf "can't find segments in the image" ()
+    | Some img -> Fact.return img
 end
 
 module Spec(M : Monad.S) = struct
-  module M = Ogre.Make(M)
-  open M
+  module Fact = Ogre.Make(M)
+  open Fact.Syntax
   open Scheme
 
-  let rec checked p = function
-    | Or (p1,p2) -> checked p p1 || checked p p2
-    | X|W|R as p' -> p = p'
+  let rec is p = function
+    | Or (p1,p2) -> is p p1 || is p p2
+    | p' -> p = p'
 
-  let int64_of_word word =
-    match Word.to_int64 word with
-    | Ok word -> return word
-    | Error er -> fail er
+  let addr x = ok_exn (Word.to_int64 x)
 
-  let arch a = provide arch (Sexp.to_string @@ Arch.sexp_of_t a)
-  let entry e = int64_of_word e >>= fun e -> provide entry_point e
+  let location_repr {Location.addr=x; len} =
+    addr x, Int64.of_int len
 
-  let segment s =
-    let loc = Segment.location s in
-    let addr, len = Location.(addr loc, len loc) in
-    let len = Int64.of_int len in
+  let provide_segment s =
+    let addr,len = location_repr @@ Segment.location s in
     let perm = Segment.perm s in
-    let r,w,x = checked R perm, checked W perm, checked X perm in
-    int64_of_word addr >>= fun addr ->
-    provide segment addr len >>= fun () ->
-    provide mapped addr len (Int64.of_int @@ Segment.off s) r w x >>= fun () ->
-    provide named_region addr len (Segment.name s)
+    let r,w,x = is R perm, is W perm, is X perm in
+    let off = Int64.of_int (Segment.off s) in
+    Fact.provide segment addr len >>= fun () ->
+    Fact.provide mapped addr len off r w x >>= fun () ->
+    Fact.provide named_region addr len (Segment.name s)
 
-  let section s =
-    let loc = Section.location s in
-    let addr, len = Location.(addr loc, len loc) in
-    let len = Int64.of_int len in
-    int64_of_word addr >>= fun addr ->
-    provide section addr len >>= fun () ->
-    provide named_region addr len (Section.name s)
+  let provide_section s =
+    let addr, len = location_repr @@ Section.location s in
+    Fact.provide section addr len >>= fun () ->
+    Fact.provide named_region addr len (Section.name s)
 
-  let code name loc =
-    let len = Int64.of_int @@ Location.len loc in
-    int64_of_word (Location.addr loc) >>= fun addr ->
-    provide named_symbol addr name >>= fun () ->
-    provide value_chunk addr len addr >>= fun () ->
-    provide code_start addr
-
-  let symbol s =
+  let provide_function s =
     let loc, locs = Symbol.locations s in
-    if Symbol.is_function s then
-      List.iter ~f:(code (Symbol.name s)) (loc::locs)
-    else return ()
+    let root,len = location_repr loc in
+    Fact.provide named_symbol root (Symbol.name s) >>= fun () ->
+    Fact.provide code_start root >>= fun () ->
+    Fact.provide value_chunk root len root >>= fun () ->
+    Fact.List.iter locs ~f:(fun loc ->
+        let addr,len = location_repr loc in
+        Fact.provide value_chunk addr len root)
 
-  let of_image img =
-    arch  (Img.arch  img) >>= fun () ->
-    entry (Img.entry img) >>= fun () ->
-    let seg, segs = Img.segments img in
-    List.iter (seg::segs) ~f:segment >>= fun () ->
-    List.iter (Img.sections img) ~f:section >>= fun () ->
-    List.iter (Img.symbols img) ~f:symbol
+  let provide_symbol s =
+    if Symbol.is_function s then provide_function s
+    else Fact.return ()
+
+  let provide_image
+      {Img.arch=a; entry; segments=(s,ss); sections; symbols} =
+    Fact.provide arch (Arch.to_string a) >>= fun () ->
+    Fact.provide entry_point (addr entry) >>= fun () ->
+    Fact.List.iter (s::ss)  ~f:provide_segment >>= fun () ->
+    Fact.List.iter sections ~f:provide_section >>= fun () ->
+    Fact.List.iter symbols  ~f:provide_symbol
 end
 
 module Make (M : Monad.S) = struct
@@ -224,6 +215,6 @@ module Make (M : Monad.S) = struct
   module Spec = Spec(M)
   module M = Ogre.Make(M)
 
-  let doc_of_image img = M.exec (Spec.of_image img) Ogre.Doc.empty
-  let image_of_doc doc = M.eval (Image.image ()) doc
+  let doc_of_image img = M.exec (Spec.provide_image img) Ogre.Doc.empty
+  let image_of_doc doc = M.eval Image.image doc
 end

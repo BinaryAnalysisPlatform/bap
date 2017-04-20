@@ -9,4 +9,4 @@ Library ogre
   Path:         lib/ogre
   FindlibName:  ogre
   Modules:      Ogre
-  BuildDepends: monads
+  BuildDepends: core_kernel, monads
