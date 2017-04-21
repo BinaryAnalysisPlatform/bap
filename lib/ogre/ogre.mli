@@ -513,7 +513,7 @@ end
 
   *)
 module Doc : sig
-  type t  = doc
+  type t = doc [@@deriving compare]
 
 
   (** [empty] creates an empty document  *)
@@ -556,6 +556,22 @@ module Doc : sig
 
   (** [pp ppf doc] prints a [doc] in the specified formatter [ppf]  *)
   val pp : Format.formatter -> doc -> unit
+
+
+  (** [clear doc] removes all facts from the document.
+
+      Useful for extracting scheme from a document.*)
+  val clear : doc -> doc
+
+
+  (** [declarations doc] returns a number of declarations in the
+      document *)
+  val declarations : doc -> int
+
+
+  (** [definitions doc] returns a number of facts, defined in the
+      document. *)
+  val definitions : doc -> int
 end
 
 

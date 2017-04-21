@@ -56,21 +56,30 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     | Backend.Or (p1,p2) -> is set p1 || is set p2
     | bit -> bit = set
 
+  let segmentations =
+    Ogre.foreach Ogre.Query.(select (from Image.Scheme.segment))
+      ~f:ident
+
+  let get_segmentations proj =
+    match Project.get proj Image.specification with
+    | None -> Ok Seq.empty
+    | Some spec -> Ogre.eval segmentations spec
+
   let load_virtuals () =
     proj () >>= fun proj ->
     make_addr 0L >>= fun null ->
-    match Project.get proj Backend.Img.t with
-    | None -> Machine.return null
-    | Some {Backend.Img.segments=s,ss} ->
-      Machine.List.fold ~init:null (s::ss)
-        ~f:(fun endp {Backend.Segment.name; perm; off;
-                 location={Location.addr; len}} ->
-            if off >= 0 then Machine.return endp
-            else Mem.allocate
-                ~readonly:(not (is Backend.W perm))
-                ~executable:(is Backend.X perm)
-                ~generator:(Generator.static 0) addr len >>| fun () ->
-           Addr.max endp Addr.(addr ++ len))
+    match get_segmentations proj with
+    | Error err -> assert false
+    | Ok segs ->
+      Machine.Seq.fold ~init:null segs
+        ~f:(fun endp {Image.Scheme.addr; size; info=(_,w,x)} ->
+            make_addr addr >>= fun addr ->
+            let size = Int64.to_int_exn size in
+            Mem.allocate
+              ~readonly:(not w)
+              ~executable:x
+              ~generator:(Generator.static 0) addr size >>| fun () ->
+            Addr.max endp Addr.(addr ++ size))
 
   let load_segments () =
     proj () >>= fun proj ->

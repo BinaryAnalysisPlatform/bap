@@ -17,25 +17,25 @@ type result = (t * Error.t list) Or_error.t
 val create : ?backend:string -> path -> result
 val of_string : ?backend:string -> string -> result
 val of_bigstring : ?backend:string -> Bigstring.t -> result
+val from_spec : Bigstring.t -> Ogre.doc -> result
 
 val entry_point : t -> addr
 val filename : t -> string option
 val arch: t -> arch
 val addr_size : t -> addr_size
 val endian : t -> endian
-
+val spec : t -> Ogre.doc
 val data : t -> Bigstring.t
-val backend_image : t -> Backend.Img.t
 
 val words : t -> size -> word table
 val segments : t -> segment table
-val virtuals : t -> Backend.Segment.t list
 val symbols : t -> symbol table
 
 
 val segment : segment tag
 val symbol  : string tag
 val section : string tag
+val specification : Ogre.doc tag
 
 val memory : t -> value memmap
 
@@ -63,6 +63,35 @@ end
 
 val register_backend : name:string -> Image_backend.t -> [ `Ok | `Duplicate ]
 
-val register_loader : name:string -> (Bigstring.t -> Ogre.doc option Or_error.t) -> unit
+
+module type Loader = sig
+  val from_file : string -> Ogre.doc option Or_error.t
+  val from_data : Bigstring.t -> Ogre.doc option Or_error.t
+end
+
+val register_loader : name:string -> (module Loader) -> unit
 
 val available_backends : unit -> string list
+
+
+module Scheme : sig
+  type addr = int64
+  type 'a region = {addr : addr; size : int64; info : 'a}
+
+  val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+  val segment : ((bool * bool * bool) region,
+                 (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
+  val section : (unit region, (addr -> addr -> 'a) -> 'a) Ogre.attribute
+  val code_start : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+  val entry_point : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+  val symbol_chunk :
+    (addr region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+
+  val named_region :
+    (string region, (addr -> addr -> string -> 'a) -> 'a) Ogre.attribute
+
+  val named_symbol :
+    (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
+
+  val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+end

@@ -97,11 +97,11 @@ module Result : sig
      and type ('a,'e) e := ('a,'e) T2(M).e
 
   module Error : sig
-    include S
-      with type 'a t = 'a Or_error.t
-       and type 'a m = 'a
-       and type 'a e = 'a Or_error.t
-       and type err := Error.t
+    module type S = sig
+      include S
+      val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
+    end
+
 
     module T(M : Monad) : sig
       type 'a m = 'a M.t
@@ -113,6 +113,12 @@ module Result : sig
       with type 'a t := 'a T(M).t
        and type 'a m := 'a T(M).m
        and type 'a e := 'a T(M).e
+       and type err := Error.t
+
+    include S
+      with type 'a t = 'a Or_error.t
+       and type 'a m = 'a
+       and type 'a e = 'a Or_error.t
        and type err := Error.t
   end
 

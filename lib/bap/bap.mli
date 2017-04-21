@@ -4050,6 +4050,7 @@ module Std : sig
       accessible for loading images.*)
 
   module Backend : sig
+    [@@@deprecated "Use new loader Ogre-powered loader interface"]
 
     (** memory access permissions  *)
     type perm = R | W | X | Or of perm * perm
@@ -4094,12 +4095,6 @@ module Std : sig
         symbols  : Symbol.t list;
         sections  : Section.t list;
       } [@@deriving bin_io, compare, fields, sexp]
-
-      (** Image tag. Can be used to store images in universal
-          dictionaries, for example if a project was reconstructed from an
-          image, then the image will be stored in the project
-          dictionary. *)
-      val t : t tag
     end
 
     (** the actual interface to be implemented  *)
@@ -4172,13 +4167,6 @@ module Std : sig
     (** [segments image] returns a mapping from addresses to segments  *)
     val segments : t -> segment table
 
-
-    (** [virutals image] is a list of virtual memory segments, i.e.,
-        segments, that are not stored statically in a file, but should
-        be loaded by a loader into a process memory, e.g., the bss
-        segment *)
-    val virtuals : t -> Backend.Segment.t list
-
     (** [symbols image] returns a mapping from addresses to symbols *)
     val symbols : t -> symbol table
 
@@ -4192,6 +4180,9 @@ module Std : sig
 
     (** tags a section  *)
     val section : string tag
+
+    (** an image specification in OGRE  *)
+    val specification : Ogre.doc tag
 
     (** returns memory, annotated with tags  *)
     val memory : t -> value memmap
@@ -4261,20 +4252,43 @@ module Std : sig
 
     (** {2 Backend Interface}  *)
 
+
+    (** An interface that a backend shall implement.
+
+        The functions provided by a loader return an OGRE document,
+        wrapped into option and error monads, thus the three outcomes
+        are possible with the following interpretation:
+
+        - [Ok None] - a loader doesn't know how handle files of this
+          type.
+        - [Ok (Some doc)] - a loader was able to obtain some
+          information from the input.
+
+        - [Error err] - a file was corrupted, according to the loader.
+    *)
+    module type Loader = sig
+
+      (** [from_file name] loads a file with the given [name]. *)
+      val from_file : string -> Ogre.doc option Or_error.t
+
+
+      (** [from_data data] loads image from the specified array of bytes.  *)
+      val from_data : Bigstring.t -> Ogre.doc option Or_error.t
+
+    end
+
+    (** [register_loader ~name backend] registers new loader. *)
+    val register_loader : name:string -> (module Loader) -> unit
+
+    (** lists all registered backends  *)
+    val available_backends : unit -> string list
+
     (** [register_backend ~name backend] tries to register backend under
         the specified [name]. *)
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
     [@@deprecated "use register_loader instead"]
 
-    (** lists all registered backends  *)
-    val available_backends : unit -> string list
 
-    (** [register_loader ~name backend] register backend under
-        the specified [name] and raise Invalid_argument if name is in
-        use. [backend] function returns [Ok (Some doc)] if backend
-        able to process file, [Ok None] if backend doesn't support
-        type of a given file and [Error er] in case a file is corrupted. *)
-    val register_loader : name:string -> (Bigstring.t -> Ogre.doc option Or_error.t) -> unit
 
 
     (** {2 Internals}
@@ -4286,12 +4300,31 @@ module Std : sig
         input file, or it is whatever was passed to [of_[big]string]. *)
     val data : t -> Bigstring.t
 
-    (** [backend_image image] is a low-level representation of a
-        program image. Since the Image interface imposes more invariants,
-        the low-level representation can contain strictly more
-        information. For example, segments that are not backed with any
-        data are not representable with the high-level image representation.  *)
-    val backend_image : t -> Backend.Img.t
+
+
+    module Scheme : sig
+      type addr = int64
+      type 'a region = {addr : addr; size : int64; info : 'a}
+
+      val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+      val segment : ((bool * bool * bool) region,
+                     (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
+      val section : (unit region, (addr -> addr -> 'a) -> 'a) Ogre.attribute
+      val code_start : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+      val entry_point : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+      val symbol_chunk :
+        (addr region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+
+      val named_region :
+        (string region, (addr -> addr -> string -> 'a) -> 'a) Ogre.attribute
+
+      val named_symbol :
+        (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
+
+      val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+    end
+
+
   end
 
   (** Memory maps.
@@ -7226,7 +7259,6 @@ module Std : sig
           [name]. The [load] function will be called the filename, and it
           must return the [input] value. *)
       val register_loader : string -> (string -> t) -> unit
-
 
       (** [available_loaders ()] returns a list of names of currently known loaders.  *)
       val available_loaders : unit -> string list

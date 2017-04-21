@@ -519,12 +519,29 @@ module ResultT = struct
       type 'a e = 'a Or_error.t m
     end
 
+    module type S = sig
+      include S
+      val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
+    end
     module Make(M : Monad.S) : S
       with type 'a t := 'a T(M).t
        and type 'a m := 'a T(M).m
        and type 'a e := 'a T(M).e
        and type err := Error.t
-      = Make(struct type t = Error.t end)(M)
+      = struct
+        include Make(struct type t = Error.t end)(M)
+
+        let failf fmt =
+          let open Format in
+          let buf = Buffer.create 512 in
+          let ppf = formatter_of_buffer buf in
+          let kon ppf () =
+            pp_print_flush ppf ();
+            let err = Or_error.error_string (Buffer.contents buf) in
+            M.return err in
+          kfprintf kon ppf fmt
+
+      end
     type 'a t = 'a Or_error.t
     type 'a m = 'a
     type 'a e = 'a Or_error.t

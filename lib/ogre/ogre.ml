@@ -170,7 +170,7 @@ module Doc = struct
   type t = {
     scheme  : Type.signature String.Map.t;
     entries : entry list String.Map.t;
-  }
+  } [@@deriving compare]
 
   let empty = {
     scheme = String.Map.empty;
@@ -179,10 +179,9 @@ module Doc = struct
 
   let errorf fmt = Or_error.errorf fmt
 
-  let reduce_fields fields =
-    List.sort fields ~cmp:compare_entry |>
-    List.remove_consecutive_duplicates
-      ~equal:(fun x y -> compare x y = 0)
+  let declarations {scheme} = Map.length scheme
+  let definitions {entries} = Map.length entries
+  let clear doc = {doc with entries = String.Map.empty}
 
   let update_scheme name sign doc =
     match Map.find doc.scheme name with

@@ -1,4 +1,4 @@
 B ../../_build/plugins/primus_elf
-B ../../_build/lib/primus
-S ../../lib/primus
+B ../../_build/lib/bap_primus
+S ../../lib/bap_primus
 REC

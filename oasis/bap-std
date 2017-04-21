@@ -16,7 +16,6 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
-                   ogre,
                    regular
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
@@ -28,7 +27,7 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib,
+  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre,
                    ppx_variants_conv, ppx_enumerate
 
   InternalModules:
@@ -57,6 +56,7 @@ Library types
                    Bap_integer_intf,
                    Bap_monad,
                    Bap_monad_types,
+                   Bap_ogre,
                    Bap_result,
                    Bap_size,
                    Bap_state,
@@ -81,7 +81,6 @@ Library bap_image
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
-                 Bap_image_ogre,
                  Bap_image_std,
                  Bap_memmap,
                  Bap_memory,
