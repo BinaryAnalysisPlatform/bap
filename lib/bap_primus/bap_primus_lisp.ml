@@ -1166,11 +1166,8 @@ module Make(Machine : Machine) = struct
     let arch = Project.arch ctxt#project in
     let args,ret,tid,addr = find_sub ctxt name in
     match Resolve.extern s.contexts defs name arch args with
-    | _,None ->
-      eprintf "Lisp: %s\n" name;
-      Machine.return ()
+    | _,None -> Machine.return ()
     | _,Some (fn,bs) ->
-      eprintf "Lisp: linking %s\n" name;
       let module Code(Machine : Machine) = struct
         module Lisp = Lisp(Machine)
         open Machine.Syntax

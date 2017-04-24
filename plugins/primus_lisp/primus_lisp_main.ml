@@ -23,7 +23,8 @@ let () =
     Config.(param (list dir) ~doc:"paths to lisp libraries" "add") in
 
   let features =
-    Config.(param (list string) ~doc:"load specified module" "load") in
+    Config.(param (list string) ~doc:"load specified module" "load"
+              ~default:["posix"]) in
 
   Config.when_ready (fun {Config.get=(!)} ->
       let paths = !libs @ [Lisp_config.library]  in

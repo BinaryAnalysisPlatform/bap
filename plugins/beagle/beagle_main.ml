@@ -84,15 +84,12 @@ module Param = struct
 end
 
 let make_alphabet (module A : Alphabet) =
-  let alpha =
-    Seq.range 0 256 |> Seq.fold ~init:Char.Set.empty ~f:(fun alpha c ->
-        let c = Char.of_int_exn c in
-        let i = A.index c in
-        if i < 0 || i >= A.length then alpha
-        else Set.add alpha c) in
-  let abc = String.of_char_list (Set.elements alpha) in
-  eprintf "alphabet[%d] = %s\n" (Set.length alpha) abc;
-  alpha
+  Seq.range 0 256 |> Seq.fold ~init:Char.Set.empty ~f:(fun alpha c ->
+      let c = Char.of_int_exn c in
+      let i = A.index c in
+      if i < 0 || i >= A.length then alpha
+      else Set.add alpha c)
+
 
 type prey = {
   chars : string list Tid.Map.t;
@@ -163,11 +160,6 @@ module Hunter(Machine : Primus.Machine.S) = struct
     Machine.get () >>= fun ctxt ->
     Machine.Local.get beagle >>= fun (Beagle d) ->
     let d = Strings.Detector.step d ctxt#current char in
-    eprintf "%03d => %a: %a - %a"
-      (Char.to_int char)
-      Tid.pp ctxt#current
-      Strings.Detector.pp_stats d
-      Strings.Detector.pp d;
     Strings.Detector.when_decided d (Machine.return ())
       ~f:(fun d ->
           let terms = Strings.Detector.data ~rev:false d in
@@ -198,11 +190,6 @@ module Hunter(Machine : Primus.Machine.S) = struct
         | '\255' | '\000'..'\010' -> Machine.return d
         | char ->
           let d = Strings.Detector.step d ctxt#current char in
-          eprintf "%03d => %a: %a - %a@\n%!"
-            (Char.to_int char)
-            Tid.pp ctxt#current
-            Strings.Detector.pp_stats d
-            Strings.Detector.pp d;
           Strings.Detector.when_decided d (Machine.return ())
             ~f:got_prey >>= fun () ->
             Machine.return d) >>= fun d ->
@@ -265,4 +252,4 @@ let main proj =
   Primus.Machine.add_component (module Hunter)
 
 let () = (Config.when_ready (fun _ ->
-  Project.register_pass' ~deps:["strings-mark"] main))
+  Project.register_pass' ~deps:["strings-collect"] main))
