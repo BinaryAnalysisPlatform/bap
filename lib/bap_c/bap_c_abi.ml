@@ -108,6 +108,27 @@ let find_first_caller prog tid =
 
 let proj_int = function Bil.Int x -> Some x | _ -> None
 
+let has_libc_runtime prog =
+  find_by_name prog "__libc_csu_fini" <> None &&
+  find_by_name prog "__libc_csu_init" <> None
+
+
+let find_entry_point prog =
+  Term.enum sub_t prog |>
+  Seq.find ~f:(fun sub -> Term.has_attr sub Sub.entry_point)
+
+
+let find_libc_start_main prog =
+  let open Monad.Option.Syntax in
+  find_entry_point prog >>= fun start ->
+  Term.first blk_t start >>= fun entry ->
+  Term.first jmp_t entry >>= fun jmp ->
+  match Jmp.kind jmp with
+  | Goto _ | Ret _ | Int _ -> None
+  | Call call -> match Call.target call with
+    | Indirect _ -> None
+    | Direct tid -> Some tid
+
 let detect_main_address prog =
   let open Monad.Option.Syntax in
   find_by_name prog "__libc_start_main" >>= fun start ->
@@ -125,21 +146,38 @@ let detect_main_address prog =
         | _ -> None) >>= proj_int
   | _ -> None
 
+let rename_main abi prog = match detect_main_address prog with
+  | None -> prog
+  | Some addr ->
+    Term.map sub_t prog ~f:(fun sub ->
+        match Term.get_attr sub address with
+        | Some a when Addr.equal addr a ->
+          abi#map_sub (Sub.with_name sub "main")
+        | _ -> sub)
+
+let rename_libc_start_main abi prog =
+  if find_by_name prog "__libc_start_main" = None
+  then match find_libc_start_main prog with
+    | None -> prog
+    | Some tid ->
+      Term.change sub_t prog tid @@ function
+      | None -> None
+      | Some sub -> Some (abi#map_sub (Sub.with_name sub "__libc_start_main"))
+  else prog
+
+let fix_libc_runtime abi prog =
+  rename_libc_start_main abi prog |>
+  rename_main abi
 
 let stage2 stage1 = object
   inherit Term.mapper
   method! run prog =
     let prog = stage1#run prog in
-    match find_by_name prog "main" with
-    | Some _ -> prog
-    | None -> match detect_main_address prog with
-      | None -> prog
-      | Some addr ->
-        Term.map sub_t prog ~f:(fun sub ->
-            match Term.get_attr sub address with
-            | Some a when Addr.equal addr a ->
-              stage1#map_sub (Sub.with_name sub "main")
-            | _ -> sub)
+    if has_libc_runtime prog &&
+       (find_by_name prog "main" = None ||
+        (find_by_name prog "__libc_start_main" = None))
+    then fix_libc_runtime stage1 prog
+    else prog
 end
 
 let create_api_processor size abi : Bap_api.t =
