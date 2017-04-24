@@ -159,7 +159,7 @@ module Make (Machine : Machine) = struct
           Some (sprintf "Bap_primus runtime error: %s" msg)
         | _ -> None)
 
-  let failf fmt = Format.kasprintf (fun msg ->
+  let failf fmt = Format.ksprintf (fun msg ->
     fun () -> Machine.fail (Runtime_error msg)) fmt
 
   let update_program_counter t =
