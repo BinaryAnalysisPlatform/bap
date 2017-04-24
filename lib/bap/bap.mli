@@ -4303,8 +4303,19 @@ module Std : sig
 
 
     module Scheme : sig
+      open Ogre.Type
+
       type addr = int64
       type 'a region = {addr : addr; size : int64; info : 'a}
+
+      val off : int64 Ogre.field
+      val size : int64 Ogre.field
+      val addr : int64 Ogre.field
+      val name : string Ogre.field
+      val root : int64 Ogre.field
+      val readable : bool Ogre.field
+      val writable : bool Ogre.field
+      val executable : bool Ogre.field
 
       val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
       val segment : ((bool * bool * bool) region,

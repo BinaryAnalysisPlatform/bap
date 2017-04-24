@@ -57,7 +57,10 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     | bit -> bit = set
 
   let segmentations =
-    Ogre.foreach Ogre.Query.(select (from Image.Scheme.segment))
+    let open Image.Scheme in
+    Ogre.foreach Ogre.Query.(begin
+        select (from segment)
+      end)
       ~f:ident
 
   let get_segmentations proj =
@@ -65,7 +68,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     | None -> Ok Seq.empty
     | Some spec -> Ogre.eval segmentations spec
 
-  let load_virtuals () =
+  let load_segments () =
     proj () >>= fun proj ->
     make_addr 0L >>= fun null ->
     match get_segmentations proj with
@@ -81,7 +84,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
               ~generator:(Generator.static 0) addr size >>| fun () ->
             Addr.max endp Addr.(addr ++ size))
 
-  let load_segments () =
+  let map_segments () =
     proj () >>= fun proj ->
     make_addr 0L >>= fun null ->
     Memmap.to_sequence (Project.memory proj) |>
@@ -177,7 +180,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     setup_stack () >>= fun () ->
     setup_main_frame () >>= fun () ->
     load_segments () >>= fun e1 ->
-    load_virtuals () >>= fun e2 ->
+    map_segments () >>= fun e2 ->
     let endp = Addr.max e1 e2 in
     set_word "endp" endp >>= fun () ->
     set_word "brk"  endp >>= fun () ->

@@ -33,6 +33,7 @@ type 'a region = {
 
 type mapped = {
   off : int;
+  len : int;
   endian : endian;
   r : bool;
   w : bool;
@@ -63,6 +64,8 @@ module Segment = struct
   end
 
   let name t = t.name
+  let addr t = t.locn.addr
+  let size t = t.locn.size
   let is_writable {info={w}} = w
   let is_readable {info={r}} = r
   let is_executable {info={x}} = x
@@ -168,8 +171,8 @@ let tag mem tag value memmap =
   Memmap.add memmap mem (Value.create tag value)
 
 
-let map_region data {locn={addr;size}; info={off; endian}} =
-  Memory.create ~pos:off ~len:size endian addr data
+let map_region data {locn={addr}; info={off; len; endian}} =
+  Memory.create ~pos:off ~len endian addr data
 
 let static_view segments = function {addr; size} as locn ->
   match Table.find_addr segments addr with
@@ -374,10 +377,14 @@ module Derive = struct
           ~join:[[field addr];
                  [field size ~from:segment;
                   field size ~from:named_region]]
-      end) ~f:(fun {addr; size; info=(r,w,x)} {info=off} {info=name} ->
+      end) ~f:(fun
+                {addr; size; info=(r,w,x)}
+                {size=len; info=off}
+                {info=name} ->
         location ~addr ~size >>= fun locn ->
-        int_of_int64 off >>| fun off ->
-        {name; locn; info={off; endian; r; w; x}}) >>=
+        int_of_int64 off >>= fun off ->
+        int_of_int64 len >>| fun len ->
+        {name; locn; info={off; len; endian; r; w; x}}) >>=
     Fact.Seq.all
 
   let sections =
@@ -448,14 +455,23 @@ module Legacy = struct
   let location_repr {Location.addr=x; len} =
     addr x, Int64.of_int len
 
-  let provide_segment s =
-    let addr,size = location_repr @@ Segment.location s in
+
+  let vsize secs {Segment.name; location={Location.addr;len}} =
+    List.find_map secs
+      ~f:(fun {Section.name=n; location={Location.addr=a;len}} ->
+          if name = n && addr = a then Some len else None) |> function
+    | None -> len
+    | Some len -> len
+
+  let provide_segment sections s =
+    let addr,fsize = location_repr @@ Segment.location s in
     let perm = Segment.perm s in
     let r,w,x = is R perm, is W perm, is X perm in
     let off = Int64.of_int (Segment.off s) in
-    Fact.provide segment addr size r w x >>= fun () ->
-    Fact.provide mapped addr size off >>= fun () ->
-    Fact.provide named_region addr size (Segment.name s)
+    let vsize = Int64.of_int (vsize sections s) in
+    Fact.provide segment addr vsize r w x >>= fun () ->
+    Fact.provide mapped addr fsize off >>= fun () ->
+    Fact.provide named_region addr vsize (Segment.name s)
 
   let provide_section s =
     let addr, size = location_repr @@ Section.location s in
@@ -480,7 +496,7 @@ module Legacy = struct
       {Img.arch=a; entry; segments=(s,ss); sections; symbols} =
     Fact.provide arch (Arch.to_string a) >>= fun () ->
     Fact.provide entry_point (addr entry) >>= fun () ->
-    Fact.List.iter (s::ss)  ~f:provide_segment >>= fun () ->
+    Fact.List.iter (s::ss)  ~f:(provide_segment sections) >>= fun () ->
     Fact.List.iter sections ~f:provide_section >>= fun () ->
     Fact.List.iter symbols  ~f:provide_symbol
 end

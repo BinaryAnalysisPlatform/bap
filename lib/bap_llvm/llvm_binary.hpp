@@ -44,6 +44,7 @@ struct segment {
     int offset;
     uint64_t addr;
     uint64_t size;
+    uint64_t vsize;
     bool is_readable;
     bool is_writable;
     bool is_executable;
@@ -53,18 +54,17 @@ typedef std::vector<segment> segments;
 
 template <typename S>
 segment make_segment(const S &s) {
-    int off = s.vmsize == 0 ? -1 : s.fileoff;
-    return segment{s.segname, off, s.vmaddr, s.filesize, //s.vmsize
+    return segment{s.segname, s.fileoff, s.vmaddr, s.filesize, s.vmsize,
             static_cast<bool>(s.initprot & MachO::VM_PROT_READ),
             static_cast<bool>(s.initprot & MachO::VM_PROT_WRITE),
             static_cast<bool>(s.initprot & MachO::VM_PROT_EXECUTE)};
 }
 
 segment make_segment(const coff_section &s, uint64_t image_base) {
-    int offset = s.SizeOfRawData == 0 ? -1 : s.PointerToRawData;
     return segment{s.Name,
-            static_cast<int>(offset),
+            static_cast<uint64_t>(s.PointerToRawData),
             static_cast<uint64_t>(s.VirtualAddress + image_base),
+            static_cast<uint64_t>(s.SizeOfRawData),
             static_cast<uint64_t>(s.VirtualSize),
             static_cast<bool>((s.Characteristics) &
                               COFF::IMAGE_SCN_MEM_READ),
@@ -85,14 +85,15 @@ error_or<segments> read(const ELFObjectFile<T>& obj) {
         if (it -> p_type == ELF::PT_LOAD) {
             std::ostringstream oss;
             oss << std::setfill('0') << std::setw(2) << pos;
-            int offset = it->p_filesz == 0 ? -1 : it->p_offset;
             s.push_back(segment{oss.str(),
-                        offset,
+                        it->p_offset,
                         it->p_vaddr,
-                        it->p_filesz, //it->p_memsz,
+                        it->p_filesz,
+                        it->p_memsz,
                         static_cast<bool>(it->p_flags & ELF::PF_R),
                         static_cast<bool>(it->p_flags & ELF::PF_W),
                         static_cast<bool>(it->p_flags & ELF::PF_X)});
+
         }
     }
     return success(std::move(s));
@@ -223,6 +224,7 @@ error_or<sections> read(const ObjectFile &obj) {
     return secs;
 }
 
+
 error_or<sections> read(const COFFObjectFile &obj) {
     auto image_base = getImageBase(obj);
     auto obj_secs = sections_range(obj);
@@ -235,6 +237,13 @@ error_or<sections> read(const COFFObjectFile &obj) {
         secs->push_back(make_section(*s, *image_base));
     }
     return secs;
+}
+
+template <typename Sections, typename Segments>
+void add_virtuals(Sections &secs, const Segments &segs) {
+    for (auto seg : segs) {
+        secs.push_back(section {seg.name, seg.addr, seg.vsize});
+    }
 }
 
 } //namespace sec
@@ -294,8 +303,10 @@ image* create_image(error_or<object::Binary> &binary) {
         binary << entry.warnings() << segments.warnings() << symbols.warnings() << sections.warnings();
         print_warnings(binary.warnings());
 
-        return (new image
+        auto img = (new image
             {arch, *entry, move(*segments), move(*symbols), move(*sections)});
+        sec::add_virtuals(img->sections, img->segments);
+        return img;
 
     }
     bap_notify_error("Unrecognized object format");

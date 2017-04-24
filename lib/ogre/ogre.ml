@@ -119,8 +119,9 @@ module Type = struct
     | Bool -> ok bool
     | Float -> ok float
 
-  let rewrite t x =
-    Option.value_exn (t.parse x) |> t.pack
+  let rewrite t x = match t.parse x with
+    | None -> failwithf "internal error - can't parse %s" x ()
+    | Some v -> t.pack v
 
   let normalize = function
     | Int -> rewrite int

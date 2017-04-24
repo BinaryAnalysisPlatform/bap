@@ -48,6 +48,8 @@ module Segment : sig
   type t = segment
   include Regular.S with type t := t
   val name : t -> string
+  val addr : t -> addr
+  val size : t -> int
   val is_writable   : t -> bool
   val is_readable   : t -> bool
   val is_executable : t -> bool
@@ -75,8 +77,19 @@ val available_backends : unit -> string list
 
 
 module Scheme : sig
+  open Ogre.Type
   type addr = int64
   type 'a region = {addr : addr; size : int64; info : 'a}
+
+  val off : int64 Ogre.field
+  val size : int64 Ogre.field
+  val addr : int64 Ogre.field
+  val name : string Ogre.field
+  val root : int64 Ogre.field
+  val readable : bool Ogre.field
+  val writable : bool Ogre.field
+  val executable : bool Ogre.field
+
 
   val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
   val segment : ((bool * bool * bool) region,
