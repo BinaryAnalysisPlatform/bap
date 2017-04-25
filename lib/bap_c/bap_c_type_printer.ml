@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Bap.Std
 open Format
 open Bap_c_type
 
@@ -22,6 +21,7 @@ let pp_size ppf t = Option.iter t ~f:(Int.pp ppf)
 let pp_or ppf () = pr ppf "@ | @ "
 let pp_to ppf () = pr ppf "@ ->@ "
 let pp_sc ppf () = pr ppf ";@ "
+let pp_sp ppf () = pr ppf "@,"
 
 let pp_list pp_sep field = pp_print_list ~pp_sep field
 

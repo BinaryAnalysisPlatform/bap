@@ -11,8 +11,6 @@
     declarations.
 *)
 open Core_kernel.Std
-open Bap.Std
-
 
 type char =
   [ `schar | `char | `uchar]

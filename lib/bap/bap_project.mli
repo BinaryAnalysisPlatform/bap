@@ -54,7 +54,12 @@ module Input : sig
   val file : ?loader:string -> filename:string -> t
   val binary : ?base:addr -> arch -> filename:string -> t
 
-  val create : arch -> string -> code:value memmap -> data: value memmap -> t
+  val create :
+    ?finish:(project -> project) ->
+    arch ->
+    string ->
+    code:value memmap ->
+    data:value memmap -> t
   val register_loader : string -> (string -> t) -> unit
   val available_loaders : unit -> string list
 end

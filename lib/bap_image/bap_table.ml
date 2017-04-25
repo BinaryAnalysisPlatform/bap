@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Regular.Std
 open Bap_types.Std
 open Or_error
 
@@ -28,7 +27,7 @@ module Bound = struct
   type t =
     | Unbound
     | Bounded of addr * addr
-  [@@deriving sexp_of]
+    [@@deriving sexp_of]
 
   let empty = Unbound
 

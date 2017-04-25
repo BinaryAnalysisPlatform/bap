@@ -11,6 +11,10 @@ open Bap.Std
 module IA32 : sig
   include Bap.Std.CPU
 
+
+  (** [flags] is a set of flag registers  *)
+  val flags : Var.Set.t
+
   (** base pointer  *)
   val rbp : var
 
@@ -37,6 +41,7 @@ module IA32 : sig
 
   (** data register  *)
   val rdx : var
+
 
 end
 

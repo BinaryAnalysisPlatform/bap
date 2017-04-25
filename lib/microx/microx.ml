@@ -13,6 +13,8 @@
 
 *)
 
+[@@@deprecated "use Primus instead"]
+
 module Std = struct
   module Concretizer = Microx_concretizer
   module Conqueror   = Microx_conqueror

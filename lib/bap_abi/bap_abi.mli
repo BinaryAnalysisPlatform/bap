@@ -22,3 +22,6 @@ val pass : project -> project
     apply some transformations on the project, e.g., demangling, and
     register further actions in the system, e.g., api transformations.*)
 val register_pass : (project -> project) -> unit
+
+
+val name : string tag

@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_primus.Std
 open Format
 
 module Words = struct
@@ -16,6 +17,15 @@ module Words = struct
   let to_string set = asprintf "%a" pp set
 end
 
+module Statics = struct
+  type t = string Addr.Map.t [@@deriving bin_io, compare, sexp]
+
+  let pp ppf =
+    Map.iteri ~f:(fun ~key:addr ~data:str ->
+        printf "%s: %s@\n" (Addr.string_of_value addr) str)
+end
+
+
 type words = Words.t
 
 
@@ -31,3 +41,31 @@ let words = Value.Tag.register (module Words)
 let strings = Value.Tag.register (module Words)
     ~uuid:"386efa37-85b0-4b48-b04d-8bafd5160670"
     ~name:"beagle-strings"
+
+
+let statics = Value.Tag.register (module Statics)
+    ~uuid:"eab82922-2c46-47bf-94ac-1ccb5de5daca"
+    ~name:"static-strings"
+
+type t = {
+  terms : tid seq;
+  chars : string;
+}
+
+
+let create terms chars = {terms; chars}
+let terms t = t.terms
+let data t = t.chars
+
+let inspect_prey {chars} = Sexp.Atom chars
+
+let detected,finished =
+  Primus.Observation.provide ~inspect:inspect_prey "beagle-prey"
+
+let inspect (prey,words) =
+  Sexp.List [
+    inspect_prey prey;
+    String.Set.sexp_of_t words;
+  ]
+
+let caught,catch = Primus.Observation.provide ~inspect "beagle"

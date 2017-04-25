@@ -48,9 +48,10 @@ type t = {
   insert_args : sub term -> attr list -> proto -> args option;
 
   (** [apply_attrs attrs sub] transform a subroutine based on the
-      semantics of the list of attributes, attached to it. (Usually,
-      this means a transformation of C attributes to BIR
-      attributes.)  *)
+      semantics of the list of attributes, attached to it. See also,
+      C.Attr.register
+
+*)
   apply_attrs : attr list -> sub term -> sub term;
 }
 

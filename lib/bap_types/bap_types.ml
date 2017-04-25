@@ -24,9 +24,14 @@ module Std = struct
   module type Integer = Integer
   module type Trie = Trie
 
-  module Monad = struct
-    include Bap_monad
-    include Bap_monad_types
+  module Legacy = struct
+    [@@@deprecated "all definitions in this module are deprecated"]
+    module Monad = struct
+      [@@@deprecated "use new monads library"]
+
+      include Bap_monad        [@@warning "-3"]
+      include Bap_monad_types  [@@warning "-3"]
+    end
   end
 
 
