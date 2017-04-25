@@ -94,12 +94,18 @@ template <typename ELFT>
 error_or<symbol_sizes> getSymbolSizes(const ELFObjectFile<ELFT> &obj) {
     typedef typename ELFFile<ELFT>::Elf_Shdr sec_hdr;
 
-    std::size_t sym_count = std::distance(obj.symbol_begin(), obj.symbol_end());
+    symbol_sizes syms;
+    for (auto sym : obj.symbols())
+        syms.push_back({sym, sym.getSize()});
+
     auto sections = obj.getELFFile()->sections();
     bool is_dyn = std::any_of(sections.begin(), sections.end(),
                               [](const sec_hdr &hdr) { return (hdr.sh_type == ELF::SHT_DYNSYM); });
-    if (!sym_count && !is_dyn)
+    if (!syms.size() && !is_dyn)
         return success(symbol_sizes());
+    for (auto sym : obj.getDynamicSymbolIterators())
+        syms.push_back({sym, sym.getSize()});
+
     return success(std::move(computeSymbolSizes(obj)));
 }
 
