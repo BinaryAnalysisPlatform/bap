@@ -1,6 +1,7 @@
 (** BAP Standard Library  *)
 
 open Core_kernel.Std
+open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
@@ -625,224 +626,60 @@ module Std : sig
     module Make(T : Base) : S with type t = T.t
   end
 
-  (** Monad is an interface, that is pervasives through many data
-      types. Such types are called monadic. Monad interface is
-      practical for both data (list, option, etc), and codata (Future,
-      Lwt, Deferred, Lazy, Continuation). The interpretation of each
-      monad interface is different for each data type. But in general
-      monad interface consists of two functions:
-        - [return : 'a -> 'a t]
-        - [bind : 'a t -> ('a -> 'b t) -> 'b t].
-
-      This is a minimal definition. Many functions can be inferred
-      based on this interface, see [Monad.S] for the full list.
-
-
-      [Option] monad, as well as [Or_error] and [Result] monads, is suitable
-      for building control flow. They can be seen as a reification of
-      exception. A chain of such monads link with the [bind] function,
-      will break as soon as monadic zero value occurs.
-
-      [Future], as well as [Lwt] or [Async], provides a safe access to
-      codata, i.e., to a value that is defined somewhere outside of
-      the main program, or to a value that is represented by an
-      effectful computation, not by inductive data. [Lwt] and [Async]
-      are also so called [IO] monads, that reifies side-effects,
-      mostly [IO]. [State] monad is another example of reification of
-      computation effect. The [State] monad is useful to build purely
-      functional computation with side-effects. The side-effect, e.g.,
-      writing to a memory cell, is reified into an OCaml value, and
-      practically becomes a first class value, i.e., it can be stored,
-      printed, etc.
-  *)
-  module Monad : sig
-    module type Basic = Monad.Basic
-    module type Basic2 = Monad.Basic2
-
-    module type Infix = Monad.Infix
-    module type Infix2 = Monad.Infix2
-
-    module type S = Monad.S
-    module type S2 = Monad.S2
-
-
-    module Make(M : Basic) : S with type 'a t := 'a M.t
-    module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
-
-    (** State monad.
-        See {!modtype:State} for more info.
-    *)
-    module State : sig
-
-      (** State monad interface.
-
-          State monad is an interface to a computation that has a
-          limited side effect. The side effect is defined by the
-          following two functions:
-          - [put s]  -- that will store value [s]
-          - [get ()] -- that will extract the value.
-
-
-          There're few functions derived on [get] and [put], like
-          [gets], [update], [modify], but the minimal algebra is
-          [put] and [set].
-
-
-          The value of type [('a,'s) t] bears a computation that
-          has an access to the state of type ['s], and evaluates
-          to a value of type ['a]. It can be said, that ['s] reifies
-          effect of computation of value ['a].
-
-      *)
-      module type S = sig
-
-        (** [('a,'s) t] computation that evaluates to ['a] and state ['s] *)
-        type ('a,'s) t
-
-        (** ['a result] is a type that represents result of computation.*)
-        type 'a result
-
-        include Monad.S2 with type ('a,'s) t := ('a,'s) t
-
-        (** [put s] creates a computation that has effect [s] and unit
-            value.  This operation effectively updates the state by
-            overriding the existent one with the new one. An imperative
-            counterpart of this operation is a statement that performs
-            side effect, e.g., {[put x]} is somewhat equivalent to
-            {[let state = ref init
-              let put x = state := x
-            ]}
-
-            except that [state] is not hidden in the language heap, but is
-            reified into a value of type ['s].
-        *)
-        val put : 's -> (unit,'s) t
-
-        (** [get ()] creates a computation that evalates to a value,
-            that holds the state. This operation extracts the state, and
-            gives an access for it. The [get ()] is somewhat equivalent
-            to the imperative operator [(!)], i.e.,
-            {[
-              let state = ref init
-              let get () = !state
-            ]} *)
-        val get : unit -> ('s,'s) t
-
-        (** [gets f] is a computation whose value is [f state]) *)
-        val gets : ('s -> 'r) -> ('r,'s) t
-        (** [update f] is [get () >>= fun s -> put (f s)]  *)
-        val update : ('s -> 's) -> (unit,'s) t
-
-        (** [modify c f] is a computation with state [f], where
-            [s] is [c >>= get ()], i.e., an effect of computation [c].*)
-        val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
-
-
-        (** Running state computations.  *)
-
-        (** [run c init] runs computation [c] with initial state
-            [init]. Result contains a pair of the computation result
-            and total effect.  *)
-        val run : ('a,'s) t -> 's -> ('a * 's) result
-
-        (** [eval c init] contains a value computed by computation [c]
-            under initial state [init].   *)
-        val eval : ('a,'s) t -> 's -> 'a result
-
-        (** [exec c init] contains an final effect produced by a
-            computation [c] under initial state [init].  *)
-        val exec : ('a,'s) t -> 's -> 's result
-      end
-
-      include S with type 'a result = 'a
-    end
-
-
-    (** Monad transformers.
-
-        [module IO = Monad.T.Inner(Outer)] is a monad
-        [Inner] wrapped into monad [Outer]. For example, monad
-        [module OLwt = Monad.T.Option(Lwt)] will
-        allow to work with optional values in the [Lwt] IO monad,
-        e.g.,
-
-        {[
-          open OLwt
-          let require p = if p then return (Some ()) else return None
-          let authenticate user passwd =
-            read_credentials >>= fun (u,p) ->
-            require (user = u) >>= fun () ->
-            require (passwd = p)
-        ]}
-
-
-        Not all monands are transformable into anothers. For example,
-        in general it is not possible to wrap IO monad into other monad
-        (but it is possible to in the opposite direction). State monad
-        here is a special case, although it is very similiar to the IO
-        monad it still can be wrapped into some other monad. However,
-        this wrapping is more like intersection, as the returned monad
-        actually behaves like an intersection of the outer and inner
-        monad.
-    *)
-    module T : sig
-
-      (** Option Monad Transformer  *)
-      module Option : sig
-        module Make (M : S ) : S  with type 'a t = 'a option M.t
-        module Make2(M : S2) : S2 with type ('a,'b) t = ('a option,'b) M.t
-      end
-
-      (** Or_error Monad Transformer  *)
-      module Or_error : sig
-        module Make (M : S ) : S  with type 'a t = 'a Or_error.t M.t
-        module Make2(M : S2) : S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
-      end
-
-      (** Result Monad Transformer.
-
-          We do not provide [Make2] because its result would be a
-          non-existent [Monad.S3].*)
-      module Result : sig
-        module Make(M : S) : S2 with type ('a,'e) t = ('a,'e) Result.t M.t
-      end
-
-      (** Result Monad Transformer.
-
-          [module STM = Monad.T.State.Make(M)] is not a monad [M], but a
-          state monad which build computations that are interleaved
-          with computations of monad [M]. For example, let's take
-          the [Future] as the outer monad:
-
-          [module STF = Monad.T.State.Make(Future)] will build a
-          computation that can access values that are defined in the
-          future, as a consequence, [STF.run] result will be a value that
-          would be defined in the future. The computation built with
-          [STF] monad will not try to access any future values until [run] is
-          called. Once it is called, each step of the computation will
-          first wait until the future occurs (i.e., future value is
-          defined) and then perform update of the state.
-
-          As an another example, given some [IO] monad, a computation
-          built with [monad STIO = Monad.T.State.Make(IO)] will not
-          perform any I/O until it is actually ran or evaluated. And
-          the result of the run would be [('a,'s) IO.t], that actually
-          may not perform actual IO (i.e., system calls) until it is
-          run (this, of course, depends on the implementation of IO,
-          as [Core.Async] will not perform any operations until the
-          scheduler is run, but [Lwt] will trigger the I/O and defer
-          until it is finished).
-
-          Note: We do not provide [Make2] because its result would be a
-          module of non-existent [Monad.S3] type.
-      *)
+  (**/**)
+  module Legacy : sig
+    [@@@deprecated "Definitions in this module are deprecated"]
+    module Monad : sig
+      [@@@deprecated
+        "The module is deprecated in favor of new monads library"]
+      open Core_kernel.Std
+      module type Basic = Monad.Basic
+      module type Basic2 = Monad.Basic2
+      module type Infix = Monad.Infix
+      module type Infix2 = Monad.Infix2
+      module type S = Monad.S
+      module type S2 = Monad.S2
+      module Make(M : Basic) : S with type 'a t := 'a M.t
+      module Make2(M : Basic2) : S2 with type ('a,'s) t := ('a,'s) M.t
       module State : sig
-        module Make(M : S) : State.S with type 'a result = 'a M.t
+        module type S = sig
+          type ('a,'s) t
+          type 'a result
+          include Monad.S2 with type ('a,'s) t := ('a,'s) t
+          val put : 's -> (unit,'s) t
+          val get : unit -> ('s,'s) t
+          val gets : ('s -> 'r) -> ('r,'s) t
+          val update : ('s -> 's) -> (unit,'s) t
+          val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
+          val run : ('a,'s) t -> 's -> ('a * 's) result
+          val eval : ('a,'s) t -> 's -> 'a result
+          val exec : ('a,'s) t -> 's -> 's result
+        end
+        include S with type 'a result = 'a
+                   and type ('a,'e) t = ('a,'e) Monads.Std.Monad.State.t
+      end
+      module T : sig
+        module Option : sig
+          module Make (M : S ) : S  with type 'a t = 'a option M.t
+          module Make2(M : S2) : S2 with type ('a,'b) t = ('a option,'b) M.t
+        end
+        module Or_error : sig
+          module Make (M : S ) : S  with type 'a t = 'a Or_error.t M.t
+          module Make2(M : S2) : S2 with type ('a,'b) t = ('a Or_error.t,'b) M.t
+        end
+        module Result : sig
+          module Make(M : S) : S2 with type ('a,'e) t = ('a,'e) Result.t M.t
+        end
+        module State : sig
+          module Make(M : S) : State.S with type 'a result = 'a M.t
+        end
       end
     end
   end
 
-  (** Lazy sequence  *)
+ (**/**)
+
+ (** Lazy sequence  *)
   module Seq : module type of Seq
     with type 'a t = 'a Sequence.t
   (** type abbreviation for ['a Sequence.t]  *)
@@ -1177,7 +1014,7 @@ module Std : sig
     (** {2 Constructors} *)
 
     (** [of_string s] parses a bitvector from a string representation
-    defined in section {!bv_string}.    *)
+        defined in section {!bv_string}.    *)
     val of_string : string -> t
 
     (** [of_bool x] is a bitvector with length [1] and value [b0] if
@@ -1418,7 +1255,7 @@ module Std : sig
       val of_word_size : Word_size.t -> t -> t Or_error.t
 
       include Integer.S with type t = t Or_error.t
-      include Monad.Infix with type 'a t := 'a Or_error.t
+      include Legacy.Monad.Infix with type 'a t := 'a Or_error.t
     end
 
     (** Arithmetic that raises exceptions.
@@ -2285,9 +2122,9 @@ module Std : sig
 
        Expi implements an operational semantics described in [[1]].
 
-      @see
-      <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
-      [[1]]: BIL Semantics.
+       @see
+       <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
+       [[1]]: BIL Semantics.
     *)
 
 
@@ -2311,100 +2148,106 @@ module Std : sig
       method create_storage : Bil.storage -> 's * Bil.result
     end
 
-    (** Expression interpreter.
+    module type S = sig
 
-        Expi is a base class for all other interpreters (see {!bili}
-        and {!biri}, that do all the hard work. Expi recognizes a
-        language defined by [exp] type. It evaluates arbitrary
-        expressions under provided {{!Context}context}.
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      (** Expression interpreter.
+
+          Expi is a base class for all other interpreters (see {!bili}
+          and {!biri}, that do all the hard work. Expi recognizes a
+          language defined by [exp] type. It evaluates arbitrary
+          expressions under provided {{!Context}context}.
 
 
-        To create new interpreter use operator [new]:
+          To create new interpreter use operator [new]:
 
-        {v
+          {v
         let expi = new expi;;
         val expi : _#Expi.context expi = <obj>
         v}
 
-        Note: The type [_#Expi.context] is weakly polymorphic subtype of
-        [Expi.context][1]. Basically, this means, that the type is not
-        generalized and will be instantiated when used and fixed
-        afterwards.
+          Note: The type [_#Expi.context] is weakly polymorphic subtype of
+          [Expi.context][1]. Basically, this means, that the type is not
+          generalized and will be instantiated when used and fixed
+          afterwards.
 
-        {v
+          {v
         let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
         val r : _#Expi.context Bil.Result.r = <abstr>
         v}
 
-        The returned value is a state monad parametrized by a subtype
-        of class [Expi.context]. The state monad is a chain of
-        computations, where each computation is merely a function from
-        state to a state paired with the result of computation. The
-        state is accessible inside the computation and can be
-        changed.
+          The returned value is a state monad parametrized by a subtype
+          of class [Expi.context]. The state monad is a chain of
+          computations, where each computation is merely a function from
+          state to a state paired with the result of computation. The
+          state is accessible inside the computation and can be
+          changed.
 
-        To run the computation use [Monad.State.eval] function, that
-        accepts a state monad and an initial value. Here we can
-        provide any subtype of [Expi.context] as an initial
-        value. Let start with a [Expi.context] as a first approximation:
+          To run the computation use [Monad.State.eval] function, that
+          accepts a state monad and an initial value. Here we can
+          provide any subtype of [Expi.context] as an initial
+          value. Let start with a [Expi.context] as a first approximation:
 
-        {v
+          {v
         let x = Monad.State.eval r (new Expi.context);;
         val x : Bil.result = [0x3] true
         v}
 
-        The expression evaluates to [true], and the result is tagged
-        with an identifier [[0x3]]. The [Exp.context] assigns a unique
-        identifier for each freshly created result. Tag [[0x3]] means
-        that this was the third value created under provided context.
+          The expression evaluates to [true], and the result is tagged
+          with an identifier [[0x3]]. The [Exp.context] assigns a unique
+          identifier for each freshly created result. Tag [[0x3]] means
+          that this was the third value created under provided context.
 
-        If the only thing, that you need is just to evaluate an
-        expression, then you can just use [Exp.eval] function:
+          If the only thing, that you need is just to evaluate an
+          expression, then you can just use [Exp.eval] function:
 
-        {v
+          {v
         Exp.eval Bil.(int Word.b0 lor int Word.b1);;
         - : Bil.value = true
         v}
 
-        The main strength of [expi] is its extensibility. Let's write
-        a expression evaluator that will record a trace of evaluation:
+          The main strength of [expi] is its extensibility. Let's write
+          a expression evaluator that will record a trace of evaluation:
 
-        {[
-          class context = object
-            inherit Expi.context
-            val events : (exp * Bil.result) list = []
-            method add_event exp res = {< events = (exp,res) :: events >}
-            method show_events = List.rev events
-          end
-        ]}
+          {[
+            class context = object
+              inherit Expi.context
+              val events : (exp * Bil.result) list = []
+              method add_event exp res = {< events = (exp,res) :: events >}
+              method show_events = List.rev events
+            end
+          ]}
 
-        {[
-          class ['a] exp_tracer = object
-            constraint 'a = #context
-            inherit ['a] expi as super
-            method! eval_exp e =
-              let open Monad.State in
-              super#eval_exp e >>= fun r ->
-              get () >>= fun ctxt ->
-              put (ctxt#add_event e r) >>= fun () ->
-              return r
-          end;;
-        ]}
+          {[
+            class ['a] exp_tracer = object
+              constraint 'a = #context
+              inherit ['a] expi as super
+              method! eval_exp e =
+                let open Monad.State in
+                super#eval_exp e >>= fun r ->
+                get () >>= fun ctxt ->
+                put (ctxt#add_event e r) >>= fun () ->
+                return r
+            end;;
+          ]}
 
-        Note : We made our [exp_tracer] class polymorphic as a
-        courtesy to our fellow programmer, that may want to reuse it.
-        We can define it by inheriting from [expi] parametrized with
-        our context type, like this: [inherit [context] expi]
+          Note : We made our [exp_tracer] class polymorphic as a
+          courtesy to our fellow programmer, that may want to reuse it.
+          We can define it by inheriting from [expi] parametrized with
+          our context type, like this: [inherit [context] expi]
 
-        Also, there is no need to write a [constraint], as it will be
-        inferred automatically.
+          Also, there is no need to write a [constraint], as it will be
+          inferred automatically.
 
-        Now, let's try to use our tracer. We will use
-        [Monad.State.run] function, that returns both, the evaluated
-        value and the context. (We can also use [Monad.State.exec], if
-        we're not interested in value at all):
+          Now, let's try to use our tracer. We will use
+          [Monad.State.run] function, that returns both, the evaluated
+          value and the context. (We can also use [Monad.State.exec], if
+          we're not interested in value at all):
 
-        {v
+          {v
         let expi = new exp_tracer;;
         val expi : _#context exp_tracer = <obj>
         # let r = expi#eval_exp Bil.(int Word.b0 lor int Word.b1);;
@@ -2417,65 +2260,74 @@ module Std : sig
         [(false, [0x1] false); (true, [0x2] true); (false | true, [0x3] true)]
         v}
 
-        [1]: The weakness of the type variable is introduced by
-        a value restriction and can't be relaxed since it is invariant
-        in state monad.
-    *)
-    class ['a] t : object
-      constraint 'a = #context
+          [1]: The weakness of the type variable is introduced by
+          a value restriction and can't be relaxed since it is invariant
+          in state monad.
+      *)
+      class ['a] t : object
+        constraint 'a = #context
 
-      (** {2 Interaction with environment} *)
-
-
-      (** creates an empty storage. If you want to provide
-          your own implementation of storage, then it is definitely
-          the right place.  *)
-      method empty  : Bil.storage
-
-      (** a variable is looked up in a context *)
-      method lookup : var -> 'a r
-
-      (** a variable is bind to a value.*)
-      method update : var -> Bil.result -> 'a u
-
-      (** a byte is loaded from a given address  *)
-      method load   : Bil.storage -> addr -> 'a r
-
-      (** a byte is stored to a a given address  *)
-      method store  : Bil.storage -> addr -> word -> 'a r
-
-      (** {2 Error conditions}  *)
-
-      (** a given typing error has occured  *)
-      method type_error : type_error -> 'a r
-
-      (** we can't do this!  *)
-      method division_by_zero : unit -> 'a r
-
-      (** called when storage doesn't contain the addr  *)
-      method undefined_addr : addr -> 'a r
-
-      (** called when context doesn't know the variable  *)
-      method undefined_var  : var  -> 'a r
+        (** {2 Interaction with environment} *)
 
 
-      (** {2 Evaluation methods}  *)
+        (** creates an empty storage. If you want to provide
+            your own implementation of storage, then it is definitely
+            the right place.  *)
+        method empty  : Bil.storage
 
-      method eval_exp : exp -> 'a r
-      method eval_var : var -> 'a r
-      method eval_int : word -> 'a r
-      method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
-      method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
-      method eval_binop : binop -> exp -> exp -> 'a r
-      method eval_unop  : unop -> exp -> 'a r
-      method eval_cast  : cast -> int -> exp -> 'a r
-      method eval_let : var -> exp -> exp -> 'a r
-      method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
-      method eval_concat : exp -> exp -> 'a r
-      method eval_extract : int -> int -> exp -> 'a r
-      method eval_unknown : string -> typ -> 'a r
+        (** a variable is looked up in a context *)
+        method lookup : var -> 'a r
+
+        (** a variable is bind to a value.*)
+        method update : var -> Bil.result -> 'a u
+
+        (** a byte is loaded from a given address  *)
+        method load   : Bil.storage -> addr -> 'a r
+
+        (** a byte is stored to a a given address  *)
+        method store  : Bil.storage -> addr -> word -> 'a r
+
+        (** {2 Error conditions}  *)
+
+        (** a given typing error has occured  *)
+        method type_error : type_error -> 'a r
+
+        (** we can't do this!  *)
+        method division_by_zero : unit -> 'a r
+
+        (** called when storage doesn't contain the addr  *)
+        method undefined_addr : addr -> 'a r
+
+        (** called when context doesn't know the variable  *)
+        method undefined_var  : var  -> 'a r
+
+
+        (** {2 Evaluation methods}  *)
+
+        method eval_exp : exp -> 'a r
+        method eval_var : var -> 'a r
+        method eval_int : word -> 'a r
+        method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
+        method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
+        method eval_binop : binop -> exp -> exp -> 'a r
+        method eval_unop  : unop -> exp -> 'a r
+        method eval_cast  : cast -> int -> exp -> 'a r
+        method eval_let : var -> exp -> exp -> 'a r
+        method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
+        method eval_concat : exp -> exp -> 'a r
+        method eval_extract : int -> int -> exp -> 'a r
+        method eval_unknown : string -> typ -> 'a r
+      end
     end
+
+    module Make(M : Monad.State.S2) : S
+      with type ('a,'e) state = ('a,'e) M.t
+
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
+
+
+
 
   (** Expression {{!Expi}interpreter}  *)
   class ['a] expi : ['a] Expi.t
@@ -2513,19 +2365,30 @@ module Std : sig
       method with_pc : Bil.value -> 's
     end
 
-    (** Base class for BIL interpreters   *)
-    class ['a] t : object
-      constraint 'a = #context
-      inherit ['a] expi
-      method eval : stmt list -> 'a u
-      method eval_stmt : stmt -> 'a u
-      method eval_move : var -> exp -> 'a u
-      method eval_jmp : exp -> 'a u
-      method eval_while : cond:exp -> body:stmt list -> 'a u
-      method eval_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a u
-      method eval_cpuexn : int -> 'a u
-      method eval_special : string -> 'a u
+    module type S = sig
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** Base class for BIL interpreters   *)
+      class ['a] t : object
+        constraint 'a = #context
+        inherit ['a] Expi.t
+        method eval : stmt list -> 'a u
+        method eval_stmt : stmt -> 'a u
+        method eval_move : var -> exp -> 'a u
+        method eval_jmp : exp -> 'a u
+        method eval_while : cond:exp -> body:stmt list -> 'a u
+        method eval_if : cond:exp -> yes:stmt list -> no:stmt list -> 'a u
+        method eval_cpuexn : int -> 'a u
+        method eval_special : string -> 'a u
+      end
     end
+
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
   (** BIL {{!Bili}interpreter} *)
@@ -3544,77 +3407,89 @@ module Std : sig
         method next : tid option
       end
 
-    (** base class for BIR interpreters  *)
-    class ['a] t : object
-      constraint 'a = #context
-      inherit ['a] expi
+    module type S = sig
 
-      (** called for each term, just after the position is updated,
-          but before any side effect of term evaluation had occurred.*)
-      method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+      type ('a,'e) state
+      type 'a u = (unit,'a) state
+      type 'a r = (Bil.result,'a) state
+
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** base class for BIR interpreters  *)
+      class ['a] t : object
+        constraint 'a = #context
+        inherit ['a] Expi.t
+
+        (** called for each term, just after the position is updated,
+            but before any side effect of term evaluation had occurred.*)
+        method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
 
-      method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
+        method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
-      (** called after all side effects of the term has occurred  *)
-      method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
+        (** called after all side effects of the term has occurred  *)
+        method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
-      (** Evaluates a subroutine with the following algorithm:
+        (** Evaluates a subroutine with the following algorithm:
 
-          0. next <- first block of subroutine and goto 1
-          1. eval all in and in/out arguments and goto 2
-          2. if next is some blk then eval it and goto 2 else goto 3
-          3. if next is some sub then eval it and goto 2 else goto 4
-          4. eval all out and in/out arguments.
-      *)
-      method eval_sub : sub term -> 'a u
+            0. next <- first block of subroutine and goto 1
+            1. eval all in and in/out arguments and goto 2
+            2. if next is some blk then eval it and goto 2 else goto 3
+            3. if next is some sub then eval it and goto 2 else goto 4
+            4. eval all out and in/out arguments.
+        *)
+        method eval_sub : sub term -> 'a u
 
-      (** evaluate argument by first evaluating its right hand side,
-          and then assigning the result to the left hand side.*)
-      method eval_arg : arg term -> 'a u
+        (** evaluate argument by first evaluating its right hand side,
+            and then assigning the result to the left hand side.*)
+        method eval_arg : arg term -> 'a u
 
-      (** evaluate all terms in a given block, starting with phi
-          nodes, then proceeding to def nodes and finally evaluating
-          all jmp terms until either jump is taken or jump condition
-          is undefined.
-          After the evaluation the context#next will point next
-          destination.  *)
-      method eval_blk : blk term -> 'a u
+        (** evaluate all terms in a given block, starting with phi
+            nodes, then proceeding to def nodes and finally evaluating
+            all jmp terms until either jump is taken or jump condition
+            is undefined.
+            After the evaluation the context#next will point next
+            destination.  *)
+        method eval_blk : blk term -> 'a u
 
-      (** evaluate definition by assigning the result of the right
-          hand side to the definition variable  *)
-      method eval_def : def term -> 'a u
+        (** evaluate definition by assigning the result of the right
+            hand side to the definition variable  *)
+        method eval_def : def term -> 'a u
 
-      (** based on trace select an expression and assign its
-          value to the left hand side of phi node.   *)
-      method eval_phi : phi term -> 'a u
+        (** based on trace select an expression and assign its
+            value to the left hand side of phi node.   *)
+        method eval_phi : phi term -> 'a u
 
-      (** evaluate condition, and if it is false, then do nothing,
-          otherwise evaluate jump target (see below) *)
-      method eval_jmp : jmp term -> 'a u
+        (** evaluate condition, and if it is false, then do nothing,
+            otherwise evaluate jump target (see below) *)
+        method eval_jmp : jmp term -> 'a u
 
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_goto : label -> 'a u
+        (** evaluate label, using [eval_direct] or [eval_indirect], based
+            on the label variant *)
+        method eval_goto : label -> 'a u
 
-      (** evaluate target label, using [eval_direct] or
-          [eval_indirect], based on the label variant.
-          Ignores return label.  *)
-      method eval_call : call -> 'a u
+        (** evaluate target label, using [eval_direct] or
+            [eval_indirect], based on the label variant.
+            Ignores return label.  *)
+        method eval_call : call -> 'a u
 
-      (** evaluate label, using [eval_direct] or [eval_indirect], based
-          on the label variant *)
-      method eval_ret  : label -> 'a u
+        (** evaluate label, using [eval_direct] or [eval_indirect], based
+            on the label variant *)
+        method eval_ret  : label -> 'a u
 
-      (** ignore arguments and set context#next to None  *)
-      method eval_exn  : int -> tid -> 'a u
+        (** ignore arguments and set context#next to None  *)
+        method eval_exn  : int -> tid -> 'a u
 
-      (** set context#next to the a given tid  *)
-      method eval_direct : tid -> 'a u
+        (** set context#next to the a given tid  *)
+        method eval_direct : tid -> 'a u
 
-      (** ignore argument and set context#next to None  *)
-      method eval_indirect : exp -> 'a u
+        (** ignore argument and set context#next to None  *)
+        method eval_indirect : exp -> 'a u
+      end
     end
+
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
   (** BIR {{!Biri}interpreter}  *)
@@ -3840,7 +3715,7 @@ module Std : sig
                                           and type 'a m = 'a Or_error.t
 
     (** lifts iterators to monad [M]  *)
-    module Make_iterators( M : Monad.S )
+    module Make_iterators( M : Legacy.Monad.S )
       : Memory_iterators with type t := t
                           and type 'a m = 'a M.t
 
@@ -4175,6 +4050,7 @@ module Std : sig
       accessible for loading images.*)
 
   module Backend : sig
+    [@@@deprecated "Use new loader Ogre-powered loader interface"]
 
     (** memory access permissions  *)
     type perm = R | W | X | Or of perm * perm
@@ -4265,32 +4141,74 @@ module Std : sig
 
     (** {2 Attributes}  *)
 
+    (** [entry_point addr] is an address from which a kernel should start *)
     val entry_point : t -> addr
+    (** [filename image] a name of file from which an image was
+        loaded (if any) *)
     val filename : t -> string option
+
+    (** [arch image] code architecture   *)
     val arch: t -> arch
+
+    (** [addr_size image] same as [Arch.addr_size (Image.arch image)] *)
     val addr_size : t -> addr_size
+
+    (** [endian image] same as [Arch.endian (Image.arch image)]  *)
     val endian : t -> endian
 
-    val data : t -> Bigstring.t
 
     (** {2 Tables }  *)
+
+    (** [words image size] returns a mapping from addresses to words
+        of the specified [size]. For example, [Image.words img `r8]
+        returns all bytes. *)
     val words : t -> size -> word table
+
+    (** [segments image] returns a mapping from addresses to segments  *)
     val segments : t -> segment table
+
+    (** [symbols image] returns a mapping from addresses to symbols *)
     val symbols : t -> symbol table
 
     (** {2 Tags}  *)
+
+    (** tags a segment  *)
     val segment : segment tag
+
+    (** tags a symbol *)
     val symbol  : string tag
+
+    (** tags a section  *)
     val section : string tag
+
+    (** an image specification in OGRE  *)
+    val specification : Ogre.doc tag
 
     (** returns memory, annotated with tags  *)
     val memory : t -> value memmap
 
     (** {2 Mappings }  *)
+
+
+    (** [memory_of_segment img seg] returns a memory region occupied
+        by the segment [seg].  *)
     val memory_of_segment  : t -> segment -> mem
-    (** [memory_of_symbol sym]: returns the memory of symbol in acending order. *)
+
+    (** [memory_of_symbol sym] returns a sequence of memory regions
+        that belong to the [sym] symbol. The sequence is represented
+        as a pair, where the first element is the starting memory
+        region, and the second elemnt is (a possible empty) sequence
+        of the rest memory regions (in case if a symbol occupies a
+        non-contigious region of memory).*)
     val memory_of_symbol   : t -> symbol -> mem * mem seq
+
+
+    (** [symbols_of_segment img seg] all symbols that belong to the
+        [seg] segment.  *)
     val symbols_of_segment : t -> segment -> symbol seq
+
+
+    (** [segment_of_symbol image sym] a segment to which [sym] belongs.*)
     val segment_of_symbol  : t -> symbol -> segment
 
     (** Image Segments.
@@ -4299,9 +4217,19 @@ module Std : sig
     module Segment : sig
       type t = segment
       include Regular.S with type t := t
+
+      (** [name segment] a name associated with the segment (usually
+      meaningless). Guaranteed to be unique across other segments of
+      the same image. *)
       val name : t -> string
+
+      (** [is_writable segment]  *)
       val is_writable   : t -> bool
+
+      (** [is_readable segment]  *)
       val is_readable   : t -> bool
+
+      (** [is_executable segment]  *)
       val is_executable : t -> bool
     end
 
@@ -4309,19 +4237,104 @@ module Std : sig
     module Symbol : sig
       type t = symbol
       include Regular.S with type t := t
+
+
+      (** [name sym] symbol's name  *)
       val name : t -> string
+
+      (** [is_function sym] is true if [sym] is a function.  *)
       val is_function : t -> bool
+
+
+      (** [is_debug sym] is true if [sym] is a debug symbol.  *)
       val is_debug : t -> bool
     end
 
     (** {2 Backend Interface}  *)
 
-    (** [register_backend ~name backend] tries to register backend under
-        the specified [name]. *)
-    val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
+
+    (** An interface that a backend shall implement.
+
+        The functions provided by a loader return an OGRE document,
+        wrapped into option and error monads, thus the three outcomes
+        are possible with the following interpretation:
+
+        - [Ok None] - a loader doesn't know how handle files of this
+          type.
+        - [Ok (Some doc)] - a loader was able to obtain some
+          information from the input.
+
+        - [Error err] - a file was corrupted, according to the loader.
+    *)
+    module type Loader = sig
+
+      (** [from_file name] loads a file with the given [name]. *)
+      val from_file : string -> Ogre.doc option Or_error.t
+
+
+      (** [from_data data] loads image from the specified array of bytes.  *)
+      val from_data : Bigstring.t -> Ogre.doc option Or_error.t
+
+    end
+
+    (** [register_loader ~name backend] registers new loader. *)
+    val register_loader : name:string -> (module Loader) -> unit
 
     (** lists all registered backends  *)
     val available_backends : unit -> string list
+
+    (** [register_backend ~name backend] tries to register backend under
+        the specified [name]. *)
+    val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
+    [@@deprecated "use register_loader instead"]
+
+
+
+
+    (** {2 Internals}
+
+        Access to the low-level internals.
+    *)
+
+    (** [data image] returns image data. Usually it is a memory mapped
+        input file, or it is whatever was passed to [of_[big]string]. *)
+    val data : t -> Bigstring.t
+
+
+
+    module Scheme : sig
+      open Ogre.Type
+
+      type addr = int64
+      type 'a region = {addr : addr; size : int64; info : 'a}
+
+      val off : int64 Ogre.field
+      val size : int64 Ogre.field
+      val addr : int64 Ogre.field
+      val name : string Ogre.field
+      val root : int64 Ogre.field
+      val readable : bool Ogre.field
+      val writable : bool Ogre.field
+      val executable : bool Ogre.field
+
+      val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+      val segment : ((bool * bool * bool) region,
+                     (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
+      val section : (unit region, (addr -> addr -> 'a) -> 'a) Ogre.attribute
+      val code_start : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+      val entry_point : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+      val symbol_chunk :
+        (addr region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+
+      val named_region :
+        (string region, (addr -> addr -> string -> 'a) -> 'a) Ogre.attribute
+
+      val named_symbol :
+        (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
+
+      val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+    end
+
 
   end
 
@@ -5424,7 +5437,7 @@ module Std : sig
 
       The definitions in this module are so generic, that they
       present on all processors.
- *)
+  *)
   module type CPU = sig
 
     (** A set of general purpose registers *)
@@ -6049,6 +6062,9 @@ module Std : sig
     (** A subroutine doesn't throw exceptions  *)
     val nothrow : unit tag
 
+    (** a subroutine is the binary entry point *)
+    val entry_point : unit tag
+
     (** Subroutine builder *)
     module Builder : sig
       type t
@@ -6571,7 +6587,6 @@ module Std : sig
     (** Factory of data processors.
         Registry of sources of information. *)
     module Factory : sig
-
       (** Factory interface  *)
       module type S = sig
         type t
@@ -6637,29 +6652,33 @@ module Std : sig
       method all_taints : set
     end
 
-    (** Propagate taint through expressions.
+    module type S = sig
+      type ('a,'e) state
+      module Expi : Expi.S with type ('a,'e) state = ('a,'e) state
+
+      (** Propagate taint through expressions.
 
 
-        {2 Semantics}
+          {2 Semantics}
 
-        {3 Grammar}
+          {3 Grammar}
 
-        The following syntactic forms are used in propagation rules:
+          The following syntactic forms are used in propagation rules:
 
-        [*a] - load from address [a], where [a] is immediate value;
-        [*a <- v] - store value [v] at address [a];
-        [exp ~> v] - expression reduces to value [v];
-        [v -> t] - value [v] is tainted by a taint [t];
-        [<bop>] - BIL binary operation or BIL concat expression;
-        [<uop>] - BIL unary, extract or cast expression.
+          [*a] - load from address [a], where [a] is immediate value;
+          [*a <- v] - store value [v] at address [a];
+          [exp ~> v] - expression reduces to value [v];
+          [v -> t] - value [v] is tainted by a taint [t];
+          [<bop>] - BIL binary operation or BIL concat expression;
+          [<uop>] - BIL unary, extract or cast expression.
 
 
-        {3 Rules}
+          {3 Rules}
 
-        Value [v] is tainted by taint [t], denoted as [v -> t], if there
-        exists a deriviation of the following rules, proving this fact.
+          Value [v] is tainted by taint [t], denoted as [v -> t], if there
+          exists a deriviation of the following rules, proving this fact.
 
-        {v
+          {v
 
     *a ~> v
     a -> t
@@ -6688,27 +6707,32 @@ module Std : sig
 
     v}
 
-        Note 1: this class overrides only methods, that computes non-leaf
-        expressions, leaving a space for extension for derived classes.
+          Note 1: this class overrides only methods, that computes non-leaf
+          expressions, leaving a space for extension for derived classes.
 
-        Note 2: we do not propagate taint from condition to branches in the
-        if/then/else expression, since we're propagating only data
-        dependency, not control dependency.
+          Note 2: we do not propagate taint from condition to branches in the
+          if/then/else expression, since we're propagating only data
+          dependency, not control dependency.
 
-        Although, one can argue, that in expression [if c then x else y]
-        the result depends on [c], since if we change [c] we will get
-        different results, there is a good reason for not propagating this
-        dependency - the consistency with BIR and BIL. Consider, BIL's
-        [if] statement or BIR's conditional jump. If we will start to
-        propagate taint from condition in [ite] expression, then we should
-        also propagate it in BIL's and BIR's conditionals. Unfortunatelly
-        the latter is not possible.
+          Although, one can argue, that in expression [if c then x else y]
+          the result depends on [c], since if we change [c] we will get
+          different results, there is a good reason for not propagating this
+          dependency - the consistency with BIR and BIL. Consider, BIL's
+          [if] statement or BIR's conditional jump. If we will start to
+          propagate taint from condition in [ite] expression, then we should
+          also propagate it in BIL's and BIR's conditionals. Unfortunatelly
+          the latter is not possible.
 
-    *)
-    class ['a] propagator : object('s)
-      constraint 'a = #context
-      inherit ['a] expi
+      *)
+      class ['a] propagator : object('s)
+        constraint 'a = #context
+        inherit ['a] Expi.t
+      end
     end
+
+    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
+
+    include S with type ('a,'e) state = ('a,'e) Monad.State.t
 
     (** print a set of taints  *)
     val pp_set : set printer
@@ -6800,8 +6824,8 @@ module Std : sig
 
 
     (** [create resolve] creates a brancher from [resolve] function,
-    that accepts a memory region, occupied by an instruction, the
-    instruction itself and returns a list of destination.  *)
+        that accepts a memory region, occupied by an instruction, the
+        instruction itself and returns a list of destination.  *)
     val create : (mem -> full_insn -> dests) -> t
 
 
@@ -6811,7 +6835,7 @@ module Std : sig
 
 
     (** [resolve brancher mem insn] returns a list of destinations of
-    the instruction [insn], that occupies memory region [mem].  *)
+        the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
     module Factory : Source.Factory.S with type t = t
@@ -7211,7 +7235,7 @@ module Std : sig
     (** Input information.
 
         This module abstracts input type.
- *)
+    *)
     module Input : sig
       type t = input
 
@@ -7232,15 +7256,20 @@ module Std : sig
 
       (** [create arch filename ~code ~data] creates an input from a
           file, using two memory maps. The [code] memmap spans the code in
-          the file, and [data] spans the data. *)
-      val create : arch -> string -> code:value memmap -> data: value memmap -> t
+          the file, and [data] spans the data. An optional [finish]
+          function can be used to propagate to the project any
+          additional information that is available to the loader. It
+          defaults to [ident].
+*)
+      val create :
+        ?finish:(project -> project) ->
+        arch -> string -> code:value memmap -> data: value memmap -> t
 
 
       (** [register_loader name load] register a loader under provided
           [name]. The [load] function will be called the filename, and it
           must return the [input] value. *)
       val register_loader : string -> (string -> t) -> unit
-
 
       (** [available_loaders ()] returns a list of names of currently known loaders.  *)
       val available_loaders : unit -> string list
@@ -7687,4 +7716,10 @@ module Std : sig
         logged.  *)
     val start : unit -> unit
   end
+
+  (**/**)
+  module Monad : module type of Legacy.Monad
+  [@@deprecated "use the `monads' library instead of this module"]
+  (**/**)
+
 end

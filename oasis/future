@@ -8,7 +8,7 @@ Library bap_future
   FindlibName:     bap-future
   CompiledObject:  best
   Build$:          flag(everything) || flag(future)
-  BuildDepends:    core_kernel
+  BuildDepends:    core_kernel, monads
   Modules: Bap_future
 
 Library future_test

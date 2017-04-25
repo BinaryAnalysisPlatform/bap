@@ -12,4 +12,5 @@ module Std = struct
   module Log = Bap_log
   type project = Project.t
   type event = Event.t = ..
+  module Monad = Legacy.Monad
 end

@@ -250,6 +250,11 @@ let () =
       n (Project.Pass.name p)
   | Pass_not_found p -> error "Failed to find pass: %s" p
   | Project.Pass.Failed
+      (Project.Pass.Runtime_error
+         (p, Exn.Reraised (backtrace, (Invalid_argument msg | Failure msg)))) ->
+    error "Pass `%s' failed at runtime with %s\nBacktrace:\n%s"
+      (Project.Pass.name p) msg backtrace
+  | Project.Pass.Failed
       (Project.Pass.Runtime_error (p, Exn.Reraised (backtrace, exn))) ->
     error "Pass `%s' failed at runtime with: %a\nBacktrace:\n%s"
       (Project.Pass.name p) Exn.pp exn backtrace

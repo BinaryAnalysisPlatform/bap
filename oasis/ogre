@@ -1,0 +1,12 @@
+######## Ogre library #####
+
+Flag ogre
+  Description: Build ogre library
+  Default: false
+
+Library ogre
+  Build$:       flag(everything) || flag(ogre)
+  Path:         lib/ogre
+  FindlibName:  ogre
+  Modules:      Ogre
+  BuildDepends: core_kernel, monads

@@ -1,0 +1,13 @@
+Flag primus_x86
+  Description: build Primus x86 support package
+  Default: false
+
+Library primus_x86_plugin
+  Path: plugins/primus_x86
+  Build$: flag(everything) || flag(primus_x86)
+  FindlibName: bap-plugin-primus_x86
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel, bap-x86-cpu
+  XMETADescription: x86 support package
+  Modules: Primus_x86_main
+  InternalModules: Primus_x86_loader

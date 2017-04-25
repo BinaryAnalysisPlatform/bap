@@ -8,10 +8,10 @@ Maintainers: Ivan Gotovchits <ivg@ieee.org>
 License:     MIT
 Copyrights:  (C) 2017 Carnegie Mellon University
 Plugins:     META (0.4)
-AlphaFeatures: ocamlbuild_more_args
+AlphaFeatures: ocamlbuild_more_args, compiled_setup_ml
 BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
-     -j 2
+     -j 32
      -use-ocamlfind
      -classic-display
      -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"

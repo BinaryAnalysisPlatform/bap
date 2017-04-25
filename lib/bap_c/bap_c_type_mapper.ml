@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Monads.Std
 open Bap_c_type
 
 module Make(M : Monad.S2) = struct

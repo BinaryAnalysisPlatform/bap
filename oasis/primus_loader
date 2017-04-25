@@ -1,0 +1,13 @@
+Flag primus_loader
+  Description: build generic program loader for Primus
+  Default: false
+
+Library primus_loader_plugin
+  Path: plugins/primus_loader
+  Build$: flag(everything) || flag(primus_loader)
+  FindlibName: bap-plugin-primus_loader
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: generic program loader for Primus
+  Modules: Primus_loader_main
+  InternalModules: Primus_loader_basic
