@@ -35,7 +35,8 @@ let symbolizers () : string list Term.t =
       sprintf "Use a specified symbolizer. If an option is specified
       several times, then symbolizers are merged. Possible values
       are: %s" @@ Arg.doc_alts_enum names in
-    Arg.(value & opt_all (enum names) ["internal"] & info ["symbolizer"] ~doc)
+    let default = List.map names ~f:fst in
+    Arg.(value & opt_all (enum names) default & info ["symbolizer"] ~doc)
 
 let rooters () : string list Term.t =
   match enum_processors (module Rooter) with

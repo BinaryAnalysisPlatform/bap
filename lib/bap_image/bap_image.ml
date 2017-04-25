@@ -1,85 +1,105 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_types.Std
-open Or_error
-
-open Image_common
+open Monads.Std
+open Format
 open Image_internal_std
-open Backend
 
-type 'a m = 'a Or_error.t
-type img = Backend.Img.t [@@deriving sexp_of]
+module Fact = Ogre.Make(Monad.Ident)
+module Result = Monad.Result.Error
+open Result.Syntax
+
 type path = string
+type doc = Ogre.doc
+module type Loader = sig
+  val from_file : string -> doc option Or_error.t
+  val from_data : Bigstring.t -> doc option Or_error.t
+end
 
-let backends : Backend.t String.Table.t =
+type loader = (module Loader)
+let backends : loader String.Table.t =
   String.Table.create ()
 
+type location = {
+  addr : addr;
+  size : int;
+} [@@deriving bin_io, compare, sexp]
 
-let (+>) = Fn.compose
+type 'a region = {
+  name : string;
+  locn : location;
+  info : 'a;
+} [@@deriving bin_io, compare, sexp]
 
-(* We hide Segment and Symbol types making them not only abstract,
-   but even nonconstructable from the outside, so that we
-   can enforce several invariants.  In particular, we can enforce
-   a strict bijection between segment and memory regions as well
-   as between symbol and memory. This means that no one can construct
-   such symbol or segment that will not be mapped to the memory. This
-   allows us to provide handy mapping functions, that are guaranteed
-   for not to fail.
-*)
+type mapped = {
+  off : int;
+  len : int;
+  endian : endian;
+  r : bool;
+  w : bool;
+  x : bool;
+} [@@deriving bin_io, compare, sexp]
+
+
+type symbol_info = {
+  kind : [`Code | `Debug | `Dyn] list;
+  extra_locns : location list;
+} [@@deriving bin_io, compare, sexp]
+
+type symtab = symbol_info region table
+
+let pp_region fmt {name; locn={addr; size}} =
+  fprintf fmt "%s %a %d" name Addr.pp addr size
+
+let hash_region {locn={addr}} = Addr.hash addr
 
 module Segment = struct
+
   module T = struct
-    type t = Segment.t [@@deriving bin_io, compare, sexp]
-    let hash = Addr.hash +> Location.addr +> Segment.location
-    let pp fmt t = Format.fprintf fmt "%s" @@ Segment.name t
+    type t = mapped region [@@deriving bin_io, compare, sexp]
+    let hash = hash_region
+    let pp = pp_region
     let module_name = Some "Bap.Std.Image.Segment"
-    let version = "1.0.0"
+    let version = "2.0.0"
   end
 
-  let name = Segment.name
-
-
-  let rec checked p = function
-    | Or (p1,p2) -> checked p p1 || checked p p2
-    | X|W|R as p' -> p = p'
-
-  let is_writable t   = checked W (Segment.perm t)
-  let is_readable t   = checked R (Segment.perm t)
-  let is_executable t = checked X (Segment.perm t)
+  let name t = t.name
+  let addr t = t.locn.addr
+  let size t = t.locn.size
+  let is_writable {info={w}} = w
+  let is_readable {info={r}} = r
+  let is_executable {info={x}} = x
   include T
   include Regular.Make(T)
 end
 
 module Symbol = struct
   module T = struct
-    type t = Symbol.t [@@deriving bin_io, compare, sexp]
-    let hash = Addr.hash +> Location.addr +> fst +> Symbol.locations
-    let pp fmt t = Format.fprintf fmt "%s" @@ Symbol.name t
+    type t = symbol_info region [@@deriving bin_io,compare,sexp]
+    let pp = pp_region and hash = hash_region
     let module_name = Some "Bap.Std.Image.Symbol"
-    let version = "1.0.0"
+    let version = "2.0.0"
   end
-  include Symbol
+  let name {name} = name
+  let is_debug {info={kind}} = List.mem kind `Debug
+  let is_function {info={kind}} = List.mem kind `Code
+  include T
   include Regular.Make(T)
 end
 
 type segment = Segment.t [@@deriving bin_io, compare, sexp]
-type symbol = Symbol.t [@@deriving bin_io, compare, sexp]
+type symbol = Symbol.t [@@deriving bin_io,compare, sexp]
 
-let segment = Value.Tag.register (module Segment)
-    ~name:"segment"
-    ~uuid:"a0eec123-5937-4283-b141-58d579a9b0df"
+module Spec = struct
+  type t = {
+    arch : arch;
+    entry : addr;
+    segments : segment list;
+    symbols : symbol list;
+    sections : unit region list;
+  } [@@deriving bin_io, compare, sexp]
+end
 
-let symbol  = Value.Tag.register (module String)
-    ~name:"symbol"
-    ~uuid:"768bc13d-d4be-43fc-9f7a-c369ebab9c7e"
-
-let section  = Value.Tag.register (module String)
-    ~name:"section"
-    ~uuid:"4014408d-a3af-488f-865b-5413beaf198e"
-
-let file = Value.Tag.register (module String)
-    ~name:"file"
-    ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
 
 type words = {
   r8  : word table Lazy.t;
@@ -90,8 +110,11 @@ type words = {
   r256 : word table Lazy.t;
 }
 
+let sexp_of_doc doc = Sexp.Atom (Ogre.Doc.to_string doc)
+
 type t = {
-  img  : img ;
+  doc  : doc;
+  spec : Spec.t;
   name : string option;
   data : Bigstring.t;
   symbols : symbol table;
@@ -104,98 +127,89 @@ type t = {
   segment_of_symbol : (symbol -> segment) Lazy.t sexp_opaque;
 } [@@deriving sexp_of]
 
+
 type result = (t * Error.t list) Or_error.t
 
-let memory_error ?here msg mem =
-  Error.create ?here msg
-    (Memory.min_addr mem, Memory.max_addr mem)
-    [%sexp_of:(addr*addr)]
 
-let (++!) e1 e2 = Error.of_list [e1;e2]
+let segment = Value.Tag.register (module Segment)
+    ~name:"segment"
+    ~uuid:"a0eec123-5937-4283-b141-58d579a9b0df"
 
-let memory_of_location loc mem : mem Or_error.t =
-  let (addr, len) = Location.(addr loc, len loc) in
-  match Memory.view ~from:addr ~words:len mem with
+let symbol  = Value.Tag.register (module String)
+    ~name:"symbol"
+    ~uuid:"768bc13d-d4be-43fc-9f7a-c369ebab9c7e"
+
+let function_start = Value.Tag.register (module Unit)
+    ~name:"function-start"
+    ~uuid:"1c1809ec-a38a-4aee-a46c-3d49127ba85a"
+
+let symbol_info = Value.Tag.register (module Symbol)
+    ~name:"symbol-info"
+    ~uuid:"706e78cf-07de-4417-a422-effa7821dd02"
+
+let section  = Value.Tag.register (module String)
+    ~name:"section"
+    ~uuid:"4014408d-a3af-488f-865b-5413beaf198e"
+
+let file = Value.Tag.register (module String)
+    ~name:"file"
+    ~uuid:"c119f700-4069-47ad-ba99-fc29791e0d47"
+
+let specification = Value.Tag.register (module Bap_ogre.Doc)
+    ~name:"image-specification"
+    ~uuid:"a0c98f1f-3693-412a-a11a-2b6c3f6935a7"
+
+
+let mem_of_locn mem {addr;size} : mem Or_error.t =
+  match Memory.view ~from:addr ~words:size mem with
   | Error err ->
-    Error.create "symbol at" addr sexp_of_addr ++!
-    Error.create "with size" len sexp_of_int ++!
-    memory_error "doesn't fit into memory" mem ++! err |>
-    Result.fail
+    Result.failf "region %a+%d can't be mapped into memory, %a"
+      Addr.pp addr size Error.pp err ()
   | ok -> ok
 
-let add_sym memory errs secs syms sym =
-  let (m,ms) = Symbol.locations sym in
-  List.fold (m::ms) ~init:(memory,syms,errs)
-    ~f:(fun (memory, map,errs) loc ->
-        let (addr, len) = Location.(addr loc, len loc) in
-        let memory,r = match Table.find_addr secs addr with
-          | None ->
-            memory, Error Error.(of_string "no segment for location")
-          | Some (sec_mem,sec) ->
-            match memory_of_location loc sec_mem with
-            | Error err -> memory, Error err
-            | Ok mem ->
-              let memory =
-                let tag = Value.create symbol (Symbol.name sym) in
-                Memmap.add memory mem tag in
-              match Table.add map mem sym with
-              | Error err ->
-                memory,Error Error.(tag err "intersecting symbol")
-              | ok -> memory,ok in
-        match r with
-        | Ok map -> memory,map,errs
-        | Error err ->
-          let err = Error.tag_arg err "skipped sym" sym sexp_of_symbol in
-          memory, map, err::errs)
+let tag mem tag value memmap =
+  Memmap.add memmap mem (Value.create tag value)
 
-let create_symbols memory syms secs =
-  List.fold syms ~init:(memory,Table.empty,[])
-    ~f:(fun (memory,symtab,errs) sym ->
-        if Symbol.is_function sym
-        then add_sym memory errs secs symtab sym
-        else (memory,symtab,errs))
 
-let validate_no_intersections (s,ss) : Validate.t =
-  let open Backend.Segment in
-  let (vs,_) = List.fold ss ~init:([],s) ~f:(fun (vs,s1) s2 ->
-      let loc1,loc2 = location s1, location s2 in
-      let open Location in
-      let v1 =
-        Addr.(validate_lbound  loc2.addr
-                ~min:(Incl (loc1.addr ++ loc1.len))) in
-      let v2 =
-        Int.validate_lbound s2.off ~min:(Incl (s1.off + loc1.len))  in
-      (v1 :: v2 :: vs, s2)) in
-  Validate.name_list "segments shouldn't intersect" vs
+let map_region data {locn={addr}; info={off; len; endian}} =
+  Memory.create ~pos:off ~len endian addr data
 
-let validate_segment data s : Validate.t =
-  let size = Bigstring.length data in
-  let off = Backend.Segment.off s in
-  let len = Location.len (Backend.Segment.location s) in
-  Validate.(name_list "segment" [
-      name "offset" @@
-      Int.validate_bound off ~min:(Incl 0) ~max:(Excl size);
-      name "length" @@
-      Int.validate_bound len ~min:(Incl 1) ~max:(Incl size);
-      name "offset+length" @@
-      Int.validate_ubound (len+off) ~max:(Incl size)
-    ])
+let static_view segments = function {addr; size} as locn ->
+  match Table.find_addr segments addr with
+  | None -> Result.failf "region is not mapped to memory" ()
+  | Some (segmem,_) -> mem_of_locn segmem locn
 
-let validate_segments data (s,ss) : Validate.t =
-  let check_secs = Validate.list_indexed (validate_segment data) in
-  Validate.of_list [
-    check_secs (s::ss);
-    validate_no_intersections (s,ss)
-  ]
+let add_sym segments memory (symtab : symtab)
+    ({name; locn=entry; info={kind; extra_locns=locns}} as sym) =
+  static_view segments entry >>= fun entry_region ->
+  Result.List.fold (entry::locns) ~init:(memory,symtab)
+    ~f:(fun (memory,symtab) locn ->
+        static_view segments locn >>= fun mem ->
+        let memory = tag mem symbol name memory |>
+                     tag mem symbol_info sym in
+        match Table.add symtab mem sym with
+        | Ok symtab -> Ok (memory,symtab)
+        | _intersects_ -> Ok (memory,symtab))
 
-let create_segments arch data (s,ss) =
-  let endian = Arch.endian arch in
-  Validate.result (validate_segments data (s,ss)) >>= fun () ->
-  List.fold (s::ss) ~init:(return Table.empty) ~f:(fun tab s ->
-      let loc, pos = Backend.Segment.(location s, off s) in
-      let len, addr = Location.(len loc, addr loc) in
-      Memory.create ~pos ~len endian addr data >>= fun mem ->
-      tab >>= fun tab -> Table.add tab mem s)
+let add_segment base memory segments : segment -> _ = function
+    {name; locn={addr;size}} as seg ->
+    map_region base seg >>= fun mem ->
+    Table.add segments mem seg >>= fun segments ->
+    let memory = tag mem segment seg memory |>
+                 tag mem section name in
+    Result.return (memory,segments)
+
+
+let make_table add base memory =
+  List.fold ~init:(memory,Table.empty,[])
+    ~f:(fun (memory,table,warns) sym ->
+        match add base memory table sym with
+        | Ok (memory,table) -> (memory,table,warns)
+        | Error happens -> (memory,table,happens::warns))
+
+let make_symtab = make_table add_sym
+let make_segtab = make_table add_segment
+
 
 (** [words_of_table word_size table] maps all memory mapped by [table]
     to words of size [word_size]. If size of mapped region is not enough
@@ -224,9 +238,6 @@ let create_words secs = {
   r256 = lazy (words_of_table `r256 secs);
 }
 
-let register_backend ~name backend =
-  String.Table.add backends ~key:name ~data:backend
-
 let available_backends () = Hashtbl.keys backends
 
 let create_segment_of_symbol_table syms secs =
@@ -240,81 +251,40 @@ let create_segment_of_symbol_table syms secs =
         Symbol.Table.add_exn tab ~key:sym ~data:sec);
   Symbol.Table.find_exn tab
 
-let of_img img data name =
-  let open Img in
-  let arch = arch img in
-  create_segments arch data (segments img) >>= fun secs ->
-  let memory = Table.foldi secs ~init:Memmap.empty ~f:(fun mem sec map ->
-      Memmap.add map mem (Value.create segment sec)) in
-  let memory,syms,errs = create_symbols memory (symbols img) secs in
-  let memory,errs =
-    List.fold (sections img) ~init:(memory,errs) ~f:(fun (map,es) sec ->
-        let loc = Section.location sec in
-        let name = Section.name sec in
-        let (addr,len) = Location.(addr loc, len loc) in
-        Memmap.lookup memory addr |> Seq.hd |> function
-        | None -> map,errs
-        | Some (mem,_) -> match memory_of_location loc mem with
-          | Error e ->
-            map, Error.tag e ("skipped section " ^ name) :: es
-          | Ok mem ->
-            Memmap.add map mem (Value.create section name),es) in
-  let words = create_words secs in
-  Table.(rev_map ~one_to:one Segment.hashable secs)
-  >>= fun (memory_of_segment : segment -> mem) ->
+let from_spec query base doc =
+  Fact.eval query doc >>= function
+    {Spec.arch; entry; segments; symbols; sections} as spec ->
+  let memory = Memmap.empty in
+  let memory,segs,seg_warns = make_segtab base memory segments in
+  let memory,syms,sym_warns = make_symtab segs memory symbols in
+  let words = create_words segs in
+  Table.(rev_map ~one_to:one Segment.hashable (segs : segment table)) >>=
+  fun (memory_of_segment : segment -> mem) ->
   let memory_of_symbol () : symbol -> mem * mem seq =
     ok_exn (Table.(rev_map ~one_to:at_least_one Symbol.hashable syms)) in
   let symbols_of_segment () : segment -> symbol seq =
-    Table.(link ~one_to:many Segment.hashable secs syms) in
+    Table.(link ~one_to:many Segment.hashable segs syms) in
   let segment_of_symbol () : symbol -> segment =
-    create_segment_of_symbol_table syms secs in
-  return ({
-      img; name; data; symbols = syms; segments = secs; words;
+    create_segment_of_symbol_table syms segs in
+  Result.return ({
+      doc; spec;
+      name = None; data=base; symbols=syms; segments=segs; words;
       memory_of_segment;
       memory;
       memory_of_symbol   = Lazy.from_fun memory_of_symbol;
       symbols_of_segment = Lazy.from_fun symbols_of_segment;
       segment_of_symbol  = Lazy.from_fun segment_of_symbol;
-    }, errs)
+    }, (seg_warns @ sym_warns))
 
 let data t = t.data
 let memory t = t.memory
 
-let of_backend backend data path : result =
-  match String.Table.find backends backend with
-  | None -> errorf "no such backend: '%s'" backend
-  | Some load -> match load data with
-    | Some img -> of_img img data path
-    | None -> error "create image" (backend,`path path)
-                [%sexp_of:string * [`path of string option]]
-
-let autoload data path =
-  let bs = String.Table.data backends in
-  match List.filter_map bs ~f:(fun load -> load data) with
-  | [img] -> of_img img data path
-  | [] -> errorf "Autoloader: no suitable backend found"
-  | _  -> errorf "Autoloader: can't resolve proper backend"
-
-let create_image path ?(backend="llvm") data : result =
-  if backend = "auto" then autoload data path
-  else of_backend backend data path
-
-let of_bigstring ?backend data =
-  create_image None ?backend data
-
-let of_string ?backend data =
-  of_bigstring ?backend (Bigstring.of_string data)
-
-let create ?(backend="llvm") path : result =
-  try_with (fun () -> Bap_fileutils.readfile path) >>= fun data ->
-  if backend = "auto" then autoload data (Some path)
-  else of_backend backend data (Some path)
-
-let entry_point t = Img.entry t.img
+let entry_point {spec={Spec.entry}} = entry
 let filename t = t.name
-let arch t = Img.arch t.img
-let addr_size t = Arch.addr_size (Img.arch t.img)
-let endian t = Arch.endian (Img.arch t.img)
+let arch {spec={Spec.arch}} = arch
+let addr_size t = Arch.addr_size (arch t)
+let endian t = Arch.endian (arch t)
+let spec t = t.doc
 
 let words t (size : size) : word table =
   let lazy table = match size with
@@ -333,43 +303,295 @@ let memory_of_segment t = t.memory_of_segment
 let memory_of_symbol {memory_of_symbol = lazy f} = f
 let symbols_of_segment {symbols_of_segment = lazy f} = f
 let segment_of_symbol {segment_of_symbol = lazy f} = f
+let register_loader ~name backend =
+  Hashtbl.add_exn backends ~key:name ~data:backend
 
-(* let%test_module "image" = *)
-(*   (module struct *)
-(*     let expect ?(print=false) ~errors data_size ss = *)
-(*       let width = 32 in *)
-(*       let segment (addr, off, size) = { *)
-(*         Backend.Segment.name = "test-segment"; *)
-(*         Backend.Segment.perm = R; *)
-(*         Backend.Segment.off; *)
-(*         Backend.Segment.location = { *)
-(*           Location.addr = Addr.of_int ~width addr; *)
-(*           Location.len = size; *)
+module Scheme = struct
+  open Ogre.Type
+  type addr = int64
+  type 'a region = {addr : int64; size: int64; info : 'a}
+  let region addr size info = {addr; size; info}
+  let void_region addr size = {addr; size; info = ()}
 
-(*         } *)
-(*       } in *)
-(*       let data = Bigstring.create data_size in *)
-(*       let secs = match List.map ss ~f:segment with *)
-(*         | [] -> invalid_arg "empty set of segments" *)
-(*         | (s::ss) -> (s,ss) in *)
-(*       let v = validate_segments data secs in *)
-(*       if print then begin *)
-(*         match Validate.(result v) with *)
-(*         | Ok () -> eprintf "No errors\n" *)
-(*         | Error err -> eprintf "Errors: %s\n" @@ Error.to_string_hum err *)
-(*       end; *)
-(*       let has_errors = Validate.errors v <> [] in *)
-(*       errors = has_errors *)
+  let off  = "off"  %: int
+  let size  = "size"  %: int
+  let addr = "addr"  %: int
+  let name = "name"  %: str
+  let root = "root"  %: int
+  let readable   = "r" %: bool
+  let writable   = "w" %: bool
+  let executable = "x" %: bool
 
-(*     let%test "" = expect ~errors:true  0 [0,0,0] *)
-(*     let%test "" = expect ~errors:true  1 [0,0,0] *)
-(*     let%test "" = expect ~errors:false 1 [0,0,1] *)
-(*     let%test "" = expect ~errors:true  8 [0,0,4; 2,4,4] *)
-(*     let%test "" = expect ~errors:true  8 [0,0,4; 4,0,4] *)
-(*     let%test "" = expect ~errors:true  7 [0,0,4; 4,4,4] *)
-(*     let%test "" = expect ~errors:true  8 [0,0,4; 4,1,4] *)
-(*     let%test "" = expect ~errors:true  8 [0,2,4; 4,0,4] *)
-(*     let%test "" = expect ~errors:true  8 [0,1,4; 4,0,4] *)
-(*     let%test "" = expect ~errors:true  8 [0,0,4; 4,1,4] *)
-(*   end *)
-(*   ) *)
+  let location () = scheme addr $ size
+  let declare name scheme f = Ogre.declare ~name scheme f
+  let named n scheme f = declare n (scheme $ name) f
+  let arch    () = declare "arch" (scheme name) ident
+  let section () = declare "section" (location ()) void_region
+  let code_start   () = declare "code-start" (scheme addr) ident
+  let entry_point  () = declare "entry-point" (scheme addr) ident
+  let symbol_chunk  () = declare "symbol-chunk" (location () $ root) region
+  let named_region () = named "named-region" (location ()) region
+  let named_symbol () = named "named-symbol" (scheme addr) (fun x y -> x,y)
+  let rwx scheme = scheme $ readable $ writable $ executable
+  let segment () = declare "segment" (location () |> rwx)
+      (fun addr size r w x -> {addr; size; info=(r,w,x)})
+  let mapped () = declare "mapped" (location () $off)
+      (fun addr size off -> region addr size off)
+end
+
+
+module Derive = struct
+  open Fact.Syntax
+  open Scheme
+
+  let int_of_int64 x = match Int64.to_int x with
+    | None -> Fact.failf "unable to convert int64 to int" ()
+    | Some x -> Fact.return x
+
+  let arch =
+    Fact.require arch >>= fun s -> match Arch.of_string s with
+    | Some s -> Fact.return s
+    | None -> Fact.failf "unknown/unsupported architecture %s" s ()
+
+
+  let addr_width = arch >>| Arch.addr_size >>| Size.in_bits
+
+  let endian = arch >>| Arch.endian
+
+  let entry =
+    addr_width >>= fun width ->
+    Fact.require entry_point >>| Word.of_int64 ~width
+
+  let location ~addr ~size : location Fact.t =
+    addr_width >>= fun width ->
+    let addr = Word.of_int64 ~width addr in
+    int_of_int64 size >>| fun size ->
+    {addr;size}
+
+
+  let segments : segment seq Fact.t =
+    endian >>= fun endian ->
+    addr_width >>= fun width ->
+    Fact.foreach Ogre.Query.(begin
+        select (from segment $ mapped $ named_region)
+          ~join:[[field addr];
+                 [field size ~from:segment;
+                  field size ~from:named_region]]
+      end) ~f:(fun
+                {addr; size; info=(r,w,x)}
+                {size=len; info=off}
+                {info=name} ->
+        location ~addr ~size >>= fun locn ->
+        int_of_int64 off >>= fun off ->
+        int_of_int64 len >>| fun len ->
+        {name; locn; info={off; len; endian; r; w; x}}) >>=
+    Fact.Seq.all
+
+  let sections =
+    Fact.foreach Ogre.Query.(begin
+        select (from section $ named_region)
+          ~join:[[field addr];
+                 [field size ~from:section;
+                  field size ~from:named_region]]
+      end) ~f:(fun {addr; size;} {info=name} ->
+        location ~addr ~size >>| fun locn ->
+        {locn; name; info=()}) >>=
+    Fact.Seq.all
+
+  let symbol_locations start =
+    Fact.foreach Ogre.Query.(begin
+        select ~where:(symbol_chunk.(root) = int start)
+          (from symbol_chunk)
+      end) ~f:(fun {addr; size} -> location ~addr ~size) >>=
+    Fact.Seq.all
+
+  let symbol_name start =
+    Fact.foreach Ogre.Query.(begin
+        select ~where:(named_symbol.(addr) = int start)
+          (from named_symbol)
+      end) ~f:snd >>| Seq.hd
+
+  let symbols =
+    Fact.foreach Ogre.Query.(begin
+        select ~join:[[field addr]] (from code_start)
+      end) ~f:(fun start ->
+        symbol_name start >>= function
+        | None -> Fact.return None
+        | Some name ->
+          symbol_locations start >>= fun locations ->
+          match Seq.to_list locations with
+          | [] -> Fact.return None
+          | locn::locns ->
+            Fact.return (Some {
+                name; locn; info={kind=[`Code]; extra_locns = locns}
+              })) >>=
+    Fact.Seq.all >>| Seq.filter_opt
+
+  let image =
+    arch >>= fun arch ->
+    entry    >>= fun entry ->
+    segments >>= fun segments ->
+    sections >>= fun sections ->
+    symbols  >>| fun symbols  -> {
+      Spec.arch; entry;
+      segments = Seq.to_list_rev segments;
+      symbols = Seq.to_list_rev symbols;
+      sections = Seq.to_list_rev sections;
+    }
+end
+
+
+module Legacy = struct
+  open Fact.Syntax
+  open Scheme
+  open Image_backend
+
+  let rec is p = function
+    | Or (p1,p2) -> is p p1 || is p p2
+    | p' -> p = p'
+
+  let addr x = ok_exn (Word.to_int64 x)
+
+  let location_repr {Location.addr=x; len} =
+    addr x, Int64.of_int len
+
+
+  let vsize secs {Segment.name; location={Location.addr;len}} =
+    List.find_map secs
+      ~f:(fun {Section.name=n; location={Location.addr=a;len}} ->
+          if name = n && addr = a then Some len else None) |> function
+    | None -> len
+    | Some len -> len
+
+  let provide_segment sections s =
+    let addr,fsize = location_repr @@ Segment.location s in
+    let perm = Segment.perm s in
+    let r,w,x = is R perm, is W perm, is X perm in
+    let off = Int64.of_int (Segment.off s) in
+    let vsize = Int64.of_int (vsize sections s) in
+    Fact.provide segment addr vsize r w x >>= fun () ->
+    Fact.provide mapped addr fsize off >>= fun () ->
+    Fact.provide named_region addr vsize (Segment.name s)
+
+  let provide_section s =
+    let addr, size = location_repr @@ Section.location s in
+    Fact.provide section addr size >>= fun () ->
+    Fact.provide named_region addr size (Section.name s)
+
+  let provide_function s =
+    let loc, locs = Symbol.locations s in
+    let root,size = location_repr loc in
+    Fact.provide named_symbol root (Symbol.name s) >>= fun () ->
+    Fact.provide code_start root >>= fun () ->
+    Fact.provide symbol_chunk root size root >>= fun () ->
+    Fact.List.iter locs ~f:(fun loc ->
+        let addr,size = location_repr loc in
+        Fact.provide symbol_chunk addr size root)
+
+  let provide_symbol s =
+    if Symbol.is_function s then provide_function s
+    else Fact.return ()
+
+  let provide_image
+      {Img.arch=a; entry; segments=(s,ss); sections; symbols} =
+    Fact.provide arch (Arch.to_string a) >>= fun () ->
+    Fact.provide entry_point (addr entry) >>= fun () ->
+    Fact.List.iter (s::ss)  ~f:(provide_segment sections) >>= fun () ->
+    Fact.List.iter sections ~f:provide_section >>= fun () ->
+    Fact.List.iter symbols  ~f:provide_symbol
+end
+
+
+let register_backend ~name load =
+  let module Loader = struct
+    let from_data input = match load input with
+      | None ->
+        Result.failf
+          "A legacy %s loader was \
+           unable to process input" name ()
+      | Some img ->
+        match Fact.exec (Legacy.provide_image img) Ogre.Doc.empty with
+        | Error err ->
+          Result.failf
+            "A legacy %s loader failed to provide data - %a"
+            name Error.pp err ()
+        | Ok spec -> Ok (Some spec)
+
+    let from_file filename =
+      from_data (Bap_fileutils.readfile filename)
+  end in
+  if Hashtbl.mem backends name then `Duplicate
+  else (register_loader ~name (module Loader); `Ok)
+
+
+module Metaloader () = struct
+  let merge_docs d1 d2 = match Ogre.Doc.merge d1 d2 with
+    | Ok d3 -> Ok d3
+    | Error err ->
+      if Ogre.Doc.declarations d1 >
+         Ogre.Doc.declarations d2
+      then Ok d1
+      else if Ogre.Doc.definitions d1 >
+              Ogre.Doc.definitions d2
+      then Ok d1
+      else Ok d2
+
+  let load invoke =
+    Hashtbl.data backends |>
+    List.fold ~init:(Ok None) ~f:(fun doc loader ->
+        match doc, invoke loader with
+        | Ok None,doc
+        | doc,Ok None -> doc
+        | Ok (Some doc), Error _
+        | Error _ , Ok (Some doc) -> Ok (Some doc)
+        | Error e1, Error e2 -> Error (Error.of_list [e1;e2])
+        | Ok Some d1, Ok Some d2 ->
+          Ogre.Doc.merge d1 d2 |> Or_error.map ~f:Option.some)
+
+
+  let from_file name =
+    load (fun (module Loader) -> Loader.from_file name)
+  let from_data data =
+    load (fun (module Loader) -> Loader.from_data data)
+end
+
+let from_spec = from_spec Derive.image
+
+let merge_loaders () : loader =
+  let module Loader = Metaloader () in
+  (module Loader)
+
+let get_loader = function
+  | None -> merge_loaders ()
+  | Some name -> match Hashtbl.find backends name with
+    | Some loader -> loader
+    | None ->
+      let module Failure = struct
+        let fail _ = Result.failf "Unknown image loader %s" name ()
+        let from_file = fail
+        let from_data = fail
+      end in
+      (module Failure)
+
+let invoke load data arg = match load arg with
+  | Ok (Some doc) -> from_spec (data arg) doc
+  | Ok None ->
+    Result.failf "input file format is not supported \
+                  by the specified loader" ()
+  | Error _ as err -> err
+
+let result_with_filename file (t,warns) =
+  ({t with name = Some file},warns)
+
+let create ?backend path =
+  let (module Load) = get_loader backend in
+  invoke Load.from_file Bap_fileutils.readfile path >>|
+  result_with_filename path
+
+let of_bigstring ?backend data =
+  let (module Load) = get_loader backend in
+  invoke Load.from_data ident data
+
+let of_string ?backend data =
+  let (module Load) = get_loader backend in
+  invoke Load.from_data ident (Bigstring.of_string data)

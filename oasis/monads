@@ -1,0 +1,14 @@
+Flag monads
+  Description: Build monad library
+  Default: false
+
+Library monads
+  Build$: flag(everything) || flag(monads)
+  Path: lib/monads
+  FindlibName: monads
+  CompiledObject: best
+  BuildDepends: core_kernel
+  Modules: Monads
+  InternalModules: Monads_monad,
+                   Monads_monoid,
+                   Monads_types

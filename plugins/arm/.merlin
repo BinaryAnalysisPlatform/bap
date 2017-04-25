@@ -1,2 +1,12 @@
 REC
-PKG bap-arm
+
+B ../../_build
+B ../../_build/lib/bap_c
+B ../../_build/lib/arm
+B ../../_build/lib/bap_api
+B ../../_build/lib/bap_abi
+
+S ../../lib/bap_c
+S ../../lib/arm
+S ../../lib/bap_api
+S ../../lib/bap_abi

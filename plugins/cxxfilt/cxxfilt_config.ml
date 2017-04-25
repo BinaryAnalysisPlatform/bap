@@ -1,2 +1,2 @@
 let targets = []
-let cxxfilt = "cxxfilt_path"
+let cxxfilt = "cxxfilt"

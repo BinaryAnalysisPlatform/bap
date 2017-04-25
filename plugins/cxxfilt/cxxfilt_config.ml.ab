@@ -1,2 +1,2 @@
 let targets = $cxxfilt_targets
-let cxxfilt = "cxxfilt_path"
+let cxxfilt = "$cxxfilt_path"

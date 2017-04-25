@@ -1,10 +1,8 @@
-open Core_kernel.Std
-open Bap_bundle.Std
+open! Core_kernel.Std
 open Bap.Std
 open Bap_c.Std
 include Self()
 open Cabs
-open Option.Monad_infix
 
 let () = Config.manpage [
     `S "DESCRIPTION";
@@ -183,8 +181,8 @@ let is_signed = function
 
 let resolver lookup = object(self)
   inherit [unit] C.Type.Mapper.base
-  method map_union = self#resolve
-  method map_structure = self#resolve
+  method! map_union = self#resolve
+  method! map_structure = self#resolve
 
   method private resolve t = match t with
     | {C.Type.Compound.fields=[]} -> self#lookup t
@@ -202,7 +200,7 @@ let parse (size : C.Size.base) parse lexbuf =
   let tags = String.Table.create () in
   let gamma name = match Hashtbl.find env name with
     | Some t -> t
-    | None -> `Void in
+    | None -> invalid_argf "unbound type %s" name () in
   let lookup what name = match Hashtbl.find tags name with
     | Some t -> t
     | None -> what name [] in

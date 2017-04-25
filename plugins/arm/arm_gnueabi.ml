@@ -62,7 +62,7 @@ let main proj = match Project.arch proj with
   | #Arch.arm ->
     info "using armeabi ABI";
     Bap_api.process (api size);
-    proj
+    Project.set proj Bap_abi.name "eabi"
   | _ -> proj
 
 let setup () = Bap_abi.register_pass main

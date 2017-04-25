@@ -218,6 +218,13 @@ error_or<symbols_sizes> getSymbolSizes(const ObjectFile &obj) {
     return success(std::move(sizes));
 }
 
+error_or<symbols_sizes> getSymbolSizes(const MachOObjectFile& obj) {
+    symbols_sizes sizes;
+    error_code ec;
+    fill_symbols(obj.begin_symbols(), obj.end_symbols(), sizes, ec);
+    return success(std::move(sizes));
+}
+
 } //namespace sym
 
 namespace sec {

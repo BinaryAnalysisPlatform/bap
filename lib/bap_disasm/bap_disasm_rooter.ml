@@ -20,6 +20,7 @@ let of_image img =
   Table.to_sequence |>
   Seq.map ~f:fst    |>
   Seq.map ~f:Memory.min_addr |>
+  Seq.cons (Image.entry_point img) |>
   create
 
 let of_blocks blocks =

@@ -219,6 +219,7 @@ module Ir_sub : sig
   val noreturn : unit tag
   val returns_twice : unit tag
   val nothrow : unit tag
+  val entry_point : unit tag
   include Regular.S with type t := t
 end
 

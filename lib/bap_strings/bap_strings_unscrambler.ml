@@ -1,7 +1,6 @@
 open Core_kernel.Std
 open Format
 
-
 module type Alphabet = sig
   val length : int
   val index : char -> int

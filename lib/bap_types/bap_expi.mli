@@ -1,40 +1,14 @@
 open Core_kernel.Std
+open Monads.Std
 open Bap_common
 open Bap_bil
 open Bap_result
 open Bap_type_error
+open Bap_expi_types
 
-class context : object('s)
-  inherit Bap_context.t
-  method create_undefined : 's * result
-  method create_word : word -> 's * result
-  method create_storage : storage -> 's * result
-end
+class context : Context.t
 
-class ['a] t : object
-  constraint 'a = #context
-  method empty  : storage
-  method lookup : var -> 'a r
-  method update : var -> result -> 'a u
-  method load   : storage -> addr -> 'a r
-  method store  : storage -> addr -> word -> 'a r
+module type S = Expi.S
+module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
 
-  method type_error : type_error -> 'a r
-  method division_by_zero : unit -> 'a r
-  method undefined_addr : addr -> 'a r
-  method undefined_var  : var  -> 'a r
-
-  method eval_exp : exp -> 'a r
-  method eval_var : var -> 'a r
-  method eval_int : word -> 'a r
-  method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
-  method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
-  method eval_binop : binop -> exp -> exp -> 'a r
-  method eval_unop  : unop -> exp -> 'a r
-  method eval_cast  : cast -> nat1 -> exp -> 'a r
-  method eval_let : var -> exp -> exp -> 'a r
-  method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
-  method eval_concat : exp -> exp -> 'a r
-  method eval_extract : nat1 -> nat1 -> exp -> 'a r
-  method eval_unknown : string -> typ -> 'a r
-end
+include S with type ('a,'e) state = ('a,'e) Monad.State.t

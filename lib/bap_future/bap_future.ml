@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Monads.Std
 
 module Std = struct
 

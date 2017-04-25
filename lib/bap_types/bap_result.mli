@@ -1,7 +1,7 @@
 open Core_kernel.Std
+open Monads.Std
 open Regular.Std
 open Bap_common
-open Bap_monad
 
 class type storage = object('s)
   method load : addr -> word option
@@ -19,8 +19,8 @@ type id
 
 type t = result
 
-type 'a u = (unit,'a) State.t
-type 'a r = (result,'a) State.t
+type 'a u = (unit,'a) Monad.State.t
+type 'a r = (result,'a) Monad.State.t
 
 val undefined : id -> t
 val storage : storage -> id -> t

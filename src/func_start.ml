@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Monads.Std
 open Bap_future.Std
 open Bap_plugins.Std
 
@@ -19,7 +20,7 @@ let of_truth truth ~testbin : addr seq Or_error.t future =
   Future.return value
 
 let of_tool tool ~testbin : addr seq Or_error.t future =
-  let module EF = Monad.T.Or_error.Make(Future) in
+  let module EF = Monad.Result.Error.Make(Future) in
   let rooter = Rooter.Factory.find tool in
   let rooter = Option.value_exn rooter in
   let rooter_fe = Stream.hd rooter in
@@ -27,7 +28,7 @@ let of_tool tool ~testbin : addr seq Or_error.t future =
   let _ = match Project.create ~rooter input with
     | Ok x -> x
     | Error e -> Error.raise e in
-  let open EF in
+  let open EF.Syntax in
   rooter_fe >>= (fun r ->
       let future, promise = Future.create () in
       Future.upon Plugins.loaded (fun () ->
