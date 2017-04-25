@@ -1,3 +1,7 @@
 PKG cmdliner
 PKG bap-ida
 REC
+
+B ../../_build/lib/bap_ida
+B ../../_build/plugins/ida
+S.

@@ -20,5 +20,5 @@ Library bap_ida_plugin
   CompiledObject:   best
   BuildDepends:     bap, bap-ida
   Modules:          Ida_main
-  InternalModules:  Bap_ida_config, Bap_ida_service
+  InternalModules:  Bap_ida_config, Bap_ida_service, Bap_ida_check
   XMETADescription: use ida to provide rooter, symbolizer and reconstructor
