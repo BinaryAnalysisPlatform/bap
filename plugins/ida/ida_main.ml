@@ -160,22 +160,9 @@ let bool_of_headless = function
   | Some x -> x
   | None -> Bap_ida_config.is_headless
 
-let version_of_path path =
-  let path = FilePath.basename path in
-  let re = Str.regexp "{|[0-9]\(\.[0-9]\)?|}" in
-  let _x = Str.search_forward re path 0 in
-  try Some (Str.matched_string path)
-  with _ -> None
-
-let find_path paths version =
-  let test path msg = match path with
-    | Some p -> p
-    | None -> eprintf "%s\n" msg; exit 1 in
-  match version with
-  | None -> test (List.hd paths) "didn't find ida!"
-  | Some ver ->
-    let x = List.find ~f:(fun p -> version_of_path p = Some ver) paths in
-    test x @@ sprintf "didn't find a %s version in provided paths" ver
+let find_path = function
+  | None -> Bap_ida_config.ida_path
+  | Some p -> p
 
 module Cmdline = struct
 
@@ -224,23 +211,19 @@ module Cmdline = struct
         `P "$(b,bap-ida)(3), $(b,regular)(3),$(b,bap-plugin-byteweight)(1), $(b,bap-plugin-objdump)(1)"
       ] in
 
-    let paths =
+    let path =
       let doc = "Path to IDA directory." in
-      Config.(param (list string) "path" ~synonyms:["paths"]
-                ~default:[Bap_ida_config.ida_path] ~doc) in
+      Config.(param (some string) "path" ~doc) in
     let headless =
       let doc = "Use headless curses based IDA." in
       Config.(param Headless.t "headless" ~default:None ~doc) in
     let mode =
       let doc = "Specify IDA mode." in
       Config.(param Mode.t "mode" ~default:None ~doc) in
-    let version =
-      let doc = "Use specified IDA version" in
-      Config.(param (some string) "version" ~default:None ~doc) in
     Config.when_ready (fun {Config.get=(!)} ->
         let is_headless = bool_of_headless !headless in
         let ida_mode = ida_mode is_headless !mode in
-        let ida_path = find_path !paths !version in
+        let ida_path = find_path !path in
         match checked ida_path is_headless with
         | Ok () ->
           Bap_ida_service.register ida_path ida_mode is_headless; main ()
