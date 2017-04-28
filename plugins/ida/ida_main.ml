@@ -213,7 +213,7 @@ module Cmdline = struct
 
     let path =
       let doc = "Path to IDA directory." in
-      Config.(param (some string) "path" ~synonyms:["path"] ~doc) in
+      Config.(param (some string) "path" ~doc) in
     let headless =
       let doc = "Use headless curses based IDA." in
       Config.(param Headless.t "headless" ~default:None ~doc) in
