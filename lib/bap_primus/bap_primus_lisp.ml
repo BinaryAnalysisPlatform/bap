@@ -31,7 +31,8 @@ type exp =
 and fmt = Lit of string | Exp of exp | Pos of int
 
 
-type hook = [`enter | `leave] [@@deriving sexp]
+type hook = [ `before | `after] [@@deriving sexp]
+type advices = (hook * string) list String.Map.t
 type attrs = Univ_map.t
 
 type filepos = {
@@ -45,7 +46,6 @@ type meta = {
   name : string;
   docs : string;
   attrs : attrs;
-  hooks : (hook * string) list;
   loc : loc;
 }
 
@@ -57,6 +57,11 @@ type func = {
 type macro = {
   param : string list;
   subst : Sexp.t;
+  const : bool;
+}
+
+type subst = {
+  elts : Sexp.t list;
 }
 
 type 'a def = {meta : meta; code : 'a}
@@ -71,6 +76,14 @@ type library = {
   mutable initialized : bool;
 }
 
+type program = {
+  modules : String.Set.t;
+  defs : func defs;
+  macros : macro defs;
+  substs : subst defs;
+  advices : advices;
+}
+
 let library = {
   paths = [];
   features = [];
@@ -81,7 +94,7 @@ let library = {
 module Primitive = struct
   type 'a t = (Word.t list -> 'a) def
   let create ?(docs="") name code : 'a t =
-    {meta = {name;docs; hooks=[]; attrs=Univ_map.empty; loc=Primitive}; code}
+    {meta = {name;docs; attrs=Univ_map.empty; loc=Primitive}; code}
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig
@@ -232,16 +245,19 @@ end
 module Macro = struct
   open Sexp
 
-  let bind macro cs =
-    let rec bind ps cs = match ps, cs with
-      | [],[] -> []
-      | _ :: _, [] | [], _ :: _ -> raise Not_found
-      | [p],cs -> [p,cs]
-      | (p::ps),(c::cs) -> (p,[c]) :: bind ps cs in
-    match macro.code.param, cs with
-    | [p], _ :: _ :: _ -> None
-    | ps,cs -> try Some (bind ps cs) with Not_found -> None
+  let take_rest xs ys =
+    let rec take xs ys zs = match xs,ys with
+      | [],[] -> Some zs
+      | [x], (_ :: _ :: ys as rest) -> Some ((x,rest)::zs)
+      | x :: xs, y :: ys -> take xs ys ((x,[y])::zs)
+      | _ :: _, [] | [],_ -> None in
+    match take xs ys []with
+    | Some [] -> Some (0,[])
+    | Some ((z,rest) :: _ as bs) ->
+      Some (List.length rest, List.rev bs)
+    | None -> None
 
+  let bind macro cs = take_rest macro.code.param cs
 
   let subst bs body =
     let rec sub = function
@@ -297,7 +313,7 @@ module Resolve = struct
 
   let string_of_error name ctxts resolution =
     asprintf
-      "unable to find a candidate for definition %s@\n\
+      "no candidate for definition %s@\n\
        evaluation context@\n%a@\n@\n%a"
       name Contexts.pp ctxts pp resolution
 
@@ -354,8 +370,12 @@ module Resolve = struct
     | Type n -> size = n
 
   let overload_macro code (s3 : 'a candidates) =
-    List.filter_map s3 ~f:(fun (macro,_) ->
-        Option.(Macro.bind macro code >>| fun bs -> macro,bs))
+    List.filter_map s3 ~f:(fun (def,_) ->
+        Option.(Macro.bind def code >>| fun (n,bs) -> n,def,bs)) |>
+    List.sort ~cmp:(fun (n,_,_) (m,_,_) -> Int.ascending n m) |> function
+    | [] -> []
+    | ((n,_,_) as c) :: cs -> List.filter_map (c::cs) ~f:(fun (m,d,bs) ->
+        Option.some_if (n = m) (d,bs))
 
   let overload_defun arch args s3 =
     List.filter_map s3 ~f:(fun (def,cs) ->
@@ -433,6 +453,15 @@ module Variables = struct
 end
 
 module Parse = struct
+  module State = struct
+    type t = {
+      global_attrs : attrs;
+      parse_module : string -> t -> t;
+      program : program;
+      current : filepos;
+      constraints : Contexts.t;
+    }
+  end
   open Sexp
 
   let atom = function
@@ -498,20 +527,62 @@ module Parse = struct
   let is_keyword op = List.mem keywords op
   let nil = Int {value=0L; typ=Word}
 
-  let macros : macro def list ref = ref []
+  let find_entry defs op =
+    List.find defs ~f:(fun m -> String.(m.meta.name = op))
 
-  let is_macro op =
-    List.exists macros.contents ~f:(fun m -> String.(m.meta.name = op))
+  let find_macro {State.program={macros}} = find_entry macros
+  let find_subst {State.program={substs}} = find_entry substs
 
-  let subst ctxts name ops =
-    match Resolve.macro ctxts !macros name ops with
-    | res,None -> failwith (Resolve.string_of_error name ctxts res)
+  let is_macro s op = Option.is_some (find_macro s op)
+
+  let is_const s op = match find_macro s op with
+    | None -> false
+    | Some {code={const}} -> const
+
+
+  let ascii xs =
+    let rec loop xs acc = match xs with
+      | [] -> acc
+      | Atom x :: xs ->
+        String.fold x ~init:acc ~f:(fun acc x -> x :: acc) |>
+        loop xs
+      | List _ :: _ ->
+        failwith "ascii syntax must contain only atoms" in
+    List.rev_map (loop xs []) ~f:(fun c ->
+        Atom (sprintf "%#02x" (Char.to_int c)))
+
+
+  let is_odd x = Int.(x mod 2 = 1)
+
+  let hex xs =
+    let rec loop xs acc = match xs with
+      | [] -> List.rev acc
+      | List _ :: _ -> failwith "hex-data must contain only atoms"
+      | Atom x :: xs ->
+        let x = if is_odd (String.length x) then "0" ^ x else x in
+        String.foldi x ~init:acc ~f:(fun i acc _ ->
+            if is_odd i
+            then (Atom (sprintf "0x%c%c" x.[i-1] x.[i])) :: acc
+            else acc) |>
+        loop xs in
+    loop xs []
+
+  let expand s cs =
+    List.concat_map cs ~f:(function
+        | List _ as cs -> [cs]
+        | Atom x as atom -> match find_subst s x with
+          | None -> [atom]
+          | Some subst -> subst.code.elts)
+
+  let subst {State.constraints=cs; program={macros}} name ops =
+    match Resolve.macro cs macros name ops with
+    | res,None -> failwith (Resolve.string_of_error name cs res)
     | _,Some (macro,bs) -> Macro.apply macro bs
 
-
-  let exp pos ctxts =
+  let exp ({State.current=pos; constraints=ctxts} as s) sexp =
     let rec exp = function
       | Atom x when is_word x -> word x
+      | Atom c when is_const s c -> exp (subst s c [])
       | Atom x -> Var (var x)
       | List (Atom "if" :: c :: e1 :: es) -> Ite (exp c,exp e1,prog es)
       | List (Atom "let" :: List bs :: e) -> let' bs e
@@ -523,12 +594,12 @@ module Parse = struct
       | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
       | List (Atom "msg" :: Atom msg :: es) -> Msg (fmt msg, exps es)
       | List [Atom "fail"; Atom msg] -> Err msg
-      | List (Atom op ::_ ) as exp when is_keyword op -> bad_form pos op exp
-      | List (Atom op :: exps) when is_macro op ->
-        exp (subst ctxts op exps)
+      | List (Atom op :: _) as exp when is_keyword op -> bad_form pos op exp
+      | List (Atom op :: exps) when is_macro s op ->
+        exp (subst s op (expand s exps))
       | List (op :: arg :: args) when is_bop op ->
         List.fold ~f:(bop op) ~init:(exp arg) (exps args)
-      | List (Atom op :: args) -> App (op, exps args)
+      | List (Atom op :: args) -> App (op, exps (expand s args))
       | List [] -> nil
       | s ->  expects "(<ident> exps..)" s
     and exps = List.map ~f:exp
@@ -584,7 +655,7 @@ module Parse = struct
           | `Atm xs -> push_exp (str xs) spec
           | _ -> invalid_argf "invalid format string '%s'" fmt () in
       parse 0 [] nil in
-    exp
+    exp sexp
 
   let params = function
     | List vars -> List.map ~f:(fun x -> var (atom x)) vars
@@ -594,65 +665,87 @@ module Parse = struct
     | List vars -> List.map ~f:atom vars
     | s -> expects "(s1 s2 ..)" s
 
-  module State = struct
-    type t = {
-      global_attrs : attrs;
-      parse_module : string -> t -> t;
-      defs : func defs;
-      current : filepos;
-      features : String.Set.t;
-      constraints : Contexts.t;
-    }
-  end
   open State
 
-  let add_def defs def = def :: defs
 
+  let add_def prog def = {prog with defs = def :: prog.defs}
+  let add_macro prog macro = {prog with macros = macro :: prog.macros}
+  let add_subst prog subst = {prog with substs = subst :: prog.substs}
   let parse_declarations attrs =
     List.fold ~init:attrs ~f:Attrs.parse
 
+  let reader = function
+    | None -> ident
+    | Some ":ascii" -> ascii
+    | Some ":hex" -> hex
+    | Some unknown ->
+      invalid_argf "Unknown substitution syntax %s" unknown ()
+
+  let is_keyarg s = Char.(s.[0] = ':')
+
   let defun ?(docs="") ?(attrs=[]) name p body state = {
     state with
-    defs = add_def state.defs {
+    program = add_def state.program {
         meta = {
           name;
           docs;
           attrs = parse_declarations state.global_attrs attrs;
-          hooks = [];
           loc = Filepos state.current;
         };
         code = {
           args = params p;
-          body = List.map ~f:(exp state.current state.constraints) body
+          body = List.map ~f:(exp state) body
         }
       }
   }
 
-  let defmacro ?(docs="") ?(attrs=[]) name ps body state =
-    macros := {
+  let defmacro ?(docs="") ?(attrs=[]) ?(const=false)
+      name ps body state = {
+    state with
+    program = add_macro state.program {
       meta = {
         name;
         docs;
         attrs = parse_declarations state.global_attrs attrs;
-        hooks = [];
         loc = Filepos state.current;
       };
       code = {
         param = metaparams ps;
-        subst  = body;
+        subst = body;
+        const;
       }
-    } :: !macros;
-    state
+    }
+  }
+
+  let defsubst ?(attrs=[]) ?syntax name body state = {
+    state with
+    program = add_subst state.program {
+        meta = {
+          name;
+          docs="";
+          attrs = parse_declarations state.global_attrs attrs;
+          loc = Filepos state.current;
+        };
+        code = {
+          elts = reader syntax body
+        }
+      }
+  }
 
   let add_advice ~advisor ~advised where state = {
     state with
-    defs =
-      List.map state.defs ~f:(fun def ->
-          if String.(def.meta.name = advised) then {
-            def with meta = {
-              def.meta with hooks = (where,advisor) :: def.meta.hooks
-            }} else def)
+    program = {
+      state.program with
+      advices = String.Map.add_multi
+          state.program.advices ~key:advised ~data:(where,advisor)
+    }
   }
+
+  let hook = function
+    | ":before" -> `before
+    | ":after" -> `after
+    | s -> expects ":before | :after" (Atom s)
+
 
   let stmt state = function
     | List (Atom "defun" ::
@@ -684,6 +777,30 @@ module Parse = struct
             params ::
             body) ->
       defun name params body state
+    | List [Atom "defconstant";
+            Atom name;
+            Atom docs;
+            List (Atom "declare" :: attrs);
+            Atom _ as value;
+           ] ->
+      defmacro ~docs ~attrs ~const:true name (List []) value state
+    | List [Atom "defconstant";
+            Atom name;
+            List (Atom "declare" :: attrs);
+            Atom _ as value;
+           ] ->
+      defmacro ~attrs ~const:true name (List []) value state
+    | List [Atom "defconstant";
+            Atom name;
+            Atom docs;
+            Atom _ as value;
+           ] ->
+      defmacro ~docs ~const:true name (List []) value state
+    | List [Atom "defconstant";
+            Atom name;
+            Atom _ as value;
+           ] ->
+      defmacro ~const:true name (List []) value state
     | List [Atom "defmacro";
             Atom name;
             params;
@@ -708,15 +825,32 @@ module Parse = struct
             params;
             body] ->
       defmacro name params body state
-    | List [Atom "advice"; h; Atom f1; Atom ":with"; Atom f2] ->
-      add_advice ~advised:f1 ~advisor:f2 (hook_of_sexp h) state
+    | List (Atom "defsubst" ::
+            Atom name ::
+            List (Atom "declare" :: attrs) ::
+            Atom syntax :: body) when is_keyarg syntax ->
+      defsubst ~attrs ~syntax name body state
+    | List (Atom "defsubst" ::
+            Atom name ::
+            Atom syntax :: body) when is_keyarg syntax ->
+      defsubst ~syntax name body state
+    | List (Atom "defsubst" ::
+            Atom name ::
+            List (Atom "declare" :: attrs) ::
+            body) ->
+      defsubst ~attrs name body state
+    | List (Atom "defsubst" :: Atom name :: body) ->
+      defsubst name body state
+    | List [Atom "advice-add"; Atom f1; Atom h; Atom f2] ->
+      add_advice ~advised:f2 ~advisor:f1 (hook h) state
     | List (Atom "declare" :: attrs) -> {
         state with global_attrs =
                      parse_declarations state.global_attrs attrs
       }
     | List [Atom "require"; Atom name] ->
       state.parse_module name state
-    | s -> expects "(defun ...) | (defmacro ..)" s
+    | s -> expects "(defun ...) | (defmacro ..) | (defconstant ..) \
+                   (declare ..) | (require ..) | (advice-add .. )" s
 
 
   let update_range loc range = Sexp.Annotated.{
@@ -767,28 +901,27 @@ module Load = struct
   let feature
       ?(features=String.Set.empty)
       ?(paths=[Filename.current_dir_name])
-      ?(defs=[]) cs feature =
+      program cs feature =
     let open Parse.State in
-    let rec load features defs feature =
-      if Set.mem features feature then features,defs
+    let rec load (p : program) feature =
+      if Set.mem p.modules feature then p
       else match file_of_feature paths feature with
         | Some name ->
+          let modules = Set.add p.modules feature in
           let state = Parse.State.{
               current = make_loc dummy_range name;
               global_attrs = Univ_map.empty;
-              defs;
+              program = {p with modules};
               constraints=cs;
-              features = Set.add features feature;
               parse_module = (fun feature s ->
-                  let features,defs = load s.features s.defs feature in
-                  {s with features; defs})
+                  {s with program = load s.program feature})
             } in
           let result = Parse.defs state (load_sexps name) in
-          result.features, result.defs
+          result.program
         | None ->
           invalid_argf "Lisp loader: can't find module %s"
             feature () in
-    load features defs feature
+    load program feature
 
 end
 
@@ -799,8 +932,7 @@ type bindings = (var * Word.t) list [@@deriving sexp]
 
 type state = {
   primitives : primitives list;
-  modules : String.Set.t;
-  defs : func defs;
+  program : program;
   width : int;
   env : bindings;
   contexts : Contexts.t;
@@ -827,6 +959,14 @@ let () = Bap_primus_error.add_printer (function
     | Link_error msg -> Some ("primus linker error - " ^ msg)
     | _ -> None)
 
+let empty_program = {
+  modules = String.Set.empty;
+  advices = String.Map.empty;
+  defs    = [];
+  macros  = [];
+  substs  = [];
+}
+
 
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
@@ -834,8 +974,7 @@ let state = Bap_primus_state.declare ~inspect
     (fun ctxt -> {
          env = [];
          primitives = [];
-         modules = String.Set.empty;
-         defs = [];
+         program = empty_program;
          paths = [Filename.current_dir_name];
          width = width_of_ctxt ctxt;
          contexts = Contexts.of_project ctxt#project;
@@ -1002,30 +1141,46 @@ module Lisp(Machine : Machine) = struct
             Machine.return Word.b1
           | None -> Machine.return Word.b1
 
-  let eval_primitive biri name args =
+
+
+  let rec eval_lisp biri name args =
+    Machine.get () >>= fun ctxt ->
+    let arch = Project.arch ctxt#project in
+    Machine.Local.get state >>= fun s ->
+    match Resolve.defun s.contexts s.program.defs name arch args with
+    | {Resolve.stage1=[]},None -> eval_primitive biri name args
+    | resolution,None ->
+      Machine.fail (Resolve.Failed (name, s.contexts, resolution))
+    | _,Some (fn,bs) ->
+      eval_advices `before Word.b0 biri name args >>= fun _ ->
+      Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
+      Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
+      eval_body biri fn.code.body >>= fun r ->
+      Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
+      Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+      eval_advices `after r biri name args
+
+  and eval_advices stage init biri primary args =
+    Machine.Local.get state >>= fun {program={advices}} ->
+    match Map.find advices primary with
+    | Some advices ->
+      Machine.List.fold advices ~init ~f:(fun r (s,name) ->
+          if s = stage
+          then eval_lisp biri name args
+          else Machine.return r)
+    | None -> Machine.return init
+
+  and eval_primitive biri name args =
     Machine.Local.get state >>= fun {contexts; primitives} ->
     let defs = List.concat_map primitives (fun (module Make) ->
         let module Primitives = Make(Machine) in
         Primitives.defs ()) in
     match Resolve.primitive contexts defs name with
     | _,None -> failf "unresolved name %s" name ()
-    | _,Some (def,_) -> def.code args
-
-  let rec eval_lisp biri name args =
-    Machine.get () >>= fun ctxt ->
-    let arch = Project.arch ctxt#project in
-    Machine.Local.get state >>= fun s ->
-    match Resolve.defun s.contexts s.defs name arch args with
-    | {Resolve.stage1=[]},None -> eval_primitive biri name args
-    | resolution,None ->
-      Machine.fail (Resolve.Failed (name, s.contexts, resolution))
-    | _,Some (fn,bs) ->
-      Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
-      Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-      eval_body biri fn.code.body >>= fun r ->
-      Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
-      Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
-      Machine.return r
+    | _,Some (def,_) ->
+      eval_advices `before Word.b0 biri name args >>= fun _ ->
+      def.code args >>= fun r ->
+      eval_advices `after r biri name args
 
   and eval_body biri body = eval_exp biri (Seq body)
 
@@ -1134,9 +1289,8 @@ module Make(Machine : Machine) = struct
   let failf fmt = error (fun m -> Runtime_error m) fmt
   let linkerf fmt = error (fun m -> Link_error m) fmt
 
-
   let collect_externals s =
-    List.fold ~init:String.Map.empty s.defs ~f:(fun toload def ->
+    List.fold ~init:String.Map.empty s.program.defs ~f:(fun toload def ->
         match Univ_map.find def.meta.attrs External.t with
         | Some names ->
           List.fold names ~init:toload ~f:(fun toload name ->
@@ -1161,12 +1315,14 @@ module Make(Machine : Machine) = struct
         args,ret,tid,addr
 
   let link_feature (name,defs) =
+    fprintf library.log "linking %s@\n" name;
     Machine.get () >>= fun ctxt ->
     Machine.Local.get state >>= fun s ->
     let arch = Project.arch ctxt#project in
     let args,ret,tid,addr = find_sub ctxt name in
     match Resolve.extern s.contexts defs name arch args with
-    | _,None -> Machine.return ()
+    | res,None when tid = None -> Machine.return ()
+    | res,None -> Machine.fail (Resolve.Failed (name,s.contexts,res))
     | _,Some (fn,bs) ->
       let module Code(Machine : Machine) = struct
         module Lisp = Lisp(Machine)
@@ -1184,10 +1340,7 @@ module Make(Machine : Machine) = struct
               | Bil.Mem _ -> failf "type error, got mem as arg" ()
               | Bil.Bot ->
                 failf "An argument %a has an undefined value"
-                  Arg.pps arg ()) >>= fun bs ->
-          Machine.Local.update state
-            ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
-          Machine.return bs
+                  Arg.pps arg ())
 
         let eval_ret self r = match ret with
           | None -> Machine.return ()
@@ -1213,6 +1366,7 @@ module Make(Machine : Machine) = struct
           let module Level = Context.Level in
           match level with
           | Level.Jmp {Level.me=jmp} -> return_to_caller self jmp
+          | Level.Top _ -> Machine.update (fun ctxt -> ctxt#set_next None)
           | level ->
             invalid_argf "broken invariant - %s (%s)"
               "a call to lisp from unexpected level"
@@ -1221,12 +1375,15 @@ module Make(Machine : Machine) = struct
         let exec self =
           Machine.get () >>= fun ctxt ->
           eval_args self >>= fun bs ->
+          let args = List.map ~f:snd bs in
+          Lisp.eval_advices `before Word.b0 self name args >>= fun _ ->
+          Machine.Local.update state
+            ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
           Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
           Lisp.eval_body self fn.code.body >>= fun r ->
           Machine.Local.update state ~f:(Env.pop (List.length bs)) >>= fun () ->
-
-
           Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+          Lisp.eval_advices `after r self name args >>= fun r ->
           eval_ret self r >>= fun () ->
           eval_finish self ctxt#level
       end in
@@ -1237,31 +1394,33 @@ module Make(Machine : Machine) = struct
     Machine.Seq.iter ~f:link_feature
 
   let load_feature name =
+    fprintf library.log "loading feature %s@\n" name;
     Machine.Local.update state ~f:(fun s ->
-        let modules,defs = Load.feature
-            ~paths:s.paths
-            ~features:s.modules
-            ~defs:s.defs s.contexts name in
-        {s with modules; defs})
+        let program =
+          Load.feature ~paths:s.paths s.program s.contexts name in
+        {s with program})
 
   let load_features fs =
     Machine.List.iter fs ~f:load_feature
 
   let add_directory path =
+    fprintf library.log "adding path %s@\n" path;
     Machine.Local.update state ~f:(fun s -> {
           s with paths = s.paths @ [path]
         })
 
   let init () =
+    fprintf library.log "initializing lisp library@\n";
     Machine.List.iter library.paths ~f:add_directory >>= fun () ->
     load_features library.features >>=
-    link_features
+    link_features >>= fun () ->
+    fprintf library.log "the lisp machine is ready@\n";
+    Machine.return ()
 
   let link_primitives p =
     Machine.Local.update state ~f:(fun s ->
         {s with primitives = p :: s.primitives})
 end
-
 
 let init ?(log=std_formatter) ?(paths=[]) features  =
   if library.initialized

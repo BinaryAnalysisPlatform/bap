@@ -33,15 +33,21 @@ let empty = {
 }
 
 
+let string_of_name = function
+  | `symbol name -> name
+  | `addr addr -> sprintf "at address %s" (Addr.string_of_value addr)
+  | `tid tid -> sprintf "with tid %a" Tid.pps tid
 
 let () = Bap_primus_error.add_printer (function
     | Unbound_name name ->
-      Some (asprintf "Linker: unbound %a" Sexp.pp (sexp_of_name name))
+      Some (asprintf "unbound function %s" (string_of_name name))
     | _ -> None)
 
 let code_of_term sub : code =
-  (module functor (_ : Machine) -> struct
-    let exec self = self#eval_sub sub
+  (module functor (Machine : Machine) -> struct
+    let exec :
+      (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t =
+      fun self -> self#eval sub_t sub
   end)
 
 let add_code code codes =
@@ -75,6 +81,18 @@ let code_of_name name s = match name with
   | `addr addr -> find addr s.addrs s.codes
   | `tid tid -> find tid s.terms s.codes
 
+let lookup_name k t1 names : string option =
+  match Map.find t1 k with
+  | None -> None
+  | Some idx ->
+    Map.to_sequence names |> Seq.find_map ~f:(fun (n,i) ->
+        Option.some_if Int.(i = idx) n)
+
+let resolve_name s name = match name with
+  | `symbol name -> Some name
+  | `addr addr -> lookup_name addr s.addrs s.names
+  | `tid tid -> lookup_name tid s.terms s.names
+
 let state = Bap_primus_machine.State.declare
     ~uuid:"38bf35bf-1091-4220-bf75-de79db9de4d2"
     ~name:"linker"
@@ -86,6 +104,13 @@ module Make(Machine : Machine) = struct
 
   module Biri = Biri.Make(Machine)
 
+  let linker_error s = Machine.fail (Unbound_name s)
+
+  let fail name =
+    Machine.Local.get state >>= fun s ->
+    match resolve_name s name with
+    | Some s -> linker_error (`symbol s)
+    | None -> linker_error name
 
   let link ?addr ?name ?tid code  =
     Machine.Local.update state ~f:(fun s ->
@@ -100,7 +125,7 @@ module Make(Machine : Machine) = struct
 
   let exec name biri =
     Machine.Local.get state >>| code_of_name name >>= function
-    | None -> Machine.fail (Unbound_name name)
+    | None -> fail name
     | Some (module Code) ->
       let module Code = Code(Machine) in
       Code.exec (biri :> _ Biri.t)

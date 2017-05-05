@@ -44,7 +44,8 @@ module Param = struct
   let envp = param (array string) "env"
       ~doc:"Program environemt as a list of VAR=VAL pairs";;
 
-  let entry = param (some string) "entry-point"
+  let entry = param string "entry-point"
+      ~default:"_start"
       ~doc: "When specified, then start the execution from $(docv),
       otherwise the execution will be started from a default entry point";;
 
@@ -53,12 +54,12 @@ end
 module Machine = Primus.Machine.Make(Monad.Ident)
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
-module Environment(Machine : Primus.Machine.S) = struct
-end
+module Linker = Primus.Linker.Make(Machine)
 
 let pp_backtrace ppf ctxt =
   let prog = ctxt#program in
-  List.iter ctxt#trace ~f:(fun tid ->
+  fprintf ppf "Traceback (most recent instruction last):@\n@[<v>";
+  List.iter (List.rev ctxt#trace) ~f:(fun tid ->
       let do_if cls = Option.iter (Program.lookup cls prog tid) in
       let pp_if cls pp = do_if cls ~f:(fun t ->
           fprintf ppf "    %a" pp t) in
@@ -69,7 +70,8 @@ let pp_backtrace ppf ctxt =
       do_if blk_t ~f:(fun blk ->
           fprintf ppf "  %a:@\n" Tid.pp (Term.tid blk));
       do_if sub_t ~f:(fun sub ->
-          fprintf ppf "%s:@\n" (Sub.name sub)))
+          fprintf ppf "%s:@\n" (Sub.name sub)));
+  fprintf ppf "@]@\n"
 
 let pp_binding ppf (v,r) =
     fprintf ppf "  %a -> %s" Var.pp v @@ match Bil.Result.value r with
@@ -78,29 +80,25 @@ let pp_binding ppf (v,r) =
     | Bil.Mem m -> "<mem>"
 let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 
+let name_of_entry arch entry =
+  let width = Arch.addr_size arch |> Size.in_bits in
+  if String.is_empty entry
+  then invalid_arg "Entry point should be a non-empty string"
+  else match entry.[0] with
+    | '%' -> `tid (Tid.from_string_exn entry)
+    | '0' -> `addr (Addr.of_int64 ~width (Int64.of_string entry))
+    | _ -> `symbol entry
+
 let main {Config.get=(!)} proj =
   let open Param in
-  let prog = Project.program proj in
   let init = new Primus.Context.t ~envp:!envp ~argv:!argv proj in
   let interp = new Interpreter.t in
-  let subs = Term.enum sub_t prog in
-  let is_entry_point = match !entry with
-    | Some name -> fun sub -> Sub.name sub = name
-    | None -> fun sub -> Term.has_attr sub Sub.entry_point in
-  let entry = match Seq.find subs ~f:is_entry_point with
-    | Some entry -> entry
-    | None when Option.is_some !entry ->
-      invalid_arg "can't find the specified entry point"
-    | None ->
-      Seq.find subs ~f:(fun sub -> not (Term.has_attr sub Sub.stub)) |>
-      function
-      | Some entry -> entry
-      | None -> invalid_arg "unable to find a suitable entry point" in
-  match Main.run (interp#eval sub_t entry) init with
+  let entry_point = name_of_entry (Project.arch proj) !entry in
+  match Main.run (Linker.exec entry_point interp) init with
   | (Ok (),ctxt) ->
     info "evaluation finished after %d steps at term: %a"
       (List.length ctxt#trace) Tid.pp ctxt#current;
-    debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
+    debug "%a" pp_backtrace ctxt;
     let result = Var.create "main_result" reg32_t in
     let () = match ctxt#lookup result with
       | None -> warning "result is unknown";
@@ -109,11 +107,11 @@ let main {Config.get=(!)} proj =
         | Bil.Imm w -> info "result is %a" Word.pp w;
         | Bil.Mem _ -> warning "result is unsound" in
     debug "CPU State:@\n%a@\n" pp_bindings ctxt;
-    debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
+    debug "%a" pp_backtrace ctxt;
     ctxt#project;
   | (Error err,ctxt) ->
     error "program failed with %s\n" (Primus.Error.to_string err);
-    info "Backtrace:@\n%a@\n" pp_backtrace ctxt;
+    error "%a" pp_backtrace ctxt;
     ctxt#project
 
 let () =

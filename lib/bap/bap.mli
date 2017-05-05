@@ -7441,6 +7441,20 @@ module Std : sig
     (** [error fmt ...] send an error message  *)
     val error   : ('a,Format.formatter,unit) format -> 'a
 
+
+    (** formatter that sends debug messages  *)
+    val debug_formatter : Format.formatter
+
+    (** formatter that sends info messages  *)
+    val info_formatter : Format.formatter
+
+    (** formatter that sends warning messages  *)
+    val warning_formatter : Format.formatter
+
+    (** formatter that sends error messages  *)
+    val error_formatter : Format.formatter
+
+
     (** This module allows plugins to access BAP configuration variables.
 
         When reading the values for the configuration variables, the
