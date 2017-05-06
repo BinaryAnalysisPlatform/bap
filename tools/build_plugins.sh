@@ -6,7 +6,7 @@ build_plugin() {
     plugin=$1
     if ocamlfind query bap-plugin-$plugin 2>/dev/null
     then
-        TMPDIR=`mktemp --directory`
+        TMPDIR=`mktemp -d`
         cd $TMPDIR
         touch $plugin.ml
         bapbuild -package bap-plugin-$plugin $plugin.plugin
