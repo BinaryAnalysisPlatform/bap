@@ -963,8 +963,9 @@ module Std : sig
         for ARMv7, {v t = 32 \/ 31 \/ .. \/ 1 v}. Thus a value of any
         type, is a also a value of type [t].
 
-        Side note -- the type system doesn't contain the unit type, i.e.,
-        the [0] type. An expression [()] evaluates to the [0:1] value.
+        Side note -- the type system doesn't include the unit type,
+        i.e., the [0] type. An expression [()] evaluates to the [0:1]
+        value.
 
         {2 Functions and expressions}
 
@@ -1015,11 +1016,14 @@ module Std : sig
 
         {3 Choice}
 
-        The {v (if <cond> <then> <else>) v} form is a basic control
-        flow structure. If <cond> evaluates to a word that doesn't
-        contain ones (e.g., 0:1, 00:2, ...) then the result of the
-        <if> form is the result of the <else> expression. Otherwise it
-        is the result of the <then> expression.
+        The {v (if <cond> <e1> <e2> .. <eM>) v} form is a basic
+        control flow structure. If <cond> evaluates to a non-zero word
+        then the result of the <if> form is the result of the <e1>
+        expression. Otherwise, a sequence of expressions
+
+        {v <e2> .. <eM> v} is evaluated and the result of the [if]
+        form is the result of the last expression {v <eM> v}.
+
 
         Several derived forms are defined as macros, e.g.,
         {v
@@ -1049,8 +1053,402 @@ module Std : sig
 
         {3 Variables}
 
+        The [let] form binds values to names in the lexical scope.
+
+        {v (let ((<v1> <e1>) .. (<vM> <eM>) <s1> .. <sN>) v}
+
+        form binds variables {v <v1>, ... <vM > v} to values of
+        expressions {v <e1>, ..., <eM> v} in expressions {v
+        <s1>,...,<sN> v}.  The lexical scope of the bound variable
+        starts from the next binding expression and ends with the
+        scope of the whole let expression. Thus, a variable <v1> is
+        bound in expressions {v <e2>,..., <eM> v} as well as in
+        {v <s1>,..., <sN> v}.
+
+        The value of the [let] form is the value of the last
+        expression {v <sN> v}.
 
 
+        {3 Sequencing }
+
+        The {v (prog <e1> ... <eM>) v} form combines a sequence of
+        expressions into one expression, and is useful in the contexts
+        where an expression is required. The expressions are evaluated
+        from left to right, and the value of the [prog] form is the
+        value of the last expression.
+
+        {3 Messaging }
+
+        The {v (msg <fmt> <e0> <eM>) v} form constructs
+        logging/debugging messages using an embedded formatting
+        language. The formed message will be sent to the logging
+        facility, that was set up during the Primus Lisp library
+        initialization.
+
+        The format language interprets all symbols literally, unless
+        they start with the dollar sign ($).
+
+        A pair of characters of the form {v $<n> v}, where {v <n> v}
+        is a decimal digit, will be substituted with the value of the
+        n'th expression (counting from zero).
+
+        A sequence {v $<expr> v} will be substituted with the value of
+        expression {v $<expr> v}. Thus the [$] symbol can be seen as
+        an anti-quotation, that temporary disables the quoting marks.
+
+        Example,
+
+        {v (msg "hello, $0 $0 world, (+ 7 8) = $(+ 7 8)" "cruel") v}
+
+        will be rendered to a message:
+
+        {v "hello, cruel cruel world, (+ 7 8) = 15" v}
+
+
+        {2 Metaprogramming}
+
+        Ordinary Primus Lisp expressions are evaluated at the runtime
+        in the Primus emulator, and are quite limited as they need to
+        be evaluated directly on the CPU model. To mitigate this
+        limitation, Primus Lisp provides a powerful metaprogramming
+        system. The metaprogram is evaluated when the Primus Lisp
+        program is read. A metaprogram generates a program, that will
+        be evaluated by the CPU. The metaprogram itself is Turing
+        complete, thus any transformation can be applied to a
+        program. The Primus Lisp metaprogramming system use
+        term-rewriting as a computational model, with Lisp code
+        fragments as terms. Primus Lisp provides three facilities for
+        metaprogramming:
+
+        - syntactic constants;
+        - syntactic substitutions;
+        - macro definitions.
+
+        {3 Constants}
+
+        The syntactic constants is the simplest syntactic
+        substitution, it just substitutes atoms for atoms. Constants
+        are introduced with the [defconstant] form, that has the
+        following syntax:
+
+        {v (defconstant <name>
+              [<docstring>]
+              [<declarations>]
+              <value>)
+        v}
+
+        For example,
+
+        {v (defconstant main-address 0xDEAD) v}
+
+
+        During the program parsing, each occurrence of the
+        {v <name> v} term will be rewritten with the {v <value> v}
+        term, that should be an atom.
+
+
+
+        {3 Substitutions}
+
+        The syntactic substitutions is the generalization of syntactic
+        constant, and has quite a similar syntax:
+
+        {v
+           (defsubst <name> [<declarations>] [:<syntax>] {<value>})
+        v}
+
+
+        During parsing, every occurrence of the term <name> (that
+        should be an atom), will be rewritten with a sequence of
+        values {v {<value>} v}.
+
+        Example,
+
+        {v (defsubst ten-digits 0 1 2 3 4 5 6 7 8 9 v}
+
+        A process of applying of the substitutions is called
+        "expansion". Since the expansion transforms an atom to a list
+        of atoms, it can be applied only inside the macro or function
+        application. For example,
+
+        {v (+ ten-digits) v}
+
+        will be expanded to
+
+        {v (+ 0 1 2 3 4 5 6 7 8 9 ) v}
+
+        {4 Special syntax}
+
+        Expansions also provide a support for extensible value
+        specification syntax, that enables domain-specific data
+        specification languages. Currently, we support only two
+        syntaxes: [:ascii] and [:hex].
+
+        In the [:ascii] syntax the values should be atoms, possibly
+        delimited with double quotes. Each character of each atom will
+        be expanded to its corresponding ASCII code. Strings can
+        contain special characters prefixed with a backslash. The
+        special character can be one of the well-known ASCII special
+        character, e.g., `\n`, `\r`, etc, or it can be a decimal or a
+        hexadecimal code of a character.
+
+        Example, given the following substitution:
+
+        {v (defsubst hello-cruel-world :ascii "hello, cruel world\n\000") v}
+
+        the following application:
+
+        {v (write-block SP hello-cruel-world v}
+
+        will be expanded with
+
+        {v
+         (write-block SP
+              0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63
+              0x72 0x75 0x65 0x6c 0x20 0x77 0x6f 0x72
+              0x6c 0x64 0x0a 0x00)
+        v}
+
+
+        In the [:hex] syntax the sequence of atoms is split into
+        two-characters subsequences each treated as a hex value. This
+        syntax is useful for encoding memory dumps in a format that is
+        close to the hexdump (without offsets). E.g., given the
+        following substitution rule
+
+        {v
+         (defsubt example :hex 68656c 6c 6f2c2063)
+        v}
+
+        an application
+
+        {v
+         (write-block SP example)
+        v}
+
+        will be expanded into
+
+        {v
+         (write-block SP 0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63)
+        v}
+
+
+        {3 Macro}
+
+        The macros provide the most versatile and powerful way to
+        specify arbitrary code transformations. The macro definitions
+        introduce abstractions on the meta-programming level. I.e., it
+        allows a programmer to write a function that operates on code
+        terms, making the code a first class value.
+
+
+        The macro definition has the following syntax:
+
+        {v
+
+         (defmacro <name> (<p1> ... <pM>)
+           [<docstring>] [<declarations>]
+           <value>)
+        v}
+
+        A macro definition adds a term rewriting rule, that rewrites
+        each occurrence of {v (<name> <t1> .. <tN>) v}, where [N >= M]
+        with the {v <value> v} in which occurrences of the parameter
+        <pN> is substituted with the term <tN>. If [N] is bigger than
+        [M], then the last parameter is bound with the sequence {v
+        <tM>...<tN> v}.
+
+        The macro subsystem doesn't provide any specific looping or
+        control-flow facilities, however, the macro-overloading
+        mechanism along with the recursion make it possible to encode
+        arbitrary meta-transformations.
+
+        Other than a standard context-based ad-hoc overloading
+        mechanism, the macro application uses arity-based
+        resolution. As it was described above, if a number of
+        arguments is greater than the number of parameters, then the
+        last parameter is bound to the rest of the arguments. When
+        several macro definitions matches, then a definition that has
+        fewer unmatched arguments is chosen. For example, suppose we
+        have the following definitions:
+
+        {v
+          (defmacro list-length (x) 1)
+          (defmacro list-length (x xs) (+ 1 (list-length xs)))
+        v}
+
+
+        The the following term
+
+        {v (list-length 1 2 3) v}
+
+        will be normalized (after a series of transformations) with
+        the following:
+
+        {v
+         (+ 1 (+ 1 1))
+        v}
+
+
+        {v
+1: (list-length 1 2 3) => (+ 1 (list-length 2 3))
+2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
+3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
+        v}
+
+        In the first step, both definition match. In the first
+        definition [x] is bound to [1 2 3], while in the second
+        [x] is bound to [1] and [xs] is bound to [2 3]. Since the last
+        parameter is bound to fewer arguments, the second definition
+        is chosen as the most certain. In the second step the second
+        definition is still more concrete. Finally at the last step,
+        the second definition doesn't match at all, as it has more
+        parameters than arguments.
+
+
+        A slightly more complex example, is a fold iterator, that
+        applies a function to a sequence of arguments  of arbitrary
+        length, e.g.,
+
+        {v
+        (defmacro fold (f a x) (f a x))
+        (defmacro fold (f a x xs) (fold f (f a x) xs))
+        v}
+
+
+        Using this definition we can define a sum function (although
+        it is not needed as the [+] function defined in the Primus Lisp
+        standard library, already accepts arbitrary number of
+        arguments), as:
+
+        (defmacro sum (xs) (fold + 0 xs))
+
+        The {v (sum 1 2 3) v} will be rewritten as follows:
+
+        {v
+1: (sum 1 2 3) => (fold + 0 1 2 3)
+2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
+3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
+4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
+        v}
+
+        A more real example is the [write-block] macro, that takes a
+        sequence of bytes, and writes them starting from the given
+        address:
+
+        {v
+        (defmacro write-block (addr bytes)
+          (fold memory-write addr bytes))
+        v}
+
+        The definition uses the [memory-write] primitive, that writes
+        a byte at the given address and returns an address of the next
+        byte.
+
+
+        {2 Polymorphism}
+
+        Primus Lisp provides both kinds of polymorphism: parametric
+        and ad hoc.
+
+        Expressions in Primus Lisp have types, that are denoted with
+        natural numbers starting with one. Each type defines a set of
+        values that can be represented with the given number of
+        bits. Values with different widths are different, even if they
+        represent the same number. Expressions can be polymorphic,
+        e.g., function
+
+        {v
+
+           (defun square (x) ( * x x))
+
+         v}
+
+        has type `forall n. n -> n -> n`. Thus it can be applied to
+        values of different types, e.g., [(square 4:4)], that will be
+        evaluated to the [0:4] value, or [(square 4:8)], that will be
+        evaluated to [16:8], etc. The parametric polymorphism doesn't
+        require any special annotations or type specifications so we
+        will not stop on it anymore.
+
+
+        The ad hoc polymorphism provides a facilities for overloading
+        definitions. That is, the same entity may have multiple
+        definitions, and depending on a context, only one definition
+        should be chosen. Not only functions can have multiple
+        definitions, but also macros, constants, and
+        substitutions. Since the latter three entities operate on the
+        syntactic level, the syntax of Primus Lisp itself is
+        context-dependent.
+
+        {3 Context}
+
+        A context (from the perspective of the type system) is a set
+        of type class instances. The context is fixed when a program
+        is parsed. A Primus Lisp program may not change the context;
+        neither in runtime, nor it the parse time, thus a program is
+        parsed and evaluated at the specific context. However, a
+        definition may declare that it makes sense only in some
+        context. If more than one definition make sense under the
+        given context, then the most specific one is chosen. If no
+        definition is more specific than another, then an error
+        occurs.
+
+        A type class defines a type as a set of features. The subset
+        relation induces a subtyping relation over types - a type [t']
+        is a subtype of a type [t] if [t' <= t] (i.e., if [t'] is a
+        subset of [t]). Each feature is a textual tag, called a
+        feature constructor.
+
+        The context declaration limits an associated definition to the
+        specified type class(es), and has the following syntax:
+
+        {v
+          (declare (context <type-class-name> {<feature-constructor>})
+        v}
+
+        Let's use the following two definitions for a concrete example,
+
+        {v
+           (defmacro get-arg-0 ()
+             (declare (context (arch arm gnueabi)))
+             R0)
+
+           (defmacro get-arg-0 ()
+             (declare (context (arch x86 cdecl)))
+             (read-word word-width (+ SP (sizeof word-width))))
+        v}
+
+
+        We have two definitions of the same macro [get-arg-0], that
+        are applicable to different contexts. The first definition,
+        is only applicable in the context of the ARM architecture and
+        the gnueabi ABI. The second is applicable in the context of
+        the x86 architecture and the cdecl ABI. More formally, a
+        definition is considered only if its context is a subtype of
+        the current type context.
+
+        {2 Advice mechanism}
+
+        Primus Lisp also provides a mechanism for non-intrusive
+        extending existing function definitions. An existing
+        definition maybe advised with another definition. A piece of
+        advice maybe added to a function, and will be called either
+        before, or after the function evaluation, e.g.,
+
+        {v
+
+        (defun memory-written (a x) (msg "write $x to $a"))
+
+        (advice-add memory-written :after memory-write)
+
+        v}
+
+        The general syntax is:
+
+        {v (advice-add <advisor> <when> <advised> )v}
+
+        where the <when> clause is either [:before] or [:after].
 
         {2 Formal syntax}
 
@@ -1079,7 +1477,7 @@ declarations ::= (declare {<attribute>})
 constant-definition ::=
   (defconstant <ident> [<docstring>] [<declarations>] <atom>)
 substitution-definition ::=
-  (defsubst <ident> [<declarations>] [<syntax>] {<atom>})
+  (defsubst <ident> [<declarations>] [:<syntax>] {<atom>})
 macro-definition ::=
   (defmacro <ident> ({<macro-param>})
      [<docstring>] [<declarations>]
@@ -1090,8 +1488,8 @@ function-definition ::=
      {<exp>})
 advice ::= (advice-add <ident> <method> <ident>)
 exp ::= ()
-      | (if <exp> <exp> <exp>)
-      | (let ({<binding>}) <exp>)
+      | (if <exp> <exp> {<exp>})
+      | (let ({<binding>}) {<exp>})
       | (while exp {exps})
       | (prog {exp})
       | (msg <format>)
@@ -1114,12 +1512,6 @@ int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
 size  ::= {<decimal>}
 ident ::= ?any atom that is not recognized as a <word>?
         v}
-
-
-
-
-
-
     *)
     module Lisp : sig
 
