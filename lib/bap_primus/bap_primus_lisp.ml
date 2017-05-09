@@ -971,12 +971,20 @@ let empty_program = {
   substs  = [];
 }
 
+let init_env ctxt = (object
+  inherit [bindings] Term.visitor
+  method! enter_term _ t env =
+    match Term.get_attr t address with
+    | None -> env
+    | Some addr ->
+      ({value = Term.name t; typ = Word},addr) :: env
+end)#run (Project.program ctxt#project) []
 
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun ctxt -> {
-         env = [];
+         env = init_env ctxt;
          primitives = [];
          program = empty_program;
          paths = [Filename.current_dir_name];
@@ -1119,33 +1127,38 @@ module Lisp(Machine : Machine) = struct
         failf "invoke-subroutine: no function for %a" Addr.pps
           sub_addr ()
       | Some sub ->
-        match Term.get_attr sub C.proto with
-        | None ->
-          failf "invoke-subroutine: can't invoke subroutine %s - %s"
-            (Sub.name sub) "type information is not available" ()
-        | Some {C.Type.Proto.args} ->
-          let args = Term.enum arg_t sub in
-          allocate_stack_frame biri args >>= fun frame ->
-          Seq.zip args (Seq.of_list sub_args) |>
-          Machine.Seq.iter ~f:(fun (arg,value) ->
-              match Arg.rhs arg with
-              | Bil.Var v ->
-                biri#eval_int value >>= biri#update v
+        let args = Term.enum arg_t sub in
+        allocate_stack_frame biri args >>= fun frame ->
+        Seq.zip args (Seq.of_list sub_args) |>
+        Machine.Seq.iter ~f:(fun (arg,value) ->
+            if Arg.intent arg <> Some Out
+            then match Arg.rhs arg with
+              | Bil.Var v -> biri#eval_int value >>= biri#update v
               | Bil.Load (mem,addr,endian,size) ->
                 biri#eval_store ~mem ~addr (Bil.int value) endian size
                 >>= fun _mem -> Machine.return ()
               | exp ->
                 failf "%s: can't pass argument %s - %s %a"
                   "invoke-subroutine" (Arg.lhs arg |> Var.name)
-                  "unsupported ABI" Exp.pps exp ()) >>= fun () ->
-          Linker.exec (`addr sub_addr) biri >>= fun () ->
-          match frame with
-          | Some (sp,bp) ->
-            biri#update sp bp >>= fun () ->
-            Machine.return Word.b1
-          | None -> Machine.return Word.b1
-
-
+                  "unsupported ABI" Exp.pps exp ()
+            else Machine.return ()) >>= fun () ->
+        Linker.exec (`addr sub_addr) biri >>= fun () ->
+        Machine.Seq.find_map args ~f:(fun arg ->
+            if Arg.intent arg = Some Out
+            then biri#lookup (Arg.lhs arg) >>= fun r ->
+              match Bil.Result.value r with
+              | Bil.Imm x -> Machine.return (Some x)
+              | Bil.Bot -> failf "%s is undefined"
+                             (Arg.lhs arg |> Var.name) ()
+              | Bil.Mem _ -> failf "type error in %s"
+                               (Arg.lhs arg |> Var.name) ()
+            else Machine.return None) >>|
+        Option.value ~default:Word.b0  >>= fun rval ->
+        match frame with
+        | Some (sp,bp) ->
+          biri#update sp bp >>= fun () ->
+          Machine.return rval
+        | None -> Machine.return rval
 
   let rec eval_lisp biri name args =
     Machine.get () >>= fun ctxt ->
