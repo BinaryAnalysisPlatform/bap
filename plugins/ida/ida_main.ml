@@ -54,7 +54,6 @@ let extract path arch =
   List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
   Seq.of_list
 
-
 let register_source (module T : Target) =
   let source =
     let open Project.Info in
@@ -137,32 +136,8 @@ let loader path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
-let require req check =
-  if check
-  then Ok ()
-  else Or_error.errorf "IDA configuration failure: %s" req
-
 let checked ida_path is_headless =
-  let (/) = Filename.concat in
-  require "path must exist"
-    (Sys.file_exists ida_path) >>= fun () ->
-  require "path must be a folder"
-    (Sys.is_directory ida_path) >>= fun () ->
-  require "can't use headless on windows"
-    (is_headless ==> not Sys.win32) >>= fun () ->
-  require "idaq must exist"
-    (Sys.file_exists (ida_path/"idaq")) >>= fun () ->
-  require "idaq64 must exist"
-    (Sys.file_exists (ida_path/"idaq64")) >>= fun () ->
-  require "idal must exist"
-    (Sys.file_exists (ida_path/"idal")) >>= fun () ->
-  require "idal64 must exist"
-    (Sys.file_exists (ida_path/"idal64")) >>= fun () ->
-  require "bap-ida-python must be installed"
-    (Sys.file_exists
-       (ida_path/"plugins"/"plugin_loader_bap.py"))  >>| fun () ->
-  ida_path
-
+  Bap_ida_check.(check_headless is_headless >>= fun () -> check_path ida_path)
 
 let main () =
   register_source (module Rooter);
@@ -170,24 +145,88 @@ let main () =
   register_source (module Reconstructor);
   Project.Input.register_loader name loader
 
-let () =
-  let () = Config.manpage [
-      `S "DESCRIPTION";
-      `P "This plugin provides rooter, symbolizer and reconstuctor services.";
-      `P "If IDA instance is found on the machine, or specified by a
+type headless = bool option
+type mode = [ `m32 | `m64 ] option
+
+let ida_mode is_headless mode =
+  let map = function
+    | `m32 when is_headless -> `idal
+    | `m64 when is_headless -> `idal64
+    | `m32 -> `idaq
+    | `m64 -> `idaq64 in
+  Option.value_map mode ~default:None ~f:(fun x -> Some (map x))
+
+let bool_of_headless = function
+  | Some x -> x
+  | None -> Bap_ida_config.is_headless
+
+let find_path = function
+  | None -> Bap_ida_config.ida_path
+  | Some p -> p
+
+module Cmdline = struct
+
+  module Headless = struct
+    type t = headless
+
+    let parser = function
+      | "true"  -> `Ok (Some true)
+      | "false" -> `Ok (Some false)
+      | "auto"  -> `Ok None
+      | _ -> `Error "headless should be one of true | false | auto"
+
+    let printer fmt t = Format.fprintf fmt "%s"
+        (match t with
+         | Some x -> sprintf "%b" x
+         | None -> "auto")
+
+    let t = Config.converter parser printer None
+  end
+
+  module Mode = struct
+    type t = mode
+
+    let parser = function
+      | "32" -> `Ok (Some `m32)
+      | "64" -> `Ok (Some `m64)
+      | "auto" -> `Ok None
+      | _ -> `Error "mode should be one of 32 | 64 | auto"
+
+    let printer fmt t = Format.fprintf fmt "%s"
+        (match t with
+         | Some `m32 -> "32"
+         | Some `m64 -> "64"
+         | None -> "auto")
+
+    let t = Config.converter parser printer None
+  end
+
+  let () =
+    let () = Config.manpage [
+        `S "DESCRIPTION";
+        `P "This plugin provides rooter, symbolizer and reconstuctor services.";
+        `P "If IDA instance is found on the machine, or specified by a
         user, it will be queried for the specified information.";
-      `S "SEE ALSO";
-      `P "$(b,bap-ida)(3), $(b,regular)(3),$(b,bap-plugin-byteweight)(1), $(b,bap-plugin-objdump)(1)"
-    ] in
-  let path =
-    let doc = "Path to IDA directory." in
-    Config.(param string "path" ~default:Bap_ida_config.ida_path ~doc) in
-  let headless =
-    let doc = "Use headless curses based IDA." in
-    Config.(param bool "headless" ~default:Bap_ida_config.is_headless ~doc) in
-  Config.when_ready (fun {Config.get=(!)} ->
-      match checked !path !headless with
-      | Result.Ok path -> Bap_ida_service.register path !headless; main ()
-      | Result.Error e -> error "%S. Service not registered."
-                            (Error.to_string_hum e)
-    )
+        `S "SEE ALSO";
+        `P "$(b,bap-ida)(3), $(b,regular)(3),$(b,bap-plugin-byteweight)(1), $(b,bap-plugin-objdump)(1)"
+      ] in
+
+    let path =
+      let doc = "Path to IDA directory." in
+      Config.(param (some string) "path" ~doc) in
+    let headless =
+      let doc = "Use headless curses based IDA." in
+      Config.(param Headless.t "headless" ~default:None ~doc) in
+    let mode =
+      let doc = "Specify IDA mode." in
+      Config.(param Mode.t "mode" ~default:None ~doc) in
+    Config.when_ready (fun {Config.get=(!)} ->
+        let is_headless = bool_of_headless !headless in
+        let ida_mode = ida_mode is_headless !mode in
+        let ida_path = find_path !path in
+        match checked ida_path is_headless with
+        | Ok () ->
+          Bap_ida_service.register ida_path ida_mode is_headless; main ()
+        | Error e ->
+          error "%S. Service not registered." (Error.to_string_hum e))
+end
