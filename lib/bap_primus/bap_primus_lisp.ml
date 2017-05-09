@@ -597,13 +597,17 @@ module Parse = struct
       | List (Atom op :: _) as exp when is_keyword op -> bad_form pos op exp
       | List (Atom op :: exps) when is_macro s op ->
         exp (subst s op (expand s exps))
-      | List (op :: arg :: args) when is_bop op ->
-        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
+      | List (op :: arg :: args) when is_bop op -> expbop op arg args
       | List (Atom op :: args) -> App (op, exps (expand s args))
       | List [] -> nil
       | s ->  expects "(<ident> exps..)" s
     and exps = List.map ~f:exp
     and prog es = Seq (exps es)
+    and expbop op arg args =
+      match expand s (arg::args) with
+      | arg :: args ->
+        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
+      | [] -> expect "(<bop> exps...)" "(<bop>)"
     and let' bs e =
       List.fold_right bs ~init:(prog e) ~f:(fun b e ->
           match b with
