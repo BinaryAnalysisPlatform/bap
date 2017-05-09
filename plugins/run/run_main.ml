@@ -17,38 +17,22 @@ type parameters = {
 
 
 module Param = struct
-  open Sexp
-  type t = parameters
-
-  let int = int_of_string
-
-  let parse_value = function
-    | List [Atom x; Atom y; Atom z] ->
-      Primus.Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
-    | List [Atom x; Atom y] ->
-      Primus.Generator.Random.Seeded.lcg ~min:(int x) ~max:(int y) ()
-    | Atom x -> Primus.Generator.static (int x)
-    | _ -> invalid_arg "Parse error:
-     expected 'value := const | (min max) | (min max seed)'"
-
   open Config;;
 
   manpage [
     `S "DESCRIPTION";
-    `P "Run program in the Primus emulator. ";
+    `P "Run a program in the Primus emulator. ";
   ];;
 
   let argv = param (array string)  "argv"
       ~doc:"Program command line arguments";;
 
   let envp = param (array string) "env"
-      ~doc:"Program environemt as a list of VAR=VAL pairs";;
+      ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
   let entry = param string "entry-point"
       ~default:"_start"
-      ~doc: "When specified, then start the execution from $(docv),
-      otherwise the execution will be started from a default entry point";;
-
+      ~doc: "When specified, start the execution from $(docv)";;
 end
 
 module Machine = Primus.Machine.Make(Monad.Ident)
