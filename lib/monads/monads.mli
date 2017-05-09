@@ -163,10 +163,18 @@ module Std : sig
     module Collection : sig
       module type Basic = sig
         type 'a t
-        val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
-        val map  : 'a t -> f:('a -> 'b) -> 'b t
         val return : 'a -> 'a t
         include Plus.S   with type 'a t := 'a t
+      end
+
+      module type Eager = sig
+        include Basic
+        val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
+      end
+
+      module type Delay = sig
+        include Basic
+        val fold : 'a t -> init:'s -> f:('s -> 'a -> ('s -> 'r) -> 'r) -> (('s -> 'r) -> 'r)
       end
 
       module type S2 = sig
@@ -174,10 +182,11 @@ module Std : sig
         type 'a t
         val all : ('a,'e) m t -> ('a t, 'e) m
         val all_ignore : ('a,'e) m t -> (unit,'e) m
-        val rev_map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
         val map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
         val iter : 'a t -> f:('a -> (unit,'e) m) -> (unit,'e) m
         val fold : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
+        val fold_left  : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
+        val fold_right : 'a t -> f:('a -> 'b -> ('b,'e) m) -> init:'b -> ('b,'e) m
         val reduce : 'a t -> f:('a -> 'a -> ('a,'e) m) -> ('a option,'e) m
         val exists : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
         val for_all : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
@@ -185,8 +194,6 @@ module Std : sig
         val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> ('a,'e) m) -> ('a,'e) m
         val find : 'a t -> f:('a -> (bool,'e) m) -> ('a option,'e) m
         val find_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b option,'e) m
-        val rev_filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t, 'e) m
-        val rev_filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
         val filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t,'e) m
         val filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
       end
@@ -197,10 +204,11 @@ module Std : sig
 
         val all : 'a m t -> 'a t m
         val all_ignore : 'a m t -> unit m
-        val rev_map : 'a t -> f:('a -> 'b m) -> 'b t m
         val map : 'a t -> f:('a -> 'b m) -> 'b t m
         val iter : 'a t -> f:('a -> unit m) -> unit m
         val fold : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
+        val fold_left : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
+        val fold_right : 'a t -> f:('a -> 'b -> 'b m) -> init:'b -> 'b m
         val reduce : 'a t -> f:('a -> 'a -> 'a m) -> 'a option m
         val exists : 'a t -> f:('a -> bool m) -> bool m
         val for_all : 'a t -> f:('a -> bool m) -> bool m
@@ -208,8 +216,6 @@ module Std : sig
         val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> 'a m) -> 'a m
         val find : 'a t -> f:('a -> bool m) -> 'a option m
         val find_map : 'a t -> f:('a -> 'b option m) -> 'b option m
-        val rev_filter : 'a t -> f:('a -> bool m) -> 'a t m
-        val rev_filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
         val filter : 'a t -> f:('a -> bool m) -> 'a t m
         val filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
       end
@@ -281,7 +287,8 @@ module Std : sig
 
       module Collection : sig
         module type S = Collection.S with type 'a m := 'a t
-        module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
+        module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
+        module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
       end
 
       module List : Collection.S with type 'a t := 'a list
@@ -335,7 +342,8 @@ module Std : sig
 
       module Collection : sig
         module type S = Collection.S2 with type ('a,'e) m := ('a,'e) t
-        module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
+        module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
+        module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
       end
 
       module List : Collection.S with type 'a t := 'a list

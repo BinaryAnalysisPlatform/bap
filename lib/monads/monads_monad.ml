@@ -97,34 +97,72 @@ module Monad = struct
         try invoke f () with exn -> invoke catch exn
     end
 
+
+
     module Collection  = struct
-      module type S = Types.Collection.S2 with type ('a,'e) m := ('a,'e) M.t
-      module Make(T : Types.Collection.Basic) : Types.Collection.S2
+      module type S = Types.Collection.S2
+        with type ('a,'e) m := ('a,'e) M.t
+
+      module type Base = sig
+        include Types.Collection.Basic
+        val foldl : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) M.t) -> ('b,'e) M.t
+        val foldr : 'a t -> f:('a -> 'b -> ('b,'e) M.t) -> init:'b -> ('b,'e) M.t
+        val find_map : 'a t -> f:('a -> ('b option,'e) M.t) -> ('b option,'e) M.t
+      end
+
+      module Eager_base(T : Types.Collection.Eager) = struct
+        include T
+        let foldl xs ~init ~f =
+          T.fold xs ~init:(fun k -> k init)
+            ~f:(fun k x k' -> k (fun a -> f a x >>= k')) M.return
+
+        let foldr xs ~f ~init =
+          T.fold xs ~init:M.return ~f:(fun k x ->
+              (fun a -> f x a >>= k)) init
+
+        let find_map xs ~f =
+          foldl xs ~init:None ~f:(fun r x -> match r with
+              | None -> f x
+              | r -> M.return r)
+      end
+
+      module Delay_base( T : Types.Collection.Delay) = struct
+        include T
+        let foldl xs ~init ~f =
+          T.fold xs ~init ~f:(fun a x k -> f a x >>= k) M.return
+
+        let fold xs ~init ~f =
+          T.fold xs ~init ~f:(fun a x k -> k (f a x)) ident
+
+        let foldr xs ~f ~init =
+          fold xs ~init:M.return ~f:(fun k x a -> f x a >>= k) init
+
+        let find_map xs ~f  =
+          T.fold xs ~init:() ~f:(fun () x k -> f x >>= function
+            | None -> k ()
+            | x -> M.return x) (fun () -> M.return None)
+      end
+
+
+      module Make(T : Base) : Types.Collection.S2
         with type 'a t := 'a T.t
          and type ('a,'e) m = ('a,'e) M.t = struct
         type ('a,'e) m = ('a,'e) M.t
         type 'a t = 'a T.t
         type 'a c = 'a t
 
-        let rev xs = T.fold xs ~init:(T.zero ()) ~f:(fun ys x ->
-          T.plus (T.return x) ys)
 
-        let fold xs ~init ~f =
-          T.fold xs ~init:(return init) ~f:(fun acc x ->
-              acc >>= fun acc -> f acc x)
+        let fold = T.foldl
+        let fold_left = T.foldl
+        let fold_right = T.foldr
+        let find_map = T.find_map
+
+        let prepend ys x = T.plus (T.return x) ys
 
         let map xs ~f =
           let empty = T.zero () in
-          fold xs ~init:empty ~f:(fun ys x ->
-              f x >>| fun x -> T.plus (T.return x) ys) >>| rev
+          fold_right xs ~init:empty ~f:(fun x ys -> f x >>| prepend ys)
 
-        let rev_map xs ~f =
-          let empty = T.zero () in
-          fold xs ~init:empty ~f:(fun ys x ->
-              f x >>| fun x -> T.plus (T.return x) ys)
-
-        let map xs ~f =
-          rev_map xs ~f >>| rev
 
         let all = map ~f:ident
 
@@ -138,11 +176,9 @@ module Monad = struct
             | Some x -> f x y >>| fun z -> Some z)
 
         let exists xs ~f =
-          with_return (fun {return=finish} ->
-              iter xs ~f:(fun x ->
-                  f x >>| function
-                  | true -> finish (return true)
-                  | false -> ()) >>| fun () -> false)
+          T.find_map xs ~f:(fun x -> f x >>| function
+            | true -> Some ()
+            | false -> None) >>| fun x -> x <> None
 
         let for_all xs ~f = !$not @@ exists xs ~f:(Fn.non f)
 
@@ -155,45 +191,56 @@ module Monad = struct
         let map_reduce (type a) (module M : Monoid.S with type t = a) xs ~f =
           fold xs ~init:M.zero ~f:(fun x y -> (f y >>| M.plus x))
 
-        let find_map xs ~f =
-          with_return (fun {return=found} ->
-              iter xs ~f:(fun x -> f x >>= function
-                | None -> return ()
-                | x -> found (return x)) >>= fun () ->
-              return None)
-
         let find xs ~f =
           let f x  = f x >>| function
             | true -> Some x
             | false -> None  in
           find_map xs ~f
 
-        let rev_filter_map xs ~f =
+        let filter_map xs ~f =
           let empty = T.zero () in
-          fold xs ~init:empty ~f:(fun ys x -> f x >>| function
+          fold_right xs ~init:empty ~f:(fun x ys -> f x >>| function
             | None -> ys
-            | Some y -> T.plus (T.return y) ys)
+            | Some y -> prepend ys y)
 
-        let filter_map xs ~f = rev_filter_map xs ~f >>| rev
-
-        let rev_filter xs ~f = rev_filter_map xs ~f:(fun x ->
+        let filter xs ~f = filter_map xs ~f:(fun x ->
             f x >>| function
             | true -> Some x
             | false -> None)
+      end
 
-        let filter xs ~f = rev_filter xs ~f >>| rev
+      module Delay(B : Types.Collection.Delay) = struct
+        module Base = Delay_base(B)
+        include Make(Base)
+      end
+
+      module Eager(B : Types.Collection.Eager) = struct
+        module Base = Eager_base(B)
+        include Make(Base)
       end
 
     end
-    module List = Collection.Make(struct
-        include List
+
+
+    module List = Collection.Delay(struct
+        type 'a t = 'a list
+        let fold xs ~init ~f =
+          let rec loop xs k = match xs with
+            | [] -> k
+            | x :: xs -> fun k' ->  k (fun a -> loop xs (f a x) k') in
+          loop xs (fun k -> k init)
         let zero () = []
+        let return x = [x]
         let plus = (@)
       end)
 
-    module Seq = Collection.Make(struct
-        include Sequence
+    module Seq = Collection.Delay(struct
+        type 'a t = 'a Sequence.t
+        let fold xs ~init ~f finish =
+          Sequence.delayed_fold xs ~init ~f:(fun a x ~k ->
+            f a x k) ~finish
         let zero () = Sequence.empty
+        let return = Sequence.return
         let plus = Sequence.append
       end)
     include Syntax
@@ -306,9 +353,17 @@ module Ident
 
   module Collection = struct
     module type S = Types.Collection.S with type 'a m := 'a t
-    module Make(T : Types.Collection.Basic) :
+    module Eager(T : Types.Collection.Eager) :
       S with type 'a t := 'a T.t = struct
-      include M.Collection.Make(T)
+      include M.Collection.Eager(T)
+      let all = ident
+      let all_ignore = ignore
+      let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
+      let fold = fold
+    end
+    module Delay(T : Types.Collection.Delay) :
+      S with type 'a t := 'a T.t = struct
+      include M.Collection.Delay(T)
       let all = ident
       let all_ignore = ignore
       let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
@@ -317,9 +372,15 @@ module Ident
   end
 
   module List = struct
-    module Base = Collection.Make(struct
-        include List
+    module Base = Collection.Delay(struct
+        type 'a t = 'a list
+        let fold xs ~init ~f =
+          let rec loop xs k = match xs with
+            | [] -> k
+            | x :: xs -> fun k' ->  k (fun a -> loop xs (f a x) k') in
+          loop xs (fun k -> k init)
         let zero () = []
+        let return x = [x]
         let plus = (@)
       end)
     include (Base : Collection.S with type 'a t := 'a list)
@@ -329,9 +390,13 @@ module Ident
   end
 
   module Seq = struct
-    module Base = Collection.Make(struct
-        include Sequence
+    module Base = Collection.Delay(struct
+        type 'a t = 'a Sequence.t
+        let fold xs ~init ~f finish =
+          Sequence.delayed_fold xs ~init ~f:(fun a x ~k ->
+            f a x k) ~finish
         let zero () = Sequence.empty
+        let return = Sequence.return
         let plus = Sequence.append
       end)
     include (Base : Collection.S with type 'a t := 'a Sequence.t)
