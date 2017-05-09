@@ -978,15 +978,15 @@ module Std : sig
         A function is defined with the [defun] form, that has the
         following syntax:
 
-        {v
+        {[
            (defun <name> (<p1> <p2> ... <pM>)
               <e1> <e2> .. <eN>)
-        v}
+        ]}
 
         A function definition may optionally contain a documentation
         strings and a declaration section. For example,
 
-        {v
+        {[
          (defun strlen (p)
            "returns a length of the null-terminated string pointed by P"
            (declare (external "strlen"))
@@ -995,7 +995,7 @@ module Std : sig
              (while (not (points-to-null p))
                (incr len p))
              len))
-        v}
+        ]}
 
         A function can be called (applied) using the function
         application form:
@@ -1026,12 +1026,12 @@ module Std : sig
 
 
         Several derived forms are defined as macros, e.g.,
-        {v
 
+        {[
          (when <cond> <body>)
          (or <e1> <e2> .. <eM>)
          (and <e1> <e2> .. <eM>)
-       v}
+        ]}
 
         {3 Loops}
 
@@ -1058,8 +1058,8 @@ module Std : sig
         {v (let ((<v1> <e1>) .. (<vM> <eM>) <s1> .. <sN>) v}
 
         form binds variables {v <v1>, ... <vM > v} to values of
-        expressions {v <e1>, ..., <eM> v} in expressions {v
-        <s1>,...,<sN> v}.  The lexical scope of the bound variable
+        expressions {v <e1>, ..., <eM> v} in expressions
+        {v <s1>,...,<sN> v}.  The lexical scope of the bound variable
         starts from the next binding expression and ends with the
         scope of the whole let expression. Thus, a variable <v1> is
         bound in expressions {v <e2>,..., <eM> v} as well as in
@@ -1131,11 +1131,12 @@ module Std : sig
         are introduced with the [defconstant] form, that has the
         following syntax:
 
-        {v (defconstant <name>
+        {[
+           (defconstant <name>
               [<docstring>]
               [<declarations>]
               <value>)
-        v}
+        ]}
 
         For example,
 
@@ -1153,18 +1154,18 @@ module Std : sig
         The syntactic substitutions is the generalization of syntactic
         constant, and has quite a similar syntax:
 
-        {v
+        {[
            (defsubst <name> [<declarations>] [:<syntax>] {<value>})
-        v}
+        ]}
 
 
-        During parsing, every occurrence of the term <name> (that
+        During parsing, every occurrence of the term {v <name> v} (that
         should be an atom), will be rewritten with a sequence of
-        values {v {<value>} v}.
+        values {[ {<value>} ]}.
 
         Example,
 
-        {v (defsubst ten-digits 0 1 2 3 4 5 6 7 8 9 v}
+        {v (defsubst ten-digits 0 1 2 3 4 5 6 7 8 9) v}
 
         A process of applying of the substitutions is called
         "expansion". Since the expansion transforms an atom to a list
@@ -1189,7 +1190,7 @@ module Std : sig
         be expanded to its corresponding ASCII code. Strings can
         contain special characters prefixed with a backslash. The
         special character can be one of the well-known ASCII special
-        character, e.g., `\n`, `\r`, etc, or it can be a decimal or a
+        character, e.g., [\n], [\r], etc, or it can be a decimal or a
         hexadecimal code of a character.
 
         Example, given the following substitution:
@@ -1202,12 +1203,12 @@ module Std : sig
 
         will be expanded with
 
-        {v
+        {[
          (write-block SP
               0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63
               0x72 0x75 0x65 0x6c 0x20 0x77 0x6f 0x72
               0x6c 0x64 0x0a 0x00)
-        v}
+        ]}
 
 
         In the [:hex] syntax the sequence of atoms is split into
@@ -1216,21 +1217,21 @@ module Std : sig
         close to the hexdump (without offsets). E.g., given the
         following substitution rule
 
-        {v
+        {[
          (defsubt example :hex 68656c 6c 6f2c2063)
-        v}
+        ]}
 
         an application
 
-        {v
+        {[
          (write-block SP example)
-        v}
+        ]}
 
         will be expanded into
 
-        {v
+        {[
          (write-block SP 0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63)
-        v}
+        ]}
 
 
         {3 Macro}
@@ -1244,19 +1245,19 @@ module Std : sig
 
         The macro definition has the following syntax:
 
-        {v
+        {[
 
          (defmacro <name> (<p1> ... <pM>)
            [<docstring>] [<declarations>]
            <value>)
-        v}
+        ]}
 
         A macro definition adds a term rewriting rule, that rewrites
         each occurrence of {v (<name> <t1> .. <tN>) v}, where [N >= M]
         with the {v <value> v} in which occurrences of the parameter
         <pN> is substituted with the term <tN>. If [N] is bigger than
-        [M], then the last parameter is bound with the sequence {v
-        <tM>...<tN> v}.
+        [M], then the last parameter is bound with the sequence
+        {v <tM>...<tN> v}.
 
         The macro subsystem doesn't provide any specific looping or
         control-flow facilities, however, the macro-overloading
@@ -1272,10 +1273,10 @@ module Std : sig
         fewer unmatched arguments is chosen. For example, suppose we
         have the following definitions:
 
-        {v
+        {[
           (defmacro list-length (x) 1)
           (defmacro list-length (x xs) (+ 1 (list-length xs)))
-        v}
+        ]}
 
 
         The the following term
@@ -1285,16 +1286,14 @@ module Std : sig
         will be normalized (after a series of transformations) with
         the following:
 
-        {v
-         (+ 1 (+ 1 1))
-        v}
+        {v (+ 1 (+ 1 1)) v}
 
 
-        {v
+        {[
 1: (list-length 1 2 3) => (+ 1 (list-length 2 3))
 2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
 3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
-        v}
+        ]}
 
         In the first step, both definition match. In the first
         definition [x] is bound to [1 2 3], while in the second
@@ -1310,10 +1309,10 @@ module Std : sig
         applies a function to a sequence of arguments  of arbitrary
         length, e.g.,
 
-        {v
+        {[
         (defmacro fold (f a x) (f a x))
         (defmacro fold (f a x xs) (fold f (f a x) xs))
-        v}
+        ]}
 
 
         Using this definition we can define a sum function (although
@@ -1321,25 +1320,25 @@ module Std : sig
         standard library, already accepts arbitrary number of
         arguments), as:
 
-        (defmacro sum (xs) (fold + 0 xs))
+        {v (defmacro sum (xs) (fold + 0 xs)) v}
 
         The {v (sum 1 2 3) v} will be rewritten as follows:
 
-        {v
+        {[
 1: (sum 1 2 3) => (fold + 0 1 2 3)
 2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
 3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
 4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
-        v}
+        ]}
 
         A more real example is the [write-block] macro, that takes a
         sequence of bytes, and writes them starting from the given
         address:
 
-        {v
+        {[
         (defmacro write-block (addr bytes)
           (fold memory-write addr bytes))
-        v}
+        ]}
 
         The definition uses the [memory-write] primitive, that writes
         a byte at the given address and returns an address of the next
@@ -1358,11 +1357,7 @@ module Std : sig
         represent the same number. Expressions can be polymorphic,
         e.g., function
 
-        {v
-
-           (defun square (x) ( * x x))
-
-         v}
+        {v (defun square (x) ( * x x)) v}
 
         has type `forall n. n -> n -> n`. Thus it can be applied to
         values of different types, e.g., [(square 4:4)], that will be
@@ -1403,13 +1398,13 @@ module Std : sig
         The context declaration limits an associated definition to the
         specified type class(es), and has the following syntax:
 
-        {v
-          (declare (context <type-class-name> {<feature-constructor>})
-        v}
+        {[
+          (declare (context <type-class-name> {<feature-constructor>}))
+        ]}
 
         Let's use the following two definitions for a concrete example,
 
-        {v
+        {[
            (defmacro get-arg-0 ()
              (declare (context (arch arm gnueabi)))
              R0)
@@ -1417,7 +1412,7 @@ module Std : sig
            (defmacro get-arg-0 ()
              (declare (context (arch x86 cdecl)))
              (read-word word-width (+ SP (sizeof word-width))))
-        v}
+        ]}
 
 
         We have two definitions of the same macro [get-arg-0], that
@@ -1436,17 +1431,14 @@ module Std : sig
         advice maybe added to a function, and will be called either
         before, or after the function evaluation, e.g.,
 
-        {v
-
+        {[
         (defun memory-written (a x) (msg "write $x to $a"))
-
         (advice-add memory-written :after memory-write)
-
-        v}
+        ]}
 
         The general syntax is:
 
-        {v (advice-add <advisor> <when> <advised> )v}
+        {v (advice-add <advisor> <when> <advised>) v}
 
         where the <when> clause is either [:before] or [:after].
 
@@ -1463,7 +1455,7 @@ module Std : sig
         grammar. Grammar extension points are defined as '..' in the
         production definition.
 
-        {v
+        {[
  module ::= {<entity>}
  entity ::= <feature-request>
           | <declarations>
@@ -1511,7 +1503,7 @@ word  ::= ?<ascii-char> | <int> | <int>:<size>
 int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
 size  ::= {<decimal>}
 ident ::= ?any atom that is not recognized as a <word>?
-        v}
+        ]}
     *)
     module Lisp : sig
 
