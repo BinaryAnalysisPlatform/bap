@@ -7,6 +7,79 @@ open Cmdliner
 
 module Event = Bap_event
 
+module CmdlineGrammar : sig
+  (** [plugin_help name info g] takes a grammar [g] and returns a new
+      grammar that accepts help for [name] and creates a manpage using
+      [info]. *)
+  val plugin_help : string -> Term.info -> unit Term.t -> unit Term.t
+
+  (** [add grammar] adds a grammar to the global grammar which will
+      be used by the front end. *)
+  val add : unit Term.t -> unit
+
+  (** [when_ready f] evaluates [f ()] when the whole grammar is known
+      and all arguments have been parsed. *)
+  val when_ready : (unit -> unit) -> unit
+
+  (** [front_end info] sets up evaluation of grammar upon loading of
+      all plugins *)
+  val front_end : Term.info -> unit
+
+end = struct
+
+  let global = ref Term.(const ())
+
+  let eval_complete, front_end_promise = Future.create ()
+
+  let when_ready f =
+    Future.upon eval_complete f
+
+  let plugin_help plugin_name terminfo grammar : unit Term.t =
+    let formats = List.map ~f:(fun x -> x,x) ["pager"; "plain"; "groff"] in
+    let name = plugin_name ^ "-help" in
+    let doc = "Show help for " ^
+              plugin_name ^
+              " plugin in format $(docv), (pager, plain or groff)" in
+    let help = Arg.(value @@
+                    opt ~vopt:(Some "pager") (some (enum formats)) None @@
+                    info [name] ~doc ~docv:"FMT") in
+    Term.(const (fun h () ->
+        match h with
+        | None -> ()
+        | Some v ->
+          match eval ~argv:[|plugin_name;
+                             "--help";
+                             v
+                           |] (grammar, terminfo) with
+          | `Error _ -> exit 1
+          | `Ok _ -> assert false
+          | `Version -> assert false
+          | `Help -> exit 0
+      ) $ help $ grammar)
+
+  let add g =
+    let combine = Term.const (fun () () -> ()) in
+    global := Term.(combine $ g $ (!global))
+
+  let term_info, term_info_promise = Future.create ()
+
+  let front_end term_info =
+    Future.upon Plugins.loaded (fun () ->
+        match Term.eval (!global, term_info) with
+        | `Error _ -> exit 1
+        | `Ok () -> Promise.fulfill front_end_promise ()
+        | `Version | `Help -> exit 0)
+
+  (* Ensures that all plugins can get their options while the front
+     ends are still being updated. _Must_ be removed after plugins are updated. *)
+  let temporary_workaround =
+    Future.upon Plugins.loaded (fun () ->
+        match Term.eval_peek_opts !global with
+        | _, `Error _ -> exit 1
+        | _, `Ok () -> Promise.fulfill front_end_promise ()
+        | _, `Version | _, `Help -> exit 0)
+end
+
 module Create() = struct
   let bundle = main_bundle ()
 
@@ -23,6 +96,9 @@ module Create() = struct
   let version = Manifest.version manifest
   let doc = Manifest.desc manifest
 
+  let is_plugin =
+    name <> main
+
   let has_verbose =
     Array.exists ~f:(function "--verbose" | _ -> false)
 
@@ -30,7 +106,7 @@ module Create() = struct
     let prefix = "--" ^ name ^ "-" in
     let is_key = String.is_prefix ~prefix:"-" in
     Array.fold Sys.argv ~init:([],`drop) ~f:(fun (args,act) arg ->
-        let take arg = ("--" ^ arg) :: args in
+        let take arg = (prefix ^ arg) :: args in
         if arg = Sys.argv.(0) then (name::args,`drop)
         else match String.chop_prefix arg ~prefix, act with
           | None,`take when is_key arg -> args,`drop
@@ -65,12 +141,15 @@ module Create() = struct
 
   module Config = struct
     let plugin_name = name
+    let executable_name = main
     include Bap_config
 
     (* Discourage access to directories of other plugins *)
     let confdir =
-      let (/) = Filename.concat in
-      confdir / plugin_name
+      if is_plugin then
+        let (/) = Filename.concat in
+        confdir / plugin_name
+      else confdir
 
     type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
@@ -91,8 +170,11 @@ module Create() = struct
         let warn_if_deprecated () =
           match deprecated with
           | Some msg ->
-            eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
-              name plugin_name msg
+            if is_plugin then
+              eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
+                name plugin_name msg
+            else eprintf "WARNING: %S option is deprecated. %s\n"
+                name msg
           | None -> () in
         {converter with parser=(fun s -> warn_if_deprecated ();
                                  converter.parser s)}
@@ -105,7 +187,9 @@ module Create() = struct
     type 'a converter = 'a Converter.t
     let converter = Converter.t
 
-    let deprecated = "Please refer to --help."
+    let deprecated =
+      if is_plugin then "Please refer to --" ^ plugin_name ^ "-help"
+      else "Please refer to --help."
 
     let main = ref Term.(const ())
 
@@ -133,7 +217,8 @@ module Create() = struct
       List.Assoc.find conf_file_options ~equal:String.Caseless.equal name
 
     let get_from_env name =
-      let name = "BAP_" ^ String.uppercase (plugin_name ^ "_" ^ name) in
+      let name = if is_plugin then plugin_name ^ "_" ^ name else name in
+      let name = String.uppercase (executable_name ^ "_" ^ name) in
       try
         Some (Sys.getenv name)
       with Not_found -> None
@@ -161,8 +246,13 @@ module Create() = struct
       | Some _ -> "DEPRECATED. " ^ doc
       | None -> doc
 
+    let complete_param name =
+      if is_plugin then plugin_name ^ "-" ^ name
+      else name
+
     let param converter ?deprecated ?default ?as_flag ?(docv="VAL")
         ?(doc="Undocumented") ?(synonyms=[]) name =
+      let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter ?deprecated ~name in
       let doc = check_deprecated doc deprecated in
@@ -183,6 +273,7 @@ module Create() = struct
 
     let param_all (converter:'a converter) ?deprecated ?(default=[]) ?as_flag
         ?(docv="VAL") ?(doc="Uncodumented") ?(synonyms=[]) name : 'a list param =
+      let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter ?deprecated ~name in
       let doc = check_deprecated doc deprecated in
@@ -199,6 +290,7 @@ module Create() = struct
 
     let flag ?deprecated ?(docv="VAL") ?(doc="Undocumented")
         ?(synonyms=[]) name : bool param =
+      let name = complete_param name in
       let converter = Converter.deprecation_wrap
           ~converter:(Converter.of_arg Arg.bool false) ?deprecated ~name in
       let doc = check_deprecated doc deprecated in
@@ -211,7 +303,9 @@ module Create() = struct
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
 
-    let term_info = ref (Term.info ~doc plugin_name)
+    let term_info =
+      ref (Term.info ~doc (if is_plugin then plugin_name
+                           else executable_name))
 
     type manpage_block = [
       | `I of string * string
@@ -222,24 +316,17 @@ module Create() = struct
     ]
 
     let manpage (man:manpage_block list) : unit =
-      term_info := Term.info ~doc ~man plugin_name
+      term_info := Term.info ~doc ~man (if is_plugin then plugin_name
+                                        else executable_name)
 
     let determined (p:'a param) : 'a future = p
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      let evaluate_cmdline_args () =
-        match Term.eval ~argv (!main, !term_info) with
-        | `Error _ -> exit 1
-        | `Ok _ -> f {get = (fun p -> Future.peek_exn p)}
-        | `Version | `Help -> exit 0 in
-      Stream.watch Plugins.events (fun subscription -> function
-          | `Errored (name,_) when plugin_name = name ->
-            Stream.unsubscribe Plugins.events subscription
-          | `Loaded p when Plugin.name p = plugin_name ->
-            evaluate_cmdline_args ();
-            Stream.unsubscribe Plugins.events subscription
-          | _ -> () )
+      CmdlineGrammar.(
+        add (plugin_help plugin_name !term_info !main);
+        when_ready (fun () ->
+            f {get = (fun p -> Future.peek_exn p)}))
 
     let doc_enum = Arg.doc_alts_enum
 
