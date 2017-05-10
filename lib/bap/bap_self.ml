@@ -63,6 +63,24 @@ module Create() = struct
   let warning f = message Warning ~section:name f
   let error f = message Error ~section:name f
 
+  let make_formatter (f : ('a, formatter, unit) format -> 'a) =
+    let buf = Buffer.create 512 in
+    let output = Buffer.add_subbytes buf in
+    let flush () =
+      f "%s" (Buffer.contents buf);
+      Buffer.clear buf in
+    let fmt = make_formatter output flush in
+    let out = pp_get_formatter_out_functions fmt () in
+    let out = {out with out_newline = flush} in
+    pp_set_formatter_out_functions fmt out;
+    fmt
+
+  let debug_formatter = make_formatter debug
+  let info_formatter = make_formatter info
+  let warning_formatter = make_formatter warning
+  let error_formatter = make_formatter error
+
+
   module Config = struct
     let plugin_name = name
     include Bap_config
@@ -74,7 +92,7 @@ module Create() = struct
 
     type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-    type 'a printer = Format.formatter -> 'a -> unit
+    type 'a printer = formatter -> 'a -> unit
 
     module Converter = struct
       type 'a t = {

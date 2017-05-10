@@ -58,6 +58,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
     | [a;x] -> Memory.save a x >>| fun () -> Addr.succ a
     | _ -> Lisp.failf "memory-write requires two arguments" ()
 
+
   let primitive name code = Primitive.create name code
 
   let defs () = [

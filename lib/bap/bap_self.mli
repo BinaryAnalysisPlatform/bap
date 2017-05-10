@@ -13,6 +13,12 @@ module Create() : sig
   val warning : ('a,formatter,unit) format -> 'a
   val error   : ('a,formatter,unit) format -> 'a
 
+  val debug_formatter : formatter
+  val info_formatter : formatter
+  val warning_formatter : formatter
+  val error_formatter : formatter
+
+
   module Config : sig
     val version : string
     val datadir : string

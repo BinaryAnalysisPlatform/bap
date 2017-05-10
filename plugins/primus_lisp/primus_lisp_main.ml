@@ -16,7 +16,7 @@ let () =
   modules.";
 
     `S "SEE ALSO";
-    `P "$(b,primus)(3) $(b,bap-run)(1)"
+    `P "$(b,bap-primus)(3) $(b,bap-run)(1)"
   ];
 
   let libs =
@@ -29,4 +29,4 @@ let () =
   Config.when_ready (fun {Config.get=(!)} ->
       let paths = !libs @ [Lisp_config.library]  in
       let features = "init" :: !features in
-      Primus.Lisp.init ~paths features)
+      Primus.Lisp.init ~log:info_formatter ~paths features)

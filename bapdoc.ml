@@ -20,6 +20,8 @@ let libraries = [
   "Core libraries", [
     "bap", "Bap.Std", "BAP standard library";
     "regular", "Regular.Std", "regular inductive types";
+    "monads", "Monads.Std", "a missing monads library";
+    "ogre", "Ogre", "a sexp-based NoSQL database";
     "bap-future", "Bap_future.Std", "coinductive types";
     "graphlib", "Graphlib.Std", "graph library";
   ];
@@ -40,6 +42,7 @@ let libraries = [
 
   "Auxiliary libraries",
   [
+    "bap-primus", "Bap_primus.Std", "The Microexecution Framework";
     "bap-traces", "Bap_traces.Std", "loading execution traces";
     "bap-bml", "Bap_bml", "an extensible DSL for term transformation";
     "bap-byteweight", "Bap_byteweight", "an interface to byteweight implementation";
@@ -47,7 +50,6 @@ let libraries = [
     "bap-ida", "Bap_ida.Std", "call IDA from OCaml";
     "bap-elf", "Bap_elf.Std", "native support for ELF files";
     "bap-dwarf", "Bap_dwarf.Std", "native DWARF parser";
-    "bap-microx", "Microx.Std", "a library for code microexecution";
     "bap-build", "Bap_build.Std", "BAP build system as an ocamlbuild plugin";
     "text-tags", "Text_tags", "Use semantics tags to format your texts";
   ];
@@ -254,10 +256,10 @@ let render modules =
       "-html";
       "-colorize-code";
       "-short-paths";
-      "-i /home/ivg/.opam/4.03.0/lib/argot";
+      "-i /home/ivg/.opam/devel/lib/argot";
       "-g argot.cmo";
       "-short-functors";
-      "-hide Bap.Std,Core_kernel.Std,Regular.Std,Graphlib.Std,Future.Std";
+      "-hide Bap.Std,Core_kernel.Std,Regular.Std,Graphlib.Std,Future.Std,Monads.Std,Bap_primus.Std";
       "-passopt -search-frame";
       "-passopt -search";
       "-passopt -full-text";
