@@ -11,3 +11,4 @@ Library print_plugin
   BuildDepends:     bap, text-tags, bap-demangle
   InternalModules:  Print_main
   XMETADescription: print project in various formats
+  XMETAExtraLines:  tags="core"

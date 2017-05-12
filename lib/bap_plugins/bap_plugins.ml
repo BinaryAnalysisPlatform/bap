@@ -71,6 +71,7 @@ module Plugin = struct
   let manifest p = Bundle.manifest p.bundle
   let name p = manifest p |> Manifest.name
   let desc p = manifest p |> Manifest.desc
+  let tags p = manifest p |> Manifest.tags
 
   let find_library_exn name =
     let dir = Findlib.package_directory name in
@@ -223,26 +224,36 @@ module Plugins = struct
               with exn -> Some (Error (file,Error.of_exn exn))
             else None))
 
-  let list ?library () =
+  let is_selected tags p =
+    List.is_empty tags ||
+    List.exists ~f:(fun t -> List.mem tags t) (Plugin.tags p)
+
+  let is_not_selected tags p = not (is_selected tags p)
+
+  let select tags plugins =
+    List.filter ~f:(is_selected tags) plugins
+
+  let list ?(query=[]) ?library () =
     collect ?library () |> List.filter_map ~f:(function
         | Ok p -> Some p
-        | Error _ -> None)
+        | Error _ -> None) |> select query
 
-  let load ?library ?(exclude=[]) () =
+  let load ?(query=[]) ?library ?(exclude=[]) () =
     collect ?library () |> List.filter_map ~f:(function
         | Error err -> Some (Error err)
         | Ok p when List.mem exclude (Plugin.name p) -> None
+        | Ok p when is_not_selected query p -> None
         | Ok p -> match Plugin.load p with
           | Ok () -> Some (Ok p)
           | Error err -> Some (Error (Plugin.path p, err)))
 
   let loaded,finished = Future.create ()
 
-  let load ?library ?exclude () =
+  let load ?query ?library ?exclude () =
     if Future.is_decided loaded
     then []
     else begin
-      let r = load ?library ?exclude () in
+      let r = load ?query ?library ?exclude () in
       Promise.fulfill finished ();
       r
     end
@@ -269,10 +280,10 @@ module Plugins = struct
     Future.upon loaded (fun () -> events_backtrace := [])
 
 
-  let run ?(don't_setup_handlers=false) ?library ?exclude () =
+  let run ?query ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?library ?exclude () |> ignore
+    load ?query ?library ?exclude () |> ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]

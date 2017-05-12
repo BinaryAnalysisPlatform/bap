@@ -74,10 +74,14 @@ module Update = struct
   let add_res r =
     resources := r :: !resources
 
+  let set_tags s =
+    String.split ~on:',' s |> List.map ~f:String.strip |> set tags
+
   let common_args = Arg.[
       "-author",    String (set author), "<name> Set bundle's author name";
       "-name",      String (set name),   "<name> Set bundle's name";
       "-desc",      String (set desc),   "<text> Set bundle's description";
+      "-tags",      String set_tags,     "<text list> Set bundle's tags";
     ]
 
   let args = common_args @ Arg.[
@@ -92,7 +96,8 @@ module Update = struct
   let main () =
     let bundle = open_bundle () in
     Bundle.update_manifest bundle ~f:(fun init ->
-        List.fold [author;name;desc] ~init ~f:update);
+        let b = List.fold [author;name;desc] ~init ~f:update in
+        update b tags);
     List.map !resources ~f:named_resource |>
     List.map ~f:(fun (name,path) -> name, Uri.of_string path) |>
     Bundle.insert_files bundle

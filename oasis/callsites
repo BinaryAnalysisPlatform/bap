@@ -10,3 +10,4 @@ Library callsites_plugin
   BuildDepends:     bap
   Modules:          Callsites_main
   XMETADescription: annotate callsites with subroutine's arguments
+  XMETAExtraLines:  tags="core, pass"
