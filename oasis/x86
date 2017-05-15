@@ -51,6 +51,4 @@ Library x86_plugin
                    X86_tools_types,
                    X86_tools_vector,
                    X86_utils
- XMETAExtraLines:
-        tags="lifter, disassembler"
-        constraints="bap-frontend"
+ XMETAExtraLines:  tags="lifter, disassembler"
