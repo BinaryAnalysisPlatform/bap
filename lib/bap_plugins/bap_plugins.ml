@@ -72,6 +72,7 @@ module Plugin = struct
   let name p = manifest p |> Manifest.name
   let desc p = manifest p |> Manifest.desc
   let tags p = manifest p |> Manifest.tags
+  let cons p = manifest p |> Manifest.cons
 
   let find_library_exn name =
     let dir = Findlib.package_directory name in
@@ -224,36 +225,40 @@ module Plugins = struct
               with exn -> Some (Error (file,Error.of_exn exn))
             else None))
 
-  let is_selected requested p =
+  let is_subset requested existed =
     List.is_empty requested ||
-    List.for_all ~f:(List.mem (Plugin.tags p)) requested
+    List.for_all ~f:(List.mem existed) requested
 
-  let is_not_selected tags p = not (is_selected tags p)
+  let is_selected ~provides ~env p =
+    is_subset provides (Plugin.tags p) &&
+    is_subset (Plugin.cons p) env
 
-  let select tags plugins =
-    List.filter ~f:(is_selected tags) plugins
+  let is_not_selected ~provides ~env p = not (is_selected ~provides ~env p)
 
-  let list ?(provides=[]) ?library () =
+  let select ~provides ~env plugins =
+    List.filter ~f:(is_selected ~provides ~env) plugins
+
+  let list ?(env=[]) ?(provides=[]) ?library () =
     collect ?library () |> List.filter_map ~f:(function
         | Ok p -> Some p
-        | Error _ -> None) |> select provides
+        | Error _ -> None) |> select ~provides ~env
 
-  let load ?(provides=[]) ?library ?(exclude=[]) () =
+  let load ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
     collect ?library () |> List.filter_map ~f:(function
         | Error err -> Some (Error err)
         | Ok p when List.mem exclude (Plugin.name p) -> None
-        | Ok p when is_not_selected provides p -> None
+        | Ok p when is_not_selected ~provides ~env p -> None
         | Ok p -> match Plugin.load p with
           | Ok () -> Some (Ok p)
           | Error err -> Some (Error (Plugin.path p, err)))
 
   let loaded,finished = Future.create ()
 
-  let load ?provides ?library ?exclude () =
+  let load ?env ?provides ?library ?exclude () =
     if Future.is_decided loaded
     then []
     else begin
-      let r = load ?provides ?library ?exclude () in
+      let r = load ?env ?provides ?library ?exclude () in
       Promise.fulfill finished ();
       r
     end
@@ -280,10 +285,10 @@ module Plugins = struct
     Future.upon loaded (fun () -> events_backtrace := [])
 
 
-  let run ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
+  let run ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?provides ?library ?exclude () |> ignore
+    load ?env ?provides ?library ?exclude () |> ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]

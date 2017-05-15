@@ -39,6 +39,7 @@ module Std : sig
       license : string option;  (** project license *)
       copyrights : string option; (** copyright holders *)
       tags : string list;       (** bundle tags  *)
+      cons : string list;       (** bundle constraints  *)
     } [@@deriving bin_io, compare, fields, sexp]
 
     (** [create name] create a bundle for a program with a given [name] *)
@@ -53,7 +54,8 @@ module Std : sig
       ?url:string ->
       ?license:string ->
       ?copyrights:string ->
-      ?tags:string list -> string -> t
+      ?tags:string list ->
+      ?cons:string list -> string -> t
 
     include Stringable with type t := t
   end

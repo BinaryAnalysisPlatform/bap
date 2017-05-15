@@ -88,7 +88,7 @@ let load_plugin p = ok_exn (Plugin.load p)
 
 
 let autoload_plugins ~library ~verbose ~exclude =
-  Plugins.run ~provides:["core"] ~library ~exclude ()
+  Plugins.run ~env:["bap-frontend"] ~library ~exclude ()
     ~don't_setup_handlers:true
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
@@ -101,7 +101,7 @@ let run_and_get_passes argv =
   let exclude = exclude @ excluded argv in
   let list = get_opt argv list_plugins ~default:false in
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
-  let known_plugins = Plugins.list ~provides:["core"] ~library () @ plugins in
+  let known_plugins = Plugins.list ~env:["bap-frontend"] ~library () @ plugins in
   if list then print_plugins_and_exit exclude known_plugins;
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in

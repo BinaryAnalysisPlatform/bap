@@ -18,4 +18,4 @@ Library "demangle_plugin"
   BuildDepends: core_kernel, bap-demangle, bap
   InternalModules: Demangle_main
   XMETADescription: demangle subroutine names
-  XMETAExtraLines:  tags="core, pass"
+  XMETAExtraLines:  tags="pass"

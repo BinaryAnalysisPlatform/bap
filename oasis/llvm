@@ -38,4 +38,4 @@ Library llvm_plugin
   BuildDepends:  bap, bap-llvm
   FindlibName:   bap-plugin-llvm
   InternalModules: Llvm_main
-  XMETAExtraLines: tags="core, disassembler"
+  XMETAExtraLines: tags="disassembler"

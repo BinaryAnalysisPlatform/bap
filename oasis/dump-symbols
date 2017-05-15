@@ -10,4 +10,4 @@ Library dump_symbols_plugin
   BuildDepends:     bap
   InternalModules:  Dump_symbols_main
   XMETADescription: dump symbol information as a list of blocks
-  XMETAExtraLines:  tags="core, pass"
+  XMETAExtraLines:  tags="pass"

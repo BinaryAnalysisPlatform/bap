@@ -10,4 +10,4 @@ Library objdump_plugin
   BuildDepends:     bap, re.pcre
   InternalModules:  Objdump_main, Objdump_config
   XMETADescription: use objdump to provide a symbolizer
-  XMETAExtraLines:  tags="core, pass"
+  XMETAExtraLines:  tags="pass"

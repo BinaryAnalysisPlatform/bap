@@ -9,4 +9,4 @@ Library read_symbols_plugin
   BuildDepends:     bap
   Modules:          Read_symbols_main
   XMETADescription: read symbol information from file
-  XMETAExtraLines:  tags="core, pass"
+  XMETAExtraLines:  tags="pass"

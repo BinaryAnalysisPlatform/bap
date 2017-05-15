@@ -22,4 +22,3 @@ Library bap_ida_plugin
   Modules:          Ida_main
   InternalModules:  Bap_ida_config, Bap_ida_service, Bap_ida_check
   XMETADescription: use ida to provide rooter, symbolizer and reconstructor
-  XMETAExtraLines:  tags="core"

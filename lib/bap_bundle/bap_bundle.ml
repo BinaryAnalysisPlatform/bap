@@ -20,6 +20,7 @@ module Std = struct
       license : string sexp_option;
       copyrights : string sexp_option;
       tags : string sexp_list;
+      cons : string sexp_list;
     } [@@deriving bin_io, compare, fields, sexp]
 
     let create
@@ -31,9 +32,10 @@ module Std = struct
         ?(requires=[])
         ?(provides=[])
         ?url ?license ?copyrights
-        ?(tags=["core"]) name = {
+        ?(tags=[])
+        ?(cons=[]) name = {
       name; author; version; date; desc; requires; provides;
-      copyrights; license; url; tags;
+      copyrights; license; url; tags; cons;
       main = Option.value main ~default:name;
     }
 
