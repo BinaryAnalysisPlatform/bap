@@ -5697,11 +5697,11 @@ module Std : sig
         parent [p] *)
     val last  : ('a,'b) cls -> 'a t -> 'b t option
 
-    (** [next t p id] returns a term that preceeds a term with a given
+    (** [next t p id] returns a term that is after a term with a given
         [id], if such exists.  *)
     val next : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
-    (** [next t p id] returns a term that is after a term with a given
+    (** [prev t p id] returns a term that preceeds a term with a given
         [id], if such exists.  *)
     val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
