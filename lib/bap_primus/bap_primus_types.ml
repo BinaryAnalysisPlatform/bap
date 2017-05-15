@@ -24,6 +24,8 @@ module type State = sig
   val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
 end
 
+type id = Monad.State.Multi.id
+
 module type Machine = sig
   type ('a,'e) t
   type 'a m
@@ -41,6 +43,7 @@ module type Machine = sig
   include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
                                 and type 'a m := 'a m
                                 and type ('a,'e) e = 'e -> (('a, error) result * 'e) m
+                                and type id := id
                                 and module Syntax := Syntax
   module Local  : State with type ('a,'e) m := ('a,'e) t
                          and type 'a t := 'a state

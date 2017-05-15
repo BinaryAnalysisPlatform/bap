@@ -15,6 +15,7 @@ type nonrec component = component
 
 
 module State = Bap_primus_state
+type id = Monad.State.Multi.id
 
 module Make(M : Monad.S)
 = struct

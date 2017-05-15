@@ -14,7 +14,6 @@ module Std = struct
       type 'a state = ('a,Context.t) State.t
     end
     module Memory = Bap_primus_memory
-    module Scheduler = Bap_primus_scheduler
     module Observation = Bap_primus_observation
     module Lisp = Bap_primus_lisp
     type generator = Generator.t

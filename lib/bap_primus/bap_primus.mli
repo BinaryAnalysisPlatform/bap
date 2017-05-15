@@ -5,21 +5,15 @@ open Format
 
 module Std : sig
 
-
   module Primus : sig
-
-
     (** Machine error.
 
         The error type is an extensible variant, and components
         usually register their own error constructors. *)
     type error = ..
 
-
-
     (** [an observation] of a value of type [an].*)
     type 'a observation
-
 
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
@@ -27,8 +21,6 @@ module Std : sig
     type ('a,'e) result = ('a,'e) Monad.Result.result =
       | Ok of 'a
       | Error of 'e
-
-
 
     (** value generator  *)
     type generator
@@ -50,8 +42,8 @@ module Std : sig
           first element is used to observe values, the second is used
           to provide values for the observation.
 
-          The [inspect] function should provide a sexp representation
-          of an observed value, and is used for introspection and
+          The [inspect] function may provide a sexp representation of
+          an observed value, that will be used for introspection and
           pretty-printing (it is not required, and if it is provided, it
           is not necessary to disclose everything *)
       val provide : ?inspect:('a -> Sexp.t) -> string -> 'a observation * 'a statement
@@ -70,26 +62,20 @@ module Std : sig
     (** Evaluation Context.*)
     module Context : sig
 
-
       (** A hierarchical program position.
-
 
           The [Level.t] is a cursor-like data structure, that
           describes a program position in the program term hierarchy.*)
       module Level : sig
 
-
         (** uninhabited type  *)
         type nil
-
 
         (** the top-most program term.  *)
         type top = program
 
-
         (** [(t,p) level] a cursor pointing to a [t term], that is
             nested in the parent cursor [p]. *)
-
         type ('a,'b) level = {
           me : 'a term;          (** [me] current position *)
           up : 'b;               (** [up] parent cursor *)
@@ -100,18 +86,16 @@ module Std : sig
             to the whole program. This is a starting position.  *)
         type level3 = (top,nil) level
 
-
         (** a cursor pointing to a function  *)
         type level2 = (sub,level3) level
-
 
         (** a level of arguments and basic blocks  *)
         type 'a level1 = ('a,level2) level
 
-
         (** a level of the basic terms, e.g., defs, jmps and phi-nodes.  *)
         type 'a level0 = ('a,blk level1) level
 
+        (** a program location  *)
         type t =
           | Top of level3       (** a program *)
           | Sub of level2       (** a subroutine  *)
@@ -121,25 +105,20 @@ module Std : sig
           | Def of def level0   (** a definition *)
           | Jmp of jmp level0   (** a jump term *)
 
-
-
         (** [to_string level] a textual and human readable
-        representation of a cursor.  *)
+            representation of a cursor.  *)
         val to_string : t -> string
-
 
         (** [next p cls t] moves the cursor position [p] to the next
             position, that points to the term [t] of the class
-            [cls]. Returns an error there is no valid transition from
-            the current program position to the specified program term.  *)
+            [cls]. Returns an error if there is no valid transition
+            from the current program position to the specified program
+            term.  *)
         val next : t -> ('p,'t) cls -> 't term -> (t,error) Monad.Result.result
       end
 
-
       (** program location.  *)
       type level = Level.t [@@deriving sexp_of]
-
-
 
       (** Primus Interpreter Context.
 
@@ -147,7 +126,6 @@ module Std : sig
           inheritence it is not recommended, as the Primus framework
           provides more composable way to extend the interpreter
           state. See the {!State} module for more information.
-
 
           A value of type [#t] can be accessed in the machine
           operation (an operation in the Machine monad), by the virtue
@@ -160,7 +138,8 @@ module Std : sig
           usually it is an array of [name=value]
           bindings. Correspondingly, the [argv] is an array of the
           program arguments. The [main] argument, if present, defines
-          a function that is considered the entry point to a program.
+          a function that is considered the entry point to a
+          program.
 
           Note: it is usually not necessary to create a new context
           manually, unless you are implementing a new instatiation of
@@ -170,7 +149,6 @@ module Std : sig
         ?argv: string array -> ?main:sub term -> project ->
         object('s)
           inherit Biri.context
-
 
           (** [argv] an array of command line arguments  *)
           method argv : string array
@@ -184,15 +162,12 @@ module Std : sig
           (** [with_project proj] updates the static model of a program  *)
           method with_project : project -> 's
 
-
           (** [current] returns a term identifier of a current program
               term.  *)
           method current : tid
 
-
           (** [level] returns a current program location.  *)
           method level : level
-
 
           (** [with_level level] invoked by the interpreter every time
               a program position changes.  *)
@@ -204,9 +179,6 @@ module Std : sig
     (** Evaluation context.  *)
     class type context = Context.t
 
-
-
-
     (** Primus Machine.
 
         The Machine is the core of Primus Framework.  The Machine
@@ -216,7 +188,7 @@ module Std : sig
         during the machine evaluation. Events can be obtained from the
         observations made by the core components of the Machine, such
         as the Interpreter, or by other components, if their
-        implementors provided any observations.
+        implementors provide any observations.
 
         A machine is usually instantiated and ran only once. For
         example, the [run] analysis creates a machine parameterized by
@@ -227,24 +199,27 @@ module Std : sig
         and is registered with the [register_component] function.*)
     module Machine : sig
 
-
-      (** [finished] occurs when machine terminates.   *)
+      (** The [finished] event occurs when the machine terminates.   *)
       val finished : unit observation
 
 
+
+      (** Machine identifier type.   *)
+      type id = Monad.State.Multi.id
+
       (** Machine State.
 
-          Any component can have it own state. In fact, components can
-          have global state and local state.
+          Any component can have its own state. In fact, components
+          can have a global state and a local state.
 
-          The Primus Machine is a non-deterministic Machine that can
-          have multiple states at once. Basically, every time a
-          non-deterministic event happens a machine can be forked
-          (cloned). The [Global] state is shared across all clones of a
-          machine, and can be used as a communication channel between
-          the clones. Each clone has its own copy of the local state,
-          that doesn't interfere with the state of other clones.
-      *)
+          The Primus Machine is an implementation of the
+          Non-deterministic abstract machine, and thus can have more
+          than one state. Basically, every time a non-deterministic
+          event happens a machine can be forked (cloned). The [Global]
+          state is never replicated, and a machine can have only one
+          global state, that is shared across all clones of a machine,
+          and can be used as a communication channel between the
+          clones. The [local] state is duplicated at each clone. *)
       module State : sig
 
 
@@ -255,7 +230,7 @@ module Std : sig
 
         type ('a,'c) state = ('a,'c) t
 
-
+        (** a type that has no values *)
         type void
 
 
@@ -306,24 +281,18 @@ module Std : sig
         type ('a,'e) m
         type 'a t
 
-
         (** [get state] extracts the state.  *)
         val get : 'a t -> ('a,#Context.t) m
 
-
         (** [put state x] saves a machine state  *)
         val put : 'a t -> 'a -> (unit,#Context.t) m
-
 
         (** [update state ~f] updates a state using function [f]. *)
         val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
       end
 
-
-
       (** The Machine interface.*)
       module type S = sig
-
 
         (** the machine  *)
         type ('a,'e) t
@@ -331,8 +300,6 @@ module Std : sig
 
         (** the machine computation.  *)
         type 'a m
-
-
 
         (** Observations interface.  *)
         module Observation : sig
@@ -367,6 +334,7 @@ module Std : sig
         include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
                                       and type 'a m := 'a m
                                       and type ('a,'e) e = 'e -> (('a, error) result * 'e) m
+                                      and type id := id
                                       and module Syntax := Syntax
 
 
@@ -485,6 +453,27 @@ module Std : sig
 
       (** a jump term is entered  *)
       val enter_jmp : jmp term observation
+
+      (** the top-level term was left  *)
+      val leave_top : program term observation
+
+      (** a subroutine was left  *)
+      val leave_sub : sub term observation
+
+      (** a subroutine argument was left  *)
+      val leave_arg : arg term observation
+
+      (** a basic block was left  *)
+      val leave_blk : blk term observation
+
+      (** a phi-node was left  *)
+      val leave_phi : phi term observation
+
+      (** a definition was left  *)
+      val leave_def : def term observation
+
+      (** a jump term was left  *)
+      val leave_jmp : jmp term observation
 
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
@@ -623,8 +612,6 @@ module Std : sig
           same [value].  *)
       val static : int -> t
 
-
-
       (** [unfold ~min ~max ~seed ~f] creates a generator that
           generates values by applying a function [f] to a pair of
           a generator state and previous value.   *)
@@ -636,9 +623,13 @@ module Std : sig
       module Random : sig
 
 
-        (** [lcg ~min ~max seed] a linear congruential generator,
-        that produces a sequence of pseudorandom values that lies in
-        the range between [min] and [max] (all inclusive). *)
+        (** [lcg ~min ~max seed] a linear congruential generator, that
+            produces a sequence of pseudorandom values that lies in the
+            range between [min] and [max] (all inclusive).
+
+            @param min (defaults to 0)
+            @param max (defaults to 1^30)
+        *)
         val lcg : ?min:int -> ?max:int -> int -> t
 
 

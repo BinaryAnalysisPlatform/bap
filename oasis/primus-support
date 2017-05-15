@@ -1,0 +1,59 @@
+Flag primus_support
+  Description: build supporting components for Primus
+  Default: false
+
+
+Library primus_loader_plugin
+  Path: plugins/primus_loader
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_loader
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: generic program loader for Primus
+  Modules: Primus_loader_main
+  InternalModules: Primus_loader_basic
+
+Library primus_promiscuous_plugin
+  Path: plugins/primus_promiscuous
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_promiscuous
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: enables the promiscuous mode of execution
+  Modules: Primus_promiscuous_main
+
+Library greedy_scheduler
+  Path: plugins/primus_greedy
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_greedy
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the greedy scheduling strategy
+  Modules: Primus_greedy_main
+
+Library round_robin_scheduler
+  Path: plugins/primus_round_robin
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_round_robin
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the round-robin scheduling strategy
+  Modules: Primus_round_robin_main
+
+Library exploring_scheduler
+  Path: plugins/primus_exploring
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_exploring
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the exploring scheduling strategy
+  Modules: Primus_exploring_main
+
+Library wandering_scheduler
+  Path: plugins/primus_wandering
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_wandering
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the wandering scheduling strategy
+  Modules: Primus_wandering_main
