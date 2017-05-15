@@ -14,16 +14,13 @@ build_plugin() {
         DESC=`ocamlfind query -format "%D" bap-plugin-$plugin`
         CONS=`ocamlfind query -format "%(constraints)" bap-plugin-$plugin`
         TAGS=`ocamlfind query -format "%(tags)" bap-plugin-$plugin`
-
-        if [ ! -z "$CONS" ] && [ ! -z "$TAGS" ]; then
-            bapbundle update -desc "$DESC" -cons "$CONS" -tags "$TAGS" $plugin.plugin
-        elif [ ! -z "$CONS" ]; then
-            bapbundle update -desc "$DESC" -cons "$CONS" $plugin.plugin
-        elif [ ! -z "$TAGS" ]; then
-            bapbundle update -desc "$DESC" -tags "$TAGS" $plugin.plugin
-        else
-            bapbundle update -desc "$DESC" $plugin.plugin
+        if [ ! -z "$CONS" ]; then
+            bapbundle update -cons "$CONS" $plugin.plugin
         fi
+        if [ ! -z "$TAGS" ]; then
+            bapbundle update -tags "$TAGS" $plugin.plugin
+        fi
+        bapbundle update -desc "$DESC" $plugin.plugin
 
         bapbundle install $plugin.plugin
         cd -
