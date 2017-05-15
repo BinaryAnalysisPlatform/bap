@@ -37,19 +37,11 @@ let filter_options ~known_plugins ~known_passes ~argv =
 let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
 
-let print_plugins_and_exit features excluded plugins =
-  let print p =
-    let status = if List.mem excluded (Plugin.name p) then "[-]" else "[+]" in
-    printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p) in
-  let plugins = match features with
-    | [] -> plugins
-    | features ->
-      let is_featured p =
-        let provided =
-          Manifest.tags (Bundle.manifest (Plugin.bundle p)) in
-        List.for_all ~f:(List.mem provided) features in
-      List.filter ~f:is_featured plugins in
-  List.iter plugins ~f:print;
+let print_plugins_and_exit excluded plugins =
+  List.iter plugins ~f:(fun p ->
+      let status = if List.mem excluded (Plugin.name p)
+        then "[-]" else "[+]" in
+      printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p));
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
@@ -95,7 +87,6 @@ let open_plugin ~verbose name =
     by a user with `-l` option. *)
 let load_plugin p = ok_exn (Plugin.load p)
 
-
 let autoload_plugins ~env ~library ~verbose ~exclude =
   Plugins.run ~env ~library ~exclude ()
     ~don't_setup_handlers:true
@@ -113,7 +104,9 @@ let run_and_get_passes env argv =
   let list = get_opt argv list_plugins ~default:None in
   let () = match list with
     | None -> ()
-    | Some list -> print_plugins_and_exit list exclude known_plugins in
+    | Some provides ->
+      let list = Plugins.list ~env ~provides ~library () in
+      print_plugins_and_exit exclude (list @ plugins) in
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;
