@@ -306,7 +306,7 @@ end
 
 let () =
   Log.start ();
-  let args = Bap_plugin_loader.run Sys.argv in
+  let args = Bap_plugin_loader.run ["byteweight-frontend"] Sys.argv in
   match Cmdline.eval args with
   | `Ok Ok () -> ()
   | `Ok Error err ->

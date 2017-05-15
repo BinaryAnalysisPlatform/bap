@@ -17,7 +17,7 @@ val reconstructor : unit -> string option Term.t
 
 val load : string list Term.t
 val load_path : string list Term.t
-val list_plugins : bool Term.t
+val list_plugins : string list option Term.t
 val disable_plugin : string list Term.t
 val no_auto_load : bool Term.t
 

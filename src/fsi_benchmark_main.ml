@@ -127,7 +127,7 @@ let info =
   Term.info "bap-fsi-benchmark" ~doc ~man
 
 let () =
-  let argv = Bap_plugin_loader.run Sys.argv in
+  let argv = Bap_plugin_loader.run ["fsi-frontend"] Sys.argv in
   match Term.eval ~argv (compare_against_t (), info) with
   | `Error _ -> exit 1
   | _ -> exit 0

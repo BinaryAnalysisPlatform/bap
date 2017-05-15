@@ -25,4 +25,4 @@ Library elf_loader_plugin
   BuildDepends:     bap, bap-elf, bap-dwarf
   InternalModules:  Elf_loader_main
   XMETADescription: read ELF and DWARF formats in a pure OCaml
-  XMETAExtraLines:  tags="disassembler"
+  XMETAExtraLines:  tags="loader"

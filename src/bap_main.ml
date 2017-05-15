@@ -209,7 +209,7 @@ let parse_source argv =
   | _ -> raise Unrecognized_source
 
 let run_loader () =
-  let argv,passes = Bap_plugin_loader.run_and_get_passes Sys.argv in
+  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] Sys.argv in
   let print_formats =
     Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
     fst |> Option.value ~default:false in
