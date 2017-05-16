@@ -41,7 +41,7 @@ let print_plugins_and_exit excluded plugins =
   List.iter plugins ~f:(fun p ->
       let status = if List.mem excluded (Plugin.name p)
         then "[-]" else "[+]" in
-      printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p));
+      printf "  %s %-26s %s@." status (Plugin.name p) (Plugin.desc p));
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
