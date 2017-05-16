@@ -101,12 +101,15 @@ error_or<symbol_sizes> getSymbolSizes(const ELFObjectFile<ELFT> &obj) {
     auto sections = obj.getELFFile()->sections();
     bool is_dyn = std::any_of(sections.begin(), sections.end(),
                               [](const sec_hdr &hdr) { return (hdr.sh_type == ELF::SHT_DYNSYM); });
+
     if (!syms.size() && !is_dyn)
         return success(symbol_sizes());
-    for (auto sym : obj.getDynamicSymbolIterators())
-        syms.push_back({sym, sym.getSize()});
 
-    return success(std::move(computeSymbolSizes(obj)));
+    if (is_dyn)  // we aren't able to rely on iterators because of bug in llvm
+        for (auto sym : obj.getDynamicSymbolIterators())
+            syms.push_back({sym, sym.getSize()});
+
+    return success(syms);
 }
 
 error_or<symbol_sizes> getSymbolSizes(const COFFObjectFile& obj) {

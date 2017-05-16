@@ -8,6 +8,8 @@ type name = [
   | `symbol of string
 ] [@@deriving sexp_of]
 
+type error += Unbound_name of name
+
 module type Code = functor (Machine : Machine) -> sig
   val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
 end

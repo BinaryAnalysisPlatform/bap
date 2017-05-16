@@ -1,4 +1,7 @@
 (defmacro when (cnd body)
+  "if CND is 1:0 then evalute BODY
+   and return the value of last expression in BODY,
+   otherwise return 0:0"
   (if cnd (prog body) ()))
 
 (defmacro until ($cond$ $body$)
@@ -15,7 +18,8 @@
 
 
 (defmacro incr (x) (set x (+1 x)))
-(defmacro incr (x xs) (prog (incr x) (incr xs)))
+(defmacro incr (x xs)
+  (prog (incr x) (incr xs)))
 
 (defmacro decr (x) (set x (-1 x)))
 (defmacro decr (x xs)

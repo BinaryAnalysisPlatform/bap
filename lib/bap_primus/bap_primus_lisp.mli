@@ -78,7 +78,7 @@ end
 
 
 (** [init ~paths features] initialize the Lisp machine, load all
-    [features] lookin in the specified set of paths, and register a
+    [features] looking in the specified set of paths, and register a
     Primus machine component that will use the Linker component to
     link into the program all definitions with the external linkage
     (i.e., those with the external attribute).

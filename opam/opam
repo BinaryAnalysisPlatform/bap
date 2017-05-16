@@ -205,12 +205,13 @@ depexts: [
         "curl"
         "libzip"
      ]]
-     [["osx" "brew"] [
+     [["osx" "homebrew"] [
         "gmp"
-        "homebrew/versions/llvm34"
+        "homebrew/versions/llvm38"
         "graphviz"
         "curl"
         "libzip"
+        "dejagnu"
     ]]
 ]
 
