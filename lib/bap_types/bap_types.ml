@@ -96,6 +96,7 @@ module Std = struct
     type result = Result.t
   end
 
+  module Eval = Bap_eval
   module Expi = Bap_expi
   module Bili = Bap_bili
   module Biri = Bap_biri
