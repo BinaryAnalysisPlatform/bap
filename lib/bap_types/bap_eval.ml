@@ -6,6 +6,7 @@ open Bap_bil
 open Bap_eval_types
 
 module type S = Eval.S
+module type S2 = Eval.S2
 module Sz = Bap_size
 module TE = Bap_type_error
 
@@ -40,16 +41,16 @@ let is_shift = function
   | Binop.LSHIFT | Binop.RSHIFT | Binop.ARSHIFT -> true
   | _ -> false
 
-module Make(State : Monad.State.S2) = struct
+module Make2(State : Monad.S2) = struct
   open State.Syntax
 
-  module State = State
+  module M = State
 
-  type ('a,'e) state = ('a,'e) State.t
+  type ('a,'e) state = ('a,'e) M.t
   type ('a,'e) m = ('a,'e) state
-  class type ['a,'r] semantics = ['a,'r] Eval.Class(State).semantics
-  class type virtual ['a,'r,'s] domain  = ['a,'r,'s] Eval.Class(State).domain
-  class type virtual ['a,'r,'s] eff = ['a,'r,'s] Eval.Class(State).eff
+  class type ['a,'r] semantics = ['a,'r] Eval.T2(State).semantics
+  class type virtual ['a,'r,'s] domain  = ['a,'r,'s] Eval.T2(State).domain
+  class type virtual ['a,'r,'s] eff = ['a,'r,'s] Eval.T2(State).eff
 
   class type virtual ['a,'r,'s] eval = object
     inherit ['a,'r,'s] domain
@@ -70,7 +71,6 @@ module Make(State : Monad.State.S2) = struct
     method private virtual value_of_word : word -> ('r,'a) m
     method private virtual word_of_value : 'r -> (word option,'a) m
     method private virtual storage_of_value : 'r -> ('s option,'a) m
-    method private virtual value_of_storage : 's -> ('r,'a) m
 
     method private bot = self#undefined
 
@@ -120,8 +120,8 @@ module Make(State : Monad.State.S2) = struct
         match u,v with
         | None,_|_,None -> self#type_error TE.bad_imm
         | Some u, Some v -> match ed with
-        | LittleEndian -> self#eval_concat' u v
-        | BigEndian    -> self#eval_concat' v u
+          | LittleEndian -> self#eval_concat' u v
+          | BigEndian    -> self#eval_concat' v u
 
     method eval_store ~mem ~addr word (e : endian) s =
       self#eval_mem  mem >>= function
@@ -242,4 +242,27 @@ module Make(State : Monad.State.S2) = struct
   end
 end
 
-include Make(Monad.State)
+module Make(M : Monad.S) = struct
+  type 'a m = 'a M.t
+  module M = M
+  module Eval2 = Make2(struct
+      type ('a,'e) t = 'a M.t
+      include (M : Monad.S with type 'a t := 'a M.t)
+    end)
+
+  class type ['r] semantics = ['r] Eval.T1(M).semantics
+  class type virtual ['r,'s] domain  = ['r,'s] Eval.T1(M).domain
+  class type virtual ['r,'s] eff = ['r,'s] Eval.T1(M).eff
+
+  class type virtual ['r,'s] eval = object
+    inherit ['r,'s] domain
+    inherit ['r,'s] eff
+    inherit ['r] semantics
+    method type_error : TE.type_error -> 'r m
+    method division_by_zero : unit -> 'r m
+  end
+
+  class virtual ['r,'s] t : ['r,'s] eval = ['a,'r,'s] Eval2.t
+end
+
+include Make2(Monad.State)

@@ -21,7 +21,8 @@ module Make(State : Monad.State.S2) = struct
   type 'a u = (unit,'a) state
   type 'a r = (Bap_result.result,'a) state
 
-  module Eval = Bap_eval.Make(State)
+  module M = State
+  module Eval = Bap_eval.Make2(State)
 
   let create_result f =
     State.get () >>= fun ctxt ->
@@ -53,7 +54,6 @@ module Make(State : Monad.State.S2) = struct
     method private storage_of_value v = match value v with
       | Mem mem -> State.return (Some mem)
       | _ -> State.return None
-    method private value_of_storage = storage
 
     method lookup v =
       State.get () >>= fun ctxt -> match ctxt#lookup v with

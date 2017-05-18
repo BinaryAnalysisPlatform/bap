@@ -2,5 +2,8 @@ open Monads.Std
 open Bap_eval_types
 
 module type S = Eval.S
-module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
-include S with type ('a,'e) state = ('a,'e) Monad.State.t
+module type S2 = Eval.S2
+module Make2(M : Monad.S2) : S2 with type ('a,'e) m := ('a,'e) M.t
+                                 and module M := M
+module Make(M : Monad.S) : S with type 'a m := 'a M.t
+                              and module M := M

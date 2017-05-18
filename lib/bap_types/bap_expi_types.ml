@@ -1,3 +1,4 @@
+open Core_kernel.Std
 open Bap_result
 open Bap_common
 open Bap_bil
@@ -20,7 +21,10 @@ module Expi = struct
     type 'a u = (unit,'a) state
     type 'a r = (result,'a) state
 
-    module Eval : Eval.S with type ('a,'e) state = ('a,'e) state
+    module M : T2 with type ('a,'e) t = ('a,'e) state
+
+    module Eval : Eval.S2 with type ('a,'e) m := ('a,'e) state
+                           and module M := M
 
     class ['a] t : object
       constraint 'a = #Context.t
