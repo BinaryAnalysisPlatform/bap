@@ -33,16 +33,27 @@ let objdump_strip  =
 let text_to_addr l =
   objdump_strip l |> (^) "0x" |> Int64.of_string
 
-let parse_func_start l =
+let is_section_start s =
+  String.is_substring s ~substring:"Disassembly of section"
+
+(** "Disassembly of section .fini:" -> ".fini" *)
+let section_name s =
+  match String.split_on_chars ~on:[' '; ':'] s with
+  | _ :: _ :: _ :: name :: _ -> Some name
+  | _ -> None
+
+let parse_func_start section l =
   if re func_start_re l then
     let xs = String.split_on_chars ~on:[' '; '@'] l in
     match xs with
-      addr::name::[]  (* name w/o @plt case *)
+    | addr::name::[]  (* name w/o @plt case *)
     | addr::name::_::[] -> (* name@plt case *)
-      Some(objdump_strip name, text_to_addr addr)
+      let name = objdump_strip name in
+      if Some name = section then None
+      else
+        Some (name, text_to_addr addr)
     | _ -> None
-  else
-    None
+  else None
 
 let popen cmd =
   let env = Unix.environment () in
@@ -61,13 +72,18 @@ let popen cmd =
 
 let run_objdump arch file =
   let popen = fun cmd -> popen (cmd ^ " " ^ file) in
-  let lines = List.find_map objdump_cmds ~f:popen in
   let names = Addr.Table.create () in
   let width = Arch.addr_size arch |> Size.in_bits in
   let add (name,addr) =
     Hashtbl.set names ~key:(Addr.of_int64 ~width addr) ~data:name in
-  Option.iter lines ~f:(List.iter ~f:(fun line ->
-      Option.iter (parse_func_start line) ~f:add));
+  let () = match List.find_map objdump_cmds ~f:popen with
+    | None -> ()
+    | Some lines ->
+      List.fold ~init:None lines ~f:(fun sec line ->
+          if is_section_start line then section_name line
+          else
+            let () = Option.iter (parse_func_start sec line) ~f:add in
+            sec) |> ignore in
   if Hashtbl.length names = 0
   then warning "failed to obtain symbols";
   Ok (Symbolizer.create (Hashtbl.find names))
