@@ -11,20 +11,24 @@ include Self()
 module Greedy(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
-  let schedule _ =
+  let schedule blk =
+    info "finished blk %s" (Term.name blk);
     Machine.get () >>= fun ctxt -> match ctxt#next with
-    | Some _ -> Machine.return ()
-    | None -> Machine.forks () >>= Machine.Seq.find ~f:(fun id ->
+    | Some _ ->
+      info "have next, will continue";
+      Machine.return ()
+    | None ->
+      info "trace finished, switching to another clone@\n";
+      Machine.forks () >>= Machine.Seq.find ~f:(fun id ->
           Machine.switch id >>= fun () ->
           Machine.get () >>| fun ctxt -> match ctxt#next with
           | None -> false
           | Some _ ->
-            info "switched to a machine clone #%s"
-              (Machine.Id.to_string id);
+            info "switched to machine %a" Machine.Id.pp id;
             true) >>| ignore
 
   let init () =
-    Primus.Interpreter.enter_blk >>> schedule
+    Primus.Interpreter.leave_blk >>> schedule
 end
 
 let enable () =
@@ -39,7 +43,7 @@ manpage [
     "The greedy scheduling strategy will continue with the same state,
      unless the machine reaches a termination state, i.e., when the
      $(b,next) value in a context becomes $(b,None). In that case
-     another alive state that has a ($b,next) value that is not $(b,None) is
+     another alive state that has a $(b,next) value that is not $(b,None) is
      chosen. If such state doesn't exist, then the Machine finally
      terminates. Thus this strategy will perform a depth-first
      traversal of the state tree, and guarantees that all paths

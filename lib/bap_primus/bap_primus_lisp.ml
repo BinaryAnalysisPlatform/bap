@@ -106,7 +106,7 @@ module type Primitives = functor (Machine : Machine) ->  sig
       should work directly with the Linker module. The primitives
       extend only the Lisp machine.
   *)
-  val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+  val defs : unit -> Word.t Machine.t Primitive.t list
 end
 
 type primitives = (module Primitives)
@@ -951,8 +951,8 @@ let inspect_def {meta={name; docs}} = Sexp.List [
 
 let inspect {env} = sexp_of_bindings env
 
-let width_of_ctxt ctxt =
-  Size.in_bits (Arch.addr_size (Project.arch ctxt#project))
+let width_of_ctxt proj =
+  Size.in_bits (Arch.addr_size (Project.arch proj))
 
 
 type error += Runtime_error of string
@@ -971,25 +971,25 @@ let empty_program = {
   substs  = [];
 }
 
-let init_env ctxt = (object
+let init_env proj = (object
   inherit [bindings] Term.visitor
   method! enter_term _ t env =
     match Term.get_attr t address with
     | None -> env
     | Some addr ->
       ({value = Term.name t; typ = Word},addr) :: env
-end)#run (Project.program ctxt#project) []
+end)#run proj []
 
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
-    (fun ctxt -> {
-         env = init_env ctxt;
+    (fun proj -> {
+         env = init_env (Project.program proj);
          primitives = [];
          program = empty_program;
          paths = [Filename.current_dir_name];
-         width = width_of_ctxt ctxt;
-         contexts = Contexts.of_project ctxt#project;
+         width = width_of_ctxt proj;
+         contexts = Contexts.of_project proj;
        })
 
 let bil_of_lisp op =
@@ -1118,8 +1118,8 @@ module Lisp(Machine : Machine) = struct
   let eval_sub biri = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
-      Machine.get () >>= fun ctxt ->
-      Term.enum sub_t ctxt#program |>
+      Machine.get () >>= fun proj ->
+      Term.enum sub_t (Project.program proj) |>
       Seq.find ~f:(fun sub -> match Term.get_attr sub address with
           | None -> false
           | Some addr -> Word.(addr = sub_addr)) |> function
@@ -1145,13 +1145,7 @@ module Lisp(Machine : Machine) = struct
         Linker.exec (`addr sub_addr) biri >>= fun () ->
         Machine.Seq.find_map args ~f:(fun arg ->
             if Arg.intent arg = Some Out
-            then biri#lookup (Arg.lhs arg) >>= fun r ->
-              match Bil.Result.value r with
-              | Bil.Imm x -> Machine.return (Some x)
-              | Bil.Bot -> failf "%s is undefined"
-                             (Arg.lhs arg |> Var.name) ()
-              | Bil.Mem _ -> failf "type error in %s"
-                               (Arg.lhs arg |> Var.name) ()
+            then biri#lookup (Arg.lhs arg) >>| Option.some
             else Machine.return None) >>|
         Option.value ~default:Word.b0  >>= fun rval ->
         match frame with
@@ -1161,8 +1155,8 @@ module Lisp(Machine : Machine) = struct
         | None -> Machine.return rval
 
   let rec eval_lisp biri name args =
-    Machine.get () >>= fun ctxt ->
-    let arch = Project.arch ctxt#project in
+    Machine.get () >>= fun proj ->
+    let arch = Project.arch proj in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.program.defs name arch args with
     | {Resolve.stage1=[]},None -> eval_primitive biri name args
@@ -1201,7 +1195,7 @@ module Lisp(Machine : Machine) = struct
 
   and eval_body biri body = eval_exp biri (Seq body)
 
-  and eval_exp biri exp : (Word.t,#Context.t) Machine.t =
+  and eval_exp biri exp : Word.t Machine.t =
     let int v t = width () >>| fun width -> word width v t in
     let rec eval = function
       | Int {value;typ} -> int value typ

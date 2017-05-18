@@ -17,31 +17,29 @@ type nonrec component = component
 module State = Bap_primus_state
 type id = Monad.State.Multi.id
 
-module Make(M : Monad.S)
-= struct
+module Make(M : Monad.S) = struct
   module SM = struct
     include Monad.State.Multi.T2(M)
     include Monad.State.Multi.Make2(M)
   end
 
-  type ('a,'e) t = (('a,Error.t) result,'e state) SM.t
-  and 'e state = {
-    ctxt : 'e;
+  type 'a t = (('a,Error.t) result,state) SM.t
+  and state = {
+    proj : project;
     local  : State.Bag.t;
     global : State.Bag.t;
     states : int String.Map.t;
-    observations : 'e observations;
+    observations : unit t Observation.observations;
   }
-  and 'e observations = (unit,'e) t Observation.observations
 
   type 'a m = 'a M.t
-  type ('a,'e) e = 'e -> (('a,Error.t) result * 'e) m
+  type 'a e = project -> (('a,Error.t) result * project) m
   module Basic = struct
     open SM.Syntax
-    type nonrec ('a,'e) t = ('a,'e) t
+    type nonrec 'a t = 'a t
     let return x = SM.return (Ok x)
 
-    let bind (m : ('a,'e) t) (f : 'a -> ('b,'e) t) : ('b,'e) t = m >>= function
+    let bind (m : 'a t) (f : 'a -> 'b t) : 'b t = m >>= function
       | Ok r -> f r
       | Error err -> SM.return (Error err)
     let map = `Define_using_bind
@@ -56,7 +54,7 @@ module Make(M : Monad.S)
 
   type _ error = Error.t
   include Fail
-  module M2 = Monad.Make2(Basic)
+  module M2 = Monad.Make(Basic)
   open M2
 
 
@@ -66,7 +64,7 @@ module Make(M : Monad.S)
 
   let lifts m = SM.map m ~f:(fun x -> Ok x)
 
-  let with_global_context (f : (unit -> ('a,'b) t)) =
+  let with_global_context (f : (unit -> 'a t)) =
     lifts (SM.current ())       >>= fun id ->
     lifts (SM.switch SM.global) >>= fun () ->
     f ()                >>= fun r  ->
@@ -84,7 +82,7 @@ module Make(M : Monad.S)
     lifts (SM.update @@ fun s -> {s with global})
 
   module Observation = struct
-    type ('a,'e) m = ('a,'e) t
+    type 'a m = 'a t
     type nonrec 'a observation = 'a observation
     type nonrec 'a statement = 'a statement
 
@@ -106,18 +104,18 @@ module Make(M : Monad.S)
   end
 
   module Make_state(S : sig
-      val get : unit -> (State.Bag.t,'e) t
-      val set : State.Bag.t -> (unit,'e) t
+      val get : unit -> State.Bag.t t
+      val set : State.Bag.t -> unit t
       val typ : string
     end) = struct
-    type ('a,'e) m = ('a,'e) t
+    type 'a m = 'a t
     let get state =
       S.get () >>= fun states ->
       State.Bag.with_state states state
         ~ready:return
         ~create:(fun make ->
-            lifts (SM.get ()) >>= fun {ctxt} ->
-            return (make (ctxt :> Context.t)))
+            lifts (SM.get ()) >>= fun {proj} ->
+            return (make proj))
 
     let put state x =
       S.get () >>= fun states ->
@@ -139,19 +137,20 @@ module Make(M : Monad.S)
       let set = set_global
     end)
 
-  let put ctxt = lifts @@ SM.update @@ fun s -> {s with ctxt}
-  let get () = lifts (SM.gets @@ fun s -> s.ctxt)
+  let put proj = lifts @@ SM.update @@ fun s -> {s with proj}
+  let get () = lifts (SM.gets @@ fun s -> s.proj)
+  let project : project t = get ()
   let gets f = get () >>| f
   let update f = get () >>= fun s -> put (f s)
   let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
-  let run : ('a,'e) t -> ('a,'e) e = fun m ctxt ->
+  let run : 'a t -> 'a e = fun m proj ->
     M.bind (SM.run m {
         global = State.Bag.empty;
         local = State.Bag.empty;
         observations = Bap_primus_observation.empty;
         states = String.Map.empty;
-        ctxt}) @@ fun (x,{ctxt}) -> M.return (x,ctxt)
+        proj}) @@ fun (x,{proj}) -> M.return (x,proj)
 
   let eval m s = M.map (run m s) ~f:fst
   let exec m s = M.map (run m s) ~f:snd
@@ -171,8 +170,8 @@ module Make(M : Monad.S)
     let (>>>) = Observation.observe
   end
 
-  include (M2 : Monad.S2 with type ('a,'e) t := ('a,'e) t
-                          and module Syntax := Syntax)
+  include (M2 : Monad.S with type 'a t := 'a t
+                         and module Syntax := Syntax)
 end
 
 let finished,finish =

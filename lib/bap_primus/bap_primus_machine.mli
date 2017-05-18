@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap.Std
 open Monads.Std
 open Bap_primus_types
 
@@ -17,7 +18,7 @@ type id = Monad.State.Multi.id
 
 (* think about: add more stuff  to the main? Like preinstantiated  *)
 module Main(M : Machine) : sig
-  val run : ('a,#Context.t as 'e) M.t -> 'e -> (('a,error) result * 'e) M.m
+  val run : 'a M.t -> project -> (('a,error) result * project) M.m
 end
 
 

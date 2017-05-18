@@ -102,8 +102,6 @@ module Make(Machine : Machine) = struct
 
   module Generate = Generator.Make(Machine)
 
-  type ('a,'e) m = ('a,'e) Machine.t
-
   let update state f =
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)

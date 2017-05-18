@@ -11,9 +11,11 @@ type name = [
 
 type error += Unbound_name of name
 
+
 module type Code = functor (Machine : Machine) -> sig
-  val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
+  val exec : Semantics(Machine).t -> unit Machine.t
 end
+
 
 
 type code = (module Code)
@@ -45,9 +47,8 @@ let () = Bap_primus_error.add_printer (function
 
 let code_of_term sub : code =
   (module functor (Machine : Machine) -> struct
-    let exec :
-      (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t =
-      fun self -> self#eval sub_t sub
+    let exec : Semantics(Machine).t -> unit Machine.t =
+      fun self -> self#run sub_t sub
   end)
 
 let add_code code codes =
@@ -96,13 +97,11 @@ let resolve_name s name = match name with
 let state = Bap_primus_machine.State.declare
     ~uuid:"38bf35bf-1091-4220-bf75-de79db9de4d2"
     ~name:"linker"
-    (fun ctxt -> init_state ctxt#program)
+    (fun p -> init_state (Project.program p))
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
-  type ('a,'e) m = ('a,'e) Machine.t
-
-  module Biri = Biri.Make(Machine)
+  type 'a m = 'a Machine.t
 
   let linker_error s = Machine.fail (Unbound_name s)
 
@@ -123,12 +122,12 @@ module Make(Machine : Machine) = struct
         let addrs = update s.addrs addr in
         {codes; terms; names; addrs})
 
-  let exec name biri =
+  let exec name sema =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
     | Some (module Code) ->
       let module Code = Code(Machine) in
-      Code.exec (biri :> _ Biri.t)
+      Code.exec sema
 
   let is_linked name =
     Machine.Local.get state >>| code_of_name name >>| Option.is_some

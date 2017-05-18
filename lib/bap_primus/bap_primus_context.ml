@@ -104,6 +104,14 @@ module Level = struct
           | Blk up | Phi {up} | Def {up} | Jmp {up} ->
             accept jmp {me;up}
           | _ -> reject `jmp)
+
+
+  let tid level =
+    let (!) {me} = Term.tid me in
+    match level with
+    | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
+    | Phi t -> !t | Def t -> !t | Jmp t -> !t
+
 end
 
 type level = Level.t
@@ -111,23 +119,11 @@ type level = Level.t
 let sexp_of_level = Level.sexp_of_level
 open Level
 
-class t ?(envp=[| |]) ?(argv=[| |]) ?main proj =
-  let prog = Project.program proj in
+class t ?main proj =
   object(self : 's)
-    inherit Biri.context ?main prog
-    val level = Top {me=prog; up=Nil}
+    inherit Biri.context ?main (Project.program proj)
     val proj  = proj
-    val argv : string array = argv
-    val envp : string array = envp
-    method argv = argv
-    method envp = envp
+    method! program = Project.program self#project
     method project = proj
-    method with_project p = {< proj = p >}
-    method level = level
-    method with_level level = {< level = level >}
-    method current =
-      let (!) {me} = Term.tid me in
-      match level with
-      | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
-      | Phi t -> !t | Def t -> !t | Jmp t -> !t
+    method with_project p = {< proj=p >}
   end

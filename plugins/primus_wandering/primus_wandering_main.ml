@@ -48,7 +48,7 @@ module Make
       Note, a winner - the clone that was chosen, is removed from the
       draw.*)
   let rec reschedule n t =
-    if n > 0 then
+    if n > 0 && t.max > 0 then
       Generate.next Random.generator >>= fun i ->
       let i = i mod t.max in
       match Map.find t.pending i with

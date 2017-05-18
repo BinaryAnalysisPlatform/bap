@@ -58,27 +58,38 @@ let state = Primus.Machine.State.declare
               ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
               (fun _ -> Conflict [])
 
-let blk_without_jmps = Term.filter jmp_t ~f:(fun _ -> false)
-let new_var () = Var.create ~is_virtual:true ~fresh:true "c" bool_t
 
-(* Pre: number of jumps is greater than 1
-   post: number of jumps is the same, each jump is in TCF.*)
-let blk blk =
-  Term.enum jmp_t blk |>
-  Seq.fold ~init:(blk_without_jmps blk) ~f:(fun blk jmp ->
-      match Jmp.cond jmp with
-      | Bil.Int _ | Bil.Var _ -> Term.append jmp_t blk jmp
-      | cond ->
-        let var = new_var () in
-        let def = Def.create var cond in
-        let blk = Term.append def_t blk def in
-        let jmp = Jmp.with_cond jmp (Bil.var var) in
-        Term.append jmp_t blk jmp)
+(** Trivial Condition Form (TCF) transformation.
 
-let sub = Term.map blk_t ~f:(fun b ->
-    if Term.length jmp_t b < 2 then b else blk b)
+    In the TCF a condition expression must be either a variable or a
+    constant. The transformations detect non-trivial condition
+    expressions and bind them to variables whose definitions are
+    pushed to the block definition list. *)
+module TCF = struct
+  let blk_without_jmps = Term.filter jmp_t ~f:(fun _ -> false)
+  let new_var () = Var.create ~is_virtual:true ~fresh:true "c" bool_t
 
-let prog = Term.map sub_t ~f:sub
+  (* Pre: number of jumps is greater than 1
+     post: number of jumps is the same, each jump is in TCF.*)
+  let blk blk =
+    Term.enum jmp_t blk |>
+    Seq.fold ~init:(blk_without_jmps blk) ~f:(fun blk jmp ->
+        match Jmp.cond jmp with
+        | Bil.Int _ | Bil.Var _ -> Term.append jmp_t blk jmp
+        | cond ->
+          let var = new_var () in
+          let def = Def.create var cond in
+          let blk = Term.append def_t blk def in
+          let jmp = Jmp.with_cond jmp (Bil.var var) in
+          Term.append jmp_t blk jmp)
+
+  let sub = Term.map blk_t ~f:(fun b ->
+      if Term.length jmp_t b < 2 then b else blk b)
+
+  let prog = Term.map sub_t ~f:sub
+
+  let proj p = Project.with_program p @@ prog @@ Project.program p
+end
 
 let neg = List.map ~f:(fun assn -> {assn with res = not assn.res})
 
@@ -112,15 +123,20 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let fork blk  =
     unsat_assumptions blk >>=
-    Machine.List.iter ~f:(fun assns ->
-        Machine.fork () >>= fun () ->
-        assume  assns >>= fun () ->
-        Machine.current () >>= fun id ->
-        Machine.Local.put state (Conflict assns) >>= fun () ->
-        Machine.parent () >>= fun pid ->
-        Machine.switch pid)
+    Machine.List.iter ~f:(function
+        | [] -> Machine.return ()
+        | assns ->
+          Machine.fork () >>= fun () ->
+          assume  assns >>= fun () ->
+          Machine.current () >>= fun id ->
+          Machine.Local.put state (Conflict assns) >>= fun () ->
+          Machine.parent () >>= fun pid ->
+          info "forked clone %a" Monad.State.Multi.Id.pp id;
+          Machine.switch pid)
 
-  let is_last blk def = Term.last def_t blk = Some def
+  let is_last blk def = match Term.last def_t blk with
+    | None -> true
+    | Some last -> Term.same def last
 
   let step level =
     let open Primus.Context.Level in
@@ -130,6 +146,9 @@ module Main(Machine : Primus.Machine.S) = struct
     | _ -> Machine.return ()
 
   let init () =
+    info "translating the program into the Trivial Condition Form (TCF)";
+    Machine.update (fun ctxt ->
+        ctxt#with_project (TCF.proj ctxt#project)) >>= fun () ->
     Primus.Interpreter.leave_level >>> step
 end
 
@@ -140,7 +159,12 @@ manpage [
   `P
     "When this mode is enabled the Primus Machine will venture into
      paths with unsatisfied constraints. Basically, it means that on
-     every branch the state is duplicated.  "
+     every branch the state is duplicated.";
+  `P
+    "The program will be translated into the Trivial Condition Form,
+  where each compound condition expression is trivialized to a
+  variable, that is bound earlier in the block."
+
 ]
 
 let enabled = flag "mode" ~doc:"Enable the mode."

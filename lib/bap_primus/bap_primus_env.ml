@@ -80,7 +80,6 @@ let word = Word.of_int ~width:8
 
 module Make(Machine : Machine) = struct
     open Machine.Syntax
-    type ('a,'e) m = ('a,'e) Machine.t
 
     module Generator = Bap_primus_generator.Make(Machine)
 
@@ -90,9 +89,9 @@ module Make(Machine : Machine) = struct
           })
 
     let set var x =
-      Machine.get () >>= fun ctxt ->
-      let ctxt,res = ctxt#create_word x in
-      Machine.put (ctxt#update var res)
+      Machine.Local.update state ~f:(fun s -> {
+        s with values = Map.add s.values ~key:var ~data:x
+      })
 
     let gen_word gen width =
       assert (width > 0);
@@ -103,23 +102,19 @@ module Make(Machine : Machine) = struct
           next (Word.concat x (word y)) in
       Generator.next gen >>| word >>= next
 
+    let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>| fun s ->
+      Word.zero (Size.in_bits s)
+
     let get var =
-      Machine.get () >>= fun ctxt ->
-      match ctxt#lookup var with
+      Machine.Local.get state >>= fun t ->
+      match Map.find t.values var with
       | Some res -> Machine.return res
       | None -> match Var.typ var with
-        | Type.Mem (_,_) ->
-          Machine.Observation.make undefined var >>= fun () ->
-          Machine.fail (Undefined_var var)
-        | Type.Imm width ->
-          Machine.Local.get state >>= fun t ->
-          match Map.find t.random var with
+        | Type.Mem (_,_) -> null
+        | Type.Imm width -> match Map.find t.random var with
           | None ->
             Machine.Observation.make undefined var >>= fun () ->
             Machine.fail (Undefined_var var)
-          | Some gen ->
-            gen_word gen width >>= fun w ->
-            let ctxt,res = ctxt#create_word w in
-            Machine.put (ctxt#update var res) >>= fun () ->
-            Machine.return res
+          | Some gen -> gen_word gen width
+
 end

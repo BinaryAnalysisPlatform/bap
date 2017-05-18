@@ -9,22 +9,21 @@ type error += Segmentation_fault of addr
 val segmentation_fault : addr observation
 
 module Make(Machine : Machine) : sig
-  type ('a,'e) m = ('a,'e) Machine.t
 
-  val load : addr -> (word,#Context.t) m
-  val save : addr -> word -> (unit,#Context.t) m
+  val load : addr -> word Machine.t
+  val save : addr -> word -> unit Machine.t
 
-  val add_text : mem -> (unit,#Context.t) m
-  val add_data : mem -> (unit,#Context.t) m
+  val add_text : mem -> unit Machine.t
+  val add_data : mem -> unit Machine.t
 
   val allocate :
     ?readonly:bool ->
     ?executable:bool ->
     ?generator:Generator.t ->
-    addr -> int -> (unit,#Context.t) m
+    addr -> int -> unit Machine.t
 
   val map :
     ?readonly:bool ->
     ?executable:bool ->
-    mem -> (unit,#Context.t) m
+    mem -> unit Machine.t
 end

@@ -27,18 +27,13 @@ val leave_def : def term observation
 val leave_jmp : jmp term observation
 
 val variable_access : var observation
-val variable_read : (var * Bil.result) observation
-val variable_written : (var * Bil.result) observation
+val variable_read : (var * word) observation
+val variable_written : (var * word) observation
 
 val address_access : addr observation
 val address_read : (addr * word) observation
 val address_written : (addr * word) observation
 
 module Make (Machine : Machine) : sig
-  module Biri : Biri.S
-    with type ('a,'e) state = ('a,'e) Machine.t
-  class ['a] t : object
-    inherit ['a] Biri.t
-    constraint 'a = #Bap_primus_context.t
-  end
+  val sema : Semantics(Machine).t
 end

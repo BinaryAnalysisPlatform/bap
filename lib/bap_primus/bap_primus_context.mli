@@ -3,7 +3,7 @@ open Bap.Std
 open Monads.Std
 
 module Level : sig
-  type nil
+  type nil = Nil
   type top = program
 
   type ('a,'b) level = {
@@ -27,22 +27,14 @@ module Level : sig
 
   val to_string : t -> string
 
+  val tid : t -> tid
   val next : t -> ('p,'t) cls -> 't term -> (t,Bap_primus_error.t) Monad.Result.result
 end
 
 type level = Level.t [@@deriving sexp_of]
 
-
-class t :
-  ?envp: string array ->
-  ?argv: string array -> ?main:sub term -> project ->
-  object('s)
+class t : ?main: sub term -> project -> object('s)
     inherit Biri.context
-    method argv : string array
-    method envp : string array
     method project : project
     method with_project : project -> 's
-    method current : tid
-    method level : level
-    method with_level : level -> 's
   end

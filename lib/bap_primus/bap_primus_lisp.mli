@@ -57,7 +57,7 @@ module type Primitives = functor (Machine : Machine) ->  sig
       should work directly with the Linker module. The primitives
       extend only the Lisp machine.
   *)
-  val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+  val defs : unit -> Word.t Machine.t Primitive.t list
 end
 
 type primitives = (module Primitives)
@@ -72,8 +72,8 @@ type primitives = (module Primitives)
 type error += Runtime_error of string
 
 module Make (Machine : Machine) : sig
-  val failf : ('a, unit, string, unit -> ('b, 'c) Machine.t) format4 -> 'a
-  val link_primitives : primitives -> (unit, #Context.t) Machine.t
+  val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
+  val link_primitives : primitives -> unit Machine.t
 end
 
 

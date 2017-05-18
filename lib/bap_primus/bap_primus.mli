@@ -25,6 +25,23 @@ module Std : sig
     (** value generator  *)
     type generator
 
+    module Semantics(M : Monad.S) : sig
+      type 'a m = 'a M.t
+      class type t = object
+        inherit [word,word] Eval.Make(M).t
+        method run : (_,'t) cls -> 't term -> unit m
+        method undefined : word m
+        method word_of_value : word -> word option m
+        method value_of_word : word -> word m
+        method storage_of_value : word -> word option m
+        method lookup : var -> word m
+        method update : var -> word -> unit m
+        method load : addr -> addr -> word m
+        method store : addr -> addr -> word -> word m
+      end
+    end
+
+
     (** Machine Observation.
 
         The Primus Framework is built on top of the Machine
@@ -119,65 +136,7 @@ module Std : sig
 
       (** program location.  *)
       type level = Level.t [@@deriving sexp_of]
-
-      (** Primus Interpreter Context.
-
-          Although it is possible to extend the Context class via the
-          inheritence it is not recommended, as the Primus framework
-          provides more composable way to extend the interpreter
-          state. See the {!State} module for more information.
-
-          A value of type [#t] can be accessed in the machine
-          operation (an operation in the Machine monad), by the virtue
-          of the [get ()] operation. The context can be changed with
-          the [put ctxt] operation.
-
-          [new ~envp ~argv ~main proj] creates a fresh new
-          context. The [envp] is an array of environemnt
-          variables. The representation depends on a system, but
-          usually it is an array of [name=value]
-          bindings. Correspondingly, the [argv] is an array of the
-          program arguments. The [main] argument, if present, defines
-          a function that is considered the entry point to a
-          program.
-
-          Note: it is usually not necessary to create a new context
-          manually, unless you are implementing a new instatiation of
-          a framework.*)
-      class t :
-        ?envp: string array ->
-        ?argv: string array -> ?main:sub term -> project ->
-        object('s)
-          inherit Biri.context
-
-          (** [argv] an array of command line arguments  *)
-          method argv : string array
-
-          (** [envp] an array of process environment variables  *)
-          method envp : string array
-
-          (** [project] a static model of a program  *)
-          method project : project
-
-          (** [with_project proj] updates the static model of a program  *)
-          method with_project : project -> 's
-
-          (** [current] returns a term identifier of a current program
-              term.  *)
-          method current : tid
-
-          (** [level] returns a current program location.  *)
-          method level : level
-
-          (** [with_level level] invoked by the interpreter every time
-              a program position changes.  *)
-          method with_level : level -> 's
-        end
     end
-
-
-    (** Evaluation context.  *)
-    class type context = Context.t
 
     (** Primus Machine.
 
@@ -223,12 +182,12 @@ module Std : sig
       module State : sig
 
 
-        (** [('a,'c) t] is a type of state that holds a value of type
+        (** ['a t] is a type of state that holds a value of type
             ['a], and can be constructed from the base context of type
             ['c]. *)
-        type ('a,'c) t
+        type 'a t
 
-        type ('a,'c) state = ('a,'c) t
+        type 'a state = 'a t
 
         (** a type that has no values *)
         type void
@@ -258,19 +217,19 @@ module Std : sig
           ?inspect:('a -> Sexp.t) ->
           uuid:uuid ->
           name:string ->
-          ('c -> 'a) -> ('a,'c) t
+          (project -> 'a) -> 'a t
 
 
         (** [inspect state value] introspects given [value] of the state.  *)
-        val inspect : ('a,'c) t -> 'a -> Sexp.t
+        val inspect : 'a t -> 'a -> Sexp.t
 
 
         (** [name state] a state name that was given during the construction.  *)
-        val name : ('a,'c) t -> string
+        val name : 'a t -> string
       end
 
 
-      type 'a state = ('a,Context.t) State.t
+      type 'a state = 'a State.t
 
 
       (** An interface to the state.
@@ -278,32 +237,31 @@ module Std : sig
           An interface gives an access to operations that query and
           modify machine state. *)
       module type State = sig
-        type ('a,'e) m
+        type 'a m
         type 'a t
 
         (** [get state] extracts the state.  *)
-        val get : 'a t -> ('a,#Context.t) m
+        val get : 'a t -> 'a m
 
         (** [put state x] saves a machine state  *)
-        val put : 'a t -> 'a -> (unit,#Context.t) m
+        val put : 'a t -> 'a -> unit m
 
         (** [update state ~f] updates a state using function [f]. *)
-        val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
+        val update : 'a t -> f:('a -> 'a) -> unit m
       end
 
       (** The Machine interface.*)
       module type S = sig
 
-        (** the machine  *)
-        type ('a,'e) t
+        (** the machine computation  *)
+        type 'a t
 
 
-        (** the machine computation.  *)
+        (** an external monad in which the machine computation is wrapped  *)
         type 'a m
 
         (** Observations interface.  *)
         module Observation : sig
-
 
           (** [observe obs on_observation] subscribes to the given
               observation [obs]. Every time the observation [obs] is
@@ -311,45 +269,46 @@ module Std : sig
               function can perform arbitrary computations in the
               machine monad, e.g., make its own computations, or access
               other components via their interfaces.  *)
-          val observe : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
+          val observe : 'a observation -> ('a -> unit t) -> unit t
 
 
           (** [make observation event] make an [observation] of the
               given [event].  *)
-          val make : 'a statement -> 'a -> (unit,'e) t
+          val make : 'a statement -> 'a -> unit t
         end
 
 
         (** Computation Syntax.*)
         module Syntax : sig
-          include Monad.Syntax.S2 with type ('a,'e) t := ('a,'e) t
+          include Monad.Syntax.S with type 'a t := 'a t
 
 
           (** [event >>> action] is the same as
               [Observation.observe event action] *)
-          val (>>>) : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
+          val (>>>) : 'a observation -> ('a -> unit t) -> unit t
         end
 
 
-        include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
-                                      and type 'a m := 'a m
-                                      and type ('a,'e) e = 'e -> (('a, error) result * 'e) m
-                                      and type id := id
-                                      and module Syntax := Syntax
+        include Monad.State.Multi.S with type 'a t := 'a t
+                                     and type 'a m := 'a m
+                                     and type 'a e = project -> (('a, error) result * project) m
+                                     and type env := project
+                                     and type id := id
+                                     and module Syntax := Syntax
 
 
 
         (** Local state of the machine.  *)
-        module Local  : State with type ('a,'e) m := ('a,'e) t
+        module Local  : State with type 'a m := 'a t
                                and type 'a t := 'a state
 
 
         (** Global state shared across all machine clones.  *)
-        module Global : State with type ('a,'e) m := ('a,'e) t
+        module Global : State with type 'a m := 'a t
                                and type 'a t := 'a state
 
-        include Monad.Fail.S2 with type ('a,'e) t := ('a,'e) t
-                               and type 'a error = error
+        include Monad.Fail.S with type 'a t := 'a t
+                              and type 'a error = error
       end
 
 
@@ -370,25 +329,21 @@ module Std : sig
 
 
         (** [init ()] component initialization function. *)
-        val init : unit -> (unit,#Context.t) Machine.t
+        val init : unit -> unit Machine.t
       end
 
 
       (** The Machine component.  *)
       type component = (module Component)
 
-
-
       (** [Make(Monad)] a monad transformer that wraps the Machine
           into an arbitrary [Monad].  *)
       module Make(M : Monad.S) : S with type 'a m = 'a M.t
 
-
-
       (** [Main(Machine)] instantiates the [Machine] and provides a
           function, that runs the Machine *)
       module Main(M : S) : sig
-        val run : ('a,#Context.t as 'e) M.t -> 'e -> (('a,error) result * 'e) M.m
+        val run : 'a M.t -> project -> (('a,error) result * project) M.m
       end
 
 
@@ -513,10 +468,10 @@ module Std : sig
       val variable_access : var observation
 
       (** a variabe was valuated to the provided value.  *)
-      val variable_read : (var * Bil.result) observation
+      val variable_read : (var * word) observation
 
       (** a variable was set to the specified value.  *)
-      val variable_written : (var * Bil.result) observation
+      val variable_written : (var * word) observation
 
 
       (** an address will be read  *)
@@ -534,12 +489,7 @@ module Std : sig
       (** Make(Machine) makes an interpreter that computes in the
           given machine.  *)
       module Make (Machine : Machine.S) : sig
-        module Biri : Biri.S
-          with type ('a,'e) state = ('a,'e) Machine.t
-        class ['a] t : object
-          inherit ['a] Biri.t
-          constraint 'a = #context
-        end
+        val sema : Semantics(Machine).t
       end
     end
 
@@ -662,7 +612,7 @@ module Std : sig
       (** [Make(Machine)] lifts the generator interface into the
           Machine monad.  *)
       module Make( Machine : Machine.S) : sig
-        val next : t -> (int,#Context.t) Machine.t
+        val next : t -> int Machine.t
       end
     end
 
@@ -697,7 +647,7 @@ module Std : sig
           itself is represented. It is just a function, that takes a
           machine and performs a computation using this machine.*)
       module type Code = functor (Machine : Machine.S) -> sig
-        val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
+        val exec : Semantics(Machine).t -> unit Machine.t
       end
 
 
@@ -716,12 +666,7 @@ module Std : sig
 
       *)
       module Make(Machine : Machine.S) : sig
-        type ('a,'e) m = ('a,'e) Machine.t
-        module Biri : Biri.S
-          with type ('a,'e) state = ('a,'e) Machine.t
-
-
-
+        type 'a m = 'a Machine.t
         (** [link ~addr ~name ~tid code] links the given [code]
             fragment into the Machine. The code can be invoked by one
             of the provided identifier. If no idetifiers were
@@ -733,19 +678,19 @@ module Std : sig
           ?addr:addr ->
           ?name:string ->
           ?tid:tid ->
-          code -> (unit,#Context.t) m
+          code -> unit m
 
 
         (** [exec name] executes a code fragment associated with the
             given name. Terminates the computation with the
             [Linker.Unbound_name name] condition, if the [name] is not
             associated with any code fragment.  *)
-        val exec : name -> (#Context.t as 'a) #Biri.t -> (unit,'a) m
+        val exec : name -> Semantics(Machine).t -> unit m
 
 
         (** [is_linked name] computes to [true] if the [name] is
             associated with some code.  *)
-        val is_linked : name -> (bool,#Context.t) m
+        val is_linked : name -> bool m
       end
     end
 
@@ -769,20 +714,16 @@ module Std : sig
 
       (** [Env = Make(Machine)]  *)
       module Make(Machine : Machine.S) : sig
-        type ('a,'e) m = ('a,'e) Machine.t
-
-
 
         (** [get var] returns a value associated with the variable.
             Todo: it looks like that the interface doesn't allow
             anyone to save bottom or memory values in the environemnt,
             thus the [get] operation should not return the
             [Bil.result].*)
-        val get : var -> (Bil.result,#Context.t) m
-
+        val get : var -> word Machine.t
 
         (** [set var value] binds a variable [var] to the given [value].  *)
-        val set : var -> word -> (unit,#Context.t) m
+        val set : var -> word -> unit Machine.t
 
 
         (** [add var generator] adds a variable [var] to the
@@ -790,7 +731,7 @@ module Std : sig
             with the [set] operation, then a value produces by the
             generator will be automatically associated with the
             variable and returned. *)
-        val add : var -> Generator.t -> (unit,#Context.t) m
+        val add : var -> Generator.t -> unit Machine.t
       end
     end
 
@@ -808,26 +749,24 @@ module Std : sig
 
 
       module Make(Machine : Machine.S) : sig
-        type ('a,'e) m = ('a,'e) Machine.t
-
 
         (** [load addr] loads a byte from the given address *)
-        val load : addr -> (word,#Context.t) m
+        val load : addr -> word Machine.t
 
 
         (** [save addr x] stores a byte [x] at the given address [addr]  *)
-        val save : addr -> word -> (unit,#Context.t) m
+        val save : addr -> word -> unit Machine.t
 
 
 
         (** [add_text mem] maps a memory chunk [mem] as executable and
             readonly segment of machine memory.*)
-        val add_text : mem -> (unit,#Context.t) m
+        val add_text : mem -> unit Machine.t
 
 
         (** [add_data] maps a memory chunk [mem] as writable and
         nonexecutable segment of machine memory.  *)
-        val add_data : mem -> (unit,#Context.t) m
+        val add_data : mem -> unit Machine.t
 
 
         (** [allocate addr size] allocates a segment of the specified
@@ -842,7 +781,7 @@ module Std : sig
           ?readonly:bool ->
           ?executable:bool ->
           ?generator:Generator.t ->
-          addr -> int -> (unit,#Context.t) m
+          addr -> int -> unit Machine.t
 
 
         (** [map mem] maps a memory chunk [mem] to a segment with the
@@ -850,7 +789,7 @@ module Std : sig
         val map :
           ?readonly:bool ->
           ?executable:bool ->
-          mem -> (unit,#Context.t) m
+          mem -> unit Machine.t
       end
     end
 
@@ -1519,7 +1458,7 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
         (** a list of primitives defined in the Machine monad.  *)
-        val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+        val defs : unit -> word Machine.t Primitive.t list
       end
 
 
@@ -1537,11 +1476,11 @@ ident ::= ?any atom that is not recognized as a <word>?
         (** [failf msg a1 ... am ()] terminates a lisp machine, and
             correspondingly the Primus machine with the
             [Runtime_error].  *)
-        val failf : ('a, unit, string, unit -> ('b, 'c) Machine.t) format4 -> 'a
+        val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
 
 
         (** [link_primitives prims] provides the primitives [prims]   *)
-        val link_primitives : primitives -> (unit, #Context.t) Machine.t
+        val link_primitives : primitives -> unit Machine.t
       end
 
 

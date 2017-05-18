@@ -11,25 +11,22 @@ type name = [
 type error += Unbound_name of name
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
+  val exec : Semantics(Machine).t -> unit Machine.t
 end
 
 type code = (module Code)
 
-
 module Make(Machine : Machine) : sig
-  type ('a,'e) m = ('a,'e) Machine.t
-   module Biri : Biri.S
-     with type ('a,'e) state = ('a,'e) Machine.t
+  type 'a m = 'a Machine.t
 
   val link :
     ?addr:addr ->
     ?name:string ->
     ?tid:tid ->
-    code -> (unit,#Context.t) m
+    code -> unit m
 
-  val exec : name -> (#Context.t as 'a) #Biri.t -> (unit,'a) m
+  val exec : name -> Semantics(Machine).t -> unit m
 
-  val is_linked : name -> (bool,#Context.t) m
+  val is_linked : name -> bool m
 
 end
