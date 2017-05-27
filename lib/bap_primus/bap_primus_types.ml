@@ -14,6 +14,10 @@ type ('a,'e) result = ('a,'e) Monad.Result.result =
   | Ok of 'a
   | Error of 'e
 
+type input = project
+type effect = (project, error) result
+
+
 module type State = sig
   type 'a m
   type 'a t
@@ -59,7 +63,7 @@ module type Machine = sig
   include Monad.State.Multi.S with type 'a t := 'a t
                                and type 'a m := 'a m
                                and type env := project
-                               and type 'a e = project -> (('a, error) result * project) m
+                               and type 'a e = input -> effect m
                                and type id := id
                                and module Syntax := Syntax
   module Local  : State with type 'a m := 'a t
@@ -68,11 +72,11 @@ module type Machine = sig
                          and type 'a t := 'a state
 
   include Monad.Fail.S with type 'a t := 'a t
-                         and type 'a error = error
+                        and type 'a error = error
 end
 
 module type Component = functor (Machine : Machine) -> sig
-    val init : unit -> unit Machine.t
+  val init : unit -> unit Machine.t
 end
 
 type component = (module Component)

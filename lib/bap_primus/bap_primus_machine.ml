@@ -18,51 +18,51 @@ module State = Bap_primus_state
 type id = Monad.State.Multi.id
 
 module Make(M : Monad.S) = struct
+  module PE = struct
+    type t = (project, Error.t) result
+  end
   module SM = struct
     include Monad.State.Multi.T2(M)
     include Monad.State.Multi.Make2(M)
   end
 
-  type 'a t = (('a,Error.t) result,state) SM.t
+  type 'a t = (('a,Error.t) result,PE.t sm) Monad.Cont.t
+  and 'a sm = ('a,state) SM.t
   and state = {
-    proj : project;
+    curr   : unit t;
+    proj   : project;
     local  : State.Bag.t;
     global : State.Bag.t;
-    states : int String.Map.t;
     observations : unit t Observation.observations;
   }
 
+  type 'a c = 'a t
   type 'a m = 'a M.t
-  type 'a e = project -> (('a,Error.t) result * project) m
-  module Basic = struct
-    open SM.Syntax
-    type nonrec 'a t = 'a t
-    let return x = SM.return (Ok x)
+  type 'a e = project -> (project, Error.t) result m
 
-    let bind (m : 'a t) (f : 'a -> 'b t) : 'b t = m >>= function
-      | Ok r -> f r
-      | Error err -> SM.return (Error err)
-    let map = `Define_using_bind
-  end
+  module C = Monad.Cont.Make(PE)(struct
+      type 'a t = 'a sm
+      include Monad.Make(struct
+          type 'a t = 'a sm
+          let return = SM.return
+          let bind = SM.bind
+          let map = `Custom SM.map
+        end)
+    end)
 
-  module Fail = struct
-    let fail err = SM.return (Error err)
-    let catch m f = SM.bind m (function
-        | Error err -> f err
-        | ok -> SM.return ok)
-  end
+  module CM = Monad.Result.Make(Error)(struct
+      type 'a t = ('a, PE.t sm) Monad.Cont.t
+      include C
+    end)
 
   type _ error = Error.t
-  include Fail
-  module M2 = Monad.Make(Basic)
-  open M2
-
-
+  open CM
 
   type id = Monad.State.Multi.id
   module Id = Monad.State.Multi.Id
 
-  let lifts m = SM.map m ~f:(fun x -> Ok x)
+  (* lifts state monad to the outer monad *)
+  let lifts x = CM.lift (C.lift x)
 
   let with_global_context (f : (unit -> 'a t)) =
     lifts (SM.current ())       >>= fun id ->
@@ -71,9 +71,9 @@ module Make(M : Monad.S) = struct
     lifts (SM.switch id)        >>| fun () ->
     r
 
-  let get_local () = lifts (SM.gets @@ fun s -> s.local)
-  let get_global () = with_global_context @@ fun () ->
-    SM.gets @@ fun s -> Ok s.global
+  let get_local () : _ t = lifts (SM.gets @@ fun s -> s.local)
+  let get_global () : _ t = with_global_context @@ fun () ->
+    lifts (SM.gets @@ fun s -> s.global)
 
   let set_local local = lifts @@ SM.update @@ fun s ->
     {s with local}
@@ -144,33 +144,48 @@ module Make(M : Monad.S) = struct
   let update f = get () >>= fun s -> put (f s)
   let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
-  let run : 'a t -> 'a e = fun m proj ->
-    M.bind (SM.run m {
-        global = State.Bag.empty;
-        local = State.Bag.empty;
-        observations = Bap_primus_observation.empty;
-        states = String.Map.empty;
-        proj}) @@ fun (x,{proj}) -> M.return (x,proj)
+  let switch_task f =
+    C.call ~cc:(fun k ->
+        lifts (SM.update (fun s -> {s with curr = k (Ok ())})) >>= fun () ->
+        lifts (f ()) >>= fun () ->
+        lifts (SM.get ()) >>= fun s ->
+        s.curr)
 
-  let eval m s = M.map (run m s) ~f:fst
-  let exec m s = M.map (run m s) ~f:snd
+  let fork () : unit c = switch_task SM.fork
+  let switch id : unit c = switch_task (fun () -> SM.switch id)
+
   let lift x = lifts (SM.lift x)
   let status x = lifts (SM.status x)
   let forks () = lifts (SM.forks ())
   let kill id = lifts (SM.kill id)
-  let fork () = lifts (SM.fork ())
   let ancestor x  = lifts (SM.ancestor x)
   let parent () = lifts (SM.parent ())
-  let switch id = lifts (SM.switch id)
   let global = SM.global
   let current () = lifts (SM.current ())
+  let fail = fail
+  let catch = catch
+
+
+  let run : 'a t -> 'a e = fun m proj ->
+    M.bind
+      (SM.run
+         (C.run m (fun _ -> SM.gets @@ fun s -> (Ok s.proj))) {
+         curr = CM.return ();
+         global = State.Bag.empty;
+         local = State.Bag.empty;
+         observations = Bap_primus_observation.empty;
+         proj})
+      (fun (r,{proj}) -> match r with
+         | Ok _ -> M.return (Ok proj)
+         | Error e -> M.return (Error e))
+
 
   module Syntax = struct
-    include M2.Syntax
+    include CM.Syntax
     let (>>>) = Observation.observe
   end
 
-  include (M2 : Monad.S with type 'a t := 'a t
+  include (CM : Monad.S with type 'a t := 'a t
                          and module Syntax := Syntax)
 end
 
@@ -180,7 +195,6 @@ let finished,finish =
 
 module Main(Machine : Machine) = struct
   open Machine.Syntax
-
 
   let init_components () =
     Machine.List.iter !components ~f:(fun (module Component) ->
@@ -195,3 +209,5 @@ module Main(Machine : Machine) = struct
     Machine.run comp init
 
 end
+
+

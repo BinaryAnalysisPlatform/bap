@@ -22,25 +22,13 @@ module Std : sig
       | Ok of 'a
       | Error of 'e
 
+
+    type input
+
+    type effect
+
     (** value generator  *)
     type generator
-
-    module Semantics(M : Monad.S) : sig
-      type 'a m = 'a M.t
-      class type t = object
-        inherit [word,word] Eval.Make(M).t
-        method run : (_,'t) cls -> 't term -> unit m
-        method undefined : word m
-        method word_of_value : word -> word option m
-        method value_of_word : word -> word m
-        method storage_of_value : word -> word option m
-        method lookup : var -> word m
-        method update : var -> word -> unit m
-        method load : addr -> addr -> word m
-        method store : addr -> addr -> word -> word m
-      end
-    end
-
 
     (** Machine Observation.
 
