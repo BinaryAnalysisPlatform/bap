@@ -4,7 +4,6 @@ open Monads.Std
 open Format
 
 module Std : sig
-
   module Primus : sig
     (** Machine error.
 
@@ -21,7 +20,6 @@ module Std : sig
     type ('a,'e) result = ('a,'e) Monad.Result.result =
       | Ok of 'a
       | Error of 'e
-
 
     type input
 
@@ -279,8 +277,8 @@ module Std : sig
 
         include Monad.State.Multi.S with type 'a t := 'a t
                                      and type 'a m := 'a m
-                                     and type 'a e = project -> (('a, error) result * project) m
                                      and type env := project
+                                     and type 'a e = input -> effect m
                                      and type id := id
                                      and module Syntax := Syntax
 
@@ -326,14 +324,7 @@ module Std : sig
 
       (** [Make(Monad)] a monad transformer that wraps the Machine
           into an arbitrary [Monad].  *)
-      module Make(M : Monad.S) : S with type 'a m = 'a M.t
-
-      (** [Main(Machine)] instantiates the [Machine] and provides a
-          function, that runs the Machine *)
-      module Main(M : S) : sig
-        val run : 'a M.t -> project -> (('a,error) result * project) M.m
-      end
-
+      module Make(M : Monad.S) : S with type 'a m := 'a M.t
 
       (** [add_component comp] registers a machine component in the
           Primus Framework.  *)
@@ -350,8 +341,6 @@ module Std : sig
     (** The Machine component.  *)
     type component = Machine.component
 
-
-
     (** The Interpreter.
 
         The Interpreter is the core componet of the Primus Machine. It
@@ -362,7 +351,6 @@ module Std : sig
         components that are used by the Interpreter, name the
         Environemnt and the Memory. *)
     module Interpreter : sig
-
 
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
@@ -375,9 +363,6 @@ module Std : sig
 
       (** a program location left  *)
       val leave_level : Context.level observation
-
-      (** the top-level term entered  *)
-      val enter_top : program term observation
 
       (** a subroutine entered  *)
       val enter_sub : sub term observation
@@ -397,9 +382,6 @@ module Std : sig
       (** a jump term is entered  *)
       val enter_jmp : jmp term observation
 
-      (** the top-level term was left  *)
-      val leave_top : program term observation
-
       (** a subroutine was left  *)
       val leave_sub : sub term observation
 
@@ -418,66 +400,15 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
-      (** an identifier of a term that will be executed next.   *)
-      val enter_term : tid observation
-
-      (** an identifier of a term that just finished the execution.  *)
-      val leave_term : tid observation
-
-      (** new program locatio left  *)
-      val enter_level : Context.level observation
-
-      (** a program location left  *)
-      val leave_level : Context.level observation
-
-      (** the top-level term left  *)
-      val enter_top : program term observation
-
-      (** a subroutine is left  *)
-      val enter_sub : sub term observation
-
-      (** a subroutine argument is left  *)
-      val enter_arg : arg term observation
-
-      (** a basic block is left  *)
-      val enter_blk : blk term observation
-
-      (** a phi-node is left  *)
-      val enter_phi : phi term observation
-
-      (** a definition is left  *)
-      val enter_def : def term observation
-
-      (** a jump term is left  *)
-      val leave_jmp : jmp term observation
-
-
-      (** a value of the variable will be looked up  *)
-      val variable_access : var observation
-
-      (** a variabe was valuated to the provided value.  *)
-      val variable_read : (var * word) observation
-
-      (** a variable was set to the specified value.  *)
-      val variable_written : (var * word) observation
-
-
-      (** an address will be read  *)
-      val address_access : addr observation
-
-
-      (** a byte from the given address was read  *)
-      val address_read : (addr * word) observation
-
-
-      (** a byte was written to the given address  *)
-      val address_written : (addr * word) observation
-
-
       (** Make(Machine) makes an interpreter that computes in the
           given machine.  *)
       module Make (Machine : Machine.S) : sig
-        val sema : Semantics(Machine).t
+        type 'a m = 'a Machine.t
+        val halt : unit m
+        val pos : Context.level m
+        val sub : sub term -> unit m
+        val blk : blk term -> unit m
+        val exp : exp -> word m
       end
     end
 
@@ -635,7 +566,7 @@ module Std : sig
           itself is represented. It is just a function, that takes a
           machine and performs a computation using this machine.*)
       module type Code = functor (Machine : Machine.S) -> sig
-        val exec : Semantics(Machine).t -> unit Machine.t
+        val exec : unit Machine.t
       end
 
 
@@ -673,7 +604,7 @@ module Std : sig
             given name. Terminates the computation with the
             [Linker.Unbound_name name] condition, if the [name] is not
             associated with any code fragment.  *)
-        val exec : name -> Semantics(Machine).t -> unit m
+        val exec : name -> unit m
 
 
         (** [is_linked name] computes to [true] if the [name] is
@@ -688,7 +619,14 @@ module Std : sig
         The Environment binds variables to values.*)
     module Env : sig
 
+      (** a value of the variable will be looked up  *)
+      val variable_access : var observation
 
+      (** a variabe was valuated to the provided value.  *)
+      val variable_read : (var * word) observation
+
+      (** a variable was set to the specified value.  *)
+      val variable_written : (var * word) observation
 
       (** A variable is undefined, if it was never [add]ed to the
           environment.  *)
@@ -735,6 +673,16 @@ module Std : sig
           that is not mapped into the Machine memory.  *)
       val segmentation_fault : addr observation
 
+      (** an address will be read  *)
+      val address_access : addr observation
+
+
+      (** a byte from the given address was read  *)
+      val address_read : (addr * word) observation
+
+
+      (** a byte was written to the given address  *)
+      val address_written : (addr * word) observation
 
       module Make(Machine : Machine.S) : sig
 
@@ -753,7 +701,7 @@ module Std : sig
 
 
         (** [add_data] maps a memory chunk [mem] as writable and
-        nonexecutable segment of machine memory.  *)
+            nonexecutable segment of machine memory.  *)
         val add_data : mem -> unit Machine.t
 
 
@@ -897,22 +845,22 @@ module Std : sig
         following syntax:
 
         {[
-           (defun <name> (<p1> <p2> ... <pM>)
-              <e1> <e2> .. <eN>)
+          (defun <name> (<p1> <p2> ... <pM>)
+           <e1> <e2> .. <eN>)
         ]}
 
         A function definition may optionally contain a documentation
         strings and a declaration section. For example,
 
         {[
-         (defun strlen (p)
-           "returns a length of the null-terminated string pointed by P"
-           (declare (external "strlen"))
-           (msg "strlen was called with $p")
-           (let ((len 0))
-             (while (not (points-to-null p))
-               (incr len p))
-             len))
+          (defun strlen (p)
+             "returns a length of the null-terminated string pointed by P"
+             (declare (external "strlen"))
+             (msg "strlen was called with $p")
+             (let ((len 0))
+                 (while (not (points-to-null p))
+             (incr len p))
+            len))
         ]}
 
         A function can be called (applied) using the function
@@ -946,9 +894,9 @@ module Std : sig
         Several derived forms are defined as macros, e.g.,
 
         {[
-         (when <cond> <body>)
-         (or <e1> <e2> .. <eM>)
-         (and <e1> <e2> .. <eM>)
+          (when <cond> <body>)
+          (or <e1> <e2> .. <eM>)
+            (and <e1> <e2> .. <eM>)
         ]}
 
         {3 Loops}
@@ -1050,10 +998,10 @@ module Std : sig
         following syntax:
 
         {[
-           (defconstant <name>
-              [<docstring>]
-              [<declarations>]
-              <value>)
+          (defconstant <name>
+           [<docstring>]
+             [<declarations>]
+           <value>)
         ]}
 
         For example,
@@ -1073,7 +1021,7 @@ module Std : sig
         constant, and has quite a similar syntax:
 
         {[
-           (defsubst <name> [<declarations>] [:<syntax>] {<value>})
+          (defsubst <name> [<declarations>] [:<syntax>] {<value>})
         ]}
 
 
@@ -1122,10 +1070,10 @@ module Std : sig
         will be expanded with
 
         {[
-         (write-block SP
-              0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63
-              0x72 0x75 0x65 0x6c 0x20 0x77 0x6f 0x72
-              0x6c 0x64 0x0a 0x00)
+          (write-block SP
+             0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63
+             0x72 0x75 0x65 0x6c 0x20 0x77 0x6f 0x72
+             0x6c 0x64 0x0a 0x00)
         ]}
 
 
@@ -1136,19 +1084,19 @@ module Std : sig
         following substitution rule
 
         {[
-         (defsubt example :hex 68656c 6c 6f2c2063)
+          (defsubt example :hex 68656c 6c 6f2c2063)
         ]}
 
         an application
 
         {[
-         (write-block SP example)
+          (write-block SP example)
         ]}
 
         will be expanded into
 
         {[
-         (write-block SP 0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63)
+          (write-block SP 0x68 0x65 0x6c 0x6c 0x6f 0x2c 0x20 0x63)
         ]}
 
 
@@ -1165,8 +1113,8 @@ module Std : sig
 
         {[
 
-         (defmacro <name> (<p1> ... <pM>)
-           [<docstring>] [<declarations>]
+          (defmacro <name> (<p1> ... <pM>)
+             [<docstring>] [<declarations>]
            <value>)
         ]}
 
@@ -1193,7 +1141,7 @@ module Std : sig
 
         {[
           (defmacro list-length (x) 1)
-          (defmacro list-length (x xs) (+ 1 (list-length xs)))
+            (defmacro list-length (x xs) (+ 1 (list-length xs)))
         ]}
 
 
@@ -1208,9 +1156,9 @@ module Std : sig
 
 
         {[
-1: (list-length 1 2 3) => (+ 1 (list-length 2 3))
-2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
-3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
+          1: (list-length 1 2 3) => (+ 1 (list-length 2 3))
+               2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
+                    3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
         ]}
 
         In the first step, both definition match. In the first
@@ -1228,8 +1176,8 @@ module Std : sig
         length, e.g.,
 
         {[
-        (defmacro fold (f a x) (f a x))
-        (defmacro fold (f a x xs) (fold f (f a x) xs))
+          (defmacro fold (f a x) (f a x))
+            (defmacro fold (f a x xs) (fold f (f a x) xs))
         ]}
 
 
@@ -1243,10 +1191,10 @@ module Std : sig
         The {v (sum 1 2 3) v} will be rewritten as follows:
 
         {[
-1: (sum 1 2 3) => (fold + 0 1 2 3)
-2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
-3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
-4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
+          1: (sum 1 2 3) => (fold + 0 1 2 3)
+               2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
+                    3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
+                         4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
         ]}
 
         A more real example is the [write-block] macro, that takes a
@@ -1254,8 +1202,8 @@ module Std : sig
         address:
 
         {[
-        (defmacro write-block (addr bytes)
-          (fold memory-write addr bytes))
+          (defmacro write-block (addr bytes)
+             (fold memory-write addr bytes))
         ]}
 
         The definition uses the [memory-write] primitive, that writes
@@ -1323,13 +1271,13 @@ module Std : sig
         Let's use the following two definitions for a concrete example,
 
         {[
-           (defmacro get-arg-0 ()
+          (defmacro get-arg-0 ()
              (declare (context (arch arm gnueabi)))
              R0)
 
-           (defmacro get-arg-0 ()
-             (declare (context (arch x86 cdecl)))
-             (read-word word-width (+ SP (sizeof word-width))))
+            (defmacro get-arg-0 ()
+               (declare (context (arch x86 cdecl)))
+               (read-word word-width (+ SP (sizeof word-width))))
         ]}
 
 
@@ -1350,8 +1298,8 @@ module Std : sig
         before, or after the function evaluation, e.g.,
 
         {[
-        (defun memory-written (a x) (msg "write $x to $a"))
-        (advice-add memory-written :after memory-write)
+          (defun memory-written (a x) (msg "write $x to $a"))
+            (advice-add memory-written :after memory-write)
         ]}
 
         The general syntax is:
@@ -1374,53 +1322,53 @@ module Std : sig
         production definition.
 
         {[
- module ::= {<entity>}
- entity ::= <feature-request>
-          | <declarations>
-          | <constant-definition>
-          | <substitution-definition>
-          | <macro-definition>
-          | <function-definition>
-          | <advising>
-feature-request ::= (require <ident>)
-declarations ::= (declare {<attribute>})
-constant-definition ::=
-  (defconstant <ident> [<docstring>] [<declarations>] <atom>)
-substitution-definition ::=
-  (defsubst <ident> [<declarations>] [:<syntax>] {<atom>})
-macro-definition ::=
-  (defmacro <ident> ({<macro-param>})
-     [<docstring>] [<declarations>]
-     <exp>)
-function-definition ::=
-  (defun <ident> ({<function-param>})
-     [<docstring>] [<declarations>]
-     {<exp>})
-advice ::= (advice-add <ident> <method> <ident>)
-exp ::= ()
-      | (if <exp> <exp> {<exp>})
-      | (let ({<binding>}) {<exp>})
-      | (while exp {exps})
-      | (prog {exp})
-      | (msg <format>)
-      | (<ident> {exp})
-binding ::= (<var> <exp>)
-attribute ::= (<ident> <attribute-value>)
-macro-param ::= {<ident>}
-function-param ::= {<var>}
-var = <ident> | <ident>:<size>
+          module ::= {<entity>}
+              entity ::= <feature-request>
+                     | <declarations>
+                     | <constant-definition>
+                     | <substitution-definition>
+                     | <macro-definition>
+                     | <function-definition>
+                       | <advising>
+                         feature-request ::= (require <ident>)
+                           declarations ::= (declare {<attribute>})
+                           constant-definition ::=
+                         (defconstant <ident> [<docstring>] [<declarations>] <atom>)
+                           substitution-definition ::=
+                         (defsubst <ident> [<declarations>] [:<syntax>] {<atom>})
+                           macro-definition ::=
+                         (defmacro <ident> ({<macro-param>})
+                            [<docstring>] [<declarations>]
+                          <exp>)
+                           function-definition ::=
+                                   (defun <ident> ({<function-param>})
+                                       [<docstring>] [<declarations>]
+                                       {<exp>})
+                                     advice ::= (advice-add <ident> <method> <ident>)
+                                     exp ::= ()
+                           | (if <exp> <exp> {<exp>})
+                           | (let ({<binding>}) {<exp>})
+                           | (while exp {exps})
+                           | (prog {exp})
+                           | (msg <format>)
+                           | (<ident> {exp})
+                               binding ::= (<var> <exp>)
+                               attribute ::= (<ident> <attribute-value>)
+                               macro-param ::= {<ident>}
+                               function-param ::= {<var>}
+                                         var = <ident> | <ident>:<size>
 
-attribute-value ::= ?each attribute defines its own syntax?
-external-attribute-value ::= {<ident>}
-context-attribute-value ::= {<context-declaration>}
-context-declaration ::= (<ident> {<ident>})
-docstring ::= <text>
-syntax ::= :hex | :ascii | ..
-atom  ::= <word> | <text> | ..
-word  ::= ?<ascii-char> | <int> | <int>:<size>
-int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
-size  ::= {<decimal>}
-ident ::= ?any atom that is not recognized as a <word>?
+                                                         attribute-value ::= ?each attribute defines its own syntax?
+          external-attribute-value ::= {<ident>}
+              context-attribute-value ::= {<context-declaration>}
+                                         context-declaration ::= (<ident> {<ident>})
+                                         docstring ::= <text>
+                                         syntax ::= :hex | :ascii | ..
+                                       atom  ::= <word> | <text> | ..
+                                       word  ::= ?<ascii-char> | <int> | <int>:<size>
+                                         int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
+                                         size  ::= {<decimal>}
+                                                                                           ident ::= ?any atom that is not recognized as a <word>?
         ]}
     *)
     module Lisp : sig

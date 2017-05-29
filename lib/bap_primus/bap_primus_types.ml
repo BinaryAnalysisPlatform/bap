@@ -27,23 +27,6 @@ module type State = sig
   val update : 'a t -> f:('a -> 'a) -> unit m
 end
 
-
-module Semantics(M : Monad.S) = struct
-  type 'a m = 'a M.t
-  class type t = object
-    inherit [word,word] Eval.Make(M).t
-    method undefined : word m
-    method word_of_value : word -> word option m
-    method value_of_word : word -> word m
-    method storage_of_value : word -> word option m
-    method lookup : var -> word m
-    method update : var -> word -> unit m
-    method load : addr -> addr -> word m
-    method store : addr -> addr -> word -> word m
-    method run : 't 'p. ('p,'t) cls -> 't term -> unit m
-  end
-end
-
 type id = Monad.State.Multi.id
 
 module type Machine = sig

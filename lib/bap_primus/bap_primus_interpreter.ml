@@ -57,27 +57,6 @@ let leave_jmp,jmp_left =
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
 
-
-let variable_access,variable_will_be_looked_up =
-  Observation.provide ~inspect:(fun v ->
-      Sexp.Atom (Var.name v)) "variable-access"
-
-let variable_read,variable_was_read =
-  Observation.provide ~inspect:sexp_of_binding "variable-read"
-
-let variable_written,variable_was_written =
-  Observation.provide ~inspect:sexp_of_binding "variable-written"
-
-let address_access,address_will_be_read =
-  Observation.provide ~inspect:sexp_of_word "address-access"
-
-let address_read,address_was_read =
-  Observation.provide ~inspect:sexp_of_move "address-read"
-
-let address_written,address_was_written =
-  Observation.provide ~inspect:sexp_of_move
-    "address-written"
-
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
 
@@ -95,20 +74,18 @@ let sexp_of_name = function
 let sexp_of_call name = Sexp.List [
     Sexp.Atom "call";
     sexp_of_name name;
-]
+  ]
 
 let call,calling =
   Observation.provide ~inspect:sexp_of_call "call"
 
 
 type state = {
-  next : tid option;
   curr : Context.level;
-  blks : tid Addr.Map.t;
 }
 
 let sexp_of_state {curr} =
-    Context.sexp_of_level curr
+  Context.sexp_of_level curr
 
 let collect_blks prog =
   (object(self)
@@ -130,24 +107,21 @@ let state = Bap_primus_machine.State.declare
     Context.Level.(fun proj  ->
         let prog = Project.program proj in
         {
-         next = None;
-         curr = Top {me=prog; up=Nil};
-         blks = collect_blks prog
-       })
+          curr = Top {me=prog; up=Nil};
+        })
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
 
   module Eval = Eval.Make(Machine)
   module Memory = Bap_primus_memory.Make(Machine)
-  module Linker = Bap_primus_linker.Make(Machine)
   module Env = Bap_primus_env.Make(Machine)
+  module Linker = Bap_primus_linker.Make(Machine)
 
-  type 'a r = 'a Machine.t
-
-  let make_observation = Machine.Observation.make
-
+  type 'a m = 'a Machine.t
   type error += Runtime_error of string
+
+  let (!!) = Machine.Observation.make
 
   let () =
     Bap_primus_error.add_printer (function
@@ -155,338 +129,136 @@ module Make (Machine : Machine) = struct
           Some (sprintf "Bap_primus runtime error: %s" msg)
         | _ -> None)
 
-  let observe_term cls t = Term.switch cls t
-      ~program:(make_observation top_entered)
-      ~sub:(make_observation sub_entered)
-
 
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.fail (Runtime_error msg)) fmt
 
-  class base_sema = object
+  let sema = object
     inherit [word,word] Eval.t
     method value_of_word = Machine.return
     method word_of_value x = Machine.return (Some x)
     method undefined = failf "undefined value" ()
     method storage_of_value x = Machine.return (Some x)
-
-    method lookup var =
-      make_observation variable_will_be_looked_up var >>= fun () ->
-      Env.get var >>= fun r ->
-      make_observation variable_was_read (var,r) >>= fun () ->
-      Machine.return r
-
-    method update var r =
-      Env.set var r >>= fun () ->
-      make_observation variable_was_written (var,r)
+    method lookup = Env.get 
+    method update = Env.set 
 
     method load base addr =
       let addr = Addr.(base + addr) in
-      make_observation address_will_be_read addr >>= fun () ->
-      Memory.load addr >>= fun r ->
-      make_observation address_was_read (addr,r) >>= fun () ->
-      Machine.return r
+      Memory.load addr
 
     method store base addr data =
       let addr = Addr.(base + addr) in
       Memory.save addr data >>= fun () ->
-      make_observation address_was_written (addr,data) >>= fun () ->
       Machine.return base
   end
 
-  let resolve_addr addr = failf "not implemented" ()
+  let term cls f t =
+    Machine.Local.get state >>= fun {curr} -> 
+    match Context.Level.next curr cls t with
+    | Error err -> Machine.fail err
+    | Ok curr ->
+      !!level_entered curr >>= fun () -> 
+      Machine.Local.put state {curr} >>= fun () -> 
+      !!term_entered (Term.tid t) >>= fun () ->
+      Term.switch cls t 
+        ~program:(!!top_entered)
+        ~sub:(!!sub_entered)
+        ~arg:(!!arg_entered)
+        ~blk:(!!blk_entered)
+        ~phi:(!!phi_entered)
+        ~def:(!!def_entered)
+        ~jmp:(!!jmp_entered) >>= fun () -> 
+      f t >>= fun r -> 
+      Term.switch cls t 
+        ~program:(!!top_left)
+        ~sub:(!!sub_left)
+        ~arg:(!!arg_left)
+        ~blk:(!!blk_left)
+        ~phi:(!!phi_left)
+        ~def:(!!def_left)
+        ~jmp:(!!jmp_left) >>= fun () -> 
+      !!term_left (Term.tid t) >>= fun () -> 
+      !!level_left curr >>= fun () -> 
+      Machine.return r
 
-  let sema = new base_sema
 
-  let skip = Machine.return ()
-  let halt = Machine.return ()
   let exp = sema#eval_exp
+  let (:=) v x  = exp x >>= sema#update v 
+  let def t = Def.lhs t := Def.rhs t
+  let def = term def_t def 
 
-  let set_next next = Machine.Local.update state (fun s ->
-    {s with next = next})
-  let def_next x = set_next (Some x)
-  let undef_next = set_next None
+  let label : label -> _ = function
+    | Direct t -> Linker.exec (`tid t)
+    | Indirect x -> 
+      exp x >>= fun x -> 
+      Linker.exec (`addr x)
 
-  let label l = function
-    | Direct tid -> Machine.Local.update state (fun s ->
-      {s with next = Some tid})
-    | Indirect e -> exp e >>= resolve_addr
-
-  let call c = failf "not implemented" ()
-  let goto c = failf "not implemented" ()
-  let ret l = failf "not implemented" ()
+  let call c = label (Call.target c)
+  let goto c = label c
+  let ret l = label l
   let interrupt n r = failf "not implemented" ()
+  let jump t = match Jmp.kind t with
+    | Call c -> call c
+    | Goto l -> goto l
+    | Ret l -> ret l
+    | Int (n,r) -> interrupt n r
 
+  let jmp t = exp (Jmp.cond t) >>| Word.is_zero
+  let jmp = term jmp_t jmp
 
-  let phi t = failf "not implemented" ()
-  let def t = exp (Def.rhs t) >>= sema#update (Def.lhs t)
-
-  let jmp t =
-    exp (Jmp.cond t) >>= fun c ->
-    if Word.is_zero c then skip
-    else match Jmp.kind t with
-      | Call c -> call c
-      | Goto l -> goto l
-      | Ret l -> ret l
-      | Int (n,r) -> interrupt n r
-
-  let fst cls t = Option.map ~f:Term.tid (Term.first cls t)
-  let goto_first_of terms =
-    List.find_map terms ~f:ident |> function
-    | None -> skip
-    | Some tid -> def_next tid
 
   let blk t =
-    let fst cls = fst cls t in
-    goto_first_of [fst phi_t; fst def_t; fst jmp_t]
+    (* todo add the phi nodes, or think at least.. *)
+    Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
+    Machine.Seq.find (Term.enum jmp_t t) ~f:jmp >>= function
+    | None -> Machine.return ()
+    | Some t -> jump t
 
-  let arg t =
-    exp (Arg.rhs t) >>= sema#update (Arg.lhs t)
+  let blk = term blk_t blk 
+
+  let arg_def t = match Arg.intent t with
+    | None | Some In -> Arg.lhs t := Arg.rhs t
+    | _ -> Machine.return ()
+
+  let arg_def = term arg_t arg_def
+
+  let arg_use t = match Arg.intent t with
+    | None | Some Out -> Arg.lhs t := Arg.rhs t
+    | _ -> Machine.return ()
+
+  let arg_use = term arg_t arg_use
+
+  let eval_entry = function
+    | None -> Machine.return ()
+    | Some t -> blk t
 
   let sub t =
-    let fst cls = fst cls t in
-    goto_first_of [fst arg_t; fst blk_t]
+    let iter f = Machine.Seq.iter (Term.enum arg_t t) ~f in
+    iter arg_def >>= fun () ->
+    eval_entry (Term.first blk_t t) >>= fun () ->
+    iter arg_use
 
-  let prog t = goto_first_of [fst sub_t t]
+  let sub = term sub_t sub
 
+  let pos = Machine.Local.get state >>| fun {curr} -> curr
 
-  let next_term cls p t =
-    Term.next cls p (Term.tid t)
-
-  let next_tid cls p t =
-    next_term cls p t |> Option.map ~f:Term.tid
-
-
-  open Context.Level
-
-  let no_transition = failf "no transition" ()
-
-
-  module Trans = struct
-    let (-->) cls step p tid  = match Term.find cls p tid with
-      | None -> None
-      | Some t -> Some (step t)
-
-    let fall = [
-      jmp_t --> jmp;
-    ]
-
-    let goto = [
-      blk_t --> blk;
-    ]
-
-    let call = [
-      sub_t --> sub;
-    ]
-
-    let top = [
-      sub_t --> sub;
-    ]
-
-    let sub = [
-      arg_t --> arg;
-      blk_t --> blk;
-    ]
-
-    let arg = [
-      arg_t --> arg;
-      blk_t --> blk;
-    ]
-
-    let blk = [
-      phi_t --> phi;
-      def_t --> def;
-      jmp_t --> jmp;
-    ]
-
-    let phi = [
-      phi_t --> phi;
-      def_t --> def;
-      jmp_t --> jmp;
-    ]
-
-    let def = [
-      def_t --> def;
-      jmp_t --> jmp;
-    ]
-
-
-    let get trans p t =
-      List.find_map trans ~f:(fun f -> f p t)
-
-    let run trans p t : unit Machine.t =
-      get trans p t |> function
-      | None -> no_transition
-      | Some x -> x
-
-    let apply t x =
-      List.find_map t ~f:(fun f -> f x) |> function
-      | None -> no_transition
-      | Some x -> x
-
-  end
-
-
-
-  let rec eval m =
-    m >>= fun () -> Machine.Local.get state >>= function
-    | {next=None} -> halt
-    | {next=Some tid} -> eval @@ compute_tid tid
-  and compute_tid tid =
-    let open Trans in
-    Machine.Local.get state >>= fun s ->
-    match s.curr with
-    | Top {me} -> run top me tid
-    | Sub {me} -> run sub me tid
-    | Arg {up={me=sub}} -> run arg sub tid
-    | Blk {me} -> run blk me tid
-    | Phi {up={me=blk}} -> run phi blk tid
-    | Def {up={me=blk}} -> run def blk tid
-    | Jmp {up={me=blk; up={me=sub; up={me=top}}}} -> apply [
-        get fall blk;
-        get goto sub;
-        get call top;
-      ] tid
-
-  let eval f t = eval (f t)
-
-  let run cls t = Term.switch cls t
-      ~program:(eval prog)
-      ~sub:(eval sub)
-      ~arg:(eval arg)
-      ~blk:(eval blk)
-      ~phi:(eval phi)
-      ~def:(eval def)
-      ~jmp:(eval jmp)
-
-  class type s = Semantics(Machine).t
-
-  let sema : s = object
-    inherit base_sema
-    method run : 'p 't. ('p,'t) cls -> 't term -> unit Machine.t =
-      fun cls t -> run cls t
-  end
-
-
-  (* let next_of_level level = *)
-  (*   let open Context.Level in match level with *)
-  (*   | Top _ -> None *)
-  (*   | Sub _ -> None *)
-  (*   | Arg {me; up={me=sub}} -> next_tid arg_t sub me *)
-  (*   | Blk _ *)
-  (*   | Phi _ *)
-  (*   | Def _ *)
-  (*   | Jmp _ -> assert false *)
-
-
-  (* let set_next_term next = *)
-  (*   Machine.update (fun ctxt -> *)
-  (*       ctxt#set_next (Option.map ~f:Term.tid next)) *)
-
-  (* class ['e] t  = object(self) *)
-  (*   inherit ['e,word,word] Eval.t *)
-
-  (*   method value_of_word = Machine.return *)
-  (*   method word_of_value x = Machine.return (Some x) *)
-
-  (*   method lookup var = *)
-  (*     make_observation variable_will_be_looked_up var >>= fun () -> *)
-  (*     Env.get var >>= fun r -> *)
-  (*     make_observation variable_was_read (var,r) >>= fun () -> *)
-  (*     Machine.return r *)
-
-  (*   method update var r = *)
-  (*     Env.set var r >>= fun () -> *)
-  (*     make_observation variable_was_written (var,r) *)
-
-  (*   method load base addr = *)
-  (*     let addr = Addr.(base + addr) in *)
-  (*     make_observation address_will_be_read addr >>= fun () -> *)
-  (*     Memory.load addr >>= fun r -> *)
-  (*     make_observation address_was_read (addr,r) >>= fun () -> *)
-  (*     super#eval_int r *)
-
-  (*   method store base addr data = *)
-  (*     let addr = Addr.(base + addr) in *)
-  (*     super#store mem addr data >>= fun r -> *)
-  (*     Memory.save addr data >>= fun () -> *)
-  (*     make_observation address_was_written (addr,data) >>= fun () -> *)
-  (*     Machine.return r *)
-
-  (*   method enter_term cls t = *)
-  (*     super#enter_term cls t >>= fun () -> *)
-  (*     Machine.Local.get state >>= fun s -> *)
-  (*     make_observation term_entered (Term.tid t) >>= fun () -> *)
-  (*     match Context.Level.next s.curr cls t with *)
-  (*     | Error err -> Machine.fail err *)
-  (*     | Ok next -> *)
-  (*       Machine.Local.put state {s with curr=next} >>= fun () -> *)
-  (*       make_observation level_left s.curr >>= fun () -> *)
-  (*       make_observation level_entered next >>= fun () -> *)
-  (*       Term.switch cls t *)
-  (*         ~program:(make_observation top_entered) *)
-  (*         ~sub:(make_observation sub_entered) *)
-  (*         ~arg:(make_observation arg_entered) *)
-  (*         ~blk:(make_observation blk_entered) *)
-  (*         ~phi:(make_observation phi_entered) *)
-  (*         ~def:(make_observation def_entered) *)
-  (*         ~jmp:(make_observation jmp_entered) *)
-
-
-
-  (*   method eval_sub sub = match Term.first arg_t sub with *)
-  (*     | None -> set_next_term (Term.first blk_t sub) *)
-  (*     | arg -> set_next_term arg *)
-
-
-  (*   method leave_term cls t = *)
-  (*     super#leave_term cls t >>= fun () -> *)
-  (*     make_observation term_left (Term.tid t) >>= fun () -> *)
-  (*     Term.switch cls t *)
-  (*       ~program:(make_observation top_left) *)
-  (*       ~sub:(make_observation sub_left) *)
-  (*       ~arg:(make_observation arg_left) *)
-  (*       ~blk:(make_observation blk_left) *)
-  (*       ~phi:(make_observation phi_left) *)
-  (*       ~def:(make_observation def_left) *)
-  (*       ~jmp:(make_observation jmp_left) *)
-
-
-
-
-
-  (*   method empty : Bil.storage = object(self) *)
-  (*     method load _ = None *)
-  (*     method save _ _ = self *)
-  (*   end *)
-
-  (*   method private eval_jmp_target exp = *)
-  (*     super#eval_exp exp >>| Bil.Result.value >>= function *)
-  (*     | Bil.Bot -> failf "undefined jump destination" () *)
-  (*     | Bil.Mem _ -> failf "type error in a jump" () *)
-  (*     | Bil.Imm dst -> Machine.return dst *)
-
-  (*   method eval_indirect exp = *)
-  (*     let open Context.Level in *)
-  (*     self#eval_jmp_target exp >>= fun dst -> *)
-  (*     Machine.Local.get state >>= fun {blks} -> *)
-  (*     Linker.is_linked (`addr dst) >>= fun is_linked -> *)
-  (*     match Map.find blks dst with *)
-  (*     | Some tid when not is_linked -> self#eval_direct tid *)
-  (*     | _ -> *)
-  (*       make_observation calling (`addr dst) >>= fun () -> *)
-  (*       Linker.exec (`addr dst) self (\* in case of a tail-call *\) *)
-
-  (*   method private eval_indirect_call exp = *)
-  (*     self#eval_jmp_target exp >>= fun dst -> *)
-  (*     make_observation calling (`addr dst) >>= fun () -> *)
-  (*     Linker.exec (`addr dst) self *)
-
-  (*   method eval_call call = *)
-  (*     match Call.target call with *)
-  (*     | Indirect exp -> self#eval_indirect_call exp *)
-  (*     | Direct tid -> *)
-  (*       make_observation calling (`tid tid) >>= fun () -> *)
-  (*       Linker.exec (`tid tid) self *)
-  (* end *)
+  let halt = failf "machine halted" ()
 end
+
+module Main(Machine : Machine) = struct
+  open Machine.Syntax
+  module Linker = Bap_primus_linker.Make(Machine)
+  module Interp = Make(Machine)
+
+  let linker = object 
+    inherit [unit Machine.t] Term.visitor
+    method! enter_blk t m = m >>= fun () -> Interp.blk t
+    method! enter_sub t m = m >>= fun () -> Interp.sub t
+  end
+
+  let init () =
+    Machine.get () >>= fun proj -> 
+    linker#run (Project.program proj) (Machine.return ())
+end
+
+let () = Bap_primus_machine.add_component (module Main)

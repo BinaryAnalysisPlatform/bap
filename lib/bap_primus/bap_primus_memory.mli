@@ -7,6 +7,10 @@ module Generator = Bap_primus_generator
 type error += Segmentation_fault of addr
 
 val segmentation_fault : addr observation
+val address_access : addr observation
+val address_read : (addr * word) observation
+val address_written : (addr * word) observation
+
 
 module Make(Machine : Machine) : sig
 

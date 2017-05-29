@@ -11,7 +11,7 @@ type name = [
 type error += Unbound_name of name
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : Semantics(Machine).t -> unit Machine.t
+  val exec : unit Machine.t
 end
 
 type code = (module Code)
@@ -25,7 +25,7 @@ module Make(Machine : Machine) : sig
     ?tid:tid ->
     code -> unit m
 
-  val exec : name -> Semantics(Machine).t -> unit m
+  val exec : name -> unit m
 
   val is_linked : name -> bool m
 

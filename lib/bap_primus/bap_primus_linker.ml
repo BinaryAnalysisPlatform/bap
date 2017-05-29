@@ -13,10 +13,8 @@ type error += Unbound_name of name
 
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : Semantics(Machine).t -> unit Machine.t
+  val exec : unit Machine.t
 end
-
-
 
 type code = (module Code)
 
@@ -45,33 +43,12 @@ let () = Bap_primus_error.add_printer (function
       Some (asprintf "unbound function %s" (string_of_name name))
     | _ -> None)
 
-let code_of_term sub : code =
-  (module functor (Machine : Machine) -> struct
-    let exec : Semantics(Machine).t -> unit Machine.t =
-      fun self -> self#run sub_t sub
-  end)
 
 let add_code code codes =
   let max_key = Option.(Map.max_elt codes >>| fst >>| Int.succ) in
   let key = Option.value ~default:1 max_key in
   key, Map.add codes ~key ~data:code
 
-let link_code t s =
-  let key,codes = add_code (code_of_term t) s.codes in
-  {
-    codes;
-    terms = Map.add s.terms ~key:(Term.tid t) ~data:key;
-    names = Map.add s.names ~key:(Sub.name t) ~data:key;
-    addrs = match Term.get_attr t address with
-      | None -> s.addrs
-      | Some addr -> Map.add s.addrs ~key:addr ~data:key
-  }
-
-let init_state program =
-  (object
-    inherit [t] Term.visitor
-    method! enter_sub = link_code
-  end)#run program empty
 
 let find k1 m1 m2 = match Map.find m1 k1 with
   | None -> None
@@ -97,7 +74,7 @@ let resolve_name s name = match name with
 let state = Bap_primus_machine.State.declare
     ~uuid:"38bf35bf-1091-4220-bf75-de79db9de4d2"
     ~name:"linker"
-    (fun p -> init_state (Project.program p))
+    (fun _ -> empty)
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
@@ -122,14 +99,16 @@ module Make(Machine : Machine) = struct
         let addrs = update s.addrs addr in
         {codes; terms; names; addrs})
 
-  let exec name sema =
+  let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
     | Some (module Code) ->
       let module Code = Code(Machine) in
-      Code.exec sema
+      Code.exec
 
   let is_linked name =
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
-
 end
+
+
+

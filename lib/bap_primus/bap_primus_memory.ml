@@ -16,10 +16,19 @@ type error += Segmentation_fault of addr
 let sexp_of_segmentation_fault addr =
   Sexp.List [Sexp.Atom "Segmentation fault"; sexp_of_addr addr]
 
-
 let segmentation_fault, segfault =
   Observation.provide ~inspect:sexp_of_segmentation_fault
     "segmentation-fault"
+
+let address_access,address_will_be_read =
+  Observation.provide ~inspect:sexp_of_word "address-access"
+
+let address_read,address_was_read =
+  Observation.provide ~inspect:sexp_of_move "address-read"
+
+let address_written,address_was_written =
+  Observation.provide ~inspect:sexp_of_move
+    "address-written"
 
 let () = Error.add_printer (function
     | Segmentation_fault here ->
