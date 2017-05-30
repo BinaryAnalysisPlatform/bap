@@ -11,18 +11,17 @@ type t = {
 }
 
 let state = Primus.Machine.State.declare
-              ~uuid:"5a863fc2-96cf-4a00-b046-b9b38f95aa11"
-              ~name:"exploring-scheduler"
-              (fun _ -> {
-                   pending=Fqueue.empty;
-                   explored=Tid.Map.empty;
+    ~uuid:"5a863fc2-96cf-4a00-b046-b9b38f95aa11"
+    ~name:"exploring-scheduler"
+    (fun _ -> {
+         pending=Fqueue.empty;
+         explored=Tid.Map.empty;
 
-                 })
-
-
+       })
 module Scheduler(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
+  module Eval = Primus.Interpreter.Make(Machine)
 
   (** [enqueue level state pid] adds [pid] to the list of ids that
       will be explored, if the [next|pid] points to an unvisited term, or
@@ -32,20 +31,19 @@ module Scheduler(Machine : Primus.Machine.S) = struct
       any) to the [explored] mapping, with the number of explorations
       equal to zero. Also, will leave the machine the state with the
       given [pid].
-*)
+  *)
   let enqueue level t id  =
     let add ?(level=0) tid = {
       pending = Fqueue.enqueue t.pending id;
       explored = Map.add t.explored ~key:tid ~data:level
     } in
     Machine.switch id >>= fun () ->
-    Machine.get () >>| fun ctxt -> match ctxt#next with
-    | None -> t
-    | Some tid -> match Map.find t.explored tid with
-      | None -> add tid
-      | Some 0 -> t
-      | Some n when n = level -> add ~level tid
-      | Some _ -> t
+    Eval.pos >>| Primus.Pos.tid >>| fun tid -> 
+    match Map.find t.explored tid with
+    | None -> add tid
+    | Some 0 -> t
+    | Some n when n = level -> add ~level tid
+    | Some _ -> t
 
   let remove_planned_explorations t = {
     t with explored = Map.filteri t.explored

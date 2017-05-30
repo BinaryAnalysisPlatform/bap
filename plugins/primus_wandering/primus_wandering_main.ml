@@ -13,12 +13,12 @@ type t = {
 }
 
 let state = Primus.Machine.State.declare
-              ~uuid:"99883d0e-94b2-41a4-bce6-1e4a949fd919"
-              ~name:"wandering-scheduler"
-              (fun _ -> {
-                   pending = Int.Map.empty;
-                   max = 0;
-                 })
+    ~uuid:"99883d0e-94b2-41a4-bce6-1e4a949fd919"
+    ~name:"wandering-scheduler"
+    (fun _ -> {
+         pending = Int.Map.empty;
+         max = 0;
+       })
 
 module Make
     (Random : sig val generator : Primus.generator end)
@@ -32,7 +32,7 @@ module Make
       draw.  *)
   let attempts = 4
 
-  type ('a,'e) m = ('a,'e) Machine.t
+  type 'a m = 'a Machine.t
 
   let drop i t =
     {t with pending = Map.remove t.pending i}

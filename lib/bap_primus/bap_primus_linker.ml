@@ -9,7 +9,7 @@ type name = [
   | `symbol of string
 ] [@@deriving sexp_of]
 
-type error += Unbound_name of name
+type exn += Unbound_name of name
 
 
 module type Code = functor (Machine : Machine) -> sig
@@ -38,7 +38,7 @@ let string_of_name = function
   | `addr addr -> sprintf "at address %s" (Addr.string_of_value addr)
   | `tid tid -> sprintf "with tid %a" Tid.pps tid
 
-let () = Bap_primus_error.add_printer (function
+let () = Exn.add_printer (function
     | Unbound_name name ->
       Some (asprintf "unbound function %s" (string_of_name name))
     | _ -> None)
@@ -80,7 +80,7 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
   type 'a m = 'a Machine.t
 
-  let linker_error s = Machine.fail (Unbound_name s)
+  let linker_error s = Machine.raise (Unbound_name s)
 
   let fail name =
     Machine.Local.get state >>= fun s ->

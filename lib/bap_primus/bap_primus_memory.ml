@@ -3,15 +3,13 @@ open Bap.Std
 
 open Bap_primus_types
 
-module Context = Bap_primus_context
 module Observation = Bap_primus_observation
 module Iterator = Bap_primus_iterator
 module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
-module Error = Bap_primus_error
 open Bap_primus_sexp
 
-type error += Segmentation_fault of addr
+type exn += Segmentation_fault of addr
 
 let sexp_of_segmentation_fault addr =
   Sexp.List [Sexp.Atom "Segmentation fault"; sexp_of_addr addr]
@@ -30,7 +28,7 @@ let address_written,address_was_written =
   Observation.provide ~inspect:sexp_of_move
     "address-written"
 
-let () = Error.add_printer (function
+let () = Exn.add_printer (function
     | Segmentation_fault here ->
       Some (sprintf "Segmentation fault at %s"
               (Addr.string_of_value here))
@@ -48,7 +46,6 @@ type t = {
   values : word Addr.Map.t;
   layers : layer list;
 }
-
 
 let zero = Word.of_int ~width:8 0
 
@@ -115,7 +112,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
 
-  let segfault addr = Machine.fail (Segmentation_fault addr)
+  let segfault addr = Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
     | None ->
@@ -155,7 +152,6 @@ module Make(Machine : Machine) = struct
       perms={readonly; executable};
       mem = Dynamic {base;len; value=generator}
     }
-
 
   let map ?(readonly=false) ?(executable=false) mem =
     update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})

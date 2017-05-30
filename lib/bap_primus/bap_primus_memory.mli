@@ -1,10 +1,9 @@
 open Bap.Std
 open Bap_primus_types
 
-module Context = Bap_primus_context
 module Generator = Bap_primus_generator
 
-type error += Segmentation_fault of addr
+type exn += Segmentation_fault of addr
 
 val segmentation_fault : addr observation
 val address_access : addr observation

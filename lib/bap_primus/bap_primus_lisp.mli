@@ -69,7 +69,7 @@ type primitives = (module Primitives)
     OCaml.
 *)
 
-type error += Runtime_error of string
+type exn += Runtime_error of string
 
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a

@@ -5,11 +5,11 @@ open Format
 
 module Std : sig
   module Primus : sig
-    (** Machine error.
+    (** Machine Exception.
 
-        The error type is an extensible variant, and components
+        The exn type is an extensible variant, and components
         usually register their own error constructors. *)
-    type error = ..
+    type exn = ..
 
     (** [an observation] of a value of type [an].*)
     type 'a observation
@@ -17,13 +17,20 @@ module Std : sig
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
 
-    type ('a,'e) result = ('a,'e) Monad.Result.result =
-      | Ok of 'a
-      | Error of 'e
+    (** Machine exit status.
+        A machine may terminate normally, or abnormally with the 
+        specified exception.  
+    *)
+    type exit_status = 
+      | Normal
+      | Exn of exn
 
-    type input
-
-    type effect
+    (** An abstract type that represents an effect produced by a
+        Machine run. That type is left abstract, and has no
+        operations, as its purpose is to disallow running machine
+        directly, withou an instantiation of the [Machine.Main]
+        module. *)
+    type 'a effect
 
     (** value generator  *)
     type generator
@@ -62,67 +69,66 @@ module Std : sig
     end
 
 
-    (** Evaluation Context.*)
-    module Context : sig
 
-      (** A hierarchical program position.
+    (** A hierarchical program position.
 
-          The [Level.t] is a cursor-like data structure, that
-          describes a program position in the program term hierarchy.*)
-      module Level : sig
+        The [Level.t] is a cursor-like data structure, that
+        describes a program position in the program term hierarchy.*)
+    module Pos : sig
+      (** uninhabited type  *)
+      type nil
 
-        (** uninhabited type  *)
-        type nil
+      (** the top-most program term.  *)
+      type top = program
 
-        (** the top-most program term.  *)
-        type top = program
-
-        (** [(t,p) level] a cursor pointing to a [t term], that is
-            nested in the parent cursor [p]. *)
-        type ('a,'b) level = {
-          me : 'a term;          (** [me] current position *)
-          up : 'b;               (** [up] parent cursor *)
-        }
+      (** [(t,p) level] a cursor pointing to a [t term], that is
+          nested in the parent cursor [p]. *)
+      type ('a,'b) level = {
+        me : 'a term;          (** [me] current position *)
+        up : 'b;               (** [up] parent cursor *)
+      }
 
 
-        (** the highest level of the hierarchy - a cursor the points
-            to the whole program. This is a starting position.  *)
-        type level3 = (top,nil) level
+      (** the highest level of the hierarchy - a cursor the points
+          to the whole program. This is a starting position.  *)
+      type level3 = (top,nil) level
 
-        (** a cursor pointing to a function  *)
-        type level2 = (sub,level3) level
+      (** a cursor pointing to a function  *)
+      type level2 = (sub,level3) level
 
-        (** a level of arguments and basic blocks  *)
-        type 'a level1 = ('a,level2) level
+      (** a level of arguments and basic blocks  *)
+      type 'a level1 = ('a,level2) level
 
-        (** a level of the basic terms, e.g., defs, jmps and phi-nodes.  *)
-        type 'a level0 = ('a,blk level1) level
+      (** a level of the basic terms, e.g., defs, jmps and phi-nodes.  *)
+      type 'a level0 = ('a,blk level1) level
 
-        (** a program location  *)
-        type t =
-          | Top of level3       (** a program *)
-          | Sub of level2       (** a subroutine  *)
-          | Arg of arg level1   (** subroutine argument *)
-          | Blk of blk level1   (** a basic block *)
-          | Phi of phi level0   (** a phi-node *)
-          | Def of def level0   (** a definition *)
-          | Jmp of jmp level0   (** a jump term *)
+      (** a program location  *)
+      type t =
+        | Top of level3       (** a program *)
+        | Sub of level2       (** a subroutine  *)
+        | Arg of arg level1   (** subroutine argument *)
+        | Blk of blk level1   (** a basic block *)
+        | Phi of phi level0   (** a phi-node *)
+        | Def of def level0   (** a definition *)
+        | Jmp of jmp level0   (** a jump term *)
 
-        (** [to_string level] a textual and human readable
-            representation of a cursor.  *)
-        val to_string : t -> string
 
-        (** [next p cls t] moves the cursor position [p] to the next
-            position, that points to the term [t] of the class
-            [cls]. Returns an error if there is no valid transition
-            from the current program position to the specified program
-            term.  *)
-        val next : t -> ('p,'t) cls -> 't term -> (t,error) Monad.Result.result
-      end
+      (** [tid p] is term identifier of the term enclosing position [p] *)
+      val tid : t -> tid
 
-      (** program location.  *)
-      type level = Level.t [@@deriving sexp_of]
+      (** [to_string level] a textual and human readable
+          representation of a cursor.  *)
+      val to_string : t -> string
+
+      (** [next p cls t] moves the cursor position [p] to the next
+          position, that points to the term [t] of the class
+          [cls]. Returns an error if there is no valid transition
+          from the current program position to the specified program
+          term.  *)
+      val next : t -> ('p,'t) cls -> 't term -> (t,exn) Monad.Result.result
     end
+
+    type pos = Pos.t [@@deriving sexp_of]
 
     (** Primus Machine.
 
@@ -278,11 +284,10 @@ module Std : sig
         include Monad.State.Multi.S with type 'a t := 'a t
                                      and type 'a m := 'a m
                                      and type env := project
-                                     and type 'a e = input -> effect m
                                      and type id := id
                                      and module Syntax := Syntax
-
-
+                                     and type 'a e =
+                                           (exit_status * project) m effect
 
         (** Local state of the machine.  *)
         module Local  : State with type 'a m := 'a t
@@ -293,8 +298,14 @@ module Std : sig
         module Global : State with type 'a m := 'a t
                                and type 'a t := 'a state
 
-        include Monad.Fail.S with type 'a t := 'a t
-                              and type 'a error = error
+        val raise : exn -> 'a t
+        val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+        val project : project t
+        val program : program term t
+        val arch : arch t
+        val args : string array t
+        val envp : string array t
       end
 
 
@@ -325,6 +336,16 @@ module Std : sig
       (** [Make(Monad)] a monad transformer that wraps the Machine
           into an arbitrary [Monad].  *)
       module Make(M : Monad.S) : S with type 'a m := 'a M.t
+
+
+      module Main(M : S) : sig
+        val run : 
+          ?envp:string array ->
+          ?args:string array -> 
+          project ->
+          unit M.t ->
+          (exit_status * project) M.m
+      end
 
       (** [add_component comp] registers a machine component in the
           Primus Framework.  *)
@@ -359,10 +380,10 @@ module Std : sig
       val leave_term : tid observation
 
       (** new program locatio entered  *)
-      val enter_level : Context.level observation
+      val enter_pos : pos observation
 
       (** a program location left  *)
-      val leave_level : Context.level observation
+      val leave_pos : pos observation
 
       (** a subroutine entered  *)
       val enter_sub : sub term observation
@@ -400,12 +421,16 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
+      val halting : unit observation
+
+      type exn += Halt
+
       (** Make(Machine) makes an interpreter that computes in the
           given machine.  *)
       module Make (Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
-        val halt : unit m
-        val pos : Context.level m
+        val halt : never_returns m
+        val pos : pos m
         val sub : sub term -> unit m
         val blk : blk term -> unit m
         val exp : exp -> word m
@@ -557,7 +582,7 @@ module Std : sig
 
 
       (** The Linker error  *)
-      type error += Unbound_name of name
+      type exn += Unbound_name of name
 
 
       (** Code representation.
@@ -630,7 +655,7 @@ module Std : sig
 
       (** A variable is undefined, if it was never [add]ed to the
           environment.  *)
-      type error += Undefined_var of var
+      type exn += Undefined_var of var
 
 
       (** happens when an undefined variable is accessed.  *)
@@ -1401,7 +1426,7 @@ module Std : sig
       (** a list of priomitives.  *)
       type primitives = (module Primitives)
 
-      type error += Runtime_error of string
+      type exn += Runtime_error of string
 
 
       (** Make(Machine) creates a Lisp machine embedded into the
@@ -1429,8 +1454,8 @@ module Std : sig
 
 
     (** Primus error.  *)
-    module Error : sig
-      type t = error = ..
+    module Exn : sig
+      type t = exn = ..
 
 
       (** returns a textual representation of an error  *)

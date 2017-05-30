@@ -8,7 +8,7 @@ type name = [
   | `symbol of string
 ] [@@deriving sexp_of]
 
-type error += Unbound_name of name
+type exn += Unbound_name of name
 
 module type Code = functor (Machine : Machine) -> sig
   val exec : unit Machine.t

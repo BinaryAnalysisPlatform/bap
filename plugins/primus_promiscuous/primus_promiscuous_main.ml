@@ -53,10 +53,10 @@ let inspect_conflicts cs =
   Sexp.List (List.map ~f:inspect_conflict cs)
 
 let state = Primus.Machine.State.declare
-              ~inspect:inspect_conflict
-              ~name:"conflicts"
-              ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
-              (fun _ -> Conflict [])
+    ~inspect:inspect_conflict
+    ~name:"conflicts"
+    ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
+    (fun _ -> Conflict [])
 
 
 (** Trivial Condition Form (TCF) transformation.
@@ -104,22 +104,17 @@ let assumptions blk =
 
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
-  module Interpreter = Primus.Interpreter.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
 
   let assume assns =
-    let self = new Interpreter.t in
     Machine.List.iter assns ~f:(fun assn ->
-        self#eval_int (Word.of_bool assn.res) >>=
-        self#update assn.var)
+        Env.set assn.var (Word.of_bool assn.res))
 
   let unsat_assumptions blk =
-    let self = new Interpreter.t in
     Machine.List.map (assumptions blk)
-      ~f:(Machine.List.filter ~f:(fun assn ->
-          let exp = Word.of_bool assn.res in
-          self#lookup assn.var >>| Bil.Result.value >>| function
-          | Bil.Imm r -> Word.(r <> exp)
-          | _ -> true))
+      ~f:(Machine.List.filter ~f:(fun {var;res} ->
+          Env.get var >>| fun r -> Word.(r <> of_bool res)))
 
   let fork blk  =
     unsat_assumptions blk >>=
@@ -139,7 +134,7 @@ module Main(Machine : Primus.Machine.S) = struct
     | Some last -> Term.same def last
 
   let step level =
-    let open Primus.Context.Level in
+    let open Primus.Pos in
     match level with
     | Def {up={me=blk}; me=def} when is_last blk def ->
       fork blk
@@ -147,9 +142,8 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let init () =
     info "translating the program into the Trivial Condition Form (TCF)";
-    Machine.update (fun ctxt ->
-        ctxt#with_project (TCF.proj ctxt#project)) >>= fun () ->
-    Primus.Interpreter.leave_level >>> step
+    Machine.update TCF.proj >>= fun () ->
+    Primus.Interpreter.leave_pos >>> step
 end
 
 open Config;;

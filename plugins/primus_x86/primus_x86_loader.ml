@@ -13,8 +13,8 @@ module Component(Machine : Primus.Machine.S) = struct
         Env.add reg zero)
 
   let init () =
-    Machine.get () >>= fun ctxt ->
-    match Project.arch ctxt#project with
+    Machine.get () >>= fun proj ->
+    match Project.arch proj with
     | `x86 -> initialize_flags (X86_cpu.IA32.flags)
     | `x86_64 -> initialize_flags (X86_cpu.AMD64.flags)
     | _ -> Machine.return ()

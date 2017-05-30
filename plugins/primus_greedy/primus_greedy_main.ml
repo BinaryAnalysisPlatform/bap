@@ -1,34 +1,44 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
+open Monads.Std
 include Self()
 
 (* continue with the same context, until a path terminates,
    then switch to a next thread that is not yet terminated.
-
-   A thread  is terminated, if [ctxt#next = None]
 *)
+
+module Ids = Monad.State.Multi.Id.Set
+
+type state = {
+  halted : Ids.t;
+}
+
+let state = Primus.Machine.State.declare
+    ~uuid:"328fd42b-1ffd-44da-8400-8494732dcfa3"
+    ~name:"greedy-scheduler-state"
+    (fun _ -> {halted = Ids.empty})
+
+
 module Greedy(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
-  let schedule blk =
-    info "finished blk %s" (Term.name blk);
-    Machine.get () >>= fun ctxt -> match ctxt#next with
-    | Some _ ->
-      info "have next, will continue";
-      Machine.return ()
-    | None ->
-      info "trace finished, switching to another clone@\n";
-      Machine.forks () >>= Machine.Seq.find ~f:(fun id ->
-          Machine.switch id >>= fun () ->
-          Machine.get () >>| fun ctxt -> match ctxt#next with
-          | None -> false
-          | Some _ ->
-            info "switched to machine %a" Machine.Id.pp id;
-            true) >>| ignore
+
+  let reschedule () =
+    Machine.current () >>= fun id -> 
+    Machine.Local.get state >>= fun {halted} -> 
+    let halted = Set.add halted id in
+    Machine.Local.put state {halted} >>= fun () -> 
+    Machine.forks () >>= fun forks ->
+    Seq.find forks ~f:(fun id -> 
+        not (Set.mem halted id)) |> function
+    | None -> Machine.return ()
+    | Some id ->
+      info "switched to machine %a" Machine.Id.pp id;
+      Machine.switch id
 
   let init () =
-    Primus.Interpreter.leave_blk >>> schedule
+    Primus.Interpreter.halting >>> reschedule
 end
 
 let enable () =

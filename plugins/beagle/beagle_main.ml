@@ -110,13 +110,13 @@ type hunter = Hunter of (string -> String.Set.t)
 
 let hunters_club =
   Primus.Machine.State.declare
-  ~uuid:"1fa35cfe-f720-473c-a5ac-50fa8fa9f1fd"
-  ~name:"beagle-hunters-club"
-  (fun _ -> {
-       addrs = Addr.Set.empty;
-       checked = Bil.Result.Id.Set.empty;
-       cache  = String.Map.empty;
-     })
+    ~uuid:"1fa35cfe-f720-473c-a5ac-50fa8fa9f1fd"
+    ~name:"beagle-hunters-club"
+    (fun _ -> {
+         addrs = Addr.Set.empty;
+         checked = Bil.Result.Id.Set.empty;
+         cache  = String.Map.empty;
+       })
 
 
 let beagle =
@@ -152,14 +152,17 @@ let hunter =
 module Hunter(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
+
+  module Eval = Primus.Interpreter.Make(Machine)
+
   let save_address addr =
     Machine.Global.update hunters_club ~f:(fun t ->
         {t with addrs = Set.add t.addrs addr})
 
   let process_byte char =
-    Machine.get () >>= fun ctxt ->
+    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
     Machine.Local.get beagle >>= fun (Beagle d) ->
-    let d = Strings.Detector.step d ctxt#current char in
+    let d = Strings.Detector.step d curr char in
     Strings.Detector.when_decided d (Machine.return ())
       ~f:(fun d ->
           let terms = Strings.Detector.data ~rev:false d in
@@ -182,17 +185,17 @@ module Hunter(Machine : Primus.Machine.S) = struct
     | Some d -> got_prey d
 
   let process_word w =
-    Machine.get () >>= fun ctxt ->
+    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
     Machine.Local.get beagle >>= fun (Beagle d) ->
     Word.enum_chars w LittleEndian |>
     Machine.Seq.fold ~init:d ~f:(fun d char ->
         match char with
         | '\255' | '\000'..'\010' -> Machine.return d
         | char ->
-          let d = Strings.Detector.step d ctxt#current char in
+          let d = Strings.Detector.step d curr char in
           Strings.Detector.when_decided d (Machine.return ())
             ~f:got_prey >>= fun () ->
-            Machine.return d) >>= fun d ->
+          Machine.return d) >>= fun d ->
     Machine.Local.put beagle (Beagle d)
 
 
@@ -218,7 +221,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
       Machine.Local.get hunter >>= fun (Hunter hunt) ->
       let data = hunt key in
       Machine.Global.update hunters_club ~f:(fun club ->
-        {club with cache = Map.add club.cache ~key ~data}) >>= fun () ->
+          {club with cache = Map.add club.cache ~key ~data}) >>= fun () ->
       Machine.Observation.make Beagle_prey.catch (prey,data)
     | Some data ->
       Machine.Observation.make Beagle_prey.catch (prey,data)
@@ -236,20 +239,20 @@ module Hunter(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    Machine.all_ignore Primus.Interpreter.[
-      address_access   >>> save_address;
-      (* variable_read    >>> process_variable; *)
-      (* variable_written >>> process_variable; *)
-      address_written >>> process_memory;
-      Primus.Machine.finished >>> gohome;
-      Beagle_prey.detected >>> print_prey;
-      Beagle_prey.detected >>> hunt;
-      Beagle_prey.caught >>> print_result;
-    ]
+    Machine.all_ignore Primus.Memory.[
+        address_access   >>> save_address;
+        (* variable_read    >>> process_variable; *)
+        (* variable_written >>> process_variable; *)
+        address_written >>> process_memory;
+        Primus.Machine.finished >>> gohome;
+        Beagle_prey.detected >>> print_prey;
+        Beagle_prey.detected >>> hunt;
+        Beagle_prey.caught >>> print_result;
+      ]
 end
 
 let main proj =
   Primus.Machine.add_component (module Hunter)
 
 let () = (Config.when_ready (fun _ ->
-  Project.register_pass' ~deps:["strings-collect"] main))
+    Project.register_pass' ~deps:["strings-collect"] main))

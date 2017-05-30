@@ -4,19 +4,20 @@ open Monads.Std
 
 open Bap_primus_generator_types
 
-module Context = Bap_primus_context
+module Exn = Bap_primus_exn
+module Pos = Bap_primus_pos
 
-type error =  Bap_primus_error.t = ..
+type exn = Exn.t = ..
+type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type 'a statement = 'a Bap_primus_observation.statement
 type 'a state = 'a Bap_primus_state.t
-type ('a,'e) result = ('a,'e) Monad.Result.result =
-  | Ok of 'a
-  | Error of 'e
+type exit_status = 
+  | Normal
+  | Exn of exn
 
-type input = project
-type effect = (project, error) result
-
+type 'a effect = 
+  project -> string array -> string array -> 'a
 
 module type State = sig
   type 'a m
@@ -46,16 +47,22 @@ module type Machine = sig
   include Monad.State.Multi.S with type 'a t := 'a t
                                and type 'a m := 'a m
                                and type env := project
-                               and type 'a e = input -> effect m
                                and type id := id
                                and module Syntax := Syntax
+                               and type 'a e = (exit_status * project) m effect 
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
   module Global : State with type 'a m := 'a t
                          and type 'a t := 'a state
 
-  include Monad.Fail.S with type 'a t := 'a t
-                        and type 'a error = error
+  val raise : exn -> 'a t
+  val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+  val project : project t
+  val program : program term t
+  val arch : arch t
+  val args : string array t
+  val envp : string array t
 end
 
 module type Component = functor (Machine : Machine) -> sig

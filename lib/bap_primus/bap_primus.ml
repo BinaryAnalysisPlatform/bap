@@ -4,7 +4,6 @@ module Std = struct
     include Bap_primus_types
     module Iterator = Iterator
     module Env = Bap_primus_env
-    module Error = Bap_primus_error
     module Generator = Bap_primus_generator
     module Interpreter = Bap_primus_interpreter
     module Linker = Bap_primus_linker

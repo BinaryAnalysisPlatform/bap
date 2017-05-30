@@ -3,7 +3,7 @@ open Bap_primus_types
 
 module Generator = Bap_primus_generator
 
-type error += Undefined_var of var
+type exn += Undefined_var of var
 
 val undefined_variable : var observation
 val variable_access : var observation

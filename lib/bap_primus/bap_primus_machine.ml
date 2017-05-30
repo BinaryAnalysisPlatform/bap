@@ -3,7 +3,6 @@ open Bap.Std
 open Monads.Std
 open Bap_primus_types
 
-module Error = Bap_primus_error
 module Observation = Bap_primus_observation
 
 let components : component list ref = ref []
@@ -19,26 +18,28 @@ type id = Monad.State.Multi.id
 
 module Make(M : Monad.S) = struct
   module PE = struct
-    type t = (project, Error.t) result
+    type t = (project, exn) Monad.Result.result
   end
   module SM = struct
     include Monad.State.Multi.T2(M)
     include Monad.State.Multi.Make2(M)
   end
 
-  type 'a t = (('a,Error.t) result,PE.t sm) Monad.Cont.t
-  and 'a sm = ('a,state) SM.t
+  type 'a t  = (('a,exn) Monad.Result.result,PE.t sm) Monad.Cont.t
+  and 'a sm  = ('a,state) SM.t
   and state = {
-    curr   : unit t;
-    proj   : project;
-    local  : State.Bag.t;
-    global : State.Bag.t;
+    args    : string array;
+    envp    : string array;
+    curr    : unit t;
+    proj    : project;
+    local   : State.Bag.t;
+    global  : State.Bag.t;
     observations : unit t Observation.observations;
   }
 
   type 'a c = 'a t
   type 'a m = 'a M.t
-  type 'a e = project -> (project, Error.t) result m
+  type 'a e = (exit_status * project) m effect
 
   module C = Monad.Cont.Make(PE)(struct
       type 'a t = 'a sm
@@ -50,12 +51,12 @@ module Make(M : Monad.S) = struct
         end)
     end)
 
-  module CM = Monad.Result.Make(Error)(struct
+  module CM = Monad.Result.Make(Exn)(struct
       type 'a t = ('a, PE.t sm) Monad.Cont.t
       include C
     end)
 
-  type _ error = Error.t
+  type _ error = exn
   open CM
 
   type id = Monad.State.Multi.id
@@ -162,22 +163,30 @@ module Make(M : Monad.S) = struct
   let parent () = lifts (SM.parent ())
   let global = SM.global
   let current () = lifts (SM.current ())
-  let fail = fail
+  let raise = fail
   let catch = catch
 
+  let project = get ()
+  let program = project >>| Project.program
+  let arch = project >>| Project.arch
+  let args = lifts (SM.gets @@ fun s -> s.args)
+  let envp = lifts (SM.gets @@ fun s -> s.envp)
 
-  let run : 'a t -> 'a e = fun m proj ->
-    M.bind
-      (SM.run
-         (C.run m (fun _ -> SM.gets @@ fun s -> (Ok s.proj))) {
-         curr = CM.return ();
-         global = State.Bag.empty;
-         local = State.Bag.empty;
-         observations = Bap_primus_observation.empty;
-         proj})
-      (fun (r,{proj}) -> match r with
-         | Ok _ -> M.return (Ok proj)
-         | Error e -> M.return (Error e))
+  let run : 'a t -> 'a e =
+    fun m proj args envp ->
+      M.bind
+        (SM.run
+           (C.run m (fun _ -> SM.gets @@ fun s -> (Ok s.proj))) {
+           args;
+           envp;
+           curr = CM.return ();
+           global = State.Bag.empty;
+           local = State.Bag.empty;
+           observations = Bap_primus_observation.empty;
+           proj})
+        (fun (r,{proj}) -> match r with
+           | Ok _ -> M.return (Normal, proj)
+           | Error e -> M.return (Exn e, proj))
 
 
   module Syntax = struct
@@ -201,13 +210,12 @@ module Main(Machine : Machine) = struct
         let module Comp = Component(Machine) in
         Comp.init ())
 
-  let run m init =
+  let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
       init_components () >>= fun () -> m >>= fun x ->
       Machine.Observation.make finish () >>= fun () ->
       Machine.return x in
-    Machine.run comp init
-
+    Machine.run comp proj args envp
 end
 
 

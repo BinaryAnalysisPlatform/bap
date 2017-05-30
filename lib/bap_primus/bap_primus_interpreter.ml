@@ -5,27 +5,20 @@ open Bap_c.Std
 open Format
 open Bap_primus_types
 
-module Context = Bap_primus_context
 module Observation = Bap_primus_observation
 module State = Bap_primus_state
 
 open Bap_primus_sexp
 
-let sexp_of_level = Bap_primus_context.sexp_of_level
-
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
 let leave_term, term_left =
   Observation.provide ~inspect:sexp_of_tid "leave-term"
-
-let enter_level,level_entered =
-  Observation.provide ~inspect:sexp_of_level "enter-level"
-
-let leave_level, level_left =
-  Observation.provide ~inspect:sexp_of_level "leave-level"
-
+let enter_pos,pos_entered =
+  Observation.provide ~inspect:Pos.sexp_of_t "enter-pos"
+let leave_pos,pos_left =
+  Observation.provide ~inspect:Pos.sexp_of_t "leave-pos"
 let sexp_of_term term = sexp_of_tid (Term.tid term)
-
 let enter_sub,sub_entered =
   Observation.provide ~inspect:sexp_of_term "enter-sub"
 let enter_arg,arg_entered =
@@ -40,8 +33,6 @@ let enter_jmp,jmp_entered =
   Observation.provide ~inspect:sexp_of_term "enter-jmp"
 let enter_top,top_entered =
   Observation.provide ~inspect:sexp_of_term "enter-top"
-
-
 let leave_sub,sub_left =
   Observation.provide ~inspect:sexp_of_term "leave-sub"
 let leave_arg,arg_left =
@@ -59,6 +50,9 @@ let leave_top,top_left =
 
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
+
+let halting,will_halt =
+  Observation.provide ~inspect:sexp_of_unit "halting"
 
 let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
 
@@ -81,34 +75,38 @@ let call,calling =
 
 
 type state = {
-  curr : Context.level;
+  addr : addr;
+  curr : pos;
 }
 
 let sexp_of_state {curr} =
-  Context.sexp_of_level curr
+  Pos.sexp_of_t curr
 
-let collect_blks prog =
-  (object(self)
-    inherit [tid Addr.Map.t] Term.visitor
-    method! enter_blk term addrs =
-      match Term.get_attr term address with
-      | None -> addrs
-      | Some addr -> Map.add addrs ~key:addr ~data:(Term.tid term)
-  end)#run prog Addr.Map.empty
-
-let null ctxt =
-  let size = Arch.addr_size (Project.arch ctxt#project) in
+let null proj =
+  let size = Arch.addr_size (Project.arch proj) in
   Addr.zero (Size.in_bits size)
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
     ~name:"interpreter"
     ~inspect:sexp_of_state
-    Context.Level.(fun proj  ->
-        let prog = Project.program proj in
-        {
-          curr = Top {me=prog; up=Nil};
-        })
+    (fun proj  ->
+       let prog = Project.program proj in
+       Pos.{
+         addr = null proj;
+         curr = Top {me=prog; up=Nil};
+       })
+
+type exn += Halt
+type exn += Runtime_error of string
+
+let () =
+  Exn.add_printer (function
+      | Runtime_error msg ->
+        Some (sprintf "Bap_primus runtime error: %s" msg)
+      | Halt -> Some "Halt"
+      | _ -> None)
+
 
 module Make (Machine : Machine) = struct
   open Machine.Syntax
@@ -119,19 +117,11 @@ module Make (Machine : Machine) = struct
   module Linker = Bap_primus_linker.Make(Machine)
 
   type 'a m = 'a Machine.t
-  type error += Runtime_error of string
 
   let (!!) = Machine.Observation.make
 
-  let () =
-    Bap_primus_error.add_printer (function
-        | Runtime_error msg ->
-          Some (sprintf "Bap_primus runtime error: %s" msg)
-        | _ -> None)
-
-
   let failf fmt = Format.ksprintf (fun msg ->
-      fun () -> Machine.fail (Runtime_error msg)) fmt
+      fun () -> Machine.raise (Runtime_error msg)) fmt
 
   let sema = object
     inherit [word,word] Eval.t
@@ -152,13 +142,26 @@ module Make (Machine : Machine) = struct
       Machine.return base
   end
 
+  let update_pc t = 
+    match Term.get_attr t address with
+    | None -> Machine.return ()
+    | Some addr ->
+      Machine.Local.get state >>= fun s -> 
+      Machine.Local.put state {s with addr} >>= fun () -> 
+      if Addr.(s.addr <> addr) 
+      then !!pc_changed addr
+      else Machine.return ()
+
+
+
   let term cls f t =
-    Machine.Local.get state >>= fun {curr} -> 
-    match Context.Level.next curr cls t with
-    | Error err -> Machine.fail err
+    Machine.Local.get state >>= fun s -> 
+    match Pos.next s.curr cls t with
+    | Error err -> Machine.raise err
     | Ok curr ->
-      !!level_entered curr >>= fun () -> 
-      Machine.Local.put state {curr} >>= fun () -> 
+      update_pc t >>= fun () ->
+      !!pos_entered curr >>= fun () -> 
+      Machine.Local.put state {s with curr} >>= fun () -> 
       !!term_entered (Term.tid t) >>= fun () ->
       Term.switch cls t 
         ~program:(!!top_entered)
@@ -178,10 +181,10 @@ module Make (Machine : Machine) = struct
         ~def:(!!def_left)
         ~jmp:(!!jmp_left) >>= fun () -> 
       !!term_left (Term.tid t) >>= fun () -> 
-      !!level_left curr >>= fun () -> 
+      !!pos_left curr >>= fun () -> 
       Machine.return r
 
-
+  let halt = Machine.raise Halt
   let exp = sema#eval_exp
   let (:=) v x  = exp x >>= sema#update v 
   let def t = Def.lhs t := Def.rhs t
@@ -193,7 +196,12 @@ module Make (Machine : Machine) = struct
       exp x >>= fun x -> 
       Linker.exec (`addr x)
 
-  let call c = label (Call.target c)
+  let call c = 
+    label (Call.target c) >>= fun () ->
+    match Call.return c with
+    | Some t -> label t
+    | None -> failf "a non-return call returned" ()
+
   let goto c = label c
   let ret l = label l
   let interrupt n r = failf "not implemented" ()
@@ -241,8 +249,6 @@ module Make (Machine : Machine) = struct
   let sub = term sub_t sub
 
   let pos = Machine.Local.get state >>| fun {curr} -> curr
-
-  let halt = failf "machine halted" ()
 end
 
 module Main(Machine : Machine) = struct

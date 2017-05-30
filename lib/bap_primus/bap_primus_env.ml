@@ -4,13 +4,10 @@ open Bap_primus_types
 open Format
 open Bap_primus_sexp
 
-module Context = Bap_primus_context
 module Observation = Bap_primus_observation
 module Generator = Bap_primus_generator
-module Error = Bap_primus_error
 
-
-type error += Undefined_var of var
+type exn += Undefined_var of var
 
 let undefined_variable,undefined =
   Observation.provide ~inspect:sexp_of_var "undefined-variable"
@@ -25,8 +22,7 @@ let variable_read,variable_was_read =
 let variable_written,variable_was_written =
   Observation.provide ~inspect:sexp_of_binding "variable-written"
 
-
-let () = Error.add_printer (function
+let () = Exn.add_printer (function
     | Undefined_var v ->
       Some (sprintf "undefined variable `%s'" (Var.name v))
     | _ -> None)
@@ -126,7 +122,7 @@ module Make(Machine : Machine) = struct
       | Type.Imm width -> match Map.find t.random var with
         | None ->
           Machine.Observation.make undefined var >>= fun () ->
-          Machine.fail (Undefined_var var)
+          Machine.raise (Undefined_var var)
         | Some gen -> gen_word gen width
 
 end
