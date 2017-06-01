@@ -54,11 +54,14 @@ let start_monitoring {Config.get} =
     let init () =
       parse_monitors @@ get Param.monitors |>
       List.iter ~f:(fun m ->
+          let name = Primus.Observation.Provider.name m in
+          let nos = Primus.Observation.Provider.observers m in
+          info "monitoring %s, subscribed by %d observers" name nos;
           Stream.observe (Primus.Observation.Provider.data m)
             print_event);
       Machine.return ()
   end in
-  ()
+  Primus.Machine.add_component (module Monitor)
 
 
 let () = Config.when_ready start_monitoring
