@@ -18,8 +18,12 @@ module Param = struct
         "A list of events to monitor. A keyword `all` can be use to
       select all events. To ignore a particular event, add `-' before
       the name. An optional + is allowed for the consistency."
-end
 
+  let output = param (some string) "output"
+      ~doc:
+        "A name of a file in which to store the monitor output. If not
+      specified, then outputs result into stdout"
+end
 
 let starts_with name x = 
   String.length name > 1 && name.[0] = x
@@ -46,19 +50,20 @@ let parse_monitors =
       | name when starts_with name '-' -> remove_provider (strip name) ps 
       | name -> monitor_provider (strip name) ps)
 
-let print_event ev = 
-  printf "%a@\n" Sexp.pp_hum ev
+let print_event out ev = 
+  fprintf out "%a@\n" Sexp.pp_hum ev
 
-let start_monitoring {Config.get} = 
+let start_monitoring {Config.get=(!)} = 
+  let out = match !Param.output with
+    | None -> std_formatter
+    | Some name -> formatter_of_out_channel (Out_channel.create name) in
   let module Monitor(Machine : Primus.Machine.S) = struct 
     let init () =
-      parse_monitors @@ get Param.monitors |>
+      parse_monitors !Param.monitors |>
       List.iter ~f:(fun m ->
-          let name = Primus.Observation.Provider.name m in
-          let nos = Primus.Observation.Provider.observers m in
-          info "monitoring %s, subscribed by %d observers" name nos;
+          info "monitoring %s" (Primus.Observation.Provider.name m);
           Stream.observe (Primus.Observation.Provider.data m)
-            print_event);
+            (print_event out));
       Machine.return ()
   end in
   Primus.Machine.add_component (module Monitor)
