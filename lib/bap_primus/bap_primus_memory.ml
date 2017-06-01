@@ -115,9 +115,7 @@ module Make(Machine : Machine) = struct
   let segfault addr = Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
-    | None ->
-      eprintf "Didn't find a value in %d layers\n" (List.length layers);
-      segfault addr
+    | None -> segfault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None -> match layer.mem with
@@ -128,13 +126,8 @@ module Make(Machine : Machine) = struct
 
 
   let write addr value {values;layers} = match find_layer addr layers with
-    | None ->
-      eprintf "Didn't find a writable layer in %d layers\n"
-        (List.length layers);
-      segfault addr
-    | Some {perms={readonly=true}} ->
-      eprintf "Trying to write into a readonly memory\n";
-      segfault addr
+    | None -> segfault addr
+    | Some {perms={readonly=true}} -> segfault addr
     | Some _ -> Machine.return {
         layers;
         values = Map.add values ~key:addr ~data:value;

@@ -104,7 +104,6 @@ module Make(Machine : Machine) = struct
     | None -> fail name
     | Some (module Code) ->
       let module Code = Code(Machine) in
-      eprintf "Linker.exec %s@\n" (string_of_name name);
       Code.exec
 
   let is_linked name =

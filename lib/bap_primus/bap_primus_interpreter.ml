@@ -153,14 +153,13 @@ module Make (Machine : Machine) = struct
       else Machine.return ()
 
   let term cls f t =
-    eprintf "Entering term %s@\n" (Term.name t);
     Machine.Local.get state >>= fun s -> 
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
     | Ok curr ->
       update_pc t >>= fun () ->
+      Machine.Local.update state (fun s -> {s with curr}) >>= fun () -> 
       !!pos_entered curr >>= fun () -> 
-      Machine.Local.put state {s with curr} >>= fun () -> 
       !!term_entered (Term.tid t) >>= fun () ->
       Term.switch cls t 
         ~program:(!!top_entered)
@@ -240,7 +239,6 @@ module Make (Machine : Machine) = struct
     | Some t -> blk t
 
   let sub t =
-    eprintf "Running a function %s@\n" (Sub.name t);
     let iter f = Machine.Seq.iter (Term.enum arg_t t) ~f in
     iter arg_def >>= fun () ->
     eval_entry (Term.first blk_t t) >>= fun () ->
@@ -282,7 +280,6 @@ module Init(Machine : Machine) = struct
   end
 
   let run () =
-    eprintf "Initializing the Interpreter@\n";
     Machine.get () >>= fun proj -> 
     linker#run (Project.program proj) (Machine.return ())
 end
