@@ -25,12 +25,18 @@ module Main(Machine : Machine) = struct
         let module Comp = Component(Machine) in
         Comp.init ())
 
+  let finish () =
+    Machine.Observation.make finish ()
+
+
   let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
       Init.run () >>= fun () ->
       init_components () >>= fun () -> 
-      m >>= fun x ->
-      Machine.Observation.make finish () >>= fun () ->
+      Machine.catch m (fun err -> 
+          finish () >>= fun () ->
+          Machine.raise err)
+      >>= fun x -> finish () >>= fun () -> 
       Machine.return x in
     Machine.run comp proj args envp
 end
