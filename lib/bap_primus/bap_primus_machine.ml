@@ -171,18 +171,24 @@ module Make(M : Monad.S) = struct
   let args = lifts (SM.gets @@ fun s -> s.args)
   let envp = lifts (SM.gets @@ fun s -> s.envp)
 
+
+  let init proj args envp = {
+    args;
+    envp;
+    curr = CM.return ();
+    global = State.Bag.empty;
+    local = State.Bag.empty;
+    observations = Bap_primus_observation.empty;
+    proj}
+
   let run : 'a t -> 'a e =
     fun m proj args envp ->
       M.bind
         (SM.run
-           (C.run m (fun _ -> SM.gets @@ fun s -> (Ok s.proj))) {
-           args;
-           envp;
-           curr = CM.return ();
-           global = State.Bag.empty;
-           local = State.Bag.empty;
-           observations = Bap_primus_observation.empty;
-           proj})
+           (C.run m (function
+                | Ok _ -> SM.gets @@ fun s -> Ok s.proj 
+                | Error err -> SM.gets @@ fun s -> Error err))
+           (init proj args envp))
         (fun (r,{proj}) -> match r with
            | Ok _ -> M.return (Normal, proj)
            | Error e -> M.return (Exn e, proj))
