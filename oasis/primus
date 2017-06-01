@@ -8,7 +8,7 @@ Library primus
   Path: lib/bap_primus
   FindlibName: bap-primus
   CompiledObject: best
-  BuildDepends: bap, bap-abi, bap-c, uuidm
+  BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future
   Modules: Bap_primus
   InternalModules:
            Bap_primus_env,
@@ -20,6 +20,7 @@ Library primus
            Bap_primus_linker,
            Bap_primus_lisp,
            Bap_primus_machine,
+           Bap_primus_main,
            Bap_primus_memory,
            Bap_primus_observation,
            Bap_primus_pos,

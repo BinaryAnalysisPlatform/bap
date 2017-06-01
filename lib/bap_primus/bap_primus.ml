@@ -11,6 +11,7 @@ module Std = struct
       module type State = State
       include Bap_primus_machine
       type 'a state = 'a State.t
+      include Bap_primus_main
     end
     module Memory = Bap_primus_memory
     module Observation = Bap_primus_observation

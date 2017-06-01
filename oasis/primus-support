@@ -57,3 +57,12 @@ Library wandering_scheduler
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: implements the wandering scheduling strategy
   Modules: Primus_wandering_main
+
+Library debugger
+  Path: plugins/primus_debug
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_debug
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: enables Primus machine debugging
+  Modules: Primus_debug_main

@@ -33,3 +33,8 @@ module Make (Machine : Machine) : sig
   val blk : blk term -> unit m
   val exp : exp -> word m
 end
+
+
+module Init (Machine : Machine) : sig
+  val run : unit -> unit Machine.t
+end

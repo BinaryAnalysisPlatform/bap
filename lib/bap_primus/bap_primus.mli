@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Monads.Std
+open Bap_future.Std
 open Format
 
 module Std : sig
@@ -47,6 +48,14 @@ module Std : sig
         not depenend on the type of the functor.*)
     module Observation : sig
 
+      (** An observation provider. 
+          A provider facilitates introspection of the Primus Machine,
+          for the sake of debugging and dumping the effects. The
+          provider shoud not (and can't be) used for affecting the
+          behavior of a machine, or for the analysis, as its main
+          purpose is debugging, logging, and tracing the execution.*)
+      type provider 
+
 
       (** [provide ?inspect name] returns a pair of two handlers. The
           first element is used to observe values, the second is used
@@ -66,6 +75,26 @@ module Std : sig
       (** [inspect observation value] returns a sexp representation of
           an observed [value] *)
       val inspect : 'a observation -> 'a -> Sexp.t
+
+      (** enumerate all currently available observation providers  *)
+      val list_providers : unit -> provider list
+
+      module Provider : sig 
+        type t = provider
+
+        (** unique name of a provider *)
+        val name : t -> string
+
+        (** a total number of observers that subscribed to this provider  *)
+        val observers : t -> int
+
+        (** triggers a stream of occurences of this observation  *)
+        val triggers : t -> unit stream
+
+        (** a data stream from this observation *)
+        val data : t -> Sexp.t stream
+
+      end
     end
 
 

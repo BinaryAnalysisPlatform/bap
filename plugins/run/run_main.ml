@@ -82,7 +82,9 @@ let main {Config.get=(!)} proj =
   Linker.exec |>
   Main.run ~envp:!envp ~args:!argv proj |> function
   | (Primus.Normal,proj)  
-  | (Primus.Exn Primus.Interpreter.Halt,proj) -> proj
+  | (Primus.Exn Primus.Interpreter.Halt,proj) ->
+    eprintf "Ok, we've terminated normally@\n";
+    proj
   | (Primus.Exn exn,proj) -> 
     error "program terminated by a signal: %s\n" (Primus.Exn.to_string exn);
     proj

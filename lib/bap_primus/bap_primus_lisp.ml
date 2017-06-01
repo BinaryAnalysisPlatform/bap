@@ -1409,4 +1409,4 @@ let init ?(log=std_formatter) ?(paths=[]) features  =
   library.paths <- paths;
   library.features <- features;
   library.log <- log;
-  Bap_primus_machine.add_component (module Make)
+  Bap_primus_main.add_component (module Make)

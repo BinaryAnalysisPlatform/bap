@@ -2,11 +2,10 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 open Bap_primus_types
+open Format
 
 module Observation = Bap_primus_observation
 
-let components : component list ref = ref []
-let add_component comp = components := comp :: !components
 
 module type Component = Component
 module type S = Machine
@@ -96,7 +95,7 @@ module Make(M : Monad.S) = struct
       (* let event = Observation.of_statement key in *)
       with_global_context @@ fun () ->
       observations () >>= fun os ->
-      Observation.with_observers os key ~f:(List.iter ~f:(fun observe -> observe obs))
+      Seq.all_ignore @@ Observation.notify os key obs 
 
     let observe key observer =
       with_global_context @@ fun () ->
@@ -196,26 +195,6 @@ module Make(M : Monad.S) = struct
 
   include (CM : Monad.S with type 'a t := 'a t
                          and module Syntax := Syntax)
-end
-
-let finished,finish =
-  Observation.provide ~inspect:sexp_of_unit "machine-finished"
-
-
-module Main(Machine : Machine) = struct
-  open Machine.Syntax
-
-  let init_components () =
-    Machine.List.iter !components ~f:(fun (module Component) ->
-        let module Comp = Component(Machine) in
-        Comp.init ())
-
-  let run ?(envp=[| |]) ?(args=[| |]) proj m =
-    let comp =
-      init_components () >>= fun () -> m >>= fun x ->
-      Machine.Observation.make finish () >>= fun () ->
-      Machine.return x in
-    Machine.run comp proj args envp
 end
 
 

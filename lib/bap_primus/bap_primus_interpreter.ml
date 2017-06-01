@@ -152,9 +152,8 @@ module Make (Machine : Machine) = struct
       then !!pc_changed addr
       else Machine.return ()
 
-
-
   let term cls f t =
+    eprintf "Entering term %s@\n" (Term.name t);
     Machine.Local.get state >>= fun s -> 
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
@@ -211,7 +210,7 @@ module Make (Machine : Machine) = struct
     | Ret l -> ret l
     | Int (n,r) -> interrupt n r
 
-  let jmp t = exp (Jmp.cond t) >>| Word.is_zero
+  let jmp t = exp (Jmp.cond t) >>| Word.is_one
   let jmp = term jmp_t jmp
 
 
@@ -241,6 +240,7 @@ module Make (Machine : Machine) = struct
     | Some t -> blk t
 
   let sub t =
+    eprintf "Running a function %s@\n" (Sub.name t);
     let iter f = Machine.Seq.iter (Term.enum arg_t t) ~f in
     iter arg_def >>= fun () ->
     eval_entry (Term.first blk_t t) >>= fun () ->
@@ -251,20 +251,39 @@ module Make (Machine : Machine) = struct
   let pos = Machine.Local.get state >>| fun {curr} -> curr
 end
 
-module Main(Machine : Machine) = struct
+module Init(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Bap_primus_linker.Make(Machine)
-  module Interp = Make(Machine)
+
 
   let linker = object 
     inherit [unit Machine.t] Term.visitor
-    method! enter_blk t m = m >>= fun () -> Interp.blk t
-    method! enter_sub t m = m >>= fun () -> Interp.sub t
+    method! enter_blk t m = m >>= fun () -> 
+      let module Code(Machine : Machine) = struct 
+        module Interp = Make(Machine)
+        let exec = Interp.blk t
+      end in
+      Linker.link
+        ~name:(Term.name t)
+        ~tid:(Term.tid t)
+        ?addr:(Term.get_attr t address)
+        (module Code)
+    method! enter_sub t m = 
+      m >>= fun () ->
+      let module Code(Machine : Machine) = struct 
+        module Interp = Make(Machine)
+        let exec = Interp.sub t
+      end in 
+      Linker.link
+        ~name:(Sub.name t)
+        ~tid:(Term.tid t)
+        ?addr:(Term.get_attr t address)
+        (module Code)
   end
 
-  let init () =
+  let run () =
+    eprintf "Initializing the Interpreter@\n";
     Machine.get () >>= fun proj -> 
     linker#run (Project.program proj) (Machine.return ())
 end
 
-let () = Bap_primus_machine.add_component (module Main)
