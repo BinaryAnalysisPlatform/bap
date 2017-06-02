@@ -123,11 +123,13 @@ module Make (Machine : Machine) = struct
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
+  let undefined = Word.of_int 0 ~width:0
+
   let sema = object
     inherit [word,word] Eval.t
     method value_of_word = Machine.return
     method word_of_value x = Machine.return (Some x)
-    method undefined = failf "undefined value" ()
+    method undefined = Machine.return undefined
     method storage_of_value x = Machine.return (Some x)
     method lookup = Env.get 
     method update = Env.set 

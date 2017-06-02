@@ -88,7 +88,7 @@ module Make(Machine : Machine) = struct
     | Some s -> linker_error (`symbol s)
     | None -> linker_error name
 
-  let link ?addr ?name ?tid code  =
+  let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
         let key,codes = add_code code s.codes in
         let update table value = match value with

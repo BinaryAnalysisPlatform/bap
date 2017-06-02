@@ -68,10 +68,10 @@ let print_pos ppf pos =
   | Top _ -> ()
   | Sub {me} -> fprintf ppf "%a: <%s>@\n" id pos (Sub.name me)
   | Blk _ -> fprintf ppf "%a:@\n" id pos
-  | Arg {me} -> fprintf ppf "%a@" Arg.pp me
-  | Phi {me} -> fprintf ppf "%a@" Phi.pp me
-  | Def {me} -> fprintf ppf "%a@" Def.pp me
-  | Jmp {me} -> fprintf ppf "%a@" Jmp.pp me
+  | Arg {me} -> fprintf ppf "%a" Arg.pp me
+  | Phi {me} -> fprintf ppf "%a" Phi.pp me
+  | Def {me} -> fprintf ppf "%a" Def.pp me
+  | Jmp {me} -> fprintf ppf "%a" Jmp.pp me
 
 let print_trace ppf = List.iter ~f:(print_pos ppf)
 
