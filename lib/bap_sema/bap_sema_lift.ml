@@ -208,7 +208,9 @@ let blk cfg block : blk term list =
       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
-  List.rev (Term.set_attr b address (Block.addr block) :: bs)
+  List.rev (b::bs) |> function
+  | [] -> assert false
+  | b::bs -> Term.set_attr b address (Block.addr block) :: bs
 
 (* extracts resolved calls from the blk *)
 let call_of_blk blk =
