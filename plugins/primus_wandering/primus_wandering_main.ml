@@ -8,17 +8,13 @@ include Self()
 
 
 type t = {
-  max : int;
   pending : Primus.Machine.id Int.Map.t;
 }
 
 let state = Primus.Machine.State.declare
     ~uuid:"99883d0e-94b2-41a4-bce6-1e4a949fd919"
     ~name:"wandering-scheduler"
-    (fun _ -> {
-         pending = Int.Map.empty;
-         max = 0;
-       })
+    (fun _ -> {pending = Int.Map.empty})
 
 module Make
     (Random : sig val generator : Primus.generator end)
@@ -35,7 +31,7 @@ module Make
   type 'a m = 'a Machine.t
 
   let drop i t =
-    {t with pending = Map.remove t.pending i}
+    {pending = Map.remove t.pending i}
 
 
   (** [reschedule n s] performs [n] attempts to choose a live clone,
@@ -48,9 +44,10 @@ module Make
       Note, a winner - the clone that was chosen, is removed from the
       draw.*)
   let rec reschedule n t =
-    if n > 0 && t.max > 0 then
+    if n > 0 && not (Map.is_empty t.pending) then
+      let (max,_) = Map.max_elt_exn t.pending in
       Generate.next Random.generator >>= fun i ->
-      let i = i mod t.max in
+      let i = i mod (max + 1) in
       match Map.find t.pending i with
       | None -> reschedule (n-1) t
       | Some id -> Machine.status id >>= function
@@ -58,9 +55,8 @@ module Make
         | _ -> Machine.switch id >>| fun () -> drop i t
     else
       Machine.forks () >>| fun fs -> {
-        t with
         pending = Seq.foldi fs ~init:Int.Map.empty ~f:(fun i cs id ->
-            Map.add cs ~key:i ~data:id)
+            Map.add cs ~key:i ~data:id);
       }
 
   let schedule t = reschedule attempts t
@@ -71,7 +67,7 @@ module Make
     Machine.Local.put state
 
   let init () =
-    Primus.Interpreter.leave_blk >>> step
+    Primus.Interpreter.leave_pos >>> step
 
 end
 

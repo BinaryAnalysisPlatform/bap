@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 
 open Bap_primus_types
 
@@ -11,8 +12,7 @@ open Bap_primus_sexp
 
 type exn += Segmentation_fault of addr
 
-let sexp_of_segmentation_fault addr =
-  Sexp.List [Sexp.Atom "Segmentation fault"; sexp_of_addr addr]
+let sexp_of_segmentation_fault = sexp_of_word
 
 let segmentation_fault, segfault =
   Observation.provide ~inspect:sexp_of_segmentation_fault
@@ -107,21 +107,27 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   module Generate = Generator.Make(Machine)
+  let (!!) = Machine.Observation.make 
 
   let update state f =
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
 
-  let segfault addr = Machine.raise (Segmentation_fault addr)
+  let segfault addr =
+    !!segfault addr >>= fun () ->
+    Machine.current () >>= fun id -> 
+    Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
     | None -> segfault addr
     | Some layer -> match Map.find values addr with
-      | Some v -> Machine.return v
+      | Some v -> !!address_was_read (addr,v) >>| fun () -> v
       | None -> match layer.mem with
-        | Dynamic {value} -> Generate.next value >>| Word.of_int ~width:8
+        | Dynamic {value} -> 
+          Generate.next value >>| Word.of_int ~width:8 >>= fun v ->
+          !!address_was_read (addr,v) >>| fun () -> v
         | Static mem -> match Memory.get ~addr mem with
-          | Ok value -> Machine.return value
+          | Ok v -> !!address_was_read (addr,v) >>| fun () -> v
           | Error _ -> failwith "Bap_primus.Memory.read"
 
 
@@ -152,10 +158,12 @@ module Make(Machine : Machine) = struct
   let add_data mem = map mem ~readonly:false ~executable:false
 
   let load addr =
+    !!address_will_be_read addr >>= fun () ->
     Machine.Local.get state >>= read addr
 
   let save addr value =
     Machine.Local.get state >>=
     write addr value >>=
-    Machine.Local.put state
+    Machine.Local.put state >>= fun () ->
+    !!address_was_written (addr,value)
 end

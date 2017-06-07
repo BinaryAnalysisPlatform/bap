@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
+open Format
 include Self()
 
 (* continue with the same context, until a path terminates,
@@ -14,31 +15,38 @@ type state = {
   halted : Ids.t;
 }
 
+
 let state = Primus.Machine.State.declare
     ~uuid:"328fd42b-1ffd-44da-8400-8494732dcfa3"
     ~name:"greedy-scheduler-state"
     (fun _ -> {halted = Ids.empty})
 
 
+
 module Greedy(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
+  module Eval = Primus.Interpreter.Make(Machine)
+
+  let pp_halted ppf halted = 
+    Set.iter halted ~f:(fun id -> 
+        fprintf ppf "%a" Machine.Id.pp id)
 
   let reschedule () =
     Machine.current () >>= fun id -> 
-    Machine.Local.get state >>= fun {halted} -> 
+    info "%a: scheduling" Machine.Id.pp id;
+    Machine.Global.get state >>= fun {halted} -> 
     let halted = Set.add halted id in
-    Machine.Local.put state {halted} >>= fun () -> 
+    Machine.Global.put state {halted} >>= fun () -> 
     Machine.forks () >>= fun forks ->
-    Seq.find forks ~f:(fun id -> 
-        not (Set.mem halted id)) |> function
-    | None -> Machine.return ()
-    | Some id ->
-      info "switched to machine %a" Machine.Id.pp id;
-      Machine.switch id
+    Seq.find forks ~f:(fun id -> not (Set.mem halted id)) |> function
+    | None ->
+      info "no more pending machines";
+      Machine.return ()
+    | Some id -> Machine.switch id
 
   let init () =
-    Primus.Interpreter.halting >>> reschedule
+    Primus.Machine.finished >>> reschedule
 end
 
 let enable () =

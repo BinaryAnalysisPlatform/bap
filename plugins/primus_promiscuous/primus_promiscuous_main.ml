@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 open Bap_primus.Std
+open Format
+
 include Self()
 (*
 
@@ -100,7 +102,7 @@ let assumptions blk =
           let assn = {use=Term.tid jmp; var=c; res=true} in
           assn :: assns, (assn :: neg assns) :: assms
         | Bil.Int _ -> assns, (neg assns) :: assms
-        | _ -> (assns,assms)) |> snd
+        | _ -> failwith "Not in TCF") |> snd
 
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -114,20 +116,24 @@ module Main(Machine : Primus.Machine.S) = struct
   let unsat_assumptions blk =
     Machine.List.map (assumptions blk)
       ~f:(Machine.List.filter ~f:(fun {var;res} ->
-          Env.get var >>| fun r -> Word.(r <> of_bool res)))
+          Env.get var >>| fun r -> 
+          Word.(r <> of_bool res)))
+
+  let pp_id = Monad.State.Multi.Id.pp
 
   let fork blk  =
     unsat_assumptions blk >>=
     Machine.List.iter ~f:(function
         | [] -> Machine.return ()
         | assns ->
+          Machine.current () >>= fun pid ->
           Machine.fork () >>= fun () ->
-          assume  assns >>= fun () ->
           Machine.current () >>= fun id ->
-          Machine.Local.put state (Conflict assns) >>= fun () ->
-          Machine.parent () >>= fun pid ->
-          info "forked clone %a" Monad.State.Multi.Id.pp id;
-          Machine.switch pid)
+          if pid = id then Machine.return ()
+          else 
+            assume  assns >>= fun () ->
+            Machine.Local.put state (Conflict assns) >>= fun () ->
+            Machine.switch pid)
 
   let is_last blk def = match Term.last def_t blk with
     | None -> true
@@ -137,7 +143,10 @@ module Main(Machine : Primus.Machine.S) = struct
     let open Primus.Pos in
     match level with
     | Def {up={me=blk}; me=def} when is_last blk def ->
-      fork blk
+      Machine.current () >>= fun id ->
+      if id = Machine.global 
+      then fork blk
+      else Machine.return ()
     | _ -> Machine.return ()
 
   let init () =

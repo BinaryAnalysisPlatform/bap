@@ -18,7 +18,7 @@ module Main(Machine : Machine) = struct
   open Machine.Syntax
 
   module Mach = Bap_primus_machine
-  module Init = Bap_primus_interpreter.Init(Machine)
+  module Link = Bap_primus_interpreter.Init(Machine)
 
   let init_components () =
     Machine.List.iter !components ~f:(fun (module Component) ->
@@ -31,12 +31,13 @@ module Main(Machine : Machine) = struct
 
   let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
-      Init.run () >>= fun () ->
       init_components () >>= fun () -> 
+      Link.run () >>= fun () ->
       Machine.catch m (fun err -> 
           finish () >>= fun () ->
           Machine.raise err)
-      >>= fun x -> finish () >>= fun () -> 
+      >>= fun x ->
+      finish () >>= fun () -> 
       Machine.return x in
     Machine.run comp proj args envp
 end

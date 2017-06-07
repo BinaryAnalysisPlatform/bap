@@ -56,8 +56,9 @@ let parse_monitors =
       | name when starts_with name '-' -> remove_provider (strip name) ps 
       | name -> monitor_provider (strip name) ps)
 
-let print_event out ev = 
-  fprintf out "%a@\n" Sexp.pp_hum ev
+let print_event out p ev = 
+  fprintf out "@[(%s %a)@]@\n"
+    (Primus.Observation.Provider.name p) Sexp.pp_hum ev
 
 let id ppf pos = 
   fprintf ppf "%a" Tid.pp (Primus.Pos.tid pos)
@@ -113,7 +114,7 @@ let start_monitoring {Config.get=(!)} =
       List.iter ~f:(fun m ->
           info "monitoring %s" (Primus.Observation.Provider.name m);
           Stream.observe (Primus.Observation.Provider.data m)
-            (print_event out));
+            (print_event out m));
       Machine.return ()
   end in
   Primus.Machine.add_component (module Monitor)

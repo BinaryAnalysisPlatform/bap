@@ -181,10 +181,11 @@ module Make (Machine : Machine) = struct
         ~def:(!!def_left)
         ~jmp:(!!jmp_left) >>= fun () -> 
       !!term_left (Term.tid t) >>= fun () -> 
-      !!pos_left curr >>= fun () -> 
+      !!pos_left curr >>= fun () ->
       Machine.return r
 
-  let halt = Machine.raise Halt
+  let halt = 
+    !!will_halt () >>= fun () -> Machine.raise Halt
   let exp = sema#eval_exp
   let (:=) v x  = exp x >>= sema#update v 
   let def t = Def.lhs t := Def.rhs t
@@ -255,30 +256,40 @@ module Init(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Bap_primus_linker.Make(Machine)
 
+  let is_linked name t = [
+    Linker.is_linked (`tid (Term.tid t));
+    Linker.is_linked (`symbol (name t));
+  ] |> Machine.List.all >>| (fun xs -> List.mem xs true) >>= function
+    | true -> Machine.return true
+    | false -> match Term.get_attr t address with
+      | None -> Machine.return false
+      | Some x -> Linker.is_linked (`addr x)
+
+
+  let link name code t m = 
+    m >>= fun () -> is_linked name t >>= function 
+    | true -> Machine.return ()
+    | false ->
+      Linker.link
+        ~name:(name t)
+        ~tid:(Term.tid t)
+        ?addr:(Term.get_attr t address)
+        code
 
   let linker = object 
     inherit [unit Machine.t] Term.visitor
-    method! enter_blk t m = m >>= fun () -> 
+    method! enter_blk t =
       let module Code(Machine : Machine) = struct 
         module Interp = Make(Machine)
         let exec = Interp.blk t
       end in
-      Linker.link
-        ~name:(Term.name t)
-        ~tid:(Term.tid t)
-        ?addr:(Term.get_attr t address)
-        (module Code)
-    method! enter_sub t m = 
-      m >>= fun () ->
+      link Term.name (module Code) t
+    method! enter_sub t = 
       let module Code(Machine : Machine) = struct 
         module Interp = Make(Machine)
         let exec = Interp.sub t
       end in 
-      Linker.link
-        ~name:(Sub.name t)
-        ~tid:(Term.tid t)
-        ?addr:(Term.get_attr t address)
-        (module Code)
+      link Sub.name (module Code) t
   end
 
   let run () =

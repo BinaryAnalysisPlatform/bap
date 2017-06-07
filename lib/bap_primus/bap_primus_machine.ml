@@ -29,7 +29,7 @@ module Make(M : Monad.S) = struct
   and state = {
     args    : string array;
     envp    : string array;
-    curr    : unit t;
+    curr    : unit -> id t;
     proj    : project;
     local   : State.Bag.t;
     global  : State.Bag.t;
@@ -93,8 +93,7 @@ module Make(M : Monad.S) = struct
 
     let make key obs =
       (* let event = Observation.of_statement key in *)
-      with_global_context @@ fun () ->
-      observations () >>= fun os ->
+      with_global_context observations >>= fun os ->
       Seq.all_ignore @@ Observation.notify os key obs 
 
     let observe key observer =
@@ -144,15 +143,15 @@ module Make(M : Monad.S) = struct
   let update f = get () >>= fun s -> put (f s)
   let modify m f = m >>= fun x -> update f >>= fun () -> return x
 
-  let switch_task f =
-    C.call ~cc:(fun k ->
-        lifts (SM.update (fun s -> {s with curr = k (Ok ())})) >>= fun () ->
-        lifts (f ()) >>= fun () ->
-        lifts (SM.get ()) >>= fun s ->
-        s.curr)
 
-  let fork () : unit c = switch_task SM.fork
-  let switch id : unit c = switch_task (fun () -> SM.switch id)
+  let fork_state () = lifts (SM.fork ())
+  let switch_state id = lifts (SM.switch id)
+  let store_curr k id = 
+    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok id)}))
+
+  (* switch_task SM.fork *)
+
+
 
   let lift x = lifts (SM.lift x)
   let status x = lifts (SM.status x)
@@ -162,6 +161,21 @@ module Make(M : Monad.S) = struct
   let parent () = lifts (SM.parent ())
   let global = SM.global
   let current () = lifts (SM.current ())
+
+  let fork () : unit c =
+    current () >>= fun pid -> 
+    C.call ~cc:(fun k -> store_curr k pid >>= fork_state >>= current) >>=
+    switch_state
+
+  let switch id : unit c =
+    current () >>= fun cid -> 
+    C.call ~cc:(fun k ->
+        store_curr k cid >>= fun () ->
+        switch_state id >>= fun () ->
+        lifts (SM.get ()) >>= fun s ->
+        s.curr ()) >>= 
+    switch_state
+
   let raise = fail
   let catch = catch
 
@@ -175,7 +189,7 @@ module Make(M : Monad.S) = struct
   let init proj args envp = {
     args;
     envp;
-    curr = CM.return ();
+    curr = current;
     global = State.Bag.empty;
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
