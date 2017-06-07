@@ -43,22 +43,26 @@ type assn = {
 }
 
 type id = Primus.Machine.id
-type conflict = Conflict of assn list
-
+type state = {
+  conflicts : assn list;
+  forkpoints : Tid.Set.t;
+}
 
 let inspect_assn {use; var; res} =
   let var = sprintf "%s: %s" (Tid.to_string use)(Var.to_string var) in
   Sexp.List [Sexp.Atom var; sexp_of_bool res]
 
-let inspect_conflict (Conflict assn) = Sexp.List (List.map assn ~f:inspect_assn)
+let inspect_conflict (assn) =
+  Sexp.List (List.map assn ~f:inspect_assn)
+
 let inspect_conflicts cs =
   Sexp.List (List.map ~f:inspect_conflict cs)
 
+
 let state = Primus.Machine.State.declare
-    ~inspect:inspect_conflict
     ~name:"conflicts"
     ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
-    (fun _ -> Conflict [])
+    (fun _ -> {conflicts=[]; forkpoints = Tid.Set.empty})
 
 
 (** Trivial Condition Form (TCF) transformation.
@@ -125,14 +129,19 @@ module Main(Machine : Primus.Machine.S) = struct
     unsat_assumptions blk >>=
     Machine.List.iter ~f:(function
         | [] -> Machine.return ()
-        | assns ->
+        | conflicts ->
           Machine.current () >>= fun pid ->
           Machine.fork () >>= fun () ->
           Machine.current () >>= fun id ->
-          if pid = id then Machine.return ()
+          if pid = id then
+            Machine.Global.update state ~f:(fun t -> {
+                  t with forkpoints = 
+                           Set.add t.forkpoints (Term.tid blk)
+                })
           else 
-            assume  assns >>= fun () ->
-            Machine.Local.put state (Conflict assns) >>= fun () ->
+            assume  conflicts >>= fun () ->
+            Machine.Local.update state ~f:(fun t -> {
+                  t with conflicts}) >>= fun () ->
             Machine.switch pid)
 
   let is_last blk def = match Term.last def_t blk with
@@ -143,10 +152,10 @@ module Main(Machine : Primus.Machine.S) = struct
     let open Primus.Pos in
     match level with
     | Def {up={me=blk}; me=def} when is_last blk def ->
-      Machine.current () >>= fun id ->
-      if id = Machine.global 
-      then fork blk
-      else Machine.return ()
+      Machine.Global.get state >>= fun t ->
+      if Set.mem t.forkpoints (Term.tid blk)
+      then Machine.return ()
+      else fork blk
     | _ -> Machine.return ()
 
   let init () =
