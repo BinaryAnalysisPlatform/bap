@@ -5,6 +5,9 @@ open Bap_primus_types
 val enter_term : tid observation
 val leave_term : tid observation
 
+val new_value : word observation
+val enter_exp : exp observation
+val leave_exp : exp observation
 val enter_pos : pos observation
 val leave_pos : pos observation
 val enter_sub : sub term observation

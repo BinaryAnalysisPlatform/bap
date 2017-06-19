@@ -66,3 +66,13 @@ Library debugger
   BuildDepends: bap-primus
   XMETADescription: enables Primus machine debugging
   Modules: Primus_debug_main
+
+Library primus_propagate_taint_plugin
+  Path: plugins/primus_propagate_taint
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_propagate_taint
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: a taint propagation engine
+  Modules: Primus_propagate_taint_main
+  

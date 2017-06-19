@@ -48,6 +48,14 @@ let leave_jmp,jmp_left =
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
 
+let enter_exp,exp_entered = 
+  Observation.provide ~inspect:sexp_of_exp "enter-exp"
+let leave_exp,exp_left = 
+  Observation.provide ~inspect:sexp_of_exp "leave-exp"
+
+let new_value,value_created = 
+  Observation.provide ~inspect:sexp_of_word "new-value"
+
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
 
@@ -126,7 +134,7 @@ module Make (Machine : Machine) = struct
   let undefined = Word.of_int 0 ~width:0
 
   let sema = object
-    inherit [word,word] Eval.t
+    inherit [word,word] Eval.t as super
     method value_of_word = Machine.return
     method word_of_value x = Machine.return (Some x)
     method undefined = Machine.return undefined
@@ -142,6 +150,13 @@ module Make (Machine : Machine) = struct
       let addr = Addr.(base + addr) in
       Memory.save addr data >>= fun () ->
       Machine.return base
+
+    method! eval_exp e = 
+      !!exp_entered e >>= fun () -> 
+      super#eval_exp e >>= fun r -> 
+      !!value_created r >>= fun () -> 
+      !!exp_left e >>= fun () ->
+      Machine.return r
   end
 
   let update_pc t = 

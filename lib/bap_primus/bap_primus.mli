@@ -450,6 +450,16 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
+      (** the [new_value] observation is made every time an 
+          expression computes a new value*)
+      val new_value : word observation
+
+      (** an expression was entered  *)
+      val enter_exp : exp observation
+
+      (** an expression was left *)
+      val leave_exp : exp observation
+
       val halting : unit observation
 
       type exn += Halt
