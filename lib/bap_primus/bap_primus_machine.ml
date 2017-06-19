@@ -94,7 +94,7 @@ module Make(M : Monad.S) = struct
     let make key obs =
       (* let event = Observation.of_statement key in *)
       with_global_context observations >>= fun os ->
-      Seq.all_ignore @@ Observation.notify os key obs 
+      Seq.all_ignore @@ Observation.notify os key obs
 
     let observe key observer =
       with_global_context @@ fun () ->
@@ -146,7 +146,7 @@ module Make(M : Monad.S) = struct
 
   let fork_state () = lifts (SM.fork ())
   let switch_state id = lifts (SM.switch id)
-  let store_curr k id = 
+  let store_curr k id =
     lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok id)}))
 
   (* switch_task SM.fork *)
@@ -163,17 +163,17 @@ module Make(M : Monad.S) = struct
   let current () = lifts (SM.current ())
 
   let fork () : unit c =
-    current () >>= fun pid -> 
+    current () >>= fun pid ->
     C.call ~cc:(fun k -> store_curr k pid >>= fork_state >>= current) >>=
     switch_state
 
   let switch id : unit c =
-    current () >>= fun cid -> 
+    current () >>= fun cid ->
     C.call ~cc:(fun k ->
         store_curr k cid >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->
-        s.curr ()) >>= 
+        s.curr ()) >>=
     switch_state
 
   let raise = fail
@@ -195,13 +195,18 @@ module Make(M : Monad.S) = struct
     observations = Bap_primus_observation.empty;
     proj}
 
+  let extract f =
+    let open SM.Syntax in
+    SM.switch SM.global >>= fun () ->
+    SM.gets f
+
   let run : 'a t -> 'a e =
     fun m proj args envp ->
       M.bind
         (SM.run
            (C.run m (function
-                | Ok _ -> SM.gets @@ fun s -> Ok s.proj 
-                | Error err -> SM.gets @@ fun s -> Error err))
+                | Ok _ -> extract @@ fun s -> Ok s.proj
+                | Error err -> extract @@ fun s -> Error err))
            (init proj args envp))
         (fun (r,{proj}) -> match r with
            | Ok _ -> M.return (Normal, proj)
@@ -216,5 +221,3 @@ module Make(M : Monad.S) = struct
   include (CM : Monad.S with type 'a t := 'a t
                          and module Syntax := Syntax)
 end
-
-
