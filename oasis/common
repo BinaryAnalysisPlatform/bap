@@ -11,7 +11,7 @@ Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args, compiled_setup_ml
 BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
-     -j 32
+     -j 2
      -use-ocamlfind
      -classic-display
      -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"

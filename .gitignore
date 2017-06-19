@@ -33,3 +33,4 @@ _oasis
 /plugins/ida/bap_ida_config.ml
 /plugins/objdump/objdump_config.ml
 /plugins/api/api_config.ml
+/plugins/primus_lisp/primus_lisp_config.ml
