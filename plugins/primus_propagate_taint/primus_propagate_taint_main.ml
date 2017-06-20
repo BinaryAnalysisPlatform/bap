@@ -218,16 +218,15 @@ module Main(Machine : Primus.Machine.S) = struct
   }
 
 
-  let def_computed d =
-    let propagate =
-      Machine.Local.update state ~f:(fun s ->
-          match s.taints with
-          | [value] -> propagate_var s (Term.tid d) (Def.lhs d) value
-          | [] -> s                (* for args *)
-          | _ -> invalid_arg "def: corrupted stack")  in
-    propagate >>= fun () ->
+  let introduce_taints d =
     introduce_ptr d >>= fun () ->
     introduce_reg d
+
+  let def_computed d =
+    Machine.Local.update state ~f:(fun s ->
+        match s.taints with
+        | [value] -> propagate_var s (Term.tid d) (Def.lhs d) value
+        | _ -> invalid_arg "def: corrupted stack")
 
   let jmp_computed t =
     Machine.Local.update state ~f:(fun s ->
@@ -261,6 +260,7 @@ module Main(Machine : Primus.Machine.S) = struct
   let init () = Machine.List.all_ignore Primus.Interpreter.[
       new_value >>> val_computed;
       leave_exp >>> exp_computed;
+      enter_def >>> introduce_taints;
       leave_def >>> def_computed;
       leave_jmp >>> jmp_computed;
       enter_pos >>> pos_entered;
