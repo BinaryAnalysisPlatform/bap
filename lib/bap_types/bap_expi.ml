@@ -53,6 +53,7 @@ module Make(State : Monad.State.S2) = struct
       | _ -> State.return None
     method private storage_of_value v = match value v with
       | Mem mem -> State.return (Some mem)
+      | Bot -> State.return (Some self#empty)
       | _ -> State.return None
 
     method lookup v =
