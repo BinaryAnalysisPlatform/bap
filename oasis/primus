@@ -2,7 +2,7 @@ Flag primus
   Description: Microexecution framework
   Default: false
 
-Library primus
+Library bap_primus
   Build$: flag(everything) || flag(primus)
   XMETADescription: microexecution framework
   Path: lib/bap_primus

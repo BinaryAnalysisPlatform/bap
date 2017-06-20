@@ -22,7 +22,7 @@ Library primus_promiscuous_plugin
   XMETADescription: enables the promiscuous mode of execution
   Modules: Primus_promiscuous_main
 
-Library greedy_scheduler
+Library primus_greedy_scheduler_plugin
   Path: plugins/primus_greedy
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_greedy
@@ -31,7 +31,7 @@ Library greedy_scheduler
   XMETADescription: implements the greedy scheduling strategy
   Modules: Primus_greedy_main
 
-Library round_robin_scheduler
+Library primus_round_robin_scheduler_plugin
   Path: plugins/primus_round_robin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_round_robin
@@ -40,7 +40,7 @@ Library round_robin_scheduler
   XMETADescription: implements the round-robin scheduling strategy
   Modules: Primus_round_robin_main
 
-Library exploring_scheduler
+Library primus_exploring_scheduler_plugin
   Path: plugins/primus_exploring
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_exploring
@@ -49,7 +49,7 @@ Library exploring_scheduler
   XMETADescription: implements the exploring scheduling strategy
   Modules: Primus_exploring_main
 
-Library wandering_scheduler
+Library primus_wandering_scheduler_plugin
   Path: plugins/primus_wandering
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_wandering
@@ -58,14 +58,14 @@ Library wandering_scheduler
   XMETADescription: implements the wandering scheduling strategy
   Modules: Primus_wandering_main
 
-Library debugger
-  Path: plugins/primus_debug
+Library primus_print_plugin
+  Path: plugins/primus_print
   Build$: flag(everything) || flag(primus_support)
-  FindlibName: bap-plugin-primus_debug
+  FindlibName: bap-plugin-primus_print
   CompiledObject: best
   BuildDepends: bap-primus
-  XMETADescription: enables Primus machine debugging
-  Modules: Primus_debug_main
+  XMETADescription: prints Primus states and observations
+  Modules: Primus_print_main
 
 Library primus_propagate_taint_plugin
   Path: plugins/primus_propagate_taint
