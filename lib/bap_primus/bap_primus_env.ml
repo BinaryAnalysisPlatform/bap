@@ -2,19 +2,27 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus_types
 open Format
+open Bap_primus_sexp
 
-module Context = Bap_primus_context
 module Observation = Bap_primus_observation
 module Generator = Bap_primus_generator
-module Error = Bap_primus_error
 
-
-type error += Undefined_var of var
+type exn += Undefined_var of var
 
 let undefined_variable,undefined =
   Observation.provide ~inspect:sexp_of_var "undefined-variable"
 
-let () = Error.add_printer (function
+let variable_access,variable_will_be_looked_up =
+  Observation.provide ~inspect:(fun v ->
+      Sexp.Atom (Var.name v)) "variable-access"
+
+let variable_read,variable_was_read =
+  Observation.provide ~inspect:sexp_of_binding "variable-read"
+
+let variable_written,variable_was_written =
+  Observation.provide ~inspect:sexp_of_binding "variable-written"
+
+let () = Exn.add_printer (function
     | Undefined_var v ->
       Some (sprintf "undefined variable `%s'" (Var.name v))
     | _ -> None)
@@ -79,47 +87,51 @@ let word = Word.of_int ~width:8
 
 
 module Make(Machine : Machine) = struct
-    open Machine.Syntax
-    type ('a,'e) m = ('a,'e) Machine.t
+  open Machine.Syntax
 
-    module Generator = Bap_primus_generator.Make(Machine)
+  module Generator = Bap_primus_generator.Make(Machine)
 
-    let add var policy =
-      Machine.Local.update state ~f:(fun s -> {
-        s with random = Map.add s.random ~key:var ~data:policy
-          })
+  let (!!) = Machine.Observation.make 
 
-    let set var x =
-      Machine.get () >>= fun ctxt ->
-      let ctxt,res = ctxt#create_word x in
-      Machine.put (ctxt#update var res)
+  let add var policy =
+    Machine.Local.update state ~f:(fun s -> {
+          s with random = Map.add s.random ~key:var ~data:policy
+        })
 
-    let gen_word gen width =
-      assert (width > 0);
-      let rec next x =
-        if Word.bitwidth x >= width
-        then Machine.return (Word.extract_exn ~hi:(width+1) x)
-        else Generator.next gen >>= fun y ->
-          next (Word.concat x (word y)) in
-      Generator.next gen >>| word >>= next
+  let set var x =
+    Machine.Local.update state ~f:(fun s -> {
+          s with values = Map.add s.values ~key:var ~data:x
+        }) >>= fun () ->
+    !!variable_was_written (var,x)
 
-    let get var =
-      Machine.get () >>= fun ctxt ->
-      match ctxt#lookup var with
-      | Some res -> Machine.return res
-      | None -> match Var.typ var with
-        | Type.Mem (_,_) ->
-          Machine.Observation.make undefined var >>= fun () ->
-          Machine.fail (Undefined_var var)
-        | Type.Imm width ->
-          Machine.Local.get state >>= fun t ->
-          match Map.find t.random var with
-          | None ->
-            Machine.Observation.make undefined var >>= fun () ->
-            Machine.fail (Undefined_var var)
-          | Some gen ->
-            gen_word gen width >>= fun w ->
-            let ctxt,res = ctxt#create_word w in
-            Machine.put (ctxt#update var res) >>= fun () ->
-            Machine.return res
+  let gen_word gen width =
+    assert (width > 0);
+    let rec next x =
+      if Word.bitwidth x >= width
+      then Machine.return (Word.extract_exn ~hi:(width+1) x)
+      else Generator.next gen >>= fun y ->
+        next (Word.concat x (word y)) in
+    Generator.next gen >>| word >>= next
+
+  let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>| fun s ->
+    Word.zero (Size.in_bits s)
+
+  let get var =
+    !!variable_will_be_looked_up var >>= fun () -> 
+    Machine.Local.get state >>= fun t ->
+    match Map.find t.values var with
+    | Some res ->
+      !!variable_was_read (var,res) >>= fun () ->
+      Machine.return res
+    | None -> match Var.typ var with
+      | Type.Mem (_,_) -> null
+      | Type.Imm width -> match Map.find t.random var with
+        | None ->
+          !!undefined var >>= fun () ->
+          Machine.raise (Undefined_var var)
+        | Some gen ->
+          gen_word gen width >>= fun w -> 
+          !!variable_was_read (var,w) >>| fun () ->
+          w
+
 end

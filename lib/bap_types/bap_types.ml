@@ -96,6 +96,11 @@ module Std = struct
     type result = Result.t
   end
 
+  module Eval = struct
+    include Bap_eval_types.Eval
+    module Make2 = Bap_eval.Make2
+    module Make = Bap_eval.Make
+  end
   module Expi = Bap_expi
   module Bili = Bap_bili
   module Biri = Bap_biri

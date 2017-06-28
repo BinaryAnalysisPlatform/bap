@@ -9,12 +9,12 @@ type name = [
   | `symbol of string
 ] [@@deriving sexp_of]
 
-type error += Unbound_name of name
+type exn += Unbound_name of name
+
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
+  val exec : unit Machine.t
 end
-
 
 type code = (module Code)
 
@@ -38,39 +38,17 @@ let string_of_name = function
   | `addr addr -> sprintf "at address %s" (Addr.string_of_value addr)
   | `tid tid -> sprintf "with tid %a" Tid.pps tid
 
-let () = Bap_primus_error.add_printer (function
+let () = Exn.add_printer (function
     | Unbound_name name ->
       Some (asprintf "unbound function %s" (string_of_name name))
     | _ -> None)
 
-let code_of_term sub : code =
-  (module functor (Machine : Machine) -> struct
-    let exec :
-      (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t =
-      fun self -> self#eval sub_t sub
-  end)
 
 let add_code code codes =
   let max_key = Option.(Map.max_elt codes >>| fst >>| Int.succ) in
   let key = Option.value ~default:1 max_key in
   key, Map.add codes ~key ~data:code
 
-let link_code t s =
-  let key,codes = add_code (code_of_term t) s.codes in
-  {
-    codes;
-    terms = Map.add s.terms ~key:(Term.tid t) ~data:key;
-    names = Map.add s.names ~key:(Sub.name t) ~data:key;
-    addrs = match Term.get_attr t address with
-      | None -> s.addrs
-      | Some addr -> Map.add s.addrs ~key:addr ~data:key
-  }
-
-let init_state program =
-  (object
-    inherit [t] Term.visitor
-    method! enter_sub = link_code
-  end)#run program empty
 
 let find k1 m1 m2 = match Map.find m1 k1 with
   | None -> None
@@ -96,15 +74,13 @@ let resolve_name s name = match name with
 let state = Bap_primus_machine.State.declare
     ~uuid:"38bf35bf-1091-4220-bf75-de79db9de4d2"
     ~name:"linker"
-    (fun ctxt -> init_state ctxt#program)
+    (fun _ -> empty)
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
-  type ('a,'e) m = ('a,'e) Machine.t
+  type 'a m = 'a Machine.t
 
-  module Biri = Biri.Make(Machine)
-
-  let linker_error s = Machine.fail (Unbound_name s)
+  let linker_error s = Machine.raise (Unbound_name s)
 
   let fail name =
     Machine.Local.get state >>= fun s ->
@@ -112,7 +88,7 @@ module Make(Machine : Machine) = struct
     | Some s -> linker_error (`symbol s)
     | None -> linker_error name
 
-  let link ?addr ?name ?tid code  =
+  let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
         let key,codes = add_code code s.codes in
         let update table value = match value with
@@ -123,14 +99,16 @@ module Make(Machine : Machine) = struct
         let addrs = update s.addrs addr in
         {codes; terms; names; addrs})
 
-  let exec name biri =
+  let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
     | Some (module Code) ->
       let module Code = Code(Machine) in
-      Code.exec (biri :> _ Biri.t)
+      Code.exec
 
   let is_linked name =
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
-
 end
+
+
+

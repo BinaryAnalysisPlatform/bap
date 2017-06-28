@@ -8,11 +8,11 @@ open Format
 type value = Primus.Generator.t
 
 type parameters = {
- argv  : string list;
- envp  : (string * string) list;
- entry : string option;
- memory : (addr * value) list;
- variables : (string * value) list;
+  argv  : string list;
+  envp  : (string * string) list;
+  entry : string option;
+  memory : (addr * value) list;
+  variables : (string * value) list;
 }
 
 
@@ -35,7 +35,10 @@ module Param = struct
       ~doc: "When specified, start the execution from $(docv)";;
 end
 
-module Machine = Primus.Machine.Make(Monad.Ident)
+module Machine = struct 
+  type 'a m = 'a
+  include Primus.Machine.Make(Monad.Ident) 
+end
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
@@ -58,10 +61,10 @@ let pp_backtrace ppf ctxt =
   fprintf ppf "@]@\n"
 
 let pp_binding ppf (v,r) =
-    fprintf ppf "  %a -> %s" Var.pp v @@ match Bil.Result.value r with
-    | Bil.Bot -> "undefined"
-    | Bil.Imm w -> Word.string_of_value w
-    | Bil.Mem m -> "<mem>"
+  fprintf ppf "  %a -> %s" Var.pp v @@ match Bil.Result.value r with
+  | Bil.Bot -> "undefined"
+  | Bil.Imm w -> Word.string_of_value w
+  | Bil.Mem m -> "<mem>"
 let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 
 let name_of_entry arch entry =
@@ -75,28 +78,16 @@ let name_of_entry arch entry =
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let init = new Primus.Context.t ~envp:!envp ~argv:!argv proj in
-  let interp = new Interpreter.t in
-  let entry_point = name_of_entry (Project.arch proj) !entry in
-  match Main.run (Linker.exec entry_point interp) init with
-  | (Ok (),ctxt) ->
-    info "evaluation finished after %d steps at term: %a"
-      (List.length ctxt#trace) Tid.pp ctxt#current;
-    debug "%a" pp_backtrace ctxt;
-    let result = Var.create "main_result" reg32_t in
-    let () = match ctxt#lookup result with
-      | None -> warning "result is unknown";
-      | Some r -> match Bil.Result.value r with
-        | Bil.Bot -> warning "result is undefined";
-        | Bil.Imm w -> info "result is %a" Word.pp w;
-        | Bil.Mem _ -> warning "result is unsound" in
-    debug "CPU State:@\n%a@\n" pp_bindings ctxt;
-    debug "%a" pp_backtrace ctxt;
-    ctxt#project;
-  | (Error err,ctxt) ->
-    error "program failed with %s\n" (Primus.Error.to_string err);
-    error "%a" pp_backtrace ctxt;
-    ctxt#project
+  name_of_entry (Project.arch proj) !entry |>
+  Linker.exec |>
+  Main.run ~envp:!envp ~args:!argv proj |> function
+  | (Primus.Normal,proj)  
+  | (Primus.Exn Primus.Interpreter.Halt,proj) ->
+    eprintf "Ok, we've terminated normally@\n";
+    proj
+  | (Primus.Exn exn,proj) -> 
+    error "program terminated by a signal: %s\n" (Primus.Exn.to_string exn);
+    proj
 
 let () =
   Config.when_ready (fun conf ->

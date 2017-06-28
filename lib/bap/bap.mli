@@ -1868,7 +1868,6 @@ module Std : sig
     (** Result of a computation.*)
     type result
 
-
     (** An interface to a memory storage.
 
         A storage is a mapping from addresses to bytes. For
@@ -2109,6 +2108,115 @@ module Std : sig
   type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
 
 
+  module Eval : sig
+    module T1(M : T1) : sig
+      type 'a m = 'a M.t
+
+      class type ['r] semantics = object
+        method eval_exp : exp -> 'r m
+        method eval_var : var -> 'r m
+        method eval_int : word -> 'r m
+        method eval_load : mem:exp -> addr:exp -> endian -> size -> 'r m
+        method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'r m
+        method eval_binop : binop -> exp -> exp -> 'r m
+        method eval_unop  : unop -> exp -> 'r m
+        method eval_cast  : cast -> int -> exp -> 'r m
+        method eval_let : var -> exp -> exp -> 'r m
+        method eval_ite : cond:exp -> yes:exp -> no:exp -> 'r m
+        method eval_concat : exp -> exp -> 'r m
+        method eval_extract : int -> int -> exp -> 'r m
+        method eval_unknown : string -> typ -> 'r m
+      end
+
+      class type virtual ['r,'s] domain = object
+        method private virtual undefined : 'r m
+        method private virtual value_of_word : word -> 'r m
+        method private virtual word_of_value : 'r -> word option m
+        method private virtual storage_of_value : 'r -> 's option m
+      end
+
+      class type virtual ['r,'s] eff = object
+        method virtual lookup : var -> 'r m
+        method virtual update : var -> 'r -> unit m
+        method virtual load   : 's -> addr -> 'r m
+        method virtual store  : 's -> addr -> word -> 'r m
+      end
+    end
+
+    module T2(M : T2) : sig
+      type ('a,'e) m = ('a,'e) M.t
+
+      class type ['a,'r] semantics = object
+        method eval_exp : exp -> ('r,'a) m
+        method eval_var : var -> ('r,'a) m
+        method eval_int : word -> ('r,'a) m
+        method eval_load : mem:exp -> addr:exp -> endian -> size -> ('r,'a) m
+        method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> ('r,'a) m
+        method eval_binop : binop -> exp -> exp -> ('r,'a) m
+        method eval_unop  : unop -> exp -> ('r,'a) m
+        method eval_cast  : cast -> int -> exp -> ('r,'a) m
+        method eval_let : var -> exp -> exp -> ('r,'a) m
+        method eval_ite : cond:exp -> yes:exp -> no:exp -> ('r,'a) m
+        method eval_concat : exp -> exp -> ('r,'a) m
+        method eval_extract : int -> int -> exp -> ('r,'a) m
+        method eval_unknown : string -> typ -> ('r,'a) m
+      end
+
+      class type virtual ['a,'r,'s] domain = object
+        method private virtual undefined : ('r,'a) m
+        method private virtual value_of_word : word -> ('r,'a) m
+        method private virtual word_of_value : 'r -> (word option,'a) m
+        method private virtual storage_of_value : 'r -> ('s option,'a) m
+      end
+
+      class type virtual ['a,'r,'s] eff = object
+        method virtual lookup : var -> ('r,'a) m
+        method virtual update : var -> 'r -> (unit,'a) m
+        method virtual load   : 's -> addr -> ('r,'a) m
+        method virtual store  : 's -> addr -> word -> ('r,'a) m
+      end
+    end
+
+    module type S = sig
+      type 'a m
+      module M : T1 with type 'a t = 'a m
+
+      class type ['r] semantics = ['r] T1(M).semantics
+      class type virtual ['r,'s] domain  = ['r,'s] T1(M).domain
+      class type virtual ['r,'s] eff = ['r,'s] T1(M).eff
+
+      class virtual ['r,'s] t : object
+        inherit ['r,'s] domain
+        inherit ['r,'s] eff
+        inherit ['r] semantics
+        method type_error : type_error -> 'r m
+        method division_by_zero : unit -> 'r m
+      end
+    end
+
+    module type S2 = sig
+      type ('a,'e) m
+      module M : T2 with type ('a,'e) t = ('a,'e) m
+
+      class type ['a,'r] semantics = ['a,'r] T2(M).semantics
+      class type virtual ['a,'r,'s] domain  = ['a,'r,'s] T2(M).domain
+      class type virtual ['a,'r,'s] eff = ['a,'r,'s] T2(M).eff
+
+      class virtual ['a,'r,'s] t : object
+        inherit ['a,'r,'s] domain
+        inherit ['a,'r,'s] eff
+        inherit ['a,'r] semantics
+        method type_error : type_error -> ('r,'a) m
+        method division_by_zero : unit -> ('r,'a) m
+      end
+    end
+
+    module Make2(M : Monad.S2) : S2 with type ('a,'e) m := ('a,'e) M.t
+                                     and module M := M
+    module Make(M : Monad.S) : S with type 'a m := 'a M.t
+                                  and module M := M
+  end
+
   (** Expression Language Interpreter.*)
   module Expi : sig
     open Bil.Result
@@ -2153,6 +2261,12 @@ module Std : sig
       type ('a,'e) state
       type 'a u = (unit,'a) state
       type 'a r = (Bil.result,'a) state
+
+      module M : T2 with type ('a,'e) t = ('a,'e) state
+
+      module Eval : Eval.S2 with type ('a,'e) m := ('a,'e) state
+                             and module M := M
+
 
       (** Expression interpreter.
 
@@ -2266,7 +2380,7 @@ module Std : sig
       *)
       class ['a] t : object
         constraint 'a = #context
-
+        inherit ['a, Bil.result] Eval.semantics
         (** {2 Interaction with environment} *)
 
 
@@ -2300,23 +2414,6 @@ module Std : sig
 
         (** called when context doesn't know the variable  *)
         method undefined_var  : var  -> 'a r
-
-
-        (** {2 Evaluation methods}  *)
-
-        method eval_exp : exp -> 'a r
-        method eval_var : var -> 'a r
-        method eval_int : word -> 'a r
-        method eval_load : mem:exp -> addr:exp -> endian -> size -> 'a r
-        method eval_store : mem:exp -> addr:exp -> exp -> endian -> size -> 'a r
-        method eval_binop : binop -> exp -> exp -> 'a r
-        method eval_unop  : unop -> exp -> 'a r
-        method eval_cast  : cast -> int -> exp -> 'a r
-        method eval_let : var -> exp -> exp -> 'a r
-        method eval_ite : cond:exp -> yes:exp -> no:exp -> 'a r
-        method eval_concat : exp -> exp -> 'a r
-        method eval_extract : int -> int -> exp -> 'a r
-        method eval_unknown : string -> typ -> 'a r
       end
     end
 
@@ -3395,15 +3492,36 @@ module Std : sig
         terms may contain calls and jumps).
         Biri also tracks for current position inside block, the block
         and preceding block.
-    *)
 
+        Note, that even if some properties do not provide setters, they
+        can still change during the evaluation, as other
+        implementations may override them and provide different behavior.*)
     class context : ?main : sub term -> program term ->  object('s)
         inherit Expi.context
+
+        (** current model of a program.  *)
         method program : program term
+
+        (** the entry point of evaluation  *)
         method main : sub term option
+
+        (** list of term that were already executed (may be long)  *)
         method trace : tid list
+
+        (** Should be called when a new term is entered. This
+            implementation will update the trace list with the passed
+            argument. *)
         method enter_term : tid -> 's
+
+        (** [set_next tid] set the identifier of the next term.  *)
         method set_next : tid option -> 's
+
+
+        (** The [next] term identifier is the identifier of a term,
+            that should be executed next. If [next] is [None] then,
+            the interpretation will stop. The identifier must belong
+            to a term, that is in the [program] and is either an
+            identifier of a block or a subroutine. *)
         method next : tid option
       end
 
@@ -3425,6 +3543,11 @@ module Std : sig
         method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
 
+        (** [eval cls t] evaluates a term [t] of the [cls] class. The
+            method implementation will call the [enter_term] method,
+            and then will dispatch to the [eval_XXX] method, where
+            [XXX] is a name of a term corresponding to [cls]. Finally,
+            the [leave_term] method is called.  *)
         method eval : 't 'p . ('p,'t) cls -> 't term -> 'a u
 
         (** called after all side effects of the term has occurred  *)
@@ -3488,7 +3611,9 @@ module Std : sig
       end
     end
 
-    module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
+    module Make(M : Monad.State.S2) :
+      S with type ('a,'e) state = ('a,'e) M.t
+
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end
 
@@ -5697,11 +5822,11 @@ module Std : sig
         parent [p] *)
     val last  : ('a,'b) cls -> 'a t -> 'b t option
 
-    (** [next t p id] returns a term that preceeds a term with a given
+    (** [next t p id] returns a term that is after a term with a given
         [id], if such exists.  *)
     val next : ('a,'b) cls -> 'a t -> tid -> 'b t option
 
-    (** [next t p id] returns a term that is after a term with a given
+    (** [prev t p id] returns a term that preceeds a term with a given
         [id], if such exists.  *)
     val prev : ('a,'b) cls -> 'a t -> tid -> 'b t option
 

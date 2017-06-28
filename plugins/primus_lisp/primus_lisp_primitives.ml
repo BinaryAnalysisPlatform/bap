@@ -4,6 +4,7 @@ open Bap_primus.Std
 
 module Primitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
+  module Eval = Primus.Interpreter.Make(Machine)
   module Primitive = Primus.Lisp.Primitive
   module Lisp = Primus.Lisp.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
@@ -12,10 +13,11 @@ module Primitives(Machine : Primus.Machine.S) = struct
   let is_zero args = all Word.is_zero args
   let is_positive args = all Word.is_positive args
   let is_negative args = all Word.is_negative args
-  let width_of_ctxt ctxt =
-    Project.arch ctxt#project |> Arch.addr_size |> Size.in_bits
+  let addr_width =
+    Machine.arch >>| Arch.addr_size >>| Size.in_bits
+
   let word_width args =
-    Machine.get () >>| width_of_ctxt >>| fun width ->
+    addr_width >>| fun width -> 
     match args with
     | [] -> Word.of_int ~width width
     | x :: xs -> Word.of_int ~width (Word.bitwidth x)
@@ -23,11 +25,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
   let negone = Word.ones 8
   let zero = Word.zero 8
 
-  let exit = function
-    | [rval] ->
-      Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
-      Machine.return rval
-    | _ -> Lisp.failf "exit requires only one argument" ()
+  let exit _ = 
+    Eval.halt >>|
+    Nothing.unreachable_code >>= fun () ->
+    Machine.return Word.b0
 
   let allocate = function
     | [addr; size] ->
@@ -37,8 +38,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       else Memory.allocate addr (Or_error.ok_exn n) >>| fun () -> zero
     | _ -> Lisp.failf "allocate requires two arguments" ()
 
-  let machine_int x =
-    Machine.get () >>| width_of_ctxt >>| fun width -> Word.of_int ~width x
+  let machine_int x = addr_width >>| fun width -> Word.of_int ~width x
 
   let output_char = function
     | [] | [_] -> machine_int 0
@@ -62,15 +62,15 @@ module Primitives(Machine : Primus.Machine.S) = struct
   let primitive name code = Primitive.create name code
 
   let defs () = [
-      primitive "is-zero" is_zero;
-      primitive "is-positive" is_positive;
-      primitive "is-negative" is_negative;
-      primitive "word-width"  word_width;
-      primitive "output-char" output_char;
-      primitive "exit-with" exit;
-      primitive "memory-read" memory_read;
-      primitive "memory-write" memory_write;
-      primitive "memory-allocate" allocate;
+    primitive "is-zero" is_zero;
+    primitive "is-positive" is_positive;
+    primitive "is-negative" is_negative;
+    primitive "word-width"  word_width;
+    primitive "output-char" output_char;
+    primitive "exit-with" exit;
+    primitive "memory-read" memory_read;
+    primitive "memory-write" memory_write;
+    primitive "memory-allocate" allocate;
   ]
 end
 

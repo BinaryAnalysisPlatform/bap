@@ -9,12 +9,7 @@ let sexp_of_var v = Sexp.Atom (Var.name v)
 
 let string_of_byte w = sprintf "%02x" @@ ok_exn (Word.to_int w)
 let string_of_word w = Word.string_of_value w
-let string_of_res r = match Bil.Result.value r with
-  | Bil.Bot -> "bot"
-  | Bil.Imm w -> string_of_word w
-  | Bil.Mem _ -> "<mem>"
 let sexp_of_word w = atom (string_of_word w)
 let sexp_of_byte w = atom (string_of_byte w)
-let sexp_of_res r = Sexp.Atom (string_of_res r)
-let sexp_of_binding (v,r) = [%sexp ((v : var), (r : res))]
+let sexp_of_binding (v,r) = [%sexp ((v : var), (r : word))]
 let sexp_of_move (a,w) = [%sexp ((a : word), (w : word))]

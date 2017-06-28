@@ -729,7 +729,10 @@ module Std : sig
         type 'a contexts
 
         type id
-        module Id : Identifiable with type t = id
+        module Id : sig
+          include Identifiable with type t = id
+          val pp : Format.formatter -> id -> unit
+        end
 
         module type S = sig
           include Trans.S
