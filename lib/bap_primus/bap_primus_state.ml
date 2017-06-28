@@ -1,17 +1,18 @@
 open Core_kernel.Std
+open Bap.Std
 
 module Dict = Univ_map
 module Key = Dict.Key
 type void
 type uuid = (void,void,void) format
 
-type ('a,'c) t = {
+type 'a t = {
   key : 'a Key.t;
-  init : 'c -> 'a;
+  init : project -> 'a;
   uuid : string;
 }
 
-type ('a,'c) state = ('a,'c) t
+type 'a state = 'a t
 
 let string_of_uuid uuid =
   let uuid = string_of_format uuid in

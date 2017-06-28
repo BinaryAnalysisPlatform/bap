@@ -17,12 +17,10 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   module Env = Primus.Env.Make(Machine)
   module Mem = Primus.Memory.Make(Machine)
 
-  let proj () = Machine.get () >>| fun ctxt -> ctxt#project
-  let arch () = proj () >>| Project.arch
-  let target () = arch () >>| target_of_arch
+  let target = Machine.arch >>| target_of_arch
 
   let make_addr addr =
-    arch () >>| Arch.addr_size >>| fun size ->
+    Machine.arch >>| Arch.addr_size >>| fun size ->
     Addr.of_int64 ~width:(Size.in_bits size) addr
 
   let set_word name x =
@@ -37,18 +35,18 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
      where kernel should put argc, argv, and other infor to a
      user process *)
   let setup_stack () =
-    target () >>= fun (module Target) ->
+    target >>= fun (module Target) ->
     make_addr stack_base >>= fun bottom ->
     let top = Addr.(bottom -- stack_size) in
     Env.set Target.CPU.sp bottom >>= fun () ->
     Mem.allocate
       ~readonly:false
       ~executable:false
-     top stack_size
+      top stack_size
 
   let setup_registers () =
     let zero = Generator.static 0 in
-    target () >>= fun (module Target) ->
+    target >>= fun (module Target) ->
     Set.to_sequence Target.CPU.gpr |>
     Machine.Seq.iter ~f:(fun reg -> Env.add reg zero)
 
@@ -69,7 +67,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     | Some spec -> Ogre.eval segmentations spec
 
   let load_segments () =
-    proj () >>= fun proj ->
+    Machine.project >>= fun proj ->
     make_addr 0L >>= fun null ->
     match get_segmentations proj with
     | Error err -> assert false
@@ -85,7 +83,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
             Addr.max endp Addr.(addr ++ size))
 
   let map_segments () =
-    proj () >>= fun proj ->
+    Machine.project >>= fun proj ->
     make_addr 0L >>= fun null ->
     Memmap.to_sequence (Project.memory proj) |>
     Machine.Seq.fold ~init:null ~f:(fun endp (mem,tag) ->
@@ -135,13 +133,14 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
         save_word endian addr ptr)
 
   let setup_main_frame () =
-    target () >>= fun (module Target) ->
-    arch () >>= fun arch ->
-    Machine.get () >>= fun ctxt ->
+    target >>= fun (module Target) ->
+    Machine.arch >>= fun arch ->
+    Machine.args >>= fun argv ->
+    Machine.envp >>= fun envp -> 
     make_addr stack_base >>= fun sp ->
     let endian = Arch.endian arch in
     let addr_size = Arch.addr_size arch in
-    let argc = Array.length ctxt#argv |>
+    let argc = Array.length argv |>
                Word.of_int ~width:(Size.in_bits addr_size) in
     let bytes_in_addr = Size.in_bytes addr_size in
     let null = String.make bytes_in_addr '\x00' in
@@ -149,20 +148,20 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     let table_size args = bytes_in_addr * (Array.length args + 1) in
     let total_size =
       bytes_in_addr +    (* argc *)
-      table_size ctxt#argv + table_size ctxt#envp +
-      frame_size ctxt#argv + table_size ctxt#envp in
+      table_size argv + table_size envp +
+      frame_size argv + table_size envp in
     let argv_frame_ptr =
       bytes_in_addr +
-      table_size  ctxt#argv + table_size ctxt#envp |>
+      table_size  argv + table_size envp |>
       Addr.nsucc sp in
     let argv_table_ptr = Addr.nsucc sp bytes_in_addr in
     Mem.allocate
       ~readonly:false
       ~executable:false
       sp total_size >>= fun () ->
-    save_args ctxt#argv argv_frame_ptr >>=
+    save_args argv argv_frame_ptr >>=
     fun (envp_frame_ptr, argv_table) ->
-    save_args ctxt#envp envp_frame_ptr >>=
+    save_args envp envp_frame_ptr >>=
     fun (_end_of_stack, envp_table) ->
     save_table endian argv_table argv_table_ptr >>=
     fun end_of_argv_table ->

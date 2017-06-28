@@ -43,6 +43,8 @@ Library types
                    Bap_bitvector,
                    Bap_common,
                    Bap_context,
+                   Bap_eval,
+                   Bap_eval_types,
                    Bap_exp,
                    Bap_expi,
                    Bap_expi_types,

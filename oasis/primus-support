@@ -1,0 +1,77 @@
+Flag primus_support
+  Description: build supporting components for Primus
+  Default: false
+
+
+Library primus_loader_plugin
+  Path: plugins/primus_loader
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_loader
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: generic program loader for Primus
+  Modules: Primus_loader_main
+  InternalModules: Primus_loader_basic
+
+Library primus_promiscuous_plugin
+  Path: plugins/primus_promiscuous
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_promiscuous
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: enables the promiscuous mode of execution
+  Modules: Primus_promiscuous_main
+
+Library primus_greedy_scheduler_plugin
+  Path: plugins/primus_greedy
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_greedy
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the greedy scheduling strategy
+  Modules: Primus_greedy_main
+
+Library primus_round_robin_scheduler_plugin
+  Path: plugins/primus_round_robin
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_round_robin
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the round-robin scheduling strategy
+  Modules: Primus_round_robin_main
+
+Library primus_exploring_scheduler_plugin
+  Path: plugins/primus_exploring
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_exploring
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the exploring scheduling strategy
+  Modules: Primus_exploring_main
+
+Library primus_wandering_scheduler_plugin
+  Path: plugins/primus_wandering
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_wandering
+  CompiledObject: best
+  BuildDepends: bap, bap-primus, core_kernel
+  XMETADescription: implements the wandering scheduling strategy
+  Modules: Primus_wandering_main
+
+Library primus_print_plugin
+  Path: plugins/primus_print
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_print
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: prints Primus states and observations
+  Modules: Primus_print_main
+
+Library primus_propagate_taint_plugin
+  Path: plugins/primus_propagate_taint
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_propagate_taint
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: a taint propagation engine
+  Modules: Primus_propagate_taint_main
