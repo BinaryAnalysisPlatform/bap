@@ -9,3 +9,4 @@ Library warn_unused_plugin
   BuildDepends: bap
   InternalModules: Warn_unused_main
   XMETADescription: warn about unused results of certain functions
+  XMETAExtraLines:  tags="pass"

@@ -258,7 +258,7 @@ let start options =
 
 let _main : unit =
   Log.start ();
-  let argv = Bap_plugin_loader.run Sys.argv in
+  let argv = Bap_plugin_loader.run ["bap-mc-frontend"] Sys.argv in
   try match Or_error.(Cmdline.parse argv >>= start) with
     | Ok () -> exit 0
     | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)

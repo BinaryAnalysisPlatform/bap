@@ -9,7 +9,7 @@ Library beagle_plugin
   BuildDepends: bap, bap-microx, bap-beagle-prey, bap-strings
   InternalModules: Beagle_main
   XMETADescription: microx powered obfuscated string solver
-
+  XMETAExtraLines:  tags="pass"
 
 Library beagle_prey
   Build$: flag(everything) || flag(beagle)

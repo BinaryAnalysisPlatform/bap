@@ -15,3 +15,4 @@ Library phoenix_plugin
                     Phoenix_printing,
                     Phoenix_root
   XMETADescription: output project information in a phoenix format
+  XMETAExtraLines:  tags="pass"

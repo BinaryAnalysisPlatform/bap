@@ -26,13 +26,14 @@ Library piqi_printers_plugin
   BuildDepends: bap-piqi
   InternalModules: Piqi_printers_main
   XMETADescription: provides piqi serialization for main data types (BIL, IR)
+  XMETAExtraLines:  tags="pass"
 
 Executable run_piqi_tests
-  Path:		  lib/bap_piqi/test
-  Build$:	  flag(tests) && (flag(everything) || flag(piqi))
+  Path:       lib/bap_piqi/test
+  Build$:     flag(tests) && (flag(everything) || flag(piqi))
   CompiledObject: best
-  BuildDepends:	  bap, oUnit, bap-piqi
-  Install:	  false
+  BuildDepends:   bap, oUnit, bap-piqi
+  Install:    false
   MainIs: run_piqi_tests.ml
 
 Test piqi_tests

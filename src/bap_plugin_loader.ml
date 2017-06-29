@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap_plugins.Std
 open Bap_future.Std
 open Bap.Std
+open Bap_bundle.Std
 open Bap_cmdline_terms
 open Cmdliner
 open Format
@@ -40,7 +41,7 @@ let print_plugins_and_exit excluded plugins =
   List.iter plugins ~f:(fun p ->
       let status = if List.mem excluded (Plugin.name p)
         then "[-]" else "[+]" in
-      printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p));
+      printf "  %s %-26s %s@." status (Plugin.name p) (Plugin.desc p));
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
@@ -86,26 +87,29 @@ let open_plugin ~verbose name =
     by a user with `-l` option. *)
 let load_plugin p = ok_exn (Plugin.load p)
 
-
-let autoload_plugins ~library ~verbose ~exclude =
-  Plugins.run ~library ~exclude ()
+let autoload_plugins ~env ~library ~verbose ~exclude =
+  Plugins.run ~env ~library ~exclude ()
     ~don't_setup_handlers:true
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
 
-let run_and_get_passes argv =
+let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
   let plugins = get_opt argv load ~default:[] in
   let exclude = get_opt argv disable_plugin ~default:[] in
   let exclude = exclude @ excluded argv in
-  let list = get_opt argv list_plugins ~default:false in
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
-  let known_plugins = Plugins.list ~library () @ plugins in
-  if list then print_plugins_and_exit exclude known_plugins;
+  let known_plugins = Plugins.list ~env ~library () @ plugins in
+  let list = get_opt argv list_plugins ~default:None in
+  let () = match list with
+    | None -> ()
+    | Some provides ->
+      let list = Plugins.list ~env ~provides ~library () in
+      print_plugins_and_exit exclude (list @ plugins) in
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
-  if not noautoload then autoload_plugins ~library ~verbose ~exclude;
+  if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;
   let known_passes = Project.passes () |>
                      List.map ~f:Project.Pass.name in
   let known_plugins = List.map known_plugins ~f:Plugin.name in
@@ -116,4 +120,4 @@ let run_and_get_passes argv =
   filter_options ~known_plugins ~known_passes ~argv:Sys.argv,
   Array.(to_list @@ filter_map argv ~f:to_pass)
 
-let run argv = fst (run_and_get_passes argv)
+let run env argv = fst (run_and_get_passes env argv)

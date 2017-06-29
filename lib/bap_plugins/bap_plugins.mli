@@ -85,12 +85,13 @@ module Std : sig
       | `Errored of string * Error.t (** failed to load a plugin    *)
     ] [@@deriving sexp_of]
 
-    (** [list ?library ()] scans a list of directories, provided by a
+    (** [list ?env ~provides:features ?library ()] scans a list of directories, provided by a
         [library] parameter, and, finally, [Config.libdir] for files with
-        a [plugin] extension.*)
-    val list : ?library:string list -> unit -> plugin list
+        a [plugin] extension. Returns all plugins that provide a
+        superset of [features] and has constrains that are subset of [env]. *)
+    val list : ?env:string list -> ?provides:string list -> ?library:string list -> unit -> plugin list
 
-    (** [run ?library ?exclude] load and execute all plugins that can
+    (** [run ?env ?provides ?library ?exclude] load and execute all plugins that can
         be found in the [library] paths, and are not in the [exclude]
         list. The default event handler will abort the program if
         there is any [Errored] event occurs, a message will be printed
@@ -98,17 +99,21 @@ module Std : sig
         chosen, then events are not treated, so that a host program may
         setup a more fine granular error handling. *)
     val run :
+      ?env:string list ->
+      ?provides:string list ->
       ?don't_setup_handlers:bool ->
       ?library:string list ->
       ?exclude:string list -> unit -> unit
 
-    (** [load ?library ?exclude] is like [run], but will not setup
+    (** [load ?env ?provides ?library ?exclude] is like [run], but will not setup
         handlers, and will return a result of loading. Each element of
         the list is either an [Ok plugin] if a [plugin] was
         successfully loaded, or [Error (name,error)] if a plugin with
         the given [name] failed with [error].
     *)
     val load :
+      ?env:string list ->
+      ?provides:string list ->
       ?library:string list ->
       ?exclude:string list -> unit ->
       (plugin, string * Error.t) Result.t list

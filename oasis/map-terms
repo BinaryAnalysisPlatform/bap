@@ -17,3 +17,4 @@ Library map_terms_plugin
   BuildDepends: bap, bap-bml
   InternalModules: Map_terms_main
   XMETADescription: map terms using BML DSL
+  XMETAExtraLines:  tags="pass"

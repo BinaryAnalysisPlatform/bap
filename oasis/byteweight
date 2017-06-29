@@ -18,3 +18,4 @@ Library byteweight_plugin
   BuildDepends:     bap, bap-byteweight
   InternalModules:  Byteweight_main
   XMETADescription: find function starts using Byteweight algorithm
+  XMETAExtraLines:  tags="pass"

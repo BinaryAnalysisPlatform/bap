@@ -71,6 +71,8 @@ module Plugin = struct
   let manifest p = Bundle.manifest p.bundle
   let name p = manifest p |> Manifest.name
   let desc p = manifest p |> Manifest.desc
+  let tags p = manifest p |> Manifest.tags
+  let cons p = manifest p |> Manifest.cons
 
   let find_library_exn name =
     let dir = Findlib.package_directory name in
@@ -223,26 +225,40 @@ module Plugins = struct
               with exn -> Some (Error (file,Error.of_exn exn))
             else None))
 
-  let list ?library () =
+  let is_subset requested existed =
+    List.is_empty requested ||
+    List.for_all ~f:(List.mem existed) requested
+
+  let is_selected ~provides ~env p =
+    is_subset provides (Plugin.tags p) &&
+    is_subset (Plugin.cons p) env
+
+  let is_not_selected ~provides ~env p = not (is_selected ~provides ~env p)
+
+  let select ~provides ~env plugins =
+    List.filter ~f:(is_selected ~provides ~env) plugins
+
+  let list ?(env=[]) ?(provides=[]) ?library () =
     collect ?library () |> List.filter_map ~f:(function
         | Ok p -> Some p
-        | Error _ -> None)
+        | Error _ -> None) |> select ~provides ~env
 
-  let load ?library ?(exclude=[]) () =
+  let load ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
     collect ?library () |> List.filter_map ~f:(function
         | Error err -> Some (Error err)
         | Ok p when List.mem exclude (Plugin.name p) -> None
+        | Ok p when is_not_selected ~provides ~env p -> None
         | Ok p -> match Plugin.load p with
           | Ok () -> Some (Ok p)
           | Error err -> Some (Error (Plugin.path p, err)))
 
   let loaded,finished = Future.create ()
 
-  let load ?library ?exclude () =
+  let load ?env ?provides ?library ?exclude () =
     if Future.is_decided loaded
     then []
     else begin
-      let r = load ?library ?exclude () in
+      let r = load ?env ?provides ?library ?exclude () in
       Promise.fulfill finished ();
       r
     end
@@ -269,10 +285,10 @@ module Plugins = struct
     Future.upon loaded (fun () -> events_backtrace := [])
 
 
-  let run ?(don't_setup_handlers=false) ?library ?exclude () =
+  let run ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?library ?exclude () |> ignore
+    load ?env ?provides ?library ?exclude () |> ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]
