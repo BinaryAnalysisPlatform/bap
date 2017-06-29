@@ -1,2 +1,2 @@
 let targets = []
-let cxxfilt = "cxxfilt"
+let cxxfilt = "c++filt"

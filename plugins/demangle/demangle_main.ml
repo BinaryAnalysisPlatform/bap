@@ -12,11 +12,9 @@ let apply demangler proj =
       Sub.with_name sub (Demangler.run demangler (Sub.name sub))) |>
   Project.with_program proj
 
-let main = function
-  | None -> ()
-  | Some demangler ->
-    Project.register_pass ~autorun:true (apply demangler)
-
+let find_demangler name =
+  Demanglers.available () |>
+  List.find ~f:(fun d -> Demangler.name d = name)
 
 let () =
   let () = Config.manpage [
@@ -25,12 +23,18 @@ let () =
       `S "SEE ALSO";
       `P "$(b,bap-plugin-cxxfilt)(1)"
     ] in
-  let demangler : demangler option Config.param =
-    let demanglers =
-      Demanglers.available () |>
-      List.map ~f:(fun d -> Demangler.name d, d) in
-    let doc = sprintf "Demangle all function names using $(docv),
-      that should be %s" @@ Config.doc_enum demanglers in
-    Config.(param (some (enum demanglers)) "with" ~docv:"DEMANGLER" ~doc) in
+  let demangler : string Config.param =
+    let doc = sprintf "Demangle all function names using $(docv)" in
+    Config.(param string) "with" ~docv:"DEMANGLER" ~doc in
   Config.when_ready (fun {Config.get=(!)} ->
-      Future.upon Plugins.loaded (fun () -> main !demangler))
+      Future.upon Plugins.loaded (fun () ->
+          match find_demangler !demangler with
+          | Some d -> Project.register_pass ~autorun:true (apply d)
+          | None ->
+            let names =
+              Demanglers.available () |>
+              List.map ~f:Demangler.name |>
+              String.concat ~sep:", " in
+            eprintf "Didn't find demangler %s, should be one of: %s\n"
+              !demangler names;
+            exit 1))
