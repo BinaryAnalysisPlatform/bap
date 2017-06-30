@@ -35,6 +35,5 @@ let () =
               Demanglers.available () |>
               List.map ~f:Demangler.name |>
               String.concat ~sep:", " in
-            eprintf "Didn't find demangler %s, should be one of: %s\n"
-              !demangler names;
-            exit 1))
+            invalid_argf "Didn't find demangler %s, should be one of: %s\n"
+              !demangler names ()))

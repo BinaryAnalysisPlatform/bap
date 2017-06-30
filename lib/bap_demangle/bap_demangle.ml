@@ -35,9 +35,9 @@ let demangle_internal str =
   | s  -> s
 
 let demangle_internal name =
-  let open Option in
-  some_if (maybe_mangled name) name >>= fun name ->
-  try_with (fun () -> demangle_internal name)
+  if maybe_mangled name then
+    Option.try_with (fun () -> demangle_internal name)
+  else None
 
 let run_internal name =
   Option.value_map ~default:name ~f:ident (demangle_internal name)
