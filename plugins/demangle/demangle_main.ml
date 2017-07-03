@@ -23,17 +23,18 @@ let () =
       `S "SEE ALSO";
       `P "$(b,bap-plugin-cxxfilt)(1)"
     ] in
-  let demangler : string Config.param =
+  let demangler : string option Config.param =
     let doc = sprintf "Demangle all function names using $(docv)" in
-    Config.(param string) "with" ~docv:"DEMANGLER" ~doc in
+    Config.(param (some string)) "with" ~docv:"DEMANGLER" ~doc in
   Config.when_ready (fun {Config.get=(!)} ->
       Future.upon Plugins.loaded (fun () ->
-          match find_demangler !demangler with
-          | Some d -> Project.register_pass ~autorun:true (apply d)
-          | None ->
-            let names =
-              Demanglers.available () |>
-              List.map ~f:Demangler.name |>
-              String.concat ~sep:", " in
-            invalid_argf "Didn't find demangler %s, should be one of: %s\n"
-              !demangler names ()))
+          Option.iter !demangler (fun demangler ->
+              match find_demangler demangler with
+              | Some d -> Project.register_pass ~autorun:true (apply d)
+              | None ->
+                let names =
+                  Demanglers.available () |>
+                  List.map ~f:Demangler.name |>
+                  String.concat ~sep:", " in
+                invalid_argf "Didn't find demangler %s, should be one of: %s\n"
+                  demangler names ())))
