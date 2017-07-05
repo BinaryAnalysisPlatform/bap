@@ -107,7 +107,7 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   module Generate = Generator.Make(Machine)
-  let (!!) = Machine.Observation.make 
+  let (!!) = Machine.Observation.make
 
   let update state f =
     Machine.Local.get state >>= fun s ->
@@ -115,7 +115,7 @@ module Make(Machine : Machine) = struct
 
   let segfault addr =
     !!segfault addr >>= fun () ->
-    Machine.current () >>= fun id -> 
+    Machine.current () >>= fun id ->
     Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
@@ -123,7 +123,7 @@ module Make(Machine : Machine) = struct
     | Some layer -> match Map.find values addr with
       | Some v -> !!address_was_read (addr,v) >>| fun () -> v
       | None -> match layer.mem with
-        | Dynamic {value} -> 
+        | Dynamic {value} ->
           Generate.next value >>| Word.of_int ~width:8 >>= fun v ->
           !!address_was_read (addr,v) >>| fun () -> v
         | Static mem -> match Memory.get ~addr mem with
@@ -166,4 +166,12 @@ module Make(Machine : Machine) = struct
     write addr value >>=
     Machine.Local.put state >>= fun () ->
     !!address_was_written (addr,value)
+
+  let is_mapped addr =
+    Machine.Local.get state >>| is_mapped addr
+
+  let is_writable addr =
+    Machine.Local.get state >>| fun {layers} -> find_layer addr layers |>
+    function Some {perms={readonly}} -> not readonly
+           | None -> false
 end

@@ -17,17 +17,17 @@ type provider = {
 
 let providers : provider String.Table.t = String.Table.create ()
 
-let provider name = 
+let provider name =
   let data,newdata = Stream.create () in
   let triggers,newtrigger = Stream.create () in
   {name; newdata; data; triggers; newtrigger; observers=0}
 
-let update_provider provider ~f = 
+let update_provider provider ~f =
   Hashtbl.update providers provider ~f:(function
       | None -> failwith "bug: unregistered provider"
       | Some p -> f p)
 
-let register_observer = 
+let register_observer =
   update_provider ~f:(fun p -> {p with observers = p.observers + 1})
 
 let provide ?(inspect=sexp_of_opaque) name =
@@ -55,9 +55,9 @@ let add_observer observers key obs =
       | None -> Observers [obs]
       | Some (Observers observers) -> Observers (obs::observers))
 
-let notify_provider key x = 
+let notify_provider key x =
   let p = Hashtbl.find_exn providers (name key) in
-  if Stream.has_subscribers p.data 
+  if Stream.has_subscribers p.data
   then Signal.send p.newdata (inspect key x);
   Signal.send p.newtrigger ()
 
@@ -65,14 +65,13 @@ let notify os key x =
   notify_provider key x;
   match Map.find os key with
   | None -> Seq.empty
-  | Some (Observers os) ->
-    Seq.(map ~f:(fun ob -> ob x) @@ of_list os) 
+  | Some (Observers os) -> Seq.(map ~f:(fun ob -> ob x) @@ of_list os)
 
 let empty = Map.empty
 
 let list_providers () = Hashtbl.data providers
 
-module Provider = struct 
+module Provider = struct
   type t = provider
   let name t = t.name
   let data t = t.data

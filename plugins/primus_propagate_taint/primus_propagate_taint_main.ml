@@ -35,6 +35,31 @@ let state = Primus.Machine.State.declare
        })
 
 
+let reg_taint_introduced,introduce_reg_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "introduce-reg-taint"
+
+let reg_taint_propagated,propagate_reg_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "propagate-reg-taint"
+
+let reg_taint_killed,kill_reg_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "kill-reg-taint"
+
+let ptr_taint_introduced,introduce_ptr_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "introduce-ptr-taint"
+
+let ptr_taint_propagated,propagate_ptr_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "propagate-ptr-taint"
+
+let ptr_taint_killed,kill_ptr_taint =
+  Primus.Observation.provide
+    ~inspect:sexp_of_tid "kill-ptr-taint"
+
+
 let pp_taint_value ppf {ptr;imm;value} =
   fprintf ppf "{%s; imm=%a; ptr=%a}@\n"
     (Word.string_of_value value)
@@ -54,8 +79,8 @@ let taint taints key value =
       | Some s -> Set.add s value)
 
 let mark tag taints t = match Map.find taints (Term.tid t) with
-  | None -> t
-  | Some ts -> Term.set_attr t tag ts
+  | Some ts when not(Map.is_empty ts) -> Term.set_attr t tag ts
+  | _ -> t
 
 let mark_terms {regs; ptrs} = (object
   inherit Term.mapper as super
@@ -217,16 +242,27 @@ module Main(Machine : Primus.Machine.S) = struct
     terms = merge_terms s.terms tid rhs;
   }
 
+  let observe_taint obs taints =
+    Set.to_sequence taints |>
+    Machine.Seq.iter ~f:(Machine.Observation.make obs)
+
+  let observe_taints {imm; ptr} =
+    observe_taint propagate_reg_taint imm >>= fun () ->
+    observe_taint propagate_ptr_taint ptr >>= fun () ->
+    Machine.return ()
+
 
   let introduce_taints d =
     introduce_ptr d >>= fun () ->
     introduce_reg d
 
   let def_computed d =
-    Machine.Local.update state ~f:(fun s ->
-        match s.taints with
-        | [value] -> propagate_var s (Term.tid d) (Def.lhs d) value
-        | _ -> invalid_arg "def: corrupted stack")
+    Machine.Local.get state >>= fun s -> match s.taints with
+    | [value] ->
+      observe_taints value >>= fun () ->
+      Machine.Local.put state @@
+      propagate_var s (Term.tid d) (Def.lhs d) value
+    | _ -> invalid_arg "def: corrupted stack"
 
   let jmp_computed t =
     Machine.Local.update state ~f:(fun s ->
@@ -240,14 +276,12 @@ module Main(Machine : Primus.Machine.S) = struct
   let pos_entered _ =
     Machine.Local.update state ~f:(fun s -> {s with taints=[]})
 
-  let finished () =
+  let finished _ =
     Machine.Local.get state >>= fun s ->
-    Machine.switch Machine.global >>= fun () ->
     Machine.update (fun proj ->
         Project.program proj |>
         mark_terms s |>
         Project.with_program proj)
-
 
   let debug_taints _ =
     Machine.Local.get state >>| fun {taints} ->
@@ -257,14 +291,14 @@ module Main(Machine : Primus.Machine.S) = struct
     Machine.Local.get state >>| fun {tvs} ->
     printf "<tvs>@\n%a@\n</tvs>" Taint.pp_map tvs
 
-  let init () = Machine.List.all_ignore Primus.Interpreter.[
+  let init () = Machine.List.sequence Primus.Interpreter.[
       new_value >>> val_computed;
       leave_exp >>> exp_computed;
       enter_def >>> introduce_taints;
       leave_def >>> def_computed;
       leave_jmp >>> jmp_computed;
       enter_pos >>> pos_entered;
-      Primus.Machine.finished >>> finished;
+      leave_blk >>> finished;
     ]
   (*
      after each expression we push a word onto the stack, once the

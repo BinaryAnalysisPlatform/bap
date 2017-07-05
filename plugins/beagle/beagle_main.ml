@@ -160,7 +160,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
         {t with addrs = Set.add t.addrs addr})
 
   let process_byte char =
-    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
+    Eval.pos >>| Primus.Pos.tid >>= fun curr ->
     Machine.Local.get beagle >>= fun (Beagle d) ->
     let d = Strings.Detector.step d curr char in
     Strings.Detector.when_decided d (Machine.return ())
@@ -185,7 +185,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
     | Some d -> got_prey d
 
   let process_word w =
-    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
+    Eval.pos >>| Primus.Pos.tid >>= fun curr ->
     Machine.Local.get beagle >>= fun (Beagle d) ->
     Word.enum_chars w LittleEndian |>
     Machine.Seq.fold ~init:d ~f:(fun d char ->
@@ -239,7 +239,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    Machine.all_ignore Primus.Memory.[
+    Machine.sequence Primus.Memory.[
         address_access   >>> save_address;
         (* variable_read    >>> process_variable; *)
         (* variable_written >>> process_variable; *)

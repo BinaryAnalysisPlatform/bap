@@ -75,3 +75,12 @@ Library primus_propagate_taint_plugin
   BuildDepends: bap-primus
   XMETADescription: a taint propagation engine
   Modules: Primus_propagate_taint_main
+
+Library primus_mark_visited_plugin
+  Path: plugins/primus_mark_visited
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_mark_visited
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: marks terms that were visted by Primus
+  Modules: Primus_mark_visited_main

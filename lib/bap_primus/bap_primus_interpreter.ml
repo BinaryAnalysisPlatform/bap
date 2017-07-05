@@ -48,12 +48,12 @@ let leave_jmp,jmp_left =
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
 
-let enter_exp,exp_entered = 
+let enter_exp,exp_entered =
   Observation.provide ~inspect:sexp_of_exp "enter-exp"
-let leave_exp,exp_left = 
+let leave_exp,exp_left =
   Observation.provide ~inspect:sexp_of_exp "leave-exp"
 
-let new_value,value_created = 
+let new_value,value_created =
   Observation.provide ~inspect:sexp_of_word "new-value"
 
 let pc_change,pc_changed =
@@ -139,8 +139,8 @@ module Make (Machine : Machine) = struct
     method word_of_value x = Machine.return (Some x)
     method undefined = Machine.return undefined
     method storage_of_value x = Machine.return (Some x)
-    method lookup = Env.get 
-    method update = Env.set 
+    method lookup = Env.get
+    method update = Env.set
 
     method load base addr =
       let addr = Addr.(base + addr) in
@@ -151,68 +151,80 @@ module Make (Machine : Machine) = struct
       Memory.save addr data >>= fun () ->
       Machine.return base
 
-    method! eval_exp e = 
-      !!exp_entered e >>= fun () -> 
-      super#eval_exp e >>= fun r -> 
-      !!value_created r >>= fun () -> 
+    method! eval_exp e =
+      !!exp_entered e >>= fun () ->
+      super#eval_exp e >>= fun r ->
+      !!value_created r >>= fun () ->
       !!exp_left e >>= fun () ->
       Machine.return r
   end
 
-  let update_pc t = 
+  let update_pc t =
     match Term.get_attr t address with
     | None -> Machine.return ()
     | Some addr ->
-      Machine.Local.get state >>= fun s -> 
-      Machine.Local.put state {s with addr} >>= fun () -> 
-      if Addr.(s.addr <> addr) 
+      Machine.Local.get state >>= fun s ->
+      Machine.Local.put state {s with addr} >>= fun () ->
+      if Addr.(s.addr <> addr)
       then !!pc_changed addr
       else Machine.return ()
 
-  let term cls f t =
-    Machine.Local.get state >>= fun s -> 
+
+  let enter cls curr t =
+    !!pos_entered curr >>= fun () ->
+    !!term_entered (Term.tid t) >>= fun () ->
+    Term.switch cls t
+      ~program:(!!top_entered)
+      ~sub:(!!sub_entered)
+      ~arg:(!!arg_entered)
+      ~blk:(!!blk_entered)
+      ~phi:(!!phi_entered)
+      ~def:(!!def_entered)
+      ~jmp:(!!jmp_entered)
+
+  let leave cls curr t =
+    Term.switch cls t
+      ~program:(!!top_left)
+      ~sub:(!!sub_left)
+      ~arg:(!!arg_left)
+      ~blk:(!!blk_left)
+      ~phi:(!!phi_left)
+      ~def:(!!def_left)
+      ~jmp:(!!jmp_left) >>= fun () ->
+    !!term_left (Term.tid t) >>= fun () ->
+    !!pos_left curr
+
+
+  let term return cls f t =
+    Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
     | Ok curr ->
       update_pc t >>= fun () ->
-      Machine.Local.update state (fun s -> {s with curr}) >>= fun () -> 
-      !!pos_entered curr >>= fun () -> 
-      !!term_entered (Term.tid t) >>= fun () ->
-      Term.switch cls t 
-        ~program:(!!top_entered)
-        ~sub:(!!sub_entered)
-        ~arg:(!!arg_entered)
-        ~blk:(!!blk_entered)
-        ~phi:(!!phi_entered)
-        ~def:(!!def_entered)
-        ~jmp:(!!jmp_entered) >>= fun () -> 
-      f t >>= fun r -> 
-      Term.switch cls t 
-        ~program:(!!top_left)
-        ~sub:(!!sub_left)
-        ~arg:(!!arg_left)
-        ~blk:(!!blk_left)
-        ~phi:(!!phi_left)
-        ~def:(!!def_left)
-        ~jmp:(!!jmp_left) >>= fun () -> 
-      !!term_left (Term.tid t) >>= fun () -> 
-      !!pos_left curr >>= fun () ->
-      Machine.return r
+      Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
+      enter cls curr t >>= fun () ->
+      Machine.catch (f t)
+        (fun exn -> leave cls curr t >>= fun () -> Machine.raise exn)
+      >>= fun r ->
+      leave cls curr t >>= fun () ->
+      return r
 
-  let halt = 
+  let normal = Machine.return
+
+  let halt =
     !!will_halt () >>= fun () -> Machine.raise Halt
   let exp = sema#eval_exp
-  let (:=) v x  = exp x >>= sema#update v 
+  let (:=) v x  = exp x >>= sema#update v
   let def t = Def.lhs t := Def.rhs t
-  let def = term def_t def 
+  let def = term normal def_t def
 
   let label : label -> _ = function
     | Direct t -> Linker.exec (`tid t)
-    | Indirect x -> 
-      exp x >>= fun x -> 
+    | Indirect x ->
+      exp x >>= fun x ->
       Linker.exec (`addr x)
 
-  let call c = 
+  let call c =
     label (Call.target c) >>= fun () ->
     match Call.return c with
     | Some t -> label t
@@ -228,29 +240,31 @@ module Make (Machine : Machine) = struct
     | Int (n,r) -> interrupt n r
 
   let jmp t = exp (Jmp.cond t) >>| Word.is_one
-  let jmp = term jmp_t jmp
+  let jmp = term normal jmp_t jmp
 
 
   let blk t =
     (* todo add the phi nodes, or think at least.. *)
     Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
-    Machine.Seq.find (Term.enum jmp_t t) ~f:jmp >>= function
-    | None -> Machine.return ()
-    | Some t -> jump t
+    Machine.Seq.find (Term.enum jmp_t t) ~f:jmp
 
-  let blk = term blk_t blk 
+  let finish = function
+    | None -> Machine.return ()
+    | Some code -> jump code
+
+  let blk = term finish blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some In -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
-  let arg_def = term arg_t arg_def
+  let arg_def = term normal arg_t arg_def
 
   let arg_use t = match Arg.intent t with
     | None | Some Out -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
-  let arg_use = term arg_t arg_use
+  let arg_use = term normal arg_t arg_use
 
   let eval_entry = function
     | None -> Machine.return ()
@@ -262,7 +276,7 @@ module Make (Machine : Machine) = struct
     eval_entry (Term.first blk_t t) >>= fun () ->
     iter arg_use
 
-  let sub = term sub_t sub
+  let sub = term normal sub_t sub
 
   let pos = Machine.Local.get state >>| fun {curr} -> curr
 end
@@ -281,8 +295,8 @@ module Init(Machine : Machine) = struct
       | Some x -> Linker.is_linked (`addr x)
 
 
-  let link name code t m = 
-    m >>= fun () -> is_linked name t >>= function 
+  let link name code t m =
+    m >>= fun () -> is_linked name t >>= function
     | true -> Machine.return ()
     | false ->
       Linker.link
@@ -291,24 +305,23 @@ module Init(Machine : Machine) = struct
         ?addr:(Term.get_attr t address)
         code
 
-  let linker = object 
+  let linker = object
     inherit [unit Machine.t] Term.visitor
     method! enter_blk t =
-      let module Code(Machine : Machine) = struct 
+      let module Code(Machine : Machine) = struct
         module Interp = Make(Machine)
         let exec = Interp.blk t
       end in
       link Term.name (module Code) t
-    method! enter_sub t = 
-      let module Code(Machine : Machine) = struct 
+    method! enter_sub t =
+      let module Code(Machine : Machine) = struct
         module Interp = Make(Machine)
         let exec = Interp.sub t
-      end in 
+      end in
       link Sub.name (module Code) t
   end
 
   let run () =
-    Machine.get () >>= fun proj -> 
+    Machine.get () >>= fun proj ->
     linker#run (Project.program proj) (Machine.return ())
 end
-

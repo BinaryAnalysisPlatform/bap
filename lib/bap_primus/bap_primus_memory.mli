@@ -29,4 +29,8 @@ module Make(Machine : Machine) : sig
     ?readonly:bool ->
     ?executable:bool ->
     mem -> unit Machine.t
+
+  val is_mapped : addr -> bool Machine.t
+
+  val is_writable : addr -> bool Machine.t
 end

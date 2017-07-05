@@ -102,7 +102,7 @@ let start_monitoring {Config.get=(!)} =
 
     let setup_tracing () =
       if Option.is_some !Param.traceback
-      then Machine.List.all_ignore [
+      then Machine.List.sequence [
           Primus.Interpreter.enter_pos >>> record_trace;
           Primus.Machine.finished >>> print_trace;
         ]

@@ -19,10 +19,10 @@ module Std : sig
     type 'a statement
 
     (** Machine exit status.
-        A machine may terminate normally, or abnormally with the 
-        specified exception.  
+        A machine may terminate normally, or abnormally with the
+        specified exception.
     *)
-    type exit_status = 
+    type exit_status =
       | Normal
       | Exn of exn
 
@@ -48,13 +48,13 @@ module Std : sig
         not depenend on the type of the functor.*)
     module Observation : sig
 
-      (** An observation provider. 
+      (** An observation provider.
           A provider facilitates introspection of the Primus Machine,
           for the sake of debugging and dumping the effects. The
           provider shoud not (and can't be) used for affecting the
           behavior of a machine, or for the analysis, as its main
           purpose is debugging, logging, and tracing the execution.*)
-      type provider 
+      type provider
 
 
       (** [provide ?inspect name] returns a pair of two handlers. The
@@ -79,7 +79,7 @@ module Std : sig
       (** enumerate all currently available observation providers  *)
       val list_providers : unit -> provider list
 
-      module Provider : sig 
+      module Provider : sig
         type t = provider
 
         (** unique name of a provider *)
@@ -182,6 +182,10 @@ module Std : sig
       (** The [finished] event occurs when the machine terminates.   *)
       val finished : unit observation
 
+
+      (** [exn_raised exn] occurs every time an abnormal control flow
+          is initiated *)
+      val exn_raised : exn observation
 
 
       (** Machine identifier type.   *)
@@ -368,9 +372,9 @@ module Std : sig
 
 
       module Main(M : S) : sig
-        val run : 
+        val run :
           ?envp:string array ->
-          ?args:string array -> 
+          ?args:string array ->
           project ->
           unit M.t ->
           (exit_status * project) M.m
@@ -450,7 +454,7 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
-      (** the [new_value] observation is made every time an 
+      (** the [new_value] observation is made every time an
           expression computes a new value*)
       val new_value : word observation
 
@@ -790,6 +794,16 @@ module Std : sig
           ?readonly:bool ->
           ?executable:bool ->
           mem -> unit Machine.t
+
+
+        (** [is_mapped addr] a computation that evaluates to true,
+            when the value is mapped, i.e., it is readable.  *)
+        val is_mapped : addr -> bool Machine.t
+
+
+        (** [is_writable addr] is a computation that evaluates to
+            [true] if [addr] is writable.  *)
+        val is_writable : addr -> bool Machine.t
       end
     end
 

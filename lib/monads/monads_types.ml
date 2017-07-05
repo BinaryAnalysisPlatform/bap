@@ -116,6 +116,7 @@ module Collection = struct
     type 'a t
     val all : ('a,'e) m t -> ('a t, 'e) m
     val all_ignore : ('a,'e) m t -> (unit,'e) m
+    val sequence : (unit,'e) m t -> (unit,'e) m
     val map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
     val iter : 'a t -> f:('a -> (unit,'e) m) -> (unit,'e) m
     val fold : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
@@ -138,6 +139,7 @@ module Collection = struct
 
     val all : 'a m t -> 'a t m
     val all_ignore : 'a m t -> unit m
+    val sequence : unit m t -> unit m
     val map : 'a t -> f:('a -> 'b m) -> 'b t m
     val iter : 'a t -> f:('a -> unit m) -> unit m
     val fold : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
@@ -206,6 +208,10 @@ module Monad = struct
   module type S = sig
     type 'a t
 
+    val void : 'a t -> unit t
+    val sequence : unit t list -> unit t
+    val forever : 'a t -> 'b t
+
     module Fn : sig
       val id : 'a -> 'a t
       val ignore : 'a t -> unit t
@@ -256,6 +262,10 @@ module Monad = struct
 
   module type S2 = sig
     type ('a,'e) t
+
+    val void : ('a,'e) t -> (unit,'e) t
+    val sequence : (unit,'e) t list -> (unit,'e) t
+    val forever : ('a,'e) t -> ('b,'e) t
 
     module Fn : sig
       val id : 'a -> ('a,'e) t

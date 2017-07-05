@@ -28,25 +28,31 @@ module Greedy(Machine : Primus.Machine.S) = struct
 
   module Eval = Primus.Interpreter.Make(Machine)
 
-  let pp_halted ppf halted = 
-    Set.iter halted ~f:(fun id -> 
+  let pp_halted ppf halted =
+    Set.iter halted ~f:(fun id ->
         fprintf ppf "%a" Machine.Id.pp id)
 
+
+
   let reschedule () =
-    Machine.current () >>= fun id -> 
-    info "%a: scheduling" Machine.Id.pp id;
-    Machine.Global.get state >>= fun {halted} -> 
-    let halted = Set.add halted id in
-    Machine.Global.put state {halted} >>= fun () -> 
+    Machine.Global.get state >>= fun {halted} ->
     Machine.forks () >>= fun forks ->
     Seq.find forks ~f:(fun id -> not (Set.mem halted id)) |> function
     | None ->
       info "no more pending machines";
-      Machine.return ()
-    | Some id -> Machine.switch id
+      Machine.switch Machine.global
+    | Some cid -> Machine.switch cid
+
+
+  let halt () =
+    Machine.current () >>= fun pid ->
+    Machine.Global.update state ~f:(fun {halted} ->
+        {halted = Set.add halted pid}) >>= fun () ->
+    reschedule ()
+
 
   let init () =
-    Primus.Machine.finished >>> reschedule
+    Primus.Machine.finished >>> halt
 end
 
 let enable () =

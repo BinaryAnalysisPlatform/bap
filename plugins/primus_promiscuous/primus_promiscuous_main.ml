@@ -112,6 +112,7 @@ module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Eval = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
+  module Mem = Primus.Memory.Make(Machine)
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
@@ -120,7 +121,7 @@ module Main(Machine : Primus.Machine.S) = struct
   let unsat_assumptions blk =
     Machine.List.map (assumptions blk)
       ~f:(Machine.List.filter ~f:(fun {var;res} ->
-          Env.get var >>| fun r -> 
+          Env.get var >>| fun r ->
           Word.(r <> of_bool res)))
 
   let pp_id = Monad.State.Multi.Id.pp
@@ -135,10 +136,10 @@ module Main(Machine : Primus.Machine.S) = struct
           Machine.current () >>= fun id ->
           if pid = id then
             Machine.Global.update state ~f:(fun t -> {
-                  t with forkpoints = 
+                  t with forkpoints =
                            Set.add t.forkpoints (Term.tid blk)
                 })
-          else 
+          else
             assume  conflicts >>= fun () ->
             Machine.Local.update state ~f:(fun t -> {
                   t with conflicts}) >>= fun () ->
@@ -158,9 +159,27 @@ module Main(Machine : Primus.Machine.S) = struct
       else fork blk
     | _ -> Machine.return ()
 
+
+  let map addr =
+    Mem.allocate ~generator:Primus.Generator.Random.Seeded.byte addr 1
+
+  let make_loadable addr =
+    Mem.is_mapped addr >>= function
+    | false -> map addr
+    | true -> Machine.return ()
+
+
+  let make_writable (addr,_) =
+    Mem.is_writable addr >>= function
+    | false -> map addr
+    | true -> Machine.return ()
+
   let init () =
     info "translating the program into the Trivial Condition Form (TCF)";
     Machine.update TCF.proj >>= fun () ->
+    Primus.Memory.address_access >>> make_loadable >>= fun () ->
+    Primus.Memory.address_written >>> make_writable >>= fun () ->
+
     Primus.Interpreter.leave_pos >>> step
 end
 
