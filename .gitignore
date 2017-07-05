@@ -30,6 +30,7 @@ _oasis
 /man/bap.1
 /lib/bap_config/bap_config.ml
 /lib/bap_llvm/bap_llvm_config.ml
+/plugins/cxxfilt/cxxfilt_config.ml
 /plugins/ida/bap_ida_config.ml
 /plugins/objdump/objdump_config.ml
 /plugins/api/api_config.ml
