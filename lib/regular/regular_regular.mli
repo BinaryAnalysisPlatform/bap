@@ -20,13 +20,16 @@ module type S = sig
   include Data with type t := t
 end
 
-module Make(M : sig
-    type t [@@deriving bin_io, sexp, compare]
-    include Pretty_printer.S with type t := t
-    include Versioned with type t := t
-    val hash : t -> int
-    val module_name : string option
-  end ) : S with type t := M.t
+module type Minimal = sig
+  (** type t should be binable, sexpable and provide compare function  *)
+  type t [@@deriving bin_io, sexp, compare]
+  include Pretty_printer.S with type t := t
+  include Versioned.S with type t := t
+  val hash : t -> int
+  val module_name : string option
+end
+
+module Make(M : Minimal ) : S with type t := M.t
 
 module Printable(M : sig
     include Pretty_printer.S
