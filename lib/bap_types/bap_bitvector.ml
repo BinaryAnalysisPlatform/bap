@@ -2,6 +2,10 @@ open Core_kernel.Std
 open Regular.Std
 open Or_error
 
+
+module Value = Bap_value
+module Dict = Value.Dict
+
 type endian = LittleEndian | BigEndian
   [@@deriving bin_io, compare, sexp]
 
@@ -37,6 +41,7 @@ module Internal = struct
     z : Bignum.t;
     w : int;
     signed : bool;
+    attrs : Dict.t;
   } [@@deriving bin_io, sexp]
 end
 
@@ -56,6 +61,8 @@ module type Kernel = sig
   val bits_of_z  : t -> string
   val compare  : t -> t -> int
   val hash : t -> int
+  val attrs : t -> Dict.t
+  val with_attrs : t -> Dict.t -> t
   val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
@@ -79,8 +86,10 @@ module Make(Size : Compare) : Kernel = struct
 
   let z t = t.z
 
-  let create z w = {z = znorm z w; w; signed=false}
+  let create z w = {z = znorm z w; w; signed=false; attrs = Dict.empty}
 
+  let attrs t = t.attrs
+  let with_attrs t attrs = {t with attrs}
   let hash = Hashtbl.hash
 
   let signed t = { t with signed = true }
@@ -170,7 +179,6 @@ module Cons = struct
   let one   n = of_int 1    ~width:n
 end
 include Cons
-
 
 let safe f t = try_with (fun () -> f t)
 

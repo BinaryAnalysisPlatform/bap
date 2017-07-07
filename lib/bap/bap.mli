@@ -801,6 +801,9 @@ module Std : sig
     end
   end
 
+  type value               [@@deriving bin_io, compare, sexp]
+  type dict                [@@deriving bin_io, compare, sexp]
+
   (** Type to represent machine word  *)
   type word [@@deriving bin_io, compare, sexp]
 
@@ -1070,7 +1073,6 @@ module Std : sig
 
     (** {2 Conversions to built-in integers }  *)
 
-
     (** [to_int x] projects [x] in to OCaml [int].  *)
     val to_int   : t -> int   Or_error.t
 
@@ -1098,6 +1100,12 @@ module Std : sig
 
     (** [bitwidth bv] return a bit-width, i.e., the amount of bits *)
     val bitwidth : t -> int
+
+    (** value attributes  *)
+    val attrs : t -> dict
+
+    (** update value attributes  *)
+    val with_attrs : t -> dict -> t
 
     (** [extract bv ~hi ~lo] extracts a subvector from [bv], starting
         from bit [hi] and ending with [lo]. Bits are enumerated from
@@ -1253,6 +1261,8 @@ module Std : sig
       (** [of_word_size w] creates a lifter for a specified word size
           [w], i.e. either [i64] or [i32]  *)
       val of_word_size : Word_size.t -> t -> t Or_error.t
+
+
 
       include Integer.S with type t = t Or_error.t
       include Legacy.Monad.Infix with type 'a t := 'a Or_error.t
@@ -2040,8 +2050,6 @@ module Std : sig
   type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
   type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
   type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
-  type value               [@@deriving bin_io, compare, sexp]
-  type dict                [@@deriving bin_io, compare, sexp]
 
 
   (** Base class for evaluation contexts.

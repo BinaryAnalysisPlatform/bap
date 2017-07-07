@@ -26,6 +26,8 @@ val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
 val string_of_value : ?hex:bool -> t -> string
+val attrs : t -> Bap_value.dict
+val with_attrs : t -> Bap_value.dict -> t
 val signed : t -> t
 val is_zero : t -> bool
 val is_one : t -> bool
