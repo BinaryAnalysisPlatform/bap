@@ -1,0 +1,8 @@
+let () = add_variable ~doc:"riscv library" "riscv_lib" ~define:(function
+        | None -> "-lriscv"
+        | Some p -> p)
+
+let () = add_variable ~doc:"riscv ldflags" "riscv_ldflags" ~define:(function
+        | None -> "-lriscv"
+        | Some p -> p)
+

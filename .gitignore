@@ -4,6 +4,9 @@
 *.mllib
 *.mlpack
 *.odocl
+*.swp
+*.swo
+*.un~
 /*.1
 /*.bak
 /*.byte

@@ -1,0 +1,20 @@
+Flag riscv
+ Description: Build with riscv backend
+ Default: true
+
+Library riscv_plugin
+  XMETADescription: provide the RISC-V disassembler
+  Path:          plugins/riscv
+  Build$:        flag(everything) || flag(riscv)
+  BuildDepends:  bap
+  FindlibName:   bap-riscv
+  CCOpt:         $cc_optimization
+  CCLib:         $riscv_lib $cxxlibs $riscv_ldflags
+  CSources:      bap_riscv.h,
+                 bap_riscv.cc,
+                 strings.h,
+                 strings.cc
+  FindlibName:   bap-plugin-riscv
+  InternalModules: Riscv_main
+  XMETAExtraLines: tags="disassembler"
+
