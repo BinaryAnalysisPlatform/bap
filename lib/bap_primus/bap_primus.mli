@@ -1,10 +1,12 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
 open Format
 
 module Std : sig
+
   module Primus : sig
     (** Machine Exception.
 
@@ -17,6 +19,9 @@ module Std : sig
 
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
+
+    type value
+
 
     (** Machine exit status.
         A machine may terminate normally, or abnormally with the
@@ -35,6 +40,8 @@ module Std : sig
 
     (** value generator  *)
     type generator
+
+
 
     (** Machine Observation.
 
@@ -395,6 +402,28 @@ module Std : sig
     (** The Machine component.  *)
     type component = Machine.component
 
+
+    module Value : sig
+      type id [@@deriving bin_io, compare, sexp]
+      module Id : Regular.S with type t = id
+
+      type t = value [@@deriving bin_io, compare, sexp]
+
+      val to_word : t -> word
+      val id : t -> id
+
+      (** the [new_value] observation is made every time an
+          expression computes a new value*)
+      val created : value observation
+
+      module Make(Machine : Machine.S) : sig
+        val create : word -> t Machine.t
+      end
+
+      include Regular.S with type t := t
+
+    end
+
     (** The Interpreter.
 
         The Interpreter is the core componet of the Primus Machine. It
@@ -454,10 +483,6 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
-      (** the [new_value] observation is made every time an
-          expression computes a new value*)
-      val new_value : word observation
-
       (** an expression was entered  *)
       val enter_exp : exp observation
 
@@ -476,7 +501,7 @@ module Std : sig
         val pos : pos m
         val sub : sub term -> unit m
         val blk : blk term -> unit m
-        val exp : exp -> word m
+        val exp : exp -> value m
       end
     end
 
@@ -691,10 +716,10 @@ module Std : sig
       val variable_access : var observation
 
       (** a variabe was valuated to the provided value.  *)
-      val variable_read : (var * word) observation
+      val variable_read : (var * value) observation
 
       (** a variable was set to the specified value.  *)
-      val variable_written : (var * word) observation
+      val variable_written : (var * value) observation
 
       (** A variable is undefined, if it was never [add]ed to the
           environment.  *)
@@ -714,10 +739,10 @@ module Std : sig
             anyone to save bottom or memory values in the environemnt,
             thus the [get] operation should not return the
             [Bil.result].*)
-        val get : var -> word Machine.t
+        val get : var -> value Machine.t
 
         (** [set var value] binds a variable [var] to the given [value].  *)
-        val set : var -> word -> unit Machine.t
+        val set : var -> value -> unit Machine.t
 
 
         (** [add var generator] adds a variable [var] to the
@@ -1446,7 +1471,7 @@ module Std : sig
                                        word  ::= ?<ascii-char> | <int> | <int>:<size>
                                          int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
                                          size  ::= {<decimal>}
-                                                                                           ident ::= ?any atom that is not recognized as a <word>?
+        ident ::= ?any atom that is not recognized as a <word>?
         ]}
     *)
     module Lisp : sig
@@ -1463,7 +1488,7 @@ module Std : sig
             [name]. A function [code] accepts a list of arguments,
             and returns a computation in a Machine monad, that should
             evaluate to a word. *)
-        val create : ?docs:string -> string -> (word list -> 'a) -> 'a t
+        val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
       end
 
 
@@ -1472,7 +1497,7 @@ module Std : sig
 
 
         (** a list of primitives defined in the Machine monad.  *)
-        val defs : unit -> word Machine.t Primitive.t list
+        val defs : unit -> value Machine.t Primitive.t list
       end
 
 

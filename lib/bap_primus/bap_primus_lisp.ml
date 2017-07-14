@@ -92,7 +92,7 @@ let library = {
 }
 
 module Primitive = struct
-  type 'a t = (Word.t list -> 'a) def
+  type 'a t = (value list -> 'a) def
   let create ?(docs="") name code : 'a t =
     {meta = {name;docs; attrs=Univ_map.empty; loc=Primitive}; code}
 end
@@ -932,7 +932,7 @@ end
 
 module State = Bap_primus_state
 
-type bindings = (var * Word.t) list [@@deriving sexp]
+type bindings = (var * value) list [@@deriving sexp]
 
 type state = {
   primitives : primitives list;
@@ -971,20 +971,11 @@ let empty_program = {
   substs  = [];
 }
 
-let init_env proj = (object
-  inherit [bindings] Term.visitor
-  method! enter_term _ t env =
-    match Term.get_attr t address with
-    | None -> env
-    | Some addr ->
-      ({value = Term.name t; typ = Word},addr) :: env
-end)#run proj []
-
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun proj -> {
-         env = init_env (Project.program proj);
+         env = [];
          primitives = [];
          program = empty_program;
          paths = [Filename.current_dir_name];
@@ -1059,15 +1050,13 @@ module Lisp(Machine : Machine) = struct
   module Vars = Locals(Machine)
   module Env = Bap_primus_env.Make(Machine)
   module Mem = Bap_primus_memory.Make(Machine)
-
+  module Value = Bap_primus_value.Make(Machine)
 
   let error kind = Format.ksprintf
       (fun msg -> fun () -> Machine.raise (Runtime_error msg))
 
   let failf fmt = error (fun m -> Runtime_error m) fmt
   let linkerf fmt = error (fun m -> Link_error m) fmt
-
-
 
   let word width value typ =
     let width = match typ with
@@ -1118,28 +1107,28 @@ module Lisp(Machine : Machine) = struct
       Env.set sp >>= fun () ->
       Machine.return (Some (sp,old))
 
-  let eval_sub = function
+  let eval_sub : value list -> 'x = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
       Machine.get () >>= fun proj ->
       Term.enum sub_t (Project.program proj) |>
       Seq.find ~f:(fun sub -> match Term.get_attr sub address with
           | None -> false
-          | Some addr -> Word.(addr = sub_addr)) |> function
+          | Some addr -> Word.(addr = sub_addr.value)) |> function
       | None ->
         failf "invoke-subroutine: no function for %a" Addr.pps
-          sub_addr ()
+          sub_addr.value ()
       | Some sub ->
         let args = Term.enum arg_t sub in
         allocate_stack_frame args >>= fun frame ->
         Seq.zip args (Seq.of_list sub_args) |>
-        Machine.Seq.iter ~f:(fun (arg,value) ->
+        Machine.Seq.iter ~f:(fun (arg,({value} as x)) ->
             if Arg.intent arg <> Some Out
             then match Arg.rhs arg with
-              | Bil.Var v -> Env.set v value
+              | Bil.Var v -> Env.set v x
               | Bil.Load (mem,addr,endian,size) ->
+                Machine.ignore_m @@
                 Eval.exp (Bil.store ~mem ~addr (Bil.int value) endian size)
-                >>= fun _mem -> Machine.return ()
               | exp ->
                 failf "%s: can't pass argument %s - %s %a"
                   "invoke-subroutine" (Arg.lhs arg |> Var.name)
@@ -1199,7 +1188,8 @@ module Lisp(Machine : Machine) = struct
   and eval_body body = eval_exp (Seq body)
 
   and eval_exp exp : Word.t Machine.t =
-    let int v t = width () >>| fun width -> word width v t in
+    let int v t = width () >>= fun width ->
+      Value.create (word width v t) in
     let rec eval = function
       | Int {value;typ} -> int value typ
       | Var v -> lookup v
@@ -1215,10 +1205,12 @@ module Lisp(Machine : Machine) = struct
       | Msg (fmt,es) -> msg fmt es
       | Err msg -> Machine.raise (Runtime_error msg)
     and rep c e =
-      eval c >>= fun r -> if Word.is_zero r then Machine.return r
+      eval c >>= function {value} as r ->
+        if Word.is_zero value then Machine.return r
       else eval e >>= fun _ -> rep c e
     and ite c e1 e2 =
-      eval c >>= fun w -> if Word.is_zero w then eval e2 else eval e1
+      eval c >>= fun {value=w} ->
+      if Word.is_zero w then eval e2 else eval e1
     and let_ v e1 e2 =
       eval e1 >>= fun w ->
       Machine.Local.update state ~f:(Vars.push v w) >>=  fun () ->
@@ -1227,13 +1219,13 @@ module Lisp(Machine : Machine) = struct
       Machine.return r
     and ext hi lo w =
       let eval_to_int e =
-        eval e >>| Word.to_int >>= function
-        | Ok n -> Machine.return n
+        eval e >>= fun {value=x} -> match Word.to_int x with
+        | Ok x -> Machine.return x
         | Error _ -> failf "expected smallint" () in
       eval_to_int hi >>= fun hi ->
       eval_to_int lo >>= fun lo ->
       eval w >>= fun w ->
-      Eval.exp Bil.(extract ~hi ~lo (int w))
+      Eval.exp Bil.(extract ~hi ~lo (int w.value))
     and lookup v =
       Machine.Local.get state >>= fun {env; width} ->
       match List.Assoc.find env v with
@@ -1256,7 +1248,7 @@ module Lisp(Machine : Machine) = struct
         Machine.Local.put state {s with env = Vars.replace s.env v w}
         >>= fun () -> Machine.return w
       else
-        Env.set (var s.width v) w >>= fun () -> 
+        Env.set (var s.width v) w >>= fun () ->
         Machine.return w
     and bop op e1 e2 =
       eval e1 >>= fun e1 ->
@@ -1292,6 +1284,8 @@ module Make(Machine : Machine) = struct
   module Linker = Bap_primus_linker.Make(Machine)
   module Eval = Bap_primus_interpreter.Make(Machine)
   module Vars = Locals(Machine)
+  module Value = Bap_primus_value.Make(Machine)
+
 
   let error kind = Format.ksprintf
       (fun msg -> fun () -> Machine.raise (kind msg))
@@ -1344,7 +1338,7 @@ module Make(Machine : Machine) = struct
             (fun msg -> fun () -> Machine.raise (Runtime_error msg)) ppf
 
         let eval_args = Machine.List.map bs ~f:(fun (var,arg) ->
-            Eval.exp (Arg.rhs arg) >>= fun w -> 
+            Eval.exp (Arg.rhs arg) >>= fun w ->
             Machine.return (var,w))
 
         let eval_ret r = match ret with
@@ -1388,6 +1382,20 @@ module Make(Machine : Machine) = struct
     Machine.Local.update state ~f:(fun s -> {
           s with paths = s.paths @ [path]
         })
+
+
+  let init_env proj = (object
+    inherit [(var * value) Machine.t list] Term.visitor
+    method! enter_term _ t env =
+      match Term.get_attr t address with
+      | None -> env
+      | Some addr ->
+        let binding =
+          Value.create addr >>| fun addr ->
+          {value = Term.name t; typ = Word}, addr in
+        binding :: env
+  end)#run proj [] |> Machine.List.all
+
 
   let init () =
     fprintf library.log "initializing lisp library@\n";

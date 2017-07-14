@@ -4,8 +4,13 @@ open Bap_common
 
 open Bap_bil
 
+module Var = Bap_var
+module Word = Bitvector
+module Size = Bap_size
+
 type binop = exp -> exp -> exp
 type unop = exp -> exp
+
 
 module Exp = struct
   open Exp
@@ -165,17 +170,20 @@ module PP = struct
     let is_b0 x = Bitvector.(x = b0) in
     let is_b1 x = Bitvector.(x = b1) in
     match exp with
-    | Load (Var _ as mem, idx, edn, s) ->
-      pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+    | Load (mem, idx, _, `r8) ->
+      pr "%a[%a]" pp mem pp idx
     | Load (mem, idx, edn, s) ->
-      pr "(%a)[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+      pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+    | Store (mem, idx, exp, edn, `r8) ->
+      pr "@[<4>%a@;with [%a] <- %a@]"
+        pp mem pp idx pp exp
     | Store (mem, idx, exp, edn, s) ->
-      pr "@[<2>%a@;with [%a, %a]:%a <- %a@]"
+      pr "@[<4>%a@;with [%a, %a]:%a <- %a@]"
         pp mem pp idx pp_edn edn Bap_size.pp s pp exp
     | Ite (ce, te, fe) ->
       pr "@[<2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
     | Extract (hi, lo, exp) ->
-      pr "extract: %d:%d[%a]" hi lo pp exp
+      pr "extract:%d:%d[%a]" hi lo pp exp
     | Concat (le, re) ->
       pr (a le ^^ "." ^^ a re) pp le pp re
     | BinOp (EQ,e, Int x) when is_b1 x -> pr ("%a") pp e

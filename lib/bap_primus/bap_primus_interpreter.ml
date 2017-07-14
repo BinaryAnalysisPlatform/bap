@@ -53,8 +53,6 @@ let enter_exp,exp_entered =
 let leave_exp,exp_left =
   Observation.provide ~inspect:sexp_of_exp "leave-exp"
 
-let new_value,value_created =
-  Observation.provide ~inspect:sexp_of_word "new-value"
 
 let pc_change,pc_changed =
   Observation.provide ~inspect:sexp_of_word "pc-changed"
@@ -87,6 +85,7 @@ type state = {
   curr : pos;
 }
 
+
 let sexp_of_state {curr} =
   Pos.sexp_of_t curr
 
@@ -104,6 +103,7 @@ let state = Bap_primus_machine.State.declare
          addr = null proj;
          curr = Top {me=prog; up=Nil};
        })
+
 
 type exn += Halt
 type exn += Runtime_error of string
@@ -123,6 +123,7 @@ module Make (Machine : Machine) = struct
   module Memory = Bap_primus_memory.Make(Machine)
   module Env = Bap_primus_env.Make(Machine)
   module Linker = Bap_primus_linker.Make(Machine)
+  module Value = Bap_primus_value.Make(Machine)
 
   type 'a m = 'a Machine.t
 
@@ -131,30 +132,29 @@ module Make (Machine : Machine) = struct
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
-  let undefined = Word.of_int 0 ~width:0
+
+  let value = Value.create
+  let undefined = value (Word.of_int 0 ~width:0)
 
   let sema = object
-    inherit [word,word] Eval.t as super
-    method value_of_word = Machine.return
-    method word_of_value x = Machine.return (Some x)
-    method undefined = Machine.return undefined
-    method storage_of_value x = Machine.return (Some x)
-    method lookup = Env.get
+    inherit [value,unit] Eval.t as super
+    method value_of_word = value
+    method word_of_value {value} = Machine.return (Some value)
+    method undefined = undefined
+    method storage_of_value {value} = Machine.return (Some ())
+    method lookup v = Env.get v
     method update = Env.set
 
-    method load base addr =
-      let addr = Addr.(base + addr) in
-      Memory.load addr
+    method load () addr =
+      Memory.load addr >>= value
 
     method store base addr data =
-      let addr = Addr.(base + addr) in
       Memory.save addr data >>= fun () ->
-      Machine.return base
+      undefined
 
     method! eval_exp e =
       !!exp_entered e >>= fun () ->
       super#eval_exp e >>= fun r ->
-      !!value_created r >>= fun () ->
       !!exp_left e >>= fun () ->
       Machine.return r
   end
@@ -221,8 +221,8 @@ module Make (Machine : Machine) = struct
   let label : label -> _ = function
     | Direct t -> Linker.exec (`tid t)
     | Indirect x ->
-      exp x >>= fun x ->
-      Linker.exec (`addr x)
+      exp x >>= fun {value} ->
+      Linker.exec (`addr value)
 
   let call c =
     label (Call.target c) >>= fun () ->
@@ -239,7 +239,7 @@ module Make (Machine : Machine) = struct
     | Ret l -> ret l
     | Int (n,r) -> interrupt n r
 
-  let jmp t = exp (Jmp.cond t) >>| Word.is_one
+  let jmp t = exp (Jmp.cond t) >>| fun {value} -> Word.is_one value
   let jmp = term normal jmp_t jmp
 
 

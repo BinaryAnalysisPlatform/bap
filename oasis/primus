@@ -27,4 +27,5 @@ Library bap_primus
            Bap_primus_random,
            Bap_primus_sexp,
            Bap_primus_state,
-           Bap_primus_types
+           Bap_primus_types,
+           Bap_primus_value

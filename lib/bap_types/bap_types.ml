@@ -118,6 +118,7 @@ module Std = struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Exp
     include (Bap_exp : Regular.S with type t := t)
+    let eval = Bap_expi.eval
     let pp_adt = Bap_bil_adt.pp_exp
   end
 
@@ -126,6 +127,7 @@ module Std = struct
     type t = Bap_bil.stmt [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Stmt
     include (Bap_stmt : Regular.S with type t := t)
+    let eval = Bap_bili.eval
     let pp_adt = Bap_bil_adt.pp_stmt
   end
 

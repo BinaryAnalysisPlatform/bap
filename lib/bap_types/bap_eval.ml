@@ -7,8 +7,11 @@ open Bap_eval_types
 
 module type S = Eval.S
 module type S2 = Eval.S2
-module Sz = Bap_size
 module TE = Bap_type_error
+module Size = Bap_size
+module Var = Bap_var
+module Word = Bitvector
+module Bil = Bap_helpers
 
 type word = Bitvector.t
 type endian = Bitvector.endian
@@ -18,24 +21,6 @@ let imm_t imm = Type.Imm (Bitvector.bitwidth imm)
 let bool_t = Type.Imm 1
 let (^^) = Bitvector.concat
 let succ = Bitvector.succ
-
-let reduce_let exp =
-  let open Exp in
-  let rec (/) d x = match x with
-    | Load (x,y,e,s) -> Load (d/x, d/y, e, s)
-    | Store (x,y,z,e,s) -> Store (d/x, d/y, d/z, e, s)
-    | BinOp (b,x,y) -> BinOp (b, d/x, d/y)
-    | UnOp (o,x) -> UnOp (o, d/x)
-    | Int _ | Unknown _ as x -> x
-    | Cast (c,n,x) -> Cast (c,n,d/x)
-    | Ite (x,y,z) -> Ite (d/x, d/y, d/z)
-    | Extract (n,m,x) -> Extract (n,m, d/x)
-    | Concat (x,y) -> Concat (d/x, d/y)
-    | Let (v,x,y) -> ((v,d/x)::d)/y
-    | Var x as var -> match List.Assoc.find d x with
-      | None -> var
-      | Some exp -> exp in
-  []/exp
 
 let is_shift = function
   | Binop.LSHIFT | Binop.RSHIFT | Binop.ARSHIFT -> true
@@ -78,7 +63,7 @@ module Make2(State : Monad.S2) = struct
 
     method type_error (err : TE.t) = self#bot
 
-    method eval_exp : exp -> ('r,'a) m = function
+    method eval_exp exp : ('r,'a) m = match Bil.Exp.normalize exp with
       | Exp.Load (m,a,e,s) -> self#eval_load ~mem:m ~addr:a e s
       | Exp.Store (m,a,u,e,s) -> self#eval_store ~mem:m ~addr:a u e s
       | Exp.Var v -> self#eval_var v
@@ -101,54 +86,28 @@ module Make2(State : Monad.S2) = struct
       self#eval_exp exp >>= self#storage_of_value
 
     method eval_load ~mem ~addr endian sz =
-      self#eval_mem mem >>= function
-      | None -> self#type_error TE.bad_mem
-      | Some mem ->
-        self#eval_imm addr >>= function
-        | None -> self#type_error TE.bad_imm
-        | Some addr ->
-          self#load_word mem addr endian (Sz.in_bits sz)
+      if sz <> `r8
+      then self#eval_exp (Bil.Exp.expand_load mem addr endian sz)
+      else self#eval_mem mem >>= function
+        | None -> self#type_error TE.bad_mem
+        | Some mem ->
+          self#eval_imm addr >>= function
+          | None -> self#type_error TE.bad_imm
+          | Some addr -> self#load mem addr
 
-
-    method private load_word mem addr ed size =
-      let v = self#load mem addr in
-      if size = 8 then v else
-        self#load_word mem (succ addr) ed (size - 8) >>= fun u ->
-        v >>= fun v ->
-        self#word_of_value u >>= fun u ->
-        self#word_of_value v >>= fun v ->
-        match u,v with
-        | None,_|_,None -> self#type_error TE.bad_imm
-        | Some u, Some v -> match ed with
-          | LittleEndian -> self#eval_concat' u v
-          | BigEndian    -> self#eval_concat' v u
 
     method eval_store ~mem ~addr word (e : endian) s =
-      self#eval_mem  mem >>= function
-      | None -> self#type_error TE.bad_mem
-      | Some mem ->
-        self#eval_imm addr >>= function
-        | None -> self#type_error TE.bad_imm
-        | Some addr ->
-          self#eval_imm word >>= function
+      if s <> `r8
+      then self#eval_exp (Bil.Exp.expand_store mem addr word e s)
+      else self#eval_mem  mem >>= function
+        | None -> self#type_error TE.bad_mem
+        | Some mem ->
+          self#eval_imm addr >>= function
           | None -> self#type_error TE.bad_imm
-          | Some word ->
-            self#store_word mem addr word e (Sz.in_bits s)
-
-    method private store_word mem addr word (ed : Bitvector.endian) sz =
-      let hd_ct,tl_ct = match ed with
-        | LittleEndian -> Cast.(LOW,HIGH)
-        | BigEndian    -> Cast.(HIGH,LOW) in
-      self#eval_cast' hd_ct 8 word |> function
-      | None -> self#type_error `bad_cast
-      | Some hd -> self#store mem addr hd >>= fun mem ->
-        if sz = 8 then State.return mem
-        else self#storage_of_value mem >>= function
-          | None -> self#type_error TE.bad_mem
-          | Some mem ->
-            self#eval_cast' tl_ct (sz - 8) word |> function
-            | Some tl -> self#store_word mem  (succ addr) tl ed (sz - 8)
-            | None -> self#type_error `bad_cast
+          | Some addr ->
+            self#eval_imm word >>= function
+            | None -> self#type_error TE.bad_imm
+            | Some word -> self#store mem addr word
 
     method eval_var var = self#lookup var
 
@@ -208,7 +167,7 @@ module Make2(State : Monad.S2) = struct
       with exn -> None
 
     method eval_let var u body =
-      self#eval_exp (reduce_let Exp.(Let (var,u,body)))
+      self#eval_exp (Bil.Exp.reduce_let Exp.(Let (var,u,body)))
 
     method eval_unknown _ _ = self#bot
 

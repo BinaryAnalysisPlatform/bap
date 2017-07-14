@@ -1110,7 +1110,7 @@ module Std : sig
     (** [extract bv ~hi ~lo] extracts a subvector from [bv], starting
         from bit [hi] and ending with [lo]. Bits are enumerated from
         right to left (from least significant to most), starting from
-        zero. [hi] maybe greater then [size].
+        zero. [hi] maybe greater than [size].
 
         [hi] defaults to [width bv - 1]
         [lo] defaults to [0].
@@ -1501,7 +1501,7 @@ module Std : sig
       type cast =
         | UNSIGNED (** 0-padding widening cast. *)
         | SIGNED   (** Sign-extending widening cast. *)
-        | HIGH     (** Narrowning cast. Keeps the high bits. *)
+        | HIGH     (** Narrowing cast. Keeps the high bits. *)
         | LOW      (** Narrowing cast. Keeps the low bits. *)
       [@@deriving bin_io, compare, sexp]
 
@@ -2071,7 +2071,7 @@ module Std : sig
   module Context : sig
     class t : object('s)
 
-      (** [self#lokup var] evaluate variable [var] to a value that was
+      (** [self#lookup var] evaluate variable [var] to a value that was
           previously bound to it. Returns [None] if it is unbound.  *)
       method lookup : var -> Bil.result option
 
