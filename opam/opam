@@ -205,10 +205,10 @@ depexts: [
         "libgmp-dev"
         "libzip-dev"
         "libcurl4-gnutls-dev"
-        "llvm-3.4-dev"
+        "llvm-3.8-dev"
         "time"
         "clang"
-        "llvm"
+        "llvm-3.8"
         "m4"
         "dejagnu"
      ]]
