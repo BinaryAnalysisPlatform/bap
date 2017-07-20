@@ -1019,7 +1019,7 @@ module State = struct
       include Identifiable.Make(struct
           type t = int [@@deriving compare, bin_io, sexp]
           let hash = Int.hash
-          let module_name = "Monads.Std.Mutli.Id"
+          let module_name = "Monads.Std.Multi.Id"
           let to_string = Int.to_string
           let of_string = Int.of_string
         end)
