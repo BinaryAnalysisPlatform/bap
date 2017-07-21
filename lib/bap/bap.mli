@@ -689,6 +689,7 @@ module Std : sig
 
   (** Constructs a trie  *)
   module Trie : sig
+
     (** Key requirements.
         Key is a sequence of tokens of the specified length.
         It is better to use contiguous data structures, like
@@ -717,13 +718,15 @@ module Std : sig
 
     (** Prefix trie interface.
 
-        Trie is a mutable table, that can be seen as a specialized
+        Trie is a mutable table that can be seen as a specialized
         form of a hash table.
 
-        Use [Trie.Make] functor to create modules, implementing this
-        signature.  Also look at already predefined modules, like
-        [String] (see below), [Bitvector.Trie], [Bil.Trie],
-        [Insn.Trie], etc.
+        Use the [Trie.Make] functor to create modules that implement
+        this signature.  Some modules also provide an implementation
+        of this signature under a [Trie] name, e.g., [Bitvector.Trie],
+        [Bil.Trie], [Insn.Trie], etc. See also a [Trie.String] module
+        below, that is a specialized implementation of a trie data
+        structure with string keys.
 
     *)
     module type S = sig
@@ -736,16 +739,16 @@ module Std : sig
       (** [create ()] creates new empty trie  *)
       val create : unit -> 'a t
 
-      (** [add trie ~key ~data] adds [data] associated with [key], if
-          [trie] already has some data associated with the [key], then
-          it will be overwritten *)
+      (** [add trie ~key ~data] associates [data] with [key]. If
+          [trie] already has some value associated with [key], then
+          the value will be overwritten (rebound) *)
       val add : 'a t -> key:key -> data:'a -> unit
 
       (** [change trie key f] if trie has [data] associated with [key] then
           [f] will be called with [Some data], otherwise it will be called
           with [None]. If [f] returns [None] then there will be no data
           associated with [key], if [f] returns [Some thing], then [thing]
-          will be bound to [key] *)
+          will be associated with [key] *)
       val change : 'a t -> key -> ('a option -> 'a option) -> unit
 
       (** [find trie key] finds data associated with [key]  *)
@@ -760,12 +763,12 @@ module Std : sig
       (** [remove trie key] removes value bound with [key] if any.  *)
       val remove : 'a t -> key -> unit
 
-      (** [longest_match trie k] find the value associated with a
-          longest substring of a key [k]. Returns a pair - a length of
-          matched key and data, associated with that key. *)
+      (** [longest_match trie key] find a value associated with a
+          longest substring of [key]. Returns a pair - a length of
+          matched key and the value, associated with that key. *)
       val longest_match : 'a t -> key -> (int * 'a) option
 
-      (** [length trie] returns the amount of entries in the [trie]  *)
+      (** [length trie] returns the number of values in [trie]  *)
       val length : 'a t -> int
 
       (** [pp pp_val] creates a printer for a given value printer
@@ -1334,132 +1337,6 @@ module Std : sig
     val memref : ?disp:int -> ?index:int -> ?scale:size -> addr -> addr
   end
 
-  (** The type of a BIL expression.
-
-      Each BIL expression is either an immediate value of a given
-      width, or a chunk of memory of a give size. The following
-      predefined constructors are brought to the scope:
-
-      - {{!bool_t}bool_t};
-      - {{!reg8_t}reg8_t};
-      - {{!reg16_t}reg16_t};
-      - {{!reg32_t}reg32_t};
-      - {{!reg64_t}reg64_t};
-      - {{!reg128_t}reg128_t};
-      - {{!reg256_t}reg256_t};
-      - {{!mem32_t}mem32_t};
-      - {{!mem64_t}mem64_t}.
-  *)
-  module Type : sig
-    (** type is either an immediate value of memory reference *)
-    type t =
-      | Imm of int
-      (** [Imm n] - n-bit immediate   *)
-      | Mem of addr_size * size
-      (** [Mem (a,t)] memory with a specifed addr_size *)
-    [@@deriving variants]
-
-    (** BIL type is regular  *)
-    include Regular.S with type t := t
-  end
-
-  (** short abbreviation for a type  *)
-  type typ = Type.t
-  [@@deriving bin_io, compare, sexp]
-
-  val bool_t  : typ             (** one bit             *)
-  val reg8_t  : typ             (** 8-bit width value   *)
-  val reg16_t : typ             (** 16-bit width value  *)
-  val reg32_t : typ             (** 32-bit width value  *)
-  val reg64_t : typ             (** 64-bit width value  *)
-  val reg128_t: typ             (** 128-bit width value *)
-  val reg256_t: typ             (** 256-bit width value *)
-
-  (** [mem32_t size] creates a type for memory with [32]-bit addresses
-      and elements of size [size].  *)
-  val mem32_t : size -> typ
-
-  (** [mem64_t size] creates a type for memory with [64]-bit addresses
-      and elements of size [size].  *)
-  val mem64_t : size -> typ
-
-  (** bil variable   *)
-  type var
-  [@@deriving bin_io, compare, sexp]
-
-  (** BIL variable.
-
-      BIL variables are regular values. Variables can have
-      indices. Usually the index is used to represent the same
-      variable but at different time or space (control flow path).
-      This is particulary useful for representing variables in SSA
-      form.
-
-      By default, comparison functions takes indices into account. In
-      order to compare two variables regardless their index use [same]
-      function, or compare with [base x].
-
-      A variable can represent a physical register or be just a virtual
-      variable.
-
-      {2 Printing}
-
-      A default pretty printer doesn't print zero indices.
-  *)
-  module Var : sig
-
-    type t = var
-
-    (** implements [Regular] interface  *)
-    include Regular.S with type t := t
-
-    (** [create ?register ?fresh name typ] creates a variable with
-        a given [name] and [typ]e.
-
-        A newly created variable has version equal to 0.
-
-        If [fresh] is [true] (defaults to [false]), then a unique salt
-        is mixed to the name of variable, making it unique.
-
-        If [is_virtual] is [true] (defaults to [false]), then a
-        variable is virtual, i.e., it doesn't correspond to some
-        physical register or memory location and was added to a program
-        artificially.
-    *)
-    val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t
-
-    (** [name var] returns a name assosiated with variable  *)
-    val name : t -> string
-
-    (** [typ var] returns a type assosiated with variable  *)
-    val typ : t -> typ
-
-    (** [is_physical v] is [true] if a variable [v] represents a
-        physical register or memory location.  *)
-    val is_physical : t -> bool
-
-
-    (** [is_virtual v] is [true] if [v] is not physical  *)
-    val is_virtual : t -> bool
-
-    (** [ var ver] returns a variable, that is identical to
-        [var], but with version equal to [ver] *)
-    val with_index : t -> int -> t
-
-    (** [index v] returns variable's index  *)
-    val index : t -> int
-
-    (** [base var] returns an original variable. Essentially,
-        identical to [with_index var 0] *)
-    val base : t -> t
-
-    (** [same x y] compares variables ignoring indices, i.e., for
-        variables [x] and [y] the [same x y] is [true] iff [equal
-        (base x) (base y)] *)
-    val same : t -> t -> bool
-  end
-
-
 
   (** Main BIL module.
 
@@ -1497,13 +1374,15 @@ module Std : sig
   *)
   module Bil : sig
     module Types : sig
+      type var
+
       (** Different forms of casting *)
       type cast =
         | UNSIGNED (** 0-padding widening cast. *)
         | SIGNED   (** Sign-extending widening cast. *)
         | HIGH     (** Narrowing cast. Keeps the high bits. *)
         | LOW      (** Narrowing cast. Keeps the low bits. *)
-      [@@deriving bin_io, compare, sexp]
+          [@@deriving bin_io, compare, sexp]
 
       (** Binary operations implemented in the BIL *)
       type binop =
@@ -1526,13 +1405,13 @@ module Std : sig
         | LE      (** Unsigned less than or equal to. *)
         | SLT     (** Signed less than. *)
         | SLE     (** Signed less than or equal to. *)
-      [@@deriving bin_io, compare, sexp]
+          [@@deriving bin_io, compare, sexp]
 
       (** Unary operations implemented in the IR *)
       type unop =
         | NEG (** Negate.   (2's complement) *)
         | NOT (** Bitwise not.(1's complement) *)
-      [@@deriving bin_io, compare, sexp]
+            [@@deriving bin_io, compare, sexp]
 
       (** BIL expression variants  *)
       type exp =
@@ -1548,7 +1427,11 @@ module Std : sig
         | Ite     of exp * exp * exp    (** if-then-else expression  *)
         | Extract of int * int * exp  (** extract portion of word  *)
         | Concat  of exp * exp          (** concatenate two words  *)
-      [@@deriving bin_io, compare, sexp]
+        [@@deriving bin_io, compare, sexp]
+      and typ =
+        | Imm of int                     (** [Imm n] - n-bit immediate   *)
+        | Mem of addr_size * size        (** [Mem (a,t)] memory with a specifed addr_size *)
+        [@@deriving bin_io, compare, sexp]
 
       type stmt =
         | Move    of var * exp  (** assign value of expression to variable *)
@@ -1557,7 +1440,7 @@ module Std : sig
         | While   of exp * stmt list (** while loops  *)
         | If      of exp * stmt list * stmt list (** if/then/else statement  *)
         | CpuExn  of int                         (** CPU exception *)
-      [@@deriving bin_io, compare, sexp]
+            [@@deriving bin_io, compare, sexp]
     end
 
     (** include all constructors into Bil namespace *)
@@ -1565,11 +1448,15 @@ module Std : sig
     include module type of Types with type cast = cast
                                   and type binop = binop
                                   and type unop = unop
+                                  and type typ = typ
+                                  and type var = var
                                   and type exp = exp
                                   and type stmt = stmt
     type t = stmt list
-    [@@deriving bin_io, compare, sexp]
+        [@@deriving bin_io, compare, sexp]
 
+    type var_compare
+    type vars = (var,var_compare) Set.t
 
     include Printable.S with type t := t
     include Data.S      with type t := t
@@ -1861,7 +1748,7 @@ module Std : sig
     (** [free_vars bil] returns a set of free variables in program
         [bil]. Variable is considered free if it is not bound in a
         preceding statement or is not bound with [let] expression *)
-    val free_vars : stmt list -> Var.Set.t
+    val free_vars : stmt list -> vars
 
     (** [fold_consts] evaluate constant expressions.
         Note: this function performs only one step, and has no loops,
@@ -1874,6 +1761,10 @@ module Std : sig
         then the transformation will stop at an arbitrary point of a
         cycle. *)
     val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
+
+
+
+    val normalize : stmt list -> stmt list
 
     (** Result of a computation.*)
     type result
@@ -2044,6 +1935,8 @@ module Std : sig
     end
   end
 
+  type typ   = Bil.typ     [@@deriving bin_io, compare, sexp]
+  type var   = Bil.var     [@@deriving bin_io, compare, sexp]
   type bil   = Bil.t       [@@deriving bin_io, compare, sexp]
   type binop = Bil.binop   [@@deriving bin_io, compare, sexp]
   type cast  = Bil.cast    [@@deriving bin_io, compare, sexp]
@@ -2051,6 +1944,210 @@ module Std : sig
   type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
   type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
 
+
+
+  (** The type of a BIL expression.
+
+      Each BIL expression is either an immediate value of a given
+      width, or a chunk of memory of a give size. The following
+      predefined constructors are brought to the scope:
+
+      - {{!bool_t}bool_t};
+      - {{!reg8_t}reg8_t};
+      - {{!reg16_t}reg16_t};
+      - {{!reg32_t}reg32_t};
+      - {{!reg64_t}reg64_t};
+      - {{!reg128_t}reg128_t};
+      - {{!reg256_t}reg256_t};
+      - {{!mem32_t}mem32_t};
+      - {{!mem64_t}mem64_t}.
+  *)
+  module Type : sig
+    (** type is either an immediate value or a storage *)
+    type t = Bil.typ =
+      | Imm of int
+      | Mem of addr_size * size
+      [@@deriving variants]
+
+
+
+    (** type error   *)
+    type error [@@deriving bin_io, compare, sexp]
+
+    (** [imm n] denotes a type of bitvectors of the given bitwidth  *)
+    val imm : int -> t
+
+    (** [mem n m] denotes a type of memory storages with
+       the element type [imm m] and the index type [imm n] *)
+    val mem : addr_size -> size -> t
+
+    (** [infer exp] is [Ok t] if [exp] is well-typed and has type [t]
+       otherwise [Error e]. *)
+    val infer : exp -> (t,error) result
+
+    (** [check bil] is [Ok ()] if [bil] is well-typed, otherwise the
+    first type error [e] is returned as [Error e]   *)
+    val check : exp -> (unit,error) result
+
+    (** BIL type errors.
+
+       Not all syntactically correct expressions make sense. A
+       well-formed expression that doesn't have defined semantics is
+       called an ill-typed expression. We further distinguish between
+       different ill-typed expression to help the error diagnosis.
+
+       A [bad_mem] ill-typed expression is an expression that during
+       the evaluation may load or store from a bitvector.
+
+       A [bad_imm] ill-typed expression is an expression that during
+       the evaluation may apply a integer operation on a storage
+       value.
+
+       A [bad_type ~exp:t ~got:u] ill-typed expression may evaluate an
+       expression of type [u], where an expression of type [t] is
+       expected. For example, when a load address is evaluated to a
+       type that is different from a type of the memory index, or when
+       an integer operation is applied to expressions of different
+       types.
+
+       Finally, a [bad_cast] expression is an expression that may
+       evaluate a bitvector of improper size or when a cast arguments
+       of a cast expression doesn't make sense.
+
+    *)
+    module Error : sig
+
+      type t = error [@@deriving bin_io, compare, sexp]
+
+      exception T of t [@@deriving sexp]
+
+      (** [bad_mem] error occurs when a value of type [mem] was expected  *)
+      val bad_mem : t
+
+      (** [bad_imm] error occurs when a value of type [imm] was expected *)
+      val bad_imm : t
+
+      (** [bad_cast] error occurs when parameters to the cast operation
+          are not valid, or if a store operand is not of a word size *)
+      val bad_cast : t
+
+      (** [bad_type ~exp ~got] error happens when we expect a value of
+          type [exp] but got a value of type [got].  *)
+      val bad_type : exp:typ -> got:typ -> t
+
+
+      (** [expect_mem] raises [T bad_mem]  *)
+      val expect_mem : 'a
+
+      (** [expect_imm] raises [T bad_imm]  *)
+      val expect_imm : 'a
+
+      (** [bad_cast] raises [T bad_cast]  *)
+      val bad_cast : 'a
+
+      (** [expect t ~got:u] raises [T (bap_type ~exp:t ~got:t)] *)
+      val expect : typ -> got:typ -> 'a
+
+      include Regular.S with type t := t
+
+    end
+    (** BIL type is regular  *)
+    include Regular.S with type t := t
+  end
+
+
+  val bool_t  : typ             (** one bit             *)
+  val reg8_t  : typ             (** 8-bit width value   *)
+  val reg16_t : typ             (** 16-bit width value  *)
+  val reg32_t : typ             (** 32-bit width value  *)
+  val reg64_t : typ             (** 64-bit width value  *)
+  val reg128_t: typ             (** 128-bit width value *)
+  val reg256_t: typ             (** 256-bit width value *)
+
+  (** [mem32_t size] creates a type for memory with [32]-bit addresses
+      and elements of the given [size].  *)
+  val mem32_t : size -> typ
+
+  (** [mem64_t size] creates a type for memory with [64]-bit addresses
+      and elements of the given [size].  *)
+  val mem64_t : size -> typ
+
+  (** BIL variable.
+
+      A variable is a symbolic name, that may have different values
+      during program evaluation. A variable may be virtual, in the
+      sense that it doesn't correspond to some physical location, or it
+      can be physical if a variable is a some physical location, e.g.,
+      a register. All variables have types that designate a set of
+      values over which a variable ranges.
+
+      BIL variables are regular values. Variables can have
+      indices. Usually the index is used to represent the same
+      variable but at different time or space (control flow path).
+      This is particulary useful for representing variables in SSA
+      form.
+
+      By default, comparison functions takes indices into account. In
+      order to compare two variables regardless their index use [same]
+      function, or compare with [base x].
+
+      {2 Printing}
+
+      A default pretty printer doesn't print zero indices.
+  *)
+  module Var : sig
+
+    type t = var
+
+    (** [create ?register ?fresh name typ] creates a variable with
+        a given [name] and [typ]e.
+
+        A newly created variable has version equal to 0.
+
+        If [fresh] is [true] (defaults to [false]), then a unique salt
+        is mixed to the name of variable, making it unique.
+
+        If [is_virtual] is [true] (defaults to [false]), then a
+        variable is virtual, i.e., it doesn't correspond to some
+        physical register or memory location and was added to a program
+        artificially.
+    *)
+    val create : ?is_virtual:bool -> ?fresh:bool -> string -> typ -> t
+
+    (** [name var] returns a name assosiated with variable  *)
+    val name : t -> string
+
+    (** [typ var] returns a type assosiated with variable  *)
+    val typ : t -> typ
+
+    (** [is_physical v] is [true] if [v] represents a contents of a
+        physical register. *)
+    val is_physical : t -> bool
+
+    (** [is_virtual v] is [true] if [v] is not physical  *)
+    val is_virtual : t -> bool
+
+    (** [with_index v i] returns a variable, that is identical to
+        [v], but with the index [i] *)
+    val with_index : t -> int -> t
+
+    (** [index v] is an index of [v]  *)
+    val index : t -> int
+
+    (** [base v] returns an original variable. Essentially,
+        identical to [with_index v 0]. *)
+    val base : t -> t
+
+    (** [same x y] compares variables ignoring indices, i.e., for
+        variables [x] and [y] the [same x y] is [true] iff [equal
+        (base x) (base y)] *)
+    val same : t -> t -> bool
+
+    (** implements [Regular] interface  *)
+    include Regular.S with type t := t
+                       and type comparator_witness = Bil.var_compare
+
+  end
 
   (** Base class for evaluation contexts.
 
@@ -2087,30 +2184,7 @@ module Std : sig
     end
   end
 
-  (** BIL type errors.
-
-      A type error will occur during the evaluation of a BIL program
-      that is not well typed.  *)
-  module Type_error : sig
-    type t [@@deriving bin_io, compare, sexp]
-
-
-    (** [bad_mem] error occurs when a value of type [mem] was expected  *)
-    val bad_mem : t
-
-    (** [bad_imm] error occurs when a value of type [imm] was expected *)
-    val bad_imm : t
-
-    (** [bad_cast] error occurs when parameters to the cast operation
-        are not valid.  *)
-    val bad_cast : t
-
-    (** [bad_type ~exp ~got] error happens when we expect a value of
-        type [exp] but got a value of type [got].  *)
-    val bad_type : exp:typ -> got:typ -> t
-
-    include Regular.S with type t := t
-  end
+  module Type_error : module type of Type.Error with type t = Type.Error.t
 
   (** A BIL type error  *)
   type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
@@ -2504,6 +2578,102 @@ module Std : sig
   module Exp : sig
     type t = Bil.exp
 
+    (** Effect analysis.
+
+       Effect analysis describes how an expression computation
+       interacts with the outside world. By the outside world we
+       understand the whole of the CPU state (including the hidden
+       state) and the memory. We distinguish, so far, between the
+       following sorts of effects:
+
+       - coeffects - a value of an expression depends on the outside
+         world, that is further subdivided by the read effect, when an
+         expression reads a CPU register, and the load effect, when an
+         expression an expression accesses the memory.
+
+       - effects - a value modifies the state of the world, by either
+         storing a value in the memory, or by raising a CPU exception
+         via the division by zero or accessing the memory.
+
+       An expression that doesn't have effects or coeffects is
+       idempotent and can be moved arbitrary in a tree, removed or
+       substituted. An expression that has only [coeffects] is
+       generative and can be reproduced without a significant change
+       of semantics.
+
+       Examples:
+       - [x ^ x], [x+1], [x] - have coeffects;
+       - [x[y]] - has both effects (may raise pagefault) and coeffects;
+       - [7 * 8], [42] - have no effects.
+
+    *)
+    module Eff : sig
+
+      (** a set of expression effects  *)
+      type t
+
+      (** an expression doesn't have any effects  *)
+      val none : t
+
+      (** an expression reads a register (nonvirtual) variable.   *)
+      val read : t
+
+      (** an expression loads a value from a memory   *)
+      val load : t
+
+      (**  an expression stores a value in a memory *)
+      val store : t
+
+      (** an expression raises a CPU exception  *)
+      val raise : t
+
+      (** a set of all effects, i.e., [store] and [raise] *)
+      val effects : t
+
+      (** a set of all coeffects, i.e., [load] and [read]  *)
+      val coeffects : t
+
+      (** [reads eff] if [read] in [eff]  *)
+      val reads : t -> bool
+
+      (** [loads eff] if [load] in [eff] *)
+      val loads : t -> bool
+
+      (** [stores eff] if [load] in [eff] *)
+      val stores : t -> bool
+
+      (** [raises eff] if [raise] in [eff] *)
+      val raises : t -> bool
+
+
+      (** [has_effects eff] if [stores eff] || [raises eff]  *)
+      val has_effects : t -> bool
+
+      (** [has_coeffects eff] if [loads eff] || [reads eff]  *)
+      val has_coeffects :  t -> bool
+
+      (** [compute x] computes a set of effects produced by [x]. The
+         result is a sound overapproximation of the real effects,
+         i.e., if an effect is computed then it may really happen,
+         but if it is not computed, then it is proved that it is not
+         possible for the expression to have this effect.
+
+         The analysis applies a simple abstract interpretation to
+         approximate arithmetics and prove an absence of the division
+         by zero. The load/store/read analysis is more precise than
+         the division by zero, as the only source of the imprecision
+         is a presence of conditional expressions.
+
+         Requires: normalized and simplified expression.
+
+         Warning: the above should be either relaxed or expressed in
+         the type system.
+      *)
+
+      val compute : exp -> t
+    end
+
+
     (** All visitors provide some information about the current
         position of the visitor *)
     class state : object
@@ -2686,6 +2856,53 @@ module Std : sig
         something. See also {!Bil.exists} and {Stmt.exists}  *)
     val exists : unit #finder -> t -> bool
 
+
+    (** [simpl ~ignore:effects x] iff expression [x] is well-typed,
+        then returns an expression with the same semantics as [x],
+        that might smaller according to some metrics. A subexression
+        is removed from [x] if it doesn't manifest any effects other
+        than those that are specified with the [~ignore:effects]
+        parameter (defaults to an empty list).
+
+        The following code simplification are applied:
+
+        - constant folding: if an expression can be computed
+          statically then it is substituted with the result of
+          computation, e.g., [1 + 2 -> 3]
+
+        - neutral element elimination: binary operations with one of
+          the operands being known to be neutral, are subtituted with
+          the other operand, e.g., [x * 1 -> x]
+
+        - zero element propagation: binary operations applied to a
+          zero element are substituted with the zero element, e.g.,
+          [x * 0 -> 0]
+
+        - symbolic equality reduction: if both branches of a
+          comparison are syntactically equal then the comparison is
+          reduced to a boolean constant, e.g., [a = a -> true],
+          [a < a -> false]. Note, by default a read from a register is
+          considered as a (co)effect, hence the above transformations
+          wouldn't be applied, consider passing [~ignore:[Eff.reads]]
+          if you want such expressions to be reduced.
+
+        - double complement reduction: an even amount of complement
+          operations (one and two) are reduced to one complement of
+          the same sort, e.g., [~~~1 -> ~1]
+
+        - binary to unary reduction: reduce a subtraction from zero
+          to the unary negation, e.g., [0 - x -> -x]
+
+        - exclusive disjunction reduction: reduces an exclusive
+          disjunction of syntactically equal expresions to zero, e.g,
+          [42 ^ 42 -> 0]. Note, by default a read from a register is
+          considered as a (co)effect, thus [xor eax eax] is not
+          reduced, consider passing [~ignore:[Eff.reads]] if you want
+          such expressions to be reduced.
+
+    *)
+    val simpl : ?ignore:Eff.t list -> exp -> exp
+
     (** [is_referenced x exp] true if [exp] contains [Var x] on one of
         its leafs. See also {!Bil.is_referenced} and {!Stmt.is_referenced}  *)
     val is_referenced : var -> t -> bool
@@ -2722,7 +2939,7 @@ module Std : sig
     val free_vars : t -> Var.Set.t
 
     (** [eval x] evaluate expression [x] to a value.  *)
-    val eval : exp -> Bil.value
+    val eval : t -> Bil.value
 
     include Regular.S with type t := t
     val pp_adt : t printer
@@ -2891,6 +3108,57 @@ module Std : sig
 
     (** [constant_folder] is a class that implements the [fold_consts]  *)
     class constant_folder : mapper
+
+
+    (** [normalize xs] produces a normalized BIL program with the same[^1]
+       semantics but in the BIL normalized form. Precondition: [xs] is
+       well-typed.
+
+       The BIL Normalized Form (BNF) is a subset of the BIL
+       language, where expressions have the following properties:
+
+       - No let expressions - new variable can be created only with a
+         Move instruction.
+
+       - All memory operations have sizes equal to one byte. Thus the
+         size and endiannes can be ignored in analysis. During the
+         normalization, the following rewrites are performed
+
+       - Memory load expressions can be only applied to a memory. This
+         effectively disallows creation of temporary memory regions,
+         and requires all store operations to be commited via the
+         assignemnt operation.
+
+         {v
+
+let x = <expr> in ... x ... => ... <expr> ...
+x[a,el]:n => x[a+n-1] @ ... @ x[a]
+x[a,be]:n => x[a] @ ... @ x[a+n-1]
+m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
+m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
+... ite c ? x : y ... => if c {... x ...} {... y ...}
+(x[a] <- b)[c] => m := x[a] <- b; m[c]
+         v}
+
+       [^1]: The normalization procedure may duplicate expressions
+       that might be considered non-generative. For example,
+
+       [let x = m[a] in x + x]
+
+       is rewritten to [m[a] + m[a]]. Given a concrete semantics of a
+       memory (for example, if memory is mapped to a device register
+       that changes every times it is read) this expression may have
+       different value. It will also have different effect (such as
+       two memory accesses, page faults etc).
+
+       However, in the formal semantics of BAP we do not consider
+       effects, and treat all expressions as side-effect free, thus
+       the above transformation, as well as
+
+
+    *)
+    val normalize : bil -> bil Or_error.t
+
 
 
     (** [fold ~init visitor stmt] folds a [stmt] with a visitor. See

@@ -5,13 +5,14 @@ open Bap_bil
 open Bap_visitor
 open Bap_result
 
+class rewriter : exp -> exp -> bil_mapper
+
 val find   : <find : 'a -> 'b option; ..> -> 'a -> 'b option
 val exists : <find : 'a -> 'b option; ..> -> 'a -> bool
 val iter : unit #bil_visitor -> bil -> unit
 val fold : 'a #bil_visitor -> init:'a -> bil -> 'a
 val map : #bil_mapper -> bil -> bil
 
-class rewriter : exp -> exp -> bil_mapper
 val is_referenced : var -> bil -> bool
 val is_assigned : ?strict:bool -> var -> bil -> bool
 val prune_unreferenced :
@@ -19,6 +20,8 @@ val prune_unreferenced :
   ?physicals:bool ->
   ?virtuals:bool ->
   bil -> bil
+
+val normalize : bil -> bil
 val normalize_negatives : bil -> bil
 val substitute : exp -> exp -> bil -> bil
 val substitute_var : var -> exp -> bil -> bil
@@ -36,6 +39,32 @@ module Simpl : sig
   val bil : stmt list -> stmt list
   val stmt : stmt -> stmt list
   val exp : exp -> exp
+end
+
+module Type : sig
+  val check : stmt list -> (unit,Bap_type_error.t) Result.t
+  val infer : exp -> (typ, Bap_type_error.t) Result.t
+  val infer_exn : exp -> typ
+end
+
+module Eff : sig
+  type t
+
+  val read : t
+  val load : t
+  val store : t
+  val raise : t
+
+  val reads : t -> bool
+  val loads : t -> bool
+  val stores : t -> bool
+  val raises : t -> bool
+
+  val has_effects : t -> bool
+  val has_coeffects :  t -> bool
+  val idempotent : t -> bool
+
+  val compute : exp -> t
 end
 
 module Exp : sig
@@ -76,6 +105,7 @@ module Stmt : sig
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
+  val normalize : stmt list -> stmt list
 end
 
 module Trie : sig

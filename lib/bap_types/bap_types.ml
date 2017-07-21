@@ -45,15 +45,6 @@ module Std = struct
   (** Typed and always fresh variables.  *)
   module Var  = Bap_var
 
-  (** Types of BIL expressions  *)
-  module Type = struct
-    include Type
-    include Bap_type
-  end
-
-  (** This module exports first-class type definitions,
-      like [reg8_t], or [mem32_t]. Look at [Bap_type], for more. *)
-  include Type.Export
 
   (** Sizes of expression operands  *)
   module Size = struct
@@ -66,6 +57,11 @@ module Std = struct
     include (Bap_stmt.Stmts_pp : Printable.S with type t := t)
     include (Bap_stmt.Stmts_data : Data.S with type t := t)
     module Types = struct
+      type var = Bap_var.t
+      type typ = Type.t =
+        | Imm of int
+        | Mem of addr_size * size
+        [@@deriving bin_io, compare, sexp]
       include Bap_bil.Cast
       include Bap_bil.Binop
       include Bap_bil.Unop
@@ -92,9 +88,24 @@ module Std = struct
       | Imm of word
       | Mem of storage
       | Bot
-
+    type var_compare = Var.comparator_witness
+    type vars = (var,var_compare) Set.t
     type result = Result.t
   end
+
+  (** Types of BIL expressions  *)
+  module Type = struct
+    include Type
+    include Bap_type
+    type error = Bap_type_error.t
+        [@@deriving bin_io, compare, sexp]
+    module Error = Bap_type_error
+  end
+
+  (** This module exports first-class type definitions,
+      like [reg8_t], or [mem32_t]. Look at [Bap_type], for more. *)
+  include Type.Export
+
 
   module Eval = struct
     include Bap_eval_types.Eval

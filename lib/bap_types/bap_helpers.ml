@@ -7,12 +7,18 @@ open Bap_visitor
 module Word = Bitvector
 module Var = Bap_var
 module Size = Bap_size
+module Type_error = Bap_type_error
 
 let find finder ss : 'a option = finder#find ss
+let find_stmt f s = find f [s]
 let exists finder ss = Option.is_some (finder#find ss)
 let iter (visitor : unit #bil_visitor) ss = visitor#run ss ()
 let fold (visitor : 'a #bil_visitor) ~init ss = visitor#run ss init
 let map m = m#run
+let map_exp m = m#map_exp
+let map_stmt m = m#map_stmt
+let is0 = Word.is_zero and is1 = Word.is_one
+let ism1 x = Word.is_zero (Word.lnot x)
 
 let is_assigned ?(strict=false) x = exists (object(self)
     inherit [unit] bil_finder
@@ -147,52 +153,179 @@ module Apply = struct
     | SLE  -> Bitvector.(of_bool (signed u <= signed v))
 end
 
-module Simpl = struct
+module Type = struct
   open Bap_bil
   open Binop
   open Unop
   open Exp
   open Stmt
+  open Cast
+  include Type
 
-  module Size = Bap_size
-  module Var = Bap_var
 
-  let rec infer_type = function
+  (** [infer x] infers the type of the expression [x].  Either returns
+      the inferred type, or terminates abnormally on the first type
+      error with the `Type_error.E` exception.  *)
+  let rec infer = function
     | Var v -> Var.typ v
     | Int x -> Type.Imm (Word.bitwidth x)
     | Unknown (_,t) -> t
-    | Load (_,_,_,s) -> Type.Imm (Size.in_bits s)
-    | Cast (_,s,_) -> Type.Imm s
-    | Store (m,_,_,_,_) -> infer_type m
-    | BinOp ((LT|LE|EQ|NEQ|SLT|SLE),_,_) -> Type.Imm 1
-    | BinOp (_,x,y) -> unify x y
-    | UnOp (_,x) -> infer_type x
-    | Let (_,_,x) -> infer_type x
-    | Ite (_,x,y) -> unify x y
-    | Extract (hi,lo,_) -> Type.Imm (hi - lo + 1)
-    | Concat (x,y) -> match infer_type x, infer_type y with
-      | Type.Imm s, Type.Imm t -> Type.Imm (s+t)
-      | _ -> failwith "concat is not applicable to mem"
+    | Load (m,a,_,s) -> load m a s
+    | Cast (c,s,x) -> cast c s x
+    | Store (m,a,x,_,t) -> store m a x t
+    | BinOp (op,x,y) -> binop op x y
+    | UnOp (_,x) -> unop x
+    | Let (v,x,y) -> let_ v x y
+    | Ite (c,x,y) -> ite c x y
+    | Extract (hi,lo,x) -> extract hi lo x
+    | Concat (x,y) -> concat x y
   and unify x y =
-    let t1 = infer_type x and t2 = infer_type y in
-    if t1 = t2 then t1 else failwith "type error"
+    let t1 = infer x and t2 = infer y in
+    if t1 = t2 then t1
+    else Type_error.expect t1 ~got:t2
+  and let_ v x y =
+    let t = Var.typ v and u = infer x in
+    if t = u then infer y
+    else Type_error.expect t ~got:u
+  and ite c x y = match infer c with
+    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Imm 1 -> unify x y
+    | t -> Type_error.expect (Type.Imm 1) ~got:t
+  and unop x = match infer x with
+    | Type.Mem _ -> Type_error.expect_imm
+    | t -> t
+  and binop op x y = match unify x y with
+    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Imm _ as t -> match op with
+      | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
+      | _ -> t
+  and load m a r = match infer m, infer a with
+    | Type.Imm _,_ -> Type_error.expect_mem
+    | _,Type.Mem _ -> Type_error.expect_imm
+    | Type.Mem (s,_),Type.Imm s' ->
+      let s = Size.in_bits s in
+      if s = s' then Type.Imm (Size.in_bits r)
+      else Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
+  and store m a x r =
+    match infer m, infer a, infer x with
+    | Type.Imm _,_,_ -> Type_error.expect_mem
+    | Type.Mem (s,_) as t, Type.Imm s', Type.Imm u ->
+      let s = Size.in_bits s in
+      if s < s'
+      then Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
+      else if is_error (Size.of_int u)
+      then Type_error.bad_cast
+      else t
+    | _ -> Type_error.expect_imm
+  and cast c s x =
+    let t = Type.Imm s in
+    match c,infer x with
+    | _,Type.Mem _ -> Type_error.expect_imm
+    | (UNSIGNED|SIGNED),_ -> t
+    | (HIGH|LOW), Type.Imm s' ->
+      if s' >= s then t else Type_error.bad_cast
+  and extract hi lo x = match infer x with
+    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Imm _ ->
+      (* we don't really need a type of x, as the extract operation
+         can both narrow and widen. Though it is a question whether it is
+         correct or not, especially wrt to the operational semantics, the
+         real life fact is that our lifters are (ab)using extract
+         instruction in both directions.  *)
+      if hi >= lo then Type.Imm (hi - lo + 1)
+      else Type_error.bad_cast
+  and concat x y = match infer x, infer y with
+    | Type.Imm s, Type.Imm t -> Type.Imm (s+t)
+    | _ -> Type_error.expect_mem
 
-  let width x = match infer_type x with
+
+
+  let infer_exn = infer
+  let infer x =
+    try Ok (infer x) with
+    | Type_error.T err -> Error err
+
+  let (&&&) = Option.first_some
+
+
+  (** [check xs] verifies that [xs] is well-typed.  *)
+  let rec check bil =
+    List.find_map bil ~f:(function
+    | Move (v,x) -> move v x
+    | Jmp d -> jmp d
+    | While (c,xs) -> cond c &&& check bil
+    | If (c,xs,ys) -> cond c &&& check xs &&& check ys
+    | Special _ | CpuExn _ -> None)
+  and move v x =
+    let t = Var.typ v in
+    match infer x with
+    | Ok u when t = u -> None
+    | Ok u -> Some (Type_error.expect t ~got:u)
+    | Error err -> Some err
+  and jmp x = match infer x with
+    | Ok (Imm s) when Result.is_ok (Size.addr_of_int s) -> None
+    | Ok (Mem _) -> Some Type_error.expect_imm
+    | Ok (Imm _) -> Some Type_error.bad_cast
+    | Error err -> Some err
+  and cond x = match infer x with
+    | Ok (Imm 1) -> None
+    | Ok got -> Some (Type_error.expect (Type.Imm 1) ~got)
+    | Error err -> Some err
+
+  let check xs = match check xs with
+    | None -> Ok ()
+    | Some err -> Error err
+end
+
+(*
+  The effect analysis kind of contradicts the official operational
+  semantics of BIL, as it is stated there that expressions do not
+  manifest any effects.
+
+  This module is one of the first steps in the direction of new BIL,
+  that will be easier to analyze, and that will have semantics that
+  corresponds to real hardware not to some abstract non-implementable
+  machine. *)
+module Eff = struct
+  open Bap_bil
+  open Binop
+  open Unop
+  open Exp
+  open Stmt
+  open Cast
+
+  type t = {
+    reads : bool;
+    loads : bool;
+    stores : bool;
+    raises : bool;
+  }
+
+
+  let all_effects_are t = {reads=t; loads=t; stores=t; raises=t}
+  let no_effect = all_effects_are false
+  let reads  = {no_effect with reads = true}
+  let loads  = {no_effect with loads = true}
+  let stores = {no_effect with stores = true}
+  let raises = {no_effect with raises = true}
+  let join_eff x y = {
+    reads = x.reads || y.reads;
+    loads = x.loads || y.loads;
+    stores = x.stores || y.stores;
+    raises = x.raises || y.raises;
+  }
+
+  let has_effects {raises=x; stores=y} = x || y
+  let has_coeffects {reads=x; loads=y} = x || y
+  let idempotent x = x = no_effect
+
+  let width x = match Type.infer_exn x with
     | Type.Imm x -> x
     | Type.Mem _ -> failwith "width is not for memory"
-
-  let zero width = Int (Word.zero width)
-  let ones width = Int (Word.ones width)
-  let is0 = Word.is_zero
-  and is1 = Word.is_one
-  let ism1 x = Word.is_zero (Word.lnot x)
-  let nothing _ = false
-
 
   (* approximates a number of non-zero bits in a bitvector.  *)
   module Nz = struct
     open Cast
-
 
     (* an approximation of a set of non-zero bits  *)
     type nzbits =
@@ -270,26 +403,57 @@ module Simpl = struct
   *)
 
   let rec eff = function
-    | Load _ | Store _ -> true
-    | BinOp ((DIVIDE|SDIVIDE|MOD|SMOD),x,y) -> eff x || div y
-    | BinOp (_,x,y) -> eff x || eff y
-    | UnOp (_,x) -> eff x
-    | Var _ | Int _ | Unknown _ -> false
-    | Cast (_,_,x) -> eff x
-    | Let (_,x,y) -> eff x || eff y
-    | Ite (x,y,z) -> eff x || eff y || eff z
+    | Var _ -> reads
+    | Int _ -> no_effect
+    | Unknown _ -> no_effect
+    | Load (m,a,_,_) -> all [raises; loads; eff m; eff a]
+    | Store (m,a,x,_,_) -> all [raises; stores; eff m; eff a; eff x]
+    | BinOp ((DIVIDE|SDIVIDE|MOD|SMOD),x,y) -> all [div y; eff x; eff y]
+    | BinOp (_,x,y)
+    | Concat (x,y) -> all [eff x; eff y]
+    | Ite (x,y,z) -> all [eff x; eff y; eff z]
+    | UnOp (_,x)
+    | Cast (_,_,x)
     | Extract (_,_,x) -> eff x
-    | Concat (x,y) -> eff x || eff y
+    | Let (_,x,y) -> assert false (* must be let-normalized *)
   and div y = match Nz.bits y with
-    | Nz.Maybe | Nz.Empty -> true
-    | _ -> false
+    | Nz.Maybe | Nz.Empty -> raises
+    | _ -> no_effect
+  and all = List.fold_left ~init:no_effect ~f:join_eff
+
+  let compute = eff
+  let reads t = t.reads
+  let loads t = t.loads
+  let stores t = t.stores
+  let raises t = t.raises
+end
+
+module Simpl = struct
+  open Bap_bil
+  open Binop
+  open Unop
+  open Exp
+  open Stmt
+  open Cast
+
+
+  let zero width = Int (Word.zero width)
+  let ones width = Int (Word.ones width)
+  let nothing _ = false
+
+
+  (* requires: let-free, simplifications(
+        constant-folding,
+        neutral-element-elimination,
+        zero-element-propagation)  *)
+  let removable x = Eff.idempotent (Eff.compute x)
 
   let rec exp = function
     | Load (m,a,e,s) -> Load (exp m, exp a, e, s)
     | Store (m,a,v,e,s) -> Store (exp m, exp a, exp v, e, s)
     | BinOp (op,x,y) -> binop op x y
     | UnOp (op,x) -> unop op x
-    | Var _ | Int _  | Unknown (_,_)as const -> const
+    | Var _ | Int _  | Unknown (_,_) as const -> const
     | Cast (t,s,x) -> Cast (t,s,exp x)
     | Let (v,x,y) -> Let (v, exp x, exp y)
     | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
@@ -303,13 +467,13 @@ module Simpl = struct
     | UnOp(op',x) when op = op' -> exp x
     | _ -> UnOp(op, exp x)
   and binop op x y =
-    let width = match unify x y with
+    let width = match Type.unify x y with
       | Type.Imm s -> s
       | Type.Mem _ -> failwith "binop" in
-    let return op x y = BinOp(op,x,y) in
+    let keep op x y = BinOp(op,x,y) in
     let int f = function Int x -> f x | _ -> false in
     let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-    let (=) x y = compare_exp x y = 0 && not (eff x) in
+    let (=) x y = compare_exp x y = 0 && removable x in
     match op, exp x, exp y with
     | op, Int x, Int y -> Int (Apply.binop op x y)
     | PLUS,x,y  when is0 x -> y
@@ -317,25 +481,24 @@ module Simpl = struct
     | MINUS,x,y when is0 x -> UnOp(NEG,y)
     | MINUS,x,y when is0 y -> x
     | MINUS,x,y when x = y -> zero width
-    | TIMES,x,y when is0 x -> x
-    | TIMES,x,y when is0 y -> y
+    | TIMES,x,y when is0 x && removable y -> x
+    | TIMES,x,y when is0 y && removable x -> y
     | TIMES,x,y when is1 x -> y
     | TIMES,x,y when is1 y -> x
-    | (DIVIDE|SDIVIDE),x,y when is0 y -> return op x y
     | (DIVIDE|SDIVIDE),x,y when is1 y -> x
     | (MOD|SMOD),x,y when is1 y -> zero width
     | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
     | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 x -> x
     | (LSHIFT|RSHIFT|ARSHIFT),x,y when ism1 x -> x
-    | AND,x,y when is0 x -> x
-    | AND,x,y when is0 y -> y
+    | AND,x,y when is0 x && removable y -> x
+    | AND,x,y when is0 y && removable x -> y
     | AND,x,y when ism1 x -> y
     | AND,x,y when ism1 y -> x
     | AND,x,y when x = y -> x
     | OR,x,y  when is0 x -> y
     | OR,x,y  when is0 y -> x
-    | OR,x,y  when ism1 x -> x
-    | OR,x,y  when ism1 y -> y
+    | OR,x,y  when ism1 x && removable y -> x
+    | OR,x,y  when ism1 y && removable x -> y
     | OR,x,y  when x = y -> x
     | XOR,x,y when x = y -> zero width
     | XOR,x,y when is0 x -> y
@@ -343,7 +506,7 @@ module Simpl = struct
     | EQ,x,y  when x = y -> Int Word.b1
     | NEQ,x,y when x = y -> Int Word.b0
     | (LT|SLT), x, y when x = y -> Int Word.b0
-    | _ -> return op x y
+    | _ -> keep op x y
 
   let rec stmt = function
     | Move (v,x) -> [Move (v, exp x)]
@@ -378,6 +541,7 @@ class rewriter x y = object
     let z = super#map_exp z in
     if Bap_exp.(z = x) then y else z
 end
+
 
 let substitute x y = (new rewriter x y)#run
 
@@ -462,6 +626,38 @@ module Exp = struct
   let fold_consts = Simpl.exp
   let fixpoint = fix compare_exp
 
+  let substitute x y = map (new rewriter x y)
+
+  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
+      inherit [VS.t * var list] visitor
+
+      method! enter_var var (vars,stack) =
+        if List.exists stack ~f:(fun x -> Bap_var.(x = var))
+        then (vars,stack) else Set.add vars var,stack
+
+      method! enter_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, var::stack)
+
+      method! leave_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, List.tl_exn stack)
+      end) exp
+end
+
+module Normalize = struct
+  open Bap_bil
+  open Binop
+  open Unop
+  open Exp
+  open Stmt
+  open Cast
+
+
+  (** substitutes let bound variables with theirs definitions.
+     May change the semantics in general, as the function will
+     copy expressions that are non-generative. However,
+     the semantics is preserved wrt to the official BIL semantics,
+     that states that all expressions have no side effects.
+  *)
   let reduce_let exp =
     let rec (/) d x = match x with
       | Load (x,y,e,s) -> Load (d/x, d/y, e, s)
@@ -479,11 +675,14 @@ module Exp = struct
         | Some exp -> exp in
     []/exp
 
-  let nth n x =
-    let hi = (n+1) * 8 - 1 in
-    let lo = n * 8 in
-    Exp.Extract (hi,lo,x)
 
+  (** [nth n x] projects [n]'th byte from a word.
+      requires that a word is at least [n] bytes long.*)
+  let nth n x = Exp.Extract ((n+1) * 8 - 1, n * 8, x)
+
+
+  (* we don't need a full-fledged type inference here.
+     requires: well-typed exp *)
   let infer_addr_size exp =
     let open Exp in
     let rec infer = function
@@ -498,6 +697,7 @@ module Exp = struct
     match infer exp with
     | Type.Mem (s,_) -> s
     | Type.Imm _ -> invalid_arg "type error"
+
 
 
   let make_succ m =
@@ -521,44 +721,135 @@ module Exp = struct
     let (++) = make_succ m in
     let n = Size.in_bytes s in
     let nth i = if e = BigEndian then nth (n-i-1) else nth i in
-    let rec rewrite i =
+    let rec expand i =
       if i >= 0
-      then Exp.Store(rewrite (i-1),(a++i),nth i x,LittleEndian,`r8)
+      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
       else m in
-    rewrite (n-1)
+    expand (n-1)
 
+  (*
+x[a,el]:n => x[a+n-1] @ ... @ x[a]
+x[a,be]:n => x[a] @ ... @ x[a+n-1]
+   *)
   let expand_load m a e s =
     let (++) = make_succ m in
     let cat x y = if e = LittleEndian
       then Exp.Concat (y,x)
       else Exp.Concat (x,y) in
     let load a = Exp.Load (m,a,e,`r8) in
-    let rec rewrite a i =
+    let rec expand a i =
       if i > 1
-      then cat (load a) (rewrite (a++1) (i-1))
+      then cat (load a) (expand (a++1) (i-1))
       else load a in
-    rewrite a (Size.in_bytes s)
+    expand a (Size.in_bytes s)
 
-  let normalize exp = Simpl.exp @@ match reduce_let exp with
+  (* ensures: no-lets, one-byte-stores, one-byte-loads.
+
+     This is the first step of normalization. The full normalization,
+     e.g., remove ite and hoisting storages can be only done on the
+     BIL level.  *)
+  let normalize_exp exp = match reduce_let exp with
     | Load (m,a,e,s) -> expand_load m a e s
     | Store (m,a,x,e,s) -> expand_store m a x e s
     | exp -> exp
 
-  let substitute x y = map (new rewriter x y)
 
-  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
-      inherit [VS.t * var list] visitor
 
-      method! enter_var var (vars,stack) =
-        if List.exists stack ~f:(fun x -> Bap_var.(x = var))
-        then (vars,stack) else Set.add vars var,stack
 
-      method! enter_let var ~exp:_ ~body:_ (vars,stack) =
-        (vars, var::stack)
+  type assume = Assume of (exp * bool)
 
-      method! leave_let var ~exp:_ ~body:_ (vars,stack) =
-        (vars, List.tl_exn stack)
-      end) exp
+
+  (* assume that c is equal to yes in the statement and rewrite all
+     Ite exressions accordingly.
+  *)
+  let assume_exp (Assume (c,yes)) =
+    map_exp @@ object inherit bil_mapper as super
+      method! map_ite ~cond ~yes:x ~no:y =
+        if Bap_exp.equal c cond
+        then if yes then x else y
+        else super#map_ite ~cond ~yes:x ~no:y
+    end
+
+
+  (* extends assume_exp to the BIL level  *)
+  let assume assm stmt =
+    let exp = assume_exp assm in
+    let rec apply = function
+      | CpuExn _ | Special _ as s -> s
+      | Move (v,xs) -> Move (v, exp xs)
+      | Jmp x -> Jmp (exp x)
+      | If (c,xs,ys) -> If (exp c, map xs, map ys)
+      | While (c,xs) -> While (exp c, map xs)
+    and map = List.map ~f:apply in
+    apply stmt
+
+  let with_true v x = assume (Assume (v,true)) x
+  let with_false v x = assume (Assume (v,false)) x
+
+  let require pre =
+    failwithf "precondition %s is violated" pre ()
+
+  let find_cond_in_exp = find @@ object
+      inherit [exp] exp_finder
+      method! enter_ite ~cond ~yes ~no {return} =
+        return (Some cond)
+    end
+
+  let find_cond_in_stmt = find_stmt @@ object
+      inherit [exp] bil_finder
+      method! enter_ite ~cond ~yes ~no {return} =
+        return (Some cond)
+    end
+
+  let find_load_from_store = find_stmt @@ object
+      inherit [exp] bil_finder
+      method! enter_load ~mem ~addr e s ({return} as continue) =
+        match mem with
+        | Var v -> continue
+        | exp -> return (Some exp)
+    end
+
+  let rec memory_of_store = function
+    | Store (Var mem,_,_,_,_) -> mem
+    | Store (mem,_,_,_,_) -> memory_of_store mem
+    | _ -> invalid_arg "memory_of_store: applied non to a store"
+
+
+  let hoist = map @@ object
+      inherit bil_mapper as super
+
+      method! map_stmt stmt =
+        let prog = super#map_stmt stmt in
+        match find_load_from_store stmt with
+        | None -> prog
+        | Some store ->
+          let v =  memory_of_store store in
+          Move (v,store) :: substitute store (Var v) prog
+
+      method! map_while ~cond prog = match find_cond_in_exp cond with
+        | None -> [While(cond,prog)]
+        | Some _ ->
+          let t = Type.infer_exn cond in
+          let v =
+            Var.create ~is_virtual:true ~fresh:true "hoisted_cond" t in
+          let setvar = Move (v, cond) in
+          [setvar; While (Var v, setvar :: prog)]
+    end
+
+  (* requires: hoisted-while-cond.  *)
+  let rec split_ite stmt = match find_cond_in_stmt stmt with
+    | None -> stmt
+    | Some x -> split_ite (If (x, [with_true x stmt], [with_false x stmt]))
+
+  let rec bil xs =
+    List.map (hoist xs) ~f:(function
+    | Move (v,x) -> Move (v, normalize_exp x)
+    | Jmp x -> Jmp (normalize_exp x)
+    | If (c,xs,ys) -> If (normalize_exp c, bil xs, bil ys)
+    | While (c,xs) -> While (normalize_exp c, bil xs)
+    | Special _  | CpuExn _ as s -> s) |>
+    List.map ~f:split_ite
+
 end
 
 module Stmt = struct
@@ -598,8 +889,10 @@ module Stmt = struct
           | stmt -> update (free_vars stmt) vars kill, kill)
 
 
+
   class constant_folder = Constant_folder.main
 end
 
 let free_vars = Stmt.bil_free_vars
 let fold_consts = Simpl.bil
+let normalize = Normalize.bil
