@@ -510,8 +510,6 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
-
-
   (** Machine integer as a sequence of bits.  *)
   module Integer : sig
 
@@ -1441,6 +1439,38 @@ module Std : sig
         | If      of exp * stmt list * stmt list (** if/then/else statement  *)
         | CpuExn  of int                         (** CPU exception *)
             [@@deriving bin_io, compare, sexp]
+
+
+      type well_typed = [`well_typed]
+      type imm_typed = [`immediate]
+      type mem_typed = [`storage]
+      type no_lets = [`no_lets]
+      type no_ites = [`no_ites]
+      type no_whiles = [`no_whiles]
+      type no_specials = [`no_specials]
+      type doesn't_read  = [`doesn't_read]
+      type doesn't_load  = [`doesn't_load]
+      type doesn't_store = [`doesn't_store]
+      type doesn't_raise = [`doesn't_raise]
+      type no_effect = [doesn't_store | doesn't_raise]
+      type no_coeffect = [doesn't_load | doesn't_read]
+      type generative = [ doesn't_load | no_effect]
+      type pure = [no_effect | no_coeffect]
+      type byte_only_loads = [`byte_only_loads]
+      type byte_only_stores = [`byte_only_stores]
+      type no_stores_inside_load = [`no_stores_inside_load]
+      type normalized_memory = [
+        | byte_only_stores
+        | byte_only_loads
+        | no_stores_inside_load
+      ]
+
+      type nf1 = [
+        | normalized_memory
+        | no_lets
+        | no_ites
+      ]
+
     end
 
     (** include all constructors into Bil namespace *)
@@ -3127,17 +3157,20 @@ module Std : sig
        - Memory load expressions can be only applied to a memory. This
          effectively disallows creation of temporary memory regions,
          and requires all store operations to be commited via the
-         assignemnt operation.
+         assignemnt operation. Also, this provides a guarantee, that
+         store expressions will not occur in integer assigments, jmp
+         destinations, and conditional expressions, leaving them valid
+         only in an assignment statment where the rhs has type mem_t.
 
          {v
 
-let x = <expr> in ... x ... => ... <expr> ...
-x[a,el]:n => x[a+n-1] @ ... @ x[a]
-x[a,be]:n => x[a] @ ... @ x[a+n-1]
-m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
-m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
-... ite c ? x : y ... => if c {... x ...} {... y ...}
-(x[a] <- b)[c] => m := x[a] <- b; m[c]
+       let x = <expr> in ... x ... => ... <expr> ...
+       x[a,el]:n => x[a+n-1] @ ... @ x[a]
+       x[a,be]:n => x[a] @ ... @ x[a+n-1]
+       m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
+       m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
+       ... ite c ? x : y ... => if c {... x ...} {... y ...}
+       (x[a] <- b)[c] => m := x[a] <- b; m[c]
          v}
 
        [^1]: The normalization procedure may duplicate expressions

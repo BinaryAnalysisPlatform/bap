@@ -744,7 +744,6 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     expand a (Size.in_bytes s)
 
   (* ensures: no-lets, one-byte-stores, one-byte-loads.
-
      This is the first step of normalization. The full normalization,
      e.g., remove ite and hoisting storages can be only done on the
      BIL level.  *)
@@ -786,9 +785,6 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
   let with_true v x = assume (Assume (v,true)) x
   let with_false v x = assume (Assume (v,false)) x
 
-  let require pre =
-    failwithf "precondition %s is violated" pre ()
-
   let find_cond_in_exp = find @@ object
       inherit [exp] exp_finder
       method! enter_ite ~cond ~yes ~no {return} =
@@ -801,8 +797,8 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
         return (Some cond)
     end
 
-  let find_load_from_store = find_stmt @@ object
-      inherit [exp] bil_finder
+  let find_load_from_store = find @@ object
+      inherit [exp] exp_finder
       method! enter_load ~mem ~addr e s ({return} as continue) =
         match mem with
         | Var v -> continue
@@ -814,42 +810,193 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     | Store (mem,_,_,_,_) -> memory_of_store mem
     | _ -> invalid_arg "memory_of_store: applied non to a store"
 
+  (* hoists non-trivial while conditions and load memory arguments.
 
-  let hoist = map @@ object
-      inherit bil_mapper as super
+     while-cond-hoisting
+     ===================
 
-      method! map_stmt stmt =
-        let prog = super#map_stmt stmt in
-        match find_load_from_store stmt with
-        | None -> prog
-        | Some store ->
-          let v =  memory_of_store store in
-          Move (v,store) :: substitute store (Var v) prog
+     a non-trivial while condition is a condition that contans an
+     if-then-else expression, for example
 
-      method! map_while ~cond prog = match find_cond_in_exp cond with
-        | None -> [While(cond,prog)]
-        | Some _ ->
-          let t = Type.infer_exn cond in
-          let v =
-            Var.create ~is_virtual:true ~fresh:true "hoisted_cond" t in
-          let setvar = Move (v, cond) in
-          [setvar; While (Var v, setvar :: prog)]
+        while (c ? x : y) prog;
+
+    since the condition is evaluated implicitly as a part of the prog
+    body we can apply a regular rewriting to get rid of the
+    if-then-else expression, e.g. the following program modification
+    is incorrect,
+
+        if (c)
+         while (x) prog;
+        else
+         while (y) prog;
+
+
+    Thus, when we see that condition we hoist it to two definitions:
+
+        h = c ? x : y;
+        while (h) {prog; h = c ? x : y}
+
+    So that the if-then-else elimination pass will yield the following
+    program:
+
+       if (c)
+         h := x;
+       else
+         h := y;
+
+       while (h) {
+         prog;
+         if (c)
+           h := x;
+         else
+           h := y;
+       }
+
+
+     load-memory-argument
+     ====================
+
+     We want to ensure that all load expressions refer to memory as a
+     variable, not as an arbitrary store expressions. This will
+     essentialy disallow memory operations that will not have any
+     observable side effects, e.g., the [(mem [a] <- x)[a]]
+     expression creates an anonymous memory storage on fly, stores a
+     value in it, and then discards it without commiting the effect of
+     writting.
+
+     The transformation will force the memory-commit operation, so
+     that if there is any memory load with a non-trivial (i.e., not a
+     variable) memory argument, then this argument is hoisted as a
+     seprate move instruction. This is not always correct, e.g.,
+
+
+         z := (m[a]<-x)[a] + (m[a]<-y)[a]
+
+
+     is not the same as
+
+         m := m[a]<-x
+         m := m[a]<-y
+         z := m[a] + m[a]
+
+
+     But the lifter shouldn't produce such program on a first hand, as
+     this program wouldn't have a physical representation.
+  *)
+
+
+  let new_hoisted_var () =
+    Var.create ~is_virtual:true ~fresh:true "hoisted_cond" (Type.Imm 1)
+
+
+  (** [hoist_whiles ~has_anomality : bil -> bil] generic while
+      condition hoister.  hoists an offending expression from a
+      conditional of a while statement into two separate assignments,
+      e.g.,
+
+      [while (c) prog] if [has_anomality c] is transformed to
+      [v := c; while (v) {prog; v := c}]
+
+      [has_anomality c : bool] is applied to the conditional
+      expression of a while statement and should return [true] if a
+      conditional must be hoisted.
+
+      requires: [has_anomality (Var _) = false]
+      provides: [has_anomality c] is false forall while conditionals.
+  *)
+  let hoist_whiles ~has_anomality =
+    map @@ object(self)
+    inherit bil_mapper as super
+      method! map_while ~cond prog =
+        let prog = super#run prog in
+        if has_anomality cond then
+          let v = new_hoisted_var () in
+          let mv = Move (v,cond) in
+          [mv; While (Var v, prog @ [mv])]
+        else [While (cond, prog)]
     end
 
-  (* requires: hoisted-while-cond.  *)
-  let rec split_ite stmt = match find_cond_in_stmt stmt with
-    | None -> stmt
-    | Some x -> split_ite (If (x, [with_true x stmt], [with_false x stmt]))
+  let not_allowed_in_conditional cond =
+    Option.is_some (find_cond_in_exp cond) ||
+    Option.is_some (find_load_from_store cond)
+
+  (* ensures: all while conditions are free from:
+      - ite expressions;
+      - store operations.
+
+     Note the latter sounds more strong then the implementation, but
+     it is true, as in a well-typed program a conditional must has
+     type bool_t, and thus if the conditional contains a store
+     operation, the the operation will be enclosed with the load, thus
+     any store in a conditional automatically triggers the store in
+     while condition. The same reasoning can be applied to all Jmp
+     statements without further ado, and to all Move statements that
+     has Imm type variable.*)
+  let normalize_while_conditionals =
+    hoist_whiles ~has_anomality:not_allowed_in_conditional
+
+
+  let normalize_if_conditionals =
+    map @@ object(self)
+    inherit bil_mapper
+      method! map_if ~cond ~yes ~no =
+        let yes = self#run yes and no = self#run no in
+        if not_allowed_in_conditional cond
+        then
+          let v = new_hoisted_var () in
+          [Move (v,cond); If (Var v,yes,no)]
+        else [If (cond,yes,no)]
+    end
+
+  let normalize_conditionals = Fn.compose
+      normalize_while_conditionals
+      normalize_if_conditionals
+
+  (* requires: hoisted-while-cond.
+
+     Splits move and jmp instructions that contain ite expressions
+     into an if statement with two branches, e.g.,
+
+        x := c?y:z;
+
+     is rewritten into
+
+       if (c)
+         x := y;
+       else
+         x := z;
+  *)
+  let rec split_ite = map @@ object(self)
+      inherit bil_mapper
+      method! map_move v e = self#split @@ Move (v,e)
+      method! map_jmp e = self#split @@ Jmp (e)
+      method private split stmt = match find_cond_in_stmt stmt with
+        | None -> [stmt]
+        | Some x -> split_ite [If (x, [with_true x stmt], [with_false x stmt])]
+    end
+
+  let rec hoist_stores = map @@ object(self)
+    inherit bil_mapper
+      method! map_move v e = self#hoist e @@ Move (v,e)
+      method! map_jmp e = self#hoist e @@ Jmp e
+      method private hoist e stmt = match find_load_from_store e with
+        | None -> [stmt]
+        | Some store ->
+          let v = memory_of_store store in
+          hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
+    end
+
 
   let rec bil xs =
-    List.map (hoist xs) ~f:(function
+    normalize_conditionals xs |>
+    List.map ~f:(function
     | Move (v,x) -> Move (v, normalize_exp x)
     | Jmp x -> Jmp (normalize_exp x)
     | If (c,xs,ys) -> If (normalize_exp c, bil xs, bil ys)
     | While (c,xs) -> While (normalize_exp c, bil xs)
     | Special _  | CpuExn _ as s -> s) |>
-    List.map ~f:split_ite
-
+    hoist_stores |>
+    split_ite
 end
 
 module Stmt = struct
