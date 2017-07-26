@@ -27,6 +27,7 @@ val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
 val string_of_value : ?hex:bool -> t -> string
 val signed : t -> t
+val unsigned : t -> t
 val is_zero : t -> bool
 val is_one : t -> bool
 val bitwidth : t -> int
@@ -65,6 +66,17 @@ module Int_err : sig
   include Bap_integer.S with type t = t Or_error.t
   include Monad.Infix with type 'a t := 'a Or_error.t
 end
+
+module Stable : sig
+  module V1 : sig
+    type nonrec t = t [@@deriving bin_io, compare, sexp]
+  end
+  module V2 : sig
+    type nonrec t = t [@@deriving bin_io, compare, sexp]
+  end
+end
+
+module Unsafe  : Bap_integer.S with type t = t
 module Int_exn : Bap_integer.S with type t = t
 module Trie : sig
   module Big : sig

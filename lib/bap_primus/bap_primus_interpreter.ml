@@ -48,12 +48,12 @@ let leave_jmp,jmp_left =
 let leave_top,top_left =
   Observation.provide ~inspect:sexp_of_term "leave-top"
 
-let enter_exp,exp_entered = 
+let enter_exp,exp_entered =
   Observation.provide ~inspect:sexp_of_exp "enter-exp"
-let leave_exp,exp_left = 
+let leave_exp,exp_left =
   Observation.provide ~inspect:sexp_of_exp "leave-exp"
 
-let new_value,value_created = 
+let new_value,value_created =
   Observation.provide ~inspect:sexp_of_word "new-value"
 
 let pc_change,pc_changed =
@@ -131,7 +131,7 @@ module Make (Machine : Machine) = struct
   let failf fmt = Format.ksprintf (fun msg ->
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
-  let undefined = Word.of_int 0 ~width:0
+  let undefined = Word.of_int 0 ~width:1
 
   let sema = object
     inherit [word,word] Eval.t as super
@@ -139,8 +139,8 @@ module Make (Machine : Machine) = struct
     method word_of_value x = Machine.return (Some x)
     method undefined = Machine.return undefined
     method storage_of_value x = Machine.return (Some x)
-    method lookup = Env.get 
-    method update = Env.set 
+    method lookup = Env.get
+    method update = Env.set
 
     method load base addr =
       let addr = Addr.(base + addr) in
@@ -151,68 +151,68 @@ module Make (Machine : Machine) = struct
       Memory.save addr data >>= fun () ->
       Machine.return base
 
-    method! eval_exp e = 
-      !!exp_entered e >>= fun () -> 
-      super#eval_exp e >>= fun r -> 
-      !!value_created r >>= fun () -> 
+    method! eval_exp e =
+      !!exp_entered e >>= fun () ->
+      super#eval_exp e >>= fun r ->
+      !!value_created r >>= fun () ->
       !!exp_left e >>= fun () ->
       Machine.return r
   end
 
-  let update_pc t = 
+  let update_pc t =
     match Term.get_attr t address with
     | None -> Machine.return ()
     | Some addr ->
-      Machine.Local.get state >>= fun s -> 
-      Machine.Local.put state {s with addr} >>= fun () -> 
-      if Addr.(s.addr <> addr) 
+      Machine.Local.get state >>= fun s ->
+      Machine.Local.put state {s with addr} >>= fun () ->
+      if Addr.(s.addr <> addr)
       then !!pc_changed addr
       else Machine.return ()
 
   let term cls f t =
-    Machine.Local.get state >>= fun s -> 
+    Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
     | Ok curr ->
       update_pc t >>= fun () ->
-      Machine.Local.update state (fun s -> {s with curr}) >>= fun () -> 
-      !!pos_entered curr >>= fun () -> 
+      Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
+      !!pos_entered curr >>= fun () ->
       !!term_entered (Term.tid t) >>= fun () ->
-      Term.switch cls t 
+      Term.switch cls t
         ~program:(!!top_entered)
         ~sub:(!!sub_entered)
         ~arg:(!!arg_entered)
         ~blk:(!!blk_entered)
         ~phi:(!!phi_entered)
         ~def:(!!def_entered)
-        ~jmp:(!!jmp_entered) >>= fun () -> 
-      f t >>= fun r -> 
-      Term.switch cls t 
+        ~jmp:(!!jmp_entered) >>= fun () ->
+      f t >>= fun r ->
+      Term.switch cls t
         ~program:(!!top_left)
         ~sub:(!!sub_left)
         ~arg:(!!arg_left)
         ~blk:(!!blk_left)
         ~phi:(!!phi_left)
         ~def:(!!def_left)
-        ~jmp:(!!jmp_left) >>= fun () -> 
-      !!term_left (Term.tid t) >>= fun () -> 
+        ~jmp:(!!jmp_left) >>= fun () ->
+      !!term_left (Term.tid t) >>= fun () ->
       !!pos_left curr >>= fun () ->
       Machine.return r
 
-  let halt = 
+  let halt =
     !!will_halt () >>= fun () -> Machine.raise Halt
   let exp = sema#eval_exp
-  let (:=) v x  = exp x >>= sema#update v 
+  let (:=) v x  = exp x >>= sema#update v
   let def t = Def.lhs t := Def.rhs t
-  let def = term def_t def 
+  let def = term def_t def
 
   let label : label -> _ = function
     | Direct t -> Linker.exec (`tid t)
-    | Indirect x -> 
-      exp x >>= fun x -> 
+    | Indirect x ->
+      exp x >>= fun x ->
       Linker.exec (`addr x)
 
-  let call c = 
+  let call c =
     label (Call.target c) >>= fun () ->
     match Call.return c with
     | Some t -> label t
@@ -238,7 +238,7 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()
     | Some t -> jump t
 
-  let blk = term blk_t blk 
+  let blk = term blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some In -> Arg.lhs t := Arg.rhs t
@@ -281,8 +281,8 @@ module Init(Machine : Machine) = struct
       | Some x -> Linker.is_linked (`addr x)
 
 
-  let link name code t m = 
-    m >>= fun () -> is_linked name t >>= function 
+  let link name code t m =
+    m >>= fun () -> is_linked name t >>= function
     | true -> Machine.return ()
     | false ->
       Linker.link
@@ -291,24 +291,23 @@ module Init(Machine : Machine) = struct
         ?addr:(Term.get_attr t address)
         code
 
-  let linker = object 
+  let linker = object
     inherit [unit Machine.t] Term.visitor
     method! enter_blk t =
-      let module Code(Machine : Machine) = struct 
+      let module Code(Machine : Machine) = struct
         module Interp = Make(Machine)
         let exec = Interp.blk t
       end in
       link Term.name (module Code) t
-    method! enter_sub t = 
-      let module Code(Machine : Machine) = struct 
+    method! enter_sub t =
+      let module Code(Machine : Machine) = struct
         module Interp = Make(Machine)
         let exec = Interp.sub t
-      end in 
+      end in
       link Sub.name (module Code) t
   end
 
   let run () =
-    Machine.get () >>= fun proj -> 
+    Machine.get () >>= fun proj ->
     linker#run (Project.program proj) (Machine.return ())
 end
-

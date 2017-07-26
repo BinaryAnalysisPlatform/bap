@@ -442,19 +442,30 @@ let pp_hex fmt t =
 
 
 module Trie = struct
-  module Key(Spec : sig val size : size end ) = struct
-    open Spec
-    type nonrec t = t
-    type token = word [@@deriving bin_io, compare, sexp]
+  module Make(Token : sig
+      type t = word [@@deriving bin_io, compare, sexp]
+    end) = struct
+    module Key
+        (Spec : sig val size : size end ) = struct
+      open Spec
+      type nonrec t = t
+      type token = Token.t [@@deriving bin_io, compare, sexp]
 
-    let length m = length m / Size.in_bytes size
-    let nth_token m n = get ~index:n ~scale:size m |> ok_exn
-    let token_hash = Word.hash
+      let length m = length m / Size.in_bytes size
+      let nth_token m n = get ~index:n ~scale:size m |> ok_exn
+      let token_hash = Word.hash
+    end
+
+    module R8  = Trie.Make(Key(struct let size = `r8 end))
+    module R16 = Trie.Make(Key(struct let size = `r16 end))
+    module R32 = Trie.Make(Key(struct let size = `r32 end))
+    module R64 = Trie.Make(Key(struct let size = `r64 end))
   end
-  module R8  = Trie.Make(Key(struct let size = `r8 end))
-  module R16 = Trie.Make(Key(struct let size = `r16 end))
-  module R32 = Trie.Make(Key(struct let size = `r32 end))
-  module R64 = Trie.Make(Key(struct let size = `r64 end))
+  module Stable = struct
+    module V1 = Make(Word.Stable.V1)
+    module V2 = Make(Word.Stable.V2)
+  end
+  include Make(Word)
 end
 
 include Printable.Make(struct
