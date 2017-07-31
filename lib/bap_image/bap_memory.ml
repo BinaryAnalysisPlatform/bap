@@ -13,28 +13,12 @@ type getter = {
   fast : pos_ref :  int ref -> word;
 }
 
-module Getters = struct
-  type getters = {
-    int8  : getter;
-    uint8 : getter;
-    int16 : getter;
-    uint16: getter;
-    int32 : getter;
-    int64 : getter;
-    int128 : getter;
-    int256 : getter;
-  } [@@deriving fields]
-end
-
-open Getters
-
 type t = {
   endian : endian;
   data: Bigstring.t;
   addr : addr;
   off  : int;
   size : int;
-  get  : getters;
 }
 
 module Repr = struct
@@ -62,7 +46,7 @@ let endian t = t.endian
     encapsulated inside a closure (cf, [getter] type).
     [addr] is a virtual address of the byte located at the [offset]
     from the beginning of the [data] *)
-let create_getters endian addr off size data  =
+let getter {endian; addr; off; size; data}  =
   let length = Bigstring.length data in
   (* this precondition should be checked before entry *)
   assert (off + size <= length);
@@ -105,16 +89,16 @@ let create_getters endian addr off size data  =
       unsafe_get_int64_t_be t ~pos:(pos+8),
       unsafe_get_int64_t_be t ~pos:(pos+16),
       unsafe_get_int64_t_be t ~pos:(pos+24)
-    ) in {
-      int8   = int   1 unsafe_get_int8;
-      uint8  = int   1 unsafe_get_uint8;
-      int16  = int   2 unsafe_get_int16_be;
-      uint16 = int   2 unsafe_get_uint16_be;
-      int32  = int32 4 unsafe_get_int32_t_be;
-      int64  = int64 8 unsafe_get_int64_t_be;
-      int128 = concat_int64X2 16 get_int64_beX2;
-      int256 = concat_int64X4 32 get_int64_beX4;
-    }
+    ) in
+    function
+    | `s8 -> int   1 unsafe_get_int8
+    | `r8  -> int   1 unsafe_get_uint8
+    | `s16 -> int   2 unsafe_get_int16_be
+    | `r16 -> int   2 unsafe_get_uint16_be
+    | `r32 -> int32 4 unsafe_get_int32_t_be
+    | `r64 -> int64 8 unsafe_get_int64_t_be
+    | `r128 -> concat_int64X2 16 get_int64_beX2
+    | `r256 -> concat_int64X4 32 get_int64_beX4
   else
     let get_int64_leX2rev t ~pos = (
       unsafe_get_int64_t_le t ~pos:(pos+8),
@@ -125,53 +109,22 @@ let create_getters endian addr off size data  =
       unsafe_get_int64_t_le t ~pos:(pos+16),
       unsafe_get_int64_t_le t ~pos:(pos+8),
       unsafe_get_int64_t_le t ~pos:pos
-    ) in {
-      int8   = int 1 unsafe_get_int8;
-      uint8  = int 1 unsafe_get_uint8;
-      int16  = int 2 unsafe_get_int16_le;
-      uint16 = int 2 unsafe_get_uint16_le;
-      int32  = int32 4 unsafe_get_int32_t_le;
-      int64  = int64 8 unsafe_get_int64_t_le;
-      int128 = concat_int64X2 16 get_int64_leX2rev;
-      int256 = concat_int64X4 32 get_int64_leX4rev;
-    }
-
-let one_byte_getters data addr pos =
-  let byte = Word.of_int ~width:8 in
-  let make read  =
-    let fast ~pos_ref =
-      pos_ref := !pos_ref + 1;
-      byte (read data ~pos)  in
-    let safe ~pos_ref =
-      if Addr.(pos_ref.contents <> addr)
-      then errorf "segfault: you missed a byte"
-      else (pos_ref := Addr.(!pos_ref ++ 1);
-            return (byte (read data ~pos))) in
-    {fast ; safe } in
-  let error =
-    let msg = "trying to read word from one byte of memory" in
-    {
-      safe = (fun ~pos_ref:_ -> errorf "%s" msg);
-      fast = (fun ~pos_ref:_ -> invalid_arg msg);
-    } in
-  let open Bigstring in
-  {
-    int8   = make unsafe_get_int8;
-    uint8  = make unsafe_get_uint8;
-    int16  = error;
-    uint16 = error;
-    int32  = error;
-    int64  = error;
-    int128 = error;
-    int256 = error;
-  }
+    ) in
+    function
+    | `s8 -> int 1 unsafe_get_int8
+    | `r8 -> int 1 unsafe_get_uint8
+    | `s16 -> int 2 unsafe_get_int16_le
+    | `r16 -> int 2 unsafe_get_uint16_le
+    | `r32 -> int32 4 unsafe_get_int32_t_le
+    | `r64 -> int64 8 unsafe_get_int64_t_le
+    | `r128 -> concat_int64X2 16 get_int64_leX2rev
+    | `r256 -> concat_int64X4 32 get_int64_leX4rev
 
 let make_byte mem addr off : t = {
   mem with
   addr;
   off;
   size = 1;
-  get = one_byte_getters mem.data addr off;
 }
 
 let create ?(pos=0) ?len endian addr data : t Or_error.t =
@@ -186,12 +139,7 @@ let create ?(pos=0) ?len endian addr data : t Or_error.t =
         ~max:(Incl data_len);
     ]) in
   Validate.result v >>= fun () ->
-  if size = 1 then
-    let get = one_byte_getters data addr pos in
-    return {endian; data; addr; off=pos; size; get}
-  else
-    let get = create_getters endian addr pos size data in
-    return {endian; data; addr; off=pos; size; get }
+  return {endian; data; addr; off=pos; size}
 
 let of_file endian addr path : t Or_error.t =
   create endian addr (Bap_fileutils.readfile path)
@@ -210,14 +158,6 @@ let first_byte mem : t =
 
 let last_byte mem : t =
   make_byte mem (max_addr mem) (mem.off + mem.size - 1)
-
-let getter mem : size -> getter = function
-  | `r8  -> mem.get.uint8
-  | `r16 -> mem.get.uint16
-  | `r32 -> mem.get.int32
-  | `r64 -> mem.get.int64
-  | `r128 -> mem.get.int128
-  | `r256 -> mem.get.int256
 
 let contains mem =
   Addr.between ~low:(min_addr mem) ~high:(max_addr mem)
@@ -240,16 +180,16 @@ module Input = struct
 
   let word ~word_size m = (getter m word_size).safe
 
-  let read  get t ~pos_ref = (get t.get).safe  ~pos_ref
+  let read  s m ~pos_ref = (getter m s).safe  ~pos_ref
 
-  let int8 = read int8
-  let uint8 = read uint8
-  let int16 = read int16
-  let uint16 = read uint16
-  let int32 = read int32
-  let int64 = read int64
-  let int128 = read int128
-  let int256 = read int256
+  let int8 = read `s8
+  let uint8 = read `r8
+  let int16 = read `s16
+  let uint16 = read `r16
+  let int32 = read `r32
+  let int64 = read `r64
+  let int128 = read `r128
+  let int256 = read `r256
 end
 
 let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
@@ -276,9 +216,7 @@ let sub copy ?(word_size=`r8) ?from ?words  t : t or_error =
     ]) in
   Validate.result check_preconditions >>= fun () ->
   if size = 1 then return (make_byte t amin off)
-  else
-    let get = create_getters t.endian amin off size t.data in
-    return { t with size; data = t.data; addr = amin; off; get}
+  else return { t with size; data = t.data; addr = amin; off}
 
 let view = sub ident
 let copy = sub Bigstring.subo
