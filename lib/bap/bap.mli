@@ -1439,38 +1439,6 @@ module Std : sig
         | If      of exp * stmt list * stmt list (** if/then/else statement  *)
         | CpuExn  of int                         (** CPU exception *)
             [@@deriving bin_io, compare, sexp]
-
-
-      type well_typed = [`well_typed]
-      type imm_typed = [`immediate]
-      type mem_typed = [`storage]
-      type no_lets = [`no_lets]
-      type no_ites = [`no_ites]
-      type no_whiles = [`no_whiles]
-      type no_specials = [`no_specials]
-      type doesn't_read  = [`doesn't_read]
-      type doesn't_load  = [`doesn't_load]
-      type doesn't_store = [`doesn't_store]
-      type doesn't_raise = [`doesn't_raise]
-      type no_effect = [doesn't_store | doesn't_raise]
-      type no_coeffect = [doesn't_load | doesn't_read]
-      type generative = [ doesn't_load | no_effect]
-      type pure = [no_effect | no_coeffect]
-      type byte_only_loads = [`byte_only_loads]
-      type byte_only_stores = [`byte_only_stores]
-      type no_stores_inside_load = [`no_stores_inside_load]
-      type normalized_memory = [
-        | byte_only_stores
-        | byte_only_loads
-        | no_stores_inside_load
-      ]
-
-      type nf1 = [
-        | normalized_memory
-        | no_lets
-        | no_ites
-      ]
-
     end
 
     (** include all constructors into Bil namespace *)
@@ -1490,6 +1458,8 @@ module Std : sig
 
     include Printable.S with type t := t
     include Data.S      with type t := t
+
+
 
     (** Infix operators  *)
     module Infix : sig
@@ -2013,11 +1983,14 @@ module Std : sig
 
     (** [infer exp] is [Ok t] if [exp] is well-typed and has type [t]
        otherwise [Error e]. *)
-    val infer : exp -> (t,error) result
+    val infer : exp -> (t,error) Result.t
+
+    (** [infer_exn t] is the same as [ok_exn @@ infer_exn t]  *)
+    val infer_exn : exp -> t
 
     (** [check bil] is [Ok ()] if [bil] is well-typed, otherwise the
     first type error [e] is returned as [Error e]   *)
-    val check : exp -> (unit,error) result
+    val check : bil -> (unit,error) Result.t
 
     (** BIL type errors.
 
@@ -2603,106 +2576,99 @@ module Std : sig
   (** BIL {{!Bili}interpreter} *)
   class ['a] bili : ['a] Bili.t
 
+(** Effect analysis.
+
+    Effect analysis describes how an expression computation
+    interacts with the outside world. By the outside world we
+    understand the whole of the CPU state (including the hidden
+    state) and the memory. We distinguish, so far, between the
+    following sorts of effects:
+
+    - coeffects - a value of an expression depends on the outside
+     world, that is further subdivided by the read effect, when an
+     expression reads a CPU register, and the load effect, when an
+     expression an expression accesses the memory.
+
+    - effects - a value modifies the state of the world, by either
+     storing a value in the memory, or by raising a CPU exception
+     via the division by zero or accessing the memory.
+
+    An expression that doesn't have effects or coeffects is
+    idempotent and can be moved arbitrary in a tree, removed or
+    substituted. An expression that has only [coeffects] is
+    generative and can be reproduced without a significant change
+    of semantics.
+
+    Examples:
+    - [x ^ x], [x+1], [x] - have coeffects;
+    - [x[y]] - has both effects (may raise pagefault) and coeffects;
+    - [7 * 8], [42] - have no effects.
+
+*)
+module Eff : sig
+
+  (** a set of expression effects  *)
+  type t
+
+  (** an expression doesn't have any effects  *)
+  val none : t
+
+  (** an expression reads a register (nonvirtual) variable.   *)
+  val read : t
+
+  (** an expression loads a value from a memory   *)
+  val load : t
+
+  (**  an expression stores a value in a memory *)
+  val store : t
+
+  (** an expression raises a CPU exception  *)
+  val raise : t
+
+  (** [reads eff] if [read] in [eff]  *)
+  val reads : t -> bool
+
+  (** [loads eff] if [load] in [eff] *)
+  val loads : t -> bool
+
+  (** [stores eff] if [load] in [eff] *)
+  val stores : t -> bool
+
+  (** [raises eff] if [raise] in [eff] *)
+  val raises : t -> bool
+
+
+  (** [has_effects eff] if [stores eff] || [raises eff]  *)
+  val has_effects : t -> bool
+
+  (** [has_coeffects eff] if [loads eff] || [reads eff]  *)
+  val has_coeffects :  t -> bool
+
+  (** [compute x] computes a set of effects produced by [x]. The
+      result is a sound overapproximation of the real effects,
+      i.e., if an effect is computed then it may really happen,
+      but if it is not computed, then it is proved that it is not
+      possible for the expression to have this effect.
+
+      The analysis applies a simple abstract interpretation to
+      approximate arithmetics and prove an absence of the division
+      by zero. The load/store/read analysis is more precise than
+      the division by zero, as the only source of the imprecision
+      is a presence of conditional expressions.
+
+      Requires: normalized and simplified expression.
+
+      Warning: the above should be either relaxed or expressed in
+      the type system.
+  *)
+
+  val compute : exp -> t
+end
+
 
   (** [Regular] interface for BIL expressions *)
   module Exp : sig
     type t = Bil.exp
-
-    (** Effect analysis.
-
-       Effect analysis describes how an expression computation
-       interacts with the outside world. By the outside world we
-       understand the whole of the CPU state (including the hidden
-       state) and the memory. We distinguish, so far, between the
-       following sorts of effects:
-
-       - coeffects - a value of an expression depends on the outside
-         world, that is further subdivided by the read effect, when an
-         expression reads a CPU register, and the load effect, when an
-         expression an expression accesses the memory.
-
-       - effects - a value modifies the state of the world, by either
-         storing a value in the memory, or by raising a CPU exception
-         via the division by zero or accessing the memory.
-
-       An expression that doesn't have effects or coeffects is
-       idempotent and can be moved arbitrary in a tree, removed or
-       substituted. An expression that has only [coeffects] is
-       generative and can be reproduced without a significant change
-       of semantics.
-
-       Examples:
-       - [x ^ x], [x+1], [x] - have coeffects;
-       - [x[y]] - has both effects (may raise pagefault) and coeffects;
-       - [7 * 8], [42] - have no effects.
-
-    *)
-    module Eff : sig
-
-      (** a set of expression effects  *)
-      type t
-
-      (** an expression doesn't have any effects  *)
-      val none : t
-
-      (** an expression reads a register (nonvirtual) variable.   *)
-      val read : t
-
-      (** an expression loads a value from a memory   *)
-      val load : t
-
-      (**  an expression stores a value in a memory *)
-      val store : t
-
-      (** an expression raises a CPU exception  *)
-      val raise : t
-
-      (** a set of all effects, i.e., [store] and [raise] *)
-      val effects : t
-
-      (** a set of all coeffects, i.e., [load] and [read]  *)
-      val coeffects : t
-
-      (** [reads eff] if [read] in [eff]  *)
-      val reads : t -> bool
-
-      (** [loads eff] if [load] in [eff] *)
-      val loads : t -> bool
-
-      (** [stores eff] if [load] in [eff] *)
-      val stores : t -> bool
-
-      (** [raises eff] if [raise] in [eff] *)
-      val raises : t -> bool
-
-
-      (** [has_effects eff] if [stores eff] || [raises eff]  *)
-      val has_effects : t -> bool
-
-      (** [has_coeffects eff] if [loads eff] || [reads eff]  *)
-      val has_coeffects :  t -> bool
-
-      (** [compute x] computes a set of effects produced by [x]. The
-         result is a sound overapproximation of the real effects,
-         i.e., if an effect is computed then it may really happen,
-         but if it is not computed, then it is proved that it is not
-         possible for the expression to have this effect.
-
-         The analysis applies a simple abstract interpretation to
-         approximate arithmetics and prove an absence of the division
-         by zero. The load/store/read analysis is more precise than
-         the division by zero, as the only source of the imprecision
-         is a presence of conditional expressions.
-
-         Requires: normalized and simplified expression.
-
-         Warning: the above should be either relaxed or expressed in
-         the type system.
-      *)
-
-      val compute : exp -> t
-    end
-
 
     (** All visitors provide some information about the current
         position of the visitor *)
@@ -3190,7 +3156,15 @@ module Std : sig
 
 
     *)
-    val normalize : bil -> bil Or_error.t
+    val normalize : bil -> bil
+
+
+    (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
+        simplifies if and while expressions with statically known
+        conditionals, e.g., [if (true) xs ys] is simplified to [xs],
+        [while (false) xs] is simplified to [xs].
+    *)
+    val simpl : ?ignore:Eff.t list -> t list -> t list
 
 
 
@@ -3222,6 +3196,8 @@ module Std : sig
         see {!Bil.is_referenced} for more details.
     *)
     val is_referenced : var -> t -> bool
+
+
 
     (** [fixpoint f x] applies transformation [f] until it reaches
         fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)

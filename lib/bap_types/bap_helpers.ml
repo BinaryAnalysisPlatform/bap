@@ -294,30 +294,19 @@ module Eff = struct
   open Stmt
   open Cast
 
-  type t = {
-    reads : bool;
-    loads : bool;
-    stores : bool;
-    raises : bool;
-  }
+  type eff = Reads | Loads | Stores | Raises
+  type t = eff Set.Poly.t
 
+  let none : t = Set.Poly.empty
+  let read  = Set.Poly.singleton Reads
+  let load  = Set.Poly.singleton Loads
+  let store = Set.Poly.singleton Stores
+  let raise = Set.Poly.singleton Raises
+  let join_eff = Set.union
 
-  let all_effects_are t = {reads=t; loads=t; stores=t; raises=t}
-  let no_effect = all_effects_are false
-  let reads  = {no_effect with reads = true}
-  let loads  = {no_effect with loads = true}
-  let stores = {no_effect with stores = true}
-  let raises = {no_effect with raises = true}
-  let join_eff x y = {
-    reads = x.reads || y.reads;
-    loads = x.loads || y.loads;
-    stores = x.stores || y.stores;
-    raises = x.raises || y.raises;
-  }
-
-  let has_effects {raises=x; stores=y} = x || y
-  let has_coeffects {reads=x; loads=y} = x || y
-  let idempotent x = x = no_effect
+  let has_effects eff = Set.mem eff Raises || Set.mem eff Stores
+  let has_coeffects eff = Set.mem eff Reads || Set.mem eff Loads
+  let idempotent = Set.is_empty
 
   let width x = match Type.infer_exn x with
     | Type.Imm x -> x
@@ -403,11 +392,11 @@ module Eff = struct
   *)
 
   let rec eff = function
-    | Var _ -> reads
-    | Int _ -> no_effect
-    | Unknown _ -> no_effect
-    | Load (m,a,_,_) -> all [raises; loads; eff m; eff a]
-    | Store (m,a,x,_,_) -> all [raises; stores; eff m; eff a; eff x]
+    | Var _ -> read
+    | Int _ -> none
+    | Unknown _ -> none
+    | Load (m,a,_,_) -> all [raise; load; eff m; eff a]
+    | Store (m,a,x,_,_) -> all [raise; store; eff m; eff a; eff x]
     | BinOp ((DIVIDE|SDIVIDE|MOD|SMOD),x,y) -> all [div y; eff x; eff y]
     | BinOp (_,x,y)
     | Concat (x,y) -> all [eff x; eff y]
@@ -417,15 +406,16 @@ module Eff = struct
     | Extract (_,_,x) -> eff x
     | Let (_,x,y) -> assert false (* must be let-normalized *)
   and div y = match Nz.bits y with
-    | Nz.Maybe | Nz.Empty -> raises
-    | _ -> no_effect
-  and all = List.fold_left ~init:no_effect ~f:join_eff
+    | Nz.Maybe | Nz.Empty -> raise
+    | _ -> none
+  and all = List.fold_left ~init:none ~f:join_eff
 
   let compute = eff
-  let reads t = t.reads
-  let loads t = t.loads
-  let stores t = t.stores
-  let raises t = t.raises
+  let reads t = Set.mem t Reads
+  let loads t = Set.mem t Loads
+  let stores t = Set.mem t Stores
+  let raises t = Set.mem t Raises
+  let of_list : t list -> t = Set.Poly.union_list
 end
 
 module Simpl = struct
@@ -446,82 +436,91 @@ module Simpl = struct
         constant-folding,
         neutral-element-elimination,
         zero-element-propagation)  *)
-  let removable x = Eff.idempotent (Eff.compute x)
+  let removable ignore x =
+    Set.subset (Eff.compute x) (Eff.of_list ignore)
 
-  let rec exp = function
-    | Load (m,a,e,s) -> Load (exp m, exp a, e, s)
-    | Store (m,a,v,e,s) -> Store (exp m, exp a, exp v, e, s)
-    | BinOp (op,x,y) -> binop op x y
-    | UnOp (op,x) -> unop op x
-    | Var _ | Int _  | Unknown (_,_) as const -> const
-    | Cast (t,s,x) -> Cast (t,s,exp x)
-    | Let (v,x,y) -> Let (v, exp x, exp y)
-    | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
-    | Extract (h,l,x) -> Extract (h,l, exp x)
-    | Concat (x,y) -> concat x y
-  and concat x y = match x, y with
-    | Int x, Int y -> Int (Word.concat x y)
-    | _ -> Concat (exp x, exp y)
-  and unop op x = match x with
-    | UnOp(op,Int x) -> Int (Apply.unop op x)
-    | UnOp(op',x) when op = op' -> exp x
-    | _ -> UnOp(op, exp x)
-  and binop op x y =
-    let width = match Type.unify x y with
-      | Type.Imm s -> s
-      | Type.Mem _ -> failwith "binop" in
-    let keep op x y = BinOp(op,x,y) in
-    let int f = function Int x -> f x | _ -> false in
-    let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-    let (=) x y = compare_exp x y = 0 && removable x in
-    match op, exp x, exp y with
-    | op, Int x, Int y -> Int (Apply.binop op x y)
-    | PLUS,x,y  when is0 x -> y
-    | PLUS,x,y  when is0 y -> x
-    | MINUS,x,y when is0 x -> UnOp(NEG,y)
-    | MINUS,x,y when is0 y -> x
-    | MINUS,x,y when x = y -> zero width
-    | TIMES,x,y when is0 x && removable y -> x
-    | TIMES,x,y when is0 y && removable x -> y
-    | TIMES,x,y when is1 x -> y
-    | TIMES,x,y when is1 y -> x
-    | (DIVIDE|SDIVIDE),x,y when is1 y -> x
-    | (MOD|SMOD),x,y when is1 y -> zero width
-    | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
-    | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 x -> x
-    | (LSHIFT|RSHIFT|ARSHIFT),x,y when ism1 x -> x
-    | AND,x,y when is0 x && removable y -> x
-    | AND,x,y when is0 y && removable x -> y
-    | AND,x,y when ism1 x -> y
-    | AND,x,y when ism1 y -> x
-    | AND,x,y when x = y -> x
-    | OR,x,y  when is0 x -> y
-    | OR,x,y  when is0 y -> x
-    | OR,x,y  when ism1 x && removable y -> x
-    | OR,x,y  when ism1 y && removable x -> y
-    | OR,x,y  when x = y -> x
-    | XOR,x,y when x = y -> zero width
-    | XOR,x,y when is0 x -> y
-    | XOR,x,y when is0 y -> y
-    | EQ,x,y  when x = y -> Int Word.b1
-    | NEQ,x,y when x = y -> Int Word.b0
-    | (LT|SLT), x, y when x = y -> Int Word.b0
-    | _ -> keep op x y
+  let exp ?(ignore=[]) =
+    let removable = removable ignore in
+    let rec exp = function
+      | Load (m,a,e,s) -> Load (exp m, exp a, e, s)
+      | Store (m,a,v,e,s) -> Store (exp m, exp a, exp v, e, s)
+      | BinOp (op,x,y) -> binop op x y
+      | UnOp (op,x) -> unop op x
+      | Var _ | Int _  | Unknown (_,_) as const -> const
+      | Cast (t,s,x) -> Cast (t,s,exp x)
+      | Let (v,x,y) -> Let (v, exp x, exp y)
+      | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
+      | Extract (h,l,x) -> Extract (h,l, exp x)
+      | Concat (x,y) -> concat x y
+    and concat x y = match x, y with
+      | Int x, Int y -> Int (Word.concat x y)
+      | _ -> Concat (exp x, exp y)
+    and unop op x = match x with
+      | UnOp(op,Int x) -> Int (Apply.unop op x)
+      | UnOp(op',x) when op = op' -> exp x
+      | _ -> UnOp(op, exp x)
+    and binop op x y =
+      let width = match Type.unify x y with
+        | Type.Imm s -> s
+        | Type.Mem _ -> failwith "binop" in
+      let keep op x y = BinOp(op,x,y) in
+      let int f = function Int x -> f x | _ -> false in
+      let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
+      let (=) x y = compare_exp x y = 0 && removable x in
+      match op, exp x, exp y with
+      | op, Int x, Int y -> Int (Apply.binop op x y)
+      | PLUS,x,y  when is0 x -> y
+      | PLUS,x,y  when is0 y -> x
+      | MINUS,x,y when is0 x -> UnOp(NEG,y)
+      | MINUS,x,y when is0 y -> x
+      | MINUS,x,y when x = y -> zero width
+      | TIMES,x,y when is0 x && removable y -> x
+      | TIMES,x,y when is0 y && removable x -> y
+      | TIMES,x,y when is1 x -> y
+      | TIMES,x,y when is1 y -> x
+      | (DIVIDE|SDIVIDE),x,y when is1 y -> x
+      | (MOD|SMOD),x,y when is1 y -> zero width
+      | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
+      | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 x -> x
+      | (LSHIFT|RSHIFT|ARSHIFT),x,y when ism1 x -> x
+      | AND,x,y when is0 x && removable y -> x
+      | AND,x,y when is0 y && removable x -> y
+      | AND,x,y when ism1 x -> y
+      | AND,x,y when ism1 y -> x
+      | AND,x,y when x = y -> x
+      | OR,x,y  when is0 x -> y
+      | OR,x,y  when is0 y -> x
+      | OR,x,y  when ism1 x && removable y -> x
+      | OR,x,y  when ism1 y && removable x -> y
+      | OR,x,y  when x = y -> x
+      | XOR,x,y when x = y -> zero width
+      | XOR,x,y when is0 x -> y
+      | XOR,x,y when is0 y -> y
+      | EQ,x,y  when x = y -> Int Word.b1
+      | NEQ,x,y when x = y -> Int Word.b0
+      | (LT|SLT), x, y when x = y -> Int Word.b0
+      | _ -> keep op x y in
+    exp
 
-  let rec stmt = function
-    | Move (v,x) -> [Move (v, exp x)]
-    | Jmp x -> [Jmp (exp x)]
-    | While (c,ss) -> while_ c ss
-    | If (c,ts,fs) -> if_ c ts fs
-    | s -> [s]
-  and if_ c ts fs = match exp c with
-    | Int x ->
-      if Word.is_zero x then bil fs else bil ts
-    | c -> [If (exp c, bil ts, bil fs)]
-  and while_  c ss = match exp c with
-    | Int x when Word.is_zero x -> []
-    | c -> [While (c, bil ss)]
-  and bil = List.concat_map ~f:stmt
+  let bil ?ignore =
+    let exp x = exp ?ignore x in
+    let rec stmt = function
+      | Move (v,x) -> [Move (v, exp x)]
+      | Jmp x -> [Jmp (exp x)]
+      | While (c,ss) -> while_ c ss
+      | If (c,ts,fs) -> if_ c ts fs
+      | s -> [s]
+    and if_ c ts fs = match exp c with
+      | Int x ->
+        if Word.is_zero x then bil fs else bil ts
+      | c -> [If (exp c, bil ts, bil fs)]
+    and while_  c ss = match exp c with
+      | Int x when Word.is_zero x -> []
+      | c -> [While (c, bil ss)]
+    and bil = List.concat_map ~f:stmt in
+    bil
+
+  let stmt ?ignore x = bil ?ignore [x]
 end
 
 let fix compare f x  =
@@ -605,42 +604,6 @@ module Constant_folder = struct
     method! map_while ~cond bil =
       super#map_while ~cond bil |> Simpl.bil
   end
-end
-
-
-module Exp = struct
-  open Exp
-  class state = exp_state
-  class ['a] visitor = ['a] exp_visitor
-  class ['a] finder  = ['a] exp_finder
-  class mapper = exp_mapper
-
-  let find (finder : 'a #finder) es : 'a option =
-    finder#find es
-  let exists finder ss = finder#find ss = Some ()
-  let iter (visitor : unit #visitor) ss = visitor#visit_exp ss ()
-  let fold (visitor : 'a #visitor) ~init ss = visitor#visit_exp ss init
-  let map m = m#map_exp
-  let is_referenced x = exists (new exp_reference_finder x)
-  let normalize_negatives = (new negative_normalizer)#map_exp
-  let fold_consts = Simpl.exp
-  let fixpoint = fix compare_exp
-
-  let substitute x y = map (new rewriter x y)
-
-  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
-      inherit [VS.t * var list] visitor
-
-      method! enter_var var (vars,stack) =
-        if List.exists stack ~f:(fun x -> Bap_var.(x = var))
-        then (vars,stack) else Set.add vars var,stack
-
-      method! enter_let var ~exp:_ ~body:_ (vars,stack) =
-        (vars, var::stack)
-
-      method! leave_let var ~exp:_ ~body:_ (vars,stack) =
-        (vars, List.tl_exn stack)
-      end) exp
 end
 
 module Normalize = struct
@@ -966,16 +929,16 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
        else
          x := z;
   *)
-  let rec split_ite = map @@ object(self)
+  let rec split_ite bil = map (object(self)
       inherit bil_mapper
       method! map_move v e = self#split @@ Move (v,e)
       method! map_jmp e = self#split @@ Jmp (e)
       method private split stmt = match find_cond_in_stmt stmt with
         | None -> [stmt]
         | Some x -> split_ite [If (x, [with_true x stmt], [with_false x stmt])]
-    end
+    end) bil
 
-  let rec hoist_stores = map @@ object(self)
+  let rec hoist_stores bil = map (object(self)
     inherit bil_mapper
       method! map_move v e = self#hoist e @@ Move (v,e)
       method! map_jmp e = self#hoist e @@ Jmp e
@@ -984,7 +947,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
         | Some store ->
           let v = memory_of_store store in
           hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
-    end
+    end) bil
 
 
   let rec bil xs =
@@ -997,6 +960,42 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     | Special _  | CpuExn _ as s -> s) |>
     hoist_stores |>
     split_ite
+end
+
+
+module Exp = struct
+  open Exp
+  class state = exp_state
+  class ['a] visitor = ['a] exp_visitor
+  class ['a] finder  = ['a] exp_finder
+  class mapper = exp_mapper
+
+  let find (finder : 'a #finder) es : 'a option =
+    finder#find es
+  let exists finder ss = finder#find ss = Some ()
+  let iter (visitor : unit #visitor) ss = visitor#visit_exp ss ()
+  let fold (visitor : 'a #visitor) ~init ss = visitor#visit_exp ss init
+  let map m = m#map_exp
+  let is_referenced x = exists (new exp_reference_finder x)
+  let normalize_negatives = (new negative_normalizer)#map_exp
+  let fold_consts = Simpl.exp ~ignore:[Eff.read]
+  let fixpoint = fix compare_exp
+  let normalize = Normalize.normalize_exp
+  let substitute x y = map (new rewriter x y)
+
+  let free_vars exp = fst @@ fold ~init:(VS.empty,[]) (object
+      inherit [VS.t * var list] visitor
+
+      method! enter_var var (vars,stack) =
+        if List.exists stack ~f:(fun x -> Bap_var.(x = var))
+        then (vars,stack) else Set.add vars var,stack
+
+      method! enter_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, var::stack)
+
+      method! leave_let var ~exp:_ ~body:_ (vars,stack) =
+        (vars, List.tl_exn stack)
+      end) exp
 end
 
 module Stmt = struct
@@ -1035,11 +1034,10 @@ module Stmt = struct
             update (Exp.free_vars e) vars kill, VS.add kill v
           | stmt -> update (free_vars stmt) vars kill, kill)
 
-
-
   class constant_folder = Constant_folder.main
+  let normalize = Normalize.bil
 end
 
 let free_vars = Stmt.bil_free_vars
-let fold_consts = Simpl.bil
+let fold_consts = Simpl.bil ~ignore:[Eff.read]
 let normalize = Normalize.bil

@@ -87,7 +87,7 @@ module Make2(State : Monad.S2) = struct
 
     method eval_load ~mem ~addr endian sz =
       if sz <> `r8
-      then self#eval_exp (Bil.Exp.expand_load mem addr endian sz)
+      then self#eval_exp (Exp.Load (mem,addr,endian,sz))
       else self#eval_mem mem >>= function
         | None -> self#type_error TE.bad_mem
         | Some mem ->
@@ -98,7 +98,7 @@ module Make2(State : Monad.S2) = struct
 
     method eval_store ~mem ~addr word (e : endian) s =
       if s <> `r8
-      then self#eval_exp (Bil.Exp.expand_store mem addr word e s)
+      then self#eval_exp (Exp.Store (mem,addr,word,e,s))
       else self#eval_mem  mem >>= function
         | None -> self#type_error TE.bad_mem
         | Some mem ->
@@ -167,7 +167,7 @@ module Make2(State : Monad.S2) = struct
       with exn -> None
 
     method eval_let var u body =
-      self#eval_exp (Bil.Exp.reduce_let Exp.(Let (var,u,body)))
+      self#eval_exp (Exp.Let (var,u,body))
 
     method eval_unknown _ _ = self#bot
 

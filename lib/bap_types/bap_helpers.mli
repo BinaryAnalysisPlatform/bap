@@ -35,11 +35,6 @@ module Apply : sig
   val unop : unop -> word -> word
 end
 
-module Simpl : sig
-  val bil : stmt list -> stmt list
-  val stmt : stmt -> stmt list
-  val exp : exp -> exp
-end
 
 module Type : sig
   val check : stmt list -> (unit,Bap_type_error.t) Result.t
@@ -50,6 +45,7 @@ end
 module Eff : sig
   type t
 
+  val none : t
   val read : t
   val load : t
   val store : t
@@ -67,6 +63,13 @@ module Eff : sig
   val compute : exp -> t
 end
 
+module Simpl : sig
+  val bil  : ?ignore:Eff.t list -> stmt list -> stmt list
+  val stmt : ?ignore:Eff.t list -> stmt -> stmt list
+  val exp  : ?ignore:Eff.t list -> exp -> exp
+end
+
+
 module Exp : sig
   class state : exp_state
   class ['a] visitor : ['a] exp_visitor
@@ -82,12 +85,9 @@ module Exp : sig
   val is_referenced : var -> exp -> bool
   val normalize_negatives : exp -> exp
   val fold_consts : exp -> exp
-  val expand_store : exp -> exp -> exp -> endian -> size -> exp
-  val expand_load : exp -> exp -> endian -> size -> exp
-  val reduce_let : exp -> exp
-  val normalize : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
   val free_vars : exp -> Bap_var.Set.t
+  val normalize : exp -> exp
 end
 
 module Stmt : sig
@@ -107,6 +107,7 @@ module Stmt : sig
   val free_vars : stmt -> Bap_var.Set.t
   val normalize : stmt list -> stmt list
 end
+
 
 module Trie : sig
   type normalized_bil
