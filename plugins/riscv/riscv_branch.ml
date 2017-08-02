@@ -11,14 +11,6 @@ let pc_offset = Word.(of_int 4 ~width:32) (* 32bit for now *)
 let word = Word.of_int ~width:32
 
 let lift operand1 operand2 ?cond ?link addr =
-  let cond =
-    match operand1, operand2 with
-    | `Reg r_1, `Reg r_2 -> Bil.[]
-    | `Reg r_1, `Imm imm -> Bil.[]
-    | `Imm imm, `Reg r_2 -> Bil.[]
-    | `Imm imm1, `Imm imm2 -> Bil.[]
-
-  Bil.If (c, [Bil.jmp addr])
   let target =
     match operand1 with
     | `Reg r -> Bil.var (Env.of_reg r)

@@ -2,11 +2,11 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 
-type t = Riscv_types.reg [@@deriving bin_io, compare, sexp]
-
 let sexpable_of_string t_of_sexp name =
   try Some (t_of_sexp @@ Sexp.of_string name)
   with Sexp.Of_sexp_error _ -> None
+
+type t = Riscv_types.reg [@@deriving bin_io, compare, sexp]
 
 let create reg : t option =
   sexpable_of_string t_of_sexp (Reg.name reg)

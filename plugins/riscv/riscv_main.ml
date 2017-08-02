@@ -468,5 +468,5 @@ module Riscv = struct
 
 end
 
-let () = register_target `riscv (module Riscv);
+let () = register_target `xcore (module Riscv);
 

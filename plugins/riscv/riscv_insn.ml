@@ -2,6 +2,10 @@ open Core_kernel.Std
 open Regular.Std
 open Bap.Std
 
+let sexpable_of_string t_of_sexp name =
+  try Some (t_of_sexp @@ Sexp.of_string name)
+  with Sexp.Of_sexp_error _ -> None
+
 type t = Riscv_types.insn [@@deriving bin_io, compare, sexp]
 
 let of_name name =
