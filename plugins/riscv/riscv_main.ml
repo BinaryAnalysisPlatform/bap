@@ -25,8 +25,6 @@ module Riscv = struct
     let tp = reg "r4"
     let fp = reg "r8"
 
-    let pc = reg "pc"
-
     let gprs = Array.concat [
         r;
         [|zero; gp; tp; sp; fp; ra|] ;
@@ -63,9 +61,6 @@ module Riscv = struct
     let addr_of_pc m = Addr.(Memory.min_addr m ++ 4)
   end
 
-  (** simplify an expression by applying constant folding *)
-  let simpl = Bil.fixpoint Bil.fold_consts
-
   (** [reg op] is [Ok reg] if operand is a register with the same
       name as reg *)
   let reg = function
@@ -83,58 +78,58 @@ module Riscv = struct
   (** [rrr_type f d s t] uses lifter [f] for an rrr-type instruction with
       arguments [d], [s], and [t]. *)
   let rrr_type f d s t = match reg d, reg s, reg t with
-    | Ok d, Ok s, Ok t -> Ok (simpl (f d s t))
+    | Ok d, Ok s, Ok t -> Ok (f d s t)
     | e1,e2,e3 -> Or_error.errorf "invalid instruction"
 
   (** [rri_type f d s i] uses lifter [f] for an rri-type instruction with
       arguments [d], [s], and [i]. *)
   let rri_type f d s i = match reg d, reg s, imm i with
-    | Ok d, Ok s, Ok i -> Ok (simpl (f d s i))
+    | Ok d, Ok s, Ok i -> Ok (f d s i)
     | e1,e2,e3 -> Or_error.errorf "invalid instruction"
 
   (** [rr_type f d s ] uses lifter [f] for an rr-type instruction with
       arguments [d], [s]. *)
   let rr_type f d s = match reg d, reg s with
-    | Ok d, Ok s -> Ok (simpl (f d s))
+    | Ok d, Ok s -> Ok (f d s)
     | e1,e2 -> Or_error.errorf "invalid instruction"
 
   (** [ri_type f d i] uses lifter [f] for an ri-type instruction with
       arguments [d], and [i]. *)
   let ri_type f d i = match reg d, imm i with
-    | Ok d, Ok i -> Ok (simpl (f d i))
+    | Ok d, Ok i -> Ok (f d i)
     | e1,e2 -> Or_error.errorf "invalid instruction"
 
   (** [rim_type f d i m] uses lifter [f] for an rim-type instruction with
       arguments [d], [i], and [m]. *)
   (* TODO: Check the memory input? *)
   let rim_type f d i m = match reg d, imm i with
-    | Ok d, Ok i -> Ok (simpl (f d i m))
+    | Ok d, Ok i -> Ok (f d i m)
     | e1,e2 -> Or_error.errorf "invalid instruction"
 
   (** [mem_type_load f w s d b o] uses lifter [f] for an mem-type instruction with
       arguments [w], [s], [d], [b] and [o]. *)
   (* TODO: Check also the other arguments *)
   let mem_type_load f w s d b o = match reg d, reg b, imm o with
-    | Ok d, Ok b, Ok o -> Ok (simpl (f w s d b o))
+    | Ok d, Ok b, Ok o -> Ok (f w s d b o)
     | e1,e2,e3 -> Or_error.errorf "invalid instruction"
 
   (** [mem_type_store f w d b o] uses lifter [f] for an mem-type instruction with
       arguments [w], [d], [b] and [o]. *)
   (* TODO: Check also the other arguments *)
   let mem_type_store f w d b o = match reg d, reg b, imm o with
-    | Ok d, Ok b, Ok o -> Ok (simpl (f w d b o))
+    | Ok d, Ok b, Ok o -> Ok (f w d b o)
     | e1,e2,e3 -> Or_error.errorf "invalid instruction"
 
   (** [bra_type f m s1 s2 a] uses lifter [f] for a branch-type instruction with
       arguments [m], [s1], [s1], and [a]. *)
   let bra_type f m s1 s2 a = match reg s1, reg s2, imm a with
-    | Ok s1, Ok s2, Ok a -> Ok (simpl (f m s1 s2 a))
+    | Ok s1, Ok s2, Ok a -> Ok (f m s1 s2 a)
     | e1,e2,e3 -> Or_error.errorf "invalid instruction"
 
   (** [bra_type2 f m d a] uses lifter [f] for a branch-type instruction with
       arguments [m], [d], and [a]. *)
   let bra_type2 f m d a = match reg d, imm a with
-    | Ok d, Ok a -> Ok (simpl (f m d a))
+    | Ok d, Ok a -> Ok (f m d a)
     | e1,e2 -> Or_error.errorf "invalid instruction"
 
   (** [!$reg] lifts [reg] into a Bil expression, substitution a zero
@@ -256,7 +251,7 @@ module Riscv = struct
         if size = W then [
             Bil.move rd (load mem address);
         ] else [
-            assn temp (load mem address);
+            Bil.move temp (load mem address);
         ] in
     List.concat[
         loads;
@@ -304,10 +299,10 @@ module Riscv = struct
     let rs = Env.of_reg rs |> Bil.var in
     let csr = Env.of_reg csr |> Bil.var in
     exec Bil.([
-        assn temp (load (var Env.mem) csr LittleEndian `r8);
+        Bil.move temp (load (var Env.mem) csr LittleEndian `r8);
         Env.mem :=
           store (var Env.mem) csr (extract 7 0 rs) LittleEndian `r8;
-        assn dest (cast unsigned 32 (var temp));
+        Bil.move dest (cast unsigned 32 (var temp));
       ])
 
   (* TODO: do CSR registers size varies? *)
@@ -318,8 +313,8 @@ module Riscv = struct
     let rs = Env.of_reg rs |> Bil.var in
     let csr = Env.of_reg csr |> Bil.var in
     exec Bil.([
-        assn temp (load (var Env.mem) csr LittleEndian `r8);
-        assn dest (cast unsigned 32 (var temp));
+        Bil.move temp (load (var Env.mem) csr LittleEndian `r8);
+        Bil.move dest (cast unsigned 32 (var temp));
         temp2 := (Bil.var temp) lor rs;
         Env.mem :=
           store (var Env.mem) csr (extract 7 0 (Bil.var temp2)) LittleEndian `r8;
@@ -333,8 +328,8 @@ module Riscv = struct
     let rs = Env.of_reg rs |> Bil.var in
     let csr = Env.of_reg csr |> Bil.var in
     exec Bil.([
-        assn temp (load (var Env.mem) csr LittleEndian `r8);
-        assn dest (cast unsigned 32 (var temp));
+        Bil.move temp (load (var Env.mem) csr LittleEndian `r8);
+        Bil.move dest (cast unsigned 32 (var temp));
         temp2 := (Bil.var temp) land lnot rs;
         Env.mem :=
           store (var Env.mem) csr (extract 7 0 (Bil.var temp2)) LittleEndian `r8;
@@ -444,36 +439,34 @@ module Riscv = struct
 
   let riscv_ops ops = try_with (riscv_ops_exn ops)
 
-
-  (** Substitute PC with its value  *)
-  let resolve_pc mem = Stmt.map (object(self)
-    inherit Stmt.mapper as super
-    method! map_var var =
-      if Var.(equal var CPU.pc) then
-        Bil.int (CPU.addr_of_pc mem)
-      else super#map_var var
-  end)
-
-  let insn_exn mem insn : bil Or_error.t =
+  let lift mem insn : bil Or_error.t =
     let name = Basic.Insn.name insn in
     Memory.(Addr.Int_err.(!$(max_addr mem) - !$(min_addr mem)))
     >>= Word.to_int >>= fun s -> Size.of_int ((s+1) * 8) >>= fun size ->
-    Memory.get ~scale:(size ) mem >>| fun word ->
+    Memory.get ~scale:(size) mem >>| fun word ->
     match Riscv_insn.of_basic insn with
       | None -> [Bil.special (sprintf "unsupported: %s" name)]
       | Some riscv_insn -> match riscv_ops (Basic.Insn.ops insn) with
         | Error err -> [Bil.special (Error.to_string_hum err)]
         | Ok ops -> match riscv_insn with
-            | #move_insn as op -> lift_move mem insn
-            | #mem_insn  as op -> lift_mem mem insn
-            | #branch_insn as op -> lift_branch mem insn
+            | #move_insn as op ->
+                (let result = lift_move mem insn in
+                match result with
+                  | Error err -> [Bil.special (Error.to_string_hum err)]
+                  | Ok stmt -> stmt)
+            | #mem_insn  as op ->
+                (let result = lift_mem mem insn in
+                match result with
+                  | Error err -> [Bil.special (Error.to_string_hum err)]
+                  | Ok stmt -> stmt)
+            | #branch_insn as op ->
+                (let result = lift_branch mem insn in
+                match result with
+                  | Error err -> [Bil.special (Error.to_string_hum err)]
+                  | Ok stmt -> stmt)
   (*          | #csr_insn as op -> lift_csr ops op *)
-
-  let lift mem insn =
-    try insn_exn mem insn >>| resolve_pc mem with
-      | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
-      | exn -> of_exn exn
 
 end
 
-let () = register_target `riscv (module Riscv)
+let () = register_target `riscv (module Riscv);
+

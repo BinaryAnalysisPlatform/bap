@@ -16,7 +16,7 @@ let zf = "ZF" %: bool_t
 let cf = "CF" %: bool_t
 let vf = "VF" %: bool_t
 
-let pc = reg32 `PC
+(* let pc = reg32 `PC *)
 
 (* 32-bit general-purpose registers *)
 let r0  = reg32 `R0
@@ -93,8 +93,8 @@ let var_of_gpr : gpr_reg -> var = function
   | `R29 -> r29
   | `R30 -> r30
   | `R31 -> r31
-  | `PC  -> pc
 (*
+  | `PC  -> pc
   | `SP  -> sp
   | `RA  -> ra
   | `GP  -> gp

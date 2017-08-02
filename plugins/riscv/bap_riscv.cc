@@ -24,53 +24,6 @@ using namespace riscv;
 const char* riscv::null_symbol_lookup(addr_t, bool nearest) { return nullptr; }
 const char* riscv::null_symbol_colorize(const char *type) { return ""; }
 
-template <typename... Params>
-inline void sprintf_fmt(size_t &offset, std::string &buf, std::string fmt, Params&&... params)
-{
-	size_t sz = buf.size();
-	std::array<arg_type, sizeof...(Params)> bt;
-	std::array<type_holder, sizeof...(Params)> tb;
-	sprintf(buf, fmt, bt, tb, 0, std::forward<Params>(params)...);
-	offset += (buf.size() - sz);
-}
-
-static const void sprintf_add(size_t &offset, std::string &buf, const char *str)
-{
-	buf += str;
-	offset += strlen(str);
-}
-
-static const void sprintf_pad(size_t &offset, std::string &buf, size_t pad_to)
-{
-	static const char *space32 = "                                        ";
-	if (pad_to < offset) pad_to = offset;
-	size_t x = std::min(strlen(space32), (size_t)std::max(((ssize_t)pad_to - (ssize_t)offset), 0L));
-	sprintf_fmt(offset, buf, "%s", space32 + strlen(space32) - x);
-}
-
-static const void sprintf_pad(size_t &offset, std::string &buf, size_t pad_to, const char *str)
-{
-	sprintf_add(offset, buf, str);
-	sprintf_pad(offset, buf, pad_to);
-}
-
-static const void sprintf_addr(size_t &offset, std::string &buf, addr_t addr,
-	riscv::symbol_name_fn symlookup, riscv::symbol_colorize_fn colorize)
-{
-	sprintf_pad(offset, buf, 80);
-	sprintf(buf, colorize("address"));
-	sprintf_add(offset, buf, "# ");
-	sprintf_fmt(offset, buf, "0x%016llx", addr);
-	buf += colorize("reset");
-	const char* symbol_name = symlookup((addr_t)addr, true);
-	if (symbol_name) {
-		buf += " ";
-		buf += colorize("label");
-		buf += symbol_name;
-		buf += colorize("reset");
-	}
-}
-
 static const bap_disasm_insn_p_type supported[] = {
     is_true,
     is_invalid,

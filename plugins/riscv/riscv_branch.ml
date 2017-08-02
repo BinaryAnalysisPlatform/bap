@@ -17,7 +17,7 @@ let lift operand1 operand2 ?cond ?link addr =
     | `Reg r_1, `Imm imm -> Bil.[]
     | `Imm imm, `Reg r_2 -> Bil.[]
     | `Imm imm1, `Imm imm2 -> Bil.[]
-      
+
   Bil.If (c, [Bil.jmp addr])
   let target =
     match operand1 with

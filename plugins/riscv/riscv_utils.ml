@@ -28,9 +28,6 @@ let assert_cond loc op =
 let tmp ?(name="v") typ =
   Var.create ~fresh:true ~is_virtual:true name typ
 
-let assn d s =
-  if d = Env.pc then Bil.jmp s else Bil.move d s
-
 let bitlen = function
   | Type.Imm len -> len
   | Type.Mem (_,size) -> Size.in_bits size
