@@ -2,11 +2,34 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus_types
 
-val enter_term : tid observation
-val leave_term : tid observation
+val pc_change : addr observation
+val halting : unit observation
+
+val loading : value observation
+val loaded : (value * value) observation
+val storing : value observation
+val stored : (value * value) observation
+val reading : var observation
+val read : (var * value) observation
+val writing : var observation
+val written : (var * value) observation
+val undefined : value observation
+val const : value observation
+
+val binop : ((binop * value * value) * value) observation
+val unop : ((unop * value) * value) observation
+val cast : ((cast * int * value) * value) observation
+val extract : ((int * int * value) * value) observation
+
+
 
 val enter_exp : exp observation
 val leave_exp : exp observation
+
+
+val enter_term : tid observation
+val leave_term : tid observation
+
 val enter_pos : pos observation
 val leave_pos : pos observation
 
@@ -26,36 +49,6 @@ val leave_phi : phi term observation
 val leave_def : def term observation
 val leave_jmp : jmp term observation
 
-val halting : unit observation
-
-(* todo, add events that correspond to the interpreter methods,
-
-   e.g.,
-   - bop binop x y
-   - uop unop  x
-   - cast hi lo x
-   - load ..
-   - save ..
-
-   would it be possible to provide this events without an allocation?
-
-   1. rely on the inlining and implement observation with a thunk,
-      e.g., [let provide obs = if obs.requested then obs.invoke ()].
-      If the provide function will be inlined, it will remove
-      allocation.
-      Actually, even without a thunk, we should use the if statement, this
-      might save us from an allocation (probably with even higher
-      probability).
-
-   2. An observer may take a handler, that will return operands. But
-      how we can implement this handler without performing an
-      allocation? We can store values in a stack, and the handler can
-      be actually a state with a restricted interface. But the problem
-      here is that: (a) storing values in a stack will be an
-      allocation already, and (b) extracting a value from a state
-      monad will also lead to allocations.
-
- *)
 
 type exn += Halt
 
@@ -67,11 +60,14 @@ module Make (Machine : Machine) : sig
   val blk : blk term -> unit m
   val get : var -> value m
   val set : var -> value -> unit m
-  val bop : binop -> value -> value -> value m
-  val uop : unop -> value -> value m
-  val cast : hi:int -> lo:int -> value -> value m
-  val load : value -> value m
-  val save : value -> value -> unit m
+  val binop : binop -> value -> value -> value m
+  val unop : unop -> value -> value m
+  val cast : cast -> int -> value -> value m
+  val concat : value -> value -> value m
+  val extract : hi:int -> lo:int -> value -> value m
+  val const : word -> value m
+  val load : value -> endian -> size -> value m
+  val store : value -> value -> endian -> size -> unit m
 end
 
 

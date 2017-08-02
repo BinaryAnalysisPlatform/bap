@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
-
+open Format
 open Bap_bil
 
 module Var = Bap_var
@@ -11,111 +11,7 @@ module Size = Bap_size
 type binop = exp -> exp -> exp
 type unop = exp -> exp
 
-
-module Exp = struct
-  open Exp
-  let load ~mem ~addr e s = Load (mem,addr,e,s)
-  let store ~mem ~addr value e s = Store (mem,addr,value,e,s)
-  let binop op x y = BinOp (op,x,y)
-  let unop op x = UnOp (op,x)
-  let var v = Var v
-  let int w = Int w
-  let cast ct s e = Cast (ct,s,e)
-  let let_ v e b = Let (v,e,b)
-  let unknown s t = Unknown (s,t)
-  let ite ~if_ ~then_ ~else_ = Ite (if_,then_,else_)
-  let extract ~hi ~lo e = Extract (hi,lo,e)
-  let concat e1 e2 = Concat (e1,e2)
-end
-include Exp
-
-module Binop = struct
-  open Binop
-  let plus = PLUS
-  let minus = MINUS
-  let times = TIMES
-  let divide = DIVIDE
-  let sdivide = SDIVIDE
-  let modulo  = MOD
-  let smodulo = SMOD
-  let lshift = LSHIFT
-  let rshift = RSHIFT
-  let arshift = ARSHIFT
-  let bit_and = AND
-  let bit_xor = XOR
-  let bit_or = OR
-  let eq = EQ
-  let neq = NEQ
-  let lt = LT
-  let le = LE
-  let slt = SLT
-  let sle = SLE
-
-  let is_commutative = function
-    | PLUS | TIMES | AND | XOR | OR | EQ | NEQ -> true
-    | _ -> false
-
-  let is_associative = function
-    | PLUS | TIMES | AND | OR | XOR -> true
-    | _ -> false
-end
-
-module Unop = struct
-  open Unop
-  let neg = NEG
-  let not = NOT
-end
-
-module Cast = struct
-  open Cast
-  let unsigned = UNSIGNED
-  let signed = SIGNED
-  let high = HIGH
-  let low = LOW
-end
-
-module Infix = struct
-  open Bap_bil.Exp
-  open Binop
-  open Unop
-
-
-  (** Arithmetic operations *)
-  let ( + ) = binop plus
-  let ( - ) = binop minus
-  let ( * ) = binop times
-  let ( / ) = binop divide
-  let ( /$ ) = binop sdivide
-  let ( mod ) = binop modulo
-  let ( %$ ) = binop smodulo
-
-  (** Bit operations *)
-  let ( lsl ) = binop lshift
-  let ( lsr ) = binop rshift
-  let ( asr ) = binop arshift
-  let ( land ) a b   = binop bit_and a b
-  let ( lor  ) a b   = binop bit_or  a b
-  let ( lxor ) a b   = binop bit_xor a b
-  let lnot     a     = unop  not a
-
-  (** Equality tests *)
-  let ( = )    a b   = binop eq  a b
-  let ( <> )    a b   = binop neq a b
-  let ( < )    a b   = binop lt  a b
-  let ( > )    a b   = binop lt  b a
-  let ( <= )    a b   = binop le  a b
-  let ( >= )    a b   = binop le  b a
-  let ( <$ )   a b   = binop slt a b
-  let ( >$ )   a b   = binop slt b a
-  let ( <=$ )  a b   = binop sle a b
-  let ( >=$ )  a b   = binop sle b a
-
-  (** Misc operations *)
-  let ( ^ )    a b   = concat a b
-end
-
 module PP = struct
-  open Format
   open Bap_bil
 
   let pp_cast fmt cst = fprintf fmt "%s"
@@ -207,6 +103,119 @@ module PP = struct
     | Unknown (s, typ) ->
       pr "unknown[%s]:%a" s Bap_type.pp typ
 end
+
+
+module Exp = struct
+  open Exp
+  let load ~mem ~addr e s = Load (mem,addr,e,s)
+  let store ~mem ~addr value e s = Store (mem,addr,value,e,s)
+  let binop op x y = BinOp (op,x,y)
+  let unop op x = UnOp (op,x)
+  let var v = Var v
+  let int w = Int w
+  let cast ct s e = Cast (ct,s,e)
+  let let_ v e b = Let (v,e,b)
+  let unknown s t = Unknown (s,t)
+  let ite ~if_ ~then_ ~else_ = Ite (if_,then_,else_)
+  let extract ~hi ~lo e = Extract (hi,lo,e)
+  let concat e1 e2 = Concat (e1,e2)
+end
+include Exp
+
+module Binop = struct
+  open Binop
+  let plus = PLUS
+  let minus = MINUS
+  let times = TIMES
+  let divide = DIVIDE
+  let sdivide = SDIVIDE
+  let modulo  = MOD
+  let smodulo = SMOD
+  let lshift = LSHIFT
+  let rshift = RSHIFT
+  let arshift = ARSHIFT
+  let bit_and = AND
+  let bit_xor = XOR
+  let bit_or = OR
+  let eq = EQ
+  let neq = NEQ
+  let lt = LT
+  let le = LE
+  let slt = SLT
+  let sle = SLE
+
+  let is_commutative = function
+    | PLUS | TIMES | AND | XOR | OR | EQ | NEQ -> true
+    | _ -> false
+
+  let is_associative = function
+    | PLUS | TIMES | AND | OR | XOR -> true
+    | _ -> false
+
+  include PP
+  let string_of_binop = asprintf "%a" pp_binop
+end
+
+module Unop = struct
+  open Unop
+  let neg = NEG
+  let not = NOT
+
+  let pp = PP.pp_unop
+  include PP
+  let string_of_unop = asprintf "%a" pp_unop
+end
+
+module Cast = struct
+  open Cast
+  let unsigned = UNSIGNED
+  let signed = SIGNED
+  let high = HIGH
+  let low = LOW
+  include PP
+  let string_of_cast = asprintf "%a" pp_cast
+end
+
+module Infix = struct
+  open Bap_bil.Exp
+  open Binop
+  open Unop
+
+
+  (** Arithmetic operations *)
+  let ( + ) = binop plus
+  let ( - ) = binop minus
+  let ( * ) = binop times
+  let ( / ) = binop divide
+  let ( /$ ) = binop sdivide
+  let ( mod ) = binop modulo
+  let ( %$ ) = binop smodulo
+
+  (** Bit operations *)
+  let ( lsl ) = binop lshift
+  let ( lsr ) = binop rshift
+  let ( asr ) = binop arshift
+  let ( land ) a b   = binop bit_and a b
+  let ( lor  ) a b   = binop bit_or  a b
+  let ( lxor ) a b   = binop bit_xor a b
+  let lnot     a     = unop  not a
+
+  (** Equality tests *)
+  let ( = )    a b   = binop eq  a b
+  let ( <> )    a b   = binop neq a b
+  let ( < )    a b   = binop lt  a b
+  let ( > )    a b   = binop lt  b a
+  let ( <= )    a b   = binop le  a b
+  let ( >= )    a b   = binop le  b a
+  let ( <$ )   a b   = binop slt a b
+  let ( >$ )   a b   = binop slt b a
+  let ( <=$ )  a b   = binop sle a b
+  let ( >=$ )  a b   = binop sle b a
+
+  (** Misc operations *)
+  let ( ^ )    a b   = concat a b
+end
+
 
 include Regular.Make(struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]

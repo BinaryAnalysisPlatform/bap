@@ -62,14 +62,14 @@ let accept level args = Ok (level args)
 let reject level dst = Error (Broken_invariant {level; dst})
 
 
-let level name f x = list [atom name; atom (f x)]
+let level name f x = sexps [name; f x]
 let (>>) = Fn.compose
-let leaf name str t = list [
-    atom name; atom (String.strip (str t));
+let leaf name str t = sexps [
+    name; String.strip (str t);
   ]
 
 let sexp_of_t = function
-  | Top _   -> atom "top"
+  | Top _   -> Sexp.Atom "top"
   | Sub {me} -> level "sub" Sub.name me
   | Arg {me} -> level "arg" (Var.name >> Arg.lhs) me
   | Blk {me} -> level "blk" (Tid.name >> Term.tid ) me
@@ -110,4 +110,3 @@ let tid level =
   match level with
   | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
   | Phi t -> !t | Def t -> !t | Jmp t -> !t
-

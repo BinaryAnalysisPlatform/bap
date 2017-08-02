@@ -435,6 +435,25 @@ module Std : sig
         Environemnt and the Memory. *)
     module Interpreter : sig
 
+      val pc_change : addr observation
+
+      val loading : value observation
+      val loaded : (value * value) observation
+      val storing : value observation
+      val stored : (value * value) observation
+      val reading : var observation
+      val read : (var * value) observation
+      val writing : var observation
+      val written : (var * value) observation
+      val undefined : value observation
+      val const : value observation
+
+      val binop : ((binop * value * value) * value) observation
+      val unop : ((unop * value) * value) observation
+      val cast : ((cast * int * value) * value) observation
+      val extract : ((int * int * value) * value) observation
+
+
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
 
@@ -501,7 +520,17 @@ module Std : sig
         val pos : pos m
         val sub : sub term -> unit m
         val blk : blk term -> unit m
-        val exp : exp -> value m
+        val get : var -> value m
+        val set : var -> value -> unit m
+        val binop : binop -> value -> value -> value m
+        val unop : unop -> value -> value m
+        val cast : cast -> int -> value -> value m
+        val concat : value -> value -> value m
+        val extract : hi:int -> lo:int -> value -> value m
+        val const : word -> value m
+
+        val load : value -> endian -> size -> value m
+        val store : value -> value -> endian -> size -> unit m
       end
     end
 
@@ -766,27 +795,14 @@ module Std : sig
           that is not mapped into the Machine memory.  *)
       val segmentation_fault : addr observation
 
-      (** an address will be read  *)
-      val address_access : addr observation
-
-
-      (** a byte from the given address was read  *)
-      val address_read : (addr * word) observation
-
-
-      (** a byte was written to the given address  *)
-      val address_written : (addr * word) observation
-
       module Make(Machine : Machine.S) : sig
 
         (** [load addr] loads a byte from the given address *)
         val load : addr -> word Machine.t
 
 
-        (** [save addr x] stores a byte [x] at the given address [addr]  *)
-        val save : addr -> word -> unit Machine.t
-
-
+        (** [store addr x] stores a byte [x] at the given address [addr]  *)
+        val store : addr -> word -> unit Machine.t
 
         (** [add_text mem] maps a memory chunk [mem] as executable and
             readonly segment of machine memory.*)

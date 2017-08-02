@@ -118,37 +118,12 @@ module Make2(State : Monad.S2) = struct
       | Some u ->
         self#eval_imm v >>= function
         | None -> self#type_error TE.bad_imm
-        | Some v ->
-          if is_shift op || Int.(bitwidth u = bitwidth v)
-          then try self#value_of_word @@ match op with
-            | Binop.PLUS -> u + v
-            | Binop.MINUS -> u - v
-            | Binop.TIMES -> u * v
-            | Binop.DIVIDE -> u / v
-            | Binop.SDIVIDE -> signed u / signed v
-            | Binop.MOD -> u mod v
-            | Binop.SMOD -> signed u mod signed v
-            | Binop.LSHIFT -> u lsl v
-            | Binop.RSHIFT -> u lsr v
-            | Binop.ARSHIFT -> u asr v
-            | Binop.AND -> u land v
-            | Binop.OR -> u lor v
-            | Binop.XOR -> u lxor v
-            | Binop.EQ -> Bitvector.(of_bool (u = v))
-            | Binop.NEQ -> Bitvector.(of_bool (u <> v))
-            | Binop.LT -> Bitvector.(of_bool (u < v))
-            | Binop.LE -> Bitvector.(of_bool (u <= v))
-            | Binop.SLT -> Bitvector.(of_bool (signed u < signed v))
-            | Binop.SLE  -> Bitvector.(of_bool (signed u <= signed v))
-            with Division_by_zero -> self#division_by_zero ()
-          else self#type_error @@ TE.bad_type (imm_t u) (imm_t v)
+        | Some v -> self#value_of_word (Bil.Apply.binop op u v)
 
     method eval_unop op u =
       self#eval_imm u >>= function
       | None -> self#type_error TE.bad_imm
-      | Some u -> self#value_of_word @@ match op with
-        | Unop.NEG -> Bitvector.(neg u)
-        | Unop.NOT -> Bitvector.(lnot u)
+      | Some u -> self#value_of_word @@ Bil.Apply.unop op u
 
     method eval_cast ct sz u =
       self#eval_imm u >>= function
@@ -159,11 +134,7 @@ module Make2(State : Monad.S2) = struct
 
     method private eval_cast' ct sz u : word option =
       let open Bitvector in
-      try Option.return @@ match ct with
-        | Cast.UNSIGNED -> extract_exn ~hi:Int.(sz - 1) u
-        | Cast.SIGNED   -> extract_exn ~hi:Int.(sz - 1) (signed u)
-        | Cast.HIGH     -> extract_exn ~lo:Int.(bitwidth u - sz) u
-        | Cast.LOW      -> extract_exn ~hi:Int.(sz - 1) u
+      try Option.return @@ Bil.Apply.cast ct sz u
       with exn -> None
 
     method eval_let var u body =

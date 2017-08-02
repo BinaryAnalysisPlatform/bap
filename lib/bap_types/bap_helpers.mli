@@ -33,6 +33,7 @@ val fixpoint : (bil -> bil) -> (bil -> bil)
 module Apply : sig
   val binop : binop -> word -> word -> word
   val unop : unop -> word -> word
+  val cast : cast -> int -> word -> word
 end
 
 

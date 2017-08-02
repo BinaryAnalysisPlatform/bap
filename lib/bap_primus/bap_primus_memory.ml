@@ -18,16 +18,6 @@ let segmentation_fault, segfault =
   Observation.provide ~inspect:sexp_of_segmentation_fault
     "segmentation-fault"
 
-let address_access,address_will_be_read =
-  Observation.provide ~inspect:sexp_of_word "address-access"
-
-let address_read,address_was_read =
-  Observation.provide ~inspect:sexp_of_move "address-read"
-
-let address_written,address_was_written =
-  Observation.provide ~inspect:sexp_of_move
-    "address-written"
-
 let () = Exn.add_printer (function
     | Segmentation_fault here ->
       Some (sprintf "Segmentation fault at %s"
@@ -121,13 +111,12 @@ module Make(Machine : Machine) = struct
   let read addr {values;layers} = match find_layer addr layers with
     | None -> segfault addr
     | Some layer -> match Map.find values addr with
-      | Some v -> !!address_was_read (addr,v) >>| fun () -> v
+      | Some v -> Machine.return v
       | None -> match layer.mem with
         | Dynamic {value} ->
-          Generate.next value >>| Word.of_int ~width:8 >>= fun v ->
-          !!address_was_read (addr,v) >>| fun () -> v
+          Generate.next value >>| Word.of_int ~width:8
         | Static mem -> match Memory.get ~addr mem with
-          | Ok v -> !!address_was_read (addr,v) >>| fun () -> v
+          | Ok v -> Machine.return v
           | Error _ -> failwith "Bap_primus.Memory.read"
 
 
@@ -158,14 +147,12 @@ module Make(Machine : Machine) = struct
   let add_data mem = map mem ~readonly:false ~executable:false
 
   let load addr =
-    !!address_will_be_read addr >>= fun () ->
     Machine.Local.get state >>= read addr
 
-  let save addr value =
+  let store addr value =
     Machine.Local.get state >>=
     write addr value >>=
-    Machine.Local.put state >>= fun () ->
-    !!address_was_written (addr,value)
+    Machine.Local.put state
 
   let is_mapped addr =
     Machine.Local.get state >>| is_mapped addr

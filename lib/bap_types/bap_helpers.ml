@@ -151,6 +151,15 @@ module Apply = struct
     | LE -> Bitvector.(of_bool (u <= v))
     | SLT -> Bitvector.(of_bool (signed u < signed v))
     | SLE  -> Bitvector.(of_bool (signed u <= signed v))
+
+  let cast ct sz u =
+    let ext = Bitvector.extract_exn in
+    match ct with
+    | Cast.UNSIGNED -> ext ~hi:Int.(sz - 1) u
+    | Cast.SIGNED   -> ext ~hi:Int.(sz - 1) (Bitvector.signed u)
+    | Cast.HIGH     -> ext ~lo:Int.(Bitvector.bitwidth u - sz) u
+    | Cast.LOW      -> ext ~hi:Int.(sz - 1) u
+
 end
 
 module Type = struct
