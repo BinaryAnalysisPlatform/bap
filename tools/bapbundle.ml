@@ -77,12 +77,18 @@ module Update = struct
   let set_list s f =
     String.split ~on:',' s |> List.map ~f:String.strip |> set f
 
+  let set_name s =
+    set name @@
+    String.map ~f:(function
+        | '_' -> '-'
+        | c -> c) s
+
   let set_tags s = set_list s tags
   let set_cons s = set_list s cons
 
   let common_args = Arg.[
       "-author",    String (set author), "<name> Set bundle's author name";
-      "-name",      String (set name),   "<name> Set bundle's name";
+      "-name",      String set_name,     "<name> Set bundle's name";
       "-desc",      String (set desc),   "<text> Set bundle's description";
       "-tags",      String set_tags,     "<list> Set bundle's tags";
       "-cons",      String set_cons,     "<list> Set bundle's constraints";

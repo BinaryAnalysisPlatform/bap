@@ -131,10 +131,6 @@ module Plugin_rules = struct
 
   let is_cmx file = Filename.check_suffix file ".cmx"
 
-  let dashify = String.map ~f:(function
-      | '_' -> '-'
-      | c -> c)
-
   let bundle env =
     let requires =
       packages () |> List.concat_map ~f:(fun pkg ->
@@ -154,7 +150,7 @@ module Plugin_rules = struct
     Cmd (S [
         A "bapbundle"; A "pack";
         T (Tags.of_list ["bundle"; "library"; "plugin"]);
-        A "-name"; A (dashify (env "%"));
+        A "-name"; A (env "%");
         A "-main"; A (env "%.cmxs");
         A "-main"; A (env "%.cma");
         requires; provides;
