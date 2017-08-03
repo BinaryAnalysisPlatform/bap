@@ -7,6 +7,6 @@ Library run_plugin
   Path: plugins/run
   FindlibName: bap-plugin-run
   CompiledObject: best
-  BuildDepends: bap, bap-primus, cmdliner
+  BuildDepends: bap, bap-primus
   InternalModules: Run_main
   XMETADescription: a pass that will run a program

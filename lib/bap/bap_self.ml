@@ -239,7 +239,8 @@ module Create() = struct
       | `S of string
     ]
 
-    let manpage (man:manpage_block list) : unit =
+    let manpage man =
+      let man = (man :> Manpage.block list) in
       term_info := Term.info ~doc ~man plugin_name
 
     let determined (p:'a param) : 'a future = p
