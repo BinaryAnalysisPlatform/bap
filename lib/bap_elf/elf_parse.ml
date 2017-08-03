@@ -483,4 +483,4 @@ let from_bigstring_exn ?(pos=0) ?len data =
   return { elf with e_segments; e_sections }
 
 let from_bigstring ?pos ?len data =
-  Or_error.try_with_join (fun () -> from_bigstring_exn ?pos ?len data)
+  Or_error.try_with_join ~backtrace:true (fun () -> from_bigstring_exn ?pos ?len data)

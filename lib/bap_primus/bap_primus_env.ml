@@ -114,7 +114,7 @@ module Make(Machine : Machine) = struct
     Generator.next gen >>| word >>= next
 
   let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
-    Value.create (Word.zero (Size.in_bits s))
+    Value.zero (Size.in_bits s)
 
   let get var =
     !!variable_will_be_looked_up var >>= fun () ->
@@ -131,7 +131,7 @@ module Make(Machine : Machine) = struct
           Machine.raise (Undefined_var var)
         | Some gen ->
           gen_word gen width >>=
-          Value.create >>= fun w ->
+          Value.of_word >>= fun w ->
           !!variable_was_read (var,w) >>| fun () ->
           w
 

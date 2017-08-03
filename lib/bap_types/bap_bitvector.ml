@@ -180,7 +180,7 @@ module Cons = struct
 end
 include Cons
 
-let safe f t = try_with (fun () -> f t)
+let safe f t = try_with ~backtrace:true (fun () -> f t)
 
 let to_int   = unop (safe Bignum.to_int)
 let to_int32 = unop (safe Bignum.to_int32)

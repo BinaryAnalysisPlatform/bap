@@ -116,7 +116,9 @@ module Main(Machine : Primus.Machine.S) = struct
     introduce Taint.ptr @@ fun def t s ->
     Set.to_sequence (Def.free_vars def) |>
     Machine.Seq.fold ~init:s.tas ~f:(fun tas v ->
-        Env.get v >>| fun addr -> taint tas addr t) >>| fun tas -> {
+        Env.get v >>| fun addr ->
+        let addr = Primus.Value.to_word addr in
+        taint tas addr t) >>| fun tas -> {
       s with tas
     }
 
@@ -292,7 +294,6 @@ module Main(Machine : Primus.Machine.S) = struct
     printf "<tvs>@\n%a@\n</tvs>" Taint.pp_map tvs
 
   let init () = Machine.List.sequence Primus.Interpreter.[
-      new_value >>> val_computed;
       leave_exp >>> exp_computed;
       enter_def >>> introduce_taints;
       leave_def >>> def_computed;

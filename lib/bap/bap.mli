@@ -513,7 +513,6 @@ module Std : sig
   (** Machine integer as a sequence of bits.  *)
   module Integer : sig
 
-
     (** The minimal interface of the machine integer.  *)
     module type Base = sig
       type t
@@ -2065,15 +2064,14 @@ module Type : sig
         type [exp] but got a value of type [got].  *)
     val bad_type : exp:typ -> got:typ -> t
 
+    (** [expect_mem ()] raises [T bad_mem]  *)
+    val expect_mem : unit -> 'a
 
-    (** [expect_mem] raises [T bad_mem]  *)
-    val expect_mem : 'a
+    (** [expect_imm ()] raises [T bad_imm]  *)
+    val expect_imm : unit -> 'a
 
-    (** [expect_imm] raises [T bad_imm]  *)
-    val expect_imm : 'a
-
-    (** [bad_cast] raises [T bad_cast]  *)
-    val bad_cast : 'a
+    (** [wrong_cast ()] raises [T bad_cast]  *)
+    val wrong_cast : unit -> 'a
 
     (** [expect t ~got:u] raises [T (bap_type ~exp:t ~got:t)] *)
     val expect : typ -> got:typ -> 'a

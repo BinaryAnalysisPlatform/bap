@@ -1405,7 +1405,7 @@ module Make(Machine : Machine) = struct
       | None -> env
       | Some addr ->
         let binding =
-          Value.create addr >>| fun addr ->
+          Value.of_word addr >>| fun addr ->
           {data = Term.name t; typ = Word}, addr in
         binding :: env
   end)#run proj [] |> Machine.List.all

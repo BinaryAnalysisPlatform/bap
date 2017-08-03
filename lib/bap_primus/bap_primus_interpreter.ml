@@ -196,7 +196,7 @@ module Make (Machine : Machine) = struct
       fun () -> Machine.raise (Runtime_error msg)) fmt
 
 
-  let value = Value.create
+  let value = Value.of_word
 
   let word_of_type = function
     | Type.Mem _ -> Word.b0

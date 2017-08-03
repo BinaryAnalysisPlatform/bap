@@ -116,12 +116,13 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
-        Env.set assn.var (Word.of_bool assn.res))
+        Eval.const (Word.of_bool assn.res) >>=
+        Env.set assn.var)
 
   let unsat_assumptions blk =
     Machine.List.map (assumptions blk)
       ~f:(Machine.List.filter ~f:(fun {var;res} ->
-          Env.get var >>| fun r ->
+          Env.get var >>| Primus.Value.to_word >>| fun r ->
           Word.(r <> of_bool res)))
 
   let pp_id = Monad.State.Multi.Id.pp
@@ -163,13 +164,15 @@ module Main(Machine : Primus.Machine.S) = struct
   let map addr =
     Mem.allocate ~generator:Primus.Generator.Random.Seeded.byte addr 1
 
-  let make_loadable addr =
+  let make_loadable value =
+    let addr = Primus.Value.to_word value in
     Mem.is_mapped addr >>= function
     | false -> map addr
     | true -> Machine.return ()
 
 
-  let make_writable (addr,_) =
+  let make_writable value =
+    let addr = Primus.Value.to_word value in
     Mem.is_writable addr >>= function
     | false -> map addr
     | true -> Machine.return ()
@@ -177,8 +180,8 @@ module Main(Machine : Primus.Machine.S) = struct
   let init () =
     info "translating the program into the Trivial Condition Form (TCF)";
     Machine.update TCF.proj >>= fun () ->
-    Primus.Memory.address_access >>> make_loadable >>= fun () ->
-    Primus.Memory.address_written >>> make_writable >>= fun () ->
+    Primus.Interpreter.loading >>> make_loadable >>= fun () ->
+    Primus.Interpreter.storing >>> make_writable >>= fun () ->
 
     Primus.Interpreter.leave_pos >>> step
 end

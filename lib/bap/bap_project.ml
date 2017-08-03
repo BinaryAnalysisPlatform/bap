@@ -281,7 +281,7 @@ let create_exn
 
 let create
     ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
-  Or_error.try_with (fun () ->
+  Or_error.try_with ~backtrace:true (fun () ->
       create_exn
         ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
 

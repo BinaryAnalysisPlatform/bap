@@ -17,9 +17,9 @@ let bad_imm  = `bad_kind `imm
 let bad_cast = `bad_cast
 let bad_type ~exp ~got = `bad_type (exp,got)
 
-let expect_mem = raise (T (`bad_kind `mem))
-let expect_imm = raise (T (`bad_kind `imm))
-let bad_cast = raise (T (`bad_cast))
+let expect_mem () = raise (T (`bad_kind `mem))
+let expect_imm () = raise (T (`bad_kind `imm))
+let wrong_cast () = raise (T (`bad_cast))
 let expect e ~got = raise (T (`bad_type (e,got)))
 
 let to_string : type_error -> string = function

@@ -3,8 +3,6 @@ open Bap.Std
 
 module Exn = Bap_primus_exn
 
-open Bap_primus_sexp
-
 type nil = Nil
 type top = program
 
@@ -62,10 +60,14 @@ let accept level args = Ok (level args)
 let reject level dst = Error (Broken_invariant {level; dst})
 
 
-let level name f x = sexps [name; f x]
+let level name f x = Sexp.List [
+    Sexp.Atom name;
+    Sexp.Atom (f x)
+]
 let (>>) = Fn.compose
-let leaf name str t = sexps [
-    name; String.strip (str t);
+let leaf name str t = Sexp.List [
+    Sexp.Atom name;
+    Sexp.Atom (String.strip (str t));
   ]
 
 let sexp_of_t = function

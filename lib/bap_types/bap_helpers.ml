@@ -197,44 +197,44 @@ module Type = struct
     if t = u then infer y
     else Type_error.expect t ~got:u
   and ite c x y = match infer c with
-    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Mem _ -> Type_error.expect_imm ()
     | Type.Imm 1 -> unify x y
     | t -> Type_error.expect (Type.Imm 1) ~got:t
   and unop x = match infer x with
-    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Mem _ -> Type_error.expect_imm ()
     | t -> t
   and binop op x y = match unify x y with
-    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Mem _ -> Type_error.expect_imm ()
     | Type.Imm _ as t -> match op with
       | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
       | _ -> t
   and load m a r = match infer m, infer a with
-    | Type.Imm _,_ -> Type_error.expect_mem
-    | _,Type.Mem _ -> Type_error.expect_imm
+    | Type.Imm _,_ -> Type_error.expect_mem ()
+    | _,Type.Mem _ -> Type_error.expect_imm ()
     | Type.Mem (s,_),Type.Imm s' ->
       let s = Size.in_bits s in
       if s = s' then Type.Imm (Size.in_bits r)
       else Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
   and store m a x r =
     match infer m, infer a, infer x with
-    | Type.Imm _,_,_ -> Type_error.expect_mem
+    | Type.Imm _,_,_ -> Type_error.expect_mem ()
     | Type.Mem (s,_) as t, Type.Imm s', Type.Imm u ->
       let s = Size.in_bits s in
       if s < s'
       then Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
       else if is_error (Size.of_int u)
-      then Type_error.bad_cast
+      then Type_error.wrong_cast ()
       else t
-    | _ -> Type_error.expect_imm
+    | _ -> Type_error.expect_imm ()
   and cast c s x =
     let t = Type.Imm s in
     match c,infer x with
-    | _,Type.Mem _ -> Type_error.expect_imm
+    | _,Type.Mem _ -> Type_error.expect_imm ()
     | (UNSIGNED|SIGNED),_ -> t
     | (HIGH|LOW), Type.Imm s' ->
-      if s' >= s then t else Type_error.bad_cast
+      if s' >= s then t else Type_error.wrong_cast ()
   and extract hi lo x = match infer x with
-    | Type.Mem _ -> Type_error.expect_imm
+    | Type.Mem _ -> Type_error.expect_imm ()
     | Type.Imm _ ->
       (* we don't really need a type of x, as the extract operation
          can both narrow and widen. Though it is a question whether it is
@@ -242,12 +242,10 @@ module Type = struct
          real life fact is that our lifters are (ab)using extract
          instruction in both directions.  *)
       if hi >= lo then Type.Imm (hi - lo + 1)
-      else Type_error.bad_cast
+      else Type_error.wrong_cast ()
   and concat x y = match infer x, infer y with
     | Type.Imm s, Type.Imm t -> Type.Imm (s+t)
-    | _ -> Type_error.expect_mem
-
-
+    | _ -> Type_error.expect_mem ()
 
   let infer_exn = infer
   let infer x =
@@ -269,16 +267,16 @@ module Type = struct
     let t = Var.typ v in
     match infer x with
     | Ok u when t = u -> None
-    | Ok u -> Some (Type_error.expect t ~got:u)
+    | Ok u -> Some (Type_error.bad_type ~exp:t ~got:u)
     | Error err -> Some err
   and jmp x = match infer x with
     | Ok (Imm s) when Result.is_ok (Size.addr_of_int s) -> None
-    | Ok (Mem _) -> Some Type_error.expect_imm
+    | Ok (Mem _) -> Some Type_error.bad_imm
     | Ok (Imm _) -> Some Type_error.bad_cast
     | Error err -> Some err
   and cond x = match infer x with
     | Ok (Imm 1) -> None
-    | Ok got -> Some (Type_error.expect (Type.Imm 1) ~got)
+    | Ok got -> Some (Type_error.bad_type ~exp:(Type.Imm 1) ~got)
     | Error err -> Some err
 
   let check xs = match check xs with
