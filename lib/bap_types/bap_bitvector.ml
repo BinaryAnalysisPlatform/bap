@@ -3,22 +3,58 @@ open Regular.Std
 open Or_error
 
 
-module Value = Bap_value
-module Dict = Value.Dict
+(* current representation has a very big overhead,
+   depending on a size of a payload it is minumum five words,
+   For example, although Zarith stores a 32bit word on a 64 bit
+   machine in one word and represent it as an unboxed int, we still
+   take four more words on top of that, as bitvector is represented as
+   a pointer (1) to a boxed value that contains (3) fields, plus the
+   header (1), that gives us 5 words (40 bytes), to store 4 bytes of
+   payload.
+
+   We have the following representation in mind, that will minimize
+   the overhead. We will store an extra information, attached to a
+   word in the word itself. Thus, bitvector will become a Z.t. We will
+   use several bits of the word for meta data.
+   To be able to store 32 bit words on a 64 bit platform we need to
+   leave enough space in a 63 bit word for the payload. Ideally, we
+   would like to have a support for an arbitrary bitwidth, but we can
+   limit it to 2^14=32 (2 kB), spend one bit for sign (that can be
+   removed later), thus we will have 48 bits for the payload.
+
+
+     small:
+     +-----------+------+---+
+     |  payload  | size | s |
+     +-----------+------+---+
+      size+15  15 14       0
+
+
+    Given this scheme, all values smaller than 0x100_000_000_0000 will
+    have the same representation as OCaml int.
+
+    The performance overhead is minimal, especially since no
+    allocations are done anymore.
+
+    Speaking of the sign. I would propose to remove it from the
+    bitvector, as sign is not a property of a bitvector, it is its
+    interpretation.
+
+    Removing the sign will get us extra memory and CPU efficiency.
+ *)
 
 type endian = LittleEndian | BigEndian
   [@@deriving bin_io, compare, sexp]
 
+
 module Bignum = struct
   module Repr : Stringable with type t = Z.t = struct
     type t = Z.t
-    let to_string z = sprintf "0x%s" (Z.format "%X" z)
-    let of_string = Z.of_string
+    let to_string = Z.to_bits
+    let of_string = Z.of_bits
   end
   include Z
-  include Sexpable.Of_stringable(Repr)
   include Binable.Of_stringable(Repr)
-  include (Repr : Stringable with type t := Z.t)
 end
 
 type bignum = Bignum.t
@@ -36,19 +72,11 @@ module Size_mono = struct
     if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
 end
 
-module Internal = struct
-  type t = {
-    z : Bignum.t;
-    w : int;
-    signed : bool;
-    attrs : Dict.t;
-  } [@@deriving bin_io, sexp]
-end
-
 module type Kernel = sig
-  type t = Internal.t [@@deriving bin_io, compare, sexp]
+  type t = Bignum.t [@@deriving bin_io, compare, sexp]
   val create : bignum -> int -> t
   val signed : t -> t
+  val unsigned : t -> t
   val is_signed: t -> bool
   val z : t -> bignum
   val with_z : t -> bignum -> t
@@ -56,13 +84,11 @@ module type Kernel = sig
   val lift2 : (bignum -> bignum -> bignum) -> t -> t -> t
   val unop  : (bignum -> 'a) -> t -> 'a
   val binop : (bignum -> bignum -> 'a) -> t -> t -> 'a
-  val extract : ?hi:int -> ?lo:int -> t -> t Or_error.t
+  val extract : ?hi:int -> ?lo:int -> t -> t
   val bitwidth : t -> int
   val bits_of_z  : t -> string
   val compare  : t -> t -> int
   val hash : t -> int
-  val attrs : t -> Dict.t
-  val with_attrs : t -> Dict.t -> t
   val module_name : string option
   include Pretty_printer.S with type t := t
   include Stringable with type t := t
@@ -70,56 +96,64 @@ module type Kernel = sig
 end
 
 (** internal representation *)
-module Make(Size : Compare) : Kernel = struct
-  open Internal
-  type nonrec t = t [@@deriving bin_io, sexp]
+module Make(Size : Compare) = struct
+  type t = Bignum.t [@@deriving bin_io]
 
   let module_name = Some "Bap.Std.Bitvector"
 
-  let version = "1.0.0"
+  let version = "2.0.0"
 
-  let znorm z w = Bignum.(z land ((one lsl w) - one))
+  let metasize = 15
+  let lenoff   = 1
+  let lensize  = metasize - 1
+  let maxlen   = 1 lsl lensize
+  let maxval   = Z.(one lsl maxlen)
 
-  (** Extend that sign bit.
-    * This makes Zarith treat the normalized input as if it were signed. *)
-  let signed_z t : Bignum.t = Bignum.signed_extract t.z 0 t.w
+  let meta x = Z.extract x 0 (metasize - 1)
+  let is_signed = Z.is_odd
+  let bitwidth x = Z.extract x lenoff lensize |> Z.to_int
+  let z x =
+    let w = bitwidth x in
+    if is_signed x
+    then Z.signed_extract x metasize w
+    else Z.extract x metasize w
 
-  let z t = t.z
+  let signed x = Z.(x lor one)
 
-  let create z w = {z = znorm z w; w; signed=false; attrs = Dict.empty}
+  let with_z x v =
+    let w = bitwidth x in
+    let v = Z.(extract v 0 w lsl metasize) in
+    Z.(v lor meta x)
 
-  let attrs t = t.attrs
-  let with_attrs t attrs = {t with attrs}
-  let hash = Hashtbl.hash
+  let create z w =
+    if w > maxlen
+    then invalid_argf
+        "Bitvector overflow: maximum allowed with is %d bits"
+        maxlen ();
+    if w <= 0
+    then invalid_argf "A nonpositive width is specified" ();
+    let meta = Z.(of_int w lsl 1) in
+    let z = Z.(extract z 0 w lsl metasize) in
+    Z.(z lor meta)
 
-  let signed t = { t with signed = true }
-  let is_signed t = t.signed
-
-  let z t = t.z
-  let with_z t z = { t with z = znorm z t.w }
-  let bitwidth t = t.w
-  let bits_of_z t = Bignum.to_bits t.z
-
-  let unop op t =
-    op (if t.signed then signed_z t else z t)
-
-  let binop op t1 t2 =
-    let z = if t1.signed || t2.signed then signed_z else z in
-    op (z t1) (z t2)
-
-  let lift1 op t = with_z t (unop op t)
-  let lift2 op t1 t2 = create (binop op t1 t2) t1.w
+  let unsigned x = create x (bitwidth x)
+  let hash x = Z.hash (z x)
+  let bits_of_z x = Z.to_bits (z x)
+  let unop op t = op (z t)
+  let binop op t1 t2 = op (z t1) (z t2)
+  let lift1 op t = create (unop op t) (bitwidth t)
+  let lift2 op t1 t2 = create (binop op t1 t2) (bitwidth t1)
 
   let compare l r =
-    let s = Size.compare l.w r.w in
-    if s <> 0 then s else
-    if l.signed || r.signed
-    then binop Bignum.compare l r
-    else Bignum.compare l.z r.z
+    let s = Size.compare (bitwidth l) (bitwidth r) in
+    if s <> 0 then s
+    else Bignum.compare (z l) (z r)
 
-  let to_string = function
-    | {z; w=1} -> if Bignum.equal z Bignum.zero then "false" else "true"
-    | {z; w=n} -> Bignum.to_string z ^ ":" ^ string_of_int n
+  let to_string x =
+    let z = z x in
+    match bitwidth x with
+    | 1 -> if Bignum.equal z Bignum.zero then "false" else "true"
+    | n -> Bignum.format "%#x" z ^ ":" ^ string_of_int n
 
   let of_string = function
     | "false" -> create Bignum.zero 1
@@ -134,21 +168,16 @@ module Make(Size : Compare) : Kernel = struct
 
   let extract ?hi ?(lo=0) t =
     let n = bitwidth t in
+    let z = z t in
     let hi = Option.value ~default:(n-1) hi in
-    let extract = if t.signed then
-        Bignum.signed_extract else
-        Bignum.extract in
-    let do_extract () =
-      let len = hi-lo+1 in
-      let z = if t.signed then signed_z t else t.z in
-      create (extract z lo len) len in
-    with_validation ~f:do_extract
-      Validate.(name_list "extract" [
-          name "(hi >= 0)"    @@ Int.validate_non_negative hi;
-          name "(lo >= 0)"    @@ Int.validate_non_negative lo;
-          name "(hi > lo)"    @@ Int.validate_non_negative (hi - lo);
-        ])
+    let len = hi-lo+1 in
+    create (Z.extract z lo len) len
 
+  let sexp_of_t t = Sexp.Atom (to_string t)
+  let t_of_sexp = function
+    | Sexp.Atom s -> of_string s
+    | _ -> invalid_argf
+             "Bitvector.of_sexp: expected an atom got a list" ()
 end
 
 (* About monomorphic comparison.
@@ -180,7 +209,7 @@ module Cons = struct
 end
 include Cons
 
-let safe f t = try_with ~backtrace:true (fun () -> f t)
+let safe f t = try_with (fun () -> f t)
 
 let to_int   = unop (safe Bignum.to_int)
 let to_int32 = unop (safe Bignum.to_int32)
@@ -204,14 +233,51 @@ let (--) t n = npred t n
 let succ n = n ++ 1
 let pred n = n -- 1
 
-(* warning, concatination looses sign *)
-let concat t1 t2 =
-  let lhs = Bignum.shift_left (z t1) (bitwidth t2) in
-  let w = bitwidth t1 + bitwidth t2 in
-  let z = Bignum.add lhs (z t2) in
+let concat x y =
+  let w = bitwidth x + bitwidth y in
+  let x = Bignum.(z x lsl bitwidth y) in
+  let z = Bignum.(x lor z y) in
   create z w
 
 let (@.) = concat
+
+module Unsafe = struct
+  module Base = struct
+    type t = T.t
+    let one = create Z.one 1
+    let zero = create Z.zero 1
+    let succ = lift1 Bignum.succ
+    let pred = lift1 Bignum.pred
+    let abs  = lift1 Bignum.abs
+    let neg  = lift1 Bignum.neg
+    let lnot = lift1 Bignum.lognot
+    let logand = lift2 Bignum.logand
+    let logor  = lift2 Bignum.logor
+    let logxor = lift2 Bignum.logxor
+    let add    = lift2 Bignum.add
+    let sub    = lift2 Bignum.sub
+    let mul    = lift2 Bignum.mul
+    let sdiv   = lift2 Bignum.div
+    let udiv   = lift2 Bignum.ediv
+    let srem   = lift2 Bignum.rem
+    let urem   = lift2 Bignum.erem
+
+    let sign_disp ~signed ~unsigned x y =
+      let op = if is_signed x || is_signed y then signed else unsigned in
+      op x y
+
+    let div = sign_disp ~signed:sdiv ~unsigned:udiv
+    let rem = sign_disp ~signed:srem ~unsigned:urem
+    let modulo  = rem
+
+    let shift dir x n = create (dir (z x) (Z.to_int (z n))) (bitwidth x)
+    let lshift = shift Bignum.shift_left
+    let rshift = shift Bignum.shift_right
+    let arshift x y = shift Bignum.shift_right (signed x) y
+  end
+  include Base
+  include (Bap_integer.Make(Base) : Bap_integer.S with type t := t)
+end
 
 module Safe = struct
   include Or_error.Monad_infix
@@ -233,10 +299,7 @@ module Safe = struct
   let lift2 op (x : m) (y : m) : m =
     x >>= fun x -> y >>= fun y ->
     let v = validate_equal (bitwidth x, bitwidth y) in
-    Validate.result v >>| fun () -> lift2 op x y
-
-
-
+    Validate.result v >>| fun () -> op x y
 
   let int = lift
   let i1  = lift 1
@@ -260,16 +323,16 @@ module Safe = struct
 
     let lnot = lift1 Bignum.lognot
 
-    let logand = lift2 Bignum.logand
-    let logor  = lift2 Bignum.logor
-    let logxor = lift2 Bignum.logxor
-    let add    = lift2 Bignum.add
-    let sub    = lift2 Bignum.sub
-    let mul    = lift2 Bignum.mul
-    let sdiv   = lift2 Bignum.div
-    let udiv   = lift2 Bignum.ediv
-    let srem   = lift2 Bignum.rem
-    let urem   = lift2 Bignum.erem
+    let logand = lift2 Unsafe.logand
+    let logor  = lift2 Unsafe.logor
+    let logxor = lift2 Unsafe.logxor
+    let add    = lift2 Unsafe.add
+    let sub    = lift2 Unsafe.sub
+    let mul    = lift2 Unsafe.mul
+    let sdiv   = lift2 Unsafe.div
+    let udiv   = lift2 Unsafe.udiv
+    let srem   = lift2 Unsafe.rem
+    let urem   = lift2 Unsafe.urem
 
     let sign_disp ~signed ~unsigned x y =
       x >>= fun x -> y >>= fun y ->
@@ -283,18 +346,14 @@ module Safe = struct
     let shift dir (x : m) (y : m) : m =
       x >>= fun x -> y >>= fun y ->
       if unop Bignum.fits_int y
-      then
-        let shift arg = dir arg (Bignum.to_int (z y)) in
-        Ok (T.lift1 shift x)
+      then Ok (dir x y)
       else Or_error.errorf
           "cannot perform shift, because rhs doesn't fit int: %s" @@
         to_string y
 
-    let lshift = shift Bignum.shift_left
-    let rshift = shift Bignum.shift_right
-
-    let arshift (x : m) y : m =
-      x >>= fun x -> rshift (Ok (signed x)) y
+    let lshift = shift Unsafe.lshift
+    let rshift = shift Unsafe.rshift
+    let arshift = shift Unsafe.arshift
   end
   include Bap_integer.Make(Base)
 end
@@ -331,8 +390,9 @@ module Int_exn = struct
   include Bap_integer.Make(Base)
 end
 
-let extract_exn ?hi ?lo z =
-  Or_error.ok_exn @@ extract ?hi ?lo z
+let extract_exn = extract
+let extract ?hi ?lo x = Or_error.try_with (fun () ->
+    extract_exn ?hi ?lo x)
 
 let is_zero = unop Bignum.(equal zero)
 let is_one = unop Bignum.(equal one)
@@ -439,6 +499,78 @@ end
 include Or_error.Monad_infix
 include Regular.Make(T)
 module Int_err = Safe
-include (Int_exn : Bap_integer.S with type t := t)
+include (Unsafe : Bap_integer.S with type t := t)
 let one = Cons.one
 let zero = Cons.zero
+
+
+(* old representation for backward compatibility. *)
+module V1 = struct
+  module Bignum = struct
+    module Repr : Stringable with type t = Z.t = struct
+      type t = Z.t
+      let to_string z = sprintf "0x%s" (Z.format "%X" z)
+      let of_string = Z.of_string
+    end
+    include Z
+    include Sexpable.Of_stringable(Repr)
+    include Binable.Of_stringable(Repr)
+  end
+
+  type t = {
+    z : Bignum.t;
+    w : int;
+    signed : bool;
+  } [@@deriving bin_io, sexp]
+end
+
+(* stable serialization protocol *)
+module Stable = struct
+  module V1 = struct
+    type t = bignum
+    let compare = compare
+
+    let of_legacy {V1.z; w; signed=s} =
+      let x = create z w in
+      if s then signed x else x
+
+    let to_legacy x = V1.{
+        z = z x;
+        w = bitwidth x;
+        signed = is_signed x;
+      }
+
+    include Binable.Of_binable(V1)(struct
+        type t = bignum
+        let to_binable = to_legacy
+        let of_binable = of_legacy
+      end)
+
+    include Sexpable.Of_sexpable(V1)(struct
+        type t = bignum
+        let to_sexpable = to_legacy
+        let of_sexpable = of_legacy
+      end)
+  end
+
+  module V2 = struct
+    type nonrec t = t [@@deriving bin_io, compare, sexp]
+  end
+end
+
+
+let pp_value ppf x =
+  Format.fprintf ppf "%s" (Z.format "%#x" (z x))
+
+let light_printer = Data.Write.create ~pp:pp_value ()
+
+let () =
+  add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
+    (Data.bin_reader (module Stable.V1));
+  add_writer ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
+    (Data.bin_writer (module Stable.V1));
+  add_reader ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+    (Data.sexp_reader (module Stable.V1));
+  add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
+    (Data.sexp_writer (module Stable.V1));
+  add_writer ~desc:"Light pretty printer" ~ver:"2.0.0" "light" light_printer

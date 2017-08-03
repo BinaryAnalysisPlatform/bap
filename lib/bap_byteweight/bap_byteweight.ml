@@ -94,7 +94,7 @@ module Bytes = struct
         match Memory.view ~from ~words:length mem with
         | Ok mem -> Some mem
         | _ -> None
-    end)(Memory.Trie.R8)
+    end)(Memory.Trie.Stable.V1.R8)
 
   let find bw ~length ~threshold mem =
     let start = Memory.min_addr mem in

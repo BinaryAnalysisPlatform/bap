@@ -1,5 +1,11 @@
 open Core_kernel.Std
 
+let maybe_mangled name =
+  String.length name > 2 &&
+  name.[0] = '_' &&
+  Char.is_uppercase name.[1] &&
+  Char.is_alpha name.[1]
+
 let demangle_internal str =
   let open String in
   let open Option.Monad_infix in
@@ -28,6 +34,14 @@ let demangle_internal str =
   | "" -> str
   | s  -> s
 
+let demangle_internal name =
+  if maybe_mangled name then
+    Option.try_with (fun () -> demangle_internal name)
+  else None
+
+let run_internal name =
+  Option.value_map ~default:name ~f:ident (demangle_internal name)
+
 module Std = struct
   type demangler = {
     name : string;
@@ -49,7 +63,7 @@ module Std = struct
 
   let internal = {
     name = "internal";
-    run = demangle_internal;
+    run = run_internal;
   }
 
   let () = Demanglers.register internal

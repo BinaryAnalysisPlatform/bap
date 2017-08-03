@@ -1092,6 +1092,10 @@ module Std : sig
         applied on [t] will be signed *)
     val signed : t -> t
 
+    (** [unsigned t] casts [t] to an unsigned type, so that any
+        operations applied to it will interpret [t] as an unsigned word.*)
+    val unsigned : t -> t
+
     (** [is_zero bv] is true iff all bits are set to zero. *)
     val is_zero : t -> bool
 
@@ -1100,12 +1104,6 @@ module Std : sig
 
     (** [bitwidth bv] return a bit-width, i.e., the amount of bits *)
     val bitwidth : t -> int
-
-    (** value attributes  *)
-    val attrs : t -> dict
-
-    (** update value attributes  *)
-    val with_attrs : t -> dict -> t
 
     (** [extract bv ~hi ~lo] extracts a subvector from [bv], starting
         from bit [hi] and ending with [lo]. Bits are enumerated from
@@ -1275,6 +1273,17 @@ module Std : sig
         [Width] exception if operands sizes mismatch.
     *)
     module Int_exn : Integer.S with type t = t
+    module Unsafe  : Bap_integer.S with type t = t
+
+    (** Stable marshaling interface.  *)
+    module Stable : sig
+      module V1 : sig
+        type nonrec t = t [@@deriving bin_io, compare, sexp]
+      end
+      module V2 : sig
+        type nonrec t = t [@@deriving bin_io, compare, sexp]
+      end
+    end
 
     (** Prefix trees for bitvectors.
 
@@ -4169,9 +4178,23 @@ module Memory : sig
   *)
   val to_buffer : t -> Bigsubstring.t
 
-
   (** Tries over memory  *)
   module Trie : sig
+    module Stable : sig
+      module V1 : sig
+        module R8  : Trie.S with type key = t
+        module R16 : Trie.S with type key = t
+        module R32 : Trie.S with type key = t
+        module R64 : Trie.S with type key = t
+      end
+      module V2 : sig
+        module R8  : Trie.S with type key = t
+        module R16 : Trie.S with type key = t
+        module R32 : Trie.S with type key = t
+        module R64 : Trie.S with type key = t
+      end
+
+    end
     module R8  : Trie.S with type key = t
     module R16 : Trie.S with type key = t
     module R32 : Trie.S with type key = t
