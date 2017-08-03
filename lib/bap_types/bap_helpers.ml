@@ -129,7 +129,7 @@ module Apply = struct
 
   let binop op u v =
     let open Word in
-    if Int.(bitwidth u = bitwidth v) && not (is_shift op)
+    if Int.(bitwidth u <> bitwidth v) && not (is_shift op)
     then failwith "type error";
     match op with
     | PLUS -> u + v

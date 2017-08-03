@@ -46,5 +46,20 @@ let target_of_arch =
       target in
   get
 
-let register_target arch target =
-  Hashtbl.set targets ~key:arch ~data:target
+module Ensure_normal_form(T : Target) = struct
+  include T
+
+  let lift mem insn = match T.lift mem insn with
+    | Error _ as e -> e
+    | Ok bil -> match Type.check bil with
+      | Error te ->
+        let err  =
+          Error.createf "The lifted code is not well-typed: %s"
+            (Type.Error.to_string te) in
+        Error err
+      | Ok () -> Ok (Bil.normalize bil |> Bil.fold_consts)
+end
+
+let register_target arch (module Target : Target) =
+  let module T = Ensure_normal_form(Target) in
+  Hashtbl.set targets ~key:arch ~data:(module T)
