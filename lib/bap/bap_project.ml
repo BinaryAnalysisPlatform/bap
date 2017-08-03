@@ -31,7 +31,7 @@ type t = {
   storage : dict;
   program : program term;
   symbols : Symtab.t;
-  state : state;
+  state   : state;
   passes  : string list;
 } [@@deriving fields]
 
@@ -44,6 +44,7 @@ module Info = struct
   let cfg, got_cfg  = Stream.create ()
   let symtab,got_symtab = Stream.create ()
   let program,got_program = Stream.create ()
+  let spec,got_spec = Stream.create ()
 end
 
 module Input = struct
@@ -84,6 +85,7 @@ module Input = struct
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
     Signal.send Info.got_img img;
+    Signal.send Info.got_spec spec;
     let finish proj = {
       proj with
       storage = Dict.set proj.storage Image.specification spec;
@@ -114,7 +116,7 @@ module Input = struct
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
     let data = Memmap.add Memmap.empty mem section in
-    {arch; data; code = data; file = filename; finish = ident}
+    {arch; data; code = data; file = filename; finish = ident;}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
@@ -207,6 +209,17 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
+let symbolize_synthetic prog insns spec =
+  if MVar.is_updated spec then
+    match MVar.read spec with
+    | None -> prog
+    | Some spec ->
+      let p =
+        Bap_synthetic_symbolizer.resolve spec insns prog in
+      Signal.send Info.got_program p;
+      p
+  else prog
+
 let create_exn
     ?disassembler:backend
     ?brancher
@@ -222,7 +235,8 @@ let create_exn
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let {Input.arch; data; code; file; finish} = read () in
+  let spec = MVar.from_source (Stream.map ~f:(fun s -> Ok s) Info.spec) in
+  let {Input.arch; data; code; file; finish;} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
@@ -269,14 +283,19 @@ let create_exn
        MVar.is_updated mbrancher ||
        MVar.is_updated msymbolizer ||
        MVar.is_updated mreconstructor then loop ()
-    else finish {
-      disasm = Disasm.create g;
-      program = MVar.read program;
-      symbols = MVar.read symtab;
-      arch; memory=union_memory code data;
-      storage = Dict.set Dict.empty filename file;
-      state; passes=[]
-    } in
+    else
+      let disasm = Disasm.create g in
+      let program = MVar.read program in
+      let program =
+        symbolize_synthetic program (Disasm.insns disasm) spec in
+      finish {
+        disasm;
+        program;
+        symbols = MVar.read symtab;
+        arch; memory=union_memory code data;
+        storage = Dict.set Dict.empty filename file;
+        state; passes=[]
+      } in
   loop ()
 
 let create
@@ -501,8 +520,10 @@ let () =
   let stream f = Stream.map Info.img ~f:(fun img -> Ok (f img)) in
   let rooter = stream Rooter.of_image in
   let symbolizer = stream Symbolizer.of_image in
+  let brancher = stream Brancher.of_image in
   Rooter.Factory.register "internal" rooter;
-  Symbolizer.Factory.register "internal" symbolizer
+  Symbolizer.Factory.register "internal" symbolizer;
+  Brancher.Factory.register "internal" brancher
 
 include Data.Make(struct
     type nonrec t = t

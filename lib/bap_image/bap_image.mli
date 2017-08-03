@@ -90,7 +90,6 @@ module Scheme : sig
   val writable : bool Ogre.field
   val executable : bool Ogre.field
 
-
   val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
   val segment : ((bool * bool * bool) region,
                  (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
@@ -107,4 +106,12 @@ module Scheme : sig
     (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
   val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+
+  val reference :
+    (addr * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
+
+  val external_reference :
+    (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
+
+  val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
 end

@@ -63,3 +63,6 @@ external section_addr : t -> int -> int64  =
 
 external section_size : t -> int -> int64  =
   "bap_llvm_binary_section_size_stub"
+
+external bap_llvm_load : Bigstring.t -> string =
+  "bap_llvm_load_stub"

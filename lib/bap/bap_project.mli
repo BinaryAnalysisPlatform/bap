@@ -47,6 +47,7 @@ module Info : sig
   val cfg : cfg stream
   val symtab : symtab stream
   val program : program term stream
+  val spec : Ogre.Doc.t stream
 end
 
 module Input : sig
