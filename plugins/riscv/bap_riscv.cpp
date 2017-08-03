@@ -101,6 +101,20 @@ public:
             if (debug_level > 1) {
 			    std::cerr << "read: '" << get_asm() << "'\n";
             }
+            if (is_prefix() && size != 0) {
+				step(pc+size);
+
+				// a standalone prefix is not a valid instruction
+				if (current.loc.len == 0) {
+					current = invalid_insn(loc);
+				}
+
+				// a prefix to invalid instruction is invalid instruction
+				if (current.code != 0) {
+					location ext = {loc.off, loc.len + current.loc.len};
+					current = valid_insn(ext);
+				}
+			}
         }
     }
 

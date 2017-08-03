@@ -11,9 +11,14 @@ Library riscv_plugin
   CCOpt:         $cc_optimization
   CCLib:         $riscv_lib $cxxlibs $riscv_ldflags
   CSources:      bap_riscv.h,
-                 bap_riscv.cc,
+                 bap_riscv.hpp,
+                 bap_riscv.cpp,
                  strings.h,
-                 strings.cc
+                 strings.hpp,
+                 strings.cpp,
+                 meta.h,
+                 meta.hpp,
+                 meta.cpp
   FindlibName:   bap-plugin-riscv
   InternalModules: Riscv_main
   XMETAExtraLines: tags="disassembler"

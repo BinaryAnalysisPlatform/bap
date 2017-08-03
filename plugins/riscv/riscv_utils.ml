@@ -18,7 +18,6 @@ let assert_imm loc = function
   | `Reg _ -> fail loc "expected imm"
   | `Imm imm -> imm
 
-
 let assert_cond loc op =
   match Riscv_cond.create (assert_imm loc op) with
   | Ok cond -> cond
