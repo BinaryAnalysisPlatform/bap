@@ -2886,6 +2886,8 @@ module Exp : sig
       something. See also {!Bil.exists} and {Stmt.exists}  *)
   val exists : unit #finder -> t -> bool
 
+  (** [normalize] ensures no-lets and normalized-memory  *)
+  val normalize : exp -> exp
 
   (** [simpl ~ignore:effects x] iff expression [x] is well-typed,
       then returns an expression with the same semantics as [x],
