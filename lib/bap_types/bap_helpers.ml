@@ -203,11 +203,16 @@ module Type = struct
   and unop x = match infer x with
     | Type.Mem _ -> Type_error.expect_imm ()
     | t -> t
-  and binop op x y = match unify x y with
+  and binop op x y = match op with
+    | LSHIFT|RSHIFT|ARSHIFT -> shift x y
+    | _ -> match unify x y with
     | Type.Mem _ -> Type_error.expect_imm ()
     | Type.Imm _ as t -> match op with
       | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
       | _ -> t
+  and shift x y = match infer x, infer y with
+    | Type.Mem _,_ | _,Type.Mem _ -> Type_error.expect_imm ()
+    | t, Type.Imm _ -> t
   and load m a r = match infer m, infer a with
     | Type.Imm _,_ -> Type_error.expect_mem ()
     | _,Type.Mem _ -> Type_error.expect_imm ()
@@ -467,7 +472,7 @@ module Simpl = struct
       | UnOp(op',x) when op = op' -> exp x
       | _ -> UnOp(op, exp x)
     and binop op x y =
-      let width = match Type.unify x y with
+      let width = match Type.infer_exn x with
         | Type.Imm s -> s
         | Type.Mem _ -> failwith "binop" in
       let keep op x y = BinOp(op,x,y) in
@@ -713,17 +718,24 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
       else load a in
     expand a (Size.in_bytes s)
 
+  let expand_memory = map_exp @@ object
+      inherit exp_mapper as super
+      method! map_load ~mem ~addr e s =
+        let mem =  super#map_exp mem in
+        let addr = super#map_exp addr in
+        expand_load mem addr e s
+      method! map_store ~mem ~addr ~exp:x e s =
+        let mem =  super#map_exp mem in
+        let addr = super#map_exp addr in
+        let x = super#map_exp x in
+        expand_store mem addr x e s
+    end
+
   (* ensures: no-lets, one-byte-stores, one-byte-loads.
      This is the first step of normalization. The full normalization,
      e.g., remove ite and hoisting storages can be only done on the
      BIL level.  *)
-  let normalize_exp exp = match reduce_let exp with
-    | Load (m,a,e,s) -> expand_load m a e s
-    | Store (m,a,x,e,s) -> expand_store m a x e s
-    | exp -> exp
-
-
-
+  let normalize_exp x = expand_memory (reduce_let x)
 
   type assume = Assume of (exp * bool)
 
