@@ -255,7 +255,6 @@ module Make (Machine : Machine) = struct
       | exp ->
         invalid_argf "precondition failed: denormalized exp: %s"
           (Exp.to_string exp) () in
-    let x = Exp.normalize x in
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
@@ -292,6 +291,8 @@ module Make (Machine : Machine) = struct
     eval_exp y >>= fun y ->
     concat x y
 
+  let eval_exp x = eval_exp (Exp.normalize x)
+
   let mem =
     Machine.get () >>| fun proj ->
     let (module Target) = target_of_arch (Project.arch proj) in
@@ -299,12 +300,12 @@ module Make (Machine : Machine) = struct
 
   let load a e s =
     mem >>= fun m ->
-    eval_exp @@ Exp.normalize Bil.(Load (var m, int a.value,e,s))
+    eval_exp Bil.(Load (var m, int a.value,e,s))
 
   let store a x e s =
     mem >>= fun m ->
     Machine.ignore_m @@
-    eval_exp @@ Exp.normalize Bil.(Store (var m,int a.value,int x.value,e,s))
+    eval_exp Bil.(Store (var m,int a.value,int x.value,e,s))
 
 
   let update_pc t =

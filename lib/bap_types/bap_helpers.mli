@@ -21,7 +21,7 @@ val prune_unreferenced :
   ?virtuals:bool ->
   bil -> bil
 
-val normalize : bil -> bil
+val normalize : ?normalize_exp:bool -> bil -> bil
 val normalize_negatives : bil -> bil
 val substitute : exp -> exp -> bil -> bil
 val substitute_var : var -> exp -> bil -> bil
@@ -106,7 +106,7 @@ module Stmt : sig
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
-  val normalize : stmt list -> stmt list
+  val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 end
 
 

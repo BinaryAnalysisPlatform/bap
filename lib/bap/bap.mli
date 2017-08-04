@@ -3220,7 +3220,7 @@ module Stmt : sig
 
 
   *)
-  val normalize : stmt list -> stmt list
+  val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
 
 

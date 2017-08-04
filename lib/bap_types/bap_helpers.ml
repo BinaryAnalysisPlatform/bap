@@ -969,7 +969,8 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     end) bil
 
 
-  let rec bil xs =
+  let rec bil ?normalize_exp:(ne=false) xs =
+    let normalize_exp = if ne then normalize_exp else ident in
     normalize_conditionals xs |>
     List.map ~f:(function
     | Move (v,x) -> Move (v, normalize_exp x)
