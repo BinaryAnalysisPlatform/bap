@@ -252,7 +252,10 @@ module Make (Machine : Machine) = struct
       | Bil.Unknown (x,typ) -> eval_unknown x typ
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
-      | _ -> invalid_arg "precondition failed: denormalized exp" in
+      | exp ->
+        invalid_argf "precondition failed: denormalized exp: %s"
+          (Exp.to_string exp) () in
+    let x = Exp.normalize x in
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
@@ -296,12 +299,12 @@ module Make (Machine : Machine) = struct
 
   let load a e s =
     mem >>= fun m ->
-    eval_exp Bil.(Load (var m, int a.value,e,s))
+    eval_exp @@ Exp.normalize Bil.(Load (var m, int a.value,e,s))
 
   let store a x e s =
     mem >>= fun m ->
     Machine.ignore_m @@
-    eval_exp Bil.(Store (var m,int a.value,int x.value,e,s))
+    eval_exp @@ Exp.normalize Bil.(Store (var m,int a.value,int x.value,e,s))
 
 
   let update_pc t =
