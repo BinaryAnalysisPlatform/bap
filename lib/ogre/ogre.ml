@@ -203,7 +203,7 @@ module Doc = struct
                     a value for the field %S" name fname
           | Some value when Type.check ftype value -> Ok (fnum + 1)
           | Some bad ->
-            errorf "value %S is not in a domain of values of\
+            errorf "value %S is not in a domain of values of \
                     field '%s.%s'" bad name fname) >>= fun checked ->
       if checked = Map.length fields then Ok ()
       else errorf "attribute %S has an arity %d, while a value with \
@@ -219,10 +219,14 @@ module Doc = struct
   let update_entries name packed doc =
     typecheck_entry name packed doc >>| fun () ->
     let packed = {fields = normalize_entry name packed doc} in
-    {
-      doc with entries =
-                 Map.add_multi doc.entries ~key:name ~data:packed
-    }
+    let equal e e' = compare_entry e e' = 0 in
+    let entries = Map.update doc.entries name
+        ~f:(function
+            | None -> [packed]
+            | Some data ->
+              if List.mem ~equal data packed then data
+              else (packed :: data)) in
+    { doc with entries }
 
   let merge doc {scheme; entries} =
     Map.to_sequence scheme |>
@@ -713,6 +717,7 @@ module type S = sig
   val require : ?that:('a -> bool) -> ('a,_) attribute -> 'a t
   val request : ?that:('a -> bool) -> ('a,_) attribute -> 'a option t
   val foreach : ('a -> 'b) query -> f:'a -> 'b seq t
+  val collect : (('a -> 'a) -> 'b) query -> 'b seq t
   val provide : (_, 'a -> unit t) attribute -> 'a
   val fail : Error.t -> 'a t
   val failf : ('a, formatter, unit, unit -> 'b t) format4 -> 'a
@@ -766,6 +771,8 @@ module Make(B : Monad.S) = struct
     (*   foldm rows ~init:[] ~f:(fun xs row -> read row f >>| fun x -> x :: xs) >>| *)
     (*   Sequence.of_list *)
 
+  let collect q = foreach q ~f:ident
+
   let require ?(that=fun _ -> true) attr : 'a t =
     let name = sprintf "required attribute %s" (Attribute.name attr) in
     M.get () >>= fun doc -> match Doc.get doc attr with
@@ -780,10 +787,9 @@ module Make(B : Monad.S) = struct
     let name = sprintf "requested attribute %s" (Attribute.name attr) in
     M.get () >>= fun doc -> match Doc.get doc attr with
     | Error err -> M.lift (B.return (Error err))
-    | Ok [] -> M.lift (B.return (Ok None))
     | Ok xs -> match List.filter ~f:that xs with
-      | [x] ->  M.lift (B.return (Ok (Some x)))
-      | [] -> failf "%s doesn't satisfy the constraint" name ()
+      | [x] -> M.lift (B.return (Ok (Some x)))
+      | [] -> M.lift (B.return (Ok None))
       | _  -> failf "%s values are ambiguous" name ()
 
   let provide (attr : (_, 'a -> unit monad) attribute) : 'a =

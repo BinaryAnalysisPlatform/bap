@@ -35,6 +35,8 @@ S lib/bap_plugins
 S lib/bap_bundle
 S lib/bap_config
 S lib/bap_types
+S lib/bap_disasm
+S lib/bap_image
 S lib/monads
 S lib/primus
 S lib/bap_llvm
