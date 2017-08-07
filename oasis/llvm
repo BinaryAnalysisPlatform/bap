@@ -6,15 +6,30 @@ Flag llvm_static
   Description: Links with llvm in a static mode
   Default: true
 
+Flag llvm_legacy
+ Description: Build with legacy llvm backend
+ Default: false
+
 Library bap_llvm
   Path:          lib/bap_llvm
   Build$:        flag(everything) || flag(llvm)
-  BuildDepends:  bap
+  BuildDepends:  bap, ogre, monads
   FindlibName:   bap-llvm
-  Modules:       Bap_llvm_disasm, Bap_llvm_loader
+  Modules:       Bap_llvm,
+                 Bap_llvm_disasm,
+                 Bap_llvm_loader
   InternalModules:
                  Bap_llvm_config,
-                 Bap_llvm_binary
+                 Bap_llvm_binary,
+                 Bap_llvm_coff_scheme,
+                 Bap_llvm_elf_scheme,
+                 Bap_llvm_macho_scheme,
+                 Bap_llvm_ogre_loader,
+                 Bap_llvm_ogre_coff,
+                 Bap_llvm_ogre_elf,
+                 Bap_llvm_ogre_macho,
+                 Bap_llvm_ogre_samples,
+                 Bap_llvm_ogre_types
   CCOpt:         $cc_optimization
   CCLib:         $llvm_lib $cxxlibs $llvm_ldflags
   CSources:      llvm_disasm.h,
@@ -29,13 +44,43 @@ Library bap_llvm
                  llvm_binary_38.c,
                  llvm_binary_38.h,
                  llvm_error_or.c,
-                 llvm_error_or.h
+                 llvm_error_or.h,
+                 llvm_loader.c,
+                 llvm_loader.h,
+                 llvm_coff_loader.c,
+                 llvm_coff_loader.h,
+                 llvm_elf_loader.c,
+                 llvm_elf_loader.h,
+                 llvm_macho_loader.c,
+                 llvm_macho_loader.h,
+                 llvm_loader_stubs.c,
+                 llvm_loader_stubs.h,
+                 llvm_loader_utils.c,
+                 llvm_loader_utils.h,
+                 llvm_primitives.c,
+                 llvm_primitives.h
 
 Library llvm_plugin
   XMETADescription: provide loader and disassembler using LLVM library
-  Path:          plugins/llvm
-  Build$:        flag(everything) || flag(llvm)
-  BuildDepends:  bap, bap-llvm
-  FindlibName:   bap-plugin-llvm
+  Path:            plugins/llvm
+  Build$:          flag(everything) || flag(llvm)
+  FindlibName:     bap-plugin-llvm
   InternalModules: Llvm_main
+  BuildDepends:    bap, bap-llvm
   XMETAExtraLines: tags="disassembler"
+
+Library legacy_llvm_plugin
+  XMETADescription: provide legacy loader using LLVM library
+  Path:            plugins/legacy_llvm
+  Build$:          flag(llvm_legacy)
+  BuildDepends:    bap, bap-llvm
+  FindlibName:     bap-plugin-legacy_llvm
+  InternalModules: Legacy_loader_main
+
+Library relocatable_plugin
+  XMETADescription: provides facility to load relocatable files using LLVM library
+  Path:            plugins/relocatable
+  Build$:          flag(everything) || flag(llvm)
+  FindlibName:     bap-plugin-relocatable
+  InternalModules: Relocatable_main, Rel_brancher
+  BuildDepends:    bap, bap-llvm, ogre

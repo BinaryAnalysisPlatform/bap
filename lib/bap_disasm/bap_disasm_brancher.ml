@@ -18,6 +18,8 @@ type brancher = t
 let create f = Brancher f
 let resolve (Brancher f) = f
 
+let empty = Brancher (fun _ _ -> [])
+
 let kind_of_dests = function
   | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall
   | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump)
@@ -62,6 +64,6 @@ let dests_of_bil arch =
 
 
 let of_bil arch = create (dests_of_bil arch)
-
+let of_image img = Image.arch img |> of_bil
 
 module Factory = Source.Factory.Make(struct type nonrec t = t end)

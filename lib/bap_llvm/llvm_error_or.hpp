@@ -6,6 +6,7 @@
 #include <system_error>
 #include <memory>
 #include <type_traits>
+#include <assert.h>
 
 // [error_or] contains either data or error message, but not both of them.
 // Also, it's possible to store warnings.
@@ -74,7 +75,26 @@
 //
 // Note, that error_or has a pointer semantic.
 //
-namespace {
+// Also there is a type conversion operator, and it's permitted to use it
+// only to convert error_or that contains exactly error, i.e. :
+//
+//  error_or<A> my_fun(error_or<B> x) {
+//      if (!x) return x;
+//      A a = 42;
+//      return success(a)
+//  }
+//
+//  is correct, while
+//
+//  error_or<A> my_fun() {
+//     B b = 42;
+//     return success(b)
+//  }
+//
+//  is wrong!
+//
+
+namespace llvm {
 
 // due to a bug in gcc library, move constructor (that has a high importance for us)
 // will not available until gcc 5.0. So instead of `typedef std::stringstream info`
@@ -139,6 +159,7 @@ struct error_or {
 
     template <typename U>
     operator error_or<U> ()  {
+        assert(payload == 0); // don't use operator () for type conversions
         error_or<U> p(nullptr);
         p.fail(err.str());
         for(const info & w : warns)
@@ -183,6 +204,12 @@ private:
     error_or<T> & operator=(const error_or<T>& other) { /* deleted. use move assignment instead. */}
 
     void assert_me() const { assert(payload != 0); }
+
+    template <typename X, typename Y>
+    void copy_warnings(const error_or<X> &x, error_or<Y> &y) {
+        for(const info & w : x.warns)
+            y.warning() << w.str();
+    }
 
 private:
     pointer payload;
@@ -261,6 +288,6 @@ error_or<U> map_value(const error_or<T> &v, Unary_function op) {
     return success(op(*v));
 }
 
-} // namespace
+} // namespace llvm
 
 #endif // LLVM_ERROR_OR_HPP

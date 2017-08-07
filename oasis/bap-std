@@ -18,7 +18,7 @@ Library bap
                    cmdliner,
                    regular
   Modules:         Bap
-  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
+  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self, Bap_synthetic_symbolizer
 
 
 Library types
@@ -101,6 +101,7 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
+                 ogre,
                  ppx_here
   InternalModules:
                  Bap_disasm,
