@@ -459,18 +459,23 @@ module Simpl = struct
       | BinOp (op,x,y) -> binop op x y
       | UnOp (op,x) -> unop op x
       | Var _ | Int _  | Unknown (_,_) as const -> const
-      | Cast (t,s,x) -> Cast (t,s,exp x)
+      | Cast (t,s,x) -> cast t s x
       | Let (v,x,y) -> Let (v, exp x, exp y)
       | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
       | Extract (h,l,x) -> Extract (h,l, exp x)
       | Concat (x,y) -> concat x y
-    and concat x y = match x, y with
+    and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
-      | _ -> Concat (exp x, exp y)
-    and unop op x = match x with
+      | x,y -> Concat (x,y)
+    and cast t s x =
+      let x = exp x in
+      match Type.infer_exn x with
+      | Type.Imm s' when s' = s -> x
+      | _ -> Cast (t,s,x)
+    and unop op x = match exp x with
       | UnOp(op,Int x) -> Int (Apply.unop op x)
       | UnOp(op',x) when op = op' -> exp x
-      | _ -> UnOp(op, exp x)
+      | x -> UnOp(op, x)
     and binop op x y =
       let width = match Type.infer_exn x with
         | Type.Imm s -> s
@@ -511,7 +516,7 @@ module Simpl = struct
       | EQ,x,y  when x = y -> Int Word.b1
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
-      | _ -> keep op x y in
+      | op,x,y -> keep op x y in
     exp
 
   let bil ?ignore =
