@@ -84,7 +84,7 @@ module Input = struct
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
-    Signal.send Info.got_img img;
+    Signal.send Info.got_img (Some img);
     Signal.send Info.got_spec spec;
     let finish proj = {
       proj with
@@ -104,7 +104,10 @@ module Input = struct
     | None -> from_image filename
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?loader filename
-      | Some load -> load filename
+      | Some load ->
+        fun () ->
+          Signal.send Info.got_img None;
+          load filename ()
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -516,14 +519,25 @@ end
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
+module type S = sig
+  type t
+  val empty : t
+  val of_image : image -> t
+  module Factory : Bap_disasm_source.Factory with type t = t
+end
+
+let register x =
+  let module S = (val x : S) in
+  let stream =
+    Stream.map Info.img ~f:(function
+	| None -> Ok S.empty
+	| Some img -> Ok (S.of_image img)) in
+  S.Factory.register "internal" stream
+
 let () =
-  let stream f = Stream.map Info.img ~f:(fun img -> Ok (f img)) in
-  let rooter = stream Rooter.of_image in
-  let symbolizer = stream Symbolizer.of_image in
-  let brancher = stream Brancher.of_image in
-  Rooter.Factory.register "internal" rooter;
-  Symbolizer.Factory.register "internal" symbolizer;
-  Brancher.Factory.register "internal" brancher
+  register (module Brancher);
+  register (module Rooter);
+  register (module Symbolizer)
 
 include Data.Make(struct
     type nonrec t = t
