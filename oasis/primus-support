@@ -82,5 +82,5 @@ Library primus_mark_visited_plugin
   FindlibName: bap-plugin-primus_mark_visited
   CompiledObject: best
   BuildDepends: bap-primus
-  XMETADescription: marks terms that were visted by Primus
+  XMETADescription: marks terms that were visited by Primus
   Modules: Primus_mark_visited_main
