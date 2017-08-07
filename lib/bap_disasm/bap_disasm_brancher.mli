@@ -18,4 +18,6 @@ val of_image : image -> t
 
 val resolve : t -> mem -> full_insn -> dests
 
+val empty : t
+
 module Factory : Factory with type t = t
