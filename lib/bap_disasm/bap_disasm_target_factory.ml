@@ -57,7 +57,7 @@ module Ensure_normal_form(T : Target) = struct
           Error.createf "The lifted code is not well-typed: %s"
             (Type.Error.to_string te) in
         Error err
-      | Ok () -> Ok (Bil.normalize bil)
+      | Ok () -> Ok (Bil.fold_consts (Bil.normalize bil))
 end
 
 let register_target arch (module Target : Target) =
