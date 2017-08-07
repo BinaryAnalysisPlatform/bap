@@ -10,4 +10,4 @@ Library frontc_parser_plugin
   CompiledObject: best
   BuildDepends: bap, bap-c, FrontC
   InternalModules: Frontc_parser_main
-  XMETAExtraLines: tags="pass"
+  XMETAExtraLines: tags="c,parser"

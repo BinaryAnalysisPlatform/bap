@@ -1,0 +1,14 @@
+Flag ssa
+  Description: Build the SSA plugin
+  Default: false
+
+
+Library ssa_plugin
+  Build$: flag(everything) || flag(ssa)
+  XMETADescription: translates a program into the SSA form
+  Path: plugins/ssa
+  FindlibName: bap-plugin-ssa
+  CompiledObject: best
+  BuildDepends: bap
+  InternalModules: Ssa_main
+  XMETAExtraLines: tags="pass,analysis,ssa"
