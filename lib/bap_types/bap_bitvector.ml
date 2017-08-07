@@ -136,7 +136,7 @@ module Make(Size : Compare) = struct
     let z = Z.(extract z 0 w lsl metasize) in
     Z.(z lor meta)
 
-  let unsigned x = create x (bitwidth x)
+  let unsigned x = create (z x) (bitwidth x)
   let hash x = Z.hash (z x)
   let bits_of_z x = Z.to_bits (z x)
   let unop op t = op (z t)
@@ -147,7 +147,11 @@ module Make(Size : Compare) = struct
   let compare l r =
     let s = Size.compare (bitwidth l) (bitwidth r) in
     if s <> 0 then s
-    else Bignum.compare (z l) (z r)
+    else match is_signed l, is_signed r with
+      | true,true | false,false -> Bignum.compare (z l) (z r)
+      | true,false -> Bignum.compare (z l) (z (signed r))
+      | false,true -> Bignum.compare (z (signed l)) (z r)
+
 
   let to_string x =
     let z = z x in
