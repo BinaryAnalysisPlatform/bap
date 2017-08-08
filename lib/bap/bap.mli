@@ -2895,6 +2895,11 @@ module Exp : sig
       something. See also {!Bil.exists} and {Stmt.exists}  *)
   val exists : unit #finder -> t -> bool
 
+
+  (** [substitute pat rep x] subsitutes each occurence of an
+      expression [pat] in [x] with an expression [rep] *)
+  val substitute : exp -> exp -> exp -> exp
+
   (** [normalize] ensures no-lets and normalized-memory  *)
   val normalize : exp -> exp
 
