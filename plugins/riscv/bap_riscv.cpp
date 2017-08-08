@@ -9,11 +9,10 @@
 #include <deque>
 #include <string>
 
-#include "disasm.hpp"
+#include "bap_riscv.h"
 
 #include "types.h"
 #include "host-endian.h"
-#include "format.h"
 #include "meta.h"
 #include "codec.h"
 #include "strings.h"
