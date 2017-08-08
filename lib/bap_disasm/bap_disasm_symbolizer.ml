@@ -8,7 +8,7 @@ type symbolizer = t
 
 
 let name_of_addr addr =
-  sprintf "sub_%s" @@ Addr.string_of_value addr
+  sprintf "sub_%s" @@ Addr.string_of_value ~prefix:false addr
 
 let create fn = Symbolizer fn
 

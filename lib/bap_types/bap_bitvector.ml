@@ -219,8 +219,6 @@ let to_int   = unop (safe Bignum.to_int)
 let to_int32 = unop (safe Bignum.to_int32)
 let to_int64 = unop (safe Bignum.to_int64)
 
-let string_of_value ?(hex=true) =
-  unop (Bignum.format (if hex then "0x%x" else "%d"))
 
 let of_binary ?width endian num  =
   let num = match endian with
@@ -405,6 +403,7 @@ let is_non_positive  = Fn.non is_positive
 let is_negative = unop Bignum.(fun z -> lt z zero)
 let is_non_negative = Fn.non is_negative
 
+
 let validate check msg x =
   if check x then Validate.pass
   else Validate.fails msg x sexp_of_t
@@ -506,6 +505,16 @@ module Int_err = Safe
 include (Unsafe : Bap_integer.S with type t := t)
 let one = Cons.one
 let zero = Cons.zero
+
+let string_of_value ?(prefix=true) ?(hex=true) b =
+  let z = z b in
+  if abs b < of_int ~width:(bitwidth b) 10
+  then Z.format "%d" z
+  else if hex
+  then if prefix
+    then Z.format "%#x" z
+    else Z.format "%x" z
+  else Z.format "%d" z
 
 
 (* old representation for backward compatibility. *)

@@ -1082,11 +1082,20 @@ module Std : sig
     (** [to_int64 x] projects [x] in to [int64]  *)
     val to_int64 : t -> int64 Or_error.t
 
-    (** [string_of_value ?hex x] returns a textual representation of
-        [x] value. If [hex] is true (defaul), then it is in
-        hexadecimal format without a leading (0x). Otherwise the
-        decimal format is used. *)
-    val string_of_value : ?hex:bool -> t -> string
+    (** [string_of_value ?prefix ?hex x] returns a printable
+        representation of the [x] value. If [hex] is [true] (default),
+        then it is in the hexadecimal representation, otherwise the
+        decimal representation is used. If [prefix] is [true]
+        (default) then a [0x] prefix is used in the hexadecimal
+        representation, otherwise no prefix is used. If the value is
+        less than 10, then [prefix] and [hex] flags are practically
+        ignored, i.e., the function will not ouput a prefix if it is
+        totally nonnecessary.
+
+        No leading zeros are printed. If a value is negative and
+        signed, then a leading negative sign is printed.
+    *)
+    val string_of_value : ?prefix:bool -> ?hex:bool -> t -> string
 
     (** [signed t] casts t to a signed type, so that any operations
         applied on [t] will be signed *)

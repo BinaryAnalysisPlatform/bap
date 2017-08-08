@@ -72,9 +72,6 @@ module PP = struct
     | BinOp (op,x,y) -> op_prec op
     | Store _ | Let _ | Ite _ | Concat _ -> 0)
 
-  let is_hex bv =
-    Word.(unsigned bv > of_int ~width:(bitwidth bv) 9)
-
   let rec pp fmt exp =
     let open Bap_bil.Exp in
     let open Bap_bil.Binop in
@@ -114,9 +111,7 @@ module PP = struct
     | UnOp (op, exp) as p ->
       pr ("%a" ^^ pfmt p exp) pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
-    | Int bv  -> pr "%s%s"
-                   (if is_hex bv then "0x" else "")
-                   (Bap_bitvector.string_of_value bv)
+    | Int bv  -> pr "%s" (Bap_bitvector.string_of_value bv)
     | Cast (ct, n, exp) ->
       pr "%a:%d[%a]" pp_cast ct n pp exp
     | Let (var, def, body) ->

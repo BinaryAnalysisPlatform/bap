@@ -25,7 +25,7 @@ val of_binary : ?width:int -> endian -> string -> t
 val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
-val string_of_value : ?hex:bool -> t -> string
+val string_of_value : ?prefix:bool -> ?hex:bool -> t -> string
 val signed : t -> t
 val unsigned : t -> t
 val is_zero : t -> bool
