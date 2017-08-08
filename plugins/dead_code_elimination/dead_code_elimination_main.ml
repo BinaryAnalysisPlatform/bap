@@ -40,16 +40,53 @@ let compute_dead protected sub =
         else (Set.add dead (Term.tid t))
   end)#visit_sub sub Tid.Set.empty
 
+(* a simple constant propagation, that will propagate constant
+   expressions from virtual variables that are assigned only once to
+   the point of usage (if any).
 
-let process proj =
-  info "removing dead code";
+   1. we propagate only virtuals since they are not used/clobbered by
+      function calls. We can't touch real registers, as we don't know
+      the calling convention. And even if we know, a malicious program
+      may easily break it.
+
+   2. instead of a full-fledges reaching definition analysis we are
+      relying on a simple over-approximation: if a variable is defined
+      only once, then it is never redifined. Enough for reaping the
+      low hanging fruits.
+
+   Note, the input is not required to be in SSA.
+ *)
+let propagate_consts sub =
+  let vars = (object inherit [exp Var.Map.t] Term.visitor
+      method! enter_def t vars =
+        let v = Def.lhs t in
+        if Var.is_virtual v
+        then if Map.mem vars v
+          then Map.remove vars v
+          else match Def.rhs t with
+            | Bil.Unknown _ | Bil.Int _ as exp ->
+              Map.add vars ~key:v ~data:exp
+            | _ -> vars
+        else vars
+  end)#visit_sub sub Var.Map.empty in
+  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
+      Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
+          Exp.substitute Bil.(var pat) rep)))
+
+let rec process proj =
   let prog = Project.program proj in
   let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa in
   let free = union subs ~init:Var.Set.empty ~f:free_vars in
   let dead = union subs ~init:Tid.Set.empty ~f:(compute_dead free) in
   let live t = not (Set.mem dead (Term.tid t)) in
-  Term.map sub_t prog ~f:(Term.map blk_t ~f:(Term.filter def_t ~f:live)) |>
-  Project.with_program proj
+  let clean sub = Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
+                  propagate_consts in
+  if Set.is_empty dead then proj
+  else
+    Term.map sub_t prog ~f:clean |>
+    Project.with_program proj |>
+    process
+
 let () = Config.when_ready (fun _ ->
     Project.register_pass ~deps:["api"] ~autorun:true process)
 ;;
