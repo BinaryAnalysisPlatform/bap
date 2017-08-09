@@ -451,6 +451,10 @@ module Simpl = struct
   let removable ignore x =
     Set.subset (Eff.compute x) (Eff.of_list ignore)
 
+  let is_associative = function
+    | PLUS | TIMES | AND | OR | XOR -> true
+    | _ -> false
+
   let exp ?(ignore=[]) =
     let removable = removable ignore in
     let rec exp = function
@@ -483,6 +487,7 @@ module Simpl = struct
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
+      let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
       match op, exp x, exp y with
       | op, Int x, Int y -> Int (Apply.binop op x y)
@@ -516,6 +521,9 @@ module Simpl = struct
       | EQ,x,y  when x = y -> Int Word.b1
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
+      | op,BinOp(op',x, Int p),Int q
+        when op_eq op op' && is_associative op ->
+        BinOp (op,x,Int (Apply.binop op p q))
       | op,x,y -> keep op x y in
     exp
 
@@ -791,6 +799,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
         | Var v -> continue
         | exp -> return (Some exp)
     end
+
 
   let rec memory_of_store = function
     | Store (Var mem,_,_,_,_) -> mem
