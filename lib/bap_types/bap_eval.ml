@@ -63,7 +63,9 @@ module Make2(State : Monad.S2) = struct
 
     method type_error (err : TE.t) = self#bot
 
-    method eval_exp exp : ('r,'a) m = match Bil.Exp.normalize exp with
+    method eval_exp x = self#eval (Bil.Simpl.exp (Bil.Exp.normalize x))
+
+    method private eval exp : ('r,'a) m = match exp with
       | Exp.Load (m,a,e,s) -> self#eval_load ~mem:m ~addr:a e s
       | Exp.Store (m,a,u,e,s) -> self#eval_store ~mem:m ~addr:a u e s
       | Exp.Var v -> self#eval_var v
@@ -80,10 +82,10 @@ module Make2(State : Monad.S2) = struct
     method eval_int : word -> ('r,'a) m = self#value_of_word
 
     method private eval_imm exp : (word option,'a) m =
-      self#eval_exp exp >>= self#word_of_value
+      self#eval exp >>= self#word_of_value
 
     method private eval_mem exp : ('s option,'a) m =
-      self#eval_exp exp >>= self#storage_of_value
+      self#eval exp >>= self#storage_of_value
 
     method eval_load ~mem ~addr endian sz =
       if sz <> `r8
@@ -147,9 +149,9 @@ module Make2(State : Monad.S2) = struct
       | None -> self#type_error TE.bad_imm
       | Some u ->
         if Bitvector.(u = b1)
-        then self#eval_exp t
+        then self#eval t
         else if Bitvector.(u = b0)
-        then self#eval_exp f
+        then self#eval f
         else self#type_error @@ TE.bad_type bool_t (imm_t u)
 
     method eval_extract hi lo w =
