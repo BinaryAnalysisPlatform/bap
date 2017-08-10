@@ -20,8 +20,8 @@ let segmentation_fault, segfault =
 
 let () = Exn.add_printer (function
     | Segmentation_fault here ->
-      Some (sprintf "Segmentation fault at %s"
-              (Addr.string_of_value here))
+      Some (asprintf "Segmentation fault at %a"
+              Addr.pp_hex here)
     | _ -> None)
 
 type dynamic = {base : addr; len : int; value : Generator.t }
@@ -39,7 +39,7 @@ type t = {
 
 let zero = Word.of_int ~width:8 0
 
-let sexp_of_word w = Sexp.Atom (Word.string_of_value w)
+let sexp_of_word w = Sexp.Atom (asprintf "%a" Word.pp_hex w)
 
 let sexp_of_dynamic {base; len; value} =
   Sexp.(List [

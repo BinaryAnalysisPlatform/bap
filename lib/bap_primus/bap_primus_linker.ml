@@ -35,8 +35,8 @@ let empty = {
 
 let string_of_name = function
   | `symbol name -> name
-  | `addr addr -> sprintf "at address %s" (Addr.string_of_value addr)
-  | `tid tid -> sprintf "with tid %a" Tid.pps tid
+  | `addr addr -> asprintf "at address %a" Addr.pp_hex addr
+  | `tid tid -> asprintf "with tid %a" Tid.pp tid
 
 let () = Exn.add_printer (function
     | Unbound_name name ->
@@ -109,6 +109,3 @@ module Make(Machine : Machine) = struct
   let is_linked name =
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
 end
-
-
-

@@ -13,11 +13,11 @@ module Make(Env : sig val project : project end) = struct
     let pos =
       Symtab.owners (Project.symbols project) addr |>
       List.hd |> function
-      | None -> sprintf "text_0x%s" (Addr.string_of_value addr)
+      | None -> asprintf "text_%a" Word.pp_hex addr
       | Some (name,entry,cfg) ->
         let off = Addr.Int_exn.(addr - Block.addr entry) in
         if Word.is_zero off then sprintf "%s_ENTRY" name
-        else sprintf "%s_0x%s" name (Word.string_of_value off) in
+        else sprintf "%s_%s" name (Word.string_of_value off) in
     fprintf fmt "%s" pos
 
   (** [pp_seq pp] prints a sequence using given printer [pp] *)

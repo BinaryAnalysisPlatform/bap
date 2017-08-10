@@ -111,7 +111,7 @@ module PP = struct
     | UnOp (op, exp) as p ->
       pr ("%a" ^^ pfmt p exp) pp_unop op pp exp
     | Var var -> Bap_var.pp fmt var
-    | Int bv  -> pr "%s" (Bap_bitvector.string_of_value bv)
+    | Int bv  -> pr "%a" Bap_bitvector.pp_hex bv
     | Cast (ct, n, exp) ->
       pr "%a:%d[%a]" pp_cast ct n pp exp
     | Let (var, def, body) ->

@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Regular.Std
+open Format
 
 type t
 
@@ -25,7 +26,9 @@ val of_binary : ?width:int -> endian -> string -> t
 val to_int   : t -> int   Or_error.t
 val to_int32 : t -> int32 Or_error.t
 val to_int64 : t -> int64 Or_error.t
-val string_of_value : ?prefix:bool -> ?hex:bool -> t -> string
+val to_int_exn   : t -> int
+val to_int32_exn : t -> int32
+val to_int64_exn : t -> int64
 val signed : t -> t
 val unsigned : t -> t
 val is_zero : t -> bool
@@ -52,6 +55,26 @@ val is_positive     : t -> bool
 val is_non_negative : t -> bool
 val is_negative     : t -> bool
 val is_non_positive : t -> bool
+
+
+val pp_generic :
+  ?case:[`upper | `lower ] ->
+  ?prefix:[`auto | `base | `none | `this of string ] ->
+  ?suffix:[`none | `full | `size ] ->
+  ?format:[`hex | `dec | `oct | `bin ] ->
+  formatter -> t -> unit
+
+val pp_hex : formatter -> t -> unit
+val pp_dec : formatter -> t -> unit
+val pp_oct : formatter -> t -> unit
+val pp_bin : formatter -> t -> unit
+
+val pp_hex_full : formatter -> t -> unit
+val pp_dec_full : formatter -> t -> unit
+val pp_oct_full : formatter -> t -> unit
+val pp_bin_full : formatter -> t -> unit
+
+val string_of_value : ?hex:bool -> t -> string
 
 module Int_err : sig
   val (!$): t -> t Or_error.t

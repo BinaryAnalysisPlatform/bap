@@ -1082,20 +1082,240 @@ module Std : sig
     (** [to_int64 x] projects [x] in to [int64]  *)
     val to_int64 : t -> int64 Or_error.t
 
-    (** [string_of_value ?prefix ?hex x] returns a printable
-        representation of the [x] value. If [hex] is [true] (default),
-        then it is in the hexadecimal representation, otherwise the
-        decimal representation is used. If [prefix] is [true]
-        (default) then a [0x] prefix is used in the hexadecimal
-        representation, otherwise no prefix is used. If the value is
-        less than 10, then [prefix] and [hex] flags are practically
-        ignored, i.e., the function will not ouput a prefix if it is
-        totally nonnecessary.
-
-        No leading zeros are printed. If a value is negative and
-        signed, then a leading negative sign is printed.
+    (** [to_int_exn x] projects [x] in to OCaml [int].
+        @since 1.3
     *)
-    val string_of_value : ?prefix:bool -> ?hex:bool -> t -> string
+    val to_int_exn   : t -> int
+
+    (** [to_int32_exn x] projects [x] in to [int32]
+        @since 1.3
+    *)
+    val to_int32_exn : t -> int32
+
+    (** [to_int64_exn x] projects [x] in to [int64]
+        @since 1.3
+    *)
+    val to_int64_exn : t -> int64
+
+    (** [printf "%a" pp x] prints [x] into a formatter. This is
+        a default printer, controlled by
+        [set_default_printer]. Multiple formats are available, see the
+        [available_writers] for the actual list of formats and
+        a format description. Out of box it defaults to [pp_hex_full].
+        Note, the [printf] function from examples refers to the
+        [Format.printf], thus it is assumed that the [Format] module
+        is open in the scope. *)
+    val pp : t printer
+
+    (** [printf "%a" pp_hex x] prints [x] in the hexadecimal format omitting
+        suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_hex (Word.of_int32 0xDEADBEEFl);;
+          0xDEADBEEF
+          # printf "%a\n" pp_hex (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_hex : t printer
+
+    (** [printf "%a" pp_dec x] prints [x] in the decimal format omitting
+        suffixes and prefixes.
+        Example,
+
+        {[
+          # printf "%a\n" pp_dec (Word.of_int32 0xDEADBEEFl);;
+          3735928559
+          # printf "%a\n" pp_dec (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_dec : t printer
+
+    (** [printf "%a" pp_oct x] prints [x] in the octal format omitting
+        suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_oct (Word.of_int32 0xDEADBEEFl);;
+          0o33653337357
+          # printf "%a\n" pp_oct (Word.of_int32 0x1);;
+          1
+        ]} *)
+    val pp_oct : t printer
+
+
+    (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1) format omitting
+        suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_bin (Word.of_int32 0xDEADBEEFl);;
+          0b11011110101011011011111011101111
+          # printf "%a\n" pp_bin (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_bin : t printer
+
+    (** [printf "%a" pp_hex x] prints [x] in the hexadecimal format omitting
+        suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_hex (Word.of_int32 0xDEADBEEFl);;
+          0xDEADBEEF
+          # printf "%a\n" pp_hex (Word.of_int32 0x1);;
+          1
+        ]} *)
+    val pp_hex : t printer
+
+    (** [printf "%a" pp_dec x] prints [x] in the decimal format omitting
+        suffixes and prefixes.
+        Example,
+
+        {[
+          # printf "%a\n" pp_dec (Word.of_int32 0xDEADBEEFl);;
+          3735928559
+          # printf "%a\n" pp_dec (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_dec : t printer
+
+    (** [printf "%a" pp_oct x] prints [x] in the octal format omitting
+        suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_oct (Word.of_int32 0xDEADBEEFl);;
+          0o33653337357
+          # printf "%a\n" pp_oct (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_oct : t printer
+
+
+    (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1)
+        format omitting suffixes, and the prefix if it is not necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_bin (Word.of_int32 0xDEADBEEFl);;
+          0b11011110101011011011111011101111
+          # printf "%a\n" pp_bin (Word.of_int32 0x1);;
+          1
+        ]}
+        @since 1.3
+    *)
+    val pp_bin : t printer
+
+    (** [printf "%a" pp_hex_full x] prints [x] in the hexadecimal format with
+        suffixes, and the prefix if it is necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_hex_full (Word.of_int32 0xDEADBEEFl);;
+          0xDEADBEEF:32u
+          # printf "%a\n" pp_hex_full (Word.of_int32 0x1);;
+          1:32u
+        ]} *)
+    val pp_hex_full : t printer
+
+    (** [printf "%a" pp_dec_full x] prints [x] in the decimal format with
+        suffixes and prefixes.
+        Example,
+
+        {[
+          # printf "%a\n" pp_dec_full (Word.of_int32 0xDEADBEEFl);;
+          3735928559:32u
+          # printf "%a\n" pp_dec_full (Word.of_int32 0x1);;
+          1:32u
+        ]}
+        @since 1.3
+    *)
+    val pp_dec_full : t printer
+
+    (** [printf "%a" pp_oct_full x] prints [x] in the octal format with
+        suffixes, and the prefix if it is necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_oct_full (Word.of_int32 0xDEADBEEFl);;
+          0o33653337357:32u
+          # printf "%a\n" pp_oct_full (Word.of_int32 0x1);;
+          1:32u
+        ]} *)
+    val pp_oct_full : t printer
+
+
+    (** [printf "%a" pp_bin_full x] prints [x] in the binary (0 and 1)
+        format omitting suffixes, and the prefix if it is necessary.
+        Example,
+
+        {[
+          # printf "%a\n" pp_bin_full (Word.of_int32 0xDEADBEEFl);;
+          0b11011110101011011011111011101111:32u
+          # printf "%a\n" pp_bin_full (Word.of_int32 0x1);;
+          1:32u
+        ]} *)
+    val pp_bin_full : t printer
+
+    (** [pp_generic ?case ?prefix ?suffix ?format ppf x] - a printer
+        to suit all tastes.
+
+        Note: this is a generic printer factory that should be used if
+        none of the nine preinstantiated suits you.
+
+        @param prefix defines whether or not a number is prefixed:
+          - [`auto] (default) - a prefix that corresponds to the chosen
+            format is printed if it is necessary to disambiguate a
+            number from a decimal representation;
+          - [`base] - a corresponding prefix is always printed;
+          - [`none] - the prefix is never printed;
+          - [`this p] - the user specified prefix [p] is always
+            printed;
+
+        @param suffix defines how the suffix should be printed:
+          - [`none] (default) - the suffix is never printed;
+          - [`full] - a full suffix that denotes size and signedness
+            is printed, e.g., [0xDE:32s] is a signed integer modulo [32].
+          - [`size] - only the modulo is printed, e.g., [0xDE:32s] is
+            printed as [0xDE:32]
+
+        @param format defines the textual representation format:
+          - [hex] (default) - hexadecimal
+          - [dec] - decimal
+          - [oct] - octal
+          - [bin] - binary (0 and 1).
+
+        @param case defines the case of hexadecimal letters
+    *)
+    val pp_generic :
+      ?case:[`upper | `lower ] ->
+      ?prefix:[`auto | `base | `none | `this of string ] ->
+      ?suffix:[`none | `full | `size ] ->
+      ?format:[`hex | `dec | `oct | `bin ] ->
+      t printer
+
+    (** [string_of_value ?hex x] returns a textual
+        representation of the [x] value, i.e., ignores size and
+        signedness.  If [hex] is [true] (default),
+        then it is in the hexadecimal representation, otherwise the
+        decimal representation is used. The returned value is not
+        prefixed.
+        No leading zeros are printed. If a value is negative and
+        signed, then a leading negative sign is printed. Hexadecimal
+        letter literals are printed in a lowercase format.
+    *)
+    val string_of_value : ?hex:bool -> t -> string
 
     (** [signed t] casts t to a signed type, so that any operations
         applied on [t] will be signed *)
