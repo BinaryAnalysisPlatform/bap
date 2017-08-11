@@ -34,12 +34,14 @@ end
 module Ida = struct
   type t = Service.t
 
+  open Service
+
   exception Failed of string
   exception Not_in_path
 
   let create = Service.create
-  let exec (service:t) = service.exec
-  let close (service:t) = service.close ()
+  let exec service = service.exec
+  let close service = service.close ()
 
   let with_file target command =
     let ida = create target in

@@ -48,12 +48,12 @@ module Cmdline = struct
   let () = Config.manpage [
     `S "SYNOPSIS";
     `Pre "
-        $(b,bap) --$(b,$mname-dump)=$(i,URI)
-        $(b,bap) $(i,BINARY) --$(b,$mname-load)=$(i,URI)...
+        $(b,bap) $(b,--)$(mname)$(b,-dump)=$(i,URI)
+        $(b,bap) $(i,BINARY) $(b,--)$(mname)$(b,-load)=$(i,URI)...
        ";
     `S "DESCRIPTION";
     `P "Loads and prints traces. The plugin can be used in two
-       modes. When called as $(b,--$mname-dump) it will just dump the
+       modes. When called as $(b,--)$(mname)$(b,-dump) it will just dump the
        specified trace and exit. In the second mode, it will load
        specified traces, so that they can be used by
        analysis. The loaded traces must be runs of the analyzed

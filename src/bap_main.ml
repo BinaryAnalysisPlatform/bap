@@ -123,10 +123,10 @@ let program_info =
   let man = [
     `S "SYNOPSIS";
     `Pre "
-      $(b,$mname) [PLUGIN OPTION]... --list-formats
-      $(b,$mname) [PLUGIN OPTION]... [--source-type=$(i,SOURCE)] --list-plugins
-      $(b,$mname) [PLUGIN OPTION]... --$(i,PLUGIN)-help
-      $(b,$mname) $(i,FILE) [PLUGIN OPTION]... [OPTION]...";
+      $(mname) [PLUGIN OPTION]... --list-formats
+      $(mname) [PLUGIN OPTION]... [--source-type=$(i,SOURCE)] --list-plugins
+      $(mname) [PLUGIN OPTION]... --$(i,PLUGIN)-help
+      $(mname) $(i,FILE) [PLUGIN OPTION]... [OPTION]...";
     `S "DESCRIPTION";
     `P "A frontend to the Binary Analysis Platfrom library.
       The tool allows you to inspect binary programs by printing them
