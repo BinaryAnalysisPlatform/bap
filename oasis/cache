@@ -9,3 +9,4 @@ Library cache_plugin
   BuildDepends:     bap
   InternalModules:  Cache_main
   XMETADescription: provide caching services
+  XMETAExtraLines:  tags="cache"

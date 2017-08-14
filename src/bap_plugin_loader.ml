@@ -37,15 +37,51 @@ let filter_options ~known_plugins ~known_passes ~argv =
 let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
 
-let print_plugins_and_exit ~env ~provides ~library excluded plugins =
+type print_ops = List_plugins | List_tags | List_plugins_tags
+
+let plugin_tags p = Plugin.bundle p |> Bundle.manifest |> Manifest.tags
+
+let print_plugins ?(info=`Desc) excluded plugins =
   let plugins =
-    let name = Plugin.name in
-    plugins @ Plugins.list ~env ~provides ~library () |>
-    List.sort ~cmp:(fun x y -> String.compare (name x) (name y)) in
+    let cmp x y = String.compare (Plugin.name x) (Plugin.name y) in
+    List.sort ~cmp plugins in
+  let info_string p = match info with
+    | `Desc -> Plugin.desc p
+    | `Tags -> plugin_tags p |> String.concat ~sep:", " in
   List.iter plugins ~f:(fun p ->
       let status = if List.mem excluded (Plugin.name p)
         then "[-]" else "[+]" in
-      printf "  %s %-26s %s@." status (Plugin.name p) (Plugin.desc p));
+      printf "  %s %-26s %s@." status (Plugin.name p) (info_string p))
+
+let print_tags plgs =
+  let add s p =
+    List.fold (plugin_tags p) ~init:s ~f:(fun s t -> Set.add s t) in
+  let tags = List.fold ~f:add ~init:String.Set.empty plgs in
+  Set.iter ~f:(printf "%s@ ") tags
+
+let get_print_ops () =
+  if get_opt argv list_plugins ~default:None <> None then
+    Some List_plugins
+  else if get_opt argv list_tags ~default:false then
+    Some List_tags
+  else if get_opt argv list_plugins_tags ~default:false then
+    Some List_plugins_tags
+  else None
+
+let print_and_exit  env exclude plugins what =
+  let library = get_opt argv load_path ~default:[] in
+  let () = match what with
+    | List_plugins ->
+      let list = get_opt argv list_plugins ~default:None in
+      Option.value_map list ~default:() ~f:(fun provides ->
+          let plugins = plugins @ Plugins.list ~env ~provides ~library () in
+          print_plugins exclude plugins)
+    | List_tags ->
+      let plugins = plugins @ Plugins.list ~env ~library () in
+      print_tags plugins
+    | List_plugins_tags ->
+      let plugins = plugins @ Plugins.list ~env ~library () in
+      print_plugins ~info:`Tags exclude plugins in
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
@@ -97,14 +133,6 @@ let autoload_plugins ~env ~library ~verbose ~exclude =
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
 
-let print_tags_and_exit plgs =
-  let add s p =
-    let tags = Plugin.bundle p |> Bundle.manifest |> Manifest.tags in
-    List.fold tags ~init:s ~f:(fun s t -> Set.add s t) in
-  let tags = List.fold ~f:add ~init:String.Set.empty plgs in
-  Set.iter ~f:(printf "%s@ ") tags;
-  exit 0
-
 let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
@@ -113,12 +141,9 @@ let run_and_get_passes env argv =
   let exclude = exclude @ excluded argv in
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
   let known_plugins = Plugins.list ~env ~library () @ plugins in
-  let list = get_opt argv list_plugins ~default:None in
-  let tags = get_opt argv list_tags ~default:false in
-  Option.value_map list ~default:() ~f:(fun provides ->
-      print_plugins_and_exit ~env ~provides ~library exclude plugins);
-  if tags then
-    print_tags_and_exit known_plugins;
+  let () = match get_print_ops () with
+    | None -> ()
+    | Some ops -> print_and_exit env exclude plugins ops in
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;

@@ -181,6 +181,10 @@ let list_tags, list_tags_doc =
   let doc = "List all available plugin tags" in
   Arg.(value & flag & info ["list-tags"] ~doc), doc
 
+let list_plugins_tags, list_plugins_tags_doc =
+  let doc = "List all available plugin with theirs tags" in
+  Arg.(value & flag & info ["list-plugins-tags"] ~doc), doc
+
 let disable_plugin, disable_plugin_doc =
   let doc = "Don't load $(i,PLUGIN) automatically" in
   Arg.(value & opt_all string [] &
@@ -202,6 +206,7 @@ let common_loader_options = [
   `I ("$(b,-L)$(i,PATH)", load_path_doc);
   `I ("$(b,--list-plugins)", list_plugin_doc);
   `I ("$(b,--list-tags)", list_tags_doc);
+  `I ("$(b,--list-plugins-tags)", list_plugins_tags_doc);
   `I ("$(b,--disable-plugin)", disable_plugin_doc);
   `I ("$(b,--disable-autoload)", no_auto_load_doc);
   `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);

@@ -10,4 +10,4 @@ Library "cxxfilt_plugin"
   BuildDepends: core_kernel, bap-demangle, bap
   InternalModules: Cxxfilt_main, Cxxfilt_config
   XMETADescription: provide c++filt based demangler
-  XMETAExtraLines: tags="c++filt, demangler"
+  XMETAExtraLines: tags="c++, c++filt, demangler"
