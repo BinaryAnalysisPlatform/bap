@@ -36,4 +36,4 @@ Library arm_plugin
   BuildDepends:     bap-abi, bap-arm, bap-c
   InternalModules:  Arm_main, Arm_gnueabi
   XMETADescription: provide ARM lifter
-  XMETAExtraLines:  tags="lifter"
+  XMETAExtraLines:  tags="arm, lifter"

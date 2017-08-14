@@ -239,7 +239,35 @@ module Create() = struct
       | `S of string
     ]
 
+    let extract_section name man =
+      let _, sec, man =
+        List.fold ~f:(fun (to_pick, picked, remained) -> function
+            | `S x when x = name -> true, `S x :: picked, remained
+            | `S x -> false, picked, `S x :: remained
+            | x ->
+              if to_pick then to_pick, x :: picked, remained
+              else to_pick, picked, x :: remained)
+          ~init:(false,[],[]) man in
+      List.rev sec, List.rev man
+
+    let insert_tags man =  match Manifest.tags manifest with
+      | [] -> man
+      | tags ->
+        let default_see_also =
+          let h = "https://github.com/BinaryAnalysisPlatform/bap" in
+          [`S "SEE ALSO"; `P (sprintf "$(b,home:) $(i,%s)" h)] in
+        let see_also, man = match extract_section "SEE ALSO" man with
+          | [], man -> default_see_also, man
+          | x -> x in
+        let tags = [
+          `P (Manifest.tags manifest |>
+              List.map ~f:(sprintf "$(b,%s)") |>
+              String.concat ~sep:", " |>
+              sprintf "$(b,tags:) %s") ] in
+        man @ see_also @ tags
+
     let manpage man =
+      let man = insert_tags man in
       let man = (man :> Manpage.block list) in
       term_info := Term.info ~doc ~man plugin_name
 

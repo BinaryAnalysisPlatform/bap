@@ -37,7 +37,11 @@ let filter_options ~known_plugins ~known_passes ~argv =
 let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
 
-let print_plugins_and_exit excluded plugins =
+let print_plugins_and_exit ~env ~provides ~library excluded plugins =
+  let plugins =
+    let name = Plugin.name in
+    plugins @ Plugins.list ~env ~provides ~library () |>
+    List.sort ~cmp:(fun x y -> String.compare (name x) (name y)) in
   List.iter plugins ~f:(fun p ->
       let status = if List.mem excluded (Plugin.name p)
         then "[-]" else "[+]" in
@@ -93,6 +97,14 @@ let autoload_plugins ~env ~library ~verbose ~exclude =
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
 
+let print_tags_and_exit plgs =
+  let add s p =
+    let tags = Plugin.bundle p |> Bundle.manifest |> Manifest.tags in
+    List.fold tags ~init:s ~f:(fun s t -> Set.add s t) in
+  let tags = List.fold ~f:add ~init:String.Set.empty plgs in
+  Set.iter ~f:(printf "%s@ ") tags;
+  exit 0
+
 let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
@@ -102,11 +114,11 @@ let run_and_get_passes env argv =
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
   let known_plugins = Plugins.list ~env ~library () @ plugins in
   let list = get_opt argv list_plugins ~default:None in
-  let () = match list with
-    | None -> ()
-    | Some provides ->
-      let list = Plugins.list ~env ~provides ~library () in
-      print_plugins_and_exit exclude (list @ plugins) in
+  let tags = get_opt argv list_tags ~default:false in
+  Option.value_map list ~default:() ~f:(fun provides ->
+      print_plugins_and_exit ~env ~provides ~library exclude plugins);
+  if tags then
+    print_tags_and_exit known_plugins;
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
   if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;

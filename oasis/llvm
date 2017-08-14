@@ -67,7 +67,7 @@ Library llvm_plugin
   FindlibName:     bap-plugin-llvm
   InternalModules: Llvm_main
   BuildDepends:    bap, bap-llvm
-  XMETAExtraLines: tags="disassembler"
+  XMETAExtraLines: tags="disassembler, llvm, loader, elf, macho, coff"
 
 Library legacy_llvm_plugin
   XMETADescription: provide legacy loader using LLVM library
@@ -76,6 +76,7 @@ Library legacy_llvm_plugin
   BuildDepends:    bap, bap-llvm
   FindlibName:     bap-plugin-legacy_llvm
   InternalModules: Legacy_loader_main
+  XMETAExtraLines: tags="legacy, llvm, loader, elf, macho, coff"
 
 Library relocatable_plugin
   XMETADescription: provides facility to load relocatable files using LLVM library
@@ -84,3 +85,4 @@ Library relocatable_plugin
   FindlibName:     bap-plugin-relocatable
   InternalModules: Relocatable_main, Rel_brancher
   BuildDepends:    bap, bap-llvm, ogre
+  XMETAExtraLines: tags="brancher, llvm, relocation"

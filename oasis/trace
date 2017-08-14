@@ -10,4 +10,4 @@ Library trace_plugin
   Modules: Trace_main
   BuildDepends:   bap, bap-traces
   XMETADescription: manage execution traces
-  XMETAExtraLines:  tags="pass"
+  XMETAExtraLines:  tags="pass, printer, trace"
