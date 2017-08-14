@@ -137,7 +137,7 @@ module Cmdline = struct
         sprintf ("%s, where $(i,ATTR) must be one of %s.")
           desc (enum attrs))
 
-  let colors = bold [
+  let colors = [
       "black"; "red"; "green"; "yellow"; "blue"; "magenta"; "cyan";
       "white"; "gray"
     ]
@@ -227,12 +227,12 @@ module Cmdline = struct
 
   let man = [
     `S "SYNOPSIS";
-    `P "$(b,bap) [$(b,--$(mname)-with)=$(i,SCHEME)]
-                 [$(b,--$(mname)-using)=$(i,FILE)] $(b,--$(mname))";
+    `P "$(b,bap) [$(b,--)$(mname)$(b,-with)=$(i,SCHEME)]
+                 [$(b,--)$(mname)$(b,-using)=$(i,FILE)] $(b,--)$(mname)";
     `S "DESCRIPTION";
     `P "Transform terms using a domain specific pattern matching language.
     The pass accepts a list of patterns via a command line argument
-    $(b,--)$(b,$(mname)-pattern) (that can be specified several times), or
+    $(b,--)$(mname)$(b,-pattern) (that can be specified several times), or
     via file, that contains a list of patterns. Each pattern is
     represented by a pair $(b,(<condition> <action>)). The $(b,<action>) specifies
     a transformation over a term, that is applied if a $(b,<condition>)
@@ -245,7 +245,7 @@ module Cmdline = struct
     <arg>)). Where $(b,<id>) must be a valid predicate or mapper
     name. There is a predefined set of standard functions, but it can
     be extended by adding new mappers or predicates to the BML
-    language using $(bap-bml) library. ";
+    language using $(b, bap-bml) library. ";
   ] @
     Predicates.section @
     Mappers.section @
