@@ -182,7 +182,7 @@ let list_tags, list_tags_doc =
   Arg.(value & flag & info ["list-tags"] ~doc), doc
 
 let list_plugins_tags, list_plugins_tags_doc =
-  let doc = "List all available plugin with theirs tags" in
+  let doc = "List all available plugins with theirs tags" in
   Arg.(value & flag & info ["list-plugins-tags"] ~doc), doc
 
 let disable_plugin, disable_plugin_doc =
