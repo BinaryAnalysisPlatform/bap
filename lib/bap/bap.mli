@@ -1485,7 +1485,7 @@ module Std : sig
 
 
     (** Arithmentic operations that doesn't check the widths.*)
-    module Unsafe  : Bap_integer.S with type t = t
+    module Unsafe  : Integer.S with type t = t
 
     (** Stable marshaling interface.  *)
     module Stable : sig
@@ -2082,7 +2082,7 @@ module Std : sig
       syntactically as
       {v
             v1 with [v2,ed] : nat <- v3,
-        v}
+      v}
       where v1 may be either a [Bot] value, representing an empty
       memory (or an absence of knowledge), or another storage. So a
       well typed memory object is defined inductively as:
@@ -2091,7 +2091,7 @@ module Std : sig
           Inductive memory :=
            | bot : memory
            | store : (mem : memory) (addr : value) (data : value).
-        v}
+      v}
 
       That is equivalent to an assoc list. Although we provide an
       assoc list as storage variant (see {!Storage.linear}), the
@@ -2851,7 +2851,7 @@ class ['a] expi : ['a] Expi.t
       val ctxt : Bili.context = <obj>
       ctxt#bindings |> Seq.to_list;;
       - : (var * Bil.result) list = [(x, [0x1] false)]
-      v}
+    v}
 *)
 module Bili : sig
 
@@ -3497,9 +3497,10 @@ module Stmt : sig
        x[a,be]:n => x[a] @ ... @ x[a+n-1]
        m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
        m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
-       ... ite c ? x : y ... => if c {... x ...} {... y ...}
+       ... ite c ? x : y ... => if c { ... x ... } { ... y ... }
        (x[a] <- b)[c] => m := x[a] <- b; m[c]
-         v}
+
+      v}
 
       [^1]: The normalization procedure may duplicate expressions
       that might be considered non-generative. For example,
