@@ -4,7 +4,7 @@ Flag dead_code_elimination
 
 
 Library dead_code_elimination_plugin
-  Build$: flag(everything) || flag(dead_code_elimination_plugin)
+  Build$: flag(everything) || flag(dead_code_elimination)
   XMETADescription: automatically removes dead code
   Path: plugins/dead_code_elimination
   FindlibName: bap-plugin-dead_code_elimination

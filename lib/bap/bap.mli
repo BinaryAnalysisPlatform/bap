@@ -7,21 +7,18 @@ open Graphlib.Std
 open Bap_future.Std
 
 module Std : sig
-
-
   (** {2 Overview}
 
 
       {3 Layered Architecture}
 
-      The BAP library has a layered architecture consisting of four
+      The BAP library has the layered architecture consisting of four
       layers. Although the layers are not really observable from outside
-      of the library, they make it easier to learn the library, as
-      they introduce new concepts sequentially. On top of this layers,
-      the {{!section:project}Project} module is defined, that
-      consolidates all information about target of an
-      analysis. [Project] module may be viewed as an entry point to
-      the library.
+      of the library, they make it easier to learn the library as they
+      introduce new concepts sequentially. On top of these layers, the
+      {{!section:project}Project} module is defined that consolidates
+      all information about a target of analysis. The [Project] module
+      may be viewed as an entry point to the library.
 
       {v
         +-----------------------------------------------------+
@@ -510,11 +507,18 @@ module Std : sig
 
   (** {1:api BAP API}  *)
 
-  (** Machine integer as a sequence of bits.  *)
+  (** Abstract integral type.
+
+      This module describes an interface of an integral arithmetic
+      type, as well as the [Make] functor, that derives a module that
+      implements this interface from a module that provides the
+      minimal ([Base]) interface *)
   module Integer : sig
 
-    (** The minimal interface of the machine integer.  *)
+    (** The minimal interface of an integer.  *)
     module type Base = sig
+
+      (** type of integer  *)
       type t
 
       (** element neutral to the addition  *)
@@ -540,7 +544,6 @@ module Std : sig
 
       (** [sub x y] is [x - y] *)
       val sub     : t -> t -> t
-
 
       (** [mul x y] is [x * y]  *)
       val mul     : t -> t -> t
@@ -573,7 +576,7 @@ module Std : sig
       val arshift : t -> t -> t
     end
 
-    (** Signature for integral type.  *)
+    (** The integer signature.  *)
     module type S = sig
       type t
 
@@ -617,7 +620,6 @@ module Std : sig
       (** [x asr y = arshift x y]  *)
       val (asr)  : t -> t -> t
     end
-
 
     (** Derive {!S} from the minimal implementation.  *)
     module Make(T : Base) : S with type t = T.t
@@ -880,56 +882,37 @@ module Std : sig
 
 
 
-  (** Bitvector -- a type for representing binary values.
+  (** Bitvector -- an integer with modular arithmentics.
 
       {2 Overview }
 
-      A numeric value with a 2-complement binary representation. It is
-      good for representing addresses, offsets and other numeric values.
+      A numeric value with the 2-complement binary representation. It
+      is good for representing addresses, offsets and other arithmetic
+      values.
 
-      Each value is attributed by a its bit-width. All arithmetic
-      operations over values are done modulo their widths. It is an
-      error to apply arithmetic operation to values with different
-      widths. Default implementations will raise a [Width] exception,
-      however there exists a family of modules that provide arithmetic
-      operations lifted to an [Or_error.t] monad. It is suggested to use
-      them, if you know what kind of operands you're expecting.
-
-
-      {2 Clarifications endianness and bit-ordering }
-
-      Bitvector should be considered as an number with an arbitrary
-      width. That means, that as with all numbers it is subject to
-      endianness. When we iterate over bitvector using some container
-      interface we always start from the byte with the lower
-      address. Depending on endianness it will be either least
-      significant bytes (little-endian), or most significant
-      (big-endian). Sometimes id does matter, sometimes it doesn't. In a
-      latter case you can just use a default native-endian
-      interface. But in a former case, please consider using explicit
-      modules, either [Bytes_LE] or [Bytes_BE], even if you know that
-      your system is [LE]. Things change.
-
-      Bits are always numbered from right to left, with least
-      significant bit having a zero index, and most significant having
-      index equal to [width - 1]. That means, they're endianness
-      agnostic.
+      Each value is attributed by a bitwidth and signedness. All
+      arithmetic operations over values are done modulo their
+      widths. It is an error to apply arithmetic operation to values
+      with different widths. Default implementations will raise a an
+      exception, however there exists a family of modules that provide
+      arithmetic operations lifted to an [Or_error.t] monad. It is
+      suggested to use them, if you know what kind of operands you're
+      expecting.
 
       {2 Clarification on size-morphism }
 
       Size-monomorphic operations (as opposed to size-polymorphic
       comparison) doesn't allow to compare two operands with different
-      sizes, and either raise exception or return [Error]. If we would
-      have type safe interface, with type [t] defined as [type 'a t],
+      sizes, and either raise an exception or return [Error]. If we would
+      have a type safe interface, with type [t] defined as [type 'a t],
       where ['a] stands for size, then size-monomorphic operations will
       have type ['a t -> 'a t -> _], and size-polymorphic ['a t -> 'b t -> _].
 
-      By default, size-polymorphic comparison is used (for rationale of
-      this decision look at the implementation of a hash function). To
-      understand the ordering relation one can think that a lexical
-      ordering is specified on a tuple [(x,n)], where [x] is the number
-      and [n] is the size. For example, the following sequence is in an
-      ascending order:
+      By default, size-polymorphic comparison is used. To understand
+      the ordering relation one can think that a lexical ordering is
+      specified on a tuple [(x,n)], where [x] is the number and [n] is
+      the size. For example, the following sequence is in an ascending
+      order:
 
       {[ 0x0:1, 0x0:32, 0x0:64, 0x1:1, 0x1:32, 0xD:4, 0xDEADBEEF:32]}.
 
@@ -941,15 +924,18 @@ module Std : sig
       {2 Clarification on signs}
 
       By default all numbers represented by a bitvector are considered
-      unsigned. This includes comparisons, e.g., [of_int (-1) ~width:32]
-      is greater than zero. If you need to perform signed operation, you
-      can use [signed] operator to temporary cast your value to signed.
-      We use temporary to emphasize that, the signedness property won't
-      propagate to the result of the operation, e.g. result of the
-      following expression: [Int_exn.(signed x / y)] will not be signed.
+      unsigned. This includes comparisons, e.g., [of_int (-1)
+      ~width:32] is greater than zero. If you need to perform a signed
+      operation, you can use the [signed] operator to temporary cast
+      your value to the signed kind.  We use word "temporary" to
+      emphasize that, the signedness property won't propagate to the
+      result of the operation, e.g. result of the following
+      expression: [Int_exn.(signed x / y)] will not be signed. In other
+      words each new value is created unsigned.
 
       If any operand of a binary operation is signed, then a signed
-      version of an operation is used.
+      version of an operation is used, i.e., the other operand is
+      upcasted to the signed kind.
 
       Remember to use explicit casts, whenever you really need a signed
       representation. Examples:
@@ -970,7 +956,7 @@ module Std : sig
       restore it from string. The format of the representation is the
       following (in EBNF):
       {[
-        repr  = [sign], base, digit, {digit}, ":", size | true | false;
+        repr  = [sign], [base], digit, {digit}, ":", size, [kind]
         sign  = "+" | "-";
         base  = "0x" | "0b" | "0o";
         size  = dec, {dec};
@@ -978,15 +964,15 @@ module Std : sig
         dec   = ?decimal digit?;
         oct   = ?octal digit?;
         hex   = ?hexadecimal digit?;
+        kind  = u | s
       ]}
 
       Examples:
-      [0x5D:32, 0b0101:16, 5:64, +5:8, +0x5D:16, true, false.].
+      [0x5D:32s, 0b0101:16u, 5:64, +5:8, +0x5D:16].
 
-      Form [false] is a shortcut for [0:1], as well as [true] is [1:1].
-
-      If [base] is omitted base-10 is assumed. The output format is
-      lways ["0x", hex, {hex}] in an unsigned form. *)
+      If [base] is omitted base-10 is assumed. If the kind is ommited,
+      then the usigned kind is assumed. The output format is always in
+      a hex representation with a full prefix.  . *)
   module Bitvector : sig
 
     (** [word] is an abbreviation to [Bitvector.t]  *)
@@ -994,15 +980,15 @@ module Std : sig
 
     (** {2 Common Interfaces}
 
-        Bitvector is a value, first of all, so it supports a common set of
-        a value interface: it can be stored, compared, it can be a key in
-        a dictionary, etc. Moreover, being a number it can be compared
-        with zero and applied to a common set of integer operations.
-    *)
+        A bitvector is a value, first of all, so it supports a common
+        set of a value interface: it can be stored, compared, it can
+        be a key in a dictionary, etc. Moreover, being a number it can
+        be compared with zero and applied to a common set of integer
+        operations.  *)
+    include Regular.S with type t := t
 
     (** Bitvector implements a common set of operations that are
         expected from integral values.  *)
-    include Regular.S with type t := t
     include Integer.S with type t := t
 
     (** A comparable interface with size-monomorphic comparison. *)
@@ -1043,10 +1029,10 @@ module Std : sig
 
     (** {2 Some predefined constant constructors }  *)
 
-    (** [b0 = of_bool false] is a zero bit  *)
+    (** [b0 = of_bool false] *)
     val b0 : t
 
-    (** [b1 = of_bool true] is a one bit  *)
+    (** [b1 = of_bool true] *)
     val b1 : t
 
     (** {2 Helpful shortcuts }  *)
@@ -1066,12 +1052,11 @@ module Std : sig
     (** [of_binary ?width endian num] creates a bitvector from a string
         interpreted as a sequence of bytes in a specified order.
 
-        The result is always positive. [num] argument is not shared.
-        [width] defaults to [String.length num]
-    *)
+        The result is always positive and unsigned. [num] argument is
+        not shared.  [width] defaults to [String.length num] *)
     val of_binary : ?width:int -> endian -> string -> t
 
-    (** {2 Conversions to built-in integers }  *)
+    (** {2 Conversions to OCaml built in integer types }  *)
 
     (** [to_int x] projects [x] in to OCaml [int].  *)
     val to_int   : t -> int   Or_error.t
@@ -1083,18 +1068,15 @@ module Std : sig
     val to_int64 : t -> int64 Or_error.t
 
     (** [to_int_exn x] projects [x] in to OCaml [int].
-        @since 1.3
-    *)
+        @since 1.3 *)
     val to_int_exn   : t -> int
 
     (** [to_int32_exn x] projects [x] in to [int32]
-        @since 1.3
-    *)
+        @since 1.3 *)
     val to_int32_exn : t -> int32
 
     (** [to_int64_exn x] projects [x] in to [int64]
-        @since 1.3
-    *)
+        @since 1.3 *)
     val to_int64_exn : t -> int64
 
     (** [printf "%a" pp x] prints [x] into a formatter. This is
@@ -1305,24 +1287,23 @@ module Std : sig
       ?format:[`hex | `dec | `oct | `bin ] ->
       t printer
 
-    (** [string_of_value ?hex x] returns a textual
-        representation of the [x] value, i.e., ignores size and
-        signedness.  If [hex] is [true] (default),
-        then it is in the hexadecimal representation, otherwise the
-        decimal representation is used. The returned value is not
-        prefixed.
-        No leading zeros are printed. If a value is negative and
-        signed, then a leading negative sign is printed. Hexadecimal
-        letter literals are printed in a lowercase format.
-    *)
+    (** [string_of_value ?hex x] returns a textual representation of
+        the [x] value, i.e., ignores size and signedness.  If [hex] is
+        [true] (default), then it is in the hexadecimal
+        representation, otherwise the decimal representation is
+        used. The returned value is not prefixed.  No leading zeros are
+        printed. If a value is signed and negative, then a leading
+        negative sign is printed. Hexadecimal letter literals are
+        printed in a lowercase format.  *)
     val string_of_value : ?hex:bool -> t -> string
 
     (** [signed t] casts t to a signed type, so that any operations
-        applied on [t] will be signed *)
+        applied on [t] will be signed. *)
     val signed : t -> t
 
     (** [unsigned t] casts [t] to an unsigned type, so that any
-        operations applied to it will interpret [t] as an unsigned word.*)
+        operations applied to it will interpret [t] as an unsigned
+        word. @since 1.3 *)
     val unsigned : t -> t
 
     (** [is_zero bv] is true iff all bits are set to zero. *)
@@ -1490,7 +1471,6 @@ module Std : sig
       val of_word_size : Word_size.t -> t -> t Or_error.t
 
 
-
       include Integer.S with type t = t Or_error.t
       include Legacy.Monad.Infix with type 'a t := 'a Or_error.t
     end
@@ -1502,6 +1482,9 @@ module Std : sig
         [Width] exception if operands sizes mismatch.
     *)
     module Int_exn : Integer.S with type t = t
+
+
+    (** Arithmentic operations that doesn't check the widths.*)
     module Unsafe  : Bap_integer.S with type t = t
 
     (** Stable marshaling interface.  *)
@@ -1696,14 +1679,37 @@ module Std : sig
   include Printable.S with type t := t
   include Data.S      with type t := t
 
+
+  (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
   val pp_binop : binop printer
+
+
+  (** [printf "%a" pp_unop op] prints an unary operation [op] *)
   val pp_unop : unop printer
+
+
+  (** [printf "%a" pp_cast t] prints a cast type [t]
+      @since 1.3
+*)
   val pp_cast : cast printer
 
-  val string_of_binop : binop -> string
-  val string_of_unop : unop -> string
-  val string_of_cast : cast -> string
 
+  (** [string_of_binop op] is a textual representation of [op].
+      @since 1.3
+  *)
+  val string_of_binop : binop -> string
+
+
+  (** [string_of_unop op] is a textual representation of [op].
+      @since 1.3
+  *)
+  val string_of_unop : unop -> string
+
+
+  (** [string_of_cast t] is a textual representation of a cast type
+      @since 1.3
+  *)
+  val string_of_cast : cast -> string
 
   (** Infix operators  *)
   module Infix : sig
@@ -1798,7 +1804,7 @@ module Std : sig
     val ( ^ )   : exp -> exp -> exp
   end
 
-  (** Bring infix operations into scope of the [Bil] module.  *)
+  (** Brings infix operations into scope of the [Bil] module.  *)
   include module type of Infix
 
   (** {2 Functional constructors}  *)
@@ -1929,7 +1935,6 @@ module Std : sig
   (** [extract ~hi ~lo x -> Extract (hi,lo,x)]  *)
   val extract : hi:int -> lo:int -> exp -> exp
 
-
   (** [concat x y -> Concat (x,y)]  *)
   val concat : exp -> exp -> exp
 
@@ -2007,9 +2012,10 @@ module Std : sig
   val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
 
 
-  (** maps BIL operators to bitvectors  *)
+  (** Maps BIL operators to bitvectors.
+      @since 1.3
+  *)
   module Apply : sig
-
 
     (** [binop op x y] applies the binary operation [op] to [x] and
         [y].
@@ -2246,14 +2252,20 @@ module Type : sig
   val mem : addr_size -> size -> t
 
   (** [infer exp] is [Ok t] if [exp] is well-typed and has type [t]
-      otherwise [Error e]. *)
+      otherwise [Error e].
+      @since 1.3
+  *)
   val infer : exp -> (t,error) Result.t
 
-  (** [infer_exn t] is the same as [ok_exn @@ infer_exn t]  *)
+  (** [infer_exn t] is the same as [ok_exn @@ infer_exn t].
+      @since 1.3
+  *)
   val infer_exn : exp -> t
 
   (** [check bil] is [Ok ()] if [bil] is well-typed, otherwise the
-      first type error [e] is returned as [Error e]   *)
+      first type error [e] is returned as [Error e].
+      @since 1.3
+  *)
   val check : bil -> (unit,error) Result.t
 
   (** BIL type errors.
@@ -2281,6 +2293,7 @@ module Type : sig
       evaluate a bitvector of improper size or when a cast arguments
       of a cast expression doesn't make sense.
 
+      @since 1.3
   *)
   module Error : sig
 
@@ -2359,7 +2372,8 @@ val mem64_t : size -> typ
 
     {2 Printing}
 
-    A default pretty printer doesn't print zero indices.
+    A default pretty printer doesn't print zero indices and never
+    prints types.
 *)
 module Var : sig
 
@@ -2456,10 +2470,26 @@ module Type_error : module type of Type.Error with type t = Type.Error.t
 type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
 
 
+(** Basic and generic expression evaluator.
+
+    The module provides functors that derive base classes and class
+    types for Expi, Bili, and Biri.
+
+    Note, this is a low-level interface that can be used if you want
+    to build your own evaluators (interpeters). If you want to use
+    already existing interpreter without drastically changing the
+    semantics of BIL consider using the Primus Framework.
+
+    @since 1.3
+  *)
 module Eval : sig
+
+
+  (** An evaluator interface parametrized by a [T1] monad.  *)
   module T1(M : T1) : sig
     type 'a m = 'a M.t
 
+    (** interface that describes semantics of an expression  *)
     class type ['r] semantics = object
       method eval_exp : exp -> 'r m
       method eval_var : var -> 'r m
@@ -2476,6 +2506,7 @@ module Eval : sig
       method eval_unknown : string -> typ -> 'r m
     end
 
+    (** interface of the evaluation value domain *)
     class type virtual ['r,'s] domain = object
       method private virtual undefined : 'r m
       method private virtual value_of_word : word -> 'r m
@@ -2483,6 +2514,7 @@ module Eval : sig
       method private virtual storage_of_value : 'r -> 's option m
     end
 
+    (** interface of the computation effects *)
     class type virtual ['r,'s] eff = object
       method virtual lookup : var -> 'r m
       method virtual update : var -> 'r -> unit m
@@ -2491,9 +2523,12 @@ module Eval : sig
     end
   end
 
+
+  (** An evaluator parametrized by a [T2] monad.  *)
   module T2(M : T2) : sig
     type ('a,'e) m = ('a,'e) M.t
 
+    (** interface that describes semantics of an expression  *)
     class type ['a,'r] semantics = object
       method eval_exp : exp -> ('r,'a) m
       method eval_var : var -> ('r,'a) m
@@ -2510,6 +2545,7 @@ module Eval : sig
       method eval_unknown : string -> typ -> ('r,'a) m
     end
 
+    (** interface of the evaluation value domain *)
     class type virtual ['a,'r,'s] domain = object
       method private virtual undefined : ('r,'a) m
       method private virtual value_of_word : word -> ('r,'a) m
@@ -2517,6 +2553,7 @@ module Eval : sig
       method private virtual storage_of_value : 'r -> ('s option,'a) m
     end
 
+    (** interface of the computation effects *)
     class type virtual ['a,'r,'s] eff = object
       method virtual lookup : var -> ('r,'a) m
       method virtual update : var -> 'r -> (unit,'a) m
@@ -2525,6 +2562,8 @@ module Eval : sig
     end
   end
 
+
+  (** An interface of a basic evaluator in a [T1] monad  *)
   module type S = sig
     type 'a m
     module M : T1 with type 'a t = 'a m
@@ -2533,6 +2572,7 @@ module Eval : sig
     class type virtual ['r,'s] domain  = ['r,'s] T1(M).domain
     class type virtual ['r,'s] eff = ['r,'s] T1(M).eff
 
+    (** a virtual base class for all evaluators  *)
     class virtual ['r,'s] t : object
       inherit ['r,'s] domain
       inherit ['r,'s] eff
@@ -2542,6 +2582,7 @@ module Eval : sig
     end
   end
 
+  (** An interface of a basic evaluator in a [T1] monad  *)
   module type S2 = sig
     type ('a,'e) m
     module M : T2 with type ('a,'e) t = ('a,'e) m
@@ -2550,6 +2591,7 @@ module Eval : sig
     class type virtual ['a,'r,'s] domain  = ['a,'r,'s] T2(M).domain
     class type virtual ['a,'r,'s] eff = ['a,'r,'s] T2(M).eff
 
+    (** a virtual base class for all evaluators  *)
     class virtual ['a,'r,'s] t : object
       inherit ['a,'r,'s] domain
       inherit ['a,'r,'s] eff
@@ -2559,13 +2601,25 @@ module Eval : sig
     end
   end
 
+
+
+  (** [Make2(M)] provides an implementation of the [S2] interface
+      lifted into the monad [M].  *)
   module Make2(M : Monad.S2) : S2 with type ('a,'e) m := ('a,'e) M.t
                                    and module M := M
+
+
+  (** [Make(M)] provides an implementation of the [S2] interface
+      lifted into the monad [M].  *)
   module Make(M : Monad.S) : S with type 'a m := 'a M.t
                                 and module M := M
 end
 
-(** Expression Language Interpreter.*)
+(** Expression Language Interpreter.
+
+    See also the Primus Framework.
+
+*)
 module Expi : sig
   open Bil.Result
   (**
@@ -2612,6 +2666,8 @@ module Expi : sig
 
     module M : T2 with type ('a,'e) t = ('a,'e) state
 
+
+    (** @since 1.3  *)
     module Eval : Eval.S2 with type ('a,'e) m := ('a,'e) state
                            and module M := M
 
@@ -2867,6 +2923,8 @@ class ['a] bili : ['a] Bili.t
     - [x[y]] - has both effects (may raise pagefault) and coeffects;
     - [7 * 8], [42] - have no effects.
 
+    @since 1.3
+
 *)
 module Eff : sig
 
@@ -3035,7 +3093,7 @@ module Exp : sig
     method leave_unknown : string -> typ -> 'a -> 'a
   end
 
-  (** A visitor with shortcut.
+  (** A visitor with a shortcut.
       Finder is a specialization of a visitor, that uses [return] as its
       folding argument. At any time you can stop the traversing by
       calling [return] function of the provided argument (which is by
@@ -3120,7 +3178,12 @@ module Exp : sig
       expression [pat] in [x] with an expression [rep] *)
   val substitute : exp -> exp -> exp -> exp
 
-  (** [normalize] ensures no-lets and normalized-memory  *)
+  (** [normalize] ensures no-lets and normalized-memory.
+      Inlines all let expressions, expands multibyte loads to a
+      concatenation of one byte loads, and expand multibyte stores
+      into chains of one byte stores.
+      @since 1.3
+ *)
   val normalize : exp -> exp
 
   (** [simpl ~ignore:effects x] iff expression [x] is well-typed,
@@ -3166,6 +3229,7 @@ module Exp : sig
         reduced, consider passing [~ignore:[Eff.reads]] if you want
         such expressions to be reduced.
 
+      @since 1.3
   *)
   val simpl : ?ignore:Eff.t list -> exp -> exp
 
@@ -3452,7 +3516,7 @@ module Stmt : sig
       effects, and treat all expressions as side-effect free, thus
       the above transformation, as well as
 
-
+      @since 1.3
   *)
   val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
@@ -3462,6 +3526,8 @@ module Stmt : sig
       simplifies [if] and [while] expressions with statically known
       conditionals, e.g., [if (true) xs ys] is simplified to [xs],
       [while (false) xs] is simplified to [xs].
+
+      @since 1.3
   *)
   val simpl : ?ignore:Eff.t list -> t list -> t list
 
@@ -3814,9 +3880,20 @@ module Value : sig
     (** [name cons] returns a name of a constructor.  *)
     val name : 'a t -> string
 
+
+    (** [same x y] is true if tags [x] and [y] have the same type.   *)
     val same : 'a t -> 'b t -> bool
+
+    (** [same_witness x y] returns a value witnessing that value tags
+        [x] and [y] has the same type.  *)
     val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
+
+
+    (** [same_witness_exn x y] is the same as [same_witness] but
+    raises exception if [not (same x y)].  *)
     val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
+
+    (** [typeid t] returns a type identifier of a type tag [t].  *)
     val typeid : 'a t -> typeid
   end
 
@@ -3967,13 +4044,32 @@ module Vector : sig
       [Container.S1] interface *)
   val map_to_array : 'a t -> f:('a -> 'b) -> 'b array
 
-
+  (** [findi xs ~f] retuns an index [i] and a value [x] of the first
+      element of [xs], for which [f i x] is [true].  *)
   val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
+
+
+  (** [iter xs ~f] applies [f i x] for each [x_i] in [xs]  *)
   val iteri : 'a t -> f:(int -> 'a -> unit) -> unit
+
+  (** [foldi xs ~init:s_0 ~f] computes [f n s_n x_n], where [s_n = f
+      (n-1) s_[n-1] x_[n-1]] and [n] is the number of elements in
+      [xs] *)
   val foldi : 'a t -> init:'b -> f:(int -> 'b -> 'a -> 'b) -> 'b
 
+
+  (** [index ?equal xs x] returns an index of the first element [p] of
+      [xs] for which [equal p x] is [true]. The [equal] parameter
+      defaults to the OCaml builtin polymorphic equality. *)
   val index : ?equal:('a -> 'a -> bool) -> 'a t -> 'a -> int option
+
+  (** [index_exn ?equal xs x] is the same as [index ?equal xs x] but
+      an exception is thrown instead of [None] *)
   val index_exn : ?equal:('a -> 'a -> bool) -> 'a t -> 'a -> int
+
+
+  (** [index_with ?equal ~default xs x] same as [index] but returns
+      the [default] value instead of [None]. *)
   val index_with : ?equal:('a -> 'a -> bool) -> default:int -> 'a t -> 'a -> int
 
 
@@ -3981,6 +4077,9 @@ module Vector : sig
       [iter], etc  *)
   include Container.S1 with type 'a t := 'a t
 
+
+  (** [pp pp_elem] creates a vector printer that uses [pp_elem] to
+      print elements.  *)
   val pp : 'a printer -> 'a t printer
 end
 
@@ -4319,6 +4418,7 @@ module Memory : sig
 
   (** [first_byte m] returns first byte of [m] as a memory  *)
   val first_byte : t -> t
+
   (** [last_byte m] returns last byte of [m] as a memory  *)
   val last_byte : t -> t
 
@@ -4335,11 +4435,13 @@ module Memory : sig
   (** [m^.n] dereferences a byte at address [n]  *)
   val (^!) : t -> addr -> word
 
-  (** [{max,min}_addr] function specify upper and lower bounds of the memory *)
+  (** [max_addr m] is an address of the last byte of [m] *)
   val max_addr : t -> addr
+
+  (** [min_addr m] is an address of the first byte of [m] *)
   val min_addr : t -> addr
 
-  (** [length] returns the length of the memory in bytes *)
+  (** [length m] returns a number of bytes in m *)
   val length : t -> int
 
   (** [contains mem addr] returns true if [mem] contains address [addr]  *)
@@ -4366,17 +4468,32 @@ module Memory : sig
         @return a word lifted into a monad.
     *)
     type 'a reader = t -> pos_ref : addr ref -> 'a Or_error.t
+
+
+    (** [word ~word_size] a reader that reads words of [word_size]  *)
     val word   : word_size:size -> word reader
+
+
+    (** [int8] a signed byte reader  *)
     val int8   : word reader
+
+    (** [uint8] an unsigned byte reader  *)
     val uint8  : word reader
+
+    (** [int16] a signed 16-bit word reader  *)
     val int16  : word reader
+
+    (** [uint16] an unsigned 16-bit word reader  *)
     val uint16 : word reader
+
+    (** [int32] a 32-bit word reader  *)
     val int32  : word reader
+
+    (** [int64] a 64-bit word reader  *)
     val int64  : word reader
   end
 
   (** {2 Printing and outputing}  *)
-
   include Printable.S with type t := t
 
   (** [hexdump t out] outputs hexdump (as per [hexdump -C]) of the
@@ -4974,13 +5091,10 @@ module Image : sig
   (** lists all registered backends  *)
   val available_backends : unit -> string list
 
-  (** [register_backend ~name backend] tries to register backend under
+  (** [register_backend ~name backend] tries to register [backend] under
       the specified [name]. *)
   val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
   [@@deprecated "use register_loader instead"]
-
-
-
 
   (** {2 Internals}
 
@@ -4991,52 +5105,108 @@ module Image : sig
       input file, or it is whatever was passed to [of_[big]string]. *)
   val data : t -> Bigstring.t
 
-  (** [spec image] returns an image specification. *)
+  (** [spec image] returns the image specification.
+
+      @since 1.3
+  *)
   val spec : t -> Ogre.doc
 
+
+
+  (** A scheme of image specification.
+
+      An attribute is some statement about a program that is true,
+      thus each attribute is a proposition in a logical database of
+      inferred facts.
+
+      Note, in comments we use actual field names in the synopsis
+      section of a function, e.g., [section addr size] means that
+      the [section] statement has two fields [Scheme.addr] and
+      [Scheme.size].
+
+      See the OGRE library for more information.
+
+      @since 1.3
+  *)
   module Scheme : sig
     open Ogre.Type
 
     type addr = int64
-    type 'a region = {addr : addr; size : int64; info : 'a}
+    type size = int64
+    type off  = int64
 
-    val off : int64 Ogre.field
-    val size : int64 Ogre.field
-    val addr : int64 Ogre.field
-    val name : string Ogre.field
-    val root : int64 Ogre.field
-    val readable : bool Ogre.field
-    val writable : bool Ogre.field
-    val executable : bool Ogre.field
 
+    (** a contiguous piece of memory.  *)
+    type 'a region = {
+      addr : addr;              (** a staring address *)
+      size : size;              (** a size of the segment *)
+      info : 'a                  (** the attached information *)
+    }
+
+    val off : off Ogre.field      (** offset  *)
+    val size : size Ogre.field     (** size  *)
+    val addr : addr Ogre.field     (** address  *)
+    val name : string Ogre.field    (** name *)
+    val root : addr Ogre.field     (** code root *)
+    val readable : bool Ogre.field  (** is readable *)
+    val writable : bool Ogre.field  (** is_writable *)
+    val executable : bool Ogre.field (** is_executable *)
+    val fixup : addr Ogre.field      (** an address of a fixup *)
+
+    (** [arch name] a file contains code for the [name] architecture. *)
     val arch : (string, (string -> 'a) -> 'a) Ogre.attribute
+
+    (** [segment addr size readable writable executable] a memory
+        region (addr,size) has the specified permissions.  *)
     val segment : ((bool * bool * bool) region,
-                   (addr -> addr -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
-    val section : (unit region, (addr -> addr -> 'a) -> 'a) Ogre.attribute
+                   (addr -> size -> bool -> bool -> bool -> 'a) -> 'a) Ogre.attribute
+
+    (** [section addr size] a memory region is a section *)
+    val section : (unit region, (addr -> size -> 'a) -> 'a) Ogre.attribute
+
+    (** [code_start addr] an address starts a code sequence *)
     val code_start : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+    (** [entry_point addr] an address is a program entry point  *)
     val entry_point : (addr, (addr -> 'a) -> 'a) Ogre.attribute
+
+    (** [symbol_chunk addr size root] a contiguous piece of a program
+        symbol, that can be a function or some data.  *)
     val symbol_chunk :
-      (addr region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+      (addr region, (addr -> size -> addr -> 'a) -> 'a) Ogre.attribute
 
+    (** [named_region addr size name] a region of memory has a [name]  *)
     val named_region :
-      (string region, (addr -> addr -> string -> 'a) -> 'a) Ogre.attribute
+      (string region, (addr -> size -> string -> 'a) -> 'a) Ogre.attribute
 
+    (** [named_symbol addr name] a symbol that starts at this [addr]
+        has this [name]. *)
     val named_symbol :
       (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
-    val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
+    (** [mapped addr size off] sequence of bytes in a file starting at
+        offset [off] and has the given [size] is mapped into memory at the
+        given address [addr] *)
+    val mapped : (off region, (addr -> size -> off -> 'a) -> 'a) Ogre.attribute
 
-    val reference :
-      (int64 * addr, (int64 -> addr -> 'a) -> 'a) Ogre.attribute
+    (** [relocation fixup addr] a value referenced at the code that
+        has the [fixup] address is relocated to the specified address
+        [addr].  *)
+    val relocation :
+      (int64 * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
+
+    (** [extrenal_reference addr name] a piece of code at the
+        specified address [addr] references an external symbol with
+        the given [name]. *)
     val external_reference :
       (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
 
+
+    (** [base_address addr] this is the base address of an image,
+        i.e., an address of a first byte of the image.  *)
     val base_address : (addr, (addr -> 'a) -> 'a) Ogre.attribute
-
   end
-
-
 end
 
 (** Memory maps.
@@ -5144,6 +5314,8 @@ module Memmap : sig
 
   include Container.S1 with type 'a t := 'a t
 
+
+  (** [pp pp_elem] constracts a printer for a memmap to the given element. *)
   val pp : 'a printer -> 'a t printer
 end
 
@@ -5235,6 +5407,7 @@ module Reg : sig
 
   (** name of a register  *)
   val name : t -> string
+
   include Regular.S with type t := t
 end
 
@@ -5242,8 +5415,18 @@ end
 (** Integer immediate operand  *)
 module Imm : sig
   type t = imm
+
+
+  (** [to_word ~width x] projects [x] to a word. Returns [None] only
+      if [width] is non-positive. *)
   val to_word  : t -> width:int -> word option
+
+  (** [to_int64 x] maps immediates to the OCaml [int64] type  *)
   val to_int64 : t -> int64
+
+
+  (** [to_int x] projects immediates to the OCaml [int] type. Returns
+      [None] if it doesn't fit.  *)
   val to_int   : t -> int option
   include Regular.S with type t := t
 end
@@ -5251,6 +5434,8 @@ end
 (** Floating point immediate operand  *)
 module Fmm : sig
   type t = fmm
+
+  (** [to_float x] maps floating point operans to the OCaml [float] type  *)
   val to_float : t -> float
   include Regular.S with type t := t
 end
@@ -5393,23 +5578,25 @@ module Disasm_expert : sig
     val store_kinds : ('a,_) t -> ('a,kinds) t
 
     (** [run ?stop_on ?invalid ?stopped dis mem ~init ~return ~hit]
-        performs recursive disassembly of specified memory [mem]. The
-        process of disassembly can be driven using [stop], [step], [back]
-        and [jump] functions, described later.
+        performs the recursive disassembly of the specified chunk of
+        memory [mem]. The process of disassembly can be driven using
+        the [stop], [step], [back] and [jump] functions, described
+        later.
 
         @param backlog defines a size of history of states, that can
         be used for backtracking. Defaults to some positive natural
         number.
 
-        @param stop_on defines a set of predicates that will be checked
-        on each step to decide whether it should stop here and call a
-        user-provided [hit] function, or it should continue. The descision
-        is made acording to the rule: [if exists stop_on then stop], i.e.,
-        it there exists such predicate in a set of predicates, that
-        evaluates to true, then stop the disassembly and pass the control
-        to the user function [hit].  A few notes: only valid instructions
-        can match predicates, and if the set is empty, then it always
-        evaluates to false.
+        @param stop_on defines a set of predicates that will be
+        checked on each step to decide whether a disassembler should
+        stop here and call the user-provided [hit] function, or it should
+        continue. The decision is made according to the rule: [if
+        exists stop_on then stop], i.e., it there exists such
+        predicate in a set of predicates, that evaluates to true, then
+        stop the disassembly and pass the control to the user function
+        [hit].  A few notes: only valid instructions can match
+        predicates, and if the set is empty, then it always evaluates
+        to false.
 
         @param init initial value of user data, that can be passed
         through handlers (cf., [fold])
@@ -5419,14 +5606,15 @@ module Disasm_expert : sig
         monad, like [Or_error], or [Lwt]. Otherwise, just use [ident]
         function and assume that ['s == 'r].
 
-        In a process of disassembly user provided callbacks are invoked by
-        the engine. To each callback at least two parameters are passed:
-        [state] and [user_data]. [user_data] is arbitrary data of type ['s]
-        with which the folding over the memory is actually
+        The disassembler will invoke user provided callbacks. To each
+        callback at least two parameters are passed: [state] and
+        [user_data]. [user_data] is arbitrary data of type ['s] with
+        which the folding over the memory is actually
         performed. [state] incapsulates the current state of the
-        disassembler, and provides continuation functions, namely [stop],
-        [next] and [back], that drives the process of disassembly. This
-        functions are used to pass control back to the disassembler.
+        disassembler, and provides continuation functions, namely
+        [stop], [next] and [back], that drives the process of
+        disassembly. This functions are used to pass control back to
+        the disassembler.
 
         [stopped state user_data] is called when there is no more data to
         disassemble. This handler is optional and defaults to [stop].
@@ -6218,7 +6406,10 @@ module type Target = sig
 
   (** [lift mem insn] lifts provided instruction to BIL.
       Usually you do not need to call this function directly, as
-      [disassemble] function will do the lifting. *)
+      [disassemble] function will do the lifting.
+
+      postcondition: the returned BIL code is well-typed.
+  *)
   val lift : lifter
 end
 
@@ -6455,9 +6646,11 @@ module Term : sig
   (** [set_attr term attr value] attaches an [value] to attribute
       [attr] in [term] *)
   val set_attr : 'a t -> 'b tag -> 'b -> 'a t
+
   (** [attrs term attrs] returns the set of [attributes] associated
       with a [term]*)
   val attrs : 'a t -> Dict.t
+
   (** [get_attr term attr] returns a value of the a given [attr] in
       [term] *)
   val get_attr : 'a t -> 'b tag -> 'b option
@@ -6494,7 +6687,6 @@ module Term : sig
 
   (** must hold just after the term is left  *)
   val postcondition : exp tag
-
 
   (** {2 Higher order mapping}  *)
 
@@ -7311,11 +7503,10 @@ end
 
 (** Abstract taint.
 
-    We represent a taint with a term identifier, to designated,
-    that a taint was produced by a term with the given id. A taint
-    set is usually associated with each variable of a given
-    term. This set defines a set of taints with which a variable is
-    tainted.*)
+    We represent a taint with a term identifier, to designate that a
+    taint was produced by a term with the given id. A taint set is
+    usually associated with each variable of a given term. This set
+    defines a set of taints with which a variable is tainted.*)
 module Taint : sig
   type t = tid
 
@@ -7330,13 +7521,19 @@ module Taint : sig
       in the register is tainted.*)
   val ptr : t tag
 
+
+  (** maps each variable that is used in a term to a set of register taints *)
   val regs : map tag
 
+  (** maps each variable that is used in a term to a set of pointer taints *)
   val ptrs : map tag
 
+
+  (** [merge t1 t2] merge taint maps  *)
   val merge : map -> map -> map
 
   class context :  object('s)
+
     (** taint result with the given set of taints  *)
     method taint_reg : Bil.result -> set -> 's
 
@@ -7438,7 +7635,6 @@ module Taint : sig
   (** print a set of taints  *)
   val pp_set : set printer
 
-
   (** print a taint map  *)
   val pp_map : map printer
 
@@ -7463,7 +7659,6 @@ module Symbolizer : sig
       virtual address of a block start, and [ea] is an address of the
       block end.  *)
   val of_blocks : (string * addr * addr) seq -> t
-
 
   (** [resolve symbolizer addr] returns a name of function,
       to which a given address belongs. If the address is not know to
@@ -7500,7 +7695,6 @@ module Rooter : sig
       block end.  *)
   val of_blocks : (string * addr * addr) seq -> t
 
-
   (** [roots r] enumerates roots found by rooter [r]  *)
   val roots : t -> addr seq
 
@@ -7516,7 +7710,6 @@ end
 module Brancher : sig
   open Disasm_expert.Basic
   type t = brancher
-
 
   (** destination target (if known) and edge classification (see {!edge})  *)
   type dest = addr option * edge [@@deriving sexp]
@@ -8108,6 +8301,7 @@ end
     [Sys.executable_name] and [argv] to [Sys.argv].
 *)
 module Self() : sig
+
   (** [name of a plugin]  *)
   val name : string
 
@@ -8185,6 +8379,7 @@ module Self() : sig
       ]}
   *)
   module Config : sig
+
     (** Version number  *)
     val version : string
 

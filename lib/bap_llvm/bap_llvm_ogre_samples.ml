@@ -47,7 +47,7 @@ module Relocatable_symbols(Fact : Ogre.S) = struct
     Fact.Seq.iter ints ~f:(fun (sym_off, rel_off) ->
         let symbol_addr = Int64.(sym_off + base) in
         let relocation_addr = Int64.(rel_off + base) in
-        Fact.provide reference relocation_addr symbol_addr)
+        Fact.provide relocation relocation_addr symbol_addr)
 
   let externals =
     Fact.require base_address >>= fun base ->
