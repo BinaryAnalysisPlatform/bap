@@ -9,19 +9,6 @@ module Generator = Bap_primus_generator
 
 type exn += Undefined_var of var
 
-let undefined_variable,undefined =
-  Observation.provide ~inspect:sexp_of_var "undefined-variable"
-
-let variable_access,variable_will_be_looked_up =
-  Observation.provide ~inspect:(fun v ->
-      Sexp.Atom (Var.name v)) "variable-access"
-
-let variable_read,variable_was_read =
-  Observation.provide ~inspect:sexp_of_binding "variable-read"
-
-let variable_written,variable_was_written =
-  Observation.provide ~inspect:sexp_of_binding "variable-written"
-
 let () = Exn.add_printer (function
     | Undefined_var v ->
       Some (sprintf "undefined variable `%s'" (Var.name v))
@@ -91,8 +78,6 @@ module Make(Machine : Machine) = struct
   module Generator = Bap_primus_generator.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
 
-  let (!!) = Machine.Observation.make
-
   let add var policy =
     Machine.Local.update state ~f:(fun s -> {
           s with random = Map.add s.random ~key:var ~data:policy
@@ -101,8 +86,7 @@ module Make(Machine : Machine) = struct
   let set var x =
     Machine.Local.update state ~f:(fun s -> {
           s with values = Map.add s.values ~key:var ~data:x
-        }) >>= fun () ->
-    !!variable_was_written (var,x)
+        })
 
   let gen_word gen width =
     assert (width > 0);
@@ -117,22 +101,13 @@ module Make(Machine : Machine) = struct
     Value.zero (Size.in_bits s)
 
   let get var =
-    !!variable_will_be_looked_up var >>= fun () ->
     Machine.Local.get state >>= fun t ->
     match Map.find t.values var with
-    | Some res ->
-      !!variable_was_read (var,res) >>= fun () ->
-      Machine.return res
+    | Some res -> Machine.return res
     | None -> match Var.typ var with
       | Type.Mem (_,_) -> null
       | Type.Imm width -> match Map.find t.random var with
-        | None ->
-          !!undefined var >>= fun () ->
-          Machine.raise (Undefined_var var)
-        | Some gen ->
-          gen_word gen width >>=
-          Value.of_word >>= fun w ->
-          !!variable_was_read (var,w) >>| fun () ->
-          w
+        | None -> Machine.raise (Undefined_var var)
+        | Some gen -> gen_word gen width >>= Value.of_word
 
 end

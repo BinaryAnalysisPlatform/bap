@@ -12,12 +12,6 @@ open Bap_primus_sexp
 
 type exn += Segmentation_fault of addr
 
-let sexp_of_segmentation_fault = sexp_of_word
-
-let segmentation_fault, segfault =
-  Observation.provide ~inspect:sexp_of_segmentation_fault
-    "segmentation-fault"
-
 let () = Exn.add_printer (function
     | Segmentation_fault here ->
       Some (asprintf "Segmentation fault at %a"
@@ -103,10 +97,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
 
-  let segfault addr =
-    !!segfault addr >>= fun () ->
-    Machine.current () >>= fun id ->
-    Machine.raise (Segmentation_fault addr)
+  let segfault addr = Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
     | None -> segfault addr
@@ -117,7 +108,7 @@ module Make(Machine : Machine) = struct
           Generate.next value >>| Word.of_int ~width:8
         | Static mem -> match Memory.get ~addr mem with
           | Ok v -> Machine.return v
-          | Error _ -> failwith "Bap_primus.Memory.read"
+          | Error _ -> failwith "Primus.Memory.read"
 
 
   let write addr value {values;layers} = match find_layer addr layers with

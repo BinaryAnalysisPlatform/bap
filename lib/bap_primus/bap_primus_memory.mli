@@ -5,8 +5,6 @@ module Generator = Bap_primus_generator
 
 type exn += Segmentation_fault of addr
 
-val segmentation_fault : addr observation
-
 module Make(Machine : Machine) : sig
 
   val load  : addr -> word Machine.t
