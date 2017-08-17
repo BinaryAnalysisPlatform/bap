@@ -261,7 +261,6 @@ module Create() = struct
           | x -> x in
         let tags = [
           `P (Manifest.tags manifest |>
-              List.map ~f:(sprintf "$(b,%s)") |>
               String.concat ~sep:", " |>
               sprintf "$(b,tags:) %s") ] in
         man @ see_also @ tags

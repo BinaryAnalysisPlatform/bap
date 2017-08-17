@@ -60,7 +60,7 @@ let print_tags plgs =
   Set.iter ~f:(printf "%s@ ") tags
 
 let get_print_ops () =
-  if get_opt argv list_plugins ~default:None <> None then
+  if Option.is_some (get_opt argv list_plugins ~default:None) then
     Some List_plugins
   else if get_opt argv list_tags ~default:false then
     Some List_tags
@@ -68,20 +68,19 @@ let get_print_ops () =
     Some List_plugins_tags
   else None
 
-let print_and_exit  env exclude plugins what =
+let get_plugins ?(provides=[]) env =
   let library = get_opt argv load_path ~default:[] in
+  Plugins.list ~env ~provides ~library ()
+
+let print_and_exit env exclude plugins what =
   let () = match what with
     | List_plugins ->
-      let list = get_opt argv list_plugins ~default:None in
-      Option.value_map list ~default:() ~f:(fun provides ->
-          let plugins = plugins @ Plugins.list ~env ~provides ~library () in
-          print_plugins exclude plugins)
-    | List_tags ->
-      let plugins = plugins @ Plugins.list ~env ~library () in
-      print_tags plugins
+      let provides = Option.value_exn
+          (get_opt argv list_plugins ~default:(Some [])) in
+      print_plugins exclude (plugins @ get_plugins ~provides env)
+    | List_tags -> print_tags (plugins @ get_plugins env)
     | List_plugins_tags ->
-      let plugins = plugins @ Plugins.list ~env ~library () in
-      print_plugins ~info:`Tags exclude plugins in
+      print_plugins ~info:`Tags exclude (plugins @ get_plugins env) in
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
