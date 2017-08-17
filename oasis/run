@@ -10,4 +10,4 @@ Library run_plugin
   BuildDepends: bap, bap-primus
   InternalModules: Run_main
   XMETADescription: a pass that will run a program
-  XMETAExtraLines:  tags="pass, primus"
+  XMETAExtraLines:  tags="emulator, pass, primus"

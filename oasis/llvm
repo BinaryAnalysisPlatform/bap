@@ -85,4 +85,4 @@ Library relocatable_plugin
   FindlibName:     bap-plugin-relocatable
   InternalModules: Relocatable_main, Rel_brancher
   BuildDepends:    bap, bap-llvm, ogre
-  XMETAExtraLines: tags="brancher, llvm, relocation"
+  XMETAExtraLines: tags="brancher, llvm, loader, ogre"

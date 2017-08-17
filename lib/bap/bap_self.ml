@@ -254,7 +254,7 @@ module Create() = struct
       | [] -> man
       | tags ->
         let default_see_also =
-          let h = "https://github.com/BinaryAnalysisPlatform/bap" in
+          let h = "www:bap.ece.cmu.edu" in
           [`S "SEE ALSO"; `P (sprintf "$(b,home:) $(i,%s)" h)] in
         let see_also, man = match extract_section "SEE ALSO" man with
           | [], man -> default_see_also, man

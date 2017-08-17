@@ -9,4 +9,4 @@ Library propagate_taint_plugin
   BuildDepends: bap, bap-microx
   InternalModules: Propagate_taint_main, Propagator
   XMETADescription: propagate taints through a program
-  XMETAExtraLines:  tags="pass, taint"
+  XMETAExtraLines:  tags="dataflow, pass, taint"

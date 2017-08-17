@@ -12,7 +12,7 @@ Library primus_loader_plugin
   XMETADescription: generic program loader for Primus
   Modules: Primus_loader_main
   InternalModules: Primus_loader_basic
-  XMETAExtraLines: tags="primus, loader"
+  XMETAExtraLines: tags="abi, loader, primus"
 
 Library primus_promiscuous_plugin
   Path: plugins/primus_promiscuous
@@ -22,7 +22,7 @@ Library primus_promiscuous_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: enables the promiscuous mode of execution
   Modules: Primus_promiscuous_main
-  XMETAExtraLines: tags="primus"
+  XMETAExtraLines: tags="primus, fuzz"
 
 Library primus_greedy_scheduler_plugin
   Path: plugins/primus_greedy
@@ -82,4 +82,4 @@ Library primus_propagate_taint_plugin
   BuildDepends: bap-primus
   XMETADescription: a taint propagation engine
   Modules: Primus_propagate_taint_main
-  XMETAExtraLines: tags="primus, taint"
+  XMETAExtraLines: tags="primus, taint, dataflow"

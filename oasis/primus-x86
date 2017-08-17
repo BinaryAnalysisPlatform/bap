@@ -11,4 +11,4 @@ Library primus_x86_plugin
   XMETADescription: x86 support package
   Modules: Primus_x86_main
   InternalModules: Primus_x86_loader
-  XMETAExtraLines:  tags="primus, x86"
+  XMETAExtraLines:  tags="loader, primus, x86"
