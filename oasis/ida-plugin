@@ -9,3 +9,4 @@ Library emit_ida_script_plugin
   BuildDepends:     bap
   Modules:          Emit_ida_script_main
   XMETADescription: extract a IDA python script from bap
+  XMETAExtraLines:  tags="ida, python"

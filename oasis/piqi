@@ -26,7 +26,7 @@ Library piqi_printers_plugin
   BuildDepends: bap-piqi
   InternalModules: Piqi_printers_main
   XMETADescription: provides piqi serialization for main data types (BIL, IR)
-  XMETAExtraLines:  tags="pass"
+  XMETAExtraLines:  tags="printer, serialization"
 
 Executable run_piqi_tests
   Path:       lib/bap_piqi/test

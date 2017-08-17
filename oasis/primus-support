@@ -12,6 +12,7 @@ Library primus_loader_plugin
   XMETADescription: generic program loader for Primus
   Modules: Primus_loader_main
   InternalModules: Primus_loader_basic
+  XMETAExtraLines: tags="abi, loader, primus"
 
 Library primus_promiscuous_plugin
   Path: plugins/primus_promiscuous
@@ -21,6 +22,7 @@ Library primus_promiscuous_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: enables the promiscuous mode of execution
   Modules: Primus_promiscuous_main
+  XMETAExtraLines: tags="primus, fuzz"
 
 Library primus_greedy_scheduler_plugin
   Path: plugins/primus_greedy
@@ -30,6 +32,7 @@ Library primus_greedy_scheduler_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: implements the greedy scheduling strategy
   Modules: Primus_greedy_main
+  XMETAExtraLines: tags="primus, scheduler"
 
 Library primus_round_robin_scheduler_plugin
   Path: plugins/primus_round_robin
@@ -39,6 +42,7 @@ Library primus_round_robin_scheduler_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: implements the round-robin scheduling strategy
   Modules: Primus_round_robin_main
+  XMETAExtraLines: tags="primus, scheduler"
 
 Library primus_exploring_scheduler_plugin
   Path: plugins/primus_exploring
@@ -48,6 +52,7 @@ Library primus_exploring_scheduler_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: implements the exploring scheduling strategy
   Modules: Primus_exploring_main
+  XMETAExtraLines: tags="primus, scheduler"
 
 Library primus_wandering_scheduler_plugin
   Path: plugins/primus_wandering
@@ -57,6 +62,7 @@ Library primus_wandering_scheduler_plugin
   BuildDepends: bap, bap-primus, core_kernel
   XMETADescription: implements the wandering scheduling strategy
   Modules: Primus_wandering_main
+  XMETAExtraLines: tags="primus, scheduler"
 
 Library primus_print_plugin
   Path: plugins/primus_print
@@ -66,6 +72,7 @@ Library primus_print_plugin
   BuildDepends: bap-primus
   XMETADescription: prints Primus states and observations
   Modules: Primus_print_main
+  XMETAExtraLines: tags="primus, printer"
 
 Library primus_propagate_taint_plugin
   Path: plugins/primus_propagate_taint
@@ -75,3 +82,4 @@ Library primus_propagate_taint_plugin
   BuildDepends: bap-primus
   XMETADescription: a taint propagation engine
   Modules: Primus_propagate_taint_main
+  XMETAExtraLines: tags="primus, taint, dataflow"
