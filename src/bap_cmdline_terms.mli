@@ -20,6 +20,7 @@ val load_path : string list Term.t
 val list_plugins : string list option Term.t
 val disable_plugin : string list Term.t
 val no_auto_load : bool Term.t
+val list_tags : bool Term.t
 
 val loader_options : string list
 val common_loader_options : Manpage.block list

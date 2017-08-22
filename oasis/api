@@ -20,4 +20,4 @@ Library api_plugin
   InternalModules:  Api_main, Api_config
   XMETADescription: add parameters to subroutines based on known API
   DataFiles:        api/c/*.h ($datadir/bap-api/c)
-  XMETAExtraLines:  tags="pass"
+  XMETAExtraLines:  tags="api, pass"

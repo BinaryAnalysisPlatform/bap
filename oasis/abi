@@ -18,4 +18,4 @@ Library abi_plugin
   BuildDepends:     bap, bap-abi
   InternalModules:  Abi_main
   XMETADescription: apply abi information to a project
-  XMETAExtraLines:  tags="pass"
+  XMETAExtraLines:  tags="abi, pass"
