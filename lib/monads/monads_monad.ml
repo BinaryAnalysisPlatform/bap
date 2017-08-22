@@ -1026,7 +1026,7 @@ module State = struct
       include Identifiable.Make(struct
           type t = int [@@deriving compare, bin_io, sexp]
           let hash = Int.hash
-          let module_name = "Monads.Std.Multi.Id"
+          let module_name = "Monads.Std.Monad.State.Multi.Id"
           let to_string = Int.to_string
           let of_string = Int.of_string
         end)
@@ -1375,7 +1375,7 @@ module Cont = struct
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
     type 'a r
-    val call : cc:(('a -> ('r,'e r) t) -> ('a,'e r) t) -> ('a,'e r) t
+    val call : f:(cc:('a -> ('r,'e r) t) -> ('a,'e r) t) -> ('a,'e r) t
   end
 
   module Makep(T : T1)(M : Monad.S) : Sp
@@ -1392,8 +1392,8 @@ module Cont = struct
       let lift m = cont @@ fun k -> m >>= k
       let bind m f = cont @@ fun k ->
         run m @@ fun x -> run (f x) k
-      let call ~cc = cont @@ fun k ->
-        run (cc (fun x -> cont @@ fun _ -> k x)) k
+      let call ~f = cont @@ fun k ->
+        run (f ~cc:(fun x -> cont @@ fun _ -> k x)) k
       let map = `Define_using_bind
     end
     include Base

@@ -171,12 +171,12 @@ module Make(M : Monad.S) = struct
 
   let fork () : unit c =
     current () >>= fun pid ->
-    C.call ~cc:(fun k -> store_curr k pid >>= fork_state >>= current) >>=
+    C.call ~f:(fun ~cc:k -> store_curr k pid >>= fork_state >>= current) >>=
     switch_state
 
   let switch id : unit c =
     current () >>= fun cid ->
-    C.call ~cc:(fun k ->
+    C.call ~f:(fun ~cc:k ->
         store_curr k cid >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->

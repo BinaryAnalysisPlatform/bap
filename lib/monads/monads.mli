@@ -62,8 +62,6 @@ open Core_kernel.Std
       {- {{!Std.Monad.Cont}Monad.Cont} a call/cc monad}
     }
 
-
-
     {2:intro Introduction}
 
     In this section we will provide a small introduction into the
@@ -95,7 +93,6 @@ open Core_kernel.Std
          return (x + y);
     v}
 
-
     However, we have one more generalization opportunity. The
     semicolon is a sequencing operator that has semantics that is
     usually defined by a programming language, and, typically, in
@@ -104,7 +101,6 @@ open Core_kernel.Std
     assign the result to [y]. However, what if we would like to
     parametrize our algorithm with a behavior of the semicolon
     and operators:
-
 
     {v
       algorithm ((return _), (_ := _ ; _)) ((_ + _), (f _)) a b ::=
@@ -134,7 +130,6 @@ open Core_kernel.Std
        {{!Std.Monad.Result}Monad.Result} provide a notion of partial
        computation with different representations of the bottom value.
 
-
     2. Nondeterminism: a computation may produce more than one value,
        in that case [v] will be bound several times, and [z] will be
        called for each possible value of
@@ -142,7 +137,6 @@ open Core_kernel.Std
        {{!Std.Monad.Seq}Monad.Seq} provide implementations of the
        nondeterministic monad with different representations of a
        sequence of values.
-
 
     3. Side-effects: [x] may produce an effect that changes the
        computation environment. We can subdivide effectful computation
@@ -164,7 +158,6 @@ open Core_kernel.Std
        computation to another, the continuation notion reifes the
        control flow of a computation and passes it to the consequent
        continuation as a state. See {{!Std.Monad.Cont}Monad.Cont}.
-
 
     {3 The OCaml representation of the monad signature}
 
@@ -204,7 +197,6 @@ open Core_kernel.Std
     code. Alternatively, you may try one of the syntax preprocessors
     that will introduce the so called do-notation, with the actual
     semicolon being overloaded.
-
 
     {2:conv Conventions}
 
@@ -262,20 +254,16 @@ module Std : sig
   *)
   module Monoid : sig
 
-
     (** The minimal monoid interface  *)
     module type Base = sig
       type t
 
-
       (** [zero] an element that is neutral to [plus]  *)
       val zero : t
-
 
       (** [plus x y] an associative operation.  *)
       val plus : t -> t -> t
     end
-
 
     (** The monoid interface *)
     module type S = sig
@@ -288,7 +276,6 @@ module Std : sig
       val (@@) : t -> t -> t
     end
 
-
     (** Make(Base) derives a monoid from its minimal definition  *)
     module Make(M : Base) : S with type t := M.t
 
@@ -297,7 +284,6 @@ module Std : sig
 
     (** Concretizes ['a list] to [T.t list]  *)
     module TList(T : T) : sig type t = T.t list end
-
 
     (** A {{!Std.Monoid.List}list monoid} that accumulates data in a
         reversed order. *)
@@ -308,7 +294,6 @@ module Std : sig
       module Make (T : T) : S with type t := TList(T).t
     end
 
-
     (** A monoid that accumulates data in a list.  *)
     module List : sig
 
@@ -317,20 +302,15 @@ module Std : sig
       module Make (T : T) : S with type t := TList(T).t
     end
 
-
     (** A monoid on strings. *)
     module String : S with type t = string
-
 
     (** A set monoind.  *)
     module Set : sig
 
-
       (** Derives a set monoind from the set [S].  *)
       module Make(S : Set.S) : S with type t := S.t
     end
-
-
 
     (** Provides monoids in the Z domain.
 
@@ -360,15 +340,11 @@ module Std : sig
     end
   end
 
-
   (** The Monad module.   *)
   module Monad : sig
 
-
-
     (** A parametric {{!Std.Monoid}monoid} *)
     module Plus : sig
-
 
       (** a monoid over an unary polymorphic type.  *)
       module type S = sig
@@ -393,7 +369,6 @@ module Std : sig
       end
     end
 
-
     (** A fail monad interface.
 
         Fail monads are used to represent partial computation. There
@@ -410,7 +385,6 @@ module Std : sig
         - {{!Std.Monad.Result.Exception.Make}Monad.Result.Exception.Make}
     *)
     module Fail : sig
-
 
       (** The unary fail monad interface.
 
@@ -429,11 +403,9 @@ module Std : sig
         (** a monad type  *)
         type 'a t
 
-
         (** [fail err] diverges the computation, possibly providing an
             extra information in a value of type [_ error].  *)
         val fail : _ error -> 'a t
-
 
         (** [catch m f] if [m] diverges with some bottom value [err],
             the [f err] is a result of the whole computation, otherwise
@@ -455,7 +427,6 @@ module Std : sig
             parameter of the [error] type. *)
         type ('a,'e) t
 
-
         (** [fail err] diverges the computation, possibly providing an
             extra information in a value of type ['e error].  *)
         val fail : 'e error -> ('a,'e) t
@@ -467,7 +438,7 @@ module Std : sig
       end
     end
 
-    (** A choice monad.
+    (** A choice monad interface.
 
         A choice monad is a monad with an exceptional control flow,
         akin to the [Fail] monad, except that it may not hold an
@@ -497,7 +468,6 @@ module Std : sig
     *)
     module Choice : sig
 
-
       (** The minimal choice interface for unary monad.  *)
       module type Basic = sig
         type 'a t
@@ -513,7 +483,6 @@ module Std : sig
       module type S = sig
         type 'a t
         include Basic with type 'a t := 'a t
-
 
         (** [accept x] accepts [x] as a result of computation. (Same
             as [pure x].  *)
@@ -577,7 +546,6 @@ module Std : sig
       module Make2(M : Basic2) : S2 with type ('a,'e) t := ('a,'e) M.t
     end
 
-
     (** Monad Transformer Interface.
 
         A monad transformer is a monad composition operator. There is
@@ -590,7 +558,6 @@ module Std : sig
         - {{!Std.Monad.Trans.S1}Monad.Trans.S} composes unary and binary monads;
         - {{!Std.Monad.Trans.S2}Monad.Trans.S} composes two binary monad;
 
-
         A composition of two monads denoted as [module M =
         Outer.Make(Inner)] can is a new monad [M] that has properties
         of both [Outer] and [Inner] (you visualize this composition as
@@ -601,7 +568,6 @@ module Std : sig
         monad transfomer defines differently.
     *)
     module Trans : sig
-
 
       (** Unary monad transformer.  *)
       module type S = sig
@@ -616,7 +582,6 @@ module Std : sig
         val run : 'a t -> 'a e
       end
 
-
       (** Unary to binary monad transfomer.  *)
       module type S1 = sig
         type ('a,'e) t
@@ -629,7 +594,6 @@ module Std : sig
         (** runs the computation  *)
         val run : ('a,'e) t -> ('a,'e) e
       end
-
 
       (** Binary to binary monad transfomer  *)
       module type S2 = sig
@@ -644,7 +608,6 @@ module Std : sig
         val run : ('a,'e) t -> ('a,'e) e
       end
     end
-
 
     (** Basic monad interface.  *)
     module type Basic = sig
@@ -662,10 +625,8 @@ module Std : sig
                 ]
     end
 
-
     (** Basic binary monad interface.  *)
     module type Basic2 = sig
-
 
       (** (a,e) t is a type of monad, where [a] is a type of
           computation values, and [e] is a type of some extra
@@ -676,15 +637,15 @@ module Std : sig
       (** [bind m f] passes the result of computation [m] to function [f] *)
       val bind : ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
 
-      (** [return x] creates a trivial compuation that results in [x]  *)
-      val return : 'a -> ('a, _) t
-
       (** map function can be derived from bind or provided explicitly  *)
       val map : [ `Define_using_bind
                 | `Custom of (('a, 'e) t -> f:('a -> 'b) -> ('b, 'e) t)
                 ]
-    end
 
+      (** [return x] creates a trivial compuation that results in [x]  *)
+      val return : 'a -> ('a, _) t
+
+    end
 
     (** Container interface in the Kleisli category.
 
@@ -695,7 +656,6 @@ module Std : sig
         As usuall, two interfaces are provided:
         -  {{!Std.Monad.Collection.S}Monad.Collection.S} for unary monad
         -  {{!Std.Monad.Collection.S2}Monad.Collection.S2} for binary monad
-
 
         The container interfaces can be derived for any collection
         that implements a base interface. In our case we have two
@@ -718,25 +678,20 @@ module Std : sig
         should be provided, especially in the case of infinite
         sequences.
 
-
     *)
     module Collection : sig
-
 
       (** Base signature for collections  *)
       module type Basic = sig
 
-
         (** [x t] a container that hold values of type [x]  *)
         type 'a t
-
 
         (** [return x] creates a singleton container holding [x]  *)
         val return : 'a -> 'a t
 
         include Plus.S   with type 'a t := 'a t
       end
-
 
       (** A container with an eager (regular) fold.  *)
       module type Eager = sig
@@ -746,11 +701,9 @@ module Std : sig
         val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
       end
 
-
       (** A container with a generic fold  *)
       module type Delay = sig
         include Basic
-
 
         (** [fold xs ~init:s ~f] a delayed fold implementation. It is
             the same as a regular [fold] except that function [f]
@@ -758,7 +711,6 @@ module Std : sig
             expression returns a continuation.*)
         val fold : 'a t -> init:'s -> f:('s -> 'a -> ('s -> 'r) -> 'r) -> (('s -> 'r) -> 'r)
       end
-
 
       (** A container interface for a binary monad.  *)
       module type S2 = sig
@@ -877,7 +829,6 @@ module Std : sig
         val filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
       end
 
-
       (** A container interface for an unary monad  *)
       module type S = sig
 
@@ -886,7 +837,6 @@ module Std : sig
 
         (** type of the container  *)
         type 'a t
-
 
         (** [all cs] perfoms all computations in [cs] and returns a
             list of results in the same order. The order of
@@ -995,10 +945,8 @@ module Std : sig
       end
     end
 
-
     (** Describes monadic operators.   *)
     module Syntax : sig
-
 
       (** Operators for an unary monad.  *)
       module type S = sig
@@ -1065,37 +1013,28 @@ module Std : sig
       end
     end
 
-
     (** An unary monad interface.  *)
     module type S = sig
       type 'a t
 
-
       (** [void m] computes [m] and discrards the result.  *)
       val void : 'a t -> unit t
-
 
       (** [sequence xs] computes a sequence of computations [xs] in
           the left to right order.  *)
       val sequence : unit t list -> unit t
 
-
       (** [forever xs] creates a computationt that never returns.  *)
       val forever : 'a t -> 'b t
-
-
 
       (** Various function combinators lifted into the Kleisli category.  *)
       module Fn : sig
 
-
         (** [id x] a monadic identity function  *)
         val id : 'a -> 'a t
 
-
         (** [ignore m] computes [m] and discards the result.  *)
         val ignore : 'a t -> unit t
-
 
         (** [nothing] is a computation that does nothing.   *)
         val nothing : unit -> unit t
@@ -1103,18 +1042,15 @@ module Std : sig
         (** [non f] returns a negation of the function [f].  *)
         val non : ('a -> bool t) -> ('a -> bool t)
 
-
         (** [apply_n_times ~n f] creates a chaing of computation of
             size [n] made from applications of the same function to its
             own result.  *)
         val apply_n_times : n:int -> ('a -> 'a t) -> 'a -> 'a t
 
-
         (** [compose f g] creates a composition [f.g] of two
             function.  *)
         val compose : ('b -> 'c t) -> ('a -> 'b t) -> ('a -> 'c t)
       end
-
 
       (** The pair interface lifted into the monad.  *)
       module Pair : sig
@@ -1125,7 +1061,6 @@ module Std : sig
         (** [snd (x,y)] computes [y]  *)
         val snd: ('a * 'b) t -> 'b t
       end
-
 
       (** The triple interface lifted into a monad.   *)
       module Triple : sig
@@ -1140,7 +1075,6 @@ module Std : sig
         val trd : ('a * 'b * 'c) t -> 'c t
       end
 
-
       (** Lifts functions into the monad.
 
           A function that operates on values can be mapped to a
@@ -1153,7 +1087,6 @@ module Std : sig
 
         (** [unary f] lifts [f] *)
         val unary   : ('a -> 'b) -> ('a t -> 'b t)
-
 
         (** [binary f] lifts [f] *)
         val binary  : ('a -> 'b -> 'c) -> ('a t -> 'b t -> 'c t)
@@ -1168,10 +1101,8 @@ module Std : sig
         val quinary : ('a -> 'b -> 'c -> 'd -> 'e -> 'f) -> ('a t -> 'b t -> 'c t -> 'd t -> 'e t -> 'f t)
       end
 
-
       (** Interacting between monads and language exceptions  *)
       module Exn : sig
-
 
         (** [expect ?finally ~f ~catch] evaluates [f ()], if an
             exception [e] is raised during the evaluation (or call)
@@ -1182,53 +1113,46 @@ module Std : sig
         val expect : ?finally:(unit -> unit t) -> f:(unit -> 'a t) -> catch:(exn -> 'a t) -> 'a t
       end
 
-
       (** Lifts collection interface into the monad.
 
           This module provides two functors that take a basic
           collection interface and provide the
-          {{!Std.Monad.Container.S}Monad.Container.S} interface.
+          {{!Std.Monad.Collection.S}Monad.Collection.S} interface.
 
-          See {{!Std.Monad.Container}Monad.Container} for more
+          See {{!Std.Monad.Collection}Monad.Collection} for more
           information. *)
       module Collection : sig
         module type S = Collection.S with type 'a m := 'a t
 
-
         (** [Eager(C)] derives
-            {{!Std.Monad.Container.S}Monad.Container.S} for container
+            {{!Std.Monad.Collection.S}Monad.Collection.S} for container
             [C] *)
         module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
 
-
         (** [Delay(C)] derives
-            {{!Std.Monad.Container.S}Monad.Container.S} for container
+            {{!Std.Monad.Collection.S}Monad.Collection.S} for container
             [C] *)
         module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
       end
 
-
-      (** The {{!Std.Monad.Container.S}Monad.Container.S} interface
+      (** The {{!Std.Monad.Collection.S}Monad.Collection.S} interface
             for lists *)
       module List : Collection.S with type 'a t := 'a list
 
-      (** The {{!Std.Monad.Container.S}Monad.Container.S} interface
+      (** The {{!Std.Monad.Collection.S}Monad.Collection.S} interface
             for sequences *)
       module Seq : Collection.S with type 'a t := 'a Sequence.t
-
 
       include Syntax.S with type 'a t := 'a t
       include Monad.S with type 'a t := 'a t
 
-
       (** Monadic operators, see
-          {{!Std.Monads.Monad.Syntax.S}Monad.Syntax.S} for more.  *)
+          {{!Std.Monad.Syntax.S}Monad.Syntax.S} for more.  *)
       module Syntax : Syntax.S with type 'a t := 'a t
     end
 
     module type S2 = sig
       type ('a,'e) t
-
 
       (** [void m] computes [m] and discrards the result.  *)
       val void : ('a,'e) t -> (unit,'e) t
@@ -1239,8 +1163,6 @@ module Std : sig
 
       (** [forever xs] creates a computationt that never returns.  *)
       val forever : ('a,'e) t -> ('b,'e) t
-
-
 
       (** Various function combinators lifted into the Kleisli category.  *)
       module Fn : sig
@@ -1267,18 +1189,15 @@ module Std : sig
         val compose : ('b -> ('c,'e) t) -> ('a -> ('b,'e) t) -> ('a -> ('c,'e) t)
       end
 
-
       (** The pair interface lifted into the monad.  *)
       module Pair : sig
 
         (** [fst (x,y)] computes [x]  *)
         val fst: (('a * 'b),'e) t -> ('a,'e) t
 
-
         (** [snd (x,y)] computes [y]  *)
         val snd: (('a * 'b),'e) t -> ('b,'e) t
       end
-
 
       (** The triple interface lifted into a monad.   *)
       module Triple : sig
@@ -1292,7 +1211,6 @@ module Std : sig
         (** [trd (x,y,z)] computes [z]  *)
         val trd : (('a * 'b * 'c),'e) t -> ('c,'e) t
       end
-
 
       (** Lifts functions into the monad.
 
@@ -1321,7 +1239,6 @@ module Std : sig
           (('a,'s) t -> ('b,'s) t -> ('c,'s) t -> ('d,'s) t -> ('e,'s) t -> ('f,'s) t)
       end
 
-
       (** Interacting between monads and language exceptions  *)
       module Exn : sig
 
@@ -1341,51 +1258,45 @@ module Std : sig
 
           This module provides two functors that take a basic
           collection interface and provide the
-          {{!Std.Monad.Container.S2}Monad.Container.S2} interface.
+          {{!Std.Monad.Collection.S2}Monad.Collection.S2} interface.
 
-          See {{!Std.Monad.Container}Monad.Container} for more
+          See {{!Std.Monad.Collection}Monad.Collection} for more
           information. *)
       module Collection : sig
         module type S = Collection.S2 with type ('a,'e) m := ('a,'e) t
 
         (** [Eager(C)] derives
-            {{!Std.Monad.Container.S2}Monad.Container.S2} for container
+            {{!Std.Monad.Collection.S2}Monad.Collection.S2} for container
             [C] *)
         module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
 
         (** [Delay(C)] derives
-            {{!Std.Monad.Container.S2}Monad.Container.S2} for container
+            {{!Std.Monad.Collection.S2}Monad.Collection.S2} for container
             [C] *)
         module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
       end
 
-
-      (** The {{!Std.Monad.Container.S2}Monad.Container.S2} interface
+      (** The {{!Std.Monad.Collection.S2}Monad.Collection.S2} interface
             for lists *)
       module List : Collection.S with type 'a t := 'a list
 
-      (** The {{!Std.Monad.Container.S2}Monad.Container.S2} interface
+      (** The {{!Std.Monad.Collection.S2}Monad.Collection.S2} interface
             for sequences *)
       module Seq : Collection.S with type 'a t := 'a Sequence.t
-
 
       include Syntax.S2 with type ('a,'e) t := ('a,'e) t
       include Monad.S2 with type ('a,'e) t := ('a,'e) t
 
       (** Monadic operators, see
-          {{!Std.Monads.Monad.Syntax.S2}Monad.Syntax.S2} for more.  *)
+          {{!Std.Monad.Syntax.S2}Monad.Syntax.S2} for more.  *)
       module Syntax : Syntax.S2 with type ('a,'e) t := ('a,'e) t
     end
-
 
     (** Reexports Core's [Monad.S] as [Monads.Core] *)
     module type Core = Monad.S
 
-
     (** Reexports Core's [Monad.S2] as [Monads.Core2] *)
     module type Core2 = Monad.S2
-
-
 
     (** The Minimal monad interface.  *)
     module type Minimal = sig
@@ -1428,7 +1339,6 @@ module Std : sig
     module type Monad = S
     module type Monad2 = S2
 
-
     (** The identity monad.
 
         The identity monad represents a computation that has the same
@@ -1440,7 +1350,6 @@ module Std : sig
     *)
     module Ident : Monad with type 'a t = 'a
 
-
     (** The option aka Maybe monad.
 
         This monad can be used to denote partial computations or
@@ -1448,7 +1357,6 @@ module Std : sig
         absence of result, i.e., the bottom value, can be considered
         as a posible outcome. *)
     module Option : sig
-
 
       (** The unary option monad.  *)
       module type S = sig
@@ -1459,7 +1367,6 @@ module Std : sig
         include Fail.S    with type 'a t := 'a t
                            and type 'a error = unit
       end
-
 
       (** The binary option monad  *)
       module type S2 = sig
@@ -1487,7 +1394,6 @@ module Std : sig
         type ('a,'e) e = ('a,'e) t
       end
 
-
       (** [Make(M)] composes the option monad with the monad [M].   *)
       module Make(M : Monad) :
         S with type 'a m := 'a T1(M).m
@@ -1500,7 +1406,6 @@ module Std : sig
             and type ('a,'e) m := ('a,'e) T2(M).m
             and type ('a,'e) e := ('a,'e) T2(M).e
     end
-
 
     (** The Result Monad.
 
@@ -1520,7 +1425,6 @@ module Std : sig
       type ('a,'e) result = ('a,'e) Result.t =
         | Ok of 'a
         | Error of 'e
-
 
       module type S = sig
         type err
@@ -1548,7 +1452,6 @@ module Std : sig
         type ('a,'e) e = ('a,'e) result m
       end
 
-
       (** [Make(E)(M)] concretized the type of error to [E.t] and
           composes the Result monad with the monad [M]. *)
       module Make(T : T)(M : Monad) : S
@@ -1557,13 +1460,11 @@ module Std : sig
          and type 'a e := 'a T1(T)(M).e
          and type err := T.t
 
-
       (** [Make2(M)] composes the result monad with the monad [M].  *)
       module Make2(M : Monad) : S2
         with type ('a,'e) t := ('a,'e) T2(M).t
          and type 'a m     := 'a     T2(M).m
          and type ('a,'e) e := ('a,'e) T2(M).e
-
 
       (** The Error monad.
 
@@ -1580,13 +1481,11 @@ module Std : sig
           val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
         end
 
-
         module T(M : Monad) : sig
           type 'a m = 'a M.t
           type 'a t = 'a Or_error.t m
           type 'a e = 'a Or_error.t m
         end
-
 
         (** [Make(M)] wraps [M] into the [Error] monad.  *)
         module Make(M : Monad) : S
@@ -1600,7 +1499,6 @@ module Std : sig
                    and type 'a e = 'a Or_error.t
                    and type err := Error.t
       end
-
 
       (** The Exception monad.
 
@@ -1625,7 +1523,6 @@ module Std : sig
            and type err := exn
       end
     end
-
 
     (** The List monad.
 
@@ -1656,7 +1553,6 @@ module Std : sig
         type 'a e = 'a t
       end
 
-
       (** [Make(M)] composes the List monad with [M]  *)
       module Make(M: Monad)
         : S with type 'a m := 'a T1(M).m
@@ -1675,7 +1571,6 @@ module Std : sig
               and type ('a,'e) t := ('a,'e) T2(M).t
               and type ('a,'e) e := ('a,'e) T2(M).e
     end
-
 
     (** The Sequence monad.
 
@@ -1724,7 +1619,6 @@ module Std : sig
               and type ('a,'e) e := ('a,'e) T2(M).e
     end
 
-
     (** The Writer monad.
 
         The writer monad denotes a simple effectful computations. The
@@ -1735,11 +1629,9 @@ module Std : sig
     module Writer : sig
       module type S = sig
 
-
         (** type representing the system state (enironment)  *)
         type state
         include Trans.S
-
 
         (** [write s] add [s] to the current state  *)
         val write : state -> unit t
@@ -1747,11 +1639,9 @@ module Std : sig
         (** [read m] reads the current state of computation [m]  *)
         val read : 'a t -> state t
 
-
         (** [listen m] reads both the computation result and the
             current state.  *)
         val listen : 'a t -> ('a * state) t
-
 
         (** [exec m] executes computation [m] and reads the state  *)
         val exec : unit t -> state m
@@ -1766,7 +1656,6 @@ module Std : sig
         type 'a t = ('a,state) writer m
         type 'a e = ('a * state) m
       end
-
 
       (** Make(Sum)(M) constructs a reader that uses [Sum.t] type as a
           state accumulator and composes the Writer with the monad
@@ -1790,7 +1679,6 @@ module Std : sig
         be to use the Reader monad to pass command line arguments and
         program configuration.  *)
     module Reader : sig
-
 
       (** The reader monad interface with the environment type fixed
           on the module level.  *)
@@ -1817,7 +1705,6 @@ module Std : sig
         include Monad2 with type ('a,'e) t := ('a,'e) t
       end
 
-
       (** an abstract type of reader computations  *)
       type ('a,'b) reader
 
@@ -1838,7 +1725,6 @@ module Std : sig
         type ('a,'e) e = 'e -> 'a m
       end
 
-
       (** [Make(Env)(M)] concretizes the environment type to [Env.t]
           and composes the Reader monad with [M]. *)
       module Make(T : T)(M : Monad): S
@@ -1853,8 +1739,6 @@ module Std : sig
          and type 'a m     := 'a     T2(M).m
          and type ('a,'e) e := ('a,'e) T2(M).e
     end
-
-
 
     (** The State Monad.
 
@@ -1871,16 +1755,13 @@ module Std : sig
   *)
     module State : sig
 
-
       (** an abstract storage  *)
       type ('a,'e) storage
-
 
       (** an abstract type of stateful computations. The type variable
           ['a] denotes types of values and the type variable ['e] denotes a
           type of the state (aka envionment, aka world).  *)
       type ('a,'e) state
-
 
       (** The State Monad interface with a fixed environment.   *)
       module type S = sig
@@ -1898,7 +1779,6 @@ module Std : sig
 
         (** [gets p] projects the current state with the function [p]  *)
         val gets : (env -> 'r) -> 'r t
-
 
         (** [update f] updates the current state with the function [f]  *)
         val update : (env -> env) -> unit t
@@ -1920,7 +1800,6 @@ module Std : sig
         val update : ('s -> 's) -> (unit,'s) t
       end
 
-
       (** The Multi State monad.
 
           The multi state monad is a generalization of a state monad
@@ -1937,7 +1816,6 @@ module Std : sig
           called being a parent of a newly forked state. The initial
           state, called the global state is an ancestor of all
           states.
-
 
       *)
       module Multi : sig
@@ -1957,13 +1835,11 @@ module Std : sig
 
           module Id : Identifiable.S with type t = id
 
-
           (** the identifier of the global (initial) state.  *)
           val global : id
 
           (** [fork ()] forks the current state.  *)
           val fork : unit -> unit t
-
 
           (** [switch id] switches to the state with the given [id] if
               such state is alive, otherwise switches to the closest
@@ -1973,25 +1849,20 @@ module Std : sig
           (** [parent ()] returns an identifier of the closest alive parent.  *)
           val parent : unit -> id t
 
-
           (** [ancestor ids] returns an identifier of the closest
               common ancestor of states with the given identifiers. *)
           val ancestor : id list -> id t
 
-
           (** [current id] returns an identifier of current state.  *)
           val current : unit -> id t
 
-
           (** [kill id] kills a state with the specified [id]. If [id]
               corresponds to the current state, then switches to the
-              closest ancestor.  *)
+              closest ancestor.  If [id = global] then do nothing.*)
           val kill : id -> unit t
-
 
           (** [forks xs] returns a sequence of all alive states  *)
           val forks : unit -> id Sequence.t t
-
 
           (** [status id] returns a status of a state with the given [id]  *)
           val status : id -> status t
@@ -2007,16 +1878,36 @@ module Std : sig
 
           module Id : Identifiable.S with type t = id
 
-
+          (** the identifier of the global (initial) state.  *)
           val global : id
 
+          (** [fork ()] forks the current state.  *)
           val fork : unit -> (unit,'e) t
+
+          (** [switch id] switches to the state with the given [id] if
+              such state is alive, otherwise switches to the closest
+              alive ancestor of the state with the given [id] *)
           val switch : id -> (unit,'e) t
+
+          (** [parent ()] returns an identifier of the closest alive parent.  *)
           val parent : unit -> (id,'e) t
+
+          (** [ancestor ids] returns an identifier of the closest
+              common ancestor of states with the given identifiers. *)
           val ancestor : id list -> (id,'e) t
+
+          (** [current id] returns an identifier of current state.  *)
           val current : unit -> (id,'e) t
+
+          (** [kill id] kills a state with the specified [id]. If [id]
+              corresponds to the current state, then switches to the
+              closest ancestor.  If [id = global] then do nothing.*)
           val kill : id -> (unit,'e) t
+
+          (** [forks xs] returns a sequence of all alive states  *)
           val forks : unit -> (id Sequence.t,'e) t
+
+          (** [status id] returns a status of a state with the given [id]  *)
           val status : id -> (status,'e) t
 
           include S2 with type ('a,'e) t := ('a,'e) t
@@ -2057,9 +1948,13 @@ module Std : sig
                   and type 'a m = 'a
                   and type ('a,'e) e = 'e -> ('a * 'e)
 
+      (** [eval m] is the same as [run m >>| fst], i.e., it runs the
+          computation and returns the computed value.  *)
       val eval : ('a,'e) t -> 'e -> 'a
-      val exec : ('a,'e) t -> 'e -> 'e
 
+      (** [exec m] is the same as [run m >>| snd], i.e., it runs the
+          computation and returns the final state.  *)
+      val exec : ('a,'e) t -> 'e -> 'e
 
       module T1(T : T)(M : Monad) : sig
         type env = T.t
@@ -2086,6 +1981,15 @@ module Std : sig
          and type ('a,'e) e := ('a,'e) T2(M).e
     end
 
+    (** The Function Monad.
+
+        The function monad delays the computation until it is actually
+        run. This is not the only monad that has such behavior, i.e.,
+        State, Cont, Lazy, and Reader monads are also delayed, but
+        they all have other additional behaviors on top of the
+        delaying the computation. The function monad can be seen as a
+        Reader monad with [unit] environment, or as a Lazy monad
+        without the memoization. *)
     module Fun : sig
       module type S = sig
         include Trans.S
@@ -2097,6 +2001,8 @@ module Std : sig
         include Monad2 with type ('a,'e) t := ('a,'e) t
       end
 
+      (** A function monad computation is a thunk that returns a value
+          of type ['a]. *)
       type 'a thunk
 
       include S with type 'a t = 'a thunk
@@ -2126,6 +2032,12 @@ module Std : sig
          and type ('a,'e) e := ('a,'e) T2(M).e
     end
 
+    (** The Lazy monad.
+
+        The lazy monad implements a call-by-need evaluation
+        strategy. The computation is delayed until it is run. It uses
+        OCaml built in lazy computations to implement memoization.
+  *)
     module Lazy : sig
       module type S = sig
         include Trans.S
@@ -2140,6 +2052,7 @@ module Std : sig
       include S with type 'a t = 'a Lazy.t
                  and type 'a m = 'a
                  and type 'a e = 'a
+
       module T1(M : Monad) : sig
         type 'a m = 'a M.t
         type 'a t = 'a m Lazy.t
@@ -2150,7 +2063,6 @@ module Std : sig
         with type 'a t := 'a T1(M).t
          and type 'a m := 'a T1(M).m
          and type 'a e := 'a T1(M).e
-
 
       module T2(M : Monad2) : sig
         type ('a,'e) m = ('a,'e) M.t
@@ -2164,24 +2076,69 @@ module Std : sig
          and type ('a,'e) e := ('a,'e) T2(M).e
     end
 
+    (** The continuation monad.
+
+        The continuation monad reifies computations by making them
+        available as first class values. A continuation encapsulates
+        an evaluation context of a host language (OCaml in our
+        case). The continuation monad behaves like it is a function
+        monad, except that it provides the [call/cc] operator. The
+        [call/cc] operator calls a user provided function with a
+        current continuaton. This continuation can be stored in a
+        state (i.e., if the Continuation monad is composed with the
+        State monad) and later resumed. It may also be used to
+        implement various control structures, i.e., exceptions or
+        coroutines.
+
+        The same as with the state monad we provide two interfaces,
+        one with the type of final result of the computation is fixed
+        on the module level, and another where it is a type variable.
+
+    *)
     module Cont : sig
+
+      (** The unary monad interface  *)
       module type S = sig
         include Trans.S
         include Monad with type 'a t := 'a t
+
+        (** type of the final result of computation  *)
         type  r
-        val call : cc:(('a -> _ t) -> 'a t) -> 'a t
+
+        (** [call ~f] calls [f ~cc] with the current continuation [cc].
+
+            The [call ~f] computation may be computed more than
+            once, i.e., it would be resumed every time the
+            continuation is invoked. The captured continuation
+            represents the computation around the [call]. Thus
+            invoking this computation will effectively escape the [f]
+            function (discarding the consequent computations) and
+            continue with a computation that follows the [call]. The
+            continuation is multi-shot, in the sense that it can be
+            called (resumed) multiple times (or not called at all). Every
+            time it is called, the computation will resume at the same
+            point, thus a computation that contains the [call] can be
+            seen as a reenterable computation, and the [call] itself
+            marks the entry point, and the continuation acts like a
+            key that allows any computation that has it to reenter the
+            subroutine at this point.  *)
+        val call : f:(cc:('a -> _ t) -> 'a t) -> 'a t
       end
 
+      (** The binary monad interface.  *)
       module type S2 = sig
         include Trans.S1
         include Monad2 with type ('a,'e) t := ('a,'e) t
-        val call : cc:(('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
+        val call : f:(cc:('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
       end
+
+      (** type of continuation monads  *)
       type ('a,'r) cont
 
       include S2 with type ('a,'r) t = ('a,'r) cont
                   and type 'a m = 'a
                   and type ('a,'e) e = ('a -> 'e) -> 'e
+
       module T1(T : T)(M : Monad) : sig
         type r = T.t
         type 'a m = 'a M.t
@@ -2195,12 +2152,15 @@ module Std : sig
         type ('a,'e) e = ('a -> 'e m) -> 'e m
       end
 
+      (** [Make(T)(M)] wraps the monad [M] into the continuation monad
+          and fix the type of the whole computation to [T.t] *)
       module Make(T : T)(M : Monad): S
         with type 'a t := 'a T1(T)(M).t
          and type 'a m := 'a T1(T)(M).m
          and type 'a e := 'a T1(T)(M).e
          and type r := T.t
 
+      (** [Make2(M)] wrapes the monad [M] into the continuation monad.  *)
       module Make2(M : Monad) : S2
         with type ('a,'e) t := ('a,'e) T2(M).t
          and type 'a m     := 'a     T2(M).m

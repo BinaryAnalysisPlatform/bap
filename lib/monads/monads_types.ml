@@ -384,8 +384,6 @@ module Writer = struct
     val read : 'a t -> state t
     val listen : 'a t -> ('a * state) t
     val exec : unit t -> state m
-    val ignore : 'a t -> unit t
-    val lift : 'a m -> 'a t
     include Monad.S with type 'a t := 'a t
   end
 
@@ -396,7 +394,6 @@ module Writer = struct
     val read : ('a,'e) t -> (state,'e) t
     val listen : ('a,'e) t -> (('a * state),'e) t
     val exec : (unit,'e) t -> (state,'e) m
-    val ignore : ('a,'e) t -> (unit,'e) t
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
   end
 end
@@ -427,7 +424,6 @@ module State = struct
     val get : unit -> env t
     val gets : (env -> 'r) -> 'r t
     val update : (env -> env) -> unit t
-    val modify : 'a t -> (env -> env) -> 'a t
   end
 
   module type S2 = sig
@@ -437,7 +433,6 @@ module State = struct
     val get : unit -> ('s,'s) t
     val gets : ('s -> 'r) -> ('r,'s) t
     val update : ('s -> 's) -> (unit,'s) t
-    val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
   end
 end
 
@@ -524,12 +519,12 @@ module Cont = struct
     include Trans.S
     include Monad.S with type 'a t := 'a t
     type  r
-    val call : cc:(('a -> _ t) -> 'a t) -> 'a t
+    val call : f:(cc:('a -> _ t) -> 'a t) -> 'a t
   end
 
   module type S2 = sig
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
-    val call : cc:(('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
+    val call : f:(cc:('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
   end
 end
