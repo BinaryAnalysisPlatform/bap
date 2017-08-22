@@ -9,7 +9,6 @@ open Bap_future.Std
 module Std : sig
   (** {2 Overview}
 
-
       {3 Layered Architecture}
 
       The BAP library has the layered architecture consisting of four
@@ -48,7 +47,6 @@ module Std : sig
         +-----------------------------------------------------+
       v}
 
-
       The {{!bfl}Foundation library} defines {{!Bil}BAP Instruction
       language} data types, as well as other useful data structures,
       like {!Value}, {!Trie}, {!Vector}, etc. The
@@ -81,7 +79,6 @@ module Std : sig
       principle, can define their own extension points, so the
       following set is not complete):
 
-
       - loader - add new file formats (see {!Image.register_backend} or {!Project.Input});
       - target - add new architecture (see {!register_target});
       - disassembler - plug in a disassembler (see 'disasm.hpp' for c++ disassembler interface);
@@ -93,7 +90,6 @@ module Std : sig
         {!Reconstructor});
       - analysis - write your own arbitrary analysis pass (see
         {!Project.register_pass})
-
 
       The {!Regular.Std} library, that forms a foundation for the BAP
       Standard Library, also follows the dependency injection
@@ -142,7 +138,6 @@ module Std : sig
       - {{!Vector}vector} - an array that can grow;
       - {{!Trie}Trie} - prefix trees;
 
-
       Most of the types implement the {{!Regular.Std.Regular.S}Regular}
       interface. This interface is very similar to Core's
       [Identifiable], and is supposed to represent a type that is as
@@ -184,7 +179,6 @@ module Std : sig
       steroids. Not only they maybe extended, but they also can be
       serialized, compared with user-defined comparison function and
       even pretty printed.
-
 
       {3:dict Dict}
 
@@ -234,7 +228,6 @@ module Std : sig
       objects. In order to add new loader, one should implement the
       {{!Backend}Backend.t} loader function and register it with the
       {{!Image.register_backend}Image.register_backend} function. *)
-
 
   (** {2:disasm Disassembler}
 
@@ -291,7 +284,6 @@ module Std : sig
         +-----------------+
       v}
 
-
       A disassembled program is represented as a set of interconnected
       {{!Block}basic blocks}, called a whole program control flow
       graph (CFG) and it is indeed represented as a graph
@@ -336,7 +328,6 @@ module Std : sig
       express richer relationships between program terms and it also
       easier to use for most use cases, especially for data dependency
       analysis.
-
 
       The program in IR is build of terms. In fact the program itself
       is also a term. There're only 7 kinds of terms:
@@ -503,7 +494,6 @@ module Std : sig
       from a binary format that contains segments, then the
       corresponding memory regions are be marked. Segments provide
       access to permission information.  *)
-
 
   (** {1:api BAP API}  *)
 
@@ -684,8 +674,6 @@ module Std : sig
   (** type abbreviation for ['a Sequence.t]  *)
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
-
-
   (** Constructs a trie  *)
   module Trie : sig
 
@@ -713,7 +701,6 @@ module Std : sig
           If nothing efficient came to mind, just use [Hashtbl.hash]. *)
       val token_hash : token -> int
     end
-
 
     (** Prefix trie interface.
 
@@ -779,7 +766,6 @@ module Std : sig
           integers.  *)
       val pp : 'a printer -> 'a t printer
     end
-
 
     (** Create a trie for a given [Key]  *)
     module Make(Key : Key) : S with type key = Key.t
@@ -880,8 +866,6 @@ module Std : sig
   type addr_size = [ `r32 | `r64 ] Size.p
   [@@deriving bin_io, compare, sexp]
 
-
-
   (** Bitvector -- an integer with modular arithmentics.
 
       {2 Overview }
@@ -957,7 +941,7 @@ module Std : sig
       following (in EBNF):
       {[
         repr  = [sign], [base], digit, {digit}, ":", size, [kind]
-        sign  = "+" | "-";
+          sign  = "+" | "-";
         base  = "0x" | "0b" | "0o";
         size  = dec, {dec};
         digit = dec | oct | hex;
@@ -1129,7 +1113,6 @@ module Std : sig
         ]} *)
     val pp_oct : t printer
 
-
     (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1) format omitting
         suffixes, and the prefix if it is not necessary.
         Example,
@@ -1184,7 +1167,6 @@ module Std : sig
     *)
     val pp_oct : t printer
 
-
     (** [printf "%a" pp_bin x] prints [x] in the binary (0 and 1)
         format omitting suffixes, and the prefix if it is not necessary.
         Example,
@@ -1206,7 +1188,7 @@ module Std : sig
         {[
           # printf "%a\n" pp_hex_full (Word.of_int32 0xDEADBEEFl);;
           0xDEADBEEF:32u
-          # printf "%a\n" pp_hex_full (Word.of_int32 0x1);;
+                       # printf "%a\n" pp_hex_full (Word.of_int32 0x1);;
           1:32u
         ]} *)
     val pp_hex_full : t printer
@@ -1218,7 +1200,7 @@ module Std : sig
         {[
           # printf "%a\n" pp_dec_full (Word.of_int32 0xDEADBEEFl);;
           3735928559:32u
-          # printf "%a\n" pp_dec_full (Word.of_int32 0x1);;
+                       # printf "%a\n" pp_dec_full (Word.of_int32 0x1);;
           1:32u
         ]}
         @since 1.3
@@ -1232,11 +1214,10 @@ module Std : sig
         {[
           # printf "%a\n" pp_oct_full (Word.of_int32 0xDEADBEEFl);;
           0o33653337357:32u
-          # printf "%a\n" pp_oct_full (Word.of_int32 0x1);;
+                          # printf "%a\n" pp_oct_full (Word.of_int32 0x1);;
           1:32u
         ]} *)
     val pp_oct_full : t printer
-
 
     (** [printf "%a" pp_bin_full x] prints [x] in the binary (0 and 1)
         format omitting suffixes, and the prefix if it is necessary.
@@ -1245,7 +1226,7 @@ module Std : sig
         {[
           # printf "%a\n" pp_bin_full (Word.of_int32 0xDEADBEEFl);;
           0b11011110101011011011111011101111:32u
-          # printf "%a\n" pp_bin_full (Word.of_int32 0x1);;
+                                               # printf "%a\n" pp_bin_full (Word.of_int32 0x1);;
           1:32u
         ]} *)
     val pp_bin_full : t printer
@@ -1381,7 +1362,6 @@ module Std : sig
         is always a power of [8].  *)
     val enum_bits  : t -> endian -> bool seq
 
-
     (** {3 Comparison with zero}
 
         Note, we're not including [With_zero] interface, since
@@ -1413,11 +1393,9 @@ module Std : sig
         is a contradiction if [x] is not signed.  *)
     val is_negative     : t -> bool
 
-
     (** [is_non_positive x] is true if [x] is less than zero. It is a
         contradiction if [x] is not signed.  *)
     val is_non_positive : t -> bool
-
 
     (** {2 Arithmetic raised into [Or_error] monad }
 
@@ -1436,7 +1414,6 @@ module Std : sig
 
         [Z.(!$v1 + !$v2 / !$v3)]. *)
     module Int_err : sig
-
 
       (** [!$v] lifts [v] to an Or_error monad. It is, essentially, the
           same as [Ok v] *)
@@ -1470,7 +1447,6 @@ module Std : sig
           [w], i.e. either [i64] or [i32]  *)
       val of_word_size : Word_size.t -> t -> t Or_error.t
 
-
       include Integer.S with type t = t Or_error.t
       include Legacy.Monad.Infix with type 'a t := 'a Or_error.t
     end
@@ -1482,7 +1458,6 @@ module Std : sig
         [Width] exception if operands sizes mismatch.
     *)
     module Int_exn : Integer.S with type t = t
-
 
     (** Arithmentic operations that doesn't check the widths.*)
     module Unsafe  : Integer.S with type t = t
@@ -1555,7 +1530,6 @@ module Std : sig
     val memref : ?disp:int -> ?index:int -> ?scale:size -> addr -> addr
   end
 
-
   (** Main BIL module.
 
       The module specifies Binary Instruction Language (BIL). A language to
@@ -1584,7 +1558,6 @@ module Std : sig
       [let i32 x = Bil.int (Word.of_int ~width:32 x)]
       and [v,r,s] are some variables of type [var]; and
       [src, dst] are expressions of type [exp].
-
 
       @see
       <https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf>
@@ -1679,32 +1652,26 @@ module Std : sig
   include Printable.S with type t := t
   include Data.S      with type t := t
 
-
   (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
   val pp_binop : binop printer
-
 
   (** [printf "%a" pp_unop op] prints an unary operation [op] *)
   val pp_unop : unop printer
 
-
   (** [printf "%a" pp_cast t] prints a cast type [t]
       @since 1.3
-*)
+  *)
   val pp_cast : cast printer
-
 
   (** [string_of_binop op] is a textual representation of [op].
       @since 1.3
   *)
   val string_of_binop : binop -> string
 
-
   (** [string_of_unop op] is a textual representation of [op].
       @since 1.3
   *)
   val string_of_unop : unop -> string
-
 
   (** [string_of_cast t] is a textual representation of a cast type
       @since 1.3
@@ -1784,7 +1751,6 @@ module Std : sig
     val ( >= )   : exp -> exp -> exp
 
     (** {3 Signed comparison}  *)
-
 
     (** [x <$ x -> Binop(SLT,x,y)]  *)
     val ( <$ )  : exp -> exp -> exp
@@ -2011,7 +1977,6 @@ module Std : sig
       cycle. *)
   val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
 
-
   (** Maps BIL operators to bitvectors.
       @since 1.3
   *)
@@ -2022,12 +1987,10 @@ module Std : sig
         precondition: the expression [BinOp(op,Int x,Int y)] shall be well-typed.*)
     val binop : binop -> word -> word -> word
 
-
     (** [unop op x] applies the unary operation [op] to [x].
         precondition: the expression [Unop(op,Int x)] shall be
         well-typed.     *)
     val unop : unop -> word -> word
-
 
     (** [cast t s x] casts [x] using the cast type [t] to the given
         size [s].
@@ -2057,7 +2020,6 @@ module Std : sig
     method save : addr -> word -> 's
   end
 
-
   (** Predefined storage classes  *)
   module Storage : sig
     (** linear storage literally implements operational
@@ -2072,7 +2034,6 @@ module Std : sig
         update method. *)
     class sparse : storage
   end
-
 
   (** Value of a result.
       We slightly diverge from an operational semantics by allowing
@@ -2159,7 +2120,6 @@ module Std : sig
     module Id : sig
       include Regular.S with type t = id
 
-
       (** [zero] identifier  *)
       val zero : t
 
@@ -2214,8 +2174,6 @@ type exp   = Bil.exp     [@@deriving bin_io, compare, sexp]
 type stmt  = Bil.stmt    [@@deriving bin_io, compare, sexp]
 type unop  = Bil.unop    [@@deriving bin_io, compare, sexp]
 
-
-
 (** The type of a BIL expression.
 
     Each BIL expression is either an immediate value of a given
@@ -2238,8 +2196,6 @@ module Type : sig
     | Imm of int
     | Mem of addr_size * size
   [@@deriving variants]
-
-
 
   (** type error   *)
   type error [@@deriving bin_io, compare, sexp]
@@ -2333,7 +2289,6 @@ module Type : sig
   (** BIL type is regular  *)
   include Regular.S with type t := t
 end
-
 
 val bool_t  : typ             (** one bit             *)
 val reg8_t  : typ             (** 8-bit width value   *)
@@ -2452,11 +2407,9 @@ module Context : sig
         previously bound to it. Returns [None] if it is unbound.  *)
     method lookup : var -> Bil.result option
 
-
     (** [self#update var x] bind variable [var] to value [x]. Returns a a
         context updated with the new binding.  *)
     method update : var -> Bil.result -> 's
-
 
     (** [self#bindings] returns a current list of bindings. Useful,
         for debugging and introspection.  *)
@@ -2469,7 +2422,6 @@ module Type_error : module type of Type.Error with type t = Type.Error.t
 (** A BIL type error  *)
 type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
 
-
 (** Basic and generic expression evaluator.
 
     The module provides functors that derive base classes and class
@@ -2481,9 +2433,8 @@ type type_error = Type_error.t [@@deriving bin_io, compare, sexp]
     semantics of BIL consider using the Primus Framework.
 
     @since 1.3
-  *)
+*)
 module Eval : sig
-
 
   (** An evaluator interface parametrized by a [T1] monad.  *)
   module T1(M : T1) : sig
@@ -2523,7 +2474,6 @@ module Eval : sig
     end
   end
 
-
   (** An evaluator parametrized by a [T2] monad.  *)
   module T2(M : T2) : sig
     type ('a,'e) m = ('a,'e) M.t
@@ -2561,7 +2511,6 @@ module Eval : sig
       method virtual store  : 's -> addr -> word -> ('r,'a) m
     end
   end
-
 
   (** An interface of a basic evaluator in a [T1] monad  *)
   module type S = sig
@@ -2601,13 +2550,10 @@ module Eval : sig
     end
   end
 
-
-
   (** [Make2(M)] provides an implementation of the [S2] interface
       lifted into the monad [M].  *)
   module Make2(M : Monad.S2) : S2 with type ('a,'e) m := ('a,'e) M.t
                                    and module M := M
-
 
   (** [Make(M)] provides an implementation of the [S2] interface
       lifted into the monad [M].  *)
@@ -2637,7 +2583,6 @@ module Expi : sig
      [[1]]: BIL Semantics.
   *)
 
-
   (** Context for expression evaluation.
 
       Context provides a unique identifier for each freshly created
@@ -2666,11 +2611,9 @@ module Expi : sig
 
     module M : T2 with type ('a,'e) t = ('a,'e) state
 
-
     (** @since 1.3  *)
     module Eval : Eval.S2 with type ('a,'e) m := ('a,'e) state
                            and module M := M
-
 
     (** Expression interpreter.
 
@@ -2678,7 +2621,6 @@ module Expi : sig
         and {!biri}, that do all the hard work. Expi recognizes a
         language defined by [exp] type. It evaluates arbitrary
         expressions under provided {{!Context}context}.
-
 
         To create new interpreter use operator [new]:
 
@@ -2787,7 +2729,6 @@ module Expi : sig
       inherit ['a, Bil.result] Eval.semantics
       (** {2 Interaction with environment} *)
 
-
       (** creates an empty storage. If you want to provide
           your own implementation of storage, then it is definitely
           the right place.  *)
@@ -2827,9 +2768,6 @@ module Expi : sig
   include S with type ('a,'e) state = ('a,'e) Monad.State.t
 end
 
-
-
-
 (** Expression {{!Expi}interpreter}  *)
 class ['a] expi : ['a] Expi.t
 
@@ -2854,7 +2792,6 @@ class ['a] expi : ['a] Expi.t
     v}
 *)
 module Bili : sig
-
 
   open Bil.Result
 
@@ -2958,7 +2895,6 @@ module Eff : sig
   (** [raises eff] if [raise] in [eff] *)
   val raises : t -> bool
 
-
   (** [has_effects eff] if [stores eff] || [raises eff]  *)
   val has_effects : t -> bool
 
@@ -2985,7 +2921,6 @@ module Eff : sig
 
   val compute : exp -> t
 end
-
 
 (** [Regular] interface for BIL expressions *)
 module Exp : sig
@@ -3104,7 +3039,6 @@ module Exp : sig
     method find : t -> 'a option
   end
 
-
   (** Exp mapper.
       By default performs deep identity mapping. Non-leaf methods
       deconstructs terms, calls corresponding methods on its parts
@@ -3140,7 +3074,6 @@ module Exp : sig
     method map_unknown : string -> typ -> t
   end
 
-
   (** [fold visitor ~init exp] traverse the [exp] tree with
       provided [visitor]. For example, the following will collect
       all address that are accessed with a load operation:
@@ -3173,7 +3106,6 @@ module Exp : sig
       something. See also {!Bil.exists} and {Stmt.exists}  *)
   val exists : unit #finder -> t -> bool
 
-
   (** [substitute pat rep x] subsitutes each occurence of an
       expression [pat] in [x] with an expression [rep] *)
   val substitute : exp -> exp -> exp -> exp
@@ -3183,7 +3115,7 @@ module Exp : sig
       concatenation of one byte loads, and expand multibyte stores
       into chains of one byte stores.
       @since 1.3
- *)
+  *)
   val normalize : exp -> exp
 
   (** [simpl ~ignore:effects x] iff expression [x] is well-typed,
@@ -3279,7 +3211,6 @@ end
 module Stmt : sig
 
   type t = Bil.stmt
-
 
   (** All visitors provide some information about the current
       position of the visitor *)
@@ -3378,7 +3309,6 @@ module Stmt : sig
     method leave_special : string -> 'a -> 'a
   end
 
-
   (** A visitor with a shortcut.
       Finder is a specialization of a visitor, that uses [return] as its
       folding argument. At any time you can stop the traversing by
@@ -3411,7 +3341,6 @@ module Stmt : sig
     method find : t list -> 'a option
   end
 
-
   (** AST transformation.
       mapper allows one to map AST, performing some limited
       amount of transformations on it. Mapper provides extra
@@ -3435,7 +3364,6 @@ module Stmt : sig
     method map_special : string -> t list
   end
 
-
   (** [constant_folder] is a class that implements the [fold_consts]  *)
   class constant_folder : mapper
 
@@ -3447,14 +3375,12 @@ module Stmt : sig
       {!Bil.iter} and {!Exp.iter} for more details.  *)
   val iter : unit #visitor -> t -> unit
 
-
   (** [map mapper bil] applies [mapper] to the program [bil] *)
   val map : #mapper -> t list -> t list
 
   (** [find finder stmt] performs a lookup into the Bil statement. See
       {!Bil.find} and {!Exp.find} for more details.  *)
   val find : 'a #finder -> t -> 'a option
-
 
   (** [exists finder stmt] is [true] iff [find finder stmt <> None].
       See {!Bil.exists} and {!Exp.exists} for more details.  *)
@@ -3521,8 +3447,6 @@ module Stmt : sig
   *)
   val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
-
-
   (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
       simplifies [if] and [while] expressions with statically known
       conditionals, e.g., [if (true) xs ys] is simplified to [xs],
@@ -3531,7 +3455,6 @@ module Stmt : sig
       @since 1.3
   *)
   val simpl : ?ignore:Eff.t list -> t list -> t list
-
 
   (** [fixpoint f x] applies transformation [f] until it reaches
       fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)
@@ -3665,7 +3588,6 @@ end
 type arch = Arch.t
 [@@deriving bin_io, compare, sexp]
 
-
 (** Universal Values.
 
     This module creates an extensible variant type, that resembles
@@ -3712,7 +3634,6 @@ type arch = Arch.t
         val pp : Format.formatter -> t -> unit
       end
     ]}
-
 
     The good news is that, most of the types in [Core] and [Bap] do
     conform with the requirements. Usually, one can implement the
@@ -3809,7 +3730,6 @@ module Value : sig
   (** a universal value  *)
   type t = value [@@deriving bin_io, compare, sexp]
 
-
   (** Tag constructor of type ['a]  *)
   type 'a tag
 
@@ -3881,7 +3801,6 @@ module Value : sig
     (** [name cons] returns a name of a constructor.  *)
     val name : 'a t -> string
 
-
     (** [same x y] is true if tags [x] and [y] have the same type.   *)
     val same : 'a t -> 'b t -> bool
 
@@ -3889,15 +3808,13 @@ module Value : sig
         [x] and [y] has the same type.  *)
     val same_witness : 'a t -> 'b t -> ('a,'b) Type_equal.t option
 
-
     (** [same_witness_exn x y] is the same as [same_witness] but
-    raises exception if [not (same x y)].  *)
+        raises exception if [not (same x y)].  *)
     val same_witness_exn : 'a t -> 'b t -> ('a,'b) Type_equal.t
 
     (** [typeid t] returns a type identifier of a type tag [t].  *)
     val typeid : 'a t -> typeid
   end
-
 
   (** Runtime parallel match.  *)
   module Match : sig
@@ -4049,7 +3966,6 @@ module Vector : sig
       element of [xs], for which [f i x] is [true].  *)
   val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
 
-
   (** [iter xs ~f] applies [f i x] for each [x_i] in [xs]  *)
   val iteri : 'a t -> f:(int -> 'a -> unit) -> unit
 
@@ -4057,7 +3973,6 @@ module Vector : sig
       (n-1) s_[n-1] x_[n-1]] and [n] is the number of elements in
       [xs] *)
   val foldi : 'a t -> init:'b -> f:(int -> 'b -> 'a -> 'b) -> 'b
-
 
   (** [index ?equal xs x] returns an index of the first element [p] of
       [xs] for which [equal p x] is [true]. The [equal] parameter
@@ -4068,22 +3983,18 @@ module Vector : sig
       an exception is thrown instead of [None] *)
   val index_exn : ?equal:('a -> 'a -> bool) -> 'a t -> 'a -> int
 
-
   (** [index_with ?equal ~default xs x] same as [index] but returns
       the [default] value instead of [None]. *)
   val index_with : ?equal:('a -> 'a -> bool) -> default:int -> 'a t -> 'a -> int
-
 
   (** implements common accessors for the array, like [find], [fold],
       [iter], etc  *)
   include Container.S1 with type 'a t := 'a t
 
-
   (** [pp pp_elem] creates a vector printer that uses [pp_elem] to
       print elements.  *)
   val pp : 'a printer -> 'a t printer
 end
-
 
 (** BAP IR.
 
@@ -4168,7 +4079,6 @@ module Biri : sig
       (** [set_next tid] set the identifier of the next term.  *)
       method set_next : tid option -> 's
 
-
       (** The [next] term identifier is the identifier of a term,
           that should be executed next. If [next] is [None] then,
           the interpretation will stop. The identifier must belong
@@ -4193,7 +4103,6 @@ module Biri : sig
       (** called for each term, just after the position is updated,
           but before any side effect of term evaluation had occurred.*)
       method enter_term : 't 'p . ('p,'t) cls -> 't term -> 'a u
-
 
       (** [eval cls t] evaluates a term [t] of the [cls] class. The
           method implementation will call the [enter_term] method,
@@ -4272,7 +4181,6 @@ end
 (** BIR {{!Biri}interpreter}  *)
 class ['a] biri : ['a] Biri.t
 
-
 (** {3 Some predefined tags} *)
 
 type color = [
@@ -4287,16 +4195,13 @@ type color = [
   | `gray
 ] [@@deriving bin_io, compare, sexp]
 
-
 (** Color something with a color  *)
 val color : color tag
-
 
 (** print marked entity with the specified color.  (the same
     as color, but pretty printing function will output ascii escape
     sequence of corresponding color.  *)
 val foreground : color tag
-
 
 (** print marked entity with specified color. See [foreground].  *)
 val background : color tag
@@ -4470,10 +4375,8 @@ module Memory : sig
     *)
     type 'a reader = t -> pos_ref : addr ref -> 'a Or_error.t
 
-
     (** [word ~word_size] a reader that reads words of [word_size]  *)
     val word   : word_size:size -> word reader
-
 
     (** [int8] a signed byte reader  *)
     val int8   : word reader
@@ -4513,7 +4416,6 @@ module Memory : sig
   module Make_iterators( M : Legacy.Monad.S )
     : Memory_iterators with type t := t
                         and type 'a m = 'a M.t
-
 
   (** {2 Interfacing with C}
 
@@ -4660,7 +4562,6 @@ module Table : sig
   (** [0..1]  *)
   val maybe_one : ('a, 'a option) r
 
-
   (** [link relation t t1 t2] takes two tables and returns a mapping
       from elements of one table to elements of other table.
 
@@ -4699,7 +4600,6 @@ module Table : sig
       ]} *)
 
   val link : one_to:('b,'r) r -> 'a hashable -> 'a t -> 'b t -> 'a -> 'r
-
 
   (** [rev_map arity t tab] creates a reverse mapping from values of
       typeclass [t] stored in table [tab] to memory regions.
@@ -4910,7 +4810,6 @@ module Backend : sig
   type t = Bigstring.t -> Img.t option
 end
 
-
 (** Binary Image.  *)
 module Image : sig
   (** {2 Type definitions}  *)
@@ -4947,7 +4846,6 @@ module Image : sig
       [data]. See {!create} for [backend] parameter. *)
   val of_bigstring : ?backend:string -> Bigstring.t -> result
 
-
   (** {2 Attributes}  *)
 
   (** [entry_point addr] is an address from which a kernel should start *)
@@ -4964,7 +4862,6 @@ module Image : sig
 
   (** [endian image] same as [Arch.endian (Image.arch image)]  *)
   val endian : t -> endian
-
 
   (** {2 Tables }  *)
 
@@ -4998,7 +4895,6 @@ module Image : sig
 
   (** {2 Mappings }  *)
 
-
   (** [memory_of_segment img seg] returns a memory region occupied
       by the segment [seg].  *)
   val memory_of_segment  : t -> segment -> mem
@@ -5011,11 +4907,9 @@ module Image : sig
       non-contigious region of memory).*)
   val memory_of_symbol   : t -> symbol -> mem * mem seq
 
-
   (** [symbols_of_segment img seg] all symbols that belong to the
       [seg] segment.  *)
   val symbols_of_segment : t -> segment -> symbol seq
-
 
   (** [segment_of_symbol image sym] a segment to which [sym] belongs.*)
   val segment_of_symbol  : t -> symbol -> segment
@@ -5047,20 +4941,17 @@ module Image : sig
     type t = symbol
     include Regular.S with type t := t
 
-
     (** [name sym] symbol's name  *)
     val name : t -> string
 
     (** [is_function sym] is true if [sym] is a function.  *)
     val is_function : t -> bool
 
-
     (** [is_debug sym] is true if [sym] is a debug symbol.  *)
     val is_debug : t -> bool
   end
 
   (** {2 Backend Interface}  *)
-
 
   (** An interface that a backend shall implement.
 
@@ -5079,7 +4970,6 @@ module Image : sig
 
     (** [from_file name] loads a file with the given [name]. *)
     val from_file : string -> Ogre.doc option Or_error.t
-
 
     (** [from_data data] loads image from the specified array of bytes.  *)
     val from_data : Bigstring.t -> Ogre.doc option Or_error.t
@@ -5112,8 +5002,6 @@ module Image : sig
   *)
   val spec : t -> Ogre.doc
 
-
-
   (** A scheme of image specification.
 
       An attribute is some statement about a program that is true,
@@ -5135,7 +5023,6 @@ module Image : sig
     type addr = int64
     type size = int64
     type off  = int64
-
 
     (** a contiguous piece of memory.  *)
     type 'a region = {
@@ -5196,13 +5083,11 @@ module Image : sig
     val relocation :
       (int64 * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
-
     (** [extrenal_reference addr name] a piece of code at the
         specified address [addr] references an external symbol with
         the given [name]. *)
     val external_reference :
       (addr * string, (addr -> string -> 'a) -> 'a) Ogre.attribute
-
 
     (** [base_address addr] this is the base address of an image,
         i.e., an address of a first byte of the image.  *)
@@ -5315,11 +5200,9 @@ module Memmap : sig
 
   include Container.S1 with type 'a t := 'a t
 
-
   (** [pp pp_elem] constracts a printer for a memmap to the given element. *)
   val pp : 'a printer -> 'a t printer
 end
-
 
 (** Symbolizer defines a method for assigning symbolic names to addresses  *)
 type symbolizer
@@ -5356,7 +5239,6 @@ type jump = [
 ] [@@deriving compare, sexp]
 (** This type defines a relation between two basic blocks.  *)
 type edge = [jump | `Fall] [@@deriving compare, sexp]
-
 
 (** Kinds of instructions  *)
 module Kind : sig
@@ -5398,7 +5280,6 @@ type fmm [@@deriving bin_io, compare, sexp]
 (** kind of instruction  *)
 type kind = Kind.t [@@deriving bin_io, compare, sexp]
 
-
 (** Register.  *)
 module Reg : sig
   type t = reg
@@ -5412,11 +5293,9 @@ module Reg : sig
   include Regular.S with type t := t
 end
 
-
 (** Integer immediate operand  *)
 module Imm : sig
   type t = imm
-
 
   (** [to_word ~width x] projects [x] to a word. Returns [None] only
       if [width] is non-positive. *)
@@ -5424,7 +5303,6 @@ module Imm : sig
 
   (** [to_int64 x] maps immediates to the OCaml [int64] type  *)
   val to_int64 : t -> int64
-
 
   (** [to_int x] projects immediates to the OCaml [int] type. Returns
       [None] if it doesn't fit.  *)
@@ -5483,7 +5361,6 @@ module Disasm_expert : sig
     ] [@@deriving sexp]
 
     (** {2 Basic types }  *)
-
 
     (** [insn] basic instruction.
 
@@ -5567,7 +5444,6 @@ module Disasm_expert : sig
     *)
     val create : ?debug_level:int -> ?cpu:string -> backend:string -> string ->
       (empty, empty) t Or_error.t
-
 
     (** [close d] closes a disassembler [d].   *)
     val close : (_,_) t -> unit
@@ -5802,7 +5678,6 @@ module Disasm_expert : sig
         is is a whole segment graph.  *)
     val cfg : t -> cfg
 
-
     (** [errors disasm] returns a list of non-critical errors, that
         happened during the disassembly (e.g., unknown opcodes and
         unlifted instructions.  *)
@@ -5827,7 +5702,6 @@ end
     the term was born.
 *)
 module Insn : sig
-
 
   type t = insn [@@deriving bin_io, compare, sexp]
 
@@ -5872,7 +5746,6 @@ module Insn : sig
 
   val new_property : 'a -> string -> 'a property
 
-
   (** the instruction performs a non-regular control flow *)
   val jump                : must property
 
@@ -5898,13 +5771,11 @@ module Insn : sig
   (** the instruction may store to memory  *)
   val store               : may  property
 
-
   (** [is property insn] is [true] if [insn] has [property]  *)
   val is  : must property -> t -> bool
 
   (** [may propery insn] is [true] if [insn] has [property]  *)
   val may : may  property -> t -> bool
-
 
   (** [must property insn] postulate that [insn] must have the [property]  *)
   val must    : must property -> t -> t
@@ -5917,7 +5788,6 @@ module Insn : sig
 
   (** [must property insn] postulate that [insn] shouldn't have the [property]  *)
   val shouldn't : may  property -> t -> t
-
 
   (** [pp_adt] prints instruction in ADT format, suitable for reading
       by evaluating in many languages, e.g. Python, Js, etc *)
@@ -5954,7 +5824,6 @@ end
     Basic block is piece of code, that has single entry and single
     exit. It can be seen as a container for instructions. Also,
     basic blocks are nodes of control flow graphs.
-
 
     The following invariants must be preserved:
     - there is no known jump in the program, that points to an
@@ -6013,7 +5882,6 @@ end
 *)
 module Graphs : sig
 
-
   (** Control Flow Graph with a machine basic block as a node.  *)
   module Cfg : Graph with type t = cfg
                       and type node = block
@@ -6060,7 +5928,6 @@ module Graphs : sig
       create an arbitrary number of edges, from zero to N. If jump
       target is not yet in the graph, then jump is not removed from a
       sequence of jumps of the inserted node, but just ignored.
-
 
       {2 Updating nodes}
 
@@ -6109,7 +5976,6 @@ module Graphs : sig
 
       Updating an edge is basically the same, as updating incident
       nodes, a given that the edge exists in the graph.
-
 
       {2 Removing edge}
 
@@ -6179,7 +6045,6 @@ module Graphs : sig
                    and module Edge := Edge
   end
 
-
   (** Graph of Term identifiers.
 
       This is a graph where all information is distilled to term
@@ -6229,7 +6094,6 @@ module Disasm : sig
     ?brancher:brancher -> ?rooter:rooter ->
     ?loader:string -> string -> t Or_error.t
 
-
   (** [With_exn.f] is the same as [f] except that it throws an
       exception instead of returning [Error].  *)
   module With_exn : sig
@@ -6257,7 +6121,6 @@ module Disasm : sig
 
   (** A whole program CFG.  *)
   val cfg : t -> cfg
-
 
   (** {2 Tags}  *)
 
@@ -6315,10 +6178,7 @@ module Symtab : sig
   val span : fn -> unit memmap
 end
 
-
 type lifter = mem -> Disasm_expert.Basic.full_insn -> bil Or_error.t
-
-
 
 (** A BIL model of CPU
 
@@ -6341,23 +6201,19 @@ module type CPU = sig
 
   (** {4 Flag registers}  *)
 
-
   (** zero flag  *)
   val zf  : var
 
   (** carry flag  *)
   val cf  : var
 
-
   (** overflow flag  *)
   val vf  : var
-
 
   (** negative flag  *)
   val nf  : var
 
   (** {3 Predicates}  *)
-
 
   (** [is_reg var] true if [var] is a processor register  *)
   val is_reg : var -> bool
@@ -6365,14 +6221,12 @@ module type CPU = sig
   (** [is_flag reg] is true if [reg] is a flag register   *)
   val is_flag : var -> bool
 
-
   (** [is_sp x = Var.same x sp] *)
   val is_sp : var -> bool
 
   (** [is_bp x] is true if [x] can be possibly used as a base
       pointer register.  *)
   val is_bp : var -> bool
-
 
   (** [is_zf x = Var.same x zf] *)
   val is_zf : var -> bool
@@ -6401,7 +6255,6 @@ end
     {{!AMD64}AMD64}. *)
 module type Target = sig
 
-
   (** access to the CPU variables.  *)
   module CPU : CPU
 
@@ -6422,12 +6275,10 @@ end
     ]} *)
 val target_of_arch : arch -> (module Target)
 
-
 (** Register new target architecture. If target for the given arch
     already exists, then it will be superseeded by the new
     target.  *)
 val register_target : arch -> (module Target) -> unit
-
 
 (** Term identifier  *)
 module Tid : sig
@@ -6485,7 +6336,6 @@ end
     {v val b : Blk.t =
           00000003: v}
 
-
       We can append a definition to it with an overloaded
       [Term.append]
 
@@ -6496,7 +6346,6 @@ end
           v}
 
       Update a value of a definition in the block:
-
 
     {[# let b = Term.update def_t b d_2;;]}
     {v val b : blk term =
@@ -6551,7 +6400,6 @@ module Term : sig
       then remove this subterm (a given it did exist), otherwise,
       update parent with a new subterm.  *)
   val change : ('a,'b) cls -> 'a t -> tid -> ('b t option -> 'b t option) -> 'a t
-
 
   (** [enum ?rev t p] enumerate all subterms of type [t] of the
       a given term [p] *)
@@ -6633,7 +6481,6 @@ module Term : sig
       not a valid position number.  *)
   val nth_exn : ('a,'b) cls -> 'a t -> int -> 'b t
 
-
   (** {2 Attributes}
 
       Terms attribute set can be extended, using {{!Value}universal
@@ -6661,7 +6508,6 @@ module Term : sig
 
   (** [del_attr term attr] deletes attribute [attr] from [term]  *)
   val del_attr : 'a t -> 'b tag -> 'a t
-
 
   (** {Predefined attributes}  *)
 
@@ -6734,7 +6580,6 @@ module Term : sig
     method visit_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
     method leave_term : 't 'p . ('p,'t) cls -> 't term -> 'a -> 'a
 
-
     method enter_program : program term -> 'a -> 'a
     method run           : program term -> 'a -> 'a
     method leave_program : program term -> 'a -> 'a
@@ -6764,7 +6609,6 @@ module Term : sig
     method leave_jmp : jmp term -> 'a -> 'a
   end
 
-
   (** [switch cls t ~program ~sub .. ~jmp] performs a pattern
       matching over a term [t] based on its type class [cls].
       It is guaranteed that only one function will be called for a
@@ -6777,7 +6621,6 @@ module Term : sig
     phi:(phi term -> 'a) ->
     def:(def term -> 'a) ->
     jmp:(jmp term -> 'a) -> 't term -> 'a
-
 
   (** [proj cls t ?case] a special case of pattern matching,
       where all cases by default returns [None] *)
@@ -6910,7 +6753,6 @@ module Sub : sig
       operation is just a projection, i.e., it has O(0) complexity.  *)
   val of_cfg : Graphs.Ir.t -> t
 
-
   (** other names for the given subroutine.*)
   val aliases : string list tag
 
@@ -7021,7 +6863,6 @@ module Blk : sig
       is the entry. *)
   val lift : cfg -> block -> blk term list
 
-
   (** [from_insn insn] creates an IR representation of a single
       machine instruction [insn].  *)
   val from_insn : insn -> blk term list
@@ -7082,7 +6923,6 @@ module Blk : sig
   val map_exp :
     ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
     t -> f:(exp -> exp) -> t
-
 
   (** [substitute ?skip blk x y] substitutes each occurrence of
       expression [x] with expression [y] in block [blk]. The
@@ -7383,7 +7223,6 @@ module Arg : sig
   (** removes the intent from an argument  *)
   val with_unknown_intent : t -> t
 
-
   (** {2 Attributes}  *)
 
   (** a caller of the subroutine must use an argument tagged with
@@ -7392,11 +7231,9 @@ module Arg : sig
       bug, such as [realloc] *)
   val warn_unused : unit tag
 
-
   (** the size of allocated memory is the product of arguments
       marked with [alloc_size] attribute  *)
   val alloc_size : unit tag
-
 
   (** format(DSL) the specified argument of a subroutine is
       actually a format string written in a corresponding DSL. *)
@@ -7422,7 +7259,6 @@ module Call : sig
       called subroutine returns.  *)
 
   type t = call
-
 
   (** [create ?return ~target ()] creates a call to the [target]
       subroutine. If [return] is not provided, that it is assumed that
@@ -7477,7 +7313,6 @@ module Source : sig
   type 'a t = 'a Or_error.t stream
   type 'a source = 'a t
 
-
   (** Factory of data processors.
       Registry of sources of information. *)
   module Factory : sig
@@ -7514,7 +7349,6 @@ module Taint : sig
   type set = Tid.Set.t [@@deriving bin_io, compare, sexp]
   type map = set Var.Map.t [@@deriving bin_io, compare, sexp]
 
-
   (** value stored in register is source of taint  *)
   val reg : t tag
 
@@ -7522,13 +7356,11 @@ module Taint : sig
       in the register is tainted.*)
   val ptr : t tag
 
-
   (** maps each variable that is used in a term to a set of register taints *)
   val regs : map tag
 
   (** maps each variable that is used in a term to a set of pointer taints *)
   val ptrs : map tag
-
 
   (** [merge t1 t2] merge taint maps  *)
   val merge : map -> map -> map
@@ -7557,7 +7389,6 @@ module Taint : sig
 
     (** Propagate taint through expressions.
 
-
         {2 Semantics}
 
         {3 Grammar}
@@ -7570,7 +7401,6 @@ module Taint : sig
         [v -> t] - value [v] is tainted by a taint [t];
         [<bop>] - BIL binary operation or BIL concat expression;
         [<uop>] - BIL unary, extract or cast expression.
-
 
         {3 Rules}
 
@@ -7641,7 +7471,6 @@ module Taint : sig
 
   module Map : Regular.S with type t = map
 end
-
 
 type 'a source = 'a Source.t
 
@@ -7717,17 +7546,14 @@ module Brancher : sig
 
   type dests = dest list [@@deriving sexp]
 
-
   (** [create resolve] creates a brancher from [resolve] function,
       that accepts a memory region, occupied by an instruction, the
       instruction itself and returns a list of destination.  *)
   val create : (mem -> full_insn -> dests) -> t
 
-
   (** [of_bil arch] creates a brancher that will use a BIL code to
       statically deduce the instruction destinations.  *)
   val of_bil : arch -> t
-
 
   (** [resolve brancher mem insn] returns a list of destinations of
       the instruction [insn], that occupies memory region [mem].  *)
@@ -7778,7 +7604,6 @@ module Reconstructor : sig
   module Factory : Source.Factory.S with type t = t
 end
 
-
 (** Event subsystem.
 
     The event subsystem is a way of communicating between different
@@ -7788,15 +7613,11 @@ module Event : sig
   type t = ..
   type event = t = ..
 
-
-
   (** global [stream] of events  *)
   val stream : t stream
 
-
   (** [send event] to the {!stream}  *)
   val send : t -> unit
-
 
   (** [register_printer f] when event [e] is printed, [f e] must be
       [None] if [f] is not a subset of events, that is intended to be
@@ -7806,7 +7627,6 @@ module Event : sig
       If more than one printer returns [Some thing] for the same event,
       then the last registered has the precedence.*)
   val register_printer : (t -> string option) -> unit
-
 
   (** Logging event.*)
   module Log : sig
@@ -7823,7 +7643,6 @@ module Event : sig
     }
 
     type event += Message of info
-
 
     (** [message level ~section fmt ...] send a message of the
         specified [level] and [section].
@@ -7922,7 +7741,6 @@ module Project : sig
 
        v}
 
-
       The input variables, are represented with stream of
       values. Basically, they can be viewed as cells, that depends
       on some input. When input changes, the value is recomputed and
@@ -7964,7 +7782,6 @@ module Project : sig
 
       [Stream.Variadic.(apply ~f:create_source args].
 
-
       Sources, specified in the examples above, will call a [create_source]
       when all arguments changes. This is an expected behavior for
       the [arch] and [file] variables, since the do not change during
@@ -8000,7 +7817,6 @@ module Project : sig
     ?rooter:rooter source ->
     ?reconstructor:reconstructor source ->
     input -> t Or_error.t
-
 
   (** [arch project] reveals the architecture of a loaded file  *)
   val arch : t -> arch
@@ -8129,14 +7945,12 @@ module Project : sig
     val spec : Ogre.Doc.t stream
   end
 
-
   (** Input information.
 
       This module abstracts input type.
   *)
   module Input : sig
     type t = input
-
 
     (** [file ?loader ~filename] input data from a file, using the
         specified loader. If [loader] is not specified, then some existing
@@ -8145,12 +7959,10 @@ module Project : sig
         be looked up in the {!Image.available_backends}.  *)
     val file : ?loader:string -> filename:string -> t
 
-
     (** [binary ?base arch ~filename] create an input from a binary
         file, that is a pure code.
         @param base is an virtual address of the first byte (defaults to 0).*)
     val binary : ?base:addr -> arch -> filename:string -> t
-
 
     (** [create arch filename ~code ~data] creates an input from a
         file, using two memory maps. The [code] memmap spans the code in
@@ -8163,7 +7975,6 @@ module Project : sig
       ?finish:(project -> project) ->
       arch -> string -> code:value memmap -> data: value memmap -> t
 
-
     (** [register_loader name load] register a loader under provided
         [name]. The [load] function will be called the filename, and it
         must return the [input] value. *)
@@ -8172,7 +7983,6 @@ module Project : sig
     (** [available_loaders ()] returns a list of names of currently known loaders.  *)
     val available_loaders : unit -> string list
   end
-
 
   (** {3 Registering passes}
 
@@ -8213,13 +8023,11 @@ module Project : sig
   (** [passes ()] returns all currently registered passes.  *)
   val passes : unit -> pass list
 
-
   (** [find_pass name] returns a pass with the given name.  *)
   val find_pass : string -> pass option
 
   (** time duration in seconds  *)
   type second = float
-
 
   (** A program analysis pass.
 
@@ -8237,7 +8045,6 @@ module Project : sig
         some reason. This is a very unlikely error, indicating
         either a logic error in the plugin system implementation or
         something very weird, that we didn't expect.
-
 
         - [Not_loaded name] when we tried to load plugin with a given
         [name] we failed to find it in our search paths.
@@ -8257,7 +8064,6 @@ module Project : sig
         name. *)
     exception Failed of error [@@deriving sexp]
 
-
     (** [run_pass project pass] applies [pass] to a [project].
 
         If a pass has dependencies, then they will be run before the
@@ -8272,10 +8078,8 @@ module Project : sig
         runtime.  *)
     val run_exn : t -> project -> project
 
-
     (** [name pass] is a pass name  *)
     val name : t -> string
-
 
     (** [autorun pass] is [true] if a [pass] was created with
         autorun option *)
@@ -8312,7 +8116,6 @@ module Self() : sig
   (** A short, one-line description  *)
   val doc : string
 
-
   (** [args name] returns an array of arguments designated for a
       plugin with a given [name].
 
@@ -8327,7 +8130,6 @@ module Self() : sig
       accept arguments that are anonymous or short options *)
   val argv : string array
 
-
   (** [debug fmt ...] send a debug message  *)
   val debug   : ('a,Format.formatter,unit) format -> 'a
 
@@ -8340,7 +8142,6 @@ module Self() : sig
   (** [error fmt ...] send an error message  *)
   val error   : ('a,Format.formatter,unit) format -> 'a
 
-
   (** formatter that sends debug messages  *)
   val debug_formatter : Format.formatter
 
@@ -8352,7 +8153,6 @@ module Self() : sig
 
   (** formatter that sends error messages  *)
   val error_formatter : Format.formatter
-
 
   (** This module allows plugins to access BAP configuration variables.
 
