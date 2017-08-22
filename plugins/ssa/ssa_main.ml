@@ -3,9 +3,8 @@ include Self()
 
 let main proj =
   Project.with_program proj @@
-  Term.map sub_t (Project.program proj) ~f:Sub.ssa
+  Term.map sub_t (Project.program proj) ~f:Sub.ssa;;
 
-let () = Project.register_pass main;;
 
 Config.manpage [
   `S "SYNOPSIS";
@@ -15,3 +14,5 @@ Config.manpage [
   `S "DESCRIPTION";
   `P "Translates the whole program into the SSA form";
 ]
+
+let () = Config.when_ready (fun _ -> Project.register_pass main);;
