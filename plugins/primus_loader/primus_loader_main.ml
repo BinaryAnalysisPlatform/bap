@@ -17,7 +17,7 @@ Config.manpage [
   `S "DESCRIPTION";
   `P
     "Loads a binary and sets up the environment. This loader is
-  generic and sets things in an architecture specific way. The loading
+  generic and sets things in an architecture independent way. The loading
   process is finished by the backend (target specific) loaders if
   necessary.  The loader setups stack, prepares a callframe for the
   main function, fills it the environment and command line
