@@ -32,10 +32,9 @@ let kind_of_branches t f =
   | `Fall,`Fall -> `Fall
   | _           -> `Cond
 
-let fold_consts = Bil.(fixpoint fold_consts)
 
 let rec dests_of_bil bil : dests =
-  fold_consts bil |> List.concat_map ~f:dests_of_stmt
+  Bil.fold_consts bil |> List.concat_map ~f:dests_of_stmt
 and dests_of_stmt = function
   | Bil.Jmp (Bil.Int addr) -> [Some addr,`Jump]
   | Bil.Jmp (_) -> [None, `Jump]

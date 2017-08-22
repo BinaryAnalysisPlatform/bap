@@ -591,11 +591,11 @@ module Trie = struct
   let prune x = prune_unreferenced
       ~virtuals:true x
 
-  let simplify = List.map ~f:fixpoint [
+  let simplify = [
       prune;
       normalize_negatives;
       Simpl.bil;
-    ] |> List.reduce_exn ~f:Fn.compose |> fixpoint
+    ] |> List.reduce_exn ~f:Fn.compose
 
   let normalize ?(subst=[]) bil =
     List.fold subst ~init:bil ~f:(fun bil (x,y) -> substitute x y bil)

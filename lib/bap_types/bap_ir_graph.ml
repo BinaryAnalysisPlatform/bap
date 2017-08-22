@@ -278,7 +278,7 @@ module Edge = struct
 
   let tid e = Term.tid (jmp e)
 
-  let simpl = Bap_helpers.Exp.(fixpoint fold_consts)
+  let simpl = Bap_helpers.Exp.(fold_consts)
 
   let cond e g =
     jmps `before e g |>
