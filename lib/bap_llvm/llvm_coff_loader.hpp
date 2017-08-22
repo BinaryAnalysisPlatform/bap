@@ -254,7 +254,8 @@ void exported_symbols(const coff_obj &obj, ogre_doc &s) {
     exported_symbols(obj, v, s);
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
 error_or<uint64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
     auto base = obj.getImageBase();

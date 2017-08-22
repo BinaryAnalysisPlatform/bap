@@ -9,6 +9,7 @@
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Target/TargetInstrInfo.h>
+#include <llvm-c/Target.h>
 
 #include <cstring>
 #include <cstdint>
@@ -19,7 +20,8 @@
 #include "disasm.hpp"
 #include "llvm_disasm.h"
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
+    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
@@ -32,7 +34,8 @@
 #endif
 
 //template <typename T>
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 template <typename T>
 using smart_ptr = std::unique_ptr<T>;
 template <class T>
@@ -74,7 +77,8 @@ bool ends_with(const std::string& str, const std::string &suffix) {
 //! disassembler. This will allow us to handle all the checks
 //! identically on both versions.
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 class MemoryObject {
     memory mem;
 public:
@@ -173,7 +177,8 @@ class llvm_disassembler : public disassembler_interface {
     llvm::MCInst mcinst;
     insn current;
     std::vector<int> prefixes;
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
+    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
     shared_ptr<MemoryObject>                mem;
 #else
     shared_ptr<const llvm::MemoryObject>    mem;
@@ -260,7 +265,8 @@ public:
             return {nullptr, {bap_disasm_unsupported_target} };
         }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
+    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
@@ -284,7 +290,8 @@ public:
             return {nullptr, {bap_disasm_unsupported_target} };
         }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
         shared_ptr<llvm::MCInstPrinter>
             printer (target->createMCInstPrinter
                      (t, asm_info->getAssemblerDialect(), *asm_info, *ins_info, *reg_info));
@@ -303,7 +310,8 @@ public:
         /* Make the default for immediates to be in hex */
         printer->setPrintImmHex(true);
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
         shared_ptr<llvm::MCDisassembler>
             dis(target->createMCDisassembler(*sub_info, *ctx));
 #else
@@ -317,7 +325,8 @@ public:
             return {nullptr, {bap_disasm_unsupported_target} };
         }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
         dis->setSymbolizer(move(symbolizer));
 #else
         dis->setSymbolizer(symbolizer);
@@ -362,7 +371,8 @@ public:
                                   current.code);
     }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
     llvm::ArrayRef<uint8_t> view(uint64_t pc) {
         return mem->view(pc);
     }
@@ -437,7 +447,8 @@ public:
         if (current.code != 0) {
             std::string data;
             llvm::raw_string_ostream stream(data);
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
             printer->printInst(&mcinst, stream, "", *sub_info);
 #else
             printer->printInst(&mcinst, stream, "");
@@ -479,6 +490,15 @@ public:
 
 
 private:
+
+    const char *get_name(const char *x) const { return x; }
+    const char *get_name(const llvm::StringRef &x) const { return x.data(); }
+
+    template <typename Table>
+    const char* get_name(const Table &tab, int code) const {
+        return get_name(tab.getName(code));
+    }
+
     insn valid_insn(location loc) const {
         insn ins;
 
@@ -495,7 +515,7 @@ private:
         }
 
         ins.code = mcinst.getOpcode();
-        ins.name = ins_info->getName(ins.code) - ins_tab.data;
+        ins.name = get_name(*ins_info, ins.code) - ins_tab.data;
         ins.loc = loc;
         return ins;
     }
@@ -563,10 +583,10 @@ private:
         // we can't just take address of the lowest opcode insn, and
         // subtract it from the address of the highest one.
         assert(n > 0);
-        const char *p = tab->getName(0);
+        const char *p = get_name(*tab, 0);
         const char *q = p;
         for (int i = 0; i < n; i++) {
-            const char *r = tab->getName(i);
+            const char *r = get_name(*tab, i);
             if (r < p)
                 p = r;
             if (r > q)

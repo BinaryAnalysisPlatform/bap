@@ -204,28 +204,29 @@ void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s
     }
 }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
 template <typename T>
 uint64_t base_address(const ELFObjectFile<T> &obj) {
-    auto elf = obj.getELFFile();
-    return base_address(elf->program_header_begin(), elf->program_header_end());
+    auto hdrs = prim::elf_program_headers(*obj.getELFFile());
+    return base_address(hdrs.begin(), hdrs.end());
 }
 
 template <typename T>
 void program_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {
-    auto elf = obj.getELFFile();
-    program_headers(elf->program_header_begin(), elf->program_header_end(), s);
+    auto hdrs = prim::elf_program_headers(*obj.getELFFile());
+    program_headers(hdrs.begin(), hdrs.end(), s);
 }
 
 template <typename T>
 void section_headers(const ELFObjectFile<T> &obj, ogre_doc &s) {
     auto elf = obj.getELFFile();
     auto base = base_address(obj);
-    for (auto it = elf->section_begin(); it != elf->section_end(); ++it) {
-        auto name = elf->getSectionName(it);
-        if (!name) s.fail(name.getError().message());
-        section_header(*it, name.get().str(), base, s);
+    for (auto sec : prim::elf_sections(*elf)) {
+        auto name = prim::elf_section_name(*elf, &sec);
+        if (name)
+            section_header(sec, *name, base, s);
     }
 }
 
@@ -240,7 +241,8 @@ void symbol_entries(const ELFObjectFile<T> &obj, ogre_doc &s) {
     typedef typename ELFFile<T>::Elf_Shdr sec_hdr;
     auto elf = obj.getELFFile();
     symbol_entries(obj, obj.symbol_begin(), obj.symbol_end(), s);
-    bool is_dyn = std::any_of(elf->section_begin(), elf->section_end(),
+    auto secs = prim::elf_sections(*elf);
+    bool is_dyn = std::any_of(secs.begin(), secs.end(),
                               [](const sec_hdr &hdr) { return (hdr.sh_type == ELF::SHT_DYNSYM); });
     if (is_dyn) // preventing from llvm 3.8 fail in case of .dynsym absence
         symbol_entries(obj, obj.dynamic_symbol_begin(), obj.dynamic_symbol_end(), s);

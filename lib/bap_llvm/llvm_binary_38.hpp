@@ -1,4 +1,5 @@
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
 #ifndef LLVM_BINARY_38_HPP
 #define LLVM_BINARY_38_HPP
@@ -11,6 +12,10 @@
 #include <iomanip>
 #include <sstream>
 #include <tuple>
+
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#include <llvm/Support/Error.h>
+#endif
 
 #include <llvm/Object/ELFObjectFile.h>
 #include <llvm/Object/COFF.h>
@@ -69,21 +74,35 @@ error_or<T> of_llvm_error_or(const llvm::ErrorOr<T> &e) {
     return success(e.get());
 }
 
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+template <typename T>
+error_or<T> of_llvm_error_or(llvm::Expected<T> &e) {
+    if (!e) {
+        return failure(llvm::toString(e.takeError()));
+    }
+    return success(e.get());
+}
+#endif
+
 error_or<std::string> get_name(const SymbolRef &sym) {
-    auto e = of_llvm_error_or(sym.getName());
+    auto er_name = sym.getName();
+    auto e = of_llvm_error_or(er_name);
     return map_value<std::string>(e, [](const StringRef &x){return x.str();});
 }
 
 error_or<uint64_t> get_addr(const SymbolRef &sym, const ObjectFile &) {
-    return of_llvm_error_or(sym.getAddress());
+    auto er_addr = sym.getAddress();
+    return of_llvm_error_or(er_addr);
 }
 
 error_or<uint64_t> get_addr(const SymbolRef &sym, const COFFObjectFile &obj) {
-    return of_llvm_error_or(sym.getAddress());
+    auto er_addr = sym.getAddress();
+    return of_llvm_error_or(er_addr);
 }
 
 error_or<kind_type> get_kind(const SymbolRef &sym) {
-    return success(sym.getType());
+    auto er_type = sym.getType();
+    return success(er_type);
 }
 
 error_or<symbol_sizes> getSymbolSizes(const ObjectFile &obj) {
