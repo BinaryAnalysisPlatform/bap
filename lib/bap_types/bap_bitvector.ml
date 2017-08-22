@@ -73,29 +73,6 @@ module Size_mono = struct
     if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
 end
 
-module type Kernel = sig
-  type t = Bignum.t [@@deriving bin_io, compare, sexp]
-  val create : bignum -> int -> t
-  val signed : t -> t
-  val unsigned : t -> t
-  val is_signed: t -> bool
-  val z : t -> bignum
-  val with_z : t -> bignum -> t
-  val lift1 : (bignum -> bignum) -> t -> t
-  val lift2 : (bignum -> bignum -> bignum) -> t -> t -> t
-  val unop  : (bignum -> 'a) -> t -> 'a
-  val binop : (bignum -> bignum -> 'a) -> t -> t -> 'a
-  val extract : ?hi:int -> ?lo:int -> t -> t
-  val bitwidth : t -> int
-  val bits_of_z  : t -> string
-  val compare  : t -> t -> int
-  val hash : t -> int
-  val module_name : string option
-  include Pretty_printer.S with type t := t
-  include Stringable with type t := t
-  include Data.Versioned.S with type t := t
-end
-
 (** internal representation *)
 module Make(Size : Compare) = struct
   type t = Bignum.t [@@deriving bin_io]
@@ -112,6 +89,7 @@ module Make(Size : Compare) = struct
   let meta x = Z.extract x 0 (metasize - 1)
   let is_signed = Z.is_odd
   let bitwidth x = Z.extract x lenoff lensize |> Z.to_int
+
   let z x =
     let w = bitwidth x in
     if is_signed x
@@ -131,7 +109,9 @@ module Make(Size : Compare) = struct
         "Bitvector overflow: maximum allowed with is %d bits"
         maxlen ();
     if w <= 0
-    then invalid_argf "A nonpositive width is specified" ();
+    then invalid_argf
+        "A nonpositive width is specified (%s,%d)"
+        (Z.to_string z) w ();
     let meta = Z.(of_int w lsl 1) in
     let z = Z.(extract z 0 w lsl metasize) in
     Z.(z lor meta)

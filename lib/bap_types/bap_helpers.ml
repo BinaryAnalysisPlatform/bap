@@ -265,7 +265,7 @@ module Type = struct
     List.find_map bil ~f:(function
     | Move (v,x) -> move v x
     | Jmp d -> jmp d
-    | While (c,xs) -> cond c &&& check bil
+    | While (c,xs) -> cond c &&& check xs
     | If (c,xs,ys) -> cond c &&& check xs &&& check ys
     | Special _ | CpuExn _ -> None)
   and move v x =

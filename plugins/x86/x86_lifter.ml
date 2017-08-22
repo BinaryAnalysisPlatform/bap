@@ -2,10 +2,12 @@
 
 open Core_kernel.Std
 open Bap.Std
+open Format
 open Bil.Types
 open X86_types
 open X86_utils
 open X86_env
+include Self()
 
 module ToIR = struct
 
@@ -1454,17 +1456,22 @@ let disasm_instr mode mem addr =
   let has_rex = prefix.rex <> None in
   let has_vex = prefix.vex <> None in
   let (ss, pref) = D.parse_prefixes mode pref op in
-  let ir = ToIR.to_ir mode addr na ss pref has_rex has_vex op in
-  (ir, na)
+  ToIR.to_ir mode addr na ss pref has_rex has_vex op
 
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
   let addr = Memory.min_addr mem in
-  Or_error.try_with (fun () ->
-      let stmts, _ = disasm_instr mode mem addr in stmts)
-
-
-
+  Or_error.try_with (fun () -> disasm_instr mode mem addr) |> function
+  | Error err ->
+    warning "the legacy lifter failed at %a - %a"
+      pp_insn (mem,insn) Error.pp err;
+    Error err
+  | Ok bil -> match Type.check bil with
+    | Ok () -> Ok bil
+    | Error err ->
+      warning "BIL is not well-type in the legacy lifter at %a - %a"
+        pp_insn (mem,insn) Type.Error.pp err;
+      Error (Error.of_string "type error")
 
 module AMD64 = struct
   module CPU = X86_cpu.AMD64
