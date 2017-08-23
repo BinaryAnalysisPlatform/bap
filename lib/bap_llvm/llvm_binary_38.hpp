@@ -1,8 +1,8 @@
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
     || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
-#ifndef LLVM_BINARY_38_HPP
-#define LLVM_BINARY_38_HPP
+#ifndef LLVM_BINARY_38_40_HPP
+#define LLVM_BINARY_38_40_HPP
 
 #include <memory>
 #include <numeric>
@@ -26,6 +26,7 @@
 #include <llvm/ADT/iterator_range.h>
 #include <llvm/Object/SymbolSize.h>
 
+#include "llvm_primitives.hpp"
 #include "llvm_error_or.hpp"
 
 using std::error_code;
@@ -43,22 +44,6 @@ error_or<uint64_t> getImageBase(const COFFObjectFile &obj) {
 }
 
 } // namespace
-
-namespace seg {
-using namespace llvm;
-using namespace llvm::object;
-
-template <typename ELFT>
-const typename ELFFile<ELFT>::Elf_Phdr* elf_header_begin(const ELFFile<ELFT> *elf) {
-    return elf->program_header_begin();
-}
-
-template <typename ELFT>
-const typename ELFFile<ELFT>::Elf_Phdr* elf_header_end(const ELFFile<ELFT> *elf) {
-    return elf->program_header_end();
-}
-
-} //namespace seg
 
 namespace sym {
 using namespace llvm;
@@ -117,7 +102,7 @@ error_or<symbol_sizes> getSymbolSizes(const ELFObjectFile<ELFT> &obj) {
     for (auto sym : obj.symbols())
         syms.push_back({sym, sym.getSize()});
 
-    auto sections = obj.getELFFile()->sections();
+    auto sections = prim::elf_sections(*obj.getELFFile());
     bool is_dyn = std::any_of(sections.begin(), sections.end(),
                               [](const sec_hdr &hdr) { return (hdr.sh_type == ELF::SHT_DYNSYM); });
 
@@ -238,13 +223,21 @@ error_or<object::Binary> get_binary(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+    if (!binary)
+        return failure(toString(binary.takeError()));
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
     if (error_code ec = binary.getError())
         return failure(ec.message());
+#else
+#error LLVM version is not supported
+#endif
     error_or<object::Binary> v(binary->release());
     return v;
 }
 
 } //namespace img
 
-#endif //LLVM_BINARY_38_HPP
-#endif // LLVM=3.8
+#endif //LLVM_BINARY_38_40_HPP
+
+#endif // LLVM = 3.8 | LLVM = 4.0

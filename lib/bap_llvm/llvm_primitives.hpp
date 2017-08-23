@@ -15,21 +15,21 @@ namespace prim {
 using namespace llvm;
 using namespace llvm::object;
 
-// object stuff
+// object
 std::string arch_of_object(const llvm::object::ObjectFile &obj);
 const char* get_raw_data(const ObjectFile &obj);
 std::vector<RelocationRef> relocations(const SectionRef &sec);
 std::vector<SectionRef> sections(const ObjectFile &obj);
 std::vector<SymbolRef> symbols(const ObjectFile &obj);
 
-// sections stuff
+// sections
 section_iterator begin_sections(const ObjectFile &obj);
 section_iterator end_sections(const ObjectFile &obj);
 error_or<std::string> section_name(const SectionRef &sec);
 error_or<uint64_t> section_address(const SectionRef &sec);
 error_or<uint64_t> section_size(const SectionRef &sec);
 
-// symbols stuff
+// symbols
 symbol_iterator begin_symbols(const ObjectFile &obj);
 symbol_iterator end_symbols(const ObjectFile &obj);
 error_or<uint64_t> symbol_address(const SymbolRef &sym);
@@ -39,10 +39,10 @@ error_or<SymbolRef::Type> symbol_type(const SymbolRef &s);
 error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s);
 error_or<uint64_t> symbol_size(const SymbolRef &s);
 
-// relocations stuff
+// relocation
 uint64_t relocation_offset(const RelocationRef &rel);
 
-// misc stuff
+// misc
 
 // returns abs - base if abs >= base or just abs otherwise
 uint64_t relative_address(uint64_t base, uint64_t abs);
@@ -57,11 +57,18 @@ typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 //results could be weird, e.g. symbol size eqauls to 18446744073709550526.
 symbols_sizes get_symbols_sizes(const ObjectFile &obj);
 
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf);
 
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf);
 
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec);
 
-// Pity, it's C++ and it isn't easy to hide templates inside .cpp
+// template functions
 
+// 4.0
 #if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
 template <typename T>
@@ -91,20 +98,59 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
     return success(er_name.get().str());
 }
 
+//3.8
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
-// TODO : repeat functions above
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Phdr hdr;
 
+    auto hdrs = elf.program_headers();
+    return std::vector<hdr>(hdrs.begin(), hdrs.end());
+}
 
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Shdr hdr;
+
+    auto secs = elf.sections();
+    return std::vector<hdr>(secs.begin(), secs.end());
+}
+
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
+    auto er_name = elf.getSectionName(sec);
+    if (er_name) return failure(er_name.getError().message());
+    return success(er_name->str());
+}
+
+// 3.4
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
-// TODO : repeat functions above
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Phdr hdr;
+
+    return std::vector<hdr>(elf.begin_program_headers(), elf.end_program_headers());
+}
+
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Shdr hdr;
+
+    return std::vector<hdr>(elf.begin_sections(), elf.end_sections());
+}
+
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
+    auto er_name = elf.getSectionName(sec);
+    if (er_name) return failure(er_name.getError().message());
+    return success(er_name->str());
+}
 
 #else
 #error LLVM version is not supported
 #endif
-
-
 
 } // namespace prim
 

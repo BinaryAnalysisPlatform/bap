@@ -1,5 +1,7 @@
 #include <iostream>
 
+#include <llvm/ADT/Triple.h>
+
 #include "llvm_primitives.hpp"
 
 namespace prim {
@@ -15,8 +17,25 @@ uint64_t relative_address(uint64_t base, uint64_t abs) {
     else return abs;
 }
 
+// 4.0 only
 #if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 
+template <typename T>
+std::string error_message(Expected<T> &e) {
+    return toString(e.takeError());
+}
+
+// 3.8 only
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
+template <typename T>
+std::string error_message(const ErrorOr<T> &er) {
+    return er.getError().message();
+}
+
+// 4.0 or 3.8
+#elif LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0        \
+    || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 const char* get_raw_data(const ObjectFile &obj) {
     return obj.getMemoryBufferRef().getBufferStart();
@@ -30,13 +49,13 @@ section_iterator end_sections(const ObjectFile &obj) { return obj.section_end();
 error_or<uint64_t> symbol_address(const SymbolRef &sym) {
     auto addr = sym.getAddress();
     if (addr) return success(*addr);
-    else return failure(llvm::toString(addr.takeError()));
+    else return failure(error_message(addr));
 }
 
 error_or<std::string> symbol_name(const SymbolRef &s) {
     auto name = s.getName();
     if (name) return success(name->str());
-    else return failure(llvm::toString(name.takeError()));
+    else return failure(error_message(name));
 }
 
 error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue()); }
@@ -44,30 +63,27 @@ error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue(
 error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
     auto typ = s.getType();
     if (typ) return success(*typ);
-    else return failure(llvm::toString(typ.takeError()));
+    else return failure(error_message(typ));
 }
 
 error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
     auto sec = s.getSection();
     if (sec) return success(*sec);
-    else return failure(llvm::toString(sec.takeError()));
+    else return failure(error_message(sec));
 }
 
 uint64_t relocation_offset(const RelocationRef &rel) { return rel.getOffset(); }
 
-// TODO: the same as for 3.8. consider reuse
 std::vector<RelocationRef> relocations(const SectionRef &sec) {
     auto r = sec.relocations();
     return std::vector<RelocationRef>(r.begin(), r.end());
 }
 
-// TODO: the same as for 3.8. consider reuse
 std::vector<SectionRef> sections(const ObjectFile &obj) {
     auto s = obj.sections();
     return std::vector<SectionRef>(s.begin(), s.end());
 }
 
-// TODO: the same as for 3.8. consider reuse
 std::vector<SymbolRef> symbols(const ObjectFile &obj) {
     auto s = obj.symbols();
     return std::vector<SymbolRef>(s.begin(), s.end());
@@ -92,78 +108,7 @@ error_or<uint64_t> section_size(const SectionRef &sec) {
 template <typename T>
 void next(content_iterator<T> &it, content_iterator<T> end) { ++it; }
 
-#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
-
-const char* get_raw_data(const ObjectFile &obj) {
-    return obj.getMemoryBufferRef().getBufferStart();
-}
-
-symbol_iterator begin_symbols(const ObjectFile &obj) { return obj.symbol_begin(); }
-symbol_iterator end_symbols(const ObjectFile &obj) { return obj.symbol_end(); }
-section_iterator begin_sections(const ObjectFile &obj) { return obj.section_begin(); }
-section_iterator end_sections(const ObjectFile &obj) { return obj.section_end(); }
-
-error_or<uint64_t> symbol_address(const SymbolRef &sym) {
-    auto addr = sym.getAddress();
-    if (addr) return success(*addr);
-    else return failure(addr.getError().message());
-}
-
-error_or<std::string> symbol_name(const SymbolRef &s) {
-    auto name = s.getName();
-    if (name) return success(name.get().str());
-    else return failure(name.getError().message());
-}
-
-error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue()); }
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) { return success(s.getType()); }
-
-error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
-    auto sec = s.getSection();
-    if (sec) return success(*sec);
-    else return failure(sec.getError().message());
-}
-
-uint64_t relocation_offset(const RelocationRef &rel) {
-    return rel.getOffset();
-}
-
-std::vector<RelocationRef> relocations(const SectionRef &sec) {
-    auto r = sec.relocations();
-    return std::vector<RelocationRef>(r.begin(), r.end());
-}
-
-std::vector<SectionRef> sections(const ObjectFile &obj) {
-    auto s = obj.sections();
-    return std::vector<SectionRef>(s.begin(), s.end());
-}
-
-std::vector<SymbolRef> symbols(const ObjectFile &obj) {
-    auto s = s.symbols();
-    return std::vector<SymbolRef>(s.begin(), s.end());
-}
-
-error_or<std::string> section_name(const SectionRef &sec) {
-    StringRef name;
-    auto er = sec.getName(name);
-    if (!er) return success(name.str());
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_address(const SectionRef &sec) {
-    return success(sec.getAddress());
-}
-
-error_or<uint64_t> section_size(const SectionRef &sec) {
-    return success(sec.getSize());
-}
-
-//aimed for iteration over symbols, sections, relocations
-template <typename T>
-void next(content_iterator<T> &it, content_iterator<T> end) {
-    ++it;
-}
-
+// 3.4
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
 const char* get_raw_data(const ObjectFile &obj) {
