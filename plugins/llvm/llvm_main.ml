@@ -9,6 +9,10 @@ let disasm_init x86_syntax =
   | Error er ->
     eprintf "%s\n" (Error.to_string_hum er)
 
+let print_version () =
+  printf "%s\n" Bap_llvm_config.version ;
+  exit 0
+
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
@@ -28,7 +32,12 @@ to a file type will be used. For example, for any executable file a
 default image base is equal to lowest image virtual address.
 For relocatable files a default image base is equal to 0xC0000000." in
     Config.(param (some int64) ~default:None "base" ~doc) in
+  let version =
+    let doc ="Prints LLVM version and exits" in
+    Config.(flag "version" ~doc) in
   Config.when_ready (fun {Config.get=(!)} ->
+      if !version then
+        print_version();
       let () = Ogre_loader.init ?base:!base_addr () in
       match !x86_syntax with
       | "att" | "intel" as s ->
