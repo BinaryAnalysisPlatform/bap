@@ -16,6 +16,7 @@ val id : t -> id
 module Make(Machine : Machine) : sig
   type t = value
   type 'a m = 'a Machine.t
+  val id : t -> id
   val to_word : t -> word
   val of_word : word -> t m
   val of_string : string -> t m

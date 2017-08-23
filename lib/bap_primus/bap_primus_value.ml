@@ -45,6 +45,7 @@ module Make(Machine : Machine) = struct
   type t = value
   type 'a m = 'a Machine.t
 
+  let id = id
   let of_word value =
     Machine.Global.get state >>= fun id ->
     Machine.Global.put state (Int63.succ id) >>| fun () ->

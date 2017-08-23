@@ -514,6 +514,15 @@ module Std : sig
         type t = value
         type 'a m = 'a Machine.t
 
+
+        (** [id x] is a unique identifier of a value. Every
+            evaluation of non-trivial computation produces a value
+            with new identifier. Only seting and reading a variable
+            preserves value identifiers. Each new constaint or
+            arithmentic, or memory expression produces a value with a
+            new identifier.   *)
+        val id : t -> id
+
         (** [to_word x] projects [x] to a machine [word]. Note, many
             operations from the [Word] module are lifted into the
             [Machine] monad by this functor, so this operation is not
