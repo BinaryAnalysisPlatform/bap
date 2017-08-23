@@ -43,13 +43,8 @@ error_or<uint64_t> symbol_size(const SymbolRef &s);
 uint64_t relocation_offset(const RelocationRef &rel);
 
 // misc
-
 // returns abs - base if abs >= base or just abs otherwise
 uint64_t relative_address(uint64_t base, uint64_t abs);
-
-// next - aimed for iteration over symbols, sections, relocations
-template <typename T>
-void next(content_iterator<T> &it, content_iterator<T> end);
 
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
@@ -146,6 +141,14 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
     auto er_name = elf.getSectionName(sec);
     if (er_name) return failure(er_name.getError().message());
     return success(er_name->str());
+}
+
+// aimed for iteration over symbols, sections, relocations in llvm 3.4
+template <typename T>
+void next(content_iterator<T> &it, content_iterator<T> end) {
+    error_code ec;
+    it.increment(ec);
+    if (ec) it = end;
 }
 
 #else

@@ -206,14 +206,6 @@ uint64_t relocation_offset(const RelocationRef &rel) {
     return off;
 }
 
-//aimed for iteration over symbols, sections, relocations in llvm 3.4
-template <typename T>
-void next(content_iterator<T> &it, content_iterator<T> end) {
-    error_code ec;
-    it.increment(ec);
-    if (ec) it = end;
-}
-
 template <typename T>
 std::vector<T> collect(content_iterator<T> begin, content_iterator<T> end) {
     std::vector<T> data;
