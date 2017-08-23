@@ -19,7 +19,7 @@
 #include <llvm/Config/llvm-config.h>
 
 #include "llvm_binary_34.hpp"
-#include "llvm_binary_38.hpp"
+#include "llvm_binary_38_40.hpp"
 #include "llvm_error_or.hpp"
 #include "llvm_primitives.hpp"
 
