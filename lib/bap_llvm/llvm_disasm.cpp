@@ -20,8 +20,8 @@
 #include "disasm.hpp"
 #include "llvm_disasm.h"
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
-    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
@@ -177,8 +177,8 @@ class llvm_disassembler : public disassembler_interface {
     llvm::MCInst mcinst;
     insn current;
     std::vector<int> prefixes;
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
-    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
     shared_ptr<MemoryObject>                mem;
 #else
     shared_ptr<const llvm::MemoryObject>    mem;
@@ -265,8 +265,8 @@ public:
             return {nullptr, {bap_disasm_unsupported_target} };
         }
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 ||       \
-    LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
+    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
