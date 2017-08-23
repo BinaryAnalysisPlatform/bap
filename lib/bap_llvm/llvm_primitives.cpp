@@ -25,6 +25,12 @@ std::string error_message(Expected<T> &e) {
     return toString(e.takeError());
 }
 
+error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
+    auto typ = s.getType();
+    if (typ) return success(*typ);
+    else return failure(error_message(typ));
+}
+
 // 3.8 only
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
@@ -33,8 +39,14 @@ std::string error_message(const ErrorOr<T> &er) {
     return er.getError().message();
 }
 
+error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
+    return success(s.getType());
+}
+
+#endif
+
 // 4.0 or 3.8
-#elif LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0        \
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0        \
     || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 const char* get_raw_data(const ObjectFile &obj) {
@@ -59,12 +71,6 @@ error_or<std::string> symbol_name(const SymbolRef &s) {
 }
 
 error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue()); }
-
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
-    auto typ = s.getType();
-    if (typ) return success(*typ);
-    else return failure(error_message(typ));
-}
 
 error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
     auto sec = s.getSection();
