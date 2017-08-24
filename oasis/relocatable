@@ -1,0 +1,12 @@
+Flag relocatable
+  Description: Build relocatable brancher
+  Default: false
+
+Library relocatable_plugin
+  XMETADescription: provides facility to load relocatable files using LLVM library
+  Path:            plugins/relocatable
+  Build$:          flag(everything) || flag(relocatable)
+  FindlibName:     bap-plugin-relocatable
+  InternalModules: Relocatable_main, Rel_brancher
+  BuildDepends:    bap, ogre
+  XMETAExtraLines: tags="brancher, loader, ogre"
