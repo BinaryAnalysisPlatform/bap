@@ -84,3 +84,5 @@ module Make(SM : Monad.State.S2) = struct
 end
 
 include Make(Monad.State)
+
+let eval xs = Monad.State.exec ((new t)#eval xs)

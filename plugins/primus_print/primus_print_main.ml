@@ -57,7 +57,7 @@ let parse_monitors =
       | name -> monitor_provider (strip name) ps)
 
 let print_event out p ev =
-  fprintf out "@[(%s %a)@]@\n"
+  fprintf out "@[(%s %a)@]@\n%!"
     (Primus.Observation.Provider.name p) Sexp.pp_hum ev
 
 let id ppf pos =
@@ -102,7 +102,7 @@ let start_monitoring {Config.get=(!)} =
 
     let setup_tracing () =
       if Option.is_some !Param.traceback
-      then Machine.List.all_ignore [
+      then Machine.List.sequence [
           Primus.Interpreter.enter_pos >>> record_trace;
           Primus.Machine.finished >>> print_trace;
         ]

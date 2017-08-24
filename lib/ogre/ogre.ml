@@ -365,7 +365,7 @@ module Doc = struct
   let pp ppf t =
     fprintf ppf "%a@\n%a" pp_scheme t pp_body t
 
-  let load channel = Or_error.try_with_join (fun () ->
+  let load channel = Or_error.try_with_join ~backtrace:true (fun () ->
       of_sexps (Sexp.input_sexps channel))
 
   let from_file name = In_channel.with_file name ~f:load
@@ -379,7 +379,7 @@ module Doc = struct
     Out_channel.with_file name ~f:(save doc)
 
   let from_string str =
-    Or_error.try_with_join (fun () ->
+    Or_error.try_with_join ~backtrace:true (fun () ->
         Sexp.scan_sexps (String.strip str |> Lexing.from_string) |>
         of_sexps)
 

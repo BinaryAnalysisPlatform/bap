@@ -2,14 +2,38 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus_types
 
+val pc_change : addr observation
+val halting : unit observation
+
+val loading : value observation
+val loaded : (value * value) observation
+val storing : value observation
+val stored : (value * value) observation
+val reading : var observation
+val read : (var * value) observation
+val writing : var observation
+val written : (var * value) observation
+val undefined : value observation
+val const : value observation
+
+val binop : ((binop * value * value) * value) observation
+val unop : ((unop * value) * value) observation
+val cast : ((cast * int * value) * value) observation
+val extract : ((int * int * value) * value) observation
+
+
+
+val enter_exp : exp observation
+val leave_exp : exp observation
+
+
 val enter_term : tid observation
 val leave_term : tid observation
 
-val new_value : word observation
-val enter_exp : exp observation
-val leave_exp : exp observation
 val enter_pos : pos observation
 val leave_pos : pos observation
+
+val enter_top : program term observation
 val enter_sub : sub term observation
 val enter_arg : arg term observation
 val enter_blk : blk term observation
@@ -17,6 +41,7 @@ val enter_phi : phi term observation
 val enter_def : def term observation
 val enter_jmp : jmp term observation
 
+val leave_top : program term observation
 val leave_sub : sub term observation
 val leave_arg : arg term observation
 val leave_blk : blk term observation
@@ -24,17 +49,26 @@ val leave_phi : phi term observation
 val leave_def : def term observation
 val leave_jmp : jmp term observation
 
-val halting : unit observation
 
 type exn += Halt
 
 module Make (Machine : Machine) : sig
   type 'a m = 'a Machine.t
   val halt : never_returns m
+  val pc : addr m
   val pos : pos m
   val sub : sub term -> unit m
   val blk : blk term -> unit m
-  val exp : exp -> word m
+  val get : var -> value m
+  val set : var -> value -> unit m
+  val binop : binop -> value -> value -> value m
+  val unop : unop -> value -> value m
+  val cast : cast -> int -> value -> value m
+  val concat : value -> value -> value m
+  val extract : hi:int -> lo:int -> value -> value m
+  val const : word -> value m
+  val load : value -> endian -> size -> value m
+  val store : value -> value -> endian -> size -> unit m
 end
 
 

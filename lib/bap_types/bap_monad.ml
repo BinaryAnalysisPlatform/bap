@@ -12,9 +12,14 @@ module State = struct
   module Compat = struct
     type 'a result = 'a
     include Monad.State
+    let modify m f =
+      m >>= fun x ->
+      update f >>= fun () ->
+      return x
   end
   include (Compat : S with type ('a,'e) t = ('a,'e) Monad.State.t
                        and type 'a result = 'a)
+
 end
 
 module T = struct
@@ -61,6 +66,10 @@ module T = struct
       type 'a result = 'a M.t
       include Monad.State.T2(M)
       include Monad.State.Make2(M)
+      let modify m f =
+        m >>= fun x ->
+        update f >>= fun () ->
+        return x
       let eval m s = M.(run m s >>| fst)
       let exec m s = M.(run m s >>| snd)
     end

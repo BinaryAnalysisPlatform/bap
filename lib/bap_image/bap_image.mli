@@ -79,6 +79,9 @@ val available_backends : unit -> string list
 module Scheme : sig
   open Ogre.Type
   type addr = int64
+  type size = int64
+  type off = int64
+
   type 'a region = {addr : addr; size : int64; info : 'a}
 
   val off : int64 Ogre.field
@@ -86,6 +89,7 @@ module Scheme : sig
   val addr : int64 Ogre.field
   val name : string Ogre.field
   val root : int64 Ogre.field
+  val fixup : addr Ogre.field
   val readable : bool Ogre.field
   val writable : bool Ogre.field
   val executable : bool Ogre.field
@@ -107,7 +111,7 @@ module Scheme : sig
 
   val mapped : (int64 region, (addr -> addr -> addr -> 'a) -> 'a) Ogre.attribute
 
-  val reference :
+  val relocation :
     (addr * addr, (addr -> addr -> 'a) -> 'a) Ogre.attribute
 
   val external_reference :

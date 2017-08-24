@@ -1038,10 +1038,7 @@ let arm_ops_exn ops () =
         ~error:(Error.create "unsupported operand" op Op.sexp_of_t )
         (Arm_op.create op))
 
-let arm_ops ops = try_with (arm_ops_exn ops)
-
-
-
+let arm_ops ops = try_with ~backtrace:true (arm_ops_exn ops)
 
 module CPU = struct
   include Arm_env
@@ -1125,4 +1122,4 @@ let insn_exn mem insn : bil Or_error.t =
 let lift mem insn =
   try insn_exn mem insn >>| resolve_pc mem with
   | Lifting_failed msg -> errorf "%s:%s" (Basic.Insn.name insn) msg
-  | exn -> of_exn exn
+  | exn -> of_exn ~backtrace:`Get exn

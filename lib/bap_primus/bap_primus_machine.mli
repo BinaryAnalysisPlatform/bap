@@ -12,3 +12,4 @@ type nonrec component = component
 module State = Bap_primus_state
 module Make(M : Monad.S) : Machine with type 'a m := 'a M.t
 
+val exn_raised : exn observation

@@ -309,6 +309,8 @@ let register_loader ~name backend =
 module Scheme = struct
   open Ogre.Type
   type addr = int64
+  type size = int64
+  type off = int64
   type 'a region = {addr : int64; size: int64; info : 'a}
   let region addr size info = {addr; size; info}
   let void_region addr size = {addr; size; info = ()}
@@ -321,7 +323,7 @@ module Scheme = struct
   let readable   = "r" %: bool
   let writable   = "w" %: bool
   let executable = "x" %: bool
-  let ref_addr = "ref-addr" %: int
+  let fixup = "fixup" %: int
 
   let location () = scheme addr $ size
   let declare name scheme f = Ogre.declare ~name scheme f
@@ -339,10 +341,10 @@ module Scheme = struct
   let mapped () = declare "mapped" (location () $off)
       (fun addr size off -> region addr size off)
 
-  let reference () =
-    declare "reference" (scheme ref_addr $ addr) Tuple.T2.create
+  let relocation () =
+    declare "relocation" (scheme fixup $ addr) Tuple.T2.create
   let external_reference () =
-    declare "external_reference" (scheme ref_addr $ name) Tuple.T2.create
+    declare "external_reference" (scheme addr $ name) Tuple.T2.create
   let base_address () = declare "base-address" (scheme addr) ident
 end
 

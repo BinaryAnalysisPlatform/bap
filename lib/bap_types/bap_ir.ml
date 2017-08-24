@@ -78,7 +78,7 @@ module Tid = struct
     | '@' -> Scanf.sscanf str "@%s" rev_lookup
     | _ -> invalid_arg "label should start from '%' or '@'"
 
-  let from_string str = Or_error.try_with (fun () ->
+  let from_string str = Or_error.try_with ~backtrace:true (fun () ->
       from_string_exn str)
 
   let set_name tid name =

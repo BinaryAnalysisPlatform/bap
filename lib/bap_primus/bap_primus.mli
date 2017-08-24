@@ -1,10 +1,62 @@
 open Core_kernel.Std
+open Regular.Std
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
 open Format
 
 module Std : sig
+
+  (** Primus - The Microexecution Framework.
+
+
+      Primus is a microexecution framework that can be used to build
+      CPU and full system emulators, symbolic executers, static
+      fuzzers, policy checkers, tracers, quickcheck-like test suits,
+      etc.
+
+      The underlying idea is quite simple - Primus interprets a lifted
+      program. The interpreter provides a set of extension points
+      through which it is possible to observe what is happening inside
+      the interpreter, and even to change the interpreter
+      behavior. This extension points are called "observations" in
+      Primus parlance. A simple publish/subscriber architecture is
+      used to watch for the interpreter events, where subscribers are
+      allowed to arbitrary change the interpreter state.
+
+      A novel idea is that the interpreter is non-deterministic
+      in the same sense as a non-deterministic Turing machine. That
+      means that any computation may have more than one result. Every
+      time there is a non-determinism in the computation the machine
+      state is cloned. Different scheduling policies mixed with
+      different non-deterministic startegies provide an analyst a vast
+      selection of avenues to investigate.
+
+      Primus is build around an idea of a component base linearly
+      extensible interpreter. That means, that an analysis can be
+      built from basic building blocks, with minimal coupling between
+      them. The central component is the Interpreter itself. It
+      evaluates a program and interacts with three other components:
+       - Linker
+       - Env
+       - Memory
+
+      The Linker is responsible for linking code into the program
+      abstraction. The [Env] component defines the environment
+      behavior, i.e., variables. Finally, the [Memory] component is
+      responsible for the memory representation.
+
+      Primus framework is implemented as a monad transformer that
+      wraps any monad into the [Machine] monad. The [Machine] monad
+      denotes a computation, and is implemented as a composition of
+      state, exception, and continuation passing monad.
+
+      Each user component is a functor that is parametrized by a
+      Machine monad. It is require to provide only one function -
+      [init]. Usually, this function subscribes to observations, but
+      it can modify other components (depending on their interface).
+
+  *)
   module Primus : sig
     (** Machine Exception.
 
@@ -18,18 +70,21 @@ module Std : sig
     (** [a statement] is used to make an observation of type [a].    *)
     type 'a statement
 
+    (** a result of computation  *)
+    type value
+
+
     (** Machine exit status.
-        A machine may terminate normally, or abnormally with the 
-        specified exception.  
-    *)
-    type exit_status = 
+        A machine may terminate normally, or abnormally with the
+        specified exception. *)
+    type exit_status =
       | Normal
       | Exn of exn
 
     (** An abstract type that represents an effect produced by a
         Machine run. That type is left abstract, and has no
         operations, as its purpose is to disallow running machine
-        directly, withou an instantiation of the [Machine.Main]
+        directly, without an instantiation of the [Machine.Main]
         module. *)
     type 'a effect
 
@@ -48,13 +103,13 @@ module Std : sig
         not depenend on the type of the functor.*)
     module Observation : sig
 
-      (** An observation provider. 
+      (** An observation provider.
           A provider facilitates introspection of the Primus Machine,
           for the sake of debugging and dumping the effects. The
           provider shoud not (and can't be) used for affecting the
           behavior of a machine, or for the analysis, as its main
           purpose is debugging, logging, and tracing the execution.*)
-      type provider 
+      type provider
 
 
       (** [provide ?inspect name] returns a pair of two handlers. The
@@ -79,7 +134,7 @@ module Std : sig
       (** enumerate all currently available observation providers  *)
       val list_providers : unit -> provider list
 
-      module Provider : sig 
+      module Provider : sig
         type t = provider
 
         (** unique name of a provider *)
@@ -97,11 +152,9 @@ module Std : sig
       end
     end
 
-
-
     (** A hierarchical program position.
 
-        The [Level.t] is a cursor-like data structure, that
+        The [Pos.t] is a cursor-like data structure, that
         describes a program position in the program term hierarchy.*)
     module Pos : sig
       (** uninhabited type  *)
@@ -182,6 +235,10 @@ module Std : sig
       (** The [finished] event occurs when the machine terminates.   *)
       val finished : unit observation
 
+
+      (** [exn_raised exn] occurs every time an abnormal control flow
+          is initiated *)
+      val exn_raised : exn observation
 
 
       (** Machine identifier type.   *)
@@ -310,6 +367,7 @@ module Std : sig
         end
 
 
+
         include Monad.State.Multi.S with type 'a t := 'a t
                                      and type 'a m := 'a m
                                      and type env := project
@@ -327,17 +385,43 @@ module Std : sig
         module Global : State with type 'a m := 'a t
                                and type 'a t := 'a state
 
+
+        (** [raise exn] raises the machine exception [exn], intiating
+            an abonormal control flow *)
         val raise : exn -> 'a t
+
+
+        (** [catch x f] creates a computation that is equal to [x] if
+            it terminates normally, and to [f e] if [x] terminates
+            abnormally with the exception [e]. *)
         val catch : 'a t -> (exn -> 'a t) -> 'a t
 
+
+        (** [project] is a computation that results with the project
+            data structure. Note, that Machine is a State monad
+            with the [env] type equal to [project], thus [project] is
+            a shortcut to [get ()].
+
+            You can use [put project] to update the project data structure.*)
         val project : project t
+
+
+        (** [program] program representation  *)
         val program : program term t
+
+
+        (** [arch] code architecture  *)
         val arch : arch t
+
+
+        (** [args] program command line arguments  *)
         val args : string array t
+
+
+        (** [envp] program environment variables.   *)
         val envp : string array t
+
       end
-
-
 
       (** Machine component interface.
 
@@ -367,10 +451,24 @@ module Std : sig
       module Make(M : Monad.S) : S with type 'a m := 'a M.t
 
 
+
+      (** Primus Entry Point.  *)
       module Main(M : S) : sig
-        val run : 
+
+        (** [run ?envp ?args proj] returns a computation that will
+            run a program represented with the [proj] data structure.
+
+            The [envp] and [args] parameters are constants, and can be
+            accessible during the computation using [Machine.envp] and
+            [Machine.argp].
+
+            The computation evaluates to a pair [(result,project)]
+            where result is a result of computation and project can be
+            modified by the [primus] components, e.g., annotated with
+            attributes, etc. *)
+        val run :
           ?envp:string array ->
-          ?args:string array -> 
+          ?args:string array ->
           project ->
           unit M.t ->
           (exit_status * project) M.m
@@ -381,15 +479,219 @@ module Std : sig
       val add_component : component -> unit
     end
 
-
-
-
     (** type abbreviation for the Machine.state  *)
     type 'a state = 'a Machine.state
 
 
     (** The Machine component.  *)
     type component = Machine.component
+
+
+
+    (** A result of computation.
+
+        Each computation that terminates normally produces a machine
+        word that has a unique identifier. Basically, [value] is an
+        abstract pair, that consists of the [word] and an identifier.
+    *)
+    module Value : sig
+      type id [@@deriving bin_io, compare, sexp]
+      module Id : Regular.S with type t = id
+
+      type t = value [@@deriving bin_io, compare, sexp]
+
+
+      (** [to_word x] projects [x] to a machine word  *)
+      val to_word : t -> word
+
+      (** [id value] returns the [value] identifier *)
+      val id : t -> id
+
+
+      (** [Make(Machine)] provides an interface to the Value type
+          lifted into the [Machine] monad.  *)
+      module Make(Machine : Machine.S) : sig
+        type t = value
+        type 'a m = 'a Machine.t
+
+
+        (** [id x] is a unique identifier of a value. Every
+            evaluation of non-trivial computation produces a value
+            with new identifier. Only seting and reading a variable
+            preserves value identifiers. Each new constaint or
+            arithmentic, or memory expression produces a value with a
+            new identifier.   *)
+        val id : t -> id
+
+        (** [to_word x] projects [x] to a machine [word]. Note, many
+            operations from the [Word] module are lifted into the
+            [Machine] monad by this functor, so this operation is not
+            usually necessary. *)
+        val to_word : t -> word
+
+        (** [of_word x] computes a fresh new value from [x]  *)
+        val of_word : word -> t m
+
+        (** [of_string s] computes a fresh new value from a textual
+            representation of a machine word [x]. See {!Bap.Std.Word}
+            module for more details.  *)
+        val of_string : string -> t m
+
+        (** [of_bool x] creates a fresh new value from the boolean [x].  *)
+        val of_bool : bool -> t m
+
+        (** [of_int ~width x] creates a fresh new value of the given
+            [width] from the integer [x] *)
+        val of_int : width:int -> int -> t m
+
+        (** [of_int32 x] creates a fresh new value from [x]  *)
+        val of_int32 : ?width:int -> int32 -> t m
+
+        (** [of_int64 x] creates a fresh new value from [x]  *)
+        val of_int64 : ?width:int -> int64 -> t m
+
+        (** a fresh new [false] computation  *)
+        val b0 : t m
+
+        (** a fresh new [true] computation  *)
+        val b1 : t m
+
+        (** [one x] same as [of_word @@ one x]  *)
+        val one : int -> t m
+
+        (** [zero x] same as [of_word @@ zero x]  *)
+        val zero : int -> t m
+
+        (** [signed x] same as [of_word @@ signed x]  *)
+        val signed : t -> t m
+
+        (** [is_zero] is [lift1 Word.is_zero]  *)
+        val is_zero : t -> bool
+
+        (** [is_one] is [lift1 Word.is_one]  *)
+        val is_one : t -> bool
+
+        (** [is_positive] is [lift1 Word.is_positive]  *)
+        val is_positive : t -> bool
+
+        (** [is_negative] is [lift1 Word.is_negative]  *)
+        val is_negative : t -> bool
+
+        (** [is_non_positive] is [lift1 Word.is_non_positive]  *)
+        val is_non_positive : t -> bool
+
+        (** [is_non_negative] is [lift1 Word.is_non_negative]  *)
+        val is_non_negative : t -> bool
+
+        (** [bitwidth] is [lift1 Word.bitwidth]  *)
+        val bitwidth : t -> int
+
+
+        (** [extracts ?hi ?lo] is [lift1 (Word.extract ?hi ?lo)]  *)
+        val extract : ?hi:int -> ?lo:int -> t -> t m
+
+        (** [concat] is [lift2 Word.concat]  *)
+        val concat : t -> t -> t m
+
+        (** [succ] is [lift1 Word.succ]  *)
+        val succ : t -> t m
+
+        (** [pred] is [lift1 Word.pred]  *)
+        val pred : t -> t m
+
+        (** [nsucc] see {!Word.nsucc}  *)
+        val nsucc : t -> int -> t m
+
+        (** [npred] see {!Word.npred}  *)
+        val npred : t -> int -> t m
+
+
+        (** see {!Word.abs}  *)
+        val abs : t -> t m
+
+        (** see {!Word.neg}  *)
+        val neg : t -> t m
+
+        (** see {!Word.add}  *)
+        val add : t -> t -> t m
+
+        (** see {!Word.sub}  *)
+        val sub : t -> t -> t m
+
+        (** see {!Word.div}  *)
+        val div : t -> t -> t m
+
+        (** see {!Word.modulo}  *)
+        val modulo : t -> t -> t m
+
+        (** see {!Word.lnot}  *)
+        val lnot : t -> t m
+
+        (** see {!Word.logand}  *)
+        val logand : t -> t -> t m
+
+        (** see {!Word.logor}  *)
+        val logor : t -> t -> t m
+
+        (** see {!Word.logxor}  *)
+        val logxor : t -> t -> t m
+
+        (** see {!Word.lshift}  *)
+        val lshift : t -> t -> t m
+
+        (** see {!Word.rshift}  *)
+        val rshift : t -> t -> t m
+
+        (** see {!Word.arshift}  *)
+        val arshift : t -> t -> t m
+
+
+        (** Int-like syntax.  *)
+        module Syntax : sig
+
+          (** see {!Word.(~-)}  *)
+          val ( ~-) : t -> t m
+
+          (** see {!Word.(+)}  *)
+          val ( + ) : t -> t -> t m
+
+          (** see {!Word.(-)}  *)
+          val ( - ) : t -> t -> t m
+
+          (** see {!Word.( * )}  *)
+          val ( * ) : t -> t -> t m
+
+          (** see {!Word.(/)}  *)
+          val ( / ) : t -> t -> t m
+
+          (** see {!Word.(mod)}  *)
+          val (mod) : t -> t -> t m
+
+          (** see {!Word.(lor)}  *)
+          val (lor) : t -> t -> t m
+
+          (** see {!Word.(lsl)}  *)
+          val (lsl) : t -> t -> t m
+
+          (** see {!Word.(lsr)}  *)
+          val (lsr) : t -> t -> t m
+
+          (** see {!Word.(asr)}  *)
+          val (asr) : t -> t -> t m
+
+          (** see {!Word.(lxor)}  *)
+          val (lxor) : t -> t -> t m
+
+          (** see {!Word.(land)}  *)
+          val (land) : t -> t -> t m
+        end
+
+        include Regular.S with type t := t
+      end
+
+      include Regular.S with type t := t
+
+    end
 
     (** The Interpreter.
 
@@ -399,8 +701,73 @@ module Std : sig
         evaluation. The components can affect the results of
         evaluation in a limited way, by affecting the state of the
         components that are used by the Interpreter, name the
-        Environemnt and the Memory. *)
+        Environemnt and the Memory.
+
+        Note: we the [observation (x,y,z)] notation in the
+        documentation to denote an observation of a value represented
+        with the [(x,y,z)] tuple, that in fact corresponds to
+        [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
+
+
+      (** [pc_change x] happens every time a code at address [x] is executed.  *)
+      val pc_change : addr observation
+
+
+      (** [loading x] happens before a value from the address [x] is loaded
+          by the interpreter from the memory.  *)
+      val loading : value observation
+
+
+      (** [loaded (addr,value)] happens after the [value] is loaded
+          from the address [addr].  *)
+      val loaded : (value * value) observation
+
+
+      (** [storing x] happens before a value is stored at address [x]  *)
+      val storing : value observation
+
+
+      (** [stored (addr,value)] happens after the [value] is stored at
+          the address [addr] *)
+      val stored : (value * value) observation
+
+
+      (** [reading x] happens before the variable [x] is read from the
+          environment. *)
+      val reading : var observation
+
+      (** [read (var,x)] happens after a variable [var] is evaluated
+          to the value [x] *)
+      val read : (var * value) observation
+
+      (** [writing v] happens before a value is written to the variable [v]  *)
+      val writing : var observation
+
+      (** [written (v,x)] happens after [x] is assinged to [v]  *)
+      val written : (var * value) observation
+
+      (** [undefined x] happens when a computation produces an
+          undefined value [x].  *)
+      val undefined : value observation
+
+      (** [const x] happens when a constant [x] is created *)
+      val const : value observation
+
+      (** [binop ((op,x,y),r)] happens after the binary operation [op]
+          is applied to values [x] and [y] and evaluates to [r] *)
+      val binop : ((binop * value * value) * value) observation
+
+      (** [unop ((op,x),r)] happens after the unary operation [op] is
+          applied to [x] and results [r] *)
+      val unop : ((unop * value) * value) observation
+
+      (** [cast ((t,x),r)] happens after [x] is casted to [r] using
+          the casting type [t] *)
+      val cast : ((cast * int * value) * value) observation
+
+      (** [extract ((hi,lo,x),r)] happens after [r] is extracted from [x] *)
+      val extract : ((int * int * value) * value) observation
 
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
@@ -450,10 +817,6 @@ module Std : sig
       (** a jump term was left  *)
       val leave_jmp : jmp term observation
 
-      (** the [new_value] observation is made every time an 
-          expression computes a new value*)
-      val new_value : word observation
-
       (** an expression was entered  *)
       val enter_exp : exp observation
 
@@ -465,19 +828,66 @@ module Std : sig
       type exn += Halt
 
       (** Make(Machine) makes an interpreter that computes in the
-          given machine.  *)
+          given [Machine].  *)
       module Make (Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
+
+
+        (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
+
+
+        (** [pc] current value of a program counter.*)
+        val pc : addr m
+
+        (** [pos m] current program position.  *)
         val pos : pos m
+
+        (** [sub x] computes the subroutine [x].  *)
         val sub : sub term -> unit m
+
+        (** [blk x] interprets the block [x].  *)
         val blk : blk term -> unit m
-        val exp : exp -> word m
+
+        (** [get var] reads [var]  *)
+        val get : var -> value m
+
+        (** [set var x] sets [var] to [x]  *)
+        val set : var -> value -> unit m
+
+        (** [binop x y] computes a binary operation [op] on [x] and [y]  *)
+        val binop : binop -> value -> value -> value m
+
+        (** [unop op x] computes an unary operation [op] on [x]  *)
+        val unop : unop -> value -> value m
+
+        (** [cast t n x] casts [n] bits of [x] using a casting type [t]  *)
+        val cast : cast -> int -> value -> value m
+
+        (** [concat x y] computes a concatenation of [x] and [y]  *)
+        val concat : value -> value -> value m
+
+        (** [extract ~hi ~lo x] extracts bits from [lo] to [hi] from
+            [x].  *)
+        val extract : hi:int -> lo:int -> value -> value m
+
+        (** [const x] computes the constant expression [x]  *)
+        val const : word -> value m
+
+        (** [load a d s] computes a load operation, that loads a word
+            of size [s] using an order specified by the endianness [d] from
+            address [a]. *)
+        val load : value -> endian -> size -> value m
+
+        (** [store a x d s] computes a store operation, that stores at
+            the address [a] the word [x] of size [s], using an
+            ordering specified by the endianness [d]. *)
+        val store : value -> value -> endian -> size -> unit m
       end
     end
 
 
-    (** Iterator is a sequence of values from some domain.
+    (** Iterator is a sequence of values of some domain.
 
         Iterator is a just another abstraction that represent a
         sequence of values.  *)
@@ -518,7 +928,6 @@ module Std : sig
       (** Inifinite iterators produces infinite sequences.  *)
       module type Infinite = sig
         include Base
-
 
         (** [next iterator] moves the iterator to the next element of
             the sequence.  *)
@@ -595,6 +1004,9 @@ module Std : sig
       (** [Make(Machine)] lifts the generator interface into the
           Machine monad.  *)
       module Make( Machine : Machine.S) : sig
+
+        (** [next iter] switches the internal state of [iter] to the
+            next state and returns the current value *)
         val next : t -> int Machine.t
       end
     end
@@ -607,7 +1019,6 @@ module Std : sig
         computation using a provided machine.*)
     module Linker : sig
 
-
       (** A code identifier.
 
           A program code can be identified by a name, address or by a
@@ -616,12 +1027,18 @@ module Std : sig
         | `tid of tid
         | `addr of addr
         | `symbol of string
-      ] [@@deriving sexp_of]
+      ] [@@deriving bin_io, compare, sexp]
 
 
 
       (** The Linker error  *)
       type exn += Unbound_name of name
+
+
+      (** occurs before a piece of code is executed *)
+      val exec : name observation
+
+      module Name : Regular.S with type t = name
 
 
       (** Code representation.
@@ -630,6 +1047,8 @@ module Std : sig
           itself is represented. It is just a function, that takes a
           machine and performs a computation using this machine.*)
       module type Code = functor (Machine : Machine.S) -> sig
+
+        (** [exec] computes the code.  *)
         val exec : unit Machine.t
       end
 
@@ -641,15 +1060,14 @@ module Std : sig
 
           Note that the Linker, as well as all other Primus Machine
           components, is stateless, i.e., the functor itself doesn't
-          contain any non-syntactic values, and thus it is purely
+          contain any non-syntactic values and thus it is purely
           functional. All the state is stored in the [Machine]
           state. Thus it is absolutely safe, and correct, to create
           multiple instances of components, as they needed. The
-          functor instatiation is totaly side-effect free.
-
-      *)
+          functor instatiation is totaly side-effect free.*)
       module Make(Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
+
         (** [link ~addr ~name ~tid code] links the given [code]
             fragment into the Machine. The code can be invoked by one
             of the provided identifier. If no idetifiers were
@@ -683,23 +1101,9 @@ module Std : sig
         The Environment binds variables to values.*)
     module Env : sig
 
-      (** a value of the variable will be looked up  *)
-      val variable_access : var observation
-
-      (** a variabe was valuated to the provided value.  *)
-      val variable_read : (var * word) observation
-
-      (** a variable was set to the specified value.  *)
-      val variable_written : (var * word) observation
-
       (** A variable is undefined, if it was never [add]ed to the
           environment.  *)
       type exn += Undefined_var of var
-
-
-      (** happens when an undefined variable is accessed.  *)
-      val undefined_variable : var observation
-
 
 
       (** [Env = Make(Machine)]  *)
@@ -710,10 +1114,10 @@ module Std : sig
             anyone to save bottom or memory values in the environemnt,
             thus the [get] operation should not return the
             [Bil.result].*)
-        val get : var -> word Machine.t
+        val get : var -> value Machine.t
 
         (** [set var value] binds a variable [var] to the given [value].  *)
-        val set : var -> word -> unit Machine.t
+        val set : var -> value -> unit Machine.t
 
 
         (** [add var generator] adds a variable [var] to the
@@ -733,36 +1137,20 @@ module Std : sig
     module Memory : sig
 
 
-      (** occurs when an access (read or write) is perfomed on address
-          that is not mapped into the Machine memory.  *)
-      val segmentation_fault : addr observation
-
-      (** an address will be read  *)
-      val address_access : addr observation
-
-
-      (** a byte from the given address was read  *)
-      val address_read : (addr * word) observation
-
-
-      (** a byte was written to the given address  *)
-      val address_written : (addr * word) observation
-
+      (** [Make(Machine)] lifts the memory interface into the
+          [Machine] monad.  *)
       module Make(Machine : Machine.S) : sig
 
         (** [load addr] loads a byte from the given address *)
         val load : addr -> word Machine.t
 
 
-        (** [save addr x] stores a byte [x] at the given address [addr]  *)
-        val save : addr -> word -> unit Machine.t
-
-
+        (** [store addr x] stores a byte [x] at the given address [addr]  *)
+        val store : addr -> word -> unit Machine.t
 
         (** [add_text mem] maps a memory chunk [mem] as executable and
             readonly segment of machine memory.*)
         val add_text : mem -> unit Machine.t
-
 
         (** [add_data] maps a memory chunk [mem] as writable and
             nonexecutable segment of machine memory.  *)
@@ -790,6 +1178,16 @@ module Std : sig
           ?readonly:bool ->
           ?executable:bool ->
           mem -> unit Machine.t
+
+
+        (** [is_mapped addr] a computation that evaluates to true,
+            when the value is mapped, i.e., it is readable.  *)
+        val is_mapped : addr -> bool Machine.t
+
+
+        (** [is_writable addr] is a computation that evaluates to
+            [true] if [addr] is writable.  *)
+        val is_writable : addr -> bool Machine.t
       end
     end
 
@@ -809,7 +1207,7 @@ module Std : sig
         with a native program. Primus Lisp is close to Common Lisp and
         to the Emacs Lisp dialect.
 
-        Primus Lips is a low-level language, that doesn't provide many
+        Primus Lips is a low-level language that doesn't provide many
         abstractions, as it tries to be as close to the machine
         language as possible. In that sense Primus Lisp can be seen as
         an assembler, except that it can't really assemble binaries,
@@ -817,6 +1215,7 @@ module Std : sig
         program. Primus Lisp, however is still quite powerfull, as the
         absence of suitable abstractions is compensated with powerful
         and versatile meta-programming system.
+
 
         Primus Lisp is primarily used for the following tasks:
         - writing function summaries (aka stubs);
@@ -850,17 +1249,17 @@ module Std : sig
         implementation of all functions specified in the POSIX
         standard (not all at the time of writing).
 
-        A collection of files is called library.  To use features
+        A collection of files is called a library.  To use features
         provided by another file, the file should be requested with
-        the [(require <name>)] form, where [<name>] is the name of the
-        feature. A file with the requested name is searched in the
+        the [(require <ident>)] form, where [<ident>] is the name of
+        the feature. A file with the requested name is searched in the
         library, and loaded, making all its definitions available in
         the lexical scope, that follows the [require] form. If a
         feature is already provided, then nothing
         happens. Dependencies should not contain cycles.
 
-        Declarations specify attributes that are shared by all
-        definitions in a file.For example, a declaration
+        Top-level declarations specify attributes that are shared by
+        all definitions in a file. For example, a declaration
 
         {v (declare (context (arch armv7)) v}
 
@@ -890,7 +1289,7 @@ module Std : sig
 
         An expression can have a polymorphic type [t] that denotes a
         powerset of all types for the given architecture. For example,
-        for ARMv7, {v t = 32 \/ 31 \/ .. \/ 1 v}. Thus a value of any
+        for ARMv7, {b t = 32 \/ 31 \/ .. \/ 1 }. Thus a value of any
         type, is a also a value of type [t].
 
         Side note -- the type system doesn't include the unit type,
@@ -909,28 +1308,31 @@ module Std : sig
         following syntax:
 
         {[
-          (defun <name> (<p1> <p2> ... <pM>)
-           <e1> <e2> .. <eN>)
+          (defun <name> (<arg> ...) <exp> ...)
         ]}
+
+        A list of arguments (that can be empty) defines function
+        arity. Functions in Primus Lisp has fixed arity, unlike
+        macros.
 
         A function definition may optionally contain a documentation
         strings and a declaration section. For example,
 
-        {[
-          (defun strlen (p)
-             "returns a length of the null-terminated string pointed by P"
-             (declare (external "strlen"))
-             (msg "strlen was called with $p")
-             (let ((len 0))
-                 (while (not (points-to-null p))
-             (incr len p))
-            len))
-        ]}
+        {v
+         (defun strlen (p)
+           "returns a length of the null-terminated string pointed by P"
+           (declare (external "strlen"))
+           (msg "strlen was called with $p")
+           (let ((len 0))
+             (while (not (points-to-null p))
+               (incr len p))
+             len))
+        v}
 
         A function can be called (applied) using the function
         application form:
 
-        {v (<function-name> <e1> <e2> ... <eM>) v}
+        {v (<name> <exp> ...) v}
 
         The first element of the function application form is not an
         expression and must be an identified. The rest arguments are
@@ -938,30 +1340,39 @@ module Std : sig
         arguments are passed by value.
 
         The body of a function is a sequence of expressions, that is
-        evaluated in the lexical order (i.e., from top to down). A
+        evaluated in the lexical order (i.e., from left to right). A
         value of the last expression is the result of the function
         evaluation. An expression is either a function application or
         or a special form. Primus Lisp defines only 5 special forms,
         the rest of the syntax is defined using the macro system.
 
-        {3 Choice}
+        {3 Conditionals}
 
-        The {v (if <cond> <e1> <e2> .. <eM>) v} form is a basic
-        control flow structure. If <cond> evaluates to a non-zero word
-        then the result of the <if> form is the result of the <e1>
-        expression. Otherwise, a sequence of expressions
+        The {b (if <test-expr> <then-expr> <else-expr> ...)} form is a basic
+        control flow structure. If {b <test-expr>} evaluates to a non-zero word
+        then the result of the {b <if>} form is the result of evaluation
+        of the {b <then-expr>}, otherwise a sequence of {b <else-expr>} ...
+        is evaluated and the result of the form evaluation
+        would be a result of the last expression in a form
 
-        {v <e2> .. <eM> v} is evaluated and the result of the [if]
-        form is the result of the last expression {v <eM> v}.
+        For example,
 
+        {v
+        (if (< 4 3)
+            (msg "shouldn't happen")
+          (msg "that's right")
+          (- 4 3))
+        v}
+
+        Note that the the {b <else-expr> } sequence maybe empty.
 
         Several derived forms are defined as macros, e.g.,
 
-        {[
-          (when <cond> <body>)
-          (or <e1> <e2> .. <eM>)
-            (and <e1> <e2> .. <eM>)
-        ]}
+        {v
+          (when <cond> <expr> ...)
+          (or <expr> ...)
+          (and <expr> ...)
+        v}
 
         {3 Loops}
 
@@ -972,11 +1383,11 @@ module Std : sig
         stack size, as it uses the host language heap memory to
         represent the Primus Lisp call stack).
 
-        The {v (while <cond> <e1> <e2> ..<eM>) v} form, will evaluate
+        The {b (while <cond> <expr> ...) } form, will evaluate
         the <cond> expression first, and if it is a non-zero value,
-        then the sequence of expressions {v <e1> .. <eM> v} is
+        then the sequence of expressions {b <expr> ... } is
         evaluated, and the value of the last expression becomes the
-        value of the [while] form. If the value of the <cond>
+        value of the [while] form. If the value of the {b <cond> }
         expression is not a zero, then this value becomes the value of
         the [while] form.
 
@@ -985,23 +1396,31 @@ module Std : sig
 
         The [let] form binds values to names in the lexical scope.
 
-        {v (let ((<v1> <e1>) .. (<vM> <eM>) <s1> .. <sN>) v}
+        {v
+         (let (<binding> ...)  <body-expr> ...)
+         binding ::= (<var> <expr>)
+        v}
 
-        form binds variables {v <v1>, ... <vM > v} to values of
-        expressions {v <e1>, ..., <eM> v} in expressions
-        {v <s1>,...,<sN> v}.  The lexical scope of the bound variable
-        starts from the next binding expression and ends with the
-        scope of the whole let expression. Thus, a variable <v1> is
-        bound in expressions {v <e2>,..., <eM> v} as well as in
-        {v <s1>,..., <sN> v}.
+        Evaluates each {b <binding>} in order binding the {b <var>}
+        identifier to a result of {b <expr>}. The newly created
+        binding is available in consequent bindings and in the
+        <body-expr>, but is not visible outside of the scope of the
+        let-form.
+
+        Example,
+        {v
+        (let ((x 4)
+              (y (+ x 2)))
+          (+ x 3))
+        v}
 
         The value of the [let] form is the value of the last
-        expression {v <sN> v}.
+        expression {b <sN> }.
 
 
         {3 Sequencing }
 
-        The {v (prog <e1> ... <eM>) v} form combines a sequence of
+        The {b (prog <expr> ...) } form combines a sequence of
         expressions into one expression, and is useful in the contexts
         where an expression is required. The expressions are evaluated
         from left to right, and the value of the [prog] form is the
@@ -1009,7 +1428,7 @@ module Std : sig
 
         {3 Messaging }
 
-        The {v (msg <fmt> <e0> <eM>) v} form constructs
+        The {b (msg <fmt> <expr> ...) } form constructs
         logging/debugging messages using an embedded formatting
         language. The formed message will be sent to the logging
         facility, that was set up during the Primus Lisp library
@@ -1018,12 +1437,12 @@ module Std : sig
         The format language interprets all symbols literally, unless
         they start with the dollar sign ($).
 
-        A pair of characters of the form {v $<n> v}, where {v <n> v}
+        A pair of characters of the form {b $<n> }, where {b <n> }
         is a decimal digit, will be substituted with the value of the
         n'th expression (counting from zero).
 
-        A sequence {v $<expr> v} will be substituted with the value of
-        expression {v $<expr> v}. Thus the [$] symbol can be seen as
+        A sequence {b $<expr> } will be substituted with the value of
+        expression {b $<expr> }. Thus the [$] symbol can be seen as
         an anti-quotation, that temporary disables the quoting marks.
 
         Example,
@@ -1061,12 +1480,12 @@ module Std : sig
         are introduced with the [defconstant] form, that has the
         following syntax:
 
-        {[
-          (defconstant <name>
-           [<docstring>]
-             [<declarations>]
-           <value>)
-        ]}
+        {v
+         (defconstant <name> <atom>)
+         (defconstant <name> <docstring> <atom>)
+         (defconstant <name> <declarations> <atom>)
+         (defconstant <name> <docstring> <declarations> <atom>)
+        v}
 
         For example,
 
@@ -1074,22 +1493,23 @@ module Std : sig
 
 
         During the program parsing, each occurrence of the
-        {v <name> v} term will be rewritten with the {v <value> v}
+        {b <name> } term will be rewritten with the {b <value> }
         term, that should be an atom.
-
-
 
         {3 Substitutions}
 
-        The syntactic substitutions is the generalization of syntactic
+        The syntactic substitution is a generalization of syntactic
         constant, and has quite a similar syntax:
 
-        {[
-          (defsubst <name> [<declarations>] [:<syntax>] {<value>})
-        ]}
+        {v
+          | (defsubst <name> <value> ...)
+          | (defsubst <name> <declarations> <value> ...)
+          | (defsubst <name> :<syntax> <value> ...)
+          | (defsubst <name> <declarations> :<syntax> <value> ...)
+        v}
 
 
-        During parsing, every occurrence of the term {v <name> v} (that
+        During parsing, every occurrence of the term {b <name> } (that
         should be an atom), will be rewritten with a sequence of
         values {[ {<value>} ]}.
 
@@ -1175,19 +1595,20 @@ module Std : sig
 
         The macro definition has the following syntax:
 
-        {[
-
-          (defmacro <name> (<p1> ... <pM>)
-             [<docstring>] [<declarations>]
-           <value>)
-        ]}
+        {v
+          (defmacro <name> (<param> ...) <value>)
+          (defmacro <name> (<param> ...) <docstring> <value>)
+          (defmacro <name> (<param> ...) <declarations> <value>)
+          (defmacro <name> (<param> ...) <docstring> <declarations> <value>)
+        v}
 
         A macro definition adds a term rewriting rule, that rewrites
-        each occurrence of {v (<name> <t1> .. <tN>) v}, where [N >= M]
-        with the {v <value> v} in which occurrences of the parameter
-        <pN> is substituted with the term <tN>. If [N] is bigger than
-        [M], then the last parameter is bound with the sequence
-        {v <tM>...<tN> v}.
+        each occurrence of {b (<name> <arg> ...) }, where the number
+        of arguments [N] is greater or equal then the number of
+        parameters [M], with the {b <value> } in which occurrences of the
+        [i]th parameter is substituted with the term [i]th argument. If [N] is
+        bigger than [M], then the last parameter is bound with the
+        sequence of arguments  {b <argM>...<argN> }.
 
         The macro subsystem doesn't provide any specific looping or
         control-flow facilities, however, the macro-overloading
@@ -1195,7 +1616,7 @@ module Std : sig
         arbitrary meta-transformations.
 
         Other than a standard context-based ad-hoc overloading
-        mechanism, the macro application uses arity-based
+        mechanism, the macro application uses the arity-based
         resolution. As it was described above, if a number of
         arguments is greater than the number of parameters, then the
         last parameter is bound to the rest of the arguments. When
@@ -1203,10 +1624,10 @@ module Std : sig
         fewer unmatched arguments is chosen. For example, suppose we
         have the following definitions:
 
-        {[
+        {v
           (defmacro list-length (x) 1)
-            (defmacro list-length (x xs) (+ 1 (list-length xs)))
-        ]}
+          (defmacro list-length (x xs) (+ 1 (list-length xs)))
+        v}
 
 
         The the following term
@@ -1219,11 +1640,11 @@ module Std : sig
         {v (+ 1 (+ 1 1)) v}
 
 
-        {[
+        {v
           1: (list-length 1 2 3) => (+ 1 (list-length 2 3))
-               2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
-                    3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
-        ]}
+          2: (+ 1 (list-length 2 3)) => (+ 1 (+ 1 (list-length 3)))
+          3: (+ 1 (+ 1 (list-length 3))) => (+ 1 (+ 1 1))
+        v}
 
         In the first step, both definition match. In the first
         definition [x] is bound to [1 2 3], while in the second
@@ -1239,10 +1660,10 @@ module Std : sig
         applies a function to a sequence of arguments  of arbitrary
         length, e.g.,
 
-        {[
+        {v
           (defmacro fold (f a x) (f a x))
-            (defmacro fold (f a x xs) (fold f (f a x) xs))
-        ]}
+          (defmacro fold (f a x xs) (fold f (f a x) xs))
+        v}
 
 
         Using this definition we can define a sum function (although
@@ -1252,23 +1673,23 @@ module Std : sig
 
         {v (defmacro sum (xs) (fold + 0 xs)) v}
 
-        The {v (sum 1 2 3) v} will be rewritten as follows:
+        The {b (sum 1 2 3) } will be rewritten as follows:
 
-        {[
+        {v
           1: (sum 1 2 3) => (fold + 0 1 2 3)
-               2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
-                    3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
-                         4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
-        ]}
+          2: (fold + 0 1 2 3) => (fold + (+ 0 1) 2 3)
+          3: (fold + (+ 0 1) 2 3) => (fold + (+ (+ 0 1) 2) 3)
+          4: (fold + (+ (+ 0 1) 2) 3) => (+ (+ (+ 0 1) 2) 3)
+        v}
 
         A more real example is the [write-block] macro, that takes a
         sequence of bytes, and writes them starting from the given
         address:
 
-        {[
+        {v
           (defmacro write-block (addr bytes)
              (fold memory-write addr bytes))
-        ]}
+        v}
 
         The definition uses the [memory-write] primitive, that writes
         a byte at the given address and returns an address of the next
@@ -1328,21 +1749,21 @@ module Std : sig
         The context declaration limits an associated definition to the
         specified type class(es), and has the following syntax:
 
-        {[
-          (declare (context <type-class-name> {<feature-constructor>}))
-        ]}
+        {v
+          (declare (context (<type-class> <feature> ...) ...))
+        v}
 
         Let's use the following two definitions for a concrete example,
 
-        {[
+        {v
           (defmacro get-arg-0 ()
              (declare (context (arch arm gnueabi)))
              R0)
 
-            (defmacro get-arg-0 ()
-               (declare (context (arch x86 cdecl)))
-               (read-word word-width (+ SP (sizeof word-width))))
-        ]}
+          (defmacro get-arg-0 ()
+             (declare (context (arch x86 cdecl)))
+             (read-word word-width (+ SP (sizeof word-width))))
+        v}
 
 
         We have two definitions of the same macro [get-arg-0], that
@@ -1361,10 +1782,10 @@ module Std : sig
         advice maybe added to a function, and will be called either
         before, or after the function evaluation, e.g.,
 
-        {[
+        {v
           (defun memory-written (a x) (msg "write $x to $a"))
-            (advice-add memory-written :after memory-write)
-        ]}
+          (advice-add memory-written :after memory-write)
+        v}
 
         The general syntax is:
 
@@ -1376,64 +1797,89 @@ module Std : sig
 
         Each entity is an s-expression with the grammar, specified
         below.We use BNF-like syntax with the following conventions.
-        Non-terminal symbols are denoted like <this>, square brackets
-        denote optional components, and curly brackets denote zero,
-        one, or several repetitions of the enclosed component. Ordinary
+        Metavariables are denoted like [<this>]. The [<this> ...]
+        stands of any number of [<this>] (possibly zero). Ordinary
         parentheses do not bear any notation, and should be read
         literally. Note, since the grammar is not context free, and is
         extensible, the following is an approximation of the language
-        grammar. Grammar extension points are defined as '..' in the
-        production definition.
+        grammar. Grammar extension points are defined with the
+        '?extensible?'comment in a production definition.
 
-        {[
-          module ::= {<entity>}
-              entity ::= <feature-request>
-                     | <declarations>
-                     | <constant-definition>
-                     | <substitution-definition>
-                     | <macro-definition>
-                     | <function-definition>
-                       | <advising>
-                         feature-request ::= (require <ident>)
-                           declarations ::= (declare {<attribute>})
-                           constant-definition ::=
-                         (defconstant <ident> [<docstring>] [<declarations>] <atom>)
-                           substitution-definition ::=
-                         (defsubst <ident> [<declarations>] [:<syntax>] {<atom>})
-                           macro-definition ::=
-                         (defmacro <ident> ({<macro-param>})
-                            [<docstring>] [<declarations>]
-                          <exp>)
-                           function-definition ::=
-                                   (defun <ident> ({<function-param>})
-                                       [<docstring>] [<declarations>]
-                                       {<exp>})
-                                     advice ::= (advice-add <ident> <method> <ident>)
-                                     exp ::= ()
-                           | (if <exp> <exp> {<exp>})
-                           | (let ({<binding>}) {<exp>})
-                           | (while exp {exps})
-                           | (prog {exp})
-                           | (msg <format>)
-                           | (<ident> {exp})
-                               binding ::= (<var> <exp>)
-                               attribute ::= (<ident> <attribute-value>)
-                               macro-param ::= {<ident>}
-                               function-param ::= {<var>}
-                                         var = <ident> | <ident>:<size>
+        {v
+module ::= <entity> ...
 
-                                                         attribute-value ::= ?each attribute defines its own syntax?
-          external-attribute-value ::= {<ident>}
-              context-attribute-value ::= {<context-declaration>}
-                                         context-declaration ::= (<ident> {<ident>})
-                                         docstring ::= <text>
-                                         syntax ::= :hex | :ascii | ..
-                                       atom  ::= <word> | <text> | ..
-                                       word  ::= ?<ascii-char> | <int> | <int>:<size>
-                                         int   ::= {<decimal>} | 0x{<hex>} | 0b{<bin>} | 0o{<oct>}
-                                         size  ::= {<decimal>}
-                                                                                           ident ::= ?any atom that is not recognized as a <word>?
-        ]}
+entity ::=
+  | <feature-request>
+  | <declarations>
+  | <constant-definition>
+  | <substitution-definition>
+  | <macro-definition>
+  | <function-definition>
+  | <advising>
+
+feature-request ::= (require <ident>)
+
+declarations ::= (declare <attribute> ...)
+
+constant-definition ::=
+  | (defconstant <ident> <atom>)
+  | (defconstant <ident> <docstring> <atom>)
+  | (defconstant <ident> <declarations> <atom>)
+  | (defconstant <ident> <docstring> <declarations> <atom>)
+
+substitution-definition ::=
+  | (defsubst <ident> <atom> ...)
+  | (defsubst <ident> <declarations> <atom> ...)
+  | (defsubst <ident> :<syntax> <atom> ...)
+  | (defsubst <ident> <declarations> :<syntax> <atom> ...)
+
+macro-definition ::=
+  | (defmacro <ident> (<ident> ...) <exp>)
+  | (defmacro <ident> (<ident> ...) <docstring> <exp>)
+  | (defmacro <ident> (<ident> ...) <declarations> <exp>)
+  | (defmacro <ident> (<ident> ...) <docstring> <declarations> <exp>)
+
+function-definition ::=
+  | (defun <ident> (<var> ...) <exp> ...)
+  | (defun <ident> (<var> ...) <docstring> <exp> ...)
+  | (defun <ident> (<var> ...) <declarations> <exp> ...)
+  | (defun <ident> (<var> ...) <docstring> <declarations> <exp> ...)
+
+advice ::=
+  | (advice-add <ident> <method> <ident>)
+
+exp ::=
+  | ()
+  | (if <exp> <exp> <exp> ...)
+  | (let (<binding> ...) <exp> ...)
+  | (while <exp> <exp> ...)
+  | (prog <exp> ...)
+  | (msg <format>)
+  | (<ident> <exp> ...)
+
+binding ::= (<var> <exp>)
+
+var ::= <ident> | <ident>:<size>
+
+attribute ::=
+  | (external <ident> ...)
+  | (context (<ident> <ident> ...) ...)
+  | (<ident> ?ident-specific-format?)
+
+docstring ::= <text>
+
+syntax ::= :hex | :ascii | ?extensible?
+
+atom  ::= <word> | <text> |
+
+word  ::= ?ascii-char? | <int> | <int>:<size>
+
+int   ::= ?decimal-octal-hex-or-bin format?
+
+size  ::= ?decimal?
+
+ident ::= ?any atom that is not recognized as a <word>?
+        v}
     *)
     module Lisp : sig
 
@@ -1449,7 +1895,7 @@ module Std : sig
             [name]. A function [code] accepts a list of arguments,
             and returns a computation in a Machine monad, that should
             evaluate to a word. *)
-        val create : ?docs:string -> string -> (word list -> 'a) -> 'a t
+        val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
       end
 
 
@@ -1458,7 +1904,7 @@ module Std : sig
 
 
         (** a list of primitives defined in the Machine monad.  *)
-        val defs : unit -> word Machine.t Primitive.t list
+        val defs : unit -> value Machine.t Primitive.t list
       end
 
 

@@ -82,13 +82,21 @@ class context = object(self)
   val tas : set Addr.Map.t = Addr.Map.empty
 
   method taint_reg r ts =
-    {< tvs = Values.add tvs ~key:(Bil.Result.id r) ~data:ts >}
+    let key = Bil.Result.id r in
+    if Set.is_empty ts
+    then {< tvs = Values.remove tvs key >}
+    else {< tvs = Values.add tvs ~key ~data:ts >}
 
   method taint_ptr a (s : size) ts =
-    let addrs = Seq.init (Size.in_bytes s) ~f:(fun n -> Addr.(a++n)) in
-    let tas' = Seq.fold addrs ~init:tas ~f:(fun tas a ->
-        Map.add tas ~key:a ~data:ts) in
-    {< tas = tas' >}
+    if Set.is_empty ts then self
+    else if s = `r8
+    then
+      {< tas = Map.add tas ~key:a ~data:ts >}
+    else
+      let addrs = Seq.init (Size.in_bytes s) ~f:(fun n -> Addr.(a++n)) in
+      let tas' = Seq.fold addrs ~init:tas ~f:(fun tas a ->
+          Map.add tas ~key:a ~data:ts) in
+      {< tas = tas' >}
 
   (** T(r) = { t : t |-> v}  *)
   method reg_taints r = get_taints tvs (Bil.Result.id r)
@@ -180,10 +188,10 @@ module Make(SM : Monad.State.S2) = struct
       SM.return rr
 
     method private propagate args rr =
-      SM.get () >>= fun ctxt ->
-      let taints = Taints.union_list @@
-        List.map args ~f:(fun a -> ctxt#reg_taints a) in
-      SM.put (ctxt#taint_reg rr taints)
+      SM.update @@ fun ctxt ->
+      List.map args ~f:ctxt#reg_taints |>
+      Taints.union_list |>
+      ctxt#taint_reg rr
   end
 
 end

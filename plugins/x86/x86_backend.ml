@@ -2,6 +2,10 @@ open Core_kernel.Std
 open Or_error
 open Bap.Std
 open X86_tools_types
+open Format
+include Self()
+
+
 
 module Insn = Disasm_expert.Basic.Insn
 module Table = String.Table
@@ -28,7 +32,20 @@ module Make (PR : PR) = struct
 
     let lift mem insn =
       let lift = search lifts insn in
-      lift mem insn
+      match lift mem insn with
+      | Error err ->
+        warning "failed to lift instruction %a - %a"
+          X86_utils.pp_insn (mem,insn) Error.pp err;
+        Error err
+      | Ok bil as ok -> match Type.check bil with
+        | Ok () -> ok
+        | Error te ->
+          warning "BIL is not well-typed %a - %a"
+            X86_utils.pp_insn (mem,insn) Type.Error.pp te;
+          Error (Error.of_string "type error")
+
+
+
 
   end
 end

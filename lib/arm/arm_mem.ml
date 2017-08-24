@@ -52,7 +52,8 @@ let lift_r  ~(dst1 : Var.t) ?(dst2 : Var.t option) ~(base : Var.t)
   let load  m n   = Bil.(load  m n LittleEndian typ) in
 
   let temp = match size with
-    | B | H -> tmp reg32_t
+    | B -> tmp reg8_t
+    | H -> tmp reg16_t
     | _ -> dst1 in
 
   let four = Bil.int (Word.of_int 4 ~width:32) in

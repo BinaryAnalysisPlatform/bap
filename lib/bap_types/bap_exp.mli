@@ -3,6 +3,7 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_common
 open Bap_bil
+open Format
 
 include Regular.S with type t := exp
 
@@ -11,6 +12,8 @@ module Cast : sig
   val signed : cast
   val high : cast
   val low : cast
+  val pp_cast : formatter -> cast -> unit
+  val string_of_cast : cast -> string
 end
 
 module Binop : sig
@@ -35,11 +38,15 @@ module Binop : sig
   val sle : binop
   val is_commutative : binop -> bool
   val is_associative : binop -> bool
+  val pp_binop : formatter -> binop -> unit
+  val string_of_binop : binop -> string
 end
 
 module Unop : sig
   val neg : unop
   val not : unop
+  val pp_unop : formatter -> unop -> unit
+  val string_of_unop : unop -> string
 end
 
 module Exp : sig

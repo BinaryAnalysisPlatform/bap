@@ -8,8 +8,8 @@ module Word = Bitvector
 let pr ch fms = Format.fprintf ch fms
 
 let pp_word ch word =
-  pr ch "Int(%s,%d)"
-    (Word.string_of_value ~hex:false word)
+  pr ch "Int(%a,%d)"
+    Word.pp_dec word
     (Word.bitwidth word)
 
 let pp_endian ch = function

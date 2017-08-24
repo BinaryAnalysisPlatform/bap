@@ -33,7 +33,6 @@ module Monad = struct
   = struct
     include Monad.Make2(M)
 
-    let unit = return ()
 
     module Lift = struct
       let nullary = return
@@ -163,12 +162,12 @@ module Monad = struct
           let empty = T.zero () in
           fold_right xs ~init:empty ~f:(fun x ys -> f x >>| prepend ys)
 
-
         let all = map ~f:ident
 
         let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
 
         let all_ignore = iter ~f:Fn.ignore
+        let sequence = all_ignore
 
         let reduce xs ~f = fold xs ~init:None ~f:(fun acc y ->
             match acc with
@@ -207,6 +206,7 @@ module Monad = struct
             f x >>| function
             | true -> Some x
             | false -> None)
+
       end
 
       module Delay(B : Types.Collection.Delay) = struct
@@ -243,6 +243,10 @@ module Monad = struct
         let return = Sequence.return
         let plus = Sequence.append
       end)
+
+    let void t = Fn.ignore t
+    let sequence = List.sequence
+    let rec forever t = bind t (fun _ -> forever t)
     include Syntax
   end
 
@@ -289,7 +293,7 @@ module Monad = struct
     let all_ignore = M.all_ignore
   end
 
-  (* this module allows fast and dirty translation from a minimal
+  (* this module provides a fast and dirty translation from a minimal
      monad representation to our maximal. We will not erase types
      from the resulting structure, as this functor is expected to
      be used as a type caster, e.g. [Monad.State.Make(Monad.Minimal(M)]
@@ -432,6 +436,9 @@ module Ident
   let all = ident
   let ignore_m = ignore
   let join = ident
+  let void = ignore
+  let rec forever x = forever x
+  let sequence = all_ignore
   module Monad_infix = Syntax
   include Let_syntax.Let_syntax
   include Syntax
@@ -1019,7 +1026,7 @@ module State = struct
       include Identifiable.Make(struct
           type t = int [@@deriving compare, bin_io, sexp]
           let hash = Int.hash
-          let module_name = "Monads.Std.Multi.Id"
+          let module_name = "Monads.Std.Monad.State.Multi.Id"
           let to_string = Int.to_string
           let of_string = Int.of_string
         end)
@@ -1368,7 +1375,7 @@ module Cont = struct
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
     type 'a r
-    val call : cc:(('a -> ('r,'e r) t) -> ('a,'e r) t) -> ('a,'e r) t
+    val call : f:(cc:('a -> ('r,'e r) t) -> ('a,'e r) t) -> ('a,'e r) t
   end
 
   module Makep(T : T1)(M : Monad.S) : Sp
@@ -1385,8 +1392,8 @@ module Cont = struct
       let lift m = cont @@ fun k -> m >>= k
       let bind m f = cont @@ fun k ->
         run m @@ fun x -> run (f x) k
-      let call ~cc = cont @@ fun k ->
-        run (cc (fun x -> cont @@ fun _ -> k x)) k
+      let call ~f = cont @@ fun k ->
+        run (f ~cc:(fun x -> cont @@ fun _ -> k x)) k
       let map = `Define_using_bind
     end
     include Base

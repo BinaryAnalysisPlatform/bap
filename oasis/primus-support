@@ -82,4 +82,24 @@ Library primus_propagate_taint_plugin
   BuildDepends: bap-primus
   XMETADescription: a taint propagation engine
   Modules: Primus_propagate_taint_main
-  XMETAExtraLines: tags="primus, taint, dataflow"
+
+Library primus_mark_visited_plugin
+  Path: plugins/primus_mark_visited
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_mark_visited
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: marks terms that were visited by Primus
+  Modules: Primus_mark_visited_main
+  XMETAExtraLines: tags="primus"
+
+
+Library primus_limit
+  Path: plugins/primus_limit
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_limit
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: ensures termination by limiting Primus machines
+  Modules: Primus_limit_main
+  XMETAExtraLines: tags="primus"

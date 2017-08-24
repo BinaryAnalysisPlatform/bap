@@ -760,16 +760,18 @@ module Std : sig
       include Data.S                 with type t := t
     end
 
+    module type Minimal = sig
+      (** type t should be binable, sexpable and provide compare function  *)
+      type t [@@deriving bin_io, sexp, compare]
+      include Pretty_printer.S with type t := t
+      include Data.Versioned.S with type t := t
+      val hash : t -> int
+      val module_name : string option
+    end
+
     (** In order to implement [Regular] interface you need to provide a
         minimum implementation [M]  *)
-    module Make( M : sig
-        (** type t should be binable, sexpable and provide compare function  *)
-        type t [@@deriving bin_io, sexp, compare]
-        include Pretty_printer.S with type t := t
-        include Data.Versioned.S with type t := t
-        val hash : t -> int
-        val module_name : string option
-      end) : S with type t := M.t
+    module Make( M : Minimal) : S with type t := M.t
   end
 
 

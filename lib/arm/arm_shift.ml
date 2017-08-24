@@ -47,7 +47,7 @@ let shift_c ~src shift_type ~shift t =
     let ret1 = Bil.(src lsr e1) in
     let carryin = Bil.(cast unsigned bits (var Env.cf) lsl (bits_e - e1)) in
     let shifted = Bil.(ret1 lor carryin) in
-    let carry = nth_bit Bil.(int (Word.zero 0)) src in
+    let carry = nth_bit Bil.(int (Word.zero 1)) src in
     shifted, carry
 
 let r_shift ~src shift_type ~shift t =

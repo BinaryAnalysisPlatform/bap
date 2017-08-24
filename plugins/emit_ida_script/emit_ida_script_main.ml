@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 include Self()
 
 (** ida uses a strange color coding, bgr, IIRC  *)
@@ -72,7 +73,7 @@ let emit_attr buf sub_name addr attr =
   let open Value.Match in
   let substitute = function
     | "sub_name" -> sub_name
-    | "addr" -> "0x" ^ Addr.string_of_value addr
+    | "addr" -> asprintf "%a" Word.pp_hex addr
     | s -> s in
   let case tag f = case tag (fun attr ->
       Buffer.add_substitute buf substitute (f attr);

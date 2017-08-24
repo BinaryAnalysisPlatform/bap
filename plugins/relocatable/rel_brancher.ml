@@ -25,7 +25,7 @@ module Rel = struct
     | None -> Fact.failf "unknown/unsupported architecture" ()
 
   let relocations =
-    Fact.collect Ogre.Query.(select (from reference))
+    Fact.collect Ogre.Query.(select (from relocation))
 
   let external_symbols  =
     Fact.collect Ogre.Query.(

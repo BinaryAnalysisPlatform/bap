@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Regular.Std
 open Format
 open Bap_primus_types
 
@@ -7,9 +8,10 @@ type name = [
   | `tid of tid
   | `addr of addr
   | `symbol of string
-] [@@deriving sexp_of]
+] [@@deriving bin_io, compare, sexp]
 
 type exn += Unbound_name of name
+
 
 
 module type Code = functor (Machine : Machine) -> sig
@@ -32,11 +34,19 @@ let empty = {
   addrs = Addr.Map.empty;
 }
 
+let unresolved_handler = `symbol "__primus_linker_unresolved_call"
 
 let string_of_name = function
   | `symbol name -> name
-  | `addr addr -> sprintf "at address %s" (Addr.string_of_value addr)
-  | `tid tid -> sprintf "with tid %a" Tid.pps tid
+  | `addr addr -> asprintf "at address %a" Addr.pp_hex addr
+  | `tid tid -> asprintf "with tid %a" Tid.pp tid
+
+let inspect n = Sexp.Atom (string_of_name n)
+
+let exec,will_exec = Bap_primus_observation.provide
+                    ~inspect
+                    "linker-exec"
+
 
 let () = Exn.add_printer (function
     | Unbound_name name ->
@@ -82,11 +92,25 @@ module Make(Machine : Machine) = struct
 
   let linker_error s = Machine.raise (Unbound_name s)
 
-  let fail name =
+  let is_linked name =
+    Machine.Local.get state >>| code_of_name name >>| Option.is_some
+
+  let do_fail name =
     Machine.Local.get state >>= fun s ->
     match resolve_name s name with
     | Some s -> linker_error (`symbol s)
     | None -> linker_error name
+
+  let run name (module Code : Code) =
+    let module Code = Code(Machine) in
+    Machine.Observation.make will_exec name >>= fun () ->
+    Code.exec
+
+  let fail name =
+    Machine.Local.get state >>= fun s ->
+    match code_of_name unresolved_handler s with
+    | None -> do_fail name
+    | Some code -> run name code
 
   let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
@@ -102,13 +126,19 @@ module Make(Machine : Machine) = struct
   let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
-    | Some (module Code) ->
-      let module Code = Code(Machine) in
-      Code.exec
+    | Some code -> run name code
 
-  let is_linked name =
-    Machine.Local.get state >>| code_of_name name >>| Option.is_some
 end
 
 
-
+module Name = struct
+  type t = name
+  include Regular.Make(struct
+      type t = name [@@deriving bin_io, compare, sexp]
+      let hash = Hashtbl.hash
+      let version = "1.0.0"
+      let module_name = Some "Bap_primus.Std.Linker.Name"
+      let pp ppf n =
+        Format.fprintf ppf "%s" (string_of_name n)
+    end)
+end

@@ -11,6 +11,11 @@ module type Component = Component
 module type S = Machine
 type nonrec component = component
 
+let exn_raised,raise_exn =
+  Observation.provide
+    ~inspect:(fun exn -> Sexp.Atom (Bap_primus_exn.to_string exn))
+    "exception"
+
 
 module State = Bap_primus_state
 type id = Monad.State.Multi.id
@@ -94,7 +99,7 @@ module Make(M : Monad.S) = struct
     let make key obs =
       (* let event = Observation.of_statement key in *)
       with_global_context observations >>= fun os ->
-      Seq.all_ignore @@ Observation.notify os key obs
+      Seq.sequence @@ Observation.notify os key obs
 
     let observe key observer =
       with_global_context @@ fun () ->
@@ -136,8 +141,10 @@ module Make(M : Monad.S) = struct
       let set = set_global
     end)
 
-  let put proj = lifts @@ SM.update @@ fun s -> {s with proj}
-  let get () = lifts (SM.gets @@ fun s -> s.proj)
+  let put proj = with_global_context @@ fun () ->
+    lifts @@ SM.update @@ fun s -> {s with proj}
+  let get () = with_global_context @@ fun () ->
+    lifts (SM.gets @@ fun s -> s.proj)
   let project : project t = get ()
   let gets f = get () >>| f
   let update f = get () >>= fun s -> put (f s)
@@ -164,19 +171,21 @@ module Make(M : Monad.S) = struct
 
   let fork () : unit c =
     current () >>= fun pid ->
-    C.call ~cc:(fun k -> store_curr k pid >>= fork_state >>= current) >>=
+    C.call ~f:(fun ~cc:k -> store_curr k pid >>= fork_state >>= current) >>=
     switch_state
 
   let switch id : unit c =
     current () >>= fun cid ->
-    C.call ~cc:(fun k ->
+    C.call ~f:(fun ~cc:k ->
         store_curr k cid >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->
         s.curr ()) >>=
     switch_state
 
-  let raise = fail
+  let raise exn =
+    Observation.make raise_exn exn >>= fun () ->
+    fail exn
   let catch = catch
 
   let project = get ()
