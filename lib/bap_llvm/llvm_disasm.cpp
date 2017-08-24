@@ -267,9 +267,6 @@ public:
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
     || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
-
-        std::cout << "ok, it's working" << std::endl;
-
         smart_ptr<llvm::MCSymbolizer>
             symbolizer(target->createMCSymbolizer(
                            triple,
