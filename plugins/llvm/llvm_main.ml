@@ -10,7 +10,7 @@ let disasm_init x86_syntax =
     eprintf "%s\n" (Error.to_string_hum er)
 
 let print_version () =
-  printf "%s\n" Bap_llvm_config.version ;
+  printf "%s\n" Llvm_config.version ;
   exit 0
 
 let () =

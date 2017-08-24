@@ -197,7 +197,7 @@ module T_38 = Make(Ver_38)
 module Self = Self ()
 
 let () =
-  let ver = Bap_llvm_config.version in
+  let ver = Llvm_config.version in
   if ver = "3.4" then T_34.register ()
   else if ver = "3.8" || ver = "4.0" then T_38.register ()
   else

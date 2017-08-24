@@ -7,4 +7,5 @@ module Std = struct
   module Coff_scheme = Bap_llvm_coff_scheme
   module Elf_scheme = Bap_llvm_elf_scheme
   module Macho_scheme = Bap_llvm_macho_scheme
+  module Llvm_config = Bap_llvm_config
 end
