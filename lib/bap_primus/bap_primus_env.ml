@@ -92,7 +92,7 @@ module Make(Machine : Machine) = struct
     assert (width > 0);
     let rec next x =
       if Word.bitwidth x >= width
-      then Machine.return (Word.extract_exn ~hi:(width+1) x)
+      then Machine.return (Word.extract_exn ~hi:(width-1) x)
       else Generator.next gen >>= fun y ->
         next (Word.concat x (word y)) in
     Generator.next gen >>| word >>= next
