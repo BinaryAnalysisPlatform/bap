@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_llvm.Std
 open X86_asm.Reg
 open X86_tools_types
 
@@ -197,10 +198,9 @@ module T_38 = Make(Ver_38)
 module Self = Self ()
 
 let () =
-  let ver = Bap_llvm_disasm.version in
-  if ver = "3.4" then T_34.register ()
-  else if ver = "3.8" || ver = "4.0" then T_38.register ()
+  if llvm_version = "3.4" then T_34.register ()
+  else if llvm_version = "3.8" || llvm_version = "4.0" then T_38.register ()
   else
     Self.error
       "x86 MOV with offset instructions will not lifted due to unknown\
-       llvm version %s\n" ver
+       llvm version %s\n" llvm_version
