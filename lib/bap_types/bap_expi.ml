@@ -74,3 +74,8 @@ module Make(State : Monad.State.S2) = struct
 end
 
 include Make(Monad.State)
+
+
+let eval x =
+  let expi = new t and ctxt = new context in
+  Bap_result.value @@ Monad.State.eval (expi#eval_exp x) ctxt

@@ -9,6 +9,7 @@ build: setup.ml
 
 .PHONY: doc
 doc:
+	@ocamlbuild -pkg bap bapdoc.native
 	make -C doc
 
 all:

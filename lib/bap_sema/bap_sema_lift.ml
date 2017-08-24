@@ -35,45 +35,6 @@ type linear =
   | Label of tid
   | Instr of Ir_blk.elt
 
-(* we're very conservative here *)
-let has_side_effect e scope = (object
-  inherit [bool] Stmt.visitor
-  method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
-  method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
-  method! enter_var v r = r || Bil.is_assigned v scope
-end)#visit_exp e false
-
-(** This optimization will inline virtual variables that occurs
-    inside the instruction definition if the right hand side of the
-    variable definition is either side-effect free, or another
-    variable, that is not changed in the scope of the variable definition. *)
-let inline_variables stmt =
-  let rec loop ss = function
-    | [] -> List.rev ss
-    | Bil.Move _ as s :: [] -> loop (s::ss) []
-    | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_virtual x ->
-      if Bil.is_assigned y xs || Bil.is_assigned x xs
-      then loop (s::ss) xs else
-        let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
-        loop ss xs
-    | Bil.Move (x, y) as s :: xs when Var.is_virtual x ->
-      if has_side_effect y xs || Bil.is_assigned x xs
-      then loop (s::ss) xs
-      else loop ss (Bil.substitute (Bil.var x) y xs)
-    | s :: xs -> loop (s::ss) xs in
-  loop [] stmt
-
-let prune x = Bil.prune_unreferenced ~virtuals:true x
-
-let optimize =
-  List.map ~f:Bil.fixpoint [
-    prune;
-    Bil.fold_consts;
-    Bil.normalize_negatives;
-    inline_variables;
-  ]
-  |> List.reduce_exn ~f:Fn.compose
-  |> Bil.fixpoint
 
 let fall_of_block cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
@@ -173,7 +134,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
   linearize stmt
 
 let lift_insn ?addr fall init insn =
-  List.fold (optimize @@ Insn.bil insn) ~init ~f:(fun init stmt ->
+  List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
       List.fold (linear_of_stmt ?addr fall insn stmt) ~init
         ~f:(fun (bs,b) -> function
             | Label lab ->

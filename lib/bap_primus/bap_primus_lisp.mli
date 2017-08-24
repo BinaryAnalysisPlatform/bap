@@ -45,7 +45,7 @@ open Bap_primus_types
 (** a primitive that can be called from lisp code  *)
 module Primitive : sig
   type 'a t
-  val create : ?docs:string -> string -> (word list -> 'a) -> 'a t
+  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig
@@ -57,7 +57,7 @@ module type Primitives = functor (Machine : Machine) ->  sig
       should work directly with the Linker module. The primitives
       extend only the Lisp machine.
   *)
-  val defs : unit -> Word.t Machine.t Primitive.t list
+  val defs : unit -> value Machine.t Primitive.t list
 end
 
 type primitives = (module Primitives)

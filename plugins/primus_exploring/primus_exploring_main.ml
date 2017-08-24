@@ -38,7 +38,7 @@ module Scheduler(Machine : Primus.Machine.S) = struct
       explored = Map.add t.explored ~key:tid ~data:level
     } in
     Machine.switch id >>= fun () ->
-    Eval.pos >>| Primus.Pos.tid >>| fun tid -> 
+    Eval.pos >>| Primus.Pos.tid >>| fun tid ->
     match Map.find t.explored tid with
     | None -> add tid
     | Some 0 -> t
@@ -80,7 +80,7 @@ module Scheduler(Machine : Primus.Machine.S) = struct
     Machine.Global.put state
 
   let init () =
-    Machine.List.all_ignore [
+    Machine.List.sequence [
       Primus.Interpreter.leave_blk >>> step;
       Primus.Interpreter.leave_blk >>> visit;
       Primus.Interpreter.leave_sub >>> visit;

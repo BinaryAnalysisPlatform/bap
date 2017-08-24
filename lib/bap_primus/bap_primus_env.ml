@@ -9,36 +9,23 @@ module Generator = Bap_primus_generator
 
 type exn += Undefined_var of var
 
-let undefined_variable,undefined =
-  Observation.provide ~inspect:sexp_of_var "undefined-variable"
-
-let variable_access,variable_will_be_looked_up =
-  Observation.provide ~inspect:(fun v ->
-      Sexp.Atom (Var.name v)) "variable-access"
-
-let variable_read,variable_was_read =
-  Observation.provide ~inspect:sexp_of_binding "variable-read"
-
-let variable_written,variable_was_written =
-  Observation.provide ~inspect:sexp_of_binding "variable-written"
-
 let () = Exn.add_printer (function
     | Undefined_var v ->
       Some (sprintf "undefined variable `%s'" (Var.name v))
     | _ -> None)
 
 type t = {
-  values : word Var.Map.t;
+  values : value Var.Map.t;
   random : Generator.t Var.Map.t;
 }
 
 let sexp_of_values values =
-  Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,w) ->
+  Sexp.List (Map.to_sequence values |> Seq.map ~f:(fun (v,{value}) ->
       Sexp.List [
         Sexp.Atom "set-var";
         Sexp.Atom (Var.name v);
         Sexp.Atom (Type.to_string (Var.typ v));
-        Sexp.Atom (Word.string_of_value w)
+        Sexp.Atom (asprintf "%a" Word.pp_hex value)
       ]) |> Seq.to_list_rev)
 
 let sexp_of_random map =
@@ -72,12 +59,11 @@ let inspect_environment {values;random} =
       sexp_of_value value;
       Atom (Type.to_string (Var.typ var))
     ]) in
-  let sexp_of_word x = Sexp.Atom (Word.string_of_value x) in
   let sexp_of_policy = Generator.sexp_of_t in
   let bindings =
     Set.fold keys ~init:[] ~f:(fun acc var ->
         match Map.find values var with
-        | Some value -> sexp_of_var sexp_of_word var value :: acc
+        | Some value -> sexp_of_var sexp_of_value var value :: acc
         | None -> match Map.find random var with
           | Some policy -> sexp_of_var sexp_of_policy var policy ::acc
           | None -> assert false)  in
@@ -90,8 +76,7 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   module Generator = Bap_primus_generator.Make(Machine)
-
-  let (!!) = Machine.Observation.make 
+  module Value = Bap_primus_value.Make(Machine)
 
   let add var policy =
     Machine.Local.update state ~f:(fun s -> {
@@ -101,37 +86,28 @@ module Make(Machine : Machine) = struct
   let set var x =
     Machine.Local.update state ~f:(fun s -> {
           s with values = Map.add s.values ~key:var ~data:x
-        }) >>= fun () ->
-    !!variable_was_written (var,x)
+        })
 
   let gen_word gen width =
     assert (width > 0);
     let rec next x =
       if Word.bitwidth x >= width
-      then Machine.return (Word.extract_exn ~hi:(width+1) x)
+      then Machine.return (Word.extract_exn ~hi:(width-1) x)
       else Generator.next gen >>= fun y ->
         next (Word.concat x (word y)) in
     Generator.next gen >>| word >>= next
 
-  let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>| fun s ->
-    Word.zero (Size.in_bits s)
+  let null = Machine.get () >>| Project.arch >>| Arch.addr_size >>= fun s ->
+    Value.zero (Size.in_bits s)
 
   let get var =
-    !!variable_will_be_looked_up var >>= fun () -> 
     Machine.Local.get state >>= fun t ->
     match Map.find t.values var with
-    | Some res ->
-      !!variable_was_read (var,res) >>= fun () ->
-      Machine.return res
+    | Some res -> Machine.return res
     | None -> match Var.typ var with
       | Type.Mem (_,_) -> null
       | Type.Imm width -> match Map.find t.random var with
-        | None ->
-          !!undefined var >>= fun () ->
-          Machine.raise (Undefined_var var)
-        | Some gen ->
-          gen_word gen width >>= fun w -> 
-          !!variable_was_read (var,w) >>| fun () ->
-          w
+        | None -> Machine.raise (Undefined_var var)
+        | Some gen -> gen_word gen width >>= Value.of_word
 
 end

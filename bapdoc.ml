@@ -8,10 +8,6 @@
 
  *)
 
-#use "topfind";;
-#require "findlib";;
-#require "bap";;
-
 open Core_kernel.Std
 open Bap_plugins.Std
 
@@ -53,6 +49,11 @@ let libraries = [
     "bap-build", "Bap_build.Std", "BAP build system as an ocamlbuild plugin";
     "text-tags", "Text_tags", "Use semantics tags to format your texts";
   ];
+]
+
+let std_libraries = [
+  "Bap"; "Core_kernel"; "Regular"; "Graphlib"; "Future"; "Monads";
+  "Bap_primus"
 ]
 
 let frontends = [
@@ -242,6 +243,8 @@ let plugins =
 let plugins_index =
   sprintf "\n\n{2 Plugins}\n%s" plugins
 
+let hides = String.concat ~sep:"," std_libraries
+let argot = if Dynlink.is_native then "argot.cmxs" else "argot.cmo"
 
 let render modules =
   let intro,out = Filename.open_temp_file "intro" ".txt" in
@@ -256,10 +259,10 @@ let render modules =
       "-html";
       "-colorize-code";
       "-short-paths";
-      "-i /home/ivg/.opam/devel/lib/argot";
-      "-g argot.cmo";
+      "-i"; Pkg.dir "argot";
+      "-g"; argot;
       "-short-functors";
-      "-hide Bap.Std,Core_kernel.Std,Regular.Std,Graphlib.Std,Future.Std,Monads.Std,Bap_primus.Std";
+      "-hide"; hides;
       "-passopt -search-frame";
       "-passopt -search";
       "-passopt -full-text";

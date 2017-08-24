@@ -16,6 +16,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
   module Env = Primus.Env.Make(Machine)
   module Mem = Primus.Memory.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
 
   let target = Machine.arch >>| target_of_arch
 
@@ -26,7 +27,8 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let set_word name x =
     let t = Type.imm (Word.bitwidth x) in
     let var = Var.create name t in
-    Env.set var x
+    Eval.const x >>=
+    Env.set var
 
   (* bottom points to the end of the stack, ala STL end pointer.
      Note: bottom is usually depicted at the top of the stack
@@ -38,6 +40,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     target >>= fun (module Target) ->
     make_addr stack_base >>= fun bottom ->
     let top = Addr.(bottom -- stack_size) in
+    Eval.const bottom >>= fun bottom ->
     Env.set Target.CPU.sp bottom >>= fun () ->
     Mem.allocate
       ~readonly:false
@@ -111,7 +114,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let save_string str ptr =
     String.to_list str |>
     Machine.List.fold ~init:ptr ~f:(fun ptr char ->
-        Mem.save ptr (word_of_char char) >>| fun () ->
+        Mem.store ptr (word_of_char char) >>| fun () ->
         Word.succ ptr)
 
   let save_args array ptr =
@@ -125,7 +128,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let save_word endian word ptr =
     Word.enum_bytes word endian |>
     Machine.Seq.fold ~init:ptr ~f:(fun ptr byte ->
-        Mem.save ptr byte >>| fun () ->
+        Mem.store ptr byte >>| fun () ->
         Word.succ ptr)
 
   let save_table endian addrs ptr =
@@ -136,7 +139,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     target >>= fun (module Target) ->
     Machine.arch >>= fun arch ->
     Machine.args >>= fun argv ->
-    Machine.envp >>= fun envp -> 
+    Machine.envp >>= fun envp ->
     make_addr stack_base >>= fun sp ->
     let endian = Arch.endian arch in
     let addr_size = Arch.addr_size arch in

@@ -2,10 +2,12 @@
 
 open Core_kernel.Std
 open Bap.Std
+open Format
 open Bil.Types
 open X86_types
 open X86_utils
 open X86_env
+include Self()
 
 module ToIR = struct
 
@@ -30,9 +32,6 @@ module ToIR = struct
     | None -> Bil.Move (mem, Bil.(Store (Var mem, a, e, LittleEndian, sz)))
     | Some v -> Bil.Move (mem, Bil.(Store (Var mem, Var v + a, e,
                                            LittleEndian, sz)))
-
-  let storem mode t a e =
-    Bil.Move (mode, Bil.(Store (Var mode, a, e, LittleEndian, t)))
 
   (* copypasted from op2e_s below, but keeps the opcode width *)
   let op2e_s_keep_width mode ss has_rex t = function
@@ -837,84 +836,92 @@ module ToIR = struct
         [assn t o1 Bil.(Cast (UNSIGNED, !!t, c))]
       | Shift(st, s, dst, shift) ->
         assert (List.mem [reg8_t; reg16_t; reg32_t; reg64_t] s);
-        let origCOUNT, origDEST = tmp ~name:"orig_count" s,
-                                  tmp ~name:"orig_dest" s in
+        let old = tmp ~name:"tmp" s in
         let s' = !!s in
         let size = int_exp s' s' in
-        let s_f = Bil.(match st with LSHIFT -> (lsl)  | RSHIFT -> (lsr)
-                                   | ARSHIFT -> (asr) | _ -> disfailwith
-                                                               "invalid shift type") in
+        let s_f = Bil.(match st with
+            | LSHIFT -> (lsl)
+            | RSHIFT -> (lsr)
+            | ARSHIFT -> (asr)
+            | _ -> disfailwith "invalid shift type") in
         let dste = op2e s dst in
-        let count_mask = Bil.(size - (int_exp 1 s')) in
-        let count = Bil.((op2e s shift) land count_mask) in
-        let ifzero t e = Bil.(Ite ((Var origCOUNT = int_exp 0 s'), t, e)) in
+        let count_mask = Bil.(size - int_exp 1 s') in
+        let count = Bil.(op2e s shift land count_mask) in
         let new_of = match st with
           | LSHIFT -> Bil.((Cast (HIGH, !!bool_t, dste)) lxor cf_e)
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, Var origDEST))
+          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var old))
           | ARSHIFT -> exp_false
           | _ -> disfailwith "impossible"
         in
-        let unk_of = Bil.Unknown ("OF undefined after shift", bool_t) in
         let new_cf =
           (* undefined for SHL and SHR instructions where the count is greater than
              or equal to the size (in bits) of the destination operand *)
           match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, Var origDEST lsr (size - Var origCOUNT)))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var old lsr size - count))
           | RSHIFT | ARSHIFT ->
-            Bil.(Cast (HIGH, !!bool_t, Var origDEST lsl (size - Var origCOUNT)))
+            Bil.(Cast (HIGH, !!bool_t, var old lsl size - count))
           | _ -> failwith "impossible"
         in
-        [Bil.Move (origDEST, dste);
-         Bil.Move (origCOUNT, count);
-         assn s dst (s_f dste count);
-         Bil.Move (cf, ifzero cf_e new_cf);
-         Bil.Move (oF, Bil.(ifzero of_e (Ite (Var origCOUNT = int_exp 1 s', new_of, unk_of))));
-         Bil.Move (sf, ifzero sf_e (compute_sf dste));
-         Bil.Move (zf, ifzero zf_e (compute_zf s' dste));
-         Bil.Move (pf, ifzero pf_e (compute_pf s dste));
-         Bil.Move (af, ifzero af_e (Bil.Unknown ("AF undefined after shift", bool_t)))
+        Bil.[
+          old := dste;
+          assn s dst (s_f dste count);
+          if_ (count <> int_exp 0 s') [
+            cf := new_cf;
+            sf := compute_sf dste;
+            zf := compute_zf s' dste;
+            pf := compute_pf s dste;
+            af := unknown "after-shift" bool_t;
+            if_ (count = int_exp 1 s') [
+                oF := new_of;
+              ] [
+                oF := unknown "after-shift" bool_t;
+              ]
+            ] [];
         ]
       | Shiftd(st, s, dst, fill, count) ->
-        let origDEST, origCOUNT = tmp ~name:"orig_dest" s,
-                                  tmp ~name:"orig_count" s in
+        let was = tmp ~name:"tmp" s in
         let e_dst = op2e s dst in
         let e_fill = op2e s fill in
         let s' = !!s in
         (* Check for 64-bit operand *)
         let size = int_exp s' s' in
         let count_mask = Bil.(size - int_exp 1 s') in
-        let e_count = Bil.((op2e s count) land count_mask) in
+        let e_count = Bil.(op2e s count land count_mask) in
         let new_cf =  match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, Var origDEST lsr (size - Var origCOUNT)))
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, Var origDEST lsl (size - Var origCOUNT)))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var was lsr size - e_count))
+          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var was lsl size - e_count))
           | _ -> disfailwith "impossible" in
-        let ifzero t e = Bil.(Ite ((Var origCOUNT = int_exp 0 s'), t, e)) in
-        let new_of = Bil.(Cast (HIGH, !!bool_t, (Var origDEST lxor e_dst))) in
+        let new_of = Bil.(Cast (HIGH, !!bool_t, (var was lxor e_dst))) in
         let unk_of =
           Bil.Unknown ("OF undefined after shiftd of more then 1 bit", bool_t) in
         let ret1 = match st with
-          | LSHIFT -> Bil.(e_fill lsr (size - Var origCOUNT))
-          | RSHIFT -> Bil.(e_fill lsl (size - Var origCOUNT))
+          | LSHIFT -> Bil.(e_fill lsr (size - e_count))
+          | RSHIFT -> Bil.(e_fill lsl (size - e_count))
           | _ -> disfailwith "impossible" in
         let ret2 = match st with
-          | LSHIFT -> Bil.(e_dst lsl Var origCOUNT)
-          | RSHIFT -> Bil.(e_dst lsr Var origCOUNT)
+          | LSHIFT -> Bil.(e_dst lsl e_count)
+          | RSHIFT -> Bil.(e_dst lsr e_count)
           | _ -> disfailwith "impossible" in
         let result = Bil.(ret1 lor ret2) in
         (* SWXXX If shift is greater than the operand size, dst and
            flags are undefined *)
-        [ Bil.Move (origDEST, e_dst);
-          Bil.Move (origCOUNT, e_count);
+        Bil.[
+          was := e_dst;
           assn s dst result;
-          Bil.Move (cf, ifzero cf_e new_cf);
-          (* For a 1-bit shift, the OF flag is set if a sign change occurred;
-             otherwise, it is cleared. For shifts greater than 1 bit, the OF flag
-             is undefined. *)
-          Bil.Move (oF, Bil.(ifzero of_e (Ite (Var origCOUNT = int_exp 1 s', new_of, unk_of))));
-          Bil.Move (sf, ifzero sf_e (compute_sf e_dst));
-          Bil.Move (zf, ifzero zf_e (compute_zf s' e_dst));
-          Bil.Move (pf, ifzero pf_e (compute_pf s e_dst));
-          Bil.Move (af, ifzero af_e (Bil.Unknown ("AF undefined after shiftd", bool_t)))
+          if_ (e_count <> int_exp 0 s') [
+            cf := new_cf;
+            sf := compute_sf e_dst;
+            zf := compute_zf s' e_dst;
+            pf := compute_pf s e_dst;
+            (* For a 1-bit shift, the OF flag is set if a sign change occurred;
+               otherwise, it is cleared. For shifts greater than 1 bit, the OF flag
+               is undefined. *)
+            if_ (e_count = int_exp 1 s') [
+                oF := new_of;
+              ] [
+                oF := unk_of;
+              ]
+          ] []
         ]
       | Rotate(rt, s, dst, shift, use_cf) ->
         (* SWXXX implement use_cf *)
@@ -1449,17 +1456,22 @@ let disasm_instr mode mem addr =
   let has_rex = prefix.rex <> None in
   let has_vex = prefix.vex <> None in
   let (ss, pref) = D.parse_prefixes mode pref op in
-  let ir = ToIR.to_ir mode addr na ss pref has_rex has_vex op in
-  (ir, na)
+  ToIR.to_ir mode addr na ss pref has_rex has_vex op
 
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
   let addr = Memory.min_addr mem in
-  Or_error.try_with (fun () ->
-      let stmts, _ = disasm_instr mode mem addr in stmts)
-
-
-
+  Or_error.try_with (fun () -> disasm_instr mode mem addr) |> function
+  | Error err ->
+    warning "the legacy lifter failed at %a - %a"
+      pp_insn (mem,insn) Error.pp err;
+    Error err
+  | Ok bil -> match Type.check bil with
+    | Ok () -> Ok bil
+    | Error err ->
+      warning "BIL is not well-type in the legacy lifter at %a - %a"
+        pp_insn (mem,insn) Type.Error.pp err;
+      Error (Error.of_string "type error")
 
 module AMD64 = struct
   module CPU = X86_cpu.AMD64

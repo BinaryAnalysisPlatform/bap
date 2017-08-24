@@ -26,7 +26,7 @@ let x86 = {
   addr = 10;
   code = "\x89\x34\x24";
   asm  = "movl %esi, (%esp)";
-  bil  = "mem32 := mem32 with [ESP,el]:u32 <- ESI";
+  bil  = "mem := mem with [ESP,el]:u32 <- ESI";
 }
 
 let normalize = String.filter ~f:(function
@@ -42,7 +42,7 @@ let tag = Value.Tag.register (module String)
 
 let addr_width case = Arch.addr_size case.arch |> Size.in_bits
 
-let test_substitute case : test list =
+let test_substitute case =
   let sub_name = Format.asprintf "test_%a" Arch.pp case.arch in
   let addr = sprintf "%#x" in
   let min_addr = addr case.addr in

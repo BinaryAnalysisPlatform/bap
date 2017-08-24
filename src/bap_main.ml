@@ -10,8 +10,8 @@ open Bap_options
 open Bap_source_type
 include Self()
 
-exception Failed_to_create_project of Error.t
-exception Pass_not_found of string
+exception Failed_to_create_project of Error.t [@@deriving sexp]
+exception Pass_not_found of string [@@deriving sexp]
 
 let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
@@ -232,9 +232,11 @@ let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Not_found -> () in
+  Sys.(set_signal sigint (Signal_handle exit));
   Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
+  (* main (parse passes argv); exit 0 *)
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

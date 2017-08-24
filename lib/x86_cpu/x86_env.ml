@@ -31,7 +31,7 @@ let gs_base = nmv "GS_BASE" reg32_t "GS_BASE" reg64_t
 let gdt = nmv "GDTR" reg32_t "GDTR" reg64_t
 let ldt = nmv "LDTR" reg32_t "LDTR" reg64_t
 
-let mem = nmv "mem32" (Type.mem `r32 `r8) "mem64" (Type.mem `r64 `r8)
+let mem = nmv "mem" (Type.mem `r32 `r8) "mem" (Type.mem `r64 `r8)
 
 (* condition flag bits *)
 let cf = Var.create "CF" bool_t

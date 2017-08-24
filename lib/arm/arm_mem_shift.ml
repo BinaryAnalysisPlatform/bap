@@ -44,7 +44,7 @@ let lift_r_op ~dest1 ?dest2 ?shift ~base ~offset mode sign size operation =
     | `Imm w ->
       let width = Word.bitwidth w in
       let _1 = Word.one 32 in
-      let min_32 = Word.Int_exn.(_1 lsl Word.of_int 31 ~width) in
+      let min_32 = Word.(_1 lsl Word.of_int 31 ~width) in
       if Word.(w = min_32)
       then Bil.(int Word.(zero width))
       else Bil.(int w) in

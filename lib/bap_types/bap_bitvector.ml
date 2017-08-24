@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Or_error
+open Format
 
 
 (* current representation has a very big overhead,
@@ -72,29 +73,6 @@ module Size_mono = struct
     if Int.(x <> y) then failwith "Non monomoprhic compare" else 0
 end
 
-module type Kernel = sig
-  type t = Bignum.t [@@deriving bin_io, compare, sexp]
-  val create : bignum -> int -> t
-  val signed : t -> t
-  val unsigned : t -> t
-  val is_signed: t -> bool
-  val z : t -> bignum
-  val with_z : t -> bignum -> t
-  val lift1 : (bignum -> bignum) -> t -> t
-  val lift2 : (bignum -> bignum -> bignum) -> t -> t -> t
-  val unop  : (bignum -> 'a) -> t -> 'a
-  val binop : (bignum -> bignum -> 'a) -> t -> t -> 'a
-  val extract : ?hi:int -> ?lo:int -> t -> t
-  val bitwidth : t -> int
-  val bits_of_z  : t -> string
-  val compare  : t -> t -> int
-  val hash : t -> int
-  val module_name : string option
-  include Pretty_printer.S with type t := t
-  include Stringable with type t := t
-  include Data.Versioned.S with type t := t
-end
-
 (** internal representation *)
 module Make(Size : Compare) = struct
   type t = Bignum.t [@@deriving bin_io]
@@ -107,11 +85,11 @@ module Make(Size : Compare) = struct
   let lenoff   = 1
   let lensize  = metasize - 1
   let maxlen   = 1 lsl lensize
-  let maxval   = Z.(one lsl maxlen)
 
   let meta x = Z.extract x 0 (metasize - 1)
   let is_signed = Z.is_odd
   let bitwidth x = Z.extract x lenoff lensize |> Z.to_int
+
   let z x =
     let w = bitwidth x in
     if is_signed x
@@ -131,12 +109,14 @@ module Make(Size : Compare) = struct
         "Bitvector overflow: maximum allowed with is %d bits"
         maxlen ();
     if w <= 0
-    then invalid_argf "A nonpositive width is specified" ();
+    then invalid_argf
+        "A nonpositive width is specified (%s,%d)"
+        (Z.to_string z) w ();
     let meta = Z.(of_int w lsl 1) in
     let z = Z.(extract z 0 w lsl metasize) in
     Z.(z lor meta)
 
-  let unsigned x = create x (bitwidth x)
+  let unsigned x = create (z x) (bitwidth x)
   let hash x = Z.hash (z x)
   let bits_of_z x = Z.to_bits (z x)
   let unop op t = op (z t)
@@ -144,25 +124,85 @@ module Make(Size : Compare) = struct
   let lift1 op t = create (unop op t) (bitwidth t)
   let lift2 op t1 t2 = create (binop op t1 t2) (bitwidth t1)
 
+  let pp_generic
+      ?(case:[`lower|`upper]=`upper)
+      ?(prefix:[`auto|`base|`none|`this of string]=`auto)
+      ?(suffix:[`full|`none|`size]=`none)
+      ?(format:[`hex|`dec|`oct|`bin]=`hex) ppf x =
+    let width = bitwidth x in
+    let is_signed = is_signed x in
+    let is_negative = Z.compare (z x) Z.zero < 0 in
+    let x = Z.abs (z x) in
+    let word = Z.of_int in
+    let int  = Z.to_int in
+    let base = match format with
+      | `dec -> word 10
+      | `hex -> word 0x10
+      | `oct -> word 0o10
+      | `bin -> word 0b10 in
+    let pp_prefix ppf = match format with
+      | `dec -> ()
+      | `hex -> fprintf ppf "0x"
+      | `oct -> fprintf ppf "0o"
+      | `bin -> fprintf ppf "0b" in
+    if is_negative then fprintf ppf "-";
+    let () = match prefix with
+      | `none -> ()
+      | `this x -> fprintf ppf "%s" x
+      | `base -> pp_prefix ppf
+      | `auto ->
+        if Z.compare x (Z.min (word 10) base) >= 0
+        then pp_prefix ppf in
+    let fmt = format_of_string @@ match format, case with
+      | `hex,`upper -> "%X"
+      | `hex,`lower -> "%x"
+      | _ -> "%d" in
+    let rec print x =
+      let d = int Z.(x mod base) in
+      if x >= base
+      then print Z.(x / base);
+      fprintf ppf fmt d in
+    print x;
+    match suffix with
+    | `full -> fprintf ppf ":%d%c" width (if is_signed then 's' else 'u')
+    | `size -> fprintf ppf ":%d" width
+    | `none -> ()
+
   let compare l r =
     let s = Size.compare (bitwidth l) (bitwidth r) in
     if s <> 0 then s
-    else Bignum.compare (z l) (z r)
+    else match is_signed l, is_signed r with
+      | true,true | false,false -> Bignum.compare (z l) (z r)
+      | true,false -> Bignum.compare (z l) (z (signed r))
+      | false,true -> Bignum.compare (z (signed l)) (z r)
+
+  let pp_full ppf = pp_generic ~suffix:`full ppf
+  let pp = pp_full
 
   let to_string x =
     let z = z x in
     match bitwidth x with
-    | 1 -> if Bignum.equal z Bignum.zero then "false" else "true"
-    | n -> Bignum.format "%#x" z ^ ":" ^ string_of_int n
+    | 1 -> if Z.equal z Z.zero then "false" else "true"
+    | n -> asprintf "%a" pp_full x
+
+  let of_suffixed stem suffix =
+    let z = Bignum.of_string stem in
+    let sl = String.length suffix in
+    if sl = 0
+    then invalid_arg "Bitvector.of_string: an empty suffix";
+    let chop x = String.subo ~len:(sl - 1) x in
+    match suffix.[sl-1] with
+    | 's' -> create z (Int.of_string (chop suffix)) |> signed
+    | 'u' -> create z (Int.of_string (chop suffix))
+    | x when Char.is_digit x -> create z (Int.of_string suffix)
+    | _ -> invalid_arg "Bitvector.of_string: invalid prefix format"
 
   let of_string = function
     | "false" -> create Bignum.zero 1
     | "true"  -> create Bignum.one  1
     | s -> match String.split ~on:':' s with
-      | [z; n] -> create (Bignum.of_string z) (Int.of_string n)
+      | [z; n] -> of_suffixed z n
       | _ -> failwithf "Bitvector.of_string: '%s'" s ()
-
-  let pp fmt v = Format.fprintf fmt "%s" (to_string v)
 
   let with_validation t ~f = Or_error.map ~f (Validate.result t)
 
@@ -171,6 +211,8 @@ module Make(Size : Compare) = struct
     let z = z t in
     let hi = Option.value ~default:(n-1) hi in
     let len = hi-lo+1 in
+    if len <= 0
+    then failwithf "Bitvector.extract: len %d is negative" len ();
     create (Z.extract z lo len) len
 
   let sexp_of_t t = Sexp.Atom (to_string t)
@@ -211,12 +253,13 @@ include Cons
 
 let safe f t = try_with (fun () -> f t)
 
-let to_int   = unop (safe Bignum.to_int)
-let to_int32 = unop (safe Bignum.to_int32)
-let to_int64 = unop (safe Bignum.to_int64)
+let to_int_exn = unop Bignum.to_int
+let to_int32_exn = unop Bignum.to_int32
+let to_int64_exn = unop Bignum.to_int64
+let to_int   = safe to_int_exn
+let to_int32 = safe to_int32_exn
+let to_int64 = safe to_int64_exn
 
-let string_of_value ?(hex=true) =
-  unop (Bignum.format (if hex then "0x%x" else "%d"))
 
 let of_binary ?width endian num  =
   let num = match endian with
@@ -401,6 +444,7 @@ let is_non_positive  = Fn.non is_positive
 let is_negative = unop Bignum.(fun z -> lt z zero)
 let is_non_negative = Fn.non is_negative
 
+
 let validate check msg x =
   if check x then Validate.pass
   else Validate.fails msg x sexp_of_t
@@ -503,6 +547,21 @@ include (Unsafe : Bap_integer.S with type t := t)
 let one = Cons.one
 let zero = Cons.zero
 
+let pp_hex ppf = pp_generic ppf
+let pp_dec ppf = pp_generic ~format:`dec ppf
+let pp_oct ppf = pp_generic ~format:`oct ppf
+let pp_bin ppf = pp_generic ~format:`bin ppf
+
+let pp_hex_full ppf = pp_generic ~suffix:`full ppf
+let pp_dec_full ppf = pp_generic ~format:`dec ~suffix:`full ppf
+let pp_oct_full ppf = pp_generic ~format:`oct ~suffix:`full ppf
+let pp_bin_full ppf = pp_generic ~format:`bin ~suffix:`full ppf
+
+let string_of_value ?(hex=true) x =
+  if hex
+  then asprintf "%a" (fun p -> pp_generic ~prefix:`none ~case:`lower p) x
+  else asprintf "%a" (fun p -> pp_generic ~format:`dec p) x
+
 
 (* old representation for backward compatibility. *)
 module V1 = struct
@@ -559,10 +618,7 @@ module Stable = struct
 end
 
 
-let pp_value ppf x =
-  Format.fprintf ppf "%s" (Z.format "%#x" (z x))
-
-let light_printer = Data.Write.create ~pp:pp_value ()
+let pp = pp_hex
 
 let () =
   add_reader ~desc:"Janestreet Binary Protocol" ~ver:"1.0.0" "bin"
@@ -573,4 +629,13 @@ let () =
     (Data.sexp_reader (module Stable.V1));
   add_writer ~desc:"Janestreet Sexp Protocol" ~ver:"1.0.0" "sexp"
     (Data.sexp_writer (module Stable.V1));
-  add_writer ~desc:"Light pretty printer" ~ver:"2.0.0" "light" light_printer
+  let add name desc pp =
+    add_writer ~desc ~ver:"2.0.0" name (Data.Write.create ~pp ()) in
+  add "hex" "Hexadecimal without a suffix" pp_hex;
+  add "dec" "Decimal without a suffix" pp_dec;
+  add "oct" "Octal without a suffix" pp_oct;
+  add "bin" "Binary (0 and 1) without a suffix" pp_bin;
+  add "hex_full" "Hexadecimal" pp_hex_full;
+  add "dec_full" "Decimal" pp_dec_full;
+  add "oct_full" "Octal" pp_oct_full;
+  add "bin_full" "Binary (0 and 1)" pp_bin_full;

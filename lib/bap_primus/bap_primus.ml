@@ -13,6 +13,7 @@ module Std = struct
       type 'a state = 'a State.t
       include Bap_primus_main
     end
+    module Value = Bap_primus_value
     module Memory = Bap_primus_memory
     module Observation = Bap_primus_observation
     module Lisp = Bap_primus_lisp

@@ -154,13 +154,14 @@ module Hunter(Machine : Primus.Machine.S) = struct
 
 
   module Eval = Primus.Interpreter.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
 
   let save_address addr =
     Machine.Global.update hunters_club ~f:(fun t ->
-        {t with addrs = Set.add t.addrs addr})
+        {t with addrs = Set.add t.addrs (Value.to_word addr)})
 
   let process_byte char =
-    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
+    Eval.pos >>| Primus.Pos.tid >>= fun curr ->
     Machine.Local.get beagle >>= fun (Beagle d) ->
     let d = Strings.Detector.step d curr char in
     Strings.Detector.when_decided d (Machine.return ())
@@ -185,7 +186,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
     | Some d -> got_prey d
 
   let process_word w =
-    Eval.pos >>| Primus.Pos.tid >>= fun curr -> 
+    Eval.pos >>| Primus.Pos.tid >>= fun curr ->
     Machine.Local.get beagle >>= fun (Beagle d) ->
     Word.enum_chars w LittleEndian |>
     Machine.Seq.fold ~init:d ~f:(fun d char ->
@@ -199,7 +200,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
     Machine.Local.put beagle (Beagle d)
 
 
-  let process_memory (a,w) = process_word w
+  let process_memory (a,w) = process_word (Value.to_word w)
 
   let process_variable (_,r) = match Bil.Result.value r with
     | Bil.Mem _ | Bil.Bot -> Machine.return ()
@@ -239,11 +240,11 @@ module Hunter(Machine : Primus.Machine.S) = struct
 
 
   let init () =
-    Machine.all_ignore Primus.Memory.[
-        address_access   >>> save_address;
+    Machine.sequence Primus.Interpreter.[
+        loading   >>> save_address;
         (* variable_read    >>> process_variable; *)
         (* variable_written >>> process_variable; *)
-        address_written >>> process_memory;
+        stored >>> process_memory;
         Primus.Machine.finished >>> gohome;
         Beagle_prey.detected >>> print_prey;
         Beagle_prey.detected >>> hunt;
