@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+
 include Self()
 
 let disasm_init x86_syntax =
@@ -37,7 +38,7 @@ For relocatable files a default image base is equal to 0xC0000000." in
   Config.when_ready (fun {Config.get=(!)} ->
       if !version then
         print_version();
-      let () = Bap_ogre_loader.init ?base:!base_addr () in
+      let () = Bap_llvm_ogre_loader.init ?base:!base_addr () in
       match !x86_syntax with
       | "att" | "intel" as s ->
         let syn = Bap_llvm_disasm.x86_syntax_of_sexp (Sexp.of_string s) in
