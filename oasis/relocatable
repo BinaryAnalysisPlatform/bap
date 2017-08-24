@@ -3,7 +3,7 @@ Flag relocatable
   Default: false
 
 Library relocatable_plugin
-  XMETADescription: provides facility to load relocatable files using LLVM library
+  XMETADescription: provides facility to load relocatable files
   Path:            plugins/relocatable
   Build$:          flag(everything) || flag(relocatable)
   FindlibName:     bap-plugin-relocatable
