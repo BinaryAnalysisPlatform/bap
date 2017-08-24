@@ -46,10 +46,12 @@ module Primitives(Machine : Primus.Machine.S) = struct
     | [] | [_] -> machine_int 0
     | fd :: words ->
       if Value.is_zero fd
-      then
+      then begin
         List.iter words ~f:(fun w ->
             Word.enum_chars (Value.to_word w) LittleEndian |>
             Seq.hd |> Option.iter ~f:(print_char));
+        flush stdout;
+      end;
       machine_int (List.length words)
 
   let memory_read = function
