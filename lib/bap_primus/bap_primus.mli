@@ -836,6 +836,10 @@ module Std : sig
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
 
+
+        (** [pc] current value of a program counter.*)
+        val pc : addr m
+
         (** [pos m] current program position.  *)
         val pos : pos m
 

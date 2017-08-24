@@ -62,6 +62,10 @@ module Primitives(Machine : Primus.Machine.S) = struct
       Value.succ a
     | _ -> Lisp.failf "memory-write requires two arguments" ()
 
+  let get_pc = function
+    | [] -> Eval.pc >>= Value.of_word
+    | _ -> Lisp.failf
+             "get-current-program-counter requires zero arguments" ()
 
   let primitive name code = Primitive.create name code
 
@@ -75,6 +79,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
     primitive "memory-read" memory_read;
     primitive "memory-write" memory_write;
     primitive "memory-allocate" allocate;
+    primitive "get-current-program-counter" get_pc;
   ]
 end
 

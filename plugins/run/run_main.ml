@@ -35,37 +35,14 @@ module Param = struct
       ~doc: "When specified, start the execution from $(docv)";;
 end
 
-module Machine = struct 
+module Machine = struct
   type 'a m = 'a
-  include Primus.Machine.Make(Monad.Ident) 
+  include Primus.Machine.Make(Monad.Ident)
 end
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
 
-let pp_backtrace ppf ctxt =
-  let prog = ctxt#program in
-  fprintf ppf "Traceback (most recent instruction last):@\n@[<v>";
-  List.iter (List.rev ctxt#trace) ~f:(fun tid ->
-      let do_if cls = Option.iter (Program.lookup cls prog tid) in
-      let pp_if cls pp = do_if cls ~f:(fun t ->
-          fprintf ppf "    %a" pp t) in
-      pp_if arg_t Arg.pp;
-      pp_if phi_t Phi.pp;
-      pp_if def_t Def.pp;
-      pp_if jmp_t Jmp.pp;
-      do_if blk_t ~f:(fun blk ->
-          fprintf ppf "  %a:@\n" Tid.pp (Term.tid blk));
-      do_if sub_t ~f:(fun sub ->
-          fprintf ppf "%s:@\n" (Sub.name sub)));
-  fprintf ppf "@]@\n"
-
-let pp_binding ppf (v,r) =
-  fprintf ppf "  %a -> %s" Var.pp v @@ match Bil.Result.value r with
-  | Bil.Bot -> "undefined"
-  | Bil.Imm w -> Word.string_of_value w
-  | Bil.Mem m -> "<mem>"
-let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
 
 let name_of_entry arch entry =
   let width = Arch.addr_size arch |> Size.in_bits in
@@ -81,12 +58,12 @@ let main {Config.get=(!)} proj =
   name_of_entry (Project.arch proj) !entry |>
   Linker.exec |>
   Main.run ~envp:!envp ~args:!argv proj |> function
-  | (Primus.Normal,proj)  
+  | (Primus.Normal,proj)
   | (Primus.Exn Primus.Interpreter.Halt,proj) ->
-    eprintf "Ok, we've terminated normally@\n";
+    info "Ok, we've terminated normally@\n";
     proj
-  | (Primus.Exn exn,proj) -> 
-    error "program terminated by a signal: %s\n" (Primus.Exn.to_string exn);
+  | (Primus.Exn exn,proj) ->
+    info "program terminated by a signal: %s\n" (Primus.Exn.to_string exn);
     proj
 
 let () =

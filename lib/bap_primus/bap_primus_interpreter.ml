@@ -427,6 +427,8 @@ module Make (Machine : Machine) = struct
   let sub = term normal sub_t sub
 
   let pos = Machine.Local.get state >>| fun {curr} -> curr
+
+  let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
 
 module Init(Machine : Machine) = struct

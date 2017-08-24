@@ -32,6 +32,7 @@ let empty = {
   addrs = Addr.Map.empty;
 }
 
+let unresolved_handler = `symbol "__primus_linker_unresolved_call"
 
 let string_of_name = function
   | `symbol name -> name
@@ -82,11 +83,24 @@ module Make(Machine : Machine) = struct
 
   let linker_error s = Machine.raise (Unbound_name s)
 
-  let fail name =
+  let is_linked name =
+    Machine.Local.get state >>| code_of_name name >>| Option.is_some
+
+  let do_fail name =
     Machine.Local.get state >>= fun s ->
     match resolve_name s name with
     | Some s -> linker_error (`symbol s)
     | None -> linker_error name
+
+  let run (module Code : Code) =
+    let module Code = Code(Machine) in
+    Code.exec
+
+  let fail name =
+    Machine.Local.get state >>= fun s ->
+    match code_of_name unresolved_handler s with
+    | None -> do_fail name
+    | Some code -> run code
 
   let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
@@ -102,10 +116,6 @@ module Make(Machine : Machine) = struct
   let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
-    | Some (module Code) ->
-      let module Code = Code(Machine) in
-      Code.exec
+    | Some code -> run code
 
-  let is_linked name =
-    Machine.Local.get state >>| code_of_name name >>| Option.is_some
 end
