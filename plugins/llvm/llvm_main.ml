@@ -1,16 +1,15 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_llvm.Std
 include Self()
 
 let disasm_init x86_syntax =
-  match Llvm_disasm.init ~x86_syntax () with
+  match Bap_llvm_disasm.init ~x86_syntax () with
   | Ok () -> ()
   | Error er ->
     eprintf "%s\n" (Error.to_string_hum er)
 
 let print_version () =
-  printf "%s\n" Llvm_config.version ;
+  printf "%s\n" Bap_llvm_disasm.version ;
   exit 0
 
 let () =
@@ -38,9 +37,9 @@ For relocatable files a default image base is equal to 0xC0000000." in
   Config.when_ready (fun {Config.get=(!)} ->
       if !version then
         print_version();
-      let () = Ogre_loader.init ?base:!base_addr () in
+      let () = Bap_ogre_loader.init ?base:!base_addr () in
       match !x86_syntax with
       | "att" | "intel" as s ->
-        let syn = Llvm_disasm.x86_syntax_of_sexp (Sexp.of_string s) in
+        let syn = Bap_llvm_disasm.x86_syntax_of_sexp (Sexp.of_string s) in
         disasm_init syn
       | s -> eprintf "unknown x86-asm-syntax: %s" s)

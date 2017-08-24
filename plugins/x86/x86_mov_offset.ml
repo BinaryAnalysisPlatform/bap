@@ -197,8 +197,10 @@ module T_38 = Make(Ver_38)
 module Self = Self ()
 
 let () =
-  let ver = Llvm_config.version in
+  let ver = Bap_llvm_disasm.version in
   if ver = "3.4" then T_34.register ()
   else if ver = "3.8" || ver = "4.0" then T_38.register ()
   else
-    Self.error "x86 MOV offset instructions will not lifted due to unknown llvm version %s\n" ver
+    Self.error
+      "x86 MOV with offset instructions will not lifted due to unknown\
+       llvm version %s\n" ver

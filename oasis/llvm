@@ -15,16 +15,16 @@ Library bap_llvm
   Build$:        flag(everything) || flag(llvm)
   BuildDepends:  bap, ogre, monads
   FindlibName:   bap-llvm
+  Modules:       Bap_llvm_disasm,
+                 Bap_llvm_ogre_loader
   InternalModules:
                  Bap_llvm,
                  Bap_llvm_config,
                  Bap_llvm_binary,
                  Bap_llvm_coff_scheme,
-                 Bap_llvm_disasm,
                  Bap_llvm_elf_scheme,
                  Bap_llvm_loader,
                  Bap_llvm_macho_scheme,
-                 Bap_llvm_ogre_loader,
                  Bap_llvm_ogre_coff,
                  Bap_llvm_ogre_elf,
                  Bap_llvm_ogre_macho,
