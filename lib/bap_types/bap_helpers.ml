@@ -130,7 +130,10 @@ module Apply = struct
   let binop op u v =
     let open Word in
     if Int.(bitwidth u <> bitwidth v) && not (is_shift op)
-    then failwith "type error";
+    then failwithf "binop type error - %s %s %s"
+        (to_string u)
+        (Bap_exp.Binop.string_of_binop op)
+        (to_string v) ();
     match op with
     | PLUS -> u + v
     | MINUS -> u - v

@@ -9,7 +9,8 @@ include Self()
    then switch to a next thread that is not yet terminated.
 *)
 
-module Ids = Monad.State.Multi.Id.Set
+module Id = Monad.State.Multi.Id
+module Ids = Id.Set
 
 type state = {
   halted : Ids.t;
@@ -41,7 +42,9 @@ module Greedy(Machine : Primus.Machine.S) = struct
     | None ->
       info "no more pending machines";
       Machine.switch Machine.global
-    | Some cid -> Machine.switch cid
+    | Some cid ->
+      info "switch to machine %a" Id.pp cid;
+      Machine.switch cid
 
 
   let halt () =
