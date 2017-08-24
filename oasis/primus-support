@@ -92,3 +92,14 @@ Library primus_mark_visited_plugin
   XMETADescription: marks terms that were visited by Primus
   Modules: Primus_mark_visited_main
   XMETAExtraLines: tags="primus"
+
+
+Library primus_limit
+  Path: plugins/primus_limit
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_limit
+  CompiledObject: best
+  BuildDepends: bap-primus
+  XMETADescription: ensures termination by limiting Primus machines
+  Modules: Primus_limit_main
+  XMETAExtraLines: tags="primus"

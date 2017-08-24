@@ -986,9 +986,8 @@ let state = Bap_primus_state.declare ~inspect
 module Trace = struct
   module Observation = Bap_primus_observation
   let sexp_of_value {value=x} =
-    let v = Word.string_of_value x in
-    let w = Int.to_string (Word.bitwidth x) in
-    Sexp.Atom (v ^ ":" ^ w)
+    let v = Format.asprintf "%a" Word.pp_hex x in
+    Sexp.Atom v
   let sexp_of_binding (_,x) = sexp_of_value x
 
   let sexp_of_enter ({meta={name}},bs) =
@@ -1161,6 +1160,7 @@ module Lisp(Machine : Machine) = struct
       Machine.raise (Resolve.Failed (name, s.contexts, resolution))
     | _,Some (fn,bs) ->
       Eval.const Word.b0 >>= fun init ->
+      Machine.Observation.make Bap_primus_linker.will_exec (`symbol name) >>= fun () ->
       eval_advices `before init name args >>= fun _ ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
       Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->

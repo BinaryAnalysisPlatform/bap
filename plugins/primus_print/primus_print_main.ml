@@ -57,7 +57,7 @@ let parse_monitors =
       | name -> monitor_provider (strip name) ps)
 
 let print_event out p ev =
-  fprintf out "@[(%s %a)@]@\n"
+  fprintf out "@[(%s %a)@]@\n%!"
     (Primus.Observation.Provider.name p) Sexp.pp_hum ev
 
 let id ppf pos =

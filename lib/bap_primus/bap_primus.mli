@@ -1027,12 +1027,18 @@ module Std : sig
         | `tid of tid
         | `addr of addr
         | `symbol of string
-      ] [@@deriving sexp_of]
+      ] [@@deriving bin_io, compare, sexp]
 
 
 
       (** The Linker error  *)
       type exn += Unbound_name of name
+
+
+      (** occurs before a piece of code is executed *)
+      val exec : name observation
+
+      module Name : Regular.S with type t = name
 
 
       (** Code representation.

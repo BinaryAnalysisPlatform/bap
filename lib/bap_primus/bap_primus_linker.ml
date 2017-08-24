@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Regular.Std
 open Format
 open Bap_primus_types
 
@@ -7,9 +8,10 @@ type name = [
   | `tid of tid
   | `addr of addr
   | `symbol of string
-] [@@deriving sexp_of]
+] [@@deriving bin_io, compare, sexp]
 
 type exn += Unbound_name of name
+
 
 
 module type Code = functor (Machine : Machine) -> sig
@@ -38,6 +40,13 @@ let string_of_name = function
   | `symbol name -> name
   | `addr addr -> asprintf "at address %a" Addr.pp_hex addr
   | `tid tid -> asprintf "with tid %a" Tid.pp tid
+
+let inspect n = Sexp.Atom (string_of_name n)
+
+let exec,will_exec = Bap_primus_observation.provide
+                    ~inspect
+                    "linker-exec"
+
 
 let () = Exn.add_printer (function
     | Unbound_name name ->
@@ -92,15 +101,16 @@ module Make(Machine : Machine) = struct
     | Some s -> linker_error (`symbol s)
     | None -> linker_error name
 
-  let run (module Code : Code) =
+  let run name (module Code : Code) =
     let module Code = Code(Machine) in
+    Machine.Observation.make will_exec name >>= fun () ->
     Code.exec
 
   let fail name =
     Machine.Local.get state >>= fun s ->
     match code_of_name unresolved_handler s with
     | None -> do_fail name
-    | Some code -> run code
+    | Some code -> run name code
 
   let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
@@ -116,6 +126,19 @@ module Make(Machine : Machine) = struct
   let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
-    | Some code -> run code
+    | Some code -> run name code
 
+end
+
+
+module Name = struct
+  type t = name
+  include Regular.Make(struct
+      type t = name [@@deriving bin_io, compare, sexp]
+      let hash = Hashtbl.hash
+      let version = "1.0.0"
+      let module_name = Some "Bap_primus.Std.Linker.Name"
+      let pp ppf n =
+        Format.fprintf ppf "%s" (string_of_name n)
+    end)
 end
