@@ -217,8 +217,11 @@ module Make (Machine : Machine) = struct
     !!on_read (v,r) >>| fun () -> r
 
   let binop op x y =
-    value (Bil.Apply.binop op x.value y.value) >>= fun r ->
-    !!on_binop ((op,x,y),r) >>| fun () -> r
+    try
+      value (Bil.Apply.binop op x.value y.value) >>= fun r ->
+      !!on_binop ((op,x,y),r) >>| fun () -> r
+    with Division_by_zero -> failf "Division by zero" ()
+
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
