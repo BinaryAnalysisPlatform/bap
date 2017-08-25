@@ -1,12 +1,13 @@
+
 // Here we place primitives that could come in handy,
 // mainly to unify interfaces of llvm versions.
-// Hence there are some functions that are sensible only
-// for one particular version, e.g. get_symbols_sizes
 
 #ifndef LLVM_PRIMITIVES_HPP
 #define LLVM_PRIMITIVES_HPP
 
 #include <llvm/Object/ObjectFile.h>
+#include <llvm/Object/ELF.h>
+
 #include "llvm_error_or.hpp"
 
 namespace prim {
@@ -14,176 +15,135 @@ namespace prim {
 using namespace llvm;
 using namespace llvm::object;
 
-std::string arch_of_object(const llvm::object::ObjectFile &obj) {
-    return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
-}
+// object
+std::string arch_of_object(const llvm::object::ObjectFile &obj);
+const char* get_raw_data(const ObjectFile &obj);
+std::vector<RelocationRef> relocations(const SectionRef &sec);
+std::vector<SectionRef> sections(const ObjectFile &obj);
+std::vector<SymbolRef> symbols(const ObjectFile &obj);
 
-uint64_t relative_address(uint64_t base, uint64_t abs) {
-    if (abs >= base) return (abs - base);
-    else return abs;
-}
+// sections
+section_iterator begin_sections(const ObjectFile &obj);
+section_iterator end_sections(const ObjectFile &obj);
+error_or<std::string> section_name(const SectionRef &sec);
+error_or<uint64_t> section_address(const SectionRef &sec);
+error_or<uint64_t> section_size(const SectionRef &sec);
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+// symbols
+symbol_iterator begin_symbols(const ObjectFile &obj);
+symbol_iterator end_symbols(const ObjectFile &obj);
+error_or<uint64_t> symbol_address(const SymbolRef &sym);
+error_or<std::string> symbol_name(const SymbolRef &s);
+error_or<uint64_t> symbol_value(const SymbolRef &s);
+error_or<SymbolRef::Type> symbol_type(const SymbolRef &s);
+error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s);
+error_or<uint64_t> symbol_size(const SymbolRef &s);
 
-const char* get_raw_data(const ObjectFile &obj) {
-    return obj.getMemoryBufferRef().getBufferStart();
-}
+// relocation
+uint64_t relocation_offset(const RelocationRef &rel);
 
-symbol_iterator begin_symbols(const ObjectFile &obj) { return obj.symbol_begin(); }
-symbol_iterator end_symbols(const ObjectFile &obj) { return obj.symbol_end(); }
-section_iterator begin_sections(const ObjectFile &obj) { return obj.section_begin(); }
-section_iterator end_sections(const ObjectFile &obj) { return obj.section_end(); }
+// misc
+// returns abs - base if abs >= base or just abs otherwise
+uint64_t relative_address(uint64_t base, uint64_t abs);
 
-error_or<uint64_t> symbol_address(const SymbolRef &sym) {
-    auto addr = sym.getAddress();
-    if (addr) return success(*addr);
-    else return failure(addr.getError().message());
-}
+typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
-error_or<std::string> symbol_name(const SymbolRef &s) {
-    auto name = s.getName();
-    if (name) return success(name.get().str());
-    else return failure(name.getError().message());
-}
+//replace to computeSymbolSizes function, because sometimes it's
+//results could be weird, e.g. symbol size eqauls to 18446744073709550526.
+symbols_sizes get_symbols_sizes(const ObjectFile &obj);
 
-error_or<uint64_t> symbol_value(const SymbolRef &s) { return success(s.getValue()); }
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) { return success(s.getType()); }
-
-error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
-    auto sec = s.getSection();
-    if (sec) return success(*sec);
-    else return failure(sec.getError().message());
-}
-
-uint64_t relocation_offset(const RelocationRef &rel) {
-    return rel.getOffset();
-}
-
-iterator_range<relocation_iterator> relocations(const SectionRef &sec) {
-    return sec.relocations();
-}
-
-iterator_range<section_iterator> sections(const ObjectFile &obj) {
-    return obj.sections();
-}
-
-iterator_range<symbol_iterator> symbols(const ObjectFile &obj) {
-    return obj.symbols();
-}
-
-error_or<std::string> section_name(const SectionRef &sec) {
-    StringRef name;
-    auto er = sec.getName(name);
-    if (!er) return success(name.str());
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_address(const SectionRef &sec) {
-    return success(sec.getAddress());
-}
-
-error_or<uint64_t> section_size(const SectionRef &sec) {
-    return success(sec.getSize());
-}
-
-//aimed for iteration over symbols, sections, relocations
 template <typename T>
-void next(content_iterator<T> &it, content_iterator<T> end) {
-    ++it;
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf);
+
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf);
+
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec);
+
+// template functions
+
+// 4.0
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Phdr hdr;
+
+    auto er_hdrs = elf.program_headers();
+    if (!er_hdrs) return std::vector<hdr>();
+    auto hdrs = er_hdrs.get();
+    return std::vector<hdr>(hdrs.begin(), hdrs.end());
 }
 
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Shdr hdr;
+
+    auto er_hdrs = elf.sections();
+    if (!er_hdrs) return std::vector<hdr>();
+    auto hdrs = er_hdrs.get();
+    return std::vector<hdr>(hdrs.begin(), hdrs.end());
+}
+
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
+    auto er_name = elf.getSectionName(sec);
+    if (!er_name) return failure(toString(er_name.takeError()));
+    return success(er_name.get().str());
+}
+
+//3.8
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Phdr hdr;
+
+    auto hdrs = elf.program_headers();
+    return std::vector<hdr>(hdrs.begin(), hdrs.end());
+}
+
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Shdr hdr;
+
+    auto secs = elf.sections();
+    return std::vector<hdr>(secs.begin(), secs.end());
+}
+
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
+    auto er_name = elf.getSectionName(sec);
+    if (er_name) return failure(er_name.getError().message());
+    return success(er_name->str());
+}
+
+// 3.4
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
-const char* get_raw_data(const ObjectFile &obj) {
-    return obj.getData().begin();
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Phdr hdr;
+
+    return std::vector<hdr>(elf.begin_program_headers(), elf.end_program_headers());
 }
 
-symbol_iterator begin_symbols(const ObjectFile &obj) { return obj.begin_symbols(); }
-symbol_iterator end_symbols(const ObjectFile &obj) { return obj.end_symbols(); }
-section_iterator begin_sections(const ObjectFile &obj) { return obj.begin_sections(); }
-section_iterator end_sections(const ObjectFile &obj) { return obj.end_sections(); }
+template <typename T>
+std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
+    typedef typename ELFFile<T>::Elf_Shdr hdr;
 
-error_or<std::string> symbol_name(const SymbolRef &s) {
-    StringRef name;
-    auto er_name = s.getName(name);
-    if (!er_name) return success(name.str());
-    else return failure(er_name.message());
+    return std::vector<hdr>(elf.begin_sections(), elf.end_sections());
 }
 
-error_or<uint64_t> symbol_size(const SymbolRef &s) {
-    uint64_t size;
-    auto er = s.getSize(size);
-    if (!er) return success(size);
-    else return failure(er.message());
+template <typename T>
+error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
+    auto er_name = elf.getSectionName(sec);
+    if (er_name) return failure(er_name.getError().message());
+    return success(er_name->str());
 }
 
-error_or<uint64_t> symbol_value(const SymbolRef &s) {
-    uint64_t val;
-    auto er = s.getValue(val);
-    if (!er) return success(val);
-    else return failure(er.message());
-}
-
-
-error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
-    SymbolRef::Type typ;
-    auto er = s.getType(typ);
-    if (!er) return success(typ);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> symbol_address(const SymbolRef &s) {
-    uint64_t addr;
-    auto er = s.getAddress(addr);
-    if (er) return failure(er.message());
-
-    //need to check this due to nice llvm code like:
-    // ...
-    // Result = UnknownAddressOrSize;
-    // return object_error::success;
-    // ..
-    // where UnknownAddressOrSize = 18446744073709551615
-    if (addr == UnknownAddressOrSize)
-        addr = 0;
-    return success(addr);
-}
-
-error_or<section_iterator> symbol_section(const ObjectFile &obj, const SymbolRef &s) {
-    section_iterator sec = obj.begin_sections();
-    auto er = s.getSection(sec);
-    if (!er) return success(sec);
-    else return failure(er.message());
-}
-
-
-error_or<std::string> section_name(const SectionRef &sec) {
-    StringRef name;
-    auto er = sec.getName(name);
-    if (!er) return success(name.str());
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_address(const SectionRef &sec) {
-    uint64_t addr;
-    auto er = sec.getAddress(addr);
-    if (!er) return success(addr);
-    else return failure(er.message());
-}
-
-error_or<uint64_t> section_size(const SectionRef &sec) {
-    uint64_t size;
-    auto er = sec.getSize(size);
-    if (!er) return success(size);
-    else return failure(er.message());
-}
-
-uint64_t relocation_offset(const RelocationRef &rel) {
-    uint64_t off;
-    auto er_off = rel.getOffset(off); // this operation is always successful
-    return off;
-}
-
-//aimed for iteration over symbols, sections, relocations in llvm 3.4
+// aimed for iteration over symbols, sections, relocations in llvm 3.4
 template <typename T>
 void next(content_iterator<T> &it, content_iterator<T> end) {
     error_code ec;
@@ -191,59 +151,9 @@ void next(content_iterator<T> &it, content_iterator<T> end) {
     if (ec) it = end;
 }
 
-template <typename T>
-std::vector<T> collect(content_iterator<T> begin, content_iterator<T> end) {
-    std::vector<T> data;
-    for (auto it = begin; it != end; next(it, end))
-        data.push_back(*it);
-    return data;
-}
-
-std::vector<SectionRef> sections(const ObjectFile &obj) {
-    return collect(obj.begin_sections(), obj.end_sections());
-}
-
-std::vector<RelocationRef> relocations(const SectionRef &sec) {
-    return collect(sec.begin_relocations(), sec.end_relocations());
-}
-
-std::vector<SymbolRef> symbols(const ObjectFile &obj) {
-    return collect(obj.begin_symbols(), obj.end_symbols());
-}
-
+#else
+#error LLVM version is not supported
 #endif
-
-typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
-
-//replace to computeSymbolSizes function, because sometimes it's
-//results could be weird, e.g. symbol size eqauls to 18446744073709550526.
-symbols_sizes get_symbols_sizes(const ObjectFile &obj) {
-    symbols_sizes sizes;
-    for (auto sym : symbols(obj)) {
-        auto addr = symbol_address(sym);
-        auto sect = symbol_section(obj, sym);
-        if (!addr || !sect || *sect == end_sections(obj)) continue;
-        auto sect_it = *sect;
-        auto sect_addr = section_address(*sect_it);
-        auto sect_size = section_size(*sect_it);
-        if (!sect_addr || !sect_size) continue;
-        uint64_t end = *sect_addr + *sect_size;
-        if (end < *addr) continue;
-        uint64_t size = end - *addr;
-        for (auto next : symbols(obj)) {
-            auto next_addr = symbol_address(next);
-            auto next_sect = symbol_section(obj, next);
-            if (!next_addr || !next_sect || *next_sect == end_sections(obj)) continue;
-            if (*sect == *next_sect) {
-                auto new_size = *next_addr > *addr ? *next_addr - *addr : size;
-                size = new_size < size ? new_size : size;
-            }
-        }
-        sizes.push_back(std::make_pair(sym, size));
-    }
-    return sizes;
-}
-
 
 } // namespace prim
 

@@ -16,17 +16,17 @@ Library bap_llvm
   BuildDepends:  bap, ogre, monads
   FindlibName:   bap-llvm
   Modules:       Bap_llvm,
-                 Bap_llvm_disasm,
                  Bap_llvm_loader
   InternalModules:
                  Bap_llvm_config,
                  Bap_llvm_binary,
                  Bap_llvm_coff_scheme,
+                 Bap_llvm_disasm,
                  Bap_llvm_elf_scheme,
                  Bap_llvm_macho_scheme,
-                 Bap_llvm_ogre_loader,
                  Bap_llvm_ogre_coff,
                  Bap_llvm_ogre_elf,
+                 Bap_llvm_ogre_loader,
                  Bap_llvm_ogre_macho,
                  Bap_llvm_ogre_samples,
                  Bap_llvm_ogre_types
@@ -41,8 +41,8 @@ Library bap_llvm
                  llvm_binary.h,
                  llvm_binary_34.c,
                  llvm_binary_34.h,
-                 llvm_binary_38.c,
-                 llvm_binary_38.h,
+                 llvm_binary_38_40.c,
+                 llvm_binary_38_40.h,
                  llvm_error_or.c,
                  llvm_error_or.h,
                  llvm_loader.c,
@@ -77,12 +77,3 @@ Library legacy_llvm_plugin
   FindlibName:     bap-plugin-legacy_llvm
   InternalModules: Legacy_loader_main
   XMETAExtraLines: tags="legacy, llvm, loader, elf, macho, coff"
-
-Library relocatable_plugin
-  XMETADescription: provides facility to load relocatable files using LLVM library
-  Path:            plugins/relocatable
-  Build$:          flag(everything) || flag(llvm)
-  FindlibName:     bap-plugin-relocatable
-  InternalModules: Relocatable_main, Rel_brancher
-  BuildDepends:    bap, bap-llvm, ogre
-  XMETAExtraLines: tags="brancher, llvm, loader, ogre"

@@ -15,7 +15,6 @@ let of_aseq width x =
 
 module Rel = struct
   open Image.Scheme
-  open Bap_llvm.Std
   open Fact.Syntax
 
   let addr_width =

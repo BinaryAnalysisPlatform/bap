@@ -13,7 +13,19 @@ namespace loader {
 using namespace llvm;
 using namespace llvm::object;
 
-#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
+#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+
+error_or<object::Binary> get_binary(const char* data, std::size_t size) {
+    StringRef data_ref(data, size);
+    MemoryBufferRef buf(data_ref, "binary");
+    auto binary = createBinary(buf);
+    if (!binary)
+        return failure(toString(binary.takeError()));
+    error_or<object::Binary> v(binary->release());
+    return v;
+}
+
+#elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 error_or<object::Binary> get_binary(const char* data, std::size_t size) {
     StringRef data_ref(data, size);

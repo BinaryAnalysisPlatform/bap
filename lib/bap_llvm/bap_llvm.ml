@@ -1,10 +1,14 @@
+open Core_kernel.Std
+
+let strip_version ver =
+  if String.length ver <> 5 then ver
+  else String.sub ver 0 3
+
 
 module Std = struct
-  module Llvm_disasm = Bap_llvm_disasm
-  module Legacy_loader = Bap_llvm_loader
-  module Ogre_loader = Bap_llvm_ogre_loader
-  module Scheme = Bap_llvm_ogre_types.Scheme
-  module Coff_scheme = Bap_llvm_coff_scheme
-  module Elf_scheme = Bap_llvm_elf_scheme
-  module Macho_scheme = Bap_llvm_macho_scheme
+  type x86_syntax = [`att | `intel] [@@deriving sexp]
+
+  let llvm_version = strip_version Bap_llvm_config.version
+  let init_disassembler = Bap_llvm_disasm.init
+  let init_loader = Bap_llvm_ogre_loader.init
 end

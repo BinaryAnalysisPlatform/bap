@@ -19,8 +19,9 @@
 #include <llvm/Config/llvm-config.h>
 
 #include "llvm_binary_34.hpp"
-#include "llvm_binary_38.hpp"
+#include "llvm_binary_38_40.hpp"
 #include "llvm_error_or.hpp"
+#include "llvm_primitives.hpp"
 
 extern "C" {
     void bap_notify_error(const char*);
@@ -77,11 +78,10 @@ segment make_segment(const coff_section &s, uint64_t image_base) {
 
 template<typename T>
 error_or<segments> read(const ELFObjectFile<T>& obj) {
-    auto begin = elf_header_begin(obj.getELFFile());
-    auto end   = elf_header_end(obj.getELFFile());
+    auto hdrs = prim::elf_program_headers(*obj.getELFFile());
     segments s;
-    auto it = begin;
-    for (int pos = 0; it != end; ++it, ++pos) {
+    auto it = hdrs.begin();
+    for (int pos = 0; it != hdrs.end(); ++it, ++pos) {
         if (it -> p_type == ELF::PT_LOAD) {
             std::ostringstream oss;
             oss << std::setfill('0') << std::setw(2) << pos;
