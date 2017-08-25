@@ -64,7 +64,12 @@ eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```
 
-To use a specific version of llvm (we support 3.4, 3.8, and 4.0) specify the desired version explicitly via the `conf-llvm` package, e.g., `opam depext --install conf-llvm=3.8 bap`.
+To use a specific version of llvm (we support 3.4, 3.8, and 4.0) specify the desired version explicitly via the `conf-llvm` package, e.g., 
+
+```bash 
+   opam depext --install conf-llvm=3.8
+   opam depext --install conf-llvm=3.8 bap
+```
 
 Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation) 
 or contact us directly via our Gitter [chat](https://gitter.im/BinaryAnalysisPlatform/bap).
