@@ -64,7 +64,7 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
 // template functions
 
 // 4.0
-#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 4
 
 template <typename T>
 std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
@@ -93,7 +93,7 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
     return success(er_name.get().str());
 }
 
-//3.8
+// 3.8
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 template <typename T>
@@ -115,8 +115,8 @@ std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
 template <typename T>
 error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
     auto er_name = elf.getSectionName(sec);
-    if (er_name) return failure(er_name.getError().message());
-    return success(er_name->str());
+    if (er_name) return success(er_name->str());
+    return failure(er_name.getError().message());
 }
 
 // 3.4
