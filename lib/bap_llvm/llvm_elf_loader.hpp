@@ -205,7 +205,7 @@ void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
-    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+    || LLVM_VERSION_MAJOR == 4
 
 template <typename T>
 uint64_t base_address(const ELFObjectFile<T> &obj) {
