@@ -356,7 +356,7 @@ void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+    || LLVM_VERSION_MAJOR == 4
 
 commands macho_commands(const macho &obj) {
     commands cmds;
