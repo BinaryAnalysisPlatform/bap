@@ -25,7 +25,6 @@ WORKDIR /home/bap
 RUN opam init --auto-setup --comp=4.02.3 --yes
 RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 RUN opam update
-RUN opam depext --install conf-llvm.3.8 --yes
 RUN OPAMJOBS=1 opam depext --install bap --yes
 RUN sudo pip install bap
 ENTRYPOINT ["opam", "config", "exec", "--"]

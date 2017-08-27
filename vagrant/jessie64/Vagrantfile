@@ -14,7 +14,6 @@ sudo apt-get --yes install unzip
 opam init --auto-setup --comp=4.02.3 --yes
 eval `opam config env`
 opam install depext --yes
-opam depext conf-llvm.3.4 --install --yes
 opam depext bap --install --yes
 sudo apt-get install python-pip --yes
 sudo pip install bap
