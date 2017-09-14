@@ -190,16 +190,16 @@ depends: [
     "base-unix"
     "bitstring"
     "camlzip"
-    "cmdliner" {= "0.9.8"}
-    "ppx_jane" {>= "113.33.00" & < "113.34.00"}
-    "core_kernel" {>= "113.33.00" & < "113.34.00"}
+    "cmdliner" {>= "1.0" & < "2.0"}
+    "ppx_jane"    {>= "v0.9" & < "v0.10"}
+    "core_kernel" {>= "v0.9" & < "v0.10"}
     "ezjsonm"
     "faillib"
     "fileutils"
     "FrontC"
-    "oasis" {build & = "0.4.7"}
+    "oasis" {build & = "0.4.10"}
     "ounit" {build}
-    "ocamlgraph" {>= "1.8.6" }
+    "ocamlgraph" {>= "1.8.6"}
     "ocamlfind" {>= "1.5.6" & < "2.0"}
     "ocurl" {= "0.7.7"}
     "optcomp"
