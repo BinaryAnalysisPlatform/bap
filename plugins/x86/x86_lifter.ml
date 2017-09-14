@@ -362,7 +362,7 @@ module ToIR = struct
         in
         if pref = [] then
           stmts
-        else if List.mem pref repz || List.mem pref repnz then
+        else if ints_mem pref repz || ints_mem pref repnz then
           (* movs has only rep instruction others just considered to be rep *)
           rep_wrap ~mode ~addr ~next stmts
         else
@@ -835,7 +835,6 @@ module ToIR = struct
       | Setcc(t, o1, c) ->
         [assn t o1 Bil.(Cast (UNSIGNED, !!t, c))]
       | Shift(st, s, dst, shift) ->
-        assert (List.mem [reg8_t; reg16_t; reg32_t; reg64_t] s);
         let old = tmp ~name:"tmp" s in
         let s' = !!s in
         let size = int_exp s' s' in

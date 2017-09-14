@@ -452,7 +452,7 @@ module Simpl = struct
         neutral-element-elimination,
         zero-element-propagation)  *)
   let removable ignore x =
-    Set.subset (Eff.compute x) (Eff.of_list ignore)
+    Set.is_subset (Eff.compute x) ~of_:(Eff.of_list ignore)
 
   let is_associative = function
     | PLUS | TIMES | AND | OR | XOR -> true
@@ -661,7 +661,7 @@ module Normalize = struct
       | Extract (n,m,x) -> Extract (n,m, d/x)
       | Concat (x,y) -> Concat (d/x, d/y)
       | Let (v,x,y) -> ((v,d/x)::d)/y
-      | Var x as var -> match List.Assoc.find d x with
+      | Var x as var -> match List.Assoc.find ~equal:Var.equal d x with
         | None -> var
         | Some exp -> exp in
     []/exp

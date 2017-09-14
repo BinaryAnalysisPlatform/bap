@@ -31,6 +31,12 @@ let exp_not = Bil.lnot
 (* exp from int *)
 let int_exp n width = BV.of_int n ~width |> Bil.int
 
+
+(** [ints_mem xs x] is [true] if [x] is a member of the list of
+    integers [xs] *)
+let ints_mem = List.mem ~equal:Int.equal
+
+
 (* the 2 with_width functions are versions of functions that
  * already exist that don't throw away existing width information
  * so that we can avoid calling Typecheck.infer_ast *)

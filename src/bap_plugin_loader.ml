@@ -49,7 +49,8 @@ let print_plugins ?(info=`Desc) excluded plugins =
     | `Desc -> Plugin.desc p
     | `Tags -> plugin_tags p |> String.concat ~sep:", " in
   List.iter plugins ~f:(fun p ->
-      let status = if List.mem excluded (Plugin.name p)
+      let status =
+        if List.mem ~equal:String.equal excluded (Plugin.name p)
         then "[-]" else "[+]" in
       printf "  %s %-26s %s@." status (Plugin.name p) (info_string p))
 

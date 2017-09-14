@@ -1097,8 +1097,9 @@ module Ir_blk = struct
 
 
   let apply_map name get map skip blk ~f =
-    if List.mem skip name then (get blk.self) else
-      Array.map (get blk.self) ~f:(fun x -> map x ~f)
+    if List.mem ~equal:Polymorphic_compare.equal skip name
+    then (get blk.self)
+    else Array.map (get blk.self) ~f:(fun x -> map x ~f)
 
   let map_exp ?(skip=[]) blk ~f = {
     blk with self = {

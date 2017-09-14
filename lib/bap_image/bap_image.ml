@@ -74,6 +74,7 @@ module Segment = struct
 end
 
 module Symbol = struct
+  open! Polymorphic_compare
   module T = struct
     type t = symbol_info region [@@deriving bin_io,compare,sexp]
     let pp = pp_region and hash = hash_region
@@ -81,8 +82,8 @@ module Symbol = struct
     let version = "2.0.0"
   end
   let name {name} = name
-  let is_debug {info={kind}} = List.mem kind `Debug
-  let is_function {info={kind}} = List.mem kind `Code
+  let is_debug {info={kind}} = List.mem ~equal kind `Debug
+  let is_function {info={kind}} = List.mem ~equal kind `Code
   include T
   include Regular.Make(T)
 end

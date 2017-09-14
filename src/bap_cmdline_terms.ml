@@ -80,10 +80,12 @@ let disassembler () : string Term.t =
       Arg.doc_alts_enum backends in
     Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
+let rooters_mem = List.mem ~equal:[%compare.equal : string * string]
+
 let symbols () : string list Term.t =
   let rooters = enum_processors (module Rooter) in
   let sybolzs = enum_processors (module Symbolizer) in
-  match List.filter sybolzs ~f:(List.mem rooters) with
+  match List.filter sybolzs ~f:(rooters_mem rooters) with
   | [] | [_] -> Term.const []
   | names ->
     let doc =

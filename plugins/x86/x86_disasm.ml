@@ -27,7 +27,7 @@ let parse_instr mode mem addr =
     let value = Word.extract_exn ~hi:(Addr.bitwidth addr - 1) value in
     Addr.(addr + value) in
   let g a =
-    let open Or_error in
+    let open Or_error.Monad_infix in
     Memory.get ~addr:a mem >>= Word.to_int |>
     ok_exn |> Char.of_int_exn in
   let module R = (val (vars_of_mode mode)) in
@@ -1183,7 +1183,8 @@ let parse_instr mode mem addr =
      operands larger.  *)
   let modesize = type_of_mode mode in
   let opsize, bopsize, mopsize =
-    if List.mem pref pref_opsize then reg16_t,reg16_t,reg128_t else reg32_t,modesize,reg64_t
+    if ints_mem pref pref_opsize
+    then reg16_t,reg16_t,reg128_t else reg32_t,modesize,reg64_t
   in
   let opsize = match rex with
     | Some {rex_w=true; _} -> reg64_t (* See Table 3-4: Effective Operand-
@@ -1200,8 +1201,8 @@ let parse_instr mode mem addr =
     | None -> mopsize
   in
   let addrsize = match mode with
-    | X86 -> if List.mem pref pref_addrsize then reg16_t else reg32_t
-    | X8664 -> if List.mem pref pref_addrsize then reg32_t else reg64_t
+    | X86 -> if ints_mem pref pref_addrsize then reg16_t else reg32_t
+    | X8664 -> if ints_mem pref pref_addrsize then reg32_t else reg64_t
   in
   let r_extend, rm_extend, sib_extend =
     let e b = ((if b then 1 else 0) lsl 3) in
@@ -1220,10 +1221,10 @@ let parse_instr mode mem addr =
       opsize;
       bopsize;
       mopsize;
-      repeat = List.mem pref repz;
-      nrepeat = List.mem pref repnz;
-      addrsize_override = List.mem pref pref_addrsize;
-      opsize_override = List.mem pref pref_opsize;
+      repeat = ints_mem pref repz;
+      nrepeat = ints_mem pref repnz;
+      addrsize_override = ints_mem pref pref_addrsize;
+      opsize_override = ints_mem pref pref_opsize;
       rex;
       vex;
       r_extend;

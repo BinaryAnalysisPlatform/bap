@@ -26,6 +26,7 @@ module Plugin_rules = struct
 
   let needs_threads pkgs =
     List.mem (Fl.package_deep_ancestors ["native"] pkgs) "threads"
+      ~equal:String.equal
 
   let infer_thread_predicates predicates pkg =
     if needs_threads pkg
@@ -64,7 +65,7 @@ module Plugin_rules = struct
         else predicates in
       let arch,preds = Fl.package_property_2 preds pkg "archive" in
       let base = Fl.package_directory pkg in
-      if dynamic && not (List.mem preds (`Pred "plugin"))
+      if dynamic && not (List.mem ~equal:Polymorphic_compare.equal preds (`Pred "plugin"))
       then raise Not_found;
       String.split ~on:' ' arch |>
       List.map ~f:(Fl.resolve_path ~base)
@@ -73,7 +74,7 @@ module Plugin_rules = struct
   let externals pkgs =
     pkgs |>
     topological_closure ~predicates:(pkg_predicates ~native:true) |>
-    List.filter ~f:(fun dep -> not (List.mem interns dep))
+    List.filter ~f:(fun dep -> not (List.mem ~equal:String.equal interns dep))
 
   let packages () = externals !Options.ocaml_pkgs
 

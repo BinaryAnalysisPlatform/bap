@@ -135,12 +135,12 @@ let digest_project proj =
     | Some v -> Digest.add dst "%a" Tid.pp v in
   (object
     inherit [Digest.t] Term.visitor
-    method enter_term cls t dst =
+    method! enter_term cls t dst =
       add_taint Taint.reg t dst |>
       add_taint Taint.ptr t
-    method enter_arg t dst = Digest.add dst "%a" Arg.pp t
-    method enter_def t dst = Digest.add dst "%a" Def.pp t
-    method enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+    method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
+    method! enter_def t dst = Digest.add dst "%a" Def.pp t
+    method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
   end)#run
     (Project.program proj)
     (Data.Cache.Digest.create ~namespace:"propagate_taint")
@@ -157,7 +157,7 @@ let process args proj =
   let callgraph = Program.to_graph prog in
   let is_interesting = match args.interesting with
     | [] -> fun _ -> true
-    | xs -> fun sub -> List.mem xs (Sub.name sub) in
+    | xs -> fun sub -> List.mem ~equal:String.equal xs (Sub.name sub) in
   let subs = Term.enum sub_t prog |>
              Seq.filter ~f:is_interesting |>
              seeded callgraph in

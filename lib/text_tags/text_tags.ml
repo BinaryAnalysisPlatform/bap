@@ -173,7 +173,7 @@ let register_mode mode install =
 let available_modes () = List.map ~f:fst !modes
 
 let install fmt mode =
-  List.Assoc.find !modes mode |> function
+  List.Assoc.find ~equal:String.equal !modes mode |> function
   | Some install -> install fmt
   | None -> raise (Unknown_mode mode)
 

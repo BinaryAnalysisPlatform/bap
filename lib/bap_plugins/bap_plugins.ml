@@ -227,7 +227,7 @@ module Plugins = struct
 
   let is_subset requested existed =
     List.is_empty requested ||
-    List.for_all ~f:(List.mem existed) requested
+    List.for_all ~f:(List.mem ~equal:String.equal existed) requested
 
   let is_selected ~provides ~env p =
     is_subset provides (Plugin.tags p) &&
@@ -246,7 +246,7 @@ module Plugins = struct
   let load ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
     collect ?library () |> List.filter_map ~f:(function
         | Error err -> Some (Error err)
-        | Ok p when List.mem exclude (Plugin.name p) -> None
+        | Ok p when List.mem ~equal:String.equal exclude (Plugin.name p) -> None
         | Ok p when is_not_selected ~provides ~env p -> None
         | Ok p -> match Plugin.load p with
           | Ok () -> Some (Ok p)

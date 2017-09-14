@@ -9,8 +9,8 @@ module Syntax = Types.Monad.Syntax
 
 module type S = Types.Monad.S
 module type S2 = Types.Monad.S2
-module type Core = Monad.S
-module type Core2 = Monad.S2
+module type Core = Types.Monad.Core
+module type Core2 = Types.Monad.Core2
 module type Minimal = Types.Monad.Minimal
 module type Minimal2 = Types.Monad.Minimal2
 module type Monad = S
@@ -99,7 +99,7 @@ module Result : sig
   module Error : sig
     module type S = sig
       include S
-      val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
+      val failf : ('a, Caml.Format.formatter, unit, unit -> 'b t) format4 -> 'a
     end
 
 
@@ -310,8 +310,8 @@ module State : sig
 
     type id
     module Id : sig
-      include Identifiable with type t = id
-      val pp : Format.formatter -> id -> unit
+      include Identifiable.S with type t = id
+      val pp : Caml.Format.formatter -> id -> unit
     end
 
     module T1(T : T)(M : Monad) : sig

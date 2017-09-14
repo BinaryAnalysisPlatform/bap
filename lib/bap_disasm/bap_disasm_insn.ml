@@ -85,7 +85,9 @@ let of_basic ?bil insn =
     | None -> [] in
   let is = Insn.is insn in
   let is_bil kind =
-    if bil <> None then List.mem bil_kinds kind else is kind in
+    if bil <> None
+    then List.mem ~equal:[%compare.equal : kind] bil_kinds kind
+    else is kind in
   let is_conditional_jump = is_bil `Conditional_branch in
   let is_jump = is_conditional_jump || is_bil `Unconditional_branch in
   let is_indirect_jump = is_bil `Indirect_branch in

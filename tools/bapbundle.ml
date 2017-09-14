@@ -32,7 +32,7 @@ let set field value =
 
 let add field x =
   let xs = Field.get field !manifest in
-  match List.mem xs x with
+  match List.mem ~equal:String.equal xs x with
   | true -> ()
   | false ->
     field_modified field;
