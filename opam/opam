@@ -12,7 +12,7 @@ build: [
   "--prefix=%{prefix}%"
   "--with-cxx=`which clang++`"
   "--with-llvm-version=3.8"
-  "--with-llvm-config=`which llvm-config-3.8`"
+  "--with-llvm-config=llvm-config-3.8"
   "--mandir=%{man}%"
   "--enable-everything"
   "--enable-tests"
