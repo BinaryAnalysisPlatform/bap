@@ -1,7 +1,7 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     1.3.0
-OCamlVersion: >= 4.02
+Version:     master
+OCamlVersion: >= 4.03
 Synopsis:    BAP Core Library
 Authors:     BAP Team
 Maintainers: Ivan Gotovchits <ivg@ieee.org>
@@ -16,7 +16,7 @@ XOCamlbuildExtraArgs:
      -classic-display
      -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"
 
-BuildDepends: ppx_jane, core_kernel
+BuildDepends: ppx_jane, core_kernel (>= v0.9 && < v0.10)
 
 
 PreConfCommand: $rm setup.data
