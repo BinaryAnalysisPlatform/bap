@@ -11,6 +11,8 @@ build: [
   ["./configure"
   "--prefix=%{prefix}%"
   "--with-cxx=`which clang++`"
+  "--with-llvm-version=3.8"
+  "--with-llvm-config=`which llvm-config-3.8`"
   "--mandir=%{man}%"
   "--enable-everything"
   "--enable-tests"
@@ -217,7 +219,7 @@ depexts: [
         "libgmp-dev"
         "libzip-dev"
         "libcurl4-gnutls-dev"
-        "llvm-3.4-dev"
+        "llvm-3.8-dev"
         "time"
         "clang"
         "llvm"
@@ -226,7 +228,7 @@ depexts: [
      ]]
      [["osx" "macports"] [
         "gmp"
-        "llvm-3.4"
+        "llvm-3.8"
         "graphviz"
         "curl"
         "libzip"
