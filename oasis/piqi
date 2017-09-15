@@ -10,7 +10,7 @@ Library "bap-piqi"
   BuildTools: ocamlbuild, piqi
   DataFiles:    *.piqi
   CompiledObject: best
-  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap,ppx_enumerate
+  BuildDepends: piqirun,piqirun.pb,piqirun.ext,bap
   Modules:   Bir_piqi, Bil_piqi
   InternalModules:
              Stmt_piqi,
