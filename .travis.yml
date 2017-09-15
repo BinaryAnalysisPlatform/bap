@@ -37,7 +37,7 @@ addons:
     - opam
 env:
   global:
-  - OPAMYES=true PACKAGE=bap BAP_DEBUG=true TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true OPAM_SWITCH=$OCAML_VERSION
+  - OPAMYES=true PACKAGE=bap TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true OPAM_SWITCH=$OCAML_VERSION
   matrix:
   - OCAML_VERSION=4.03
   - OCAML_VERSION=4.04
