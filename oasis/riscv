@@ -11,15 +11,29 @@ Library riscv_plugin
   CCOpt:         $cc_optimization -verbose
   CCLib:         $cxxlibs
   CSources:      bap_riscv.h,
-                 bap_riscv.hpp,
-                 bap_riscv.cpp,
+                 bap_riscv.c,
+                 codec.h,
+                 constraints.h,
+                 decode.h,
+                 encode.h,
                  strings.h,
-                 strings.hpp,
-                 strings.cpp,
+                 strings.c,
+                 types.h,
+                 format.c,
+                 format.h,
+                 host-endian.h,
                  meta.h,
-                 meta.hpp,
-                 meta.cpp
+                 meta.c,
+                 operands.h,
+                 switch.h
   FindlibName:   bap-plugin-riscv
-  InternalModules: Riscv_main
+  InternalModules:
+                 Riscv_main,
+                 Riscv_branch,
+                 Riscv_cond,
+                 Riscv_insn,
+                 Riscv_op,
+                 Riscv_reg,
+                 Riscv_types,
+                 Riscv_utils
   XMETAExtraLines: tags="disassembler"
-
