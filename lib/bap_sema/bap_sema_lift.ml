@@ -35,45 +35,6 @@ type linear =
   | Label of tid
   | Instr of Ir_blk.elt
 
-(* we're very conservative here *)
-let has_side_effect e scope = (object
-  inherit [bool] Stmt.visitor
-  method! enter_load  ~mem:_ ~addr:_ _e _s _r = true
-  method! enter_store ~mem:_ ~addr:_ ~exp:_ _e _s _r = true
-  method! enter_var v r = r || Bil.is_assigned v scope
-end)#visit_exp e false
-
-(** This optimization will inline virtual variables that occurs
-    inside the instruction definition if the right hand side of the
-    variable definition is either side-effect free, or another
-    variable, that is not changed in the scope of the variable definition. *)
-let inline_variables stmt =
-  let rec loop ss = function
-    | [] -> List.rev ss
-    | Bil.Move _ as s :: [] -> loop (s::ss) []
-    | Bil.Move (x, Bil.Var y) as s :: xs when Var.is_virtual x ->
-      if Bil.is_assigned y xs || Bil.is_assigned x xs
-      then loop (s::ss) xs else
-        let xs = Bil.substitute (Bil.var x) (Bil.var y) xs in
-        loop ss xs
-    | Bil.Move (x, y) as s :: xs when Var.is_virtual x ->
-      if has_side_effect y xs || Bil.is_assigned x xs
-      then loop (s::ss) xs
-      else loop ss (Bil.substitute (Bil.var x) y xs)
-    | s :: xs -> loop (s::ss) xs in
-  loop [] stmt
-
-let prune x = Bil.prune_unreferenced ~virtuals:true x
-
-let optimize =
-  List.map ~f:Bil.fixpoint [
-    prune;
-    Bil.fold_consts;
-    Bil.normalize_negatives;
-    inline_variables;
-  ]
-  |> List.reduce_exn ~f:Fn.compose
-  |> Bil.fixpoint
 
 let fall_of_block cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
@@ -101,7 +62,11 @@ let linear_of_stmt ?addr return insn stmt : linear list =
     else if Insn.(is call) insn
     then
       Ir_jmp.create_call ?cond (Call.create ?return ~target ())
-    else Ir_jmp.create_goto ?cond target in
+    else
+      match exp with (** we consider any 0x0 destination as a call to external *)
+      | Bil.Int a when Addr.is_zero a ->
+        Ir_jmp.create_call ?cond (Call.create ?return ~target ())
+      | _ -> Ir_jmp.create_goto ?cond target in
   let jump ?cond exp = Instr (`Jmp ~@(jump ?cond exp)) in
   let cpuexn ?cond n =
     let landing = Tid.create () in
@@ -169,7 +134,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
   linearize stmt
 
 let lift_insn ?addr fall init insn =
-  List.fold (optimize @@ Insn.bil insn) ~init ~f:(fun init stmt ->
+  List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
       List.fold (linear_of_stmt ?addr fall insn stmt) ~init
         ~f:(fun (bs,b) -> function
             | Label lab ->
@@ -208,7 +173,9 @@ let blk cfg block : blk term list =
       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
-  List.rev (Term.set_attr b address (Block.addr block) :: bs)
+  List.rev (b::bs) |> function
+  | [] -> assert false
+  | b::bs -> Term.set_attr b address (Block.addr block) :: bs
 
 (* extracts resolved calls from the blk *)
 let call_of_blk blk =
@@ -279,6 +246,43 @@ let lift_sub entry cfg =
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
+let synthetic_sub () =
+  let s = Ir_sub.create () in
+  Term.(set_attr s synthetic ())
+
+
+(** at this moment all null jumps remained in a program denotes
+    external calls. And for each null we create a synthetic subroutine *)
+class null_jump_mapper = object(self)
+  inherit Term.mapper
+
+  val mutable subs : sub term list = []
+
+  method synthetic = subs
+
+  method private add_synthetic =
+    let sub = Ir_sub.create () in
+    let sub = Term.(set_attr sub synthetic ()) in
+    subs <- sub :: subs;
+    sub
+
+  method! map_jmp jmp = match Ir_jmp.kind jmp with
+    | Call call ->
+      begin
+        match Call.target call with
+        | Indirect (Bil.Int addr) when Addr.is_zero addr ->
+          let sub = self#add_synthetic in
+          let call = Call.with_target call (Direct (Term.tid sub)) in
+          Ir_jmp.with_kind jmp (Call call)
+        | _ -> jmp
+      end
+    | _ -> jmp
+end
+
+let resolve_null_jumps s =
+  let mapper = new null_jump_mapper in
+  let s = mapper#map_term sub_t s in
+  s, mapper#synthetic
 
 let program symtab =
   let b = Ir_program.Builder.create () in
@@ -286,7 +290,9 @@ let program symtab =
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let sub = lift_sub entry cfg in
+      let sub,subs = resolve_null_jumps sub in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
+      List.iter ~f:(Ir_program.Builder.add_sub b) subs;
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
   let program = Ir_program.Builder.result b in

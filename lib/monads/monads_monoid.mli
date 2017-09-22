@@ -15,6 +15,8 @@ end
 
 module Make(M : Base) : S with type t := M.t
 
+module Unit : S with type t = unit
+
 module TList(T : T) : sig type t = T.t list end
 
 module Stack : sig

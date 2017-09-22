@@ -9,7 +9,7 @@ Library beagle_plugin
   BuildDepends: bap, bap-microx, bap-beagle-prey, bap-strings
   InternalModules: Beagle_main
   XMETADescription: microx powered obfuscated string solver
-
+  XMETAExtraLines:  tags="deobfuscator, microx, primus, pass, strings"
 
 Library beagle_prey
   Build$: flag(everything) || flag(beagle)
@@ -17,7 +17,7 @@ Library beagle_prey
   FindlibName: bap-beagle-prey
   Modules: Beagle_prey
   BuildDepends: bap, bap-primus
-  Xmetadescription: beagle attributes
+  XMETADescription: beagle attributes
 
 Library strings_plugin
   Build$:       flag(everything) || flag(beagle)
@@ -25,3 +25,5 @@ Library strings_plugin
   FindlibName:  bap-plugin-strings
   BuildDepends: bap, bap-strings, bap-beagle-prey
   InternalModules: Strings_main
+  XMETAExtraLines:  tags="pass, strings"
+  XMETADescription: find strings of characters

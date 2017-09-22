@@ -10,8 +10,8 @@ open Bap_options
 open Bap_source_type
 include Self()
 
-exception Failed_to_create_project of Error.t
-exception Pass_not_found of string
+exception Failed_to_create_project of Error.t [@@deriving sexp]
+exception Pass_not_found of string [@@deriving sexp]
 
 let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
@@ -123,10 +123,10 @@ let program_info =
   let man = [
     `S "SYNOPSIS";
     `Pre "
-      $(b,$mname) [PLUGIN OPTION]... --list-formats
-      $(b,$mname) [PLUGIN OPTION]... [--source-type=$(i,SOURCE)] --list-plugins
-      $(b,$mname) [PLUGIN OPTION]... --$(i,PLUGIN)-help
-      $(b,$mname) $(i,FILE) [PLUGIN OPTION]... [OPTION]...";
+      $(mname) [PLUGIN OPTION]... --list-formats
+      $(mname) [PLUGIN OPTION]... [--source-type=$(i,SOURCE)] --list-plugins
+      $(mname) [PLUGIN OPTION]... --$(i,PLUGIN)-help
+      $(mname) $(i,FILE) [PLUGIN OPTION]... [OPTION]...";
     `S "DESCRIPTION";
     `P "A frontend to the Binary Analysis Platfrom library.
       The tool allows you to inspect binary programs by printing them
@@ -209,7 +209,7 @@ let parse_source argv =
   | _ -> raise Unrecognized_source
 
 let run_loader () =
-  let argv,passes = Bap_plugin_loader.run_and_get_passes Sys.argv in
+  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] Sys.argv in
   let print_formats =
     Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
     fst |> Option.value ~default:false in
@@ -232,9 +232,11 @@ let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Not_found -> () in
+  Sys.(set_signal sigint (Signal_handle exit));
   Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
+  (* main (parse passes argv); exit 0 *)
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

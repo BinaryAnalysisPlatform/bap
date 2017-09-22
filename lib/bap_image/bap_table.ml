@@ -424,7 +424,7 @@ let rev_map_exn : type c . (mem,c) r ->
 
 
 let rev_map ~one_to t tab =
-  try_with (fun () -> rev_map_exn one_to t tab)
+  try_with ~backtrace:true (fun () -> rev_map_exn one_to t tab)
 
 let pp_comma ppf () =
   Format.pp_print_string ppf ", "

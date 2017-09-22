@@ -27,7 +27,7 @@ let of_int_exn = function
 let create w =
   let open Or_error in
   Word.to_int w >>= fun w ->
-  try_with (fun () -> of_int_exn w)
+  try_with ~backtrace:true (fun () -> of_int_exn w)
 
 include Regular.Make(struct
     type t = cond [@@deriving bin_io, compare, sexp]

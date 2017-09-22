@@ -38,14 +38,14 @@
 
     Given, that the predicate is declared as:
 
-    {v (declare student (name str) (gpa float))v}
+    {v (declare student (name str) (gpa float)) v}
 
     where the declaration has the following syntax:
 
     {v
-       <declaration ::= (declare <attribute-name> <field> <field>..)
-       <field> ::= (<field-name> <field-type>)
-       <field-type> ::= int | str | bool | float
+     declaration ::= ( declare <attribute-name> <field> <field> ... )
+     field ::= ( <field-name> <field-type> )
+     field-type ::= int | str | bool | float
     v}
 
     Each declaration declare an attribute, that defines a type of the
@@ -58,9 +58,6 @@
     of table (or a relvar). Correspondingly, a column of a table (that
     is usually referred as an attribute in the relational model), maps
     to Ogre's field.
-
-
-
 *)
 
 open Core_kernel.Std
@@ -655,6 +652,8 @@ module type S = sig
       the query EDSL.*)
   val foreach : ('a -> 'b) query -> f:'a -> 'b seq t
 
+  (** [collect query] is the same as [foreach query ~f:ident] *)
+  val collect : (('a -> 'a) -> 'b) query -> 'b seq t
 
   (** [provide attr v1 v2 ... vm] stores the constituents of an
       attribute value in the document. An attribute type encodes not

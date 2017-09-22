@@ -46,7 +46,8 @@ let read_word_exn reader size buf ~pos_ref =
   word
 
 let read_word reader ~size str ~pos_ref =
-  try_with (fun () -> read_word_exn reader size str ~pos_ref)
+  try_with ~backtrace:true (fun () ->
+      read_word_exn reader size str ~pos_ref)
 
 let read_as inj reader ~size str ~pos_ref =
   read_word reader ~size str ~pos_ref >>= inj

@@ -4,55 +4,74 @@ open Monads.Std
 
 open Bap_primus_generator_types
 
-module Context = Bap_primus_context
-class context = Context.t
+module Exn = Bap_primus_exn
+module Pos = Bap_primus_pos
 
-type error =  Bap_primus_error.t = ..
+type exn = Exn.t = ..
+type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type 'a statement = 'a Bap_primus_observation.statement
-type 'a state = ('a,Context.t) Bap_primus_state.t
-type ('a,'e) result = ('a,'e) Monad.Result.result =
-  | Ok of 'a
-  | Error of 'e
+type 'a state = 'a Bap_primus_state.t
+type exit_status =
+  | Normal
+  | Exn of exn
+
+type 'a effect =
+  project -> string array -> string array -> 'a
 
 module type State = sig
-  type ('a,'e) m
+  type 'a m
   type 'a t
 
-  val get : 'a t -> ('a,#Context.t) m
-  val put : 'a t -> 'a -> (unit,#Context.t) m
-  val update : 'a t -> f:('a -> 'a) -> (unit,#Context.t) m
+  val get : 'a t -> 'a m
+  val put : 'a t -> 'a -> unit m
+  val update : 'a t -> f:('a -> 'a) -> unit m
 end
 
+type value = {
+  id : Int63.t;
+  value  : word;
+} [@@deriving bin_io, compare, sexp]
+
+type id = Monad.State.Multi.id
+
 module type Machine = sig
-  type ('a,'e) t
+  type 'a t
   type 'a m
 
   module Observation : sig
-    val observe : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
-    val make : 'a statement -> 'a -> (unit,'e) t
+    val observe : 'a observation -> ('a -> unit t) -> unit t
+    val make : 'a statement -> 'a -> unit t
   end
 
   module Syntax : sig
-    include Monad.Syntax.S2 with type ('a,'e) t := ('a,'e) t
-    val (>>>) : 'a observation -> ('a -> (unit,'e) t) -> (unit,'e) t
+    include Monad.Syntax.S with type 'a t := 'a t
+    val (>>>) : 'a observation -> ('a -> unit t) -> unit t
   end
 
-  include Monad.State.Multi.S2 with type ('a,'e) t := ('a,'e) t
-                                and type 'a m := 'a m
-                                and type ('a,'e) e = 'e -> (('a, error) result * 'e) m
-                                and module Syntax := Syntax
-  module Local  : State with type ('a,'e) m := ('a,'e) t
+  include Monad.State.Multi.S with type 'a t := 'a t
+                               and type 'a m := 'a m
+                               and type env := project
+                               and type id := id
+                               and module Syntax := Syntax
+                               and type 'a e = (exit_status * project) m effect
+  module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
-  module Global : State with type ('a,'e) m := ('a,'e) t
+  module Global : State with type 'a m := 'a t
                          and type 'a t := 'a state
 
-  include Monad.Fail.S2 with type ('a,'e) t := ('a,'e) t
-                         and type 'a error = error
+  val raise : exn -> 'a t
+  val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+  val project : project t
+  val program : program term t
+  val arch : arch t
+  val args : string array t
+  val envp : string array t
 end
 
 module type Component = functor (Machine : Machine) -> sig
-    val init : unit -> (unit,#Context.t) Machine.t
+  val init : unit -> unit Machine.t
 end
 
 type component = (module Component)

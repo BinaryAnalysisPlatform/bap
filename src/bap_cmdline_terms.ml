@@ -171,8 +171,15 @@ let load_path : string list Term.t =
        info ["load-path"; "L"] ~doc:load_path_doc ~docv:"PATH")
 
 let list_plugins, list_plugin_doc =
-  let doc = "List available plugins" in
-  Arg.(value & flag & info ["list-plugins"] ~doc), doc
+  let doc =
+    "List all available plugins or list plugins that provide some
+     features, e.g. --list-plugins=disassembler,lifter" in
+  Arg.(value & opt ~vopt:(Some []) (some (list string)) None
+       & info ["list-plugins"] ~doc), doc
+
+let list_tags, list_tags_doc =
+  let doc = "List all available plugin tags" in
+  Arg.(value & flag & info ["list-tags"] ~doc), doc
 
 let disable_plugin, disable_plugin_doc =
   let doc = "Don't load $(i,PLUGIN) automatically" in
@@ -194,6 +201,7 @@ let common_loader_options = [
   `I ("$(b,-l) $(i,PATH)", load_doc);
   `I ("$(b,-L)$(i,PATH)", load_path_doc);
   `I ("$(b,--list-plugins)", list_plugin_doc);
+  `I ("$(b,--list-tags)", list_tags_doc);
   `I ("$(b,--disable-plugin)", disable_plugin_doc);
   `I ("$(b,--disable-autoload)", no_auto_load_doc);
   `I ("$(b,--no-)$(i,PLUGIN)", disable_plugin_doc);

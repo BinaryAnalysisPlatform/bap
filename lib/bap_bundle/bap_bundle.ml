@@ -19,6 +19,8 @@ module Std = struct
       url : string sexp_option;
       license : string sexp_option;
       copyrights : string sexp_option;
+      tags : string sexp_list;
+      cons : string sexp_list;
     } [@@deriving bin_io, compare, fields, sexp]
 
     let create
@@ -29,9 +31,11 @@ module Std = struct
         ?(desc = "description not provided")
         ?(requires=[])
         ?(provides=[])
-        ?url ?license ?copyrights name = {
+        ?url ?license ?copyrights
+        ?(tags=[])
+        ?(cons=[]) name = {
       name; author; version; date; desc; requires; provides;
-      copyrights; license; url;
+      copyrights; license; url; tags; cons;
       main = Option.value main ~default:name;
     }
 

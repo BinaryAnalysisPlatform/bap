@@ -9,3 +9,4 @@ Library taint_plugin
   BuildDepends: bap
   InternalModules: Taint_main
   XMETADescription: taint specified terms
+  XMETAExtraLines:  tags="dataflow, pass, taint"

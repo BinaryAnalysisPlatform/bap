@@ -1,5 +1,4 @@
 language: c
-before_install: if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew upgrade && brew install gmp; fi
 install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
 script: bash -ex .travis-opam.sh
 sudo: required
@@ -38,19 +37,8 @@ addons:
     - opam
 env:
   global:
-  - OPAMYES=true PACKAGE=bap TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true OPAM_SWITCH=$OCAML_VERSION
+  - OPAMYES=true PACKAGE=bap BAP_DEBUG=true TESTS=false BAP_RUN_TEST=true BAP_RUN_CHECK=true OPAM_SWITCH=$OCAML_VERSION
   matrix:
   - OCAML_VERSION=4.02
   - OCAML_VERSION=4.03
   - OCAML_VERSION=4.04
-os:
-  - linux
-  - osx
-matrix:
-  exclude:
-    - os: osx
-      env: OCAML_VERSION=4.03
-    - os: osx
-      env: OCAML_VERSION=4.04
-  allow_failures:
-    - os: osx

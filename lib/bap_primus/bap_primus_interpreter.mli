@@ -1,14 +1,37 @@
 open Core_kernel.Std
 open Bap.Std
-
 open Bap_primus_types
 
-module Context = Bap_primus_context
+val pc_change : addr observation
+val halting : unit observation
+
+val loading : value observation
+val loaded : (value * value) observation
+val storing : value observation
+val stored : (value * value) observation
+val reading : var observation
+val read : (var * value) observation
+val writing : var observation
+val written : (var * value) observation
+val undefined : value observation
+val const : value observation
+
+val binop : ((binop * value * value) * value) observation
+val unop : ((unop * value) * value) observation
+val cast : ((cast * int * value) * value) observation
+val extract : ((int * int * value) * value) observation
+
+
+
+val enter_exp : exp observation
+val leave_exp : exp observation
+
 
 val enter_term : tid observation
 val leave_term : tid observation
-val enter_level : Context.level observation
-val leave_level : Context.level observation
+
+val enter_pos : pos observation
+val leave_pos : pos observation
 
 val enter_top : program term observation
 val enter_sub : sub term observation
@@ -26,19 +49,29 @@ val leave_phi : phi term observation
 val leave_def : def term observation
 val leave_jmp : jmp term observation
 
-val variable_access : var observation
-val variable_read : (var * Bil.result) observation
-val variable_written : (var * Bil.result) observation
 
-val address_access : addr observation
-val address_read : (addr * word) observation
-val address_written : (addr * word) observation
+type exn += Halt
 
 module Make (Machine : Machine) : sig
-  module Biri : Biri.S
-    with type ('a,'e) state = ('a,'e) Machine.t
-  class ['a] t : object
-    inherit ['a] Biri.t
-    constraint 'a = #Bap_primus_context.t
-  end
+  type 'a m = 'a Machine.t
+  val halt : never_returns m
+  val pc : addr m
+  val pos : pos m
+  val sub : sub term -> unit m
+  val blk : blk term -> unit m
+  val get : var -> value m
+  val set : var -> value -> unit m
+  val binop : binop -> value -> value -> value m
+  val unop : unop -> value -> value m
+  val cast : cast -> int -> value -> value m
+  val concat : value -> value -> value m
+  val extract : hi:int -> lo:int -> value -> value m
+  val const : word -> value m
+  val load : value -> endian -> size -> value m
+  val store : value -> value -> endian -> size -> unit m
+end
+
+
+module Init (Machine : Machine) : sig
+  val run : unit -> unit Machine.t
 end

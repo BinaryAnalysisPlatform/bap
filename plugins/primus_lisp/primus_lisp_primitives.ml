@@ -4,72 +4,84 @@ open Bap_primus.Std
 
 module Primitives(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
+  module Eval = Primus.Interpreter.Make(Machine)
   module Primitive = Primus.Lisp.Primitive
   module Lisp = Primus.Lisp.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
 
-  let all f args = Machine.return (Word.of_bool (List.exists args ~f))
-  let is_zero args = all Word.is_zero args
-  let is_positive args = all Word.is_positive args
-  let is_negative args = all Word.is_negative args
-  let width_of_ctxt ctxt =
-    Project.arch ctxt#project |> Arch.addr_size |> Size.in_bits
+  let all f args = List.exists args ~f |> Value.of_bool
+  let is_zero args = all Value.is_zero args
+  let is_positive args = all Value.is_positive args
+  let is_negative args = all Value.is_negative args
+  let addr_width =
+    Machine.arch >>| Arch.addr_size >>| Size.in_bits
+
   let word_width args =
-    Machine.get () >>| width_of_ctxt >>| fun width ->
+    addr_width >>= fun width ->
     match args with
-    | [] -> Word.of_int ~width width
-    | x :: xs -> Word.of_int ~width (Word.bitwidth x)
+    | [] -> Value.of_int ~width width
+    | x :: xs -> Value.of_int ~width (Value.bitwidth x)
 
-  let negone = Word.ones 8
-  let zero = Word.zero 8
+  let negone = Value.one 8
+  let zero = Value.zero 8
 
-  let exit = function
-    | [rval] ->
-      Machine.update (fun ctxt -> ctxt#set_next None) >>= fun () ->
-      Machine.return rval
-    | _ -> Lisp.failf "exit requires only one argument" ()
+  let exit _ =
+    Eval.halt >>|
+    Nothing.unreachable_code >>= fun () ->
+    Value.b0
 
   let allocate = function
     | [addr; size] ->
-      let n = Word.to_int size in
+      let n = Word.to_int (Value.to_word size) in
       if Result.is_error n
-      then Machine.return negone
-      else Memory.allocate addr (Or_error.ok_exn n) >>| fun () -> zero
+      then negone
+      else Memory.allocate (Value.to_word addr) (Or_error.ok_exn n) >>=
+        fun () -> zero
     | _ -> Lisp.failf "allocate requires two arguments" ()
 
-  let machine_int x =
-    Machine.get () >>| width_of_ctxt >>| fun width -> Word.of_int ~width x
+  let machine_int x = addr_width >>= fun width -> Value.of_int ~width x
 
   let output_char = function
     | [] | [_] -> machine_int 0
     | fd :: words ->
-      if Word.is_zero fd
-      then
+      if Value.is_zero fd
+      then begin
         List.iter words ~f:(fun w ->
-            Word.enum_chars w LittleEndian |>
+            Word.enum_chars (Value.to_word w) LittleEndian |>
             Seq.hd |> Option.iter ~f:(print_char));
+        flush stdout;
+      end;
       machine_int (List.length words)
 
   let memory_read = function
-    | [x] -> Memory.load x
+    | [x] -> Eval.load x LittleEndian `r8
     | _ -> Lisp.failf "memory-read requires one argument" ()
 
   let memory_write = function
-    | [a;x] -> Memory.save a x >>| fun () -> Addr.succ a
+    | [a;x] ->
+      Eval.store a x LittleEndian `r8 >>= fun () ->
+      Value.succ a
     | _ -> Lisp.failf "memory-write requires two arguments" ()
+
+  let get_pc = function
+    | [] -> Eval.pc >>= Value.of_word
+    | _ -> Lisp.failf
+             "get-current-program-counter requires zero arguments" ()
 
   let primitive name code = Primitive.create name code
 
   let defs () = [
-      primitive "is-zero" is_zero;
-      primitive "is-positive" is_positive;
-      primitive "is-negative" is_negative;
-      primitive "word-width"  word_width;
-      primitive "output-char" output_char;
-      primitive "exit-with" exit;
-      primitive "memory-read" memory_read;
-      primitive "memory-write" memory_write;
-      primitive "memory-allocate" allocate;
+    primitive "is-zero" is_zero;
+    primitive "is-positive" is_positive;
+    primitive "is-negative" is_negative;
+    primitive "word-width"  word_width;
+    primitive "output-char" output_char;
+    primitive "exit-with" exit;
+    primitive "memory-read" memory_read;
+    primitive "memory-write" memory_write;
+    primitive "memory-allocate" allocate;
+    primitive "get-current-program-counter" get_pc;
   ]
 end
 

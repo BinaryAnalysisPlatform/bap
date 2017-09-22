@@ -208,8 +208,8 @@ module Cmdline = struct
     let man = [
       `S "SYNOPSIS";
       `Pre "
- $(b,$mname) [PLUGIN OPTION]... --list-formats
- $(b,$mname) [OPTION]... DATA";
+ $(mname) [PLUGIN OPTION]... --list-formats
+ $(mname) [OPTION]... DATA";
       `S "DESCRIPTION";
       `P "Disassemble a string of bytes. This is the BAP machine \
           code playground. It is intended to mimic a subset of \
@@ -232,7 +232,7 @@ module Cmdline = struct
         `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
     Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
           $insn_formats $bil_formats $bir_formats $show_kinds),
-    Term.info "bap-mc" ~doc ~man ~version
+    Term.info "bap-mc" ~doc ~man ~version:Config.version
 
   let exitf n =
     kfprintf (fun ppf -> pp_print_newline ppf (); exit n) err_formatter
@@ -258,7 +258,7 @@ let start options =
 
 let _main : unit =
   Log.start ();
-  let argv = Bap_plugin_loader.run Sys.argv in
+  let argv = Bap_plugin_loader.run ["bap-mc-frontend"] Sys.argv in
   try match Or_error.(Cmdline.parse argv >>= start) with
     | Ok () -> exit 0
     | Error err -> exitf 64 "%s\n" Error.(to_string_hum err)

@@ -45,7 +45,7 @@ open Bap_primus_types
 (** a primitive that can be called from lisp code  *)
 module Primitive : sig
   type 'a t
-  val create : ?docs:string -> string -> (word list -> 'a) -> 'a t
+  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig
@@ -57,7 +57,7 @@ module type Primitives = functor (Machine : Machine) ->  sig
       should work directly with the Linker module. The primitives
       extend only the Lisp machine.
   *)
-  val defs : unit -> (Word.t,#Context.t) Machine.t Primitive.t list
+  val defs : unit -> value Machine.t Primitive.t list
 end
 
 type primitives = (module Primitives)
@@ -69,16 +69,16 @@ type primitives = (module Primitives)
     OCaml.
 *)
 
-type error += Runtime_error of string
+type exn += Runtime_error of string
 
 module Make (Machine : Machine) : sig
-  val failf : ('a, unit, string, unit -> ('b, 'c) Machine.t) format4 -> 'a
-  val link_primitives : primitives -> (unit, #Context.t) Machine.t
+  val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
+  val link_primitives : primitives -> unit Machine.t
 end
 
 
 (** [init ~paths features] initialize the Lisp machine, load all
-    [features] lookin in the specified set of paths, and register a
+    [features] looking in the specified set of paths, and register a
     Primus machine component that will use the Linker component to
     link into the program all definitions with the external linkage
     (i.e., those with the external attribute).

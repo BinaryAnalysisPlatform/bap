@@ -56,9 +56,15 @@ let main path length threshold =
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "This plugin will provide a rooter service. The algorithm is
-      described in [1]. The $(b,SEE ALSO) section contains links for
-      other plugins, that provides rooters";
+
+      `P
+
+        "This plugin provides a rooter (function start identification)
+       service using the BYTEWEIGHT algorithm described in [1]. The
+       plugin operates on a byte level. The $(b,SEE ALSO) section
+       contains links for other plugins, that provides rooters";
+
+
       `P "[1]: Bao, Tiffany, et al. \"Byteweight: Learning to recognize
     functions in binary code.\" 23rd USENIX Security Symposium (USENIX
     Security 14). 2014.";

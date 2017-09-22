@@ -51,3 +51,4 @@ Library x86_plugin
                    X86_tools_types,
                    X86_tools_vector,
                    X86_utils
+ XMETAExtraLines:  tags="disassembler, lifter, x86, abi"

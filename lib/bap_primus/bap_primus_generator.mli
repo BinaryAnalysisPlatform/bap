@@ -25,5 +25,5 @@ module Random : sig
 end
 
 module Make( Machine : Machine) : sig
-  val next : t -> (int,#Context.t) Machine.t
+  val next : t -> int Machine.t
 end

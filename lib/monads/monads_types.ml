@@ -97,10 +97,18 @@ end
 module Collection = struct
   module type Basic = sig
     type 'a t
-    val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
-    val map  : 'a t -> f:('a -> 'b) -> 'b t
     val return : 'a -> 'a t
     include Plus.S   with type 'a t := 'a t
+  end
+
+  module type Eager = sig
+    include Basic
+    val fold : 'a t -> init:'s -> f:('s -> 'a -> 's) -> 's
+  end
+
+  module type Delay = sig
+    include Basic
+    val fold : 'a t -> init:'s -> f:('s -> 'a -> ('s -> 'r) -> 'r) -> (('s -> 'r) -> 'r)
   end
 
   module type S2 = sig
@@ -108,10 +116,12 @@ module Collection = struct
     type 'a t
     val all : ('a,'e) m t -> ('a t, 'e) m
     val all_ignore : ('a,'e) m t -> (unit,'e) m
-    val rev_map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
+    val sequence : (unit,'e) m t -> (unit,'e) m
     val map : 'a t -> f:('a -> ('b,'e) m) -> ('b t,'e) m
     val iter : 'a t -> f:('a -> (unit,'e) m) -> (unit,'e) m
     val fold : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
+    val fold_left  : 'a t -> init:'b -> f:('b -> 'a -> ('b,'e) m) -> ('b,'e) m
+    val fold_right : 'a t -> f:('a -> 'b -> ('b,'e) m) -> init:'b -> ('b,'e) m
     val reduce : 'a t -> f:('a -> 'a -> ('a,'e) m) -> ('a option,'e) m
     val exists : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
     val for_all : 'a t -> f:('a -> (bool,'e) m) -> (bool,'e) m
@@ -119,8 +129,6 @@ module Collection = struct
     val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> ('a,'e) m) -> ('a,'e) m
     val find : 'a t -> f:('a -> (bool,'e) m) -> ('a option,'e) m
     val find_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b option,'e) m
-    val rev_filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t, 'e) m
-    val rev_filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
     val filter : 'a t -> f:('a -> (bool,'e) m) -> ('a t,'e) m
     val filter_map : 'a t -> f:('a -> ('b option,'e) m) -> ('b t,'e) m
   end
@@ -131,10 +139,12 @@ module Collection = struct
 
     val all : 'a m t -> 'a t m
     val all_ignore : 'a m t -> unit m
-    val rev_map : 'a t -> f:('a -> 'b m) -> 'b t m
+    val sequence : unit m t -> unit m
     val map : 'a t -> f:('a -> 'b m) -> 'b t m
     val iter : 'a t -> f:('a -> unit m) -> unit m
     val fold : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
+    val fold_left : 'a t -> init:'b -> f:('b -> 'a -> 'b m) -> 'b m
+    val fold_right : 'a t -> f:('a -> 'b -> 'b m) -> init:'b -> 'b m
     val reduce : 'a t -> f:('a -> 'a -> 'a m) -> 'a option m
     val exists : 'a t -> f:('a -> bool m) -> bool m
     val for_all : 'a t -> f:('a -> bool m) -> bool m
@@ -142,8 +152,6 @@ module Collection = struct
     val map_reduce : (module Monoid.S with type t = 'a) -> 'b t -> f:('b -> 'a m) -> 'a m
     val find : 'a t -> f:('a -> bool m) -> 'a option m
     val find_map : 'a t -> f:('a -> 'b option m) -> 'b option m
-    val rev_filter : 'a t -> f:('a -> bool m) -> 'a t m
-    val rev_filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
     val filter : 'a t -> f:('a -> bool m) -> 'a t m
     val filter_map : 'a t -> f:('a -> 'b option m) -> 'b t m
   end
@@ -200,6 +208,10 @@ module Monad = struct
   module type S = sig
     type 'a t
 
+    val void : 'a t -> unit t
+    val sequence : unit t list -> unit t
+    val forever : 'a t -> 'b t
+
     module Fn : sig
       val id : 'a -> 'a t
       val ignore : 'a t -> unit t
@@ -235,7 +247,8 @@ module Monad = struct
 
     module Collection : sig
       module type S = Collection.S with type 'a m := 'a t
-      module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
+      module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
+      module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
     end
 
     module List : Collection.S with type 'a t := 'a list
@@ -249,6 +262,10 @@ module Monad = struct
 
   module type S2 = sig
     type ('a,'e) t
+
+    val void : ('a,'e) t -> (unit,'e) t
+    val sequence : (unit,'e) t list -> (unit,'e) t
+    val forever : ('a,'e) t -> ('b,'e) t
 
     module Fn : sig
       val id : 'a -> ('a,'e) t
@@ -289,7 +306,8 @@ module Monad = struct
 
     module Collection : sig
       module type S = Collection.S2 with type ('a,'e) m := ('a,'e) t
-      module Make(T : Collection.Basic) : S with type 'a t := 'a T.t
+      module Eager(T : Collection.Eager) : S with type 'a t := 'a T.t
+      module Delay(T : Collection.Delay) : S with type 'a t := 'a T.t
     end
 
     module List : Collection.S with type 'a t := 'a list
@@ -366,8 +384,6 @@ module Writer = struct
     val read : 'a t -> state t
     val listen : 'a t -> ('a * state) t
     val exec : unit t -> state m
-    val ignore : 'a t -> unit t
-    val lift : 'a m -> 'a t
     include Monad.S with type 'a t := 'a t
   end
 
@@ -378,7 +394,6 @@ module Writer = struct
     val read : ('a,'e) t -> (state,'e) t
     val listen : ('a,'e) t -> (('a * state),'e) t
     val exec : (unit,'e) t -> (state,'e) m
-    val ignore : ('a,'e) t -> (unit,'e) t
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
   end
 end
@@ -409,7 +424,6 @@ module State = struct
     val get : unit -> env t
     val gets : (env -> 'r) -> 'r t
     val update : (env -> env) -> unit t
-    val modify : 'a t -> (env -> env) -> 'a t
   end
 
   module type S2 = sig
@@ -419,7 +433,6 @@ module State = struct
     val get : unit -> ('s,'s) t
     val gets : ('s -> 'r) -> ('r,'s) t
     val update : ('s -> 's) -> (unit,'s) t
-    val modify : ('a,'s) t -> ('s -> 's) -> ('a,'s) t
   end
 end
 
@@ -506,12 +519,12 @@ module Cont = struct
     include Trans.S
     include Monad.S with type 'a t := 'a t
     type  r
-    val call : cc:(('a -> _ t) -> 'a t) -> 'a t
+    val call : f:(cc:('a -> _ t) -> 'a t) -> 'a t
   end
 
   module type S2 = sig
     include Trans.S1
     include Monad.S2 with type ('a,'e) t := ('a,'e) t
-    val call : cc:(('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
+    val call : f:(cc:('a -> (_,'e) t) -> ('a,'e) t) -> ('a,'e) t
   end
 end

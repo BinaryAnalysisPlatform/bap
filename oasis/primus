@@ -2,30 +2,30 @@ Flag primus
   Description: Microexecution framework
   Default: false
 
-Library primus
+Library bap_primus
   Build$: flag(everything) || flag(primus)
   XMETADescription: microexecution framework
   Path: lib/bap_primus
   FindlibName: bap-primus
   CompiledObject: best
-  BuildDepends: bap, bap-abi, bap-c, uuidm
+  BuildDepends: bap, bap-abi, bap-c, uuidm, bap-future
   Modules: Bap_primus
   InternalModules:
-           Bap_primus_context,
            Bap_primus_env,
-           Bap_primus_error,
+           Bap_primus_exn,
            Bap_primus_generator,
            Bap_primus_generator_types,
-           Bap_primus_infeasible,
            Bap_primus_interpreter,
            Bap_primus_iterator,
            Bap_primus_linker,
            Bap_primus_lisp,
            Bap_primus_machine,
+           Bap_primus_main,
            Bap_primus_memory,
            Bap_primus_observation,
+           Bap_primus_pos,
            Bap_primus_random,
-           Bap_primus_scheduler,
            Bap_primus_sexp,
            Bap_primus_state,
-           Bap_primus_types
+           Bap_primus_types,
+           Bap_primus_value

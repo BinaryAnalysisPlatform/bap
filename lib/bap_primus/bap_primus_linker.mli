@@ -1,4 +1,5 @@
 open Bap.Std
+open Regular.Std
 open Bap_primus_types
 
 
@@ -6,28 +7,32 @@ type name = [
   | `tid of tid
   | `addr of addr
   | `symbol of string
-] [@@deriving sexp_of]
+] [@@deriving bin_io, compare, sexp]
+
+type exn += Unbound_name of name
+
+val exec : name observation
+val will_exec : name statement
 
 module type Code = functor (Machine : Machine) -> sig
-  val exec : (#Context.t as 'a) Biri.Make(Machine).t -> (unit,'a) Machine.t
+  val exec : unit Machine.t
 end
 
 type code = (module Code)
 
+module Name : Regular.S with type t = name
 
 module Make(Machine : Machine) : sig
-  type ('a,'e) m = ('a,'e) Machine.t
-   module Biri : Biri.S
-     with type ('a,'e) state = ('a,'e) Machine.t
+  type 'a m = 'a Machine.t
 
   val link :
     ?addr:addr ->
     ?name:string ->
     ?tid:tid ->
-    code -> (unit,#Context.t) m
+    code -> unit m
 
-  val exec : name -> (#Context.t as 'a) #Biri.t -> (unit,'a) m
+  val exec : name -> unit m
 
-  val is_linked : name -> (bool,#Context.t) m
+  val is_linked : name -> bool m
 
 end

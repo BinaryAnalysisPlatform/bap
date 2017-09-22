@@ -1,6 +1,6 @@
 OASISFormat: 0.4
 Name:        bap
-Version:     1.2.0
+Version:     1.3.0
 OCamlVersion: >= 4.02
 Synopsis:    BAP Core Library
 Authors:     BAP Team
@@ -11,7 +11,7 @@ Plugins:     META (0.4)
 AlphaFeatures: ocamlbuild_more_args, compiled_setup_ml
 BuildTools: ocamlbuild
 XOCamlbuildExtraArgs:
-     -j 32
+     -j 2
      -use-ocamlfind
      -classic-display
      -plugin-tags "'package(findlib),package(core_kernel),package(ppx_driver.ocamlbuild)'"

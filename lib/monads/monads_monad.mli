@@ -309,7 +309,10 @@ module State : sig
     type 'a contexts
 
     type id
-    module Id : Identifiable with type t = id
+    module Id : sig
+      include Identifiable with type t = id
+      val pp : Format.formatter -> id -> unit
+    end
 
     module T1(T : T)(M : Monad) : sig
       type env = T.t

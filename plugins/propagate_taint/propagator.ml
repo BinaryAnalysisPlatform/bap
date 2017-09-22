@@ -163,6 +163,8 @@ class ['a] main ?deterministic ?random_seed ?reg_policy ?mem_policy proj =
         ?random_seed ?reg_policy ?mem_policy () as concrete
     inherit! ['a] Taint.propagator
 
+    method! empty = new Bil.Storage.sparse
+
     method! lookup v =
       concrete#lookup v >>= fun r ->
       SM.get () >>= fun ctxt ->

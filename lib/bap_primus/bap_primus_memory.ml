@@ -1,30 +1,21 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 
 open Bap_primus_types
 
-module Context = Bap_primus_context
 module Observation = Bap_primus_observation
 module Iterator = Bap_primus_iterator
 module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
-module Error = Bap_primus_error
 open Bap_primus_sexp
 
-type error += Segmentation_fault of addr
+type exn += Segmentation_fault of addr
 
-let sexp_of_segmentation_fault addr =
-  Sexp.List [Sexp.Atom "Segmentation fault"; sexp_of_addr addr]
-
-
-let segmentation_fault, segfault =
-  Observation.provide ~inspect:sexp_of_segmentation_fault
-    "segmentation-fault"
-
-let () = Error.add_printer (function
+let () = Exn.add_printer (function
     | Segmentation_fault here ->
-      Some (sprintf "Segmentation fault at %s"
-              (Addr.string_of_value here))
+      Some (asprintf "Segmentation fault at %a"
+              Addr.pp_hex here)
     | _ -> None)
 
 type dynamic = {base : addr; len : int; value : Generator.t }
@@ -40,10 +31,9 @@ type t = {
   layers : layer list;
 }
 
-
 let zero = Word.of_int ~width:8 0
 
-let sexp_of_word w = Sexp.Atom (Word.string_of_value w)
+let sexp_of_word w = Sexp.Atom (asprintf "%a" Word.pp_hex w)
 
 let sexp_of_dynamic {base; len; value} =
   Sexp.(List [
@@ -101,36 +91,29 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   module Generate = Generator.Make(Machine)
-
-  type ('a,'e) m = ('a,'e) Machine.t
+  let (!!) = Machine.Observation.make
 
   let update state f =
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
 
-  let segfault addr = Machine.fail (Segmentation_fault addr)
+  let segfault addr = Machine.raise (Segmentation_fault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
-    | None ->
-      eprintf "Didn't find a value in %d layers\n" (List.length layers);
-      segfault addr
+    | None -> segfault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None -> match layer.mem with
-        | Dynamic {value} -> Generate.next value >>| Word.of_int ~width:8
+        | Dynamic {value} ->
+          Generate.next value >>| Word.of_int ~width:8
         | Static mem -> match Memory.get ~addr mem with
-          | Ok value -> Machine.return value
-          | Error _ -> failwith "Bap_primus.Memory.read"
+          | Ok v -> Machine.return v
+          | Error _ -> failwith "Primus.Memory.read"
 
 
   let write addr value {values;layers} = match find_layer addr layers with
-    | None ->
-      eprintf "Didn't find a writable layer in %d layers\n"
-        (List.length layers);
-      segfault addr
-    | Some {perms={readonly=true}} ->
-      eprintf "Trying to write into a readonly memory\n";
-      segfault addr
+    | None -> segfault addr
+    | Some {perms={readonly=true}} -> segfault addr
     | Some _ -> Machine.return {
         layers;
         values = Map.add values ~key:addr ~data:value;
@@ -149,7 +132,6 @@ module Make(Machine : Machine) = struct
       mem = Dynamic {base;len; value=generator}
     }
 
-
   let map ?(readonly=false) ?(executable=false) mem =
     update state @@ add_layer ({mem=Static mem; perms={readonly; executable}})
   let add_text mem = map mem ~readonly:true  ~executable:true
@@ -158,8 +140,19 @@ module Make(Machine : Machine) = struct
   let load addr =
     Machine.Local.get state >>= read addr
 
-  let save addr value =
+  let store addr value =
     Machine.Local.get state >>=
     write addr value >>=
     Machine.Local.put state
+
+  let is_mapped addr =
+    Machine.Local.get state >>| is_mapped addr
+
+  let is_writable addr =
+    Machine.Local.get state >>| fun {layers} -> find_layer addr layers |>
+    function Some {perms={readonly}} -> not readonly
+           | None -> false
+
+
+
 end

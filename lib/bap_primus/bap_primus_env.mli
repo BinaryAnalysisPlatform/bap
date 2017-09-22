@@ -3,10 +3,10 @@ open Bap_primus_types
 
 module Generator = Bap_primus_generator
 
+type exn += Undefined_var of var
 
 module Make(Machine : Machine) : sig
-  type ('a,'e) m = ('a,'e) Machine.t
-  val get : var -> (Bil.result,#Context.t) m
-  val set : var -> word -> (unit,#Context.t) m
-  val add : var -> Generator.t -> (unit,#Context.t) m
+  val get : var -> value Machine.t
+  val set : var -> value -> unit Machine.t
+  val add : var -> Generator.t -> unit Machine.t
 end

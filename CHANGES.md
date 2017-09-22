@@ -1,3 +1,36 @@
+1.3.0
+=====
+
+### Features
+
+- PR#700 LLVM-4.0 is now supported
+- PR#688 Primus - the microexecution framework
+- PR#688 BIL type checker and normalizer
+- PR#688 New constant folding with effect analysis
+- PR#688 SSA transformation plugin
+- PR#688 Dead code elimination plugin
+- PR#688 New pretty-printer for BIL and bitvectors
+- PR#684 Support for cmdliner 1.0
+- PR#682 Severely reduces memory consumption
+- PR#680 New thin bitvector representation
+- PR#663 Adds topic tags to bundle
+- PR#654 New OGRE based loader that supports:
+  - Linux Kernel Modules
+  - MachO Kernel Bundles (LLVM 3.8+ only)
+  - Plain object files
+  - Shared libraries
+- PR#630 Enhancments in IDA plugin
+
+
+### Bug fixes
+
+- PR#688 Type errors in the x86 lifter
+- PR#688 Type errors in the ARM lifter
+- PR#688 Fixes constant folding
+- PR#672 Fixes demangler plugin
+- PR#665 Fixes symbol cases in objdump
+- PR#644 Robustness fixes in x86 lifter
+
 1.2.0
 =====
 

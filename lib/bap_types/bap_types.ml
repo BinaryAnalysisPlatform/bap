@@ -45,15 +45,6 @@ module Std = struct
   (** Typed and always fresh variables.  *)
   module Var  = Bap_var
 
-  (** Types of BIL expressions  *)
-  module Type = struct
-    include Type
-    include Bap_type
-  end
-
-  (** This module exports first-class type definitions,
-      like [reg8_t], or [mem32_t]. Look at [Bap_type], for more. *)
-  include Type.Export
 
   (** Sizes of expression operands  *)
   module Size = struct
@@ -61,11 +52,18 @@ module Std = struct
     include Bap_size
   end
 
+  module Eff = Bap_helpers.Eff
+
   module Bil = struct
     type t = Bap_bil.bil [@@deriving bin_io, compare, sexp]
     include (Bap_stmt.Stmts_pp : Printable.S with type t := t)
     include (Bap_stmt.Stmts_data : Data.S with type t := t)
     module Types = struct
+      type var = Bap_var.t
+      type typ = Type.t =
+        | Imm of int
+        | Mem of addr_size * size
+        [@@deriving bin_io, compare, sexp]
       include Bap_bil.Cast
       include Bap_bil.Binop
       include Bap_bil.Unop
@@ -92,10 +90,31 @@ module Std = struct
       | Imm of word
       | Mem of storage
       | Bot
-
+    type var_compare = Var.comparator_witness
+    type vars = (var,var_compare) Set.t
     type result = Result.t
   end
 
+  (** Types of BIL expressions  *)
+  module Type = struct
+    include Type
+    include Bap_type
+    type error = Bap_type_error.t
+        [@@deriving bin_io, compare, sexp]
+    module Error = Bap_type_error
+    include Bap_helpers.Type
+  end
+
+  (** This module exports first-class type definitions,
+      like [reg8_t], or [mem32_t]. Look at [Bap_type], for more. *)
+  include Type.Export
+
+
+  module Eval = struct
+    include Bap_eval_types.Eval
+    module Make2 = Bap_eval.Make2
+    module Make = Bap_eval.Make
+  end
   module Expi = Bap_expi
   module Bili = Bap_bili
   module Biri = Bap_biri
@@ -113,6 +132,8 @@ module Std = struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Exp
     include (Bap_exp : Regular.S with type t := t)
+    let eval = Bap_expi.eval
+    let simpl = Bap_helpers.Simpl.exp
     let pp_adt = Bap_bil_adt.pp_exp
   end
 
@@ -121,6 +142,8 @@ module Std = struct
     type t = Bap_bil.stmt [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Stmt
     include (Bap_stmt : Regular.S with type t := t)
+    let eval = Bap_bili.eval
+    let simpl = Bap_helpers.Simpl.bil
     let pp_adt = Bap_bil_adt.pp_stmt
   end
 

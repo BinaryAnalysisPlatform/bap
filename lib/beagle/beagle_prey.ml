@@ -22,7 +22,7 @@ module Statics = struct
 
   let pp ppf =
     Map.iteri ~f:(fun ~key:addr ~data:str ->
-        printf "%s: %s@\n" (Addr.string_of_value addr) str)
+        printf "%a: %s@\n" Addr.pp_hex addr str)
 end
 
 

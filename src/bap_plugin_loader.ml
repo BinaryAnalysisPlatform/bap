@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap_plugins.Std
 open Bap_future.Std
 open Bap.Std
+open Bap_bundle.Std
 open Bap_cmdline_terms
 open Cmdliner
 open Format
@@ -36,11 +37,59 @@ let filter_options ~known_plugins ~known_passes ~argv =
 let get_opt ~default  argv opt  =
   Option.value (fst (Term.eval_peek_opts ~argv opt)) ~default
 
-let print_plugins_and_exit excluded plugins =
+type print_ops = List_plugins | List_tags
+
+let plugin_tags p = Plugin.bundle p |> Bundle.manifest |> Manifest.tags
+
+let print_plugins ?(info=`Desc) excluded plugins =
+  let plugins =
+    let cmp x y = String.compare (Plugin.name x) (Plugin.name y) in
+    List.sort ~cmp plugins in
+  let info_string p = match info with
+    | `Desc -> Plugin.desc p
+    | `Tags -> plugin_tags p |> String.concat ~sep:", " in
   List.iter plugins ~f:(fun p ->
       let status = if List.mem excluded (Plugin.name p)
         then "[-]" else "[+]" in
-      printf "  %s %-16s %s@." status (Plugin.name p) (Plugin.desc p));
+      printf "  %s %-26s %s@." status (Plugin.name p) (info_string p))
+
+let print_tags plgs =
+  let add s p =
+    let plugin = Plugin.name p in
+    List.fold (plugin_tags p) ~init:s
+      ~f:(fun s tag -> Map.change s tag ~f:(function
+          | None -> Some (Set.add String.Set.empty plugin)
+          | Some ps -> Some (Set.add ps plugin))) in
+  let pp_list =
+    let pp_sep fmt () = printf ",@ " in
+    let pp_tag fmt = printf "%s"  in
+    let f = pp_print_list ~pp_sep  pp_tag in
+    f std_formatter in
+  List.fold ~f:add ~init:String.Map.empty plgs |>
+  Map.iteri ~f:(fun ~key:tag ~data:plugins ->
+      printf "%-20s" tag;
+      printf "@[<hov>";
+      pp_list (Set.to_list plugins);
+      printf "@]@.";)
+
+let get_print_ops () =
+  if Option.is_some (get_opt argv list_plugins ~default:None) then
+    Some List_plugins
+  else if get_opt argv list_tags ~default:false then
+    Some List_tags
+  else None
+
+let get_plugins ?(provides=[]) env =
+  let library = get_opt argv load_path ~default:[] in
+  Plugins.list ~env ~provides ~library ()
+
+let print_and_exit env exclude plugins what =
+  let () = match what with
+    | List_plugins ->
+      let provides = Option.value_exn
+          (get_opt argv list_plugins ~default:(Some [])) in
+      print_plugins exclude (plugins @ get_plugins ~provides env)
+    | List_tags -> print_tags (plugins @ get_plugins env) in
   exit 0
 
 let exit_if_plugin_help_was_requested plugins argv =
@@ -86,26 +135,26 @@ let open_plugin ~verbose name =
     by a user with `-l` option. *)
 let load_plugin p = ok_exn (Plugin.load p)
 
-
-let autoload_plugins ~library ~verbose ~exclude =
-  Plugins.run ~library ~exclude ()
+let autoload_plugins ~env ~library ~verbose ~exclude =
+  Plugins.run ~env ~library ~exclude ()
     ~don't_setup_handlers:true
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
 
-let run_and_get_passes argv =
+let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
   let plugins = get_opt argv load ~default:[] in
   let exclude = get_opt argv disable_plugin ~default:[] in
   let exclude = exclude @ excluded argv in
-  let list = get_opt argv list_plugins ~default:false in
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
-  let known_plugins = Plugins.list ~library () @ plugins in
-  if list then print_plugins_and_exit exclude known_plugins;
+  let known_plugins = Plugins.list ~env ~library () @ plugins in
+  let () = match get_print_ops () with
+    | None -> ()
+    | Some ops -> print_and_exit env exclude plugins ops in
   List.iter plugins ~f:load_plugin;
   let noautoload = get_opt argv no_auto_load ~default:false in
-  if not noautoload then autoload_plugins ~library ~verbose ~exclude;
+  if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;
   let known_passes = Project.passes () |>
                      List.map ~f:Project.Pass.name in
   let known_plugins = List.map known_plugins ~f:Plugin.name in
@@ -116,4 +165,4 @@ let run_and_get_passes argv =
   filter_options ~known_plugins ~known_passes ~argv:Sys.argv,
   Array.(to_list @@ filter_map argv ~f:to_pass)
 
-let run argv = fst (run_and_get_passes argv)
+let run env argv = fst (run_and_get_passes env argv)

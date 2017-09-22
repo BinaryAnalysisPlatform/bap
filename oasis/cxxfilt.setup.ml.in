@@ -6,5 +6,5 @@ let () =
         | Some xs -> xs);
   add_variable ~doc:"A path to cxxfilt binary" "cxxfilt_path"
     ~define:(function
-        | None -> "cxxfilt"
+        | None -> "c++filt"
         | Some x -> x)

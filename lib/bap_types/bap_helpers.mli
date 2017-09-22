@@ -5,13 +5,14 @@ open Bap_bil
 open Bap_visitor
 open Bap_result
 
+class rewriter : exp -> exp -> bil_mapper
+
 val find   : <find : 'a -> 'b option; ..> -> 'a -> 'b option
 val exists : <find : 'a -> 'b option; ..> -> 'a -> bool
 val iter : unit #bil_visitor -> bil -> unit
 val fold : 'a #bil_visitor -> init:'a -> bil -> 'a
 val map : #bil_mapper -> bil -> bil
 
-class rewriter : exp -> exp -> bil_mapper
 val is_referenced : var -> bil -> bool
 val is_assigned : ?strict:bool -> var -> bil -> bool
 val prune_unreferenced :
@@ -19,32 +20,55 @@ val prune_unreferenced :
   ?physicals:bool ->
   ?virtuals:bool ->
   bil -> bil
+
+val normalize : ?normalize_exp:bool -> bil -> bil
 val normalize_negatives : bil -> bil
-
-(** [substitute x y p] substitutes each occurrence of expression [x] by
-    expression [y] in program [p] *)
 val substitute : exp -> exp -> bil -> bil
-
-
-(** [substitute_var x y p] substitutes all occurences of variable [x]
-    by expression [y] *)
 val substitute_var : var -> exp -> bil -> bil
-
-
 val free_vars : bil -> Bap_var.Set.t
-
-(** [fold_consts] evaluate constant expressions.
-    Note: this function performs only one step, and has no loops,
-    it is supposed to be run using a fixpoint combinator.
-*)
 val fold_consts : bil -> bil
-
-
-(** [fixpoint f] applies transformation [f] until fixpoint is
-    reached. If the transformation orbit contains non-trivial cycles,
-    then the transformation will stop at an arbitrary point of a
-    cycle. *)
 val fixpoint : (bil -> bil) -> (bil -> bil)
+
+
+module Apply : sig
+  val binop : binop -> word -> word -> word
+  val unop : unop -> word -> word
+  val cast : cast -> int -> word -> word
+end
+
+
+module Type : sig
+  val check : stmt list -> (unit,Bap_type_error.t) Result.t
+  val infer : exp -> (typ, Bap_type_error.t) Result.t
+  val infer_exn : exp -> typ
+end
+
+module Eff : sig
+  type t
+
+  val none : t
+  val read : t
+  val load : t
+  val store : t
+  val raise : t
+
+  val reads : t -> bool
+  val loads : t -> bool
+  val stores : t -> bool
+  val raises : t -> bool
+
+  val has_effects : t -> bool
+  val has_coeffects :  t -> bool
+  val idempotent : t -> bool
+
+  val compute : exp -> t
+end
+
+module Simpl : sig
+  val bil  : ?ignore:Eff.t list -> stmt list -> stmt list
+  val stmt : ?ignore:Eff.t list -> stmt -> stmt list
+  val exp  : ?ignore:Eff.t list -> exp -> exp
+end
 
 
 module Exp : sig
@@ -64,7 +88,7 @@ module Exp : sig
   val fold_consts : exp -> exp
   val fixpoint : (exp -> exp) -> (exp -> exp)
   val free_vars : exp -> Bap_var.Set.t
-  val eval : exp -> value
+  val normalize : exp -> exp
 end
 
 module Stmt : sig
@@ -72,6 +96,7 @@ module Stmt : sig
   class ['a] visitor : ['a] bil_visitor
   class mapper  : bil_mapper
   class ['a] finder : ['a] bil_finder
+  class constant_folder : mapper
   val fold : 'a #visitor -> init:'a -> stmt -> 'a
   val iter : unit #visitor -> stmt -> unit
   val find : 'a #finder -> stmt -> 'a option
@@ -81,11 +106,9 @@ module Stmt : sig
   val is_referenced : var -> stmt -> bool
   val fixpoint : (stmt -> stmt) -> (stmt -> stmt)
   val free_vars : stmt -> Bap_var.Set.t
-  val eval : stmt list -> (#Bap_bili.context as 'a) -> 'a
-
-  (** [constant_folder] is a class that implements the [fold_consts]  *)
-  class constant_folder : bil_mapper
+  val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 end
+
 
 module Trie : sig
   type normalized_bil

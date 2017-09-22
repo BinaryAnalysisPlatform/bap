@@ -1,11 +1,125 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
-
+open Format
 open Bap_bil
+
+module Var = Bap_var
+module Word = Bitvector
+module Size = Bap_size
 
 type binop = exp -> exp -> exp
 type unop = exp -> exp
+
+module PP = struct
+  open Bap_bil
+
+  let pp_cast fmt cst = fprintf fmt "%s"
+      (match cst with
+       | Cast.UNSIGNED -> "pad"
+       | Cast.SIGNED   -> "extend"
+       | Cast.HIGH     -> "high"
+       | Cast.LOW      -> "low")
+
+  let pp_binop fmt op = fprintf fmt "%s"
+      Binop.(match op with
+          | PLUS    -> "+"
+          | MINUS   -> "-"
+          | TIMES   -> "*"
+          | DIVIDE  -> "/"
+          | SDIVIDE -> "/$"
+          | MOD     -> "%"
+          | SMOD    -> "%$"
+          | LSHIFT  -> "<<"
+          | RSHIFT  -> ">>"
+          | ARSHIFT -> "~>>"
+          | AND     -> "&"
+          | OR      -> "|"
+          | XOR     -> "^"
+          | EQ      -> "="
+          | NEQ     -> "<>"
+          | LT      -> "<"
+          | LE      -> "<="
+          | SLT     -> "<$"
+          | SLE     -> "<=$")
+
+  let pp_unop fmt op = fprintf fmt "%s"
+      Unop.(match op with
+          | NEG -> "-"
+          | NOT -> "~")
+
+  let pp_edn fmt e = fprintf fmt "%s"
+      Bap_bil.(match e with
+          | LittleEndian -> "el"
+          | BigEndian    -> "be")
+
+  type precendence = int
+
+  let op_prec op = Binop.(match op with
+    | TIMES | DIVIDE | SDIVIDE | MOD| SMOD -> 8
+    | PLUS | MINUS -> 7
+    | LSHIFT | RSHIFT | ARSHIFT -> 6
+    | LT|LE|SLT|SLE -> 5
+    | EQ|NEQ -> 4
+    | AND -> 3
+    | XOR -> 2
+    | OR -> 1)
+
+  let prec x = Exp.(match x with
+    | Var _ | Int _ | Unknown _ -> 10
+    | Load _ | Cast _ | Extract _ -> 10
+    | UnOp _ -> 9
+    | BinOp (op,x,y) -> op_prec op
+    | Store _ | Let _ | Ite _ | Concat _ -> 0)
+
+  let rec pp fmt exp =
+    let open Bap_bil.Exp in
+    let open Bap_bil.Binop in
+    let open Bap_bil.Unop in
+    let pfmt p c =
+      if prec c >= prec p
+      then format_of_string "%a"
+      else format_of_string "(@[<2>%a@])" in
+    let pr s = fprintf fmt s in
+    let is_b0 x = Bitvector.(x = b0) in
+    let is_b1 x = Bitvector.(x = b1) in
+    match exp with
+    | Load (mem, idx, _, `r8) ->
+      pr "%a[%a]" pp mem pp idx
+    | Load (mem, idx, edn, s) ->
+      pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
+    | Store (mem, idx, exp, edn, `r8) ->
+      pr "@[<4>%a@;with [%a] <- %a@]"
+        pp mem pp idx pp exp
+    | Store (mem, idx, exp, edn, s) ->
+      pr "@[<4>%a@;with [%a, %a]:%a <- %a@]"
+        pp mem pp idx pp_edn edn Bap_size.pp s pp exp
+    | Ite (ce, te, fe) ->
+      pr "@[<2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
+    | Extract (hi, lo, exp) ->
+      pr "extract:%d:%d[%a]" hi lo pp exp
+    | Concat (le, re) as p ->
+      pr (pfmt p le ^^ "." ^^ pfmt p re) pp le pp re
+    | BinOp (EQ,e, Int x) when is_b1 x -> pr ("%a") pp e
+    | BinOp (EQ,Int x, e) when is_b1 x -> pr ("%a") pp e
+    | BinOp (EQ,e, Int x) as p when is_b0 x ->
+      pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
+    | BinOp (EQ,Int x, e) as p when is_b0 x ->
+      pr ("%a" ^^ pfmt p e) pp_unop Unop.NOT pp e
+    | BinOp (op, le, re) as p ->
+      pr (pfmt p le ^^ " %a " ^^ pfmt p re) pp le pp_binop op pp re
+    | UnOp (op, exp) as p ->
+      pr ("%a" ^^ pfmt p exp) pp_unop op pp exp
+    | Var var -> Bap_var.pp fmt var
+    | Int bv  -> pr "%a" Bap_bitvector.pp_hex bv
+    | Cast (ct, n, exp) ->
+      pr "%a:%d[%a]" pp_cast ct n pp exp
+    | Let (var, def, body) ->
+      pr "let %a = %a in@ %a" Bap_var.pp var pp def pp body
+    | Unknown (s, typ) ->
+      pr "unknown[%s]:%a" s Bap_type.pp typ
+end
+
 
 module Exp = struct
   open Exp
@@ -53,12 +167,19 @@ module Binop = struct
   let is_associative = function
     | PLUS | TIMES | AND | OR | XOR -> true
     | _ -> false
+
+  include PP
+  let string_of_binop = asprintf "%a" pp_binop
 end
 
 module Unop = struct
   open Unop
   let neg = NEG
   let not = NOT
+
+  let pp = PP.pp_unop
+  include PP
+  let string_of_unop = asprintf "%a" pp_unop
 end
 
 module Cast = struct
@@ -67,6 +188,8 @@ module Cast = struct
   let signed = SIGNED
   let high = HIGH
   let low = LOW
+  include PP
+  let string_of_cast = asprintf "%a" pp_cast
 end
 
 module Infix = struct
@@ -109,96 +232,6 @@ module Infix = struct
   let ( ^ )    a b   = concat a b
 end
 
-module PP = struct
-  open Format
-  open Bap_bil
-
-  let pp_cast fmt cst = fprintf fmt "%s"
-      (match cst with
-       | Cast.UNSIGNED -> "pad"
-       | Cast.SIGNED   -> "extend"
-       | Cast.HIGH     -> "high"
-       | Cast.LOW      -> "low")
-
-  let pp_binop fmt op = fprintf fmt "%s"
-      Binop.(match op with
-          | PLUS    -> "+"
-          | MINUS   -> "-"
-          | TIMES   -> "*"
-          | DIVIDE  -> "/"
-          | SDIVIDE -> "/$"
-          | MOD     -> "%"
-          | SMOD    -> "%$"
-          | LSHIFT  -> "<<"
-          | RSHIFT  -> ">>"
-          | ARSHIFT -> "~>>"
-          | AND     -> "&"
-          | OR      -> "|"
-          | XOR     -> "^"
-          | EQ      -> "="
-          | NEQ     -> "<>"
-          | LT      -> "<"
-          | LE      -> "<="
-          | SLT     -> "<$"
-          | SLE     -> "<=$")
-
-  let pp_unop fmt op = fprintf fmt "%s"
-      Unop.(match op with
-          | NEG -> "-"
-          | NOT -> "~")
-
-  let pp_edn fmt e = fprintf fmt "%s"
-      Bap_bil.(match e with
-          | LittleEndian -> "el"
-          | BigEndian    -> "be")
-
-  let rec pp fmt exp =
-    let open Bap_bil.Exp in
-    let open Bap_bil.Binop in
-    let open Bap_bil.Unop in
-    let is_imm = function
-      | Var _ | Int _ -> true
-      | _ -> false in
-    let a e = format_of_string
-        (if is_imm e then "%a" else "(%a)") in
-    let pr s = fprintf fmt s in
-    let is_b0 x = Bitvector.(x = b0) in
-    let is_b1 x = Bitvector.(x = b1) in
-    match exp with
-    | Load (Var _ as mem, idx, edn, s) ->
-      pr "%a[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
-    | Load (mem, idx, edn, s) ->
-      pr "(%a)[%a, %a]:%a" pp mem pp idx pp_edn edn Bap_size.pp s
-    | Store (mem, idx, exp, edn, s) ->
-      pr "@[<2>%a@;with [%a, %a]:%a <- %a@]"
-        pp mem pp idx pp_edn edn Bap_size.pp s pp exp
-    | Ite (ce, te, fe) ->
-      pr "@[<2>if %a@;then %a@;else %a@]" pp ce pp te pp fe
-    | Extract (hi, lo, exp) ->
-      pr "extract: %d:%d[%a]" hi lo pp exp
-    | Concat (le, re) ->
-      pr (a le ^^ "." ^^ a re) pp le pp re
-    | BinOp (EQ,e, Int x) when is_b1 x -> pr ("%a") pp e
-    | BinOp (EQ,Int x, e) when is_b1 x -> pr ("%a") pp e
-    | BinOp (EQ,e, Int x) when is_b0 x -> pr ("%a(%a)") pp_unop Unop.NOT pp e
-    | BinOp (EQ,Int x, e) when is_b0 x -> pr ("%a(%a)") pp_unop Unop.NOT pp e
-    | BinOp (op, le, re) ->
-      pr (a le ^^ " %a " ^^ a re) pp le pp_binop op pp re
-    | UnOp (NOT, BinOp(LE,le,re)) ->
-      pr (a le ^^ " > " ^^ a re) pp le pp re
-    | UnOp (NOT, BinOp(LT,le,re)) ->
-      pr (a le ^^ " >= " ^^ a re) pp le pp re
-    | UnOp (op, exp) ->
-      pr ("%a" ^^ a exp) pp_unop op pp exp
-    | Var var -> Bap_var.pp fmt var
-    | Int bv  -> Bap_bitvector.pp fmt bv
-    | Cast (ct, n, exp) ->
-      pr "%a:%d[%a]" pp_cast ct n pp exp
-    | Let (var, def, body) ->
-      pr "let %a = %a in@ %a" Bap_var.pp var pp def pp body
-    | Unknown (s, typ) ->
-      pr "unknown[%s]:%a" s Bap_type.pp typ
-end
 
 include Regular.Make(struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]

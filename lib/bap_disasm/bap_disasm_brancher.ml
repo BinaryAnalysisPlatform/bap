@@ -18,6 +18,8 @@ type brancher = t
 let create f = Brancher f
 let resolve (Brancher f) = f
 
+let empty = Brancher (fun _ _ -> [])
+
 let kind_of_dests = function
   | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall
   | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump)
@@ -30,10 +32,9 @@ let kind_of_branches t f =
   | `Fall,`Fall -> `Fall
   | _           -> `Cond
 
-let fold_consts = Bil.(fixpoint fold_consts)
 
 let rec dests_of_bil bil : dests =
-  fold_consts bil |> List.concat_map ~f:dests_of_stmt
+  Bil.fold_consts bil |> List.concat_map ~f:dests_of_stmt
 and dests_of_stmt = function
   | Bil.Jmp (Bil.Int addr) -> [Some addr,`Jump]
   | Bil.Jmp (_) -> [None, `Jump]
@@ -62,6 +63,6 @@ let dests_of_bil arch =
 
 
 let of_bil arch = create (dests_of_bil arch)
-
+let of_image img = Image.arch img |> of_bil
 
 module Factory = Source.Factory.Make(struct type nonrec t = t end)

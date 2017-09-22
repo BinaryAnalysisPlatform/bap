@@ -63,6 +63,24 @@ module Create() = struct
   let warning f = message Warning ~section:name f
   let error f = message Error ~section:name f
 
+  let make_formatter (f : ('a, formatter, unit) format -> 'a) =
+    let buf = Buffer.create 512 in
+    let output = Buffer.add_subbytes buf in
+    let flush () =
+      f "%s" (Buffer.contents buf);
+      Buffer.clear buf in
+    let fmt = make_formatter output flush in
+    let out = pp_get_formatter_out_functions fmt () in
+    let out = {out with out_newline = flush} in
+    pp_set_formatter_out_functions fmt out;
+    fmt
+
+  let debug_formatter = make_formatter debug
+  let info_formatter = make_formatter info
+  let warning_formatter = make_formatter warning
+  let error_formatter = make_formatter error
+
+
   module Config = struct
     let plugin_name = name
     include Bap_config
@@ -74,7 +92,7 @@ module Create() = struct
 
     type 'a param = 'a future
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
-    type 'a printer = Format.formatter -> 'a -> unit
+    type 'a printer = formatter -> 'a -> unit
 
     module Converter = struct
       type 'a t = {
@@ -221,7 +239,35 @@ module Create() = struct
       | `S of string
     ]
 
-    let manpage (man:manpage_block list) : unit =
+    let extract_section name man =
+      let _, sec, man =
+        List.fold ~f:(fun (to_pick, picked, remained) -> function
+            | `S x when x = name -> true, `S x :: picked, remained
+            | `S x -> false, picked, `S x :: remained
+            | x ->
+              if to_pick then to_pick, x :: picked, remained
+              else to_pick, picked, x :: remained)
+          ~init:(false,[],[]) man in
+      List.rev sec, List.rev man
+
+    let insert_tags man =  match Manifest.tags manifest with
+      | [] -> man
+      | tags ->
+        let default_see_also =
+          let h = "www:bap.ece.cmu.edu" in
+          [`S "SEE ALSO"; `P (sprintf "$(b,home:) $(i,%s)" h)] in
+        let see_also, man = match extract_section "SEE ALSO" man with
+          | [], man -> default_see_also, man
+          | x -> x in
+        let tags = [
+          `P (Manifest.tags manifest |>
+              String.concat ~sep:", " |>
+              sprintf "$(b,tags:) %s") ] in
+        man @ see_also @ tags
+
+    let manpage man =
+      let man = insert_tags man in
+      let man = (man :> Manpage.block list) in
       term_info := Term.info ~doc ~man plugin_name
 
     let determined (p:'a param) : 'a future = p

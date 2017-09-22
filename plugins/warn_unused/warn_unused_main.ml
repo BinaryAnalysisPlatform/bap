@@ -90,31 +90,31 @@ module Cmdline = struct
   let man = [
     `S "SYNOPSIS";
     `Pre "
-    $(b,--$mname)
-    $(b,--$mname-taint)
-    $(b,--$mname-print)
-    $(b,--$mname-mark)";
+    $(b,--)$(mname)
+    $(b,--)$(mname)$(b,-taint)
+    $(b,--)$(mname)$(b,-print)
+    $(b,--)$(mname)$(b,-mark)";
     `S "DESCRIPTION";
     `P "If a subroutine has GNU attribute $(b,warn_unused_result) and
   its result is not used, then print a warning message.";
     `S "PASSES";
     `I begin
-      "$(b,--$mname-taint)",
+      "$(b,--)$(mname)$(b,-taint)",
       "Taint all values defined by functions that are marked with
      $(b,warn_unused_result) attribute. Will run $(b,callsites) as a
      dependency."
     end;
     `I begin
-      "$(b,--$mname-print)",
+      "$(b,--)$(mname)$(b,-print)",
       "Print all calls that weren't checked."
     end;
     `I begin
-      "$(b,--$mname-mark)",
+      "$(b,--)$(mname)$(b,-mark)",
       "Mark all unchecked calls with $(b,Term.dead) attribute"
     end;
     `I begin
-      "$(b,--$mname)",
-      "Same as $(b,--$mname-taint --propagate-taint --$mname-print)"
+      "$(b,--)$(mname)",
+      "Same as $(b,--)$(mname)$(b,-taint) $(b,--propagate-taint --)$(mname)$(b,-print)"
     end;
     `S "SEE ALSO";
     `P "$(b,bap-api)(1), $(b,bap-plugin-propagate-taint)(1), $(b,bap-plugin-taint)(1)"
@@ -123,7 +123,7 @@ module Cmdline = struct
   let passes = [name; "--taint"; "--mark"; "--print"]
 
   let pass name =
-    let doc = sprintf "run $mname-%s pass" name in
+    let doc = sprintf "run $(mname)$(b,-%s) pass" name in
     Config.(flag name ~doc)
 
   let taint_p = pass "taint"

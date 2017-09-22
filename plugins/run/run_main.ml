@@ -8,113 +8,148 @@ open Format
 type value = Primus.Generator.t
 
 type parameters = {
- argv  : string list;
- envp  : (string * string) list;
- entry : string option;
- memory : (addr * value) list;
- variables : (string * value) list;
+  argv  : string list;
+  envp  : (string * string) list;
+  entry : string option;
+  memory : (addr * value) list;
+  variables : (string * value) list;
 }
 
 
 module Param = struct
-  open Sexp
-  type t = parameters
-
-  let int = int_of_string
-
-  let parse_value = function
-    | List [Atom x; Atom y; Atom z] ->
-      Primus.Generator.Random.lcg ~min:(int x) ~max:(int y) (int z)
-    | List [Atom x; Atom y] ->
-      Primus.Generator.Random.Seeded.lcg ~min:(int x) ~max:(int y) ()
-    | Atom x -> Primus.Generator.static (int x)
-    | _ -> invalid_arg "Parse error:
-     expected 'value := const | (min max) | (min max seed)'"
-
   open Config;;
 
   manpage [
     `S "DESCRIPTION";
-    `P "Run program in the Primus emulator. ";
+    `P "Run a program in the Primus emulator. ";
   ];;
 
   let argv = param (array string)  "argv"
       ~doc:"Program command line arguments";;
 
   let envp = param (array string) "env"
-      ~doc:"Program environemt as a list of VAR=VAL pairs";;
+      ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
 
-  let entry = param (some string) "entry-point"
-      ~doc: "When specified, then start the execution from $(docv),
-      otherwise the execution will be started from a default entry point";;
+  let entry = param (list string) "entry-points"
+      ~doc:
+
+        "Can a list of entry points or a special keyword
+      $(b,all-subroutines). An entry point is either a string denoting
+      a function name, a tid starting with the $(b,%) percent, or an
+      address in a hexadecimal format starting prefixed with $(b,0x).
+      When the option is specified, the Primus Machine will start the
+      execution from the specified entry point(s). Otherwise the
+      execution will be started from all program terms that are marked
+      with the [entry_point] attribute. If there are several entry
+      points, then the execution will be started from all of them in
+      parallel, i.e., by forking the machine and starting each machine
+      from its own entry point. Consider enabling corresponding
+      scheduler. If neither the argument nor there any entry points in
+      the program, then a function called $(b,_start) is called.";;
 
 end
 
-module Machine = Primus.Machine.Make(Monad.Ident)
+
+let pp_id = Monad.State.Multi.Id.pp
+
+module Machine = struct
+  type 'a m = 'a
+  include Primus.Machine.Make(Monad.Ident)
+end
+open Machine.Syntax
+
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
-module Environment(Machine : Primus.Machine.S) = struct
+module Linker = Primus.Linker.Make(Machine)
+
+let string_of_name = function
+  | `symbol s -> s
+  | `tid t -> Tid.to_string t
+  | `addr x -> Addr.string_of_value x
+
+let name_of_entry arch entry =
+  let width = Arch.addr_size arch |> Size.in_bits in
+  if String.is_empty entry
+  then invalid_arg "An entry point should be a non-empty string"
+  else match entry.[0] with
+    | '%' -> `tid (Tid.from_string_exn entry)
+    | '0' -> `addr (Addr.of_int64 ~width (Int64.of_string entry))
+    | _ -> `symbol entry
+
+let entry_point_collector = object
+  inherit [Primus.Linker.name list] Term.visitor
+  method! enter_term cls t entries =
+    if Term.has_attr t Sub.entry_point then
+      Term.proj cls t ~sub:(fun s -> Some (Sub.name s)) |> function
+      | None -> `tid (Term.tid t) :: entries
+      | Some name -> `symbol name :: entries
+    else entries
 end
 
-let pp_backtrace ppf ctxt =
-  let prog = ctxt#program in
-  List.iter ctxt#trace ~f:(fun tid ->
-      let do_if cls = Option.iter (Program.lookup cls prog tid) in
-      let pp_if cls pp = do_if cls ~f:(fun t ->
-          fprintf ppf "    %a" pp t) in
-      pp_if arg_t Arg.pp;
-      pp_if phi_t Phi.pp;
-      pp_if def_t Def.pp;
-      pp_if jmp_t Jmp.pp;
-      do_if blk_t ~f:(fun blk ->
-          fprintf ppf "  %a:@\n" Tid.pp (Term.tid blk));
-      do_if sub_t ~f:(fun sub ->
-          fprintf ppf "%s:@\n" (Sub.name sub)))
+let all_subroutines prog =
+  Term.enum sub_t prog |> Seq.map ~f:(fun t ->
+      `symbol (Sub.name t)) |>
+  Seq.to_list
 
-let pp_binding ppf (v,r) =
-    fprintf ppf "  %a -> %s" Var.pp v @@ match Bil.Result.value r with
-    | Bil.Bot -> "undefined"
-    | Bil.Imm w -> Word.string_of_value w
-    | Bil.Mem m -> "<mem>"
-let pp_bindings ppf ctxt = Seq.pp pp_binding ppf ctxt#bindings
+let entry_points proj entry = match entry with
+  | ["all-subroutines"] -> all_subroutines (Project.program proj)
+  | [] -> entry_point_collector#run (Project.program proj) []
+  | xs -> List.map ~f:(name_of_entry (Project.arch proj)) xs
+
+let exec x =
+  Machine.current () >>= fun cid ->
+  info "Fork %a: starting from the %s entry point"
+    pp_id cid (string_of_name x);
+  Machine.catch (Linker.exec x)
+    (fun exn ->
+       info "execution from %s terminated with: %s "
+         (string_of_name x)
+         (Primus.Exn.to_string exn);
+       Machine.return ())
+
+let run_entries = function
+  | [] -> exec (`symbol "_start")
+  | x :: xs ->
+    Machine.List.iter xs ~f:(fun x ->
+        Machine.current () >>= fun pid ->
+        if pid = Machine.global
+        then
+          Machine.fork () >>= fun () ->
+          Machine.current () >>= fun cid ->
+          if cid = Machine.global
+          then Machine.return ()
+          else
+            Machine.switch pid >>= fun () ->
+            Machine.current () >>= fun xid ->
+            exec x
+        else Machine.return ()) >>= fun () ->
+    Machine.current () >>= fun id ->
+    if id = Machine.global
+    then exec x
+    else Machine.return ()
+
 
 let main {Config.get=(!)} proj =
   let open Param in
-  let prog = Project.program proj in
-  let init = new Primus.Context.t ~envp:!envp ~argv:!argv proj in
-  let interp = new Interpreter.t in
-  let subs = Term.enum sub_t prog in
-  let is_entry_point = match !entry with
-    | Some name -> fun sub -> Sub.name sub = name
-    | None -> fun sub -> Term.has_attr sub Sub.entry_point in
-  let entry = match Seq.find subs ~f:is_entry_point with
-    | Some entry -> entry
-    | None when Option.is_some !entry ->
-      invalid_arg "can't find the specified entry point"
-    | None ->
-      Seq.find subs ~f:(fun sub -> not (Term.has_attr sub Sub.stub)) |>
-      function
-      | Some entry -> entry
-      | None -> invalid_arg "unable to find a suitable entry point" in
-  match Main.run (interp#eval sub_t entry) init with
-  | (Ok (),ctxt) ->
-    info "evaluation finished after %d steps at term: %a"
-      (List.length ctxt#trace) Tid.pp ctxt#current;
-    debug "Backtrace:@\n%a@\n" pp_backtrace ctxt;
-    let result = Var.create "main_result" reg32_t in
-    let () = match ctxt#lookup result with
-      | None -> warning "result is unknown";
-      | Some r -> match Bil.Result.value r with
-        | Bil.Bot -> warning "result is undefined";
-        | Bil.Imm w -> info "result is %a" Word.pp w;
-        | Bil.Mem _ -> warning "result is unsound" in
-    debug "CPU State:@\n%a@\n" pp_bindings ctxt;
-    debug "Backtrace:@\n@[<v>%a@]@\n" pp_backtrace ctxt;
-    ctxt#project;
-  | (Error err,ctxt) ->
-    error "program failed with %s\n" (Primus.Error.to_string err);
-    info "Backtrace:@\n%a@\n" pp_backtrace ctxt;
-    ctxt#project
+  entry_points proj !entry |> run_entries |>
+  Main.run ~envp:!envp ~args:!argv proj |> function
+  | (Primus.Normal,proj)
+  | (Primus.Exn Primus.Interpreter.Halt,proj) ->
+    info "Ok, we've terminated normally";
+    proj
+  | (Primus.Exn exn,proj) ->
+    info "program terminated by a signal: %s
+
+
+
+
+
+
+
+
+
+" (Primus.Exn.to_string exn);
+    proj
 
 let () =
   Config.when_ready (fun conf ->

@@ -152,7 +152,7 @@ let fetch fname url =
 let fetch fname url = try Ok (fetch fname url) with
   | Curl.CurlException (err,n,_) ->
     Or_error.errorf "failed to fetch: %s" (Curl.strerror err)
-  | exn -> Or_error.of_exn exn
+  | exn -> Or_error.of_exn ~backtrace:`Get exn
 
 let install src dst = Or_error.try_with begin fun () ->
     create_parent_dir dst;
@@ -306,7 +306,7 @@ end
 
 let () =
   Log.start ();
-  let args = Bap_plugin_loader.run Sys.argv in
+  let args = Bap_plugin_loader.run ["byteweight-frontend"] Sys.argv in
   match Cmdline.eval args with
   | `Ok Ok () -> ()
   | `Ok Error err ->

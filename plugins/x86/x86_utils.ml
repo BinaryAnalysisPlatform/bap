@@ -131,7 +131,7 @@ let sig_to_mask =
   | LSB -> Bitmask
   | MSB -> Bytemask
 
-exception Arch_exception of Arch.x86 * string
+exception Arch_exception of Arch.x86 * string [@@deriving sexp]
 
 (** disfailwith is a non-fatal disassembly exception. *)
 let disfailwith m s =
@@ -387,3 +387,9 @@ let ah_e mode = bits2reg8e mode 4
 let ch_e mode = bits2reg8e mode 5
 let dh_e mode = bits2reg8e mode 6
 let bh_e mode = bits2reg8e mode 7
+
+
+let pp_insn ppf (mem,insn) =
+  Format.fprintf ppf "%a: %s"
+    Addr.pp_hex (Memory.min_addr mem)
+    (Disasm_expert.Basic.Insn.asm insn)
