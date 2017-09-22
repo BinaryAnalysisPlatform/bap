@@ -8,7 +8,7 @@ module Iterator = Bap_primus_iterator
 
 
 let uniform_coverage ~total ~trials =
-  ~-.(expm1 (float trials *. log1p( ~-.(1. /. float total))))
+  ~-.(Float.expm1 (float trials *. Float.log1p( ~-.(1. /. float total))))
 
 
 

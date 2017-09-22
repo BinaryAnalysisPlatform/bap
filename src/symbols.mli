@@ -28,18 +28,16 @@ open Bap.Std
 
 
 (** [read arch ic] reads (symbol, start, end) from input channel [ic] *)
-val read : arch -> in_channel -> (string * addr * addr) list
+val read : arch -> In_channel.t -> (string * addr * addr) list
 
 (** [read_addrs ic] reads function start address list from input
     channel [ic] *)
-val read_addrs : in_channel -> addr list
+val read_addrs : In_channel.t -> addr list
 
 (** [write oc syms] writes the [syms] in format of (name, start, end) to
     output channel [oc] *)
-val write : out_channel -> (string * addr * addr) list -> unit
+val write : Out_channel.t -> (string * addr * addr) list -> unit
 
 (** [write oc addrs] writes function start addresses list [addrs] to
     output channel [oc] *)
-val write_addrs : out_channel -> addr list -> unit
-
-
+val write_addrs : Out_channel.t -> addr list -> unit
