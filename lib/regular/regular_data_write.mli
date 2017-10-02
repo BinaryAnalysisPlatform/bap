@@ -7,7 +7,7 @@ type bytes = Regular_bytes.t
 val create :
   ?to_bytes  : ('a -> bytes) ->
   ?to_bigstring : ('a -> bigstring) ->
-  ?dump  : (out_channel -> 'a -> unit) ->
+  ?dump  : (Out_channel.t -> 'a -> unit) ->
   ?pp : (Format.formatter -> 'a -> unit) ->
   ?size  : ('a -> int) ->
   ?blit_to_string:('a,string) copy ->
@@ -15,7 +15,7 @@ val create :
   unit -> 'a t
 
 val size : 'a t -> 'a -> int
-val to_channel : 'a t -> out_channel -> 'a -> unit
+val to_channel : 'a t -> Out_channel.t -> 'a -> unit
 val to_formatter : 'a t -> Format.formatter -> 'a -> unit
 val to_bytes : 'a t -> 'a -> bytes
 val to_bigstring : 'a t -> 'a -> bigstring

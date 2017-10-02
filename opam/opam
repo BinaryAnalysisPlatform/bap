@@ -11,8 +11,8 @@ build: [
   ["./configure"
   "--prefix=%{prefix}%"
   "--with-cxx=`which clang++`"
-  "--with-llvm-version=3.8"
-  "--with-llvm-config=llvm-config-3.8"
+  "--with-llvm-version=%{conf-bap-llvm:package-version}%" {conf-bap-llvm:installed}
+  "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
   "--mandir=%{man}%"
   "--enable-everything"
   "--enable-tests"
@@ -211,6 +211,7 @@ depends: [
     "zarith"
     "uuidm"
     "piqi" {>= "0.7.4"}
+    "conf-bap-llvm" {>= "1.1"}
 ]
 
 

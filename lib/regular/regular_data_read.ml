@@ -4,7 +4,7 @@ open Regular_data_types
 type bytes = Regular_bytes.t
 
 type 'a t = {
-  of_channel : in_channel -> 'a;
+  of_channel : In_channel.t -> 'a;
   of_bigstring : bigstring -> 'a ;
   of_bytes : bytes -> 'a;
 } [@@deriving fields]

@@ -7,5 +7,5 @@ module Make(Env : sig
     module Target : Target
   end) : sig
   val fprint_graph : Format.formatter -> Symtab.fn -> unit
-  val output_graph : out_channel -> Symtab.fn -> unit
+  val output_graph : Out_channel.t -> Symtab.fn -> unit
 end

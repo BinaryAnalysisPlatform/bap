@@ -525,12 +525,12 @@ module Doc : sig
   (** [load chan] loads a document from a channel, returns an error if
       a document is not well-formed, raises an exception if a system error
       has occured.  *)
-  val load : in_channel -> doc Or_error.t
+  val load : In_channel.t -> doc Or_error.t
 
 
   (** [save doc out] stores the document in a channel. Raises an
       exception in case of a system error. *)
-  val save : doc -> out_channel -> unit
+  val save : doc -> Out_channel.t -> unit
 
 
   (** [from_file name] reads a document from a file with the given

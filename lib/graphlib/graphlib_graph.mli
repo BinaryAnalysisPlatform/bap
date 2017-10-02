@@ -39,7 +39,7 @@ val to_dot :
   ?edge_attrs:('e -> edge_attr list) ->
   ?string_of_node:('n -> string) ->
   ?string_of_edge:('e -> string) ->
-  ?channel:out_channel ->
+  ?channel:Out_channel.t ->
   ?formatter:formatter ->
   ?filename:string -> 'c -> unit
 

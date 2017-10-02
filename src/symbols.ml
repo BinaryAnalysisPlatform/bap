@@ -23,7 +23,7 @@ let write oc (syms : (string * addr * addr) list) : unit =
     let syms = List.map syms ~f:(fun (s, es, ef) -> s, Addr.to_int64 es |> ok_exn,
                                                     Addr.to_int64 ef |> ok_exn) in
     List.iter syms ~f:(fun sym -> Sexp.output_hum oc @@ sexp_of_sym sym;
-                        output_char oc '\n')
+                        Out_channel.output_char oc '\n')
   with exn ->
     printf "Output error: %a." Exn.pp exn;
     ()
