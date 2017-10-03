@@ -106,7 +106,7 @@ module Geometric = struct
         then invalid_arg
             "Geometric distribution: \
              parameter p must be in (0,1] interval";
-        let log1mp = log1p(-.p) in
+        let log1mp = Float.log1p(-.p) in
         if log1mp = 0.0 then invalid_arg
             "Geometric distribution: \
              parameter p is too small";

@@ -7,7 +7,7 @@ module type Printable = sig
   val to_string : t -> string
   val str : unit -> t -> string
   val pps : unit -> t -> string
-  val ppo : out_channel -> t -> unit
+  val ppo : Out_channel.t -> t -> unit
   val pp_seq : Format.formatter -> t Sequence.t -> unit
   include Pretty_printer.S     with type t := t
 end

@@ -11,7 +11,7 @@ type bytes = Regular_bytes.t
     then [from_channel] function will consume all input and pass it
     to the correspondings function.  *)
 val create :
-  ?of_channel     : (in_channel -> 'a) ->
+  ?of_channel     : (In_channel.t -> 'a) ->
   ?of_lexbuf      : (lexbuf -> 'a) ->
   ?of_scanbuf     : (scanbuf -> 'a) ->
   ?of_bigstring   : (bigstring -> 'a) ->
@@ -19,5 +19,5 @@ val create :
   unit -> 'a t
 
 val of_bytes : 'a t -> bytes -> 'a
-val of_channel : 'a t -> in_channel -> 'a
+val of_channel : 'a t -> In_channel.t -> 'a
 val of_bigstring : 'a t -> bigstring -> 'a

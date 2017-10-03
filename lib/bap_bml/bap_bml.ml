@@ -140,7 +140,7 @@ module Color = struct
 
   let grammar = List.map colors ~f:fst |> String.concat ~sep:" | "
 
-  let color_t s = match List.Assoc.find colors s with
+  let color_t s = match List.Assoc.find ~equal:String.equal colors s with
     | Some c -> c
     | None -> expect grammar s
 

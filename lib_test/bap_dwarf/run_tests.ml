@@ -15,6 +15,6 @@ let run_inline_tests () =
   eprintf "Warning: ignoring inline tests\n"
 
 let () =
-  if Array.mem Sys.argv "inline-test-runner"
+  if Array.mem ~equal:String.equal Sys.argv "inline-test-runner"
   then run_inline_tests ()
   else run_test_tt_main suite

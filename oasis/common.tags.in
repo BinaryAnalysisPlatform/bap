@@ -3,6 +3,5 @@
 true: short_paths
 true: bin_annot
 true: debug
-<**/*.ml{,i}>: predicate(ppx_driver)
-<**/*.native>: predicate(ppx_driver)
-<**/*.ml{,i}> and not <lib/bap_elf/elf_parse.ml>: pp(ppx-jane -dump-ast -inline-test-lib bap)
+<**/*>: predicate(ppx_driver)
+<**/*>: pp(ppx-jane -dump-ast -inline-test-drop)

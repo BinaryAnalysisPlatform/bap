@@ -27,11 +27,16 @@ end
 
 module Monad = struct
   include Types.Monad
+  module type B = Types.Monad.Basic
+  module type B2 = Types.Monad.Basic2
 
-  module Make2(M : Basic2)
+  module Make2(M : B2)
     : S2 with type ('a,'e) t := ('a,'e) M.t
   = struct
-    include Monad.Make2(M)
+    include Monad.Make2(struct
+        include M
+        let bind m ~f = bind m f
+      end)
 
 
     module Lift = struct
@@ -85,9 +90,9 @@ module Monad = struct
     end
 
     module Triple = struct
-      let fst x = !$fst3 x
-      let snd x = !$snd3 x
-      let trd x = !$trd3 x
+      let fst x = !$(fun (x,_,_) -> x) x
+      let snd x = !$(fun (_,x,_) -> x) x
+      let trd x = !$(fun (_,_,x) -> x) x
     end
 
     module Exn = struct
@@ -177,7 +182,7 @@ module Monad = struct
         let exists xs ~f =
           T.find_map xs ~f:(fun x -> f x >>| function
             | true -> Some ()
-            | false -> None) >>| fun x -> x <> None
+            | false -> None) >>| Option.is_some
 
         let for_all xs ~f = !$not @@ exists xs ~f:(Fn.non f)
 
@@ -250,16 +255,17 @@ module Monad = struct
     include Syntax
   end
 
-  module Make(M : Monad.Basic) : S with type 'a t := 'a M.t =
+  module Make(M : B) : S with type 'a t := 'a M.t =
     Make2(struct
       type ('a, 'e) t = 'a M.t
-      include (M : Monad.Basic with type 'a t := 'a M.t)
+      include (M : B with type 'a t := 'a M.t)
     end)
 
   module Core2(M : Core2) = struct
     type ('a,'e) t = ('a,'e) M.t
     include Make2(struct
         include M
+        let bind m f = bind m ~f
         let map = `Custom map
       end)
     let join = M.join
@@ -285,6 +291,7 @@ module Monad = struct
     type 'a t = 'a M.t
     include Make(struct
         include M
+        let bind m f = bind m ~f
         let map = `Custom map
       end)
     let join = M.join
@@ -339,9 +346,9 @@ module Ident
   end
 
   module Triple = struct
-    let fst = fst3
-    let snd = snd3
-    let trd = trd3
+    let fst (x,_,_) = x
+    let snd (_,x,_) = x
+    let trd (_,_,x) = x
   end
 
   module Exn = M.Exn
@@ -422,9 +429,11 @@ module Ident
   end
 
   module Let_syntax = struct
+    include Syntax
+    let return = ident
     module Let_syntax = struct
       let return = ident
-      let bind x f = x |> f
+      let bind x ~f = x |> f
       let map x ~f = x |> f
       let both x y = x,y
       module Open_on_rhs = struct let return = ident end
@@ -593,7 +602,7 @@ module ResultT = struct
 
     module type S = sig
       include S
-      val failf : ('a, Format.formatter, unit, unit -> 'b t) format4 -> 'a
+      val failf : ('a, Caml.Format.formatter, unit, unit -> 'b t) format4 -> 'a
     end
     module Make(M : Monad.S) : S
       with type 'a t := 'a T(M).t
@@ -604,7 +613,7 @@ module ResultT = struct
         include Make(struct type t = Error.t end)(M)
 
         let failf fmt =
-          let open Format in
+          let open Caml.Format in
           let buf = Buffer.create 512 in
           let ppf = formatter_of_buffer buf in
           let kon ppf () =
@@ -1019,13 +1028,12 @@ module State = struct
 
   module Multi = struct
     include Types.Multi
-    module Id = struct
+    module Id  = struct
       type t = int
       let zero = Int.zero
       let succ = Int.succ
       include Identifiable.Make(struct
-          type t = int [@@deriving compare, bin_io, sexp]
-          let hash = Int.hash
+          type t = int [@@deriving compare, bin_io, hash, sexp]
           let module_name = "Monads.Std.Monad.State.Multi.Id"
           let to_string = Int.to_string
           let of_string = Int.of_string
@@ -1197,13 +1205,13 @@ module State = struct
       let modify m f = m >>= fun x -> update f >>= fun () -> SM.return x
 
 
-      let run m = fun ctxt -> M.bind (SM.run m (init ctxt)) @@ fun (x,cs) ->
-        M.return (x,cs.init)
+      let run m = fun ctxt -> M.bind (SM.run m (init ctxt)) ~f:(fun (x,cs) ->
+        M.return (x,cs.init))
 
       include Monad.Make2(struct
           type nonrec ('a,'e) t = ('a,'e) t
           let return = SM.return
-          let bind = SM.bind
+          let bind m f = SM.bind m ~f
           let map = `Custom SM.map
         end)
 

@@ -25,7 +25,7 @@ let create_demangler = function
 
 let should_print = function
   | [] -> fun _ -> true
-  | xs -> List.mem xs
+  | xs -> List.mem xs ~equal:String.equal
 
 
 let find_section_for_addr memory addr =

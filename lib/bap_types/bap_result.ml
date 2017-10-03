@@ -53,7 +53,7 @@ module Storage = struct
   class linear : storage = object
     val storage = []
     method save x u = {< storage = (x,u) :: storage >}
-    method load x = List.Assoc.find storage x
+    method load x = List.Assoc.find ~equal:Bitvector.equal storage x
   end
 
   class sparse : storage = object
