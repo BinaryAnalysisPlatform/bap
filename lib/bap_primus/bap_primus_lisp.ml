@@ -10,10 +10,10 @@ type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
 [@@deriving sexp]
 type uop = Neg | Not [@@deriving sexp]
 
-type typ = Word | Type of int [@@deriving sexp]
-type 'a scalar = {data : 'a; typ : typ}[@@deriving sexp]
-type word = int64 scalar [@@deriving sexp]
-type var = string scalar[@@deriving sexp]
+type typ = Word | Type of int [@@deriving compare, sexp]
+type 'a scalar = {data : 'a; typ : typ}[@@deriving compare, sexp]
+type word = int64 scalar [@@deriving compare, sexp]
+type var = string scalar[@@deriving compare, sexp]
 type exp =
   | Int of word
   | Var of var
@@ -222,7 +222,7 @@ module Contexts = struct
       ~add:add
       ~sexp_of ~of_sexp
 
-  let (<=) = Set.subset
+  let (<=) x y = Set.is_subset x ~of_:y
   let pp ppf ctxt =
     Sexp.pp_hum ppf (sexp_of ctxt)
 end
@@ -259,15 +259,17 @@ module Macro = struct
 
   let bind macro cs = take_rest macro.code.param cs
 
+  let find = List.Assoc.find ~equal:String.equal
+
   let subst bs body =
     let rec sub = function
       | List xs -> [List (List.concat_map xs ~f:sub)]
-      | Atom x -> match List.Assoc.find bs x with
+      | Atom x -> match find bs x with
         | None -> [Atom x]
         | Some cs -> cs in
     match body with
     | List xs -> List (List.concat_map xs ~f:sub)
-    | Atom x -> match List.Assoc.find bs x with
+    | Atom x -> match find bs x with
       | None -> Atom x
       | Some [x] -> x
       | Some xs -> invalid_argf "invalid substitution" ()
@@ -326,7 +328,7 @@ module Resolve = struct
   let externs def name =
     match Univ_map.find def.meta.attrs External.t with
     | None -> false
-    | Some names -> List.mem names name
+    | Some names -> List.mem ~equal:String.equal names name
 
 
   (* all definitions with the given name *)
@@ -524,7 +526,7 @@ module Parse = struct
     "if"; "let"; "neg"; "not";
     "coerce"; "msg"; "while";"set"
   ]
-  let is_keyword op = List.mem keywords op
+  let is_keyword op = List.mem ~equal:String.equal keywords op
   let nil = Int {data=0L; typ=Word}
 
   let find_entry defs op =
@@ -1235,7 +1237,7 @@ module Lisp(Machine : Machine) = struct
       Eval.extract ~hi ~lo w
     and lookup v =
       Machine.Local.get state >>= fun {env; width} ->
-      match List.Assoc.find env v with
+      match List.Assoc.find ~equal:[%compare.equal : var] env v with
       | Some w -> Machine.return w
       | None -> Eval.get (var width v)
     and app n args =
@@ -1250,7 +1252,7 @@ module Lisp(Machine : Machine) = struct
       loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
-      if List.Assoc.mem s.env v
+      if List.Assoc.mem ~equal:[%compare.equal : var] s.env v
       then
         Machine.Local.put state {s with env = Vars.replace s.env v w}
         >>= fun () -> Machine.return w

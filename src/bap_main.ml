@@ -62,7 +62,7 @@ let args filename argv =
     if is_key arg
     then List.exists transparent_args
         ~f:(fun prefix -> String.is_prefix ~prefix arg)
-    else List.mem transparent_args arg in
+    else List.mem ~equal:String.equal transparent_args arg in
   let inputs = String.Hash_set.of_list @@ list_loaded_units () in
   Array.iteri argv ~f:(fun i arg -> match i with
       | 0 -> ()

@@ -158,8 +158,23 @@ module Collection = struct
 end
 
 module Monad = struct
-  module type Basic = Monad.Basic
-  module type Basic2 = Monad.Basic2
+  module type Basic = sig
+    type 'a t
+    val bind : 'a t -> ('a -> 'b t) -> 'b t
+    val return : 'a -> 'a t
+    val map : [ `Define_using_bind
+              | `Custom of ('a t -> f:('a -> 'b) -> 'b t)
+              ]
+  end
+
+  module type Basic2 = sig
+      type ('a, 'e) t
+      val bind : ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
+      val map : [ `Define_using_bind
+                | `Custom of (('a, 'e) t -> f:('a -> 'b) -> ('b, 'e) t)
+                ]
+      val return : 'a -> ('a, _) t
+    end
 
   module type Core = Monad.S
   module type Core2 = Monad.S2

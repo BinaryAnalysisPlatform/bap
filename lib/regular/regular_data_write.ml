@@ -7,7 +7,7 @@ type 'a t = {
   size : 'a -> int;
   copy : ('a,string) copy;
   blit : ('a,bigstring) copy;
-  dump : out_channel -> 'a -> unit;
+  dump : Out_channel.t -> 'a -> unit;
   pp   : Format.formatter -> 'a -> unit;
   to_bytes : 'a -> bytes;
   to_bigstring : 'a -> bigstring;

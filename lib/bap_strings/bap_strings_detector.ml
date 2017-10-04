@@ -29,6 +29,8 @@ let empty = {
   n = 0; m = 0; cut = 0; len = 0; stage = Working;
 }
 
+let log1p = Float.log1p
+
 let create
     ?(alpha=0.05)
     ?(beta=0.001)

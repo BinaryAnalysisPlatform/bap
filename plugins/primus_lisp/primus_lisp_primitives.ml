@@ -49,8 +49,8 @@ module Primitives(Machine : Primus.Machine.S) = struct
       then begin
         List.iter words ~f:(fun w ->
             Word.enum_chars (Value.to_word w) LittleEndian |>
-            Seq.hd |> Option.iter ~f:(print_char));
-        flush stdout;
+            Seq.hd |> Option.iter ~f:(Out_channel.output_char stdout));
+        Out_channel.flush stdout;
       end;
       machine_int (List.length words)
 

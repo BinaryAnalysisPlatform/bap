@@ -307,7 +307,7 @@ module Create() = struct
     let non_dir_file = of_arg Arg.non_dir_file ""
     let list ?sep x = of_arg (Arg.list ?sep (Converter.to_arg x)) []
     let array ?sep x =
-      let default = Array.empty () in
+      let default = [| |] in
       of_arg (Arg.array ?sep (Converter.to_arg x)) default
     let pair ?sep x y =
       let default = Converter.(default x, default y) in

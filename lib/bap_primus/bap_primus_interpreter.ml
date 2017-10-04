@@ -441,7 +441,7 @@ module Init(Machine : Machine) = struct
   let is_linked name t = [
     Linker.is_linked (`tid (Term.tid t));
     Linker.is_linked (`symbol (name t));
-  ] |> Machine.List.all >>| (fun xs -> List.mem xs true) >>= function
+  ] |> Machine.List.all >>| List.exists ~f:ident >>= function
     | true -> Machine.return true
     | false -> match Term.get_attr t address with
       | None -> Machine.return false

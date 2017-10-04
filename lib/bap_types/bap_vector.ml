@@ -49,6 +49,31 @@ let nth vec n =
   if n < vec.size then Some (Array.unsafe_get vec.data n)
   else None
 
+
+include struct
+  open Container_intf.Continue_or_stop
+  open Container_intf.Finished_or_stopped_early
+
+  let fold_until vec ~init ~f =
+    let rec loop i init =
+      if i < vec.size
+      then match f init (Array.unsafe_get vec.data i) with
+        | Stop x -> Stopped_early x
+        | Continue r -> loop (i+1) r
+      else Finished init in
+    loop 0 init
+
+  let fold_result vec ~init ~f =
+    let rec loop i init =
+      if i < vec.size
+      then match f init (Array.unsafe_get vec.data i) with
+        | Error _ as e -> e
+        | Ok r -> loop (i+1) r
+      else Ok init in
+    loop 0 init
+end
+
+
 let foldi vec ~init ~f =
   let rec loop i init =
     if i < vec.size

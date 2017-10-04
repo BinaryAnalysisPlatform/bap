@@ -31,6 +31,13 @@ let pr_6184_hack = function
   | _ -> ()
 
 
+let pass_pp_to_link = function
+  | After_rules ->
+    let set acts = pflag acts "pp" (fun s -> S [A "-pp"; A s]) in
+    set ["link"];
+    set ["c"; "compile"];
+  | _ -> ()
+
 let chop_extension file =
   try Filename.chop_extension file
   with exn -> invalid_arg ("Failed to chop extension from '" ^ file ^ "'")
@@ -72,6 +79,7 @@ let () =
       Rules.dispatch stage;
       dispatch_default stage;
       pr_6184_hack stage;
+      pass_pp_to_link stage;
       predicate_used_libs stage;
       predicate_used_packages stage;
       Ppx_driver_ocamlbuild.dispatch stage)

@@ -11,32 +11,38 @@ module Plugin_rules = struct
     let libs = Bap_config.standard_library / "compiler-libs" in
     Unix.putenv "OCAMLFIND_IGNORE_DUPS_IN" libs
 
-  let syntax_packages = ["ppx_jane"]
-  let default_pkgs = ["bap"; "core_kernel"]
+  let packages = ["bap"; "core_kernel"; "ppx_jane"]
 
-  let packages = default_pkgs @ syntax_packages
-
+  let default_predicates = [
+    "custom_ppx";
+    "ppx_driver";
+  ]
 
   let default_tags = [
     "thread";
     "debug";
     "short_paths";
     "custom";
-  ]
+    "pp(ppx-jane -dump-ast -inline-test-drop)"
+  ] @ List.map default_predicates ~f:(sprintf "predicate(%s)")
 
-  let needs_threads pkgs =
-    List.mem (Fl.package_deep_ancestors ["native"] pkgs) "threads"
+  let needs_threads ~predicates pkgs =
+    let deps = Fl.package_deep_ancestors predicates pkgs in
+    List.mem deps "threads" ~equal:String.equal
 
-  let infer_thread_predicates predicates pkg =
-    if needs_threads pkg
+  let infer_thread_predicates ~predicates pkg =
+    if needs_threads ~predicates pkg
     then "mt" :: "mt_posix" :: predicates
     else predicates
 
   let bap_predicates ~native =
     let code = if native then "native" else "byte" in
-    infer_thread_predicates [code] packages
+    let predicates = code :: default_predicates in
+    infer_thread_predicates ~predicates packages
+
   let pkg_predicates ~native =
-    infer_thread_predicates (bap_predicates ~native) !Options.ocaml_pkgs
+    infer_thread_predicates ~predicates:(bap_predicates ~native)
+      !Options.ocaml_pkgs
 
   let topological_closure ~predicates pkgs =
     Fl.package_deep_ancestors predicates pkgs
@@ -50,7 +56,7 @@ module Plugin_rules = struct
         recursive := true;
       end)
 
-  let interns =
+  let interns () =
     topological_closure
       ~predicates:(bap_predicates ~native:true) packages
 
@@ -64,16 +70,17 @@ module Plugin_rules = struct
         else predicates in
       let arch,preds = Fl.package_property_2 preds pkg "archive" in
       let base = Fl.package_directory pkg in
-      if dynamic && not (List.mem preds (`Pred "plugin"))
+      if dynamic && not (List.mem ~equal:Polymorphic_compare.equal preds (`Pred "plugin"))
       then raise Not_found;
       String.split ~on:' ' arch |>
       List.map ~f:(Fl.resolve_path ~base)
     with Not_found -> []
 
   let externals pkgs =
+    let interns = interns () in
     pkgs |>
     topological_closure ~predicates:(pkg_predicates ~native:true) |>
-    List.filter ~f:(fun dep -> not (List.mem interns dep))
+    List.filter ~f:(fun dep -> not (List.mem ~equal:String.equal interns dep))
 
   let packages () = externals !Options.ocaml_pkgs
 
@@ -176,10 +183,14 @@ module Plugin_rules = struct
       ~deps:["%.bundle"; "%.cmxs"; "%.cma"]
       (fun env _ -> Seq [bundle env; symlink env])
 
+let pass_pp_to_link_phase () =
+  pflag ["ocaml"; "link"] "pp" (fun s -> S [A "-pp"; A s])
+
   let install () =
     register_cmxs_of_cmxa_rule ();
     register_collect_bundle_rule ();
-    register_plugin_rule ()
+    register_plugin_rule ();
+    pass_pp_to_link_phase ();
 end
 
 

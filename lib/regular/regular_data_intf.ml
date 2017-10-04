@@ -20,13 +20,13 @@ module type Data = sig
   val blit_to_bigstring : ?ver:string -> ?fmt:string -> bigstring -> t -> int -> unit
   module Io : sig
     val read  : ?ver:string -> ?fmt:string -> string -> t
-    val load  : ?ver:string -> ?fmt:string -> in_channel -> t
-    val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> in_channel -> t list
-    val scan  : ?ver:string -> ?fmt:string -> in_channel -> (unit -> t option)
+    val load  : ?ver:string -> ?fmt:string -> In_channel.t -> t
+    val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> In_channel.t -> t list
+    val scan  : ?ver:string -> ?fmt:string -> In_channel.t -> (unit -> t option)
     val write : ?ver:string -> ?fmt:string -> string -> t -> unit
-    val save  : ?ver:string -> ?fmt:string -> out_channel -> t -> unit
-    val save_all : ?ver:string -> ?fmt:string -> out_channel -> t list -> unit
-    val dump  : ?ver:string -> ?fmt:string -> out_channel -> (unit -> t option) -> unit
+    val save  : ?ver:string -> ?fmt:string -> Out_channel.t -> t -> unit
+    val save_all : ?ver:string -> ?fmt:string -> Out_channel.t -> t list -> unit
+    val dump  : ?ver:string -> ?fmt:string -> Out_channel.t -> (unit -> t option) -> unit
     val show  : ?ver:string -> ?fmt:string -> t -> unit
     val print : ?ver:string -> ?fmt:string -> Format.formatter -> t -> unit
   end
