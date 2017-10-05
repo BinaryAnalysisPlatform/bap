@@ -70,12 +70,12 @@ module Input = struct
     Value.get Image.segment v |>
     Option.value_map ~default:false ~f:Image.Segment.is_executable
 
-  let filter_code mem = Memmap.filter mem ~f:is_code
+  let is_data v = not (is_code v)
 
   let of_image finish file img = {
     arch = Image.arch img;
-    data = Image.memory img;
-    code = filter_code (Image.memory img);
+    data = Memmap.filter ~f:is_data (Image.memory img);
+    code = Memmap.filter ~f:is_code (Image.memory img);
     file;
     finish;
   }
