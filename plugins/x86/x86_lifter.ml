@@ -1263,14 +1263,19 @@ module ToIR = struct
           assn reg32_t o_rax (Bil.Ite (equal_v, eax_e, dst_low_e));
           assn reg32_t o_rdx (Bil.Ite (equal_v, edx_e, dst_hi_e))
         ]
-      | Xadd(t, dst, src) ->
-        let tmp_res, tmp_dst, tmp_src = tmp t, tmp t, tmp t in
-        Bil.Move (tmp_src, op2e t src)
-        :: Bil.Move (tmp_dst, op2e t dst)
-        :: Bil.Move (tmp_res, Bil.(op2e t dst + op2e t src))
-        :: assn t src (op2e t dst)
-        :: assn t dst (Bil.Var tmp_res)
-        :: set_flags_add !!t (Bil.Var tmp_dst) (Bil.Var tmp_src) (op2e t dst)
+      | Xadd(t, dst_op, src_op) ->
+        let tmp_res = tmp t in
+        let tmp_dst = tmp t in
+        let tmp_src = tmp t in
+        let dst = op2e t dst_op in
+        let src = op2e t src_op in
+        Bil.[
+          tmp_src := src;
+          tmp_dst := dst;
+          tmp_res := src + dst;
+          assn t src_op dst;
+          assn t dst_op (var tmp_res);
+        ] @ set_flags_add !!t (Bil.var tmp_dst) (Bil.var tmp_src) dst;
       | Xchg(t, src, dst) ->
         let tmp = tmp t in
         [ Bil.Move (tmp, op2e t src);
