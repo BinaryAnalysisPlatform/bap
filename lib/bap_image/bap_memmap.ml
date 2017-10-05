@@ -267,6 +267,8 @@ let to_list = C.to_list
 let to_array = C.to_array
 let min_elt = C.min_elt
 let max_elt = C.max_elt
+let fold_until = C.fold_until
+let fold_result = C.fold_result
 
 let pp pp_elt ppf map =
   let module M = Bap_memory in

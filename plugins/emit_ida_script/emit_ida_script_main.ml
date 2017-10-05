@@ -95,7 +95,8 @@ let program_visitor buf attrs =
       | Some addr ->
         Term.attrs t |> Dict.to_sequence |> Seq.iter ~f:(fun (_,x) ->
             let attr = Value.tagname x in
-            if List.mem attrs attr then emit_attr buf name addr x);
+            if List.mem ~equal:String.equal attrs attr
+            then emit_attr buf name addr x);
         name,Some addr
     method! enter_term _ t (name,_) =
       name,Term.get_attr t address

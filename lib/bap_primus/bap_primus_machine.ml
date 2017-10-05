@@ -50,7 +50,7 @@ module Make(M : Monad.S) = struct
       include Monad.Make(struct
           type 'a t = 'a sm
           let return = SM.return
-          let bind = SM.bind
+          let bind m f = SM.bind m ~f
           let map = `Custom SM.map
         end)
     end)

@@ -120,7 +120,7 @@ module Std : sig
 
       (** will print to a standard [output_channel], useful for using in
           [printf], [fprintf], etc. *)
-      val ppo : out_channel -> t -> unit
+      val ppo : Out_channel.t -> t -> unit
 
       (** prints a sequence of values of type [t] *)
       val pp_seq : Format.formatter -> t Sequence.t -> unit
@@ -342,32 +342,32 @@ module Std : sig
         val read  : ?ver:string -> ?fmt:string -> string -> t
 
         (** [load ?ver ?fmt channel] loads datum from the input channel  *)
-        val load  : ?ver:string -> ?fmt:string -> in_channel -> t
+        val load  : ?ver:string -> ?fmt:string -> In_channel.t -> t
 
         (** [read_all ?ver ?fmt ?rev channel] reads a sequence of datums
             stored in the storage accessed via [channel] and returns it as a
             list. If [rev] is [true] (defaults to [false]) then a list will
             be reversed (slightly faster).  *)
-        val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> in_channel -> t list
+        val load_all : ?ver:string -> ?fmt:string -> ?rev:bool -> In_channel.t -> t list
 
         (** [scan ?ver ?fmt channel] creates a stream of data, that
             are loaded consequently from the channel *)
-        val scan  : ?ver:string -> ?fmt:string -> in_channel -> (unit -> t option)
+        val scan  : ?ver:string -> ?fmt:string -> In_channel.t -> (unit -> t option)
 
         (** [write ?ver ?fmt file datum] writes the [datum] to the [file] *)
         val write  : ?ver:string -> ?fmt:string -> string -> t -> unit
 
         (** [save ?ver ?fmt channel datum] saves the [datum] to the [channel] *)
-        val save  : ?ver:string -> ?fmt:string -> out_channel -> t -> unit
+        val save  : ?ver:string -> ?fmt:string -> Out_channel.t -> t -> unit
 
 
         (** [save_all ?ver ?fmt data channel] saves a list of data into
             a [channel] *)
-        val save_all : ?ver:string -> ?fmt:string -> out_channel -> t list -> unit
+        val save_all : ?ver:string -> ?fmt:string -> Out_channel.t -> t list -> unit
 
         (** [dump ?ver ?fmt chan stream] dumps a [stream] (represented
             by a [next] function) into channel.  *)
-        val dump  : ?ver:string -> ?fmt:string -> out_channel -> (unit -> t option) -> unit
+        val dump  : ?ver:string -> ?fmt:string -> Out_channel.t -> (unit -> t option) -> unit
 
         (** [show ?ver ?fmt datum] saves datum to standard output
             channel, using a [default_printer] if [fmt] is not
@@ -533,7 +533,7 @@ module Std : sig
           then [from_channel] function will consume all input and pass it
           to the correspondings function.  *)
       val create :
-        ?of_channel     : (in_channel -> 'a) ->
+        ?of_channel     : (In_channel.t -> 'a) ->
         ?of_lexbuf      : (lexbuf -> 'a) ->
         ?of_scanbuf     : (scanbuf -> 'a) ->
         ?of_bigstring   : (bigstring -> 'a) ->
@@ -546,9 +546,9 @@ module Std : sig
       (** [of_channel readable channel] inputs a value from a
           channel. If [of_channel] function wasn't provided when
           [readable] was created, then the whole content of the
-          [in_channel] is read into an intermediate buffer, that is later
+          [In_channel.t] is read into an intermediate buffer, that is later
           read. Any leftover bytes are discarded. *)
-      val of_channel : 'a t -> in_channel -> 'a
+      val of_channel : 'a t -> In_channel.t -> 'a
 
       (** [of_bigstring readable buf] deserializes a [readable] value
           from the bigstring.  *)
@@ -577,7 +577,7 @@ module Std : sig
       val create :
         ?to_bytes  : ('a -> bytes) ->
         ?to_bigstring : ('a -> bigstring) ->
-        ?dump  : (out_channel -> 'a -> unit) ->
+        ?dump  : (Out_channel.t -> 'a -> unit) ->
         ?pp    : (Format.formatter -> 'a -> unit) ->
         ?size  : ('a -> int) ->
         ?blit_to_string:('a,string) copy ->
@@ -591,7 +591,7 @@ module Std : sig
 
       (** [to_channel writeable out value] writes the [writable]
           [value] into the channel [chan] *)
-      val to_channel : 'a t -> out_channel -> 'a -> unit
+      val to_channel : 'a t -> Out_channel.t -> 'a -> unit
 
       (** [to_formatter writeable ppf value] outputs the value
           into the formatter [ppf] *)

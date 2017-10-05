@@ -163,7 +163,7 @@ module Arch = struct
     | systemz
     | x86
     | xcore
-  ] [@@deriving bin_io, compare, enumerate, sexp, variants]
+  ] [@@deriving bin_io, compare, enumerate, sexp]
 end
 
 (** {2 Common type abbreviations}

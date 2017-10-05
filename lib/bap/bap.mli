@@ -617,10 +617,10 @@ module Std : sig
 
   (**/**)
   module Legacy : sig
-    [@@@deprecated "Definitions in this module are deprecated"]
+    [@@@deprecated "[since 2017-04] Definitions in this module are deprecated"]
     module Monad : sig
       [@@@deprecated
-        "The module is deprecated in favor of new monads library"]
+        "[since 2017-04] The module is deprecated in favor of new monads library"]
       open Core_kernel.Std
       module type Basic = Monad.Basic
       module type Basic2 = Monad.Basic2
@@ -4759,7 +4759,7 @@ type location = Location.t [@@deriving bin_io, compare, sexp]
     accessible for loading images.*)
 
 module Backend : sig
-  [@@@deprecated "Use new loader Ogre-powered loader interface"]
+  [@@@deprecated "[since 2017-08] Use new loader Ogre-powered loader interface"]
 
   (** memory access permissions  *)
   type perm = R | W | X | Or of perm * perm
@@ -4985,7 +4985,7 @@ module Image : sig
   (** [register_backend ~name backend] tries to register [backend] under
       the specified [name]. *)
   val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
-  [@@deprecated "use register_loader instead"]
+  [@@deprecated "[since 2017-07] use register_loader instead"]
 
   (** {2 Internals}
 
@@ -8433,7 +8433,7 @@ end
 
 (**/**)
 module Monad : module type of Legacy.Monad
-[@@deprecated "use the `monads' library instead of this module"]
+[@@deprecated "[since 2017-04] use the `monads' library instead of this module"]
 (**/**)
 
 end

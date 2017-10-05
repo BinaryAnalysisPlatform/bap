@@ -255,7 +255,7 @@ module Doc = struct
   let tabulate xs = List.mapi xs ~f:(fun i x -> (i,x))
 
   let parse_tname name =
-    List.Assoc.find Type.names name |> function
+    List.Assoc.find ~equal:String.equal Type.names name |> function
     | Some typ -> Ok typ
     | None ->
       errorf "expected <field-type> ::= %s"
@@ -287,7 +287,7 @@ module Doc = struct
                    <field-value> | (<field-name> <field-value>)"
 
   let positional header pos x =
-    match List.Assoc.find header pos with
+    match List.Assoc.find ~equal:Int.equal header pos with
     | None -> errorf "wrong arity"
     | Some {Type.fname} -> Ok (fname,x)
 
@@ -522,7 +522,8 @@ module Exp = struct
         | false -> Uop (Not,True))
   ]
 
-  let lift ftype = List.Assoc.find_exn parsers ftype
+  let lift ftype =
+    List.Assoc.find_exn ~equal:[%compare.equal: Type.typ] parsers ftype
 
   let lookup_var name {fields} {attr; field={Type.fname;ftype}} =
     if attr = Some name || attr = None

@@ -27,8 +27,7 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre,
-                   ppx_variants_conv, ppx_enumerate
+  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre
 
   InternalModules:
                    Bap_addr,
@@ -101,8 +100,7 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
-                 ogre,
-                 ppx_here
+                 ogre
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,

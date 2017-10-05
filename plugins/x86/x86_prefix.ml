@@ -41,6 +41,7 @@ let get memory =
   Seq.(deref memory >>| Word.to_int >>| ok_exn >>| to_known_prefix
        |> take_while ~f:Option.is_some |> filter_opt |> to_list)
 
-let exists pref mem = List.mem (get mem) `xF0
+let exists pref mem =
+  List.mem ~equal:[%compare.equal : t] (get mem) pref
 
 let fold ~init ~f mem = List.fold ~init ~f (get mem)
