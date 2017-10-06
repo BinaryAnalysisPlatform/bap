@@ -773,33 +773,47 @@ module ToIR = struct
          | None -> [assn t dst dwords]
          | Some vdst -> [assn t vdst dwords])
       | Pshufb (t, dst, src, vsrc) ->
-        let order_e = op2e t src in
-        let dst_e = op2e t dst in
-        let get_bit i =
-          let highbit = Bil.Extract (((i*8)+7), ((i*8)+7), order_e) in
-          (* this part of the code previously also used Typecheck.infer_ast
-           * (indirectly, by calling Ast_convenience.extract_byte_symbolic with
-           * index as the last argument).
-           * I've read the relevant parts of infer_ast and extract_byte_symbolic
-           * and also the helpful comments below "3 bits" and "4 bits"
-           * and it seems those are the appropriate widths we get out of
-           * infer_ast, so I'm passing those in directly now.
-           * Imo, this is a lot less dubious than the thingy above. *)
-          let (index, index_width) = match t with
-            | Type.Imm 64 -> (Bil.Extract (((i*8)+2), ((i*8)+0), order_e), 64) (* 3 bits *)
-            | Type.Imm 128 -> (Bil.Extract (((i*8)+3), ((i*8)+0), order_e), 128) (* 4 bits *)
-            | Type.Imm 256 -> (Bil.Extract (((i*8)+3), ((i*8)+0), order_e), 256) (* 4 bits *)
-            | _ -> disfailwith "invalid size for pshufb"
-          in
-          let index = Bil.(Cast (UNSIGNED, !!t, index)) in
-          let atindex = extract_byte_symbolic_with_width dst_e index index_width in
-          Bil.Ite (highbit, int_exp 0 8, atindex)
-        in
-        let n = !!t / 8 in
-        let e = concat_explist (List.map ~f:get_bit (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive n 0)) in
-        (match vsrc with
-         | None -> [assn t dst e]
-         | Some vdst -> [assn t vdst e])
+        let extract_and_pad ?(width=(!!t)) hi lo exp =
+          Bil.(cast UNSIGNED width (extract hi lo exp)) in
+        let byte = int_exp 8 !!t in
+        let rshift_byte n exp = Bil.(exp lsr (n * byte)) in
+        let set_byte ind src dst =
+          Bil.(move dst @@ var dst lor (src lsl (ind * byte))) in
+        let zero_e = Bil.int @@ Word.zero !!t in
+        let mask_e, dst_e = op2e t src, op2e t dst in
+        let least_bits = match t with
+          | Type.Imm 64 -> 3
+          | Type.Imm 128 | Type.Imm 256 -> 4
+          | _ -> disfailwith "invalid size for pshufb" in
+        let i, init_i, incr_i =
+          let i = tmp ~name:"i" t in
+          Bil.(var i,
+          move i zero_e,
+          move i (var i + (int @@ Word.one !!t))) in
+        let i_is_max =
+          let bytes = !!t / 8 in
+          Bil.(i = int_exp bytes !!t) in
+        let mask_byte_i = rshift_byte i mask_e in
+        let target_byte_ind =
+          extract_and_pad least_bits 0 mask_byte_i in
+        let most_bit_i = extract_and_pad ~width:1 7 7 mask_byte_i in
+        let at_index =
+          extract_and_pad 7 0 (rshift_byte target_byte_ind dst_e) in
+        let tmp_byte, tmp_dst = tmp t, tmp t in
+        let loop =
+          Bil.while_ Bil.(lnot i_is_max) [
+            Bil.move tmp_byte @@
+            Bil.ite
+              ~if_:Bil.(most_bit_i = Bil.int Word.b1)
+              ~then_:zero_e
+              ~else_:at_index ;
+            set_byte i (Bil.var tmp_byte) tmp_dst;
+            incr_i; ] in
+        let dst = Option.value ~default:dst vsrc in
+        [ init_i;
+          Bil.move tmp_dst zero_e;
+          loop;
+          assn t dst (Bil.var tmp_dst) ]
       | Lea(t, r, a) when pref = [] ->
         (* See Table 3-64 *)
         (* previously, it checked whether addrbits > opbits before the cast_low.
