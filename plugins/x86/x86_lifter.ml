@@ -772,48 +772,53 @@ module ToIR = struct
         (match vsrc with
          | None -> [assn t dst dwords]
          | Some vdst -> [assn t vdst dwords])
-      | Pshufb (t, dst, src, vsrc) ->
-        let extract_and_pad ?(width=(!!t)) hi lo exp =
-          Bil.(cast UNSIGNED width (extract hi lo exp)) in
-        let byte = int_exp 8 !!t in
-        let rshift_byte n exp = Bil.(exp lsr (n * byte)) in
-        let set_byte ind src dst =
-          Bil.(move dst @@ var dst lor (src lsl (ind * byte))) in
-        let zero_e = Bil.int @@ Word.zero !!t in
-        let mask_e, dst_e = op2e t src, op2e t dst in
-        let least_bits = match t with
-          | Type.Imm 64 -> 3
-          | Type.Imm 128 | Type.Imm 256 -> 4
+      | Pshufb (exp_type, dst_op, src_op, vsrc) ->
+        let op_size = bitwidth_of_type exp_type in
+        let index_bits = match op_size with
+          | 64 -> 3
+          | 128 | 256 -> 4
           | _ -> disfailwith "invalid size for pshufb" in
-        let i, init_i, incr_i =
-          let i = tmp ~name:"i" t in
-          Bil.(var i,
-          move i zero_e,
-          move i (var i + (int @@ Word.one !!t))) in
-        let i_is_max =
-          let bytes = !!t / 8 in
-          Bil.(i = int_exp bytes !!t) in
-        let mask_byte_i = rshift_byte i mask_e in
-        let target_byte_ind =
-          extract_and_pad least_bits 0 mask_byte_i in
-        let most_bit_i = extract_and_pad ~width:1 7 7 mask_byte_i in
-        let at_index =
-          extract_and_pad 7 0 (rshift_byte target_byte_ind dst_e) in
-        let tmp_byte, tmp_dst = tmp t, tmp t in
-        let loop =
-          Bil.while_ Bil.(lnot i_is_max) [
-            Bil.move tmp_byte @@
-            Bil.ite
-              ~if_:Bil.(most_bit_i = Bil.int Word.b1)
-              ~then_:zero_e
-              ~else_:at_index ;
-            set_byte i (Bil.var tmp_byte) tmp_dst;
-            incr_i; ] in
-        let dst = Option.value ~default:dst vsrc in
-        [ init_i;
-          Bil.move tmp_dst zero_e;
-          loop;
-          assn t dst (Bil.var tmp_dst) ]
+
+        let byte = int_exp 8 op_size in
+        let bytes_num = int_exp (op_size / 8) op_size in
+        let src = op2e exp_type src_op in
+        let dst = op2e exp_type dst_op in
+        let dst_op = Option.value ~default:dst_op vsrc in
+        let zero = Bil.int (Word.zero op_size) in
+        let one = Bil.int (Word.one op_size) in
+
+        let i = tmp ~name:"i" exp_type in
+        let mask_byte_i = tmp exp_type in
+        let tmp_byte = tmp exp_type in
+        let tmp_dst = tmp exp_type in
+        let msb = tmp exp_type in
+        let ind = tmp exp_type in
+
+        let check_mem_allignment = match src_op with
+          | Oaddr addr when (op_size = 128) ->
+            let zero = Bil.int (Word.zero 4) in
+            [ Bil.(if_ (extract 3 0 addr <> zero) [cpuexn 13] []) ]
+          | _ -> [] in
+
+        check_mem_allignment @
+        Bil.[
+          i := zero;
+          tmp_dst := zero;
+          while_ (var i <> bytes_num) [
+            mask_byte_i := src lsr (var i * byte);
+            msb := cast unsigned op_size (extract 7 7 (var mask_byte_i));
+            ind := cast unsigned op_size (extract index_bits 0 (var mask_byte_i));
+            if_ (var msb = one) [
+              tmp_byte := zero;
+            ] (* else *) [
+              tmp_byte :=
+                cast unsigned op_size (extract 7 0 (dst lsr (var ind * byte)))
+            ];
+            tmp_dst := Bil.(var tmp_dst lor (var tmp_byte lsl (var i * byte)));
+            i := var i + one;
+          ]; (* while *)
+          assn exp_type dst_op (var tmp_dst)
+        ];
       | Lea(t, r, a) when pref = [] ->
         (* See Table 3-64 *)
         (* previously, it checked whether addrbits > opbits before the cast_low.
