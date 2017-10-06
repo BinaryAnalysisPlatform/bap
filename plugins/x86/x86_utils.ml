@@ -16,8 +16,11 @@ let concat_explist elist =
   List.reduce_exn
     ~f:Bil.(^) elist
 
-(*FIXME: This is conversion from typ to nat1. It's used in cast expressions*)
-let (!!) = function Type.Imm v -> v | _ -> failwith "internal error"
+let bitwidth_of_type = function
+  | Type.Imm v -> v
+  | _ -> failwith "internal error"
+
+let (!!) = bitwidth_of_type
 
 let bytes_of_width t =
   let b = !!t in

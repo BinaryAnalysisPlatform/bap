@@ -936,47 +936,47 @@ module ToIR = struct
               ]
           ] []
         ]
-      | Rotate(rt, s, dst, shift, use_cf) ->
-        (* SWXXX implement use_cf *)
+      | Rotate(shift_type, exp_type, dst_op, shift_op, use_cf) ->
         if use_cf then unimplemented "rotate use_vf";
-        let origCOUNT = tmp ~name:"orig_count" s in
-        let e_dst = op2e s dst in
-        let shift_val = match s with
-          | Type.Imm 64 -> 63
-          | _ -> 31
-        in
-        let s' = !!s in
-        let e_shift = Bil.(op2e s shift land int_exp shift_val s') in
-        let size = int_exp !!s s' in
-        let new_cf = match rt with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, e_dst))
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, e_dst))
-          | _ -> disfailwith "impossible" in
-        let new_of = match rt with
-          | LSHIFT -> Bil.(cf_e lxor Cast (HIGH, !!bool_t, e_dst))
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, e_dst) lxor Cast (HIGH, !!bool_t, e_dst lsl int_exp 1 s'))
-          | _ -> disfailwith "impossible" in
-        let unk_of =
-          Bil.Unknown ("OF undefined after rotate of more then 1 bit", bool_t) in
-        (* this is repeated often enough in the cases perhaps
-         * we should bind it at the top of the function... *)
-        let ifzero t e = Bil.(Ite (Var origCOUNT = int_exp 0 s', t, e)) in
-        let ret1 = match rt with
-          | LSHIFT -> Bil.(e_dst lsl Var origCOUNT)
-          | RSHIFT -> Bil.(e_dst lsr Var origCOUNT)
-          | _ -> disfailwith "impossible" in
-        let ret2 = match rt with
-          | LSHIFT -> Bil.(e_dst lsr (size - Var origCOUNT))
-          | RSHIFT -> Bil.(e_dst lsl (size - Var origCOUNT))
-          | _ -> disfailwith "impossible" in
-        let result = Bil.(ret1 lor ret2) in
-        [
-          Bil.Move (origCOUNT, e_shift);
-          assn s dst result;
-          (* cf must be set before of *)
-          Bil.Move (cf, ifzero cf_e new_cf);
-          Bil.Move (oF, ifzero of_e Bil.(Ite (Var origCOUNT = int_exp 1 s', new_of, unk_of)));
-        ]
+        let word_size = bitwidth_of_type exp_type in
+        let mask_size = word_size - 1 in
+        let count_var = tmp exp_type in
+        let count = Bil.var count_var in
+        let zero = int_exp 0 word_size in
+        let one  = int_exp 1 word_size in
+        let dst  = op2e exp_type dst_op in
+        let shift_mask = int_exp mask_size word_size in
+        let size = int_exp word_size word_size in
+        let shift = op2e exp_type shift_op in
+
+        if shift_type = LSHIFT then
+          Bil.[
+            count_var := (shift land shift_mask) mod size;
+            assn exp_type dst_op ((dst lsl count) lor (dst lsr (size - count)));
+            if_ (count = zero) [
+              cf := cast low 1 dst;
+            ] (* else *) [
+              if_ (count = one) [
+                oF := cf_e lxor (cast high 1 dst);
+              ]  (* else  *) [
+                oF := unknown "OF undefined after rotate of more then 1 bit" bool_t;
+              ]
+            ]
+          ]
+        else
+          Bil.[
+            count_var := (shift land shift_mask) mod size;
+            assn exp_type dst_op ((dst lsr count) lor (dst lsl (size - count)));
+            if_ (count = zero) [
+              cf := cast high 1 dst;
+            ] (* else *) [
+              if_ (count = one) [
+                oF := cast high 1 dst lxor ((cast high 1 dst) lsl int_exp 1 word_size);
+              ]  (* else  *) [
+                oF := unknown "OF undefined after rotate of more then 1 bit" bool_t;
+              ]
+            ]
+          ]
       | Bt(t, bitoffset, bitbase) ->
         let t' = !!t in
         let offset = op2e t bitoffset in
