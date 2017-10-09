@@ -778,7 +778,7 @@ module ToIR = struct
           | 64 -> 3
           | 128 | 256 -> 4
           | _ -> disfailwith "invalid size for pshufb" in
-	let foreach_size f = List.concat @@ List.init (op_size / 8) ~f in
+	let foreach_byte f = List.concat @@ List.init (op_size / 8) ~f in
 
         let src = op2e exp_type src_op in
         let dst = op2e exp_type dst_op in
@@ -805,7 +805,7 @@ module ToIR = struct
         List.concat [
 	  check_mem_alignment;
 	  [Bil.move tmp_dst zero];
-	  foreach_size (fun i ->
+	  foreach_byte (fun i ->
               Bil.[
                 iv := int (Word.of_int ~width:8 i);
                 mask_byte_i := extract 7 0 (src lsr (var iv * byte));
