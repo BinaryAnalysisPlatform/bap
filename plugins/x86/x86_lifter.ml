@@ -784,7 +784,7 @@ module ToIR = struct
         let dst = op2e exp_type dst_op in
         let dst_op = Option.value ~default:dst_op vsrc in
         let zero = Bil.int (Word.zero op_size) in
-        let one = Bil.int Word.b1 in
+        let msb_one = Bil.int (Word.of_int ~width:8 0x80) in
 
 	let byte_t = Type.imm 8 in
 	let byte = int_exp 8 8 in
@@ -809,7 +809,7 @@ module ToIR = struct
               Bil.[
                 iv := int (Word.of_int ~width:8 i);
                 mask_byte_i := extract 7 0 (src lsr (var iv * byte));
-                if_ (extract 7 7 (var mask_byte_i) = one) [
+                if_ (msb_one land var mask_byte_i = msb_one) [
                   tmp_byte := zero;
 		] (* else *) [
 		  ind := cast unsigned 8 (extract index_bits 0 (var mask_byte_i));
