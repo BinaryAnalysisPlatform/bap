@@ -778,7 +778,7 @@ module ToIR = struct
           | 64 -> 3
           | 128 | 256 -> 4
           | _ -> disfailwith "invalid size for pshufb" in
-	let loop f = List.concat @@ List.init (op_size / 8) ~f in
+	let foreach_size f = List.concat @@ List.init (op_size / 8) ~f in
 
         let src = op2e exp_type src_op in
         let dst = op2e exp_type dst_op in
@@ -799,13 +799,13 @@ module ToIR = struct
             let word_size = width_of_mode mode in
             let zero = Bil.int (Word.zero word_size) in
             let ox10 = Bil.int (Word.of_int ~width:word_size 0x10) in
-            [ Bil.(if_ (ox10 land addr = zero) [cpuexn 13] []) ]
+            [ Bil.(if_ (ox10 land addr <> zero) [cpuexn 13] []) ]
           | _ -> [] in
 
         List.concat [
 	  check_mem_alignment;
 	  [Bil.move tmp_dst zero];
-	  loop (fun i ->
+	  foreach_size (fun i ->
               Bil.[
                 iv := int (Word.of_int ~width:8 i);
                 mask_byte_i := extract 7 0 (src lsr (var iv * byte));
