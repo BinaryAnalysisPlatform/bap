@@ -778,46 +778,46 @@ module ToIR = struct
           | 64 -> 3
           | 128 | 256 -> 4
           | _ -> disfailwith "invalid size for pshufb" in
+	let loop f = List.concat @@ List.init (op_size / 8) ~f in
 
-        let byte = int_exp 8 op_size in
         let src = op2e exp_type src_op in
         let dst = op2e exp_type dst_op in
         let dst_op = Option.value ~default:dst_op vsrc in
         let zero = Bil.int (Word.zero op_size) in
-        let one = Bil.int (Word.one op_size) in
+        let one = Bil.int Word.b1 in
 
-        let iv = tmp ~name:"i" exp_type in
-        let mask_byte_i = tmp exp_type in
+	let byte_t = Type.imm 8 in
+	let byte = int_exp 8 8 in
+        let iv = tmp ~name:"i" byte_t in
+        let mask_byte_i = tmp byte_t in
         let tmp_byte = tmp exp_type in
         let tmp_dst = tmp exp_type in
-        let msb = tmp exp_type in
-        let ind = tmp exp_type in
+        let ind = tmp byte_t in
 
-        let check_mem_alignment = match src_op with
+	let check_mem_alignment = match src_op with
           | Oaddr addr when (op_size = 128) ->
             let word_size = width_of_mode mode in
+            let zero = Bil.int (Word.zero word_size) in
             let ox10 = Bil.int (Word.of_int ~width:word_size 0x10) in
-            [ Bil.(if_ (ox10 land addr = ox10) [cpuexn 13] []) ]
+            [ Bil.(if_ (ox10 land addr = zero) [cpuexn 13] []) ]
           | _ -> [] in
 
-        let loop = List.concat @@ List.init (op_size / 8) ~f:(fun i ->
-            Bil.[
-              iv := int (Word.of_int ~width:op_size i);
-              mask_byte_i := src lsr (var iv * byte);
-              msb := cast unsigned op_size (extract 7 7 (var mask_byte_i));
-              ind := cast unsigned op_size (extract index_bits 0 (var mask_byte_i));
-              if_ (var msb = one) [
-                tmp_byte := zero;
-              ] (* else *) [
-                tmp_byte :=
-                  cast unsigned op_size (extract 7 0 (dst lsr (var ind * byte)))
-              ];
-              tmp_dst := Bil.(var tmp_dst lor (var tmp_byte lsl (var iv * byte)));
-            ]) in
         List.concat [
-          check_mem_alignment;
-          [Bil.move tmp_dst zero];
-          loop;
+	  check_mem_alignment;
+	  [Bil.move tmp_dst zero];
+	  loop (fun i ->
+              Bil.[
+                iv := int (Word.of_int ~width:8 i);
+                mask_byte_i := extract 7 0 (src lsr (var iv * byte));
+                if_ (extract 7 7 (var mask_byte_i) = one) [
+                  tmp_byte := zero;
+		] (* else *) [
+		  ind := cast unsigned 8 (extract index_bits 0 (var mask_byte_i));
+                  tmp_byte :=
+                    cast unsigned op_size (extract 7 0 (dst lsr (var ind * byte)))
+                ];
+                tmp_dst := Bil.(var tmp_dst lor (var tmp_byte lsl (var iv * byte)));
+              ]);
           [assn exp_type dst_op (Bil.var tmp_dst)]
         ]
 
