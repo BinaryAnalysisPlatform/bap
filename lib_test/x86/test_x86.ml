@@ -3,5 +3,5 @@ open Bap.Std
 open OUnit2
 
 let suite () = "X86" >::: [
-    Test_pshufb.suite ();
+    "pshufb" >::: Test_pshufb.suite ();
   ]
