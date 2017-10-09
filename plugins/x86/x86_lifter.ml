@@ -798,8 +798,8 @@ module ToIR = struct
           | Oaddr addr when (op_size = 128) ->
             let word_size = width_of_mode mode in
             let zero = Bil.int (Word.zero word_size) in
-            let ox10 = Bil.int (Word.of_int ~width:word_size 0x10) in
-            [ Bil.(if_ (ox10 land addr <> zero) [cpuexn 13] []) ]
+            let oxf = Bil.int (Word.of_int ~width:word_size 0xf) in
+            [ Bil.(if_ (oxf land addr <> zero) [cpuexn 13] []) ]
           | _ -> [] in
 
         List.concat [
