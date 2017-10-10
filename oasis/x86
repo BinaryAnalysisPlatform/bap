@@ -52,3 +52,24 @@ Library x86_plugin
                    X86_tools_vector,
                    X86_utils
  XMETAExtraLines:  tags="disassembler, lifter, x86, abi"
+
+Library x86_test
+  Path:           lib_test/x86
+  Build$:         flag(tests) && (flag(everything) || flag(x86))
+  CompiledObject: best
+  BuildDepends:   bap, oUnit, bap-x86-cpu
+  Install:        false
+  Modules:        Test_pshufb
+
+Executable run_x86_tests
+  Path:		  lib_test/x86
+  Build$:	  flag(tests) && (flag(everything) || flag(x86))
+  CompiledObject: best
+  BuildDepends:	  bap.plugins, findlib.dynload, oUnit, x86_test
+  Install:	  false
+  MainIs: run_x86_tests.ml
+
+Test x86_tests
+ TestTools: run_x86_tests
+ Run$: flag(tests) && (flag(everything) || flag(x86))
+ Command: $run_x86_tests
