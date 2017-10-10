@@ -8,6 +8,8 @@ B ../_build/lib_test/bap_project
 B ../_build/lib_test/bap_sema
 B ../_build/lib_test/bap_trace
 B ../_build/lib_test/bap_types
+B ../_build/lib_test/x86
+
 REC
 S bap_core
 S bap_disasm
@@ -18,5 +20,6 @@ S bap_image
 S bap_project
 S bap_sema
 S bap_types
-S bap_trace  
+S bap_trace
+S x86
 PKG oUnit
