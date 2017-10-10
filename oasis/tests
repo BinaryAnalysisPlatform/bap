@@ -44,15 +44,6 @@ Library sema_test
   Install:        false
   Modules:        Test_ir
 
-Library x86_test
-  Path:           lib_test/x86
-  Build$:         (flag(everything) || flag(bap_std)) && flag(tests)
-  CompiledObject: best
-  BuildDepends:   bap, oUnit, bap-x86-cpu
-  Install:        false
-  Modules:        Test_x86, Test_pshufb
-
-
 Executable run_tests
   Path:         lib_test/bap
   MainIs:       run_tests.ml
@@ -65,7 +56,6 @@ Executable run_tests
                 sema_test,
                 types_test,
                 project_test,
-                x86_test,
                 findlib.dynload
   CompiledObject: best
 

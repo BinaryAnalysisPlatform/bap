@@ -140,7 +140,7 @@ let test_rm addr expected ctxt =
   assert_bool "pshufb: memory alignment" @@
   (new exn_visitor)#run bil false
 
-let suite () = [
+let suite = "pshufb" >::: [
     "no permuatations"          >:: test_rr no_permutations;
     "last three bytes = 0x42"   >:: test_rr last_three_0x42;
     "first three bytes = 0x42"  >:: test_rr first_three_0x42;
