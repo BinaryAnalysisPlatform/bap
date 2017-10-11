@@ -292,7 +292,16 @@ module ToIR = struct
     let rdx_e = Bil.var rdx in
     let ah_e = ah_e mode in
     let disfailwith = disfailwith mode in
-    let unimplemented = unimplemented mode in function
+    let unimplemented = unimplemented mode in
+    let is_small_imm op t = match op with
+      | Oimm imm -> Word.bitwidth imm < bitwidth_of_type t
+      | _ -> false in
+    let sign_extend_imm op t =
+      let op_typ = match op with
+        | Oimm imm -> Type.imm (Word.bitwidth imm)
+        | _ -> disfailwith "imm operand expected" in
+      Bil.(cast signed (bitwidth_of_type t) (op2e op_typ op)) in
+    function
       | Nop -> []
       | Bswap(t, op) ->
         let e = match t with
@@ -1115,10 +1124,12 @@ module ToIR = struct
           | [single] when single = repz -> rep_wrap ~mode ~addr ~next stmts
           | _ -> unimplemented "unsupported prefix for stos" end
       | Push(t, o) ->
+        let o = if is_small_imm o t then sign_extend_imm o t
+          else op2e t o in
         let tmp = tmp t in (* only really needed when o involves esp *)
-        Bil.Move (tmp, op2e t o)
+        Bil.Move (tmp, o)
         :: Bil.Move (rsp, Bil.(rsp_e - Int (mi (bytes_of_width t))))
-        :: store_s mode seg_ss t rsp_e (Bil.Var tmp) (* FIXME: can ss be overridden? *)
+        :: store_s mode seg_ss t rsp_e (Bil.var tmp) (* FIXME: can ss be overridden? *)
         :: []
       | Pop(t, o) ->
         (* From the manual:
@@ -1223,9 +1234,12 @@ module ToIR = struct
         :: set_aopszf_sub t' (Bil.Var tmp) (int_exp 1 t') (op2e t o) (* CF is maintained *)
       | Sub(t, o1, o2) (* o1 = o1 - o2 *) ->
         let oldo1 = tmp t in
+        let o2 =
+          if is_small_imm o2 t then sign_extend_imm o2 t
+          else op2e t o2 in
         Bil.Move (oldo1, op2e t o1)
-        :: assn t o1 Bil.(op2e t o1 - op2e t o2)
-        :: set_flags_sub !!t (Bil.Var oldo1) (op2e t o2) (op2e t o1)
+        :: assn t o1 Bil.(op2e t o1 - o2)
+        :: set_flags_sub !!t (Bil.Var oldo1) o2 (op2e t o1)
       | Sbb(t, o1, o2) ->
         let tmp_s = tmp t in
         let tmp_d = tmp t in
@@ -1233,7 +1247,9 @@ module ToIR = struct
         let orig_d = Bil.Var tmp_d in
         let sube = Bil.(orig_s + Cast (UNSIGNED, !!t, cf_e)) in
         let d = op2e t o1 in
-        let s1 = op2e t o2 in
+        let s1 =
+          if is_small_imm o2 t then sign_extend_imm o2 t
+          else op2e t o2 in
         Bil.Move (tmp_s, s1)
         :: Bil.Move (tmp_d, d)
         :: assn t o1 Bil.(orig_d - sube)
@@ -1309,7 +1325,10 @@ module ToIR = struct
         :: Bil.Move (af, Bil.Unknown ("AF is undefined after and", bool_t))
         :: set_pszf t (op2e t o1)
       | Or(t, o1, o2) ->
-        assn t o1 Bil.(op2e t o1 lor op2e t o2)
+        let o2 =
+          if is_small_imm o2 t then sign_extend_imm o2 t
+          else op2e t o2 in
+        assn t o1 Bil.(op2e t o1 lor o2)
         :: Bil.Move (oF, exp_false)
         :: Bil.Move (cf, exp_false)
         :: Bil.Move (af, Bil.Unknown ("AF is undefined after or", bool_t))
@@ -1326,8 +1345,11 @@ module ToIR = struct
         :: Bil.Move (af, Bil.Unknown ("AF is undefined after xor", bool_t))
         :: set_pszf t (op2e t o1)
       | Test(t, o1, o2) ->
+        let o2 =
+          if is_small_imm o2 t then sign_extend_imm o2 t
+          else op2e t o2 in
         let tmp = tmp t in
-        Bil.Move (tmp, Bil.(op2e t o1 land op2e t o2))
+        Bil.Move (tmp, Bil.(op2e t o1 land o2))
         :: Bil.Move (oF, exp_false)
         :: Bil.Move (cf, exp_false)
         :: Bil.Move (af, Bil.Unknown ("AF is undefined after and", bool_t))
