@@ -1234,12 +1234,16 @@ module ToIR = struct
         :: set_aopszf_sub t' (Bil.Var tmp) (int_exp 1 t') (op2e t o) (* CF is maintained *)
       | Sub(t, o1, o2) (* o1 = o1 - o2 *) ->
         let oldo1 = tmp t in
-        let o2 =
+        let oldo2 = tmp t in
+        let op1 = op2e t o1 in
+        let op2 =
           if is_small_imm o2 t then sign_extend_imm o2 t
           else op2e t o2 in
-        Bil.Move (oldo1, op2e t o1)
-        :: assn t o1 Bil.(op2e t o1 - o2)
-        :: set_flags_sub !!t (Bil.Var oldo1) o2 (op2e t o1)
+        Bil.([
+            oldo1 := op1;
+            oldo2 := op2;
+            assn t o1 (op1 - op2);
+          ] @ set_flags_sub (bitwidth_of_type t) (var oldo1) (var oldo2) op1)
       | Sbb(t, o1, o2) ->
         let tmp_s = tmp t in
         let tmp_d = tmp t in
