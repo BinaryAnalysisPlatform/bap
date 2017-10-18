@@ -239,7 +239,9 @@ let create_exn
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
   let spec = MVar.from_source (Stream.map ~f:(fun s -> Ok s) Info.spec) in
-  let {Input.arch; data; code; file; finish;} = read () in
+  let task = "loading" in
+  report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
+  let {Input.arch; data; code; file; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
@@ -249,6 +251,7 @@ let create_exn
     let brancher = MVar.read mbrancher
     and rooter   = MVar.read mrooter in
     let disassemble () =
+      report_progress ~task ~stage:1 ~note:"disassembling" ();
       let run mem =
         let dis =
           Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
@@ -269,18 +272,23 @@ let create_exn
           | Some s -> s in
         let name = Symbolizer.resolve symbolizer in
         let syms =
+          let () = report_progress ~task ~stage:2 ~note:"reconstructing" () in
           Reconstructor.(run (default name (roots rooter)) g) in
         MVar.write symtab syms in
     if is_cfg_updated || MVar.is_updated mreconstructor
     then match MVar.read mreconstructor with
       | Some r ->
         MVar.ignore msymbolizer;
+        report_progress ~task ~stage:2 ~note:"reconstructing" ();
         MVar.write symtab (Reconstructor.run r g)
       | None -> reconstruct ()
     else reconstruct ();
     let is_symtab_updated = phase_triggered Info.got_symtab symtab in
     if is_symtab_updated
-    then MVar.write program (Program.lift (MVar.read symtab));
+    then begin
+      report_progress ~task ~stage:3 ~note:"lifting" ();
+      MVar.write program (Program.lift (MVar.read symtab))
+    end;
     let _ = phase_triggered Info.got_program program in
     if MVar.is_updated mrooter ||
        MVar.is_updated mbrancher ||
@@ -291,6 +299,7 @@ let create_exn
       let program = MVar.read program in
       let program =
         symbolize_synthetic program (Disasm.insns disasm) spec in
+      report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {
         disasm;
         program;

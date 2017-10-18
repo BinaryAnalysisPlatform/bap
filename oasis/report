@@ -1,0 +1,13 @@
+Flag report
+  Description: Build the report bars plugin
+  Default: false
+
+Library report_plugin
+  Build$:           flag(everything) || flag(report)
+  Path:             plugins/report
+  FindlibName:      bap-plugin-report
+  CompiledObject:   best
+  BuildDepends:     bap
+  InternalModules:  Report_main
+  XMETADescription: reports program status
+  XMETAExtraLines:  tags="report, visualization"

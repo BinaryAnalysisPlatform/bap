@@ -80,17 +80,25 @@ let digest o =
     (Digest.file o.filename)
     (args o.filename Sys.argv)
 
+let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
+    report_progress
+      ~stage:(i+base)
+      ~note:(Project.Pass.name pass) ();
+    Project.Pass.run_exn pass proj)
+
 let process options project =
-  let run_passes init = List.fold ~init ~f:(fun proj pass ->
-      Project.Pass.run_exn pass proj) in
-  let project = Project.passes () |>
-                List.filter ~f:Project.Pass.autorun |>
-                run_passes project in
-  let project = options.passes |>
+  let autoruns = Project.passes () |>
+                 List.filter ~f:Project.Pass.autorun in
+
+  let passes = options.passes |>
                 List.map ~f:(fun p -> match Project.find_pass p with
                     | Some p -> p
-                    | None -> raise (Pass_not_found p)) |>
-                run_passes project in
+                    | None -> raise (Pass_not_found p)) in
+  let autos = List.length autoruns in
+  let total = List.length passes + autos in
+  report_progress ~note:"analyzing" ~total ();
+  let project = run_passes 0 project autoruns in
+  let project = run_passes autos project passes in
   List.iter options.dump ~f:(function
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
@@ -98,6 +106,7 @@ let process options project =
       | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
 
 let main o =
+  report_progress ~note:"loading" ();
   let digest = digest o in
   let project = match Project.Cache.load digest with
     | Some proj ->

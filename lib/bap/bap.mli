@@ -7657,6 +7657,18 @@ module Event : sig
             info "created some %s" "thing"
           v} *)
     val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+    type event += Progress of {
+        task  : string;         (** hierarchical task name  *)
+        note  : string option;  (** a short note            *)
+        stage : int option;     (** entered stage           *)
+        total : int option;     (** total number of stages  *)
+      }
+
+    (** [progress ?note ?stage ?total name] sends a progress report.
+        This  function should be used by the main components only,
+        while plugins should use the [report_progress] function from
+        the [Self()] interface. All parameters defaults to [None].*)
+    val progress : ?note:string -> ?stage:int -> ?total:int -> string -> unit
   end
 
   include Printable.S with type t := t
@@ -8153,6 +8165,64 @@ module Self() : sig
 
   (** formatter that sends error messages  *)
   val error_formatter : Format.formatter
+
+  (** [report_progress ~task:t ~note:n ~state:s ~total:s' ()] reports
+      a progress of the task [t].
+
+      Reports that the task [t] made a progress to the stage [s] out
+      the total number of stages [s']. The note [n] may provide an
+      additional textual explanation of the current stage. The report
+      doesn't mean that the stage is finished, but rather that it is
+      entered. Thus for [s'] stages we expect to recieve [s'-1]
+      reports. (This approach works fine with functional programming
+      and iterating - as in functional programming it is more
+      convinient to report before computation, and during the indexed
+      iteration the index of the last element is one less than the
+      total number of elements).
+
+      All parameters are optional, and have the following default
+      values if not specified:
+
+      @param task defaults to the plugin [name];
+      @param note defaults to the empty string;
+      @param stage defaults to [None]
+      @param total defaults to [None] or to the last value of this
+             parameter for the given task.
+
+      The [report_progress] bar is an easy way to provide some
+      feedback to the system, either in the form of a progress (if the
+      total number of stages is known) or in the form of a friendly
+      ping back.
+
+      The mechanism should be used by analyses that expect to take
+      some time to complete. Usually, one plugin implements only one
+      task, so the task name may be omitted. If an analysis is built
+      from several tasks, then they can be represented as subtasks,
+      and the main task should represent the whole work.
+
+      Example:
+      {[
+
+        let find_interesting_points prog =
+          report_progress ~task:"discover" ~total:(Term.length sub_t prog) ();
+          Term.enum sub_t prog |> Seq.concat_mapi ~f:(fun stage sub ->
+              report_progress ~note:(Sub.name sub) ~task:"discover" ~stage ();
+              interesting_points_of_sub sub)
+
+        let check_interesting_points points =
+          report_progress ~task:"checking" ~total:(Seq.length points) ();
+          Seq.iteri ~f:(fun stage p ->
+              report_progress ~note:(Point.name p) ~task:"checking" ~stage ();
+              check_point p)
+      ]}
+
+  *)
+  val report_progress :
+    ?task:string ->
+    ?note:string ->
+    ?stage:int ->
+    ?total:int -> unit -> unit
+
 
   (** This module allows plugins to access BAP configuration variables.
 
