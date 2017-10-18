@@ -25,7 +25,7 @@ module Param = struct
   ];;
 
   let argv = param (array string)  "argv"
-      ~doc:"Program command line arguments";;
+      ~doc:"Process argument vector";;
 
   let envp = param (array string) "env"
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;

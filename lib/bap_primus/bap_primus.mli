@@ -1784,12 +1784,12 @@ module Std : sig
         Primus Lisp also provides a mechanism for non-intrusive
         extending existing function definitions. An existing
         definition maybe advised with another definition. A piece of
-        advice maybe added to a function, and will be called either
-        before, or after the function evaluation, e.g.,
+        advice maybe added to a function that will be called either
+        before or after the evaluation of an advised function, e.g.,
 
         {v
           (defun memory-written (a x) (msg "write $x to $a"))
-          (advice-add memory-written :after memory-write)
+          (advice-add memory-written :before memory-write)
         v}
 
         The general syntax is:
@@ -1797,6 +1797,25 @@ module Std : sig
         {v (advice-add <advisor> <when> <advised>) v}
 
         where the <when> clause is either [:before] or [:after].
+
+        If an advisor is attached before the advised function, then
+        it the advisor will be called with the same arguments as the
+        advised function. The return value of the advisor is
+        ignored. The advisor function will be called as a normal Lisp
+        function, with all expected overloading and name resolving. So
+        it is possible to provide context specific advice. If there
+        are several advice to the same function, then they will be
+        called in the unspecified order.
+
+        An advisor that is attached after the advised function will be
+        called with one extra argument - the result of evaluation of
+        the advised function. The value returned by the advisor will
+        override the result of the advised function. If there are
+        several advisors attached after the same function, then they
+        will be called in the unspecified order.
+
+        The following example will demostrate how to implement fat
+        pointers using the advice mechanism:
 
         {2 Formal syntax}
 

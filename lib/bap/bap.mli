@@ -3394,19 +3394,20 @@ module Stmt : sig
   *)
   val is_referenced : var -> t -> bool
 
-  (** [normalize xs] produces a normalized BIL program with the same[^1]
-      semantics but in the BIL normalized form. Precondition: [xs] is
-      well-typed.
+  (** [normalize ?normalize_exp xs] produces a normalized BIL program
+      with the same[^1] semantics but in the BIL normalized
+      form (BNF). There are two normalized forms, both described
+      below. The first form (BNF1) is more readable, the second form
+      (BNF2) is more strict, but sometimes yields a code, that is hard
+      for a human to comprehend. The [BNF1] is the default, to request
+      [BNF2] pass [normalize_exp:true].
 
-      The BIL Normalized Form (BNF) is a subset of the BIL
+      Precondition: [xs] is well-typed.
+
+      The BIL First Normalized Form (BNF1) is a subset of the BIL
       language, where expressions have the following properties:
 
-      - No let expressions - new variable can be created only with a
-       Move instruction.
-
-      - All memory operations have sizes equal to one byte. Thus the
-       size and endiannes can be ignored in analysis. During the
-       normalization, the following rewrites are performed
+      - No if-then-else expressions.
 
       - Memory load expressions can be only applied to a memory. This
        effectively disallows creation of temporary memory regions,
@@ -3415,7 +3416,20 @@ module Stmt : sig
        store expressions will not occur in integer assigments, jmp
        destinations, and conditional expressions, leaving them valid
        only in an assignment statment where the rhs has type mem_t.
+       This is effectively the same as make the [Load] constructor to
+       have type ([Load (var,exp,endian,size)]).
 
+
+      The BIL Second Normalized Form (BNF2) is a subset of the BNF1
+      (in a sense that all BNF2 programs are also in BNF1). This form
+      puts the following restrictions:
+
+      - No let expressions - new variables can be created only with
+       the Move instruction.
+
+      - All memory operations have sizes equal to one byte. Thus the
+       size and endiannes can be ignored in analysis. During the
+       normalization, the following rewrites are performed
       {v
 
        let x = <expr> in ... x ... => ... <expr> ...
@@ -3440,11 +3454,13 @@ module Stmt : sig
       two memory accesses, page faults etc).
 
       However, in the formal semantics of BAP we do not consider
-      effects, and treat all expressions as side-effect free, thus
-      the above transformation, as well as
+      effects, and treat all expressions as side-effect free, thus the
+      above transformation, are preserving the semantics.
 
-      @since 1.3
-  *)
+      @param normalize_exp (defaults to [false]) if set to [true] then
+      the returned program will be in BNF2.
+
+      @since 1.3 *)
   val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
   (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
@@ -3457,11 +3473,11 @@ module Stmt : sig
   val simpl : ?ignore:Eff.t list -> t list -> t list
 
   (** [fixpoint f x] applies transformation [f] until it reaches
-      fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)
+      fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}.  *)
   val fixpoint : (t -> t) -> (t -> t)
 
   (** [free_vars stmt] returns a set of all unbound variables, that
-      occurs in the [stmt]. *)
+      occurs in [stmt]. *)
   val free_vars : t -> Var.Set.t
 
   (** [eval prog] eval BIL program under given context. Returns the
@@ -3469,6 +3485,7 @@ module Stmt : sig
   val eval : t list -> (#Bili.context as 'a) -> 'a
 
   include Regular.S with type t := t
+
   val pp_adt : t printer
 end
 
