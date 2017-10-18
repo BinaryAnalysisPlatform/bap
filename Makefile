@@ -1,7 +1,7 @@
 ifeq (is$(BAP_DEBUG), $(filter is$(BAP_DEBUG),is is0 isno isdisable isfalse))
-SETUP = ocaml setup.ml -quiet
+SETUP = ./setup.exe -quiet
 else
-SETUP = ocaml setup.ml
+SETUP = ./setup.exe
 endif
 
 build: setup.ml
