@@ -1177,7 +1177,9 @@ module Lisp(Machine : Machine) = struct
     | Some advices ->
       Machine.List.fold advices ~init ~f:(fun r (s,name) ->
           if s = stage
-          then eval_lisp name args
+          then match stage with
+            | `after ->  eval_lisp name (args @ [r])
+            | `before -> eval_lisp name args
           else Machine.return r)
     | None -> Machine.return init
 
