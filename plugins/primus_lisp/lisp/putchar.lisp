@@ -8,4 +8,5 @@
   (declare (external "puts"))
   (while (not (points-to-null p))
     (putchar (memory-read p))
-    (incr p)))
+    (incr p))
+  (putchar 0xA))

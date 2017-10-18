@@ -83,7 +83,8 @@
   (let ((p p))
     (while n
       (memory-write p c)
-      (incr p)))
+      (incr p)
+      (decr n)))
   p)
 
 (defun memcmp (p1 p2 n)
@@ -91,4 +92,5 @@
   (let ((res 0) (i 0))
     (while (and (< i n) (not res))
       (set res (compare (memory-read p1) (memory-read p2)))
-      (incr p1 p2 i))))
+      (incr p1 p2 i))
+    res))

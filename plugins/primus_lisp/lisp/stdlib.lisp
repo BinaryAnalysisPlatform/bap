@@ -37,9 +37,12 @@
 (defun abort ()
   "terminates program with exit code 1"
   (declare (external "abort"))
-  (msg "abort!")
   (exit-with 1))
 
+
+(defun exit (code)
+  (declare (external "exit"))
+  (exit-with code))
 
 (defun atexit (cb)
   (declare (external "atexit")))
