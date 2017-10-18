@@ -6,7 +6,7 @@ open Bap_future.Std
 include Self()
 
 module Id = Monad.State.Multi.Id
-module Name = Primus.Linker.Name
+module Name = Tid
 
 module Cfg = struct
   open Config
@@ -48,10 +48,8 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let count_call call =
     Machine.Local.update state ~f:(fun s -> {
+          s with
           length = s.length + 1;
-          visited = Map.update s.visited call ~f:(function
-              | None -> 1
-              | Some n -> n + 1)
         })
 
   let terminate reason =
@@ -75,17 +73,26 @@ module Main(Machine : Primus.Machine.S) = struct
     | _ -> Machine.return ()
 
   let check_call call =
-    Machine.Local.get state >>= fun {length; visited} ->
-    check_max_length length >>= fun () ->
-    check_max_visits call visited
+    Machine.Local.get state >>= fun {length} ->
+    check_max_length length
 
-
-  let step call =
+  let on_exec call =
     count_call call >>= fun () ->
     check_call call
 
-  let init () = Machine.sequence Primus.Linker.[
-      exec >>> step;
+  let on_blk blk =
+    let name = Term.tid blk in
+    Machine.Local.get state >>= fun s ->
+    check_max_visits name s.visited >>= fun () ->
+    Machine.Local.put state {
+      s with visited = Map.update s.visited name ~f:(function
+        | None -> 1
+        | Some n -> n + 1)
+    }
+
+  let init () = Machine.sequence [
+      Primus.Linker.exec >>> on_exec;
+      Primus.Interpreter.enter_blk >>> on_blk
     ]
 
 end
