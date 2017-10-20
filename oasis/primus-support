@@ -69,7 +69,7 @@ Library primus_print_plugin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_print
   CompiledObject: best
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bare
   XMETADescription: prints Primus states and observations
   Modules: Primus_print_main
   XMETAExtraLines: tags="primus, printer"

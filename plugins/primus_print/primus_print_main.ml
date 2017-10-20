@@ -2,11 +2,14 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
 open Bap_future.Std
+open Monads.Std
 open Format
 
 include Self()
 
-(* probably, a better name would `inspector`, or `monitor` *)
+let report = Primus.Observation.provide
+               ~inspect:(fun xs -> Sexp.List xs)
+               "report"
 
 module Param = struct
   open Config;;
@@ -24,6 +27,8 @@ module Param = struct
   let output = param (some string) "output"
       ~doc: "A name of a file in which to store the monitor output. If
       not specified, then outputs result into stdout"
+
+  let rules = param (list string) "rules"
 
   let traceback = param (some int) ~as_flag:(Some 16) "traceback"
       ~doc: "Stores and outputs a trace of execution. Takes an
@@ -74,11 +79,66 @@ let print_pos ppf pos =
   | Def {me} -> fprintf ppf "%a" Def.pp me
   | Jmp {me} -> fprintf ppf "%a" Jmp.pp me
 
+
+let rule_providers rule =
+  Bare.Rule.lhs rule |> List.concat_map ~f:(function
+      | Sexp.Atom x
+      | Sexp.List (Sexp.Atom x :: _) ->
+        if String.length x > 0 && x.[0] = '?'
+        then Primus.Observation.list_providers () |>
+             List.map ~f:Primus.Observation.Provider.name
+        else [x]
+      | _ ->
+        warning "Rule %a won't match with any observation"
+          Bare.Rule.pp rule;
+        [])
+
 let print_trace ppf = List.iter ~f:(print_pos ppf)
 
 type state = {
   trace : Primus.pos list;
 }
+
+
+(* todo: move to the Stream module *)
+let concat streams =
+  let stream,main = Stream.create () in
+  List.iter streams ~f:(fun stream ->
+      Stream.observe stream (fun x ->
+          Signal.send main x));
+  stream
+
+let process_rule rule =
+  let module Prov = Primus.Observation.Provider in
+  let observing = String.Set.of_list (rule_providers rule) in
+  Primus.Observation.list_providers () |>
+  List.filter ~f:(fun p -> Set.mem observing (Prov.name p)) |>
+  List.map ~f:(fun p -> Prov.data p |> Stream.map ~f:(fun ev ->
+      Sexp.List [
+        Sexp.Atom (Prov.name p);
+        ev
+      ])) |> concat |>
+  Stream.parse ~init:rule ~f:(fun rule ev ->
+      let rule,actions = Bare.Rule.apply rule ev in
+      Some actions,rule)
+
+let read_rules filename =
+  match Bare.Rule.from_file filename with
+  | Ok rules -> rules
+  | Error err ->
+    Bare.Rule.report_error ~filename err_formatter err;
+    pp_flush_formatter err_formatter;
+    exit 1
+
+let setup_rules_processor out rules =
+  let templates =
+    rules |>
+    List.concat_map ~f:read_rules |>
+    List.map ~f:process_rule |> concat in
+  Stream.observe templates (List.iter ~f:(fprintf out "%a@\n" Sexp.pp_hum))
+
+
+
 
 let state = Primus.Machine.State.declare
     ~name:"primus-debug"
@@ -89,6 +149,7 @@ let start_monitoring {Config.get=(!)} =
   let out = match !Param.output with
     | None -> std_formatter
     | Some name -> formatter_of_out_channel (Out_channel.create name) in
+  setup_rules_processor out !Param.rules;
   let module Monitor(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
 
