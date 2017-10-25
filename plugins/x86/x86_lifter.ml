@@ -446,56 +446,84 @@ module ToIR = struct
          Bil.Move (dt, de);
          assn t dest e]
       | Ppackedbinop(t, et, fbop, _, d, s, vs) ->
-        let nelem = match t, et with
-          | Type.Imm n, Type.Imm n' -> n / n'
-          | _ -> disfailwith "invalid"
-        in
+        let t_width = bitwidth_of_type t  in
+        let e_width = bitwidth_of_type et in
+        let nops = t_width / e_width in
+        let byte = 8 in
+        let tmp_dst = tmp t in
+        let vdst = Option.value ~default:d vs in
+        let iv  = tmp (Type.imm byte) in
+        let elt = tmp et in
+        let zero = Word.zero t_width in
+        let bits = Word.of_int ~width:byte e_width in
+
+        let foreach_size f = List.concat @@ List.init nops ~f in
         let getelement o i =
           (* assumption: immediate operands are repeated for all vector
              elements *)
           match o with
           | Oimm _ -> op2e et o
-          | _ -> extract_element !!et (op2e t o) i
-        in
-        let f i =
-          fbop (getelement d i) (getelement s i)
-        in
-        let e = concat_explist (List.map ~f:f (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0)) in
-        (match vs with
-         | None -> [assn t d e]
-         | Some vdst -> [assn t vdst e])
+          | _ -> extract_element !!et (op2e t o) i in
+
+        List.concat Bil.[
+            [tmp_dst := int zero];
+	    foreach_size (fun i -> [
+                  elt := fbop (getelement d i) (getelement s i);
+                  iv := int @@ Word.of_int ~width:byte i;
+                  tmp_dst :=
+                    var tmp_dst lor
+                    ((cast unsigned t_width (var elt)) lsl (var iv * int bits))
+                ]
+              );
+            [assn t vdst (var tmp_dst)]
+          ]
       | Pbinop(t, fbop, _s, o1, o2, vop) ->
         (match vop with
          | None -> [assn t o1 (fbop (op2e t o1) (op2e t o2))]
          | Some vop -> [assn t o1 (fbop (op2e t vop) (op2e t o2))])
       | Pcmp (t,elet,bop,_,dst,src,vsrc) ->
-        let elebits = !!elet in
-        let ncmps = !!t / elebits in
+        let elebits = bitwidth_of_type elet in
+        let t_width = bitwidth_of_type t in
+        let ncmps = t_width / elebits in
         let src = match src with
           | Ovec _ -> op2e t src
           | Oaddr a -> load (size_of_typ t) a
-          | Oreg _ | Oimm _ | Oseg _ -> disfailwith "invalid"
-        in
-        let dst, vsrc = match vsrc with
-          | None -> dst, dst
-          | Some vsrc -> dst, vsrc
-        in
-        let compare_region i =
-          let byte1 = Bil.Extract(i*elebits-1, (i-1)*elebits, src) in
-          let byte2 = Bil.Extract(i*elebits-1, (i-1)*elebits, op2e t vsrc) in
-          let tmp = tmp ~name:("t" ^ string_of_int i) elet in
-          let ltw n t = (BV.of_int64 n ~width:t) |> Bil.int in
-          Bil.Var tmp, Bil.Move (tmp, Bil.(Ite (BinOp (bop, byte1, byte2), ltw (-1L) !!elet, ltw 0L !!elet)))
-        in
-        let indices = List.init ~f:(fun i -> i + 1) ncmps in (* list 1-nbytes *)
-        let comparisons = List.map ~f:compare_region indices in
-        let temps, cmps = List.unzip comparisons in
-        begin match List.rev temps with
-          | [] -> disfailwith "Pcmp element size mismatch" (* XXX what's actually going on in Pcmp? *)
-          | t_first::t_rest ->
-            (* could also be done with shifts *)
-            let store_back = List.fold_left ~f:(fun acc i -> Bil.Concat(acc,i)) ~init:t_first t_rest in
-            cmps @ [assn t dst store_back] end
+          | Oreg _ | Oimm _ | Oseg _ -> disfailwith "invalid" in
+        let vsrc = Option.value ~default:dst vsrc in
+        let byte = 8 in
+        let tmp_dst = tmp t in
+        let iv  = tmp (Type.imm byte) in
+        let elt = tmp elet in
+        let elt_1 = tmp elet in
+        let elt_2 = tmp elet in
+        let _one = Word.of_int ~width:elebits (-1) in
+        let zero = Word.zero elebits in
+        let bits = Word.of_int ~width:byte elebits in
+        let zero_long = Word.zero t_width in
+        let foreach_size f =
+          let sizes = List.init ncmps ~f:(fun i ->
+              let left_bit = i * elebits in
+              let right_bit = (i + 1) * elebits - 1 in
+              let i = Word.of_int ~width:byte i in
+              i, left_bit, right_bit) in
+          List.concat @@ List.map sizes ~f in
+
+        List.concat Bil.[
+          [tmp_dst := int zero_long];
+	  foreach_size (fun (i, left_bit, right_bit) -> [
+                elt_1 := extract right_bit left_bit src;
+                elt_2 := extract right_bit left_bit (op2e t vsrc);
+                iv := int i;
+                if_ (binop bop (var elt_1) (var elt_2)) [
+                  elt := int _one;
+                ] [
+                  elt := int zero;
+                ];
+                tmp_dst :=
+                  var tmp_dst lor
+                    ((cast unsigned t_width (var elt)) lsl (var iv * int bits))
+              ]);
+          [assn t dst (var tmp_dst)] ]
       | Pmov (t, dstet, srcet, dst, src, ext, _) ->
         let nelem = match t, dstet with
           | Type.Imm n, Type.Imm n' -> n / n'
