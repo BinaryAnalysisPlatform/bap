@@ -59,7 +59,7 @@ Library x86_test
   CompiledObject: best
   BuildDepends:   bap, oUnit, bap-x86-cpu
   Install:        false
-  Modules:        Test_pshufb
+  Modules:        Test_pshufb, Test_pcmp
 
 Executable run_x86_tests
   Path:		  lib_test/x86
