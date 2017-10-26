@@ -581,6 +581,19 @@ module ToIR = struct
             | None -> [assn t dst result]
             | Some vdst -> [assn t vdst result])
       | Pcmpstr(t,xmm1,xmm2m128,_imm,imm8cb,pcmpinfo) ->
+        let open Pcmpstr in
+        let concat elt_width exps = match exps with
+          | [] -> disfailwith "trying concat on empty list"
+          | exps ->
+            let f (acc, n, y) e =
+              let x = tmp (Type.imm (n + elt_width)) in
+              match y with
+              | None -> Bil.(x := e) :: acc, n + 1, Some x
+              | Some y ->
+                Bil.(move x (var y ^ e)) :: acc, n + elt_width, Some x in
+            let bil,_, var = List.fold ~init:([],0, None) ~f exps in
+            Option.value_exn var, List.rev bil in
+
         (* All bytes and bits are numbered with zero being the least
            significant. This includes strings! *)
         (* NOTE: Strings are backwards, at least when they are in
@@ -591,40 +604,50 @@ module ToIR = struct
         let xmm2m128_e = op2e t xmm2m128 in
         let regm = type_of_mode mode in
 
-        let open Pcmpstr in
-        let nelem, _nbits, elemt = match imm8cb with
-          | {ssize=Bytes; _} -> 16, 8, Type.imm 8
-          | {ssize=Words; _} -> 8, 16, Type.imm 16
-        in
+        let nelem, _nbits, elemt = match imm8cb.ssize with
+          | Bytes -> 16, 8, Type.imm 8
+          | Words -> 8, 16, Type.imm 16 in
+
         (* Get element index in e *)
         let get_elem = extract_element !!elemt in
-        (* Get from xmm1/xmm2 *)
         let get_xmm1 = get_elem xmm1_e in
         let get_xmm2 = get_elem xmm2m128_e in
+
+        let nelem_range =
+          List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0 in
+
         (* Build expressions that assigns the correct values to the
-           is_valid variables using implicit (NULL-based) string
-           length. *)
-        let build_implicit_valid_xmm_i is_valid_xmm_i get_xmm_i =
+           is_valid variables using implicit (NULL-based) string length. *)
+        let implicit_check is_valid_xmm_i get_xmm_i =
           let f acc i =
-            (* Previous element is valid *)
-            let prev_valid = if i = 0 then exp_true else Bil.var (is_valid_xmm_i (i-1)) in
-            (* Current element is valid *)
-            let curr_valid = Bil.(get_xmm_i i <> (int_exp 0 !!elemt)) in
-            Bil.Let(is_valid_xmm_i i, Bil.(prev_valid land curr_valid), acc)
-          in (fun e -> List.fold_left ~f:f ~init:e (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0))
-        in
+            let previous_valid =
+              if i = 0 then exp_true
+              else Bil.var (is_valid_xmm_i (i - 1)) in
+            let current_valid =
+              Bil.(get_xmm_i i <> (int_exp 0 !!elemt)) in
+            let x = is_valid_xmm_i i in
+            Bil.(x := previous_valid land current_valid) :: acc in
+          List.fold ~f:f ~init:[] nelem_range in
+
         (* Build expressions that assigns the correct values to the
            is_valid variables using explicit string length. *)
-        let build_explicit_valid_xmm_i is_valid_xmm_i sizee =
+        let explicit_check is_valid_xmm_i sizee =
           (* Max size is nelem *)
+          let nelem_e = Word.of_int ~width:(bitwidth_of_type regm) nelem in
           let sizev = tmp ~name:"sz" regm in
-          let sizee = Bil.(Ite (BinOp (LT, int_exp nelem !!regm, sizee), int_exp nelem !!regm, sizee)) in
+          let init = Bil.[
+              if_ (int nelem_e < sizee) [
+                sizev := int nelem_e;
+              ] [
+                sizev := sizee;
+              ]
+            ] in
           let f acc i =
             (* Current element is valid *)
-            let curr_valid = Bil.(BinOp (LT, int_exp i !!regm, Var sizev)) in
-            Bil.Let(is_valid_xmm_i i, curr_valid, acc)
-          in (fun e -> Bil.Let(sizev, sizee, List.fold_left ~f:f ~init:e (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0)))
-        in
+            let current_valid = Bil.(int_exp i !!regm < var sizev) in
+            let x = is_valid_xmm_i i in
+            Bil.(x := current_valid) :: acc in
+          List.fold_left ~f ~init nelem_range in
 
         (* Get var name indicating whether index in xmm num is a valid
            byte (before NULL byte). *)
@@ -634,59 +657,57 @@ module ToIR = struct
           (fun xmmnum index -> match Hashtbl.find vh (xmmnum,index) with
              | Some v -> v
              | None ->
-               let v = tmp ~name:("is_valid_xmm"^string_of_int xmmnum^"_ele"^string_of_int index) bool_t in
+               let name = sprintf "is_valid_xmm%d_ele%d" xmmnum index in
+               let v = tmp ~name bool_t in
                Hashtbl.add_exn vh ~key:(xmmnum,index) ~data:v;
-               v)
-        in
+               v) in
 
         let is_valid_xmm1 index = is_valid 1 index in
         let is_valid_xmm2 index = is_valid 2 index in
         let is_valid_xmm1_e index = Bil.Var(is_valid_xmm1 index) in
         let is_valid_xmm2_e index = Bil.Var(is_valid_xmm2 index) in
 
-        let build_valid_xmm1,build_valid_xmm2 =
-          match pcmpinfo with
-          | {len=Implicit; _} ->
-            build_implicit_valid_xmm_i is_valid_xmm1 get_xmm1,
-            build_implicit_valid_xmm_i is_valid_xmm2 get_xmm2
-          | {len=Explicit; _} ->
-            build_explicit_valid_xmm_i is_valid_xmm1 rax_e,
-            build_explicit_valid_xmm_i is_valid_xmm2 rdx_e
-        in
+        let xmm1_checks, xmm2_checks =
+          match pcmpinfo.len with
+          | Implicit ->
+            implicit_check is_valid_xmm1 get_xmm1,
+            implicit_check is_valid_xmm2 get_xmm2
+          | Explicit ->
+            explicit_check is_valid_xmm1 rax_e,
+            explicit_check is_valid_xmm2 rdx_e in
 
-        let get_intres1_bit index =
-          match imm8cb with
-          | {agg=EqualAny; _} ->
+        let get_bit index =
+          match imm8cb.agg with
+          | EqualAny ->
             (* Is xmm2[index] at xmm1[j]? *)
             let check_char acc j =
-              let eql = Bil.((get_xmm2 index) = (get_xmm1 j)) in
-              let valid = is_valid_xmm1_e j in
-              Bil.(Ite ((eql land valid), exp_true, acc))
+              let is_eql = Bil.(get_xmm2 index = get_xmm1 j) in
+              let is_valid = is_valid_xmm1_e j in
+              Bil.(Ite ((is_eql land is_valid), exp_true, acc))
             in
             Bil.BinOp (AND, is_valid_xmm2_e index,
                        (* Is xmm2[index] included in xmm1[j] for any j? *)
-                       (List.fold ~f:check_char ~init:exp_false (List.range
-                                                                   ~stride:(-1) ~stop:`inclusive (nelem-1) 0)))
-          | {agg=Ranges; _} ->
+                       (List.fold ~f:check_char ~init:exp_false nelem_range))
+          | Ranges ->
             (* Is there an even j such that xmm1[j] <= xmm2[index] <=
                xmm1[j+1]? *)
             let check_char acc j =
               (* XXX: Should this be AND? *)
-              let rangevalid = Bil.(is_valid_xmm1_e Pervasives.(2*j) land is_valid_xmm1_e Pervasives.(2*j+1)) in
-              let lte = match imm8cb with
-                | {ssign=Unsigned; _} -> LE
-                | {ssign=Signed; _} -> SLE
-              in
+              let ind0 = 2 * j in
+              let ind1 = ind0 + 1 in
+              let rangevalid = Bil.(is_valid_xmm1_e ind0 land is_valid_xmm1_e ind1) in
+              let (<=) = match imm8cb.ssign with
+                | Unsigned -> Bil.(<=)
+                | Signed -> Bil.(<=$) in
+              let (land) = Bil.(land) in
               let inrange =
-                Bil.((BinOp (lte, (get_xmm1 Pervasives.(2*j)), (get_xmm2 index)))
-                     land (BinOp (lte, (get_xmm2 index), (get_xmm1 Pervasives.(2*j+1)))))
-              in
+                (get_xmm1 ind0 <= get_xmm2 index) land (get_xmm2 index <= get_xmm1 ind1) in
               Bil.(Ite (UnOp (NOT, rangevalid), exp_false, Ite (inrange, exp_true, acc)))
             in
             Bil.(is_valid_xmm2_e index
                  (* Is xmm2[index] in the jth range pair? *)
                  land List.fold_left ~f:check_char ~init:exp_false (List.range ~stride:(-1) ~stop:`inclusive Pervasives.(nelem/2-1) 0))
-          | {agg=EqualEach; _} ->
+          | EqualEach ->
             (* Does xmm1[index] = xmm2[index]? *)
             let xmm1_invalid = Bil.(UnOp (NOT, (is_valid_xmm1_e index))) in
             let xmm2_invalid = Bil.(UnOp (NOT, (is_valid_xmm2_e index))) in
@@ -699,7 +720,7 @@ module ToIR = struct
             Bil.Ite (bothinvalid, exp_true,
                      Bil.Ite (eitherinvalid, exp_false,
                               Bil.Ite (eq, exp_true, exp_false)))
-          | {agg=EqualOrdered; _} ->
+          | EqualOrdered ->
             (* Does the substring xmm1 occur at xmm2[index]? *)
             let check_char acc j =
               let neq = Bil.(get_xmm1 j <> get_xmm2 Pervasives.(index+j)) in
@@ -717,8 +738,8 @@ module ToIR = struct
             List.fold_left ~f:check_char ~init:exp_true (List.range
                                                            ~stride:(-1) ~stop:`inclusive (nelem-index-1) 0)
         in
-        let bits = List.map ~f:get_intres1_bit (List.range ~stride:(-1) ~stop:`inclusive (nelem-1) 0) in
-        let res_e = build_valid_xmm1 (build_valid_xmm2 (concat_explist bits)) in
+        let bits = List.map ~f:get_bit nelem_range in
+        let res, res_bil = concat 1 bits in
         let int_res_1 = tmp ~name:"IntRes1" reg16_t in
         let int_res_2 = tmp ~name:"IntRes2" reg16_t in
 
@@ -726,64 +747,72 @@ module ToIR = struct
           List.fold_left ~f:(fun acc i ->
               Bil.Ite (Bil.(get_elem e i = int_exp 0 !!elemt), exp_true, acc)) ~init:exp_false (List.init ~f:(fun x -> x) nelem)
         in
+
         (* For pcmpistri/pcmpestri *)
-        let sb e =
+        let sb exp =
           List.fold_left ~f:(fun acc i ->
-              Bil.Ite (Bil.(exp_true = Extract (i, i, e)),
+              Bil.Ite (Bil.(exp_true = Extract (i, i, exp)),
                        (int_exp i !!regm),
                        acc))
             ~init:(int_exp nelem !!regm)
-            (match imm8cb with
-             | {outselectsig=LSB; _} -> List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0
-             | {outselectsig=MSB; _} -> List.init ~f:(fun x -> x) nelem)
+            (match imm8cb.outselectsig with
+             | LSB -> List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0
+             | MSB -> List.init ~f:(fun x -> x) nelem)
         in
+
         (* For pcmpistrm/pcmpestrm *)
         let mask e =
-          match imm8cb with
-          | {outselectmask=Bitmask; _} ->
-            Bil.(Cast (UNSIGNED, !!reg128_t, e))
-          | {outselectmask=Bytemask; _} ->
+          match imm8cb.outselectmask with
+          | Bitmask -> Bil.(cast unsigned 128 e)
+          | Bytemask ->
             let get_element i =
-              Bil.(Cast (UNSIGNED, !!elemt, Extract (i, i, e)))
-            in
-            concat_explist (List.map ~f:get_element (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0))
-        in
-        (* comment crap from earlier *)
-        (*comment
-          ::*)
-        let open Stmt in
-        Move (int_res_1, Bil.(Cast (UNSIGNED, !!reg16_t, res_e)))
-        :: (match imm8cb with
-            | {negintres1=false; _} ->
-              Move (int_res_2, Bil.Var int_res_1)
-            | {negintres1=true; maskintres1=false; _} ->
-              (* int_res_1 is bitwise-notted *)
-              Move (int_res_2, Bil.(UnOp (NOT, (Var int_res_1))))
-            | {negintres1=true; maskintres1=true; _} ->
-              (* only the valid elements in xmm2 are bitwise-notted *)
-              (* XXX: Right now we duplicate the valid element computations
-                 when negating the valid elements.  They are also used by the
-                 aggregation functions.  A better way to implement this might
-                 be to write the valid element information out as a temporary
-                 bitvector.  The aggregation functions and this code would
-                 then extract the relevant bit to see if an element is
-                 valid. *)
-              let validvector =
-                let bits = List.map ~f:is_valid_xmm2_e (List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0) in
-                build_valid_xmm2 (Bil.(Cast (UNSIGNED, !!reg16_t, concat_explist bits)))
-              in
-              Move (int_res_2, Bil.(validvector lxor Var int_res_1)))
-        :: (match pcmpinfo with
-            | {out=Index; _} -> Move (rcx, sb (Bil.Var int_res_2))
-            (* FIXME: ymms should be used instead of xmms here *)
-            | {out=Mask; _} -> Move (ymms.(0), mask (Bil.Var int_res_2)))
-        :: Move (cf, Bil.(Var int_res_2 <> int_exp 0 16))
-        :: Move (zf ,contains_null xmm2m128_e)
-        :: Move (sf, contains_null xmm1_e)
-        :: Move (oF, Bil.(Extract (0, 0, Var int_res_2)))
-        :: Move (af, int_exp 0 1)
-        :: Move (pf, int_exp 0 1)
-        :: []
+              Bil.(cast unsigned !!elemt (extract i i e)) in
+            let range = List.range ~stride:(-1)
+                ~start:`exclusive ~stop:`inclusive nelem 0 in
+            concat_explist (List.map ~f:get_element range) in
+
+        let res_of_cb = match imm8cb with
+          | {negintres1=false; _} -> Bil.(int_res_2 := var int_res_1)
+          | {negintres1=true; maskintres1=false; _} -> (* int_res_1 is bitwise-notted *)
+            Bil.(int_res_2 := unop not (var int_res_1))
+          | {negintres1=true; maskintres1=true; _} ->
+            (* only the valid elements in xmm2 are bitwise-notted *)
+            (* XXX: Right now we duplicate the valid element computations
+               when negating the valid elements.  They are also used by the
+               aggregation functions.  A better way to implement this might
+               be to write the valid element information out as a temporary
+               bitvector.  The aggregation functions and this code would
+               then extract the relevant bit to see if an element is
+               valid. *)
+            let validvector =
+              let range = List.range ~stride:(-1)
+                  ~start:`exclusive ~stop:`inclusive nelem 0 in
+              let bits = List.map ~f:is_valid_xmm2_e range  in
+              Bil.(cast unsigned 16 (concat_explist bits)) in
+            Bil.(int_res_2 := validvector lxor var int_res_1) in
+
+        let res_of_pcmpinfo = match pcmpinfo.out with
+          | Index -> Bil.(rcx := sb (var int_res_2))
+          (* FIXME: ymms should be used instead of xmms here *)
+          | Mask -> Bil.(ymms.(0) := mask (var int_res_2)) in
+
+        List.concat [
+          xmm1_checks;
+          xmm2_checks;
+          res_bil;
+          Bil.[
+            int_res_1 := cast unsigned 16 (var res);
+            res_of_cb;
+            res_of_pcmpinfo;
+            cf := var int_res_2 <> int_exp 0 16;
+            zf := contains_null xmm2m128_e;
+            sf := contains_null xmm1_e;
+            oF := extract 0 0 (var int_res_2);
+            af := int_exp 0 1;
+            pf := int_exp 0 1;
+          ]
+        ]
+
       | Pshufd (t, dst, src, vsrc, imm) ->
         let src_e = op2e t src in
         let imm_e = op2e t imm in
