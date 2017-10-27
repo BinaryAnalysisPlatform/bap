@@ -47,6 +47,9 @@ let exec,will_exec = Bap_primus_observation.provide
                     ~inspect
                     "linker-exec"
 
+let unresolved,will_fail = Bap_primus_observation.provide
+                       ~inspect
+                       "linker-unresolved"
 
 let () = Exn.add_printer (function
     | Unbound_name name ->
@@ -96,6 +99,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
 
   let do_fail name =
+    Machine.Observation.make will_fail name >>= fun () ->
     Machine.Local.get state >>= fun s ->
     match resolve_name s name with
     | Some s -> linker_error (`symbol s)
