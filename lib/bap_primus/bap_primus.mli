@@ -70,7 +70,7 @@ module Std : sig
     type 'a statement
 
     (** a result of computation  *)
-    type value
+    type value [@@deriving bin_io, compare, sexp]
 
 
     (** Machine exit status.

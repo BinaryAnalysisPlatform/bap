@@ -17,8 +17,8 @@ module Id = struct
     end)
 end
 type id = Id.t [@@deriving bin_io, compare, sexp]
+type t = value [@@deriving bin_io, compare]
 
-type t = value [@@deriving bin_io, compare, sexp]
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"873f2ba6-9adc-45bb-8ed1-a0f57337ca80"
@@ -30,13 +30,23 @@ let to_word x = x.value
 let id x = x.id
 
 module Reg = Regular.Make(struct
-    type t = value [@@deriving bin_io, compare, sexp]
-    let hash {id} = Int63.hash id
+    type t = value [@@deriving bin_io, compare]
     let pp ppf {id; value} =
-      fprintf ppf "%a.%a" Word.pp value Id.pp id
+      fprintf ppf "%a#%a" Word.pp_hex_full value Id.pp id
+    let sexp_of_t x = Sexp.Atom (asprintf "%a" pp x)
+    let t_of_sexp = function
+      | Sexp.List _ -> failwith "value_of_sexp: expected atom"
+      | Sexp.Atom s -> match String.split ~on:'#' s with
+        | [w;id] -> {
+            value=Word.of_string w;
+            id = Int63.of_string id;
+          }
+        | _ -> failwithf "value: expected <word>#<id> got %s" s ()
+    let hash {id} = Int63.hash id
+    let pp = pp
     let module_name = Some "Bap_primus.Std.Value"
-    let version = "1.0.0"
-end)
+    let version = "2.0.0"
+  end)
 
 
 module Make(Machine : Machine) = struct

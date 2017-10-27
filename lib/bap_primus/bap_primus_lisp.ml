@@ -3,6 +3,7 @@ open Bap.Std
 open Format
 open Bap_c.Std
 open Bap_primus_types
+open Bap_primus_sexp
 
 type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
          | Lsl | Lsr | Asr | And | Or | Xor | Cat
@@ -934,7 +935,7 @@ end
 
 module State = Bap_primus_state
 
-type bindings = (var * value) list [@@deriving sexp]
+type bindings = (var * value) list [@@deriving sexp_of]
 
 type state = {
   primitives : primitives list;
@@ -1157,7 +1158,8 @@ module Lisp(Machine : Machine) = struct
     let arch = Project.arch proj in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.program.defs name arch args with
-    | {Resolve.stage1=[]},None -> eval_primitive name args
+    | {Resolve.stage1=[]},None ->
+      eval_primitive name args
     | resolution,None ->
       Machine.raise (Resolve.Failed (name, s.contexts, resolution))
     | _,Some (fn,bs) ->

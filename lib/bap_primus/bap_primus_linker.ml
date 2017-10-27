@@ -38,8 +38,8 @@ let unresolved_handler = `symbol "__primus_linker_unresolved_call"
 
 let string_of_name = function
   | `symbol name -> name
-  | `addr addr -> asprintf "at address %a" Addr.pp_hex addr
-  | `tid tid -> asprintf "with tid %a" Tid.pp tid
+  | `addr addr -> asprintf "%a" Addr.pp_hex addr
+  | `tid tid -> asprintf "%%%a" Tid.pp tid
 
 let inspect n = Sexp.Atom (string_of_name n)
 
