@@ -1,0 +1,11 @@
+Flag bare
+  Description: Build monad library
+  Default: false
+
+Library bare
+  Build$: flag(everything) || flag(bare)
+  Path: lib/bare
+  FindlibName: bare
+  CompiledObject: best
+  BuildDepends: core_kernel, parsexp
+  Modules: Bare
