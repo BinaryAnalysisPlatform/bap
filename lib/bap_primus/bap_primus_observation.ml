@@ -13,6 +13,11 @@ type provider = {
   newtrigger : unit signal;
   triggers : unit stream;
   observers : int;
+  key : Sexp.t Univ_map.Key.t;
+}
+
+type 'a mstream = {
+  providers : provider list;
 }
 
 let providers : provider String.Table.t = String.Table.create ()
@@ -20,7 +25,8 @@ let providers : provider String.Table.t = String.Table.create ()
 let provider name =
   let data,newdata = Stream.create () in
   let triggers,newtrigger = Stream.create () in
-  {name; newdata; data; triggers; newtrigger; observers=0}
+  let key = Univ_map.Key.create ~name:("watch-"^name) ident in
+  {name; newdata; data; triggers; newtrigger; observers=0; key}
 
 let update_provider provider ~f =
   Hashtbl.update providers provider ~f:(function
@@ -55,17 +61,34 @@ let add_observer observers key obs =
       | None -> Observers [obs]
       | Some (Observers observers) -> Observers (obs::observers))
 
+let add_watcher observers {key} obs =
+  add_observer observers key obs
+
 let notify_provider key x =
   let p = Hashtbl.find_exn providers (name key) in
   if Stream.has_subscribers p.data
   then Signal.send p.newdata (inspect key x);
   Signal.send p.newtrigger ()
 
-let notify os key x =
-  notify_provider key x;
+let notify_observer os key x =
   match Map.find os key with
   | None -> Seq.empty
   | Some (Observers os) -> Seq.(map ~f:(fun ob -> ob x) @@ of_list os)
+
+let notify_watchers os key x =
+  let p = Hashtbl.find_exn providers (name key) in
+  match Map.find os p.key with
+  | None -> Seq.empty
+  | Some (Observers os) ->
+    let data = (inspect key x) in
+    Seq.(map ~f:(fun ob -> ob data) @@ of_list os)
+
+let notify os key x =
+  notify_provider key x;
+  Seq.append
+    (notify_observer os key x)
+    (notify_watchers os key x)
+
 
 let empty = Map.empty
 

@@ -355,6 +355,8 @@ module Std : sig
           val observe : 'a observation -> ('a -> unit t) -> unit t
 
 
+          val watch : Observation.provider -> (Sexp.t -> unit t) -> unit t
+
           (** [make observation event] make an [observation] of the
               given [event].  *)
           val make : 'a statement -> 'a -> unit t

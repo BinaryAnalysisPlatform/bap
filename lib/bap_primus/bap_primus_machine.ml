@@ -17,6 +17,7 @@ let exn_raised,raise_exn =
     "exception"
 
 
+
 module State = Bap_primus_state
 type id = Monad.State.Multi.id
 
@@ -105,6 +106,11 @@ module Make(M : Monad.S) = struct
       with_global_context @@ fun () ->
       observations () >>= fun os ->
       set_observations (Observation.add_observer os key observer)
+
+    let watch prov watcher =
+      with_global_context @@ fun () ->
+      observations () >>= fun os ->
+      set_observations (Observation.add_watcher os prov watcher)
   end
 
   module Make_state(S : sig
