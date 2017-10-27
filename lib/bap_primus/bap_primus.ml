@@ -20,5 +20,6 @@ module Std = struct
     type generator = Generator.t
     let sexp_of_value = Value.sexp_of_t
     let value_of_sexp = Value.t_of_sexp
+    let compare_value = Value.compare
   end
 end

@@ -32,7 +32,7 @@ end
 type value = {
   id : Int63.t;
   value  : word;
-} [@@deriving bin_io, compare]
+} [@@deriving bin_io]
 
 type id = Monad.State.Multi.id
 

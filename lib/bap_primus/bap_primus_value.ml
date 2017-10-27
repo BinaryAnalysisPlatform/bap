@@ -4,7 +4,6 @@ open Bap.Std
 open Format
 open Bap_primus_types
 
-open Bap_primus_sexp
 module Observation = Bap_primus_observation
 
 
@@ -17,6 +16,9 @@ module Id = struct
     end)
 end
 type id = Id.t [@@deriving bin_io, compare, sexp]
+
+
+let compare_value x y = Word.compare x.value y.value
 type t = value [@@deriving bin_io, compare]
 
 
