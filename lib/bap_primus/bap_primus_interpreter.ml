@@ -294,7 +294,7 @@ module Make (Machine : Machine) = struct
     eval_exp y >>= fun y ->
     concat x y
 
-  let eval_exp x = eval_exp (Exp.normalize x)
+  let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
 
   let mem =
     Machine.get () >>| fun proj ->
