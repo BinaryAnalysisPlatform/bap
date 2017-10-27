@@ -112,3 +112,9 @@ let tid level =
   match level with
   | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
   | Phi t -> !t | Def t -> !t | Jmp t -> !t
+
+let get tag level =
+  let (!) {me} = Term.get_attr me tag in
+  match level with
+  | Top t -> !t | Sub t -> !t | Arg t -> !t | Blk t -> !t
+  | Phi t -> !t | Def t -> !t | Jmp t -> !t

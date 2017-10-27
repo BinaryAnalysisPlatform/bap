@@ -3,7 +3,6 @@ open Regular.Std
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
-open Format
 
 module Std : sig
 
@@ -197,6 +196,12 @@ module Std : sig
 
       (** [tid p] is term identifier of the term enclosing position [p] *)
       val tid : t -> tid
+
+
+      (** [get a p] get a value of the attribute [a] associated with
+          the given position [p]. Example, [Pos.get address p] returns
+          a machine address of the position [p]. *)
+      val get : 'a tag -> t -> 'a option
 
       (** [to_string level] a textual and human readable
           representation of a cursor.  *)
@@ -1934,7 +1939,7 @@ ident ::= ?any atom that is not recognized as a <word>?
           This function should be called by a plugin, that is
           responsible for providing lisp code. In the [bap] framework
           it is called by the [primus-lisp] plugin.  *)
-      val init : ?log:formatter -> ?paths:string list -> string list -> unit
+      val init : ?log:Format.formatter -> ?paths:string list -> string list -> unit
     end
 
 
