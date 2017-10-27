@@ -7,9 +7,6 @@ open Format
 
 include Self()
 
-let report = Primus.Observation.provide
-               ~inspect:(fun xs -> Sexp.List xs)
-               "report"
 
 module Param = struct
   open Config;;
@@ -100,27 +97,33 @@ type state = {
 }
 
 
-(* todo: move to the Stream module *)
 let concat streams =
   let stream,main = Stream.create () in
   List.iter streams ~f:(fun stream ->
       Stream.observe stream (fun x ->
           Signal.send main x));
-  stream
+  stream,main
 
+(* returns a stream of derived facts, each element of the stream is
+   a non-empty list of facts provided from some fact in the list of
+   facts or another derived fact.  *)
 let process_rule rule =
   let module Prov = Primus.Observation.Provider in
   let observing = String.Set.of_list (rule_providers rule) in
-  Primus.Observation.list_providers () |>
-  List.filter ~f:(fun p -> Set.mem observing (Prov.name p)) |>
-  List.map ~f:(fun p -> Prov.data p |> Stream.map ~f:(fun ev ->
-      Sexp.List [
-        Sexp.Atom (Prov.name p);
-        ev
-      ])) |> concat |>
-  Stream.parse ~init:rule ~f:(fun rule ev ->
-      let rule,actions = Bare.Rule.apply rule ev in
-      Some actions,rule)
+  let facts,to_facts =
+    Primus.Observation.list_providers () |>
+    List.filter ~f:(fun p -> Set.mem observing (Prov.name p)) |>
+    List.map ~f:(fun p -> Prov.data p |> Stream.map ~f:(fun ev ->
+        Sexp.List [
+          Sexp.Atom (Prov.name p);
+          ev
+        ])) |> concat in
+  Stream.parse facts ~init:rule ~f:(fun rule ev ->
+      let rule,facts = Bare.Rule.apply rule ev in
+      List.iter facts ~f:(Signal.send to_facts);
+      match facts with
+      | [] -> None,rule
+      | facts -> Some facts,rule)
 
 let read_rules filename =
   match Bare.Rule.from_file filename with
@@ -131,11 +134,13 @@ let read_rules filename =
     exit 1
 
 let setup_rules_processor out rules =
-  let templates =
     rules |>
     List.concat_map ~f:read_rules |>
-    List.map ~f:process_rule |> concat in
-  Stream.observe templates (List.iter ~f:(fprintf out "%a@\n" Sexp.pp_hum))
+    List.map ~f:process_rule |>
+    List.iter ~f:(fun facts ->
+        Stream.observe facts
+          (List.iter ~f:(fprintf out "%a@\n" Sexp.pp_hum)))
+
 
 
 
