@@ -6,29 +6,49 @@ open Bap_primus_types
 open Bap_primus_sexp
 
 type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
-         | Lsl | Lsr | Asr | And | Or | Xor | Cat
-         | Eq | Le
+         | Lsl | Lsr | Asr | Land | Lior | Lxor | Cat
+         | Equal | Less | And | Or
 [@@deriving sexp]
-type uop = Neg | Not [@@deriving sexp]
-
+type uop = Lneg | Lnot | Not [@@deriving sexp]
+type sexp = Sexp.t = Atom of string | List of sexp list[@@deriving sexp]
 type typ = Word | Type of int [@@deriving compare, sexp]
 type 'a scalar = {data : 'a; typ : typ}[@@deriving compare, sexp]
 type word = int64 scalar [@@deriving compare, sexp]
 type var = string scalar[@@deriving compare, sexp]
+
+type range = Parsexp.Positions.range
+type filepos = {
+  file  : string;
+  range : range;
+}
+
+
+type src = Ground | Macro of loc | Subst of loc
+and epos = {
+  def : filepos;
+  src : src;
+}
+and loc = Primitive | Filepos of epos
+
+type 'a arg = {
+  arg : 'a;
+  pos : epos;
+}
+
 type exp =
-  | Int of word
-  | Var of var
-  | Ite of exp * exp * exp
-  | Let of var * exp * exp
-  | Ext of exp * exp * exp
-  | Bop of bop * exp * exp
-  | Uop of uop * exp
-  | App of string * exp list
-  | Seq of exp list
-  | Set of var * exp
-  | Rep of exp * exp
-  | Msg of fmt list * exp list
-  | Err of string
+  | Int of word arg
+  | Var of var arg
+  | Ite of (exp * exp * exp) arg
+  | Let of (var * exp * exp) arg
+  | Ext of (exp * exp * exp) arg
+  | Bop of (bop * exp * exp) arg
+  | Uop of (uop * exp) arg
+  | App of (string * exp list) arg
+  | Seq of (exp list) arg
+  | Set of (var * exp) arg
+  | Rep of (exp * exp) arg
+  | Msg of (fmt list * exp list) arg
+  | Err of string arg
 and fmt = Lit of string | Exp of exp | Pos of int
 
 
@@ -36,12 +56,6 @@ type hook = [ `before | `after] [@@deriving sexp]
 type advices = (hook * string) list String.Map.t
 type attrs = Univ_map.t
 
-type filepos = {
-  file  : string;
-  range : Sexp.Annotated.range;
-}
-
-type loc = Primitive | Filepos of filepos
 
 type meta = {
   name : string;
@@ -52,17 +66,17 @@ type meta = {
 
 type func = {
   args : var list;
-  body : exp list;
+  body : exp;
 }
 
 type macro = {
   param : string list;
-  subst : Sexp.t;
+  subst : sexp;
   const : bool;
 }
 
 type subst = {
-  elts : Sexp.t list;
+  elts : sexp list;
 }
 
 type 'a def = {meta : meta; code : 'a}
@@ -84,6 +98,42 @@ type program = {
   substs : subst defs;
   advices : advices;
 }
+
+
+type stage = loc list
+type resolution = {
+  stage1 : stage; (* definitions with the given name *)
+  stage2 : stage; (* definitions applicable to the ctxt *)
+  stage3 : stage; (* most specific definitions *)
+  stage4 : stage; (* applicable definitions *)
+}
+
+type parse_error =
+  | Expect_atom
+  | Bad_toplevel
+  | Bad_word_literal
+  | Bad_form of string
+  | Bad_app
+  | Bad_let_binding
+  | Bad_param_list
+  | Bad_macro_param_list
+  | Bad_attribute_syntax
+  | Unknown_parser
+  | Bad_context_value
+  | Bad_context_syntax
+  | Bad_external_syntax
+  | Bad_variables_spec
+  | Bad_hook
+
+
+type error =
+  | Parse_error of parse_error
+  | Unbound_macro of string * resolution
+
+exception Error of error * sexp
+
+let error kind where = raise (Error (kind,where))
+let parse_error kind where = error (Parse_error kind) where
 
 let library = {
   paths = [];
@@ -112,23 +162,32 @@ end
 
 type primitives = (module Primitives)
 
+let pp_filepos ppf {file; range={start_pos=s; end_pos=e}}  =
+  let len = e.offset - s.offset in
+  fprintf ppf "file %S, line %d, characters %d-%d"
+    file s.line s.col (s.col+len)
 
-let expect what got =
-  invalid_argf "Parser error: expected %s, got %s"
-    what got ()
-
-let expects what got = expect what (Sexp.to_string got)
+let rec pp_epos ppf {def; src} =
+  fprintf ppf "%a" pp_filepos def;
+  match src with
+  | Ground -> ()
+  | Macro loc | Subst loc ->
+    fprintf ppf "@\nexpanded from %a" pp_loc loc
+and pp_loc ppf loc = match loc with
+  | Primitive -> fprintf ppf "<primitive>"
+  | Filepos epos -> fprintf ppf "%a" pp_epos epos
 
 module Attrs = struct
   type t = attrs
 
+
   type 'a attr = {
     key : 'a Univ_map.Key.t;
     add : 'a -> 'a -> 'a;
-    parse : Sexp.t list -> 'a;
+    parse : sexp list -> 'a;
   }
 
-  type parser = Parser of (t -> Sexp.t list -> t)
+  type parser = Parser of (t -> sexp list -> t)
 
   let parsers : parser String.Table.t = String.Table.create ()
 
@@ -151,13 +210,13 @@ module Attrs = struct
   let expected_parsers () =
     String.Table.keys parsers |> String.concat ~sep:" | "
 
-  let parse attrs name values = match Hashtbl.find parsers name with
-    | None -> expect (expected_parsers ()) name
+  let parse s attrs name values = match Hashtbl.find parsers name with
+    | None -> parse_error Unknown_parser s
     | Some (Parser run) -> run attrs values
 
   let parse attrs = function
-    | Sexp.List (Sexp.Atom name :: values) -> parse attrs name values
-    | s -> expects "(name value ...)" s
+    | List (Atom name as s :: values) -> parse s attrs name values
+    | s -> parse_error Bad_attribute_syntax s
 end
 
 module Contexts = struct
@@ -186,21 +245,21 @@ module Contexts = struct
     ]
 
   let sexp_of_context (name,values) =
-    Sexp.List (List.map (name :: Set.to_list values)
-                 ~f:(fun x -> Sexp.Atom x))
+    List (List.map (name :: Set.to_list values)
+                 ~f:(fun x -> Atom x))
 
   let sexp_of (cs : t) =
-    Sexp.List (Sexp.Atom "context" ::
+    List (Atom "context" ::
                (Map.to_alist cs |> List.map ~f:sexp_of_context))
 
   let value = function
-    | Sexp.Atom x -> x
-    | s -> expects "(a1 a2 ... am)" s
+    | Atom x -> x
+    | s -> parse_error Bad_context_value s
 
   let context_of_sexp = function
-    | Sexp.List (Sexp.Atom name :: values) ->
+    | List (Atom name :: values) ->
       name, Feature.Set.of_list (List.map values ~f:value)
-    | s -> expects "(a1 a1 ... am)" s
+    | s -> parse_error Bad_context_syntax s
 
 
   let push cs name vs =
@@ -231,10 +290,10 @@ end
 module External = struct
   type t = string list
 
-  let sexp_of x = Sexp.List (List.map x ~f:(fun s -> Sexp.Atom s))
+  let sexp_of x = List (List.map x ~f:(fun s -> Atom s))
   let of_sexp = List.map ~f:(function
-      | Sexp.Atom x -> x
-      | s -> expects "(external name1 .. nameM)" s)
+      | Atom x -> x
+      | s -> parse_error Bad_external_syntax s)
 
   let t = Attrs.register
       ~name:"external"
@@ -280,25 +339,12 @@ module Macro = struct
 end
 
 module Resolve = struct
-  type stage = loc list
-  type resolution = {
-    stage1 : stage; (* definitions with the given name *)
-    stage2 : stage; (* definitions applicable to the ctxt *)
-    stage3 : stage; (* most specific definitions *)
-    stage4 : stage; (* applicable definitions *)
-  }
 
   type 'a candidate = 'a def * Contexts.t
   type 'a candidates = 'a candidate list
 
   type exn += Failed of string * Contexts.t * resolution
 
-  let pp_loc ppf loc = match loc with
-    | Primitive -> fprintf ppf "<primitive>"
-    | Filepos {file; range={Sexp.Annotated.start_pos = {
-        Sexp.Annotated.line;
-      }}} ->
-      fprintf ppf "File %s, line %d" file line
 
   let pp_stage ppf locs =
     List.iter locs ~f:(fun loc ->
@@ -431,18 +477,18 @@ module Variable = struct
     | {data;typ = Word} -> data
     | {data;typ = Type n} -> sprintf "%s:%d" data n
 
-  let sexp_of_t v = Sexp.Atom (to_string v)
+  let sexp_of_t v = Atom (to_string v)
 end
 
 module Variables = struct
   type t = var list
 
   let var = function
-    | Sexp.Atom v -> Variable.parse v
-    | s -> expects "(v1 .. vm)" s
+    | Atom v -> Variable.parse v
+    | s -> parse_error Bad_variables_spec s
 
   let of_sexp = List.map ~f:var
-  let sexp_of vs = Sexp.List (List.map vs ~f:Variable.sexp_of_t)
+  let sexp_of vs = List (List.map vs ~f:Variable.sexp_of_t)
 
   let global = Attrs.register
       ~name:"global"
@@ -461,74 +507,57 @@ module Parse = struct
       global_attrs : attrs;
       parse_module : string -> t -> t;
       program : program;
-      current : filepos;
+      getpos : Sexp.t -> epos;
       constraints : Contexts.t;
     }
   end
-  open Sexp
+
+  let is_word x =
+    String.length x > 0 && (x.[0] = '?' || Char.is_digit x.[0])
 
   let atom = function
     | Atom x -> x
-    | s -> expects "atom" s
+    | s -> parse_error Expect_atom s
 
   let typ = Type_annot.parse
 
-  let char x = Int {
-      data = Int64.of_int (Char.to_int (Char.of_string x));
-      typ = Type 8
-    }
-
-  let word x =
-    if Char.(x.[0] = '?') then char (String.subo ~pos:1 x)
-    else match String.split x ~on:':' with
-      | [x] ->  Int {data=Int64.of_string x; typ=Word}
-      | [x;sz] -> Int {
-          data = Int64.of_string (String.strip x);
-          typ   = typ sz
-        }
-      | _ -> expect "int ::= ?<char> | <lit> | <lit>:<typ>" x
 
 
-  let is_word x = try ignore (word x);true with _ -> false
+
+
   let var = Variable.parse
   let int x = int_of_string (atom x)
 
-  let bop op = match atom op with
-    | "+" -> Add
-    | "-" -> Sub
-    | "*" -> Mul
-    | "/" -> Div
-    | "%" -> Mod
-    | "%s" -> Mods
-    | "/s" -> Divs
-    | "<<" -> Lsl
-    | ">>" -> Lsr
-    | ">>s" -> Asr
-    | "=" -> Eq
-    | "<" -> Le
-    | "&" -> And
-    | "|" -> Or
-    | _ -> bop_of_sexp op
+  (* let operators = [ *)
+  (*    "+" , Add; *)
+  (*    "-" , Sub; *)
+  (*    "*" , Mul; *)
+  (*    "/" , Div; *)
+  (*    "mod" , Mod; *)
+  (*    "signed-mod" , Mods; *)
+  (*    "s/" , Divs; *)
+  (*    "signed-div" , Divs; *)
+  (*    "shift-left", Lsl; *)
+  (*    "shift-right", Lsr; *)
+  (*    "signed-shift-right", Asr; *)
+  (*    "=" , Equal; *)
+  (*    "<" , Less; *)
+  (*    "and", And; *)
+  (*    "or", Or; *)
+  (*    "logand" , Land; *)
+  (*    "logxor", Lxor; *)
+  (*    "logior", Lior; *)
+  (*    "cat", Cat; *)
+  (* ] *)
 
-  let is_bop x = try ignore (bop x); true with exn -> false
-
-  let bop x e1 e2 = Bop (bop x, e1, e2)
-
-
-  let bad_form pos op got =
-    let open Sexp.Annotated in
-    invalid_argf {|\nFile "%s", line %d \
-                   parser error: invalid usage of form %s. \
-                   Don't know how to handle\n%s|}
-      pos.file pos.range.start_pos.line op (Sexp.to_string_hum got) ()
-
+  let bad_form op got = parse_error (Bad_form op) got
 
   let keywords = [
     "if"; "let"; "neg"; "not";
     "coerce"; "msg"; "while";"set"
   ]
   let is_keyword op = List.mem ~equal:String.equal keywords op
-  let nil = Int {data=0L; typ=Word}
+  let nil = {data=0L; typ=Word}
 
   let find_entry defs op =
     List.find defs ~f:(fun m -> String.(m.meta.name = op))
@@ -577,45 +606,84 @@ module Parse = struct
           | None -> [atom]
           | Some subst -> subst.code.elts)
 
-  let subst {State.constraints=cs; program={macros}} name ops =
-    match Resolve.macro cs macros name ops with
-    | res,None -> failwith (Resolve.string_of_error name cs res)
-    | _,Some (macro,bs) -> Macro.apply macro bs
 
-  let exp ({State.current=pos; constraints=ctxts} as s) sexp =
-    let rec exp = function
-      | Atom x when is_word x -> word x
-      | Atom c when is_const s c -> exp (subst s c [])
-      | Atom x -> Var (var x)
-      | List (Atom "if" :: c :: e1 :: es) -> Ite (exp c,exp e1,prog es)
-      | List (Atom "let" :: List bs :: e) -> let' bs e
-      | List [Atom "coerce"; e1; e2; e3] -> Ext (exp e1,exp e2,exp e3)
-      | List [Atom "neg"; e] -> Uop (Neg, exp e)
-      | List [Atom "not"; e] -> Uop (Not, exp e)
-      | List (Atom "prog" :: es) -> prog es
-      | List (Atom "while" :: c :: es) -> Rep (exp c, prog es)
-      | List [Atom "set"; Atom x; e] -> Set (var x, exp e)
-      | List (Atom "msg" :: Atom msg :: es) -> Msg (fmt msg, exps es)
-      | List [Atom "fail"; Atom msg] -> Err msg
-      | List (Atom op :: _) as exp when is_keyword op -> bad_form pos op exp
-      | List (Atom op :: exps) when is_macro s op ->
-        exp (subst s op (expand s exps))
-      | List (op :: arg :: args) when is_bop op -> expbop op arg args
-      | List (Atom op :: args) -> App (op, exps (expand s args))
-      | List [] -> nil
-      | s ->  expects "(<ident> exps..)" s
+  let char s = {
+    data = Int64.of_int (Char.to_int (Char.of_string s));
+    typ = Type 8
+  }
+
+
+  let rec parse ({State.constraints=ctxts} as s) sexp =
+    let rec exp sexp =
+      let cons exp = {pos = s.getpos sexp; arg = exp} in
+      let seq es = Seq (cons (exps es)) in
+
+      let if_ = function
+        | c::e1::es -> Ite (cons (exp c,exp e1,seq es))
+        | _ -> bad_form "if" sexp in
+
+      let let_ = function
+        | List bs :: e ->
+          List.fold_right bs ~init:(seq e) ~f:(fun b e ->
+            match b with
+            | List [Atom v; x] -> Let (cons (var v,exp x,e))
+            | s -> parse_error Bad_let_binding s)
+        | _ -> bad_form "let" sexp in
+
+      let while_ = function
+        | c :: es -> Rep (cons (exp c, seq es))
+        | _ -> bad_form "while" sexp in
+
+      let msg = function
+        |  Atom msg :: es -> Msg (cons (fmt msg, exps es))
+        | _ -> bad_form "msg" sexp in
+
+      let forms = [
+        "if", if_;
+        "let", let_;
+        "prog", seq;
+        "while", while_;
+        "msg", msg;
+      ] in
+
+      let apply_macro macro bs =
+          let {def} = s.getpos sexp in
+          let s = {s with getpos = fun _ ->
+              {def; src=Macro macro.meta.loc}} in
+          parse s (Macro.apply macro bs) in
+
+      let macro op args =
+        match Resolve.macro ctxts s.program.macros op args with
+        | res,None -> App (cons (op, exps args))
+        | _, Some (macro,bs) -> apply_macro macro bs in
+
+      let list : sexp list -> exp = function
+        | [] -> Int (cons nil)
+        | List _ as s :: _  -> parse_error Bad_app s
+        | Atom op :: exps ->
+          match List.Assoc.find ~equal:String.equal forms op with
+          | None -> macro op (expand s exps)
+          | Some form -> form exps in
+
+      let word x =
+        if Char.(x.[0] = '?')
+        then Int (cons (char (String.subo ~pos:1 x)))
+        else match String.split x ~on:':' with
+          | [x] ->  Int (cons {data=Int64.of_string x; typ=Word})
+          | [x;sz] -> Int (cons {
+              data = Int64.of_string (String.strip x);
+              typ   = typ sz
+            })
+          | _ -> parse_error Bad_word_literal sexp in
+
+      let start : sexp -> exp = function
+        | List xs -> list xs
+        | Atom x -> match Resolve.macro ctxts s.program.macros x [] with
+          | _,None | _,Some ({code={const=false}},_) ->
+            if is_word x then word x else Var (cons (var x))
+          | _, Some (m,bs) -> apply_macro m bs in
+      start sexp
     and exps = List.map ~f:exp
-    and prog es = Seq (exps es)
-    and expbop op arg args =
-      match expand s (arg::args) with
-      | arg :: args ->
-        List.fold ~f:(bop op) ~init:(exp arg) (exps args)
-      | [] -> expect "(<bop> exps...)" "(<bop>)"
-    and let' bs e =
-      List.fold_right bs ~init:(prog e) ~f:(fun b e ->
-          match b with
-          | List [Atom v; x] -> Let (var v,exp x,e)
-          | s -> expects "(var exp)" s)
     and fmt fmt =
       let nil = `Lit [] in
       let str cs = String.of_char_list (List.rev cs) in
@@ -666,11 +734,11 @@ module Parse = struct
 
   let params = function
     | List vars -> List.map ~f:(fun x -> var (atom x)) vars
-    | s -> expects "(v1 v2 ..)" s
+    | s -> parse_error Bad_param_list s
 
   let metaparams = function
     | List vars -> List.map ~f:atom vars
-    | s -> expects "(s1 s2 ..)" s
+    | s -> parse_error Bad_macro_param_list s
 
   open State
 
@@ -690,31 +758,34 @@ module Parse = struct
 
   let is_keyarg s = Char.(s.[0] = ':')
 
-  let defun ?(docs="") ?(attrs=[]) name p body state = {
+  let defun ?(docs="") ?(attrs=[]) name p body state sexp = {
     state with
     program = add_def state.program {
         meta = {
           name;
           docs;
           attrs = parse_declarations state.global_attrs attrs;
-          loc = Filepos state.current;
+          loc = Filepos (state.getpos sexp);
         };
         code = {
           args = params p;
-          body = List.map ~f:(exp state) body
+          body = Seq {
+              arg = List.map ~f:(parse state) body;
+              pos = state.getpos sexp;
+          }
         }
       }
   }
 
   let defmacro ?(docs="") ?(attrs=[]) ?(const=false)
-      name ps body state = {
+      name ps body state sexp = {
     state with
     program = add_macro state.program {
         meta = {
           name;
           docs;
           attrs = parse_declarations state.global_attrs attrs;
-          loc = Filepos state.current;
+          loc = Filepos (state.getpos sexp);
         };
         code = {
           param = metaparams ps;
@@ -724,14 +795,14 @@ module Parse = struct
       }
   }
 
-  let defsubst ?(attrs=[]) ?syntax name body state = {
+  let defsubst ?(attrs=[]) ?syntax name body state sexp = {
     state with
     program = add_subst state.program {
         meta = {
           name;
           docs="";
           attrs = parse_declarations state.global_attrs attrs;
-          loc = Filepos state.current;
+          loc = Filepos (state.getpos sexp);
         };
         code = {
           elts = reader syntax body
@@ -739,7 +810,7 @@ module Parse = struct
       }
   }
 
-  let add_advice ~advisor ~advised where state = {
+  let add_advice ~advisor ~advised where state sexp = {
     state with
     program = {
       state.program with
@@ -749,153 +820,120 @@ module Parse = struct
   }
 
   let hook = function
-    | ":before" -> `before
-    | ":after" -> `after
-    | s -> expects ":before | :after" (Atom s)
+    | Atom ":before" -> `before
+    | Atom ":after" -> `after
+    | s -> parse_error Bad_hook s
 
 
-  let stmt state = function
+  let stmt state s = match s with
     | List (Atom "defun" ::
             Atom name ::
             params ::
             Atom docs ::
             List (Atom "declare" :: attrs) ::
             body) ->
-      defun ~docs ~attrs name params body state
+      defun ~docs ~attrs name params body state s
     | List (Atom "defun" ::
             Atom name ::
             params ::
             List (Atom "declare" :: attrs) ::
             body) ->
-      defun ~attrs name params body state
+      defun ~attrs name params body state s
     | List (Atom "defun" ::
             Atom name ::
             params ::
             Atom const :: []) ->
-      defun name params [Atom const] state
+      defun name params [Atom const] state s
     | List (Atom "defun" ::
             Atom name ::
             params ::
             Atom docs ::
             body) ->
-      defun ~docs name params body state
+      defun ~docs name params body state s
     | List (Atom "defun" ::
             Atom name ::
             params ::
             body) ->
-      defun name params body state
+      defun name params body state s
     | List [Atom "defconstant";
             Atom name;
             Atom docs;
             List (Atom "declare" :: attrs);
             Atom _ as value;
            ] ->
-      defmacro ~docs ~attrs ~const:true name (List []) value state
+      defmacro ~docs ~attrs ~const:true name (List []) value state s
     | List [Atom "defconstant";
             Atom name;
             List (Atom "declare" :: attrs);
             Atom _ as value;
            ] ->
-      defmacro ~attrs ~const:true name (List []) value state
+      defmacro ~attrs ~const:true name (List []) value state s
     | List [Atom "defconstant";
             Atom name;
             Atom docs;
             Atom _ as value;
            ] ->
-      defmacro ~docs ~const:true name (List []) value state
+      defmacro ~docs ~const:true name (List []) value state s
     | List [Atom "defconstant";
             Atom name;
             Atom _ as value;
            ] ->
-      defmacro ~const:true name (List []) value state
+      defmacro ~const:true name (List []) value state s
     | List [Atom "defmacro";
             Atom name;
             params;
             Atom docs;
             List (Atom "declare" :: attrs);
             body] ->
-      defmacro ~docs ~attrs name params body state
+      defmacro ~docs ~attrs name params body state s
     | List [Atom "defmacro";
             Atom name;
             params;
             List (Atom "declare" :: attrs);
             body] ->
-      defmacro ~attrs name params body state
+      defmacro ~attrs name params body state s
     | List [Atom "defmacro";
             Atom name;
             params;
             Atom docs;
             body] ->
-      defmacro ~docs name params body state
+      defmacro ~docs name params body state s
     | List [Atom "defmacro";
             Atom name;
             params;
             body] ->
-      defmacro name params body state
+      defmacro name params body state s
     | List (Atom "defsubst" ::
             Atom name ::
             List (Atom "declare" :: attrs) ::
             Atom syntax :: body) when is_keyarg syntax ->
-      defsubst ~attrs ~syntax name body state
+      defsubst ~attrs ~syntax name body state s
     | List (Atom "defsubst" ::
             Atom name ::
             Atom syntax :: body) when is_keyarg syntax ->
-      defsubst ~syntax name body state
+      defsubst ~syntax name body state s
     | List (Atom "defsubst" ::
             Atom name ::
             List (Atom "declare" :: attrs) ::
             body) ->
-      defsubst ~attrs name body state
+      defsubst ~attrs name body state s
     | List (Atom "defsubst" :: Atom name :: body) ->
-      defsubst name body state
-    | List [Atom "advice-add"; Atom f1; Atom h; Atom f2] ->
-      add_advice ~advised:f2 ~advisor:f1 (hook h) state
+      defsubst name body state s
+    | List [Atom "advice-add"; Atom f1; h; Atom f2] ->
+      add_advice ~advised:f2 ~advisor:f1 (hook h) state s
     | List (Atom "declare" :: attrs) -> {
         state with global_attrs =
                      parse_declarations state.global_attrs attrs
       }
     | List [Atom "require"; Atom name] ->
       state.parse_module name state
-    | s -> expects "(defun ...) | (defmacro ..) | (defconstant ..) \
-                    (declare ..) | (require ..) | (advice-add .. )" s
+    | s -> parse_error Bad_toplevel s
 
 
-  let update_range loc range = Sexp.Annotated.{
-      loc with range
-    }
-
-  let update_file loc name = Sexp.Annotated.{
-      loc with name
-    }
-
-  let annotated_stmt state sexp =
-    let range = Sexp.Annotated.get_range sexp in
-    let sexp = Sexp.Annotated.get_sexp sexp in
-    stmt {state with current = update_range state.current range} sexp
-
-  let defs state = List.fold ~f:annotated_stmt ~init:state
+  let defs state = List.fold ~f:stmt ~init:state
 end
 
 module Load = struct
-
-  let make_pos ~line ~col ~offset = Sexp.Annotated.{
-      line; col; offset;
-    }
-
-  let dummy_pos = make_pos ~line:0 ~col:0 ~offset:0
-
-  let make_range ~start_pos ~end_pos = Sexp.Annotated.{
-      start_pos; end_pos
-    }
-
-  let dummy_range = make_range ~start_pos:dummy_pos ~end_pos:dummy_pos
-
-  let make_loc range name = Sexp.Annotated.{
-      file = name; range;
-    }
-
-  let load_sexps = Sexp.Annotated.load_sexps
-
   let file_of_feature paths feature =
     let name = feature ^ ".lisp" in
     List.find_map paths ~f:(fun path ->
@@ -903,6 +941,16 @@ module Load = struct
             if String.(file = name)
             then Some (Filename.concat path file)
             else None))
+
+
+  let find_pos pos sexps sub =
+    Parsexp.Positions.find_sub_sexp_in_list_phys pos sexps ~sub
+
+  let load_sexps name =
+    In_channel.read_all name |>
+    Parsexp.Many_and_positions.parse_string |> function
+    | Result.Error err -> failwith "TODO"
+    | Ok (sexps,pos) -> sexps,pos
 
   (* TODO: check for cycles *)
   let feature
@@ -914,16 +962,26 @@ module Load = struct
       if Set.mem p.modules feature then p
       else match file_of_feature paths feature with
         | Some name ->
+          let sexps,pos = load_sexps name in
+          let getpos sexp = match find_pos pos sexps sexp with
+            | None -> failwith "internal error"
+            | Some range -> {
+                def = {
+                    file=name;
+                    range;
+                  };
+                src = Ground;
+              } in
           let modules = Set.add p.modules feature in
           let state = Parse.State.{
-              current = make_loc dummy_range name;
+              getpos;
               global_attrs = Univ_map.empty;
               program = {p with modules};
               constraints=cs;
               parse_module = (fun feature s ->
                   {s with program = load s.program feature})
             } in
-          let result = Parse.defs state (load_sexps name) in
+          let result = Parse.defs state sexps in
           result.program
         | None ->
           invalid_argf "Lisp loader: can't find module %s"
@@ -947,9 +1005,9 @@ type state = {
 }
 
 
-let inspect_def {meta={name; docs}} = Sexp.List [
-    Sexp.Atom name;
-    Sexp.Atom docs;
+let inspect_def {meta={name; docs}} = List [
+    Atom name;
+    Atom docs;
   ]
 
 let inspect {env} = sexp_of_bindings env
@@ -990,14 +1048,14 @@ module Trace = struct
   module Observation = Bap_primus_observation
   let sexp_of_value {value=x} =
     let v = Format.asprintf "%a" Word.pp_hex x in
-    Sexp.Atom v
+    Atom v
   let sexp_of_binding (_,x) = sexp_of_value x
 
   let sexp_of_enter ({meta={name}},bs) =
-    Sexp.List (Sexp.Atom name :: List.map bs ~f:sexp_of_binding)
+    List (Atom name :: List.map bs ~f:sexp_of_binding)
 
   let sexp_of_leave (call,result) =
-    Sexp.List (Sexp.Atom "#result-of" ::
+    List (Atom "#result-of" ::
                sexp_of_enter call ::
                [sexp_of_value result])
 
@@ -1103,12 +1161,13 @@ module Lisp(Machine : Machine) = struct
     | Lsl  -> binop lshift
     | Lsr  -> binop rshift
     | Asr  -> binop arshift
-    | And  -> binop AND
-    | Or   -> binop OR
-    | Xor  -> binop XOR
+    | Land  -> binop AND
+    | Lior   -> binop OR
+    | Lxor  -> binop XOR
     | Cat  -> Eval.concat
-    | Eq   -> binop eq
-    | Le   -> binop le
+    | Equal   -> binop eq
+    | Less   -> binop le
+    | And | Or -> assert false
 
 
   let eval_sub : value list -> 'x = function
@@ -1158,7 +1217,7 @@ module Lisp(Machine : Machine) = struct
     let arch = Project.arch proj in
     Machine.Local.get state >>= fun s ->
     match Resolve.defun s.contexts s.program.defs name arch args with
-    | {Resolve.stage1=[]},None ->
+    | {stage1=[]},None ->
       eval_primitive name args
     | resolution,None ->
       Machine.raise (Resolve.Failed (name, s.contexts, resolution))
@@ -1168,7 +1227,7 @@ module Lisp(Machine : Machine) = struct
       eval_advices `before init name args >>= fun _ ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
       Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-      eval_body fn.code.body >>= fun r ->
+      eval_exp fn.code.body >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
       Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
       eval_advices `after r name args
@@ -1198,25 +1257,23 @@ module Lisp(Machine : Machine) = struct
       def.code args >>= fun r ->
       eval_advices `after r name args
 
-  and eval_body body : value Machine.t = eval_exp (Seq body)
-
   and eval_exp exp  =
     let int v t = width () >>= fun width ->
       Eval.const (word width v t) in
     let rec eval = function
-      | Int {data;typ} -> int data typ
-      | Var v -> lookup v
-      | Ite (c,e1,e2) -> ite c e1 e2
-      | Let (v,e1,e2) -> let_ v e1 e2
-      | Ext (hi,lo,e) -> ext hi lo e
-      | App (n,args) -> app n args
-      | Rep (c,e) -> rep c e
-      | Bop (op,e1,e2) -> bop op e1 e2
-      | Uop (op,e) -> uop op e
-      | Seq es -> seq es
-      | Set (v,e) -> eval e >>= set v
-      | Msg (fmt,es) -> msg fmt es
-      | Err msg -> Machine.raise (Runtime_error msg)
+      | Int {arg={data;typ}} -> int data typ
+      | Var {arg=v} -> lookup v
+      | Ite {arg=(c,e1,e2)} -> ite c e1 e2
+      | Let {arg=(v,e1,e2)} -> let_ v e1 e2
+      | Ext {arg=(hi,lo,e)} -> ext hi lo e
+      | App {arg=(n,args)} -> app n args
+      | Rep {arg=(c,e)} -> rep c e
+      | Bop {arg=(op,e1,e2)} -> bop op e1 e2
+      | Uop {arg=(op,e)} -> uop op e
+      | Seq {arg=es} -> seq es
+      | Set {arg=(v,e)} -> eval e >>= set v
+      | Msg {arg=(fmt,es)} -> msg fmt es
+      | Err {arg=msg} -> Machine.raise (Runtime_error msg)
     and rep c e =
       eval c >>= function {value} as r ->
         if Word.is_zero value then Machine.return r
@@ -1270,8 +1327,9 @@ module Lisp(Machine : Machine) = struct
     and uop op e =
       eval e >>= fun e ->
       let op = match op with
-        | Neg -> Bil.NEG
-        | Not -> Bil.NOT in
+        | Lneg -> Bil.NEG
+        | Lnot -> Bil.NOT
+        | Not -> assert false in
       Eval.unop op e
     and msg fmt es =
       let pp_exp e =
@@ -1375,7 +1433,7 @@ module Make(Machine : Machine) = struct
           Machine.Local.update state
             ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
           Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-          Lisp.eval_body fn.code.body >>= fun r ->
+          Lisp.eval_exp fn.code.body >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
           Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
           Lisp.eval_advices `after r name args >>= fun r ->
@@ -1389,10 +1447,13 @@ module Make(Machine : Machine) = struct
 
   let load_feature name =
     fprintf library.log "loading feature %s@\n" name;
-    Machine.Local.update state ~f:(fun s ->
-        let program =
-          Load.feature ~paths:s.paths s.program s.contexts name in
-        {s with program})
+    Machine.Local.update state ~f:(fun s -> {
+          s with program = Load.feature
+                     ~paths:s.paths
+                     s.program
+                     s.contexts name
+        })
+
 
   let load_features fs =
     Machine.List.iter fs ~f:load_feature
@@ -1402,7 +1463,6 @@ module Make(Machine : Machine) = struct
     Machine.Local.update state ~f:(fun s -> {
           s with paths = s.paths @ [path]
         })
-
 
   let init_env proj = (object
     inherit [(var * value) Machine.t list] Term.visitor
