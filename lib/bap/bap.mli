@@ -2321,7 +2321,7 @@ val mem64_t : size -> typ
     This is particulary useful for representing variables in SSA
     form.
 
-    By default, comparison functions takes indices into account. In
+    By default, comparison function takes indices into account. In
     order to compare two variables regardless their index use [same]
     function, or compare with [base x].
 
@@ -2387,7 +2387,7 @@ end
 (** Base class for evaluation contexts.
 
     All interpreters evaluate terms under a given context,
-    wrapped into a state monad. All context must be structural
+    wrapped into a state monad. All context types must be structural
     subtypes of the [Context.t].
 
     The base context is just a mapping from variables to values.
