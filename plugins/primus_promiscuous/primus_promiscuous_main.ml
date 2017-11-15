@@ -113,6 +113,7 @@ module Main(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Mem = Primus.Memory.Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
@@ -127,24 +128,39 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let pp_id = Monad.State.Multi.Id.pp
 
+  let do_fork blk ~child =
+    Machine.current () >>= fun pid ->
+    Machine.fork () >>= fun () ->
+    Machine.current () >>= fun id ->
+    if pid = id then
+      Machine.Global.update state ~f:(fun t -> {
+            t with forkpoints =
+                     Set.add t.forkpoints (Term.tid blk)
+          })
+    else
+      child () >>= fun () ->
+      Machine.switch pid
+
+
   let fork blk  =
     unsat_assumptions blk >>=
     Machine.List.iter ~f:(function
         | [] -> Machine.return ()
         | conflicts ->
-          Machine.current () >>= fun pid ->
-          Machine.fork () >>= fun () ->
-          Machine.current () >>= fun id ->
-          if pid = id then
-            Machine.Global.update state ~f:(fun t -> {
-                  t with forkpoints =
-                           Set.add t.forkpoints (Term.tid blk)
-                })
-          else
+          do_fork blk ~child:(fun () ->
             assume  conflicts >>= fun () ->
             Machine.Local.update state ~f:(fun t -> {
-                  t with conflicts}) >>= fun () ->
-            Machine.switch pid)
+                  t with conflicts})))
+
+  let assume_returns blk call =
+    match Call.return call with
+    | Some (Direct dst) ->
+      do_fork blk ~child:(fun () -> Linker.exec (`tid dst))
+    | _ -> Machine.return ()
+
+  let fork_on_calls blk jmp = match Jmp.kind jmp with
+    | Call c -> assume_returns blk c
+    | _ -> Machine.return ()
 
   let is_last blk def = match Term.last def_t blk with
     | None -> true
@@ -158,6 +174,7 @@ module Main(Machine : Primus.Machine.S) = struct
       if Set.mem t.forkpoints (Term.tid blk)
       then Machine.return ()
       else fork blk
+    | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp
     | _ -> Machine.return ()
 
 
@@ -169,7 +186,6 @@ module Main(Machine : Primus.Machine.S) = struct
     Mem.is_mapped addr >>= function
     | false -> map addr
     | true -> Machine.return ()
-
 
   let make_writable value =
     let addr = Primus.Value.to_word value in
