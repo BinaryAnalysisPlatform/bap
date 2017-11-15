@@ -39,3 +39,10 @@
   (when (not c)
     (msg m)
     (fail m)))
+
+(defmacro expand-clause (c xs)
+  (when c xs))
+
+(defmacro cond (x xs)
+  (expand-clause s)
+  (cond xs))

@@ -2,6 +2,9 @@ open Bap.Std
 open Format
 open Bap_primus_types
 
+module Def = Bap_primus_lisp_def
+
+
 module Primitive : sig
   type 'a t
   val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
