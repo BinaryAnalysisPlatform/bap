@@ -90,10 +90,10 @@ module Kernel(Machine : Primus.Machine.S) = struct
     add Fields.violation ptr {pos; event}
 
   let process_free ptr =
-      Machine.Local.get state >>= fun s ->
-      Eval.const Word.b0 >>= fun void ->
-      if Value.is_zero ptr then Machine.return void
-      else
+    Machine.Local.get state >>= fun s ->
+    Eval.const Word.b0 >>= fun void ->
+    if Value.is_zero ptr then Machine.return void
+    else
       match Map.find s.allocated ptr with
       | None -> violation ptr Corrupted >>| fun () -> void
       | Some {event=Alloc size} ->
@@ -102,7 +102,11 @@ module Kernel(Machine : Primus.Machine.S) = struct
         match Map.find s.dead_heap ptr with
         | Some _ -> violation ptr Double_free >>| fun () -> void
         | None ->
-          add Fields.dead_heap ptr {pos; event = Free size} >>| fun () -> void
+          let n = Value.to_word size |> Word.to_int_exn in
+          let loc = {pos; event = Free size} in
+          Machine.Seq.iter (Seq.range 0 n) ~f:(fun off ->
+              Value.nsucc ptr off >>= fun ptr ->
+              add Fields.dead_heap ptr loc) >>| fun () -> void
 
   let check event ptr =
     Machine.Local.get state >>= fun s ->
@@ -112,12 +116,6 @@ module Kernel(Machine : Primus.Machine.S) = struct
       | None -> Machine.return ()
       | Some (upper_bound,{event=Alloc size}) ->
         Machine.return ()
-        (* if Word.(addr > upper_bound + size) *)
-        (* then violation addr Corrupted *)
-        (* else Machine.return () *)
-
-
-
 
   let init () = Machine.sequence Primus.Interpreter.[
       loading >>> check Use_after_free;
