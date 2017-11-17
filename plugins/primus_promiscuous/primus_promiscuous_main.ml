@@ -136,10 +136,10 @@ module Main(Machine : Primus.Machine.S) = struct
       Machine.Global.update state ~f:(fun t -> {
             t with forkpoints =
                      Set.add t.forkpoints (Term.tid blk)
-          })
+          }) >>| fun () -> id
     else
       child () >>= fun () ->
-      Machine.switch pid
+      Machine.switch pid >>| fun () -> id
 
 
   let fork blk  =
@@ -147,15 +147,24 @@ module Main(Machine : Primus.Machine.S) = struct
     Machine.List.iter ~f:(function
         | [] -> Machine.return ()
         | conflicts ->
+          Machine.ignore_m @@
           do_fork blk ~child:(fun () ->
-            assume  conflicts >>= fun () ->
-            Machine.Local.update state ~f:(fun t -> {
-                  t with conflicts})))
+              Machine.current () >>= fun pid ->
+              Eval.pc >>= fun pc ->
+              List.iter conflicts ~f:(fun {var;res} ->
+                  printf "%a: %a: assume %a = %b@\n%!"
+                    pp_id pid Addr.pp pc Var.pp var res);
+              assume  conflicts >>= fun () ->
+              Machine.Local.update state ~f:(fun t -> {
+                    t with conflicts})))
 
   let assume_returns blk call =
     match Call.return call with
     | Some (Direct dst) ->
-      do_fork blk ~child:(fun () -> Linker.exec (`tid dst))
+      Machine.current () >>= fun pid ->
+      do_fork blk ~child:Machine.return >>= fun id ->
+      if id = pid then Machine.return ()
+      else Linker.exec (`tid dst)
     | _ -> Machine.return ()
 
   let fork_on_calls blk jmp = match Jmp.kind jmp with
