@@ -1,0 +1,16 @@
+Flag powerpc
+ Description: Build PowerPC lifter
+ Default: false
+
+Library "bap-powerpc"
+ XMETADescription: powerpc lifting
+ Path:             lib/powerpc
+ Build$:           flag(everything) || flag(powerpc)
+ BuildDepends:     bap
+ FindlibName:      bap-powerpc
+ Modules:
+                   Powerpc_dsl,
+                   Powerpc_lifter,
+                   Powerpc_load,
+                   Powerpc_model,
+                   Powerpc_types
