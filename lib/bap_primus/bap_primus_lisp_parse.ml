@@ -282,7 +282,7 @@ module Parse = struct
       "defun";
     ]
 
-  let declarations gattrs s = match s with
+  let declaration gattrs s = match s with
     | {data=List ({data=Atom "declare"} :: attrs)} ->
       parse_declarations gattrs attrs
     | {data=List ({data=Atom toplevel} as here :: _)} ->
@@ -417,16 +417,17 @@ module Parse = struct
 
     | _ -> state
 
+
+  let declarations =
+    List.fold ~init:Attribute.Set.empty ~f:declaration
+
   let source constraints source =
     let init = {source; constraints; program=empty_program} in
-    Source.fold source ~init ~f:(fun _ trees state ->
-        let gattrs =
-          List.fold trees ~init:Attribute.Set.empty ~f:declarations in
-        let state =
-          List.fold trees ~init:state ~f:(meta gattrs) in
-        List.fold trees ~init:state ~f:(stmt gattrs))
+    let state = Source.fold source ~init ~f:(fun _ trees state ->
+        List.fold trees ~init:state ~f:(meta (declarations trees))) in
+    Source.fold source ~init:state ~f:(fun _ trees state ->
+        List.fold trees ~init:state ~f:(stmt (declarations trees)))
 end
-
 
 module Load = struct
   let file_of_feature paths feature =
