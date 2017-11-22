@@ -9,6 +9,7 @@ open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 module Loc = Bap_primus_lisp_loc
+module Index = Bap_primus_lisp_index
 
 type attrs = Attribute.set
 
@@ -16,7 +17,6 @@ type meta = {
   name : string;
   docs : string;
   attrs : attrs;
-  loc : loc;
 } [@@deriving fields]
 
 type func = {
@@ -37,31 +37,40 @@ type subst = {
 type const = macro
 
 type 'a primitive = (value list -> 'a)
-type 'a t = {meta : meta; code : 'a}
+type 'a spec = {meta : meta; code : 'a}
+type 'a t = 'a spec indexed
 type 'a def = ?docs:string -> ?attrs:attrs -> loc -> string -> 'a
 
 let attributes = attrs
-let location = loc
 
 let field f t = f t.code
+
+let create data tree = {
+  data;
+  id = tree.id;
+  eq = tree.eq;
+}
 
 module Func = struct
   let args = field args
   let body = field body
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name args body = {
-    meta = {name; docs; attrs; loc};
-    code = {args; body}
-  }
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name args body =
+    create {
+      meta = {name; docs; attrs};
+      code = {args; body}
+    };
+
 end
 
 module Macro = struct
   type error += Bad_subst of tree * tree list
   let args = field param
   let body = field subst
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name param subst = {
-    meta = {name; docs; attrs; loc};
-    code = {param; subst}
-  }
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name param subst tree =
+    create {
+      meta = {name; docs; attrs};
+      code = {param; subst}
+    }
 
   let take_rest xs ys =
     let rec take xs ys zs = match xs,ys with
@@ -79,7 +88,7 @@ module Macro = struct
 
   let find = List.Assoc.find ~equal:String.equal
 
-  let unknown = Parser.Eq.null
+  let unknown = Eq.null
 
   let subst bs body =
     let rec sub : tree -> tree list = function
@@ -101,17 +110,19 @@ module Macro = struct
 end
 
 module Const = struct
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name subst = {
-    meta = {name; docs; attrs; loc};
-    code = {param=[]; subst}
-  }
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name subst tree =
+    create {
+      meta = {name; docs; attrs};
+      code = {param=[]; subst}
+    }
 end
 
 module Subst = struct
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name elts = {
-    meta = {name; docs; attrs; loc};
-    code = {elts}
-  }
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name elts =
+    create {
+      meta = {name; docs; attrs};
+      code = {elts}
+    }
   let body = field elts
 
   let ascii xs =
@@ -125,6 +136,7 @@ module Subst = struct
     List.rev_map (loop xs []) ~f:(fun c ->
         Atom (sprintf "%#02x" (Char.to_int c)))
 
+  let is_odd x = x mod 2 = 1
   let hex xs =
     let rec loop xs acc = match xs with
       | [] -> List.rev acc
@@ -142,9 +154,12 @@ end
 
 
 module Primitive = struct
-  let create ?(docs="") name code : 'a t =
-    {meta = {name;docs; attrs=Attribute.Set.empty; loc=Primitive};
-     code}
-
-
+  let create ?(docs="") name code = {
+    data = {
+      meta = {name;docs; attrs=Attribute.Set.empty};
+      code;
+    };
+    id = Id.null;
+    eq = Eq.null;
+  }
 end

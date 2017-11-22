@@ -7,12 +7,13 @@ module Context = Bap_primus_lisp_context
 module Def = Bap_primus_lisp_def
 module Value = Bap_primus_value
 module Loc = Bap_primus_lisp_loc
+module Program = Bap_primus_lisp_program
 
 open Bap_primus_lisp_attributes
 
 
 
-type stage = Loc.Set.t
+type stage = Id.Set.t
 type resolution = {
   stage1 : stage; (* definitions with the given name *)
   stage2 : stage; (* definitions applicable to the ctxt *)
@@ -21,8 +22,8 @@ type resolution = {
 }
 
 type ('t,'a,'b) resolver =
-  't Def.t list -> Context.t -> string -> 'a ->
-  resolution * ('t Def.t * 'b) option
+  Program.t -> 't Program.item -> string -> 'a -> ('t Def.t * 'b,resolution) result option
+
 
 
 type exn += Failed of string * Context.t * resolution
@@ -140,9 +141,12 @@ let overload_defun arch args s3 =
 
 let overload_primitive s3 = s3
 
-let locs defs = List.map defs ~f:Def.location |> Loc.Set.of_list
+let locs defs =
+  List.map defs ~f:(fun def -> def.id) |> Id.Set.of_list
 
-let run namespace overload ctxts defs (name : string) =
+let run namespace overload prog item (name : string) =
+  let ctxts = Program.context prog in
+  let defs = Program.get prog item in
   let s1 = stage1 namespace defs name in
   let s2 = stage2 ctxts s1 in
   let s3 = stage3 s2 in
@@ -158,19 +162,19 @@ let run namespace overload ctxts defs (name : string) =
         stage4 = locs s4;
       })
 
-let extern arch defs ctxt name args =
-  run externs (overload_defun arch args) ctxt defs name
+let extern arch prog item name args =
+  run externs (overload_defun arch args) prog item name
 
-let defun arch defs ctxt name args =
-  run interns (overload_defun arch args) ctxt defs name
+let defun arch prog item name args =
+  run interns (overload_defun arch args) prog item name
 
-let macro defs ctxts name code =
-  run interns (overload_macro code) ctxts defs name
+let macro prog item name code =
+  run interns (overload_macro code) prog item name
 
-let primitive ctxts defs name =
-  run interns overload_primitive ctxts defs name
+let primitive prog item name =
+  run interns overload_primitive prog item name
 
-let subst substs ctxts name =
-  run interns ident ctxts substs name
+let subst prog item name =
+  run interns ident prog item name
 
 let const = subst

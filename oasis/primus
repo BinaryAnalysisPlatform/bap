@@ -28,6 +28,7 @@ Library bap_primus
            Bap_primus_lisp_loc,
            Bap_primus_lisp_macro,
            Bap_primus_lisp_parse,
+           Bap_primus_lisp_program,
            Bap_primus_lisp_resolve,
            Bap_primus_lisp_source,
            Bap_primus_lisp_type,

@@ -10,6 +10,7 @@ module Var = Bap_primus_lisp_var
 module Word = Bap_primus_lisp_word
 module Loc = Bap_primus_lisp_loc
 module Resolve = Bap_primus_lisp_resolve
+module Program = Bap_primus_lisp_program
 
 type attribute_error = ..
 
@@ -41,52 +42,19 @@ type error += Parse_error of parse_error * tree list
 type error += Sexp_error of Source.error
 type error += Unresolved_feature of string * Loc.filepos option
 
-type attrs = Attribute.set
-type 'a defs = 'a Def.t list
-
-type meta_program = {
-  macros : Def.macro defs;
-  substs : Def.subst defs;
-  consts : Def.const defs;
-}
-
-type program = {
-  defs : Def.func defs;
-  meta : meta_program;
-}
-
-
-let empty_program = {
-  defs = [];
-  meta={
-    macros=[];
-    substs=[];
-    consts=[];
-  }
-}
-
 module Parse = struct
-  module State = struct
-    type t = {
-      source : Source.t;
-      constraints : Context.t;
-      program : program;
-    }
-  end
+  open Program.Items
 
   let fails err s = raise (Fail (Parse_error (err,s)))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
   let nil = {data=0L; typ=Type 1}
 
-
-  let is_odd x = Int.(x mod 2 = 1)
-
-  let expand {State.program; constraints} cs =
+  let expand prog cs =
     List.concat_map cs ~f:(function
         | {data=List _} as cs -> [cs]
         | {data=Atom x} as atom ->
-          match Resolve.subst program.meta.substs constraints x () with
+          match Resolve.subst prog subst x () with
           | None -> [atom]
           | Some (Error s) -> fail (Unresolved (Subst,s)) atom
           | Some (Ok (d,())) ->
@@ -99,7 +67,7 @@ module Parse = struct
       | Error e -> fail (Bad_var_literal e) s
       | Ok var -> var
 
-  let parse ({State.constraints=ctxts} as s) tree =
+  let parse prog tree =
     let rec exp : tree -> ast = fun tree ->
       let cons data : ast = {data; id=tree.id; eq=tree.eq} in
 
@@ -127,19 +95,18 @@ module Parse = struct
         | [v; e] -> cons (Set (let_var v, exp e))
         | _ -> bad_form "set" tree in
 
-      let prog es = cons (Seq (exps es)) in
+      let prog_ es = cons (Seq (exps es)) in
 
       let forms = [
         "if", if_;
         "let", let_;
-        "prog", prog;
+        "prog", prog_;
         "while", while_;
         "msg", msg;
         "set", set;
       ] in
 
-      let macro op args =
-        match Resolve.macro s.program.meta.macros ctxts op args with
+      let macro op args = match Resolve.macro prog macro op args with
         | None -> cons (App (Dynamic op, exps args))
         | Some (Ok (macro,bs)) -> exp (Def.Macro.apply macro bs)
         | Some (Error err) -> fails (Unresolved (Macro,err)) args in
@@ -149,7 +116,7 @@ module Parse = struct
         | {data=List _} as s :: _  -> fail Bad_app s
         | {data=Atom op} :: exps ->
           match List.Assoc.find ~equal:String.equal forms op with
-          | None -> macro op (expand s exps)
+          | None -> macro op (expand prog exps)
           | Some form -> form exps in
 
       let var r = match Var.read r with
@@ -163,8 +130,7 @@ module Parse = struct
 
       let start : tree -> ast = function
         | {data=List xs} -> list xs
-        | {data=Atom x} as t ->
-          match Resolve.const s.program.meta.consts ctxts x () with
+        | {data=Atom x} as t -> match Resolve.const prog const x () with
           | None -> lit x
           | Some Error err -> fail (Unresolved (Const,err)) t
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
@@ -216,24 +182,6 @@ module Parse = struct
     | {data=List vars} -> List.map ~f:atom vars
     | s -> fail Bad_macro_param_list s
 
-  open State
-
-
-  let with_def state def = {
-    state with program = {
-      state.program with defs = def :: state.program.defs
-    }
-  }
-
-  let with_macro meta macro = {meta with macros = macro :: meta.macros}
-  let with_subst meta subst = {meta with substs = subst :: meta.substs}
-  let with_const meta const = {meta with consts = const :: meta.consts}
-  let meta state add stuff = {
-    state with program = {
-      state.program with meta = add state.program.meta stuff
-    }
-  }
-
   let parse_declarations attrs =
     List.fold ~init:attrs ~f:Attribute.parse
 
@@ -246,38 +194,38 @@ module Parse = struct
 
   let is_keyarg s = Char.(s.[0] = ':')
 
-  let constrained state attrs =
+  let constrained prog attrs =
     match Attribute.Set.get attrs Context.t with
-    | None -> state
-    | Some constraints -> {state with constraints}
+    | None -> prog
+    | Some constraints -> Program.constrain prog constraints
 
-  let defun ?docs ?(attrs=[]) name p b bs state gattrs =
+  let defun ?docs ?(attrs=[]) name p b bs prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
-    let es = List.map ~f:(parse (constrained state attrs)) (b::bs) in
-    with_def state @@ Def.Func.create ?docs ~attrs name (params p) {
+    let es = List.map ~f:(parse (constrained prog attrs)) (b::bs) in
+    Program.add prog func @@ Def.Func.create ?docs ~attrs name (params p) {
       data = Seq es;
       id = b.id;
       eq = b.eq;
-    }
+    } tree
 
-  let defmacro ?docs ?(attrs=[]) name ps body state gattrs =
-    meta state with_macro @@
+  let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
+    Program.add prog macro @@
     Def.Macro.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name
       (metaparams ps)
-      body
+      body tree
 
-  let defsubst ?docs ?(attrs=[]) ?syntax name body state gattrs =
-    meta state with_subst @@
+  let defsubst ?docs ?(attrs=[]) ?syntax name body prog gattrs tree =
+    Program.add prog subst @@
     Def.Subst.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name
       (reader syntax)
-      body
+      body tree
 
-  let defconst ?docs ?(attrs=[]) name body state gattrs =
-    meta state with_const @@
+  let defconst ?docs ?(attrs=[]) name body prog gattrs tree =
+    Program.add prog const @@
     Def.Const.create ?docs
-      ~attrs:(parse_declarations gattrs attrs) name ~value:body
+      ~attrs:(parse_declarations gattrs attrs) name ~value:body tree
 
   let toplevels = String.Set.of_list [
       "declare";
@@ -304,7 +252,7 @@ module Parse = struct
         {data=List ({data=Atom "declare"} :: attrs)} ::
         b :: body)
       } ->
-      defun ~docs ~attrs name params b body state gattrs
+      defun ~docs ~attrs name params b body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
@@ -312,7 +260,7 @@ module Parse = struct
         {data=Atom docs} ::
         b :: body)
       } ->
-      defun ~docs name params b body state gattrs
+      defun ~docs name params b body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
@@ -320,14 +268,14 @@ module Parse = struct
         {data=List ({data=Atom "declare"} :: attrs)} ::
         b :: body)
       } ->
-      defun ~attrs name params b body state gattrs
+      defun ~attrs name params b body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
         params ::
         b :: body)
       } ->
-      defun name params b body state gattrs
+      defun name params b body state gattrs s
     | s -> fail Bad_toplevel s
 
 
@@ -339,27 +287,27 @@ module Parse = struct
         {data=List ({data=Atom "declare"} :: attrs)};
         {data=Atom body };
       ]} ->
-      defconst ~docs ~attrs name body state gattrs
+      defconst ~docs ~attrs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
         {data=Atom docs};
         {data=Atom body };
       ]} ->
-      defconst ~docs name body state gattrs
+      defconst ~docs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
         {data=List ({data=Atom "declare"} :: attrs)};
         {data=Atom body};
       ]} ->
-      defconst ~attrs name body state gattrs
+      defconst ~attrs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
         {data=Atom body };
       ]} ->
-      defconst name body state gattrs
+      defconst name body state gattrs s
 
     | {data=List [
         {data=Atom "defmacro"};
@@ -368,27 +316,27 @@ module Parse = struct
         {data=Atom docs};
         {data=List ({data=Atom "declare"} :: attrs)};
         body]} ->
-      defmacro ~docs ~attrs name params body state gattrs
+      defmacro ~docs ~attrs name params body state gattrs s
     | {data=List [
         {data=Atom "defmacro"};
         {data=Atom name};
         params;
         {data=Atom docs};
         body]} ->
-      defmacro ~docs name params body state gattrs
+      defmacro ~docs name params body state gattrs s
     | {data=List [
         {data=Atom "defmacro"};
         {data=Atom name};
         params;
         {data=List ({data=Atom "declare"} :: attrs)};
         body]} ->
-      defmacro ~attrs name params body state gattrs
+      defmacro ~attrs name params body state gattrs s
     | {data=List [
         {data=Atom "defmacro"};
         {data=Atom name};
         params;
         body]} ->
-      defmacro name params body state gattrs
+      defmacro name params body state gattrs s
 
     (* we can't add docstrings to the docstrings as it will make
        grammar ambiguous -- we are unable to distinguish between
@@ -401,32 +349,31 @@ module Parse = struct
         {data=List ({data=Atom "declare"} :: attrs)} ::
         {data=Atom syntax} ::
         body)} when is_keyarg syntax ->
-      defsubst ~attrs ~syntax name body state gattrs
+      defsubst ~attrs ~syntax name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
         {data=Atom syntax} ::
         body)} when is_keyarg syntax ->
-      defsubst ~syntax name body state gattrs
+      defsubst ~syntax name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
         {data=List ({data=Atom "declare"} :: attrs)} ::
         body)} ->
-      defsubst ~attrs name body state gattrs
+      defsubst ~attrs name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
         body)} ->
-      defsubst name body state gattrs
-
+      defsubst name body state gattrs s
     | _ -> state
 
   let declarations =
     List.fold ~init:Attribute.Set.empty ~f:declaration
 
   let source constraints source =
-    let init = {source; constraints; program=empty_program} in
+    let init = Program.create constraints in
     let state = Source.fold source ~init ~f:(fun _ trees state ->
         List.fold trees ~init:state ~f:(meta (declarations trees))) in
     Source.fold source ~init:state ~f:(fun _ trees state ->

@@ -3,7 +3,8 @@ open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 
-type 'a t
+type 'a spec
+type 'a t = 'a spec indexed
 type func
 type macro
 type subst
@@ -19,13 +20,13 @@ val attributes : 'a t -> attrs
 type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
 
 module Func : sig
-  val create : (var list -> ast -> func t) def
+  val create : (var list -> ast -> tree -> func t) def
   val args : func t -> var list
   val body : func t -> ast
 end
 
 module Macro : sig
-  val create : (string list -> tree -> macro t) def
+  val create : (string list -> tree -> tree -> macro t) def
   val args : macro t -> string list
   val body : macro t -> tree
   val bind : macro t -> tree list -> (int * (string * tree list) list) option
@@ -40,13 +41,13 @@ module Macro : sig
 end
 
 module Const : sig
-  val create : (value:string -> const t) def
+  val create : (value:string -> tree -> const t) def
   val value : const t -> tree
 end
 
 module Subst : sig
   type syntax = Ident | Ascii | Hex
-  val create : (syntax -> tree list -> subst t) def
+  val create : (syntax -> tree list -> tree -> subst t) def
   val body : subst t -> tree list
 end
 

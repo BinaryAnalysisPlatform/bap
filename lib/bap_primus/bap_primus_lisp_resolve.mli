@@ -3,13 +3,14 @@ open Bap.Std
 open Bap_primus_lisp_types
 module Context = Bap_primus_lisp_context
 module Def = Bap_primus_lisp_def
-
+module Program = Bap_primus_lisp_program
 
 type resolution
 
 type ('t,'a,'b) resolver =
-  't Def.t list -> Context.t -> string -> 'a ->
+  Program.t -> 't Def.t Program.item -> string -> 'a ->
   ('t Def.t* 'b,resolution) result option
+
 
 val extern : arch -> (Def.func, value list, (var * value) list) resolver
 val defun : arch -> (Def.func, value list, (var * value) list) resolver
