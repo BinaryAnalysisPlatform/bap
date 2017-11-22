@@ -123,6 +123,10 @@ module Parse = struct
         |  {data=Atom msg} :: es -> cons (Msg (fmt msg, exps es))
         | _ -> bad_form "msg" tree in
 
+      let set = function
+        | [v; e] -> cons (Set (let_var v, exp e))
+        | _ -> bad_form "set" tree in
+
       let prog es = cons (Seq (exps es)) in
 
       let forms = [
@@ -131,6 +135,7 @@ module Parse = struct
         "prog", prog;
         "while", while_;
         "msg", msg;
+        "set", set;
       ] in
 
       let macro op args =
@@ -416,7 +421,6 @@ module Parse = struct
       defsubst name body state gattrs
 
     | _ -> state
-
 
   let declarations =
     List.fold ~init:Attribute.Set.empty ~f:declaration
