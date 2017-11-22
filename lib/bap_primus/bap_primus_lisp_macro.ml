@@ -11,21 +11,3 @@ let take_rest xs ys =
   | None -> None
 
 let bind macro cs = take_rest macro.code.param cs
-
-let find = List.Assoc.find ~equal:String.equal
-
-let subst bs body =
-  let rec sub = function
-    | List xs -> [List (List.concat_map xs ~f:sub)]
-    | Atom x -> match find bs x with
-      | None -> [Atom x]
-      | Some cs -> cs in
-  match body with
-  | List xs -> List (List.concat_map xs ~f:sub)
-  | Atom x -> match find bs x with
-    | None -> Atom x
-    | Some [x] -> x
-    | Some xs -> invalid_argf "invalid substitution" ()
-
-let apply macro cs =
-  subst cs macro.code.subst

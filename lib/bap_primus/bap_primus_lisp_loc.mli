@@ -17,13 +17,13 @@ type loc =
 [@@deriving sexp_of]
 (* definition position that is aware of a preprocessor *)
 and pos = {
-  def : filepos;                (* a position *)
-  src : src;                    (* kind of a definition *)
-} [@@deriving sexp_of]
+    def : filepos;                (* a position *)
+    src : src;                    (* kind of a definition *)
+  } [@@deriving sexp_of]
 
 (* how was the definition defined? *)
 and src =
-  | Ground       (* exactly by the code *)
+    Ground       (* exactly by the code *)
   | Macro of loc (* as an expansion of a macro defined at loc*)
 [@@deriving compare, sexp_of]
 
@@ -38,15 +38,4 @@ include Comparable.S_plain with type t := t
 module Pos : Comparable.S_plain with type t = pos
 module Filepos : Comparable.S_plain with type t = filepos
 
-module Current : sig
-  val get : Sexp.t -> t
-  val range : Sexp.t list -> t
-end
-
-(*  *)
-module Control : sig
-  type positions = Parsexp.Positions.t
-  val push : positions -> unit
-  val pop : positions -> unit
-  val shift : positions -> unit
-end
+type positions = Parsexp.Positions.t

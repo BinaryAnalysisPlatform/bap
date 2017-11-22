@@ -15,31 +15,39 @@ type attrs = Attribute.set
 val name : 'a t -> string
 val docs : 'a t -> string
 val attributes : 'a t -> attrs
-val location : 'a t -> loc
 
-type 'a def = ?docs:string -> ?attrs:attrs -> loc -> string -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
 
 module Func : sig
-  val create : (var list -> exp -> func t) def
+  val create : (var list -> ast -> func t) def
   val args : func t -> var list
-  val body : func t -> exp
+  val body : func t -> ast
 end
 
 module Macro : sig
-  val create : (string list -> sexp -> macro t) def
+  val create : (string list -> tree -> macro t) def
   val args : macro t -> string list
-  val body : macro t -> sexp
-  val bind : macro t -> sexp list -> (int * (string * sexp list) list) option
+  val body : macro t -> tree
+  val bind : macro t -> tree list -> (int * (string * tree list) list) option
+
+  (** [apply m bs] returns the body of [m] where any occurence of a
+      variable [x] is substituted with [y] if [x,[y]] is in the list
+      of bindings [bs].
+
+      The identity of the returned tree is the same as the identity of
+      the macro body.*)
+  val apply : macro t -> (string * tree list) list -> tree
 end
 
 module Const : sig
-  val create : (value:string -> macro t) def
-  val value : const t -> sexp
+  val create : (value:string -> const t) def
+  val value : const t -> tree
 end
 
 module Subst : sig
-  val create : (sexp list -> subst t) def
-  val body : subst -> sexp list
+  type syntax = Ident | Ascii | Hex
+  val create : (syntax -> tree list -> subst t) def
+  val body : subst t -> tree list
 end
 
 module Primitive : sig

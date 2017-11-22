@@ -7,8 +7,6 @@ module Var = Bap_primus_lisp_var
 
 module Variables = struct
 
-  type Parse.error += Bad_syntax
-
   type t = var list
 
   let var = function

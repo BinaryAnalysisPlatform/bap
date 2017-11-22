@@ -7,13 +7,13 @@ module Def = Bap_primus_lisp_def
 
 type resolution
 
-
-
 type ('t,'a,'b) resolver =
   't Def.t list -> Context.t -> string -> 'a ->
-  resolution * ('t Def.t * 'b) option
+  ('t Def.t* 'b,resolution) result option
 
 val extern : arch -> (Def.func, value list, (var * value) list) resolver
 val defun : arch -> (Def.func, value list, (var * value) list) resolver
-val macro : (Def.macro, sexp list, (string * sexp list) list) resolver
+val macro : (Def.macro, tree list, (string * tree list) list) resolver
 val primitive : ('a Def.primitive, unit, unit) resolver
+val subst : (Def.subst, unit, unit) resolver
+val const : (Def.const, unit, unit) resolver

@@ -34,9 +34,9 @@ type exn += Failed of string * Context.t * resolution
 
 (* let pp ppf {stage1; stage2; stage3; stage4} = *)
 (*   fprintf ppf "Initial set of candidates: @\n%a@\n\ *)
-(*                Candidates that satisfy current context: @\n%a@\n\ *)
-(*                Most specific candidates: @\n%a@\n\ *)
-(*                Candidates with compatible types and arity: @\n%a@\n\ " *)
+     (*                Candidates that satisfy current context: @\n%a@\n\ *)
+     (*                Most specific candidates: @\n%a@\n\ *)
+     (*                Candidates with compatible types and arity: @\n%a@\n\ " *)
 (*     pp_stage stage1 *)
 (*     pp_stage stage2 *)
 (*     pp_stage stage3 *)
@@ -45,7 +45,7 @@ type exn += Failed of string * Context.t * resolution
 (* let string_of_error name ctxts resolution = *)
 (*   asprintf *)
 (*     "no candidate for definition %s@\n\ *)
-(*      evaluation context@\n%a@\n@\n%a" *)
+       (*      evaluation context@\n%a@\n@\n%a" *)
 (*     name Contexts.pp ctxts pp resolution *)
 
 (* let () = Exn.add_printer (function *)
@@ -116,8 +116,6 @@ let stage4 = function
     then x::xs
     else []
 
-
-
 let overload_macro code (s3) =
   List.filter_map s3 ~f:(fun def ->
       Option.(Def.Macro.bind def code >>| fun (n,bs) -> n,def,bs)) |>
@@ -149,15 +147,16 @@ let run namespace overload ctxts defs (name : string) =
   let s2 = stage2 ctxts s1 in
   let s3 = stage3 s2 in
   let s4 = stage4 s3 in
-  let result = match overload s4 with
-    | [f] -> Some f
-    | _ -> None in
-  {
-    stage1 = locs s1;
-    stage2 = locs s2;
-    stage3 = locs s3;
-    stage4 = locs s4;
-  }, result
+  match overload s4 with
+  | [f] -> Some (Ok f)
+  | _ -> match s1 with
+    | [] -> None
+    | _ ->  Some( Error {
+        stage1 = locs s1;
+        stage2 = locs s2;
+        stage3 = locs s3;
+        stage4 = locs s4;
+      })
 
 let extern arch defs ctxt name args =
   run externs (overload_defun arch args) ctxt defs name
@@ -170,3 +169,8 @@ let macro defs ctxts name code =
 
 let primitive ctxts defs name =
   run interns overload_primitive ctxts defs name
+
+let subst substs ctxts name =
+  run interns ident ctxts substs name
+
+let const = subst

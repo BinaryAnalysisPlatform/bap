@@ -2,41 +2,60 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus_sexp
 
+module Index = Bap_primus_lisp_index
+module Loc = Bap_primus_lisp_loc
+module Source = Bap_primus_lisp_source
+
+module Id = Source.Id
+module Eq = Source.Eq
+
 type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
          | Lsl | Lsr | Asr | Land | Lior | Lxor | Cat
          | Equal | Less | And | Or
 [@@deriving sexp]
 type uop = Lneg | Lnot | Not [@@deriving sexp]
-type sexp = Sexp.t = Atom of string | List of sexp list[@@deriving sexp]
 type typ = Word | Type of int [@@deriving compare, sexp]
 type 'a scalar = {data : 'a; typ : typ}[@@deriving compare, sexp]
 type word = int64 scalar [@@deriving compare, sexp]
 type var = string scalar[@@deriving compare, sexp]
-type pos = Bap_primus_lisp_loc.pos [@@deriving compare, sexp_of]
-type loc = Bap_primus_lisp_loc.t [@@deriving compare, sexp_of]
+type pos = Loc.pos [@@deriving compare, sexp_of]
+type loc = Loc.t [@@deriving compare, sexp_of]
 
-type 'a arg = {
-  arg : 'a;
-  pos : pos;
+type error = ..
+exception Fail of error
+
+type ('a,'i,'e) interned = ('a,'i,'e) Index.interned = {
+  data : 'a;
+  id : 'i;
+  eq : 'e;
 }
 
-type exp =
-  | Int of word arg
-  | Var of var arg
-  | Ite of (exp * exp * exp) arg
-  | Let of (var * exp * exp) arg
-  | Ext of (exp * exp * exp) arg
-  | Bop of (bop * exp * exp) arg
-  | Uop of (uop * exp) arg
-  | App of (string * exp list) arg
-  | Seq of (exp list) arg
-  | Set of (var * exp) arg
-  | Rep of (exp * exp) arg
-  | Msg of (fmt list * exp list) arg
-  | Err of string arg
-and fmt = Lit of string | Exp of exp | Pos of int
+type tree = Source.tree
+type token = Source.token =
+  | Atom of string
+  | List of tree list
+
+type 'a indexed = ('a,Id.t,Eq.t) interned
 
 
-type parse_error = ..
-
-exception Parse_error of parse_error * sexp
+type ast = exp indexed
+and exp =
+  | Int of word
+  | Var of var
+  | Ite of ast * ast * ast
+  | Let of var * ast * ast
+  | Ext of ast * ast * ast
+  | Bop of bop * ast * ast
+  | Uop of uop * ast
+  | App of binding * ast list
+  | Seq of ast list
+  | Set of var * ast
+  | Rep of ast * ast
+  | Msg of fmt list * ast list
+  | Err of string
+and fmt =
+  | Lit of string
+  | Pos of int
+and binding =
+  | Dynamic of string
+  | Static of var list * ast

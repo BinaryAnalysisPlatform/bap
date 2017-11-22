@@ -38,6 +38,11 @@ and pp_loc ppf loc = match loc with
 
 let pp = pp_loc
 
+let create file range = FilePpos {
+  src = Ground;
+  def = {file; range}}
+
+
 include Comparable.Make_plain(struct
     type t = loc [@@deriving compare, sexp_of]
 end)
@@ -51,4 +56,4 @@ end)
 
 module Filepos = Comparable.Make_plain(struct
     type t = filepos [@@deriving compare, sexp_of ]
-end)
+  end)
