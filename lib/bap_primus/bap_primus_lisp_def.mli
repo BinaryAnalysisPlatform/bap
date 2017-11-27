@@ -3,12 +3,17 @@ open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 
+module type Code = functor(Machine : Machine) -> sig
+  val run : value list -> value Machine.t
+end
+
 type 'a spec
 type 'a t = 'a spec indexed
 type func
 type macro
 type subst
 type const
+type code = (module Code)
 type 'a primitive
 
 type attrs = Attribute.set
@@ -46,11 +51,23 @@ module Const : sig
 end
 
 module Subst : sig
-  type syntax = Ident | Ascii | Hex
-  val create : (syntax -> tree list -> tree -> subst t) def
+  val create : (tree list -> tree -> subst t) def
   val body : subst t -> tree list
 end
 
 module Primitive : sig
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a primitive t
+  type nonrec 'a t = 'a primitive t
+  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
+  val body : 'a t -> (value list -> 'a)
 end
+
+module Code : sig
+  val of_primitive : 'a Primitive.t -> code -> code t
+  val body : code t -> code
+end
+
+module type Primitives = functor (Machine : Machine) ->  sig
+  val defs : unit -> value Machine.t Primitive.t list
+end
+
+type primitives = (module Primitives)

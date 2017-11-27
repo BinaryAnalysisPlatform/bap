@@ -7,6 +7,7 @@ module Def = Bap_primus_lisp_def
 
 type t = {
   context : Context.t;
+  codes : Def.code Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
@@ -15,6 +16,7 @@ type t = {
 
 let create context = {
   context;
+  codes = [];
   defs = [];
   macros=[];
   substs=[];
@@ -23,10 +25,13 @@ let create context = {
 
 type 'a item = ([`Read | `Set_and_create ], t, 'a Def.t list) Fieldslib.Field.t_with_perm
 
-let macro = Fields.macros
-let subst = Fields.substs
-let const = Fields.consts
-let func = Fields.defs
+module Items = struct
+  let macro = Fields.macros
+  let subst = Fields.substs
+  let const = Fields.consts
+  let func = Fields.defs
+  let code = Fields.codes
+end
 
 let add p (fld : 'a item) x =
   Field.fset fld p (x :: Field.get fld p)

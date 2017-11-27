@@ -15,7 +15,7 @@ type set
 
 type error = ..
 exception Unknown_attr of string * tree
-exception Bad_syntax of error * tree
+exception Bad_syntax of error * tree list
 
 (** registers a new attribute. An attribute is a monoind that is
     parsed from a sexp and added to existing attribute of the same

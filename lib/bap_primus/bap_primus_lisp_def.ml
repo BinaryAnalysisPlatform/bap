@@ -21,7 +21,7 @@ type meta = {
 
 type func = {
   args : var list;
-  body : exp;
+  body : ast;
 } [@@deriving fields]
 
 type macro = {
@@ -34,16 +34,28 @@ type subst = {
 } [@@deriving fields]
 
 
-type const = macro
+type const = {
+  value : string;
+}
 
 type 'a primitive = (value list -> 'a)
+
+
+module type Code = functor(Machine : Machine) -> sig
+  val run : value list -> value Machine.t
+end
+
+type code = (module Code)
+
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
-type 'a def = ?docs:string -> ?attrs:attrs -> loc -> string -> 'a
+type 'a def = ?docs:string -> ?attrs:attrs -> string -> 'a
 
-let attributes = attrs
+let name {data={meta}} = name meta
+let docs {data={meta}} = docs meta
+let attributes {data={meta}} = attrs meta
 
-let field f t = f t.code
+let field f t = f t.data.code
 
 let create data tree = {
   data;
@@ -54,7 +66,7 @@ let create data tree = {
 module Func = struct
   let args = field args
   let body = field body
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) loc name args body =
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name args body =
     create {
       meta = {name; docs; attrs};
       code = {args; body}
@@ -66,7 +78,7 @@ module Macro = struct
   type error += Bad_subst of tree * tree list
   let args = field param
   let body = field subst
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) name param subst tree =
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name param subst =
     create {
       meta = {name; docs; attrs};
       code = {param; subst}
@@ -84,7 +96,7 @@ module Macro = struct
       Some (List.length rest, List.rev bs)
     | None -> None
 
-  let bind macro cs = take_rest macro.code.param cs
+  let bind macro cs = take_rest macro.data.code.param cs
 
   let find = List.Assoc.find ~equal:String.equal
 
@@ -105,55 +117,35 @@ module Macro = struct
       | Some [x] -> x
       | Some xs -> raise (Fail (Bad_subst (atom,xs)))
 
-
-  let apply macro cur cs = subst cs macro.code.subst
+  let apply macro cs = subst cs macro.data.code.subst
 end
 
 module Const = struct
-  let create ?(docs="") ?(attrs=Attribute.Set.empty) name subst tree =
+  let create ?(docs="") ?(attrs=Attribute.Set.empty) name ~value =
     create {
       meta = {name; docs; attrs};
-      code = {param=[]; subst}
+      code = {value}
     }
+  let value p = {data=Atom p.data.code.value; id=p.id; eq=p.eq}
 end
 
 module Subst = struct
+  type syntax = Ident | Ascii | Hex
+
+  let body = field elts
+
+
   let create ?(docs="") ?(attrs=Attribute.Set.empty) name elts =
     create {
       meta = {name; docs; attrs};
       code = {elts}
     }
-  let body = field elts
-
-  let ascii xs =
-    let rec loop xs acc = match xs with
-      | [] -> acc
-      | Atom x :: xs ->
-        String.fold x ~init:acc ~f:(fun acc x -> x :: acc) |>
-        loop xs
-      | List _ :: _ ->
-        failwith "ascii syntax must contain only atoms" in
-    List.rev_map (loop xs []) ~f:(fun c ->
-        Atom (sprintf "%#02x" (Char.to_int c)))
-
-  let is_odd x = x mod 2 = 1
-  let hex xs =
-    let rec loop xs acc = match xs with
-      | [] -> List.rev acc
-      | List _ :: _ -> failwith "hex-data must contain only atoms"
-      | Atom x :: xs ->
-        let x = if is_odd (String.length x) then "0" ^ x else x in
-        String.foldi x ~init:acc ~f:(fun i acc _ ->
-            if is_odd i
-            then (Atom (sprintf "0x%c%c" x.[i-1] x.[i])) :: acc
-            else acc) |>
-        loop xs in
-    loop xs []
 
 end
 
 
 module Primitive = struct
+  type nonrec 'a t = 'a primitive t
   let create ?(docs="") name code = {
     data = {
       meta = {name;docs; attrs=Attribute.Set.empty};
@@ -162,4 +154,19 @@ module Primitive = struct
     id = Id.null;
     eq = Eq.null;
   }
+
+  let body p = p.data.code
+end
+
+
+module type Primitives = functor (Machine : Machine) ->  sig
+  val defs : unit -> value Machine.t Primitive.t list
+end
+
+type primitives = (module Primitives)
+
+module Code = struct
+  let of_primitive prim code = {prim with data={prim.data with code}}
+
+  let body p = p.data.code
 end

@@ -1,78 +1,108 @@
 open Core_kernel.Std
 open Bap.Std
 
+open Bap_primus_lisp_types
+
 module Attribute = Bap_primus_lisp_attribute
-module Parse = Bap_primus_lisp_parse
 module Var = Bap_primus_lisp_var
+
+let fail err t = raise (Attribute.Bad_syntax (err,t))
 
 module Variables = struct
 
   type t = var list
 
-  let var = function
-    | Sexp.Atom v -> Parse.variable v
-    | s -> Parse.error Bad_syntax s
+  type Attribute.error += Expect_atom
+  type Attribute.error += Var_error of Var.read_error
 
-  let of_sexp = List.map ~f:var
-  let sexp_of vs = Sexp.List (List.map vs ~f:Var.sexp_of_t)
+  let var t = match t with
+    | {data=List _} -> fail Expect_atom [t]
+    | {data=Atom v} -> match Var.read v with
+      | Ok v -> v
+      | Error err -> fail (Var_error err) [t]
+
+  let parse = List.map ~f:var
 
   let global = Attribute.register
       ~name:"global"
       ~add:List.append
-      ~sexp_of ~of_sexp
+      ~parse
 
   let static = Attribute.register
       ~name:"static"
       ~add:List.append
-      ~sexp_of ~of_sexp
+      ~parse
 end
 
 module External = struct
   type t = string list
 
-  type Parse.error += Bad_syntax
+  type Attribute.error += Expect_atom
 
-  let sexp_of x = Sexp.List (List.map x ~f:(fun s -> Sexp.Atom s))
-  let of_sexp = List.map ~f:(function
-      | Sexp.Atom x -> x
-      | s -> Parse.error Bad_syntax s)
+  let parse = List.map ~f:(function
+      | {data=Atom x} -> x
+      | s -> fail Expect_atom [s])
 
   let t = Attribute.register
       ~name:"external"
       ~add:List.append
-      ~sexp_of ~of_sexp
-
+      ~parse
 end
 
 
 module Advice = struct
-  type cmethod = Before | After
+  type cmethod = Before | After [@@deriving compare, sexp]
 
-  type Parse.error += Unknown_method of string | Bad_syntax | Empty
+  module Methods = Map.Make_plain(struct
+      type t = cmethod [@@deriving compare, sexp]
+    end)
 
-  type t = {
-    cmethod : cmethod;
-    targets : String.Set.t;
-  }
+  type Attribute.error +=
+    | Unknown_method of string
+    | Bad_syntax
+    | Empty
+    | No_targets
+
+  type t = {methods : String.Set.t Methods.t}
 
   let methods = String.Map.of_alist_exn [
-    ":before", Before;
-    ":after",  After;
-  ]
+      ":before", Before;
+      ":after",  After;
+    ]
 
-  let targets _ _ = assert false
+  let targets {methods} m = match Map.find methods m with
+    | None -> String.Set.empty
+    | Some targets -> targets
 
-  let start = function
-    | [] -> invalid_arg "shit"
-    | Sexp.List _ as s :: _  -> Parse.error Bad_syntax s
-    | Atom s as lit :: _ as ss ->
-      if String.is_empty s then Parse.error Empty lit;
-      if s.[0] <> ':' then targets Before ss
-      else match Map.find methods s with
-        | None -> Parse.error (Unknown_method s) lit
-        | Some m -> targets m ss
+  let parse_targets met ss = match ss with
+    | [] -> fail No_targets ss
+    | ss ->
+      List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t ->
+          match t with
+          | {data=List _} -> fail Bad_syntax [t]
+          | {data=Atom x} -> {
+              methods = Map.update methods met ~f:(function
+                  | None -> String.Set.singleton x
+                  | Some ts -> Set.add ts x)
+            })
 
+  let parse trees = match trees with
+    | [] -> fail Empty trees
+    | {data=List _} as s :: _  ->  fail Bad_syntax [s]
+    | {data=Atom s} as lit :: ss ->
+      if String.is_empty s then fail (Unknown_method s) [lit];
+      match s with
+      | ":before" -> parse_targets Before ss
+      | ":after" -> parse_targets After ss
+      | _ when s.[0] = ':' -> fail (Unknown_method s) [lit]
+      | _ -> parse_targets Before trees
 
+  let add d1 d2 = {
+    methods = Map.merge d1.methods d2.methods ~f:(fun ~key -> function
+        | `Both (xs,ys) -> Some (Set.union xs ys)
+        | `Left xs | `Right xs -> Some xs)
+  }
 
-
+  let t = Attribute.register ~name:"advice"
+      ~parse ~add
 end

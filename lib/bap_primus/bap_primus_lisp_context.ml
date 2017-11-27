@@ -11,8 +11,13 @@ module Name = String
 type t = Feature.Set.t Name.Map.t
 let empty = Name.Map.empty
 
-exception Bad_context_value of sexp
-exception Bad_context_syntax of sexp
+type Attribute.error += Expect_atom | Expect_list
+
+
+let fail what got = raise (Attribute.Bad_syntax (what,[got]))
+let expect_atom = fail Expect_atom
+let expect_list = fail Expect_list
+
 
 let attr proj attr = match Project.get proj attr with
   | Some x -> [x]
@@ -33,21 +38,21 @@ let of_project proj = Name.Map.of_alist_exn [
   ]
 
 let sexp_of_context (name,values) =
-  List (List.map (name :: Set.to_list values)
-          ~f:(fun x -> Atom x))
+  Sexp.List (List.map (name :: Set.to_list values)
+               ~f:(fun x -> Sexp.Atom x))
 
 let sexp_of (cs : t) =
-  List (Atom "context" ::
-        (Map.to_alist cs |> List.map ~f:sexp_of_context))
+  Sexp.List (Atom "context" ::
+             (Map.to_alist cs |> List.map ~f:sexp_of_context))
 
 let value = function
-  | Atom x -> x
-  | s -> raise (Bad_context_value s)
+  | {data=Atom x} -> x
+  | s -> expect_atom s
 
-let context_of_sexp = function
-  | List (Atom name :: values) ->
+let context_of_tree = function
+  | {data=List ({data=Atom name} :: values)} ->
     name, Feature.Set.of_list (List.map values ~f:value)
-  | s -> raise (Bad_context_syntax s)
+  | s -> expect_list s
 
 
 let push cs name vs =
@@ -56,9 +61,9 @@ let push cs name vs =
       | Some vs' -> Set.union vs vs')
 
 
-let of_sexp : Sexp.t list -> t =
-  List.fold ~init:Name.Map.empty ~f:(fun cs sexp ->
-      let (name,vs) = context_of_sexp sexp in
+let parse : tree list -> t =
+  List.fold ~init:Name.Map.empty ~f:(fun cs tree ->
+      let (name,vs) = context_of_tree tree in
       push cs name vs)
 
 let add cs cs' =
@@ -67,8 +72,8 @@ let add cs cs' =
 
 let t = Attribute.register
     ~name:"context"
-    ~add:add
-    ~sexp_of ~of_sexp
+    ~add
+    ~parse
 
 let pp ppf ctxt =
   Sexp.pp_hum ppf (sexp_of ctxt)

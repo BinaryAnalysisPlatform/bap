@@ -24,15 +24,15 @@ let read_int str =
   with _ -> Error Bad_literal
 
 let char s =
-  Result.map (read_char s) ~f:(fun data -> {data; typ = Type 8})
+  Result.map (read_char s) ~f:(fun exp -> {exp; typ = Type 8})
 
 let int ?typ s =
-  Result.bind (read_int s) ~f:(fun data ->
+  Result.bind (read_int s) ~f:(fun exp ->
       match typ with
-      | None -> Ok {data;typ=Word}
+      | None -> Ok {exp;typ=Word}
       | Some s -> match Type.read s with
         | None -> Error Bad_type
-        | Some typ -> Ok {data;typ})
+        | Some typ -> Ok {exp;typ})
 
 let read x =
   if String.is_empty x then Error Empty
@@ -48,4 +48,4 @@ let read x =
 
 include Comparable.Make_plain(struct
     type t = word [@@deriving compare, sexp]
-end)
+  end)

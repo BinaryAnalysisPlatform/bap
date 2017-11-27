@@ -15,10 +15,9 @@ type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
 [@@deriving sexp]
 type uop = Lneg | Lnot | Not [@@deriving sexp]
 type typ = Word | Type of int [@@deriving compare, sexp]
-type 'a scalar = {data : 'a; typ : typ}[@@deriving compare, sexp]
-type word = int64 scalar [@@deriving compare, sexp]
-type var = string scalar[@@deriving compare, sexp]
-type pos = Loc.pos [@@deriving compare, sexp_of]
+type 'a term = {exp : 'a; typ : typ}[@@deriving compare, sexp]
+type word = int64 term [@@deriving compare, sexp]
+type var = string term[@@deriving compare, sexp]
 type loc = Loc.t [@@deriving compare, sexp_of]
 
 type error = ..
@@ -36,7 +35,6 @@ type token = Source.token =
   | List of tree list
 
 type 'a indexed = ('a,Id.t,Eq.t) interned
-
 
 type ast = exp indexed
 and exp =

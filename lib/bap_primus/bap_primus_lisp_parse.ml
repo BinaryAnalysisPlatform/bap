@@ -36,11 +36,14 @@ type parse_error =
   | Bad_hook
   | Unknown_toplevel
   | Bad_toplevel
+  | Bad_ascii
+  | Bad_hex
+  | Unknown_subst_syntax
   | Unresolved of defkind * Resolve.resolution
 
 type error += Parse_error of parse_error * tree list
 type error += Sexp_error of Source.error
-type error += Unresolved_feature of string * Loc.filepos option
+type error += Unresolved_feature of string * Loc.t option
 
 module Parse = struct
   open Program.Items
@@ -48,7 +51,7 @@ module Parse = struct
   let fails err s = raise (Fail (Parse_error (err,s)))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
-  let nil = {data=0L; typ=Type 1}
+  let nil = {exp=0L; typ=Type 1}
 
   let expand prog cs =
     List.concat_map cs ~f:(function
@@ -185,14 +188,42 @@ module Parse = struct
   let parse_declarations attrs =
     List.fold ~init:attrs ~f:Attribute.parse
 
-  let reader = function
-    | None -> Def.Subst.Ident
-    | Some ":ascii" -> Def.Subst.Ascii
-    | Some ":hex" -> Def.Subst.Hex
-    | Some unknown ->
-      invalid_argf "Unknown substitution syntax %s" unknown ()
+  let ascii xs =
+    let rec loop xs acc = match xs with
+      | [] -> acc
+      | {data=Atom x} as s :: xs ->
+        String.fold x ~init:acc ~f:(fun acc x ->
+            {data=x; id = s.id; eq = Eq.null} :: acc) |>
+        loop xs
+      | {data=List _} as here :: _ -> fail Bad_ascii here in
+    List.rev_map (loop xs []) ~f:(fun c ->
+        {c with data=Atom (sprintf "%#02x" (Char.to_int c.data))})
 
-  let is_keyarg s = Char.(s.[0] = ':')
+  let is_odd x = x mod 2 = 1
+
+  let hex xs =
+    let rec loop xs acc = match xs with
+      | [] -> List.rev acc
+      | {data=List _} as here :: _ -> fail Bad_hex here
+      | {data=Atom x} as s :: xs ->
+        let x = if is_odd (String.length x) then "0" ^ x else x in
+        String.foldi x ~init:acc ~f:(fun i acc _ ->
+            if is_odd i
+            then {s with data=Atom (sprintf "0x%c%c" x.[i-1] x.[i])} :: acc
+            else acc) |>
+        loop xs in
+    loop xs []
+
+  let reader = function
+    | None -> ident
+    | Some {data=Atom ":ascii"} -> ascii
+    | Some {data=Atom ":hex"} -> hex
+    | Some here -> fail Unknown_subst_syntax here
+
+
+  let is_keyarg = function
+    | {data=Atom s} -> Char.(s.[0] = ':')
+    | _ -> false
 
   let constrained prog attrs =
     match Attribute.Set.get attrs Context.t with
@@ -219,8 +250,7 @@ module Parse = struct
     Program.add prog subst @@
     Def.Subst.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name
-      (reader syntax)
-      body tree
+      (reader syntax body) tree
 
   let defconst ?docs ?(attrs=[]) name body prog gattrs tree =
     Program.add prog const @@
@@ -347,13 +377,13 @@ module Parse = struct
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
         {data=List ({data=Atom "declare"} :: attrs)} ::
-        {data=Atom syntax} ::
+        syntax ::
         body)} when is_keyarg syntax ->
       defsubst ~attrs ~syntax name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
-        {data=Atom syntax} ::
+        syntax ::
         body)} when is_keyarg syntax ->
       defsubst ~syntax name body state gattrs s
     | {data=List (
@@ -419,7 +449,7 @@ module Load = struct
             | None -> required
             | Some name -> match file_of_feature paths name with
               | None ->
-                let pos = Source.pos p tree in
+                let pos = Source.loc p tree in
                 raise (Fail (Unresolved_feature (name,Some pos)))
               | Some file -> match Source.find p file with
                 | None -> Set.add required name
@@ -432,11 +462,13 @@ module Load = struct
       else fixpoint (Set.fold required ~init:p ~f:(tree paths)) in
     fixpoint p
 
-  let features paths constraints features =
+  let features ~paths constraints features =
     trees paths Source.empty features |> transitive_closure paths |>
     Parse.source constraints
 
 end
+
+let program = Load.features
 
 
 (* let operators = [ *)

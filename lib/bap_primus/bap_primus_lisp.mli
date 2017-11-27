@@ -19,6 +19,10 @@ type exn += Runtime_error of string
 
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
+
+  val link_primitive : Def.code Def.t -> unit Machine.t
+
+  (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
 end
 

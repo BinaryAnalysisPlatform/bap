@@ -11,7 +11,7 @@ type error = ..
 type error += Expect_list
 
 exception Unknown_attr of string * tree
-exception Bad_syntax of error * tree
+exception Bad_syntax of error * tree list
 
 
 type 'a attr = {
@@ -51,7 +51,7 @@ let parse s attrs name values = match Hashtbl.find parsers name with
 
 let parse attrs = function
   | {data=List ({data=Atom name} as s :: values)} -> parse s attrs name values
-  | s -> raise (Bad_syntax (Expect_list,s))
+  | s -> raise (Bad_syntax (Expect_list,[s]))
 
 module Set = struct
   let get = Univ_map.find

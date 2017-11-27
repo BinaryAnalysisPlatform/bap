@@ -8,14 +8,13 @@ module External : sig
 end
 
 module Variables : sig
-  val t : var list Attribute.t
+  val global : var list Attribute.t
+  val static : var list Attribute.t
 end
 
 module Advice : sig
   type cmethod = Before | After
   type t
-  val t : t
-
-  val cmethod : t -> cmethod
-  val targets : t -> String.Set.t
+  val t : t Attribute.t
+  val targets : t -> cmethod -> String.Set.t
 end

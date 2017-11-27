@@ -24,41 +24,14 @@ type resolution = {
 type ('t,'a,'b) resolver =
   Program.t -> 't Program.item -> string -> 'a -> ('t Def.t * 'b,resolution) result option
 
-
-
 type exn += Failed of string * Context.t * resolution
-
-
-(* let pp_stage ppf locs = *)
-(*   List.iter locs ~f:(fun loc -> *)
-(*       fprintf ppf "%a@\n" pp_loc loc) *)
-
-(* let pp ppf {stage1; stage2; stage3; stage4} = *)
-(*   fprintf ppf "Initial set of candidates: @\n%a@\n\ *)
-     (*                Candidates that satisfy current context: @\n%a@\n\ *)
-     (*                Most specific candidates: @\n%a@\n\ *)
-     (*                Candidates with compatible types and arity: @\n%a@\n\ " *)
-(*     pp_stage stage1 *)
-(*     pp_stage stage2 *)
-(*     pp_stage stage3 *)
-(*     pp_stage stage4 *)
-
-(* let string_of_error name ctxts resolution = *)
-(*   asprintf *)
-(*     "no candidate for definition %s@\n\ *)
-       (*      evaluation context@\n%a@\n@\n%a" *)
-(*     name Contexts.pp ctxts pp resolution *)
-
-(* let () = Exn.add_printer (function *)
-(*     | Failed (n,c,r) -> Some (string_of_error n c r) *)
-(*     | _ -> None) *)
-
 
 let interns d name = Def.name d = name
 let externs def name =
   match Attribute.Set.get (Def.attributes def) External.t with
   | None -> false
   | Some names -> List.mem ~equal:String.equal names name
+
 
 
 (* all definitions with the given name *)
@@ -125,21 +98,16 @@ let overload_macro code (s3) =
   | ((n,_,_) as c) :: cs -> List.filter_map (c::cs) ~f:(fun (m,d,bs) ->
       Option.some_if (n = m) (d,bs))
 
-let typechecks arch (v,w) =
-  let word_size = Size.in_bits (Arch.addr_size arch) in
-  let size = Word.bitwidth (Value.to_word w) in
-  match v.typ with
-  | Word -> size = word_size
-  | Type n -> size = n
 
-let overload_defun arch args s3 =
+let overload_defun typechecks args s3 =
   let open Option in
   List.filter_map s3 ~f:(fun def ->
       List.zip (Def.Func.args def) args >>= fun bs ->
-      if List.for_all ~f:(typechecks arch) bs
+      if List.for_all ~f:(fun (v,x) ->
+          typechecks v.typ x) bs
       then Some (def,bs) else None)
 
-let overload_primitive s3 = s3
+let overload_primitive s3 = List.map s3 ~f:(fun s -> s,())
 
 let locs defs =
   List.map defs ~f:(fun def -> def.id) |> Id.Set.of_list
@@ -162,19 +130,19 @@ let run namespace overload prog item (name : string) =
         stage4 = locs s4;
       })
 
-let extern arch prog item name args =
-  run externs (overload_defun arch args) prog item name
+let extern typechecks prog item name args =
+  run externs (overload_defun typechecks args) prog item name
 
-let defun arch prog item name args =
-  run interns (overload_defun arch args) prog item name
+let defun typechecks prog item name args =
+  run interns (overload_defun typechecks args) prog item name
 
 let macro prog item name code =
   run interns (overload_macro code) prog item name
 
-let primitive prog item name =
+let code prog item name () =
   run interns overload_primitive prog item name
 
-let subst prog item name =
-  run interns ident prog item name
+let subst prog item name () =
+  run interns overload_primitive prog item name
 
 let const = subst

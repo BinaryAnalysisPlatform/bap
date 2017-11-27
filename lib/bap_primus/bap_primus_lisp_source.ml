@@ -121,14 +121,9 @@ let filename p tree = match Map.find p.origin tree.id with
   | None -> "/unknown/"
   | Some file -> file
 
-let pos p tree = Loc.{
+let loc p tree = Loc.{
     file = filename p tree;
     range = range p tree;
-  }
-
-let loc p tree = Loc.{
-    def = pos p tree;
-    src = Ground;
   }
 
 let fold p ~init ~f = Map.fold ~init p.source ~f:(fun ~key ~data user ->

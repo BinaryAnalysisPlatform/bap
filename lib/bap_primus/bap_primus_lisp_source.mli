@@ -19,8 +19,7 @@ and token = Atom of string | List of tree list
 
 val empty : t
 val load : t -> string -> (t,error) result
-val find : t -> string -> tree option
+val find : t -> string -> tree list option
 val loc : t -> tree -> Loc.t
-val pos : t -> tree -> Loc.filepos
-val filename : t -> string
+val filename : t -> tree -> string
 val fold : t -> init:'a -> f:(string -> tree list -> 'a -> 'a) -> 'a
