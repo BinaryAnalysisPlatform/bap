@@ -4,6 +4,29 @@ include Self()
 
 module Lisp_config = Primus_lisp_config
 
+let load_program paths features project =
+  match Primus.Lisp.Load.program ~paths project features with
+  | Ok prog -> prog
+  | Error err ->
+    Primus.Lisp.Load.pp_error Format.err_formatter err;
+    exit 2
+
+let main paths features project =
+  let prog = load_program paths features project in
+  let module Loader(Machine : Primus.Machine.S) = struct
+    module Lisp = Primus.Lisp.Make(Machine)
+    open Machine.Syntax
+
+    let print_message msg =
+      Machine.return (info "%s" msg)
+
+    let init () = Machine.sequence [
+        Lisp.link_program prog;
+        Primus.Lisp.message >>> print_message;
+      ]
+  end in
+  Primus.Machine.add_component (module Loader)
+
 let () =
   Config.manpage [
     `S "DESCRIPTION";
@@ -27,6 +50,6 @@ let () =
               ~default:["posix"]) in
 
   Config.when_ready (fun {Config.get=(!)} ->
-      let paths = !libs @ [Lisp_config.library]  in
+      let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
-      Primus.Lisp.init ~log:info_formatter ~paths features)
+      Project.register_pass' (main paths features))

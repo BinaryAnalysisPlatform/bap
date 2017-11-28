@@ -530,7 +530,7 @@ module Make(Machine : Machine) = struct
 end
 
 let init ?(log=std_formatter) ?(paths=[]) features  =
-  invalid_argf "Lisp library no longer requires initialization" ()
+  failwith "Lisp library no longer requires initialization"
 
 type primitives = Def.primitives
 module type Primitives = Def.Primitives

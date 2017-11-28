@@ -138,19 +138,9 @@ let main {Config.get=(!)} proj =
     info "Ok, we've terminated normally";
     proj
   | (Primus.Exn exn,proj) ->
-    info "program terminated by a signal: %s
-
-
-
-
-
-
-
-
-
-" (Primus.Exn.to_string exn);
+    info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
     proj
 
 let () =
   Config.when_ready (fun conf ->
-      Project.register_pass (main conf))
+      Project.register_pass ~deps:["primus-lisp"] (main conf))
