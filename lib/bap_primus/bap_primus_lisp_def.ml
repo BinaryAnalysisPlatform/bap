@@ -41,11 +41,11 @@ type const = {
 type 'a primitive = (value list -> 'a)
 
 
-module type Code = functor(Machine : Machine) -> sig
+module type Closure = functor(Machine : Machine) -> sig
   val run : value list -> value Machine.t
 end
 
-type code = (module Code)
+type closure = (module Closure)
 
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
@@ -165,8 +165,15 @@ end
 
 type primitives = (module Primitives)
 
-module Code = struct
+module Closure = struct
   let of_primitive prim code = {prim with data={prim.data with code}}
-
+  let create ?(docs="") name code = {
+    data = {
+      meta = {name;docs; attrs=Attribute.Set.empty};
+      code;
+    };
+    id = Id.null;
+    eq = Eq.null;
+  }
   let body p = p.data.code
 end

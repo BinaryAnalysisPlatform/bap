@@ -16,5 +16,5 @@ module Items : sig
   val subst : Def.subst item
   val const : Def.const item
   val func  : Def.func  item
-  val code  : Def.code item
+  val primitive  : Def.closure item
 end

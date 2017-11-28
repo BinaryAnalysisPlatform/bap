@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Format
 
 open Bap_primus_lisp_types
 
@@ -12,12 +13,9 @@ module Loc = Bap_primus_lisp_loc
 module Resolve = Bap_primus_lisp_resolve
 module Program = Bap_primus_lisp_program
 
-type attribute_error = ..
-
 type defkind = Func | Macro | Const | Subst
 
 type parse_error =
-  | Expect_atom
   | Bad_var_literal of Var.read_error
   | Bad_word_literal of Word.read_error
   | Bad_form of string
@@ -25,15 +23,7 @@ type parse_error =
   | Bad_let_binding
   | Bad_param_list
   | Bad_macro_param_list
-  | Bad_attribute_syntax
-  | Attribute_error of attribute_error
-  | Unknown_parser
   | Bad_require
-  | Bad_context_value
-  | Bad_context_syntax
-  | Bad_external_syntax
-  | Bad_variables_spec
-  | Bad_hook
   | Unknown_toplevel
   | Bad_toplevel
   | Bad_ascii
@@ -41,17 +31,35 @@ type parse_error =
   | Unknown_subst_syntax
   | Unresolved of defkind * Resolve.resolution
 
-type error += Parse_error of parse_error * tree list
-type error += Sexp_error of Source.error
-type error += Unresolved_feature of string * Loc.t option
+exception Parse_error of parse_error * tree list
+exception Attribute_parse_error of Attribute.error * tree list * tree
+
+type source =
+  | Cmdline
+  | Module of Loc.t
+
+type error =
+  | Parse_error of parse_error * Loc.t
+  | Sexp_error of string * source * Source.error
+  | Unresolved_feature of string * source
+  | Unknown_attr of string * Loc.t
+
+exception Fail of error
+
+let loc src trees = match trees with
+  | [] -> Source.loc src Id.null
+  | t :: ts ->
+    List.fold ts ~init:(Source.loc src t.id) ~f:(fun loc t ->
+        Loc.merge loc (Source.loc src t.id))
 
 module Parse = struct
   open Program.Items
 
-  let fails err s = raise (Fail (Parse_error (err,s)))
+  let fails err s = raise (Parse_error (err,s))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
   let nil = {exp=0L; typ=Type 1}
+
 
   let expand prog cs =
     List.concat_map cs ~f:(function
@@ -75,7 +83,7 @@ module Parse = struct
       let cons data : ast = {data; id=tree.id; eq=tree.eq} in
 
       let if_ = function
-        | c::e1::e2 :: e :: es -> cons (Ite (exp c,exp e1,seq e es))
+        | c::e1::e2 :: es -> cons (Ite (exp c,exp e1,seq e2 es))
         | _ -> bad_form "if" tree in
 
       let let_ = function
@@ -184,6 +192,12 @@ module Parse = struct
   let metaparams = function
     | {data=List vars} -> List.map ~f:atom vars
     | s -> fail Bad_macro_param_list s
+
+
+  let parse_declaration attrs tree =
+    try Attribute.parse attrs tree
+    with Attribute.Bad_syntax (err,trees) ->
+      raise (Attribute_parse_error (err,trees,tree))
 
   let parse_declarations attrs =
     List.fold ~init:attrs ~f:Attribute.parse
@@ -422,53 +436,141 @@ module Load = struct
 
   let is_loaded p name = Option.is_some (Source.find p name)
 
-  let tree paths p feature =
+  let load_tree paths p feature loc =
     match file_of_feature paths feature with
     | None ->
-      raise (Fail (Unresolved_feature (feature,None)))
+      raise (Fail (Unresolved_feature (feature,loc)))
     | Some name -> match Source.find p name with
       | Some _ -> p
       | None -> match Source.load p name with
         | Ok p -> p
-        | Error err -> raise (Fail (Sexp_error err))
+        | Error err -> raise (Fail (Sexp_error (feature,loc,err)))
 
-  let trees paths p features =
-    List.fold ~init:p features ~f:(tree paths)
+  let load_trees paths p features =
+    Map.fold ~init:p features ~f:(fun ~key ~data p ->
+        load_tree paths p key data)
 
   let parse_require tree = match tree with
     | {data=List [{data=Atom "require"}; {data=Atom name}]} ->
-      Some name
-    | {data=List ({data=Atom "require"} :: xs)} ->
-      raise (Fail (Parse_error (Bad_require,xs)))
+      Some (Ok name)
+    | {data=List ({data=Atom "require"} :: xs)} -> Some (Error xs)
     | _ -> None
 
   let required paths p =
-    Source.fold p ~init:String.Set.empty ~f:(fun _ trees required ->
+    Source.fold p ~init:String.Map.empty ~f:(fun _ trees required ->
         List.fold trees ~init:required ~f:(fun required tree ->
             match parse_require tree with
             | None -> required
-            | Some name -> match file_of_feature paths name with
-              | None ->
-                let pos = Source.loc p tree in
-                raise (Fail (Unresolved_feature (name,Some pos)))
+            | Some (Error trees) ->
+              raise (Fail (Parse_error (Bad_require,loc p trees)))
+            | Some (Ok name) ->
+              let pos = Module (Source.loc p tree.id) in
+              match file_of_feature paths name with
+              | None -> raise (Fail (Unresolved_feature (name,pos)))
               | Some file -> match Source.find p file with
-                | None -> Set.add required name
+                | None -> Map.add required name pos
                 | Some _ -> required))
 
   let transitive_closure paths p =
     let rec fixpoint p =
       let required = required paths p in
-      if Set.is_empty required then p
-      else fixpoint (Set.fold required ~init:p ~f:(tree paths)) in
+      if Map.is_empty required then p
+      else fixpoint (load_trees paths p required) in
     fixpoint p
 
-  let features ~paths constraints features =
-    trees paths Source.empty features |> transitive_closure paths |>
-    Parse.source constraints
+  let features_of_list =
+    List.fold ~init:String.Map.empty ~f:(fun fs f ->
+        Map.add fs ~key:f ~data:Cmdline)
 
+  let features ?(paths=[Filename.current_dir_name]) proj fs =
+    let source =
+      load_trees paths Source.empty (features_of_list fs) |>
+      transitive_closure paths in
+    try
+      Parse.source (Context.of_project proj) source
+    with Parse_error (err,trees) ->
+      raise (Fail (Parse_error (err, loc source trees)))
 end
 
-let program = Load.features
+let program ?paths proj features =
+  try Ok (Load.features ?paths proj features)
+  with Fail e -> Error e
+
+let string_of_var_error = function
+  | Var.Empty -> "empty string can't be used as a variable name"
+  | Var.Not_a_var -> "variable name can't start with a digit"
+  | Var.Bad_type -> "variable type should be a decimal number"
+  | Var.Bad_format -> "variable name contains extra `:' symbol"
+
+let string_of_word_error = function
+  | Word.Empty -> "an empty string"
+  | Word.Not_an_int -> "doesn't start with a number"
+  | Word.Bad_literal ->
+    "must start with a digit and contain no more than one `:' symbol"
+  | Word.Unclosed -> "unmatching single quote in a character literal"
+  | Word.Bad_type -> "the type annotation should be a decimal number"
+
+let string_of_form_syntax = function
+  | "if" -> "(if c e1 e2 ..)"
+  | "let" -> "(let (<bindings>..) e1 ..)"
+  | "while" -> "(while e e1 e2 ..)"
+  | "msg" -> "(msg <fmt> e ..)"
+  | "set" -> "(set var exp)"
+  | _ -> assert false
+
+let string_of_defkind = function
+  | Func -> "function"
+  | Macro -> "macro"
+  | Const -> "contant"
+  | Subst -> "substitution"
+
+let pp_parse_error ppf err = match err with
+  | Bad_var_literal e ->
+    fprintf ppf "bad variable literal - %s" (string_of_var_error e)
+  | Bad_word_literal e ->
+    fprintf ppf "bad word literal - %s" (string_of_word_error e)
+  | Bad_form name ->
+    fprintf ppf "bad %s syntax - expected %s" name (string_of_form_syntax name)
+  | Bad_app ->
+    fprintf ppf "head of the list in the application form shall be an atom"
+  | Bad_let_binding ->
+    fprintf ppf "expected a variable literal"
+  | Bad_param_list ->
+    fprintf ppf "expected a list of variables"
+  | Bad_macro_param_list ->
+    fprintf ppf "expected a list of atoms"
+  | Bad_require ->
+    fprintf ppf "expected (require <feature>)"
+  | Unknown_toplevel ->
+    fprintf ppf "unknown toplevel form"
+  | Bad_toplevel ->
+    fprintf ppf "bad toplevel syntax"
+  | Bad_ascii | Bad_hex ->
+    fprintf ppf "expected a list of atoms"
+  | Unknown_subst_syntax ->
+    fprintf ppf "unknown substitution syntax"
+  | Unresolved (k,r) ->
+    fprintf ppf "Unresoved %s@\n%a"
+      (string_of_defkind k) Resolve.pp_resolution r
+
+let pp_request ppf req = match req with
+  | Cmdline ->
+    fprintf ppf "requested by a user"
+  | Module loc ->
+    fprintf ppf "requested in %a" Loc.pp loc
+
+
+let pp_error ppf err = match err with
+  | Parse_error (err,loc) ->
+    fprintf ppf "%a@\nParse error: %a" Loc.pp loc pp_parse_error err
+  | Sexp_error (name,req,err) ->
+    fprintf ppf "%a@\nOccured when parsing feature %s %a"
+      Source.pp_error err name pp_request req
+  | Unresolved_feature (name,req) ->
+    fprintf ppf "Error: no implementation provided for feature `%s' %a"
+      name pp_request req
+  | Unknown_attr (attr,loc) ->
+    fprintf ppf "%a@\nError: unknown attribute %s@\n" Loc.pp loc attr
 
 
 (* let operators = [ *)

@@ -43,7 +43,7 @@ let read x =
     | [x] ->  int x
     | [x;typ] -> int ~typ x
     | _ -> Error Bad_literal
-  else Error Bad_literal
+  else Error Not_an_int
 
 
 include Comparable.Make_plain(struct

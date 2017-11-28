@@ -1,11 +1,26 @@
-open Core_kernel
-open Bap.Std
+(** A repository of s-expressions.
 
-(** Sexp Parser.
+    The repository holds an information about s-expressions loaded
+    from files. The s-expression representation is indexed, and with
+    each sub-tree of the s-expression we associate two indexes: the
+    identity index and the equality index.
 
-    The parser contains all parsed modules, as well as positional
-    information.
-*)
+    The identity index uniquely identifies a tree, and location
+    information is associated with each identity. The equality index
+    represents structural equality and is in fact the ordinal number
+    of the tree equivalence class in the quotient set by the
+    structural equality. In other words, if two trees have the same
+    equality index, then they are structurally equal.
+
+    The source repository implements hashconsing, i.e., all trees with
+    the same structure share the same memory regions.
+
+    Note: despite the name the module doesn't have any dependencies on
+    Primus Lisp, and works purely on the s-expression level. Later, we
+    will move it into a separate library, along with the index and
+    location modules. *)
+
+
 module Index = Bap_primus_lisp_index
 module Loc = Bap_primus_lisp_loc
 module Id : Index.S
@@ -17,9 +32,45 @@ type 'a indexed = ('a,Id.t,Eq.t) Index.interned
 type tree = token indexed
 and token = Atom of string | List of tree list
 
+
+
+(** [empty] source repository  *)
 val empty : t
+
+
+(** [load source filename] loads the source code from the given
+    [filename]. The source code should be a sequence of well-formed
+    s-expressions.
+
+    The [filename] should be an explicit path.
+*)
 val load : t -> string -> (t,error) result
+
+
+(** [find source filename] returns a list of trees loaded from a file
+    with the given [filename]. *)
 val find : t -> string -> tree list option
-val loc : t -> tree -> Loc.t
-val filename : t -> tree -> string
+
+
+(** [loc source id] returns a location information for the identity
+    with the provided [id].
+
+    If there is no such information, then a bogus location is
+    returned. *)
+val loc : t -> Id.t -> Loc.t
+
+
+(** [filename source id] returns the name of a file from which an
+    identity with the given [id] is orginating.
+
+    If the identity is not known to the source code repository, then
+    a bogus filename is returned. *)
+val filename : t -> Id.t -> string
+
+
+(** [fold source ~init ~f] iterates over all files loaded into the
+    [source] repository.  *)
 val fold : t -> init:'a -> f:(string -> tree list -> 'a -> 'a) -> 'a
+
+
+val pp_error : Format.formatter -> error -> unit

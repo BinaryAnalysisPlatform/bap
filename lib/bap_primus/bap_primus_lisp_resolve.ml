@@ -139,10 +139,14 @@ let defun typechecks prog item name args =
 let macro prog item name code =
   run interns (overload_macro code) prog item name
 
-let code prog item name () =
+let primitive prog item name () =
   run interns overload_primitive prog item name
 
 let subst prog item name () =
   run interns overload_primitive prog item name
 
 let const = subst
+
+
+let pp_resolution ppf res =
+  Format.fprintf ppf "ambiguous definitions"

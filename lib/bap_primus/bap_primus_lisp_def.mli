@@ -3,7 +3,7 @@ open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
 
-module type Code = functor(Machine : Machine) -> sig
+module type Closure = functor(Machine : Machine) -> sig
   val run : value list -> value Machine.t
 end
 
@@ -13,7 +13,7 @@ type func
 type macro
 type subst
 type const
-type code = (module Code)
+type closure = (module Closure)
 type 'a primitive
 
 type attrs = Attribute.set
@@ -61,9 +61,11 @@ module Primitive : sig
   val body : 'a t -> (value list -> 'a)
 end
 
-module Code : sig
-  val of_primitive : 'a Primitive.t -> code -> code t
-  val body : code t -> code
+module Closure : sig
+  val of_primitive : 'a Primitive.t -> closure -> closure t
+
+  val create : ?docs:string -> string -> closure -> closure t
+  val body : closure t -> closure
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig

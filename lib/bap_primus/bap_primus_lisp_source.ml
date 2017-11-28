@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 
 module Loc = Bap_primus_lisp_loc
 module Index = Bap_primus_lisp_index
@@ -7,7 +6,7 @@ module Index = Bap_primus_lisp_index
 module Id = Index.Make()
 module Eq = Index.Make()
 
-type error = Parsexp.Parse_error.t
+type error = Bad_sexp of (string * Parsexp.Parse_error.t)
 
 type ('a,'i,'e) interned = ('a,'i,'e) Index.interned = {
   data : 'a;
@@ -102,7 +101,7 @@ let add_origin origins origin trees =
 let load p filename =
   let source = In_channel.read_all filename in
   match Parsexp.Many_and_positions.parse_string source with
-  | Error _ as err -> err
+  | Error err -> Error (Bad_sexp (filename,err))
   | Ok (sexps,pos) ->
     let p,tree = of_sexps p pos sexps in
     let origin = add_origin p.origin filename tree in
@@ -113,11 +112,11 @@ let load p filename =
     }
 
 let find p filename = Map.find p.source filename
-let range p tree = match Map.find p.ranges tree.id with
+let range p id = match Map.find p.ranges id with
   | None -> norange
   | Some rng -> rng
 
-let filename p tree = match Map.find p.origin tree.id with
+let filename p id  = match Map.find p.origin id with
   | None -> "/unknown/"
   | Some file -> file
 
@@ -128,3 +127,6 @@ let loc p tree = Loc.{
 
 let fold p ~init ~f = Map.fold ~init p.source ~f:(fun ~key ~data user ->
     f key data user)
+
+let pp_error ppf (Bad_sexp (filename,err)) =
+  Parsexp.Parse_error.report ppf ~filename err

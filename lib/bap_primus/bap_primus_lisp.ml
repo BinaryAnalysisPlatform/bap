@@ -9,7 +9,6 @@ open Bap_primus_sexp
 module Attribute = Bap_primus_lisp_attribute
 module Def = Bap_primus_lisp_def
 module Parse = Bap_primus_lisp_parse
-module Machine = Bap_primus_lisp_machine
 module Resolve = Bap_primus_lisp_resolve
 module State = Bap_primus_state
 module Check = Bap_primus_lisp_type.Check
@@ -23,24 +22,6 @@ open Program.Items
 type exn += Runtime_error of string
 type exn += Link_error of string
 type exn += Unresolved of string * Resolve.resolution
-
-
-(* for external usage *)
-
-type library = {
-  mutable paths : string list;
-  mutable features : string list;
-  mutable log : formatter;
-  mutable initialized : bool;
-}
-
-
-let library = {
-  paths = [];
-  features = [];
-  log = err_formatter;
-  initialized = false;
-}
 
 type bindings = (var * value) list [@@deriving sexp_of]
 type state = {
@@ -85,6 +66,12 @@ let state = Bap_primus_state.declare ~inspect
        })
 
 
+let message,new_message =
+  Bap_primus_observation.provide
+    ~inspect:sexp_of_string "lisp-message"
+
+
+
 module Trace = struct
   open Sexp
   module Observation = Bap_primus_observation
@@ -124,6 +111,9 @@ module Lisp(Machine : Machine) = struct
 
   let failf fmt = error (fun m -> Runtime_error m) fmt
   let linkerf fmt = error (fun m -> Link_error m) fmt
+
+  let say fmt =
+    ksprintf (Machine.Observation.make new_message) fmt
 
   let word width value typ =
     let width = match typ with
@@ -277,11 +267,11 @@ module Lisp(Machine : Machine) = struct
 
   and eval_primitive name args =
     Machine.Local.get state >>= fun {program} ->
-    match Resolve.code program code name () with
+    match Resolve.primitive program primitive name () with
     | None -> failf "unresolved primitive %s" name ()
     | Some (Error err) -> failf "conflicting primitive %s" name ()
     | Some (Ok (code,())) ->
-      let module Body = (val (Def.Code.body code)) in
+      let module Body = (val (Def.Closure.body code)) in
       let module Code = Body(Machine) in
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
@@ -364,18 +354,21 @@ module Lisp(Machine : Machine) = struct
         | Not -> assert false in
       Eval.unop op e
     and msg fmt es =
+      let buf = Buffer.create 64 in
+      let ppf = formatter_of_buffer buf in
       let pp_exp e =
         Machine.catch
-          (eval e >>| fun {value=x} -> fprintf library.log "%a" Word.pp x)
+          (eval e >>| fun {value=x} -> fprintf ppf "%a" Word.pp x)
           (fun err ->
-             fprintf library.log "<%s>" (Exn.to_string err);
+             fprintf ppf "<%s>" (Exn.to_string err);
              Machine.return ()) in
       Machine.List.iter fmt ~f:(function
-          | Lit s -> Machine.return (pp_print_string library.log s)
+          | Lit s -> Machine.return (pp_print_string ppf s)
           | Pos n -> match List.nth es n with
             | None -> Machine.raise (Runtime_error "fmt pos")
             | Some e -> pp_exp e) >>= fun () ->
-      pp_print_newline library.log ();
+      pp_print_flush ppf ();
+      Machine.Observation.make new_message (Buffer.contents buf) >>= fun () ->
       Eval.const Word.b0 in
     eval exp
 
@@ -406,6 +399,7 @@ module Make(Machine : Machine) = struct
         | _ -> toload) |>
     Map.to_sequence
 
+
   let find_sub prog name =
     Term.enum sub_t prog |>
     Seq.find ~f:(fun s -> Sub.name s = name) |> function
@@ -422,8 +416,8 @@ module Make(Machine : Machine) = struct
           | _ -> List.(take args (List.length args - 1), last args) in
         args,ret,tid,addr
 
+
   let link_feature (name,defs) =
-    fprintf library.log "linking %s@\n" name;
     Machine.get () >>= fun proj ->
     Machine.Local.get state >>= fun s ->
     let arch = Project.arch proj in
@@ -494,26 +488,25 @@ module Make(Machine : Machine) = struct
   end)#run proj [] |> Machine.List.all
 
 
-  let init ()=
-    fprintf library.log "initializing lisp library@\n";
+  let link_program program =
     Machine.get () >>= fun proj ->
-    let context = Context.of_project proj in
-    let program =
-      Parse.program ~paths:library.paths context library.features in
     init_env (Project.program proj) >>= fun env ->
     Machine.Local.put state {
       program; env;
       width = width_of_ctxt proj;
     } >>= fun () ->
-    link_features () >>= fun () ->
-    fprintf library.log "the lisp machine is ready@\n";
-    Machine.return ()
+    link_features ()
 
-  let link_primitive packed =
+
+  let link_primitive p =
     Machine.Local.update state ~f:(fun s -> {
           s with
-          program = Program.add s.program code packed
+          program = Program.add s.program primitive p
         })
+
+  let define ?docs name body =
+    Def.Closure.create ?docs name body |>
+    link_primitive
 
   (* this is a deprecated interface for the backward compatibility,
      we can't efficiently translate a list of primitives to the code
@@ -532,19 +525,17 @@ module Make(Machine : Machine) = struct
             | Some code -> (Def.Primitive.body code)
             | _ -> assert false
         end in
-        Def.Code.of_primitive def (module Packed : Def.Code) |>
+        Def.Closure.of_primitive def (module Packed : Def.Closure) |>
         link_primitive)
 end
 
 let init ?(log=std_formatter) ?(paths=[]) features  =
-  if library.initialized
-  then invalid_argf "Lisp library is already initialized" ();
-  library.initialized <- true;
-  library.paths <- paths;
-  library.features <- features;
-  library.log <- log;
-  Bap_primus_main.add_component (module Make)
+  invalid_argf "Lisp library no longer requires initialization" ()
 
 type primitives = Def.primitives
 module type Primitives = Def.Primitives
 module Primitive = Def.Primitive
+module type Closure = Def.Closure
+type closure = Def.closure
+type program = Program.t
+module Load = Parse

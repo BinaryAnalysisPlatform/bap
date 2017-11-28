@@ -1909,30 +1909,61 @@ ident ::= ?any atom that is not recognized as a <word>?
     *)
     module Lisp : sig
 
+      (** an abstract type representing a lisp program  *)
+      type program
 
 
-      (**  A lisp primitive  *)
+      (** Primus Lisp program loader  *)
+      module Load : sig
+        type error
+
+        (** [program ?paths proj features] loads a program that
+            implements a set of [features]. For each feature its
+            implementation file, that must have the same basename as
+            the name of feature, is looked up in the list of
+            directories, specified by the [path] parameter (defaults
+            to the current folder). The first implementation that is
+            found, will be used, thus the order of the paths matters.
+
+            Returns an abstract representation of a program, that can
+            be linked into the Lisp machine, or an error if the program
+            is not well-formed.
+        *)
+        val program : ?paths:string list -> project -> string list ->
+          (program,error) result
+
+
+        (** [pp_error ppf err] outputs error information into the
+            pretty-printing formatter [ppf].  *)
+        val pp_error : Format.formatter -> error -> unit
+      end
+
+
+      (** Machine independent closure.
+
+          A closure is an anonymous function, that performs some
+          computation in the Machine Monad. Closures are used to
+          extend the Lisp Machine with arbitrary primitive operations
+          implemented in OCaml. *)
+      module type Closure = functor (Machine : Machine.S) -> sig
+
+        (** [run args] performs the computation.  *)
+        val run : value list -> value Machine.t
+      end
+
+      (** a closure packed as an OCaml value *)
+      type closure = (module Closure)
+
+      (* undocumented since it is deprecated *)
       module Primitive : sig
         type 'a t
-
-
-        (** [create ~docs name code] creates a lisp primitive, that is
-            accessible from lisp as a regular function with the given
-            [name]. A function [code] accepts a list of arguments,
-            and returns a computation in a Machine monad, that should
-            evaluate to a word. *)
         val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
       end
 
-
-      (** a list of primitives.  *)
+      (* undocumented since it is deprecated *)
       module type Primitives = functor (Machine : Machine.S) ->  sig
-
-
-        (** a list of primitives defined in the Machine monad.  *)
         val defs : unit -> value Machine.t Primitive.t list
       end
-
 
       (** a list of priomitives.  *)
       type primitives = (module Primitives)
@@ -1940,9 +1971,49 @@ ident ::= ?any atom that is not recognized as a <word>?
       type exn += Runtime_error of string
 
 
+      (** [message] occurs every time the Lisp Machine produces a
+          message using the [msg] primitive.   *)
+      val message : string observation
+
+
       (** Make(Machine) creates a Lisp machine embedded into the
           Primus [Machine].  *)
       module Make (Machine : Machine.S) : sig
+
+
+        (** [link_program p] links the program [p] into the Lisp
+            Machine. Previous program, if any, is discarded. *)
+        val link_program : program -> unit Machine.t
+
+        (** [define ?docs name code] defines a lisp primitive with
+            the given [name] and an optional documentation string
+            [doscs].
+
+            Example:
+
+            {[
+              open Bap_primus.Std
+
+              type Primus.exn += Bad_abs_call
+
+              module Abs(Machine : Primus.Machine.S) = struct
+                let run = function
+                  | [x] -> Value.abs x
+                  | _ -> Machine.raise Bad_abs_call
+              end
+
+              ...
+
+              module Library(Machine : Primus.Machine.S) = struct
+                module Lisp = Primus.Lisp.Make(Machine)
+                let init () = Machine.sequence [
+                    Lisp.define "abs" (module Abs);
+                    ...;
+                  ]
+              end
+            ]}
+        *)
+        val define : ?docs:string -> string -> closure -> unit Machine.t
 
 
         (** [failf msg a1 ... am ()] terminates a lisp machine, and
@@ -1953,14 +2024,12 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         (** [link_primitives prims] provides the primitives [prims]   *)
         val link_primitives : primitives -> unit Machine.t
+        [@@deprecated "[since 2017-12] use link_primitive instead"]
       end
 
-
-      (** [init ?log ?paths features] initializes the Lisp machine.
-          This function should be called by a plugin, that is
-          responsible for providing lisp code. In the [bap] framework
-          it is called by the [primus-lisp] plugin.  *)
+      (* it's a no-op now. *)
       val init : ?log:Format.formatter -> ?paths:string list -> string list -> unit
+      [@@deprecated "[since 2017-12] use the Machine interface instead"]
     end
 
 
