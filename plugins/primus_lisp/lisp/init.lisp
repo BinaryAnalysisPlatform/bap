@@ -1,15 +1,16 @@
+(defconstant true 1:1)
+(defconstant false 0:1)
+(defconstant nil false)
+
 (defmacro when (cnd body)
-  "if CND is 1:0 then evalute BODY
+  "if CND is true then evalute BODY
    and return the value of last expression in BODY,
-   otherwise return 0:0"
+   otherwise return false"
   (if cnd (prog body) ()))
 
-(defmacro until ($cond$ $body$)
-  (while (not $cond) $body))
+(defmacro until (c b)
+  (while (not c) b))
 
-
-(defun > (x y) (< y x))
-(defun /= (x y) (not (= x y)))
 (defun +1 (x) (+ x 1))
 (defun -1 (x) (- x 1))
 

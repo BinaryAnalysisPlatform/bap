@@ -1,6 +1,7 @@
 (require string)
 (require atoi)
 (require stdio)
+(require simple-memory-allocator)
 
 (defun getenv (name)
   "finds a value of an environemnt variable with the given name"

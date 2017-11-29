@@ -28,7 +28,7 @@
         (k (if (< j 0) (+ j n) j))
         (hi (- (* 8 (+ k 1)) 1))
         (lo (* k 8)))
-    (coerce hi lo x)))
+    (extract hi lo x)))
 
 (defmacro read-word (t p)
   "reads a word of type T at address P"
