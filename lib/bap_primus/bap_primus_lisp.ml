@@ -20,7 +20,6 @@ open Bap_primus_lisp_attributes
 open Program.Items
 
 type exn += Runtime_error of string
-type exn += Link_error of string
 type exn += Unresolved of string * Resolve.resolution
 
 type bindings = (var * value) list [@@deriving sexp_of]
@@ -52,7 +51,6 @@ end
 
 let () = Exn.add_printer (function
     | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
-    | Link_error msg -> Some ("primus linker error - " ^ msg)
     | _ -> None)
 
 
@@ -107,7 +105,6 @@ module Lisp(Machine : Machine) = struct
       (fun msg -> fun () -> Machine.raise (Runtime_error msg))
 
   let failf fmt = error (fun m -> Runtime_error m) fmt
-  let linkerf fmt = error (fun m -> Link_error m) fmt
 
   let say fmt =
     ksprintf (Machine.Observation.make new_message) fmt
@@ -163,27 +160,6 @@ module Lisp(Machine : Machine) = struct
       Machine.return (Some (sp,sp_value))
 
 
-  let bil_of_lisp op =
-    let open Bil in
-    let binop = Eval.binop in
-    match op with
-    | Add  -> binop plus
-    | Sub  -> binop minus
-    | Mul  -> binop times
-    | Div  -> binop divide
-    | Mod  -> binop modulo
-    | Divs -> binop sdivide
-    | Mods -> binop smodulo
-    | Lsl  -> binop lshift
-    | Lsr  -> binop rshift
-    | Asr  -> binop arshift
-    | Land  -> binop AND
-    | Lior   -> binop OR
-    | Lxor  -> binop XOR
-    | Cat  -> Eval.concat
-    | Equal   -> binop eq
-    | Less   -> binop le
-    | And | Or -> assert false
 
 
   let eval_sub : value list -> 'x = function
@@ -283,11 +259,8 @@ module Lisp(Machine : Machine) = struct
       | {data=Var v} -> lookup v
       | {data=Ite (c,e1,e2)}  -> ite c e1 e2
       | {data=Let (v,e1,e2)} -> let_ v e1 e2
-      | {data=Ext (hi,lo,e)} -> ext hi lo e
       | {data=App (n,args)} -> app n args
       | {data=Rep (c,e)} -> rep c e
-      | {data=Bop (op,e1,e2)} -> bop op e1 e2
-      | {data=Uop (op,e)} -> uop op e
       | {data=Seq es} -> seq es
       | {data=Set (v,e)} -> eval e >>= set v
       | {data=Msg (fmt,es)} -> msg fmt es
@@ -305,15 +278,6 @@ module Lisp(Machine : Machine) = struct
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
-    and ext hi lo w =
-      let eval_to_int e =
-        eval e >>= fun {value=x} -> match Word.to_int x with
-        | Ok x -> Machine.return x
-        | Error _ -> failf "expected smallint" () in
-      eval_to_int hi >>= fun hi ->
-      eval_to_int lo >>= fun lo ->
-      eval w >>= fun w ->
-      Eval.extract ~hi ~lo w
     and lookup v =
       Machine.Local.get state >>= fun {env; width} ->
       match List.Assoc.find ~equal:[%compare.equal : var] env v with
@@ -339,17 +303,6 @@ module Lisp(Machine : Machine) = struct
       else
         Eval.set (var s.width v) w >>= fun () ->
         Machine.return w
-    and bop op e1 e2 =
-      eval e1 >>= fun e1 ->
-      eval e2 >>= fun e2 ->
-      bil_of_lisp op e1 e2
-    and uop op e =
-      eval e >>= fun e ->
-      let op = match op with
-        | Lneg -> Bil.NEG
-        | Lnot -> Bil.NOT
-        | Not -> assert false in
-      Eval.unop op e
     and msg fmt es =
       let buf = Buffer.create 64 in
       let ppf = formatter_of_buffer buf in
@@ -362,7 +315,7 @@ module Lisp(Machine : Machine) = struct
       Machine.List.iter fmt ~f:(function
           | Lit s -> Machine.return (pp_print_string ppf s)
           | Pos n -> match List.nth es n with
-            | None -> Machine.raise (Runtime_error "fmt pos")
+            | None -> failf "bad positional argument $%d" n ()
             | Some e -> pp_exp e) >>= fun () ->
       pp_print_flush ppf ();
       Machine.Observation.make new_message (Buffer.contents buf) >>= fun () ->
@@ -384,7 +337,6 @@ module Make(Machine : Machine) = struct
       (fun msg -> fun () -> Machine.raise (kind msg))
 
   let failf fmt = error (fun m -> Runtime_error m) fmt
-  let linkerf fmt = error (fun m -> Link_error m) fmt
 
   let collect_externals s =
     Program.get s.program Program.Items.func |>

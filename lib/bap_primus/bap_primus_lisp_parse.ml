@@ -92,7 +92,7 @@ module Parse = struct
       let push_nothing = ident in
       let push s xs = s :: xs in
       let push_lit s = push (Lit s) in
-      let push_pos x = push (Pos (Char.to_int x)) in
+      let push_pos x = push (Pos (Int.of_string (Char.to_string x))) in
       let push_chars cs = push_lit (str cs) in
       let lit parse xs = function
         | '\\' -> parse (push_chars xs) `Esc
@@ -591,26 +591,3 @@ let pp_error ppf err = match err with
     fprintf ppf "%a@\nError: unknown attribute %s@\n" Loc.pp loc attr
   | Format_error (err,loc) ->
     fprintf ppf "%a@\nFormat error: %a" Loc.pp loc pp_format_error err
-
-
-(* let operators = [ *)
-(*    "+" , Add; *)
-(*    "-" , Sub; *)
-(*    "*" , Mul; *)
-(*    "/" , Div; *)
-(*    "mod" , Mod; *)
-(*    "signed-mod" , Mods; *)
-(*    "s/" , Divs; *)
-(*    "signed-div" , Divs; *)
-(*    "shift-left", Lsl; *)
-(*    "shift-right", Lsr; *)
-(*    "signed-shift-right", Asr; *)
-(*    "=" , Equal; *)
-(*    "<" , Less; *)
-(*    "and", And; *)
-(*    "or", Or; *)
-(*    "logand" , Land; *)
-(*    "logxor", Lxor; *)
-(*    "logior", Lior; *)
-(*    "cat", Cat; *)
-(* ] *)

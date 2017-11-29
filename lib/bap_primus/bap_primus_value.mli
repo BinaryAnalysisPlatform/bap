@@ -46,6 +46,7 @@ module Make(Machine : Machine) : sig
   val neg : t -> t m
   val add : t -> t -> t m
   val sub : t -> t -> t m
+  val mul : t -> t -> t m
   val div : t -> t -> t m
   val modulo : t -> t -> t m
   val lnot : t -> t m

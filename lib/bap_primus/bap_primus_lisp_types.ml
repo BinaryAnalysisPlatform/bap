@@ -9,11 +9,6 @@ module Source = Bap_primus_lisp_source
 module Id = Source.Id
 module Eq = Source.Eq
 
-type bop = Add | Sub | Mul | Div | Mod | Divs | Mods
-         | Lsl | Lsr | Asr | Land | Lior | Lxor | Cat
-         | Equal | Less | And | Or
-[@@deriving sexp]
-type uop = Lneg | Lnot | Not [@@deriving sexp]
 type typ = Word | Type of int [@@deriving compare, sexp]
 type 'a term = {exp : 'a; typ : typ}[@@deriving compare, sexp]
 type word = int64 term [@@deriving compare, sexp]
@@ -42,9 +37,6 @@ and exp =
   | Var of var
   | Ite of ast * ast * ast
   | Let of var * ast * ast
-  | Ext of ast * ast * ast
-  | Bop of bop * ast * ast
-  | Uop of uop * ast
   | App of binding * ast list
   | Seq of ast list
   | Set of var * ast
