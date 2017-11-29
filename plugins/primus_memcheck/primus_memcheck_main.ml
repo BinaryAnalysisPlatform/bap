@@ -123,34 +123,20 @@ module Kernel(Machine : Primus.Machine.S) = struct
     ]
 end
 
-module Primitives(Machine : Primus.Machine.S) = struct
+module Acquire(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   module Kernel = Kernel(Machine)
-
-
-  let register_allocation = function
+  let run = function
     | [ptr; size] -> Kernel.allocate ptr size
     | _ -> Lisp.failf "memcheck-acquire expects 2 arguments" ()
+end
 
-  let register_free = function
+module Release(Machine : Primus.Machine.S) = struct
+  module Lisp = Primus.Lisp.Make(Machine)
+  module Kernel = Kernel(Machine)
+  let run = function
     | [ptr] -> Kernel.process_free ptr
     | _ -> Lisp.failf "memcheck-release expectrs 1 argument" ()
-
-  let make_primitive (name, code, docs) =
-    Primus.Lisp.Primitive.create ~docs name code
-
-  let defs () = List.map ~f:make_primitive [
-      "memcheck-acquire", register_allocation,
-      "PTR SIZE - remembers that the memory region [pointer,
-      pointer+size) was allocated by the checked memory allocator";
-
-      "memcheck-release", register_free,
-      "registers the memory chunk pointed by P as deallocated. Any
-       consequent access to it will be registered as UAF. If P points to a
-       memory chunk that wasn't previously allocated then it is
-       registered as a memory corruption"
-    ]
-
 end
 
 module Main(Machine : Primus.Machine.S) = struct
@@ -158,7 +144,15 @@ module Main(Machine : Primus.Machine.S) = struct
   module Kernel = Kernel(Machine)
   let init () = Machine.sequence [
       Kernel.init ();
-      Lisp.link_primitives (module Primitives)
+      Lisp.define "memcheck-acquire" (module Acquire)
+        ~docs:"PTR SIZE - remembers that the memory region [pointer,
+         pointer+size) was allocated by the checked memory allocator";
+
+      Lisp.define "memcheck-release" (module Release)
+        ~docs:"registers the memory chunk pointed by P as deallocated. Any
+       consequent access to it will be registered as UAF. If P points to a
+       memory chunk that wasn't previously allocated then it is
+       registered as a memory corruption"
     ]
 end
 
