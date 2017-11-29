@@ -255,8 +255,8 @@ val empty : t
     specific. Where a context [c] is the same as context [c'] if [c]
     is as specific as [c'], i.e., no more, no less.
 
-    This is a partial order, that means that it is possible that both
-    contexts are neigther same, nor one is a less than of another, nor
+    This is a partial order relation, i.e., it is possible that both
+    contexts are neither same, nor one is less than of another, nor
     vice verse.
 
     Examples:
@@ -283,3 +283,4 @@ type porder =
   | More     (** more generic :  not(c1 <= c2) &&   c2 <= c1  *)
 
 val compare : t -> t -> porder
+val pp : Format.formatter -> t -> unit

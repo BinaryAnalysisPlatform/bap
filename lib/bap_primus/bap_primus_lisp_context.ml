@@ -91,7 +91,7 @@ let pp ppf ctxt =
 let (<=) ctxt ctxt' =
   Map.for_alli ctxt ~f:(fun ~key:name ~data:features ->
       match Map.find ctxt' name with
-      | None -> false
+      | None -> true  (* an empty set is a subset of any set *)
       | Some features' -> Set.is_subset features' ~of_:features)
 
 
