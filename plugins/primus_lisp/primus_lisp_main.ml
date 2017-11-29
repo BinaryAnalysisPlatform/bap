@@ -1,5 +1,6 @@
 open Bap.Std
 open Bap_primus.Std
+open Format
 include Self()
 
 module Lisp_config = Primus_lisp_config
@@ -8,7 +9,7 @@ let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
   | Ok prog -> prog
   | Error err ->
-    Primus.Lisp.Load.pp_error Format.err_formatter err;
+    eprintf "%a@\n" Primus.Lisp.Load.pp_error err;
     exit 2
 
 let main paths features project =

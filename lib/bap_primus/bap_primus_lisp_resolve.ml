@@ -1,5 +1,6 @@
 open Bap.Std
 open Core_kernel
+open Format
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
@@ -13,12 +14,14 @@ open Bap_primus_lisp_attributes
 
 
 
-type stage = Id.Set.t
+type stage = Loc.Set.t
 type resolution = {
+  constr : Context.t;
   stage1 : stage; (* definitions with the given name *)
   stage2 : stage; (* definitions applicable to the ctxt *)
   stage3 : stage; (* lower bounds of all definitions *)
   stage4 : stage; (* infinum *)
+  stage5 : stage; (* overload *)
 }
 
 type ('t,'a,'b) resolver =
@@ -109,8 +112,10 @@ let overload_defun typechecks args s3 =
 
 let overload_primitive s3 = List.map s3 ~f:(fun s -> s,())
 
-let locs defs =
-  List.map defs ~f:(fun def -> def.id) |> Id.Set.of_list
+let locs prog defs =
+  let src = Program.sources prog in
+  List.map defs ~f:(fun def ->
+      Source.loc src def.id) |> Loc.Set.of_list
 
 let run namespace overload prog item (name : string) =
   let ctxts = Program.context prog in
@@ -119,15 +124,18 @@ let run namespace overload prog item (name : string) =
   let s2 = stage2 ctxts s1 in
   let s3 = stage3 s2 in
   let s4 = stage4 s3 in
-  match overload s4 with
+  let s5 = overload s4 in
+  match s5 with
   | [f] -> Some (Ok f)
   | _ -> match s1 with
     | [] -> None
     | _ ->  Some( Error {
-        stage1 = locs s1;
-        stage2 = locs s2;
-        stage3 = locs s3;
-        stage4 = locs s4;
+        constr = ctxts;
+        stage1 = locs prog s1;
+        stage2 = locs prog s2;
+        stage3 = locs prog s3;
+        stage4 = locs prog s4;
+        stage5 = locs prog (List.map s5 ~f:fst);
       })
 
 let extern typechecks prog item name args =
@@ -147,6 +155,33 @@ let subst prog item name () =
 
 let const = subst
 
+let pp_stage ppf stage =
+  if Set.is_empty stage
+  then fprintf ppf "No definitions@\n"
+  else Set.iter stage ~f:(fprintf ppf "%a@\n" Loc.pp)
+
+let pp_reason ppf res =
+  if Set.is_empty res.stage5
+  then fprintf ppf "no suitable definitions were found.@\n"
+  else fprintf ppf "several equally applicable definitions were found.@\n"
 
 let pp_resolution ppf res =
-  Format.fprintf ppf "ambiguous definitions"
+  pp_reason ppf res;
+  fprintf ppf "The following candidates were considered:@\n";
+  fprintf ppf "All definitions with the given name:@\n";
+  pp_stage ppf res.stage1;
+  fprintf ppf "All definitions applicable to the given context:@\n";
+  pp_stage ppf res.stage2;
+  fprintf ppf "Definitions that are most specific to the given context:@\n";
+  pp_stage ppf res.stage3;
+  if Set.equal res.stage3 res.stage4
+  then
+    fprintf ppf "All definitions applicable to the specified arguments:@\n%a"
+      pp_stage res.stage5
+  else
+    fprintf ppf
+      "Overloading was not applied, since the above definitions \
+       belong to different context classes@\n";
+  fprintf ppf "Note: the definitions were considered in the \
+               following context:@\n%a"
+    Context.pp res.constr

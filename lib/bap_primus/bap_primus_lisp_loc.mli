@@ -14,6 +14,8 @@ type t = loc [@@deriving compare, sexp_of]
 
 val merge : t -> t -> t
 
+val nth_char : t -> int -> t
+
 val pp : Format.formatter -> t -> unit
 
 include Comparable.S_plain with type t := t

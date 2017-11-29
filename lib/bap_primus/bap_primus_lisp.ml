@@ -61,16 +61,13 @@ let state = Bap_primus_state.declare ~inspect
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun proj -> {
          env = [];
-         program = Program.create (Context.of_project proj);
+         program = Program.empty;
          width = width_of_ctxt proj;
        })
-
 
 let message,new_message =
   Bap_primus_observation.provide
     ~inspect:sexp_of_string "lisp-message"
-
-
 
 module Trace = struct
   open Sexp

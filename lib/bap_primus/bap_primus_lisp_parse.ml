@@ -15,6 +15,10 @@ module Program = Bap_primus_lisp_program
 
 type defkind = Func | Macro | Const | Subst
 
+type format_error =
+  | Expect_digit
+  | Unterminated of [`Esc | `Exp]
+
 type parse_error =
   | Bad_var_literal of Var.read_error
   | Bad_word_literal of Word.read_error
@@ -29,7 +33,8 @@ type parse_error =
   | Bad_ascii
   | Bad_hex
   | Unknown_subst_syntax
-  | Unresolved of defkind * Resolve.resolution
+  | Unresolved of defkind * string * Resolve.resolution
+
 
 exception Parse_error of parse_error * tree list
 exception Attribute_parse_error of Attribute.error * tree list * tree
@@ -40,6 +45,7 @@ type source =
 
 type error =
   | Parse_error of parse_error * Loc.t
+  | Format_error of format_error * Loc.t
   | Sexp_error of string * source * Source.error
   | Unresolved_feature of string * source
   | Unknown_attr of string * Loc.t
@@ -67,7 +73,7 @@ module Parse = struct
         | {data=Atom x} as atom ->
           match Resolve.subst prog subst x () with
           | None -> [atom]
-          | Some (Error s) -> fail (Unresolved (Subst,s)) atom
+          | Some (Error s) -> fail (Unresolved (Subst,x,s)) atom
           | Some (Ok (d,())) ->
             Def.Subst.body d |> List.map ~f:(fun tree ->
                 {tree with id = atom.id}))
@@ -79,6 +85,42 @@ module Parse = struct
       | Ok var -> var
 
   let parse prog tree =
+    let fmt fmt =
+      let src = Program.sources prog in
+      let nil = `Lit [] in
+      let str cs = String.of_char_list (List.rev cs) in
+      let push_nothing = ident in
+      let push s xs = s :: xs in
+      let push_lit s = push (Lit s) in
+      let push_pos x = push (Pos (Char.to_int x)) in
+      let push_chars cs = push_lit (str cs) in
+      let lit parse xs = function
+        | '\\' -> parse (push_chars xs) `Esc
+        | '$'  -> parse (push_chars xs) `Exp
+        | x    -> parse push_nothing (`Lit (x::xs)) in
+      let esc parse = function
+        | '\\' -> parse (push_lit "\\") nil
+        | 'n'  -> parse (push_lit "\n") nil
+        | '$'  -> parse (push_lit "$") nil
+        | c    -> parse (push_lit (sprintf "\\%c" c)) nil in
+      let exp off parse = function
+        | c when Char.is_digit c -> parse (push_pos c) nil
+        | c ->
+          let pos = Loc.nth_char (loc src [tree]) off in
+          raise (Fail (Format_error (Expect_digit, pos)))  in
+      let rec parse off spec state =
+        let step push state = parse (off+1) (push spec) state in
+        if Int.(off < String.length fmt) then match state with
+          | `Lit xs -> lit step xs fmt.[off]
+          | `Esc -> esc step fmt.[off]
+          | `Exp -> exp off step fmt.[off]
+        else List.rev @@ match state with
+          | `Lit xs -> push_chars xs spec
+          | (`Esc|`Exp) as state ->
+            let pos = Loc.nth_char (loc src [tree]) off in
+            raise (Fail (Format_error ((Unterminated state), pos))) in
+      parse 0 [] nil in
+
     let rec exp : tree -> ast = fun tree ->
       let cons data : ast = {data; id=tree.id; eq=tree.eq} in
 
@@ -120,7 +162,7 @@ module Parse = struct
       let macro op args = match Resolve.macro prog macro op args with
         | None -> cons (App (Dynamic op, exps args))
         | Some (Ok (macro,bs)) -> exp (Def.Macro.apply macro bs)
-        | Some (Error err) -> fails (Unresolved (Macro,err)) args in
+        | Some (Error err) -> fail (Unresolved (Macro,op,err)) tree in
 
       let list : tree list -> ast = function
         | [] -> cons (Int nil)
@@ -143,41 +185,11 @@ module Parse = struct
         | {data=List xs} -> list xs
         | {data=Atom x} as t -> match Resolve.const prog const x () with
           | None -> lit x
-          | Some Error err -> fail (Unresolved (Const,err)) t
+          | Some Error err -> fail (Unresolved (Const,x,err)) t
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
       start tree
     and seq e es = {data=Seq ((exp e) :: exps es); id=e.id; eq=e.eq}
-    and exps : tree list -> ast list = List.map ~f:exp
-    and fmt fmt =
-      let nil = `Lit [] in
-      let str cs = String.of_char_list (List.rev cs) in
-      let push_nothing = ident in
-      let push s xs = s :: xs in
-      let push_lit s = push (Lit s) in
-      let push_pos x = push (Pos (Char.to_int x)) in
-      let push_chars cs = push_lit (str cs) in
-      let lit parse xs = function
-        | '\\' -> parse (push_chars xs) `Esc
-        | '$'  -> parse (push_chars xs) `Exp
-        | x    -> parse push_nothing (`Lit (x::xs)) in
-      let esc parse = function
-        | '\\' -> parse (push_lit "\\") nil
-        | 'n'  -> parse (push_lit "\n") nil
-        | '$'  -> parse (push_lit "$") nil
-        | c    -> parse (push_lit (sprintf "\\%c" c)) nil in
-      let exp parse = function
-        | c when Char.is_digit c -> parse (push_pos c) nil
-        | c -> invalid_argf "msg - invalid format got $%c" c () in
-      let rec parse off spec state =
-        let step push state = parse (off+1) (push spec) state in
-        if Int.(off < String.length fmt) then match state with
-          | `Lit xs -> lit step xs fmt.[off]
-          | `Esc -> esc step fmt.[off]
-          | `Exp -> exp step fmt.[off]
-        else List.rev @@ match state with
-          | `Lit xs -> push_chars xs spec
-          | _ -> invalid_argf "invalid format string '%s'" fmt () in
-      (parse 0 [] nil) in
+    and exps : tree list -> ast list = List.map ~f:exp in
     exp tree
 
 
@@ -242,7 +254,7 @@ module Parse = struct
   let constrained prog attrs =
     match Attribute.Set.get attrs Context.t with
     | None -> prog
-    | Some constraints -> Program.constrain prog constraints
+    | Some constraints -> Program.with_context prog constraints
 
   let defun ?docs ?(attrs=[]) name p b bs prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
@@ -277,6 +289,7 @@ module Parse = struct
       "defmacro";
       "defsubst";
       "defun";
+      "require";
     ]
 
   let declaration gattrs s = match s with
@@ -320,7 +333,7 @@ module Parse = struct
         b :: body)
       } ->
       defun name params b body state gattrs s
-    | s -> fail Bad_toplevel s
+    | _ -> state
 
 
   let meta gattrs state s = match s with
@@ -417,7 +430,8 @@ module Parse = struct
     List.fold ~init:Attribute.Set.empty ~f:declaration
 
   let source constraints source =
-    let init = Program.create constraints in
+    let init = Program.with_context Program.empty constraints in
+    let init = Program.with_sources init source in
     let state = Source.fold source ~init ~f:(fun _ trees state ->
         List.fold trees ~init:state ~f:(meta (declarations trees))) in
     Source.fold source ~init:state ~f:(fun _ trees state ->
@@ -549,9 +563,9 @@ let pp_parse_error ppf err = match err with
     fprintf ppf "expected a list of atoms"
   | Unknown_subst_syntax ->
     fprintf ppf "unknown substitution syntax"
-  | Unresolved (k,r) ->
-    fprintf ppf "Unresoved %s@\n%a"
-      (string_of_defkind k) Resolve.pp_resolution r
+  | Unresolved (k,n,r) ->
+    fprintf ppf "Unable to resolve %s `%s', because %a"
+      (string_of_defkind k) n Resolve.pp_resolution r
 
 let pp_request ppf req = match req with
   | Cmdline ->
@@ -559,6 +573,10 @@ let pp_request ppf req = match req with
   | Module loc ->
     fprintf ppf "requested in %a" Loc.pp loc
 
+let pp_format_error ppf err = match err with
+  | Expect_digit -> fprintf ppf "expected digit"
+  | Unterminated `Esc -> fprintf ppf "unterminated escape sequence"
+  | Unterminated `Exp -> fprintf ppf "unterminated reference"
 
 let pp_error ppf err = match err with
   | Parse_error (err,loc) ->
@@ -571,6 +589,8 @@ let pp_error ppf err = match err with
       name pp_request req
   | Unknown_attr (attr,loc) ->
     fprintf ppf "%a@\nError: unknown attribute %s@\n" Loc.pp loc attr
+  | Format_error (err,loc) ->
+    fprintf ppf "%a@\nFormat error: %a" Loc.pp loc pp_format_error err
 
 
 (* let operators = [ *)

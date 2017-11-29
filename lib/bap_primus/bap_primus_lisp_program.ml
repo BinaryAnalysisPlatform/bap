@@ -7,6 +7,7 @@ module Def = Bap_primus_lisp_def
 
 type t = {
   context : Context.t;
+  sources : Source.t;
   codes : Def.closure Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
@@ -14,8 +15,9 @@ type t = {
   defs : Def.func Def.t list;
 } [@@deriving fields]
 
-let create context = {
-  context;
+let empty = {
+  context = Context.empty;
+  sources = Source.empty;
   codes = [];
   defs = [];
   macros=[];
@@ -38,6 +40,5 @@ let add p (fld : 'a item) x =
 
 let get p (fld : 'a item) = Field.get fld p
 
-let context p = p.context
-
-let constrain p context = {p with context}
+let with_context p context = {p with context}
+let with_sources p sources = {p with sources}

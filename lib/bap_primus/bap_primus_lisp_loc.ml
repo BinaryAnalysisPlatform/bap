@@ -10,7 +10,7 @@ type loc = {
 
 let pp ppf {file; range={start_pos=s; end_pos=e}}  =
   let len = e.offset - s.offset in
-  fprintf ppf "file %S, line %d, characters %d-%d"
+  fprintf ppf "File %S, line %d, characters %d-%d"
     file s.line s.col (s.col+len)
 
 let merge_pos merge p1 p2 = Parsexp.Positions.{
@@ -27,6 +27,18 @@ let merge p1 p2 =
       start_pos = merge_pos min p1.range.start_pos p2.range.start_pos;
       end_pos   = merge_pos max p1.range.end_pos p2.range.end_pos;
     }
+  }
+
+let shift_pos p off = Parsexp.Positions.{
+    p with
+    col = p.col + off;
+    offset = p.offset + off;
+  }
+
+let nth_char p off = Parsexp.Positions.{
+    p with range = {
+    start_pos = shift_pos p.range.start_pos off;
+    end_pos = shift_pos p.range.end_pos (off + 1)}
   }
 
 
