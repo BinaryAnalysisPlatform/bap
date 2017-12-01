@@ -14,7 +14,8 @@ type read_error = Empty | Not_a_var | Bad_type | Bad_format
 
 let read = function
   | "" -> Error Empty
-  | x when Char.is_digit x.[0] -> Error Not_a_var
+  | x when Char.is_digit x.[0] || x.[0] = '\'' || x.[0] = '"' ->
+    Error Not_a_var
   | x -> match String.split x ~on:':' with
     | [] -> assert false
     | _::_::_::_ -> Error Bad_format

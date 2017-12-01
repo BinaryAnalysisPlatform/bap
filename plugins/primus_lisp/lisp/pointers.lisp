@@ -38,7 +38,7 @@
     (while n
       (incr p)
       (decr n)
-      (endian cat x (memory-read p)))
+      (endian concat x (memory-read p)))
     x))
 
 (defmacro write-word (t p x)

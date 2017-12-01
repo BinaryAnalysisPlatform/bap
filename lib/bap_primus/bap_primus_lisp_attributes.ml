@@ -34,14 +34,26 @@ module Variables = struct
       ~parse
 end
 
+type Attribute.error +=
+  | Expect_atom
+  | Unterminated_quote
+
+let parse_name = function
+  | {data=Atom x} as s ->
+    let n = String.length x in
+    if n < 2 then x
+    else if x.[0] = '"'
+    then if x.[n-1] = '"'
+      then String.sub ~pos:1 ~len:(n-2) x
+      else fail Unterminated_quote [s]
+    else x
+  | s -> fail Expect_atom [s]
+
+
 module External = struct
   type t = string list
 
-  type Attribute.error += Expect_atom
-
-  let parse = List.map ~f:(function
-      | {data=Atom x} -> x
-      | s -> fail Expect_atom [s])
+  let parse = List.map ~f:parse_name
 
   let t = Attribute.register
       ~name:"external"
@@ -77,14 +89,11 @@ module Advice = struct
   let parse_targets met ss = match ss with
     | [] -> fail No_targets ss
     | ss ->
-      List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t ->
-          match t with
-          | {data=List _} -> fail Bad_syntax [t]
-          | {data=Atom x} -> {
-              methods = Map.update methods met ~f:(function
-                  | None -> String.Set.singleton x
-                  | Some ts -> Set.add ts x)
-            })
+      List.fold ss ~init:{methods=Methods.empty} ~f:(fun {methods} t -> {
+            methods = Map.update methods met ~f:(function
+                | None -> String.Set.singleton (parse_name t)
+                | Some ts -> Set.add ts (parse_name t))
+          })
 
   let parse trees = match trees with
     | [] -> fail Empty trees

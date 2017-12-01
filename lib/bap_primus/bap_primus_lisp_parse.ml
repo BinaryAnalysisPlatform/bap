@@ -17,6 +17,7 @@ type defkind = Func | Macro | Const | Subst
 
 type format_error =
   | Expect_digit
+  | Illegal_escape of char
   | Unterminated of [`Esc | `Exp]
 
 type parse_error =
@@ -30,6 +31,7 @@ type parse_error =
   | Bad_require
   | Unknown_toplevel
   | Bad_toplevel
+  | Bad_def of defkind
   | Bad_ascii
   | Bad_hex
   | Unknown_subst_syntax
@@ -58,6 +60,15 @@ let loc src trees = match trees with
     List.fold ts ~init:(Source.loc src t.id) ~f:(fun loc t ->
         Loc.merge loc (Source.loc src t.id))
 
+let is_quoted s =
+  let n = String.length s in
+  n > 1 && s.[0] = '"' && s.[n - 1] = '"'
+
+let unqoute s =
+  if is_quoted s
+  then String.sub ~pos:1 ~len:(String.length s - 2) s
+  else s
+
 module Parse = struct
   open Program.Items
 
@@ -84,43 +95,47 @@ module Parse = struct
       | Error e -> fail (Bad_var_literal e) s
       | Ok var -> var
 
-  let parse prog tree =
-    let fmt fmt =
-      let src = Program.sources prog in
-      let nil = `Lit [] in
-      let str cs = String.of_char_list (List.rev cs) in
-      let push_nothing = ident in
-      let push s xs = s :: xs in
-      let push_lit s = push (Lit s) in
-      let push_pos x = push (Pos (Int.of_string (Char.to_string x))) in
-      let push_chars cs = push_lit (str cs) in
+
+  let fmt prog fmt tree =
+    let fmt = unqoute fmt in
+    let fail err off =
+      let pos =
+        Loc.nth_char (loc (Program.sources prog) [tree]) (off+1) in
+      raise (Fail (Format_error (err, pos))) in
+    let unescape off c =
+      try Scanf.unescaped (sprintf "\\%c" c)
+      with Scanf.Scan_failure _ ->
+        fail (Illegal_escape c) off in
+    let nil = `Lit [] in
+    let str cs = String.of_char_list (List.rev cs) in
+    let push_nothing = ident in
+    let push s xs = s :: xs in
+    let push_lit s = push (Lit s) in
+    let push_pos x = push (Pos (Int.of_string (Char.to_string x))) in
+    let push_chars cs = push_lit (str cs) in
+    let rec parse off spec state =
       let lit parse xs = function
         | '\\' -> parse (push_chars xs) `Esc
         | '$'  -> parse (push_chars xs) `Exp
         | x    -> parse push_nothing (`Lit (x::xs)) in
       let esc parse = function
-        | '\\' -> parse (push_lit "\\") nil
-        | 'n'  -> parse (push_lit "\n") nil
         | '$'  -> parse (push_lit "$") nil
-        | c    -> parse (push_lit (sprintf "\\%c" c)) nil in
-      let exp off parse = function
+        | c    -> parse (push_lit (unescape off c)) nil in
+      let exp parse = function
         | c when Char.is_digit c -> parse (push_pos c) nil
-        | c ->
-          let pos = Loc.nth_char (loc src [tree]) off in
-          raise (Fail (Format_error (Expect_digit, pos)))  in
-      let rec parse off spec state =
-        let step push state = parse (off+1) (push spec) state in
-        if Int.(off < String.length fmt) then match state with
-          | `Lit xs -> lit step xs fmt.[off]
-          | `Esc -> esc step fmt.[off]
-          | `Exp -> exp off step fmt.[off]
-        else List.rev @@ match state with
-          | `Lit xs -> push_chars xs spec
-          | (`Esc|`Exp) as state ->
-            let pos = Loc.nth_char (loc src [tree]) off in
-            raise (Fail (Format_error ((Unterminated state), pos))) in
-      parse 0 [] nil in
+        | c -> fail Expect_digit off in
+      let step push state = parse (off+1) (push spec) state in
+      if Int.(off < String.length fmt) then match state with
+        | `Lit xs -> lit step xs fmt.[off]
+        | `Esc -> esc step fmt.[off]
+        | `Exp -> exp step fmt.[off]
+      else List.rev @@ match state with
+        | `Lit xs -> push_chars xs spec
+        | (`Esc|`Exp) as state -> fail (Unterminated state) off in
+    parse 0 [] nil
 
+
+  let parse prog tree =
     let rec exp : tree -> ast = fun tree ->
       let cons data : ast = {data; id=tree.id; eq=tree.eq} in
 
@@ -141,7 +156,8 @@ module Parse = struct
         | _ -> bad_form "while" tree in
 
       let msg = function
-        |  {data=Atom msg} :: es -> cons (Msg (fmt msg, exps es))
+        | {data=Atom msg} as tree :: es when is_quoted msg ->
+          cons (Msg (fmt prog msg tree, exps es))
         | _ -> bad_form "msg" tree in
 
       let set = function
@@ -217,11 +233,13 @@ module Parse = struct
   let ascii xs =
     let rec loop xs acc = match xs with
       | [] -> acc
-      | {data=Atom x} as s :: xs ->
+      | {data=Atom x} as s :: xs when is_quoted x ->
+        let x = try Scanf.unescaped x
+          with Scanf.Scan_failure _ -> fail Bad_ascii s in
         String.fold x ~init:acc ~f:(fun acc x ->
             {data=x; id = s.id; eq = Eq.null} :: acc) |>
         loop xs
-      | {data=List _} as here :: _ -> fail Bad_ascii here in
+      | here :: _ -> fail Bad_ascii here in
     List.rev_map (loop xs []) ~f:(fun c ->
         {c with data=Atom (sprintf "%#02x" (Char.to_int c.data))})
 
@@ -246,7 +264,6 @@ module Parse = struct
     | Some {data=Atom ":hex"} -> hex
     | Some here -> fail Unknown_subst_syntax here
 
-
   let is_keyarg = function
     | {data=Atom s} -> Char.(s.[0] = ':')
     | _ -> false
@@ -256,13 +273,13 @@ module Parse = struct
     | None -> prog
     | Some constraints -> Program.with_context prog constraints
 
-  let defun ?docs ?(attrs=[]) name p b bs prog gattrs tree =
+  let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
-    let es = List.map ~f:(parse (constrained prog attrs)) (b::bs) in
+    let es = List.map ~f:(parse (constrained prog attrs)) body in
     Program.add prog func @@ Def.Func.create ?docs ~attrs name (params p) {
       data = Seq es;
-      id = b.id;
-      eq = b.eq;
+      id = tree.id;
+      eq = tree.eq;
     } tree
 
   let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
@@ -272,7 +289,10 @@ module Parse = struct
       (metaparams ps)
       body tree
 
-  let defsubst ?docs ?(attrs=[]) ?syntax name body prog gattrs tree =
+  let defsubst ?docs ?(attrs=[]) name body prog gattrs tree =
+    let syntax = match body with
+      | s :: _ when is_keyarg s -> Some s
+      | _ -> None in
     Program.add prog subst @@
     Def.Subst.create ?docs
       ~attrs:(parse_declarations gattrs attrs) name
@@ -300,6 +320,7 @@ module Parse = struct
       else fail Unknown_toplevel here
     | _ -> fail Bad_toplevel s
 
+
   let stmt gattrs state s = match s with
     | {data = List (
         {data=Atom "defun"} ::
@@ -307,32 +328,33 @@ module Parse = struct
         params ::
         {data=Atom docs} ::
         {data=List ({data=Atom "declare"} :: attrs)} ::
-        b :: body)
-      } ->
-      defun ~docs ~attrs name params b body state gattrs s
+        body)
+      } when is_quoted docs ->
+      defun ~docs ~attrs name params body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
         params ::
         {data=Atom docs} ::
-        b :: body)
-      } ->
-      defun ~docs name params b body state gattrs s
+        body)
+      } when is_quoted docs ->
+      defun ~docs name params body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
         params ::
         {data=List ({data=Atom "declare"} :: attrs)} ::
-        b :: body)
+        body)
       } ->
-      defun ~attrs name params b body state gattrs s
+      defun ~attrs name params body state gattrs s
     | {data = List (
         {data=Atom "defun"} ::
         {data=Atom name} ::
         params ::
-        b :: body)
+        body)
       } ->
-      defun name params b body state gattrs s
+      defun name params body state gattrs s
+    | {data=List ({data=Atom "defun"} :: _)} -> fail (Bad_def Func) s
     | _ -> state
 
 
@@ -343,14 +365,14 @@ module Parse = struct
         {data=Atom docs};
         {data=List ({data=Atom "declare"} :: attrs)};
         {data=Atom body };
-      ]} ->
+      ]} when is_quoted docs ->
       defconst ~docs ~attrs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
         {data=Atom docs};
         {data=Atom body };
-      ]} ->
+      ]} when is_quoted docs ->
       defconst ~docs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
@@ -372,14 +394,14 @@ module Parse = struct
         params;
         {data=Atom docs};
         {data=List ({data=Atom "declare"} :: attrs)};
-        body]} ->
+        body]} when is_quoted docs ->
       defmacro ~docs ~attrs name params body state gattrs s
     | {data=List [
         {data=Atom "defmacro"};
         {data=Atom name};
         params;
         {data=Atom docs};
-        body]} ->
+        body]} when is_quoted docs ->
       defmacro ~docs name params body state gattrs s
     | {data=List [
         {data=Atom "defmacro"};
@@ -395,24 +417,19 @@ module Parse = struct
         body]} ->
       defmacro name params body state gattrs s
 
-    (* we can't add docstrings to the docstrings as it will make
-       grammar ambiguous -- we are unable to distinguish between
-       the first value in a series of values, and the docstring,
-       since we don't have any specific marker that separates the
-       meta description from the body. *)
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
+        {data=Atom docs} ::
         {data=List ({data=Atom "declare"} :: attrs)} ::
-        syntax ::
-        body)} when is_keyarg syntax ->
-      defsubst ~attrs ~syntax name body state gattrs s
+        body)} when is_quoted docs ->
+      defsubst ~docs ~attrs name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
-        syntax ::
-        body)} when is_keyarg syntax ->
-      defsubst ~syntax name body state gattrs s
+        {data=Atom docs} ::
+        body)} when is_quoted docs ->
+      defsubst ~docs name body state gattrs s
     | {data=List (
         {data=Atom "defsubst"} ::
         {data=Atom name} ::
@@ -424,6 +441,9 @@ module Parse = struct
         {data=Atom name} ::
         body)} ->
       defsubst name body state gattrs s
+    | {data=List ({data=Atom "defsubst"}::_)} -> fail (Bad_def Subst) s
+    | {data=List ({data=Atom "defmacro"}::_)} -> fail (Bad_def Macro) s
+    | {data=List ({data=Atom "defconst"}::_)} -> fail (Bad_def Const) s
     | _ -> state
 
   let declarations =
@@ -512,7 +532,7 @@ let program ?paths proj features =
 
 let string_of_var_error = function
   | Var.Empty -> "empty string can't be used as a variable name"
-  | Var.Not_a_var -> "variable name can't start with a digit"
+  | Var.Not_a_var -> "not a valid identifier"
   | Var.Bad_type -> "variable type should be a decimal number"
   | Var.Bad_format -> "variable name contains extra `:' symbol"
 
@@ -525,11 +545,12 @@ let string_of_word_error = function
   | Word.Bad_type -> "the type annotation should be a decimal number"
 
 let string_of_form_syntax = function
-  | "if" -> "(if c e1 e2 ..)"
-  | "let" -> "(let (<bindings>..) e1 ..)"
-  | "while" -> "(while e e1 e2 ..)"
-  | "msg" -> "(msg <fmt> e ..)"
-  | "set" -> "(set var exp)"
+  | "if" -> "(if <exp> <exp> <exp> ...)"
+  | "let" -> "(let ((<var> <exp>) ...) <exp> ...)"
+  | "while" -> "(while <exp> <exp> <exp> ...)"
+  | "msg" -> "(msg <fmt> <exp> ...)"
+  | "set" -> "(set <var> <exp>)"
+  | "prog" -> "(prog <exp> ...)"
   | _ -> assert false
 
 let string_of_defkind = function
@@ -537,6 +558,12 @@ let string_of_defkind = function
   | Macro -> "macro"
   | Const -> "contant"
   | Subst -> "substitution"
+
+let string_of_def_syntax = function
+  | Func  -> "(defun <ident> (<var> ...) [<docstring>] [<declarations>] <exp> ...)"
+  | Macro -> "(defmacro <ident> (<ident> ...) [<docstring>] [<declarations>] <exp>)"
+  | Const -> "(defconstant <ident> [<docstring>] [<declarations>] <atom>)"
+  | Subst -> "(defsubst <ident> [<docstring>] [<declarations>] [:<syntax>] <atom> ...)"
 
 let pp_parse_error ppf err = match err with
   | Bad_var_literal e ->
@@ -564,8 +591,11 @@ let pp_parse_error ppf err = match err with
   | Unknown_subst_syntax ->
     fprintf ppf "unknown substitution syntax"
   | Unresolved (k,n,r) ->
-    fprintf ppf "Unable to resolve %s `%s', because %a"
+    fprintf ppf "unable to resolve %s `%s', because %a"
       (string_of_defkind k) n Resolve.pp_resolution r
+  | Bad_def def ->
+    fprintf ppf "bad %s definition, expect %s"
+      (string_of_defkind def) (string_of_def_syntax def)
 
 let pp_request ppf req = match req with
   | Cmdline ->
@@ -577,6 +607,7 @@ let pp_format_error ppf err = match err with
   | Expect_digit -> fprintf ppf "expected digit"
   | Unterminated `Esc -> fprintf ppf "unterminated escape sequence"
   | Unterminated `Exp -> fprintf ppf "unterminated reference"
+  | Illegal_escape c  -> fprintf ppf "illegal escape character '%c'" c
 
 let pp_error ppf err = match err with
   | Parse_error (err,loc) ->
@@ -591,3 +622,5 @@ let pp_error ppf err = match err with
     fprintf ppf "%a@\nError: unknown attribute %s@\n" Loc.pp loc attr
   | Format_error (err,loc) ->
     fprintf ppf "%a@\nFormat error: %a" Loc.pp loc pp_format_error err
+
+let pp_program = Program.pp

@@ -74,3 +74,5 @@ val fold : t -> init:'a -> f:(string -> tree list -> 'a -> 'a) -> 'a
 
 
 val pp_error : Format.formatter -> error -> unit
+
+val pp_tree : Format.formatter -> tree -> unit

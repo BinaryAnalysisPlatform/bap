@@ -41,9 +41,5 @@
     (msg m)
     (fail m)))
 
-(defmacro expand-clause (c xs)
-  (when c xs))
-
-(defmacro cond (x xs)
-  (expand-clause s)
-  (cond xs))
+(defmacro cond (x y) (when x y))
+(defmacro cond (x y rest) (prog (cond x y) (cond rest)))

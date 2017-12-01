@@ -12,8 +12,16 @@ let load_program paths features project =
     eprintf "%a@\n" Primus.Lisp.Load.pp_error err;
     exit 2
 
-let main paths features project =
+let dump_program prog =
+  let margin = get_margin () in
+  set_margin 64;
+  printf "%a@\n" Primus.Lisp.Load.pp_program prog;
+  set_margin margin
+
+let main dump paths features project =
   let prog = load_program paths features project in
+  if dump then dump_program prog;
+
   let module Loader(Machine : Primus.Machine.S) = struct
     module Lisp = Primus.Lisp.Make(Machine)
     open Machine.Syntax
@@ -43,6 +51,9 @@ let () =
     `P "$(b,bap-primus)(3) $(b,bap-run)(1)"
   ];
 
+  let dump =
+    Config.(flag ~doc:"dumps generated AST" "dump") in
+
   let libs =
     Config.(param (list dir) ~doc:"paths to lisp libraries" "add") in
 
@@ -53,4 +64,4 @@ let () =
   Config.when_ready (fun {Config.get=(!)} ->
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
-      Project.register_pass' (main paths features))
+      Project.register_pass' (main !dump paths features))

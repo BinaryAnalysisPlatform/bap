@@ -21,3 +21,5 @@ module Items : sig
   val func  : Def.func  item
   val primitive  : Def.closure item
 end
+
+val pp : Format.formatter -> t -> unit

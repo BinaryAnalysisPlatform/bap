@@ -51,6 +51,10 @@ end
 
 let () = Exn.add_printer (function
     | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
+    | Unresolved (name,res) ->
+      let msg = asprintf "unable to resolve function %s, because %a"
+          name Resolve.pp_resolution res in
+      Some msg
     | _ -> None)
 
 
@@ -209,6 +213,7 @@ module Lisp(Machine : Machine) = struct
     let arch = Project.arch proj in
     Machine.Local.get state >>= fun s ->
     let typecheck = Check.value arch in
+    let typecheck _ _ = true in
     match Resolve.defun typecheck s.program func name args with
     | None -> eval_primitive name args
     | Some (Error resolution) ->

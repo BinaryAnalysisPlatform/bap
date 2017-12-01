@@ -17,6 +17,8 @@
     (memory-write dst 0:8))
   dst)
 
+;; strncpy dst src len
+;; copy len bytes from src to dst
 (defun strncpy (dst src len)
   (declare (external "strncpy"))
   (let ((dst dst))
@@ -25,6 +27,7 @@
       (copy-byte-shift dst src))
     (memory-write dst 0:8))
   dst)
+
 
 (defun memmove (dst src len)
   (declare (external "memmove"))

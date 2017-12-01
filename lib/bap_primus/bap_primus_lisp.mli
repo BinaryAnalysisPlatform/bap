@@ -10,7 +10,7 @@ val message : string observation
 module Load : sig
   type error
   val program : ?paths:string list -> Project.t -> string list -> (program,error) result
-
+  val pp_program : Format.formatter -> program -> unit
   val pp_error : Format.formatter -> error -> unit
 end
 

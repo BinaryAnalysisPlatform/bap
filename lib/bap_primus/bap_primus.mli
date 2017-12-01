@@ -1878,9 +1878,10 @@ exp ::=
   | ()
   | (if <exp> <exp> <exp> ...)
   | (let (<binding> ...) <exp> ...)
-  | (while <exp> <exp> ...)
+  | (set <var> <exp>)
+  | (while <exp> <exp> <exp> ...)
   | (prog <exp> ...)
-  | (msg <format>)
+  | (msg <format> <exp> ...)
   | (<ident> <exp> ...)
 
 binding ::= (<var> <exp>)
@@ -1936,6 +1937,10 @@ ident ::= ?any atom that is not recognized as a <word>?
         (** [pp_error ppf err] outputs error information into the
             pretty-printing formatter [ppf].  *)
         val pp_error : Format.formatter -> error -> unit
+
+
+        (** [pp_program ppf program] dumps program definitions into the formatter [ppf]   *)
+        val pp_program : Format.formatter -> program -> unit
       end
 
 

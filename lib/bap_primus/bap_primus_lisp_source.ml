@@ -1,5 +1,6 @@
 open Core_kernel
 
+module Cst = Parsexp.Cst
 module Loc = Bap_primus_lisp_loc
 module Index = Bap_primus_lisp_index
 
@@ -58,17 +59,43 @@ let norange = Parsexp.Positions.make_range_incl
     ~start_pos:nopos
     ~last_pos:nopos
 
-let getrange pos parents child =
-  Parsexp.Positions.find_sub_sexp_in_list_phys
-    pos parents ~sub:child |> function
+let getrange pos parents child = match pos with
   | None -> norange
-  | Some range -> range
+  | Some pos ->
+    Parsexp.Positions.find_sub_sexp_in_list_phys
+      pos parents ~sub:child |> function
+    | None -> norange
+    | Some range -> range
 
 let add_range p data =
   {p with ranges = Map.add p.ranges ~key:p.lastid ~data}
 
+let of_cst p sexps =
+  let newterm p r s =
+    let p = nextid p in
+    let p = add_range p r in
+    hashcons p (Cst.Forget.t s) in
+  let rec of_sexp p s = match s with
+    | Cst.Comment _ -> p,None
+    | Cst.Sexp (Atom {atom; loc; unescaped} as s) ->
+      let p,eq = newterm p loc s in
+      let x = Option.value unescaped ~default:atom in
+      unify p eq, Some {data=Atom x; id=p.lastid; eq}
+    | Cst.Sexp (List {elements=xs; loc} as s)  ->
+      let p,data = List.fold ~init:(p,[]) ~f:(fun (p,xs) sexp ->
+          match of_sexp p sexp with
+          | p,None -> p,xs
+          | p,Some x -> p,(x::xs)) xs in
+      let p,eq = newterm p loc s in
+      unify p eq,Some {data = List (List.rev data); id=p.lastid; eq} in
+  let p,trees = List.fold sexps ~init:(p,[]) ~f:(fun (p,xs) x ->
+      match of_sexp p x with
+      | p,None -> p,xs
+      | p,Some x -> p,(x::xs)) in
+  p,List.rev trees
 
-let of_sexps p pos sexps =
+
+let of_sexps ?pos p sexps =
   let getrange = getrange pos sexps in
   let newterm p s =
     let p = nextid p in
@@ -100,10 +127,10 @@ let add_origin origins origin trees =
 
 let load p filename =
   let source = In_channel.read_all filename in
-  match Parsexp.Many_and_positions.parse_string source with
+  match Parsexp.Many_cst.parse_string source with
   | Error err -> Error (Bad_sexp (filename,err))
-  | Ok (sexps,pos) ->
-    let p,tree = of_sexps p pos sexps in
+  | Ok cst ->
+    let p,tree = of_cst p cst in
     let origin = add_origin p.origin filename tree in
     Ok {
       p with
@@ -130,3 +157,10 @@ let fold p ~init ~f = Map.fold ~init p.source ~f:(fun ~key ~data user ->
 
 let pp_error ppf (Bad_sexp (filename,err)) =
   Parsexp.Parse_error.report ppf ~filename err
+
+let rec sexp_of_tree = function
+  | {data=List xs} -> Sexp.List (List.map xs ~f:sexp_of_tree)
+  | {data=Atom x} -> Sexp.Atom x
+
+let pp_tree ppf t =
+  Sexp.pp_hum ppf (sexp_of_tree t)
