@@ -166,6 +166,10 @@ module Parse = struct
 
       let prog_ es = cons (Seq (exps es)) in
 
+      let error = function
+        | [{data=Atom msg}] when is_quoted msg -> cons (Err msg)
+        | _ -> bad_form "error" tree in
+
       let forms = [
         "if", if_;
         "let", let_;
@@ -173,6 +177,7 @@ module Parse = struct
         "while", while_;
         "msg", msg;
         "set", set;
+        "error", error;
       ] in
 
       let macro op args = match Resolve.macro prog macro op args with
@@ -551,6 +556,7 @@ let string_of_form_syntax = function
   | "msg" -> "(msg <fmt> <exp> ...)"
   | "set" -> "(set <var> <exp>)"
   | "prog" -> "(prog <exp> ...)"
+  | "error" -> {|(error "<msg>")|}
   | _ -> assert false
 
 let string_of_defkind = function
