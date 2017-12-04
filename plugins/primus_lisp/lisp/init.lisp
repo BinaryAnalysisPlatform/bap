@@ -4,8 +4,8 @@
 
 (defmacro when (cnd body)
   "if CND is true then evalute BODY
-   and return the value of last expression in BODY,
-   otherwise return false"
+   and return the value of last expression
+   in BODY, otherwise return false"
   (if cnd (prog body) ()))
 
 (defmacro until (c b)
@@ -27,10 +27,12 @@
   (prog (decr x) (decr xs)))
 
 (defmacro and (x) x)
-(defmacro and (x xs) (if x (and xs) x))
+(defmacro and (x xs)
+  (let ((r x)) (if r (and xs) r)))
 
 (defmacro or (x) x)
-(defmacro or (x xs) (if x x (or xs)))
+(defmacro or (x xs)
+  (let ((r x)) (if r r (or xs))))
 
 (defun compare (x y)
   (if (< x y) -1 (if (> x y) 1 0)))
