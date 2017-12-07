@@ -12,6 +12,7 @@ module Word = Bap_primus_lisp_word
 module Loc = Bap_primus_lisp_loc
 module Resolve = Bap_primus_lisp_resolve
 module Program = Bap_primus_lisp_program
+module Type = Bap_primus_lisp_type
 
 type defkind = Func | Macro | Const | Subst
 
@@ -75,7 +76,7 @@ module Parse = struct
   let fails err s = raise (Parse_error (err,s))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
-  let nil = {exp=0L; typ=Type 1}
+  let nil = {exp=0L; typ=Type.word 1}
 
 
   let expand prog cs =
@@ -91,7 +92,7 @@ module Parse = struct
 
   let let_var : tree -> var = function
     | {data=List _} as s -> fail Bad_let_binding s
-    | {data=Atom x} as s -> match Var.read x with
+    | {data=Atom x; id; eq} as s -> match Var.read id eq x with
       | Error e -> fail (Bad_var_literal e) s
       | Ok var -> var
 
@@ -186,33 +187,32 @@ module Parse = struct
         | Some (Error err) -> fail (Unresolved (Macro,op,err)) tree in
 
       let list : tree list -> ast = function
-        | [] -> cons (Int nil)
+        | [] -> cons (Int {data=nil; id=tree.id; eq=tree.eq})
         | {data=List _} as s :: _  -> fail Bad_app s
         | {data=Atom op} :: exps ->
           match List.Assoc.find ~equal:String.equal forms op with
           | None -> macro op (expand prog exps)
           | Some form -> form exps in
 
-      let var r = match Var.read r with
+      let var {id;eq;data=r} = match Var.read id eq r with
         | Error e -> fail (Bad_var_literal e) tree
         | Ok v -> cons (Var v) in
 
-      let lit r = match Word.read r with
+      let lit ({id; eq; data=r} as t) = match Word.read id eq r with
         | Ok x -> cons (Int x)
-        | Error Not_an_int -> var r
+        | Error Not_an_int -> var t
         | Error other -> fail (Bad_word_literal other) tree in
 
       let start : tree -> ast = function
         | {data=List xs} -> list xs
         | {data=Atom x} as t -> match Resolve.const prog const x () with
-          | None -> lit x
+          | None -> lit {t with data=x}
           | Some Error err -> fail (Unresolved (Const,x,err)) t
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
       start tree
     and seq e es = {data=Seq ((exp e) :: exps es); id=e.id; eq=e.eq}
     and exps : tree list -> ast list = List.map ~f:exp in
     exp tree
-
 
   let params = function
     | {data=List vars} -> List.map ~f:let_var vars

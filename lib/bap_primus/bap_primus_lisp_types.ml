@@ -8,28 +8,29 @@ module Source = Bap_primus_lisp_source
 
 module Id = Source.Id
 module Eq = Source.Eq
-
-type typ = Word | Type of int [@@deriving compare, sexp]
-type 'a term = {exp : 'a; typ : typ}[@@deriving compare, sexp]
-type word = int64 term [@@deriving compare, sexp]
-type var = string term[@@deriving compare, sexp]
-type loc = Loc.t [@@deriving compare, sexp_of]
-
-type error = ..
-exception Fail of error
-
 type ('a,'i,'e) interned = ('a,'i,'e) Index.interned = {
   data : 'a;
   id : 'i;
   eq : 'e;
-}
+} [@@deriving compare, sexp]
+
+type 'a indexed = ('a,Id.t,Eq.t) interned [@@deriving compare]
+
+type typ = Any | Type of int [@@deriving sexp, compare]
+type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
+type word = int64 term indexed [@@deriving compare]
+type var = string term indexed [@@deriving compare]
+type loc = Loc.t
+
+type error = ..
+exception Fail of error
+
 
 type tree = Source.tree
 type token = Source.token =
   | Atom of string
   | List of tree list
 
-type 'a indexed = ('a,Id.t,Eq.t) interned
 
 type ast = exp indexed
 and exp =

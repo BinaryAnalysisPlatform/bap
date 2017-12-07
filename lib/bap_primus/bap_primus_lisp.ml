@@ -6,40 +6,84 @@ open Bap_primus_types
 open Bap_primus_sexp
 
 
-module Attribute = Bap_primus_lisp_attribute
-module Def = Bap_primus_lisp_def
-module Parse = Bap_primus_lisp_parse
-module Resolve = Bap_primus_lisp_resolve
-module State = Bap_primus_state
-module Check = Bap_primus_lisp_type.Check
-module Context = Bap_primus_lisp_context
-module Program = Bap_primus_lisp_program
+module Lisp = struct
+  module Attribute = Bap_primus_lisp_attribute
+  module Def = Bap_primus_lisp_def
+  module Var = Bap_primus_lisp_var
+  module Parse = Bap_primus_lisp_parse
+  module Resolve = Bap_primus_lisp_resolve
+  module State = Bap_primus_state
+  module Check = Bap_primus_lisp_type.Check
+  module Context = Bap_primus_lisp_context
+  module Program = Bap_primus_lisp_program
+end
 
 open Bap_primus_lisp_types
 open Bap_primus_lisp_attributes
-open Program.Items
+open Lisp.Program.Items
 
 type exn += Runtime_error of string
-type exn += Unresolved of string * Resolve.resolution
+type exn += Unresolved of string * Lisp.Resolve.resolution
 
-type bindings = (var * value) list [@@deriving sexp_of]
+type bindings = (Var.t * value) list [@@deriving sexp_of]
 type state = {
-  program : Program.t;
+  program : Lisp.Program.t;
   width : int;
   env : bindings;
+  cur : Id.t;
 }
+
 
 let inspect {env} = sexp_of_bindings env
 
 let width_of_ctxt proj =
   Size.in_bits (Arch.addr_size (Project.arch proj))
 
+let state = Bap_primus_state.declare ~inspect
+    ~name:"lisp-env"
+    ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
+    (fun proj -> {
+         env = [];
+         cur = Id.null;
+         program = Lisp.Program.empty;
+         width = width_of_ctxt proj;
+       })
+
+
+module Errors(Machine : Machine) = struct
+  open Machine.Syntax
+
+  let with_loc msg =
+    Machine.Local.get state >>| fun {cur; program} ->
+    let source = Lisp.Program.sources program in
+    let loc = Source.loc source cur in
+    let pos = Format.asprintf "%a" Loc.pp loc in
+    String.concat ~sep:"\n" [pos; msg]
+
+  let error kind = Format.ksprintf
+      (fun msg () ->
+         with_loc msg >>= fun msg ->
+         Machine.raise (kind msg))
+
+  let failf fmt = error (fun m -> Runtime_error m) fmt
+end
+
 module Locals(Machine : Machine) = struct
   open Machine.Syntax
+  include Errors(Machine)
+
+  let of_lisp {data={exp;typ}} =
+    Machine.Local.get state >>= fun {width} ->
+    match typ with
+    | Any -> Machine.return (Var.create exp (Type.Imm width))
+    | Type t -> Machine.return (Var.create exp (Type.Imm t))
+
+  let bindings =
+    Machine.List.map ~f:(fun (v,x) -> of_lisp v >>| fun v -> v,x)
 
   let rec update xs x ~f = match xs with
     | [] -> []
-    | (x',w) :: xs when x' = x -> (x,f w) :: xs
+    | (x',w) :: xs when Var.(x' = x) -> (x,f w) :: xs
     | xw :: xs -> xw :: update xs x ~f
 
   let replace xs x w = update xs x ~f:(fun _ -> w)
@@ -53,19 +97,11 @@ let () = Exn.add_printer (function
     | Runtime_error msg -> Some ("primus runtime error - " ^ msg)
     | Unresolved (name,res) ->
       let msg = asprintf "unable to resolve function %s, because %a"
-          name Resolve.pp_resolution res in
+          name Lisp.Resolve.pp_resolution res in
       Some msg
     | _ -> None)
 
 
-let state = Bap_primus_state.declare ~inspect
-    ~name:"lisp-env"
-    ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
-    (fun proj -> {
-         env = [];
-         program = Program.empty;
-         width = width_of_ctxt proj;
-       })
 
 let message,new_message =
   Bap_primus_observation.provide
@@ -80,7 +116,7 @@ module Trace = struct
   let sexp_of_binding (_,x) = sexp_of_value x
 
   let sexp_of_enter (def,bs) =
-    List (Atom (Def.name def) :: List.map bs ~f:sexp_of_binding)
+    List (Atom (Lisp.Def.name def) :: List.map bs ~f:sexp_of_binding)
 
   let sexp_of_leave (call,result) =
     List (Atom "#result-of" ::
@@ -96,34 +132,21 @@ module Trace = struct
 end
 
 
-module Lisp(Machine : Machine) = struct
+module Interpreter(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Bap_primus_linker.Make(Machine)
   module Eval = Bap_primus_interpreter.Make(Machine)
-  module Vars = Locals(Machine)
   module Env = Bap_primus_env.Make(Machine)
   module Mem = Bap_primus_memory.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
+  module Vars = Locals(Machine)
 
-  let error kind = Format.ksprintf
-      (fun msg -> fun () -> Machine.raise (Runtime_error msg))
+  include Errors(Machine)
 
-  let failf fmt = error (fun m -> Runtime_error m) fmt
+
 
   let say fmt =
     ksprintf (Machine.Observation.make new_message) fmt
-
-  let word width value typ =
-    let width = match typ with
-      | Word -> width
-      | Type n -> n in
-    Word.of_int64 ~width value
-
-  let var width {exp;typ} =
-    let typ = match typ with
-      | Word -> Type.Imm width
-      | Type n -> Type.Imm n in
-    Var.create exp typ
 
   let width () = Machine.Local.get state >>| fun {width} -> width
 
@@ -162,9 +185,6 @@ module Lisp(Machine : Machine) = struct
       Eval.binop sign sp_value frame_size >>=
       Eval.set sp >>= fun () ->
       Machine.return (Some (sp,sp_value))
-
-
-
 
   let eval_sub : value list -> 'x = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
@@ -209,32 +229,30 @@ module Lisp(Machine : Machine) = struct
         | Some rval -> Machine.return rval
 
   let rec eval_lisp name args : value Machine.t =
-    Machine.get () >>= fun proj ->
-    let arch = Project.arch proj in
     Machine.Local.get state >>= fun s ->
-    let typecheck = Check.value arch in
-    let typecheck _ _ = true in
-    match Resolve.defun typecheck s.program func name args with
+    Lisp.Resolve.defun Lisp.Check.value s.program func name args |>
+    function
     | None -> eval_primitive name args
     | Some (Error resolution) ->
       Machine.raise (Unresolved (name,resolution))
     | Some (Ok (fn,bs)) ->
+      Vars.bindings bs >>= fun bs ->
       Eval.const Word.b0 >>= fun init ->
       Machine.Observation.make Bap_primus_linker.will_exec (`symbol name) >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
       Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-      eval_exp (Def.Func.body fn) >>= fun r ->
+      eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
       Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_advices stage init primary args =
     Machine.Local.get state >>= fun {program} ->
-    Program.get program func |>
+    Lisp.Program.get program func |>
     Machine.List.fold ~init ~f:(fun r def ->
-        let name = Def.name def in
-        match Attribute.Set.get (Def.attributes def) Advice.t with
+        let name = Lisp.Def.name def in
+        match Attribute.Set.get (Lisp.Def.attributes def) Advice.t with
         | None -> Machine.return r
         | Some adv ->
           if Set.mem (Advice.targets adv stage) primary
@@ -245,11 +263,11 @@ module Lisp(Machine : Machine) = struct
 
   and eval_primitive name args =
     Machine.Local.get state >>= fun {program} ->
-    match Resolve.primitive program primitive name () with
+    match Lisp.Resolve.primitive program primitive name () with
     | None -> failf "unresolved primitive %s" name ()
     | Some (Error err) -> failf "conflicting primitive %s" name ()
     | Some (Ok (code,())) ->
-      let module Body = (val (Def.Closure.body code)) in
+      let module Body = (val (Lisp.Def.Closure.body code)) in
       let module Code = Body(Machine) in
       Eval.const Word.b0 >>= fun init ->
       eval_advices Advice.Before init name args >>= fun _ ->
@@ -257,10 +275,14 @@ module Lisp(Machine : Machine) = struct
       eval_advices Advice.After r name args
 
   and eval_exp exp  =
-    let int v t = width () >>= fun width ->
-      Eval.const (word width v t) in
+    let int v t =
+      let width = match t with
+        | Any -> width ()
+        | Type t -> Machine.return t in
+      width >>= fun width ->
+      Eval.const (Word.of_int64 ~width v) in
     let rec eval = function
-      | {data=Int {exp;typ}} -> int exp typ
+      | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
       | {data=Ite (c,e1,e2)}  -> ite c e1 e2
       | {data=Let (v,e1,e2)} -> let_ v e1 e2
@@ -279,15 +301,17 @@ module Lisp(Machine : Machine) = struct
       if Word.is_zero w then eval e2 else eval e1
     and let_ v e1 e2 =
       eval e1 >>= fun w ->
+      Vars.of_lisp v >>= fun v ->
       Machine.Local.update state ~f:(Vars.push v w) >>=  fun () ->
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v =
       Machine.Local.get state >>= fun {env; width} ->
-      match List.Assoc.find ~equal:[%compare.equal : var] env v with
+      Vars.of_lisp v >>= fun v ->
+      match List.Assoc.find ~equal:Var.equal env v with
       | Some w -> Machine.return w
-      | None -> Eval.get (var width v)
+      | None -> Eval.get v
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
@@ -301,12 +325,13 @@ module Lisp(Machine : Machine) = struct
       loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
-      if List.Assoc.mem ~equal:[%compare.equal : var] s.env v
+      Vars.of_lisp v >>= fun v ->
+      if List.Assoc.mem ~equal:Var.equal s.env v
       then
         Machine.Local.put state {s with env = Vars.replace s.env v w}
         >>= fun () -> Machine.return w
       else
-        Eval.set (var s.width v) w >>= fun () ->
+        Eval.set v w >>= fun () ->
         Machine.return w
     and msg fmt es =
       let buf = Buffer.create 64 in
@@ -325,6 +350,7 @@ module Lisp(Machine : Machine) = struct
       pp_print_flush ppf ();
       Machine.Observation.make new_message (Buffer.contents buf) >>= fun () ->
       Eval.const Word.b0 in
+    Machine.Local.update state (fun s -> {s with cur = exp.id}) >>= fun () ->
     eval exp
 
 end
@@ -334,19 +360,14 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
   module Linker = Bap_primus_linker.Make(Machine)
   module Eval = Bap_primus_interpreter.Make(Machine)
-  module Vars = Locals(Machine)
   module Value = Bap_primus_value.Make(Machine)
-
-
-  let error kind = Format.ksprintf
-      (fun msg -> fun () -> Machine.raise (kind msg))
-
-  let failf fmt = error (fun m -> Runtime_error m) fmt
+  module Vars = Locals(Machine)
+  include Errors(Machine)
 
   let collect_externals s =
-    Program.get s.program Program.Items.func |>
+    Lisp.Program.get s.program Lisp.Program.Items.func |>
     List.fold ~init:String.Map.empty  ~f:(fun toload def ->
-        match Attribute.Set.get (Def.attributes def) External.t with
+        match Attribute.Set.get (Lisp.Def.attributes def) External.t with
         | Some names ->
           List.fold names ~init:toload ~f:(fun toload name ->
               Map.add_multi toload ~key:name ~data:def)
@@ -374,18 +395,19 @@ module Make(Machine : Machine) = struct
   let link_feature (name,defs) =
     Machine.get () >>= fun proj ->
     Machine.Local.get state >>= fun s ->
-    let arch = Project.arch proj in
-    let typecheck = Check.arg arch in
     let args,ret,tid,addr = find_sub (Project.program proj) name in
-    match Resolve.extern typecheck s.program Program.Items.func name args with
+    Lisp.Resolve.extern Lisp.Check.arg
+      s.program
+      Lisp.Program.Items.func name args |> function
     | None -> Machine.return ()
     | Some (Error _) when tid = None -> Machine.return ()
     | Some (Error err) -> Machine.raise (Unresolved (name,err))
     | Some (Ok (fn,bs)) ->
+      Vars.bindings bs >>= fun bs ->
       let module Code(Machine : Machine) = struct
         open Machine.Syntax
         module Eval = Bap_primus_interpreter.Make(Machine)
-        module Lisp = Lisp(Machine)
+        module Interp = Interpreter(Machine)
 
         let failf ppf = Format.ksprintf
             (fun msg -> fun () -> Machine.raise (Runtime_error msg)) ppf
@@ -412,14 +434,14 @@ module Make(Machine : Machine) = struct
           eval_args >>= fun bs ->
           let args = List.map ~f:snd bs in
           Eval.const Word.b0 >>= fun init ->
-          Lisp.eval_advices Advice.Before init name args >>= fun _ ->
+          Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state
             ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
           Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
-          Lisp.eval_exp (Def.Func.body fn) >>= fun r ->
+          Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
           Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
-          Lisp.eval_advices Advice.After r name args >>= fun r ->
+          Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
       end in
       Linker.link ?addr ?tid ~name (module Code)
@@ -428,16 +450,16 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| collect_externals >>=
     Machine.Seq.iter ~f:link_feature
 
-
   let init_env proj = (object
-    inherit [(var * value) Machine.t list] Term.visitor
+    inherit [(Var.t * value) Machine.t list] Term.visitor
     method! enter_term _ t env =
       match Term.get_attr t address with
       | None -> env
       | Some addr ->
         let binding =
+          let typ = Type.imm (Word.bitwidth addr) in
           Value.of_word addr >>| fun addr ->
-          {exp = Term.name t; typ = Word}, addr in
+          Var.create (Term.name t) typ, addr in
         binding :: env
   end)#run proj [] |> Machine.List.all
 
@@ -447,6 +469,7 @@ module Make(Machine : Machine) = struct
     init_env (Project.program proj) >>= fun env ->
     Machine.Local.put state {
       program; env;
+      cur = Id.null;
       width = width_of_ctxt proj;
     } >>= fun () ->
     link_features ()
@@ -455,11 +478,11 @@ module Make(Machine : Machine) = struct
   let link_primitive p =
     Machine.Local.update state ~f:(fun s -> {
           s with
-          program = Program.add s.program primitive p
+          program = Lisp.Program.add s.program primitive p
         })
 
   let define ?docs name body =
-    Def.Closure.create ?docs name body |>
+    Lisp.Def.Closure.create ?docs name body |>
     link_primitive
 
   (* this is a deprecated interface for the backward compatibility,
@@ -468,28 +491,29 @@ module Make(Machine : Machine) = struct
      primitives, then find one primitive and repack it, and repeat
      this process every time we need an existential.
   *)
-  let link_primitives (module Library : Def.Primitives) =
+  let link_primitives (module Library : Lisp.Def.Primitives) =
     let module Unpacked = Library(Machine) in
     Unpacked.defs () |> Machine.List.iter ~f:(fun def ->
         let module Packed(M : Machine) = struct
           module Unpacked = Library(M)
           let run =
             Unpacked.defs () |> List.find ~f:(fun d ->
-                Def.name d = Def.name def) |> function
-            | Some code -> (Def.Primitive.body code)
+                Lisp.Def.name d = Lisp.Def.name def) |> function
+            | Some code -> (Lisp.Def.Primitive.body code)
             | _ -> assert false
         end in
-        Def.Closure.of_primitive def (module Packed : Def.Closure) |>
+        Lisp.Def.Closure.of_primitive def
+          (module Packed : Lisp.Def.Closure) |>
         link_primitive)
 end
 
 let init ?(log=std_formatter) ?(paths=[]) features  =
   failwith "Lisp library no longer requires initialization"
 
-type primitives = Def.primitives
-module type Primitives = Def.Primitives
-module Primitive = Def.Primitive
-module type Closure = Def.Closure
-type closure = Def.closure
-type program = Program.t
-module Load = Parse
+type primitives = Lisp.Def.primitives
+module type Primitives = Lisp.Def.Primitives
+module Primitive = Lisp.Def.Primitive
+module type Closure = Lisp.Def.Closure
+type closure = Lisp.Def.closure
+type program = Lisp.Program.t
+module Load = Lisp.Parse

@@ -17,7 +17,7 @@ module Variables = struct
 
   let var t = match t with
     | {data=List _} -> fail Expect_atom [t]
-    | {data=Atom v} -> match Var.read v with
+    | {data=Atom v; id; eq} -> match Var.read id eq v with
       | Ok v -> v
       | Error err -> fail (Var_error err) [t]
 

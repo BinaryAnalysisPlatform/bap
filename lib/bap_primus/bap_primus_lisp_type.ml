@@ -3,28 +3,34 @@ open Bap.Std
 open Bap_primus_lisp_types
 
 module Value = Bap_primus_value
+module Context = Bap_primus_lisp_context
+type context = Context.t
 
+let word n = Type n
 
-let read_exn s = Type (int_of_string (String.strip s))
+let read_exn s = word (int_of_string (String.strip s))
 
 let read s = Option.try_with (fun () -> read_exn s)
 
-module Check = struct
-  let value arch typ w =
-    let word_size = Size.in_bits (Arch.addr_size arch) in
-    let size = Word.bitwidth (Value.to_word w) in
-    match typ with
-    | Word -> size = word_size
-    | Type n -> size = n
 
-  let arg arch typ arg =
-    let word_size = Size.in_bits (Arch.addr_size arch) in
-    match typ, Var.typ (Arg.lhs arg) with
-    | Word, Type.Imm s -> word_size = s
-    | Type n, Type.Imm m -> m = n
+let mem t x = match t with
+  | Any -> true
+  | Type t -> t = x
+
+module Check = struct
+  let value typ w =
+    mem typ (Word.bitwidth (Value.to_word w))
+
+  let arg typ arg =
+    match Var.typ (Arg.lhs arg) with
+    | Type.Imm s -> mem typ s
     | _ -> false
 
 end
+
+let pp ppf t = match t with
+  | Any -> ()
+  | Type t -> Format.fprintf ppf ":%d" t
 
 
 include Comparable.Make(struct

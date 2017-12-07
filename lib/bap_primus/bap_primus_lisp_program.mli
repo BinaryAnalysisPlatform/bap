@@ -1,3 +1,5 @@
+open Bap.Std
+
 open Bap_primus_lisp_types
 module Def = Bap_primus_lisp_def
 module Context = Bap_primus_lisp_context
@@ -20,6 +22,17 @@ module Items : sig
   val const : Def.const item
   val func  : Def.func  item
   val primitive  : Def.closure item
+end
+
+module Type : sig
+  type gamma
+  type error
+
+  val infer : Var.t list -> t -> gamma
+
+  val errors : gamma -> error Id.Map.t
+
+  val pp_error : Format.formatter -> error -> unit
 end
 
 val pp : Format.formatter -> t -> unit

@@ -107,7 +107,7 @@ let overload_defun typechecks args s3 =
   List.filter_map s3 ~f:(fun def ->
       List.zip (Def.Func.args def) args >>= fun bs ->
       if List.for_all ~f:(fun (v,x) ->
-          typechecks v.typ x) bs
+          typechecks v.data.typ x) bs
       then Some (def,bs) else None)
 
 let overload_primitive s3 = List.map s3 ~f:(fun s -> s,())

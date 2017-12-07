@@ -1390,13 +1390,13 @@ module Std : sig
         stack size, as it uses the host language heap memory to
         represent the Primus Lisp call stack).
 
-        The {b (while <cond> <expr> ...) } form, will evaluate
-        the <cond> expression first, and if it is a non-zero value,
-        then the sequence of expressions {b <expr> ... } is
-        evaluated, and the value of the last expression becomes the
-        value of the [while] form. If the value of the {b <cond> }
-        expression is not a zero, then this value becomes the value of
-        the [while] form.
+        The {b (while <cond> <expr> ...) } form, will evaluate the
+        <cond> expression first, and if it is a non-zero value, then
+        the sequence of expressions {b <expr> ... } is evaluated, and
+        the value of the last expression becomes the value of the
+        [while] form. If the value of the {b <cond> } expression is a
+        false value, then this value becomes the value of the [while]
+        form.
 
 
         {3 Variables}
