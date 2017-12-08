@@ -10,6 +10,8 @@ open Bap_primus_lisp_types
 module Attribute = Bap_primus_lisp_attribute
 module Loc = Bap_primus_lisp_loc
 module Index = Bap_primus_lisp_index
+module Type = Bap_primus_lisp_type
+
 
 type attrs = Attribute.set
 
@@ -38,6 +40,7 @@ type const = {
   value : string;
 }
 
+
 type 'a primitive = (value list -> 'a)
 
 
@@ -46,6 +49,11 @@ module type Closure = functor(Machine : Machine) -> sig
 end
 
 type closure = (module Closure)
+
+type prim = {
+  lambda : closure;
+  types : Type.signature option;
+}
 
 type 'a spec = {meta : meta; code : 'a}
 type 'a t = 'a spec indexed
@@ -166,14 +174,24 @@ end
 type primitives = (module Primitives)
 
 module Closure = struct
-  let of_primitive prim code = {prim with data={prim.data with code}}
-  let create ?(docs="") name code = {
+  let of_primitive prim lambda =
+    {prim with data={prim.data with code={
+         lambda;
+         types=None;
+       }}}
+
+  let create ?types ?(docs="") name lambda = {
     data = {
       meta = {name;docs; attrs=Attribute.Set.empty};
-      code;
+      code = {
+        types;
+        lambda;
+      };
     };
     id = Id.null;
     eq = Eq.null;
   }
-  let body p = p.data.code
+  let body p = p.data.code.lambda
+
+  let signature p = p.data.code.types
 end

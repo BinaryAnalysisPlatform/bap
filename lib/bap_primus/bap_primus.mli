@@ -1133,6 +1133,12 @@ module Std : sig
             generator will be automatically associated with the
             variable and returned. *)
         val add : var -> Generator.t -> unit Machine.t
+
+
+        (** [all] is a sequence of all variables defined in the
+            environment. Note, the word _defined_ doesn't mean
+            initialized.   *)
+        val all : var seq Machine.t
       end
     end
 
@@ -1943,6 +1949,22 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_program : Format.formatter -> program -> unit
       end
 
+      module Type : sig
+        type t
+        type signature
+        type error
+
+        val word : int -> t
+
+        val any : t
+
+        val signature : ?rest:t -> t list -> t -> signature
+
+        val check : var seq -> program -> error list
+
+        val pp_error : Format.formatter -> error -> unit
+      end
+
 
       (** Machine independent closure.
 
@@ -1990,6 +2012,10 @@ ident ::= ?any atom that is not recognized as a <word>?
             Machine. Previous program, if any, is discarded. *)
         val link_program : program -> unit Machine.t
 
+
+        (** [progra] is the current Machine program.  *)
+        val program : program Machine.t
+
         (** [define ?docs name code] defines a lisp primitive with
             the given [name] and an optional documentation string
             [doscs].
@@ -2018,7 +2044,8 @@ ident ::= ?any atom that is not recognized as a <word>?
               end
             ]}
         *)
-        val define : ?docs:string -> string -> closure -> unit Machine.t
+        val define : ?types:Type.signature ->
+          ?docs:string -> string -> closure -> unit Machine.t
 
 
         (** [failf msg a1 ... am ()] terminates a lisp machine, and

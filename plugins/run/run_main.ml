@@ -61,6 +61,8 @@ open Machine.Syntax
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
+module Env = Primus.Env.Make(Machine)
+module Lisp = Primus.Lisp.Make(Machine)
 
 let string_of_name = function
   | `symbol s -> s
@@ -107,7 +109,7 @@ let exec x =
          (Primus.Exn.to_string exn);
        Machine.return ())
 
-let run_entries = function
+let run = function
   | [] -> exec (`symbol "_start")
   | x :: xs ->
     Machine.List.iter xs ~f:(fun x ->
@@ -128,6 +130,18 @@ let run_entries = function
     then exec x
     else Machine.return ()
 
+let typecheck =
+  Lisp.program >>= fun prog ->
+  Env.all >>| fun vars ->
+  match Primus.Lisp.Type.check vars prog with
+  | [] -> info "The Lisp Machine program is well-typed"
+  | xs -> error "The Lisp Machine program is ill-typed";
+    List.iter xs ~f:(error "%a@\n" Primus.Lisp.Type.pp_error)
+
+
+let run_entries xs =
+  typecheck >>= fun () ->
+  run xs
 
 let main {Config.get=(!)} proj =
   let open Param in

@@ -474,6 +474,7 @@ module Make(Machine : Machine) = struct
     } >>= fun () ->
     link_features ()
 
+  let program = Machine.Local.get state >>| fun s -> s.program
 
   let link_primitive p =
     Machine.Local.update state ~f:(fun s -> {
@@ -481,8 +482,8 @@ module Make(Machine : Machine) = struct
           program = Lisp.Program.add s.program primitive p
         })
 
-  let define ?docs name body =
-    Lisp.Def.Closure.create ?docs name body |>
+  let define ?types ?docs name body =
+    Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
   (* this is a deprecated interface for the backward compatibility,
@@ -517,3 +518,4 @@ module type Closure = Lisp.Def.Closure
 type closure = Lisp.Def.closure
 type program = Lisp.Program.t
 module Load = Lisp.Parse
+module Type = Lisp.Program.Type

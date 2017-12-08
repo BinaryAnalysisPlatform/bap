@@ -14,6 +14,17 @@ module Load : sig
   val pp_error : Format.formatter -> error -> unit
 end
 
+module Type : sig
+  type t
+  type signature
+  type error
+  val word : int -> t
+  val any : t
+  val signature : ?rest:t -> t list -> t -> signature
+  val check : Var.t  seq -> program -> error list
+  val pp_error : Format.formatter -> error -> unit
+end
+
 module type Closure = functor(Machine : Machine) -> sig
   val run : value list -> value Machine.t
 end
@@ -37,8 +48,9 @@ module Make (Machine : Machine) : sig
 
   val link_program : program -> unit Machine.t
 
+  val program : program Machine.t
 
-  val define : ?docs:string -> string -> closure -> unit Machine.t
+  val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t

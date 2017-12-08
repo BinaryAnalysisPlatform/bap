@@ -110,4 +110,10 @@ module Make(Machine : Machine) = struct
         | None -> Machine.raise (Undefined_var var)
         | Some gen -> gen_word gen width >>= Value.of_word
 
+  let keys dic = Map.to_sequence dic |> Seq.map ~f:fst
+
+  let all =
+    Machine.Local.get state >>| fun {values; random} ->
+    Seq.append (keys values) (keys random)
+
 end

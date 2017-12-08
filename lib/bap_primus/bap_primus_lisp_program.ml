@@ -17,12 +17,14 @@ module Def = Bap_primus_lisp_def
 type t = {
   context : Lisp.Context.t;
   sources : Source.t;
-  codes : Def.closure Def.t list;
+  codes : Def.prim Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
   defs : Def.func Def.t list;
 } [@@deriving fields]
+
+type program = t
 
 let empty = {
   context = Lisp.Context.empty;
@@ -296,6 +298,7 @@ module Fixpoint = struct
     let nodes =
       Graphlib.reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
+    eprintf "Got %d nodes@\n" (Array.length nodes);
     let rnodes =
       Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
           Map.add rnodes ~key:n ~data:i) in
@@ -309,14 +312,20 @@ module Fixpoint = struct
       | None -> init
       | Some x -> x in
     let step works approx = match Set.min_elt works with
-      | None -> Done approx
+      | None ->
+        eprintf "No more nodes in the work list@\n";
+        Done approx
       | Some n ->
         let works = Set.remove works n in
         let out = f nodes.(n) (get approx n) in
+        eprintf
+          "Computed approximation for node %d, procceding to %d successors@\n"
+          n (Set.length succs.(n));
         succs.(n) |>
         Set.fold ~init:(works,approx) ~f:(fun (works,approx) n ->
             let ap = get approx n in
             let ap' = meet out ap in
+
             if equal ap ap' then (works,approx)
             else Set.add works n,
                  Map.add approx ~key:n ~data:ap') |>
@@ -342,10 +351,12 @@ module Fixpoint = struct
       | Some node -> match Map.find rnodes node with
         | None -> []
         | Some n -> [n] in
+    eprintf "Starting with %d nodes in the work list@\n"
+      (List.length works);
     loop 0 (Int.Set.of_list works) Int.Map.empty
 end
 
-module Type = struct
+module Typing = struct
   type texpr =
     | Grnd of int
     | Meet of texpr * texpr
@@ -353,9 +364,8 @@ module Type = struct
     | Tvar of Id.t
   [@@deriving compare]
 
-  type error = Error of texpr
 
-  type signature = {
+  type signature = Lisp.Type.signature = {
     args : typ list;
     rest : typ option;
     ret  : typ;
@@ -487,7 +497,7 @@ module Type = struct
 
   type gamma = texpr Id.Map.t
 
-  let infer_ast glob bindings ast : gamma =
+  let infer_ast glob bindings ast : gamma -> gamma =
     let rec infer vs = function
       | {data=Int x; id} ->
         constr id x.data.typ
@@ -533,7 +543,7 @@ module Type = struct
         ident
       | x :: xs ->
         List.map (x::xs) ~f:(infer vs) |> List.reduce_exn ~f:(++) in
-    infer bindings ast empty
+    infer bindings ast
 
   let find_func funcs id =
     List.find funcs ~f:(fun f -> f.id = id)
@@ -545,7 +555,7 @@ module Type = struct
       | Some f ->
         let vars =
           Def.Func.args f |> List.fold ~init:String.Map.empty ~f:push in
-        infer_ast glob vars (Def.Func.body f)
+        infer_ast glob vars (Def.Func.body f) gamma
 
 
   let unify_meets g =
@@ -566,16 +576,23 @@ module Type = struct
   let equal = Id.Map.equal equal_texpr
 
   let make_globs =
-    List.fold ~init:String.Map.empty ~f:(fun vars v ->
+    Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
         match Var.typ v with
         | Type.Imm x ->
           Map.add vars ~key:(Var.name v) ~data:x
         | Type.Mem _ -> vars)
 
+  let make_prims {codes} =
+    List.fold codes ~init:String.Map.empty ~f:(fun ps p ->
+        match Def.Closure.signature p with
+        | None -> ps
+        | Some types -> Map.add ps ~key:(Def.name p) ~data:types)
+
+
   let infer vars p : gamma =
     let glob = {
       ctxt = p.context;
-      prims = String.Map.empty;
+      prims = make_prims p;
       globs = make_globs vars;
       funcs = p.defs;
     } in
@@ -592,20 +609,36 @@ module Type = struct
     | Join (x,y) -> well_typed x || well_typed y
     | Tvar _ | Grnd _ -> true
 
-  let errors =
-    Map.filter_map ~f:(fun t ->
-        if well_typed t then None
-        else Some (Error t))
 
-  let rec pp_expr ppf = function
-    | Grnd x -> fprintf ppf "%d" x
-    | Meet (x,y) -> fprintf ppf "%a=%a" pp_expr x pp_expr y
-    | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
-    | Tvar _ -> fprintf ppf "?"
+  (* The public interface  *)
+  module Type = struct
+    type error = Bot of Loc.t * texpr
+    let rec pp_expr ppf = function
+      | Grnd x -> fprintf ppf "%d" x
+      | Meet (x,y) -> fprintf ppf "%a=%a" pp_expr x pp_expr y
+      | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
+      | Tvar _ -> fprintf ppf "?"
+
+    let check vars p =
+      let gamma = infer vars p in
+      eprintf "Inferred %d types@\n%!"
+        (Map.length gamma);
+      Map.iteri gamma ~f:(fun ~key ~data ->
+          eprintf "%a: %a@\n%!"
+            Loc.pp (Source.loc p.sources key) pp_expr data);
+      Map.fold gamma ~init:[] ~f:(fun ~key:id ~data:t errs ->
+          if well_typed t then errs
+          else Bot (Source.loc p.sources id, t) :: errs)
 
 
-  let pp_error ppf (Error expr) =
-    fprintf ppf "The following type is empty: %a" pp_expr expr
+    let pp_error ppf (Bot (loc,expr)) =
+      fprintf ppf "%a@\nType error - expression is ill-typed: %a"
+        Loc.pp loc pp_expr expr
+
+
+
+    include Lisp.Type
+  end
 end
 
 let pp_term pp_exp ppf = function
@@ -669,3 +702,4 @@ let pp ppf {defs} =
   fprintf ppf "@[<v>%a@]" (pp_print_list pp_def) defs
 
 module Context = Lisp.Context
+module Type = Typing.Type

@@ -3,7 +3,6 @@
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
-  (msg "allocating $0 bytes" n)
   (if (= n 0) brk
     (let ((ptr brk)
           (failed (memory-allocate ptr n)))

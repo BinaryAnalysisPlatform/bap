@@ -267,41 +267,63 @@ module Stub(Machine : Primus.Machine.S) = struct
 end
 
 module Primitives(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
   module Lisp = Primus.Lisp.Make(Machine)
-  let init () = Machine.sequence [
-      Lisp.define "is-zero" (module IsZero);
-      Lisp.define "is-positive" (module IsPositive);
-      Lisp.define "is-negative" (module IsNegative);
-      Lisp.define "word-width"  (module WordWidth);
-      Lisp.define "output-char" (module OutputChar);
-      Lisp.define "exit-with" (module ExitWith);
-      Lisp.define "memory-read" (module MemoryRead);
-      Lisp.define "memory-write" (module MemoryWrite);
-      Lisp.define "memory-allocate" (module MemoryAllocate);
-      Lisp.define "get-current-program-counter" (module GetPC);
-      Lisp.define "+" (module Add);
-      Lisp.define "-" (module Sub);
-      Lisp.define "*" (module Mul);
-      Lisp.define "/" (module Div);
-      Lisp.define "s/" (module SDiv);
-      Lisp.define "mod" (module Mod);
-      Lisp.define "signed-mod" (module SignedMod);
-      Lisp.define "lshift" (module Lshift);
-      Lisp.define "rshift" (module Rshift);
-      Lisp.define "arshift" (module Arshift);
-      Lisp.define "=" (module Equal);
-      Lisp.define "/=" (module NotEqual);
-      Lisp.define "logand" (module Logand);
-      Lisp.define "logor" (module Logor);
-      Lisp.define "logxor" (module Logxor);
-      Lisp.define "concat" (module Concat);
-      Lisp.define "extract" (module Extract);
-      Lisp.define "not" (module Not);
-      Lisp.define "neg" (module Neg);
-      Lisp.define "<" (module Less);
-      Lisp.define ">" (module Greater);
-      Lisp.define "<=" (module LessEqual);
-      Lisp.define ">=" (module GreaterEqual);
+
+  let init () =
+    Machine.get () >>= fun proj ->
+    let width = Project.arch proj |> Arch.addr_size |> Size.in_bits in
+    let word = Primus.Lisp.Type.word width in
+    let bool = Primus.Lisp.Type.word 1 in
+    let byte = Primus.Lisp.Type.word 8 in
+    let unit = `Tuple [] in
+    let any = Primus.Lisp.Type.any in
+    let all t = `All t in
+    let tuple ts = `Tuple ts in
+    let one t = tuple [t] in
+    let (//) (`Tuple ts) (`All t) = `Gen (ts,t) in
+    let (@->) dom cod =
+      let args,rest = match dom with
+        | `All t -> [],Some t
+        | `Tuple ts -> ts,None
+        | `Gen (ts,t) -> ts, Some t in
+      Primus.Lisp.Type.signature args ?rest cod in
+    let def name types closure =
+      Lisp.define ~types name closure in
+    Machine.sequence [
+      def "is-zero" (all word @-> bool) (module IsZero);
+      def "is-positive" (all word @-> bool) (module IsPositive);
+      def "is-negative" (all word @-> bool) (module IsNegative);
+      def "word-width" (unit @-> word)  (module WordWidth);
+      def "output-char" (one word // all byte @-> word) (module OutputChar);
+      def "exit-with" (one word @-> any) (module ExitWith);
+      def "memory-read" (one word @-> byte) (module MemoryRead);
+      def "memory-write" (tuple [word; byte] @-> word) (module MemoryWrite);
+      def "memory-allocate" (tuple [word; word] @-> word) (module MemoryAllocate);
+      def "get-current-program-counter" (unit @-> word) (module GetPC);
+      def "+" (all word @-> word) (module Add);
+      def "-" (all word @-> word) (module Sub);
+      def "*" (all word @-> word) (module Mul);
+      def "/" (all word @-> word) (module Div);
+      def "s/" (all word @-> word) (module SDiv);
+      def "mod" (all word @-> word) (module Mod);
+      def "signed-mod" (all word @-> word) (module SignedMod);
+      def "lshift" (tuple [word; word] @-> word) (module Lshift);
+      def "rshift" (tuple [word; word] @-> word) (module Rshift);
+      def "arshift" (tuple [word; word] @-> word) (module Arshift);
+      def "=" (all word @-> bool) (module Equal);
+      def "/=" (all word @-> bool) (module NotEqual);
+      def "logand" (all word @-> word) (module Logand);
+      def "logor" (all word @-> word) (module Logor);
+      def "logxor" (all word @-> word) (module Logxor);
+      def "concat" (all word @-> any) (module Concat);
+      def "extract" (tuple [word; word; word] @-> any) (module Extract);
+      def "not" (one word @-> word) (module Not);
+      def "neg" (one word @-> word) (module Neg);
+      def "<" (all word @-> bool) (module Less);
+      def ">" (all word @-> bool) (module Greater);
+      def "<=" (all word @-> bool) (module LessEqual);
+      def ">=" (all word @-> bool) (module GreaterEqual);
     ]
 end
 

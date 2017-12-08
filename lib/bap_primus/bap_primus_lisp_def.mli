@@ -2,10 +2,12 @@ open Bap_primus_types
 open Bap_primus_lisp_types
 
 module Attribute = Bap_primus_lisp_attribute
+module Type = Bap_primus_lisp_type
 
 module type Closure = functor(Machine : Machine) -> sig
   val run : value list -> value Machine.t
 end
+
 
 type 'a spec
 type 'a t = 'a spec indexed
@@ -13,6 +15,7 @@ type func
 type macro
 type subst
 type const
+type prim
 type closure = (module Closure)
 type 'a primitive
 
@@ -62,10 +65,10 @@ module Primitive : sig
 end
 
 module Closure : sig
-  val of_primitive : 'a Primitive.t -> closure -> closure t
-
-  val create : ?docs:string -> string -> closure -> closure t
-  val body : closure t -> closure
+  val of_primitive : 'a Primitive.t -> closure -> prim t
+  val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
+  val signature : prim t -> Type.signature option
+  val body : prim t -> closure
 end
 
 module type Primitives = functor (Machine : Machine) ->  sig

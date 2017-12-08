@@ -5,6 +5,7 @@ module Def = Bap_primus_lisp_def
 module Context = Bap_primus_lisp_context
 
 type t
+type program = t
 type 'a item
 
 val empty : t
@@ -21,17 +22,17 @@ module Items : sig
   val subst : Def.subst item
   val const : Def.const item
   val func  : Def.func  item
-  val primitive  : Def.closure item
+  val primitive  : Def.prim item
 end
 
 module Type : sig
-  type gamma
+  type t
+  type signature = Bap_primus_lisp_type.signature
   type error
-
-  val infer : Var.t list -> t -> gamma
-
-  val errors : gamma -> error Id.Map.t
-
+  val word : int -> t
+  val any : t
+  val signature : ?rest:t -> t list -> t -> signature
+  val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end
 

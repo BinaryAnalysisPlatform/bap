@@ -6,16 +6,30 @@ module Value = Bap_primus_value
 module Context = Bap_primus_lisp_context
 type context = Context.t
 
+type signature = {
+  args : typ list;
+  rest : typ option;
+  ret  : typ;
+}
+
+
 let word n = Type n
 
 let read_exn s = word (int_of_string (String.strip s))
 
 let read s = Option.try_with (fun () -> read_exn s)
-
+let any = Any
 
 let mem t x = match t with
   | Any -> true
   | Type t -> t = x
+
+let signature ?rest args ret = {
+  ret;
+  rest;
+  args;
+}
+
 
 module Check = struct
   let value typ w =

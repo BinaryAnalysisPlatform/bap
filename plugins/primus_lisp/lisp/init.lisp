@@ -30,9 +30,15 @@
 (defmacro and (x xs)
   (let ((r x)) (if r (and xs) r)))
 
-(defmacro or (x) x)
 (defmacro or (x xs)
+  "(or <expr> ...) evaluates a sequence of expressions EXPR from left
+   to right until it meets the first expression that evaluates to the
+   truth value, that will become the value of the whole form. If no
+   expression returned the truth value, then the result of the whole
+   form is 0:1"
   (let ((r x)) (if r r (or xs))))
+
+(defmacro or (x) x)
 
 (defun compare (x y)
   (if (< x y) -1 (if (> x y) 1 0)))
@@ -41,7 +47,4 @@
 (defmacro assert (c m)
   (when (not c)
     (msg m)
-    (fail m)))
-
-(defmacro cond (x y) (when x y))
-(defmacro cond (x y rest) (prog (cond x y) (cond rest)))
+    (error m)))

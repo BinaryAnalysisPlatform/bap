@@ -2,7 +2,6 @@
 
 (defun memcheck-malloc (s p)
   (declare (advice :after "malloc"))
-  (msg "$1 = malloc($0)" s p)
   (memcheck-acquire p s))
 
 (defun memcheck-calloc (n s p)
@@ -19,7 +18,6 @@
 
 (defun memcheck-free (p)
   (declare (advice :before "free"))
-  (msg "will free $0" p)
   (memcheck-release p))
 
 (defun memcheck-aligned-alloc (a s p)

@@ -17,7 +17,7 @@ type ('t,'a,'b) resolver =
 val extern : (typ -> 'a -> bool) -> (Def.func, 'a list, (var * 'a) list) resolver
 val defun  : (typ -> 'a -> bool) -> (Def.func, 'a list, (var * 'a) list) resolver
 val macro : (Def.macro, tree list, (string * tree list) list) resolver
-val primitive  : (Def.closure, unit, unit) resolver
+val primitive  : (Def.prim, unit, unit) resolver
 val subst : (Def.subst, unit, unit) resolver
 val const : (Def.const, unit, unit) resolver
 
