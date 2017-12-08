@@ -27,6 +27,7 @@ type t = {
   origin : string Id.Map.t;
   ranges : Loc.range Id.Map.t;
   source : tree list String.Map.t;
+  rclass : Id.t Id.Map.t;
 }
 
 let empty = {
@@ -37,10 +38,19 @@ let empty = {
   origin = Id.Map.empty;
   ranges = Id.Map.empty;
   source = String.Map.empty;
+  rclass = Id.Map.empty;
 }
 
-let nextid p = {p with lastid = Id.next p.lastid}
+let nextid p = {
+  p with lastid = Id.next p.lastid
+}
+
+
 let nexteq p = {p with lasteq = Eq.next p.lasteq}
+
+let rec repr s id = match Map.find s.rclass id with
+  | None -> id
+  | Some id' -> if id = id' then id else repr s id'
 
 let hashcons p sexp =
   match Map.find p.hashed sexp with
@@ -139,11 +149,11 @@ let load p filename =
     }
 
 let find p filename = Map.find p.source filename
-let range p id = match Map.find p.ranges id with
+let range p id = match Map.find p.ranges (repr p id) with
   | None -> norange
   | Some rng -> rng
 
-let filename p id  = match Map.find p.origin id with
+let filename p id  = match Map.find p.origin (repr p id) with
   | None -> "/unknown/"
   | Some file -> file
 
@@ -152,8 +162,20 @@ let loc p tree = Loc.{
     range = range p tree;
   }
 
+let lastid s = s.lastid
+let lasteq s = s.lasteq
+
 let fold p ~init ~f = Map.fold ~init p.source ~f:(fun ~key ~data user ->
     f key data user)
+
+let derived p ~from id =
+  if Id.null = from then {
+    p with lastid = Id.max id p.lastid
+  } else {
+    p with
+    lastid = Id.max id p.lastid;
+    rclass = Map.add p.rclass ~key:id ~data:from;
+  }
 
 let pp_error ppf (Bad_sexp (filename,err)) =
   Parsexp.Parse_error.report ppf ~filename err

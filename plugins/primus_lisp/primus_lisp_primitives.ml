@@ -291,39 +291,39 @@ module Primitives(Machine : Primus.Machine.S) = struct
     let def name types closure =
       Lisp.define ~types name closure in
     Machine.sequence [
-      def "is-zero" (all word @-> bool) (module IsZero);
-      def "is-positive" (all word @-> bool) (module IsPositive);
-      def "is-negative" (all word @-> bool) (module IsNegative);
+      def "is-zero" (all any @-> bool) (module IsZero);
+      def "is-positive" (all any @-> bool) (module IsPositive);
+      def "is-negative" (all any @-> bool) (module IsNegative);
       def "word-width" (unit @-> word)  (module WordWidth);
       def "output-char" (one word // all byte @-> word) (module OutputChar);
       def "exit-with" (one word @-> any) (module ExitWith);
       def "memory-read" (one word @-> byte) (module MemoryRead);
       def "memory-write" (tuple [word; byte] @-> word) (module MemoryWrite);
-      def "memory-allocate" (tuple [word; word] @-> word) (module MemoryAllocate);
+      def "memory-allocate" (tuple [word; word] @-> byte) (module MemoryAllocate);
       def "get-current-program-counter" (unit @-> word) (module GetPC);
-      def "+" (all word @-> word) (module Add);
-      def "-" (all word @-> word) (module Sub);
-      def "*" (all word @-> word) (module Mul);
-      def "/" (all word @-> word) (module Div);
-      def "s/" (all word @-> word) (module SDiv);
-      def "mod" (all word @-> word) (module Mod);
-      def "signed-mod" (all word @-> word) (module SignedMod);
-      def "lshift" (tuple [word; word] @-> word) (module Lshift);
-      def "rshift" (tuple [word; word] @-> word) (module Rshift);
-      def "arshift" (tuple [word; word] @-> word) (module Arshift);
-      def "=" (all word @-> bool) (module Equal);
-      def "/=" (all word @-> bool) (module NotEqual);
-      def "logand" (all word @-> word) (module Logand);
-      def "logor" (all word @-> word) (module Logor);
-      def "logxor" (all word @-> word) (module Logxor);
-      def "concat" (all word @-> any) (module Concat);
-      def "extract" (tuple [word; word; word] @-> any) (module Extract);
-      def "not" (one word @-> word) (module Not);
-      def "neg" (one word @-> word) (module Neg);
-      def "<" (all word @-> bool) (module Less);
-      def ">" (all word @-> bool) (module Greater);
-      def "<=" (all word @-> bool) (module LessEqual);
-      def ">=" (all word @-> bool) (module GreaterEqual);
+      def "+" (all any @-> any) (module Add);
+      def "-" (all any @-> any) (module Sub);
+      def "*" (all any @-> any) (module Mul);
+      def "/" (all any @-> any) (module Div);
+      def "s/" (all any @-> any) (module SDiv);
+      def "mod" (all any @-> any) (module Mod);
+      def "signed-mod" (all any @-> any) (module SignedMod);
+      def "lshift" (tuple [any; any] @-> any) (module Lshift);
+      def "rshift" (tuple [any; any] @-> any) (module Rshift);
+      def "arshift" (tuple [any; any] @-> any) (module Arshift);
+      def "=" (all any @-> bool) (module Equal);
+      def "/=" (all any @-> bool) (module NotEqual);
+      def "logand" (all any @-> any) (module Logand);
+      def "logor" (all any @-> any) (module Logor);
+      def "logxor" (all any @-> any) (module Logxor);
+      def "concat" (all any @-> any) (module Concat);
+      def "extract" (tuple [any; any; any] @-> any) (module Extract);
+      def "not" (one any @-> any) (module Not);
+      def "neg" (one any @-> any) (module Neg);
+      def "<" (all any @-> bool) (module Less);
+      def ">" (all any @-> bool) (module Greater);
+      def "<=" (all any @-> bool) (module LessEqual);
+      def ">=" (all any @-> bool) (module GreaterEqual);
     ]
 end
 

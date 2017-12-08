@@ -78,7 +78,12 @@ module Func = struct
     create {
       meta = {name; docs; attrs};
       code = {args; body}
-    };
+    }
+
+  let with_body t body = {
+    t with data = {
+      t.data with code = {t.data.code with body}}
+  }
 
 end
 

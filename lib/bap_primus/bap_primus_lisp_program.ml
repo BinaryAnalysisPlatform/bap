@@ -2,6 +2,7 @@ open Bap.Std
 open Core_kernel
 open Graphlib.Std
 open Regular.Std
+open Monads.Std
 open Bap_primus_lisp_types
 open Format
 
@@ -107,6 +108,7 @@ module Callgraph = struct
         | None -> []
         | Some x -> x in
     List.fold defs ~init:G.empty ~f:(fun g def ->
+        let g = G.Node.insert (Defun def.id) g in
         Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
             List.fold (ids name) ~init:g ~f:(fun g id ->
                 G.Edge.insert (edge def.id id) g)))
@@ -298,7 +300,8 @@ module Fixpoint = struct
     let nodes =
       Graphlib.reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
-    eprintf "Got %d nodes@\n" (Array.length nodes);
+    eprintf "Got %d nodes |G| = %d@\n" (Array.length nodes)
+      (G.number_of_nodes g);
     let rnodes =
       Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
           Map.add rnodes ~key:n ~data:i) in
@@ -325,6 +328,11 @@ module Fixpoint = struct
         Set.fold ~init:(works,approx) ~f:(fun (works,approx) n ->
             let ap = get approx n in
             let ap' = meet out ap in
+            eprintf "%d /\\ %d = %d@\n"
+              (Map.length out) (Map.length ap) (Map.length ap');
+            if equal ap ap'
+            then eprintf "Nothing new for successor %d@\n" n
+            else eprintf "Will recompute successor %d@\n" n;
 
             if equal ap ap' then (works,approx)
             else Set.add works n,
@@ -346,14 +354,84 @@ module Fixpoint = struct
         | Done approx -> make_solution iters approx
         | Step (works,approx) -> loop (iters+1) works approx
       else make_solution iters approx in
-    let works = match start with
-      | None -> if Array.length nodes > 0 then [0] else []
-      | Some node -> match Map.find rnodes node with
-        | None -> []
-        | Some n -> [n] in
-    eprintf "Starting with %d nodes in the work list@\n"
-      (List.length works);
+    let works = List.init (Array.length nodes) ident in
     loop 0 (Int.Set.of_list works) Int.Map.empty
+end
+
+
+
+module Reindex = struct
+  module State = Monad.State.Make(Source)(Monad.Ident)
+  open State.Syntax
+  type 'a m = 'a Monad.State.T1(Source)(Monad.Ident).t
+
+
+  let rec ids_of_trees trees =
+    List.fold trees ~init:Id.Set.empty ~f:(fun xs t -> match t with
+        | {data=Atom _; id} -> Set.add xs id
+        | {data=List ts;id} ->
+          Set.union (Set.add xs id) (ids_of_trees ts))
+
+  let ids_of_defs defs f =
+    List.map defs ~f |> ids_of_trees
+
+  let macro_ids p = Id.Set.union_list [
+      ids_of_defs p.macros Def.Macro.body;
+      ids_of_defs p.consts Def.Const.value;
+      ids_of_trees (List.concat_map p.substs ~f:Def.Subst.body);
+    ]
+
+  let derive tid =
+    State.get () >>= fun src ->
+    let nextid = Id.next (Source.lastid src) in
+    State.put (Source.derived src ~from:tid nextid) >>| fun () ->
+    nextid
+
+  let reindex_def macros def =
+    let rec map t : ast m =
+      rename t >>= fun t -> match t.data with
+      | Int _ | Var _ | Err _ -> State.return t
+      | Ite (x,y,z) ->
+        map x >>= fun x ->
+        map y >>= fun y ->
+        map z >>| fun z ->
+        {t with data = Ite (x,y,z)}
+      | Let (c,x,y) ->
+        map x >>= fun x ->
+        map y >>| fun y ->
+        {t with data = Let (c,x,y)}
+      | Rep (x,y) ->
+        map x >>= fun x ->
+        map y >>| fun ys ->
+        {t with data = Rep (x,y)}
+      | App (b,xs) ->
+        map_all xs >>| fun xs ->
+        {t with data = App (b,xs)}
+      | Msg (f,xs) ->
+        map_all xs >>| fun xs ->
+        {t with data = Msg (f,xs)}
+      | Seq xs ->
+        map_all xs >>| fun xs ->
+        {t with data = Seq xs}
+      | Set (v,x) ->
+        map x >>| fun x ->
+        {t with data = Set (v,x)}
+    and map_all = State.List.map ~f:map
+    and rename t =
+      if Set.mem macros t.id || Id.null = t.id
+      then derive t.id >>| fun id -> {t with id}
+      else State.return t in
+    map (Def.Func.body def) >>|
+    Def.Func.with_body def
+
+  let reindex p =
+    let macros = macro_ids p in
+    State.List.map p.defs ~f:(reindex_def macros)
+
+  let program p =
+    let defs,sources = State.run (reindex p) p.sources in
+    {p with defs; sources}
+
 end
 
 module Typing = struct
@@ -398,8 +476,8 @@ module Typing = struct
   (** [subst gamma x y] substitute all occurences of [x] with [y] *)
   let subst gamma x y =
     let rec subst t = if t = x then y else match t with
-        | Meet (t1,t2) -> Meet (subst t1, subst t2)
-        | Join (t1,t2) -> Join (subst t1, subst t2)
+        | Meet (t1,t2) -> make_meet (subst t1) (subst t2)
+        | Join (t1,t2) -> make_join (subst t1) (subst t2)
         | grnd -> grnd in
     Map.map gamma ~f:subst
 
@@ -425,7 +503,7 @@ module Typing = struct
     | Join (x,y) ->
       subst (subst g x (Grnd n)) y (Grnd n)
     | Grnd m -> if m = n then g
-      else subst g t (Meet (t,Grnd n))
+      else subst g t (make_meet t (Grnd n))
 
 
   let apply_signature ts g {args; rest; ret} =
@@ -519,6 +597,7 @@ module Typing = struct
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
         reduce vs xs
+      | {data=Seq []; id} -> constr id Any
       | {data=Seq xs; id} ->
         meet (last xs) id id ++
         reduce vs xs
@@ -539,10 +618,8 @@ module Typing = struct
       | {data=App (Static _,_)} ->
         ident
     and reduce vs = function
-      | [] ->
-        ident
-      | x :: xs ->
-        List.map (x::xs) ~f:(infer vs) |> List.reduce_exn ~f:(++) in
+      | [] -> ident
+      | x :: xs -> infer vs x ++ reduce vs xs in
     infer bindings ast
 
   let find_func funcs id =
@@ -553,8 +630,10 @@ module Typing = struct
     | Defun id -> match find_func glob.funcs id with
       | None -> gamma
       | Some f ->
-        let vars =
-          Def.Func.args f |> List.fold ~init:String.Map.empty ~f:push in
+        let args = Def.Func.args f in
+        let vars = List.fold args ~init:String.Map.empty ~f:push in
+        let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
+            constr v.id v.data.typ gamma) in
         infer_ast glob vars (Def.Func.body f) gamma
 
 
@@ -620,6 +699,7 @@ module Typing = struct
       | Tvar _ -> fprintf ppf "?"
 
     let check vars p =
+      let p = Reindex.program p in
       let gamma = infer vars p in
       eprintf "Inferred %d types@\n%!"
         (Map.length gamma);

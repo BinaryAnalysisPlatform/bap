@@ -72,6 +72,12 @@ val filename : t -> Id.t -> string
     [source] repository.  *)
 val fold : t -> init:'a -> f:(string -> tree list -> 'a -> 'a) -> 'a
 
+val derived : t -> from:Id.t -> Id.t -> t
+
+val lastid : t -> Id.t
+
+val lasteq : t -> Eq.t
+
 
 val pp_error : Format.formatter -> error -> unit
 

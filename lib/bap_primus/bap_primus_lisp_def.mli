@@ -31,6 +31,7 @@ module Func : sig
   val create : (var list -> ast -> tree -> func t) def
   val args : func t -> var list
   val body : func t -> ast
+  val with_body : func t -> ast -> func t
 end
 
 module Macro : sig
