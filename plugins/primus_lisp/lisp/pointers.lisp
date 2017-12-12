@@ -38,7 +38,7 @@
     (while n
       (incr p)
       (decr n)
-      (endian concat x (memory-read p)))
+      (set x (endian concat x (memory-read p))))
     x))
 
 (defmacro write-word (t p x)
@@ -47,8 +47,7 @@
         (n (sizeof t))
         (i 0))
     (while (< i n)
-      (memory-write
-       p (nth-byte-of-word t i x))
+      (memory-write p (nth-byte-of-word t i x))
       (incr p i))
     p))
 
