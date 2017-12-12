@@ -514,9 +514,11 @@ module Typing = struct
     match get gamma id1, get gamma id2 with
     | (Tvar x as t), (Tvar y as t') ->
       bind id (Tvar id) ++ unify gamma t t' (Tvar id)
-    | (Tvar x as t), t'
-    | t', (Tvar x as t) -> bind id t' ++ subst gamma t t'
-    | t1,t2 -> bind id (make_meet t1 t2) ++ gamma
+    | (Tvar _ as t), t'
+    | t', (Tvar _ as t)
+    | t,t' -> bind id t' ++ subst gamma t t'
+
+
 
   let meet_with_ground g t n = match t with
     | Tvar x -> subst g t (Grnd n)
