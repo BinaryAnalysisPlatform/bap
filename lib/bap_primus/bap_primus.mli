@@ -1956,6 +1956,8 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         val word : int -> t
 
+        val var : string -> t
+
         val any : t
 
         val signature : ?rest:t -> t list -> t -> signature

@@ -12,16 +12,15 @@ type signature = {
   ret  : typ;
 }
 
-
 let word n = Type n
-
+let var n = Name n
 let read_exn s = word (int_of_string (String.strip s))
 
 let read s = Option.try_with (fun () -> read_exn s)
 let any = Any
 
 let mem t x = match t with
-  | Any -> true
+  | Any | Name _ -> true
   | Type t -> t = x
 
 let signature ?rest args ret = {
@@ -29,7 +28,6 @@ let signature ?rest args ret = {
   rest;
   args;
 }
-
 
 module Check = struct
   let value typ w =
@@ -39,13 +37,12 @@ module Check = struct
     match Var.typ (Arg.lhs arg) with
     | Type.Imm s -> mem typ s
     | _ -> false
-
 end
 
 let pp ppf t = match t with
   | Any -> ()
-  | Type t -> Format.fprintf ppf ":%d" t
-
+  | Name s -> Format.fprintf ppf "%s" s
+  | Type t -> Format.fprintf ppf "%d" t
 
 include Comparable.Make(struct
     type t = typ [@@deriving sexp, compare]

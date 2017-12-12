@@ -30,6 +30,7 @@ module Type : sig
   type signature = Bap_primus_lisp_type.signature
   type error
   val word : int -> t
+  val var : string -> t
   val any : t
   val signature : ?rest:t -> t list -> t -> signature
   val check : Var.t seq -> program -> error list

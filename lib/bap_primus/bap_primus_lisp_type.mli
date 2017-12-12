@@ -16,6 +16,7 @@ type signature = {
 val read : string -> typ option
 val word : int -> t
 val any : t
+val var : string -> t
 
 val signature : ?rest:t -> t list -> t -> signature
 

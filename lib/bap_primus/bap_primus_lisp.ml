@@ -75,8 +75,8 @@ module Locals(Machine : Machine) = struct
   let of_lisp {data={exp;typ}} =
     Machine.Local.get state >>= fun {width} ->
     match typ with
-    | Any -> Machine.return (Var.create exp (Type.Imm width))
     | Type t -> Machine.return (Var.create exp (Type.Imm t))
+    | _ -> Machine.return (Var.create exp (Type.Imm width))
 
   let bindings =
     Machine.List.map ~f:(fun (v,x) -> of_lisp v >>| fun v -> v,x)
@@ -277,8 +277,8 @@ module Interpreter(Machine : Machine) = struct
   and eval_exp exp  =
     let int v t =
       let width = match t with
-        | Any -> width ()
-        | Type t -> Machine.return t in
+        | Type t -> Machine.return t
+        | Any | Name _ -> width () in
       width >>= fun width ->
       Eval.const (Word.of_int64 ~width v) in
     let rec eval = function

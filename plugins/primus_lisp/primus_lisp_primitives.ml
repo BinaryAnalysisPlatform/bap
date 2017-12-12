@@ -278,6 +278,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
     let byte = Primus.Lisp.Type.word 8 in
     let unit = `Tuple [] in
     let any = Primus.Lisp.Type.any in
+    let alpha = Primus.Lisp.Type.var "a" in
     let all t = `All t in
     let tuple ts = `Tuple ts in
     let one t = tuple [t] in
@@ -301,29 +302,29 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "memory-write" (tuple [word; byte] @-> word) (module MemoryWrite);
       def "memory-allocate" (tuple [word; word] @-> byte) (module MemoryAllocate);
       def "get-current-program-counter" (unit @-> word) (module GetPC);
-      def "+" (all any @-> any) (module Add);
-      def "-" (all any @-> any) (module Sub);
-      def "*" (all any @-> any) (module Mul);
-      def "/" (all any @-> any) (module Div);
-      def "s/" (all any @-> any) (module SDiv);
-      def "mod" (all any @-> any) (module Mod);
-      def "signed-mod" (all any @-> any) (module SignedMod);
-      def "lshift" (tuple [any; any] @-> any) (module Lshift);
-      def "rshift" (tuple [any; any] @-> any) (module Rshift);
-      def "arshift" (tuple [any; any] @-> any) (module Arshift);
-      def "=" (all any @-> bool) (module Equal);
-      def "/=" (all any @-> bool) (module NotEqual);
-      def "logand" (all any @-> any) (module Logand);
-      def "logor" (all any @-> any) (module Logor);
-      def "logxor" (all any @-> any) (module Logxor);
+      def "+" (all alpha @-> alpha) (module Add);
+      def "-" (all alpha @-> alpha) (module Sub);
+      def "*" (all alpha @-> alpha) (module Mul);
+      def "/" (all alpha @-> alpha) (module Div);
+      def "s/" (all alpha @-> alpha) (module SDiv);
+      def "mod" (all alpha @-> alpha) (module Mod);
+      def "signed-mod" (all alpha @-> alpha) (module SignedMod);
+      def "lshift" (tuple [alpha; alpha] @-> alpha) (module Lshift);
+      def "rshift" (tuple [alpha; alpha] @-> alpha) (module Rshift);
+      def "arshift" (tuple [alpha; alpha] @-> alpha) (module Arshift);
+      def "=" (all alpha @-> bool) (module Equal);
+      def "/=" (all alpha @-> bool) (module NotEqual);
+      def "logand" (all alpha @-> alpha) (module Logand);
+      def "logor" (all alpha @-> alpha) (module Logor);
+      def "logxor" (all alpha @-> alpha) (module Logxor);
       def "concat" (all any @-> any) (module Concat);
       def "extract" (tuple [any; any; any] @-> any) (module Extract);
-      def "not" (one any @-> any) (module Not);
-      def "neg" (one any @-> any) (module Neg);
-      def "<" (all any @-> bool) (module Less);
-      def ">" (all any @-> bool) (module Greater);
-      def "<=" (all any @-> bool) (module LessEqual);
-      def ">=" (all any @-> bool) (module GreaterEqual);
+      def "not" (one alpha @-> alpha) (module Not);
+      def "neg" (one alpha @-> alpha) (module Neg);
+      def "<" (all alpha @-> bool) (module Less);
+      def ">" (all alpha @-> bool) (module Greater);
+      def "<=" (all alpha @-> bool) (module LessEqual);
+      def ">=" (all alpha @-> bool) (module GreaterEqual);
     ]
 end
 

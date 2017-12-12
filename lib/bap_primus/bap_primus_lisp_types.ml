@@ -16,7 +16,10 @@ type ('a,'i,'e) interned = ('a,'i,'e) Index.interned = {
 
 type 'a indexed = ('a,Id.t,Eq.t) interned [@@deriving compare]
 
-type typ = Any | Type of int [@@deriving sexp, compare]
+type typ =
+  | Any
+  | Name of string
+  | Type of int [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
 type word = int64 term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]

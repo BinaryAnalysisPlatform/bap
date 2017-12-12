@@ -4,6 +4,7 @@ module type S = sig
   type t
   val null : t
   val next : t -> t
+  val pp : Format.formatter -> t -> unit
   include Comparable.S_plain with type t := t
 end
 

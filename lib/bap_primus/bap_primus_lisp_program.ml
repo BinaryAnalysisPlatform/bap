@@ -85,7 +85,7 @@ module Callgraph = struct
     String.Set.union_list
 
   let rec calls = function
-    | {data=App ((Dynamic v),_); } -> call v
+    | {data=App ((Dynamic v),xs); } -> call v ++ union xs ~f:calls
     | {data=(Var _ | Int _ | Err _)} -> empty
     | {data=Ite (x,y,z)} -> calls x ++ calls y ++ calls z
     | {data=(Seq xs | App (_,xs) | Msg (_,xs))} -> union xs ~f:calls
@@ -105,11 +105,16 @@ module Callgraph = struct
     let ids =
       let ids = compute_ids defs in
       fun name -> match Map.find ids name with
-        | None -> []
+        | None ->
+          eprintf "No definitions found for %s@\n" name;
+          []
         | Some x -> x in
     List.fold defs ~init:G.empty ~f:(fun g def ->
         let g = G.Node.insert (Defun def.id) g in
+        eprintf "Inserting node %s@\n" (Def.name def);
         Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
+            eprintf "Inserting edge between %s and %s@\n"
+              (Def.name def) name;
             List.fold (ids name) ~init:g ~f:(fun g id ->
                 G.Edge.insert (edge def.id id) g)))
 
@@ -127,6 +132,17 @@ module Callgraph = struct
 
   include G
 end
+
+let pp_callgraph ppf g = 
+  Graphlib.to_dot (module Callgraph)
+    ~formatter:ppf
+    ~string_of_node:(function
+        | Entry -> "<entry>"
+        | Exit -> "<exit>"
+        | Defun id -> asprintf "%a" Id.pp id)
+    g
+
+
 
 module Use = struct
   let empty = String.Map.empty
@@ -300,8 +316,6 @@ module Fixpoint = struct
     let nodes =
       Graphlib.reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
-    eprintf "Got %d nodes |G| = %d@\n" (Array.length nodes)
-      (G.number_of_nodes g);
     let rnodes =
       Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
           Map.add rnodes ~key:n ~data:i) in
@@ -315,25 +329,14 @@ module Fixpoint = struct
       | None -> init
       | Some x -> x in
     let step works approx = match Set.min_elt works with
-      | None ->
-        eprintf "No more nodes in the work list@\n";
-        Done approx
+      | None -> Done approx
       | Some n ->
         let works = Set.remove works n in
         let out = f nodes.(n) (get approx n) in
-        eprintf
-          "Computed approximation for node %d, procceding to %d successors@\n"
-          n (Set.length succs.(n));
         succs.(n) |>
         Set.fold ~init:(works,approx) ~f:(fun (works,approx) n ->
             let ap = get approx n in
             let ap' = meet out ap in
-            eprintf "%d /\\ %d = %d@\n"
-              (Map.length out) (Map.length ap) (Map.length ap');
-            if equal ap ap'
-            then eprintf "Nothing new for successor %d@\n" n
-            else eprintf "Will recompute successor %d@\n" n;
-
             if equal ap ap' then (works,approx)
             else Set.add works n,
                  Map.add approx ~key:n ~data:ap') |>
@@ -357,8 +360,6 @@ module Fixpoint = struct
     let works = List.init (Array.length nodes) ident in
     loop 0 (Int.Set.of_list works) Int.Map.empty
 end
-
-
 
 module Reindex = struct
   module State = Monad.State.Make(Source)(Monad.Ident)
@@ -455,6 +456,7 @@ module Typing = struct
     prims : signature String.Map.t;
     funcs : Def.func Def.t list;
   }
+  type gamma = texpr Id.Map.t
 
   let empty = Id.Map.empty
   let merge = union empty
@@ -463,18 +465,35 @@ module Typing = struct
     | None -> Tvar id
     | Some t -> t
 
+  let rec pp_expr ppf = function
+    | Grnd x -> fprintf ppf "%d" x
+    | Meet (x,y) -> fprintf ppf "%a=%a" pp_expr x pp_expr y
+    | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
+    | Tvar id -> fprintf ppf "t%a" Id.pp id
+
+  let pp_args ppf args = 
+    pp_print_list Lisp.Type.pp ppf args
+
+  let pp_signature ppf {args; rest; ret} = 
+    fprintf ppf "@[(%a" pp_args args;
+    Option.iter rest ~f:(fun rest ->
+        fprintf ppf "&rest %a" Lisp.Type.pp rest);
+    fprintf ppf ")@] => (%a)" Lisp.Type.pp ret
 
   let make_join t t' = match t,t' with
     | Join (x,y), z when x = z || y = z -> t
     | _ -> if t = t' then t else Join (t,t')
 
-  let make_meet t t' = match t,t' with
+  let make_meet t t' =
+    eprintf "meeting %a with %a@\n" pp_expr t pp_expr t';
+    match t,t' with
     | Join (x,y),z when x = z || y = z -> z
     | _ -> if t = t' then t else Meet (t,t')
 
 
   (** [subst gamma x y] substitute all occurences of [x] with [y] *)
   let subst gamma x y =
+    eprintf "substituting %a with %a@\n" pp_expr x pp_expr y;
     let rec subst t = if t = x then y else match t with
         | Meet (t1,t2) -> make_meet (subst t1) (subst t2)
         | Join (t1,t2) -> make_join (subst t1) (subst t2)
@@ -490,6 +509,10 @@ module Typing = struct
     gamma ++ bind id (make_join (get gamma id1) (get gamma id2))
 
   let meet id1 id2 id gamma =
+    eprintf "Unifying t%a=%a with t%a=%a under t%a@\n"
+      Id.pp id1 pp_expr (get gamma id1) 
+      Id.pp id2 pp_expr (get gamma id2)
+      Id.pp id;
     match get gamma id1, get gamma id2 with
     | (Tvar x as t), (Tvar y as t') ->
       bind id (Tvar id) ++ unify gamma t t' (Tvar id)
@@ -505,23 +528,42 @@ module Typing = struct
     | Grnd m -> if m = n then g
       else subst g t (make_meet t (Grnd n))
 
+  let apply_ret id gamma vs : typ -> gamma = function
+    | Any -> meet id id id gamma
+    | Type n -> meet_with_ground gamma (Tvar id) n
+    | Name n -> match Map.find vs n with
+      | None -> meet id id id gamma
+      | Some id' -> meet id id' id gamma
 
-  let apply_signature ts g {args; rest; ret} =
-    let rec apply g ts ns = match ts,ns with
-      | ts,[] -> Some g,ts
-      | [],_ -> None,[]
-      | t :: ts, Any :: ns -> apply g ts ns
+  let apply_signature appid ts g {args; rest; ret} =
+    let rec apply (g:gamma) (vs : Id.t String.Map.t) ts ns = match ts,ns with
+      | ts,[] -> Some g,vs,ts
+      | [],_ -> None,vs,[]
+      | t :: ts, Any :: ns -> apply g vs ts ns
       | t :: ts, Type n :: ns ->
-        apply (meet_with_ground g (get g t.id) n) ts ns in
-    match apply g ts args with
-    | None,_ -> None
-    | Some g,[] -> Some g
-    | Some g, ts -> match rest with
-      | None -> None
-      | Some Any -> Some g
-      | Some (Type n) ->
-        Some (List.fold ts ~init:g ~f:(fun g t ->
-            meet_with_ground g (get g t.id) n))
+        apply (meet_with_ground g (get g t.id) n) vs ts ns 
+      | t :: ts, Name n :: ns -> match Map.find vs n with
+        | Some id -> apply (meet t.id id id g) vs ts ns 
+        | None -> 
+          let vs = String.Map.add vs ~key:n ~data:t.id in
+          apply g vs ts ns in
+    match apply g String.Map.empty ts args with
+    | None,_,_ -> None
+    | Some g,vs,ts -> 
+      let g = apply_ret appid g vs ret in
+      match ts with
+      | [] -> Some g
+      | ts -> match rest with
+        | None -> None
+        | Some Any -> Some g
+        | Some (Type n) ->
+          Some (List.fold ts ~init:g ~f:(fun g t ->
+              meet_with_ground g (get g t.id) n))
+        | Some (Name n) -> match Map.find vs n with
+          | None -> Some g
+          | Some id -> 
+            Some (List.fold ts ~init:g ~f:(fun g t -> 
+                meet t.id id id g))
 
   let type_of_expr gamma expr = match Map.find gamma expr.id with
     | Some (Grnd n) -> Type n
@@ -530,11 +572,15 @@ module Typing = struct
   let type_of_exprs gamma exprs =
     List.map exprs ~f:(type_of_expr gamma)
 
-  let signature_of_gamma def gamma = {
-    rest = None;
-    ret = type_of_expr gamma (Def.Func.body def);
-    args = type_of_exprs gamma (Def.Func.args def);
-  }
+  let signature_of_gamma def gamma = 
+    let sign = {
+      rest = None;
+      ret = type_of_expr gamma (Def.Func.body def);
+      args = type_of_exprs gamma (Def.Func.args def);
+    } in
+    eprintf "generated signature for definition %s: %a@\n" 
+      (Def.name def) pp_signature sign;
+    sign
 
   let signatures glob gamma name =
     match Map.find glob.prims name with
@@ -546,7 +592,7 @@ module Typing = struct
 
   let apply glob id name args gamma =
     signatures glob gamma name|>
-    List.find_map ~f:(apply_signature args gamma) |> function
+    List.find_map ~f:(apply_signature id args gamma) |> function
     | None -> gamma
     | Some gamma -> gamma
 
@@ -556,6 +602,7 @@ module Typing = struct
 
   let constr id typ gamma = match typ with
     | Any -> Map.add gamma ~key:id ~data:(Tvar id)
+    | Name _ -> gamma
     | Type n -> Map.add gamma ~key:id ~data:(Grnd n)
 
   let constr_glob {globs} vars var gamma =
@@ -572,8 +619,6 @@ module Typing = struct
     | Some id -> id
 
   let (++) f g x = f (g x)
-
-  type gamma = texpr Id.Map.t
 
   let infer_ast glob bindings ast : gamma -> gamma =
     let rec infer vs = function
@@ -596,7 +641,8 @@ module Typing = struct
         constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
-        reduce vs xs
+        reduce vs xs ++
+        meet id id id
       | {data=Seq []; id} -> constr id Any
       | {data=Seq xs; id} ->
         meet (last xs) id id ++
@@ -625,11 +671,13 @@ module Typing = struct
   let find_func funcs id =
     List.find funcs ~f:(fun f -> f.id = id)
 
+
   let transfer glob node gamma = match node with
     | Entry | Exit -> gamma
     | Defun id -> match find_func glob.funcs id with
       | None -> gamma
       | Some f ->
+        eprintf "Inferring type for %s@\n" (Def.name f);
         let args = Def.Func.args f in
         let vars = List.fold args ~init:String.Map.empty ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
@@ -676,6 +724,9 @@ module Typing = struct
       funcs = p.defs;
     } in
     let g = Callgraph.build p.defs in
+    List.iter p.defs ~f:(fun def -> 
+        eprintf "%s => %a@\n" (Def.name def) Id.pp def.id);
+    eprintf "Generated the callgraph:@\n%a@\n" pp_callgraph g;
     let init = Id.Map.empty in
     let fp =
       Fixpoint.compute (module Callgraph) ~rev:true ~start:Exit
@@ -692,17 +743,10 @@ module Typing = struct
   (* The public interface  *)
   module Type = struct
     type error = Bot of Loc.t * texpr
-    let rec pp_expr ppf = function
-      | Grnd x -> fprintf ppf "%d" x
-      | Meet (x,y) -> fprintf ppf "%a=%a" pp_expr x pp_expr y
-      | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
-      | Tvar _ -> fprintf ppf "?"
 
     let check vars p =
       let p = Reindex.program p in
       let gamma = infer vars p in
-      eprintf "Inferred %d types@\n%!"
-        (Map.length gamma);
       Map.iteri gamma ~f:(fun ~key ~data ->
           eprintf "%a: %a@\n%!"
             Loc.pp (Source.loc p.sources key) pp_expr data);
@@ -710,12 +754,9 @@ module Typing = struct
           if well_typed t then errs
           else Bot (Source.loc p.sources id, t) :: errs)
 
-
     let pp_error ppf (Bot (loc,expr)) =
       fprintf ppf "%a@\nType error - expression is ill-typed: %a"
         Loc.pp loc pp_expr expr
-
-
 
     include Lisp.Type
   end
