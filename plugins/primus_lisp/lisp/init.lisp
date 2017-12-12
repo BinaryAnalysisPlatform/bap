@@ -1,3 +1,4 @@
+
 (defconstant true 1:1)
 (defconstant false 0:1)
 (defconstant nil false)
@@ -11,12 +12,12 @@
 (defmacro until (c b)
   (while (not c) b))
 
-(defun +1 (x) (+ x 1))
-(defun -1 (x) (- x 1))
 
-(defun non-zero (x) (non (is-zero x)))
+(defun non-zero (x) (not (is-zero x)))
 (defmacro += (x y) (set x (+ x y)))
 
+(defun -1 (x) (- x 1))
+(defun +1 (x) (+ x 1))
 
 (defmacro incr (x) (set x (+1 x)))
 (defmacro incr (x xs)

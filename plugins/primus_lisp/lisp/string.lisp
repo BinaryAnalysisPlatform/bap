@@ -2,15 +2,7 @@
 (require pointers)
 (require memory)
 
-(defun find-null (p)
-  (strlen (points-to-null p)))
 
-(defun strlen-internal (p)
-  (let ((len 0))
-    (while (points-to-null p)
-      (set len (+1 len))
-      (set p (+1 p)))
-    len))
 
 
 (defun strlen (p)

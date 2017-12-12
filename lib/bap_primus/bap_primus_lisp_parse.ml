@@ -148,7 +148,8 @@ module Parse = struct
         | {data=List bs} :: e :: es ->
           List.fold_right bs ~init:(seq e es) ~f:(fun b e ->
               match b with
-              | {data=List [v; x]} -> cons (Let (let_var v,exp x,e))
+              | {data=List [v; x]; id; eq} ->
+                {data=Let (let_var v,exp x,e); id; eq}
               | s -> fail Bad_let_binding s)
         | _ -> bad_form "let" tree in
 
@@ -210,7 +211,7 @@ module Parse = struct
           | Some Error err -> fail (Unresolved (Const,x,err)) t
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
       start tree
-    and seq e es = {data=Seq ((exp e) :: exps es); id=e.id; eq=e.eq}
+    and seq e es = {data=Seq ((exp e) :: exps es); id=Id.null; eq=Eq.null}
     and exps : tree list -> ast list = List.map ~f:exp in
     exp tree
 

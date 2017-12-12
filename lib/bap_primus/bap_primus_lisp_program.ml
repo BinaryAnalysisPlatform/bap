@@ -105,16 +105,11 @@ module Callgraph = struct
     let ids =
       let ids = compute_ids defs in
       fun name -> match Map.find ids name with
-        | None ->
-          eprintf "No definitions found for %s@\n" name;
-          []
+        | None -> []
         | Some x -> x in
     List.fold defs ~init:G.empty ~f:(fun g def ->
         let g = G.Node.insert (Defun def.id) g in
-        eprintf "Inserting node %s@\n" (Def.name def);
         Set.fold (calls (Def.Func.body def)) ~init:g ~f:(fun g name ->
-            eprintf "Inserting edge between %s and %s@\n"
-              (Def.name def) name;
             List.fold (ids name) ~init:g ~f:(fun g id ->
                 G.Edge.insert (edge def.id id) g)))
 
@@ -143,6 +138,12 @@ let pp_callgraph ppf g =
     g
 
 
+let pp_term pp_exp ppf = function
+  | {data={exp; typ=Any}} -> fprintf ppf "%a" pp_exp exp
+  | {data={exp; typ}} -> fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
+
+let pp_word = pp_term Int64.pp
+let pp_var = pp_term String.pp
 
 module Use = struct
   let empty = String.Map.empty
@@ -369,17 +370,20 @@ module Reindex = struct
 
   let rec ids_of_trees trees =
     List.fold trees ~init:Id.Set.empty ~f:(fun xs t -> match t with
-        | {data=Atom _; id} -> Set.add xs id
+        | {data=Atom v; id} -> Set.add xs id
         | {data=List ts;id} ->
           Set.union (Set.add xs id) (ids_of_trees ts))
 
-  let ids_of_defs defs f =
-    List.map defs ~f |> ids_of_trees
+  let ids_of_defs defs map reduce =
+    Id.Set.union_list [
+      Id.Set.of_list @@ List.map defs ~f:(fun d -> d.id);
+      map defs ~f:reduce |> ids_of_trees
+    ]
 
   let macro_ids p = Id.Set.union_list [
-      ids_of_defs p.macros Def.Macro.body;
-      ids_of_defs p.consts Def.Const.value;
-      ids_of_trees (List.concat_map p.substs ~f:Def.Subst.body);
+      ids_of_defs p.macros List.map Def.Macro.body;
+      ids_of_defs p.consts List.map Def.Const.value;
+      ids_of_defs p.substs List.concat_map Def.Subst.body;
     ]
 
   let derive tid =
@@ -389,6 +393,10 @@ module Reindex = struct
     nextid
 
   let reindex_def macros def =
+    let rename t =
+      if Set.mem macros t.id || Id.null = t.id
+      then derive t.id >>| fun id -> {t with id}
+      else State.return t in
     let rec map t : ast m =
       rename t >>= fun t -> match t.data with
       | Int _ | Var _ | Err _ -> State.return t
@@ -398,12 +406,13 @@ module Reindex = struct
         map z >>| fun z ->
         {t with data = Ite (x,y,z)}
       | Let (c,x,y) ->
+        rename c >>= fun c -> 
         map x >>= fun x ->
         map y >>| fun y ->
         {t with data = Let (c,x,y)}
       | Rep (x,y) ->
         map x >>= fun x ->
-        map y >>| fun ys ->
+        map y >>| fun y ->
         {t with data = Rep (x,y)}
       | App (b,xs) ->
         map_all xs >>| fun xs ->
@@ -417,11 +426,7 @@ module Reindex = struct
       | Set (v,x) ->
         map x >>| fun x ->
         {t with data = Set (v,x)}
-    and map_all = State.List.map ~f:map
-    and rename t =
-      if Set.mem macros t.id || Id.null = t.id
-      then derive t.id >>| fun id -> {t with id}
-      else State.return t in
+    and map_all = State.List.map ~f:map in
     map (Def.Func.body def) >>|
     Def.Func.with_body def
 
@@ -484,16 +489,13 @@ module Typing = struct
     | Join (x,y), z when x = z || y = z -> t
     | _ -> if t = t' then t else Join (t,t')
 
-  let make_meet t t' =
-    eprintf "meeting %a with %a@\n" pp_expr t pp_expr t';
-    match t,t' with
+  let make_meet t t' = match t,t' with
     | Join (x,y),z when x = z || y = z -> z
     | _ -> if t = t' then t else Meet (t,t')
 
 
   (** [subst gamma x y] substitute all occurences of [x] with [y] *)
   let subst gamma x y =
-    eprintf "substituting %a with %a@\n" pp_expr x pp_expr y;
     let rec subst t = if t = x then y else match t with
         | Meet (t1,t2) -> make_meet (subst t1) (subst t2)
         | Join (t1,t2) -> make_join (subst t1) (subst t2)
@@ -509,10 +511,6 @@ module Typing = struct
     gamma ++ bind id (make_join (get gamma id1) (get gamma id2))
 
   let meet id1 id2 id gamma =
-    eprintf "Unifying t%a=%a with t%a=%a under t%a@\n"
-      Id.pp id1 pp_expr (get gamma id1) 
-      Id.pp id2 pp_expr (get gamma id2)
-      Id.pp id;
     match get gamma id1, get gamma id2 with
     | (Tvar x as t), (Tvar y as t') ->
       bind id (Tvar id) ++ unify gamma t t' (Tvar id)
@@ -572,15 +570,12 @@ module Typing = struct
   let type_of_exprs gamma exprs =
     List.map exprs ~f:(type_of_expr gamma)
 
-  let signature_of_gamma def gamma = 
-    let sign = {
-      rest = None;
-      ret = type_of_expr gamma (Def.Func.body def);
-      args = type_of_exprs gamma (Def.Func.args def);
-    } in
-    eprintf "generated signature for definition %s: %a@\n" 
-      (Def.name def) pp_signature sign;
-    sign
+  let signature_of_gamma def gamma = {
+    rest = None;
+    ret = type_of_expr gamma (Def.Func.body def);
+    args = type_of_exprs gamma (Def.Func.args def);
+  } 
+
 
   let signatures glob gamma name =
     match Map.find glob.prims name with
@@ -601,8 +596,8 @@ module Typing = struct
     | _ -> Id.null
 
   let constr id typ gamma = match typ with
-    | Any -> Map.add gamma ~key:id ~data:(Tvar id)
-    | Name _ -> gamma
+    | Any 
+    | Name _ -> Map.add gamma ~key:id ~data:(Tvar id)
     | Type n -> Map.add gamma ~key:id ~data:(Grnd n)
 
   let constr_glob {globs} vars var gamma =
@@ -641,8 +636,7 @@ module Typing = struct
         constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
-        reduce vs xs ++
-        meet id id id
+        reduce vs xs 
       | {data=Seq []; id} -> constr id Any
       | {data=Seq xs; id} ->
         meet (last xs) id id ++
@@ -677,7 +671,6 @@ module Typing = struct
     | Defun id -> match find_func glob.funcs id with
       | None -> gamma
       | Some f ->
-        eprintf "Inferring type for %s@\n" (Def.name f);
         let args = Def.Func.args f in
         let vars = List.fold args ~init:String.Map.empty ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
@@ -724,9 +717,6 @@ module Typing = struct
       funcs = p.defs;
     } in
     let g = Callgraph.build p.defs in
-    List.iter p.defs ~f:(fun def -> 
-        eprintf "%s => %a@\n" (Def.name def) Id.pp def.id);
-    eprintf "Generated the callgraph:@\n%a@\n" pp_callgraph g;
     let init = Id.Map.empty in
     let fp =
       Fixpoint.compute (module Callgraph) ~rev:true ~start:Exit
@@ -743,7 +733,6 @@ module Typing = struct
   (* The public interface  *)
   module Type = struct
     type error = Bot of Loc.t * texpr
-
     let check vars p =
       let p = Reindex.program p in
       let gamma = infer vars p in
@@ -761,14 +750,6 @@ module Typing = struct
     include Lisp.Type
   end
 end
-
-let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}} -> fprintf ppf "%a" pp_exp exp
-  | {data={exp; typ}} -> fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
-
-let pp_word = pp_term Int64.pp
-let pp_var = pp_term String.pp
-
 
 let rec concat_prog =
   List.concat_map ~f:(function
