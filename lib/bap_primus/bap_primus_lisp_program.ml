@@ -518,8 +518,6 @@ module Typing = struct
     | t', (Tvar _ as t)
     | t,t' -> bind id t' ++ subst gamma t t'
 
-
-
   let meet_with_ground g t n = match t with
     | Tvar x -> subst g t (Grnd n)
     | Meet (x,y) -> unify g x y (Grnd n)
@@ -536,7 +534,7 @@ module Typing = struct
       | Some id' -> meet id id' id gamma
 
   let apply_signature appid ts g {args; rest; ret} =
-    let rec apply (g:gamma) (vs : Id.t String.Map.t) ts ns = match ts,ns with
+    let rec apply g vs ts ns = match ts,ns with
       | ts,[] -> Some g,vs,ts
       | [],_ -> None,vs,[]
       | t :: ts, Any :: ns -> apply g vs ts ns
@@ -545,7 +543,7 @@ module Typing = struct
       | t :: ts, Name n :: ns -> match Map.find vs n with
         | Some id -> apply (meet t.id id id g) vs ts ns 
         | None -> 
-          let vs = String.Map.add vs ~key:n ~data:t.id in
+          let vs = Map.add vs ~key:n ~data:t.id in
           apply g vs ts ns in
     match apply g String.Map.empty ts args with
     | None,_,_ -> None
@@ -578,7 +576,6 @@ module Typing = struct
     args = type_of_exprs gamma (Def.Func.args def);
   } 
 
-
   let signatures glob gamma name =
     match Map.find glob.prims name with
     | Some sign -> [sign]
@@ -587,9 +584,14 @@ module Typing = struct
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
+  let join_gammas = Map.merge ~f:(fun ~key -> function
+      | `Left t | `Right t -> Some (make_join t (Tvar key))
+      | `Both (t,t') -> Some (make_join t t'))
+
   let apply glob id name args gamma =
     signatures glob gamma name|>
-    List.find_map ~f:(apply_signature id args gamma) |> function
+    List.filter_map ~f:(apply_signature id args gamma) |> 
+    List.reduce ~f:join_gammas |> function
     | None -> gamma
     | Some gamma -> gamma
 
@@ -679,7 +681,6 @@ module Typing = struct
             constr v.id v.data.typ gamma) in
         infer_ast glob vars (Def.Func.body f) gamma
 
-
   let unify_meets g =
     Map.fold g ~init:g ~f:(fun ~key:id ~data:t g ->
         match t with
@@ -738,9 +739,6 @@ module Typing = struct
     let check vars p =
       let p = Reindex.program p in
       let gamma = infer vars p in
-      Map.iteri gamma ~f:(fun ~key ~data ->
-          eprintf "%a: %a@\n%!"
-            Loc.pp (Source.loc p.sources key) pp_expr data);
       Map.fold gamma ~init:[] ~f:(fun ~key:id ~data:t errs ->
           if well_typed t then errs
           else Bot (Source.loc p.sources id, t) :: errs)
