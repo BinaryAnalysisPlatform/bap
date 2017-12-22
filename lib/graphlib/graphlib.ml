@@ -13,7 +13,7 @@ module Std = struct
   module Partition = Partition
   module Equiv = Equiv
   module Path = Path
-
+  module Solution = Fixpoint
   module Graphlib = struct
     include Graphlib_graph
     module type Aux = Graphlib_regular_intf.Aux
