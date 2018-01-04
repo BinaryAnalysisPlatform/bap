@@ -128,7 +128,7 @@ module Callgraph = struct
   include G
 end
 
-let pp_callgraph ppf g = 
+let pp_callgraph ppf g =
   Graphlib.to_dot (module Callgraph)
     ~formatter:ppf
     ~string_of_node:(function
@@ -192,176 +192,6 @@ module Use = struct
         })
 end
 
-module type Fixpoint = sig
-  type ('n,'d) t
-
-  val compute : (module Graph with type t = 'c
-                               and type node = 'n) ->
-    ?steps:int -> ?start:'n -> ?rev:bool ->
-    meet:('d -> 'd -> 'd) -> init:'d -> f:('n -> 'd -> 'd) -> 'c -> ('n,'d) t
-
-  val iterations : ('n,'d) t -> int
-  val is_maximal : ('n,'d) t -> bool
-  val solution : ('n,'d) t -> 'n -> 'd
-
-end
-
-module Fixpoint = struct
-  type ('n,'d) t = Solution : {
-      steps : int option;
-      iters : int;
-      init : 'd;
-      approx : ('n,'d,_) Map.t;
-    } -> ('n,'d) t
-
-  let solution (Solution {approx; init}) n =
-    match Map.find approx n with
-    | None -> init
-    | Some x -> x
-
-  let is_maximal (Solution {steps; iters}) = match steps with
-    | None -> true
-    | Some steps -> iters < steps
-
-  type ('a,'b) step =
-    | Step of 'a
-    | Done of 'b
-
-  let continue x = Step x
-
-
-  (* Kildall's Worklist Algorithm Implementation
-
-
-     Kildall's Algorithm
-     ===================
-
-     Pseudocode:
-
-     Given a set of node W, and a finite mapping A from nodes to
-     approximations, a function F, the initial approximation I, and a
-     start node B, the algorithm refines the mapping A, until a
-     fixpoint is reached.
-
-
-     {v
-     let W = {B}
-     for each node N in graph G:
-        A[N] := I
-
-     while W <> {}:
-        pop a node N from W
-        let OUT = F N A[N]
-        for each successor S of N:
-           let IN = A[S] /\ OUT
-           if IN <> A[S]:
-              A[S] := IN
-              W := union(W,{S}
-        end
-     end
-     v}
-
-
-     If the meet operation (/\) induces a partial order over the set
-     of approximations, and function F is monotonic, then the result
-     would me the maximal fixpoint solution.
-
-
-     Implementation
-     ==============
-
-     1. We do not distinguish between forward and backward problems,
-     since a backward problem can be expressed as forward, on the
-     reversed graph and inversed lattice. Thus, we express our
-     algorithm as a forward problem with a meet semilattice. We do not
-     require, of course, a user to provide a reverse graph, instead the
-     flag [rev] could be used to virtually reverse the graph, and
-     the exit node should be provided as a start node.
-
-     2. Since the algorithm converges faster if a worklist is
-     traversed in the reverse postorder we rank the graph nodes with
-     their reverse postorder (rpost) numbers and use an array [nodes]
-     for fast mapping from rpost numbers to nodes. We then represent
-     the worklist as an integer set, and always pick the minimal
-     element from the worklist.
-
-     3. We also precompute a set of successors [succs] (as a set of
-     their rpost numbers) for each node.
-
-     4. In the loop body we use rpost numbers as node representations,
-     and the finite mapping A is a mapping from integers to
-     approximations.
-
-     5. We optionally bound our loop with the maximum number of
-     iterations, allowing an algorithm to terminate before it
-     converges. Thus the result might be not a maximal fixpoint (i.e.,
-     it might not be the greater lower bound for some if not all
-     nodes, however, it should still be the over-approximation, given
-     the correct meet, f,  and initial approximation.
-
-
-     Caveats
-     =======
-
-     1. We allow only one start node. If it is specified, then only
-     those nodes that are reachable from the start node will
-     participate in the computation. So, unless, it is really desired,
-     it is a good idea to introduce an artificial entry node, from
-     which everything is reachable.
-
-  *)
-  let compute
-      (type g n)
-      (module G : Graph with type t = g and type node = n)
-      ?steps ?start ?(rev=false) ~equal ~meet ~init ~f g =
-    let nodes =
-      Graphlib.reverse_postorder_traverse (module G) ~rev ?start g |>
-      Sequence.to_array in
-    let rnodes =
-      Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
-          Map.add rnodes ~key:n ~data:i) in
-    let succs = Array.map nodes ~f:(fun n ->
-        let succs = if rev then G.Node.preds else G.Node.succs in
-        succs n g |> Sequence.fold ~init:Int.Set.empty ~f:(fun ns n ->
-            match Map.find rnodes n with
-            | None -> ns
-            | Some i -> Set.add ns i)) in
-    let get approx n = match Map.find approx n with
-      | None -> init
-      | Some x -> x in
-    let step works approx = match Set.min_elt works with
-      | None -> Done approx
-      | Some n ->
-        let works = Set.remove works n in
-        let out = f nodes.(n) (get approx n) in
-        succs.(n) |>
-        Set.fold ~init:(works,approx) ~f:(fun (works,approx) n ->
-            let ap = get approx n in
-            let ap' = meet out ap in
-            if equal ap ap' then (works,approx)
-            else Set.add works n,
-                 Map.add approx ~key:n ~data:ap') |>
-        continue in
-    let can_iter iters = match steps with
-      | None -> true
-      | Some steps -> iters < steps in
-    let make_solution iters approx = Solution {
-        steps;
-        iters;
-        init;
-        approx = Map.fold approx ~init:G.Node.Map.empty
-            ~f:(fun ~key:n ~data approx ->
-                Map.add approx ~key:nodes.(n) ~data);
-      } in
-    let rec loop iters works approx =
-      if can_iter iters then match step works approx with
-        | Done approx -> make_solution iters approx
-        | Step (works,approx) -> loop (iters+1) works approx
-      else make_solution iters approx in
-    let works = List.init (Array.length nodes) ident in
-    loop 0 (Int.Set.of_list works) Int.Map.empty
-end
-
 module Reindex = struct
   module State = Monad.State.Make(Source)(Monad.Ident)
   open State.Syntax
@@ -406,7 +236,7 @@ module Reindex = struct
         map z >>| fun z ->
         {t with data = Ite (x,y,z)}
       | Let (c,x,y) ->
-        rename c >>= fun c -> 
+        rename c >>= fun c ->
         map x >>= fun x ->
         map y >>| fun y ->
         {t with data = Let (c,x,y)}
@@ -476,10 +306,10 @@ module Typing = struct
     | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
     | Tvar id -> fprintf ppf "t%a" Id.pp id
 
-  let pp_args ppf args = 
+  let pp_args ppf args =
     pp_print_list Lisp.Type.pp ppf args
 
-  let pp_signature ppf {args; rest; ret} = 
+  let pp_signature ppf {args; rest; ret} =
     fprintf ppf "@[(%a" pp_args args;
     Option.iter rest ~f:(fun rest ->
         fprintf ppf "&rest %a" Lisp.Type.pp rest);
@@ -539,15 +369,15 @@ module Typing = struct
       | [],_ -> None,vs,[]
       | t :: ts, Any :: ns -> apply g vs ts ns
       | t :: ts, Type n :: ns ->
-        apply (meet_with_ground g (get g t.id) n) vs ts ns 
+        apply (meet_with_ground g (get g t.id) n) vs ts ns
       | t :: ts, Name n :: ns -> match Map.find vs n with
-        | Some id -> apply (meet t.id id id g) vs ts ns 
-        | None -> 
+        | Some id -> apply (meet t.id id id g) vs ts ns
+        | None ->
           let vs = Map.add vs ~key:n ~data:t.id in
           apply g vs ts ns in
     match apply g String.Map.empty ts args with
     | None,_,_ -> None
-    | Some g,vs,ts -> 
+    | Some g,vs,ts ->
       let g = apply_ret appid g vs ret in
       match ts with
       | [] -> Some g
@@ -559,8 +389,8 @@ module Typing = struct
               meet_with_ground g (get g t.id) n))
         | Some (Name n) -> match Map.find vs n with
           | None -> Some g
-          | Some id -> 
-            Some (List.fold ts ~init:g ~f:(fun g t -> 
+          | Some id ->
+            Some (List.fold ts ~init:g ~f:(fun g t ->
                 meet t.id id id g))
 
   let type_of_expr gamma expr = match Map.find gamma expr.id with
@@ -574,7 +404,7 @@ module Typing = struct
     rest = None;
     ret = type_of_expr gamma (Def.Func.body def);
     args = type_of_exprs gamma (Def.Func.args def);
-  } 
+  }
 
   let signatures glob gamma name =
     match Map.find glob.prims name with
@@ -590,7 +420,7 @@ module Typing = struct
 
   let apply glob id name args gamma =
     signatures glob gamma name|>
-    List.filter_map ~f:(apply_signature id args gamma) |> 
+    List.filter_map ~f:(apply_signature id args gamma) |>
     List.reduce ~f:join_gammas |> function
     | None -> gamma
     | Some gamma -> gamma
@@ -600,7 +430,7 @@ module Typing = struct
     | _ -> Id.null
 
   let constr id typ gamma = match typ with
-    | Any 
+    | Any
     | Name _ -> Map.add gamma ~key:id ~data:(Tvar id)
     | Type n -> Map.add gamma ~key:id ~data:(Grnd n)
 
@@ -640,7 +470,7 @@ module Typing = struct
         constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
-        reduce vs xs 
+        reduce vs xs
       | {data=Seq []; id} -> constr id Any
       | {data=Seq xs; id} ->
         meet (last xs) id id ++
@@ -720,11 +550,11 @@ module Typing = struct
       funcs = p.defs;
     } in
     let g = Callgraph.build p.defs in
-    let init = Id.Map.empty in
+    let init = Solution.create Callgraph.Node.Map.empty Id.Map.empty in
     let fp =
-      Fixpoint.compute (module Callgraph) ~rev:true ~start:Exit
-        ~equal ~meet ~init ~f:(transfer glob) g in
-    Fixpoint.solution fp Entry
+      Graphlib.fixpoint (module Callgraph) ~rev:true ~start:Exit
+        ~equal ~merge:meet ~init ~f:(transfer glob) g in
+    Solution.get fp Entry
 
   let rec well_typed = function
     | Meet (Grnd x, Grnd y) -> x = y
