@@ -1115,7 +1115,7 @@ module Std : sig
     (** [fixpoint ~equal ~init ~merge ~f g] computes a solution for a
         system of equations denoted by graph [g], using the inital
         approximation [init] (obtained either with [Solution.create] or
-        from previous calls to [fixpoint]).
+        from the previous calls to [fixpoint]).
 
         The general representation of the fixpoint equations is
 
@@ -1141,10 +1141,10 @@ module Std : sig
         solution is always a lower approximation of a real solution,
         so it is always safe to use it).
 
-        @param steps the maximum number of iterations that should be
-        made before the fixpoint is reached.
+        @param the upper bound to the number of iterations the solver
+        can make.
 
-        @param start the entry node of a graph
+        @param start the entry node of the graph
 
         @param rev if [true] then graph is visited in the reverse order,
         defaults to [false].
@@ -1168,8 +1168,8 @@ module Std : sig
         The [fixpoint] function implements a general fixed pointed
         iterative solver, that is suitable for implementing data-flow
         analysis or abstract interpreters. This section will provide
-        some insight on how a particular choice of parameters affect
-        the results of computation. We will start with a small
+        some insight on how a particular choice of parameters affects
+        the result of computation. We will start with a small
         introduction to the theory of Data Flow Analysis and Abstract
         Interpretation, with respect to the solution of a system of
         fixed point equations.
@@ -1195,7 +1195,7 @@ module Std : sig
         value contans all the information, representable in the
         lattice, correspondingly the [bot] value represents an absence
         of information. Thus, we will consider the bottom value as an
-        over approximation (or a lower approximation in terms the
+        over approximation (or a lower approximation in terms of the
         lattice ordering relation), as an absence of information
         cannot contain false statements (vacuous truth). Assuming,
         that there is some value [t], [bot <= t <= top] that represents
@@ -1207,30 +1207,29 @@ module Std : sig
         a system that is not true, hence an under approximate solution,
         is usually unsafe to use. In general, our task is to find an
         over approximation that is as close as possible to the ground
-        truth.
+        truth [t].
 
         A solution to a fixed point equation (i.e., an equation of the
         form [x = f(x)]) could be obtainted by starting from some
         initial approximation [x0] and repeatedly applying [f] to it,
-        until the solution is found, i.e., [x = f(... f(x0) ...)]. In
-        general, a function may have multiple (or no at all) fixed
+        until the solution is found, i.e., [x = f(... f(f(x0)) ...)].
+        In general, a function may have multiple (or no at all) fixed
         points. If a function has several fixed points, then we can
         distinguish two extremums - the least fixed point [lfp] and
-        the greatest fixed point [gfp] w.r.t the lattice
-        ordering. Assuming that function [f] is positive monotonic
-        function (i.e., [x <= y] implies that [f(x) <= f(y)]), thechoice of
-        the initial value [x0] denotes which of the two fixed points
-        is computed. When we start with the bot value, we are
-        ascending from it until the least fixed point is
-        obtained. Dually, if we will start with the top value, we will
-        descend until the maximal fixpoint is reached. Assuming that
-        both fixpoints are lower approximations of the ground truth,
-        we can easily see, that the maximal fixpoint solution is more
-        attractive, as it bears more information than the minimal
-        (unless both are the same). However, the ascending search,
-        bears a nice property, that any intermediate solution is an
-        over-approximation of the ground truth (i.e., we are
-        monotonically aggregating facts).
+        the greatest fixed point [gfp] w.r.t the ordering of lattice
+        [L]. Assuming that function [f] is positive monotonic function
+        (i.e., [x <= y] implies that [f(x) <= f(y)]), thechoice of the
+        initial value [x0] denotes which of the two fixed points is
+        computed. When we start with the bot value, we are ascending
+        from it until the least fixed point is obtained. Dually, if we
+        will start with the top value, we will descend until the
+        maximal fixpoint is reached. Assuming that both fixpoints are
+        lower approximations of the ground truth, we can easily see,
+        that the maximal fixpoint solution is more attractive, as it
+        bears more information than the minimal (unless both are the
+        same). However, the ascending search, bears a nice property,
+        that any intermediate solution is an over-approximation of the
+        ground truth (i.e., we are monotonically aggregating facts).
 
         In general, a function may not have a solution at all, or the
         solution may not be computable in practice, i.e., when the chain
@@ -1248,8 +1247,8 @@ module Std : sig
         Interpretation and Data Flow Analysis. The latter usually
         deals with lattice that have finite heights, while the former
         deals with very big and infinite lattices. To accelerate the
-        convergence of a chaing of approximations a special technique
-        called [widening] is used. Widening could be seen as an
+        convergence of a chain of approximations, a special technique
+        called [widening] is used. Widening can be seen as an
         operation that jumps over several applications of the function
         [f], hence it actually accelerates the convergence. Given,
         that widening jumps forward in the chain, it is possible to
@@ -1262,7 +1261,7 @@ module Std : sig
         graph denotes a boolean adjacency matrix [A = {a(i,j)}], such that
         [a(i,j)] is [1] if there is an edge from [i] to [j], and [0]
         otherwise). To solve the system of equations, we need to find
-        such vector [x1,..,xM] that solves all equations. Of course,
+        such vector [x1,..,xM] that solves all equations. In general,
         a system may not have a solution (an over-constrainted system),
         may have one solution, and may have many solutions (under
         constrained system). In our case, the system is not linear, as
@@ -1272,24 +1271,25 @@ module Std : sig
         correctness and convergence of the solution.
 
         The [meet] operator is a commutative, associative, and
-        indemotent operator, such that if [z = meet x y], then [z <= x
+        idempotent operator, such that if [z = meet x y], then [z <= x
         && z <= y] and for all [w] in [L], [w <= x && w <= y] implies [w <=
         z]. The [z] value is called the greatest lower bound ([glb], or
         [inf]) of [x] and [y]. Intuitively, the [meet] operator takes
-        two pieces of information and removes all contradictions. The
-        [top] element is the neutral element with respect to the
-        [meet] operation, e.g., [meet x top = x]. A consequent
-        application of the [meet] operation builds a descending chain
-        of approximations, i.e., the amount of information is reduced
-        on each step.
+        two pieces of information and removes all contradictions. Thus
+        [z] is the maximal consensus between [x] and [y]. The [top]
+        element is the neutral element with respect to the [meet]
+        operation, e.g., [meet x top = x]. A consequent application of
+        the [meet] operation builds a {i descending chain} of
+        approximations, i.e., the amount of information is reduced on
+        each step.
 
-        The [join] operator is dual to [meet] and defined
+        The [join] operator is dual to [meet] and is defined
         correspondingly (with the flipped order). A join of [x] and
         [y] is called the least upper bound ([lub], [sup]) of [x] and
         [y]. Intuitively, the [join] operator takes two
         non-contradictory pieces information and returns their
         concatenation. The [bot] element is the neutral element with
-        respect to the [join] operation, .e.g, [join x bot = x]. A
+        respect to the [join] operation, e.g., [join x bot = x]. A
         consequent application of the [join] operation builds an
         ascending chain of approximations, i.e., the amount of
         information is increased on each step.
@@ -1313,14 +1313,14 @@ module Std : sig
 
         The classical Data Flow analysis uses the descending chain of
         approximations in a complete lattice with finite (usually very
-        small) height. Thus, the [fixpoint] solution is greates
+        small) height. Thus, the [fixpoint] solution is the greatest
         (maximal) fixed point (a maximal set of facts on which all
         equations agree). If the transfer function [f] is monotone and
         distributive, then it is the meet-over-paths (mop) solution,
         in a more general case [gfp <= mop] and [mop <= t] (where [t] is
         the ground truth). (Note, [gfp] is of course the best solution
         to the system of equations, as it is the maximal of all
-        solutions. Bot [mop] and [t] are not solutions to the given
+        solutions. Both [mop] and [t] are not solutions to the given
         system, but define the true properties of a system under test,
         that we are trying to model with the system of fixed point
         equations. The fact that [gfp] is smaller, indicates that our
@@ -1335,8 +1335,8 @@ module Std : sig
         The [fixpoint] function could be easily applied to both
         forward and backward data flow problem, as backward problem
         could be seen as a forward problem on a reversed graph. To
-        effectively reverse a graph, set the [rev] flat to [true] and
-        set the [exit] parameter to the [exit] node.
+        effectively reverse a graph, set the [rev] flag to [true] and
+        set the [enter] parameter to the [exit] node.
 
 
 
@@ -1346,34 +1346,39 @@ module Std : sig
         lattices, and applies different heuristics to ensure
         termination with the minimum loss of precision. This usually
         ends up in applying widening and narrowing operations. Since
-        widening accelerates jumps forward in the search space, it can
-        easily overshoot a fixed point, and in case of ascending chain
-        this may lead to a solution that is an under approximation of
-        the ground truth. Thus, abstract interpretation is also
-        usually applied in the descending order. In this case the
-        [widen] operation may still overshot the maximal fixpoint,
-        that will lead to an over-approximation of the ground truth,
-        that is safe, but still looses precision. Therefore, it is
-        necessary to apply widening as rarely as
-        possible. Unfortunatelly, a question where and when to apply
-        widening is undecidable by itself, that's why heuristics are
-        used. The [fixpoint] function, provides a limited interface
-        via the [step i n x x'] function that is called every time a
-        new [i]'th approximation [x'] for variable [n] is
-        computed. The [step] function must return an upper bound (not
-        necessary the least one) of the previous approximation [x] and
-        the new approximation [x']. The default, implementation just
-        is just the [merge x x']. An alternative implementation may
-        widen [x'] if the number of steps [i] in the chain is higher
-        than some threshold, and/or if [x] is a widening point (e.g.,
-        the loop header).
+        widening accelerates by jumping forward in the chain of
+        approximations, it can easily overshoot a fixed point, and in
+        case of the ascending chain this may lead to a solution that
+        is an under approximation of the ground truth. Thus, abstract
+        interpretation is usually applied in the descending order. In
+        this case the [widen] operation may still overshot the maximal
+        fixpoint, that will lead to an over-approximation of the
+        ground truth, that is safe, but still looses
+        precision. Therefore, it is necessary to apply widening as
+        rarely as possible. Unfortunatelly, a question where and when
+        to apply widening is undecidable by itself, that's why
+        heuristics are used. The [fixpoint] function, provides a
+        limited capabilities to control widening via the [step i n x
+        x'] function that is called every time a new [i]'th
+        approximation [x'] for variable [n] is computed. The [step]
+        function must return an upper bound (not necessary the least
+        one) of the previous approximation [x] and the new
+        approximation [x']. The default, implementation just returns
+        [x']. An alternative implementation may widen [x'] if the
+        number of steps [i] in the chain is higher than some
+        threshold, and/or if [x] is a widening point (e.g., the loop
+        header).
 
+        Note: terms widening and narrowing comes from the interval
+        analysis where they were first introduced, and correspond to
+        the widening of an interval (usually up to infinitiy) and
+        narrowing a widened interval based on some heurisitic.
 
         {6 Using [fixpoint] for general iterative approximation}
 
         In a general case, the [fixpoint] function could be used to
         compute successive approximations of a solution to a system of
-        equations, even if [f] is not monotone, and the lattice is not
+        (in)equations, even if [f] is not monotone, and the lattice is not
         finite. The termination could be guaranteed by limiting the
         maximum number of iterations. And the correctness could be
         ensured by starting from the bottom element, and using the

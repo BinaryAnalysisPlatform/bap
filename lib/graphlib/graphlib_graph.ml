@@ -1192,16 +1192,6 @@ module Fixpoint = struct
      nodes, however, it should still be the over-approximation, given
      the correct meet, f,  and initial approximation.
 
-
-     Caveats
-     =======
-
-     1. We allow only one start node. If it is specified, then only
-     those nodes that are reachable from the start node will
-     participate in the computation. So, unless, it is really desired,
-     it is a good idea to introduce an artificial entry node, from
-     which everything is reachable.
-
   *)
   let compute (type g n d)
       (module G : Graph with type t = g and type node = n)
@@ -1219,7 +1209,7 @@ module Fixpoint = struct
             match Map.find rnodes n with
             | None -> ns
             | Some i -> Set.add ns i)) in
-    let step = match step with
+    let user_step = match step with
       | None -> fun visits _ _ x -> visits,x
       | Some step -> fun visits n x x' ->
         let i = match Map.find visits n with
@@ -1239,8 +1229,8 @@ module Fixpoint = struct
         Set.fold ~init:(visits,works,approx)
           ~f:(fun (visits,works,approx) n ->
               let ap = get approx n in
-              let ap' = merge (out : d) (ap : d) in
-              let visits,ap' = step visits n ap ap' in
+              let ap' = merge out ap in
+              let visits,ap' = user_step visits n ap ap' in
               if equal ap ap' then (visits,works,approx)
               else visits,
                    Set.add works n,
