@@ -21,6 +21,8 @@ module Std = struct
     include Bap_trie
   end
 
+  module Interval_tree = Bap_interval_tree
+
   module type Integer = Integer
   module type Trie = Trie
 
@@ -63,7 +65,7 @@ module Std = struct
       type typ = Type.t =
         | Imm of int
         | Mem of addr_size * size
-        [@@deriving bin_io, compare, sexp]
+      [@@deriving bin_io, compare, sexp]
       include Bap_bil.Cast
       include Bap_bil.Binop
       include Bap_bil.Unop
@@ -100,7 +102,7 @@ module Std = struct
     include Type
     include Bap_type
     type error = Bap_type_error.t
-        [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
     module Error = Bap_type_error
     include Bap_helpers.Type
   end
@@ -178,7 +180,7 @@ module Std = struct
       Sorry, no maps and tables for this type.
   *)
   type endian = Bap_common.endian = LittleEndian | BigEndian
-    [@@deriving sexp, bin_io, compare]
+  [@@deriving sexp, bin_io, compare]
 
   (** {2 Type abbreviations}
       In this section there is a type abbreviation for all
@@ -189,12 +191,12 @@ module Std = struct
       acceptable sizes, e.g., [type mmx = [`r128 | `r256] poly_size]
   *)
   type 'a size_p = 'a Size.p
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   (** [addr_size] is a subset of sizes that contains only two
       instances [`r32] and [`r64]  *)
   type nonrec addr_size = Bap_common.addr_size
-    [@@deriving bin_io, compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
   type addr  = Addr.t      [@@deriving bin_io, compare, sexp]
   type arch  = Arch.t      [@@deriving bin_io, compare, sexp]

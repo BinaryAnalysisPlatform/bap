@@ -47,6 +47,7 @@ Library types
                    Bap_exp,
                    Bap_expi,
                    Bap_expi_types,
+                   Bap_interval_tree,
                    Bap_ir,
                    Bap_ir_graph,
                    Bap_ir_callgraph,

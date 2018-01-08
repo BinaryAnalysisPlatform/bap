@@ -789,6 +789,134 @@ module Std : sig
     end
   end
 
+
+  (** Balanced Interval Tree. 
+
+      Interval trees are used to build efficient mappings from
+      intervals to arbitrary data. 
+
+      The interval tree may contain overlapping intervals and allows
+      inserting and removing elements. 
+
+      The interval tree is implemented using AVL trees. 
+  *)
+  module Interval_tree : sig 
+    module type Interval = sig
+
+      (** interval representation *)
+      type t [@@deriving compare, sexp_of]
+
+      (** point representation *)
+      type point [@@deriving compare, sexp_of]
+
+      (** the lower bound of an interval *)
+      val lower : t -> point
+
+      (** the upper bound of an interval *)
+      val upper : t -> point
+    end
+
+    (** The Interval Tree Interface. *)
+    module type S = sig
+
+      (** interval tree abstract representation *)
+      type 'a t [@@deriving sexp_of]
+
+      (** the interval *)
+      type key
+
+      (** the point *)
+      type point
+
+      (** [empty x] an empty interval tree *)
+      val empty : 'a t
+
+      (** [singleton k x] creates an interval tree that has only one
+          mappig - from the key [k] to data [x] *)
+      val singleton : key -> 'a -> 'a t
+
+      (** [least t] returns the least bound of the tree [t]. Returns
+          [None] if [t] is empty. *)
+      val least : 'a t -> point option
+
+      (** [greatest t] returns the greatest bound of the tree [t]. Returns
+          [None] if [t] is empty. *)
+      val greatest : 'a t -> point option
+
+      (** [min_bining t] returns the least binding in the tree *)
+      val min_binding : 'a t -> (key * 'a) option
+
+      (** [max_binding t] returns the greatest binding in the tree *)
+      val max_binding : 'a t -> (key * 'a) option
+
+      (** [add t k x] adds a new binding (k,x) to the mappingn *)
+      val add : 'a t -> key -> 'a -> 'a t
+
+      (** [dominators t k] returns bindings of all intervals that
+          include [k]. *)
+      val dominators : 'a t -> key -> (key * 'a) Sequence.t
+
+      (** [intersections t k] returns bindings of all intervals that
+          share some points with [k] *)
+      val intersections : 'a t -> key -> (key * 'a) Sequence.t
+
+      (** [intersects t k] is [true] iff [t] contains an interval
+          that intersects with [k] *)
+      val intersects : 'a t -> key -> bool
+
+      (** [dominates t k] is [true] iff all intervals in [t] are
+          included in [k]. *)
+      val dominates : 'a t -> key -> bool
+
+      (** [contains t p] is [true] if [p] belongs to at least one
+          interval in [t] *)
+      val contains : 'a t -> point -> bool
+
+      (** [lookup t p] returns bindings of all intervals that
+          contain the given point *)
+      val lookup : 'a t -> point -> (key * 'a) Sequence.t
+
+      (** [map k ~f] maps all data values with the function [f] *)
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+
+      (** [mapi k ~f] maps all bindings with the function [f] *)
+      val mapi : 'a t -> f:(key -> 'a -> 'b) -> 'b t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [false] are removed. *)
+      val filter : 'a t -> f:('a -> bool) -> 'a t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [None] are removed and all others are mapped. *)
+      val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [None] are removed and all others are mapped. *)
+      val filter_mapi : 'a t -> f:(key -> 'a -> 'b option) -> 'b t
+
+      (** [remove t k] removes all bindings to the key [k] *)
+      val remove : 'a t -> key -> 'a t
+
+      (** [remove_intersections t k] removes all bindings that
+          intersect with the key [k].  *)
+      val remove_intersections : 'a t -> key -> 'a t
+
+      (** [remove_dominators t k] removes all bindings that are
+          included (dominated by) in the interval [k] *)
+      val remove_dominators : 'a t -> key -> 'a t
+
+      (** [to_sequence t] returns all bindings in [t] *)
+      val to_sequence : 'a t -> (key * 'a) Sequence.t
+
+      include Container.S1 with type 'a t := 'a t
+    end 
+
+    module Make(Interval : Interval) : S 
+      with type key := Interval.t 
+       and type point := Interval.point
+
+  end
+
   type value               [@@deriving bin_io, compare, sexp]
   type dict                [@@deriving bin_io, compare, sexp]
 
