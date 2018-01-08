@@ -127,16 +127,16 @@ module Acquire(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   module Kernel = Kernel(Machine)
   let run = function
-    | [ptr; size] -> Kernel.allocate ptr size
-    | _ -> Lisp.failf "memcheck-acquire expects 2 arguments" ()
+    | [_; ptr; size] -> Kernel.allocate ptr size
+    | _ -> Lisp.failf "memcheck-acquire expects 3 arguments" ()
 end
 
 module Release(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   module Kernel = Kernel(Machine)
   let run = function
-    | [ptr] -> Kernel.process_free ptr
-    | _ -> Lisp.failf "memcheck-release expectrs 1 argument" ()
+    | [_; ptr] -> Kernel.process_free ptr
+    | _ -> Lisp.failf "memcheck-release expects 2 argument" ()
 end
 
 module Main(Machine : Primus.Machine.S) = struct
