@@ -86,7 +86,7 @@ module Callgraph = struct
 
   let rec calls = function
     | {data=App ((Dynamic v),xs); } -> call v ++ union xs ~f:calls
-    | {data=(Var _ | Int _ | Err _)} -> empty
+    | {data=(Var _ | Int _ | Sym _ | Err _)} -> empty
     | {data=Ite (x,y,z)} -> calls x ++ calls y ++ calls z
     | {data=(Seq xs | App (_,xs) | Msg (_,xs))} -> union xs ~f:calls
     | {data=(Let (_,x,y) | Rep (x,y))} -> calls x ++ calls y
@@ -160,7 +160,7 @@ module Use = struct
       if Set.mem bound v then String.Map.empty
       else use v id in
     let rec free bound = function
-      | {data=(Int _ | Err _)}  -> empty
+      | {data=(Int _ | Err _ | Sym _)}  -> empty
       | {data=Var v; id} -> use bound v.data id
       | {data=Ite (x,y,z)} -> free bound x ++ free bound y ++ free bound z
       | {data=Let (v,x,y)} -> free bound x ++ free (Set.add bound v.data.exp) y
@@ -171,7 +171,7 @@ module Use = struct
 
   let rec calls = function
     | {data=App ((Dynamic v),_); id} -> use v id
-    | {data=(Var _ | Int _ | Err _)} -> empty
+    | {data=(Var _ | Int _ | Sym _ | Err _)} -> empty
     | {data=Ite (x,y,z)} -> calls x ++ calls y ++ calls z
     | {data=(Seq xs | App (_,xs) | Msg (_,xs))} -> union xs ~f:calls
     | {data=(Let (_,x,y) | Rep (x,y))} -> calls x ++ calls y
@@ -229,7 +229,7 @@ module Reindex = struct
       else State.return t in
     let rec map t : ast m =
       rename t >>= fun t -> match t.data with
-      | Int _ | Var _ | Err _ -> State.return t
+      | Int _ | Var _ | Sym _ | Err _ -> State.return t
       | Ite (x,y,z) ->
         map x >>= fun x ->
         map y >>= fun y ->
@@ -451,6 +451,8 @@ module Typing = struct
 
   let infer_ast glob bindings ast : gamma -> gamma =
     let rec infer vs = function
+      | {data=Sym _; id} -> 
+        constr id Any
       | {data=Int x; id} ->
         constr id x.data.typ
       | {data=Var v; id} ->
@@ -591,6 +593,8 @@ module Ast = struct
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
+    | Sym x -> 
+      pp_print_string ppf x.data
     | Var x ->
       pp_var ppf x
     | Ite (c,t,e) ->

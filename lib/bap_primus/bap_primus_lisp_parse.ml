@@ -65,6 +65,9 @@ let is_quoted s =
   let n = String.length s in
   n > 1 && s.[0] = '"' && s.[n - 1] = '"'
 
+let is_symbol s = 
+  String.length s > 1 && s.[0] = '\''
+
 let unqoute s =
   if is_quoted s
   then String.sub ~pos:1 ~len:(String.length s - 2) s
@@ -195,13 +198,15 @@ module Parse = struct
           | None -> macro op (expand prog exps)
           | Some form -> form exps in
 
-      let var {id;eq;data=r} = match Var.read id eq r with
-        | Error e -> fail (Bad_var_literal e) tree
-        | Ok v -> cons (Var v) in
+      let sym ({id;eq;data=r} as s)  = 
+        if is_symbol r then cons (Sym s)
+        else match Var.read id eq r with
+          | Error e -> fail (Bad_var_literal e) tree
+          | Ok v -> cons (Var v) in
 
       let lit ({id; eq; data=r} as t) = match Word.read id eq r with
         | Ok x -> cons (Int x)
-        | Error Not_an_int -> var t
+        | Error Not_an_int -> sym t
         | Error other -> fail (Bad_word_literal other) tree in
 
       let start : tree -> ast = function

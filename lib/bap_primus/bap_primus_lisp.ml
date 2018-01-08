@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Format
 open Bap_c.Std
+open Bap_strings.Std
 open Bap_primus_types
 open Bap_primus_sexp
 
@@ -22,12 +23,18 @@ open Bap_primus_lisp_types
 open Bap_primus_lisp_attributes
 open Lisp.Program.Items
 
+module Index = Strings.Index.Persistent.Make(struct 
+    include Word
+    let null = zero 63
+  end)
+
 type exn += Runtime_error of string
 type exn += Unresolved of string * Lisp.Resolve.resolution
 
 type bindings = (Var.t * value) list [@@deriving sexp_of]
 type state = {
   program : Lisp.Program.t;
+  index : Index.t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -44,6 +51,7 @@ let state = Bap_primus_state.declare ~inspect
     ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
     (fun proj -> {
          env = [];
+         index = Index.empty;
          cur = Id.null;
          program = Lisp.Program.empty;
          width = width_of_ctxt proj;
@@ -281,9 +289,13 @@ module Interpreter(Machine : Machine) = struct
         | Any | Name _ -> width () in
       width >>= fun width ->
       Eval.const (Word.of_int64 ~width v) in
+    let sym v = 
+      Machine.Local.get state >>= fun {index} -> 
+      Eval.const (Index.key index v.data) in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
+      | {data=Sym v} -> sym v 
       | {data=Ite (c,e1,e2)}  -> ite c e1 e2
       | {data=Let (v,e1,e2)} -> let_ v e1 e2
       | {data=App (n,args)} -> app n args
@@ -354,6 +366,27 @@ module Interpreter(Machine : Machine) = struct
     eval exp
 
 end
+
+module Symdex = struct 
+  let rec index_ast idx body = match body.data with
+    | Sym s -> Index.register idx s.data 
+    | Int _ | Var _ | Err _ -> idx
+    | Ite (x,y,z) -> index_asts idx [x;y;z]
+    | Rep (x,y) | Let (_,x,y) -> index_asts idx [x;y]
+    | App (bs,xs) -> index_asts (index_bindings idx bs) xs
+    | Seq xs | Msg (_,xs) -> index_asts idx xs
+    | Set (_,x) -> index_ast idx x
+  and index_asts idx asts = 
+    List.fold ~init:idx asts ~f:index_ast 
+  and index_bindings idx = function
+    | Dynamic _ -> idx 
+    | Static (_,x) -> index_ast idx x
+
+  let of_prog prog = 
+    Lisp.Program.get prog func |>
+    List.fold ~init:Index.empty ~f:(fun idx def -> 
+        index_ast idx (Lisp.Def.Func.body def))
+end 
 
 
 module Make(Machine : Machine) = struct
@@ -463,12 +496,12 @@ module Make(Machine : Machine) = struct
         binding :: env
   end)#run proj [] |> Machine.List.all
 
-
   let link_program program =
     Machine.get () >>= fun proj ->
     init_env (Project.program proj) >>= fun env ->
     Machine.Local.put state {
       program; env;
+      index = Symdex.of_prog program;
       cur = Id.null;
       width = width_of_ctxt proj;
     } >>= fun () ->

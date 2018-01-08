@@ -4,5 +4,5 @@
       (= s 13)
       (= s 32)))
 
-(defun ascii-sign (s:8) (if (= s '+') 1 -1))
-(defun ascii-digit (s:8) (< (- s '0') 10))
+(defun ascii-sign (s:8) (if (= s ?+) 1 -1))
+(defun ascii-digit (s:8) (< (- s ?0) 10))

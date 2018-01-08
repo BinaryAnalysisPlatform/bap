@@ -23,6 +23,7 @@ type typ =
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
 type word = int64 term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
+type sym = string indexed [@@deriving compare]
 type loc = Loc.t
 
 type error = ..
@@ -39,6 +40,7 @@ type ast = exp indexed
 and exp =
   | Int of word
   | Var of var
+  | Sym of sym
   | Ite of ast * ast * ast
   | Let of var * ast * ast
   | App of binding * ast list

@@ -7,17 +7,11 @@ type t = word [@@deriving compare]
 
 type read_error = Empty | Not_an_int | Unclosed | Bad_literal | Bad_type
 
-let prime = function '\'' -> true | _ -> false
-
 let char_of_string s =
   try Ok Char.(Int64.of_int @@ to_int @@ of_string s)
   with _ -> Error Bad_literal
 
-let read_char str =
-  let char = String.strip ~drop:prime str in
-  if String.length str - 2 = String.length char
-  then  (char_of_string char)
-  else Error Unclosed
+let read_char str = char_of_string (String.subo ~pos:1 str) 
 
 let read_int str =
   try Ok (Int64.of_string (String.strip str))
@@ -37,7 +31,7 @@ let int ?typ id eq s =
 
 let read id eq x =
   if String.is_empty x then Error Empty
-  else if x.[0] = '\''
+  else if x.[0] = '?'
   then char id eq x
   else if Char.is_digit x.[0]
   then match String.split x ~on:':' with
