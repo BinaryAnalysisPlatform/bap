@@ -12,6 +12,7 @@ module Persistent = struct
   module type S = sig
     type t 
     type key
+    val empty : t
     val string : t -> key -> string
     val key : t -> string -> key
     val register : t -> string -> t
@@ -29,6 +30,11 @@ module Persistent = struct
     type t = {
       strings : string Index.t;
       keys : key String.Map.t;
+    }
+
+    let empty = {
+      strings = Index.empty;
+      keys = String.Map.empty;
     }
 
     let string {strings} key = 

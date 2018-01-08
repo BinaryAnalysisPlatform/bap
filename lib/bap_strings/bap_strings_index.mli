@@ -10,6 +10,9 @@ module Persistent : sig
     type t 
     type key
 
+    (** [empty] an empty index *)
+    val empty : t
+
     (** [string idx key] returns data associated with the
         provided [key]. Returns an empty string if there are no data.
     *)
