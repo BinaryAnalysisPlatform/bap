@@ -32,6 +32,7 @@ module Type : sig
   val word : int -> t
   val var : string -> t
   val any : t
+  val sym : t 
   val signature : ?rest:t -> t list -> t -> signature
   val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit

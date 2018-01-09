@@ -13,10 +13,12 @@ type signature = {
   ret  : typ;
 }
 
+
 val symbol_size : int
 val read : string -> typ option
 val word : int -> t
 val any : t
+val sym : t
 val var : string -> t
 
 val signature : ?rest:t -> t list -> t -> signature
