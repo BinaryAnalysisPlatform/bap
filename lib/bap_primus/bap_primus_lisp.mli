@@ -18,11 +18,34 @@ module Type : sig
   type t
   type signature
   type error
-  val word : int -> t
-  val var : string -> t
-  val any : t
-  val sym : t
-  val signature : ?rest:t -> t list -> t -> signature
+
+  type parameters = [
+    | `All of t
+    | `Gen of t list * t
+    | `Tuple of t list
+  ]
+
+  module Spec : sig
+    val any : t
+    val var : string -> t
+    val sym : t
+    val int : t
+    val bool : t
+    val byte : t
+    val word : int -> t
+    val a : t
+    val b : t
+    val c : t
+    val d : t
+
+    val tuple : t list -> [`Tuple of t list]
+    val all : t -> [`All of t]
+    val one : t -> [`Tuple of t list]
+    val unit : [`Tuple of t list]
+    val (//) : [`Tuple of t list] -> [`All of t] -> parameters
+    val (@->) : [< parameters] -> t -> signature
+  end
+
   val check : Var.t seq -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end

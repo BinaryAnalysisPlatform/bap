@@ -271,60 +271,43 @@ module Primitives(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
 
   let init () =
-    Machine.get () >>= fun proj ->
-    let width = Project.arch proj |> Arch.addr_size |> Size.in_bits in
-    let word = Primus.Lisp.Type.word width in
-    let bool = Primus.Lisp.Type.word 1 in
-    let byte = Primus.Lisp.Type.word 8 in
-    let unit = `Tuple [] in
-    let any = Primus.Lisp.Type.any in
-    let alpha = Primus.Lisp.Type.var "a" in
-    let all t = `All t in
-    let tuple ts = `Tuple ts in
-    let one t = tuple [t] in
-    let (//) (`Tuple ts) (`All t) = `Gen (ts,t) in
-    let (@->) dom cod =
-      let args,rest = match dom with
-        | `All t -> [],Some t
-        | `Tuple ts -> ts,None
-        | `Gen (ts,t) -> ts, Some t in
-      Primus.Lisp.Type.signature args ?rest cod in
+    let open Primus.Lisp.Type.Spec in
     let def name types closure =
       Lisp.define ~types name closure in
     Machine.sequence [
       def "is-zero" (all any @-> bool) (module IsZero);
       def "is-positive" (all any @-> bool) (module IsPositive);
       def "is-negative" (all any @-> bool) (module IsNegative);
-      def "word-width" (unit @-> word)  (module WordWidth);
-      def "output-char" (one word // all byte @-> word) (module OutputChar);
-      def "exit-with" (one word @-> any) (module ExitWith);
-      def "memory-read" (one word @-> byte) (module MemoryRead);
-      def "memory-write" (tuple [word; byte] @-> word) (module MemoryWrite);
-      def "memory-allocate" (tuple [word; word] @-> byte) (module MemoryAllocate);
-      def "get-current-program-counter" (unit @-> word) (module GetPC);
-      def "+" (all alpha @-> alpha) (module Add);
-      def "-" (all alpha @-> alpha) (module Sub);
-      def "*" (all alpha @-> alpha) (module Mul);
-      def "/" (all alpha @-> alpha) (module Div);
-      def "s/" (all alpha @-> alpha) (module SDiv);
-      def "mod" (all alpha @-> alpha) (module Mod);
-      def "signed-mod" (all alpha @-> alpha) (module SignedMod);
-      def "lshift" (tuple [alpha; alpha] @-> alpha) (module Lshift);
-      def "rshift" (tuple [alpha; alpha] @-> alpha) (module Rshift);
-      def "arshift" (tuple [alpha; alpha] @-> alpha) (module Arshift);
-      def "=" (all alpha @-> bool) (module Equal);
-      def "/=" (all alpha @-> bool) (module NotEqual);
-      def "logand" (all alpha @-> alpha) (module Logand);
-      def "logor" (all alpha @-> alpha) (module Logor);
-      def "logxor" (all alpha @-> alpha) (module Logxor);
+      def "int-width" (unit @-> int)  (module WordWidth);
+      def "output-char" (one int // all byte @-> int) (module OutputChar);
+      def "exit-with" (one int @-> any) (module ExitWith);
+      def "memory-read" (one int @-> byte) (module MemoryRead);
+      def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite);
+      def "memory-allocate" (tuple [int; int] @-> byte) (module MemoryAllocate);
+      def "get-current-program-counter" (unit @-> int) (module GetPC);
+      def "+" (all a @-> a) (module Add);
+      def "-" (all a @-> a) (module Sub);
+      def "*" (all a @-> a) (module Mul);
+      def "/" (all a @-> a) (module Div);
+      def "s/" (all a @-> a) (module SDiv);
+      def "mod" (all a @-> a) (module Mod);
+      def "signed-mod" (all a @-> a) (module SignedMod);
+      def "lshift" (tuple [a; a] @-> a) (module Lshift);
+      def "rshift" (tuple [a; a] @-> a) (module Rshift);
+      def "arshift" (tuple [a; a] @-> a) (module Arshift);
+      def "=" (all a @-> bool) (module Equal);
+      def "/=" (all a @-> bool) (module NotEqual);
+      def "logand" (all a @-> a) (module Logand);
+      def "logor" (all a @-> a) (module Logor);
+      def "logxor" (all a @-> a) (module Logxor);
       def "concat" (all any @-> any) (module Concat);
       def "extract" (tuple [any; any; any] @-> any) (module Extract);
-      def "not" (one alpha @-> alpha) (module Not);
-      def "neg" (one alpha @-> alpha) (module Neg);
-      def "<" (all alpha @-> bool) (module Less);
-      def ">" (all alpha @-> bool) (module Greater);
-      def "<=" (all alpha @-> bool) (module LessEqual);
-      def ">=" (all alpha @-> bool) (module GreaterEqual);
+      def "not" (one a @-> a) (module Not);
+      def "neg" (one a @-> a) (module Neg);
+      def "<" (all a @-> bool) (module Less);
+      def ">" (all a @-> bool) (module Greater);
+      def "<=" (all a @-> bool) (module LessEqual);
+      def ">=" (all a @-> bool) (module GreaterEqual);
     ]
 end
 

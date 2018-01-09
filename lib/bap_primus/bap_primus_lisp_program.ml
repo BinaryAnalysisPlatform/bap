@@ -590,8 +590,6 @@ module Typing = struct
     let pp_error ppf (Bot (loc,expr)) =
       fprintf ppf "%a@\nType error - expression is ill-typed: %a"
         Loc.pp loc pp_expr expr
-
-    include Lisp.Type
   end
 end
 

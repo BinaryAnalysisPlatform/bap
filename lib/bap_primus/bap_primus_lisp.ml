@@ -517,6 +517,8 @@ module Make(Machine : Machine) = struct
         })
 
   let define ?types ?docs name body =
+    Machine.gets Project.arch >>= fun arch ->
+    let types = Option.map types ~f:(fun t -> t arch) in
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
@@ -552,4 +554,50 @@ module type Closure = Lisp.Def.Closure
 type closure = Lisp.Def.closure
 type program = Lisp.Program.t
 module Load = Lisp.Parse
-module Type = Lisp.Program.Type
+module Type = struct
+  include Lisp.Program.Type
+  type t = arch -> Lisp.Type.t
+  type signature = arch -> Lisp.Type.signature
+
+  type parameters = [
+    | `All of t
+    | `Gen of t list * t
+    | `Tuple of t list
+  ]
+
+
+  module Spec = struct
+    let any _ = Lisp.Type.any
+    let var s _ = Lisp.Type.var s
+    let sym _ = Lisp.Type.sym
+    let word n _ = Lisp.Type.word n
+    let int arch =
+      Lisp.Type.word (Size.in_bits (Arch.addr_size arch))
+    let bool = word 1
+    let byte = word 8
+    let a : t = var "a"
+    let b : t = var "b"
+    let c : t = var "c"
+    let d : t = var "d"
+
+    let tuple ts = `Tuple ts
+    let unit = tuple []
+    let one t = tuple [t]
+    let all t = `All t
+
+    let (//) : [`Tuple of t list] -> [`All of t] -> parameters =
+      fun (`Tuple ts) (`All t) -> `Gen (ts,t)
+
+    let (@->) (dom : [< parameters]) (cod : t) : signature =
+      let args,rest = match dom with
+        | `All t -> [],Some t
+        | `Tuple ts -> ts,None
+        | `Gen (ts,t) -> ts, Some t in
+      fun arch ->
+        let args = List.map args ~f:(fun t -> t arch) in
+        let cod = cod arch in
+        let rest = Option.map rest ~f:(fun t -> t arch) in
+        Lisp.Type.signature args ?rest cod
+
+  end
+end

@@ -1954,18 +1954,34 @@ ident ::= ?any atom that is not recognized as a <word>?
         type signature
         type error
 
-        val word : int -> t
+        type parameters = [
+          | `All of t
+          | `Gen of t list * t
+          | `Tuple of t list
+        ]
 
-        val var : string -> t
+        module Spec : sig
+          val any : t
+          val var : string -> t
+          val sym : t
+          val int : t
+          val bool : t
+          val byte : t
+          val word : int -> t
+          val a : t
+          val b : t
+          val c : t
+          val d : t
 
-        val any : t
+          val tuple : t list -> [`Tuple of t list]
+          val all : t -> [`All of t]
+          val one : t -> [`Tuple of t list]
+          val unit : [`Tuple of t list]
+          val (//) : [`Tuple of t list] -> [`All of t] -> parameters
+          val (@->) : [< parameters] -> t -> signature
+        end
 
-        val sym : t
-
-        val signature : ?rest:t -> t list -> t -> signature
-
-        val check : var seq -> program -> error list
-
+        val check : Var.t seq -> program -> error list
         val pp_error : Format.formatter -> error -> unit
       end
 

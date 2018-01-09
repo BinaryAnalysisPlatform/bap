@@ -14,6 +14,7 @@ type signature = {
 
 let symbol_size = 63
 let word n = Type n
+let sym = Symbol
 let var n = Name n
 let read_exn s = word (int_of_string (String.strip s))
 
