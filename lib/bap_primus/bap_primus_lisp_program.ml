@@ -272,12 +272,12 @@ end
 
 module Typing = struct
   type texpr =
+    | Tsym
     | Grnd of int
     | Meet of texpr * texpr
     | Join of texpr * texpr
     | Tvar of Id.t
   [@@deriving compare]
-
 
   type signature = Lisp.Type.signature = {
     args : typ list;
@@ -301,6 +301,7 @@ module Typing = struct
     | Some t -> t
 
   let rec pp_expr ppf = function
+    | Tsym -> fprintf ppf "symbol"
     | Grnd x -> fprintf ppf "%d" x
     | Meet (x,y) -> fprintf ppf "%a=%a" pp_expr x pp_expr y
     | Join (x,y) -> fprintf ppf "%a:%a" pp_expr x pp_expr y
@@ -348,16 +349,19 @@ module Typing = struct
     | t', (Tvar _ as t)
     | t,t' -> bind id t' ++ subst gamma t t'
 
+  let meet_with_symbol g t = subst g t (make_meet t Tsym)
+
   let meet_with_ground g t n = match t with
     | Tvar x -> subst g t (Grnd n)
     | Meet (x,y) -> unify g x y (Grnd n)
     | Join (x,y) ->
       subst (subst g x (Grnd n)) y (Grnd n)
-    | Grnd m -> if m = n then g
-      else subst g t (make_meet t (Grnd n))
+    | Grnd m when m = n -> g
+    | Grnd _ | Tsym -> subst g t (make_meet t (Grnd n))
 
   let apply_ret id gamma vs : typ -> gamma = function
     | Any -> meet id id id gamma
+    | Symbol -> subst gamma (Tvar id) Tsym
     | Type n -> meet_with_ground gamma (Tvar id) n
     | Name n -> match Map.find vs n with
       | None -> meet id id id gamma
@@ -370,6 +374,8 @@ module Typing = struct
       | t :: ts, Any :: ns -> apply g vs ts ns
       | t :: ts, Type n :: ns ->
         apply (meet_with_ground g (get g t.id) n) vs ts ns
+      | t :: ts, Symbol :: ns ->
+        apply (meet_with_symbol g (get g t.id)) vs ts ns
       | t :: ts, Name n :: ns -> match Map.find vs n with
         | Some id -> apply (meet t.id id id g) vs ts ns
         | None ->
@@ -384,6 +390,7 @@ module Typing = struct
       | ts -> match rest with
         | None -> None
         | Some Any -> Some g
+        | Some Symbol -> assert false
         | Some (Type n) ->
           Some (List.fold ts ~init:g ~f:(fun g t ->
               meet_with_ground g (get g t.id) n))
@@ -433,6 +440,7 @@ module Typing = struct
     | Any
     | Name _ -> Map.add gamma ~key:id ~data:(Tvar id)
     | Type n -> Map.add gamma ~key:id ~data:(Grnd n)
+    | Symbol -> Map.add gamma ~key:id ~data:Tsym
 
   let constr_glob {globs} vars var gamma =
     if Map.mem vars var.data.exp then gamma
@@ -472,7 +480,8 @@ module Typing = struct
         constr v.id v.data.typ
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
-        reduce vs xs
+        reduce vs xs ++
+        constr id Any
       | {data=Seq []; id} -> constr id Any
       | {data=Seq xs; id} ->
         meet (last xs) id id ++
@@ -559,10 +568,13 @@ module Typing = struct
     Solution.get fp Entry
 
   let rec well_typed = function
+    | Meet (Tsym,Tsym) -> true
     | Meet (Grnd x, Grnd y) -> x = y
+    | Meet (Grnd _, Tsym)
+    | Meet (Tsym, Grnd _) -> false
     | Meet (x,y) -> well_typed x && well_typed y
     | Join (x,y) -> well_typed x || well_typed y
-    | Tvar _ | Grnd _ -> true
+    | Tvar _ | Grnd _ | Tsym -> true
 
 
   (* The public interface  *)

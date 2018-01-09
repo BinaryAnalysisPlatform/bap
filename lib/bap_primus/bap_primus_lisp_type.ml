@@ -12,6 +12,7 @@ type signature = {
   ret  : typ;
 }
 
+let symbol_size = 63
 let word n = Type n
 let var n = Name n
 let read_exn s = word (int_of_string (String.strip s))
@@ -21,6 +22,7 @@ let any = Any
 
 let mem t x = match t with
   | Any | Name _ -> true
+  | Symbol -> x = symbol_size
   | Type t -> t = x
 
 let signature ?rest args ret = {
@@ -40,7 +42,7 @@ module Check = struct
 end
 
 let pp ppf t = match t with
-  | Any -> ()
+  | Any | Symbol -> ()
   | Name s -> Format.fprintf ppf "%s" s
   | Type t -> Format.fprintf ppf "%d" t
 

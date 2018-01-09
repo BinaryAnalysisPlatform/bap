@@ -13,6 +13,7 @@ type signature = {
   ret  : typ;
 }
 
+val symbol_size : int
 val read : string -> typ option
 val word : int -> t
 val any : t

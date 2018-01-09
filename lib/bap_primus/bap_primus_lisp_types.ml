@@ -18,6 +18,7 @@ type 'a indexed = ('a,Id.t,Eq.t) interned [@@deriving compare]
 
 type typ =
   | Any
+  | Symbol
   | Name of string
   | Type of int [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]

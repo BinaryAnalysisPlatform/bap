@@ -17,6 +17,7 @@ module Lisp = struct
   module Check = Bap_primus_lisp_type.Check
   module Context = Bap_primus_lisp_context
   module Program = Bap_primus_lisp_program
+  module Type = Bap_primus_lisp_type
 end
 
 open Bap_primus_lisp_types
@@ -25,7 +26,7 @@ open Lisp.Program.Items
 
 module Index = Strings.Index.Persistent.Make(struct 
     include Word
-    let null = zero 63
+    let null = zero Lisp.Type.symbol_size
   end)
 
 type exn += Runtime_error of string
@@ -39,7 +40,6 @@ type state = {
   env : bindings;
   cur : Id.t;
 }
-
 
 let inspect {env} = sexp_of_bindings env
 
@@ -286,6 +286,7 @@ module Interpreter(Machine : Machine) = struct
     let int v t =
       let width = match t with
         | Type t -> Machine.return t
+        | Symbol -> Machine.return Lisp.Type.symbol_size
         | Any | Name _ -> width () in
       width >>= fun width ->
       Eval.const (Word.of_int64 ~width v) in
