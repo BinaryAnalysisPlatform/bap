@@ -292,9 +292,9 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "s/" (all a @-> a) (module SDiv);
       def "mod" (all a @-> a) (module Mod);
       def "signed-mod" (all a @-> a) (module SignedMod);
-      def "lshift" (tuple [a; a] @-> a) (module Lshift);
-      def "rshift" (tuple [a; a] @-> a) (module Rshift);
-      def "arshift" (tuple [a; a] @-> a) (module Arshift);
+      def "lshift" (tuple [a; b] @-> a) (module Lshift);
+      def "rshift" (tuple [a; b] @-> a) (module Rshift);
+      def "arshift" (tuple [a; b] @-> a) (module Arshift);
       def "=" (all a @-> bool) (module Equal);
       def "/=" (all a @-> bool) (module NotEqual);
       def "logand" (all a @-> a) (module Logand);
