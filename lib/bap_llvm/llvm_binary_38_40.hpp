@@ -1,5 +1,5 @@
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
-    || LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+    || LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
 
 #ifndef LLVM_BINARY_38_40_HPP
 #define LLVM_BINARY_38_40_HPP
@@ -13,7 +13,7 @@
 #include <sstream>
 #include <tuple>
 
-#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
 #include <llvm/Support/Error.h>
 #endif
 
@@ -59,7 +59,7 @@ error_or<T> of_llvm_error_or(const llvm::ErrorOr<T> &e) {
     return success(e.get());
 }
 
-#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
 template <typename T>
 error_or<T> of_llvm_error_or(llvm::Expected<T> &e) {
     if (!e) {
@@ -223,7 +223,7 @@ error_or<object::Binary> get_binary(const char* data, std::size_t size) {
     StringRef data_ref(data, size);
     MemoryBufferRef buf(data_ref, "binary");
     auto binary = createBinary(buf);
-#if LLVM_VERSION_MAJOR == 4 && LLVM_VERSION_MINOR == 0
+#if LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
     if (!binary)
         return failure(toString(binary.takeError()));
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
