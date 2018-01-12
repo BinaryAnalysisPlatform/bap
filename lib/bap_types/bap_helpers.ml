@@ -163,6 +163,8 @@ module Apply = struct
     | Cast.HIGH     -> ext ~lo:Int.(Bitvector.bitwidth u - sz) u
     | Cast.LOW      -> ext ~hi:Int.(sz - 1) u
 
+  let extract hi lo w = Bitvector.extract_exn ~hi ~lo w
+
 end
 
 module Type = struct
@@ -469,16 +471,17 @@ module Simpl = struct
       | Cast (t,s,x) -> cast t s x
       | Let (v,x,y) -> Let (v, exp x, exp y)
       | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
-      | Extract (h,l,x) -> Extract (h,l, exp x)
+      | Extract (h,l,x) -> extract h l x
       | Concat (x,y) -> concat x y
     and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
       | x,y -> Concat (x,y)
-    and cast t s x =
-      let x = exp x in
-      match Type.infer_exn x with
-      | Type.Imm s' when s' = s -> x
+    and cast t s x = match exp x with
+      | Int w -> Int (Apply.cast t s w)
       | _ -> Cast (t,s,x)
+    and extract hi lo x = match exp x with
+      | Int w -> Int (Apply.extract hi lo w)
+      | _ -> Extract (hi,lo,x)
     and unop op x = match exp x with
       | UnOp(op,Int x) -> Int (Apply.unop op x)
       | UnOp(op',x) when op = op' -> exp x
@@ -520,7 +523,7 @@ module Simpl = struct
       | OR,x,y  when x = y -> x
       | XOR,x,y when x = y -> zero width
       | XOR,x,y when is0 x -> y
-      | XOR,x,y when is0 y -> y
+      | XOR,x,y when is0 y -> x
       | EQ,x,y  when x = y -> Int Word.b1
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
