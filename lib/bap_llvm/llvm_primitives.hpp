@@ -139,7 +139,7 @@ std::vector<typename ELFFile<T>::Elf_Shdr> elf_sections(const ELFFile<T> &elf) {
 template <typename T>
 error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELFFile<T>::Elf_Shdr *sec) {
     auto er_name = elf.getSectionName(sec);
-    if (er_name) return failure(er_name.getError().message());
+    if (error_code er = er_name) return failure(er.message());
     return success(er_name->str());
 }
 
