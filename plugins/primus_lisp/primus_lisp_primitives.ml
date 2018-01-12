@@ -278,7 +278,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "is-zero" (all any @-> bool) (module IsZero);
       def "is-positive" (all any @-> bool) (module IsPositive);
       def "is-negative" (all any @-> bool) (module IsNegative);
-      def "int-width" (unit @-> int)  (module WordWidth);
+      def "word-width" (unit @-> int)  (module WordWidth);
       def "output-char" (one int // all byte @-> int) (module OutputChar);
       def "exit-with" (one int @-> any) (module ExitWith);
       def "memory-read" (one int @-> byte) (module MemoryRead);
