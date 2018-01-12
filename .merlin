@@ -9,7 +9,10 @@ PKG camlzip
 
 B _build
 B _build/lib/bap
+B _build/lib/bap_abi
+B _build/lib/bap_api
 B _build/lib/bap_bundle
+B _build/lib/bap_c
 B _build/lib/bap_config
 B _build/lib/bap_disasm
 B _build/lib/bap_dwarf
@@ -17,17 +20,21 @@ B _build/lib/bap_elf
 B _build/lib/bap_future
 B _build/lib/bap_image
 B _build/lib/bap_plugins
+B _build/lib/bap_powerpc
 B _build/lib/bap_sema
 B _build/lib/bap_types
 B _build/lib/graphlib
 B _build/lib/monads
 B _build/lib/ogre
-B _build/lib/primus
+B _build/lib/bap_primus
 B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
 
 S lib/bap
+S lib/bap_abi
+S lib/bap_api
+S lib/bap_c
 S lib/regular
 S lib/graphlib
 S lib/bap_future
@@ -37,8 +44,9 @@ S lib/bap_config
 S lib/bap_types
 S lib/bap_disasm
 S lib/bap_image
+S lib/bap_powerpc
 S lib/monads
-S lib/primus
+S lib/bap_primus
 S lib/bap_llvm
 S lib/ogre
 S ../core_kernel.113.33.00/src
