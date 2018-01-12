@@ -6,7 +6,7 @@ open Core_kernel.Std
 
     A monad is an abstraction that can be used to parametrize code
     with the way how computations are sequenced. A monad can also be
-    seen as design pattern, that sometimes make your code more
+    seen as design pattern, that sometimes makes your code more
     readable (and, more often, less readable).  A monad transformer of
     a monad [M] is a functor that takes another monad [M'] and
     enriches [M] with the behavior of [M']. In other terms a

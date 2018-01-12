@@ -12,9 +12,12 @@ module T = struct
   let module_name = Some "Bap.Std.Arch"
   let version = "1.0.0"
 
-
   let to_string = function
     | `x86 -> "i386"
+    | `systemz -> "s390x"
+    | `ppc -> "powerpc"
+    | `ppc64 -> "powerpc64"
+    | `ppc64le -> "powerpc64le"
     | arch -> Sexp.to_string (sexp_of_t arch)
   let pp ch arch = Format.fprintf ch "%s" (to_string arch)
 
@@ -30,6 +33,7 @@ module T = struct
     | "thumbeb" -> "thumbv7eb"
     | "xscale"  -> "arm"
     | "powerpc64" | "ppu" -> "ppc64"
+    | "powerpc64le" -> "ppc64le"
     | "sparc64" -> "sparcv9"
     | "s390x" -> "systemz"
     | "arm64" -> "aarch64"
