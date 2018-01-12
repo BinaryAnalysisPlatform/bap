@@ -59,6 +59,9 @@ val find : t -> string -> tree list option
     returned. *)
 val loc : t -> Id.t -> Loc.t
 
+(** [has_loc source id] if the location information is associated
+    with the given [id] *)
+val has_loc : t -> Id.t -> bool
 
 (** [filename source id] returns the name of a file from which an
     identity with the given [id] is orginating.

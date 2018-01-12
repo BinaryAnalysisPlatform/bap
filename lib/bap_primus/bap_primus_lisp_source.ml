@@ -162,6 +162,8 @@ let loc p tree = Loc.{
     range = range p tree;
   }
 
+let has_loc p id = Map.mem p.origin (repr p id)
+
 let lastid s = s.lastid
 let lasteq s = s.lasteq
 
