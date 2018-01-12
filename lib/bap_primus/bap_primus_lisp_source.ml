@@ -45,7 +45,6 @@ let nextid p = {
   p with lastid = Id.next p.lastid
 }
 
-
 let nexteq p = {p with lasteq = Eq.next p.lasteq}
 
 let rec repr s id = match Map.find s.rclass id with

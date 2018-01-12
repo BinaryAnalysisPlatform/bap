@@ -7,7 +7,7 @@ type ('a,'i,'e) interned = {
 }
 
 module type S = sig
-  type t
+  type t [@@deriving sexp_of]
   val null : t
   val next : t -> t
   val pp : Format.formatter -> t -> unit

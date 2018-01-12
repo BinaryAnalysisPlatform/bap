@@ -130,13 +130,21 @@ let run = function
     then exec x
     else Machine.return ()
 
+
+let pp_var ppf v = 
+  fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
+
 let typecheck =
   Lisp.program >>= fun prog ->
   Env.all >>| fun vars ->
+  eprintf "Global variables are: @[<v>%a@]@\n%!"
+    (pp_print_list pp_var) (Seq.to_list vars);
   match Primus.Lisp.Type.check vars prog with
   | [] -> info "The Lisp Machine program is well-typed"
-  | xs -> error "The Lisp Machine program is ill-typed";
-    List.iter xs ~f:(error "%a@\n" Primus.Lisp.Type.pp_error)
+  | xs -> 
+    warning "The Lisp Machine program is ill-typed";
+    info "The typechecker is broken for now, ignore the message above";
+    List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
 
 
 let run_entries xs =

@@ -15,7 +15,7 @@ let load_program paths features project =
 let dump_program prog =
   let margin = get_margin () in
   set_margin 64;
-  printf "%a@\n" Primus.Lisp.Load.pp_program prog;
+  printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
   set_margin margin
 
 let main dump paths features project =
