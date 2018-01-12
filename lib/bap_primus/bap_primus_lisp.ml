@@ -25,8 +25,15 @@ open Bap_primus_lisp_attributes
 open Lisp.Program.Items
 
 module Index = Strings.Index.Persistent.Make(struct 
-    include Word
-    let null = zero Lisp.Type.symbol_size
+    include Bap_primus_value
+    let null = {
+      id = Int63.zero;
+      value = Word.zero Lisp.Type.symbol_size
+    }
+    let succ s = {
+      s with
+      value = Word.succ s.value
+    }
   end)
 
 type exn += Runtime_error of string
@@ -291,8 +298,8 @@ module Interpreter(Machine : Machine) = struct
       width >>= fun width ->
       Eval.const (Word.of_int64 ~width v) in
     let sym v = 
-      Machine.Local.get state >>= fun {index} -> 
-      Eval.const (Index.key index v.data) in
+      Machine.Local.get state >>| fun {index} -> 
+      Index.key index v.data in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
