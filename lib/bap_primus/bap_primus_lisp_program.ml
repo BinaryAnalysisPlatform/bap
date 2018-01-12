@@ -67,7 +67,6 @@ type node =
   | Exit
 [@@deriving compare]
 
-
 module Callgraph = struct
   module G = Graphlib.Make(struct
       type t = node
@@ -137,13 +136,72 @@ let pp_callgraph ppf g =
         | Defun id -> asprintf "%a" Id.pp id)
     g
 
-
 let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}} -> fprintf ppf "%a" pp_exp exp
-  | {data={exp; typ}} -> fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
-
+  | {data={exp; typ=Any}; id} -> 
+    fprintf ppf "%a.%a" pp_exp exp Id.pp id
+  | {data={exp; typ}; id} -> 
+    fprintf ppf "%a:%a.%a" pp_exp exp Lisp.Type.pp typ Id.pp id
 let pp_word = pp_term Int64.pp
 let pp_var = pp_term String.pp
+
+let rec concat_prog =
+  List.concat_map ~f:(function
+      | {data=Seq xs} -> concat_prog xs
+      | x -> [x])
+
+let concat_prog = ident
+
+module Ast = struct
+  let rec pp ppf {data; id} = 
+    fprintf ppf "%a.%a" pp_exp data Source.Id.pp id
+  and pp_exp ppf = function
+    | Int x ->
+      pp_word ppf x
+    | Sym x -> 
+      pp_print_string ppf x.data
+    | Var x ->
+      pp_var ppf x
+    | Ite (c,t,e) ->
+      fprintf ppf "@[<2>(if@ %a@;<1 2>%a@ %a)@]" pp c pp t pp_prog e
+    | Let (v,e,b) ->
+      fprintf ppf "@[(let@;<1 2>@[<2>(%a@ %a)@]@ %a)@]" pp_var v pp e pp b
+    | App (b,xs) ->
+      fprintf ppf "@[<2>(%a@ %a)@]" pp_binding b pp_exps xs;
+    | Seq [] -> fprintf ppf "()"
+    | Seq [x] -> pp ppf x
+    | Seq xs ->
+      fprintf ppf "@[<2>(prog@ @[<v>%a@])@]" pp_exps (concat_prog xs)
+    | Set (v,x) ->
+      fprintf ppf "@[<2>(set@ %a@ %a)@]" pp_var v pp x
+    | Rep (c,b) ->
+      fprintf ppf "@[<2>(while@;<1 2>%a@ @[<v>%a@])@]" pp c pp_prog b
+    | Msg (f,es) ->
+      fprintf ppf "@[<2>(msg@ \"%a\"@ %a)@]" pp_fmt f pp_exps es;
+    | Err msg ->
+      fprintf ppf "@[<2>(error@ %s)@]" msg
+  and pp_binding ppf = function
+    | Dynamic x -> fprintf ppf "%s" x
+    | Static _ -> fprintf ppf "<lambda>"
+  and pp_exps ppf xs = pp_print_list ~pp_sep:pp_print_space pp ppf xs
+  and pp_fmt ppf xs = pp_print_list pp_fmt_elt ppf xs
+  and pp_fmt_elt ppf = function
+    | Lit s -> pp_print_string ppf s
+    | Pos n -> fprintf ppf "$%d" n
+  and pp_prog ppf = function
+    | {data=Seq xs; id} ->
+      fprintf ppf "%a.%a" pp_exps (concat_prog xs) Id.pp id
+    | exp -> pp ppf exp
+end
+
+let pp_def ppf d =
+  fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
+    (Def.name d)
+    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
+    Ast.pp_prog (Def.Func.body d)
+
+let pp ppf {defs} =
+  fprintf ppf "Printing %d definitions@\n" (List.length defs);
+  fprintf ppf "@[<v>%a@]" (pp_print_list pp_def) defs
 
 module Use = struct
   let empty = String.Map.empty
@@ -216,10 +274,10 @@ module Reindex = struct
       ids_of_defs p.substs List.concat_map Def.Subst.body;
     ]
 
-  let derive tid =
+  let derive from =
     State.get () >>= fun src ->
     let nextid = Id.next (Source.lastid src) in
-    State.put (Source.derived src ~from:tid nextid) >>| fun () ->
+    State.put (Source.derived src ~from nextid) >>| fun () ->
     nextid
 
   let reindex_def macros def =
@@ -229,7 +287,16 @@ module Reindex = struct
       else State.return t in
     let rec map t : ast m =
       rename t >>= fun t -> match t.data with
-      | Int _ | Var _ | Sym _ | Err _ -> State.return t
+      | Err _ -> State.return t
+      | Int x -> 
+        rename x >>| fun x -> 
+        {t with data = Int x}
+      | Sym s -> 
+        rename s >>| fun s -> 
+        {t with data = Sym s}
+      | Var v -> 
+        rename v >>| fun v -> 
+        {t with data = Var v}
       | Ite (x,y,z) ->
         map x >>= fun x ->
         map y >>= fun y ->
@@ -254,6 +321,7 @@ module Reindex = struct
         map_all xs >>| fun xs ->
         {t with data = Seq xs}
       | Set (v,x) ->
+        rename v >>= fun v ->
         map x >>| fun x ->
         {t with data = Set (v,x)}
     and map_all = State.List.map ~f:map in
@@ -324,63 +392,99 @@ module Typing = struct
     | Join (x,y),z when x = z || y = z -> z
     | _ -> if t = t' then t else Meet (t,t')
 
-
-  (** [subst gamma x y] substitute all occurences of [x] with [y] *)
-  let subst gamma x y =
-    let rec subst t = if t = x then y else match t with
-        | Meet (t1,t2) -> make_meet (subst t1) (subst t2)
-        | Join (t1,t2) -> make_join (subst t1) (subst t2)
-        | grnd -> grnd in
-    Map.map gamma ~f:subst
-
-  (** [unify gamma x y r] substitute all occurences of type
-      [x] and [y] with [r]  *)
-  let unify gamma x y r =
-    subst (subst gamma x r) y r
-
   let join id1 id2 id gamma =
     gamma ++ bind id (make_join (get gamma id1) (get gamma id2))
 
-  let meet id1 id2 id gamma =
-    match get gamma id1, get gamma id2 with
-    | (Tvar x as t), (Tvar y as t') ->
-      bind id (Tvar id) ++ unify gamma t t' (Tvar id)
-    | (Tvar _ as t), t'
-    | t', (Tvar _ as t)
-    | t,t' -> bind id t' ++ subst gamma t t'
 
-  let meet_with_symbol g t = subst g t (make_meet t Tsym)
+  let make_texpr id = function
+    | Any | Name _ -> Tvar id
+    | Type n -> Grnd n
+    | Symbol -> Tsym
 
-  let meet_with_ground g t n = match t with
-    | Tvar x -> subst g t (Grnd n)
-    | Meet (x,y) -> unify g x y (Grnd n)
-    | Join (x,y) ->
-      subst (subst g x (Grnd n)) y (Grnd n)
-    | Grnd m when m = n -> g
-    | Grnd _ | Tsym -> subst g t (make_meet t (Grnd n))
+  (* substitute all occurences of the type variable [v] (denoted by
+     its id) with type [t].  *)
+  let subst v t g = 
+    let rec subst x = 
+      eprintf "subst %a %a@\n%!" Id.pp v pp_expr x;
+      match x with
+      | Meet (t1,t2) -> make_meet (subst t1) (subst t2)
+      | Join (t1,t2) -> make_join (subst t1) (subst t2)
+      | Tvar v' as t' -> if v = v' then t else t'
+      | Tsym | Grnd _ as t -> t in
+    Map.map ~f:subst g
 
-  let apply_ret id gamma vs : typ -> gamma = function
-    | Any -> meet id id id gamma
-    | Symbol -> subst gamma (Tvar id) Tsym
-    | Type n -> meet_with_ground gamma (Tvar id) n
+  let unify_meets g =
+    Map.fold g ~init:g ~f:(fun ~key:id ~data:t g ->
+        match t with
+        | Meet (Tvar x, t')
+        | Meet (t', Tvar x) -> subst x t' g
+        | _ -> g)
+
+
+  (* constrains the type of expression [expr] (denoted with its id) to
+     type [t].  If the expression wasn't constrained then it is added
+     as a new constraint to the typing context. If expression was
+     constrained to some type variable, then all occurences of this
+     type variable in the typing context are substituted with type
+     [t]. If it was constrained with some other type, then it will be
+     constrained with the greatest lower bound of the old and new
+     types.  
+  *)
+
+  let constr expr t gamma = 
+    eprintf "constr %a %a@\n%!" Id.pp expr pp_expr t;
+    match get gamma expr with
+    | Tvar id' -> 
+      subst id' t (Map.add gamma ~key:expr ~data:t)
+    | t' -> Map.add gamma ~key:expr ~data:(make_meet t t')
+
+
+  (* unifies types of expressions using function [f] *)
+  let merge ~f ids gamma = match ids with
+    | [] -> gamma
+    | id :: ids -> 
+      let t = List.fold ids ~init:(get gamma id) ~f:(fun t id -> 
+          f (get gamma id) t) in
+      List.fold (id::ids) ~init:gamma ~f:(fun gamma id -> 
+          constr id t gamma) |> unify_meets
+
+  (* unifies types of expressions denoted with [ids] with 
+     a greatest lower bound of their types *)
+  let meet = merge ~f:make_meet
+
+  let join expr ids gamma = match ids with
+    | [] -> gamma
+    | id :: ids -> 
+      let t = List.fold ids ~init:(get gamma id) ~f:(fun t id -> 
+          make_join (get gamma id) t) in
+      constr expr t gamma
+
+
+  let meet_with_symbol expr g = constr expr Tsym g
+  let meet_with_ground expr n g = constr expr (Grnd n) g
+
+  let apply_ret expr gamma vs : typ -> gamma = function
+    | Any -> gamma
+    | Symbol -> constr expr Tsym gamma
+    | Type n -> meet_with_ground expr n gamma
     | Name n -> match Map.find vs n with
-      | None -> meet id id id gamma
-      | Some id' -> meet id id' id gamma
+      | None -> gamma
+      | Some id' -> constr expr (get gamma id') gamma
 
   let apply_signature appid ts g {args; rest; ret} =
-    let rec apply g vs ts ns = match ts,ns with
+    let rec apply g vs ts ns = 
+      eprintf "apply arg@\n%!";
+      match ts,ns with
       | ts,[] -> Some g,vs,ts
       | [],_ -> None,vs,[]
-      | t :: ts, Any :: ns -> apply g vs ts ns
+      | _ :: ts, Any :: ns -> apply g vs ts ns
       | t :: ts, Type n :: ns ->
-        apply (meet_with_ground g (get g t.id) n) vs ts ns
+        apply (meet_with_ground t.id n g) vs ts ns
       | t :: ts, Symbol :: ns ->
-        apply (meet_with_symbol g (get g t.id)) vs ts ns
+        apply (meet_with_symbol t.id g) vs ts ns
       | t :: ts, Name n :: ns -> match Map.find vs n with
-        | Some id -> apply (meet t.id id id g) vs ts ns
-        | None ->
-          let vs = Map.add vs ~key:n ~data:t.id in
-          apply g vs ts ns in
+        | Some id -> apply (constr t.id (Tvar id) g) vs ts ns
+        | None -> apply g (Map.add vs ~key:n ~data:t.id) ts ns in
     match apply g String.Map.empty ts args with
     | None,_,_ -> None
     | Some g,vs,ts ->
@@ -390,18 +494,21 @@ module Typing = struct
       | ts -> match rest with
         | None -> None
         | Some Any -> Some g
-        | Some Symbol -> assert false
+        | Some Symbol -> 
+          Some (List.fold ts ~init:g ~f:(fun g t -> 
+              meet_with_symbol t.id g))
         | Some (Type n) ->
           Some (List.fold ts ~init:g ~f:(fun g t ->
-              meet_with_ground g (get g t.id) n))
+              meet_with_ground t.id n g))
         | Some (Name n) -> match Map.find vs n with
           | None -> Some g
           | Some id ->
             Some (List.fold ts ~init:g ~f:(fun g t ->
-                meet t.id id id g))
+                constr t.id (Tvar id) g))
 
   let type_of_expr gamma expr = match Map.find gamma expr.id with
     | Some (Grnd n) -> Type n
+    | Some Tsym -> Symbol
     | _ -> Any
 
   let type_of_exprs gamma exprs =
@@ -421,12 +528,14 @@ module Typing = struct
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
-  let join_gammas = Map.merge ~f:(fun ~key -> function
-      | `Left t | `Right t -> Some (make_join t (Tvar key))
-      | `Both (t,t') -> Some (make_join t t'))
+  let join_gammas xs ys = 
+    let zs = Map.merge xs ys ~f:(fun ~key -> function
+        | `Left t | `Right t -> Some (make_join t (Tvar key))
+        | `Both (t,t') -> Some (make_join t t')) in
+    zs
 
   let apply glob id name args gamma =
-    signatures glob gamma name|>
+    signatures glob gamma name |>
     List.filter_map ~f:(apply_signature id args gamma) |>
     List.reduce ~f:join_gammas |> function
     | None -> gamma
@@ -434,19 +543,15 @@ module Typing = struct
 
   let last xs = match List.rev xs with
     | {id} :: _ -> id
-    | _ -> Id.null
-
-  let constr id typ gamma = match typ with
-    | Any
-    | Name _ -> Map.add gamma ~key:id ~data:(Tvar id)
-    | Type n -> Map.add gamma ~key:id ~data:(Grnd n)
-    | Symbol -> Map.add gamma ~key:id ~data:Tsym
+    | _ -> assert false
 
   let constr_glob {globs} vars var gamma =
     if Map.mem vars var.data.exp then gamma
     else match Map.find globs var.data.exp with
       | None -> gamma
-      | Some n -> Map.add gamma ~key:var.id ~data:(Grnd n)
+      | Some n ->
+        (* TODO: shouldn't we meet here? *)
+        Map.add gamma ~key:var.id ~data:(Grnd n)
 
   let push vars {data; id} =
     Map.add vars ~key:data.exp ~data:id
@@ -455,53 +560,61 @@ module Typing = struct
     | None -> v.id
     | Some id -> id
 
+  let pp_binding ppf (v,id) = 
+    fprintf ppf "%s:%a" v Id.pp id
+
+  let pp_sep ppf () = 
+    fprintf ppf ", "
+
+  let pp_vars ppf vs = 
+    fprintf ppf "{%a}" (pp_print_list ~pp_sep pp_binding) @@
+    Map.to_alist vs
+
   let (++) f g x = f (g x)
 
   let infer_ast glob bindings ast : gamma -> gamma =
-    let rec infer vs = function
-      | {data=Sym _; id} -> 
-        constr id Any
-      | {data=Int x; id} ->
-        constr id x.data.typ
+    let rec infer vs expr =
+      let (++) f g x = 
+        eprintf "infer %a s.t. %a@\n%!" Ast.pp expr pp_vars vs;
+        f (g x) in
+      match expr with
+      | {data=Sym _; id} -> meet_with_symbol id
+      | {data=Int x; id} -> constr id (make_texpr id x.data.typ)
       | {data=Var v; id} ->
-        meet v.id (varclass vs v) id ++
+        meet [v.id; varclass vs v; id] ++
         constr_glob glob vs v ++
-        constr v.id v.data.typ
+        constr v.id (make_texpr id v.data.typ)
       | {data=Ite (x,y,z); id} ->
-        join y.id z.id id ++
+        join id [y.id; z.id] ++
         infer vs x ++
         infer vs y ++
         infer vs z
       | {data=Let (v,x,y); id} ->
-        meet y.id id id ++
+        meet [y.id; id] ++
         infer (push vs v) y ++
-        meet x.id v.id v.id ++
+        meet [x.id; v.id] ++
         infer vs x ++
-        constr v.id v.data.typ
+        constr v.id (make_texpr v.id v.data.typ)
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
-        reduce vs xs ++
-        constr id Any
-      | {data=Seq []; id} -> constr id Any
+        reduce vs xs
+      | {data=Seq []; id} -> ident
       | {data=Seq xs; id} ->
-        meet (last xs) id id ++
+        meet [last xs; id] ++
         reduce vs xs
       | {data=Set (v,x); id} ->
-        meet v.id id id ++
-        meet v.id x.id (varclass vs v) ++
-        constr v.id v.data.typ ++
+        join id [v.id; x.id] ++
+        constr v.id (make_texpr v.id v.data.typ) ++
         infer vs x
       | {data=Rep (c,x); id} ->
-        meet c.id id id ++
+        meet [c.id; id] ++
         infer vs c ++
         infer vs x
       | {data=Msg (_,xs); id} ->
-        constr id (Lisp.Type.word 1) ++
+        constr id (Grnd 1) ++
         reduce vs xs
-      | {data=Err _; id} ->
-        constr id Any
-      | {data=App (Static _,_)} ->
-        ident
+      | {data=Err _; id} -> ident
+      | {data=App (Static _,_)} -> ident
     and reduce vs = function
       | [] -> ident
       | x :: xs -> infer vs x ++ reduce vs xs in
@@ -510,30 +623,34 @@ module Typing = struct
   let find_func funcs id =
     List.find funcs ~f:(fun f -> f.id = id)
 
+  let pp_gbinding ppf (id,t) = 
+    fprintf ppf "%a:%a" Id.pp id pp_expr t
 
-  let transfer glob node gamma = match node with
-    | Entry | Exit -> gamma
+  let pp_gamma ppf gamma = 
+    fprintf ppf "{@[<v>%a@]}@\n"
+      (pp_print_list pp_gbinding) (Map.to_alist gamma)
+
+  let transfer glob node gamma =
+    match node with
+    | Entry | Exit ->
+      gamma
     | Defun id -> match find_func glob.funcs id with
       | None -> gamma
       | Some f ->
+        eprintf "typing %s@\n%!" (Def.name f);
         let args = Def.Func.args f in
         let vars = List.fold args ~init:String.Map.empty ~f:push in
         let gamma = List.fold args ~init:gamma ~f:(fun gamma v ->
-            constr v.id v.data.typ gamma) in
-        infer_ast glob vars (Def.Func.body f) gamma
+            constr v.id (make_texpr v.id v.data.typ) gamma) in
+        let gamma = infer_ast glob vars (Def.Func.body f) gamma in
+        eprintf "finished@\n%!";
+        gamma
 
-  let unify_meets g =
-    Map.fold g ~init:g ~f:(fun ~key:id ~data:t g ->
-        match t with
-        | Meet ((Tvar x as t), t')
-        | Meet (t', (Tvar x as t)) -> subst g t t'
-        | _ -> g)
 
   let meet g1 g2 =
-    Map.merge g1 g2 ~f:(fun ~key -> function
+    unify_meets @@ Map.merge g1 g2 ~f:(fun ~key -> function
         | `Left t | `Right t -> Some t
-        | `Both (t,t') -> Some (make_meet t t')) |>
-    unify_meets
+        | `Both (t,t') -> Some (make_meet t t')) 
 
 
   let equal_texpr x y = compare_texpr x y = 0
@@ -579,73 +696,24 @@ module Typing = struct
 
   (* The public interface  *)
   module Type = struct
-    type error = Bot of Loc.t * texpr
+    type error = Loc.t * (Source.Id.t * texpr)
     let check vars p =
       let p = Reindex.program p in
       let gamma = infer vars p in
-      Map.fold gamma ~init:[] ~f:(fun ~key:id ~data:t errs ->
-          if well_typed t then errs
-          else Bot (Source.loc p.sources id, t) :: errs)
+      Map.fold gamma ~init:Loc.Map.empty ~f:(fun ~key:id ~data:t errs ->
+          assert (id <> Source.Id.null);
+          if well_typed t || not (Source.has_loc p.sources id) then errs
+          else Map.add errs ~key:(Source.loc p.sources id) ~data:(id,t)) |>
+      Map.to_alist
 
-    let pp_error ppf (Bot (loc,expr)) =
-      fprintf ppf "%a@\nType error - expression is ill-typed: %a"
-        Loc.pp loc pp_expr expr
+    let pp_error ppf (loc,(id,expr)) =
+      fprintf ppf "%a@\nType error - expression %a is ill-typed: %a"
+        Loc.pp loc Id.pp id pp_expr expr
   end
 end
 
-let rec concat_prog =
-  List.concat_map ~f:(function
-      | {data=Seq xs} -> concat_prog xs
-      | x -> [x])
 
-module Ast = struct
-  let rec pp ppf {data} = pp_exp ppf data
-  and pp_exp ppf = function
-    | Int x ->
-      pp_word ppf x
-    | Sym x -> 
-      pp_print_string ppf x.data
-    | Var x ->
-      pp_var ppf x
-    | Ite (c,t,e) ->
-      fprintf ppf "@[<2>(if@ %a@;<1 2>%a@ %a)@]" pp c pp t pp_prog e
-    | Let (v,e,b) ->
-      fprintf ppf "@[(let@;<1 2>@[<2>(%a@ %a)@]@ %a)@]" pp_var v pp e pp b
-    | App (b,xs) ->
-      fprintf ppf "@[<2>(%a@ %a)@]" pp_binding b pp_exps xs;
-    | Seq [] -> fprintf ppf "()"
-    | Seq [x] -> pp ppf x
-    | Seq xs ->
-      fprintf ppf "@[<2>(prog@ @[<v>%a@])@]" pp_exps (concat_prog xs)
-    | Set (v,x) ->
-      fprintf ppf "@[<2>(set@ %a@ %a)@]" pp_var v pp x
-    | Rep (c,b) ->
-      fprintf ppf "@[<2>(while@;<1 2>%a@ @[<v>%a@])@]" pp c pp_prog b
-    | Msg (f,es) ->
-      fprintf ppf "@[<2>(msg@ \"%a\"@ %a)@]" pp_fmt f pp_exps es;
-    | Err msg ->
-      fprintf ppf "@[<2>(error@ %s)@]" msg
-  and pp_binding ppf = function
-    | Dynamic x -> fprintf ppf "%s" x
-    | Static _ -> fprintf ppf "<lambda>"
-  and pp_exps ppf xs = pp_print_list ~pp_sep:pp_print_space pp ppf xs
-  and pp_fmt ppf xs = pp_print_list pp_fmt_elt ppf xs
-  and pp_fmt_elt ppf = function
-    | Lit s -> pp_print_string ppf s
-    | Pos n -> fprintf ppf "$%d" n
-  and pp_prog ppf = function
-    | {data=Seq xs} -> pp_exps ppf (concat_prog xs)
-    | exp -> pp ppf exp
-end
-
-let pp_def ppf d =
-  fprintf ppf "@[<2>(defun %s @[<2>(%a)@]@ %a)@]@,"
-    (Def.name d)
-    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
-    Ast.pp_prog (Def.Func.body d)
-
-let pp ppf {defs} =
-  fprintf ppf "@[<v>%a@]" (pp_print_list pp_def) defs
 
 module Context = Lisp.Context
 module Type = Typing.Type
+
