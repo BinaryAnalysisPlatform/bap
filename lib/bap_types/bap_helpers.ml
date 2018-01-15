@@ -163,8 +163,6 @@ module Apply = struct
     | Cast.HIGH     -> ext ~lo:Int.(Bitvector.bitwidth u - sz) u
     | Cast.LOW      -> ext ~hi:Int.(sz - 1) u
 
-  let extract hi lo w = Bitvector.extract_exn ~hi ~lo w
-
 end
 
 module Type = struct
@@ -480,8 +478,8 @@ module Simpl = struct
       | Int w -> Int (Apply.cast t s w)
       | _ -> Cast (t,s,x)
     and extract hi lo x = match exp x with
-      | Int w -> Int (Apply.extract hi lo w)
-      | _ -> Extract (hi,lo,x)
+      | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+      | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
       | UnOp(op,Int x) -> Int (Apply.unop op x)
       | UnOp(op',x) when op = op' -> exp x
