@@ -1,7 +1,7 @@
 
 (**
 
-   ## Intro
+    {2 Intro}
 
     This module is the only one that needed to write lifter functions.
     The main idea is to make a life of lifter writers as easy as
@@ -15,15 +15,36 @@
     So proposed usage is just to open it at the very beginning of your
     module:
 
-    open Bap_powerpc.Std
-    ...
+    {[
+      open Bap_powerpc.Std
+    ]}
 
     Note, that everywhere in this module, where some operation has
     a notion of bit position (byte/word ...), it's assumed that
     numeration starts from most significant bit (byte/word ...).
 
+    Example 1. [y] will be set to 0xAB, because first byte
+    requested:
+    {[
+     let x = signed const halfword 0xABCD in
+     let y = signed var byte in
+     RTL.[
+       y := first byte x;
+     ];
+    ]}
 
-   ## Lifter
+    Example 2. [y] will be set to 0xCD, because last byte
+    requested:
+    {[
+     let x = signed const halfword 0xABCD in
+     let y = signed var byte in
+     RTL.[
+       y := last byte x;
+     ];
+    ]}
+
+
+    {2 Lifter}
 
     Any lifter function must have two arguments.
     The first one is a model of CPU that contains all information like
@@ -35,11 +56,7 @@
     a user must point that the first and the second element of
     operands array registers and the third argument is immediate.
 
-    In general, what one should do to add an instruction is to write
-    a lifter function and to add it to others.
-
-
-   ## RTL
+    {2 RTL}
 
     The central part of this module is RTL. It contains expressions,
     operations over expressions and statements.
@@ -47,67 +64,80 @@
     and any part of it is either expression(s), or operation over
     expression(s).
 
-    ### Bitwidth and Signess
-    Any expression in RTL has a notion of signess. Any operation over
+    {3 Bitwidth and Signedness}
+
+    Any expression in RTL has a notion of signedness. Any operation over
     expressions of different sign causes a casting to signed.
 
-    Any expression in RTL has a notion of bitwidth. All operations
-    over expressions of different width will cause a casting to the
-    more biggest bitwidth.
+    If an operation is applied to expressions with different bitwidths,
+    an expression with the smaller bitwidth is implicitly casted
+    (extended) to the bitwidth of another expression.
 
-    Note, that any expression that tends to take part of other
-    expression is always unsigned. The same is true for any
-    expression that is a concatenation of expressions.
-    But it's still possible to use them as signed expressions, e.g.
-    assign them to signed expression or use signed comparison.
+    If an operation is applied to expressions with different signs,
+    any unsigned expression is implicitly casted to signed one.
 
-   ### Expressions
-    There are only a few ways to construct expression:
+    Any extension, shrinking and concatenation always return an unsigned
+    expression. It's still possible to use them as signed expressions,
+    e.g. assign them to signed expression or use in signed binary/unary
+    operation.
+
+    {3 Expressions}
+
+    There are only few ways to construct an expression:
      - from instruction operand
      - from constant
      - from string
      - by defining temporary variable
 
     To construct an expression that denotes a register and treat
-     its content as an unsigned value, one should write:
-     ...
+    its content as an unsigned value, one should write:
+
+    {v
      let ra = unsigned reg op.(0)
-     ...      -------- --- ------
+              -------- --- ------
                  ^      ^    ^
                  |      |    |
       content is |      |    |
       unsigned __|      |    |
                         |    |
            claim register  from operands array at index 0
+    v}
 
     Immediate instructions operands are constructed in the same
     way:
-     ...
-     let im = signed imm op.(1)
-     ...
+
+    {[
+      let im = signed imm op.(1)
+    ]}
 
     Also one may create variables for convenience:
-     ...
-     let x = unsigned var halfword
-     ...
+
+    {[
+      let x = unsigned var halfword
+    ]}
+
     that is a creation of variable of bitwidth 16. Other useful
     bitwidthes are bit, byte, word, doubleword, quadroword. And
     also it's possible to create a variable of arbitrary bitwidth:
-     ...
-     let x = signed var (bitwidth 10)
-     ...
+
+    {[
+      let x = signed var (bitwidth 10)
+    ]}
 
     It's also possible to create an epxression from integer constant:
-     ...
-     let x = unsigned const word 42
-     ...
+
+    {[
+      let x = unsigned const word 42
+    ]}
 
     And create an expression from string:
-     ...
-     let x = unsigned of_string "0xFFFF_FFFF_FFFF"
-     ...
 
-    #### Taking a part
+    {[
+      let x = unsigned of_string "0xFFFF_FFFF_FFFF"
+    ]}
+
+    {4 Taking a part}
+
     There is a general way to take a part of an expression:
     {extract exp from to}, where a [from] denotes a more significant
     bit than [to].
@@ -121,29 +151,48 @@
     msb x       - take the most significant bit
 
     Note, that taking a part of a bigger width from expression is
-    also possible. An extended expression will be returned with
-    the respect to  [x] sign:
-     ...
-     let x = unsigned var halfword
-     let y = unsigned var word
-     RTL.[
-        y := last word x;
-     ]
+    also possible.
 
-    #### Operators
+    Taking a part always results to an unsigned expression. And
+    sign bit interpretation depends on further using of a result
+    expression. So don't use it for sign casting, just use
+    expression as it is where signedness matter.
+
+    Example 1. Taking a part explicitly. The result is 0x0000_FFFF.
+    {[
+     let x = signed const halfword 0xFFFF in
+     let y = signed var word in
+     RTL.[
+       y := last word x;
+     ];
+    ]}
+
+    Example 2. Assignment to signed, without taking a part.
+    The result is 0xFFFF_FFFF.
+    {[
+     let x = signed const halfword 0xFFFF in
+     let y = signed var word in
+     RTL.[
+       y := x;
+     ]
+    ]}
+
+    {4 Operators}
+
     There are lot's math operators: plus, modulo, less than etc.
     All they take one or more expressions and also return expression:
     x + y, lnot y, x lsl y ...
 
-    #### Assignment
+    {4 Assignment}
+
     The only operator that takes an expression and returns a statement
     is an assignment. It is a very important and expressive operator
     in RTL. The right-hand side of an assignment is always treated to
     have the same sign and width as a left one:
-    ...
+    {[
       ra := zero;
       rb := rc ^ rd;
-    ...
+    ]}
     Assuming, that zero is just one bit and all ra, rb, rc, rd are 32-bit
     expressions we will get ra, with all bits set to zero, and rb
     equaled to rd.
@@ -154,14 +203,15 @@
      - expressions from cpu model.
      - taking part or concatenation of listed cases above
     So there are few examples of correct assignment:
-     ...
-     low byte rt := ra + rb;
-     cpu.cr := zero;
-     nbit cpu.cr 1 := one;
-     ...
+
+    {[
+      low byte rt := ra + rb;
+      cpu.cr := zero;
+      nbit cpu.cr 1 := one;
+    }]
 
 
-   ## Misc
+   {2 Misc}
 
     There are few useful constructions that either a part of RTL
     (if_, foreach) or simplify code (when_, ifnot, switch).
@@ -172,9 +222,11 @@
     - (>.) - does the same, plus does some extra job (see
              a description below)
 
-   ## Comlete example
 
-    To be more concrete let's create an artificial example:
+   {2 Comlete example}
+
+   To be more concrete let's create an artificial example.
+   {[
      1 let sort_of_add cpu ops =
      2   let rt = unsigned reg ops.(0) in
      3   let ra = signed reg ops.(1) in
@@ -190,6 +242,7 @@
     13    ]
     14 let () =
     15   "SomeSortOfAdd" >> sort_of_add;
+   ]}
 
    There is a lifter for instruction "SomeSortOfAdd". It's required
    it has two arguments: cpu model and operand array.
