@@ -1,0 +1,13 @@
+Flag primus_region
+  Description: Build Primus Region Tool
+  Default: false
+
+Library primus_region_library_plugin
+  Build$:       flag(everything) || flag(primus_region)
+  Path:         plugins/primus_region
+  BuildDepends: bap-primus
+  FindlibName:     bap-plugin-primus_region
+  CompiledObject:  best
+  InternalModules: Primus_region_main
+  XMETADescription: interval sets
+  XMETAExtraLines:  tags="primus, primus-library"
