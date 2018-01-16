@@ -28,7 +28,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *)
-(* -*- ocp-indent-syntax: ("bitstring") -*- *)
 open Core_kernel.Std
 
 open Bitstring
@@ -223,8 +222,8 @@ let parse_flags flag_of bit data =
 (** elf ident *)
 
 let parse_elf_ident bits =
-  bitmatch bits with
-  | { 0x7f      : 8;
+  match%bitstring bits with
+  | {|0x7f      : 8;
       "ELF"     : 24 : string;
       e_class   : 8;
       e_data    : 8;
@@ -233,7 +232,7 @@ let parse_elf_ident bits =
       e_abiver  : 8;
       e_pad     : 56;
       rest      : -1 : bitstring
-    } ->
+    |} ->
     (parse_e_class e_class,
      parse_e_data e_data,
      e_version,
@@ -247,8 +246,8 @@ let parse_elf_hdr elf =
     parse_elf_ident elf in
   let endian = endian_of ei_data in
   match ei_class with
-  | ELFCLASS32 ->  (bitmatch rest with
-      | { e_type      : 16 : endian (endian);
+  | ELFCLASS32 ->  (match%bitstring rest with
+      | {|e_type      : 16 : endian (endian);
           e_machine   : 16 : endian (endian);
           e_version   : 32 : endian (endian);
           e_entry     : 32 : endian (endian);
@@ -261,7 +260,7 @@ let parse_elf_hdr elf =
           e_shentsize : 16 : endian (endian);
           e_shnum     : 16 : endian (endian);
           e_shstrndx  : 16 : endian (endian)
-        } ->
+        |} ->
         let elf = {
           e_class = ei_class;
           e_data = ei_data;
@@ -287,8 +286,8 @@ let parse_elf_hdr elf =
         } in
         elf, seg_table, sec_table
     )
-  | ELFCLASS64 -> ( bitmatch rest with
-      | { e_type      : 16 : endian (endian);
+  | ELFCLASS64 -> ( match%bitstring rest with
+      | {|e_type      : 16 : endian (endian);
           e_machine   : 16 : endian (endian);
           e_version   : 32 : endian (endian);
           e_entry     : 64 : endian (endian);
@@ -301,7 +300,7 @@ let parse_elf_hdr elf =
           e_shentsize : 16 : endian (endian);
           e_shnum     : 16 : endian (endian);
           e_shstrndx  : 16 : endian (endian)
-        } ->
+        |} ->
         let elf = {
           e_class = ei_class;
           e_data = ei_data;
@@ -331,8 +330,8 @@ let parse_elf_hdr elf =
 (* segment *)
 let parse_segment ei_class endian bit =
   match ei_class with
-  | ELFCLASS32 -> (bitmatch bit with
-      | { p_type   : 32 : endian (endian);
+  | ELFCLASS32 -> (match%bitstring bit with
+      | {|p_type   : 32 : endian (endian);
           p_offset : 32 : endian (endian);
           p_vaddr  : 32 : endian (endian);
           p_paddr  : 32 : endian (endian);
@@ -340,7 +339,7 @@ let parse_segment ei_class endian bit =
           p_memsz  : 32 : endian (endian);
           p_flags  : 32 : endian (endian);
           p_align  : 32 : endian (endian)
-        } -> {
+        |} -> {
           p_type   = parse_p_type p_type;
           p_flags  = parse_flags parse_p_flag 32 (Int64.of_int32 p_flags);
           p_vaddr  = Int64.of_int32 p_vaddr;
@@ -350,8 +349,8 @@ let parse_segment ei_class endian bit =
           p_filesz = Int64.of_int32 p_filesz;
           p_offset = Int64.of_int32 p_offset;
         })
-  | ELFCLASS64 -> (bitmatch bit with
-      | { p_type   : 32 : endian (endian);
+  | ELFCLASS64 -> (match%bitstring bit with
+      | {|p_type   : 32 : endian (endian);
           p_flags  : 32 : endian (endian);
           p_offset : 64 : endian (endian);
           p_vaddr  : 64 : endian (endian);
@@ -359,7 +358,7 @@ let parse_segment ei_class endian bit =
           p_filesz : 64 : endian (endian);
           p_memsz  : 64 : endian (endian);
           p_align  : 64 : endian (endian)
-        } -> {
+        |} -> {
           p_type  = parse_p_type p_type;
           p_flags = parse_flags parse_p_flag 32 (Int64.of_int32 p_flags);
           p_vaddr;
@@ -373,8 +372,8 @@ let parse_segment ei_class endian bit =
 (* section *)
 let parse_section ei_class endian bit =
   match ei_class with
-  | ELFCLASS32 -> (bitmatch bit with
-      | { sh_name      : 32 : endian (endian);
+  | ELFCLASS32 -> (match%bitstring bit with
+      | {|sh_name      : 32 : endian (endian);
           sh_type      : 32 : endian (endian);
           sh_flags     : 32 : endian (endian);
           sh_addr      : 32 : endian (endian);
@@ -384,7 +383,7 @@ let parse_section ei_class endian bit =
           sh_info      : 32 : endian (endian);
           sh_addralign : 32 : endian (endian);
           sh_entsize   : 32 : endian (endian)
-        } -> {
+        |} -> {
           sh_name = Int32.to_int_exn sh_name;
           sh_type = parse_sh_type sh_type;
           sh_flags = parse_flags parse_sh_flag 32 (Int64.of_int32 sh_flags);
@@ -396,8 +395,8 @@ let parse_section ei_class endian bit =
           sh_entsize = Int64.of_int32 sh_entsize;
           sh_offset = Int64.of_int32 sh_offset;
         })
-  | ELFCLASS64 -> (bitmatch bit with
-      | {
+  | ELFCLASS64 -> (match%bitstring bit with
+      | {|
         sh_name      : 32 : endian (endian);
         sh_type      : 32 : endian (endian);
         sh_flags     : 64 : endian (endian);
@@ -408,7 +407,7 @@ let parse_section ei_class endian bit =
         sh_info      : 32 : endian (endian);
         sh_addralign : 64 : endian (endian);
         sh_entsize   : 64 : endian (endian)
-      } -> {
+      |} -> {
           sh_name = Int32.to_int_exn sh_name;
           sh_type = parse_sh_type sh_type;
           sh_flags = parse_flags parse_sh_flag 64 sh_flags;
@@ -435,9 +434,9 @@ let validate_offsets desc  ~pos ~len ~offset ~size : unit Or_error.t =
 
 
 let split bits size : bitstring * bitstring =
-  bitmatch bits with
-  | { hd : size * 8 : bitstring;
-      tl : -1       : bitstring } -> hd,tl
+  match%bitstring bits with
+  | {|hd : size * 8 : bitstring;
+      tl : -1       : bitstring|} -> hd,tl
 
 (** returns a sequence of table entries  *)
 let split_table ti ~pos ~len data : bitstring Sequence.t Or_error.t =
