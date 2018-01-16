@@ -149,8 +149,6 @@ let rec concat_prog =
       | {data=Seq xs} -> concat_prog xs
       | x -> [x])
 
-let concat_prog = ident
-
 module Ast = struct
   let rec pp ppf {data; id} = 
     fprintf ppf "%a.%a" pp_exp data Source.Id.pp id
@@ -341,15 +339,12 @@ end
 module Typing = struct
   (* An expression in Primus Lisp gradual type system may have several
      types, e.g., [(if c 123 'hello)] is a well-typed expression that
-     has type int+symbol. The int+symbol type is a disjunctive type,
+     has type int+sym. The int+sym type is a disjunctive type,
      or a polytype. Our type system is _soft_ as we have type Any,
      that denotes a disjunction (join in our parlance) of all
      types. The set of type expressions forms a lattice with the Any
-     type representing the Top element (all possible types). We do not
-     explicitly represent the Bot type, but any ill-type could be seen
-     as a bottom type with additional information attached to it. For
-     example, int=symbol is a bottom type since it represents a type
-     of expression that can not be evaluated.
+     type representing the Top element (all possible types). The Bot
+     type is an empty disjunction. 
 
      Our type inference system is a mixture of flow based and
      inference based analysis. We infer a type of a function, 
@@ -360,9 +355,9 @@ module Typing = struct
      consistency of the program static properties. 
   *)
 
-  (* type value or type. A value could be either a symbol or a
-     bitvector with the given width. All types have the same runtime
-     representation (modulo bitwidth).  *)
+  (* Type value (aka type). A program value could be either a symbol
+     or a bitvector with the given width. All types have the same
+     runtime representation (modulo bitwidth).  *)
   type tval = 
     | Tsym
     | Grnd of int
@@ -385,38 +380,82 @@ module Typing = struct
       type t = tvar [@@deriving compare, sexp_of]
     end)
 
-  (* typing environment.
+  (** Typing environment.
 
-     [vars] associates each program term with a type variable. It is a
-     disjoint set that partitions the set of program terms into
-     equivalence classes, such that two terms belonging to the same
-     set will have the same type.
-
-     [qset] is the quotient set (disjoint union) of equivalence classes
-     of type variables. In other words, it partitions a set of
-     type variables into equivalence classes, where all type variables
-     belonging to the same equivalence class must have the same type.
-
-     [tenv] is the typing environment that associates each equivalence
-     class with the sum of ground types. If an eq class doesn't have a
-     ground type then it is assumed to be type Top (i.e., it is a set
-     of all possible types). An empty set denotes the bottom type,
-     i.e., all expressions that has that type are ill-typed. 
+      Typing constraint is built as a composition of rules, where each
+      rule is a function of type [gamma -> gamma], so the rules can be 
+      composed with the function composition operator.
   *)
-  type gamma = {
-    vars : tvar Id.Map.t;
-    vals : Tval.Set.t Tvar.Map.t;
-  } [@@deriving compare, sexp_of]
+  module Gamma : sig 
+    type t [@@deriving compare, sexp_of]
+
+    type rule = t -> t
+
+    val empty : t
+
+    (** [get gamma exp] returns a type of the expression [exp]. 
+        If [None] is returned, then the expression doesn't have any
+        statical constraints, so its type is [Any]. If some set is
+        returned, then this set denotes a disjunction of types, that a
+        term can have during program evaluation. If this set is empty,
+        then the term is ill-typed.
+    *)
+    val get : t -> Id.t -> Tval.Set.t option
 
 
+    val merge : t -> t -> t
 
-  module Gamma = struct
+    (** [exps gamma] returns a list of typed expressions. *)
+    val exps : t -> Id.t list
+
+    (** [constr exp typ] expression [exp] shall have type [typ]  *)
+    val constr : Id.t -> typ -> rule
+
+    (** [meet x y] types of [x] and [y] shall have the same type *)
+    val meet : Id.t -> Id.t -> rule
+
+    (** [join x ys] expression [x] shall have a type that is a
+        disjunction of the types of expressions specified by the [ys] list.  *)
+    val join : Id.t -> Id.t list -> rule
+
+  end = struct
+    (* typing environment.
+
+       [vars] associates each program term with a type variable. It is a
+       disjoint set that partitions the set of program terms into
+       equivalence classes, such that two terms belonging to the same
+       set will have the same type.
+
+       [vals] is the typing environment that associates each type
+       variable with the sum of type values (ground types). If an type
+       variable is not mapped in [vals] then it is assumed to has type
+       Top (i.e., it is a set of all possible types). An empty set
+       denotes the bottom type, i.e., all expressions that has that type
+       are ill-typed.*)
+    type t = {
+      vars : tvar Id.Map.t;
+      vals : Tval.Set.t Tvar.Map.t;
+    } [@@deriving compare, sexp_of]
+
+    type rule = t -> t
 
     let empty = {
       vars = Id.Map.empty;
       vals = Tvar.Map.empty;
+    }
+
+    let exps {vars} = Map.keys vars
+
+    let merge g g' = {
+      vars = Map.merge g.vars g'.vars ~f:(fun ~key -> function
+          | `Left t | `Right t -> Some t 
+          | `Both (_,t') -> Some t');
+      vals = Map.merge g.vals g'.vals ~f:(fun ~key -> function
+          | `Left ts | `Right ts -> Some ts
+          | `Both (_,ts) -> Some ts)
 
     }
+
 
     let add_var id t g = 
       {g with vars = Map.add g.vars ~key:id ~data:t}
@@ -448,8 +487,6 @@ module Typing = struct
     let inter_list = function
       | [] -> None
       | x :: xs -> Some (List.fold ~init:x xs ~f:Set.inter)
-
-
 
     let join id ids g =
       List.filter_map ids ~f:(get g) |>
@@ -518,6 +555,18 @@ module Typing = struct
         fprintf ppf "&rest %a" Lisp.Type.pp rest);
     fprintf ppf ")@] => (%a)" Lisp.Type.pp ret
 
+  let pp_tval ppf = function
+    | Tsym -> fprintf ppf "sym"
+    | Grnd n -> fprintf ppf "%d" n
+
+  let pp_plus ppf () = pp_print_char ppf '+'
+  let pp_tvals ppf tvals = 
+    if Set.is_empty tvals
+    then fprintf ppf "nil"
+    else fprintf ppf "%a"
+        (pp_print_list ~pp_sep:pp_plus pp_tval)
+        (Set.elements tvals)
+
   let apply_signature appid ts g {args; rest; ret} =
     let rec apply g ts ns = 
       match ts,ns with
@@ -537,14 +586,12 @@ module Typing = struct
               Gamma.constr t.id typ g))
 
   let type_of_expr g expr : typ = 
-    match Map.find g.vars expr.id with
+    match Gamma.get g expr.id with
     | None -> Any
-    | Some v -> match Map.find g.vals v with
-      | None -> Any
-      | Some ts -> match Set.elements ts with
-        | [Tsym] -> Symbol
-        | [Grnd n] -> Type n
-        | _ -> Any
+    | Some ts -> match Set.elements ts with
+      | [Tsym] -> Symbol
+      | [Grnd n] -> Type n
+      | _ -> Any
 
   let type_of_exprs gamma exprs =
     List.map exprs ~f:(type_of_expr gamma)
@@ -602,7 +649,7 @@ module Typing = struct
 
   let (++) f g x = f (g x)
 
-  let infer_ast glob bindings ast : gamma -> gamma =
+  let infer_ast glob bindings ast : Gamma.t -> Gamma.t =
     let rec infer vs expr =
       match expr with
       | {data=Sym _; id} -> 
@@ -680,9 +727,9 @@ module Typing = struct
         | None -> ps
         | Some types -> Map.add ps ~key:(Def.name p) ~data:types)
 
-  let gamma_equal g1 g2 = compare_gamma g1 g2 = 0
+  let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
-  let infer vars p : gamma =
+  let infer vars p : Gamma.t =
     let glob = {
       ctxt = p.context;
       prims = make_prims p;
@@ -691,11 +738,10 @@ module Typing = struct
     } in
     let g = Callgraph.build p.defs in
     let init = Solution.create Callgraph.Node.Map.empty Gamma.empty in
-    let meet x y = y in
     let equal = gamma_equal in
     let fp =
       Graphlib.fixpoint (module Callgraph) ~rev:true ~start:Exit
-        ~equal ~merge:meet ~init ~f:(transfer glob) g in
+        ~equal ~merge:Gamma.merge ~init ~f:(transfer glob) g in
     Solution.get fp Entry
 
   (* The public interface  *)
@@ -704,13 +750,14 @@ module Typing = struct
     let check vars p : error list =
       let p = Reindex.program p in
       let gamma = infer vars p in
-      Map.fold gamma.vars ~init:Loc.Map.empty ~f:(fun ~key:id ~data:v errs ->
-          assert (id <> Source.Id.null);
-          if Source.has_loc p.sources id then match Map.find gamma.vals v with
+      List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
+          assert (exp <> Source.Id.null);
+          if Source.has_loc p.sources exp 
+          then match Gamma.get gamma exp with
             | None -> errs
             | Some ts -> 
               if Set.is_empty ts 
-              then Map.add errs ~key:(Source.loc p.sources id) ~data: id
+              then Map.add errs ~key:(Source.loc p.sources exp) ~data:exp
               else errs
           else errs) |> 
       Map.to_alist
