@@ -27,7 +27,12 @@ end
 val store : var -> exp -> exp -> endian -> size -> t
 val if_ : exp -> t list -> t list -> t
 val jmp : exp -> t
-val foreach : exp -> exp -> t list -> t
+
+(** [foreach ~inverse step e code] - repeats [code] for each
+    [step] of [e]. if [inverse] is set to true then starts from
+    head (most significant bits) of [e] *)
+val foreach : inverse:bool -> exp -> exp -> t list -> t
+
 val message : string ->t
 
 module Infix : sig

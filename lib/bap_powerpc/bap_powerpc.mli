@@ -12,49 +12,12 @@
     with lots of details hidden under the hood, so a user should not
     care about minor details.
 
-    So proposed usage is just to open it at the very beginning of your
+    So proposed usage is just to open at the very beginning of your
     module:
 
     {[
       open Bap_powerpc.Std
     ]}
-
-    Note, that everywhere in this module, where some operation has
-    a notion of bit position (byte/word ...), it's assumed that
-    numeration starts from most significant bit (byte/word ...).
-
-    Example 1. [y] will be set to 0xAB, because first byte
-    requested:
-    {[
-     let x = signed const halfword 0xABCD in
-     let y = signed var byte in
-     RTL.[
-       y := first byte x;
-     ];
-    ]}
-
-    Example 2. [y] will be set to 0xCD, because last byte
-    requested:
-    {[
-     let x = signed const halfword 0xABCD in
-     let y = signed var byte in
-     RTL.[
-       y := last byte x;
-     ];
-    ]}
-
-
-    {2 Lifter}
-
-    Any lifter function must have two arguments.
-    The first one is a model of CPU that contains all information like
-    registers, memory access, instruction address, etc.
-    The second argument is an array of instruction operands, and its
-    user responsibility to treat each element of this array
-    according to instruction semantics. Those, for add instruction
-    which sum register and immediate and save a result in a register,
-    a user must point that the first and the second element of
-    operands array registers and the third argument is immediate.
 
     {2 RTL}
 
@@ -66,20 +29,14 @@
 
     {3 Bitwidth and Signedness}
 
-    Any expression in RTL has a notion of signedness. Any operation over
-    expressions of different sign causes a casting to signed.
-
-    If an operation is applied to expressions with different bitwidths,
-    an expression with the smaller bitwidth is implicitly casted
-    (extended) to the bitwidth of another expression.
+    Any expression in RTL has a notion of signedness and bitwidth.
 
     If an operation is applied to expressions with different signs,
     any unsigned expression is implicitly casted to signed one.
 
-    Any extension, shrinking and concatenation always return an unsigned
-    expression. It's still possible to use them as signed expressions,
-    e.g. assign them to signed expression or use in signed binary/unary
-    operation.
+    If an operation is applied to expressions with different bitwidths,
+    an expression with the smaller bitwidth is implicitly casted
+    (extended) to the bitwidth of another expression.
 
     {3 Expressions}
 
@@ -93,14 +50,14 @@
     its content as an unsigned value, one should write:
 
     {v
-     let ra = unsigned reg op.(0)
-              -------- --- ------
-                 ^      ^    ^
-                 |      |    |
-      content is |      |    |
-      unsigned __|      |    |
-                        |    |
-           claim register  from operands array at index 0
+     let ra = unsigned cpu.reg op.(0)
+              -------- ------- ------
+                 ^         ^      ^
+                 |         |      |
+      content is |         |      |
+      unsigned __|         |      |
+                           |      |
+                 claim register  from operands array at index 0
     v}
 
     Immediate instructions operands are constructed in the same
@@ -151,7 +108,7 @@
     msb x       - take the most significant bit
 
     Note, that taking a part of a bigger width from expression is
-    also possible.
+    also possible, see example 1 below.
 
     Taking a part always results to an unsigned expression. And
     sign bit interpretation depends on further using of a result
@@ -177,6 +134,12 @@
      ]
     ]}
 
+    {4 Concatenation}
+
+    Concatenation always return an unsigned expression. It's still
+    possible to use a result as signed expressions, e.g. by assigning
+    it to signed expression or use in signed binary/unary operation.
+
     {4 Operators}
 
     There are lot's math operators: plus, modulo, less than etc.
@@ -195,13 +158,14 @@
     ]}
     Assuming, that zero is just one bit and all ra, rb, rc, rd are 32-bit
     expressions we will get ra, with all bits set to zero, and rb
-    equaled to rd.
+    equaled to rd, since a concatenation [rc ^ rb] returns a 64 bit
+    expression and we may assign only 32 bit.
 
     An expression in left hand side of assignment is always either of
     expressions:
      - constructed with var/reg constructors
      - expressions from cpu model.
-     - taking part or concatenation of listed cases above
+     - taking a part or concatenation of two cases above
     So there are few examples of correct assignment:
 
     {[
@@ -211,7 +175,62 @@
     }]
 
 
-   {2 Misc}
+    {2 Bit,byte,whatever Order}
+
+    Everywhere in this module, where a notion of bit position
+    (byte,word ...) does matter, a numeration starts from
+    the most significant bit (byte,word, ...).
+
+    Example 1. [y] will be set to 0xAB, because first byte
+    requested:
+    {[
+     let x = signed const halfword 0xABCD in
+     let y = signed var byte in
+     RTL.[
+       y := first byte x;
+     ];
+    ]}
+
+    Example 2. [y] will be set to 0xCD, because last byte
+    requested:
+    {[
+     let x = signed const halfword 0xABCD in
+     let y = signed var byte in
+     RTL.[
+       y := last byte x;
+     ];
+    ]}
+
+    Example 3. [y] will be set to one, because second byte
+    requested (numeration starts from zero):
+    {[
+     let x = unsigned of_string "0b010000" in
+     let y = unsigned var bit in
+     RTL.[
+       y := nth bit x 1;
+     ];
+    ]}
+
+    {2 Lifter}
+
+    Any lifter function must have two arguments. The first one is
+    a model of CPU that contains all information like registers,
+    memory access, instruction address, etc. The second argument
+    is an array of instruction operands, and it's a user responsibility
+    to treat each element of this array according to instruction
+    semantics. So, if the first operand of add instruction is a target
+    register, the second operand is a source register, and the
+    third operand is an immediate:
+    {[
+      let tar = signed cpu.reg ops.(0) in
+      let src = signed cpu.reg ops.(1) in
+      let imm = unsigned imm ops.(2) in
+      RTL.[
+        tar := src + imm;
+      ]
+    ]}
+
+    {2 Misc}
 
     There are few useful constructions that either a part of RTL
     (if_, foreach) or simplify code (when_, ifnot, switch).
@@ -222,63 +241,62 @@
     - (>.) - does the same, plus does some extra job (see
              a description below)
 
+    {2 Comlete example}
 
-   {2 Comlete example}
+    To be more concrete let's create an artificial example.
+    {[
+      1 let sort_of_add cpu ops =
+      2   let rt = unsigned reg ops.(0) in
+      3   let ra = signed reg ops.(1) in
+      4   let im = unsigned imm ops.(2) in
+      5   let rc = unsigned reg ops.(3) in
+      6   let tm = signed var doubleword in
+      7   let xv = unsigned const word 42 in
+      8   let sh = unsinged const byte 2 in
+      9   RTL.[
+     10        rt := ra + im;
+     11        tm = cpu.load rt halfword + xv;
+     12        rc := (tm lsl sh) + cpu.ca;
+     13    ]
+     14   let () =
+     15     "SomeSortOfAdd"  >> sort_of_add;
+    ]}
 
-   To be more concrete let's create an artificial example.
-   {[
-     1 let sort_of_add cpu ops =
-     2   let rt = unsigned reg ops.(0) in
-     3   let ra = signed reg ops.(1) in
-     4   let im = unsigned imm ops.(2) in
-     5   let rc = unsigned reg ops.(3) in
-     6   let tm = signed var doubleword in
-     7   let xv = unsigned const word 42 in
-     8   let sh = unsinged const byte 2 in
-     9   RTL.[
-    10        rt := ra + im;
-    11        tm = cpu.load rt halfword + xv;
-    12        rc := (tm lsl sh) + cpu.ca;
-    13    ]
-    14 let () =
-    15   "SomeSortOfAdd" >> sort_of_add;
-   ]}
+    There is a lifter for instruction "SomeSortOfAdd". It's required
+    it has two arguments: cpu model and operand array.
+    An author read an ISA of Power PC architecture carefully and
+    figured out that this instruction has four operands, and that the
+    first, the second and the fourth argument are registers and the
+    third one is an immediate. And instruction has the following
+    semantics.
+    An effective address is a sum of the content of [ra] register and
+    immediate. An effective address is stored in [rt] register. A
+    halfword stored at this address must be summed with 42, shifted
+    left twice and summed with carry flag. And the result must be
+    written to [rc] register.
 
-   There is a lifter for instruction "SomeSortOfAdd". It's required
-   it has two arguments: cpu model and operand array.
-   An author read an ISA of Power PC architecture carefully and
-   figured out that this instruction has four operands, and that the
-   first, the second and the fourth argument are registers and the
-   third one is an immediate. And instruction has the following
-   semantics.
-   An effective address is a sum of the content of [ra] register and
-   immediate. An effective address is stored in [rt] register. A
-   halfword stored at this address must be summed with 42, shifted
-   left twice and summed with carry flag. And the result must be
-   written to [rc] register.
+    How did author implement lifter for this instruction:
+    line  1    : defined a function with two arguments
+    lines 2-5  : parsed instruction operands
+    lines 6-8  : defined useful constants
+    lines 9-13 : wrote RTL code for this instruction.
+    lines 14-15   : registered lifter for this instruction
 
-   How did author implement lifter for this instruction:
-   line  1    : defined a function with two arguments
-   lines 2-5  : parsed instruction operands
-   lines 6-8  : defined useful constants
-   lines 9-13 : wrote RTL code for this instruction.
-   lines 14-15: registered lifter
-
-   What happens on each line:
-   line 10: sum of signed [ra] and unsigned imm is a signed expression,
-            because one of the operands is signed. But an unsigned
-            result is placed in [rt], since [rt] is unsigned too.
-   line 11: load from memory at address from [rt] is summed with 42
-            and assigned to variable [tm]. Note, there are two width
-            extension under the hood: loaded halfword is extended to
-            up to a word bitwidth (since it's a bigger bitwidth among
-            sum operand) and than sum extended to a doubleword
-            bitwidth with respect to a [tm] sign. So, the result of
-            this sum is treated as a signed.
-   line 12: Logical shift returns an unsigned result which is summed
-            with unsigned value. The interesting part is that it's
-            safe to add one-bit value (flag is one bit width) and a
-            doubleword.
+    What happens on each line of RTL code:
+    line 10: sum of signed [ra] and unsigned imm is a signed expression,
+             because one of the operands is signed. But an unsigned
+             result is placed in [rt], since [rt] is unsigned too.
+    line 11: load from memory at address from [rt] is summed with 42
+             and assigned to variable [tm]. Note, there are two width
+             extension under the hood: loaded halfword is extended to
+             up to a word bitwidth (since it's a bigger bitwidth among
+             sum operand) and than sum extended to a doubleword
+             bitwidth with respect to a [tm] sign. So, the result of
+             this sum is treated as a signed.
+    line 12: Logical shift returns an unsigned result which is summed
+             with unsigned value. The interesting part is that it's
+             safe to add one-bit value (flag is one bit width) and a
+             doubleword.
 *)
 
 open Core_kernel.Std

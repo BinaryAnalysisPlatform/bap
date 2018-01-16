@@ -59,9 +59,6 @@ val msb : exp -> exp
 (** [lsb e] - extracts the least significant bit from [e] *)
 val lsb : exp -> exp
 
-(** [foreach step e rtl] - repeat [rtl] for each [step] of [e] *)
-val foreach : exp -> exp -> rtl list -> rtl
-
 (** [when_ cond rtl] = if_ cond rtl [] *)
 val when_ : exp -> rtl list -> rtl
 

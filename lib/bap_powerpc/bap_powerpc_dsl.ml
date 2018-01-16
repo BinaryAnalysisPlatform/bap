@@ -110,8 +110,6 @@ let extract e left right =
 let when_ cond then_ = if_ cond then_ []
 let ifnot cond else_ = if_ cond [] else_
 
-let foreach = foreach
-
 type clause = [
   | `Case of (exp * rtl list)
   | `Default of rtl list

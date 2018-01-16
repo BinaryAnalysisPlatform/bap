@@ -14,6 +14,7 @@ module Std = struct
   module RTL = struct
     include Bap_powerpc_rtl
     include Infix
+    let foreach = foreach ~inverse:true
   end
 
   type rtl = RTL.rtl [@@deriving bin_io, compare, sexp]
