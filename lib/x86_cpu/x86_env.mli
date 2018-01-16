@@ -148,7 +148,7 @@ module type ModeVars = sig
       Due to a legacy issues r.(0) -> r8, r.(1) -> r8, ... *)
   val r : var array
 
-  (** array of yms registers  *)
+  (** array of YMM registers  *)
   val ymms: var array
 
 end
