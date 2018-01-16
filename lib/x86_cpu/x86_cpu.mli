@@ -42,6 +42,8 @@ module IA32 : sig
   (** data register  *)
   val rdx : var
 
+  (** YMM registers that are available *)
+  val ymms: var array
 
 end
 
