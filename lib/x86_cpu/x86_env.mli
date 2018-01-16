@@ -51,9 +51,6 @@ val fpu_ctrl : var
 val mxcsr    : var
 
 
-(** array of yms registers  *)
-val ymms: var array
-
 
 val o_rax : operand
 val o_rcx : operand
@@ -147,11 +144,13 @@ module type ModeVars = sig
   val mem : var
   (* r8 -> r15 *)
 
-  val nums : var array
-
   (** r8-r15 registers.
       Due to a legacy issues r.(0) -> r8, r.(1) -> r8, ... *)
   val r : var array
+
+  (** array of yms registers  *)
+  val ymms: var array
+
 end
 
 
