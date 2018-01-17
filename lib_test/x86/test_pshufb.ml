@@ -106,8 +106,8 @@ let pshufb_rm = "\x66\x0f\x38\x00\x00" (** pshufb %xmm0, (%eax) *)
 
 (** tests that permutations works as expected  *)
 let test_rr (mask, expected) ctxt =
-  let xmm0 = X86_env.ymms.(0) in
-  let xmm1 = X86_env.ymms.(1) in
+  let xmm0 = X86_cpu.IA32.ymms.(0) in
+  let xmm1 = X86_cpu.IA32.ymms.(1) in
   let bil = Bil.[
       move xmm0 (int origin);
       move xmm1 (int mask);
@@ -130,7 +130,7 @@ end
     raise in some cases raised *)
 let test_rm addr expected ctxt =
   let open X86_env.R32 in
-  let xmm0 = X86_env.ymms.(0) in
+  let xmm0 = X86_cpu.IA32.ymms.(0) in
   let bil = Bil.[
       move rax (int addr);
       move mem

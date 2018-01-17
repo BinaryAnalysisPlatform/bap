@@ -26,7 +26,7 @@ end
 (** Memory model *)
 module type MM = sig
   type t
-  val of_mem : mem -> seg:reg -> base:reg -> scale:imm -> index:reg -> disp:imm -> t
+  val of_mem : ?seg:reg -> ?base:reg -> ?scale:imm -> ?index:reg -> disp:imm -> mem -> t
   val of_offset : imm -> t
   val addr : t -> exp
   val addr_size : addr_size
