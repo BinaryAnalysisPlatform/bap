@@ -5,7 +5,7 @@
 
     This module is the only one that needed to write lifter functions.
     The main idea is to make a life of lifter writers as easy as
-    possible. This implies that only a few lines of code should be
+    possible. This implies that only few lines of code should be
     enough to describe any instruction.
 
     We introduce RTL - the language we expect to be very expressive,
