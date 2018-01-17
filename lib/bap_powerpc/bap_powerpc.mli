@@ -323,26 +323,16 @@ module Std : sig
 
   (** CPU model  *)
   type cpu = {
-    (** [cpu.load address size] *)
-    load      : exp -> bitwidth -> exp;
+    load :  exp -> bitwidth -> exp; (** usage: [cpu.load address size] *)
+    store : exp -> exp -> bitwidth -> rtl; (** usage: [cpu.store address data size] *)
 
-    (** [cpu.store address data size]  *)
-    store     : exp -> exp -> bitwidth -> rtl;
-
-    (** [cpu.jmp address]  *)
-    jmp       : exp -> rtl;
-
-    (** address of current instruction *)
-    cia       : exp;
-
-    (** address size of current arch   *)
-    addr_size : bitwidth;
-
-    (** gpr bitwidth for current arch  *)
-    gpr_width : bitwidth;
+    jmp       : exp -> rtl; (** usage: [cpu.jmp address]       *)
+    cia       : exp;       (** address of current instruction *)
+    addr_size : bitwidth;  (** address size of current arch   *)
+    gpr_width : bitwidth;  (** gpr bitwidth for current arch  *)
 
     (** registers  *)
-    reg       : (op -> exp) ec; (** reg constructor - constructs a register from operand *)
+    reg       : (op -> exp) ec; (** constructs a register from operand *)
     gpr       : int -> exp; (** general purpose registers 0..31 *)
     fpr       : int -> exp; (** floating-point registers 0..31  *)
     vr        : int -> exp; (** vector register 0..31           *)
