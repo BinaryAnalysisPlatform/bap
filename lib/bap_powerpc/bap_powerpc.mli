@@ -23,8 +23,8 @@
 
     The central part of this module is RTL. It contains expressions,
     operations over expressions and statements.
-    Basically, any line that ended with ';' is a statement,
-    and any part of it is either expression(s), or operation over
+    Basically, any line that ended with ';' is a (compound) statement,
+    and any part of it is either a statement, expression(s), or operation over
     expression(s).
 
     {3 Bitwidth and Signedness}
@@ -96,19 +96,19 @@
     {4 Taking a part}
 
     There is a general way to take a part of an expression:
-    {extract exp from to}, where a [from] denotes a more significant
+    [extract exp from to], where a [from] denotes a more significant
     bit than [to].
 
     Also, there are few more convenient and readable ways to take a
     part, e.g.:
-    low word x  - take the last word from [x]
-    high byte x - take first (the most significant) byte
-    last x 5    - take last (the least significant) bits
-    first x 2   - take second bit
-    msb x       - take the most significant bit
+    - [low word x]  - take the last word from [x]
+    - [high byte x] - take first (the most significant) byte
+    - [last x 5]    - take last (the least significant) bits
+    - [first x 2]   - take second bit
+    - [msb x]       - take the most significant bit
 
     Note, that taking a part of a bigger width from expression is
-    also possible, see example 1 below.
+    also possible, see example below.
 
     Taking a part always results to an unsigned expression. And
     sign bit interpretation depends on further using of a result
@@ -142,9 +142,9 @@
 
     {4 Operators}
 
-    There are lot's math operators: plus, modulo, less than etc.
+    There are lot's math operators: [plus], [modulo], [less than] etc.
     All they take one or more expressions and also return expression:
-    x + y, lnot y, x lsl y ...
+    [x + y], [lnot y], [x lsl y] ...
 
     {4 Assignment}
 
@@ -156,10 +156,10 @@
       ra := zero;
       rb := rc ^ rd;
     ]}
-    Assuming, that zero is just one bit and all ra, rb, rc, rd are 32-bit
-    expressions we will get ra, with all bits set to zero, and rb
-    equaled to rd, since a concatenation [rc ^ rb] returns a 64 bit
-    expression and we may assign only 32 bit.
+    Assuming, that [zero] is just one bit and all [ra], [rb], [rc], [rd] are 32-bit
+    expressions we will get [ra], with all bits set to zero, and [rb]
+    equaled to [rd], since a concatenation [rc ^ rb] returns a 64 bit
+    expression while we may assign only 32 bit.
 
     An expression in left hand side of assignment is always either of
     expressions:
@@ -172,7 +172,7 @@
       low byte rt := ra + rb;
       cpu.cr := zero;
       nbit cpu.cr 1 := one;
-    }]
+    ]}
 
 
     {2 Bit,byte,whatever Order}
@@ -184,8 +184,8 @@
     Example 1. [y] will be set to 0xAB, because first byte
     requested:
     {[
-     let x = signed const halfword 0xABCD in
-     let y = signed var byte in
+     let x = unsigned const halfword 0xABCD in
+     let y = unsigned var byte in
      RTL.[
        y := first byte x;
      ];
@@ -194,14 +194,14 @@
     Example 2. [y] will be set to 0xCD, because last byte
     requested:
     {[
-     let x = signed const halfword 0xABCD in
-     let y = signed var byte in
+     let x = unsigned const halfword 0xABCD in
+     let y = unsigned var byte in
      RTL.[
        y := last byte x;
      ];
     ]}
 
-    Example 3. [y] will be set to one, because second byte
+    Example 3. [y] will be set to one, because second bit
     requested (numeration starts from zero):
     {[
      let x = unsigned of_string "0b010000" in
@@ -233,12 +233,12 @@
     {2 Misc}
 
     There are few useful constructions that either a part of RTL
-    (if_, foreach) or simplify code (when_, ifnot, switch).
+    ([if_], [foreach]) or simplify code ([when_], [ifnot], [switch]).
     Also, one needs to register a lifted function, so
     it could be called when appropriative instruction will be
     encountered. There are two operators for this purpose:
-    - (>>) - just registers a function (see example below)
-    - (>.) - does the same, plus does some extra job (see
+    - [(>>)] - just registers a function (see example below)
+    - [(>.)] - does the same, plus does some extra job (see
              a description below)
 
     {2 Comlete example}
@@ -262,7 +262,7 @@
      15     "SomeSortOfAdd"  >> sort_of_add;
     ]}
 
-    There is a lifter for instruction "SomeSortOfAdd". It's required
+    There is a lifter for instruction [SomeSortOfAdd]. It's required
     it has two arguments: cpu model and operand array.
     An author read an ISA of Power PC architecture carefully and
     figured out that this instruction has four operands, and that the
@@ -276,24 +276,24 @@
     written to [rc] register.
 
     How did author implement lifter for this instruction:
-    line  1    : defined a function with two arguments
-    lines 2-5  : parsed instruction operands
-    lines 6-8  : defined useful constants
-    lines 9-13 : wrote RTL code for this instruction.
-    lines 14-15   : registered lifter for this instruction
+    - [line 1] - defined a function with two arguments
+    - [lines 2-5] - parsed instruction operands
+    - [lines 6-8] - defined useful constants
+    - [lines 9-13] - wrote RTL code for this instruction.
+    - [lines 14-15] - registered lifter for this instruction
 
     What happens on each line of RTL code:
-    line 10: sum of signed [ra] and unsigned imm is a signed expression,
+    - [line 10]: sum of signed [ra] and unsigned imm is a signed expression,
              because one of the operands is signed. But an unsigned
              result is placed in [rt], since [rt] is unsigned too.
-    line 11: load from memory at address from [rt] is summed with 42
+    - [line 11]: load from memory at address from [rt] is summed with 42
              and assigned to variable [tm]. Note, there are two width
              extension under the hood: loaded halfword is extended to
              up to a word bitwidth (since it's a bigger bitwidth among
              sum operand) and than sum extended to a doubleword
              bitwidth with respect to a [tm] sign. So, the result of
              this sum is treated as a signed.
-    line 12: Logical shift returns an unsigned result which is summed
+    - [line 12]: Logical shift returns an unsigned result which is summed
              with unsigned value. The interesting part is that it's
              safe to add one-bit value (flag is one bit width) and a
              doubleword.
@@ -388,8 +388,8 @@ module Std : sig
   (** [of_string] - constructs an expression from string.
       String must be either in a decimal, binary, octal or hexadecimal format.
       Bitwidth of an expression is defined as following:
-      if format is decimal then bitwidth = number of significant bits
-      else bitwidth = number of all lister bits in a string.
+      if format is decimal then bitwidth equals to a number of significant bits
+      else bitwidth equals to a number of all listed bits in a string.
       Examples:
        - bitwidth of [unsigned of_string "0b00"] is eqauls to 2
        - bitwidth of [unsigned of_string "0o474"] is eqauls to 9;
