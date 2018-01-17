@@ -10,7 +10,7 @@ module Make_CPU(Env : ModeVars) = struct
   let gpr = Var.Set.of_list @@ [
       rax; rcx; rdx; rsi; rdi;
       rbx; rbp; rsp;
-    ] @ Array.to_list nums
+    ] @ Array.to_list r
 
   let flags = Var.Set.of_list [
       cf; pf; af; zf; sf; oF; df

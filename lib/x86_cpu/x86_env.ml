@@ -120,8 +120,9 @@ module type ModeVars = sig
   val mem : var
 
   (* r8 -> r15 *)
-  val nums : var array
   val r : var array
+  val nums : var array
+  val ymms : var array
 end
 
 module R32 = struct
@@ -151,9 +152,14 @@ module R32 = struct
 
   let mem = mem.v32
 
-  (* r8 -> r15 *)
-  let nums = Array.init 8 ~f:(fun i -> Var.create "ERROR" (Type.imm 0) )
-  let r = nums
+  (* No r registers in x86 32-bit mode *)
+  let r = [||]
+
+  let nums = r
+
+  (* Only 8 YMM/XMM registers in x86 32-bit mode *)
+  let ymms = Array.sub ymms 0 8
+
 end
 
 module R64 = struct
@@ -184,8 +190,13 @@ module R64 = struct
   let mem = mem.v64
 
   (* r8 -> r15 *)
-  let nums = Array.init 8 ~f:(fun i -> Var.create (Printf.sprintf "R%d" (i+8)) reg64_t)
-  let r = nums
+  let r = Array.init 8 ~f:(fun i -> Var.create (Printf.sprintf "R%d" (i+8)) reg64_t)
+
+  let nums = r
+
+  (* All YMM/XMM registers are available *)
+  let ymms = ymms
+
 end
 
 let vars_of_mode mode =
