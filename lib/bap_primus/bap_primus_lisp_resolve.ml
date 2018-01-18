@@ -24,8 +24,14 @@ type resolution = {
   stage5 : stage; (* overload *)
 }
 
+
 type ('t,'a,'b) resolver =
-  Program.t -> 't Program.item -> string -> 'a -> ('t Def.t * 'b,resolution) result option
+  Program.t -> 't Program.item -> string -> 'a ->
+  ('b,resolution) result option
+
+type ('t,'a,'b) one = ('t,'a,'t Def.t * 'b) resolver
+type ('t,'a,'b) many = ('t,'a,('t Def.t * 'b) list) resolver
+
 
 type exn += Failed of string * Context.t * resolution
 
@@ -101,14 +107,34 @@ let overload_macro code (s3) =
   | ((n,_,_) as c) :: cs -> List.filter_map (c::cs) ~f:(fun (m,d,bs) ->
       Option.some_if (n = m) (d,bs))
 
+let all_bindings f = 
+  List.for_all ~f:(fun (v,x) ->
+      f v.data.typ x)
 
 let overload_defun typechecks args s3 =
   let open Option in
   List.filter_map s3 ~f:(fun def ->
       List.zip (Def.Func.args def) args >>= fun bs ->
-      if List.for_all ~f:(fun (v,x) ->
-          typechecks v.data.typ x) bs
+      if all_bindings typechecks bs
       then Some (def,bs) else None)
+
+let zip_tail xs ys = 
+  let rec zip zs xs ys = match xs,ys with
+    | [],[] -> zs, None
+    | x,[] -> zs, Some (First x)
+    | [],y -> zs, Some (Second y)
+    | x :: xs, y :: ys -> zip ((x,y)::zs) xs ys in
+  let zs,tail = zip [] xs ys in
+  List.rev zs,tail
+
+
+let overload_meth typechecks args s3 = 
+  List.filter_map s3 ~f:(fun m -> 
+      match zip_tail (Def.Meth.args m) args with
+      | bs,None 
+      | bs, Some (Second _) when all_bindings typechecks bs -> 
+        Some (m,bs)
+      | _ -> None)
 
 let overload_primitive s3 = List.map s3 ~f:(fun s -> s,())
 
@@ -117,7 +143,15 @@ let locs prog defs =
   List.map defs ~f:(fun def ->
       Source.loc src def.id) |> Loc.Set.of_list
 
-let run namespace overload prog item (name : string) =
+let one = function
+  | [x] -> Some x
+  | _ -> None
+
+let many = function
+  | [] -> None
+  | xs -> Some xs
+
+let run choose namespace overload prog item name =
   let ctxts = Program.context prog in
   let defs = Program.get prog item in
   let s1 = stage1 namespace defs name in
@@ -125,9 +159,9 @@ let run namespace overload prog item (name : string) =
   let s3 = stage3 s2 in
   let s4 = stage4 s3 in
   let s5 = overload s4 in
-  match s5 with
-  | [f] -> Some (Ok f)
-  | _ -> match s1 with
+  match choose s5 with
+  | Some f -> Some (Ok f)
+  | None -> match s1 with
     | [] -> None
     | _ ->  Some( Error {
         constr = ctxts;
@@ -139,19 +173,22 @@ let run namespace overload prog item (name : string) =
       })
 
 let extern typechecks prog item name args =
-  run externs (overload_defun typechecks args) prog item name
+  run one externs (overload_defun typechecks args) prog item name
 
 let defun typechecks prog item name args =
-  run interns (overload_defun typechecks args) prog item name
+  run one interns (overload_defun typechecks args) prog item name
+
+let meth typechecks prog item name args =
+  run many interns (overload_meth typechecks args) prog item name
 
 let macro prog item name code =
-  run interns (overload_macro code) prog item name
+  run one interns (overload_macro code) prog item name
 
 let primitive prog item name () =
-  run interns overload_primitive prog item name
+  run one interns overload_primitive prog item name
 
 let subst prog item name () =
-  run interns overload_primitive prog item name
+  run one interns overload_primitive prog item name
 
 let const = subst
 

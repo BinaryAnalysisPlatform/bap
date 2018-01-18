@@ -1919,6 +1919,8 @@ ident ::= ?any atom that is not recognized as a <word>?
       (** an abstract type representing a lisp program  *)
       type program
 
+      type message
+
 
       (** Primus Lisp program loader  *)
       module Load : sig
@@ -1985,6 +1987,10 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_error : Format.formatter -> error -> unit
       end
 
+      module Message : sig 
+        type t = message
+        val pp : Format.formatter -> t -> unit
+      end
 
       (** Machine independent closure.
 
@@ -2001,7 +2007,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       (** a closure packed as an OCaml value *)
       type closure = (module Closure)
 
-      (* undocumented since it is deprecated *)
+      (* dedocumented due to deprecation *)
       module Primitive : sig
         type 'a t
         val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
@@ -2012,16 +2018,12 @@ ident ::= ?any atom that is not recognized as a <word>?
         val defs : unit -> value Machine.t Primitive.t list
       end
 
-      (** a list of priomitives.  *)
+      (** a list of primitives.  *)
       type primitives = (module Primitives)
-
       type exn += Runtime_error of string
 
 
-      (** [message] occurs every time the Lisp Machine produces a
-          message using the [msg] primitive.   *)
-      val message : string observation
-
+      val message : message observation
 
       (** Make(Machine) creates a Lisp machine embedded into the
           Primus [Machine].  *)
@@ -2033,7 +2035,7 @@ ident ::= ?any atom that is not recognized as a <word>?
         val link_program : program -> unit Machine.t
 
 
-        (** [progra] is the current Machine program.  *)
+        (** [program] is the current Machine program.  *)
         val program : program Machine.t
 
         (** [define ?docs name code] defines a lisp primitive with
@@ -2067,6 +2069,32 @@ ident ::= ?any atom that is not recognized as a <word>?
         val define : ?types:Type.signature ->
           ?docs:string -> string -> closure -> unit Machine.t
 
+
+        (** [signal ?params ?docs obs proj] defines a new signal.
+
+            Primus Observations are reflected onto Primus Lisp
+            signals. Each reflection is defined via the [signal]
+            operator that establishes a mapping between an observation
+            and a signal. 
+
+            After the signal is defined, every time the observation
+            [obs] is made, the signal [(signal args)] will be sent,
+            where [signal = Observation.name obs] and [args] is a
+            mapping from the observation value to a list of values.  
+
+            The signal will match with the observation name. Though
+            the same observation may produce signals with different
+            arities. 
+
+            @param params optional type specification
+
+            @param doc optional documentation string
+        *)
+        val signal :
+          ?params:Type.parameters ->
+          ?doc:string ->
+          'a observation ->
+          ('a -> value list Machine.t) -> unit Machine.t
 
         (** [failf msg a1 ... am ()] terminates a lisp machine, and
             correspondingly the Primus machine with the

@@ -12,6 +12,7 @@ end
 type 'a spec
 type 'a t = 'a spec indexed
 type func
+type meth
 type macro
 type subst
 type const
@@ -32,6 +33,13 @@ module Func : sig
   val args : func t -> var list
   val body : func t -> ast
   val with_body : func t -> ast -> func t
+end
+
+module Meth : sig 
+  val create : (var list -> ast -> tree -> meth t) def
+  val args : meth t -> var list
+  val body : meth t -> ast
+  val with_body : meth t -> ast -> meth t
 end
 
 module Macro : sig

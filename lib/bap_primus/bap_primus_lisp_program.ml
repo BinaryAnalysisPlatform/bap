@@ -23,6 +23,7 @@ type t = {
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
   defs : Def.func Def.t list;
+  mets : Def.meth Def.t list;
 } [@@deriving fields]
 
 type program = t
@@ -32,6 +33,7 @@ let empty = {
   sources = Source.empty;
   codes = [];
   defs = [];
+  mets = [];
   macros=[];
   substs=[];
   consts=[];
@@ -44,6 +46,7 @@ module Items = struct
   let subst = Fields.substs
   let const = Fields.consts
   let func = Fields.defs
+  let meth = Fields.mets
   let primitive = Fields.codes
 end
 

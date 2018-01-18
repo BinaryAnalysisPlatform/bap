@@ -1,3 +1,4 @@
+open Core_kernel
 open Bap.Std
 open Bap_primus.Std
 open Format
@@ -18,19 +19,58 @@ let dump_program prog =
   printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
   set_margin margin
 
+
+module Signals(Machine : Primus.Machine.S) = struct 
+  open Machine.Syntax
+  module Value = Primus.Value.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
+  module Lisp = Primus.Lisp.Make(Machine)
+
+  let value = Machine.return
+  let word = Value.of_word
+  let sym _ = Value.b0 
+
+  let one f x = [f x]
+  let pair (f,g) (x,y) = [f x; g y]
+
+  let cond j = match Jmp.cond j with
+    | Bil.Var v -> Env.get v
+    | Bil.Int x -> word x
+    | exp -> failwith "TCF violation" 
+
+
+  let jmp (cond,dst) j = [cond j;dst j]
+
+  let signal obs kind proj = 
+    Lisp.signal obs @@ fun arg -> 
+    Machine.List.all (proj kind arg)
+
+  let init = Machine.sequence Primus.Interpreter.[
+      signal loaded (value,value) pair;
+      signal stored (value,value) pair;
+      signal read  (sym,value) pair;
+      signal written (sym,value) pair;
+      signal pc_change word one;
+    ]
+
+end
+
 let main dump paths features project =
   let prog = load_program paths features project in
   if dump then dump_program prog;
 
   let module Loader(Machine : Primus.Machine.S) = struct
-    module Lisp = Primus.Lisp.Make(Machine)
     open Machine.Syntax
+    module Lisp = Primus.Lisp.Make(Machine)
+    module Signals = Signals(Machine)
 
     let print_message msg =
-      Machine.return (info "%s" msg)
+      Machine.return (info "%a" Primus.Lisp.Message.pp msg)
+
 
     let init () = Machine.sequence [
         Lisp.link_program prog;
+        Signals.init;
         Primus.Lisp.message >>> print_message;
       ]
   end in

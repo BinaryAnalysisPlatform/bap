@@ -26,6 +26,8 @@ type func = {
   body : ast;
 } [@@deriving fields]
 
+type meth = func
+
 type macro = {
   param : string list;
   subst : tree;
@@ -86,6 +88,8 @@ module Func = struct
   }
 
 end
+
+module Meth = Func
 
 module Macro = struct
   type error += Bad_subst of tree * tree list

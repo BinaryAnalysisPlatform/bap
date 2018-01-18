@@ -14,7 +14,7 @@ module Resolve = Bap_primus_lisp_resolve
 module Program = Bap_primus_lisp_program
 module Type = Bap_primus_lisp_type
 
-type defkind = Func | Macro | Const | Subst
+type defkind = Func | Macro | Const | Subst | Meth
 
 type format_error =
   | Expect_digit
@@ -293,6 +293,15 @@ module Parse = struct
       eq = tree.eq;
     } tree
 
+  let defmethod ?docs ?(attrs=[]) name p body prog gattrs tree =
+    let attrs = parse_declarations gattrs attrs in
+    let es = List.map ~f:(parse (constrained prog attrs)) body in
+    Program.add prog meth @@ Def.Meth.create ?docs ~attrs name (params p) {
+      data = Seq es;
+      id = tree.id;
+      eq = tree.eq;
+    } tree
+
   let defmacro ?docs ?(attrs=[]) name ps body prog gattrs tree =
     Program.add prog macro @@
     Def.Macro.create ?docs
@@ -320,6 +329,7 @@ module Parse = struct
       "defmacro";
       "defsubst";
       "defun";
+      "defmethod";
       "require";
     ]
 
@@ -366,6 +376,39 @@ module Parse = struct
       } ->
       defun name params body state gattrs s
     | {data=List ({data=Atom "defun"} :: _)} -> fail (Bad_def Func) s
+    | {data = List (
+        {data=Atom "defmethod"} ::
+        {data=Atom name} ::
+        params ::
+        {data=Atom docs} ::
+        {data=List ({data=Atom "declare"} :: attrs)} ::
+        body)
+      } when is_quoted docs ->
+      defmethod ~docs ~attrs name params body state gattrs s
+    | {data = List (
+        {data=Atom "defmethod"} ::
+        {data=Atom name} ::
+        params ::
+        {data=Atom docs} ::
+        body)
+      } when is_quoted docs ->
+      defmethod ~docs name params body state gattrs s
+    | {data = List (
+        {data=Atom "defmethod"} ::
+        {data=Atom name} ::
+        params ::
+        {data=List ({data=Atom "declare"} :: attrs)} ::
+        body)
+      } ->
+      defmethod ~attrs name params body state gattrs s
+    | {data = List (
+        {data=Atom "defmethod"} ::
+        {data=Atom name} ::
+        params ::
+        body)
+      } ->
+      defmethod name params body state gattrs s
+    | {data=List ({data=Atom "defmethod"} :: _)} -> fail (Bad_def Meth) s 
     | _ -> state
 
 
@@ -567,12 +610,14 @@ let string_of_form_syntax = function
 
 let string_of_defkind = function
   | Func -> "function"
+  | Meth -> "method"
   | Macro -> "macro"
   | Const -> "contant"
   | Subst -> "substitution"
 
 let string_of_def_syntax = function
   | Func  -> "(defun <ident> (<var> ...) [<docstring>] [<declarations>] <exp> ...)"
+  | Meth  -> "(defmethod <ident> (<var> ...) [<docstring>] [<declarations>] <exp> ..."
   | Macro -> "(defmacro <ident> (<ident> ...) [<docstring>] [<declarations>] <exp>)"
   | Const -> "(defconstant <ident> [<docstring>] [<declarations>] <atom>)"
   | Subst -> "(defsubst <ident> [<docstring>] [<declarations>] [:<syntax>] <atom> ...)"

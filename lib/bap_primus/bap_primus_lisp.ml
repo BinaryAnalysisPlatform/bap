@@ -117,10 +117,18 @@ let () = Exn.add_printer (function
     | _ -> None)
 
 
+type message = string
+
+module Message = struct 
+  type t = message
+  let pp = Format.pp_print_string
+end
+
 
 let message,new_message =
   Bap_primus_observation.provide
     ~inspect:sexp_of_string "lisp-message"
+
 
 module Trace = struct
   open Sexp
@@ -373,6 +381,21 @@ module Interpreter(Machine : Machine) = struct
     Machine.Local.update state (fun s -> {s with cur = exp.id}) >>= fun () ->
     eval exp
 
+  let eval_signal name args : unit Machine.t = 
+    Machine.Local.get state >>= fun s -> 
+    let res = 
+      Lisp.Resolve.meth Lisp.Check.value s.program meth name args in 
+    match res with
+    | None -> Machine.return ()
+    | Some (Error resolution) -> 
+      Machine.raise (Unresolved (name,resolution))
+    | Some (Ok mets) -> 
+      Machine.List.iter mets ~f:(fun (met,bs) -> 
+          Vars.bindings bs >>= fun bs ->
+          Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
+          eval_exp (Lisp.Def.Meth.body met) >>= fun _ ->
+          Machine.Local.update state ~f:(Vars.pop (List.length bs)))
+
 end
 
 module Symdex = struct 
@@ -399,6 +422,7 @@ end
 
 module Make(Machine : Machine) = struct
   open Machine.Syntax
+  module Self = Interpreter(Machine)
   module Linker = Bap_primus_linker.Make(Machine)
   module Eval = Bap_primus_interpreter.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
@@ -528,6 +552,11 @@ module Make(Machine : Machine) = struct
     let types = Option.map types ~f:(fun t -> t arch) in
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
+
+  let signal ?params ?doc obs proj =
+    let name = Bap_primus_observation.name obs in
+    Machine.Observation.observe obs (fun x -> 
+        proj x >>= Self.eval_signal name)
 
   (* this is a deprecated interface for the backward compatibility,
      we can't efficiently translate a list of primitives to the code

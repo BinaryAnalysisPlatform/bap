@@ -4,14 +4,19 @@ open Format
 open Bap_primus_types
 
 type program
+type message
 
-val message : string observation
 
 module Load : sig
   type error
   val program : ?paths:string list -> Project.t -> string list -> (program,error) result
   val pp_program : Format.formatter -> program -> unit
   val pp_error : Format.formatter -> error -> unit
+end
+
+module Message : sig 
+  type  t = message
+  val pp : Format.formatter -> message -> unit
 end
 
 module Type : sig
@@ -61,6 +66,9 @@ module Primitive : sig
   val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
 end
 
+val message : message observation
+
+
 module type Primitives = functor (Machine : Machine) ->  sig
   val defs : unit -> value Machine.t Primitive.t list
 end
@@ -76,6 +84,12 @@ module Make (Machine : Machine) : sig
   val program : program Machine.t
 
   val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
+
+  val signal :
+    ?params:Type.parameters ->
+    ?doc:string ->
+    'a observation ->
+    ('a -> value list Machine.t) -> unit Machine.t
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
