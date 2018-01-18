@@ -32,13 +32,13 @@
 
 (defmacro read-word (t p)
   "reads a word of type T at address P"
-  (let ((p p)
+  (let ((r p)
         (x (memory-read p))
         (n (-1 (sizeof t))))
     (while n
-      (incr p)
+      (incr r)
       (decr n)
-      (endian cat x (memory-read p)))
+      (set x (endian cat x (memory-read r))))
     x))
 
 (defmacro write-word (t p x)
