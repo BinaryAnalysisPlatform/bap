@@ -1992,6 +1992,13 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp : Format.formatter -> t -> unit
       end
 
+      module Symbol : sig 
+        module Make(Machine : Machine.S) : sig 
+          val to_value : string -> value Machine.t
+          val of_value : value -> string Machine.t
+        end
+      end
+
       (** Machine independent closure.
 
           A closure is an anonymous function, that performs some
@@ -2111,6 +2118,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       val init : ?log:Format.formatter -> ?paths:string list -> string list -> unit
       [@@deprecated "[since 2017-12] use the Machine interface instead"]
     end
+
 
 
     (** Primus error.  *)

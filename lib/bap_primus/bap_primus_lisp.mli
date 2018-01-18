@@ -76,6 +76,13 @@ end
 type primitives = (module Primitives)
 type exn += Runtime_error of string
 
+module Symbol : sig 
+  module Make(Machine : Machine) : sig 
+    val to_value : string -> value Machine.t
+    val of_value : value -> string Machine.t
+  end
+end
+
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
 

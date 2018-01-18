@@ -580,6 +580,22 @@ module Make(Machine : Machine) = struct
         link_primitive)
 end
 
+module Symbol = struct 
+  module Make(Machine : Machine) = struct 
+    open Machine.Syntax
+
+    let to_value sym = 
+      Machine.Local.get state >>= fun s -> 
+      let index = Index.register s.index sym in
+      Machine.Local.put state {s with index} >>| fun () -> 
+      Index.key index sym
+
+    let of_value value = 
+      Machine.Local.get state >>| fun {index} -> 
+      Index.string index value
+  end
+end
+
 let init ?(log=std_formatter) ?(paths=[]) features  =
   failwith "Lisp library no longer requires initialization"
 

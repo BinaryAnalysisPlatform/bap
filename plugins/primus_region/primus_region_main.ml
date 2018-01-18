@@ -39,7 +39,9 @@ end
 
 module Create(Machine : Primus.Machine.S) = struct 
   include Pre(Machine)
-  let run [reg; lower; upper] =
+  [@@@warning "-P"]
+
+  let run  [reg; lower; upper] =
     Machine.Local.update state ~f:(fun {regions} -> {
           regions = Map.update regions reg ~f:(function
               | None -> Regions.singleton {lower; upper} ()
@@ -49,6 +51,8 @@ end
 
 module Contains(Machine : Primus.Machine.S) = struct 
   include Pre(Machine)
+  [@@@warning "-P"]
+
   let run [reg; addr] =
     Machine.Local.get state >>= (fun {regions} -> 
         match Map.find regions reg with
@@ -60,6 +64,7 @@ end
 
 module Move(Machine : Primus.Machine.S) = struct 
   include Pre(Machine)
+  [@@@warning "-P"]
   let run [dst; src; addr] = 
     Machine.Local.get state >>= fun {regions} -> 
     match Map.find regions src with
