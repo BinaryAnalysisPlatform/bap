@@ -194,8 +194,11 @@ let resolve_jmp ~local addrs jmp =
       ~f:(fun id -> Ir_jmp.with_kind jmp (make_kind id)) in
   match Ir_jmp.kind jmp with
   | Ret _ | Int _ -> jmp
-  | Goto (Indirect (Bil.Int addr)) when local ->
-    update_kind jmp addr (fun id -> Goto (Direct id))
+  | Goto (Indirect (Bil.Int addr)) ->
+    update_kind jmp addr (fun id ->
+        if local then Goto (Direct id)
+        else
+          Call (Call.create ~target:(Direct id) ()))
   | Goto _ -> jmp
   | Call call ->
     let jmp,call = match Call.target call with
