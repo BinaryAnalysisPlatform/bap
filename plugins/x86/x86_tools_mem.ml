@@ -31,23 +31,26 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       disp : int;
     } [@@ deriving fields, sexp]
 
-    let create mem ~seg ~base ~scale ~index ~disp =
+    let create ?seg ?base ?scale ?index ~disp mem =
       let seg =
         let base = function
           | `FS -> RR.of_asm_exn `FS_BASE |> Option.some
           | `GS -> RR.of_asm_exn `GS_BASE |> Option.some
           | `CS | `DS | `ES | `SS -> None in
         let open X86_asm in
-        match X86_asm.Reg.decode seg with
+        let seg =
+          Option.value_map ~default:None ~f:X86_asm.Reg.decode seg in
+        match seg with
         | None -> None
         | Some (#Reg.segment as s) -> base s
         | Some r -> Error.failwiths "invalid segment" r
                       X86_asm.Reg.sexp_of_t in
-      Fields.create ~seg
-        ~base:(Base.create mem base)
-        ~scale:(Imm.to_int scale)
-        ~index:(RR.of_mc index)
-        ~disp:(Imm.to_int disp |> Option.value_exn)
+      let map = Option.value_map ~default:None in
+      let base = map ~f:(Base.create mem) base in
+      let scale = map ~f:Imm.to_int scale in
+      let index = map ~f:RR.of_mc index in
+      let disp = Imm.to_int disp |> Option.value_exn in
+      Fields.create ~seg ~base ~scale ~index ~disp
 
     let make_value reg =
       let size = Size.in_bits addr_size in
@@ -118,9 +121,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
     | Relative of Relative.t
     [@@ deriving variants]
 
-
-  let of_mem mem ~seg ~base ~scale ~index ~disp =
-    segment @@ Segment.create mem ~seg ~base ~scale ~index ~disp
+  let of_mem ?seg ?base ?scale ?index ~disp mem =
+    segment @@ Segment.create mem ?seg ?base ?scale ?index ~disp
 
   let of_offset imm =
     Relative.create imm |> relative

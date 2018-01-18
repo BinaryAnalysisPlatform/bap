@@ -315,7 +315,7 @@ let bits2genreg mode =
     | 5 -> rbp
     | 6 -> rsi
     | 7 -> rdi
-    | i when i >= 8 && i <= 15 -> nums.(i-8)
+    | i when i >= 8 && i <= 15 -> r.(i-8)
     | _ -> failwith "bits2genreg takes 4 bits"
 
 let reg2bits mode x =
@@ -335,18 +335,24 @@ let bits2segreg = function
 
 let bits2segrege b = bits2segreg b |> Bil.var
 
-let bits2ymm b = ymms.(b)
+(* select the right YMM var based on mode *)
+let bits2ymm mode b =
+  let ymms = match mode with
+    | X86 -> R32.ymms
+    | X8664 -> R64.ymms
+  in
+  ymms.(b)
 
-let bits2ymme b = bits2ymm b |> Bil.var
+let bits2ymme mode b = bits2ymm mode b |> Bil.var
 
-let bits2ymm128e b =
-  bits2ymme b |> Bil.(cast low (!!reg128_t))
+let bits2ymm128e mode b =
+  bits2ymme mode b |> Bil.(cast low (!!reg128_t))
 
-let bits2ymm64e b =
-  bits2ymme b |> Bil.(cast low (!!reg64_t))
+let bits2ymm64e mode b =
+  bits2ymme mode b |> Bil.(cast low (!!reg64_t))
 
-let bits2ymm32e b =
-  bits2ymme b |> Bil.(cast low (!!reg32_t))
+let bits2ymm32e mode b =
+  bits2ymme mode b |> Bil.(cast low (!!reg32_t))
 
 let bits2xmm = bits2ymm128e
 
@@ -370,7 +376,7 @@ let bits2reg8e mode ?(has_rex=false) b =
     b land 3 |> bits2reg32e mode |>
     Bil.(cast low (!!reg16_t)) |>  Bil.(cast high (!!reg8_t))
 
-let reg2xmm mode r = reg2bits mode r |> bits2xmm
+let reg2xmm mode r = reg2bits mode r |> bits2xmm mode
 
 (* effective addresses for 16-bit addressing *)
 let eaddr16 mode =
