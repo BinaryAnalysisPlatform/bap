@@ -140,9 +140,8 @@ let std cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let im = signed imm ops.(1) in
   let ra = signed cpu.reg ops.(2) in
-  let sh = unsigned const byte 2 in
   RTL.[
-    cpu.store (ra + (im lsl sh)) rs doubleword;
+    cpu.store (ra + im) rs doubleword;
   ]
 
 (** Fixed-point Store Doubleword with Update
@@ -153,10 +152,9 @@ let stdu cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let im = signed imm ops.(2) in
   let ra = signed cpu.reg ops.(3) in
-  let sh = unsigned const byte 2 in
   let ea = unsigned var doubleword in
   RTL.[
-    ea := ra + (im lsl sh);
+    ea := ra + im;
     cpu.store ea rs doubleword;
     ra := ea;
   ]

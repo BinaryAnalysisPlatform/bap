@@ -136,9 +136,8 @@ let lwa cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let im = signed imm ops.(1) in
   let ra = signed cpu.reg ops.(2) in
-  let sh = signed const byte 2 in
   RTL.[
-    rt := cpu.load (ra + (im lsl sh)) word;
+    rt := cpu.load (ra + im) word;
   ]
 
 (** Fixed-point Load Halfword/Word Algebraic Indexed
@@ -206,9 +205,8 @@ let ld cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let im = signed imm ops.(1) in
   let ra = signed cpu.reg ops.(2) in
-  let sh = unsigned const byte 2 in
   RTL.[
-    rt := cpu.load (ra + (im lsl sh)) doubleword;
+    rt := cpu.load (ra + im) doubleword;
   ]
 
 (** Fixed-point Load Dobuleword Indexed
@@ -231,10 +229,9 @@ let ldu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
-  let sh = unsigned const byte 2 in
   RTL.[
-    rt := cpu.load (ra + (im lsl sh)) doubleword;
-    ra := ra + (im lsl sh);
+    rt := cpu.load (ra + im) doubleword;
+    ra := ra + im;
   ]
 
 (** Fixed-point Load Dobuleword with Update Indexed
