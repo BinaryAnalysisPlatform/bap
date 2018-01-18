@@ -27,24 +27,20 @@ end
 module Insn_semantics(Tools : X86_tools.S) = struct
   open Tools
 
-  let mem_to_reg reg off =
-    let mem = MM.of_offset off in
-    Ok [MM.load mem ~size:(RR.width reg) |> RR.set reg ]
-
-  let reg_to_mem reg off =
-    let mem = MM.of_offset off in
-    Ok [RR.get reg |> MM.store mem ~size:(RR.width reg)]
-
-  let apply reg off = function
-    | Mem_to_reg -> mem_to_reg reg off
-    | Reg_to_mem -> reg_to_mem reg off
+  let apply mem seg disp reg sem =
+    let mem = MM.of_mem ?seg ~disp mem in
+    match sem with
+    | Mem_to_reg ->
+      Ok [MM.load mem ~size:(RR.width reg) |> RR.set reg ]
+    | Reg_to_mem ->
+      Ok [RR.get reg |> MM.store mem ~size:(RR.width reg)]
 
   let lift asm sem allow_nil =
     let reg = RR.of_asm_exn asm in
     if allow_nil then
-      X86_operands.ir ~f:(fun _mem off _reg -> apply reg off sem)
+      X86_operands.ir ~f:(fun mem off seg -> apply mem (Some seg) off reg sem)
     else
-      X86_operands.i ~f:(fun _mem off -> apply reg off sem)
+      X86_operands.i ~f:(fun mem off -> apply mem None off reg sem)
 end
 
 module Ver_34 = struct
