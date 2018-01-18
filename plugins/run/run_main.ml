@@ -163,6 +163,10 @@ let main {Config.get=(!)} proj =
     info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
     proj
 
+let deps = [
+  "primus-lisp"; 
+  "trivial-condition-form"
+]
+
 let () =
-  Config.when_ready (fun conf ->
-      Project.register_pass ~deps:["primus-lisp"] (main conf))
+  Config.when_ready (fun conf -> Project.register_pass ~deps (main conf))

@@ -3,8 +3,8 @@ open Bap.Std
 open Monads.Std
 open Bap_primus.Std
 open Format
-
 include Self()
+
 (*
 
    In a general case a block is terminated by a sequence of jumps:
@@ -36,6 +36,7 @@ include Self()
 
 
 *)
+
 type assn = {
   use : tid;
   var : var;
@@ -63,39 +64,6 @@ let state = Primus.Machine.State.declare
     ~name:"conflicts"
     ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
     (fun _ -> {conflicts=[]; forkpoints = Tid.Set.empty})
-
-
-(** Trivial Condition Form (TCF) transformation.
-
-    In the TCF a condition expression must be either a variable or a
-    constant. The transformations detect non-trivial condition
-    expressions and bind them to variables whose definitions are
-    pushed to the block definition list. *)
-module TCF = struct
-  let blk_without_jmps = Term.filter jmp_t ~f:(fun _ -> false)
-  let new_var () = Var.create ~is_virtual:true ~fresh:true "c" bool_t
-
-  (* Pre: number of jumps is greater than 1
-     post: number of jumps is the same, each jump is in TCF.*)
-  let blk blk =
-    Term.enum jmp_t blk |>
-    Seq.fold ~init:(blk_without_jmps blk) ~f:(fun blk jmp ->
-        match Jmp.cond jmp with
-        | Bil.Int _ | Bil.Var _ -> Term.append jmp_t blk jmp
-        | cond ->
-          let var = new_var () in
-          let def = Def.create var cond in
-          let blk = Term.append def_t blk def in
-          let jmp = Jmp.with_cond jmp (Bil.var var) in
-          Term.append jmp_t blk jmp)
-
-  let sub = Term.map blk_t ~f:(fun b ->
-      if Term.length jmp_t b < 2 then b else blk b)
-
-  let prog = Term.map sub_t ~f:sub
-
-  let proj p = Project.with_program p @@ prog @@ Project.program p
-end
 
 let neg = List.map ~f:(fun assn -> {assn with res = not assn.res})
 
@@ -203,8 +171,6 @@ module Main(Machine : Primus.Machine.S) = struct
     | true -> Machine.return ()
 
   let init () =
-    info "translating the program into the Trivial Condition Form (TCF)";
-    Machine.update TCF.proj >>= fun () ->
     Primus.Interpreter.loading >>> make_loadable >>= fun () ->
     Primus.Interpreter.storing >>> make_writable >>= fun () ->
 

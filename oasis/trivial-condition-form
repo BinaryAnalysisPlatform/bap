@@ -1,0 +1,13 @@
+Flag trivial_condition_form
+  Description: Build trivial_condition_form plugin
+  Default: false
+
+Library trivial_condition_form_plugin
+  Build$:           flag(everything) || flag(trivial_condition_form)
+  Path:             plugins/trivial_condition_form
+  FindlibName:      bap-plugin-trivial_condition_form
+  CompiledObject:   best
+  BuildDepends:     bap
+  Modules:          Trivial_condition_form_main
+  XMETADescription: eliminates complex conditionals in branches
+  XMETAExtraLines:  tags="pass"
