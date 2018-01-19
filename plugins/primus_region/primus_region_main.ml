@@ -89,7 +89,7 @@ module Main(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
   open Primus.Lisp.Type.Spec 
   let def name types closure docs =
-    Lisp.define ~types name closure 
+    Lisp.define ~docs ~types name closure 
   let init () = 
     Machine.sequence [
       def "region-create" (tuple [sym; int; int] @-> sym)
