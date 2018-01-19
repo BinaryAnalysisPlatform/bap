@@ -73,6 +73,11 @@ let unqoute s =
   then String.sub ~pos:1 ~len:(String.length s - 2) s
   else s
 
+let symbol s = 
+  if is_symbol s 
+  then String.subo ~pos:1 s
+  else s
+
 module Parse = struct
   open Program.Items
 
@@ -127,7 +132,7 @@ module Parse = struct
         | c    -> parse (push_lit (unescape off c)) nil in
       let exp parse = function
         | c when Char.is_digit c -> parse (push_pos c) nil
-        | c -> fail Expect_digit off in
+        | _ -> fail Expect_digit off in
       let step push state = parse (off+1) (push spec) state in
       if Int.(off < String.length fmt) then match state with
         | `Lit xs -> lit step xs fmt.[off]
@@ -199,7 +204,7 @@ module Parse = struct
           | Some form -> form exps in
 
       let sym ({id;eq;data=r} as s)  = 
-        if is_symbol r then cons (Sym s)
+        if is_symbol r then cons (Sym { s with data = symbol s.data})
         else match Var.read id eq r with
           | Error e -> fail (Bad_var_literal e) tree
           | Ok v -> cons (Var v) in

@@ -54,8 +54,7 @@ module Signals(Machine : Primus.Machine.S) = struct
   let value = Machine.return
   let word = Value.of_word
 
-  (* ok, it is the parser, who should remove the ticks *)
-  let sym x = Symbol.to_value ("'"^x)
+  let sym x = Symbol.to_value x
   let var v = sym (Var.name v)
 
   let one f x = [f x]
