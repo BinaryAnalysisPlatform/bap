@@ -48,9 +48,9 @@ module Persistent = struct
     let register idx str = 
       if Map.mem idx.keys str then idx
       else 
-        let key = Key.succ @@ match Map.max_elt idx.keys with
+        let key = Key.succ @@ match Map.max_elt idx.strings with
           | None -> Key.null 
-          | Some (_,k) -> k in
+          | Some (k,_) -> k in
         {
           strings = Map.add idx.strings ~key ~data:str;
           keys = Map.add idx.keys ~key:str ~data:key
