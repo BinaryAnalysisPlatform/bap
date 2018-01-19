@@ -95,27 +95,65 @@ let process options project =
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch project)
-      | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
+      | `stdout,fmt,ver ->
+        Project.Io.show ~fmt ?ver project)
+
+let filename_info filename =
+  let rindex ?from what = match from with
+    | None -> String.rindex filename what
+    | Some ind -> String.rindex_from filename ind what in
+  let substr_from ?len pos = String.subo ~pos ?len filename in
+  let get_dot_ind dash_ind = match dash_ind with
+    | None -> rindex '.'
+    | Some dash_ind -> match rindex ~from:dash_ind '.' with
+      | None -> rindex '.'
+      | Some ind -> Some ind in
+  let dash_ind = rindex '-' in
+  match get_dot_ind dash_ind, dash_ind with
+  | Some dot, Some dash when dot < dash ->
+    let ver = substr_from (dash + 1) in
+    let fmt = substr_from ~len:(dash - dot - 1) (dot + 1) in
+    Some fmt, Some ver
+  | Some dot, _ ->
+    Some (substr_from (dot + 1)), None
+  | _ -> None, None
+
+let fmt filename =
+  let parse = fst Bap_fmt_spec.t in
+  let fmt =
+    match List.rev @@  String.split ~on:'.' name with
+    | fmt :: _ -> fmt
+    | _ -> name in
+  match parse fmt with
+  | `Error _ -> None, None
+  | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let main o =
-  let digest = digest o in
-  let project = match Project.Cache.load digest with
+  let make input =
+    let rooter = rooter o
+    and brancher = brancher o
+    and reconstructor = reconstructor o
+    and symbolizer = symbolizer o in
+    Project.create input ~disassembler:o.disassembler
+      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    | Error err -> raise (Failed_to_create_project err)
+    | Ok project ->
+      Project.Cache.save (digest o) project;
+      project in
+  let load_from_file () =
+    let fmt,ver = fmt o.filename in
+    In_channel.with_file o.filename
+      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
+  let project = match Project.Cache.load (digest o) with
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None ->
-      let rooter = rooter o
-      and brancher = brancher o
-      and reconstructor = reconstructor o
-      and symbolizer = symbolizer o in
-      let input =
+    | None -> match o.source with
+      | `File _ -> load_from_file ()
+      | `Memory arch -> make @@
+        Project.Input.binary arch ~filename:o.filename
+      | `Binary -> make @@
         Project.Input.file ~loader:o.loader ~filename: o.filename in
-      Project.create input ~disassembler:o.disassembler
-        ?brancher ?rooter ?symbolizer ?reconstructor  |> function
-      | Error err -> raise (Failed_to_create_project err)
-      | Ok project ->
-        Project.Cache.save digest project;
-        project in
   process o project
 
 let program_info =
