@@ -4,7 +4,12 @@ open Bap_primus.Std
 open Format
 include Self()
 
+let deps = [
+  "trivial-condition-form"
+]
+
 module Lisp_config = Primus_lisp_config
+
 
 let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
@@ -19,16 +24,39 @@ let dump_program prog =
   printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
   set_margin margin
 
+type state = {
+  addrs : addr Tid.Map.t;
+}
+
+let update_addr t m = match Term.get_attr t address with
+  | None -> m
+  | Some addr -> Map.add m ~key:(Term.tid t) ~data:addr
+
+let compute_addresses prog = (object
+  inherit [addr Tid.Map.t] Term.visitor
+  method! enter_sub = update_addr
+  method! enter_blk = update_addr
+end)#run prog Tid.Map.empty
+
+let state = Primus.Machine.State.declare
+    ~inspect:sexp_of_opaque
+    ~uuid:"23D4C1C4-784E-42DC-B8C9-B4C4268B0688"
+    ~name:"stdlib-signals"
+    (fun proj -> {addrs = compute_addresses (Project.program proj)})
 
 module Signals(Machine : Primus.Machine.S) = struct 
   open Machine.Syntax
   module Value = Primus.Value.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
+  module Symbol = Primus.Lisp.Symbol.Make(Machine)
 
   let value = Machine.return
   let word = Value.of_word
-  let sym _ = Value.b0 
+
+  (* ok, it is the parser, who should remove the ticks *)
+  let sym x = Symbol.to_value ("'"^x)
+  let var v = sym (Var.name v)
 
   let one f x = [f x]
   let pair (f,g) (x,y) = [f x; g y]
@@ -36,10 +64,35 @@ module Signals(Machine : Primus.Machine.S) = struct
   let cond j = match Jmp.cond j with
     | Bil.Var v -> Env.get v
     | Bil.Int x -> word x
-    | exp -> failwith "TCF violation" 
-
+    | _ -> failwith "TCF violation" 
 
   let jmp (cond,dst) j = [cond j;dst j]
+
+  let name = Value.b0
+  let args = []
+
+  let parameters name args = 
+    sym name :: 
+    List.map args ~f:Machine.return
+
+  let call make_pars (name,args) = make_pars name args
+
+  let label j = match Jmp.kind j with
+    | Call c -> Some (Call.target c)
+    | Goto l | Ret l -> Some l
+    | Int _  -> None
+
+  let addr j = match label j with
+    | None -> Machine.return None
+    | Some (Direct tid) -> 
+      Machine.Local.get state >>| fun {addrs} -> 
+      Map.find addrs tid
+    | Some (Indirect (Bil.Int x)) -> Machine.return (Some x)
+    | _ -> Machine.return None
+
+  let dst j = addr j >>= function
+    | None -> Value.b0
+    | Some x -> word x
 
   let signal obs kind proj = 
     Lisp.signal obs @@ fun arg -> 
@@ -48,9 +101,12 @@ module Signals(Machine : Primus.Machine.S) = struct
   let init = Machine.sequence Primus.Interpreter.[
       signal loaded (value,value) pair;
       signal stored (value,value) pair;
-      signal read  (sym,value) pair;
-      signal written (sym,value) pair;
+      signal read  (var,value) pair;
+      signal written (var,value) pair;
       signal pc_change word one;
+      signal enter_jmp (cond,dst) jmp;
+      signal Primus.Linker.Trace.call parameters call;
+      signal Primus.Linker.Trace.return parameters call;
     ]
 
 end

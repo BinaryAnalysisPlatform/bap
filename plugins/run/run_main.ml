@@ -122,7 +122,7 @@ let run = function
           then Machine.return ()
           else
             Machine.switch pid >>= fun () ->
-            Machine.current () >>= fun xid ->
+            Machine.current () >>= fun _id ->
             exec x
         else Machine.return ()) >>= fun () ->
     Machine.current () >>= fun id ->
@@ -137,8 +137,6 @@ let pp_var ppf v =
 let typecheck =
   Lisp.program >>= fun prog ->
   Env.all >>| fun vars ->
-  eprintf "Global variables are: @[<v>%a@]@\n%!"
-    (pp_print_list pp_var) (Seq.to_list vars);
   match Primus.Lisp.Type.check vars prog with
   | [] -> info "The Lisp Machine program is well-typed"
   | xs -> 

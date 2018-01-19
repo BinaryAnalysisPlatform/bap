@@ -147,9 +147,7 @@ let one = function
   | [x] -> Some x
   | _ -> None
 
-let many = function
-  | [] -> None
-  | xs -> Some xs
+let many xs = Some xs
 
 let run choose namespace overload prog item name =
   let ctxts = Program.context prog in

@@ -24,6 +24,8 @@ open Bap_primus_lisp_types
 open Bap_primus_lisp_attributes
 open Lisp.Program.Items
 
+module Pos = Bap_primus_pos
+
 module Index = Strings.Index.Persistent.Make(struct 
     include Bap_primus_value
     let null = {
@@ -130,29 +132,7 @@ let message,new_message =
     ~inspect:sexp_of_string "lisp-message"
 
 
-module Trace = struct
-  open Sexp
-  module Observation = Bap_primus_observation
-  let sexp_of_value {value=x} =
-    let v = Format.asprintf "%a" Word.pp_hex x in
-    Atom v
-  let sexp_of_binding (_,x) = sexp_of_value x
-
-  let sexp_of_enter (def,bs) =
-    List (Atom (Lisp.Def.name def) :: List.map bs ~f:sexp_of_binding)
-
-  let sexp_of_leave (call,result) =
-    List (Atom "#result-of" ::
-          sexp_of_enter call ::
-          [sexp_of_value result])
-
-  let enter,entered =
-    Observation.provide ~inspect:sexp_of_enter "lisp-call"
-
-  let leave,left =
-    Observation.provide ~inspect:sexp_of_leave "lisp-return"
-
-end
+module Trace = Bap_primus_linker.Trace
 
 
 module Interpreter(Machine : Machine) = struct
@@ -165,8 +145,6 @@ module Interpreter(Machine : Machine) = struct
   module Vars = Locals(Machine)
 
   include Errors(Machine)
-
-
 
   let say fmt =
     ksprintf (Machine.Observation.make new_message) fmt
@@ -209,6 +187,9 @@ module Interpreter(Machine : Machine) = struct
       Eval.set sp >>= fun () ->
       Machine.return (Some (sp,sp_value))
 
+  (* we won't notify linker about a call, since the callee will
+     notify it itself. Basically, it is the responsibility of a
+     callee to register itself as a call, if it is a call. *)
   let eval_sub : value list -> 'x = function
     | [] -> failf "invoke-subroutine: requires at least one argument" ()
     | sub_addr :: sub_args ->
@@ -251,6 +232,35 @@ module Interpreter(Machine : Machine) = struct
         | None -> Eval.const Word.b0
         | Some rval -> Machine.return rval
 
+
+  let is_external_call name def = 
+    match Attribute.Set.get (Lisp.Def.attributes def) External.t with
+    | None -> false
+    | Some names -> List.mem ~equal:String.equal names name
+
+  let notify_when cond obs name args = 
+    if cond 
+    then Machine.Observation.make obs (name,args)
+    else Machine.return ()
+
+  (* Still an open question. Shall we register an call to an external
+     function, that is done not directly from a program, but
+     internally from other lisp function?
+
+     Pros: a call to an external function is an effect, i.e., if a
+     function implementation calls malloc, then it comes directly from
+     the implementation. 
+
+     Cons: the same, though it is an effect, it is not really present
+     in a program and becomes an assumption that is rather hidden. For
+     example, we might assume that a function calls malloc, as our
+     implementation does this, though an actual implementation just
+     uses static memory, or relies on a custom allocator.
+
+     So far, we will register all calls to externals when the happen
+     inside the Lisp interpreter since this looks more conservative,
+     though, of course, it depends on a particular policy.
+  *)
   let rec eval_lisp name args : value Machine.t =
     Machine.Local.get state >>= fun s ->
     Lisp.Resolve.defun Lisp.Check.value s.program func name args |>
@@ -259,15 +269,15 @@ module Interpreter(Machine : Machine) = struct
     | Some (Error resolution) ->
       Machine.raise (Unresolved (name,resolution))
     | Some (Ok (fn,bs)) ->
+      let is_external = is_external_call name fn in
       Vars.bindings bs >>= fun bs ->
       Eval.const Word.b0 >>= fun init ->
-      Machine.Observation.make Bap_primus_linker.will_exec (`symbol name) >>= fun () ->
+      notify_when is_external Trace.call_entered name args >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
       Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
-      Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
-      Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+      notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
       eval_advices Advice.After r name args
 
   and eval_advices stage init primary args =
@@ -288,7 +298,7 @@ module Interpreter(Machine : Machine) = struct
     Machine.Local.get state >>= fun {program} ->
     match Lisp.Resolve.primitive program primitive name () with
     | None -> failf "unresolved primitive %s" name ()
-    | Some (Error err) -> failf "conflicting primitive %s" name ()
+    | Some (Error _) -> failf "conflicting primitive %s" name ()
     | Some (Ok (code,())) ->
       let module Body = (val (Lisp.Def.Closure.body code)) in
       let module Code = Body(Machine) in
@@ -335,7 +345,7 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v =
-      Machine.Local.get state >>= fun {env; width} ->
+      Machine.Local.get state >>= fun {env} ->
       Vars.of_lisp v >>= fun v ->
       match List.Assoc.find ~equal:Var.equal env v with
       | Some w -> Machine.return w
@@ -413,10 +423,13 @@ module Symdex = struct
     | Dynamic _ -> idx 
     | Static (_,x) -> index_ast idx x
 
+
+  let asts prog = 
+    List.map ~f:Lisp.Def.Func.body (Lisp.Program.get prog func) @
+    List.map ~f:Lisp.Def.Meth.body (Lisp.Program.get prog meth) 
+
   let of_prog prog = 
-    Lisp.Program.get prog func |>
-    List.fold ~init:Index.empty ~f:(fun idx def -> 
-        index_ast idx (Lisp.Def.Func.body def))
+    List.fold (asts prog) ~init:Index.empty ~f:index_ast
 end 
 
 
@@ -457,7 +470,7 @@ module Make(Machine : Machine) = struct
         args,ret,tid,addr
 
 
-  let link_feature (name,defs) =
+  let link_feature (name,_defs) =
     Machine.get () >>= fun proj ->
     Machine.Local.get state >>= fun s ->
     let args,ret,tid,addr = find_sub (Project.program proj) name in
@@ -495,17 +508,16 @@ module Make(Machine : Machine) = struct
             | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
         let exec =
-          Machine.get () >>= fun ctxt ->
           eval_args >>= fun bs ->
           let args = List.map ~f:snd bs in
           Eval.const Word.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state
             ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
-          Machine.Observation.make Trace.entered (fn,bs) >>= fun () ->
+          Machine.Observation.make Trace.call_entered (name,args) >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
           Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
-          Machine.Observation.make Trace.left ((fn,bs),r) >>= fun () ->
+          Machine.Observation.make Trace.call_returned (name,args @ [r]) >>= fun () ->
           Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
       end in
@@ -553,7 +565,7 @@ module Make(Machine : Machine) = struct
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
-  let signal ?params ?doc obs proj =
+  let signal ?params:_ ?doc:_ obs proj =
     let name = Bap_primus_observation.name obs in
     Machine.Observation.observe obs (fun x -> 
         proj x >>= Self.eval_signal name)
@@ -596,7 +608,7 @@ module Symbol = struct
   end
 end
 
-let init ?(log=std_formatter) ?(paths=[]) features  =
+let init ?log:_ ?paths:_ _features  =
   failwith "Lisp library no longer requires initialization"
 
 type primitives = Lisp.Def.primitives

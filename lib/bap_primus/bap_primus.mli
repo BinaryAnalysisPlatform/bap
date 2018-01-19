@@ -1037,6 +1037,62 @@ module Std : sig
       ] [@@deriving bin_io, compare, sexp]
 
 
+      (** Call tracing. 
+
+          Linker doesn't operate in terms of functions or subroutines,
+          but rather in terms of executable chunks of code. It is
+          convenient, though, to track called functions, i.e., there
+          are names and arguments (data-flow). Since a code in Primus
+          is an uniterpreted computation it is the responsibility of
+          the code provider to make corresponding observations, when a
+          subroutine is entered or left. 
+
+          By default, the code is provided by the BIR Interpeter and
+          Primus Interpreter. Both care to provide corresponding
+          observations. However, the Primus Lisp Interpreter provides call
+          observations only when an externally visible function is
+          called, e.g., malloc, free. 
+      *)
+      module Trace : sig
+
+        (** occurs when a subroutine is called. 
+            Argument values are specified in the same order in which
+            corresponding input arguments of a corresponding subroutine
+            term are specified. 
+
+            Example,
+
+            (call (malloc 4))
+        *)
+        val call : (string * value list) observation
+
+        (** occurs just before a subroutine returns.
+
+            Context-wise, an observation is made when the interpreter is
+            still in the subroutine. The argument list are in the same
+            order as arguments of a corresponding subroutine. Values of
+            all arguments are provided, including output and input
+            arguments. 
+
+            Example,
+
+            (call-return (malloc 4 0xDEADBEEF))
+        *)
+        val return : (string * value list) observation
+
+        (** {3 Notification interface}
+
+            Use [Machine.Observation.make] function, where [Machine]
+            is a module implementing [Machine.S] interface, to provide
+            observations. 
+        *)
+
+        (** the statement that makes [call] observations. *)
+        val call_entered : (string * value list) statement
+
+        (** the statement that makes [return] observations  *)
+        val call_returned : (string * value list) statement
+      end
 
       (** The Linker error  *)
       type exn += Unbound_name of name

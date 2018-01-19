@@ -36,20 +36,37 @@ let empty = {
 
 let unresolved_handler = `symbol "__primus_linker_unresolved_call"
 
-let string_of_name = function
-  | `symbol name -> name
-  | `addr addr -> asprintf "%a" Addr.pp_hex addr
-  | `tid tid -> asprintf "%%%a" Tid.pp tid
+include struct 
+  open Sexp
 
-let inspect n = Sexp.Atom (string_of_name n)
+  let string_of_name = function
+    | `symbol name -> name
+    | `addr addr -> asprintf "%a" Addr.pp_hex addr
+    | `tid tid -> asprintf "%%%a" Tid.pp tid
+  let sexp_of_name n = Sexp.Atom (string_of_name n)
+  let sexp_of_value {value=x} = Atom (asprintf "%a" Word.pp_hex x)
+  let sexp_of_args = List.map ~f:sexp_of_value
+  let sexp_of_call (dst,args) = 
+    List (Atom dst :: sexp_of_args args)
+end
 
-let exec,will_exec = Bap_primus_observation.provide
-                    ~inspect
-                    "linker-exec"
+module Trace = struct
+  module Observation = Bap_primus_observation
+  let exec,will_exec = Observation.provide
+      ~inspect:sexp_of_name
+      "linker-exec"
 
-let unresolved,will_fail = Bap_primus_observation.provide
-                       ~inspect
-                       "linker-unresolved"
+  let unresolved,will_fail = Observation.provide
+      ~inspect:sexp_of_name
+      "linker-unresolved"
+
+  let call,call_entered =
+    Observation.provide ~inspect:sexp_of_call "call"
+
+  let return,call_returned =
+    Observation.provide ~inspect:sexp_of_call "call-return"
+end
+include Trace
 
 let () = Exn.add_printer (function
     | Unbound_name name ->

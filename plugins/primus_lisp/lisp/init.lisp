@@ -45,7 +45,11 @@
   (if (< x y) -1 (if (> x y) 1 0)))
 
 
-(defmacro assert (c m)
+(defmacro assert (c)
   (when (not c)
-    (msg m)
-    (error m)))
+    (msg "Assertion (assert $0) failed" c)
+    (error "Assert_failure")))
+
+(defmacro is-in (x y) (= x y))
+(defmacro is-in (x y ys) 
+  (or (is-in x y) (is-in x ys)))

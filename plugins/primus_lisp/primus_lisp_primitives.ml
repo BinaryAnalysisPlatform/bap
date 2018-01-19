@@ -53,7 +53,7 @@ module WordWidth(Machine : Primus.Machine.S) = struct
     addr_width >>= fun width ->
     match args with
     | [] -> Value.of_int ~width width
-    | x :: xs -> Value.of_int ~width (Value.bitwidth x)
+    | x :: _ -> Value.of_int ~width (Value.bitwidth x)
 end
 
 module ExitWith(Machine : Primus.Machine.S) = struct
@@ -228,8 +228,15 @@ end
 module Not(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x] -> Value.lnot x
+    | [x] -> if Value.is_zero x then Value.b1 else Value.b0
     | _ -> Lisp.failf "not expects only one argument" ()
+end
+
+module Lnot(Machine : Primus.Machine.S) = struct
+  include Lib(Machine)
+  let run = function
+    | [x] -> Value.lnot x
+    | _ -> Lisp.failf "lnot expects only one argument" ()
 end
 
 module Neg(Machine : Primus.Machine.S) = struct
@@ -302,6 +309,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "logxor" (all a @-> a) (module Logxor);
       def "concat" (all any @-> any) (module Concat);
       def "extract" (tuple [any; any; any] @-> any) (module Extract);
+      def "lnot" (one a @-> a) (module Lnot);
       def "not" (one a @-> a) (module Not);
       def "neg" (one a @-> a) (module Neg);
       def "<" (all a @-> bool) (module Less);
