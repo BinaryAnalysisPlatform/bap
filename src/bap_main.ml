@@ -141,7 +141,10 @@ let main o =
       Project.Cache.save (digest o) project;
       project in
   let load_from_file () =
-    let fmt,ver = fmt o.filename in
+    (* let fmt,ver = fmt o.filename in *)
+    let fmt,ver = filename_info o.filename in
+    printf "format is %s\n" (Option.value ~default:"none" fmt);
+
     In_channel.with_file o.filename
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
   let project = match Project.Cache.load (digest o) with
