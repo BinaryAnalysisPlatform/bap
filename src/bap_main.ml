@@ -107,7 +107,7 @@ let parse_filename filename =
   | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let main o =
-  let make input =
+  let proj_of_input input =
     let rooter = rooter o
     and brancher = brancher o
     and reconstructor = reconstructor o
@@ -118,21 +118,21 @@ let main o =
     | Ok project ->
       Project.Cache.save (digest o) project;
       project in
-  let load_from_file () =
-    let fmt,ver = parse_filename o.filename in
-    In_channel.with_file o.filename
-      ~f:(fun ch ->
-          Project.Io.load ?fmt ?ver ch) in
+  let proj_of_file file =
+    let fmt,ver = parse_filename file in
+    In_channel.with_file file
+      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
   let project = match Project.Cache.load (digest o) with
     | Some proj ->
       Project.restore_state proj;
       proj
     | None -> match o.source with
-      | `File _ -> load_from_file ()
+      | `File _ -> proj_of_file o.filename
       | `Memory arch ->
-        make @@
+        proj_of_input @@
         Project.Input.binary arch ~filename:o.filename
-      | `Binary -> make @@
+      | `Binary ->
+        proj_of_input @@
         Project.Input.file ~loader:o.loader ~filename: o.filename in
   process o project
 
