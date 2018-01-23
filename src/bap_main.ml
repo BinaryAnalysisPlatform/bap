@@ -118,8 +118,7 @@ let main o =
     | Ok project ->
       Project.Cache.save (digest o) project;
       project in
-  let proj_of_file file =
-    let fmt,ver = parse_filename file in
+  let proj_of_file ?ver ?fmt file =
     In_channel.with_file file
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
   let project = match Project.Cache.load (digest o) with
@@ -127,7 +126,11 @@ let main o =
       Project.restore_state proj;
       proj
     | None -> match o.source with
-      | `File _ -> proj_of_file o.filename
+      | `File "builtin" ->
+        let fmt,ver = parse_filename o.filename in
+        proj_of_file ?fmt ?ver o.filename
+      | `File fmt ->
+        proj_of_file ~fmt o.filename
       | `Memory arch ->
         proj_of_input @@
         Project.Input.binary arch ~filename:o.filename
