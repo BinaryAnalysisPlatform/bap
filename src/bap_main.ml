@@ -32,6 +32,17 @@ let merge_streams ss ~f : 'a Source.t option =
       | Error a, Error b -> Error (Error.of_list [a;b])
       | Error e,_|_,Error e -> Error e))
 
+let merge_streams ss ~f : 'a Source.t option =
+  let stream, signal = Stream.create () in
+  List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
+  let stream : 'a Source.t = Stream.parse stream ~init:None
+    ~f:(fun state x -> match state with
+        | None -> Some (Ok x), Some x
+        | Some y ->
+          printf "called merge!\n";
+          Some (Ok (f x y)), Some (f x y)) in
+  Option.some stream
+
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
   | names -> match List.filter_map names ~f:create with
