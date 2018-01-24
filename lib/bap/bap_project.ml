@@ -119,6 +119,7 @@ module Input = struct
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
     let data = Memmap.add Memmap.empty mem section in
+    Signal.send Info.got_img None;
     {arch; data; code = data; file = filename; finish = ident;}
 
   let available_loaders () =
