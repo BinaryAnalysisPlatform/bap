@@ -98,8 +98,8 @@ let process options project =
       | `stdout,fmt,ver ->
         Project.Io.show ~fmt ?ver project)
 
-let parse_filename filename =
-  let fmt = match String.index filename '.' with
+let extract_format filename =
+  let fmt = match String.rindex filename '.' with
     | None -> filename
     | Some n -> String.subo ~pos:(n+1) filename in
   match Bap_fmt_spec.parse fmt with
@@ -126,11 +126,9 @@ let main o =
       Project.restore_state proj;
       proj
     | None -> match o.source with
-      | `File "builtin" ->
-        let fmt,ver = parse_filename o.filename in
+      | `Project ->
+        let fmt,ver = extract_format o.filename in
         proj_of_file ?fmt ?ver o.filename
-      | `File fmt ->
-        proj_of_file ~fmt o.filename
       | `Memory arch ->
         proj_of_input @@
         Project.Input.binary arch ~filename:o.filename
