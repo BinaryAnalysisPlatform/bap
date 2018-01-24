@@ -13,16 +13,16 @@ type t = {
 let pair key data = {dict = Primus.Value.Map.singleton key data}
 let add key data s = {dict = Primus.Value.Map.add s.dict ~key ~data}
 
-(* idea: initialize the dictionary with initial 
-   properties of a project and terms. 
+(* idea: initialize the dictionary with initial
+   properties of a project and terms.
 *)
 let state = Primus.Machine.State.declare
     ~uuid:"F050079C-7FDB-4A8F-8A59-72C9693ADBCE"
     ~name:"lisp-dictionaries"
-    (fun _  -> 
+    (fun _  ->
        {dicts = Primus.Value.Map.empty})
 
-module Pre(Machine : Primus.Machine.S) = struct 
+module Pre(Machine : Primus.Machine.S) = struct
   include Machine.Syntax
   module Value = Primus.Value.Make(Machine)
   let nil = Value.b0
@@ -31,26 +31,26 @@ module Pre(Machine : Primus.Machine.S) = struct
     | true -> Value.b1
 end
 
-module Add(Machine : Primus.Machine.S) = struct 
+module Add(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
   include Pre(Machine)
 
-  let run [dic; key; data] = 
+  let run [dic; key; data] =
     Machine.Local.update state ~f:(fun s -> {
           dicts = Map.update s.dicts dic ~f:(function
               | None -> pair key data
               | Some dict -> add key data dict)
         }
-      ) >>= fun () -> 
-    nil
+      ) >>| fun () ->
+    key
 end
 
-module Get(Machine : Primus.Machine.S) = struct 
+module Get(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
   include Pre(Machine)
 
-  let run [dic; key] = 
-    Machine.Local.get state >>= fun s -> 
+  let run [dic; key] =
+    Machine.Local.get state >>= fun s ->
     match Map.find s.dicts dic with
     | None -> nil
     | Some {dict} -> match Map.find dict key with
@@ -58,11 +58,11 @@ module Get(Machine : Primus.Machine.S) = struct
       | Some x -> Machine.return x
 end
 
-module Del(Machine : Primus.Machine.S) = struct 
+module Del(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
   include Pre(Machine)
 
-  let run = function 
+  let run = function
     | [dic] -> Machine.Local.update state ~f:(fun s -> {
           dicts = Map.remove s.dicts dic
         })
@@ -75,30 +75,30 @@ module Del(Machine : Primus.Machine.S) = struct
         })
 end
 
-module Has(Machine : Primus.Machine.S) = struct 
+module Has(Machine : Primus.Machine.S) = struct
   [@@@warning "-P"]
   include Pre(Machine)
 
-  let run [dic; key] = 
-    Machine.Local.get state >>= fun {dicts} -> 
+  let run [dic; key] =
+    Machine.Local.get state >>= fun {dicts} ->
     match Map.find dicts dic with
     | None -> nil
     | Some {dict} -> bool (Map.mem dict key)
 end
 
-module Main(Machine : Primus.Machine.S) = struct 
+module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   open Primus.Lisp.Type.Spec
   module Lisp = Primus.Lisp.Make(Machine)
 
   let def name types closure docs =
-    Lisp.define ~docs  ~types name closure 
+    Lisp.define ~docs  ~types name closure
 
-  let init () = 
+  let init () =
     Machine.sequence [
       def "dict-add" (tuple [sym; a; b] @-> bool) (module Add)
         {|(dict-add DIC KEY DATA) associates DATA with KEY in the
-          dictionary DIC.|};
+          dictionary DIC. Returns KEY.|};
 
       def "dict-get" (tuple [sym; a] @-> b) (module Get)
         {|(dict-get DIC KEY) returns data associated with KEY in the
