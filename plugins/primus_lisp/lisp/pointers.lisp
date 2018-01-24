@@ -25,14 +25,14 @@
   "extracts nth byte of a word, based on endianness."
   (let ((n (sizeof t))
         (j (endian - n i))
-        (k (if (< j 0) (+ j n) j))
+        (k (if (< j n) (- j 1) (+ j n)))
         (hi (- (* 8 (+ k 1)) 1))
         (lo (* k 8)))
     (extract hi lo x)))
 
-(defmacro read-word (t p)
-  "reads a word of type T at address P"
-  (let ((p p)
+(defmacro read-word (t a)
+  "reads a word of type T at address A"
+  (let ((p a)
         (x (memory-read p))
         (n (-1 (sizeof t))))
     (while n
@@ -41,9 +41,9 @@
       (set x (endian concat x (memory-read p))))
     x))
 
-(defmacro write-word (t p x)
-  "writes a word of type T to address P"
-  (let ((p p)
+(defmacro write-word (t a x)
+  "writes a word of type T to address A"
+  (let ((p a)
         (n (sizeof t))
         (i 0))
     (while (< i n)
