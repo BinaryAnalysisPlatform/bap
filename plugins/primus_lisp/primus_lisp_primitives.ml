@@ -123,58 +123,58 @@ end
 
 module Add(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.add
+  let run = reduce null (Eval.binop Bil.PLUS)
 end
 
 module Sub(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.sub
+  let run = reduce null (Eval.binop Bil.MINUS)
 end
 
 module Div(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.div
+  let run = reduce null (Eval.binop Bil.DIVIDE)
 end
 
 module SDiv(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = signed_reduce null Value.div
+  let run = signed_reduce null (Eval.binop Bil.SDIVIDE)
 end
 
 module Mul(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.Syntax.( * )
+  let run = reduce null (Eval.binop Bil.TIMES)
 end
 
 module Mod(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.modulo
+  let run = reduce null (Eval.binop Bil.MOD)
 end
 
 module SignedMod(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = signed_reduce null Value.modulo
+  let run = signed_reduce null (Eval.binop Bil.SMOD)
 end
 
 module Lshift(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x;y] -> Value.lshift x y
-    | _ -> Lisp.failf "Type error: shift-left expects two arguments" ()
+    | [x;y] -> Eval.binop Bil.lshift x y
+    | _ -> Lisp.failf "Type error: lshift expects two arguments" ()
 end
 
 module Rshift(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x;y] -> Value.rshift x y
-    | _ -> Lisp.failf "Type error: shift-left expects two arguments" ()
+    | [x;y] -> Eval.binop Bil.rshift x y
+    | _ -> Lisp.failf "Type error: rshift expects two arguments" ()
 end
 
 module Arshift(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x;y] -> Value.arshift x y
-    | _ -> Lisp.failf "Type error: shift-left expects two arguments" ()
+    | [x;y] -> Eval.binop Bil.arshift x y
+    | _ -> Lisp.failf "Type error: arshift expects two arguments" ()
 end
 
 module Equal(Machine : Primus.Machine.S) = struct
@@ -186,28 +186,28 @@ end
 
 module NotEqual(Machine : Primus.Machine.S) = struct
   include Equal(Machine)
-  let run xs = run xs >>= Value.lnot
+  let run xs = run xs >>= (Eval.unop Bil.NOT)
 end
 
 
 module Logand(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce negone Value.logand
+  let run = reduce negone (Eval.binop Bil.AND)
 end
 
 module Logor(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.logor
+  let run = reduce null (Eval.binop Bil.OR)
 end
 
 module Logxor(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce null Value.logxor
+  let run = reduce null (Eval.binop Bil.XOR)
 end
 
 module Concat(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
-  let run = reduce false_ Value.concat
+  let run = reduce false_ Eval.concat
 end
 
 module Extract(Machine : Primus.Machine.S) = struct
@@ -221,7 +221,7 @@ module Extract(Machine : Primus.Machine.S) = struct
     | [hi; lo; x] ->
       to_int hi >>= fun hi ->
       to_int lo >>= fun lo ->
-      Value.extract ~hi ~lo x
+      Eval.extract ~hi ~lo x
     | _ -> Lisp.failf "extract expects exactly three arguments" ()
 end
 
@@ -235,14 +235,14 @@ end
 module Lnot(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x] -> Value.lnot x
+    | [x] -> Eval.unop Bil.NOT x
     | _ -> Lisp.failf "lnot expects only one argument" ()
 end
 
 module Neg(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x] -> Value.neg x
+    | [x] -> Eval.unop Bil.NEG x
     | _ -> Lisp.failf "neg expects only one argument" ()
 end
 
@@ -265,8 +265,6 @@ module GreaterEqual(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let rec run = ordered Value.(>=)
 end
-
-
 
 module Stub(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
