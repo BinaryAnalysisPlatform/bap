@@ -4,35 +4,18 @@ open Bap_future.Std
 
 include Self ()
 
-module File = struct
-
-  let split_right ~after str =
-    match String.rindex str after with
-    | None -> str,None
-    | Some n -> String.(subo ~len:n str, Some (subo ~pos:(n+1) str))
-
-  let extension s = split_right ~after:'.' s |> snd
-
-  let print_roots r =
-    let seq = Rooter.roots r in
-    printf "roots(%d): " (Seq.length seq);
-    Seq.iter seq ~f:(fun a -> printf "%s; " @@ Addr.to_string a);
-    printf "\n";
-    r
-
-  let rooter filename =
-    let name,ver = split_right ~after:'-' filename in
-    let fmt = extension name in
-    In_channel.with_file filename ~f:(fun chan ->
-        Addr.Io.load_all ?ver ?fmt chan |>
-        Seq.of_list |>
-        Rooter.create)
-end
+let extract filename arch =
+  let width = Arch.addr_size arch |> Size.in_bits in
+  let addr = Addr.of_int64 ~width in
+  In_channel.with_file filename ~f:(fun ch ->
+      Sexp.input_sexps ch |> List.map ~f:Int64.t_of_sexp |>
+      List.map ~f:addr |>
+      Seq.of_list)
 
 let register filename =
-  let source = Stream.map Project.Info.arch (fun arch ->
-      Ok (File.rooter filename |> File.print_roots)) in
-  Rooter.Factory.register "file" source
+  Stream.map Project.Info.arch (fun arch ->
+      Ok (Rooter.create (extract filename arch))) |>
+  Rooter.Factory.register "file"
 
 let () =
   let () = Config.manpage [
@@ -50,14 +33,8 @@ let () =
       `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
     ] in
   let file = Config.(param (some non_dir_file) "from" ~docv:"SYMS"
-                           ~doc:"Use this file as roots source") in
+                       ~doc:"Use this file as roots source") in
   Config.when_ready (fun {Config.get=(!)} ->
       match !file with
       | Some file -> register file
       | None -> () )
-
-
-(** TODO:
-    Probably we need to define a file format without
-    and infer size from arch. It seems it would be much better.
-    I don't see any reasons we need Addr io here. *)
