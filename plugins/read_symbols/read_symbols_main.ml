@@ -38,11 +38,12 @@ let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
       `P "Read symbol information from a file and provide rooter,
-    symbolizer and a reconstructor, based on this information. The
-        name of registered service is a concatenation of \"file:\" and a
-        filename with symbols. So once symbols are read,
-use $(b,--)$(i,SERVICE)=$(b,file:filename) to use them.
-  where $(i,SERVICE) is one of $(b,rooter), $(b,symbolizer) or $(b,reconstructor).";
+          symbolizer and a reconstructor, based on this information. The
+          name of registered service is a concatenation of \"file:\" and a
+          filename with symbols. So once symbols are read,
+          use $(b,--)$(i,SERVICE)=$(b,file:filename) to use them.
+          where $(i,SERVICE) is one of $(b,rooter), $(b,symbolizer) or
+          $(b,reconstructor).";
       `S "SEE ALSO";
       `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
     ] in
