@@ -97,27 +97,46 @@ let process options project =
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch project)
-      | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
+      | `stdout,fmt,ver ->
+        Project.Io.show ~fmt ?ver project)
+
+let extract_format filename =
+  let fmt = match String.rindex filename '.' with
+    | None -> filename
+    | Some n -> String.subo ~pos:(n+1) filename in
+  match Bap_fmt_spec.parse fmt with
+  | `Error _ -> None, None
+  | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let main o =
-  let digest = digest o in
-  let project = match Project.Cache.load digest with
+  let proj_of_input input =
+    let rooter = rooter o
+    and brancher = brancher o
+    and reconstructor = reconstructor o
+    and symbolizer = symbolizer o in
+    Project.create input ~disassembler:o.disassembler
+      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    | Error err -> raise (Failed_to_create_project err)
+    | Ok project ->
+      Project.Cache.save (digest o) project;
+      project in
+  let proj_of_file ?ver ?fmt file =
+    In_channel.with_file file
+      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
+  let project = match Project.Cache.load (digest o) with
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None ->
-      let rooter = rooter o
-      and brancher = brancher o
-      and reconstructor = reconstructor o
-      and symbolizer = symbolizer o in
-      let input =
+    | None -> match o.source with
+      | `Project ->
+        let fmt,ver = extract_format o.filename in
+        proj_of_file ?fmt ?ver o.filename
+      | `Memory arch ->
+        proj_of_input @@
+        Project.Input.binary arch ~filename:o.filename
+      | `Binary ->
+        proj_of_input @@
         Project.Input.file ~loader:o.loader ~filename: o.filename in
-      Project.create input ~disassembler:o.disassembler
-        ?brancher ?rooter ?symbolizer ?reconstructor  |> function
-      | Error err -> raise (Failed_to_create_project err)
-      | Ok project ->
-        Project.Cache.save digest project;
-        project in
   process o project
 
 let program_info =
@@ -238,7 +257,6 @@ let () =
   Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
-  (* main (parse passes argv); exit 0 *)
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch
