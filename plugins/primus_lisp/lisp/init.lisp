@@ -42,7 +42,7 @@
 (defmacro or (x) x)
 
 (defun compare (x y)
-  (if (< x y) -1 (if (> x y) 1 0)))
+  (if (< x y) (-1 0) (if (> x y) 1 0)))
 
 
 (defmacro assert (c)
@@ -51,5 +51,15 @@
     (error "Assert_failure")))
 
 (defmacro is-in (x y) (= x y))
-(defmacro is-in (x y ys) 
+(defmacro is-in (x y ys)
   (or (is-in x y) (is-in x ys)))
+
+
+(defmacro fold (f a x) (f a x))
+(defmacro fold (f a x xs) (fold f (f a x) xs))
+(defmacro min (x)      x)
+(defmacro min (p q)    (let ((x p) (y q)) (if (< x y) x y)))
+(defmacro min (x y ys) (min (min x y) ys))
+(defmacro max (x)      x)
+(defmacro max (p q)    (let ((x p) (y q)) (if (> x y) x y)))
+(defmacro max (x y ys) (max (max x y) ys))
