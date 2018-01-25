@@ -20,26 +20,25 @@ let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
-let merge_streams ss ~f : 'a Source.t option =
+let merge_streams ss ~f : 'a Source.t =
   let stream, signal = Stream.create () in
   List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
   let pair x = Some x, Some x in
   Stream.parse stream ~init:None
-    ~f:(fun state x -> match x, state with
+    ~f:(fun prev curr -> match curr, prev with
         | Ok x, None -> pair (Ok x)
-        | Ok x, Some (Ok y) -> pair (Ok (f x y))
+        | Ok x, Some (Ok y) -> pair (Ok (f y x))
         | Error e, Some (Ok _)
         | Ok _, Some (Error e) -> pair (Error e)
         | Error x, None -> Some (Error x), None
         | Error x, Some (Error y) ->
-          pair (Error (Error.of_list [x;y]))) |>
-  Option.some
+          pair (Error (Error.of_list [y; x])))
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
   | names -> match List.filter_map names ~f:create with
     | [] -> assert false
-    | ss -> merge_streams ss ~f
+    | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
   merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
