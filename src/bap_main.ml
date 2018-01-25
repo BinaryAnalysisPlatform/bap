@@ -35,13 +35,13 @@ let merge_streams ss ~f : 'a Source.t option =
 let merge_streams ss ~f : 'a Source.t option =
   let stream, signal = Stream.create () in
   List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
-  let stream : 'a Source.t = Stream.parse stream ~init:None
-    ~f:(fun state x -> match state with
-        | None -> Some (Ok x), Some x
-        | Some y ->
-          printf "called merge!\n";
-          Some (Ok (f x y)), Some (f x y)) in
-  Option.some stream
+  let stream = Stream.parse stream ~init:None
+      ~f:(fun state x -> match x, state with
+          | Ok x, None -> Some (Ok x), Some x
+          | Ok x, Some y -> Some (Ok (f x y)), Some (f x y)
+          | error, Some y -> Some error, Some y
+          | error, None -> Some error, None) in
+  Some stream
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
