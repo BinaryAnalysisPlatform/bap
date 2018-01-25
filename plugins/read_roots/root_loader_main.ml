@@ -1,5 +1,10 @@
+open Core_kernel.Std
+open Bap.Std
+open Bap_future.Std
+
+include Self ()
+
 module File = struct
-  open Option.Monad_infix
 
   let split_right ~after str =
     match String.rindex str after with
@@ -8,17 +13,51 @@ module File = struct
 
   let extension s = split_right ~after:'.' s |> snd
 
-  (* input file format is [<name>.<fmt>[-<ver>]]. The `<fmt>` part is
-     mandatory and should match with some reader, registered for Addr,
-     data type. The `<ver>` part is optional, and defines format
-     version. Example: "functions.sexp" or "functions.sexp-1.0".
-     The example above will use sexp serializer to read data from file.
-  *)
+  let print_roots r =
+    let seq = Rooter.roots r in
+    printf "roots(%d): " (Seq.length seq);
+    Seq.iter seq ~f:(fun a -> printf "%s; " @@ Addr.to_string a);
+    printf "\n";
+    r
+
   let rooter filename =
     let name,ver = split_right ~after:'-' filename in
-    extension name >>= fun fmt -> Addr.find_reader fmt >>| fun _ ->
+    let fmt = extension name in
     In_channel.with_file filename ~f:(fun chan ->
-        Addr.Io.load_all ?ver ~fmt chan |>
+        Addr.Io.load_all ?ver ?fmt chan |>
         Seq.of_list |>
-        create)
+        Rooter.create)
 end
+
+let register filename =
+  let source = Stream.map Project.Info.arch (fun arch ->
+      Ok (File.rooter filename |> File.print_roots)) in
+  Rooter.Factory.register "file" source
+
+let () =
+  let () = Config.manpage [
+      `S "DESCRIPTION";
+      `P
+        "Read roots information from a file and provide a rooter under
+     the name $(b,file). So print $(b,--rooter=file) to use only this
+     rooter. Input file format is [<name>.<fmt>[-<ver>]]. If fmt is not
+     specified the default reader will be used, otherwise the `<fmt>`
+     part should match with some reader, registered for Addr module.
+     The `<ver>` part is optional, and defines format version.
+     Example: \"functions.sexp\" or \"functions.sexp-1.0.
+     The example above will use sexp serializer to read data from file.";
+      `S "SEE ALSO";
+      `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
+    ] in
+  let file = Config.(param (some non_dir_file) "from" ~docv:"SYMS"
+                           ~doc:"Use this file as roots source") in
+  Config.when_ready (fun {Config.get=(!)} ->
+      match !file with
+      | Some file -> register file
+      | None -> () )
+
+
+(** TODO:
+    Probably we need to define a file format without
+    and infer size from arch. It seems it would be much better.
+    I don't see any reasons we need Addr io here. *)
