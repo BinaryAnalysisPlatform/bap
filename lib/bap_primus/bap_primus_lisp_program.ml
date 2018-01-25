@@ -140,10 +140,10 @@ let pp_callgraph ppf g =
     g
 
 let pp_term pp_exp ppf = function
-  | {data={exp; typ=Any}; id} -> 
-    fprintf ppf "%a.%a" pp_exp exp Id.pp id
-  | {data={exp; typ}; id} -> 
-    fprintf ppf "%a:%a.%a" pp_exp exp Lisp.Type.pp typ Id.pp id
+  | {data={exp; typ=Any}} ->
+    fprintf ppf "%a" pp_exp exp
+  | {data={exp; typ}} ->
+    fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
 let pp_word = pp_term Int64.pp
 let pp_var = pp_term String.pp
 
@@ -153,12 +153,11 @@ let rec concat_prog =
       | x -> [x])
 
 module Ast = struct
-  let rec pp ppf {data; id} = 
-    fprintf ppf "%a.%a" pp_exp data Source.Id.pp id
+  let rec pp ppf {data} = pp_exp ppf data
   and pp_exp ppf = function
     | Int x ->
       pp_word ppf x
-    | Sym x -> 
+    | Sym x ->
       pp_print_string ppf x.data
     | Var x ->
       pp_var ppf x
@@ -189,8 +188,8 @@ module Ast = struct
     | Lit s -> pp_print_string ppf s
     | Pos n -> fprintf ppf "$%d" n
   and pp_prog ppf = function
-    | {data=Seq xs; id} ->
-      fprintf ppf "%a.%a" pp_exps (concat_prog xs) Id.pp id
+    | {data=Seq xs} ->
+      fprintf ppf "%a" pp_exps (concat_prog xs)
     | exp -> pp ppf exp
 end
 
@@ -289,14 +288,14 @@ module Reindex = struct
     let rec map t : ast m =
       rename t >>= fun t -> match t.data with
       | Err _ -> State.return t
-      | Int x -> 
-        rename x >>| fun x -> 
+      | Int x ->
+        rename x >>| fun x ->
         {t with data = Int x}
-      | Sym s -> 
-        rename s >>| fun s -> 
+      | Sym s ->
+        rename s >>| fun s ->
         {t with data = Sym s}
-      | Var v -> 
-        rename v >>| fun v -> 
+      | Var v ->
+        rename v >>| fun v ->
         {t with data = Var v}
       | Ite (x,y,z) ->
         map x >>= fun x ->
@@ -347,26 +346,26 @@ module Typing = struct
      that denotes a disjunction (join in our parlance) of all
      types. The set of type expressions forms a lattice with the Any
      type representing the Top element (all possible types). The Bot
-     type is an empty disjunction. 
+     type is an empty disjunction.
 
      Our type inference system is a mixture of flow based and
-     inference based analysis. We infer a type of a function, 
+     inference based analysis. We infer a type of a function,
      and find a fixed point solution for a set of (possibly
      mutually recursive) functions. The inferred type is the upper
      approximation of a program behavior, i.e., it doesn't guarantee
      an absence of runtime errors, though it guarantees some
-     consistency of the program static properties. 
+     consistency of the program static properties.
   *)
 
   (* Type value (aka type). A program value could be either a symbol
      or a bitvector with the given width. All types have the same
      runtime representation (modulo bitwidth).  *)
-  type tval = 
+  type tval =
     | Tsym
     | Grnd of int
   [@@deriving compare, sexp_of]
 
-  module Tval = Comparable.Make_plain(struct 
+  module Tval = Comparable.Make_plain(struct
       type t = tval [@@deriving compare, sexp_of]
     end)
 
@@ -374,29 +373,29 @@ module Typing = struct
      we allow users to specify type variables, the rest of the type
      variables are created by using term identifiers of corresponding
      program terms (thus we don't need to create fresh type variables).*)
-  type tvar = 
+  type tvar =
     | Name of string
     | Tvar of Id.t
   [@@deriving compare, sexp_of]
 
-  module Tvar = Comparable.Make_plain(struct 
+  module Tvar = Comparable.Make_plain(struct
       type t = tvar [@@deriving compare, sexp_of]
     end)
 
   (** Typing environment.
 
       Typing constraint is built as a composition of rules, where each
-      rule is a function of type [gamma -> gamma], so the rules can be 
+      rule is a function of type [gamma -> gamma], so the rules can be
       composed with the function composition operator.
   *)
-  module Gamma : sig 
+  module Gamma : sig
     type t [@@deriving compare, sexp_of]
 
     type rule = t -> t
 
     val empty : t
 
-    (** [get gamma exp] returns a type of the expression [exp]. 
+    (** [get gamma exp] returns a type of the expression [exp].
         If [None] is returned, then the expression doesn't have any
         statical constraints, so its type is [Any]. If some set is
         returned, then this set denotes a disjunction of types, that a
@@ -451,7 +450,7 @@ module Typing = struct
 
     let merge g g' = {
       vars = Map.merge g.vars g'.vars ~f:(fun ~key -> function
-          | `Left t | `Right t -> Some t 
+          | `Left t | `Right t -> Some t
           | `Both (_,t') -> Some t');
       vals = Map.merge g.vals g'.vals ~f:(fun ~key -> function
           | `Left ts | `Right ts -> Some ts
@@ -460,10 +459,10 @@ module Typing = struct
     }
 
 
-    let add_var id t g = 
+    let add_var id t g =
       {g with vars = Map.add g.vars ~key:id ~data:t}
 
-    let add_val t v g = 
+    let add_val t v g =
       {g with vals = Map.add g.vals ~key:t ~data:v}
 
     let unify t1 t2 g =
@@ -473,7 +472,7 @@ module Typing = struct
       | None, Some v | Some v, None -> add_val t v g
       | Some v, Some v' -> add_val t (Set.inter v v') g
 
-    let meet id1 id2 g = 
+    let meet id1 id2 g =
       let t,g = match Map.find g.vars id1, Map.find g.vars id2 with
         | None,None -> Tvar.min (Tvar id1) (Tvar id2),g
         | None,Some t | Some t,None -> t,g
@@ -484,7 +483,7 @@ module Typing = struct
 
     let get g id = match Map.find g.vars id with
       | None -> None
-      | Some rep -> Map.find g.vals rep 
+      | Some rep -> Map.find g.vals rep
 
 
     let inter_list = function
@@ -511,25 +510,25 @@ module Typing = struct
       match Map.find g.vars id with
       | None -> g'
       | Some v -> Map.fold g'.vars ~init:g ~f:(fun ~key:id' ~data:v' g ->
-          if Tvar.equal v v' 
+          if Tvar.equal v v'
           then meet id id' g
           else g)
 
-    let constr_grnd id t g = 
+    let constr_grnd id t g =
       let v = match Map.find g.vars id with
         | None -> Tvar id
         | Some v -> v in
       let g = add_var id v g in
       let t = Tval.Set.singleton t in
-      {g with 
-       vals = Map.update g.vals v ~f:(function 
+      {g with
+       vals = Map.update g.vals v ~f:(function
            | None -> t
            | Some t' -> Set.inter t t')
       }
 
     let constr id t g = match t with
       | Any -> g
-      | Name n -> constr_name id n g 
+      | Name n -> constr_name id n g
       | Symbol -> constr_grnd id Tsym g
       | Type n -> constr_grnd id (Grnd n) g
 
@@ -563,7 +562,7 @@ module Typing = struct
     | Grnd n -> fprintf ppf "%d" n
 
   let pp_plus ppf () = pp_print_char ppf '+'
-  let pp_tvals ppf tvals = 
+  let pp_tvals ppf tvals =
     if Set.is_empty tvals
     then fprintf ppf "nil"
     else fprintf ppf "%a"
@@ -571,7 +570,7 @@ module Typing = struct
         (Set.elements tvals)
 
   let apply_signature appid ts g {args; rest; ret} =
-    let rec apply g ts ns = 
+    let rec apply g ts ns =
       match ts,ns with
       | ts,[] -> Some g,ts
       | [],_ -> None,[]
@@ -584,11 +583,11 @@ module Typing = struct
       | [] -> Some g
       | ts -> match rest with
         | None -> None
-        | Some typ -> 
-          Some (List.fold ts ~init:g ~f:(fun g t -> 
+        | Some typ ->
+          Some (List.fold ts ~init:g ~f:(fun g t ->
               Gamma.constr t.id typ g))
 
-  let type_of_expr g expr : typ = 
+  let type_of_expr g expr : typ =
     match Gamma.get g expr.id with
     | None -> Any
     | Some ts -> match Set.elements ts with
@@ -640,13 +639,13 @@ module Typing = struct
     | None -> v.id
     | Some id -> id
 
-  let pp_binding ppf (v,id) = 
+  let pp_binding ppf (v,id) =
     fprintf ppf "%s:%a" v Id.pp id
 
-  let pp_sep ppf () = 
+  let pp_sep ppf () =
     fprintf ppf ", "
 
-  let pp_vars ppf vs = 
+  let pp_vars ppf vs =
     fprintf ppf "{%a}" (pp_print_list ~pp_sep pp_binding) @@
     Map.to_alist vs
 
@@ -655,9 +654,9 @@ module Typing = struct
   let infer_ast glob bindings ast : Gamma.t -> Gamma.t =
     let rec infer vs expr =
       match expr with
-      | {data=Sym _; id} -> 
+      | {data=Sym _; id} ->
         Gamma.constr id Symbol
-      | {data=Int x; id} -> 
+      | {data=Int x; id} ->
         Gamma.constr id x.data.typ
       | {data=Var v; id} ->
         Gamma.meet v.id (varclass vs v) ++
@@ -755,14 +754,14 @@ module Typing = struct
       let gamma = infer vars p in
       List.fold (Gamma.exps gamma) ~init:Loc.Map.empty ~f:(fun errs exp ->
           assert (exp <> Source.Id.null);
-          if Source.has_loc p.sources exp 
+          if Source.has_loc p.sources exp
           then match Gamma.get gamma exp with
             | None -> errs
-            | Some ts -> 
-              if Set.is_empty ts 
+            | Some ts ->
+              if Set.is_empty ts
               then Map.add errs ~key:(Source.loc p.sources exp) ~data:exp
               else errs
-          else errs) |> 
+          else errs) |>
       Map.to_alist
 
     let pp_error ppf (loc,id) =
@@ -775,5 +774,3 @@ end
 
 module Context = Lisp.Context
 module Type = Typing.Type
-
-
