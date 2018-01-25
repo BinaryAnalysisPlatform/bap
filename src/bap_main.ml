@@ -20,28 +20,20 @@ let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
-(* This can be seen as an non-optimal merging strategy, as we're
-   postponing the emission of the information until everyone is
-   ready. Instead, we can emit the information as soon as possible,
-   thus allowing the information to flow into the algorithm at early
-   stages. But it will still work correctly.
-*)
-let merge_streams ss ~f : 'a Source.t option =
-  List.reduce ss ~f:(Stream.merge ~f:(fun a b -> match a,b with
-      | Ok a, Ok b -> Ok (f a b)
-      | Error a, Error b -> Error (Error.of_list [a;b])
-      | Error e,_|_,Error e -> Error e))
-
 let merge_streams ss ~f : 'a Source.t option =
   let stream, signal = Stream.create () in
   List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
-  let stream = Stream.parse stream ~init:None
-      ~f:(fun state x -> match x, state with
-          | Ok x, None -> Some (Ok x), Some x
-          | Ok x, Some y -> Some (Ok (f x y)), Some (f x y)
-          | error, Some y -> Some error, Some y
-          | error, None -> Some error, None) in
-  Some stream
+  let pair x = Some x, Some x in
+  Stream.parse stream ~init:None
+    ~f:(fun state x -> match x, state with
+        | Ok x, None -> pair (Ok x)
+        | Ok x, Some (Ok y) -> pair (Ok (f x y))
+        | Error e, Some (Ok _)
+        | Ok _, Some (Error e) -> pair (Error e)
+        | Error x, None -> Some (Error x), None
+        | Error x, Some (Error y) ->
+          pair (Error (Error.of_list [x;y]))) |>
+  Option.some
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
