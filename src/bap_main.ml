@@ -26,13 +26,13 @@ let merge_streams ss ~f : 'a Source.t =
   let pair x = Some x, Some x in
   Stream.parse stream ~init:None
     ~f:(fun prev curr -> match curr, prev with
-        | Ok x, None -> pair (Ok x)
-        | Ok x, Some (Ok y) -> pair (Ok (f y x))
-        | Error e, Some (Ok _)
-        | Ok _, Some (Error e) -> pair (Error e)
-        | Error x, None -> Some (Error x), None
-        | Error x, Some (Error y) ->
-          pair (Error (Error.of_list [y; x])))
+        | Ok curr, None -> pair (Ok curr)
+        | Ok curr, Some (Ok prev) -> pair (Ok (f prev curr))
+        | Ok _, Some (Error e)
+        | Error e, Some (Ok _) -> pair (Error e)
+        | Error e, None -> Some (Error e), None
+        | Error curr, Some (Error prev) ->
+          pair (Error (Error.of_list [prev; curr])))
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
