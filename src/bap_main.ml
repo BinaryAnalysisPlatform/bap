@@ -20,23 +20,25 @@ let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
-(* This can be seen as an non-optimal merging strategy, as we're
-   postponing the emission of the information until everyone is
-   ready. Instead, we can emit the information as soon as possible,
-   thus allowing the information to flow into the algorithm at early
-   stages. But it will still work correctly.
-*)
-let merge_streams ss ~f : 'a Source.t option =
-  List.reduce ss ~f:(Stream.merge ~f:(fun a b -> match a,b with
-      | Ok a, Ok b -> Ok (f a b)
-      | Error a, Error b -> Error (Error.of_list [a;b])
-      | Error e,_|_,Error e -> Error e))
+let merge_streams ss ~f : 'a Source.t =
+  let stream, signal = Stream.create () in
+  List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
+  let pair x = Some x, Some x in
+  Stream.parse stream ~init:None
+    ~f:(fun prev curr -> match curr, prev with
+        | Ok curr, None -> pair (Ok curr)
+        | Ok curr, Some (Ok prev) -> pair (Ok (f prev curr))
+        | Ok _, Some (Error e)
+        | Error e, Some (Ok _) -> pair (Error e)
+        | Error e, None -> Some (Error e), None
+        | Error curr, Some (Error prev) ->
+          pair (Error (Error.of_list [prev; curr])))
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
   | names -> match List.filter_map names ~f:create with
     | [] -> assert false
-    | ss -> merge_streams ss ~f
+    | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
   merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->

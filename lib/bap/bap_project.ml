@@ -84,7 +84,7 @@ module Input = struct
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
-    Signal.send Info.got_img (Some img);
+    Signal.send Info.got_img img;
     Signal.send Info.got_spec spec;
     let finish proj = {
       proj with
@@ -105,9 +105,7 @@ module Input = struct
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?loader filename
       | Some load ->
-        fun () ->
-          Signal.send Info.got_img None;
-          load filename ()
+        fun () -> load filename ()
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -530,9 +528,7 @@ end
 let register x =
   let module S = (val x : S) in
   let stream =
-    Stream.map Info.img ~f:(function
-	| None -> Ok S.empty
-	| Some img -> Ok (S.of_image img)) in
+    Stream.map Info.img ~f:(fun img -> Ok (S.of_image img)) in
   S.Factory.register "internal" stream
 
 let () =
