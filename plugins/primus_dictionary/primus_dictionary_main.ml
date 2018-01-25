@@ -121,4 +121,7 @@ Config.manpage [
   programs. Dictionaries are represented with symbols and it is a
   responsibility of user to prevent name clashing between different
   dictionaries.";
-]
+];;
+
+let () = Config.when_ready @@
+           fun _ -> Primus.Machine.add_component (module Main)
