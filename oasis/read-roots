@@ -1,0 +1,12 @@
+Flag root_reader
+  Description: Build read-roots plugin
+  Default: false
+
+Library read_roots_plugin
+  Build$:           flag(everything) || flag(root_reader)
+  Path:             plugins/read_roots
+  FindlibName:      bap-plugin-read_roots
+  BuildDepends:     bap
+  Modules:          Root_loader_main
+  XMETADescription: read roots from file
+  XMETAExtraLines:  tags="rooter"
