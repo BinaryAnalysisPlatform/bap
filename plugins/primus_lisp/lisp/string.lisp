@@ -2,9 +2,6 @@
 (require pointers)
 (require memory)
 
-
-
-
 (defun strlen (p)
   (declare (external "strlen"))
   (let ((len 0))
@@ -20,8 +17,6 @@
     (memory-write dst 0:8))
   dst)
 
-;; strncpy dst src len
-;; copy len bytes from src to dst
 (defun strncpy (dst src len)
   (declare (external "strncpy"))
   (let ((dst dst))
@@ -30,6 +25,11 @@
       (copy-byte-shift dst src))
     (memory-write dst 0:8))
   dst)
+
+(defun strdup (src)
+  (declare (external "strdup"))
+  (let ((dst (malloc (+1 (strlen src)))))
+    (when dst (strcpy dst src))))
 
 
 (defun memmove (dst src len)
@@ -100,3 +100,11 @@
       (set res (compare (memory-read p1) (memory-read p2)))
       (incr p1 p2 i))
     res))
+
+(defun strncmp (s1 s2 n)
+  (declare (external "strncmp"))
+  (memcmp s1 s2 (min (strlen s1) (strlen s2) n)))
+
+(defun strcmp (s1 s2)
+  (declare (external "strcmp"))
+  (memcmp s1 s2 (min (strlen s1) (strlen s2))))
