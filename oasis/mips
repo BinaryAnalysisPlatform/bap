@@ -1,0 +1,30 @@
+Flag mips
+  Description: Build MIPS lifter
+  Default: true
+
+Library mips_plugin
+  XMETADescription:     provide MIPS lifter
+  Path:                 plugins/mips
+  FindlibName:          bap-plugin-mips
+  Build$:               flag(everything) || flag (mips)
+  BuildDepends:         bap, bap-abi, bap-c
+  InternalModules:
+                        Mips,
+                        Mips_main,
+                        Mips_types,
+                        Mips_utils,
+                        Mips_cpu,
+                        Mips_load,
+                        Mips_model,
+                        Mips_abi,
+                        Mips_dsl,
+                        Mips_rtl,
+                        Mips_arithmetic,
+                        Mips_branch,
+                        Mips_conditional,
+                        Mips_logic,
+                        Mips_multiply,
+                        Mips_shift_and_rot,
+                        Mips_store
+
+  XMETAExtraLines:      tags="mips,lifter,arch,abi"
