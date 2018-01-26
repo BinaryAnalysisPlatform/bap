@@ -116,6 +116,7 @@ let find_calls rels name roots cfg =
   starts
 
 let reconstruct rels name roots cfg =
+  printf "called REL reconstructor\n";
   let roots = find_calls rels name roots cfg in
   let init =
     Cfg.nodes cfg |> Seq.fold ~init:Cfg.empty ~f:(fun cfg n ->

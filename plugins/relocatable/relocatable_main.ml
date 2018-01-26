@@ -6,6 +6,7 @@ include Self()
 let () =
   Rel_brancher.init ();
   Rel_reconstructor.init ();
+  Rel_relocator.init ();
   Config.manpage [
     `S "SYNOPSIS";
     `Pre "
