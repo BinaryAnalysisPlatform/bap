@@ -38,16 +38,18 @@ module Rel = struct
 
 end
 
-(** TODO: using stub is wrong!!!  *)
-let get addr data =
+(** TODO: using stub is wrong!!!
+    probably a good idea to know address of the next insn
+*)
+let get start data =
   let stub = Addr.of_int ~width:64 3 in
   let rec find addr =
-    if Addr.(addr > addr + stub) then None
+    if Addr.(addr > start + stub) then None
     else
       match Map.find data addr with
       | None -> find (Addr.succ addr)
       | Some value -> Some value in
-  find addr
+  find start
 
 let synthetic_sub () =
   let s = Sub.create () in
@@ -55,15 +57,27 @@ let synthetic_sub () =
 
 let spec = ref None
 
-let relink rels pr =
+let relink rels exts pr =
   let subs = Term.to_sequence sub_t pr in
-  let find a =
+  let find_by_addr a =
     Seq.find subs ~f:(fun s ->
         match Term.get_attr s address with
         | None -> false
         | Some a' ->
           let a = Addr.of_int64 ~width:(Addr.bitwidth a') a in
           Addr.equal a a') in
+  let find_by_name name =
+    Seq.find subs ~f:(fun s ->
+        String.equal name (Sub.name s)) in
+  let map_jmp jmp sub =
+    match Jmp.kind jmp, sub with
+    | Call call, Some s ->
+      let return = Call.return call in
+      let target = Direct (Term.tid s) in
+      Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
+    | Goto (Indirect addr), Some s ->
+      Jmp.with_kind jmp (Goto (Direct (Term.tid s)))
+    | _ -> jmp in
   (object
     inherit Term.mapper
     method! map_jmp jmp =
@@ -71,21 +85,11 @@ let relink rels pr =
       | None -> jmp
       | Some addr ->
         match get addr rels with
-        | None -> jmp
+        | None ->
+          Option.value_map ~default:jmp (get addr exts)
+            ~f:(fun name -> map_jmp jmp (find_by_name name))
         | Some rel_addr ->
-          printf "found %Lx %s\n" rel_addr (Addr.to_string addr);
-          match Jmp.kind jmp with
-          | Call call ->
-            let return = Call.return call in
-            let target = match find rel_addr with
-              | None -> Call.target call
-              | Some s ->
-                printf " tids: found %s for %s\n"
-                  (Tid.to_string (Term.tid s))
-                  (Tid.to_string (Term.tid jmp));
-                Direct (Term.tid s) in
-            Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
-          | _ -> jmp
+          map_jmp jmp (find_by_addr rel_addr)
   end)#run pr
 
 let main proj =
@@ -104,8 +108,9 @@ let main proj =
         List.fold ~init:pr ~f:(fun pr name ->
             let sub = Sub.create ~name () in
             let sub = Term.(set_attr sub synthetic ()) in
+            Tid.set_name (Term.tid sub) name;
             Term.append sub_t pr sub) in
-      let pr = relink rels pr in
+      let pr = relink rels exts pr in
       Project.with_program proj pr
 
 let init () =
