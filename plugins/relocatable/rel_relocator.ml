@@ -38,13 +38,16 @@ module Rel = struct
 
 end
 
-(** TODO: using stub is wrong!!!
-    probably a good idea to know address of the next insn
-*)
-let get start data =
-  let stub = Addr.of_int ~width:64 3 in
+let get insns data start =
+  let max_addr = Seq.find_map insns ~f:(fun (mem, _) ->
+      let min, max = Memory.(min_addr mem, max_addr mem) in
+      if Addr.equal min start then Some max
+      else None) in
+  match max_addr with
+  | None -> None
+  | Some max_addr ->
   let rec find addr =
-    if Addr.(addr > start + stub) then None
+    if Addr.(addr > max_addr) then None
     else
       match Map.find data addr with
       | None -> find (Addr.succ addr)
@@ -57,26 +60,26 @@ let synthetic_sub () =
 
 let spec = ref None
 
-let relink rels exts pr =
+let relocate insns rels exts pr =
   let subs = Term.to_sequence sub_t pr in
-  let find_by_addr a =
-    Seq.find subs ~f:(fun s ->
-        match Term.get_attr s address with
-        | None -> false
-        | Some a' ->
-          let a = Addr.of_int64 ~width:(Addr.bitwidth a') a in
-          Addr.equal a a') in
-  let find_by_name name =
-    Seq.find subs ~f:(fun s ->
-        String.equal name (Sub.name s)) in
-  let map_jmp jmp sub =
-    match Jmp.kind jmp, sub with
-    | Call call, Some s ->
+  let find_sub = function
+    | `Addr a ->
+      Seq.find subs ~f:(fun s -> match Term.get_attr s address with
+          | None -> false
+          | Some a' ->
+            Addr.of_int64 ~width:(Addr.bitwidth a') a |>
+            Addr.equal a')
+    | `Name n ->
+      Seq.find subs ~f:(fun s ->
+          String.equal n (Sub.name s)) in
+  let map_jmp jmp jmp_to =
+    match Jmp.kind jmp, find_sub jmp_to with
+    | Call call, Some sub ->
       let return = Call.return call in
-      let target = Direct (Term.tid s) in
+      let target = Direct (Term.tid sub) in
       Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
-    | Goto (Indirect addr), Some s ->
-      Jmp.with_kind jmp (Goto (Direct (Term.tid s)))
+    | Goto (Indirect addr), Some sub ->
+      Jmp.with_kind jmp (Goto (Direct (Term.tid sub)))
     | _ -> jmp in
   (object
     inherit Term.mapper
@@ -84,12 +87,11 @@ let relink rels exts pr =
       match Term.get_attr jmp address with
       | None -> jmp
       | Some addr ->
-        match get addr rels with
+        match get insns rels addr with
         | None ->
-          Option.value_map ~default:jmp (get addr exts)
-            ~f:(fun name -> map_jmp jmp (find_by_name name))
-        | Some rel_addr ->
-          map_jmp jmp (find_by_addr rel_addr)
+          Option.value_map ~default:jmp (get insns exts addr)
+            ~f:(fun name -> map_jmp jmp (`Name name))
+        | Some rel_addr -> map_jmp jmp (`Addr rel_addr)
   end)#run pr
 
 let main proj =
@@ -97,20 +99,18 @@ let main proj =
   | None -> proj
   | Some spec ->
     match Fact.eval Rel.relocations spec with
-    | Error er ->
-      error "%a" Error.pp er;
-      proj
+    | Error er -> error "%a" Error.pp er; proj
     | Ok (rels, exts) ->
-      let pr = Project.program proj in
       let pr =
         String.Set.of_list (Map.data exts) |>
         Set.to_list |>
-        List.fold ~init:pr ~f:(fun pr name ->
+        List.fold ~init:(Project.program proj) ~f:(fun pr name ->
             let sub = Sub.create ~name () in
             let sub = Term.(set_attr sub synthetic ()) in
             Tid.set_name (Term.tid sub) name;
             Term.append sub_t pr sub) in
-      let pr = relink rels exts pr in
+      let insns = Disasm.insns (Project.disasm proj) in
+      let pr = relocate insns rels exts pr in
       Project.with_program proj pr
 
 let init () =
