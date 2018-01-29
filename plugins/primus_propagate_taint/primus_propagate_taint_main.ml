@@ -12,9 +12,7 @@ type vid = Vid.t
 (* v[tid] -> taints *)
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
 
-
-
-(** how are we referencing a tainted object  *)
+(** how we are referencing a tainted object  *)
 type reference_kind =
   | Ptr           (* by a pointer *)
   | Reg                         (* directly *)
@@ -25,18 +23,46 @@ type coeff = {
   loads : Primus.value list;
 }
 
+
 type objects = Tid.Set.t
 
-(* we have a set of tainted objects and we map it onto two sets:
-   set of addresses that we believe are pointing into objects,
-   set of computations that we believe are resulting
-
-   we track all references to a tainted object and all computations
+(* state of the taint engine.
+ *
+ * The taint engine maintains a set of values and pointers that
+ * reference to tainted objects.
+ *
+ * Each object is represented by a unique id, that was assigned to it,
+ * when the object was originally tainted (i.e., when the taint was introduced).
+ *
+ * An object could be referenced directly, i.e., it could be a result
+ * of a computation (value), represnted by the direct mapping. Or an
+ * object could be stored in dymanic memory at the specified address(es).
+ *
+ * If a tainted object is no longer reachable, then we say that the
+ * taint is killed. Thus precise tainting is an instance of the
+ * garbage collection problem.
+ *
 *)
 type tainter = {
   direct : objects Vid.Map.t;
   indirect : objects Addr.Map.t;
 } [@@deriving fields]
+
+(* generalized access to the tainter fields
+ *
+ * - [select.field] selects either direct or indirect field of the
+ *   tainter (should be used with [Field.get] and [Field.fset])
+ *  - [select.key] maps value to the key of the appropriate type
+ *   (i.e., to Id in case of direct, and addr in case of indirect)
+ *
+ *  With the selector object it is possible to write a function that
+ *  will be polymorphic across two fields of the tainter (sort of
+ *  extremly boundned polymorphism).
+*)
+type selector = Field : {
+    field : (tainter, ('k,objects,'c) Map.t) Field.t;
+    key : (Primus.value -> 'k);
+  } -> selector
 
 
 type mapper = {
@@ -48,9 +74,6 @@ type intro = {
   coeff : coeff option;
 }
 
-type ('f,'k) mapping = {
-  field : 'f;
-  key : 'k;
 }
 
 let nocoeff = {reads = []; loads = []}
@@ -76,40 +99,28 @@ let intro = Primus.Machine.State.declare
     ~uuid:"fd12a09a-57bf-4b5c-a9b7-a0e27768f5c9"
     (fun _ -> {coeff = None})
 
-let reg_taint_introduced,introduce_reg_taint =
+let taint_introduced,introduced_taint =
   Primus.Observation.provide
-    ~inspect:sexp_of_tid "introduce-reg-taint"
+    ~inspect:sexp_of_tid "taint-introduced"
 
-let reg_taint_propagated,propagate_reg_taint =
+let taint_propagated,propagated_taint =
   Primus.Observation.provide
-    ~inspect:sexp_of_tid "propagate-reg-taint"
+    ~inspect:sexp_of_tid "taint-propagated"
 
-let reg_taint_killed,kill_reg_taint =
+let taint_killed,killed_taint =
   Primus.Observation.provide
-    ~inspect:sexp_of_tid "kill-reg-taint"
-
-let ptr_taint_introduced,introduce_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "introduce-ptr-taint"
-
-let ptr_taint_propagated,propagate_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "propagate-ptr-taint"
-
-let ptr_taint_killed,kill_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "kill-ptr-taint"
+    ~inspect:sexp_of_tid "taint-killed"
 
 let vid = Primus.Value.id
 
-let indirect = {
-  field = Fields_of_tainter.indirect;
-  key = Primus.Value.to_word
-}
-let direct = {
-  field = Fields_of_tainter.direct;
-  key = vid;
-}
+let indirect = Field {
+    field = Fields_of_tainter.indirect;
+    key = Primus.Value.to_word
+  }
+let direct = Field {
+    field = Fields_of_tainter.direct;
+    key = vid;
+  }
 
 
 module Intro(Machine : Primus.Machine.S) = struct
@@ -122,9 +133,7 @@ module Intro(Machine : Primus.Machine.S) = struct
 
   let start_observing_coeff def =
     if introduces def
-    then Machine.Local.update intro ~f:(fun s -> {
-          coeff = Some nocoeff
-        })
+    then Machine.Local.put intro {coeff = Some nocoeff}
     else Machine.return ()
 
   let stop_observing_coeff def =
@@ -132,7 +141,8 @@ module Intro(Machine : Primus.Machine.S) = struct
     then Machine.Local.put intro {coeff = None}
     else Machine.return ()
 
-  let taint dst taint v =
+  (* taint kind taint v - taints value v with the given taint *)
+  let taint (Field dst) taint v =
     Machine.Local.get tainter >>= fun s ->
     Map.update (Field.get dst.field s) (dst.key v) ~f:(function
         | None -> Tid.Set.singleton taint
@@ -145,8 +155,7 @@ module Intro(Machine : Primus.Machine.S) = struct
         | (Reg,t) -> taint direct t v
         | (Ptr,t) -> taint indirect t v)
 
-  let constant v kinds = Machine.return ()
-
+  let constant (_v : Primus.value) _kinds = Machine.return ()
 
   (* a pointer to the tainted object  *)
   let taint_direct_addr t v = taint indirect t v
@@ -213,29 +222,27 @@ module Propagate(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
 
+  let union_taints (Field ms) srcs s =
+    List.fold srcs ~init:Tid.Set.empty ~f:(fun objs src ->
+        match Map.find (Field.get ms.field s) (ms.key src) with
+        | None -> objs
+        | Some objs' -> Set.union objs' objs)
+
   (** [ms --> md] transfers references from the [ms] mapping to the
       [md] mapping.  *)
-  let (-->) ms md (src,dst) =
+  let (-->) ms (Field md) srcs dst =
     Machine.Local.get tainter >>= fun s ->
-    match Map.find (Field.get ms.field s) (ms.key src) with
-    | None -> Machine.return ()
-    | Some objs ->
-      Set.fold objs ~init:(Field.get md.field s) ~f:(fun refs obj ->
-          Map.update refs (md.key dst) ~f:(function
-              | None -> Tid.Set.singleton obj
-              | Some objs -> Set.add objs obj)) |>
-      Field.fset md.field s |>
-      Machine.Local.put tainter
+    Map.add (Field.get md.field s)
+      ~key:(md.key dst)
+      ~data:(union_taints ms srcs s) |>
+    Field.fset md.field s |>
+    Machine.Local.put tainter
 
-  let loaded = indirect --> direct
-  let stored = direct --> indirect
-  let computed = direct --> direct
-
-  let binop ((_op,x,y),r) = Machine.sequence [
-      computed (x,r);
-      computed (y,r);
-    ]
-
+  let one f (x,y) = f [x] y
+  let loaded = one (indirect --> direct)
+  let stored = one (direct --> indirect)
+  let computed = one (direct --> direct)
+  let binop ((_op,x,y),r) = (direct --> direct) [x;y] r
   let unop ((_op,x),r) = computed (x,r)
   let extract ((_,_,x),r) = computed (x,r)
   let cast ((_,_,x),r) = computed (x,r)
@@ -251,11 +258,67 @@ module Propagate(Machine : Primus.Machine.S) = struct
 end
 
 
-module Mapper(Machine : Primus.Machine.S) = struct
+(* tracks live tainted objects, removes unecessary references.
+
+   A tainted object is live, if it is reachable either directly or
+   indirectly in the tainted. The indirect references are dropped
+   implicitly, when an address is overwritten with the new tainted
+   object (since we have finite set of addresses). The direct
+   references use value identifiers, that are dynamic, so we need to
+   track which of them still live. Since values are only stoted in
+   Env, we can easily compute the set of live values.
+
+   Finally, we compute a set of live objects on the entrance to a
+   basic block, and a set of live objects at the exit of the basic
+   block, the difference between these two are the objects that were
+   killed in the block. We make an observation about each killed
+   object.
+
+*)
+module Gc(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Env = Primus.Env.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
+
+  (* removes directly dead taints *)
+  let collect_direct =
+    Machine.Local.get tainter >>= fun s ->
+    Env.all >>= fun vars ->
+    Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
+        Env.get var >>| fun v ->
+        Set.add live (Value.id v)) >>= fun live ->
+    Machine.Local.put tainter {
+      s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
+    }
+
+  (* a set of live tainted objects *)
+  let objects {direct; indirect} : objects =
+    let to_set m : objects =
+      Map.to_sequence m |>
+      Seq.map ~f:snd |>
+      Seq.fold ~init:Tid.Set.empty ~f:Set.union in
+    Set.union (to_set direct) (to_set indirect)
+
+  let main _ =
+    Machine.Local.get gc >>= fun {old} ->
+    collect_direct >>= fun () ->
+    Machine.Local.get tainter >>= fun cur ->
+    let dead = Set.diff (objects old) (objects cur) in
+    Set.to_sequence dead |> Machine.Seq.iter
+      ~f:(Machine.Observation.make killed_taint) >>= fun () ->
+    Machine.Local.put gc {old = cur}
+
+
+  let init () = Primus.Interpreter.leave_blk >>> main
+
+end
+
+
+module Mapper (Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Eval = Primus.Interpreter.Make(Machine)
 
-  let update src dst (var,x) =
+  let update (Field src) dst (var,x) =
     Machine.Local.get tainter >>= fun tainter ->
     match Map.find (Field.get src.field tainter) (src.key x) with
     | None -> Machine.return ()
@@ -266,7 +329,7 @@ module Mapper(Machine : Primus.Machine.S) = struct
               | None -> Var.Map.singleton var taints
               | Some vars -> Map.update vars var ~f:(function
                   | None -> taints
-                  | Some taints' -> Set.union taints taints)) |>
+                  | Some taints' -> Set.union taints taints')) |>
           Field.fset dst m)
 
   let variable_read assn = Machine.sequence [
