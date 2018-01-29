@@ -74,6 +74,14 @@ type intro = {
   coeff : coeff option;
 }
 
+
+type gc_local = {
+  old : tainter;
+}
+
+let empty_tainter = {
+  direct = Vid.Map.empty;
+  indirect = Addr.Map.empty;
 }
 
 let nocoeff = {reads = []; loads = []}
@@ -81,10 +89,7 @@ let nocoeff = {reads = []; loads = []}
 let tainter = Primus.Machine.State.declare
     ~name:"primus-tainter"
     ~uuid:"2d4a4208-f918-4cf7-8e1b-5d8400a106d3"
-    (fun _ -> {
-         direct = Vid.Map.empty;
-         indirect = Addr.Map.empty;
-       })
+    (fun _ -> empty_tainter)
 
 let mapper = Primus.Machine.State.declare
     ~name:"primus-taint-mapper"
@@ -93,6 +98,12 @@ let mapper = Primus.Machine.State.declare
          regs = Tid.Map.empty;
          ptrs = Tid.Map.empty;
        })
+
+let gc = Primus.Machine.State.declare
+    ~name:"primus-taint-gc"
+    ~uuid:"2357826e-d5b7-40a3-8f90-0cfd7b48eadc"
+    (fun _ -> {old = empty_tainter})
+
 
 let intro = Primus.Machine.State.declare
     ~name:"primus-taint-introducer"
@@ -385,6 +396,7 @@ let don't_mark = flag "no-marks" ~doc:"Don't mark project terms"
 let main : Primus.component list = [
   (module Intro);
   (module Propagate);
+  (module Gc)
 ]
 
 let markers : Primus.component list = [
