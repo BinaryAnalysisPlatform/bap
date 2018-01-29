@@ -39,7 +39,7 @@ module Rel = struct
 
 end
 
-let get insns data start =
+let find insns data start =
   let max_addr = Seq.find_map insns ~f:(fun (mem, _) ->
       let min, max = Bap_memory.(min_addr mem, max_addr mem) in
       if Addr.equal min start then Some max
@@ -60,13 +60,31 @@ let create_synthetic_sub name =
   Tid.set_name (Term.tid s) name;
   Term.(set_attr s synthetic ())
 
-let is_return insns addr =
+let find_insn insns addr =
   Seq.find insns ~f:(fun (mem, _) ->
-      Addr.equal (Bap_memory.min_addr mem) addr) |> function
+      Addr.equal (Bap_memory.min_addr mem) addr)
+
+let is_return insns addr =
+  find_insn insns addr |> function
   | None -> false
   | Some (_, insn) -> Insn.(is return) insn
 
-let relocate insns rels exts pr =
+let fall_of_block cfg block =
+  Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
+      match Cfg.Edge.label e with
+      | `Fall -> Some (Cfg.Edge.dst e)
+      | _ -> None)
+
+let find_fall cfg insns addr =
+  let blks = Cfg.nodes cfg in
+  Seq.find blks ~f:(fun b ->
+      Block.memory b |> Bap_memory.max_addr |> Addr.equal addr) |>
+  function
+  | None -> None
+  | Some b ->
+    fall_of_block cfg b
+
+let relocate cfg insns rels exts pr =
   let subs = Term.to_sequence sub_t pr in
   let ext_subs = String.Table.create () in
   let find_sub = function
@@ -97,6 +115,7 @@ let relocate insns rels exts pr =
       if is_return insns addr then
         Ir_jmp.create_ret ~tid target
       else
+        let fall_b = find_fall cfg insns addr in
         Ir_jmp.create ~tid (Call (Call.create ~target ()))
     | _ -> jmp in
   let program = (object
@@ -105,16 +124,16 @@ let relocate insns rels exts pr =
       match Term.get_attr jmp address with
       | None -> jmp
       | Some addr ->
-        match get insns rels addr with
+        match find insns rels addr with
         | None ->
-          Option.value_map ~default:jmp (get insns exts addr)
+          Option.value_map ~default:jmp (find insns exts addr)
             ~f:(fun name -> map_jmp ~local:false addr jmp (`Name name))
         | Some rel_addr -> map_jmp ~local:true addr jmp (`Addr rel_addr)
   end)#run pr in
   let append_ext prg sub = Term.append sub_t prg sub in
   List.fold ~init:program ~f:append_ext (Hashtbl.data ext_subs)
 
-let run prog insns spec =
+let run prog cfg insns spec =
   match Fact.eval Rel.relocations spec with
     | Error _ ->  prog
-    | Ok (rels, exts) -> relocate insns rels exts prog
+    | Ok (rels, exts) -> relocate cfg insns rels exts prog
