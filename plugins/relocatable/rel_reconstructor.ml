@@ -41,8 +41,6 @@ module Sources = struct
 
 end
 
-let width_of_mem m = Word.bitwidth (Memory.min_addr m)
-
 let dest_of_bil bil =
   (object inherit [word] Stmt.finder
     method! enter_jmp dst goto = match dst with
@@ -116,7 +114,7 @@ let create spec name roots =
     This module has a lot of copy-paste code.
     It's decidable, but there is a worse thing here.
     It has an assumption that we can reuse
-    rooter and symbolizer. It's not true. *)
+    rooter and symbolizer. *)
 let init () =
   let open Project.Info in
   let open Sources in

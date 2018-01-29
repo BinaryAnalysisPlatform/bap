@@ -242,17 +242,6 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
-let symbolize_synthetic prog insns spec =
-  if MVar.is_updated spec then
-    match MVar.read spec with
-    | None -> prog
-    | Some spec ->
-      let p =
-        Bap_synthetic_symbolizer.resolve spec insns prog in
-      Signal.send Info.got_program p;
-      p
-  else prog
-
 let create_exn
     ?disassembler:backend
     ?brancher
@@ -330,7 +319,12 @@ let create_exn
       let disasm = Disasm.create g in
       let program = MVar.read program in
       let program =
-        symbolize_synthetic program (Disasm.insns disasm) spec in
+        if MVar.is_updated spec then
+          match MVar.read spec with
+          | None -> program
+          | Some spec ->
+            Bap_relocator.run program (Disasm.insns disasm) spec
+        else program in
       report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {
         disasm;
@@ -512,7 +506,7 @@ module Pass = struct
   type error =
     | Unsat_dep of pass * string
     | Runtime_error of pass * exn
-    [@@deriving variants, sexp_of]
+  [@@deriving variants, sexp_of]
 
   let find name : pass option =
     DList.find passes ~f:(fun p -> p.name = name)
