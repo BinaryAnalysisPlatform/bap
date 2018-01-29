@@ -239,15 +239,18 @@ module Propagate(Machine : Primus.Machine.S) = struct
         | None -> objs
         | Some objs' -> Set.union objs' objs)
 
+  let add_taints m key set =
+    if Set.is_empty set
+    then Map.remove m key
+    else Map.add m ~key ~data:set
+
   (** [ms --> md] transfers references from the [ms] mapping to the
       [md] mapping.  *)
   let (-->) ms (Field md) srcs dst =
-    Machine.Local.get tainter >>= fun s ->
-    Map.add (Field.get md.field s)
-      ~key:(md.key dst)
-      ~data:(union_taints ms srcs s) |>
-    Field.fset md.field s |>
-    Machine.Local.put tainter
+    Machine.Local.update tainter ~f:(fun s ->
+        union_taints ms srcs s |>
+        add_taints (Field.get md.field s) (md.key dst) |>
+        Field.fset md.field s)
 
   let one f (x,y) = f [x] y
   let loaded = one (indirect --> direct)
