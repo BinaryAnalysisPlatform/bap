@@ -3,8 +3,6 @@ open Bap.Std
 open Bap_future.Std
 open Graphlib.Std
 open Graphs
-open Image
-open Monads.Std
 
 include Self ()
 
@@ -43,49 +41,7 @@ module Sources = struct
 
 end
 
-
-module Fact = Ogre.Make(Monad.Ident)
-
-let of_aseq width x =
-  Seq.fold x ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-      let key = Addr.of_int64 ~width key in
-      Map.add m ~key ~data)
-
-module Rel = struct
-  open Image.Scheme
-  open Fact.Syntax
-
-  let addr_width =
-    Fact.require arch >>= fun a ->
-    match Arch.of_string a with
-    | Some a -> Fact.return (Arch.addr_size a |> Size.in_bits)
-    | None -> Fact.failf "unknown/unsupported architecture" ()
-
-  let relocations =
-    Fact.collect Ogre.Query.(select (from relocation))
-
-  let external_symbols  =
-    Fact.collect Ogre.Query.(
-        select (from external_reference))
-
-  let relocations =
-    addr_width >>= fun width ->
-    relocations >>= fun rels ->
-    external_symbols >>= fun ext ->
-    Fact.return (of_aseq width rels, of_aseq width ext)
-
-end
-
 let width_of_mem m = Word.bitwidth (Memory.min_addr m)
-
-let get mem data =
-  let rec find addr =
-    if Addr.(addr > Memory.max_addr mem) then None
-    else
-      match Map.find data addr with
-      | None -> find (Addr.succ addr)
-      | Some value -> Some value in
-  find (Memory.min_addr mem)
 
 let dest_of_bil bil =
   (object inherit [word] Stmt.finder
@@ -94,13 +50,15 @@ let dest_of_bil bil =
       | _ -> goto
   end)#find bil
 
-let dest (rels, exts) insn mem =
+let dest fact insn mem =
   let width = Word.bitwidth (Memory.min_addr mem) in
-  match get mem rels with
-  | Some a -> Some (Addr.of_int64 ~width a)
-  | None -> match get mem exts with
-    | Some _ ->
-      Some (Addr.zero width)
+  let min = Memory.min_addr mem in
+  let max = Memory.max_addr mem in
+  match Rel_fact.find min max (Rel_fact.internals fact) with
+  | Some a -> Some a
+  | None ->
+    match Rel_fact.find min max (Rel_fact.externals fact) with
+    | Some _ -> Some (Addr.zero width)
     | None -> dest_of_bil (Insn.bil insn)
 
 let find_calls rels name roots cfg =
@@ -144,14 +102,14 @@ let reconstruct rels name roots cfg =
           Symtab.add_symbol syms (name,entry,cfg))
 
 let create spec name roots =
-  match Fact.eval Rel.relocations spec with
+  match Rel_fact.create spec with
   | Error er ->
     error "%a" Error.pp er;
     let default = Reconstructor.default name roots in
     let f cfg = Reconstructor.run default cfg in
     Ok (Reconstructor.create f)
-  | Ok rels ->
-    let f cfg = reconstruct rels name roots cfg in
+  | Ok fact ->
+    let f cfg = reconstruct fact name roots cfg in
     Ok (Reconstructor.create f)
 
 (** TODO: think about this module as a draft.
