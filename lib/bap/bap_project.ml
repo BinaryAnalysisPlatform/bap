@@ -323,7 +323,7 @@ let create_exn
           match MVar.read spec with
           | None -> program
           | Some spec ->
-            Bap_relocator.run program g (Disasm.insns disasm) spec
+            Bap_relocator.run program (MVar.read symtab) (Disasm.insns disasm) spec
         else program in
       report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {

@@ -8,13 +8,13 @@ include Self()
 
 module Fact = Ogre.Make(Monad.Ident)
 
-let of_seq s ~fkey ~fdata =
-  Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-      Map.add m ~key:(fkey key) ~data:(fdata data))
-
 module Rel = struct
   open Image.Scheme
   open Fact.Syntax
+
+  let of_seq s ~fkey ~fdata =
+    Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
+        Map.add m ~key:(fkey key) ~data:(fdata data))
 
   let addr_width =
     Fact.require arch >>= fun a ->
@@ -39,11 +39,11 @@ module Rel = struct
 
 end
 
-type 'a relocations = 'a Addr.Map.t
+type 'a fixups = 'a Addr.Map.t
 
 type t = {
-  rels : addr relocations;
-  exts : string relocations;
+  rels : addr fixups;
+  exts : string fixups;
 }
 
 let create spec =
@@ -51,16 +51,14 @@ let create spec =
   | Ok (rels,exts) -> Ok {rels; exts;}
   | Error er -> Error er
 
-let internals t = t.rels
+let relocations t = t.rels
 let externals t = t.exts
 
-let to_seq m = Map.to_sequence m
-
-let find min_addr max_addr where =
+let find ~from ~to_ where =
   let rec get addr =
-    if Addr.(addr > max_addr) then None
+    if Addr.(addr > to_) then None
     else
       match Map.find where addr with
       | None -> get (Addr.succ addr)
       | Some value -> Some value in
-  get min_addr
+  get from

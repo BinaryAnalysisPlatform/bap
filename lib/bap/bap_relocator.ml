@@ -8,13 +8,13 @@ open Monads.Std
 
 module Fact = Ogre.Make(Monad.Ident)
 
-let of_seq s ~fkey ~fdata =
-  Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-      Map.add m ~key:(fkey key) ~data:(fdata data))
-
 module Rel = struct
   open Bap_image.Scheme
   open Fact.Syntax
+
+  let of_seq s ~fkey ~fdata =
+    Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
+        Map.add m ~key:(fkey key) ~data:(fdata data))
 
   let addr_width =
     Fact.require arch >>= fun a ->
@@ -39,7 +39,7 @@ module Rel = struct
 
 end
 
-let find insns data start =
+let find_rel_data insns data start =
   let max_addr = Seq.find_map insns ~f:(fun (mem, _) ->
       let min, max = Bap_memory.(min_addr mem, max_addr mem) in
       if Addr.equal min start then Some max
@@ -64,59 +64,58 @@ let find_insn insns addr =
   Seq.find insns ~f:(fun (mem, _) ->
       Addr.equal (Bap_memory.min_addr mem) addr)
 
-let is_return insns addr =
-  find_insn insns addr |> function
-  | None -> false
-  | Some (_, insn) -> Insn.(is return) insn
-
 let fall_of_block cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
       match Cfg.Edge.label e with
       | `Fall -> Some (Cfg.Edge.dst e)
       | _ -> None)
 
-let find_fall cfg insns addr =
-  let blks = Cfg.nodes cfg in
+let find_fall symtab subs tid addr =
+  let open Option in
+  Seq.find subs ~f:(fun s ->
+      let blks = Term.to_sequence blk_t s in
+      Seq.exists blks ~f:(fun b ->
+          Option.is_some (Term.find jmp_t b tid))) >>= fun sub ->
+  Symtab.find_by_name symtab (Sub.name sub) >>= fun (_,_,cfg) ->
+  Seq.find (Cfg.nodes cfg)
+    ~f:(fun b -> Bap_memory.contains (Block.memory b) addr) >>= fun b ->
+  fall_of_block cfg b >>= fun fall ->
+  let blks = Term.to_sequence blk_t sub in
   Seq.find blks ~f:(fun b ->
-      Block.memory b |> Bap_memory.max_addr |> Addr.equal addr) |>
-  function
-  | None -> None
-  | Some b ->
-    fall_of_block cfg b
+      match Term.get_attr b address with
+      | None -> false
+      | Some a -> Addr.equal (Block.addr fall) a) |> function
+  | None -> Some (Label.indirect Bil.(int (Block.addr fall)))
+  | Some blk -> Some (Label.direct (Term.tid blk))
 
-let relocate cfg insns rels exts pr =
+let relocate symtab insns rels exts pr =
   let subs = Term.to_sequence sub_t pr in
   let ext_subs = String.Table.create () in
-  let find_sub = function
-    | `Addr addr ->
-      Seq.find subs ~f:(fun s -> match Term.get_attr s address with
-          | None -> false
-          | Some addr' -> Addr.equal addr addr')
-    | `Name name ->
-      Seq.find subs ~f:(fun s ->
-          String.equal name (Sub.name s)) |> function
+  let get_external name =
+    Hashtbl.find_or_add ext_subs name
+      ~default:(fun () -> create_synthetic_sub name) in
+  let sub_of_name n =
+    Seq.find subs ~f:(fun s -> String.equal n (Sub.name s)) in
+  let sub_of_addr a =
+    Seq.find subs ~f:(fun s -> match Term.get_attr s address with
+        | None -> false
+        | Some a' -> Addr.equal a a') in
+  let get_sub = function
+    | `Addr addr -> sub_of_addr addr
+    | `Name name -> match sub_of_name name with
       | Some s -> Some s
-      | None ->
-        let () = Hashtbl.change ext_subs name ~f:(function
-            | None -> Some (create_synthetic_sub name)
-            | Some s -> Some s) in
-        Hashtbl.find ext_subs name in
-  let map_jmp ~local addr jmp jmp_to =
-    match Jmp.kind jmp, find_sub jmp_to with
+      | None -> Some (get_external name) in
+  let fixup addr jmp jmp_to =
+    match Jmp.kind jmp, get_sub jmp_to with
     | Call call, Some sub ->
       let return = Call.return call in
       let target = Direct (Term.tid sub) in
       Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
-    | Goto (Indirect _), Some sub when local ->
-      Jmp.with_kind jmp (Goto (Direct (Term.tid sub)))
-    | Goto (Indirect _), Some sub ->
+    | _, Some sub  ->
       let tid = Term.tid jmp in
       let target = Direct (Term.tid sub) in
-      if is_return insns addr then
-        Ir_jmp.create_ret ~tid target
-      else
-        let fall_b = find_fall cfg insns addr in
-        Ir_jmp.create ~tid (Call (Call.create ~target ()))
+      let return = find_fall symtab subs tid addr in
+      Ir_jmp.create ~tid (Call (Call.create ~target ?return ()))
     | _ -> jmp in
   let program = (object
     inherit Term.mapper
@@ -124,16 +123,17 @@ let relocate cfg insns rels exts pr =
       match Term.get_attr jmp address with
       | None -> jmp
       | Some addr ->
-        match find insns rels addr with
+        match find_rel_data insns rels addr with
         | None ->
-          Option.value_map ~default:jmp (find insns exts addr)
-            ~f:(fun name -> map_jmp ~local:false addr jmp (`Name name))
-        | Some rel_addr -> map_jmp ~local:true addr jmp (`Addr rel_addr)
+          Option.value_map ~default:jmp
+            (find_rel_data insns exts addr)
+            ~f:(fun name  -> fixup addr jmp (`Name name))
+        | Some rel_addr -> fixup addr jmp (`Addr rel_addr)
   end)#run pr in
   let append_ext prg sub = Term.append sub_t prg sub in
   List.fold ~init:program ~f:append_ext (Hashtbl.data ext_subs)
 
-let run prog cfg insns spec =
+let run prog symtab insns spec =
   match Fact.eval Rel.relocations spec with
-    | Error _ ->  prog
-    | Ok (rels, exts) -> relocate cfg insns rels exts prog
+  | Error _ ->  prog
+  | Ok (rels, exts) -> relocate symtab insns rels exts prog

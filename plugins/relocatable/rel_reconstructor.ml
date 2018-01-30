@@ -49,14 +49,13 @@ let dest_of_bil bil =
   end)#find bil
 
 let dest fact insn mem =
-  let width = Word.bitwidth (Memory.min_addr mem) in
-  let min = Memory.min_addr mem in
-  let max = Memory.max_addr mem in
-  match Rel_fact.find min max (Rel_fact.internals fact) with
+  let from = Memory.min_addr mem in
+  let to_ = Memory.max_addr mem in
+  match Rel_fact.find ~from ~to_ (Rel_fact.relocations fact) with
   | Some a -> Some a
   | None ->
-    match Rel_fact.find min max (Rel_fact.externals fact) with
-    | Some _ -> Some (Addr.zero width)
+    match Rel_fact.find ~from ~to_ (Rel_fact.externals fact) with
+    | Some _ -> None
     | None -> dest_of_bil (Insn.bil insn)
 
 let find_calls rels name roots cfg =
@@ -79,7 +78,8 @@ let reconstruct rels name roots cfg =
   let filtered =
     Cfg.edges cfg |> Seq.fold ~init ~f:(fun cfg e ->
         if Hashtbl.mem roots (Block.addr (Cfg.Edge.dst e)) then cfg
-        else Cfg.Edge.insert e cfg) in
+        else
+          Cfg.Edge.insert e cfg) in
   let find_block addr =
     Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
         Addr.equal addr (Block.addr blk)) in
