@@ -58,6 +58,16 @@ let dest fact insn mem =
     | Some _ -> None
     | None -> dest_of_bil (Insn.bil insn)
 
+let str_of_block b =
+  sprintf "%s %s"
+    (Addr.to_string @@ Memory.min_addr @@ Block.memory b)
+    (Addr.to_string @@ Memory.max_addr @@ Block.memory b)
+
+let str_of_block_full b =
+  let s = List.fold (Block.insns b) ~init:"" ~f:(fun s (_,i) ->
+      sprintf "%s\n   %s" s (Insn.asm i)) in
+  sprintf "%s %s" (str_of_block b) s
+
 let find_calls rels name roots cfg =
   let starts = Addr.Table.create () in
   List.iter roots ~f:(fun addr ->
@@ -67,10 +77,34 @@ let find_calls rels name roots cfg =
       if Insn.(is call) term
       then
         Option.iter (dest rels term mem)
-          ~f:(fun w -> Hashtbl.set starts ~key:w ~data:(name w)));
+          ~f:(fun w ->
+              let blk = str_of_block blk in
+              eprintf "discovered call  %s: %s - %s\n" blk  (Addr.to_string w) (name w);
+              Hashtbl.set starts ~key:w ~data:(name w)));
   starts
 
+let find_calls' name roots cfg =
+  let starts = Addr.Table.create () in
+  List.iter roots ~f:(fun addr ->
+      Hashtbl.set starts ~key:addr ~data:(name addr));
+  Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
+      let outs =
+        Cfg.Node.outputs blk cfg |>
+        Seq.filter ~f:(fun e -> Cfg.Edge.label e = `Jump) in
+      let jumps =
+        Block.insns blk |>
+        List.filter ~f:(fun (_, insn) -> Insn.(is call) insn) in
+      if Seq.length outs = List.length jumps then
+        Seq.iter outs ~f:(fun e ->
+            let dst = Cfg.Edge.dst e in
+            let w = Block.addr dst in
+            let blk = str_of_block blk in
+            eprintf "discovered call' %s: %s - %s\n" blk  (Addr.to_string w) (name w);
+            Hashtbl.set starts ~key:w ~data:(name w)))
+
 let reconstruct rels name roots cfg =
+  eprintf "relocatable reconstructor in use\n";
+  let _roots = find_calls' name roots cfg in
   let roots = find_calls rels name roots cfg in
   let init =
     Cfg.nodes cfg |> Seq.fold ~init:Cfg.empty ~f:(fun cfg n ->
