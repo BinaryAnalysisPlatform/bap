@@ -5,14 +5,13 @@ include Self()
 
 let () =
   Rel_brancher.init ();
-  Rel_reconstructor.init ();
   Config.manpage [
     `S "SYNOPSIS";
     `Pre "
       $(b,--brancher=relocatable)
      ";
     `S "DESCRIPTION";
-    `P "Provides a brancher and reconstructor for relocatable files.";
+    `P "Provides a brancher for relocatable files.";
     `P "Usually, jumps in a relocatable program do not have a direct
      static references to a destination but rather some bogus fixup.
      The default brancher is unable to infer the destination, as it
