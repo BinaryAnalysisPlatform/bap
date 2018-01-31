@@ -790,17 +790,17 @@ module Std : sig
   end
 
 
-  (** Balanced Interval Tree. 
+  (** Balanced Interval Tree.
 
       Interval trees are used to build efficient mappings from
-      intervals to arbitrary data. 
+      intervals to arbitrary data.
 
       The interval tree may contain overlapping intervals and allows
-      inserting and removing elements. 
+      inserting and removing elements.
 
-      The interval tree is implemented using AVL trees. 
+      The interval tree is implemented using AVL trees.
   *)
-  module Interval_tree : sig 
+  module Interval_tree : sig
     module type Interval = sig
 
       (** interval representation *)
@@ -909,10 +909,10 @@ module Std : sig
       val to_sequence : 'a t -> (key * 'a) Sequence.t
 
       include Container.S1 with type 'a t := 'a t
-    end 
+    end
 
-    module Make(Interval : Interval) : S 
-      with type key := Interval.t 
+    module Make(Interval : Interval) : S
+      with type key := Interval.t
        and type point := Interval.point
 
   end
@@ -7733,6 +7733,7 @@ module Reconstructor : sig
 
       Note: this is an approximation, that works fine for most cases.  *)
   val default : (word -> string) -> word list -> t
+
 
   (** [of_blocks] produces a reconstructor from a serialized
       sequence of blocks. Each element of the sequence is deconstructed

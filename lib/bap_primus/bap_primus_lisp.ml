@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap.Std
 open Format
 open Bap_c.Std
-open Bap_strings.Std
 open Bap_primus_types
 open Bap_primus_sexp
 
@@ -26,17 +25,6 @@ open Lisp.Program.Items
 
 module Pos = Bap_primus_pos
 
-module Index = Strings.Index.Persistent.Make(struct 
-    include Bap_primus_value
-    let null = {
-      id = Int63.zero;
-      value = Word.zero Lisp.Type.symbol_size
-    }
-    let succ s = {
-      s with
-      value = Word.succ s.value
-    }
-  end)
 
 type exn += Runtime_error of string
 type exn += Unresolved of string * Lisp.Resolve.resolution
@@ -44,7 +32,6 @@ type exn += Unresolved of string * Lisp.Resolve.resolution
 type bindings = (Var.t * value) list [@@deriving sexp_of]
 type state = {
   program : Lisp.Program.t;
-  index : Index.t;
   width : int;
   env : bindings;
   cur : Id.t;
@@ -57,10 +44,9 @@ let width_of_ctxt proj =
 
 let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
-    ~uuid:"fc4b3719-f32c-4d0f-ad63-6167ab00b7f9"
+    ~uuid:"0360697d-febe-4982-a528-152ada72bf4a"
     (fun proj -> {
          env = [];
-         index = Index.empty;
          cur = Id.null;
          program = Lisp.Program.empty;
          width = width_of_ctxt proj;
@@ -121,7 +107,7 @@ let () = Exn.add_printer (function
 
 type message = string
 
-module Message = struct 
+module Message = struct
   type t = message
   let pp = Format.pp_print_string
 end
@@ -233,13 +219,13 @@ module Interpreter(Machine : Machine) = struct
         | Some rval -> Machine.return rval
 
 
-  let is_external_call name def = 
+  let is_external_call name def =
     match Attribute.Set.get (Lisp.Def.attributes def) External.t with
     | None -> false
     | Some names -> List.mem ~equal:String.equal names name
 
-  let notify_when cond obs name args = 
-    if cond 
+  let notify_when cond obs name args =
+    if cond
     then Machine.Observation.make obs (name,args)
     else Machine.return ()
 
@@ -249,7 +235,7 @@ module Interpreter(Machine : Machine) = struct
 
      Pros: a call to an external function is an effect, i.e., if a
      function implementation calls malloc, then it comes directly from
-     the implementation. 
+     the implementation.
 
      Cons: the same, though it is an effect, it is not really present
      in a program and becomes an assumption that is rather hidden. For
@@ -315,13 +301,11 @@ module Interpreter(Machine : Machine) = struct
         | Any | Name _ -> width () in
       width >>= fun width ->
       Eval.const (Word.of_int64 ~width v) in
-    let sym v = 
-      Machine.Local.get state >>| fun {index} -> 
-      Index.key index v.data in
+    let sym v = Value.Symbol.to_value v.data in
     let rec eval = function
       | {data=Int {data={exp;typ}}} -> int exp typ
       | {data=Var v} -> lookup v
-      | {data=Sym v} -> sym v 
+      | {data=Sym v} -> sym v
       | {data=Ite (c,e1,e2)}  -> ite c e1 e2
       | {data=Let (v,e1,e2)} -> let_ v e1 e2
       | {data=App (n,args)} -> app n args
@@ -391,46 +375,22 @@ module Interpreter(Machine : Machine) = struct
     Machine.Local.update state (fun s -> {s with cur = exp.id}) >>= fun () ->
     eval exp
 
-  let eval_signal name args : unit Machine.t = 
-    Machine.Local.get state >>= fun s -> 
-    let res = 
-      Lisp.Resolve.meth Lisp.Check.value s.program meth name args in 
+  let eval_signal name args : unit Machine.t =
+    Machine.Local.get state >>= fun s ->
+    let res =
+      Lisp.Resolve.meth Lisp.Check.value s.program meth name args in
     match res with
     | None -> Machine.return ()
-    | Some (Error resolution) -> 
+    | Some (Error resolution) ->
       Machine.raise (Unresolved (name,resolution))
-    | Some (Ok mets) -> 
-      Machine.List.iter mets ~f:(fun (met,bs) -> 
+    | Some (Ok mets) ->
+      Machine.List.iter mets ~f:(fun (met,bs) ->
           Vars.bindings bs >>= fun bs ->
           Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
           eval_exp (Lisp.Def.Meth.body met) >>= fun _ ->
           Machine.Local.update state ~f:(Vars.pop (List.length bs)))
 
 end
-
-module Symdex = struct 
-  let rec index_ast idx body = match body.data with
-    | Sym s -> Index.register idx s.data 
-    | Int _ | Var _ | Err _ -> idx
-    | Ite (x,y,z) -> index_asts idx [x;y;z]
-    | Rep (x,y) | Let (_,x,y) -> index_asts idx [x;y]
-    | App (bs,xs) -> index_asts (index_bindings idx bs) xs
-    | Seq xs | Msg (_,xs) -> index_asts idx xs
-    | Set (_,x) -> index_ast idx x
-  and index_asts idx asts = 
-    List.fold ~init:idx asts ~f:index_ast 
-  and index_bindings idx = function
-    | Dynamic _ -> idx 
-    | Static (_,x) -> index_ast idx x
-
-
-  let asts prog = 
-    List.map ~f:Lisp.Def.Func.body (Lisp.Program.get prog func) @
-    List.map ~f:Lisp.Def.Meth.body (Lisp.Program.get prog meth) 
-
-  let of_prog prog = 
-    List.fold (asts prog) ~init:Index.empty ~f:index_ast
-end 
 
 
 module Make(Machine : Machine) = struct
@@ -545,7 +505,6 @@ module Make(Machine : Machine) = struct
     init_env (Project.program proj) >>= fun env ->
     Machine.Local.put state {
       program; env;
-      index = Symdex.of_prog program;
       cur = Id.null;
       width = width_of_ctxt proj;
     } >>= fun () ->
@@ -567,7 +526,7 @@ module Make(Machine : Machine) = struct
 
   let signal ?params:_ ?doc:_ obs proj =
     let name = Bap_primus_observation.name obs in
-    Machine.Observation.observe obs (fun x -> 
+    Machine.Observation.observe obs (fun x ->
         proj x >>= Self.eval_signal name)
 
   (* this is a deprecated interface for the backward compatibility,
@@ -590,22 +549,6 @@ module Make(Machine : Machine) = struct
         Lisp.Def.Closure.of_primitive def
           (module Packed : Lisp.Def.Closure) |>
         link_primitive)
-end
-
-module Symbol = struct 
-  module Make(Machine : Machine) = struct 
-    open Machine.Syntax
-
-    let to_value sym = 
-      Machine.Local.get state >>= fun s -> 
-      let index = Index.register s.index sym in
-      Machine.Local.put state {s with index} >>| fun () -> 
-      Index.key index sym
-
-    let of_value value = 
-      Machine.Local.get state >>| fun {index} -> 
-      Index.string index value
-  end
 end
 
 let init ?log:_ ?paths:_ _features  =

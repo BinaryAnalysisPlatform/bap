@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
+open Bap_strings.Std
 open Format
 open Bap_primus_types
 
@@ -15,6 +16,7 @@ module Id = struct
       let module_name = Some "Bap_primus.Std.Value.Id"
     end)
 end
+
 type id = Id.t [@@deriving bin_io, compare, sexp]
 
 
@@ -22,11 +24,31 @@ let compare_value x y = Word.compare x.value y.value
 type t = value [@@deriving bin_io, compare]
 
 
+module Index = struct
+  let key_width = 63
+  include Strings.Index.Persistent.Make(struct
+      type t = value
+      let compare = compare_value
+      let null = {
+        id = Int63.zero;
+        value = Word.zero key_width
+      }
+      let succ s = {
+        s with
+        value = Word.succ s.value
+      }
+    end)
+end
+
 let state = Bap_primus_machine.State.declare
     ~uuid:"873f2ba6-9adc-45bb-8ed1-a0f57337ca80"
     ~name:"value"
-    (fun proj -> Int63.one)
+    (fun _ -> Int63.one)
 
+let symbols = Bap_primus_machine.State.declare
+    ~uuid:"2d2293e9-4c42-4b82-90a7-7e8e74fd01ed"
+    ~name:"symbols"
+    (fun _ -> Index.empty)
 
 let to_word x = x.value
 let id x = x.id
@@ -111,6 +133,19 @@ module Make(Machine : Machine) = struct
   let lshift = lift2 Word.lshift
   let rshift = lift2 Word.rshift
   let arshift = lift2 Word.arshift
+
+  module Symbol = struct
+    let to_value sym =
+      Machine.Local.get symbols >>= fun index ->
+      let index = Index.register index sym in
+      Machine.Local.put symbols index >>| fun () ->
+      Index.key index sym
+
+    let of_value value =
+      Machine.Local.get symbols >>| fun index ->
+      Index.string index value
+  end
+
   module Syntax = struct
     let (~-) = neg
     let (+) = add

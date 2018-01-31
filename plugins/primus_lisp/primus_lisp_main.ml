@@ -44,17 +44,16 @@ let state = Primus.Machine.State.declare
     ~name:"stdlib-signals"
     (fun proj -> {addrs = compute_addresses (Project.program proj)})
 
-module Signals(Machine : Primus.Machine.S) = struct 
+module Signals(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Value = Primus.Value.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
-  module Symbol = Primus.Lisp.Symbol.Make(Machine)
 
   let value = Machine.return
   let word = Value.of_word
 
-  let sym x = Symbol.to_value x
+  let sym x = Value.Symbol.to_value x
   let var v = sym (Var.name v)
 
   let one f x = [f x]
@@ -63,15 +62,15 @@ module Signals(Machine : Primus.Machine.S) = struct
   let cond j = match Jmp.cond j with
     | Bil.Var v -> Env.get v
     | Bil.Int x -> word x
-    | _ -> failwith "TCF violation" 
+    | _ -> failwith "TCF violation"
 
   let jmp (cond,dst) j = [cond j;dst j]
 
   let name = Value.b0
   let args = []
 
-  let parameters name args = 
-    sym name :: 
+  let parameters name args =
+    sym name ::
     List.map args ~f:Machine.return
 
   let call make_pars (name,args) = make_pars name args
@@ -83,8 +82,8 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let addr j = match label j with
     | None -> Machine.return None
-    | Some (Direct tid) -> 
-      Machine.Local.get state >>| fun {addrs} -> 
+    | Some (Direct tid) ->
+      Machine.Local.get state >>| fun {addrs} ->
       Map.find addrs tid
     | Some (Indirect (Bil.Int x)) -> Machine.return (Some x)
     | _ -> Machine.return None
@@ -93,8 +92,8 @@ module Signals(Machine : Primus.Machine.S) = struct
     | None -> Value.b0
     | Some x -> word x
 
-  let signal obs kind proj = 
-    Lisp.signal obs @@ fun arg -> 
+  let signal obs kind proj =
+    Lisp.signal obs @@ fun arg ->
     Machine.List.all (proj kind arg)
 
   let init = Machine.sequence Primus.Interpreter.[

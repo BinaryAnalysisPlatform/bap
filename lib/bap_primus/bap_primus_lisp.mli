@@ -14,7 +14,7 @@ module Load : sig
   val pp_error : Format.formatter -> error -> unit
 end
 
-module Message : sig 
+module Message : sig
   type  t = message
   val pp : Format.formatter -> message -> unit
 end
@@ -76,12 +76,6 @@ end
 type primitives = (module Primitives)
 type exn += Runtime_error of string
 
-module Symbol : sig 
-  module Make(Machine : Machine) : sig 
-    val to_value : string -> value Machine.t
-    val of_value : value -> string Machine.t
-  end
-end
 
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a

@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
+open Bap_strings.Std
 
 open Bap_primus_types
 
@@ -11,6 +12,11 @@ type t = value [@@deriving bin_io, compare, sexp]
 
 val to_word : t -> word
 val id : t -> id
+
+module Index : sig
+  val key_width : int
+  include Strings.Index.Persistent.S with type key := t
+end
 
 
 module Make(Machine : Machine) : sig
@@ -71,6 +77,12 @@ module Make(Machine : Machine) : sig
     val (lxor) : t -> t -> t m
     val (land) : t -> t -> t m
   end
+
+  module Symbol : sig
+    val to_value : string -> t m
+    val of_value : t -> string m
+  end
+
   include Regular.S with type t := t
 end
 

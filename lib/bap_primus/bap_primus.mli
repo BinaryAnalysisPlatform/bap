@@ -3,6 +3,7 @@ open Regular.Std
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
+open Bap_strings.Std
 
 module Std : sig
 
@@ -693,7 +694,17 @@ module Std : sig
           val (land) : t -> t -> t m
         end
 
+        module Symbol : sig
+          val to_value : string -> value Machine.t
+          val of_value : value -> string Machine.t
+        end
+
         include Regular.S with type t := t
+      end
+
+      module Index : sig
+        val key_width : int
+        include Strings.Index.Persistent.S with type key := value
       end
 
       include Regular.S with type t := t
@@ -1037,7 +1048,7 @@ module Std : sig
       ] [@@deriving bin_io, compare, sexp]
 
 
-      (** Call tracing. 
+      (** Call tracing.
 
           Linker doesn't operate in terms of functions or subroutines,
           but rather in terms of executable chunks of code. It is
@@ -1045,20 +1056,20 @@ module Std : sig
           are names and arguments (data-flow). Since a code in Primus
           is an uniterpreted computation it is the responsibility of
           the code provider to make corresponding observations, when a
-          subroutine is entered or left. 
+          subroutine is entered or left.
 
           By default, the code is provided by the BIR Interpeter and
           Primus Interpreter. Both care to provide corresponding
           observations. However, the Primus Lisp Interpreter provides call
           observations only when an externally visible function is
-          called, e.g., malloc, free. 
+          called, e.g., malloc, free.
       *)
       module Trace : sig
 
-        (** occurs when a subroutine is called. 
+        (** occurs when a subroutine is called.
             Argument values are specified in the same order in which
             corresponding input arguments of a corresponding subroutine
-            term are specified. 
+            term are specified.
 
             Example,
 
@@ -1072,7 +1083,7 @@ module Std : sig
             still in the subroutine. The argument list are in the same
             order as arguments of a corresponding subroutine. Values of
             all arguments are provided, including output and input
-            arguments. 
+            arguments.
 
             Example,
 
@@ -1084,7 +1095,7 @@ module Std : sig
 
             Use [Machine.Observation.make] function, where [Machine]
             is a module implementing [Machine.S] interface, to provide
-            observations. 
+            observations.
         *)
 
         (** the statement that makes [call] observations. *)
@@ -2043,16 +2054,9 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_error : Format.formatter -> error -> unit
       end
 
-      module Message : sig 
+      module Message : sig
         type t = message
         val pp : Format.formatter -> t -> unit
-      end
-
-      module Symbol : sig 
-        module Make(Machine : Machine.S) : sig 
-          val to_value : string -> value Machine.t
-          val of_value : value -> string Machine.t
-        end
       end
 
       (** Machine independent closure.
@@ -2138,16 +2142,16 @@ ident ::= ?any atom that is not recognized as a <word>?
             Primus Observations are reflected onto Primus Lisp
             signals. Each reflection is defined via the [signal]
             operator that establishes a mapping between an observation
-            and a signal. 
+            and a signal.
 
             After the signal is defined, every time the observation
             [obs] is made, the signal [(signal args)] will be sent,
             where [signal = Observation.name obs] and [args] is a
-            mapping from the observation value to a list of values.  
+            mapping from the observation value to a list of values.
 
             The signal will match with the observation name. Though
             the same observation may produce signals with different
-            arities. 
+            arities.
 
             @param params optional type specification
 
