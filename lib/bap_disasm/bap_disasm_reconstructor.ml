@@ -19,23 +19,18 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
-
-let dest_of_bil bil =
-  (object inherit [word] Stmt.finder
-    method! enter_jmp dst goto = match dst with
-      | Bil.Int dst -> goto.return (Some dst)
-      | _ -> goto
-  end)#find bil
-
 let find_calls name roots cfg =
   let starts = Addr.Table.create () in
   List.iter roots ~f:(fun addr ->
       Hashtbl.set starts ~key:addr ~data:(name addr));
   Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
-      let term = Block.terminator blk in
-      if Insn.(is call) term
-      then Option.iter (dest_of_bil (Insn.bil term))
-          ~f:(fun w -> Hashtbl.set starts ~key:w ~data:(name w)));
+      match Cfg.Node.outputs blk cfg |> Seq.hd with
+      | None -> ()
+      | Some e ->
+        let term = Block.terminator blk in
+        if Insn.(is call) term && Cfg.Edge.label e = `Jump then
+          let w = Block.addr (Cfg.Edge.dst e) in
+          Hashtbl.set starts ~key:w ~data:(name w));
   starts
 
 let reconstruct name roots cfg =
@@ -78,7 +73,7 @@ let of_blocks syms =
     Hashtbl.fold symtab ~init:Symtab.empty ~f:(fun ~key ~data symtab ->
         List.sort data ~cmp:Block.ascending |> function
         | [] -> symtab
-        | entry :: rest as blocks ->
+        | entry :: _ as blocks ->
           let g = List.fold blocks ~init:Cfg.empty ~f:(fun g x ->
               List.fold blocks ~init:g ~f:(fun g y ->
                   match Cfg.Node.edge x y cfg with
