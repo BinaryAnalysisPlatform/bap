@@ -30,8 +30,6 @@ module Object = Primus.Value
 (* v[term] -> taints *)
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
 
-(** how we are referencing a tainted object  *)
-
 type objects = Object.Set.t
 type property = Primus.value
 
