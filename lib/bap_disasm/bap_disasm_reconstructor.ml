@@ -24,13 +24,13 @@ let find_calls name roots cfg =
   List.iter roots ~f:(fun addr ->
       Hashtbl.set starts ~key:addr ~data:(name addr));
   Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
-      match Cfg.Node.outputs blk cfg |> Seq.hd with
-      | None -> ()
-      | Some e ->
-        let term = Block.terminator blk in
-        if Insn.(is call) term && Cfg.Edge.label e = `Jump then
-          let w = Block.addr (Cfg.Edge.dst e) in
-          Hashtbl.set starts ~key:w ~data:(name w));
+      let term = Block.terminator blk in
+      if Insn.(is call) term then
+        Seq.iter (Cfg.Node.outputs blk cfg)
+          ~f:(fun e ->
+              if Cfg.Edge.label e <> `Fall then
+                let w = Block.addr (Cfg.Edge.dst e) in
+                Hashtbl.set starts ~key:w ~data:(name w)));
   starts
 
 let reconstruct name roots cfg =
