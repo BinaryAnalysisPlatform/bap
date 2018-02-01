@@ -26,8 +26,7 @@ module Rel = struct
     Fact.collect Ogre.Query.(select (from relocation))
 
   let external_symbols  =
-    Fact.collect Ogre.Query.(
-        select (from external_reference))
+    Fact.collect Ogre.Query.(select (from external_reference))
 
   let relocations =
     addr_width >>= fun width ->
@@ -39,21 +38,15 @@ module Rel = struct
 
 end
 
-let find_rel_data insns data start =
-  let max_addr = Seq.find_map insns ~f:(fun (mem, _) ->
-      let min, max = Bap_memory.(min_addr mem, max_addr mem) in
-      if Addr.equal min start then Some max
-      else None) in
-  match max_addr with
-  | None -> None
-  | Some max_addr ->
-    let rec get addr =
-      if Addr.(addr > max_addr) then None
-      else
-        match Map.find data addr with
-        | None -> get (Addr.succ addr)
-        | Some value -> Some value in
-    get start
+let find_rel memmap data start =
+  let rec get addr max_addr =
+    if Addr.(addr > max_addr) then None
+    else
+      match Map.find data addr with
+      | None -> get (Addr.succ addr) max_addr
+      | Some value -> Some value in
+  Option.value_map ~default:None
+    (Addr.Map.find memmap start) ~f:(get start)
 
 let create_synthetic_sub name =
   let s = Sub.create ~name () in
@@ -111,22 +104,26 @@ let relocate symtab insns rels exts pr =
       let return = Call.return call in
       let target = Direct (Term.tid sub) in
       Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
-    | _, Some sub  ->
+    | _, Some sub ->
       let tid = Term.tid jmp in
       let target = Direct (Term.tid sub) in
       let return = find_fall symtab subs tid addr in
       Ir_jmp.create ~tid (Call (Call.create ~target ?return ()))
     | _ -> jmp in
+  let memmap = Seq.fold insns ~init:Addr.Map.empty
+      ~f:(fun mems (m,_) ->
+          let min,max = Bap_memory.(min_addr m, max_addr m) in
+          Addr.Map.add mems min max) in
   let program = (object
     inherit Term.mapper
     method! map_jmp jmp =
       match Term.get_attr jmp address with
       | None -> jmp
       | Some addr ->
-        match find_rel_data insns rels addr with
+        match find_rel memmap rels addr with
         | None ->
           Option.value_map ~default:jmp
-            (find_rel_data insns exts addr)
+            (find_rel memmap exts addr)
             ~f:(fun name  -> fixup addr jmp (`Name name))
         | Some rel_addr -> fixup addr jmp (`Addr rel_addr)
   end)#run pr in
