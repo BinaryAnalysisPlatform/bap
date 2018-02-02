@@ -55,6 +55,39 @@ let sce cpu ops =
     cpu.store (base + off) rt word;
   ]
 
+(* SCX rt, offset(base)
+ * Store Conditional Word Extended, MIPS32 Release 6
+ * Page 407 *)
+let scx cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    cpu.store (base + off) rt word;
+  ]
+
+(* SCDX rt, offset(base)
+ * Store Conditional Doubleword Extended, MIPS64 Release 6
+ * Page 407 *)
+let scdx cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    cpu.store (base + off) rt doubleword;
+  ]
+
+(* SCXE rt, offset(base)
+ * Store Conditional Word EVA Extended, MIPS32 Release 6
+ * Page 407 *)
+let scxe cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    cpu.store (base + off) rt word;
+  ]
+
 (* SD rt, offset(base)
  * Store Doubleword, MIPS64
  * Page 417 *)
@@ -124,6 +157,9 @@ let () =
   "SC" >> sc;
   "SCD" >> scd;
   "SCE" >> sce;
+  "SCX" >> scx;
+  "SCDX" >> scdx;
+  "SCXE" >> scxe;
   "SD" >> sd;
   "SH" >> sh;
   "SHE" >> she;

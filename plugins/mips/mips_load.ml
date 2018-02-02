@@ -147,9 +147,38 @@ let lle cpu ops =
     rt := cpu.load (base + off) word;
   ]
 
-(* TODO: LLX rt, offset(base) *)
-(* TODO: LLDX rt, offset(base) *)
-(* TODO: LLXE rt, offset(base) *)
+(* LLX rt, offset(base)
+ * Load Linked Word Extended, MIPS32 Release 6
+ * Page 266 *)
+let llx cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    rt := cpu.load (base + off) word;
+  ]
+
+(* LLDX rt, offset(base)
+ * Load Linked Doubleword Extended, MIPS64 Release 6
+ * Page 264 *)
+let lldx cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    rt := cpu.load (base + off) doubleword;
+  ]
+
+(* LLXE rt, offset(base)
+ * Load Linked Word EVA Extended, MIPS32 Release 6
+ * Page 266 *)
+let llxe cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let base = signed cpu.reg ops.(1) in
+  let off = signed imm ops.(2) in
+  RTL.[
+    rt := cpu.load (base + off) word;
+  ]
 
 (* LW rt, offset(base)
  * Load Word, MIPS32
@@ -225,6 +254,9 @@ let () =
   "LL" >> ll;
   "LLD" >> lld;
   "LLE" >> lle;
+  "LLX" >> llx;
+  "LLDX" >> lldx;
+  "LLXE" >> llxe;
   "LW" >> lw;
   "LWE" >> lwe;
   "LWPC" >> lwpc;
