@@ -694,15 +694,50 @@ module Std : sig
           val (land) : t -> t -> t m
         end
 
+
+        (** Symbol Value Isomorphism.
+
+            A value can have a symbolic representation that is usefull
+            to embed analysis in the machine computation. We inject
+            symbols, represented with the [string] data type, into the
+            value, using interning, i.e., each symbol is mapped to its
+            index (see the Index module).
+
+            The relation between values and symbols is not bijective,
+            since not all values represent interned symbols, moreover
+            it depends on the order of statements, i.e., a symbol shall
+            be interned (with the [to_value] call) before it can be
+            translated back into a symbolic representation.
+
+            Implementors of Primus components are encouraged to use the
+            [Index] module and implement their own mapping with bijection
+            enforced by the abstraction.
+         *)
         module Symbol : sig
+
+
+          (** [to_value sym] returns a value corresponding to the
+              provided symbolic representation.  *)
           val to_value : string -> value Machine.t
+
+
+
+          (** [of_value v] returns a symbolic representation of the
+              value [v].
+
+              If the symbolic representation of a value wasn't
+              established, then returns an empty string. *)
           val of_value : value -> string Machine.t
         end
 
         include Regular.S with type t := t
       end
 
+
+      (** Indexing strings by values.   *)
       module Index : sig
+
+        (** the width of keys in the index.   *)
         val key_width : int
         include Strings.Index.Persistent.S with type key := value
       end
@@ -786,6 +821,10 @@ module Std : sig
 
       (** [extract ((hi,lo,x),r)] happens after [r] is extracted from [x] *)
       val extract : ((int * int * value) * value) observation
+
+      (** [extract ((x,y),z)] happens after [x] is concatenated with [y]
+          and produces [z] as a result.*)
+      val concat : ((value * value) * value) observation
 
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation

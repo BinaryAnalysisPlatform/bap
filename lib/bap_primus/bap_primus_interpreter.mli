@@ -20,7 +20,7 @@ val binop : ((binop * value * value) * value) observation
 val unop : ((unop * value) * value) observation
 val cast : ((cast * int * value) * value) observation
 val extract : ((int * int * value) * value) observation
-
+val concat : ((value * value) * value) observation
 
 
 val enter_exp : exp observation
