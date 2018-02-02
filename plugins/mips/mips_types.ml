@@ -11,10 +11,9 @@ type cpu = {
     store : exp -> exp -> bitwidth -> rtl;
     jmp : exp -> rtl;
     cia : exp;
-    addr_size : bitwidth;
-    gpr_width : bitwidth;
+    word_width : exp;
+    word_bitwidth : bitwidth;
     reg : (op -> exp) ec;
     gpr : int -> exp;
     fpr : int -> exp;
 }
-

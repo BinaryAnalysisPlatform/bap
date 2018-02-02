@@ -114,7 +114,7 @@ module Make_MIPS(S: Spec) : MIPS = struct
 
     let gpr = Array.to_list gprs |> reglist_to_map
     (* FIXME: better representation *)
-    let gpri = make_regs_i (Type.imm fpr_bitwidth) "R" range32
+    let gpri = make_regs_i (Type.imm gpr_bitwidth) "R" range32
 
     module E = struct
         include Exps
@@ -178,4 +178,3 @@ end
 
 module MIPS_32_cpu = Make_cpu(MIPS_32)
 module MIPS_64_cpu = Make_cpu(MIPS_64)
-

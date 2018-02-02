@@ -52,11 +52,9 @@ let make_cpu addr_size endian memory =
             mips_fail "%s with number %d not found" name n in
     let gpr n = find "GPR" gpri n in
     let fpr n = find "FPR" fpri n in
-    let addr_size = match addr_size with
-    | `r32 -> word
-    | `r64 -> doubleword in
-    let gpr_width = addr_size in
-    { load; store; jmp; cia; addr_size; gpr_width;
+    let word_width, word_bitwidth = match addr_size with
+    | `r32 -> unsigned const byte 32, word
+    | `r64 -> unsigned const byte 64, doubleword in
+    { load; store; jmp; cia; word_width; word_bitwidth;
         reg; gpr; fpr;
     }
-

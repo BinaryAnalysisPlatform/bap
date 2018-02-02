@@ -4,8 +4,10 @@ open Mips.Std
 let bal cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
+    let step = unsigned const byte 2 in
+    let byte = unsigned const byte 8 in
     RTL.[
-        rs := cpu.cia + unsigned const byte 8;
+        rs := cpu.cia + step * cpu.word_width / byte;
         cpu.jmp (cpu.cia + off);
     ]
 
@@ -54,9 +56,11 @@ let blez cpu ops =
 let bgezal cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
+    let step = unsigned const byte 2 in
+    let byte = unsigned const byte 8 in
     RTL.[
-        (* )cpu.lr := cpu.cia + unsigned const byte 8; *)
         when_ (rs >= zero) [
+            cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
             cpu.jmp (cpu.cia + off);
         ];
     ]
@@ -67,7 +71,7 @@ let bltzalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt < zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -77,7 +81,7 @@ let blezalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt <= zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -87,7 +91,7 @@ let bgezalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt >= zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -97,7 +101,7 @@ let bgtzalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt > zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -107,7 +111,7 @@ let beqzalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt = zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -117,7 +121,7 @@ let bnezalc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt <> zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -128,7 +132,7 @@ let bltc cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs < rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -139,7 +143,7 @@ let bgec cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs >= rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -150,7 +154,7 @@ let beqc cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs = rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -161,7 +165,7 @@ let bnec cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs <> rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -172,7 +176,7 @@ let bltuc cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs < rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -183,7 +187,7 @@ let bgeuc cpu ops =
     let off = signed imm ops.(2) in
     RTL.[
         when_ (rs >= rt) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -193,7 +197,7 @@ let bltzc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt < zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -203,7 +207,7 @@ let blezc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt <= zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -213,7 +217,7 @@ let bgezc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt >= zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -223,7 +227,7 @@ let bgtzc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rt > zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -233,7 +237,7 @@ let beqzc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rs = zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -243,7 +247,7 @@ let bnezc cpu ops =
     let off = signed imm ops.(1) in
     RTL.[
         when_ (rs <> zero) [
-            cpu.jmp (cpu.cia + off + unsigned const byte 4);
+            cpu.jmp (cpu.cia + off);
         ];
     ]
 
@@ -287,8 +291,10 @@ let jump cpu ops =
 (* JAL target *)
 let jal cpu ops =
     let target = signed imm ops.(0) in
+    let step = unsigned const byte 2 in
+    let byte = unsigned const byte 8 in
     RTL.[
-        cpu.cia := cpu.cia + unsigned const byte 8;
+        cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
         cpu.jmp target;
     ]
 
@@ -296,8 +302,10 @@ let jal cpu ops =
 let jalr cpu ops =
     let rd = signed cpu.reg ops.(0) in
     let rs = signed cpu.reg ops.(1) in
+    let step = unsigned const byte 2 in
+    let byte = unsigned const byte 8 in
     RTL.[
-        rd := cpu.cia + unsigned const byte 8;
+        rd := cpu.cia + step * cpu.word_width / byte;
         cpu.jmp rs;
     ]
 
@@ -305,8 +313,10 @@ let jalr cpu ops =
 let jialc cpu ops =
     let rt = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
+    let step = unsigned const byte 2 in
+    let byte = unsigned const byte 8 in
     RTL.[
-        cpu.cia := cpu.cia + unsigned const byte 4;
+        cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
         cpu.jmp (rt + off);
     ]
 
@@ -323,6 +333,17 @@ let jr cpu ops =
     let rs = signed cpu.reg ops.(0) in
     RTL.[
         cpu.jmp rs;
+    ]
+
+(* BNE ra, rb, offset  *)
+let bne cpu ops =
+    let ra = unsigned cpu.reg ops.(0) in
+    let rb = unsigned cpu.reg ops.(1) in
+    let off = signed imm ops.(2) in
+    RTL.[
+        when_ (lnot (ra = rb)) [
+            cpu.jmp (cpu.cia + off)
+        ]
     ]
 
 let () =
@@ -359,4 +380,49 @@ let () =
     "JIALC" >> jialc;
     "JIC" >> jic;
     "JR" >> jr;
+    "BNE" >> bne;
 
+
+    (* SLT  v0,v1,v0 *)
+let slt cpu ops =
+  let rd = signed cpu.reg ops.(0) in
+  let rs = signed cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[
+    if_ (rs <$ rt) [
+      rd := one;
+    ] [
+      rd := zero
+    ]
+  ]
+
+(* SLTU  v1,v0,s1 *)
+let sltu cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[
+    if_ (rs < rt) [
+      rd := one;
+    ] [
+      rd := zero
+    ]
+  ]
+
+(* SLTiu  v0,v0,7 *)
+let sltiu cpu ops =
+  let rt = signed cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let im = signed imm ops.(2) in
+  RTL.[
+    if_ (rs < im) [
+      rt := one;
+    ] [
+      rt := zero
+    ]
+  ]
+
+let () =
+  "SLT"   >> slt;
+  "SLTu"  >> sltu;
+  "SLTiu" >> sltiu
