@@ -16,4 +16,7 @@ type cpu = {
     reg : (op -> exp) ec;
     gpr : int -> exp;
     fpr : int -> exp;
+    hi : exp;
+    lo : exp;
 }
+

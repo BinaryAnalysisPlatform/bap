@@ -1,6 +1,12 @@
 open Core_kernel.Std
 open Bap.Std
 
+(* This CPU model and instruction set is based on the
+ * "MIPS Architecture For Programmers
+ * Volume II-A: The MIPS64 Instruction Set Reference Manual"
+ * Document Number: MD00087  Revision 6.04
+ * November 13, 2015 *)
+
 module Model = Mips_model
 
 module Std = struct

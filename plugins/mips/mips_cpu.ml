@@ -55,6 +55,10 @@ let make_cpu addr_size endian memory =
     let word_width, word_bitwidth = match addr_size with
     | `r32 -> unsigned const byte 32, word
     | `r64 -> unsigned const byte 64, doubleword in
+    (* FIXME: Just use zero here? *)
+    let hi = Memory.min_addr memory |> Exp.of_word |> Exp.unsigned in
+    let lo = Memory.min_addr memory |> Exp.of_word |> Exp.unsigned in
     { load; store; jmp; cia; word_width; word_bitwidth;
-        reg; gpr; fpr;
+        reg; gpr; fpr; hi; lo;
     }
+

@@ -24,6 +24,7 @@ Library mips_plugin
                         Mips_conditional,
                         Mips_logic,
                         Mips_multiply,
+                        Mips_divide,
                         Mips_shift_and_rot,
                         Mips_store
 

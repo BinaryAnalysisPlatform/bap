@@ -1,6 +1,8 @@
 open Mips.Std
 
-(* BAL rs, offset *)
+(* BAL rs, offset
+ * Branch and Link, MIPS32
+ * Page 54 *)
 let bal cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -11,7 +13,9 @@ let bal cpu ops =
         cpu.jmp (cpu.cia + off);
     ]
 
-(* BEQ rs, rt, offset *)
+(* BEQ rs, rt, offset
+ * Branch on Equal, MIPS32
+ * Page 76 *)
 let beq cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let rt = signed cpu.reg ops.(1) in
@@ -22,7 +26,9 @@ let beq cpu ops =
         ];
     ]
 
-(* BEQL rs, rt, offset *)
+(* BEQL rs, rt, offset
+ * Branch on Equal Likely, MIPS32, removed in Release 6
+ * Page 77 *)
 let beql cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let rt = signed cpu.reg ops.(1) in
@@ -33,7 +39,9 @@ let beql cpu ops =
         ];
     ]
 
-(* BGEZ rs, offset *)
+(* BGEZ rs, offset
+ * Branch on Greater Than or Equal to Zero, MIPS32
+ * Page 79 *)
 let bgez cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -43,7 +51,9 @@ let bgez cpu ops =
         ];
     ]
 
-(* BLEZ rs, offset *)
+(* BLEZ rs, offset
+ * Branch on Less Than or Equal to Zero, MIPS32
+ * Page 97 *)
 let blez cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -52,7 +62,10 @@ let blez cpu ops =
             cpu.jmp (cpu.cia + off);
         ];
     ]
-(* BGEZAL rs, offset *)
+
+(* BGEZAL rs, offset
+ * Branch on Greater Than or Equal to Zero and Link, MIPS32, removed in Release 6
+ * Page 80 *)
 let bgezal cpu ops =
     let rs = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -281,14 +294,18 @@ let bgtzl cpu ops =
         ];
     ]
 
-(* J target *)
+(* J target
+ * Jump, MIPS32
+ * Page 226 *)
 let jump cpu ops =
     let target = signed imm ops.(0) in
     RTL.[
         cpu.jmp target;
     ]
 
-(* JAL target *)
+(* JAL target
+ * Jump and Link, MIPS32
+ * Page 227 *)
 let jal cpu ops =
     let target = signed imm ops.(0) in
     let step = unsigned const byte 2 in
@@ -298,7 +315,9 @@ let jal cpu ops =
         cpu.jmp target;
     ]
 
-(* JALR rd, rs *)
+(* JALR rd, rs
+ * Jump and Link Register, MIPS32
+ * Page 228 *)
 let jalr cpu ops =
     let rd = signed cpu.reg ops.(0) in
     let rs = signed cpu.reg ops.(1) in
@@ -309,7 +328,9 @@ let jalr cpu ops =
         cpu.jmp rs;
     ]
 
-(* JIALC rt, offset *)
+(* JIALC rt, offset
+ * Jump Indexed and Link, Compact, MIPS32 Release 6
+ * Page 236 *)
 let jialc cpu ops =
     let rt = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -320,7 +341,9 @@ let jialc cpu ops =
         cpu.jmp (rt + off);
     ]
 
-(* JIC rt, offset *)
+(* JIC rt, offset
+ * Jump Indexed, Compact, MIPS32 Release 6
+ * Page 238 *)
 let jic cpu ops =
     let rt = signed cpu.reg ops.(0) in
     let off = signed imm ops.(1) in
@@ -328,14 +351,18 @@ let jic cpu ops =
         cpu.jmp (rt + off);
     ]
 
-(* JR rs *)
+(* JR rs
+ * Jump Register, MIPS32
+ * Page 239 *)
 let jr cpu ops =
     let rs = signed cpu.reg ops.(0) in
     RTL.[
         cpu.jmp rs;
     ]
 
-(* BNE ra, rb, offset  *)
+(* BNE ra, rb, offset
+ * Branch or Not Equal
+ * Page 106 *)
 let bne cpu ops =
     let ra = unsigned cpu.reg ops.(0) in
     let rb = unsigned cpu.reg ops.(1) in
@@ -345,6 +372,8 @@ let bne cpu ops =
             cpu.jmp (cpu.cia + off)
         ]
     ]
+
+(* TODO: Add NAL instruction *)
 
 let () =
     "BAL" >> bal;
@@ -377,52 +406,9 @@ let () =
     "J" >> jump;
     "JAL" >> jal;
     "JALR" >> jalr;
+    "JALR.HB" >> jalr;
     "JIALC" >> jialc;
     "JIC" >> jic;
     "JR" >> jr;
     "BNE" >> bne;
 
-
-    (* SLT  v0,v1,v0 *)
-let slt cpu ops =
-  let rd = signed cpu.reg ops.(0) in
-  let rs = signed cpu.reg ops.(1) in
-  let rt = unsigned cpu.reg ops.(2) in
-  RTL.[
-    if_ (rs <$ rt) [
-      rd := one;
-    ] [
-      rd := zero
-    ]
-  ]
-
-(* SLTU  v1,v0,s1 *)
-let sltu cpu ops =
-  let rd = unsigned cpu.reg ops.(0) in
-  let rs = unsigned cpu.reg ops.(1) in
-  let rt = unsigned cpu.reg ops.(2) in
-  RTL.[
-    if_ (rs < rt) [
-      rd := one;
-    ] [
-      rd := zero
-    ]
-  ]
-
-(* SLTiu  v0,v0,7 *)
-let sltiu cpu ops =
-  let rt = signed cpu.reg ops.(0) in
-  let rs = unsigned cpu.reg ops.(1) in
-  let im = signed imm ops.(2) in
-  RTL.[
-    if_ (rs < im) [
-      rt := one;
-    ] [
-      rt := zero
-    ]
-  ]
-
-let () =
-  "SLT"   >> slt;
-  "SLTu"  >> sltu;
-  "SLTiu" >> sltiu
