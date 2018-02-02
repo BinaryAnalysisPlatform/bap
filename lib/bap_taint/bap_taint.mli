@@ -120,7 +120,9 @@ module Std : sig
         include Value with type t := t
                        and type 'a m := 'a Machine.t
       end
-      include Comparable.S_plain with type t := t
+      include Comparable.S_plain
+        with type t := t
+         and type comparator_witness = Primus.Value.comparator_witness
     end
 
     (** Relation between a value and an object that we track.
@@ -178,8 +180,9 @@ module Std : sig
         include Value with type t := t
                        and type 'a m := 'a Machine.t
       end
-
-      include Comparable.S_plain with type t := t
+      include Comparable.S_plain
+        with type t := t
+         and type comparator_witness = Primus.Value.comparator_witness
     end
 
     (** Taint tracker control module.

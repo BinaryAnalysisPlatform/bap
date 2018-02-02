@@ -18,6 +18,9 @@ module type Value = sig
   val of_value : Primus.value -> t m
 end
 
+module type comparable_with_value =
+  Comparable.S_plain with type comparator_witness = Primus.Value.comparator_witness
+
 module Ident(Machine : Primus.Machine.S) = struct
   type t = value
   type 'a m = 'a Machine.t
@@ -62,8 +65,9 @@ module Object = struct
     let kind v =
       Machine.Local.get kinds >>| fun {objects} ->
       Map.find_exn objects v
+    include Ident(Machine)
   end
-  include (Primus.Value : Comparable.S_plain with type t = value)
+  include (Primus.Value : comparable_with_value with type t = value)
 end
 
 type objects = Object.Set.t
@@ -163,6 +167,7 @@ module Kind = struct
     let name = Value.Symbol.of_value
     include Ident(Machine)
   end
+  include (Primus.Value : comparable_with_value with type t := t)
 end
 
 module Rel = struct
@@ -172,6 +177,7 @@ module Rel = struct
 end
 
 
+type Primus.exn += Bad_cast of Primus.value
 
 
 module Taint = struct
@@ -204,6 +210,10 @@ module Taint = struct
       | Some s -> s
 
 
+    let int_of_value x =
+      match Word.to_int (Value.to_word x) with
+      | Error _ -> Machine.raise (Bad_cast x)
+      | Ok x -> Machine.return x
 
     let new_direct value kind =
       Taint.create kind >>= fun taint ->
@@ -213,10 +223,11 @@ module Taint = struct
                 (Primus.Value.id value) ~f:(function
                     | None -> Object.Set.singleton taint
                     | Some taints -> Set.add taints taint)
-          })
+          }) >>| fun () -> taint
 
     let new_indirect ~addr ~len kind  =
       Taint.create kind >>= fun taint ->
+      int_of_value len >>= fun len ->
       Machine.Local.get tainter >>= fun s ->
       Seq.range 0 len |>
       Machine.Seq.fold ~init:s.indirect ~f:(fun indirect off ->
@@ -262,7 +273,7 @@ module Taint = struct
   end
 end
 
-module Propagate = struct
+module Propagation = struct
 
   type policies = {
     clients : Primus.Value.Set.t Primus.Value.Map.t;
@@ -278,6 +289,7 @@ module Propagate = struct
          })
 
   module Policy = struct
+    type t = value
     module Make(Machine : Primus.Machine.S) = struct
       open Machine.Syntax
 
@@ -292,7 +304,7 @@ module Propagate = struct
       let set_default p = Machine.Local.update policies ~f:(fun s ->
           {s with default = Some p})
 
-      let kinds p =
+      let kinds p : Kind.Set.t Machine.t =
         Machine.Local.get policies >>| fun {clients} ->
         match Map.find clients p with
         | None -> Primus.Value.Set.empty
@@ -447,4 +459,16 @@ module Gc(Machine : Primus.Machine.S) = struct
 
   let init () = Primus.Interpreter.leave_blk >>> main
 
+end
+
+
+module Std = struct
+  module type Value = Value
+  module Taint = struct
+    module Object = Object
+    module Kind = Kind
+    module Rel = Rel
+    module Tracker = Taint.Make
+    module Propagation = Propagation
+  end
 end
