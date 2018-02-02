@@ -59,27 +59,24 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
 
-
-(** Abstract value.
-
-    Anything isomorphic to the value, is a value. Since we define
-    isomorphism modulo the machine monad it is possible to define
-    abstract types that could be easily embedded in the Primus runtime
-    value representation.
-
-    TODO: this shall be a part of Primus.*)
-module type Value = sig
-  type t
-  type 'a m
-  (** [to_value x] injects [x] into the [value] domain  *)
-  val to_value : t -> Primus.value m
-
-  (** [of_value v] project the value [v] to the abstract domain of [t]  *)
-  val of_value : Primus.value -> t m
-end
-
-
 module Std : sig
+
+
+  (** Abstract value.
+
+      Anything isomorphic to the value, is a value. Since we define
+      isomorphism modulo the machine monad it is possible to define
+      abstract types that could be easily embedded in the Primus runtime
+      value representation. *)
+  module type Value = sig
+    type t
+    type 'a m
+    (** [to_value x] injects [x] into the [value] domain  *)
+    val to_value : t -> Primus.value m
+
+    (** [of_value v] project the value [v] to the abstract domain of [t]  *)
+    val of_value : Primus.value -> t m
+  end
 
   (** Abstract taint.
 
@@ -260,6 +257,27 @@ module Std : sig
 
       *)
 
+
+      (** [new_direct v k] introduces a new direct relation between the
+          value [v] and a freshly created object of the given kind
+          [k]. The object is returned.
+
+          Essentially:
+          [attach v direct (add (lookup v k) (Object.create k as r)); r]
+
+      *)
+      val new_direct : Primus.value -> Kind.t -> Object.t Machine.t
+
+      (** [new_indirect ~addr:v ~len:n k] establishes a new indirect
+          relation between a set of addresses, denoted by interval
+          [[v,v+n-1]], and a freshly created object of specified
+          kind. *)
+      val new_indirect :
+        addr:Primus.value ->
+        len:Primus.value ->
+        Kind.t ->
+        Object.t Machine.t
+
       (** [Taint.sanitize r k v] detaches all objects related to the
           value [v] by the relation [r] that has the given kind [k].
 
@@ -267,10 +285,10 @@ module Std : sig
 
           [detach v r (filter (has_kind k) (lookup v r))]
       *)
-      val sanitize : Rel.t -> Kind.t -> Primus.value -> unit Machine.t
+      val sanitize : Primus.value -> Rel.t -> Kind.t -> unit Machine.t
 
 
-      (** [propagate rs rd srcs dst] select all objects
+      (** [transfer rs rd srcs dst] select all objects
           related with values in [srcs] by the relation [rs] and
           associate them with the value [dst] using the relation
           [rd]. The relations of the source values are unaffected.
@@ -278,7 +296,34 @@ module Std : sig
           In terms of the low-level operations:
           [attach dst rd (union (map srcs (fun v -> lookup v rs)))]
       *)
-      val propagate : Rel.t -> Rel.t -> Primus.value list -> Primus.value -> unit Machine.t
+      val transfer : Kind.t -> Rel.t -> Rel.t -> Primus.value list -> Primus.value -> unit Machine.t
+    end
+
+    module Propagation : sig
+      module Policy : sig
+        type t
+        module Make(Machine : Primus.Machine.S) : sig
+
+          (** [select k p] selects the taint propagation policy [p]
+              for objects of kind [k]. It is possible to select
+              several policies for the same kind. If no policy is
+              selected, then the default policy will be selected.
+          *)
+          val select : Kind.t -> t -> unit Machine.t
+
+          (** [set_default policy] makes [policy] the default policy
+              for all kinds that didn't select their own taint
+              propagation policies.  *)
+          val set_default : t -> unit Machine.t
+
+          (** [kinds policy] returns a set of kinds that uses the
+              specified taint propagation [policy]. *)
+          val kinds : t -> Kind.Set.t Machine.t
+
+          include Value with type t := t
+                         and type 'a m := 'a Machine.t
+        end
+      end
     end
   end
 end
