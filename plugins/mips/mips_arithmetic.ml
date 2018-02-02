@@ -130,8 +130,29 @@ let aluipc cpu ops =
     rs := (lnot mask) land x;
   ]
 
-(* TODO: Add LSA rd, rs, rt, sa *)
-(* TODO: Add DLSA rd, rs, rt, sa *)
+(* LSA rd, rs, rt, sa
+ * Load Scaled Address, MIPS32 Release 6
+ * Page 278 *)
+let lsa cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  let sa = unsigned imm ops.(3) in
+  RTL.[
+    rd := (rs lsl (sa + unsigned const byte 1)) + rt;
+  ]
+
+(* DLSA rd, rs, rt, sa
+ * Load Scaled Address, MIPS64 Release 6
+ * Page 278 *)
+let dlsa cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  let sa = unsigned imm ops.(3) in
+  RTL.[
+    rd := (rs lsl (sa + unsigned const byte 1)) + rt;
+  ]
 
 (* MOVE rd, rs  - WTF nonexistent!? *)
 
@@ -185,6 +206,8 @@ let () =
   "ADDu" >> addu;
   "CLO" >> clo;
   "CLZ" >> clz;
+  "LSA" >> lsa;
+  "DLSA" >> dlsa;
   "LUi" >> lui;
   "ALUipc" >> aluipc;
   "SEB" >> seb;
