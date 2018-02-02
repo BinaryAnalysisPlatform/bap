@@ -390,8 +390,8 @@ module Normalize = struct
         match acc with
         | [] -> loop [[n,x] ] (succ n) bil
         | _ ->
-        let acc = List.map acc ~f:(fun xs -> (n, x) :: xs) in
-        loop acc (succ n) bil in
+          let acc = List.map acc ~f:(fun xs -> (n, x) :: xs) in
+          loop acc (succ n) bil in
     let vars,_ = loop [] 0 bil in
     List.map ~f:List.rev vars
 
