@@ -1,6 +1,8 @@
 open Mips.Std
 
-(* AND rd, rs, rt *)
+(* AND rd, rs, rt
+ * And, MIPS32
+ * Page 47 *)
 let mand cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -9,7 +11,9 @@ let mand cpu ops =
     rd := rs land rt;
   ]
 
-(* ANDI rd, rs, imm *)
+(* ANDI rd, rs, imm
+ * And Immediate, MIPS32
+ * Page 48 *)
 let mandi cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -18,12 +22,17 @@ let mandi cpu ops =
     rd := rs land im;
   ]
 
-(* EXT rd, rs, p, s *)
-(* INS rd, rs, p, s *)
-(* NOP *)
+(* TODO: EXT rd, rs, p, s *)
+(* TODO: INS rd, rs, p, s *)
+
+(* NOP
+ * Just NOP, here and everywhere
+ * Page 364 *)
 let nop cpu ops = []
 
-(* NOR rd, rs, rt *)
+(* NOR rd, rs, rt
+ * Not Or, MIPS32
+ * Page 365 *)
 let nor cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -32,7 +41,8 @@ let nor cpu ops =
     rd := lnot (rs lor rt);
   ]
 
-(* NOT rd, rs *)
+(* NOT rd, rs
+ * Not in the manual *)
 let mnot cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -40,7 +50,9 @@ let mnot cpu ops =
     rd := lnot rs;
   ]
 
-(* OR rd, rs, rt *)
+(* OR rd, rs, rt
+ * Or, MIPS32
+ * Page 366 *)
 let mor cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -49,7 +61,9 @@ let mor cpu ops =
     rd := rs lor rt;
   ]
 
-(* ORI rd, rs, imm *)
+(* ORI rd, rs, imm
+ * Or Immediate, MIPS32
+ * Page 367 *)
 let mori cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -58,8 +72,21 @@ let mori cpu ops =
     rd := rs lor im;
   ]
 
-(* WSBH rd, rs *)
-(* XOR rd, rs, rt *)
+(* WSBH rd, rs
+ * Word Swap Bytes Within Halfwords, MIPS32 Release 2
+ * Page 509 *)
+let wsbh cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let im = unsigned imm ops.(2) in
+  RTL.[
+    rd := nth byte rs 3 ^ nth byte rs 4 ^
+      nth byte rs 1 ^ nth byte rs 2;
+  ]
+
+(* XOR rd, rs, rt
+ * Exclusive Or, MIPS32
+ * Page 509 *)
 let mxor cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -68,7 +95,9 @@ let mxor cpu ops =
     rd := rs lxor rt;
   ]
 
-(* XORI rd, rs, imm *)
+(* XORI rd, rs, imm
+ * Exclusive Or Immediate, MIPS32
+ * Page 511 *)
 let mxori cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -77,7 +106,9 @@ let mxori cpu ops =
     rd := rs lxor im;
   ]
 
-(* BITSWAP rd, rt *) (* DBITSWAP rd, rt  - 64bit instruction *)
+(* BITSWAP rd, rt
+ * Swaps (reverses) bits in each byte, MIPS32 Release 6
+ * Page 95 *)
 let bitswap cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rt = unsigned cpu.reg ops.(1) in
@@ -93,6 +124,24 @@ let bitswap cpu ops =
     ];
   ]
 
+(* DBITSWAP rd, rt  - 64bit instruction
+ * Swaps (reverses) bits in each byte, MIPS64 Release 6
+ * Page 95 *)
+let dbitswap cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rt = unsigned cpu.reg ops.(1) in
+  let cnt = unsigned var byte in
+  let biti = unsigned var bit in
+  RTL.[
+    (* Reverse bits *)
+    cnt := zero;
+    foreach biti rt [
+      rd := rd lor (((rt lsr cnt) land one)
+                    lsl (unsigned const byte 63 - cnt));
+      cnt := cnt + one;
+    ];
+  ]
+
 let () =
   "AND" >> mand;
   "ANDi" >> mandi;
@@ -104,4 +153,5 @@ let () =
   "XOR" >> mxor;
   "XORi" >> mxori;
   "BITSWAP" >> bitswap;
+  "DBITSWAP" >> dbitswap;
 

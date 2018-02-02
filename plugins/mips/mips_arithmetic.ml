@@ -1,45 +1,60 @@
 open Mips.Std
 
-(* ADD rd, rs, rt *)
+(* ADD rd, rs, rt
+ * Add Word, MIPS32
+ * Page 36 *)
 let add cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let rt = signed cpu.reg ops.(2) in
   RTL.[ rd := rs + rt; ]
 
-(* ADD.S fd, fs, ft
- * ADD.D fd, fs, ft *)
+(* ADD.S fd, fs, ft , MIPS32
+ * ADD.D fd, fs, ft , MIPS32
+ * ADD.PS fd, fs, ft , MIPS32, MIPS64
+ * Floating Point Add
+ * Page 37 *)
 let add_fmt cpu ops =
   RTL.[]
 
-(* ADDI rt, rs, immediate *)
+(* ADDI rt, rs, immediate
+ * Add Immediate Word, MIPS32, removed in Release 6
+ * Page 38 *)
 let addi cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let im = signed imm ops.(2) in
   RTL.[ rt := rs + im; ]
 
-(* ADDIU rt, rs, immediate *)
+(* ADDIU rt, rs, immediate
+ * Add Immediate Unsigned Word, MIPS32
+ * Page 39 *)
 let addiu cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let im = signed imm ops.(2) in
   RTL.[ rt := rs + im; ]
 
-(* ADDIUPC rs, immediate *)
+(* ADDIUPC rs, immediate
+ * Add Immediate to PC (unsigned), MIPS32 Release 6
+ * Page 40 *)
 let addiupc cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let im = signed imm ops.(1) in
   RTL.[ rs := cpu.cia + im; ]
 
-(* ADDU rd, rs, rt *)
+(* ADDU rd, rs, rt
+ * Add Unsigned Word, MIPS32,
+ * Page 41 *)
 let addu cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rt = unsigned cpu.reg ops.(2) in
   RTL.[ rd := rs + rt; ]
 
-(* CLO rd, rs *)
+(* CLO rd, rs
+ * Count Leading Ones in Word, MIPS32
+ * Page 136 *)
 (* TODO: check that RT = RD *)
 let clo cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
@@ -64,7 +79,9 @@ let clo cpu ops =
     rd := cnt;
   ]
 
-(* CLZ rd, rs *)
+(* CLZ rd, rs
+ * Count Leading Zeroes in Word, MIPS32
+ * Page 137 *)
 (* TODO: check that RT = RD *)
 let clz cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
@@ -89,11 +106,9 @@ let clz cpu ops =
     rd := cnt;
   ]
 
-(*
-let la cpu ops =
-let li cpu ops =
-*)
-(* LUi rt, imm *)
+(* LUi rt, imm
+ * Load Upper Immediate, MIPS32
+ * Page 279 *)
 let lui cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let im = signed imm ops.(1) in
@@ -101,12 +116,28 @@ let lui cpu ops =
     rt := im lsl unsigned const byte 16;
   ]
 
+(* ALUIPC rs, imm
+ * Aligned Add Upper Immediate to PC, MIPS32 Release 6
+ * Page 45 *)
+let aluipc cpu ops =
+  let rs = signed cpu.reg ops.(0) in
+  let im = signed imm ops.(1) in
+  let x = unsigned var word in
+  let mask = unsigned var word in
+  RTL.[
+    mask := unsigned const word 0xFFFF;
+    x := cpu.cia + (im lsl unsigned const byte 16);
+    rs := (lnot mask) land x;
+  ]
+
+(* TODO: Add LSA rd, rs, rt, sa *)
+(* TODO: Add DLSA rd, rs, rt, sa *)
+
 (* MOVE rd, rs  - WTF nonexistent!? *)
-(*
-let move cpu ops =
-let negu cpu ops =
-*)
-(* SEB rd, rt *)
+
+(* SEB rd, rt
+ * Sign-Extend Byte, MIPS32 Release 2
+ * Page 426 *)
 let seb cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -115,7 +146,9 @@ let seb cpu ops =
     rs := rt;
   ]
 
-(* SEH rd, rt *)
+(* SEH rd, rt
+ * Sign-Extend Halfword, MIPS32 Release 2
+ * Page 427 *)
 let seh cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -124,14 +157,18 @@ let seh cpu ops =
     rs := rt;
   ]
 
-(* SUB rd, rs, rt *)
+(* SUB rd, rs, rt
+ * Subtract Word, MIPS32
+ * Page 452 *)
 let sub cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let rt = signed cpu.reg ops.(2) in
   RTL.[ rd := rs - rt; ]
 
-(* SUBU rd, rs, rt *)
+(* SUBU rd, rs, rt
+ * Subtract Word Unsigned, MIPS32
+ * Page 454 *)
 let subu cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -149,6 +186,7 @@ let () =
   "CLO" >> clo;
   "CLZ" >> clz;
   "LUi" >> lui;
+  "ALUipc" >> aluipc;
   "SEB" >> seb;
   "SEH" >> seh;
   "SUB" >> sub;

@@ -1,6 +1,8 @@
 open Mips.Std
 
-(* ROTR rd, rt, imm *)
+(* ROTR rd, rt, imm
+ * Rotate Word Right, MIPS32 Release 2
+ * Page 391 *)
 let rotr cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rt = unsigned cpu.reg ops.(1) in
@@ -13,11 +15,12 @@ let rotr cpu ops =
     (* rotate right *)
     tt := tm lsr sa;
     tm := tm lsl (unsigned const byte 32 - sa);
-    (* sign extend *)
     rd := tm lor tt;
   ]
 
-(* ROTRV rd, rs, rt *)
+(* ROTRV rd, rs, rt
+ * Rotate Word Right Variable, MIPS32 Release 2
+ * Page 392 *)
 let rotrv cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -30,11 +33,12 @@ let rotrv cpu ops =
     (* rotate right at bits in rs *)
     tt := tm lsr rs;
     tm := tm lsl (unsigned const byte 32 - rs);
-    (* sign extend *)
     rd := tm lor tt;
   ]
 
-(* SLL rd, rs, imm *)
+(* SLL rd, rs, imm
+ * Shift Word Left Logical, MIPS32
+ * Page 440 *)
 let sll cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -42,11 +46,13 @@ let sll cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rs lsl sa;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
-(* SLLV rd, rs, rt *)
+(* SLLV rd, rs, rt
+ * Shift Word Left Logical Variable, MIPS32
+ * Page 441 *)
 let sllv cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -54,11 +60,13 @@ let sllv cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rt lsl rs;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
-(* SRA rd, rs, imm *)
+(* SRA rd, rs, imm
+ * Shift Word Right Arithmetic, MIPS32
+ * Page 446 *)
 let sra cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -66,11 +74,13 @@ let sra cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rs lsr sa;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
-(* SRAV rd, rs, rt *)
+(* SRAV rd, rs, rt
+ * Shift Word Right Arithmetic Variable, MIPS32
+ * Page 448 *)
 let srav cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -78,11 +88,13 @@ let srav cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rt lsr rs;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
-(* SRL rd, rs, imm *)
+(* SRL rd, rs, imm
+ * Shift Word Right Logical, MIPS32
+ * Page 449 *)
 let srl cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -90,11 +102,13 @@ let srl cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rs lsr sa;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
-(* SRLV rd, rs, rt *)
+(* SRLV rd, rs, rt
+ * Shift Word Right Logical Variable, MIPS32
+ * Page 450 *)
 let srlv cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
@@ -102,7 +116,7 @@ let srlv cpu ops =
   let tm = unsigned var word in
   RTL.[
     tm := rt lsr rs;
-    (* sign extend *)
+    (* TODO: sign extend *)
     rd := tm;
   ]
 
