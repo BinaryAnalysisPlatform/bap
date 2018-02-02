@@ -64,6 +64,39 @@ let sllv cpu ops =
     rd := tm;
   ]
 
+(* DSLL rd, rs, imm
+ * Shift Doubleword Left Logical, MIPS64
+ * Page 198 *)
+let dsll cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsl sa;
+  ]
+
+(* DSLL32 rd, rs, imm
+ * Shift Doubleword Left Logical Plus 32, MIPS64
+ * Page 199 *)
+let dsll32 cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsl (sa + unsigned const byte 32);
+  ]
+
+(* DSLLV rd, rs, rt
+ * Shift Doubleword Left Logical Variable, MIPS64
+ * Page 200 *)
+let dsllv cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[
+    rd := rt lsl rs;
+  ]
+
 (* SRA rd, rs, imm
  * Shift Word Right Arithmetic, MIPS32
  * Page 446 *)
@@ -90,6 +123,39 @@ let srav cpu ops =
     tm := rt lsr rs;
     (* TODO: sign extend *)
     rd := tm;
+  ]
+
+(* DSRA rd, rs, imm
+ * Shift Doubleword Right Arithmetic, MIPS64
+ * Page 201 *)
+let dsra cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsr sa;
+  ]
+
+(* DSRA32 rd, rs, imm
+ * Shift Doubleword Right Arithmetic Plus 32, MIPS64
+ * Page 202 *)
+let dsra32 cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsr (sa + unsigned const byte 32);
+  ]
+
+(* DSRAV rd, rs, rt
+ * Shift Doubleword Right Arithmetic Variable, MIPS64
+ * Page 203 *)
+let dsrav cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[
+    rd := rt lsr rs;
   ]
 
 (* SRL rd, rs, imm
@@ -120,12 +186,55 @@ let srlv cpu ops =
     rd := tm;
   ]
 
+(* DSRL rd, rs, imm
+ * Shift Doubleword Right Logical, MIPS64
+ * Page 203 *)
+let dsrl cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsr sa;
+  ]
+
+(* DSRL32 rd, rs, imm
+ * Shift Doubleword Right Logical, MIPS64
+ * Page 204 *)
+let dsrl32 cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let sa = unsigned imm ops.(2) in
+  RTL.[
+    rd := rs lsr (sa + unsigned const byte 32);
+  ]
+
+(* DSRLV rd, rs, rt
+ * Shift Doubleword Right Logical Variable, MIPS64
+ * Page 205 *)
+let dsrlv cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  let tm = unsigned var word in
+  RTL.[
+    rd := rt lsr rs;
+  ]
+
 let () =
   "ROTR" >> rotr;
   "ROTRV" >> rotrv;
   "SLL" >> sll;
   "SLLV" >> sllv;
+  "DSLL" >> dsll;
+  "DSLL32" >> dsll32;
+  "DSLLV" >> dsllv;
   "SRA" >> sra;
   "SRAV" >> srav;
+  "DSRA" >> dsra;
+  "DSRA32" >> dsra32;
+  "DSRAV" >> dsrav;
   "SRL" >> srl;
   "SRLV" >> srlv;
+  "DSRL" >> dsrl;
+  "DSRL32" >> dsrl32;
+  "DSRLV" >> dsrlv;

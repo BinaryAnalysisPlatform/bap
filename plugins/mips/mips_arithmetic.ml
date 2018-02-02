@@ -60,7 +60,6 @@ let clo cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let rt = unsigned cpu.reg ops.(1) in
   let rd = unsigned cpu.reg ops.(2) in
-  let tm = unsigned const halfword 32 in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
   let has_no_zeroes = unsigned var bit in
@@ -87,7 +86,6 @@ let clz cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let rt = unsigned cpu.reg ops.(1) in
   let rd = unsigned cpu.reg ops.(2) in
-  let tm = unsigned const halfword 32 in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
   let has_no_ones = unsigned var bit in
@@ -196,6 +194,24 @@ let subu cpu ops =
   let rt = unsigned cpu.reg ops.(2) in
   RTL.[ rd := rs - rt; ]
 
+(* DSUB rd, rs, rt
+ * Subtract Doubleword, MIPS64
+ * Page 207 *)
+let dsub cpu ops =
+  let rd = signed cpu.reg ops.(0) in
+  let rs = signed cpu.reg ops.(1) in
+  let rt = signed cpu.reg ops.(2) in
+  RTL.[ rd := rs - rt; ]
+
+(* DSUBU rd, rs, rt
+ * Subtract Doubleword Unsigned, MIPS64
+ * Page 208 *)
+let dsubu cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[ rd := rs - rt; ]
+
 let () =
   "ADD" >> add;
   "ADD.S" >> add_fmt;
@@ -214,3 +230,5 @@ let () =
   "SEH" >> seh;
   "SUB" >> sub;
   "SUBu" >> subu;
+  "DSUB" >> dsub;
+  "DSUBu" >> dsubu;

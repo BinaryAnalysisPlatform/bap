@@ -78,10 +78,33 @@ let mori cpu ops =
 let wsbh cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
-  let im = unsigned imm ops.(2) in
   RTL.[
     rd := nth byte rs 3 ^ nth byte rs 4 ^
       nth byte rs 1 ^ nth byte rs 2;
+  ]
+
+(* DSBH rd, rs
+ * Doubleord Swap Bytes Within Halfwords, MIPS64 Release 2
+ * Page 196 *)
+let dsbh cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  RTL.[
+    rd := nth byte rs 7 ^ nth byte rs 8 ^
+      nth byte rs 5 ^ nth byte rs 6 ^
+      nth byte rs 3 ^ nth byte rs 4 ^
+      nth byte rs 1 ^ nth byte rs 2;
+  ]
+
+(* DSHD rd, rs
+ * Doubleord Swap Halfword Within Doublewords, MIPS64 Release 2
+ * Page 509 *)
+let dshd cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  RTL.[
+    rd := nth halfword rs 1 ^ nth halfword rs 2 ^
+      nth halfword rs 3 ^ nth halfword rs 4;
   ]
 
 (* XOR rd, rs, rt
@@ -154,4 +177,6 @@ let () =
   "XORi" >> mxori;
   "BITSWAP" >> bitswap;
   "DBITSWAP" >> dbitswap;
+  "WSBH" >> wsbh;
+  "DSBH" >> dsbh;
 
