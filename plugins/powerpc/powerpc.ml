@@ -1,21 +1,21 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Bap_powerpc_types
+open Powerpc_types
 
-module Model = Bap_powerpc_model
+module Model = Powerpc_model
 
 module Std = struct
 
-  open Bap_powerpc_rtl
+  open Powerpc_rtl
 
-  include Bap_powerpc_utils
-  include Bap_powerpc_cpu
-  include Bap_powerpc_dsl
-  include Bap_powerpc_types
+  include Powerpc_utils
+  include Powerpc_cpu
+  include Powerpc_dsl
+  include Powerpc_types
 
   module RTL = struct
-    include Bap_powerpc_rtl
+    include Powerpc_rtl
     include Infix
     let foreach = foreach ~inverse:true
   end

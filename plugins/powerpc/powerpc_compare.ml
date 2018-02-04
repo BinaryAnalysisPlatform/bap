@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Fix-point Compare Immediate
     Page 85 of IBM Power ISATM Version 3.0 B

@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Fix-point Rotate Left Word Immediate then AND with Mask
     Page 102 of IBM Power ISATM Version 3.0 B

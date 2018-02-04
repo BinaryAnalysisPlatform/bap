@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Bap_powerpc_rtl
+open Powerpc_rtl
 
 module type Model = sig
   type t

@@ -1,5 +1,5 @@
 
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Fixed-Point Arithmetic Instructions - Negate
     Page 72 of IBM Power ISATM Version 3.0 B

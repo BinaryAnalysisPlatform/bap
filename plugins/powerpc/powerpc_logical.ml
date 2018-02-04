@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Extended mnemonics:
 

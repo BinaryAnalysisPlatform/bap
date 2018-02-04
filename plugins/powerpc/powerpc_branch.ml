@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 let update_link_register cpu ops =
   RTL.[cpu.lr := cpu.pc + unsigned const byte 4]

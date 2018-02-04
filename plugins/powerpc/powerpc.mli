@@ -16,7 +16,7 @@
     module:
 
     {[
-      open Bap_powerpc.Std
+      open Powerpc.Std
     ]}
 
     {2 RTL}

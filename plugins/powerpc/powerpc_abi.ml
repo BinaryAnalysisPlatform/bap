@@ -22,7 +22,7 @@ type abi = (module abi)
 exception Unsupported
 
 module Abi32 = struct
-  open Bap_powerpc.Std
+  open Powerpc.Std
   open PowerPC_32
 
   let reg i = Int.Map.find_exn gpri i |> Bil.var

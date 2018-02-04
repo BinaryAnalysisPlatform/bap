@@ -1,5 +1,5 @@
 open Bap.Std
-open Bap_powerpc_rtl
-open Bap_powerpc_types
+open Powerpc_rtl
+open Powerpc_types
 
 val make_cpu : addr_size -> endian -> mem -> cpu

@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Bap_powerpc_utils
+open Powerpc_utils
 
 type sign = Signed | Unsigned [@@deriving bin_io, compare, sexp]
 

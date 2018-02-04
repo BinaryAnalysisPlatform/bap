@@ -1,5 +1,5 @@
 
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Move To Special Purpose Cpu.Register
     Page 116 of IBM Power ISATM Version 3.0 B

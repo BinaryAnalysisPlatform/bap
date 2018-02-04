@@ -24,7 +24,7 @@
     contains "o" suffix in thers llvm names: ADDo ADDeo ADDMEo ADDZEo,
     where "o" stands for .(dot) . *)
 
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Extended mnemonics:
 

@@ -2,8 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Regular.Std
 
-open Bap_powerpc_rtl
-open Bap_powerpc_utils
+open Powerpc_rtl
+open Powerpc_utils
 
 type 'a ec = bool -> 'a
 

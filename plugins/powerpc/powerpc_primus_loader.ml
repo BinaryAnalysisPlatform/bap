@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
-open Bap_powerpc.Std
+open Powerpc.Std
 
 include Self()
 

@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Fixed-point Store Byte/Halfword/Word
     Pages 54-56 of IBM Power ISATM Version 3.0 B

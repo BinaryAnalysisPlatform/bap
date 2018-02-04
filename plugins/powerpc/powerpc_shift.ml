@@ -1,4 +1,4 @@
-open Bap_powerpc.Std
+open Powerpc.Std
 
 (** Fix-point Shift Left Word
     Page 107 of IBM Power ISATM Version 3.0 B

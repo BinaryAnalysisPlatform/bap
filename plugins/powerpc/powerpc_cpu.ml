@@ -1,10 +1,10 @@
 open Core_kernel.Std
 open Bap.Std
-open Bap_powerpc_rtl
-open Bap_powerpc_dsl
-open Bap_powerpc_utils
-open Bap_powerpc_model
-open Bap_powerpc_types
+open Powerpc_rtl
+open Powerpc_dsl
+open Powerpc_utils
+open Powerpc_model
+open Powerpc_types
 
 let size_of_width x =
   let x = int_of_bitwidth x in

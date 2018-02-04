@@ -8,13 +8,13 @@ Library powerpc_plugin
   Build$:           flag(everything) || flag(powerpc)
   BuildDepends:     bap-abi, bap-c, bap-primus, zarith
   FindlibName:      bap-plugin-powerpc
-  InternalModules:  Bap_powerpc,
-                    Bap_powerpc_cpu,
-                    Bap_powerpc_dsl,
-                    Bap_powerpc_model,
-                    Bap_powerpc_rtl,
-                    Bap_powerpc_types,
-                    Bap_powerpc_utils,
+  InternalModules:  Powerpc,
+                    Powerpc_cpu,
+                    Powerpc_dsl,
+                    Powerpc_model,
+                    Powerpc_rtl,
+                    Powerpc_types,
+                    Powerpc_utils,
                     Powerpc_abi,
                     Powerpc_add,
                     Powerpc_arith,
@@ -28,5 +28,5 @@ Library powerpc_plugin
                     Powerpc_rotate,
                     Powerpc_shift,
                     Powerpc_store,
-                    Primus_powerpc_loader
+                    Powerpc_primus_loader
   XMETAExtraLines:  tags="powerpc, lifter"
