@@ -13,6 +13,7 @@ Library "bap-powerpc"
                     Bap_powerpc_dsl,
                     Bap_powerpc_model,
                     Bap_powerpc_rtl,
+                    Bap_powerpc_types,
                     Bap_powerpc_utils
 
 Library powerpc_plugin

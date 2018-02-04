@@ -93,29 +93,28 @@
       let x = unsigned of_string "0xFFFF_FFFF_FFFF"
     ]}
 
-    {4 Taking a part}
+    {4 Extraction}
 
-    There is a general way to take a part of an expression:
+    There is a general way to extract a part of an expression:
     [extract exp from to], where a [from] denotes a more significant
     bit than [to].
 
-    Also, there are few more convenient and readable ways to take a
-    part, e.g.:
-    - [low word x]  - take the last word from [x]
-    - [high byte x] - take first (the most significant) byte
-    - [last x 5]    - take last (the least significant) bits
-    - [first x 2]   - take second bit
-    - [msb x]       - take the most significant bit
+    Also, there are few more convenient and readable ways to extract, e.g.:
+    - [low word x]  - extract the last word from [x]
+    - [high byte x] - extract first (the most significant) byte
+    - [last x 5]    - extract last (the least significant) bits
+    - [first x 2]   - extract second bit
+    - [msb x]       - extract the most significant bit
 
-    Note, that taking a part of a bigger width from expression is
+    Note, that extraction of a bigger width from expression is
     also possible, see example below.
 
-    Taking a part always results to an unsigned expression. And
+    Extraction always results to an unsigned expression. And
     sign bit interpretation depends on further using of a result
     expression. So don't use it for sign casting, just use
     expression as it is where signedness matter.
 
-    Example 1. Taking a part explicitly. The result is 0x0000_FFFF.
+    Example 1. Apply extract explicitly. The result is 0x0000_FFFF.
     {[
      let x = signed const halfword 0xFFFF in
      let y = signed var word in
@@ -124,7 +123,7 @@
      ];
     ]}
 
-    Example 2. Assignment to signed, without taking a part.
+    Example 2. Assignment to signed, without extraction.
     The result is 0xFFFF_FFFF.
     {[
      let x = signed const halfword 0xFFFF in
@@ -164,8 +163,8 @@
     An expression in left hand side of assignment is always either of
     expressions:
      - constructed with var/reg constructors
-     - expressions from cpu model.
-     - taking a part or concatenation of two cases above
+     - all expressions from cpu model, except pc
+     - extraction or concatenation of two cases above
     So there are few examples of correct assignment:
 
     {[
@@ -241,7 +240,7 @@
     - [(>.)] - does the same, plus does some extra job (see
              a description below)
 
-    {2 Comlete example}
+    {2 Complete example}
 
     To be more concrete let's create an artificial example.
     {[
@@ -326,10 +325,9 @@ module Std : sig
     load :  exp -> bitwidth -> exp; (** usage: [cpu.load address size] *)
     store : exp -> exp -> bitwidth -> rtl; (** usage: [cpu.store address data size] *)
 
-    jmp       : exp -> rtl; (** usage: [cpu.jmp address]       *)
-    cia       : exp;       (** address of current instruction *)
-    addr_size : bitwidth;  (** address size of current arch   *)
-    gpr_width : bitwidth;  (** gpr bitwidth for current arch  *)
+    jmp        : exp -> rtl; (** usage: [cpu.jmp address]       *)
+    pc         : exp;       (** address of current instruction *)
+    word_width : bitwidth;  (** word width for current arch    *)
 
     (** registers  *)
     reg       : (op -> exp) ec; (** constructs a register from operand *)

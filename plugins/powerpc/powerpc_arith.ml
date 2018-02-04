@@ -32,7 +32,7 @@ let subfic cpu ops =
   let si = unsigned imm ops.(2) in
   RTL.[
     rt := (lnot ra) + si + one;
-    cpu.ca   := low cpu.addr_size si < low cpu.addr_size ra;
+    cpu.ca   := low cpu.word_width si < low cpu.word_width ra;
     cpu.ca32 := low word si < low word ra;
   ]
 
@@ -47,7 +47,7 @@ let subfc cpu ops =
   let rb = signed cpu.reg ops.(2) in
   RTL.[
     rt := (lnot ra) + rb + one;
-    cpu.ca   := low cpu.addr_size rb < low cpu.addr_size ra;
+    cpu.ca   := low cpu.word_width rb < low cpu.word_width ra;
     cpu.ca32 := low word rb < low word ra;
   ]
 
@@ -63,7 +63,7 @@ let subfe cpu ops =
   RTL.[
     rt := (lnot ra) + rb + cpu.ca;
     cpu.ca32 := low word rb < low word (ra + one - cpu.ca);
-    cpu.ca   := low cpu.addr_size rb < low cpu.addr_size (ra + one - cpu.ca);
+    cpu.ca   := low cpu.word_width rb < low cpu.word_width (ra + one - cpu.ca);
   ]
 
 (** Fixed-Point Arithmetic Instructions - Substract From Minus One Extended

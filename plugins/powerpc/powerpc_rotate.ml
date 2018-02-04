@@ -12,11 +12,11 @@ let rlwinm cpu ops =
   let mb = unsigned imm ops.(3) in
   let me = unsigned imm ops.(4) in
   let tmp   = unsigned var word in
-  let start = unsigned var cpu.gpr_width in
-  let stop  = unsigned var cpu.gpr_width in
-  let mask  = unsigned var cpu.gpr_width in
+  let start = unsigned var cpu.word_width in
+  let stop  = unsigned var cpu.word_width in
+  let mask  = unsigned var cpu.word_width in
   let w32 = unsigned const word 32 in
-  let ones = unsigned const cpu.gpr_width (-1) in
+  let ones = unsigned const cpu.word_width (-1) in
   RTL.[
     if_ (width ra <> w32) [
       start := mb + w32;
@@ -32,7 +32,7 @@ let rlwinm cpu ops =
       mask := (mask lsl (width ra - stop)) lor (mask lsr (start + one));
     ];
     tmp := nth word rs 1;
-    ra := (nth cpu.gpr_width ((tmp ^ tmp ^ tmp) lsl sh) 0) land mask;
+    ra := (nth cpu.word_width ((tmp ^ tmp ^ tmp) lsl sh) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Word then AND with Mask
@@ -47,11 +47,11 @@ let rlwnm cpu ops =
   let mb = unsigned imm ops.(3) in
   let me = unsigned imm ops.(4) in
   let tmp   = unsigned var word in
-  let start = unsigned var cpu.gpr_width in
-  let stop  = unsigned var cpu.gpr_width in
-  let mask  = unsigned var cpu.gpr_width in
+  let start = unsigned var cpu.word_width in
+  let stop  = unsigned var cpu.word_width in
+  let mask  = unsigned var cpu.word_width in
   let w32  = unsigned const word 32 in
-  let ones = unsigned const cpu.gpr_width (-1) in
+  let ones = unsigned const cpu.word_width (-1) in
   RTL.[
     if_ (width ra <> w32) [
       start := mb + w32;
@@ -82,12 +82,12 @@ let rlwimi cpu ops =
   let mb = unsigned imm ops.(4) in
   let me = unsigned imm ops.(5) in
   let tmp1  = unsigned var word in
-  let tmp2  = unsigned var cpu.gpr_width in
-  let start = unsigned var cpu.gpr_width in
-  let stop  = unsigned var cpu.gpr_width in
-  let mask  = unsigned var cpu.gpr_width in
-  let w32  = unsigned const cpu.gpr_width 32 in
-  let ones = unsigned const cpu.gpr_width (-1) in
+  let tmp2  = unsigned var cpu.word_width in
+  let start = unsigned var cpu.word_width in
+  let stop  = unsigned var cpu.word_width in
+  let mask  = unsigned var cpu.word_width in
+  let w32  = unsigned const cpu.word_width 32 in
+  let ones = unsigned const cpu.word_width (-1) in
   RTL.[
     if_ (width ra <> w32) [
       start := mb + w32;

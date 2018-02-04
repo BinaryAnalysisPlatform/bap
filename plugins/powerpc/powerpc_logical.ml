@@ -17,9 +17,9 @@ let andi_dot cpu ops =
   let im = unsigned imm ops.(2) in
   RTL.[
     ra := rs land im;
-    nth bit cpu.cr 0 := low cpu.addr_size ra <$ zero;
-    nth bit cpu.cr 1 := low cpu.addr_size ra >$ zero;
-    nth bit cpu.cr 2 := low cpu.addr_size ra = zero
+    nth bit cpu.cr 0 := low cpu.word_width ra <$ zero;
+    nth bit cpu.cr 1 := low cpu.word_width ra >$ zero;
+    nth bit cpu.cr 2 := low cpu.word_width ra = zero
   ]
 
 (** Fixed-point AND Immediate Shifted
@@ -33,9 +33,9 @@ let andis_dot cpu ops =
   let sh = unsigned const byte 16 in
   RTL.[
     ra := rs land (im lsl sh);
-    nth bit cpu.cr 0 := low cpu.addr_size ra <$ zero;
-    nth bit cpu.cr 1 := low cpu.addr_size ra >$ zero;
-    nth bit cpu.cr 2 := low cpu.addr_size ra = zero;
+    nth bit cpu.cr 0 := low cpu.word_width ra <$ zero;
+    nth bit cpu.cr 1 := low cpu.word_width ra >$ zero;
+    nth bit cpu.cr 2 := low cpu.word_width ra = zero;
   ]
 
 (** Fixed-point AND
@@ -314,7 +314,7 @@ let cmpb cpu ops =
       ];
       ind := ind + one;
     ];
-    ra := high cpu.addr_size tmp;
+    ra := high cpu.word_width tmp;
   ]
 
 (** Fixed-point Population Count Bytes/Words/Doubleword
@@ -345,7 +345,7 @@ let popcntw cpu ops =
       res := res lor (cnt lsl (ind * x));
       ind := ind - one;
     ];
-    ra := high cpu.addr_size res;
+    ra := high cpu.word_width res;
   ]
 
 let popcntd cpu ops =

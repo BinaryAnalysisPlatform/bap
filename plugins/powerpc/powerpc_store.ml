@@ -167,7 +167,7 @@ let sthbrx cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
-  let ea = unsigned var cpu.addr_size in
+  let ea = unsigned var cpu.word_width in
   let x = unsigned var halfword in
   let y = unsigned var doubleword in
   RTL.[
@@ -185,7 +185,7 @@ let stwbrx cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
-  let ea = unsigned var cpu.addr_size in
+  let ea = unsigned var cpu.word_width in
   let x = unsigned var word in
   let y = unsigned var doubleword in
   RTL.[

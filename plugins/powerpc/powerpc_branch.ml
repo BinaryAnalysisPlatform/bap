@@ -1,7 +1,7 @@
 open Bap_powerpc.Std
 
 let update_link_register cpu ops =
-  RTL.[cpu.lr := cpu.cia + unsigned const byte 4]
+  RTL.[cpu.lr := cpu.pc + unsigned const byte 4]
 
 (** Branch Instructions, Branch
     Page 37 of IBM Power ISATM Version 3.0 B
@@ -16,7 +16,7 @@ let b cpu ops =
   let sh = unsigned of_string "0b00" in
   RTL.[
     tm := im ^ sh;
-    cpu.jmp (cpu.cia + tm)
+    cpu.jmp (cpu.pc + tm)
   ]
 
 let ba cpu ops =
@@ -35,8 +35,8 @@ let bl cpu ops =
   let ad = unsigned const byte 4 in
   RTL.[
     tm := im ^ sh;
-    cpu.jmp (cpu.cia + tm);
-    cpu.lr := cpu.cia + ad;
+    cpu.jmp (cpu.pc + tm);
+    cpu.lr := cpu.pc + ad;
   ]
 
 let bla cpu ops =
@@ -47,7 +47,7 @@ let bla cpu ops =
   RTL.[
     tm := im ^ sh;
     cpu.jmp tm;
-    cpu.lr := cpu.cia + ad;
+    cpu.lr := cpu.pc + ad;
   ]
 
 (** Branch Instructions, Branch Conditional
@@ -75,7 +75,7 @@ let bc cpu ops =
     cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
     when_ (ctr_ok land cond_ok) [
       tm := bd ^ sh;
-      cpu.jmp (cpu.cia + tm);
+      cpu.jmp (cpu.pc + tm);
     ]
   ]
 
@@ -87,7 +87,7 @@ let bca cpu ops =
   let ctr_ok = unsigned var bit in
   let cond_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
-  let tm = signed var cpu.addr_size in
+  let tm = signed var cpu.word_width in
   RTL.[
     x := last bo 5;
     when_ (nth bit x 2 = zero) [
@@ -108,12 +108,12 @@ let bcla = bca ^ update_link_register
 let bdz cpu ops =
   let bd = unsigned imm ops.(0) in
   let sh = unsigned of_string "0b00" in
-  let tm = signed var cpu.addr_size in
+  let tm = signed var cpu.word_width in
   RTL.[
     cpu.ctr := cpu.ctr - one;
-    when_ (low cpu.addr_size cpu.ctr = zero) [
+    when_ (low cpu.word_width cpu.ctr = zero) [
       tm := bd ^ sh;
-      cpu.jmp (cpu.cia + tm)
+      cpu.jmp (cpu.pc + tm)
     ]
   ]
 
@@ -121,12 +121,12 @@ let bdz cpu ops =
 let bdnz cpu ops =
   let bd = unsigned imm ops.(0) in
   let sh = unsigned of_string "0b00" in
-  let tm = signed var cpu.addr_size in
+  let tm = signed var cpu.word_width in
   RTL.[
     cpu.ctr := cpu.ctr - one;
-    when_ (low cpu.addr_size cpu.ctr <> zero) [
+    when_ (low cpu.word_width cpu.ctr <> zero) [
       tm := bd ^ sh;
-      cpu.jmp (cpu.cia + tm)
+      cpu.jmp (cpu.pc + tm)
     ]
   ]
 
@@ -171,7 +171,7 @@ let blrl cpu ops =
   let sh = unsigned of_string "0b00" in
   RTL.[
     cpu.jmp (cpu.lr ^ sh);
-    cpu.lr := cpu.cia + unsigned const byte 4
+    cpu.lr := cpu.pc + unsigned const byte 4
   ]
 
 (** bdnzlr = bclr 16,0,0  *)

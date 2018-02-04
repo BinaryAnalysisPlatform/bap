@@ -98,7 +98,7 @@ let addic cpu ops =
   RTL.[
     tm := ra;
     rt := ra + im;
-    cpu.ca := low cpu.addr_size rt < low cpu.addr_size tm;
+    cpu.ca := low cpu.word_width rt < low cpu.word_width tm;
     cpu.ca32 := low word rt < low word tm;
   ]
 
@@ -115,7 +115,7 @@ let addc cpu ops =
   RTL.[
     tm := ra;
     rt := ra + rb;
-    cpu.ca := low cpu.addr_size rt < low cpu.addr_size tm;
+    cpu.ca := low cpu.word_width rt < low cpu.word_width tm;
     cpu.ca32 := low word rt < low word tm;
   ]
 
@@ -132,7 +132,7 @@ let adde cpu ops =
   RTL.[
     tm := ra;
     rt := ra + rb + cpu.ca;
-    cpu.ca := low cpu.addr_size rt < low cpu.addr_size tm;
+    cpu.ca := low cpu.word_width rt < low cpu.word_width tm;
     cpu.ca32 := low word rt < low word tm;
   ]
 
@@ -148,7 +148,7 @@ let addme cpu ops =
   RTL.[
     tm := ra;
     rt := ra + cpu.ca - one;
-    cpu.ca := low cpu.addr_size rt < low cpu.addr_size tm;
+    cpu.ca := low cpu.word_width rt < low cpu.word_width tm;
     cpu.ca32 := low word rt < low word tm;
   ]
 
@@ -164,7 +164,7 @@ let addze cpu ops =
   RTL.[
     tm := ra;
     rt := ra + cpu.ca;
-    cpu.ca := low cpu.addr_size rt < low cpu.addr_size tm;
+    cpu.ca := low cpu.word_width rt < low cpu.word_width tm;
     cpu.ca32 := low word rt < low word tm;
   ]
 

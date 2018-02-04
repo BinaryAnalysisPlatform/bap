@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap.Std
 
+open Bap_powerpc_types
+
 module Model = Bap_powerpc_model
 
 module Std = struct
@@ -10,6 +12,7 @@ module Std = struct
   include Bap_powerpc_utils
   include Bap_powerpc_cpu
   include Bap_powerpc_dsl
+  include Bap_powerpc_types
 
   module RTL = struct
     include Bap_powerpc_rtl
@@ -29,10 +32,10 @@ module Std = struct
 
   let dot fc cpu ops =
     let res = signed cpu.reg ops.(0) in
-    let x = signed var cpu.addr_size in
+    let x = signed var cpu.word_width in
     fc cpu ops @
     RTL.[
-      x := low cpu.addr_size res;
+      x := low cpu.word_width res;
       nth bit cpu.cr 0 := x <$ zero;
       nth bit cpu.cr 1 := x >$ zero;
       nth bit cpu.cr 2 := x = zero;
