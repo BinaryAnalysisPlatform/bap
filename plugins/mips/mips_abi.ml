@@ -23,16 +23,15 @@ module Abi32 = struct
   open Mips.Std
   open MIPS_32
 
-  let a i = Map.find_exn gpr (sprintf "A%d" i) |> Bil.var
-  let v i = Map.find_exn gpr (sprintf "V%d" i) |> Bil.var
+  let reg n = Bil.Var (Map.find_exn gpri n)
   let name = "mips32"
   let size = object
     inherit C.Size.base `ILP32
   end
   let arg = function
-    | Ret_0 -> v 0
-    | Ret_1 -> v 1
-    | Arg n -> a n
+    | Ret_0 -> reg 2
+    | Ret_1 -> reg 3
+    | Arg n -> reg (n + 4)
 
 end
 

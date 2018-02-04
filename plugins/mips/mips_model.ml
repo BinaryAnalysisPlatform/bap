@@ -94,28 +94,50 @@ module Make_MIPS(S: Spec) : MIPS = struct
 
   include Vars
 
-  (* Define "standard" aliases *)
-  let zero = make_reg (Type.imm gpr_bitwidth) "ZERO"
-  let at = make_reg (Type.imm gpr_bitwidth) "AT"
-  let v = make_regs_list (Type.imm gpr_bitwidth) "V" 4
-  let a = make_regs_list (Type.imm gpr_bitwidth) "A" 4
-  let t = make_regs_list (Type.imm gpr_bitwidth) "T" 10
-  let s = make_regs_list (Type.imm gpr_bitwidth) "S" 8
-  let k = make_regs_list (Type.imm gpr_bitwidth) "K" 2
-  let gp = make_reg (Type.imm gpr_bitwidth) "GP"
-  let sp = make_reg (Type.imm gpr_bitwidth) "SP"
-  let fp = make_reg (Type.imm gpr_bitwidth) "FP"
-  let ra = make_reg (Type.imm gpr_bitwidth) "RA"
+  let make_gpr = make_reg (Type.imm gpr_bitwidth)
 
-  (* TODO: Here I am not sure if HI and LO belongs to GPRs though *)
-  let gprs = Array.concat [
-      v; a; t; s; k;
-      [|zero; at; gp; sp; fp; ra;|];
-    ]
+  let gprs = [
+    make_gpr "ZERO", "R0";
+    make_gpr "AT", "R1";
+    make_gpr "V0", "R2";
+    make_gpr "V1", "R3";
+    make_gpr "A0", "R4";
+    make_gpr "A1", "R5";
+    make_gpr "A2", "R6";
+    make_gpr "A3", "R7";
+    make_gpr "T0", "R8";
+    make_gpr "T1", "R9";
+    make_gpr "T2", "R10";
+    make_gpr "T3", "R11";
+    make_gpr "T4", "R12";
+    make_gpr "T5", "R13";
+    make_gpr "T6", "R14";
+    make_gpr "T7", "R15";
+    make_gpr "S0", "R16";
+    make_gpr "S1", "R17";
+    make_gpr "S2", "R18";
+    make_gpr "S3", "R19";
+    make_gpr "S4", "R20";
+    make_gpr "S5", "R21";
+    make_gpr "S6", "R22";
+    make_gpr "S7", "R23";
+    make_gpr "T8", "R24";
+    make_gpr "T9", "R25";
+    make_gpr "K0", "R26";
+    make_gpr "K1", "R27";
+    make_gpr "GP", "R28";
+    make_gpr "SP", "R29";
+    make_gpr "FP", "R30";
+    make_gpr "RA", "R31";
+  ]
 
-  let gpr = Array.to_list gprs |> reglist_to_map
-  (* FIXME: better representation *)
-  let gpri = make_regs_i (Type.imm fpr_bitwidth) "R" range32
+  let gpr =
+    List.fold ~init:String.Map.empty ~f:(fun regs (reg, alias) ->
+        let regs = Map.add regs (Var.name reg) reg in
+        Map.add regs alias reg) gprs
+
+  let gpri = List.foldi ~init:Int.Map.empty ~f:(fun n regs (reg,_) ->
+      Map.add regs n reg) gprs
 
   module E = struct
     include Exps
@@ -179,4 +201,3 @@ end
 
 module MIPS_32_cpu = Make_cpu(MIPS_32)
 module MIPS_64_cpu = Make_cpu(MIPS_64)
-
