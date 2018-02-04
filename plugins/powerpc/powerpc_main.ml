@@ -6,7 +6,7 @@ include Self()
 
 let () = Config.manpage [
     `S "DESCRIPTION";
-    `P "Provides lifter PowerPC architecture.";
+    `P "Provides lifter for PowerPC architecture.";
   ]
 
 module Make(T : Target) : Target = struct
