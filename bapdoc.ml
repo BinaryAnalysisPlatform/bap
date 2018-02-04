@@ -27,7 +27,6 @@ let libraries = [
   [
     "bap-arm", "ARM", "ARM architecture";
     "bap-x86-cpu", "X86_cpu", "x86 family";
-    "bap-powerpc", "Bap_powerpc", "Powerpc architecture";
   ];
 
   "Programming Languages",
