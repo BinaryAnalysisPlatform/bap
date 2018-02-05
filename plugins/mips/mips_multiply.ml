@@ -51,8 +51,10 @@ let dmul cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let rt = signed cpu.reg ops.(2) in
+  let tmp = signed var quadword in
   RTL.[
-    rd := low doubleword (rs * rt);
+    tmp := rs * rt;
+    rd := low doubleword tmp;
   ]
 
 (* DMUH rd, rs, rt
@@ -62,7 +64,9 @@ let dmuh cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let rt = signed cpu.reg ops.(2) in
+  let tmp = signed var quadword in
   RTL.[
+    tmp := rs * rt;
     rd := high doubleword (rs * rt);
   ]
 
@@ -73,7 +77,9 @@ let dmulu cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rt = unsigned cpu.reg ops.(2) in
+  let tmp = unsigned var quadword in
   RTL.[
+    tmp := rs * rt;
     rd := low doubleword (rs * rt);
   ]
 
@@ -84,7 +90,9 @@ let dmuhu cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rt = unsigned cpu.reg ops.(2) in
+  let tmp = unsigned var quadword in
   RTL.[
+    tmp := rs * rt;
     rd := high doubleword (rs * rt);
   ]
 
@@ -124,4 +132,4 @@ let () =
   "DMULu" >> dmulu;
   "DMUHu" >> dmuhu;
   "MULT" >> mult;
-  "MULTU" >> multu;
+  "MULTu" >> multu;

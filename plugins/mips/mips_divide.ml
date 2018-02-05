@@ -1,7 +1,5 @@
 open Mips.Std
 
-(* FIXME: there are two kinds of instructions - with two and three
- * operands, how to choose between them? *)
 (* DIV rs, rt
  * Divide Word, MIPS32, removed in Release 6
  * Page 178 *)
@@ -18,7 +16,7 @@ let div cpu ops =
 (* DIV rd, rs, rt
  * Divide Words Signed, MIPS32, Release 6
  * Page 180 *)
-let div2 cpu ops =
+let div_r6 cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
   let rt = signed cpu.reg ops.(2) in
@@ -37,12 +35,10 @@ let modulo cpu ops =
     rd := rs %$ rt;
   ]
 
-(* FIXME: there are two kinds of instructions - with two and three
- * operands, how to choose between them? *)
 (* DIV rs, rt
  * Divide Word, MIPS32, removed in Release 6
  * Page 184 *)
-let divu_ cpu ops =
+let divu cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
   let rt = unsigned cpu.reg ops.(1) in
   let x = unsigned var doubleword in
@@ -55,7 +51,7 @@ let divu_ cpu ops =
 (* DIVU rd, rs, rt
  * Divide Words Unsigned, MIPS32, Release 6
  * Page 180 *)
-let divu cpu ops =
+let divu_r6 cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rt = unsigned cpu.reg ops.(2) in
@@ -119,12 +115,11 @@ let dmodulou cpu ops =
   ]
 
 let () =
-  "DIV" >> div;
-  "MOD" >> modulo;
-  "DIVu" >> divu;
+  "SDIV" >> div;
+  "MOD"  >> modulo;
+  "UDIV" >> divu;
   "MODu" >> modulou;
   "DDIV" >> ddiv;
   "DMOD" >> dmodulo;
   "DDIVu" >> ddivu;
   "DMODu" >> dmodulou;
-

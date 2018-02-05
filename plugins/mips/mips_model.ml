@@ -8,6 +8,8 @@ module type Model = sig
   val gpri : t Int.Map.t
   val fpr : t String.Map.t
   val fpri : t Int.Map.t
+  val hi : t
+  val lo : t
 end
 
 module type Model_exp = sig
@@ -139,14 +141,18 @@ module Make_MIPS(S: Spec) : MIPS = struct
   let gpri = List.foldi ~init:Int.Map.empty ~f:(fun n regs (reg,_) ->
       Map.add regs n reg) gprs
 
+  let hi = make_reg (Type.imm gpr_bitwidth) "HI"
+  let lo = make_reg (Type.imm gpr_bitwidth) "LO"
+
   module E = struct
     include Exps
     let gpri = of_vars_i gpri
     let gpr = of_vars gpr
+    let hi = Exp.of_var hi
+    let lo = Exp.of_var lo
   end
 
   let mem = Var.create "mem" (Type.mem S.addr_size `r8)
-
 end
 
 module Spec32 = struct
