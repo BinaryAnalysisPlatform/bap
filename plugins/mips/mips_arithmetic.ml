@@ -9,14 +9,6 @@ let add cpu ops =
   let rt = signed cpu.reg ops.(2) in
   RTL.[ rd := rs + rt; ]
 
-(* ADD.S fd, fs, ft , MIPS32
- * ADD.D fd, fs, ft , MIPS32
- * ADD.PS fd, fs, ft , MIPS32, MIPS64
- * Floating Point Add
- * Page 37 *)
-let add_fmt cpu ops =
-  RTL.[]
-
 (* ADDI rt, rs, immediate
  * Add Immediate Word, MIPS32, removed in Release 6
  * Page 38 *)
@@ -55,10 +47,10 @@ let addu cpu ops =
 (* CLO rd, rs
  * Count Leading Ones in Word, MIPS32
  * Page 136 *)
-(* TODO: check that RT = RD *)
+(* MIPS produces Undefined Behavior if RT <> RD *)
 let clo cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let rt = unsigned cpu.reg ops.(1) in
+  let _rt = unsigned cpu.reg ops.(1) in
   let rd = unsigned cpu.reg ops.(2) in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
@@ -81,10 +73,10 @@ let clo cpu ops =
 (* CLZ rd, rs
  * Count Leading Zeroes in Word, MIPS32
  * Page 137 *)
-(* TODO: check that RT = RD *)
+(* MIPS produces Undefined Behavior if RT <> RD *)
 let clz cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let rt = unsigned cpu.reg ops.(1) in
+  let _rt = unsigned cpu.reg ops.(1) in
   let rd = unsigned cpu.reg ops.(2) in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
@@ -159,10 +151,9 @@ let dlsa cpu ops =
  * Page 426 *)
 let seb cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let rs = unsigned cpu.reg ops.(1) in
+  let rs = signed cpu.reg ops.(1) in
   RTL.[
-    (* TODO: Add sign-extend *)
-    rs := rt;
+    rs := last rt 8;
   ]
 
 (* SEH rd, rt
@@ -170,10 +161,9 @@ let seb cpu ops =
  * Page 427 *)
 let seh cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let rs = unsigned cpu.reg ops.(1) in
+  let rs = signed cpu.reg ops.(1) in
   RTL.[
-    (* TODO: Add sign-extend *)
-    rs := rt;
+    rs := last rt 16;
   ]
 
 (* SUB rd, rs, rt
@@ -214,8 +204,6 @@ let dsubu cpu ops =
 
 let () =
   "ADD" >> add;
-  "ADD.S" >> add_fmt;
-  "ADD.D" >> add_fmt;
   "ADDi" >> addi;
   "ADDiu" >> addiu;
   "ADDiupc" >> addiupc;

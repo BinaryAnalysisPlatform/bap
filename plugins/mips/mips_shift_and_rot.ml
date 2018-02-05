@@ -215,7 +215,6 @@ let dsrlv cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rt = unsigned cpu.reg ops.(2) in
-  let tm = unsigned var word in
   RTL.[
     rd := rt lsr rs;
   ]

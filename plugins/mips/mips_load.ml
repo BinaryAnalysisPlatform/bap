@@ -64,8 +64,7 @@ let ld cpu ops =
  * Page 254 *)
 let ldpc cpu ops =
   let rt = signed cpu.reg ops.(0) in
-  let base = signed cpu.reg ops.(1) in
-  let off = signed imm ops.(2) in
+  let off = signed imm ops.(1) in
   RTL.[
     rt := cpu.load (cpu.cia + (off lsl unsigned const byte 3)) doubleword;
   ]
@@ -207,13 +206,12 @@ let lwe cpu ops =
 (* TODO: LWR rt, offset(base) *)
 (* TODO: LWRE rt, offset(base) *)
 
-(* LWPC rt, offset(base)
+(* LWPC rt, offset
  * Load Word PC-relative, MIPS32 Release 6
  * 293 *)
 let lwpc cpu ops =
   let rt = signed cpu.reg ops.(0) in
-  let base = signed cpu.reg ops.(1) in
-  let off = signed imm ops.(2) in
+  let off = signed imm ops.(1) in
   RTL.[
     rt := cpu.load (cpu.cia + (off lsl unsigned const byte 2)) word;
   ]
@@ -234,8 +232,7 @@ let lwu cpu ops =
  * Page 302 *)
 let lwupc cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
-  let base = signed cpu.reg ops.(1) in
-  let off = signed imm ops.(2) in
+  let off = signed imm ops.(1) in
   RTL.[
     rt := cpu.load (cpu.cia + (off lsl unsigned const byte 2)) word;
   ]
