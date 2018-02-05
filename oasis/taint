@@ -19,3 +19,13 @@ Library taint
   CompiledObject: best
   BuildDepends: core_kernel, bap, bap-primus
   Modules: Bap_taint
+
+
+Library primus_propagate_taint_plugin
+  Path: plugins/primus_propagate_taint
+  Build$: flag(everything) || flag(primus_support)
+  FindlibName: bap-plugin-primus_propagate_taint
+  CompiledObject: best
+  BuildDepends: bap-primus, bap-taint
+  XMETADescription: a taint propagation engine
+  Modules: Primus_propagate_taint_main

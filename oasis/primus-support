@@ -74,15 +74,6 @@ Library primus_print_plugin
   Modules: Primus_print_main
   XMETAExtraLines: tags="primus, printer"
 
-Library primus_propagate_taint_plugin
-  Path: plugins/primus_propagate_taint
-  Build$: flag(everything) || flag(primus_support)
-  FindlibName: bap-plugin-primus_propagate_taint
-  CompiledObject: best
-  BuildDepends: bap-primus
-  XMETADescription: a taint propagation engine
-  Modules: Primus_propagate_taint_main
-
 Library primus_mark_visited_plugin
   Path: plugins/primus_mark_visited
   Build$: flag(everything) || flag(primus_support)
