@@ -6,10 +6,9 @@ open Mips.Std
 let bal cpu ops =
   let rs = signed cpu.reg ops.(0) in
   let off = signed imm ops.(1) in
-  let step = unsigned const byte 2 in
-  let byte = unsigned const byte 8 in
+  let step = unsigned const byte 8 in
   RTL.[
-    rs := cpu.cia + step * cpu.word_width / byte;
+    rs := cpu.cia + step;
     cpu.jmp (cpu.cia + off);
   ]
 
@@ -69,11 +68,10 @@ let blez cpu ops =
 let bgezal cpu ops =
   let rs = signed cpu.reg ops.(0) in
   let off = signed imm ops.(1) in
-  let step = unsigned const byte 2 in
-  let byte = unsigned const byte 8 in
+  let step = unsigned const byte 8 in
   RTL.[
     when_ (rs >= zero) [
-      cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
+      cpu.gpr 31 := cpu.cia + step;
       cpu.jmp (cpu.cia + off);
     ];
   ]
@@ -308,10 +306,9 @@ let jump cpu ops =
  * Page 227 *)
 let jal cpu ops =
   let target = signed imm ops.(0) in
-  let step = unsigned const byte 2 in
-  let byte = unsigned const byte 8 in
+  let step = unsigned const byte 8 in
   RTL.[
-    cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
+    cpu.gpr 31 := cpu.cia + step;
     cpu.jmp target;
   ]
 
@@ -321,10 +318,9 @@ let jal cpu ops =
 let jalr cpu ops =
   let rd = signed cpu.reg ops.(0) in
   let rs = signed cpu.reg ops.(1) in
-  let step = unsigned const byte 2 in
-  let byte = unsigned const byte 8 in
+  let step = unsigned const byte 8 in
   RTL.[
-    rd := cpu.cia + step * cpu.word_width / byte;
+    rd := cpu.cia + step;
     cpu.jmp rs;
   ]
 
@@ -334,10 +330,9 @@ let jalr cpu ops =
 let jialc cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let off = signed imm ops.(1) in
-  let step = unsigned const byte 2 in
-  let byte = unsigned const byte 8 in
+  let step = unsigned const byte 8 in
   RTL.[
-    cpu.gpr 31 := cpu.cia + step * cpu.word_width / byte;
+    cpu.gpr 31 := cpu.cia + step;
     cpu.jmp (rt + off);
   ]
 
