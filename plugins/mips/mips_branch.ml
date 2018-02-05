@@ -368,12 +368,20 @@ let bne cpu ops =
     ]
   ]
 
-(* TODO: Add NAL instruction *)
+(* NAL
+ * No-op and Link, MIPS32 Release 6, deprecated
+ * Page 358 *)
+let nal cpu ops =
+  let step = unsigned const byte 8 in
+  RTL.[
+    cpu.gpr 31 := cpu.cia + step;
+  ]
 
 let () =
   "BAL" >> bal;
   "BEQ" >> beq;
   "BEQL" >> beql;
+  "BNE" >> bne;
   "BGEZ" >> bgez;
   "BLEZ" >> blez;
   "BGEZAL" >> bgezal;
@@ -405,5 +413,5 @@ let () =
   "JIALC" >> jialc;
   "JIC" >> jic;
   "JR" >> jr;
-  "BNE" >> bne;
+  "NAL" >> nal;
 
