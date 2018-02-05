@@ -57,6 +57,7 @@ module Infix : sig
   val ( >=$ )  : exp -> exp -> exp
   val ( lsl )  : exp -> exp -> exp
   val ( lsr )  : exp -> exp -> exp
+  val ( asr )  : exp -> exp -> exp
   val ( lor )  : exp -> exp -> exp
   val ( land ) : exp -> exp -> exp
   val ( lxor ) : exp -> exp -> exp

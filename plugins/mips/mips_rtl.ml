@@ -90,20 +90,22 @@ module Exp = struct
 
   let unop op x = { x with body = Unop (op, x.body)}
 
-  let unsigned_binop op lhs rhs =
-    let sign = Unsigned in
+  let binop_with_signedness sign op lhs rhs =
     let width = max lhs.width rhs.width in
     let lhs = cast lhs width sign in
     let rhs = cast rhs width sign in
     let body = Binop(op, lhs.body, rhs.body) in
     {sign; width; body;}
 
+  let unsigned_binop op lhs rhs =
+    binop_with_signedness Unsigned op lhs rhs
+
+  let signed_binop op lhs rhs =
+    binop_with_signedness Signed op lhs rhs
+
   let binop_with_cast op lhs rhs =
     let sign = derive_sign lhs.sign rhs.sign in
-    let width = max lhs.width rhs.width in
-    let lhs = cast lhs width sign in
-    let rhs = cast rhs width sign in
-    { sign; width; body = Binop (op, lhs.body, rhs.body); }
+    binop_with_signedness sign op lhs rhs
 
   let concat lhs rhs =
     let width = lhs.width + rhs.width in
@@ -132,6 +134,7 @@ module Exp = struct
 
   let lshift  = unsigned_binop Bil.lshift
   let rshift  = unsigned_binop Bil.rshift
+  let arshift = binop_with_cast Bil.arshift
   let bit_and = unsigned_binop Bil.bit_and
   let bit_xor = unsigned_binop Bil.bit_xor
   let bit_or  = unsigned_binop Bil.bit_or
@@ -224,6 +227,7 @@ module Infix = struct
   let ( <> )   = neq
   let ( lsl )  = lshift
   let ( lsr )  = rshift
+  let ( asr )  = arshift
   let ( lor )  = bit_or
   let ( land ) = bit_and
   let ( lxor ) = bit_xor
