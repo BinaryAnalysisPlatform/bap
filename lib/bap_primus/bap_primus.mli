@@ -906,6 +906,9 @@ module Std : sig
         (** [blk x] interprets the block [x].  *)
         val blk : blk term -> unit m
 
+        (** [exp x] returns a value of [x]. *)
+        val exp : exp -> value m
+
         (** [get var] reads [var]  *)
         val get : var -> value m
 

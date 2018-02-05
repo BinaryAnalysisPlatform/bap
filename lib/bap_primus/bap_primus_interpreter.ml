@@ -297,6 +297,8 @@ module Make (Machine : Machine) = struct
 
   let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
 
+  let exp = eval_exp
+
   let mem =
     Machine.get () >>| fun proj ->
     let (module Target) = target_of_arch (Project.arch proj) in
