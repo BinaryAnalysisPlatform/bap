@@ -27,9 +27,9 @@ val unsigned : 'a ec -> 'a
 val zero : exp
 val one  : exp
 
-(** [extract e lx rx] extracts portion of [e] starting
-    at bit [lx] and ending at bit [rx], all bounds
-    are inclusive. Bits indexes start from the most
+(** [extract e hi lo] extracts portion of [e] starting
+    at bit [lo] and ending at bit [hi], all bounds
+    are inclusive. Bits indexes start from the least
     significant bit. *)
 val extract : exp -> int -> int -> exp
 
@@ -40,16 +40,16 @@ val low : bitwidth -> exp -> exp
 val high : bitwidth -> exp -> exp
 
 (** [first e n] - extracts first [n] bits from [e], starting from
-    the most significant bit *)
+    the least significant bit *)
 val first : exp -> int -> exp
 
 (** [last e n] - extracts last [n] bits from [e], where the
-    last bit is the least significant bit *)
+    last bit is the most significant bit *)
 val last : exp -> int -> exp
 
 (** [nth width e n] - extracts a portion of [e] of width [width] at
     index [n], where each index points to a portion of width [width].
-    Indexes are zero based and started from most significant portion.
+    Indexes are zero based and started from least significant portion.
     E.g. [nth halfword e 1] extracts a second halfword from [e] *)
 val nth : bitwidth -> exp -> int -> exp
 

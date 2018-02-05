@@ -68,13 +68,14 @@ let of_string signed s =
 let zero = Exp.of_word Word.b0
 let one  = Exp.of_word Word.b1
 
-let first e bits =
+let last e bits =
   let w = Exp.width e in
   Exp.extract (w - 1) (w - bits) e
 
-let last e bits = Exp.extract (bits - 1) 0 e
-let high w e = first e (int_of_bitwidth w)
-let low w e = last e (int_of_bitwidth w)
+let first e bits = Exp.extract (bits - 1) 0 e
+
+let high w e = last e (int_of_bitwidth w)
+let low w e = first e (int_of_bitwidth w)
 
 let msb e =
   let h = Exp.width e - 1 in
@@ -83,28 +84,12 @@ let msb e =
 let lsb e = Exp.extract 0 0 e
 
 let nth w e index =
-  let width = Exp.width e in
   let step = int_of_bitwidth w in
-  let x = width / step - index - 1 in
-  let hi = (x + 1) * step - 1 in
-  let lo = x * step in
-  let n = width / step in
-  let hi, lo =
-    if n * step < width then
-      let sh = width - n * step in
-      hi + sh, lo + sh
-    else hi, lo in
+  let hi = (index + 1) * step - 1 in
+  let lo = index * step in
   Exp.extract hi lo e
 
-let extract e left right =
-  let width = Exp.width e in
-  let target_width = right - left + 1 in
-  if width >= target_width then
-    let hi = width - left - 1 in
-    let lo = width - right - 1 in
-    Exp.extract hi lo e
-  else
-    Exp.extract (target_width - 1) 0 e
+let extract e hi lo = Exp.extract hi lo e
 
 let when_ cond then_ = if_ cond then_ []
 let ifnot cond else_ = if_ cond [] else_
