@@ -174,10 +174,10 @@ module Rel = struct
 end
 
 
-type Primus.exn += Bad_cast of Primus.value
-
 
 module Taint = struct
+  type Primus.exn += Bad_cast of Primus.value
+
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
     module Taint = Object.Make(Machine)
@@ -235,10 +235,12 @@ module Taint = struct
       Machine.Local.put tainter {s with indirect} >>| fun () ->
       taint
 
+    exception Bad_object of Primus.value
+
     let objects_of_kind {objects} k ts =
       Set.filter ts ~f:(fun v ->
           match Map.find objects v with
-          | None -> assert false
+          | None -> false
           | Some k' -> Kind.(k <> k'))
 
     let sanitize v r k =
