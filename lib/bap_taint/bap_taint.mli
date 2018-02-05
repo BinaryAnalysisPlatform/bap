@@ -328,5 +328,42 @@ module Std : sig
         end
       end
     end
+
+    module Gc : sig
+
+      (** [taint_killed t] occurs when the taint [t] is no longer
+          reachable and goes out of existence.
+
+          The event occurs during the GC collection cycle and there
+          could be a significant delay between the actual time when the
+          taint become unreachable and the time when the observation is
+          made. *)
+      val taint_killed : Object.t Primus.observation
+
+
+      (** Conservative Garbage Collector.
+
+          The conservative garbage collector may keep taints alive
+          even when they become unreachable. This is an
+          over-approximation and it is possible to devise a more precise
+          GC, especially if soundness is not required (or not strictly
+          required).
+
+          Taint is live if either of the following is true:
+          1. it is attached to a value of a variable in [Env.all];
+          2. it is attached to any address.
+
+          The second clause gives a possibility for
+          over-approximation, as we do not track, whether an address
+          is reachable from the current program location. So once a
+          tainted value is stored and the taint is attached to an
+          address, the only way to kill this taint, is to overwrite it
+          with another value using another store operation.
+
+          Currently, the garbage collection runs every basic block,
+          but this may change in future.
+      *)
+      module Conservative : Primus.Machine.Component
+    end
   end
 end

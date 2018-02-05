@@ -144,9 +144,6 @@ let taint_propagated,propagated_taint =
   Primus.Observation.provide
     ~inspect:Primus.sexp_of_value "taint-propagated"
 
-let taint_killed,killed_taint =
-  Primus.Observation.provide
-    ~inspect:Primus.sexp_of_value "taint-killed"
 
 let vid = Primus.Value.id
 
@@ -423,42 +420,49 @@ end
    object.
 
 *)
-module Gc(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Env = Primus.Env.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
+module Gc = struct
 
-  (* removes directly dead taints *)
-  let collect_direct =
-    Machine.Local.get tainter >>= fun s ->
-    Env.all >>= fun vars ->
-    Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
-        Env.get var >>| fun v ->
-        Set.add live (Value.id v)) >>= fun live ->
-    Machine.Local.put tainter {
-      s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
-    }
+  let taint_killed,killed_taint =
+    Primus.Observation.provide
+      ~inspect:Primus.sexp_of_value "taint-killed"
 
-  (* a set of live tainted objects *)
-  let objects {direct; indirect} : objects =
-    let to_set m : objects =
-      Map.to_sequence m |>
-      Seq.map ~f:snd |>
-      Seq.fold ~init:Object.Set.empty ~f:Set.union in
-    Set.union (to_set direct) (to_set indirect)
+  module Conservative(Machine : Primus.Machine.S) = struct
+    open Machine.Syntax
+    module Env = Primus.Env.Make(Machine)
+    module Value = Primus.Value.Make(Machine)
 
-  let main _ =
-    Machine.Local.get gc >>= fun {old} ->
-    collect_direct >>= fun () ->
-    Machine.Local.get tainter >>= fun cur ->
-    let dead = Set.diff (objects old) (objects cur) in
-    Set.to_sequence dead |> Machine.Seq.iter
-      ~f:(Machine.Observation.make killed_taint) >>= fun () ->
-    Machine.Local.put gc {old = cur}
+    (* removes directly dead taints *)
+    let collect_direct =
+      Machine.Local.get tainter >>= fun s ->
+      Env.all >>= fun vars ->
+      Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
+          Env.get var >>| fun v ->
+          Set.add live (Value.id v)) >>= fun live ->
+      Machine.Local.put tainter {
+        s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
+      }
+
+    (* a set of live tainted objects *)
+    let objects {direct; indirect} : objects =
+      let to_set m : objects =
+        Map.to_sequence m |>
+        Seq.map ~f:snd |>
+        Seq.fold ~init:Object.Set.empty ~f:Set.union in
+      Set.union (to_set direct) (to_set indirect)
+
+    let main _ =
+      Machine.Local.get gc >>= fun {old} ->
+      collect_direct >>= fun () ->
+      Machine.Local.get tainter >>= fun cur ->
+      let dead = Set.diff (objects old) (objects cur) in
+      Set.to_sequence dead |> Machine.Seq.iter
+        ~f:(Machine.Observation.make killed_taint) >>= fun () ->
+      Machine.Local.put gc {old = cur}
 
 
-  let init () = Primus.Interpreter.leave_blk >>> main
+    let init () = Primus.Interpreter.leave_blk >>> main
 
+  end
 end
 
 
@@ -470,5 +474,6 @@ module Std = struct
     module Rel = Rel
     module Tracker = Taint.Make
     module Propagation = Propagation
+    module Gc = Gc
   end
 end
