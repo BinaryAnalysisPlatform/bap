@@ -61,6 +61,9 @@ let pc_change,pc_changed =
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
 
+let interrupt,will_interrupt =
+  Observation.provide ~inspect:sexp_of_int "interrupt"
+
 let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
 
 let loading,on_loading =
@@ -387,12 +390,15 @@ module Make (Machine : Machine) = struct
 
   let goto c = label c
   let ret l = label l
-  let interrupt _n _r = failf "not implemented" ()
+  let interrupt n _r = !!will_interrupt n
+
   let jump t = match Jmp.kind t with
     | Call c -> call c
     | Goto l -> goto l
     | Ret l -> ret l
-    | Int (n,r) -> interrupt n r
+    | Int (n,r) ->
+      interrupt n r >>= fun () ->
+      Code.exec (`tid r)
 
   let jmp t = eval_exp (Jmp.cond t) >>| fun {value} -> Word.is_one value
   let jmp = term normal jmp_t jmp
@@ -425,8 +431,8 @@ module Make (Machine : Machine) = struct
 
 
   let get_arg t = Env.get (Arg.lhs t)
-  let get_args ~input sub = 
-    Term.enum arg_t sub |> 
+  let get_args ~input sub =
+    Term.enum arg_t sub |>
     Seq.filter ~f:(fun x -> not input || Arg.intent x <> Some Out) |>
     Machine.Seq.map ~f:get_arg
 
@@ -435,15 +441,15 @@ module Make (Machine : Machine) = struct
   let sub t =
     let name = Sub.name t in
     iter_args t arg_def >>= fun () ->
-    get_args ~input:true t >>| Seq.to_list >>= fun args -> 
+    get_args ~input:true t >>| Seq.to_list >>= fun args ->
     Machine.Observation.make Linker.Trace.call_entered
-      (name,args) >>= fun () -> 
-    let cleanup = 
+      (name,args) >>= fun () ->
+    let cleanup =
       iter_args t arg_use >>= fun () ->
-      get_args ~input:false t >>| Seq.to_list >>= fun args -> 
+      get_args ~input:false t >>| Seq.to_list >>= fun args ->
       Machine.Observation.make Linker.Trace.call_returned
         (name,args) in
-    eval_entry cleanup (Term.first blk_t t) 
+    eval_entry cleanup (Term.first blk_t t)
 
 
   let blk = term finish blk_t blk

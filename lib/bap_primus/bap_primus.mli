@@ -880,7 +880,12 @@ module Std : sig
       (** an expression was left *)
       val leave_exp : exp observation
 
+      (** occurs on [halt] operation  *)
       val halting : unit observation
+
+      (** [interrupt n] occurs on the machine interrupt [n] (aka CPU
+         exception) *)
+      val interrupt : int observation
 
       type exn += Halt
 

@@ -4,6 +4,7 @@ open Bap_primus_types
 
 val pc_change : addr observation
 val halting : unit observation
+val interrupt : int observation
 
 val loading : value observation
 val loaded : (value * value) observation

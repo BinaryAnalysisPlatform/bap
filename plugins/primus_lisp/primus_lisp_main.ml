@@ -52,6 +52,7 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let value = Machine.return
   let word = Value.of_word
+  let int x = word (Word.of_int ~width:32 x)
 
   let sym x = Value.Symbol.to_value x
   let var v = sym (Var.name v)
@@ -105,6 +106,7 @@ module Signals(Machine : Primus.Machine.S) = struct
       signal enter_jmp (cond,dst) jmp;
       signal Primus.Linker.Trace.call parameters call;
       signal Primus.Linker.Trace.return parameters call;
+      signal interrupt int one;
     ]
 
 end
