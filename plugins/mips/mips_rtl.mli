@@ -66,3 +66,13 @@ end
 
 (** [bil_of_t d] - returns a program in BIL language   *)
 val bil_of_t : t list -> bil
+
+module Op_array : sig
+
+  type 'a t = 'a Array.t
+
+  exception Invalid_operand_index of int
+
+  val get : 'a t -> int -> 'a
+  val unsafe_get : 'a t -> int -> 'a
+end

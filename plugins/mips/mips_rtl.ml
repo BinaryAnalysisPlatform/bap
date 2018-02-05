@@ -448,3 +448,17 @@ end
 let bil_of_t rtl =
   Normalize.norm_jmps @@
   Translate.to_bil rtl
+
+
+module Op_array = struct
+
+  type 'a t = 'a Array.t
+
+  exception Invalid_operand_index of int
+
+  let get a n =
+    if n >= Array.length a then raise (Invalid_operand_index n)
+    else Array.get a n
+
+  let unsafe_get a n = get a n
+end

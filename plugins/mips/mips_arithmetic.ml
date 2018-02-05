@@ -47,11 +47,9 @@ let addu cpu ops =
 (* CLO rd, rs
  * Count Leading Ones in Word, MIPS32
  * Page 136 *)
-(* MIPS produces Undefined Behavior if RT <> RD *)
 let clo cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let _rt = unsigned cpu.reg ops.(1) in
-  let rd = unsigned cpu.reg ops.(2) in
+  let rd = unsigned cpu.reg ops.(1) in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
   let has_no_zeroes = unsigned var bit in
@@ -73,11 +71,9 @@ let clo cpu ops =
 (* CLZ rd, rs
  * Count Leading Zeroes in Word, MIPS32
  * Page 137 *)
-(* MIPS produces Undefined Behavior if RT <> RD *)
 let clz cpu ops =
   let rs = unsigned cpu.reg ops.(0) in
-  let _rt = unsigned cpu.reg ops.(1) in
-  let rd = unsigned cpu.reg ops.(2) in
+  let rd = unsigned cpu.reg ops.(1) in
   let xv = unsigned var word in
   let cnt = unsigned var byte in
   let has_no_ones = unsigned var bit in

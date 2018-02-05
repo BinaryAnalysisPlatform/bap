@@ -16,6 +16,8 @@ module Std = struct
   include Mips_cpu
   include Mips_dsl
 
+  module Array = Mips_rtl.Op_array
+
   module RTL = struct
     include Mips_rtl
     include Infix
@@ -49,7 +51,12 @@ module Std = struct
         bil_of_rtl |>
         Result.return
       with
-      | Failure str -> Error (Error.of_string str) in
+      | Failure str -> Error (Error.of_string str)
+      | Array.Invalid_operand_index n ->
+        let str =
+          sprintf "instruction %s doesn't have an operand with index %d"
+            insn_name n in
+        Error (Error.of_string str) in
     match String.Table.find lifters (Insn.name insn) with
     | None -> Or_error.errorf "unknown instruction %s" insn_name
     | Some lifter -> lift lifter
