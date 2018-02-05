@@ -67,7 +67,7 @@ let dmuh cpu ops =
   let tmp = signed var quadword in
   RTL.[
     tmp := rs * rt;
-    rd := high doubleword (rs * rt);
+    rd := high doubleword tmp;
   ]
 
 (* DMULU rd, rs, rt
@@ -80,7 +80,7 @@ let dmulu cpu ops =
   let tmp = unsigned var quadword in
   RTL.[
     tmp := rs * rt;
-    rd := low doubleword (rs * rt);
+    rd := low doubleword tmp;
   ]
 
 (* DMUHU rd, rs, rt
@@ -93,7 +93,7 @@ let dmuhu cpu ops =
   let tmp = unsigned var quadword in
   RTL.[
     tmp := rs * rt;
-    rd := high doubleword (rs * rt);
+    rd := high doubleword tmp;
   ]
 
 (* MULT rs, rt
