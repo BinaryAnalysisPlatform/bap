@@ -84,7 +84,7 @@ let wsbh cpu ops =
   ]
 
 (* DSBH rd, rs
- * Doubleord Swap Bytes Within Halfwords, MIPS64 Release 2
+ * Doubleword Swap Bytes Within Halfwords, MIPS64 Release 2
  * Page 196 *)
 let dsbh cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
@@ -97,7 +97,7 @@ let dsbh cpu ops =
   ]
 
 (* DSHD rd, rs
- * Doubleord Swap Halfword Within Doublewords, MIPS64 Release 2
+ * Doubleword Swap Halfword Within Doublewords, MIPS64 Release 2
  * Page 509 *)
 let dshd cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
