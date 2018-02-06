@@ -329,7 +329,7 @@ module Translate = struct
     object inherit [unit] Stmt.finder
       method! enter_move v _ r =
         if Var.equal var v then r.return (Some ())
-        else r.return None
+        else r
     end
 
   let rec stmt_to_bil = function

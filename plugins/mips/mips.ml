@@ -21,7 +21,7 @@ module Std = struct
   module RTL = struct
     include Mips_rtl
     include Infix
-    let foreach = foreach ~inverse:true
+    let foreach = foreach ~inverse:false
   end
 
   type rtl = RTL.rtl [@@deriving bin_io, compare, sexp]

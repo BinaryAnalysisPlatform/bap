@@ -137,12 +137,16 @@ let bitswap cpu ops =
   let rt = unsigned cpu.reg ops.(1) in
   let cnt = unsigned var byte in
   let biti = unsigned var bit in
+  let width = unsigned const byte 8 in
+  let pos = unsigned var byte in
+  let max_ind = unsigned const byte 7 in
+  let byte_ind = unsigned var byte in
   RTL.[
-    (* Reverse bits *)
     cnt := zero;
-    foreach biti rt [
-      rd := rd lor (((rt lsr cnt) land one)
-                    lsl (unsigned const byte 31 - cnt));
+    foreach biti rd [
+      byte_ind := cnt / width;
+      pos := byte_ind * width + (max_ind - (cnt % width));
+      biti := lsb (rt lsr pos);
       cnt := cnt + one;
     ];
   ]
@@ -155,12 +159,16 @@ let dbitswap cpu ops =
   let rt = unsigned cpu.reg ops.(1) in
   let cnt = unsigned var byte in
   let biti = unsigned var bit in
+  let width = unsigned const byte 8 in
+  let pos = unsigned var byte in
+  let max_ind = unsigned const byte 7 in
+  let byte_ind = unsigned var byte in
   RTL.[
-    (* Reverse bits *)
     cnt := zero;
-    foreach biti rt [
-      rd := rd lor (((rt lsr cnt) land one)
-                    lsl (unsigned const byte 63 - cnt));
+    foreach biti rd [
+      byte_ind := cnt / width;
+      pos := byte_ind * width + (max_ind - (cnt % width));
+      biti := lsb (rt lsr pos);
       cnt := cnt + one;
     ];
   ]
