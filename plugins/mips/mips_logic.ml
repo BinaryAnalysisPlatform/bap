@@ -79,8 +79,8 @@ let wsbh cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   RTL.[
-    rd := nth byte rs 3 ^ nth byte rs 4 ^
-      nth byte rs 1 ^ nth byte rs 2;
+    rd := nth byte rs 2 ^ nth byte rs 3 ^
+      nth byte rs 0 ^ nth byte rs 1;
   ]
 
 (* DSBH rd, rs
@@ -90,10 +90,10 @@ let dsbh cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   RTL.[
-    rd := nth byte rs 7 ^ nth byte rs 8 ^
-      nth byte rs 5 ^ nth byte rs 6 ^
-      nth byte rs 3 ^ nth byte rs 4 ^
-      nth byte rs 1 ^ nth byte rs 2;
+    rd := nth byte rs 6 ^ nth byte rs 7 ^
+      nth byte rs 4 ^ nth byte rs 5 ^
+      nth byte rs 2 ^ nth byte rs 3 ^
+      nth byte rs 0 ^ nth byte rs 1;
   ]
 
 (* DSHD rd, rs
@@ -103,8 +103,8 @@ let dshd cpu ops =
   let rd = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   RTL.[
-    rd := nth halfword rs 1 ^ nth halfword rs 2 ^
-      nth halfword rs 3 ^ nth halfword rs 4;
+    rd := nth halfword rs 0 ^ nth halfword rs 1 ^
+      nth halfword rs 2 ^ nth halfword rs 3;
   ]
 
 (* XOR rd, rs, rt
@@ -179,4 +179,3 @@ let () =
   "DBITSWAP" >> dbitswap;
   "WSBH" >> wsbh;
   "DSBH" >> dsbh;
-
