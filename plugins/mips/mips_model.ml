@@ -134,9 +134,13 @@ module Make_MIPS(S: Spec) : MIPS = struct
   ]
 
   let gpr =
-    List.fold ~init:String.Map.empty ~f:(fun regs (reg, alias) ->
-        let regs = Map.add regs (Var.name reg) reg in
-        Map.add regs alias reg) gprs
+    List.fold gprs ~init:String.Map.empty ~f:(fun init (reg, alias) ->
+        let name = Var.name reg in
+        let names = [name; alias] in
+        let names =
+          if gpr_bitwidth = 64 then (name ^ "_64") :: names
+          else names in
+        List.fold names ~init ~f:(fun regs name -> Map.add regs name reg))
 
   let gpri = List.foldi ~init:Int.Map.empty ~f:(fun n regs (reg,_) ->
       Map.add regs n reg) gprs
@@ -178,8 +182,8 @@ module Make_cpu(M : MIPS) : CPU = struct
     List.fold data ~init:Var.Set.empty
       ~f:(fun regs v -> Var.Set.add regs v)
 
-  let sp = Var.Set.find_exn gpr ~f:(fun v -> Var.name v = "SP")
-  let fp = Var.Set.find_exn gpr ~f:(fun v -> Var.name v = "FP")
+  let sp = Var.Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"SP" (Var.name v))
+  let fp = Var.Set.find_exn gpr ~f:(fun v -> String.is_prefix ~prefix:"FP" (Var.name v))
 
   (* MIPS doesn't have flags, but structure requires them
    * We just make a stubs here *)

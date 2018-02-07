@@ -414,4 +414,4 @@ let () =
   "JIC" >> jic;
   "JR" >> jr;
   "NAL" >> nal;
-
+  "JALR64" >> jalr

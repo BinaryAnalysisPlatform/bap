@@ -198,6 +198,28 @@ let dsubu cpu ops =
   let rt = unsigned cpu.reg ops.(2) in
   RTL.[ rd := rs - rt; ]
 
+(* DADDIU rt, rs, imm
+ * Doubleword Add Immediate Unsigned, MIPS64
+ * Page 158 *)
+let daddiu cpu ops =
+  let rt = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let im = signed imm ops.(2) in
+  RTL.[
+    rt := rs + im;
+  ]
+
+(* DADDU rd, rs, rt
+ * Doubleword Add Unsigned, MIPS64
+ * Page 159 *)
+let daddu cpu ops =
+  let rd = unsigned cpu.reg ops.(0) in
+  let rs = unsigned cpu.reg ops.(1) in
+  let rt = unsigned cpu.reg ops.(2) in
+  RTL.[
+    rd := rs + rt;
+  ]
+
 let () =
   "ADD" >> add;
   "ADDi" >> addi;
@@ -216,3 +238,5 @@ let () =
   "SUBu" >> subu;
   "DSUB" >> dsub;
   "DSUBu" >> dsubu;
+  "DADDu" >> daddu;
+  "DADDiu" >> daddiu;

@@ -32,11 +32,26 @@ module Abi32 = struct
     | Ret_0 -> reg 2
     | Ret_1 -> reg 3
     | Arg n -> reg (n + 4)
-
 end
 
-let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
-  let word = Arch.addr_size (`mips :> arch) |> Size.in_bits in
+module Abi64 = struct
+  open Mips.Std
+  open MIPS_64
+
+  let reg n = Bil.Var (Map.find_exn gpri n)
+  let name = "mips64"
+  let size = object
+    inherit C.Size.base `ILP64
+  end
+  let arg = function
+    | Ret_0 -> reg 2
+    | Ret_1 -> reg 3
+    | Arg n -> reg (n + 4)
+end
+
+
+let supported_api arch (module Abi : abi) {C.Type.Proto.return; args} =
+  let word = Arch.addr_size arch |> Size.in_bits in
   let return = match Abi.size#bits return with
     | None -> None
     | Some width  -> match Size.of_int_opt width with
@@ -67,13 +82,12 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
   in
   C.Abi.{return; params; hidden = []}
 
-let api abi proto =
-  try Some (supported_api abi proto) with Unsupported ->
+let api abi proto arch =
+  try Some (supported_api arch abi proto) with Unsupported ->
     warning "skipped function due to unsupported abi";
     None
 
-let dispatch abi sub attrs proto = api abi proto
-
+let dispatch abi arch sub attrs proto = api abi proto arch
 
 let strip_leading_dot s =
   match String.chop_prefix s ~prefix:"." with
@@ -86,19 +100,25 @@ let demangle demangle prog =
       Tid.set_name (Term.tid sub) name;
       Sub.with_name sub name)
 
+let set_abi proj m =
+  let module A = (val m : abi) in
+  let abi = C.Abi.{
+      insert_args = dispatch m (Project.arch proj);
+      apply_attrs = fun _ -> ident
+    } in
+  let api = C.Abi.create_api_processor A.size abi in
+  Bap_api.process api;
+  let prog = Project.program proj in
+  let prog = demangle strip_leading_dot prog in
+  Project.set (Project.with_program proj prog) Bap_abi.name A.name
 
 let main proj = match Project.arch proj with
   | `mips ->
     info "using MIPS ABI";
-    let abi = C.Abi.{
-        insert_args = dispatch (module Abi32);
-        apply_attrs = fun _ -> ident
-      } in
-    let api = C.Abi.create_api_processor Abi32.size abi in
-    Bap_api.process api;
-    let prog = Project.program proj in
-    let prog = demangle strip_leading_dot prog in
-    Project.set (Project.with_program proj prog) Bap_abi.name Abi32.name
+    set_abi proj (module Abi32)
+  | `mips64 ->
+    info "using MIPS64 ABI";
+    set_abi proj (module Abi64)
   | _ -> proj
 
 let setup () = Bap_abi.register_pass main
