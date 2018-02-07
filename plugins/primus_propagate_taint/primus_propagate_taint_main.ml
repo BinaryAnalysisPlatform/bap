@@ -1,108 +1,26 @@
-open Core_kernel.Std
-open Regular.Std
 open Bap.Std
-open Bap_primus.Std
-open Monads.Std
-module Legacy_taint = Taint
-open Bap_taint.Std
-open Format
+open Core_kernel.Std
 include Self()
-
-
-module Intro(Machine : Primus.Machine.S) = struct
-  module Env = Primus.Interpreter.Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
-  module Kind = Taint.Kind.Make(Machine)
-  module Object = Taint.Object.Make(Machine)
-
-  open Machine.Syntax
-
-
-  let kind t =
-    Kind.create (sprintf "user-%s" (Tid.name (Term.tid t)))
-
-  let gentaint t =
-    kind t >>= fun k ->
-    Object.create k >>|
-    Taint.Object.Set.singleton
-
-  let introduces def =
-    Term.has_attr def Legacy_taint.reg ||
-    Term.has_attr def Legacy_taint.ptr
-
-  let taint_ptr taints ptr sz =
-    Eval.exp ptr >>= fun ptr ->
-    Machine.Seq.iter (Seq.range 0 (Size.in_bytes sz)) ~f:(fun off ->
-        Value.nsucc ptr off >>= fun ptr ->
-        Tracker.attach ptr Taint.Rel.indirect taints)
-
-  let taint_var taints var =
-    Env.get var >>= fun v ->
-    Tracker.attach v Taint.Rel.direct taints
-
-  let intro def =
-    if introduces def then
-      gentaint def >>= fun t ->
-      taint_var t (Def.lhs def) >>= fun () ->
-      match Def.rhs def with
-      | Bil.Load (_,addr,_,sz)
-      | Bil.Store (_,addr,_,_,sz) ->
-        taint_ptr t addr sz
-      | exp ->
-        Exp.free_vars exp |> Set.to_sequence |>
-        Machine.Seq.iter ~f:(taint_var t)
-    else Machine.return ()
-end
-
-module Pre(Machine : Primus.Machine.S) = struct
-  include Machine.Syntax
-  module Lisp = Primus.Lisp.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
-  module Object = Taint.Object.Make(Machine)
-  module Kind = Taint.Kind.Make(Machine)
-end
-
-module IntroDirect(Machine : Primus.Machine.S) = struct
-  include Pre(Machine)
-  [@@@warning "-P"]
-  let run [v; k] = Kind.of_value k >>= Tracker.new_direct v
-end
-
-module IntroIndirect(Machine : Primus.Machine.S) = struct
-  include Pre(Machine)
-  [@@@warning "-P"]
-  let run [v; k; n] =
-    Kind.of_value k >>=
-    Tracker.new_indirect ~addr:v ~len:n
-end
-
-module HasDirect(Machine : Primus.Machine.S) = struct
-  include Pre(Machine)
-  [@@@warning "-P"]
-  let run [v; k] =
-    Tracker.lookup v Taint.Rel.direct
-end
-
-(* module IntroIndirect(Machine : Primus.Machine.S) = struct
- *   include Pre(Machine)
- *   [@@@warning "-P"]
- *
- *   let general
- *
- * end *)
-
-
-
 open Config;;
 manpage [
   `S "DESCRIPTION";
-  `P "The Primus Taint Analysis Framework.";
+  `P "The Primus taint propagatation engine.";
+  `P
+    "This is a deprecated control module, please primus-taint to
+     control the Taint Analysis Framework."
 ]
+let deprecated = "is deprecated, use the primus-taint plugin instead"
 
 
 
+let enabled = flag "run" ~doc:deprecated
+let don't_mark = flag "no-marks" ~doc:deprecated
 
-
-let () = when_ready (fun _ -> ())
+(* deprecation doesn't work as expected with flags, so let's invent
+ * something here... *)
+let () = when_ready (fun {get=(!!)} ->
+    if !!enabled || !!don't_mark then
+      eprintf
+        "Warning: the primus-propagate-taint plugin is deprecated, \
+         use `primus-taint` plugin for fine control of the taint \
+         analysis framework.\n%!")

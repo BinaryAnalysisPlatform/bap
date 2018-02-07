@@ -291,20 +291,20 @@ module Std : sig
       val sanitize : Primus.value -> Rel.t -> Kind.t -> unit Machine.t
 
 
-      (** [transfer rs rd srcs dst] select all objects
-          related with values in [srcs] by the relation [rs] and
+      (** [transfer k rs rd srcs dst] select all objects of the [k]
+          kind related with values in [srcs] by the relation [rs] and
           associate them with the value [dst] using the relation
           [rd]. The relations of the source values are unaffected.
 
           In terms of the low-level operations:
-          [attach dst rd (union (map srcs (fun v -> lookup v rs)))]
-      *)
+          [attach dst rd (union (map srcs (fun v -> lookup v rs)))] *)
       val transfer : Kind.t -> Rel.t -> Rel.t -> Primus.value list -> Primus.value -> unit Machine.t
     end
 
     module Propagation : sig
       module Policy : sig
         type t
+
         module Make(Machine : Primus.Machine.S) : sig
 
           (** [select k p] selects the taint propagation policy [p]
