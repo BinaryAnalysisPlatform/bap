@@ -20,23 +20,25 @@ let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
-(* This can be seen as an non-optimal merging strategy, as we're
-   postponing the emission of the information until everyone is
-   ready. Instead, we can emit the information as soon as possible,
-   thus allowing the information to flow into the algorithm at early
-   stages. But it will still work correctly.
-*)
-let merge_streams ss ~f : 'a Source.t option =
-  List.reduce ss ~f:(Stream.merge ~f:(fun a b -> match a,b with
-      | Ok a, Ok b -> Ok (f a b)
-      | Error a, Error b -> Error (Error.of_list [a;b])
-      | Error e,_|_,Error e -> Error e))
+let merge_streams ss ~f : 'a Source.t =
+  let stream, signal = Stream.create () in
+  List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
+  let pair x = Some x, Some x in
+  Stream.parse stream ~init:None
+    ~f:(fun prev curr -> match curr, prev with
+        | Ok curr, None -> pair (Ok curr)
+        | Ok curr, Some (Ok prev) -> pair (Ok (f prev curr))
+        | Ok _, Some (Error e)
+        | Error e, Some (Ok _) -> pair (Error e)
+        | Error e, None -> Some (Error e), None
+        | Error curr, Some (Error prev) ->
+          pair (Error (Error.of_list [prev; curr])))
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
   | names -> match List.filter_map names ~f:create with
     | [] -> assert false
-    | ss -> merge_streams ss ~f
+    | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
   merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
@@ -95,27 +97,46 @@ let process options project =
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch project)
-      | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
+      | `stdout,fmt,ver ->
+        Project.Io.show ~fmt ?ver project)
+
+let extract_format filename =
+  let fmt = match String.rindex filename '.' with
+    | None -> filename
+    | Some n -> String.subo ~pos:(n+1) filename in
+  match Bap_fmt_spec.parse fmt with
+  | `Error _ -> None, None
+  | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let main o =
-  let digest = digest o in
-  let project = match Project.Cache.load digest with
+  let proj_of_input input =
+    let rooter = rooter o
+    and brancher = brancher o
+    and reconstructor = reconstructor o
+    and symbolizer = symbolizer o in
+    Project.create input ~disassembler:o.disassembler
+      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    | Error err -> raise (Failed_to_create_project err)
+    | Ok project ->
+      Project.Cache.save (digest o) project;
+      project in
+  let proj_of_file ?ver ?fmt file =
+    In_channel.with_file file
+      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
+  let project = match Project.Cache.load (digest o) with
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None ->
-      let rooter = rooter o
-      and brancher = brancher o
-      and reconstructor = reconstructor o
-      and symbolizer = symbolizer o in
-      let input =
+    | None -> match o.source with
+      | `Project ->
+        let fmt,ver = extract_format o.filename in
+        proj_of_file ?fmt ?ver o.filename
+      | `Memory arch ->
+        proj_of_input @@
+        Project.Input.binary arch ~filename:o.filename
+      | `Binary ->
+        proj_of_input @@
         Project.Input.file ~loader:o.loader ~filename: o.filename in
-      Project.create input ~disassembler:o.disassembler
-        ?brancher ?rooter ?symbolizer ?reconstructor  |> function
-      | Error err -> raise (Failed_to_create_project err)
-      | Ok project ->
-        Project.Cache.save digest project;
-        project in
   process o project
 
 let program_info =
@@ -236,7 +257,6 @@ let () =
   Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
-  (* main (parse passes argv); exit 0 *)
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

@@ -1036,8 +1036,9 @@ module Std : sig
     (** [of_binary ?width endian num] creates a bitvector from a string
         interpreted as a sequence of bytes in a specified order.
 
-        The result is always positive and unsigned. [num] argument is
-        not shared.  [width] defaults to [String.length num] *)
+        The result is always positive and unsigned. The [num] argument is
+        not shared. [width] defaults to the length of [num] in bits,
+        i.e. [8 * String.length num]. *)
     val of_binary : ?width:int -> endian -> string -> t
 
     (** {2 Conversions to OCaml built in integer types }  *)

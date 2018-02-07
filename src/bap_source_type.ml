@@ -8,7 +8,7 @@ exception Unrecognized_source
 
 type t = [
   | `Binary
-  | `File of string
+  | `Project
   | `Memory of arch
 ] [@@deriving sexp]
 
@@ -19,9 +19,8 @@ let arch_exn str = match Arch.of_string str with
 
 let parse_source_type str = match String.split ~on:'-' str with
   | [arch;"code"] -> `Memory (arch_exn arch)
-  | [fmt;"custom"]  -> `File fmt
   | ["binary"] -> `Binary
-  | ["project"] -> `File "builtin"
+  | ["project"] -> `Project
   | _ -> raise Unrecognized_source
 
 let parse s =
@@ -31,6 +30,6 @@ let parse s =
 let pp ppf = function
   | `Memory arch -> fprintf ppf "%a-code" Arch.pp arch
   | `Binary -> fprintf ppf "binary"
-  | `File fmt -> fprintf ppf "%s-data" fmt
+  | `Project -> fprintf ppf "project"
 
 let t : 'a Arg.converter = parse,pp
