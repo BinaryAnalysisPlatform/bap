@@ -117,6 +117,46 @@ module HasIndirect(Machine : Primus.Machine.S) = struct
   let run = run Taint.Rel.indirect
 end
 
+module Sanitize(Machine : Primus.Machine.S) = struct
+  include Has(Machine)
+  [@@@warning "-P"]
+  let run rel [v; k] =
+    Kind.of_value k >>= fun k ->
+    Tracker.sanitize v rel k >>| fun () ->
+    v
+end
+
+module SanitizeDirect(Machine : Primus.Machine.S) = struct
+  include Sanitize(Machine)
+  let run = run Taint.Rel.direct
+end
+
+module SanitizeIndirect(Machine : Primus.Machine.S) = struct
+  include Sanitize(Machine)
+  let run = run Taint.Rel.indirect
+end
+
+module PolicySelect(Machine : Primus.Machine.S) = struct
+  include Pre(Machine)
+  [@@@warning "-P"]
+  module Policy = Taint.Propagation.Policy.Make(Machine)
+  let run [k; p] =
+    Kind.of_value k >>= fun k ->
+    Policy.of_value p >>= fun p ->
+    Policy.select k p >>= fun () ->
+    nil
+end
+
+module PolicySetDefault(Machine : Primus.Machine.S) = struct
+  include Pre(Machine)
+  [@@@warning "-P"]
+  module Policy = Taint.Propagation.Policy.Make(Machine)
+  let run [p] =
+    Policy.of_value p >>=
+    Policy.set_default >>= fun () ->
+    nil
+end
+
 
 module Setup(Machine : Primus.Machine.S) = struct
   module Lisp = Primus.Lisp.Make(Machine)
@@ -136,7 +176,21 @@ module Setup(Machine : Primus.Machine.S) = struct
 
       def "taint-has-indirect" (tuple [a; b] @-> c)
         (module HasIndirect);
-    ]
+
+      def "taint-sanitize-direct" (tuple [a; b] @-> c)
+        (module SanitizeDirect);
+
+      def "taint-sanitize-indirect" (tuple [a; b] @-> c)
+        (module SanitizeIndirect);
+
+      def "taint-policy-select" (tuple [a; b] @-> bool)
+        (module PolicySelect);
+
+      def "taint-policy-set-default" (tuple [a] @-> bool)
+        (module PolicySetDefault);
+
+    ];
+
 end
 
 let set_default_policy name =
