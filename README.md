@@ -334,7 +334,7 @@ execute the following in any OCaml top-level:
 # Learning
 
 Other than
-[API](https://binaryanalysisplatform.github.io/bap/api/v1.0.0/argot_index.html)
+[API](https://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
 documentation, we have
 [blog](https://binaryanalysisplatform.github.io/) and
 [wiki](https://github.com/BinaryAnalysisPlatform/bap/wiki/), where you
