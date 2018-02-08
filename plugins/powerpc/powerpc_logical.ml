@@ -15,11 +15,13 @@ let andi_dot cpu ops =
   let ra = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
+  let tm = signed var cpu.word_width in
   RTL.[
     ra := rs land im;
-    nth bit cpu.cr 0 := low cpu.word_width ra <$ zero;
-    nth bit cpu.cr 1 := low cpu.word_width ra >$ zero;
-    nth bit cpu.cr 2 := low cpu.word_width ra = zero
+    tm := low cpu.word_width ra;
+    nth bit cpu.cr 0 := tm < zero;
+    nth bit cpu.cr 1 := tm > zero;
+    nth bit cpu.cr 2 := tm = zero
   ]
 
 (** Fixed-point AND Immediate Shifted
@@ -31,11 +33,13 @@ let andis_dot cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
   let sh = unsigned const byte 16 in
+  let tm = signed var cpu.word_width in
   RTL.[
-    ra := rs land (im lsl sh);
-    nth bit cpu.cr 0 := low cpu.word_width ra <$ zero;
-    nth bit cpu.cr 1 := low cpu.word_width ra >$ zero;
-    nth bit cpu.cr 2 := low cpu.word_width ra = zero;
+    ra := rs land (im << sh);
+    tm := low cpu.word_width ra;
+    nth bit cpu.cr 0 := tm < zero;
+    nth bit cpu.cr 1 := tm > zero;
+    nth bit cpu.cr 2 := tm = zero;
   ]
 
 (** Fixed-point AND
@@ -82,7 +86,7 @@ let oris cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
   let sh = unsigned const byte 16 in
-  RTL.[ ra := rs lor (im lsl sh); ]
+  RTL.[ ra := rs lor (im << sh); ]
 
 (** Fixed-point OR
     Pages 92-98 of IBM Power ISATM Version 3.0 B
@@ -125,7 +129,7 @@ let xoris cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let im = unsigned imm ops.(2) in
   let sh = unsigned const byte 16 in
-  RTL.[ ra := rs lxor (im lsl sh); ]
+  RTL.[ ra := rs lxor (im << sh); ]
 
 (** Fixed-point XOR
     Pages 92-98 of IBM Power ISATM Version 3.0 B
@@ -308,9 +312,9 @@ let cmpb cpu ops =
     ind := zero;
     tmp := zero;
     foreach byte_i rs [
-      byte_j := nth byte (rb lsl (ind * sh)) 0;
+      byte_j := nth byte (rb << (ind * sh)) 0;
       when_ (byte_i = byte_j) [
-        tmp := tmp lor (xb lsl ((max - ind) * sh));
+        tmp := tmp lor (xb << ((max - ind) * sh));
       ];
       ind := ind + one;
     ];
@@ -342,7 +346,7 @@ let popcntw cpu ops =
           cnt := cnt + one;
         ];
       ];
-      res := res lor (cnt lsl (ind * x));
+      res := res lor (cnt << (ind * x));
       ind := ind - one;
     ];
     ra := high cpu.word_width res;
@@ -382,55 +386,55 @@ let bpermd cpu ops =
     ind := max;
     foreach bit_index rs [
       if_ (bit_index < max_ind) [
-        x := msb (rb lsl bit_index);
+        x := msb (rb << bit_index);
       ] [
         x := zero;
       ];
-      tmp := tmp lor (x lsl ind);
+      tmp := tmp lor (x << ind);
       ind := ind - one;
     ];
     ra := tmp;
 ]
 
 let () =
-  "ANDIo"   >> andi_dot;
-  "ANDISo"  >> andis_dot;
-  "AND"     >> and_;
+  "ANDIo"   >| andi_dot;
+  "ANDISo"  >| andis_dot;
+  "AND"     >| and_;
   "ANDo"    >. and_;
-  "ANDC"    >> andc;
+  "ANDC"    >| andc;
   "ANDCo"   >. andc;
-  "ORI"     >> ori;
-  "NOP"     >> nop;
-  "ORIS"    >> oris;
-  "OR"      >> or_;
+  "ORI"     >| ori;
+  "NOP"     >| nop;
+  "ORIS"    >| oris;
+  "OR"      >| or_;
   "ORo"     >. or_;
-  "ORC"     >> orc;
+  "ORC"     >| orc;
   "ORCo"    >. orc;
-  "XORI"    >> xori;
-  "XORIS"   >> xoris;
-  "XOR"     >> xor;
+  "XORI"    >| xori;
+  "XORIS"   >| xoris;
+  "XOR"     >| xor;
   "XORo"    >. xor;
-  "NAND"    >> nand;
+  "NAND"    >| nand;
   "NANDo"   >. nand;
-  "NOR"     >> nor;
+  "NOR"     >| nor;
   "NORo"    >. nor;
-  "EQV"     >> eqv;
+  "EQV"     >| eqv;
   "EQVo"    >. eqv;
-  "EXTSB"   >> extsb;
+  "EXTSB"   >| extsb;
   "EXTSBo"  >. extsb;
-  "EXTSH"   >> extsh;
+  "EXTSH"   >| extsh;
   "EXTSHo"  >. extsh;
-  "EXTSW"   >> extsw;
+  "EXTSW"   >| extsw;
   "EXTSWo"  >. extsw;
-  "CNTLZW"  >> cntlzw;
+  "CNTLZW"  >| cntlzw;
   "CNTLZWo" >. cntlzw;
-  "CNTLZD"  >> cntlzd;
+  "CNTLZD"  >| cntlzd;
   "CNTLZDo" >. cntlzd;
-  "CNTTZW"  >> cnttzw;
+  "CNTTZW"  >| cnttzw;
   "CNTTZWo" >. cnttzw;
-  "CNTTZD"  >> cnttzd;
+  "CNTTZD"  >| cnttzd;
   "CNTTZDo" >. cnttzd;
-  "CMPB"    >> cmpb;
-  "POPCNTW" >> popcntw;
-  "POPCNTD" >> popcntd;
-  "BPERMD"  >> bpermd;
+  "CMPB"    >| cmpb;
+  "POPCNTW" >| popcntw;
+  "POPCNTD" >| popcntd;
+  "BPERMD"  >| bpermd;

@@ -36,8 +36,8 @@ module Std = struct
     fc cpu ops @
     RTL.[
       x := low cpu.word_width res;
-      nth bit cpu.cr 0 := x <$ zero;
-      nth bit cpu.cr 1 := x >$ zero;
+      nth bit cpu.cr 0 := x < zero;
+      nth bit cpu.cr 1 := x > zero;
       nth bit cpu.cr 2 := x = zero;
     ]
 
@@ -48,7 +48,7 @@ module Std = struct
 
   let register_dot name lifter = register name (dot lifter)
 
-  let (>>) = register
+  let (>|) = register
   let (>.) = register_dot
 
   let lift addr_size endian mem insn =

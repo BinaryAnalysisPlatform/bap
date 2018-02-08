@@ -214,22 +214,22 @@ let stdbrx cpu ops =
   ]
 
 let () =
-  "STB"    >> stb;
-  "STH"    >> sth;
-  "STW"    >> stw;
-  "STBX"   >> stbx;
-  "STHX"   >> sthx;
-  "STWX"   >> stwx;
-  "STDX"   >> stdx;
-  "STBU"   >> stbu;
-  "STHU"   >> sthu;
-  "STWU"   >> stwu;
-  "STBUX"  >> stbux;
-  "STHUX"  >> sthux;
-  "STWUX"  >> stwux;
-  "STDUX"  >> stdux;
-  "STD"    >> std;
-  "STDU"   >> stdu;
-  "STHBRX" >> sthbrx;
-  "STWBRX" >> stwbrx;
-  "STDBRX" >> stdbrx;
+  "STB"    >| stb;
+  "STH"    >| sth;
+  "STW"    >| stw;
+  "STBX"   >| stbx;
+  "STHX"   >| sthx;
+  "STWX"   >| stwx;
+  "STDX"   >| stdx;
+  "STBU"   >| stbu;
+  "STHU"   >| sthu;
+  "STWU"   >| stwu;
+  "STBUX"  >| stbux;
+  "STHUX"  >| sthux;
+  "STWUX"  >| stwux;
+  "STDUX"  >| stdux;
+  "STD"    >| std;
+  "STDU"   >| stdu;
+  "STHBRX" >| sthbrx;
+  "STWBRX" >| stwbrx;
+  "STDBRX" >| stdbrx;

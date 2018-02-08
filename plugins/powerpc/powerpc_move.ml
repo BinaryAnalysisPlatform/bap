@@ -61,7 +61,7 @@ let mtcrf cpu ops =
     ind := zero;
     fxm := fx;
     foreach halfbyte_i mask [
-      bit_i := msb (fxm lsl ind);
+      bit_i := msb (fxm << ind);
       if_ (bit_i = one) [
         halfbyte_i := ones;
       ] [
@@ -113,11 +113,11 @@ let mflr cpu ops =
   RTL.[ rt := cpu.lr ]
 
 let () =
-  "MTSPR" >> mtspr;
-  "MFSPR" >> mfspr;
-  "MTCRF" >> mtcrf;
-  "MFCR"  >> mfcr;
-  "MTCTR" >> mtctr;
-  "MTLR"  >> mtlr;
-  "MFCTR" >> mfctr;
-  "MFLR"  >> mflr;
+  "MTSPR" >| mtspr;
+  "MFSPR" >| mfspr;
+  "MTCRF" >| mtcrf;
+  "MFCR"  >| mfcr;
+  "MTCTR" >| mtctr;
+  "MTLR"  >| mtlr;
+  "MFCTR" >| mfctr;
+  "MFLR"  >| mflr;

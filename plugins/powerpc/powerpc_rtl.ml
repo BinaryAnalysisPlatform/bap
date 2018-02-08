@@ -91,20 +91,22 @@ module Exp = struct
 
   let unop op x = { x with body = Unop (op, x.body)}
 
-  let unsigned_binop op lhs rhs =
-    let sign = Unsigned in
+  let binop_with_signedness sign op lhs rhs =
     let width = max lhs.width rhs.width in
     let lhs = cast lhs width sign in
     let rhs = cast rhs width sign in
     let body = Binop(op, lhs.body, rhs.body) in
     {sign; width; body;}
 
+  let unsigned_binop op lhs rhs =
+    binop_with_signedness Unsigned op lhs rhs
+
+  let signed_binop op lhs rhs =
+    binop_with_signedness Signed op lhs rhs
+
   let binop_with_cast op lhs rhs =
     let sign = derive_sign lhs.sign rhs.sign in
-    let width = max lhs.width rhs.width in
-    let lhs = cast lhs width sign in
-    let rhs = cast rhs width sign in
-    { sign; width; body = Binop (op, lhs.body, rhs.body); }
+    binop_with_signedness sign op lhs rhs
 
   let concat lhs rhs =
     let width = lhs.width + rhs.width in
@@ -113,26 +115,49 @@ module Exp = struct
 
   let bit_result x = cast_width x 1
 
+  let derive_op x y op_u op_s =
+    match derive_sign x.sign y.sign with
+    | Signed -> op_s
+    | Unsigned -> op_u
+
   let plus  = binop_with_cast Bil.plus
   let minus = binop_with_cast Bil.minus
   let times = binop_with_cast Bil.times
-  let divide  = binop_with_cast Bil.divide
-  let sdivide = binop_with_cast Bil.sdivide
-  let modulo  = binop_with_cast Bil.modulo
-  let smodulo = binop_with_cast Bil.smodulo
-  let lt x y  = bit_result (binop_with_cast Bil.lt x y)
-  let gt x y  = bit_result (binop_with_cast Bil.lt y x)
-  let eq x y  = bit_result (binop_with_cast Bil.eq x y)
-  let le x y  = bit_result (binop_with_cast Bil.le x y)
-  let ge x y  = bit_result (binop_with_cast Bil.le y x)
-  let neq x y = bit_result (binop_with_cast Bil.neq x y)
-  let slt x y = bit_result (binop_with_cast Bil.slt x y)
-  let sgt x y = bit_result (binop_with_cast Bil.slt y x)
-  let slte x y = bit_result (binop_with_cast Bil.sle x y)
-  let sgte x y = bit_result (binop_with_cast Bil.sle y x)
 
-  let lshift  = unsigned_binop Bil.lshift
-  let rshift  = unsigned_binop Bil.rshift
+  let lt x y  =
+    let op = derive_op x y Bil.lt Bil.slt in
+    bit_result (binop_with_cast op x y)
+
+  let gt x y  =
+    let op = derive_op x y Bil.lt Bil.slt in
+    bit_result (binop_with_cast op y x)
+
+  let le x y  =
+    let op = derive_op x y Bil.le Bil.sle in
+    bit_result (binop_with_cast op x y)
+
+  let ge x y  =
+    let op = derive_op x y Bil.le Bil.sle in
+    bit_result (binop_with_cast op y x)
+
+  let divide x y  =
+    let op = derive_op x y Bil.divide Bil.sdivide in
+    binop_with_cast op x y
+
+  let modulo x y =
+    let op = derive_op x y Bil.modulo Bil.smodulo in
+    binop_with_cast op x y
+
+  let eq x y  = bit_result (binop_with_cast Bil.eq x y)
+  let neq x y = bit_result (binop_with_cast Bil.neq x y)
+
+  let lshift = binop_with_cast Bil.lshift
+  let rshift x y =
+    let op =
+      if x.sign = Signed then Bil.arshift
+      else Bil.rshift in
+    binop_with_cast op x y
+
   let bit_and = unsigned_binop Bil.bit_and
   let bit_xor = unsigned_binop Bil.bit_xor
   let bit_or  = unsigned_binop Bil.bit_or
@@ -184,9 +209,13 @@ module Exp = struct
     else
       {sign=Unsigned; width; body = Extract (hi,lo,e.body)}
 
+  (* if target width is the same as original expression width, we
+     return unsigned original, dependless what sign it had,
+     because there is an invariant that extract always returns
+     unsigned expression. *)
   let extract hi lo e =
     let width = hi - lo + 1 in
-    if width = e.width then e
+    if width = e.width then { e with sign=Unsigned; }
     else
       match e.body with
       | Vars (v,vars) when vars <> [] ->
@@ -209,22 +238,16 @@ module Infix = struct
   let ( - )  = minus
   let ( * )  = times
   let ( / )  = divide
-  let ( /$)  = sdivide
   let ( ^ )  = concat
   let ( % )  = modulo
-  let ( %$)  = smodulo
   let ( < )  = lt
   let ( > )  = gt
   let ( <= )  = le
   let ( >= )  = ge
-  let ( <$ ) = slt
-  let ( >$ ) = sgt
-  let ( <=$ ) = slte
-  let ( >=$ ) = sgte
   let ( = )   = eq
   let ( <> )   = neq
-  let ( lsl )  = lshift
-  let ( lsr )  = rshift
+  let ( << )  = lshift
+  let ( >> )  = rshift
   let ( lor )  = bit_or
   let ( land ) = bit_and
   let ( lxor ) = bit_xor
@@ -326,7 +349,7 @@ module Translate = struct
     object inherit [unit] Stmt.finder
       method! enter_move v _ r =
         if Var.equal var v then r.return (Some ())
-        else r.return None
+        else r
     end
 
   let rec stmt_to_bil = function

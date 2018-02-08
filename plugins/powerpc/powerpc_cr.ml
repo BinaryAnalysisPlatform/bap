@@ -108,12 +108,12 @@ let mcrf cpu ops =
   ]
 
 let () =
-  "CRAND"  >> crand;
-  "CRNAND" >> crnand;
-  "CROR"   >> cror;
-  "CRXOR"  >> crxor;
-  "CRNOR"  >> crnor;
-  "CREQV"  >> creqv;
-  "CRANDC" >> crandc;
-  "CRORC"  >> crorc;
-  "MCRF"   >> mcrf;
+  "CRAND"  >| crand;
+  "CRNAND" >| crnand;
+  "CROR"   >| cror;
+  "CRXOR"  >| crxor;
+  "CRNOR"  >| crnor;
+  "CREQV"  >| creqv;
+  "CRANDC" >| crandc;
+  "CRORC"  >| crorc;
+  "MCRF"   >| mcrf;

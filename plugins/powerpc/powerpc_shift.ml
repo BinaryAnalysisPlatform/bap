@@ -11,8 +11,8 @@ let slw cpu ops =
   let rb = unsigned cpu.reg ops.(2) in
   let sh = unsigned const byte 5 in
   RTL.[
-    if_ (lsb (rb lsr sh) = zero) [
-      ra := low word rs lsl last rb 5;
+    if_ (lsb (rb >> sh) = zero) [
+      ra := low word rs << last rb 5;
     ] [
       ra := zero;
     ]
@@ -29,8 +29,8 @@ let srw cpu ops =
   let rb = unsigned cpu.reg ops.(2) in
   let sh = unsigned const byte 5 in
   RTL.[
-    if_ (lsb (rb lsr sh) = zero) [
-      ra := low word rs lsr last rb 5;
+    if_ (lsb (rb >> sh) = zero) [
+      ra := low word rs >> last rb 5;
     ] [
       ra := zero;
     ]
@@ -49,20 +49,22 @@ let srawi cpu ops =
   let carry_ones = unsigned var bit in
   let ones = unsigned const cpu.word_width (-1) in
   let w32 = unsigned const byte 32 in
+  let tm = signed var word in
   RTL.[
     mask := ones;
-    carry_ones := ((lnot (mask lsl sh)) land rs) <> zero;
-    cpu.ca := carry_ones land (low word rs <$ zero);
+    carry_ones := ((lnot (mask << sh)) land rs) <> zero;
+    tm := low word rs;
+    cpu.ca := carry_ones land (tm < zero);
     cpu.ca32 := cpu.ca;
-    if_ (low word rs >=$ zero) [
-      ra := low word rs lsr sh;
+    if_ (tm >= zero) [
+      ra := low word rs >> sh;
     ] [
       if_ (width ra = w32) [
-        mask := mask lsr sh;
+        mask := mask >> sh;
       ] [
-        mask := mask lsr (w32 + sh);
+        mask := mask >> (w32 + sh);
       ];
-      ra := (low word rs lsr sh) lor (lnot mask);
+      ra := (low word rs >> sh) lor (lnot mask);
     ]
   ]
 
@@ -80,25 +82,27 @@ let sraw cpu ops =
   let carry_ones = unsigned var bit in
   let s = unsigned var bit in
   let shift = unsigned var byte in
+  let tm = signed var word in
   RTL.[
     mask := zero;
     shift := last rb 6;
     when_ (last rb 6 < w32) [
-      mask := (lnot mask) lsl shift;
+      mask := (lnot mask) << shift;
     ];
-    s := low word rs <$ zero;
+    tm := low word rs;
+    s := tm < zero;
     carry_ones := ((lnot mask) land rs) <> zero;
     cpu.ca   := carry_ones land s;
     cpu.ca32 := cpu.ca;
     if_ (s = zero) [
-      ra := low word rs lsr shift;
+      ra := low word rs >> shift;
     ] [
       if_ (width ra = w32) [
-        mask := mask lsr shift;
+        mask := mask >> shift;
       ] [
-        mask := mask lsr (w32 + shift);
+        mask := mask >> (w32 + shift);
       ];
-      ra := (low word rs lsr shift) lor (lnot mask);
+      ra := (low word rs >> shift) lor (lnot mask);
     ]
   ]
 
@@ -112,7 +116,7 @@ let sld cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let rb = unsigned cpu.reg ops.(2) in
   RTL.[
-    ra := rs lsl (last rb 6)
+    ra := rs << (last rb 6)
   ]
 
 (** Fix-point Shift Right Doubleword
@@ -125,7 +129,7 @@ let srd cpu ops =
   let rs = unsigned cpu.reg ops.(1) in
   let rb = unsigned cpu.reg ops.(2) in
   RTL.[
-    ra := rs lsr (last rb 6)
+    ra := rs >> (last rb 6)
   ]
 
 (** Fix-point Shift Right Algebraic Doubleword Immediate
@@ -139,17 +143,19 @@ let sradi cpu ops =
   let sh = unsigned imm ops.(2) in
   let mask = unsigned var doubleword in
   let carry_ones = unsigned var bit in
+  let tm = signed var cpu.word_width in
   RTL.[
     mask := zero;
     mask := lnot mask;
-    carry_ones := ((lnot (mask lsl sh)) land rs) <> zero;
-    cpu.ca   := carry_ones land (rs <$ zero);
+    carry_ones := ((lnot (mask << sh)) land rs) <> zero;
+    tm := rs;
+    cpu.ca   := carry_ones land (tm < zero);
     cpu.ca32 := cpu.ca;
-    if_ (rs >=$ zero) [
-      ra := rs lsr sh;
+    if_ (tm >= zero) [
+      ra := rs >> sh;
     ] [
-      mask := mask lsr sh;
-      ra := (rs lsr sh) lor (lnot mask);
+      mask := mask >> sh;
+      ra := (rs >> sh) lor (lnot mask);
     ]
   ]
 
@@ -166,33 +172,35 @@ let srad cpu ops =
   let carry_ones = unsigned var bit in
   let s = unsigned var bit in
   let shift = unsigned var byte in
+  let tm = signed var cpu.word_width in
   RTL.[
     mask := zero;
     shift := last rb 7;
     when_ (nth bit rb 57 = zero) [
-      mask := (lnot mask) lsl shift;
+      mask := (lnot mask) << shift;
     ];
-    s := rs <$ zero;
+    tm := rs;
+    s := tm < zero;
     carry_ones := ((lnot mask) land rs) <> zero;
     cpu.ca   := carry_ones land s;
     cpu.ca32 := cpu.ca;
     if_ (s = zero) [
-      ra := rs lsr shift;
+      ra := rs >> shift;
     ] [
-      mask := mask lsr shift;
-      ra := (rs lsr shift) lor (lnot mask);
+      mask := mask >> shift;
+      ra := (rs >> shift) lor (lnot mask);
     ]
   ]
 
 let () =
-  "SLW"    >> slw;
-  "SRW"    >> srw;
-  "SRAWI"  >> srawi;
-  "SRAW"   >> sraw;
-  "SLD"    >> sld;
-  "SRD"    >> srd;
-  "SRADI"  >> sradi;
-  "SRAD"   >> srad;
+  "SLW"    >| slw;
+  "SRW"    >| srw;
+  "SRAWI"  >| srawi;
+  "SRAW"   >| sraw;
+  "SLD"    >| sld;
+  "SRD"    >| srd;
+  "SRADI"  >| sradi;
+  "SRAD"   >| srad;
   "SLWo"   >. slw;
   "SRWo"   >. srw;
   "SRAWIo" >. srawi;

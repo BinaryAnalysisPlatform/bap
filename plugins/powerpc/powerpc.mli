@@ -236,8 +236,8 @@
     Also, one needs to register a lifted function, so
     it could be called when appropriative instruction will be
     encountered. There are two operators for this purpose:
-    - [(>>)] - just registers a function (see example below)
-    - [(>.)] - does the same, plus does some extra job (see
+    - [(|>)] - just registers a function (see example below)
+    - [(|>.)] - does the same, plus does some extra job (see
              a description below)
 
     {2 Complete example}
@@ -258,7 +258,7 @@
      12        rc := (tm lsl sh) + cpu.ca;
      13    ]
      14   let () =
-     15     "SomeSortOfAdd"  >> sort_of_add;
+     15     "SomeSortOfAdd" >| sort_of_add;
     ]}
 
     There is a lifter for instruction [SomeSortOfAdd]. It's required
@@ -388,7 +388,6 @@ module Std : sig
   (** Set of operators. Briefly it contains next operators:
       - assignment
       - math operators: +, -, *, \, %, <, >, <= , >= , =, <>
-      - math signed operators: \$, %$, <$, >$, <=$, >=$
       - logical operators: lsl, lsr, lnot, land, lor, lxor  *)
   module RTL : sig
 
@@ -407,17 +406,11 @@ module Std : sig
     (** [x / y] - division *)
     val ( / ) : exp -> exp -> exp
 
-    (** [x /$ y] - signed division *)
-    val ( /$ ) : exp -> exp -> exp
-
     (** [x ^ y] - concatenation *)
     val ( ^ ) : exp -> exp -> exp
 
     (** [x % y] - modulo*)
     val ( % ) : exp -> exp -> exp
-
-    (** [x %$ y] - signed modulo *)
-    val ( %$ ) : exp -> exp -> exp
 
     (** [x < y] - less than*)
     val ( < ) : exp -> exp -> exp
@@ -437,23 +430,11 @@ module Std : sig
     (** [x <> y] - not equal *)
     val ( <> ) : exp -> exp -> exp
 
-    (** [x <$ y] - signed less than *)
-    val ( <$ ) : exp -> exp -> exp
+    (** [x << y] - logical shift left *)
+    val ( << )  : exp -> exp -> exp
 
-    (** [x >$ y] - signed greater than *)
-    val ( >$ ) : exp -> exp -> exp
-
-    (** [x <=$ y] - signed less than or equal *)
-    val ( <=$ )  : exp -> exp -> exp
-
-    (** [x >=$ y] - signed greater than or equal *)
-    val ( >=$ )  : exp -> exp -> exp
-
-    (** [x lsl y] - logical shift left *)
-    val ( lsl )  : exp -> exp -> exp
-
-    (** [x lsr y] - logical shift right *)
-    val ( lsr )  : exp -> exp -> exp
+    (** [x >> y] - logical shift right *)
+    val ( >> )  : exp -> exp -> exp
 
     (** [x lor y] - logical or *)
     val ( lor )  : exp -> exp -> exp
@@ -588,8 +569,8 @@ module Std : sig
 
   (** Registration *)
 
-  (** [name >> lift]  - registers a lifter for instruction [name]  *)
-  val (>>) : string -> lift -> unit
+  (** [name >| lift]  - registers a lifter for instruction [name]  *)
+  val (>|) : string -> lift -> unit
 
   (** [name >. lift] - registers a lifter for dot version of instruction
       [name], but also extend an RTL code with signed comparison of the

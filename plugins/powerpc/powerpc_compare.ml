@@ -10,8 +10,8 @@ let cmpwi cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let si = signed imm ops.(2) in
   RTL.[
-    nth bit bf 0 := low word ra <$ si;
-    nth bit bf 1 := low word ra >$ si;
+    nth bit bf 0 := low word ra < si;
+    nth bit bf 1 := low word ra > si;
     nth bit bf 2 := low word ra = si;
     nth bit bf 3 := cpu.so;
   ]
@@ -21,8 +21,8 @@ let cmpdi cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let si = signed imm ops.(2) in
   RTL.[
-    nth bit bf 0 := ra <$ si;
-    nth bit bf 1 := ra >$ si;
+    nth bit bf 0 := ra < si;
+    nth bit bf 1 := ra > si;
     nth bit bf 2 := ra = si;
     nth bit bf 3 := cpu.so;
   ]
@@ -37,8 +37,8 @@ let cmpw cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
   RTL.[
-    nth bit bf 0 := low word ra <$ rb;
-    nth bit bf 1 := low word ra >$ rb;
+    nth bit bf 0 := low word ra < rb;
+    nth bit bf 1 := low word ra > rb;
     nth bit bf 2 := low word ra = rb;
     nth bit bf 3 := cpu.so;
   ]
@@ -48,8 +48,8 @@ let cmpd cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
   RTL.[
-    nth bit bf 0 := ra <$ rb;
-    nth bit bf 1 := ra >$ rb;
+    nth bit bf 0 := ra < rb;
+    nth bit bf 1 := ra > rb;
     nth bit bf 2 := ra = rb;
     nth bit bf 3 := cpu.so;
   ]
@@ -109,11 +109,11 @@ let cmpld cpu ops =
   ]
 
 let () =
-  "CMPWI"  >> cmpwi;
-  "CMPDI"  >> cmpdi;
-  "CMPW"   >> cmpw;
-  "CMPD"   >> cmpd;
-  "CMPLWI" >> cmplwi;
-  "CMPLDI" >> cmpldi;
-  "CMPLW"  >> cmplw;
-  "CMPLD"  >> cmpld;
+  "CMPWI"  >| cmpwi;
+  "CMPDI"  >| cmpdi;
+  "CMPW"   >| cmpw;
+  "CMPD"   >| cmpd;
+  "CMPLWI" >| cmplwi;
+  "CMPLDI" >| cmpldi;
+  "CMPLW"  >| cmplw;
+  "CMPLD"  >| cmpld;

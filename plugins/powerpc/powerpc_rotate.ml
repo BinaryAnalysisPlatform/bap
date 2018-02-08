@@ -27,12 +27,12 @@ let rlwinm cpu ops =
     ];
     mask := ones;
     if_ (mb <= me) [
-      mask := (mask lsr start) land (mask lsl (width ra - stop - one));
+      mask := (mask >> start) land (mask << (width ra - stop - one));
     ] [
-      mask := (mask lsl (width ra - stop)) lor (mask lsr (start + one));
+      mask := (mask << (width ra - stop)) lor (mask >> (start + one));
     ];
     tmp := nth word rs 1;
-    ra := (nth cpu.word_width ((tmp ^ tmp ^ tmp) lsl sh) 0) land mask;
+    ra := (nth cpu.word_width ((tmp ^ tmp ^ tmp) << sh) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Word then AND with Mask
@@ -62,12 +62,12 @@ let rlwnm cpu ops =
     ];
     mask := ones;
     if_ (mb <= me) [
-      mask := (mask lsr start) land (mask lsl (width ra - stop - one));
+      mask := (mask >> start) land (mask << (width ra - stop - one));
     ] [
-      mask := (mask lsl (width ra - stop)) lor (mask lsr (start + one));
+      mask := (mask << (width ra - stop)) lor (mask >> (start + one));
     ];
     tmp := nth word rs 1;
-    ra := (nth doubleword ((tmp ^ tmp ^ tmp) lsl (last rb 5)) 0) land mask;
+    ra := (nth doubleword ((tmp ^ tmp ^ tmp) << (last rb 5)) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Word Immediate then Mask Insert
@@ -98,12 +98,12 @@ let rlwimi cpu ops =
     ];
     mask := ones;
     if_ (mb <= me) [
-      mask := (mask lsr start) land (mask lsl (width ra - stop - one));
+      mask := (mask >> start) land (mask << (width ra - stop - one));
     ] [
-      mask := (mask lsl (width ra - stop)) lor (mask lsr (start + one));
+      mask := (mask << (width ra - stop)) lor (mask >> (start + one));
     ];
     tmp1 := nth word rs 1;
-    tmp2 := nth doubleword ((tmp1 ^ tmp1 ^ tmp1) lsl sh) 0;
+    tmp2 := nth doubleword ((tmp1 ^ tmp1 ^ tmp1) << sh) 0;
     ra := (tmp2 land mask) lor (ra land (lnot mask));
   ]
 
@@ -120,8 +120,8 @@ let rldicl cpu ops =
   let mask = unsigned var doubleword in
   RTL.[
     mask := zero;
-    mask := (lnot mask) lsr mb;
-    ra := (nth doubleword ((rs ^ rs ^ rs) lsl sh) 0) land mask;
+    mask := (lnot mask) >> mb;
+    ra := (nth doubleword ((rs ^ rs ^ rs) << sh) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Doubleword Immediate then Clear Right
@@ -138,8 +138,8 @@ let rldicr cpu ops =
   let width = unsigned const doubleword 64 in
   RTL.[
     mask := zero;
-    mask := (lnot mask) lsl (width - me - one);
-    ra := (nth doubleword ((rs ^ rs ^ rs) lsl sh) 0) land mask;
+    mask := (lnot mask) << (width - me - one);
+    ra := (nth doubleword ((rs ^ rs ^ rs) << sh) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Doubleword Immediate then Clear
@@ -158,10 +158,10 @@ let rldic cpu ops =
   let ones = unsigned const doubleword (-1) in
   RTL.[
     mask := ones;
-    mask1 := mask lsr mb;
-    mask2 := mask lsl sh;
+    mask1 := mask >> mb;
+    mask2 := mask << sh;
     mask := mask1 land mask2;
-    ra := (nth doubleword ((rs ^ rs ^ rs) lsl sh) 0) land mask;
+    ra := (nth doubleword ((rs ^ rs ^ rs) << sh) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Doubleword then Clear Left
@@ -177,8 +177,8 @@ let rldcl cpu ops =
   let mask = unsigned var doubleword in
   RTL.[
     mask := zero;
-    mask := (lnot mask) lsr mb;
-    ra := (nth doubleword ((rs ^ rs ^ rs) lsl (last rb 6)) 0) land mask;
+    mask := (lnot mask) >> mb;
+    ra := (nth doubleword ((rs ^ rs ^ rs) << (last rb 6)) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Doubleword then Clear Right
@@ -195,8 +195,8 @@ let rldcr cpu ops =
   let width = unsigned const doubleword 64 in
   RTL.[
     mask := zero;
-    mask := (lnot mask) lsl (width - me - one);
-    ra := (nth doubleword ((rs ^ rs ^ rs) lsl (last rb 6)) 0) land mask;
+    mask := (lnot mask) << (width - me - one);
+    ra := (nth doubleword ((rs ^ rs ^ rs) << (last rb 6)) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Doubleword Immediate then Mask Insert
@@ -216,23 +216,23 @@ let rldimi cpu ops =
   let ones = unsigned const doubleword (-1) in
   RTL.[
     mask := ones;
-    mask1 := mask lsr mb;
-    mask2 := mask lsl sh;
+    mask1 := mask >> mb;
+    mask2 := mask << sh;
     mask := mask1 land mask2;
-    tmp := nth doubleword ((rs ^ rs ^ rs) lsl sh) 0;
+    tmp := nth doubleword ((rs ^ rs ^ rs) << sh) 0;
     ra := (tmp land mask) lor (ra land (lnot mask));
   ]
 
 let () =
-  "RLWINM"  >> rlwinm;
-  "RLWNM"   >> rlwnm;
-  "RLWIMI"  >> rlwimi;
-  "RLDICL"  >> rldicl;
-  "RLDICR"  >> rldicr;
-  "RLDIC"   >> rldic;
-  "RLDCL"   >> rldcl;
-  "RLDCR"   >> rldcr;
-  "RLDIMI"  >> rldimi;
+  "RLWINM"  >| rlwinm;
+  "RLWNM"   >| rlwnm;
+  "RLWIMI"  >| rlwimi;
+  "RLDICL"  >| rldicl;
+  "RLDICR"  >| rldicr;
+  "RLDIC"   >| rldic;
+  "RLDCL"   >| rldcl;
+  "RLDCR"   >| rldcr;
+  "RLDIMI"  >| rldimi;
   "RLWINMo" >. rlwinm;
   "RLWNMo"  >. rlwnm;
   "RLWIMIo" >. rlwimi;

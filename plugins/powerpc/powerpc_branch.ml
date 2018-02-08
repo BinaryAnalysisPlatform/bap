@@ -12,42 +12,42 @@ let update_link_register cpu ops =
     4b ff fe f3  bla 67108592 *)
 let b cpu ops =
   let im = signed imm ops.(0) in
-  let tm = signed var (bitwidth 26) in
-  let sh = unsigned of_string "0b00" in
+  let tm = signed var cpu.word_width in
+  let sh = unsigned const byte 2 in
   RTL.[
-    tm := im ^ sh;
+    tm := last (im << sh) 26;
     cpu.jmp (cpu.pc + tm)
   ]
 
 let ba cpu ops =
   let im = signed imm ops.(0) in
-  let tm = signed var (bitwidth 26) in
-  let sh = unsigned of_string "0b00" in
+  let tm = signed var cpu.word_width in
+  let sh = unsigned const byte 2 in
   RTL.[
-    tm := im ^ sh;
-    cpu.jmp tm;
+    tm := last (im << sh) 26;
+    cpu.jmp tm
   ]
 
 let bl cpu ops =
   let im = signed imm ops.(0) in
-  let tm = signed var (bitwidth 26) in
-  let sh = unsigned of_string "0b00" in
+  let tm = signed var cpu.word_width in
+  let sh = unsigned const byte 2 in
   let ad = unsigned const byte 4 in
   RTL.[
-    tm := im ^ sh;
-    cpu.jmp (cpu.pc + tm);
+    tm := last (im << sh) 26;
     cpu.lr := cpu.pc + ad;
+    cpu.jmp (cpu.pc + tm);
   ]
 
 let bla cpu ops =
   let im = signed imm ops.(0) in
-  let tm = signed var (bitwidth 26) in
-  let sh = unsigned of_string "0b00" in
+  let tm = signed var cpu.word_width in
+  let sh = unsigned const byte 2 in
   let ad = unsigned const byte 4 in
   RTL.[
-    tm := im ^ sh;
-    cpu.jmp tm;
+    tm := last (im << sh) 26;
     cpu.lr := cpu.pc + ad;
+    cpu.jmp tm;
   ]
 
 (** Branch Instructions, Branch Conditional
@@ -60,30 +60,8 @@ let bla cpu ops =
 let bc cpu ops =
   let bo = unsigned imm ops.(0) in
   let bi = unsigned cpu.reg ops.(1) in
-  let bd = unsigned imm ops.(2) in
-  let sh = unsigned of_string "0b00" in
-  let ctr_ok = unsigned var bit in
-  let cond_ok = unsigned var bit in
-  let x = unsigned var (bitwidth 5) in
-  let tm = signed var halfword in
-  RTL.[
-    x := last bo 5;
-    when_ (nth bit x 2 = zero) [
-      cpu.ctr := cpu.ctr - one;
-    ];
-    ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
-    cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
-    when_ (ctr_ok land cond_ok) [
-      tm := bd ^ sh;
-      cpu.jmp (cpu.pc + tm);
-    ]
-  ]
-
-let bca cpu ops =
-  let bo = unsigned imm ops.(0) in
-  let bi = unsigned cpu.reg ops.(1) in
-  let bd = unsigned imm ops.(2) in
-  let sh = unsigned of_string "0b00" in
+  let bd = signed imm ops.(2) in
+  let sh = unsigned const byte 2 in
   let ctr_ok = unsigned var bit in
   let cond_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
@@ -96,7 +74,29 @@ let bca cpu ops =
     ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
     cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
     when_ (ctr_ok land cond_ok) [
-      tm := bd ^ sh;
+      tm := last (bd << sh) 16;
+      cpu.jmp (cpu.pc + tm);
+    ]
+  ]
+
+let bca cpu ops =
+  let bo = unsigned imm ops.(0) in
+  let bi = unsigned cpu.reg ops.(1) in
+  let bd = signed imm ops.(2) in
+  let sh = unsigned const byte 2 in
+  let ctr_ok = unsigned var bit in
+  let cond_ok = unsigned var bit in
+  let x = unsigned var (bitwidth 5) in
+  let tm = signed var cpu.word_width in
+  RTL.[
+    x := last bo 5;
+    when_ (nth bit x 2 = zero) [
+      cpu.ctr := cpu.ctr - one;
+    ];
+    ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
+    cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
+    when_ (ctr_ok land cond_ok) [
+      tm := last (bd << sh) 16;
       cpu.jmp tm;
     ]
   ]
@@ -107,12 +107,12 @@ let bcla = bca ^ update_link_register
 (** bdz  target = bc 18,0, target *)
 let bdz cpu ops =
   let bd = unsigned imm ops.(0) in
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   let tm = signed var cpu.word_width in
   RTL.[
     cpu.ctr := cpu.ctr - one;
     when_ (low cpu.word_width cpu.ctr = zero) [
-      tm := bd ^ sh;
+      tm := bd << sh;
       cpu.jmp (cpu.pc + tm)
     ]
   ]
@@ -120,12 +120,12 @@ let bdz cpu ops =
 (** bdnz  target = bc 16,0, target *)
 let bdnz cpu ops =
   let bd = unsigned imm ops.(0) in
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   let tm = signed var cpu.word_width in
   RTL.[
     cpu.ctr := cpu.ctr - one;
     when_ (low cpu.word_width cpu.ctr <> zero) [
-      tm := bd ^ sh;
+      tm := bd << sh;
       cpu.jmp (cpu.pc + tm)
     ]
   ]
@@ -138,10 +138,11 @@ let bdnz cpu ops =
 let bclr cpu ops =
   let bo = unsigned imm ops.(0) in
   let bi = unsigned cpu.reg ops.(1) in
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   let ctr_ok = unsigned var bit in
   let cond_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
+  let tm = unsigned var doubleword in
   RTL.[
     x := last bo 5;
     when_ (nth bit x 2 = zero) [
@@ -150,7 +151,8 @@ let bclr cpu ops =
     ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
     cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
     when_ (ctr_ok land cond_ok) [
-      cpu.jmp (cpu.lr ^ sh);
+      tm := first cpu.lr 62;
+      cpu.jmp (tm << sh);
     ];
   ]
 
@@ -162,25 +164,25 @@ let bclrl = bclr ^ update_link_register
     4e 80 00 20   blr
     4e 80 00 21   blrl *)
 let blr cpu ops =
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   RTL.[
-    cpu.jmp (cpu.lr ^ sh)
+    cpu.jmp (cpu.lr << sh)
   ]
 
 let blrl cpu ops =
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   RTL.[
-    cpu.jmp (cpu.lr ^ sh);
+    cpu.jmp (cpu.lr << sh);
     cpu.lr := cpu.pc + unsigned const byte 4
   ]
 
 (** bdnzlr = bclr 16,0,0  *)
 let bdnzlr cpu ops =
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   RTL.[
     cpu.ctr := cpu.ctr - one;
     when_ (cpu.ctr <> zero) [
-      cpu.jmp (cpu.lr ^ sh);
+      cpu.jmp (cpu.lr << sh);
     ];
   ]
 
@@ -194,13 +196,14 @@ let bcctr cpu ops =
   let bi = unsigned cpu.reg ops.(1) in
   let cond_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
+  let tm = unsigned var doubleword in
+  let sh = unsigned const doubleword 2 in
   RTL.[
     x := last bo 5;
-    cond_ok := (nth bit x 0 = one) lor ( bi lxor (lnot (nth bit x 1)));
+    cond_ok := (nth bit x 0 = one) lor (bi lxor (lnot (nth bit x 1)));
     when_ (cond_ok) [
-      nth bit cpu.ctr 62 := zero;
-      nth bit cpu.ctr 63 := zero;
-      cpu.jmp cpu.ctr;
+      tm := first cpu.ctr 62;
+      cpu.jmp (tm << sh);
     ];
   ]
 
@@ -228,7 +231,7 @@ let bctrl = bctr ^ update_link_register
 let bctar cpu ops =
   let bo = unsigned imm ops.(0) in
   let bi = unsigned cpu.reg ops.(1) in
-  let sh = unsigned of_string "0b00" in
+  let sh = unsigned const byte 2 in
   let cond_ok = unsigned var bit in
   let ctr_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
@@ -240,38 +243,38 @@ let bctar cpu ops =
     ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
     cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
     when_ (ctr_ok land cond_ok) [
-      cpu.jmp (cpu.tar ^ sh);
+      cpu.jmp (cpu.tar << sh);
     ]
   ]
 
 let bctarl = bctar ^ update_link_register
 
 let () =
-  "B"       >> b;
-  "BA"      >> ba;
-  "BL"      >> bl;
-  "BLA"     >> bla;
-  "gBC"     >> bc;
-  "gBCA"    >> bca;
-  "gBCL"    >> bcl;
-  "gBCLA"   >> bcla;
-  "BDZ"     >> bdz;
-  "BDNZ"    >> bdnz;
-  "BCC"     >> bc;
-  "BCCL"    >> bcl;
-  "BCCLA"   >> bcla;
-  "gBCLR"   >> bclr;
-  "gBCLRL"  >> bclrl;
-  "gBCCTR"  >> bcctr;
-  "gBCCTRL" >> bcctrl;
-  "BDNZLR"  >> bdnzlr;
-  "gBCTAR"  >> bctar;
-  "gBCTARL" >> bctarl;
-  "BLR"     >> blr;
-  "BLRL"    >> blrl;
-  "BCTR"    >> bctr;
-  "BCTRL"   >> bctrl;
-  "BCCLR"   >> bclr;
-  "BCCLRL"  >> bclrl;
-  "BCCCTR"  >> bcctr;
-  "BCCCTRL" >> bcctrl;
+  "B"       >| b;
+  "BA"      >| ba;
+  "BL"      >| bl;
+  "BLA"     >| bla;
+  "gBC"     >| bc;
+  "gBCA"    >| bca;
+  "gBCL"    >| bcl;
+  "gBCLA"   >| bcla;
+  "BDZ"     >| bdz;
+  "BDNZ"    >| bdnz;
+  "BCC"     >| bc;
+  "BCCL"    >| bcl;
+  "BCCLA"   >| bcla;
+  "gBCLR"   >| bclr;
+  "gBCLRL"  >| bclrl;
+  "gBCCTR"  >| bcctr;
+  "gBCCTRL" >| bcctrl;
+  "BDNZLR"  >| bdnzlr;
+  "gBCTAR"  >| bctar;
+  "gBCTARL" >| bctarl;
+  "BLR"     >| blr;
+  "BLRL"    >| blrl;
+  "BCTR"    >| bctr;
+  "BCTRL"   >| bctrl;
+  "BCCLR"   >| bclr;
+  "BCCLRL"  >| bclrl;
+  "BCCCTR"  >| bcctr;
+  "BCCCTRL" >| bcctrl;

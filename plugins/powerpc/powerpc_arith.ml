@@ -166,8 +166,12 @@ let divw cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
+  let dividend = signed var word in
+  let divisor = signed var word in
   RTL.[
-    rt := low word ra /$ low word rb;
+    dividend := low word ra;
+    divisor := low word rb;
+    rt := dividend / divisor;
   ]
 
 (** Fixed-Point Arithmetic Instructions - Divide Word Unsigned
@@ -196,7 +200,7 @@ let divwe cpu ops =
   RTL.[
     x := zero;
     high word x := low word ra;
-    rt := low word (x /$ low word rb);
+    rt := low word (x / low word rb);
   ]
 
 (** Fixed-Point Arithmetic Instructions - Divide Word Extended Unsigned
@@ -223,8 +227,12 @@ let modsw cpu ops =
   let rt = signed cpu.reg ops.(0) in
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
+  let dividend = signed var word in
+  let divisor = signed var word in
   RTL.[
-    rt := low word ra %$ low word rb;
+    dividend := low word ra;
+    divisor := low word rb;
+    rt := dividend % divisor;
   ]
 
 (** Fixed-Point Arithmetic Instructions - Modulo unsigned word
@@ -295,7 +303,7 @@ let divd cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
   RTL.[
-    rt := ra /$  rb;
+    rt := ra /  rb;
   ]
 
 (** Fixed-Point Arithmetic Instructions - Divide doubleword unsigned
@@ -308,7 +316,7 @@ let divdu cpu ops =
   let ra = unsigned cpu.reg ops.(1) in
   let rb = unsigned cpu.reg ops.(2) in
   RTL.[
-    rt := ra /  rb;
+    rt := ra / rb;
   ]
 
 (** Fixed-Point Arithmetic Instructions - Divide doubleword extended
@@ -325,7 +333,7 @@ let divde cpu ops =
   RTL.[
     tm1 := zero;
     high doubleword tm1 := ra;
-    tm2 := tm1 /$ rb;
+    tm2 := tm1 / rb;
     rt := low doubleword tm2;
   ]
 
@@ -356,7 +364,7 @@ let modsd cpu ops =
   let ra = signed cpu.reg ops.(1) in
   let rb = signed cpu.reg ops.(2) in
   RTL.[
-    rt := ra %$ rb;
+    rt := ra % rb;
   ]
 
 (** Fixed-Point Arithmetic Instructions - Modulo unsigned doubleword
@@ -372,49 +380,49 @@ let modud cpu ops =
   ]
 
 let () =
-  "NEG"     >> neg;
+  "NEG"     >| neg;
   "NEGo"    >. neg;
-  "SUBF"    >> subf;
+  "SUBF"    >| subf;
   "SUBFo"   >. subf;
-  "SUBFIC"  >> subfic;
-  "SUBFC"   >> subfc;
+  "SUBFIC"  >| subfic;
+  "SUBFC"   >| subfc;
   "SUBFCo"  >. subfc;
-  "SUBFE"   >> subfe;
+  "SUBFE"   >| subfe;
   "SUBFEo"  >. subfe;
-  "SUBFME"  >> subfme;
+  "SUBFME"  >| subfme;
   "SUBFMEo" >. subfme;
-  "SUBFZE"  >> subfze;
+  "SUBFZE"  >| subfze;
   "SUBFZEo" >. subfze;
-  "MULLI"   >> mulli;
-  "MULHW"   >> mulhw;
+  "MULLI"   >| mulli;
+  "MULHW"   >| mulhw;
   "MULHWo"  >. mulhw;
-  "MULHWU"  >> mulhwu;
+  "MULHWU"  >| mulhwu;
   "MULHWUo" >. mulhwu;
-  "MULLW"   >> mullw;
+  "MULLW"   >| mullw;
   "MULLWo"  >. mullw;
-  "DIVW"    >> divw;
+  "DIVW"    >| divw;
   "DIVWo"   >. divw;
-  "DIVWU"   >> divwu;
+  "DIVWU"   >| divwu;
   "DIVWUo"  >. divwu;
-  "DIVWE"   >> divwe;
+  "DIVWE"   >| divwe;
   "DIVWEo"  >. divwe;
-  "DIVWEU"  >> divweu;
+  "DIVWEU"  >| divweu;
   "DIVWEUo" >. divweu;
-  "MODSW"   >> modsw;
-  "MODUW"   >> moduw;
-  "MULLD"   >> mulld;
+  "MODSW"   >| modsw;
+  "MODUW"   >| moduw;
+  "MULLD"   >| mulld;
   "MULLDo"  >. mulld;
-  "MULHD"   >> mulhd;
+  "MULHD"   >| mulhd;
   "MULHDo"  >. mulhd;
-  "MULHDU"  >> mulhdu;
+  "MULHDU"  >| mulhdu;
   "MULHDUo" >. mulhdu;
-  "DIVD"    >> divd;
+  "DIVD"    >| divd;
   "DIVDo"   >. divd;
-  "DIVDU"   >> divdu;
+  "DIVDU"   >| divdu;
   "DIVDUo"  >. divdu;
-  "DIVDE"   >> divde;
+  "DIVDE"   >| divde;
   "DIVDEo"  >. divde;
-  "DIVDEU"  >> divdeu;
+  "DIVDEU"  >| divdeu;
   "DIVDEUo" >. divdeu;
-  "MODSD"   >> modsd;
-  "MODUD"   >> modud;
+  "MODSD"   >| modsd;
+  "MODUD"   >| modud;
