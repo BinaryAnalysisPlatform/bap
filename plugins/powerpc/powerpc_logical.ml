@@ -394,7 +394,18 @@ let bpermd cpu ops =
       ind := ind - one;
     ];
     ra := tmp;
-]
+  ]
+
+(** Fixed-Point Arithmetic Instructions - Negate
+    Page 72 of IBM Power ISATM Version 3.0 B
+    example:
+    7c 22 00 d0   neg  r1, r2
+    7c 22 00 d1   neg. r1, r2 *)
+let neg cpu ops =
+  let rt = unsigned cpu.reg ops.(0) in
+  let ra = unsigned cpu.reg ops.(1) in
+  RTL.[ rt := lnot ra + one ]
+
 
 let () =
   "ANDIo"   >| andi_dot;
@@ -438,3 +449,5 @@ let () =
   "POPCNTW" >| popcntw;
   "POPCNTD" >| popcntd;
   "BPERMD"  >| bpermd;
+  "NEG"     >| neg;
+  "NEGo"    >. neg;

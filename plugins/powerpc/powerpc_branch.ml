@@ -28,27 +28,8 @@ let ba cpu ops =
     cpu.jmp tm
   ]
 
-let bl cpu ops =
-  let im = signed imm ops.(0) in
-  let tm = signed var cpu.word_width in
-  let sh = unsigned const byte 2 in
-  let ad = unsigned const byte 4 in
-  RTL.[
-    tm := last (im << sh) 26;
-    cpu.lr := cpu.pc + ad;
-    cpu.jmp (cpu.pc + tm);
-  ]
-
-let bla cpu ops =
-  let im = signed imm ops.(0) in
-  let tm = signed var cpu.word_width in
-  let sh = unsigned const byte 2 in
-  let ad = unsigned const byte 4 in
-  RTL.[
-    tm := last (im << sh) 26;
-    cpu.lr := cpu.pc + ad;
-    cpu.jmp tm;
-  ]
+let bl = update_link_register ^ b
+let bla = update_link_register ^ ba
 
 (** Branch Instructions, Branch Conditional
     Page 37 of IBM Power ISATM Version 3.0 B
@@ -101,8 +82,8 @@ let bca cpu ops =
     ]
   ]
 
-let bcl = bc ^ update_link_register
-let bcla = bca ^ update_link_register
+let bcl = update_link_register ^ bc
+let bcla = update_link_register ^ bca
 
 (** bdz  target = bc 18,0, target *)
 let bdz cpu ops =
@@ -156,7 +137,28 @@ let bclr cpu ops =
     ];
   ]
 
-let bclrl = bclr ^ update_link_register
+let bclrl cpu ops =
+  let bo = unsigned imm ops.(0) in
+  let bi = unsigned cpu.reg ops.(1) in
+  let sh = unsigned const byte 2 in
+  let ctr_ok = unsigned var bit in
+  let cond_ok = unsigned var bit in
+  let x = unsigned var (bitwidth 5) in
+  let tm = unsigned var doubleword in
+  let step = unsigned const byte 4 in
+  RTL.[
+    x := last bo 5;
+    when_ (nth bit x 2 = zero) [
+      cpu.ctr := cpu.ctr - one;
+    ];
+    ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
+    cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
+    tm := first cpu.lr 62;
+    cpu.lr := cpu.pc + step;
+    when_ (ctr_ok land cond_ok) [
+      cpu.jmp (tm << sh);
+    ];
+  ]
 
 (** Branch Instructions extended mnemonic, branch to LR unconditionally.
     Page 792 of IBM Power ISATM Version 3.0 B
@@ -171,9 +173,11 @@ let blr cpu ops =
 
 let blrl cpu ops =
   let sh = unsigned const byte 2 in
+  let tm = unsigned var doubleword in
   RTL.[
-    cpu.jmp (cpu.lr << sh);
-    cpu.lr := cpu.pc + unsigned const byte 4
+    tm := first cpu.ctr 62;
+    cpu.lr := cpu.pc + unsigned const byte 4;
+    cpu.jmp (tm << sh);
   ]
 
 (** bdnzlr = bclr 16,0,0  *)
@@ -207,7 +211,7 @@ let bcctr cpu ops =
     ];
   ]
 
-let bcctrl = bcctr ^ update_link_register
+let bcctrl = update_link_register ^ bcctr
 
 (** Branch Instructions extended mnemonic, branch to CTR unconditionally.
     Page 792 of IBM Power ISATM Version 3.0 B
@@ -215,13 +219,14 @@ let bcctrl = bcctr ^ update_link_register
     4e 80 04 20   bctr
     4e 80 04 21   bctrl *)
 let bctr cpu ops =
+  let tm = unsigned var doubleword in
+  let sh = unsigned const doubleword 2 in
   RTL.[
-    nth bit cpu.ctr 62 := zero;
-    nth bit cpu.ctr 63 := zero;
-    cpu.jmp cpu.ctr;
+    tm := first cpu.ctr 62;
+    cpu.jmp (tm << sh);
   ]
 
-let bctrl = bctr ^ update_link_register
+let bctrl = update_link_register ^ bctr
 
 (** Branch Instructions, Branch Conditional to Target Cpu.Register
     Page 39 of IBM Power ISATM Version 3.0 B
@@ -247,7 +252,7 @@ let bctar cpu ops =
     ]
   ]
 
-let bctarl = bctar ^ update_link_register
+let bctarl = update_link_register ^ bctar
 
 let () =
   "B"       >| b;
