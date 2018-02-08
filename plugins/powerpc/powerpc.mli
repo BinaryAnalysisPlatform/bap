@@ -144,6 +144,38 @@
     There are lot's math operators: [plus], [modulo], [less than] etc.
     All they take one or more expressions and also return expression:
     [x + y], [lnot y], [x lsl y] ...
+    There are not any special signed versions of operators. But if
+    signedness is matter, then use signed operands. Like in example
+    below, [<] is a signed comparison:
+
+    {[
+      let x = signed const halfword 0xFAAA in
+      let y = signed var bit in
+      RTL.[
+        y := x < zero;
+      ]
+    ]}
+
+    The result is true (1), since [x] is signed. But if we will replace
+    x definition to [unsigned const halfword 0xFFFF] then result will be
+    false (0) and [<] will be unsigned comparison.
+
+    The same is true for shift operators: [>>] and [<<].
+    There are not separate logical shift operators. But shift is a
+    logical one if operand is unsigned. And otherwise, shift is
+    an arithmetical one if operand is signed.
+
+    {[
+      let x = signed const halfword 0xFAAA in
+      let s = unsigned const halfword 4 in
+      let y = unsigned var halfword in
+      RTL.[
+        y := x >> s;
+      ]
+    ]}
+    If [x] is signed, like in example above, then shift is
+    arithmetical, and result is 0xFFAA. If [x] is unsigned, then shift
+    is logical and result is Ox0FAA.
 
     {4 Assignment}
 
@@ -430,10 +462,10 @@ module Std : sig
     (** [x <> y] - not equal *)
     val ( <> ) : exp -> exp -> exp
 
-    (** [x << y] - logical shift left *)
+    (** [x << y] - shift left *)
     val ( << )  : exp -> exp -> exp
 
-    (** [x >> y] - logical shift right *)
+    (** [x >> y] - shift right *)
     val ( >> )  : exp -> exp -> exp
 
     (** [x lor y] - logical or *)
