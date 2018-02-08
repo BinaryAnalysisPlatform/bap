@@ -100,7 +100,7 @@ install: [
   ["ocamlfind" "remove" "monads"]
   ["ocamlfind" "remove" "ogre"]
   [make "reinstall"]
-  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v0.9.9/sigs.zip"]
+  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.3.0/sigs_full.zip"]
   [make "test"]
   [make "check"]
 ]
