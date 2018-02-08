@@ -406,8 +406,7 @@ let neg cpu ops =
   let ra = unsigned cpu.reg ops.(1) in
   RTL.[ rt := lnot ra + one ]
 
-
-let () =
+let init () =
   "ANDIo"   >| andi_dot;
   "ANDISo"  >| andis_dot;
   "AND"     >| and_;

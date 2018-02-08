@@ -84,8 +84,7 @@ let subfze cpu ops =
     cpu.ca   := one;
   ]
 
-
-let () =
+let init () =
   "SUBF"    >| subf;
   "SUBFo"   >. subf;
   "SUBFIC"  >| subfic;

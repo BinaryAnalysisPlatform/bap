@@ -107,7 +107,7 @@ let mcrf cpu ops =
     bt := bs;
   ]
 
-let () =
+let init () =
   "CRAND"  >| crand;
   "CRNAND" >| crnand;
   "CROR"   >| cror;

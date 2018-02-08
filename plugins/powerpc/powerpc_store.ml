@@ -213,7 +213,7 @@ let stdbrx cpu ops =
     cpu.store ea x doubleword;
   ]
 
-let () =
+let init () =
   "STB"    >| stb;
   "STH"    >| sth;
   "STW"    >| stw;

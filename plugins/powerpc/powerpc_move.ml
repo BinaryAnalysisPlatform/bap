@@ -112,7 +112,7 @@ let mflr cpu ops =
   let rt = unsigned cpu.reg ops.(0) in
   RTL.[ rt := cpu.lr ]
 
-let () =
+let init () =
   "MTSPR" >| mtspr;
   "MFSPR" >| mfspr;
   "MTCRF" >| mtcrf;

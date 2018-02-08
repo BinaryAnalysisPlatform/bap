@@ -192,7 +192,7 @@ let srad cpu ops =
     ]
   ]
 
-let () =
+let init () =
   "SLW"    >| slw;
   "SRW"    >| srw;
   "SRAWI"  >| srawi;

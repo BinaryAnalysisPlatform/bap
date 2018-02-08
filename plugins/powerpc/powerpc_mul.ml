@@ -109,7 +109,7 @@ let mulhdu cpu ops =
     rt := high doubleword tm;
   ]
 
-let () =
+let init () =
   "MULLI"   >| mulli;
   "MULHW"   >| mulhw;
   "MULHWo"  >. mulhw;

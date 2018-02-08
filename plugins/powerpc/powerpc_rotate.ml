@@ -223,7 +223,7 @@ let rldimi cpu ops =
     ra := (tmp land mask) lor (ra land (lnot mask));
   ]
 
-let () =
+let init () =
   "RLWINM"  >| rlwinm;
   "RLWNM"   >| rlwnm;
   "RLWIMI"  >| rlwimi;

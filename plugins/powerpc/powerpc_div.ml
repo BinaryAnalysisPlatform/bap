@@ -178,7 +178,7 @@ let modud cpu ops =
     rt := ra % rb;
   ]
 
-let () =
+let init () =
   "DIVW"    >| divw;
   "DIVWo"   >. divw;
   "DIVWU"   >| divwu;

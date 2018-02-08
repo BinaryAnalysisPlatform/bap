@@ -254,7 +254,7 @@ let bctar cpu ops =
 
 let bctarl = update_link_register ^ bctar
 
-let () =
+let init () =
   "B"       >| b;
   "BA"      >| ba;
   "BL"      >| bl;

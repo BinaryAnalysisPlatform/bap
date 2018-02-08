@@ -108,7 +108,7 @@ let cmpld cpu ops =
     nth bit bf 3 := cpu.so;
   ]
 
-let () =
+let init () =
   "CMPWI"  >| cmpwi;
   "CMPDI"  >| cmpdi;
   "CMPW"   >| cmpw;

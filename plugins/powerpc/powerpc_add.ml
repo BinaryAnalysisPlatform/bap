@@ -168,7 +168,7 @@ let addze cpu ops =
     cpu.ca32 := low word rt < low word tm;
   ]
 
-let () =
+let init () =
   "ADD4"   >| add;
   "ADD4o"  >. add;
   "ADDI"   >| addi;

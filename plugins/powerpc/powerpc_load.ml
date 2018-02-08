@@ -291,7 +291,7 @@ let ldbrx cpu ops =
       nth byte x 3 ^ nth byte x 2 ^ nth byte x 1 ^ nth byte x 0;
   ]
 
-let () =
+let init () =
   "LBZ"   >| lbz;
   "LHZ"   >| lhz;
   "LWZ"   >| lwz;
