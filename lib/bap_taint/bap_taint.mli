@@ -331,15 +331,16 @@ module Std : sig
 
     module Gc : sig
 
-      (** [taint_killed t] occurs when the taint [t] is no longer
-          reachable and goes out of existence.
+      (** [taint_finalize (t,live)] occurs either when the taint [t]
+          is no longer reachable or when when machine that created this
+          taint finishes. In the former case [live] would be [true] in
+          the latter it is [false].
 
-          The event occurs during the GC collection cycle and there
+          The event may occur during the GC collection cycle and there
           could be a significant delay between the actual time when the
           taint become unreachable and the time when the observation is
           made. *)
-      val taint_killed : Object.t Primus.observation
-
+      val taint_finalize : (Object.t * bool) Primus.observation
 
       (** Conservative Garbage Collector.
 

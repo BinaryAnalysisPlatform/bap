@@ -336,14 +336,23 @@ end
 *)
 module Gc = struct
 
-  let taint_killed,killed_taint =
+  let sexp_of_finish (t,live) = Sexp.List [
+      Primus.sexp_of_value t;
+      sexp_of_bool live;
+    ]
+
+
+  let taint_finalize,taint_finished =
     Primus.Observation.provide
-      ~inspect:Primus.sexp_of_value "taint-killed"
+      ~inspect:sexp_of_finish "taint-finalize"
 
   module Conservative(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Env = Primus.Env.Make(Machine)
     module Value = Primus.Value.Make(Machine)
+
+    let finish ~live t =
+      Machine.Observation.make taint_finished (t,live)
 
     (* removes directly dead taints *)
     let collect_direct =
@@ -370,11 +379,19 @@ module Gc = struct
       Machine.Local.get tainter >>= fun cur ->
       let dead = Set.diff (objects old) (objects cur) in
       Set.to_sequence dead |> Machine.Seq.iter
-        ~f:(Machine.Observation.make killed_taint) >>= fun () ->
+        ~f:(finish ~live:false) >>= fun () ->
       Machine.Local.put gc {old = cur}
 
+    let finalize () =
+      Machine.Local.get tainter >>= fun cur ->
+      Set.to_sequence (objects cur) |>
+      Machine.Seq.iter ~f:(finish ~live:true)
 
-    let init () = Primus.Interpreter.leave_blk >>> main
+    let init () = Machine.sequence Primus.Interpreter.[
+        leave_blk >>> main;
+        Primus.Machine.finished >>> finalize;
+      ]
+
 
   end
 end
