@@ -16,7 +16,7 @@ let find m reg =
   let (module M : PowerPC) = m in
   let open M in
   let open E in
-  let find_reg regs reg = String.Map.find regs (Reg.name reg) in
+  let find_reg regs reg = Map.find regs (Reg.name reg) in
   let find_gpr = find_reg gpr in
   let find_vr  = find_reg vr in
   let find_fpr = find_reg fpr in
@@ -43,27 +43,27 @@ let make_cpu addr_size endian memory =
     let size = size_of_width width in
     store mem addr data endian size in
   let pc = Memory.min_addr memory |>
-            Exp.of_word |>
-            Exp.signed in
+           Exp.of_word |>
+           Exp.signed in
   let jmp e = match addr_size with
     | `r32 -> jmp (low word e)
     | `r64 -> jmp e in
   let find name regs n =
     try
-      Int.Map.find_exn regs n
+      Map.find_exn regs n
     with _ ->
       ppc_fail "%s with number %d not found" name n in
   let gpr n = find "GPR" gpri n in
   let fpr n = find "FPR" fpri n in
   let vr  n = find "VR"  vri  n in
-  let cr0 = Int.Map.find_exn cri_fields 0 in
-  let cr1 = Int.Map.find_exn cri_fields 1 in
-  let cr2 = Int.Map.find_exn cri_fields 2 in
-  let cr3 = Int.Map.find_exn cri_fields 3 in
-  let cr4 = Int.Map.find_exn cri_fields 4 in
-  let cr5 = Int.Map.find_exn cri_fields 5 in
-  let cr6 = Int.Map.find_exn cri_fields 6 in
-  let cr7 = Int.Map.find_exn cri_fields 7 in
+  let cr0 = Map.find_exn cri_fields 0 in
+  let cr1 = Map.find_exn cri_fields 1 in
+  let cr2 = Map.find_exn cri_fields 2 in
+  let cr3 = Map.find_exn cri_fields 3 in
+  let cr4 = Map.find_exn cri_fields 4 in
+  let cr5 = Map.find_exn cri_fields 5 in
+  let cr6 = Map.find_exn cri_fields 6 in
+  let cr7 = Map.find_exn cri_fields 7 in
   let word_width = match addr_size with
     | `r32 -> word
     | `r64 -> doubleword in

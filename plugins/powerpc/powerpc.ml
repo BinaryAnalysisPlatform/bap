@@ -44,7 +44,7 @@ module Std = struct
   let lifters = String.Table.create ()
 
   let register name lifter =
-    String.Table.change lifters name ~f:(fun _ -> Some lifter)
+    Hashtbl.change lifters name ~f:(fun _ -> Some lifter)
 
   let register_dot name lifter = register name (dot lifter)
 
@@ -62,7 +62,7 @@ module Std = struct
         Result.return
       with
       | Failure str -> Error (Error.of_string str) in
-    match String.Table.find lifters (Insn.name insn) with
+    match Hashtbl.find lifters (Insn.name insn) with
     | None -> Or_error.errorf "unknown instruction %s" insn_name
     | Some lifter -> lift lifter
 

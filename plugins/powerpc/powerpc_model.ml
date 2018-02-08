@@ -59,17 +59,17 @@ let make_regs typ ?alias prefix range =
   List.fold ~init:String.Map.empty ~f:(fun regs i ->
       let var = make_var_i typ prefix i in
       let name = Var.name var in
-      let regs = String.Map.add regs name var in
+      let regs = Map.add regs name var in
       match alias with
       | None -> regs
       | Some a ->
         let name = make_name a i in
-        String.Map.add regs name var) range
+        Map.add regs name var) range
 
 
 let make_regs_i typ prefix range =
   List.fold ~init:Int.Map.empty ~f:(fun regs i ->
-      Int.Map.add regs i (make_var_i typ prefix i)) range
+      Map.add regs i (make_var_i typ prefix i)) range
 
 let flag name = Var.create name (Type.imm 1)
 
@@ -161,13 +161,13 @@ module Vars = struct
     let _, bits =
       List.fold (List.rev cr_bits) ~init:(0,Int.Map.empty)
         ~f:(fun (num, bits) bit ->
-            num + 1, Int.Map.add bits ~key:num ~data:bit) in
+            num + 1, Map.add bits ~key:num ~data:bit) in
     bits
 
   let crn =
     Int.Map.fold cri ~init:String.Map.empty
       ~f:(fun ~key ~data:var acc ->
-          String.Map.add acc (Var.name var) var)
+          Map.add acc (Var.name var) var)
 
   let fields = [
     "CR0", 0, (cr28, cr29, cr30, cr31);
@@ -182,18 +182,18 @@ module Vars = struct
 
   let cr_fields =
     List.fold fields ~init:String.Map.empty ~f:(fun fs (name, _, fd) ->
-        String.Map.add fs name fd)
+        Map.add fs name fd)
 
   let cri_fields =
     List.fold fields ~init:Int.Map.empty ~f:(fun fs (_, index, fd) ->
-        Int.Map.add fs index fd)
+        Map.add fs index fd)
 end
 
 let of_vars vars =
-  String.Map.map vars ~f:(fun v -> Exp.of_var v)
+  Map.map vars ~f:(fun v -> Exp.of_var v)
 
 let of_vars_i vars =
-  Int.Map.map vars ~f:(fun v -> Exp.of_var v)
+  Map.map vars ~f:(fun v -> Exp.of_var v)
 
 module Exps = struct
   open Vars
@@ -214,17 +214,17 @@ module Exps = struct
   let crn =
     Int.Map.fold cri ~init:String.Map.empty
       ~f:(fun ~key ~data:var acc ->
-          String.Map.add acc (Var.name var) (Exp.of_var var))
+          Map.add acc (Var.name var) (Exp.of_var var))
 
-  let cri = Int.Map.map cri ~f:(fun v -> Exp.of_var v)
+  let cri = Map.map cri ~f:(fun v -> Exp.of_var v)
 
   let cr = Exp.of_vars (List.rev cr_bits)
 
   let cr_fields =
-    String.Map.map cr_fields ~f:(fun (b3,b2,b1,b0) -> Exp.of_vars [b0;b1;b2;b3])
+    Map.map cr_fields ~f:(fun (b3,b2,b1,b0) -> Exp.of_vars [b0;b1;b2;b3])
 
   let cri_fields =
-    Int.Map.map cri_fields ~f:(fun (b3,b2,b1,b0) -> Exp.of_vars [b0;b1;b2;b3])
+    Map.map cri_fields ~f:(fun (b3,b2,b1,b0) -> Exp.of_vars [b0;b1;b2;b3])
 
 end
 
@@ -252,9 +252,9 @@ module Make_ppc(S : Spec) : PowerPC = struct
 
   let flags = Var.Set.of_list [
       so; ca; ca32; ov; ov32;
-      Int.Map.find_exn cri 0;
-      Int.Map.find_exn cri 1;
-      Int.Map.find_exn cri 2;
+      Map.find_exn cri 0;
+      Map.find_exn cri 1;
+      Map.find_exn cri 2;
     ]
 
 end
@@ -285,8 +285,8 @@ module Make_cpu(P : PowerPC) : CPU = struct
   let sp = Var.Set.find_exn gpr ~f:(fun v -> Var.name v = "R1")
   let vf = ov
   let cf = ca
-  let nf = Int.Map.find_exn cri 0
-  let zf = Int.Map.find_exn cri 1
+  let nf = Map.find_exn cri 0
+  let zf = Map.find_exn cri 1
 
   let flags = Var.Set.of_list [
       so; ca; ov; cf; nf; zf; ca32; ov32;
