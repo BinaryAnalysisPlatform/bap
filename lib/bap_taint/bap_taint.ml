@@ -45,7 +45,7 @@ module Object = struct
     open Machine.Syntax
 
     let next_key {objects} =
-      match Map.min_elt objects with
+      match Map.max_elt objects with
       | None -> Value.of_int 1 ~width:63
       | Some (k,_) -> Value.succ k
 
@@ -241,7 +241,7 @@ module Taint = struct
       Set.filter ts ~f:(fun v ->
           match Map.find objects v with
           | None -> false
-          | Some k' -> Kind.(k <> k'))
+          | Some k' -> Kind.(k = k'))
 
     let sanitize v r k =
       Machine.Local.get kinds >>= fun kinds ->

@@ -33,42 +33,42 @@ end
 module IntroDirect(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
-  let run [v; k] =
+  let run [k; v] =
     Kind.of_value k >>= Tracker.new_direct v >>= taint
 end
 
 module IntroIndirect(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
-  let run [v; k; n] =
+  let run [k; v; n] =
     Kind.of_value k >>=
     Tracker.new_indirect ~addr:v ~len:n >>=
     taint
 end
 
-module Has(Machine : Primus.Machine.S) = struct
+module Get(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
-  let run rel [v; k] =
+  let run rel [k; v] =
     Kind.of_value k >>= fun k ->
     Tracker.lookup v rel >>=
     optional taint first_of_kind k
 end
 
-module HasDirect(Machine : Primus.Machine.S) = struct
-  include Has(Machine)
+module GetDirect(Machine : Primus.Machine.S) = struct
+  include Get(Machine)
   let run = run Taint.Rel.direct
 end
 
-module HasIndirect(Machine : Primus.Machine.S) = struct
-  include Has(Machine)
+module GetIndirect(Machine : Primus.Machine.S) = struct
+  include Get(Machine)
   let run = run Taint.Rel.indirect
 end
 
 module Sanitize(Machine : Primus.Machine.S) = struct
-  include Has(Machine)
+  include Pre(Machine)
   [@@@warning "-P"]
-  let run rel [v; k] =
+  let run rel [k; v] =
     Kind.of_value k >>= fun k ->
     Tracker.sanitize v rel k >>| fun () ->
     v
@@ -129,11 +129,11 @@ module Setup(Machine : Primus.Machine.S) = struct
       def "taint-introduce-indirectly" (tuple [a; int; int] @-> c)
         (module IntroIndirect);
 
-      def "taint-has-direct" (tuple [a; b] @-> c)
-        (module HasDirect);
+      def "taint-get-direct" (tuple [a; b] @-> c)
+        (module GetDirect);
 
-      def "taint-has-indirect" (tuple [a; b] @-> c)
-        (module HasIndirect);
+      def "taint-get-indirect" (tuple [a; b] @-> c)
+        (module GetIndirect);
 
       def "taint-sanitize-direct" (tuple [a; b] @-> c)
         (module SanitizeDirect);

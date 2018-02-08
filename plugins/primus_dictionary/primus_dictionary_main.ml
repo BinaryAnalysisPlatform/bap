@@ -65,14 +65,14 @@ module Del(Machine : Primus.Machine.S) = struct
   let run = function
     | [dic] -> Machine.Local.update state ~f:(fun s -> {
           dicts = Map.remove s.dicts dic
-        })
+        }) >>= fun () -> nil
     | [dic; key] -> Machine.Local.update state ~f:(fun s -> {
           dicts = Map.change s.dicts dic ~f:(function
               | None -> None
               | Some {dict} -> Some {
                   dict = Map.remove dict key
                 })
-        })
+        }) >>= fun () -> nil
 end
 
 module Has(Machine : Primus.Machine.S) = struct
@@ -107,7 +107,11 @@ module Main(Machine : Primus.Machine.S) = struct
 
       def "dict-has" (tuple [sym; a] @-> bool) (module Has)
         {|(dict-has DIC KEY) returns T if the dictionary DIC has the
-          key KEY|}
+          key KEY|};
+
+      def "dict-del" (tuple [sym; a] @-> bool) (module Del)
+        {|(dict-del DIC KEY) deletes any association with KEY in the
+          dictionary DIC|};
     ]
 end
 
@@ -124,4 +128,4 @@ Config.manpage [
 ];;
 
 let () = Config.when_ready @@
-           fun _ -> Primus.Machine.add_component (module Main)
+  fun _ -> Primus.Machine.add_component (module Main)

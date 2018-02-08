@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap_primus.Std
 open Bap_taint.Std
+open Format
 
 module Support(Id : sig val name : string end)
     (Machine : Primus.Machine.S) = struct
@@ -43,9 +44,9 @@ module Computation(Machine : Primus.Machine.S) = struct
   let cast ((_,_,x),r) = computed (x,r)
 
   let stored (x,y) =
-    Taint.lookup y indirect >>= fun ts ->
-    Taint.detach y indirect ts >>= fun () ->
-    (direct --> indirect) [x] y
+    Taint.lookup x indirect >>= fun ts ->
+    Taint.detach x indirect ts >>= fun () ->
+    (direct --> indirect) [y] x
 
   let init () = Machine.sequence Primus.[
       Interpreter.loaded  >>> loaded;
@@ -82,9 +83,9 @@ module Exact(Machine : Primus.Machine.S) = struct
   let cast ((_,_,x),r) = computed (x,r)
 
   let stored (x,y) =
-    Taint.lookup y indirect >>= fun ts ->
-    Taint.detach y indirect ts >>= fun () ->
-    (direct --> indirect) [x] y
+    Taint.lookup x indirect >>= fun ts ->
+    Taint.detach x indirect ts >>= fun () ->
+    (direct --> indirect) [y] x
 
   let init () = Machine.sequence Primus.[
       Interpreter.loaded  >>> loaded;
