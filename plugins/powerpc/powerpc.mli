@@ -150,7 +150,7 @@
 
     {[
       let x = signed const halfword 0xFAAA in
-      let y = signed var bit in
+      let y = unsigned var bit in
       RTL.[
         y := x < zero;
       ]
