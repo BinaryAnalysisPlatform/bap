@@ -3,61 +3,9 @@ open Regular.Std
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
-module Legacy_taint = Taint
 open Bap_taint.Std
 open Format
 include Self()
-
-
-module Intro(Machine : Primus.Machine.S) = struct
-  module Env = Primus.Interpreter.Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
-  module Kind = Taint.Kind.Make(Machine)
-  module Object = Taint.Object.Make(Machine)
-
-  open Machine.Syntax
-
-
-  let kind t =
-    Kind.create (sprintf "user-%s" (Tid.name (Term.tid t)))
-
-  let gentaint t =
-    kind t >>= fun k ->
-    Object.create k >>|
-    Taint.Object.Set.singleton
-
-  let introduces def =
-    Term.has_attr def Legacy_taint.reg ||
-    Term.has_attr def Legacy_taint.ptr
-
-  let taint_ptr taints ptr sz =
-    Eval.exp ptr >>= fun ptr ->
-    Machine.Seq.iter (Seq.range 0 (Size.in_bytes sz)) ~f:(fun off ->
-        Value.nsucc ptr off >>= fun ptr ->
-        Tracker.attach ptr Taint.Rel.indirect taints)
-
-  let taint_var taints var =
-    Env.get var >>= fun v ->
-    Tracker.attach v Taint.Rel.direct taints
-
-  let intro def =
-    if introduces def then
-      gentaint def >>= fun t ->
-      taint_var t (Def.lhs def) >>= fun () ->
-      match Def.rhs def with
-      | Bil.Load (_,addr,_,sz)
-      | Bil.Store (_,addr,_,_,sz) ->
-        taint_ptr t addr sz
-      | exp ->
-        Exp.free_vars exp |> Set.to_sequence |>
-        Machine.Seq.iter ~f:(taint_var t)
-    else Machine.return ()
-
-  let init () =
-    Primus.Interpreter.leave_def >>> intro
-end
 
 module Pre(Machine : Primus.Machine.S) = struct
   include Machine.Syntax
@@ -136,6 +84,16 @@ module SanitizeIndirect(Machine : Primus.Machine.S) = struct
   let run = run Taint.Rel.indirect
 end
 
+module TaintKind(Machine : Primus.Machine.S) = struct
+  include Pre(Machine)
+  [@@@warning "-P"]
+  let run [t] =
+    Object.of_value t >>=
+    Object.kind >>=
+    Kind.to_value
+end
+
+
 module PolicySelect(Machine : Primus.Machine.S) = struct
   include Pre(Machine)
   [@@@warning "-P"]
@@ -189,8 +147,24 @@ module Setup(Machine : Primus.Machine.S) = struct
       def "taint-policy-set-default" (tuple [a] @-> bool)
         (module PolicySetDefault);
 
-    ];
+      def "taint-kind" (tuple [a] @-> b)
+        (module TaintKind);
 
+    ];
+end
+
+module Signals(Machine : Primus.Machine.S) = struct
+  module Lisp = Primus.Lisp.Make(Machine)
+  module Object = Taint.Object.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
+
+  let init () = Machine.sequence [
+      Lisp.signal Taint.Gc.taint_finalize @@ fun (t,live) ->
+      Machine.List.all [
+        Object.to_value t;
+        Value.of_bool live;
+      ]
+    ]
 end
 
 let set_default_policy name =
@@ -206,33 +180,58 @@ let set_default_policy name =
   end in
   Primus.Machine.add_component (module Init)
 
-
-
 open Config;;
 manpage [
   `S "DESCRIPTION";
-  `P "The Primus Taint Analysis Framework. Control Module";
-  `P
-    "This plugin enables fine tuning of the Taint Analysis Framework, \
-     exposes the framework interface to Primus Lisp programs, and
-provides several useful components.";
+
+  `P "The Primus Taint Analysis Framework Control Module";
+
+  `P "This plugin enables fine tuning of the Taint Analysis Framework,
+    exposes the framework interface to Primus Lisp programs, and
+    provides several useful components.";
+
   `S "Taint Propagation Policies";
-  `P
-    "In the Taint Analysis Framework the taint propagation could be
-assigned individually based on a taint kind. If no policy was
-assigned, then the default is used (selectable using this module).
-It is possible to implement custom policy. This module provides two
-policies: $(b,propagate-by-computation) and $(b,propagate-exactly).
-The $(b,propagate-by-computation) policy propagates a taint to the
-result of any computation. The $(b,propagate-exactly) policy is more
-strict and propagate taint if is an operation is store, load, cast, or
-concat.";
+
+  `P "In the Taint Analysis Framework the taint propagation could be
+    assigned individually based on a taint kind. If no policy was
+    assigned, then the default is used (selectable using this module).
+    It is possible to implement custom policy. This module provides
+    two policies: $(b,propagate-by-computation) (default) and
+    $(b,propagate-exactly).  The $(b,propagate-by-computation) policy
+    propagates a taint to the result of any computation. The
+    $(b,propagate-exactly) policy is more strict and propagate taint
+    if is an operation is store, load, cast, or concat.";
+
+  `S "Taint Garbage Collectors";
+
+  `P "It is possible to track the liveness of a taint, i.e., whether
+    it is reachable from any live value. By default we use a
+    conservative garbage collector that sometimes gives a taint more
+    credit than it deserves, in other words a taint may be treated as
+    live even if it is no longer reachable. When a taint is destroyed,
+    either because it is not longer reachable or because a machine is
+    finished, a taint finalizer, that is reflected to the
+    $(b,taint-finalize), Lisp signal is called, with the taint itself,
+    and a boolean parameter that tells whether the taint was still
+    live or dead, when the finalization was called."
 ]
 
 let policy = param string ~default:"propagate-by-computation" "policy"
+    ~doc:"Set the default taint propagation policy"
+
+(* our poor choice of garbage collectors *)
+let collectors = [
+  "none", false;
+  "conservative", true;
+]
+
+let enable_gc = param (enum collectors) ~default:true "gc"
+    ~doc:"Picks a taint garbage collector"
 
 let () = when_ready (fun {get=(!!)} ->
     Primus.Machine.add_component (module Setup);
-    Primus.Machine.add_component (module Intro);
+    Primus.Machine.add_component (module Signals);
     Primus_taint_policies.init ();
-    set_default_policy !!policy)
+    set_default_policy !!policy;
+    if !!enable_gc
+    then Primus.Machine.add_component (module Taint.Gc.Conservative))
