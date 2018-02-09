@@ -134,10 +134,10 @@ let open_plugin ~verbose name =
 
 (** We will not ignore errors on plugins loaded explicitly
     by a user with `-l` option. *)
-let load_plugin p = ok_exn (Plugin.load p)
+let load_plugin argv p = ok_exn (Plugin.load ~argv p)
 
-let autoload_plugins ~env ~library ~verbose ~exclude =
-  Plugins.run ~env ~library ~exclude ()
+let autoload_plugins ~argv ~env ~library ~verbose ~exclude =
+  Plugins.run ~argv ~env ~library ~exclude ()
     ~don't_setup_handlers:true
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
@@ -153,9 +153,9 @@ let run_and_get_passes env argv =
   let () = match get_print_ops () with
     | None -> ()
     | Some ops -> print_and_exit env exclude plugins ops in
-  List.iter plugins ~f:load_plugin;
+  List.iter plugins ~f:(load_plugin argv);
   let noautoload = get_opt argv no_auto_load ~default:false in
-  if not noautoload then autoload_plugins ~env ~library ~verbose ~exclude;
+  if not noautoload then autoload_plugins ~argv ~env ~library ~verbose ~exclude;
   let known_passes = Project.passes () |>
                      List.map ~f:Project.Pass.name in
   let known_plugins = List.map known_plugins ~f:Plugin.name in
@@ -163,7 +163,7 @@ let run_and_get_passes env argv =
   exit_if_plugin_help_was_requested known_names argv;
   let to_pass opt =
     List.find known_passes ~f:(fun plugin -> opt = "--"^plugin) in
-  filter_options ~known_plugins ~known_passes ~argv:Sys.argv,
+  filter_options ~known_plugins ~known_passes ~argv,
   Array.(to_list @@ filter_map argv ~f:to_pass)
 
 let run env argv = fst (run_and_get_passes env argv)

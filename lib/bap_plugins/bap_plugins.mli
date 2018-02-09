@@ -46,10 +46,12 @@ module Std : sig
         compilation unit. Can return error if the underlying loader
         raised an error, or package is malformed, or if there is some
         other system error. *)
-    val load : t -> unit Or_error.t
+    val load : ?argv:string array -> t -> unit Or_error.t
 
     (** loaded event happens when a pass is succesfully loaded  *)
     val loaded : t -> unit future
+
+    val argv : unit -> string array
   end
 
 
@@ -99,6 +101,7 @@ module Std : sig
         chosen, then events are not treated, so that a host program may
         setup a more fine granular error handling. *)
     val run :
+      ?argv:string array ->
       ?env:string list ->
       ?provides:string list ->
       ?don't_setup_handlers:bool ->
@@ -112,6 +115,7 @@ module Std : sig
         the given [name] failed with [error].
     *)
     val load :
+      ?argv:string array ->
       ?env:string list ->
       ?provides:string list ->
       ?library:string list ->

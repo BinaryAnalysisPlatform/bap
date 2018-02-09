@@ -31,13 +31,13 @@ module Create() = struct
       | None -> name
       | Some subtask -> sprintf "%s/%s" name subtask in
     let task = if String.(name = main) then task
-        else sprintf "%s/%s" main task in
+      else sprintf "%s/%s" main task in
     Event.Log.progress ?note ?stage ?total task
 
   let filter_args name =
     let prefix = "--" ^ name ^ "-" in
     let is_key = String.is_prefix ~prefix:"-" in
-    Array.fold Sys.argv ~init:([],`drop) ~f:(fun (args,act) arg ->
+    Array.fold (Plugin.argv ()) ~init:([],`drop) ~f:(fun (args,act) arg ->
         let take arg = ("--" ^ arg) :: args in
         if arg = Sys.argv.(0) then (name::args,`drop)
         else match String.chop_prefix arg ~prefix, act with

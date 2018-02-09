@@ -10,6 +10,8 @@ open Bap_options
 open Bap_source_type
 include Self()
 
+module Recipe = Bap_recipe
+
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
@@ -66,8 +68,8 @@ let args filename argv =
   let inputs = String.Hash_set.of_list @@ list_loaded_units () in
   Array.iteri argv ~f:(fun i arg -> match i with
       | 0 -> ()
-      | i when is_transparent arg -> ()
-      | i when is_key arg -> Hash_set.add inputs arg
+      | _ when is_transparent arg -> ()
+      | _ when is_key arg -> Hash_set.add inputs arg
       | i ->
         let pre = argv.(i-1) in
         if not(is_key pre && is_transparent pre)
@@ -91,9 +93,9 @@ let process options project =
                  List.filter ~f:Project.Pass.autorun in
 
   let passes = options.passes |>
-                List.map ~f:(fun p -> match Project.find_pass p with
-                    | Some p -> p
-                    | None -> raise (Pass_not_found p)) in
+               List.map ~f:(fun p -> match Project.find_pass p with
+                   | Some p -> p
+                   | None -> raise (Pass_not_found p)) in
   let autos = List.length autoruns in
   let total = List.length passes + autos in
   report_progress ~note:"analyzing" ~total ();
@@ -183,11 +185,11 @@ let program_info =
       `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
-let program source =
+let program _source =
   let create
       passopt
-      a b c d e f g i j k = (Bap_options.Fields.create
-                               a b c d e f g i j k []), passopt in
+      _ a b c d e f g i j k = (Bap_options.Fields.create
+                                 a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -198,6 +200,7 @@ let program source =
          info ["p"; "pass"; "passes"] ~doc ~docv:"PASS") in
   Term.(const create
         $passopt
+        $recipe
         $filename
         $(disassembler ())
         $(loader ())
@@ -217,8 +220,27 @@ let parse_source argv =
   | Some src,(`Version|`Help) -> src
   | _ -> raise Unrecognized_source
 
+
+let eval_recipe name =
+  let paths = [Filename.current_dir_name] in
+  match Recipe.load ~paths name with
+  | Ok r ->
+    at_exit (fun () -> Recipe.cleanup r);
+    Array.concat [Sys.argv; Recipe.argv r]
+  | Error err ->
+    eprintf "Failed to load recipe %s: %a\n" name
+      Recipe.pp_error err;
+    exit 1
+
+let load_recipe () =
+  match Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.recipe with
+  | _,`Ok (Some r) -> eval_recipe r
+  | _ -> Sys.argv
+
 let run_loader () =
-  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] Sys.argv in
+  let args = load_recipe () in
+  printf "argv: %s\n" (String.concat_array ~sep:" " args);
+  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] args in
   let print_formats =
     Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
     fst |> Option.value ~default:false in
@@ -245,7 +267,7 @@ let () =
   Log.start ();
   at_exit (pp_print_flush err_formatter);
   let argv,passes = run_loader () in
-  (* main (parse passes argv); exit 0 *)
+  printf "after loader, argv: %s\n" (String.concat_array ~sep:" " argv);
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

@@ -193,6 +193,10 @@ let no_auto_load, no_auto_load_doc =
   Arg.(value & flag & info ["disable-autoload"] ~doc), doc
 
 
+let recipe =
+  let doc = "Load the specified recipe" in
+  Arg.(value & opt (some string) None & info ["recipe"] ~doc)
+
 let loader_options = [
   "-l"; "-L"; "--load-path";
   "--list-plugins"; "--disable-plugin"; "--disable-autoload"
