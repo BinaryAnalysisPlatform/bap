@@ -6,6 +6,7 @@ type t = {
   addr : string;
   only_one : bool;
   arch : string;
+  cpu  : string option;
   show_insn_size : bool;
   insn_formats : string list;
   bil_formats : string list;

@@ -27,6 +27,7 @@ type error = [
 
 val run :
   ?backend:string ->
+  ?cpu:string ->
   ?brancher:brancher ->
   ?rooter:rooter -> arch -> mem -> t Or_error.t
 

@@ -409,12 +409,12 @@ let stage3 s2 =
                   Cfg.Edge.insert edge cfg)) in
   return {cfg; failures = s2.stage1.errors}
 
-let run ?(backend="llvm") ?brancher ?rooter arch mem =
+let run ?(backend="llvm") ?cpu ?brancher ?rooter arch mem =
   let b = Option.value brancher ~default:(Brancher.of_bil arch) in
   let brancher = Brancher.resolve b in
   let module Target = (val Targets.target_of_arch arch) in
   let lifter = Target.lift in
-  Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
+  Dis.with_disasm ~backend ?cpu (Arch.to_string arch) ~f:(fun dis ->
       stage1 ?rooter lifter brancher dis mem >>= stage2 dis >>= stage3)
 
 let cfg t = t.cfg

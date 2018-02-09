@@ -15,6 +15,7 @@ type second = float
 
 val create :
   ?disassembler:string ->
+  ?cpu:string ->
   ?brancher:brancher source ->
   ?symbolizer:symbolizer source ->
   ?rooter:rooter source ->

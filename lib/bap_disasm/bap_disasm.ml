@@ -63,7 +63,7 @@ let of_rec d = {
 
 module Disasm = struct
   type t = disasm
-  type 'a disassembler = ?backend:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
+  type 'a disassembler = ?backend:string -> ?cpu:string -> ?brancher:brancher -> ?rooter:rooter -> 'a
 
   let create  cfg = {
     cfg; err = [];
@@ -73,14 +73,14 @@ module Disasm = struct
   let cfg t = t.cfg
   let errors t = t.err
 
-  let of_mem ?backend ?brancher ?rooter arch mem =
-    Rec.run ?backend ?brancher ?rooter arch mem >>| of_rec
+  let of_mem ?backend ?cpu ?brancher ?rooter arch mem =
+    Rec.run ?backend ?cpu ?brancher ?rooter arch mem >>| of_rec
 
   let merge d1 d2 =
     let merge = Graphlib.union (module Rec.Cfg) in
     {cfg = merge d1.cfg d2.cfg; err = d1.err @ d2.err}
 
-  let of_image ?backend ?brancher ?rooter image =
+  let of_image ?backend ?cpu ?brancher ?rooter image =
     let arch = Image.arch image in
     let rooter =
       Option.value rooter ~default:(Rooter.of_image image) in
@@ -88,20 +88,20 @@ module Disasm = struct
       ~f:(fun mem sec dis ->
           dis >>= fun dis ->
           if Image.Segment.is_executable sec then
-            of_mem ?backend ?brancher ~rooter arch mem >>| merge dis
+            of_mem ?backend ?cpu ?brancher ~rooter arch mem >>| merge dis
           else return dis)
 
-  let of_file ?backend ?brancher ?rooter ?loader filename =
+  let of_file ?backend ?cpu ?brancher ?rooter ?loader filename =
     Image.create ?backend:loader filename >>= fun (img,errs) ->
-    of_image ?backend ?brancher ?rooter img
+    of_image ?backend ?cpu ?brancher ?rooter img
 
   module With_exn = struct
-    let of_mem ?backend ?brancher ?rooter arch mem =
-      of_mem ?backend ?brancher ?rooter arch mem |> ok_exn
-    let of_file ?backend ?brancher ?rooter ?loader filename =
-      of_file ?backend ?brancher ?rooter ?loader filename |> ok_exn
-    let of_image ?backend ?brancher ?rooter image =
-      of_image ?backend ?brancher ?rooter image |> ok_exn
+    let of_mem ?backend ?cpu ?brancher ?rooter arch mem =
+      of_mem ?backend ?cpu ?brancher ?rooter arch mem |> ok_exn
+    let of_file ?backend ?cpu ?brancher ?rooter ?loader filename =
+      of_file ?backend ?cpu ?brancher ?rooter ?loader filename |> ok_exn
+    let of_image ?backend ?cpu ?brancher ?rooter image =
+      of_image ?backend ?cpu ?brancher ?rooter image |> ok_exn
   end
 
   let insn  = Value.Tag.register (module Insn)
