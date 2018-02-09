@@ -39,6 +39,8 @@ let kinds = Primus.Machine.State.declare
     (fun _ -> {objects = Primus.Value.Map.empty})
 
 module Object = struct
+  type Primus.exn += Bad_object of Primus.value
+
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
 
@@ -56,15 +58,11 @@ module Object = struct
         objects = Map.add s.objects ~key ~data:kind
       } >>| fun () -> key
 
-    (* pre: v was obtained from (create k)
-       post: returns k.
-
-       we can break the precondition only inside of this module, where
-       the abstraction walls are not yet erected, and the equality
-       between object and value types is not removed. *)
     let kind v =
-      Machine.Local.get kinds >>| fun {objects} ->
-      Map.find_exn objects v
+      Machine.Local.get kinds >>= fun {objects} ->
+      match Map.find objects v with
+      | None -> Machine.raise (Bad_object v)
+      | Some x -> Machine.return x
     include Ident(Machine)
   end
   include (Primus.Value : comparable_with_value with type t = value)
@@ -174,7 +172,6 @@ module Rel = struct
 end
 
 
-
 module Taint = struct
   type Primus.exn += Bad_cast of Primus.value
 
@@ -250,40 +247,21 @@ module Taint = struct
           | Some ts ->
             let ts = objects_of_kind kinds k ts in
             if Set.is_empty ts then None else Some ts)
-
-
-    let collect_taints kind (Rel ms) srcs s =
-      Machine.Local.get kinds >>| fun kinds ->
-      let filter = objects_of_kind kinds kind in
-      List.fold srcs ~init:Object.Set.empty ~f:(fun objs src ->
-          match Map.find (Field.get ms.field s) (ms.key src) with
-          | None -> objs
-          | Some objs' -> Set.union (filter objs') objs)
-
-    let append_taints m key ts =
-      Map.update m key ~f:(function
-          | None -> ts
-          | Some ts' -> Set.union ts ts')
-
-    let transfer kind ms md srcs dst =
-      Machine.Local.get tainter >>= fun s ->
-      collect_taints kind ms srcs s >>= fun taints ->
-      attach dst md taints
   end
 end
 
 module Propagation = struct
 
   type policies = {
-    clients : Primus.Value.Set.t Primus.Value.Map.t;
-    default : Primus.Value.t option;
+    servers : Primus.value Kind.Map.t;
+    default : Primus.value option;
   }
 
   let policies = Primus.Machine.State.declare
       ~name:"taint-policies"
       ~uuid:"4c370c33-ef1b-4e10-be27-ee751a4d6cf3"
       (fun _ -> {
-           clients = Primus.Value.Map.empty;
+           servers = Kind.Map.empty;
            default = None;
          })
 
@@ -292,29 +270,55 @@ module Propagation = struct
     module Make(Machine : Primus.Machine.S) = struct
       open Machine.Syntax
 
-      let select k p =
+      module Tracker = Taint.Make(Machine)
+
+      let select p k =
         Machine.Local.update policies ~f:(fun s -> {
-              clients = Map.update s.clients p ~f:(function
-                  | None -> Primus.Value.Set.singleton k
-                  | Some ks -> Set.add ks k);
+              servers = Map.add s.servers ~key:k ~data:p;
               default = Option.first_some s.default (Some p);
             })
 
       let set_default p = Machine.Local.update policies ~f:(fun s ->
           {s with default = Some p})
 
-      let kinds p : Kind.Set.t Machine.t =
-        Machine.Local.get policies >>| fun {clients} ->
-        match Map.find clients p with
-        | None -> Primus.Value.Set.empty
-        | Some ks -> ks
+      let has_selected ~policy:p ~kind:k {servers; default} =
+        match Map.find servers k with
+        | Some p' -> Primus.Value.equal p p'
+        | None -> match default with
+          | None -> false
+          | Some p' -> Primus.Value.equal p p'
 
+      let selected policy kind =
+        Machine.Local.get policies >>|
+        has_selected ~policy ~kind
 
+      let select_objects {objects} policies ~policy ts =
+        Set.filter ts ~f:(fun v ->
+            match Map.find objects v with
+            | None -> false
+            | Some kind -> has_selected policies ~policy ~kind)
+
+      let collect_taints p (Rel ms) srcs s =
+        Machine.Local.get kinds >>= fun kinds ->
+        Machine.Local.get policies >>| fun policies ->
+        let filter = select_objects kinds policies ~policy:p in
+        List.fold srcs ~init:Object.Set.empty ~f:(fun objs src ->
+            match Map.find (Field.get ms.field s) (ms.key src) with
+            | None -> objs
+            | Some objs' -> Set.union (filter objs') objs)
+
+      let append_taints m key ts =
+        Map.update m key ~f:(function
+            | None -> ts
+            | Some ts' -> Set.union ts ts')
+
+      let propagate p ms md srcs dst =
+        Machine.Local.get tainter >>= fun s ->
+        collect_taints p ms srcs s >>= fun taints ->
+        Tracker.attach dst md taints
       include Ident(Machine)
     end
   end
-
-
 end
 
 (* tracks live tainted objects, removes unecessary references.
@@ -403,7 +407,7 @@ module Std = struct
     module Object = Object
     module Kind = Kind
     module Rel = Rel
-    module Tracker = Taint.Make
+    module Tracker = Taint
     module Propagation = Propagation
     module Gc = Gc
   end

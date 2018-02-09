@@ -192,136 +192,155 @@ module Std : sig
 
         [module Tracker = Taint.Tracker(Machine)]
     *)
-    module Tracker(Machine : Primus.Machine.S) : sig
+    module Tracker : sig
+
+      module Make(Machine : Primus.Machine.S) : sig
 
 
-      (** {3 The low-level interface}
+        (** {3 The low-level interface}
 
-          The low-level interface defines three primitives in terms of
-          which we can express a more convenient high-level
-          interface. It is recommened to get acquainted with these
-          three primitives, to understand how the tracker works,
-          however it is better to use the high level interface,
-          whenever it is possible.
+            The low-level interface defines three primitives in terms of
+            which we can express a more convenient high-level
+            interface. It is recommened to get acquainted with these
+            three primitives, to understand how the tracker works,
+            however it is better to use the high level interface,
+            whenever it is possible.
 
-          To denote the concrete semantics of these primitives we will
-          use the taint ternary relation [T] that establishes a
-          relation between a value and an object, e.g., [T(v,r,x)] is
-          the relation [r] between the value [v] and an object [x].
+            To denote the concrete semantics of these primitives we will
+            use the taint ternary relation [T] that establishes a
+            relation between a value and an object, e.g., [T(v,r,x)] is
+            the relation [r] between the value [v] and an object [x].
 
-          Conceptually, the state of the tracker can be seen as a set
-          of such relations. Since tracker operations may affect this set
-          of relations we will denote relations that existed just
-          before an operation with [pre], e.g., [pre(T(v,r,x)] means
-          that before the operation there was the relation [T(v,r,x)]
-      *)
+            Conceptually, the state of the tracker can be seen as a set
+            of such relations. Since tracker operations may affect this set
+            of relations we will denote relations that existed just
+            before an operation with [pre], e.g., [pre(T(v,r,x)] means
+            that before the operation there was the relation [T(v,r,x)]
+        *)
 
-      (** [attach v r xs] establishes the relation [r] between the
-          value [v] and every object [x] in the set of objects [xs].
-          All other relations, as well as relations with other values
-          are unaffected.
+        (** [attach v r xs] establishes the relation [r] between the
+            value [v] and every object [x] in the set of objects [xs].
+            All other relations, as well as relations with other values
+            are unaffected.
 
-          Post conditions:
-          - forall x, x in xs -> T(v,r,x);
-          - forall u,s,x, pre(T(u,s,x)) -> T(u,s,x);
-          - forall u,s,x, T(v,s,x) -> pre(T(v,s,x)) \// s = r /\\ v = u.
-      *)
-      val attach : Primus.value -> Rel.t -> Object.Set.t -> unit Machine.t
-
-
-      (** [lookup v r] returns a set [xs] of objects that are related
-          with the value [v] by the relation [r]. The operation
-          doesn't change the state of the tracker.
-
-          Post conditions:
-          - x in xs iff T(v,r,x);
-          - forall u,s,y, Pre(T(u,s,y)) iff T(u,s,y);
-      *)
-      val lookup : Primus.value -> Rel.t -> Object.Set.t Machine.t
-
-      (** [detach v r xs] removes all relations of type [r] between
-          the value [v] and elements of the set of objects
-          [xs]. Relations of other types as well as relations between
-          other objects and values are unaffected.
-
-          Post conditions:
-          - forall x, x in xs -> not (T(v,r,x));
-          - forall u,s,y, v <> u \// s <> r, pre(T(u,s,y)) -> T(u,s,y)
-      *)
-      val detach : Primus.value -> Rel.t -> Object.Set.t -> unit Machine.t
+            Post conditions:
+            - forall x, x in xs -> T(v,r,x);
+            - forall u,s,x, pre(T(u,s,x)) -> T(u,s,x);
+            - forall u,s,x, T(v,s,x) -> pre(T(v,s,x)) \// s = r /\\ v = u.
+        *)
+        val attach : Primus.value -> Rel.t -> Object.Set.t -> unit Machine.t
 
 
+        (** [lookup v r] returns a set [xs] of objects that are related
+            with the value [v] by the relation [r]. The operation
+            doesn't change the state of the tracker.
 
-      (** {3 High-level interface}
+            Post conditions:
+            - x in xs iff T(v,r,x);
+            - forall u,s,y, Pre(T(u,s,y)) iff T(u,s,y);
+        *)
+        val lookup : Primus.value -> Rel.t -> Object.Set.t Machine.t
 
-          The high-level interface provides a set of easy to use (and
-          sometimes more efficient) functions. All these functions
-          could be expressed in terms of the three primitive operations.
+        (** [detach v r xs] removes all relations of type [r] between
+            the value [v] and elements of the set of objects
+            [xs]. Relations of other types as well as relations between
+            other objects and values are unaffected.
 
-      *)
-
-
-      (** [new_direct v k] introduces a new direct relation between the
-          value [v] and a freshly created object of the given kind
-          [k]. The object is returned.
-
-          Essentially:
-          [attach v direct (add (lookup v k) (Object.create k as r)); r]
-
-      *)
-      val new_direct : Primus.value -> Kind.t -> Object.t Machine.t
-
-      (** [new_indirect ~addr:v ~len:n k] establishes a new indirect
-          relation between a set of addresses, denoted by interval
-          [[v,v+n-1]], and a freshly created object of specified
-          kind. *)
-      val new_indirect :
-        addr:Primus.value ->
-        len:Primus.value ->
-        Kind.t ->
-        Object.t Machine.t
-
-      (** [Taint.sanitize r k v] detaches all objects related to the
-          value [v] by the relation [r] that has the given kind [k].
-
-          In terms of the low-level operations:
-
-          [detach v r (filter (has_kind k) (lookup v r))]
-      *)
-      val sanitize : Primus.value -> Rel.t -> Kind.t -> unit Machine.t
+            Post conditions:
+            - forall x, x in xs -> not (T(v,r,x));
+            - forall u,s,y, v <> u \// s <> r, pre(T(u,s,y)) -> T(u,s,y)
+        *)
+        val detach : Primus.value -> Rel.t -> Object.Set.t -> unit Machine.t
 
 
-      (** [transfer k rs rd srcs dst] select all objects of the [k]
-          kind related with values in [srcs] by the relation [rs] and
-          associate them with the value [dst] using the relation
-          [rd]. The relations of the source values are unaffected.
+        (** {3 High-level interface}
 
-          In terms of the low-level operations:
-          [attach dst rd (union (map srcs (fun v -> lookup v rs)))] *)
-      val transfer : Kind.t -> Rel.t -> Rel.t -> Primus.value list -> Primus.value -> unit Machine.t
+            The high-level interface provides a set of easy to use (and
+            sometimes more efficient) functions. All these functions
+            could be expressed in terms of the three primitive operations.
+
+        *)
+
+
+        (** [new_direct v k] introduces a new direct relation between the
+            value [v] and a freshly created object of the given kind
+            [k]. The object is returned.
+
+            Essentially:
+            [attach v direct (add (lookup v k) (Object.create k as r)); r]
+
+        *)
+        val new_direct : Primus.value -> Kind.t -> Object.t Machine.t
+
+        (** [new_indirect ~addr:v ~len:n k] establishes a new indirect
+            relation between a set of addresses, denoted by interval
+            [[v,v+n-1]], and a freshly created object of specified
+            kind. *)
+        val new_indirect :
+          addr:Primus.value ->
+          len:Primus.value ->
+          Kind.t ->
+          Object.t Machine.t
+
+        (** [Taint.sanitize r k v] detaches all objects related to the
+            value [v] by the relation [r] that has the given kind [k].
+
+            In terms of the low-level operations:
+
+            [detach v r (filter (has_kind k) (lookup v r))]
+        *)
+        val sanitize : Primus.value -> Rel.t -> Kind.t -> unit Machine.t
+      end
     end
 
+    (** Policy based propagation.
+
+        Although taints could be attached and detached in an arbitrary
+        way, the framework provides a mechanism for a policy based
+        taint propagation.
+
+        By associating a taint propagation policy with an object kind,
+        we can specify taint propagation rules based on the kind of
+        the object.
+
+        The policy mechanism establishes a surjection of the set of
+        object kinds onto the set of policies, that establishes a
+        partitioning of all objects into a disjoit set of classes,
+        with each class defining its own rules of taint propagation.
+    *)
     module Propagation : sig
       module Policy : sig
         type t
 
         module Make(Machine : Primus.Machine.S) : sig
 
-          (** [select k p] selects the taint propagation policy [p]
-              for objects of kind [k]. It is possible to select
-              several policies for the same kind. If no policy is
-              selected, then the default policy will be selected.
-          *)
-          val select : Kind.t -> t -> unit Machine.t
+          (** [select p k] selects the taint propagation policy [p]
+              for objects of kind [k]. If no policy is selected for a
+              kind of an object, then objects of that kind will be
+              propagated by default policy.  *)
+          val select : t -> Kind.t -> unit Machine.t
 
           (** [set_default policy] makes [policy] the default policy
               for all kinds that didn't select their own taint
               propagation policies.  *)
           val set_default : t -> unit Machine.t
 
-          (** [kinds policy] returns a set of kinds that uses the
-              specified taint propagation [policy]. *)
-          val kinds : t -> Kind.Set.t Machine.t
+          (** [selected p k] is [true] if the policy [p] was selected
+              for the kind [k]. *)
+          val selected : t -> Kind.t -> bool Machine.t
+
+
+          (** [propagate p rs rd srcs dst] transfers objects
+              associated with [srcs] to [dst] based on the selected
+              policy [p].
+
+              Effect: all objects that have selected the propagation
+              policy [p] and were associated with [srcs] by the
+              relation [rs] are attached to the [dst] value using the
+              [rd] relation. All associations of the [srcs] values
+              remain unaffected. *)
+          val propagate : t -> Rel.t -> Rel.t ->
+            Primus.value list -> Primus.value -> unit Machine.t
 
           include Value with type t := t
                          and type 'a m := 'a Machine.t

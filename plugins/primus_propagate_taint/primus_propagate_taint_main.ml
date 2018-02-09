@@ -35,7 +35,7 @@ module Intro(Machine : Primus.Machine.S) = struct
   module Env = Primus.Interpreter.Make(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
+  module Tracker = Taint.Tracker.Make(Machine)
   module Kind = Taint.Kind.Make(Machine)
   module Object = Taint.Object.Make(Machine)
 
@@ -103,7 +103,7 @@ end
 module Mapper(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Env = Primus.Env.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
+  module Tracker = Taint.Tracker.Make(Machine)
 
   let relations = [
     Taint.Rel.indirect, Fields_of_mapper.ptrs;

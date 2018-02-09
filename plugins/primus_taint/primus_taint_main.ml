@@ -10,7 +10,7 @@ include Self()
 module Pre(Machine : Primus.Machine.S) = struct
   include Machine.Syntax
   module Lisp = Primus.Lisp.Make(Machine)
-  module Tracker = Taint.Tracker(Machine)
+  module Tracker = Taint.Tracker.Make(Machine)
   module Object = Taint.Object.Make(Machine)
   module Kind = Taint.Kind.Make(Machine)
   module Value = Primus.Value.Make(Machine)
@@ -101,7 +101,7 @@ module PolicySelect(Machine : Primus.Machine.S) = struct
   let run [k; p] =
     Kind.of_value k >>= fun k ->
     Policy.of_value p >>= fun p ->
-    Policy.select k p >>= fun () ->
+    Policy.select p k >>= fun () ->
     nil
 end
 
@@ -174,8 +174,9 @@ let set_default_policy name =
     module Value = Primus.Value.Make(Machine)
 
     let init () =
-      Value.Symbol.to_value name >>=
-      Policy.of_value >>=
+      Value.Symbol.to_value name >>= fun v ->
+      eprintf "Setting default policy to %a@\n" Value.pp v;
+      Policy.of_value v >>=
       Policy.set_default
   end in
   Primus.Machine.add_component (module Init)
@@ -216,7 +217,7 @@ manpage [
     live or dead, when the finalization was called."
 ]
 
-let policy = param string ~default:"propagate-by-computation" "policy"
+let policy = param string ~default:"propagate-by-computation" "default-policy"
     ~doc:"Set the default taint propagation policy"
 
 (* our poor choice of garbage collectors *)

@@ -6,7 +6,7 @@ open Format
 module Support(Id : sig val name : string end)
     (Machine : Primus.Machine.S) = struct
   module Policy = Taint.Propagation.Policy.Make(Machine)
-  module Taint = Taint.Tracker(Machine)
+  module Taint = Taint.Tracker.Make(Machine)
   module Value = Primus.Value.Make(Machine)
   open Machine.Syntax
 
@@ -15,9 +15,7 @@ module Support(Id : sig val name : string end)
     Policy.of_value
 
   let (-->) rs rd srcs dst =
-    name >>= Policy.kinds >>= fun ks ->
-    Set.to_sequence ks |> Machine.Seq.iter ~f:(fun k ->
-        Taint.transfer k rs rd srcs dst)
+    name >>= fun p -> Policy.propagate p rs rd srcs dst
 end
 
 
@@ -27,7 +25,7 @@ module Computation(Machine : Primus.Machine.S) = struct
     let name = "propagate-by-computation"
   end
   module Eval = Primus.Interpreter.Make(Machine)
-  module Taint = Taint.Tracker(Machine)
+  module Taint = Taint.Tracker.Make(Machine)
   module Value = Primus.Value.Make(Machine)
   module Support = Support(Id)(Machine)
   open Machine.Syntax
@@ -65,7 +63,7 @@ module Exact(Machine : Primus.Machine.S) = struct
     let name = "propagate-exactly"
   end
   module Eval = Primus.Interpreter.Make(Machine)
-  module Taint = Taint.Tracker(Machine)
+  module Taint = Taint.Tracker.Make(Machine)
   module Value = Primus.Value.Make(Machine)
   module Support = Support(Id)(Machine)
 
