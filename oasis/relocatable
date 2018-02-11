@@ -8,5 +8,5 @@ Library relocatable_plugin
   Build$:          flag(everything) || flag(relocatable)
   FindlibName:     bap-plugin-relocatable
   InternalModules: Rel_main, Rel_brancher
-  BuildDepends:    bap, graphlib, ogre
+  BuildDepends:    bap, ogre
   XMETAExtraLines: tags="brancher, loader, ogre"
