@@ -38,24 +38,25 @@ module Rel = struct
 
 end
 
-let find_rel memmap data start =
-  let rec get addr max_addr =
-    if Addr.(addr > max_addr) then None
-    else
-      match Map.find data addr with
-      | None -> get (Addr.succ addr) max_addr
-      | Some value -> Some value in
-  Option.value_map ~default:None
-    (Addr.Map.find memmap start) ~f:(get start)
+let find_fixup (relocations, externals) min_addr max_addr =
+  let find data =
+    let rec get addr =
+      if Addr.(addr > max_addr) then None
+      else
+        match Map.find data addr with
+        | None -> get (Addr.succ addr)
+        | Some value -> Some value in
+    get min_addr in
+  match find relocations with
+  | Some rel_addr -> Some (`Addr rel_addr)
+  | None -> match find externals with
+    | Some name -> Some (`Name name)
+    | None -> None
 
 let create_synthetic_sub name =
   let s = Sub.create ~name () in
   Tid.set_name (Term.tid s) name;
   Term.(set_attr s synthetic ())
-
-let find_insn insns addr =
-  Seq.find insns ~f:(fun (mem, _) ->
-      Addr.equal (Bap_memory.min_addr mem) addr)
 
 let fall_of_block cfg block =
   Seq.find_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
@@ -81,9 +82,13 @@ let find_fall symtab subs tid addr =
   | None -> Some (Label.indirect Bil.(int (Block.addr fall)))
   | Some blk -> Some (Label.direct (Term.tid blk))
 
-let relocate symtab insns rels exts pr =
+let relocate symtab insns fixups pr =
   let subs = Term.to_sequence sub_t pr in
   let ext_subs = String.Table.create () in
+  let memory = Seq.fold insns ~init:Addr.Map.empty
+      ~f:(fun mems (m,_) ->
+          let min,max = Bap_memory.(min_addr m, max_addr m) in
+          Map.add mems min max) in
   let get_external name =
     Hashtbl.find_or_add ext_subs name
       ~default:(fun () -> create_synthetic_sub name) in
@@ -110,22 +115,15 @@ let relocate symtab insns rels exts pr =
       let return = find_fall symtab subs tid addr in
       Ir_jmp.create ~tid (Call (Call.create ~target ?return ()))
     | _ -> jmp in
-  let memmap = Seq.fold insns ~init:Addr.Map.empty
-      ~f:(fun mems (m,_) ->
-          let min,max = Bap_memory.(min_addr m, max_addr m) in
-          Addr.Map.add mems min max) in
+  let (>>=) = Option.(>>=) in
   let program = (object
     inherit Term.mapper
     method! map_jmp jmp =
-      match Term.get_attr jmp address with
-      | None -> jmp
-      | Some addr ->
-        match find_rel memmap rels addr with
-        | None ->
-          Option.value_map ~default:jmp
-            (find_rel memmap exts addr)
-            ~f:(fun name  -> fixup addr jmp (`Name name))
-        | Some rel_addr -> fixup addr jmp (`Addr rel_addr)
+      Option.value ~default:jmp
+        (Term.get_attr jmp address >>= fun addr ->
+         Map.find memory addr >>= fun max_addr ->
+         find_fixup fixups addr max_addr >>= fun fix ->
+         Some (fixup addr jmp fix))
   end)#run pr in
   let append_ext prg sub = Term.append sub_t prg sub in
   List.fold ~init:program ~f:append_ext (Hashtbl.data ext_subs)
@@ -133,4 +131,4 @@ let relocate symtab insns rels exts pr =
 let run prog symtab insns spec =
   match Fact.eval Rel.relocations spec with
   | Error _ ->  prog
-  | Ok (rels, exts) -> relocate symtab insns rels exts prog
+  | Ok fixups -> relocate symtab insns fixups prog
