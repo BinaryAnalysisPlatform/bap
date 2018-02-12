@@ -108,17 +108,25 @@ module Main(Machine : Primus.Machine.S) = struct
     | None -> Machine.return ()
     | Some {limit; counter} ->
       Machine.Local.get state >>= fun s ->
+      report_progress ~task:"limit max path length" ~stage:s.length ~total:limit ();
       if s.length > limit
       then terminate (string_of_counter counter)
       else Machine.Local.put state {
           s with length = s.length + 1;
         }
 
+
+
   let check_max_visits name visited = match get Cfg.max_visited with
     | None -> Machine.return ()
     | Some max_visited -> match Map.find visited name with
-      | Some visits when visits > max_visited ->
-        terminate "visits of the same destination"
+      | Some visits ->
+        report_progress ~task:"limit max visits"
+          ~stage:visits ~total:max_visited ();
+        if visits > max_visited
+        then terminate
+            (sprintf "visits of the %s destination" (Tid.name name))
+        else Machine.return ()
       | _ -> Machine.return ()
 
   let on_blk blk =
@@ -138,7 +146,13 @@ module Main(Machine : Primus.Machine.S) = struct
     | Some {counter=Blk}  -> enter_blk >>> check_bound
     | Some {counter=Insn} -> pc_change >>> check_bound
     | Some {counter=Term} -> enter_term >>> check_bound
-    | Some {counter=Exp}  -> enter_exp >>> check_bound
+    | Some {counter=Exp}  -> Machine.sequence [
+        loading >>> check_bound;
+        storing >>> check_bound;
+        binop >>> check_bound;
+        unop >>> check_bound;
+        Primus.Linker.exec >>> check_bound;
+      ]
 
   let init () =
     Machine.sequence [
