@@ -117,11 +117,6 @@ module Main(Machine : Primus.Machine.S) = struct
         | conflicts ->
           Machine.ignore_m @@
           do_fork blk ~child:(fun () ->
-              Machine.current () >>= fun pid ->
-              Eval.pc >>= fun pc ->
-              List.iter conflicts ~f:(fun {var;res} ->
-                  printf "%a: %a: assume %a = %b@\n%!"
-                    pp_id pid Addr.pp pc Var.pp var res);
               assume  conflicts >>= fun () ->
               Machine.Local.update state ~f:(fun t -> {
                     t with conflicts})))
