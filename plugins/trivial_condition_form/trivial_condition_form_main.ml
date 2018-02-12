@@ -31,7 +31,7 @@ module TCF = struct
           Term.append jmp_t blk jmp)
 
   let sub = Term.map blk_t ~f:(fun b ->
-      if Term.length jmp_t b < 2 then b else blk b)
+      if Term.length jmp_t b > 0 then blk b else b)
 
   let prog = Term.map sub_t ~f:sub
 
@@ -39,7 +39,7 @@ module TCF = struct
 end
 
 
-let main proj = 
+let main proj =
   info "translating the program into the Trivial Condition Form (TCF)";
   TCF.proj proj
 
@@ -47,12 +47,12 @@ open Config;;
 
 manpage [
   `S "DESCRIPTION";
-  `P "Ensures that all branching conditions are either a variable 
+  `P "Ensures that all branching conditions are either a variable
 or a constant. We call such representation a Trivial Condition Form
 (TCF). During the translation all complex condition expressions are
 hoisted into the assignemnt section of a block.";
 ];;
 
 
-let () = when_ready (fun _ -> 
+let () = when_ready (fun _ ->
     Project.register_pass main)
