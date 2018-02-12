@@ -175,7 +175,6 @@ let set_default_policy name =
 
     let init () =
       Value.Symbol.to_value name >>= fun v ->
-      eprintf "Setting default policy to %a@\n" Value.pp v;
       Policy.of_value v >>=
       Policy.set_default
   end in
