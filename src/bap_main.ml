@@ -188,8 +188,8 @@ let program_info =
 let program _source =
   let create
       passopt
-      _ a b c d e f g i j k = (Bap_options.Fields.create
-                                 a b c d e f g i j k []), passopt in
+      _ _ a b c d e f g i j k = (Bap_options.Fields.create
+                                   a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -201,6 +201,7 @@ let program _source =
   Term.(const create
         $passopt
         $recipe
+        $logdir
         $filename
         $(disassembler ())
         $(loader ())
@@ -220,6 +221,12 @@ let parse_source argv =
   | Some src,(`Version|`Help) -> src
   | _ -> raise Unrecognized_source
 
+let get_logdir argv =
+  match Cmdliner.Term.eval_peek_opts ~argv
+          Bap_cmdline_terms.logdir with
+  | _,`Ok r -> r
+  | _ -> None
+
 
 let eval_recipe name =
   let paths = [Filename.current_dir_name] in
@@ -232,15 +239,8 @@ let eval_recipe name =
       Recipe.pp_error err;
     exit 1
 
-let load_recipe () =
-  match Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.recipe with
-  | _,`Ok (Some r) -> eval_recipe r
-  | _ -> Sys.argv
-
-let run_loader () =
-  let args = load_recipe () in
-  printf "argv: %s\n" (String.concat_array ~sep:" " args);
-  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] args in
+let run_loader argv =
+  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] argv in
   let print_formats =
     Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
     fst |> Option.value ~default:false in
@@ -258,16 +258,22 @@ let parse passes argv =
 let error fmt =
   kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
 
+let load_recipe () =
+  match Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.recipe with
+  | _,`Ok (Some r) -> eval_recipe r
+  | _ -> Sys.argv
+
+
 let () =
   let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
     with Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
-  Log.start ();
+  let argv = load_recipe () in
+  Log.start ?logdir:(get_logdir argv)();
   at_exit (pp_print_flush err_formatter);
-  let argv,passes = run_loader () in
-  printf "after loader, argv: %s\n" (String.concat_array ~sep:" " argv);
+  let argv,passes = run_loader argv in
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

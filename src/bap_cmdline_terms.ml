@@ -18,6 +18,11 @@ let filename : string Term.t =
   Arg.(required & pos 0 (some non_dir_file) None &
        info [] ~doc ~docv:"FILE")
 
+let logdir : string option Term.t =
+  let doc = "A folder for log files." in
+  let env = Term.env_info ~doc "BAP_LOG_DIR" in
+  Arg.(value & opt (some dir) None & info ["logdir"; "log-dir"] ~env ~doc)
+
 let brancher () : string option Term.t =
   match enum_processors (module Brancher) with
   | [] | [_] -> Term.const None

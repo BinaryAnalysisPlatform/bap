@@ -8644,7 +8644,7 @@ module Log : sig
 
   (** Start logging events. Only events of type [Event.Log] are
       logged.  *)
-  val start : unit -> unit
+  val start : ?logdir:string -> unit -> unit
 end
 
 (**/**)

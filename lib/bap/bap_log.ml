@@ -14,7 +14,7 @@ let rec mkdir path =
 
 let (/) = Filename.concat
 
-let log_folder = match getenv "BAP_LOG_DIR" with
+let log_folder user = match user with
   | Some dir -> dir
   | None -> match getenv "XDG_STATE_HOME" with
     | Some dir -> dir / "bap"
@@ -24,15 +24,15 @@ let log_folder = match getenv "BAP_LOG_DIR" with
 
 let max_logs = match getenv "BAP_BACKLOG" with
   | None -> 99
-  | Some n -> try Int.of_string n with
-      exn -> invalid_argf "BAP_BACKLOG expect a number" ()
+  | Some n -> try Int.of_string n with _ ->
+    invalid_argf "BAP_BACKLOG expect a number" ()
 
 let rec rotate max_logs file =
   let next = try Scanf.sscanf file "%s@~%d" (fun name num ->
       Option.some_if (num < max_logs)
         (sprintf "%s~%d" name (num + 1)))
-    with exn when max_logs > 0 -> Some (file ^ "~1")
-       | exn -> None in
+    with _ when max_logs > 0 -> Some (file ^ "~1")
+       | _ -> None in
   match next with
   | None -> FileUtil.rm [file]
   | Some next ->
@@ -54,8 +54,9 @@ let print_message ppf msg =
   | Error -> print err_formatter msg
   | _ -> ()
 
-let open_log_channel () =
+let open_log_channel user_dir =
   try
+    let log_folder = log_folder user_dir in
     mkdir log_folder;
     let file = log_folder / "log" in
     if Sys.file_exists file
@@ -85,8 +86,8 @@ let log_plugin_events () =
         message Debug ~section "Linking library %s" lib)
 
 
-let start () =
-  let ppf = open_log_channel () in
+let start ?logdir () =
+  let ppf = open_log_channel logdir in
   Stream.observe Bap_event.stream (function
       | Bap_event.Log.Message message -> print_message ppf message
       | e -> fprintf ppf "%a@." Bap_event.pp e);
