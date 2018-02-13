@@ -80,7 +80,7 @@ module Scheme = struct
     try List.map ~f:parse (Sexp.load_sexps f) |> Result.all
     with Sexp.Parse_error err -> sexp_error err
        | Sys_error e -> Error e
-       | exn -> Error "Malformed sexp "
+       | exn -> Error "Malformed sexp"
 
   let parse_arg s = match parse_string s with
     | Ok r -> `Ok r
@@ -91,13 +91,16 @@ end
 
 class marker (patts : Scheme.t) = object(self)
   inherit Term.mapper as super
+
   method! map_term cls t =
     List.fold patts ~init:t ~f:(fun t (preds,maps) ->
-        if List.for_all preds ~f:(fun p -> p#visit_term cls t false)
+        if List.for_all preds ~f:(fun p -> p#enter_term cls t false)
         then List.fold maps ~init:t ~f:(fun t m -> m#map_term cls t)
         else t) |>
     super#map_term cls
 end
+
+let () = Map_terms_features.init ()
 
 let main patts file proj =
   let patts = match file with
@@ -106,8 +109,8 @@ let main patts file proj =
       | Ok ps -> patts @ ps
       | Error err -> raise (Parse_error err) in
   let marker = new marker patts in
-  marker#run (Project.program proj) |>
-  Project.with_program proj
+  Project.with_program proj @@
+    marker#run (Project.program proj)
 
 module Cmdline = struct
 
@@ -150,6 +153,40 @@ module Cmdline = struct
     attribute $(b,%s) has the given value, where $(i,COLOR) must be
     one of %s" attr (enum colors))
 
+    let term_attr attr =
+      `I (sprintf "$(b,(term-%s VALUE))" attr,
+          sprintf "Is satisfied when a term's
+    attribute $(b,%s) has the given value" attr)
+
+    let term_field attr =
+      `I (sprintf "$(b,(term-%s VALUE))" attr,
+          sprintf "Is satisfied when a term's
+    $(b,%s) has the given value" attr)
+
+    let term_parent =
+      `I (sprintf "$(b,(term-parent name))",
+          sprintf "Is satisfied when term is a parent for term with a given name")
+
+    let def_lhs =
+      `I (sprintf "$(b,(def-lhs VAR))",
+          sprintf "Is satisfied when a term defines $(b,VAR)")
+
+    let def_uses =
+      `I (sprintf "$(b,(def-uses VAR))",
+          sprintf "Is satisfied when a term uses $(b,VAR)")
+
+    let call =
+      `I (sprintf "$(b,(call DST))",
+          sprintf "Is satisfied when call of $(b,DST) occures")
+
+    let goto =
+      `I (sprintf "$(b,(goto LABEL))",
+          sprintf "Is satisfied when goto $(b,LABEL) occures")
+
+    let call_return =
+      `I (sprintf "$(b,(return DST))",
+          sprintf "Is satisfied when call returns to $(b,DST)")
+
     let section = [
       `S "STANDARD PREDICATES";
       `I ("$(b,(true))","Is always satisfied.");
@@ -164,6 +201,15 @@ module Cmdline = struct
       color "color";
       color "foreground";
       color "background";
+      term_attr  "addr";
+      term_field "tid";
+      term_field "name";
+      term_parent;
+      def_lhs;
+      def_uses;
+      call;
+      goto;
+      call_return;
       `I ("$(b,(taints))", "Is satisfied if a term is taint source, i.e., has
       $(b,tainted-reg) or $(b,tainted-ptr) attributes.");
       `I ("$(b,(taints-reg))", "Is satisfied if a term is taint source,
@@ -206,7 +252,10 @@ module Cmdline = struct
       `I ("$(b,(taint-reg TID))", "Mark a term with the given $(b,TID)
       as a taint source for register values.");
       `I ("$(b,(taint-ptr TID))", "Mark a term with the given $(b,TID)
-      as a taint source for memory values.")
+      as a taint source for memory values.");
+      `I ("$(b,(unset-ATTR))",
+          "Unmark a term from attribute $(b,ATTR) e.g.
+        $(b,unset-visited), $(b,unset-foreground)")
     ]
   end
 
@@ -217,8 +266,11 @@ module Cmdline = struct
 
   let example = [
     `S "EXAMPLES";
-    `P "$(b,bap) exe --$(mname)-pattern='((is-visited) (foreground green))'";
-    `P {|$(b,bap) exe --$(mname)-pattern='((taints-ptr %12) (comment "ha ha"))'|};
+    `P "$(b,bap) exe --$(mname)$(b,-with)='((is-visited) (foreground blue))'";
+    `P {|$(b,bap) exe --$(mname)$(b,-with)='((taints-ptr %12) (comment "ha ha"))'|};
+    `P "$(b,bap) exe --$(mname)$(b,-with)='((term-name @strlen) (foreground blue))'";
+    `P "$(b,bap) exe --$(mname)$(b,-with)='((term-tid %0000042) (foreground blue))'";
+    `P "$(b,bap) exe --$(mname)$(b,-with)='((goto mem[0x42]) (foreground blue))'";
   ]
 
   let see_also = [
@@ -232,7 +284,7 @@ module Cmdline = struct
     `S "DESCRIPTION";
     `P "Transform terms using a domain specific pattern matching language.
     The pass accepts a list of patterns via a command line argument
-    $(b,--)$(mname)$(b,-pattern) (that can be specified several times), or
+    $(b,--)$(mname)$(b,-with) (that can be specified several times), or
     via file, that contains a list of patterns. Each pattern is
     represented by a pair $(b,(<condition> <action>)). The $(b,<action>) specifies
     a transformation over a term, that is applied if a $(b,<condition>)
