@@ -20,8 +20,9 @@
 
 
 (defun exit (code)
-  (declare (external "exit"))
+  (declare (external "exit" "_exit"))
   (exit-with code))
+
 
 (defun atexit (cb)
   (declare (external "atexit")))
