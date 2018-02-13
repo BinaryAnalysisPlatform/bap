@@ -5632,13 +5632,13 @@ module Disasm_expert : sig
 
     (** [Linear.sweep arch mem] will perform a linear sweep
         disassembly on the specified memory [mem] *)
-    val sweep : arch -> mem -> t Or_error.t
+    val sweep : ?backend:string -> arch -> mem -> t Or_error.t
 
     module With_exn : sig
       (** [Linear.With_exn.sweep] same as
           [Linear_sweep.memory], but raises an exception, instead of
           returning [Or_error] monad *)
-      val sweep : arch -> mem -> t
+      val sweep : ?backend:string -> arch -> mem -> t
     end
   end
 
