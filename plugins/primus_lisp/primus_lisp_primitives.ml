@@ -65,22 +65,6 @@ module ExitWith(Machine : Primus.Machine.S) = struct
     Value.b0
 end
 
-module OutputChar(Machine : Primus.Machine.S) = struct
-  include Lib(Machine)
-  let machine_int x = addr_width >>= fun width -> Value.of_int ~width x
-  let run = function
-    | [] | [_] -> machine_int 0
-    | fd :: words ->
-      if Value.is_zero fd
-      then begin
-        List.iter words ~f:(fun w ->
-            Word.enum_chars (Value.to_word w) LittleEndian |>
-            Seq.hd |> Option.iter ~f:(Out_channel.output_char stdout));
-        Out_channel.flush stdout;
-      end;
-      machine_int (List.length words)
-end
-
 module MemoryAllocate(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let negone = Value.one 8
@@ -284,7 +268,6 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "is-positive" (all any @-> bool) (module IsPositive);
       def "is-negative" (all any @-> bool) (module IsNegative);
       def "word-width" (unit @-> int)  (module WordWidth);
-      def "output-char" (one int // all byte @-> int) (module OutputChar);
       def "exit-with" (one int @-> any) (module ExitWith);
       def "memory-read" (one int @-> byte) (module MemoryRead);
       def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite);

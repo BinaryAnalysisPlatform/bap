@@ -132,6 +132,33 @@ let main dump paths features project =
   end in
   Primus.Machine.add_component (module Loader)
 
+module Redirection = struct
+  type t = string * string
+
+  let known_channels = Primus_lisp_io.standard_channels
+
+
+  let make oldname newname =
+    if String.length oldname < 1 ||
+       String.length newname < 1
+    then `Error ("bad redirection: expected two non-empty names")
+    else if String.get oldname 0 = '<'
+    then if List.mem known_channels ~equal:String.equal oldname
+      then `Ok (oldname,newname)
+      else `Error (sprintf "unknown channel %s, expected one of %s"
+                     oldname (String.concat ~sep:", " known_channels))
+    else `Ok (oldname,newname)
+
+  let parse str = match String.split str ~on:':' with
+    | [oldname; newname] -> make oldname newname
+    | _ -> `Error (sprintf "bad redirection, expected <old>:<new> got %s" str)
+
+  let print ppf (oldname,newname) =
+    Format.fprintf ppf "%s:%s" oldname newname
+
+  let convert = Config.converter parse print ("none","none")
+end
+
 let () =
   Config.manpage [
     `S "DESCRIPTION";
@@ -157,7 +184,17 @@ let () =
     Config.(param (list string) ~doc:"load specified module" "load"
               ~default:["posix"]) in
 
+  let redirects =
+    let doc = sprintf
+        "establishes a redirection between an emulated file path and a
+       file path on a host system. Each redirection should be of form
+       <emu-name>:<real-name>, where <emu-name> could be a path or a
+       a name of one of the standard channels, i.e., %s."
+        (String.concat ~sep:" or " Redirection.known_channels) in
+    Config.(param (list Redirection.convert) ~doc "channel-redirect") in
+
   Config.when_ready (fun {Config.get=(!)} ->
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
+      Primus_lisp_io.init (!redirects);
       Project.register_pass' (main !dump paths features))
