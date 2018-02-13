@@ -207,9 +207,6 @@ module Cmdline = struct
       term_parent;
       def_lhs;
       def_uses;
-      call;
-      goto;
-      call_return;
       `I ("$(b,(taints))", "Is satisfied if a term is taint source, i.e., has
       $(b,tainted-reg) or $(b,tainted-ptr) attributes.");
       `I ("$(b,(taints-reg))", "Is satisfied if a term is taint source,

@@ -61,75 +61,6 @@ let def_uses x =
         ~f:(fun y -> String.equal x (Var.name y))
   end
 
-class exp_matcher = object(self)
-  inherit [string * bool] Exp.visitor
-
-  method private mem_exp_str str =
-    let subs = "mem[" in
-    match String.(substr_index ~pattern:subs str, index str ']') with
-    | Some ind0, Some ind1 when ind0 < ind1 ->
-       let pos = ind0 + String.length subs in
-       Some (String.subo ~pos ~len:(ind1 - pos) str)
-    | _ -> None
-
-  method! enter_int word (str,p) =
-    match word_of_string (Word.bitwidth word) str with
-    | None -> str, p
-    | Some w -> str, p || Word.equal word w
-
-  method! enter_load ~mem ~addr endian size (str,p) =
-    match self#mem_exp_str str with
-    | Some str -> self#visit_exp addr (str, p)
-    | None -> str, p
-
-  method! enter_var var (str, p) =
-    str, p || String.equal (Var.name var) str
-end
-
-let is_exp_matched exp str =
-  snd @@ (new exp_matcher)#visit_exp exp (str, false)
-
-let match_exp x =
-  object inherit content_visitor
-    method! enter_def t _ = is_exp_matched (Def.rhs t) x
-  end
-
-let call x = object
-    inherit content_visitor
-
-    method! enter_jmp t _ = match Jmp.kind t with
-      | Call call ->
-         begin
-           match Call.target call with
-           | Direct tid -> Ok tid = Tid.from_string x
-           | Indirect exp -> is_exp_matched exp x
-         end
-      | _ -> false
-  end
-
-let goto x = object
-    inherit content_visitor
-
-    method! enter_jmp t _ = match Jmp.kind t with
-      | Goto (Direct tid) -> Ok tid = Tid.from_string x
-      | Goto (Indirect exp) -> is_exp_matched exp x
-      | _ -> false
-  end
-
-let call_return x = object
-    inherit content_visitor
-
-    method! enter_jmp t _ = match Jmp.kind t with
-      | Call call ->
-         begin
-           match Call.return call with
-           | Some (Direct tid) -> Ok tid = Tid.from_string x
-           | Some (Indirect exp) -> is_exp_matched exp x
-           | _ -> false
-         end
-      | _ -> false
-  end
-
 let exists_child par cls tid =
   Term.to_sequence cls par |>
     Seq.exists ~f:(fun t -> Tid.equal (Term.tid t) tid)
@@ -174,8 +105,4 @@ let init () =
   "term-name" := term_name;
   "def-lhs" := def_lhs;
   "def-uses" := def_uses;
-  "exp" := match_exp;            (* TODO: check it  *)
-  "call" := call;
-  "goto" := goto;
-  "call-return" := call_return;
   "term-parent" := parent;
