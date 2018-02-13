@@ -3923,6 +3923,9 @@ module Dict : sig
 
   (** [data dict] is a sequence of all dict elements  *)
   val data : t -> value seq
+
+  (** [filter dict ~f] returns a new dict, filtered with [f] *)
+  val filter : t -> f:(value -> bool) -> t
 end
 
 (** {{!Vector}Resizable array}  *)
@@ -6499,6 +6502,9 @@ module Term : sig
   (** [attrs term attrs] returns the set of [attributes] associated
       with a [term]*)
   val attrs : 'a t -> Dict.t
+
+  (** [with_attrs term attributess] returns a term with a new set of [attributes] *)
+  val with_attrs : 'a t -> Dict.t -> 'a t
 
   (** [get_attr term attr] returns a value of the a given [attr] in
       [term] *)

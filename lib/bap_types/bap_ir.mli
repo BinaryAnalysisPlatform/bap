@@ -92,6 +92,8 @@ module Term : sig
   val get_attr : 'a t -> 'b tag -> 'b option
   val del_attr : 'a t -> 'b tag -> 'a t
   val has_attr : 'a t -> 'b tag -> bool
+  val with_attrs : 'a t -> Dict.t -> 'a t
+
 
   val origin : tid tag
   val synthetic : unit tag

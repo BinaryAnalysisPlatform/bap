@@ -44,17 +44,6 @@ let marker parse tag x =
       Term.set_attr t tag x |> super#map_term cls
   end
 
-let register_unmarker ?name tag =
-  let name =
-    "unset-" ^ Option.value ~default:(Value.Tag.name tag) name in
-  let unmarker =
-    object
-      inherit Term.mapper as super
-      method! map_term cls t =
-        Term.del_attr t tag |> super#map_term cls
-    end in
-  Mappers.Nullary.register name unmarker
-
 let has tag = object
   inherit [bool] Term.visitor
   method! enter_term cls t _ = Term.has_attr t tag
@@ -85,7 +74,6 @@ let (+) pref suf = if suf = "" then pref else pref^"-"^suf
 
 let unit suf set is tag =
   Mappers.Nullary.register (set-tag+suf) (marker ident tag ());
-  register_unmarker tag;
   Predicates.Nullary.register (is-tag+suf) (has tag)
 
 module Markers = struct
@@ -136,9 +124,6 @@ end
 let expect exp got =
   raise (Parse_error (sprintf "Expected %s got %S" exp got))
 
-let register_unary_mapper name (parse, tag) =
-  Mappers.Unary.register name (marker parse tag);
-  register_unmarker ~name tag
 
 module Color = struct
   let colors = [
@@ -159,11 +144,13 @@ module Color = struct
     | Some c -> c
     | None -> expect grammar s
 
+
+
   let () =
-    let (:=) = register_unary_mapper in
-    "foreground" := color_t, foreground;
-    "background" := color_t, background;
-    "color"      := color_t, color
+    let (:=) = Mappers.Unary.register in
+    "foreground" := marker color_t foreground;
+    "background" := marker color_t background;
+    "color"      := marker color_t color
 
   module Colors = struct
     type t = color
@@ -181,12 +168,17 @@ module Color = struct
     "has-color"      := equal color_t color
 end
 
+
 module Comment = struct
-  let () = register_unary_mapper "comment" (ident, comment)
+  let () =
+    Mappers.Unary.register "comment" @@
+    marker ident comment;
 end
 
 module Python = struct
-  let () = register_unary_mapper "python" (ident, python)
+  let () =
+    Mappers.Unary.register "python" @@
+    marker ident python;
 end
 
 module Taint = struct
@@ -235,12 +227,9 @@ module Taint = struct
     "has-tainted-reg" := has_taint Taint.regs
 
   let () =
-    let register name tag =
-      Mappers.Nullary.register name (seed tag);
-      register_unmarker ~name tag in
-    let (:=) = register in
-    "taint-ptr" := Taint.ptr;
-    "taint-reg" := Taint.reg
+    let (:=) = Mappers.Nullary.register in
+    "taint-ptr" := seed Taint.ptr;
+    "taint-reg" := seed Taint.reg
 end
 
 module True = struct

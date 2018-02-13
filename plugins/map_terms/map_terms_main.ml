@@ -100,6 +100,18 @@ class marker (patts : Scheme.t) = object(self)
     super#map_term cls
 end
 
+let unmarker attr = object
+  inherit Term.mapper as super
+
+  method! map_term cls t =
+    let attrs =
+      Dict.filter
+        ~f:(fun v -> String.((Value.tagname v) <> attr)) (Term.attrs t) in
+    Term.with_attrs t attrs
+end
+
+let () = Mappers.Unary.register "unset-attr" unmarker
+
 let () = Map_terms_features.init ()
 
 let main patts file proj =
@@ -165,7 +177,7 @@ module Cmdline = struct
 
     let term_parent =
       `I (sprintf "$(b,(term-parent name))",
-          sprintf "Is satisfied when term is a parent for term with a given name")
+          sprintf "Is satisfied when a term is a parent for term with a given name")
 
     let def_lhs =
       `I (sprintf "$(b,(def-lhs VAR))",
