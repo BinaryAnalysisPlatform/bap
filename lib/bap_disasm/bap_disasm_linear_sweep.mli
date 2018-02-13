@@ -6,8 +6,8 @@ type insn = Bap_disasm_insn.t
 
 type t = (mem * insn option) list
 
-val sweep : arch -> mem -> t Or_error.t
+val sweep : ?backend:string -> arch -> mem -> t Or_error.t
 
 module With_exn : sig
-  val sweep : arch -> mem -> t
+  val sweep : ?backend:string -> arch -> mem -> t
 end
