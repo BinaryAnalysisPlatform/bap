@@ -6503,7 +6503,7 @@ module Term : sig
       with a [term]*)
   val attrs : 'a t -> Dict.t
 
-  (** [with_attrs term attributess] returns a term with a new set of [attributes] *)
+  (** [with_attrs term attributes] returns a term with a new set of [attributes] *)
   val with_attrs : 'a t -> Dict.t -> 'a t
 
   (** [get_attr term attr] returns a value of the a given [attr] in
