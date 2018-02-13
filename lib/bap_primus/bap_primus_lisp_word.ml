@@ -11,7 +11,7 @@ let char_of_string s =
   try Ok Char.(Int64.of_int @@ to_int @@ of_string s)
   with _ -> Error Bad_literal
 
-let read_char str = char_of_string (String.subo ~pos:1 str) 
+let read_char str = char_of_string (String.subo ~pos:1 str)
 
 let read_int str =
   try Ok (Int64.of_string (String.strip str))
@@ -33,7 +33,10 @@ let read id eq x =
   if String.is_empty x then Error Empty
   else if x.[0] = '?'
   then char id eq x
-  else if Char.is_digit x.[0]
+  else if Char.is_digit x.[0] ||
+          String.length x > 1 &&
+          Char.is_digit x.[1] &&
+          x.[0] = '-'
   then match String.split x ~on:':' with
     | [x] -> int id eq x
     | [x;typ] -> int ~typ id eq x
