@@ -547,7 +547,7 @@ module Std : sig
   (** Ordinal for representing equivalence. Useful, for indexing
       elements based on their equivalence. *)
   module Equiv : sig
-    type t
+    type t = equiv
     val to_int : t -> int
     include Regular.S with type t := t
   end
