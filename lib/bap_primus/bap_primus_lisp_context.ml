@@ -37,6 +37,10 @@ let of_project proj = Name.Map.of_alist_exn [
     "endian", features [endian proj]
   ]
 
+let merge xs ys : t = Map.merge xs ys ~f:(fun ~key:_ -> function
+    | `Left v | `Right v -> Some v
+    | `Both (x,y) -> Some (Feature.Set.union x y) )
+
 let sexp_of_context (name,values) =
   Sexp.List (List.map (name :: Set.to_list values)
                ~f:(fun x -> Sexp.Atom x))

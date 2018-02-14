@@ -65,7 +65,7 @@ let is_quoted s =
   let n = String.length s in
   n > 1 && s.[0] = '"' && s.[n - 1] = '"'
 
-let is_symbol s = 
+let is_symbol s =
   String.length s > 1 && s.[0] = '\''
 
 let unqoute s =
@@ -73,8 +73,8 @@ let unqoute s =
   then String.sub ~pos:1 ~len:(String.length s - 2) s
   else s
 
-let symbol s = 
-  if is_symbol s 
+let symbol s =
+  if is_symbol s
   then String.subo ~pos:1 s
   else s
 
@@ -203,7 +203,7 @@ module Parse = struct
           | None -> macro op (expand prog exps)
           | Some form -> form exps in
 
-      let sym ({id;eq;data=r} as s)  = 
+      let sym ({id;eq;data=r} as s)  =
         if is_symbol r then cons (Sym { s with data = symbol s.data})
         else match Var.read id eq r with
           | Error e -> fail (Bad_var_literal e) tree
@@ -287,7 +287,9 @@ module Parse = struct
   let constrained prog attrs =
     match Attribute.Set.get attrs Context.t with
     | None -> prog
-    | Some constraints -> Program.with_context prog constraints
+    | Some constraints ->
+      Program.with_context prog @@
+      Context.merge (Program.context prog) constraints
 
   let defun ?docs ?(attrs=[]) name p body prog gattrs tree =
     let attrs = parse_declarations gattrs attrs in
@@ -413,7 +415,7 @@ module Parse = struct
         body)
       } ->
       defmethod name params body state gattrs s
-    | {data=List ({data=Atom "defmethod"} :: _)} -> fail (Bad_def Meth) s 
+    | {data=List ({data=Atom "defmethod"} :: _)} -> fail (Bad_def Meth) s
     | _ -> state
 
 

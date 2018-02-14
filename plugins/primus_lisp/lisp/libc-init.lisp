@@ -22,15 +22,7 @@
            (context (abi "ms"))) ; actually we should overload by runtime
   0)
 
-
-;; Although CRT statically adds its stuff to each binary we will stub it,
-;; since CRT uses segmented memory model to access TLS data, and the this
-;; model is not currently supported by our lifter. Until we add a support
-;; at least partial, we need to bypass this function.
-
-
 (defun init (argc argv ubpev auxvec fini stinfo stack_on_entry)
-  ""
   (declare (external "__libc_start_main")
            (context (abi "ppc32")))
   (set R2 (+ stack_on_entry 0x7008))

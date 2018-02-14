@@ -284,3 +284,5 @@ type porder =
 
 val compare : t -> t -> porder
 val pp : Format.formatter -> t -> unit
+
+val merge : t -> t -> t
