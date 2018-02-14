@@ -28,6 +28,7 @@ module Dict : sig
   val change : t -> 'a tag -> ('a option -> 'a option) -> t
   val to_sequence : t -> (typeid * value) Sequence.t
   val data : t -> value Sequence.t
+  val filter : t -> f:(value -> bool) -> t
 end
 
 module type S = sig
