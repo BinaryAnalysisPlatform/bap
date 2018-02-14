@@ -107,6 +107,11 @@ let list_formats, list_formats_doc =
     "Print detailed information about available project printers" in
   Arg.(value & flag & info ["list-formats"] ~doc), doc
 
+let list_recipes =
+  let doc = "Print all known recipes" in
+  Arg.(value & opt ~vopt:(Some None) (some (some string)) None
+       & info ["list-recipes"; "show-recipes"] ~doc)
+
 let dump_formats () : Bap_fmt_spec.t list Term.t =
   let fmts = Project.available_writers () |>
              List.map ~f:(fun (n,_,_) -> n,n) in

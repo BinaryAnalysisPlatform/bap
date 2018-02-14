@@ -6,6 +6,7 @@ val logdir : string option Term.t
 val loader : unit -> string Term.t
 val disassembler : unit -> string Term.t
 val list_formats : bool Term.t
+val list_recipes : string option option Term.t
 val list_formats_doc : string
 val dump_formats : unit -> fmt_spec list Term.t
 val source_type : source Term.t

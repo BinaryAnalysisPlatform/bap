@@ -51,6 +51,7 @@ let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
   exit 0
 
+
 let args filename argv =
   let passes = Project.passes () |>
                List.map ~f:Project.Pass.name in
@@ -228,9 +229,13 @@ let get_logdir argv =
   | _ -> None
 
 
+let recipe_paths = [
+  Filename.current_dir_name;
+  Config.datadir
+]
+
 let eval_recipe name =
-  let paths = [Filename.current_dir_name] in
-  match Recipe.load ~paths name with
+  match Recipe.load ~paths:recipe_paths name with
   | Ok r ->
     at_exit (fun () -> Recipe.cleanup r);
     Array.concat [Sys.argv; Recipe.argv r]
@@ -239,12 +244,59 @@ let eval_recipe name =
       Recipe.pp_error err;
     exit 1
 
+
+let print_recipe r =
+  printf "%s@\nRecipe Arguments: %s@\n"
+    (Recipe.descr r)
+    (String.concat_array ~sep:" " (Recipe.argv r))
+
+let summary str =
+  match String.index str '\n' with
+  | None -> str
+  | Some p -> String.subo ~len:p str
+
+let print_recipes_and_exit () =
+  let (/) = Filename.concat in
+  List.iter recipe_paths ~f:(fun dir ->
+      if Sys.file_exists dir &&
+         Sys.is_directory dir
+      then Array.iter (Sys.readdir dir) ~f:(fun file ->
+          let file = dir / file in
+          if Filename.check_suffix file ".recipe"
+          then
+            let name = Filename.chop_suffix file ".recipe" in
+            match Recipe.load ~paths:recipe_paths name with
+            | Ok r ->
+              printf "%-32s %s\n" name (summary (Recipe.descr r));
+              Recipe.cleanup r
+            | Error err ->
+              eprintf "Malformed recipe %s: %a@\n%!" file
+                Recipe.pp_error err));
+  exit 0
+
+let handle_recipes = function
+  | None -> print_recipes_and_exit ()
+  | Some name -> match Recipe.load ~paths:recipe_paths name with
+    | Ok r ->
+      print_recipe r;
+      Recipe.cleanup r;
+      exit 0
+    | Error err ->
+      eprintf "Malformed recipe: %a@\n%!" Recipe.pp_error err;
+      exit 1
+
+
+
+let is_specified opt ~default =
+  Cmdliner.Term.eval_peek_opts opt |>
+  fst |> Option.value ~default
+
 let run_loader argv =
   let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] argv in
-  let print_formats =
-    Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
-    fst |> Option.value ~default:false in
+  let print_formats = is_specified Bap_cmdline_terms.list_formats ~default:false in
+  let print_recipes = is_specified Bap_cmdline_terms.list_recipes ~default:None  in
   if print_formats then print_formats_and_exit ();
+  Option.iter print_recipes ~f:handle_recipes;
   argv,passes
 
 let parse passes argv =

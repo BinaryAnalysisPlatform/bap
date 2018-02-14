@@ -10,4 +10,6 @@ val argv : t -> string array
 
 val cleanup : t -> unit
 
+val descr : t -> string
+
 val pp_error : Format.formatter -> error -> unit

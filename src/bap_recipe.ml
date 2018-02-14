@@ -180,6 +180,8 @@ let rec args t =
 
 let argv t = Array.of_list (args t)
 
+let descr t = t.descr
+
 let rec cleanup t =
   Map.iter t.files ~f:Sys.remove;
   List.iter t.loads ~f:cleanup
