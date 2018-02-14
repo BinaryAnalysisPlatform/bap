@@ -90,5 +90,5 @@ let start ?logdir () =
   let ppf = open_log_channel logdir in
   Stream.observe Bap_event.stream (function
       | Bap_event.Log.Message message -> print_message ppf message
-      | e -> fprintf ppf "%a@." Bap_event.pp e);
+      | _ -> ());
   log_plugin_events ()
