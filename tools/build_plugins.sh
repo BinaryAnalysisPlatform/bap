@@ -2,8 +2,7 @@
 
 set -ue
 
-PLUGINS_DIR=/home/ivg/.opam/4.05.0/lib/bap
-
+. $(dirname $0)/bap_config
 
 
 build_plugin() {
