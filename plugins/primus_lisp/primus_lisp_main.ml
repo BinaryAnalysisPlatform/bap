@@ -57,6 +57,7 @@ module Signals(Machine : Primus.Machine.S) = struct
   let sym x = Value.Symbol.to_value x
   let var v = sym (Var.name v)
 
+  let unit f () = [f ()]
   let one f x = [f x]
   let pair (f,g) (x,y) = [f x; g y]
 
@@ -107,6 +108,8 @@ module Signals(Machine : Primus.Machine.S) = struct
       signal Primus.Linker.Trace.call parameters call;
       signal Primus.Linker.Trace.return parameters call;
       signal interrupt int one;
+      Lisp.signal Primus.Machine.init (fun () -> Machine.return []);
+      Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
     ]
 
 end

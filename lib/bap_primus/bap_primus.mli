@@ -238,9 +238,12 @@ module Std : sig
         and is registered with the [register_component] function.*)
     module Machine : sig
 
+      (** [init] event occurs just after all components have been
+         initialized, and before the execution starts*)
+      val init : unit observation
+
       (** The [finished] event occurs when the machine terminates.   *)
       val finished : unit observation
-
 
       (** [exn_raised exn] occurs every time an abnormal control flow
           is initiated *)
