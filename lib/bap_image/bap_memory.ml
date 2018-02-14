@@ -419,7 +419,8 @@ include Printable.Make(struct
         (Word.(to_int64 word) |> ok_exn)
 
     let pp_small fmt t =
-      Format.fprintf fmt "%a: " print_word (Addr.signed t.addr);
+      let pp_addr ppf = Addr.pp_generic ~prefix:`none ~case:`lower ppf in
+      Format.fprintf fmt "%a: " pp_addr t.addr;
       iter t ~f:(fun b -> fprintf fmt "%a " print_word b)
 
     let pp fmt t =

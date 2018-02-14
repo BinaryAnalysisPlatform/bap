@@ -1164,8 +1164,9 @@ module Std : sig
     (** [of_binary ?width endian num] creates a bitvector from a string
         interpreted as a sequence of bytes in a specified order.
 
-        The result is always positive and unsigned. [num] argument is
-        not shared.  [width] defaults to [String.length num] *)
+        The result is always positive and unsigned. The [num] argument is
+        not shared. [width] defaults to the length of [num] in bits,
+        i.e. [8 * String.length num]. *)
     val of_binary : ?width:int -> endian -> string -> t
 
     (** {2 Conversions to OCaml built in integer types }  *)
@@ -4067,6 +4068,9 @@ module Dict : sig
 
   (** [data dict] is a sequence of all dict elements  *)
   val data : t -> value seq
+
+  (** [filter dict ~f] returns a new dict, filtered with [f] *)
+  val filter : t -> f:(value -> bool) -> t
 end
 
 (** {{!Vector}Resizable array}  *)
@@ -5776,13 +5780,13 @@ module Disasm_expert : sig
 
     (** [Linear.sweep arch mem] will perform a linear sweep
         disassembly on the specified memory [mem] *)
-    val sweep : arch -> mem -> t Or_error.t
+    val sweep : ?backend:string -> arch -> mem -> t Or_error.t
 
     module With_exn : sig
       (** [Linear.With_exn.sweep] same as
           [Linear_sweep.memory], but raises an exception, instead of
           returning [Or_error] monad *)
-      val sweep : arch -> mem -> t
+      val sweep : ?backend:string -> arch -> mem -> t
     end
   end
 
@@ -6643,6 +6647,9 @@ module Term : sig
   (** [attrs term attrs] returns the set of [attributes] associated
       with a [term]*)
   val attrs : 'a t -> Dict.t
+
+  (** [with_attrs term attributes] returns a term with a new set of [attributes] *)
+  val with_attrs : 'a t -> Dict.t -> 'a t
 
   (** [get_attr term attr] returns a value of the a given [attr] in
       [term] *)

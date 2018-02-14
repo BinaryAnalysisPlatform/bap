@@ -15,6 +15,6 @@ Library map_terms_plugin
   Path: plugins/map_terms
   FindlibName: bap-plugin-map_terms
   BuildDepends: bap, bap-bml
-  InternalModules: Map_terms_main
+  InternalModules: Map_terms_main, Map_terms_features
   XMETADescription: map terms using BML DSL
   XMETAExtraLines:  tags="pass"

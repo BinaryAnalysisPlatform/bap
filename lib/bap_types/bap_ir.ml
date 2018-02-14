@@ -716,6 +716,7 @@ module Term = struct
   let get_attr t = Dict.find t.dict
   let del_attr t tag = {t with dict = Dict.remove t.dict tag}
   let has_attr t tag = get_attr t tag <> None
+  let with_attrs t dict = {t with dict}
 
   let length t p = Array.length (t.get p.self)
 

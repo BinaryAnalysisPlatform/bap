@@ -16,9 +16,9 @@ let lifter_of_arch arch =
   Target.lift
 
 
-let sweep arch mem : (mem * insn option) list Or_error.t =
+let sweep ?(backend="llvm") arch mem : (mem * insn option) list Or_error.t =
   let open Or_error.Monad_infix in
-  Dis.with_disasm ~backend:"llvm" (Arch.to_string arch) ~f:(fun dis ->
+  Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
       let dis = Dis.store_asm dis in
       let dis = Dis.store_kinds dis in
       let lift = lifter_of_arch arch in
@@ -34,5 +34,5 @@ let sweep arch mem : (mem * insn option) list Or_error.t =
 
 
 module With_exn = struct
-  let sweep arch mem = ok_exn (sweep arch mem)
+  let sweep ?backend arch mem = ok_exn (sweep ?backend arch mem)
 end

@@ -4,13 +4,15 @@
 *.mllib
 *.mlpack
 *.odocl
+*.un~
+*.sw[op]
 /*.1
 /*.bak
 /*.byte
 /*.docdir
 /*.native
 /Makefile
-/_build/
+_build/
 /_tags
 /configure
 /doc

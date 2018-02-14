@@ -157,10 +157,7 @@ let source_type : source Term.t =
             needed, then a version number can be specifed, separated
             from the format by a dash, e.g., `myproj.marshal`,
             `myproj.sexp-1.0', etc. If the format is not specified,
-            then the default reader will be used. The name can be also
-            of the form `<name>-custom', where <name> should be a name
-            of factory method registered for a file source in project
-            factory." in
+            then the default reader will be used." in
   Arg.(value & opt Bap_source_type.t `Binary & info ["source-type"]
          ~doc ~docv:"NAME")
 

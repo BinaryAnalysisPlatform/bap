@@ -2,7 +2,7 @@ open Bap.Std
 
 type t = [
   | `Binary
-  | `File of string
+  | `Project
   | `Memory of arch
 ] [@@deriving sexp]
 
