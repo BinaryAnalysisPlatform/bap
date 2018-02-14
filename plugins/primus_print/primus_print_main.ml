@@ -134,12 +134,12 @@ let read_rules filename =
     exit 1
 
 let setup_rules_processor out rules =
-    rules |>
-    List.concat_map ~f:read_rules |>
-    List.map ~f:process_rule |>
-    List.iter ~f:(fun facts ->
-        Stream.observe facts
-          (List.iter ~f:(fprintf out "%a@\n" Sexp.pp_hum)))
+  rules |>
+  List.concat_map ~f:read_rules |>
+  List.map ~f:process_rule |>
+  List.iter ~f:(fun facts ->
+      Stream.observe facts
+        (List.iter ~f:(fprintf out "%a@\n%!" Sexp.pp_hum)))
 
 
 

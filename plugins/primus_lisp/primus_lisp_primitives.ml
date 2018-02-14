@@ -250,6 +250,14 @@ module GreaterEqual(Machine : Primus.Machine.S) = struct
   let rec run = ordered Value.(>=)
 end
 
+module SymbolConcat(Machine : Primus.Machine.S) = struct
+  include Lib(Machine)
+  let run syms =
+    Machine.List.map syms ~f:Value.Symbol.of_value >>= fun strs ->
+    Value.Symbol.to_value (String.concat strs)
+
+end
+
 module Stub(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = Lisp.failf "not implemented"
@@ -297,6 +305,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def ">" (all a @-> bool) (module Greater);
       def "<=" (all a @-> bool) (module LessEqual);
       def ">=" (all a @-> bool) (module GreaterEqual);
+      def "symbol-concat" (all sym @-> sym) (module SymbolConcat);
     ]
 end
 
