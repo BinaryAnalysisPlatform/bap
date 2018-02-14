@@ -111,7 +111,7 @@ module Program(Conf : Mc_options.Provider) = struct
     let input = read_input options.src in
     let mem = create_memory arch input addr in
     let backend = options.disassembler in
-    Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
+    Dis.with_disasm ~backend ?cpu:options.cpu (Arch.to_string arch) ~f:(fun dis ->
         let bytes = Dis.run dis mem ~return:ident ~init:0
             ~stop_on:[`Valid] ~invalid:(bad_insn addr)
             ~hit:(fun state mem insn bytes ->
@@ -196,8 +196,8 @@ module Cmdline = struct
     let doc = "Stop after the first instruction is decoded" in
     Arg.(value & flag & info ["only-one"] ~doc)
 
-  let create a b c d e f g h i j =
-    Mc_options.Fields.create a b c d e f g h i j
+  let create a b c d e f g h i j k =
+    Mc_options.Fields.create a b c d e f g h i j k
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
@@ -230,7 +230,8 @@ module Cmdline = struct
              bap-mc  --show-inst --show-bil");
         `S "SEE ALSO";
         `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
-    Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
+    Term.(const create $(disassembler ()) $src $addr $only_one $arch
+          $(cpu ()) $show_insn_size
           $insn_formats $bil_formats $bir_formats $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.version
 

@@ -223,6 +223,7 @@ let symbolize_synthetic prog insns spec =
 
 let create_exn
     ?disassembler:backend
+    ?cpu
     ?brancher
     ?symbolizer
     ?rooter
@@ -249,7 +250,7 @@ let create_exn
     let disassemble () =
       let run mem =
         let dis =
-          Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
+          Disasm.With_exn.of_mem ?backend ?cpu ?brancher ?rooter arch mem in
         Disasm.errors dis |>
         List.iter ~f:(fun e -> warning "%a" pp_disasm_error e);
         Disasm.cfg dis in
@@ -300,10 +301,10 @@ let create_exn
   loop ()
 
 let create
-    ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input =
+    ?disassembler ?cpu ?brancher ?symbolizer ?rooter ?reconstructor input =
   Or_error.try_with ~backtrace:true (fun () ->
       create_exn
-        ?disassembler ?brancher ?symbolizer ?rooter ?reconstructor input)
+        ?disassembler ?cpu ?brancher ?symbolizer ?rooter ?reconstructor input)
 
 let restore_state {state={State.tids; name}} =
   Tid.Tid_generator.store tids;

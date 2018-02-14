@@ -80,6 +80,10 @@ let disassembler () : string Term.t =
       Arg.doc_alts_enum backends in
     Arg.(value & opt (enum backends) "llvm" & info ["disassembler"] ~doc)
 
+let cpu () : string option Term.t =
+  let doc = "Target cpu" in
+  Arg.(value & opt (some string) None & info ["cpu"] ~docv:"CPU" ~doc)
+
 let rooters_mem = List.mem ~equal:[%compare.equal : string * string]
 
 let symbols () : string list Term.t =

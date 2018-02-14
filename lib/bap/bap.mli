@@ -5663,7 +5663,7 @@ module Disasm_expert : sig
       | `Failed_to_lift of mem * Basic.full_insn * Error.t
     ] [@@deriving sexp_of]
 
-    (** [run ?backend ?brancher ?rooter arch mem] disassemble and
+    (** [run ?backend ?cpu ?brancher ?rooter arch mem] disassemble and
         reconstruct a CFG of the code in [mem], assuming
         architecture [arch].
 
@@ -5674,6 +5674,7 @@ module Disasm_expert : sig
         {!Rooter.empty}). *)
     val run :
       ?backend:string ->
+      ?cpu:string ->
       ?brancher:brancher ->
       ?rooter:rooter -> arch -> mem -> t Or_error.t
 
@@ -6067,34 +6068,37 @@ module Disasm : sig
   (** [create cfg]   *)
   val create : cfg -> t
 
-  (** [disassemble ?roots arch mem] disassemble provided memory region
-      [mem] using best available algorithm and backend for the specified
-      [arch]. Roots, if provided, should point to memory regions, that
-      are believed to contain code. At best, this should be a list of
-      function starts. If no roots are provided, then the starting
-      address of the provided memory [mem] will be used as a root.
-
-      The returned value will contain all memory reachable from the
-      a given set of roots, at our best knowledge. *)
+  (** [of_mem ?backend ?cpu ?brancher ?rooter arch mem] disassemble
+      provided memory region [mem] using best available algorithm and
+      backend for the specified [arch]. Rooter, if provided, should
+      return a list of pointers to memory regions, that are believed
+      to contain code. At best, this should be a list of function
+      starts. If no roots are provided, then the starting address of
+      the provided memory [mem] will be used as a root. The returned
+      value will contain all memory reachable from the a given set of
+      roots, at our best knowledge. *)
   val of_mem :
     ?backend:string ->
+    ?cpu:string ->
     ?brancher:brancher ->
     ?rooter:rooter -> arch -> mem -> t Or_error.t
 
-  (** [disassemble_image image] disassemble a given image.
-      Will take executable segments of the image and disassemble it,
-      applying [disassemble] function. If no roots are specified, then
-      symbol table will be used as a source of roots. If file doesn't
-      contain one, then entry point will be used.
-  *)
+  (** [of_image ?backend ?cpu ?brancher ?rooter image] disassemble a
+      given image. Will take executable segments of the image and
+      disassemble it, applying [of_mem] function. If rooter is not
+      specified, then symbol table will be used as a source of
+      roots. If file doesn't contain one, then entry point will be
+      used. *)
   val of_image :
     ?backend:string ->
+    ?cpu:string ->
     ?brancher:brancher -> ?rooter:rooter -> image -> t Or_error.t
 
-  (** [disassemble_file ?roots path] takes a path to a binary and
-      disassembles it  *)
+  (** [of_file ?backend ?cpu ?brancher ?rooter path] takes a path to a
+      binary and disassembles it *)
   val of_file :
     ?backend:string ->
+    ?cpu:string ->
     ?brancher:brancher -> ?rooter:rooter ->
     ?loader:string -> string -> t Or_error.t
 
@@ -6103,14 +6107,14 @@ module Disasm : sig
   module With_exn : sig
 
     (** see {!Disasm.of_mem}  *)
-    val of_mem   : ?backend:string -> ?brancher:brancher ->
+    val of_mem   : ?backend:string -> ?cpu:string -> ?brancher:brancher ->
       ?rooter:rooter -> arch -> mem -> t
     (** see {!Disasm.of_image}  *)
-    val of_image : ?backend:string -> ?brancher:brancher ->
+    val of_image : ?backend:string -> ?cpu:string -> ?brancher:brancher ->
       ?rooter:rooter -> image -> t
 
     (** see {!Disasm.of_file} *)
-    val of_file  : ?backend:string -> ?brancher:brancher ->
+    val of_file  : ?backend:string -> ?cpu:string -> ?brancher:brancher ->
       ?rooter:rooter -> ?loader:string -> string -> t
   end
 
@@ -7695,7 +7699,7 @@ module Project : sig
   (** IO interface to a project data structure.  *)
   include Data.S with type t := t
 
-  (** [from_file filename] creates a project from a provided input
+  (** [create input] creates a project from a provided input
       source. The reconstruction is a multi-pass process driven by
       the following input variables, provided by a user:
 
@@ -7819,6 +7823,7 @@ module Project : sig
   *)
   val create :
     ?disassembler:string ->
+    ?cpu:string ->
     ?brancher:brancher source ->
     ?symbolizer:symbolizer source ->
     ?rooter:rooter source ->

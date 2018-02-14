@@ -114,7 +114,7 @@ let main o =
     and brancher = brancher o
     and reconstructor = reconstructor o
     and symbolizer = symbolizer o in
-    Project.create input ~disassembler:o.disassembler
+    Project.create input ~disassembler:o.disassembler ?cpu:o.cpu
       ?brancher ?rooter ?symbolizer ?reconstructor  |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project ->
@@ -198,8 +198,8 @@ let program_info =
 let program source =
   let create
       passopt
-      a b c d e f g i j k = (Bap_options.Fields.create
-                               a b c d e f g i j k []), passopt in
+      a b c d e f g i j k l = (Bap_options.Fields.create
+                               a b c d e f g i j k l []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -212,6 +212,7 @@ let program source =
         $passopt
         $filename
         $(disassembler ())
+        $(cpu ())
         $(loader ())
         $(dump_formats ())
         $source_type

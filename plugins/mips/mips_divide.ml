@@ -116,8 +116,10 @@ let dmodulou cpu ops =
 
 let () =
   "SDIV" >> div;
+  "DIV"  >> div_r6;
   "MOD"  >> modulo;
   "UDIV" >> divu;
+  "DIVU" >> divu_r6;
   "MODu" >> modulou;
   "DDIV" >> ddiv;
   "DMOD" >> dmodulo;
