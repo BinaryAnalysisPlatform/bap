@@ -98,16 +98,16 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let do_fork blk ~child =
     Machine.current () >>= fun pid ->
-    Machine.fork () >>= fun () ->
-    Machine.current () >>= fun id ->
-    if pid = id then
-      Machine.Global.update state ~f:(fun t -> {
-            t with forkpoints =
-                     Set.add t.forkpoints (Term.tid blk)
-          }) >>| fun () -> id
+    Machine.Global.get state >>= fun t ->
+    if Set.mem t.forkpoints (Term.tid blk)
+    then Machine.return pid
     else
-      child () >>= fun () ->
-      Machine.switch pid >>| fun () -> id
+      Machine.fork () >>= fun () ->
+      Machine.current () >>= fun id ->
+      if pid = id then Machine.return id
+      else
+        child () >>= fun () ->
+        Machine.switch pid >>| fun () -> id
 
 
   let fork blk  =
@@ -142,10 +142,7 @@ module Main(Machine : Primus.Machine.S) = struct
     let open Primus.Pos in
     match level with
     | Def {up={me=blk}; me=def} when is_last blk def ->
-      Machine.Global.get state >>= fun t ->
-      if Set.mem t.forkpoints (Term.tid blk)
-      then Machine.return ()
-      else fork blk
+      fork blk
     | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp
     | _ -> Machine.return ()
 
@@ -165,11 +162,18 @@ module Main(Machine : Primus.Machine.S) = struct
     | false -> map addr
     | true -> Machine.return ()
 
-  let init () =
-    Primus.Interpreter.loading >>> make_loadable >>= fun () ->
-    Primus.Interpreter.storing >>> make_writable >>= fun () ->
+  let mark_visited blk =
+    Machine.Global.update state ~f:(fun t -> {
+          t with forkpoints =
+                   Set.add t.forkpoints (Term.tid blk)
+        })
 
-    Primus.Interpreter.leave_pos >>> step
+  let init () = Machine.sequence [
+      Primus.Interpreter.loading >>> make_loadable;
+      Primus.Interpreter.storing >>> make_writable;
+      Primus.Interpreter.leave_pos >>> step;
+      Primus.Interpreter.leave_blk >>> mark_visited;
+    ]
 end
 
 open Config;;
