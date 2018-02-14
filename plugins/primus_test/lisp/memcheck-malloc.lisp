@@ -9,5 +9,4 @@
 
 (defmethod call-return (name len ptr)
   (when (= name 'malloc)
-    (msg "calling (memcheck-acquire $0 $1)" ptr len)
     (memcheck-acquire 'malloc ptr len)))
