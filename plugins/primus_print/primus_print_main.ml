@@ -130,7 +130,7 @@ let read_rules filename =
   | Ok rules -> rules
   | Error err ->
     Bare.Rule.report_error ~filename err_formatter err;
-    pp_flush_formatter err_formatter;
+    fprintf err_formatter "%!";
     exit 1
 
 let setup_rules_processor out rules =
