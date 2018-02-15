@@ -8,17 +8,16 @@
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
 The Binary Analysis Platform is a reverse engineering and program analysis platform 
-that targets binaries, i.e., compiled programs without the source code. BAP supports 
-multiple architectures (more than 30), though the first tier architectures are x86, x86-64, 
-and ARM. BAP operates by disassembling and lifting the binary code into the RISC-like BAP 
-Instruction Language ([BIL](https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf)). 
-Thus the analysis, implemented in BAP, is architecture independent in a sense that it will work equally
+that works with binary code and doesn't require the source code. BAP supports 
+multiple architectures x86, x86-64, and ARMv7, PowerPC, and MIPS. BAP disassembles and lifts binary code into 
+the RISC-like BAP Instruction Language ([BIL](https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf)). 
+Program analysis is performed on BIL representation and is architecture independent in a sense that it will work equally
 well for all the supported architectures. The platform comes with a set of tools, libraries, and plugins. 
 The main purpose of BAP is to provide a toolkit for automated program analysis. BAP is written 
 in [OCaml](https://ocaml.org/) and it is the preferred language to write analysis, we have bindings to 
 [C](https://github.com/BinaryAnalysisPlatform/bap-bindings),
 [Python](https://github.com/BinaryAnalysisPlatform/bap-python) and
-[Rust](https://github.com/maurer/bap-rust).
+[Rust](https://github.com/maurer/bap-rust). The Primus Framework also provide a Lisp-like DSL for writing program analysis tools.
 
 BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by various grants 
 from the United States Department of Defense, Siemens AG, and the Korea government, see [sponsors](#Sponsors) for more information.  
@@ -52,23 +51,16 @@ sudo dpkg -i {bap,libbap,libbap-dev}_1.3.0.deb
 ## From sources
 
 The binary release doesn't contain OCaml runtime, and is suitable only
-if you are not going to extend BAP using OCaml programming language
-(the recommended way). We recommend to use the OPAM package manager to
-install BAP and a development environment.  After you've successfully
-[installed](https://opam.ocaml.org/doc/Install.html) OPAM, do the
-following:
+if you are not going to extend BAP using OCaml programming language. 
+If you want to write your own analysis in OCaml, we recommend to use the OPAM package manager to
+install BAP and the development environment.  After you've successfully
+[installed](https://opam.ocaml.org/doc/Install.html) OPAM, run the
+following commands:
 
 ```bash
 opam init --comp=4.03.0              # install the compiler
 eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
-```
-
-To use a specific version of llvm (we support 3.4, 3.8, and 4.0) specify the desired version explicitly via the `conf-llvm` package, e.g., 
-
-```bash 
-   opam depext --install conf-llvm=3.8
-   opam depext --install conf-llvm=3.8 bap
 ```
 
 Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation) 
