@@ -129,9 +129,10 @@ let read_rules filename =
   match Bare.Rule.from_file filename with
   | Ok rules -> rules
   | Error err ->
-    Bare.Rule.report_error ~filename err_formatter err;
-    fprintf err_formatter "%!";
-    exit 1
+    let err = asprintf "%a"
+        (Bare.Rule.report_error ~filename) err in
+    invalid_arg err
+
 
 let setup_rules_processor out rules =
   rules |>

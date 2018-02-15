@@ -15,8 +15,8 @@ let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
   | Ok prog -> prog
   | Error err ->
-    eprintf "%a@\n" Primus.Lisp.Load.pp_error err;
-    exit 2
+    let err = asprintf "%a" Primus.Lisp.Load.pp_error err in
+    invalid_arg err
 
 let dump_program prog =
   let margin = get_margin () in

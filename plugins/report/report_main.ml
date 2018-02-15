@@ -53,7 +53,7 @@ module Ansi = struct
   let pp_reset ppf = fprintf ppf "\027[0m"
 end
 
-let task_second {created; updated} =
+let task_second {created} =
   duration created @@ Unix.gettimeofday ()
 
 
@@ -120,11 +120,11 @@ let do_render_progress () =
   Hashtbl.keys tasks |>
   List.sort ~cmp:String.compare |>
   List.iteri ~f:(fun line name ->
-        let level = level_of_name name in
-        let path = String.split name ~on:'/' in
-        match Hashtbl.find tasks name with
-        | None -> ()
-        | Some slot -> render_slot line level path slot);
+      let level = level_of_name name in
+      let path = String.split name ~on:'/' in
+      match Hashtbl.find tasks name with
+      | None -> ()
+      | Some slot -> render_slot line level path slot);
   pp "%!"
 
 let render_progress tick =
@@ -174,8 +174,6 @@ let enable () =
   let ticks = sample ~interval @@
     Stream.merge majors Event.stream ~f:(fun () _ -> ()) in
   Stream.observe ticks render_progress;
-  at_exit @@ fun () ->
-  pp "%t" Ansi.pp_clear;
   render_progress ()
 
 let print_events () =
