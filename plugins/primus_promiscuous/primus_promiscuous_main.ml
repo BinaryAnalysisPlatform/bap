@@ -168,7 +168,20 @@ module Main(Machine : Primus.Machine.S) = struct
                    Set.add t.forkpoints (Term.tid blk)
         })
 
+  let free_vars proj =
+    Term.enum sub_t (Project.program proj) |>
+    Seq.map ~f:Sub.free_vars |>
+    Seq.to_list_rev |>
+    Var.Set.union_list
+
+  let setup_vars =
+    Machine.get () >>= fun proj ->
+    Set.to_sequence (free_vars proj) |>
+    Machine.Seq.iter ~f:(fun var ->
+        Env.add var (Primus.Generator.static 0))
+
   let init () = Machine.sequence [
+      setup_vars;
       Primus.Interpreter.loading >>> make_loadable;
       Primus.Interpreter.storing >>> make_writable;
       Primus.Interpreter.leave_pos >>> step;
