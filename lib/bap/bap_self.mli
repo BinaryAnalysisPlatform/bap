@@ -18,6 +18,11 @@ module Create() : sig
   val warning_formatter : formatter
   val error_formatter : formatter
 
+  val report_progress :
+    ?task:string ->
+    ?note:string ->
+    ?stage:int ->
+    ?total:int -> unit -> unit
 
   module Config : sig
     val version : string

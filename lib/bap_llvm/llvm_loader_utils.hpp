@@ -44,7 +44,9 @@ std::string smart_quoted(const std::string &s) {
 // ...
 struct ogre_doc {
 
-    explicit ogre_doc() : s_(info()), closed_(true) { *s_ << std::boolalpha; }
+    explicit ogre_doc() : s_(info()), closed_(true) {
+        *s_ << std::boolalpha << std::hex << std::showbase;
+    }
 
     void fail(const std::string &m) { s_.fail(m); }
 

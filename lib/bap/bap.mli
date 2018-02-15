@@ -789,6 +789,134 @@ module Std : sig
     end
   end
 
+
+  (** Balanced Interval Tree.
+
+      Interval trees are used to build efficient mappings from
+      intervals to arbitrary data.
+
+      The interval tree may contain overlapping intervals and allows
+      inserting and removing elements.
+
+      The interval tree is implemented using AVL trees.
+  *)
+  module Interval_tree : sig
+    module type Interval = sig
+
+      (** interval representation *)
+      type t [@@deriving compare, sexp_of]
+
+      (** point representation *)
+      type point [@@deriving compare, sexp_of]
+
+      (** the lower bound of an interval *)
+      val lower : t -> point
+
+      (** the upper bound of an interval *)
+      val upper : t -> point
+    end
+
+    (** The Interval Tree Interface. *)
+    module type S = sig
+
+      (** interval tree abstract representation *)
+      type 'a t [@@deriving sexp_of]
+
+      (** the interval *)
+      type key
+
+      (** the point *)
+      type point
+
+      (** [empty x] an empty interval tree *)
+      val empty : 'a t
+
+      (** [singleton k x] creates an interval tree that has only one
+          mappig - from the key [k] to data [x] *)
+      val singleton : key -> 'a -> 'a t
+
+      (** [least t] returns the least bound of the tree [t]. Returns
+          [None] if [t] is empty. *)
+      val least : 'a t -> point option
+
+      (** [greatest t] returns the greatest bound of the tree [t]. Returns
+          [None] if [t] is empty. *)
+      val greatest : 'a t -> point option
+
+      (** [min_bining t] returns the least binding in the tree *)
+      val min_binding : 'a t -> (key * 'a) option
+
+      (** [max_binding t] returns the greatest binding in the tree *)
+      val max_binding : 'a t -> (key * 'a) option
+
+      (** [add t k x] adds a new binding (k,x) to the mappingn *)
+      val add : 'a t -> key -> 'a -> 'a t
+
+      (** [dominators t k] returns bindings of all intervals that
+          include [k]. *)
+      val dominators : 'a t -> key -> (key * 'a) Sequence.t
+
+      (** [intersections t k] returns bindings of all intervals that
+          share some points with [k] *)
+      val intersections : 'a t -> key -> (key * 'a) Sequence.t
+
+      (** [intersects t k] is [true] iff [t] contains an interval
+          that intersects with [k] *)
+      val intersects : 'a t -> key -> bool
+
+      (** [dominates t k] is [true] iff all intervals in [t] are
+          included in [k]. *)
+      val dominates : 'a t -> key -> bool
+
+      (** [contains t p] is [true] if [p] belongs to at least one
+          interval in [t] *)
+      val contains : 'a t -> point -> bool
+
+      (** [lookup t p] returns bindings of all intervals that
+          contain the given point *)
+      val lookup : 'a t -> point -> (key * 'a) Sequence.t
+
+      (** [map k ~f] maps all data values with the function [f] *)
+      val map : 'a t -> f:('a -> 'b) -> 'b t
+
+      (** [mapi k ~f] maps all bindings with the function [f] *)
+      val mapi : 'a t -> f:(key -> 'a -> 'b) -> 'b t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [false] are removed. *)
+      val filter : 'a t -> f:('a -> bool) -> 'a t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [None] are removed and all others are mapped. *)
+      val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
+
+      (** [filter t ~f] returns a tree where all elements for which
+          [f] returned [None] are removed and all others are mapped. *)
+      val filter_mapi : 'a t -> f:(key -> 'a -> 'b option) -> 'b t
+
+      (** [remove t k] removes all bindings to the key [k] *)
+      val remove : 'a t -> key -> 'a t
+
+      (** [remove_intersections t k] removes all bindings that
+          intersect with the key [k].  *)
+      val remove_intersections : 'a t -> key -> 'a t
+
+      (** [remove_dominators t k] removes all bindings that are
+          included (dominated by) in the interval [k] *)
+      val remove_dominators : 'a t -> key -> 'a t
+
+      (** [to_sequence t] returns all bindings in [t] *)
+      val to_sequence : 'a t -> (key * 'a) Sequence.t
+
+      include Container.S1 with type 'a t := 'a t
+    end
+
+    module Make(Interval : Interval) : S
+      with type key := Interval.t
+       and type point := Interval.point
+
+  end
+
   type value               [@@deriving bin_io, compare, sexp]
   type dict                [@@deriving bin_io, compare, sexp]
 
@@ -2322,7 +2450,7 @@ val mem64_t : size -> typ
     This is particulary useful for representing variables in SSA
     form.
 
-    By default, comparison functions takes indices into account. In
+    By default, comparison function takes indices into account. In
     order to compare two variables regardless their index use [same]
     function, or compare with [base x].
 
@@ -2388,7 +2516,7 @@ end
 (** Base class for evaluation contexts.
 
     All interpreters evaluate terms under a given context,
-    wrapped into a state monad. All context must be structural
+    wrapped into a state monad. All context types must be structural
     subtypes of the [Context.t].
 
     The base context is just a mapping from variables to values.
@@ -3395,19 +3523,20 @@ module Stmt : sig
   *)
   val is_referenced : var -> t -> bool
 
-  (** [normalize xs] produces a normalized BIL program with the same[^1]
-      semantics but in the BIL normalized form. Precondition: [xs] is
-      well-typed.
+  (** [normalize ?normalize_exp xs] produces a normalized BIL program
+      with the same[^1] semantics but in the BIL normalized
+      form (BNF). There are two normalized forms, both described
+      below. The first form (BNF1) is more readable, the second form
+      (BNF2) is more strict, but sometimes yields a code, that is hard
+      for a human to comprehend. The [BNF1] is the default, to request
+      [BNF2] pass [normalize_exp:true].
 
-      The BIL Normalized Form (BNF) is a subset of the BIL
+      Precondition: [xs] is well-typed.
+
+      The BIL First Normalized Form (BNF1) is a subset of the BIL
       language, where expressions have the following properties:
 
-      - No let expressions - new variable can be created only with a
-       Move instruction.
-
-      - All memory operations have sizes equal to one byte. Thus the
-       size and endiannes can be ignored in analysis. During the
-       normalization, the following rewrites are performed
+      - No if-then-else expressions.
 
       - Memory load expressions can be only applied to a memory. This
        effectively disallows creation of temporary memory regions,
@@ -3416,7 +3545,20 @@ module Stmt : sig
        store expressions will not occur in integer assigments, jmp
        destinations, and conditional expressions, leaving them valid
        only in an assignment statment where the rhs has type mem_t.
+       This is effectively the same as make the [Load] constructor to
+       have type ([Load (var,exp,endian,size)]).
 
+
+      The BIL Second Normalized Form (BNF2) is a subset of the BNF1
+      (in a sense that all BNF2 programs are also in BNF1). This form
+      puts the following restrictions:
+
+      - No let expressions - new variables can be created only with
+       the Move instruction.
+
+      - All memory operations have sizes equal to one byte. Thus the
+       size and endiannes can be ignored in analysis. During the
+       normalization, the following rewrites are performed
       {v
 
        let x = <expr> in ... x ... => ... <expr> ...
@@ -3441,11 +3583,13 @@ module Stmt : sig
       two memory accesses, page faults etc).
 
       However, in the formal semantics of BAP we do not consider
-      effects, and treat all expressions as side-effect free, thus
-      the above transformation, as well as
+      effects, and treat all expressions as side-effect free, thus the
+      above transformation, are preserving the semantics.
 
-      @since 1.3
-  *)
+      @param normalize_exp (defaults to [false]) if set to [true] then
+      the returned program will be in BNF2.
+
+      @since 1.3 *)
   val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
   (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
@@ -3458,11 +3602,11 @@ module Stmt : sig
   val simpl : ?ignore:Eff.t list -> t list -> t list
 
   (** [fixpoint f x] applies transformation [f] until it reaches
-      fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}  *)
+      fixpoint. See {!Bil.fixpoint} and {Exp.fixpoint}.  *)
   val fixpoint : (t -> t) -> (t -> t)
 
   (** [free_vars stmt] returns a set of all unbound variables, that
-      occurs in the [stmt]. *)
+      occurs in [stmt]. *)
   val free_vars : t -> Var.Set.t
 
   (** [eval prog] eval BIL program under given context. Returns the
@@ -3470,6 +3614,7 @@ module Stmt : sig
   val eval : t list -> (#Bili.context as 'a) -> 'a
 
   include Regular.S with type t := t
+
   val pp_adt : t printer
 end
 
@@ -7596,6 +7741,7 @@ module Reconstructor : sig
       Note: this is an approximation, that works fine for most cases.  *)
   val default : (word -> string) -> word list -> t
 
+
   (** [of_blocks] produces a reconstructor from a serialized
       sequence of blocks. Each element of the sequence is deconstructed
       as [(name,ba,ea)], where [name] is a subroutine name, [ba] is a
@@ -7664,6 +7810,18 @@ module Event : sig
             info "created some %s" "thing"
           v} *)
     val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
+    type event += Progress of {
+        task  : string;         (** hierarchical task name  *)
+        note  : string option;  (** a short note            *)
+        stage : int option;     (** entered stage           *)
+        total : int option;     (** total number of stages  *)
+      }
+
+    (** [progress ?note ?stage ?total name] sends a progress report.
+        This  function should be used by the main components only,
+        while plugins should use the [report_progress] function from
+        the [Self()] interface. All parameters defaults to [None].*)
+    val progress : ?note:string -> ?stage:int -> ?total:int -> string -> unit
   end
 
   include Printable.S with type t := t
@@ -8161,6 +8319,64 @@ module Self() : sig
   (** formatter that sends error messages  *)
   val error_formatter : Format.formatter
 
+  (** [report_progress ~task:t ~note:n ~state:s ~total:s' ()] reports
+      a progress of the task [t].
+
+      Reports that the task [t] made a progress to the stage [s] out
+      the total number of stages [s']. The note [n] may provide an
+      additional textual explanation of the current stage. The report
+      doesn't mean that the stage is finished, but rather that it is
+      entered. Thus for [s'] stages we expect to recieve [s'-1]
+      reports. (This approach works fine with functional programming
+      and iterating - as in functional programming it is more
+      convinient to report before computation, and during the indexed
+      iteration the index of the last element is one less than the
+      total number of elements).
+
+      All parameters are optional, and have the following default
+      values if not specified:
+
+      @param task defaults to the plugin [name];
+      @param note defaults to the empty string;
+      @param stage defaults to [None]
+      @param total defaults to [None] or to the last value of this
+             parameter for the given task.
+
+      The [report_progress] bar is an easy way to provide some
+      feedback to the system, either in the form of a progress (if the
+      total number of stages is known) or in the form of a friendly
+      ping back.
+
+      The mechanism should be used by analyses that expect to take
+      some time to complete. Usually, one plugin implements only one
+      task, so the task name may be omitted. If an analysis is built
+      from several tasks, then they can be represented as subtasks,
+      and the main task should represent the whole work.
+
+      Example:
+      {[
+
+        let find_interesting_points prog =
+          report_progress ~task:"discover" ~total:(Term.length sub_t prog) ();
+          Term.enum sub_t prog |> Seq.concat_mapi ~f:(fun stage sub ->
+              report_progress ~note:(Sub.name sub) ~task:"discover" ~stage ();
+              interesting_points_of_sub sub)
+
+        let check_interesting_points points =
+          report_progress ~task:"checking" ~total:(Seq.length points) ();
+          Seq.iteri ~f:(fun stage p ->
+              report_progress ~note:(Point.name p) ~task:"checking" ~stage ();
+              check_point p)
+      ]}
+
+  *)
+  val report_progress :
+    ?task:string ->
+    ?note:string ->
+    ?stage:int ->
+    ?total:int -> unit -> unit
+
+
   (** This module allows plugins to access BAP configuration variables.
 
       When reading the values for the configuration variables, the
@@ -8435,7 +8651,7 @@ module Log : sig
 
   (** Start logging events. Only events of type [Event.Log] are
       logged.  *)
-  val start : unit -> unit
+  val start : ?logdir:string -> unit -> unit
 end
 
 (**/**)

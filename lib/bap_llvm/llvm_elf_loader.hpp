@@ -194,6 +194,9 @@ void symbol_reference(const ELFObjectFile<T> &obj, const RelocationRef &rel, sec
 template <typename T>
 void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s) {
     auto sym_elf = obj.getSymbol(sym.getRawDataRefImpl());
+    if (is_abs_symbol(*sym_elf)) {
+        return;
+    }
     auto name = prim::symbol_name(sym);
     auto addr = symbol_address(obj, sym);
     auto off = symbol_file_offset(obj, sym);

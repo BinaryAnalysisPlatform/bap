@@ -3,8 +3,8 @@ open Bap.Std
 open Monads.Std
 open Bap_primus.Std
 open Format
-
 include Self()
+
 (*
 
    In a general case a block is terminated by a sequence of jumps:
@@ -36,6 +36,7 @@ include Self()
 
 
 *)
+
 type assn = {
   use : tid;
   var : var;
@@ -64,39 +65,6 @@ let state = Primus.Machine.State.declare
     ~uuid:"58bb35f4-f259-4712-8d15-bdde1be3caa8"
     (fun _ -> {conflicts=[]; forkpoints = Tid.Set.empty})
 
-
-(** Trivial Condition Form (TCF) transformation.
-
-    In the TCF a condition expression must be either a variable or a
-    constant. The transformations detect non-trivial condition
-    expressions and bind them to variables whose definitions are
-    pushed to the block definition list. *)
-module TCF = struct
-  let blk_without_jmps = Term.filter jmp_t ~f:(fun _ -> false)
-  let new_var () = Var.create ~is_virtual:true ~fresh:true "c" bool_t
-
-  (* Pre: number of jumps is greater than 1
-     post: number of jumps is the same, each jump is in TCF.*)
-  let blk blk =
-    Term.enum jmp_t blk |>
-    Seq.fold ~init:(blk_without_jmps blk) ~f:(fun blk jmp ->
-        match Jmp.cond jmp with
-        | Bil.Int _ | Bil.Var _ -> Term.append jmp_t blk jmp
-        | cond ->
-          let var = new_var () in
-          let def = Def.create var cond in
-          let blk = Term.append def_t blk def in
-          let jmp = Jmp.with_cond jmp (Bil.var var) in
-          Term.append jmp_t blk jmp)
-
-  let sub = Term.map blk_t ~f:(fun b ->
-      if Term.length jmp_t b < 2 then b else blk b)
-
-  let prog = Term.map sub_t ~f:sub
-
-  let proj p = Project.with_program p @@ prog @@ Project.program p
-end
-
 let neg = List.map ~f:(fun assn -> {assn with res = not assn.res})
 
 let assumptions blk =
@@ -113,6 +81,7 @@ module Main(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Mem = Primus.Memory.Make(Machine)
+  module Linker = Primus.Linker.Make(Machine)
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
@@ -127,24 +96,43 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let pp_id = Monad.State.Multi.Id.pp
 
+  let do_fork blk ~child =
+    Machine.current () >>= fun pid ->
+    Machine.Global.get state >>= fun t ->
+    if Set.mem t.forkpoints (Term.tid blk)
+    then Machine.return pid
+    else
+      Machine.fork () >>= fun () ->
+      Machine.current () >>= fun id ->
+      if pid = id then Machine.return id
+      else
+        child () >>= fun () ->
+        Machine.switch pid >>| fun () -> id
+
+
   let fork blk  =
     unsat_assumptions blk >>=
     Machine.List.iter ~f:(function
         | [] -> Machine.return ()
         | conflicts ->
-          Machine.current () >>= fun pid ->
-          Machine.fork () >>= fun () ->
-          Machine.current () >>= fun id ->
-          if pid = id then
-            Machine.Global.update state ~f:(fun t -> {
-                  t with forkpoints =
-                           Set.add t.forkpoints (Term.tid blk)
-                })
-          else
-            assume  conflicts >>= fun () ->
-            Machine.Local.update state ~f:(fun t -> {
-                  t with conflicts}) >>= fun () ->
-            Machine.switch pid)
+          Machine.ignore_m @@
+          do_fork blk ~child:(fun () ->
+              assume  conflicts >>= fun () ->
+              Machine.Local.update state ~f:(fun t -> {
+                    t with conflicts})))
+
+  let assume_returns blk call =
+    match Call.return call with
+    | Some (Direct dst) ->
+      Machine.current () >>= fun pid ->
+      do_fork blk ~child:Machine.return >>= fun id ->
+      if id = pid then Machine.return ()
+      else Linker.exec (`tid dst)
+    | _ -> Machine.return ()
+
+  let fork_on_calls blk jmp = match Jmp.kind jmp with
+    | Call c -> assume_returns blk c
+    | _ -> Machine.return ()
 
   let is_last blk def = match Term.last def_t blk with
     | None -> true
@@ -154,10 +142,8 @@ module Main(Machine : Primus.Machine.S) = struct
     let open Primus.Pos in
     match level with
     | Def {up={me=blk}; me=def} when is_last blk def ->
-      Machine.Global.get state >>= fun t ->
-      if Set.mem t.forkpoints (Term.tid blk)
-      then Machine.return ()
-      else fork blk
+      fork blk
+    | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp
     | _ -> Machine.return ()
 
 
@@ -170,20 +156,37 @@ module Main(Machine : Primus.Machine.S) = struct
     | false -> map addr
     | true -> Machine.return ()
 
-
   let make_writable value =
     let addr = Primus.Value.to_word value in
     Mem.is_writable addr >>= function
     | false -> map addr
     | true -> Machine.return ()
 
-  let init () =
-    info "translating the program into the Trivial Condition Form (TCF)";
-    Machine.update TCF.proj >>= fun () ->
-    Primus.Interpreter.loading >>> make_loadable >>= fun () ->
-    Primus.Interpreter.storing >>> make_writable >>= fun () ->
+  let mark_visited blk =
+    Machine.Global.update state ~f:(fun t -> {
+          t with forkpoints =
+                   Set.add t.forkpoints (Term.tid blk)
+        })
 
-    Primus.Interpreter.leave_pos >>> step
+  let free_vars proj =
+    Term.enum sub_t (Project.program proj) |>
+    Seq.map ~f:Sub.free_vars |>
+    Seq.to_list_rev |>
+    Var.Set.union_list
+
+  let setup_vars =
+    Machine.get () >>= fun proj ->
+    Set.to_sequence (free_vars proj) |>
+    Machine.Seq.iter ~f:(fun var ->
+        Env.add var (Primus.Generator.static 0))
+
+  let init () = Machine.sequence [
+      setup_vars;
+      Primus.Interpreter.loading >>> make_loadable;
+      Primus.Interpreter.storing >>> make_writable;
+      Primus.Interpreter.leave_pos >>> step;
+      Primus.Interpreter.leave_blk >>> mark_visited;
+    ]
 end
 
 open Config;;

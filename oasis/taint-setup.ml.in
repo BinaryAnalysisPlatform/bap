@@ -1,0 +1,8 @@
+let (/) = Filename.concat
+
+let () =
+  add_variable ~doc:"where to install the library"
+    "primus_lisp_library_path"
+    ~define:(function
+        | None -> BaseEnv.var_get "datadir" / "primus" / "site-lisp"
+        | Some path -> path)

@@ -78,7 +78,10 @@ let state = Bap_primus_machine.State.declare
     (fun _ -> {values = Addr.Map.empty; layers = []})
 
 let inside {base;len} addr =
-  Addr.(addr >= base) && Addr.(addr < base ++ len)
+  let high = Word.(base ++ len) in
+  if Addr.(high < base)
+  then Addr.(addr >= base) || Addr.(addr < high)
+  else Addr.(addr >= base) && Addr.(addr < high)
 
 let find_layer addr = List.find ~f:(function
     | {mem=Dynamic mem} -> inside mem addr
@@ -149,7 +152,8 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| is_mapped addr
 
   let is_writable addr =
-    Machine.Local.get state >>| fun {layers} -> find_layer addr layers |>
+    Machine.Local.get state >>| fun {layers} ->
+    find_layer addr layers |>
     function Some {perms={readonly}} -> not readonly
            | None -> false
 

@@ -1,91 +1,99 @@
+open Core_kernel
 open Bap.Std
 open Format
 open Bap_primus_types
 
-
-(** Lisp machine.
-
-    Lisp machine is a Primus component that provides a facility to
-    link programs written in a Primus Lisp with the emulated programs.
-
-    It is useful for writing stubs, especially, for library
-    functions. For example, if a program has a call to [strcpy]
-    function that is dynamically provided by a [libc] library, then it
-    can be stubbed with the following lisp code:
-
-    [{
-    (defun strcpy (dst src)
-      (declare (external "strcpy"))
-      (let ((dst dst))
-        (while (/= (points-to-null p))
-          (copy-byte-shift dst src))
-        (memory-write dst 0:8))
-      dst)
-    }]
-
-    {2 Primus Lisp Primer}
-
-    Primus Lisp is a dialect of Lisp close to Common Lisp in
-    syntax, that can be considered as a frontend to BIL. The main
-    feature of the language, is that it has only one data type - the
-    machine word. No lists, functions, or anything like this. This
-    basically puts the language into the family of assembler
-    languages. However, there are few high-level features that work on
-    syntax or linkage stage, that makes the language much more
-    powerful an expressive. First of all it is the macro system, that
-    allows one to abstract over any syntactic term, so that it is
-    possible to write abstractions over functions or even
-    types. The second feature, extends Primus Lisp with the ad-hoc
-    polymorphism or overloading. The system is similar to Haskell's
-    type classes or Rust's traits.
+type program
+type message
 
 
-*)
+module Load : sig
+  type error
+  val program : ?paths:string list -> Project.t -> string list -> (program,error) result
+  val pp_program : Format.formatter -> program -> unit
+  val pp_error : Format.formatter -> error -> unit
+end
 
-(** a primitive that can be called from lisp code  *)
+module Message : sig
+  type  t = message
+  val pp : Format.formatter -> message -> unit
+end
+
+module Type : sig
+  type t
+  type signature
+  type error
+
+  type parameters = [
+    | `All of t
+    | `Gen of t list * t
+    | `Tuple of t list
+  ]
+
+  module Spec : sig
+    val any : t
+    val var : string -> t
+    val sym : t
+    val int : t
+    val bool : t
+    val byte : t
+    val word : int -> t
+    val a : t
+    val b : t
+    val c : t
+    val d : t
+
+    val tuple : t list -> [`Tuple of t list]
+    val all : t -> [`All of t]
+    val one : t -> [`Tuple of t list]
+    val unit : [`Tuple of t list]
+    val (//) : [`Tuple of t list] -> [`All of t] -> parameters
+    val (@->) : [< parameters] -> t -> signature
+  end
+
+  val check : Var.t seq -> program -> error list
+  val pp_error : Format.formatter -> error -> unit
+end
+
+module type Closure = functor(Machine : Machine) -> sig
+  val run : value list -> value Machine.t
+end
+
+type closure = (module Closure)
+
 module Primitive : sig
   type 'a t
   val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
 end
 
-module type Primitives = functor (Machine : Machine) ->  sig
+val message : message observation
 
-  (** each primitive is an OCaml function that takes a list of words
-      and returns a word. A primitive linkage is internal to the Lisp
-      machine, so it is visible only to Lisp functions.
-      If you want to implement a stub function in OCaml, then you
-      should work directly with the Linker module. The primitives
-      extend only the Lisp machine.
-  *)
+
+module type Primitives = functor (Machine : Machine) ->  sig
   val defs : unit -> value Machine.t Primitive.t list
 end
 
 type primitives = (module Primitives)
-
-
-(** Creates a Lisp machine.
-
-    You can extend the machine with primitive functions implemented in
-    OCaml.
-*)
-
 type exn += Runtime_error of string
+
 
 module Make (Machine : Machine) : sig
   val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
+
+  val link_program : program -> unit Machine.t
+
+  val program : program Machine.t
+
+  val define : ?types:Type.signature -> ?docs:string -> string -> closure -> unit Machine.t
+
+  val signal :
+    ?params:Type.parameters ->
+    ?doc:string ->
+    'a observation ->
+    ('a -> value list Machine.t) -> unit Machine.t
+
+  (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
 end
 
-
-(** [init ~paths features] initialize the Lisp machine, load all
-    [features] looking in the specified set of paths, and register a
-    Primus machine component that will use the Linker component to
-    link into the program all definitions with the external linkage
-    (i.e., those with the external attribute).
-
-    The function should be called only once, by a component that is
-    responsible for Lisp machine initialization. By default it is the
-    lisp_library_plugin. The function will raise an exception if it is
-    called twice.
-*)
 val init : ?log:formatter -> ?paths:string list -> string list -> unit

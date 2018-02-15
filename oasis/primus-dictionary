@@ -1,0 +1,13 @@
+Flag primus_dictionary
+  Description: Build Primus Dictionary Tool
+  Default: false
+
+Library primus_dictionary_library_plugin
+  Build$:       flag(everything) || flag(primus_dictionary)
+  Path:         plugins/primus_dictionary
+  BuildDepends: bap-primus
+  FindlibName:     bap-plugin-primus_dictionary
+  CompiledObject:  best
+  InternalModules: Primus_dictionary_main
+  XMETADescription: provides a key-value storage 
+  XMETAExtraLines:  tags="primus, primus-library"

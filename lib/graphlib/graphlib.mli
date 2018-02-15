@@ -45,7 +45,7 @@ open Regular.Std
       chosen implementation with some short name, usually [G] would be
       a good choice:
 
-      {[module G = Graphlib.Make(String)(Bool)]}
+   {[module G = Graphlib.Make(String)(Bool)]}
 
       This will bind name [G] with a graph implementation that has
       [string] nodes, with edges labeled by values of type [bool].
@@ -598,6 +598,51 @@ module Std : sig
   }
 
 
+  (** A solution to a system of fixed-point equations.
+
+      We represent the solution to a system of fixed-point equations
+      as a pair of a finite mapping [M] that associates a variable (a
+      node) with its value, and a default value, that is a value of
+      all variables that are not in [M].
+  *)
+  module Solution : sig
+
+
+    (** an abstract representation of a solution  *)
+    type ('n,'d) t
+
+
+    (** [create constraints init] creates an initial approximation of a
+        solution. The [init] parameters defines the initial value of
+        all variables unspecified in the initial constraint.
+
+        @param constraints a finite mapping from variables to their
+        value approximations.
+
+        For the returned value [s] the following is true:
+
+        - [not(is_fixpoint s)]
+        - [iterations s = 0]
+        - [get s x = constraints[x] if x in constraints else init]
+    *)
+    val create : ('n,'d,_) Map.t -> 'd -> ('n,'d) t
+
+
+    (** [iterations s] returns the total number of iterations that was
+        made to obtain the current solution.  *)
+    val iterations : ('n,'d) t -> int
+
+
+    (** [is_fixpoint s] is [true] if the solution is a fixed point
+        solution, i.e., is a solution that stabilizes the system of
+        equations.  *)
+    val is_fixpoint : ('n,'d) t -> bool
+
+    (** [get s x] returns a value of [x].  *)
+    val get : ('n,'d) t -> 'n -> 'd
+  end
+
+
   (** Generic Graph Library  *)
   module Graphlib : sig
 
@@ -1067,6 +1112,300 @@ module Std : sig
              and type Node.label = NL.t
              and type Edge.label = EL.t
 
+    (** [fixpoint ~equal ~init ~merge ~f g] computes a solution for a
+        system of equations denoted by graph [g], using the inital
+        approximation [init] (obtained either with [Solution.create] or
+        from the previous calls to [fixpoint]).
+
+        The general representation of the fixpoint equations is
+
+        {v
+          x(i) = f(i) (a(i,1) x(1) %  ... % a(i,j) x(j)),
+        v}
+
+        where
+        - [x(i)] is the value of the [i]'th variable (node);
+        - [a(i,j)] is [1] if there is an edge from the node
+          [i] to the node [j] and [0] otherwise;
+        - [%] the merge operator;
+        - [f(i)] is the transfer function for the node [i];
+        - [=] is the equivalence operation.
+
+        A solution is obtained through a series of iterations until
+        the fixpoint is reached, i.e., until the system
+        stabilizes. The total number of iterations could be bound by
+        an arbitrary number. If the maximum number of iterations is
+        reached before the system stabilizes then the solution is not
+        complete. An incomplete solution could be resumed later, or
+        used as it is (for example, in case of ascending chain the
+        solution is always a lower approximation of a real solution,
+        so it is always safe to use it).
+
+        @param the upper bound to the number of iterations the solver
+        can make.
+
+        @param start the entry node of the graph
+
+        @param rev if [true] then graph is visited in the reverse order,
+        defaults to [false].
+
+        @param step a function that is called every time a new value
+        of a variable is obtained (an extension point for
+        narrowing/widening).
+
+        @param equal compares two approximations for equivalence
+
+        @param init initial approximation
+
+        @param merge the operator for path merging
+        (usually meet/join depending on a starting point).
+
+        @param f the transfer function
+
+
+        {3 Data Flow Analysis and Abstract Interpretation}
+
+        The [fixpoint] function implements a general fixed pointed
+        iterative solver, that is suitable for implementing data-flow
+        analysis or abstract interpreters. This section will provide
+        some insight on how a particular choice of parameters affects
+        the result of computation. We will start with a small
+        introduction to the theory of Data Flow Analysis and Abstract
+        Interpretation, with respect to the solution of a system of
+        fixed point equations.
+
+        {4 Introduction}
+
+        The data domain is a set of values equiped with a partial
+        ordering operation [(L,<=)], also know as a lattice or a
+        poset. We assume, that the lattice is complete, i.e., there
+        are two special elements of a set that are called [top] and
+        [bot] (the bottom value). The top element is the greatest
+        element of the set L, i.e., for all [x] in [L], [x <=
+        top]. Correspondingly, the bottom element is the least element
+        of the set [L], i.e., for all [x] in [L], [bot <= x]. It is not
+        required by the framework that the lattice has both or any of
+        them, however their presence makes the explanation easier, and
+        since any lattice could be artificially extended with these
+        two elements, their introduction will not introduce a loss of
+        generality. Since values of the lattice [L] represent
+        information, the partial ordering between two pieces of
+        information [a] and [b], e.g., [a <= b], tells us that [a]
+        contains no more information than [b]. Therefore the [top]
+        value contans all the information, representable in the
+        lattice, correspondingly the [bot] value represents an absence
+        of information. Thus, we will consider the bottom value as an
+        over approximation (or a lower approximation in terms of the
+        lattice ordering relation), as an absence of information
+        cannot contain false statements (vacuous truth). Assuming,
+        that there is some value [t], [bot <= t <= top] that represents
+        a ground truth (that is usually unobtainable), we say that all
+        values that are less than or equal [t] are over-approximations
+        of the truth, and the rest of the values, are
+        under-approximations. Under-approximations under estimate a
+        behavior of a system, and usually represent information about
+        a system that is not true, hence an under approximate solution,
+        is usually unsafe to use. In general, our task is to find an
+        over approximation that is as close as possible to the ground
+        truth [t].
+
+        A solution to a fixed point equation (i.e., an equation of the
+        form [x = f(x)]) could be obtainted by starting from some
+        initial approximation [x0] and repeatedly applying [f] to it,
+        until the solution is found, i.e., [x = f(... f(f(x0)) ...)].
+        In general, a function may have multiple (or no at all) fixed
+        points. If a function has several fixed points, then we can
+        distinguish two extremums - the least fixed point [lfp] and
+        the greatest fixed point [gfp] w.r.t the ordering of lattice
+        [L]. Assuming that function [f] is positive monotonic function
+        (i.e., [x <= y] implies that [f(x) <= f(y)]), thechoice of the
+        initial value [x0] denotes which of the two fixed points is
+        computed. When we start with the bot value, we are ascending
+        from it until the least fixed point is obtained. Dually, if we
+        will start with the top value, we will descend until the
+        maximal fixpoint is reached. Assuming that both fixpoints are
+        lower approximations of the ground truth, we can easily see,
+        that the maximal fixpoint solution is more attractive, as it
+        bears more information than the minimal (unless both are the
+        same). However, the ascending search, bears a nice property,
+        that any intermediate solution is an over-approximation of the
+        ground truth (i.e., we are monotonically aggregating facts).
+
+        In general, a function may not have a solution at all, or the
+        solution may not be computable in practice, i.e., when the chain
+        of function applications [x = f(... f(x0) ...)] is either
+        infinite or effectively infinite (e.g., 2^64 applications). The
+        Tarksi theorem states that if [L] is complete and [f] is
+        monotone, then it has a fixed point. If a lattice has a
+        limited height (maximum length of chain of elements, such that
+        x0 < x1 < .. < xM) then we will obtain a solution in no more
+        than [M] steps. However, if [M] is very big, or infinite, then
+        the solution won't be find in general, and the computation may
+        not terminate.
+
+        This brings us to the main distinction between Abstract
+        Interpretation and Data Flow Analysis. The latter usually
+        deals with lattice that have finite heights, while the former
+        deals with very big and infinite lattices. To accelerate the
+        convergence of a chain of approximations, a special technique
+        called [widening] is used. Widening can be seen as an
+        operation that jumps over several applications of the function
+        [f], hence it actually accelerates the convergence. Given,
+        that widening jumps forward in the chain, it is possible to
+        overshoot the fixed point solution. This can potential involve
+        a lossage of precision (in case of the descending chain) or to
+        an incorrect solution (in case of the ascending chain).
+
+        So far, we were considering only one equation. However, we
+        need to solve a system of equations, denoted by a graph (as
+        graph denotes a boolean adjacency matrix [A = {a(i,j)}], such that
+        [a(i,j)] is [1] if there is an edge from [i] to [j], and [0]
+        otherwise). To solve the system of equations, we need to find
+        such vector [x1,..,xM] that solves all equations. In general,
+        a system may not have a solution (an over-constrainted system),
+        may have one solution, and may have many solutions (under
+        constrained system). In our case, the system is not linear, as
+        each equation is function of type [L -> L] not [L^M -> N], since
+        all input variables are merged with some operator, usually
+        [meet] or [join]. A correct choice of the merge opeator ensures
+        correctness and convergence of the solution.
+
+        The [meet] operator is a commutative, associative, and
+        idempotent operator, such that if [z = meet x y], then [z <= x
+        && z <= y] and for all [w] in [L], [w <= x && w <= y] implies [w <=
+        z]. The [z] value is called the greatest lower bound ([glb], or
+        [inf]) of [x] and [y]. Intuitively, the [meet] operator takes
+        two pieces of information and removes all contradictions. Thus
+        [z] is the maximal consensus between [x] and [y]. The [top]
+        element is the neutral element with respect to the [meet]
+        operation, e.g., [meet x top = x]. A consequent application of
+        the [meet] operation builds a {i descending chain} of
+        approximations, i.e., the amount of information is reduced on
+        each step.
+
+        The [join] operator is dual to [meet] and is defined
+        correspondingly (with the flipped order). A join of [x] and
+        [y] is called the least upper bound ([lub], [sup]) of [x] and
+        [y]. Intuitively, the [join] operator takes two
+        non-contradictory pieces information and returns their
+        concatenation. The [bot] element is the neutral element with
+        respect to the [join] operation, e.g., [join x bot = x]. A
+        consequent application of the [join] operation builds an
+        ascending chain of approximations, i.e., the amount of
+        information is increased on each step.
+
+        {4 Using the [fixpoint] function}
+
+        The [fixpoint] interface is trying to be as general as
+        possible, but at the same time easy to use. The interface,
+        allows a user to choose the direction of approximation
+        (ascending vs. descending) and how to accelerate the
+        convergence in case of tall lattices by applying narrowing and
+        widening. The implentation fixes the iteration strategy (by
+        always using the topological ordering). In case if you need a
+        fixed point solver, that allows you to use different iteration
+        strategies, the [fixpoint][1] library provides a descent
+        alternative.
+
+        [1]: http://pop-art.inrialpes.fr/people/bjeannet/bjeannet-forge/fixpoint/
+
+        {5 Using [fixpoint] for Classical Data Flow analysis}
+
+        The classical Data Flow analysis uses the descending chain of
+        approximations in a complete lattice with finite (usually very
+        small) height. Thus, the [fixpoint] solution is the greatest
+        (maximal) fixed point (a maximal set of facts on which all
+        equations agree). If the transfer function [f] is monotone and
+        distributive, then it is the meet-over-paths (mop) solution,
+        in a more general case [gfp <= mop] and [mop <= t] (where [t] is
+        the ground truth). (Note, [gfp] is of course the best solution
+        to the system of equations, as it is the maximal of all
+        solutions. Both [mop] and [t] are not solutions to the given
+        system, but define the true properties of a system under test,
+        that we are trying to model with the system of fixed point
+        equations. The fact that [gfp] is smaller, indicates that our
+        model looses the precision (i.e., it is overconstrained). For
+        example, the meet-over-path solution is a meet of all possible
+        paths, even those that are infeasible, thus the system is
+        overconstrained as we are taking into account system
+        behaviors that will never happen, this is however safe, to
+        overconstraint a system, as it will give us an
+        over-approximation of a real system behavior).
+
+        The [fixpoint] function could be easily applied to both
+        forward and backward data flow problem, as backward problem
+        could be seen as a forward problem on a reversed graph. To
+        effectively reverse a graph, set the [rev] flag to [true] and
+        set the [enter] parameter to the [exit] node.
+
+
+
+        {5 Using [fixpoint] for Abstract Interpretation}
+
+        Abstract Interpretation usually deals with complex and large
+        lattices, and applies different heuristics to ensure
+        termination with the minimum loss of precision. This usually
+        ends up in applying widening and narrowing operations. Since
+        widening accelerates by jumping forward in the chain of
+        approximations, it can easily overshoot a fixed point, and in
+        case of the ascending chain this may lead to a solution that
+        is an under approximation of the ground truth. Thus, abstract
+        interpretation is usually applied in the descending order. In
+        this case the [widen] operation may still overshot the maximal
+        fixpoint, that will lead to an over-approximation of the
+        ground truth, that is safe, but still looses
+        precision. Therefore, it is necessary to apply widening as
+        rarely as possible. Unfortunatelly, a question where and when
+        to apply widening is undecidable by itself, that's why
+        heuristics are used. The [fixpoint] function, provides a
+        limited capabilities to control widening via the [step i n x
+        x'] function that is called every time a new [i]'th
+        approximation [x'] for variable [n] is computed. The [step]
+        function must return an upper bound (not necessary the least
+        one) of the previous approximation [x] and the new
+        approximation [x']. The default, implementation just returns
+        [x']. An alternative implementation may widen [x'] if the
+        number of steps [i] in the chain is higher than some
+        threshold, and/or if [x] is a widening point (e.g., the loop
+        header).
+
+        Note: terms widening and narrowing comes from the interval
+        analysis where they were first introduced, and correspond to
+        the widening of an interval (usually up to infinitiy) and
+        narrowing a widened interval based on some heurisitic.
+
+        {6 Using [fixpoint] for general iterative approximation}
+
+        In a general case, the [fixpoint] function could be used to
+        compute successive approximations of a solution to a system of
+        (in)equations, even if [f] is not monotone, and the lattice is not
+        finite. The termination could be guaranteed by limiting the
+        maximum number of iterations. And the correctness could be
+        ensured by starting from the bottom element, and using the
+        ascending chain of approximations. In that case, even a
+        partially complete solution would be an over-approximation of
+        a real solution. The obtained partial solution could be later
+        resumed (and possibly extended with newly obtained facts).
+
+
+        {4 Implementation}
+
+        The [fixpoint] uses the Kildall iterative algorithm. And
+        applies equations in reverse postorder (topological
+        order). The solution is represented as an abstract finite
+        mapping, that is also used to specify the initial set of
+        constraints and the initial value of unconstrained
+        variables. It is possible to specify more than one constraint
+        to the system of equation (as opposed to the classical
+        approach where the constraint denotes only the input for the
+        entry node).  *)
+    val fixpoint : (module Graph with type t = 'c
+                                  and type node = 'n) ->
+      ?steps:int -> ?start:'n -> ?rev:bool ->
+      ?step:(int -> 'n -> 'd -> 'd -> 'd) ->
+      init:('n,'d) Solution.t ->
+      equal:('d -> 'd -> bool) ->
+      merge:('d -> 'd -> 'd) -> f:('n -> 'd -> 'd) -> 'c -> ('n,'d) Solution.t
 
 
     (** name generation scheme  *)

@@ -30,7 +30,7 @@ Library primus_greedy_scheduler_plugin
   FindlibName: bap-plugin-primus_greedy
   CompiledObject: best
   BuildDepends: bap, bap-primus, core_kernel
-  XMETADescription: implements the greedy scheduling strategy
+  XMETADescription: evaluates all machines in the DFS order
   Modules: Primus_greedy_main
   XMETAExtraLines: tags="primus, scheduler"
 
@@ -40,7 +40,7 @@ Library primus_round_robin_scheduler_plugin
   FindlibName: bap-plugin-primus_round_robin
   CompiledObject: best
   BuildDepends: bap, bap-primus, core_kernel
-  XMETADescription: implements the round-robin scheduling strategy
+  XMETADescription: evaluates all machines in the BFS order
   Modules: Primus_round_robin_main
   XMETAExtraLines: tags="primus, scheduler"
 
@@ -50,7 +50,7 @@ Library primus_exploring_scheduler_plugin
   FindlibName: bap-plugin-primus_exploring
   CompiledObject: best
   BuildDepends: bap, bap-primus, core_kernel
-  XMETADescription: implements the exploring scheduling strategy
+  XMETADescription: evaluates all machines, prioritizing the least visited
   Modules: Primus_exploring_main
   XMETAExtraLines: tags="primus, scheduler"
 
@@ -60,7 +60,7 @@ Library primus_wandering_scheduler_plugin
   FindlibName: bap-plugin-primus_wandering
   CompiledObject: best
   BuildDepends: bap, bap-primus, core_kernel
-  XMETADescription: implements the wandering scheduling strategy
+  XMETADescription: evaluates all machines while
   Modules: Primus_wandering_main
   XMETAExtraLines: tags="primus, scheduler"
 
@@ -69,19 +69,10 @@ Library primus_print_plugin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_print
   CompiledObject: best
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bare
   XMETADescription: prints Primus states and observations
   Modules: Primus_print_main
   XMETAExtraLines: tags="primus, printer"
-
-Library primus_propagate_taint_plugin
-  Path: plugins/primus_propagate_taint
-  Build$: flag(everything) || flag(primus_support)
-  FindlibName: bap-plugin-primus_propagate_taint
-  CompiledObject: best
-  BuildDepends: bap-primus
-  XMETADescription: a taint propagation engine
-  Modules: Primus_propagate_taint_main
 
 Library primus_mark_visited_plugin
   Path: plugins/primus_mark_visited

@@ -13,7 +13,12 @@ type exn += Unbound_name of name
 
 val exec : name observation
 val will_exec : name statement
-
+module Trace : sig
+  val call : (string * value list) observation
+  val call_entered : (string * value list) statement
+  val return : (string * value list) observation
+  val call_returned : (string * value list) statement
+end
 module type Code = functor (Machine : Machine) -> sig
   val exec : unit Machine.t
 end

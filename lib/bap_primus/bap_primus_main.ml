@@ -7,7 +7,10 @@ module Observation = Bap_primus_observation
 
 
 let finished,finish =
-  Observation.provide ~inspect:sexp_of_unit "machine-finished"
+  Observation.provide ~inspect:sexp_of_unit "fini"
+
+let init,inited =
+  Observation.provide ~inspect:sexp_of_unit "init"
 
 
 let components : component list ref = ref []
@@ -25,19 +28,23 @@ module Main(Machine : Machine) = struct
         let module Comp = Component(Machine) in
         Comp.init ())
 
+  let init () =
+    Machine.Observation.make inited ()
+
   let finish () =
     Machine.Observation.make finish ()
 
 
   let run ?(envp=[| |]) ?(args=[| |]) proj m =
     let comp =
-      init_components () >>= fun () -> 
+      init_components () >>= fun () ->
+      init () >>= fun () ->
       Link.run () >>= fun () ->
-      Machine.catch m (fun err -> 
+      Machine.catch m (fun err ->
           finish () >>= fun () ->
           Machine.raise err)
       >>= fun x ->
-      finish () >>= fun () -> 
+      finish () >>= fun () ->
       Machine.return x in
     Machine.run comp proj args envp
 end

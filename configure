@@ -55,4 +55,6 @@ ocaml tools/cat.ml '"\n# $name\n"' -- $TAGS _tags.in _tags
 ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $PLUGINS myocamlbuild.ml.in myocamlbuild.ml
 ocaml tools/cat.ml '"\n#1 \"$name\"\n"' -- $SETUPS setup.ml.in setup.ml
 oasis $QUIET setup
-ocaml setup.ml $QUIET -configure "$@"
+ocamlfind ocamlopt unix.cmxa setup.ml -o setup.exe
+rm setup.cmx setup.cmi setup.o
+./setup.exe $QUIET -configure "$@"

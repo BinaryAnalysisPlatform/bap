@@ -10,5 +10,6 @@ Library bap_strings
   BuildDepends: core_kernel
   Modules:      Bap_strings,
                 Bap_strings_detector,
+                Bap_strings_index,
                 Bap_strings_unscrambler,
                 Bap_strings_scanner

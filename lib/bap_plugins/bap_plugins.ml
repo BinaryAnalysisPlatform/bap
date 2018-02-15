@@ -7,6 +7,10 @@ module Plugin = struct
 
   type 'a or_error = 'a Or_error.t
 
+  let args = ref Sys.argv
+
+  let argv () = !args
+
   type t = {
     path : string;
     name : string;
@@ -193,12 +197,31 @@ module Plugin = struct
       List.iter mains ~f:(fun unit ->
           Hashtbl.set units ~key:unit ~data:reason)
 
-  let load plugin =
+
+  let with_argv argv f = match argv with
+    | None -> f ()
+    | Some argv ->
+      let old = !args in
+      args := argv;
+      try
+        let r = f () in
+        args := old;
+        r
+      with
+      | exn ->
+        args := old;
+        raise exn
+
+
+  let do_load plugin =
     match try_load plugin with
     | Error err as result ->
       notify (`Errored (plugin.name,err));
       result
     | result -> result
+
+  let load ?argv plugin =
+    with_argv argv (fun () -> do_load plugin)
 
 end
 
@@ -243,22 +266,22 @@ module Plugins = struct
         | Ok p -> Some p
         | Error _ -> None) |> select ~provides ~env
 
-  let load ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
+  let load ?argv ?(env=[]) ?(provides=[]) ?library ?(exclude=[]) () =
     collect ?library () |> List.filter_map ~f:(function
         | Error err -> Some (Error err)
         | Ok p when List.mem ~equal:String.equal exclude (Plugin.name p) -> None
         | Ok p when is_not_selected ~provides ~env p -> None
-        | Ok p -> match Plugin.load p with
+        | Ok p -> match Plugin.load ?argv p with
           | Ok () -> Some (Ok p)
           | Error err -> Some (Error (Plugin.path p, err)))
 
   let loaded,finished = Future.create ()
 
-  let load ?env ?provides ?library ?exclude () =
+  let load ?argv ?env ?provides ?library ?exclude () =
     if Future.is_decided loaded
     then []
     else begin
-      let r = load ?env ?provides ?library ?exclude () in
+      let r = load ?argv ?env ?provides ?library ?exclude () in
       Promise.fulfill finished ();
       r
     end
@@ -285,10 +308,10 @@ module Plugins = struct
     Future.upon loaded (fun () -> events_backtrace := [])
 
 
-  let run ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
+  let run ?argv ?env ?provides ?(don't_setup_handlers=false) ?library ?exclude () =
     if not don't_setup_handlers
     then setup_default_handler ();
-    load ?env ?provides ?library ?exclude () |> ignore
+    load ?argv ?env ?provides ?library ?exclude () |> ignore
 
   let events = Plugin.system_events
   type event = Plugin.system_event [@@deriving sexp_of]

@@ -7,6 +7,7 @@ open Bap_primus_types
 
 module Observation = Bap_primus_observation
 module State = Bap_primus_state
+module Linker = Bap_primus_linker
 
 open Bap_primus_sexp
 
@@ -59,6 +60,9 @@ let pc_change,pc_changed =
 
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
+
+let interrupt,will_interrupt =
+  Observation.provide ~inspect:sexp_of_int "interrupt"
 
 let sexp_of_insn insn = Sexp.Atom (Insn.to_string insn)
 
@@ -185,7 +189,7 @@ module Make (Machine : Machine) = struct
   module Eval = Eval.Make(Machine)
   module Memory = Bap_primus_memory.Make(Machine)
   module Env = Bap_primus_env.Make(Machine)
-  module Linker = Bap_primus_linker.Make(Machine)
+  module Code = Linker.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
 
   type 'a m = 'a Machine.t
@@ -285,7 +289,7 @@ module Make (Machine : Machine) = struct
   and eval_cast t s x =
     eval_exp x >>= fun x ->
     cast t s x
-  and eval_unknown x t = undefined t
+  and eval_unknown _x t = undefined t
   and eval_extract hi lo x =
     eval_exp x >>= fun x ->
     extract ~hi ~lo x
@@ -294,7 +298,9 @@ module Make (Machine : Machine) = struct
     eval_exp y >>= fun y ->
     concat x y
 
-  let eval_exp x = eval_exp (Exp.normalize x)
+  let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
+
+  let exp = eval_exp
 
   let mem =
     Machine.get () >>| fun proj ->
@@ -346,7 +352,7 @@ module Make (Machine : Machine) = struct
     !!pos_left curr
 
 
-  let term return cls f t =
+  let term ?(cleanup=Machine.return ()) return cls f t =
     Machine.Local.get state >>= fun s ->
     match Pos.next s.curr cls t with
     | Error err -> Machine.raise err
@@ -358,6 +364,7 @@ module Make (Machine : Machine) = struct
         (fun exn -> leave cls curr t >>= fun () -> Machine.raise exn)
       >>= fun r ->
       leave cls curr t >>= fun () ->
+      cleanup >>= fun () ->
       return r
 
   let normal = Machine.return
@@ -370,10 +377,10 @@ module Make (Machine : Machine) = struct
   let def = term normal def_t def
 
   let label : label -> _ = function
-    | Direct t -> Linker.exec (`tid t)
+    | Direct t -> Code.exec (`tid t)
     | Indirect x ->
       eval_exp x >>= fun {value} ->
-      Linker.exec (`addr value)
+      Code.exec (`addr value)
 
   let call c =
     label (Call.target c) >>= fun () ->
@@ -383,12 +390,15 @@ module Make (Machine : Machine) = struct
 
   let goto c = label c
   let ret l = label l
-  let interrupt n r = failf "not implemented" ()
+  let interrupt n _r = !!will_interrupt n
+
   let jump t = match Jmp.kind t with
     | Call c -> call c
     | Goto l -> goto l
     | Ret l -> ret l
-    | Int (n,r) -> interrupt n r
+    | Int (n,r) ->
+      interrupt n r >>= fun () ->
+      Code.exec (`tid r)
 
   let jmp t = eval_exp (Jmp.cond t) >>| fun {value} -> Word.is_one value
   let jmp = term normal jmp_t jmp
@@ -403,29 +413,46 @@ module Make (Machine : Machine) = struct
     | None -> Machine.return ()
     | Some code -> jump code
 
-  let blk = term finish blk_t blk
-
   let arg_def t = match Arg.intent t with
-    | None | Some In -> Arg.lhs t := Arg.rhs t
+    | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
   let arg_def = term normal arg_t arg_def
 
   let arg_use t = match Arg.intent t with
-    | None | Some Out -> Arg.lhs t := Arg.rhs t
+    | None | Some (Out|Both) -> Arg.lhs t := Arg.rhs t
     | _ -> Machine.return ()
 
   let arg_use = term normal arg_t arg_use
 
-  let eval_entry = function
+  let eval_entry cleanup = function
     | None -> Machine.return ()
-    | Some t -> blk t
+    | Some t ->  term finish blk_t blk ~cleanup t
+
+
+  let get_arg t = Env.get (Arg.lhs t)
+  let get_args ~input sub =
+    Term.enum arg_t sub |>
+    Seq.filter ~f:(fun x -> not input || Arg.intent x <> Some Out) |>
+    Machine.Seq.map ~f:get_arg
+
+  let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f
 
   let sub t =
-    let iter f = Machine.Seq.iter (Term.enum arg_t t) ~f in
-    iter arg_def >>= fun () ->
-    eval_entry (Term.first blk_t t) >>= fun () ->
-    iter arg_use
+    let name = Sub.name t in
+    iter_args t arg_def >>= fun () ->
+    get_args ~input:true t >>| Seq.to_list >>= fun args ->
+    Machine.Observation.make Linker.Trace.call_entered
+      (name,args) >>= fun () ->
+    let cleanup =
+      iter_args t arg_use >>= fun () ->
+      get_args ~input:false t >>| Seq.to_list >>= fun args ->
+      Machine.Observation.make Linker.Trace.call_returned
+        (name,args) in
+    eval_entry cleanup (Term.first blk_t t)
+
+
+  let blk = term finish blk_t blk
 
   let sub = term normal sub_t sub
 
@@ -436,7 +463,7 @@ end
 
 module Init(Machine : Machine) = struct
   open Machine.Syntax
-  module Linker = Bap_primus_linker.Make(Machine)
+  module Linker = Linker.Make(Machine)
 
   let is_linked name t = [
     Linker.is_linked (`tid (Term.tid t));
@@ -473,6 +500,7 @@ module Init(Machine : Machine) = struct
       end in
       link Sub.name (module Code) t
   end
+
 
   let run () =
     Machine.get () >>= fun proj ->

@@ -18,6 +18,11 @@ let filename : string Term.t =
   Arg.(required & pos 0 (some non_dir_file) None &
        info [] ~doc ~docv:"FILE")
 
+let logdir : string option Term.t =
+  let doc = "A folder for log files." in
+  let env = Term.env_info ~doc "BAP_LOG_DIR" in
+  Arg.(value & opt (some string) None & info ["logdir"; "log-dir"] ~env ~doc)
+
 let brancher () : string option Term.t =
   match enum_processors (module Brancher) with
   | [] | [_] -> Term.const None
@@ -101,6 +106,11 @@ let list_formats, list_formats_doc =
   let doc =
     "Print detailed information about available project printers" in
   Arg.(value & flag & info ["list-formats"] ~doc), doc
+
+let list_recipes =
+  let doc = "Print all known recipes" in
+  Arg.(value & opt ~vopt:(Some None) (some (some string)) None
+       & info ["list-recipes"; "show-recipes"] ~doc)
 
 let dump_formats () : Bap_fmt_spec.t list Term.t =
   let fmts = Project.available_writers () |>
@@ -189,6 +199,10 @@ let no_auto_load, no_auto_load_doc =
   let doc = "Disable auto loading of plugins" in
   Arg.(value & flag & info ["disable-autoload"] ~doc), doc
 
+
+let recipe =
+  let doc = "Load the specified recipe" in
+  Arg.(value & opt (some string) None & info ["recipe"] ~doc)
 
 let loader_options = [
   "-l"; "-L"; "--load-path";
