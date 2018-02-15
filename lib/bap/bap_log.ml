@@ -51,7 +51,7 @@ let print ppf {Bap_event.Log.level; section; message} =
 let print_message ppf msg =
   print ppf msg;
   let open Bap_event.Log in match msg.level with
-  | Error -> print err_formatter msg
+  | Error -> eprintf "%s@\n%!" msg.message
   | _ -> ()
 
 let open_log_channel user_dir =
@@ -64,8 +64,8 @@ let open_log_channel user_dir =
     let ch = Out_channel.create file in
     formatter_of_out_channel ch
   with exn ->
-    eprintf "log.error> unable to open log file: %a@." Exn.pp exn;
-    eprintf "log.info> will continue logging to stderr@.";
+    eprintf "unable to open log file: %a@." Exn.pp exn;
+    eprintf "will continue logging to stderr@.";
     err_formatter
 
 let log_plugin_events () =
