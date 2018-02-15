@@ -93,10 +93,14 @@ let pp ppf ctxt =
    instances of a missing class.
 *)
 let (<=) ctxt ctxt' =
-  Map.for_alli ctxt ~f:(fun ~key:name ~data:features ->
-      match Map.find ctxt' name with
-      | None -> true  (* an empty set is a subset of any set *)
-      | Some features' -> Set.is_subset features' ~of_:features)
+  let sups = Map.merge ctxt ctxt' ~f:(fun ~key:_ -> function
+      | `Left _ -> None
+      | `Right features' ->
+        if Set.is_empty features' then None else Some features'
+      | `Both (features,features') ->
+        if (Set.is_subset features' ~of_:features)
+        then None else Some features') in
+  Map.is_empty @@ sups
 
 
 type porder = Less | Same | Equiv | More
