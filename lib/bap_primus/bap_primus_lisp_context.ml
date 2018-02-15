@@ -11,7 +11,7 @@ module Name = String
 type t = Feature.Set.t Name.Map.t
 let empty = Name.Map.empty
 
-type Attribute.error += Expect_atom | Expect_list
+type Attribute.error += Expect_atom | Expect_list | Unterminated_quote
 
 
 let fail what got = raise (Attribute.Bad_syntax (what,[got]))
@@ -53,9 +53,21 @@ let value = function
   | {data=Atom x} -> x
   | s -> expect_atom s
 
+let parse_name = function
+  | {data=Atom x} as s ->
+    let n = String.length x in
+    if n < 2 then x
+    else if x.[0] = '"'
+    then if x.[n-1] = '"'
+      then String.sub ~pos:1 ~len:(n-2) x
+      else fail Unterminated_quote s
+    else x
+  | s -> fail Expect_atom s
+
+
 let context_of_tree = function
-  | {data=List ({data=Atom name} :: values)} ->
-    name, Feature.Set.of_list (List.map values ~f:value)
+  | {data=List (x :: xs)} ->
+    parse_name x, Feature.Set.of_list (List.map xs ~f:parse_name)
   | s -> expect_list s
 
 
