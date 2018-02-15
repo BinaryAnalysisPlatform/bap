@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Result.Monad_infix
+open Format
 
 exception Bad_substitution of string
 
@@ -98,22 +99,24 @@ let subst_string f str =
   Buffer.add_substitute buf f str;
   Buffer.contents buf
 
-let make_subst pars vars arg =
-  match Map.find vars arg with
+let make_subst files pars vars arg =
+  match Map.find files arg with
   | Some x -> x
-  | None -> List.find_map pars ~f:(fun {name; defl} ->
-      if name = arg then Some defl else None) |> function
-            | Some x -> x
-            | None -> try Sys.getenv arg with
-              | Not_found -> raise (Bad_substitution arg)
+  | None ->  match Map.find vars arg with
+    | Some x -> x
+    | None -> List.find_map pars ~f:(fun {name; defl} ->
+        if name = arg then Some defl else None) |> function
+              | Some x -> x
+              | None -> try Sys.getenv arg with
+                | Not_found -> raise (Bad_substitution arg)
 
-let apply_subst_exn pars vars opts =
-  let subst = make_subst pars vars in
+let apply_subst_exn files pars vars opts =
+  let subst = make_subst files pars vars in
   List.map opts ~f:(fun (name,args) ->
       "--"^name,List.map args ~f:(subst_string subst))
 
-let apply_subst pars vars opts =
-  try Ok (apply_subst_exn pars vars opts)
+let apply_subst files pars vars opts =
+  try Ok (apply_subst_exn files pars vars opts)
   with Bad_substitution s -> Error (Bad_subst s)
 
 let linearize  =
@@ -131,7 +134,7 @@ let rec load_path env path =
   input files "descr" parse_descr >>= fun descr ->
   input files "recipe.scm" parse_recipe >>= fun spec ->
   List.map spec.uses ~f:(load env) |> Result.all >>= fun loads ->
-  apply_subst spec.pars env.vars spec.opts >>| fun args ->
+  apply_subst files spec.pars env.vars spec.opts >>| fun args ->
   {files; descr; loads; args = linearize args}
 and load env name =
   List.find env.paths ~f:(fun p ->
@@ -186,5 +189,25 @@ let rec cleanup t =
   Map.iter t.files ~f:Sys.remove;
   List.iter t.loads ~f:cleanup
 
-let pp_error ppf err =
-  Sexp.pp_hum ppf (sexp_of_error err)
+let pp_error ppf = function
+  | Expect_atom sexp ->
+    fprintf ppf "Parse error: expected an atom got (%a)"
+      (pp_print_list Sexp.pp_hum) sexp
+  | Expect_var s ->
+    fprintf ppf "Parse error: bad variable, got %s" s
+  | Bad_item s ->
+    fprintf ppf "Parse error: unknown recipe item - %a" Sexp.pp_hum s
+  | Missing_entry s ->
+    fprintf ppf "There required file %s is missing" s
+  | Bad_sexp err ->
+    fprintf ppf "Parse error: %s" (Parsexp.Parse_error.message err)
+  | No_recipe r ->
+    fprintf ppf "Can't find the required recipe %s" r
+  | Bad_subst v ->
+    fprintf ppf "Don't know how to substitute %s" v
+  | Malformed_recipe (x,y,z) ->
+    fprintf ppf "Malformed recipe: %s, %s, %s" x y z
+  | Duplicate_var s ->
+    fprintf ppf "Variable %s was specified twice" s
+  | System_error s ->
+    fprintf ppf "System error: %s" s

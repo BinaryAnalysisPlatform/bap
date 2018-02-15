@@ -21,7 +21,7 @@ let filename : string Term.t =
 let logdir : string option Term.t =
   let doc = "A folder for log files." in
   let env = Term.env_info ~doc "BAP_LOG_DIR" in
-  Arg.(value & opt (some dir) None & info ["logdir"; "log-dir"] ~env ~doc)
+  Arg.(value & opt (some string) None & info ["logdir"; "log-dir"] ~env ~doc)
 
 let brancher () : string option Term.t =
   match enum_processors (module Brancher) with
