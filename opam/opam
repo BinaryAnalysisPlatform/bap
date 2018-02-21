@@ -109,9 +109,8 @@ install: [
   ["ocamlfind" "remove" "ogre"]
   ["ocamlfind" "remove" "bare"]
   [make "reinstall"]
-  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.3.0/sigs_full.zip"]
-  [make "test"]
-  [make "check"]
+  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.4.0/sigs.zip"]
+  ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
 ]
 
 remove: [
@@ -206,6 +205,7 @@ remove: [
   ["rm" "-f" "%{bin}%/bap-byteweight"]
   ["rm" "-f" "%{bin}%/bapbuild"]
   ["rm" "-f" "%{bin}%/baptop"]
+  ["rm" "-f" "%{bin}%/bap_run_tests"]
 ]
 
 depends: [
