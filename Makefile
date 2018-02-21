@@ -39,12 +39,8 @@ distclean:
 .PHONY: check
 
 test: build
-ifneq ("$(BAP_NO_TESTS)","true")
 	$(SETUP) -test $(BAPTESTFLAGS)
-endif
 
 check:
-ifneq ("$(BAP_NO_CHECKS)","true")
 	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite
-endif
