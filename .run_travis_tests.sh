@@ -4,9 +4,9 @@ eval `opam config env`
 
 comp=`opam config var switch`
 
-cp -alu $HOME/save_opam/bin/* $HOME/.opam/$comp/bin/
-cp -alu $HOME/save_opam/share/* $HOME/.opam/$comp/share/
-cp -alu $HOME/save_opam/lib/* $HOME/.opam/$comp/lib/
+cp -r $HOME/save_opam/bin/* $HOME/.opam/$comp/bin/
+cp -r $HOME/save_opam/share/* $HOME/.opam/$comp/share/
+cp -r $HOME/save_opam/lib/* $HOME/.opam/$comp/lib/
 
 bap --version
 bap-byteweight update
