@@ -405,6 +405,5 @@ let bh_e mode = bits2reg8e mode 7
 
 
 let pp_insn ppf (mem,insn) =
-  Format.fprintf ppf "%a: %s"
-    Addr.pp_hex (Memory.min_addr mem)
-    (Disasm_expert.Basic.Insn.asm insn)
+  Format.fprintf ppf "%a %s"
+    Memory.pp mem (Disasm_expert.Basic.Insn.asm insn)

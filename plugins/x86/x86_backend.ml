@@ -32,18 +32,22 @@ module Make (PR : PR) = struct
 
     let lift mem insn =
       let lift = search lifts insn in
-      match lift mem insn with
-      | Error err ->
-        warning "failed to lift instruction %a - %a"
+      try match lift mem insn with
+        | Error err ->
+          warning "failed to lift %a - %a"
+            X86_utils.pp_insn (mem,insn) Error.pp err;
+          Error err
+        | Ok bil as ok -> match Type.check bil with
+          | Ok () -> ok
+          | Error te ->
+            warning "BIL is not well-typed %a - %a"
+              X86_utils.pp_insn (mem,insn) Type.Error.pp te;
+            errorf "ill-typed term"
+      with exn ->
+        let err = Error.of_exn ~backtrace:`Get exn in
+        warning "failed to lift %a - lifter internal error: %a"
           X86_utils.pp_insn (mem,insn) Error.pp err;
-        Error err
-      | Ok bil as ok -> match Type.check bil with
-        | Ok () -> ok
-        | Error te ->
-          warning "BIL is not well-typed %a - %a"
-            X86_utils.pp_insn (mem,insn) Type.Error.pp te;
-          Error (Error.of_string "type error")
-
+        errorf "internal error"
 
 
 
