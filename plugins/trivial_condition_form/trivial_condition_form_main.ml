@@ -55,4 +55,4 @@ hoisted into the assignemnt section of a block.";
 
 
 let () = when_ready (fun _ ->
-    Project.register_pass main)
+    Project.register_pass ~runonce:true main)
