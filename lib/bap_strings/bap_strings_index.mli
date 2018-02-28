@@ -1,13 +1,13 @@
-module type Key = sig 
+module type Key = sig
   type t
   val compare : t -> t -> int
-  val null : t 
+  val null : t
   val succ : t -> t
 end
 
-module Persistent : sig 
+module Persistent : sig
   module type S = sig
-    type t 
+    type t
     type key
 
     (** [empty] an empty index *)
@@ -28,7 +28,8 @@ module Persistent : sig
         associated with [data].  *)
     val register : t -> string -> t
 
-    (** [registered idx data returns *)
+    (** [registered idx data] is [true] if [data] was registered in
+        the index. *)
     val registered : t -> string -> bool
   end
 

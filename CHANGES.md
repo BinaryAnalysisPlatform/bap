@@ -1,3 +1,39 @@
+1.4.0
+=====
+
+### Features
+
+- PR#762 MIPS and MIPS64 lifters
+- PR#739 PowerPC and PowerPC64 lifters
+- PR#744 LLVM 5.0 compatibility
+- PR#734 BARE Binary Analysis Rule Engine
+- PR#734 New Taint Analysis Framework
+- PR#734 Primus Lisp 2.0 with symbols and methods
+- PR#734 Recipes
+- PR#734 Primus Test Framework
+- PR#734 Dataflow and Abstract Interpretation Framework
+- PR#734 Progress Reports and Profilers
+- PR#773 New primitives for BML
+
+### Bug fixes
+
+- PR#782 Incorrect error handling in x86 lifter
+- PR#734 Failure to decode ICC binaries
+- PR#772 Fixes equiv type in Graphlib
+- PR#771 Unhardcodes llvm backed in the linear sweep disassembler
+- PR#770 Fixes the memory printer
+- PR#761 Fixes handling relocations in reconstructor
+- PR#759 Fixes race condition in the source merge procedure
+- PR#758 Restores the source-type command line option
+- PR#755 Proper handling of tail calls in IR lifter
+- PR#754 Fixes segment registers in mov instruction
+- PR#746 Fixes xor in the BIL simplfication procedure
+- PR#728 Fixes flag calculation in the x86 sub instruction
+- PR#727 Fixes numerous missed sign extensions in x86 lifter
+- PR#725 Adds modulo operation to x86 rot/rol instructions
+- PR#724 Fixes operands order in the x86 xadd instruction
+- PR#723 Fixes segment duplication
+
 1.3.0
 =====
 
