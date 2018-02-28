@@ -30,6 +30,10 @@ let mapper = Primus.Machine.State.declare
          tids = Taint.Object.Map.empty;
        })
 
+let is_mem v = match Var.typ v with
+  | Type.Imm _ -> false
+  | Type.Mem _ -> true
+
 
 module Intro(Machine : Primus.Machine.S) = struct
   module Env = Primus.Interpreter.Make(Machine)
@@ -41,9 +45,8 @@ module Intro(Machine : Primus.Machine.S) = struct
 
   open Machine.Syntax
 
-
   let kind t =
-    Kind.create (sprintf "user-%s" (Tid.name (Term.tid t)))
+    Kind.create (sprintf "user-%s" (Tid.name t))
 
   let connect tid taint =
     Machine.Local.update mapper ~f:(fun m -> {
@@ -51,39 +54,51 @@ module Intro(Machine : Primus.Machine.S) = struct
           tids = Map.add m.tids ~key:taint ~data:tid
         })
 
+  let translation = [
+    Legacy_taint.reg, `Reg, Taint.Rel.direct;
+    Legacy_taint.ptr, `Ptr, Taint.Rel.indirect;
+  ]
+
 
   let gentaint t =
     kind t >>= fun k ->
     Object.create k >>= fun taint ->
-    connect (Term.tid t) taint >>| fun () ->
+    connect t taint >>| fun () ->
     Taint.Object.Set.singleton taint
 
   let introduces def =
-    Term.has_attr def Legacy_taint.reg ||
-    Term.has_attr def Legacy_taint.ptr
+    List.find_map translation ~f:(fun (k,s,r) ->
+        match Term.get_attr def k with
+        | None -> None
+        | Some t -> Some (t,s,r))
 
-  let taint_ptr taints ptr sz =
-    Eval.exp ptr >>= fun ptr ->
-    Machine.Seq.iter (Seq.range 0 (Size.in_bytes sz)) ~f:(fun off ->
-        Value.nsucc ptr off >>= fun ptr ->
-        Tracker.attach ptr Taint.Rel.indirect taints)
+  let taint_ptr taints ptr =
+    Tracker.attach ptr Taint.Rel.indirect taints
 
-  let taint_var taints var =
-    Env.get var >>= fun v ->
-    Tracker.attach v Taint.Rel.direct taints
+  let taint_var k taints var =
+    if is_mem var then Machine.return ()
+    else
+      Env.get var >>= fun v ->
+      Tracker.attach v k taints
 
   let intro def =
-    if introduces def then
-      gentaint def >>= fun t ->
-      taint_var t (Def.lhs def) >>= fun () ->
+    match introduces def with
+    | None -> Machine.return ()
+    | Some (taint,kind,rel) ->
+      gentaint taint >>= fun t ->
+      taint_var rel t (Def.lhs def) >>= fun () ->
       match Def.rhs def with
-      | Bil.Load (_,addr,_,sz)
-      | Bil.Store (_,addr,_,_,sz) ->
-        taint_ptr t addr sz
+      | Bil.Load (_,addr,ed,sz)
+      | Bil.Store (_,addr,_,ed,sz) ->
+        Eval.exp addr >>= fun ptr ->
+        if kind = `Reg
+        then taint_ptr t ptr
+        else
+          Eval.load ptr ed sz >>=
+          taint_ptr t
       | exp ->
         Exp.free_vars exp |> Set.to_sequence |>
-        Machine.Seq.iter ~f:(taint_var t)
-    else Machine.return ()
+        Machine.Seq.iter ~f:(taint_var rel t)
 
   let init () =
     Primus.Interpreter.leave_def >>> intro
@@ -120,13 +135,15 @@ module Mapper(Machine : Primus.Machine.S) = struct
         Machine.Seq.fold ~init:s ~f:(fun s var ->
             Env.get var >>= fun v ->
             Tracker.lookup v rel >>| remap s.tids >>| fun taints ->
-            Field.fset fld s @@
-            Map.update (Field.get fld s) (Term.tid term) ~f:(function
-                | None -> Var.Map.singleton var taints
-                | Some taints' ->
-                  Map.update taints' var ~f:(function
-                      | None -> taints
-                      | Some taints' -> Set.union taints taints'))) >>=
+            if Set.is_empty taints || is_mem var then s
+            else
+              Field.fset fld s @@
+              Map.update (Field.get fld s) (Term.tid term) ~f:(function
+                  | None -> Var.Map.singleton var taints
+                  | Some taints' ->
+                    Map.update taints' var ~f:(function
+                        | None -> taints
+                        | Some taints' -> Set.union taints taints'))) >>=
         Machine.Local.put mapper)
 
   let update_jmp = update Jmp.free_vars
@@ -144,8 +161,17 @@ module Marker(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
 
+
+  let update_taints t tag ts = match Term.get_attr t tag with
+    | None -> Term.set_attr t tag ts
+    | Some ts' -> Term.set_attr t tag @@ Map.merge ts ts'
+        ~f:(fun ~key:_ -> function
+            | `Left ts | `Right ts -> Some ts
+            | `Both (ts,ts') -> Some(Set.union ts ts'))
+
+
   let mark tag taints t = match Map.find taints (Term.tid t) with
-    | Some ts when not(Map.is_empty ts) -> Term.set_attr t tag ts
+    | Some ts when not(Map.is_empty ts) -> update_taints t tag ts
     | _ -> t
 
   let mark_terms {regs; ptrs} = (object
@@ -172,36 +198,105 @@ let markers : Primus.component list = [
   (module Marker);
 ]
 
+let enable_projection () =
+  List.iter markers ~f:Primus.Machine.add_component
+
+let enable_injection () =
+  Primus.Machine.add_component (module Intro)
+
+
 
 open Config;;
 manpage [
   `S "DESCRIPTION";
-  `P "The Primus taint propagatation engine.";
 
-  `P "Integrates the Primus Taint Analysis Framework with the old taint
-    propagation framework. The new framework uses signals and
-    observations, provides sanitization operations and tracks
-    taint liveness, that enables more conventional and online
-    taint analysis. The old taint propagation framework used a
-    pipeline approach, with taints attributed to terms. It is still
-    used by some existing analysis and tooling. This module reflects
-    the information produced by the Primus Taint Analysis Framework
-    to the old representation, i.e., taint attributes.";
+  `P "This plugin implements a compatibility layer between the new
+    Primus Taint Analysis Framework and the old taint propagation
+    framework (the $(b,propagate-taint) plugin). The new framework
+    uses the pubslisher-subscriber pattern, provides sanitization
+    operations, and tracks the taints liveness, that enables more
+    conventional and online taint analysis. However it represents
+    taints as abstract objects associated with computations (values),
+    while the old taint propagation framework uses a pipeline
+    approach, with taints represented as attributes attached to
+    program terms. Since the new representation of taints is much more
+    precise and there is no bijection between terms and values, this
+    layer will loose information due to this impendance mismatch. The
+    trade-offs of the translation and described below. New analysis,
+    if possible, shall rely on the new framework.";
+
+  `P "The translation is achieved by mapping the $(b,tainted-ptr) and
+    $(b,tainted-reg) attributes to corresponding taint introduction
+    operations of the Primus Taint Analysis Framework, and by
+    reflecting the taint state of the analysis into the
+    $(b,tainted-regs) and $(b,tainted-ptrs) attributes. Both steps are
+    optional, and could be enabled and disabled individually.";
+
+  `P
+    "Since an attribute is attached to the whole term not to an
+    individual expression or value we need some rule that prescribes
+    how terms maps to values. If a term is marked as a term that
+    introduces a taint, then we assume that a value, computed
+    in this term, references the tainted object either directly (in
+    case of $(b,tainted-reg)) or indirectly (in case of
+    $(b,tainted-ptr)). We always taint a value contained in the
+     left-hand side of a definition. In addition, we also try to
+    taint values on the right hand side. If there is a load or store
+    operation, then we taint address as a pointer to the object that
+    will track, if it was marked with the $(b,tainted-reg)
+    attribute. If it was marked with the $(b,tainted-ptr) attribute
+    then we dereference this pointer and taint the dereferenced
+    address. If the right hand side is an abritrary expression, then
+    we assume that all variables that are used in this expression
+    contain values that are referencing directly or indirectly the
+    tainted object."
 ]
 
-let deprecated = "is deprecated, use the primus-taint plugin instead"
+let injection_enabled = flag "from-attributes"
+    ~doc:"Introduces taint in terms that are marked with the
+    $(b,tainted-ptr) and $(b,tainted-reg) attribute. "
 
+let projection_enabled = flag "to-attributes"
+    ~doc:"Reflects the state of the taint propagation engine to the
+    $(b,tainted-ptrs) and $(b,tainted-regs) term attributes."
 
-let enabled = flag "run" ~doc:deprecated
-let don't_mark = flag "no-marks" ~doc:deprecated
+let soft_deprecation_notice = {|
+This option is left for compatibility with the old interface and
+is not compatible with the $(b,from-attributes) or
+$(b,to-attrbutes) options. It is an error to mix options from the
+new and old interfaces.
+|}
 
-(* deprecation doesn't work as expected with flags, so let's invent
- * something here... *)
-let () = when_ready (fun {get=(!!)} ->
-    if !!enabled
-    then eprintf
-        "Warning: this option is deprecated and propagation is now
-         controlled by the primus-taint plugin (and there is no need
-         to enable the propagation anymore)\n%!";
-    if not !!don't_mark  (* sorry :)  *)
-    then List.iter markers ~f:Primus.Machine.add_component)
+let enabled = flag "run"
+    ~doc:("Enables propagating taint from term attributes and back to \
+           attributes, unless the latter is disabled with the
+           $(b,no-marks) option. " ^ soft_deprecation_notice)
+
+let marking_disabled = flag "no-marks"
+    ~doc: ("Disables the projection of the taint engine state to term
+    attributes. The option is only valid when the $(b,run) option is
+    specified. " ^ soft_deprecation_notice)
+
+;;
+
+when_ready begin fun {get=is} ->
+  if is injection_enabled || is projection_enabled
+  then if is enabled || is marking_disabled
+    then invalid_arg "Incorrect mix of old and new parameters";
+  if is marking_disabled && not (is enabled)
+  then invalid_arg "The no-marks option is only valid if \
+                    the run option is specified";
+
+  (* Modern interface *)
+  if is injection_enabled
+  then enable_injection ();
+  if is projection_enabled
+  then enable_projection ();
+
+  (* Legacy interface *)
+  if is enabled then begin
+    enable_injection ();
+    if not (is marking_disabled) then
+      enable_projection ();
+  end
+end

@@ -25,7 +25,7 @@ Library primus_propagate_taint_plugin
   FindlibName: bap-plugin-primus_propagate_taint
   CompiledObject: best
   BuildDepends: bap-primus, bap-taint
-  XMETADescription: a deprecated taint propagation module
+  XMETADescription: a compatibility layer between different taint analysis frameworks
   InternalModules: Primus_propagate_taint_main
   XMETAExtraLines:  tags="dataflow, pass, taint, primus"
 
