@@ -30,6 +30,10 @@ let mapper = Primus.Machine.State.declare
          tids = Taint.Object.Map.empty;
        })
 
+let is_mem v = match Var.typ v with
+  | Type.Imm _ -> false
+  | Type.Mem _ -> true
+
 
 module Intro(Machine : Primus.Machine.S) = struct
   module Env = Primus.Interpreter.Make(Machine)
@@ -72,8 +76,10 @@ module Intro(Machine : Primus.Machine.S) = struct
     Tracker.attach ptr Taint.Rel.indirect taints
 
   let taint_var k taints var =
-    Env.get var >>= fun v ->
-    Tracker.attach v k taints
+    if is_mem var then Machine.return ()
+    else
+      Env.get var >>= fun v ->
+      Tracker.attach v k taints
 
   let intro def =
     match introduces def with
@@ -121,10 +127,6 @@ module Mapper(Machine : Primus.Machine.S) = struct
 
   let remap tids objs =
     Tid.Set.filter_map objs ~f:(Map.find tids)
-
-  let is_mem v = match Var.typ v with
-    | Type.Imm _ -> false
-    | Type.Mem _ -> true
 
   let update vars term =
     Machine.List.iter relations ~f:(fun (rel,fld) ->
