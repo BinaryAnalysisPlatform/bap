@@ -12,7 +12,7 @@ module Std : sig
 
       Primus is a microexecution framework that can be used to build
       CPU and full system emulators, symbolic executers, static
-      fuzzers, policy checkers, tracers, quickcheck-like test suits,
+      fuzzers, policy checkers, tracers, quickcheck-like test suites,
       etc.
 
       The underlying idea is quite simple - Primus interprets a lifted
@@ -134,6 +134,12 @@ module Std : sig
       (** enumerate all currently available observation providers  *)
       val list_providers : unit -> provider list
 
+
+      (** Data interface to the provider.
+
+          This interface provides access to the data stream of all
+          providers expresses as a stream of s-expressions.
+       *)
       module Provider : sig
         type t = provider
 
@@ -148,7 +154,6 @@ module Std : sig
 
         (** a data stream from this observation *)
         val data : t -> Sexp.t stream
-
       end
     end
 
@@ -1359,9 +1364,9 @@ module Std : sig
         - declarations;
         - constants
         - substitutions;
+        - methods;
         - macros;
         - functions;
-        - advice
 
         The entities may be specified in any order, however the above
         order constitutes a good programming practice.
@@ -1571,13 +1576,9 @@ module Std : sig
         is a decimal digit, will be substituted with the value of the
         n'th expression (counting from zero).
 
-        A sequence {b $<expr> } will be substituted with the value of
-        expression {b $<expr> }. Thus the [$] symbol can be seen as
-        an anti-quotation, that temporary disables the quoting marks.
-
         Example,
 
-        {v (msg "hello, $0 $0 world, (+ 7 8) = $(+ 7 8)" "cruel") v}
+        {v (msg "hello, $0 $0 world, (+ 7 8) = $1" "cruel" (+ 7 8)) v}
 
         will be rendered to a message:
 
@@ -1913,15 +1914,14 @@ module Std : sig
         before or after the evaluation of an advised function, e.g.,
 
         {v
-          (defun memory-written (a x) (msg "write $x to $a"))
-          (advice-add memory-written :before memory-write)
+          (defun memory-written (a x)
+            (declare (advice :before memory-write))
+            (msg "write $x to $a"))
         v}
 
-        The general syntax is:
-
-        {v (advice-add <advisor> <when> <advised>) v}
-
-        where the <when> clause is either [:before] or [:after].
+        This definition not only defines a new function called
+        [memory-written], but also proclaims it as advice function to
+        the [memory-write] function that should before it is called.
 
         If an advisor is attached before the advised function, then
         it the advisor will be called with the same arguments as the
@@ -1939,8 +1939,26 @@ module Std : sig
         several advisors attached after the same function, then they
         will be called in the unspecified order.
 
-        The following example will demostrate how to implement fat
-        pointers using the advice mechanism:
+
+        {2 Signaling Mechanims}
+
+        The Primus Observation system is reflected onto the Primus
+        Lisp Machine Signals. Every time a reflected observation
+        occurs the Lisp Machine receives a signal that is dispatched
+        to handlers. A handler can be declared defined with the
+        [defmethod] form, e.g.,
+
+        {v
+        (defmethod call (name arg)
+          (when (= name 'malloc)
+            (msg "malloc($0) was called" arg)))
+        v}
+
+        The [defmethod] form follows the general definiton template,
+        i.e., it can contain a docstring and declaration section, and
+        selection and resolution rules are applicable to
+        methods. Methods of the same signal are invoked in an
+        unspecified order.
 
         {2 Formal syntax}
 
@@ -1964,7 +1982,7 @@ entity ::=
   | <substitution-definition>
   | <macro-definition>
   | <function-definition>
-  | <advising>
+  | <method-definition>
 
 feature-request ::= (require <ident>)
 
@@ -1994,11 +2012,18 @@ function-definition ::=
   | (defun <ident> (<var> ...) <declarations> <exp> ...)
   | (defun <ident> (<var> ...) <docstring> <declarations> <exp> ...)
 
-advice ::=
-  | (advice-add <ident> <method> <ident>)
+method-definition ::=
+  | (defmethod <ident> (<var> ...) <exp> ...)
+  | (defmethod <ident> (<var> ...) <docstring> <exp> ...)
+  | (defmethod <ident> (<var> ...) <declarations> <exp> ...)
+  | (defmethod <ident> (<var> ...) <docstring> <declarations> <exp> ...)
+
 
 exp ::=
   | ()
+  | <var>
+  | <word>
+  | <sym>
   | (if <exp> <exp> <exp> ...)
   | (let (<binding> ...) <exp> ...)
   | (set <var> <exp>)
@@ -2018,11 +2043,13 @@ attribute ::=
 
 docstring ::= <text>
 
-syntax ::= :hex | :ascii | ?extensible?
+syntax ::= :hex | :ascii | ...
 
-atom  ::= <word> | <text> |
+atom  ::= <word> | <text>
 
 word  ::= ?ascii-char? | <int> | <int>:<size>
+
+sym   ::= '<atom>
 
 int   ::= ?decimal-octal-hex-or-bin format?
 
@@ -2036,11 +2063,16 @@ ident ::= ?any atom that is not recognized as a <word>?
       (** an abstract type representing a lisp program  *)
       type program
 
+
+      (** an abstract type that represents messages send with the
+         [msg] form. *)
       type message
 
 
       (** Primus Lisp program loader  *)
       module Load : sig
+
+        (** abstract error type *)
         type error
 
         (** [program ?paths proj features] loads a program that
@@ -2068,44 +2100,168 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_program : Format.formatter -> program -> unit
       end
 
+
+      (** Lisp Type System.
+
+          Primus Lisp is equipped with the gradual type system that
+          features type inference.
+      *)
       module Type : sig
+
+
+        (** A type of an expression  *)
         type t
+
+
+        (** Definition signature  *)
         type signature
+
+        (** An abstract type error *)
         type error
 
+        (** a type specifier for function parameters
+
+            Don't use this directly, this type is uses in the [Spec]
+            eDSL. Use the Spec module directly.
+
+        *)
         type parameters = [
           | `All of t
           | `Gen of t list * t
           | `Tuple of t list
         ]
 
+
+        (** Type Specifier DSL.
+
+            A language to build type signatures for Primus Lisp
+            primitives.
+
+            The signature specifier consists of two parts: the
+            parameter list specifier, and the return value type
+            specifier. They are separated with the [@->] operator:
+
+            {[params @-> return]}
+
+            The list of parameters can be specified as a tuple, a
+            variable number of arguments of the same type, or a
+            tuple followed by a variable number of arguments of the
+            same type. Special shortcuts for 1-tuple and 0-tuple are
+            provided.
+
+            The return value type could be [any], [bool], [byte],
+            [word n], [sym], [int], or a type variable bound in the
+            parameters list.
+
+            Examples:
+
+            {[
+              one int @-> byte;
+              tuple [int; byte] @-> int;
+              all a @-> bool;
+              tuple [sym; int] // all byte @-> bool;
+            ]}
+
+        *)
         module Spec : sig
+
+
+          (** [any] top type which is inhabitated by all Primus values  *)
           val any : t
+
+
+          (** [var x] type variable [x]. All variables with the same
+              name in the scope of a definiton are unified.  *)
           val var : string -> t
+
+          (** [sym] symbol type.  *)
           val sym : t
+
+
+          (** a machine integer - a word that has the same width as
+             [Arch.addr_size] *)
           val int : t
+
+
+          (** [bool] a one bit word  *)
           val bool : t
+
+          (** [byte] an eight bit word  *)
           val byte : t
+
+          (** [word n] an [n] bit word *)
           val word : int -> t
+
+          (** [a] shortcut for [var "a"]  *)
           val a : t
+
+          (** [b] shortcut for [var "b"]  *)
           val b : t
+
+          (** [c] shortcut for [var "c"]  *)
           val c : t
+
+          (** [d] shortcut for [var "d"]  *)
           val d : t
 
+
+          (** [tuple [args]] specifies that a function accepts
+              a tuple of arguments of specified types.*)
           val tuple : t list -> [`Tuple of t list]
+
+          (** [all t] specifies that a function accepts a variable
+          number of arguments all having type [t].  *)
           val all : t -> [`All of t]
+
+          (** [one t] specifies that a function accepts one argument
+              of type [t] *)
           val one : t -> [`Tuple of t list]
+
+
+          (** [unit] specifies that a function doesn't have any parameters  *)
           val unit : [`Tuple of t list]
+
+
+          (** [params // rest] specifies that a function is variadic,
+              but have some number of mandatory arguments, i.e., it
+              accepts a tuple of parameters specified by the [params]
+              type specifier and a variadic list of arguments
+              specified by the [rest] type specifier. *)
           val (//) : [`Tuple of t list] -> [`All of t] -> parameters
+
+
+          (** [params @-> t] constructs a signature from the
+              parameter list specifier [params] and the return type
+              specifier [t]  *)
           val (@->) : [< parameters] -> t -> signature
         end
 
+
+        (** [check env prog] type checks program in the environment
+           [env] and returns a list of errors. If the list is empty
+           the the program is well-typed.
+
+            Note: this function is currently experimental *)
         val check : Var.t seq -> program -> error list
+
+
+        (** [pp_error ppf err] prints a description of the type error
+            [err] into the formatter [ppf] *)
         val pp_error : Format.formatter -> error -> unit
       end
 
+
+      (** Lisp Machine Message interface.
+
+          Lisp machine messages are sent with the [msg] primitive. The
+          messages are abstract, but they could be printed.
+      *)
       module Message : sig
         type t = message
+
+
+        (** [pp ppf msg] prints the message into the specified
+        formatter [ppf]. *)
         val pp : Format.formatter -> t -> unit
       end
 
@@ -2128,24 +2284,26 @@ ident ::= ?any atom that is not recognized as a <word>?
       module Primitive : sig
         type 'a t
         val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
-      end
+      end [@@deprecated "[since 2018-03] use [Closure]"]
 
       (* undocumented since it is deprecated *)
       module type Primitives = functor (Machine : Machine.S) ->  sig
-        val defs : unit -> value Machine.t Primitive.t list
-      end
+        val defs : unit -> value Machine.t Primitive.t list [@@warning "-D"]
+      end [@@deprecated "[since 2018-03] use [Closure]"]
 
       (** a list of primitives.  *)
       type primitives = (module Primitives)
+      [@@deprecated "[since 2018-03] use [closure]"]
+
       type exn += Runtime_error of string
 
-
+      (** [message] observation occurs every time a message is sent
+         from the Primus Machine.  *)
       val message : message observation
 
       (** Make(Machine) creates a Lisp machine embedded into the
           Primus [Machine].  *)
       module Make (Machine : Machine.S) : sig
-
 
         (** [link_program p] links the program [p] into the Lisp
             Machine. Previous program, if any, is discarded. *)
@@ -2221,15 +2379,13 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         (** [link_primitives prims] provides the primitives [prims]   *)
         val link_primitives : primitives -> unit Machine.t
-        [@@deprecated "[since 2017-12] use link_primitive instead"]
+        [@@deprecated "[since 2018-03] use link_primitive instead"]
       end
 
       (* it's a no-op now. *)
       val init : ?log:Format.formatter -> ?paths:string list -> string list -> unit
-      [@@deprecated "[since 2017-12] use the Machine interface instead"]
+      [@@deprecated "[since 2018-03] use the Machine interface instead"]
     end
-
-
 
     (** Primus error.  *)
     module Exn : sig

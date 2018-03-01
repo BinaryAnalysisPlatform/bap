@@ -2,33 +2,33 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![docs](https://img.shields.io/badge/doc-1.3.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.3.0/argot_index.html)
+[![docs](https://img.shields.io/badge/doc-1.4.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.4.0/argot_index.html)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
 
-The Binary Analysis Platform is a reverse engineering and program analysis platform 
-that works with binary code and doesn't require the source code. BAP supports 
-multiple architectures x86, x86-64, and ARMv7, PowerPC, and MIPS. BAP disassembles and lifts binary code into 
-the RISC-like BAP Instruction Language ([BIL](https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf)). 
-Program analysis is performed on BIL representation and is architecture independent in a sense that it will work equally
-well for all the supported architectures. The platform comes with a set of tools, libraries, and plugins. 
-The main purpose of BAP is to provide a toolkit for automated program analysis. BAP is written 
-in [OCaml](https://ocaml.org/) and it is the preferred language to write analysis, we have bindings to 
+The Carnegie Mellon University Binary Analysis Platform (CMU BAP) is a reverse engineering and program analysis platform
+that works with binary code and doesn't require the source code. BAP supports
+multiple architectures: ARM, x86, x86-64, PowerPC, and MIPS. BAP disassembles and lifts binary code into
+the RISC-like BAP Instruction Language ([BIL](https://github.com/BinaryAnalysisPlatform/bil/releases/download/v0.1/bil.pdf)).
+Program analysis is performed using the BIL representation and is architecture independent in a sense that it will work equally
+well for all supported architectures. The platform comes with a set of tools, libraries, and plugins. The [documentation](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html) and [tutorial](https://github.com/BinaryAnalysisPlatform/bap-tutorial) are also available.
+The main purpose of BAP is to provide a toolkit for implementing automated program analysis. BAP is written
+in [OCaml](https://ocaml.org/) and it is the preferred language to write analysis, we have bindings to
 [C](https://github.com/BinaryAnalysisPlatform/bap-bindings),
 [Python](https://github.com/BinaryAnalysisPlatform/bap-python) and
 [Rust](https://github.com/maurer/bap-rust). The Primus Framework also provide a Lisp-like DSL for writing program analysis tools.
 
-BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by various grants 
-from the United States Department of Defense, Siemens AG, and the Korea government, see [sponsors](#Sponsors) for more information.  
+BAP is developed in [CMU, Cylab](https://www.cylab.cmu.edu/) and is sponsored by various grants
+from the United States Department of Defense, Siemens AG, and the Korea government, see [sponsors](#Sponsors) for more information.
 
 # Table of contents
 * [Installation](#installation)
-  * [Binary](#binary) 
+  * [Binary](#binary)
   * [Sources](#from-sources)
 * [Usage](#usage)
   * [Shell](#shell)
-  * [OCaml](#ocaml) 
+  * [OCaml](#ocaml)
   * [Python](#python)
   * [C](#c)
   * [baptop](#baptop)
@@ -51,7 +51,7 @@ sudo dpkg -i {bap,libbap,libbap-dev}_1.3.0.deb
 ## From sources
 
 The binary release doesn't contain OCaml runtime, and is suitable only
-if you are not going to extend BAP using OCaml programming language. 
+if you are not going to extend BAP using OCaml programming language.
 If you want to write your own analysis in OCaml, we recommend to use the OPAM package manager to
 install BAP and the development environment.  After you've successfully
 [installed](https://opam.ocaml.org/doc/Install.html) OPAM, run the
@@ -63,7 +63,7 @@ eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```
 
-Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation) 
+Got any problems? Then visit our [troubleshooting page](https://github.com/BinaryAnalysisPlatform/bap/wiki/Troubleshooting-installation)
 or contact us directly via our Gitter [chat](https://gitter.im/BinaryAnalysisPlatform/bap).
 
 # Usage
@@ -82,7 +82,7 @@ file.
 ```fortran
 $ bap testsuite/bin/x86_64-linux-gnu-echo -d | grep 'sub print_endline' -A44
 00000334: sub print_endline()
-00000301: 
+00000301:
 00000302: v483 := RBP
 00000303: RSP := RSP - 8
 00000304: mem := mem with [RSP, el]:u64 <- v483
@@ -93,7 +93,7 @@ $ bap testsuite/bin/x86_64-linux-gnu-echo -d | grep 'sub print_endline' -A44
 00000310: mem := mem with [RBP + 0xFFFFFFFFFFFFFFF8, el]:u64 <- RAX
 00000311: goto %00000312
 
-00000312: 
+00000312:
 00000313: RAX := mem[RBP + 0xFFFFFFFFFFFFFFF8, el]:u64
 00000314: RAX := pad:64[pad:32[mem[RAX]]]
 00000315: v545 := low:8[low:32[RAX]]
@@ -101,13 +101,13 @@ $ bap testsuite/bin/x86_64-linux-gnu-echo -d | grep 'sub print_endline' -A44
 0000031c: when ~ZF goto %0000032a
 0000031d: goto %0000031e
 
-0000031e: 
+0000031e:
 0000031f: RDI := pad:64[0xA]
 00000320: RSP := RSP - 8
 00000321: mem := mem with [RSP, el]:u64 <- 0x400731
 00000322: call @putchar with return %00000323
 
-00000323: 
+00000323:
 00000324: RSP := RBP
 00000325: RBP := mem[RSP, el]:u64
 00000326: RSP := RSP + 8
@@ -115,7 +115,7 @@ $ bap testsuite/bin/x86_64-linux-gnu-echo -d | grep 'sub print_endline' -A44
 00000328: RSP := RSP + 8
 00000329: return v693
 
-0000032a: 
+0000032a:
 0000032b: RAX := mem[RBP + 0xFFFFFFFFFFFFFFF8, el]:u64
 0000032c: RDX := RAX + 1
 0000032d: mem := mem with [RBP + 0xFFFFFFFFFFFFFFF8, el]:u64 <- RDX
@@ -137,9 +137,9 @@ json, which cover many use cases).
 
 To discover what plugins are currently available, use the
 `--list-plugins` option. A short description will be printed for each
-plugin. The `--list-plugins` option also accepts a list of tags, that 
-will limit the output to plugins that match with the selected tags. For 
-the list of tags use the `--list-tags` option. You can also use 
+plugin. The `--list-plugins` option also accepts a list of tags, that
+will limit the output to plugins that match with the selected tags. For
+the list of tags use the `--list-tags` option. You can also use
 the `opam search bap` command, to get the information about bap packages,
 available from OPAM.
 
@@ -208,6 +208,8 @@ ratio = 974/7514 = 0.129625
 $ bap /bin/ls --pass=jmp
 ratio = 8917/64557 = 0.138126
 ```
+
+
 
 ## Python
 
@@ -354,5 +356,5 @@ the benefit of the community.
 * [Siemens AG](https://www.siemens.com/us/en/home.html)
 * Institute for Information & communications Technology Promotion(IITP) grant funded by the Korea government(MSIT)
   (No.2015-0-00565,Development of Vulnerability Discovery Technologies for IoT Software Security)
-  
+
 Please, [contact us](https://www.cylab.cmu.edu/partners/index.html) if you would like to become a sponsor.
