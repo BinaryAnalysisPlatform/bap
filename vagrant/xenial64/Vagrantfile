@@ -2,24 +2,17 @@
 # vi: set ft=ruby :
 
 Vagrant.configure(2) do |config|
-  config.vm.box = "debian/jessie64"
+  config.vm.box = "ubuntu/xenial64"
   config.vm.provider "virtualbox" do |vb|
       vb.memory = "4096"
   end
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
-sudo apt-get -y update && sudo apt-get -y install \
-    llvm-3.8-dev \
-    git \
-    libcurl4-gnutls-dev \
-    libgmp-dev \
-    zlib1g-dev \
-    binutils-multiarch \
-    clang \
-    time
+sudo apt-get update
+sudo apt-get --yes install opam
 opam init --auto-setup --comp=4.05.0 --yes
+opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#bap-1.4
 eval `opam config env`
-LLVM_CONFIG=llvm-config-3.8 opam install conf-bap-llvm --yes
-opam install bap --yes
+opam depext bap --install --yes
 sudo apt-get install python-pip --yes
 sudo pip install bap
 SHELL
