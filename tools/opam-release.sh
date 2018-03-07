@@ -139,6 +139,16 @@ delete_master_packages() {
     done
 }
 
+delete_nonmaster_packages() {
+    for pkg_path in packages/*/*; do
+        version=`echo $pkg_path | perl -ne '/.*?\.(.*)/ && print "$1"'`
+        conf=`echo $pkg_path | perl -ne '/conf-.*/ && print "conf" '`
+        if [ "is_$version" != "is_master" -a "is_$conf" != "is_conf" ]; then
+            git rm -rf $pkg_path
+        fi
+    done
+}
+
 release() {
     release_master_packages
     delete_master_packages
