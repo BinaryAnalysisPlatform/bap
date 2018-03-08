@@ -20,7 +20,7 @@ let map_stmt m = m#map_stmt
 let is0 = Word.is_zero and is1 = Word.is_one
 let ism1 x = Word.is_zero (Word.lnot x)
 
-let is_assigned ?(strict=false) x = exists (object(self)
+let is_assigned ?(strict=false) x = exists (object
     inherit [unit] bil_finder
     method! enter_move y _ cc =
       if Bap_var.(x = y) && not(strict && under_condition)
@@ -28,7 +28,7 @@ let is_assigned ?(strict=false) x = exists (object(self)
       cc
   end)
 
-class exp_reference_finder x = object(self)
+class exp_reference_finder x = object
   inherit [unit] exp_finder
   method! enter_var y cc =
     if Bap_var.(x = y) then cc.return (Some ()); cc
@@ -209,10 +209,10 @@ module Type = struct
   and binop op x y = match op with
     | LSHIFT|RSHIFT|ARSHIFT -> shift x y
     | _ -> match unify x y with
-    | Type.Mem _ -> Type_error.expect_imm ()
-    | Type.Imm _ as t -> match op with
-      | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
-      | _ -> t
+      | Type.Mem _ -> Type_error.expect_imm ()
+      | Type.Imm _ as t -> match op with
+        | LT|LE|EQ|NEQ|SLT|SLE -> Type.Imm 1
+        | _ -> t
   and shift x y = match infer x, infer y with
     | Type.Mem _,_ | _,Type.Mem _ -> Type_error.expect_imm ()
     | t, Type.Imm _ -> t
@@ -223,7 +223,7 @@ module Type = struct
       let s = Size.in_bits s in
       if s = s' then Type.Imm (Size.in_bits r)
       else Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
-  and store m a x r =
+  and store m a x _ =
     match infer m, infer a, infer x with
     | Type.Imm _,_,_ -> Type_error.expect_mem ()
     | Type.Mem (s,_) as t, Type.Imm s', Type.Imm u ->
@@ -266,11 +266,11 @@ module Type = struct
   (** [check xs] verifies that [xs] is well-typed.  *)
   let rec check bil =
     List.find_map bil ~f:(function
-    | Move (v,x) -> move v x
-    | Jmp d -> jmp d
-    | While (c,xs) -> cond c &&& check xs
-    | If (c,xs,ys) -> cond c &&& check xs &&& check ys
-    | Special _ | CpuExn _ -> None)
+        | Move (v,x) -> move v x
+        | Jmp d -> jmp d
+        | While (c,xs) -> cond c &&& check xs
+        | If (c,xs,ys) -> cond c &&& check xs &&& check ys
+        | Special _ | CpuExn _ -> None)
   and move v x =
     let t = Var.typ v in
     match infer x with
@@ -596,10 +596,10 @@ module Trie = struct
       ~virtuals:true x
 
   let simplify = [
-      prune;
-      normalize_negatives;
-      Simpl.bil;
-    ] |> List.reduce_exn ~f:Fn.compose
+    prune;
+    normalize_negatives;
+    Simpl.bil;
+  ] |> List.reduce_exn ~f:Fn.compose
 
   let normalize ?(subst=[]) bil =
     List.fold subst ~init:bil ~f:(fun bil (x,y) -> substitute x y bil)
@@ -645,10 +645,10 @@ module Normalize = struct
 
 
   (** substitutes let bound variables with theirs definitions.
-     May change the semantics in general, as the function will
-     copy expressions that are non-generative. However,
-     the semantics is preserved wrt to the official BIL semantics,
-     that states that all expressions have no side effects.
+      May change the semantics in general, as the function will
+      copy expressions that are non-generative. However,
+      the semantics is preserved wrt to the official BIL semantics,
+      that states that all expressions have no side effects.
   *)
   let reduce_let exp =
     let rec (/) d x = match x with
@@ -820,10 +820,10 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
 
         while (c ? x : y) prog;
 
-    since the condition is evaluated implicitly as a part of the prog
-    body we can apply a regular rewriting to get rid of the
-    if-then-else expression, e.g. the following program modification
-    is incorrect,
+     since the condition is evaluated implicitly as a part of the prog
+     body we can apply a regular rewriting to get rid of the
+     if-then-else expression, e.g. the following program modification
+     is incorrect,
 
         if (c)
          while (x) prog;
@@ -831,13 +831,13 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
          while (y) prog;
 
 
-    Thus, when we see that condition we hoist it to two definitions:
+     Thus, when we see that condition we hoist it to two definitions:
 
         h = c ? x : y;
         while (h) {prog; h = c ? x : y}
 
-    So that the if-then-else elimination pass will yield the following
-    program:
+     So that the if-then-else elimination pass will yield the following
+     program:
 
        if (c)
          h := x;
@@ -857,7 +857,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
      ====================
 
      We want to ensure that all load expressions refer to memory as a
-     variable, not as an arbitrary store expressions. This will
+     variable, not as arbitrary store expressions. This will
      essentialy disallow memory operations that will not have any
      observable side effects, e.g., the [(mem [a] <- x)[a]]
      expression creates an anonymous memory storage on fly, stores a
@@ -906,7 +906,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
   *)
   let hoist_whiles ~has_anomality =
     map @@ object(self)
-    inherit bil_mapper as super
+      inherit bil_mapper as super
       method! map_while ~cond prog =
         let prog = super#run prog in
         if has_anomality cond then
@@ -938,7 +938,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
 
   let normalize_if_conditionals =
     map @@ object(self)
-    inherit bil_mapper
+      inherit bil_mapper
       method! map_if ~cond ~yes ~no =
         let yes = self#run yes and no = self#run no in
         if not_allowed_in_conditional cond
@@ -976,7 +976,7 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     end) bil
 
   let rec hoist_stores bil = map (object(self)
-    inherit bil_mapper
+      inherit bil_mapper
       method! map_move v e = self#hoist e @@ Move (v,e)
       method! map_jmp e = self#hoist e @@ Jmp e
       method private hoist e stmt = match find_load_from_store e with
@@ -991,11 +991,11 @@ x[a,be]:n => x[a] @ ... @ x[a+n-1]
     let normalize_exp = if ne then normalize_exp else ident in
     normalize_conditionals xs |>
     List.map ~f:(function
-    | Move (v,x) -> Move (v, normalize_exp x)
-    | Jmp x -> Jmp (normalize_exp x)
-    | If (c,xs,ys) -> If (normalize_exp c, bil xs, bil ys)
-    | While (c,xs) -> While (normalize_exp c, bil xs)
-    | Special _  | CpuExn _ as s -> s) |>
+        | Move (v,x) -> Move (v, normalize_exp x)
+        | Jmp x -> Jmp (normalize_exp x)
+        | If (c,xs,ys) -> If (normalize_exp c, bil xs, bil ys)
+        | While (c,xs) -> While (normalize_exp c, bil xs)
+        | Special _  | CpuExn _ as s -> s) |>
     hoist_stores |>
     split_ite
 end
@@ -1033,7 +1033,7 @@ module Exp = struct
 
       method! leave_let var ~exp:_ ~body:_ (vars,stack) =
         (vars, List.tl_exn stack)
-      end) exp
+    end) exp
 end
 
 module Stmt = struct
