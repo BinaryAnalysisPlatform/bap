@@ -44,8 +44,8 @@ derivatives. For other distributions we provide tgz archives. To
 install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.3.0/{bap,libbap,libbap-dev}_1.3.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_1.3.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.4.0/{bap,libbap,libbap-dev}_1.4.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_1.4.0.deb
 ```
 
 ## From sources
@@ -58,7 +58,7 @@ install BAP and the development environment.  After you've successfully
 following commands:
 
 ```bash
-opam init --comp=4.03.0              # install the compiler
+opam init --comp=4.05.0              # install the compiler
 eval `opam config env`               # activate opam environment
 opam depext --install bap            # install bap
 ```

@@ -3,9 +3,12 @@
 set -e
 
 
+# bap version
+export VERSION=1.4.0
 
-# use vargrant to build packages
-export VERSION=1.2.0
+# OCAML versio
+export OCAML=4.05.0
+
 
 # This script will create an rpm file, and requires sudo to operate.
 #
@@ -48,7 +51,7 @@ Vagrant.configure(2) do |config|
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
 set -e
 sudo apt-get update
-sudo apt-get --yes install clang wget m4 curl autoconf dpkg-dev libgmp-dev libzip-dev libcurl4-gnutls-dev llvm-$llvm-dev time unzip git
+sudo apt-get --yes install git aspcud clang pkg-config wget m4 curl autoconf dpkg-dev libgmp-dev libzip-dev libcurl4-gnutls-dev llvm-$llvm-dev time unzip git
 export eval \`dpkg-architecture\`
 
 echo "getting opam from https://github.com/ocaml/opam/releases/download/1.2.2/opam-1.2.2-\$DEB_HOST_GNU_CPU-Linux"
@@ -66,12 +69,12 @@ end
 EOF
 vagrant destroy -f
 vagrant up
-buildrpm bap_$VERSION.deb
-buildrpm libbap_$VERSION.deb
-buildrpm libbap-dev_$VERSION.deb
-alien --to-tgz bap_$VERSION.deb
-alien --to-tgz libbap_$VERSION.deb
-alien --to-tgz libbap-dev_$VERSION.deb
+# buildrpm bap_$VERSION.deb
+# buildrpm libbap_$VERSION.deb
+# buildrpm libbap-dev_$VERSION.deb
+# alien --to-tgz bap_$VERSION.deb
+# alien --to-tgz libbap_$VERSION.deb
+# alien --to-tgz libbap-dev_$VERSION.deb
 }
 
-build ubuntu trusty64 3.4
+build ubuntu xenial64 5.0
