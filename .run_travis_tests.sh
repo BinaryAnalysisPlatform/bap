@@ -9,7 +9,6 @@ cp -r $HOME/save_opam/share/* $HOME/.opam/$comp/share/
 cp -r $HOME/save_opam/lib/* $HOME/.opam/$comp/lib/
 
 bap --version
-bap-byteweight update
 
 if [ "$TASK" == "checks" ]; then
     bash -exc 'make check'
