@@ -2127,10 +2127,7 @@ module Std : sig
         preceding statement or is not bound with [let] expression *)
     val free_vars : stmt list -> vars
 
-    (** [fold_consts] evaluate constant expressions.
-        Note: this function performs only one step, and has no loops,
-        it is supposed to be run using a fixpoint combinator.
-    *)
+    (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
@@ -3302,13 +3299,24 @@ module Std : sig
         expression [pat] in [x] with an expression [rep] *)
     val substitute : exp -> exp -> exp -> exp
 
-    (** [normalize] ensures no-lets and normalized-memory.
+    (** [normalize x] ensures no-lets and normalized-memory (BNF2).
+
         Inlines all let expressions, expands multibyte loads to a
-        concatenation of one byte loads, and expand multibyte stores
+        concatenation of one byte loads, and expands multibyte stores
         into chains of one byte stores.
+
+        The function may duplicate expressions even those that are not
+        generative, thus breaking the semantics of the expression.
+
+        Precondition: [x] is well-typed and in BNF1.
+
+        See {!Stmt.normalize} for the definition of the BNF1 and
+        BNF2.
+
         @since 1.3
     *)
     val normalize : exp -> exp
+
 
     (** [simpl ~ignore:effects x] iff expression [x] is well-typed,
         then returns an expression with the same semantics as [x],
@@ -3366,17 +3374,9 @@ module Std : sig
         {!Bil.normalize_negatives} for more details  *)
     val normalize_negatives : t -> t
 
-    (** [fold_consts] performs one step of constant evaluation. In
-        order to perform all possible reductions one should use
-        {!fixpoint} function, provided later. Example:
-        [let x = Bil.var (Var.create "x" reg32_t)]
-        [fixpoint fold_consts Bil.(x lxor x lxor x lxor x)]
+    (** [fold_consts x] performs constant folding of the expression [x].
 
-        will yield [0x0:32], but without
-        a fixpoint, the result would be just:
-
-        [fold_constants Bil.(x lxor x lxor x lxor x)]
-        [(0x0:32 ^ x) ^ x].
+        Reduces all computable expressions to integers.
 
         See also {!Bil.fold_consts} *)
     val fold_consts : t -> t
@@ -3612,6 +3612,10 @@ module Std : sig
         This is effectively the same as make the [Load] constructor to
         have type ([Load (var,exp,endian,size)]).
 
+        - No load or store expressions in the following positions:
+          1. the right-hand side of the let expression;
+          2. address or value subexpressions of the store expression;
+          3. storage or address subexpressions of the load expression;
 
         The BIL Second Normalized Form (BNF2) is a subset of the BNF1
         (in a sense that all BNF2 programs are also in BNF1). This form
@@ -7594,6 +7598,7 @@ module Std : sig
       defines a set of taints with which a variable is tainted.*)
   module Taint : sig
     [@@@deprecated "[since 2018-03] use the Bap Taint Framework instead"]
+    [@@@warning "-D"]
     type t = tid
 
     type set = Tid.Set.t [@@deriving bin_io, compare, sexp]
