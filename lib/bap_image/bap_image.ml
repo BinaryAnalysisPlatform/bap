@@ -175,14 +175,14 @@ let tag mem tag value memmap =
 let map_region data {locn={addr}; info={off; len; endian}} =
   Memory.create ~pos:off ~len endian addr data
 
-let static_view segments = function {addr; size} as locn ->
+let static_view segments = function {addr} as locn ->
   match Table.find_addr segments addr with
   | None -> Result.failf "region is not mapped to memory" ()
   | Some (segmem,_) -> mem_of_locn segmem locn
 
 let add_sym segments memory (symtab : symtab)
-    ({name; locn=entry; info={kind; extra_locns=locns}} as sym) =
-  static_view segments entry >>= fun entry_region ->
+    ({name; locn=entry; info={extra_locns=locns}} as sym) =
+  static_view segments entry >>= fun _entry_region ->
   Result.List.fold (entry::locns) ~init:(memory,symtab)
     ~f:(fun (memory,symtab) locn ->
         static_view segments locn >>= fun mem ->
@@ -192,14 +192,18 @@ let add_sym segments memory (symtab : symtab)
         | Ok symtab -> Ok (memory,symtab)
         | _intersects_ -> Ok (memory,symtab))
 
-let add_segment base memory segments : segment -> _ = function
-    {name; locn={addr;size}} as seg ->
+let add_segment base memory segments seg =
     map_region base seg >>= fun mem ->
     Table.add segments mem seg >>= fun segments ->
-    let memory = tag mem segment seg memory |>
-                 tag mem section name in
+    let memory = tag mem segment seg memory in
     Result.return (memory,segments)
 
+let add_sections_view segments sections memmap =
+  List.fold sections ~init:(memmap,[])
+    ~f:(fun (memmap,ers) {name; locn}  ->
+      match static_view segments locn with
+      | Ok mem -> tag mem section name memmap, ers
+      | Error er -> memmap,er::ers)
 
 let make_table add base memory =
   List.fold ~init:(memory,Table.empty,[])
@@ -254,10 +258,11 @@ let create_segment_of_symbol_table syms secs =
 
 let from_spec query base doc =
   Fact.eval query doc >>= function
-    {Spec.arch; entry; segments; symbols; sections} as spec ->
+    {Spec.segments; symbols; sections} as spec ->
     let memory = Memmap.empty in
     let memory,segs,seg_warns = make_segtab base memory segments in
     let memory,syms,sym_warns = make_symtab segs memory symbols in
+    let memory,sec_warns = add_sections_view segs sections memory in
     let words = create_words segs in
     Table.(rev_map ~one_to:one Segment.hashable (segs : segment table)) >>=
     fun (memory_of_segment : segment -> mem) ->
@@ -275,7 +280,7 @@ let from_spec query base doc =
         memory_of_symbol   = Lazy.from_fun memory_of_symbol;
         symbols_of_segment = Lazy.from_fun symbols_of_segment;
         segment_of_symbol  = Lazy.from_fun segment_of_symbol;
-      }, (seg_warns @ sym_warns))
+      }, (seg_warns @ sym_warns @ sec_warns))
 
 let data t = t.data
 let memory t = t.memory
@@ -385,7 +390,6 @@ module Derive = struct
 
   let segments : segment seq Fact.t =
     endian >>= fun endian ->
-    addr_width >>= fun width ->
     Fact.foreach Ogre.Query.(begin
         select (from segment $ mapped $ named_region)
           ~join:[[field addr];
@@ -545,7 +549,7 @@ module Metaloader () = struct
 
   let merge_docs d1 d2 = match Ogre.Doc.merge d1 d2 with
     | Ok d3 -> Ok d3
-    | Error err ->
+    | Error _ ->
       if Ogre.Doc.declarations d1 >
          Ogre.Doc.declarations d2
       then Ok d1
