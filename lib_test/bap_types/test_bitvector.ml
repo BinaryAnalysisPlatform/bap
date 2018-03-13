@@ -252,8 +252,8 @@ let suite () =
     "arshift" >:: arshift ~width:8 ~expect:0xff 0xFF 0x2 ;
     "gcd" >:: gcd ~width:8 ~expect:0x4 0x10 0xC ;
     "gcd" >:: gcd ~width:8 ~expect:0x1 0x11 0xF ;
-    "lcm" >:: lcm ~width:8 ~expect:0x18 0x10 0xC ;
-    "lcm" >:: lcm ~width:8 ~expect:0x23 0x1C 0x23 ;
+    "lcm" >:: lcm ~width:8 ~expect:0x30 0x10 0xC ;
+    "lcm" >:: lcm ~width:8 ~expect:0x8C 0x1C 0x23 ;
     "gcdext" >:: gcdext ~width:8 ~expect:(0x4,0x1,-0x1) 0x10 0xC ;
 
     (* a small cheatsheet for a bit numbering *)
