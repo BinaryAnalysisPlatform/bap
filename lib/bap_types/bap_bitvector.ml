@@ -124,6 +124,11 @@ module Make(Size : Compare) = struct
   let lift1 op t = create (unop op t) (bitwidth t)
   let lift2 op t1 t2 = create (binop op t1 t2) (bitwidth t1)
 
+  let lift2_triple op t1 t2 : t * t * t =
+    let (a, b, c) = binop op t1 t2 in
+    let w = bitwidth t1 in
+    create a w, create b w, create c w
+
   let pp_generic
       ?(case:[`lower|`upper]=`upper)
       ?(prefix:[`auto|`base|`none|`this of string]=`auto)
@@ -275,6 +280,17 @@ let (++) t n = nsucc t n
 let (--) t n = npred t n
 let succ n = n ++ 1
 let pred n = n -- 1
+
+let gcd_exn    = lift2 Bignum.gcd
+let lcm_exn    = lift2 Bignum.lcm
+let gcdext_exn = lift2_triple Bignum.gcdext
+
+let gcd a b = Or_error.try_with (fun () ->
+    gcd_exn a b)
+let lcm a b = Or_error.try_with (fun () ->
+    lcm_exn a b)
+let gcdext a b = Or_error.try_with (fun () ->
+    gcdext_exn a b)
 
 let concat x y =
   let w = bitwidth x + bitwidth y in
