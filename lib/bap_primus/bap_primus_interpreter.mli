@@ -56,6 +56,7 @@ type exn += Halt
 module Make (Machine : Machine) : sig
   type 'a m = 'a Machine.t
   val halt : never_returns m
+  val interrupt : int -> unit m
   val pc : addr m
   val pos : pos m
   val sub : sub term -> unit m

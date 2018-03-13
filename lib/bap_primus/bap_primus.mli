@@ -770,7 +770,6 @@ module Std : sig
         [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
 
-
       (** [pc_change x] happens every time a code at address [x] is executed.  *)
       val pc_change : addr observation
 
@@ -905,6 +904,9 @@ module Std : sig
 
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
+
+
+        val interrupt : int m
 
 
         (** [pc] current value of a program counter.*)

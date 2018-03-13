@@ -390,14 +390,14 @@ module Make (Machine : Machine) = struct
 
   let goto c = label c
   let ret l = label l
-  let interrupt n _r = !!will_interrupt n
+  let interrupt n  = !!will_interrupt n
 
   let jump t = match Jmp.kind t with
     | Call c -> call c
     | Goto l -> goto l
     | Ret l -> ret l
     | Int (n,r) ->
-      interrupt n r >>= fun () ->
+      interrupt n >>= fun () ->
       Code.exec (`tid r)
 
   let jmp t = eval_exp (Jmp.cond t) >>| fun {value} -> Word.is_one value
