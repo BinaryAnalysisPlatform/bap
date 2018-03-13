@@ -308,7 +308,7 @@ let create_exn
     if is_symtab_updated
     then begin
       report_progress ~task ~stage:3 ~note:"lifting" ();
-      MVar.write program (Program.lift (MVar.read symtab))
+      MVar.write program (Program.lift ~prg:g (MVar.read symtab))
     end;
     let _ = phase_triggered Info.got_program program in
     if MVar.is_updated mrooter ||

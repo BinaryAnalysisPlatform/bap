@@ -157,16 +157,15 @@ let is_conditional_jump jmp =
   has_jump_under_condition (Insn.bil jmp)
 
 let dst_of_cfg block cfg =
-  let same b b' = Addr.equal (Block.addr b) (Block.addr b') in
-  let has_call b = Insn.(is call) (Block.terminator b) in
-  Cfg.nodes cfg |>
-  Seq.find_map ~f:(fun blk ->
-      if same block blk && has_call blk then
-        Seq.find_map (Cfg.Node.outputs blk cfg)
-          ~f:(fun e ->
-              Option.some_if (Cfg.Edge.label e <> `Fall)
-                (Block.addr (Cfg.Edge.dst e)))
-      else None)
+  if Insn.(is call) (Block.terminator block) then
+    Seq.find_map (Cfg.nodes cfg) ~f:(fun blk ->
+        if Block.equal block blk then
+          Seq.find_map (Cfg.Node.outputs blk cfg)
+            ~f:(fun e ->
+                Option.some_if (Cfg.Edge.label e <> `Fall)
+                  (Block.addr (Cfg.Edge.dst e)))
+        else None)
+  else None
 
 let lift_blk ?prg cfg block : blk term list =
   let fall_label = label_of_fall cfg block in
