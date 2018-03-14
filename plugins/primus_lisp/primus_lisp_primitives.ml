@@ -309,4 +309,4 @@ module Primitives(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let () = Primus.Machine.add_component (module Primitives)
+let init () = Primus.Machine.add_component (module Primitives)
