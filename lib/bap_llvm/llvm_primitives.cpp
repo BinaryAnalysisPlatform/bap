@@ -12,7 +12,7 @@ std::string arch_of_object(const llvm::object::ObjectFile &obj) {
     return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
 }
 
-uint64_t relative_address(uint64_t base, uint64_t abs) {
+int64_t relative_address(uint64_t base, uint64_t abs) {
     return (abs - base);
 }
 

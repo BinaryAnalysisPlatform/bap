@@ -43,8 +43,8 @@ error_or<uint64_t> symbol_size(const SymbolRef &s);
 uint64_t relocation_offset(const RelocationRef &rel);
 
 // misc
-// returns abs - base if abs >= base or just abs otherwise
-uint64_t relative_address(uint64_t base, uint64_t abs);
+// returns abs - base
+int64_t relative_address(uint64_t base, uint64_t abs);
 
 typedef std::vector<std::pair<SymbolRef, uint64_t>> symbols_sizes;
 
