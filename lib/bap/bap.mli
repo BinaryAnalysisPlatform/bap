@@ -564,6 +564,7 @@ module Std : sig
       (** [arshift x y] shift [x] by [y] bits to the right and fill with
           the sign bit.  *)
       val arshift : t -> t -> t
+
     end
 
     (** The integer signature.  *)
@@ -1507,6 +1508,41 @@ module Std : sig
 
     (** [a -- n] is [npred a n]  *)
     val (--) : t -> int -> t
+
+    (** [gcd x y] is the greatest common divisor of [x] and [y]
+        in the integers. Note that this is not always the greatest
+        common divisor in the bitvectors of fixed length. For example,
+        in the 32-bit unsigned integers, [2 = 2 + 2^32 = 2(1 + 2^31)].
+        Thus, [1 + 2^31] is a divisor of [2], even though [gcd 2 2 = 2].
+        Two properties that still hold are:
+        1. Both [x] and [y] are multiples of [gcd x y], and
+        2. [gcd x y <= min (abs x) (abs y)] *)
+    val gcd : t -> t -> t Or_error.t
+
+    (** [lcm x y] is the least common multiple of [x] and [y]
+        in the integers. Note that, like [gcd x y], this is not
+        always the least common multiple of [x] and [y] in the fixed-
+        length bitvectors. See the [gcd] documentation for an example.
+        The result of this function will always be some common multiple
+        of the inputs, even in the fixed-width bitvectors. *)
+    val lcm : t -> t -> t Or_error.t
+
+    (** [gcdext x y] returns [(g, s, t)] where [g = gcd x y] and
+        [g = s*x + t*y]. See the documentation for [gcd x y] for
+        why this function is tricky to use. *)
+    val gcdext : t -> t -> (t * t * t) Or_error.t
+
+    (** [gcd_exn x y] is the same as [gcd], but will raise
+        an exception on error.  *)
+    val gcd_exn : t -> t -> t
+
+    (** [lcm_exn x y] is the same as [lcm], but will raise
+        an exception on error.  *)
+    val lcm_exn : t -> t -> t
+
+    (** [gcdext_exn x y] is the same as [gcdext], but will raise
+        an exception on error.  *)
+    val gcdext_exn : t -> t -> t * t * t
 
     (** {2 Iteration over bitvector components }  *)
 
