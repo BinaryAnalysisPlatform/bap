@@ -161,10 +161,10 @@ error_or<uint64_t> symbol_file_offset(const ELFObjectFile<T> &obj, const SymbolR
 }
 
 template <typename T>
-error_or<uint64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
+error_or<int64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
     auto sym_elf = obj.getSymbol(sym.getRawDataRefImpl());
     if (is_rel(obj) && !is_abs_symbol(*sym_elf)) { // abs symbols does not affected by relocations
-        return success(uint64_t(0));
+        return success(int64_t(0));
     } else {
         auto addr = prim::symbol_address(sym);
         if (!addr) return addr;
