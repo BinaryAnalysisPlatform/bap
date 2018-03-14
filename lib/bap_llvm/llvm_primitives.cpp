@@ -12,9 +12,8 @@ std::string arch_of_object(const llvm::object::ObjectFile &obj) {
     return Triple::getArchTypeName(static_cast<Triple::ArchType>(obj.getArch()));
 }
 
-uint64_t relative_address(uint64_t base, uint64_t abs) {
-    if (abs >= base) return (abs - base);
-    else return abs;
+int64_t relative_address(uint64_t base, uint64_t abs) {
+    return (abs - base);
 }
 
 // 4.0 only
