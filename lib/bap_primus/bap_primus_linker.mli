@@ -40,4 +40,7 @@ module Make(Machine : Machine) : sig
 
   val is_linked : name -> bool m
 
+  val resolve_addr : name -> addr option m
+  val resolve_symbol : name -> string option m
+  val resolve_tid : name -> tid option m
 end
