@@ -234,7 +234,6 @@ let setup_tabs ppf =
   pp_set_tab ppf () [@ocaml.warning "-3"]
 
 let print_disasm pp_insn subs secs ppf proj =
-
   let memory = Project.memory proj in
   let syms = Project.symbols proj in
   pp_open_tbox ppf () [@ocaml.warning "-3"];
