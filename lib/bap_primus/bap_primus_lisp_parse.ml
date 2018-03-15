@@ -14,7 +14,7 @@ module Resolve = Bap_primus_lisp_resolve
 module Program = Bap_primus_lisp_program
 module Type = Bap_primus_lisp_type
 
-type defkind = Func | Macro | Const | Subst | Meth
+type defkind = Func | Macro | Const | Subst | Meth | Para
 
 type format_error =
   | Expect_digit
@@ -316,6 +316,12 @@ module Parse = struct
       (metaparams ps)
       body tree
 
+  let defparameter ?docs ?(attrs=[]) name body prog gattrs tree =
+    let attrs = parse_declarations gattrs attrs in
+    Program.add prog para @@
+    Def.Para.create ?docs
+      ~attrs name (parse (constrained prog attrs) body) tree
+
   let defsubst ?docs ?(attrs=[]) name body prog gattrs tree =
     let syntax = match body with
       | s :: _ when is_keyarg s -> Some s
@@ -333,6 +339,7 @@ module Parse = struct
   let toplevels = String.Set.of_list [
       "declare";
       "defconstant";
+      "defparameter";
       "defmacro";
       "defsubst";
       "defun";
@@ -416,6 +423,35 @@ module Parse = struct
       } ->
       defmethod name params body state gattrs s
     | {data=List ({data=Atom "defmethod"} :: _)} -> fail (Bad_def Meth) s
+    | {data = List [
+        {data=Atom "defparameter"};
+        {data=Atom name};
+        body
+      ]} ->
+      defparameter name body state gattrs s
+    | {data = List [
+        {data=Atom "defparameter"};
+        {data=Atom name};
+        body;
+        {data=List ({data=Atom "declare"} :: attrs)}
+      ]} ->
+      defparameter ~attrs name body state gattrs s
+    | {data = List [
+        {data=Atom "defparameter"};
+        {data=Atom name};
+        body;
+        {data=Atom docs};
+      ]} ->
+      defparameter ~docs name body state gattrs s
+    | {data = List [
+        {data=Atom "defparameter"};
+        {data=Atom name};
+        body;
+        {data=Atom docs};
+        {data=List ({data=Atom "declare"} :: attrs)}
+      ]} ->
+      defparameter ~attrs ~docs name body state gattrs s
+    | {data=List ({data=Atom "defparameter"} :: _)} -> fail (Bad_def Para) s
     | _ -> state
 
 
@@ -618,13 +654,16 @@ let string_of_form_syntax = function
 let string_of_defkind = function
   | Func -> "function"
   | Meth -> "method"
+  | Para -> "parameter"
   | Macro -> "macro"
   | Const -> "contant"
   | Subst -> "substitution"
 
+
 let string_of_def_syntax = function
   | Func  -> "(defun <ident> (<var> ...) [<docstring>] [<declarations>] <exp> ...)"
   | Meth  -> "(defmethod <ident> (<var> ...) [<docstring>] [<declarations>] <exp> ..."
+  | Para  -> "(defparameter <ident> <exp> [<docstring>] [<declarations>])"
   | Macro -> "(defmacro <ident> (<ident> ...) [<docstring>] [<declarations>] <exp>)"
   | Const -> "(defconstant <ident> [<docstring>] [<declarations>] <atom>)"
   | Subst -> "(defsubst <ident> [<docstring>] [<declarations>] [:<syntax>] <atom> ...)"
