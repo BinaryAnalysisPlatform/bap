@@ -20,7 +20,11 @@ fi
 
 if [ "$TASK" == "veri" ]; then
     git clone https://github.com/BinaryAnalysisPlatform/bap-veri.git
-    opam pin add bap-veri bap-veri/ -n
-    opam install bap-veri -y
+    cd bap-veri
+    oasis setup
+    ./configure --prefix=`opam config var prefix`
+    make
+    make reinstall
+    cd ../
     bash -exc 'make veri'
 fi
