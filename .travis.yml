@@ -55,3 +55,7 @@ jobs:
     env:
     - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
     script: bash -ex .run_travis_tests.sh checks
+  - stage: Unit tests and checks
+    env:
+    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+    script: bash -ex .run_travis_tests.sh veri
