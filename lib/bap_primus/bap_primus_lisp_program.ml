@@ -24,6 +24,7 @@ type t = {
   consts : Def.const Def.t list;
   defs : Def.func Def.t list;
   mets : Def.meth Def.t list;
+  pars : Def.para Def.t list;
 } [@@deriving fields]
 
 type program = t
@@ -34,6 +35,7 @@ let empty = {
   codes = [];
   defs = [];
   mets = [];
+  pars = [];
   macros=[];
   substs=[];
   consts=[];
@@ -47,6 +49,7 @@ module Items = struct
   let const = Fields.consts
   let func = Fields.defs
   let meth = Fields.mets
+  let para = Fields.pars
   let primitive = Fields.codes
 end
 
@@ -58,7 +61,7 @@ let get p (fld : 'a item) = Field.get fld p
 let with_context p context = {p with context}
 let with_sources p sources = {p with sources}
 
-let (++) = Map.merge ~f:(fun ~key -> function
+let (++) = Map.merge ~f:(fun ~key:_ -> function
     | `Both (id,_) | `Left id | `Right id -> Some id)
 
 let union init xs ~f =
@@ -250,15 +253,31 @@ module Use = struct
         })
 end
 
+(** Assign fresh indices to trees that were produced my macros or that
+ ** has no indices at all.
+ **
+ ** We first scan through all meta definitions (i.e., macros, substs,
+ ** and consts) to obtain a set of indices that we shall rewrite, and
+ ** then perform rewriting for all program definitions (defs, mets,
+ ** and pars)
+ **
+ ** The newly generated Ids are derived (i.e., associated) with their
+ ** base ids, so that if needed their origin can be always
+ ** established. (except if their origin was the null identifier).
+ **
+ ** Motivation: since we identify an ast by its identifier, we want
+ ** the trees produced by the term rewriting to have different
+ ** identifiers. Otherwise, they could be unified, for example in the
+ ** Type checker.
+ **)
 module Reindex = struct
   module State = Monad.State.Make(Source)(Monad.Ident)
   open State.Syntax
   type 'a m = 'a Monad.State.T1(Source)(Monad.Ident).t
 
-
   let rec ids_of_trees trees =
     List.fold trees ~init:Id.Set.empty ~f:(fun xs t -> match t with
-        | {data=Atom v; id} -> Set.add xs id
+        | {data=Atom _; id} -> Set.add xs id
         | {data=List ts;id} ->
           Set.union (Set.add xs id) (ids_of_trees ts))
 
@@ -280,12 +299,12 @@ module Reindex = struct
     State.put (Source.derived src ~from nextid) >>| fun () ->
     nextid
 
-  let reindex_def macros def =
+  let reindex (get,set) macros def =
     let rename t =
       if Set.mem macros t.id || Id.null = t.id
       then derive t.id >>| fun id -> {t with id}
       else State.return t in
-    let rec map t : ast m =
+    let rec map : ast -> ast m = fun t ->
       rename t >>= fun t -> match t.data with
       | Err _ -> State.return t
       | Int x ->
@@ -325,16 +344,22 @@ module Reindex = struct
         map x >>| fun x ->
         {t with data = Set (v,x)}
     and map_all = State.List.map ~f:map in
-    map (Def.Func.body def) >>|
-    Def.Func.with_body def
+    map (get def) >>| set def
 
-  let reindex p =
+  let reindex_all p =
+    let def = Def.Func.body,Def.Func.with_body in
+    let met = Def.Meth.body,Def.Meth.with_body in
+    let par = Def.Para.default,Def.Para.with_default in
     let macros = macro_ids p in
-    State.List.map p.defs ~f:(reindex_def macros)
+    State.List.map p.defs ~f:(reindex def macros) >>= fun defs ->
+    State.List.map p.mets ~f:(reindex met macros) >>= fun mets ->
+    State.List.map p.pars ~f:(reindex par macros) >>= fun pars ->
+    State.return (defs,mets,pars)
 
   let program p =
-    let defs,sources = State.run (reindex p) p.sources in
-    {p with defs; sources}
+    let (defs,mets,pars),sources =
+      State.run (reindex_all p) p.sources in
+    {p with defs; mets; pars; sources}
 
 end
 
@@ -449,10 +474,10 @@ module Typing = struct
     let exps {vars} = Map.keys vars
 
     let merge g g' = {
-      vars = Map.merge g.vars g'.vars ~f:(fun ~key -> function
+      vars = Map.merge g.vars g'.vars ~f:(fun ~key:_ -> function
           | `Left t | `Right t -> Some t
           | `Both (_,t') -> Some t');
-      vals = Map.merge g.vals g'.vals ~f:(fun ~key -> function
+      vals = Map.merge g.vals g'.vals ~f:(fun ~key:_ -> function
           | `Left ts | `Right ts -> Some ts
           | `Both (_,ts) -> Some ts)
 
@@ -612,7 +637,7 @@ module Typing = struct
         then signature_of_gamma def gamma :: sigs
         else sigs)
 
-  let join_gammas xs ys = xs
+  let join_gammas xs _why_is_it_ignored = xs
 
   let apply glob id name args gamma =
     signatures glob gamma name |>
@@ -677,7 +702,7 @@ module Typing = struct
       | {data=App ((Dynamic name),xs); id} ->
         apply glob id name xs ++
         reduce vs xs
-      | {data=Seq []; id} -> ident
+      | {data=Seq []} -> ident
       | {data=Seq xs; id} ->
         Gamma.meet (last xs) id ++
         reduce vs xs
@@ -692,7 +717,7 @@ module Typing = struct
       | {data=Msg (_,xs); id} ->
         Gamma.constr id (Type 1) ++
         reduce vs xs
-      | {data=Err _; id} -> ident
+      | {data=Err _} -> ident
       | {data=App (Static _,_)} -> ident
     and reduce vs = function
       | [] -> ident
