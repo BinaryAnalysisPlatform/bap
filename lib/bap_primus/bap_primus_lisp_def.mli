@@ -19,6 +19,7 @@ type const
 type prim
 type closure = (module Closure)
 type 'a primitive
+type para
 
 type attrs = Attribute.set
 
@@ -35,11 +36,17 @@ module Func : sig
   val with_body : func t -> ast -> func t
 end
 
-module Meth : sig 
+module Meth : sig
   val create : (var list -> ast -> tree -> meth t) def
   val args : meth t -> var list
   val body : meth t -> ast
   val with_body : meth t -> ast -> meth t
+end
+
+module Para : sig
+  val create : (ast -> tree -> para t) def
+  val default : para t -> ast
+  val with_default : para t -> ast -> para t
 end
 
 module Macro : sig
