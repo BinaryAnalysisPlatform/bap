@@ -370,12 +370,21 @@ module Interpreter(Machine : Machine) = struct
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v =
-      Machine.Local.get state >>= fun {env; width} ->
+      Machine.Local.get state >>= fun {env; width; program} ->
       let v = Vars.of_lisp width v in
       if Map.mem env.vars v
       then Machine.return @@
         List.Assoc.find_exn ~equal:Var.equal env.stack v
-      else Eval.get v
+      else Env.has v >>= function
+        | true -> Eval.get v
+        | false ->
+          Lisp.Program.get program para |>
+          List.find ~f:(fun p ->
+              Lisp.Def.name p = Var.name v) |> function
+          | None -> Eval.get v
+          | Some p ->
+            eval (Lisp.Def.Para.default p) >>= fun x ->
+            Env.set v x >>| fun () -> x
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
