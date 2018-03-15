@@ -29,7 +29,10 @@ module Pos = Bap_primus_pos
 type exn += Runtime_error of string
 type exn += Unresolved of string * Lisp.Resolve.resolution
 
-type bindings = (Var.t * value) list [@@deriving sexp_of]
+type bindings = {
+  vars  : int Var.Map.t;
+  stack : (Var.t * value) list
+} [@@deriving sexp_of]
 type state = {
   program : Lisp.Program.t;
   width : int;
@@ -46,7 +49,10 @@ let state = Bap_primus_state.declare ~inspect
     ~name:"lisp-env"
     ~uuid:"0360697d-febe-4982-a528-152ada72bf4a"
     (fun proj -> {
-         env = [];
+         env = {
+           stack = [];
+           vars = Var.Map.empty;
+         };
          cur = Id.null;
          program = Lisp.Program.empty;
          width = width_of_ctxt proj;
@@ -75,24 +81,58 @@ module Locals(Machine : Machine) = struct
   open Machine.Syntax
   include Errors(Machine)
 
-  let of_lisp {data={exp;typ}} =
-    Machine.Local.get state >>= fun {width} ->
+  let of_lisp width {data={exp;typ}} =
     match typ with
-    | Type t -> Machine.return (Var.create exp (Type.Imm t))
-    | _ -> Machine.return (Var.create exp (Type.Imm width))
+    | Type t -> Var.create exp (Type.Imm t)
+    | _ -> Var.create exp (Type.Imm width)
 
-  let bindings =
-    Machine.List.map ~f:(fun (v,x) -> of_lisp v >>| fun v -> v,x)
+  let make_frame width bs =
+    List.fold ~init:([],0) bs ~f:(fun (xs,n) (v,x) ->
+        (of_lisp width v,x)::xs, n+1)
 
   let rec update xs x ~f = match xs with
     | [] -> []
     | (x',w) :: xs when Var.(x' = x) -> (x,f w) :: xs
     | xw :: xs -> xw :: update xs x ~f
 
-  let replace xs x w = update xs x ~f:(fun _ -> w)
+  let replace x w s = {
+    s with env = {
+      s.env with
+      stack = update s.env.stack x ~f:(fun _ -> w)
+    }
+  }
 
-  let push v w s = {s with env = (v,w)::s.env}
-  let pop n ({env} as s) = {s with env = List.drop env n}
+  let push v w s = {
+    s with env = {
+      stack = (v,w) :: s.env.stack;
+      vars = Map.update s.env.vars v ~f:(function
+          | None -> 1
+          | Some n -> n + 1)
+    }
+  }
+
+  (* the order in which arguments are pushed to the stack should
+   * irrelevant since we are not allowing repetetive names in the
+   * arguments list. Though, apparently this is not really checked,
+   * anywhere.
+  *)
+  let push_frame bs s =
+    List.fold bs ~init:s ~f:(fun s (v,w) ->
+        push v w s)
+
+  let unbind vars unbound =
+    List.fold unbound ~init:vars ~f:(fun vars (v,_) ->
+        Map.change vars v ~f:(function
+            | None -> assert false
+            | Some n -> if n = 1 then None else Some (n-1))
+      )
+
+  let pop n s = {
+    s with env = {
+      stack = List.drop s.env.stack n;
+      vars = unbind s.env.vars (List.take s.env.stack n)
+    }
+  }
 end
 
 
@@ -256,13 +296,13 @@ module Interpreter(Machine : Machine) = struct
       Machine.raise (Unresolved (name,resolution))
     | Some (Ok (fn,bs)) ->
       let is_external = is_external_call name fn in
-      Vars.bindings bs >>= fun bs ->
+      let bs,frame_size = Vars.make_frame s.width bs in
       Eval.const Word.b0 >>= fun init ->
       notify_when is_external Trace.call_entered name args >>= fun () ->
       eval_advices Advice.Before init name args >>= fun _ ->
-      Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
+      Machine.Local.put state (Vars.push_frame bs s) >>= fun () ->
       eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
-      Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
+      Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
       notify_when is_external Trace.call_returned name (args @ [r]) >>= fun () ->
       eval_advices Advice.After r name args
 
@@ -322,18 +362,20 @@ module Interpreter(Machine : Machine) = struct
       eval c >>= fun {value=w} ->
       if Word.is_zero w then eval e2 else eval e1
     and let_ v e1 e2 =
+      Machine.Local.get state >>= fun {width} ->
       eval e1 >>= fun w ->
-      Vars.of_lisp v >>= fun v ->
+      let v = Vars.of_lisp width v in
       Machine.Local.update state ~f:(Vars.push v w) >>=  fun () ->
       eval e2 >>= fun r ->
       Machine.Local.update state ~f:(Vars.pop 1) >>= fun () ->
       Machine.return r
     and lookup v =
-      Machine.Local.get state >>= fun {env} ->
-      Vars.of_lisp v >>= fun v ->
-      match List.Assoc.find ~equal:Var.equal env v with
-      | Some w -> Machine.return w
-      | None -> Eval.get v
+      Machine.Local.get state >>= fun {env; width} ->
+      let v = Vars.of_lisp width v in
+      if Map.mem env.vars v
+      then Machine.return @@
+        List.Assoc.find_exn ~equal:Var.equal env.stack v
+      else Eval.get v
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
@@ -347,14 +389,10 @@ module Interpreter(Machine : Machine) = struct
       loop es
     and set v w =
       Machine.Local.get state >>= fun s ->
-      Vars.of_lisp v >>= fun v ->
-      if List.Assoc.mem ~equal:Var.equal s.env v
-      then
-        Machine.Local.put state {s with env = Vars.replace s.env v w}
-        >>= fun () -> Machine.return w
-      else
-        Eval.set v w >>= fun () ->
-        Machine.return w
+      let v = Vars.of_lisp s.width v in
+      if Map.mem s.env.vars v
+      then Machine.Local.put state (Vars.replace v w s) >>| fun () -> w
+      else Eval.set v w >>| fun () -> w
     and msg fmt es =
       let buf = Buffer.create 64 in
       let ppf = formatter_of_buffer buf in
@@ -385,11 +423,10 @@ module Interpreter(Machine : Machine) = struct
       Machine.raise (Unresolved (name,resolution))
     | Some (Ok mets) ->
       Machine.List.iter mets ~f:(fun (met,bs) ->
-          Vars.bindings bs >>= fun bs ->
-          Machine.Local.put state {s with env = bs @ s.env} >>= fun () ->
+          let bs,frame_size = Vars.make_frame s.width bs in
+          Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
           eval_exp (Lisp.Def.Meth.body met) >>= fun _ ->
-          Machine.Local.update state ~f:(Vars.pop (List.length bs)))
-
+          Machine.Local.update state ~f:(Vars.pop frame_size))
 end
 
 
@@ -441,7 +478,7 @@ module Make(Machine : Machine) = struct
     | Some (Error _) when tid = None -> Machine.return ()
     | Some (Error err) -> Machine.raise (Unresolved (name,err))
     | Some (Ok (fn,bs)) ->
-      Vars.bindings bs >>= fun bs ->
+      let bs,frame_size = Vars.make_frame s.width bs in
       let module Code(Machine : Machine) = struct
         open Machine.Syntax
         module Eval = Bap_primus_interpreter.Make(Machine)
@@ -472,11 +509,10 @@ module Make(Machine : Machine) = struct
           let args = List.map ~f:snd bs in
           Eval.const Word.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
-          Machine.Local.update state
-            ~f:(fun s -> {s with env = bs @ s.env}) >>= fun () ->
+          Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->
           Machine.Observation.make Trace.call_entered (name,args) >>= fun () ->
           Interp.eval_exp (Lisp.Def.Func.body fn) >>= fun r ->
-          Machine.Local.update state ~f:(Vars.pop (List.length bs)) >>= fun () ->
+          Machine.Local.update state ~f:(Vars.pop frame_size) >>= fun () ->
           Machine.Observation.make Trace.call_returned (name,args @ [r]) >>= fun () ->
           Interp.eval_advices Advice.After r name args >>= fun r ->
           eval_ret r
