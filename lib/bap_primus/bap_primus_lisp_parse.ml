@@ -459,23 +459,23 @@ module Parse = struct
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
+        {data=Atom body};
         {data=Atom docs};
         {data=List ({data=Atom "declare"} :: attrs)};
-        {data=Atom body };
       ]} when is_quoted docs ->
       defconst ~docs ~attrs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
-        {data=Atom docs};
         {data=Atom body };
+        {data=Atom docs};
       ]} when is_quoted docs ->
       defconst ~docs name body state gattrs s
     | {data=List [
         {data=Atom "defconstant"};
         {data=Atom name};
-        {data=List ({data=Atom "declare"} :: attrs)};
         {data=Atom body};
+        {data=List ({data=Atom "declare"} :: attrs)};
       ]} ->
       defconst ~attrs name body state gattrs s
     | {data=List [

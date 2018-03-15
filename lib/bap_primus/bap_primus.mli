@@ -2012,6 +2012,7 @@ entity ::=
   | <declarations>
   | <constant-definition>
   | <substitution-definition>
+  | <parameter-definition>
   | <macro-definition>
   | <function-definition>
   | <method-definition>
@@ -2022,9 +2023,14 @@ declarations ::= (declare <attribute> ...)
 
 constant-definition ::=
   | (defconstant <ident> <atom>)
-  | (defconstant <ident> <docstring> <atom>)
-  | (defconstant <ident> <declarations> <atom>)
-  | (defconstant <ident> <docstring> <declarations> <atom>)
+  | (defconstant <ident> <atom> <docstring>)
+  | (defconstant <ident> <atom> <declarations>)
+  | (defconstant <ident> <atom> <declarations> <docstring>)
+
+parameter-definition ::=
+  | (defparameter <ident> <atom>)
+  | (defparameter <ident> <atom> <docstring>)
+  | (defparameter <ident> <atom> <declarations> <docstring>)
 
 substitution-definition ::=
   | (defsubst <ident> <atom> ...)
