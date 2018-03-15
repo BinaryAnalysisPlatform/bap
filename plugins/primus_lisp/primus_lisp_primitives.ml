@@ -4,7 +4,6 @@ open Bap_primus.Std
 
 module Lib(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
-  module Primitive = Primus.Lisp.Primitive
   module Lisp = Primus.Lisp.Make(Machine)
   module Memory = Primus.Memory.Make(Machine)
   module Value = Primus.Value.Make(Machine)
@@ -70,12 +69,23 @@ module MemoryAllocate(Machine : Primus.Machine.S) = struct
   let negone = Value.one 8
   let zero = Value.zero 8
 
+  let make_static_generator x = match Word.to_int x with
+    | Ok x when x >= 0 && x < 256 ->
+      Ok (Some (Primus.Generator.static x))
+    | _ -> Or_error.errorf "memory-allocate: fill in value must fit into byte"
+
   let run = function
-    | [addr; size] ->
+    | addr :: size :: gen ->
       let n = Word.to_int (Value.to_word size) in
-      if Result.is_error n
+      let gen = match gen with
+        | []  -> Ok None
+        | [x] -> make_static_generator (Value.to_word x)
+        | _ -> Or_error.errorf "memory-allocate requies two or three arguments" in
+      if Result.is_error n || Result.is_error gen
       then negone
-      else Memory.allocate (Value.to_word addr) (Or_error.ok_exn n) >>=
+      else
+        let generator = Or_error.ok_exn gen in
+        Memory.allocate ?generator (Value.to_word addr) (Or_error.ok_exn n) >>=
         fun () -> zero
     | _ -> Lisp.failf "allocate requires two arguments" ()
 end
@@ -279,7 +289,7 @@ module Primitives(Machine : Primus.Machine.S) = struct
       def "exit-with" (one int @-> any) (module ExitWith);
       def "memory-read" (one int @-> byte) (module MemoryRead);
       def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite);
-      def "memory-allocate" (tuple [int; int] @-> byte) (module MemoryAllocate);
+      def "memory-allocate" (tuple [int; int] // all byte @-> byte) (module MemoryAllocate);
       def "get-current-program-counter" (unit @-> int) (module GetPC);
       def "+" (all a @-> a) (module Add);
       def "-" (all a @-> a) (module Sub);
