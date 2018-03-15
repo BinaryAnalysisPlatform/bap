@@ -202,9 +202,25 @@ let pp_def ppf d =
     (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Func.args d)
     Ast.pp_prog (Def.Func.body d)
 
-let pp ppf {defs} =
-  fprintf ppf "Printing %d definitions@\n" (List.length defs);
-  fprintf ppf "@[<v>%a@]" (pp_print_list pp_def) defs
+let pp_met ppf d =
+  fprintf ppf "@[<2>(defmethod %s @[<2>(%a)@]@ %a)@]@,"
+    (Def.name d)
+    (pp_print_list ~pp_sep:pp_print_space pp_var) (Def.Meth.args d)
+    Ast.pp_prog (Def.Meth.body d)
+
+let pp_par ppf d =
+  fprintf ppf "@[<2>(defparamerter %s@,%a@,%S)@]"
+    (Def.name d)
+    Ast.pp_prog (Def.Para.default d)
+    (Def.docs d)
+
+let pp ppf {pars; mets; defs;} =
+  let pp_items pp items =
+    fprintf ppf "@[<v>%a@]" (pp_print_list pp) items in
+  pp_items pp_par pars;
+  pp_items pp_met mets;
+  pp_items pp_def defs
+
 
 module Use = struct
   let empty = String.Map.empty
