@@ -21,6 +21,6 @@ fi
 if [ "$TASK" == "veri" ]; then
     git clone https://github.com/BinaryAnalysisPlatform/bap-veri.git
     opam pin add bap-veri bap-veri/ -n
-    opam install bap-veri
+    opam install bap-veri -y
     bash -exc 'make veri'
 fi
