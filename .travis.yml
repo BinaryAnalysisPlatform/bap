@@ -38,8 +38,8 @@ cache:
   - rm -rf $HOME/.opam/log
 
 env:
-  - OCAML_VERSION=4.03
-  - OCAML_VERSION=4.04
+#  - OCAML_VERSION=4.03
+#  - OCAML_VERSION=4.04
   - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
 
 stage: Compile
@@ -47,14 +47,14 @@ script: bash -ex .travis_install.sh
 
 jobs:
   include:
-  - stage: Unit tests and checks
-    env:
-    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
-    script: bash -ex .run_travis_tests.sh unit_tests
-  - stage: Unit tests and checks
-    env:
-    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
-    script: bash -ex .run_travis_tests.sh checks
+#  - stage: Unit tests and checks
+#    env:
+#    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+#    script: bash -ex .run_travis_tests.sh unit_tests
+#  - stage: Unit tests and checks
+#    env:
+#    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+#    script: bash -ex .run_travis_tests.sh checks
   - stage: Unit tests and checks
     env:
     - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
