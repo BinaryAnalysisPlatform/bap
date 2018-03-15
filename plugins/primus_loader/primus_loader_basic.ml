@@ -16,7 +16,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
   module Env = Primus.Env.Make(Machine)
   module Mem = Primus.Memory.Make(Machine)
-  module Eval = Primus.Interpreter.Make(Machine)
+  module Val = Primus.Value.Make(Machine)
 
   let target = Machine.arch >>| target_of_arch
 
@@ -27,7 +27,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let set_word name x =
     let t = Type.imm (Word.bitwidth x) in
     let var = Var.create name t in
-    Eval.const x >>=
+    Val.of_word x >>=
     Env.set var
 
   (* bottom points to the end of the stack, ala STL end pointer.
@@ -40,7 +40,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     target >>= fun (module Target) ->
     make_addr stack_base >>= fun bottom ->
     let top = Addr.(bottom -- stack_size) in
-    Eval.const bottom >>= fun bottom ->
+    Val.of_word bottom >>= fun bottom ->
     Env.set Target.CPU.sp bottom >>= fun () ->
     Mem.allocate
       ~readonly:false
@@ -73,7 +73,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     Machine.project >>= fun proj ->
     make_addr 0L >>= fun null ->
     match get_segmentations proj with
-    | Error err -> assert false
+    | Error _ -> assert false
     | Ok segs ->
       Machine.Seq.fold ~init:null segs
         ~f:(fun endp {Image.Scheme.addr; size; info=(_,w,x)} ->
@@ -178,6 +178,20 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     save_word endian argc sp >>= fun _ ->
     set_word "environ" envp_table_ptr
 
+
+  let names prog = (object
+    inherit [string Addr.Map.t] Term.visitor
+    method! enter_term _ t env =
+      match Term.get_attr t address with
+      | None -> env
+      | Some addr -> Map.add env ~key:addr ~data:(Term.name t)
+  end)#run prog Addr.Map.empty
+
+  let init_names () =
+    Machine.get () >>= fun proj ->
+    Map.to_sequence (names (Project.program proj)) |>
+    Machine.Seq.iter ~f:(fun (addr,name) -> set_word name addr)
+
   let init () =
     setup_stack () >>= fun () ->
     setup_main_frame () >>= fun () ->
@@ -186,5 +200,6 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     let endp = Addr.max e1 e2 in
     set_word "endp" endp >>= fun () ->
     set_word "brk"  endp >>= fun () ->
-    setup_registers ()
+    setup_registers () >>= fun () ->
+    init_names ()
 end

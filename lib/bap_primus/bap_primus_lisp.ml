@@ -523,27 +523,15 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| collect_externals >>=
     Machine.Seq.iter ~f:link_feature
 
-  let init_env proj = (object
-    inherit [(Var.t * value) Machine.t list] Term.visitor
-    method! enter_term _ t env =
-      match Term.get_attr t address with
-      | None -> env
-      | Some addr ->
-        let binding =
-          let typ = Type.imm (Word.bitwidth addr) in
-          Value.of_word addr >>| fun addr ->
-          Var.create (Term.name t) typ, addr in
-        binding :: env
-  end)#run proj [] |> Machine.List.all
+  let copy_primitives ~src ~dst =
+    Lisp.Program.get src primitive |>
+    List.fold ~init:dst ~f:(fun dst p ->
+        Lisp.Program.add dst primitive p)
 
   let link_program program =
-    Machine.get () >>= fun proj ->
-    init_env (Project.program proj) >>= fun env ->
-    Machine.Local.put state {
-      program; env;
-      cur = Id.null;
-      width = width_of_ctxt proj;
-    } >>= fun () ->
+    Machine.Local.get state >>= fun s ->
+    let program = copy_primitives s.program program in
+    Machine.Local.put state {s with program} >>= fun () ->
     link_features ()
 
   let program = Machine.Local.get state >>| fun s -> s.program
