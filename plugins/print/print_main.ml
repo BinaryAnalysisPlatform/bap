@@ -29,14 +29,14 @@ let should_print = function
 
 
 let find_section_for_addr memory addr =
-  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (mem,v) ->
+  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (_,v) ->
       Value.get Image.section v)
 
 let bir memory sub =
   Term.get_attr sub address >>=
   find_section_for_addr memory
 
-let sym memory (name,entry,cfg) =
+let sym memory (_,entry,_) =
   Block.addr entry |>
   find_section_for_addr memory
 
@@ -49,10 +49,10 @@ let print_symbols subs secs demangler fmts ppf proj =
   let demangle = create_demangler demangler in
   let symtab = Project.symbols proj in
   Symtab.to_sequence symtab |>
-  Seq.filter ~f:(fun ((name,entry,cfg) as fn) ->
+  Seq.filter ~f:(fun ((name,_,_) as fn) ->
       should_print subs name &&
       should_print secs (sec_name (Project.memory proj) sym fn)) |>
-  Seq.iter ~f:(fun ((name,entry,cfg) as fn) ->
+  Seq.iter ~f:(fun ((name,entry,_) as fn) ->
       List.iter fmts ~f:(function
           | `with_name ->
             fprintf ppf "%s " @@ demangle name
@@ -226,10 +226,8 @@ let print_bir_graph subs secs ppf proj =
   Term.enum sub_t prog |> Seq.iter ~f:(fun sub ->
       fprintf ppf "%a@." Graphs.Ir.pp (Sub.to_cfg sub))
 
-let pp_addr ppf addr =
-  let width = Addr.bitwidth addr / 4 in
-  fprintf ppf "%0*Lx" width
-    (Word.(to_int64 addr) |> ok_exn)
+let pp_addr ppf a =
+  Addr.pp_generic ~prefix:`none ~case:`lower ppf a
 
 let setup_tabs ppf =
   pp_print_as ppf 50 "";
@@ -243,7 +241,7 @@ let print_disasm pp_insn subs secs ppf proj =
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
-      List.filter ~f:(fun (name,entry,cfg) ->
+      List.filter ~f:(fun (name,_,_) ->
           should_print subs name) |> function
       | [] -> ()
       | _ when not(should_print secs sec) -> ()
