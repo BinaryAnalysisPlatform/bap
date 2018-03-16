@@ -47,15 +47,15 @@ script: bash -ex .travis_install.sh
 
 jobs:
   include:
-  - stage: Unit tests and checks
+  - stage: Unit tests, checks and bil tests
     env:
     - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
     script: bash -ex .run_travis_tests.sh unit_tests
-  - stage: Unit tests and checks
+  - stage: Unit tests, checks and bil tests
     env:
     - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
     script: bash -ex .run_travis_tests.sh checks
-  - stage: Unit tests and checks
+  - stage: Unit tests, checks and bil tests
     env:
     - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
     script: bash -ex .run_travis_tests.sh veri
