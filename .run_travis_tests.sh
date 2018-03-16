@@ -19,13 +19,5 @@ if [ "$TASK" == "unit_tests" ]; then
 fi
 
 if [ "$TASK" == "veri" ]; then
-    opam install core.v0.9.2 pcre textutils -y
-    git clone https://github.com/BinaryAnalysisPlatform/bap-veri.git
-    cd bap-veri
-    oasis setup
-    ./configure --prefix=`opam config var prefix`
-    make
-    make reinstall
-    cd ../
     bash -exc 'make veri'
 fi
