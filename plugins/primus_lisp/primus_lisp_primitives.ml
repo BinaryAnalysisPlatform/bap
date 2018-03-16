@@ -279,43 +279,100 @@ module Primitives(Machine : Primus.Machine.S) = struct
 
   let init () =
     let open Primus.Lisp.Type.Spec in
-    let def name types closure =
-      Lisp.define ~types name closure in
+    let def name types closure docs =
+      Lisp.define ~types ~docs name closure  in
     Machine.sequence [
-      def "is-zero" (all any @-> bool) (module IsZero);
-      def "is-positive" (all any @-> bool) (module IsPositive);
-      def "is-negative" (all any @-> bool) (module IsNegative);
-      def "word-width" (unit @-> int)  (module WordWidth);
-      def "exit-with" (one int @-> any) (module ExitWith);
-      def "memory-read" (one int @-> byte) (module MemoryRead);
-      def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite);
-      def "memory-allocate" (tuple [int; int] // all byte @-> byte) (module MemoryAllocate);
-      def "get-current-program-counter" (unit @-> int) (module GetPC);
-      def "+" (all a @-> a) (module Add);
-      def "-" (all a @-> a) (module Sub);
-      def "*" (all a @-> a) (module Mul);
-      def "/" (all a @-> a) (module Div);
-      def "s/" (all a @-> a) (module SDiv);
-      def "mod" (all a @-> a) (module Mod);
-      def "signed-mod" (all a @-> a) (module SignedMod);
-      def "lshift" (tuple [a; b] @-> a) (module Lshift);
-      def "rshift" (tuple [a; b] @-> a) (module Rshift);
-      def "arshift" (tuple [a; b] @-> a) (module Arshift);
-      def "=" (all a @-> bool) (module Equal);
-      def "/=" (all a @-> bool) (module NotEqual);
-      def "logand" (all a @-> a) (module Logand);
-      def "logor" (all a @-> a) (module Logor);
-      def "logxor" (all a @-> a) (module Logxor);
-      def "concat" (all any @-> any) (module Concat);
-      def "extract" (tuple [any; any; any] @-> any) (module Extract);
-      def "lnot" (one a @-> a) (module Lnot);
-      def "not" (one a @-> a) (module Not);
-      def "neg" (one a @-> a) (module Neg);
-      def "<" (all a @-> bool) (module Less);
-      def ">" (all a @-> bool) (module Greater);
-      def "<=" (all a @-> bool) (module LessEqual);
-      def ">=" (all a @-> bool) (module GreaterEqual);
-      def "symbol-concat" (all sym @-> sym) (module SymbolConcat);
+      def "is-zero" (all any @-> bool) (module IsZero)
+        "(is-zero X Y ...) returns true if all arguments are zeros";
+      def "is-positive" (all any @-> bool) (module IsPositive)
+        "(is-positive X Y ...) returns true if all arguments are positive";
+      def "is-negative" (all any @-> bool) (module IsNegative)
+        "(is-negative X Y ...) returns true if all arguments are negative";
+      def "word-width" (unit @-> int)  (module WordWidth)
+        "(word-width) returns machine word widht in bits";
+      def "exit-with" (one int @-> any) (module ExitWith)
+        "(exit-with N) terminates program with the exit codeN";
+      def "memory-read" (one int @-> byte) (module MemoryRead)
+        "(memory-read A) loads one byte from the address A";
+      def "memory-write" (tuple [int; byte] @-> int) (module MemoryWrite)
+        "(memory-write A X) stores by X to A";
+      def "memory-allocate" (tuple [int; int] // all byte @-> byte) (module MemoryAllocate)
+        "(memory-allocate P N V?) maps memory region [P,P+N), if V is
+         provided, then fills the newly mapped region with the value V";
+      def "get-current-program-counter" (unit @-> int) (module GetPC)
+        "(get-current-program-counter) returns current program cunnter";
+      def "+" (all a @-> a) (module Add)
+        "(+ X Y ...) returns the sum of arguments, or 0 if there are
+         no arguments,";
+      def "-" (all a @-> a) (module Sub)
+        "(- X Y Z ...) returns X - Y - Z - ..., or 0 if there are no
+         arguments.";
+      def "*" (all a @-> a) (module Mul)
+        "(* X Y Z ...) returns the product of arguments or 1 if the list
+        of arguments is empty";
+      def "/" (all a @-> a) (module Div)
+        "(/ X Y Z ...) returns X / Y / Z / ... or 0 if the list of
+         arguments is empty";
+      def "s/" (all a @-> a) (module SDiv)
+        "(s/ X Y Z ...) returns X s/ Y s/ Z s/ ... or 0 if the list of
+         arguments is empty, where s/ is the signed division operation";
+      def "mod" (all a @-> a) (module Mod)
+        "(mod X Y Z ...) returns X % Y % Z % ... or 0 if the list of
+         arguments is empty, where % is the modulo operation";
+      def "signed-mod" (all a @-> a) (module SignedMod)
+        "(signed-mod X Y Z ...) returns X % Y % Z % ... or 0 if the list of
+         arguments is empty, where % is the signed modulo operation";
+      def "lshift" (tuple [a; b] @-> a) (module Lshift)
+        "(lshift X N) logically shifts X left by N bits";
+      def "rshift" (tuple [a; b] @-> a) (module Rshift)
+        "(rshift X N) logically shifts X right by N bits";
+      def "arshift" (tuple [a; b] @-> a) (module Arshift)
+        "(arshift X N) arithmetically shifts X right by N bits";
+      def "=" (all a @-> bool) (module Equal)
+        "(= X Y Z ...) returns true if all arguments are equal. True
+        if the list of arguments is empty";
+      def "/=" (all a @-> bool) (module NotEqual)
+        "(/= X Y Z ...) returns true if at least one argument is not
+         equal to another argument. Returns false if the list of
+         arguments is empty";
+      def "logand" (all a @-> a) (module Logand)
+        "(logand X Y Z ...) returns X & Y & Z & ... or 0 if the list of
+         arguments is empty, where & is the bitwise AND
+         operation. Returns ~0 if the list of arguments is empty";
+      def "logor" (all a @-> a) (module Logor)
+        "(logor X Y Z ...) returns X | Y | Z | ... or 0 if the list of
+         arguments is empty, where | is the bitwise OR operation";
+      def "logxor" (all a @-> a) (module Logxor)
+        "(logxor X Y Z ...) returns X ^ Y ^ Z ^ ... or 0 if the list of
+         arguments is empty, where ^ is the bitwise XOR operation";
+      def "concat" (all any @-> any) (module Concat)
+        "(concat X Y Z ...) concatenates words X, Y, Z, ... into one
+         big word";
+      def "extract" (tuple [any; any; any] @-> any) (module Extract)
+        "(extract HI LO X) extracts bits from HI to LO (including
+           both) from the word X ";
+      def "lnot" (one a @-> a) (module Lnot)
+        "(lnot X) returns the one complement of X";
+      def "not" (one a @-> a) (module Not)
+        "(not X) returns true if X is zero";
+      def "neg" (one a @-> a) (module Neg)
+        "(neg X) returns the two complement of X";
+      def "<" (all a @-> bool) (module Less)
+        "(< X Y Z ...) is true if the list of arguments is an
+         strict ascending chain or if it is empty";
+      def ">" (all a @-> bool) (module Greater)
+        "(< X Y Z ...) is true if the list of arguments is a
+         strict descending chain or if it is empty";
+      def "<=" (all a @-> bool) (module LessEqual)
+        "(< X Y Z ...) is true if the list of arguments is an
+         ascending chain or if it is empty";
+      def ">=" (all a @-> bool) (module GreaterEqual)
+        "(< X Y Z ...) is true if the list of arguments is a
+         descending chain or if it is empty";
+      def "symbol-concat" (all sym @-> sym) (module SymbolConcat)
+        "(symbol-concat X Y Z ...) returns a new symbol that is a
+        concatenation of symbols X,Y,Z,... "
+      ;
     ]
 end
 

@@ -21,11 +21,13 @@
 (require taint)
 
 (defun check-value (v)
+  "(check-value V) marks V as a value that must be checked"
   (let ((pc (incident-location))
         (tid (taint-introduce-directly 'check-value v)))
     (dict-add 'check-value/required tid pc)))
 
 (defun check-value-clear (v)
+  "(check-value-clear V) marks V as a value that was checked."
   (let ((taint (taint-get-direct 'check-value v))
         (pc (dict-get 'check-value/required taint)))
     (when taint

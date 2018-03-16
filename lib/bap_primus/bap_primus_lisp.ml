@@ -687,7 +687,8 @@ module Doc = struct
   let normalize xs =
     List.Assoc.map xs ~f:normalize_descr |>
     String.Map.of_alist_reduce ~f:(fun x y ->
-        if x = y then x
+        if x = "" then y else if y = "" then x
+        else if x = y then x
         else sprintf "%s\nOR\n%s" x y) |>
     Map.to_alist
 

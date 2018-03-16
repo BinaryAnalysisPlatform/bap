@@ -27,7 +27,7 @@ module Documentation = struct
     List.iter index ~f:(fun (cat,elts) ->
         fprintf ppf "* %a@\n" Primus.Lisp.Doc.Category.pp cat;
         List.iter elts ~f:(fun (name,desc) ->
-            fprintf ppf "** %a@\n%a@\n"
+            fprintf ppf "** ~%a~@\n%a@\n"
               Primus.Lisp.Doc.Name.pp name
               Primus.Lisp.Doc.Descr.pp desc))
 
@@ -75,22 +75,37 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let call make_pars (name,args) = make_pars name args
 
-  let signal obs kind proj =
-    Lisp.signal obs @@ fun arg ->
+  let signal obs kind proj doc =
+    Lisp.signal ~doc obs @@ fun arg ->
     Machine.List.all (proj kind arg)
 
   let init = Machine.sequence Primus.Interpreter.[
-      signal loaded (value,value) pair;
-      signal stored (value,value) pair;
-      signal read  (var,value) pair;
-      signal written (var,value) pair;
-      signal pc_change word one;
-      signal jumping (value,value) pair;
-      signal Primus.Linker.Trace.call parameters call;
-      signal Primus.Linker.Trace.return parameters call;
-      signal interrupt int one;
-      Lisp.signal Primus.Machine.init (fun () -> Machine.return []);
+      signal loaded (value,value) pair
+        {|(loaded A X) is emited when X is loaded from A|};
+      signal stored (value,value) pair
+        {|(stored A X) is emited when X is stored to A|};
+      signal read  (var,value) pair
+        {|(read V X) is emited when X is read from V|};
+      signal written (var,value) pair
+        {|(written V X) is emited when X is written to V|};
+      signal pc_change word one
+        {|(pc-change PC) is emited when PC is updated|};
+      signal jumping (value,value) pair
+        {|(jumping C D) is emited before jump to D occurs under the
+          condition C|};
+      signal Primus.Linker.Trace.call parameters call
+        {|(call NAME X Y ...) is emited when a call to a function with the
+          symbolic NAME occurs with the specified list of arguments X,Y,...|};
+      signal Primus.Linker.Trace.return parameters call
+        {|(call-return NAME X Y ... R) is emited when a call to a function with the
+          symbolic NAME returns with the specified list of arguments
+          X,Y,... and return value R.|};
+      signal interrupt int one
+        {|(interrupt N) is emited when the hardware interrupt N occurs|};
+      Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+        ~doc:{|(init) occurs when the Primus Machine is initialized|};
       Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+        ~doc:{|(fini) occurs when the Primus Machine is finished|};
     ]
 end
 
