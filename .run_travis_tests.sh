@@ -19,6 +19,7 @@ if [ "$TASK" == "unit_tests" ]; then
 fi
 
 if [ "$TASK" == "veri" ]; then
+    opam install pcre textutils -y
     git clone https://github.com/BinaryAnalysisPlatform/bap-veri.git
     cd bap-veri
     oasis setup
