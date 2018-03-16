@@ -12,38 +12,26 @@ let extract_default filename arch =
   let width = Arch.addr_size arch |> Size.in_bits in
   In_channel.with_file filename ~f:(fun ch ->
       Sexp.input_sexps ch |> List.map ~f:Int64.t_of_sexp |>
-        List.map ~f:(Addr.of_int64 ~width) |>
-        Seq.of_list)
+      List.map ~f:(Addr.of_int64 ~width) |>
+      Seq.of_list)
 
-let parse_ver fmt =
-  match String.split ~on:'-' fmt with
-  | [fmt;ver] -> fmt, Some ver
-  | _ -> fmt,None
+let split_right ~after str =
+  match String.rindex str after with
+  | None -> str,None
+  | Some n -> String.(subo ~len:n str, Some (subo ~pos:(n+1) str))
 
-let extract_format filename =
-  match String.split ~on:'.' filename with
-  | [] | [_] -> None, None
-  | [_ ; fmt] -> Some fmt, None
-  | _ :: strs ->
-     let of_prefix (r,_,_) =
-       List.exists strs ~f:(String.is_prefix ~prefix:r) in
-     match Addr.available_readers () |> List.find ~f:of_prefix with
-     | None -> None, None
-     | Some (fmt,_,_) ->
-        let pos =
-          String.substr_index_exn filename ~pattern:("." ^ fmt) + 1 in
-        let fmt,ver = parse_ver (String.subo ~pos filename) in
-        Some fmt, ver
+let extension s = split_right ~after:'.' s |> snd
 
-let extract filename arch =
-  match extract_format filename with
-  | None, _ -> extract_default filename arch
-  | Some fmt, ver -> extract_with_fmt filename fmt ver
+let rooter filename arch =
+  let name,ver = split_right ~after:'-' filename in
+  match extension name with
+  | None -> extract_default filename arch
+  | Some fmt -> extract_with_fmt filename fmt ver
 
 let register filename =
   let name = sprintf "file:%s" filename in
   Stream.map Project.Info.arch (fun arch ->
-      Ok (Rooter.create (extract filename arch))) |>
+      Ok (Rooter.create (rooter filename arch))) |>
     Rooter.Factory.register name
 
 let () =
