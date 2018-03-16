@@ -167,7 +167,10 @@ module Api_error = struct
       (Api_path.to_string api.path) (Api_path.to_string api'.path)
 end
 
-let add_api paths api =
+let add_api (paths : path list) api =
+  eprintf "api_add: ";
+  List.iter ~f:(fun p -> eprintf "%s; " (FilePath.DefaultPath.Abstract.string_of_path [p])) paths;
+  eprintf "\n";
   match Api_path.find_path paths api.desc with
   | Some path -> Api_error.api_exists path api.desc
   | None ->
@@ -367,7 +370,7 @@ module Cmdline = struct
     let open Api_options in
     match o.api_to_add, o.api_to_rem with
     | [],[] -> ()
-    | add,rem ->
+    | _add,_rem ->
       let paths = all_paths o in
       add_files o.api_to_add paths;
       rem_files o.api_to_rem paths;
@@ -381,10 +384,17 @@ module Cmdline = struct
     dispatch_flags o;
     Project.register_pass ~autorun:true ~deps:["abi"] (main paths)
 
+  let normalize_paths ps =
+    let norm p =
+      if String.equal p "." then Sys.getcwd ()
+      else p in
+    List.map ~f:norm ps
+
   let () =
     Config.manpage man;
     Config.when_ready (fun {Config.get=(!)} ->
+        let paths = normalize_paths !path in
         let o = create !add_api !remove_api
-            !list_paths !show_apis !path in
+            !list_paths !show_apis paths in
         dispatch o)
 end
