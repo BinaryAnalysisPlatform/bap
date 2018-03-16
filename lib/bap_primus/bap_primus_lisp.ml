@@ -582,6 +582,9 @@ module Make(Machine : Machine) = struct
         Lisp.Def.Closure.of_primitive def
           (module Packed : Lisp.Def.Closure) |>
         link_primitive)
+
+  let eval_method = Self.eval_signal
+  let eval_fun = Self.eval_lisp
 end
 
 let init ?log:_ ?paths:_ _features  =

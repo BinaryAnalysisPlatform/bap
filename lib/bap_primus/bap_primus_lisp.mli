@@ -92,6 +92,10 @@ module Make (Machine : Machine) : sig
     'a observation ->
     ('a -> value list Machine.t) -> unit Machine.t
 
+  val eval_fun : string -> value list -> value Machine.t
+
+  val eval_method  : string -> value list -> unit Machine.t
+
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
 end

@@ -2414,6 +2414,19 @@ ident ::= ?any atom that is not recognized as a <word>?
             [Runtime_error].  *)
         val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
 
+        (** [eval_fun name args] calls a lisp function with the given
+            [name], that is the most specific to the current context
+            and is applicable to the specified list of arguments.
+
+            @since 1.5 *)
+        val eval_fun : string -> value list -> value Machine.t
+
+        (** [eval_method name args] invokes all methods with the given
+            [name] that are applicable in the current context to the
+            specified list of arguments.
+
+            @since 1.5 *)
+        val eval_method : string -> value list -> unit Machine.t
 
         (** [link_primitives prims] provides the primitives [prims]   *)
         val link_primitives : primitives -> unit Machine.t
