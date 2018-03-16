@@ -1,5 +1,6 @@
 open Core_kernel
 open Bap.Std
+open Monads.Std
 open Bap_primus.Std
 open Format
 include Self()
@@ -20,6 +21,29 @@ let dump_program prog =
   set_margin 64;
   printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
   set_margin margin
+
+module Documentation = struct
+  let pp_index ppf index =
+    List.iter index ~f:(fun (cat,elts) ->
+        fprintf ppf "* %a@\n" Primus.Lisp.Doc.Category.pp cat;
+        List.iter elts ~f:(fun (name,desc) ->
+            fprintf ppf "** %a@\n%a@\n@\n"
+              Primus.Lisp.Doc.Name.pp name
+              Primus.Lisp.Doc.Descr.pp desc))
+
+  let print proj =
+    let module Machine = struct
+      type 'a m = 'a
+      include Primus.Machine.Make(Monad.Ident)
+    end in
+    let open Machine.Syntax in
+    let module Doc = Primus.Lisp.Doc.Make(Machine) in
+    let module Main = Primus.Machine.Main(Machine) in
+    let print =
+      Doc.generate_index >>| fun index ->
+      printf "%a@\n%!" pp_index index in
+    ignore (Main.run proj print)
+end
 
 module Signals(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
@@ -70,18 +94,15 @@ module Signals(Machine : Primus.Machine.S) = struct
     ]
 end
 
-let main dump paths features project =
-  let prog = load_program paths features project in
-  if dump then dump_program prog;
-
+let load_lisp_program dump paths features =
   let module Loader(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Lisp = Primus.Lisp.Make(Machine)
-
-
-    let init () = Machine.sequence [
-        Lisp.link_program prog;
-      ]
+    let init () =
+      Machine.get () >>= fun project ->
+      let prog = load_program paths features project in
+      if dump then dump_program prog;
+      Lisp.link_program prog;
   end in
   Primus.Machine.add_component (module Loader)
 
@@ -139,6 +160,9 @@ let () =
     `P "$(b,bap-primus)(3) $(b,bap-run)(1)"
   ];
 
+  let documentation =
+    Config.(flag ~doc:"outputs Primus Lisp documentation") "documentation" in
+
   let dump =
     Config.(flag ~doc:"dumps generated AST" "dump") in
 
@@ -159,9 +183,11 @@ let () =
     Config.(param (list Redirection.convert) ~doc "channel-redirect") in
 
   Config.when_ready (fun {Config.get=(!)} ->
+      if !documentation then
+        Project.register_pass' ~autorun:true Documentation.print;
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
       Primus.Machine.add_component (module LispCore);
       Channels.init !redirects;
       Primitives.init ();
-      Project.register_pass' ~runonce:true (main !dump paths features))
+      load_lisp_program !dump paths features)
