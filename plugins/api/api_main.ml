@@ -167,10 +167,7 @@ module Api_error = struct
       (Api_path.to_string api.path) (Api_path.to_string api'.path)
 end
 
-let add_api (paths : path list) api =
-  eprintf "api_add: ";
-  List.iter ~f:(fun p -> eprintf "%s; " (FilePath.DefaultPath.Abstract.string_of_path [p])) paths;
-  eprintf "\n";
+let add_api paths api =
   match Api_path.find_path paths api.desc with
   | Some path -> Api_error.api_exists path api.desc
   | None ->
