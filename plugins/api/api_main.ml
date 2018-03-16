@@ -367,7 +367,7 @@ module Cmdline = struct
     let open Api_options in
     match o.api_to_add, o.api_to_rem with
     | [],[] -> ()
-    | add,rem ->
+    | _add,_rem ->
       let paths = all_paths o in
       add_files o.api_to_add paths;
       rem_files o.api_to_rem paths;
@@ -381,10 +381,17 @@ module Cmdline = struct
     dispatch_flags o;
     Project.register_pass ~autorun:true ~deps:["abi"] (main paths)
 
+  let normalize_paths ps =
+    let norm p =
+      if String.equal p "." then Sys.getcwd ()
+      else p in
+    List.map ~f:norm ps
+
   let () =
     Config.manpage man;
     Config.when_ready (fun {Config.get=(!)} ->
+        let paths = normalize_paths !path in
         let o = create !add_api !remove_api
-            !list_paths !show_apis !path in
+            !list_paths !show_apis paths in
         dispatch o)
 end
