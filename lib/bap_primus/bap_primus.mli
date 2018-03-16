@@ -2138,6 +2138,47 @@ ident ::= ?any atom that is not recognized as a <word>?
         val pp_program : Format.formatter -> program -> unit
       end
 
+      module Doc : sig
+
+        (** Abstract Element of a document.
+
+            A documentation element is something that can be printed.
+            We keep it abstract, as we plan to extend it in the future.
+        *)
+        module type Element = sig
+          type t
+          val pp : Format.formatter -> t -> unit
+        end
+
+        module Category : Element
+        module Name     : Element
+        module Descr    : Element
+
+
+
+        (** Documentation index.
+
+            Documentation index has the following ogranization:
+
+            {[
+              Category 1:
+               - Element1 Name, Element1 Description;
+               - Element2 Name, Element2 Description;
+               ...
+              Category2:
+               - ...
+            ]}
+
+            All entries are sorted in alphabetic order.
+
+        *)
+        type index = (Category.t * (Name.t * Descr.t) list) list
+
+        module Make(Machine : Machine.S) : sig
+          val generate_index : index Machine.t
+        end
+      end
+
 
       (** Lisp Type System.
 

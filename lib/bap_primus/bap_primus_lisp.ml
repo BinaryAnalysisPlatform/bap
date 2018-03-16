@@ -38,6 +38,7 @@ type state = {
   width : int;
   env : bindings;
   cur : Id.t;
+  reflections : (string * string) list;
 }
 
 let inspect {env} = sexp_of_bindings env
@@ -56,6 +57,7 @@ let state = Bap_primus_state.declare ~inspect
          cur = Id.null;
          program = Lisp.Program.empty;
          width = width_of_ctxt proj;
+         reflections = [];
        })
 
 
@@ -557,8 +559,10 @@ module Make(Machine : Machine) = struct
     Lisp.Def.Closure.create ?types ?docs name body |>
     link_primitive
 
-  let signal ?params:_ ?doc:_ obs proj =
+  let signal ?params:_ ?(doc="undocumented") obs proj =
     let name = Bap_primus_observation.name obs in
+    Machine.Local.update state ~f:(fun s -> {
+          s with reflections = (name,doc) :: s.reflections}) >>= fun () ->
     Machine.Observation.observe obs (fun x ->
         proj x >>= Self.eval_signal name)
 
@@ -608,7 +612,6 @@ module Type = struct
     | `Tuple of t list
   ]
 
-
   module Spec = struct
     let any _ = Lisp.Type.any
     let var s _ = Lisp.Type.var s
@@ -642,5 +645,45 @@ module Type = struct
         let rest = Option.map rest ~f:(fun t -> t arch) in
         Lisp.Type.signature args ?rest cod
 
+  end
+end
+
+
+module Doc = struct
+  module type Element = sig
+    type t
+    val pp : formatter -> t -> unit
+  end
+
+  module Category = String
+  module Name = String
+  module Descr = String
+
+  type index = (string * (string * string) list) list
+
+  let sort =
+    List.sort ~cmp:(fun (x,_) (y,_) -> String.compare x y)
+
+  let describe prog item =
+    Lisp.Program.get prog item |> List.map ~f:(fun x ->
+        Lisp.Def.name x, Lisp.Def.docs x) |> sort
+
+
+  let index p signals = Lisp.Program.Items.[
+      "Macros", describe p macro;
+      "Substitutions", describe p subst;
+      "Constants", describe p const;
+      "Functions", describe p func;
+      "Methods", describe p meth;
+      "Parameters", describe p para;
+      "Primitives", describe p primitive;
+      "Signals", sort signals;
+    ]
+
+  module Make(Machine : Machine) = struct
+    open Machine.Syntax
+    let generate_index : index Machine.t =
+      Machine.Local.get state >>| fun s ->
+      index s.program s.reflections
   end
 end
