@@ -661,12 +661,40 @@ module Doc = struct
 
   type index = (string * (string * string) list) list
 
-  let sort =
-    List.sort ~cmp:(fun (x,_) (y,_) -> String.compare x y)
+
+  let unquote s =
+    if String.is_prefix s ~prefix:{|"|} &&
+       String.is_suffix s ~suffix:{|"|}
+    then String.sub s ~pos:1 ~len:(String.length s - 2)
+    else s
+
+  let dedup_whitespace str =
+    let buf = Buffer.create (String.length str) in
+    let push = Buffer.add_char buf in
+    String.fold str ~init:`white ~f:(fun state c ->
+        let ws = Char.is_whitespace c in
+        if not ws then push c;
+        match state,ws with
+        | `white,true  -> `white
+        | `white,false -> `black
+        | `black,true  -> push c; `white
+        | `black,false -> `black) |> ignore;
+    Buffer.contents buf
+
+  let normalize_descr s =
+    dedup_whitespace (unquote (String.strip s))
+
+  let normalize xs =
+    List.Assoc.map xs ~f:normalize_descr |>
+    String.Map.of_alist_reduce ~f:(fun x y ->
+        if x = y then x
+        else sprintf "%s\nOR\n%s" x y) |>
+    Map.to_alist
+
 
   let describe prog item =
     Lisp.Program.get prog item |> List.map ~f:(fun x ->
-        Lisp.Def.name x, Lisp.Def.docs x) |> sort
+        Lisp.Def.name x, Lisp.Def.docs x) |> normalize
 
 
   let index p signals = Lisp.Program.Items.[
@@ -677,7 +705,7 @@ module Doc = struct
       "Methods", describe p meth;
       "Parameters", describe p para;
       "Primitives", describe p primitive;
-      "Signals", sort signals;
+      "Signals", normalize signals;
     ]
 
   module Make(Machine : Machine) = struct

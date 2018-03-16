@@ -27,7 +27,7 @@ module Documentation = struct
     List.iter index ~f:(fun (cat,elts) ->
         fprintf ppf "* %a@\n" Primus.Lisp.Doc.Category.pp cat;
         List.iter elts ~f:(fun (name,desc) ->
-            fprintf ppf "** %a@\n%a@\n@\n"
+            fprintf ppf "** %a@\n%a@\n"
               Primus.Lisp.Doc.Name.pp name
               Primus.Lisp.Doc.Descr.pp desc))
 
