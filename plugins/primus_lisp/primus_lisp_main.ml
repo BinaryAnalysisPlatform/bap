@@ -1,15 +1,13 @@
 open Core_kernel
 open Bap.Std
+open Monads.Std
 open Bap_primus.Std
 open Format
 include Self()
 
-let deps = [
-  "trivial-condition-form"
-]
-
 module Lisp_config = Primus_lisp_config
-
+module Primitives = Primus_lisp_primitives
+module Channels = Primus_lisp_io
 
 let load_program paths features project =
   match Primus.Lisp.Load.program ~paths project features with
@@ -24,50 +22,50 @@ let dump_program prog =
   printf "%a@\n%!" Primus.Lisp.Load.pp_program prog;
   set_margin margin
 
-type state = {
-  addrs : addr Tid.Map.t;
-}
+module Documentation = struct
+  let pp_index ppf index =
+    List.iter index ~f:(fun (cat,elts) ->
+        fprintf ppf "* %a@\n" Primus.Lisp.Doc.Category.pp cat;
+        List.iter elts ~f:(fun (name,desc) ->
+            fprintf ppf "** ~%a~@\n%a@\n"
+              Primus.Lisp.Doc.Name.pp name
+              Primus.Lisp.Doc.Descr.pp desc))
 
-let update_addr t m = match Term.get_attr t address with
-  | None -> m
-  | Some addr -> Map.add m ~key:(Term.tid t) ~data:addr
-
-let compute_addresses prog = (object
-  inherit [addr Tid.Map.t] Term.visitor
-  method! enter_sub = update_addr
-  method! enter_blk = update_addr
-end)#run prog Tid.Map.empty
-
-let state = Primus.Machine.State.declare
-    ~inspect:sexp_of_opaque
-    ~uuid:"23D4C1C4-784E-42DC-B8C9-B4C4268B0688"
-    ~name:"stdlib-signals"
-    (fun proj -> {addrs = compute_addresses (Project.program proj)})
+  let print proj =
+    let module Machine = struct
+      type 'a m = 'a
+      include Primus.Machine.Make(Monad.Ident)
+    end in
+    let open Machine.Syntax in
+    let module Doc = Primus.Lisp.Doc.Make(Machine) in
+    let module Main = Primus.Machine.Main(Machine) in
+    let print =
+      Doc.generate_index >>| fun index ->
+      printf "%a@\n%!" pp_index index in
+    ignore (Main.run proj print)
+end
 
 module Signals(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Value = Primus.Value.Make(Machine)
+  module Eval = Primus.Interpreter.Make(Machine)
   module Env = Primus.Env.Make(Machine)
   module Lisp = Primus.Lisp.Make(Machine)
 
   let value = Machine.return
   let word = Value.of_word
-  let int x = word (Word.of_int ~width:32 x)
+  let int x =
+    Machine.arch >>= fun arch ->
+    let word_size = Arch.addr_size arch in
+    let width = Size.in_bits word_size in
+    word (Word.of_int ~width x)
 
   let sym x = Value.Symbol.to_value x
   let var v = sym (Var.name v)
-
   let unit f () = [f ()]
   let one f x = [f x]
   let pair (f,g) (x,y) = [f x; g y]
-
-  let cond j = match Jmp.cond j with
-    | Bil.Var v -> Env.get v
-    | Bil.Int x -> word x
-    | _ -> failwith "TCF violation"
-
-  let jmp (cond,dst) j = [cond j;dst j]
-
+  let cond j = Eval.exp (Jmp.cond j)
   let name = Value.b0
   let args = []
 
@@ -77,63 +75,63 @@ module Signals(Machine : Primus.Machine.S) = struct
 
   let call make_pars (name,args) = make_pars name args
 
-  let label j = match Jmp.kind j with
-    | Call c -> Some (Call.target c)
-    | Goto l | Ret l -> Some l
-    | Int _  -> None
-
-  let addr j = match label j with
-    | None -> Machine.return None
-    | Some (Direct tid) ->
-      Machine.Local.get state >>| fun {addrs} ->
-      Map.find addrs tid
-    | Some (Indirect (Bil.Int x)) -> Machine.return (Some x)
-    | _ -> Machine.return None
-
-  let dst j = addr j >>= function
-    | None -> Value.b0
-    | Some x -> word x
-
-  let signal obs kind proj =
-    Lisp.signal obs @@ fun arg ->
+  let signal obs kind proj doc =
+    Lisp.signal ~doc obs @@ fun arg ->
     Machine.List.all (proj kind arg)
 
   let init = Machine.sequence Primus.Interpreter.[
-      signal loaded (value,value) pair;
-      signal stored (value,value) pair;
-      signal read  (var,value) pair;
-      signal written (var,value) pair;
-      signal pc_change word one;
-      signal enter_jmp (cond,dst) jmp;
-      signal Primus.Linker.Trace.call parameters call;
-      signal Primus.Linker.Trace.return parameters call;
-      signal interrupt int one;
-      Lisp.signal Primus.Machine.init (fun () -> Machine.return []);
+      signal loaded (value,value) pair
+        {|(loaded A X) is emited when X is loaded from A|};
+      signal stored (value,value) pair
+        {|(stored A X) is emited when X is stored to A|};
+      signal read  (var,value) pair
+        {|(read V X) is emited when X is read from V|};
+      signal written (var,value) pair
+        {|(written V X) is emited when X is written to V|};
+      signal pc_change word one
+        {|(pc-change PC) is emited when PC is updated|};
+      signal jumping (value,value) pair
+        {|(jumping C D) is emited before jump to D occurs under the
+          condition C|};
+      signal Primus.Linker.Trace.call parameters call
+        {|(call NAME X Y ...) is emited when a call to a function with the
+          symbolic NAME occurs with the specified list of arguments X,Y,...|};
+      signal Primus.Linker.Trace.return parameters call
+        {|(call-return NAME X Y ... R) is emited when a call to a function with the
+          symbolic NAME returns with the specified list of arguments
+          X,Y,... and return value R.|};
+      signal interrupt int one
+        {|(interrupt N) is emited when the hardware interrupt N occurs|};
+      Lisp.signal Primus.Machine.init (fun () -> Machine.return [])
+        ~doc:{|(init) occurs when the Primus Machine is initialized|};
       Lisp.signal Primus.Machine.finished (fun () -> Machine.return [])
+        ~doc:{|(fini) occurs when the Primus Machine is finished|};
     ]
-
 end
 
-let main dump paths features project =
-  let prog = load_program paths features project in
-  if dump then dump_program prog;
-
+let load_lisp_program dump paths features =
   let module Loader(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Lisp = Primus.Lisp.Make(Machine)
-    module Signals = Signals(Machine)
-
-    let print_message msg =
-      Machine.return (info "%a" Primus.Lisp.Message.pp msg)
-
-
-    let init () = Machine.sequence [
-        Lisp.link_program prog;
-        Signals.init;
-        Primus.Lisp.message >>> print_message;
-      ]
+    let init () =
+      Machine.get () >>= fun project ->
+      let prog = load_program paths features project in
+      if dump then dump_program prog;
+      Lisp.link_program prog;
   end in
   Primus.Machine.add_component (module Loader)
+
+module LispCore(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Signals = Signals(Machine)
+  let print_message msg =
+    Machine.return (info "%a" Primus.Lisp.Message.pp msg)
+
+  let init () = Machine.sequence [
+      Signals.init;
+      Primus.Lisp.message >>> print_message;
+    ]
+end
 
 module Redirection = struct
   type t = string * string
@@ -177,6 +175,9 @@ let () =
     `P "$(b,bap-primus)(3) $(b,bap-run)(1)"
   ];
 
+  let documentation =
+    Config.(flag ~doc:"outputs Primus Lisp documentation") "documentation" in
+
   let dump =
     Config.(flag ~doc:"dumps generated AST" "dump") in
 
@@ -197,7 +198,11 @@ let () =
     Config.(param (list Redirection.convert) ~doc "channel-redirect") in
 
   Config.when_ready (fun {Config.get=(!)} ->
+      if !documentation then
+        Project.register_pass' ~autorun:true Documentation.print;
       let paths = [Filename.current_dir_name] @ !libs @ [Lisp_config.library] in
       let features = "init" :: !features in
-      Primus_lisp_io.init (!redirects);
-      Project.register_pass' (main !dump paths features))
+      Primus.Machine.add_component (module LispCore);
+      Channels.init !redirects;
+      Primitives.init ();
+      load_lisp_program !dump paths features)

@@ -42,6 +42,9 @@ type const = {
   value : string;
 }
 
+type para = {
+  default : ast;
+}
 
 type 'a primitive = (value list -> 'a)
 
@@ -91,6 +94,22 @@ end
 
 module Meth = Func
 
+module Para =  struct
+  let create : 'a def =
+    fun ?(docs="") ?(attrs=Attribute.Set.empty) name default ->
+      create {
+        meta = {name; docs; attrs};
+        code = {default};
+      }
+
+  let default p = p.data.code.default
+  let with_default t default = {
+    t with data = {
+      t.data with code = {default}
+    }
+  }
+end
+
 module Macro = struct
   type error += Bad_subst of tree * tree list
   let args = field param
@@ -104,12 +123,12 @@ module Macro = struct
   let take_rest xs ys =
     let rec take xs ys zs = match xs,ys with
       | [],[] -> Some zs
-      | [x], (_ :: _ :: ys as rest) -> Some ((x,rest)::zs)
+      | [x], (_ :: _ :: _ as rest) -> Some ((x,rest)::zs)
       | x :: xs, y :: ys -> take xs ys ((x,[y])::zs)
       | _ :: _, [] | [],_ -> None in
     match take xs ys []with
     | Some [] -> Some (0,[])
-    | Some ((z,rest) :: _ as bs) ->
+    | Some ((_,rest) :: _ as bs) ->
       Some (List.length rest, List.rev bs)
     | None -> None
 

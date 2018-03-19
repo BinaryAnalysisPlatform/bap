@@ -93,6 +93,9 @@ let written,on_written =
 let undefined,on_undefined =
   Observation.provide ~inspect:sexp_of_value "undefined"
 
+let jumping,will_jump =
+  Observation.provide ~inspect:sexp_of_values "jumping"
+
 
 let results r op = Sexp.List [op; sexp_of_value r]
 
@@ -376,42 +379,52 @@ module Make (Machine : Machine) = struct
   let def t = Def.lhs t := Def.rhs t
   let def = term normal def_t def
 
-  let label : label -> _ = function
-    | Direct t -> Code.exec (`tid t)
+  let will_jump_to_tid cond dst =
+    Code.resolve_addr (`tid dst) >>= function
+    | None -> Machine.return ()
+    | Some addr ->
+      Value.of_word addr >>= fun addr ->
+      !!will_jump (cond,addr)
+
+  let label cond : label -> _ = function
+    | Direct t ->
+      will_jump_to_tid cond t >>= fun () ->
+      Code.exec (`tid t)
     | Indirect x ->
-      eval_exp x >>= fun {value} ->
+      eval_exp x >>= fun ({value} as dst) ->
+      !!will_jump (cond,dst) >>= fun () ->
       Code.exec (`addr value)
 
-  let call c =
-    label (Call.target c) >>= fun () ->
+  let call cond c =
+    label cond (Call.target c) >>= fun () ->
     match Call.return c with
-    | Some t -> label t
+    | Some t -> label cond t
     | None -> failf "a non-return call returned" ()
 
-  let goto c = label c
-  let ret l = label l
-  let interrupt n _r = !!will_interrupt n
+  let goto cond c = label cond c
+  let ret cond l = label cond l
+  let interrupt n  = !!will_interrupt n
 
-  let jump t = match Jmp.kind t with
-    | Call c -> call c
-    | Goto l -> goto l
-    | Ret l -> ret l
+  let jump cond t = match Jmp.kind t with
+    | Call c -> call cond c
+    | Goto l -> goto cond l
+    | Ret l -> ret cond l
     | Int (n,r) ->
-      interrupt n r >>= fun () ->
+      interrupt n >>= fun () ->
       Code.exec (`tid r)
 
-  let jmp t = eval_exp (Jmp.cond t) >>| fun {value} -> Word.is_one value
+  let jmp t = eval_exp (Jmp.cond t) >>| fun ({value} as cond) ->
+    Option.some_if (Word.is_one value) (cond,t)
   let jmp = term normal jmp_t jmp
-
 
   let blk t =
     (* todo add the phi nodes, or think at least.. *)
     Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
-    Machine.Seq.find (Term.enum jmp_t t) ~f:jmp
+    Machine.Seq.find_map (Term.enum jmp_t t) ~f:jmp
 
   let finish = function
     | None -> Machine.return ()
-    | Some code -> jump code
+    | Some (cond,code) -> jump cond code
 
   let arg_def t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t

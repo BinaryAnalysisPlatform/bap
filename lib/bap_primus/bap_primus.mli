@@ -139,7 +139,7 @@ module Std : sig
 
           This interface provides access to the data stream of all
           providers expresses as a stream of s-expressions.
-       *)
+      *)
       module Provider : sig
         type t = provider
 
@@ -244,7 +244,7 @@ module Std : sig
     module Machine : sig
 
       (** [init] event occurs just after all components have been
-         initialized, and before the execution starts*)
+          initialized, and before the execution starts*)
       val init : unit observation
 
       (** The [finished] event occurs when the machine terminates.   *)
@@ -720,7 +720,7 @@ module Std : sig
             Implementors of Primus components are encouraged to use the
             [Index] module and implement their own mapping with bijection
             enforced by the abstraction.
-         *)
+        *)
         module Symbol : sig
 
 
@@ -770,7 +770,6 @@ module Std : sig
         [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
 
-
       (** [pc_change x] happens every time a code at address [x] is executed.  *)
       val pc_change : addr observation
 
@@ -807,6 +806,13 @@ module Std : sig
 
       (** [written (v,x)] happens after [x] is assinged to [v]  *)
       val written : (var * value) observation
+
+
+      (** [jumping (cond,dest)] happens just before a jump to [dest]
+          is taken under the condition [cond].
+
+          @since 1.5.0 *)
+      val jumping : (value * value) observation
 
       (** [undefined x] happens when a computation produces an
           undefined value [x].  *)
@@ -892,7 +898,7 @@ module Std : sig
       val halting : unit observation
 
       (** [interrupt n] occurs on the machine interrupt [n] (aka CPU
-         exception) *)
+          exception) *)
       val interrupt : int observation
 
       type exn += Halt
@@ -905,6 +911,9 @@ module Std : sig
 
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
+
+
+        val interrupt : int -> unit m
 
 
         (** [pc] current value of a program counter.*)
@@ -1218,8 +1227,31 @@ module Std : sig
         val exec : name -> unit m
 
 
+        (** [resolve_addr name] returns the address associated with the
+            given [name].  *)
+        val resolve_addr : name -> addr option m
+
+
+        (** [resolve_symbol name] returns the symbolic name associated
+            with the given [name].
+
+            @since 1.5.0
+        *)
+        val resolve_symbol : name -> string option m
+
+
+        (** [resolve_tid name] returns the term identifier associated
+            with the given [name].
+
+            @since 1.5.0
+        *)
+        val resolve_tid : name -> tid option m
+
+
         (** [is_linked name] computes to [true] if the [name] is
-            associated with some code.  *)
+            associated with some code.
+
+            @since 1.5.0 *)
         val is_linked : name -> bool m
       end
     end
@@ -1980,6 +2012,7 @@ entity ::=
   | <declarations>
   | <constant-definition>
   | <substitution-definition>
+  | <parameter-definition>
   | <macro-definition>
   | <function-definition>
   | <method-definition>
@@ -1990,9 +2023,14 @@ declarations ::= (declare <attribute> ...)
 
 constant-definition ::=
   | (defconstant <ident> <atom>)
-  | (defconstant <ident> <docstring> <atom>)
-  | (defconstant <ident> <declarations> <atom>)
-  | (defconstant <ident> <docstring> <declarations> <atom>)
+  | (defconstant <ident> <atom> <docstring>)
+  | (defconstant <ident> <atom> <declarations>)
+  | (defconstant <ident> <atom> <declarations> <docstring>)
+
+parameter-definition ::=
+  | (defparameter <ident> <atom>)
+  | (defparameter <ident> <atom> <docstring>)
+  | (defparameter <ident> <atom> <declarations> <docstring>)
 
 substitution-definition ::=
   | (defsubst <ident> <atom> ...)
@@ -2065,7 +2103,7 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
       (** an abstract type that represents messages send with the
-         [msg] form. *)
+          [msg] form. *)
       type message
 
 
@@ -2098,6 +2136,47 @@ ident ::= ?any atom that is not recognized as a <word>?
 
         (** [pp_program ppf program] dumps program definitions into the formatter [ppf]   *)
         val pp_program : Format.formatter -> program -> unit
+      end
+
+      module Doc : sig
+
+        (** Abstract Element of a document.
+
+            A documentation element is something that can be printed.
+            We keep it abstract, as we plan to extend it in the future.
+        *)
+        module type Element = sig
+          type t
+          val pp : Format.formatter -> t -> unit
+        end
+
+        module Category : Element
+        module Name     : Element
+        module Descr    : Element
+
+
+
+        (** Documentation index.
+
+            Documentation index has the following ogranization:
+
+            {[
+              Category 1:
+               - Element1 Name, Element1 Description;
+               - Element2 Name, Element2 Description;
+               ...
+              Category2:
+               - ...
+            ]}
+
+            All entries are sorted in alphabetic order.
+
+        *)
+        type index = (Category.t * (Name.t * Descr.t) list) list
+
+        module Make(Machine : Machine.S) : sig
+          val generate_index : index Machine.t
+        end
       end
 
 
@@ -2179,7 +2258,7 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
           (** a machine integer - a word that has the same width as
-             [Arch.addr_size] *)
+              [Arch.addr_size] *)
           val int : t
 
 
@@ -2210,7 +2289,7 @@ ident ::= ?any atom that is not recognized as a <word>?
           val tuple : t list -> [`Tuple of t list]
 
           (** [all t] specifies that a function accepts a variable
-          number of arguments all having type [t].  *)
+              number of arguments all having type [t].  *)
           val all : t -> [`All of t]
 
           (** [one t] specifies that a function accepts one argument
@@ -2238,8 +2317,8 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
         (** [check env prog] type checks program in the environment
-           [env] and returns a list of errors. If the list is empty
-           the the program is well-typed.
+            [env] and returns a list of errors. If the list is empty
+            the the program is well-typed.
 
             Note: this function is currently experimental *)
         val check : Var.t seq -> program -> error list
@@ -2261,7 +2340,7 @@ ident ::= ?any atom that is not recognized as a <word>?
 
 
         (** [pp ppf msg] prints the message into the specified
-        formatter [ppf]. *)
+            formatter [ppf]. *)
         val pp : Format.formatter -> t -> unit
       end
 
@@ -2298,7 +2377,7 @@ ident ::= ?any atom that is not recognized as a <word>?
       type exn += Runtime_error of string
 
       (** [message] observation occurs every time a message is sent
-         from the Primus Machine.  *)
+          from the Primus Machine.  *)
       val message : message observation
 
       (** Make(Machine) creates a Lisp machine embedded into the
@@ -2376,6 +2455,19 @@ ident ::= ?any atom that is not recognized as a <word>?
             [Runtime_error].  *)
         val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
 
+        (** [eval_fun name args] calls a lisp function with the given
+            [name], that is the most specific to the current context
+            and is applicable to the specified list of arguments.
+
+            @since 1.5 *)
+        val eval_fun : string -> value list -> value Machine.t
+
+        (** [eval_method name args] invokes all methods with the given
+            [name] that are applicable in the current context to the
+            specified list of arguments.
+
+            @since 1.5 *)
+        val eval_method : string -> value list -> unit Machine.t
 
         (** [link_primitives prims] provides the primitives [prims]   *)
         val link_primitives : primitives -> unit Machine.t

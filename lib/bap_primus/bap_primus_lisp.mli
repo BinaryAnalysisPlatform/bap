@@ -10,8 +10,24 @@ type message
 module Load : sig
   type error
   val program : ?paths:string list -> Project.t -> string list -> (program,error) result
-  val pp_program : Format.formatter -> program -> unit
-  val pp_error : Format.formatter -> error -> unit
+  val pp_program : formatter -> program -> unit
+  val pp_error : formatter -> error -> unit
+end
+
+module Doc : sig
+  module type Element = sig
+    type t
+    val pp : formatter -> t -> unit
+  end
+
+  module Category : Element
+  module Name     : Element
+  module Descr    : Element
+  type index = (Category.t * (Name.t * Descr.t) list) list
+
+  module Make(Machine : Machine) : sig
+    val generate_index : index Machine.t
+  end
 end
 
 module Message : sig
@@ -91,6 +107,10 @@ module Make (Machine : Machine) : sig
     ?doc:string ->
     'a observation ->
     ('a -> value list Machine.t) -> unit Machine.t
+
+  val eval_fun : string -> value list -> value Machine.t
+
+  val eval_method  : string -> value list -> unit Machine.t
 
   (* deprecated *)
   val link_primitives : primitives -> unit Machine.t
