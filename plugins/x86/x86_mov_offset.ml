@@ -98,7 +98,7 @@ module Ver_34 = struct
   end
 end
 
-module Ver_38 = struct
+module Ver_common = struct
 
   let allow_nil = true
 
@@ -189,14 +189,15 @@ module Make(V : Version) = struct
 end
 
 module T_34 = Make(Ver_34)
-module T_38 = Make(Ver_38)
+module T = Make(Ver_common)
 
 module Self = Self ()
 
 let () =
   if llvm_version = "3.4" then T_34.register ()
-  else if llvm_version = "3.8" || llvm_version = "4.0" || llvm_version = "5.0"
-  then T_38.register ()
+  else
+  if List.mem ["3.8";"4.0";"5.0";"6.0"] llvm_version ~equal:String.equal
+  then T.register ()
   else
     Self.error
       "x86 MOV with offset instructions will not lifted due to unknown \

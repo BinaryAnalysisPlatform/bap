@@ -38,9 +38,15 @@ distclean:
 
 .PHONY: check
 
+.PHONY: veri
+
 test: build
 	$(SETUP) -test $(BAPTESTFLAGS)
 
 check:
 	if [ -d .git ]; then git submodule init; git submodule update; 	fi
 	make -C testsuite
+
+veri:
+	if [ -d .git ]; then git submodule init; git submodule update; 	fi
+	make -C testsuite veri

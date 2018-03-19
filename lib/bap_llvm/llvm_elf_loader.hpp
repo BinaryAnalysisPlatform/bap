@@ -161,10 +161,10 @@ error_or<uint64_t> symbol_file_offset(const ELFObjectFile<T> &obj, const SymbolR
 }
 
 template <typename T>
-error_or<uint64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
+error_or<int64_t> symbol_address(const ELFObjectFile<T> &obj, const SymbolRef &sym) {
     auto sym_elf = obj.getSymbol(sym.getRawDataRefImpl());
     if (is_rel(obj) && !is_abs_symbol(*sym_elf)) { // abs symbols does not affected by relocations
-        return success(uint64_t(0));
+        return success(int64_t(0));
     } else {
         auto addr = prim::symbol_address(sym);
         if (!addr) return addr;
@@ -208,7 +208,7 @@ void symbol_entry(const ELFObjectFile<T> &obj, const SymbolRef &sym, ogre_doc &s
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8          \
-    || LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
+    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
 
 template <typename T>
 uint64_t base_address(const ELFObjectFile<T> &obj) {

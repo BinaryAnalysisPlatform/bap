@@ -17,3 +17,7 @@ fi
 if [ "$TASK" == "unit_tests" ]; then
     bap_run_tests
 fi
+
+if [ "$TASK" == "veri" ]; then
+    bash -exc 'make veri'
+fi

@@ -4,6 +4,9 @@ export TESTS=false
 
 if [ "$WITH_BUILD_CACHE" == "true" ]; then
     export POST_INSTALL_HOOK='
+git clone https://github.com/BinaryAnalysisPlatform/bap-veri.git
+opam pin add bap-veri bap-veri/ -n
+opam install bap-veri -y
 x=`ocamlfind query bap`
 if [ $x != "" ]; then
    echo START TO PACK BAP

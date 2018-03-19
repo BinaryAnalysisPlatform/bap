@@ -6,7 +6,7 @@
 #include <iomanip>
 
 
-#if LLVM_VERSION_MAJOR == 5
+#if LLVM_VERSION_MAJOR >= 5 && LLVM_VERSION_MAJOR < 7
 #include <llvm/BinaryFormat/MachO.h>
 #else
 #include <llvm/Support/MachO.h>
@@ -156,7 +156,7 @@ uint32_t section_type(const macho &obj, SectionRef sec) {
     return section_flags(obj, sec) & MachO::SECTION_TYPE;
 }
 
-void section(const std::string &name, uint64_t rel_addr, uint64_t size, uint64_t off, ogre_doc &s) {
+void section(const std::string &name, int64_t rel_addr, uint64_t size, uint64_t off, ogre_doc &s) {
      s.entry("section-entry") << name << rel_addr << size << off;
 }
 
@@ -242,9 +242,9 @@ bool is_in_section(const macho &obj, const SymbolRef &sym) {
     return ((typ & MachO::N_TYPE) == MachO::N_SECT);
 }
 
-error_or<uint64_t> symbol_address(const macho &obj, const SymbolRef &sym) {
+error_or<int64_t> symbol_address(const macho &obj, const SymbolRef &sym) {
     if (is_relocatable(obj))
-        return success(uint64_t(0));
+        return success(int64_t(0));
     auto addr = prim::symbol_address(sym);
     if (!addr) return addr;
     auto base = image_base(obj);
@@ -362,7 +362,7 @@ void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
+    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
 
 commands macho_commands(const macho &obj) {
     commands cmds;

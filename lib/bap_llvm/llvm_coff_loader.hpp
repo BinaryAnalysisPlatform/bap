@@ -46,7 +46,7 @@ void section(const coff_section &sec, uint64_t image_base,  ogre_doc &s) {
         s.entry("code-entry") << sec.Name << sec.PointerToRawData << sec.SizeOfRawData;
 }
 
-void symbol(const std::string &name, uint64_t relative_addr, uint64_t size, uint64_t off, SymbolRef::Type typ, ogre_doc &s) {
+void symbol(const std::string &name, int64_t relative_addr, uint64_t size, uint64_t off, SymbolRef::Type typ, ogre_doc &s) {
     s.entry("symbol-entry") << name << relative_addr << size << off;
     if (typ == SymbolRef::ST_Function)
         s.entry("code-entry") << name << off << size;
@@ -60,7 +60,7 @@ error_or<uint64_t> symbol_file_offset(const coff_obj &obj, const SymbolRef &sym)
 const coff_section* get_coff_section(const coff_obj &obj, const SectionRef &sec);
 error_or<int> section_number(const coff_obj &obj, const SymbolRef &sym);
 error_or<uint64_t> symbol_value(const coff_obj &obj, const SymbolRef &sym);
-error_or<uint64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym);
+error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym);
 
 const coff_section * get_coff_section(const coff_obj &obj, std::size_t index) {
     const coff_section *sec = nullptr;
@@ -255,9 +255,9 @@ void exported_symbols(const coff_obj &obj, ogre_doc &s) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR == 4 || LLVM_VERSION_MAJOR == 5
+    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
 
-error_or<uint64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
+error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
     auto base = obj.getImageBase();
     auto addr = symbol_address(obj, sym);
     if (!addr) return addr;
@@ -321,7 +321,7 @@ error_or<pe32plus_header> get_pe32plus_header(const coff_obj &obj) {
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
 // symbol address for 3.4 is already relative, i.e. doesn't include image base
-error_or<uint64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
+error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
     return symbol_address(obj, sym);
 }
 
