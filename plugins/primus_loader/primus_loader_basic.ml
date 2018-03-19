@@ -180,17 +180,17 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
 
 
   let names prog = (object
-    inherit [string Addr.Map.t] Term.visitor
+    inherit [addr String.Map.t] Term.visitor
     method! enter_term _ t env =
       match Term.get_attr t address with
       | None -> env
-      | Some addr -> Map.add env ~key:addr ~data:(Term.name t)
-  end)#run prog Addr.Map.empty
+      | Some addr -> Map.add env ~key:(Term.name t) ~data:addr
+  end)#run prog String.Map.empty
 
   let init_names () =
     Machine.get () >>= fun proj ->
     Map.to_sequence (names (Project.program proj)) |>
-    Machine.Seq.iter ~f:(fun (addr,name) -> set_word name addr)
+    Machine.Seq.iter ~f:(fun (name,addr) -> set_word name addr)
 
   let init () =
     setup_stack () >>= fun () ->
