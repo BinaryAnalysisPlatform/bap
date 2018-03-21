@@ -73,13 +73,6 @@ bool is_relocatable(const macho &obj) {
 
 bool is_exec(const macho &obj) { return filetype(obj) == MachO::MH_EXECUTE;  }
 
-// LC_MAIN command is absent in some file types, so we provide an entry here
-void image_info(const macho &obj, ogre_doc &s) {
-    if (!is_exec(obj))
-        s.raw_entry("(entry 0)");
-    s.entry("relocatable") << is_relocatable(obj);
-}
-
 commands macho_commands(const macho &obj);
 
 // collect address from executable segment commands
@@ -166,6 +159,15 @@ void entry_point(const macho &obj, ogre_doc &s) {
     std::sort(addrs.begin(), addrs.end());
     if (addrs.size() > 0)
         s.entry("entry") << addrs.front();
+}
+
+// LC_MAIN command is absent in some file types, so we provide an entry here
+void image_info(const macho &obj, ogre_doc &s) {
+    if (!is_exec(obj))
+        s.raw_entry("(entry 0)");
+    else
+        entry_point(obj, s);
+    s.entry("relocatable") << is_relocatable(obj);
 }
 
 uint32_t section_type(const macho &obj, SectionRef sec) {
@@ -465,7 +467,6 @@ error_or<std::string> load(const llvm::object::MachOObjectFile &obj) {
     s.raw_entry("(file-type macho)");
     s.entry("arch") << prim::arch_of_object(obj);
     s.entry("default-base-address") << image_base(obj);
-    entry_point(obj, s);
     image_info(obj, s);
     iterate_macho_commands(obj, s);
     sections(obj, s);
