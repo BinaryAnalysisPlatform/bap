@@ -161,7 +161,6 @@ void entry_point(const macho &obj, ogre_doc &s) {
         s.entry("entry") << addrs.front();
 }
 
-// LC_MAIN command is absent in some file types, so we provide an entry here
 void image_info(const macho &obj, ogre_doc &s) {
     if (!is_exec(obj))
         s.raw_entry("(entry 0)");
@@ -363,7 +362,7 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
                 auto i_addr = addr + j * stride;
                 auto i_offs = offs + j * stride;
 
-                uint index = n + j;
+                uint64_t index = n + j;
                 uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
                 if (offset > obj_size)
                     continue;
