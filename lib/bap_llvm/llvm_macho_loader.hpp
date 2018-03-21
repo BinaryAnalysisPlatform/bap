@@ -60,12 +60,6 @@ void segment_command(const T &cmd, uint64_t base, ogre_doc &s) {
     s.entry("virtual-segment-command") << cmd.segname << prim::relative_address(base, cmd.vmaddr) << cmd.vmsize;
 }
 
-void entry_point(command_info &info, ogre_doc &s) {
-    const MachO::entry_point_command *entry_cmd =
-        reinterpret_cast<const MachO::entry_point_command*>(info.Ptr);
-    s.entry("entry") << entry_cmd->entryoff;
-}
-
 uint32_t filetype(const macho &obj) {
     if (obj.is64Bit()) return obj.getHeader64().filetype;
     else return obj.getHeader().filetype;
@@ -120,8 +114,6 @@ void macho_command(const macho &obj, command_info &info, ogre_doc &s) {
         segment_command(obj.getSegment64LoadCommand(info), base, s);
     if (info.C.cmd == MachO::LoadCommandType::LC_SEGMENT)
         segment_command(obj.getSegmentLoadCommand(info), base, s);
-    if (info.C.cmd == MachO::LoadCommandType::LC_MAIN)
-        entry_point(info, s);
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB)
         dynamic_relocations(obj, info, s);
 }
@@ -151,6 +143,30 @@ MACHO_SECTION_FIELD(reserved1, uint32_t)
 MACHO_SECTION_FIELD(reserved2, uint32_t)
 MACHO_SECTION_FIELD(addr, uint64_t)
 MACHO_SECTION_FIELD(offset, uint32_t)
+
+void entry_point(const macho &obj, ogre_doc &s) {
+    for (auto info : macho_commands(obj)) {
+        if (info.C.cmd == MachO::LoadCommandType::LC_MAIN) {
+            const MachO::entry_point_command *entry_cmd =
+                reinterpret_cast<const MachO::entry_point_command*>(info.Ptr);
+            uint64_t entry = entry_cmd->entryoff;
+            if (obj.isLittleEndian() != sys::IsLittleEndianHost)
+                sys::swapByteOrder(entry);
+            s.entry("entry") << entry;
+            return;
+        }
+    }
+    std::vector<uint64_t> addrs;
+    for (auto sec : prim::sections(obj)) {
+        auto addr = prim::section_address(sec);
+        if (!addr) continue;
+        if (section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
+            addrs.push_back(*addr);
+    }
+    std::sort(addrs.begin(), addrs.end());
+    if (addrs.size() > 0)
+        s.entry("entry") << addrs.front();
+}
 
 uint32_t section_type(const macho &obj, SectionRef sec) {
     return section_flags(obj, sec) & MachO::SECTION_TYPE;
@@ -300,19 +316,27 @@ void iterate_dyn_relocations(const macho &obj, std::size_t off, std::size_t num,
     std::size_t next = off;
     for (std::size_t i = 0; i < num; ++i) {
         const MachO::relocation_info *rel = reinterpret_cast<const MachO::relocation_info *>(ptr + next);
-        if (rel->r_address & MachO::R_SCATTERED) {
+        auto r_address = rel->r_address;
+        if (obj.isLittleEndian() != sys::IsLittleEndianHost)
+            sys::swapByteOrder(r_address);
+
+        if (r_address & MachO::R_SCATTERED) {
             // not supported
             next = next + sizeof(MachO::scattered_relocation_info);
         } else {
+            uint32_t r_symbolnum = rel->r_symbolnum;
+            if (obj.isLittleEndian() != sys::IsLittleEndianHost)
+                sys::swapByteOrder(r_symbolnum);
+
             if (rel->r_extern)
-                symbol_reference(obj, rel->r_symbolnum, rel->r_address, s);
+                symbol_reference(obj, r_symbolnum, r_address, s);
             next = next + sizeof(MachO::relocation_info);
         }
     }
 }
 
 void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre_doc &s) {
-
+    uint64_t obj_size = obj.getData().size();
     for (auto sec : prim::sections(obj)) { // sections
         auto typ = section_type(obj, sec);
         if (typ == MachO::S_NON_LAZY_SYMBOL_POINTERS ||
@@ -336,11 +360,15 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
             for (uint32_t j = 0; j < count && n + j < dlc.nindirectsyms; j++) {
                 auto i_addr = addr + j * stride;
                 auto i_offs = offs + j * stride;
-                uint32_t indirect_symbol = obj.getIndirectSymbolTableEntry(dlc, n + j);
+
+                uint index = n + j;
+                uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
+                if (offset > obj_size)
+                    continue;
+                uint32_t indirect_symbol = obj.getIndirectSymbolTableEntry(dlc, index);
                 MachO::symtab_command Symtab = obj.getSymtabLoadCommand();
                 if (indirect_symbol < Symtab.nsyms) {
                     symbol_iterator Sym = get_symbol(obj, indirect_symbol);
-
                     if (auto name = prim::symbol_name(*Sym)) {
                         s.entry("symbol-entry") << *name << i_addr << stride << i_offs ;
                         s.entry("code-entry") << *name << i_offs << stride;
@@ -353,11 +381,10 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
 
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB) {
-        const MachO::dysymtab_command *cmd =
-            reinterpret_cast<const MachO::dysymtab_command*>(info.Ptr);
-        indirect_symbols(obj, *cmd, s);
-        iterate_dyn_relocations(obj, cmd->locreloff, cmd->nlocrel, s);
-        iterate_dyn_relocations(obj, cmd->extreloff, cmd->nextrel, s);
+        MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
+        indirect_symbols(obj, cmd, s);
+        iterate_dyn_relocations(obj, cmd.locreloff, cmd.nlocrel, s);
+        iterate_dyn_relocations(obj, cmd.extreloff, cmd.nextrel, s);
     }
 }
 
@@ -438,6 +465,7 @@ error_or<std::string> load(const llvm::object::MachOObjectFile &obj) {
     s.raw_entry("(file-type macho)");
     s.entry("arch") << prim::arch_of_object(obj);
     s.entry("default-base-address") << image_base(obj);
+    entry_point(obj, s);
     image_info(obj, s);
     iterate_macho_commands(obj, s);
     sections(obj, s);
