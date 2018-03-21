@@ -149,16 +149,15 @@ void entry_point(const macho &obj, ogre_doc &s) {
             return;
         }
     }
-    std::vector<uint64_t> addrs;
+    uint64_t entry = INT_MAX;
     for (auto sec : prim::sections(obj)) {
         auto addr = prim::section_address(sec);
         if (!addr) continue;
         if (section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
-            addrs.push_back(*addr);
+            entry = std::min(*addr, entry);
     }
-    std::sort(addrs.begin(), addrs.end());
-    if (addrs.size() > 0)
-        s.entry("entry") << addrs.front();
+    if (entry != INT_MAX)
+        s.entry("entry") << entry;
 }
 
 void image_info(const macho &obj, ogre_doc &s) {
