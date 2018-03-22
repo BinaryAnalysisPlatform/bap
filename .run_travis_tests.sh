@@ -19,7 +19,5 @@ if [ "$TASK" == "unit_tests" ]; then
 fi
 
 if [ "$TASK" == "veri" ]; then
-    ls -l $HOME/.opam/$comp/bin/
-    which bap-veri
     bash -exc 'make veri'
 fi
