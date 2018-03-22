@@ -36,6 +36,7 @@ cache:
   - $HOME/save_opam
   before_cache:
   - rm -rf $HOME/.opam/log
+  - opam remove bap-veri -y
 
 env:
   - OCAML_VERSION=4.03
