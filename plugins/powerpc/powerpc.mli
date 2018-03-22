@@ -662,15 +662,16 @@ module Std : sig
     module E : Model_exp
     include Model with type t := var
 
-    val mem : var
-    val flags : Var.Set.t
     val gpr_bitwidth : int
     val fpr_bitwidth : int
-    val vr_bitwidth  : int
-    val cr_bitwidth  : int
     val lr_bitwidth  : int
     val ctr_bitwidth : int
     val tar_bitwidth : int
+    val cr_bitwidth  : int
+    val vr_bitwidth  : int
+
+    val mem : var
+    val flags : Var.Set.t
   end
 
   module PowerPC_32 : PowerPC
