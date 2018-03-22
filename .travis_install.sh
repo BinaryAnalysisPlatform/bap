@@ -4,8 +4,7 @@ export TESTS=false
 
 if [ "$WITH_BUILD_CACHE" == "true" ]; then
     export POST_INSTALL_HOOK='
-x=`ocamlfind list | grep bap-veri`
-if [ "$x" == "" ]; then
+if [ ! `ocamlfind query bap-veri` ]; then
    echo "INSTALL BAP-VERI"
 fi
 echo START TO PACK BAP
