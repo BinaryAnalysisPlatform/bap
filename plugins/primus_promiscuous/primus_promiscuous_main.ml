@@ -142,9 +142,12 @@ module Main(Machine : Primus.Machine.S) = struct
     | None -> true
     | Some last -> Term.same def last
 
+  let has_no_def blk = Term.length def_t blk = 0
+
   let step level =
     let open Primus.Pos in
     match level with
+    | Blk {me=blk} when has_no_def blk -> fork blk
     | Def {up={me=blk}; me=def} when is_last blk def ->
       fork blk
     | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp
