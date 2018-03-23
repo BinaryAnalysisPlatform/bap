@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
-
+#include <limits>
 
 #if LLVM_VERSION_MAJOR >= 5 && LLVM_VERSION_MAJOR < 7
 #include <llvm/BinaryFormat/MachO.h>
@@ -151,14 +151,15 @@ void entry_point(const macho &obj, ogre_doc &s) {
             return;
         }
     }
-    uint64_t entry = INT_MAX;
+    uint64_t max = std::numeric_limits<uint64_t>::max();
+    uint64_t entry = max;
     for (auto sec : prim::sections(obj)) {
         auto addr = prim::section_address(sec);
         if (!addr) continue;
         if (section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
             entry = std::min(*addr, entry);
     }
-    if (entry != INT_MAX)
+    if (entry != max)
         s.entry("entry") << entry;
 }
 
