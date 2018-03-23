@@ -407,7 +407,7 @@ module Make (Machine : Machine) = struct
     | None -> failf "a non-return call returned" ()
 
   let goto cond c = label cond c
-  let ret cond l = label cond l
+  let ret _ _ = Machine.return ()
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with
