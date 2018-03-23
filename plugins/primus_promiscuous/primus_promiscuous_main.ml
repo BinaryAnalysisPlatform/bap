@@ -127,7 +127,11 @@ module Main(Machine : Primus.Machine.S) = struct
       Machine.current () >>= fun pid ->
       do_fork blk ~child:Machine.return >>= fun id ->
       if id = pid then Machine.return ()
-      else Linker.exec (`tid dst)
+      else
+        Machine.Global.get state >>= fun {forkpoints} ->
+        if Set.mem forkpoints dst
+        then Eval.halt >>= never_returns
+        else Linker.exec (`tid dst)
     | _ -> Machine.return ()
 
   let fork_on_calls blk jmp = match Jmp.kind jmp with
