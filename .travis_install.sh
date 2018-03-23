@@ -10,11 +10,10 @@ opam pin add bap-veri bap-veri/ -y
 OPAM_SWITCH=`opam config var switch`
 mkdir -p $HOME/save_opam
 mkdir -p $HOME/save_opam/lib
-cp -r $HOME/.opam/$OPAM_SWITCH/lib/bap* $HOME/save_opam/lib/
 cp -r $HOME/.opam/$OPAM_SWITCH/bin/ $HOME/save_opam/
 cp -r $HOME/.opam/$OPAM_SWITCH/share $HOME/save_opam/
 opam remove bap-veri -y
-rm -r $HOME/save_opam/lib/bap-veri
+cp -r $HOME/.opam/$OPAM_SWITCH/lib/bap* $HOME/save_opam/lib/
 '
 fi
 
