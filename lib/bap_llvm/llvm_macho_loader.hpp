@@ -68,7 +68,9 @@ uint32_t filetype(const macho &obj) {
 bool is_relocatable(const macho &obj) {
     return (filetype(obj) == MachO::MH_OBJECT ||
             filetype(obj) == MachO::MH_KEXT_BUNDLE ||
-            filetype(obj) == MachO::MH_BUNDLE);
+            filetype(obj) == MachO::MH_BUNDLE ||
+            filetype(obj) == MachO::MH_DYLIB ||
+            filetype(obj) == MachO::MH_DYLIB_STUB);
 }
 
 bool is_exec(const macho &obj) { return filetype(obj) == MachO::MH_EXECUTE;  }
