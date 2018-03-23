@@ -47,7 +47,9 @@ module Greedy(Machine : Primus.Machine.S) = struct
       Machine.switch Machine.global
     | Some cid ->
       info "switch to machine %a" Id.pp cid;
-      Machine.switch cid
+      Machine.switch cid >>= fun () ->
+      Eval.halt >>=
+      never_returns
 
 
   let halt () =
