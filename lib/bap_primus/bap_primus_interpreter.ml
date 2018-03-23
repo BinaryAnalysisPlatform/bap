@@ -367,8 +367,10 @@ module Make (Machine : Machine) = struct
       Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
       enter cls curr t >>= fun () ->
       Machine.catch (f t)
-        (fun exn -> leave cls curr t >>= fun () -> Machine.raise exn)
-      >>= fun r ->
+        (fun exn ->
+           leave cls curr t >>= fun () ->
+           cleanup >>= fun () ->
+           Machine.raise exn) >>= fun r ->
       leave cls curr t >>= fun () ->
       cleanup >>= fun () ->
       return r
