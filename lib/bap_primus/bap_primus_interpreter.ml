@@ -274,7 +274,7 @@ module Make (Machine : Machine) = struct
     Memory.load a.value >>= value >>= fun r ->
     !!on_loaded (a,r) >>| fun () -> r
   and eval_store m a x =
-    eval_exp m >>= fun _ ->
+    eval_storage m >>= fun () ->
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
     !!on_storing a >>= fun () ->
@@ -300,6 +300,9 @@ module Make (Machine : Machine) = struct
     eval_exp x >>= fun x ->
     eval_exp y >>= fun y ->
     concat x y
+  and eval_storage = function
+    | Var _ -> Machine.return ()
+    | mem -> Machine.void (eval_exp mem)
 
   let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
 
