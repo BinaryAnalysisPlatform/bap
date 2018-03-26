@@ -343,6 +343,7 @@ void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_
 }
 
 void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre_doc &s) {
+    auto base = image_base(obj);
     uint64_t obj_size = obj.getData().size();
     for (auto sec : prim::sections(obj)) { // sections
         auto typ = section_type(obj, sec);
@@ -377,7 +378,7 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
                 if (indirect_symbol < Symtab.nsyms) {
                     symbol_iterator Sym = get_symbol(obj, indirect_symbol);
                     if (auto name = prim::symbol_name(*Sym)) {
-                        s.entry("symbol-entry") << *name << i_addr << stride << i_offs ;
+                        s.entry("symbol-entry") << *name << prim::relative_address(base, i_addr) << stride << i_offs ;
                         s.entry("code-entry") << *name << i_offs << stride;
                     }
                 }
@@ -386,9 +387,14 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
     } // sections
 }
 
-// we are going to take a look only to indirect symbols and external relocations.
-// this part is mainly for bundles, since it's not enough just to iterate over
+// This part is mainly for bundles, since it's not enough just to iterate over
 // sections in order to get relocations, e.g. like we do it for MH_OBJECT files.
+// We are going to take a look only to indirect symbols and external relocations.
+// Speaking about local relocations references from dyn sym tab, even modern (6.0)
+// does not perform a lot of job about them, so let's do the same. One cat take a look at
+// implementation of MachOObjectFile::getRelocationSymbol to get the whole
+// picture about how llvm tries to get symbol iterator from relocation.
+// A using of scattered_relocation is also showed there.
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
