@@ -26,6 +26,7 @@ val unsigned : 'a ec -> 'a
 
 val zero : exp
 val one  : exp
+val ones : bitwidth -> exp
 
 (** [extract e lx rx] extracts portion of [e] starting
     at bit [lx] and ending at bit [rx], all bounds
