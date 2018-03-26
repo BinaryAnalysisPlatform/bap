@@ -314,26 +314,30 @@ void iterate_macho_commands(const macho &obj, ogre_doc &s) {
         macho_command(obj, cmd, s);
 }
 
-
-void swap_rel(MachO::relocation_info &rel) {
-    MachO::any_relocation_info *any =
-        reinterpret_cast<MachO::any_relocation_info *>(&rel);
-    sys::swapStruct(*any);
+MachO::relocation_info get_rel(const macho &obj, uint32_t off) {
+    const char *ptr = prim::get_raw_data(obj) + off;
+    MachO::relocation_info rel;
+    if (obj.isLittleEndian() != sys::IsLittleEndianHost) {
+        MachO::any_relocation_info any;
+        memcpy(&any, ptr, sizeof(MachO::any_relocation_info));
+        MachO::swapStruct(any);
+        memcpy(&rel, &any, sizeof(MachO::relocation_info));
+    } else {
+        memcpy(&rel, ptr, sizeof(MachO::relocation_info));
+    }
+    return rel;
 }
 
-void iterate_dyn_relocations(const macho &obj, std::size_t off, std::size_t num, ogre_doc &s) {
-    const char *ptr = prim::get_raw_data(obj);
-    std::size_t next = off;
+void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
+    uint32_t next = off;
     for (std::size_t i = 0; i < num; ++i) {
-        const MachO::relocation_info *rel = reinterpret_cast<const MachO::relocation_info *>(ptr + next);
-        if (obj.isLittleEndian() != sys::IsLittleEndianHost)
-            swap_rel(*rel);
-        if (rel->r_address & MachO::R_SCATTERED) {
+        MachO::relocation_info rel = get_rel(obj, next);
+        if (rel.r_address & MachO::R_SCATTERED) {
             // not supported
             next = next + sizeof(MachO::scattered_relocation_info);
         } else {
-            if (rel->r_extern)
-                symbol_reference(obj, rel->r_symbolnum, rel->r_address, s);
+            if (rel.r_extern)
+                symbol_reference(obj, rel.r_symbolnum, rel.r_address, s);
             next = next + sizeof(MachO::relocation_info);
         }
     }
