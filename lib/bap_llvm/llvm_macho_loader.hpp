@@ -235,16 +235,13 @@ void symbol_reference(const macho &obj, const RelocationRef &rel, section_iterat
 
 symbol_iterator get_symbol(const macho &obj, std::size_t index);
 
-void symbol_reference(const macho &obj, std::size_t sym_num, uint64_t offset, ogre_doc &s) {
+// symbol reference to a symtab, i.e. external reference
+void symbol_reference(const macho &obj, uint32_t sym_num, uint64_t offset, ogre_doc &s) {
     auto it = get_symbol(obj, sym_num);
     if (it == prim::end_symbols(obj)) return;
-    if (is_external(obj, *it)) {
+    if (is_external(obj, *it))
         if (auto name = prim::symbol_name(*it))
             s.entry("ref-external") << offset << *name;
-    } else {
-        if (auto file_offset = symbol_file_offset(obj, *it))
-            s.entry("ref-internal") << *file_offset << offset;
-    }
 }
 
 // checks that symbol belongs to some sections,
@@ -328,6 +325,8 @@ MachO::relocation_info get_rel(const macho &obj, uint32_t off) {
     return rel;
 }
 
+// Note, that is r_extern is set to 1, than r_symbolnum contains an index in symbtab, and
+// section index otherwise
 void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
     uint32_t next = off;
     for (std::size_t i = 0; i < num; ++i) {
@@ -387,11 +386,13 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
     } // sections
 }
 
+// we are going to take a look only to indirect symbols and external relocations.
+// this part mainly for bundles, since a it's not enough just to iterate over
+// sections in order to get relocations, e.g. like we do for MH_OBJECT files.
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
         indirect_symbols(obj, cmd, s);
-        iterate_dyn_relocations(obj, cmd.locreloff, cmd.nlocrel, s);
         iterate_dyn_relocations(obj, cmd.extreloff, cmd.nextrel, s);
     }
 }
