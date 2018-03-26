@@ -387,8 +387,8 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
 }
 
 // we are going to take a look only to indirect symbols and external relocations.
-// this part mainly for bundles, since a it's not enough just to iterate over
-// sections in order to get relocations, e.g. like we do for MH_OBJECT files.
+// this part is mainly for bundles, since it's not enough just to iterate over
+// sections in order to get relocations, e.g. like we do it for MH_OBJECT files.
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
