@@ -171,10 +171,11 @@ let blr cpu _ops =
 
 let blrl cpu _ops =
   let sh = unsigned const byte 2 in
-  let tm = unsigned var doubleword in
+  let tm = unsigned var cpu.word_width in
+  let step = unsigned const byte 4 in
   RTL.[
     tm := cpu.lr land (ones cpu.word_width << sh);
-    cpu.lr := cpu.pc + unsigned const byte 4;
+    cpu.lr := cpu.pc + step;
     cpu.jmp tm;
   ]
 
@@ -198,14 +199,12 @@ let bcctr cpu ops =
   let bi = unsigned cpu.reg ops.(1) in
   let cond_ok = unsigned var bit in
   let x = unsigned var (bitwidth 5) in
-  let tm = unsigned var doubleword in
-  let sh = unsigned const doubleword 2 in
+  let sh = unsigned const byte 2 in
   RTL.[
     x := last bo 5;
     cond_ok := (nth bit x 0 = one) lor (bi lxor (lnot (nth bit x 1)));
     when_ (cond_ok) [
-      tm := first cpu.ctr 62;
-      cpu.jmp (tm << sh);
+      cpu.jmp (cpu.ctr land (ones cpu.word_width << sh));
     ];
   ]
 
@@ -217,11 +216,9 @@ let bcctrl = update_link_register ^ bcctr
     4e 80 04 20   bctr
     4e 80 04 21   bctrl *)
 let bctr cpu _ops =
-  let tm = unsigned var doubleword in
-  let sh = unsigned const doubleword 2 in
+  let sh = unsigned const byte 2 in
   RTL.[
-    tm := first cpu.ctr 62;
-    cpu.jmp (tm << sh);
+    cpu.jmp (cpu.ctr land (ones cpu.word_width << sh));
   ]
 
 let bctrl = update_link_register ^ bctr
@@ -246,7 +243,7 @@ let bctar cpu ops =
     ctr_ok := nth bit x 2 lor ((cpu.ctr <> zero) lxor (nth bit x 3));
     cond_ok := nth bit x 0 lor (bi lxor (lnot (nth bit x 1)));
     when_ (ctr_ok land cond_ok) [
-      cpu.jmp (cpu.tar << sh);
+      cpu.jmp (cpu.tar land (ones cpu.word_width << sh));
     ]
   ]
 
