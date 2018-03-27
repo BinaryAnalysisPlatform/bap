@@ -525,28 +525,28 @@ module Std : sig
         values xs, producing a stream of results.*)
     val apply : ('a -> 'b) t -> 'a t -> 'b t
 
-    (** [concat ss] - concats a list of streams [ss] to a single
-        stream, that contains all values of [ss] *)
+    (** [concat ss] - concatenates a list of streams [ss] to a single
+        stream, that contains all values of [ss]. *)
     val concat : 'a t list -> 'a t
 
-    (** [concat_merge xs ~f] - concats a list of streams [ss]
-        to a single stream, where all values are merge with [f]*)
+    (** [concat_merge xs ~f] - concatenates a list of streams [ss]
+        to a single stream, where all values are merged with [f]*)
     val concat_merge : 'a t list -> f:('a -> 'a -> 'a) -> 'a t
 
     (** [split xs ~f] - transforms a stream [xs] to a pair of streams,
         according to applying [f] to elements of [xs]. *)
     val split : 'a t -> f:('a -> 'b * 'c) -> 'b t * 'c t
 
-    (** [zip xs ys] - transforms a pair of streams [xs] and [ys]
-        to a single stream of pairs *)
+    (** [zip xs ys] - transforms a pair of streams to a stream of
+        pairs. *)
     val zip : 'a t -> 'b t -> ('a * 'b) t
 
-    (** [unzip xs] - transforms a stream of pairs [xs] to a pair
-        of streams *)
+    (** [unzip xs] - transforms a stream of pairs to a pair of
+        streams. *)
     val unzip : ('a * 'b) t -> 'a t * 'b t
 
     (** [once xs] - transforms a stream [xs] to a stream with
-        an only first value occured in [xs] *)
+        the only first value occured in [xs]. *)
     val once : 'a t -> 'a t
 
     (** [parse ss ~init ~f] parses stream [ss] and builds new stream

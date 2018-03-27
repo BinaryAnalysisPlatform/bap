@@ -126,18 +126,13 @@ end
 module Merge = struct
 
   let merge_streams ss ~f : 'a Source.t =
-    let stream, signal = Stream.create () in
-    List.iter ss ~f:(fun s -> Stream.observe s (fun x -> Signal.send signal x));
-    let pair x = Some x, Some x in
-    Stream.parse stream ~init:None
-      ~f:(fun prev curr -> match curr, prev with
-          | Ok curr, None -> pair (Ok curr)
-          | Ok curr, Some (Ok prev) -> pair (Ok (f prev curr))
-          | Ok _, Some (Error e)
-          | Error e, Some (Ok _) -> pair (Error e)
-          | Error e, None -> Some (Error e), None
-          | Error curr, Some (Error prev) ->
-            pair (Error (Error.of_list [prev; curr])))
+    Stream.concat_merge ss
+      ~f:(fun s s' -> match s, s' with
+          | Ok s, Ok s' -> Ok (f s s')
+          | Ok _, Error er
+          | Error er, Ok _ -> Error er
+          | Error er, Error er' ->
+            Error (Error.of_list [er; er']))
 
   let merge_sources create sources ~f = match sources with
     | [] -> None
