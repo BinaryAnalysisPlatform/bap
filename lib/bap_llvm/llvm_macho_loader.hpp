@@ -315,7 +315,7 @@ void iterate_macho_commands(const macho &obj, ogre_doc &s) {
 template <typename T>
 error_or<T> get_data(const macho &obj, uint64_t off) {
     uint64_t obj_size = obj.getData().size();
-    if (obj_size > off + sizeof(T))
+    if (off + sizeof(T) > obj_size)
         return failure("request data beyond object bounds");
     const char *ptr = prim::get_raw_data(obj) + off;
     T t;
@@ -330,9 +330,8 @@ error_or<T> get_data(const macho &obj, uint64_t off) {
 error_or<MachO::relocation_info> get_rel(const macho &obj, uint32_t off) {
     auto any = get_data<MachO::any_relocation_info>(obj, off);
     if (!any) return any;
-    if (obj.isLittleEndian() != sys::IsLittleEndianHost) {
+    if (obj.isLittleEndian() != sys::IsLittleEndianHost)
         MachO::swapStruct(*any);
-    }
     if (!obj.is64Bit() && obj.isRelocationScattered(*any)) {
         return failure("scattered relocations are not supported");
     } else {
@@ -349,12 +348,25 @@ error_or<MachO::relocation_info> get_rel(const macho &obj, uint32_t off) {
 void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
     for (std::size_t i = 0; i < num; ++i) {
         auto rel = get_rel(obj, off + i * RELOCATION_ENTRY_SIZE);
-        if (rel && rel->r_extern) {
-            std::cerr << "ext rel: " << rel->r_symbolnum
-                      << " " << std::hex << rel->r_address << std::dec << std::endl;
+        if (rel && rel->r_extern)
             symbol_reference(obj, rel->r_symbolnum, rel->r_address, s);
-        }
     }
+}
+
+symbol_iterator get_indirect_symbol(const macho &obj, const MachO::dysymtab_command &dlc, uint32_t index) {
+    uint64_t obj_size = obj.getData().size();
+
+    // this is actually a check that we will not get out of object
+    // bounds while calling getIndirectSymbolTableEntry.
+    // llvm get approximately the same to raise a nasty
+    // runtime LLVM_ERROR
+    uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
+    symbol_iterator s = prim::end_symbols(obj);
+    if (offset < obj_size) {
+        uint32_t sym_index = obj.getIndirectSymbolTableEntry(dlc, index);
+        s = get_symbol(obj, sym_index);
+    }
+    return s;
 }
 
 void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre_doc &s) {
@@ -367,7 +379,7 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
             typ == MachO::S_LAZY_SYMBOL_POINTERS ||
             typ == MachO::S_LAZY_DYLIB_SYMBOL_POINTERS ||
             typ == MachO::S_THREAD_LOCAL_VARIABLE_POINTERS ||
-            typ == MachO::S_SYMBOL_STUBS) { // section test
+            typ == MachO::S_SYMBOL_STUBS) { // section check
 
             uint32_t stride;
             if (typ == MachO::S_SYMBOL_STUBS)
@@ -375,39 +387,31 @@ void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre
             else
                 stride = obj.is64Bit() ? 8 : 4;
 
-            if (stride != 0) {
+            if (stride != 0) { //stride check
                 uint64_t sym_numb = section_size(obj, sec) / stride;
                 uint32_t tab_indx = section_reserved1(obj, sec);
                 uint64_t sec_addr = section_addr(obj, sec);
                 uint32_t sec_offs = section_offset(obj, sec);
 
                 for (uint32_t j = 0; j < sym_numb && tab_indx + j < dlc.nindirectsyms; j++) {
-                    uint64_t index = tab_indx + j;
-                    // this is actually a check that ensures us that we will not get a nasty
-                    // runtime LLVM_ERROR during getIndirectSymbolTableEntry call
-                    uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
-                    if (offset < obj_size) {
-                        uint32_t indirect_symbol = obj.getIndirectSymbolTableEntry(dlc, index);
-                        if (indirect_symbol < symtab.nsyms) {
-                            symbol_iterator sym = get_symbol(obj, indirect_symbol);
-                            if (auto name = prim::symbol_name(*sym)) {
-                                std::cerr << " indirect symbol " << *name << std::endl;
-                                auto sym_addr = prim::relative_address(base, sec_addr + j * stride);
-                                auto sym_offs = sec_offs + j * stride;
-                                s.entry("symbol-entry") << *name << sym_addr << stride << sym_offs ;
-                                s.entry("code-entry") << *name << sym_offs << stride;
-                            }
-                        } // indirect sym index test
-                    } // offset test
-                } // for
-            } // stride test
-        } // section test
+                    symbol_iterator sym = get_indirect_symbol(obj, dlc, tab_indx + j);
+                    if (sym != prim::end_symbols(obj)) {
+                        if (auto name = prim::symbol_name(*sym)) {
+                            auto sym_addr = prim::relative_address(base, sec_addr + j * stride);
+                            auto sym_offs = sec_offs + j * stride;
+                            s.entry("symbol-entry") << *name << sym_addr << stride << sym_offs ;
+                            s.entry("code-entry") << *name << sym_offs << stride;
+                        }
+                    }
+                }
+            } // stride check
+        } // section check
     } // sections
 }
 
 // It's not enough just to iterate over sections in order to get relocations.
 // We are going to take a look only for indirect symbols and external relocations.
-// Speaking about local relocations references from dyn sym tab, even modern (6.0)
+// Speaking about local relocations referencesq from dyn sym tab, even modern (6.0)
 // does not perform a lot of job about them, so let's do the same. One can take a look at
 // implementation of MachOObjectFile::getRelocationSymbol to get the whole
 // picture about how llvm tries to get symbol iterator from relocation.
@@ -436,8 +440,8 @@ void symbols(const macho &obj, ogre_doc &s) {
 }
 
 symbol_iterator get_symbol(const macho &obj, std::size_t index) {
-    auto syms = prim::symbols(obj);
-    if (syms.size() <= index)
+    MachO::symtab_command symtab = obj.getSymtabLoadCommand();
+    if (index >= symtab.nsyms)
         return prim::end_symbols(obj);
     return obj.getSymbolByIndex(index);
 }
