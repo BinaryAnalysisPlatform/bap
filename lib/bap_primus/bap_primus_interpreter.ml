@@ -250,6 +250,16 @@ module Make (Machine : Machine) = struct
     value c >>= fun r ->
     !!on_const r >>| fun () -> r
 
+  let load_byte a =
+    !!on_loading a >>= fun () ->
+    Memory.get a.value >>= fun r ->
+    !!on_loaded (a,r) >>| fun () -> r
+
+  let store_byte a x =
+    !!on_storing a >>= fun () ->
+    Memory.set a.value x >>= fun () ->
+    !!on_stored (a,x)
+
   let rec eval_exp x =
     let eval = function
       | Bil.Load (Bil.Var _, a,_,`r8) -> eval_load a
@@ -268,18 +278,12 @@ module Make (Machine : Machine) = struct
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
-  and eval_load a =
-    eval_exp a >>= fun a ->
-    !!on_loading a >>= fun () ->
-    Memory.load a.value >>= value >>= fun r ->
-    !!on_loaded (a,r) >>| fun () -> r
+  and eval_load a = eval_exp a >>= load_byte
   and eval_store m a x =
     eval_storage m >>= fun () ->
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
-    !!on_storing a >>= fun () ->
-    Memory.store a.value x.value >>= fun () ->
-    !!on_stored (a,x) >>| fun () -> a
+    store_byte a x >>| fun () -> a
   and eval_binop op x y =
     eval_exp x >>= fun x ->
     eval_exp y >>= fun y ->
@@ -313,15 +317,36 @@ module Make (Machine : Machine) = struct
     let (module Target) = target_of_arch (Project.arch proj) in
     Target.CPU.mem
 
-  let load a e s =
-    mem >>= fun m ->
-    eval_exp Bil.(Load (var m, int a.value,e,s))
+  let succ x =
+    Value.one (Value.bitwidth x) >>= fun one ->
+    binop PLUS x one
+
+  let rec do_load a e s =
+    load_byte a >>= fun v ->
+    if s = 8 then Machine.return v
+    else succ a >>= fun a ->
+      do_load a e (s - 8) >>= fun u -> match e with
+      | LittleEndian -> concat u v
+      | BigEndian -> concat v u
+
+  let load a e s = do_load a e (Size.in_bits s)
+
+  let rec do_store a x s hd tl =
+    cast hd 8 x >>= fun b ->
+    store_byte a b >>= fun () ->
+    if s = 8 then Machine.return ()
+    else succ a >>= fun a ->
+      cast tl (s - 8) x >>= fun x ->
+      do_store a x (s - 8) hd tl
 
   let store a x e s =
-    mem >>= fun m ->
-    Machine.ignore_m @@
-    eval_exp Bil.(Store (var m,int a.value,int x.value,e,s))
-
+    if s = `r8 then store_byte a x
+    else
+      let open Bil.Types in
+      let s = Size.in_bits s in
+      match e with
+      | LittleEndian -> do_store a x s LOW HIGH
+      | BigEndian    -> do_store a x s HIGH LOW
 
   let update_pc t =
     match Term.get_attr t address with
