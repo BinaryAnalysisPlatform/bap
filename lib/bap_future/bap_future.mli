@@ -531,7 +531,7 @@ module Std : sig
         that elements of the same stream will preserve their ordering.*)
     val concat : 'a t list -> 'a t
 
-    (** [concat_merge xs ~f] builds a stream that of elements, that will 
+    (** [concat_merge xs ~f] builds a stream, that will 
         produce elements from the input list and applies [f] to all 
         consecutive elements. The ordering of the input list does not 
         mandate the ordering of elemenets in the output stream, and is
