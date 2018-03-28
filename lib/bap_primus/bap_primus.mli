@@ -1308,11 +1308,24 @@ module Std : sig
           [Machine] monad.  *)
       module Make(Machine : Machine.S) : sig
 
-        (** [load addr] loads a byte from the given address *)
+
+        (** [set a] loads a byte from the address [a]  *)
+        val get : addr -> value Machine.t
+
+
+        (** [set a x] stores the byte [x] at the address [a]. *)
+        val set : addr -> value -> unit Machine.t
+
+        (** [load a] loads a byte from the given address [a].
+
+            Same as [get a >>= Value.to_word]
+        *)
         val load : addr -> word Machine.t
 
+        (** [store a x] stores the byte [x] at the address [a].
 
-        (** [store addr x] stores a byte [x] at the given address [addr]  *)
+            Same as [Value.of_word x >>= set a].
+        *)
         val store : addr -> word -> unit Machine.t
 
         (** [add_text mem] maps a memory chunk [mem] as executable and

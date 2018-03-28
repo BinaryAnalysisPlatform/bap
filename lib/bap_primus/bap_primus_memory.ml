@@ -27,7 +27,7 @@ type perms = {readonly : bool; executable : bool}
 type layer = {mem : region; perms : perms}
 
 type t = {
-  values : word Addr.Map.t;
+  values : value Addr.Map.t;
   layers : layer list;
 }
 
@@ -63,7 +63,7 @@ let sexp_of_layer {mem; perms={readonly; executable}} =
 let inspect_memory {values; layers} =
   let values =
     Map.to_sequence values |> Seq.map ~f:(fun (key,value) ->
-        Sexp.(List [sexp_of_word key; sexp_of_byte value])) |>
+        Sexp.(List [sexp_of_word key; sexp_of_value value])) |>
     Seq.to_list_rev in
   let layers = List.map layers ~f:(sexp_of_layer) in
   Sexp.(List [
@@ -94,6 +94,7 @@ module Make(Machine : Machine) = struct
   open Machine.Syntax
 
   module Generate = Generator.Make(Machine)
+  module Value = Bap_primus_value.Make(Machine)
   let (!!) = Machine.Observation.make
 
   let update state f =
@@ -108,13 +109,14 @@ module Make(Machine : Machine) = struct
       | Some v -> Machine.return v
       | None -> match layer.mem with
         | Dynamic {value} ->
-          Generate.next value >>| Word.of_int ~width:8
+          Generate.next value >>= Value.of_int ~width:8
         | Static mem -> match Memory.get ~addr mem with
-          | Ok v -> Machine.return v
+          | Ok v -> Value.of_word v
           | Error _ -> failwith "Primus.Memory.read"
 
 
-  let write addr value {values;layers} = match find_layer addr layers with
+  let write addr value {values;layers} =
+    match find_layer addr layers with
     | None -> segfault addr
     | Some {perms={readonly=true}} -> segfault addr
     | Some _ -> Machine.return {
@@ -140,13 +142,16 @@ module Make(Machine : Machine) = struct
   let add_text mem = map mem ~readonly:true  ~executable:true
   let add_data mem = map mem ~readonly:false ~executable:false
 
-  let load addr =
+  let get addr =
     Machine.Local.get state >>= read addr
 
-  let store addr value =
+  let set addr value =
     Machine.Local.get state >>=
     write addr value >>=
     Machine.Local.put state
+
+  let load addr = get addr >>| Value.to_word
+  let store addr value = Value.of_word value >>= set addr
 
   let is_mapped addr =
     Machine.Local.get state >>| is_mapped addr
@@ -156,7 +161,4 @@ module Make(Machine : Machine) = struct
     find_layer addr layers |>
     function Some {perms={readonly}} -> not readonly
            | None -> false
-
-
-
 end
