@@ -116,8 +116,9 @@ module Input = struct
     let base = Option.value base ~default:(null arch) in
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
-    let data = Memmap.add Memmap.empty mem section in
-    {arch; data; code = data; file = filename; finish = ident;}
+    let code = Memmap.add Memmap.empty mem section in
+    let data = Memmap.empty  in
+    {arch; data; code; file = filename; finish = ident;}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
