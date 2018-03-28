@@ -1214,7 +1214,7 @@ module Fixpoint = struct
       | Some step -> fun visits n x x' ->
         let i = match Map.find visits n with
           | None -> 1
-          | Some x -> x in
+          | Some x -> x + 1 in
         let visits = Map.add visits ~key:n ~data:i in
         visits, step i nodes.(n) x x' in
     let get approx n : d = match Map.find approx n with
