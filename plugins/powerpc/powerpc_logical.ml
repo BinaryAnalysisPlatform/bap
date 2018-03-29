@@ -301,24 +301,25 @@ let cmpb cpu ops =
   let ra = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
   let rb = unsigned cpu.reg ops.(2) in
-  let xb = unsigned const doubleword 0xFF in
+  let xb = unsigned const byte 0xFF in
   let ind = unsigned var byte in
   let byte_i = unsigned var byte in
   let byte_j = unsigned var byte in
-  let max = unsigned const byte 7 in
+  let byte_k = unsigned var byte in
   let sh = unsigned const byte 8 in
-  let tmp = unsigned var doubleword in
+  let tmp = unsigned var cpu.word_width in
   RTL.[
     ind := zero;
     tmp := zero;
-    foreach byte_i rs [
+    foreach byte_k tmp [
+      byte_i := nth byte (rs << (ind * sh)) 0;
       byte_j := nth byte (rb << (ind * sh)) 0;
       when_ (byte_i = byte_j) [
-        tmp := tmp lor (xb << ((max - ind) * sh));
+        byte_k := xb;
       ];
       ind := ind + one;
     ];
-    ra := high cpu.word_width tmp;
+    ra := tmp;
   ]
 
 (** Fixed-point Population Count Bytes/Words/Doubleword
@@ -330,26 +331,28 @@ let cmpb cpu ops =
 let popcntw cpu ops =
   let ra = unsigned cpu.reg ops.(0) in
   let rs = unsigned cpu.reg ops.(1) in
-  let cnt = unsigned var doubleword in
-  let res = unsigned var doubleword in
+  let cnt = unsigned var word in
+  let res = unsigned var cpu.word_width in
   let word_i = unsigned var word in
+  let word_j = unsigned var word in
   let bit_i = unsigned var bit in
   let ind = unsigned var word in
   let x = unsigned const byte 32 in
   RTL.[
     res := zero;
-    ind := one;
-    foreach word_i rs [
+    ind := zero;
+    foreach word_j res [
       cnt := zero;
+      word_i := nth word (rs << ind * x) 0;
       foreach bit_i word_i [
         when_ (bit_i = one) [
           cnt := cnt + one;
         ];
       ];
-      res := res lor (cnt << (ind * x));
-      ind := ind - one;
+      word_j := cnt;
+      ind := ind + one;
     ];
-    ra := high cpu.word_width res;
+    ra := res;
   ]
 
 let popcntd cpu ops =
