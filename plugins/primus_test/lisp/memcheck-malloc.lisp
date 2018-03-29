@@ -7,6 +7,9 @@
 (defmethod loaded (ptr)
   (memcheck-access 'malloc ptr))
 
+(defmethod stored (ptr)
+  (memcheck-access 'malloc ptr))
+
 (defmethod call-return (name len ptr)
-  (when (= name 'malloc)
+  (when (and len ptr (= name 'malloc))
     (memcheck-acquire 'malloc ptr len)))

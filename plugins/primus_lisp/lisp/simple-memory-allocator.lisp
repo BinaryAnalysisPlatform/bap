@@ -40,7 +40,7 @@
 (defun calloc (n s)
   "allocates memory and initializes it with zero"
   (declare (external "calloc"))
-  (malloc (* n s)))
+  (malloc (* n s))) ; in our implementation malloc zeros memory
 
 
 (defun malloc-heap-size ()
