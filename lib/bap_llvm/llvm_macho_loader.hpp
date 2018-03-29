@@ -139,6 +139,8 @@ MACHO_SECTION_FIELD(reserved2, uint32_t)
 MACHO_SECTION_FIELD(addr, uint64_t)
 MACHO_SECTION_FIELD(offset, uint32_t)
 
+constexpr uint64_t max_uint64 = std::numeric_limits<uint64_t>::max();
+
 void entry_point(const macho &obj, ogre_doc &s) {
     for (auto info : macho_commands(obj)) {
         if (info.C.cmd == MachO::LoadCommandType::LC_MAIN) {
@@ -151,14 +153,13 @@ void entry_point(const macho &obj, ogre_doc &s) {
             return;
         }
     }
-    uint64_t max = std::numeric_limits<uint64_t>::max();
-    uint64_t entry = max;
+    uint64_t entry = max_uint64;
     for (auto sec : prim::sections(obj)) {
         auto addr = prim::section_address(sec);
         if (addr && section_flags(obj, sec) & MachO::S_ATTR_PURE_INSTRUCTIONS)
             entry = std::min(*addr, entry);
     }
-    if (entry != max)
+    if (entry != max_uint64)
         s.entry("entry") << entry;
 }
 
@@ -358,7 +359,7 @@ symbol_iterator get_indirect_symbol(const macho &obj, const MachO::dysymtab_comm
 
     // this is actually a check that we will not get out of object
     // bounds while calling getIndirectSymbolTableEntry.
-    // llvm get approximately the same to raise a nasty
+    // llvm does approximately the same to raise a nasty
     // runtime LLVM_ERROR
     uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
     symbol_iterator s = prim::end_symbols(obj);
@@ -369,53 +370,59 @@ symbol_iterator get_indirect_symbol(const macho &obj, const MachO::dysymtab_comm
     return s;
 }
 
+// returns stride for indirect symbols entries
+uint32_t indirect_symbols_stride(const macho &obj, const SectionRef &sec) {
+    auto typ = section_type(obj, sec);
+    uint32_t stride = 0;
+    if (typ == MachO::S_SYMBOL_STUBS)
+        stride = section_reserved2(obj, sec);
+    else
+        stride = obj.is64Bit() ? 8 : 4;
+    return stride;
+}
+
+// true for symbol stubs or symbol pointers sections
+bool contains_sym_stubs(const macho &obj, const SectionRef &sec) {
+    auto typ = section_type(obj, sec);
+    return
+        (typ == MachO::S_NON_LAZY_SYMBOL_POINTERS ||
+         typ == MachO::S_LAZY_SYMBOL_POINTERS ||
+         typ == MachO::S_LAZY_DYLIB_SYMBOL_POINTERS ||
+         typ == MachO::S_THREAD_LOCAL_VARIABLE_POINTERS ||
+         typ == MachO::S_SYMBOL_STUBS);
+}
+
 void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre_doc &s) {
     auto base = image_base(obj);
-    uint64_t obj_size = obj.getData().size();
-    MachO::symtab_command symtab = obj.getSymtabLoadCommand();
-    for (auto sec : prim::sections(obj)) { // sections
-        auto typ = section_type(obj, sec);
-        if (typ == MachO::S_NON_LAZY_SYMBOL_POINTERS ||
-            typ == MachO::S_LAZY_SYMBOL_POINTERS ||
-            typ == MachO::S_LAZY_DYLIB_SYMBOL_POINTERS ||
-            typ == MachO::S_THREAD_LOCAL_VARIABLE_POINTERS ||
-            typ == MachO::S_SYMBOL_STUBS) { // section check
+    for (auto sec : prim::sections(obj)) {
+        auto stride = indirect_symbols_stride(obj, sec);
+        if (contains_sym_stubs(obj, sec) && stride != 0) {
+            uint64_t sym_numb = section_size(obj, sec) / stride;
+            uint32_t tab_indx = section_reserved1(obj, sec);
+            uint64_t sec_addr = section_addr(obj, sec);
+            uint32_t sec_offs = section_offset(obj, sec);
 
-            uint32_t stride;
-            if (typ == MachO::S_SYMBOL_STUBS)
-                stride = section_reserved2(obj, sec);
-            else
-                stride = obj.is64Bit() ? 8 : 4;
-
-            if (stride != 0) { //stride check
-                uint64_t sym_numb = section_size(obj, sec) / stride;
-                uint32_t tab_indx = section_reserved1(obj, sec);
-                uint64_t sec_addr = section_addr(obj, sec);
-                uint32_t sec_offs = section_offset(obj, sec);
-
-                for (uint32_t j = 0; j < sym_numb && tab_indx + j < dlc.nindirectsyms; j++) {
-                    symbol_iterator sym = get_indirect_symbol(obj, dlc, tab_indx + j);
-                    if (sym != prim::end_symbols(obj)) {
-                        if (auto name = prim::symbol_name(*sym)) {
-                            auto sym_addr = prim::relative_address(base, sec_addr + j * stride);
-                            auto sym_offs = sec_offs + j * stride;
-                            s.entry("symbol-entry") << *name << sym_addr << stride << sym_offs ;
-                            s.entry("code-entry") << *name << sym_offs << stride;
-                        }
+            for (uint32_t j = 0; j < sym_numb && tab_indx + j < dlc.nindirectsyms; j++) {
+                auto sym = get_indirect_symbol(obj, dlc, tab_indx + j);
+                if (sym != prim::end_symbols(obj)) {
+                    if (auto name = prim::symbol_name(*sym)) {
+                        auto sym_addr = prim::relative_address(base, sec_addr + j * stride);
+                        auto sym_offs = sec_offs + j * stride;
+                        s.entry("symbol-entry") << *name << sym_addr << stride << sym_offs ;
+                        s.entry("code-entry") << *name << sym_offs << stride;
                     }
                 }
-            } // stride check
-        } // section check
-    } // sections
+            }
+        }
+    }
 }
 
 // It's not enough just to iterate over sections in order to get relocations.
-// We are going to take a look only for indirect symbols and external relocations.
-// Speaking about local relocations referencesq from dyn sym tab, even modern (6.0)
-// does not perform a lot of job about them, so let's do the same. One can take a look at
-// implementation of MachOObjectFile::getRelocationSymbol to get the whole
-// picture about how llvm tries to get symbol iterator from relocation.
-// A using of scattered_relocation is also showed there.
+// We are going to take a look for indirect symbols and external relocations.
+// Speaking about local relocations referenced from dyn sym tab, even modern (6.0)
+// does not perform a lot of job about them, so let's do the same. One can take
+// a look at implementation of MachOObjectFile::getRelocationSymbol to get the
+// whole picture about how llvm tries to get symbol iterator from relocation,
 void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
     if (info.C.cmd == MachO::LoadCommandType::LC_DYSYMTAB) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
@@ -439,6 +446,9 @@ void symbols(const macho &obj, ogre_doc &s) {
     symbols(obj, sizes, s);
 }
 
+// It's safe to call getSymtabLoadCommand without any checks,
+// because in case of symtab absence, lllvm returns just a
+// struct with all fields set to zero.
 symbol_iterator get_symbol(const macho &obj, std::size_t index) {
     MachO::symtab_command symtab = obj.getSymtabLoadCommand();
     if (index >= symtab.nsyms)
