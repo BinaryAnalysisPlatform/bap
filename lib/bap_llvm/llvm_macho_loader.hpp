@@ -324,33 +324,33 @@ error_or<T> get_data(const macho &obj, uint64_t off) {
     return success(t);
 }
 
-// Size in bytes of relocation entry. It coulbe either size of
-// relocation_info, scattered_relocation_info, any_relocation_info
-#define RELOCATION_ENTRY_SIZE 8
-
-error_or<MachO::relocation_info> get_rel(const macho &obj, uint32_t off) {
+error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t off) {
     auto any = get_data<MachO::any_relocation_info>(obj, off);
     if (!any) return any;
     if (obj.isLittleEndian() != sys::IsLittleEndianHost)
         MachO::swapStruct(*any);
     if (!obj.is64Bit() && obj.isRelocationScattered(*any)) {
         return failure("scattered relocations are not supported");
-    } else {
-        MachO::relocation_info rel;
-        std::copy_n(reinterpret_cast<char *>(&*any),
-                    RELOCATION_ENTRY_SIZE,
-                    reinterpret_cast<char *>(&rel));
-        return success(rel);
     }
+    return any;
 }
 
-//Note, that if r_extern is set to 1, then r_symbolnum contains an index in symbtab, and
-//section index otherwise
+// Size in bytes of relocation entry. It coulbe either size of
+// relocation_info, scattered_relocation_info, any_relocation_info
+#define RELOCATION_ENTRY_SIZE 8
+
+// Pay attention here, that we actually can't work directly with a relocaion_info
+// struct, but should rely to a any_relocation_info. Llvm guys actually provide a very
+// useful functions that allow us not to touch all bit fields from relocation_info struct,
+// because they become an absolutely mess when we have take into account endianess, e.g.
+// when we have a deal with big endian objects on a little endian host.
+// Note, that if r_extern is set to 1, then r_symbolnum contains an index in symbtab, and
+// section index otherwise.
 void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
     for (std::size_t i = 0; i < num; ++i) {
         auto rel = get_rel(obj, off + i * RELOCATION_ENTRY_SIZE);
-        if (rel && rel->r_extern)
-            symbol_reference(obj, rel->r_symbolnum, rel->r_address, s);
+        if (rel && obj.getPlainRelocationExternal(*rel))
+            symbol_reference(obj, obj.getPlainRelocationSymbolNum(*rel), rel->r_word0, s);
     }
 }
 
@@ -428,6 +428,7 @@ void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
         indirect_symbols(obj, cmd, s);
         iterate_dyn_relocations(obj, cmd.extreloff, cmd.nextrel, s);
+        iterate_dyn_relocations(obj, cmd.locreloff, cmd.nlocrel, s);
     }
 }
 
