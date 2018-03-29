@@ -324,6 +324,27 @@ error_or<T> get_data(const macho &obj, uint64_t off) {
     return success(t);
 }
 
+// Please, pay attention here, that it's not a good idea try to use a relocation_info
+// struct directly. We should rely on any_relocation_info instead. Llvm guys actually provide
+// a very useful functions that allow us not to touch all bits fields from relocation_info struct,
+// because they become absolutely messy when we have to take into account endianess, e.g.
+// when we have a deal with big endian objects on a little endian host.
+//
+// Example:
+// We would like to find out what is a r_symbolnum value from relocation_info struct.
+// And we know that this value is in first 24 bits of 32-bit value.
+// So, what do we have:
+// 00 00 01 40 - uint32_t in BE (big endian) file
+// 40 01 00 00 - uint32_t that we read on EL (little endian) host
+//
+// As one can notice from BE representation, a correct value of r_symbolnum should be just 1 (00 00 01).
+// And we are on a EL host, so we don't have any other options then to read values as a little endian.
+// And here we go:
+// 1) if we read 24 bits of 40 01 00 00 we will get 00 01 40
+// 2) if we swap this value again and get 00 00 01 40, and read first 24 bits, we will get 01 00 00.
+// Neither of this cases is correct.
+// So we need to play with shifts and masks here, what is actually done in llvm functions
+// like getPlainRelocationSymbolNum
 error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t off) {
     auto any = get_data<MachO::any_relocation_info>(obj, off);
     if (!any) return any;
@@ -339,11 +360,6 @@ error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t off) {
 // relocation_info, scattered_relocation_info, any_relocation_info
 #define RELOCATION_ENTRY_SIZE 8
 
-// Pay attention here, that we actually can't work directly with a relocaion_info
-// struct, but should rely to a any_relocation_info. Llvm guys actually provide a very
-// useful functions that allow us not to touch all bit fields from relocation_info struct,
-// because they become an absolutely mess when we have take into account endianess, e.g.
-// when we have a deal with big endian objects on a little endian host.
 // Note, that if r_extern is set to 1, then r_symbolnum contains an index in symbtab, and
 // section index otherwise.
 void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
@@ -363,10 +379,8 @@ symbol_iterator get_indirect_symbol(const macho &obj, const MachO::dysymtab_comm
     // runtime LLVM_ERROR
     uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
     symbol_iterator s = prim::end_symbols(obj);
-    if (offset < obj_size) {
-        uint32_t sym_index = obj.getIndirectSymbolTableEntry(dlc, index);
-        s = get_symbol(obj, sym_index);
-    }
+    if (offset < obj_size)
+        s = get_symbol(obj, obj.getIndirectSymbolTableEntry(dlc, index));
     return s;
 }
 
