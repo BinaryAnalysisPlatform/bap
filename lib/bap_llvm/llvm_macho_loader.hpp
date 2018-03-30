@@ -313,97 +313,80 @@ void iterate_macho_commands(const macho &obj, ogre_doc &s) {
         macho_command(obj, cmd, s);
 }
 
-template <typename T>
-error_or<T> get_data(const macho &obj, uint64_t off) {
-    uint64_t obj_size = obj.getData().size();
-    if (off + sizeof(T) > obj_size)
-        return failure("request data beyond object bounds");
-    const char *ptr = prim::get_raw_data(obj) + off;
-    T t;
-    std::copy_n(ptr, sizeof(T), reinterpret_cast<char *>(&t));
-    return success(t);
+// precondition: any_relocation is already swapped as neccessary
+bool is_rel_scattered(const macho &obj, const MachO::any_relocation_info &rel) {
+    return !obj.is64Bit() && (rel.r_word0 & MachO::R_SCATTERED);
 }
 
-// Please, pay attention here, that it's not a good idea try to use a relocation_info
-// struct directly. We should rely on any_relocation_info instead. Llvm guys actually provide
-// a very useful functions that allow us not to touch all bits fields from relocation_info struct,
-// because they become absolutely messy when we have to take into account endianess, e.g.
-// when we have a deal with big endian objects on a little endian host.
-//
-// Example:
-// We would like to find out what is a r_symbolnum value from relocation_info struct.
-// And we know that this value is in first 24 bits of 32-bit value.
-// So, what do we have:
-// 00 00 01 40 - uint32_t in BE (big endian) file
-// 40 01 00 00 - uint32_t that we read on EL (little endian) host
-//
-// As one can notice from BE representation, a correct value of r_symbolnum should be just 1 (00 00 01).
-// And we are on a EL host, so we don't have any other options then to read values as a little endian.
-// And here we go:
-// 1) if we read 24 bits of 40 01 00 00 we will get 00 01 40
-// 2) if we swap this value again and get 00 00 01 40, and read first 24 bits, we will get 01 00 00.
-// Neither of this cases is correct.
-// So we need to play with shifts and masks here, what is actually done in llvm functions
-// like getPlainRelocationSymbolNum
-error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t off) {
-    auto any = get_data<MachO::any_relocation_info>(obj, off);
-    if (!any) return any;
+// precondition: any_relocation is already swapped as neccessary
+bool is_rel_extern(const MachO::any_relocation_info &rel) {
+    return (rel.r_word1 >> 4) & 1;
+}
+
+// precondition: any_relocation is already swapped as neccessary
+uint32_t rel_symbolnum(const MachO::any_relocation_info &rel) {
+    return (rel.r_word1 >> 8);
+}
+
+error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t pos) {
+    uint64_t max_pos = obj.getData().size();
+    if (pos + sizeof(MachO::any_relocation_info) > max_pos)
+        return failure("request data beyond object bounds");
+    const char *ptr = prim::get_raw_data(obj) + pos;
+    MachO::any_relocation_info rel;
+    std::copy_n(ptr, sizeof(MachO::any_relocation_info), reinterpret_cast<char *>(&rel));
     if (obj.isLittleEndian() != sys::IsLittleEndianHost)
-        MachO::swapStruct(*any);
-    if (!obj.is64Bit() && obj.isRelocationScattered(*any)) {
+        MachO::swapStruct(rel);
+    if (is_rel_scattered(obj, rel)) {
         return failure("scattered relocations are not supported");
     }
-    return any;
+    return success(rel);
 }
-
-// Size in bytes of relocation entry. It coulbe either size of
-// relocation_info, scattered_relocation_info, any_relocation_info
-#define RELOCATION_ENTRY_SIZE 8
 
 // Note, that if r_extern is set to 1, then r_symbolnum contains an index in symbtab, and
 // section index otherwise.
-void iterate_dyn_relocations(const macho &obj, uint32_t off, uint32_t num, ogre_doc &s) {
+void iterate_dyn_relocations(const macho &obj, uint32_t file_pos, uint32_t num, ogre_doc &s) {
     for (std::size_t i = 0; i < num; ++i) {
-        auto rel = get_rel(obj, off + i * RELOCATION_ENTRY_SIZE);
-        if (rel && obj.getPlainRelocationExternal(*rel))
-            symbol_reference(obj, obj.getPlainRelocationSymbolNum(*rel), rel->r_word0, s);
+        auto rel = get_rel(obj, file_pos + i * sizeof(MachO::any_relocation_info));
+        if (rel && is_rel_extern(*rel))
+            symbol_reference(obj, rel_symbolnum(*rel), rel->r_word0, s);
     }
 }
 
 symbol_iterator get_indirect_symbol(const macho &obj, const MachO::dysymtab_command &dlc, uint32_t index) {
-    uint64_t obj_size = obj.getData().size();
+    uint64_t max_offset = obj.getData().size();
 
     // this is actually a check that we will not get out of object
     // bounds while calling getIndirectSymbolTableEntry.
     // llvm does approximately the same to raise a nasty
     // runtime LLVM_ERROR
-    uint64_t offset = dlc.indirectsymoff + index * sizeof(uint32_t);
-    symbol_iterator s = prim::end_symbols(obj);
-    if (offset < obj_size)
-        s = get_symbol(obj, obj.getIndirectSymbolTableEntry(dlc, index));
-    return s;
+    uint64_t file_offset = dlc.indirectsymoff + index * sizeof(uint32_t);
+    if (file_offset < max_offset)
+        return get_symbol(obj, obj.getIndirectSymbolTableEntry(dlc, index));
+    else
+        return prim::end_symbols(obj);
 }
 
 // returns stride for indirect symbols entries
 uint32_t indirect_symbols_stride(const macho &obj, const SectionRef &sec) {
-    auto typ = section_type(obj, sec);
-    uint32_t stride = 0;
-    if (typ == MachO::S_SYMBOL_STUBS)
-        stride = section_reserved2(obj, sec);
+    if (section_type(obj, sec) == MachO::S_SYMBOL_STUBS)
+        return section_reserved2(obj, sec);
     else
-        stride = obj.is64Bit() ? 8 : 4;
-    return stride;
+        return obj.is64Bit() ? 8 : 4;
 }
 
 // true for symbol stubs or symbol pointers sections
 bool contains_sym_stubs(const macho &obj, const SectionRef &sec) {
-    auto typ = section_type(obj, sec);
-    return
-        (typ == MachO::S_NON_LAZY_SYMBOL_POINTERS ||
-         typ == MachO::S_LAZY_SYMBOL_POINTERS ||
-         typ == MachO::S_LAZY_DYLIB_SYMBOL_POINTERS ||
-         typ == MachO::S_THREAD_LOCAL_VARIABLE_POINTERS ||
-         typ == MachO::S_SYMBOL_STUBS);
+    switch (section_type(obj, sec)) {
+    case MachO::S_NON_LAZY_SYMBOL_POINTERS:
+    case MachO::S_LAZY_SYMBOL_POINTERS:
+    case MachO::S_LAZY_DYLIB_SYMBOL_POINTERS:
+    case MachO::S_THREAD_LOCAL_VARIABLE_POINTERS:
+    case MachO::S_SYMBOL_STUBS:
+        return true;
+    default:
+        return false;
+    }
 }
 
 void indirect_symbols(const macho &obj, const MachO::dysymtab_command &dlc, ogre_doc &s) {
@@ -442,8 +425,7 @@ void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
         MachO::dysymtab_command cmd = obj.getDysymtabLoadCommand();
         indirect_symbols(obj, cmd, s);
         iterate_dyn_relocations(obj, cmd.extreloff, cmd.nextrel, s);
-        iterate_dyn_relocations(obj, cmd.locreloff, cmd.nlocrel, s);
-    }
+     }
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
@@ -462,8 +444,8 @@ void symbols(const macho &obj, ogre_doc &s) {
 }
 
 // It's safe to call getSymtabLoadCommand without any checks,
-// because in case of symtab absence, lllvm returns just a
-// struct with all fields set to zero.
+// because in case of symtab absence, llvm returns just a
+// struct with all fields set to zero (for llvm version >= 3.8).
 symbol_iterator get_symbol(const macho &obj, std::size_t index) {
     MachO::symtab_command symtab = obj.getSymtabLoadCommand();
     if (index >= symtab.nsyms)
