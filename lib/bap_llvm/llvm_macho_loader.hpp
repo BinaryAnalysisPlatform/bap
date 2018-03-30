@@ -313,19 +313,22 @@ void iterate_macho_commands(const macho &obj, ogre_doc &s) {
         macho_command(obj, cmd, s);
 }
 
-// precondition: any_relocation is already swapped as neccessary
 bool is_rel_scattered(const macho &obj, const MachO::any_relocation_info &rel) {
     return !obj.is64Bit() && (rel.r_word0 & MachO::R_SCATTERED);
 }
 
-// precondition: any_relocation is already swapped as neccessary
-bool is_rel_extern(const MachO::any_relocation_info &rel) {
-    return (rel.r_word1 >> 4) & 1;
+bool is_rel_extern(const macho &obj, const MachO::any_relocation_info &rel) {
+    if (obj.isLittleEndian())
+        return (rel.r_word1 >> 27) & 1;
+    else
+        return (rel.r_word1 >> 4) & 1;
 }
 
-// precondition: any_relocation is already swapped as neccessary
-uint32_t rel_symbolnum(const MachO::any_relocation_info &rel) {
-    return (rel.r_word1 >> 8);
+uint32_t rel_symbolnum(const macho &obj, const MachO::any_relocation_info &rel) {
+    if (obj.isLittleEndian())
+        return rel.r_word1 & 0xffffff;
+    else
+        return (rel.r_word1 >> 8);
 }
 
 error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t pos) {
@@ -348,8 +351,8 @@ error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t pos) {
 void iterate_dyn_relocations(const macho &obj, uint32_t file_pos, uint32_t num, ogre_doc &s) {
     for (std::size_t i = 0; i < num; ++i) {
         auto rel = get_rel(obj, file_pos + i * sizeof(MachO::any_relocation_info));
-        if (rel && is_rel_extern(*rel))
-            symbol_reference(obj, rel_symbolnum(*rel), rel->r_word0, s);
+        if (rel && is_rel_extern(obj, *rel))
+            symbol_reference(obj, rel_symbolnum(obj, *rel), rel->r_word0, s);
     }
 }
 
