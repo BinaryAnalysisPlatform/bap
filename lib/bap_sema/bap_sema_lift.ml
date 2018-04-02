@@ -156,21 +156,16 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-let dst_of_cfg block cfg =
+let find_dst block symtab =
   if Insn.(is call) (Block.terminator block) then
-    Seq.find_map (Cfg.nodes cfg) ~f:(fun blk ->
-        if Block.equal block blk then
-          Seq.find_map (Cfg.Node.outputs blk cfg)
-            ~f:(fun e ->
-                Option.some_if (Cfg.Edge.label e <> `Fall)
-                  (Block.addr (Cfg.Edge.dst e)))
-        else None)
+    Symtab.find_call symtab (Block.addr block) |>
+    Option.value_map ~default:None ~f:(fun (_,d,_) -> Some (Block.addr d))
   else None
 
-let lift_blk ?prg cfg block : blk term list =
+let lift_blk ?symtab cfg block : blk term list =
   let fall_label = label_of_fall cfg block in
   let dst =
-    Option.value_map ~default:None ~f:(dst_of_cfg block) prg in
+    Option.value_map ~default:None ~f:(find_dst block) symtab in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
@@ -231,11 +226,11 @@ let remove_false_jmps blk =
 
 let unbound _ = true
 
-let lift_sub ?prg entry cfg =
+let lift_sub ?symtab entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
-    let blks = lift_blk ?prg cfg b in
+    let blks = lift_blk ?symtab cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
     acc @ blks in
@@ -250,12 +245,12 @@ let lift_sub ?prg entry cfg =
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
-let program ?prg symtab =
+let program symtab =
   let b = Ir_program.Builder.create () in
   let addrs = Addr.Table.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub ?prg entry cfg in
+      let sub = lift_sub ~symtab entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
@@ -265,8 +260,8 @@ let program ?prg symtab =
         Term.map jmp_t (remove_false_jmps blk)
           ~f:(resolve_jmp ~local:false addrs)))
 
-let sub = lift_sub ?prg:None
-let blk = lift_blk ?prg:None
+let sub = lift_sub ?symtab:None
+let blk = lift_blk ?symtab:None
 
 let insn insn =
   lift_insn None ([], Ir_blk.Builder.create ()) insn |>

@@ -27,13 +27,13 @@ let find_calls name roots cfg =
       if Seq.is_empty (Cfg.Node.inputs blk cfg) then
         let addr = Block.addr blk in
         Hashtbl.set starts ~key:addr ~data:(name addr);
-      let term = Block.terminator blk in
-      if Insn.(is call) term then
-        Seq.iter (Cfg.Node.outputs blk cfg)
-          ~f:(fun e ->
-              if Cfg.Edge.label e <> `Fall then
-                let w = Block.addr (Cfg.Edge.dst e) in
-                Hashtbl.set starts ~key:w ~data:(name w)));
+        let term = Block.terminator blk in
+        if Insn.(is call) term then
+          Seq.iter (Cfg.Node.outputs blk cfg)
+            ~f:(fun e ->
+                if Cfg.Edge.label e <> `Fall then
+                  let w = Block.addr (Cfg.Edge.dst e) in
+                  Hashtbl.set starts ~key:w ~data:(name w)));
   starts
 
 let reconstruct name roots cfg =
@@ -48,6 +48,10 @@ let reconstruct name roots cfg =
   let find_block addr =
     Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
         Addr.equal addr (Block.addr blk)) in
+  let find_callees blk =
+    Cfg.Node.inputs blk cfg |>
+    Seq.map ~f:Cfg.Edge.src |>
+    Seq.map ~f:Block.addr in
   Hashtbl.fold roots ~init:Symtab.empty
     ~f:(fun ~key:entry ~data:name syms ->
         match find_block entry with
@@ -62,7 +66,10 @@ let reconstruct name roots cfg =
                       if Block.equal n entry
                       then Cfg.Node.insert n t
                       else return t)) in
-          Symtab.add_symbol syms (name,entry,cfg))
+          let fn = name,entry,cfg in
+          let symtab = Symtab.add_symbol syms fn in
+          Seq.fold (find_callees entry) ~init:symtab
+            ~f:(fun syms a -> Symtab.add_call syms a fn))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =

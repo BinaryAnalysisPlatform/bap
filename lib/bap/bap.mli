@@ -6940,9 +6940,9 @@ module Std : sig
     (** [create ?tid ()] creates an empty program. If [tid]  *)
     val create : ?tid:tid -> unit -> t
 
-    (** [lift ~prg:cfg symbols] takes a table of functions and program
-        cfg and return a whole program lifted into IR *)
-    val lift : ?prg:cfg -> symtab -> program term
+    (** [lift symbols] takes a table of functions and return a whole
+        program lifted into IR *)
+    val lift : symtab -> program term
 
     (** [to_graph program] creates a callgraph of a [program]  *)
     val to_graph : t -> Graphs.Callgraph.t
