@@ -141,18 +141,24 @@ MACHO_SECTION_FIELD(offset, uint32_t)
 
 constexpr uint64_t max_uint64 = std::numeric_limits<uint64_t>::max();
 
-void entry_point(const macho &obj, ogre_doc &s) {
+error_or<uint64_t> entry_of_commands(const macho &obj) {
+    uint64_t entry = max_uint64;
     for (auto info : macho_commands(obj)) {
         if (info.C.cmd == MachO::LoadCommandType::LC_MAIN) {
             const MachO::entry_point_command *entry_cmd =
                 reinterpret_cast<const MachO::entry_point_command*>(info.Ptr);
-            uint64_t entry = entry_cmd->entryoff;
+            entry = entry_cmd->entryoff;
             if (obj.isLittleEndian() != sys::IsLittleEndianHost)
                 sys::swapByteOrder(entry);
-            s.entry("entry") << entry;
-            return;
         }
     }
+    if (entry != max_uint64)
+        return success(entry);
+    else
+        return failure("entry not found");
+}
+
+error_or<uint64_t> entry_of_sections(const macho &obj) {
     uint64_t entry = max_uint64;
     for (auto sec : prim::sections(obj)) {
         auto addr = prim::section_address(sec);
@@ -160,7 +166,17 @@ void entry_point(const macho &obj, ogre_doc &s) {
             entry = std::min(*addr, entry);
     }
     if (entry != max_uint64)
-        s.entry("entry") << entry;
+        return success(entry);
+    else
+        return failure("entry not found");
+}
+
+void entry_point(const macho &obj, ogre_doc &s) {
+    if (auto entry = entry_of_commands(obj))
+        s.entry("entry") << *entry;
+    else
+        if (auto entry = entry_of_sections(obj))
+            s.entry("entry") << *entry;
 }
 
 void image_info(const macho &obj, ogre_doc &s) {
@@ -176,7 +192,7 @@ uint32_t section_type(const macho &obj, SectionRef sec) {
 }
 
 void section(const std::string &name, int64_t rel_addr, uint64_t size, uint64_t off, ogre_doc &s) {
-     s.entry("section-entry") << name << rel_addr << size << off;
+    s.entry("section-entry") << name << rel_addr << size << off;
 }
 
 // we distinguish symbols that are defined in some section and symbols that are not. For former it's ok
@@ -328,10 +344,10 @@ uint32_t rel_symbolnum(const macho &obj, const MachO::any_relocation_info &rel) 
     if (obj.isLittleEndian())
         return rel.r_word1 & 0xffffff;
     else
-        return (rel.r_word1 >> 8);
+        return rel.r_word1 >> 8;
 }
 
-error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t pos) {
+error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint64_t pos) {
     uint64_t max_pos = obj.getData().size();
     if (pos + sizeof(MachO::any_relocation_info) > max_pos)
         return failure("request data beyond object bounds");
@@ -348,7 +364,7 @@ error_or<MachO::any_relocation_info> get_rel(const macho &obj, uint32_t pos) {
 
 // Note, that if r_extern is set to 1, then r_symbolnum contains an index in symbtab, and
 // section index otherwise.
-void iterate_dyn_relocations(const macho &obj, uint32_t file_pos, uint32_t num, ogre_doc &s) {
+void iterate_dyn_relocations(const macho &obj, uint64_t file_pos, uint32_t num, ogre_doc &s) {
     for (std::size_t i = 0; i < num; ++i) {
         auto rel = get_rel(obj, file_pos + i * sizeof(MachO::any_relocation_info));
         if (rel && is_rel_extern(obj, *rel))
