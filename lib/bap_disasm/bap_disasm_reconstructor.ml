@@ -48,10 +48,9 @@ let reconstruct name roots cfg =
   let find_block addr =
     Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
         Addr.equal addr (Block.addr blk)) in
-  let find_callees blk =
+  let find_callers blk =
     Cfg.Node.inputs blk cfg |>
-    Seq.map ~f:Cfg.Edge.src |>
-    Seq.map ~f:Block.addr in
+    Seq.map ~f:(fun e -> Block.addr (Cfg.Edge.src e)) in
   Hashtbl.fold roots ~init:Symtab.empty
     ~f:(fun ~key:entry ~data:name syms ->
         match find_block entry with
@@ -68,7 +67,7 @@ let reconstruct name roots cfg =
                       else return t)) in
           let fn = name,entry,cfg in
           let symtab = Symtab.add_symbol syms fn in
-          Seq.fold (find_callees entry) ~init:symtab
+          Seq.fold (find_callers entry) ~init:symtab
             ~f:(fun syms a -> Symtab.add_call syms a fn))
 
 let of_blocks syms =

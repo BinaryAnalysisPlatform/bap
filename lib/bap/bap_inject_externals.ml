@@ -39,7 +39,7 @@ let find_name externals min_addr max_addr =
     else
       match Map.find externals addr with
       | None -> get (Addr.succ addr)
-      | Some value -> Some value in
+      | x -> x in
   get min_addr
 
 let create_synthetic_sub name =
@@ -47,15 +47,15 @@ let create_synthetic_sub name =
   Tid.set_name (Term.tid s) name;
   Term.(set_attr s synthetic ())
 
-let add_externals insns externals pr =
+let add_externals insns externals prg =
   let subs = String.Table.create () in
-  let memory = Seq.fold insns ~init:Addr.Map.empty
-      ~f:(fun mems (m,_) ->
-          let min,max = Bap_memory.(min_addr m, max_addr m) in
-          Map.add mems min max) in
   let get_sub name =
     Hashtbl.find_or_add subs name
       ~default:(fun () -> create_synthetic_sub name) in
+  let bounds = Seq.fold insns ~init:Addr.Map.empty
+      ~f:(fun mems (m,_) ->
+          let min,max = Bap_memory.(min_addr m, max_addr m) in
+          Map.add mems min max) in
   let fixup jmp jmp_to =
     match Jmp.kind jmp with
     | Call call ->
@@ -69,12 +69,11 @@ let add_externals insns externals pr =
     method! map_jmp jmp =
       Option.value ~default:jmp
         (Term.get_attr jmp address >>= fun addr ->
-         Map.find memory addr >>= fun max_addr ->
-         find_name externals addr max_addr >>= fun fix ->
-         Some (fixup jmp fix))
-  end)#run pr in
-  let append_ext prg sub = Term.append sub_t prg sub in
-  List.fold ~init:program ~f:append_ext (Hashtbl.data subs)
+         Map.find bounds addr >>= fun max_addr ->
+         find_name externals addr max_addr >>= fun jmp_to ->
+         Some (fixup jmp jmp_to))
+  end)#run prg in
+  List.fold (Hashtbl.data subs) ~init:program ~f:(Term.append sub_t)
 
 let run prog insns spec =
   match Fact.eval Rel.externals spec with
