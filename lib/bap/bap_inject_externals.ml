@@ -22,7 +22,7 @@ module Rel = struct
     | Some a -> Fact.return (Arch.addr_size a |> Size.in_bits)
     | None -> Fact.failf "unknown/unsupported architecture" ()
 
-  let external_symbols  =
+  let external_symbols =
     Fact.collect Ogre.Query.(select (from external_reference))
 
   let externals =
@@ -57,25 +57,26 @@ let add_externals insns externals prg =
           let min,max = Bap_memory.(min_addr m, max_addr m) in
           Map.add mems min max) in
   let fixup jmp jmp_to =
+    let target = Direct (Term.tid (get_sub jmp_to)) in
     match Jmp.kind jmp with
     | Call call ->
       let return = Call.return call in
-      let target = Direct (Term.tid (get_sub jmp_to)) in
       Jmp.with_kind jmp (Call (Call.create ?return ~target ()))
-    | _ -> jmp in
-  let (>>=) = Option.(>>=) in
+    |  _ -> Jmp.with_kind jmp (Call (Call.create ~target ())) in
+  let find_fixup jmp =
+    Option.(Term.get_attr jmp address >>= fun addr ->
+            Map.find bounds addr >>= fun max_addr ->
+            find_name externals addr max_addr) in
   let program = (object
     inherit Term.mapper
     method! map_jmp jmp =
-      Option.value ~default:jmp
-        (Term.get_attr jmp address >>= fun addr ->
-         Map.find bounds addr >>= fun max_addr ->
-         find_name externals addr max_addr >>= fun jmp_to ->
-         Some (fixup jmp jmp_to))
+      match find_fixup jmp with
+      | None -> jmp
+      | Some jmp_to -> fixup jmp jmp_to
   end)#run prg in
   List.fold (Hashtbl.data subs) ~init:program ~f:(Term.append sub_t)
 
 let run prog insns spec =
   match Fact.eval Rel.externals spec with
-  | Error _ ->  prog
+  | Error _ -> prog
   | Ok exts -> add_externals insns exts prog
