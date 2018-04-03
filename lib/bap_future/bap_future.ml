@@ -550,6 +550,20 @@ module Std = struct
       link s s' f;
       s'
 
+    let concat ss =
+      let stream, signal = create () in
+      List.iter ss ~f:(fun s -> observe s (fun x -> Signal.send signal x));
+      stream
+
+    let concat_merge ss ~f =
+      let pair x = Some x, Some x in
+      parse (concat ss) ~init:None
+        ~f:(fun state x -> match state with
+            | None -> pair x
+            | Some y ->
+              let z = f x y in
+              pair z)
+
     type 'a stream = 'a t
 
     module Variadic = Variadic.Make(struct

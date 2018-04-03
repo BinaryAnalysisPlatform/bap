@@ -121,33 +121,51 @@ module Setup(Machine : Primus.Machine.S) = struct
 
   let init () =
     let open Primus.Lisp.Type.Spec in
-    let def name types closure = Lisp.define ~types name closure in
+    let def name types docs closure = Lisp.define ~docs ~types name closure in
     Machine.sequence [
       def "taint-introduce-directly" (tuple [a; b] @-> c)
+        "(taint-introduce-directly K X) introduces a new taint of the
+         kind K that is directly associated with the value X"
         (module IntroDirect);
 
       def "taint-introduce-indirectly" (tuple [a; int; int] @-> c)
+        "(taint-introduce-indirectly K X N) introduces a new taint of
+        the kind K that is indirectly associated with X pointing to an
+        object of the size N"
         (module IntroIndirect);
 
       def "taint-get-direct" (tuple [a; b] @-> c)
+        "(taint-get-direct K X) returns the direct taint of the kind K
+         associatedwith the value X, or nil if there is no such taint"
         (module GetDirect);
 
       def "taint-get-indirect" (tuple [a; b] @-> c)
+        "(taint-get-indirect K X) returns the indirect taint of the
+        kind K associated with the value X, or nil if there is no such taint"
         (module GetIndirect);
 
       def "taint-sanitize-direct" (tuple [a; b] @-> c)
+        "(taint-get-indirect K X) removes any direct taint of the kind
+        K that is directly associated with the value X"
         (module SanitizeDirect);
 
       def "taint-sanitize-indirect" (tuple [a; b] @-> c)
+        "(taint-get-indirect K X) removes any direct taint of the kind
+        K that is indirectly associated with the value X"
         (module SanitizeIndirect);
 
       def "taint-policy-select" (tuple [a; b] @-> bool)
+        "(taint-policy-select K P) selects the taint propagation
+        policy P for the taints of the kind K"
         (module PolicySelect);
 
       def "taint-policy-set-default" (tuple [a] @-> bool)
+        "(taint-policy-set-default P) makes P the default taint
+        propagation policy."
         (module PolicySetDefault);
 
       def "taint-kind" (tuple [a] @-> b)
+        "(taint-kind t) returns the kind of the taint T."
         (module TaintKind);
 
     ];
@@ -158,8 +176,11 @@ module Signals(Machine : Primus.Machine.S) = struct
   module Object = Taint.Object.Make(Machine)
   module Value = Primus.Value.Make(Machine)
 
+  let doc = "(taint-finalize T L) is emited when the taint T is finilized
+     while still live if L is true or dead if T is false."
+
   let init () = Machine.sequence [
-      Lisp.signal Taint.Gc.taint_finalize @@ fun (t,live) ->
+      Lisp.signal ~doc Taint.Gc.taint_finalize @@ fun (t,live) ->
       Machine.List.all [
         Object.to_value t;
         Value.of_bool live;

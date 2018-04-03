@@ -886,9 +886,9 @@ module ToIR = struct
           (* undefined for SHL and SHR instructions where the count is greater than
              or equal to the size (in bits) of the destination operand *)
           match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var old lsr size - count))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var old lsr (size - count)))
           | RSHIFT | ARSHIFT ->
-            Bil.(Cast (HIGH, !!bool_t, var old lsl size - count))
+            Bil.(Cast (HIGH, !!bool_t, var old lsl (size - count)))
           | _ -> failwith "impossible"
         in
         Bil.[
@@ -917,8 +917,8 @@ module ToIR = struct
         let count_mask = Bil.(size - int_exp 1 s') in
         let e_count = Bil.(op2e s count land count_mask) in
         let new_cf =  match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var was lsr size - e_count))
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var was lsl size - e_count))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var was lsr (size - e_count)))
+          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var was lsl (size - e_count)))
           | _ -> disfailwith "impossible" in
         let new_of = Bil.(Cast (HIGH, !!bool_t, (var was lxor e_dst))) in
         let unk_of =

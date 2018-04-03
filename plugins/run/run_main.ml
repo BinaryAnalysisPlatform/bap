@@ -131,7 +131,7 @@ let run = function
     else Machine.return ()
 
 
-let pp_var ppf v = 
+let pp_var ppf v =
   fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
 
 let typecheck =
@@ -139,7 +139,7 @@ let typecheck =
   Env.all >>| fun vars ->
   match Primus.Lisp.Type.check vars prog with
   | [] -> info "The Lisp Machine program is well-typed"
-  | xs -> 
+  | xs ->
     warning "The Lisp Machine program is ill-typed";
     info "The typechecker is broken for now, ignore the message above";
     List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
@@ -162,7 +162,6 @@ let main {Config.get=(!)} proj =
     proj
 
 let deps = [
-  "primus-lisp"; 
   "trivial-condition-form"
 ]
 

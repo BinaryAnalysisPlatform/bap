@@ -23,6 +23,7 @@ module Items : sig
   val const : Def.const item
   val func  : Def.func  item
   val meth  : Def.meth  item
+  val para  : Def.para item
   val primitive  : Def.prim item
 end
 

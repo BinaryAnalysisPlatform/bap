@@ -116,12 +116,42 @@ module Input = struct
     let base = Option.value base ~default:(null arch) in
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
-    let data = Memmap.add Memmap.empty mem section in
-    {arch; data; code = data; file = filename; finish = ident;}
+    let code = Memmap.add Memmap.empty mem section in
+    let data = Memmap.empty  in
+    {arch; data; code; file = filename; finish = ident;}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
 end
+
+module Merge = struct
+
+  let merge_streams ss ~f : 'a Source.t =
+    Stream.concat_merge ss
+      ~f:(fun s s' -> match s, s' with
+          | Ok s, Ok s' -> Ok (f s s')
+          | Ok _, Error er
+          | Error er, Ok _ -> Error er
+          | Error er, Error er' ->
+            Error (Error.of_list [er; er']))
+
+  let merge_sources create sources ~f = match sources with
+    | [] -> None
+    | names -> match List.filter_map names ~f:create with
+      | [] -> assert false
+      | ss -> Some (merge_streams ss ~f)
+
+  let symbolizer () =
+    let symbolizers = Symbolizer.Factory.list () in
+    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
+        Symbolizer.chain [s1;s2])
+
+  let rooter () =
+    let rooters = Rooter.Factory.list () in
+    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
+
+end
+
 
 type input = Input.t
 type project = t
@@ -181,9 +211,11 @@ module MVar = struct
         | Error e -> fail x e);
     x
 
-  let from_optional_source = function
-    | None -> create None
+  let from_optional_source ?(default=fun () -> None) = function
     | Some s -> from_source s
+    | None -> match default () with
+      | None -> create None
+      | Some s -> from_source s
 end
 
 let phase_triggered phase mvar =
@@ -202,7 +234,7 @@ let pp_mem ppf mem =
 let pp_disasm_error ppf = function
   | `Failed_to_disasm mem ->
     fprintf ppf "can't disassemble insnt at address %a" pp_mem mem
-  | `Failed_to_lift (mem,insn,err) ->
+  | `Failed_to_lift (_mem,insn,err) ->
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
 
@@ -229,9 +261,11 @@ let create_exn
     ?reconstructor
     (read : input)  =
   let state = fresh_state () in
-  let mrooter = MVar.from_optional_source rooter in
+  let mrooter =
+    MVar.from_optional_source ~default:Merge.rooter rooter in
+  let msymbolizer =
+    MVar.from_optional_source ~default:Merge.symbolizer symbolizer in
   let mbrancher = MVar.from_optional_source brancher in
-  let msymbolizer = MVar.from_optional_source symbolizer in
   let mreconstructor = MVar.from_optional_source reconstructor in
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
@@ -382,7 +416,7 @@ let substitute project mem tag value : t =
   let subst_section (mem,name) = function
     | #bound as b -> addr b mem
     | `name -> name in
-  let subst_block (mem,block) = function
+  let subst_block (mem,_block) = function
     | #bound as b -> addr b mem
     | `name -> "blk_"^addr `min mem in
   let asm insn = Insn.asm insn in
@@ -390,7 +424,7 @@ let substitute project mem tag value : t =
   let subst_disasm mem out =
     let inj = match out with `asm -> asm | `bil -> bil in
     match Disasm.of_mem project.arch mem with
-    | Error er -> "<failed to disassemble memory region>"
+    | Error _er -> "<failed to disassemble memory region>"
     | Ok dis ->
       Disasm.insns dis |>
       Seq.map ~f:(fun (_,insn) -> inj insn) |> Seq.to_list |>
