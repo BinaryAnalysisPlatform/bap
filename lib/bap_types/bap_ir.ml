@@ -1396,14 +1396,8 @@ module Ir_program = struct
     Option.value ~default:[]
       (Term.get_attr s Ir_sub.aliases)
 
-  let same_names s s' =
-    String.equal (Ir_sub.name s) (Ir_sub.name s')
-
-  let strings_mem xs s = List.mem xs s ~equal:String.equal
-
-  let need_to_mangle s reserved =
-    let names = Ir_sub.name s :: sub_aliases s in
-    List.exists names ~f:(fun n -> strings_mem reserved n)
+  let sub_addr s =
+    Term.get_attr s Bap_attributes.address
 
   let mangle_name addr tid name =
     let mname = match addr with
@@ -1411,37 +1405,46 @@ module Ir_program = struct
       | None -> Tid.to_string tid in
     sprintf "%s@%s" name mname
 
-  let fix_names subs nub =
-    let reserved = Ir_sub.name nub :: sub_aliases nub in
+  let need_to_mangle s names =
+    let tid = Term.tid s in
+    let sub_names = Ir_sub.name s :: sub_aliases s in
+    List.for_all sub_names ~f:(fun n ->
+        match Hashtbl.find names n with
+        | None -> false
+        | Some tid' -> not (Tid.equal tid tid'))
+
+  let fix_names names subs =
     let may_mangle addr tid name =
-      if strings_mem reserved name then mangle_name addr tid name
-      else name in
-    let subs' =
-      Vec.foldi subs ~init:[] ~f:(fun i acc old ->
-          if not (need_to_mangle old reserved) then acc
-          else
-            let tid = Term.tid old in
-            let adr = Term.get_attr old Bap_attributes.address in
-            let may_mangle = may_mangle adr tid in
-            let als = List.map (sub_aliases old) ~f:may_mangle in
-            let old = Term.set_attr old Ir_sub.aliases als in
-            let nam = may_mangle (Ir_sub.name old) in
-            let old = Ir_sub.with_name old nam in
-            Tid.set_name tid nam;
-            (i, old) :: acc) in
+      match Hashtbl.find names name with
+      | None -> name
+      | Some tid' ->
+        if Tid.equal tid tid' then name
+        else mangle_name addr tid name in
+    let subs' = Vec.foldi subs ~init:[] ~f:(fun i acc sub ->
+        if not (need_to_mangle sub names) then acc
+        else
+          let may_mangle = may_mangle (sub_addr sub) (Term.tid sub) in
+          let als = List.map (sub_aliases sub) ~f:may_mangle in
+          let nam = may_mangle (Ir_sub.name sub) in
+          let sub = Term.set_attr sub Ir_sub.aliases als in
+          let sub = Ir_sub.with_name sub nam in
+          (i, sub) :: acc) in
     List.iter ~f:(fun (i, s) -> Vec.set subs i s) subs'
 
   module Builder = struct
-    type t = tid option * sub term vector
+    type t = tid option * tid String.Table.t * sub term vector
 
     let create ?tid ?(subs=16) () : t =
-      tid, Vec.create ~capacity:subs nil_sub
+      tid, String.Table.create (), Vec.create ~capacity:subs nil_sub
 
-    let add_sub (_,subs) sub =
-      fix_names subs sub;
+    let add_sub (_,names,subs) sub =
+      let sub_names = Ir_sub.name sub :: sub_aliases sub in
+      List.iter sub_names
+        ~f:(fun n -> Hashtbl.set names n (Term.tid sub));
       Vec.append subs sub
 
-    let result (tid,subs) : program term =
+    let result (tid,names,subs) : program term =
+      fix_names names subs;
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
