@@ -1188,8 +1188,11 @@ module Ir_sub = struct
       blks = [| |] ;
     }
 
+
   let name sub = sub.self.name
-  let with_name sub name = {sub with self = {sub.self with name}}
+  let with_name sub name =
+    Tid.set_name (Term.tid sub) name;
+    {sub with self = {sub.self with name}}
 
   module Enum(T : Bap_value.S) = struct
     type t = T.t list [@@deriving bin_io, compare,sexp]
@@ -1389,13 +1392,54 @@ module Ir_program = struct
       | Top -> Some p
       | _ -> None
 
+  let sub_aliases s =
+    Option.value ~default:[]
+      (Term.get_attr s Ir_sub.aliases)
+
+  let same_names s s' =
+    String.equal (Ir_sub.name s) (Ir_sub.name s')
+
+  let strings_mem xs s = List.mem xs s ~equal:String.equal
+
+  let need_to_mangle s reserved =
+    let names = Ir_sub.name s :: sub_aliases s in
+    List.exists names ~f:(fun n -> strings_mem reserved n)
+
+  let mangle_name addr tid name =
+    let mname = match addr with
+      | Some a -> Bap_bitvector.string_of_value ~hex:true a
+      | None -> Tid.to_string tid in
+    sprintf "%s@%s" name mname
+
+  let fix_names subs nub =
+    let reserved = Ir_sub.name nub :: sub_aliases nub in
+    let may_mangle addr tid name =
+      if strings_mem reserved name then mangle_name addr tid name
+      else name in
+    let subs' =
+      Vec.foldi subs ~init:[] ~f:(fun i acc old ->
+          if not (need_to_mangle old reserved) then acc
+          else
+            let tid = Term.tid old in
+            let adr = Term.get_attr old Bap_attributes.address in
+            let may_mangle = may_mangle adr tid in
+            let als = List.map (sub_aliases old) ~f:may_mangle in
+            let old = Term.set_attr old Ir_sub.aliases als in
+            let nam = may_mangle (Ir_sub.name old) in
+            let old = Ir_sub.with_name old nam in
+            Tid.set_name tid nam;
+            (i, old) :: acc) in
+    List.iter ~f:(fun (i, s) -> Vec.set subs i s) subs'
+
   module Builder = struct
     type t = tid option * sub term vector
 
     let create ?tid ?(subs=16) () : t =
       tid, Vec.create ~capacity:subs nil_sub
 
-    let add_sub (_,subs) = Vec.append subs
+    let add_sub (_,subs) sub =
+      fix_names subs sub;
+      Vec.append subs sub
 
     let result (tid,subs) : program term =
       let tid = match tid with
