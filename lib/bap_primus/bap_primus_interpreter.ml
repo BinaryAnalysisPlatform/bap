@@ -337,13 +337,11 @@ module Make (Machine : Machine) = struct
       do_store a x (s - 8) hd tl
 
   let store a x e s =
-    if s = `r8 then store_byte a x
-    else
-      let open Bil.Types in
-      let s = Size.in_bits s in
-      match e with
-      | LittleEndian -> do_store a x s LOW HIGH
-      | BigEndian    -> do_store a x s HIGH LOW
+    let open Bil.Types in
+    let s = Size.in_bits s in
+    match e with
+    | LittleEndian -> do_store a x s LOW HIGH
+    | BigEndian    -> do_store a x s HIGH LOW
 
   let update_pc t =
     match Term.get_attr t address with
