@@ -133,7 +133,7 @@ type blk = {
 } [@@deriving bin_io, compare, fields, sexp]
 
 type arg = var * exp * intent option
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type sub = {
   name : string;
@@ -145,50 +145,80 @@ type sub = {
 type path = int array
 [@@deriving bin_io, compare, sexp]
 
+
+let mangle_name addr tid name =
+  match addr with
+  | Some a ->
+    sprintf "%s@%s" name @@
+    Bap_bitvector.string_of_value ~hex:true a
+  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+let mangle_sub s =
+  let addr = Dict.find s.dict Bap_attributes.address in
+  let name = mangle_name addr s.tid s.self.name in
+  Tid.set_name s.tid name;
+  let self = {s.self with name} in
+  {s with self}
+
+let names_of_subs subs =
+  let names = String.Table.create () in
+  Array.iter subs ~f:(fun s ->
+      Hashtbl.change names s.self.name ~f:(function
+          | None -> Some [s.tid]
+          | Some tids -> Some (s.tid :: tids)));
+  names
+
+let fix_names ?(old_names=String.Table.create ()) subs =
+  let names = names_of_subs subs in
+  let conflicts = Hashtbl.count names ~f:(fun x -> List.length x > 1) in
+  if conflicts = 0 then subs
+  else
+    let remove name tid = match Hashtbl.find names name with
+      | None -> ()
+      | Some tids ->
+        List.filter ~f:(fun t -> not (Tid.equal t tid)) tids |>
+        Hashtbl.set names name in
+    let mangle s =
+      remove s.self.name s.tid;
+      mangle_sub s in
+    let is_old s =
+      match Hashtbl.find old_names s.self.name with
+      | Some old_tid -> Tid.equal s.tid old_tid
+      | _ -> false in
+    Array.map ~f:(fun sub ->
+        match Hashtbl.find_exn names sub.self.name with
+        | [] | [_]-> sub
+        | tids ->
+          if is_old sub then mangle sub
+          else
+            let max_tid = Option.value_exn
+                (List.max_elt ~cmp:Tid.compare tids) in
+            if Tid.equal sub.tid max_tid then sub
+            else mangle sub) subs
+
 module Program : sig
   type t = private {
     subs  : sub term array;
     paths : path Tid.Table.t;
   } [@@deriving bin_io, compare, fields, sexp]
 
-  val create : ?subs:sub term array -> ?paths:path Tid.Table.t -> unit -> t
+  val empty : unit -> t
+
+  val update : t -> sub term array -> t
+
 end = struct
   type t = {
     subs  : sub term array;
     paths : path Tid.Table.t;
   } [@@deriving bin_io, fields, sexp]
 
-  let mangle_name addr tid name =
-    match addr with
-    | Some a ->
-      sprintf "%s@%s" name @@
-      Bap_bitvector.string_of_value ~hex:true a
-    | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+  let empty () = {subs = [| |] ; paths = Tid.Table.create () }
 
-  let fix_names subs =
-    let names = String.Table.create () in
-    Array.iter subs ~f:(fun s ->
-        let name = s.self.name in
-        let tid = s.tid in
-        Hashtbl.change names name ~f:(function
-            | None -> Some tid
-            | Some tid' ->
-              if Tid.(tid' < tid) then Some tid
-              else Some tid'));
-    if Hashtbl.length names = Array.length subs then subs
-    else
-      Array.map ~f:(fun s ->
-          let tid = Hashtbl.find_exn names s.self.name in
-          if Tid.equal tid s.tid then s
-          else
-            let addr = Dict.find s.dict Bap_attributes.address in
-            let name = mangle_name addr s.tid s.self.name in
-            Tid.set_name s.tid name;
-            let self = {s.self with name} in
-            {s with self}) subs
-
-  let create ?(subs = [| |]) ?(paths = Tid.Table.create()) () =
-    {subs = fix_names subs; paths}
+  let update p subs =
+    let old_names = String.Table.create () in
+    Array.iter p.subs
+      ~f:(fun s -> Hashtbl.set old_names s.self.name s.tid);
+    {p with subs = fix_names ~old_names subs}
 
   let compare x y =
     let compare x y = [%compare:sub term array] x y in
@@ -304,7 +334,7 @@ let cls typ par nil field = {
 let hash_of_term t = Tid.hash (tid t)
 let make_term tid self : 'a term = {tid; self; dict = Dict.empty}
 
-let nil_top = make_term Tid.nil (Program.create ())
+let nil_top = make_term Tid.nil (Program.empty ())
 
 let program_t = {
   par = Nil;
@@ -338,14 +368,11 @@ let jmp_t : (blk,jmp) cls = cls Jmp Blk nil_jmp Fields_of_blk.jmps
 let blk_t : (sub,blk) cls = cls Blk Sub nil_blk Fields_of_sub.blks
 let arg_t : (sub,arg) cls = cls Arg Sub nil_arg Fields_of_sub.args
 
-let sub_set prog subs =
-  Program.create ~subs ~paths:prog.paths ()
-
 let sub_t : (program, sub) cls = {
   par = Top;
   typ = Sub;
   nil = nil_sub;
-  set = sub_set;
+  set = Program.update;
   get = Program.subs;
 }
 
@@ -1354,7 +1381,7 @@ module Ir_program = struct
   type t = program term
 
   let create ?(tid=Tid.create ()) () : t =
-    make_term tid (Program.create ())
+    make_term tid (Program.empty ())
 
   let proj1 t cs = t.self.subs.(cs.(0))
   let proj2 f t cs = (f (proj1 t cs).self).(cs.(1))
@@ -1452,8 +1479,8 @@ module Ir_program = struct
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
-      make_term tid @@
-        Program.create ~subs:(Vec.to_array subs) ()
+      let p = Program.empty () in
+      make_term tid @@ Program.update p (Vec.to_array subs)
 
   end
 
