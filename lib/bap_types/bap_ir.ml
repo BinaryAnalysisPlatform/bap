@@ -145,15 +145,58 @@ type sub = {
 type path = int array
 [@@deriving bin_io, compare, sexp]
 
+module Program : sig
+  type t = private {
+    subs  : sub term array;
+    paths : path Tid.Table.t;
+  } [@@deriving bin_io, compare, fields, sexp]
 
-type program = {
-  subs  : sub term array;
-  paths : path Tid.Table.t;
-} [@@deriving bin_io, fields, sexp]
+  val create : ?subs:sub term array -> ?paths:path Tid.Table.t -> unit -> t
+end = struct
+  type t = {
+    subs  : sub term array;
+    paths : path Tid.Table.t;
+  } [@@deriving bin_io, fields, sexp]
 
-let compare_program x y =
-  let compare x y = [%compare:sub term array] x y in
-  compare x.subs y.subs
+  let mangle_name addr tid name =
+    match addr with
+    | Some a ->
+      sprintf "%s@%s" name @@
+      Bap_bitvector.string_of_value ~hex:true a
+    | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+  let fix_names subs =
+    let names = String.Table.create () in
+    Array.iter subs ~f:(fun s ->
+        let name = s.self.name in
+        let tid = s.tid in
+        Hashtbl.change names name ~f:(function
+            | None -> Some tid
+            | Some tid' ->
+              if Tid.(tid' < tid) then Some tid
+              else Some tid'));
+    if Hashtbl.length names = Array.length subs then subs
+    else
+      Array.map ~f:(fun s ->
+          let tid = Hashtbl.find_exn names s.self.name in
+          if Tid.equal tid s.tid then s
+          else
+            let addr = Dict.find s.dict Bap_attributes.address in
+            let name = mangle_name addr s.tid s.self.name in
+            Tid.set_name s.tid name;
+            let self = {s.self with name} in
+            {s with self}) subs
+
+  let create ?(subs = [| |]) ?(paths = Tid.Table.create()) () =
+    {subs = fix_names subs; paths}
+
+  let compare x y =
+    let compare x y = [%compare:sub term array] x y in
+    compare x.subs y.subs
+end
+
+type program = Program.t [@@deriving bin_io,compare,sexp]
+open Program
 
 module Array = struct
   include Array
@@ -261,9 +304,7 @@ let cls typ par nil field = {
 let hash_of_term t = Tid.hash (tid t)
 let make_term tid self : 'a term = {tid; self; dict = Dict.empty}
 
-let nil_top = make_term Tid.nil {
-    subs = [| |] ; paths = Tid.Table.create ();
-  }
+let nil_top = make_term Tid.nil (Program.create ())
 
 let program_t = {
   par = Nil;
@@ -297,43 +338,15 @@ let jmp_t : (blk,jmp) cls = cls Jmp Blk nil_jmp Fields_of_blk.jmps
 let blk_t : (sub,blk) cls = cls Blk Sub nil_blk Fields_of_sub.blks
 let arg_t : (sub,arg) cls = cls Arg Sub nil_arg Fields_of_sub.args
 
-let mangle_name addr tid name =
-  match addr with
-  | Some a ->
-    sprintf "%s@%s" name @@
-    Bap_bitvector.string_of_value ~hex:true a
-  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
-
-let enforce_invariant subs =
-  let names = String.Table.create () in
-  Array.iter subs ~f:(fun s ->
-      let name = s.self.name in
-      let tid = s.tid in
-      Hashtbl.change names name ~f:(function
-          | None -> Some tid
-          | Some tid' ->
-            if Tid.(tid' < tid) then Some tid
-            else Some tid'));
-  Array.map ~f:(fun s ->
-      let tid = Hashtbl.find_exn names s.self.name in
-      if Tid.equal tid s.tid then s
-      else
-        let addr = Dict.find s.dict Bap_attributes.address in
-        let name = mangle_name addr s.tid s.self.name in
-        Tid.set_name s.tid name;
-        let self = {s.self with name} in
-        {s with self}) subs
-
 let sub_set prog subs =
-  let subs = enforce_invariant subs in
-  { prog with subs }
+  Program.create ~subs ~paths:prog.paths ()
 
 let sub_t : (program, sub) cls = {
   par = Top;
   typ = Sub;
   nil = nil_sub;
   set = sub_set;
-  get = Field.get Fields_of_program.subs;
+  get = Program.subs;
 }
 
 let term_pp pp_self ppf t =
@@ -1340,10 +1353,8 @@ end
 module Ir_program = struct
   type t = program term
 
-  let create ?(tid=Tid.create ()) () : t = make_term tid {
-      subs = [| |] ;
-      paths = Tid.Table.create ();
-    }
+  let create ?(tid=Tid.create ()) () : t =
+    make_term tid (Program.create ())
 
   let proj1 t cs = t.self.subs.(cs.(0))
   let proj2 f t cs = (f (proj1 t cs).self).(cs.(1))
@@ -1441,10 +1452,9 @@ module Ir_program = struct
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
-      make_term tid {
-        subs = enforce_invariant (Vec.to_array subs);
-        paths = Tid.Table.create ();
-      }
+      make_term tid @@
+        Program.create ~subs:(Vec.to_array subs) ()
+
   end
 
   include Regular.Make(struct
