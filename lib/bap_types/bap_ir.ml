@@ -143,7 +143,7 @@ type sub = {
 
 
 type path = int array
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 
 type program = {
@@ -154,7 +154,6 @@ type program = {
 let compare_program x y =
   let compare x y = [%compare:sub term array] x y in
   compare x.subs y.subs
-
 
 module Array = struct
   include Array
@@ -289,16 +288,53 @@ let nil_blk : blk term =
 let nil_arg : arg term =
   make_term Tid.nil (undefined_var,undefined_exp,None)
 
-let nil_sub : sub term = make_term Tid.nil {
-    name = "undefined"; blks = [| |] ; args = [| |]}
+let nil_sub : sub term =
+  make_term Tid.nil { name = "undefined"; blks = [| |] ; args = [| |]}
 
 let def_t : (blk,def) cls = cls Def Blk nil_def Fields_of_blk.defs
 let phi_t : (blk,phi) cls = cls Phi Blk nil_phi Fields_of_blk.phis
 let jmp_t : (blk,jmp) cls = cls Jmp Blk nil_jmp Fields_of_blk.jmps
 let blk_t : (sub,blk) cls = cls Blk Sub nil_blk Fields_of_sub.blks
 let arg_t : (sub,arg) cls = cls Arg Sub nil_arg Fields_of_sub.args
-let sub_t : (program, sub) cls =
-  cls Sub Top nil_sub Fields_of_program.subs
+
+let mangle_name addr tid name =
+  match addr with
+  | Some a ->
+    sprintf "%s@%s" name @@
+    Bap_bitvector.string_of_value ~hex:true a
+  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+let enforce_invariant subs =
+  let names = String.Table.create () in
+  Array.iter subs ~f:(fun s ->
+      let name = s.self.name in
+      let tid = s.tid in
+      Hashtbl.change names name ~f:(function
+          | None -> Some tid
+          | Some tid' ->
+            if Tid.(tid' < tid) then Some tid
+            else Some tid'));
+  Array.map ~f:(fun s ->
+      let tid = Hashtbl.find_exn names s.self.name in
+      if Tid.equal tid s.tid then s
+      else
+        let addr = Dict.find s.dict Bap_attributes.address in
+        let name = mangle_name addr s.tid s.self.name in
+        Tid.set_name s.tid name;
+        let self = {s.self with name} in
+        {s with self}) subs
+
+let sub_set prog subs =
+  let subs = enforce_invariant subs in
+  { prog with subs }
+
+let sub_t : (program, sub) cls = {
+  par = Top;
+  typ = Sub;
+  nil = nil_sub;
+  set = sub_set;
+  get = Field.get Fields_of_program.subs;
+}
 
 let term_pp pp_self ppf t =
   let open Format in
@@ -458,7 +494,7 @@ module Ir_phi = struct
   let of_list ?tid var bs : phi term =
     create ?tid var (Tid.Map.of_alist_reduce bs ~f:(fun _ x -> x))
 
-  let create ?tid var src exp : phi term = of_list var [src,exp]
+  let create ?tid:_ var src exp : phi term = of_list var [src,exp]
 
   let values (phi : phi term) : (tid * exp) Seq.t =
     Map.to_sequence (rhs phi)
@@ -660,7 +696,7 @@ module Term = struct
 
   let filter t p ~f = apply (Array.filter ~f) t p
   let findi t p tid =
-    Array.findi (t.get p.self) ~f:(fun i x -> x.tid = tid)
+    Array.findi (t.get p.self) ~f:(fun _i x -> x.tid = tid)
 
   let next t p tid =
     let open Option.Monad_infix in
@@ -767,7 +803,7 @@ module Term = struct
 
   type ('a,'b) cata = 'a term -> 'b
 
-  let this x t = x
+  let this x _t = x
 
   let cata (type t) (cls : (_,t) cls)
       ~init:default
@@ -883,13 +919,13 @@ module Term = struct
   let visit cls ~f term init =
     enum cls term |> Seq.fold ~init ~f:(fun x t -> f t x)
 
-  let fident t x = x
+  let fident _t x = x
 
   class ['a] visitor = object(self)
     inherit ['a] Bil.exp_visitor
 
-    method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
-    method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
+    method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun _cls _t x -> x
+    method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun _cls _t x -> x
     method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a =
       fun cls t x ->
         let x = self#enter_term cls t x in
@@ -903,14 +939,14 @@ module Term = struct
           ~jmp:(fun t -> self#visit_jmp t x) |>
         self#leave_term cls t
 
-    method enter_program p x = x
-    method leave_program p x = x
+    method enter_program _p x = x
+    method leave_program _p x = x
 
-    method enter_sub sub x = x
-    method leave_sub sub x = x
+    method enter_sub _sub x = x
+    method leave_sub _sub x = x
 
-    method enter_blk blk x = x
-    method leave_blk blk x = x
+    method enter_blk _blk x = x
+    method leave_blk _blk x = x
 
     method run p x =
       self#enter_program p x |>
@@ -950,7 +986,7 @@ module Term = struct
     method visit_phi phi x =
       self#enter_phi phi x |>
       self#visit_var (fst phi.self) |> fun x ->
-      Map.fold (snd phi.self) ~init:x ~f:(fun ~key ~data x ->
+      Map.fold (snd phi.self) ~init:x ~f:(fun ~key:_ ~data x ->
           self#visit_exp data x) |>
       self#leave_phi phi
 
@@ -1392,64 +1428,21 @@ module Ir_program = struct
       | Top -> Some p
       | _ -> None
 
-  let sub_aliases s =
-    Option.value ~default:[]
-      (Term.get_attr s Ir_sub.aliases)
-
-  let sub_addr s =
-    Term.get_attr s Bap_attributes.address
-
-  let mangle_name addr tid name =
-    let mname = match addr with
-      | Some a -> Bap_bitvector.string_of_value ~hex:true a
-      | None -> Tid.to_string tid in
-    sprintf "%s@%s" name mname
-
-  let need_to_mangle s names =
-    let tid = Term.tid s in
-    let sub_names = Ir_sub.name s :: sub_aliases s in
-    List.for_all sub_names ~f:(fun n ->
-        match Hashtbl.find names n with
-        | None -> false
-        | Some tid' -> not (Tid.equal tid tid'))
-
-  let fix_names names subs =
-    let may_mangle addr tid name =
-      match Hashtbl.find names name with
-      | None -> name
-      | Some tid' ->
-        if Tid.equal tid tid' then name
-        else mangle_name addr tid name in
-    let subs' = Vec.foldi subs ~init:[] ~f:(fun i acc sub ->
-        if not (need_to_mangle sub names) then acc
-        else
-          let may_mangle = may_mangle (sub_addr sub) (Term.tid sub) in
-          let als = List.map (sub_aliases sub) ~f:may_mangle in
-          let nam = may_mangle (Ir_sub.name sub) in
-          let sub = Term.set_attr sub Ir_sub.aliases als in
-          let sub = Ir_sub.with_name sub nam in
-          (i, sub) :: acc) in
-    List.iter ~f:(fun (i, s) -> Vec.set subs i s) subs'
-
   module Builder = struct
-    type t = tid option * tid String.Table.t * sub term vector
+    type t = tid option * sub term vector
 
     let create ?tid ?(subs=16) () : t =
-      tid, String.Table.create (), Vec.create ~capacity:subs nil_sub
+      tid, Vec.create ~capacity:subs nil_sub
 
-    let add_sub (_,names,subs) sub =
-      let sub_names = Ir_sub.name sub :: sub_aliases sub in
-      List.iter sub_names
-        ~f:(fun n -> Hashtbl.set names n (Term.tid sub));
-      Vec.append subs sub
+    let add_sub (_,subs) =
+      Vec.append subs
 
-    let result (tid,names,subs) : program term =
-      fix_names names subs;
+    let result (tid,subs) : program term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
       make_term tid {
-        subs = Vec.to_array subs;
+        subs = enforce_invariant (Vec.to_array subs);
         paths = Tid.Table.create ();
       }
   end
