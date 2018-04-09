@@ -197,7 +197,7 @@ let lwaux cpu ops =
     ra := ra + rb;
   ]
 
-(** Fixed-point Load Dobuleword
+(** Fixed-point Load Doubleword
     Pages 48-54 of IBM Power ISATM Version 3.0 B
     examples:
     e8 29 00 08    ld r1, 8(r9) *)
@@ -209,7 +209,7 @@ let ld cpu ops =
     rt := cpu.load (ra + im) doubleword;
   ]
 
-(** Fixed-point Load Dobuleword Indexed
+(** Fixed-point Load Doubleword Indexed
     Pages 48-54 of IBM Power ISATM Version 3.0 B
     examples:
     7c 28 48 2a    ldx r1, r8, r9 *)
@@ -221,7 +221,7 @@ let ldx cpu ops =
     rt := cpu.load (ra + rb) doubleword;
   ]
 
-(** Fixed-point Load Dobuleword with Update
+(** Fixed-point Load Doubleword with Update
     Pages 48-54 of IBM Power ISATM Version 3.0 B
     examples:
     e8 29 00 09    ldu r1, 8(r9) *)
@@ -234,7 +234,7 @@ let ldu cpu ops =
     ra := ra + im;
   ]
 
-(** Fixed-point Load Dobuleword with Update Indexed
+(** Fixed-point Load Doubleword with Update Indexed
     Pages 48-54 of IBM Power ISATM Version 3.0 B
     examples:
     7c 28 48 6a    ldux r1, r8, r9 *)

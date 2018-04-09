@@ -67,7 +67,7 @@ let rlwnm cpu ops =
       mask := (mask << (width ra - stop)) lor (mask >> (start + one));
     ];
     tmp := nth word rs 1;
-    ra := (nth doubleword ((tmp ^ tmp ^ tmp) << (last rb 5)) 0) land mask;
+    ra := (nth cpu.word_width ((tmp ^ tmp ^ tmp) << (last rb 5)) 0) land mask;
   ]
 
 (** Fix-point Rotate Left Word Immediate then Mask Insert
@@ -103,7 +103,7 @@ let rlwimi cpu ops =
       mask := (mask << (width ra - stop)) lor (mask >> (start + one));
     ];
     tmp1 := nth word rs 1;
-    tmp2 := nth doubleword ((tmp1 ^ tmp1 ^ tmp1) << sh) 0;
+    tmp2 := nth cpu.word_width ((tmp1 ^ tmp1 ^ tmp1) << sh) 0;
     ra := (tmp2 land mask) lor (ra land (lnot mask));
   ]
 

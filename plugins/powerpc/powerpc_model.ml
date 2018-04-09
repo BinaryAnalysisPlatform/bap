@@ -33,19 +33,22 @@ module type Model_exp = sig
   val cri_fields : exp Int.Map.t
 end
 
-module type PowerPC = sig
-  module E : Model_exp
-  include Model with type t := var
-
-  val mem : var
-  val flags : Var.Set.t
+module type Bitwidth = sig
   val gpr_bitwidth : int
   val fpr_bitwidth : int
-  val vr_bitwidth  : int
-  val cr_bitwidth  : int
   val lr_bitwidth  : int
   val ctr_bitwidth : int
   val tar_bitwidth : int
+  val cr_bitwidth  : int
+  val vr_bitwidth  : int
+end
+
+module type PowerPC = sig
+  module E : Model_exp
+  include Model with type t := var
+  include Bitwidth
+  val mem : var
+  val flags : Var.Set.t
 end
 
 let range32 = List.range 0 32
@@ -73,17 +76,12 @@ let make_regs_i typ prefix range =
 
 let flag name = Var.create name (Type.imm 1)
 
-module Bitwidth = struct
-  let fpr_bitwidth = 64
-  let vr_bitwidth  = 128
-  let cr_bitwidth  = 32
-  let lr_bitwidth  = 64
-  let ctr_bitwidth = 64
-  let tar_bitwidth = 64
-end
+module Vars (B : Bitwidth) = struct
+  open B
 
-module Vars = struct
-  open Bitwidth
+  (** general purpose registers  *)
+  let gpr = make_regs (Type.imm gpr_bitwidth) "R" ~alias:"X" range32
+  let gpri = make_regs_i (Type.imm gpr_bitwidth) "R" range32
 
   (** floating point registers *)
   let fpr = make_regs (Type.imm fpr_bitwidth) "F" range32
@@ -101,13 +99,6 @@ module Vars = struct
 
   (** target register  *)
   let tar = Var.create "TAR" (Type.imm tar_bitwidth)
-
-  (** fixed precision flags  *)
-  let so = flag "SO" (** summary overflow *)
-  let ca = flag "CA"
-  let ov = flag "OV"
-  let ca32 = flag "CA32" (** carry of low-order 32 bit result *)
-  let ov32 = flag "OV32" (** overflow of low-order 32 bit result *)
 
   (** FPRF floating point result flags  *)
   let float_c = flag "C"          (** Result Class Descriptor        *)
@@ -166,7 +157,7 @@ module Vars = struct
 
   let crn =
     Int.Map.fold cri ~init:String.Map.empty
-      ~f:(fun ~key ~data:var acc ->
+      ~f:(fun ~key:_ ~data:var acc ->
           Map.add acc (Var.name var) var)
 
   let fields = [
@@ -187,6 +178,14 @@ module Vars = struct
   let cri_fields =
     List.fold fields ~init:Int.Map.empty ~f:(fun fs (_, index, fd) ->
         Map.add fs index fd)
+
+  (** fixed precision flags  *)
+  let so = flag "SO" (** summary overflow *)
+  let ca = flag "CA"
+  let ov = flag "OV"
+  let ca32 = flag "CA32" (** carry of low-order 32 bit result *)
+  let ov32 = flag "OV32" (** overflow of low-order 32 bit result *)
+
 end
 
 let of_vars vars =
@@ -195,28 +194,32 @@ let of_vars vars =
 let of_vars_i vars =
   Map.map vars ~f:(fun v -> Exp.of_var v)
 
-module Exps = struct
+module Exps(B : Bitwidth) = struct
+  module Vars = Vars(B)
   open Vars
 
+  let gpr  = of_vars gpr
+  let gpri = of_vars_i gpri
+  let fpr  = of_vars fpr
   let fpri = of_vars_i fpri
-  let fpr = of_vars fpr
-  let vri = of_vars_i vri
-  let vr = of_vars vr
-  let ctr = Exp.of_var ctr
-  let lr  = Exp.of_var lr
-  let tar = Exp.of_var tar
+  let vr   = of_vars vr
+  let vri  = of_vars_i vri
+  let ctr  = Exp.of_var ctr
+  let lr   = Exp.of_var lr
+  let tar  = Exp.of_var tar
+
+  let cri = Map.map cri ~f:(fun v -> Exp.of_var v)
+
+  let crn =
+    Int.Map.fold Vars.cri ~init:String.Map.empty
+      ~f:(fun ~key:_ ~data:var acc ->
+          Map.add acc (Var.name var) (Exp.of_var var))
+
   let so  = Exp.of_var so
   let ca  = Exp.of_var ca
   let ov  = Exp.of_var ov
   let ca32 = Exp.of_var ca32
   let ov32 = Exp.of_var ov32
-
-  let crn =
-    Int.Map.fold cri ~init:String.Map.empty
-      ~f:(fun ~key ~data:var acc ->
-          Map.add acc (Var.name var) (Exp.of_var var))
-
-  let cri = Map.map cri ~f:(fun v -> Exp.of_var v)
 
   let cr = Exp.of_vars (List.rev cr_bits)
 
@@ -234,19 +237,22 @@ module type Spec = sig
 end
 
 module Make_ppc(S : Spec) : PowerPC = struct
-  include Bitwidth
-  let gpr_bitwidth = S.gpr_bitwidth
 
+  module Bitwidth = struct
+    let gpr_bitwidth = S.gpr_bitwidth
+    let fpr_bitwidth = S.gpr_bitwidth
+    let lr_bitwidth  = S.gpr_bitwidth
+    let ctr_bitwidth = S.gpr_bitwidth
+    let tar_bitwidth = S.gpr_bitwidth
+    let cr_bitwidth  = 32
+    let vr_bitwidth  = 128
+  end
+
+  module Vars = Vars(Bitwidth)
+  module E = Exps(Bitwidth)
 
   include Vars
-  let gpr = make_regs (Type.imm gpr_bitwidth) "R" ~alias:"X" range32
-  let gpri = make_regs_i (Type.imm gpr_bitwidth) "R" range32
-
-  module E = struct
-    include Exps
-    let gpri = of_vars_i gpri
-    let gpr = of_vars gpr
-  end
+  include Bitwidth
 
   let mem = Var.create "mem" (Type.mem S.addr_size `r8)
 
