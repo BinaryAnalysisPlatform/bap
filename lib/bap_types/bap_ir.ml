@@ -145,40 +145,6 @@ type sub = {
 type path = int array
 [@@deriving bin_io, compare, sexp]
 
-let mangle_name addr tid name =
-  match addr with
-  | Some a ->
-    sprintf "%s@%s" name @@
-    Bap_bitvector.string_of_value ~hex:true a
-  | None -> sprintf "%s%%%s" name (Tid.to_string tid)
-
-let mangle_sub s =
-  let addr = Dict.find s.dict Bap_attributes.address in
-  let name = mangle_name addr s.tid s.self.name in
-  Tid.set_name s.tid name;
-  let self = {s.self with name} in
-  {s with self}
-
-let fix_names olds news =
-  let is_new tid name =
-    match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
-    | Some s -> String.(name <> s.self.name)
-    | None -> true in
-  let keep_name tids name tid = Map.add tids ~key:name ~data:tid in
-  let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
-      match Map.find tids sub.self.name with
-      | None -> keep_name tids sub.self.name sub.tid
-      | Some _ ->
-        if is_new sub.tid sub.self.name then
-          keep_name tids sub.self.name sub.tid
-        else tids) in
-  Array.map news ~f:(fun sub ->
-      if Map.existsi tids
-          ~f:(fun ~key:name ~data:tid ->
-              String.equal name sub.self.name &&
-              Tid.equal tid sub.tid) then sub
-      else mangle_sub sub)
-
 module Program : sig
   type t = private {
     subs  : sub term array;
@@ -194,6 +160,40 @@ end = struct
     subs  : sub term array;
     paths : path Tid.Table.t;
   } [@@deriving bin_io, fields, sexp]
+
+  let mangle_name addr tid name =
+    match addr with
+    | Some a ->
+      sprintf "%s@%s" name @@
+      Bap_bitvector.string_of_value ~hex:true a
+    | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+  let mangle_sub s =
+    let addr = Dict.find s.dict Bap_attributes.address in
+    let name = mangle_name addr s.tid s.self.name in
+    Tid.set_name s.tid name;
+    let self = {s.self with name} in
+    {s with self}
+
+  let fix_names olds news =
+    let is_new tid name =
+      match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
+      | Some s -> String.(name <> s.self.name)
+      | None -> true in
+    let keep_name tids name tid = Map.add tids ~key:name ~data:tid in
+    let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
+        match Map.find tids sub.self.name with
+        | None -> keep_name tids sub.self.name sub.tid
+        | Some _ ->
+          if is_new sub.tid sub.self.name then
+            keep_name tids sub.self.name sub.tid
+          else tids) in
+    Array.map news ~f:(fun sub ->
+        if Map.existsi tids
+            ~f:(fun ~key:name ~data:tid ->
+                String.equal name sub.self.name &&
+                Tid.equal tid sub.tid) then sub
+        else mangle_sub sub)
 
   let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
 
