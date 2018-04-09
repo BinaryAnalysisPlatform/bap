@@ -192,6 +192,7 @@ let program_info =
     `I ("$(b,--list-formats)", Bap_cmdline_terms.list_formats_doc)
   ] @ Bap_cmdline_terms.common_loader_options
     @ Bap_cmdline_terms.options_for_passes
+    @ Bap_cmdline_terms.recipe_doc
     @ [
       `S "BUGS";
       `P "Report bugs to \
@@ -260,9 +261,16 @@ let eval_recipe name =
 
 
 let print_recipe r =
-  printf "%s@\nRecipe Arguments: %s@\n"
-    (Recipe.descr r)
-    (String.concat_array ~sep:" " (Recipe.argv r))
+  printf "DESCRIPTION@\n@\n%s@\n@\n" (Recipe.descr r);
+  let params = Recipe.params r in
+  if params <> [] then begin
+    printf "PARAMETERS@\n@\n";
+    List.iter params ~f:(printf "- %a@\n" Recipe.pp_param);
+    printf "@\n";
+  end;
+  let args = Recipe.argv r in
+  let sep = if Array.length args > 4 then " \\\n" else " " in
+  printf "COMMAND LINE@\n@\n%s@\n" (String.concat_array ~sep args)
 
 let summary str =
   match String.index str '\n' with
@@ -281,7 +289,8 @@ let print_recipes_and_exit () =
             let name = Filename.chop_suffix file ".recipe" in
             match Recipe.load ~paths:recipe_paths name with
             | Ok r ->
-              printf "%-32s %s\n" name (summary (Recipe.descr r));
+              printf "%-32s %s\n" (Filename.basename name)
+                (summary (Recipe.descr r));
               Recipe.cleanup r
             | Error err ->
               eprintf "Malformed recipe %s: %a@\n%!" file
