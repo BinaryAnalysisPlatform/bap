@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap_ida.Std
+open Bap.Std
 
 type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
 
@@ -73,8 +74,10 @@ let setup_headless_env path =
     with Not_found -> "", lib in
   Unix.putenv var new_path;
   fun () ->
-    FileUtil.rm ~recurse:true [lib];
-    if old_path <> "" then Unix.putenv var old_path
+    try
+      FileUtil.rm ~recurse:true [lib];
+      if old_path <> "" then Unix.putenv var old_path
+    with _ -> ()
 
 (* ida works fine only if everything is in the same folder  *)
 let run (t:ida) cmd =
@@ -82,10 +85,11 @@ let run (t:ida) cmd =
   let clean = match t.curses with
     | Some path -> setup_headless_env path
     | None -> fun () -> () in
+  let cleanup () = clean (); Sys.chdir cwd in
   Sys.chdir (Filename.dirname t.exe);
-  cmd ();
-  clean ();
-  Sys.chdir cwd
+  try cmd (); cleanup ()
+  with exn -> cleanup (); raise exn
+
 
 let check_path path = match Bap_ida_check.check_path path with
   | Ok () -> ()
