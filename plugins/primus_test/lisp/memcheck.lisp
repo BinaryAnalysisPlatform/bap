@@ -44,6 +44,14 @@
   (let ((reg (region-contains (symbol-concat 'memcheck/dead heap) ptr)))
     (when reg (memcheck/report-use-after-release reg))))
 
+(defun memcheck-bounds (heap beg len)
+  (when (and beg len)
+    (let ((end (-1 (+ beg len)))
+          (r1 (region-contains (symbol-concat 'memcheck/live heap) beg))
+          (r2 (region-contains (symbol-concat 'memcheck/live heap) end)))
+      (when (not (= r1 r2))
+        (memcheck/report-out-of-bound r1 r2)))))
+
 ;; Private
 ;; reports
 (defun memcheck/report-use-after-release (ptr)
@@ -64,6 +72,12 @@
   (memcheck/register ptr 'memcheck/site/corrupted-release)
   (report-incident 'memcheck-corrupted-release ptr
                    'memcheck/site/corrupted-release))
+
+(defun memcheck/report-out-of-bound (r1 r2)
+  (incident-report 'memcheck-out-of-bound
+                   (dict-get 'memcheck/site/acquire r1)
+                   (dict-get 'memcheck/site/acquire r2)
+                   (incident-location)))
 
 (defun memcheck/register (ptr site)
   (dict-add site ptr (incident-location)))

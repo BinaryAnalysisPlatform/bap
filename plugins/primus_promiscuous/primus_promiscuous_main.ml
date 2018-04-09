@@ -127,7 +127,11 @@ module Main(Machine : Primus.Machine.S) = struct
       Machine.current () >>= fun pid ->
       do_fork blk ~child:Machine.return >>= fun id ->
       if id = pid then Machine.return ()
-      else Linker.exec (`tid dst)
+      else
+        Machine.Global.get state >>= fun {forkpoints} ->
+        if Set.mem forkpoints dst
+        then Eval.halt >>= never_returns
+        else Linker.exec (`tid dst)
     | _ -> Machine.return ()
 
   let fork_on_calls blk jmp = match Jmp.kind jmp with
@@ -138,9 +142,12 @@ module Main(Machine : Primus.Machine.S) = struct
     | None -> true
     | Some last -> Term.same def last
 
+  let has_no_def blk = Term.length def_t blk = 0
+
   let step level =
     let open Primus.Pos in
     match level with
+    | Blk {me=blk} when has_no_def blk -> fork blk
     | Def {up={me=blk}; me=def} when is_last blk def ->
       fork blk
     | Jmp {up={me=blk}; me=jmp} -> fork_on_calls blk jmp

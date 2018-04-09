@@ -280,7 +280,7 @@ module Make (Machine : Machine) = struct
     !!exp_left x >>| fun () -> r
   and eval_load a = eval_exp a >>= load_byte
   and eval_store m a x =
-    eval_exp m >>= fun _ ->
+    eval_storage m >>= fun () ->
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
     store_byte a x >>| fun () -> a
@@ -304,6 +304,9 @@ module Make (Machine : Machine) = struct
     eval_exp x >>= fun x ->
     eval_exp y >>= fun y ->
     concat x y
+  and eval_storage = function
+    | Var _ -> Machine.return ()
+    | mem -> Machine.void (eval_exp mem)
 
   let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
 
@@ -389,8 +392,10 @@ module Make (Machine : Machine) = struct
       Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
       enter cls curr t >>= fun () ->
       Machine.catch (f t)
-        (fun exn -> leave cls curr t >>= fun () -> Machine.raise exn)
-      >>= fun r ->
+        (fun exn ->
+           leave cls curr t >>= fun () ->
+           cleanup >>= fun () ->
+           Machine.raise exn) >>= fun r ->
       leave cls curr t >>= fun () ->
       cleanup >>= fun () ->
       return r
@@ -427,7 +432,7 @@ module Make (Machine : Machine) = struct
     | None -> failf "a non-return call returned" ()
 
   let goto cond c = label cond c
-  let ret cond l = label cond l
+  let ret _ _ = Machine.return ()
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with

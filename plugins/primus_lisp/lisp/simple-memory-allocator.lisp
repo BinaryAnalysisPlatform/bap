@@ -19,10 +19,13 @@
   "a byte that will be used to fill guard edges")
 
 
+(defparameter *malloc-zero-sentinel* 0
+  "a pointer that is returned by (malloc 0)")
+
 (defun malloc (n)
   "allocates a memory region of size N"
   (declare (external "malloc"))
-  (if (= n 0) brk
+  (if (= n 0) *malloc-zero-sentinel*
     (if (malloc-will-reach-limit n) 0
       (let ((n (+ n (* 2 *malloc-guard-edges*)))
             (ptr brk)
@@ -40,7 +43,7 @@
 (defun calloc (n s)
   "allocates memory and initializes it with zero"
   (declare (external "calloc"))
-  (malloc (* n s)))
+  (malloc (* n s))) ; in our implementation malloc zeros memory
 
 
 (defun malloc-heap-size ()

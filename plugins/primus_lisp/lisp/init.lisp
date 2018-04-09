@@ -59,8 +59,9 @@
 (defmacro or (x) x)
 
 (defun compare (x y)
-  "(compare X Y) returns 0 if X = Y, -1 if X<Y and +1 if X>Y"
-  (if (< x y) (-1 0) (if (> x y) 1 0)))
+  "(compare X Y) returns 0 if X = Y, a negative value if X<Y
+   and a positive value if X>Y"
+  (- x y))
 
 (defmacro assert (c)
   "(assert COND) terminates program if COND is false"

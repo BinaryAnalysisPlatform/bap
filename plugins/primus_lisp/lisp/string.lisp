@@ -9,6 +9,7 @@
       (incr len p))
     len))
 
+
 (defun strcpy (dst src)
   (declare (external "strcpy"))
   (let ((dst dst))
@@ -20,7 +21,7 @@
 (defun strncpy (dst src len)
   (declare (external "strncpy"))
   (let ((dst dst))
-    (while (and len (not (points-to-null dst)))
+    (while (and len (not (points-to-null src)))
       (decr len)
       (copy-byte-shift dst src))
     (memory-write dst 0:8))
@@ -29,7 +30,7 @@
 (defun strdup (src)
   (declare (external "strdup"))
   (let ((dst (malloc (+1 (strlen src)))))
-    (when dst (strcpy dst src))))
+    (and dst (strcpy dst src))))
 
 
 (defun memmove (dst src len)
@@ -84,6 +85,18 @@
   (declare (external "strrchr"))
   (memrchr p c (+ (strlen p) 1)))
 
+
+(defun strpbrk (str set)
+  (declare (external "strpbrk"))
+  (let ((p set) (found 0))
+    (while (and
+            (not (points-to-null p))
+            (not found))
+      (set found (strchr s (memory-read p)))
+      (incr p))
+    found))
+
+
 (defun memset (p c n)
   (declare (external "memset"))
   (let ((p p))
@@ -101,10 +114,18 @@
       (incr p1 p2 i))
     res))
 
+(defun strlen/with-null (s)
+  "returns a length of the string S
+   (including the terminating null character)"
+  (+1 (strlen s)))
+
 (defun strncmp (s1 s2 n)
   (declare (external "strncmp"))
-  (memcmp s1 s2 (min (strlen s1) (strlen s2) n)))
+  (memcmp s1 s2 (min n
+                     (strlen/with-null s1)
+                     (strlen/with-null s2))))
 
 (defun strcmp (s1 s2)
   (declare (external "strcmp"))
-  (memcmp s1 s2 (min (strlen s1) (strlen s2))))
+  (memcmp s1 s2 (min (strlen/with-null s1)
+                     (strlen/with-null s2))))
