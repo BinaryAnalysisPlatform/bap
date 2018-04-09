@@ -145,7 +145,6 @@ type sub = {
 type path = int array
 [@@deriving bin_io, compare, sexp]
 
-
 let mangle_name addr tid name =
   match addr with
   | Some a ->
@@ -160,41 +159,25 @@ let mangle_sub s =
   let self = {s.self with name} in
   {s with self}
 
-let names_of_subs subs =
-  let names = String.Table.create () in
-  Array.iter subs ~f:(fun s ->
-      Hashtbl.change names s.self.name ~f:(function
-          | None -> Some [s.tid]
-          | Some tids -> Some (s.tid :: tids)));
-  names
-
-let fix_names ?(old_names=String.Table.create ()) subs =
-  let names = names_of_subs subs in
-  let conflicts = Hashtbl.count names ~f:(fun x -> List.length x > 1) in
-  if conflicts = 0 then subs
-  else
-    let remove name tid = match Hashtbl.find names name with
-      | None -> ()
-      | Some tids ->
-        List.filter ~f:(fun t -> not (Tid.equal t tid)) tids |>
-        Hashtbl.set names name in
-    let mangle s =
-      remove s.self.name s.tid;
-      mangle_sub s in
-    let is_old s =
-      match Hashtbl.find old_names s.self.name with
-      | Some old_tid -> Tid.equal s.tid old_tid
-      | _ -> false in
-    Array.map ~f:(fun sub ->
-        match Hashtbl.find_exn names sub.self.name with
-        | [] | [_]-> sub
-        | tids ->
-          if is_old sub then mangle sub
-          else
-            let max_tid = Option.value_exn
-                (List.max_elt ~cmp:Tid.compare tids) in
-            if Tid.equal sub.tid max_tid then sub
-            else mangle sub) subs
+let fix_names olds news =
+  let is_new tid name =
+    match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
+    | Some s -> String.(name <> s.self.name)
+    | None -> true in
+  let keep_name tids name tid = Map.add tids ~key:name ~data:tid in
+  let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
+      match Map.find tids sub.self.name with
+      | None -> keep_name tids sub.self.name sub.tid
+      | Some _ ->
+        if is_new sub.tid sub.self.name then
+          keep_name tids sub.self.name sub.tid
+        else tids) in
+  Array.map news ~f:(fun sub ->
+      if Map.existsi tids
+          ~f:(fun ~key:name ~data:tid ->
+              String.equal name sub.self.name &&
+              Tid.equal tid sub.tid) then sub
+      else mangle_sub sub)
 
 module Program : sig
   type t = private {
@@ -212,13 +195,9 @@ end = struct
     paths : path Tid.Table.t;
   } [@@deriving bin_io, fields, sexp]
 
-  let empty () = {subs = [| |] ; paths = Tid.Table.create () }
+  let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
 
-  let update p subs =
-    let old_names = String.Table.create () in
-    Array.iter p.subs
-      ~f:(fun s -> Hashtbl.set old_names s.self.name s.tid);
-    {p with subs = fix_names ~old_names subs}
+  let update p subs = { p with subs = fix_names p.subs subs }
 
   let compare x y =
     let compare x y = [%compare:sub term array] x y in
