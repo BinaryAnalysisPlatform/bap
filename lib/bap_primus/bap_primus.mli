@@ -634,6 +634,9 @@ module Std : sig
         (** see {!Word.sub}  *)
         val sub : t -> t -> t m
 
+        (** see {!Word.mul}  *)
+        val mul : t -> t -> t m
+
         (** see {!Word.div}  *)
         val div : t -> t -> t m
 
