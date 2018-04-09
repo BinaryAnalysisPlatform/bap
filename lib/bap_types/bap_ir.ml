@@ -189,10 +189,8 @@ end = struct
             keep_name tids sub.self.name sub.tid
           else tids) in
     Array.map news ~f:(fun sub ->
-        if Map.existsi tids
-            ~f:(fun ~key:name ~data:tid ->
-                String.equal name sub.self.name &&
-                Tid.equal tid sub.tid) then sub
+        let tid' = Map.find_exn tids sub.self.name in
+        if Tid.equal tid' sub.tid then sub
         else mangle_sub sub)
 
   let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
