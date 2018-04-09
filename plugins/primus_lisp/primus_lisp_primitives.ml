@@ -11,6 +11,8 @@ module Lib(Machine : Primus.Machine.S) = struct
   let all f args = List.exists args ~f |> Value.of_bool
   let addr_width =
     Machine.arch >>| Arch.addr_size >>| Size.in_bits
+  let endian =
+    Machine.arch >>| Arch.endian
   let null = addr_width >>= Value.zero
   let negone = null >>= Value.lnot
   let false_ = Value.zero 1
@@ -94,7 +96,8 @@ end
 module MemoryRead(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
-    | [x] -> Eval.load x LittleEndian `r8
+    | [x] ->
+      endian >>= fun e -> Eval.load x e `r8
     | _ -> Lisp.failf "memory-read requires one argument" ()
 end
 
@@ -102,7 +105,8 @@ module MemoryWrite(Machine : Primus.Machine.S) = struct
   include Lib(Machine)
   let run = function
     | [a;x] ->
-      Eval.store a x LittleEndian `r8 >>= fun () ->
+      endian >>= fun e ->
+      Eval.store a x e `r8 >>= fun () ->
       Value.succ a
     | _ -> Lisp.failf "memory-write requires two arguments" ()
 end

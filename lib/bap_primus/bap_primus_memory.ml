@@ -145,7 +145,11 @@ module Make(Machine : Machine) = struct
   let get addr =
     Machine.Local.get state >>= read addr
 
+
   let set addr value =
+    if Value.bitwidth value <> 8
+    then invalid_argf "Memory.set %a %a: value is not a byte"
+        Addr.pps addr Value.pps value ();
     Machine.Local.get state >>=
     write addr value >>=
     Machine.Local.put state

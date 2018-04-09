@@ -1316,7 +1316,10 @@ module Std : sig
         val get : addr -> value Machine.t
 
 
-        (** [set a x] stores the byte [x] at the address [a]. *)
+        (** [set a x] stores the byte [x] at the address [a].
+
+            Precondition: [Value.bitwidth x = 8].
+        *)
         val set : addr -> value -> unit Machine.t
 
         (** [load a] loads a byte from the given address [a].
@@ -1328,6 +1331,8 @@ module Std : sig
         (** [store a x] stores the byte [x] at the address [a].
 
             Same as [Value.of_word x >>= set a].
+
+            Precondition: [Value.bitwidth x = 8].
         *)
         val store : addr -> word -> unit Machine.t
 
