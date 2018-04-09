@@ -188,10 +188,12 @@ end = struct
           if is_new sub.tid sub.self.name then
             keep_name tids sub.self.name sub.tid
           else tids) in
-    Array.map news ~f:(fun sub ->
-        let tid' = Map.find_exn tids sub.self.name in
-        if Tid.equal tid' sub.tid then sub
-        else mangle_sub sub)
+    if Array.length news = Map.length tids then news
+    else
+      Array.map news ~f:(fun sub ->
+          let tid' = Map.find_exn tids sub.self.name in
+          if Tid.equal tid' sub.tid then sub
+          else mangle_sub sub)
 
   let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
 
