@@ -315,3 +315,92 @@ module Make(Interval : Interval) = struct
   let fold_result = C.fold_result
 end
 
+module type Interval_binable = sig
+  type t [@@deriving bin_io, compare, sexp]
+  type point [@@deriving bin_io, compare, sexp]
+  include Interval with type t := t and type point := point
+end
+
+module type S_binable = sig
+  type 'a t [@@deriving bin_io, compare, sexp]
+  include S with type 'a t := 'a t
+end
+
+module Make_binable(Interval : Interval_binable) = struct
+  module Base = Make(Interval)
+
+  type key = Interval.t [@@deriving sexp, compare, bin_io]
+
+  module Point = Comparable.Make_plain(struct
+      type t = Interval.point [@@deriving compare, sexp, bin_io]
+    end)
+
+  type point = Interval.point [@@deriving compare, sexp, bin_io]
+
+ type +'a node = 'a Base.node = {
+    lhs : 'a node option;
+    rhs : 'a node option;
+    key : key;
+    data : 'a;
+    height : int;
+    greatest : point;
+    least : point;
+  } [@@deriving fields, sexp, compare, bin_io]
+
+  type +'a t = 'a node option [@@deriving sexp, compare, bin_io]
+
+  let height = Base.height
+  let least = Base.least
+  let greatest = Base.greatest
+  let empty = Base.empty
+  let bound = Base.bound
+  let create = Base.create
+  let singleton = Base.singleton
+  let min_binding = Base.min_binding
+  let max_binding = Base.max_binding
+  let bal = Base.bal
+  let add = Base.add
+  let is_inside = Base.is_inside
+  let lookup = Base.lookup
+  let is_dominated = Base.is_dominated
+  let has_intersections = Base.has_intersections
+  let can't_be_in_tree = Base.can't_be_in_tree
+  let can't_be_dominated = Base.can't_be_dominated
+  let query = Base.query
+  let dominators = Base.dominators
+  let intersections = Base.intersections
+  let dominates = Base.dominates
+  let intersects = Base.intersects
+  let contains = Base.contains
+  let map = Base.map
+  let mapi = Base.mapi
+  let remove_min_binding = Base.remove_min_binding
+  let splice = Base.splice
+  let mem_equal = Base.mem_equal
+  let remove = Base.remove
+  let remove_if = Base.remove_if
+  let remove_intersections = Base.remove_intersections
+  let remove_dominators = Base.remove_dominators
+  let filter_mapi = Base.filter_mapi
+  let filter_map = Base.filter_map
+  let filter = Base.filter
+  let to_sequence = Base.to_sequence
+  let fold = Base.fold
+  let count = Base.count
+  let sum = Base.sum
+  let iter = Base.iter
+  let length = Base.length
+  let is_empty = Base.is_empty
+  let exists = Base.exists
+  let mem = Base.mem
+  let for_all = Base.for_all
+  let find_map = Base.find_map
+  let find = Base.find
+  let to_list = Base.to_list
+  let to_array = Base.to_array
+  let min_elt = Base.min_elt
+  let max_elt = Base.max_elt
+  let fold_until = Base.fold_until
+  let fold_result = Base.fold_result
+
+end

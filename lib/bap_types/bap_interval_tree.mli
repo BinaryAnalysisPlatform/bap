@@ -41,3 +41,18 @@ end
 module Make(Interval : Interval) : S 
   with type key := Interval.t 
    and type point := Interval.point
+
+module type Interval_binable = sig
+  type t [@@deriving bin_io, compare, sexp]
+  type point [@@deriving bin_io, compare, sexp]
+  include Interval with type t := t and type point := point
+end
+
+module type S_binable = sig
+  type 'a t [@@deriving bin_io, compare, sexp]
+  include S with type 'a t := 'a t
+end
+
+module Make_binable(Interval : Interval_binable) : S_binable
+  with type key := Interval.t
+   and type point := Interval.point

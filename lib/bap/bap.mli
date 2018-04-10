@@ -950,6 +950,38 @@ module Std : sig
     module Make(Interval : Interval) : S
       with type key := Interval.t
        and type point := Interval.point
+
+    (**  Binable Abstract Interval.
+
+         An extension of the Interval signature that supports the
+         necessary extensions to be serializable as a
+         {{!Value}universal value}.
+    *)
+    module type Interval_binable = sig
+      type t [@@deriving bin_io, compare, sexp]
+      type point [@@deriving bin_io, compare, sexp]
+      include Interval with type t := t and type point := point
+    end
+
+    (** Binable Interval Tree.
+
+        An extension of the Interval tree signature that supports
+        the necessary extensions to be serializable as a
+        {{!Value}universal value}.
+    *)
+    module type S_binable = sig
+      type 'a t [@@deriving bin_io, compare, sexp]
+      include S with type 'a t := 'a t
+    end
+
+    (** [Make_binable(Interval)] create an abstract interval tree data type
+        that uses abstract [Interval] and can be serialized as a
+        {{!Value}universal value}.
+    *)
+    module Make_binable(Interval : Interval_binable) : S_binable
+      with type key := Interval.t
+       and type point := Interval.point
+
   end
 
   type value               [@@deriving bin_io, compare, sexp]
