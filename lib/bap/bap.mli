@@ -953,9 +953,8 @@ module Std : sig
 
     (**  Binable Abstract Interval.
 
-         An extension of the Interval signature that supports the
-         necessary extensions to be serializable as a
-         {{!Value}universal value}.
+         An extension of the Interval signature with the
+         Binable interface.
     *)
     module type Interval_binable = sig
       type t [@@deriving bin_io, compare, sexp]
@@ -965,9 +964,8 @@ module Std : sig
 
     (** Binable Interval Tree.
 
-        An extension of the Interval tree signature that supports
-        the necessary extensions to be serializable as a
-        {{!Value}universal value}.
+        An extension of the Interval tree signature with the
+        Binable interface.
     *)
     module type S_binable = sig
       type 'a t [@@deriving bin_io, compare, sexp]
