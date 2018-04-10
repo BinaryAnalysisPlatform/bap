@@ -315,3 +315,38 @@ module Make(Interval : Interval) = struct
   let fold_result = C.fold_result
 end
 
+module type Interval_binable = sig
+  type t [@@deriving bin_io, compare, sexp]
+  type point [@@deriving bin_io, compare, sexp]
+  include Interval with type t := t and type point := point
+end
+
+module type S_binable = sig
+  type 'a t [@@deriving bin_io, compare, sexp]
+  include S with type 'a t := 'a t
+end
+
+module Make_binable(Interval : Interval_binable) = struct
+  module Base = Make(Interval)
+
+  type key = Interval.t [@@deriving sexp, compare, bin_io]
+
+  type point = Interval.point [@@deriving compare, sexp, bin_io]
+
+ type +'a node = 'a Base.node = {
+    lhs : 'a node option;
+    rhs : 'a node option;
+    key : key;
+    data : 'a;
+    height : int;
+    greatest : point;
+    least : point;
+  } [@@deriving fields, sexp, compare, bin_io]
+
+  type +'a t = 'a node option [@@deriving sexp, compare, bin_io]
+
+  include (Base : S with type key := key
+                     and type point := point
+                     and type 'a t := 'a t)
+
+end
