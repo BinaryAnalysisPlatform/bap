@@ -973,8 +973,8 @@ module Std : sig
     end
 
     (** [Make_binable(Interval)] create an abstract interval tree data type
-        that uses abstract [Interval] and can be serialized as a
-        {{!Value}universal value}.
+        that uses abstract [Interval] and can be serialized via the Binable
+        interface.
     *)
     module Make_binable(Interval : Interval_binable) : S_binable
       with type key := Interval.t
