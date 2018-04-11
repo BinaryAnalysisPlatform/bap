@@ -2,47 +2,78 @@ open Core_kernel.Std
 open Bap_future.Std
 open Regular.Std
 
-type provider = {
-  pname : string;
-  pdesc : string;
-} [@@deriving bin_io, compare, sexp]
+module Service_t = struct
+  type t = {
+    uuid : string;
+    name : string;
+    desc : string;
+  } [@@deriving bin_io, compare, fields, sexp]
 
-type product = {
-  digest   : string;
-  provider : provider;
-} [@@deriving bin_io, compare, sexp]
-
-type service = {
-  uuid  : string;
-  sname : string;
-  sdesc : string;
-} [@@deriving bin_io, compare, sexp]
-
-let todo () = failwith "unimplemented"
-
-module Product = struct
-  type t = product [@@deriving bin_io, compare, sexp]
-  let create ~digest provider = { digest; provider; }
-  let digest t = t.digest
-  let combine _p _p' = todo ()
-  let providers _p = todo ()
-end
-
-module Service = struct
-  type t = service [@@deriving bin_io, compare, sexp]
-
-  module Regular = Regular.Make(struct
+  include Regular.Make(struct
       type nonrec t = t [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Service.Service"
       let hash = Hashtbl.hash
       let version = "0.1"
-      let pp fmt t = Format.fprintf fmt "%s %s" t.sname t.sdesc
+      let pp fmt t = Format.fprintf fmt "%s %s" t.name t.desc
     end)
+end
 
-  let services = Regular.Table.create ()
+module Provider_t = struct
+  type t = {
+    name : string;
+    desc : string;
+    service : Service_t.t;
+  } [@@deriving bin_io, compare, fields, sexp]
 
-  let declare ~desc ~uuid sname =
-    let t = {sdesc=desc; uuid; sname;} in
+  include Regular.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
+      let module_name = Some "Bap.Service.Provider"
+      let hash = Hashtbl.hash
+      let version = "0.1"
+      let pp fmt t = Format.fprintf fmt "%s %s" t.name t.desc
+    end)
+end
+
+module Product_t = struct
+  type t = {
+    digest   : string;
+    provider : Provider_t.t;
+    products : t list;
+  } [@@deriving bin_io, compare, fields, sexp]
+
+  include Regular.Make(struct
+      type nonrec t = t [@@deriving bin_io, compare, sexp]
+      let module_name = Some "Bap.Service.Product"
+      let hash = Hashtbl.hash
+      let version = "0.1"
+      let pp fmt t = Format.fprintf fmt "%s" t.digest
+    end)
+end
+
+module Product = struct
+  include Product_t
+
+  let create ~digest provider = { digest; provider; products = []}
+
+  let providers t =
+    t.provider :: List.map ~f:provider t.products
+
+  let combine t t' =
+    let get x f = f x :: List.map ~f x.products in
+    let both f = get t f @ get t' f in
+    let digest   = String.concat (both digest) in
+    let products = List.concat (both products) in
+    {t with digest; products}
+
+end
+
+module Service = struct
+  include Service_t
+
+  let services = Table.create ()
+
+  let declare ~desc ~uuid name =
+    let t = {desc=desc; uuid; name;} in
     Hashtbl.set services t (Stream.create ());
     t
 
@@ -52,55 +83,34 @@ module Service = struct
 
   let request t = fst (Hashtbl.find_exn services t)
 
-  include Regular
-
 end
 
 module Provider = struct
-  type t = provider [@@deriving bin_io, compare, sexp]
 
-  module Regular = Regular.Make(struct
-      type nonrec t = t [@@deriving bin_io, compare, sexp]
-      let module_name = Some "Bap.Service.Provider"
-      let hash = Hashtbl.hash
-      let version = "0.1"
-      let pp fmt t = Format.fprintf fmt "%s %s" t.pname t.pdesc
-    end)
+  include Provider_t
 
-  let providers : service Regular.Table.t = Regular.Table.create ()
+  let providers = String.Table.create ()
 
-  let declare ~desc pname service =
-    let p = {pname;pdesc=desc} in
-    Hashtbl.set providers p service;
+  let declare ~desc name service =
+    let p = {name; desc; service} in
+    Hashtbl.set providers name p;
     p
 
-  let name t = t.pname
-
-  let find_by_name = function
-    | None -> None
-    | Some n ->
-      List.find (Hashtbl.keys providers)
-        ~f:(fun p -> String.equal p.pname n)
-
-  let filter_by_service = function
-    | None -> []
-    | Some s ->
-      List.filter_map (Hashtbl.to_alist providers)
-        ~f:(fun (p,s') ->
-            Option.some_if (Service.equal s' s) p)
+  let all f = List.filter (Hashtbl.data providers) ~f
+  let all_by_name n = all (fun p -> String.equal p.name n)
+  let all_by_service s = all (fun p -> Service.equal p.service s)
 
   let select ?by_service ?by_name () =
-    let ps = filter_by_service by_service in
-    match find_by_name by_name with
-    | None -> ps
-    | Some p -> p :: ps
-
-  include Regular
-
+    let find = Option.value_map ~default:[] in
+    find ~f:all_by_service by_service @
+    find ~f:all_by_name by_name
 end
 
-module Try = struct
+type provider = Provider.t [@@deriving bin_io, compare, sexp]
+type service  = Service.t  [@@deriving bin_io, compare, sexp]
+type product  = Product.t  [@@deriving bin_io, compare, sexp]
 
+module Try = struct
 
   type 'a t = 'a Or_error.t stream
   type 'a source = 'a t
@@ -127,7 +137,7 @@ module Try = struct
 
       let register name source =
         match List.hd @@ Provider.select ~by_name:name () with
-        | None -> failwith (sprintf "no providers decalred under the name %s" name)
+        | None -> failwith (sprintf "no providers declared under the name %s" name)
         | Some p -> Hashtbl.set factory ~key:p ~data:source
 
       let provide provider source =
