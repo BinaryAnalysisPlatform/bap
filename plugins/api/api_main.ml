@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Result
 open Bap_bundle.Std
 open Bap.Std

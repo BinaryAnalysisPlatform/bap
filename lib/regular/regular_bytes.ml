@@ -1,6 +1,6 @@
 module Std_bytes = Bytes
 
-open Core_kernel.Std
+open Core_kernel
 
 module Binable = Bin_prot.Utils.Make_binable(struct
     module Binable = String

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_result
 open Bap_common
 open Bap_bil

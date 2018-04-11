@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular_regular
 open Regular_data_types
 open Regular_data_intf

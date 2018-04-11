@@ -1,6 +1,6 @@
 (** Extends [size] type.  *)
 
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_common
 

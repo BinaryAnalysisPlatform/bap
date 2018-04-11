@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_bundle.Std
 open Bap_future.Std
 open Or_error.Monad_infix

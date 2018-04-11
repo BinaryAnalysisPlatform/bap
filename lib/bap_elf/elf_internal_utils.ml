@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 let int_of_int64 n = match Int64.to_int n with
   | Some v -> Ok v

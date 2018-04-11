@@ -12,7 +12,7 @@
     Basically they describe the same algorithm but in different
     flavors and levels of detail.
 *)
-open Core_kernel.Std
+open Core_kernel
 open Bap_types.Std
 open Graphlib.Std
 open Format

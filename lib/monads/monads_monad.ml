@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module Monoid = Monads_monoid
 module Types = Monads_types

@@ -1,6 +1,6 @@
 (** Regular Library.   *)
 
-open Core_kernel.Std
+open Core_kernel
 
 (** Interface that should support any regular data type.
 

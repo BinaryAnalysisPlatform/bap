@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 open Bap.Std
 open Bap_plugins.Std

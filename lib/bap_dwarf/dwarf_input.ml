@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Word_size
 open Or_error
 open Binary_packing

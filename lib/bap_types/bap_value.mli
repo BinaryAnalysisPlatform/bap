@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 
 type t [@@deriving bin_io, compare, sexp]

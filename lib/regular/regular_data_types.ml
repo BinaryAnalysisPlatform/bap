@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 
 (** [copy buf obj pos] is a method to copy object [obj] into a buffer

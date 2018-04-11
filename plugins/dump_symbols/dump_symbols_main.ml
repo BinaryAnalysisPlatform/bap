@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Graphlib.Std
 open Bap.Std
 include Self()

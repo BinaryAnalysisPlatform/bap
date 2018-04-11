@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Core_bench.Std
 open Or_error
 open Bap.Std

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 val check_headless : bool -> (unit, Error.t) Result.t
 

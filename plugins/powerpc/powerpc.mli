@@ -330,7 +330,7 @@
              doubleword.
 *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 module Std : sig

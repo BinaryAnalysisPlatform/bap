@@ -6,7 +6,7 @@
     the value. This module also defines models for integer
     representation.
 *)
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 (** models for 32 bit systems  *)

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module type State = sig
   type ('a,'s) t

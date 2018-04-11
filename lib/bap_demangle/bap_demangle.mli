@@ -4,7 +4,7 @@
     demanglers, that can be used on demand by fronends and plugins.
 
  *)
-open Core_kernel.Std
+open Core_kernel
 
 module Std : sig
   type demangler

@@ -1,5 +1,5 @@
 open OUnit2
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 

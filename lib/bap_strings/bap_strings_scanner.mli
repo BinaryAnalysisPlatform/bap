@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 
 (** [next ~is_stop ~read off] reads characters starting with the

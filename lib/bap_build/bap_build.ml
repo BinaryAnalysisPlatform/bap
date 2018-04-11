@@ -2,7 +2,7 @@ module Plugin_rules = struct
   module Fl = Findlib
 
   open Ocamlbuild_plugin
-  open Core_kernel.Std
+  open Core_kernel
   module Ocamlbuild = Ocamlbuild_pack
 
 

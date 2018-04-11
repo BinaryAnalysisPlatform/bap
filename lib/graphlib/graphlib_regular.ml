@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Graphlib_intf
 open Graphlib_regular_intf

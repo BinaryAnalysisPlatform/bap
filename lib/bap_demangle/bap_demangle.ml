@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 let maybe_mangled name =
   String.length name > 2 &&

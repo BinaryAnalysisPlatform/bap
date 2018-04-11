@@ -1,6 +1,6 @@
 (** Native lifter of x86 instructions to the BAP IL *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Format
 open Bil.Types

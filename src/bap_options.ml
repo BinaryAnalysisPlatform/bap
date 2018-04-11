@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 type source = Bap_source_type.t [@@deriving sexp]

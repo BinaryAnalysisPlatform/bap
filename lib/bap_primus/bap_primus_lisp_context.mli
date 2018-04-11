@@ -234,7 +234,7 @@
           that we can use a much more concrete (call-the-advised)).
 *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 module Attribute = Bap_primus_lisp_attribute
