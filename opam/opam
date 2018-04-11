@@ -252,6 +252,17 @@ depexts: [
         "m4"
         "dejagnu"
      ]]
+     [["archlinux"] [
+        "clang"
+        "curl"
+        "dejagnu"
+        "gmp"
+        "libzip"
+        "llvm38-libs"
+        "llvm-libs38"
+        "m4"
+        "time"
+     ]]
      [["osx" "macports"] [
         "gmp"
         "llvm-3.8"
