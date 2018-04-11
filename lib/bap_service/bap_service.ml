@@ -124,7 +124,6 @@ module Try = struct
     val provide : provider -> t source -> unit
     val request : provider -> t source option
     val providers : unit -> provider list
-
   end
 
   module Tab = Provider.Table
@@ -156,5 +155,4 @@ module Try = struct
 
     end
   end
-
 end

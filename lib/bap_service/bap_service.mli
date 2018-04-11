@@ -25,5 +25,6 @@ module Provider : sig
   val declare : desc:string -> string -> service -> t
   val name : t -> string
   val select : ?by_service:service -> ?by_name:string -> unit -> t list
-  val pp : t printer
+
+  include Regular.S with type t := t
 end
