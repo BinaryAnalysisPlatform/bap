@@ -39,7 +39,8 @@ let get_symbols =
 
 let extract path arch =
   let id =
-    Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
+    Data.Cache.digest ~namespace:"ida" "%s"
+      (Md5.file path |> Md5.to_hex) in
   let syms = match Symbols.Cache.load id with
     | Some syms -> syms
     | None -> match Ida.(with_file path get_symbols) with
@@ -103,15 +104,17 @@ let load_image = Command.create `python
 
 
 let mapfile path : Bigstring.t =
-  let fd = Unix.(openfile path [O_RDONLY] 0o400) in
+  let fd = Unix.(openfile path ~mode:[O_RDONLY] ~perm:0o400) in
   let size = Unix.((fstat fd).st_size) in
-  let data = Bigstring.map_file ~shared:false fd size in
+  let data =
+    Bigarray.Genarray.map_file
+      fd Bigarray.char Bigarray.c_layout false [|Int64.to_int_exn size|] in
   Unix.close fd;
-  data
+  Bigarray.array1_of_genarray data
 
 let loader path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
-      (Digest.file path) in
+      (Md5.file path |> Md5.to_hex) in
   let (proc,size,sections) = match Img.Cache.load id with
     | Some img -> img
     | None ->

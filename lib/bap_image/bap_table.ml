@@ -20,7 +20,7 @@ module Mem = struct
     let a1,a2 = min_addr mem, max_addr mem in
     Format.fprintf ppf "[%a - %a]" Addr.pp a1 Addr.pp a2
   include Comparable.Make(T)
-  include Hashable.Make(T)
+  include Hashable.Make_and_derive_hash_fold_t(T)
 end
 
 module Bound = struct
@@ -152,10 +152,10 @@ let change tab mem ~f =
       | `update f ->
         Seq.fold ins ~init:(map, tab.bound)
           ~f:(fun (map,bnd) (mem,x) ->
-              Map.add map ~key:mem ~data:(f (mem,x)),
+              Map.set map ~key:mem ~data:(f (mem,x)),
               Bound.update bnd mem)
       | `rebind (mem,data) ->
-        Map.add map ~key:mem ~data,
+        Map.set map ~key:mem ~data,
         Bound.update tab.bound mem in
     { map; bound }
 
@@ -163,7 +163,7 @@ let add tab mem x =
   if has_intersections tab mem
   then error "memory has intersections" mem sexp_of_mem
   else Ok {
-      map = Mem.Map.add tab.map ~key:mem ~data:x;
+      map = Mem.Map.set tab.map ~key:mem ~data:x;
       bound = Bound.update tab.bound mem;
     }
 
@@ -290,7 +290,7 @@ let make_map map add ?start ?until tab ~f =
     { map; bound}
 
 let mapi ?start ?until tab ~f =
-  make_map Map.mapi Map.add ?start ?until tab ~f
+  make_map Map.mapi Map.set ?start ?until tab ~f
 
 let map ?start ?until tab ~f =
   mapi ?start ?until tab ~f:(fun _ x -> f x)
@@ -298,7 +298,7 @@ let map ?start ?until tab ~f =
 let filter_mapi ?start ?until tab ~f =
   let add map ~key ~data = match data with
     | None -> map
-    | Some data -> Map.add map ~key ~data in
+    | Some data -> Map.set map ~key ~data in
   make_map Map.filter_mapi add ?start ?until tab ~f
 
 let filter_map ?start ?until tab ~f =
@@ -314,7 +314,7 @@ let filter ?start ?until tab ~f =
 let make_mapping t map =
   let size = Map.length map in
   let table =
-    Hashtbl.create ~growth_allowed:false ~size ~hashable:t () in
+    Hashtbl.Using_hashable.create ~growth_allowed:false ~size ~hashable:t () in
   Map.iteri map ~f:(fun ~key:_ ~data:(v1,v2) ->
       Hashtbl.add_exn table ~key:v1 ~data:v2);
   table
@@ -341,7 +341,7 @@ let link_one t t1 t2 =
 let link_many t t1 t2 =
   let size = Map.length t1.map in
   let table =
-    Hashtbl.create ~growth_allowed:false ~size ~hashable:t () in
+    Hashtbl.Using_hashable.create ~growth_allowed:false ~size ~hashable:t () in
   Map.iteri t1.map ~f:(fun ~key:mem ~data:x ->
       let data = intersections t2 mem |> Seq.map ~f:snd in
       Hashtbl.add_exn table ~key:x ~data);
@@ -385,7 +385,7 @@ let link : type b c . one_to:((b,c) r) ->
 let make_rev_map add find t tab =
   let size = Map.length tab.map in
   let table =
-    Hashtbl.create ~growth_allowed:false ~hashable:t ~size () in
+    Hashtbl.Using_hashable.create ~growth_allowed:false ~hashable:t ~size () in
   Map.iteri tab.map ~f:(fun ~key:mem ~data:x ->
       add t table ~key:x ~data:mem);
   find t table

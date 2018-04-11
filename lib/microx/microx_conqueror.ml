@@ -58,7 +58,7 @@ class context
         | None -> None
         | Some (p,old) ->
           let ps = Map.remove ps p in
-          let self = {< cps = Map.add cps ~key ~data:ps >} in
+          let self = {< cps = Map.set cps ~key ~data:ps >} in
           let old = old#merge self in
           Some (old#set_next (Some p))
 
@@ -70,7 +70,7 @@ class context
       else {<
         cps = Map.update cps key ~f:(function
             | None -> Tid.Map.singleton p self
-            | Some ps -> Map.add ps p self)
+            | Some ps -> Map.set ps p self)
       >}
 
   method merge runner = {<

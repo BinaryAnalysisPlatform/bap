@@ -119,7 +119,7 @@ let of_blocks syms =
         | None -> ()
         | Some blk -> Hashtbl.add_multi symtab ~key:name ~data:blk);
     Hashtbl.fold symtab ~init:Symtab.empty ~f:(fun ~key ~data symtab ->
-        List.sort data ~cmp:Block.ascending |> function
+        List.sort data ~compare:Block.ascending |> function
         | [] -> symtab
         | entry :: _ as blocks ->
           let g = List.fold blocks ~init:Cfg.empty ~f:(fun g x ->

@@ -51,16 +51,15 @@ let nth vec n =
 
 
 include struct
-  open Container_intf.Continue_or_stop
-  open Container_intf.Finished_or_stopped_early
+  open Container.Continue_or_stop
 
-  let fold_until vec ~init ~f =
+  let fold_until vec ~init ~f ~finish =
     let rec loop i init =
       if i < vec.size
       then match f init (Array.unsafe_get vec.data i) with
-        | Stop x -> Stopped_early x
+        | Stop x -> x
         | Continue r -> loop (i+1) r
-      else Finished init in
+      else finish init in
     loop 0 init
 
   let fold_result vec ~init ~f =

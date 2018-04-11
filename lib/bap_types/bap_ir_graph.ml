@@ -30,7 +30,7 @@ module Pred = struct
         | Some xs -> Some (Set.add xs src))
 
   let insert dst preds =
-    Map.add preds ~key:dst ~data:Tid.Set.empty
+    Map.set preds ~key:dst ~data:Tid.Set.empty
 end
 
 (* internal representation of a graph:

@@ -93,7 +93,7 @@ let find_all cons size ctxt =
       assert_bool "find_intersections" @@
       contains k v @@ Memmap.intersections map k)
 
-let sort_by_value = List.sort ~cmp:(fun (_,x) (_,y) -> Int.compare x y)
+let sort_by_value = List.sort ~compare:(fun (_,x) (_,y) -> Int.compare x y)
 
 (* mix three equal values into the random data *)
 let three_equal cons size ctxt =
@@ -114,7 +114,7 @@ let three_equal cons size ctxt =
 let run_through cons size ctxt =
   let lst = cons size in
   let map = map_of_list lst in
-  let sort_ints = List.sort ~cmp:Int.compare in
+  let sort_ints = List.sort ~compare:Int.compare in
   let collect addr =
     List.filter_map lst ~f:(fun (mem,x) ->
         Option.some_if (Memory.contains mem addr) x) |>
@@ -135,7 +135,7 @@ let intersections cons size ctxt =
   let lst = cons size in
   let jam = cons size in
   let map = map_of_list jam in
-  let sort_ints = List.sort ~cmp:Int.compare in
+  let sort_ints = List.sort ~compare:Int.compare in
   let map = List.fold (cons size) ~init:map ~f:(fun map (k,_) ->
       Memmap.remove_intersections map k) in
   let map = List.fold jam ~init:map ~f:(fun map (k,_) ->
@@ -155,8 +155,8 @@ let intersections cons size ctxt =
       let expect = collect mem in
       let got = Memmap.intersections map mem |> Seq.map ~f:snd
                 |> Seq.to_list
-                |> sort_ints |> List.dedup in
-      assert_equal ~printer ~ctxt expect got)
+                |> sort_ints |> List.dedup ~compare:Int.compare in
+      assert_equal ~printer ~ctxt ~cmp:(List.equal ~equal:Int.equal) expect got)
 
 let suite () = "Memmap" >::: [
     "add/lookup/1@0"    >:: add_lookup (byte 0);

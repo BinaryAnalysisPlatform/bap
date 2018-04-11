@@ -65,7 +65,7 @@ let propagate_consts sub =
           then Map.remove vars v
           else match Def.rhs t with
             | Bil.Unknown _ | Bil.Int _ as exp ->
-              Map.add vars ~key:v ~data:exp
+              Map.set vars ~key:v ~data:exp
             | _ -> vars
         else vars
   end)#visit_sub sub Var.Map.empty in

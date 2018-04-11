@@ -59,7 +59,7 @@ let train meth length comp db paths =
     FileUtil.find matching path (fun xs x -> x :: xs) [] in
   let files = List.map paths
       ~f:(fun f -> if Sys.is_directory f then collect f else [f]) |>
-              List.concat |> List.sort ~cmp:String.compare in
+              List.concat |> List.sort ~compare:String.compare in
   let total = List.length files in
   let start = Sys.time () in
   let errors = ref 0 in

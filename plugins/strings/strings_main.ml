@@ -23,7 +23,7 @@ let scan (mem,value) =
       | Ok n -> Some (Char.of_int_exn n) in
   Strings.Scanner.run ~read 0 |>
   Seq.fold ~init:Addr.Map.empty ~f:(fun strs (off,str) ->
-      Map.add strs
+      Map.set strs
       ~key:(Addr.nsucc (Memory.min_addr mem) off)
       ~data:str)
 

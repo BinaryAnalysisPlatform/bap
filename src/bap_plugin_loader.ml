@@ -43,8 +43,8 @@ let plugin_tags p = Plugin.bundle p |> Bundle.manifest |> Manifest.tags
 
 let print_plugins ?(info=`Desc) excluded plugins =
   let plugins =
-    let cmp x y = String.compare (Plugin.name x) (Plugin.name y) in
-    List.sort ~cmp plugins in
+    let compare x y = String.compare (Plugin.name x) (Plugin.name y) in
+    List.sort ~compare plugins in
   let info_string p = match info with
     | `Desc -> Plugin.desc p
     | `Tags -> plugin_tags p |> String.concat ~sep:", " in

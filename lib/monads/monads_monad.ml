@@ -171,8 +171,9 @@ module Monad = struct
 
         let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
 
+        let all_unit = iter ~f:Fn.ignore
         let all_ignore = iter ~f:Fn.ignore
-        let sequence = all_ignore
+        let sequence = all_unit
 
         let reduce xs ~f = fold xs ~init:None ~f:(fun acc y ->
             match acc with
@@ -271,7 +272,8 @@ module Monad = struct
     let join = M.join
     let ignore_m = M.ignore_m
     let all = M.all
-    let all_ignore = M.all_ignore
+    let all_unit = M.all_unit
+    let all_ignore = M.all_unit
   end
 
   (* the intended usage of this module is
@@ -297,7 +299,8 @@ module Monad = struct
     let join = M.join
     let ignore_m = M.ignore_m
     let all = M.all
-    let all_ignore = M.all_ignore
+    let all_unit = M.all_unit
+    let all_ignore = M.all_unit
   end
 
   (* this module provides a fast and dirty translation from a minimal
@@ -368,6 +371,7 @@ module Ident
       S with type 'a t := 'a T.t = struct
       include M.Collection.Eager(T)
       let all = ident
+      let all_unit = ignore
       let all_ignore = ignore
       let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
       let fold = fold
@@ -376,6 +380,7 @@ module Ident
       S with type 'a t := 'a T.t = struct
       include M.Collection.Delay(T)
       let all = ident
+      let all_unit = ignore
       let all_ignore = ignore
       let iter xs ~f = fold xs ~init:() ~f:(fun () x -> f x)
       let fold = fold
@@ -397,6 +402,7 @@ module Ident
     include (Base : Collection.S with type 'a t := 'a list)
     include List
     let all = ident
+    let all_unit = ignore
     let all_ignore = ignore
   end
 
@@ -413,6 +419,7 @@ module Ident
     include (Base : Collection.S with type 'a t := 'a Sequence.t)
     include Sequence
     let all = ident
+    let all_unit = ignore
     let all_ignore = ignore
   end
 
@@ -441,13 +448,14 @@ module Ident
     end
   end
 
+  let all_unit = ignore
   let all_ignore = ignore
   let all = ident
   let ignore_m = ignore
   let join = ident
   let void = ignore
   let rec forever x = forever x
-  let sequence = all_ignore
+  let sequence = all_unit
   module Monad_infix = Syntax
   include Let_syntax.Let_syntax
   include Syntax
@@ -1163,8 +1171,8 @@ module State = struct
       let fork () = SM.update @@ fun k ->
         let ctxt = context k in
         let current = Id.succ k.created in
-        let parents = Map.add k.parents ~key:current ~data:k.current in
-        let forks = Map.add k.forks ~key:current ~data:ctxt in
+        let parents = Map.set k.parents ~key:current ~data:k.current in
+        let forks = Map.set k.forks ~key:current ~data:ctxt in
         {k with created=current; current; parents; forks}
 
       let switch id = SM.update @@ fun k -> {k with current = alive k id}
@@ -1174,7 +1182,7 @@ module State = struct
       let put ctxt = SM.update @@ fun k ->
         let id = alive k k.current in
         if id = global then {k with init=ctxt} else {
-          k with forks = Map.add k.forks ~key:id ~data:ctxt
+          k with forks = Map.set k.forks ~key:id ~data:ctxt
         }
 
       let parent () = SM.get () >>| fun k -> alive_parent k k.current
@@ -1186,7 +1194,7 @@ module State = struct
       let remove_dead_parents k =
         let parents =
           Map.fold k.forks ~init:Id.Map.empty ~f:(fun ~key ~data:_ ps ->
-              Map.add ps ~key ~data:(alive_parent k key)) in
+              Map.set ps ~key ~data:(alive_parent k key)) in
         let children = Map.filter_keys k.children ~f:(Map.mem parents) in
         {k with children; parents}
 

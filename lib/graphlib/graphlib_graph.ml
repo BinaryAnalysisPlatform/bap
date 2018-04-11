@@ -38,8 +38,16 @@ let string_of_set ~sep pp_elt set =
   Seq.map set#enum ~f:(asprintf "%a" pp_elt) |>
   Seq.to_list |> String.concat ~sep
 
-let empty_set map =
-  Set.empty ~comparator:(Map.comparator map)
+let empty_set (type a) (type cmp) map =
+  let m : (module Comparator.S with type t = a
+                                and type comparator_witness = cmp)
+  = (module struct
+      type t = a
+      type comparator_witness = cmp
+      let comparator = Map.comparator map
+    end)
+  in
+  Set.empty m
 
 let create_ancestors empty find : ('a,'a set) map =
   let rec walk set x = match find x with
@@ -171,16 +179,20 @@ module Partition = struct
   }
 
   (* takes a mapping from node to its root *)
-  let create comparator comps =
+  let create (type a) (type c)
+        (comparator : (module Comparator.S with type t = a
+                                            and type comparator_witness = c))
+        comps =
     let roots,groups =
-      Hashtbl.fold comps ~init:(Map.empty ~comparator)
+      Hashtbl.fold comps ~init:(Map.empty comparator)
         ~f:(fun ~key:node ~data:root map ->
             Map.add_multi map ~key:root ~data:node) |>
       Map.to_alist |> List.unzip in
     let roots = Array.of_list roots in
     let groups = Array.of_list_map groups ~f:(fun xs ->
-        create_set (Set.of_list ~comparator xs)) in
-    let {Comparator.compare} = comparator in
+        create_set (Set.of_list comparator xs)) in
+    let module M = (val comparator) in
+    let {Comparator.compare} = M.comparator in
     let find_root x =
       Array.binary_search roots ~compare `First_equal_to x in
     let find x = Option.Monad_infix.(Hashtbl.find comps x >>= find_root) in
@@ -626,7 +638,7 @@ let create_namer (type t) (type n)
   let namer =
     depth_first_search (module G) g ~init:G.Node.Map.empty
       ~leave_node:(fun rpost n names ->
-          Map.add names ~key:n ~data:(Int.to_string rpost)) in
+          Map.set names ~key:n ~data:(Int.to_string rpost)) in
   Map.find_exn namer
 
 let nil _ = []
@@ -747,7 +759,7 @@ let dominators (type t) (type n) (type e)
        and type node = n) ?rev g entry =
   let `idom parent = idom ?rev (module G) g entry in
   let init = G.nodes g |> Seq.fold ~init:G.Node.Map.empty ~f:(fun t n ->
-      Map.add t ~key:n ~data:[]) in
+      Map.set t ~key:n ~data:[]) in
   let children = G.nodes g |> Seq.fold ~init ~f:(fun tree n ->
       match parent n with
       | Some p -> Map.add_multi tree ~key:p ~data:n
@@ -817,7 +829,7 @@ let strong_components
               Hashtbl.change roots v (fun _ -> Some data));
         if G.Node.(snd (root v) = v)
         then spill_comp v stack else stack) |> function
-  | [] -> Partition.create G.Node.comparator comps
+  | [] -> Partition.create (module G.Node) comps
   | _ -> assert false
 
 module Path = struct
@@ -1208,7 +1220,7 @@ module Fixpoint = struct
       Sequence.to_array in
     let rnodes =
       Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
-          Map.add rnodes ~key:n ~data:i) in
+          Map.set rnodes ~key:n ~data:i) in
     let succs = Array.map nodes ~f:(fun n ->
         let succs = if rev then G.Node.preds else G.Node.succs in
         succs n g |> Sequence.fold ~init:Int.Set.empty ~f:(fun ns n ->
@@ -1221,7 +1233,7 @@ module Fixpoint = struct
         let i = match Map.find visits n with
           | None -> 1
           | Some x -> x + 1 in
-        let visits = Map.add visits ~key:n ~data:i in
+        let visits = Map.set visits ~key:n ~data:i in
         visits, step i nodes.(n) x x' in
     let get approx n : d = match Map.find approx n with
       | Some x -> x
@@ -1240,7 +1252,7 @@ module Fixpoint = struct
               if equal ap ap' then (visits,works,approx)
               else visits,
                    Set.add works n,
-                   Map.add approx ~key:n ~data:ap') |>
+                   Map.set approx ~key:n ~data:ap') |>
         continue in
     let can_iter iters = match steps with
       | None -> true
@@ -1251,7 +1263,7 @@ module Fixpoint = struct
         default;
         approx = Map.fold approx ~init:G.Node.Map.empty
             ~f:(fun ~key:n ~data approx ->
-                Map.add approx ~key:nodes.(n) ~data);
+                Map.set approx ~key:nodes.(n) ~data);
       } in
     let rec loop visits iters works approx =
       if can_iter iters then match step visits works approx with
@@ -1263,7 +1275,7 @@ module Fixpoint = struct
         ~f:(fun ~key:node ~data approx ->
             match Map.find rnodes node with
             | None -> approx
-            | Some n -> Map.add approx ~key:n ~data) in
+            | Some n -> Map.set approx ~key:n ~data) in
     loop Int.Map.empty iters (Int.Set.of_list works) approx
 end
 

@@ -32,6 +32,16 @@ module Tracer = struct
        @]@\n}" t.name t.version Args.pp t.args Envp.pp t.envp
 end
 
+let byte2hexchar = "0123456789abcdef"
+
+let hexstring_of_bytestring str =
+  String.init (String.length str * 2) (fun dstix ->
+      let srcix = dstix / 2 in
+      let is_hi = dstix mod 2 = 0 in
+      let b = Caml.Char.code (String.get str srcix) in
+      let nib = 0xF land if is_hi then (b lsr 4) else b in
+      String.get byte2hexchar nib)
+
 module Binary = struct
   include Binary
   let pp ppf t =
@@ -41,7 +51,8 @@ module Binary = struct
        @\nmd5sum: %s\
        @\n@[<2>\
        args:   %a@]\
-       @\n@[<2>envp:@\n%a@]@]@\n}" t.path (Digest.to_hex t.md5sum) Args.pp t.args Envp.pp t.envp
+       @\n@[<2>envp:@\n%a@]@]@\n}"
+      t.path (hexstring_of_bytestring t.md5sum) Args.pp t.args Envp.pp t.envp
 end
 
 let pp_time fmt t =

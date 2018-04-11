@@ -224,7 +224,7 @@ module Hunter(Machine : Primus.Machine.S) = struct
       Machine.Local.get hunter >>= fun (Hunter hunt) ->
       let data = hunt key in
       Machine.Global.update hunters_club ~f:(fun club ->
-          {club with cache = Map.add club.cache ~key ~data}) >>= fun () ->
+          {club with cache = Map.set club.cache ~key ~data}) >>= fun () ->
       Machine.Observation.make Beagle_prey.catch (prey,data)
     | Some data ->
       Machine.Observation.make Beagle_prey.catch (prey,data)

@@ -38,7 +38,7 @@ module Ext = struct
         match Bap_table.find_addr tab addr with
         | None -> m
         | Some (mem, _) ->
-          Map.add m ~key:(Memory.min_addr mem) ~data)
+          Map.set m ~key:(Memory.min_addr mem) ~data)
 
 end
 
@@ -122,7 +122,7 @@ let reduce prg =
       ~f:(fun (unq, rem) tid ->
           let name = Tid.name tid in
           if String.Map.mem unq name then unq, tid :: rem
-          else String.Map.add unq name tid, rem) in
+          else String.Map.set unq name tid, rem) in
   let prg = (new relinker prg unique)#run prg in
   List.fold duplicates ~init:prg
     ~f:(fun prg tid ->

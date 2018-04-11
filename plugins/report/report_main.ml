@@ -118,7 +118,7 @@ let level_of_name = String.count ~f:(Char.equal '/')
 
 let do_render_progress () =
   Hashtbl.keys tasks |>
-  List.sort ~cmp:String.compare |>
+  List.sort ~compare:String.compare |>
   List.iteri ~f:(fun line name ->
       let level = level_of_name name in
       let path = String.split name ~on:'/' in

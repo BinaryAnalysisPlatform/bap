@@ -55,7 +55,7 @@ module Object = struct
       Machine.Local.get kinds >>= fun s ->
       next_key s >>= fun key ->
       Machine.Local.put kinds {
-        objects = Map.add s.objects ~key ~data:kind
+        objects = Map.set s.objects ~key ~data:kind
       } >>| fun () -> key
 
     let kind v =
@@ -288,7 +288,7 @@ module Propagation = struct
 
       let select p k =
         Machine.Local.update policies ~f:(fun s -> {
-              servers = Map.add s.servers ~key:k ~data:p;
+              servers = Map.set s.servers ~key:k ~data:p;
               default = Option.first_some s.default (Some p);
             })
 

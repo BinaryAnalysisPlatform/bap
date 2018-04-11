@@ -15,7 +15,7 @@ module Plugin_rules = struct
 
   let default_predicates = [
     "custom_ppx";
-    "ppx_driver";
+    "ppxlib";
   ]
 
   let default_tags = [
@@ -48,7 +48,6 @@ module Plugin_rules = struct
     Fl.package_deep_ancestors predicates pkgs
 
   let set_default_options () : unit =
-    Command.jobs := 4;
     Options.(begin
         use_ocamlfind := true;
         ocaml_pkgs := packages;

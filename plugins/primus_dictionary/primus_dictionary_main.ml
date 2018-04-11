@@ -11,7 +11,7 @@ type t = {
 }
 
 let pair key data = {dict = Primus.Value.Map.singleton key data}
-let add key data s = {dict = Primus.Value.Map.add s.dict ~key ~data}
+let add key data s = {dict = Primus.Value.Map.set s.dict ~key ~data}
 
 (* idea: initialize the dictionary with initial
    properties of a project and terms.

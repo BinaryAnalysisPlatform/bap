@@ -48,6 +48,7 @@ module T = struct
   include Binable
   include Sexpable
   type elt = Elt.t
+  let hash = Hashtbl.hash
   let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
     unsafe_blit src src_pos dst dst_pos len
 
@@ -88,11 +89,11 @@ let sum m t ~f  = apply t (fun s -> String.sum m s ~f)
 let is_empty t  = apply t String.is_empty
 let mem t elt = String.mem (convert t) elt
 
-include Identifiable.Make(struct
+include Identifiable.Make_and_derive_hash_fold_t(struct
     type t = T.t [@@deriving bin_io, compare, sexp]
+    include Hashable.Make_and_derive_hash_fold_t(T)
     let of_string = Stringable.of_string
     let to_string = Stringable.to_string
-    let hash = Hashtbl.hash
     let module_name = "Regular.Std.Bytes"
   end)
 

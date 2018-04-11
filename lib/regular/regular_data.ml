@@ -97,7 +97,7 @@ module Make(T : Versioned) = struct
   let set (table : 'a table) ~ver name cls : unit =
     Id.Table.change table name (function
         | None -> Some (Ver.Map.singleton ver cls)
-        | Some vs -> Some (Ver.Map.add vs ver cls))
+        | Some vs -> Some (Ver.Map.set vs ver cls))
 
   let find_with_ver (table : 'a table) ?ver name : (string * 'a) option =
     match Hashtbl.find table name with

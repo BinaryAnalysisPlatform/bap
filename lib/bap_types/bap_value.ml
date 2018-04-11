@@ -148,7 +148,7 @@ module Match = struct
   }
 
   let case t f (tab : 's t) =
-    let h = Map.add tab.handlers t.tid (fun v -> f (get_exn t v)) in
+    let h = Map.set tab.handlers t.tid (fun v -> f (get_exn t v)) in
     {tab with handlers = h}
 
   let run v tab =
@@ -171,7 +171,7 @@ module Dict = struct
   let empty = Typeid.Map.empty
 
   let set t tag data =
-    Map.add t ~key:(uuid tag) ~data:(create tag data)
+    Map.set t ~key:(uuid tag) ~data:(create tag data)
 
   let mem t key = Map.mem t (uuid key)
   let remove t key = Map.remove t (uuid key)

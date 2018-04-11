@@ -11,7 +11,7 @@ module Fact = Ogre.Make(Monad.Ident)
 let of_aseq width x =
   Seq.fold x ~init:Addr.Map.empty ~f:(fun m (key,data) ->
       let key = Addr.of_int64 ~width key in
-      Map.add m ~key ~data)
+      Map.set m ~key ~data)
 
 module Rel = struct
   open Image.Scheme

@@ -84,7 +84,7 @@ module Type = struct
   let get {fields} f = Option.(Map.find fields f.name >>= f.t.parse)
 
   let add {name; t} x {fields} = {
-    fields = Map.add fields ~key:name ~data:(t.pack x)
+    fields = Map.set fields ~key:name ~data:(t.pack x)
   }
 
   let empty = {fields = String.Map.empty}
@@ -189,7 +189,7 @@ module Doc = struct
     | Some s when Type.compare_signature s sign <> 0 ->
       Type.signature_mismatch ~expect:s ~got:sign
     | _ -> Ok {
-        doc with scheme = Map.add doc.scheme ~key:name ~data:sign
+        doc with scheme = Map.set doc.scheme ~key:name ~data:sign
       }
 
   let typecheck_entry name {fields} {scheme} =
@@ -578,7 +578,7 @@ module Exp = struct
 
   let offsets names =
     List.foldi names ~init:String.Map.empty ~f:(fun pos offs name ->
-        Map.add offs ~key:name ~data:pos)
+        Map.set offs ~key:name ~data:pos)
 
   let names_index names =
     let offs = offsets names in

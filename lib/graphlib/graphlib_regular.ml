@@ -64,7 +64,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
     let insert_arrow field info arrs n = match Map.find arrs n with
       | None -> None
       | Some l ->
-        let arrs = Map.add arrs ~key:n ~data:l in
+        let arrs = Map.set arrs ~key:n ~data:l in
         Some (Field.fset field info arrs)
 
     let remove_arrow field info arrs n =
@@ -85,7 +85,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
       | None -> g
       | Some {inc;out} ->
         let n = (create l) in
-        Map.add g ~key:n ~data:{inc;out}  |>
+        Map.set g ~key:n ~data:{inc;out}  |>
         insert_arrows Fields_of_node_info.out inc n |>
         insert_arrows Fields_of_node_info.inc out n
 
@@ -139,7 +139,7 @@ module Make(Node : Opaque.S)(Label : T) = struct
           | Some ns ->
             let map = Field.get field ns in
             Some (Field.fset field ns
-                    (Map.add map ~key:(dst e) ~data:e.data)))
+                    (Map.set map ~key:(dst e) ~data:e.data)))
 
     let remove_arrow field arr src g = Map.change g src (function
         | None -> None

@@ -163,7 +163,7 @@ module Plugin = struct
 
   let validate_provided plugin mains =
     List.map mains ~f:(validate_unit plugin) |>
-    Or_error.all_ignore
+    Or_error.all_unit
 
   let load_entries plugin entries =
     List.fold entries ~init:(Ok ()) ~f:(fun so_far entry ->

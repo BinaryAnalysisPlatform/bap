@@ -222,7 +222,7 @@ module Parse = struct
           | Some (Ok (const,())) -> exp (Def.Const.value const) in
       start tree
     and seq e es = {data=Seq ((exp e) :: exps es); id=Id.null; eq=Eq.null}
-    and exps : tree list -> ast list = List.map ~f:exp in
+    and exps : tree list -> ast list = fun xs -> List.map xs ~f:exp in
     exp tree
 
   let params = function
@@ -599,7 +599,7 @@ module Load = struct
               match file_of_feature paths name with
               | None -> raise (Fail (Unresolved_feature (name,pos)))
               | Some file -> match Source.find p file with
-                | None -> Map.add required name pos
+                | None -> Map.set required name pos
                 | Some _ -> required))
 
   let transitive_closure paths p =
@@ -611,7 +611,7 @@ module Load = struct
 
   let features_of_list =
     List.fold ~init:String.Map.empty ~f:(fun fs f ->
-        Map.add fs ~key:f ~data:Cmdline)
+        Map.set fs ~key:f ~data:Cmdline)
 
   let features ?(paths=[Filename.current_dir_name]) proj fs =
     let source =

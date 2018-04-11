@@ -185,7 +185,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
     method! enter_term _ t env =
       match Term.get_attr t address with
       | None -> env
-      | Some addr -> Map.add env ~key:(Term.name t) ~data:addr
+      | Some addr -> Map.set env ~key:(Term.name t) ~data:addr
   end)#run prog String.Map.empty
 
   let init_names () =

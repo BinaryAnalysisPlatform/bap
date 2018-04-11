@@ -66,7 +66,7 @@ module Make(M : sig
   end) = struct
   include M
   include Comparable.Make_binable(M)
-  include Hashable.Make_binable(M)
+  include Hashable.Make_binable_and_derive_hash_fold_t(M)
 
   include struct
     open Regular_data

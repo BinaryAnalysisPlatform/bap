@@ -76,7 +76,7 @@ let args filename argv =
 
 let digest o =
   Data.Cache.digest ~namespace:"project" "%s%s"
-    (Digest.file o.filename)
+    (Md5.file o.filename |> Md5.to_hex)
     (args o.filename Sys.argv)
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
@@ -377,4 +377,4 @@ let () =
   | exn ->
     error "Failed with an unexpected exception: %a\nBacktrace:\n%s"
       Exn.pp exn
-    @@ Exn.backtrace ()
+    @@ Exn.to_string exn

@@ -410,7 +410,7 @@ module ToIR = struct
           else if has_vex then [int_exp 0 (hi - lo + 1)]
           else [Bil.Extract (hi, lo, op2e tdst dst)]
         in
-        let offsets = List.sort ~cmp:(fun {offdstoffset=o1; _} {offdstoffset=o2; _} -> Int.compare o1 o2) offsets in
+        let offsets = List.sort ~compare:(fun {offdstoffset=o1; _} {offdstoffset=o2; _} -> Int.compare o1 o2) offsets in
         let add_exp (elist,nextbit) {offlen; offtyp; offop; offsrcoffset; offdstoffset} =
           Bil.Extract ((!!offlen + offsrcoffset - 1), offsrcoffset, (op2e offtyp offop))
           :: padding (offdstoffset - 1) nextbit

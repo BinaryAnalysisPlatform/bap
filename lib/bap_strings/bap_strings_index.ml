@@ -52,8 +52,8 @@ module Persistent = struct
           | None -> Key.null 
           | Some (k,_) -> k in
         {
-          strings = Map.add idx.strings ~key ~data:str;
-          keys = Map.add idx.keys ~key:str ~data:key
+          strings = Map.set idx.strings ~key ~data:str;
+          keys = Map.set idx.keys ~key:str ~data:key
         } 
 
     let registered {keys} str = Map.mem keys str

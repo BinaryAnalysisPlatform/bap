@@ -55,13 +55,13 @@ let init_channels =
             output = None;
             input = Some (In_channel.create name);
           } in
-        Map.add chans ~key:fd ~data:chan)
+        Map.set chans ~key:fd ~data:chan)
 
 let init_redirections =
   List.fold ~init:String.Map.empty ~f:(fun redirs (oldname,newname) ->
       match fd_of_name oldname with
       | Some _ -> redirs
-      | None -> Map.add redirs ~key:oldname ~data:newname)
+      | None -> Map.set redirs ~key:oldname ~data:newname)
 
 
 let init redirs = {
@@ -140,7 +140,7 @@ let init redirections =
           let fd = next_fd s.channels in
           Machine.Local.put state {
             s with
-            channels = Map.add s.channels
+            channels = Map.set s.channels
                 ~key:(next_fd s.channels)
                 ~data:channel
           } >>= fun () ->

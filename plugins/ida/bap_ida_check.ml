@@ -15,7 +15,7 @@ let check_path ida_path =
   let exists = Sys.file_exists in
   let exists_sub sub = exists (ida_path / sub) in
   let is_dir = Sys.is_directory in
-  Result.all_ignore [
+  Result.all_unit [
     require "path must exist"       (exists ida_path);
     require "path must be a folder" (is_dir ida_path);
     require "idaq must exist"       (exists_sub "idaq");

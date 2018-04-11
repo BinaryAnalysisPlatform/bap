@@ -31,7 +31,7 @@ module Rel_info = struct
 
     let of_aseq s =
       Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-          Map.add m ~key ~data)
+          Map.set m ~key ~data)
 
     let arch_width =
       Fact.require arch >>= fun a ->

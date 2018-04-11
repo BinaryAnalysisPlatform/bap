@@ -89,4 +89,4 @@ let rec sexp_of_exp = function
       sexp_of_exp x;
       sexp_of_exp y;
     ]
-and sexps_of_exps = List.map ~f:sexp_of_exp
+and sexps_of_exps exps = List.map exps ~f:sexp_of_exp

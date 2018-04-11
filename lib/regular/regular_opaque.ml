@@ -19,5 +19,5 @@ module Make(M : sig
     let t_of_sexp = opaque_of_sexp
   end
   include Comparable.Make(M)
-  include Hashable.Make(M)
+  include Hashable.Make_and_derive_hash_fold_t(M)
 end

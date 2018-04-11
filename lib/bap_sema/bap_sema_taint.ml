@@ -85,17 +85,17 @@ class context = object(self)
     let key = Bil.Result.id r in
     if Set.is_empty ts
     then {< tvs = Values.remove tvs key >}
-    else {< tvs = Values.add tvs ~key ~data:ts >}
+    else {< tvs = Values.set tvs ~key ~data:ts >}
 
   method taint_ptr a (s : size) ts =
     if Set.is_empty ts then self
     else if s = `r8
     then
-      {< tas = Map.add tas ~key:a ~data:ts >}
+      {< tas = Map.set tas ~key:a ~data:ts >}
     else
       let addrs = Seq.init (Size.in_bytes s) ~f:(fun n -> Addr.(a++n)) in
       let tas' = Seq.fold addrs ~init:tas ~f:(fun tas a ->
-          Map.add tas ~key:a ~data:ts) in
+          Map.set tas ~key:a ~data:ts) in
       {< tas = tas' >}
 
   (** T(r) = { t : t |-> v}  *)

@@ -4,10 +4,12 @@ open Option.Monad_infix
 let mapfile path : Bigstring.t option =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
   try
-    let size = Unix.((fstat fd).st_size) in
-    let data = Bigstring.map_file ~shared:false fd size in
+    let data =
+      (* Unix.map_file in 4.06; using the old location for compatibility *)
+      Bigarray.Genarray.map_file
+        fd Bigarray.char Bigarray.c_layout false [|-1|] in
     Unix.close fd;
-    Some data
+    Some (Bigarray.array1_of_genarray data)
   with exn ->
     Unix.close fd;
     None

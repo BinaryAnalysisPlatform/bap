@@ -35,7 +35,7 @@ end
 module Digest = struct
   include String
 
-  let make s = s |> Digest.string |> Digest.to_hex
+  let make s = s |> Md5.digest_string |> Md5.to_hex
 
   let format fmt =
     let buf = Buffer.create 4096 in
@@ -47,7 +47,7 @@ module Digest = struct
 
   let add buf fmt = format ("%s"^^fmt) buf
   let add_sexp d sexp_of x = add d "%a" Sexp.pp (sexp_of x)
-  let add_file d name = add d "%s" (Digest.file name)
+  let add_file d name = add d "%s" (Md5.file name |> Md5.to_hex)
   let create ~namespace = make namespace
 end
 
