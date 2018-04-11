@@ -6,6 +6,7 @@ PKG fileutils
 PKG uri
 PKG ppx_jane
 PKG camlzip
+PKG uuidm
 
 B _build
 B _build/lib/bap
@@ -29,6 +30,7 @@ B _build/lib/bap_primus
 B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
+B _build/lib/bap_service
 
 S lib/bap
 S lib/bap_abi
@@ -47,4 +49,5 @@ S lib/monads
 S lib/bap_primus
 S lib/bap_llvm
 S lib/ogre
+S lib/bap_service
 S ../core_kernel.113.33.00/src

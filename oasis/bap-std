@@ -91,9 +91,19 @@ Library bap_image
                  Image_common,
                  Image_internal_std
 
+
+Library service
+  Build$:           flag(everything)
+  Path:             lib/bap_service
+  FindlibParent:    bap
+  FindlibName:      service
+  CompiledObject:   best
+  BuildDepends:     bap-future, regular
+  Modules:          Bap_service
+
 Library disasm
   Path:          lib/bap_disasm
-  Build$:          flag(everything) || flag(bap_std)
+  Build$:        flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   disasm
   BuildDepends:  bap.image,
