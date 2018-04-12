@@ -812,10 +812,17 @@ module Std : sig
 
 
       (** [jumping (cond,dest)] happens just before a jump to [dest]
-          is taken under the condition [cond].
+          is taken under the specified condition [cond].
+          Note: [cond] is always [true]
 
           @since 1.5.0 *)
       val jumping : (value * value) observation
+
+      (** [eval_cond v] occurs every time the [cond] part of a jump is
+          evaluated.
+
+          @since 1.5.0 *)
+      val eval_cond : value observation
 
       (** [undefined x] happens when a computation produces an
           undefined value [x].  *)
