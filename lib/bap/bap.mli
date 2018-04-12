@@ -5,6 +5,7 @@ open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
+open Bap_service
 
 module Std : sig
   (** {2 Overview}
@@ -7650,6 +7651,12 @@ module Std : sig
             source of information. If a method with the given name already
             exists, then it will be superceeded by a new one.  *)
         val register : string -> t source -> unit
+
+
+        val provide : provider -> t source -> unit
+        val request : provider -> t source option
+        val providers : unit -> provider list
+
       end
 
       module Make(T : T) : S with type t = T.t
@@ -7823,6 +7830,8 @@ module Std : sig
     (** [empty] is a symbolizer that knows nothing.  *)
     val empty : t
 
+    val service : service
+
     (** A factory of symbolizers. Use it register and create
         symbolizers.  *)
     module Factory : Source.Factory.S with type t = t
@@ -7852,6 +7861,8 @@ module Std : sig
     (** [union r1 r2] joins roots from rooters [r1] and [r2]  *)
     val union : t -> t -> t
 
+    val service : service
+
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
   end
@@ -7879,6 +7890,8 @@ module Std : sig
     (** [resolve brancher mem insn] returns a list of destinations of
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
+
+    val service : service
 
     module Factory : Source.Factory.S with type t = t
 
@@ -7921,6 +7934,8 @@ module Std : sig
     (** [run reconstructor cfg] reconstructs a symbol table from a
         given cfg  *)
     val run : t -> cfg -> symtab
+
+    val service : service
 
     (** a factory of reconstructors  *)
     module Factory : Source.Factory.S with type t = t

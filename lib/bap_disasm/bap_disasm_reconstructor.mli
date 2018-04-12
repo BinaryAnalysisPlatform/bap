@@ -16,4 +16,6 @@ val default : (word -> string) -> word list -> t
 val of_blocks : (string * addr * addr) seq -> t
 val run : t -> cfg -> symtab
 
+val service : Bap_service.service
+
 module Factory : Factory with type t = t

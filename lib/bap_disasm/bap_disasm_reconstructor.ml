@@ -90,4 +90,15 @@ let of_blocks syms =
 
 let default name roots = create (reconstruct name roots)
 
-module Factory = Source.Factory.Make(struct type nonrec t = t end)
+let service =
+  Bap_service.Service.declare ~desc:"A reconstructor service"
+    ~uuid:"cb5b39ca-a779-4f6d-9f65-bfc050fc35fb" "reconstructor"
+
+module Factory = struct
+  include Source.Factory.Make(struct type nonrec t = t end)
+
+  let register name source =
+    let desc = sprintf "reconstructor %s" name in
+    let _provider = Bap_service.Provider.declare ~desc name service in
+    register name source
+end

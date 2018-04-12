@@ -10,6 +10,8 @@ module Service : sig
   val declare : desc:string -> uuid:string -> string -> t
   val provide : t -> product -> unit
   val request : t -> product stream
+
+  include Regular.S with type t := t
 end
 
 module Product : sig
@@ -18,6 +20,8 @@ module Product : sig
   val digest : t -> string
   val combine : t -> t -> t
   val providers : t -> provider list
+
+  include Regular.S with type t := t
 end
 
 module Provider : sig

@@ -13,8 +13,6 @@ let union (Rooter r1) (Rooter r2) =
   Rooter (Seq.append r1 r2)
 let empty = create Seq.empty
 
-module Factory = Source.Factory.Make(struct type nonrec t = t end)
-
 let of_image img =
   Image.symbols img |>
   Table.to_sequence |>
@@ -30,3 +28,16 @@ let of_blocks blocks =
           | Some a when Addr.(a < sa) -> Some a
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
+
+let service = Bap_service.Service.declare "rooter"
+    ~desc:"A rooter service"
+    ~uuid:"1c3d08e2-8900-4b90-b4ce-7382dcd50b1b"
+
+module Factory = struct
+  include Source.Factory.Make(struct type nonrec t = t end)
+
+  let register name source =
+    let desc = sprintf "rooter %s" name in
+    let _provider = Bap_service.Provider.declare ~desc name service in
+    register name source
+end

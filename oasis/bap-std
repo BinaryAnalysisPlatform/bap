@@ -16,7 +16,8 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
-                   regular
+                   regular,
+                   bap.service
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self, Bap_synthetic_symbolizer
 
@@ -111,7 +112,8 @@ Library disasm
                  bap-future,
                  camlzip,
                  ocamlgraph,
-                 ogre
+                 ogre,
+                 bap.service
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,
