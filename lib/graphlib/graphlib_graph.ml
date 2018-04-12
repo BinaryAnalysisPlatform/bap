@@ -1120,12 +1120,7 @@ module Fixpoint = struct
 
   let derive (Solution s) ~f default =
     let f ~key ~data = f key data in
-    Solution {
-      steps = s.steps;
-      iters = s.iters;
-      default;
-      approx = Map.filter_mapi ~f s.approx;
-    }
+    create (Map.filter_mapi ~f s.approx) default
 
   type ('a,'b) step =
     | Step of 'a
