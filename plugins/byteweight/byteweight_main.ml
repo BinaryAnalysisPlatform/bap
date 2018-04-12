@@ -2,7 +2,7 @@ open Core_kernel.Std
 open Bap.Std
 open Format
 open Bap_future.Std
-
+open Regular.Std
 include Self()
 
 module BW = Bap_byteweight.Bytes
@@ -20,7 +20,7 @@ let create_finder path length threshold arch  =
     info "advice - delete signatures at `%s'" path;
     info "advice - use `bap-byteweight` to install signatures";
     Or_error.errorf "corrupted database"
-  | Error (`No_entry err) ->
+  | Error (`No_entry _err) ->
     error "no signatures for specified compiler and architecture";
     info "advice - try to use default compiler entry";
     info "advice - create new entries with `bap-byteweight' tool";
@@ -32,11 +32,23 @@ let create_finder path length threshold arch  =
     let bw = Binable.of_string (module BW) data in
     Ok (BW.find bw ~length ~threshold)
 
+let byteweight =
+  Bap_service.Provider.declare "byteweight"
+    ~desc:"Provides a rooter based on byteweight algorithm"
+    Rooter.service
+
+let make_product file =
+  let open Bap_service in
+  let digest = Data.Cache.Digest.to_string @@
+    Data.Cache.digest ~namespace:"byteweight" "%s" file in
+  let p = Product.create ~digest byteweight in
+  Service.provide Rooter.service p
+
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in
   let find finder mem =
     Memmap.to_sequence mem |>
-    Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,v) ->
+    Seq.fold ~init:Addr.Set.empty ~f:(fun roots (mem,_v) ->
         Set.union roots @@ Addr.Set.of_list (finder mem)) in
   let find_roots arch mem = match finder arch with
     | Error _ as err ->
@@ -51,7 +63,8 @@ let main path length threshold =
   let rooter =
     let open Project.Info in
     Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
-  Rooter.Factory.register name rooter
+  Stream.observe Project.Info.file make_product;
+  Rooter.Factory.provide byteweight rooter
 
 let () =
   let () = Config.manpage [

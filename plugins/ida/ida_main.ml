@@ -17,9 +17,8 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  module Factory : sig
-    val register : string -> t source -> unit
-  end
+  val service : Bap_service.service
+  module Factory : Source.Factory.S with type t = t
 end
 
 let request =
@@ -54,13 +53,27 @@ let extract path arch =
   List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
   Seq.of_list
 
+let provider service =
+  Bap_service.Provider.declare "ida"
+    ~desc:"Provides inforamation obtained from Ida Pro"
+    service
+
+let make_product service provider file =
+  let open Bap_service in
+  let digest = Data.Cache.Digest.to_string @@
+    Data.Cache.digest ~namespace:"ida" "%s" file in
+  let p = Product.create ~digest provider in
+  Service.provide service p
+
 let register_source (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with ~backtrace:true (fun () ->
         extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
-  T.Factory.register name source
+  let p = provider T.service in
+  Stream.observe Project.Info.file (make_product T.service p);
+  T.Factory.provide p source
 
 
 type perm = [`code | `data] [@@deriving sexp]
@@ -86,7 +99,7 @@ let arch_of_procname size name = match String.lowercase name with
     if size = `r32 then `x86 else `x86_64
   | "ppc" ->  if size = `r64 then `ppc64 else `ppc
   | "ppcl" ->  `ppc64
-  | "arm" ->  `armv7
+  | "arm" ->   `armv7
   | "armb" ->  `armv7eb
   | "mipsl" ->  if size = `r64 then `mips64el else `mipsel
   | "mipsb" ->  if size = `r64 then `mips64  else `mips

@@ -87,9 +87,22 @@ let run_objdump arch file =
   then warning "failed to obtain symbols";
   Ok (Symbolizer.create (Hashtbl.find names))
 
+let objdump = Bap_service.Provider.declare "objdump"
+    ~desc:"A symbolizer based on parsing objdump output"
+    Symbolizer.service
+
+let make_product file =
+  let open Bap_service in
+  let digest = Data.Cache.Digest.to_string @@
+    Data.Cache.digest ~namespace:"objdump" "%s" file in
+  let p = Product.create ~digest objdump in
+  Service.provide Symbolizer.service p
+
+let () = Stream.observe Project.Info.file make_product
+
 let main () =
   Stream.merge Project.Info.arch Project.Info.file ~f:run_objdump |>
-  Symbolizer.Factory.register name
+  Symbolizer.Factory.provide objdump
 
 let () =
   Config.manpage [

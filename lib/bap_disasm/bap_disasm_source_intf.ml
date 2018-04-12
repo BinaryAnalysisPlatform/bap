@@ -11,7 +11,9 @@ module type Factory = sig
   type t
   val list : unit -> string list
   val find : string -> t source option
+
   val register : string -> t source -> unit
+  [@@deprecated "[since 2018-04] in favor of provide"]
 
   val provide : provider -> t source -> unit
   val request : provider -> t source option

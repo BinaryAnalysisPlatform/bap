@@ -8,6 +8,7 @@ open Format
 open Cmdliner
 open Bap_options
 open Bap_source_type
+open Bap_service
 include Self()
 
 module Recipe = Bap_recipe
@@ -79,6 +80,33 @@ let digest o =
     (Digest.file o.filename)
     (args o.filename Sys.argv)
 
+module Pr = struct
+  open Bap_service
+
+  let service = Service.declare
+      ~desc:"Service for delivering projects"
+      ~uuid:"998638ce-6d28-4eb8-b9ea-b1d47416f7b6"
+      "project"
+
+  let provider = Provider.declare
+      ~desc:"Project provider" "project" service
+
+  let products = [
+    Service.request Symbolizer.service;
+    Service.request Rooter.service;
+    Service.request Reconstructor.service;
+    Service.request Brancher.service;
+  ]
+
+  let digest = ref None
+
+  let all = Stream.concat_merge products ~f:Product.combine
+
+  let () = Stream.observe all (fun x -> digest := Some (Product.digest x))
+
+end
+
+
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
     report_progress
       ~stage:(i+base)
@@ -128,11 +156,21 @@ let main o =
   let proj_of_file ?ver ?fmt file =
     In_channel.with_file file
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
-  let project = match Project.Cache.load (digest o) with
+  let project =
+    let proj =
+      match !Pr.digest with
+      | None ->
+        printf "no digest from combined products\n";
+        None
+      | Some s -> Project.Cache.load (Data.Cache.Digest.of_string s) in
+    match proj with
     | Some proj ->
+      printf "got cache!!!\n";
       Project.restore_state proj;
       proj
-    | None -> match o.source with
+    | None ->
+      printf "NO cache!!!\n";
+      match o.source with
       | `Project ->
         let fmt,ver = extract_format o.filename in
         proj_of_file ?fmt ?ver o.filename

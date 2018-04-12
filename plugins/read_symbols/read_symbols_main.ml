@@ -17,19 +17,21 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  module Factory : sig
-    val register : string -> t source -> unit
-  end
+  val service : Bap_service.service
+  module Factory : Source.Factory.S with type t = t
 end
 
+let provider service =
+  Bap_service.Provider.declare "file"
+    ~desc:"Read symbols from a file" service
+
 let register syms =
-  let name = "file" in
   let register (module T : Target) =
     let source = Stream.map Project.Info.arch (fun arch ->
         Or_error.try_with (fun () ->
             extract syms arch |>
             Seq.of_list |> T.of_blocks)) in
-    T.Factory.register name source in
+    T.Factory.provide (provider T.service) source in
   register (module Rooter);
   register (module Symbolizer);
   register (module Reconstructor)

@@ -1,0 +1,7 @@
+Library bap_service
+  Build$:           flag(everything)
+  Path:             lib/bap_service
+  FindlibName:      bap-service
+  CompiledObject:   best
+  BuildDepends:     bap-future, regular
+  Modules:          Bap_service

@@ -97,7 +97,11 @@ let create arch spec =
     error "%a" Error.pp er;
     Ok b
 
+let rel_brancher = Bap_service.Provider.declare "relocatable"
+    ~desc:"Provides a brancher that supports relocations"
+    Brancher.service
+
 let init () =
   let open Project.Info in
   Stream.Variadic.(apply (args arch $ spec) ~f:create) |>
-  Brancher.Factory.register "relocatable"
+  Brancher.Factory.provide rel_brancher
