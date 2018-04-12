@@ -1094,27 +1094,38 @@ module Fixpoint = struct
   type ('n,'d) t = Solution : {
       steps : int option;
       iters : int;
-      init : 'd;
+      default : 'd;
       approx : ('n,'d,_) Map.t;
     } -> ('n,'d) t
 
 
-  let create constraints init = Solution {
+  let create constraints default = Solution {
       steps=Some 0; iters=0;
       approx=constraints;
-      init;
+      default;
     }
 
   let iterations (Solution {iters}) = iters
 
-  let get (Solution {approx; init}) n =
+  let default (Solution {default}) = default
+
+  let get (Solution {approx; default}) n =
     match Map.find approx n with
-    | None -> init
+    | None -> default
     | Some x -> x
 
   let is_fixpoint (Solution {steps; iters}) = match steps with
     | None -> iters > 0
     | Some steps -> iters < steps
+
+  let derive (Solution s) ~f default =
+    let f ~key ~data = f key data in
+    Solution {
+      steps = s.steps;
+      iters = s.iters;
+      default;
+      approx = Map.filter_mapi ~f s.approx;
+    }
 
   type ('a,'b) step =
     | Step of 'a
@@ -1196,7 +1207,7 @@ module Fixpoint = struct
   let compute (type g n d)
       (module G : Graph with type t = g and type node = n)
       ?steps ?start ?(rev=false) ?step
-      ~init:(Solution {approx; iters; init}) ~equal ~merge ~f g : (n,d) t =
+      ~init:(Solution {approx; iters; default}) ~equal ~merge ~f g : (n,d) t =
     let nodes =
       reverse_postorder_traverse (module G) ~rev ?start g |>
       Sequence.to_array in
@@ -1219,7 +1230,7 @@ module Fixpoint = struct
         visits, step i nodes.(n) x x' in
     let get approx n : d = match Map.find approx n with
       | Some x -> x
-      | None -> init in
+      | None -> default in
     let step visits works approx = match Set.min_elt works with
       | None -> Done approx
       | Some n ->
@@ -1242,7 +1253,7 @@ module Fixpoint = struct
     let make_solution iters approx = Solution {
         steps;
         iters;
-        init;
+        default;
         approx = Map.fold approx ~init:G.Node.Map.empty
             ~f:(fun ~key:n ~data approx ->
                 Map.add approx ~key:nodes.(n) ~data);
