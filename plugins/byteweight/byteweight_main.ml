@@ -37,10 +37,10 @@ let byteweight =
     ~desc:"Provides a rooter based on byteweight algorithm"
     Rooter.service
 
-let make_product file =
+let () =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"byteweight" "%s" file in
+    Data.Cache.digest ~namespace:"byteweight" "rooter" in
   let p = Product.create ~digest byteweight in
   Service.provide Rooter.service p
 
@@ -63,7 +63,6 @@ let main path length threshold =
   let rooter =
     let open Project.Info in
     Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
-  Stream.observe Project.Info.file make_product;
   Rooter.Factory.provide byteweight rooter
 
 let () =

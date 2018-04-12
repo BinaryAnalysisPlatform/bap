@@ -75,11 +75,6 @@ let args filename argv =
   String.Hash_set.sexp_of_t inputs |>
   Sexp.to_string_mach
 
-let digest o =
-  Data.Cache.digest ~namespace:"project" "%s%s"
-    (Digest.file o.filename)
-    (args o.filename Sys.argv)
-
 module Pr = struct
   open Bap_service
 
@@ -106,6 +101,12 @@ module Pr = struct
 
 end
 
+let digest o = match !Pr.digest with
+  | Some d ->
+    Option.some @@
+    Data.Cache.digest ~namespace:"project" "%s:%s"
+      (Digest.file o.filename) d
+  | None -> None
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
     report_progress
@@ -151,18 +152,20 @@ let main o =
       ?brancher ?rooter ?symbolizer ?reconstructor  |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project ->
-      Project.Cache.save (digest o) project;
-      project in
+      match !Pr.digest with
+      | None -> project
+      | Some d ->
+        Option.value_map ~default:() (digest o)
+          ~f:(fun d -> Project.Cache.save d project);
+        project in
   let proj_of_file ?ver ?fmt file =
     In_channel.with_file file
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
   let project =
     let proj =
-      match !Pr.digest with
-      | None ->
-        printf "no digest from combined products\n";
-        None
-      | Some s -> Project.Cache.load (Data.Cache.Digest.of_string s) in
+      match digest o with
+      | None -> None
+      | Some digest -> Project.Cache.load digest in
     match proj with
     | Some proj ->
       printf "got cache!!!\n";

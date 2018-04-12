@@ -3,6 +3,7 @@ open Bap_future.Std
 open Bap.Std
 open Image
 open Monads.Std
+open Regular.Std
 
 include Self()
 
@@ -100,6 +101,12 @@ let create arch spec =
 let rel_brancher = Bap_service.Provider.declare "relocatable"
     ~desc:"Provides a brancher that supports relocations"
     Brancher.service
+
+let () =
+  let digest = Data.Cache.Digest.to_string @@
+    Data.Cache.digest ~namespace:"brancher" "relocatable-brancher" in
+  Bap_service.Product.create ~digest rel_brancher |>
+  Bap_service.Service.provide Brancher.service
 
 let init () =
   let open Project.Info in

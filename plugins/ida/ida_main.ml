@@ -58,23 +58,22 @@ let provider service =
     ~desc:"Provides inforamation obtained from Ida Pro"
     service
 
-let make_product service provider file =
+let make_product name service provider =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"ida" "%s" file in
-  let p = Product.create ~digest provider in
-  Service.provide service p
+    Data.Cache.digest ~namespace:"ida" "%s" name in
+  Product.create ~digest provider |>
+  Service.provide service
 
-let register_source (module T : Target) =
+let register_source name (module T : Target) =
   let source =
     let open Project.Info in
     let extract file arch = Or_error.try_with ~backtrace:true (fun () ->
         extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   let p = provider T.service in
-  Stream.observe Project.Info.file (make_product T.service p);
+  make_product name T.service p;
   T.Factory.provide p source
-
 
 type perm = [`code | `data] [@@deriving sexp]
 type section = string * perm * int * (int64 * int)
@@ -153,9 +152,9 @@ let checked ida_path is_headless =
   Bap_ida_check.(check_headless is_headless >>= fun () -> check_path ida_path)
 
 let main () =
-  register_source (module Rooter);
-  register_source (module Symbolizer);
-  register_source (module Reconstructor);
+  register_source "rooter" (module Rooter);
+  register_source "symbolizer" (module Symbolizer);
+  register_source "reconstructor" (module Reconstructor);
   Project.Input.register_loader name loader
 
 type headless = bool option

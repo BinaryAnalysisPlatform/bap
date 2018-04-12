@@ -91,14 +91,12 @@ let objdump = Bap_service.Provider.declare "objdump"
     ~desc:"A symbolizer based on parsing objdump output"
     Symbolizer.service
 
-let make_product file =
+let () =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"objdump" "%s" file in
+    Data.Cache.digest ~namespace:"objdump" "symbolizer"  in
   let p = Product.create ~digest objdump in
   Service.provide Symbolizer.service p
-
-let () = Stream.observe Project.Info.file make_product
 
 let main () =
   Stream.merge Project.Info.arch Project.Info.file ~f:run_objdump |>
