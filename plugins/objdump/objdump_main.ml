@@ -88,7 +88,7 @@ let run_objdump arch file =
   Ok (Symbolizer.create (Hashtbl.find names))
 
 let objdump = Bap_service.Provider.declare "objdump"
-    ~desc:"A symbolizer based on parsing objdump output"
+    ~desc:"A symbolizer based on parsing objdump's output"
     Symbolizer.service
 
 let () =
