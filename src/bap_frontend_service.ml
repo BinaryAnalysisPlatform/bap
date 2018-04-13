@@ -3,101 +3,94 @@ open Bap.Std
 open Bap_future.Std
 open Bap_service
 
-let combine_products service ~f =
-  let s = Service.request service |>
-          Stream.parse ~init:None
-            ~f:(fun p p' -> match p with
-                | None -> Some p', Some p'
-                | Some p ->
-                  let p = Product.combine p p' in
-                  Some p, Some p) in
-  Stream.observe s f
 
-module Symbs = struct
+module type T = sig
+  val service : service
+end
+
+module Make(T:T) = struct
+
+  let product = ref None
+
+  let () =
+    let s = Service.request T.service |>
+            Stream.parse ~init:None
+              ~f:(fun p p' -> match p with
+                  | None -> Some p', Some p'
+                  | Some p ->
+                    let p = Product.combine p p' in
+                    Some p, Some p) in
+    Stream.observe s (fun x -> product := Some x)
+end
+
+module Symbolizer = Make(struct
   let service = Symbolizer.service
 
   let provider = Provider.declare
       ~desc:"Provides a sum of all acquired symbolizers"
       "Meta-symbolizer" service
+end)
 
-  let product = ref None
-
-  let () = combine_products service ~f:(fun x -> product := Some x)
-end
-
-module Roots = struct
+module Rooter = Make(struct
   let service = Rooter.service
 
   let provider = Provider.declare
       ~desc:"Provides a sum of all acquired rooters"
       "Meta-rooter" service
+end)
 
-  let product = ref None
-
-  let () = combine_products service ~f:(fun x -> product := Some x)
-end
-
-module Branchs = struct
+module Brancher = Make(struct
   let service = Brancher.service
 
   let provider = Provider.declare
       ~desc:"Provides a sum of all acquired branchers"
       "Meta-brancher" service
+end)
 
-  let product = ref None
-
-  let () = combine_products service ~f:(fun x -> product := Some x)
-end
-
-module Recons = struct
+module Recons = Make(struct
   let service = Reconstructor.service
 
   let provider = Provider.declare
       ~desc:"Provides a sum of all acquired reconstructors"
       "Meta-reconstructor" service
+end)
 
-  let product = ref None
-
-  let () = combine_products service ~f:(fun x -> product := Some x)
-end
-
-module Images = struct
+module Image = Make(struct
   let service = Image.loader
 
   let provider = Provider.declare
       ~desc:"Provides a sum of all acquired loaders"
       "Meta-image-loader" service
+end)
 
-  let product = ref None
+module Project = struct
+  let service = Service.declare
+      ~desc:"Combines services for delivering projects"
+      ~uuid:"998638ce-6d28-4eb8-b9ea-b1d47416f7b6"
+      "project"
 
-  let () = combine_products service ~f:(fun x -> product := Some x)
+  let provider = Provider.declare
+      ~desc:"Project provider" "project" service
+
+  let products = [
+    Symbolizer.product;
+    Rooter.product;
+    Brancher.product;
+    Recons.product;
+    Image.product;
+  ]
+
+  let product () = List.fold products ~init:None
+      ~f:(fun ac p ->
+          match ac, !p with
+          | None, None -> None
+          | Some x, None
+          | None, Some x -> Some x
+          | Some x, Some y -> Some (Product.combine x y))
 end
 
-let service = Service.declare
-    ~desc:"Combines services for delivering projects"
-    ~uuid:"998638ce-6d28-4eb8-b9ea-b1d47416f7b6"
-    "project"
-
-let provider = Provider.declare
-    ~desc:"Project provider" "project" service
-
-let products = [
-  Symbs.product;
-  Roots.product;
-  Branchs.product;
-  Recons.product;
-  Images.product;
-]
-
-let product () = List.fold products ~init:None
-    ~f:(fun ac p ->
-        match ac, !p with
-        | None, None -> None
-        | Some x, None
-        | None, Some x -> Some x
-        | Some x, Some y -> Some (Product.combine x y))
 
 let digest () =
-  match product () with
+  match Project.product () with
   | None -> None
   | Some p -> Some (Product.digest p)
