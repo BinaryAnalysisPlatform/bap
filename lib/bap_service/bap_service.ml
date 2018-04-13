@@ -18,11 +18,13 @@ module Service_t = struct
     end)
 end
 
+type service = Service_t.t  [@@deriving bin_io, compare, sexp]
+
 module Provider_t = struct
   type t = {
     name : string;
     desc : string;
-    service : Service_t.t;
+    service : service;
   } [@@deriving bin_io, compare, fields, sexp]
 
   include Regular.Make(struct
@@ -34,11 +36,13 @@ module Provider_t = struct
     end)
 end
 
+type provider = Provider_t.t [@@deriving bin_io, compare, sexp]
+
 module Product_t = struct
+
   type t = {
-    digest   : string;
-    provider : Provider_t.t;
-    products : t list;
+    digest    : string;
+    providers : provider list;
   } [@@deriving bin_io, compare, fields, sexp]
 
   include Regular.Make(struct
@@ -50,20 +54,19 @@ module Product_t = struct
     end)
 end
 
+type product = Product_t.t [@@deriving bin_io, compare, sexp]
+
 module Product = struct
   include Product_t
 
-  let create ~digest provider = { digest; provider; products = []}
+  let create ~digest provider = { digest; providers = [provider] }
 
-  let providers t =
-    t.provider :: List.map ~f:provider t.products
+  let providers t = t.providers
 
-  let combine t t' =
-    let get x f = f x :: List.map ~f x.products in
-    let both f = get t f @ get t' f in
-    let digest   = String.concat (both digest) in
-    let products = List.concat (both products) in
-    {t with digest; products}
+  let combine p p' = {
+    digest = String.concat [p.digest; p'.digest];
+    providers = p.providers @ p'.providers;
+  }
 
 end
 
@@ -104,55 +107,4 @@ module Provider = struct
     let find = Option.value_map ~default:[] in
     find ~f:all_by_service by_service @
     find ~f:all_by_name by_name
-end
-
-type provider = Provider.t [@@deriving bin_io, compare, sexp]
-type service  = Service.t  [@@deriving bin_io, compare, sexp]
-type product  = Product.t  [@@deriving bin_io, compare, sexp]
-
-module Try = struct
-
-  type 'a t = 'a Or_error.t stream
-  type 'a source = 'a t
-
-  module type Factory = sig
-    type t
-    val list : unit -> string list
-    val find : string -> t source option
-    val register : string -> t source -> unit
-
-    val provide : provider -> t source -> unit
-    val request : provider -> t source option
-    val providers : unit -> provider list
-  end
-
-  module Tab = Provider.Table
-
-  module Factory = struct
-    module type S = Factory
-    module Make(T : T) : S with type t = T.t = struct
-      type t = T.t
-      let factory : t source Tab.t = Tab.create ()
-
-      let register name source =
-        match List.hd @@ Provider.select ~by_name:name () with
-        | None -> failwith (sprintf "no providers declared under the name %s" name)
-        | Some p -> Hashtbl.set factory ~key:p ~data:source
-
-      let provide provider source =
-        Hashtbl.set factory ~key:provider ~data:source
-
-      let request = Hashtbl.find factory
-
-      let list () = Hashtbl.keys factory |> List.map ~f:Provider.name
-
-      let find name =
-        List.find_map (Hashtbl.to_alist factory)
-          ~f:(fun (p,s) ->
-              Option.some_if (String.equal (Provider.name p) name) s)
-
-      let providers () = Hashtbl.keys factory
-
-    end
-  end
 end
