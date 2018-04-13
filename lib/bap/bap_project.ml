@@ -560,27 +560,6 @@ end
 let passes () = DList.to_list passes
 let find_pass = Pass.find
 
-module type S = sig
-  type t
-  val empty : t
-  val of_image : image -> t
-  val service : Bap_service.service
-  module Factory : Bap_disasm_source.Factory with type t = t
-end
-
-let register x =
-  let module S = (val x : S) in
-  let _provider = Bap_service.Provider.declare
-      ~desc:"internal service provider" "internal" S.service in
-  let stream =
-    Stream.map Info.img ~f:(fun img -> Ok (S.of_image img)) in
-  S.Factory.register "internal" stream
-
-let () =
-  register (module Brancher);
-  register (module Rooter);
-  register (module Symbolizer)
-
 include Data.Make(struct
     type nonrec t = t
     let version = "1.0.0"

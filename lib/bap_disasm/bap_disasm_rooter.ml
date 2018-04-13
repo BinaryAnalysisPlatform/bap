@@ -37,7 +37,8 @@ module Factory = struct
   include Source.Factory.Make(struct type nonrec t = t end)
 
   let register name source =
-    let desc = sprintf "rooter %s" name in
-    let _provider = Bap_service.Provider.declare ~desc name service in
-    register name source
+    let provider =
+      Bap_service.Provider.declare ~desc:"no description provided"
+        name service in
+    provide provider source
 end

@@ -44,6 +44,7 @@ module Info : sig
   val arch : arch stream
   val data : value memmap stream
   val code : value memmap stream
+  val img : image stream
   val cfg : cfg stream
   val symtab : symtab stream
   val program : program term stream

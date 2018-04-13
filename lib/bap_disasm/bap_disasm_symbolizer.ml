@@ -48,9 +48,10 @@ module Factory = struct
   include Factory.Make(struct type nonrec t = t end)
 
   let register name source =
-    let desc = sprintf "symbolzier %s" name in
-    let _provider = Bap_service.Provider.declare ~desc name service in
-    register name source
+    let provider =
+      Bap_service.Provider.declare ~desc:"no description provided"
+        name service in
+    provide provider source
 end
 
 let internal_image_symbolizer = (fun img -> Some (of_image img))

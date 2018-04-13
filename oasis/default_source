@@ -1,0 +1,7 @@
+Library default_source_plugin
+  XMETADescription: provide default bap sources
+  Path:             plugins/default_source
+  BuildDepends:     bap, bap-service
+  FindlibName:      bap-plugin-default-source
+  InternalModules:  Default_source_main
+  XMETAExtraLines:  tags="symbolizer,brancher,rooter"

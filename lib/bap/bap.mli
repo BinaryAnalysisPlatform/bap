@@ -7834,6 +7834,10 @@ module Std : sig
     (** [empty] is a symbolizer that knows nothing.  *)
     val empty : t
 
+    (** [of_image img] create a symbolizer that will use existing symbol
+        information inside the image to find symbol names. *)
+    val of_image : image -> t
+
     val service : service
 
     (** A factory of symbolizers. Use it register and create
@@ -7867,6 +7871,9 @@ module Std : sig
 
     val service : service
 
+    (** [empty] is a rooter that knows nothing.  *)
+    val empty : t
+
     (** A factory of rooters. Useful to register custom rooters  *)
     module Factory : Source.Factory.S with type t = t
   end
@@ -7895,7 +7902,15 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
+    (** [of_image img] create a brancher that will use existing arch
+        information from the image. *)
+    val of_image : image -> t
+
     val service : service
+
+    (** [empty] is a brancher that knows nothing.  *)
+    val empty : t
+
 
     module Factory : Source.Factory.S with type t = t
 
@@ -8283,6 +8298,9 @@ module Std : sig
 
       (** occurs once code segment is discovered  *)
       val code : value memmap stream
+
+      (** occurs once image is loaded *)
+      val img : image stream
 
       (** occurs everytime a whole program control flow graph is changed  *)
       val cfg : cfg stream
