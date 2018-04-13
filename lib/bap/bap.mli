@@ -5292,6 +5292,10 @@ module Std : sig
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
     [@@deprecated "[since 2017-07] use register_loader instead"]
 
+
+    val loader : service
+
+
     (** {2 Internals}
 
         Access to the low-level internals.

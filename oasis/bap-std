@@ -80,7 +80,7 @@ Library bap_image
   Build$:          flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre
+  BuildDepends:  bap.types, ogre, bap-service
   InternalModules:
                  Bap_fileutils,
                  Bap_image,

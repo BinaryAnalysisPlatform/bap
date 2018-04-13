@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_llvm.Std
+open Regular.Std
+open Bap_service
 
 include Self()
 
@@ -13,6 +15,18 @@ let disasm_init x86_syntax =
 let print_version () =
   printf "%s\n" llvm_version ;
   exit 0
+
+let digest base syn =
+  let base = Option.value_map base ~default:""
+      ~f:Int64.to_string in
+  Data.Cache.Digest.to_string @@
+  Data.Cache.digest ~namespace:"llvm" "base:%s;syntax:%s" base syn
+
+let llvm_loader = Bap_service.Provider.declare "llvm-loader"
+    ~desc:"Provides disassembler and image loader base on llvm library"
+    Image.loader
+
+let product digest = Product.create ~digest llvm_loader
 
 let () =
   let () = Config.manpage [
@@ -40,6 +54,8 @@ For relocatable files a default image base is equal to 0xC0000000." in
       if !version then
         print_version();
       let () = init_loader ?base:!base_addr () in
+      let p = product (digest !base_addr !x86_syntax) in
+      Service.provide Image.loader p;
       match !x86_syntax with
       | "att" | "intel" as s ->
         let syn = x86_syntax_of_sexp (Sexp.of_string s) in
