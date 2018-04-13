@@ -65,7 +65,7 @@ end)
 
 module Project = struct
   let service = Service.declare
-      ~desc:"Combines services for delivering projects"
+      ~desc:"Service for delivering projects"
       ~uuid:"998638ce-6d28-4eb8-b9ea-b1d47416f7b6"
       "project"
 
