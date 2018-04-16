@@ -75,15 +75,26 @@ let args filename argv =
   String.Hash_set.sexp_of_t inputs |>
   Sexp.to_string_mach
 
+let ready s =
+  let xs = ref [] in
+  Stream.observe (Service.request s) (fun x -> xs := x :: !xs);
+  fun () -> List.rev !xs
+
+let symbs = ready Symbolizer.service
+let roots = ready Rooter.service
+let recons = ready Reconstructor.service
+let branch = ready Brancher.service
+let loader = ready Image.loader
+let lifter = ready lifter
+
 let digest o =
-  let ready s = Stream.get_available (Service.request s) in
   List.concat [
-    ready Symbolizer.service;
-    ready Rooter.service;
-    ready Reconstructor.service;
-    ready Brancher.service;
-    ready Image.loader;
-    ready lifter; ] |>
+    symbs  ();
+    roots  ();
+    recons ();
+    branch ();
+    loader ();
+    lifter (); ] |>
   List.fold ~init:None ~f:(fun p p' -> match p with
       | None -> Some p'
       | Some p -> Some (Product.combine p p')) |> function
@@ -150,11 +161,9 @@ let main o =
       | Some digest -> Project.Cache.load digest in
     match proj with
     | Some proj ->
-      printf "got cache!!!\n";
       Project.restore_state proj;
       proj
     | None ->
-      printf "NO cache!!!\n";
       match o.source with
       | `Project ->
         let fmt,ver = extract_format o.filename in

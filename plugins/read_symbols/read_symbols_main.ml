@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_future.Std
 open Bap.Std
+open Bap_service
 
 include Self()
 
@@ -17,12 +18,12 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  val service : Bap_service.service
+  val service : service
   module Factory : Source.Factory.S with type t = t
 end
 
 let provider service =
-  Bap_service.Provider.declare "file"
+  Provider.declare "file"
     ~desc:"Read symbols from a file" service
 
 let register syms =
@@ -31,7 +32,10 @@ let register syms =
         Or_error.try_with (fun () ->
             extract syms arch |>
             Seq.of_list |> T.of_blocks)) in
-    T.Factory.provide (provider T.service) source in
+    let provider = provider T.service in
+    let prod = Product.create ~digest:(sprintf "file %s" syms) provider in
+    T.Factory.provide provider source;
+    Bap_service.Service.provide T.service prod in
   register (module Rooter);
   register (module Symbolizer);
   register (module Reconstructor)

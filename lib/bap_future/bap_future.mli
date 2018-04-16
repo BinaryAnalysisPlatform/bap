@@ -681,8 +681,6 @@ module Std : sig
         event [e] *)
     val last_before : unit future -> 'a t -> int -> 'a list future
 
-    val get_available : 'a stream -> 'a list
-
   end
 
 

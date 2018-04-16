@@ -178,7 +178,6 @@ module Std = struct
       mutable on_subs: (id -> unit) list;
       mutable on_unsubs: (id -> unit) list;
       mutable waiters : (unit -> unit) list;
-      mutable ready : 'a list;
     }
 
     let add t f =
@@ -216,14 +215,8 @@ module Std = struct
         on_subs = [];
         on_unsubs = [];
         waiters = [];
-        ready = [];
       } in
-      let signal x =
-        stream.ready <- x :: stream.ready;
-        publish stream x in
-      stream, Signal signal
-
-    let get_available t = List.rev t.ready
+      stream, Signal (publish stream)
 
     let wait t =
       List.iter t.waiters ~f:(fun f -> f ())
