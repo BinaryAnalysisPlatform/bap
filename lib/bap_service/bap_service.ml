@@ -15,7 +15,7 @@ type provider = service named
 [@@deriving bin_io, compare, sexp]
 
 type product = {
-  digest    : string;
+  digest    : String.Set.t;
   providers : provider list;
 } [@@deriving bin_io, compare, sexp]
 
@@ -81,13 +81,15 @@ end
 module Product = struct
   type t = product [@@deriving bin_io, compare, sexp]
 
-  let create ~digest provider = { digest; providers = [provider] }
+  let create ~digest provider =
+    let digest = Set.add String.Set.empty digest in
+    { digest; providers = [provider] }
 
-  let digest t = t.digest
+  let digest t = Set.to_list t.digest |> String.concat
   let providers t = t.providers
 
   let combine p p' = {
-    digest = String.concat [p.digest; p'.digest];
+    digest = String.Set.union p.digest p'.digest;
     providers = p.providers @ p'.providers;
   }
 
@@ -96,6 +98,6 @@ module Product = struct
       let module_name = Some "Bap.Service.Product"
       let hash = Hashtbl.hash
       let version = "0.1"
-      let pp fmt t = Format.fprintf fmt "%s" t.digest
+      let pp fmt t = Format.fprintf fmt "%s" (digest t)
     end)
 end

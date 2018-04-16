@@ -6581,6 +6581,8 @@ module Std : sig
     val lift : lifter
   end
 
+  val lifter : service
+
   (** [target_of_arch arch] returns a module packed into value, that
       abstracts target architecture. The returned module has type
       {!Target} and can be unpacked locally with:

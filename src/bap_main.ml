@@ -75,12 +75,23 @@ let args filename argv =
   String.Hash_set.sexp_of_t inputs |>
   Sexp.to_string_mach
 
-let digest o = match Bap_frontend_service.digest () with
-  | Some d ->
+let digest o =
+  let ready s = Stream.get_available (Service.request s) in
+  List.concat [
+    ready Symbolizer.service;
+    ready Rooter.service;
+    ready Reconstructor.service;
+    ready Brancher.service;
+    ready Image.loader;
+    ready lifter; ] |>
+  List.fold ~init:None ~f:(fun p p' -> match p with
+      | None -> Some p'
+      | Some p -> Some (Product.combine p p')) |> function
+  | None -> None
+  | Some p ->
     Option.some @@
     Data.Cache.digest ~namespace:"project" "%s:%s"
-      (Digest.file o.filename) d
-  | None -> None
+      (Digest.file o.filename) (Product.digest p)
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
     report_progress
