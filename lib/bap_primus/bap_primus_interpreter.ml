@@ -96,6 +96,9 @@ let undefined,on_undefined =
 let jumping,will_jump =
   Observation.provide ~inspect:sexp_of_values "jumping"
 
+let eval_cond,on_cond =
+  Observation.provide ~inspect:sexp_of_value "eval_cond"
+
 
 let results r op = Sexp.List [op; sexp_of_value r]
 
@@ -441,7 +444,8 @@ module Make (Machine : Machine) = struct
       interrupt n >>= fun () ->
       Code.exec (`tid r)
 
-  let jmp t = eval_exp (Jmp.cond t) >>| fun ({value} as cond) ->
+  let jmp t = eval_exp (Jmp.cond t) >>= fun ({value} as cond) ->
+    !!on_cond cond >>| fun () ->
     Option.some_if (Word.is_one value) (cond,t)
   let jmp = term normal jmp_t jmp
 
