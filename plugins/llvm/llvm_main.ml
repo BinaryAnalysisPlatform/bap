@@ -16,15 +16,16 @@ let print_version () =
   printf "%s\n" llvm_version ;
   exit 0
 
-let digest base syn =
-  let base = Option.value_map base ~default:""
-      ~f:Int64.to_string in
-  Data.Cache.Digest.to_string @@
-  Data.Cache.digest ~namespace:"llvm" "base:%s;syntax:%s" base syn
-
 let llvm_loader = Bap_service.Provider.declare "llvm-loader"
     ~desc:"Provides disassembler and image loader base on llvm library"
     Image.loader
+
+let product base syn =
+  let base = Option.value_map base ~default:"" ~f:Int64.to_string in
+  let digest = Data.Cache.Digest.to_string @@
+    Data.Cache.digest ~namespace:"llvm" "base:%s;syntax:%s" base syn in
+  Product.provide ~digest llvm_loader;
+  info "product issued"
 
 let () =
   let () = Config.manpage [
@@ -51,8 +52,8 @@ For relocatable files a default image base is equal to 0xC0000000." in
   Config.when_ready (fun {Config.get=(!)} ->
       if !version then
         print_version();
-      let () = init_loader ?base:!base_addr () in
-      Product.provide ~digest:(digest !base_addr !x86_syntax) llvm_loader;
+      init_loader ?base:!base_addr ();
+      product !base_addr !x86_syntax;
       match !x86_syntax with
       | "att" | "intel" as s ->
         let syn = x86_syntax_of_sexp (Sexp.of_string s) in

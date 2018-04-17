@@ -27,17 +27,18 @@ let provider service =
     ~desc:"Read symbols from a file" service
 
 let register syms =
-  let register (module T : Target) =
+  let register name (module T : Target) =
     let source = Stream.map Project.Info.arch (fun arch ->
         Or_error.try_with (fun () ->
             extract syms arch |>
             Seq.of_list |> T.of_blocks)) in
     let provider = provider T.service in
     T.Factory.provide provider source;
-    Bap_service.Product.provide ~digest:(sprintf "file %s" syms) provider in
-  register (module Rooter);
-  register (module Symbolizer);
-  register (module Reconstructor)
+    Product.provide ~digest:(sprintf "file %s" syms) provider;
+    info "%s product issued" name in
+  register "rooter" (module Rooter);
+  register "symbolizer" (module Symbolizer);
+  register "reconstructor" (module Reconstructor)
 
 let () =
   let () = Config.manpage [

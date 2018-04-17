@@ -23,7 +23,8 @@ let main kind x32 x64 =
   X86_abi.setup ~abi:(function
       | `x86 -> x32
       | `x86_64 -> x64) ();
-  issue_product kind
+  issue_product kind;
+  info "product issued"
 
 let () =
   let () = Config.manpage [

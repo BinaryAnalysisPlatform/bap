@@ -62,7 +62,8 @@ let make_product name service provider =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
     Data.Cache.digest ~namespace:"ida" "%s" name in
-  Product.provide ~digest provider
+  Product.provide ~digest provider;
+  info "%s product issued" name
 
 let register_source name (module T : Target) =
   let source =
