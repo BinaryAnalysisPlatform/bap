@@ -17,7 +17,7 @@ Library x86_plugin
  XMETADescription: provide x86 lifter
  Path:             plugins/x86
  FindlibName:      bap-plugin-x86
- BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm
+ BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm, bap-service
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
                    X86_asm,

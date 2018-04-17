@@ -15,7 +15,7 @@ Library byteweight_plugin
   FindlibName:      bap-plugin-byteweight
   Build$:           flag(everything) || flag(byteweight)
   CompiledObject:   best
-  BuildDepends:     bap, bap-byteweight
+  BuildDepends:     bap, bap-byteweight, bap-service
   InternalModules:  Byteweight_main
   XMETADescription: find function starts using Byteweight algorithm
   XMETAExtraLines:  tags="pass, rooter"

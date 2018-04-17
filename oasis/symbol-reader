@@ -6,7 +6,7 @@ Library read_symbols_plugin
   Build$:           flag(everything) || flag(symbol_reader)
   Path:             plugins/read_symbols
   FindlibName:      bap-plugin-read_symbols
-  BuildDepends:     bap
+  BuildDepends:     bap, bap-service
   Modules:          Read_symbols_main
   XMETADescription: read symbol information from file
   XMETAExtraLines:  tags="reconstructor, rooter, symbolizer"
