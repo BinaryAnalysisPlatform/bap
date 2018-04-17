@@ -16,14 +16,15 @@ module Recipe = Bap_recipe
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
-let find_provider ps name =
-  List.find ps ~f:(fun p -> String.equal (Provider.name p) name)
+module type Factory = Source.Factory.S
 
-let find_source (type t) (module F : Source.Factory.S with type t = t)
-    field o =
-  Option.(field o >>= fun name ->
-          find_provider (F.providers ()) name >>=
-          F.request)
+let request (type t) (module F : Factory with type t = t) name =
+  Option.(
+    F.providers () |>
+    List.find ~f:(fun p -> String.equal (Provider.name p) name) >>=
+    F.request)
+
+let find_source factory field o = Option.(field o >>= request factory)
 
 let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
@@ -38,20 +39,17 @@ let merge_streams ss ~f : 'a Source.t =
         | Error er, Error er' ->
           Error (Error.of_list [er; er']))
 
-let merge_sources (type t) (module F : Source.Factory.S with type t = t)
-    field (o : Bap_options.t) ~f =
+let merge_sources factory field (o : Bap_options.t) ~f =
   match field o with
   | [] -> None
   | names ->
-    let ps = List.filter_map names
-      ~f:(find_provider (F.providers ())) in
-    match List.filter_map ps ~f:F.request with
+    match List.filter_map names ~f:(request factory) with
     | [] -> assert false
     | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
-  merge_sources (module Symbolizer.Factory) symbolizers ~f:(fun s1 s2 ->
-      Symbolizer.chain [s1;s2])
+  merge_sources (module Symbolizer.Factory) symbolizers
+    ~f:(fun s1 s2 -> Symbolizer.chain [s1;s2])
 
 let rooter =
   merge_sources (module Rooter.Factory) rooters ~f:Rooter.union

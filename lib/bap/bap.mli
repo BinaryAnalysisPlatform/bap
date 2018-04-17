@@ -5292,7 +5292,7 @@ module Std : sig
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
     [@@deprecated "[since 2017-07] use register_loader instead"]
 
-
+    (** [loader] a service for delivering image loaders  *)
     val loader : service
 
 
@@ -6581,6 +6581,7 @@ module Std : sig
     val lift : lifter
   end
 
+  (** [lifter] a service for delivering lifters *)
   val lifter : service
 
   (** [target_of_arch arch] returns a module packed into value, that
@@ -7661,8 +7662,15 @@ module Std : sig
         val register : string -> t source -> unit
         [@@deprecated "[since 2018-04] use provide instead"]
 
+        (** [provide provide source] registers a [provider] of a given
+            [source] of information. If a provider already exists,
+            then it will be superceeded by a new one.  *)
         val provide : provider -> t source -> unit
+
+        (** [request provider] returns a source for a given [provider] *)
         val request : provider -> t source option
+
+        (** [providers ()] returns all registered providers *)
         val providers : unit -> provider list
 
       end
@@ -7842,6 +7850,7 @@ module Std : sig
         information inside the image to find symbol names. *)
     val of_image : image -> t
 
+    (** [service] a service for delivering symbolizers.  *)
     val service : service
 
     (** A factory of symbolizers. Use it register and create
@@ -7873,6 +7882,7 @@ module Std : sig
     (** [union r1 r2] joins roots from rooters [r1] and [r2]  *)
     val union : t -> t -> t
 
+    (** [service] a service for delivering rooters *)
     val service : service
 
     (** [empty] is a rooter that knows nothing.  *)
@@ -7910,11 +7920,11 @@ module Std : sig
         information from the image. *)
     val of_image : image -> t
 
+    (** [service] a service for delivering branchers *)
     val service : service
 
     (** [empty] is a brancher that knows nothing.  *)
     val empty : t
-
 
     module Factory : Source.Factory.S with type t = t
 
@@ -7958,6 +7968,7 @@ module Std : sig
         given cfg  *)
     val run : t -> cfg -> symtab
 
+    (** [service] a service for delivering reconstructors *)
     val service : service
 
     (** a factory of reconstructors  *)
