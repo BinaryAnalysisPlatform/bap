@@ -16,8 +16,14 @@ module Recipe = Bap_recipe
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
+let find_provider ps name =
+  List.find ps ~f:(fun p -> String.equal (Provider.name p) name)
+
 let find_source (type t) (module F : Source.Factory.S with type t = t)
-    field o = Option.(field o >>= F.find)
+    field o =
+  Option.(field o >>= fun name ->
+          find_provider (F.providers ()) name >>=
+          F.request)
 
 let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
@@ -32,18 +38,23 @@ let merge_streams ss ~f : 'a Source.t =
         | Error er, Error er' ->
           Error (Error.of_list [er; er']))
 
-let merge_sources create field (o : Bap_options.t) ~f =  match field o with
+let merge_sources (type t) (module F : Source.Factory.S with type t = t)
+    field (o : Bap_options.t) ~f =
+  match field o with
   | [] -> None
-  | names -> match List.filter_map names ~f:create with
+  | names ->
+    let ps = List.filter_map names
+      ~f:(find_provider (F.providers ())) in
+    match List.filter_map ps ~f:F.request with
     | [] -> assert false
     | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
-  merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
+  merge_sources (module Symbolizer.Factory) symbolizers ~f:(fun s1 s2 ->
       Symbolizer.chain [s1;s2])
 
 let rooter =
-  merge_sources Rooter.Factory.find rooters ~f:Rooter.union
+  merge_sources (module Rooter.Factory) rooters ~f:Rooter.union
 
 let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
@@ -80,21 +91,16 @@ let ready s =
   Stream.observe (Service.request s) (fun x -> xs := x :: !xs);
   fun () -> List.rev !xs
 
-let symbs = ready Symbolizer.service
-let roots = ready Rooter.service
-let recons = ready Reconstructor.service
-let branch = ready Brancher.service
-let loader = ready Image.loader
-let lifter = ready lifter
+let ready = [
+  ready Symbolizer.service;
+  ready Rooter.service;
+  ready Reconstructor.service;
+  ready Brancher.service;
+  ready Image.loader;
+  ready lifter; ]
 
 let digest o =
-  List.concat [
-    symbs  ();
-    roots  ();
-    recons ();
-    branch ();
-    loader ();
-    lifter (); ] |>
+  List.concat @@ List.map ready ~f:(fun x -> x ()) |>
   List.fold ~init:None ~f:(fun p p' -> match p with
       | None -> Some p'
       | Some p -> Some (Product.combine p p')) |> function

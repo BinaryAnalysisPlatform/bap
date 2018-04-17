@@ -214,7 +214,7 @@ module Std = struct
         last_id = Id.zero;
         on_subs = [];
         on_unsubs = [];
-        waiters = [];
+        waiters = []
       } in
       stream, Signal (publish stream)
 

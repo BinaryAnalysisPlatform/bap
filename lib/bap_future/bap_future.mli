@@ -543,7 +543,7 @@ module Std : sig
         contains [snd (f x)] for each [x] in [xs]. *)
     val split : 'a t -> f:('a -> 'b * 'c) -> 'b t * 'c t
 
-    (** [zip xs ys] creates a steam that will produce an element [(x,y)]
+    (** [zip xs ys] creates a stream that will produce an element [(x,y)]
         every time both [xs] and [ys] produce elements [x] and [y] respectively *)
     val zip : 'a t -> 'b t -> ('a * 'b) t
 

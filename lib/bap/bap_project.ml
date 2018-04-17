@@ -142,13 +142,13 @@ module Merge = struct
       | ss -> Some (merge_streams ss ~f)
 
   let symbolizer () =
-    let symbolizers = Symbolizer.Factory.list () in
-    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
+    let symbolizers = Symbolizer.Factory.providers () in
+    merge_sources Symbolizer.Factory.request symbolizers ~f:(fun s1 s2 ->
         Symbolizer.chain [s1;s2])
 
   let rooter () =
-    let rooters = Rooter.Factory.list () in
-    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
+    let rooters = Rooter.Factory.providers () in
+    merge_sources Rooter.Factory.request rooters ~f:Rooter.union
 
 end
 

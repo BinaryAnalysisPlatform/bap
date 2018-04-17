@@ -10,10 +10,13 @@ type 'a source = 'a t
 module type Factory = sig
   type t
   val list : unit -> string list
+  [@@deprecated "[since 2018-04] use providers instead"]
+
   val find : string -> t source option
+  [@@deprecated "[since 2018-04] use request instead"]
 
   val register : string -> t source -> unit
-  [@@deprecated "[since 2018-04] in favor of provide"]
+  [@@deprecated "[since 2018-04] use provide instead"]
 
   val provide : provider -> t source -> unit
   val request : provider -> t source option
