@@ -15,9 +15,9 @@ Library bap
                    bap.sema,
                    bap.types,
                    bap-future,
+                   bap-service,
                    cmdliner,
-                   regular,
-                   bap-service
+                   regular
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self, Bap_synthetic_symbolizer
 
@@ -80,7 +80,7 @@ Library bap_image
   Build$:          flag(everything) || flag(bap_std)
   FindlibParent: bap
   FindlibName:   image
-  BuildDepends:  bap.types, ogre, bap-service
+  BuildDepends:  bap-service, bap.types, ogre
   InternalModules:
                  Bap_fileutils,
                  Bap_image,
@@ -101,10 +101,10 @@ Library disasm
   BuildDepends:  bap.image,
                  bap.types,
                  bap-future,
+                 bap-service,
                  camlzip,
                  ocamlgraph,
-                 ogre,
-                 bap-service
+                 ogre
   InternalModules:
                  Bap_disasm,
                  Bap_disasm_basic,
