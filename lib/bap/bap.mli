@@ -5295,7 +5295,6 @@ module Std : sig
     (** [loader] a service for delivering image loaders  *)
     val loader : service
 
-
     (** {2 Internals}
 
         Access to the low-level internals.
@@ -7662,7 +7661,7 @@ module Std : sig
         val register : string -> t source -> unit
         [@@deprecated "[since 2018-04] use provide instead"]
 
-        (** [provide provide source] registers a [provider] of a given
+        (** [provide provider source] registers a [provider] of a given
             [source] of information. If a provider already exists,
             then it will be superceeded by a new one.  *)
         val provide : provider -> t source -> unit
