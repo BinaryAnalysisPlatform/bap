@@ -21,8 +21,8 @@ open Bap_future.Std
 open Regular.Std
 
 type service
-type product
 type provider
+type product [@@deriving bin_io, compare, sexp]
 
 type void
 type literal = (void,void,void) format
@@ -54,7 +54,7 @@ module Provider : sig
 end
 
 module Product : sig
-  type t = product
+  type t = product  [@@deriving bin_io, compare, sexp]
 
   (** [provide ~digest provider] issue a new product with [digest] *)
   val provide : digest:string -> provider -> unit
