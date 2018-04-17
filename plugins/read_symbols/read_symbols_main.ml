@@ -33,9 +33,8 @@ let register syms =
             extract syms arch |>
             Seq.of_list |> T.of_blocks)) in
     let provider = provider T.service in
-    let prod = Product.create ~digest:(sprintf "file %s" syms) provider in
     T.Factory.provide provider source;
-    Bap_service.Service.provide T.service prod in
+    Bap_service.Product.provide ~digest:(sprintf "file %s" syms) provider in
   register (module Rooter);
   register (module Symbolizer);
   register (module Reconstructor)

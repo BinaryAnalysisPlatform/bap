@@ -105,8 +105,7 @@ let rel_brancher = Bap_service.Provider.declare "relocatable"
 let () =
   let digest = Data.Cache.Digest.to_string @@
     Data.Cache.digest ~namespace:"brancher" "relocatable-brancher" in
-  Bap_service.Product.create ~digest rel_brancher |>
-  Bap_service.Service.provide Brancher.service
+  Bap_service.Product.provide ~digest rel_brancher
 
 let init () =
   let open Project.Info in

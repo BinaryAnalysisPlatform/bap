@@ -5,32 +5,30 @@ open Bap_disasm_source_intf
 open Bap_future.Std
 open Bap_service
 
-module Tab = Provider.Table
-
 module Factory = struct
   module type S = Factory
   module Make(T : T) = struct
     type t = T.t
-    let factory : t source Tab.t = Tab.create ()
+
+    let factory : (provider * t source)  String.Table.t = String.Table.create ()
 
     let register name source =
       match List.hd @@ Provider.select ~by_name:name () with
       | None -> failwith (sprintf "no providers declared under the name %s" name)
-      | Some p -> Hashtbl.set factory ~key:p ~data:source
-
-    let provide provider source =
-      Hashtbl.set factory ~key:provider ~data:source
-
-    let request = Hashtbl.find factory
-
-    let list () = Hashtbl.keys factory |> List.map ~f:Provider.name
+      | Some p -> Hashtbl.set factory ~key:name ~data:(p,source)
 
     let find name =
-      List.find_map (Hashtbl.to_alist factory)
-        ~f:(fun (p,s) ->
-            Option.some_if (String.equal (Provider.name p) name) s)
+      match Hashtbl.find factory name with
+      | None -> None
+      | Some (_,s) -> Some s
 
-    let providers () = Hashtbl.keys factory
+    let list () = Hashtbl.keys factory
+
+    let provide provider source =
+      Hashtbl.set factory ~key:(Provider.name provider) ~data:(provider,source)
+
+    let request p = find (Provider.name p)
+    let providers () = Hashtbl.data factory |> List.map ~f:fst
 
   end
 end

@@ -41,8 +41,7 @@ let () =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
     Data.Cache.digest ~namespace:"byteweight" "rooter" in
-  let p = Product.create ~digest byteweight in
-  Service.provide Rooter.service p
+  Product.provide ~digest byteweight
 
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in

@@ -11,8 +11,7 @@ let x86_lifter =
 
 let issue_product kind =
   let digest = sprintf "x86-%s" @@ Sexp.to_string (sexp_of_kind kind) in
-  let prod = Product.create ~digest x86_lifter in
-  Service.provide lifter prod
+  Product.provide ~digest x86_lifter
 
 let main kind x32 x64 =
   let ia32, amd64 = match kind with

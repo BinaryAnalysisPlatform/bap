@@ -3,5 +3,5 @@ Library bap_service
   Path:             lib/bap_service
   FindlibName:      bap-service
   CompiledObject:   best
-  BuildDepends:     bap-future, regular
+  BuildDepends:     bap-future, regular, uuidm
   Modules:          Bap_service

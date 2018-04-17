@@ -95,8 +95,7 @@ let () =
   let open Bap_service in
   let digest = Data.Cache.Digest.to_string @@
     Data.Cache.digest ~namespace:"objdump" "symbolizer"  in
-  let p = Product.create ~digest objdump in
-  Service.provide Symbolizer.service p
+  Product.provide ~digest objdump
 
 let main () =
   Stream.merge Project.Info.arch Project.Info.file ~f:run_objdump |>

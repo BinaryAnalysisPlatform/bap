@@ -99,14 +99,14 @@ let ready = [
 
 let digest o =
   List.concat @@ List.map ready ~f:(fun x -> x ()) |>
-  List.fold ~init:None ~f:(fun p p' -> match p with
-      | None -> Some p'
-      | Some p -> Some (Product.combine p p')) |> function
-  | None -> None
-  | Some p ->
+  List.fold ~init:String.Set.empty
+    ~f:(fun d p -> Set.add d (Product.digest p)) |>
+  Set.to_list |> function
+  | [] -> None
+  | digests ->
     Option.some @@
     Data.Cache.digest ~namespace:"project" "%s:%s"
-      (Digest.file o.filename) (Product.digest p)
+      (Digest.file o.filename) (String.concat digests)
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
     report_progress

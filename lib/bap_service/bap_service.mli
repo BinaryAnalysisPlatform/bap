@@ -13,9 +13,10 @@
     could be provided by several providers. Only a service provider
     knows how the provided service depends on the environment.
 
-    A [product] is a particular comptutation, that depends
+    A [product] is a result of a particular comptutation, that depends
     of computational environment. *)
 
+open Core_kernel.Std
 open Bap_future.Std
 open Regular.Std
 
@@ -23,20 +24,18 @@ type service
 type product
 type provider
 
+type void
+type literal = (void,void,void) format
+
 module Service : sig
   type t = service
 
   (** [declare ~desc uuid name] creates a service from description
       [desc], unique id [uuid] and [name] *)
-  val declare : desc:string -> uuid:string -> string -> t
-
-  (** [provide service product] supplies a [service] with a [product] *)
-  val provide : t -> product -> unit
+  val declare : desc:string -> uuid:literal -> string -> t
 
   (** [request service] returns a stream of all products of [service] *)
   val request : t -> product stream
-
-  include Regular.S with type t := t
 end
 
 module Provider : sig
@@ -52,27 +51,19 @@ module Provider : sig
   (** [select ~by_service ~by_name ()] returns a list of providers,
       filtered by name or by service or both of them *)
   val select : ?by_service:service -> ?by_name:string -> unit -> t list
-
-  include Regular.S with type t := t
 end
 
 module Product : sig
   type t = product
 
-  (** [create ~digest provider] creates a product for [proivder]
-      with [digest], where the latter is a digest of computational
-      environment *)
-  val create : digest:string -> provider -> t
+  (** [provide ~digest provider] issue a new product with [digest] *)
+  val provide : digest:string -> provider -> unit
 
-  (** [digest product] returns a digest of a [product] *)
+   (** [digest product] returns a digest of a [product] *)
   val digest : t -> string
 
-  (** [combine p p'] returns a sum of two products *)
-  val combine : t -> t -> t
-
-  (** [providers product] returns a list of providers that
-      participates in creation of a given [product]  *)
-  val providers : t -> provider list
+  (** [provider product] returns a product provider  *)
+  val provider : t -> provider
 
   include Regular.S with type t := t
 end

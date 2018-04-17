@@ -26,8 +26,6 @@ let llvm_loader = Bap_service.Provider.declare "llvm-loader"
     ~desc:"Provides disassembler and image loader base on llvm library"
     Image.loader
 
-let product digest = Product.create ~digest llvm_loader
-
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
@@ -54,8 +52,7 @@ For relocatable files a default image base is equal to 0xC0000000." in
       if !version then
         print_version();
       let () = init_loader ?base:!base_addr () in
-      let p = product (digest !base_addr !x86_syntax) in
-      Service.provide Image.loader p;
+      Product.provide ~digest:(digest !base_addr !x86_syntax) llvm_loader;
       match !x86_syntax with
       | "att" | "intel" as s ->
         let syn = x86_syntax_of_sexp (Sexp.of_string s) in

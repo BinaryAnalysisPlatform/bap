@@ -6,6 +6,7 @@ PKG fileutils
 PKG uri
 PKG ppx_jane
 PKG camlzip
+PKG uuidm
 
 B _build
 B _build/lib/bap
