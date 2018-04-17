@@ -1,5 +1,5 @@
 Library default_source_plugin
-  XMETADescription: provide default bap sources
+  XMETADescription: provide default symbolizer,brancher,rooter
   Build$:           flag(everything)
   Path:             plugins/default_source
   BuildDepends:     bap, bap-service
