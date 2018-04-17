@@ -7846,7 +7846,7 @@ module Std : sig
     val empty : t
 
     (** [of_image img] create a symbolizer that will use existing symbol
-        information inside the image to find symbol names. *)
+        information from the image to find symbol names. *)
     val of_image : image -> t
 
     (** [service] a service for delivering symbolizers.  *)
@@ -7915,8 +7915,7 @@ module Std : sig
         the instruction [insn], that occupies memory region [mem].  *)
     val resolve : t -> mem -> full_insn -> dests
 
-    (** [of_image img] create a brancher that will use existing arch
-        information from the image. *)
+    (** [of_image img] create a brancher from the image. *)
     val of_image : image -> t
 
     (** [service] a service for delivering branchers *)
