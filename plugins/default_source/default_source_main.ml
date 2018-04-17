@@ -11,20 +11,13 @@ module type S = sig
   module Factory : Bap_disasm_source.Factory with type t = t
 end
 
-let brancher =
-  Provider.declare
-    ~desc:"Provides internal brancher" "internal" Brancher.service
+let internal what s =
+  let desc = sprintf "Provides internal %s" what in
+  Provider.declare ~desc "internal" s
 
-let symbolizer =
-  Provider.declare
-    ~desc:"Provides internal symbolizer" "internal" Symbolizer.service
-
-let rooter =
-  Provider.declare
-    ~desc:"Provides internal rooter" "internal" Rooter.service
-
-let source_of_image f =
-  Stream.map Project.Info.img ~f:(fun img -> Ok (f img))
+let brancher = internal "brancher" Brancher.service
+let symbolizer = internal "symbolizer" Symbolizer.service
+let rooter = internal "rooter" Rooter.service
 
 let provide provider x =
   let module S = (val x : S) in
