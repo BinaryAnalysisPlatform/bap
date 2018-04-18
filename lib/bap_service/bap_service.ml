@@ -24,7 +24,7 @@ type product = {
 
 module Table = String.Table
 
-type meta = {
+type info = {
   products  : product stream;
   update    : product signal;
   providers : provider Table.t;
@@ -33,10 +33,10 @@ type meta = {
 module Service = struct
   type t = service
 
-  let all : meta named Table.t = Table.create ()
+  let all : info named Table.t = Table.create ()
 
-  let meta s = Hashtbl.find_exn all s
-  let data s = data (meta s)
+  let info s = Hashtbl.find_exn all s
+  let data s = data (info s)
   let products  s = products (data s)
   let update    s = update (data s)
   let providers s = providers (data s)
@@ -53,12 +53,10 @@ module Service = struct
     let providers = Table.create () in
     let products,update = Stream.create () in
     let data = {products; update; providers} in
-    Hashtbl.set all uuid {name; desc; data} ;
+    Hashtbl.set all uuid {name; desc; data};
     uuid
 
   let request = products
-
-  let equal = String.equal
 end
 
 module Provider = struct
@@ -99,7 +97,7 @@ module Product = struct
 
   include Regular.Make(struct
       type nonrec t = t [@@deriving bin_io, compare, sexp]
-      let module_name = Some "Bap.Service.Product"
+      let module_name = Some "Bap_service.Product"
       let hash = Hashtbl.hash
       let version = "1.0"
       let pp fmt t = Format.fprintf fmt "%s" (digest t)

@@ -1,5 +1,9 @@
+Flag service
+  Description: Build bap-service library
+  Default: false
+
 Library bap_service
-  Build$:           flag(everything)
+  Build$:           flag(everything) || flag(service)
   Path:             lib/bap_service
   FindlibName:      bap-service
   CompiledObject:   best
