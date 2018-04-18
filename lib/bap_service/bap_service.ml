@@ -24,22 +24,25 @@ type product = {
 
 module Table = String.Table
 
-type info = {
-  products  : product stream;
-  update    : product signal;
-  providers : provider Table.t;
-} [@@deriving fields]
-
 module Service = struct
   type t = service
 
+  type info = {
+    products  : product stream;
+    update    : product signal;
+    providers : provider Table.t;
+  } [@@deriving fields]
+
   let all : info named Table.t = Table.create ()
 
-  let info s = Hashtbl.find_exn all s
-  let data s = data (info s)
-  let products  s = products (data s)
-  let update    s = update (data s)
-  let providers s = providers (data s)
+  let info s = data (Hashtbl.find_exn all s)
+  let products  s = products (info s)
+  let update    s = update (info s)
+  let providers s = providers (info s) |> Hashtbl.data
+  let request = products
+
+  let add_provider serv prov =
+    Hashtbl.set (info serv).providers prov.name prov
 
   let check_uuid x =
     if Option.is_none (Uuidm.of_string x) then
@@ -55,8 +58,6 @@ module Service = struct
     let data = {products; update; providers} in
     Hashtbl.set all uuid {name; desc; data};
     uuid
-
-  let request = products
 end
 
 module Provider = struct
@@ -65,24 +66,27 @@ module Provider = struct
 
   let declare ~desc name service =
     let p = {name; desc; data=service} in
-    Hashtbl.set (Service.providers service) p.name p;
+    Service.add_provider service p;
     p
 
   let name p = p.name
   let service p = p.data
 
-  let all_by_service s = Hashtbl.data (Service.providers s)
+  let pick_by_service = function
+    | None ->
+      Hashtbl.keys Service.all |>
+      List.map ~f:Service.providers |>
+      List.concat
+    | Some s -> Service.providers s
 
-  let all_by_name n =
-    Hashtbl.keys Service.all |>
-    List.map ~f:all_by_service |>
-    List.concat |>
-    List.filter ~f:(fun p -> String.equal p.name n)
+  let filter_by_name name ps = match name with
+    | None -> ps
+    | Some name ->
+      List.filter ps ~f:(fun p -> String.equal p.name name)
 
   let select ?by_service ?by_name () =
-    let find = Option.value_map ~default:[] in
-    find ~f:all_by_service by_service @
-    find ~f:all_by_name by_name
+    pick_by_service by_service |>
+    filter_by_name by_name
 end
 
 module Product = struct

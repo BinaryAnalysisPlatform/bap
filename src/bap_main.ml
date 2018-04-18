@@ -167,8 +167,7 @@ let main o =
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None ->
-      match o.source with
+    | None -> match o.source with
       | `Project ->
         let fmt,ver = extract_format o.filename in
         proj_of_file ?fmt ?ver o.filename
