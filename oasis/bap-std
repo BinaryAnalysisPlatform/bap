@@ -41,6 +41,7 @@ Library types
                    Bap_biri_types,
                    Bap_bitvector,
                    Bap_common,
+                   Bap_const_propagation,
                    Bap_context,
                    Bap_eval,
                    Bap_eval_types,

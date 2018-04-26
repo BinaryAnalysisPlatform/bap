@@ -2196,6 +2196,10 @@ module Std : sig
     (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
+    (** [propagate_consts p] reduces all computable expressions to integers
+        and propagate them as far as possible in the whole program [p] *)
+    val propagate_consts : stmt list -> stmt list
+
     (** [fixpoint f] applies transformation [f] until fixpoint is
         reached. If the transformation orbit contains non-trivial cycles,
         then the transformation will stop at an arbitrary point of a
