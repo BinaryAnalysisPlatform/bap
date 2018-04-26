@@ -54,12 +54,13 @@ module Std = struct
     include Bap_size
   end
 
-  module Eff = Bap_helpers.Eff
+  module Eff = Bap_eff
 
   module Bil = struct
     type t = Bap_bil.bil [@@deriving bin_io, compare, sexp]
     include (Bap_stmt.Stmts_pp : Printable.S with type t := t)
     include (Bap_stmt.Stmts_data : Data.S with type t := t)
+    module Apply = Bap_apply
     module Types = struct
       type var = Bap_var.t
       type typ = Type.t =
@@ -104,7 +105,7 @@ module Std = struct
     type error = Bap_type_error.t
     [@@deriving bin_io, compare, sexp]
     module Error = Bap_type_error
-    include Bap_helpers.Type
+    include Bap_types_infer
   end
 
   (** This module exports first-class type definitions,
@@ -135,7 +136,7 @@ module Std = struct
     include Bap_helpers.Exp
     include (Bap_exp : Regular.S with type t := t)
     let eval = Bap_expi.eval
-    let simpl = Bap_helpers.Simpl.exp
+    let simpl = Bap_simpl.exp
     let pp_adt = Bap_bil_adt.pp_exp
   end
 
@@ -145,7 +146,7 @@ module Std = struct
     include Bap_helpers.Stmt
     include (Bap_stmt : Regular.S with type t := t)
     let eval = Bap_bili.eval
-    let simpl = Bap_helpers.Simpl.bil
+    let simpl = Bap_simpl.bil
     let pp_adt = Bap_bil_adt.pp_stmt
   end
 
