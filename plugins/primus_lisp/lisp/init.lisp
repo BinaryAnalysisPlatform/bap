@@ -60,7 +60,7 @@
 
 (defmacro sign (x)
   "returns 1 if X > 0, 0 if X = 0, and -1 if X < 0"
-  (if (< x 0) -1 (if (> x 0) 1 else 0)))
+  (if (< x 0) -1 (if (> x 0) 1 0)))
 
 (defmacro compare (x y)
   "(compare X Y) returns 0 if X = Y, a negative value if X<Y
