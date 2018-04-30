@@ -58,10 +58,14 @@
   (let ((r x)) (if r r (or xs))))
 (defmacro or (x) x)
 
-(defun compare (x y)
+(defmacro sign (x)
+  "returns 1 if X > 0, 0 if X = 0, and -1 if X < 0"
+  (if (< x 0) -1 (if (> x 0) 1 else 0)))
+
+(defmacro compare (x y)
   "(compare X Y) returns 0 if X = Y, a negative value if X<Y
    and a positive value if X>Y"
-  (- x y))
+  (sign (- x y)))
 
 (defmacro assert (c)
   "(assert COND) terminates program if COND is false"
