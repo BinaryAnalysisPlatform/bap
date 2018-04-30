@@ -21,8 +21,8 @@ include Self()
    {v C1 \/ C2 \/ ... \/ Cm v}.
 
    The infeasible interpreter is a non-deterministic interperter, that
-   for every block B that is terminated with m jumps, will fork m
-   context after a last definition, so that under the n-th context
+   for every block B that is terminated with m jumps, will fork m-1
+   context after the last definition, so that under the n-th context
    the Dn destination will be taken by the interpreter.
 
    For the Dm-th destination to be taken, the following condition must
@@ -85,8 +85,11 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
-        Eval.const (Word.of_bool assn.res) >>=
-        Env.set assn.var)
+        Eval.const (Word.of_bool assn.res) >>= fun r ->
+        Eval.get assn.var >>= fun r' ->
+        let op = if assn.res then Bil.OR else Bil.AND in
+        Eval.binop op r r' >>=
+        Eval.set assn.var)
 
   let unsat_assumptions blk =
     Machine.List.map (assumptions blk)
