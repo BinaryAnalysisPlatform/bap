@@ -145,12 +145,12 @@ module Setup(Machine : Primus.Machine.S) = struct
         (module GetIndirect);
 
       def "taint-sanitize-direct" (tuple [a; b] @-> c)
-        "(taint-get-indirect K X) removes any direct taint of the kind
+        "(taint-sanitize-direct K X) removes any direct taint of the kind
         K that is directly associated with the value X"
         (module SanitizeDirect);
 
       def "taint-sanitize-indirect" (tuple [a; b] @-> c)
-        "(taint-get-indirect K X) removes any direct taint of the kind
+        "(taint-sanitize-indirect K X) removes any direct taint of the kind
         K that is indirectly associated with the value X"
         (module SanitizeIndirect);
 
