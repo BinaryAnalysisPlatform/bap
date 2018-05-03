@@ -1183,7 +1183,7 @@ end
 
 let fold_consts = Simpl.bil ~ignore:[Eff.read]
 
-module Beta_reduction = struct
+module Reduce = struct
 
   let apply env = object
     inherit bil_mapper as super
@@ -1243,7 +1243,7 @@ end
 
 let free_vars = Stmt_helpers.bil_free_vars
 let normalize = Normalize.bil
-let reduce = Beta_reduction.run
+let reduce = Reduce.run
 
 module Stmt = Stmt_helpers
 module Exp = Exp_helpers

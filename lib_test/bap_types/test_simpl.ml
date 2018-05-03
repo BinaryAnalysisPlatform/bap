@@ -127,6 +127,7 @@ let run fn width times ctxt =
   assert_equal  ~ctxt ~cmp:Int.equal 0 fails
 
 let suite () =
+  printf "called\n";
   "Simplification" >::: [
     "plus, minus, times etc." >:: run gen_binop 32 100;
     "<, <=, =, <> etc."       >:: run gen_cmp 1 100;
