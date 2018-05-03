@@ -8,7 +8,8 @@ Library types_test
                   Test_bili,
                   Test_bytes,
                   Test_graph,
-                  Test_const_prop,
+                  Test_reduction,
+                  Test_simpl,
                   Test_trie
 
 Library image_test

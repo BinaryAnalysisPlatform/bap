@@ -480,8 +480,7 @@ module Simpl = struct
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
       | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
-      | UnOp(op,Int x) -> Int (Apply.unop op x)
-      | UnOp(op',x) when op = op' -> exp x
+      | Int x -> Int (Apply.unop op x)
       | x -> UnOp(op, x)
     and binop op x y =
       let width = match Type.infer_exn x with
@@ -490,7 +489,6 @@ module Simpl = struct
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-      let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
       match op, exp x, exp y with
       | op, Int x, Int y -> Int (Apply.binop op x y)
@@ -507,7 +505,7 @@ module Simpl = struct
       | (MOD|SMOD),_,y when is1 y -> zero width
       | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
       | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
-      | (LSHIFT|RSHIFT|ARSHIFT),x,_ when ism1 x -> x
+      | ARSHIFT,x,_ when ism1 x -> x
       | AND,x,y when is0 x && removable y -> x
       | AND,x,y when is0 y && removable x -> y
       | AND,x,y when ism1 x -> y
@@ -524,9 +522,7 @@ module Simpl = struct
       | EQ,x,y  when x = y -> Int Word.b1
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
-      | op,BinOp(op',x, Int p),Int q
-        when op_eq op op' && is_associative op ->
-        BinOp (op,x,Int (Apply.binop op p q))
+      | (LE|SLE), x, y when x = y -> Int Word.b1
       | op,x,y -> keep op x y in
     exp
 
@@ -1108,7 +1104,7 @@ module Normalize = struct
 end
 
 
-module Exp = struct
+module Exp_helpers = struct
   open Exp
   class state = exp_state
   class ['a] visitor = ['a] exp_visitor
@@ -1143,7 +1139,9 @@ module Exp = struct
     end) exp
 end
 
-module Stmt = struct
+module Stmt_helpers = struct
+  module Exp = Exp_helpers
+
   class state = stmt_state
   class ['a] visitor = ['a] bil_visitor
   class ['a] finder  = ['a] bil_finder
@@ -1183,6 +1181,69 @@ module Stmt = struct
   let normalize  = Normalize.bil
 end
 
-let free_vars = Stmt.bil_free_vars
 let fold_consts = Simpl.bil ~ignore:[Eff.read]
+
+module Beta_reduction = struct
+
+  let apply env = object
+    inherit bil_mapper as super
+    method! map_var v =
+      match Map.find env v with
+      | None -> Var v
+      | Some i -> Int i
+
+    method! map_exp e =
+      super#map_exp (Exp_helpers.fold_consts e)
+  end
+
+  let apply_to_exp e env = (apply env)#map_exp e
+  let apply_to_stmt s env = (apply env)#map_stmt s
+
+  let (@@) = apply_to_exp
+  let (@@@) = apply_to_stmt
+
+  let bound_vars s =
+    (object
+      inherit [Var.Set.t] bil_visitor
+      method! enter_move v _ vs = Set.add vs v
+    end)#run [s] Var.Set.empty
+
+  let remove_bound_vars env s =
+    Set.fold (bound_vars s) ~init:env ~f:Map.remove
+
+  let reduce bil =
+    let rec run env acc = function
+      | [] -> List.rev acc
+      | Stmt.Move (x,y) :: bil ->
+        let env,y = match y @@ env with
+          | Int i as e -> Map.add env x i, e
+          | e -> Map.remove env x, e in
+        run env (Stmt.Move (x, y) :: acc) bil
+      | Stmt.While _ as s :: bil -> run env (s :: acc) bil
+      | Stmt.If (cond, yes, no) as if_ :: bil ->
+        let acc' =
+          Stmt.If (cond @@ env,
+                   run env [] yes,
+                   run env [] no) :: acc in
+        let env' = remove_bound_vars env if_ in
+        run env' acc' bil
+      | s :: bil ->
+        run env (List.rev (s @@@ env) @ acc) bil in
+    run Var.Map.empty [] bil
+
+  let reduce_let bil =
+    (object
+      inherit bil_mapper
+      method! map_exp e = Normalize.reduce_let e
+    end)#run bil
+
+  let run bil =
+    reduce_let bil |> fixpoint (fun bil -> fold_consts (reduce bil))
+end
+
+let free_vars = Stmt_helpers.bil_free_vars
 let normalize = Normalize.bil
+let reduce = Beta_reduction.run
+
+module Stmt = Stmt_helpers
+module Exp = Exp_helpers

@@ -28,7 +28,7 @@ val substitute_var : var -> exp -> bil -> bil
 val free_vars : bil -> Bap_var.Set.t
 val fold_consts : bil -> bil
 val fixpoint : (bil -> bil) -> (bil -> bil)
-
+val reduce : bil -> bil
 
 module Apply : sig
   val binop : binop -> word -> word -> word
