@@ -22,12 +22,12 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
         RR.set dst @@ Bil.cast HIGH dst_width extended_e
     in
     let stmt = match op with
-    | `CDQ -> `EAX ==> `EDX
-    | `CDQE -> `EAX ==> `RAX
-    | `CQO -> `RAX ==> `RDX
-    | `CWD -> `AX ==> `DX
-    | `CWDE -> `AX ==> `EAX
-    | `CBW -> `AL ==> `AX
+      | `CDQ -> `EAX ==> `EDX
+      | `CDQE -> `EAX ==> `RAX
+      | `CQO -> `RAX ==> `RDX
+      | `CWD -> `AX ==> `DX
+      | `CWDE -> `AX ==> `EAX
+      | `CBW -> `AL ==> `AX
     in
     Ok [stmt]
 

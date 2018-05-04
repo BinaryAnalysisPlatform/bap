@@ -7,4 +7,4 @@ type cdq = [
   | `CDQ
   | `CDQE
   | `CQO
-  ] [@@deriving bin_io, sexp, compare, enumerate]
+] [@@deriving bin_io, sexp, compare, enumerate]
