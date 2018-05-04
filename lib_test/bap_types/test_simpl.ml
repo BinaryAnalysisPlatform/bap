@@ -85,7 +85,7 @@ let report_fail src simpl r =
     let init = List.(rev (tl_exn (rev src))) in
     let () = match init with
       | [] -> ()
-      | init -> eprintf "%s\n" (Bil.to_string init) in
+      | init -> eprintf "init:\n%s\n" (Bil.to_string init) in
     eprintf "%s\n" (last src);
     eprintf "%s\n" (last simpl)
 
@@ -115,7 +115,7 @@ let run width make_exp =
     | `Div_zero, _ -> Ok ()
     | _ -> Error (bil, Some bil', Some (result,result'))
 
-let run fn width times ctxt =
+let random fn ~width ~times ctxt =
   let () = Random.self_init () in
   let calls = List.init times ~f:(fun _ -> run width (gen_exp fn)) in
   let fails = List.fold calls ~init:0
@@ -124,10 +124,37 @@ let run fn width times ctxt =
           | Error (bil, simpl, res) ->
             report_fail bil simpl res;
             n + 1) in
-  assert_equal  ~ctxt ~cmp:Int.equal 0 fails
+  assert_equal ~ctxt ~cmp:Int.equal 0 fails
+
+
+let width = 8
+let int x = Bil.int @@ Word.of_int ~width x
+let c2 = int 2
+let c4 = int 4
+let c6 = int 6
+let c8 = int 8
+let x = Bil.var (Var.create "x" (Type.imm width))
+
+let check exp expected ctxt =
+  assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl exp) expected
+
+let (<=>) = check
 
 let suite () =
   "Simplification" >::: [
-    "plus, minus, times etc." >:: run gen_binop 32 100;
-    "<, <=, =, <> etc."       >:: run gen_cmp 1 100;
+    "plus, minus, times etc."     >:: random gen_binop ~width:32 ~times:200;
+    "<, <=, =, <> etc."           >:: random gen_cmp ~width:1 ~times:200;
+    "2 * (x * 4) = x * 8"         >:: Bil.(c2 * (x * c4) <=> x * c8);
+    "2 * (4 * x) = 8 * x"         >:: Bil.(c2 * (c4 * x) <=> c8 * x);
+    "2 + (4 + x) = 6 + x"         >:: Bil.(c2 + (c4 + x) <=> c6 + x);
+    "2 + (x + 4) = x + 6"         >:: Bil.(c2 + (x + c4) <=> x + c6);
+    "2 * (4 + x) = 8 + 2 * x"     >:: Bil.(c2 *(c4 + x)  <=> c8 + c2 * x);
+    "2 * (x + 4) = 2 * x + 8"     >:: Bil.(c2 *(x + c4)  <=> c2 * x + c8);
+    "(4 + x) * 2 = 8 + x * 2"     >:: Bil.((c4 + x) * c2 <=> c8 + x * c2);
+    "(x + 4) * 2 = x * 2 + 8"     >:: Bil.((x + c4) * c2 <=> x * c2 + c8);
+    "(x + 4) / 2 = x / 2 + 2"     >:: Bil.((x + c4) / c2 <=> x / c2 + c2);
+    "2 / (x + 4) = 2 / (x + 4)"   >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
+    "2 + (4 << x) = 2 + (4 << x)" >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
+    "2 * (4 << x) = 2 * (4 << tm" >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
+    "(4 & x) * 2 = (4 & x) * 2"   >:: Bil.((c4 land x)*c2  <=> (c4 land x)*c2);
   ]

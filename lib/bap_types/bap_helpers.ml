@@ -457,6 +457,20 @@ module Simpl = struct
     | PLUS | TIMES | AND | OR | XOR -> true
     | _ -> false
 
+  let is_distributive = function
+    | TIMES | DIVIDE | SDIVIDE -> true
+    | _ -> false
+
+  let is_commutative = function
+    | TIMES | PLUS | AND | OR | XOR | EQ | NEQ -> true
+    | _ -> false
+
+  let is_distributivable op op' =
+    is_distributive op &&
+    (match op' with
+     | PLUS | MINUS -> true
+     | _ -> false)
+
   let exp ?(ignore=[]) =
     let removable = removable ignore in
     let rec exp = function
@@ -524,10 +538,33 @@ module Simpl = struct
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
-      | op,BinOp(op',x, Int p),Int q
-      | op,Int q,BinOp(op',x, Int p)
+      | op, BinOp(op', x, Int p), Int q
+      | op, BinOp(op', Int p, x), Int q
+
+      | op, Int q, BinOp(op', x, Int p)
         when op_eq op op' && is_associative op ->
-        BinOp (op,x,Int (Apply.binop op p q))
+        BinOp (op, x, Int (Apply.binop op p q))
+
+      | op, Int q, BinOp(op', Int p, x)
+        when op_eq op op' && is_associative op ->
+        BinOp (op,Int (Apply.binop op p q), x)
+
+      | op, BinOp(op', x, Int p), Int q
+        when is_distributivable op op' ->
+        BinOp (op',BinOp(op, x, Int q), Int (Apply.binop op p q))
+
+      | op, BinOp(op', Int p, x), Int q
+        when is_distributivable op op' ->
+        BinOp (op',Int (Apply.binop op p q), BinOp(op, x, Int q))
+
+      | op, Int q, BinOp(op', x, Int p)
+        when is_distributivable op op' && is_commutative op  ->
+        BinOp (op',BinOp(op, Int q, x), Int (Apply.binop op p q))
+
+      | op, Int q, BinOp(op', Int p, x)
+        when is_distributivable op op' && is_commutative op ->
+        BinOp (op', Int (Apply.binop op p q), BinOp(op, Int q, x))
+
       | op,x,y -> keep op x y in
     exp
 
