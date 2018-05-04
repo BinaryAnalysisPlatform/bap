@@ -489,6 +489,7 @@ module Simpl = struct
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
+      let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
       match op, exp x, exp y with
       | op, Int x, Int y -> Int (Apply.binop op x y)
@@ -523,6 +524,10 @@ module Simpl = struct
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
+      | op,BinOp(op',x, Int p),Int q
+      | op,Int q,BinOp(op',x, Int p)
+        when op_eq op op' && is_associative op ->
+        BinOp (op,x,Int (Apply.binop op p q))
       | op,x,y -> keep op x y in
     exp
 
