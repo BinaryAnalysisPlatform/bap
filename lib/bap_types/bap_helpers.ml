@@ -545,37 +545,13 @@ module Simpl = struct
       | PLUS, Int p, BinOp(MINUS, x, Int q)
       | MINUS, Int p, BinOp(MINUS, Int q, x) ->
         BinOp(PLUS, x, apply MINUS p q)
-
       | MINUS, Int q, BinOp(PLUS, x, Int p)
       | MINUS, BinOp(MINUS, Int q, x), Int p ->
         BinOp(MINUS, apply MINUS q p, x)
-
-
-
-      (* | MINUS, BinOp(PLUS, x, Int p), Int q -> *)
-      (*   BinOp(PLUS, x, apply MINUS p q) *)
-
-      (* | MINUS, Int q, BinOp(PLUS, x, Int p) -> *)
-      (*   BinOp(MINUS, apply MINUS q p, x) *)
-
-      (* | PLUS, BinOp(MINUS, x, Int p), Int q -> *)
-      (*   BinOp(PLUS, x, apply MINUS q p) *)
-
-      (* | PLUS, Int q, BinOp(MINUS, x, Int p) -> *)
-      (*   BinOp(PLUS, apply MINUS q p, x) *)
-
       | MINUS, BinOp(MINUS, x, Int p), Int q ->
         BinOp(MINUS, x, apply PLUS p q)
-
-      (* | MINUS, BinOp(MINUS, Int p, x), Int q -> *)
-      (*   BinOp(MINUS, apply MINUS p q, x) *)
-
       | MINUS, Int q, BinOp(MINUS, x, Int p) ->
         BinOp(MINUS, apply PLUS p q, x)
-
-      (* | MINUS, Int q, BinOp(MINUS, Int p, x) -> *)
-      (*   BinOp(PLUS, apply MINUS q p, x) *)
-
 
       | op, BinOp(op', x, Int p), Int q
       | op, BinOp(op', Int p, x), Int q
