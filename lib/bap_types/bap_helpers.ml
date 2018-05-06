@@ -457,12 +457,12 @@ module Simpl = struct
     | PLUS | TIMES | AND | OR | XOR -> true
     | _ -> false
 
-  let is_distributive = function
-    | TIMES | DIVIDE | SDIVIDE -> true
-    | _ -> false
-
   let is_commutative = function
     | TIMES | PLUS | AND | OR | XOR | EQ | NEQ -> true
+    | _ -> false
+
+  let is_distributive = function
+    | TIMES -> true
     | _ -> false
 
   let is_distributivable op op' =
@@ -505,6 +505,7 @@ module Simpl = struct
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
       let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
+      let apply op x y = Int (Apply.binop op x y) in
       match op, exp x, exp y with
       | op, Int x, Int y -> Int (Apply.binop op x y)
       | PLUS,x,y  when is0 x -> y
@@ -538,32 +539,59 @@ module Simpl = struct
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
+
+      | MINUS, BinOp(PLUS, x, Int p), Int q
+      | PLUS, BinOp(MINUS, x, Int q), Int p
+      | PLUS, Int p, BinOp(MINUS, x, Int q)
+      | MINUS, Int p, BinOp(MINUS, Int q, x) ->
+        BinOp(PLUS, x, apply MINUS p q)
+
+      | MINUS, Int q, BinOp(PLUS, x, Int p)
+      | MINUS, BinOp(MINUS, Int q, x), Int p ->
+        BinOp(MINUS, apply MINUS q p, x)
+
+
+
+      (* | MINUS, BinOp(PLUS, x, Int p), Int q -> *)
+      (*   BinOp(PLUS, x, apply MINUS p q) *)
+
+      (* | MINUS, Int q, BinOp(PLUS, x, Int p) -> *)
+      (*   BinOp(MINUS, apply MINUS q p, x) *)
+
+      (* | PLUS, BinOp(MINUS, x, Int p), Int q -> *)
+      (*   BinOp(PLUS, x, apply MINUS q p) *)
+
+      (* | PLUS, Int q, BinOp(MINUS, x, Int p) -> *)
+      (*   BinOp(PLUS, apply MINUS q p, x) *)
+
+      | MINUS, BinOp(MINUS, x, Int p), Int q ->
+        BinOp(MINUS, x, apply PLUS p q)
+
+      (* | MINUS, BinOp(MINUS, Int p, x), Int q -> *)
+      (*   BinOp(MINUS, apply MINUS p q, x) *)
+
+      | MINUS, Int q, BinOp(MINUS, x, Int p) ->
+        BinOp(MINUS, apply PLUS p q, x)
+
+      (* | MINUS, Int q, BinOp(MINUS, Int p, x) -> *)
+      (*   BinOp(PLUS, apply MINUS q p, x) *)
+
+
       | op, BinOp(op', x, Int p), Int q
       | op, BinOp(op', Int p, x), Int q
-
       | op, Int q, BinOp(op', x, Int p)
-        when op_eq op op' && is_associative op ->
-        BinOp (op, x, Int (Apply.binop op p q))
-
       | op, Int q, BinOp(op', Int p, x)
         when op_eq op op' && is_associative op ->
-        BinOp (op,Int (Apply.binop op p q), x)
+        BinOp (op, apply op p q, x)
 
       | op, BinOp(op', x, Int p), Int q
-        when is_distributivable op op' ->
-        BinOp (op',BinOp(op, x, Int q), Int (Apply.binop op p q))
-
-      | op, BinOp(op', Int p, x), Int q
-        when is_distributivable op op' ->
-        BinOp (op',Int (Apply.binop op p q), BinOp(op, x, Int q))
-
       | op, Int q, BinOp(op', x, Int p)
-        when is_distributivable op op' && is_commutative op  ->
-        BinOp (op',BinOp(op, Int q, x), Int (Apply.binop op p q))
-
+        when is_distributivable op op' ->
+        BinOp (op',BinOp(op, Int q, x), apply op p q)
+      | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x)
-        when is_distributivable op op' && is_commutative op ->
-        BinOp (op', Int (Apply.binop op p q), BinOp(op, Int q, x))
+        when is_distributivable op op' ->
+        BinOp (op',apply op p q, BinOp(op, x, Int q))
 
       | op,x,y -> keep op x y in
     exp
