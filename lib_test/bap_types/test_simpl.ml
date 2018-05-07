@@ -170,11 +170,6 @@ let b1 = Bil.int Word.b1
 let x = Bil.var (Var.create "x" (Type.imm width))
 
 let check exp expected ctxt =
-  let s = Exp.simpl ~ignore:[Eff.read] exp in
-  let es = Exp.to_string in
-  if not (Exp.equal s expected) then
-      printf "not equal %s --> %s ( %s )\n" (es exp) (es s) (es expected);
-
   assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl ~ignore:[Eff.read] exp) expected
 
 let (<=>) = check
@@ -258,6 +253,4 @@ let suite () =
     "plus, minus, times etc."      >:: random gen_binop ~width:32 ~times:200;
     "<, <=, =, <> etc."            >:: random gen_cmp ~width:1 ~times:200;
     "exps combinations"            >:: run_exps;
-
-
   ]
