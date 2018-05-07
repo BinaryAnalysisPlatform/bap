@@ -457,22 +457,18 @@ module Simpl = struct
     | PLUS | TIMES | AND | OR | XOR -> true
     | _ -> false
 
-  let is_commutative = function
-    | TIMES | PLUS | AND | OR | XOR | EQ | NEQ -> true
-    | _ -> false
+  let is_associative op op' =
+    is_associative op && compare_binop op op' = 0
 
-  let is_distributive = function
-    | TIMES -> true
+  let is_distributive op op' = match op,op' with
+    | TIMES, (PLUS | MINUS) -> true
     | _ -> false
-
-  let is_distributivable op op' =
-    is_distributive op &&
-    (match op' with
-     | PLUS | MINUS -> true
-     | _ -> false)
 
   let exp ?(ignore=[]) =
     let removable = removable ignore in
+    let infer_width x = match Type.infer_exn x with
+      | Type.Imm w -> w
+      | Type.Mem _ -> failwith "unexpected Mem type" in
     let rec exp = function
       | Load (m,a,e,s) -> Load (exp m, exp a, e, s)
       | Store (m,a,v,e,s) -> Store (exp m, exp a, exp v, e, s)
@@ -489,32 +485,25 @@ module Simpl = struct
       | x,y -> Concat (x,y)
     and cast t s x = match exp x with
       | Int w -> Int (Apply.cast t s w)
-      | Var v ->
-        let x = match Bap_var.typ v with
-          | Imm w when w = s -> Var v
-          | _ -> Cast (t,s,Var v) in
-        x
+      | Var _ as v ->
+        if infer_width v = s then v
+        else Cast (t,s,v)
       | _ -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-      | Var v ->
-        let x = match Bap_var.typ v with
-          | Imm w when lo = 0 && w = hi + 1 -> Var v
-          | _ -> Extract (hi,lo,Var v) in
-        x
+      | Var _ as v ->
+        if infer_width v = hi + 1 && lo = 0 then v
+        else Extract (hi,lo,v)
       | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
       | Int x -> Int (Apply.unop op x)
       | UnOp (op', x) when compare_unop op op' = 0 -> x
       | x -> UnOp(op, x)
     and binop op x y =
-      let width = match Type.infer_exn x with
-        | Type.Imm s -> s
-        | Type.Mem _ -> failwith "binop" in
+      let width = infer_width x in
       let keep op x y = BinOp(op,x,y) in
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-      let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
       let apply op x y = Int (Apply.binop op x y) in
       let (+) = Bap_exp.Infix.(+) in
@@ -561,22 +550,18 @@ module Simpl = struct
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
 
-      | op, BinOp(op', x, Int p), Int q
-        when op_eq op op' && is_associative op ->
+      | op, BinOp(op', x, Int p), Int q when is_associative op op' ->
         BinOp (op, x, apply op p q)
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', x, Int p)
-      | op, Int q, BinOp(op', Int p, x)
-        when op_eq op op' && is_associative op ->
+      | op, Int q, BinOp(op', Int p, x) when is_associative op op' ->
         BinOp (op, apply op p q, x)
 
       | op, BinOp(op', x, Int p), Int q
-      | op, Int q, BinOp(op', x, Int p)
-        when is_distributivable op op' ->
+      | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
         BinOp (op',BinOp(op, Int q, x), apply op p q)
       | op, BinOp(op', Int p, x), Int q
-      | op, Int q, BinOp(op', Int p, x)
-        when is_distributivable op op' ->
+      | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
         BinOp (op',apply op p q, BinOp(op, Int q, x))
 
       | op,x,y -> keep op x y in
