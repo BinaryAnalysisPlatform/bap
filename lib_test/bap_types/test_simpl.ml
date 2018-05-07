@@ -126,6 +126,35 @@ let random fn ~width ~times ctxt =
             n + 1) in
   assert_equal ~ctxt ~cmp:Int.equal 0 fails
 
+let exps width =
+  let x = get_var width in
+  let c1 = int 4 width in
+  let c2 = int 2 width in
+  List.fold binops ~init:[]
+    ~f:(fun acc op ->
+        acc @
+        List.fold binops ~init:[]
+          ~f:(fun acc' op' ->
+              let e1 = Bil.(binop op (binop op' x c1) c2) in
+              let e2 = Bil.(binop op (binop op' c1 x) c2) in
+              let e3 = Bil.(binop op c1 (binop op' x c2)) in
+              let e4 = Bil.(binop op c1 (binop op' c2 x)) in
+              e1 :: e2 :: e3 :: e4 :: acc'))
+
+let run_exps ctxt =
+  let () = Random.self_init () in
+  let width = 32 in
+  let exps = exps width in
+  let calls = List.init (List.length exps)
+      ~f:(fun i -> run width (fun _ -> List.nth_exn exps i)) in
+  let fails = List.fold calls ~init:0
+      ~f:(fun n -> function
+          | Ok () -> n
+          | Error (bil, simpl, res) ->
+            report_fail bil simpl res;
+            n + 1) in
+  assert_equal ~ctxt ~cmp:Int.equal 0 fails
+
 let width = 8
 let int x = Bil.int @@ Word.of_int ~width x
 let c0 = int 0
@@ -141,6 +170,11 @@ let b1 = Bil.int Word.b1
 let x = Bil.var (Var.create "x" (Type.imm width))
 
 let check exp expected ctxt =
+  let s = Exp.simpl ~ignore:[Eff.read] exp in
+  let es = Exp.to_string in
+  if not (Exp.equal s expected) then
+      printf "not equal %s --> %s ( %s )\n" (es exp) (es s) (es expected);
+
   assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl ~ignore:[Eff.read] exp) expected
 
 let (<=>) = check
@@ -223,5 +257,7 @@ let suite () =
 
     "plus, minus, times etc."      >:: random gen_binop ~width:32 ~times:200;
     "<, <=, =, <> etc."            >:: random gen_cmp ~width:1 ~times:200;
+    "exps combinations"            >:: run_exps;
+
 
   ]
