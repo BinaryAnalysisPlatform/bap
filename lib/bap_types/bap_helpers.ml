@@ -489,12 +489,23 @@ module Simpl = struct
       | x,y -> Concat (x,y)
     and cast t s x = match exp x with
       | Int w -> Int (Apply.cast t s w)
+      | Var v ->
+        let x = match Bap_var.typ v with
+          | Imm w when w = s -> Var v
+          | _ -> Cast (t,s,Var v) in
+        x
       | _ -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+      | Var v ->
+        let x = match Bap_var.typ v with
+          | Imm w when lo = 0 && w = hi + 1 -> Var v
+          | _ -> Extract (hi,lo,Var v) in
+        x
       | x -> Extract (hi,lo,x)
     and unop op x = match exp x with
       | Int x -> Int (Apply.unop op x)
+      | UnOp (op', x) when compare_unop op op' = 0 -> x
       | x -> UnOp(op, x)
     and binop op x y =
       let width = match Type.infer_exn x with
@@ -506,13 +517,23 @@ module Simpl = struct
       let op_eq x y = compare_binop x y = 0 in
       let (=) x y = compare_exp x y = 0 && removable x in
       let apply op x y = Int (Apply.binop op x y) in
+      let (+) = Bap_exp.Infix.(+) in
+      let (-) = Bap_exp.Infix.(-) in
       match op, exp x, exp y with
-      | op, Int x, Int y -> Int (Apply.binop op x y)
+      | op, Int x, Int y -> apply op x y
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
+      | PLUS,  Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + x
+      | PLUS,  BinOp(MINUS, x, Int q), Int p -> x + apply MINUS p q
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
+      | MINUS, BinOp(PLUS, x, Int q), Int p  -> x + apply MINUS q p
+      | MINUS, Int p, BinOp(MINUS, Int q, x) -> apply MINUS p q + x
+      | MINUS, Int p, BinOp(PLUS, x, Int q)  -> apply MINUS p q - x
+      | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - x
+      | MINUS, BinOp(MINUS, x, Int q), Int p -> x - apply PLUS q p
+      | MINUS, Int p, BinOp(MINUS, x, Int q) -> apply PLUS q p - x
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
@@ -539,21 +560,6 @@ module Simpl = struct
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
-
-      | MINUS, BinOp(PLUS, x, Int p), Int q
-      | PLUS, BinOp(MINUS, x, Int q), Int p ->
-        BinOp(PLUS, x, apply MINUS p q)
-      | PLUS, Int p, BinOp(MINUS, x, Int q)
-      | MINUS, Int p, BinOp(MINUS, Int q, x) ->
-        BinOp(PLUS, apply MINUS p q, x)
-
-      | MINUS, Int q, BinOp(PLUS, x, Int p)
-      | MINUS, BinOp(MINUS, Int q, x), Int p ->
-        BinOp(MINUS, apply MINUS q p, x)
-      | MINUS, BinOp(MINUS, x, Int p), Int q ->
-        BinOp(MINUS, x, apply PLUS p q)
-      | MINUS, Int q, BinOp(MINUS, x, Int p) ->
-        BinOp(MINUS, apply PLUS p q, x)
 
       | op, BinOp(op', x, Int p), Int q
         when op_eq op op' && is_associative op ->
