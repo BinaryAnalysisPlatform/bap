@@ -29,11 +29,11 @@ let eval bil = Monad.State.exec ((new t)#eval bil)
 let random max = Random.int max
 let get_elt xs = List.nth_exn xs @@ random (List.length xs)
 let int x width = Bil.int (Word.of_int ~width x)
-let get_corner = int (get_elt [0; 1; -1])
-let get_int = get_elt [int (random 5); get_corner]
+let gen_corner = int (get_elt [0; 1; -1])
+let gen_int = get_elt [int (random 5); gen_corner]
 let gen_binop ()  = get_elt binops
 let gen_cmp   ()  = get_elt cmps
-let with_unop e   = get_elt Bil.[unop neg; unop not; ident;] @@ e
+let with_unop e   = get_elt Bil.[unop neg; ident; unop not; ident;] @@ e
 
 let get_var width =
   Bil.var @@ Var.create ~is_virtual:true ~fresh:true "tmp" (Type.imm width)
@@ -41,7 +41,7 @@ let get_var width =
 let gen_exp make_binop width =
   let rec get_hs () = match random 3 with
     | 0 -> get_var width
-    | 1 -> get_int width
+    | 1 -> gen_int width
     | _ -> get ()
   and get () =
     let x = with_unop @@ get_hs () in
@@ -97,7 +97,7 @@ let simpl_bil bil =
 
 let init width e =
   Set.fold (Exp.free_vars e) ~init:[]
-    ~f:(fun bil v -> Bil.(v := get_int width) :: bil)
+    ~f:(fun bil v -> Bil.(v := gen_int width) :: bil)
 
 let run width make_exp =
   let e = make_exp width in
@@ -126,35 +126,102 @@ let random fn ~width ~times ctxt =
             n + 1) in
   assert_equal ~ctxt ~cmp:Int.equal 0 fails
 
-
 let width = 8
 let int x = Bil.int @@ Word.of_int ~width x
+let c0 = int 0
+let c1 = int 1
+let _c1 = int (-1)
 let c2 = int 2
+let _c2 = int (-2)
 let c4 = int 4
 let c6 = int 6
 let c8 = int 8
+let b0 = Bil.int Word.b0
+let b1 = Bil.int Word.b1
 let x = Bil.var (Var.create "x" (Type.imm width))
 
 let check exp expected ctxt =
-  assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl exp) expected
+  assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl ~ignore:[Eff.read] exp) expected
 
 let (<=>) = check
 
 let suite () =
   "Simplification" >::: [
-    "plus, minus, times etc."     >:: random gen_binop ~width:32 ~times:200;
-    "<, <=, =, <> etc."           >:: random gen_cmp ~width:1 ~times:200;
-    "2 * (x * 4) = x * 8"         >:: Bil.(c2 * (x * c4) <=> x * c8);
-    "2 * (4 * x) = 8 * x"         >:: Bil.(c2 * (c4 * x) <=> c8 * x);
-    "2 + (4 + x) = 6 + x"         >:: Bil.(c2 + (c4 + x) <=> c6 + x);
-    "2 + (x + 4) = x + 6"         >:: Bil.(c2 + (x + c4) <=> x + c6);
-    "2 * (4 + x) = 8 + 2 * x"     >:: Bil.(c2 *(c4 + x)  <=> c8 + c2 * x);
-    "2 * (x + 4) = 2 * x + 8"     >:: Bil.(c2 *(x + c4)  <=> c2 * x + c8);
-    "(4 + x) * 2 = 8 + x * 2"     >:: Bil.((c4 + x) * c2 <=> c8 + x * c2);
-    "(x + 4) * 2 = x * 2 + 8"     >:: Bil.((x + c4) * c2 <=> x * c2 + c8);
-    "(x + 4) / 2 = x / 2 + 2"     >:: Bil.((x + c4) / c2 <=> x / c2 + c2);
-    "2 / (x + 4) = 2 / (x + 4)"   >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
-    "2 + (4 << x) = 2 + (4 << x)" >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
-    "2 * (4 << x) = 2 * (4 << tm" >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
-    "(4 & x) * 2 = (4 & x) * 2"   >:: Bil.((c4 land x)*c2  <=> (c4 land x)*c2);
+
+    "0 + x = x"       >:: Bil.(c0 + x <=> x);
+    "x + 0 = x"       >:: Bil.(x + c0 <=> x);
+    "x - 0 = x"       >:: Bil.(x - c0 <=> x);
+    "0 - x = -x"      >:: Bil.(c0 - x <=> unop neg x);
+    "x - x = 0"       >:: Bil.(x - x <=> c0);
+    "x * 0 = 0"       >:: Bil.(x * c0 <=> c0);
+    "0 * x = 0"       >:: Bil.(c0 * x <=> c0);
+    "x * 1 = x"       >:: Bil.(x * c1 <=> x);
+    "1 * x = x"       >:: Bil.(c1 * x <=> x);
+    "x / 1 = x"       >:: Bil.(x / c1 <=> x);
+    "x /$ 1 = x"      >:: Bil.(x /$ c1 <=> x);
+    "x mod 1 = 0"     >:: Bil.(x mod c1 <=> c0);
+    "x smod 1 = 0"    >:: Bil.(x %$ c1 <=> c0);
+    "x lsl 0 = x"     >:: Bil.(x lsl c0 <=> x);
+    "x lsr 0 = x"     >:: Bil.(x lsr c0 <=> x);
+    "x asr 0 = x"     >:: Bil.(x asr c0 <=> x);
+    "0 lsl x = 0"     >:: Bil.(c0 lsl x <=> c0);
+    "0 lsr x = 0"     >:: Bil.(c0 lsr x <=> c0);
+    "0 asr x = 0"     >:: Bil.(c0 asr x <=> c0);
+    "-1 asr x = -1"   >:: Bil.(_c1 asr x <=> _c1);
+
+    "0 land x = 0"    >:: Bil.(c0 land x <=> c0);
+    "x land 0 = 0"    >:: Bil.(x land c0 <=> c0);
+    "x land -1 = x"   >:: Bil.(x land _c1 <=> x);
+    "-1 land x = x"   >:: Bil.(_c1 land x <=> x);
+    "x lor 0 = x"     >:: Bil.(x lor c0 <=> x);
+    "0 lor x = x"     >:: Bil.(c0 lor x <=> x);
+    "x lor -1 = -1"   >:: Bil.(x lor _c1 <=> _c1);
+    "-1 lor x = -1"   >:: Bil.(_c1 lor x <=> _c1);
+    "x lor x = x"     >:: Bil.(x lor x <=> x);
+    "x lxor x = 0"    >:: Bil.(x lxor x <=> c0);
+    "0 lxor x = x"    >:: Bil.(c0 lxor x <=> x);
+    "x lxor 0 = x"    >:: Bil.(x lxor c0 <=> x);
+    "(x = x) = 1"     >:: Bil.(x = x <=> b1);
+    "(x <> x) = 0"    >:: Bil.(x <> x <=> b0);
+    "(x < x) = 0"     >:: Bil.(x < x <=> b0);
+    "(x <$ x) = 0"    >:: Bil.(x <$ x <=> b0);
+    "(x <= x) = 1"    >:: Bil.(x <= x <=> b1);
+    "(x <=$ x) = 1"   >:: Bil.(x <=$ x <=> b1);
+
+    "2 * (x * 4) = 8 * x"          >:: Bil.(c2 * (x * c4) <=> c8 * x);
+    "2 * (4 * x) = 8 * x"          >:: Bil.(c2 * (c4 * x) <=> c8 * x);
+    "2 * (4 + x) = 8 + 2 * x"      >:: Bil.(c2 * (c4 + x) <=> c8 + c2 * x);
+    "2 * (x + 4) = 2 * x + 8"      >:: Bil.(c2 * (x + c4) <=> c2 * x + c8);
+
+    "2 + (4 + x) = 6 + x"          >:: Bil.(c2 + (c4 + x) <=> c6 + x);
+    "2 + (x + 4) = 6 + x"          >:: Bil.(c2 + (x + c4) <=> c6 + x);
+    "(4 + x) + 2 = 6 + x"          >:: Bil.(c2 + (c4 + x) <=> c6 + x);
+    "(x + 4) + 2 = x + 6"          >:: Bil.((x + c4) + c2 <=> x + c6);
+
+    "(x + 4) - 2 = x + 2"          >:: Bil.((x + c4) - c2 <=> x + c2);
+    "(x - 4) + 2 = x - 2"          >:: Bil.((x - c4) + c2 <=> x + _c2);
+    "2 + (x - 4) = x - 2"          >:: Bil.(c2 + (x - c4) <=> _c2 + x);
+    "2 - (4 - x) = -2 + x"         >:: Bil.(c2 - (c4 - x) <=> _c2 + x);
+
+    "2 - (x + 4) = -2 - x"         >:: Bil.(c2 - (x + c4) <=> _c2 - x);
+    "(4 - x) - 2 = 2 - x"          >:: Bil.((c4 - x) - c2 <=> c2 - x);
+    "(x - 4) - 2 = x - 6"          >:: Bil.((x - c4) - c2 <=> x - c6);
+    "2 - (x - 4) = 6 - x"          >:: Bil.(c2 - (x - c4) <=> c6 - x);
+
+    "(4 + x) * 2 = 8 + 2 * x"      >:: Bil.((c4 + x) * c2 <=> c8 + c2 * x);
+    "(x + 4) * 2 = 2 * x + 8"      >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
+    "(x + 4) / 2 = (x + 4) / 2"    >:: Bil.((x + c4) / c2 <=> (x + c4) / c2);
+
+    "2 / (x + 4) = 2 / (x + 4)"    >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
+    "2 + (4 << x) = 2 + (4 << x)"  >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
+    "2 * (4 << x) = 2 * (4 << tm)" >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
+    "(4 & x) * 2 = (4 & x) * 2"    >:: Bil.((c4 land x)*c2  <=> (c4 land x)*c2);
+
+    "-1 = 0"                       >:: Bil.(lnot b1 <=> b0);
+    "--1 = 1"                      >:: Bil.(lnot (lnot b1) <=> b1);
+    "---1 = 0"                     >:: Bil.(lnot (lnot (lnot b1)) <=> b0);
+
+    "plus, minus, times etc."      >:: random gen_binop ~width:32 ~times:200;
+    "<, <=, =, <> etc."            >:: random gen_cmp ~width:1 ~times:200;
+
   ]

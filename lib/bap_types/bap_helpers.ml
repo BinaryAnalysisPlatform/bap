@@ -541,10 +541,12 @@ module Simpl = struct
       | (LE|SLE), x, y when x = y -> Int Word.b1
 
       | MINUS, BinOp(PLUS, x, Int p), Int q
-      | PLUS, BinOp(MINUS, x, Int q), Int p
+      | PLUS, BinOp(MINUS, x, Int q), Int p ->
+        BinOp(PLUS, x, apply MINUS p q)
       | PLUS, Int p, BinOp(MINUS, x, Int q)
       | MINUS, Int p, BinOp(MINUS, Int q, x) ->
-        BinOp(PLUS, x, apply MINUS p q)
+        BinOp(PLUS, apply MINUS p q, x)
+
       | MINUS, Int q, BinOp(PLUS, x, Int p)
       | MINUS, BinOp(MINUS, Int q, x), Int p ->
         BinOp(MINUS, apply MINUS q p, x)
@@ -554,6 +556,8 @@ module Simpl = struct
         BinOp(MINUS, apply PLUS p q, x)
 
       | op, BinOp(op', x, Int p), Int q
+        when op_eq op op' && is_associative op ->
+        BinOp (op, x, apply op p q)
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', x, Int p)
       | op, Int q, BinOp(op', Int p, x)
@@ -567,7 +571,7 @@ module Simpl = struct
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x)
         when is_distributivable op op' ->
-        BinOp (op',apply op p q, BinOp(op, x, Int q))
+        BinOp (op',apply op p q, BinOp(op, Int q, x))
 
       | op,x,y -> keep op x y in
     exp
