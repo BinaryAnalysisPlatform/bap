@@ -249,11 +249,11 @@ let suite () =
     "(4 + x) * 2 = 8 + 2 * x"      >:: Bil.((c4 + x) * c2 <=> c8 + c2 * x);
     "(x + 4) * 2 = 2 * x + 8"      >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
 
-    "(x + 4) / 2 = (x + 4) / 2"    >:: Bil.((x + c4) / c2 <=> (x + c4) / c2);
-    "2 / (x + 4) = 2 / (x + 4)"    >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
-    "2 + (4 << x) = 2 + (4 << x)"  >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
-    "2 * (4 << x) = 2 * (4 << tm)" >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
-    "(4 & x) * 2 = (4 & x) * 2"    >:: Bil.((c4 land x)*c2  <=> (c4 land x)*c2);
+    "(x + 4) / 2, no simpl"        >:: Bil.((x + c4) / c2 <=> (x + c4) / c2);
+    "2 / (x + 4), no simpl"        >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
+    "2 + (4 << x), no simpl"       >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
+    "2 * (4 << x), no simpl"       >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
+    "(4 & x) * 2, no simpl"        >:: Bil.((c4 land x) * c2 <=> (c4 land x) * c2);
 
     "~1 = 0"                       >:: Bil.(lnot b1 <=> b0);
     "~~1 = 1"                      >:: Bil.(lnot (lnot b1) <=> b1);
@@ -267,25 +267,25 @@ let suite () =
     "-x = -x"                      >:: Bil.(neg' x <=> neg' x);
     "--x = x"                      >:: Bil.(neg' (neg' x) <=> x);
     "---x = -x"                    >:: Bil.(neg' (neg' (neg' x)) <=> neg' x);
-    "-~-x = -~-x"                  >:: Bil.(neg' (lnot (neg' x)) <=> neg' (lnot (neg' x)));
+    "-~-x, , no simpl"             >:: Bil.(neg' (lnot (neg' x)) <=> neg' (lnot (neg' x)));
 
     "extract 7 0 x:8 = x"          >:: Bil.(extract 7 0 x <=> x);
-    "extract 7 1 x:8 = extract"    >:: Bil.(extract 7 1 x <=> extract 7 1 x);
-    "extract 8 1 x:8 = extract"    >:: Bil.(extract 8 1 x <=> extract 8 1 x);
-    "extract 6 0 x:8 = extract"    >:: Bil.(extract 6 0 x <=> extract 6 0 x);
+    "extract 7 1 x:8, no simpl"    >:: Bil.(extract 7 1 x <=> extract 7 1 x);
+    "extract 8 1 x:8, no simpl"    >:: Bil.(extract 8 1 x <=> extract 8 1 x);
+    "extract 6 0 x:8, no simpl"    >:: Bil.(extract 6 0 x <=> extract 6 0 x);
 
-    "cast low 8 x:8 = x"           >:: Bil.(cast low 8 x <=> x);
-    "cast high 8 x:8 = x"          >:: Bil.(cast high 8 x <=> x);
-    "cast signed 8 x:8 = x"        >:: Bil.(cast signed 8 x <=> x);
-    "cast unsigned 8 x:8 = x"      >:: Bil.(cast unsigned 8 x <=> x);
-    "cast low 9 x:8 = cast"        >:: Bil.(cast low 9 x <=> cast low 9 x);
-    "cast high 9 x:8 = cast"       >:: Bil.(cast high 9 x <=> cast high 9 x);
-    "cast signed 9 x:8 = cast"     >:: Bil.(cast signed 9 x <=> cast signed 9 x);
-    "cast unsigned 9 x:8 = cast"   >:: Bil.(cast unsigned 9 x <=> cast unsigned 9 x);
-    "cast low 7 x:8 = cast"        >:: Bil.(cast low 7 x <=> cast low 7 x);
-    "cast high 7 x:8 = cast"       >:: Bil.(cast high 7 x <=> cast high 7 x);
-    "cast signed 7 x:8 = cast"     >:: Bil.(cast signed 7 x <=> cast signed 7 x);
-    "cast unsigned 7 x:8 = cast"   >:: Bil.(cast unsigned 7 x <=> cast unsigned 7 x);
+    "cast low 8 x:8 = x"            >:: Bil.(cast low 8 x <=> x);
+    "cast high 8 x:8 = x"           >:: Bil.(cast high 8 x <=> x);
+    "cast signed 8 x:8 = x"         >:: Bil.(cast signed 8 x <=> x);
+    "cast unsigned 8 x:8 = x"       >:: Bil.(cast unsigned 8 x <=> x);
+    "cast low 9 x:8, no simpl"      >:: Bil.(cast low 9 x <=> cast low 9 x);
+    "cast high 9 x:8, no simpl"     >:: Bil.(cast high 9 x <=> cast high 9 x);
+    "cast signed 9 x:8, no simpl"   >:: Bil.(cast signed 9 x <=> cast signed 9 x);
+    "cast unsigned 9 x:8, no simpl" >:: Bil.(cast unsigned 9 x <=> cast unsigned 9 x);
+    "cast low 7 x:8, no simpl"      >:: Bil.(cast low 7 x <=> cast low 7 x);
+    "cast high 7 x:8, no simpl"     >:: Bil.(cast high 7 x <=> cast high 7 x);
+    "cast signed 7 x:8, no simpl"   >:: Bil.(cast signed 7 x <=> cast signed 7 x);
+    "cast unsigned 7 x:8, no simpl" >:: Bil.(cast unsigned 7 x <=> cast unsigned 7 x);
 
     "random plus, times etc."      >:: random gen_binop ~width:32 ~times:200;
     "ranfom <, <=, =, <> etc."     >:: random gen_cmp ~width:1 ~times:200;
