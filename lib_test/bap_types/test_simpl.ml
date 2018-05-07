@@ -178,6 +178,11 @@ let x = Bil.var (Var.create "x" (Type.imm width))
 let neg' = Bil.(unop neg)
 
 let check exp expected ctxt =
+  let s = Exp.simpl ~ignore:[Eff.read] exp in
+  let es = Exp.to_string in
+  if not (Exp.equal s expected) then
+      printf "not equal %s --> %s ( %s )\n" (es exp) (es s) (es expected);
+
   assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl ~ignore:[Eff.read] exp) expected
 
 let (<=>) = check
@@ -244,6 +249,8 @@ let suite () =
     "2 - (x - 4) = 6 - x"          >:: Bil.(c2 - (x - c4) <=> c6 - x);
     "(4 + x) * 2 = 8 + 2 * x"      >:: Bil.((c4 + x) * c2 <=> c8 + c2 * x);
     "(x + 4) * 2 = 2 * x + 8"      >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
+
+    "4 - (x + 4) + 2 + (x - 2) = 0" >:: Bil.(c4 - (x + c4) + c2 + (x - c2) <=> c0);
 
     "(x + 4) / 2,  no simpl"       >:: Bil.((x + c4) / c2 <=> (x + c4) / c2);
     "2 / (x + 4),  no simpl"       >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));

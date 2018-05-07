@@ -512,17 +512,18 @@ module Simpl = struct
       | op, Int x, Int y -> apply op x y
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
-      | PLUS,  Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + x
-      | PLUS,  BinOp(MINUS, x, Int q), Int p -> x + apply MINUS p q
+      | PLUS,  Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + exp x
+      | PLUS,  BinOp(MINUS, x, Int q), Int p -> exp x + apply MINUS p q
+      | PLUS,  BinOp(MINUS, Int q, x), Int p -> apply PLUS p q - exp x
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
-      | MINUS, BinOp(PLUS, x, Int q), Int p  -> x + apply MINUS q p
-      | MINUS, Int p, BinOp(MINUS, Int q, x) -> apply MINUS p q + x
-      | MINUS, Int p, BinOp(PLUS, x, Int q)  -> apply MINUS p q - x
-      | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - x
-      | MINUS, BinOp(MINUS, x, Int q), Int p -> x - apply PLUS q p
-      | MINUS, Int p, BinOp(MINUS, x, Int q) -> apply PLUS q p - x
+      | MINUS, BinOp(PLUS, x, Int q), Int p  -> exp x + apply MINUS q p
+      | MINUS, Int p, BinOp(MINUS, Int q, x) -> apply MINUS p q + exp x
+      | MINUS, Int p, BinOp(PLUS, x, Int q)  -> apply MINUS p q - exp x
+      | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - exp x
+      | MINUS, BinOp(MINUS, x, Int q), Int p -> exp x - apply PLUS q p
+      | MINUS, Int p, BinOp(MINUS, x, Int q) -> apply PLUS q p - exp x
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
