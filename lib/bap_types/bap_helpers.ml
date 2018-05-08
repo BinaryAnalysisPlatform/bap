@@ -512,12 +512,34 @@ module Simpl = struct
       | op, Int x, Int y -> apply op x y
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
-      | PLUS,  Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + exp x
-      | PLUS,  Int p, BinOp(MINUS, Int q, x) -> apply PLUS p q - exp x
-      | PLUS,  BinOp(MINUS, x, Int q), Int p -> exp x + apply MINUS p q
-      | PLUS,  BinOp(MINUS, Int q, x), Int p -> apply PLUS p q - exp x
+
+      | PLUS, Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + exp x
+      | PLUS, Int p, BinOp(MINUS, Int q, x) -> apply PLUS p q - exp x
+      | PLUS, BinOp(MINUS, x, Int q), Int p -> exp x + apply MINUS p q
+      | PLUS, BinOp(MINUS, Int q, x), Int p -> apply PLUS p q - exp x
+      | PLUS, BinOp(PLUS, Int q, x), BinOp(PLUS, y, Int p)
+      | PLUS, BinOp(PLUS, x, Int q), BinOp(PLUS, y, Int p)
+      | PLUS, BinOp(PLUS, x, Int q), BinOp(PLUS, Int p, y)
+      | PLUS, BinOp(PLUS, Int q, x), BinOp(PLUS, Int p, y) ->
+        exp (apply PLUS q p + exp (x + y))
+      | PLUS, BinOp(PLUS, Int q, x), BinOp(MINUS, y, Int p)
+      | PLUS, BinOp(PLUS, x, Int q), BinOp(MINUS, y, Int p)
+      | PLUS, BinOp(MINUS, y, Int p), BinOp(PLUS, x, Int q)
+      | PLUS, BinOp(MINUS, y, Int p), BinOp(PLUS, Int q, x) ->
+        exp (apply MINUS q p + exp (x + y))
+      | PLUS, BinOp(PLUS, Int q, x), BinOp(MINUS, Int p, y)
+      | PLUS, BinOp(PLUS, x, Int q), BinOp(MINUS, Int p, y)
+      | PLUS, BinOp(MINUS, Int p, y), BinOp(PLUS, Int q, x)
+      | PLUS, BinOp(MINUS, Int p, y), BinOp(PLUS, x, Int q) ->
+        exp (apply PLUS q p + exp (x - y))
+      | PLUS,  BinOp(MINUS, x, Int q), BinOp(MINUS, y, Int p) ->
+        exp (exp (x + y) - apply PLUS q p)
+      | PLUS,  BinOp(MINUS, x, Int q), BinOp(MINUS, Int p, y) ->
+        exp (exp (x - y) + apply MINUS p q)
+      | PLUS,  BinOp(MINUS, Int q, x), BinOp(MINUS, Int p, y) ->
+        exp (apply PLUS q p - exp (x + y))
       | PLUS,  BinOp(MINUS, Int q, x), BinOp(MINUS, y, Int p) ->
-        exp @@ BinOp(PLUS, apply MINUS q p, exp (BinOp (MINUS, y, x)))
+        exp (apply MINUS q p + exp (y - x))
 
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
@@ -530,6 +552,34 @@ module Simpl = struct
       | MINUS, BinOp(PLUS, Int q, x), Int p  -> exp x + apply MINUS q p
       | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - exp x
       | MINUS, BinOp(MINUS, x, Int q), Int p -> exp x - apply PLUS q p
+
+      | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, y, Int p)
+      | MINUS, BinOp(PLUS, Int q, x), BinOp(PLUS, y, Int p)
+      | MINUS, BinOp(PLUS, Int q, x), BinOp(PLUS, Int p, y)
+      | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, Int p, y) ->
+        exp (exp (x - y) + apply MINUS q p)
+      | MINUS, BinOp(PLUS, x, Int q), BinOp(MINUS, y, Int p)
+      | MINUS, BinOp(PLUS, Int q, x), BinOp(MINUS, y, Int p) ->
+        exp (exp (x - y) + apply PLUS q p)
+      | MINUS, BinOp(PLUS, x, Int q), BinOp(MINUS, Int p, y)
+      | MINUS, BinOp(PLUS, Int q, x), BinOp(MINUS, Int p, y) ->
+        exp (exp (x + y) + apply MINUS q p)
+
+      | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, y, Int p)
+      | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, Int p, y) ->
+        exp (exp (x - y) - apply PLUS p q)
+      | MINUS, BinOp(MINUS, Int q, x), BinOp(PLUS, y, Int p)
+      | MINUS, BinOp(MINUS, Int q, x), BinOp(PLUS, Int p, y) ->
+        exp (apply MINUS q p - exp (x + y))
+      | MINUS, BinOp(MINUS, x, Int q), BinOp(MINUS, y, Int p) ->
+        exp (exp (x - y) + apply MINUS p q)
+      | MINUS, BinOp(MINUS, x, Int q), BinOp(MINUS, Int p, y) ->
+        exp (exp (x + y) - apply PLUS p q)
+      | MINUS, BinOp(MINUS, Int q, x), BinOp(MINUS, y, Int p) ->
+        exp (apply PLUS p q - exp (x + y))
+      | MINUS, BinOp(MINUS, Int q, x), BinOp(MINUS, Int p, y) ->
+        exp (apply MINUS q p + exp (y - x))
+
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
@@ -571,6 +621,23 @@ module Simpl = struct
       | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
         BinOp (op',apply op p q, BinOp(op, Int q, x))
 
+
+      | PLUS, BinOp(PLUS, x, Int q), y
+      | PLUS, BinOp(PLUS, Int q, x), y
+      | PLUS, y, BinOp(PLUS, x, Int q)
+      | PLUS, y, BinOp(PLUS, Int q, x) -> exp (x + y) + Int q
+      | PLUS, BinOp(MINUS, x, Int q), y
+      | PLUS, y, BinOp(MINUS, x, Int q) -> (x + y) - Int q
+      | PLUS, BinOp(MINUS, Int q, x), y
+      | PLUS, y, BinOp(MINUS, Int q, x) -> (y - x) + Int q
+      | MINUS, BinOp(PLUS, x, Int q), y
+      | MINUS, BinOp(PLUS, Int q, x), y -> (x - y) + Int q
+      | MINUS, y, BinOp(PLUS, x, Int q)
+      | MINUS, y, BinOp(PLUS, Int q, x) -> (y - x) - Int q
+      | MINUS, BinOp(MINUS, x, Int q), y -> (x - y) - Int q
+      | MINUS, BinOp(MINUS, Int q, x), y -> Int q - (x + y)
+      | MINUS, y, BinOp(MINUS, x, Int q) -> (x - y) + Int q
+      | MINUS, y, BinOp(MINUS, Int q, x) -> (x + y) - Int q
       | op,x,y -> keep op x y in
     exp
 
