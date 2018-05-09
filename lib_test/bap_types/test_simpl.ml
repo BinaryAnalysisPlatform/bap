@@ -224,6 +224,10 @@ let suite () =
     "2 * (x + 4) = 2 * x + 8" >:: Bil.(c2 * (x + c4) <=> c2 * x + c8);
     "(4 + x) * 2 = 8 + 2 * x" >:: Bil.((c4 + x) * c2 <=> c8 + c2 * x);
     "(x + 4) * 2 = 2 * x + 8" >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
+    "(x - 4) * 2 = 2 * x - 8" >:: Bil.((x - c4) * c2 <=> c2 * x - c8);
+    "(4 - x) * 2 = 8 - 2 * x" >:: Bil.((c4 - x) * c2 <=> c8 - c2 * x);
+    "2 * (x - 4) = 2 * x - 8" >:: Bil.(c2 * (x - c4) <=> c2 * x - c8);
+    "2 * (4 - x) = 8 - 2 * x" >:: Bil.(c2 * (c4 - x) <=> c8 - c2 * x);
 
     "(4 + x) + 2 = 6 + x"     >:: Bil.((c4 + x) + c2 <=> c6 + x);
     "(x + 4) + 2 = x + 6"     >:: Bil.((x + c4) + c2 <=> x + c6);
@@ -259,6 +263,24 @@ let suite () =
     "2 - (4 + x) = -2 - x"    >:: Bil.(c2 - (c4 + x) <=> _c2 - x);
     "2 + (4 - x) = 6 - x"     >:: Bil.(c2 + (c4 - x) <=> c6 - x);
     "2 + (4 + x) = 6 + x"     >:: Bil.(c2 + (c4 + x) <=> c6 + x);
+
+    "(x + 4) + y = (x + y) + 4" >:: Bil.((x + c4) + y <=> x + y + c4);
+    "(x + 4) - y = (x - y) + 4" >:: Bil.((x + c4) - y <=> x - y + c4);
+    "(x - 4) + y = (x + y) - 4" >:: Bil.((x - c4) + y <=> x + y - c4);
+    "(x - 4) - y = (x - y) - 4" >:: Bil.((x - c4) - y <=> x - y - c4);
+    "(4 + x) + y = (x + y) + 4" >:: Bil.((c4 + x) + y <=> x + y + c4);
+    "(4 + x) - y = (x - y) + 4" >:: Bil.((c4 + x) - y <=> x - y + c4);
+    "(4 - x) + y = (y - x) + 4" >:: Bil.((c4 - x) + y <=> y - x + c4);
+    "(4 - x) - y = 4 - (x + y)" >:: Bil.((c4 - x) - y <=> c4 - (x + y));
+
+    "y + (x + 4) = (y + x) + 4" >:: Bil.(y + (x + c4) <=> y + x + c4);
+    "y - (x + 4) = (y - x) - 4" >:: Bil.(y - (x + c4) <=> y - x - c4);
+    "y + (x - 4) = (y + x) - 4" >:: Bil.(y + (x - c4) <=> y + x - c4);
+    "y - (x - 4) = (y - x) + 4" >:: Bil.(y - (x - c4) <=> y - x + c4);
+    "y + (4 + x) = (y + x) + 4" >:: Bil.(y + (c4 + x) <=> y + x + c4);
+    "y - (4 + x) = (y - x) - 4" >:: Bil.(y - (c4 + x) <=> y - x - c4);
+    "y + (4 - x) = (y - x) + 4" >:: Bil.(y + (c4 - x) <=> y - x + c4);
+    "y - (4 - x) = (y + x) - 4" >:: Bil.(y - (c4 - x) <=> y + x - c4);
 
     "((x + 4) + y) + 2 = (x + y) + 6"  >:: Bil.(((x + c4) + y) + c2 <=> (x + y) + c6);
     "((x + 4) + y) - 2 = (x + y) + 2"  >:: Bil.(((x + c4) + y) - c2 <=> (x + y) + c2);
@@ -301,24 +323,24 @@ let suite () =
     "(2 - (4 - x) - y) = (x - y) - 2"  >:: Bil.((c2 - (c4 - x) - y) <=> (x - y) + _c2);
 
     "(y + (4 - x) + 2) = (y - x) + 6"  >:: Bil.((y + (c4 - x) + c2) <=> (y - x) + c6);
-    "(y - (4 - x) + 2) = (x + y) - 2"  >:: Bil.((y - (c4 - x) + c2) <=> (x + y) + _c2);
+    "(y - (4 - x) + 2) = (x + y) - 2"  >:: Bil.((y - (c4 - x) + c2) <=> (y + x) + _c2);
     "(y + (4 - x) - 2) = (y - x) + 2"  >:: Bil.((y + (c4 - x) - c2) <=> (y - x) + c2);
-    "(y - (4 - x) - 2) = (x + y) - 6"  >:: Bil.((y - (c4 - x) - c2) <=> (x + y) - c6);
+    "(y - (4 - x) - 2) = (x + y) - 6"  >:: Bil.((y - (c4 - x) - c2) <=> (y + x) - c6);
 
-    "(x + 4) + (y + 2) = (x + y) + 6"  >:: Bil.((x + c4) + (y + c2) <=> c6 + (x + y));
-    "(x + 4) + (2 + y) = (x + y) + 6"  >:: Bil.((x + c4) + (c2 + y) <=> c6 + (x + y));
+    "(x + 4) + (y + 2) = (x + y) + 6"  >:: Bil.((x + c4) + (y + c2) <=> (x + y) + c6);
+    "(x + 4) + (2 + y) = (x + y) + 6"  >:: Bil.((x + c4) + (c2 + y) <=> (x + y) + c6);
     "(4 + x) + (y + 2) = (x + y) + 6"  >:: Bil.((c4 + x) + (y + c2) <=> c6 + (x + y));
     "(4 + x) + (2 + y) = (x + y) + 6"  >:: Bil.((c4 + x) + (c2 + y) <=> c6 + (x + y));
 
     "(x + 4) - (y + 2) = (x - y) + 2"  >:: Bil.((x + c4) - (y + c2) <=> (x - y) + c2);
     "(x + 4) - (2 + y) = (x - y) + 2"  >:: Bil.((x + c4) - (c2 + y) <=> (x - y) + c2);
-    "(4 + x) - (y + 2) = (x - y) + 2"  >:: Bil.((c4 + x) - (y + c2) <=> (x - y) + c2);
-    "(4 + x) - (2 + y) = (x - y) + 2"  >:: Bil.((c4 + x) - (c2 + y) <=> (x - y) + c2);
+    "(4 + x) - (y + 2) = 2 + (x - y)"  >:: Bil.((c4 + x) - (y + c2) <=> c2 + (x - y));
+    "(4 + x) - (2 + y) = 2 + (x - y)"  >:: Bil.((c4 + x) - (c2 + y) <=> c2 + (x - y));
 
     "(x + 4) - (y - 2) = (x - y) + 6"  >:: Bil.((x + c4) - (y - c2) <=> (x - y) + c6);
     "(x + 4) - (2 - y) = (x + y) + 2"  >:: Bil.((x + c4) - (c2 - y) <=> (x + y) + c2);
-    "(4 + x) - (y - 2) = (x - y) + 6"  >:: Bil.((c4 + x) - (y - c2) <=> (x - y) + c6);
-    "(4 + x) - (2 - y) = (x + y) + 2"  >:: Bil.((c4 + x) - (c2 - y) <=> (x + y) + c2);
+    "(4 + x) - (y - 2) = 6 + (x - y)"  >:: Bil.((c4 + x) - (y - c2) <=> c6 + (x - y));
+    "(4 + x) - (2 - y) = 2 + (x + y)"  >:: Bil.((c4 + x) - (c2 - y) <=> c2 + (x + y));
 
     "(x - 4) - (y + 2) = (x - y) - 6"  >:: Bil.((x - c4) - (y + c2) <=> (x - y) - c6);
     "(x - 4) - (2 + y) = (x - y) - 6"  >:: Bil.((x - c4) - (c2 + y) <=> (x - y) - c6);
@@ -333,15 +355,15 @@ let suite () =
     "2 * (x + 4) + y - (4 - z) + c2"   >:: Bil.(c2 * (x + c4) + y - (c4 - z) + c2 <=> c2 * x + y + z + c6);
     "2 * ((x + 4) + y) + (z - 4) - c2" >:: Bil.(c2 * ((x + c4) + y) - (c4 - z) - c2 <=> c2 * (x + y) + z + c2);
 
-    "extract 7 0 x:8 = x"              >:: Bil.(extract 7 0 x <=> x);
+    "extract 7 0 x:8 = x:8"            >:: Bil.(extract 7 0 x <=> x);
     "extract 7 1 x:8, no simpl"        >:: Bil.(extract 7 1 x <=> extract 7 1 x);
     "extract 8 1 x:8, no simpl"        >:: Bil.(extract 8 1 x <=> extract 8 1 x);
     "extract 6 0 x:8, no simpl"        >:: Bil.(extract 6 0 x <=> extract 6 0 x);
 
-    "cast low 8 x:8 = x"               >:: Bil.(cast low 8 x <=> x);
-    "cast high 8 x:8 = x"              >:: Bil.(cast high 8 x <=> x);
-    "cast signed 8 x:8 = x"            >:: Bil.(cast signed 8 x <=> x);
-    "cast unsigned 8 x:8 = x"          >:: Bil.(cast unsigned 8 x <=> x);
+    "cast low 8 x:8 = x:8"             >:: Bil.(cast low 8 x <=> x);
+    "cast high 8 x:8 = x:8"            >:: Bil.(cast high 8 x <=> x);
+    "cast signed 8 x:8 = x:8"          >:: Bil.(cast signed 8 x <=> x);
+    "cast unsigned 8 x:8 = x:8"        >:: Bil.(cast unsigned 8 x <=> x);
     "cast low 9 x:8,      no simpl"    >:: Bil.(cast low 9 x <=> cast low 9 x);
     "cast high 9 x:8,     no simpl"    >:: Bil.(cast high 9 x <=> cast high 9 x);
     "cast signed 9 x:8,   no simpl"    >:: Bil.(cast signed 9 x <=> cast signed 9 x);
