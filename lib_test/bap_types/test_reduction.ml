@@ -19,6 +19,7 @@ let y = var "y"
 let z = var "z"
 let result = var "result"
 let zero = const 0
+let one = const 1
 let c4 = const 4
 let c8 = const 8
 
@@ -109,6 +110,19 @@ let uncomputable_if' =
       ];
     ]
 
+let uncomputable_after_while =
+  check no_reduction
+    Bil.[
+      x := c4;
+      y := c8;
+      while_ (var y > zero) [
+        x := var x + one;
+        y := var y - one;
+      ];
+      result := var x;
+    ]
+
+
 let suite () =
   "Const reduction" >::: [
     "simple reduction #1"      >:: simple;
@@ -118,4 +132,5 @@ let suite () =
     "computable if cond #2"    >:: computable_if';
     "uncomputable if cond #1"  >:: uncomputable_if;
     "uncomputable if cond #2"  >:: uncomputable_if';
+    "uncomputable after while" >:: uncomputable_after_while;
   ]

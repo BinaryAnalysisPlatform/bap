@@ -510,9 +510,9 @@ module Simpl = struct
       let (-) = Bap_exp.Infix.(-) in
       match op, exp x, exp y with
       | op, Int x, Int y -> apply op x y
+
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
-
       | PLUS, Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + exp x
       | PLUS, Int p, BinOp(MINUS, Int q, x) -> apply PLUS p q - exp x
       | PLUS, BinOp(MINUS, x, Int q), Int p -> exp x + apply MINUS p q
@@ -555,7 +555,6 @@ module Simpl = struct
       | MINUS, BinOp(PLUS, Int q, x), Int p  -> exp x + apply MINUS q p
       | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - exp x
       | MINUS, BinOp(MINUS, x, Int q), Int p -> exp x - apply PLUS q p
-
       | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, y, Int p)
       | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, Int p, y) ->
         exp (exp (x - y) + apply MINUS q p)
@@ -570,7 +569,6 @@ module Simpl = struct
         exp (exp (x + y) + apply MINUS q p)
       | MINUS, BinOp(PLUS, Int q, x), BinOp(MINUS, Int p, y) ->
         exp (apply MINUS q p + exp (x + y))
-
       | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, y, Int p)
       | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, Int p, y) ->
         exp (exp (x - y) - apply PLUS p q)
@@ -1339,7 +1337,9 @@ module Reduce = struct
           | Int i as e -> Map.add env x i, e
           | e -> Map.remove env x, e in
         run env (Stmt.Move (x, y) :: acc) bil
-      | Stmt.While _ as s :: bil -> run env (s :: acc) bil
+      | Stmt.While _ as s :: bil ->
+        let env' = remove_bound_vars env s in
+        run env' (s :: acc) bil
       | Stmt.If (cond, yes, no) as if_ :: bil ->
         let acc' =
           Stmt.If (cond @@ env,
