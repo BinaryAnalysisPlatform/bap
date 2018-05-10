@@ -570,12 +570,14 @@ module Simpl = struct
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
       | PLUS, Int q, x -> exp (x + Int q)
-
+      | PLUS, x, UnOp(NEG, y) when x = y -> zero width
+      | PLUS, UnOp(NEG, x), y when x = y -> zero width
+      | PLUS, x, UnOp(NOT, y) when x = y -> ones width
+      | PLUS, UnOp(NOT, x), y when x = y -> ones width
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
-      | MINUS, x, y -> exp (exp x + exp (neg (exp y)))
-
+      | MINUS, x, y -> exp (x + exp (neg y))
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
@@ -613,7 +615,7 @@ module Simpl = struct
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
       | op, BinOp(op', x, Int p), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
-      | op, y, BinOp(op', x, Int p) when is_associative op op' ->
+      | op, x, BinOp(op', y, Int p) when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
 
       | op, BinOp(op', x, Int p), Int q
@@ -622,6 +624,7 @@ module Simpl = struct
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
         BinOp (op',apply op p q, BinOp(op, Int q, x))
+
       | op,x,y -> keep op x y in
     exp
 
@@ -629,21 +632,20 @@ module Simpl = struct
     let (+) = Bap_exp.Infix.(+) in
     let (-) = Bap_exp.Infix.(-) in
     object(self)
-    inherit exp_mapper
-    method! map_binop op x y =
-      match op,self#map_exp x, self#map_exp y with
-      | PLUS, UnOp(NEG,x), UnOp(NEG, y) ->
-        self#map_exp (UnOp (NEG, x + y))
-      | PLUS, x, UnOp(NEG, y) -> x - y
-      | PLUS, UnOp(NEG, x), y -> y - x
-      | TIMES, x, UnOp(NEG, y)  ->
-        self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
-      | _ -> BinOp(op,self#map_exp x, self#map_exp y)
-  end
+      inherit exp_mapper
+      method! map_binop op x y =
+        match op,self#map_exp x, self#map_exp y with
+        | PLUS, UnOp(NEG,x), UnOp(NEG, y) ->
+          self#map_exp (UnOp (NEG, x + y))
+        | PLUS, x, UnOp(NEG, y) -> x - y
+        | PLUS, UnOp(NEG, x), y -> y - x
+        | TIMES, x, UnOp(NEG, y)  ->
+          self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
+        | _ -> BinOp(op,self#map_exp x, self#map_exp y)
+    end
 
   let exp ?(ignore=[]) e =
     exp ~ignore e |> (new pretifier)#map_exp
-
 
   let bil ?ignore =
     let exp x = exp ?ignore x in

@@ -7,6 +7,7 @@ module SM = Monad.State
 
 (* We have to redefine bili to be sure
    Simpl won't be called inside Bap.Std *)
+module E = Expi.Make(SM)
 module B = Bili.Make(SM)
 
 class ['a] t = object(self)
@@ -17,13 +18,22 @@ class ['a] t = object(self)
     | Bil.BinOp (op,u,v) -> self#eval_binop op u v
     | Bil.UnOp (op,u) -> self#eval_unop op u
     | Bil.Int u -> self#eval_int u
-    | _ -> failwith "unexpected exp"
+    | Bil.Load (m,a,e,s) -> self#eval_load ~mem:m ~addr:a e s
+    | Bil.Store (m,a,u,e,s) -> self#eval_store ~mem:m ~addr:a u e s
+    | Bil.Cast (ct,sz,e) -> self#eval_cast ct sz e
+    | Bil.Let (v,u,b) -> self#eval_let v u b
+    | Bil.Unknown (m,t) -> self#eval_unknown m t
+    | Bil.Ite (cond,yes,no) -> self#eval_ite ~cond ~yes ~no
+    | Bil.Extract (hi,lo,w) -> self#eval_extract hi lo w
+    | Bil.Concat (u,w) -> self#eval_concat u w
+
 end
 
 let cmps = Bil.[eq; neq; lt; le; slt; sle]
 
 let binops = Bil.[plus; minus; times; divide; divide; modulo; smodulo;
                   lshift; rshift; arshift; bit_and; bit_or; bit_xor]
+
 
 let eval bil = Monad.State.exec ((new t)#eval bil)
 let random max = Random.int max
@@ -92,7 +102,7 @@ let report_fail src simpl r =
 let same_bil b b' = Bil.compare b b' = 0
 
 let simpl_bil bil =
-  try Some (Stmt.simpl bil)
+  try Some (Stmt.normalize (Stmt.simpl bil))
   with Division_by_zero -> None
 
 let init width e =
@@ -136,9 +146,7 @@ let c2 = int 2
 let _c2 = int (-2)
 let c4 = int 4
 let c6 = int 6
-let _c6 = int (-6)
 let c8 = int 8
-let _c8 = int (-8)
 let b0 = Bil.int Word.b0
 let b1 = Bil.int Word.b1
 let x = Bil.var (Var.create "x" (Type.imm width))
@@ -147,13 +155,35 @@ let z = Bil.var (Var.create "z" (Type.imm width))
 
 let neg' = Bil.(unop neg)
 
-let check exp expected ctxt =
-  let s = Exp.simpl ~ignore:[Eff.read] exp in
-  let es = Exp.to_string in
-  if not (Exp.equal s expected) then
-    printf "not equal %s --> %s ( %s )\n" (es exp) (es s) (es expected);
+let eval_exp e context =
+  let x = Monad.State.eval ((new t)#eval_exp e) context in
+  match Bil.Result.value x with
+  | Bil.Imm w -> `Result w
+  | _ -> `No_result
 
-  assert_equal ~ctxt ~cmp:Exp.equal (Exp.simpl ~ignore:[Eff.read] exp) expected
+let check_eval exp simpl expected =
+  let vars = Set.to_list @@ Exp.free_vars exp in
+  let init = List.mapi vars ~f:(fun i v ->
+      let value = Word.of_int ~width (i + 4) in
+      Bil.(v := int value)) in
+  let c = Monad.State.exec ((new t)#eval init) (new Bili.context) in
+  match eval_exp exp c, eval_exp simpl c, eval_exp expected c with
+  | `Result w, `Result w', `Result w''
+    when Word.equal w w' && Word.equal w w'' -> ()
+  | `No_result, `No_result, `No_result -> ()
+  | _ ->
+    let s = sprintf "eval failed for %s" (Exp.to_string exp) in
+    assert_bool s false
+
+let check exp expected ctxt =
+  let simpl = Exp.normalize_negatives (Exp.simpl ~ignore:[Eff.read] exp) in
+  check_eval exp simpl expected;
+
+  let es = Exp.to_string in
+  if not (Exp.equal simpl expected) then
+    printf "not equal: %s --> %s ( %s )\n" (es exp) (es simpl) (es expected);
+
+  assert_equal ~ctxt ~cmp:Exp.equal simpl expected
 
 let (<=>) = check
 
@@ -176,6 +206,10 @@ let suite () =
 
     "0 + x = x"       >:: Bil.(c0 + x <=> x);
     "x + 0 = x"       >:: Bil.(x + c0 <=> x);
+    "x + ~x = 0"      >:: Bil.(x + lnot x <=> _c1);
+    "~x + x = 0"      >:: Bil.(lnot x + x <=> _c1);
+    "-x + x = 0"      >:: Bil.(neg' x + x <=> c0);
+
     "x - 0 = x"       >:: Bil.(x - c0 <=> x);
     "0 - x = -x"      >:: Bil.(c0 - x <=> unop neg x);
     "x - x = 0"       >:: Bil.(x - x <=> c0);
@@ -226,9 +260,9 @@ let suite () =
     "2 * (x + 4) = 2 * x + 8" >:: Bil.(c2 * (x + c4) <=> c2 * x + c8);
     "(4 + x) * 2 = 8 + 2 * x" >:: Bil.((c4 + x) * c2 <=> c2 * x + c8);
     "(x + 4) * 2 = 2 * x + 8" >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
-    "(x - 4) * 2 = 2 * x - 8" >:: Bil.((x - c4) * c2 <=> c2 * x + _c8);
+    "(x - 4) * 2 = 2 * x - 8" >:: Bil.((x - c4) * c2 <=> c2 * x - c8);
     "(4 - x) * 2 = 8 - 2 * x" >:: Bil.((c4 - x) * c2 <=> c8 - c2 * x);
-    "2 * (x - 4) = 2 * x - 8" >:: Bil.(c2 * (x - c4) <=> c2 * x + _c8);
+    "2 * (x - 4) = 2 * x - 8" >:: Bil.(c2 * (x - c4) <=> c2 * x - c8);
     "2 * (4 - x) = 8 - 2 * x" >:: Bil.(c2 * (c4 - x) <=> c8 - c2 * x);
 
     "(4 + x) + 2 = 6 + x"     >:: Bil.((c4 + x) + c2 <=> x + c6);
@@ -240,28 +274,28 @@ let suite () =
     "2 - (4 + x) = -2 - x"    >:: Bil.(c2 - (c4 + x) <=> _c2 - x);
     "2 - (x + 4) = -2 - x"    >:: Bil.(c2 - (x + c4) <=> _c2 - x);
     "(4 - x) + 2 = 6 - x"     >:: Bil.((c4 - x) + c2 <=> c6 - x);
-    "(x - 4) + 2 = x - 2"     >:: Bil.((x - c4) + c2 <=> x + _c2);
+    "(x - 4) + 2 = x - 2"     >:: Bil.((x - c4) + c2 <=> x - c2);
     "(4 - x) - 2 = 2 - x"     >:: Bil.((c4 - x) - c2 <=> c2 - x);
-    "(x - 4) - 2 = x - 6"     >:: Bil.((x - c4) - c2 <=> x + _c6);
-    "2 + (x - 4) = x - 2"     >:: Bil.(c2 + (x - c4) <=> x + _c2);
+    "(x - 4) - 2 = x - 6"     >:: Bil.((x - c4) - c2 <=> x - c6);
+    "2 + (x - 4) = x - 2"     >:: Bil.(c2 + (x - c4) <=> x - c2);
     "2 + (4 - x) = 6 - x"     >:: Bil.(c2 + (c4 - x) <=> c6 - x);
     "2 - (x - 4) = 6 - x"     >:: Bil.(c2 - (x - c4) <=> c6 - x);
-    "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x + _c2);
+    "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x - c2);
 
-    "(x - 4) - 2 = x - 6"     >:: Bil.((x - c4) - c2 <=> x + _c6);
+    "(x - 4) - 2 = x - 6"     >:: Bil.((x - c4) - c2 <=> x - c6);
     "(x + 4) - 2 = x + 2"     >:: Bil.((x + c4) - c2 <=> x + c2);
-    "(x - 4) + 2 = x - 2"     >:: Bil.((x - c4) + c2 <=> x + _c2);
+    "(x - 4) + 2 = x - 2"     >:: Bil.((x - c4) + c2 <=> x - c2);
     "(x + 4) + 2 = x + 6"     >:: Bil.((x + c4) + c2 <=> x + c6);
     "2 - (x - 4) = 6 - x"     >:: Bil.(c2 - (x - c4) <=> c6 - x);
     "2 - (x + 4) = -2 - x"    >:: Bil.(c2 - (x + c4) <=> _c2 - x);
-    "2 + (x - 4) = -2 + x"    >:: Bil.(c2 + (x - c4) <=> x + _c2);
+    "2 + (x - 4) = -2 + x"    >:: Bil.(c2 + (x - c4) <=> x - c2);
     "2 + (x + 4) = x + 6"     >:: Bil.(c2 + (x + c4) <=> x + c6);
 
     "(4 - x) - 2 = 2 - x"     >:: Bil.((c4 - x) - c2 <=> c2 - x);
     "(4 + x) - 2 = x + 2"     >:: Bil.((c4 + x) - c2 <=> x + c2);
     "(4 - x) + 2 = 6 - x"     >:: Bil.((c4 - x) + c2 <=> c6 - x);
     "(4 + x) + 2 = 6 + x"     >:: Bil.((c4 + x) + c2 <=> x + c6);
-    "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x + _c2);
+    "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x - c2);
     "2 - (4 + x) = -2 - x"    >:: Bil.(c2 - (c4 + x) <=> _c2 - x);
     "2 + (4 - x) = 6 - x"     >:: Bil.(c2 + (c4 - x) <=> c6 - x);
     "2 + (4 + x) = 6 + x"     >:: Bil.(c2 + (c4 + x) <=> x + c6);
@@ -271,10 +305,10 @@ let suite () =
     "((x + 4) - y) + 2 = (x - y) + 6"  >:: Bil.(((x + c4) - y) + c2 <=> (x - y) + c6);
     "((x + 4) - y) - 2 = (x - y) + 2"  >:: Bil.(((x + c4) - y) - c2 <=> (x - y) + c2);
 
-    "((x - 4) + y) + 2 = (x + y) - 2"  >:: Bil.(((x - c4) + y) + c2 <=> (x + y) + _c2);
-    "((x - 4) + y) - 2 = (x + y) - 6"  >:: Bil.(((x - c4) + y) - c2 <=> (x + y) + _c6);
-    "((x - 4) - y) + 2 = (x - y) - 2"  >:: Bil.(((x - c4) - y) + c2 <=> (x - y) + _c2);
-    "((x - 4) - y) - 2 = (x - y) - 6"  >:: Bil.(((x - c4) - y) - c2 <=> (x - y) + _c6);
+    "((x - 4) + y) + 2 = (x + y) - 2"  >:: Bil.(((x - c4) + y) + c2 <=> (x + y) - c2);
+    "((x - 4) + y) - 2 = (x + y) - 6"  >:: Bil.(((x - c4) + y) - c2 <=> (x + y) - c6);
+    "((x - 4) - y) + 2 = (x - y) - 2"  >:: Bil.(((x - c4) - y) + c2 <=> (x - y) - c2);
+    "((x - 4) - y) - 2 = (x - y) - 6"  >:: Bil.(((x - c4) - y) - c2 <=> (x - y) - c6);
 
     "((4 + x) + y) + 2 = (x + y) + 6"  >:: Bil.(((c4 + x) + y) + c2 <=> (x + y) + c6);
     "((4 + x) + y) - 2 = (x + y) + 2"  >:: Bil.(((c4 + x) + y) - c2 <=> (x + y) + c2);
@@ -287,29 +321,29 @@ let suite () =
     "((4 - x) - y) - 2 = 2 - (x + y)"  >:: Bil.(((c4 - x) - y) - c2 <=> c2 - (x + y));
 
     "(2 + (x + 4) + y) = (x + y) + 6"  >:: Bil.((c2 + (x + c4) + y) <=> (x + y) + c6);
-    "(2 - (x + 4) + y) = -2 + (y - x)" >:: Bil.((c2 - (x + c4) + y) <=> (y - x) + _c2);
+    "(2 - (x + 4) + y) = -2 + (y - x)" >:: Bil.((c2 - (x + c4) + y) <=> (y - x) - c2);
     "(2 + (x + 4) - y) = (x - y) + 6"  >:: Bil.((c2 + (x + c4) - y) <=> (x - y) + c6);
     "(2 - (x + 4) - y) = -2 - (x + y)" >:: Bil.((c2 - (x + c4) - y) <=> _c2 - (x + y));
 
-    "(2 + (x - 4) + y) = (x + y) - 2"  >:: Bil.((c2 + (x - c4) + y) <=> (x + y) + _c2);
+    "(2 + (x - 4) + y) = (x + y) - 2"  >:: Bil.((c2 + (x - c4) + y) <=> (x + y) - c2);
     "(2 - (x - 4) + y) = (y - x) + 6"  >:: Bil.((c2 - (x - c4) + y) <=> y - x + c6);
-    "(2 + (x - 4) - y) = (x - y) - 2"  >:: Bil.((c2 + (x - c4) - y) <=> (x - y) + _c2);
+    "(2 + (x - 4) - y) = (x - y) - 2"  >:: Bil.((c2 + (x - c4) - y) <=> (x - y) - c2);
     "(2 - (x - 4) - y) = 6 - (x + y)"  >:: Bil.((c2 - (x - c4) - y) <=> c6 - (x + y));
 
     "(2 + (4 + x) + y) = (x + y) + 6"  >:: Bil.((c2 + (c4 + x) + y) <=> (x + y) + c6);
-    "(2 - (4 + x) + y) = (y - x) - 2"  >:: Bil.((c2 - (c4 + x) + y) <=> (y - x) + _c2);
+    "(2 - (4 + x) + y) = (y - x) - 2"  >:: Bil.((c2 - (c4 + x) + y) <=> (y - x) - c2);
     "(2 + (4 + x) - y) = (x - y) + 6"  >:: Bil.((c2 + (c4 + x) - y) <=> (x - y) + c6);
     "(2 - (4 + x) - y) = -2 - (x + y)" >:: Bil.((c2 - (c4 + x) - y) <=> _c2 - (x + y));
 
     "(2 + (4 - x) + y) = (y - x) + 6"  >:: Bil.((c2 + (c4 - x) + y) <=> (y - x) + c6);
-    "(2 - (4 - x) + y) = (x + y) - 2"  >:: Bil.((c2 - (c4 - x) + y) <=> (x + y) + _c2);
+    "(2 - (4 - x) + y) = (x + y) - 2"  >:: Bil.((c2 - (c4 - x) + y) <=> (x + y) - c2);
     "(2 + (4 - x) - y) = 6 - (x + y)"  >:: Bil.((c2 + (c4 - x) - y) <=> c6 - (x + y));
-    "(2 - (4 - x) - y) = (x - y) - 2"  >:: Bil.((c2 - (c4 - x) - y) <=> (x - y) + _c2);
+    "(2 - (4 - x) - y) = (x - y) - 2"  >:: Bil.((c2 - (c4 - x) - y) <=> (x - y) - c2);
 
     "(y + (4 - x) + 2) = (y - x) + 6"  >:: Bil.((y + (c4 - x) + c2) <=> (y - x) + c6);
-    "(y - (4 - x) + 2) = (x + y) - 2"  >:: Bil.((y - (c4 - x) + c2) <=> (x + y) + _c2);
+    "(y - (4 - x) + 2) = (y + x) - 2"  >:: Bil.((y - (c4 - x) + c2) <=> (y + x) - c2);
     "(y + (4 - x) - 2) = (y - x) + 2"  >:: Bil.((y + (c4 - x) - c2) <=> (y - x) + c2);
-    "(y - (4 - x) - 2) = (x + y) - 6"  >:: Bil.((y - (c4 - x) - c2) <=> (x + y) + _c6);
+    "(y - (4 - x) - 2) = (y + x) - 6"  >:: Bil.((y - (c4 - x) - c2) <=> (y + x) - c6);
 
     "(x + 4) + (y + 2) = (x + y) + 6"  >:: Bil.((x + c4) + (y + c2) <=> (x + y) + c6);
     "(x + 4) + (2 + y) = (x + y) + 6"  >:: Bil.((x + c4) + (c2 + y) <=> (x + y) + c6);
@@ -326,18 +360,21 @@ let suite () =
     "(4 + x) - (y - 2) = 6 + (x - y)"  >:: Bil.((c4 + x) - (y - c2) <=> (x - y) + c6);
     "(4 + x) - (2 - y) = 2 + (x + y)"  >:: Bil.((c4 + x) - (c2 - y) <=> (x + y) + c2);
 
-    "(x - 4) - (y + 2) = (x - y) - 6"  >:: Bil.((x - c4) - (y + c2) <=> (x - y) + _c6);
-    "(x - 4) - (2 + y) = (x - y) - 6"  >:: Bil.((x - c4) - (c2 + y) <=> (x - y) + _c6);
+    "(x - 4) - (y + 2) = (x - y) - 6"  >:: Bil.((x - c4) - (y + c2) <=> (x - y) - c6);
+    "(x - 4) - (2 + y) = (x - y) - 6"  >:: Bil.((x - c4) - (c2 + y) <=> (x - y) - c6);
     "(4 - x) - (y + 2) = 2 - (x + y)"  >:: Bil.((c4 - x) - (y + c2) <=> c2 - (x + y));
     "(4 - x) - (2 + y) = 2 - (x + y)"  >:: Bil.((c4 - x) - (c2 + y) <=> c2 - (x + y));
 
-    "(x - 4) - (y - 2) = (x - y) - 2"  >:: Bil.((x - c4) - (y - c2) <=> (x - y) + _c2);
-    "(x - 4) - (2 - y) = (x + y) - 6"  >:: Bil.((x - c4) - (c2 - y) <=> (x + y) + _c6);
+    "(x - 4) - (y - 2) = (x - y) - 2"  >:: Bil.((x - c4) - (y - c2) <=> (x - y) - c2);
+    "(x - 4) - (2 - y) = (x + y) - 6"  >:: Bil.((x - c4) - (c2 - y) <=> (x + y) - c6);
     "(4 - x) - (y - 2) = 6 - (x + y)"  >:: Bil.((c4 - x) - (y - c2) <=> c6 - (x + y));
     "(4 - x) - (2 - y) = 2 + (y - x)"  >:: Bil.((c4 - x) - (c2 - y) <=> (y - x) + c2);
 
     "2 * (x + 4) + y - (4 - z) + c2"   >:: Bil.(c2 * (x + c4) + y - (c4 - z) + c2 <=> c2 * x + y + z + c6);
     "2 * ((x + 4) + y) + (z - 4) - c2" >:: Bil.(c2 * ((x + c4) + y) - (c4 - z) - c2 <=> c2 * (x + y) + z + c2);
+    "(((x + 1) + y) + z) + 1"          >:: Bil.((((x + c1) + y) + z) + c1 <=> x + y + z + c2);
+    "1 + (((x + 1) + y) + z)"          >:: Bil.(c1 + (((x + c1) + y) + z) <=> x + y + z + c2);
+    "z + (((x + 1) + y) + 1)"          >:: Bil.(z + (((x + c1) + y) + c1) <=> z + (x + y) + c2);
 
     "extract 7 0 x:8 = x:8"            >:: Bil.(extract 7 0 x <=> x);
     "extract 7 1 x:8, no simpl"        >:: Bil.(extract 7 1 x <=> extract 7 1 x);
