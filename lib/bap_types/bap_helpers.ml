@@ -440,6 +440,59 @@ module Simpl = struct
   open Stmt
   open Cast
 
+  type sign =
+    | Plus
+    | Minus
+
+  let infer sign sign' = match sign,sign' with
+    | Plus,Plus  | Minus,Minus -> Plus
+    | Plus,Minus | Minus,Plus -> Minus
+
+  let apply' (sign_x, x) (sign_y, y) plus minus =
+    match sign_x, sign_y with
+    | Plus, Plus -> Plus, plus x y
+    | Plus,Minus -> Plus, minus x y
+    | Minus,Plus -> Plus, minus y x
+    | Minus,Minus -> Minus, plus x y
+
+  let apply x y plus minus = match x with
+    | None -> Some y
+    | Some x -> Some (apply' x y plus minus)
+
+  let apply_int x y = apply x y Word.(+) Word.(-)
+  let apply_exp x y = apply x y Bap_exp.Infix.(+) Bap_exp.Infix.(-)
+  let apply_exp' x y = apply' x y Bap_exp.Infix.(+) Bap_exp.Infix.(-)
+
+  let rec solve_sum ?(before=Plus) x = match x with
+    | BinOp (PLUS, x, y) ->
+      let before = infer before Plus in
+      solve_sum ~before x @ solve_sum ~before y
+    | BinOp (MINUS, x, y) ->
+      let before = infer before Plus in
+      let before' = infer before Minus in
+      solve_sum ~before x @ solve_sum ~before:before' y
+    | e -> [before,e]
+  and fold exps =
+    let exp, const =
+      List.fold exps ~init:(None,None)
+        ~f:(fun (exp,const) -> function
+            | sign, Int x -> exp, apply_int const (sign,x)
+            | sign, e -> apply_exp exp (sign,e), const) in
+    let sign, exp = Option.value_exn exp in
+    let sign, exp = match const with
+      | None -> sign, exp
+      | Some (s,w)-> apply_exp' (sign,exp) (s,Int w) in
+    match sign with
+    | Plus -> exp
+    | Minus -> UnOp (Bap_exp.Unop.neg, exp)
+
+  let solve_sum = function
+    | BinOp (PLUS, _,_) as e -> fold (solve_sum e)
+    | BinOp (MINUS, _,_) as e -> fold (solve_sum e)
+    | e -> e
+
+
+
 
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
@@ -463,6 +516,8 @@ module Simpl = struct
   let is_distributive op op' = match op,op' with
     | TIMES, (PLUS | MINUS) -> true
     | _ -> false
+
+  let is_neg op = compare_unop op Bap_exp.Unop.neg = 0
 
   let exp ?(ignore=[]) =
     let removable = removable ignore in
@@ -498,6 +553,8 @@ module Simpl = struct
     and unop op x = match exp x with
       | Int x -> Int (Apply.unop op x)
       | UnOp (op', x) when compare_unop op op' = 0 -> x
+      | BinOp (PLUS, x, Int q) when is_neg op ->
+        BinOp (MINUS, Int (Word.neg q), x)
       | x -> UnOp(op, x)
     and binop op x y =
       let width = infer_width x in
@@ -507,82 +564,17 @@ module Simpl = struct
       let (=) x y = compare_exp x y = 0 && removable x in
       let apply op x y = Int (Apply.binop op x y) in
       let (+) = Bap_exp.Infix.(+) in
-      let (-) = Bap_exp.Infix.(-) in
+      let neg x = UnOp (Bap_exp.Unop.neg, x) in
       match op, exp x, exp y with
       | op, Int x, Int y -> apply op x y
-
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
-      | PLUS, Int p, BinOp(MINUS, x, Int q) -> apply MINUS p q + exp x
-      | PLUS, Int p, BinOp(MINUS, Int q, x) -> apply PLUS p q - exp x
-      | PLUS, BinOp(MINUS, x, Int q), Int p -> exp x + apply MINUS p q
-      | PLUS, BinOp(MINUS, Int q, x), Int p -> apply PLUS p q - exp x
-      | PLUS, BinOp(PLUS, Int q, x), BinOp(PLUS, y, Int p)
-      | PLUS, BinOp(PLUS, Int q, x), BinOp(PLUS, Int p, y) ->
-        exp (apply PLUS q p + exp (x + y))
-      | PLUS, BinOp(PLUS, x, Int q), BinOp(PLUS, y, Int p)
-      | PLUS, BinOp(PLUS, x, Int q), BinOp(PLUS, Int p, y) ->
-        exp (exp (x + y) + apply PLUS q p)
-      | PLUS, BinOp(PLUS, Int q, x), BinOp(MINUS, y, Int p) ->
-        exp (apply MINUS q p + exp (x + y))
-      | PLUS, BinOp(PLUS, x, Int q), BinOp(MINUS, y, Int p)
-      | PLUS, BinOp(MINUS, y, Int p), BinOp(PLUS, x, Int q)
-      | PLUS, BinOp(MINUS, y, Int p), BinOp(PLUS, Int q, x) ->
-        exp (exp (x + y) + apply MINUS q p)
-      | PLUS, BinOp(PLUS, Int q, x), BinOp(MINUS, Int p, y)
-      | PLUS, BinOp(MINUS, Int p, y), BinOp(PLUS, Int q, x)
-      | PLUS, BinOp(MINUS, Int p, y), BinOp(PLUS, x, Int q) ->
-        exp (apply PLUS q p + exp (x - y))
-      | PLUS, BinOp(PLUS, x, Int q), BinOp(MINUS, Int p, y) ->
-        exp (exp (x - y) + apply PLUS q p)
-      | PLUS,  BinOp(MINUS, x, Int q), BinOp(MINUS, y, Int p) ->
-        exp (exp (x + y) - apply PLUS q p)
-      | PLUS,  BinOp(MINUS, x, Int q), BinOp(MINUS, Int p, y) ->
-        exp (exp (x - y) + apply MINUS p q)
-      | PLUS,  BinOp(MINUS, Int q, x), BinOp(MINUS, Int p, y) ->
-        exp (apply PLUS q p - exp (x + y))
-      | PLUS,  BinOp(MINUS, Int q, x), BinOp(MINUS, y, Int p) ->
-        exp (apply MINUS q p + exp (y - x))
+      | PLUS, Int q, x -> exp (x + Int q)
 
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
-      | MINUS, Int p, BinOp(MINUS, Int q, x) -> apply MINUS p q + exp x
-      | MINUS, Int p, BinOp(MINUS, x, Int q) -> apply PLUS q p - exp x
-      | MINUS, Int p, BinOp(PLUS, x, Int q)  -> apply MINUS p q - exp x
-      | MINUS, Int p, BinOp(PLUS, Int q, x)  -> apply MINUS p q - exp x
-      | MINUS, BinOp(PLUS, x, Int q), Int p  -> exp x + apply MINUS q p
-      | MINUS, BinOp(PLUS, Int q, x), Int p  -> exp x + apply MINUS q p
-      | MINUS, BinOp(MINUS, Int q, x), Int p -> apply MINUS q p - exp x
-      | MINUS, BinOp(MINUS, x, Int q), Int p -> exp x - apply PLUS q p
-      | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, y, Int p)
-      | MINUS, BinOp(PLUS, x, Int q), BinOp(PLUS, Int p, y) ->
-        exp (exp (x - y) + apply MINUS q p)
-      | MINUS, BinOp(PLUS, Int q, x), BinOp(PLUS, y, Int p)
-      | MINUS, BinOp(PLUS, Int q, x), BinOp(PLUS, Int p, y) ->
-        exp (apply MINUS q p + exp (x - y))
-      | MINUS, BinOp(PLUS, x, Int q), BinOp(MINUS, y, Int p) ->
-        exp (exp (x - y) + apply PLUS q p)
-      | MINUS, BinOp(PLUS, Int q, x), BinOp(MINUS, y, Int p) ->
-        exp (apply PLUS q p + exp (x - y))
-      | MINUS, BinOp(PLUS, x, Int q), BinOp(MINUS, Int p, y) ->
-        exp (exp (x + y) + apply MINUS q p)
-      | MINUS, BinOp(PLUS, Int q, x), BinOp(MINUS, Int p, y) ->
-        exp (apply MINUS q p + exp (x + y))
-      | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, y, Int p)
-      | MINUS, BinOp(MINUS, x, Int q), BinOp(PLUS, Int p, y) ->
-        exp (exp (x - y) - apply PLUS p q)
-      | MINUS, BinOp(MINUS, Int q, x), BinOp(PLUS, y, Int p)
-      | MINUS, BinOp(MINUS, Int q, x), BinOp(PLUS, Int p, y) ->
-        exp (apply MINUS q p - exp (x + y))
-      | MINUS, BinOp(MINUS, x, Int q), BinOp(MINUS, y, Int p) ->
-        exp (exp (x - y) + apply MINUS p q)
-      | MINUS, BinOp(MINUS, x, Int q), BinOp(MINUS, Int p, y) ->
-        exp (exp (x + y) - apply PLUS p q)
-      | MINUS, BinOp(MINUS, Int q, x), BinOp(MINUS, y, Int p) ->
-        exp (apply PLUS p q - exp (x + y))
-      | MINUS, BinOp(MINUS, Int q, x), BinOp(MINUS, Int p, y) ->
-        exp (apply MINUS q p + exp (y - x))
+      | MINUS, x, y -> exp (exp x + exp (neg (exp y)))
 
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
@@ -612,11 +604,17 @@ module Simpl = struct
       | (LE|SLE), x, y when x = y -> Int Word.b1
 
       | op, BinOp(op', x, Int p), Int q when is_associative op op' ->
-        BinOp (op, x, apply op p q)
-      | op, BinOp(op', Int p, x), Int q
+        exp @@ BinOp (op, x, apply op p q)
       | op, Int q, BinOp(op', x, Int p)
       | op, Int q, BinOp(op', Int p, x) when is_associative op op' ->
-        BinOp (op, apply op p q, x)
+        exp @@ BinOp (op, apply op p q, x)
+      | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
+        when is_associative op op' && is_associative op op'' ->
+        exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
+      | op, BinOp(op', x, Int p), y when is_associative op op' ->
+        exp @@ BinOp (op, BinOp (op, x, y), Int p)
+      | op, y, BinOp(op', x, Int p) when is_associative op op' ->
+        exp @@ BinOp (op, BinOp (op, x, y), Int p)
 
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
@@ -624,25 +622,28 @@ module Simpl = struct
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
         BinOp (op',apply op p q, BinOp(op, Int q, x))
-
-      | PLUS, BinOp(PLUS, x, Int q), y
-      | PLUS, BinOp(PLUS, Int q, x), y
-      | PLUS, x, BinOp(PLUS, y, Int q)
-      | PLUS, x, BinOp(PLUS, Int q, y) -> exp (x + y) + Int q
-      | PLUS, BinOp(MINUS, x, Int q), y
-      | PLUS, x, BinOp(MINUS, y, Int q) -> (x + y) - Int q
-      | PLUS, BinOp(MINUS, Int q, x), y
-      | PLUS, y, BinOp(MINUS, Int q, x) -> (y - x) + Int q
-      | MINUS, BinOp(PLUS, x, Int q), y
-      | MINUS, BinOp(PLUS, Int q, x), y -> (x - y) + Int q
-      | MINUS, y, BinOp(PLUS, x, Int q)
-      | MINUS, y, BinOp(PLUS, Int q, x) -> (y - x) - Int q
-      | MINUS, BinOp(MINUS, x, Int q), y -> (x - y) - Int q
-      | MINUS, BinOp(MINUS, Int q, x), y -> Int q - (x + y)
-      | MINUS, y, BinOp(MINUS, x, Int q) -> (y - x) + Int q
-      | MINUS, y, BinOp(MINUS, Int q, x) -> (y + x) - Int q
       | op,x,y -> keep op x y in
     exp
+
+  class pretifier =
+    let (+) = Bap_exp.Infix.(+) in
+    let (-) = Bap_exp.Infix.(-) in
+    object(self)
+    inherit exp_mapper
+    method! map_binop op x y =
+      match op,self#map_exp x, self#map_exp y with
+      | PLUS, UnOp(NEG,x), UnOp(NEG, y) ->
+        self#map_exp (UnOp (NEG, x + y))
+      | PLUS, x, UnOp(NEG, y) -> x - y
+      | PLUS, UnOp(NEG, x), y -> y - x
+      | TIMES, x, UnOp(NEG, y)  ->
+        self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
+      | _ -> BinOp(op,self#map_exp x, self#map_exp y)
+  end
+
+  let exp ?(ignore=[]) e =
+    exp ~ignore e |> (new pretifier)#map_exp
+
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
