@@ -217,6 +217,7 @@ depends: [
     "camlzip"
     "cmdliner" {>= "1.0" & < "2.0"}
     "ppx_jane"    {>= "v0.11" & < "v0.12"}
+    "ppxlib_ocamlbuild"
     "core_kernel" {>= "v0.11" & < "v0.12"}
     "ezjsonm"
     "fileutils"
