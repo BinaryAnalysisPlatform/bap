@@ -51,8 +51,7 @@ module Binary = struct
        @\nmd5sum: %s\
        @\n@[<2>\
        args:   %a@]\
-       @\n@[<2>envp:@\n%a@]@]@\n}"
-      t.path (hexstring_of_bytestring t.md5sum) Args.pp t.args Envp.pp t.envp
+       @\n@[<2>envp:@\n%a@]@]@\n}" t.path (Caml.Digest.to_hex t.md5sum) Args.pp t.args Envp.pp t.envp
 end
 
 let pp_time fmt t =
