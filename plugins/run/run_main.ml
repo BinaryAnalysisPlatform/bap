@@ -109,27 +109,20 @@ let exec x =
          (Primus.Exn.to_string exn);
        Machine.return ())
 
+module Eval = Primus.Interpreter.Make(Machine)
+
 let run = function
   | [] -> exec (`symbol "_start")
-  | x :: xs ->
+  | xs ->
     Machine.List.iter xs ~f:(fun x ->
+        Machine.fork () >>= fun () ->
         Machine.current () >>= fun pid ->
         if pid = Machine.global
-        then
-          Machine.fork () >>= fun () ->
-          Machine.current () >>= fun cid ->
-          if cid = Machine.global
-          then Machine.return ()
-          else
-            Machine.switch pid >>= fun () ->
-            Machine.current () >>= fun _id ->
-            exec x
-        else Machine.return ()) >>= fun () ->
-    Machine.current () >>= fun id ->
-    if id = Machine.global
-    then exec x
-    else Machine.return ()
-
+        then Machine.return ()
+        else
+          exec x >>= fun () ->
+          Eval.halt >>=
+          never_returns)
 
 let pp_var ppf v =
   fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)

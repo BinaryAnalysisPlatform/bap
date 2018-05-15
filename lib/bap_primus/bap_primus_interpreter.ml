@@ -97,7 +97,7 @@ let jumping,will_jump =
   Observation.provide ~inspect:sexp_of_values "jumping"
 
 let eval_cond,on_cond =
-  Observation.provide ~inspect:sexp_of_value "eval_cond"
+  Observation.provide ~inspect:sexp_of_value "eval-cond"
 
 
 let results r op = Sexp.List [op; sexp_of_value r]

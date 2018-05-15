@@ -24,9 +24,10 @@ let find_calls name roots cfg =
   List.iter roots ~f:(fun addr ->
       Hashtbl.set starts ~key:addr ~data:(name addr));
   Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
-      if Seq.is_empty (Cfg.Node.inputs blk cfg) then
-        let addr = Block.addr blk in
-        Hashtbl.set starts ~key:addr ~data:(name addr);
+      let () =
+        if Seq.is_empty (Cfg.Node.inputs blk cfg) then
+          let addr = Block.addr blk in
+          Hashtbl.set starts ~key:addr ~data:(name addr) in
       let term = Block.terminator blk in
       if Insn.(is call) term then
         Seq.iter (Cfg.Node.outputs blk cfg)
