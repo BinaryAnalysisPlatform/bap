@@ -518,6 +518,7 @@ module Simpl = struct
     | _ -> false
 
   let is_neg op = compare_unop op Bap_exp.Unop.neg = 0
+  let is_not op = compare_unop op Bap_exp.Unop.not = 0
 
   let exp ?(ignore=[]) =
     let removable = removable ignore in
@@ -555,6 +556,14 @@ module Simpl = struct
       | UnOp (op', x) when compare_unop op op' = 0 -> x
       | BinOp (PLUS, x, Int q) when is_neg op ->
         BinOp (MINUS, Int (Word.neg q), x)
+      | BinOp(AND, Int q, x) when is_not op ->
+        BinOp (OR, Int (Apply.unop op q), UnOp(NOT, x))
+      | BinOp(AND, x, Int q) when is_not op ->
+        BinOp (OR, UnOp(NOT, x), Int (Apply.unop op q))
+      | BinOp(OR, Int q, x) when is_not op ->
+        BinOp (AND, Int (Apply.unop op q), UnOp(NOT, x))
+      | BinOp(OR, x, Int q) when is_not op ->
+        BinOp (AND, UnOp(NOT, x), Int (Apply.unop op q))
       | x -> UnOp(op, x)
     and binop op x y =
       let width = infer_width x in
@@ -574,6 +583,7 @@ module Simpl = struct
       | PLUS, UnOp(NEG, x), y when x = y -> zero width
       | PLUS, x, UnOp(NOT, y) when x = y -> ones width
       | PLUS, UnOp(NOT, x), y when x = y -> ones width
+      | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> exp (neg (x + y))
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
@@ -613,11 +623,12 @@ module Simpl = struct
       | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
         when is_associative op op' && is_associative op op'' ->
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
-      | op, BinOp(op', x, Int p), y when is_associative op op' ->
+      | op, BinOp(op', x, Int p), y
+      | op, BinOp(op', Int p, x), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
-      | op, x, BinOp(op', y, Int p) when is_associative op op' ->
+      | op, x, BinOp(op', y, Int p)
+      | op, x, BinOp(op', Int p, y) when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
-
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
         BinOp (op',BinOp(op, Int q, x), apply op p q)
@@ -628,24 +639,21 @@ module Simpl = struct
       | op,x,y -> keep op x y in
     exp
 
-  class pretifier =
-    let (+) = Bap_exp.Infix.(+) in
-    let (-) = Bap_exp.Infix.(-) in
-    object(self)
+
+  let pretify e =
+    (object(self)
       inherit exp_mapper
       method! map_binop op x y =
         match op,self#map_exp x, self#map_exp y with
-        | PLUS, UnOp(NEG,x), UnOp(NEG, y) ->
-          self#map_exp (UnOp (NEG, x + y))
-        | PLUS, x, UnOp(NEG, y) -> x - y
-        | PLUS, UnOp(NEG, x), y -> y - x
+        | PLUS, x, UnOp(NEG, y) -> Bap_exp.Infix.(x - y)
+        | PLUS, UnOp(NEG, x), y -> Bap_exp.Infix.(y - x)
         | TIMES, x, UnOp(NEG, y)  ->
           self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
         | _ -> BinOp(op,self#map_exp x, self#map_exp y)
-    end
+    end)#map_exp e
 
   let exp ?(ignore=[]) e =
-    exp ~ignore e |> (new pretifier)#map_exp
+    exp ~ignore e |> pretify
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
@@ -1225,6 +1233,144 @@ module Normalize = struct
 end
 
 
+module Like = struct
+  open Exp
+
+  type t =
+    | Sum of exp list
+
+  type group = {
+    exprs : exp * exp list;
+    likes : exp -> bool;
+  }
+
+  module Group = struct
+
+    type t = group
+
+    let get_base e =
+      let width = match Type.infer_exn e with
+        | Type.Imm w -> w
+        | _ -> failwith "imm type expected" in
+      let m1 = Word.of_int ~width (-1) in
+      let one = Word.one width in
+      let rec run base_k = function
+        | UnOp (NEG, e) -> run Word.(base_k * m1) e
+        | BinOp (TIMES, Int k, e)
+        | BinOp (TIMES, e, Int k) -> run Word.(base_k * k) e
+        | e -> base_k, e in
+      let k, e = run one e in
+      Word.signed k, e
+
+    let exp_equal = Bap_exp.equal
+
+    let is_like e e' =
+      let base e = snd (get_base e) in
+      match e, e' with
+      | e, e' when Bap_exp.equal (base e) (base e') -> true
+      | BinOp (op, x, y), BinOp (op', w, z) when Simpl.is_associative op op' ->
+        (exp_equal x w && exp_equal y z) || (exp_equal x z && exp_equal y w)
+      | e,e' -> exp_equal e e'
+
+    let create e = { exprs = e,[]; likes = is_like e; }
+
+    let add_to_group t e' =
+      if t.likes e' then
+        let e,exs = t.exprs in
+        Some {t with exprs = e, e' :: exs}
+      else None
+
+    let sum_coeffs t =
+      let e, exps = t.exprs in
+      let k, e = get_base e in
+      let ks = List.map exps ~f:(fun e -> fst @@ get_base e) in
+      Word.signed @@ List.fold ~f:Word.(+) ks ~init:k, e
+
+    let empty_pull = []
+
+    let add_to_pull pull e =
+      let rec add acc = function
+        | [] -> List.rev @@ create e :: acc
+        | group :: pull ->
+          match add_to_group group e with
+          | None -> add (group :: acc) pull
+          | Some group' -> (List.rev (group' :: acc)) @ pull in
+      add [] pull
+
+    let process exps =
+      let equal_coeffs (c1,_) (c2,_) = Word.(equal (abs c1) (abs c2)) in
+      let with_sign (c, e) = if Word.is_positive c then e else UnOp(NEG, e) in
+      let rec group_by_coeff acc = function
+        | [] -> List.rev acc
+        | e :: gs ->
+          let es, gs = List.partition_map gs
+              ~f:(fun e' -> if equal_coeffs e e' then `Fst (with_sign e')
+                   else `Snd e') in
+          let coeff = Word.abs (fst e) in
+          let acc = (coeff, with_sign e :: es) :: acc in
+          group_by_coeff acc gs in
+      List.fold exps ~init:empty_pull ~f:add_to_pull |>
+      List.map ~f:sum_coeffs |>
+      group_by_coeff []
+
+  end
+
+  let positive e =
+    (object(self)
+      inherit exp_mapper
+      method! map_binop op x y = match op with
+        | MINUS -> BinOp(PLUS, self#map_exp x, UnOp(NEG, self#map_exp y))
+        | _ -> BinOp(op, self#map_exp x, self#map_exp y)
+    end)#map_exp e
+
+  let sum x y =
+    let rec run op x =
+      match x with
+      | BinOp(op', a, b) when Simpl.is_associative op op' ->
+        run op a @ run op b
+      | BinOp (op', Int q, BinOp(op'', x, y))
+      | BinOp (op', BinOp(op'', x, y), Int q)
+        when Simpl.is_distributive op' op'' && Simpl.is_associative op op'' ->
+        run op (BinOp(op', Int q, x)) @
+        run op (BinOp(op', Int q, y))
+      | x -> [x] in
+    Sum (run PLUS x @ run PLUS y)
+
+  let fold_sum = function
+    | [] -> assert false
+    | [e] -> e
+    | fst :: snd :: exps ->
+      let init = BinOp(PLUS, fst, snd) in
+      List.fold exps ~init ~f:(fun e x -> BinOp (PLUS, e, x))
+
+  let to_exp = function
+    | Sum es -> fold_sum es
+
+  let group = function
+    | Sum exs ->
+      let groups =
+        Group.process exs |>
+        List.fold ~init:[]
+          ~f:(fun acc (k, exps) ->
+              let e = match k, exps with
+                | k, exps when Word.is_one k -> fold_sum exps
+                | _ -> BinOp (TIMES, Int k, fold_sum exps) in
+              e :: acc) in
+      Sum (List.rev groups)
+
+  let sum_like x y = to_exp @@ group @@ sum x y
+
+  let simpl e =
+    let apply e = (object(self)
+      inherit exp_mapper
+      method! map_binop op x y = match op with
+        | PLUS -> sum_like (self#map_exp x) (self#map_exp y)
+        | _ -> BinOp(op, self#map_exp x, self#map_exp y)
+    end)#map_exp e in
+    positive e |> apply |> Simpl.pretify
+
+end
+
 module Exp_helpers = struct
   open Exp
   class state = exp_state
@@ -1240,7 +1386,9 @@ module Exp_helpers = struct
   let map m = m#map_exp
   let is_referenced x = exists (new exp_reference_finder x)
   let normalize_negatives = (new negative_normalizer)#map_exp
-  let fold_consts = Simpl.exp ~ignore:[Eff.read]
+  let fold_consts exp =
+      Like.simpl exp |> Simpl.exp ~ignore:[Eff.read] |> normalize_negatives
+
   let fixpoint = fix compare_exp
   let normalize = Normalize.normalize_exp
   let substitute x y = map (new rewriter x y)
