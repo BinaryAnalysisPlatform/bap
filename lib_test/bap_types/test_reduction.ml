@@ -34,7 +34,7 @@ let find_result = (object
 end)#find
 
 let check expected bil ctxt =
-  let actual = find_result (Bil.reduce bil) in
+  let actual = find_result (Bil.reduce_consts bil) in
   assert_equal ~ctxt ~cmp:equal expected actual
 
 let simple =

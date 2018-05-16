@@ -85,6 +85,7 @@ module Std = struct
     include Bap_stmt.Stmt
     include Bap_visitor
     include Bap_helpers
+    include Bap_reduce
     module Result = Bap_result
     module Storage = Result.Storage
     class type storage = Result.storage
@@ -133,6 +134,7 @@ module Std = struct
   module Exp = struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Exp
+    include Bap_reduce.Like_exp
     include (Bap_exp : Regular.S with type t := t)
     let eval = Bap_expi.eval
     let simpl = Bap_helpers.Simpl.exp

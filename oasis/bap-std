@@ -59,6 +59,7 @@ Library types
                    Bap_monad,
                    Bap_monad_types,
                    Bap_ogre,
+                   Bap_reduce,
                    Bap_result,
                    Bap_size,
                    Bap_state,

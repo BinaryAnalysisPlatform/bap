@@ -136,24 +136,28 @@ let random fn ~width ~times ctxt =
             n + 1) in
   assert_equal ~ctxt ~cmp:Int.equal 0 fails
 
+
 let width = 8
-let word x = Word.of_int ~width x
-let int x = Bil.int @@ word x
-let var name = Bil.var @@ Var.create name (Type.imm width)
+let word ?(width=width) x = Word.of_int ~width x
+let int ?(width=width) x = Bil.int @@ word ~width x
 let c0 = int 0
 let c1 = int 1
+let c1_w2 = int ~width:2 1
 let _c1 = int (-1)
 let c2 = int 2
-let _c2 = int (-2)
 let c3 = int 3
+let c3_w2 = int ~width:2 3
+let _c2 = int (-2)
 let c4 = int 4
 let c6 = int 6
+let c7_w3 = int ~width:3 7
 let c8 = int 8
 let c16 = int 16
 let oxFD = int (0xfd)
 let oxFF = int (0xff)
 let b0 = Bil.int Word.b0
 let b1 = Bil.int Word.b1
+let var ?(width=width) n = Bil.var @@ Var.create n (Type.imm width)
 let x = var "x"
 let y = var "y"
 let z = var "z"
@@ -182,7 +186,7 @@ let check_eval exp expected simpl =
     assert_bool s false
 
 let check exp expected ctxt =
-  let simpl = Exp.fold_consts exp in
+  let simpl = Exp.fold_consts exp |> Exp.group_like in
   check_eval exp simpl expected;
 
   (** TODO: remove it later  *)
@@ -196,7 +200,6 @@ let (<=>) = check
 
 let suite () =
   "Simplification" >::: [
-
     "~1 = 0"          >:: Bil.(lnot b1 <=> b0);
     "~~1 = 1"         >:: Bil.(lnot (lnot b1) <=> b1);
     "~~~1 = 0"        >:: Bil.(lnot (lnot (lnot b1)) <=> b0);
@@ -245,6 +248,11 @@ let suite () =
     "lnot (x lor 0xFD)  = (not x) land 2" >:: Bil.(lnot (x lor oxFD) <=> (lnot x) land c2);
     "lnot (0xFD lor x)  = 2 land (not x)" >:: Bil.(lnot (oxFD lor x) <=> c2 land (lnot x));
 
+    "c2 land (c4 land x) = 0" >:: Bil.(c2 land (c4 land x) <=> c0);
+    "c2 lor (c4 lor x) = c6 lor x" >:: Bil.(c2 lor (c4 lor x) <=> c6 lor x);
+    "(c4 land x) land c2 = 0" >:: Bil.((c4 land x) land c2 <=> c0);
+    "(c4 lor x) lor c2 = x lor c6" >:: Bil.((c4 lor x) lor c2 <=> x lor c6);
+
     "x lor 0 = x"     >:: Bil.(x lor c0 <=> x);
     "0 lor x = x"     >:: Bil.(c0 lor x <=> x);
     "x lor -1 = -1"   >:: Bil.(x lor _c1 <=> _c1);
@@ -262,15 +270,21 @@ let suite () =
 
     "(x + 4) / 2,  no simpl"  >:: Bil.((x + c4) / c2 <=> (x + c4) / c2);
     "2 / (x + 4),  no simpl"  >:: Bil.(c2 / (x + c4) <=> c2 / (x + c4));
-    "2 + (4 << x), no simpl"  >:: Bil.(c2 + (c4 lsl x) <=> (c4 lsl x) + c2);
+    "2 + (4 << x), no simpl"  >:: Bil.(c2 + (c4 lsl x) <=> c2 + (c4 lsl x));
     "2 * (4 << x), no simpl"  >:: Bil.(c2 * (c4 lsl x) <=> c2 * (c4 lsl x));
     "(4 & x) * 2,  no simpl"  >:: Bil.((c4 land x) * c2 <=> (c4 land x) * c2);
 
+    "c2 * x / c2"            >:: Bil.(c2 * x / c2 <=> x);
+    "c2 * x /$ c2"           >:: Bil.(c2 * x /$ c2 <=> x);
+    "c3 * x / c2, no simpl"  >:: Bil.(c3 * x / c2 <=> c3 * x / c2);
+    "y * x / y"              >:: Bil.(y * x / y <=> x);
+    "y * x / x"              >:: Bil.(y * x / x <=> y);
+
     "2 * (x * 4) = 8 * x"     >:: Bil.(c2 * (x * c4) <=> c8 * x);
     "2 * (4 * x) = 8 * x"     >:: Bil.(c2 * (c4 * x) <=> c8 * x);
-    "2 * (4 + x) = 8 + 2 * x" >:: Bil.(c2 * (c4 + x) <=> c2 * x + c8);
+    "2 * (4 + x) = 8 + 2 * x" >:: Bil.(c2 * (c4 + x) <=> c8 + c2 * x);
     "2 * (x + 4) = 2 * x + 8" >:: Bil.(c2 * (x + c4) <=> c2 * x + c8);
-    "(4 + x) * 2 = 8 + 2 * x" >:: Bil.((c4 + x) * c2 <=> c2 * x + c8);
+    "(4 + x) * 2 = 8 + 2 * x" >:: Bil.((c4 + x) * c2 <=> c8 + c2 * x);
     "(x + 4) * 2 = 2 * x + 8" >:: Bil.((x + c4) * c2 <=> c2 * x + c8);
     "(x - 4) * 2 = 2 * x - 8" >:: Bil.((x - c4) * c2 <=> c2 * x - c8);
     "(4 - x) * 2 = 8 - 2 * x" >:: Bil.((c4 - x) * c2 <=> c8 - c2 * x);
@@ -281,8 +295,8 @@ let suite () =
     "(x + 4) + 2 = x + 6"     >:: Bil.((x + c4) + c2 <=> x + c6);
     "(x + 4) - 2 = x + 2"     >:: Bil.((x + c4) - c2 <=> x + c2);
     "(4 + x) - 2 = x + 2"     >:: Bil.((c4 + x) - c2 <=> x + c2);
-    "2 + (4 + x) = 6 + x"     >:: Bil.(c2 + (c4 + x) <=> x + c6);
-    "2 + (x + 4) = 6 + x"     >:: Bil.(c2 + (x + c4) <=> x + c6);
+    "2 + (4 + x) = 6 + x"     >:: Bil.(c2 + (c4 + x) <=> c6 + x);
+    "2 + (x + 4) = 6 + x"     >:: Bil.(c2 + (x + c4) <=> c6 + x);
     "2 - (4 + x) = -2 - x"    >:: Bil.(c2 - (c4 + x) <=> _c2 - x);
     "2 - (x + 4) = -2 - x"    >:: Bil.(c2 - (x + c4) <=> _c2 - x);
     "(4 - x) + 2 = 6 - x"     >:: Bil.((c4 - x) + c2 <=> c6 - x);
@@ -293,24 +307,6 @@ let suite () =
     "2 + (4 - x) = 6 - x"     >:: Bil.(c2 + (c4 - x) <=> c6 - x);
     "2 - (x - 4) = 6 - x"     >:: Bil.(c2 - (x - c4) <=> c6 - x);
     "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x - c2);
-
-    "(x - 4) - 2 = x - 6"     >:: Bil.((x - c4) - c2 <=> x - c6);
-    "(x + 4) - 2 = x + 2"     >:: Bil.((x + c4) - c2 <=> x + c2);
-    "(x - 4) + 2 = x - 2"     >:: Bil.((x - c4) + c2 <=> x - c2);
-    "(x + 4) + 2 = x + 6"     >:: Bil.((x + c4) + c2 <=> x + c6);
-    "2 - (x - 4) = 6 - x"     >:: Bil.(c2 - (x - c4) <=> c6 - x);
-    "2 - (x + 4) = -2 - x"    >:: Bil.(c2 - (x + c4) <=> _c2 - x);
-    "2 + (x - 4) = -2 + x"    >:: Bil.(c2 + (x - c4) <=> x - c2);
-    "2 + (x + 4) = x + 6"     >:: Bil.(c2 + (x + c4) <=> x + c6);
-
-    "(4 - x) - 2 = 2 - x"     >:: Bil.((c4 - x) - c2 <=> c2 - x);
-    "(4 + x) - 2 = x + 2"     >:: Bil.((c4 + x) - c2 <=> x + c2);
-    "(4 - x) + 2 = 6 - x"     >:: Bil.((c4 - x) + c2 <=> c6 - x);
-    "(4 + x) + 2 = 6 + x"     >:: Bil.((c4 + x) + c2 <=> x + c6);
-    "2 - (4 - x) = -2 + x"    >:: Bil.(c2 - (c4 - x) <=> x - c2);
-    "2 - (4 + x) = -2 - x"    >:: Bil.(c2 - (c4 + x) <=> _c2 - x);
-    "2 + (4 - x) = 6 - x"     >:: Bil.(c2 + (c4 - x) <=> c6 - x);
-    "2 + (4 + x) = 6 + x"     >:: Bil.(c2 + (c4 + x) <=> x + c6);
 
     "((x + 4) + y) + 2 = (x + y) + 6"  >:: Bil.(((x + c4) + y) + c2 <=> (x + y) + c6);
     "((x + 4) + y) - 2 = (x + y) + 2"  >:: Bil.(((x + c4) + y) - c2 <=> (x + y) + c2);
@@ -394,6 +390,10 @@ let suite () =
     "extract 7 1 x:8, no simpl"        >:: Bil.(extract 7 1 x <=> extract 7 1 x);
     "extract 8 1 x:8, no simpl"        >:: Bil.(extract 8 1 x <=> extract 8 1 x);
     "extract 6 0 x:8, no simpl"        >:: Bil.(extract 6 0 x <=> extract 6 0 x);
+
+    "extract 2 0 (extract 7 2 0xfd) = 7" >:: Bil.(extract 2 0 (extract 7 2 oxFD) <=> c7_w3);
+    "cast high 2 (cast low 2 0xfd) = 1"  >:: Bil.(cast high 2 (cast low 2 oxFD) <=> c1_w2);
+    "cast high 2 (extract 7 2 0xfd) = 1" >:: Bil.(cast high 2 (extract 7 2 oxFD) <=> c3_w2);
 
     "cast low 8 x:8 = x:8"             >:: Bil.(cast low 8 x <=> x);
     "cast high 8 x:8 = x:8"            >:: Bil.(cast high 8 x <=> x);

@@ -578,7 +578,6 @@ module Simpl = struct
       | op, Int x, Int y -> apply op x y
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
-      | PLUS, Int q, x -> exp (x + Int q)
       | PLUS, x, UnOp(NEG, y) when x = y -> zero width
       | PLUS, UnOp(NEG, x), y when x = y -> zero width
       | PLUS, x, UnOp(NOT, y) when x = y -> ones width
@@ -587,12 +586,13 @@ module Simpl = struct
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
-      | MINUS, x, y -> exp (x + exp (neg y))
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
       | TIMES,x,y when is1 y -> x
       | (DIVIDE|SDIVIDE),x,y when is1 y -> x
+      | (DIVIDE|SDIVIDE),BinOp(TIMES, x, y), z when x = z -> y
+      | (DIVIDE|SDIVIDE),BinOp(TIMES, x, y), z when y = z -> x
       | (MOD|SMOD),_,y when is1 y -> zero width
       | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
       | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
@@ -602,15 +602,15 @@ module Simpl = struct
       | AND,x,y when ism1 x -> y
       | AND,x,y when ism1 y -> x
       | AND,x,y when x = y -> x
-      | OR,x,y  when is0 x -> y
-      | OR,x,y  when is0 y -> x
-      | OR,x,y  when ism1 x && removable y -> x
-      | OR,x,y  when ism1 y && removable x -> y
-      | OR,x,y  when x = y -> x
+      | OR, x,y when is0 x -> y
+      | OR, x,y when is0 y -> x
+      | OR, x,y when ism1 x && removable y -> x
+      | OR, x,y when ism1 y && removable x -> y
+      | OR, x,y when x = y -> x
       | XOR,x,y when x = y -> zero width
       | XOR,x,y when is0 x -> y
       | XOR,x,y when is0 y -> x
-      | EQ,x,y  when x = y -> Int Word.b1
+      | EQ, x,y when x = y -> Int Word.b1
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
@@ -623,12 +623,14 @@ module Simpl = struct
       | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
         when is_associative op op' && is_associative op op'' ->
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
+
       | op, BinOp(op', x, Int p), y
       | op, BinOp(op', Int p, x), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
       | op, x, BinOp(op', y, Int p)
       | op, x, BinOp(op', Int p, y) when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
+
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
         BinOp (op',BinOp(op, Int q, x), apply op p q)
@@ -639,21 +641,39 @@ module Simpl = struct
       | op,x,y -> keep op x y in
     exp
 
+  let prepare e =
+    (object(self)
+      inherit exp_mapper as super
+      method! map_unop op x =
+        match op, self#map_exp x with
+        | op, Int x ->  Int (Apply.unop op x)
+        | NEG, BinOp (PLUS, x, Int q)
+        | NEG, BinOp (PLUS, Int q, x) ->
+          self#map_exp (BinOp (MINUS, Int (Apply.unop op q), x))
+        | op, x -> super#map_unop op x
+      method! map_binop op x y =
+        match op,self#map_exp x, self#map_exp y with
+        | MINUS, x, y ->
+          self#map_exp (BinOp (PLUS, x, self#map_exp (UnOp (NEG, y))))
+        | op,x,y -> super#map_binop op x y
+    end)#map_exp e
 
   let pretify e =
     (object(self)
-      inherit exp_mapper
+      inherit exp_mapper as super
       method! map_binop op x y =
-        match op,self#map_exp x, self#map_exp y with
+        match op, self#map_exp x, self#map_exp y with
+        | PLUS, Int q, x when Word.(is_negative (signed q)) ->
+          self#map_exp (BinOp (PLUS, x, Int q))
         | PLUS, x, UnOp(NEG, y) -> Bap_exp.Infix.(x - y)
         | PLUS, UnOp(NEG, x), y -> Bap_exp.Infix.(y - x)
         | TIMES, x, UnOp(NEG, y)  ->
           self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
-        | _ -> BinOp(op,self#map_exp x, self#map_exp y)
-    end)#map_exp e
+        | op,x,y -> super#map_binop op x y
+    end)#map_exp e |> (new negative_normalizer)#map_exp
 
   let exp ?(ignore=[]) e =
-    exp ~ignore e |> pretify
+    prepare e |> exp ~ignore |> pretify
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
@@ -1232,146 +1252,7 @@ module Normalize = struct
     run xs
 end
 
-
-module Like = struct
-  open Exp
-
-  type t =
-    | Sum of exp list
-
-  type group = {
-    exprs : exp * exp list;
-    likes : exp -> bool;
-  }
-
-  module Group = struct
-
-    type t = group
-
-    let get_base e =
-      let width = match Type.infer_exn e with
-        | Type.Imm w -> w
-        | _ -> failwith "imm type expected" in
-      let m1 = Word.of_int ~width (-1) in
-      let one = Word.one width in
-      let rec run base_k = function
-        | UnOp (NEG, e) -> run Word.(base_k * m1) e
-        | BinOp (TIMES, Int k, e)
-        | BinOp (TIMES, e, Int k) -> run Word.(base_k * k) e
-        | e -> base_k, e in
-      let k, e = run one e in
-      Word.signed k, e
-
-    let exp_equal = Bap_exp.equal
-
-    let is_like e e' =
-      let base e = snd (get_base e) in
-      match e, e' with
-      | e, e' when Bap_exp.equal (base e) (base e') -> true
-      | BinOp (op, x, y), BinOp (op', w, z) when Simpl.is_associative op op' ->
-        (exp_equal x w && exp_equal y z) || (exp_equal x z && exp_equal y w)
-      | e,e' -> exp_equal e e'
-
-    let create e = { exprs = e,[]; likes = is_like e; }
-
-    let add_to_group t e' =
-      if t.likes e' then
-        let e,exs = t.exprs in
-        Some {t with exprs = e, e' :: exs}
-      else None
-
-    let sum_coeffs t =
-      let e, exps = t.exprs in
-      let k, e = get_base e in
-      let ks = List.map exps ~f:(fun e -> fst @@ get_base e) in
-      Word.signed @@ List.fold ~f:Word.(+) ks ~init:k, e
-
-    let empty_pull = []
-
-    let add_to_pull pull e =
-      let rec add acc = function
-        | [] -> List.rev @@ create e :: acc
-        | group :: pull ->
-          match add_to_group group e with
-          | None -> add (group :: acc) pull
-          | Some group' -> (List.rev (group' :: acc)) @ pull in
-      add [] pull
-
-    let process exps =
-      let equal_coeffs (c1,_) (c2,_) = Word.(equal (abs c1) (abs c2)) in
-      let with_sign (c, e) = if Word.is_positive c then e else UnOp(NEG, e) in
-      let rec group_by_coeff acc = function
-        | [] -> List.rev acc
-        | e :: gs ->
-          let es, gs = List.partition_map gs
-              ~f:(fun e' -> if equal_coeffs e e' then `Fst (with_sign e')
-                   else `Snd e') in
-          let coeff = Word.abs (fst e) in
-          let acc = (coeff, with_sign e :: es) :: acc in
-          group_by_coeff acc gs in
-      List.fold exps ~init:empty_pull ~f:add_to_pull |>
-      List.map ~f:sum_coeffs |>
-      group_by_coeff []
-
-  end
-
-  let positive e =
-    (object(self)
-      inherit exp_mapper
-      method! map_binop op x y = match op with
-        | MINUS -> BinOp(PLUS, self#map_exp x, UnOp(NEG, self#map_exp y))
-        | _ -> BinOp(op, self#map_exp x, self#map_exp y)
-    end)#map_exp e
-
-  let sum x y =
-    let rec run op x =
-      match x with
-      | BinOp(op', a, b) when Simpl.is_associative op op' ->
-        run op a @ run op b
-      | BinOp (op', Int q, BinOp(op'', x, y))
-      | BinOp (op', BinOp(op'', x, y), Int q)
-        when Simpl.is_distributive op' op'' && Simpl.is_associative op op'' ->
-        run op (BinOp(op', Int q, x)) @
-        run op (BinOp(op', Int q, y))
-      | x -> [x] in
-    Sum (run PLUS x @ run PLUS y)
-
-  let fold_sum = function
-    | [] -> assert false
-    | [e] -> e
-    | fst :: snd :: exps ->
-      let init = BinOp(PLUS, fst, snd) in
-      List.fold exps ~init ~f:(fun e x -> BinOp (PLUS, e, x))
-
-  let to_exp = function
-    | Sum es -> fold_sum es
-
-  let group = function
-    | Sum exs ->
-      let groups =
-        Group.process exs |>
-        List.fold ~init:[]
-          ~f:(fun acc (k, exps) ->
-              let e = match k, exps with
-                | k, exps when Word.is_one k -> fold_sum exps
-                | _ -> BinOp (TIMES, Int k, fold_sum exps) in
-              e :: acc) in
-      Sum (List.rev groups)
-
-  let sum_like x y = to_exp @@ group @@ sum x y
-
-  let simpl e =
-    let apply e = (object(self)
-      inherit exp_mapper
-      method! map_binop op x y = match op with
-        | PLUS -> sum_like (self#map_exp x) (self#map_exp y)
-        | _ -> BinOp(op, self#map_exp x, self#map_exp y)
-    end)#map_exp e in
-    positive e |> apply |> Simpl.pretify
-
-end
-
-module Exp_helpers = struct
+module Exp = struct
   open Exp
   class state = exp_state
   class ['a] visitor = ['a] exp_visitor
@@ -1386,8 +1267,7 @@ module Exp_helpers = struct
   let map m = m#map_exp
   let is_referenced x = exists (new exp_reference_finder x)
   let normalize_negatives = (new negative_normalizer)#map_exp
-  let fold_consts exp =
-      Like.simpl exp |> Simpl.exp ~ignore:[Eff.read] |> normalize_negatives
+  let fold_consts = Simpl.exp ~ignore:[Eff.read]
 
   let fixpoint = fix compare_exp
   let normalize = Normalize.normalize_exp
@@ -1408,8 +1288,7 @@ module Exp_helpers = struct
     end) exp
 end
 
-module Stmt_helpers = struct
-  module Exp = Exp_helpers
+module Stmt = struct
 
   class state = stmt_state
   class ['a] visitor = ['a] bil_visitor
@@ -1451,70 +1330,5 @@ module Stmt_helpers = struct
 end
 
 let fold_consts = Simpl.bil ~ignore:[Eff.read]
-
-module Reduce = struct
-
-  let apply env = object
-    inherit bil_mapper as super
-    method! map_var v =
-      match Map.find env v with
-      | None -> Var v
-      | Some i -> Int i
-
-    method! map_exp e =
-      super#map_exp (Exp_helpers.fold_consts e)
-  end
-
-  let apply_to_exp e env = (apply env)#map_exp e
-  let apply_to_stmt s env = (apply env)#map_stmt s
-
-  let (@@) = apply_to_exp
-  let (@@@) = apply_to_stmt
-
-  let bound_vars s =
-    (object
-      inherit [Var.Set.t] bil_visitor
-      method! enter_move v _ vs = Set.add vs v
-    end)#run [s] Var.Set.empty
-
-  let remove_bound_vars env s =
-    Set.fold (bound_vars s) ~init:env ~f:Map.remove
-
-  let reduce bil =
-    let rec run env acc = function
-      | [] -> List.rev acc
-      | Stmt.Move (x,y) :: bil ->
-        let env,y = match y @@ env with
-          | Int i as e -> Map.add env x i, e
-          | e -> Map.remove env x, e in
-        run env (Stmt.Move (x, y) :: acc) bil
-      | Stmt.While _ as s :: bil ->
-        let env' = remove_bound_vars env s in
-        run env' (s :: acc) bil
-      | Stmt.If (cond, yes, no) as if_ :: bil ->
-        let acc' =
-          Stmt.If (cond @@ env,
-                   run env [] yes,
-                   run env [] no) :: acc in
-        let env' = remove_bound_vars env if_ in
-        run env' acc' bil
-      | s :: bil ->
-        run env (List.rev (s @@@ env) @ acc) bil in
-    run Var.Map.empty [] bil
-
-  let reduce_let bil =
-    (object
-      inherit bil_mapper
-      method! map_exp e = Normalize.reduce_let e
-    end)#run bil
-
-  let run bil =
-    reduce_let bil |> fixpoint (fun bil -> fold_consts (reduce bil))
-end
-
-let free_vars = Stmt_helpers.bil_free_vars
+let free_vars = Stmt.bil_free_vars
 let normalize = Normalize.bil
-let reduce = Reduce.run
-
-module Stmt = Stmt_helpers
-module Exp = Exp_helpers
