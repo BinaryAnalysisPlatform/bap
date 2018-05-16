@@ -440,60 +440,6 @@ module Simpl = struct
   open Stmt
   open Cast
 
-  type sign =
-    | Plus
-    | Minus
-
-  let infer sign sign' = match sign,sign' with
-    | Plus,Plus  | Minus,Minus -> Plus
-    | Plus,Minus | Minus,Plus -> Minus
-
-  let apply' (sign_x, x) (sign_y, y) plus minus =
-    match sign_x, sign_y with
-    | Plus, Plus -> Plus, plus x y
-    | Plus,Minus -> Plus, minus x y
-    | Minus,Plus -> Plus, minus y x
-    | Minus,Minus -> Minus, plus x y
-
-  let apply x y plus minus = match x with
-    | None -> Some y
-    | Some x -> Some (apply' x y plus minus)
-
-  let apply_int x y = apply x y Word.(+) Word.(-)
-  let apply_exp x y = apply x y Bap_exp.Infix.(+) Bap_exp.Infix.(-)
-  let apply_exp' x y = apply' x y Bap_exp.Infix.(+) Bap_exp.Infix.(-)
-
-  let rec solve_sum ?(before=Plus) x = match x with
-    | BinOp (PLUS, x, y) ->
-      let before = infer before Plus in
-      solve_sum ~before x @ solve_sum ~before y
-    | BinOp (MINUS, x, y) ->
-      let before = infer before Plus in
-      let before' = infer before Minus in
-      solve_sum ~before x @ solve_sum ~before:before' y
-    | e -> [before,e]
-  and fold exps =
-    let exp, const =
-      List.fold exps ~init:(None,None)
-        ~f:(fun (exp,const) -> function
-            | sign, Int x -> exp, apply_int const (sign,x)
-            | sign, e -> apply_exp exp (sign,e), const) in
-    let sign, exp = Option.value_exn exp in
-    let sign, exp = match const with
-      | None -> sign, exp
-      | Some (s,w)-> apply_exp' (sign,exp) (s,Int w) in
-    match sign with
-    | Plus -> exp
-    | Minus -> UnOp (Bap_exp.Unop.neg, exp)
-
-  let solve_sum = function
-    | BinOp (PLUS, _,_) as e -> fold (solve_sum e)
-    | BinOp (MINUS, _,_) as e -> fold (solve_sum e)
-    | e -> e
-
-
-
-
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
   let nothing _ = false

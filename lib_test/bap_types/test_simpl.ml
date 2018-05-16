@@ -188,12 +188,6 @@ let check_eval exp expected simpl =
 let check exp expected ctxt =
   let simpl = Exp.fold_consts exp |> Exp.group_like in
   check_eval exp simpl expected;
-
-  (** TODO: remove it later  *)
-  let es = Exp.to_string in
-  if not (Exp.equal simpl expected) then
-    printf "not equal: %s --> %s ( %s )\n" (es exp) (es simpl) (es expected);
-
   assert_equal ~ctxt ~cmp:Exp.equal simpl expected
 
 let (<=>) = check
