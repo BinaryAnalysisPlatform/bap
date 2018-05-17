@@ -533,8 +533,6 @@ module Simpl = struct
       | TIMES,x,y when is1 x -> y
       | TIMES,x,y when is1 y -> x
       | (DIVIDE|SDIVIDE),x,y when is1 y -> x
-      | (DIVIDE|SDIVIDE),BinOp(TIMES, x, y), z when x = z -> y
-      | (DIVIDE|SDIVIDE),BinOp(TIMES, x, y), z when y = z -> x
       | (MOD|SMOD),_,y when is1 y -> zero width
       | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
       | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
@@ -559,18 +557,16 @@ module Simpl = struct
 
       | op, BinOp(op', x, Int p), Int q when is_associative op op' ->
         exp @@ BinOp (op, x, apply op p q)
-      | op, Int q, BinOp(op', x, Int p)
-      | op, Int q, BinOp(op', Int p, x) when is_associative op op' ->
-        exp @@ BinOp (op, apply op p q, x)
       | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
         when is_associative op op' && is_associative op op'' ->
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
+
       | op, BinOp(op', x, Int p), y
       | op, BinOp(op', Int p, x), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
-      | op, x, BinOp(op', y, Int p)
-      | op, x, BinOp(op', Int p, y) when is_associative op op' ->
-        exp @@ BinOp (op, BinOp (op, x, y), Int p)
+      | op, y, BinOp(op', x, Int p)
+      | op, y, BinOp(op', Int p, x) when is_associative op op' ->
+        exp @@ BinOp (op, BinOp (op, y, x), Int p)
 
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
@@ -582,7 +578,7 @@ module Simpl = struct
       | op,x,y -> keep op x y in
     exp
 
-  let prepare e =
+  let replace_substractions e =
     (object(self)
       inherit exp_mapper as super
       method! map_unop op x =
@@ -594,8 +590,8 @@ module Simpl = struct
         | op, x -> super#map_unop op x
       method! map_binop op x y =
         match op,self#map_exp x, self#map_exp y with
-        | MINUS, x, y ->
-          self#map_exp (BinOp (PLUS, x, self#map_exp (UnOp (NEG, y))))
+        | MINUS, x, y
+          -> self#map_exp (BinOp (PLUS, x, self#map_exp (UnOp (NEG, y))))
         | op,x,y -> super#map_binop op x y
     end)#map_exp e
 
@@ -606,15 +602,16 @@ module Simpl = struct
         match op, self#map_exp x, self#map_exp y with
         | PLUS, Int q, x when Word.(is_negative (signed q)) ->
           self#map_exp (BinOp (PLUS, x, Int q))
-        | PLUS, x, UnOp(NEG, y) -> Bap_exp.Infix.(x - y)
-        | PLUS, UnOp(NEG, x), y -> Bap_exp.Infix.(y - x)
-        | TIMES, x, UnOp(NEG, y)  ->
+        | PLUS, x, UnOp(NEG, y) -> self#map_exp Bap_exp.Infix.(x - y)
+        | PLUS, UnOp(NEG, x), y -> self#map_exp Bap_exp.Infix.(y - x)
+        | TIMES, x, UnOp(NEG, y) ->
           self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
+        | TIMES, x, Int q -> self#map_exp @@ BinOp(TIMES, Int q, x)
         | op,x,y -> super#map_binop op x y
     end)#map_exp e |> (new negative_normalizer)#map_exp
 
   let exp ?(ignore=[]) e =
-    prepare e |> exp ~ignore |> pretify
+    replace_substractions e |> exp ~ignore |> pretify
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
