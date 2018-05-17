@@ -545,7 +545,7 @@ module Simpl = struct
       | PLUS, x, UnOp(NOT, y) when x = y -> ones width
       | PLUS, UnOp(NOT, x), y when x = y -> ones width
       | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> neg (x + y)
-      | MINUS,x,y when is0 x -> UnOp(NEG,y)
+      | MINUS,x,y when is0 x -> neg y
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
       | MINUS,x,y -> exp (x + neg y)
@@ -588,10 +588,10 @@ module Simpl = struct
         exp @@ BinOp (op, BinOp (op, y, x), Int p)
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
-        BinOp (op',BinOp(op, Int q, x), apply op p q)
+        exp @@ BinOp (op',BinOp(op, Int q, x), apply op p q)
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
-        BinOp (op',apply op p q, BinOp(op, Int q, x))
+        exp @@ BinOp (op',apply op p q, BinOp(op, Int q, x))
       | op,x,y -> keep op x y in
     exp e |> pretify
 
