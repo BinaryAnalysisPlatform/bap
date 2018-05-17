@@ -244,6 +244,11 @@ let suite () =
     "(c4 land x) land c2 = 0" >:: Bil.((c4 land x) land c2 <=> c0);
     "(c4 lor x) lor c2 = c6 lor x" >:: Bil.((c4 lor x) lor c2 <=> x lor c6);
 
+    "lnot (x < y) = (y <= x)"    >:: Bil.(lnot (x < y) <=> (y <= x));
+    "lnot (x <= y) = (y < x)"    >:: Bil.(lnot (x <= y) <=> (y < x));
+    "lnot (x <> y) = (x = y)"    >:: Bil.(lnot (x <> y) <=> (x = y));
+    "lnot (x = y) = (x <> y)"    >:: Bil.(lnot (x = y) <=> (x <> y));
+
     "x lor 0 = x"     >:: Bil.(x lor c0 <=> x);
     "0 lor x = x"     >:: Bil.(c0 lor x <=> x);
     "x lor -1 = -1"   >:: Bil.(x lor _c1 <=> _c1);

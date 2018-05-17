@@ -506,6 +506,10 @@ module Simpl = struct
         BinOp (AND, Int (Apply.unop op q), UnOp(NOT, x))
       | NOT, BinOp(OR, x, Int q) ->
         BinOp (AND, UnOp(NOT, x), Int (Apply.unop op q))
+      | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
+      | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
+      | NOT, BinOp (EQ, x, y) -> BinOp(NEQ, x, y)
+      | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
       | op, x -> UnOp(op, x)
     and binop op x y =
       let width = infer_width x in
