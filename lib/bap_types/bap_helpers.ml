@@ -440,6 +440,7 @@ module Simpl = struct
   open Stmt
   open Cast
 
+
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
   let nothing _ = false
@@ -462,9 +463,6 @@ module Simpl = struct
   let is_distributive op op' = match op,op' with
     | TIMES, (PLUS | MINUS) -> true
     | _ -> false
-
-  let is_neg op = compare_unop op Bap_exp.Unop.neg = 0
-  let is_not op = compare_unop op Bap_exp.Unop.not = 0
 
   let exp ?(ignore=[]) =
     let removable = removable ignore in
@@ -497,20 +495,18 @@ module Simpl = struct
         if infer_width v = hi + 1 && lo = 0 then v
         else Extract (hi,lo,v)
       | x -> Extract (hi,lo,x)
-    and unop op x = match exp x with
-      | Int x -> Int (Apply.unop op x)
-      | UnOp (op', x) when compare_unop op op' = 0 -> x
-      | BinOp (PLUS, x, Int q) when is_neg op ->
-        BinOp (MINUS, Int (Word.neg q), x)
-      | BinOp(AND, Int q, x) when is_not op ->
+    and unop op x = match op, exp x with
+      | op, Int x -> Int (Apply.unop op x)
+      | op, UnOp (op', x) when compare_unop op op' = 0 -> x
+      | NOT, BinOp(AND, Int q, x) ->
         BinOp (OR, Int (Apply.unop op q), UnOp(NOT, x))
-      | BinOp(AND, x, Int q) when is_not op ->
+      | NOT, BinOp(AND, x, Int q) ->
         BinOp (OR, UnOp(NOT, x), Int (Apply.unop op q))
-      | BinOp(OR, Int q, x) when is_not op ->
+      | NOT, BinOp(OR, Int q, x) ->
         BinOp (AND, Int (Apply.unop op q), UnOp(NOT, x))
-      | BinOp(OR, x, Int q) when is_not op ->
+      | NOT, BinOp(OR, x, Int q) ->
         BinOp (AND, UnOp(NOT, x), Int (Apply.unop op q))
-      | x -> UnOp(op, x)
+      | op, x -> UnOp(op, x)
     and binop op x y =
       let width = infer_width x in
       let keep op x y = BinOp(op,x,y) in
@@ -569,7 +565,6 @@ module Simpl = struct
       | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
         when is_associative op op' && is_associative op op'' ->
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
-
       | op, BinOp(op', x, Int p), y
       | op, BinOp(op', Int p, x), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
@@ -1198,6 +1193,7 @@ module Normalize = struct
     run xs
 end
 
+
 module Exp = struct
   open Exp
   class state = exp_state
@@ -1214,7 +1210,6 @@ module Exp = struct
   let is_referenced x = exists (new exp_reference_finder x)
   let normalize_negatives = (new negative_normalizer)#map_exp
   let fold_consts = Simpl.exp ~ignore:[Eff.read]
-
   let fixpoint = fix compare_exp
   let normalize = Normalize.normalize_exp
   let substitute x y = map (new rewriter x y)
@@ -1235,7 +1230,6 @@ module Exp = struct
 end
 
 module Stmt = struct
-
   class state = stmt_state
   class ['a] visitor = ['a] bil_visitor
   class ['a] finder  = ['a] bil_finder
@@ -1275,6 +1269,6 @@ module Stmt = struct
   let normalize  = Normalize.bil
 end
 
-let fold_consts = Simpl.bil ~ignore:[Eff.read]
 let free_vars = Stmt.bil_free_vars
+let fold_consts = Simpl.bil ~ignore:[Eff.read]
 let normalize = Normalize.bil
