@@ -464,7 +464,22 @@ module Simpl = struct
     | TIMES, (PLUS | MINUS) -> true
     | _ -> false
 
-  let exp ?(ignore=[]) =
+  let pretify e =
+    (object(self)
+      inherit exp_mapper as super
+      method! map_binop op x y =
+        match op, self#map_exp x, self#map_exp y with
+        | PLUS, Int q, x when Word.(is_negative (signed q)) ->
+          self#map_exp (BinOp (PLUS, x, Int q))
+        | PLUS, x, UnOp(NEG, y) -> self#map_exp Bap_exp.Infix.(x - y)
+        | PLUS, UnOp(NEG, x), y -> self#map_exp Bap_exp.Infix.(y - x)
+        | TIMES, x, UnOp(NEG, y) ->
+          self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
+        | TIMES, x, Int q -> self#map_exp @@ BinOp(TIMES, Int q, x)
+        | op,x,y -> super#map_binop op x y
+    end)#map_exp e |> (new negative_normalizer)#map_exp
+
+  let exp ?(ignore=[]) e =
     let removable = removable ignore in
     let infer_width x = match Type.infer_exn x with
       | Type.Imm w -> w
@@ -495,21 +510,22 @@ module Simpl = struct
         if infer_width v = hi + 1 && lo = 0 then v
         else Extract (hi,lo,v)
       | x -> Extract (hi,lo,x)
-    and unop op x = match op, exp x with
-      | op, Int x -> Int (Apply.unop op x)
+    and unop op x =
+      let apply op x = Int (Apply.unop op x) in
+      let lnot = Bap_exp.Infix.lnot in
+      match op, exp x with
+      | op, Int x -> apply op x
       | op, UnOp (op', x) when compare_unop op op' = 0 -> x
-      | NOT, BinOp(AND, Int q, x) ->
-        BinOp (OR, Int (Apply.unop op q), UnOp(NOT, x))
-      | NOT, BinOp(AND, x, Int q) ->
-        BinOp (OR, UnOp(NOT, x), Int (Apply.unop op q))
-      | NOT, BinOp(OR, Int q, x) ->
-        BinOp (AND, Int (Apply.unop op q), UnOp(NOT, x))
-      | NOT, BinOp(OR, x, Int q) ->
-        BinOp (AND, UnOp(NOT, x), Int (Apply.unop op q))
+      | NOT, BinOp (AND, Int q, x) -> BinOp (OR, apply NOT q, lnot x)
+      | NOT, BinOp (AND, x, Int q) -> BinOp (OR, lnot x, apply NOT q)
+      | NOT, BinOp (OR, Int q, x) -> BinOp (AND, apply NOT q, lnot x)
+      | NOT, BinOp (OR, x, Int q) -> BinOp (AND, lnot x, apply NOT q)
       | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
       | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
-      | NOT, BinOp (EQ, x, y) -> BinOp(NEQ, x, y)
+      | NOT, BinOp (EQ, x, y) -> BinOp(NEQ,x, y)
       | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
+      | NEG, BinOp (PLUS, x, Int q)
+      | NEG, BinOp (PLUS, Int q, x) -> exp (BinOp (MINUS, apply op q, x))
       | op, x -> UnOp(op, x)
     and binop op x y =
       let width = infer_width x in
@@ -517,8 +533,8 @@ module Simpl = struct
       let int f = function Int x -> f x | _ -> false in
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
       let (=) x y = compare_exp x y = 0 && removable x in
-      let apply op x y = Int (Apply.binop op x y) in
       let (+) = Bap_exp.Infix.(+) in
+      let apply op x y = Int (Apply.binop op x y) in
       let neg x = UnOp (Bap_exp.Unop.neg, x) in
       match op, exp x, exp y with
       | op, Int x, Int y -> apply op x y
@@ -528,10 +544,11 @@ module Simpl = struct
       | PLUS, UnOp(NEG, x), y when x = y -> zero width
       | PLUS, x, UnOp(NOT, y) when x = y -> ones width
       | PLUS, UnOp(NOT, x), y when x = y -> ones width
-      | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> exp (neg (x + y))
+      | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> neg (x + y)
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
+      | MINUS,x,y -> exp (x + neg y)
       | TIMES,x,y when is0 x && removable y -> x
       | TIMES,x,y when is0 y && removable x -> y
       | TIMES,x,y when is1 x -> y
@@ -558,64 +575,25 @@ module Simpl = struct
       | NEQ,x,y when x = y -> Int Word.b0
       | (LT|SLT), x, y when x = y -> Int Word.b0
       | (LE|SLE), x, y when x = y -> Int Word.b1
-
       | op, BinOp(op', x, Int p), Int q when is_associative op op' ->
         exp @@ BinOp (op, x, apply op p q)
       | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
         when is_associative op op' && is_associative op op'' ->
         exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
-
       | op, BinOp(op', x, Int p), y
       | op, BinOp(op', Int p, x), y when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, x, y), Int p)
       | op, y, BinOp(op', x, Int p)
       | op, y, BinOp(op', Int p, x) when is_associative op op' ->
         exp @@ BinOp (op, BinOp (op, y, x), Int p)
-
       | op, BinOp(op', x, Int p), Int q
       | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
         BinOp (op',BinOp(op, Int q, x), apply op p q)
       | op, BinOp(op', Int p, x), Int q
       | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
         BinOp (op',apply op p q, BinOp(op, Int q, x))
-
       | op,x,y -> keep op x y in
-    exp
-
-  let replace_substractions e =
-    (object(self)
-      inherit exp_mapper as super
-      method! map_unop op x =
-        match op, self#map_exp x with
-        | op, Int x ->  Int (Apply.unop op x)
-        | NEG, BinOp (PLUS, x, Int q)
-        | NEG, BinOp (PLUS, Int q, x) ->
-          self#map_exp (BinOp (MINUS, Int (Apply.unop op q), x))
-        | op, x -> super#map_unop op x
-      method! map_binop op x y =
-        match op,self#map_exp x, self#map_exp y with
-        | MINUS, x, y
-          -> self#map_exp (BinOp (PLUS, x, self#map_exp (UnOp (NEG, y))))
-        | op,x,y -> super#map_binop op x y
-    end)#map_exp e
-
-  let pretify e =
-    (object(self)
-      inherit exp_mapper as super
-      method! map_binop op x y =
-        match op, self#map_exp x, self#map_exp y with
-        | PLUS, Int q, x when Word.(is_negative (signed q)) ->
-          self#map_exp (BinOp (PLUS, x, Int q))
-        | PLUS, x, UnOp(NEG, y) -> self#map_exp Bap_exp.Infix.(x - y)
-        | PLUS, UnOp(NEG, x), y -> self#map_exp Bap_exp.Infix.(y - x)
-        | TIMES, x, UnOp(NEG, y) ->
-          self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
-        | TIMES, x, Int q -> self#map_exp @@ BinOp(TIMES, Int q, x)
-        | op,x,y -> super#map_binop op x y
-    end)#map_exp e |> (new negative_normalizer)#map_exp
-
-  let exp ?(ignore=[]) e =
-    replace_substractions e |> exp ~ignore |> pretify
+    exp e |> pretify
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
