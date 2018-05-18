@@ -465,6 +465,9 @@ module Simpl = struct
     | _ -> false
 
   let pretify e =
+    let is_int = function
+      | Int _ -> true
+      | _ -> false in
     (object(self)
       inherit exp_mapper as super
       method! map_binop op x y =
@@ -475,7 +478,8 @@ module Simpl = struct
         | PLUS, UnOp(NEG, x), y -> self#map_exp Bap_exp.Infix.(y - x)
         | TIMES, x, UnOp(NEG, y) ->
           self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
-        | TIMES, x, Int q -> self#map_exp @@ BinOp(TIMES, Int q, x)
+        | TIMES, x, Int q when not (is_int x) ->
+          self#map_exp @@ BinOp(TIMES, Int q, x)
         | op,x,y -> super#map_binop op x y
     end)#map_exp e |> (new negative_normalizer)#map_exp
 
