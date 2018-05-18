@@ -46,20 +46,36 @@ let target_of_arch =
       target in
   get
 
-module Ensure_normal_form(T : Target) = struct
+let type_check bil = match Type.check bil with
+  | Error te ->
+    let err  =
+      Error.createf "The lifted code is not well-typed: %s"
+        (Type.Error.to_string te) in
+    Error err
+  | Ok () -> Ok bil
+
+let basses = Queue.create ()
+let add = Queue.enqueue basses
+
+let () = add type_check
+
+let apply_basses bil =
+  let open Or_error in
+  let rec apply bil = function
+    | [] -> bil
+    | f :: fs ->
+      bil >>= fun bil -> apply (f bil) fs in
+  apply (Ok bil) (Queue.to_list basses)
+
+module Make(T : Target) = struct
   include T
 
-  let lift mem insn = match T.lift mem insn with
-    | Error _ as e -> e
-    | Ok bil -> match Type.check bil with
-      | Error te ->
-        let err  =
-          Error.createf "The lifted code is not well-typed: %s"
-            (Type.Error.to_string te) in
-        Error err
-      | Ok () -> Ok (Bil.reduce_consts (Bil.normalize bil))
+  let lift memory insn =
+    Or_error.(T.lift memory insn >>= apply_basses)
 end
 
 let register_target arch (module Target : Target) =
-  let module T = Ensure_normal_form(Target) in
+  let module T = Make(Target) in
   Hashtbl.set targets ~key:arch ~data:(module T)
+
+let register_bass = add

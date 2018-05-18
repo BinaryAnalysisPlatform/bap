@@ -1,0 +1,12 @@
+Flag bil_pipe
+ Description: Build bil-pipe plugin
+ Default: false
+
+Library bil_pipe_plugin
+  XMETADescription: Provides bil analysis
+  Path:             plugins/bil_pipe
+  Build$:           flag(everything) || flag(bil_pipe)
+  FindlibName:      bap-plugin-bil_pipe
+  InternalModules:  Bil_pipe_main
+  BuildDepends:     bap
+  XMETAExtraLines:  tags="bil"
