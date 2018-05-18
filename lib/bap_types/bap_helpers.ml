@@ -503,7 +503,7 @@ module Simpl = struct
       | Var _ as v ->
         if infer_width v = s then v
         else Cast (t,s,v)
-      | _ -> Cast (t,s,x)
+      | x -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
       | Var _ as v ->

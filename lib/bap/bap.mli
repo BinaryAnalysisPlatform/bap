@@ -2196,9 +2196,12 @@ module Std : sig
     (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
-    (** [reduce_consts p] performs const reduciton in program [p] *)
+    (** [reduce_consts p] evaluates constant expressions and statements
+        in the program [p]  *)
     val reduce_consts : stmt list -> stmt list
 
+    (** [group_like p] group like expressions in a program [p], e.g.
+        an expression [x + x + x] will be reduced to [3 * x] *)
     val group_like : stmt list -> stmt list
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
@@ -3418,7 +3421,7 @@ module Std : sig
         wouldn't be applied, consider passing [~ignore:[Eff.reads]]
         if you want such expressions to be reduced.
 
-        - double complement reduction: an even amount of complement
+        - double complement reduction: an odd amount of complement
         operations (one and two) are reduced to one complement of
         the same sort, e.g., [~~~1 -> ~1]
 
@@ -3452,6 +3455,8 @@ module Std : sig
         See also {!Bil.fold_consts} *)
     val fold_consts : t -> t
 
+    (** [group_like e] group like expressions, e.g.
+        an expression [x + x + x] will be reduced to [3 * x] *)
     val group_like : t -> t
 
     (** [fixpoint f] applies transformation [f] to [t] until it
@@ -6595,6 +6600,9 @@ module Std : sig
       already exists, then it will be superseeded by the new
       target.  *)
   val register_target : arch -> (module Target) -> unit
+
+  (** [register_bass f] - adds a new bil analysis to a pipeline *)
+  val register_bass : (bil -> bil Or_error.t) -> unit
 
   (** Term identifier  *)
   module Tid : sig

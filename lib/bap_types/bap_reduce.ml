@@ -215,7 +215,7 @@ module Reduce = struct
 
   let run bil =
     let reduce_step bil = Helpers.fold_consts (reduce bil) in
-    Helpers.fixpoint reduce_step (Helpers.normalize bil)
+    Helpers.fixpoint reduce_step bil
 
 end
 
@@ -224,4 +224,5 @@ module Like_exp = struct
 end
 
 let group_like = Like.bil
-let reduce_consts = Reduce.run
+
+let reduce_consts b = Like.bil b |> Reduce.run
