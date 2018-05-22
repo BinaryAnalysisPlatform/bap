@@ -1,1 +1,1 @@
-val start : unit -> unit
+val start : ?logdir:string -> unit -> unit

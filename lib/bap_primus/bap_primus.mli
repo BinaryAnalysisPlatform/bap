@@ -3,7 +3,7 @@ open Regular.Std
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
-open Format
+open Bap_strings.Std
 
 module Std : sig
 
@@ -12,7 +12,7 @@ module Std : sig
 
       Primus is a microexecution framework that can be used to build
       CPU and full system emulators, symbolic executers, static
-      fuzzers, policy checkers, tracers, quickcheck-like test suits,
+      fuzzers, policy checkers, tracers, quickcheck-like test suites,
       etc.
 
       The underlying idea is quite simple - Primus interprets a lifted
@@ -71,7 +71,7 @@ module Std : sig
     type 'a statement
 
     (** a result of computation  *)
-    type value
+    type value [@@deriving bin_io, compare, sexp]
 
 
     (** Machine exit status.
@@ -134,6 +134,12 @@ module Std : sig
       (** enumerate all currently available observation providers  *)
       val list_providers : unit -> provider list
 
+
+      (** Data interface to the provider.
+
+          This interface provides access to the data stream of all
+          providers expresses as a stream of s-expressions.
+      *)
       module Provider : sig
         type t = provider
 
@@ -148,7 +154,6 @@ module Std : sig
 
         (** a data stream from this observation *)
         val data : t -> Sexp.t stream
-
       end
     end
 
@@ -198,6 +203,12 @@ module Std : sig
       (** [tid p] is term identifier of the term enclosing position [p] *)
       val tid : t -> tid
 
+
+      (** [get a p] get a value of the attribute [a] associated with
+          the given position [p]. Example, [Pos.get address p] returns
+          a machine address of the position [p]. *)
+      val get : 'a tag -> t -> 'a option
+
       (** [to_string level] a textual and human readable
           representation of a cursor.  *)
       val to_string : t -> string
@@ -232,9 +243,12 @@ module Std : sig
         and is registered with the [register_component] function.*)
     module Machine : sig
 
+      (** [init] event occurs just after all components have been
+          initialized, and before the execution starts*)
+      val init : unit observation
+
       (** The [finished] event occurs when the machine terminates.   *)
       val finished : unit observation
-
 
       (** [exn_raised exn] occurs every time an abnormal control flow
           is initiated *)
@@ -349,6 +363,8 @@ module Std : sig
               other components via their interfaces.  *)
           val observe : 'a observation -> ('a -> unit t) -> unit t
 
+
+          val watch : Observation.provider -> (Sexp.t -> unit t) -> unit t
 
           (** [make observation event] make an [observation] of the
               given [event].  *)
@@ -618,6 +634,9 @@ module Std : sig
         (** see {!Word.sub}  *)
         val sub : t -> t -> t m
 
+        (** see {!Word.mul}  *)
+        val mul : t -> t -> t m
+
         (** see {!Word.div}  *)
         val div : t -> t -> t m
 
@@ -686,7 +705,52 @@ module Std : sig
           val (land) : t -> t -> t m
         end
 
+
+        (** Symbol Value Isomorphism.
+
+            A value can have a symbolic representation that is usefull
+            to embed analysis in the machine computation. We inject
+            symbols, represented with the [string] data type, into the
+            value, using interning, i.e., each symbol is mapped to its
+            index (see the Index module).
+
+            The relation between values and symbols is not bijective,
+            since not all values represent interned symbols, moreover
+            it depends on the order of statements, i.e., a symbol shall
+            be interned (with the [to_value] call) before it can be
+            translated back into a symbolic representation.
+
+            Implementors of Primus components are encouraged to use the
+            [Index] module and implement their own mapping with bijection
+            enforced by the abstraction.
+        *)
+        module Symbol : sig
+
+
+          (** [to_value sym] returns a value corresponding to the
+              provided symbolic representation.  *)
+          val to_value : string -> value Machine.t
+
+
+
+          (** [of_value v] returns a symbolic representation of the
+              value [v].
+
+              If the symbolic representation of a value wasn't
+              established, then returns an empty string. *)
+          val of_value : value -> string Machine.t
+        end
+
         include Regular.S with type t := t
+      end
+
+
+      (** Indexing strings by values.   *)
+      module Index : sig
+
+        (** the width of keys in the index.   *)
+        val key_width : int
+        include Strings.Index.Persistent.S with type key := value
       end
 
       include Regular.S with type t := t
@@ -708,7 +772,6 @@ module Std : sig
         with the [(x,y,z)] tuple, that in fact corresponds to
         [observation >>> fun (x,y,z)] -> ... *)
     module Interpreter : sig
-
 
       (** [pc_change x] happens every time a code at address [x] is executed.  *)
       val pc_change : addr observation
@@ -747,6 +810,20 @@ module Std : sig
       (** [written (v,x)] happens after [x] is assinged to [v]  *)
       val written : (var * value) observation
 
+
+      (** [jumping (cond,dest)] happens just before a jump to [dest]
+          is taken under the specified condition [cond].
+          Note: [cond] is always [true]
+
+          @since 1.5.0 *)
+      val jumping : (value * value) observation
+
+      (** [eval_cond v] occurs every time the [cond] part of a jump is
+          evaluated.
+
+          @since 1.5.0 *)
+      val eval_cond : value observation
+
       (** [undefined x] happens when a computation produces an
           undefined value [x].  *)
       val undefined : value observation
@@ -768,6 +845,10 @@ module Std : sig
 
       (** [extract ((hi,lo,x),r)] happens after [r] is extracted from [x] *)
       val extract : ((int * int * value) * value) observation
+
+      (** [extract ((x,y),z)] happens after [x] is concatenated with [y]
+          and produces [z] as a result.*)
+      val concat : ((value * value) * value) observation
 
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
@@ -823,7 +904,12 @@ module Std : sig
       (** an expression was left *)
       val leave_exp : exp observation
 
+      (** occurs on [halt] operation  *)
       val halting : unit observation
+
+      (** [interrupt n] occurs on the machine interrupt [n] (aka CPU
+          exception) *)
+      val interrupt : int observation
 
       type exn += Halt
 
@@ -837,6 +923,9 @@ module Std : sig
         val halt : never_returns m
 
 
+        val interrupt : int -> unit m
+
+
         (** [pc] current value of a program counter.*)
         val pc : addr m
 
@@ -848,6 +937,9 @@ module Std : sig
 
         (** [blk x] interprets the block [x].  *)
         val blk : blk term -> unit m
+
+        (** [exp x] returns a value of [x]. *)
+        val exp : exp -> value m
 
         (** [get var] reads [var]  *)
         val get : var -> value m
@@ -1030,6 +1122,62 @@ module Std : sig
       ] [@@deriving bin_io, compare, sexp]
 
 
+      (** Call tracing.
+
+          Linker doesn't operate in terms of functions or subroutines,
+          but rather in terms of executable chunks of code. It is
+          convenient, though, to track called functions, i.e., there
+          are names and arguments (data-flow). Since a code in Primus
+          is an uniterpreted computation it is the responsibility of
+          the code provider to make corresponding observations, when a
+          subroutine is entered or left.
+
+          By default, the code is provided by the BIR Interpeter and
+          Primus Interpreter. Both care to provide corresponding
+          observations. However, the Primus Lisp Interpreter provides call
+          observations only when an externally visible function is
+          called, e.g., malloc, free.
+      *)
+      module Trace : sig
+
+        (** occurs when a subroutine is called.
+            Argument values are specified in the same order in which
+            corresponding input arguments of a corresponding subroutine
+            term are specified.
+
+            Example,
+
+            (call (malloc 4))
+        *)
+        val call : (string * value list) observation
+
+        (** occurs just before a subroutine returns.
+
+            Context-wise, an observation is made when the interpreter is
+            still in the subroutine. The argument list are in the same
+            order as arguments of a corresponding subroutine. Values of
+            all arguments are provided, including output and input
+            arguments.
+
+            Example,
+
+            (call-return (malloc 4 0xDEADBEEF))
+        *)
+        val return : (string * value list) observation
+
+        (** {3 Notification interface}
+
+            Use [Machine.Observation.make] function, where [Machine]
+            is a module implementing [Machine.S] interface, to provide
+            observations.
+        *)
+
+        (** the statement that makes [call] observations. *)
+        val call_entered : (string * value list) statement
+
+        (** the statement that makes [return] observations  *)
+        val call_returned : (string * value list) statement
+      end
 
       (** The Linker error  *)
       type exn += Unbound_name of name
@@ -1089,8 +1237,31 @@ module Std : sig
         val exec : name -> unit m
 
 
+        (** [resolve_addr name] returns the address associated with the
+            given [name].  *)
+        val resolve_addr : name -> addr option m
+
+
+        (** [resolve_symbol name] returns the symbolic name associated
+            with the given [name].
+
+            @since 1.5.0
+        *)
+        val resolve_symbol : name -> string option m
+
+
+        (** [resolve_tid name] returns the term identifier associated
+            with the given [name].
+
+            @since 1.5.0
+        *)
+        val resolve_tid : name -> tid option m
+
+
         (** [is_linked name] computes to [true] if the [name] is
-            associated with some code.  *)
+            associated with some code.
+
+            @since 1.5.0 *)
         val is_linked : name -> bool m
       end
     end
@@ -1126,6 +1297,12 @@ module Std : sig
             generator will be automatically associated with the
             variable and returned. *)
         val add : var -> Generator.t -> unit Machine.t
+
+
+        (** [all] is a sequence of all variables defined in the
+            environment. Note, the word _defined_ doesn't mean
+            initialized.   *)
+        val all : var seq Machine.t
       end
     end
 
@@ -1141,11 +1318,29 @@ module Std : sig
           [Machine] monad.  *)
       module Make(Machine : Machine.S) : sig
 
-        (** [load addr] loads a byte from the given address *)
+
+        (** [set a] loads a byte from the address [a]  *)
+        val get : addr -> value Machine.t
+
+
+        (** [set a x] stores the byte [x] at the address [a].
+
+            Precondition: [Value.bitwidth x = 8].
+        *)
+        val set : addr -> value -> unit Machine.t
+
+        (** [load a] loads a byte from the given address [a].
+
+            Same as [get a >>= Value.to_word]
+        *)
         val load : addr -> word Machine.t
 
+        (** [store a x] stores the byte [x] at the address [a].
 
-        (** [store addr x] stores a byte [x] at the given address [addr]  *)
+            Same as [Value.of_word x >>= set a].
+
+            Precondition: [Value.bitwidth x = 8].
+        *)
         val store : addr -> word -> unit Machine.t
 
         (** [add_text mem] maps a memory chunk [mem] as executable and
@@ -1229,9 +1424,9 @@ module Std : sig
         - declarations;
         - constants
         - substitutions;
+        - methods;
         - macros;
         - functions;
-        - advice
 
         The entities may be specified in any order, however the above
         order constitutes a good programming practice.
@@ -1383,13 +1578,13 @@ module Std : sig
         stack size, as it uses the host language heap memory to
         represent the Primus Lisp call stack).
 
-        The {b (while <cond> <expr> ...) } form, will evaluate
-        the <cond> expression first, and if it is a non-zero value,
-        then the sequence of expressions {b <expr> ... } is
-        evaluated, and the value of the last expression becomes the
-        value of the [while] form. If the value of the {b <cond> }
-        expression is not a zero, then this value becomes the value of
-        the [while] form.
+        The {b (while <cond> <expr> ...) } form, will evaluate the
+        <cond> expression first, and if it is a non-zero value, then
+        the sequence of expressions {b <expr> ... } is evaluated, and
+        the value of the last expression becomes the value of the
+        [while] form. If the value of the {b <cond> } expression is a
+        false value, then this value becomes the value of the [while]
+        form.
 
 
         {3 Variables}
@@ -1441,13 +1636,9 @@ module Std : sig
         is a decimal digit, will be substituted with the value of the
         n'th expression (counting from zero).
 
-        A sequence {b $<expr> } will be substituted with the value of
-        expression {b $<expr> }. Thus the [$] symbol can be seen as
-        an anti-quotation, that temporary disables the quoting marks.
-
         Example,
 
-        {v (msg "hello, $0 $0 world, (+ 7 8) = $(+ 7 8)" "cruel") v}
+        {v (msg "hello, $0 $0 world, (+ 7 8) = $1" "cruel" (+ 7 8)) v}
 
         will be rendered to a message:
 
@@ -1779,19 +1970,55 @@ module Std : sig
         Primus Lisp also provides a mechanism for non-intrusive
         extending existing function definitions. An existing
         definition maybe advised with another definition. A piece of
-        advice maybe added to a function, and will be called either
-        before, or after the function evaluation, e.g.,
+        advice maybe added to a function that will be called either
+        before or after the evaluation of an advised function, e.g.,
 
         {v
-          (defun memory-written (a x) (msg "write $x to $a"))
-          (advice-add memory-written :after memory-write)
+          (defun memory-written (a x)
+            (declare (advice :before memory-write))
+            (msg "write $x to $a"))
         v}
 
-        The general syntax is:
+        This definition not only defines a new function called
+        [memory-written], but also proclaims it as advice function to
+        the [memory-write] function that should before it is called.
 
-        {v (advice-add <advisor> <when> <advised>) v}
+        If an advisor is attached before the advised function, then
+        it the advisor will be called with the same arguments as the
+        advised function. The return value of the advisor is
+        ignored. The advisor function will be called as a normal Lisp
+        function, with all expected overloading and name resolving. So
+        it is possible to provide context specific advice. If there
+        are several advice to the same function, then they will be
+        called in the unspecified order.
 
-        where the <when> clause is either [:before] or [:after].
+        An advisor that is attached after the advised function will be
+        called with one extra argument - the result of evaluation of
+        the advised function. The value returned by the advisor will
+        override the result of the advised function. If there are
+        several advisors attached after the same function, then they
+        will be called in the unspecified order.
+
+
+        {2 Signaling Mechanims}
+
+        The Primus Observation system is reflected onto the Primus
+        Lisp Machine Signals. Every time a reflected observation
+        occurs the Lisp Machine receives a signal that is dispatched
+        to handlers. A handler can be declared defined with the
+        [defmethod] form, e.g.,
+
+        {v
+        (defmethod call (name arg)
+          (when (= name 'malloc)
+            (msg "malloc($0) was called" arg)))
+        v}
+
+        The [defmethod] form follows the general definiton template,
+        i.e., it can contain a docstring and declaration section, and
+        selection and resolution rules are applicable to
+        methods. Methods of the same signal are invoked in an
+        unspecified order.
 
         {2 Formal syntax}
 
@@ -1813,9 +2040,10 @@ entity ::=
   | <declarations>
   | <constant-definition>
   | <substitution-definition>
+  | <parameter-definition>
   | <macro-definition>
   | <function-definition>
-  | <advising>
+  | <method-definition>
 
 feature-request ::= (require <ident>)
 
@@ -1823,9 +2051,14 @@ declarations ::= (declare <attribute> ...)
 
 constant-definition ::=
   | (defconstant <ident> <atom>)
-  | (defconstant <ident> <docstring> <atom>)
-  | (defconstant <ident> <declarations> <atom>)
-  | (defconstant <ident> <docstring> <declarations> <atom>)
+  | (defconstant <ident> <atom> <docstring>)
+  | (defconstant <ident> <atom> <declarations>)
+  | (defconstant <ident> <atom> <declarations> <docstring>)
+
+parameter-definition ::=
+  | (defparameter <ident> <atom>)
+  | (defparameter <ident> <atom> <docstring>)
+  | (defparameter <ident> <atom> <declarations> <docstring>)
 
 substitution-definition ::=
   | (defsubst <ident> <atom> ...)
@@ -1845,16 +2078,24 @@ function-definition ::=
   | (defun <ident> (<var> ...) <declarations> <exp> ...)
   | (defun <ident> (<var> ...) <docstring> <declarations> <exp> ...)
 
-advice ::=
-  | (advice-add <ident> <method> <ident>)
+method-definition ::=
+  | (defmethod <ident> (<var> ...) <exp> ...)
+  | (defmethod <ident> (<var> ...) <docstring> <exp> ...)
+  | (defmethod <ident> (<var> ...) <declarations> <exp> ...)
+  | (defmethod <ident> (<var> ...) <docstring> <declarations> <exp> ...)
+
 
 exp ::=
   | ()
+  | <var>
+  | <word>
+  | <sym>
   | (if <exp> <exp> <exp> ...)
   | (let (<binding> ...) <exp> ...)
-  | (while <exp> <exp> ...)
+  | (set <var> <exp>)
+  | (while <exp> <exp> <exp> ...)
   | (prog <exp> ...)
-  | (msg <format>)
+  | (msg <format> <exp> ...)
   | (<ident> <exp> ...)
 
 binding ::= (<var> <exp>)
@@ -1868,11 +2109,13 @@ attribute ::=
 
 docstring ::= <text>
 
-syntax ::= :hex | :ascii | ?extensible?
+syntax ::= :hex | :ascii | ...
 
-atom  ::= <word> | <text> |
+atom  ::= <word> | <text>
 
 word  ::= ?ascii-char? | <int> | <int>:<size>
+
+sym   ::= '<atom>
 
 int   ::= ?decimal-octal-hex-or-bin format?
 
@@ -1883,60 +2126,386 @@ ident ::= ?any atom that is not recognized as a <word>?
     *)
     module Lisp : sig
 
+      (** an abstract type representing a lisp program  *)
+      type program
 
 
-      (**  A lisp primitive  *)
+      (** an abstract type that represents messages send with the
+          [msg] form. *)
+      type message
+
+
+      (** Primus Lisp program loader  *)
+      module Load : sig
+
+        (** abstract error type *)
+        type error
+
+        (** [program ?paths proj features] loads a program that
+            implements a set of [features]. For each feature its
+            implementation file, that must have the same basename as
+            the name of feature, is looked up in the list of
+            directories, specified by the [path] parameter (defaults
+            to the current folder). The first implementation that is
+            found, will be used, thus the order of the paths matters.
+
+            Returns an abstract representation of a program, that can
+            be linked into the Lisp machine, or an error if the program
+            is not well-formed.
+        *)
+        val program : ?paths:string list -> project -> string list ->
+          (program,error) result
+
+
+        (** [pp_error ppf err] outputs error information into the
+            pretty-printing formatter [ppf].  *)
+        val pp_error : Format.formatter -> error -> unit
+
+
+        (** [pp_program ppf program] dumps program definitions into the formatter [ppf]   *)
+        val pp_program : Format.formatter -> program -> unit
+      end
+
+      module Doc : sig
+
+        (** Abstract Element of a document.
+
+            A documentation element is something that can be printed.
+            We keep it abstract, as we plan to extend it in the future.
+        *)
+        module type Element = sig
+          type t
+          val pp : Format.formatter -> t -> unit
+        end
+
+        module Category : Element
+        module Name     : Element
+        module Descr    : Element
+
+
+
+        (** Documentation index.
+
+            Documentation index has the following ogranization:
+
+            {[
+              Category 1:
+               - Element1 Name, Element1 Description;
+               - Element2 Name, Element2 Description;
+               ...
+              Category2:
+               - ...
+            ]}
+
+            All entries are sorted in alphabetic order.
+
+        *)
+        type index = (Category.t * (Name.t * Descr.t) list) list
+
+        module Make(Machine : Machine.S) : sig
+          val generate_index : index Machine.t
+        end
+      end
+
+
+      (** Lisp Type System.
+
+          Primus Lisp is equipped with the gradual type system that
+          features type inference.
+      *)
+      module Type : sig
+
+
+        (** A type of an expression  *)
+        type t
+
+
+        (** Definition signature  *)
+        type signature
+
+        (** An abstract type error *)
+        type error
+
+        (** a type specifier for function parameters
+
+            Don't use this directly, this type is uses in the [Spec]
+            eDSL. Use the Spec module directly.
+
+        *)
+        type parameters = [
+          | `All of t
+          | `Gen of t list * t
+          | `Tuple of t list
+        ]
+
+
+        (** Type Specifier DSL.
+
+            A language to build type signatures for Primus Lisp
+            primitives.
+
+            The signature specifier consists of two parts: the
+            parameter list specifier, and the return value type
+            specifier. They are separated with the [@->] operator:
+
+            {[params @-> return]}
+
+            The list of parameters can be specified as a tuple, a
+            variable number of arguments of the same type, or a
+            tuple followed by a variable number of arguments of the
+            same type. Special shortcuts for 1-tuple and 0-tuple are
+            provided.
+
+            The return value type could be [any], [bool], [byte],
+            [word n], [sym], [int], or a type variable bound in the
+            parameters list.
+
+            Examples:
+
+            {[
+              one int @-> byte;
+              tuple [int; byte] @-> int;
+              all a @-> bool;
+              tuple [sym; int] // all byte @-> bool;
+            ]}
+
+        *)
+        module Spec : sig
+
+
+          (** [any] top type which is inhabitated by all Primus values  *)
+          val any : t
+
+
+          (** [var x] type variable [x]. All variables with the same
+              name in the scope of a definiton are unified.  *)
+          val var : string -> t
+
+          (** [sym] symbol type.  *)
+          val sym : t
+
+
+          (** a machine integer - a word that has the same width as
+              [Arch.addr_size] *)
+          val int : t
+
+
+          (** [bool] a one bit word  *)
+          val bool : t
+
+          (** [byte] an eight bit word  *)
+          val byte : t
+
+          (** [word n] an [n] bit word *)
+          val word : int -> t
+
+          (** [a] shortcut for [var "a"]  *)
+          val a : t
+
+          (** [b] shortcut for [var "b"]  *)
+          val b : t
+
+          (** [c] shortcut for [var "c"]  *)
+          val c : t
+
+          (** [d] shortcut for [var "d"]  *)
+          val d : t
+
+
+          (** [tuple [args]] specifies that a function accepts
+              a tuple of arguments of specified types.*)
+          val tuple : t list -> [`Tuple of t list]
+
+          (** [all t] specifies that a function accepts a variable
+              number of arguments all having type [t].  *)
+          val all : t -> [`All of t]
+
+          (** [one t] specifies that a function accepts one argument
+              of type [t] *)
+          val one : t -> [`Tuple of t list]
+
+
+          (** [unit] specifies that a function doesn't have any parameters  *)
+          val unit : [`Tuple of t list]
+
+
+          (** [params // rest] specifies that a function is variadic,
+              but have some number of mandatory arguments, i.e., it
+              accepts a tuple of parameters specified by the [params]
+              type specifier and a variadic list of arguments
+              specified by the [rest] type specifier. *)
+          val (//) : [`Tuple of t list] -> [`All of t] -> parameters
+
+
+          (** [params @-> t] constructs a signature from the
+              parameter list specifier [params] and the return type
+              specifier [t]  *)
+          val (@->) : [< parameters] -> t -> signature
+        end
+
+
+        (** [check env prog] type checks program in the environment
+            [env] and returns a list of errors. If the list is empty
+            the the program is well-typed.
+
+            Note: this function is currently experimental *)
+        val check : Var.t seq -> program -> error list
+
+
+        (** [pp_error ppf err] prints a description of the type error
+            [err] into the formatter [ppf] *)
+        val pp_error : Format.formatter -> error -> unit
+      end
+
+
+      (** Lisp Machine Message interface.
+
+          Lisp machine messages are sent with the [msg] primitive. The
+          messages are abstract, but they could be printed.
+      *)
+      module Message : sig
+        type t = message
+
+
+        (** [pp ppf msg] prints the message into the specified
+            formatter [ppf]. *)
+        val pp : Format.formatter -> t -> unit
+      end
+
+      (** Machine independent closure.
+
+          A closure is an anonymous function, that performs some
+          computation in the Machine Monad. Closures are used to
+          extend the Lisp Machine with arbitrary primitive operations
+          implemented in OCaml. *)
+      module type Closure = functor (Machine : Machine.S) -> sig
+
+        (** [run args] performs the computation.  *)
+        val run : value list -> value Machine.t
+      end
+
+      (** a closure packed as an OCaml value *)
+      type closure = (module Closure)
+
+      (* dedocumented due to deprecation *)
       module Primitive : sig
         type 'a t
-
-
-        (** [create ~docs name code] creates a lisp primitive, that is
-            accessible from lisp as a regular function with the given
-            [name]. A function [code] accepts a list of arguments,
-            and returns a computation in a Machine monad, that should
-            evaluate to a word. *)
         val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
-      end
+      end [@@deprecated "[since 2018-03] use [Closure]"]
 
+      (* undocumented since it is deprecated *)
+      module type Primitives = functor (Machine : Machine.S) ->  sig
+        val defs : unit -> value Machine.t Primitive.t list [@@warning "-D"]
+      end [@@deprecated "[since 2018-03] use [Closure]"]
 
       (** a list of primitives.  *)
-      module type Primitives = functor (Machine : Machine.S) ->  sig
-
-
-        (** a list of primitives defined in the Machine monad.  *)
-        val defs : unit -> value Machine.t Primitive.t list
-      end
-
-
-      (** a list of priomitives.  *)
       type primitives = (module Primitives)
+      [@@deprecated "[since 2018-03] use [closure]"]
 
       type exn += Runtime_error of string
 
+      (** [message] observation occurs every time a message is sent
+          from the Primus Machine.  *)
+      val message : message observation
 
       (** Make(Machine) creates a Lisp machine embedded into the
           Primus [Machine].  *)
       module Make (Machine : Machine.S) : sig
 
+        (** [link_program p] links the program [p] into the Lisp
+            Machine. Previous program, if any, is discarded. *)
+        val link_program : program -> unit Machine.t
+
+
+        (** [program] is the current Machine program.  *)
+        val program : program Machine.t
+
+        (** [define ?docs name code] defines a lisp primitive with
+            the given [name] and an optional documentation string
+            [doscs].
+
+            Example:
+
+            {[
+              open Bap_primus.Std
+
+              type Primus.exn += Bad_abs_call
+
+              module Abs(Machine : Primus.Machine.S) = struct
+                let run = function
+                  | [x] -> Value.abs x
+                  | _ -> Machine.raise Bad_abs_call
+              end
+
+              ...
+
+              module Library(Machine : Primus.Machine.S) = struct
+                module Lisp = Primus.Lisp.Make(Machine)
+                let init () = Machine.sequence [
+                    Lisp.define "abs" (module Abs);
+                    ...;
+                  ]
+              end
+            ]}
+        *)
+        val define : ?types:Type.signature ->
+          ?docs:string -> string -> closure -> unit Machine.t
+
+
+        (** [signal ?params ?docs obs proj] defines a new signal.
+
+            Primus Observations are reflected onto Primus Lisp
+            signals. Each reflection is defined via the [signal]
+            operator that establishes a mapping between an observation
+            and a signal.
+
+            After the signal is defined, every time the observation
+            [obs] is made, the signal [(signal args)] will be sent,
+            where [signal = Observation.name obs] and [args] is a
+            mapping from the observation value to a list of values.
+
+            The signal will match with the observation name. Though
+            the same observation may produce signals with different
+            arities.
+
+            @param params optional type specification
+
+            @param doc optional documentation string
+        *)
+        val signal :
+          ?params:Type.parameters ->
+          ?doc:string ->
+          'a observation ->
+          ('a -> value list Machine.t) -> unit Machine.t
 
         (** [failf msg a1 ... am ()] terminates a lisp machine, and
             correspondingly the Primus machine with the
             [Runtime_error].  *)
         val failf : ('a, unit, string, unit -> 'b Machine.t) format4 -> 'a
 
+        (** [eval_fun name args] calls a lisp function with the given
+            [name], that is the most specific to the current context
+            and is applicable to the specified list of arguments.
+
+            @since 1.5 *)
+        val eval_fun : string -> value list -> value Machine.t
+
+        (** [eval_method name args] invokes all methods with the given
+            [name] that are applicable in the current context to the
+            specified list of arguments.
+
+            @since 1.5 *)
+        val eval_method : string -> value list -> unit Machine.t
 
         (** [link_primitives prims] provides the primitives [prims]   *)
         val link_primitives : primitives -> unit Machine.t
+        [@@deprecated "[since 2018-03] use link_primitive instead"]
       end
 
-
-      (** [init ?log ?paths features] initializes the Lisp machine.
-          This function should be called by a plugin, that is
-          responsible for providing lisp code. In the [bap] framework
-          it is called by the [primus-lisp] plugin.  *)
-      val init : ?log:formatter -> ?paths:string list -> string list -> unit
+      (* it's a no-op now. *)
+      val init : ?log:Format.formatter -> ?paths:string list -> string list -> unit
+      [@@deprecated "[since 2018-03] use the Machine interface instead"]
     end
-
 
     (** Primus error.  *)
     module Exn : sig

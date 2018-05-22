@@ -225,7 +225,7 @@ end
 
 
 module Equiv : sig
-  type t
+  type t = equiv
   val to_int : t -> int
   include Regular.S with type t := t
 end
@@ -241,3 +241,14 @@ module Path : sig
   val length : 'e t -> int
   val pp : (formatter -> 'a -> unit) -> formatter -> 'a t -> unit
 end
+
+
+module Fixpoint : Solution
+
+val fixpoint : (module Graph with type t = 'c
+                              and type node = 'n) ->
+  ?steps:int -> ?start:'n -> ?rev:bool ->
+  ?step:(int -> 'n -> 'd -> 'd -> 'd) ->
+  init:('n,'d) Fixpoint.t ->
+  equal:('d -> 'd -> bool) ->
+  merge:('d -> 'd -> 'd) -> f:('n -> 'd -> 'd) -> 'c -> ('n,'d) Fixpoint.t

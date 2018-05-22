@@ -1,5 +1,7 @@
 REC
 PKG cmdliner
 PKG curl
+PKG parsexp
+PKG uuidm
 B ../_build/src
 B ../_build/lib/bap_byteweight

@@ -1,282 +1,159 @@
 open Core_kernel.Std
-open Regular.Std
 open Bap.Std
-open Bap_primus.Std
 open Monads.Std
-open Format
+open Bap_primus.Std
+module Legacy_taint = Taint
+open Bap_taint.Std
+
 include Self()
 
-module Vid = Primus.Value.Id
-type vid = Vid.t
+
+(* Machine Identifier *)
+module Mid = Monad.State.Multi.Id
 
 (* v[tid] -> taints *)
 type taints = Tid.Set.t Var.Map.t Tid.Map.t
 
-
-
-(** how are we referencing a tainted object  *)
-type reference_kind =
-  | Ptr           (* by a pointer *)
-  | Reg                         (* directly *)
-[@@deriving bin_io, compare, sexp]
-
-type coeff = {
-  reads : Primus.value list;
-  loads : Primus.value list;
-}
-
-type objects = Tid.Set.t
-
-(* we have a set of tainted objects and we map it onto two sets:
-   set of addresses that we believe are pointing into objects,
-   set of computations that we believe are resulting
-
-   we track all references to a tainted object and all computations
-*)
-type tainter = {
-  direct : objects Vid.Map.t;
-  indirect : objects Addr.Map.t;
-} [@@deriving fields]
-
-
 type mapper = {
   regs : taints;
   ptrs : taints;
+  tids : tid Taint.Object.Map.t;
+
 } [@@deriving fields]
-
-type intro = {
-  coeff : coeff option;
-}
-
-type ('f,'k) mapping = {
-  field : 'f;
-  key : 'k;
-}
-
-let nocoeff = {reads = []; loads = []}
-
-let tainter = Primus.Machine.State.declare
-    ~name:"primus-tainter"
-    ~uuid:"2d4a4208-f918-4cf7-8e1b-5d8400a106d3"
-    (fun _ -> {
-         direct = Vid.Map.empty;
-         indirect = Addr.Map.empty;
-       })
 
 let mapper = Primus.Machine.State.declare
     ~name:"primus-taint-mapper"
-    ~uuid:"6e11c845-fee9-4d8c-898e-6aa1750718ee"
+    ~uuid:"12511d75-e626-4b0d-8dcd-2a3b597992cf"
     (fun _ ->  {
          regs = Tid.Map.empty;
          ptrs = Tid.Map.empty;
+         tids = Taint.Object.Map.empty;
        })
 
-let intro = Primus.Machine.State.declare
-    ~name:"primus-taint-introducer"
-    ~uuid:"fd12a09a-57bf-4b5c-a9b7-a0e27768f5c9"
-    (fun _ -> {coeff = None})
-
-let reg_taint_introduced,introduce_reg_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "introduce-reg-taint"
-
-let reg_taint_propagated,propagate_reg_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "propagate-reg-taint"
-
-let reg_taint_killed,kill_reg_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "kill-reg-taint"
-
-let ptr_taint_introduced,introduce_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "introduce-ptr-taint"
-
-let ptr_taint_propagated,propagate_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "propagate-ptr-taint"
-
-let ptr_taint_killed,kill_ptr_taint =
-  Primus.Observation.provide
-    ~inspect:sexp_of_tid "kill-ptr-taint"
-
-let vid = Primus.Value.id
-
-let indirect = {
-  field = Fields_of_tainter.indirect;
-  key = Primus.Value.to_word
-}
-let direct = {
-  field = Fields_of_tainter.direct;
-  key = vid;
-}
+let is_mem v = match Var.typ v with
+  | Type.Imm _ -> false
+  | Type.Mem _ -> true
 
 
 module Intro(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
+  module Env = Primus.Interpreter.Make(Machine)
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
+  module Tracker = Taint.Tracker.Make(Machine)
+  module Kind = Taint.Kind.Make(Machine)
+  module Object = Taint.Object.Make(Machine)
+
+  open Machine.Syntax
+
+  let kind t =
+    Kind.create (sprintf "user-%s" (Tid.name t))
+
+  let connect tid taint =
+    Machine.Local.update mapper ~f:(fun m -> {
+          m with
+          tids = Map.add m.tids ~key:taint ~data:tid
+        })
+
+  let translation = [
+    Legacy_taint.reg, `Reg, Taint.Rel.direct;
+    Legacy_taint.ptr, `Ptr, Taint.Rel.indirect;
+  ]
+
+
+  let gentaint t =
+    kind t >>= fun k ->
+    Object.create k >>= fun taint ->
+    connect t taint >>| fun () ->
+    Taint.Object.Set.singleton taint
 
   let introduces def =
-    Term.has_attr def Taint.reg || Term.has_attr def Taint.ptr
+    List.find_map translation ~f:(fun (k,s,r) ->
+        match Term.get_attr def k with
+        | None -> None
+        | Some t -> Some (t,s,r))
 
-  let start_observing_coeff def =
-    if introduces def
-    then Machine.Local.update intro ~f:(fun s -> {
-          coeff = Some nocoeff
-        })
-    else Machine.return ()
+  let taint_ptr taints ptr =
+    Tracker.attach ptr Taint.Rel.indirect taints
 
-  let stop_observing_coeff def =
-    if introduces def
-    then Machine.Local.put intro {coeff = None}
-    else Machine.return ()
+  let taint_var k taints var =
+    if is_mem var then Machine.return ()
+    else
+      Env.get var >>= fun v ->
+      Tracker.attach v k taints
 
-  let taint dst taint v =
-    Machine.Local.get tainter >>= fun s ->
-    Map.update (Field.get dst.field s) (dst.key v) ~f:(function
-        | None -> Tid.Set.singleton taint
-        | Some taints -> Set.add taints taint) |>
-    Field.fset dst.field s |>
-    Machine.Local.put tainter
-
-  let taint_var kinds v =
-    Machine.List.iter kinds ~f:(function
-        | (Reg,t) -> taint direct t v
-        | (Ptr,t) -> taint indirect t v)
-
-  let constant v kinds = Machine.return ()
-
-
-  (* a pointer to the tainted object  *)
-  let taint_direct_addr t v = taint indirect t v
-
-  let min_addr addrs =
-    match List.min_elt addrs ~cmp:Value.compare with
-    | None -> assert false
-    | Some x -> x
-
-  (* a pointer to a pointer to the tainted object *)
-  let taint_indirect_addr t addrs =
-    let addr = min_addr addrs in
-    Machine.arch >>= fun arch ->
-    let size = (Arch.addr_size arch :> size) in
-    Eval.load addr (Arch.endian arch) size >>=
-    taint_direct_addr t
-
-  let loaded addrs v kinds =
-    taint_var kinds v >>= fun () ->
-    Machine.List.iter kinds ~f:(function
-        | (Reg,t) -> taint_direct_addr t v
-        | (Ptr,t) -> taint_indirect_addr t addrs)
-
-  let read vids v kinds =
-    taint_var kinds v >>= fun () ->
-    Machine.List.iter vids ~f:(fun v ->
-        taint_var kinds v)
-
-  let get_attr kind attr def = match Term.get_attr def attr with
-    | None -> None
-    | Some t -> Some (kind,t)
-
-  let introduce f def =
-    let kinds = List.filter_opt [
-        get_attr Ptr Taint.ptr def;
-        get_attr Reg Taint.reg def;
-      ] in
-    Eval.get (Def.lhs def) >>= fun v ->
-    taint_var kinds v >>= fun () ->
-    f v kinds
-
-  let introduce_taints t =
-    Machine.Local.get intro >>= function
-    | {coeff=None} -> Machine.return ()
-    | {coeff=Some {loads=[]; reads=[]}} -> introduce constant t
-    | {coeff=Some {loads=[]; reads=xs}} -> introduce (read xs) t
-    | {coeff=Some {loads=xs}} -> introduce (loaded xs) t
-
-  let enter_def = start_observing_coeff
-
-  let leave_def d = Machine.sequence [
-      introduce_taints d;
-      stop_observing_coeff d;
-    ]
-
-  let init () = Machine.sequence Primus.[
-      Interpreter.enter_def >>> enter_def;
-      Interpreter.leave_def >>> leave_def;
-    ]
-end
-
-module Propagate(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Eval = Primus.Interpreter.Make(Machine)
-  module Value = Primus.Value.Make(Machine)
-
-  (** [ms --> md] transfers references from the [ms] mapping to the
-      [md] mapping.  *)
-  let (-->) ms md (src,dst) =
-    Machine.Local.get tainter >>= fun s ->
-    match Map.find (Field.get ms.field s) (ms.key src) with
+  let intro def =
+    match introduces def with
     | None -> Machine.return ()
-    | Some objs ->
-      Set.fold objs ~init:(Field.get md.field s) ~f:(fun refs obj ->
-          Map.update refs (md.key dst) ~f:(function
-              | None -> Tid.Set.singleton obj
-              | Some objs -> Set.add objs obj)) |>
-      Field.fset md.field s |>
-      Machine.Local.put tainter
-
-  let loaded = indirect --> direct
-  let stored = direct --> indirect
-  let computed = direct --> direct
-
-  let binop ((_op,x,y),r) = Machine.sequence [
-      computed (x,r);
-      computed (y,r);
-    ]
-
-  let unop ((_op,x),r) = computed (x,r)
-  let extract ((_,_,x),r) = computed (x,r)
-  let cast ((_,_,x),r) = computed (x,r)
-
-  let init () = Machine.sequence Primus.[
-      Interpreter.loaded  >>> loaded;
-      Interpreter.stored  >>> stored;
-      Interpreter.binop   >>> binop;
-      Interpreter.unop    >>> unop;
-      Interpreter.extract >>> extract;
-      Interpreter.cast    >>> cast;
-    ]
-end
-
-
-module Mapper(Machine : Primus.Machine.S) = struct
-  open Machine.Syntax
-  module Eval = Primus.Interpreter.Make(Machine)
-
-  let update src dst (var,x) =
-    Machine.Local.get tainter >>= fun tainter ->
-    match Map.find (Field.get src.field tainter) (src.key x) with
-    | None -> Machine.return ()
-    | Some taints ->
-      Eval.pos >>| Primus.Pos.tid >>= fun term ->
-      Machine.Local.update mapper ~f:(fun m ->
-          Map.update (Field.get dst m) term ~f:(function
-              | None -> Var.Map.singleton var taints
-              | Some vars -> Map.update vars var ~f:(function
-                  | None -> taints
-                  | Some taints' -> Set.union taints taints)) |>
-          Field.fset dst m)
-
-  let variable_read assn = Machine.sequence [
-      update direct Fields_of_mapper.regs assn;
-      update indirect Fields_of_mapper.ptrs assn;
-    ]
+    | Some (taint,kind,rel) ->
+      gentaint taint >>= fun t ->
+      taint_var rel t (Def.lhs def) >>= fun () ->
+      match Def.rhs def with
+      | Bil.Load (_,addr,ed,sz)
+      | Bil.Store (_,addr,_,ed,sz) ->
+        Eval.exp addr >>= fun ptr ->
+        if kind = `Reg
+        then taint_ptr t ptr
+        else
+          Eval.load ptr ed sz >>=
+          taint_ptr t
+      | exp ->
+        Exp.free_vars exp |> Set.to_sequence |>
+        Machine.Seq.iter ~f:(taint_var rel t)
 
   let init () =
-    Primus.Interpreter.read >>> variable_read
+    Primus.Interpreter.leave_def >>> intro
+end
 
+
+
+(* mapper maintains a state that maps variables (indexed by term
+   identifier) to the set of taints (represented as tids) attached to
+   those variables. Since the new framework represents taints as
+   arbitrary values classified with their kind, we also need a mapping
+   that will establish a correspondence between new and old
+   representation, this mapping is maintained by the Intro component,
+   that is responsible for introducing taints that were explicitly
+   marked with the taint attribute.
+*)
+module Mapper(Machine : Primus.Machine.S) = struct
+  open Machine.Syntax
+  module Env = Primus.Env.Make(Machine)
+  module Tracker = Taint.Tracker.Make(Machine)
+
+  let relations = [
+    Taint.Rel.indirect, Fields_of_mapper.ptrs;
+    Taint.Rel.direct, Fields_of_mapper.regs;
+  ]
+
+  let remap tids objs =
+    Tid.Set.filter_map objs ~f:(Map.find tids)
+
+  let update vars term =
+    Machine.List.iter relations ~f:(fun (rel,fld) ->
+        Machine.Local.get mapper >>= fun s ->
+        Set.to_sequence (vars term) |>
+        Machine.Seq.fold ~init:s ~f:(fun s var ->
+            Env.get var >>= fun v ->
+            Tracker.lookup v rel >>| remap s.tids >>| fun taints ->
+            if Set.is_empty taints || is_mem var then s
+            else
+              Field.fset fld s @@
+              Map.update (Field.get fld s) (Term.tid term) ~f:(function
+                  | None -> Var.Map.singleton var taints
+                  | Some taints' ->
+                    Map.update taints' var ~f:(function
+                        | None -> taints
+                        | Some taints' -> Set.union taints taints'))) >>=
+        Machine.Local.put mapper)
+
+  let update_jmp = update Jmp.free_vars
+  let update_def = update Def.free_vars
+
+
+  let init () = Machine.sequence Primus.Interpreter.[
+      leave_def >>> update_def;
+      leave_jmp >>> update_jmp;
+    ]
 end
 
 module Marker(Machine : Primus.Machine.S) = struct
@@ -284,16 +161,25 @@ module Marker(Machine : Primus.Machine.S) = struct
   module Eval = Primus.Interpreter.Make(Machine)
   module Value = Primus.Value.Make(Machine)
 
+
+  let update_taints t tag ts = match Term.get_attr t tag with
+    | None -> Term.set_attr t tag ts
+    | Some ts' -> Term.set_attr t tag @@ Map.merge ts ts'
+        ~f:(fun ~key:_ -> function
+            | `Left ts | `Right ts -> Some ts
+            | `Both (ts,ts') -> Some(Set.union ts ts'))
+
+
   let mark tag taints t = match Map.find taints (Term.tid t) with
-    | Some ts when not(Map.is_empty ts) -> Term.set_attr t tag ts
+    | Some ts when not(Map.is_empty ts) -> update_taints t tag ts
     | _ -> t
 
   let mark_terms {regs; ptrs} = (object
     inherit Term.mapper as super
     method! map_term cls t =
       super#map_term cls t |>
-      mark Taint.regs regs |>
-      mark Taint.ptrs ptrs
+      mark Legacy_taint.regs regs |>
+      mark Legacy_taint.ptrs ptrs
   end)#run
 
   let mark _ =
@@ -307,28 +193,110 @@ module Marker(Machine : Primus.Machine.S) = struct
     Primus.Interpreter.leave_blk >>> mark
 end
 
-let enable modules =
-  List.iter ~f:Primus.Machine.add_component modules
-
-open Config;;
-manpage [
-  `S "DESCRIPTION";
-  `P "The Primus taint propagatation engine.";
-]
-
-let enabled = flag "run" ~doc:"Run taint propagation."
-let don't_mark = flag "no-marks" ~doc:"Don't mark project terms"
-
-let main : Primus.component list = [
-  (module Intro);
-  (module Propagate);
-]
-
 let markers : Primus.component list = [
   (module Mapper);
   (module Marker);
 ]
 
-let () = when_ready (fun {get=(!!)} ->
-    if !!enabled then enable main;
-    if not !!don't_mark then enable markers)
+let enable_projection () =
+  List.iter markers ~f:Primus.Machine.add_component
+
+let enable_injection () =
+  Primus.Machine.add_component (module Intro)
+
+
+
+open Config;;
+manpage [
+  `S "DESCRIPTION";
+
+  `P "This plugin implements a compatibility layer between the new
+    Primus Taint Analysis Framework and the old taint propagation
+    framework (the $(b,propagate-taint) plugin). The new framework
+    uses the pubslisher-subscriber pattern, provides sanitization
+    operations, and tracks the taints liveness, that enables more
+    conventional and online taint analysis. However it represents
+    taints as abstract objects associated with computations (values),
+    while the old taint propagation framework uses a pipeline
+    approach, with taints represented as attributes attached to
+    program terms. Since the new representation of taints is much more
+    precise and there is no bijection between terms and values, this
+    layer will loose information due to this impendance mismatch. The
+    trade-offs of the translation and described below. New analysis,
+    if possible, shall rely on the new framework.";
+
+  `P "The translation is achieved by mapping the $(b,tainted-ptr) and
+    $(b,tainted-reg) attributes to corresponding taint introduction
+    operations of the Primus Taint Analysis Framework, and by
+    reflecting the taint state of the analysis into the
+    $(b,tainted-regs) and $(b,tainted-ptrs) attributes. Both steps are
+    optional, and could be enabled and disabled individually.";
+
+  `P
+    "Since an attribute is attached to the whole term not to an
+    individual expression or value we need some rule that prescribes
+    how terms maps to values. If a term is marked as a term that
+    introduces a taint, then we assume that a value, computed
+    in this term, references the tainted object either directly (in
+    case of $(b,tainted-reg)) or indirectly (in case of
+    $(b,tainted-ptr)). We always taint a value contained in the
+     left-hand side of a definition. In addition, we also try to
+    taint values on the right hand side. If there is a load or store
+    operation, then we taint address as a pointer to the object that
+    will track, if it was marked with the $(b,tainted-reg)
+    attribute. If it was marked with the $(b,tainted-ptr) attribute
+    then we dereference this pointer and taint the dereferenced
+    address. If the right hand side is an abritrary expression, then
+    we assume that all variables that are used in this expression
+    contain values that are referencing directly or indirectly the
+    tainted object."
+]
+
+let injection_enabled = flag "from-attributes"
+    ~doc:"Introduces taint in terms that are marked with the
+    $(b,tainted-ptr) and $(b,tainted-reg) attribute. "
+
+let projection_enabled = flag "to-attributes"
+    ~doc:"Reflects the state of the taint propagation engine to the
+    $(b,tainted-ptrs) and $(b,tainted-regs) term attributes."
+
+let soft_deprecation_notice = {|
+This option is left for compatibility with the old interface and
+is not compatible with the $(b,from-attributes) or
+$(b,to-attrbutes) options. It is an error to mix options from the
+new and old interfaces.
+|}
+
+let enabled = flag "run"
+    ~doc:("Enables propagating taint from term attributes and back to \
+           attributes, unless the latter is disabled with the
+           $(b,no-marks) option. " ^ soft_deprecation_notice)
+
+let marking_disabled = flag "no-marks"
+    ~doc: ("Disables the projection of the taint engine state to term
+    attributes. The option is only valid when the $(b,run) option is
+    specified. " ^ soft_deprecation_notice)
+
+;;
+
+when_ready begin fun {get=is} ->
+  if is injection_enabled || is projection_enabled
+  then if is enabled || is marking_disabled
+    then invalid_arg "Incorrect mix of old and new parameters";
+  if is marking_disabled && not (is enabled)
+  then invalid_arg "The no-marks option is only valid if \
+                    the run option is specified";
+
+  (* Modern interface *)
+  if is injection_enabled
+  then enable_injection ();
+  if is projection_enabled
+  then enable_projection ();
+
+  (* Legacy interface *)
+  if is enabled then begin
+    enable_injection ();
+    if not (is marking_disabled) then
+      enable_projection ();
+  end
+end

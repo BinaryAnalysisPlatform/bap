@@ -192,6 +192,9 @@ module Dict = struct
     Map.to_sequence t
   let data t : value Sequence.t =
     Map.to_sequence t |> Sequence.map ~f:snd
+
+  let filter t ~f = Map.filter t ~f
+
 end
 
 type dict = Dict.t [@@deriving bin_io, compare, sexp]

@@ -89,6 +89,10 @@ let of_data data : Backend.Img.t option =
   Some (Backend.Img.Fields.create
           ~arch ~entry ~segments ~symbols ~sections)
 
+
+(* this plugin is disabled by default, since it is using the depecated
+   interface. *)
+[@@@ocaml.warning "-3"]
 let init () =
   match Image.register_backend ~name:"legacy-llvm" of_data with
   | `Ok -> Ok ()

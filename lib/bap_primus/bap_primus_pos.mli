@@ -28,6 +28,5 @@ type t =
 val to_string : t -> string
 
 val tid : t -> tid
+val get : 'a tag -> t -> 'a option
 val next : t -> ('p,'t) cls -> 't term -> (t,Bap_primus_exn.t) Monad.Result.result
-
-

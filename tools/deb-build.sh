@@ -7,9 +7,9 @@ SOURCE=$GITHUB/bap
 BINDINGS=$GITHUB/bap-bindings
 BINARIES="bap bap-mc bapbundle"
 PREFIX=/usr/local
-VERSION=${VERSION:-1.2.0}
-OCAML=4.02.3
-LLVM_VERSION=${LLVM_VERSION:-3.4}
+VERSION=1.4.0
+OCAML=4.05.0
+LLVM_VERSION=5.0
 ARCH=$(dpkg-architecture -qDEB_BUILD_ARCH)
 
 CONFDIR=$PREFIX/etc/bap
@@ -32,20 +32,26 @@ fi
 
 eval $(opam config env)
 echo OCaml is at `which ocaml`
+echo LLVM is $LLVM_VERSION
+echo BAP version is $VERSION
 which ocaml
 
+echo "Pinning jbuilder to the not yet broken version"
+opam pin add jbuilder 1.0+beta17 -n --yes
+echo "Pinning utop to the latest not broken version"
+opam pin add utop 1.19.3 -n --yes
 echo "Looking in the dev-repo for the current list of dependencies"
 opam pin add bap --dev-repo --yes -n
 echo "Installing OCaml dependenices from OPAM"
-opam install --deps-only bap --yes
+opam install --yes --deps-only bap
 echo "Installed dependencies. Cleaning up..."
 opam pin remove bap
-echo "Cloning a fresh repo"
 
+echo "Cloning a fresh repo"
 [ -d bap-repo ] || git clone $SOURCE bap-repo
 echo "Installing ocamlfind to the system path"
 
-[ -f $PREFIX/bin/ocamlfind ] && cp $PREFIX/bin/ocamlfind $TMPDIR
+[ -f $PREFIX/bin/ocamlfind ] && cp $PREFIX/bin/ocamlfind $TMPDIR/stored-ocamlfind
 sudo cp $(which ocamlfind) $PREFIX/bin
 
 
@@ -54,6 +60,7 @@ git pull
 ./configure --enable-everything \
             --disable-ida --disable-fsi-benchmark \
             --with-llvm-version=$LLVM_VERSION \
+            --with-llvm-config=llvm-config-$LLVM_VERSION \
             --libdir=$(opam config var lib) \
             --plugindir=$PREFIX/lib/bap \
             --prefix=$PREFIX \

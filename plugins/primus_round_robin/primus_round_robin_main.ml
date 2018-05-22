@@ -2,36 +2,69 @@ open Core_kernel.Std
 open Bap.Std
 open Monads.Std
 open Bap_primus.Std
+open Format
 include Self()
 
+module Mid = Monad.State.Multi.Id
+
 type t = {
-  pending : Primus.Machine.id Fqueue.t
+  pending : Mid.t Fqueue.t;
+  finished : Mid.Set.t
 }
 
 let state = Primus.Machine.State.declare
               ~uuid:"d1b33e16-bf5d-48d5-a174-3901dff3d123"
               ~name:"round-robin-scheduler"
-              (fun _ -> {pending=Fqueue.empty})
+              (fun _ -> {
+                   pending = Fqueue.empty;
+                   finished = Mid.Set.empty;
+                 })
 
 
 module RR(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
 
-  let rec schedule t = match Fqueue.dequeue t.pending with
-    | None -> Machine.forks () >>= fun fs -> schedule {
-        pending = Seq.fold fs ~init:Fqueue.empty ~f:Fqueue.enqueue
-      }
-    | Some (next,pending) -> Machine.status next >>= function
-      | `Dead -> schedule {pending}
-      | _ -> Machine.switch next >>| fun () -> {pending}
 
-  let step _blk =
-    Machine.Local.get state >>=
-    schedule >>=
-    Machine.Local.put state
+
+  let rec schedule t = match Fqueue.dequeue t.pending with
+    | None ->
+      Machine.forks () >>| Seq.filter ~f:(fun id ->
+          not (Set.mem t.finished id)) >>= fun fs ->
+      if Seq.is_empty fs
+      then Machine.return ()
+      else schedule {
+          t with
+          pending = Seq.fold fs ~init:Fqueue.empty ~f:Fqueue.enqueue
+      }
+    | Some (next,pending) ->
+      Machine.status next >>= function
+      | `Dead ->
+        eprintf "Machine %a is dead, skipping over@\n%!"
+          Machine.Id.pp next;
+        schedule {pending; finished = Set.add t.finished next}
+      | _ ->
+        eprintf "Switching to machine %a@\n"
+          Machine.Id.pp next;
+        Machine.Global.put state {t with pending} >>= fun () ->
+        Machine.switch next >>= fun () ->
+        Machine.Global.get state >>= schedule
+
+  let step _ =
+    Machine.Global.get state >>= schedule
+
+  let finish () =
+    Machine.current () >>= fun id ->
+    Machine.Global.update state ~f:(fun t ->
+        {t with finished = Set.add t.finished id}) >>= fun () ->
+    eprintf "machine %a is done@\n%!" Machine.Id.pp id;
+    step ()
+
 
   let init () =
-    Primus.Interpreter.leave_blk >>> step
+    Machine.sequence [
+      Primus.Interpreter.leave_blk >>> step;
+      Primus.Machine.finished >>> finish;
+    ]
 end
 
 let enable () =

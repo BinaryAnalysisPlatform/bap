@@ -84,7 +84,7 @@ module Input = struct
     Image.create ?backend:loader filename >>| fun (img,warns) ->
     List.iter warns ~f:(fun e -> warning "%a" Error.pp e);
     let spec = Image.spec img in
-    Signal.send Info.got_img (Some img);
+    Signal.send Info.got_img img;
     Signal.send Info.got_spec spec;
     let finish proj = {
       proj with
@@ -105,9 +105,7 @@ module Input = struct
     | Some name -> match Hashtbl.find loaders name with
       | None -> from_image ?loader filename
       | Some load ->
-        fun () ->
-          Signal.send Info.got_img None;
-          load filename ()
+        fun () -> load filename ()
 
   let null arch : addr =
     Addr.of_int 0 ~width:(Arch.addr_size arch |> Size.in_bits)
@@ -118,12 +116,42 @@ module Input = struct
     let base = Option.value base ~default:(null arch) in
     let mem = Memory.create (Arch.endian arch) base big |> ok_exn in
     let section = Value.create Image.section "bap.user" in
-    let data = Memmap.add Memmap.empty mem section in
-    {arch; data; code = data; file = filename; finish = ident;}
+    let code = Memmap.add Memmap.empty mem section in
+    let data = Memmap.empty  in
+    {arch; data; code; file = filename; finish = ident;}
 
   let available_loaders () =
     Hashtbl.keys loaders @ Image.available_backends ()
 end
+
+module Merge = struct
+
+  let merge_streams ss ~f : 'a Source.t =
+    Stream.concat_merge ss
+      ~f:(fun s s' -> match s, s' with
+          | Ok s, Ok s' -> Ok (f s s')
+          | Ok _, Error er
+          | Error er, Ok _ -> Error er
+          | Error er, Error er' ->
+            Error (Error.of_list [er; er']))
+
+  let merge_sources create sources ~f = match sources with
+    | [] -> None
+    | names -> match List.filter_map names ~f:create with
+      | [] -> assert false
+      | ss -> Some (merge_streams ss ~f)
+
+  let symbolizer () =
+    let symbolizers = Symbolizer.Factory.list () in
+    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
+        Symbolizer.chain [s1;s2])
+
+  let rooter () =
+    let rooters = Rooter.Factory.list () in
+    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
+
+end
+
 
 type input = Input.t
 type project = t
@@ -183,9 +211,11 @@ module MVar = struct
         | Error e -> fail x e);
     x
 
-  let from_optional_source = function
-    | None -> create None
+  let from_optional_source ?(default=fun () -> None) = function
     | Some s -> from_source s
+    | None -> match default () with
+      | None -> create None
+      | Some s -> from_source s
 end
 
 let phase_triggered phase mvar =
@@ -204,7 +234,7 @@ let pp_mem ppf mem =
 let pp_disasm_error ppf = function
   | `Failed_to_disasm mem ->
     fprintf ppf "can't disassemble insnt at address %a" pp_mem mem
-  | `Failed_to_lift (mem,insn,err) ->
+  | `Failed_to_lift (_mem,insn,err) ->
     fprintf ppf "<%s>: %a"
       (Disasm_expert.Basic.Insn.asm insn) Error.pp err
 
@@ -231,15 +261,19 @@ let create_exn
     ?reconstructor
     (read : input)  =
   let state = fresh_state () in
-  let mrooter = MVar.from_optional_source rooter in
+  let mrooter =
+    MVar.from_optional_source ~default:Merge.rooter rooter in
+  let msymbolizer =
+    MVar.from_optional_source ~default:Merge.symbolizer symbolizer in
   let mbrancher = MVar.from_optional_source brancher in
-  let msymbolizer = MVar.from_optional_source symbolizer in
   let mreconstructor = MVar.from_optional_source reconstructor in
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
   let spec = MVar.from_source (Stream.map ~f:(fun s -> Ok s) Info.spec) in
-  let {Input.arch; data; code; file; finish;} = read () in
+  let task = "loading" in
+  report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
+  let {Input.arch; data; code; file; finish} = read () in
   Signal.send Info.got_file file;
   Signal.send Info.got_arch arch;
   Signal.send Info.got_data data;
@@ -249,6 +283,7 @@ let create_exn
     let brancher = MVar.read mbrancher
     and rooter   = MVar.read mrooter in
     let disassemble () =
+      report_progress ~task ~stage:1 ~note:"disassembling" ();
       let run mem =
         let dis =
           Disasm.With_exn.of_mem ?backend ?brancher ?rooter arch mem in
@@ -269,18 +304,23 @@ let create_exn
           | Some s -> s in
         let name = Symbolizer.resolve symbolizer in
         let syms =
+          let () = report_progress ~task ~stage:2 ~note:"reconstructing" () in
           Reconstructor.(run (default name (roots rooter)) g) in
         MVar.write symtab syms in
     if is_cfg_updated || MVar.is_updated mreconstructor
     then match MVar.read mreconstructor with
       | Some r ->
         MVar.ignore msymbolizer;
+        report_progress ~task ~stage:2 ~note:"reconstructing" ();
         MVar.write symtab (Reconstructor.run r g)
       | None -> reconstruct ()
     else reconstruct ();
     let is_symtab_updated = phase_triggered Info.got_symtab symtab in
     if is_symtab_updated
-    then MVar.write program (Program.lift (MVar.read symtab));
+    then begin
+      report_progress ~task ~stage:3 ~note:"lifting" ();
+      MVar.write program (Program.lift (MVar.read symtab))
+    end;
     let _ = phase_triggered Info.got_program program in
     if MVar.is_updated mrooter ||
        MVar.is_updated mbrancher ||
@@ -291,6 +331,7 @@ let create_exn
       let program = MVar.read program in
       let program =
         symbolize_synthetic program (Disasm.insns disasm) spec in
+      report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {
         disasm;
         program;
@@ -375,7 +416,7 @@ let substitute project mem tag value : t =
   let subst_section (mem,name) = function
     | #bound as b -> addr b mem
     | `name -> name in
-  let subst_block (mem,block) = function
+  let subst_block (mem,_block) = function
     | #bound as b -> addr b mem
     | `name -> "blk_"^addr `min mem in
   let asm insn = Insn.asm insn in
@@ -383,7 +424,7 @@ let substitute project mem tag value : t =
   let subst_disasm mem out =
     let inj = match out with `asm -> asm | `bil -> bil in
     match Disasm.of_mem project.arch mem with
-    | Error er -> "<failed to disassemble memory region>"
+    | Error _er -> "<failed to disassemble memory region>"
     | Ok dis ->
       Disasm.insns dis |>
       Seq.map ~f:(fun (_,insn) -> inj insn) |> Seq.to_list |>
@@ -529,9 +570,7 @@ end
 let register x =
   let module S = (val x : S) in
   let stream =
-    Stream.map Info.img ~f:(function
-	| None -> Ok S.empty
-	| Some img -> Ok (S.of_image img)) in
+    Stream.map Info.img ~f:(fun img -> Ok (S.of_image img)) in
   S.Factory.register "internal" stream
 
 let () =

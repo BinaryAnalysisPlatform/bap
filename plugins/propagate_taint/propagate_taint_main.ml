@@ -16,6 +16,7 @@ type args = {
   reg_policy : policy;
   mem_policy : policy;
   interesting : string list;
+  print_coverage : bool;
 } [@@deriving fields, sexp_of]
 
 let map_if cond t ~f = if cond then f t else t
@@ -100,6 +101,9 @@ module State = struct
   let pp_ratio ppf (x,y) =
     fprintf ppf "[%d/%d] %3d%%" x y (percent (x,y))
 
+  let report_progress {sub_count=stage; sub_total=total} name =
+    report_progress ~note:name ~stage ~total ()
+
   let pp_progressbar ppf {sub_count=x; sub_total=y} =
     fprintf ppf "%a" pp_ratio (x,y)
 
@@ -164,8 +168,8 @@ let process args proj =
   Term.enum sub_t prog |>
   Seq.filter ~f:(fun sub -> Set.mem subs (Term.tid sub)) |>
   Seq.fold ~init:(State.create (Set.length subs)) ~f:(fun s sub ->
+      State.report_progress s (Sub.name sub);
       let s = State.entered_sub s sub in
-      eprintf "%-40s %a\r%!" (Sub.name sub) State.pp_progressbar s;
       Propagator.run
         ~max_steps:args.max_trace
         ~max_loop:args.max_loop
@@ -184,7 +188,8 @@ let main args proj =
       let s = process args proj in
       State.Cache.save digest s;
       s in
-  eprintf "@.Coverage: %a@." State.pp_coverage state;
+  if args.print_coverage
+  then eprintf "@.Coverage: %a@." State.pp_coverage state;
 
   let marker = new marker (State.taints state) in
   Project.program proj |> marker#run |>
@@ -263,6 +268,9 @@ module Cmdline = struct
                                       backtracking, giving a more \
                                       feasable result, but much less \
                                       coverage")
+
+  let print_coverage = Config.(flag "print-coverage"
+                                 ~doc:"print coverage [debug]")
   module Policy = struct
     type t = policy
 
@@ -306,9 +314,10 @@ module Cmdline = struct
   let create
       max_trace max_loop deterministic
       random_seed reg_policy mem_policy
-      interesting = {
+      interesting print_coverage  = {
     max_trace; max_loop; deterministic;
     random_seed; reg_policy; mem_policy; interesting;
+    print_coverage
   }
 
   let () =
@@ -316,7 +325,7 @@ module Cmdline = struct
     let mem = policy "mem" "memory locations" `Random in
     Config.when_ready (fun {Config.get=(!)} ->
         let args = create !max_trace !max_loop !deterministic
-            !random_seed !reg !mem !interesting in
+            !random_seed !reg !mem !interesting !print_coverage in
         Project.register_pass (main args))
 
 end

@@ -20,8 +20,16 @@ end
 
 type code = (module Code)
 
+(* the same piece of code can be referred via multiple names *)
+type refs = {
+  term : tid option;
+  name : string option;
+  addr : addr option;
+}
+
 type t = {
   codes : code Int.Map.t;
+  alias : refs Int.Map.t;
   terms : int Tid.Map.t;
   names : int String.Map.t;
   addrs : int Addr.Map.t;
@@ -32,21 +40,42 @@ let empty = {
   terms = Tid.Map.empty;
   names = String.Map.empty;
   addrs = Addr.Map.empty;
+  alias = Int.Map.empty;
 }
 
 let unresolved_handler = `symbol "__primus_linker_unresolved_call"
 
-let string_of_name = function
-  | `symbol name -> name
-  | `addr addr -> asprintf "at address %a" Addr.pp_hex addr
-  | `tid tid -> asprintf "with tid %a" Tid.pp tid
+include struct
+  open Sexp
 
-let inspect n = Sexp.Atom (string_of_name n)
+  let string_of_name = function
+    | `symbol name -> name
+    | `addr addr -> asprintf "%a" Addr.pp_hex addr
+    | `tid tid -> asprintf "%%%a" Tid.pp tid
+  let sexp_of_name n = Sexp.Atom (string_of_name n)
+  let sexp_of_value {value=x} = Atom (asprintf "%a" Word.pp_hex x)
+  let sexp_of_args = List.map ~f:sexp_of_value
+  let sexp_of_call (dst,args) =
+    List (Atom dst :: sexp_of_args args)
+end
 
-let exec,will_exec = Bap_primus_observation.provide
-                    ~inspect
-                    "linker-exec"
+module Trace = struct
+  module Observation = Bap_primus_observation
+  let exec,will_exec = Observation.provide
+      ~inspect:sexp_of_name
+      "linker-exec"
 
+  let unresolved,will_fail = Observation.provide
+      ~inspect:sexp_of_name
+      "linker-unresolved"
+
+  let call,call_entered =
+    Observation.provide ~inspect:sexp_of_call "call"
+
+  let return,call_returned =
+    Observation.provide ~inspect:sexp_of_call "call-return"
+end
+include Trace
 
 let () = Exn.add_printer (function
     | Unbound_name name ->
@@ -59,15 +88,13 @@ let add_code code codes =
   let key = Option.value ~default:1 max_key in
   key, Map.add codes ~key ~data:code
 
+let id_of_name name s = match name with
+  | `symbol name -> Map.find s.names name
+  | `addr addr -> Map.find s.addrs addr
+  | `tid tid -> Map.find s.terms tid
 
-let find k1 m1 m2 = match Map.find m1 k1 with
-  | None -> None
-  | Some k2 -> Map.find m2 k2
-
-let code_of_name name s = match name with
-  | `symbol name -> find name s.names s.codes
-  | `addr addr -> find addr s.addrs s.codes
-  | `tid tid -> find tid s.terms s.codes
+let code_of_name name s =
+  Option.bind (id_of_name name s) ~f:(Map.find s.codes)
 
 let lookup_name k t1 names : string option =
   match Map.find t1 k with
@@ -96,6 +123,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
 
   let do_fail name =
+    Machine.Observation.make will_fail name >>= fun () ->
     Machine.Local.get state >>= fun s ->
     match resolve_name s name with
     | Some s -> linker_error (`symbol s)
@@ -112,6 +140,9 @@ module Make(Machine : Machine) = struct
     | None -> do_fail name
     | Some code -> run name code
 
+  let make_refs term name addr =
+    {term; name; addr}
+
   let link ?addr ?name ?tid code =
     Machine.Local.update state ~f:(fun s ->
         let key,codes = add_code code s.codes in
@@ -121,12 +152,29 @@ module Make(Machine : Machine) = struct
         let terms = update s.terms tid in
         let names = update s.names name in
         let addrs = update s.addrs addr in
-        {codes; terms; names; addrs})
+        let alias = Map.add s.alias ~key ~data:{
+            term=tid;
+            name;
+            addr
+          } in
+        {codes; terms; names; addrs; alias})
 
   let exec name =
     Machine.Local.get state >>| code_of_name name >>= function
     | None -> fail name
     | Some code -> run name code
+
+  let resolve f name =
+    Machine.Local.get state >>| fun s ->
+    match id_of_name name s with
+    | None -> None
+    | Some id -> match Map.find s.alias id with
+      | None -> None
+      | Some refs -> f refs
+
+  let resolve_addr = resolve (fun x -> x.addr)
+  let resolve_symbol = resolve (fun x -> x.name)
+  let resolve_tid = resolve (fun x -> x.term)
 
 end
 

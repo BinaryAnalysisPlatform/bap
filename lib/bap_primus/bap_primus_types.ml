@@ -10,6 +10,7 @@ module Pos = Bap_primus_pos
 type exn = Exn.t = ..
 type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
+type provider = Bap_primus_observation.provider
 type 'a statement = 'a Bap_primus_observation.statement
 type 'a state = 'a Bap_primus_state.t
 type exit_status =
@@ -31,7 +32,7 @@ end
 type value = {
   id : Int63.t;
   value  : word;
-} [@@deriving bin_io, compare, sexp]
+} [@@deriving bin_io]
 
 type id = Monad.State.Multi.id
 
@@ -41,6 +42,7 @@ module type Machine = sig
 
   module Observation : sig
     val observe : 'a observation -> ('a -> unit t) -> unit t
+    val watch : provider -> (Sexp.t -> unit t) -> unit t
     val make : 'a statement -> 'a -> unit t
   end
 

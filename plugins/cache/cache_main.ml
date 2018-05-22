@@ -155,8 +155,12 @@ let create reader writer =
         let ctime = Unix.time () in
         let path,ch = Filename.open_temp_file ~temp_dir:cache_dir
             "entry" ".cache" in
+        info "caching to %s" path;
+        report_progress ~note:"serializing" ();
         Data.Write.to_channel writer ch proj;
+        report_progress ~note:"flushing" ();
         Out_channel.close ch;
+        report_progress ~note:"reindexing" ();
         {
           index with
           entries = Map.add index.entries ~key:id ~data:{
@@ -166,10 +170,12 @@ let create reader writer =
   let load src =
     Index.with_entry src ~f:(fun e ->
         try
+          report_progress ~note:"loading" ();
           let proj = In_channel.with_file e.path
               ~f:(Data.Read.of_channel reader) in
           let atime = Unix.time () in
           let hits = e.hits + 1 in
+          report_progress ~note:"reindexing" ();
           Some {e with atime; hits}, Some proj
         with exn -> None,None) in
   Data.Cache.create ~load ~save

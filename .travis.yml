@@ -1,13 +1,7 @@
 language: c
-install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
-script: bash -ex .travis-opam.sh
+
 sudo: required
-cache:
-  directories:
-    - $HOME/.opam
-  before_cache:
-    - opam remove bap -y
-    - rm -rf $HOME/.opam/log
+
 addons:
   apt:
     sources:
@@ -22,7 +16,7 @@ addons:
     - libssl-dev
     - libzip-dev
     - llvm
-    - llvm-3.4-dev
+    - llvm-3.8-dev
     - m4
     - ocaml
     - ocaml-base
@@ -35,13 +29,33 @@ addons:
     - dejagnu
     - jq
     - opam
+
+cache:
+  directories:
+  - $HOME/.opam
+  - $HOME/save_opam
+  before_cache:
+  - rm -rf $HOME/.opam/log
+
 env:
-  global:
-  - OPAMYES=true PACKAGE=bap TESTS=false OPAM_SWITCH=$OCAML_VERSION
-  matrix:
-  - OCAML_VERSION=4.03 BAP_RUN_TEST=true  BAP_RUN_CHECK=false
-  - OCAML_VERSION=4.03 BAP_RUN_TEST=false BAP_RUN_CHECK=true
-  - OCAML_VERSION=4.04 BAP_RUN_TEST=true  BAP_RUN_CHECK=false
-  - OCAML_VERSION=4.04 BAP_RUN_TEST=false BAP_RUN_CHECK=true
-  - OCAML_VERSION=4.05 BAP_RUN_TEST=true  BAP_RUN_CHECK=false
-  - OCAML_VERSION=4.05 BAP_RUN_TEST=false BAP_RUN_CHECK=true
+  - OCAML_VERSION=4.03
+  - OCAML_VERSION=4.04
+  - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+
+stage: Compile
+script: bash -ex .travis_install.sh
+
+jobs:
+  include:
+  - stage: Unit tests, checks and bil tests
+    env:
+    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+    script: bash -ex .run_travis_tests.sh unit_tests
+  - stage: Unit tests, checks and bil tests
+    env:
+    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+    script: bash -ex .run_travis_tests.sh checks
+  - stage: Unit tests, checks and bil tests
+    env:
+    - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
+    script: bash -ex .run_travis_tests.sh veri

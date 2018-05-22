@@ -1,4 +1,3 @@
-#load "unix.cma";;
 (* OASIS_START *)
 (* OASIS_STOP *)
 #5 "oasis/common.setup.ml.in"

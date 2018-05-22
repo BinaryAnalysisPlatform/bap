@@ -1088,3 +1088,183 @@ let view (type t)
   end in
   let module M = Mapper(G)(N)(E)(NL)(EL) in
   (module M)
+
+
+module Fixpoint = struct
+  type ('n,'d) t = Solution : {
+      steps : int option;
+      iters : int;
+      default : 'd;
+      approx : ('n,'d,_) Map.t;
+    } -> ('n,'d) t
+
+
+  let create constraints default = Solution {
+      steps=Some 0; iters=0;
+      approx=constraints;
+      default;
+    }
+
+  let iterations (Solution {iters}) = iters
+
+  let default (Solution {default}) = default
+
+  let get (Solution {approx; default}) n =
+    match Map.find approx n with
+    | None -> default
+    | Some x -> x
+
+  let is_fixpoint (Solution {steps; iters}) = match steps with
+    | None -> iters > 0
+    | Some steps -> iters < steps
+
+  let derive (Solution s) ~f default =
+    let f ~key ~data = f key data in
+    create (Map.filter_mapi ~f s.approx) default
+
+  type ('a,'b) step =
+    | Step of 'a
+    | Done of 'b
+
+  let continue x = Step x
+
+
+  (* Kildall's Worklist Algorithm Implementation
+
+
+     Kildall's Algorithm
+     ===================
+
+     Pseudocode:
+
+     Given a set of node W, and a finite mapping A from nodes to
+     approximations, a function F, the initial approximation I, and a
+     start node B, the algorithm refines the mapping A, until a
+     fixpoint is reached.
+
+
+     {v
+     let W = {B}
+     for each node N in graph G:
+        A[N] := I
+
+     while W <> {}:
+        pop a node N from W
+        let OUT = F N A[N]
+        for each successor S of N:
+           let IN = A[S] /\ OUT
+           if IN <> A[S]:
+              A[S] := IN
+              W := union(W,{S})
+        end
+     end
+     v}
+
+
+     If the meet operation (/\) induces a partial order over the set
+     of approximations, and function F is monotonic, then the result
+     would me the maximal fixpoint solution.
+
+
+     Implementation
+     ==============
+
+     1. We do not distinguish between forward and backward problems,
+     since a backward problem can be expressed as forward, on the
+     reversed graph and inversed lattice. Thus, we express our
+     algorithm as a forward problem with a meet semilattice. We do not
+     require, of course, a user to provide a reverse graph, instead the
+     flag [rev] could be used to virtually reverse the graph, and
+     the exit node should be provided as a start node.
+
+     2. Since the algorithm converges faster if a worklist is
+     traversed in the reverse postorder we rank the graph nodes with
+     their reverse postorder (rpost) numbers and use an array [nodes]
+     for fast mapping from rpost numbers to nodes. We then represent
+     the worklist as an integer set, and always pick the minimal
+     element from the worklist.
+
+     3. We also precompute a set of successors [succs] (as a set of
+     their rpost numbers) for each node.
+
+     4. In the loop body we use rpost numbers as node representations,
+     and the finite mapping A is a mapping from integers to
+     approximations.
+
+     5. We optionally bound our loop with the maximum number of
+     iterations, allowing an algorithm to terminate before it
+     converges. Thus the result might be not a maximal fixpoint (i.e.,
+     it might not be the greater lower bound for some if not all
+     nodes, however, it should still be the over-approximation, given
+     the correct meet, f,  and initial approximation.
+
+  *)
+  let compute (type g n d)
+      (module G : Graph with type t = g and type node = n)
+      ?steps ?start ?(rev=false) ?step
+      ~init:(Solution {approx; iters; default}) ~equal ~merge ~f g : (n,d) t =
+    let nodes =
+      reverse_postorder_traverse (module G) ~rev ?start g |>
+      Sequence.to_array in
+    let rnodes =
+      Array.foldi nodes ~init:G.Node.Map.empty ~f:(fun i rnodes n ->
+          Map.add rnodes ~key:n ~data:i) in
+    let succs = Array.map nodes ~f:(fun n ->
+        let succs = if rev then G.Node.preds else G.Node.succs in
+        succs n g |> Sequence.fold ~init:Int.Set.empty ~f:(fun ns n ->
+            match Map.find rnodes n with
+            | None -> ns
+            | Some i -> Set.add ns i)) in
+    let user_step = match step with
+      | None -> fun visits _ _ x -> visits,x
+      | Some step -> fun visits n x x' ->
+        let i = match Map.find visits n with
+          | None -> 1
+          | Some x -> x + 1 in
+        let visits = Map.add visits ~key:n ~data:i in
+        visits, step i nodes.(n) x x' in
+    let get approx n : d = match Map.find approx n with
+      | Some x -> x
+      | None -> default in
+    let step visits works approx = match Set.min_elt works with
+      | None -> Done approx
+      | Some n ->
+        let works = Set.remove works n in
+        let out = f nodes.(n) (get approx n) in
+        succs.(n) |>
+        Set.fold ~init:(visits,works,approx)
+          ~f:(fun (visits,works,approx) n ->
+              let ap = get approx n in
+              let ap' = merge out ap in
+              let visits,ap' = user_step visits n ap ap' in
+              if equal ap ap' then (visits,works,approx)
+              else visits,
+                   Set.add works n,
+                   Map.add approx ~key:n ~data:ap') |>
+        continue in
+    let can_iter iters = match steps with
+      | None -> true
+      | Some steps -> iters < steps in
+    let make_solution iters approx = Solution {
+        steps;
+        iters;
+        default;
+        approx = Map.fold approx ~init:G.Node.Map.empty
+            ~f:(fun ~key:n ~data approx ->
+                Map.add approx ~key:nodes.(n) ~data);
+      } in
+    let rec loop visits iters works approx =
+      if can_iter iters then match step visits works approx with
+        | Done approx -> make_solution iters approx
+        | Step (visits,works,approx) -> loop visits (iters+1) works approx
+      else make_solution iters approx in
+    let works = List.init (Array.length nodes) ident in
+    let approx = Map.fold approx ~init:Int.Map.empty
+        ~f:(fun ~key:node ~data approx ->
+            match Map.find rnodes node with
+            | None -> approx
+            | Some n -> Map.add approx ~key:n ~data) in
+    loop Int.Map.empty iters (Int.Set.of_list works) approx
+end
+
+let fixpoint = Fixpoint.compute

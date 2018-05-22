@@ -10,6 +10,8 @@ open Bap_options
 open Bap_source_type
 include Self()
 
+module Recipe = Bap_recipe
+
 exception Failed_to_create_project of Error.t [@@deriving sexp]
 exception Pass_not_found of string [@@deriving sexp]
 
@@ -20,23 +22,20 @@ let brancher = find_source (module Brancher.Factory) brancher
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
-(* This can be seen as an non-optimal merging strategy, as we're
-   postponing the emission of the information until everyone is
-   ready. Instead, we can emit the information as soon as possible,
-   thus allowing the information to flow into the algorithm at early
-   stages. But it will still work correctly.
-*)
-let merge_streams ss ~f : 'a Source.t option =
-  List.reduce ss ~f:(Stream.merge ~f:(fun a b -> match a,b with
-      | Ok a, Ok b -> Ok (f a b)
-      | Error a, Error b -> Error (Error.of_list [a;b])
-      | Error e,_|_,Error e -> Error e))
+let merge_streams ss ~f : 'a Source.t =
+  Stream.concat_merge ss
+    ~f:(fun s s' -> match s, s' with
+        | Ok s, Ok s' -> Ok (f s s')
+        | Ok _, Error er
+        | Error er, Ok _ -> Error er
+        | Error er, Error er' ->
+          Error (Error.of_list [er; er']))
 
 let merge_sources create field (o : Bap_options.t) ~f =  match field o with
   | [] -> None
   | names -> match List.filter_map names ~f:create with
     | [] -> assert false
-    | ss -> merge_streams ss ~f
+    | ss -> Some (merge_streams ss ~f)
 
 let symbolizer =
   merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
@@ -66,8 +65,8 @@ let args filename argv =
   let inputs = String.Hash_set.of_list @@ list_loaded_units () in
   Array.iteri argv ~f:(fun i arg -> match i with
       | 0 -> ()
-      | i when is_transparent arg -> ()
-      | i when is_key arg -> Hash_set.add inputs arg
+      | _ when is_transparent arg -> ()
+      | _ when is_key arg -> Hash_set.add inputs arg
       | i ->
         let pre = argv.(i-1) in
         if not(is_key pre && is_transparent pre)
@@ -80,42 +79,69 @@ let digest o =
     (Digest.file o.filename)
     (args o.filename Sys.argv)
 
+let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
+    report_progress
+      ~stage:(i+base)
+      ~note:(Project.Pass.name pass) ();
+    Project.Pass.run_exn pass proj)
+
 let process options project =
-  let run_passes init = List.fold ~init ~f:(fun proj pass ->
-      Project.Pass.run_exn pass proj) in
-  let project = Project.passes () |>
-                List.filter ~f:Project.Pass.autorun |>
-                run_passes project in
-  let project = options.passes |>
-                List.map ~f:(fun p -> match Project.find_pass p with
-                    | Some p -> p
-                    | None -> raise (Pass_not_found p)) |>
-                run_passes project in
+  let autoruns = Project.passes () |>
+                 List.filter ~f:Project.Pass.autorun in
+
+  let passes = options.passes |>
+               List.map ~f:(fun p -> match Project.find_pass p with
+                   | Some p -> p
+                   | None -> raise (Pass_not_found p)) in
+  let autos = List.length autoruns in
+  let total = List.length passes + autos in
+  report_progress ~note:"analyzing" ~total ();
+  let project = run_passes 0 project autoruns in
+  let project = run_passes autos project passes in
   List.iter options.dump ~f:(function
       | `file dst,fmt,ver ->
         Out_channel.with_file dst ~f:(fun ch ->
             Project.Io.save ~fmt ?ver ch project)
-      | `stdout,fmt,ver -> Project.Io.show ~fmt ?ver project)
+      | `stdout,fmt,ver ->
+        Project.Io.show ~fmt ?ver project)
+
+let extract_format filename =
+  let fmt = match String.rindex filename '.' with
+    | None -> filename
+    | Some n -> String.subo ~pos:(n+1) filename in
+  match Bap_fmt_spec.parse fmt with
+  | `Error _ -> None, None
+  | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let main o =
-  let digest = digest o in
-  let project = match Project.Cache.load digest with
+  let proj_of_input input =
+    let rooter = rooter o
+    and brancher = brancher o
+    and reconstructor = reconstructor o
+    and symbolizer = symbolizer o in
+    Project.create input ~disassembler:o.disassembler
+      ?brancher ?rooter ?symbolizer ?reconstructor  |> function
+    | Error err -> raise (Failed_to_create_project err)
+    | Ok project ->
+      Project.Cache.save (digest o) project;
+      project in
+  let proj_of_file ?ver ?fmt file =
+    In_channel.with_file file
+      ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
+  let project = match Project.Cache.load (digest o) with
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None ->
-      let rooter = rooter o
-      and brancher = brancher o
-      and reconstructor = reconstructor o
-      and symbolizer = symbolizer o in
-      let input =
+    | None -> match o.source with
+      | `Project ->
+        let fmt,ver = extract_format o.filename in
+        proj_of_file ?fmt ?ver o.filename
+      | `Memory arch ->
+        proj_of_input @@
+        Project.Input.binary arch ~filename:o.filename
+      | `Binary ->
+        proj_of_input @@
         Project.Input.file ~loader:o.loader ~filename: o.filename in
-      Project.create input ~disassembler:o.disassembler
-        ?brancher ?rooter ?symbolizer ?reconstructor  |> function
-      | Error err -> raise (Failed_to_create_project err)
-      | Ok project ->
-        Project.Cache.save digest project;
-        project in
   process o project
 
 let program_info =
@@ -166,6 +192,7 @@ let program_info =
     `I ("$(b,--list-formats)", Bap_cmdline_terms.list_formats_doc)
   ] @ Bap_cmdline_terms.common_loader_options
     @ Bap_cmdline_terms.options_for_passes
+    @ Bap_cmdline_terms.recipe_doc
     @ [
       `S "BUGS";
       `P "Report bugs to \
@@ -174,11 +201,11 @@ let program_info =
       `P "$(b,bap-mc)(1), $(b,bap-byteweight)(1), $(b,bap)(3)"
     ] in
   Term.info "bap" ~version:Config.version ~doc ~man
-let program source =
+let program _source =
   let create
       passopt
-      a b c d e f g i j k = (Bap_options.Fields.create
-                               a b c d e f g i j k []), passopt in
+      _ _ a b c d e f g i j k = (Bap_options.Fields.create
+                                   a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -189,6 +216,8 @@ let program source =
          info ["p"; "pass"; "passes"] ~doc ~docv:"PASS") in
   Term.(const create
         $passopt
+        $recipe
+        $logdir
         $filename
         $(disassembler ())
         $(loader ())
@@ -208,12 +237,89 @@ let parse_source argv =
   | Some src,(`Version|`Help) -> src
   | _ -> raise Unrecognized_source
 
-let run_loader () =
-  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] Sys.argv in
-  let print_formats =
-    Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.list_formats |>
-    fst |> Option.value ~default:false in
+let get_logdir argv =
+  match Cmdliner.Term.eval_peek_opts ~argv
+          Bap_cmdline_terms.logdir with
+  | _,`Ok r -> r
+  | _ -> None
+
+
+let recipe_paths = [
+  Filename.current_dir_name;
+  Config.datadir
+]
+
+let eval_recipe name =
+  match Recipe.load ~paths:recipe_paths name with
+  | Ok r ->
+    at_exit (fun () -> Recipe.cleanup r);
+    Array.concat [Sys.argv; Recipe.argv r]
+  | Error err ->
+    eprintf "Failed to load recipe %s: %a\n%!" name
+      Recipe.pp_error err;
+    exit 1
+
+
+let print_recipe r =
+  printf "DESCRIPTION@\n@\n%s@\n@\n" (Recipe.descr r);
+  let params = Recipe.params r in
+  if params <> [] then begin
+    printf "PARAMETERS@\n@\n";
+    List.iter params ~f:(printf "- %a@\n" Recipe.pp_param);
+    printf "@\n";
+  end;
+  let args = Recipe.argv r in
+  let sep = if Array.length args > 4 then " \\\n" else " " in
+  printf "COMMAND LINE@\n@\n%s@\n" (String.concat_array ~sep args)
+
+let summary str =
+  match String.index str '\n' with
+  | None -> str
+  | Some p -> String.subo ~len:p str
+
+let print_recipes_and_exit () =
+  let (/) = Filename.concat in
+  List.iter recipe_paths ~f:(fun dir ->
+      if Sys.file_exists dir &&
+         Sys.is_directory dir
+      then Array.iter (Sys.readdir dir) ~f:(fun file ->
+          let file = dir / file in
+          if Filename.check_suffix file ".recipe"
+          then
+            let name = Filename.chop_suffix file ".recipe" in
+            match Recipe.load ~paths:recipe_paths name with
+            | Ok r ->
+              printf "%-32s %s\n" (Filename.basename name)
+                (summary (Recipe.descr r));
+              Recipe.cleanup r
+            | Error err ->
+              eprintf "Malformed recipe %s: %a@\n%!" file
+                Recipe.pp_error err));
+  exit 0
+
+let handle_recipes = function
+  | None -> print_recipes_and_exit ()
+  | Some name -> match Recipe.load ~paths:recipe_paths name with
+    | Ok r ->
+      print_recipe r;
+      Recipe.cleanup r;
+      exit 0
+    | Error err ->
+      eprintf "Malformed recipe: %a@\n%!" Recipe.pp_error err;
+      exit 1
+
+
+
+let is_specified opt ~default =
+  Cmdliner.Term.eval_peek_opts opt |>
+  fst |> Option.value ~default
+
+let run_loader argv =
+  let argv,passes = Bap_plugin_loader.run_and_get_passes ["bap-frontend"] argv in
+  let print_formats = is_specified Bap_cmdline_terms.list_formats ~default:false in
+  let print_recipes = is_specified Bap_cmdline_terms.list_recipes ~default:None  in
   if print_formats then print_formats_and_exit ();
+  Option.iter print_recipes ~f:handle_recipes;
   argv,passes
 
 let parse passes argv =
@@ -225,7 +331,15 @@ let parse passes argv =
   | _ -> exit 0
 
 let error fmt =
-  kfprintf (fun ppf -> pp_print_newline ppf (); exit 1) err_formatter fmt
+  kasprintf (fun str ->
+      error "%s" str;
+      exit 1) fmt
+
+let load_recipe () =
+  match Cmdliner.Term.eval_peek_opts Bap_cmdline_terms.recipe with
+  | _,`Ok (Some r) -> eval_recipe r
+  | _ -> Sys.argv
+
 
 let () =
   let () =
@@ -233,10 +347,10 @@ let () =
         Printexc.record_backtrace true
     with Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
-  Log.start ();
+  let argv = load_recipe () in
+  Log.start ?logdir:(get_logdir argv)();
   at_exit (pp_print_flush err_formatter);
-  let argv,passes = run_loader () in
-  (* main (parse passes argv); exit 0 *)
+  let argv,passes = run_loader argv in
   try main (parse passes argv); exit 0 with
   | Unknown_arch arch ->
     error "Invalid arch `%s', should be one of %s." arch

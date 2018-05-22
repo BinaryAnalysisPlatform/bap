@@ -7,14 +7,19 @@ Vagrant.configure(2) do |config|
       vb.memory = "4096"
   end
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
-sudo apt-get update
-sudo apt-get --yes install clang
-sudo apt-get --yes install opam
-sudo apt-get --yes install unzip
-opam init --auto-setup --comp=4.02.3 --yes
+sudo apt-get -y update && sudo apt-get -y install \
+    llvm-3.8-dev \
+    git \
+    libcurl4-gnutls-dev \
+    libgmp-dev \
+    zlib1g-dev \
+    binutils-multiarch \
+    clang \
+    time
+opam init --auto-setup --comp=4.05.0 --yes
 eval `opam config env`
-opam install depext --yes
-opam depext bap --install --yes
+LLVM_CONFIG=llvm-config-3.8 opam install conf-bap-llvm --yes
+opam install bap --yes
 sudo apt-get install python-pip --yes
 sudo pip install bap
 SHELL

@@ -7,7 +7,7 @@
   (or (ascii-special s) (ascii-whitespace s)))
 
 (defun atoi-read-digit (s)
-  (coerce (- (memory-read s) ?0) 0 (word-size)))
+  (coerce 0 (word-size) (- (memory-read s) ?0)))
 
 (defun read-ascii-word (s)
   (skip-all atoi-prefix s)

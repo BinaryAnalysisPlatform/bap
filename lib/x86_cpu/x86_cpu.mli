@@ -42,6 +42,8 @@ module IA32 : sig
   (** data register  *)
   val rdx : var
 
+  (** YMM registers that are available *)
+  val ymms: var array
 
 end
 
@@ -51,7 +53,7 @@ module AMD64 : sig
   include Bap.Std.CPU
   include module type of IA32
 
-(** r8-r15 registers.
+  (** r8-r15 registers.
       Due to a legacy issues r.(0) -> r8, r.(1) -> r8, ... *)
   val r : var array
 end

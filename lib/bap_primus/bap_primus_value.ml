@@ -1,10 +1,10 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
+open Bap_strings.Std
 open Format
 open Bap_primus_types
 
-open Bap_primus_sexp
 module Observation = Bap_primus_observation
 
 
@@ -16,27 +16,61 @@ module Id = struct
       let module_name = Some "Bap_primus.Std.Value.Id"
     end)
 end
+
 type id = Id.t [@@deriving bin_io, compare, sexp]
 
-type t = value [@@deriving bin_io, compare, sexp]
+
+let compare_value x y = Word.compare x.value y.value
+type t = value [@@deriving bin_io, compare]
+
+
+module Index = struct
+  let key_width = 63
+  include Strings.Index.Persistent.Make(struct
+      type t = value
+      let compare = compare_value
+      let null = {
+        id = Int63.zero;
+        value = Word.zero key_width
+      }
+      let succ s = {
+        s with
+        value = Word.succ s.value
+      }
+    end)
+end
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"873f2ba6-9adc-45bb-8ed1-a0f57337ca80"
     ~name:"value"
-    (fun proj -> Int63.one)
+    (fun _ -> Int63.one)
 
+let symbols = Bap_primus_machine.State.declare
+    ~uuid:"2d2293e9-4c42-4b82-90a7-7e8e74fd01ed"
+    ~name:"symbols"
+    (fun _ -> Index.empty)
 
 let to_word x = x.value
 let id x = x.id
 
 module Reg = Regular.Make(struct
-    type t = value [@@deriving bin_io, compare, sexp]
-    let hash {id} = Int63.hash id
+    type t = value [@@deriving bin_io, compare]
     let pp ppf {id; value} =
-      fprintf ppf "%a.%a" Word.pp value Id.pp id
+      fprintf ppf "%a#%a" Word.pp_hex_full value Id.pp id
+    let sexp_of_t x = Sexp.Atom (asprintf "%a" pp x)
+    let t_of_sexp = function
+      | Sexp.List _ -> failwith "value_of_sexp: expected atom"
+      | Sexp.Atom s -> match String.split ~on:'#' s with
+        | [w;id] -> {
+            value=Word.of_string w;
+            id = Int63.of_string id;
+          }
+        | _ -> failwithf "value: expected <word>#<id> got %s" s ()
+    let hash {id} = Int63.hash id
+    let pp = pp
     let module_name = Some "Bap_primus.Std.Value"
-    let version = "1.0.0"
-end)
+    let version = "2.0.0"
+  end)
 
 
 module Make(Machine : Machine) = struct
@@ -99,6 +133,19 @@ module Make(Machine : Machine) = struct
   let lshift = lift2 Word.lshift
   let rshift = lift2 Word.rshift
   let arshift = lift2 Word.arshift
+
+  module Symbol = struct
+    let to_value sym =
+      Machine.Local.get symbols >>= fun index ->
+      let index = Index.register index sym in
+      Machine.Local.put symbols index >>| fun () ->
+      Index.key index sym
+
+    let of_value value =
+      Machine.Local.get symbols >>| fun index ->
+      Index.string index value
+  end
+
   module Syntax = struct
     let (~-) = neg
     let (+) = add

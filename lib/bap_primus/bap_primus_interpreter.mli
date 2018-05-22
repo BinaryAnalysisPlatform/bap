@@ -4,6 +4,7 @@ open Bap_primus_types
 
 val pc_change : addr observation
 val halting : unit observation
+val interrupt : int observation
 
 val loading : value observation
 val loaded : (value * value) observation
@@ -13,6 +14,8 @@ val reading : var observation
 val read : (var * value) observation
 val writing : var observation
 val written : (var * value) observation
+val jumping : (value * value) observation
+val eval_cond : value observation
 val undefined : value observation
 val const : value observation
 
@@ -20,7 +23,7 @@ val binop : ((binop * value * value) * value) observation
 val unop : ((unop * value) * value) observation
 val cast : ((cast * int * value) * value) observation
 val extract : ((int * int * value) * value) observation
-
+val concat : ((value * value) * value) observation
 
 
 val enter_exp : exp observation
@@ -55,10 +58,12 @@ type exn += Halt
 module Make (Machine : Machine) : sig
   type 'a m = 'a Machine.t
   val halt : never_returns m
+  val interrupt : int -> unit m
   val pc : addr m
   val pos : pos m
   val sub : sub term -> unit m
   val blk : blk term -> unit m
+  val exp : exp -> value m
   val get : var -> value m
   val set : var -> value -> unit m
   val binop : binop -> value -> value -> value m

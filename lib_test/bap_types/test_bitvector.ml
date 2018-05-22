@@ -52,10 +52,30 @@ let binary op ~width ~expect x y ctxt =
     ~cmp:Word.equal
     !$expect (op !$x !$y)
 
+let binary3 op ~width ~expect x y ctxt =
+  let (!$) = Word.of_int ~width in
+  let (!$$$) (a, b, c) = (!$a, !$b, !$c) in
+  let equal (a, b, c) (a', b', c') =
+    Word.equal a a' &&
+    Word.equal b b' &&
+    Word.equal c c' in
+  let to_string (a, b, c) =
+    Printf.sprintf "(%s,%s,%s)"
+      (Word.to_string a)
+      (Word.to_string b)
+      (Word.to_string c) in
+  assert_equal ~ctxt
+    ~printer:to_string
+    ~cmp:equal
+    !$$$expect (op !$x !$y)
+
 let sub = binary Word.Int_exn.sub
 let lshift = binary Word.Int_exn.lshift
 let rshift = binary Word.Int_exn.rshift
 let arshift = binary Word.Int_exn.arshift
+let gcd = binary Word.gcd_exn
+let lcm = binary Word.lcm_exn
+let gcdext = binary3 Word.gcdext_exn
 
 let is yes ctxt = assert_bool "doesn't hold" yes
 
@@ -230,6 +250,11 @@ let suite () =
     "lshift" >:: lshift ~width:8 ~expect:0x0 0x1 0xA ;
     "rshift" >:: rshift ~width:8 ~expect:0x3f 0xFF 0x2 ;
     "arshift" >:: arshift ~width:8 ~expect:0xff 0xFF 0x2 ;
+    "gcd" >:: gcd ~width:8 ~expect:0x4 0x10 0xC ;
+    "gcd" >:: gcd ~width:8 ~expect:0x1 0x11 0xF ;
+    "lcm" >:: lcm ~width:8 ~expect:0x30 0x10 0xC ;
+    "lcm" >:: lcm ~width:8 ~expect:0x8C 0x1C 0x23 ;
+    "gcdext" >:: gcdext ~width:8 ~expect:(0x4,0x1,-0x1) 0x10 0xC ;
 
     (* a small cheatsheet for a bit numbering *)
     (** D    A    D    5    *)
@@ -242,6 +267,6 @@ let suite () =
     "mono_size"   >:: (fun ctxt ->
         try
           ignore Word.(Mono.(zero_32 < b0));
-          assert_string "Monoprhic comparison"
+          assert_string "Monomorphic comparison"
         with exn -> ());
   ]

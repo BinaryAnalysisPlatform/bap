@@ -10,15 +10,30 @@ module Observation = Bap_primus_observation
 module type Component = Component
 module type S = Machine
 type nonrec component = component
+module State = Bap_primus_state
+type id = Monad.State.Multi.id
 
 let exn_raised,raise_exn =
   Observation.provide
     ~inspect:(fun exn -> Sexp.Atom (Bap_primus_exn.to_string exn))
     "exception"
 
+let fork,forked =
+  Observation.provide
+    ~inspect:(fun (parent,child) -> Sexp.List [
+        Monad.State.Multi.Id.sexp_of_t parent;
+        Monad.State.Multi.Id.sexp_of_t child;
+      ])
+    "machine-fork"
 
-module State = Bap_primus_state
-type id = Monad.State.Multi.id
+
+let switch,switched =
+  Observation.provide
+    ~inspect:(fun (parent,child) -> Sexp.List [
+        Monad.State.Multi.Id.sexp_of_t parent;
+        Monad.State.Multi.Id.sexp_of_t child;
+      ])
+    "machine-switch"
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -34,7 +49,7 @@ module Make(M : Monad.S) = struct
   and state = {
     args    : string array;
     envp    : string array;
-    curr    : unit -> id t;
+    curr    : unit -> unit t;
     proj    : project;
     local   : State.Bag.t;
     global  : State.Bag.t;
@@ -105,6 +120,11 @@ module Make(M : Monad.S) = struct
       with_global_context @@ fun () ->
       observations () >>= fun os ->
       set_observations (Observation.add_observer os key observer)
+
+    let watch prov watcher =
+      with_global_context @@ fun () ->
+      observations () >>= fun os ->
+      set_observations (Observation.add_watcher os prov watcher)
   end
 
   module Make_state(S : sig
@@ -152,9 +172,9 @@ module Make(M : Monad.S) = struct
 
 
   let fork_state () = lifts (SM.fork ())
-  let switch_state id = lifts (SM.switch id)
-  let store_curr k id =
-    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok id)}))
+  let switch_state id : unit c = lifts (SM.switch id)
+  let store_curr k =
+    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok ())}))
 
   (* switch_task SM.fork *)
 
@@ -169,19 +189,25 @@ module Make(M : Monad.S) = struct
   let global = SM.global
   let current () = lifts (SM.current ())
 
+  let notify_fork pid =
+    current () >>= fun cid ->
+    Observation.make forked (pid,cid)
+
   let fork () : unit c =
-    current () >>= fun pid ->
-    C.call ~f:(fun ~cc:k -> store_curr k pid >>= fork_state >>= current) >>=
-    switch_state
+    C.call ~f:(fun ~cc:k ->
+        current () >>= fun pid ->
+        store_curr k >>=
+        fork_state >>= fun () ->
+        notify_fork pid)
 
   let switch id : unit c =
-    current () >>= fun cid ->
     C.call ~f:(fun ~cc:k ->
-        store_curr k cid >>= fun () ->
+        current () >>= fun pid ->
+        store_curr k >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->
-        s.curr ()) >>=
-    switch_state
+        Observation.make switched (pid,id) >>= fun () ->
+        s.curr ())
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -198,7 +224,7 @@ module Make(M : Monad.S) = struct
   let init proj args envp = {
     args;
     envp;
-    curr = current;
+    curr = return;
     global = State.Bag.empty;
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
@@ -215,7 +241,7 @@ module Make(M : Monad.S) = struct
         (SM.run
            (C.run m (function
                 | Ok _ -> extract @@ fun s -> Ok s.proj
-                | Error err -> extract @@ fun s -> Error err))
+                | Error err -> extract @@ fun _ -> Error err))
            (init proj args envp))
         (fun (r,{proj}) -> match r with
            | Ok _ -> M.return (Normal, proj)

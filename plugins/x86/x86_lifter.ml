@@ -35,10 +35,10 @@ module ToIR = struct
 
   (* copypasted from op2e_s below, but keeps the opcode width *)
   let op2e_s_keep_width mode ss has_rex t = function
-    | Ovec r when t = reg256_t -> (bits2ymme r, t)
-    | Ovec r when t = reg128_t -> (bits2ymm128e r, t)
-    | Ovec r when t = reg64_t -> (bits2ymm64e r, t)
-    | Ovec r when t = reg32_t -> (bits2ymm32e r, t)
+    | Ovec r when t = reg256_t -> (bits2ymme mode r, t)
+    | Ovec r when t = reg128_t -> (bits2ymm128e mode r, t)
+    | Ovec r when t = reg64_t -> (bits2ymm64e mode r, t)
+    | Ovec r when t = reg32_t -> (bits2ymm32e mode r, t)
     | Ovec _ ->
       let i = match t with
         | Type.Imm n -> ": "^(string_of_int n)
@@ -57,10 +57,10 @@ module ToIR = struct
     | Oimm i -> Bil.(Int (resize_word i !!t), t)
 
   let op2e_s mode ss has_rex t = function
-    | Ovec r when t = reg256_t -> bits2ymme r
-    | Ovec r when t = reg128_t -> bits2ymm128e r
-    | Ovec r when t = reg64_t -> bits2ymm64e r
-    | Ovec r when t = reg32_t -> bits2ymm32e r
+    | Ovec r when t = reg256_t -> bits2ymme mode r
+    | Ovec r when t = reg128_t -> bits2ymm128e mode r
+    | Ovec r when t = reg64_t -> bits2ymm64e mode r
+    | Ovec r when t = reg32_t -> bits2ymm32e mode r
     | Ovec _ ->
       let i = match t with
         | Type.Imm n -> ": "^(string_of_int n)
@@ -104,10 +104,10 @@ module ToIR = struct
     match v, t with
     (* Zero-extend 128-bit assignments to 256-bit ymms. *)
     | Ovec r, Type.Imm (128|64|32) when has_vex ->
-      let v = bits2ymm r in
+      let v = bits2ymm mode r in
       sub_assn reg256_t v Bil.(Cast (UNSIGNED, !!reg256_t, e))
     | Ovec r, Type.Imm (256|128|64|32) ->
-      let v = bits2ymm r in
+      let v = bits2ymm mode r in
       sub_assn t v e
     | Ovec _, _ -> disfailwith mode "invalid SIMD register size for assignment"
     (* Zero-extend 32-bit assignments to 64-bit registers. *)
@@ -943,9 +943,9 @@ module ToIR = struct
           (* undefined for SHL and SHR instructions where the count is greater than
              or equal to the size (in bits) of the destination operand *)
           match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var old lsr size - count))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var old lsr (size - count)))
           | RSHIFT | ARSHIFT ->
-            Bil.(Cast (HIGH, !!bool_t, var old lsl size - count))
+            Bil.(Cast (HIGH, !!bool_t, var old lsl (size - count)))
           | _ -> failwith "impossible"
         in
         Bil.[
@@ -974,8 +974,8 @@ module ToIR = struct
         let count_mask = Bil.(size - int_exp 1 s') in
         let e_count = Bil.(op2e s count land count_mask) in
         let new_cf =  match st with
-          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var was lsr size - e_count))
-          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var was lsl size - e_count))
+          | LSHIFT -> Bil.(Cast (LOW, !!bool_t, var was lsr (size - e_count)))
+          | RSHIFT -> Bil.(Cast (HIGH, !!bool_t, var was lsl (size - e_count)))
           | _ -> disfailwith "impossible" in
         let new_of = Bil.(Cast (HIGH, !!bool_t, (var was lxor e_dst))) in
         let unk_of =

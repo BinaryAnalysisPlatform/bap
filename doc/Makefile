@@ -3,6 +3,7 @@
 
 doc: argot
 	../bapdoc.native 2>bapdoc.log
+	sed -i 's/<pre><span class="keyword">include<\/span> ??<\/pre>//g' *.html
 
 
 argot:

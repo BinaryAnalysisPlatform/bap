@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap_future.Std
 open Bap.Std
 open Regular.Std
-open Re_perl
 open Format
 open Option.Monad_infix
 open Objdump_config

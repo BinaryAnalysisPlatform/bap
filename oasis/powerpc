@@ -1,0 +1,34 @@
+Flag powerpc
+ Description: Build PowerPC lifter
+ Default: false
+
+Library powerpc_plugin
+  XMETADescription: provide PowerPC lifter
+  Path:             plugins/powerpc
+  Build$:           flag(everything) || flag(powerpc)
+  BuildDepends:     bap, bap-abi, bap-c, bap-primus, zarith
+  FindlibName:      bap-plugin-powerpc
+  InternalModules:  Powerpc,
+                    Powerpc_cpu,
+                    Powerpc_dsl,
+                    Powerpc_model,
+                    Powerpc_rtl,
+                    Powerpc_types,
+                    Powerpc_utils,
+                    Powerpc_abi,
+                    Powerpc_add,
+                    Powerpc_branch,
+                    Powerpc_compare,
+                    Powerpc_cr,
+                    Powerpc_div,
+                    Powerpc_load,
+                    Powerpc_logical,
+                    Powerpc_main,
+                    Powerpc_move,
+                    Powerpc_mul,
+                    Powerpc_rotate,
+                    Powerpc_shift,
+                    Powerpc_store,
+                    Powerpc_sub,
+                    Powerpc_primus_loader
+  XMETAExtraLines:  tags="powerpc, lifter"

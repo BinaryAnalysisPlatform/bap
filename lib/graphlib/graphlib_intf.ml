@@ -112,3 +112,14 @@ type ('n,'a) labeled = {
 type node_attr = Graph.Graphviz.DotAttributes.vertex
 type edge_attr = Graph.Graphviz.DotAttributes.edge
 type graph_attr = Graph.Graphviz.DotAttributes.graph
+
+
+module type Solution = sig
+  type ('n,'d) t
+  val create : ('n,'d,_) Map.t -> 'd -> ('n,'d) t
+  val iterations : ('n,'d) t -> int
+  val default : ('n,'d) t -> 'd
+  val is_fixpoint : ('n,'d) t -> bool
+  val get : ('n,'d) t -> 'n -> 'd
+  val derive : ('n,'d) t -> f:('n -> 'd -> 'a option)  -> 'a -> ('n,'a) t
+end

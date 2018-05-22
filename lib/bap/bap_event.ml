@@ -42,6 +42,14 @@ module Log = struct
 
   type event += Message of info
 
+  type event += Progress of {
+      task  : string;
+      note  : string option;
+      stage : int option;
+      total : int option;
+    }
+
+
   let message level ~section fmt =
     let buf = Buffer.create 64 in
     let ppf = formatter_of_buffer buf in
@@ -60,6 +68,9 @@ module Log = struct
     | Warning -> "warning"
     | Error -> "error"
 
+  let progress ?note ?stage ?total task = send @@ Progress {
+      task; note; stage; total;
+  }
 
   let pp ppf {level; section; message} =
     fprintf ppf "%s.%s> %s@." section (string_of_level level) message

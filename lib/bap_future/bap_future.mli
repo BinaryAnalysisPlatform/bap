@@ -525,13 +525,35 @@ module Std : sig
         values xs, producing a stream of results.*)
     val apply : ('a -> 'b) t -> 'a t -> 'b t
 
+    (** [concat ss] returns a stream that will produce elements from 
+        the input list of streams [ss]. The ordering of the elements
+        of different streams is unspecified, though it is guaranteed
+        that elements of the same stream will preserve their ordering.*)
+    val concat : 'a t list -> 'a t
 
+    (** [concat_merge xs ~f] builds a stream, that will 
+        produce elements from the input list and applies [f] to all 
+        consecutive elements. The ordering of the input list does not 
+        mandate the ordering of elemenets in the output stream, and is
+        undefined. See [concat] for more information.*)
+    val concat_merge : 'a t list -> f:('a -> 'a -> 'a) -> 'a t
+
+    (** [split xs ~f] returns a pair of streams, where the first stream 
+        contains [fst (f x)] for each [x] in [xs] and the second stream
+        contains [snd (f x)] for each [x] in [xs]. *)
     val split : 'a t -> f:('a -> 'b * 'c) -> 'b t * 'c t
 
+    (** [zip xs ys] creates a steam that will produce an element [(x,y)] 
+        every time both [xs] and [ys] produce elements [x] and [y] respectively *)
     val zip : 'a t -> 'b t -> ('a * 'b) t
 
+    (** [unzip xs] creates a pair of streams, where the first stream contains
+        [fst x] for each [x] in [xs] and the second stream contains [snd x] for
+        each [x] in [xs]. Essentially, the same as [split ~f:ident] *)
     val unzip : ('a * 'b) t -> 'a t * 'b t
 
+    (** [once xs] creates a stream that will at most contain the next value 
+        produced by [xs] and nothing more. *)
     val once : 'a t -> 'a t
 
     (** [parse ss ~init ~f] parses stream [ss] and builds new stream

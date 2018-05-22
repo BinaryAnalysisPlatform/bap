@@ -44,6 +44,12 @@ val nsucc : t -> int -> t
 val npred : t -> int -> t
 val (++) : t -> int -> t
 val (--) : t -> int -> t
+val gcd    : t -> t -> t Or_error.t
+val lcm    : t -> t -> t Or_error.t
+val gcdext : t -> t -> (t * t * t) Or_error.t
+val gcd_exn    : t -> t -> t
+val lcm_exn    : t -> t -> t
+val gcdext_exn : t -> t -> t * t * t
 val enum_bytes : t -> endian ->    t Sequence.t
 val enum_chars : t -> endian -> char Sequence.t
 val enum_bits  : t -> endian -> bool Sequence.t

@@ -25,7 +25,7 @@ module Param = struct
   ];;
 
   let argv = param (array string)  "argv"
-      ~doc:"Program command line arguments";;
+      ~doc:"Process argument vector";;
 
   let envp = param (array string) "env"
       ~doc:"Program environemt as a comma separated list of VAR=VAL pairs";;
@@ -61,6 +61,8 @@ open Machine.Syntax
 module Main = Primus.Machine.Main(Machine)
 module Interpreter = Primus.Interpreter.Make(Machine)
 module Linker = Primus.Linker.Make(Machine)
+module Env = Primus.Env.Make(Machine)
+module Lisp = Primus.Lisp.Make(Machine)
 
 let string_of_name = function
   | `symbol s -> s
@@ -107,27 +109,38 @@ let exec x =
          (Primus.Exn.to_string exn);
        Machine.return ())
 
-let run_entries = function
+module Eval = Primus.Interpreter.Make(Machine)
+
+let run = function
   | [] -> exec (`symbol "_start")
-  | x :: xs ->
+  | xs ->
     Machine.List.iter xs ~f:(fun x ->
+        Machine.fork () >>= fun () ->
         Machine.current () >>= fun pid ->
         if pid = Machine.global
-        then
-          Machine.fork () >>= fun () ->
-          Machine.current () >>= fun cid ->
-          if cid = Machine.global
-          then Machine.return ()
-          else
-            Machine.switch pid >>= fun () ->
-            Machine.current () >>= fun xid ->
-            exec x
-        else Machine.return ()) >>= fun () ->
-    Machine.current () >>= fun id ->
-    if id = Machine.global
-    then exec x
-    else Machine.return ()
+        then Machine.return ()
+        else
+          exec x >>= fun () ->
+          Eval.halt >>=
+          never_returns)
 
+let pp_var ppf v =
+  fprintf ppf "%a" Sexp.pp (Var.sexp_of_t v)
+
+let typecheck =
+  Lisp.program >>= fun prog ->
+  Env.all >>| fun vars ->
+  match Primus.Lisp.Type.check vars prog with
+  | [] -> info "The Lisp Machine program is well-typed"
+  | xs ->
+    warning "The Lisp Machine program is ill-typed";
+    info "The typechecker is broken for now, ignore the message above";
+    List.iter xs ~f:(eprintf "%a@\n" Primus.Lisp.Type.pp_error)
+
+
+let run_entries xs =
+  typecheck >>= fun () ->
+  run xs
 
 let main {Config.get=(!)} proj =
   let open Param in
@@ -138,19 +151,12 @@ let main {Config.get=(!)} proj =
     info "Ok, we've terminated normally";
     proj
   | (Primus.Exn exn,proj) ->
-    info "program terminated by a signal: %s
-
-
-
-
-
-
-
-
-
-" (Primus.Exn.to_string exn);
+    info "program terminated by a signal: %s" (Primus.Exn.to_string exn);
     proj
 
+let deps = [
+  "trivial-condition-form"
+]
+
 let () =
-  Config.when_ready (fun conf ->
-      Project.register_pass (main conf))
+  Config.when_ready (fun conf -> Project.register_pass ~deps (main conf))

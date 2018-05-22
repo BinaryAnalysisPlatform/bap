@@ -1,0 +1,15 @@
+Flag primus_test
+  Description: Build Primus Lisp Library
+  Default: false
+
+
+Library primus_test_library_plugin
+  Build$:       flag(everything) || flag(primus_test)
+  Path:         plugins/primus_test
+  BuildDepends: bap-primus
+  FindlibName:     bap-plugin-primus_test
+  CompiledObject:  best
+  InternalModules: Primus_test_main
+  XMETADescription: Primus Program Testing and Verification Kit
+  DataFiles:        lisp/*.lisp ($primus_test_lisp_path)
+  XMETAExtraLines:  tags="primus, lisp"

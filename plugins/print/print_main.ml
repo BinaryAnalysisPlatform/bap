@@ -29,14 +29,14 @@ let should_print = function
 
 
 let find_section_for_addr memory addr =
-  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (mem,v) ->
+  Memmap.lookup memory addr |> Seq.find_map ~f:(fun (_,v) ->
       Value.get Image.section v)
 
 let bir memory sub =
   Term.get_attr sub address >>=
   find_section_for_addr memory
 
-let sym memory (name,entry,cfg) =
+let sym memory (_,entry,_) =
   Block.addr entry |>
   find_section_for_addr memory
 
@@ -45,14 +45,19 @@ let sec_name memory fn sub =
   | None -> "bap.virtual"
   | Some name -> name
 
+let print_spec ppf proj =
+  match Project.get proj Image.specification with
+  | None -> warning "The file specification is not found"
+  | Some spec ->  Format.fprintf ppf "%a" Ogre.Doc.pp spec
+
 let print_symbols subs secs demangler fmts ppf proj =
   let demangle = create_demangler demangler in
   let symtab = Project.symbols proj in
   Symtab.to_sequence symtab |>
-  Seq.filter ~f:(fun ((name,entry,cfg) as fn) ->
+  Seq.filter ~f:(fun ((name,_,_) as fn) ->
       should_print subs name &&
       should_print secs (sec_name (Project.memory proj) sym fn)) |>
-  Seq.iter ~f:(fun ((name,entry,cfg) as fn) ->
+  Seq.iter ~f:(fun ((name,entry,_) as fn) ->
       List.iter fmts ~f:(function
           | `with_name ->
             fprintf ppf "%s " @@ demangle name
@@ -226,10 +231,8 @@ let print_bir_graph subs secs ppf proj =
   Term.enum sub_t prog |> Seq.iter ~f:(fun sub ->
       fprintf ppf "%a@." Graphs.Ir.pp (Sub.to_cfg sub))
 
-let pp_addr ppf addr =
-  let width = Addr.bitwidth addr / 4 in
-  fprintf ppf "%0*Lx" width
-    (Word.(to_int64 addr) |> ok_exn)
+let pp_addr ppf a =
+  Addr.pp_generic ~prefix:`none ~case:`lower ppf a
 
 let setup_tabs ppf =
   pp_print_as ppf 50 "";
@@ -243,7 +246,7 @@ let print_disasm pp_insn subs secs ppf proj =
   Memmap.filter_map memory ~f:(Value.get Image.section) |>
   Memmap.to_sequence |> Seq.iter ~f:(fun (mem,sec) ->
       Symtab.intersecting syms mem |>
-      List.filter ~f:(fun (name,entry,cfg) ->
+      List.filter ~f:(fun (name,_,_) ->
           should_print subs name) |> function
       | [] -> ()
       | _ when not(should_print secs sec) -> ()
@@ -290,6 +293,7 @@ let main attrs ansi_colors demangle symbol_fmts subs secs =
   Project.add_writer ~ver "callgraph"
     ~desc:"print program callgraph in DOT format" pp_callgraph;
   let pp_cfg = Data.Write.create ~pp:(print_bir_graph subs secs) () in
+  let pp_spec = Data.Write.create ~pp:print_spec () in
   let pp_disasm_bil =
     Data.Write.create ~pp:(print_disasm (pp_bil "pretty") subs secs) () in
   let pp_disasm_bil_adt =
@@ -319,8 +323,9 @@ let main attrs ansi_colors demangle symbol_fmts subs secs =
   Project.add_writer ~ver "bil.adt"
     ~desc:"print BIL instructions in ADT format" pp_disasm_bil_adt;
   Project.add_writer ~ver "bil.sexp"
-    ~desc:"print BIL instructions in Sexp format" pp_disasm_bil_sexp
-
+    ~desc:"print BIL instructions in Sexp format" pp_disasm_bil_sexp;
+  Project.add_writer
+    ~desc:"print the file specification in the OGRE format" ~ver "ogre" pp_spec
 
 let () =
   let open Adt in

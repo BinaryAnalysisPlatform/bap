@@ -36,6 +36,14 @@ module Log : sig
 
   type event += Message of info
 
+  type event += Progress of {
+      task  : string;
+      note  : string option;
+      stage : int option;
+      total : int option;
+    }
+
+  val progress : ?note:string -> ?stage:int -> ?total:int -> string -> unit
   val message :  level -> section:string -> ('a,Format.formatter,unit) format -> 'a
 end
 

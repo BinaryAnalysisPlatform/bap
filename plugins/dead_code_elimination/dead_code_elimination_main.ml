@@ -75,12 +75,17 @@ let propagate_consts sub =
 
 let rec process proj =
   let prog = Project.program proj in
+  report_progress ~note:"ssa" ();
   let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa in
+  report_progress ~note:"free-vars" ();
   let free = union subs ~init:Var.Set.empty ~f:free_vars in
+  report_progress ~note:"dead-vars" ();
   let dead = union subs ~init:Tid.Set.empty ~f:(compute_dead free) in
   let live t = not (Set.mem dead (Term.tid t)) in
+  report_progress ~note:"clean" ();
   let clean sub = Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
                   propagate_consts in
+  report_progress ~note:"updating" ();
   if Set.is_empty dead then proj
   else
     Term.map sub_t prog ~f:clean |>

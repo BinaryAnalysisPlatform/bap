@@ -29,15 +29,16 @@ module Main(Machine : Primus.Machine.S) = struct
           visited = Set.add visited t
         })
 
-  let mark _ =
+  let mark () =
     Machine.Local.get state >>= fun {visited} ->
     Machine.update (fun proj ->
         Project.with_program proj @@
         marker#run (Project.program proj))
 
-  let init () =
-    Primus.Interpreter.enter_term >>> visit >>= fun () ->
-    Primus.Interpreter.leave_blk  >>> mark
+  let init () = Machine.sequence [
+      Primus.Interpreter.enter_term >>> visit;
+      Primus.Machine.finished >>> mark;
+    ]
 end
 
 
@@ -47,7 +48,8 @@ manpage [
   `S "DESCRIPTION";
   `P
     "Marks all terms visited by any Primus machine with the
-     [Term.visited] attribute."
+     [Term.visited] attribute. Terms will not be marked during the
+     execution, but only after a machine finishes."
 ]
 
 let () = when_ready (fun _ -> Primus.Machine.add_component (module Main))
