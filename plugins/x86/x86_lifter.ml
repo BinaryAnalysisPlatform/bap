@@ -509,21 +509,21 @@ module ToIR = struct
           List.concat @@ List.map sizes ~f in
 
         List.concat Bil.[
-          [tmp_dst := int zero_long];
-	  foreach_size (fun (i, left_bit, right_bit) -> [
-                elt_1 := extract right_bit left_bit src;
-                elt_2 := extract right_bit left_bit (op2e t vsrc);
-                iv := int i;
-                if_ (binop bop (var elt_1) (var elt_2)) [
-                  elt := int _one;
-                ] [
-                  elt := int zero;
-                ];
-                tmp_dst :=
-                  var tmp_dst lor
+            [tmp_dst := int zero_long];
+	    foreach_size (fun (i, left_bit, right_bit) -> [
+                  elt_1 := extract right_bit left_bit src;
+                  elt_2 := extract right_bit left_bit (op2e t vsrc);
+                  iv := int i;
+                  if_ (binop bop (var elt_1) (var elt_2)) [
+                    elt := int _one;
+                  ] [
+                    elt := int zero;
+                  ];
+                  tmp_dst :=
+                    var tmp_dst lor
                     ((cast unsigned t_width (var elt)) lsl (var iv * int bits))
-              ]);
-          [assn t dst (var tmp_dst)] ]
+                ]);
+            [assn t dst (var tmp_dst)] ]
       | Pmov (t, dstet, srcet, dst, src, ext, _) ->
         let nelem = match t, dstet with
           | Type.Imm n, Type.Imm n' -> n / n'

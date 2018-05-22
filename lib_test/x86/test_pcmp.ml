@@ -133,11 +133,10 @@ let test_pmaxub =
   let expected = of_bytes "ff 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 ff" in
   test_pmin_pmax "pmaxub" bytes expected
 
-(** Suddenly, it's unknown instuction for legacy x86_disasm  *)
-(* let test_pmaxsb = *)
-(*   let bytes = "\x66\x0f\x38\x3c\xc8" in (\** pmaxsb %xmm0, %xmm1 *\) *)
-(*   let expected = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in *)
-(*   test_pmin_pmax "pmaxsb" bytes expected *)
+let test_pmaxsb =
+  let bytes = "\x66\x0f\x38\x3c\xc8" in (** pmaxsb %xmm0, %xmm1 *)
+  let expected = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in
+  test_pmin_pmax "pmaxsb" bytes expected
 
 let suite = "pcmp" >::: [
     "pcmpeqb"   >:: test_eqb;
@@ -145,4 +144,5 @@ let suite = "pcmp" >::: [
     "pminub"    >:: test_pminub;
     "pminsb"    >:: test_pminsb;
     "pmaxub"    >:: test_pmaxub;
+    "pmaxsb"    >:: test_pmaxsb;
   ]

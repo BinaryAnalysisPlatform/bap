@@ -933,6 +933,13 @@ let parse_instr mode mem addr =
                | _ -> disfailwith "invalid"
              in
              (Ppackedbinop(prefix.mopsize, et, min_symbolic ~is_signed:false, "pminu", r, rm, rv), na)
+           | 0x3c | 0x3d when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             let et = match b3 with
+               | 0x3c -> Type.imm 8 | 0x3d -> Type.imm 32
+               | _ -> disfailwith "invalid"
+             in
+             (Ppackedbinop(prefix.mopsize, et, max_symbolic ~is_signed:true, "pmaxs", r, rm, rv), na)
            | _ -> disfailwith (Printf.sprintf "opcode unsupported: 0f 38 %02x" b3))
         | 0x3a ->
           let b3 = Char.to_int (g na) and na = s na in
