@@ -919,27 +919,30 @@ let parse_instr mode mem addr =
            | 0x37 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
              (Pcmp(prefix.mopsize, Type.imm 64, Bil.SLT, "pcmpgt", r, rm, rv), na)
-           | 0x38 | 0x39 when prefix.opsize_override ->
+           | 0x38 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
-             let et = match b3 with
-               | 0x38 -> Type.imm 8 | 0x39 -> Type.imm 32
-               | _ -> disfailwith "invalid"
-             in
-             (Ppackedbinop(prefix.mopsize, et, min_symbolic ~is_signed:true, "pmins", r, rm, rv), na)
-           | 0x3a | 0x3b when prefix.opsize_override ->
+             Ppackedbinop(prefix.mopsize, Type.imm 8, min_symbolic ~is_signed:true, "pminsb", r, rm, rv), na
+           | 0x39 when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
-             let et = match b3 with
-               | 0x3a -> Type.imm 16 | 0x3b -> Type.imm 32
-               | _ -> disfailwith "invalid"
-             in
-             (Ppackedbinop(prefix.mopsize, et, min_symbolic ~is_signed:false, "pminu", r, rm, rv), na)
-           | 0x3c | 0x3d when prefix.opsize_override ->
+             Ppackedbinop(prefix.mopsize, Type.imm 32, min_symbolic ~is_signed:true, "pminsd", r, rm, rv), na
+           | 0x3a when prefix.opsize_override ->
              let r, rm, rv, na = parse_modrm_vec None na in
-             let et = match b3 with
-               | 0x3c -> Type.imm 8 | 0x3d -> Type.imm 32
-               | _ -> disfailwith "invalid"
-             in
-             (Ppackedbinop(prefix.mopsize, et, max_symbolic ~is_signed:true, "pmaxs", r, rm, rv), na)
+             Ppackedbinop(prefix.mopsize, Type.imm 16, min_symbolic ~is_signed:false, "pminuw", r, rm, rv), na
+           | 0x3b when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             Ppackedbinop(prefix.mopsize, Type.imm 32, min_symbolic ~is_signed:false, "pminud", r, rm, rv), na
+           | 0x3c when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             Ppackedbinop(prefix.mopsize, Type.imm 8, max_symbolic ~is_signed:true, "pmaxsb", r, rm, rv), na
+           | 0x3d when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             Ppackedbinop(prefix.mopsize, Type.imm 32, max_symbolic ~is_signed:true, "pmaxsd", r, rm, rv), na
+           | 0x3e when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             Ppackedbinop(prefix.mopsize, Type.imm 16, max_symbolic ~is_signed:false, "pmaxuw", r, rm, rv), na
+           | 0x3f when prefix.opsize_override ->
+             let r, rm, rv, na = parse_modrm_vec None na in
+             Ppackedbinop(prefix.mopsize, Type.imm 32, max_symbolic ~is_signed:false, "pmaxud", r, rm, rv), na
            | _ -> disfailwith (Printf.sprintf "opcode unsupported: 0f 38 %02x" b3))
         | 0x3a ->
           let b3 = Char.to_int (g na) and na = s na in
@@ -1144,10 +1147,13 @@ let parse_instr mode mem addr =
           (Ppackedbinop(prefix.mopsize, et, average, "pavg", r, rm, rv), na)
         | 0xea ->
           let r, rm, rv, na = parse_modrm_vec None na in
-          (Ppackedbinop(prefix.mopsize, Type.imm 16, min_symbolic ~is_signed:true, "pmins", r, rm, rv), na)
+          (Ppackedbinop(prefix.mopsize, Type.imm 16, min_symbolic ~is_signed:true, "pminsw", r, rm, rv), na)
         | 0xeb ->
           let r, rm, rv, na = parse_modrm_vec None na in
           (Pbinop(prefix.mopsize, Bil.(lor), "por", r, rm, rv), na)
+        | 0xee ->
+          let r, rm, rv, na = parse_modrm_vec None na in
+          (Ppackedbinop(prefix.mopsize, Type.imm 16, max_symbolic ~is_signed:true, "pmaxsw", r, rm, rv), na)
         | 0xef ->
           let r, rm, rv, na = parse_modrm_vec None na in
           (Pbinop(prefix.mopsize, Bil.(lxor), "pxor", r, rm, rv), na)

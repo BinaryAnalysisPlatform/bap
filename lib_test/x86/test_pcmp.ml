@@ -83,7 +83,7 @@ let insn_bil x =
   let module T = (val (target_of_arch arch)) in
   Or_error.ok_exn @@ T.lift mem insn
 
-let test insn_name bytes x y expected _ctxt =
+let test insn_name bytes x y ~expected _ctxt =
   let xmm0 = Env.ymms.(0) in
   let xmm1 = Env.ymms.(1) in
   let bil = Bil.[
@@ -96,7 +96,11 @@ let test insn_name bytes x y expected _ctxt =
   | None -> false
   | Some r ->
     match Bil.Result.value r with
-    | Bil.Imm word -> Word.equal word expected
+    | Bil.Imm word ->
+      if not (Word.equal word expected) then
+        printf "%s: got %s, expected %s\n"
+          insn_name (Word.to_string word) (Word.to_string expected);
+      Word.equal word expected
     | _ -> false
 
 let test_eqb =
@@ -104,19 +108,19 @@ let test_eqb =
   let x = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in
   let y = of_bytes "0f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" in
   let e = of_bytes "ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff" in
-  test "pcmpeqb" pcmpeqb x y e
+  test "pcmpeqb" pcmpeqb x y ~expected:e
 
 let test_gtb =
   let pcmpgtb = "\x66\x0f\x64\xc8" in (** pcmpgtb %xmm1, %xmm0 *)
   let x = of_bytes "0f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" in
   let y = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in
   let e = of_bytes "00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00" in
-  test "pcmpgtb" pcmpgtb x y e
+  test "pcmpgtb" pcmpgtb x y ~expected:e
 
 let test_pmin_pmax name bytes expected =
   let x = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in
   let y = of_bytes "ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ff" in
-  test name bytes x y expected
+  test name bytes x y ~expected
 
 let test_pminub =
   let bytes = "\x66\x0f\xda\xc8" in (** pminub %xmm0, %xmm1 *)
@@ -138,6 +142,62 @@ let test_pmaxsb =
   let expected = of_bytes "0f 0e 0d 0c 0b 0a 09 08 07 06 05 04 03 02 01 00" in
   test_pmin_pmax "pmaxsb" bytes expected
 
+let test_pmaxuw =
+  let bytes = "\x66\x0f\x38\x3e\xc8" in (** pmaxuw %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "8f 0e 0d 0c 0b 0a 09 08 07 06 05 05 03 04 01 00" in
+  test "pmaxuw" bytes x y ~expected:z
+
+let test_pmaxsw =
+  let bytes = "\x66\x0f\xee\xc8" in (** pmaxsw %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "0f 00 0d 0c 0b 0a 09 08 07 06 05 05 03 04 01 00" in
+  test "pmaxsw" bytes x y ~expected:z
+
+let test_pminuw =
+  let bytes = "\x66\x0f\x38\x3a\xc8" in (** pminuw %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "0f 00 00 00 00 00 00 00 05 06 05 04 03 02 00 00" in
+  test "pminuw" bytes x y ~expected:z
+
+let test_pminsw =
+  let bytes = "\x66\x0f\xea\xc8" in (** pminsw %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "8f 0e 00 00 00 00 00 00 05 06 05 04 03 02 00 00" in
+  test "pminsw" bytes x y ~expected:z
+
+let test_pminud =
+  let bytes = "\x66\x0f\x38\x3b\xc8" in (** pminud %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "0f 00 0d 0c 00 00 00 00 05 06 05 04 03 02 00 00" in
+  test "pminud" bytes x y ~expected:z
+
+let test_pminsd =
+  let bytes = "\x66\x0f\x38\x39\xc8" in (** pminsd %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "8f 0e 00 00 00 00 00 00 05 06 05 04 03 02 00 00" in
+  test "pminsd" bytes x y ~expected:z
+
+let test_pmaxud =
+  let bytes = "\x66\x0f\x38\x3f\xc8" in (** pmaxud %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "8f 0e 00 00 0b 0a 09 08 07 06 05 05 03 04 01 00" in
+  test "pmaxud" bytes x y ~expected:z
+
+let test_pmaxsd =
+  let bytes = "\x66\x0f\x38\x3d\xc8" in (** pmaxsd %xmm0, %xmm1  *)
+  let x = of_bytes "8f 0e 00 00 0b 0a 09 08 05 06 05 04 03 04 01 00" in
+  let y = of_bytes "0f 00 0d 0c 00 00 00 00 07 06 05 05 03 02 00 00" in
+  let z = of_bytes "0f 00 0d 0c 0b 0a 09 08 07 06 05 05 03 04 01 00" in
+  test "pmaxsd" bytes x y ~expected:z
+
 let suite = "pcmp" >::: [
     "pcmpeqb"   >:: test_eqb;
     "pcmpgtb"   >:: test_gtb;
@@ -145,4 +205,12 @@ let suite = "pcmp" >::: [
     "pminsb"    >:: test_pminsb;
     "pmaxub"    >:: test_pmaxub;
     "pmaxsb"    >:: test_pmaxsb;
+    "pminuw"    >:: test_pminuw;
+    "pminsw"    >:: test_pminsw;
+    "pmaxuw"    >:: test_pmaxuw;
+    "pmaxsw"    >:: test_pmaxsw;
+    "pminud"    >:: test_pminud;
+    "pminsd"    >:: test_pminsd;
+    "pmaxud"    >:: test_pmaxud;
+    "pmaxsd"    >:: test_pmaxsd;
   ]
