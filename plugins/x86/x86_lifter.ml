@@ -584,15 +584,11 @@ module ToIR = struct
         let open Pcmpstr in
         let concat elt_width exps = match exps with
           | [] -> disfailwith "trying concat on empty list"
-          | exps ->
-            let f (acc, n, y) e =
-              let x = tmp (Type.imm (n + elt_width)) in
-              match y with
-              | None -> Bil.(x := e) :: acc, n + 1, Some x
-              | Some y ->
-                Bil.(move x (var y ^ e)) :: acc, n + elt_width, Some x in
-            let bil,_, var = List.fold ~init:([],0, None) ~f exps in
-            Option.value_exn var, List.rev bil in
+          | first :: exps' ->
+            let len = List.length exps * elt_width in
+            let exp = List.fold exps' ~init:first ~f:(fun e e' -> Bil.(e ^ e')) in
+            let tmp = tmp (Type.imm len) in
+            tmp, Bil.[tmp := exp] in
 
         (* All bytes and bits are numbered with zero being the least
            significant. This includes strings! *)
@@ -683,11 +679,11 @@ module ToIR = struct
             let check_char acc j =
               let is_eql = Bil.(get_xmm2 index = get_xmm1 j) in
               let is_valid = is_valid_xmm1_e j in
-              Bil.(Ite ((is_eql land is_valid), exp_true, acc))
+              Bil.((is_eql land is_valid) lor acc)
             in
-            Bil.BinOp (AND, is_valid_xmm2_e index,
-                       (* Is xmm2[index] included in xmm1[j] for any j? *)
-                       (List.fold ~f:check_char ~init:exp_false nelem_range))
+            (* Is xmm2[index] included in xmm1[j] for any j? *)
+            Bil.(is_valid_xmm2_e index land
+                 (List.fold ~f:check_char ~init:exp_false nelem_range))
           | Ranges ->
             (* Is there an even j such that xmm1[j] <= xmm2[index] <=
                xmm1[j+1]? *)
@@ -702,38 +698,32 @@ module ToIR = struct
               let (land) = Bil.(land) in
               let inrange =
                 (get_xmm1 ind0 <= get_xmm2 index) land (get_xmm2 index <= get_xmm1 ind1) in
-              Bil.(Ite (UnOp (NOT, rangevalid), exp_false, Ite (inrange, exp_true, acc)))
-            in
-            Bil.(is_valid_xmm2_e index
-                 (* Is xmm2[index] in the jth range pair? *)
-                 land List.fold_left ~f:check_char ~init:exp_false (List.range ~stride:(-1) ~stop:`inclusive Pervasives.(nelem/2-1) 0))
+              Bil.(rangevalid land (inrange lor acc)) in
+            Bil.(is_valid_xmm2_e index land
+                 List.fold_left ~f:check_char ~init:exp_false (List.range ~stride:(-1) ~stop:`inclusive Pervasives.(nelem/2-1) 0))
           | EqualEach ->
             (* Does xmm1[index] = xmm2[index]? *)
             let xmm1_invalid = Bil.(UnOp (NOT, (is_valid_xmm1_e index))) in
             let xmm2_invalid = Bil.(UnOp (NOT, (is_valid_xmm2_e index))) in
             let bothinvalid = Bil.(xmm1_invalid land xmm2_invalid) in
             let eitherinvalid = Bil.(xmm1_invalid lor xmm2_invalid) in
-            let eq = Bil.(get_xmm1 index = get_xmm2 index) in
+            let equal = Bil.(get_xmm1 index = get_xmm2 index) in
             (* both invalid -> true
                one invalid -> false
                both valid -> check same byte *)
-            Bil.Ite (bothinvalid, exp_true,
-                     Bil.Ite (eitherinvalid, exp_false,
-                              Bil.Ite (eq, exp_true, exp_false)))
+            Bil.(bothinvalid lor (UnOp (NOT, eitherinvalid) land equal))
           | EqualOrdered ->
             (* Does the substring xmm1 occur at xmm2[index]? *)
             let check_char acc j =
-              let neq = Bil.(get_xmm1 j <> get_xmm2 Pervasives.(index+j)) in
+              let equal = Bil.(get_xmm1 j = get_xmm2 Pervasives.(index+j)) in
               let substrended = Bil.(UnOp (NOT, (is_valid_xmm1_e j))) in
               let bigstrended = Bil.UnOp (NOT, (is_valid_xmm2_e (index+j))) in
               (* substrended => true
                  bigstrended => false
                  byte diff => false
                  byte same => keep going  *)
-              Bil.Ite (substrended, exp_true,
-                       Bil.Ite (bigstrended, exp_false,
-                                Bil.Ite (neq, exp_false, acc)))
-            in
+              Bil.(substrended lor
+                   (UnOp (NOT,bigstrended) land (equal land acc))) in
             (* Is xmm1[j] equal to xmm2[index+j]? *)
             List.fold_left ~f:check_char ~init:exp_true (List.range
                                                            ~stride:(-1) ~stop:`inclusive (nelem-index-1) 0)
@@ -744,16 +734,14 @@ module ToIR = struct
         let int_res_2 = tmp ~name:"IntRes2" reg16_t in
 
         let contains_null e =
-          List.fold_left ~f:(fun acc i ->
-              Bil.Ite (Bil.(get_elem e i = int_exp 0 !!elemt), exp_true, acc)) ~init:exp_false (List.init ~f:(fun x -> x) nelem)
-        in
+          let elts = List.init nelem ~f:(fun i -> Bil.(get_elem e i = int_exp 0 !!elemt)) in
+          List.fold elts ~init:exp_false ~f:(fun acc elt -> Bil.(acc lor elt)) in
 
         (* For pcmpistri/pcmpestri *)
         let sb exp =
           List.fold_left ~f:(fun acc i ->
               Bil.Ite (Bil.(exp_true = Extract (i, i, exp)),
-                       (int_exp i !!regm),
-                       acc))
+                       (int_exp i !!regm), acc))
             ~init:(int_exp nelem !!regm)
             (match imm8cb.outselectsig with
              | LSB -> List.range ~stride:(-1) ~start:`exclusive ~stop:`inclusive nelem 0
