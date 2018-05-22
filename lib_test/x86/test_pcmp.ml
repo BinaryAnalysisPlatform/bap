@@ -60,14 +60,14 @@ open Bap.Std
 open OUnit2
 
 module Dis = Disasm_expert.Basic
-open X86_env
+module Env = X86_env.R32
+
+let arch  = `x86
+let width = 32
 
 let of_bytes s =
   let str = String.filter ~f:(fun c -> Char.(c <> ' ')) s in
   Word.of_string @@ sprintf "0x%s:256u" str
-
-let arch = `x86
-let width = 32
 
 let insn_bil x =
   let bytes = Bigstring.of_string x in
@@ -83,9 +83,9 @@ let insn_bil x =
   let module T = (val (target_of_arch arch)) in
   Or_error.ok_exn @@ T.lift mem insn
 
-let test insn_name bytes x y expected ctxt =
-  let xmm0 = X86_env.ymms.(0) in
-  let xmm1 = X86_env.ymms.(1) in
+let test insn_name bytes x y expected _ctxt =
+  let xmm0 = Env.ymms.(0) in
+  let xmm1 = Env.ymms.(1) in
   let bil = Bil.[
       move xmm0 (int x);
       move xmm1 (int y);
