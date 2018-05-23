@@ -36,13 +36,6 @@ module Apply : sig
   val cast : cast -> int -> word -> word
 end
 
-
-module Type : sig
-  val check : stmt list -> (unit,Bap_type_error.t) Result.t
-  val infer : exp -> (typ, Bap_type_error.t) Result.t
-  val infer_exn : exp -> typ
-end
-
 module Eff : sig
   type t
 

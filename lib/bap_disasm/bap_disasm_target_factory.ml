@@ -54,10 +54,11 @@ let type_check bil = match Type.check bil with
     Error err
   | Ok () -> Ok bil
 
+(* bass = bil analysis  *)
 let basses = Queue.create ()
-let add = Queue.enqueue basses
+let register_bass = Queue.enqueue basses
 
-let () = add type_check
+let () = register_bass type_check
 
 let apply_basses bil =
   let open Or_error in
@@ -77,5 +78,3 @@ end
 let register_target arch (module Target : Target) =
   let module T = Make(Target) in
   Hashtbl.set targets ~key:arch ~data:(module T)
-
-let register_bass = add

@@ -2196,13 +2196,10 @@ module Std : sig
     (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
-    (** [reduce_consts p] evaluates constant expressions and statements
-        in the program [p]  *)
+    (** [reduce_consts p] evaluates variables in program [p] and substitute
+        them forward in program.
+        @since 1.5 *)
     val reduce_consts : stmt list -> stmt list
-
-    (** [group_like p] group like expressions in a program [p], e.g.
-        an expression [x + x + x] will be reduced to [3 * x] *)
-    val group_like : stmt list -> stmt list
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
         reached. If the transformation orbit contains non-trivial cycles,
@@ -3454,10 +3451,6 @@ module Std : sig
 
         See also {!Bil.fold_consts} *)
     val fold_consts : t -> t
-
-    (** [group_like e] group like expressions, e.g.
-        an expression [x + x + x] will be reduced to [3 * x] *)
-    val group_like : t -> t
 
     (** [fixpoint f] applies transformation [f] to [t] until it
         reaches a fixpoint, i.e., such point [x] that
@@ -6601,7 +6594,8 @@ module Std : sig
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
-  (** [register_bass f] - adds a new bil analysis to a pipeline *)
+  (** [register_bass f] - adds a new bil analysis (bass) to a pipeline.
+      Note, all basses are applied in the same order they were registered. *)
   val register_bass : (bil -> bil Or_error.t) -> unit
 
   (** Term identifier  *)

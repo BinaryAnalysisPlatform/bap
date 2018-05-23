@@ -105,7 +105,7 @@ module Std = struct
     type error = Bap_type_error.t
     [@@deriving bin_io, compare, sexp]
     module Error = Bap_type_error
-    include Bap_helpers.Type
+    include Bap_type_infer
   end
 
   (** This module exports first-class type definitions,
@@ -134,7 +134,6 @@ module Std = struct
   module Exp = struct
     type t = Bap_bil.exp [@@deriving bin_io, compare, sexp]
     include Bap_helpers.Exp
-    include Bap_reduce.Like_exp
     include (Bap_exp : Regular.S with type t := t)
     let eval = Bap_expi.eval
     let simpl = Bap_helpers.Simpl.exp

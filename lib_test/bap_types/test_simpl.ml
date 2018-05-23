@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open OUnit2
 open Bap.Std
 open Monads.Std
@@ -183,7 +183,13 @@ let check_eval exp expected simpl =
     assert_bool s false
 
 let check exp expected ctxt =
-  let simpl = Exp.fold_consts exp |> Exp.group_like in
+  let simpl = Exp.fold_consts exp in
+
+  if not (Exp.equal simpl expected) then
+    let es = Exp.to_string in
+    printf "expected %s <> %s simpl\n" (es expected) (es simpl);
+
+
   check_eval exp simpl expected;
   assert_equal ~ctxt ~cmp:Exp.equal simpl expected
 
