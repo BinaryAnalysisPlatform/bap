@@ -29,3 +29,5 @@ val loader_options : string list
 val common_loader_options : Manpage.block list
 val options_for_passes    : Manpage.block list
 val recipe_doc : Manpage.block list
+
+val basses : unit -> string list Term.t

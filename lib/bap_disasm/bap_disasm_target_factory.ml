@@ -55,10 +55,17 @@ let type_check bil = match Type.check bil with
   | Ok () -> Ok bil
 
 (* bass = bil analysis  *)
-let basses = Queue.create ()
-let register_bass = Queue.enqueue basses
+type bass = bil -> bil Or_error.t
 
-let () = register_bass type_check
+let basses = String.Table.create ()
+let selected = Queue.create ()
+
+let register_bass name (bass:bass) =
+  Hashtbl.update basses name (fun _ -> bass)
+
+let find_bass name = Hashtbl.find basses name
+let run_bass bass = Queue.enqueue selected bass
+let bass_list () = Hashtbl.keys basses
 
 let apply_basses bil =
   let open Or_error in
@@ -66,7 +73,7 @@ let apply_basses bil =
     | [] -> bil
     | f :: fs ->
       bil >>= fun bil -> apply (f bil) fs in
-  apply (Ok bil) (Queue.to_list basses)
+  apply (type_check bil) (Queue.to_list selected)
 
 module Make(T : Target) = struct
   include T

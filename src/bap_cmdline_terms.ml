@@ -261,7 +261,7 @@ let recipe_doc = [
 
   `Pre {|
     (parameter depth 128 "maximum depth of analysis")
-    (option analysis-depth $depth)
+    (option analysis-depth \$depth)
    |};
 
   `P "
@@ -298,7 +298,7 @@ let recipe =
 
   The valid representations of a recipe is either the recipe file
   itself (i.e., a file consisting of a list of s-expressions), a
-  directory with a valid $(recipe.scm) file, or zip file, that
+  directory with a valid $(b,recipe.scm) file, or zip file, that
   contains a valid recipe directory. See the $(b,RECIPES) section for
   more information.
 
@@ -347,3 +347,16 @@ let options_for_passes = [
         argument that follows the flag might be consumed by a $(i,PASS)"
   end;
 ]
+
+let basses () : string list Term.t =
+  match bass_list () with
+  | [] -> Term.const []
+  | [x] -> Term.const [x]
+  | basses ->
+    let names = basses |> List.map ~f:(fun x -> x,x) in
+    let doc =
+      sprintf "Use a specified bass (bass stands for Bil analysis)
+      or comma separated basses. Basses applied in the same order
+      they are listed. Possible values are: %s" @@ Arg.doc_alts_enum names in
+    let la_conv = Arg.(list ~sep:',' (enum names)) in
+    Arg.(value & opt la_conv basses & info ["bass"; "b"] ~doc)

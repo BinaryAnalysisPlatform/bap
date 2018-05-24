@@ -6594,9 +6594,20 @@ module Std : sig
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
-  (** [register_bass f] - adds a new bil analysis (bass) to a pipeline.
-      Note, all basses are applied in the same order they were registered. *)
-  val register_bass : (bil -> bil Or_error.t) -> unit
+  (** bil analysis *)
+  type bass
+
+  (** [register_bass name bass] register a new [bass] with a [name]  *)
+  val register_bass : string -> (bil -> bil Or_error.t) -> unit
+
+  (** [find_bass name] returns a bass with [name] *)
+  val find_bass : string -> bass option
+
+  (** [run_bass bass] adds [bass] to a pipeline *)
+  val run_bass : bass -> unit
+
+  (** [bass_list ()] lists all registered basses *)
+  val bass_list : unit -> string list
 
   (** Term identifier  *)
   module Tid : sig

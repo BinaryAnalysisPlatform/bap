@@ -2,50 +2,58 @@ open Core_kernel
 open Bap.Std
 include Self ()
 
-type switch = Enable | Disable
-[@@deriving sexp]
+type switch = Enable | Disable [@@deriving sexp]
 
-let of_string s = switch_of_sexp @@ Sexp.of_string s
+let parse = function
+  | "enable" -> `Ok Enable
+  | "disable" -> `Ok Disable
+  | s ->
+    `Error (sprintf "unknown value %s, possible are: disable | enable" s)
 
-let switch f s = Option.some_if (of_string s = Enable) f
+let print fmt s =
+  Format.fprintf fmt "%s" @@  Sexp.to_string (sexp_of_switch s)
 
-let norm_of_str = switch (Stmt.normalize ~normalize_exp:false)
-let simpl_of_str = switch Bil.fold_consts
-let subst_of_str = switch Bil.reduce_consts
+let switcher = Config.converter parse print Enable
+
+let switch f s = Option.some_if (s = Enable) f
+let norm = switch (Stmt.normalize ~normalize_exp:false)
+let simpl = switch Bil.fold_consts
+let subst = switch Bil.reduce_consts
 
 let add norm simpl reduce =
+  let norm = switch (Stmt.normalize ~normalize_exp:false) norm in
+  let simpl = switch Bil.fold_consts simpl in
   let reduce = if Option.is_none norm then None
-    else reduce in
-  List.iter [norm;simpl;reduce] ~f:(function
-      | None -> ()
-      | Some f -> register_bass (fun b -> Ok (f b)))
+    else switch Bil.reduce_consts reduce in
+  let apply bil = function
+    | None -> bil
+    | Some f -> f bil in
+  let (>>=) = apply in
+  let f bil =
+    Ok (apply bil norm >>= simpl >>= reduce) in
+  register_bass "internal" f
 
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
       `P "Applies analysises to a instruction bil code" ;
       `Pre "
+The following bil analysises are in default pipeline:
 Bil Normalization
 Constant Folding
 Constant Substitution
-"
+";
+      `S "SEE ALSO";
+      `P "$(b,bap.mli)"
     ] in
-  let names = ["enable", "enable"; "disable", "disable";] in
   let norm =
-    let doc =
-      "Produces a normalized BIL program.
-        Possible values are enable | disable" in
-    Config.(param (enum names) ~default:"enable" "norm" ~doc) in
+    let doc = "Produces a normalized BIL program" in
+    Config.(param switcher ~default:Enable ~doc "norm") in
   let simpl =
-    let doc = "Applies expressions simplification.
-                Possible values are enable, disable" in
-    Config.(param (enum names) ~default:"enable" ~doc "simpl") in
+    let doc = "Applies expressions simplification." in
+    Config.(param switcher ~default:Enable ~doc "simpl") in
   let subst =
-    let doc = "Applies constant expressions substitution.
-                Possible values are enable, disable" in
-    Config.(param (enum names) ~default:"enable" ~doc "subst") in
+    let doc = "Substitutes constant expressions." in
+    Config.(param switcher ~default:Enable ~doc "subst") in
   Config.when_ready (fun {Config.get=(!)} ->
-      let norm = norm_of_str !norm in
-      let simpl = simpl_of_str !simpl in
-      let subst = subst_of_str !subst in
-      add norm simpl subst)
+      add !norm !simpl !subst)
