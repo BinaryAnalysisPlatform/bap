@@ -114,10 +114,10 @@ let extract_format filename =
   | `Ok (_,fmt,ver) -> Some fmt, ver
 
 let select_basses o =
-  let bs = basses o in
-  printf "selected basses are %s\n" (String.concat ~sep:" " bs);
-  let bs = List.filter_map ~f:find_bass bs in
-  List.iter ~f:run_bass bs
+  List.iter o.basses
+    ~f:(fun name -> match find_bass name with
+        | None -> error "bass %s not found" name
+        | Some b -> run_bass b)
 
 let main o =
   let proj_of_input input =
