@@ -17,4 +17,4 @@ type t = {
   reconstructor   : string option;
   basses          : string list;
   passes          : string list;
-}[@@deriving sexp, fields]
+} [@@deriving sexp, fields]

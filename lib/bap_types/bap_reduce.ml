@@ -32,6 +32,7 @@ let remove_bound_vars env s =
   end)#run [s] Var.Set.empty |>
   Set.fold ~init:env ~f:Map.remove
 
+(* requires: let-free *)
 let reduce_consts bil =
   let rec run acc env = function
     | [] -> List.rev acc
