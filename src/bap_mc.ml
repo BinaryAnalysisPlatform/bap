@@ -100,6 +100,12 @@ module Program(Conf : Mc_options.Provider) = struct
     print_bir Target.lift mem insn;
     if options.show_kinds then print_kinds insn
 
+  let select_basses () =
+    List.iter options.basses
+      ~f:(fun name -> match find_bass name with
+          | None -> error "bass %s not found" name
+          | Some b -> run_bass b)
+
   let main () =
     let arch = match Arch.of_string options.arch with
       | None -> raise Unknown_arch
@@ -111,6 +117,7 @@ module Program(Conf : Mc_options.Provider) = struct
     let input = read_input options.src in
     let mem = create_memory arch input addr in
     let backend = options.disassembler in
+    select_basses ();
     Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
         let bytes = Dis.run dis mem ~return:ident ~init:0
             ~stop_on:[`Valid] ~invalid:(bad_insn addr)
@@ -196,8 +203,8 @@ module Cmdline = struct
     let doc = "Stop after the first instruction is decoded" in
     Arg.(value & flag & info ["only-one"] ~doc)
 
-  let create a b c d e f g h i j =
-    Mc_options.Fields.create a b c d e f g h i j
+  let create a b c d e f g h i j k =
+    Mc_options.Fields.create a b c d e f g h i j k
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
@@ -231,7 +238,7 @@ module Cmdline = struct
         `S "SEE ALSO";
         `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
     Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
-          $insn_formats $bil_formats $bir_formats $show_kinds),
+          $insn_formats $bil_formats $bir_formats $show_kinds $(basses ())),
     Term.info "bap-mc" ~doc ~man ~version:Config.version
 
   let exitf n =
