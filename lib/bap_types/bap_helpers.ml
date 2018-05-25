@@ -344,18 +344,16 @@ module Simpl = struct
     let is_int = function
       | Int _ -> true
       | _ -> false in
-    (object(self)
+    (object
       inherit exp_mapper as super
       method! map_binop op x y =
-        match op, self#map_exp x, self#map_exp y with
+        match op, super#map_exp x, super#map_exp y with
         | PLUS, Int q, x when Word.(is_negative (signed q)) ->
-          self#map_exp (BinOp (PLUS, x, Int q))
-        | PLUS, x, UnOp(NEG, y) -> self#map_exp Bap_exp.Infix.(x - y)
-        | PLUS, UnOp(NEG, x), y -> self#map_exp Bap_exp.Infix.(y - x)
-        | TIMES, x, UnOp(NEG, y) ->
-          self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
-        | TIMES, x, Int q when not (is_int x) ->
-          self#map_exp @@ BinOp(TIMES, Int q, x)
+          BinOp (PLUS, x, Int q)
+        | PLUS, x, UnOp(NEG, y) -> Bap_exp.Infix.(x - y)
+        | PLUS, UnOp(NEG, x), y -> Bap_exp.Infix.(y - x)
+        | TIMES, x, UnOp(NEG, y) -> UnOp (NEG,(BinOp (TIMES, x, y)))
+        | TIMES, x, Int q when not (is_int x) -> BinOp(TIMES, Int q, x)
         | op,x,y -> BinOp(op,x,y)
     end)#map_exp e |> (new negative_normalizer)#map_exp
 
