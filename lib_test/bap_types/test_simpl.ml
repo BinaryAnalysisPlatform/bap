@@ -390,6 +390,7 @@ let suite () =
     "extract 2 0 (extract 7 2 0xfd) = 7" >:: Bil.(extract 2 0 (extract 7 2 oxFD) <=> c7_w3);
     "cast high 2 (cast low 2 0xfd) = 1"  >:: Bil.(cast high 2 (cast low 2 oxFD) <=> c1_w2);
     "cast high 2 (extract 7 2 0xfd) = 1" >:: Bil.(cast high 2 (extract 7 2 oxFD) <=> c3_w2);
+    "extract 4 2 (cast low 5 0xfd) = 7"  >:: Bil.(extract 4 2 (cast low 5 oxFD) <=> c7_w3);
 
     "cast low 8 x:8 = x:8"             >:: Bil.(cast low 8 x <=> x);
     "cast high 8 x:8 = x:8"            >:: Bil.(cast high 8 x <=> x);
@@ -399,6 +400,9 @@ let suite () =
     "cast high 7 x:8,     no simpl"    >:: Bil.(cast high 7 x <=> cast high 7 x);
     "cast signed 7 x:8,   no simpl"    >:: Bil.(cast signed 7 x <=> cast signed 7 x);
     "cast unsigned 7 x:8, no simpl"    >:: Bil.(cast unsigned 7 x <=> cast unsigned 7 x);
+
+    "extract 2 0 (cast low 3 x) = extract" >:: Bil.(extract 2 0 (cast low 3 x) <=> extract 2 0 x);
+    "extract 10 0 (cast low 3 x),no simpl" >:: Bil.(extract 10 0 (cast low 3 x) <=> extract 10 0 (cast low 3 x));
 
     "random: plus, times etc."         >:: random gen_binop ~width:32 ~times:100;
     "ranfom: <, <=, =, <> etc."        >:: random gen_cmp ~width:1 ~times:100;

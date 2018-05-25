@@ -386,6 +386,10 @@ module Simpl = struct
       | x -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+      | Cast (_, w, e) when lo = 0 ->
+        let w' = hi - lo + 1 in
+        if w' <= w then Extract (hi, lo, e)
+        else Extract (hi,lo,x)
       | Var _ as v ->
         if infer_width v = hi + 1 && lo = 0 then v
         else Extract (hi,lo,v)
