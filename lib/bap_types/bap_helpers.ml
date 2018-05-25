@@ -356,7 +356,7 @@ module Simpl = struct
           self#map_exp (UnOp (NEG,(BinOp (TIMES, x, y))))
         | TIMES, x, Int q when not (is_int x) ->
           self#map_exp @@ BinOp(TIMES, Int q, x)
-        | op,x,y -> super#map_binop op x y
+        | op,x,y -> BinOp(op,x,y)
     end)#map_exp e |> (new negative_normalizer)#map_exp
 
   let exp ?(ignore=[]) e =

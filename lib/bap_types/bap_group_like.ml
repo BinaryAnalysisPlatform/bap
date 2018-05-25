@@ -109,13 +109,12 @@ let positive e =
   end)#map_exp e
 
 let sum x y =
-  let op = PLUS in
   let rec run x =
     match x with
-    | BinOp(op', a, b) when is_associative op op' -> run a @ run b
+    | BinOp(PLUS, a, b) -> run a @ run b
     | BinOp (op', Int q, BinOp(op'', x, y))
     | BinOp (op', BinOp(op'', x, y), Int q)
-      when is_distributive op' op'' && is_associative op op'' ->
+      when is_distributive op' op'' && is_associative PLUS op'' ->
       run (BinOp(op', Int q, x)) @ run (BinOp(op', Int q, y))
     | x -> [x] in
   Sum (run x @ run y)
