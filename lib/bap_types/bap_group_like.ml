@@ -152,8 +152,3 @@ let run e =
       | _ -> BinOp(op, self#map_exp x, self#map_exp y)
   end)#map_exp e in
   positive e |> apply
-
-(* let bil b = (object *)
-(*   inherit bil_mapper *)
-(*   method! map_exp e = exp e *)
-(* end)#run b *)
