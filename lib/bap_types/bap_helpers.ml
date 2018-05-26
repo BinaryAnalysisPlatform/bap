@@ -348,7 +348,8 @@ module Simpl = struct
       inherit exp_mapper as super
       method! map_binop op x y =
         match op, super#map_exp x, super#map_exp y with
-        | PLUS, Int q, x when Word.(is_negative (signed q)) ->
+        | PLUS, Int q, x
+          when Word.(is_negative (signed q)) && not (is_int x) ->
           super#map_exp @@ BinOp (PLUS, x, Int q)
         | PLUS, x, UnOp(NEG, y) -> Bap_exp.Infix.(x - y)
         | PLUS, UnOp(NEG, x), y -> Bap_exp.Infix.(y - x)
