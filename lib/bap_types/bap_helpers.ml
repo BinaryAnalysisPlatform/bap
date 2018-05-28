@@ -377,17 +377,18 @@ module Simpl = struct
     and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
       | x,y -> Concat (x,y)
-    and cast t s x = match exp x with
-      | Int w -> Int (Apply.cast t s w)
-      | Var _ as v ->
-        if infer_width v = s then v
-        else Cast (t,s,v)
-      | x -> Cast (t,s,x)
+    and cast t s x = match t,exp x with
+      | _, Int w -> Int (Apply.cast t s w)
+      | (LOW|HIGH), (Var _ as v) when infer_width v = s -> v
+      | LOW, Extract (hi, lo, e) ->
+        let w = hi - lo + 1 in
+        if s <= w then Extract (s - 1, lo, e)
+        else Cast (t,s,x)
+      | t,x -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-      | Cast (_, w, e) when lo = 0 ->
-        let w' = hi - lo + 1 in
-        if w' <= w then Extract (hi, lo, e)
+      | Cast (LOW, w, e) ->
+        if hi + 1 <= w then Extract (hi, lo, e)
         else Extract (hi,lo,x)
       | Var _ as v ->
         if infer_width v = hi + 1 && lo = 0 then v
