@@ -384,11 +384,11 @@ module Simpl = struct
     and cast t s x =
       let x = exp x in
       let no_simpl = Cast (t,s,x) in
-      let same_cast cast = compare_cast t cast = 0 in
+      let eql_cast c c' = compare_cast c c' = 0 in
       match t, x with
       | t, Int w -> Int (Apply.cast t s w)
-      | t, Cast (t', w, e) when same_cast t' && s <= w -> Cast (t, s, e)
-      | (LOW|HIGH), _ when infer_width x = s -> x
+      | _ when infer_width x = s -> x
+      | t, Cast (t', w, e) when eql_cast t t' && s <= w -> Cast (t, s, e)
       | LOW, Extract (hi, lo, e) ->
         let hi' = lo + s - 1 in
         if hi' <= hi then Extract (hi', lo, e)
@@ -400,8 +400,8 @@ module Simpl = struct
           let hi' = lo' + s - 1 in
           Extract (hi',lo',e)
         else no_simpl
-      | LOW, Concat (x,y) when infer_width y = s -> y
-      | HIGH, Concat (x,y) when infer_width x = s -> x
+      | LOW, Concat (_,y) when infer_width y = s -> y
+      | HIGH, Concat (x,_) when infer_width x = s -> x
       | _ -> no_simpl
     and extract hi lo x =
       let w = hi - lo + 1 in
