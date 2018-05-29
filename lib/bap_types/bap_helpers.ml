@@ -384,24 +384,18 @@ module Simpl = struct
     and cast t s x =
       let x = exp x in
       let no_simpl = Cast (t,s,x) in
-      let eql_cast c c' = compare_cast c c' = 0 in
       match t, x with
       | t, Int w -> Int (Apply.cast t s w)
       | _ when infer_width x = s -> x
-      | t, Cast (t', w, e) when eql_cast t t' && s <= w -> Cast (t, s, e)
-      | LOW, Extract (hi, lo, e) ->
+      | _, Cast (_, w, e) when s <= w -> Cast (t, s, e)
+      | HIGH, Extract (hi, lo, e) when s <= hi - lo + 1 ->
+        Extract (hi, hi - s + 1, e)
+      | _, Extract (hi, lo, e) ->
         let hi' = lo + s - 1 in
         if hi' <= hi then Extract (hi', lo, e)
         else no_simpl
-      | HIGH, Extract (hi, lo, e) ->
-        let w = hi - lo + 1 in
-        if s <= w then
-          let lo' = lo + w - s in
-          let hi' = lo' + s - 1 in
-          Extract (hi',lo',e)
-        else no_simpl
-      | LOW, Concat (_,y) when infer_width y = s -> y
       | HIGH, Concat (x,_) when infer_width x = s -> x
+      | _, Concat (_,y) when infer_width y = s -> y
       | _ -> no_simpl
     and extract hi lo x =
       let w = hi - lo + 1 in
@@ -409,23 +403,18 @@ module Simpl = struct
       let no_simpl = Extract (hi,lo,x) in
       match x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-      | Extract (hi',lo',e) ->
-        if hi' >= hi + lo' then Extract (hi + lo',lo + lo',e)
-        else no_simpl
-      | Cast (LOW, w, e) ->
-        if hi + 1 <= w then Extract (hi, lo, e)
-        else no_simpl
-      | Cast (HIGH, s, e) ->
-        let w = infer_width e in
-        if lo <= s then Extract (hi + w - s, lo + w - s, e)
-        else no_simpl
+      | Extract (hi',lo',e) when hi' >= hi + lo' ->
+        Extract (hi + lo',lo + lo',e)
+      | Cast (LOW, s, e) when hi < s -> Extract (hi, lo, e)
+      | Cast (HIGH, s, e) when lo <= s ->
+        let we = infer_width e in
+        Extract (hi + we - s, lo + we - s, e)
       | Concat (_,y) when lo = 0 && infer_width y = w -> y
       | Concat (x,y) when lo = infer_width y && infer_width x = w -> x
       | Concat (_,y) when hi < infer_width y -> Extract (hi,lo,y)
       | Concat (x,y) ->
-        let w = infer_width y in
-        if lo >= w then
-          Extract (hi - w,lo - w, x)
+        let we = infer_width y in
+        if lo >= we then Extract (hi - we,lo - we, x)
         else no_simpl
       | x when infer_width x = w && lo = 0 -> x
       | _ -> no_simpl

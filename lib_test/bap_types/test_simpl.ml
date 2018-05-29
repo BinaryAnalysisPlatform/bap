@@ -396,8 +396,6 @@ let suite () =
 
     "cast low 8 x:8 = x:8"             >:: Bil.(cast low 8 x <=> x);
     "cast high 8 x:8 = x:8"            >:: Bil.(cast high 8 x <=> x);
-    "cast signed 8 x:8,   no simpl"    >:: Bil.(cast signed 8 x <=> cast signed 8 x);
-    "cast unsigned 8 x:8, no simpl"    >:: Bil.(cast unsigned 8 x <=> cast unsigned 8 x);
     "cast low 7 x:8,      no simpl"    >:: Bil.(cast low 7 x <=> cast low 7 x);
     "cast high 7 x:8,     no simpl"    >:: Bil.(cast high 7 x <=> cast high 7 x);
     "cast signed 7 x:8,   no simpl"    >:: Bil.(cast signed 7 x <=> cast signed 7 x);
@@ -430,6 +428,10 @@ let suite () =
     "extract 9 8 (x ^ y) = extract 1 0 x" >:: Bil.(extract 9 8 (x ^ y) <=> extract 1 0 x);
     "cast high 8 (x ^ y) = x"             >:: Bil.(cast high 8 (x ^ y) <=> x);
     "cast low 8 (x ^ y) = y"              >:: Bil.(cast low 8 (x ^ y) <=> y);
+
+    "cast signed 3 (extract 6 2 x:8) = extract 4 2 x"  >:: Bil.(cast signed 3 (extract 6 2 x) <=> extract 4 2 x);
+    "cast signed 8 (extract 6 2 x:8),no simpl" >:: Bil.(cast signed 8 (extract 6 2 x) <=> cast signed 8 (extract 6 2 x));
+    "cast signed 8 (x ^ y) = y" >:: Bil.(cast signed 8 (x ^ y) <=> y);
 
     "random: plus, times etc."         >:: random gen_binop ~width:32 ~times:100;
     "ranfom: <, <=, =, <> etc."        >:: random gen_cmp ~width:1 ~times:100;
