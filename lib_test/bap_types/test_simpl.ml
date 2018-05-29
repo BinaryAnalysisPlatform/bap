@@ -152,6 +152,7 @@ let c8 = int 8
 let c16 = int 16
 let oxFD = int (0xfd)
 let oxFF = int (0xff)
+let ox203 = int ~width:16 0x203
 let b0 = Bil.int Word.b0
 let b1 = Bil.int Word.b1
 let var ?(width=width) n = Bil.var @@ Var.create n (Type.imm width)
@@ -185,6 +186,7 @@ let check_eval exp expected simpl =
 let check exp expected ctxt =
   let simpl = Exp.fold_consts exp in
 
+  (* TODO: remove it  *)
   if not (Exp.equal simpl expected) then
     let es = Exp.to_string in
     printf "expected %s <> %s simpl\n" (es expected) (es simpl);
@@ -404,6 +406,31 @@ let suite () =
     "extract 2 0 (cast low 5 x) = extract" >:: Bil.(extract 2 0 (cast low 5 x) <=> extract 2 0 x);
     "extract 10 0 (cast low 3 x),no simpl" >:: Bil.(extract 10 0 (cast low 3 x) <=> extract 10 0 (cast low 3 x));
 
+    "extract 3 2 (cast high 5 x:8) = extract 6 5 x"  >:: Bil.(extract 3 2 (cast high 5 x) <=> extract 6 5 x);
+    "extract 8 2 (cast high 5 x:8) = extract 11 5 x" >:: Bil.(extract 8 2 (cast high 5 x) <=> extract 11 5 x);
+    "cast high 3 (extract 6 2 x:8) = extract 6 4 x"  >:: Bil.(cast HIGH 3 (extract 6 2 x) <=> extract 6 4 x);
+    "extract 4 2 (cast low 6 x:8) = extract 4 2 x"   >:: Bil.(extract 4 2 (cast low 6 x) <=> extract 4 2 x);
+    "cast low 3 (extract 6 2 x:8) = extract 4 2 x"   >:: Bil.(cast low 3 (extract 6 2 x) <=> extract 4 2 x);
+    "cast low 3 (cast low 4 x:8) = cast low 3 x"     >:: Bil.(cast low 3 (cast low 4 x) <=> cast low 3 x);
+    "cast high 3 (cast high 4 x:8) = cast high 3 x"  >:: Bil.(cast high 3 (cast high 4 x) <=> cast high 3 x);
+
+    "extract 7 4 (cast low 6 x:8),no simpl"  >:: Bil.(extract 7 4 (cast low 6 x) <=> extract 7 4 (cast low 6 x));
+    "cast low 4 (extract 4 2 x:8),no simpl"  >:: Bil.(cast low 4 (extract 4 2 x) <=> cast low 4 (extract 4 2 x));
+    "extract 7 4 (cast high 3 x:8),no simpl" >:: Bil.(extract 7 4 (cast high 3 x) <=> extract 7 4 (cast high 3 x));
+
+    "extract 2 0 (extract 7 2 x) = extract 4 2 x" >:: Bil.(extract 2 0 (extract 7 2 x) <=> extract 4 2 x);
+    "extract 7 2 (extract 7 3 x),no simpl" >:: Bil.(extract 7 2 (extract 7 2 x) <=> extract 7 2 (extract 7 2 x));
+    "2 ^ (3 ^ x) = 0x203 ^ x"              >:: Bil.(c2 ^ (c3 ^ x) <=> ox203 ^ x);
+    "(x ^ 2) ^ 3 = x ^ 0x203"              >:: Bil.((x ^ c2) ^ c3 <=> x ^ ox203);
+
+    "(x ^ 2) (3 ^ y) = (x ^ 0x203) ^ y"   >:: Bil.((x ^ c2) ^ (c3  ^ y)<=> (x ^ ox203) ^ y);
+    "extract 15 8 (x ^ y) = x"            >:: Bil.(extract 15 8 (x ^ y) <=> x);
+    "extract 7 0 (x ^ y) = y"             >:: Bil.(extract 7 0 (x ^ y) <=> y);
+    "extract 3 0 (x ^ y) = extract 3 0 y" >:: Bil.(extract 3 0 (x ^ y) <=> extract 3 0 y);
+    "extract 9 8 (x ^ y) = extract 1 0 x" >:: Bil.(extract 9 8 (x ^ y) <=> extract 1 0 x);
+    "cast high 8 (x ^ y) = x"             >:: Bil.(cast high 8 (x ^ y) <=> x);
+    "cast low 8 (x ^ y) = y"              >:: Bil.(cast low 8 (x ^ y) <=> y);
+
     "random: plus, times etc."         >:: random gen_binop ~width:32 ~times:100;
     "ranfom: <, <=, =, <> etc."        >:: random gen_cmp ~width:1 ~times:100;
 
@@ -441,9 +468,4 @@ let suite () =
 
     "extract 5 2 (2 * z + 2 * (x + y)) = extract 5 2 ( 2 * (z + x + y) )" >::
     Bil.(extract 5 2 (c2 * z + c2 * (x + y)) <=> extract 5 2 (c2 * (z + x + y)));
-
-    "x + cast low (y + z + y ) + 2x = 3x + cast low (2y + z)" >::
-    Bil.(x + cast low width (y + z + y) + c2*x <=> c3*x + cast low width (c2*y + z))
-
-
   ]

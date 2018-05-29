@@ -376,24 +376,59 @@ module Simpl = struct
       | Concat (x,y) -> concat x y
     and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
+      | Int x, Concat (Int y, z) -> Concat (Int (Word.concat x y), z)
+      | Concat (z, Int x), Int y -> Concat (z, Int (Word.concat x y))
+      | Concat (z, Int x), Concat (Int y, z') ->
+        Concat (Concat (z, Int (Word.concat x y)), z')
       | x,y -> Concat (x,y)
-    and cast t s x = match t,exp x with
-      | _, Int w -> Int (Apply.cast t s w)
-      | (LOW|HIGH), (Var _ as v) when infer_width v = s -> v
+    and cast t s x =
+      let x = exp x in
+      let no_simpl = Cast (t,s,x) in
+      let same_cast cast = compare_cast t cast = 0 in
+      match t, x with
+      | t, Int w -> Int (Apply.cast t s w)
+      | t, Cast (t', w, e) when same_cast t' && s <= w -> Cast (t, s, e)
+      | (LOW|HIGH), _ when infer_width x = s -> x
       | LOW, Extract (hi, lo, e) ->
+        let hi' = lo + s - 1 in
+        if hi' <= hi then Extract (hi', lo, e)
+        else no_simpl
+      | HIGH, Extract (hi, lo, e) ->
         let w = hi - lo + 1 in
-        if s <= w then Extract (s - 1, lo, e)
-        else Cast (t,s,x)
-      | t,x -> Cast (t,s,x)
-    and extract hi lo x = match exp x with
+        if s <= w then
+          let lo' = lo + w - s in
+          let hi' = lo' + s - 1 in
+          Extract (hi',lo',e)
+        else no_simpl
+      | LOW, Concat (x,y) when infer_width y = s -> y
+      | HIGH, Concat (x,y) when infer_width x = s -> x
+      | _ -> no_simpl
+    and extract hi lo x =
+      let w = hi - lo + 1 in
+      let x = exp x in
+      let no_simpl = Extract (hi,lo,x) in
+      match x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+      | Extract (hi',lo',e) ->
+        if hi' >= hi + lo' then Extract (hi + lo',lo + lo',e)
+        else no_simpl
       | Cast (LOW, w, e) ->
         if hi + 1 <= w then Extract (hi, lo, e)
-        else Extract (hi,lo,x)
-      | Var _ as v ->
-        if infer_width v = hi + 1 && lo = 0 then v
-        else Extract (hi,lo,v)
-      | x -> Extract (hi,lo,x)
+        else no_simpl
+      | Cast (HIGH, s, e) ->
+        let w = infer_width e in
+        if lo <= s then Extract (hi + w - s, lo + w - s, e)
+        else no_simpl
+      | Concat (_,y) when lo = 0 && infer_width y = w -> y
+      | Concat (x,y) when lo = infer_width y && infer_width x = w -> x
+      | Concat (_,y) when hi < infer_width y -> Extract (hi,lo,y)
+      | Concat (x,y) ->
+        let w = infer_width y in
+        if lo >= w then
+          Extract (hi - w,lo - w, x)
+        else no_simpl
+      | x when infer_width x = w && lo = 0 -> x
+      | _ -> no_simpl
     and unop op x =
       let apply op x = Int (Apply.unop op x) in
       let lnot = Bap_exp.Infix.lnot in
