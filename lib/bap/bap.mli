@@ -2197,9 +2197,8 @@ module Std : sig
     val fold_consts : stmt list -> stmt list
 
     (** [propagate_consts bil] implements a simple worklist
-        algorithm for consts propagation. The only exception is
-        loops, which are not participate in propagation.
-        precondition: no let-expressions *)
+        algorithm for consts propagation. The only exception are
+        loops and let-expression, which are not participate in propagation. *)
     val propagate_consts : stmt list -> stmt list
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
