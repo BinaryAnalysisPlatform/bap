@@ -53,6 +53,7 @@ module Make(M : Monad.S) = struct
     proj    : project;
     local   : State.Bag.t;
     global  : State.Bag.t;
+    deathrow : id list;
     observations : unit t Observation.observations;
   }
 
@@ -176,14 +177,9 @@ module Make(M : Monad.S) = struct
   let store_curr k =
     lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok ())}))
 
-  (* switch_task SM.fork *)
-
-
-
   let lift x = lifts (SM.lift x)
   let status x = lifts (SM.status x)
   let forks () = lifts (SM.forks ())
-  let kill id = lifts (SM.kill id)
   let ancestor x  = lifts (SM.ancestor x)
   let parent () = lifts (SM.parent ())
   let global = SM.global
@@ -193,12 +189,17 @@ module Make(M : Monad.S) = struct
     current () >>= fun cid ->
     Observation.make forked (pid,cid)
 
-  let fork () : unit c =
-    C.call ~f:(fun ~cc:k ->
-        current () >>= fun pid ->
-        store_curr k >>=
-        fork_state >>= fun () ->
-        notify_fork pid)
+  let sentence_to_death id =
+    with_global_context (fun () ->
+        lifts @@ SM.update (fun s -> {
+              s with deathrow = id :: s.deathrow
+            }))
+
+  let execute_sentenced =
+    with_global_context (fun () ->
+        lifts @@ SM.get () >>= fun s ->
+        lifts @@ SM.List.iter s.deathrow ~f:SM.kill >>= fun () ->
+        lifts @@ SM.put {s with deathrow = []})
 
   let switch id : unit c =
     C.call ~f:(fun ~cc:k ->
@@ -206,8 +207,37 @@ module Make(M : Monad.S) = struct
         store_curr k >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->
+        execute_sentenced >>= fun () ->
         Observation.make switched (pid,id) >>= fun () ->
         s.curr ())
+
+
+  let fork () : unit c =
+    C.call ~f:(fun ~cc:k ->
+        current () >>= fun pid ->
+        store_curr k >>=
+        fork_state >>= fun () ->
+        execute_sentenced >>= fun () ->
+        notify_fork pid)
+
+
+  let kill id =
+    if id = global then return ()
+    else
+      current () >>= fun cid ->
+      if id = cid then sentence_to_death id
+      else lifts @@ SM.kill id
+
+  (* we can't make it public as it will change the interface
+     and will require us to bump Primus version to 2.0
+  *)
+  let die next =
+    current () >>= fun pid ->
+    switch_state next >>= fun () ->
+    lifts (SM.get ()) >>= fun s ->
+    lifts (SM.kill pid) >>= fun () ->
+    s.curr ()
+
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -228,6 +258,7 @@ module Make(M : Monad.S) = struct
     global = State.Bag.empty;
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
+    deathrow = [];
     proj}
 
   let extract f =
