@@ -2196,10 +2196,11 @@ module Std : sig
     (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
-    (** [reduce_consts p] evaluates variables in program [p] and substitute
-        them forward in program.
-        @since 1.5 *)
-    val reduce_consts : stmt list -> stmt list
+    (** [propagate_consts bil] implements a simple worklist
+        algorithm for consts propagation. The only exception is
+        loops, which are not participate in propagation.
+        precondition: no let-expressions *)
+    val propagate_consts : stmt list -> stmt list
 
     (** [fixpoint f] applies transformation [f] until fixpoint is
         reached. If the transformation orbit contains non-trivial cycles,

@@ -34,7 +34,12 @@ let find_result = (object
 end)#find
 
 let check expected bil ctxt =
-  let actual = find_result (Bil.reduce_consts bil) in
+  let bil' = Bil.propagate_consts bil in
+  let actual = find_result bil' in
+  if not (equal expected actual) then
+    printf "%s\n%s\n"
+      (Bil.to_string bil) (Bil.to_string bil');
+
   assert_equal ~ctxt ~cmp:equal expected actual
 
 let simple =
