@@ -2,11 +2,14 @@ open Core_kernel
 open Bap_common
 open Bap_visitor
 open Bap_stmt.Stmt
+open Bap_bil
 open Bap_bil.Stmt
 open Bap_bil.Exp
 
 module Word = Bitvector
 module Var = Bap_var
+
+type env = word Var.Map.t
 
 let empty_env = Var.Map.empty
 
@@ -27,7 +30,7 @@ let update env var value =
 
 let remove_defs env s =
   (object
-    inherit [word Var.Map.t] bil_visitor
+    inherit [env] bil_visitor
     method! enter_move v _ env = Map.remove env v
   end)#run [s] env
 
