@@ -433,13 +433,12 @@ module Make (Machine : Machine) = struct
     | None -> failf "a non-return call returned" ()
 
   let goto cond c = label cond c
-  let ret _ _ = Machine.return ()
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with
+    | Ret _ -> Machine.return () (* return from sub *)
     | Call c -> call cond c
     | Goto l -> goto cond l
-    | Ret l -> ret cond l
     | Int (n,r) ->
       interrupt n >>= fun () ->
       Code.exec (`tid r)
@@ -450,13 +449,14 @@ module Make (Machine : Machine) = struct
   let jmp = term normal jmp_t jmp
 
   let blk t =
-    (* todo add the phi nodes, or think at least.. *)
     Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
     Machine.Seq.find_map (Term.enum jmp_t t) ~f:jmp
 
   let finish = function
-    | None -> Machine.return ()
+    | None -> Machine.return ()  (* return from sub *)
     | Some (cond,code) -> jump cond code
+
+  let blk = term finish blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
@@ -470,11 +470,6 @@ module Make (Machine : Machine) = struct
 
   let arg_use = term normal arg_t arg_use
 
-  let eval_entry cleanup = function
-    | None -> Machine.return ()
-    | Some t ->  term finish blk_t blk ~cleanup t
-
-
   let get_arg t = Env.get (Arg.lhs t)
   let get_args ~input sub =
     Term.enum arg_t sub |>
@@ -483,26 +478,21 @@ module Make (Machine : Machine) = struct
 
   let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f
 
-  let sub t =
-    let name = Sub.name t in
-    iter_args t arg_def >>= fun () ->
-    get_args ~input:true t >>| Seq.to_list >>= fun args ->
-    Machine.Observation.make Linker.Trace.call_entered
-      (name,args) >>= fun () ->
-    let cleanup =
+  let sub t = match Term.first blk_t t with
+    | None -> Machine.return ()
+    | Some entry ->
+      let name = Sub.name t in
+      iter_args t arg_def >>= fun () ->
+      get_args ~input:true t >>| Seq.to_list >>= fun args ->
+      !!Linker.Trace.call_entered (name,args) >>= fun () ->
+      blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
       get_args ~input:false t >>| Seq.to_list >>= fun args ->
-      Machine.Observation.make Linker.Trace.call_returned
-        (name,args) in
-    eval_entry cleanup (Term.first blk_t t)
+      !!Linker.Trace.call_returned (name,args)
 
-
-  let blk = term finish blk_t blk
 
   let sub = term normal sub_t sub
-
   let pos = Machine.Local.get state >>| fun {curr} -> curr
-
   let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
 
