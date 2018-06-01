@@ -61,6 +61,15 @@ let pc_change,pc_changed =
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
 
+let division_by_zero,will_divide_by_zero =
+  Observation.provide ~inspect:sexp_of_unit "division-by-zero"
+
+let segfault, will_segfault =
+  Observation.provide ~inspect:sexp_of_word "segfault"
+
+let pagefault,page_fail =
+  Observation.provide ~inspect:sexp_of_word "pagefault"
+
 let interrupt,will_interrupt =
   Observation.provide ~inspect:sexp_of_int "interrupt"
 
@@ -177,8 +186,9 @@ let state = Bap_primus_machine.State.declare
          curr = Top {me=prog; up=Nil};
        })
 
-
 type exn += Halt
+type exn += Division_by_zero
+type exn += Segmentation_fault of addr
 type exn += Runtime_error of string
 
 let () =
@@ -186,7 +196,14 @@ let () =
       | Runtime_error msg ->
         Some (sprintf "Bap_primus runtime error: %s" msg)
       | Halt -> Some "Halt"
+      | Segmentation_fault x ->
+        Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
+      | Division_by_zero -> Some "Division by zero"
       | _ -> None)
+
+
+let division_by_zero_handler = "__primus_division_by_zero_handler"
+let pagefault_handler =  "__primus_pagefault_hanlder"
 
 
 module Make (Machine : Machine) = struct
@@ -226,12 +243,24 @@ module Make (Machine : Machine) = struct
     Env.get v >>= fun r ->
     !!on_read (v,r) >>| fun () -> r
 
-  let binop op x y =
-    try
+
+  let call_when_provided name =
+    Code.is_linked (`symbol name) >>= fun provided ->
+    if provided then Code.exec (`symbol name) >>| fun () -> true
+    else Machine.return false
+
+  let binop op x y = match op with
+    | Bil.DIVIDE | Bil.SDIVIDE
+    | Bil.MOD | Bil.SMOD
+      when Word.is_zero y.value ->
+      !!will_divide_by_zero () >>= fun () ->
+      call_when_provided division_by_zero_handler >>= fun called ->
+      if called
+      then undefined (Type.Imm (Word.bitwidth x.value))
+      else Machine.raise Division_by_zero
+    | _ ->
       value (Bil.Apply.binop op x.value y.value) >>= fun r ->
       !!on_binop ((op,x,y),r) >>| fun () -> r
-    with Division_by_zero -> failf "Division by zero" ()
-
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
@@ -253,14 +282,25 @@ module Make (Machine : Machine) = struct
     value c >>= fun r ->
     !!on_const r >>| fun () -> r
 
+  let trapped_memory_access access =
+    Machine.catch access (function
+        | Bap_primus_memory.Pagefault a ->
+          !!page_fail a >>= fun () ->
+          call_when_provided pagefault_handler >>= fun trapped ->
+          if trapped then access
+          else
+            !!will_segfault a >>= fun () ->
+            Machine.raise (Segmentation_fault a)
+        | exn -> Machine.raise exn)
+
   let load_byte a =
     !!on_loading a >>= fun () ->
-    Memory.get a.value >>= fun r ->
+    trapped_memory_access (Memory.get a.value) >>= fun r ->
     !!on_loaded (a,r) >>| fun () -> r
 
   let store_byte a x =
     !!on_storing a >>= fun () ->
-    Memory.set a.value x >>= fun () ->
+    trapped_memory_access (Memory.set a.value x) >>= fun () ->
     !!on_stored (a,x)
 
   let rec eval_exp x =

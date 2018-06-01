@@ -757,6 +757,7 @@ module Std : sig
 
     end
 
+
     (** The Interpreter.
 
         The Interpreter is the core componet of the Primus Machine. It
@@ -911,20 +912,69 @@ module Std : sig
           exception) *)
       val interrupt : int observation
 
+      (** [division_by_zero] occurs just before the division by zero trap
+          is signaled.
+
+          See the [binop] operation and [division_by_zero_handler] for more
+          information.
+          @since 1.5  *)
+      val division_by_zero : unit observation
+
+      (** [pagefault x] occurs just before the pagefault trap is signaled.
+
+          See [load] and [store] operations, and [pagefault_handler] for
+          more information.
+          @since 1.5 *)
+      val pagefault : addr observation
+
+      (** [segfault x] occurs when an invalid memory operation is performed
+          on the address [x]. See the [load] and [store] operations for more.
+          @since 1.5  *)
+      val segfault : addr observation
+
+      (** is raised when a computation is halted *)
       type exn += Halt
+
+      (** is raised by a machine that attempts to divide by zero  *)
+      type exn += Division_by_zero
+
+      (** is raised when a memory operation has failed. *)
+      type exn += Segmentation_fault of addr
+
+
+      (** [pagefault_hanlder] is a trap handler that is invoked when the [Pagefault]
+          exception is raised by the machine memory component. If the handler is
+          provided via the Linker, then it is invoked, otherwise a segmentation
+          fault is raised. If the hanlder returns normally then the faulty operation is
+          repeated.
+
+          Note, page faults are usually handled together with the [pagefault]
+          observation.
+
+          @since 1.5
+       *)
+      val pagefault_handler : string
+
+      (** [division_by_zero_hanlder] is a trap handler for
+          the Division_by_zero exception. If it is linked into the machine,
+          then it will be invoked when the division by zero trap is signaled.
+          If it returns normally, then the result of the faulty operation is
+          undefined.
+
+          @since 1.5
+       *)
+      val division_by_zero_handler : string
 
       (** Make(Machine) makes an interpreter that computes in the
           given [Machine].  *)
       module Make (Machine : Machine.S) : sig
         type 'a m = 'a Machine.t
 
-
         (** [halt] halts the machine by raise the [Halt] exception.  *)
         val halt : never_returns m
 
-
+        (** [interrupt n] interrupts the computation with cpuexn [n]  *)
         val interrupt : int -> unit m
-
 
         (** [pc] current value of a program counter.*)
         val pc : addr m
@@ -947,7 +997,14 @@ module Std : sig
         (** [set var x] sets [var] to [x]  *)
         val set : var -> value -> unit m
 
-        (** [binop x y] computes a binary operation [op] on [x] and [y]  *)
+        (** [binop op x y] computes a binary operation [op] on [x] and [y].
+
+            If [binop op x y] will involve the division by zero, then the
+            division by zero trap is signaled. If the
+            [division_by_zero_handler] is provided, (i.e., is linked) then
+            it will be invoked. If it returns normally, then the result of
+            the [binop op x y] is undefined. Otherwise, the [Division_by_zero]
+            machine exception is raised. *)
         val binop : binop -> value -> value -> value m
 
         (** [unop op x] computes an unary operation [op] on [x]  *)
@@ -967,14 +1024,212 @@ module Std : sig
         val const : word -> value m
 
         (** [load a d s] computes a load operation, that loads a word
-            of size [s] using an order specified by the endianness [d] from
-            address [a]. *)
+            of size [s] using an order specified by the endianness [d]
+            from address [a].
+
+            If the address [a] is not mapped, then a pagefault trap
+            is signaled. If the [pagefault_hanlder] is provided, then
+            it is invoked and the load operation repeats. Note, the
+            handler either shall not return or ensure that the
+            second attempt would be successful. If no handler is linked,
+            then the segmentation fault machine exception is raised. *)
         val load : value -> endian -> size -> value m
 
         (** [store a x d s] computes a store operation, that stores at
             the address [a] the word [x] of size [s], using an
-            ordering specified by the endianness [d]. *)
+            ordering specified by the endianness [d].
+
+            If [a] is not mapped or not writable then the pagefault
+            trap is invoked. If the handler is provided, then it is
+            invoked and the operation is repeated. Otherwise the
+            [Segmentation_fault] machine exception is raised.  *)
         val store : value -> value -> endian -> size -> unit m
+      end
+    end
+
+
+    (** Machine Linker.
+
+        The Linker dynamically extends program with the new code.
+
+        The code is represented as a functor that performs a
+        computation using a provided machine.*)
+    module Linker : sig
+
+      (** A code identifier.
+
+          A program code can be identified by a name, address or by a
+          term identifier.  *)
+      type name = [
+        | `tid of tid
+        | `addr of addr
+        | `symbol of string
+        ] [@@deriving bin_io, compare, sexp]
+
+
+      (** Call tracing.
+
+          Linker doesn't operate in terms of functions or subroutines,
+          but rather in terms of executable chunks of code. It is
+          convenient, though, to track called functions, i.e., there
+          are names and arguments (data-flow). Since a code in Primus
+          is an uniterpreted computation it is the responsibility of
+          the code provider to make corresponding observations, when a
+          subroutine is entered or left.
+
+          By default, the code is provided by the BIR Interpeter and
+          Primus Interpreter. Both care to provide corresponding
+          observations. However, the Primus Lisp Interpreter provides call
+          observations only when an externally visible function is
+          called, e.g., malloc, free.
+       *)
+      module Trace : sig
+
+        (** occurs when a subroutine is called.
+            Argument values are specified in the same order in which
+            corresponding input arguments of a corresponding subroutine
+            term are specified.
+
+            Example,
+
+            (call (malloc 4))
+         *)
+        val call : (string * value list) observation
+
+        (** occurs just before a subroutine returns.
+
+            Context-wise, an observation is made when the interpreter is
+            still in the subroutine. The argument list are in the same
+            order as arguments of a corresponding subroutine. Values of
+            all arguments are provided, including output and input
+            arguments.
+
+            Example,
+
+            (call-return (malloc 4 0xDEADBEEF))
+         *)
+        val return : (string * value list) observation
+
+        (** {3 Notification interface}
+
+            Use [Machine.Observation.make] function, where [Machine]
+            is a module implementing [Machine.S] interface, to provide
+            observations.
+         *)
+
+        (** the statement that makes [call] observations. *)
+        val call_entered : (string * value list) statement
+
+        (** the statement that makes [return] observations  *)
+        val call_returned : (string * value list) statement
+
+      end
+
+      (** The Linker error  *)
+      type exn += Unbound_name of name
+
+
+      (** occurs before a piece of code is executed *)
+      val exec : name observation
+
+      (** occurs when an unresolved name is called, just before the
+            unresolved trap is signaled. Could be used to install the
+            trap handler.
+
+            @since 1.5 *)
+      val unresolved : name observation
+
+      (** [unresolved_handler] is called instead of an unbound name.
+
+          @since 1.5
+
+       *)
+      val unresolved_handler : string
+
+      module Name : Regular.S with type t = name
+
+
+      (** Code representation.
+
+          A code representation is abstract and hides how the code
+          itself is represented. It is just a function, that takes a
+          machine and performs a computation using this machine.*)
+      module type Code = functor (Machine : Machine.S) -> sig
+
+                           (** [exec] computes the code.  *)
+                           val exec : unit Machine.t
+                         end
+
+
+      (** code representation  *)
+      type code = (module Code)
+
+      (** [Make(Machine)] parametrize the [Linker] with the [Machine].
+
+          Note that the Linker, as well as all other Primus Machine
+          components, is stateless, i.e., the functor itself doesn't
+          contain any non-syntactic values and thus it is purely
+          functional. All the state is stored in the [Machine]
+          state. Thus it is absolutely safe, and correct, to create
+          multiple instances of components, as they needed. The
+          functor instatiation is totaly side-effect free.*)
+      module Make(Machine : Machine.S) : sig
+        type 'a m = 'a Machine.t
+
+        (** [link ~addr ~name ~tid code] links the given [code]
+            fragment into the Machine. The code can be invoked by one
+            of the provided identifier. If no idetifiers were
+            provided, then apparently code will not be ever invoked. If
+            an identifier was alread bound to some other code
+            fragment, then the old binding will be substituted by the new
+            one.  *)
+        val link :
+          ?addr:addr ->
+          ?name:string ->
+          ?tid:tid ->
+          code -> unit m
+
+        (** [unlink name] removes code linked with the provided [name].
+
+            Also, removes all aliases of the given [name]. *)
+        val unlink : name -> unit m
+
+        (** [lookup name] returns code linked with the given [name].  *)
+        val lookup : name -> code option m
+
+        (** [exec name] executes a code fragment associated with the
+            given name. Terminates the computation with the
+            [Linker.Unbound_name name] condition, if the [name] is not
+            associated with any code fragment.  *)
+        val exec : name -> unit m
+
+
+        (** [resolve_addr name] returns the address associated with the
+            given [name].  *)
+        val resolve_addr : name -> addr option m
+
+
+        (** [resolve_symbol name] returns the symbolic name associated
+            with the given [name].
+
+            @since 1.5.0
+         *)
+        val resolve_symbol : name -> string option m
+
+
+        (** [resolve_tid name] returns the term identifier associated
+            with the given [name].
+
+            @since 1.5.0
+         *)
+        val resolve_tid : name -> tid option m
+
+
+        (** [is_linked name] computes to [true] if the [name] is
+            associated with some code.
+
+            @since 1.5.0 *)
+        val is_linked : name -> bool m
       end
     end
 
@@ -1103,170 +1358,6 @@ module Std : sig
       end
     end
 
-    (** Machine Linker.
-
-        The Linker dynamically extends program with the new code.
-
-        The code is represented as a functor that performs a
-        computation using a provided machine.*)
-    module Linker : sig
-
-      (** A code identifier.
-
-          A program code can be identified by a name, address or by a
-          term identifier.  *)
-      type name = [
-        | `tid of tid
-        | `addr of addr
-        | `symbol of string
-      ] [@@deriving bin_io, compare, sexp]
-
-
-      (** Call tracing.
-
-          Linker doesn't operate in terms of functions or subroutines,
-          but rather in terms of executable chunks of code. It is
-          convenient, though, to track called functions, i.e., there
-          are names and arguments (data-flow). Since a code in Primus
-          is an uniterpreted computation it is the responsibility of
-          the code provider to make corresponding observations, when a
-          subroutine is entered or left.
-
-          By default, the code is provided by the BIR Interpeter and
-          Primus Interpreter. Both care to provide corresponding
-          observations. However, the Primus Lisp Interpreter provides call
-          observations only when an externally visible function is
-          called, e.g., malloc, free.
-      *)
-      module Trace : sig
-
-        (** occurs when a subroutine is called.
-            Argument values are specified in the same order in which
-            corresponding input arguments of a corresponding subroutine
-            term are specified.
-
-            Example,
-
-            (call (malloc 4))
-        *)
-        val call : (string * value list) observation
-
-        (** occurs just before a subroutine returns.
-
-            Context-wise, an observation is made when the interpreter is
-            still in the subroutine. The argument list are in the same
-            order as arguments of a corresponding subroutine. Values of
-            all arguments are provided, including output and input
-            arguments.
-
-            Example,
-
-            (call-return (malloc 4 0xDEADBEEF))
-        *)
-        val return : (string * value list) observation
-
-        (** {3 Notification interface}
-
-            Use [Machine.Observation.make] function, where [Machine]
-            is a module implementing [Machine.S] interface, to provide
-            observations.
-        *)
-
-        (** the statement that makes [call] observations. *)
-        val call_entered : (string * value list) statement
-
-        (** the statement that makes [return] observations  *)
-        val call_returned : (string * value list) statement
-      end
-
-      (** The Linker error  *)
-      type exn += Unbound_name of name
-
-
-      (** occurs before a piece of code is executed *)
-      val exec : name observation
-
-      module Name : Regular.S with type t = name
-
-
-      (** Code representation.
-
-          A code representation is abstract and hides how the code
-          itself is represented. It is just a function, that takes a
-          machine and performs a computation using this machine.*)
-      module type Code = functor (Machine : Machine.S) -> sig
-
-        (** [exec] computes the code.  *)
-        val exec : unit Machine.t
-      end
-
-
-      (** code representation  *)
-      type code = (module Code)
-
-      (** [Make(Machine)] parametrize the [Linker] with the [Machine].
-
-          Note that the Linker, as well as all other Primus Machine
-          components, is stateless, i.e., the functor itself doesn't
-          contain any non-syntactic values and thus it is purely
-          functional. All the state is stored in the [Machine]
-          state. Thus it is absolutely safe, and correct, to create
-          multiple instances of components, as they needed. The
-          functor instatiation is totaly side-effect free.*)
-      module Make(Machine : Machine.S) : sig
-        type 'a m = 'a Machine.t
-
-        (** [link ~addr ~name ~tid code] links the given [code]
-            fragment into the Machine. The code can be invoked by one
-            of the provided identifier. If no idetifiers were
-            provided, then apparently code will not be ever invoked. If
-            an identifier was alread bound to some other code
-            fragment, then the old binding will be shadowed by the new
-            one.  *)
-        val link :
-          ?addr:addr ->
-          ?name:string ->
-          ?tid:tid ->
-          code -> unit m
-
-
-        (** [exec name] executes a code fragment associated with the
-            given name. Terminates the computation with the
-            [Linker.Unbound_name name] condition, if the [name] is not
-            associated with any code fragment.  *)
-        val exec : name -> unit m
-
-
-        (** [resolve_addr name] returns the address associated with the
-            given [name].  *)
-        val resolve_addr : name -> addr option m
-
-
-        (** [resolve_symbol name] returns the symbolic name associated
-            with the given [name].
-
-            @since 1.5.0
-        *)
-        val resolve_symbol : name -> string option m
-
-
-        (** [resolve_tid name] returns the term identifier associated
-            with the given [name].
-
-            @since 1.5.0
-        *)
-        val resolve_tid : name -> tid option m
-
-
-        (** [is_linked name] computes to [true] if the [name] is
-            associated with some code.
-
-            @since 1.5.0 *)
-        val is_linked : name -> bool m
-      end
-    end
-
-
     (** Evaluation environemnt.
 
         The Environment binds variables to values.*)
@@ -1313,17 +1404,27 @@ module Std : sig
         The virtual memory is a byte addressable machine memory.*)
     module Memory : sig
 
+      (** occurs when a memory operation for the given addr cannot be satisfied. *)
+      type exn += Pagefault of addr
+
 
       (** [Make(Machine)] lifts the memory interface into the
           [Machine] monad.  *)
       module Make(Machine : Machine.S) : sig
 
 
-        (** [set a] loads a byte from the address [a]  *)
+        (** [get a] loads a byte from the address [a].
+
+            raises the [Pagefault] machine exception if [a] is not mapped.
+
+         *)
         val get : addr -> value Machine.t
 
 
         (** [set a x] stores the byte [x] at the address [a].
+
+            raises the [Pagefault] machine exception if [a] is not mapped,
+            or not writable.
 
             Precondition: [Value.bitwidth x = 8].
         *)

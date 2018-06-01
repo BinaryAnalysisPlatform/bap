@@ -10,11 +10,11 @@ module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
 open Bap_primus_sexp
 
-type exn += Segmentation_fault of addr
+type exn += Pagefault of addr
 
 let () = Exn.add_printer (function
-    | Segmentation_fault here ->
-      Some (asprintf "Segmentation fault at %a"
+    | Pagefault here ->
+      Some (asprintf "Page fault at %a"
               Addr.pp_hex here)
     | _ -> None)
 
@@ -101,10 +101,10 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun s ->
     Machine.Local.put state (f s)
 
-  let segfault addr = Machine.raise (Segmentation_fault addr)
+  let pagefault addr = Machine.raise (Pagefault addr)
 
   let read addr {values;layers} = match find_layer addr layers with
-    | None -> segfault addr
+    | None -> pagefault addr
     | Some layer -> match Map.find values addr with
       | Some v -> Machine.return v
       | None -> match layer.mem with
@@ -117,8 +117,8 @@ module Make(Machine : Machine) = struct
 
   let write addr value {values;layers} =
     match find_layer addr layers with
-    | None -> segfault addr
-    | Some {perms={readonly=true}} -> segfault addr
+    | None -> pagefault addr
+    | Some {perms={readonly=true}} -> pagefault addr
     | Some _ -> Machine.return {
         layers;
         values = Map.add values ~key:addr ~data:value;
