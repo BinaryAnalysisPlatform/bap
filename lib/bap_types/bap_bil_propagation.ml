@@ -47,15 +47,12 @@ end
 module Node = struct
   type t = node [@@deriving bin_io, compare, sexp]
 
-  let make ?bid x = match bid with
-    | None -> Bid.get_fresh (), x
-    | Some bid -> bid, x
-
-  let atom ?bid s = make ?bid (Atom s)
-  let if_ ?bid exp = make ?bid (If_node exp)
-  let while_ ?bid exp bil = make ?bid (While_node (exp,bil))
-  let enter ?bid () = make ?bid Enter
-  let merge ?bid () = make ?bid Merge
+  let make x = Bid.get_fresh (), x
+  let atom s = make (Atom s)
+  let if_ exp = make (If_node exp)
+  let while_ exp bil = make (While_node (exp,bil))
+  let enter () = make Enter
+  let merge () = make Merge
   let bid (x,_) = x
   let value (_,x) = x
   let with_value (id,_) x = id,x
@@ -101,43 +98,40 @@ end
 
 module G = Graphlib.Make(Node)(Edge)
 
-(* invariant: every condition node must have both take and fail
+(* invariant: every condition node has both take and fail
               in output edges
-   invariant: merge node must be in the end of both take and
-              fail edges and must be the same for both of them *)
+   invariant: any 'if' condition ends with merge node *)
 let cfg_of_bil bil =
-  let add cfg preds node =
+  let add cfg (predc, edge) node =
     let cfg = G.Node.insert node cfg in
-    List.fold preds ~init:cfg
-      ~f:(fun cfg (src, edge) ->
-          let e = G.Edge.create src node edge in
-          G.Edge.insert e cfg) in
-  let rec run cfg preds = function
-    | [] -> cfg,preds
-    | If (_, [],[]) :: bil -> run cfg preds bil
+    let e = G.Edge.create predc node edge in
+    G.Edge.insert e cfg in
+  let rec run cfg predc = function
+    | [] -> cfg, predc
+    | If (_, [],[]) :: bil -> run cfg predc bil
     | If (cond, yes, no) :: bil ->
       let node = Node.if_ cond in
-      let cfg = add cfg preds node in
-      let cfg,preds  = run cfg [node, Edge.take] yes in
-      let cfg,preds' = run cfg [node, Edge.fail] no in
+      let cfg = add cfg predc node in
+      let cfg,predc  = run cfg (node, Edge.take) yes in
+      let cfg,predc' = run cfg (node, Edge.fail) no in
       let merge = Node.merge () in
-      let cfg = add cfg (preds' @ preds) merge in
-      run cfg [merge, Edge.goto] bil
+      let cfg = add cfg predc merge in
+      let cfg = add cfg predc' merge in
+      run cfg (merge, Edge.goto) bil
     | While (cond, body) :: bil ->
       let node = Node.while_ cond body in
-      let cfg = add cfg preds node in
-      let cfg,preds = run cfg [node, Edge.take] body in
-      let cfg = match preds with
-        | [] -> cfg
-        | (hd,_) :: _ when List.is_empty body ->
-          add cfg [hd, Edge.take] node
-        | (hd,_) :: _ -> add cfg [hd, Edge.goto] node in
-      run cfg [node, Edge.fail] bil
+      let cfg = add cfg predc node in
+      let cfg = match body with
+        | [] -> add cfg (node, Edge.take) node
+        | _ ->
+          let cfg,(predc,_) = run cfg (node, Edge.take) body in
+          add cfg (predc, Edge.goto) node in
+      run cfg (node, Edge.fail) bil
     | s :: bil ->
       let node = Node.atom s in
-      let cfg = add cfg preds node in
-      run cfg [node, Edge.goto] bil in
-  fst (run G.empty [Node.enter (), Edge.goto] bil)
+      let cfg = add cfg predc node in
+      run cfg (node, Edge.goto) bil in
+  fst (run G.empty (Node.enter (), Edge.goto) bil)
 
 let enter g = Seq.find (G.nodes g) ~f:Node.is_enter
 let find_edge edges f = List.find edges ~f:(fun e -> f (G.Edge.label e))
@@ -149,13 +143,46 @@ let find_fail_exn edges = find_edge_exn edges Edge.is_fail
 module Const = struct
 
   type const = Defined of word | Undefined
-  type vector = const Var.Map.t
-  type env = vector G.Edge.Map.t
+  type input = const Var.Map.t
+  type env = input G.Edge.Map.t
+
+  module Input = struct
+    type t = input
+
+    let empty = Var.Map.empty
+    let add = Map.add
+    let find = Map.find
+    let find_exn = Map.find_exn
+    let is_empty = Map.is_empty
+
+    let update t var = function
+      | Int i -> Map.add t var (Defined i)
+      | _ -> Map.add t var Undefined
+
+    let merge ts =
+      let both_defined = function
+        | `Both (Defined w1, Defined w2) ->
+          Option.some_if (Word.equal w1 w2) (Defined w1)
+        | _ -> None in
+      match ts with
+      | [] -> empty
+      | x :: xs ->
+        List.fold xs ~init:x ~f:(Map.merge ~f:(fun ~key:_ -> both_defined))
+  end
+
+  module Env = struct
+    type t = env
+    let empty = G.Edge.Map.empty
+    let update state env edge = Map.update env edge ~f:(fun _ -> state)
+    let update' state env edges =
+      List.fold edges ~init:env ~f:(update state)
+    let find_exn = Map.find_exn
+  end
 
   class apply input = object
     inherit bil_mapper as super
     method! map_var v =
-      match Map.find input v with
+      match Input.find input v with
       | Some (Defined i) -> Int i
       | _ -> Var v
     method! map_exp e = match e with
@@ -166,23 +193,9 @@ module Const = struct
   let (@@) e input = (new apply input)#map_exp e
   let (@$) s input = (new apply input)#map_stmt s
 
-  let update input var = function
-    | Int i -> Map.add input var (Defined i)
-    | _ -> Map.add input var Undefined
-
   let update_state input = function
-    | Move (v, e) -> update input v (e @@ input)
+    | Move (v, e) -> Input.update input v (e @@ input)
     | _ -> input
-
-  let merge inputs =
-    let both_defined = function
-      | `Both (Defined w1, Defined w2) ->
-        Option.some_if (Word.equal w1 w2) (Defined w1)
-      | _ -> None in
-    match inputs with
-    | [] -> Var.Map.empty
-    | x :: xs ->
-      List.fold xs ~init:x ~f:(Map.merge ~f:(fun ~key:_ -> both_defined))
 
   let defs bil =
     (object
@@ -192,27 +205,23 @@ module Const = struct
     end)#run bil Var.Set.empty
 
   let run cfg =
-    let update_env state env edge =
-      Map.update env edge ~f:(fun _ -> state) in
-    let update_env' state env edges =
-      List.fold edges ~init:env ~f:(update_env state) in
     let process_merge inputs outputs env =
       let out_state =
         Seq.filter_map inputs ~f:(fun inp ->
-            let e = Map.find_exn env inp in
-            Option.some_if (not (Map.is_empty e)) e) |>
-        Seq.to_list |> merge in
-      update_env' out_state env outputs in
+            let e = Env.find_exn env inp in
+            Option.some_if (not (Input.is_empty e)) e) |>
+        Seq.to_list |> Input.merge in
+      Env.update' out_state env outputs in
     let rec loop env predc = function
       | [] -> env, predc
       | e :: worklist ->
         let target = G.Edge.dst e in
         let outputs = Seq.to_list (G.Node.outputs target cfg) in
-        let in_state = Map.find_exn env e in
+        let in_state = Env.find_exn env e in
         match Node.value target with
         | Atom s ->
           let out_state = update_state in_state s in
-          let env = update_env' out_state env outputs in
+          let env = Env.update' out_state env outputs in
           loop env target (outputs @ worklist)
         | If_node cond ->
           let cond = cond @@ in_state in
@@ -220,11 +229,11 @@ module Const = struct
           let take = find_take_exn outputs in
           let env, merge = match cond @@ in_state with
             | Int w when Word.is_one w ->
-              loop (update_env in_state env take) target [take]
+              loop (Env.update in_state env take) target [take]
             | Int w when Word.is_zero w ->
-              loop (update_env in_state env fail) target [fail]
+              loop (Env.update in_state env fail) target [fail]
             | _ ->
-              let env = update_env' in_state env [take; fail] in
+              let env = Env.update' in_state env [take; fail] in
               loop env target [take; fail] in
           let inputs = G.Node.inputs merge cfg in
           let outputs = Seq.to_list (G.Node.outputs merge cfg) in
@@ -232,30 +241,26 @@ module Const = struct
           loop env target (outputs @ worklist)
         | Merge -> loop env target worklist
         | While_node (_,body) ->
-          let defs = defs body in
-          let state = Set.fold defs ~init:in_state
-              ~f:(fun state v -> Map.add state v Undefined) in
+          let state = Set.fold (defs body) ~init:in_state
+              ~f:(fun state v -> Input.add state v Undefined) in
           let fail_edge = find_fail_exn outputs in
-          let env = update_env state env fail_edge in
+          let env = Env.update state env fail_edge in
           loop env target (fail_edge :: worklist)
         | Enter -> env, predc in
     let init = Seq.fold (G.edges cfg)
-        ~init:G.Edge.Map.empty ~f:(update_env Var.Map.empty) in
+        ~init:Env.empty ~f:(Env.update Input.empty) in
     Option.(enter cfg >>= fun node ->
             Seq.hd (G.Node.outputs node cfg) >>= fun edge ->
             Some (node, edge)) |> function
     | None -> init
     | Some (node, edge) -> fst (loop init node [edge])
 
-  let find nodes bid =
-    Seq.find nodes ~f:(fun n -> Bid.equal (Node.bid n) bid)
-
   let propagate bil =
     let cfg = cfg_of_bil bil in
     let env = run cfg in
     let find_input node =
       let inputs = G.Node.inputs node cfg in
-      Map.find_exn env (Seq.hd_exn inputs) in
+      Env.find_exn env (Seq.hd_exn inputs) in
     let eval_node node =
       match Node.value node with
       | Atom s -> Atom (List.hd_exn (s @$ find_input node))
