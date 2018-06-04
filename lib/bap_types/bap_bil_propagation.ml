@@ -204,30 +204,31 @@ module Const = struct
         Set.add defs v
     end)#run bil Var.Set.empty
 
+  let merge env inputs =
+    Seq.filter_map inputs ~f:(fun inp ->
+        let e = Env.find_exn env inp in
+        Option.some_if (not (Input.is_empty e)) e) |>
+    Seq.to_list |> Input.merge
+
   let run cfg =
-    let process_merge inputs outputs env =
-      let out_state =
-        Seq.filter_map inputs ~f:(fun inp ->
-            let e = Env.find_exn env inp in
-            Option.some_if (not (Input.is_empty e)) e) |>
-        Seq.to_list |> Input.merge in
-      Env.update' out_state env outputs in
     let rec loop env predc = function
       | [] -> env, predc
       | e :: worklist ->
         let target = G.Edge.dst e in
-        let outputs = Seq.to_list (G.Node.outputs target cfg) in
-        let in_state = Env.find_exn env e in
+        let outputs = G.Node.outputs target cfg in
         match Node.value target with
         | Atom s ->
+          let outputs = Seq.to_list outputs in
+          let in_state = Env.find_exn env e in
           let out_state = update_state in_state s in
           let env = Env.update' out_state env outputs in
           loop env target (outputs @ worklist)
         | If_node cond ->
-          let cond = cond @@ in_state in
+          let outputs = Seq.to_list outputs in
+          let in_state = Env.find_exn env e in
           let fail = find_fail_exn outputs in
           let take = find_take_exn outputs in
-          let env, merge = match cond @@ in_state with
+          let env, merge_node = match cond @@ in_state with
             | Int w when Word.is_one w ->
               loop (Env.update in_state env take) target [take]
             | Int w when Word.is_zero w ->
@@ -235,15 +236,16 @@ module Const = struct
             | _ ->
               let env = Env.update' in_state env [take; fail] in
               loop env target [take; fail] in
-          let inputs = G.Node.inputs merge cfg in
-          let outputs = Seq.to_list (G.Node.outputs merge cfg) in
-          let env = process_merge inputs outputs env in
-          loop env target (outputs @ worklist)
+          let outputs' = Seq.to_list (G.Node.outputs merge_node cfg) in
+          let merged = merge env (G.Node.inputs merge_node cfg) in
+          let env = Env.update' merged env outputs' in
+          loop env target (outputs' @ worklist)
         | Merge -> loop env target worklist
         | While_node (_,body) ->
+          let in_state = Env.find_exn env e in
           let state = Set.fold (defs body) ~init:in_state
               ~f:(fun state v -> Input.add state v Undefined) in
-          let fail_edge = find_fail_exn outputs in
+          let fail_edge = find_fail_exn (Seq.to_list outputs) in
           let env = Env.update state env fail_edge in
           loop env target (fail_edge :: worklist)
         | Enter -> env, predc in
@@ -288,8 +290,7 @@ module Const = struct
         | Enter  -> loop acc outputs
         | Atom s -> loop (s :: acc) outputs
         | While_node (cond, body) ->
-          let fail = find_fail_exn outputs in
-          loop (While (cond, body) :: acc) [fail] in
+          loop (While (cond, body) :: acc) [find_fail_exn outputs] in
     Option.(enter cfg >>= fun n -> Seq.hd (G.Node.outputs n cfg)) |> function
     | None -> []
     | Some e -> fst (loop [] [e])
