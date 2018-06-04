@@ -145,29 +145,6 @@ let find_edge_exn edges f = Option.value_exn (find_edge edges f)
 let find_take_exn edges = find_edge_exn edges Edge.is_take
 let find_fail_exn edges = find_edge_exn edges Edge.is_fail
 
-let bil_of_cfg cfg =
-  let rec loop acc = function
-    | [] -> List.rev acc, []
-    | edge :: _ ->
-      let dst = G.Edge.dst edge in
-      let outputs = Seq.to_list (G.Node.outputs dst cfg) in
-      match Node.value dst with
-      | If_node cond ->
-        let take = find_take_exn outputs in
-        let fail = find_fail_exn outputs in
-        let yes, next = loop [] [take] in
-        let no,_ = loop [] [fail] in
-        loop (If (cond, yes, no) :: acc) next
-      | Merge  -> List.rev acc, outputs
-      | Enter  -> loop acc outputs
-      | Atom s -> loop (s :: acc) outputs
-      | While_node (cond, body) ->
-        let fail = find_fail_exn outputs in
-        loop (While (cond, body) :: acc) [fail] in
-  Option.(enter cfg >>= fun n -> Seq.hd (G.Node.outputs n cfg)) |> function
-  | None -> []
-  | Some e -> fst (loop [] [e])
-
 (* simple worklist algorithm *)
 module Const = struct
 
@@ -226,8 +203,8 @@ module Const = struct
             Option.some_if (not (Map.is_empty e)) e) |>
         Seq.to_list |> merge in
       update_env' out_state env outputs in
-    let rec loop env = function
-      | [] -> env, None
+    let rec loop env predc = function
+      | [] -> env, predc
       | e :: worklist ->
         let target = G.Edge.dst e in
         let outputs = Seq.to_list (G.Node.outputs target cfg) in
@@ -236,43 +213,39 @@ module Const = struct
         | Atom s ->
           let out_state = update_state in_state s in
           let env = update_env' out_state env outputs in
-          loop env (outputs @ worklist)
+          loop env target (outputs @ worklist)
         | If_node cond ->
+          let cond = cond @@ in_state in
           let fail = find_fail_exn outputs in
           let take = find_take_exn outputs in
           let env, merge = match cond @@ in_state with
             | Int w when Word.is_one w ->
-              loop (update_env in_state env take) [take]
+              loop (update_env in_state env take) target [take]
             | Int w when Word.is_zero w ->
-              loop (update_env in_state env fail) [fail]
+              loop (update_env in_state env fail) target [fail]
             | _ ->
               let env = update_env' in_state env [take; fail] in
-              loop env [take; fail] in
-          let merge = Option.value_exn merge in
+              loop env target [take; fail] in
           let inputs = G.Node.inputs merge cfg in
           let outputs = Seq.to_list (G.Node.outputs merge cfg) in
           let env = process_merge inputs outputs env in
-          loop env (outputs @ worklist)
-        | Merge ->
-          begin
-            match worklist with
-            | [] -> env, Some target
-            | wl -> loop env wl
-          end
+          loop env target (outputs @ worklist)
+        | Merge -> loop env target worklist
         | While_node (_,body) ->
           let defs = defs body in
           let state = Set.fold defs ~init:in_state
               ~f:(fun state v -> Map.add state v Undefined) in
           let fail_edge = find_fail_exn outputs in
           let env = update_env state env fail_edge in
-          loop env (fail_edge :: worklist)
-        | Enter -> env, None in
+          loop env target (fail_edge :: worklist)
+        | Enter -> env, predc in
     let init = Seq.fold (G.edges cfg)
         ~init:G.Edge.Map.empty ~f:(update_env Var.Map.empty) in
     Option.(enter cfg >>= fun node ->
-            Seq.hd (G.Node.outputs node cfg)) |> function
+            Seq.hd (G.Node.outputs node cfg) >>= fun edge ->
+            Some (node, edge)) |> function
     | None -> init
-    | Some edge -> fst (loop init [edge])
+    | Some (node, edge) -> fst (loop init node [edge])
 
   let find nodes bid =
     Seq.find nodes ~f:(fun n -> Bid.equal (Node.bid n) bid)
@@ -283,21 +256,39 @@ module Const = struct
     let find_input node =
       let inputs = G.Node.inputs node cfg in
       Map.find_exn env (Seq.hd_exn inputs) in
-    let cfg' = Seq.fold (G.nodes cfg) ~init:G.empty
-        ~f:(fun cfg' node ->
-            let node' = Node.with_value node
-                (match Node.value node with
-                 | Atom s -> Atom (List.hd_exn (s @$ find_input node))
-                 | If_node c -> If_node (c @@ find_input node)
-                 | x -> x) in
-            G.Node.insert node' cfg') in
-    let nodes = G.nodes cfg' in
-    let find_same x = Option.value_exn (find nodes (Node.bid x)) in
-    Seq.fold ~init:cfg' (G.edges cfg) ~f:(fun cfg' e ->
-        let src = find_same (G.Edge.src e) in
-        let dst = find_same (G.Edge.dst e) in
-        G.Edge.insert (G.Edge.create src dst (G.Edge.label e)) cfg') |>
-    bil_of_cfg
+    let eval_node node =
+      match Node.value node with
+      | Atom s -> Atom (List.hd_exn (s @$ find_input node))
+      | If_node c -> If_node (c @@ find_input node)
+      | While_node (c,body) ->
+        begin
+          match c @@ find_input node with
+          | Int w as e when Word.is_zero w -> While_node (e,body)
+          | _ -> While_node (c,body)
+        end
+      | x -> x in
+    let rec loop acc = function
+      | [] -> List.rev acc, []
+      | edge :: _ ->
+        let dst = G.Edge.dst edge in
+        let outputs = Seq.to_list (G.Node.outputs dst cfg) in
+        match eval_node dst with
+        | If_node cond ->
+          let take = find_take_exn outputs in
+          let fail = find_fail_exn outputs in
+          let yes, next = loop [] [take] in
+          let no,_ = loop [] [fail] in
+          loop (If (cond, yes, no) :: acc) next
+        | Merge  -> List.rev acc, outputs
+        | Enter  -> loop acc outputs
+        | Atom s -> loop (s :: acc) outputs
+        | While_node (cond, body) ->
+          let fail = find_fail_exn outputs in
+          loop (While (cond, body) :: acc) [fail] in
+    Option.(enter cfg >>= fun n -> Seq.hd (G.Node.outputs n cfg)) |> function
+    | None -> []
+    | Some e -> fst (loop [] [e])
+
 end
 
 let simpl_cond_stmts =
