@@ -433,6 +433,18 @@ let suite () =
     "cast signed 8 (extract 6 2 x:8),no simpl" >:: Bil.(cast signed 8 (extract 6 2 x) <=> cast signed 8 (extract 6 2 x));
     "cast signed 8 (x ^ y) = y" >:: Bil.(cast signed 8 (x ^ y) <=> y);
 
+    "cast low 10 (cast unsigned 16 x) = cast unsigned 10" >:: Bil.(cast low 10 (cast unsigned 16 x) <=> cast unsigned 10 x);
+    "cast low 10 (cast signed 16 x) = cast signed 10" >:: Bil.(cast low 10 (cast signed 16 x) <=> cast signed 10 x);
+    "cast low 7 (cast low 6 x) = cast low 6" >:: Bil.(cast low 6 (cast low 7 x) <=> cast low 6 x);
+
+    "cast unsigned 10 (cat unsigned 16) = cast unsigned 10" >:: Bil.(cast unsigned 10 (cast unsigned 16 x) <=> cast unsigned 10 x);
+    "cast unsigned 10 (cat signed 16) = cast signed 10" >:: Bil.(cast unsigned 10 (cast signed 16 x) <=> cast signed 10 x);
+    "cast unsigned 10 (cat low 16) = cast low 10" >:: Bil.(cast unsigned 6 (cast low 7 x) <=> cast low 6 x);
+
+    "cast signed 10 (cat unsigned 16) = cast unsigned 10" >:: Bil.(cast signed 10 (cast unsigned 16 x) <=> cast unsigned 10 x);
+    "cast signed 10 (cat signed 16) = cast signed 10" >:: Bil.(cast signed 10 (cast signed 16 x) <=> cast signed 10 x);
+    "cast signed 6 (cat low 7) = cast low 6" >:: Bil.(cast signed 6 (cast low 7 x) <=> cast low 6 x);
+
     "random: plus, times etc."         >:: random gen_binop ~width:32 ~times:100;
     "ranfom: <, <=, =, <> etc."        >:: random gen_cmp ~width:1 ~times:100;
 
