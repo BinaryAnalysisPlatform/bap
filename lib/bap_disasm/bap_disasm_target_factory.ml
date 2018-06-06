@@ -1,8 +1,10 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Bap_image_std
+open Monads.Std
 include Bap_disasm_target_intf
 
+module Res = Monad.Result.Error
 
 let create_stub_target () =
   let module Lifter = struct
@@ -54,32 +56,61 @@ let type_check bil = match Type.check bil with
     Error err
   | Ok () -> Ok bil
 
-(* bass = bil analysis  *)
-type bass = bil -> bil Or_error.t
+type bass = addr -> word -> bil -> bil Or_error.t
 
-let basses = String.Table.create ()
-let selected = Queue.create ()
+let basses : bass list String.Table.t = String.Table.create ()
+let memo = "memo"
+let bass = "bil analysis"
+let register_bass cat bass = Hashtbl.add_multi basses cat bass
 
-let register_bass name (bass:bass) =
-  Hashtbl.update basses name (fun _ -> bass)
+let find_basses cat =
+  List.rev @@ Option.value ~default:[] (Hashtbl.find basses cat)
 
-let find_bass name = Hashtbl.find basses name
-let run_bass bass = Queue.enqueue selected bass
-let bass_list () = Hashtbl.keys basses
+let apply_memo addr code bil =
+  Res.List.find_map (find_basses memo)
+    ~f:(fun f -> match f addr code bil with
+        | Error _ as e -> e
+        | Ok bil -> Ok (Some bil)) |> function
+  | Ok (Some bil) -> Ok bil
+  | Error _ as e -> e
+  | _ -> Error (Error.of_string "insn is not memoized")
 
-let apply_basses bil =
-  let open Or_error in
+let apply_analysis addr code bil =
+  let open Res in
   let rec apply bil = function
     | [] -> bil
     | f :: fs ->
-      bil >>= fun bil -> apply (f bil) fs in
-  apply (type_check bil) (Queue.to_list selected)
+      bil >>= fun bil -> apply (f addr code bil) fs in
+  apply (type_check bil) (find_basses bass)
+
+let find_bass _name = None
+let run_bass _bass = ()
+let bass_list () = []
+
+let get_opcode mem =
+  let open Res in
+  let len = Memory.length mem in
+  let rec run n code addr =
+    if n = len then return code
+    else
+      Memory.get ~addr mem >>= fun word ->
+      run (n + 1) (Word.concat code word) (Word.succ addr) in
+  let addr = Memory.min_addr mem in
+  Memory.get ~addr mem >>= fun fst ->
+  run 1 fst (Addr.succ addr)
 
 module Make(T : Target) = struct
   include T
 
   let lift memory insn =
-    Or_error.(T.lift memory insn >>= apply_basses)
+    let addr = Memory.min_addr memory in
+    match get_opcode memory with
+    | Error _ as e -> e
+    | Ok code ->
+      match apply_memo addr code [] with
+      | Ok bil -> Ok bil
+      | _ ->
+        Or_error.(T.lift memory insn >>= apply_analysis addr code)
 end
 
 let register_target arch (module Target : Target) =

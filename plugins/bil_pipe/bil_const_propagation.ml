@@ -308,19 +308,24 @@ let simpl_cond_stmts =
 let propagate_consts bil =
   Const.propagate bil |> simpl_cond_stmts
 
-let propagate_copy ?(virtual_only=true) bil =
+let has_loops bil =
+  (object
+    inherit [bool] Stmt.visitor
+    method! enter_while ~cond:_ _ _ = true
+  end)#run bil false
+
+let propagate_copy bil =
   let rec loop acc = function
     | [] -> List.rev acc
     | s :: bil ->
-      let acc =
-        match s with
+      let acc = match s with
         | Move (v, Int _) as s ->
-          if (virtual_only && Var.is_virtual v) || not virtual_only
-          then acc
+          if Var.is_virtual v then acc
           else s :: acc
         | If (cond, yes, no) -> If (cond,loop [] yes,loop [] no) :: acc
         | While (cond, body) -> While (cond, loop [] body) :: acc
         | s -> s :: acc in
       loop acc bil in
   let bil = propagate_consts bil in
-  loop [] bil
+  if has_loops bil then bil
+  else loop [] bil

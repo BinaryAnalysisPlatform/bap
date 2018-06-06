@@ -6592,8 +6592,10 @@ module Std : sig
   (** bil analysis *)
   type bass
 
-  (** [register_bass name bass] register a new [bass] with a [name] *)
-  val register_bass : string -> (bil -> bil Or_error.t) -> unit
+  (** [register_bass cat bass] register a new [bass] with a [name] *)
+  val register_bass : string -> (addr -> word -> bil -> bil Or_error.t) -> unit
+  val memo : string
+  val bass : string
 
   (** [find_bass name] returns a bass with [name] *)
   val find_bass : string -> bass option
