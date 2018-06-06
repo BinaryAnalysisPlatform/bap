@@ -7,6 +7,6 @@ Library bil_pipe_plugin
   Path:             plugins/bil_pipe
   Build$:           flag(everything) || flag(bil_pipe)
   FindlibName:      bap-plugin-bil_pipe
-  InternalModules:  Bil_pipe_main
+  InternalModules:  Bil_pipe_main, Bil_const_propagation
   BuildDepends:     bap
   XMETAExtraLines:  tags="bil"

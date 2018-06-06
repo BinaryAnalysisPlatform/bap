@@ -37,7 +37,6 @@ Library types
                    Bap_bili,
                    Bap_bili_types,
                    Bap_bil_adt,
-                   Bap_bil_propagation,
                    Bap_biri,
                    Bap_biri_types,
                    Bap_bitvector,

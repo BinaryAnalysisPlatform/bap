@@ -85,7 +85,6 @@ module Std = struct
     include Bap_stmt.Stmt
     include Bap_visitor
     include Bap_helpers
-    include Bap_bil_propagation
     module Result = Bap_result
     module Storage = Result.Storage
     class type storage = Result.storage

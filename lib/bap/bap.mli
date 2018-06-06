@@ -2196,11 +2196,6 @@ module Std : sig
     (** [fold_consts] evaluates constant expressions and statements. *)
     val fold_consts : stmt list -> stmt list
 
-    (** [propagate_consts bil] implements a simple worklist
-        algorithm for consts propagation. The only exception are
-        loops and let-expression, which are not participate in propagation. *)
-    val propagate_consts : stmt list -> stmt list
-
     (** [fixpoint f] applies transformation [f] until fixpoint is
         reached. If the transformation orbit contains non-trivial cycles,
         then the transformation will stop at an arbitrary point of a
@@ -6597,7 +6592,7 @@ module Std : sig
   (** bil analysis *)
   type bass
 
-  (** [register_bass name bass] register a new [bass] with a [name]  *)
+  (** [register_bass name bass] register a new [bass] with a [name] *)
   val register_bass : string -> (bil -> bil Or_error.t) -> unit
 
   (** [find_bass name] returns a bass with [name] *)

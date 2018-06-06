@@ -1,15 +1,8 @@
 open Core_kernel
-open Bap_common
-open Bap_visitor
-open Bap_stmt.Stmt
-open Bap_bil
-open Bap_bil.Stmt
-open Bap_bil.Exp
+open Bap.Std
+open Bil.Types
 open Graphlib.Std
 open Regular.Std
-
-module Word = Bitvector
-module Var = Bap_var
 
 type bid = Int63.t  [@@deriving bin_io, compare, sexp]
 
@@ -67,9 +60,9 @@ module Node = struct
         let s = match t with
           | Enter -> "enter"
           | Merge -> "merge"
-          | Atom s -> Bap_stmt.to_string s
-          | If_node e -> sprintf "if %s" (Bap_exp.to_string e)
-          | While_node (e,_) -> sprintf "while %s" (Bap_exp.to_string e) in
+          | Atom s -> Stmt.to_string s
+          | If_node e -> sprintf "if %s" (Exp.to_string e)
+          | While_node (e,_) -> sprintf "while %s" (Exp.to_string e) in
         Format.fprintf fmt "%s: %s" (Bid.to_string bid) s
       let module_name = Some "Node"
       let hash = Hashtbl.hash
@@ -180,14 +173,14 @@ module Const = struct
   end
 
   class apply input = object
-    inherit bil_mapper as super
+    inherit Stmt.mapper as super
     method! map_var v =
       match Input.find input v with
       | Some (Defined i) -> Int i
       | _ -> Var v
     method! map_exp e = match e with
       | Let _ -> e
-      | _ -> super#map_exp e |> Bap_helpers.Exp.fold_consts
+      | _ -> super#map_exp e |> Exp.fold_consts
   end
 
   let (@@) e input = (new apply input)#map_exp e
@@ -199,7 +192,7 @@ module Const = struct
 
   let defs bil =
     (object
-      inherit [Var.Set.t] bil_visitor
+      inherit [Var.Set.t] Stmt.visitor
       method! enter_move v _ defs =
         Set.add defs v
     end)#run bil Var.Set.empty
@@ -314,3 +307,19 @@ let simpl_cond_stmts =
 
 let propagate_consts bil =
   Const.propagate bil |> simpl_cond_stmts
+
+let propagate_copy bil =
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | s :: bil ->
+      let acc =
+        match s with
+        | Move (v, Int _) as s ->
+          if Var.is_virtual v then acc
+          else s :: acc
+        | If (cond, yes, no) -> If (cond,loop [] yes,loop [] no) :: acc
+        | While (cond, body) -> While (cond, loop [] body) :: acc
+        | s -> s :: acc in
+      loop acc bil in
+  let bil = propagate_consts bil in
+  loop [] bil
