@@ -73,7 +73,7 @@ let switch f s = Option.some_if (s = Enable) f
 let add norml simpl propg =
   let norml = switch (Stmt.normalize ~normalize_exp:false) norml in
   let simpl = switch Bil.fold_consts simpl in
-  let propg = switch propagate_copy propg in
+  let propg = switch (propagate_copy ~virtual_only:true) propg in
   let apply bil = function
     | None -> bil
     | Some f -> f bil in
