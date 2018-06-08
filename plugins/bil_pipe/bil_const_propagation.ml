@@ -135,15 +135,16 @@ let cfg_of_bil bil =
     | Jmp _ as s :: _ ->
       let node = Node.atom s in
       let cfg = add cfg predc node in
-      let exit = Node.exit () in
-      let cfg = add cfg (Some (node, Edge.goto)) exit in
+      let cfg = add cfg (Some (node, Edge.goto)) (Node.exit () ) in
       cfg, None
     | s :: bil ->
       let node = Node.atom s in
       let cfg = add cfg predc node in
       run cfg ~predc:(node, Edge.goto) bil in
   let cfg, predc = run G.empty ~predc:(Node.enter (), Edge.goto) bil in
-  add cfg predc (Node.exit ())
+  match predc with
+  | None -> cfg
+  | Some _ -> add cfg predc (Node.exit ())
 
 let enter g = Seq.find (G.nodes g) ~f:Node.is_enter
 let find_edge edges f = List.find edges ~f:(fun e -> f (G.Edge.label e))
