@@ -43,7 +43,8 @@ let empty = {
   alias = Int.Map.empty;
 }
 
-let unresolved_handler = `symbol "__primus_linker_unresolved_call"
+
+let unresolved_handler = "__primus_linker_unresolved_call"
 
 include struct
   open Sexp
@@ -58,6 +59,10 @@ include struct
   let sexp_of_call (dst,args) =
     List (Atom dst :: sexp_of_args args)
 end
+
+let unbound_name,needs_unbound =
+  Bap_primus_observation.provide ~inspect:sexp_of_name
+    "linker-unbound"
 
 module Trace = struct
   module Observation = Bap_primus_observation
@@ -123,7 +128,6 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>| code_of_name name >>| Option.is_some
 
   let do_fail name =
-    Machine.Observation.make will_fail name >>= fun () ->
     Machine.Local.get state >>= fun s ->
     match resolve_name s name with
     | Some s -> linker_error (`symbol s)
@@ -135,8 +139,9 @@ module Make(Machine : Machine) = struct
     Code.exec
 
   let fail name =
+    Machine.Observation.make will_fail name >>= fun () ->
     Machine.Local.get state >>= fun s ->
-    match code_of_name unresolved_handler s with
+    match code_of_name (`symbol unresolved_handler) s with
     | None -> do_fail name
     | Some code -> run name code
 
@@ -159,8 +164,26 @@ module Make(Machine : Machine) = struct
           } in
         {codes; terms; names; addrs; alias})
 
+
+  let unlink name =
+    Machine.Local.get state >>= fun s ->
+    match id_of_name name s with
+    | None -> Machine.return ()
+    | Some id ->
+      let cleanup = Map.filter ~f:(fun id' -> id <> id') in
+      Machine.Local.put state {
+        codes = Map.remove s.codes id;
+        alias = Map.remove s.alias id;
+        terms = cleanup s.terms;
+        names = cleanup s.names;
+        addrs = cleanup s.addrs;
+      }
+
+  let lookup name =
+    Machine.Local.get state >>| code_of_name name
+
   let exec name =
-    Machine.Local.get state >>| code_of_name name >>= function
+    lookup name >>= function
     | None -> fail name
     | Some code -> run name code
 
