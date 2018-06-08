@@ -203,7 +203,7 @@ let () =
 
 
 let division_by_zero_handler = "__primus_division_by_zero_handler"
-let pagefault_handler =  "__primus_pagefault_hanlder"
+let pagefault_handler =  "__primus_pagefault_handler"
 
 
 module Make (Machine : Machine) = struct
