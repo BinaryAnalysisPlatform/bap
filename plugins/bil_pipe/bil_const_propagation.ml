@@ -12,7 +12,6 @@ type value =
   | If_node of (exp * node)
   | While_node of (exp * bil)
   | Merge
-  | Exit
 and node = bid * value
 [@@deriving bin_io, compare, sexp]
 
@@ -44,7 +43,6 @@ module Node = struct
   let make x = Bid.fresh (), x
   let atom  s  = make (Atom s)
   let enter () = make Enter
-  let exit  () = make Exit
   let merge () = make Merge
   let if_ exp merge  = make (If_node (exp, merge))
   let while_ exp bil = make (While_node (exp,bil))
@@ -61,7 +59,6 @@ module Node = struct
       let pp fmt (bid,t) =
         let s = match t with
           | Enter -> "enter"
-          | Exit  -> "exit"
           | Merge -> "merge"
           | Atom s -> Stmt.to_string s
           | If_node (e, _) -> sprintf "if %s" (Exp.to_string e)
@@ -97,9 +94,8 @@ module G = Graphlib.Make(Node)(Edge)
 (* invariants:
    1. any condition node has both 'take' and 'fail' in output edges
    2. there is a 'merge' node for any 'if' node, but not necessarily reachable
-   3. any 'atom' node has one input edge and one output edge
-   4. cfg contains only one 'enter' node with the only one output edge
-   5. cfg contains at least one 'exit' node *)
+   3. any 'atom' node has a single input edge and a single output edge
+   4. cfg contains only one 'enter' node with the only one output edge *)
 let cfg_of_bil bil =
   let add cfg predc node =
     let cfg = G.Node.insert node cfg in
@@ -135,22 +131,22 @@ let cfg_of_bil bil =
     | Jmp _ as s :: _ ->
       let node = Node.atom s in
       let cfg = add cfg predc node in
-      let cfg = add cfg (Some (node, Edge.goto)) (Node.exit () ) in
       cfg, None
     | s :: bil ->
       let node = Node.atom s in
       let cfg = add cfg predc node in
       run cfg ~predc:(node, Edge.goto) bil in
-  let cfg, predc = run G.empty ~predc:(Node.enter (), Edge.goto) bil in
-  match predc with
-  | None -> cfg
-  | Some _ -> add cfg predc (Node.exit ())
+  let cfg, _ = run G.empty ~predc:(Node.enter (), Edge.goto) bil in
+  cfg
+
+let edges_of_opt = function
+  | None -> []
+  | Some x -> [x]
 
 let enter g = Seq.find (G.nodes g) ~f:Node.is_enter
 let find_edge edges f = List.find edges ~f:(fun e -> f (G.Edge.label e))
-let find_edge_exn edges f = Option.value_exn (find_edge edges f)
-let find_take_exn edges = find_edge_exn edges Edge.is_take
-let find_fail_exn edges = find_edge_exn edges Edge.is_fail
+let find_take edges = edges_of_opt (find_edge edges Edge.is_take)
+let find_fail edges = edges_of_opt (find_edge edges Edge.is_fail)
 
 let enter' g =
   Option.(enter g >>= fun n ->
@@ -158,35 +154,39 @@ let enter' g =
           Some (n,e))
 
 let bil_of_cfg ?remove cfg =
-  let to_remove = match remove with
+  let mem = match remove with
     | None -> fun _ -> false
     | Some s -> fun node -> Set.mem s node in
   let rec loop acc = function
-    | [] -> List.rev acc, []
+    | [] -> List.rev acc
     | edge :: edges ->
       let dst = G.Edge.dst edge in
       let outputs = Seq.to_list (G.Node.outputs dst cfg) in
-      if to_remove dst then
-        loop acc (outputs @ edges)
+      if mem dst then loop acc (outputs @ edges)
       else
         match Node.value dst with
-        | If_node (cond, _) ->
-          let take = find_take_exn outputs in
-          let fail = find_fail_exn outputs in
-          let yes, next = loop [] [take] in
-          let no,_ = loop [] [fail] in
-          loop (If (cond, yes, no) :: acc) (next @ edges)
-        | Merge | Exit -> List.rev acc, outputs
+        | If_node (cond,merge) ->
+          let next = Seq.to_list (G.Node.outputs merge cfg) in
+          let bil = match cond with
+            | Int w when Word.is_one w -> loop [] (find_take outputs)
+            | Int _ -> loop [] (find_fail outputs)
+            | _ ->
+              let yes = loop [] (find_take outputs) in
+              let no  = loop [] (find_fail outputs) in
+              [If (cond, yes, no)] in
+          loop (List.rev bil @ acc) (next @ edges)
+        | Merge -> List.rev acc
         | Enter  -> loop acc (outputs @ edges)
         | Atom s -> loop (s :: acc) (outputs @ edges)
         | While_node (cond, body) ->
-          let fail = find_fail_exn outputs in
-          loop (While (cond, body) :: acc) (fail :: edges) in
-  match enter' cfg with
+          let acc' = match cond with
+            | Int w when Word.is_zero w -> acc
+            | _ -> While (cond, body) :: acc in
+          loop acc' (find_fail outputs @ edges) in
+  Option.(enter cfg >>= fun n -> Seq.hd (G.Node.outputs n cfg)) |> function
   | None -> []
-  | Some (_,e) -> fst (loop [] [e])
+  | Some e -> loop [] [e]
 
-(* simple worklist algorithm *)
 module Const = struct
 
   type const = Defined of word | Undefined
@@ -199,7 +199,6 @@ module Const = struct
     let empty = Var.Map.empty
     let add = Map.add
     let find = Map.find
-    let find_exn = Map.find_exn
     let is_empty = Map.is_empty
 
     let update t var = function
@@ -220,10 +219,10 @@ module Const = struct
   module Env = struct
     type t = env
     let empty = G.Edge.Map.empty
+    let find_exn = Map.find_exn
     let update state env edge = Map.update env edge ~f:(fun _ -> state)
     let update' state env edges =
       List.fold edges ~init:env ~f:(update state)
-    let find_exn = Map.find_exn
   end
 
   class apply input = object
@@ -256,6 +255,8 @@ module Const = struct
         Option.some_if (not (Input.is_empty e)) e) |>
     Seq.to_list |> Input.merge
 
+  (* post condition: env contains entry for every edge of cfg,
+     i.e. Env.find_exn is safe *)
   let run cfg =
     let rec loop env = function
       | [] -> env
@@ -270,18 +271,18 @@ module Const = struct
           loop env (outputs @ worklist)
         | If_node (cond,merge_node) ->
           let cond = cond @@ in_state in
-          let fail = find_fail_exn outputs in
-          let take = find_take_exn outputs in
+          let fail = find_fail outputs in
+          let take = find_take outputs in
           let env = match cond @@ in_state with
             | Bil.Int w when Word.is_one w  ->
-              let env = Env.update in_state env take in
-              loop env [take]
+              let env = Env.update' in_state env take in
+              loop env take
             | Bil.Int w when Word.is_zero w ->
-              let env = Env.update in_state env fail in
-              loop env [fail]
+              let env = Env.update' in_state env fail in
+              loop env fail
             | _ ->
-              let env = Env.update' in_state env [take; fail] in
-              loop env [take; fail] in
+              let env = Env.update' in_state env (take @ fail) in
+              loop env (take @ fail) in
           let outputs' = Seq.to_list (G.Node.outputs merge_node cfg) in
           let merged = merge env (G.Node.inputs merge_node cfg) in
           let env = Env.update' merged env outputs' in
@@ -291,10 +292,11 @@ module Const = struct
           let defs = defs body in
           let state = Set.fold defs ~init:in_state
               ~f:(fun state v -> Input.add state v Undefined) in
-          let fail_edge = find_fail_exn outputs in
-          let env = Env.update state env fail_edge in
-          loop env (fail_edge :: worklist)
-        | Enter | Exit -> loop env worklist in
+          let fail = find_fail outputs in
+          let env = Env.update' state env fail in
+          let worklist = fail @ worklist in
+          loop env worklist
+        | Enter  -> loop env worklist in
     let init = Seq.fold (G.edges cfg)
         ~init:Env.empty ~f:(Env.update Input.empty) in
     Option.(enter cfg >>= fun node ->
@@ -326,6 +328,8 @@ module Const = struct
         let dst = find_same (G.Edge.dst e) in
  	G.Edge.insert (G.Edge.create src dst (G.Edge.label e)) cfg')
 
+  let propagate_consts bil = propagate bil |> bil_of_cfg
+
   let is_def v = function
     | Move (v', _) -> Var.equal v v'
     | _ -> false
@@ -338,47 +342,41 @@ module Const = struct
       | None -> false
       | Some node -> Node.equal (G.Edge.dst edge) node in
     let rec loop ?stop = function
-      | [] -> None, []
-      | edge :: edges when is_stop edge stop ->
-        let outs = Seq.to_list (G.Node.outputs (G.Edge.dst edge) cfg) in
-        None, outs @ edges
+      | [] -> None
+      | edge :: _ when is_stop edge stop -> None
       | edge :: edges ->
         let dst = G.Edge.dst edge in
         let out = Seq.to_list (G.Node.outputs dst cfg) in
         match Node.value dst with
         | Atom s ->
-          if is_def var s then Some true, []
-          else if is_use s var then Some false, []
+          if is_use s var then Some false
+          else if is_def var s then Some true
           else loop ?stop (out @ edges)
         | If_node (c,merge) ->
-          if is_use' c var then Some false, []
+          if is_use' c var then Some false
           else
-            let take = find_take_exn out in
-            let fail = find_fail_exn out in
-            let r1,outs = loop ~stop:merge [take] in
-            let r2,_ = loop ~stop:merge [fail] in
+            let r1 = loop ~stop:merge (find_take out) in
+            let r2 = loop ~stop:merge (find_fail out) in
             begin
               match r1, r2 with
-              | Some r1, Some r2 when Bool.equal r1 r2 -> Some r1, []
-              | Some _, Some _ -> Some false, []
-              | Some r1, None | None, Some r1 -> Some r1, []
-              | None, None -> loop ?stop (outs @ edges)
+              | Some r1, Some r2 when Bool.equal r1 r2 -> Some r1
+              | Some _, Some _
+              | Some _, None | None, Some _ -> Some false
+              | None, None ->
+                let outs = Seq.to_list (G.Node.outputs merge cfg) in
+                loop ?stop (outs @ edges)
             end
         | While_node (c,_) ->
-          if is_use' c var then Some false, []
+          if is_use' c var then Some false
           else
-            let take = find_take_exn out in
-            let fail = find_fail_exn out in
-            let (r,_) as res = loop ~stop:dst [take] in
-            if Option.is_some r then res
-            else
-              loop ?stop (fail :: edges)
-        | Merge -> loop ?stop (out @ edges)
-        | Exit | Enter -> None, out in
-    let start = Seq.hd_exn (G.Node.outputs enter cfg) in
-    match fst (loop [start]) with
-    | Some x -> x
+            let r = loop ~stop:dst (find_take out) in
+            if Option.is_some r then r
+            else loop ?stop (find_fail out @ edges)
+        | Enter | Merge -> loop ?stop (out @ edges) in
+    Option.(Seq.hd (G.Node.outputs enter cfg) >>= fun start ->
+            loop [start]) |> function
     | None -> true
+    | Some x -> x
 
   let propagate_copy bil =
     let cfg = propagate bil in
@@ -386,34 +384,14 @@ module Const = struct
     let consts = Seq.fold nodes ~init:Node.Set.empty
         ~f:(fun consts node ->
             match Node.value node with
+            | Atom (Move (v, _)) when Var.is_physical v -> consts
             | Atom (Move (v, Int _)) ->
-              if Var.is_physical v then consts
-              else
-              if is_removable cfg v node then
-                Set.add consts node
+              if is_removable cfg v node then Set.add consts node
               else consts
             | _ -> consts) in
     bil_of_cfg cfg ~remove:consts
 
 end
 
-let simpl_cond_stmts =
-  let rec stmt = function
-    | While (c,ss) -> while_ c ss
-    | If (c,ts,fs) -> if_ c ts fs
-    | s -> [s]
-  and if_ c ts fs = match c with
-    | Int x ->
-      if Word.is_zero x then bil fs else bil ts
-    | c -> [If (c, bil ts, bil fs)]
-  and while_  c ss = match c with
-    | Int x when Word.is_zero x -> []
-    | c -> [While (c, bil ss)]
-  and bil = List.concat_map ~f:stmt in
-  bil
-
-let propagate_consts bil =
-  Const.propagate bil |> bil_of_cfg |> simpl_cond_stmts
-
-let propagate_copy bil =
-  Const.propagate_copy bil |> simpl_cond_stmts
+let propagate_consts = Const.propagate_consts
+let propagate_copy = Const.propagate_copy
