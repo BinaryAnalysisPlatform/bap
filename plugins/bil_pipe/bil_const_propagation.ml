@@ -93,9 +93,11 @@ module G = Graphlib.Make(Node)(Edge)
 
 (* invariants:
    1. any condition node has both 'take' and 'fail' in output edges
-   2. there is a 'merge' node for any 'if' node, but not necessarily reachable
-   3. any 'atom' node has a single input edge and a single output edge
-   4. cfg contains only one 'enter' node with the only one output edge *)
+   2. there is a 'merge' node for any 'if' node, but not necessarily
+      reachable from both edges
+   3. any 'atom' node has a single input edge and (optionaly) a single output edge
+   4. cfg contains only one 'enter' node with the only one output
+      edge; consequently any bil statement has at least one input edge *)
 let cfg_of_bil bil =
   let add cfg predc node =
     let cfg = G.Node.insert node cfg in
@@ -128,10 +130,7 @@ let cfg_of_bil bil =
           | Some (predc,_) ->
             add cfg (Some (predc, Edge.goto)) node in
       run cfg ~predc:(node, Edge.fail) bil
-    | Jmp _ as s :: _ ->
-      let node = Node.atom s in
-      let cfg = add cfg predc node in
-      cfg, None
+    | Jmp _ as s :: _ -> add cfg predc (Node.atom s), None
     | s :: bil ->
       let node = Node.atom s in
       let cfg = add cfg predc node in
@@ -139,19 +138,11 @@ let cfg_of_bil bil =
   let cfg, _ = run G.empty ~predc:(Node.enter (), Edge.goto) bil in
   cfg
 
-let edges_of_opt = function
-  | None -> []
-  | Some x -> [x]
-
+let edges_of_opt e = Option.value_map e ~default:[] ~f:(fun e -> [e])
 let enter g = Seq.find (G.nodes g) ~f:Node.is_enter
 let find_edge edges f = List.find edges ~f:(fun e -> f (G.Edge.label e))
 let find_take edges = edges_of_opt (find_edge edges Edge.is_take)
 let find_fail edges = edges_of_opt (find_edge edges Edge.is_fail)
-
-let enter' g =
-  Option.(enter g >>= fun n ->
-          Seq.hd (G.Node.outputs n g) >>= fun e ->
-          Some (n,e))
 
 let bil_of_cfg ?remove cfg =
   let mem = match remove with
@@ -223,6 +214,8 @@ module Const = struct
     let update state env edge = Map.update env edge ~f:(fun _ -> state)
     let update' state env edges =
       List.fold edges ~init:env ~f:(update state)
+    let init cfg =
+      Seq.fold (G.edges cfg) ~init:empty ~f:(update Input.empty)
   end
 
   class apply input = object
@@ -297,12 +290,10 @@ module Const = struct
           let worklist = fail @ worklist in
           loop env worklist
         | Enter  -> loop env worklist in
-    let init = Seq.fold (G.edges cfg)
-        ~init:Env.empty ~f:(Env.update Input.empty) in
-    Option.(enter cfg >>= fun node ->
-            Seq.hd (G.Node.outputs node cfg)) |> function
-    | None -> init
-    | Some edge -> loop init [edge]
+    let env = Env.init cfg in
+    match enter cfg with
+    | None -> env
+    | Some enter -> loop env (Seq.to_list (G.Node.outputs enter cfg))
 
   let find nodes bid =
     Seq.find nodes ~f:(fun n -> Bid.equal (Node.bid n) bid)
@@ -337,7 +328,7 @@ module Const = struct
   let is_use s v = Set.mem (Stmt.free_vars s) v
   let is_use' e v = Set.mem (Exp.free_vars e) v
 
-  let is_removable cfg var enter =
+  let is_removable cfg enter var =
     let is_stop edge = function
       | None -> false
       | Some node -> Node.equal (G.Edge.dst edge) node in
@@ -373,10 +364,8 @@ module Const = struct
             if Option.is_some r then r
             else loop ?stop (find_fail out @ edges)
         | Enter | Merge -> loop ?stop (out @ edges) in
-    Option.(Seq.hd (G.Node.outputs enter cfg) >>= fun start ->
-            loop [start]) |> function
-    | None -> true
-    | Some x -> x
+    let outs = Seq.to_list (G.Node.outputs enter cfg) in
+    Option.value ~default:true (loop outs)
 
   let propagate_copy bil =
     let cfg = propagate bil in
@@ -385,9 +374,8 @@ module Const = struct
         ~f:(fun consts node ->
             match Node.value node with
             | Atom (Move (v, _)) when Var.is_physical v -> consts
-            | Atom (Move (v, Int _)) ->
-              if is_removable cfg v node then Set.add consts node
-              else consts
+            | Atom (Move (v, Int _)) when is_removable cfg node v ->
+              Set.add consts node
             | _ -> consts) in
     bil_of_cfg cfg ~remove:consts
 
