@@ -113,6 +113,12 @@ module Propagate(SM : Monad.State.S2) = struct
       method! enter_move v _ defs = Set.add defs v
     end)#run bil Var.Set.empty |> Set.to_list
 
+  let has_jmps bil =
+    (object
+      inherit [unit] Stmt.finder
+      method! enter_jmp _ c = c.return (Some ())
+    end)#find bil |> Option.is_some
+
   class t = object(self)
     inherit e
 
@@ -148,7 +154,12 @@ module Propagate(SM : Monad.State.S2) = struct
       SM.put ctxt >>= fun () ->
       self#eval no >>= fun no ->
       SM.get () >>= fun ctxt_no ->
-      SM.put (meet ctxt_yes ctxt_no) >>= fun () ->
+      let ctxt = match has_jmps yes, has_jmps no with
+        | false, false -> meet ctxt_yes ctxt_no
+        | true, true -> new_ctxt
+        | false, _ -> ctxt_yes
+        | _ -> ctxt_no in
+      SM.put ctxt >>= fun () ->
       SM.return (Bil.if_ cond yes no)
 
     method eval_while cond body =
@@ -169,30 +180,26 @@ module P = Propagate(Monad.State)
 
 let propagate_consts xs = Monad.State.eval ((new P.t)#eval xs) P.new_ctxt
 
-module Dead_code = struct
+let is_used var bil = Set.mem (Bil.free_vars bil) var
 
-  let is_used var bil = Set.mem (Bil.free_vars bil) var
-
-  let eliminate bil =
-    let decr = function
-      | [] -> []
-      | _ :: scope -> scope in
-    let rec loop acc scope = function
-      | [] -> List.rev acc
-      | (Move (v, Int _) as s) :: bil when Var.is_virtual v ->
-        let scope = decr scope in
-        if is_used v scope then loop (s :: acc) scope bil
-        else loop acc (decr scope) bil
-      | If (cond, yes, no) :: bil ->
-        let yes = loop [] (yes @ bil) yes in
-        let no  = loop [] (no @ bil) no in
-        loop (If (cond, yes, no) :: acc) (decr scope) bil
-      | s :: bil -> loop (s :: acc) (decr scope) bil in
-    loop [] bil bil
-
-end
+let eliminate_dead_code bil =
+  let decr = function
+    | [] -> []
+    | _ :: scope -> scope in
+  let rec loop acc scope = function
+    | [] -> List.rev acc
+    | (Move (v, Int _) as s) :: bil when Var.is_virtual v ->
+      let scope = decr scope in
+      if is_used v scope then loop (s :: acc) scope bil
+      else loop acc (decr scope) bil
+    | If (cond, yes, no) :: bil ->
+      let yes = loop [] (yes @ bil) yes in
+      let no  = loop [] (no @ bil) no in
+      loop (If (cond, yes, no) :: acc) (decr scope) bil
+    | s :: bil -> loop (s :: acc) (decr scope) bil in
+  loop [] bil bil
 
 let propagate_consts bil =
   let f bil =
-    Bil.fold_consts bil |> propagate_consts |> Dead_code.eliminate in
+    Bil.fold_consts bil |> propagate_consts |> eliminate_dead_code in
   Bil.fixpoint f bil
