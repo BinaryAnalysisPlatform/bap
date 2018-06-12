@@ -24,7 +24,7 @@ let switcher ?(default=Enable) =
 
 let norml _ _ bil = Ok (Stmt.normalize bil)
 let simpl _ _ bil = Ok (Bil.fold_consts bil)
-let propg _ _ bil = Ok (propagate_copy bil)
+let propg _ _ bil = Ok (propagate_consts bil)
 let renum _ _ bil = Ok (renum bil)
 
 let run if_norml if_simpl if_propg =
