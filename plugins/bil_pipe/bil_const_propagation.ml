@@ -100,12 +100,12 @@ module Propagate(SM : Monad.State.S2) = struct
 
   end
 
-  let meet c c' =
+  let meet =
     Map.merge ~f:(fun ~key:_ -> function
         | `Both (Def w1, Def w2) ->
           if Word.equal w1 w2 then Some (Def w1)
           else Some Top
-        | _ -> Some Top) c c'
+        | _ -> Some Top)
 
   let defs bil =
     (object
@@ -156,16 +156,21 @@ module Propagate(SM : Monad.State.S2) = struct
       SM.get () >>= fun ctxt_no ->
       let ctxt = match has_jmps yes, has_jmps no with
         | false, false -> meet ctxt_yes ctxt_no
-        | true, true -> new_ctxt
+        | true, true -> ctxt
         | false, _ -> ctxt_yes
         | _ -> ctxt_no in
       SM.put ctxt >>= fun () ->
       SM.return (Bil.if_ cond yes no)
 
     method eval_while cond body =
+      SM.get () >>= fun ctxt ->
       SM.List.iter (defs body) ~f:(self#update Top) >>= fun () ->
       self#eval_exp cond >>= fun cond ->
       self#eval body >>= fun body ->
+      SM.get () >>= fun ctxt' ->
+      let ctxt = if has_jmps body then ctxt
+          else meet ctxt ctxt' in
+      SM.put ctxt >>= fun () ->
       SM.return (Bil.while_ cond body)
 
     method eval_jmp e : stmt r =
@@ -177,25 +182,24 @@ end
 module Dead_code = struct
 
   let is_used var bil =
-    let is_used' e = Set.mem (Exp.free_vars e) var in
-    let redefined = Var.equal var in
-    let rec loop = function
+    let (||) x y = match x, y with
+      | Some r1, Some r2 -> Some (r1 || r2)
+      | Some _, None | None, Some _ -> Some true
+      | None, None -> None in
+    let is_in_free s = Set.mem (Stmt.free_vars s) var in
+    let defined = Var.equal var in
+    let rec used_in = function
       | [] -> None
-      | Move (_, e) :: _ when is_used' e -> Some true
-      | Move (var',_) :: _ when redefined var' -> Some false
-      | If (_, yes, no) :: bil ->
-	begin
-	  match loop yes, loop no with
-	  | Some r1, Some r2 -> Some (r1 || r2)
-	  | Some _, None | None, Some _ -> Some true
-	  | None, None -> loop bil
-	end
-      | While (_, body) :: bil ->
-	let r = loop body in
-	if Option.is_some r then r
-	else loop bil
-      | _  :: bil -> loop bil in
-    match loop bil with
+      | s :: bil -> match s with
+        | If (_, yes, no) ->
+          let r = used_in yes || used_in no in
+          if Option.is_some r then r
+          else used_in bil
+        | While (_, body) -> used_in body || used_in bil
+        | Move (var',_) when defined var' -> Some false
+        | s when is_in_free s -> Some true
+        | _ -> used_in bil in
+    match used_in bil with
     | None -> false
     | Some x -> x
 
@@ -211,12 +215,16 @@ module Dead_code = struct
         | Move (v, Int _) when Var.is_virtual v ->
 	  if is_used v scope then loop (st :: acc) scope bil
 	  else loop acc scope bil
-        | If (cond, yes, no)->
+        | If (cond, yes, no) ->
 	  let yes = loop [] (yes @ scope) yes in
 	  let no  = loop [] (no @ scope) no in
 	  loop (If (cond, yes, no) :: acc) scope bil
+        | While (cond,body) ->
+          let body = loop [] (body @ bil) body in
+          loop (While (cond,body) :: acc) scope bil
         | st -> loop (st :: acc) scope bil in
     loop [] bil bil
+
 end
 
 module P = Propagate(Monad.State)
