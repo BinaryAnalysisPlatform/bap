@@ -171,33 +171,58 @@ module Propagate(SM : Monad.State.S2) = struct
     method eval_jmp e : stmt r =
       self#eval_exp e >>= fun e ->
       SM.return (Bil.jmp e)
-
   end
+end
 
+module Dead_code = struct
+
+  let is_used var bil =
+    let is_used' e = Set.mem (Exp.free_vars e) var in
+    let redefined = Var.equal var in
+    let rec loop = function
+      | [] -> None
+      | Move (_, e) :: _ when is_used' e -> Some true
+      | Move (var',_) :: _ when redefined var' -> Some false
+      | If (_, yes, no) :: bil ->
+	begin
+	  match loop yes, loop no with
+	  | Some r1, Some r2 -> Some (r1 || r2)
+	  | Some _, None | None, Some _ -> Some true
+	  | None, None -> loop bil
+	end
+      | While (_, body) :: bil ->
+	let r = loop body in
+	if Option.is_some r then r
+	else loop bil
+      | _  :: bil -> loop bil in
+    match loop bil with
+    | None -> false
+    | Some x -> x
+
+  let eliminate bil =
+    let decr = function
+      | [] -> []
+      | _ :: scope -> scope in
+    let rec loop acc scope = function
+      | [] -> List.rev acc
+      | st :: bil ->
+        let scope = decr scope in
+        match st with
+        | Move (v, Int _) when Var.is_virtual v ->
+	  if is_used v scope then loop (st :: acc) scope bil
+	  else loop acc scope bil
+        | If (cond, yes, no)->
+	  let yes = loop [] (yes @ scope) yes in
+	  let no  = loop [] (no @ scope) no in
+	  loop (If (cond, yes, no) :: acc) scope bil
+        | st -> loop (st :: acc) scope bil in
+    loop [] bil bil
 end
 
 module P = Propagate(Monad.State)
 
 let propagate_consts xs = Monad.State.eval ((new P.t)#eval xs) P.new_ctxt
-
-let is_used var bil = Set.mem (Bil.free_vars bil) var
-
-let eliminate_dead_code bil =
-  let decr = function
-    | [] -> []
-    | _ :: scope -> scope in
-  let rec loop acc scope = function
-    | [] -> List.rev acc
-    | (Move (v, Int _) as s) :: bil when Var.is_virtual v ->
-      let scope = decr scope in
-      if is_used v scope then loop (s :: acc) scope bil
-      else loop acc (decr scope) bil
-    | If (cond, yes, no) :: bil ->
-      let yes = loop [] (yes @ bil) yes in
-      let no  = loop [] (no @ bil) no in
-      loop (If (cond, yes, no) :: acc) (decr scope) bil
-    | s :: bil -> loop (s :: acc) (decr scope) bil in
-  loop [] bil bil
+let eliminate_dead_code = Dead_code.eliminate
 
 let propagate_consts bil =
   let f bil =
