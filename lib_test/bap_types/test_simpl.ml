@@ -185,13 +185,6 @@ let check_eval exp expected simpl =
 
 let check exp expected ctxt =
   let simpl = Exp.fold_consts exp in
-
-  (* TODO: remove it  *)
-  if not (Exp.equal simpl expected) then
-    let es = Exp.to_string in
-    printf "expected %s <> %s simpl\n" (es expected) (es simpl);
-
-
   check_eval exp simpl expected;
   assert_equal ~ctxt ~cmp:Exp.equal simpl expected
 
@@ -376,8 +369,8 @@ let suite () =
     "(4 - x) - (y - 2) = 6 - (x + y)"  >:: Bil.((c4 - x) - (y - c2) <=> c6 - (x + y));
     "(4 - x) - (2 - y) = 2 + (y - x)"  >:: Bil.((c4 - x) - (c2 - y) <=> y - x + c2);
 
-    "2 * (x + 4) + y - (4 - z) + c2"   >:: Bil.(c2 * (x + c4) + y - (c4 - z) + c2 <=> c2 * x + (y + z) + c6);
-    "2 * ((x + 4) + y) + (z - 4) - c2" >:: Bil.(c2 * ((x + c4) + y) - (c4 - z) - c2 <=> c2 * (x + y) + z + c2);
+    "2 * (x + 4) + y - (4 - z) + c2"   >:: Bil.(c2 * (x + c4) + y - (c4 - z) + c2 <=> c2 * x + (y + z + c6));
+    "2 * ((x + 4) + y) + (z - 4) - c2" >:: Bil.(c2 * ((x + c4) + y) - (c4 - z) - c2 <=> c2 * (x + y) + (z + c2));
     "(((x + 1) + y) + z) + 1"          >:: Bil.((((x + c1) + y) + z) + c1 <=> x + y + z + c2);
     "1 + (((x + 1) + y) + z)"          >:: Bil.(c1 + (((x + c1) + y) + z) <=> x + y + z + c2);
     "z + (((x + 1) + y) + 1)"          >:: Bil.(z + (((x + c1) + y) + c1) <=> z + x + y + c2);
@@ -414,7 +407,6 @@ let suite () =
 
     "extract 7 4 (cast low 6 x:8),no simpl"  >:: Bil.(extract 7 4 (cast low 6 x) <=> extract 7 4 (cast low 6 x));
     "cast low 4 (extract 4 2 x:8),no simpl"  >:: Bil.(cast low 4 (extract 4 2 x) <=> cast low 4 (extract 4 2 x));
-    "extract 7 4 (cast high 3 x:8),no simpl" >:: Bil.(extract 7 4 (cast high 3 x) <=> extract 7 4 (cast high 3 x));
 
     "extract 2 0 (extract 7 2 x) = extract 4 2 x" >:: Bil.(extract 2 0 (extract 7 2 x) <=> extract 4 2 x);
     "extract 7 2 (extract 7 3 x),no simpl" >:: Bil.(extract 7 2 (extract 7 2 x) <=> extract 7 2 (extract 7 2 x));

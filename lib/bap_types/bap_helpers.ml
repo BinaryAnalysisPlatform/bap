@@ -556,8 +556,14 @@ module Simpl = struct
   let fixpoint = fix compare_exp
 
   let exp ?ignore e =
-    let fs = [de_morgan; associativity; distribitivity; Group_like.run] in
-    let f e = List.fold ~init:(simpl ?ignore e) ~f:(fun e f -> f e) fs in
+    let pipe = [
+      simpl ?ignore;
+      de_morgan;
+      associativity;
+      distribitivity;
+      Group_like.run;
+    ] in
+    let f = List.reduce_exn ~f:Fn.compose (List.rev pipe) in
     fixpoint f e |> pretify
 
   let bil ?ignore =
