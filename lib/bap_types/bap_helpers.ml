@@ -72,7 +72,7 @@ class negative_normalizer = object
     | Binop.PLUS, Exp.Int arg
       when Word.(is_negative (signed arg)) ->
       let (-) = Bap_exp.Infix.(-) in
-      (e1 - Exp.Int Word.(abs (signed arg)))
+      (super#map_exp e1 - Exp.Int Word.(abs (signed arg)))
     | _ -> super#map_binop op e1 e2
 end
 
@@ -308,6 +308,13 @@ module Eff = struct
   let of_list : t list -> t = Set.Poly.union_list
 end
 
+let fix compare f x  =
+  let rec loop x =
+    let x' = f x in
+    if compare x x' = 0 then x
+    else loop x' in
+  loop x
+
 module Simpl = struct
   open Bap_bil
   open Binop
@@ -358,155 +365,200 @@ module Simpl = struct
         | op,x,y -> BinOp(op,x,y)
     end)#map_exp e |> (new negative_normalizer)#map_exp
 
-  let exp ?(ignore=[]) e =
+  let apply_unop  op x = Int (Apply.unop op x)
+  let apply_binop op x y = Int (Apply.binop op x y)
+  let unop = Bap_exp.Exp.unop
+  let binop = Bap_exp.Exp.binop
+
+  let map_op ?(f1=unop) ?(f2=binop) e =
+    (object
+      inherit exp_mapper as super
+      method! map_unop op x = f1 op (super#map_exp x)
+
+      method! map_binop op x y =
+        f2 op (super#map_exp x) (super#map_exp y)
+    end)#map_exp e
+
+  let associativity e =
+    let is_associative' o o' o'' = is_associative o o' && is_associative o o'' in
+    map_op e ~f2:(fun op x y -> match x, y with
+        | BinOp(op', x, Int p), Int q when is_associative op op' ->
+          binop op x (apply_binop op p q)
+        | BinOp(op', x, Int q), BinOp(op'', y, Int p)
+          when is_associative' op op' op'' ->
+          binop op (binop op x y) (apply_binop op q p)
+        | BinOp(op', x, Int p), y
+        | BinOp(op', Int p, x), y when is_associative op op' ->
+          binop op (binop op x y) (Int p)
+        | y, BinOp(op', x, Int p)
+        | y, BinOp(op', Int p, x) when is_associative op op' ->
+          binop op (binop op y x) (Int p)
+        | x,y -> binop op x y)
+
+  let distribitivity e =
+    map_op e ~f2:(fun op x y -> match x,y with
+        | BinOp(op', x, Int p), Int q
+        | Int q, BinOp(op', x, Int p) when is_distributive op op' ->
+          binop op' (binop op (Int q) x) (apply_binop op p q)
+        | BinOp(op', Int p, x), Int q
+        | Int q, BinOp(op', Int p, x) when is_distributive op op' ->
+          binop op' (apply_binop op p q) (binop op (Int q) x)
+        | x,y -> binop op x y)
+
+  let de_morgan e =
+    let lnot = Bap_exp.Infix.lnot in
+    map_op e ~f1:(fun op x -> match op, x with
+        | NOT, BinOp(AND, Int q, x) -> BinOp (OR, apply_unop NOT q, lnot x)
+        | NOT, BinOp(AND, x, Int q) -> BinOp (OR, lnot x, apply_unop NOT q)
+        | NOT, BinOp(OR, Int q, x)  -> BinOp (AND, apply_unop NOT q, lnot x)
+        | NOT, BinOp(OR, x, Int q)  -> BinOp (AND, lnot x, apply_unop NOT q)
+        | op,x -> UnOp (op,x))
+
+  let simpl_unop op x = match op,x with
+    | op, Int x -> apply_unop op x
+    | op, UnOp (op', x) when compare_unop op op' = 0 -> x
+    | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
+    | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
+    | NOT, BinOp (EQ, x, y) -> BinOp(NEQ, x, y)
+    | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
+    | NEG, BinOp (PLUS, x, Int q)
+    | NEG, BinOp (PLUS, Int q, x) ->
+      BinOp (PLUS, apply_unop NEG q, UnOp (NEG, x))
+    | op,x -> UnOp (op,x)
+
+  let infer_width x = match Type_infer.infer_exn x with
+    | Type.Imm w -> w
+    | Type.Mem _ -> failwith "unexpected Mem type"
+
+  let simpl_cast ?(ignore=[]) t width x =
     let removable = removable ignore in
-    let infer_width x = match Type_infer.infer_exn x with
-      | Type.Imm w -> w
-      | Type.Mem _ -> failwith "unexpected Mem type" in
-    let rec exp = function
-      | Load (m,a,e,s) -> Load (exp m, exp a, e, s)
-      | Store (m,a,v,e,s) -> Store (exp m, exp a, exp v, e, s)
-      | BinOp (op,x,y) -> binop op x y
-      | UnOp (op,x) -> unop op x
-      | Var _ | Int _  | Unknown (_,_) as const -> const
-      | Cast (t,s,x) -> cast t s x
-      | Let (v,x,y) -> Let (v, exp x, exp y)
-      | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
-      | Extract (h,l,x) -> extract h l x
-      | Concat (x,y) -> concat x y
-    and concat x y = match exp x, exp y with
-      | Int x, Int y -> Int (Word.concat x y)
-      | Int x, Concat (Int y, z) -> Concat (Int (Word.concat x y), z)
-      | Concat (z, Int x), Int y -> Concat (z, Int (Word.concat x y))
-      | Concat (z, Int x), Concat (Int y, z') ->
-        Concat (Concat (z, Int (Word.concat x y)), z')
-      | x,y -> Concat (x,y)
-    and cast t s x =
-      let x = exp x in
-      let no_simpl = Cast (t,s,x) in
-      match t, x with
-      | t, Int w -> Int (Apply.cast t s w)
-      | _ when infer_width x = s -> x
-      | HIGH, (Cast (HIGH as t', w, e))
-      | (LOW|SIGNED|UNSIGNED), Cast ((LOW|SIGNED|UNSIGNED) as t', w, e)
-        when s <= w -> Cast (t', s, e)
-      | HIGH, Extract (hi, lo, e) when s <= hi - lo + 1 ->
-        Extract (hi, hi - s + 1, e)
-      | _, Extract (hi, lo, e) ->
-        let hi' = lo + s - 1 in
-        if hi' <= hi then Extract (hi', lo, e)
-        else no_simpl
-      | HIGH, Concat (x,_) when infer_width x = s -> x
-      | _, Concat (_,y) when infer_width y = s -> y
-      | _ -> no_simpl
-    and extract hi lo x =
-      let w = hi - lo + 1 in
-      let x = exp x in
-      let no_simpl = Extract (hi,lo,x) in
-      match x with
-      | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-      | Extract (hi',lo',e) when hi' >= hi + lo' ->
-        Extract (hi + lo',lo + lo',e)
-      | Cast (LOW, s, e) when hi < s -> Extract (hi, lo, e)
-      | Cast (HIGH, s, e) when lo <= s ->
-        let we = infer_width e in
-        Extract (hi + we - s, lo + we - s, e)
-      | Concat (_,y) when lo = 0 && infer_width y = w -> y
-      | Concat (x,y) when lo = infer_width y && infer_width x = w -> x
-      | Concat (_,y) when hi < infer_width y -> Extract (hi,lo,y)
-      | Concat (x,y) ->
-        let we = infer_width y in
-        if lo >= we then Extract (hi - we,lo - we, x)
-        else no_simpl
-      | x when infer_width x = w && lo = 0 -> x
-      | _ -> no_simpl
-    and unop op x =
-      let apply op x = Int (Apply.unop op x) in
-      let lnot = Bap_exp.Infix.lnot in
-      match op, exp x with
-      | op, Int x -> apply op x
-      | op, UnOp (op', x) when compare_unop op op' = 0 -> x
-      | NOT, BinOp (AND, Int q, x) -> BinOp (OR, apply NOT q, lnot x)
-      | NOT, BinOp (AND, x, Int q) -> BinOp (OR, lnot x, apply NOT q)
-      | NOT, BinOp (OR, Int q, x) -> BinOp (AND, apply NOT q, lnot x)
-      | NOT, BinOp (OR, x, Int q) -> BinOp (AND, lnot x, apply NOT q)
-      | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
-      | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
-      | NOT, BinOp (EQ, x, y) -> BinOp(NEQ,x, y)
-      | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
-      | NEG, BinOp (PLUS, x, Int q)
-      | NEG, BinOp (PLUS, Int q, x) -> exp (BinOp (MINUS, apply op q, x))
-      | op, x -> UnOp(op, x)
-    and binop op x y =
-      let width = infer_width x in
-      let keep op x y = BinOp(op,x,y) in
-      let int f = function Int x -> f x | _ -> false in
-      let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
-      let (=) x y = compare_exp x y = 0 && removable x in
-      let (+) = Bap_exp.Infix.(+) in
-      let apply op x y = Int (Apply.binop op x y) in
-      let neg x = UnOp (Bap_exp.Unop.neg, x) in
-      match op, exp x, exp y with
-      | op, Int x, Int y -> apply op x y
-      | PLUS,x,y  when is0 x -> y
-      | PLUS,x,y  when is0 y -> x
-      | PLUS, x, UnOp(NEG, y) when x = y -> zero width
-      | PLUS, UnOp(NEG, x), y when x = y -> zero width
-      | PLUS, x, UnOp(NOT, y) when x = y -> ones width
-      | PLUS, UnOp(NOT, x), y when x = y -> ones width
-      | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> neg (x + y)
-      | MINUS,x,y when is0 x -> neg y
-      | MINUS,x,y when is0 y -> x
-      | MINUS,x,y when x = y -> zero width
-      | MINUS,x,y -> exp (x + neg y)
-      | TIMES,x,y when is0 x && removable y -> x
-      | TIMES,x,y when is0 y && removable x -> y
-      | TIMES,x,y when is1 x -> y
-      | TIMES,x,y when is1 y -> x
-      | (DIVIDE|SDIVIDE),x,y when is1 y -> x
-      | (MOD|SMOD),_,y when is1 y -> zero width
-      | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
-      | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
-      | ARSHIFT,x,_ when ism1 x -> x
-      | AND,x,y when is0 x && removable y -> x
-      | AND,x,y when is0 y && removable x -> y
-      | AND,x,y when ism1 x -> y
-      | AND,x,y when ism1 y -> x
-      | AND,x,y when x = y -> x
-      | OR, x,y when is0 x -> y
-      | OR, x,y when is0 y -> x
-      | OR, x,y when ism1 x && removable y -> x
-      | OR, x,y when ism1 y && removable x -> y
-      | OR, x,y when x = y -> x
-      | XOR,x,y when x = y -> zero width
-      | XOR,x,y when is0 x -> y
-      | XOR,x,y when is0 y -> x
-      | EQ, x,y when x = y -> Int Word.b1
-      | NEQ,x,y when x = y -> Int Word.b0
-      | (LT|SLT), x, y when x = y -> Int Word.b0
-      | (LE|SLE), x, y when x = y -> Int Word.b1
-      | op, BinOp(op', x, Int p), Int q when is_associative op op' ->
-        exp @@ BinOp (op, x, apply op p q)
-      | op, BinOp(op', x, Int q), BinOp(op'', y, Int p)
-        when is_associative op op' && is_associative op op'' ->
-        exp @@ BinOp (op, BinOp (op, x, y), (apply op q p))
-      | op, BinOp(op', x, Int p), y
-      | op, BinOp(op', Int p, x), y when is_associative op op' ->
-        exp @@ BinOp (op, BinOp (op, x, y), Int p)
-      | op, y, BinOp(op', x, Int p)
-      | op, y, BinOp(op', Int p, x) when is_associative op op' ->
-        exp @@ BinOp (op, BinOp (op, y, x), Int p)
-      | op, BinOp(op', x, Int p), Int q
-      | op, Int q, BinOp(op', x, Int p) when is_distributive op op' ->
-        exp @@ BinOp (op',BinOp(op, Int q, x), apply op p q)
-      | op, BinOp(op', Int p, x), Int q
-      | op, Int q, BinOp(op', Int p, x) when is_distributive op op' ->
-        exp @@ BinOp (op',apply op p q, BinOp(op, Int q, x))
-      | op,x,y -> keep op x y in
-    exp e |> pretify
+    let no_simpl = Cast (t, width, x) in
+    match t, x with
+    | t, Int w -> Int (Apply.cast t width w)
+    | _ when infer_width x = width -> x
+    | HIGH, (Cast (HIGH as t', w, e))
+    | (LOW|SIGNED|UNSIGNED), Cast ((LOW|SIGNED|UNSIGNED) as t', w, e)
+      when width <= w -> Cast (t', width, e)
+    | HIGH, Extract (hi, lo, e)
+      when width <= hi - lo + 1 -> Extract (hi, hi - width + 1, e)
+    | _, Extract (hi, lo, e) ->
+      let hi' = lo + width - 1 in
+      if hi' <= hi then Extract (hi', lo, e)
+      else no_simpl
+    | HIGH, Concat (x,y)
+      when infer_width x = width && removable y -> x
+    | _, Concat (x,y)
+      when infer_width y = width && removable x -> y
+    | _ -> no_simpl
+
+  let simpl_extract ?(ignore=[]) hi lo x =
+    let removable = removable ignore in
+    let w = hi - lo + 1 in
+    let no_simpl = Extract (hi,lo,x) in
+    match x with
+    | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+    | Extract (hi',lo',e) when hi' >= hi + lo' ->
+      Extract (hi + lo',lo + lo',e)
+    | Cast (LOW, s, e) when hi < s -> Extract (hi, lo, e)
+    | Cast (HIGH, s, e) ->
+      let we = infer_width e in
+      if we < s then no_simpl
+      else Extract (hi + we - s, lo + we - s, e)
+    | Concat (x,y) when lo = 0 && infer_width y = w && removable x -> y
+    | Concat (x,y)
+      when lo = infer_width y && infer_width x = w && removable y -> x
+    | Concat (x,y)
+      when hi < infer_width y && removable x ->
+      Extract (hi,lo,y)
+    | Concat (x,y) when removable y ->
+      let we = infer_width y in
+      if lo >= we then Extract (hi - we,lo - we, x)
+      else no_simpl
+    | x when infer_width x = w && lo = 0 -> x
+    | _ -> no_simpl
+
+  let simpl_ite c y n = match c,y,n with
+    | Int w, y, _ when Word.is_one w -> y
+    | Int _, _, n -> n
+    | c,y,n -> Ite (c,y,n)
+
+  let simpl_concat x y = match x,y with
+    | Int x, Int y -> Int (Word.concat x y)
+    | Int x, Concat (Int y, z) -> Concat (Int (Word.concat x y), z)
+    | Concat (z, Int x), Int y -> Concat (z, Int (Word.concat x y))
+    | Concat (z, Int x), Concat (Int y, z') ->
+      Concat (Concat (z, Int (Word.concat x y)), z')
+    | x,y -> Concat (x,y)
+
+  let simpl_binop ?(ignore=[]) op x y =
+    let removable = removable ignore in
+    let int f = function Int x -> f x | _ -> false in
+    let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
+    let (=) x y = compare_exp x y = 0 && removable x in
+    let (+) = Bap_exp.Infix.(+) in
+    let neg = Bap_exp.Unop.(unop neg) in
+    let width = infer_width x in
+    match op, x,  y with
+    | op, Int x, Int y -> Int (Apply.binop op x y)
+    | PLUS, x, y when is0 x -> y
+    | PLUS, x, y when is0 y -> x
+    | PLUS, x, UnOp(NEG, y) when x = y -> zero width
+    | PLUS, UnOp(NEG, x), y when x = y -> zero width
+    | PLUS, x, UnOp(NOT, y) when x = y -> ones width
+    | PLUS, UnOp(NOT, x), y when x = y -> ones width
+    | PLUS, UnOp(NEG,x), UnOp(NEG, y) -> neg (x + y)
+    | MINUS, x, y when is0 x -> neg y
+    | MINUS, x, y when is0 y -> x
+    | MINUS, x, y when x = y -> zero width
+    | MINUS, x, y -> x + neg y
+    | TIMES, x, y when is0 x && removable y -> x
+    | TIMES, x, y when is0 y && removable x -> y
+    | TIMES, x, y when is1 x -> y
+    | TIMES, x, y when is1 y -> x
+    | (DIVIDE|SDIVIDE),x,y when is1 y -> x
+    | (MOD|SMOD),_,y when is1 y -> zero width
+    | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
+    | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
+    | ARSHIFT,x,_ when ism1 x -> x
+    | AND, x, y when is0 x && removable y -> x
+    | AND, x, y when is0 y && removable x -> y
+    | AND, x, y when ism1 x -> y
+    | AND, x, y when ism1 y -> x
+    | AND, x, y when x = y -> x
+    | OR,  x, y when is0 x -> y
+    | OR,  x, y when is0 y -> x
+    | OR,  x, y when ism1 x && removable y -> x
+    | OR,  x, y when ism1 y && removable x -> y
+    | OR,  x, y when x = y -> x
+    | XOR, x, y when x = y -> zero width
+    | XOR, x, y when is0 x -> y
+    | XOR, x, y when is0 y -> x
+    | EQ,  x, y when x = y -> Int Word.b1
+    | NEQ, x, y when x = y -> Int Word.b0
+    | (LT|SLT), x, y when x = y -> Int Word.b0
+    | (LE|SLE), x, y when x = y -> Int Word.b1
+    | op,x,y -> BinOp(op,x,y)
+
+  let simpl ?(ignore=[]) e =
+    let rec run = function
+      | Load (m,a,e,s)    -> Load  (run m, run a, e, s)
+      | Store (m,a,v,e,s) -> Store (run m, run a, run v, e, s)
+      | UnOp (op,x)       -> simpl_unop op (run x)
+      | BinOp (op,x,y)    -> simpl_binop ~ignore op (run x) (run y)
+      | Cast (t,s,x)      -> simpl_cast ~ignore t s (run x)
+      | Extract (h,l,x)   -> simpl_extract ~ignore h l (run x)
+      | Ite (c,y,n)       -> simpl_ite (run c) (run y) (run n)
+      | Concat (x,y)      -> simpl_concat (run x) (run y)
+      | Let (v,x,y)       -> Let (v, run x, run y)
+      | Var _ | Int _  | Unknown (_,_) as const -> const in
+    run e
+
+  let fixpoint = fix compare_exp
 
   let exp ?ignore e =
-    exp ?ignore e |> Group_like.run |> exp ?ignore
+    let fs = [de_morgan; associativity; distribitivity; Group_like.run] in
+    let f e = List.fold ~init:(simpl ?ignore e) ~f:(fun e f -> f e) fs in
+    fixpoint f e |> pretify
 
   let bil ?ignore =
     let exp x = exp ?ignore x in
@@ -529,14 +581,6 @@ module Simpl = struct
   let stmt ?ignore x = bil ?ignore [x]
 end
 
-let fix compare f x  =
-  let rec loop slow fast =
-    if compare slow fast = 0 then fast
-    else
-      let fast' = f fast in
-      if compare fast' fast = 0 then fast
-      else loop (f slow) (f fast) in
-  loop x (f x)
 
 let fixpoint = fix compare_bil
 
