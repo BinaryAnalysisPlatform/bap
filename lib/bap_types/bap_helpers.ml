@@ -380,7 +380,7 @@ module Simpl = struct
     end)#map_exp e
 
   let associativity e =
-    let is_associative' o o' o'' = is_associative o o' && is_associative o o'' in
+    let is_associative' a b c = is_associative a b && is_associative a c in
     map_op e ~f2:(fun op x y -> match x, y with
         | BinOp(op', x, Int p), Int q when is_associative op op' ->
           binop op x (apply_binop op p q)
@@ -430,17 +430,20 @@ module Simpl = struct
     | Type.Imm w -> w
     | Type.Mem _ -> failwith "unexpected Mem type"
 
+  let extracted hi lo = hi - lo + 1
+
   let simpl_cast ?(ignore=[]) t width x =
     let removable = removable ignore in
     let no_simpl = Cast (t, width, x) in
     match t, x with
     | t, Int w -> Int (Apply.cast t width w)
     | _ when infer_width x = width -> x
-    | HIGH, (Cast (HIGH as t', w, e))
-    | (LOW|SIGNED|UNSIGNED), Cast ((LOW|SIGNED|UNSIGNED) as t', w, e)
-      when width <= w -> Cast (t', width, e)
-    | HIGH, Extract (hi, lo, e)
-      when width <= hi - lo + 1 -> Extract (hi, hi - width + 1, e)
+    | t, Cast (t',_,e) when compare_cast t' t = 0 -> Cast (t,width,e)
+    | (LOW|UNSIGNED), Cast ((LOW|UNSIGNED), w, e) -> Cast (t,width,e)
+    | (LOW|SIGNED|UNSIGNED), Cast (SIGNED, w, e) when width <= w ->
+      Cast (SIGNED, width, e)
+    | HIGH, Extract (hi, lo, e) when width <= extracted hi lo ->
+      Extract (hi, hi - width + 1, e)
     | _, Extract (hi, lo, e) ->
       let hi' = lo + width - 1 in
       if hi' <= hi then Extract (hi', lo, e)
@@ -453,26 +456,26 @@ module Simpl = struct
 
   let simpl_extract ?(ignore=[]) hi lo x =
     let removable = removable ignore in
-    let w = hi - lo + 1 in
+    let w = extracted hi lo in
     let no_simpl = Extract (hi,lo,x) in
     match x with
     | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-    | Extract (hi',lo',e) when hi' >= hi + lo' ->
-      Extract (hi + lo',lo + lo',e)
-    | Cast (LOW, s, e) when hi < s -> Extract (hi, lo, e)
+    | Extract (hi',lo',e) when hi' >= hi + lo' -> Extract (hi + lo',lo + lo',e)
+    | Extract (hi',lo',e) when hi' >= infer_width e - 1 -> Extract (hi + lo',lo + lo',e)
+    | Cast ((LOW | UNSIGNED), s, e) when hi < s -> Extract (hi, lo, e)
+    | Cast ((LOW | UNSIGNED), s, e) when s >= infer_width e -> Extract (hi, lo, e)
+    | Cast (SIGNED, s, e) when hi <= infer_width e - 1 -> Extract (hi, lo, e)
     | Cast (HIGH, s, e) ->
       let we = infer_width e in
-      if we < s then no_simpl
-      else Extract (hi + we - s, lo + we - s, e)
+      Extract (hi + we - s, lo + we - s, e)
     | Concat (x,y) when lo = 0 && infer_width y = w && removable x -> y
     | Concat (x,y)
       when lo = infer_width y && infer_width x = w && removable y -> x
-    | Concat (x,y)
-      when hi < infer_width y && removable x ->
+    | Concat (x,y) when hi < infer_width y && removable x ->
       Extract (hi,lo,y)
     | Concat (x,y) when removable y ->
-      let we = infer_width y in
-      if lo >= we then Extract (hi - we,lo - we, x)
+      let wy = infer_width y in
+      if lo >= wy then Extract (hi - wy,lo - wy, x)
       else no_simpl
     | x when infer_width x = w && lo = 0 -> x
     | _ -> no_simpl
@@ -708,7 +711,7 @@ module Normalize = struct
       | Var v -> Var.typ v
       | Store (m,_,_,_,_) -> infer m
       | Ite (_,x,y) -> both x y
-      | _ -> invalid_arg "type error"
+      | e -> invalid_arg "type error"
     and both x y =
       match infer x, infer y with
       | t1,t2 when Type.(t1 = t2) -> t1
