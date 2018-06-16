@@ -29,48 +29,6 @@ val free_vars : bil -> Bap_var.Set.t
 val fold_consts : bil -> bil
 val fixpoint : (bil -> bil) -> (bil -> bil)
 
-
-module Apply : sig
-  val binop : binop -> word -> word -> word
-  val unop : unop -> word -> word
-  val cast : cast -> int -> word -> word
-end
-
-
-module Type : sig
-  val check : stmt list -> (unit,Bap_type_error.t) Result.t
-  val infer : exp -> (typ, Bap_type_error.t) Result.t
-  val infer_exn : exp -> typ
-end
-
-module Eff : sig
-  type t
-
-  val none : t
-  val read : t
-  val load : t
-  val store : t
-  val raise : t
-
-  val reads : t -> bool
-  val loads : t -> bool
-  val stores : t -> bool
-  val raises : t -> bool
-
-  val has_effects : t -> bool
-  val has_coeffects :  t -> bool
-  val idempotent : t -> bool
-
-  val compute : exp -> t
-end
-
-module Simpl : sig
-  val bil  : ?ignore:Eff.t list -> stmt list -> stmt list
-  val stmt : ?ignore:Eff.t list -> stmt -> stmt list
-  val exp  : ?ignore:Eff.t list -> exp -> exp
-end
-
-
 module Exp : sig
   class state : exp_state
   class ['a] visitor : ['a] exp_visitor

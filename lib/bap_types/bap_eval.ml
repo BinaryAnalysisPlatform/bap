@@ -63,7 +63,7 @@ module Make2(State : Monad.S2) = struct
 
     method type_error (err : TE.t) = self#bot
 
-    method eval_exp x = self#eval (Bil.Simpl.exp (Bil.Exp.normalize x))
+    method eval_exp x = self#eval (Bap_simpl.exp (Bil.Exp.normalize x))
 
     method private eval exp : ('r,'a) m = match exp with
       | Exp.Load (m,a,e,s) -> self#eval_load ~mem:m ~addr:a e s
@@ -120,12 +120,12 @@ module Make2(State : Monad.S2) = struct
       | Some u ->
         self#eval_imm v >>= function
         | None -> self#type_error TE.bad_imm
-        | Some v -> self#value_of_word (Bil.Apply.binop op u v)
+        | Some v -> self#value_of_word (Bap_apply.binop op u v)
 
     method eval_unop op u =
       self#eval_imm u >>= function
       | None -> self#type_error TE.bad_imm
-      | Some u -> self#value_of_word @@ Bil.Apply.unop op u
+      | Some u -> self#value_of_word @@ Bap_apply.unop op u
 
     method eval_cast ct sz u =
       self#eval_imm u >>= function
@@ -136,7 +136,7 @@ module Make2(State : Monad.S2) = struct
 
     method private eval_cast' ct sz u : word option =
       let open Bitvector in
-      try Option.return @@ Bil.Apply.cast ct sz u
+      try Option.return @@ Bap_apply.cast ct sz u
       with exn -> None
 
     method eval_let var u body =
