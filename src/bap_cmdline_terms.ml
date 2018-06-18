@@ -347,16 +347,3 @@ let options_for_passes = [
         argument that follows the flag might be consumed by a $(i,PASS)"
   end;
 ]
-
-let basses () : string list Term.t =
-  match bass_list () with
-  | [] -> Term.const []
-  | [x] -> Term.const [x]
-  | basses ->
-    let names = basses |> List.map ~f:(fun x -> x,x) in
-    let doc =
-      sprintf "Use a specified bass (bass stands for Bil analysis)
-      or comma separated basses. Basses applied in the same order
-      they are listed. Possible values are: %s" @@ Arg.doc_alts_enum names in
-    let la_conv = Arg.(list ~sep:',' (enum names)) in
-    Arg.(value & opt la_conv basses & info ["bass"; "b"] ~doc)

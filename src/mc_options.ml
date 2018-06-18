@@ -11,7 +11,6 @@ type t = {
   bil_formats : string list;
   bir_formats : string list;
   show_kinds: bool;
-  basses : string list;
 } [@@deriving sexp, fields]
 
 module type Provider = sig

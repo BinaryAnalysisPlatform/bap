@@ -113,19 +113,12 @@ let extract_format filename =
   | `Error _ -> None, None
   | `Ok (_,fmt,ver) -> Some fmt, ver
 
-let select_basses o =
-  List.iter o.basses
-    ~f:(fun name -> match find_bass name with
-        | None -> error "bass %s not found" name
-        | Some b -> run_bass b)
-
 let main o =
   let proj_of_input input =
     let rooter = rooter o
     and brancher = brancher o
     and reconstructor = reconstructor o
     and symbolizer = symbolizer o in
-    select_basses o;
     Project.create input ~disassembler:o.disassembler
       ?brancher ?rooter ?symbolizer ?reconstructor  |> function
     | Error err -> raise (Failed_to_create_project err)
@@ -211,8 +204,8 @@ let program_info =
 let program _source =
   let create
       passopt
-      _ _ a b c d e f g i j k l = (Bap_options.Fields.create
-                                   a b c d e f g i j k l []), passopt in
+      _ _ a b c d e f g i j k = (Bap_options.Fields.create
+                                   a b c d e f g i j k []), passopt in
   let open Bap_cmdline_terms in
   let passopt : string list Term.t =
     let doc =
@@ -234,8 +227,7 @@ let program _source =
         $(brancher ())
         $(symbolizers ())
         $(rooters ())
-        $(reconstructor ())
-        $(basses ())),
+        $(reconstructor ())),
   program_info
 
 let parse_source argv =

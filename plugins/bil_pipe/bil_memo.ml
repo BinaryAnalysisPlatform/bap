@@ -23,9 +23,21 @@ end
 
 let insns : bil Memo.Table.t = Memo.Table.create ()
 
+(* let last : (memo * bil) ref = ref ({addr = Addr.zero 1; code = Word.zero 1}, []) *)
+
+(* let find addr' code' _ = *)
+(*   let {addr;code}, bil = !last in *)
+(*   if Addr.equal addr addr' && Word.equal code code' then Ok bil *)
+(*   else Error (Error.of_string "bil not found") *)
+
+(* let save addr code bil = *)
+(*   last := {addr; code}, bil; *)
+(*   Ok bil *)
+
 let find addr code _ =
   match Hashtbl.find insns {addr; code} with
-  | None -> Error (Error.of_string "bil not found")
+  | None ->
+    Error (Error.of_string "bil not found")
   | Some bil -> Ok bil
 
 let save addr code bil =

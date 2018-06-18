@@ -22,23 +22,29 @@ let print fmt s =
 let switcher ?(default=Enable) =
   Config.(param (converter parse print default) ~default)
 
-let norml _ _ bil = Ok (Stmt.normalize bil)
+let stub  _ _ bil = Ok bil
 let simpl _ _ bil = Ok (Bil.fold_consts bil)
+let norml _ _ bil = Ok (Stmt.normalize bil)
 let propg _ _ bil = Ok (propagate_consts bil)
 let renum _ _ bil = Ok (renum bil)
+let simpl _ _ bil = Ok (Stmt.simpl ~ignore:[] bil)
+let stub_find  _ _ _ = Error (Error.of_string "bil not found")
 
-let run if_norml if_simpl if_propg =
+let run if_norml if_simpl if_propg if_memo =
+  let add cat ~default x  = function
+    | Enable -> cat,x
+    | Disable -> cat,default in
+  let add_memo = add memo ~default:stub_find find in
+  let add_bass = add bass ~default:stub in
   let pipe = [
-     Enable,   find,  memo;
-     if_norml, norml, bass;
-     if_simpl, simpl, bass;
-     if_propg, propg, bass;
-     Enable,   renum, bass;
-     Enable,   save,  bass;
+    add_memo if_memo;
+    add_bass simpl if_simpl;
+    add_bass norml if_norml;
+    add_bass propg if_propg;
+    add_bass renum if_memo ;
+    add_bass save  if_memo ;
   ] in
-  List.iter pipe ~f:(fun (e,f,cat) -> match e with
-      | Disable -> ()
-      | Enable -> register_bass cat f)
+  List.iter pipe ~f:(fun (cat,f) -> register_bass cat f)
 
 let () =
   let () = Config.manpage [
@@ -46,17 +52,16 @@ let () =
       `P "Applies analysises to a instruction bil code" ;
       `Pre "
 The following bil analysises are in default pipeline:
+Constant Folding and Simplification
 Bil Normalization
-Constant Folding
 Constant Propagation
+Memoization
 ";
       `S "SEE ALSO";
       `P "$(b,bap.mli)"
     ] in
-  let norm =
-    switcher "norm" ~doc:"Produces a normalized BIL program" in
-  let simpl =
-    switcher "simpl" ~doc:"Applies expressions simplification." in
-  let prop =
-    switcher "prop" ~doc:"Const propagation" in
-  Config.when_ready (fun {Config.get=(!)} -> run !norm !simpl !prop)
+  let simpl = switcher "simpl" ~doc:"Applies expressions simplification." in
+  let norm = switcher "norm" ~doc:"Produces a normalized BIL program" in
+  let prop = switcher "prop" ~doc:"Const propagation" in
+  let memo = switcher "memo" ~doc:"Bil memoization" in
+  Config.when_ready (fun {Config.get=(!)} -> run !norm !simpl !prop !memo)

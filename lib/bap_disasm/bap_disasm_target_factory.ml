@@ -57,6 +57,7 @@ let type_check bil = match Type.check bil with
   | Ok () -> Ok bil
 
 type bass = addr -> word -> bil -> bil Or_error.t
+type bass_category = string
 
 let basses : bass list String.Table.t = String.Table.create ()
 let memo = "memo"
@@ -82,10 +83,6 @@ let apply_analysis addr code bil =
     | f :: fs ->
       bil >>= fun bil -> apply (f addr code bil) fs in
   apply (type_check bil) (find_basses bass)
-
-let find_bass _name = None
-let run_bass _bass = ()
-let bass_list () = []
 
 let get_opcode mem =
   let open Res in
