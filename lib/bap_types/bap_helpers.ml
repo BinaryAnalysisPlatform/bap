@@ -431,53 +431,81 @@ module Simpl = struct
     | Type.Mem _ -> failwith "unexpected Mem type"
 
   let extracted hi lo = hi - lo + 1
+  let extended e w = w > infer_width e
 
   let simpl_cast ?(ignore=[]) t width x =
     let removable = removable ignore in
     let no_simpl = Cast (t, width, x) in
-    match t, x with
-    | t, Int w -> Int (Apply.cast t width w)
+    let same_cast t t' = compare_cast t t' = 0 in
+    let of_extract hi lo e =
+      let is_reducing = width < extracted hi lo in
+      let zero_extended = extended e (hi + 1) in
+      match t with
+      | HIGH when is_reducing -> Extract (hi, hi - width + 1, e)
+      | _    when is_reducing -> Extract (lo + width - 1, lo, e)
+      | SIGNED   when zero_extended -> Extract (lo + width - 1, lo, e)
+      | UNSIGNED when zero_extended || infer_width e = hi + 1 ->
+        Extract (lo + width - 1, lo, e)
+      | _ -> no_simpl in
+    let of_cast cast w e =
+      let is_reducing = width < w in
+      let zero_extended = extended e w && same_cast cast UNSIGNED in
+      match t,cast with
+      | t,cast when same_cast t cast && is_reducing -> Cast (t,width,e)
+      | (LOW|UNSIGNED|SIGNED), (LOW|UNSIGNED|SIGNED) when is_reducing ->
+        Cast (cast,width,e)
+      | SIGNED, _ | UNSIGNED,_ when zero_extended -> Cast (UNSIGNED, width, e)
+      | _ -> no_simpl in
+    let of_concat x y =
+      let xwidth = infer_width x in
+      let ywidth = infer_width y in
+      match t with
+      | HIGH when width <= xwidth && removable y -> Extract (xwidth - 1, xwidth - width, x)
+      | (LOW|SIGNED|UNSIGNED) when width <= ywidth && removable x -> Extract (width - 1, 0, y)
+      | _ -> no_simpl in
+    match x with
+    | Int w -> Int (Apply.cast t width w)
     | _ when infer_width x = width -> x
-    | t, Cast (t',w,e) when compare_cast t' t = 0 && width <= w -> Cast (t,width,e)
-    | (LOW|UNSIGNED), Cast ((LOW|UNSIGNED), w, e) when width <= w -> Cast (t,width,e)
-    | (LOW|SIGNED|UNSIGNED), Cast (SIGNED, w, e) when width <= w ->
-      Cast (SIGNED, width, e)
-    | HIGH, Extract (hi, lo, e) when width <= extracted hi lo ->
-      Extract (hi, hi - width + 1, e)
-    | _, Extract (hi, lo, e) ->
-      let hi' = lo + width - 1 in
-      if hi' <= hi then Extract (hi', lo, e)
-      else no_simpl
-    | HIGH, Concat (x,y)
-      when infer_width x = width && removable y -> x
-    | _, Concat (x,y)
-      when infer_width y = width && removable x -> y
+    | Extract (hi,lo,e) -> of_extract hi lo e
+    | Cast (t',w,e) -> of_cast t' w e
+    | Concat (x,y) -> of_concat x y
     | _ -> no_simpl
 
   let simpl_extract ?(ignore=[]) hi lo x =
     let removable = removable ignore in
-    let w = extracted hi lo in
+    let extracted = extracted hi lo in
     let no_simpl = Extract (hi,lo,x) in
+    let of_extract hi' lo' e =
+      let is_reducing = hi' >= hi + lo' in
+      let zero_extended = infer_width e <= hi' + 1 in
+      if is_reducing || zero_extended then
+        Extract (hi + lo',lo + lo',e)
+      else no_simpl in
+    let of_cast cast width e =
+      let ewidth = infer_width e in
+      let is_reducing = hi + 1 < width in
+      let extended = extended e width  in
+      match cast with
+      | LOW | UNSIGNED when is_reducing -> Extract (hi, lo, e)
+      | UNSIGNED when extended -> Extract (hi, lo, e)
+      | SIGNED when hi + 1 <= ewidth -> Extract (hi, lo, e)
+      | SIGNED when lo = 0 && is_reducing -> Cast (SIGNED, hi + 1, e)
+      | HIGH -> Extract (hi + ewidth - width, lo + ewidth - width, e)
+      | _ -> no_simpl in
+    let of_concat x y =
+      let ywidth = infer_width y in
+      let extracting_y = lo = 0 && ywidth >= extracted in
+      let extracting_x = lo >= ywidth in
+      if extracting_y && removable x then Extract (hi,lo,y)
+      else if extracting_x && removable y then
+        Extract (hi - ywidth,lo - ywidth,x)
+      else no_simpl in
     match x with
     | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
-    | Extract (hi',lo',e) when hi' >= hi + lo' -> Extract (hi + lo',lo + lo',e)
-    | Extract (hi',lo',e) when hi' >= infer_width e - 1 -> Extract (hi + lo',lo + lo',e)
-    | Cast ((LOW | UNSIGNED), s, e) when hi < s -> Extract (hi, lo, e)
-    | Cast ((LOW | UNSIGNED), s, e) when s >= infer_width e -> Extract (hi, lo, e)
-    | Cast (SIGNED, s, e) when hi <= infer_width e - 1 -> Extract (hi, lo, e)
-    | Cast (HIGH, s, e) ->
-      let we = infer_width e in
-      Extract (hi + we - s, lo + we - s, e)
-    | Concat (x,y) when lo = 0 && infer_width y = w && removable x -> y
-    | Concat (x,y)
-      when lo = infer_width y && infer_width x = w && removable y -> x
-    | Concat (x,y) when hi < infer_width y && removable x ->
-      Extract (hi,lo,y)
-    | Concat (x,y) when removable y ->
-      let wy = infer_width y in
-      if lo >= wy then Extract (hi - wy,lo - wy, x)
-      else no_simpl
-    | x when infer_width x = w && lo = 0 -> x
+    | x when infer_width x = extracted && lo = 0 -> x
+    | Extract (hi',lo',e) -> of_extract hi' lo' e
+    | Cast (cast,width,e) -> of_cast cast width e
+    | Concat (x,y) -> of_concat x y
     | _ -> no_simpl
 
   let simpl_ite c y n = match c,y,n with

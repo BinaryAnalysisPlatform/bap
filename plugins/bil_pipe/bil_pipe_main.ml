@@ -30,10 +30,11 @@ let renum _ _ bil = Ok (renum bil)
 let simpl _ _ bil = Ok (Stmt.simpl ~ignore:[] bil)
 let stub_find  _ _ _ = Error (Error.of_string "bil not found")
 
+let add cat ~default x  = function
+  | Enable -> cat,x
+  | Disable -> cat,default
+
 let run if_norml if_simpl if_propg if_memo =
-  let add cat ~default x  = function
-    | Enable -> cat,x
-    | Disable -> cat,default in
   let add_memo = add memo ~default:stub_find find in
   let add_bass = add bass ~default:stub in
   let pipe = [
