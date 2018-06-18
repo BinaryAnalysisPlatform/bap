@@ -438,8 +438,8 @@ module Simpl = struct
     match t, x with
     | t, Int w -> Int (Apply.cast t width w)
     | _ when infer_width x = width -> x
-    | t, Cast (t',_,e) when compare_cast t' t = 0 -> Cast (t,width,e)
-    | (LOW|UNSIGNED), Cast ((LOW|UNSIGNED), w, e) -> Cast (t,width,e)
+    | t, Cast (t',w,e) when compare_cast t' t = 0 && width <= w -> Cast (t,width,e)
+    | (LOW|UNSIGNED), Cast ((LOW|UNSIGNED), w, e) when width <= w -> Cast (t,width,e)
     | (LOW|SIGNED|UNSIGNED), Cast (SIGNED, w, e) when width <= w ->
       Cast (SIGNED, width, e)
     | HIGH, Extract (hi, lo, e) when width <= extracted hi lo ->
