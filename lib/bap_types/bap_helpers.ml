@@ -449,8 +449,8 @@ module Simpl = struct
         Extract (width - 1, 0, y)
       | _ -> no_simplf in
     match x with
-    | x when infer_width x = width -> x
     | Int w -> Int (Apply.cast t width w)
+    | x when infer_width x = width -> x
     | Extract (hi,lo,e) -> of_extract hi lo e
     | Cast (t',w,e) -> of_cast t' w e
     | Concat (x,y) -> of_concat x y
@@ -486,8 +486,8 @@ module Simpl = struct
         Extract (hi - ywidth,lo - ywidth,x)
       else no_simplf in
     match x with
-    | x when infer_width x = extracted && lo = 0 -> x
     | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
+    | x when infer_width x = extracted && lo = 0 -> x
     | Extract (hi',lo',e) -> of_extract hi' lo' e
     | Cast (cast,width,e) -> of_cast cast width e
     | Concat (x,y) -> of_concat x y
@@ -614,7 +614,6 @@ module Simpl = struct
 
   let stmt ?ignore x = bil ?ignore [x]
 end
-
 
 let fixpoint = fix compare_bil
 

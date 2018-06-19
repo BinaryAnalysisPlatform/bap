@@ -34,12 +34,8 @@ let insns : bil Memo.Table.t = Memo.Table.create ()
 (*   last := {addr; code}, bil; *)
 (*   Ok bil *)
 
-let find addr code _ =
-  match Hashtbl.find insns {addr; code} with
-  | None ->
-    Error (Error.of_string "bil not found")
-  | Some bil -> Ok bil
+let find addr code = Hashtbl.find insns {addr; code}
 
 let save addr code bil =
   Hashtbl.update insns {addr; code} ~f:(fun _ -> bil);
-  Ok bil
+  bil

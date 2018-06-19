@@ -5,47 +5,50 @@ open Bil_renum_virtual
 open Bil_memo
 include Self ()
 
-type switch = Enable | Disable
-
 let parse = function
-  | "enable" -> `Ok Enable
-  | "disable" -> `Ok Disable
+  | "enable" -> `Ok true
+  | "disable" -> `Ok false
   | s ->
     `Error (sprintf "unknown value %s, possible are: disable | enable" s)
 
 let print fmt s =
   Format.fprintf fmt "%s" @@
   match s with
-  | Enable  -> "enable"
-  | Disable -> "disable"
+  | true  -> "enable"
+  | false -> "disable"
 
-let switcher ?(default=Enable) =
+let switcher ?(default=true) =
   Config.(param (converter parse print default) ~default)
 
-let stub  _ _ bil = Ok bil
-let simpl _ _ bil = Ok (Bil.fold_consts bil)
-let norml _ _ bil = Ok (Stmt.normalize bil)
-let propg _ _ bil = Ok (propagate_consts bil)
-let renum _ _ bil = Ok (renum bil)
-let simpl _ _ bil = Ok (Stmt.simpl ~ignore:[] bil)
-let stub_find  _ _ _ = Error (Error.of_string "bil not found")
+let simpl _ _ bil = Bil.fold_consts bil
+let norml _ _ bil = Stmt.normalize bil
+let propg _ _ bil = propagate_consts bil
+let renum _ _ bil = renum bil
 
-let add cat ~default x  = function
-  | Enable -> cat,x
-  | Disable -> cat,default
+let add pipe (test, f) =
+  if test then f :: pipe
+  else pipe
+
+let seal pipe =
+  fun addr code bil ->
+  let rec run bil = function
+    | [] -> bil
+    | f :: fs -> run (f addr code bil) fs in
+  let bil = run bil (List.rev pipe) in
+  Ok bil
 
 let run if_norml if_simpl if_propg if_memo =
-  let add_memo = add memo ~default:stub_find find in
-  let add_bass = add bass ~default:stub in
-  let pipe = [
-    add_memo if_memo;
-    add_bass simpl if_simpl;
-    add_bass norml if_norml;
-    add_bass propg if_propg;
-    add_bass renum if_memo ;
-    add_bass save  if_memo ;
+  let fs = [
+    if_simpl,simpl;
+    if_norml,norml;
+    if_propg,propg;
+    if_memo, renum;
+    if_memo, save;
   ] in
-  List.iter pipe ~f:(fun (cat,f) -> register_bass cat f)
+  let pipe = List.fold fs ~init:[] ~f:add |> seal in
+  if if_memo then register_memo find;
+  register_bass "internal" pipe
+
 
 let () =
   let () = Config.manpage [
