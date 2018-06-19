@@ -326,8 +326,6 @@ module Simpl = struct
 
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
-  let nothing _ = false
-
 
   (* requires: let-free, simplifications(
         constant-folding,
@@ -339,9 +337,6 @@ module Simpl = struct
   let is_associative = function
     | PLUS | TIMES | AND | OR | XOR -> true
     | _ -> false
-
-  let is_associative op op' =
-    is_associative op && compare_binop op op' = 0
 
   let is_distributive op op' = match op,op' with
     | TIMES, (PLUS | MINUS) -> true
@@ -380,28 +375,29 @@ module Simpl = struct
     end)#map_exp e
 
   let associativity e =
-    let is_associative' a b c = is_associative a b && is_associative a c in
+    let (=) o o' = is_associative o && compare_binop o o' = 0 in
     map_op e ~f2:(fun op x y -> match x, y with
-        | BinOp(op', x, Int p), Int q when is_associative op op' ->
+        | BinOp(op', x, Int p), Int q when op = op' ->
           binop op x (apply_binop op p q)
         | BinOp(op', x, Int q), BinOp(op'', y, Int p)
-          when is_associative' op op' op'' ->
+          when op = op' && op = op'' ->
           binop op (binop op x y) (apply_binop op q p)
         | BinOp(op', x, Int p), y
-        | BinOp(op', Int p, x), y when is_associative op op' ->
+        | BinOp(op', Int p, x), y when op = op' ->
           binop op (binop op x y) (Int p)
         | y, BinOp(op', x, Int p)
-        | y, BinOp(op', Int p, x) when is_associative op op' ->
+        | y, BinOp(op', Int p, x) when op = op' ->
           binop op (binop op y x) (Int p)
         | x,y -> binop op x y)
 
   let distribitivity e =
+    let (=) = is_distributive in
     map_op e ~f2:(fun op x y -> match x,y with
         | BinOp(op', x, Int p), Int q
-        | Int q, BinOp(op', x, Int p) when is_distributive op op' ->
+        | Int q, BinOp(op', x, Int p) when op = op' ->
           binop op' (binop op (Int q) x) (apply_binop op p q)
         | BinOp(op', Int p, x), Int q
-        | Int q, BinOp(op', Int p, x) when is_distributive op op' ->
+        | Int q, BinOp(op', Int p, x) when op = op' ->
           binop op' (apply_binop op p q) (binop op (Int q) x)
         | x,y -> binop op x y)
 
@@ -414,84 +410,73 @@ module Simpl = struct
         | NOT, BinOp(OR, x, Int q)  -> BinOp (AND, lnot x, apply_unop NOT q)
         | op,x -> UnOp (op,x))
 
-  let simpl_unop op x = match op,x with
-    | op, Int x -> apply_unop op x
-    | op, UnOp (op', x) when compare_unop op op' = 0 -> x
-    | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
-    | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
-    | NOT, BinOp (EQ, x, y) -> BinOp(NEQ, x, y)
-    | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
-    | NEG, BinOp (PLUS, x, Int q)
-    | NEG, BinOp (PLUS, Int q, x) ->
-      BinOp (PLUS, apply_unop NEG q, UnOp (NEG, x))
-    | op,x -> UnOp (op,x)
-
   let infer_width x = match Type_infer.infer_exn x with
     | Type.Imm w -> w
     | Type.Mem _ -> failwith "unexpected Mem type"
 
   let extracted hi lo = hi - lo + 1
-  let extended e w = w > infer_width e
 
   let simpl_cast ?(ignore=[]) t width x =
     let removable = removable ignore in
-    let no_simpl = Cast (t, width, x) in
+    let no_simplf = Cast (t, width, x) in
     let same_cast t t' = compare_cast t t' = 0 in
     let of_extract hi lo e =
       let is_reducing = width < extracted hi lo in
-      let zero_extended = extended e (hi + 1) in
+      let zero_extended = hi + 1 > infer_width e in
       match t with
       | HIGH when is_reducing -> Extract (hi, hi - width + 1, e)
       | _    when is_reducing -> Extract (lo + width - 1, lo, e)
       | SIGNED   when zero_extended -> Extract (lo + width - 1, lo, e)
       | UNSIGNED when zero_extended || infer_width e = hi + 1 ->
         Extract (lo + width - 1, lo, e)
-      | _ -> no_simpl in
+      | _ -> no_simplf in
     let of_cast cast w e =
       let is_reducing = width < w in
-      let zero_extended = extended e w && same_cast cast UNSIGNED in
+      let zero_extended = w > infer_width e && same_cast cast UNSIGNED in
       match t,cast with
       | t,cast when same_cast t cast && is_reducing -> Cast (t,width,e)
       | (LOW|UNSIGNED|SIGNED), (LOW|UNSIGNED|SIGNED) when is_reducing ->
         Cast (cast,width,e)
       | SIGNED, _ | UNSIGNED,_ when zero_extended -> Cast (UNSIGNED, width, e)
-      | _ -> no_simpl in
+      | _ -> no_simplf in
     let of_concat x y =
       let xwidth = infer_width x in
       let ywidth = infer_width y in
       match t with
-      | HIGH when width <= xwidth && removable y -> Extract (xwidth - 1, xwidth - width, x)
-      | (LOW|SIGNED|UNSIGNED) when width <= ywidth && removable x -> Extract (width - 1, 0, y)
-      | _ -> no_simpl in
+      | HIGH when width <= xwidth && removable y ->
+        Extract (xwidth - 1, xwidth - width, x)
+      | (LOW|SIGNED|UNSIGNED) when width <= ywidth && removable x ->
+        Extract (width - 1, 0, y)
+      | _ -> no_simplf in
     match x with
+    | x when infer_width x = width -> x
     | Int w -> Int (Apply.cast t width w)
-    | _ when infer_width x = width -> x
     | Extract (hi,lo,e) -> of_extract hi lo e
     | Cast (t',w,e) -> of_cast t' w e
     | Concat (x,y) -> of_concat x y
-    | _ -> no_simpl
+    | _ -> no_simplf
 
   let simpl_extract ?(ignore=[]) hi lo x =
     let removable = removable ignore in
     let extracted = extracted hi lo in
-    let no_simpl = Extract (hi,lo,x) in
+    let no_simplf = Extract (hi,lo,x) in
     let of_extract hi' lo' e =
       let is_reducing = hi' >= hi + lo' in
-      let zero_extended = infer_width e <= hi' + 1 in
+      let zero_extended = hi' + 1 >= infer_width e in
       if is_reducing || zero_extended then
         Extract (hi + lo',lo + lo',e)
-      else no_simpl in
+      else no_simplf in
     let of_cast cast width e =
       let ewidth = infer_width e in
       let is_reducing = hi + 1 < width in
-      let extended = extended e width  in
+      let extended = width > infer_width e in
       match cast with
       | LOW | UNSIGNED when is_reducing -> Extract (hi, lo, e)
       | UNSIGNED when extended -> Extract (hi, lo, e)
       | SIGNED when hi + 1 <= ewidth -> Extract (hi, lo, e)
       | SIGNED when lo = 0 && is_reducing -> Cast (SIGNED, hi + 1, e)
       | HIGH -> Extract (hi + ewidth - width, lo + ewidth - width, e)
-      | _ -> no_simpl in
+      | _ -> no_simplf in
     let of_concat x y =
       let ywidth = infer_width y in
       let extracting_y = lo = 0 && ywidth >= extracted in
@@ -499,14 +484,14 @@ module Simpl = struct
       if extracting_y && removable x then Extract (hi,lo,y)
       else if extracting_x && removable y then
         Extract (hi - ywidth,lo - ywidth,x)
-      else no_simpl in
+      else no_simplf in
     match x with
-    | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
     | x when infer_width x = extracted && lo = 0 -> x
+    | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
     | Extract (hi',lo',e) -> of_extract hi' lo' e
     | Cast (cast,width,e) -> of_cast cast width e
     | Concat (x,y) -> of_concat x y
-    | _ -> no_simpl
+    | _ -> no_simplf
 
   let simpl_ite c y n = match c,y,n with
     | Int w, y, _ when Word.is_one w -> y
@@ -520,6 +505,18 @@ module Simpl = struct
     | Concat (z, Int x), Concat (Int y, z') ->
       Concat (Concat (z, Int (Word.concat x y)), z')
     | x,y -> Concat (x,y)
+
+  let simpl_unop op x = match op,x with
+    | op, Int x -> apply_unop op x
+    | op, UnOp (op', x) when compare_unop op op' = 0 -> x
+    | NOT, BinOp (LT, x, y) -> BinOp(LE, y, x)
+    | NOT, BinOp (LE, x, y) -> BinOp(LT, y, x)
+    | NOT, BinOp (EQ, x, y) -> BinOp(NEQ, x, y)
+    | NOT, BinOp (NEQ,x, y) -> BinOp(EQ, x, y)
+    | NEG, BinOp (PLUS, x, Int q)
+    | NEG, BinOp (PLUS, Int q, x) ->
+      BinOp (PLUS, apply_unop NEG q, UnOp (NEG, x))
+    | op,x -> UnOp (op,x)
 
   let simpl_binop ?(ignore=[]) op x y =
     let removable = removable ignore in
