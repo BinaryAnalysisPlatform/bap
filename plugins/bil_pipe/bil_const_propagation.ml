@@ -114,10 +114,8 @@ module Propagate(SM : Monad.State.S2) = struct
     end)#run bil Var.Set.empty |> Set.to_list
 
   let has_jmps bil =
-    (object
-      inherit [unit] Stmt.finder
-      method! enter_jmp _ c = c.return (Some ())
-    end)#find bil |> Option.is_some
+    List.exists bil
+      ~f:(function | Jmp _ -> true | _ -> false)
 
   class t = object(self)
     inherit e
