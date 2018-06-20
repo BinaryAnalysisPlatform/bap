@@ -169,7 +169,7 @@ module Propagate(SM : Monad.State.S2) = struct
       self#eval body >>= fun body ->
       SM.get () >>= fun ctxt' ->
       let ctxt = if has_jmps body then ctxt
-          else meet ctxt ctxt' in
+        else meet ctxt ctxt' in
       SM.put ctxt >>= fun () ->
       SM.return (Bil.while_ cond body)
 

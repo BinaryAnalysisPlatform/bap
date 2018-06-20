@@ -26,6 +26,7 @@ let computed_def_use sub =
 let sub_args sub =
   Term.enum arg_t sub |>
   union ~init:Var.Set.empty ~f:(fun arg -> Exp.free_vars (Arg.rhs arg))
+
 let free_vars sub = Set.union (Sub.free_vars sub) (sub_args sub)
 
 let compute_dead protected sub =
@@ -76,7 +77,7 @@ let propagate_consts sub =
 let rec process proj =
   let prog = Project.program proj in
   report_progress ~note:"ssa" ();
-  let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa in
+  let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa |> Seq.memoize in
   report_progress ~note:"free-vars" ();
   let free = union subs ~init:Var.Set.empty ~f:free_vars in
   report_progress ~note:"dead-vars" ();

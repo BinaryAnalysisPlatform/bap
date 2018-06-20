@@ -20,35 +20,32 @@ let print fmt s =
 let switcher ?(default=true) =
   Config.(param (converter parse print default) ~default)
 
-let simpl _ _ bil = Bil.fold_consts bil
-let norml _ _ bil = Stmt.normalize bil
-let propg _ _ bil = propagate_consts bil
-let renum _ _ bil = renum bil
+let mk f = fun _ _ bil -> f bil
+let simpl = mk Bil.fold_consts
+let norml = mk Stmt.normalize
+let propg = mk propagate_consts
+let renum = mk renum
 
-let add pipe (test, f) =
-  if test then f :: pipe
-  else pipe
-
-let seal pipe =
+let process pipe =
+  let pipe = List.filter_map pipe
+      ~f:(fun (test, f) -> Option.some_if test f) in
   fun addr code bil ->
-  let rec run bil = function
-    | [] -> bil
-    | f :: fs -> run (f addr code bil) fs in
-  let bil = run bil (List.rev pipe) in
-  Ok bil
+    let rec run bil = function
+      | [] -> bil
+      | f :: fs ->
+        run (f addr code bil) fs in
+    Ok (run bil pipe)
 
 let run if_norml if_simpl if_propg if_memo =
-  let fs = [
+  if if_memo then register_memo find;
+  register_bass "internal" @@
+  process [
     if_simpl,simpl;
     if_norml,norml;
     if_propg,propg;
     if_memo, renum;
     if_memo, save;
-  ] in
-  let pipe = List.fold fs ~init:[] ~f:add |> seal in
-  if if_memo then register_memo find;
-  register_bass "internal" pipe
-
+  ]
 
 let () =
   let () = Config.manpage [

@@ -69,17 +69,12 @@ let apply_analysis addr code bil =
   List.fold bs ~init:(type_check bil)
     ~f:(fun bil f -> bil >>= f addr code) >>= type_check
 
-let get_opcode memory =
-  let open Or_error in
-  let len = Memory.length memory in
-  let rec run n code addr =
-    if n = len then return code
-    else
-      Memory.get ~addr memory >>= fun word ->
-      run (n + 1) (Word.concat code word) (Word.succ addr) in
-  let addr = Memory.min_addr memory in
-  Memory.get ~addr memory >>= fun fst ->
-  run 1 fst (Addr.succ addr)
+let get_opcode mem =
+  Memory.fold mem ~init:None ~f:(fun b -> function
+      | None -> Some b
+      | Some bs -> Some (Word.concat bs b)) |> function
+  | None -> Error (Error.of_string "failed to read from memory")
+  | Some x -> Ok x
 
 module Make(T : Target) = struct
   include T
@@ -88,8 +83,7 @@ module Make(T : Target) = struct
     let addr = Memory.min_addr memory in
     match get_opcode memory with
     | Error _ as e -> e
-    | Ok code ->
-      match !memo addr code with
+    | Ok code -> match !memo addr code with
       | Some bil -> Ok bil
       | None ->
         Or_error.(T.lift memory insn >>= apply_analysis addr code)
