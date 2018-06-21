@@ -46,9 +46,10 @@ let reconstruct name roots cfg =
     Cfg.edges cfg |> Seq.fold ~init ~f:(fun cfg e ->
         if Hashtbl.mem roots (Block.addr (Cfg.Edge.dst e)) then cfg
         else Cfg.Edge.insert e cfg) in
-  let find_block addr =
-    Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
-        Addr.equal addr (Block.addr blk)) in
+  let entries = Addr.Table.create () in
+  Seq.iter (Cfg.nodes cfg) ~f:(fun blk ->
+      Hashtbl.update entries (Block.addr blk) (fun _ -> blk));
+  let find_block addr = Hashtbl.find entries addr in
   Hashtbl.fold roots ~init:Symtab.empty
     ~f:(fun ~key:entry ~data:name syms ->
         match find_block entry with
