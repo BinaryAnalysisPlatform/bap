@@ -17,7 +17,7 @@ type cfg = Cfg.t [@@deriving compare]
 
 type fn = string * block * cfg [@@deriving compare]
 
-let sexp_of_fn (name,block,cfg) =
+let sexp_of_fn (name,block,_cfg) =
   Sexp.List [sexp_of_string name; sexp_of_addr (Block.addr block)]
 
 module Fn = Opaque.Make(struct
@@ -38,7 +38,7 @@ let compare t1 t2 =
 
 type symtab = t [@@deriving compare, sexp_of]
 
-let span ((name,entry,cfg) as fn) =
+let span ((_name,_entry,cfg) as fn) =
   Cfg.nodes cfg |> Seq.fold ~init:Memmap.empty ~f:(fun map blk ->
       Memmap.add map (Block.memory blk) fn)
 
@@ -52,19 +52,27 @@ let merge m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,x) ->
       Memmap.add m1 mem x)
 
+let filter_mem mem name entry =
+  Memmap.filter mem ~f:(fun (n,e,_) ->
+      not(String.(name = n) || Block.(entry = e)))
+
 let remove t (name,entry,_) : t = {
   names = Map.remove t.names name;
   addrs = Map.remove t.addrs (Block.addr entry);
-  memory = Memmap.filter t.memory ~f:(fun (n,e,_) ->
-      not(String.(name = n) || Block.(entry = e)))
+  memory = filter_mem t.memory name entry;
 }
+
+let filter t ((name,entry,_ ) as fn) =
+  if Map.mem t.names name || Map.mem t.addrs (Block.addr entry) then
+    remove t fn
+  else t
 
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
-  let t = remove t data in
+  let t = filter t data in
   {
     addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
-    names = Map.add t.names ~key:name  ~data;
+    names = Map.add t.names ~key:name ~data;
     memory = merge t.memory (span data);
   }
 
