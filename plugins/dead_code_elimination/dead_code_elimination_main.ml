@@ -74,24 +74,52 @@ let propagate_consts sub =
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
           Exp.substitute Bil.(var pat) rep)))
 
-let rec process proj =
-  let prog = Project.program proj in
-  report_progress ~note:"ssa" ();
-  let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa |> Seq.memoize in
-  report_progress ~note:"free-vars" ();
-  let free = union subs ~init:Var.Set.empty ~f:free_vars in
-  report_progress ~note:"dead-vars" ();
-  let dead = union subs ~init:Tid.Set.empty ~f:(compute_dead free) in
-  let live t = not (Set.mem dead (Term.tid t)) in
-  report_progress ~note:"clean" ();
-  let clean sub = Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
-                  propagate_consts in
-  report_progress ~note:"updating" ();
-  if Set.is_empty dead then proj
-  else
-    Term.map sub_t prog ~f:clean |>
-    Project.with_program proj |>
-    process
+type t = {
+  sub' : sub term;
+  free : Var.Set.t;
+}
+
+let subs_free all =
+  Hashtbl.fold all ~init:Var.Set.empty ~f:(fun ~key:_ ~data:{free} frees ->
+      Set.union frees free)
+
+let subs_dead all free =
+  Hashtbl.fold all ~init:Tid.Set.empty ~f:(fun ~key:_ ~data:{sub'} deads ->
+      Set.union deads (compute_dead free sub'))
+
+let process proj =
+  let transformed = Sub.Table.create () in
+  let update sub = match Hashtbl.find transformed sub with
+    | None ->
+      let sub' = Sub.ssa sub in
+      let free = free_vars sub' in
+      Hashtbl.update transformed sub ~f:(fun _ -> {sub'; free;})
+    | Some _ -> () in
+  let rec run proj =
+    let prog = Project.program proj in
+    report_progress ~note:"ssa" ();
+    let () = Term.enum sub_t prog |> Seq.iter ~f:update in
+    report_progress ~note:"free-vars" ();
+    let free = subs_free transformed in
+    report_progress ~note:"dead-vars" ();
+    let dead = subs_dead transformed free in
+    let live t = not (Set.mem dead (Term.tid t)) in
+    report_progress ~note:"clean" ();
+    let clean sub =
+      let sub' =
+        Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
+        propagate_consts in
+      if not (Sub.equal sub sub') then
+        Hashtbl.remove transformed sub;
+      sub' in
+    report_progress ~note:"updating" ();
+    if Set.is_empty dead then proj
+    else
+      Term.map sub_t prog ~f:clean |>
+      Project.with_program proj |>
+      run in
+  run proj
+
 
 let () = Config.when_ready (fun _ ->
     Project.register_pass ~deps:["api"] ~autorun:true process)
