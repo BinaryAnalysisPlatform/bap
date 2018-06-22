@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Regular.Std
 open Format
 include Self()
 
@@ -74,55 +75,59 @@ let propagate_consts sub =
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
           Exp.substitute Bil.(var pat) rep)))
 
-type t = {
-  sub' : sub term;
-  free : Var.Set.t;
-}
+let free_vars (_,ssa) = free_vars ssa
+let compute_dead free (_,ssa) = compute_dead free ssa
 
-let subs_free all =
-  Hashtbl.fold all ~init:Var.Set.empty ~f:(fun ~key:_ ~data:{free} frees ->
-      Set.union frees free)
+let rec run subs =
+  let subs = Seq.memoize subs in
+  let free = union ~init:Var.Set.empty ~f:free_vars subs in
+  report_progress ~note:"dead-vars" ();
+  let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
+  let live t = not (Set.mem dead (Term.tid t)) in
+  report_progress ~note:"clean" ();
+  let clean (sub,ssa) =
+    let sub' =
+      Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
+      propagate_consts in
+    if Sub.equal sub sub' then (sub,ssa)
+    else sub',Sub.ssa sub' in
+  report_progress ~note:"updating" ();
+  if Set.is_empty dead then subs
+  else run (Seq.map subs ~f:clean)
 
-let subs_dead all free =
-  Hashtbl.fold all ~init:Tid.Set.empty ~f:(fun ~key:_ ~data:{sub'} deads ->
-      Set.union deads (compute_dead free sub'))
+let process prog =
+  let ptid = Term.tid prog in
+  let subs = Term.enum sub_t prog |> Seq.map ~f:(fun s -> s, Sub.ssa s) in
+  let subs = run subs in
+  let len = Seq.length subs in
+  let bld = Program.Builder.create ~tid:ptid ~subs:len () in
+  Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
+  Program.Builder.result bld
 
-let process proj =
-  let transformed = Sub.Table.create () in
-  let update sub = match Hashtbl.find transformed sub with
+let digest proj =
+  let module Digest = Data.Cache.Digest in
+  (object
+    inherit [Digest.t] Term.visitor
+    method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
+    method! enter_def t dst = Digest.add dst "%a" Def.pp t
+    method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+  end)#run
+    (Project.program proj)
+    (Data.Cache.Digest.create ~namespace:"dead_code_elimination")
+
+let run proj =
+  let digest = digest proj in
+  let p =
+    match Program.Cache.load digest with
+    | Some p -> p
     | None ->
-      let sub' = Sub.ssa sub in
-      let free = free_vars sub' in
-      Hashtbl.update transformed sub ~f:(fun _ -> {sub'; free;})
-    | Some _ -> () in
-  let rec run proj =
-    let prog = Project.program proj in
-    report_progress ~note:"ssa" ();
-    let () = Term.enum sub_t prog |> Seq.iter ~f:update in
-    report_progress ~note:"free-vars" ();
-    let free = subs_free transformed in
-    report_progress ~note:"dead-vars" ();
-    let dead = subs_dead transformed free in
-    let live t = not (Set.mem dead (Term.tid t)) in
-    report_progress ~note:"clean" ();
-    let clean sub =
-      let sub' =
-        Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
-        propagate_consts in
-      if not (Sub.equal sub sub') then
-        Hashtbl.remove transformed sub;
-      sub' in
-    report_progress ~note:"updating" ();
-    if Set.is_empty dead then proj
-    else
-      Term.map sub_t prog ~f:clean |>
-      Project.with_program proj |>
-      run in
-  run proj
-
+      let p = process (Project.program proj) in
+      Program.Cache.save digest p;
+      p in
+  Project.with_program proj p
 
 let () = Config.when_ready (fun _ ->
-    Project.register_pass ~deps:["api"] ~autorun:true process)
+    Project.register_pass ~deps:["api"] ~autorun:true run)
 ;;
 
 Config.manpage [
