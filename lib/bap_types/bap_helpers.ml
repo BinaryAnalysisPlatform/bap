@@ -680,6 +680,7 @@ module Normalize = struct
       | Var v -> Var.typ v
       | Store (m,_,_,_,_) -> infer m
       | Ite (_,x,y) -> both x y
+      | Unknown (_,t) -> t
       | _ -> invalid_arg "type error"
     and both x y =
       match infer x, infer y with
