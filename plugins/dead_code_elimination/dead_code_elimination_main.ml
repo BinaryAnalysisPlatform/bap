@@ -75,34 +75,96 @@ let propagate_consts sub =
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
           Exp.substitute Bil.(var pat) rep)))
 
-let free_vars (_,ssa) = free_vars ssa
-let compute_dead free (_,ssa) = compute_dead free ssa
+module X = struct
 
-let rec run subs =
-  let subs = Seq.memoize subs in
-  let free = union ~init:Var.Set.empty ~f:free_vars subs in
-  report_progress ~note:"dead-vars" ();
-  let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
-  let live t = not (Set.mem dead (Term.tid t)) in
-  report_progress ~note:"clean" ();
-  let clean (sub,ssa) =
+  let rec process prog =
+    report_progress ~note:"ssa" ();
+    let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa |> Seq.memoize in
+    report_progress ~note:"free-vars" ();
+    let free = union subs ~init:Var.Set.empty ~f:free_vars in
+    report_progress ~note:"dead-vars" ();
+    let dead = union subs ~init:Tid.Set.empty ~f:(compute_dead free) in
+    let live t = not (Set.mem dead (Term.tid t)) in
+    report_progress ~note:"clean" ();
+    let clean sub = Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
+                    propagate_consts in
+    report_progress ~note:"updating" ();
+    if Set.is_empty dead then prog
+    else
+      Term.map sub_t prog ~f:clean |>
+      process
+
+end
+
+module Y = struct
+
+  let free_vars (_,ssa) = free_vars ssa
+  let compute_dead free (_,ssa) = compute_dead free ssa
+  let is_alive dead t = not (Set.mem dead (Term.tid t))
+  let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
+  let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
+
+  let clean dead (sub,ssa) =
+    Term.map blk_t sub ~f:(live_def dead),
+    Term.map blk_t ssa ~f:(fun b -> live_def dead b |> live_phi dead)
+
+  let rec run subs =
+    report_progress ~note:"ssa" ();
+    let subs = Seq.memoize subs in
+    report_progress ~note:"free-vars" ();
+    let free = union ~init:Var.Set.empty ~f:free_vars subs in
+    report_progress ~note:"dead-vars" ();
+    let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
+    report_progress ~note:"clean" ();
+    if Set.is_empty dead then subs
+    else run (Seq.map subs ~f:(clean dead))
+
+  let process prog =
+    let ptid = Term.tid prog in
+    let subs = Term.enum sub_t prog |> Seq.map ~f:(fun s ->
+        let s = propagate_consts s in
+        s, Sub.ssa s) in
+    let subs = run subs in
+    let len = Seq.length subs in
+    let bld = Program.Builder.create ~tid:ptid ~subs:len () in
+    Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
+    Program.Builder.result bld
+end
+
+module Z = struct
+
+  let free_vars (_,ssa) = free_vars ssa
+  let compute_dead free (_,ssa) = compute_dead free ssa
+
+  let clean is_live (sub,ssa) =
     let sub' =
-      Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
+      Term.map blk_t sub ~f:(Term.filter def_t ~f:is_live) |>
       propagate_consts in
     if Sub.equal sub sub' then (sub,ssa)
-    else sub',Sub.ssa sub' in
-  report_progress ~note:"updating" ();
-  if Set.is_empty dead then subs
-  else run (Seq.map subs ~f:clean)
+    else sub',Sub.ssa sub'
 
-let process prog =
-  let ptid = Term.tid prog in
-  let subs = Term.enum sub_t prog |> Seq.map ~f:(fun s -> s, Sub.ssa s) in
-  let subs = run subs in
-  let len = Seq.length subs in
-  let bld = Program.Builder.create ~tid:ptid ~subs:len () in
-  Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
-  Program.Builder.result bld
+  let rec run subs =
+    let subs = Seq.memoize subs in
+    report_progress ~note:"free-vars" ();
+    let free = union ~init:Var.Set.empty ~f:free_vars subs in
+    report_progress ~note:"dead-vars" ();
+    let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
+    let live t = not (Set.mem dead (Term.tid t)) in
+    report_progress ~note:"clean" ();
+    if Set.is_empty dead then subs
+    else run (Seq.map subs ~f:(clean live))
+
+  let process prog =
+    let ptid = Term.tid prog in
+    let subs =
+      Term.enum sub_t prog |>  Seq.map ~f:(fun s -> s, Sub.ssa s) in
+    let subs = run subs in
+    let len = Seq.length subs in
+    let bld = Program.Builder.create ~tid:ptid ~subs:len () in
+    Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
+    Program.Builder.result bld
+end
+
 
 let digest proj =
   let module Digest = Data.Cache.Digest in
@@ -113,7 +175,8 @@ let digest proj =
     method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
   end)#run
     (Project.program proj)
-    (Data.Cache.Digest.create ~namespace:"dead_code_elimination")
+    (Digest.create ~namespace:"dead_code_elimination")
+
 
 let run proj =
   let digest = digest proj in
@@ -121,7 +184,7 @@ let run proj =
     match Program.Cache.load digest with
     | Some p -> p
     | None ->
-      let p = process (Project.program proj) in
+      let p = Y.process (Project.program proj) in
       Program.Cache.save digest p;
       p in
   Project.with_program proj p
