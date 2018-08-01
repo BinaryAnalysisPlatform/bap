@@ -19,51 +19,47 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
-let find_calls name roots cfg =
-  let starts = Addr.Table.create () in
-  List.iter roots ~f:(fun addr ->
-      Hashtbl.set starts ~key:addr ~data:(name addr));
-  Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
-      let () =
-        if Seq.is_empty (Cfg.Node.inputs blk cfg) then
-          let addr = Block.addr blk in
-          Hashtbl.set starts ~key:addr ~data:(name addr) in
-      let term = Block.terminator blk in
-      if Insn.(is call) term then
-        Seq.iter (Cfg.Node.outputs blk cfg)
-          ~f:(fun e ->
-              if Cfg.Edge.label e <> `Fall then
-                let w = Block.addr (Cfg.Edge.dst e) in
-                Hashtbl.set starts ~key:w ~data:(name w)));
-  starts
+let roots_of_blk roots cfg blk =
+  let addr = Block.addr blk in
+  let term = Block.terminator blk in
+  let init =
+    if Set.mem roots addr || Seq.is_empty (Cfg.Node.inputs blk cfg)
+    then [blk]
+    else [] in
+  if Insn.(is call) term then
+    Seq.fold ~init (Cfg.Node.outputs blk cfg)
+      ~f:(fun rs e ->
+          if Cfg.Edge.label e <> `Fall then Cfg.Edge.dst e :: rs
+          else rs)
+  else init
+
+let find_calls cfg roots =
+  let roots = List.fold ~init:Addr.Set.empty ~f:Set.add roots in
+  Graphlib.depth_first_search (module Cfg)
+    cfg ~init:Block.Set.empty
+    ~enter_node:(fun _ blk all ->
+        roots_of_blk roots cfg blk |>
+        List.fold ~init:all ~f:Set.add)
 
 let reconstruct name roots cfg =
-  let roots = find_calls name roots cfg in
-  let init =
-    Cfg.nodes cfg |> Seq.fold ~init:Cfg.empty ~f:(fun cfg n ->
-        Cfg.Node.insert n cfg) in
-  let filtered =
-    Cfg.edges cfg |> Seq.fold ~init ~f:(fun cfg e ->
-        if Hashtbl.mem roots (Block.addr (Cfg.Edge.dst e)) then cfg
-        else Cfg.Edge.insert e cfg) in
-  let find_block addr =
-    Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
-        Addr.equal addr (Block.addr blk)) in
-  Hashtbl.fold roots ~init:Symtab.empty
-    ~f:(fun ~key:entry ~data:name syms ->
-        match find_block entry with
-        | None -> syms
-        | Some entry ->
-          let cfg : cfg =
-            with_return (fun {return} ->
-                Graphlib.depth_first_search (module Cfg)
-                  filtered ~start:entry ~init:Cfg.empty
-                  ~enter_edge:(fun _ -> Cfg.Edge.insert)
-                  ~start_tree:(fun n t ->
-                      if Block.equal n entry
-                      then Cfg.Node.insert n t
-                      else return t)) in
-          Symtab.add_symbol syms (name,entry,cfg))
+  let roots = find_calls cfg roots in
+  let filtered = Set.fold roots ~init:cfg
+      ~f:(fun g root ->
+          let inputs = Cfg.Node.inputs root cfg in
+          Seq.fold inputs ~init:g ~f:(fun g e -> Cfg.Edge.remove e g)) in
+  Set.fold roots ~init:Symtab.empty
+    ~f:(fun syms entry ->
+        let name = name (Block.addr entry) in
+        let cfg : cfg =
+          with_return (fun {return} ->
+              Graphlib.depth_first_search (module Cfg)
+                filtered ~start:entry ~init:Cfg.empty
+                ~enter_edge:(fun _ -> Cfg.Edge.insert)
+                ~start_tree:(fun n t ->
+                    if Block.equal n entry
+                    then Cfg.Node.insert n t
+                    else return t)) in
+        Symtab.add_symbol syms (name,entry,cfg))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =
