@@ -1092,8 +1092,9 @@ module Normalize = struct
           hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
     end) bil
 
-  let bil ?normalize_exp:(ne=false) xs =
+  let bil ?(keep_ites=false) ?normalize_exp:(ne=false) xs =
     let normalize_exp = if ne then normalize_exp else ident in
+    let split_ite = if keep_ites then ident else split_ite in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>

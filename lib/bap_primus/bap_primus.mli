@@ -851,6 +851,11 @@ module Std : sig
           and produces [z] as a result.*)
       val concat : ((value * value) * value) observation
 
+      (** [ite ((cond, yes, no), res)] happens after the ite expression
+          that corresponds to ite([cond], [yes], [no]) is evaluated
+          to [res]. *)
+      val ite : ((value * value * value) * value) observation
+
       (** an identifier of a term that will be executed next.   *)
       val enter_term : tid observation
 
