@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Regular.Std
 open Format
 include Self()
 
@@ -26,6 +27,7 @@ let computed_def_use sub =
 let sub_args sub =
   Term.enum arg_t sub |>
   union ~init:Var.Set.empty ~f:(fun arg -> Exp.free_vars (Arg.rhs arg))
+
 let free_vars sub = Set.union (Sub.free_vars sub) (sub_args sub)
 
 let compute_dead protected sub =
@@ -73,27 +75,63 @@ let propagate_consts sub =
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
           Exp.substitute Bil.(var pat) rep)))
 
-let rec process proj =
-  let prog = Project.program proj in
+let free_vars (_,ssa) = free_vars ssa
+let compute_dead free (_,ssa) = compute_dead free ssa
+let is_alive dead t = not (Set.mem dead (Term.tid t))
+let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
+let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
+
+let clean dead (sub,ssa) =
+  Term.map blk_t sub ~f:(live_def dead),
+  Term.map blk_t ssa ~f:(fun b -> live_def dead b |> live_phi dead)
+
+let rec run subs =
   report_progress ~note:"ssa" ();
-  let subs = Term.enum sub_t prog |> Seq.map ~f:Sub.ssa in
+  let subs = Seq.memoize subs in
   report_progress ~note:"free-vars" ();
-  let free = union subs ~init:Var.Set.empty ~f:free_vars in
+  let free = union ~init:Var.Set.empty ~f:free_vars subs in
   report_progress ~note:"dead-vars" ();
-  let dead = union subs ~init:Tid.Set.empty ~f:(compute_dead free) in
-  let live t = not (Set.mem dead (Term.tid t)) in
+  let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
   report_progress ~note:"clean" ();
-  let clean sub = Term.map blk_t sub ~f:(Term.filter def_t ~f:live) |>
-                  propagate_consts in
-  report_progress ~note:"updating" ();
-  if Set.is_empty dead then proj
-  else
-    Term.map sub_t prog ~f:clean |>
-    Project.with_program proj |>
-    process
+  if Set.is_empty dead then subs
+  else run (Seq.map subs ~f:(clean dead))
+
+let process prog =
+  let ptid = Term.tid prog in
+  let subs = Term.enum sub_t prog |> Seq.map ~f:(fun s ->
+      let s = propagate_consts s in
+      s, Sub.ssa s) in
+  let subs = run subs in
+  let len = Seq.length subs in
+  let bld = Program.Builder.create ~tid:ptid ~subs:len () in
+  Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
+  Program.Builder.result bld
+
+let digest proj =
+  let module Digest = Data.Cache.Digest in
+  (object
+    inherit [Digest.t] Term.visitor
+    method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
+    method! enter_def t dst = Digest.add dst "%a" Def.pp t
+    method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+  end)#run
+    (Project.program proj)
+    (Digest.create ~namespace:"dead_code_elimination")
+
+
+let run proj =
+  let digest = digest proj in
+  let p =
+    match Program.Cache.load digest with
+    | Some p -> p
+    | None ->
+      let p = process (Project.program proj) in
+      Program.Cache.save digest p;
+      p in
+  Project.with_program proj p
 
 let () = Config.when_ready (fun _ ->
-    Project.register_pass ~deps:["api"] ~autorun:true process)
+    Project.register_pass ~deps:["api"] ~autorun:true run)
 ;;
 
 Config.manpage [
