@@ -43,7 +43,7 @@ env:
   - OCAML_VERSION=4.05 WITH_BUILD_CACHE=true
 
 stage: Compile
-script: OPAM_VERSION=1.2.2 bash -ex .travis_install.sh
+script: bash -ex .travis_install.sh
 
 jobs:
   include:
