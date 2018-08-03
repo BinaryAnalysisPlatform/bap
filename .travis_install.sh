@@ -17,5 +17,4 @@ cp -r $HOME/.opam/$OPAM_SWITCH/lib/bap* $HOME/save_opam/lib/
 '
 fi
 
-wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-opam.sh
 bash -ex .travis-opam.sh
