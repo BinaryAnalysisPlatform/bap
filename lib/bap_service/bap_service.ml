@@ -44,15 +44,31 @@ module Service = struct
   let add_provider serv prov =
     Hashtbl.set (info serv).providers prov.name prov
 
-  let check_uuid x =
-    if Option.is_none (Uuidm.of_string x) then
-      invalid_arg "Invalid UUID format";
-    if Hashtbl.mem all x then
-      invalid_argf "UUID %s is already in use" x ()
+  let validate_format name s =
+    if Option.is_none (Uuidm.of_string s)
+    then invalid_argf
+        "Failed to declare service %s. \
+         The provided '%s' string is not a valid UUID" name s ()
+
+  let validate_unique name s = match Hashtbl.find all s with
+    | None -> ()
+    | Some other when other.name = name ->
+      invalid_argf
+        "Failed to declare the service '%s'. A service with exactly \
+         the same name and UUID is already registered." name ()
+    | Some other ->
+      invalid_argf
+        "Failed to declare the service '%s'. A service '%s' is already \
+         using the same UUID %s" name other.name s  ()
+
+  let validate_uuid name s =
+    validate_format name s;
+    validate_unique name s
+
 
   let declare ~desc ~uuid name =
     let uuid = string_of_format uuid in
-    check_uuid uuid;
+    validate_uuid name uuid;
     let providers = Table.create () in
     let products,update = Stream.create () in
     let data = {products; update; providers} in

@@ -16,7 +16,7 @@
     A [product] is a result of a particular comptutation, that depends
     of computational environment. *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap_future.Std
 open Regular.Std
 
@@ -59,7 +59,7 @@ module Product : sig
   (** [provide ~digest provider] issue a new product with [digest] *)
   val provide : digest:string -> provider -> unit
 
-   (** [digest product] returns a digest of a [product] *)
+  (** [digest product] returns a digest of a [product] *)
   val digest : t -> string
 
   (** [provider product] returns a product provider  *)
