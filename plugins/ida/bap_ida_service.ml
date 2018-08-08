@@ -14,7 +14,7 @@ type ida = {
   debug : int;
 } [@@deriving sexp]
 
-module Config = struct
+module Ida_config = struct
   type t = {
     ida_path : string;
     ida_kind : ida_kind option;
@@ -22,7 +22,7 @@ module Config = struct
     debug  : int;
   }
 end
-type config = Config.t
+type config = Ida_config.t
 
 type 'a command = 'a Command.t
 
@@ -114,7 +114,7 @@ let check_path path = match Bap_ida_check.check_path path with
     eprintf "failed to check ida path: %s." (Error.to_string_hum e);
     exit 1
 
-let create {Config.ida_path; ida_kind; debug; curses} target =
+let create {Ida_config.ida_path; ida_kind; debug; curses} target =
   if not (Sys.file_exists target)
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
@@ -177,7 +177,7 @@ let register ida_path ida_kind is_headless : unit =
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _exn -> 0 in
   let config = {
-    Config.ida_path;
+    Ida_config.ida_path;
     ida_kind;
     curses;
     debug
