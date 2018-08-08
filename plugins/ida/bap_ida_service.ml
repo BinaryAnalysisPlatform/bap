@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap_ida.Std
 open Bap.Std
 
+include Self ()
+
 type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
 
 type ida = {
@@ -87,6 +89,7 @@ let cleanup_minidump () =
     List.filter ~f:is_dump |> function
     | [] -> ()
     | files ->
+      info "ida minidump is not empty";
       let lock = sprintf "%s/lock" dump_path in
       let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
       Unix.lockf lock Unix.F_LOCK 0;
