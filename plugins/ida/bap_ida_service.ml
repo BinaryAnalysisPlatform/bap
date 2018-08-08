@@ -80,12 +80,18 @@ let setup_headless_env path =
     with _ -> ()
 
 let cleanup_minidump () =
+  let is_dump x = String.equal (Filename.extension x) ".dmp" in
   let dump_path = "/tmp/ida" in
-  if FileUtil.(test Exists dump_path) then
-    let ext = FilePath.DefaultPath.extension_of_string "dmp" in
-    let is_dmp = FileUtil.(test (Has_extension ext)) in
+  if Sys.file_exists dump_path then
     FileUtil.ls dump_path  |>
-    List.iter ~f:(fun f -> if is_dmp f then FileUtil.rm [f])
+    List.filter ~f:is_dump |> function
+    | [] -> ()
+    | files ->
+      let lock = sprintf "%s/lock" dump_path in
+      let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
+      Unix.lockf lock Unix.F_LOCK 0;
+      List.iter files ~f:Sys.remove;
+      Unix.lockf lock Unix.F_ULOCK 0
 
 (* ida works fine only if everything is in the same folder  *)
 let run (t:ida) cmd =
