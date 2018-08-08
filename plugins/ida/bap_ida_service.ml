@@ -79,8 +79,17 @@ let setup_headless_env path =
       if old_path <> "" then Unix.putenv var old_path
     with _ -> ()
 
+let cleanup_minidump () =
+  let dump_path = "/tmp/ida" in
+  if FileUtil.(test Exists dump_path) then
+    let ext = FilePath.DefaultPath.extension_of_string "dmp" in
+    let is_dmp = FileUtil.(test (Has_extension ext)) in
+    FileUtil.ls dump_path  |>
+    List.iter ~f:(fun f -> if is_dmp f then FileUtil.rm [f])
+
 (* ida works fine only if everything is in the same folder  *)
 let run (t:ida) cmd =
+  cleanup_minidump ();
   let cwd = Unix.getcwd () in
   let clean = match t.curses with
     | Some path -> setup_headless_env path
@@ -89,7 +98,6 @@ let run (t:ida) cmd =
   Sys.chdir (Filename.dirname t.exe);
   try cmd (); cleanup ()
   with exn -> cleanup (); raise exn
-
 
 let check_path path = match Bap_ida_check.check_path path with
   | Ok () -> ()
@@ -158,7 +166,7 @@ let register ida_path ida_kind is_headless : unit =
   let curses = if Sys.os_type = "Unix" && is_headless
     then find_curses () else None in
   let debug =
-    try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with exn -> 0 in
+    try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _exn -> 0 in
   let config = {
     Config.ida_path;
     ida_kind;
