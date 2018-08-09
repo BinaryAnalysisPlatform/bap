@@ -102,7 +102,7 @@ module Create() = struct
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = formatter -> 'a -> unit
 
-    let warn_if_deprecated msg name is_used = match msg with
+    let warn_if msg name is_used = match msg with
       | Some msg when is_used ->
         eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
           name plugin_name msg
@@ -121,7 +121,7 @@ module Create() = struct
 
       let deprecation_wrap ~converter ?deprecated ~name =
         {converter with
-         parser=(fun s -> warn_if_deprecated deprecated name true;
+         parser=(fun s -> warn_if deprecated name true;
                   converter.parser s)}
 
       let of_arg (conv:'a Arg.converter) (default:'a) : 'a t =
@@ -203,7 +203,7 @@ module Create() = struct
       let check x = match as_flag with
         | None -> ()
         | Some y ->
-          warn_if_deprecated deprecated name (phys_equal x y) in
+          warn_if deprecated name (phys_equal x y) in
       let t =
         Arg.(value
              @@ opt ?vopt:as_flag converter param
@@ -226,8 +226,7 @@ module Create() = struct
              @@ opt_all ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
       let check x = match x, as_flag with
-        | [x], Some y ->
-          warn_if_deprecated deprecated name (phys_equal x y)
+        | [x], Some y -> warn_if deprecated name (phys_equal x y)
         | _ -> () in
       main := Term.(const (fun x () ->
           check x;
@@ -244,7 +243,7 @@ module Create() = struct
       let param = get_param ~converter ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
-      let check = warn_if_deprecated deprecated name in
+      let check = warn_if deprecated name in
       main := Term.(const (fun x () ->
           check (param || x);
           Promise.fulfill promise (param || x)) $ t $ (!main));
