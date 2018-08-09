@@ -17,7 +17,7 @@ module Create() = struct
 
   let manifest =
     try Bundle.manifest bundle
-    with exn -> Manifest.create main
+    with _exn -> Manifest.create main
 
   let name = Manifest.name manifest
   let version = Manifest.version manifest
@@ -88,7 +88,6 @@ module Create() = struct
   let warning_formatter = make_formatter warning
   let error_formatter = make_formatter error
 
-
   module Config = struct
     let plugin_name = name
     include Bap_config
@@ -102,9 +101,15 @@ module Create() = struct
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = formatter -> 'a -> unit
 
+    let warn_if_deprecated msg name is_used = match msg with
+      | Some msg when is_used ->
+        eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
+          name plugin_name msg
+      | _ -> ()
+
     module Converter = struct
       type 'a t = {
-        parser : 'a parser;
+        parser  : 'a parser;
         printer : 'a printer;
         default : 'a;
       }
@@ -114,14 +119,9 @@ module Create() = struct
       let default conv = conv.default
 
       let deprecation_wrap ~converter ?deprecated ~name =
-        let warn_if_deprecated () =
-          match deprecated with
-          | Some msg ->
-            eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
-              name plugin_name msg
-          | None -> () in
-        {converter with parser=(fun s -> warn_if_deprecated ();
-                                 converter.parser s)}
+        {converter with
+         parser=(fun s -> warn_if_deprecated deprecated name true;
+                  converter.parser s)}
 
       let of_arg (conv:'a Arg.converter) (default:'a) : 'a t =
         let parser, printer = conv in
@@ -199,11 +199,16 @@ module Create() = struct
         | None -> Converter.default converter in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
+      let warn x = match as_flag with
+        | None -> ()
+        | Some y ->
+          warn_if_deprecated deprecated name (phys_equal x y) in
       let t =
         Arg.(value
              @@ opt ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
+          warn x;
           Promise.fulfill promise x) $ t $ (!main));
       future
 
@@ -219,7 +224,12 @@ module Create() = struct
         Arg.(value
              @@ opt_all ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
+      let warn x = match x, as_flag with
+        | [x], Some y ->
+          warn_if_deprecated deprecated name (phys_equal x y)
+        | _ -> () in
       main := Term.(const (fun x () ->
+          warn x;
           Promise.fulfill promise x) $ t $ (!main));
       future
 
@@ -233,7 +243,9 @@ module Create() = struct
       let param = get_param ~converter ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
+      let warn = warn_if_deprecated deprecated name in
       main := Term.(const (fun x () ->
+          warn (param || x);
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
 
@@ -268,8 +280,7 @@ module Create() = struct
           | [], man -> default_see_also, man
           | x -> x in
         let tags = [
-          `P (Manifest.tags manifest |>
-              String.concat ~sep:", " |>
+          `P (String.concat tags ~sep:", " |>
               sprintf "$(b,tags:) %s") ] in
         man @ see_also @ tags
 
