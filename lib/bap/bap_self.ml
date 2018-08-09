@@ -88,6 +88,7 @@ module Create() = struct
   let warning_formatter = make_formatter warning
   let error_formatter = make_formatter error
 
+
   module Config = struct
     let plugin_name = name
     include Bap_config
@@ -199,7 +200,7 @@ module Create() = struct
         | None -> Converter.default converter in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
-      let warn x = match as_flag with
+      let check x = match as_flag with
         | None -> ()
         | Some y ->
           warn_if_deprecated deprecated name (phys_equal x y) in
@@ -208,7 +209,7 @@ module Create() = struct
              @@ opt ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
       main := Term.(const (fun x () ->
-          warn x;
+          check x;
           Promise.fulfill promise x) $ t $ (!main));
       future
 
@@ -224,12 +225,12 @@ module Create() = struct
         Arg.(value
              @@ opt_all ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
-      let warn x = match x, as_flag with
+      let check x = match x, as_flag with
         | [x], Some y ->
           warn_if_deprecated deprecated name (phys_equal x y)
         | _ -> () in
       main := Term.(const (fun x () ->
-          warn x;
+          check x;
           Promise.fulfill promise x) $ t $ (!main));
       future
 
@@ -243,9 +244,9 @@ module Create() = struct
       let param = get_param ~converter ~default:false ~name in
       let t =
         Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
-      let warn = warn_if_deprecated deprecated name in
+      let check = warn_if_deprecated deprecated name in
       main := Term.(const (fun x () ->
-          warn (param || x);
+          check (param || x);
           Promise.fulfill promise (param || x)) $ t $ (!main));
       future
 
