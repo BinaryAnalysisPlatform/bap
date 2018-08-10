@@ -29,16 +29,7 @@ let of_blocks blocks =
           | _ -> Some sa));
   create (Hashtbl.data roots |> Seq.of_list)
 
-let service = Bap_service.Service.declare "rooter"
+let service = Bap_service.declare "rooter"
     ~desc:"A rooter service"
-    ~uuid:"1c3d08e2-8900-4b90-b4ce-7382dcd50b1b"
 
-module Factory = struct
-  include Source.Factory.Make(struct type nonrec t = t end)
-
-  let register name source =
-    let provider =
-      Bap_service.Provider.declare ~desc:"no description provided"
-        name service in
-    provide provider source
-end
+module Factory = Source.Factory.Make(struct type nonrec t = t end)

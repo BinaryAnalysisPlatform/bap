@@ -20,9 +20,9 @@ module type Factory = Source.Factory.S
 
 let request (type t) (module F : Factory with type t = t) name =
   Option.(
-    F.providers () |>
-    List.find ~f:(fun p -> String.equal (Provider.name p) name) >>=
-    F.request)
+    F.list () |>
+    List.find ~f:(String.equal name) >>=
+    F.find)
 
 let find_source factory field o = Option.(field o >>= request factory)
 

@@ -54,16 +54,8 @@ let extract path arch =
   Seq.of_list
 
 let provider service =
-  Bap_service.Provider.declare "ida"
-    ~desc:"Provides inforamation obtained from Ida Pro"
-    service
-
-let make_product name service provider =
-  let open Bap_service in
-  let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"ida" "%s" name in
-  Product.provide ~digest provider;
-  info "%s product issued" name
+  Bap_service.(provide service "ida" ~require:nothing
+                 ~desc:"extracts data using IDA Pro" )
 
 let register_source name (module T : Target) =
   let source =
@@ -71,9 +63,7 @@ let register_source name (module T : Target) =
     let extract file arch = Or_error.try_with ~backtrace:true (fun () ->
         extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
-  let p = provider T.service in
-  make_product name T.service p;
-  T.Factory.provide p source
+  T.Factory.register name source
 
 type perm = [`code | `data] [@@deriving sexp]
 type section = string * perm * int * (int64 * int)

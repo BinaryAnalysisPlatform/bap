@@ -27,13 +27,13 @@ let find_calls name roots cfg =
       if Seq.is_empty (Cfg.Node.inputs blk cfg) then
         let addr = Block.addr blk in
         Hashtbl.set starts ~key:addr ~data:(name addr);
-      let term = Block.terminator blk in
-      if Insn.(is call) term then
-        Seq.iter (Cfg.Node.outputs blk cfg)
-          ~f:(fun e ->
-              if Cfg.Edge.label e <> `Fall then
-                let w = Block.addr (Cfg.Edge.dst e) in
-                Hashtbl.set starts ~key:w ~data:(name w)));
+        let term = Block.terminator blk in
+        if Insn.(is call) term then
+          Seq.iter (Cfg.Node.outputs blk cfg)
+            ~f:(fun e ->
+                if Cfg.Edge.label e <> `Fall then
+                  let w = Block.addr (Cfg.Edge.dst e) in
+                  Hashtbl.set starts ~key:w ~data:(name w)));
   starts
 
 let reconstruct name roots cfg =
@@ -91,15 +91,7 @@ let of_blocks syms =
 let default name roots = create (reconstruct name roots)
 
 let service =
-  Bap_service.Service.declare ~desc:"A reconstructor service"
-    ~uuid:"cb5b39ca-a779-4f6d-9f65-bfc050fc35fb" "reconstructor"
+  Bap_service.declare ~desc:"Provides CFG reconstructors"
+    "reconstructor"
 
-module Factory = struct
-  include Source.Factory.Make(struct type nonrec t = t end)
-
-  let register name source =
-    let provider =
-      Bap_service.Provider.declare ~desc:"no description provided"
-        name service in
-    provide provider source
-end
+module Factory = Source.Factory.Make(struct type nonrec t = t end)

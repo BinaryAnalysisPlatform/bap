@@ -46,6 +46,7 @@ module Digest = struct
     kfprintf key ppf fmt
 
   let add buf fmt = format ("%s"^^fmt) buf
+  let concat x y = add x "%s" y
   let add_sexp d sexp_of x = add d "%a" Sexp.pp (sexp_of x)
   let add_file d name = add d "%s" (Digest.file name)
   let create ~namespace = make namespace

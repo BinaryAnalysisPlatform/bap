@@ -20,50 +20,125 @@ open Core_kernel
 open Bap_future.Std
 open Regular.Std
 
+
 type service
 type provider
-type product [@@deriving bin_io, compare, sexp]
+type product
 
-type void
-type literal = (void,void,void) format
+type inputs
+type success
+type failure
+type modality
 
-module Service : sig
-  type t = service
+(** [declare ?desc name] declares a new service with the specified
+    name and description.
 
-  (** [declare ~desc uuid name] creates a service from description
-      [desc], unique id [uuid] and [name] *)
-  val declare : desc:string -> uuid:literal -> string -> t
+    The service name should be globally unique and the program will
+    terminate if it is not the case. The service [name] should be a
+    valid identifier, which should be a non-empty sequence of
+    alphanumeric characters, '/', '_', '.', or '-'.
 
-  (** [request service] returns a stream of all products of [service] *)
-  val request : t -> product stream
-end
+    The main purpose of the service declaration is to declare the name
+    of the service and make it available to other possible providers
+    and consumers.
+*)
+val declare : ?desc:string -> string -> service
 
-module Provider : sig
-  type t = provider
 
-  (** [declare ~desc name service] creates a provider of a [service]
-      with description [desc] and [name] *)
-  val declare : desc:string -> string -> service -> t
+(** [provide ?desc service name requirements] declares a provider
+    of the specified service, that in turn may have its own
+    requirements. The provider name should be unique, and an
+    optional description might be provided to help the users make
+    the right selection of a provider for the given service.
 
-  (** [name provider] returns a name of a given [provider] *)
-  val name : t -> string
+    The provider name shall be a valid identifier that follows the
+    same rules as the service name, see [declare] for more
+    information. The identifier should be unique in the namespace of
+    the service that it is providing. I.e., its fine to reuse the same
+    name of a provider for different services.
+*)
+val provide : ?desc:string -> service -> string -> require:product list -> provider
 
-  (** [select ~by_service ~by_name ()] returns a list of providers,
-      filtered by name or by service or both of them *)
-  val select : ?by_service:service -> ?by_name:string -> unit -> t list
-end
 
-module Product : sig
-  type t = product  [@@deriving bin_io, compare, sexp]
+(** [require requirements] establishes [requirements] without
+    specifying a service or a provider.
 
-  (** [provide ~digest provider] issue a new product with [digest] *)
-  val provide : digest:string -> provider -> unit
+    It is common to write an analysis that although provides some
+    service (otherwise why to write it at all), this service is
+    intented to be used by only one person, namely the author of
+    analysis. However, the analysis might still require some other
+    services thus the Service facility woudld be necessary. Thus
+    In that case, instead of creating a dummy service along
+    with a dummy provider, a user can just specify the set of
+    requirements.
 
-  (** [digest product] returns a digest of a [product] *)
-  val digest : t -> string
+    Note: this function will create a unique service and provider pair,
+    that might be observable in case if the service facility would
+    unable to satisfy the requirements and terminate the program with
+    an error. The function will do its best to provide a recognizable
+    an readable name (by leveraging the plugin subsystem), but may
+    fallback just to a random identifier.
 
-  (** [provider product] returns a product provider  *)
-  val provider : t -> provider
+    Since an anonymous provider could not be selected or deselected
+    the [require] function returns directly the inputs future, that
+    will be determined to the inputs of the analysis while they are
+    ready.
+*)
+val require : product list -> inputs future
 
-  include Regular.S with type t := t
-end
+(** [nothing  []] an empty list that is provided here for
+    readability, e.g.,
+    [require nothing] or
+    [provide grooming "com.ivg.groomer" ~require:nothing]
+*)
+val nothing : product list
+val product : modality -> service -> product
+val program : string -> product
+val content : string -> product
+val library : string -> product
+val env_var : string -> product
+val cmdline : string -> product
+
+
+val required : modality
+val optional : modality
+
+
+val providers : service -> provider list
+
+val inputs : provider -> inputs future
+val digest : inputs -> digest
+
+val success_or_die : (success, failure) result -> success
+val die_on_failure : (success, failure) result -> unit
+
+(** Distribute products.
+
+    Example:
+    {[
+      die_on_failure @@ run ()
+    ]}
+
+*)
+val run : provider list -> (success, failure) result
+
+(**
+   {[
+     let salad = Service.(provide fruit_salad "G&K Fruit Salads" [
+         product required oranges;
+         product optional bananas;
+         product optional strawberries;
+         product one_from [salt; sugar];
+         library "libdressings";
+         content "/etc/version";
+         program "mixer";
+         env_var "IGNORE_CLIENT_REQUESTS";
+         cmdline "double-pricing";
+         cmdline "respect-customers";
+         cmdline "use-rotten-food";
+       ])
+   ]}
+*)
+
+
+(* files, environment variables, are all services *)

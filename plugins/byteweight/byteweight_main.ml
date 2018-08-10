@@ -3,7 +3,6 @@ open Bap.Std
 open Format
 open Bap_future.Std
 open Regular.Std
-open Bap_service
 
 include Self()
 
@@ -35,15 +34,9 @@ let create_finder path length threshold arch  =
     Ok (BW.find bw ~length ~threshold)
 
 let byteweight =
-  Provider.declare "byteweight"
-    ~desc:"Provides a rooter based on byteweight algorithm"
-    Rooter.service
-
-let () =
-  let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"byteweight" "rooter" in
-  Product.provide ~digest byteweight;
-  info "product issued"
+  Bap_service.(provide Rooter.service name
+                 ~desc:"finds roots using Byteweight"
+                 ~require:nothing)
 
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in
@@ -64,7 +57,7 @@ let main path length threshold =
   let rooter =
     let open Project.Info in
     Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
-  Rooter.Factory.provide byteweight rooter
+  Rooter.Factory.register name rooter
 
 let () =
   let () = Config.manpage [

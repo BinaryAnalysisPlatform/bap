@@ -1,125 +1,196 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_future.Std
 open Regular.Std
+open Future.Syntax
 
-type void
-type literal = (void,void,void) format
+type service = Service of string
+type success = Success
+type failure = Unsat of {
+    kind : string;
+    name : string;
+    problem : string;
+  }
 
-type 'a named = {
+type outcome = (success, failure) result
+(* we might later extend it to provide more introspection *)
+type inputs = {digest : digest}
+
+type product = {inputs : inputs future}
+
+type provider = {
   name : string;
-  desc : string;
-  data : 'a;
-} [@@deriving bin_io, compare, fields, sexp]
+  service : service;
+  product : product;
+}
 
-type service = string
-[@@deriving bin_io, compare, sexp]
+type 'a requirement = ('a -> product) -> 'a -> product
 
-type provider = service named
-[@@deriving bin_io, compare, sexp]
+(* unique service and provider identifiers together with their descriptions *)
+let registry = String.Table.create ()
 
-type product = {
-  digest   : string;
-  provider : provider;
-} [@@deriving bin_io, compare, sexp]
+(* the allotment of all providers *)
+let providers : provider list ref = ref []
 
-module Table = String.Table
+(* happens when the run cycle is started *)
+let started,start = Future.create ()
 
-module Service = struct
-  type t = service
-
-  type info = {
-    products  : product stream;
-    update    : product signal;
-    providers : provider Table.t;
-  } [@@deriving fields]
-
-  let all : info named Table.t = Table.create ()
-
-  let info s = data (Hashtbl.find_exn all s)
-  let products  s = products (info s)
-  let update    s = update (info s)
-  let providers s = providers (info s) |> Hashtbl.data
-  let request = products
-
-  let add_provider serv prov =
-    Hashtbl.set (info serv).providers prov.name prov
-
-  let validate_format name s =
-    if Option.is_none (Uuidm.of_string s)
-    then invalid_argf
-        "Failed to declare service %s. \
-         The provided '%s' string is not a valid UUID" name s ()
-
-  let validate_unique name s = match Hashtbl.find all s with
-    | None -> ()
-    | Some other when other.name = name ->
-      invalid_argf
-        "Failed to declare the service '%s'. A service with exactly \
-         the same name and UUID is already registered." name ()
-    | Some other ->
-      invalid_argf
-        "Failed to declare the service '%s'. A service '%s' is already \
-         using the same UUID %s" name other.name s  ()
-
-  let validate_uuid name s =
-    validate_format name s;
-    validate_unique name s
+(* this will happen when the run cycle is finished,
+   and may have the failure outcome.
+*)
+let (failed : failure future),
+    (fail : failure promise) =
+  Future.create ()
 
 
-  let declare ~desc ~uuid name =
-    let uuid = string_of_format uuid in
-    validate_uuid name uuid;
-    let providers = Table.create () in
-    let products,update = Stream.create () in
-    let data = {products; update; providers} in
-    Hashtbl.set all uuid {name; desc; data};
-    uuid
-end
+let run selection =
+  providers := selection;
+  Promise.fulfill start ();
+  match Future.peek failed with
+  | None -> Ok Success
+  | Some failure -> Error failure
 
-module Provider = struct
-  type t = provider
-  [@@deriving bin_io, compare, sexp]
+let inputs provider = provider.product.inputs
+let digest inputs = inputs.digest
 
-  let declare ~desc name service =
-    let p = {name; desc; data=service} in
-    Service.add_provider service p;
-    p
+let no_desc = "no description provided"
 
-  let name p = p.name
-  let service p = p.data
+let validate_identifier what name =
+  let is_valid = function
+    | '-' | '/' | '_' | '.' -> true
+    | c -> Char.is_alphanum c in
+  if String.is_empty name
+  then invalid_argf
+      "Can't declare a %s with an empty name. Please, provide a \
+       valid identifier" what ();
+  match String.find name ~f:(Fn.non is_valid) with
+  | None -> ()
+  | Some invalid ->
+    invalid_argf
+      "Can't declare a %s with name '%s'. Character '%c' is not \
+       allowed in the service identifier" what name invalid ()
 
-  let pick_by_service = function
-    | None ->
-      Hashtbl.keys Service.all |>
-      List.map ~f:Service.providers |>
-      List.concat
-    | Some s -> Service.providers s
+let register_identifier ?(desc=no_desc) kind name =
+  validate_identifier kind name;
+  let id = kind ^ name in
+  if Hashtbl.mem registry id
+  then invalid_argf
+      "Failed to declare a new %s named %s as there already exists \
+       one with the same name. Please choose a different identifier."
+      kind name ();
+  Hashtbl.set registry ~key:id ~data:desc
 
-  let filter_by_name name ps = match name with
-    | None -> ps
-    | Some name ->
-      List.filter ps ~f:(fun p -> String.equal p.name name)
+let validate_stage kind name =
+  if Future.is_decided started
+  then invalid_argf
+      "The declaration of a %s named %s failed, because it occurs
+      after service scheduling has started. All declarations shold
+      be made on module intialization level. " kind name ()
 
-  let select ?by_service ?by_name () =
-    pick_by_service by_service |>
-    filter_by_name by_name
-end
+let declare ?desc name =
+  validate_stage "service" name;
+  register_identifier ?desc "service" name;
+  Service name
 
-module Product = struct
-  type t = product [@@deriving bin_io, compare, sexp]
+let digests products =
+  Future.List.all @@
+  List.map products ~f:(fun {inputs} -> inputs >>| fun {digest} -> digest)
 
-  let digest t = t.digest
-  let provider t = t.provider
 
-  let provide ~digest provider =
-    let sid = Provider.service provider in
-    Signal.send (Service.update sid) {digest; provider}
+let provide ?desc (Service s) name ~require:products : provider =
+  let namespace = "provider for " ^ s in
+  validate_stage namespace name;
+  register_identifier ?desc namespace name;
+  let digest = digests products >>| fun digests ->
+    let init = Data.Cache.Digest.create ~namespace in
+    List.fold digests ~init ~f:Data.Cache.Digest.concat in
+  let inputs = digest >>| fun digest -> {digest} in
+  {name; service = Service s; product = {inputs}}
 
-  include Regular.Make(struct
-      type nonrec t = t [@@deriving bin_io, compare, sexp]
-      let module_name = Some "Bap_service.Product"
-      let hash = Hashtbl.hash
-      let version = "1.0"
-      let pp fmt t = Format.fprintf fmt "%s" (digest t)
-    end)
-end
+
+let require =
+  let next_number = ref 0 in
+  fun products ->
+    incr next_number;
+    let name = sprintf "anonymous/%d" !next_number in
+    let service = declare name in
+    let provider = provide service name ~require:products in
+    provider.product.inputs
+
+let providers service =
+  List.filter !providers ~f:(fun p -> p.service = service)
+
+let inputs provider = provider.product.inputs
+
+let products service =
+  started >>= fun () ->
+  digests @@  List.map (providers service) ~f:(fun p -> p.product)
+
+let nothing = []
+
+type modality = Required | Optional
+
+let required = Required
+let optional = Optional
+
+let fail kind name problem = Promise.fulfill fail (Unsat {
+    kind; name; problem
+  })
+
+let product modality (Service s as service) : product =
+  let ready, contract = Future.create () in
+  begin Future.upon (products service) @@ function
+    | [] -> if modality = Required then
+        fail "service" s "is required but not provided"
+    | xs ->
+      Promise.fulfill contract @@
+      {digest=List.reduce_exn xs ~f:Data.Cache.Digest.concat}
+  end;
+  {inputs=ready}
+
+
+let file_contents contract path () =
+  let md5sum = Digest.file path in
+  let digest = Data.Cache.digest ~namespace:"file" "%s" md5sum in
+  Promise.fulfill contract {digest}
+
+let content path =
+  let ready, contract = Future.create () in
+  begin try
+      Future.upon started (file_contents contract path)
+    with Sys_error msg ->
+      fail "file" path ("is unaccessible - " ^ msg)
+  end;
+  {inputs=ready}
+
+let program_in_path program =
+  let ready, contract = Future.create () in
+  begin try Future.upon started @@
+      file_contents contract (FileUtil.which program)
+    with _ ->
+      fail "program" program ("is not available")
+  end;
+  {inputs=ready}
+
+let program name =
+  if Filename.is_implicit name
+  then program_in_path name
+  else content name
+
+
+(* that's a stub...*)
+let library _ = program Sys.argv.(0)
+let cmdline _ = program Sys.argv.(0)
+let env_var _ = program Sys.argv.(0)
+
+let pp_failure ppf (Unsat {kind; name; problem}) =
+  Format.fprintf ppf
+    "Failed to satisfy all service requests. The %s %s %s."
+    kind name problem
+
+let success_or_die = function
+  | Ok Success -> Success
+  | Error fail ->
+    Format.eprintf "%a@\n%!" pp_failure fail;
+    exit 1
+
+let die_on_failure result = ignore (success_or_die result)

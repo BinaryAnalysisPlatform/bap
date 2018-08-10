@@ -29,5 +29,6 @@ module Digest : sig
   val add : t -> ('a,formatter,unit,t) format4 -> 'a
   val add_sexp : t -> ('a -> Sexp.t) -> 'a -> t
   val add_file : t -> string -> t
+  val concat : t -> t -> t
   include Identifiable with type t := t
 end

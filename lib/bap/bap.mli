@@ -7648,30 +7648,14 @@ module Std : sig
 
         (** [list source] is a list of names of source providers *)
         val list : unit -> string list
-        [@@deprecated "[since 2018-04] use providers instead"]
-
         (** [create name args] finds a source provider with the
             given name and creates it *)
         val find : string -> t source option
-        [@@deprecated "[since 2018-04] use request instead"]
 
         (** [register name cons] registers a method that creates a given
             source of information. If a method with the given name already
             exists, then it will be superceeded by a new one.  *)
         val register : string -> t source -> unit
-        [@@deprecated "[since 2018-04] use provide instead"]
-
-        (** [provide provider source] registers a [provider] of a given
-            [source] of information. If a provider already exists,
-            then it will be superceeded by a new one.  *)
-        val provide : provider -> t source -> unit
-
-        (** [request provider] returns a source for a given [provider] *)
-        val request : provider -> t source option
-
-        (** [providers ()] returns all registered providers *)
-        val providers : unit -> provider list
-
       end
 
       module Make(T : T) : S with type t = T.t

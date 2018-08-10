@@ -142,13 +142,13 @@ module Merge = struct
       | ss -> Some (merge_streams ss ~f)
 
   let symbolizer () =
-    let symbolizers = Symbolizer.Factory.providers () in
-    merge_sources Symbolizer.Factory.request symbolizers ~f:(fun s1 s2 ->
+    let symbolizers = Symbolizer.Factory.list () in
+    merge_sources Symbolizer.Factory.find symbolizers ~f:(fun s1 s2 ->
         Symbolizer.chain [s1;s2])
 
   let rooter () =
-    let rooters = Rooter.Factory.providers () in
-    merge_sources Rooter.Factory.request rooters ~f:Rooter.union
+    let rooters = Rooter.Factory.list () in
+    merge_sources Rooter.Factory.find rooters ~f:Rooter.union
 
 end
 
@@ -512,7 +512,7 @@ module Pass = struct
   type error =
     | Unsat_dep of pass * string
     | Runtime_error of pass * exn
-    [@@deriving variants, sexp_of]
+  [@@deriving variants, sexp_of]
 
   let find name : pass option =
     DList.find passes ~f:(fun p -> p.name = name)

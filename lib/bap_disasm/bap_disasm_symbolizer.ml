@@ -40,18 +40,9 @@ let of_blocks seq =
       Hashtbl.set syms ~key:addr ~data:name);
   create (Hashtbl.find syms)
 
-let service = Bap_service.Service.declare "symbolizer"
+let service = Bap_service.declare "symbolizer"
     ~desc:"A symbolizer service"
-    ~uuid:"aa15e6c7-7127-4b69-9138-f23429ce4308"
 
-module Factory = struct
-  include Factory.Make(struct type nonrec t = t end)
-
-  let register name source =
-    let provider =
-      Bap_service.Provider.declare ~desc:"no description provided"
-        name service in
-    provide provider source
-end
+module Factory = Factory.Make(struct type nonrec t = t end)
 
 let internal_image_symbolizer = (fun img -> Some (of_image img))

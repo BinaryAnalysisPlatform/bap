@@ -680,6 +680,10 @@ module Std : sig
 
         (** [add_sexp d sexp_of x] is [add d "%a" Sexp.pp (sexp_of x)] *)
         val add_sexp : t -> ('a -> Sexp.t) -> 'a -> t
+
+        (** [concat x y] is a digest incorporates [x] and [y].
+            @since 1.5 *)
+        val concat : t -> t -> t
       end
 
       (** [load cls digest] loads entry with a given [digest] from the

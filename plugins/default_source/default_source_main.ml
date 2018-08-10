@@ -1,7 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_future.Std
-open Bap_service
 
 include Self ()
 
@@ -13,22 +12,18 @@ module type S = sig
   module Factory : Bap_disasm_source.Factory with type t = t
 end
 
-let internal name s =
-  let desc = sprintf "Provides internal %s" name in
-  Provider.declare ~desc "internal" s, name
+let internal name service =
+  Bap_service.(provide service name ~require:nothing)
 
 let brancher = internal "brancher" Brancher.service
 let symbolizer = internal "symbolizer" Symbolizer.service
 let rooter = internal "rooter" Rooter.service
 
-let provide (provider,service_name) x =
+let provide (service_name) x =
   let module S = (val x : S) in
   let source =
     Stream.map Project.Info.img ~f:(fun img -> Ok (S.of_image img)) in
-  S.Factory.provide provider source;
-  let digest = sprintf "%s-%s" (Provider.name provider) service_name in
-  Product.provide ~digest provider;
-  info "product issued for %s" digest
+  S.Factory.register name source
 
 let () =
   provide brancher (module Brancher);

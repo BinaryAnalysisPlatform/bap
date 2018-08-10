@@ -16,7 +16,7 @@ let print_version () =
   printf "%s\n" llvm_version ;
   exit 0
 
-let llvm_loader = Bap_service.Provider.declare "llvm-loader"
+let image_provider = Provider.declare "llvm-loader"
     ~desc:"Provides disassembler and image loader base on llvm library"
     Image.loader
 

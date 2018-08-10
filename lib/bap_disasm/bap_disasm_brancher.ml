@@ -65,15 +65,8 @@ let dests_of_bil arch =
 let of_bil arch = create (dests_of_bil arch)
 let of_image img = Image.arch img |> of_bil
 
-let service = Bap_service.Service.declare "brancher"
+let service = Bap_service.declare "brancher"
     ~desc:"A brancher service"
-    ~uuid:"af1f5cce-08fd-438c-8fc3-906f4f3ca07c"
 
-module Factory = struct
-  include Source.Factory.Make(struct type nonrec t = t end)
 
-  let register name source =
-    let provider = Bap_service.Provider.declare
-        ~desc:"no description provided" name service in
-    provide provider source
-end
+module Factory = Source.Factory.Make(struct type nonrec t = t end)

@@ -5,6 +5,7 @@ open Regular.Std
 open Format
 open Option.Monad_infix
 open Objdump_config
+open Bap_service
 include Self()
 
 let objdump_opts = "-rd --no-show-raw-insn"
@@ -62,11 +63,11 @@ let popen cmd =
   match Unix.close_process_full (ic,oc,ec) with
   | Unix.WEXITED 0 -> Some r
   | Unix.WEXITED n ->
-    info "command `%s' terminated abnormally with exit code %d" cmd n;
+    warning "command `%s' terminated abnormally with exit code %d" cmd n;
     None
   | Unix.WSIGNALED _ | Unix.WSTOPPED _ ->
     (* a signal number is internal to OCaml, so don't print it *)
-    info "command `%s' was terminated by a signal" cmd;
+    warning "command `%s' was terminated by a signal" cmd;
     None
 
 let run_objdump arch file =
@@ -92,10 +93,8 @@ let objdump = Bap_service.Provider.declare "objdump"
     Symbolizer.service
 
 let () =
-  let open Bap_service in
-  let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"objdump" "symbolizer"  in
-  Product.provide ~digest objdump;
+  Product.provided objdump @@
+  Data.Cache.digest ~namespace:"objdump" "symbolizer";
   info "product issued"
 
 let main () =
@@ -107,7 +106,7 @@ let () =
     `S "DESCRIPTION";
     `P "This plugin provides a symbolizer based on objdump. \
         Note that we parse objdump output, thus this symbolizer \
-        is potentially fragile to changes in objdumps output.";
+        is potentially fragile to changes in objdump's output.";
     `S  "EXAMPLES";
     `P  "To view the symbols after running the plugin:";
     `P  "$(b, bap --symbolizer=objdump --dump-symbols) $(i,executable)";

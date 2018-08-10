@@ -64,7 +64,6 @@ let register_target arch (module Target : Target) =
   let module T = Ensure_normal_form(Target) in
   Hashtbl.set targets ~key:arch ~data:(module T)
 
-let lifter = Bap_service.Service.declare
-    ~uuid:"b46a19ed-c0bd-450f-b3d5-2bff76299726"
+let lifter = Bap_service.declare
     ~desc:"A service for delivering lifters"
     "lifter"
