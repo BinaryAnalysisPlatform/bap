@@ -19,44 +19,38 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
-let callees_of_block cfg roots blk =
-  let addr = Block.addr blk in
+let entries_of_block cfg roots entries blk =
+  let entries =
+    if Set.mem roots (Block.addr blk) then Set.add entries blk
+    else entries in
   let term = Block.terminator blk in
-  let init =
-    if Set.mem roots addr then Block.Set.singleton blk
-    else Block.Set.empty in
   if Insn.(is call) term then
-    Seq.fold ~init (Cfg.Node.outputs blk cfg)
-      ~f:(fun cls e ->
+    Seq.fold ~init:entries (Cfg.Node.outputs blk cfg)
+      ~f:(fun entries e ->
           if Cfg.Edge.label e <> `Fall then
-            Set.add cls (Cfg.Edge.dst e)
-          else cls)
-  else init
+            Set.add entries (Cfg.Edge.dst e)
+          else entries)
+  else entries
 
-let update_callees cfg roots callees blk =
-  Set.union callees (callees_of_block cfg roots blk)
-
-let find_callees cfg roots =
+let collect_entries cfg roots =
   let roots = Addr.Set.of_list roots in
   Seq.fold (Cfg.nodes cfg) ~init:Block.Set.empty
-    ~f:(update_callees cfg roots)
+    ~f:(entries_of_block cfg roots)
 
-let reconstruct name roots cfg =
-  let callees = find_callees cfg roots in
-  let is_call e = Set.mem callees (Cfg.Edge.dst e) in
-  let rec traverse fng node =
-    let fng = Cfg.Node.insert node fng in
-    Seq.fold (Cfg.Node.outputs node cfg) ~init:fng ~f:(fun fng edg ->
-        if is_call edg then fng
+let reconstruct name roots prog =
+  let entries = collect_entries prog roots in
+  let is_call e = Set.mem entries (Cfg.Edge.dst e) in
+  let rec add cfg node =
+    let cfg = Cfg.Node.insert node cfg in
+    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg ~f:(fun cfg edge ->
+        if is_call edge then cfg
         else
-          let dst = Cfg.Edge.dst edg in
-          let visited = Cfg.Node.mem dst fng in
-          let fng = Cfg.Edge.insert edg fng in
-          if visited then fng
-          else traverse fng dst) in
-  Set.fold callees ~init:Symtab.empty ~f:(fun tab entry ->
+          let cfg' = Cfg.Edge.insert edge cfg in
+          if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
+          else add cfg' (Cfg.Edge.dst edge)) in
+  Set.fold entries ~init:Symtab.empty ~f:(fun tab entry ->
       let name = name (Block.addr entry) in
-      let fng = traverse Cfg.empty entry in
+      let fng = add Cfg.empty entry in
       Symtab.add_symbol tab (name,entry,fng))
 
 let of_blocks syms =
