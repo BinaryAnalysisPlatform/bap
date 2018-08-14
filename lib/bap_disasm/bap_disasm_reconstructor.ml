@@ -50,8 +50,8 @@ let reconstruct name roots prog =
           else add cfg' (Cfg.Edge.dst edge)) in
   Set.fold entries ~init:Symtab.empty ~f:(fun tab entry ->
       let name = name (Block.addr entry) in
-      let fng = add Cfg.empty entry in
-      Symtab.add_symbol tab (name,entry,fng))
+      let cfg = add Cfg.empty entry in
+      Symtab.add_symbol tab (name,entry,cfg))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =

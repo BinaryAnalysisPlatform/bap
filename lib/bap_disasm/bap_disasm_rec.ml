@@ -174,8 +174,8 @@ type blk_dest = [
 type stage1 = {
   base : mem;
   addr : addr;
-  visited  : Span.t;
-  insns : Addr.Set.t;
+  visited : Span.t;
+  valid : Addr.Set.t;
   roots : addr list;
   inits : Addr.Set.t;
   dests : dests Addr.Table.t;
@@ -197,9 +197,8 @@ type stage3 = {
 }
 type t = stage3
 
-let errored s ty =
-  {s with errors = (s.addr,ty) :: s.errors;
-          inits = Set.remove s.inits s.addr}
+let errored s ty = {s with errors = (s.addr,ty) :: s.errors}
+
 
 let update_dests s dests mem =
   let key = Memory.max_addr mem in
@@ -224,16 +223,16 @@ let is_barrier s mem insn =
   has_jump (ok_nil (s.lift mem insn))
 
 let update s mem insn dests : stage1 =
-  let insns = Set.add s.insns (Memory.min_addr mem) in
+  let s = {s with valid = Set.add s.valid (Memory.min_addr mem)} in
   if is_barrier s mem insn then
     let dests = List.map dests ~f:(fun d -> match d with
         | Some addr,kind when Memory.contains s.base addr -> d
         | _,kind -> None, kind) in
     update_dests s dests mem;
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
-    { s with roots; insns }
+    { s with roots }
   else {
-    s with roots = Addr.succ (Memory.max_addr mem) :: s.roots; insns
+    s with roots = Addr.succ (Memory.max_addr mem) :: s.roots
   }
 
 (* switch to next root or finish if there're no roots *)
@@ -243,8 +242,7 @@ let next dis s =
     | r :: roots when not(Memory.contains s.base r) ->
       loop {s with roots}
     | r :: roots when Span.mem s.visited r ->
-      if Set.mem s.insns r then loop {s with roots}
-      else loop {s with roots; inits = Set.remove s.inits r}
+      loop {s with roots}
     | addr :: roots ->
       let mem = match Span.upper_bound s.visited addr with
         | None -> Memory.view ~from:addr s.base
@@ -278,8 +276,8 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
     | r :: rs -> r,rs
     | [] -> Memory.min_addr base, [] in
   let lift = relocate brancher lift in
-  let init = {base; addr; visited = Span.empty; insns = Addr.Set.empty;
-              roots; inits = Addr.Set.of_list roots;
+  let init = {base; addr; visited = Span.empty;
+              roots; inits = Addr.Set.of_list roots; valid = Addr.Set.empty;
               dests = Addr.Table.create (); errors = []; lift} in
   Memory.view ~from:addr base >>= fun mem ->
   Dis.run disasm mem ~stop_on ~return ~init
@@ -314,7 +312,10 @@ let create_indexes (dests : dests Addr.Table.t) =
             Addrs.add_multi terms ~key:src ~data:dst));
   leads, terms, succs
 
+let filter_valid s = {s with inits = Set.inter s.inits s.valid}
+
 let stage2 dis stage1 =
+  let stage1 = filter_valid stage1 in
   let leads, terms, kinds = create_indexes stage1.dests in
   let addrs = Addrs.create () in
   let succs = Addrs.create () in
