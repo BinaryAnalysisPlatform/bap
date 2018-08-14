@@ -174,9 +174,10 @@ type blk_dest = [
 type stage1 = {
   base : mem;
   addr : addr;
-  visited : Span.t;
+  visited  : Span.t;
+  insns : Addr.Set.t;
   roots : addr list;
-  inits : addr list;
+  inits : Addr.Set.t;
   dests : dests Addr.Table.t;
   errors : (addr * error) list;
   lift : lifter;
@@ -196,8 +197,9 @@ type stage3 = {
 }
 type t = stage3
 
-let errored s ty = {s with errors = (s.addr,ty) :: s.errors}
-
+let errored s ty =
+  {s with errors = (s.addr,ty) :: s.errors;
+          inits = Set.remove s.inits s.addr}
 
 let update_dests s dests mem =
   let key = Memory.max_addr mem in
@@ -222,15 +224,16 @@ let is_barrier s mem insn =
   has_jump (ok_nil (s.lift mem insn))
 
 let update s mem insn dests : stage1 =
+  let insns = Set.add s.insns (Memory.min_addr mem) in
   if is_barrier s mem insn then
     let dests = List.map dests ~f:(fun d -> match d with
         | Some addr,kind when Memory.contains s.base addr -> d
         | _,kind -> None, kind) in
     update_dests s dests mem;
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
-    { s with roots }
+    { s with roots; insns }
   else {
-    s with roots = Addr.succ (Memory.max_addr mem) :: s.roots
+    s with roots = Addr.succ (Memory.max_addr mem) :: s.roots; insns
   }
 
 (* switch to next root or finish if there're no roots *)
@@ -240,7 +243,8 @@ let next dis s =
     | r :: roots when not(Memory.contains s.base r) ->
       loop {s with roots}
     | r :: roots when Span.mem s.visited r ->
-      loop {s with roots}
+      if Set.mem s.insns r then loop {s with roots}
+      else loop {s with roots; inits = Set.remove s.inits r}
     | addr :: roots ->
       let mem = match Span.upper_bound s.visited addr with
         | None -> Memory.view ~from:addr s.base
@@ -274,8 +278,8 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
     | r :: rs -> r,rs
     | [] -> Memory.min_addr base, [] in
   let lift = relocate brancher lift in
-  let init = {base; addr; visited = Span.empty;
-              roots; inits = roots;
+  let init = {base; addr; visited = Span.empty; insns = Addr.Set.empty;
+              roots; inits = Addr.Set.of_list roots;
               dests = Addr.Table.create (); errors = []; lift} in
   Memory.view ~from:addr base >>= fun mem ->
   Dis.run disasm mem ~stop_on ~return ~init
@@ -315,14 +319,12 @@ let stage2 dis stage1 =
   let addrs = Addrs.create () in
   let succs = Addrs.create () in
   let preds = Addrs.create () in
-  let inits =
-    List.fold ~init:Addr.Set.empty stage1.inits ~f:Set.add in
   let next = Addr.succ in
   let is_edge addr =
     Addrs.mem leads (next addr) ||
     Addrs.mem kinds addr ||
     Addrs.mem stage1.dests addr ||
-    Addr.Set.mem inits (next addr) in
+    Addr.Set.mem stage1.inits (next addr) in
   let is_visited = Span.mem stage1.visited in
   let next_visited = Span.upper_bound stage1.visited in
   let create_block start finish =
