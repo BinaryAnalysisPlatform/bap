@@ -66,6 +66,11 @@ module Object = struct
     include Ident(Machine)
   end
   include (Primus.Value : comparable_with_value with type t = value)
+
+  let to_string x =
+    Format.asprintf "%a" Word.pp_dec (Primus.Value.to_word x)
+
+  let sexp_of_t x = Sexp.Atom (to_string x)
 end
 
 type objects = Object.Set.t
@@ -98,6 +103,8 @@ type tainter = {
   indirect : objects Primus.Value.Map.t;
 } [@@deriving fields]
 
+type relation_kind = Direct | Indirect [@@deriving sexp_of]
+
 (* generalized access to the tainter fields
  *
  * - [select.field] selects either direct or indirect field of the
@@ -112,6 +119,7 @@ type tainter = {
 type relation = Rel : {
     field : (tainter, ('k,objects,'c) Map.t) Field.t;
     key : (Primus.value -> 'k);
+    kind : relation_kind;
   } -> relation
 
 type gc_local = {
@@ -134,24 +142,17 @@ let gc = Primus.Machine.State.declare
     ~uuid:"2357826e-d5b7-40a3-8f90-0cfd7b48eadc"
     (fun _ -> {old = empty_tainter})
 
-let taint_introduced,introduced_taint =
-  Primus.Observation.provide
-    ~inspect:Primus.sexp_of_value "taint-introduced"
-
-let taint_propagated,propagated_taint =
-  Primus.Observation.provide
-    ~inspect:Primus.sexp_of_value "taint-propagated"
-
-
 let vid = Primus.Value.id
 
 let indirect = Rel {
     field = Fields_of_tainter.indirect;
     key = ident;
+    kind = Indirect;
   }
 let direct = Rel {
     field = Fields_of_tainter.direct;
     key = vid;
+    kind = Direct;
   }
 
 module Kind = struct
@@ -175,6 +176,15 @@ end
 module Taint = struct
   type Primus.exn += Bad_cast of Primus.value
 
+  let inspect (Rel {kind},o,v) = Sexp.List [
+      sexp_of_relation_kind kind;
+      Object.sexp_of_t o;
+      Primus.sexp_of_value v;
+    ]
+
+  let attached,attach =
+    Primus.Observation.provide ~inspect "taint-attached"
+
   module Make(Machine : Primus.Machine.S) = struct
     module Value = Primus.Value.Make(Machine)
     module Taint = Object.Make(Machine)
@@ -189,7 +199,11 @@ module Taint = struct
 
     let attach v r ts = change v r ~f:(function
         | None -> Some ts
-        | Some ts' -> Some (Set.union ts ts'))
+        | Some ts' -> Some (Set.union ts ts')) >>= fun () ->
+      Set.to_sequence ts |>
+      Machine.Seq.iter ~f:(fun o ->
+          Machine.Observation.make attach (r,o,v))
+
 
     let detach v r ts = change v r ~f:(function
         | None -> None
@@ -410,5 +424,6 @@ module Std = struct
     module Tracker = Taint
     module Propagation = Propagation
     module Gc = Gc
+    let attached = Taint.attached
   end
 end

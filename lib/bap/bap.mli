@@ -950,6 +950,36 @@ module Std : sig
     module Make(Interval : Interval) : S
       with type key := Interval.t
        and type point := Interval.point
+
+    (**  Binable Abstract Interval.
+
+         An extension of the Interval signature with the
+         Binable interface.
+    *)
+    module type Interval_binable = sig
+      type t [@@deriving bin_io, compare, sexp]
+      type point [@@deriving bin_io, compare, sexp]
+      include Interval with type t := t and type point := point
+    end
+
+    (** Binable Interval Tree.
+
+        An extension of the Interval tree signature with the
+        Binable interface.
+    *)
+    module type S_binable = sig
+      type 'a t [@@deriving bin_io, compare, sexp]
+      include S with type 'a t := 'a t
+    end
+
+    (** [Make_binable(Interval)] create an abstract interval tree data type
+        that uses abstract [Interval] and can be serialized via the Binable
+        interface.
+    *)
+    module Make_binable(Interval : Interval_binable) : S_binable
+      with type key := Interval.t
+       and type point := Interval.point
+
   end
 
   type value               [@@deriving bin_io, compare, sexp]
@@ -3623,8 +3653,8 @@ module Std : sig
     *)
     val is_referenced : var -> t -> bool
 
-    (** [normalize ?normalize_exp xs] produces a normalized BIL program
-        with the same[^1] semantics but in the BIL normalized
+    (** [normalize ?keep_ites ?normalize_exp xs] produces a normalized BIL
+        program with the same[^1] semantics but in the BIL normalized
         form (BNF). There are two normalized forms, both described
         below. The first form (BNF1) is more readable, the second form
         (BNF2) is more strict, but sometimes yields a code, that is hard
@@ -3691,8 +3721,12 @@ module Std : sig
         @param normalize_exp (defaults to [false]) if set to [true] then
         the returned program will be in BNF2.
 
+        @param keep_ites (defaults to [false]) if set to [true] then
+        the returned program will preserve ite expressions.
+
         @since 1.3 *)
-    val normalize : ?normalize_exp:bool -> stmt list -> stmt list
+    val normalize : ?keep_ites:bool -> ?normalize_exp:bool
+       -> stmt list -> stmt list
 
     (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
         simplifies [if] and [while] expressions with statically known

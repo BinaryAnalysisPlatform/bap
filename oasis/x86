@@ -10,6 +10,10 @@ Library "bap-x86-cpu"
  BuildDepends:     bap
  Modules:          X86_cpu,
                    X86_env,
+                   X86_asm,
+                   X86_asm_reg,
+                   X86_asm_reg_types,
+                   X86_llvm_env,
                    X86_types
 
 Library x86_plugin
@@ -20,10 +24,8 @@ Library x86_plugin
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
-                   X86_asm,
-                   X86_asm_reg,
-                   X86_asm_reg_types,
                    X86_btx,
+                   X86_cdq,
                    X86_cmpxchg,
                    X86_disasm,
                    X86_lifter,
@@ -31,6 +33,7 @@ Library x86_plugin
                    X86_mov,
                    X86_mov_offset,
                    X86_opcode_btx,
+                   X86_opcode_cdq,
                    X86_opcode_cmps,
                    X86_opcode_cmpxchg,
                    X86_opcode_ins,
@@ -59,7 +62,7 @@ Library x86_test
   CompiledObject: best
   BuildDepends:   bap, oUnit, bap-x86-cpu
   Install:        false
-  Modules:        Test_pshufb
+  Modules:        Test_pshufb, Test_pcmp
 
 Executable run_x86_tests
   Path:		  lib_test/x86

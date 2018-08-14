@@ -32,3 +32,35 @@ Library powerpc_plugin
                     Powerpc_sub,
                     Powerpc_primus_loader
   XMETAExtraLines:  tags="powerpc, lifter"
+
+Library powerpc_test
+  Path:           lib_test/powerpc
+  Build$:         flag(tests) && (flag(everything) || flag(powerpc))
+  CompiledObject: best
+  BuildDepends:   bap, oUnit
+  Install:        false
+  Modules:        Powerpc_add_tests,
+                  Powerpc_arith_tests,
+                  Powerpc_branch_tests,
+                  Powerpc_compare_tests,
+                  Powerpc_cr_tests,
+                  Powerpc_load_tests,
+                  Powerpc_logical_tests,
+                  Powerpc_move_tests,
+                  Powerpc_rotate_tests,
+                  Powerpc_shift_tests,
+                  Powerpc_store_tests,
+                  Powerpc_tests_helpers
+
+Executable run_powerpc_tests
+  Path:		  lib_test/powerpc
+  Build$:	  flag(tests) && (flag(everything) || flag(powerpc))
+  CompiledObject: best
+  BuildDepends:	  bap.plugins, findlib.dynload, oUnit, powerpc_test
+  Install:	  false
+  MainIs:         run_powerpc_tests.ml
+
+Test powerpc_tests
+ TestTools: run_powerpc_tests
+ Run$: flag(tests) && (flag(everything) || flag(powerpc))
+ Command: $run_powerpc_tests

@@ -90,8 +90,6 @@ let linear_of_stmt ?addr ?dst return insn stmt : linear list =
       [Instr (`Def ~@(Ir_def.create lhs rhs))]
     | Bil.If (_, [],[]) -> []
     | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
-    | Bil.If (cond,[Bil.CpuExn n],[]) -> cpuexn ~cond n
-    | Bil.If (cond,[Bil.Jmp exp],[]) -> [jump ~cond exp]
     | Bil.If (cond,yes,[]) ->
       let yes_label = Tid.create () in
       let tail = Tid.create () in

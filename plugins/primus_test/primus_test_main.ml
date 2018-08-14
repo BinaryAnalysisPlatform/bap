@@ -1,12 +1,19 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_primus.Std
+open Monads.Std
 open Format
 
 include Self()
 
+type id = Primus.Machine.id
+module Id = Monad.State.Multi.Id
+
 module Location = struct
-  type point = Addr.t
+  type point = {
+    mach : id;
+    addr : Addr.t;
+  }
 
 
   type trace = {
@@ -20,8 +27,10 @@ module Location = struct
   }
 
 
-  let sexp_of_point p =
-    Sexp.Atom (Addr.string_of_value ~hex:true p)
+  let sexp_of_point {mach; addr} =
+    Sexp.Atom (asprintf "%a:%s"
+                 Id.pp mach
+                 (Addr.string_of_value ~hex:true addr))
 
   let sexp_of_t {backtrace} =
     Sexp.List (List.map ~f:sexp_of_point backtrace)
@@ -45,6 +54,12 @@ module Location = struct
       ~name:"incident-locations"
       (fun _ -> {incidents = Primus.Value.Map.empty})
 
+  let push {addr; mach} = function
+    | [] -> [{mach; addr}]
+    | x::_ as trace ->
+      if Addr.equal x.addr addr then trace
+      else {mach; addr}::trace
+
   module Record(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
     module Eval = Primus.Interpreter.Make(Machine)
@@ -54,11 +69,9 @@ module Location = struct
           {backtrace = f backtrace})
 
     let record_callsite _ =
-      Eval.pc >>= fun pc ->
-      update_backtrace  ~f:(function
-          | [] -> [pc]
-          | x::_ as trace ->
-            if Addr.equal x pc then trace else pc::trace)
+      Eval.pc >>= fun addr ->
+      Machine.current () >>= fun mach ->
+      update_backtrace  ~f:(push {addr; mach})
 
     let init () =
       Primus.Interpreter.leave_blk >>> record_callsite
@@ -74,11 +87,12 @@ module Location = struct
       | Some (k,_) -> Value.succ k
 
     let record =
-      Eval.pc >>= fun pc ->
+      Eval.pc >>= fun addr ->
+      Machine.current () >>= fun mach ->
       Machine.Local.get trace >>= fun {backtrace} ->
       Machine.Global.get state >>= fun {incidents} ->
       next incidents >>= fun key ->
-      let trace = {backtrace = pc :: backtrace} in
+      let trace = {backtrace = push {addr; mach} backtrace} in
       Machine.Global.put state {
         incidents = Map.add incidents ~key ~data:trace
       } >>= fun () ->

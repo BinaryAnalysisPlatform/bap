@@ -612,9 +612,9 @@ module Std : sig
     type ('n,'d) t
 
 
-    (** [create constraints init] creates an initial approximation of a
-        solution. The [init] parameters defines the initial value of
-        all variables unspecified in the initial constraint.
+    (** [create constraints default] creates an initial approximation of a
+        solution. The [default] parameter defines the default value of
+        all variables unspecified in the initial constraints.
 
         @param constraints a finite mapping from variables to their
         value approximations.
@@ -623,7 +623,7 @@ module Std : sig
 
         - [not(is_fixpoint s)]
         - [iterations s = 0]
-        - [get s x = constraints[x] if x in constraints else init]
+        - [get s x = constraints[x] if x in constraints else default]
     *)
     val create : ('n,'d,_) Map.t -> 'd -> ('n,'d) t
 
@@ -632,6 +632,12 @@ module Std : sig
         made to obtain the current solution.  *)
     val iterations : ('n,'d) t -> int
 
+    (** [default s] return the default value assigned to all variables
+        not in the internal finite mapping. This is usually a bottom
+        or top value, depending on whether iteration increases or
+        decreases.
+    *)
+    val default : ('n,'d) t -> 'd
 
     (** [is_fixpoint s] is [true] if the solution is a fixed point
         solution, i.e., is a solution that stabilizes the system of
@@ -640,6 +646,13 @@ module Std : sig
 
     (** [get s x] returns a value of [x].  *)
     val get : ('n,'d) t -> 'n -> 'd
+
+    (** [derive s ~f default] creates a new solution from an old one
+        with a new [default] and where for each node [n] in [s]'s finite
+        map, if [f n (get s n) = Some v] then [n] maps to [v].
+    *)
+    val derive : ('n,'d) t -> f:('n -> 'd -> 'a option) -> 'a -> ('n,'a) t
+
   end
 
 
@@ -966,7 +979,12 @@ module Std : sig
       ?rev:bool -> 'c -> 'n -> 'n tree
 
     (** [dom_frontier (module G) g dom_tree] calculates dominance
-        frontiers for all nodes in a graph [g].     *)
+        frontiers for all nodes in a graph [g].
+
+        The dominance frontier of a node [d] is the set of all nodes [n]
+        such that [d] dominates an immediate predecessor of [n], but [d] does
+        not strictly dominate [n]. It is the set of nodes where [d]'s
+        dominance stops. *)
     val dom_frontier :
       (module Graph with type t = 'c
                      and type node = 'n

@@ -45,7 +45,7 @@ let extract path arch =
     | None -> match Ida.(with_file path get_symbols) with
       | [] ->
         warning "didn't find any symbols";
-        info "this plugin doesn't work with IDA Free";
+        info "note: this plugin doesn't work with IDA Free";
         []
       | syms -> Symbols.Cache.save id syms; syms in
   let size = Arch.addr_size arch in
@@ -57,7 +57,7 @@ let extract path arch =
 let register_source (module T : Target) =
   let source =
     let open Project.Info in
-    let extract file arch = Or_error.try_with (fun () ->
+    let extract file arch = Or_error.try_with ~backtrace:true (fun () ->
         extract file arch |> T.of_blocks) in
     Stream.merge file arch ~f:extract in
   T.Factory.register name source
@@ -65,7 +65,7 @@ let register_source (module T : Target) =
 
 type perm = [`code | `data] [@@deriving sexp]
 type section = string * perm * int * (int64 * int)
-  [@@deriving sexp]
+[@@deriving sexp]
 
 type image = string * addr_size * section list [@@deriving sexp]
 

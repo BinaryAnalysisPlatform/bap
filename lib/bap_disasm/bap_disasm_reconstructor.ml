@@ -19,57 +19,39 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
-let find_calls name roots cfg =
-  let starts = Addr.Table.create () in
-  List.iter roots ~f:(fun addr ->
-      Hashtbl.set starts ~key:addr ~data:(name addr));
-  Cfg.nodes cfg |> Seq.iter ~f:(fun blk ->
-      let () =
-        if Seq.is_empty (Cfg.Node.inputs blk cfg) then
-          let addr = Block.addr blk in
-          Hashtbl.set starts ~key:addr ~data:(name addr) in
-      let term = Block.terminator blk in
-      if Insn.(is call) term then
-        Seq.iter (Cfg.Node.outputs blk cfg)
-          ~f:(fun e ->
-              if Cfg.Edge.label e <> `Fall then
-                let w = Block.addr (Cfg.Edge.dst e) in
-                Hashtbl.set starts ~key:w ~data:(name w)));
-  starts
+let entries_of_block cfg roots entries blk =
+  let entries =
+    if Set.mem roots (Block.addr blk) then Set.add entries blk
+    else entries in
+  let term = Block.terminator blk in
+  if Insn.(is call) term then
+    Seq.fold ~init:entries (Cfg.Node.outputs blk cfg)
+      ~f:(fun entries e ->
+          if Cfg.Edge.label e <> `Fall then
+            Set.add entries (Cfg.Edge.dst e)
+          else entries)
+  else entries
 
-let reconstruct name roots cfg =
-  let roots = find_calls name roots cfg in
-  let init =
-    Cfg.nodes cfg |> Seq.fold ~init:Cfg.empty ~f:(fun cfg n ->
-        Cfg.Node.insert n cfg) in
-  let filtered =
-    Cfg.edges cfg |> Seq.fold ~init ~f:(fun cfg e ->
-        if Hashtbl.mem roots (Block.addr (Cfg.Edge.dst e)) then cfg
-        else Cfg.Edge.insert e cfg) in
-  let find_block addr =
-    Cfg.nodes cfg |> Seq.find ~f:(fun blk ->
-        Addr.equal addr (Block.addr blk)) in
-  let find_callers blk =
-    Cfg.Node.inputs blk cfg |>
-    Seq.map ~f:(fun e -> Block.addr (Cfg.Edge.src e)) in
-  Hashtbl.fold roots ~init:Symtab.empty
-    ~f:(fun ~key:entry ~data:name syms ->
-        match find_block entry with
-        | None -> syms
-        | Some entry ->
-          let cfg : cfg =
-            with_return (fun {return} ->
-                Graphlib.depth_first_search (module Cfg)
-                  filtered ~start:entry ~init:Cfg.empty
-                  ~enter_edge:(fun _ -> Cfg.Edge.insert)
-                  ~start_tree:(fun n t ->
-                      if Block.equal n entry
-                      then Cfg.Node.insert n t
-                      else return t)) in
-          let fn = name,entry,cfg in
-          let symtab = Symtab.add_symbol syms fn in
-          Seq.fold (find_callers entry) ~init:symtab
-            ~f:(fun syms a -> Symtab.add_call syms a fn))
+let collect_entries cfg roots =
+  let roots = Addr.Set.of_list roots in
+  Seq.fold (Cfg.nodes cfg) ~init:Block.Set.empty
+    ~f:(entries_of_block cfg roots)
+
+let reconstruct name roots prog =
+  let entries = collect_entries prog roots in
+  let is_call e = Set.mem entries (Cfg.Edge.dst e) in
+  let rec add cfg node =
+    let cfg = Cfg.Node.insert node cfg in
+    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg ~f:(fun cfg edge ->
+        if is_call edge then cfg
+        else
+          let cfg' = Cfg.Edge.insert edge cfg in
+          if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
+          else add cfg' (Cfg.Edge.dst edge)) in
+  Set.fold entries ~init:Symtab.empty ~f:(fun tab entry ->
+      let name = name (Block.addr entry) in
+      let fng = add Cfg.empty entry in
+      Symtab.add_symbol tab (name,entry,fng))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =

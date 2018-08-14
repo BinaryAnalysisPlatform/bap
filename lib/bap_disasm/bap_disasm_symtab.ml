@@ -17,7 +17,7 @@ type cfg = Cfg.t [@@deriving compare]
 
 type fn = string * block * cfg [@@deriving compare]
 
-let sexp_of_fn (name,block,cfg) =
+let sexp_of_fn (name,block,_cfg) =
   Sexp.List [sexp_of_string name; sexp_of_addr (Block.addr block)]
 
 module Fn = Opaque.Make(struct
@@ -54,21 +54,28 @@ let merge m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,x) ->
       Memmap.add m1 mem x)
 
-let remove t (name,entry,_) : t = {
-  names = Map.remove t.names name;
-  addrs = Map.remove t.addrs (Block.addr entry);
-  memory = Memmap.filter t.memory ~f:(fun (n,e,_) ->
-      not(String.(name = n) || Block.(entry = e)));
-  calls = Map.filter t.calls ~f:(fun (name',_,_) ->
-      not (String.equal name name'))
-}
+let filter_mem mem name entry =
+  Memmap.filter mem ~f:(fun (n,e,_) ->
+      not(String.(name = n) || Block.(entry = e)))
+
+let remove t (name,entry,_) : t =
+  if Map.mem t.addrs (Block.addr entry) then
+    {
+      names = Map.remove t.names name;
+      addrs = Map.remove t.addrs (Block.addr entry);
+      memory = filter_mem t.memory name entry;
+      calls = Map.filter t.calls ~f:(fun (name',_,_) ->
+          not (String.equal name name'))
+    }
+  else t
+
 
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
   let t = remove t data in
   { t with
     addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
-    names = Map.add t.names ~key:name  ~data;
+    names = Map.add t.names ~key:name ~data;
     memory = merge t.memory (span data);
   }
 
