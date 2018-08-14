@@ -49,16 +49,14 @@ let label_of_fall cfg block =
 let annotate_insn term insn = Term.set_attr term Disasm.insn insn
 let annotate_addr term addr = Term.set_attr term address addr
 
-let linear_of_stmt ?addr ?dst return insn stmt : linear list =
+let linear_of_stmt ?addr return insn stmt : linear list =
   let (~@) t = match addr with
     | None -> t
     | Some addr -> annotate_addr (annotate_insn t insn) addr in
   let goto ?cond id =
     `Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
   let jump ?cond exp =
-    let target = match dst with
-      | None -> Label.indirect exp
-      | Some d -> Label.indirect (Bil.Int d) in
+    let target = Label.indirect exp in
     if Insn.(is return) insn
     then Ir_jmp.create_ret ?cond target
     else if Insn.(is call) insn
@@ -129,9 +127,9 @@ let linear_of_stmt ?addr ?dst return insn stmt : linear list =
       Label finish :: [] in
   linearize stmt
 
-let lift_insn ?addr ?dst fall init insn =
+let lift_insn ?addr fall init insn =
   List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
-      List.fold (linear_of_stmt ?addr ?dst fall insn stmt) ~init
+      List.fold (linear_of_stmt ?addr fall insn stmt) ~init
         ~f:(fun (bs,b) -> function
             | Label lab ->
               Ir_blk.Builder.result b :: bs,
@@ -154,20 +152,12 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-let find_dst block symtab =
-  if Insn.(is call) (Block.terminator block) then
-    Symtab.find_call symtab (Block.addr block) |>
-    Option.value_map ~default:None ~f:(fun (_,d,_) -> Some (Block.addr d))
-  else None
-
-let lift_blk ?symtab cfg block : blk term list =
+let blk cfg block : blk term list =
   let fall_label = label_of_fall cfg block in
-  let dst =
-    Option.value_map ~default:None ~f:(find_dst block) symtab in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
-        lift_insn ~addr ?dst fall_label init insn) |>
+        lift_insn ~addr fall_label init insn) |>
   fun (bs,b) ->
   let fall =
     let jmp = Block.terminator block in
@@ -224,11 +214,11 @@ let remove_false_jmps blk =
 
 let unbound _ = true
 
-let lift_sub ?symtab entry cfg =
+let sub entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
-    let blks = lift_blk ?symtab cfg b in
+    let blks = blk cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
     acc @ blks in
@@ -248,7 +238,7 @@ let program symtab =
   let addrs = Addr.Table.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub ~symtab entry cfg in
+      let sub = sub entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
@@ -256,10 +246,7 @@ let program symtab =
   Term.map sub_t program
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
-          ~f:(resolve_jmp ~local:false addrs)))
-
-let sub = lift_sub ?symtab:None
-let blk = lift_blk ?symtab:None
+          ~f:(resolve_jmp  ~local:false addrs)))
 
 let insn insn =
   lift_insn None ([], Ir_blk.Builder.create ()) insn |>

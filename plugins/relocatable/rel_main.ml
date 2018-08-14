@@ -5,6 +5,7 @@ include Self()
 
 let () =
   Rel_brancher.init ();
+  Rel_solver.init ();
   Config.manpage [
     `S "SYNOPSIS";
     `Pre "

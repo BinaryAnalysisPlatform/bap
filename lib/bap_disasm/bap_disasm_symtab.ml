@@ -28,7 +28,6 @@ module Fn = Opaque.Make(struct
 type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
-  calls : fn Addr.Map.t;
   memory : fn Memmap.t;
 } [@@deriving sexp_of]
 
@@ -46,7 +45,6 @@ let span ((_name,_entry,cfg) as fn) =
 let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
-  calls = Addr.Map.empty;
   memory = Memmap.empty;
 }
 
@@ -64,8 +62,6 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      calls = Map.filter t.calls ~f:(fun (name',_,_) ->
-          not (String.equal name name'))
     }
   else t
 
@@ -73,7 +69,7 @@ let remove t (name,entry,_) : t =
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
   let t = remove t data in
-  { t with
+  {
     addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
     names = Map.add t.names ~key:name ~data;
     memory = merge t.memory (span data);
@@ -94,9 +90,3 @@ let to_sequence t =
 let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
-
-
-let add_call t addr fn =
-  { t with calls = Map.add t.calls ~key:addr ~data:fn }
-
-let find_call {calls} addr = Map.find calls addr

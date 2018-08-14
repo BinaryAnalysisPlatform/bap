@@ -318,13 +318,6 @@ let create_exn
     else
       let disasm = Disasm.create g in
       let program = MVar.read program in
-      let program =
-        if MVar.is_updated spec then
-          match MVar.read spec with
-          | None -> program
-          | Some spec ->
-            Bap_inject_externals.run program (Disasm.insns disasm) spec
-        else program in
       report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {
         disasm;
