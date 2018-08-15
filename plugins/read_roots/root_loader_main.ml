@@ -4,16 +4,39 @@ open Bap_future.Std
 
 include Self ()
 
-let extract_with_fmt filename fmt ver =
+let extract_with_fmt arch filename fmt ver =
+  let bits = Arch.addr_size arch |> Size.in_bits in
   In_channel.with_file filename
-    ~f:(fun ch -> Addr.Io.load_all ~fmt ?ver ch) |> Seq.of_list
+    ~f:(fun ch ->
+        Or_error.try_with (fun () ->
+            let addrs = Addr.Io.load_all ~fmt ?ver ch in
+            match List.find addrs ~f:(fun x -> Addr.bitwidth x <> bits) with
+            | None -> Seq.of_list addrs
+            | Some a ->
+              failwith
+                (sprintf
+                  "address %s can't be used with %d bit arch"
+                  (Addr.to_string a) bits)))
+
+let root_of_string bits s =
+  let mk_error n =
+    let ers = sprintf "Integer %s exceeds the range of %d bit" s n in
+    Error (Error.of_string ers) in
+  try
+    let x = Int64.of_string s in
+    let y = Word.of_int64 ~width:bits x in
+    let x' = Word.to_int64_exn y in
+    if Int64.(x <> x') then mk_error bits
+    else Ok y
+  with _ -> mk_error 64
 
 let extract_default filename arch =
-  let width = Arch.addr_size arch |> Size.in_bits in
+  let bits = Arch.addr_size arch |> Size.in_bits in
   In_channel.with_file filename ~f:(fun ch ->
-      Sexp.input_sexps ch |> List.map ~f:Int64.t_of_sexp |>
-      List.map ~f:(Addr.of_int64 ~width) |>
-      Seq.of_list)
+      Sexp.input_sexps ch |>
+      List.map ~f:(fun s -> Sexp.to_string s |> root_of_string bits) |>
+      Result.all |>
+      Result.map ~f:Seq.of_list)
 
 let split_right ~after str =
   match String.rindex str after with
@@ -26,13 +49,20 @@ let rooter filename arch =
   let name,ver = split_right ~after:'-' filename in
   match extension name with
   | None -> extract_default filename arch
-  | Some fmt -> extract_with_fmt filename fmt ver
+  | Some fmt ->
+    let fmts =
+      Addr.available_readers () |> List.map ~f:(fun (x,_,_) -> x) in
+    if List.mem fmts ~equal:String.equal fmt then
+      extract_with_fmt arch filename fmt ver
+    else extract_default filename arch
 
 let register filename =
   let name = sprintf "file:%s" filename in
   Stream.map Project.Info.arch (fun arch ->
-      Ok (Rooter.create (rooter filename arch))) |>
-    Rooter.Factory.register name
+      match rooter filename arch with
+      | Ok s -> Ok (Rooter.create s)
+      | Error e -> Error e) |>
+  Rooter.Factory.register name
 
 let () =
   let () = Config.manpage [
