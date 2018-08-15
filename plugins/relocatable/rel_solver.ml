@@ -6,18 +6,19 @@ module Fact = Ogre.Make(Monad.Ident)
 include Self ()
 
 let find_fixup jmp bounds rels exts =
-  match Term.get_attr jmp address with
+  let (>>|) = Option.(>>|) in
+  let find_int (min,max) =
+    Rel_data.find min max rels >>| fun x -> `Internal x in
+  let find_ext (min,max) =
+    Rel_data.find min max exts >>| fun x -> `External x in
+  Option.(
+    Term.get_attr jmp address >>= fun min ->
+    Map.find bounds min >>= fun max ->
+    Some (min, max)) |> function
   | None -> None
-  | Some addr ->
-    match Map.find bounds addr with
-    | None -> None
-    | Some max_addr ->
-      match Rel_data.find addr max_addr rels with
-      | Some addr' -> Some (`Internal addr')
-      | None ->
-        match Rel_data.find addr max_addr exts with
-        | None -> None
-        | Some name -> Some (`External name)
+  | Some x -> match find_int x with
+    | None -> find_ext x
+    | x -> x
 
 let create_synthetic_sub name =
   let s = Sub.create ~name () in

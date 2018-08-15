@@ -65,7 +65,6 @@ let remove t (name,entry,_) : t =
     }
   else t
 
-
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
   let t = remove t data in

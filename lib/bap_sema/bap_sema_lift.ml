@@ -214,7 +214,7 @@ let remove_false_jmps blk =
 
 let unbound _ = true
 
-let sub entry cfg =
+let lift_sub entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
@@ -238,7 +238,7 @@ let program symtab =
   let addrs = Addr.Table.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = sub entry cfg in
+      let sub = lift_sub entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
@@ -247,6 +247,8 @@ let program symtab =
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
           ~f:(resolve_jmp  ~local:false addrs)))
+
+let sub = lift_sub
 
 let insn insn =
   lift_insn None ([], Ir_blk.Builder.create ()) insn |>
