@@ -19,16 +19,17 @@ let extract_with_fmt arch filename fmt ver =
                   (Addr.to_string a) bits)))
 
 let root_of_string bits s =
-  let mk_error n =
-    let ers = sprintf "Integer %s exceeds the range of %d bit" s n in
+  let mk_error reason =
+    let ers = sprintf "Can't read int64 from %s: %s" s reason in
     Error (Error.of_string ers) in
   try
     let x = Int64.of_string s in
     let y = Word.of_int64 ~width:bits x in
     let x' = Word.to_int64_exn y in
-    if Int64.(x <> x') then mk_error bits
+    if Int64.(x <> x') then
+      mk_error "value doesn't match to the arch bitwidth"
     else Ok y
-  with _ -> mk_error 64
+  with exn -> mk_error (Exn.to_string exn)
 
 let extract_default filename arch =
   let bits = Arch.addr_size arch |> Size.in_bits in
