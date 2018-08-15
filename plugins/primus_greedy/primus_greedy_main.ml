@@ -33,20 +33,24 @@ module Greedy(Machine : Primus.Machine.S) = struct
     Set.iter halted ~f:(fun id ->
         fprintf ppf "%a" Machine.Id.pp id)
 
+  let last = Seq.fold ~init:None ~f:(fun _ x -> Some x)
 
   let reschedule () =
     Machine.Global.get state >>= fun {halted} ->
     Machine.forks () >>= fun forks ->
     let active = Seq.filter forks ~f:(fun id -> not (Set.mem halted id)) in
-    let total = Seq.length forks in
-    let stage = total - Seq.length active - 1 in
+    let total = Seq.length active + Set.length halted in
+    let stage = Set.length halted - 1 in
     report_progress ~stage ~total ();
-    match Seq.hd active with
+    match last active with
     | None ->
       info "no more pending machines";
       Machine.switch Machine.global
     | Some cid ->
-      info "switch to machine %a" Id.pp cid;
+      Machine.current () >>= fun pid ->
+      info "switch to machine %a from %a" Id.pp cid Id.pp pid;
+      info "killing previous machine %a" Id.pp pid;
+      Machine.kill pid >>= fun () ->
       Machine.switch cid
 
 

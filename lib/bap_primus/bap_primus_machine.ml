@@ -10,16 +10,30 @@ module Observation = Bap_primus_observation
 module type Component = Component
 module type S = Machine
 type nonrec component = component
+module State = Bap_primus_state
+type id = Monad.State.Multi.id
 
 let exn_raised,raise_exn =
   Observation.provide
     ~inspect:(fun exn -> Sexp.Atom (Bap_primus_exn.to_string exn))
     "exception"
 
+let fork,forked =
+  Observation.provide
+    ~inspect:(fun (parent,child) -> Sexp.List [
+        Monad.State.Multi.Id.sexp_of_t parent;
+        Monad.State.Multi.Id.sexp_of_t child;
+      ])
+    "machine-fork"
 
 
-module State = Bap_primus_state
-type id = Monad.State.Multi.id
+let switch,switched =
+  Observation.provide
+    ~inspect:(fun (parent,child) -> Sexp.List [
+        Monad.State.Multi.Id.sexp_of_t parent;
+        Monad.State.Multi.Id.sexp_of_t child;
+      ])
+    "machine-switch"
 
 module Make(M : Monad.S) = struct
   module PE = struct
@@ -35,10 +49,11 @@ module Make(M : Monad.S) = struct
   and state = {
     args    : string array;
     envp    : string array;
-    curr    : unit -> id t;
+    curr    : unit -> unit t;
     proj    : project;
     local   : State.Bag.t;
     global  : State.Bag.t;
+    deathrow : id list;
     observations : unit t Observation.observations;
   }
 
@@ -158,36 +173,71 @@ module Make(M : Monad.S) = struct
 
 
   let fork_state () = lifts (SM.fork ())
-  let switch_state id = lifts (SM.switch id)
-  let store_curr k id =
-    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok id)}))
-
-  (* switch_task SM.fork *)
-
-
+  let switch_state id : unit c = lifts (SM.switch id)
+  let store_curr k =
+    lifts (SM.update (fun s -> {s with curr = fun () -> k (Ok ())}))
 
   let lift x = lifts (SM.lift x)
   let status x = lifts (SM.status x)
   let forks () = lifts (SM.forks ())
-  let kill id = lifts (SM.kill id)
   let ancestor x  = lifts (SM.ancestor x)
   let parent () = lifts (SM.parent ())
   let global = SM.global
   let current () = lifts (SM.current ())
 
-  let fork () : unit c =
-    current () >>= fun pid ->
-    C.call ~f:(fun ~cc:k -> store_curr k pid >>= fork_state >>= current) >>=
-    switch_state
+  let notify_fork pid =
+    current () >>= fun cid ->
+    Observation.make forked (pid,cid)
+
+  let sentence_to_death id =
+    with_global_context (fun () ->
+        lifts @@ SM.update (fun s -> {
+              s with deathrow = id :: s.deathrow
+            }))
+
+  let execute_sentenced =
+    with_global_context (fun () ->
+        lifts @@ SM.get () >>= fun s ->
+        lifts @@ SM.List.iter s.deathrow ~f:SM.kill >>= fun () ->
+        lifts @@ SM.put {s with deathrow = []})
 
   let switch id : unit c =
-    current () >>= fun cid ->
     C.call ~f:(fun ~cc:k ->
-        store_curr k cid >>= fun () ->
+        current () >>= fun pid ->
+        store_curr k >>= fun () ->
         switch_state id >>= fun () ->
         lifts (SM.get ()) >>= fun s ->
-        s.curr ()) >>=
-    switch_state
+        execute_sentenced >>= fun () ->
+        Observation.make switched (pid,id) >>= fun () ->
+        s.curr ())
+
+
+  let fork () : unit c =
+    C.call ~f:(fun ~cc:k ->
+        current () >>= fun pid ->
+        store_curr k >>=
+        fork_state >>= fun () ->
+        execute_sentenced >>= fun () ->
+        notify_fork pid)
+
+
+  let kill id =
+    if id = global then return ()
+    else
+      current () >>= fun cid ->
+      if id = cid then sentence_to_death id
+      else lifts @@ SM.kill id
+
+  (* we can't make it public as it will change the interface
+     and will require us to bump Primus version to 2.0
+  *)
+  let die next =
+    current () >>= fun pid ->
+    switch_state next >>= fun () ->
+    lifts (SM.get ()) >>= fun s ->
+    lifts (SM.kill pid) >>= fun () ->
+    s.curr ()
+
 
   let raise exn =
     Observation.make raise_exn exn >>= fun () ->
@@ -204,10 +254,11 @@ module Make(M : Monad.S) = struct
   let init proj args envp = {
     args;
     envp;
-    curr = current;
+    curr = return;
     global = State.Bag.empty;
     local = State.Bag.empty;
     observations = Bap_primus_observation.empty;
+    deathrow = [];
     proj}
 
   let extract f =
@@ -221,7 +272,7 @@ module Make(M : Monad.S) = struct
         (SM.run
            (C.run m (function
                 | Ok _ -> extract @@ fun s -> Ok s.proj
-                | Error err -> extract @@ fun s -> Error err))
+                | Error err -> extract @@ fun _ -> Error err))
            (init proj args envp))
         (fun (r,{proj}) -> match r with
            | Ok _ -> M.return (Normal, proj)

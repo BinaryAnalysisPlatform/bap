@@ -61,6 +61,15 @@ let pc_change,pc_changed =
 let halting,will_halt =
   Observation.provide ~inspect:sexp_of_unit "halting"
 
+let division_by_zero,will_divide_by_zero =
+  Observation.provide ~inspect:sexp_of_unit "division-by-zero"
+
+let segfault, will_segfault =
+  Observation.provide ~inspect:sexp_of_word "segfault"
+
+let pagefault,page_fail =
+  Observation.provide ~inspect:sexp_of_word "pagefault"
+
 let interrupt,will_interrupt =
   Observation.provide ~inspect:sexp_of_int "interrupt"
 
@@ -96,6 +105,9 @@ let undefined,on_undefined =
 let jumping,will_jump =
   Observation.provide ~inspect:sexp_of_values "jumping"
 
+let eval_cond,on_cond =
+  Observation.provide ~inspect:sexp_of_value "eval-cond"
+
 
 let results r op = Sexp.List [op; sexp_of_value r]
 
@@ -128,6 +140,12 @@ let sexp_of_concat ((x,y),r) = results r @@ sexps [
     string_of_value y;
   ]
 
+let sexp_of_ite ((cond, yes, no), r) = results r @@ sexps [
+  string_of_value cond;
+  string_of_value yes;
+  string_of_value no;
+]
+
 let binop,on_binop =
   Observation.provide ~inspect:sexp_of_binop "binop"
 
@@ -145,6 +163,9 @@ let concat,on_concat =
 
 let const,on_const =
   Observation.provide ~inspect:sexp_of_value "const"
+
+let ite, on_ite =
+  Observation.provide ~inspect:sexp_of_ite "ite"
 
 let sexp_of_name = function
   | `symbol name -> Sexp.Atom name
@@ -174,8 +195,9 @@ let state = Bap_primus_machine.State.declare
          curr = Top {me=prog; up=Nil};
        })
 
-
 type exn += Halt
+type exn += Division_by_zero
+type exn += Segmentation_fault of addr
 type exn += Runtime_error of string
 
 let () =
@@ -183,7 +205,14 @@ let () =
       | Runtime_error msg ->
         Some (sprintf "Bap_primus runtime error: %s" msg)
       | Halt -> Some "Halt"
+      | Segmentation_fault x ->
+        Some (asprintf "Segmentation fault at %a" Addr.pp_hex x)
+      | Division_by_zero -> Some "Division by zero"
       | _ -> None)
+
+
+let division_by_zero_handler = "__primus_division_by_zero_handler"
+let pagefault_handler =  "__primus_pagefault_handler"
 
 
 module Make (Machine : Machine) = struct
@@ -223,12 +252,24 @@ module Make (Machine : Machine) = struct
     Env.get v >>= fun r ->
     !!on_read (v,r) >>| fun () -> r
 
-  let binop op x y =
-    try
+
+  let call_when_provided name =
+    Code.is_linked (`symbol name) >>= fun provided ->
+    if provided then Code.exec (`symbol name) >>| fun () -> true
+    else Machine.return false
+
+  let binop op x y = match op with
+    | Bil.DIVIDE | Bil.SDIVIDE
+    | Bil.MOD | Bil.SMOD
+      when Word.is_zero y.value ->
+      !!will_divide_by_zero () >>= fun () ->
+      call_when_provided division_by_zero_handler >>= fun called ->
+      if called
+      then undefined (Type.Imm (Word.bitwidth x.value))
+      else Machine.raise Division_by_zero
+    | _ ->
       value (Bil.Apply.binop op x.value y.value) >>= fun r ->
       !!on_binop ((op,x,y),r) >>| fun () -> r
-    with Division_by_zero -> failf "Division by zero" ()
-
 
   let unop op x =
     value (Bil.Apply.unop op x.value) >>= fun r ->
@@ -250,15 +291,30 @@ module Make (Machine : Machine) = struct
     value c >>= fun r ->
     !!on_const r >>| fun () -> r
 
+  let trapped_memory_access access =
+    Machine.catch access (function
+        | Bap_primus_memory.Pagefault a ->
+          !!page_fail a >>= fun () ->
+          call_when_provided pagefault_handler >>= fun trapped ->
+          if trapped then access
+          else
+            !!will_segfault a >>= fun () ->
+            Machine.raise (Segmentation_fault a)
+        | exn -> Machine.raise exn)
+
   let load_byte a =
     !!on_loading a >>= fun () ->
-    Memory.get a.value >>= fun r ->
+    trapped_memory_access (Memory.get a.value) >>= fun r ->
     !!on_loaded (a,r) >>| fun () -> r
 
   let store_byte a x =
     !!on_storing a >>= fun () ->
-    Memory.set a.value x >>= fun () ->
+    trapped_memory_access (Memory.set a.value x) >>= fun () ->
     !!on_stored (a,x)
+
+  let ite cond yes no =
+    value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
+    !!on_ite ((cond, yes, no), r) >>| fun () -> r
 
   let rec eval_exp x =
     let eval = function
@@ -272,6 +328,7 @@ module Make (Machine : Machine) = struct
       | Bil.Unknown (x,typ) -> eval_unknown x typ
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
+      | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
       | exp ->
         invalid_argf "precondition failed: denormalized exp: %s"
           (Exp.to_string exp) () in
@@ -279,8 +336,13 @@ module Make (Machine : Machine) = struct
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
   and eval_load a = eval_exp a >>= load_byte
+  and eval_ite cond yes no =
+    eval_exp yes >>= fun yes ->
+    eval_exp no >>= fun no ->
+    eval_exp cond >>= fun cond ->
+    ite cond yes no
   and eval_store m a x =
-    eval_exp m >>= fun _ ->
+    eval_storage m >>= fun () ->
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
     store_byte a x >>| fun () -> a
@@ -304,6 +366,9 @@ module Make (Machine : Machine) = struct
     eval_exp x >>= fun x ->
     eval_exp y >>= fun y ->
     concat x y
+  and eval_storage = function
+    | Var _ -> Machine.return ()
+    | mem -> Machine.void (eval_exp mem)
 
   let eval_exp x = eval_exp (Exp.simpl (Exp.normalize x))
 
@@ -337,13 +402,11 @@ module Make (Machine : Machine) = struct
       do_store a x (s - 8) hd tl
 
   let store a x e s =
-    if s = `r8 then store_byte a x
-    else
-      let open Bil.Types in
-      let s = Size.in_bits s in
-      match e with
-      | LittleEndian -> do_store a x s LOW HIGH
-      | BigEndian    -> do_store a x s HIGH LOW
+    let open Bil.Types in
+    let s = Size.in_bits s in
+    match e with
+    | LittleEndian -> do_store a x s LOW HIGH
+    | BigEndian    -> do_store a x s HIGH LOW
 
   let update_pc t =
     match Term.get_attr t address with
@@ -389,8 +452,10 @@ module Make (Machine : Machine) = struct
       Machine.Local.update state (fun s -> {s with curr}) >>= fun () ->
       enter cls curr t >>= fun () ->
       Machine.catch (f t)
-        (fun exn -> leave cls curr t >>= fun () -> Machine.raise exn)
-      >>= fun r ->
+        (fun exn ->
+           leave cls curr t >>= fun () ->
+           cleanup >>= fun () ->
+           Machine.raise exn) >>= fun r ->
       leave cls curr t >>= fun () ->
       cleanup >>= fun () ->
       return r
@@ -427,29 +492,30 @@ module Make (Machine : Machine) = struct
     | None -> failf "a non-return call returned" ()
 
   let goto cond c = label cond c
-  let ret cond l = label cond l
   let interrupt n  = !!will_interrupt n
 
   let jump cond t = match Jmp.kind t with
+    | Ret _ -> Machine.return () (* return from sub *)
     | Call c -> call cond c
     | Goto l -> goto cond l
-    | Ret l -> ret cond l
     | Int (n,r) ->
       interrupt n >>= fun () ->
       Code.exec (`tid r)
 
-  let jmp t = eval_exp (Jmp.cond t) >>| fun ({value} as cond) ->
+  let jmp t = eval_exp (Jmp.cond t) >>= fun ({value} as cond) ->
+    !!on_cond cond >>| fun () ->
     Option.some_if (Word.is_one value) (cond,t)
   let jmp = term normal jmp_t jmp
 
   let blk t =
-    (* todo add the phi nodes, or think at least.. *)
     Machine.Seq.iter (Term.enum def_t t) ~f:def >>= fun () ->
     Machine.Seq.find_map (Term.enum jmp_t t) ~f:jmp
 
   let finish = function
-    | None -> Machine.return ()
+    | None -> Machine.return ()  (* return from sub *)
     | Some (cond,code) -> jump cond code
+
+  let blk = term finish blk_t blk
 
   let arg_def t = match Arg.intent t with
     | None | Some (In|Both) -> Arg.lhs t := Arg.rhs t
@@ -463,11 +529,6 @@ module Make (Machine : Machine) = struct
 
   let arg_use = term normal arg_t arg_use
 
-  let eval_entry cleanup = function
-    | None -> Machine.return ()
-    | Some t ->  term finish blk_t blk ~cleanup t
-
-
   let get_arg t = Env.get (Arg.lhs t)
   let get_args ~input sub =
     Term.enum arg_t sub |>
@@ -476,26 +537,21 @@ module Make (Machine : Machine) = struct
 
   let iter_args t f = Machine.Seq.iter (Term.enum arg_t t) ~f
 
-  let sub t =
-    let name = Sub.name t in
-    iter_args t arg_def >>= fun () ->
-    get_args ~input:true t >>| Seq.to_list >>= fun args ->
-    Machine.Observation.make Linker.Trace.call_entered
-      (name,args) >>= fun () ->
-    let cleanup =
+  let sub t = match Term.first blk_t t with
+    | None -> Machine.return ()
+    | Some entry ->
+      let name = Sub.name t in
+      iter_args t arg_def >>= fun () ->
+      get_args ~input:true t >>| Seq.to_list >>= fun args ->
+      !!Linker.Trace.call_entered (name,args) >>= fun () ->
+      blk entry >>= fun () ->
       iter_args t arg_use >>= fun () ->
       get_args ~input:false t >>| Seq.to_list >>= fun args ->
-      Machine.Observation.make Linker.Trace.call_returned
-        (name,args) in
-    eval_entry cleanup (Term.first blk_t t)
+      !!Linker.Trace.call_returned (name,args)
 
-
-  let blk = term finish blk_t blk
 
   let sub = term normal sub_t sub
-
   let pos = Machine.Local.get state >>| fun {curr} -> curr
-
   let pc = Machine.Local.get state >>| fun {addr} -> addr
 end
 

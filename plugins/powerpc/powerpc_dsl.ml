@@ -68,6 +68,7 @@ let of_string signed s =
 
 let zero = Exp.of_word Word.b0
 let one  = Exp.of_word Word.b1
+let ones w = Exp.of_word (Word.ones w)
 
 let first e bits =
   let w = Exp.width e in

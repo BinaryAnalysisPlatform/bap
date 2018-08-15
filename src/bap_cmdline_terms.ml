@@ -200,8 +200,113 @@ let no_auto_load, no_auto_load_doc =
   Arg.(value & flag & info ["disable-autoload"] ~doc), doc
 
 
+let recipe_doc = [
+  `S "RECIPE DESCRIPTION";
+  `P "A recipe is either a single file or a directory (optionally
+    zipped) that contains a parametrized specification of command
+    line parameters and support files if necessary.";
+
+  `P
+    "The purpose of the recipe is to make bap runs reproducible, so
+    that you can share one simple file - the recipe, instead of a
+    bunch of scripts together with some verbal instructions. Since
+    recipes introduce an extra layer of abstraction they actually
+    simplify interaction with bap by hiding unnecessary
+    details. Recipes also provide a mechanism for building ready
+    solutions and sharing them with users.";
+
+  `P
+    "To use a recipe, just specify its name using the $(b,--recipe)
+    command line parameter. If a recipe has parameters then they could
+    be specified as colon separated list of $(b,<key>=<value>)
+    pairs. See the $(b,--recipe) parameter for more information. To
+    read the recipe description, including the list of parameters and
+    resulting command line, use the $(b,--show-recipe) command line
+    option. To list all installed recipes use the $(b,--list-recipes)
+    option.";
+
+  `P
+    "The main (and the only necessary) part of a recipe is the recipe
+    specification, that is a file that contains a list of recipe items
+    in an arbitrary order. Each item is either a command line
+    option, a parameter, or a reference to another recipe. All items
+    share the same syntax - they are flat s-expressions, i.e., a
+    whitespace separated list of strings enclosed in parentheses. The
+    first string in the lists denotes the type of the item. E.g.,
+    $(b,(option run-entry-points malloc calloc free)).";
+
+  `P
+    "The $(b,option) command requires one mandatory parameter, the
+    option name, and an arbitrary number of arguments that will be
+    passed to the corresponding command line option. If there are more
+    than one argument then they will be concatenated with the comman
+    symbol, e.g., $(b,(option opt a b c d)) will be translated to
+    $(b,--opt=a,b,c,d). Option arguments may contain substitution
+    symbols. A subsitution symbol starts with the dollar sign, that is
+    followed by a named (optionally delimited with curly braces, to
+    disambiguate it from the rest of the argument). There is one built
+    in parameter called $(b,prefix), that is substituted with the path
+    to the recipe top folder. See the $(b,parameter) command to learn
+    how to introduce parameters.";
+
+  `P
+    "The parameter command introduces a parameter to the recipe, i.e.,
+    a variable ingredient that could be changed when the recipe is
+    used. The parameter command has 3 arguments, all required. The
+    first argument is the parameter name, the second is the default
+    value, that is used if the a parameter wasn't set, and the last
+    argument is the parameter description.  The substitution symbol
+    will be replaced with the default value of a parameter, if a value
+    of the parameter wasn't passed through the command line. Example,";
+
+  `Pre {|
+    (parameter depth 128 "maximum depth of analysis")
+    (option analysis-depth $depth)
+   |};
+
+  `P "
+    If the parameter is not set through the command line, then it will
+    be substituted with $(b,128) otherwise it will receive whatever
+    value a user has passed.
+
+    Finally, the $(b,extend) command is like the include statement in
+    the C preprocessor as it includes all the ingredients from another
+    recipe. (Make sure that you're not introducing loops!). The
+    command has one mandatory argument, the name of the recipe to
+    include.";
+  `S "RECIPE GRAMMAR";
+  `Pre "
+    recipe ::= {<recipe-item>}
+    recipe-item ::= <option> | <parameter> | <extend>
+    option ::= (option <atom> {<atom>})
+    parameter ::= (parameter <atom> <atom> <atom>)
+    extend ::= (extend <atom>)
+"
+]
+
 let recipe =
-  let doc = "Load the specified recipe" in
+  let doc =
+    "Load the specified recipe. The $(docv) parameter specifies the
+  name of the recipe along with an optional colon separated list of
+  arguments. The $(docv) parameter has the following syntax:
+  $(b,<name> : <arg1>=<val1> : <arg2>=<val2> : ...).
+
+  The $(b,<name>) part could be either a path to a valid
+  recipe or the name of a recipe, that would be search in the recipe
+  search paths. A name may omit $(b,.recipe) or $(b,.scm) extensions
+  for brevity.
+
+  The valid representations of a recipe is either the recipe file
+  itself (i.e., a file consisting of a list of s-expressions), a
+  directory with a valid $(recipe.scm) file, or zip file, that
+  contains a valid recipe directory. See the $(b,RECIPES) section for
+  more information.
+
+  If a recipe is a zip file then it will be unpacked to a temporary
+  folder that will be removed after the program terminates. Otherwise,
+  all recipe resources will be used as is and won't be restored to
+  their previous state, e.g., if the input/output files were provided,
+  and they were modified, the modifications will persist." in
   Arg.(value & opt (some string) None & info ["recipe"] ~doc)
 
 let loader_options = [

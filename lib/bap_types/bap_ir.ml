@@ -133,7 +133,7 @@ type blk = {
 } [@@deriving bin_io, compare, fields, sexp]
 
 type arg = var * exp * intent option
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type sub = {
   name : string;
@@ -143,18 +143,69 @@ type sub = {
 
 
 type path = int array
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
+module Program : sig
+  type t = private {
+    subs  : sub term array;
+    paths : path Tid.Table.t;
+  } [@@deriving bin_io, compare, fields, sexp]
 
-type program = {
-  subs  : sub term array;
-  paths : path Tid.Table.t;
-} [@@deriving bin_io, fields, sexp]
+  val empty : unit -> t
 
-let compare_program x y =
-  let compare x y = [%compare:sub term array] x y in
-  compare x.subs y.subs
+  val update : t -> sub term array -> t
 
+end = struct
+  type t = {
+    subs  : sub term array;
+    paths : path Tid.Table.t;
+  } [@@deriving bin_io, fields, sexp]
+
+  let mangle_name addr tid name =
+    match addr with
+    | Some a ->
+      sprintf "%s@%s" name @@
+      Bap_bitvector.string_of_value ~hex:true a
+    | None -> sprintf "%s%%%s" name (Tid.to_string tid)
+
+  let mangle_sub s =
+    let addr = Dict.find s.dict Bap_attributes.address in
+    let name = mangle_name addr s.tid s.self.name in
+    Tid.set_name s.tid name;
+    let self = {s.self with name} in
+    {s with self}
+
+  let fix_names olds news =
+    let is_new tid name =
+      match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
+      | Some s -> String.(name <> s.self.name)
+      | None -> true in
+    let keep_name tids name tid = Map.add tids ~key:name ~data:tid in
+    let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
+        match Map.find tids sub.self.name with
+        | None -> keep_name tids sub.self.name sub.tid
+        | Some _ ->
+          if is_new sub.tid sub.self.name then
+            keep_name tids sub.self.name sub.tid
+          else tids) in
+    if Array.length news = Map.length tids then news
+    else
+      Array.map news ~f:(fun sub ->
+          let tid' = Map.find_exn tids sub.self.name in
+          if Tid.equal tid' sub.tid then sub
+          else mangle_sub sub)
+
+  let empty () = {subs = [| |] ;  paths = Tid.Table.create () }
+
+  let update p subs = { p with subs = fix_names p.subs subs }
+
+  let compare x y =
+    let compare x y = [%compare:sub term array] x y in
+    compare x.subs y.subs
+end
+
+type program = Program.t [@@deriving bin_io,compare,sexp]
+open Program
 
 module Array = struct
   include Array
@@ -262,9 +313,7 @@ let cls typ par nil field = {
 let hash_of_term t = Tid.hash (tid t)
 let make_term tid self : 'a term = {tid; self; dict = Dict.empty}
 
-let nil_top = make_term Tid.nil {
-    subs = [| |] ; paths = Tid.Table.create ();
-  }
+let nil_top = make_term Tid.nil (Program.empty ())
 
 let program_t = {
   par = Nil;
@@ -289,16 +338,22 @@ let nil_blk : blk term =
 let nil_arg : arg term =
   make_term Tid.nil (undefined_var,undefined_exp,None)
 
-let nil_sub : sub term = make_term Tid.nil {
-    name = "undefined"; blks = [| |] ; args = [| |]}
+let nil_sub : sub term =
+  make_term Tid.nil { name = "undefined"; blks = [| |] ; args = [| |]}
 
 let def_t : (blk,def) cls = cls Def Blk nil_def Fields_of_blk.defs
 let phi_t : (blk,phi) cls = cls Phi Blk nil_phi Fields_of_blk.phis
 let jmp_t : (blk,jmp) cls = cls Jmp Blk nil_jmp Fields_of_blk.jmps
 let blk_t : (sub,blk) cls = cls Blk Sub nil_blk Fields_of_sub.blks
 let arg_t : (sub,arg) cls = cls Arg Sub nil_arg Fields_of_sub.args
-let sub_t : (program, sub) cls =
-  cls Sub Top nil_sub Fields_of_program.subs
+
+let sub_t : (program, sub) cls = {
+  par = Top;
+  typ = Sub;
+  nil = nil_sub;
+  set = Program.update;
+  get = Program.subs;
+}
 
 let term_pp pp_self ppf t =
   let open Format in
@@ -458,7 +513,7 @@ module Ir_phi = struct
   let of_list ?tid var bs : phi term =
     create ?tid var (Tid.Map.of_alist_reduce bs ~f:(fun _ x -> x))
 
-  let create ?tid var src exp : phi term = of_list var [src,exp]
+  let create ?tid:_ var src exp : phi term = of_list var [src,exp]
 
   let values (phi : phi term) : (tid * exp) Seq.t =
     Map.to_sequence (rhs phi)
@@ -660,7 +715,7 @@ module Term = struct
 
   let filter t p ~f = apply (Array.filter ~f) t p
   let findi t p tid =
-    Array.findi (t.get p.self) ~f:(fun i x -> x.tid = tid)
+    Array.findi (t.get p.self) ~f:(fun _i x -> x.tid = tid)
 
   let next t p tid =
     let open Option.Monad_infix in
@@ -767,7 +822,7 @@ module Term = struct
 
   type ('a,'b) cata = 'a term -> 'b
 
-  let this x t = x
+  let this x _t = x
 
   let cata (type t) (cls : (_,t) cls)
       ~init:default
@@ -883,13 +938,13 @@ module Term = struct
   let visit cls ~f term init =
     enum cls term |> Seq.fold ~init ~f:(fun x t -> f t x)
 
-  let fident t x = x
+  let fident _t x = x
 
   class ['a] visitor = object(self)
     inherit ['a] Bil.exp_visitor
 
-    method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
-    method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun cls t x -> x
+    method enter_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun _cls _t x -> x
+    method leave_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a = fun _cls _t x -> x
     method visit_term : 't 'p. ('p,'t) cls -> 't term -> 'a -> 'a =
       fun cls t x ->
         let x = self#enter_term cls t x in
@@ -903,14 +958,14 @@ module Term = struct
           ~jmp:(fun t -> self#visit_jmp t x) |>
         self#leave_term cls t
 
-    method enter_program p x = x
-    method leave_program p x = x
+    method enter_program _p x = x
+    method leave_program _p x = x
 
-    method enter_sub sub x = x
-    method leave_sub sub x = x
+    method enter_sub _sub x = x
+    method leave_sub _sub x = x
 
-    method enter_blk blk x = x
-    method leave_blk blk x = x
+    method enter_blk _blk x = x
+    method leave_blk _blk x = x
 
     method run p x =
       self#enter_program p x |>
@@ -950,7 +1005,7 @@ module Term = struct
     method visit_phi phi x =
       self#enter_phi phi x |>
       self#visit_var (fst phi.self) |> fun x ->
-      Map.fold (snd phi.self) ~init:x ~f:(fun ~key ~data x ->
+      Map.fold (snd phi.self) ~init:x ~f:(fun ~key:_ ~data x ->
           self#visit_exp data x) |>
       self#leave_phi phi
 
@@ -1188,8 +1243,11 @@ module Ir_sub = struct
       blks = [| |] ;
     }
 
+
   let name sub = sub.self.name
-  let with_name sub name = {sub with self = {sub.self with name}}
+  let with_name sub name =
+    Tid.set_name (Term.tid sub) name;
+    {sub with self = {sub.self with name}}
 
   module Enum(T : Bap_value.S) = struct
     type t = T.t list [@@deriving bin_io, compare,sexp]
@@ -1301,10 +1359,8 @@ end
 module Ir_program = struct
   type t = program term
 
-  let create ?(tid=Tid.create ()) () : t = make_term tid {
-      subs = [| |] ;
-      paths = Tid.Table.create ();
-    }
+  let create ?(tid=Tid.create ()) () : t =
+    make_term tid (Program.empty ())
 
   let proj1 t cs = t.self.subs.(cs.(0))
   let proj2 f t cs = (f (proj1 t cs).self).(cs.(1))
@@ -1395,16 +1451,16 @@ module Ir_program = struct
     let create ?tid ?(subs=16) () : t =
       tid, Vec.create ~capacity:subs nil_sub
 
-    let add_sub (_,subs) = Vec.append subs
+    let add_sub (_,subs) =
+      Vec.append subs
 
     let result (tid,subs) : program term =
       let tid = match tid with
         | Some tid -> tid
         | None -> Tid.create () in
-      make_term tid {
-        subs = Vec.to_array subs;
-        paths = Tid.Table.create ();
-      }
+      let p = Program.empty () in
+      make_term tid @@ Program.update p (Vec.to_array subs)
+
   end
 
   include Regular.Make(struct

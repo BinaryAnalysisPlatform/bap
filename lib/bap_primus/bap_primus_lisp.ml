@@ -168,7 +168,6 @@ module Interpreter(Machine : Machine) = struct
   module Linker = Bap_primus_linker.Make(Machine)
   module Eval = Bap_primus_interpreter.Make(Machine)
   module Env = Bap_primus_env.Make(Machine)
-  module Mem = Bap_primus_memory.Make(Machine)
   module Value = Bap_primus_value.Make(Machine)
   module Vars = Locals(Machine)
 
@@ -386,7 +385,7 @@ module Interpreter(Machine : Machine) = struct
           | None -> Eval.get v
           | Some p ->
             eval (Lisp.Def.Para.default p) >>= fun x ->
-            Env.set v x >>| fun () -> x
+            Eval.set v x >>| fun () -> x
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false
@@ -517,7 +516,7 @@ module Make(Machine : Machine) = struct
 
         let exec =
           eval_args >>= fun bs ->
-          let args = List.map ~f:snd bs in
+          let args = List.rev_map ~f:snd bs in
           Eval.const Word.b0 >>= fun init ->
           Interp.eval_advices Advice.Before init name args >>= fun _ ->
           Machine.Local.update state ~f:(Vars.push_frame bs) >>= fun () ->

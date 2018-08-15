@@ -46,7 +46,10 @@
     x))
 
 (defmacro write-word (t a x)
-  "(write-word T A X) writes the word X of type T to address A"
+  "(write-word T A X) writes the word X of type T to address A
+  returns an address that points to the first byte that follows
+  the just written word.
+  "
   (let ((p a)
         (n (sizeof t))
         (i 0))
@@ -67,5 +70,6 @@
 
 (defmacro array-set (t p n w)
   "(array-set T P N W) sets to W the N-th element of the array of
-   elements of type T, pointed by P"
+   elements of type T, pointed by P. Returns a pointer to the next
+   element"
   (write-word t (ptr+ p n) w))
