@@ -259,7 +259,6 @@ let create_exn
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let spec = MVar.from_source (Stream.map ~f:(fun s -> Ok s) Info.spec) in
   let task = "loading" in
   report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
   let {Input.arch; data; code; file; finish} = read () in

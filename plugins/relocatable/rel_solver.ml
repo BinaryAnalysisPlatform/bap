@@ -1,6 +1,5 @@
 open Core_kernel
 open Bap.Std
-open Bap_future.Std
 open Monads.Std
 module Fact = Ogre.Make(Monad.Ident)
 
@@ -67,25 +66,18 @@ let solve insns rels exts prg =
   List.fold (Hashtbl.data synthetic) ~init:program
     ~f:(Term.append sub_t)
 
-let notify_errors ers =
-  List.iter ers ~f:(fun er -> error "%a" Error.pp er)
-
-let main spec proj =
-  let rels = Rel_data.relocations spec in
-  let exts = Rel_data.external_symbols spec in
-  match rels, exts with
-  | Ok rels, Ok exts ->
-    let insns = Disasm.insns (Project.disasm proj) in
-    let prog = solve insns rels exts (Project.program proj) in
-    Project.with_program proj prog
-  | Error er, Error er' ->
-    notify_errors [er; er'];
-    proj
-  | Error er, _ | _, Error er ->
-    notify_errors [er];
-    proj
+let run proj =
+  match Project.get proj Image.specification with
+  | None -> proj
+  | Some spec ->
+    match Rel_data.all spec with
+    | Ok (rels, exts) ->
+      let insns = Disasm.insns (Project.disasm proj) in
+      let prog = solve insns rels exts (Project.program proj) in
+      Project.with_program proj prog
+    | Error er ->
+      error "%a" Error.pp er;
+      proj
 
 let init () =
-  let open Project.Info in
-  Stream.observe Project.Info.spec (fun spec ->
-      Project.register_pass ~autorun:true ~name:"relocation_solver" (main spec))
+  Project.register_pass ~autorun:true ~name:"relocation_solver" run

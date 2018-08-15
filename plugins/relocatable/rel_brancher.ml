@@ -44,21 +44,13 @@ let resolve_dests b rels mem insn =
     else dests
   else dests
 
-let notify_errors ers =
-  List.iter ers ~f:(fun er -> error "%a" Error.pp er)
-
 let create arch spec =
   let b = Brancher.of_bil arch in
-  let rels = Rel_data.relocations spec in
-  let exts = Rel_data.external_symbols spec in
-  match rels, exts with
-  | Ok rels, Ok exts ->
+  match Rel_data.all spec with
+  | Ok (rels, exts) ->
     Ok (Brancher.create (resolve_dests b (rels,exts)))
-  | Error er, Error er' ->
-    notify_errors [er; er'];
-    Ok b
-  | Error er, _ | _, Error er ->
-    notify_errors [er];
+  | Error er ->
+    error "%a" Error.pp er;
     Ok b
 
 let init () =

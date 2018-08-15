@@ -45,3 +45,8 @@ let find min_addr max_addr data =
 
 let relocations spec = Fact.eval Rel.relocations spec
 let external_symbols spec = Fact.eval Rel.external_symbols spec
+
+let all spec =
+  match relocations spec, external_symbols spec with
+  | Ok r, Ok e -> Ok (r,e)
+  | Error er, _ | _, Error er -> Error er
