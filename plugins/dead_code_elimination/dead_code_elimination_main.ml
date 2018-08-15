@@ -5,7 +5,7 @@ open Format
 include Self()
 
 let union ~init ~f =
-  Seq.fold ~init ~f:(fun acc x ->
+  List.fold ~init ~f:(fun acc x ->
       Set.union acc (f x))
 
 let def_use_collector = object
@@ -25,7 +25,7 @@ let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
 let sub_args sub =
-  Term.enum arg_t sub |>
+  Term.enum arg_t sub |> Seq.to_list |>
   union ~init:Var.Set.empty ~f:(fun arg -> Exp.free_vars (Arg.rhs arg))
 
 let free_vars sub = Set.union (Sub.free_vars sub) (sub_args sub)
@@ -75,37 +75,45 @@ let propagate_consts sub =
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
           Exp.substitute Bil.(var pat) rep)))
 
-let free_vars (_,ssa) = free_vars ssa
-let compute_dead free (_,ssa) = compute_dead free ssa
 let is_alive dead t = not (Set.mem dead (Term.tid t))
 let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
 let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
 
-let clean dead (sub,ssa) =
-  Term.map blk_t sub ~f:(live_def dead),
+let clean dead ssa =
   Term.map blk_t ssa ~f:(fun b -> live_def dead b |> live_phi dead)
 
-let rec run subs =
-  report_progress ~note:"ssa" ();
-  let subs = Seq.memoize subs in
+let rec run dead subs =
   report_progress ~note:"free-vars" ();
   let free = union ~init:Var.Set.empty ~f:free_vars subs in
   report_progress ~note:"dead-vars" ();
-  let dead = union ~init:Tid.Set.empty ~f:(compute_dead free) subs in
+  let dead' = union ~init:dead ~f:(compute_dead free) subs in
   report_progress ~note:"clean" ();
-  if Set.is_empty dead then subs
-  else run (Seq.map subs ~f:(clean dead))
+  if Set.length dead' > Set.length dead then
+    run dead' (List.rev_map subs ~f:(clean dead'))
+  else dead
+
+let apply prog deads =
+  Term.map sub_t prog ~f:(fun s ->
+      Term.map blk_t s ~f:(fun b ->
+          Term.filter def_t b ~f:(is_alive deads)))
 
 let process prog =
-  let ptid = Term.tid prog in
-  let subs = Term.enum sub_t prog |> Seq.map ~f:(fun s ->
-      let s = propagate_consts s in
-      s, Sub.ssa s) in
-  let subs = run subs in
-  let len = Seq.length subs in
-  let bld = Program.Builder.create ~tid:ptid ~subs:len () in
-  Seq.iter ~f:(fun (s,_) -> Program.Builder.add_sub bld s) subs;
-  Program.Builder.result bld
+  let prog = Term.map sub_t prog ~f:propagate_consts in
+  let subs = Term.enum sub_t prog |>
+             Seq.map ~f:Sub.ssa |>
+             Seq.to_list in
+  let deads = run Tid.Set.empty subs in
+  deads, apply prog deads
+
+module Deads = struct
+  include Regular.Make(struct
+      type nonrec t = Tid.Set.t [@@deriving bin_io, sexp, compare]
+      let version = version
+      let module_name = None
+      let hash = Hashtbl.hash
+      let pp fmt t = Set.iter t ~f:(Format.fprintf fmt "%a" Tid.pp)
+    end)
+end
 
 let digest proj =
   let module Digest = Data.Cache.Digest in
@@ -118,17 +126,18 @@ let digest proj =
     (Project.program proj)
     (Digest.create ~namespace:"dead_code_elimination")
 
-
 let run proj =
   let digest = digest proj in
   let p =
-    match Program.Cache.load digest with
-    | Some p -> p
+    match Deads.Cache.load digest with
+    | Some deads ->
+      apply (Project.program proj) deads
     | None ->
-      let p = process (Project.program proj) in
-      Program.Cache.save digest p;
+      let deads, p = process (Project.program proj) in
+      Deads.Cache.save digest deads;
       p in
   Project.with_program proj p
+
 
 let () = Config.when_ready (fun _ ->
     Project.register_pass ~deps:["api"] ~autorun:true run)
