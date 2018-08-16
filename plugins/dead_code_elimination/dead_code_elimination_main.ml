@@ -98,7 +98,6 @@ let apply prog deads =
           Term.filter def_t b ~f:(is_alive deads)))
 
 let process prog =
-  let prog = Term.map sub_t prog ~f:propagate_consts in
   let subs = Term.enum sub_t prog |>
              Seq.map ~f:Sub.ssa |>
              Seq.to_list in
@@ -128,15 +127,16 @@ let digest proj =
 
 let run proj =
   let digest = digest proj in
-  let p =
+  let prog = Term.map sub_t (Project.program proj) ~f:propagate_consts in
+  let prog =
     match Deads.Cache.load digest with
     | Some deads ->
-      apply (Project.program proj) deads
+      apply prog deads
     | None ->
-      let deads, p = process (Project.program proj) in
+      let deads, prog = process prog in
       Deads.Cache.save digest deads;
-      p in
-  Project.with_program proj p
+      prog in
+  Project.with_program proj prog
 
 
 let () = Config.when_ready (fun _ ->
