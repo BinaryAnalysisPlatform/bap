@@ -4,9 +4,9 @@ open Regular.Std
 open Format
 include Self()
 
-let union ~init ~f =
-  List.fold ~init ~f:(fun acc x ->
-      Set.union acc (f x))
+let union ~init ~f xs =
+  init :: List.rev_map ~f xs |>
+  Set.union_list ~comparator:(Set.comparator init)
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -24,22 +24,21 @@ end
 let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
-let sub_args sub =
-  Term.enum arg_t sub |> Seq.to_list |>
-  union ~init:Var.Set.empty ~f:(fun arg -> Exp.free_vars (Arg.rhs arg))
-
-let free_vars sub = Set.union (Sub.free_vars sub) (sub_args sub)
+let free_vars sub =
+  Seq.fold ~init:(Sub.free_vars sub) (Term.enum arg_t sub)
+    ~f:(fun free arg ->
+        Set.union free (Exp.free_vars (Arg.rhs arg)))
 
 let compute_dead protected sub =
   let defs,uses = computed_def_use sub in
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
-      method! enter_def t dead =
-        let v = Def.lhs t in
-        if Set.mem protected (Var.base v) || live v
-        then dead
-        else (Set.add dead (Term.tid t))
+    method! enter_def t dead =
+      let v = Def.lhs t in
+      if Set.mem protected (Var.base v) || live v
+      then dead
+      else (Set.add dead (Term.tid t))
   end)#visit_sub sub Tid.Set.empty
 
 (* a simple constant propagation, that will propagate constant
@@ -57,30 +56,74 @@ let compute_dead protected sub =
       low hanging fruits.
 
    Note, the input is not required to be in SSA.
- *)
+*)
 let propagate_consts sub =
   let vars = (object inherit [exp Var.Map.t] Term.visitor
-      method! enter_def t vars =
-        let v = Def.lhs t in
-        if Var.is_virtual v
-        then if Map.mem vars v
-          then Map.remove vars v
-          else match Def.rhs t with
-            | Bil.Unknown _ | Bil.Int _ as exp ->
-              Map.add vars ~key:v ~data:exp
-            | _ -> vars
-        else vars
+    method! enter_def t vars =
+      let v = Def.lhs t in
+      if Var.is_virtual v
+      then if Map.mem vars v
+        then Map.remove vars v
+        else match Def.rhs t with
+          | Bil.Unknown _ | Bil.Int _ as exp ->
+            Map.add vars ~key:v ~data:exp
+          | _ -> vars
+      else vars
   end)#visit_sub sub Var.Map.empty in
   Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-          Exp.substitute Bil.(var pat) rep)))
+          Exp.substitute Bil.(var pat) rep))), vars
+
+module Consts = struct
+
+  type t = (exp Var.Map.t) Tid.Map.t
+
+  let empty = Tid.Map.empty
+
+  let update t tid vars =
+    Map.update t tid ~f:(function
+        | None -> vars
+        | Some vars' ->
+          Map.fold vars ~init:vars'
+            ~f:(fun ~key:v ~data:e vars' -> Map.add vars' v e))
+
+  let find t tid =
+    match Map.find t tid with
+    | None -> Var.Map.empty
+    | Some vars -> vars
+
+  let apply_sub sub vars =
+    Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
+        Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
+            Exp.substitute Bil.(var pat) rep)))
+
+  let apply t prog =
+    Term.map sub_t prog
+      ~f:(fun sub ->
+          match Map.find t (Term.tid sub) with
+          | None -> sub
+          | Some vars -> apply_sub sub vars)
+end
+
+let propagate_consts subs =
+  let rec run (subs, consts, ready) =
+    List.fold subs
+      ~init:([], consts, ready) ~f:(fun (subs, consts, ready) sub ->
+          let sub', vars = propagate_consts sub in
+          let consts = Consts.update consts (Term.tid sub) vars in
+          if Sub.equal sub sub' then
+            subs, consts, sub :: ready
+          else sub :: subs, consts, ready) |> function
+    | [], consts, ready -> consts, ready
+    | x -> run x in
+  run (subs, Consts.empty, [])
 
 let is_alive dead t = not (Set.mem dead (Term.tid t))
 let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
 let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
 
-let clean dead ssa =
-  Term.map blk_t ssa ~f:(fun b -> live_def dead b |> live_phi dead)
+let clean dead sub =
+  Term.map blk_t sub ~f:(fun b -> live_def dead b |> live_phi dead)
 
 let rec run dead subs =
   report_progress ~note:"free-vars" ();
@@ -92,25 +135,32 @@ let rec run dead subs =
     run dead' (List.rev_map subs ~f:(clean dead'))
   else dead
 
-let apply prog deads =
-  Term.map sub_t prog ~f:(fun s ->
-      Term.map blk_t s ~f:(fun b ->
-          Term.filter def_t b ~f:(is_alive deads)))
+let apply_deads deads prog =
+  Term.map sub_t prog
+    ~f:(Term.map blk_t
+          ~f:(Term.filter def_t ~f:(is_alive deads)))
+
+let apply prog (deads,consts) =
+  report_progress ~note:"apply changes" ();
+  Consts.apply consts prog |> apply_deads deads
 
 let process prog =
-  let subs = Term.enum sub_t prog |>
-             Seq.map ~f:Sub.ssa |>
-             Seq.to_list in
+  let subs = Term.enum sub_t prog |> Seq.to_list_rev in
+  report_progress ~note:"propagate consts" ();
+  let consts, subs = propagate_consts subs in
+  report_progress ~note:"ssa form" ();
+  let subs = List.rev_map ~f:Sub.ssa subs in
   let deads = run Tid.Set.empty subs in
-  deads, apply prog deads
+  let prog = apply prog (deads, consts) in
+  prog, (deads, consts)
 
-module Deads = struct
+module Dead_code_data = struct
   include Regular.Make(struct
-      type nonrec t = Tid.Set.t [@@deriving bin_io, sexp, compare]
+      type nonrec t = Tid.Set.t * (exp Var.Map.t) Tid.Map.t [@@deriving bin_io, sexp, compare]
       let version = version
       let module_name = None
       let hash = Hashtbl.hash
-      let pp fmt t = Set.iter t ~f:(Format.fprintf fmt "%a" Tid.pp)
+      let pp fmt (t,_) = Set.iter t ~f:(Format.fprintf fmt "%a" Tid.pp)
     end)
 end
 
@@ -127,14 +177,12 @@ let digest proj =
 
 let run proj =
   let digest = digest proj in
-  let prog = Term.map sub_t (Project.program proj) ~f:propagate_consts in
   let prog =
-    match Deads.Cache.load digest with
-    | Some deads ->
-      apply prog deads
+    match Dead_code_data.Cache.load digest with
+    | Some x -> apply (Project.program proj) x
     | None ->
-      let deads, prog = process prog in
-      Deads.Cache.save digest deads;
+      let prog, res = process (Project.program proj) in
+      Dead_code_data.Cache.save digest res;
       prog in
   Project.with_program proj prog
 
