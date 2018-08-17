@@ -40,8 +40,6 @@ let of_blocks seq =
       Hashtbl.set syms ~key:addr ~data:name);
   create (Hashtbl.find syms)
 
-let service = Bap_service.declare "symbolizer"
-    ~desc:"A symbolizer service"
 
 module Factory = Factory.Make(struct type nonrec t = t end)
 

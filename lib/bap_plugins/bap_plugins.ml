@@ -110,7 +110,7 @@ module Plugin = struct
 
   (** [load_entry plugin name] loads a compilation unit with the
       specified [name] required by [plugin]. The compilation unit
-      should not be alread linked to the main program. The unit is
+      should not be already linked to the main program. The unit is
       looked in the plugin bundle first and, if not found, looked in the
       system using the [Findlib] library. If the [findlib]
       infrastructure is not available (and a unit wasn't found in
@@ -186,31 +186,30 @@ module Plugin = struct
       let reqs = Manifest.requires m |>
                  List.filter ~f:(fun r -> not (Hashtbl.mem units r)) in
       let main = Manifest.main m in
-      let old_bundle = main_bundle () in
-      set_main_bundle (bundle plugin);
       load_entries plugin reqs >>= fun () ->
       load_entry ~don't_register:true plugin main >>| fun () ->
       Promise.fulfill plugin.finish ();
       notify (`Loaded plugin);
-      set_main_bundle old_bundle;
       let reason = `Provided_by plugin.name in
       List.iter mains ~f:(fun unit ->
           Hashtbl.set units ~key:unit ~data:reason)
 
 
-  let with_argv argv f = match argv with
-    | None -> f ()
-    | Some argv ->
-      let old = !args in
-      args := argv;
-      try
-        let r = f () in
-        args := old;
-        r
-      with
-      | exn ->
-        args := old;
-        raise exn
+  let with_context argv bundle f =
+    let old_args = !args in
+    let old_bundle = main_bundle () in
+    args := argv;
+    set_main_bundle bundle;
+    try
+      let r = f () in
+      args := old_args;
+      set_main_bundle old_bundle;
+      r
+    with
+    | exn ->
+      args := old_args;
+      set_main_bundle old_bundle;
+      raise exn
 
 
   let do_load plugin =
@@ -220,8 +219,9 @@ module Plugin = struct
       result
     | result -> result
 
-  let load ?argv plugin =
-    with_argv argv (fun () -> do_load plugin)
+  let load ?(argv=Sys.argv) plugin =
+    with_context argv (bundle plugin) (fun () ->
+        do_load plugin)
 
 end
 

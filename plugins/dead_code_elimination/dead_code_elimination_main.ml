@@ -33,11 +33,11 @@ let compute_dead protected sub =
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
-      method! enter_def t dead =
-        let v = Def.lhs t in
-        if Set.mem protected (Var.base v) || live v
-        then dead
-        else (Set.add dead (Term.tid t))
+    method! enter_def t dead =
+      let v = Def.lhs t in
+      if Set.mem protected (Var.base v) || live v
+      then dead
+      else (Set.add dead (Term.tid t))
   end)#visit_sub sub Tid.Set.empty
 
 (* a simple constant propagation, that will propagate constant
@@ -55,19 +55,19 @@ let compute_dead protected sub =
       low hanging fruits.
 
    Note, the input is not required to be in SSA.
- *)
+*)
 let propagate_consts sub =
   let vars = (object inherit [exp Var.Map.t] Term.visitor
-      method! enter_def t vars =
-        let v = Def.lhs t in
-        if Var.is_virtual v
-        then if Map.mem vars v
-          then Map.remove vars v
-          else match Def.rhs t with
-            | Bil.Unknown _ | Bil.Int _ as exp ->
-              Map.add vars ~key:v ~data:exp
-            | _ -> vars
-        else vars
+    method! enter_def t vars =
+      let v = Def.lhs t in
+      if Var.is_virtual v
+      then if Map.mem vars v
+        then Map.remove vars v
+        else match Def.rhs t with
+          | Bil.Unknown _ | Bil.Int _ as exp ->
+            Map.add vars ~key:v ~data:exp
+          | _ -> vars
+      else vars
   end)#visit_sub sub Var.Map.empty in
   Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
       Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->

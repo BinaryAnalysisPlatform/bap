@@ -13,4 +13,8 @@ module Std = struct
   type project = Project.t
   type event = Event.t = ..
   module Monad = Legacy.Monad
+  module Service = struct
+    include Bap_service
+    include Bap_services
+  end
 end

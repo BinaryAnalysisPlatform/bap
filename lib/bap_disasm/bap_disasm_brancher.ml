@@ -65,8 +65,4 @@ let dests_of_bil arch =
 let of_bil arch = create (dests_of_bil arch)
 let of_image img = Image.arch img |> of_bil
 
-let service = Bap_service.declare "brancher"
-    ~desc:"A brancher service"
-
-
 module Factory = Source.Factory.Make(struct type nonrec t = t end)

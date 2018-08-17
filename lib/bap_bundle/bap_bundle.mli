@@ -55,7 +55,8 @@ module Std : sig
       ?license:string ->
       ?copyrights:string ->
       ?tags:string list ->
-      ?cons:string list -> string -> t
+      ?cons:string list ->
+      string -> t
 
     include Stringable with type t := t
   end
@@ -82,9 +83,17 @@ module Std : sig
     val of_uri : Uri.t -> t
 
 
-    (** [manifest bundle] extracts program manifest from the [bundle] *)
+    (** [manifest bundle] extracts program manifest from the [bundle].
+
+        Creates a fresh manifest, if no manifest was embedded.
+    *)
     val manifest : t -> manifest
 
+
+
+    (** [is_host bundle] is [true] if the bundle belongs to the
+        host program, otherwise, the bundle belongs to a plugin. *)
+    val is_host : t -> bool
 
     (** [get_file ?name bundle uri] extracts a file.
 
@@ -93,7 +102,6 @@ module Std : sig
         optional parameter [name] allows to specify the desired
         filename for the extraction.  *)
     val get_file : ?name:string -> t -> Uri.t -> Uri.t option
-
 
     (** [get_data bundle path] extracts data specified by a [path] as
         a string.  *)
@@ -162,6 +170,9 @@ module Std : sig
       ]) -> unit
 
 
+
+    (** [digest bundle] returns the digest of the bundle contents.*)
+    val digest : t -> Digest.t
 
     (** Incremental bundle builder.
 

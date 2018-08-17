@@ -2,7 +2,6 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_llvm.Std
 open Regular.Std
-open Bap_service
 
 include Self()
 
@@ -16,46 +15,56 @@ let print_version () =
   printf "%s\n" llvm_version ;
   exit 0
 
-let image_provider = Provider.declare "llvm-loader"
-    ~desc:"Provides disassembler and image loader base on llvm library"
-    Image.loader
+let provider_name = "edu.cmu.ece.bap/llvm"
 
-let product base syn =
-  let base = Option.value_map base ~default:"" ~f:Int64.to_string in
-  let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"llvm" "base:%s;syntax:%s" base syn in
-  Product.provide ~digest llvm_loader;
-  info "product issued"
 
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Uses LLVM library to provide disassembler and file loader" ;
+      `P "Uses LLVM library (statically linked in) to provide
+          disassembling and file loading (parsing) services" ;
       `S "SEE ALSO";
       `P "$(b,bap-plugin-elf-loader)(1), $(b,bap-plugin-relocatable)(1)";
     ] in
+
   let x86_syntax =
-    let names = ["att", "att"; "intel", "intel"] in
-    let doc = sprintf "Choose style of code for x86 syntax between %s"
-      @@ Config.doc_enum names in
-    Config.(param (enum names) ~default:"att" "x86-syntax" ~doc) in
+    let names = [
+      "att", `att;
+      "intel", `intel
+    ] in
+    let doc = sprintf "Choose the x86 assembly syntax between %s" @@
+      Config.doc_enum names in
+    Config.(param (enum names) ~default:`att "x86-syntax" ~doc) in
+
   let base_addr =
-    let doc ="\
-Replace image base address. If not set, a reasonable default corresponded
-to a file type will be used. For example, for any executable file a
-default image base is equal to lowest image virtual address.
-For relocatable files a default image base is equal to 0xC0000000." in
+    let doc =
+      "Override image base address. If not specified and no base \
+       address is provided by a binary itself, then defaults to  \
+       0xC0000000." in
+
     Config.(param (some int64) ~default:None "base" ~doc) in
   let version =
     let doc ="Prints LLVM version and exits" in
     Config.(flag "version" ~doc) in
+
+  let _disassembler = Service.(begin
+      provide disassembler provider_name
+        ~require:[
+          cmdline x86_syntax;
+        ]
+        ~desc:"an LLVM based disassembler"
+    end) in
+
+  let _loader = Service.(begin
+      provide loader provider_name
+        ~require:[
+          cmdline base_addr;
+        ]
+        ~desc:"an LLVM based program parser"
+    end) in
+
   Config.when_ready (fun {Config.get=(!)} ->
       if !version then
         print_version();
       init_loader ?base:!base_addr ();
-      product !base_addr !x86_syntax;
-      match !x86_syntax with
-      | "att" | "intel" as s ->
-        let syn = x86_syntax_of_sexp (Sexp.of_string s) in
-        disasm_init syn
-      | s -> eprintf "unknown x86-asm-syntax: %s" s)
+      disasm_init !x86_syntax)

@@ -18,42 +18,53 @@ let extract name arch =
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  val service : service
   module Factory : Source.Factory.S with type t = t
 end
 
-let provider service =
-  Provider.declare "file"
-    ~desc:"Read symbols from a file" service
 
-let register syms =
-  let register name (module T : Target) =
-    let source = Stream.map Project.Info.arch (fun arch ->
+let input_filename = Config.(begin
+    param (some non_dir_file) "from" ~docv:"FILE"
+      ~doc:"Use this file as symbols source"
+  end)
+
+let provide service = Service.(begin
+    provide service "edu.cmu.ece.bap/file"
+      ~require:[
+        cmdline input_filename;
+      ]
+      ~desc:"reads information from an external file"
+  end)
+
+let rooter = provide Service.rooter
+let symbolizer = provide Service.symbolizer
+let reconstructor = provide Service.reconstructor
+
+
+let register_sources filename =
+  let register_source provider (module T : Target) =
+    Stream.observe (Service.inputs provider) @@ fun _have_inputs ->
+    T.Factory.register name @@
+    Stream.map Project.Info.arch (fun arch ->
         Or_error.try_with (fun () ->
-            extract syms arch |>
-            Seq.of_list |> T.of_blocks)) in
-    let provider = provider T.service in
-    T.Factory.provide provider source;
-    Product.provide ~digest:(sprintf "file %s" syms) provider;
-    info "%s product issued" name in
-  register "rooter" (module Rooter);
-  register "symbolizer" (module Symbolizer);
-  register "reconstructor" (module Reconstructor)
+            extract filename arch |>
+            Seq.of_list |> T.of_blocks))  in
+  register_source rooter (module Rooter);
+  register_source symbolizer (module Symbolizer);
+  register_source reconstructor (module Reconstructor)
 
-let () =
-  let () = Config.manpage [
-      `S "DESCRIPTION";
-      `P "Read symbol information from a file and provide rooter,
-    symbolizer and a reconstructor, based on this information. Once
-  symbols are read, use $(b,--)$(i,SERVICE)=$(b,file) to use them.
-  where $(i,SERVICE) is one of $(b,rooter), $(b,symbolizer) or $(b,reconstructor).
-";
-      `S "SEE ALSO";
-      `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
-    ] in
-  let symsfile = Config.(param (some non_dir_file) "from" ~docv:"SYMS"
-                           ~doc:"Use this file as symbols source") in
-  Config.when_ready (fun {Config.get=(!)} ->
-      match !symsfile with
-      | Some file -> register file
-      | None -> () )
+
+let () = Config.when_ready (fun {Config.get=(!!)} ->
+    Option.iter !!input_filename ~f:register_sources)
+;;
+
+Config.manpage [
+  `S "DESCRIPTION";
+  `P "Read symbol information from an external file and provide \
+      rooter, symbolizer and a reconstructor, based on this \
+      information. See the $(b,FILE FORMAT) section for the
+          description of supported file formats.";
+  `S "FILE FORMATS";
+  `P "TBD";
+  `S "SEE ALSO";
+  `P "$(b,bap-plugin-objdump)(1), $(b,bap-plugin-byteweight)(1), $(b,bap-plugin-ida)(1)";
+]

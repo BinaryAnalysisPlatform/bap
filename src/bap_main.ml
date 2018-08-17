@@ -58,55 +58,15 @@ let print_formats_and_exit () =
   Bap_format_printer.run `writers (module Project);
   exit 0
 
-let args filename argv =
-  let passes = Project.passes () |>
-               List.map ~f:Project.Pass.name in
-  let transparent_args =
-    "-d" :: "--dump" ::
-    "-v" :: "--verbose" ::
-    filename ::
-    List.map passes ~f:(fun p -> "--"^p) in
-  let is_key = String.is_prefix ~prefix:"-" in
-  let is_transparent arg =
-    if is_key arg
-    then List.exists transparent_args
-        ~f:(fun prefix -> String.is_prefix ~prefix arg)
-    else List.mem ~equal:String.equal transparent_args arg in
-  let inputs = String.Hash_set.of_list @@ list_loaded_units () in
-  Array.iteri argv ~f:(fun i arg -> match i with
-      | 0 -> ()
-      | _ when is_transparent arg -> ()
-      | _ when is_key arg -> Hash_set.add inputs arg
-      | i ->
-        let pre = argv.(i-1) in
-        if not(is_key pre && is_transparent pre)
-        then Hash_set.add inputs arg);
-  String.Hash_set.sexp_of_t inputs |>
-  Sexp.to_string_mach
+let inputs = Service.(require [
+    product required symbolizer;
+    product required rooter;
+    product required reconstructor;
+    product required loader;
+    product required lifter;
+    binary;
+  ])
 
-let ready s =
-  let xs = ref [] in
-  Stream.observe (Service.request s) (fun x -> xs := x :: !xs);
-  fun () -> List.rev !xs
-
-let ready = [
-  ready Symbolizer.service;
-  ready Rooter.service;
-  ready Reconstructor.service;
-  ready Brancher.service;
-  ready Image.loader;
-  ready lifter; ]
-
-let digest o =
-  List.concat @@ List.map ready ~f:(fun x -> x ()) |>
-  List.fold ~init:String.Set.empty
-    ~f:(fun d p -> Set.add d (Product.digest p)) |>
-  Set.to_list |> function
-  | [] -> None
-  | digests ->
-    Option.some @@
-    Data.Cache.digest ~namespace:"project" "%s:%s"
-      (Digest.file o.filename) (String.concat digests)
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
     report_progress
@@ -142,42 +102,46 @@ let extract_format filename =
   | `Error _ -> None, None
   | `Ok (_,fmt,ver) -> Some fmt, ver
 
-let main o =
-  let proj_of_input input =
-    let rooter = rooter o
-    and brancher = brancher o
-    and reconstructor = reconstructor o
-    and symbolizer = symbolizer o in
-    Project.create input ~disassembler:o.disassembler
+
+let do_work cmdline inputs =
+  let project_of_input input =
+    let rooter = rooter cmdline
+    and brancher = brancher cmdline
+    and reconstructor = reconstructor cmdline
+    and symbolizer = symbolizer cmdline in
+    Project.create input ~disassembler:cmdline.disassembler
       ?brancher ?rooter ?symbolizer ?reconstructor  |> function
     | Error err -> raise (Failed_to_create_project err)
     | Ok project ->
-      Option.value_map ~default:() (digest o)
-        ~f:(fun d -> Project.Cache.save d project);
+      Project.Cache.save (Service.digest inputs) project;
       project in
   let proj_of_file ?ver ?fmt file =
     In_channel.with_file file
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
-  let project =
-    let proj =
-      match digest o with
-      | None -> None
-      | Some digest -> Project.Cache.load digest in
-    match proj with
+  let project = match Project.Cache.load (Service.digest inputs) with
     | Some proj ->
       Project.restore_state proj;
       proj
-    | None -> match o.source with
+    | None -> match cmdline.source with
       | `Project ->
-        let fmt,ver = extract_format o.filename in
-        proj_of_file ?fmt ?ver o.filename
+        let fmt,ver = extract_format cmdline.filename in
+        proj_of_file ?fmt ?ver cmdline.filename
       | `Memory arch ->
-        proj_of_input @@
-        Project.Input.binary arch ~filename:o.filename
+        project_of_input @@
+        Project.Input.binary arch ~filename:cmdline.filename
       | `Binary ->
-        proj_of_input @@
-        Project.Input.file ~loader:o.loader ~filename: o.filename in
-  process o project
+        project_of_input @@
+        Project.Input.file
+          ~loader:cmdline.loader
+          ~filename:cmdline.filename in
+  process cmdline project
+
+
+let main cmdline =
+  Future.upon (Stream.hd inputs) (do_work cmdline);
+  Service.die_on_failure @@
+  Service.run []
+
 
 let program_info =
   let doc = "Binary Analysis Platform" in

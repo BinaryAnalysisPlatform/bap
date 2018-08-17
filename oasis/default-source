@@ -2,7 +2,7 @@ Library default_source_plugin
   XMETADescription: provide default symbolizer,brancher,rooter
   Build$:           flag(everything)
   Path:             plugins/default_source
-  BuildDepends:     bap, bap-service
+  BuildDepends:     bap
   FindlibName:      bap-plugin-default_source
   InternalModules:  Default_source_main
   XMETAExtraLines:  tags="symbolizer,brancher,rooter"

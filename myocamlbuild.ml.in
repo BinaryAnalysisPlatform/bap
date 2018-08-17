@@ -72,6 +72,9 @@ let predicate_used_libs = function
   | _ -> ()
 
 
+let disable_crossmodule_optimization = function
+  | After_rules -> flag ["ocaml"; "compile"; "debug"] (A "-opaque")
+  | _ -> ()
 
 let () =
   mark_tags ();
@@ -82,4 +85,5 @@ let () =
       pass_pp_to_link stage;
       predicate_used_libs stage;
       predicate_used_packages stage;
+      disable_crossmodule_optimization stage;
       Ppx_driver_ocamlbuild.dispatch stage)

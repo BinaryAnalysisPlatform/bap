@@ -75,7 +75,6 @@ val register_loader : name:string -> (module Loader) -> unit
 
 val available_backends : unit -> string list
 
-val loader : Bap_service.service
 
 module Scheme : sig
   open Ogre.Type

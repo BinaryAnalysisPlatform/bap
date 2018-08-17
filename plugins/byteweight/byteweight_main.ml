@@ -34,9 +34,9 @@ let create_finder path length threshold arch  =
     Ok (BW.find bw ~length ~threshold)
 
 let byteweight =
-  Bap_service.(provide Rooter.service name
-                 ~desc:"finds roots using Byteweight"
-                 ~require:nothing)
+  Service.(provide rooter "byteweight"
+             ~desc:"finds roots using Byteweight"
+             ~require:nothing)
 
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in

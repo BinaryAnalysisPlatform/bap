@@ -1,6 +1,18 @@
 open Format
 open Core_kernel.Std
 open Bap_future.Std
+open Regular.Std
+
+
+type 'a param
+type error
+
+val run : string array -> (unit,error) result
+
+module Param : sig
+  val value : 'a param -> 'a future
+  val digest : 'a param -> digest future
+end
 
 module Create() : sig
   val name : string
@@ -29,8 +41,6 @@ module Create() : sig
     val datadir : string
     val libdir : string
     val confdir : string
-
-    type 'a param
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit

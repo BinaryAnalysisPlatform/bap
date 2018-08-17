@@ -17,7 +17,6 @@ module Symbols = Data.Make(struct
 module type Target = sig
   type t
   val of_blocks : (string * addr * addr) seq -> t
-  val service : Bap_service.service
   module Factory : Source.Factory.S with type t = t
 end
 
@@ -53,9 +52,12 @@ let extract path arch =
   List.map syms ~f:(fun (n,s,e) -> n, addr s, addr e) |>
   Seq.of_list
 
-let provider service =
-  Bap_service.(provide service "ida" ~require:nothing
-                 ~desc:"extracts data using IDA Pro" )
+let provider service = Bap.Std.Service.(begin
+    provide service "ida" ~desc:"extracts data using IDA Pro"
+      ~require:[
+        product required loader;
+      ]
+  end)
 
 let register_source name (module T : Target) =
   let source =

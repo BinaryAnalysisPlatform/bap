@@ -20,6 +20,4 @@ val resolve : t -> mem -> full_insn -> dests
 
 val empty : t
 
-val service : Bap_service.service
-
 module Factory : Factory with type t = t

@@ -27,13 +27,14 @@ module Std = struct
         ?(author=getenv "USER")
         ?(version="1.0.0")
         ?main
-        ?(date=Unix.time ())
+        ?(date=0.0)
         ?(desc = "description not provided")
         ?(requires=[])
         ?(provides=[])
         ?url ?license ?copyrights
         ?(tags=[])
-        ?(cons=[]) name = {
+        ?(cons=[])
+        name = {
       name; author; version; date; desc; requires; provides;
       copyrights; license; url; tags; cons;
       main = Option.value main ~default:name;
@@ -74,20 +75,27 @@ module Std = struct
     type bundle = {
       name : string;
       path : filename;
+      host : bool;
     }
     type t = bundle
 
-    let main =
-      let name = Filename.basename Sys.executable_name in
-      ref {
-        name;
-        path = name ^ ".bundle"
+    let progname =
+      let base = Filename.basename Sys.executable_name in
+      try Filename.chop_extension base with _ -> base
+
+
+    let main = ref {
+        name = progname;
+        path = Sys.executable_name;
+        host = true;
       }
+
+
+    let is_host b = b.host
 
     let open_in uri =
       try Zip.open_in uri with
       | Zip.Error _ -> raise Not_a_bundle
-
 
     module Builder = struct
       type t = {
@@ -135,17 +143,49 @@ module Std = struct
 
     let (>>>) = input
 
-    let manifest b =
+    let read_manifest b =
       b >>> fun zip ->
       let data = Zip.read_entry zip (Zip.find_entry zip Nameof.manifest) in
       Manifest.of_string data
+
+    let manifest b =
+      if b.host then Manifest.create b.name
+      else try read_manifest b
+        with Sys_error _ -> Manifest.create b.name
 
     let of_uri uri =
       let path = Uri.path uri in
       let base = Filename.basename path in
       let name = if String.mem base '.'
         then Filename.chop_extension base else base in
-      {name; path}
+      {name; path; host = false}
+
+
+    let digest_of_contents b : Digest.t =
+      b >>> fun zip ->
+      Zip.entries zip |>
+      List.fold ~init:(Digest.string "bundle") ~f:(fun digest entry ->
+          if entry.Zip.filename = Nameof.manifest then digest
+          else
+            let contents = Zip.read_entry zip entry in
+            Digest.string (digest ^ Digest.string contents)) |>
+      Digest.to_hex
+
+    (* If path exists and points to a bundle, then we are in the
+       context of a plugin with the specified path. Otherwise, we're
+       in the context of the host binary, so we look into the name,
+       which is set via `Sys.executable_name` which may be the real
+       executable or a path to OCaml if we're in the in the toplevel
+       mode. In the latter case, we generate a fresh new digest every
+       time the function is called, because we can't compute it
+       reliably.  *)
+    let digest {name; path} =
+      Digest.to_hex @@
+      if Sys.file_exists path
+      then Digest.file path
+      else if Sys.file_exists name && not Sys.interactive.contents
+      then Digest.file name
+      else Digest.string (string_of_float @@ Unix.gettimeofday ())
 
     let get_file ?name b uri =
       b >>> fun zip -> try

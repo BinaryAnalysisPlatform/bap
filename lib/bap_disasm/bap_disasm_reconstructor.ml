@@ -90,8 +90,4 @@ let of_blocks syms =
 
 let default name roots = create (reconstruct name roots)
 
-let service =
-  Bap_service.declare ~desc:"Provides CFG reconstructors"
-    "reconstructor"
-
 module Factory = Source.Factory.Make(struct type nonrec t = t end)

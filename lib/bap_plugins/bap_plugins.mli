@@ -48,7 +48,7 @@ module Std : sig
         other system error. *)
     val load : ?argv:string array -> t -> unit Or_error.t
 
-    (** loaded event happens when a pass is succesfully loaded  *)
+    (** loaded event happens after the plugin has been succesfully loaded  *)
     val loaded : t -> unit future
 
     val argv : unit -> string array

@@ -1,6 +1,6 @@
 open Core_kernel.Std
-open Bap_ida.Std
 open Bap.Std
+open Bap_ida.Std
 
 type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
 
@@ -158,7 +158,7 @@ let register ida_path ida_kind is_headless : unit =
   let curses = if Sys.os_type = "Unix" && is_headless
     then find_curses () else None in
   let debug =
-    try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with exn -> 0 in
+    try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _ -> 0 in
   let config = {
     Config.ida_path;
     ida_kind;

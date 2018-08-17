@@ -312,9 +312,6 @@ let segment_of_symbol {segment_of_symbol = lazy f} = f
 let register_loader ~name backend =
   Hashtbl.add_exn backends ~key:name ~data:backend
 
-let loader = Bap_service.declare
-    ~desc:"A service for loading images"
-    "image-loader"
 
 module Scheme = struct
   open Ogre.Type

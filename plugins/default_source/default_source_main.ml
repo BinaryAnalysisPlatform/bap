@@ -1,31 +1,47 @@
 open Core_kernel.Std
 open Bap.Std
 open Bap_future.Std
+open Regular.Std
 
 include Self ()
 
+let brancher = Service.(begin
+    provide brancher "edu.cmu.ece.bap/image/semantic-insn"
+      ~desc:"computes destinations based on BIL semantics of a single instruction"
+      ~require:[
+        product required loader;
+        product required lifter;
+      ]
+  end)
+
+let rooter = Service.(begin
+    provide rooter "edu.cmu.ece.bap/image/symtab"
+      ~desc:"extracts functions starts from the image symtab"
+      ~require:[
+        product required loader;
+      ]
+  end)
+
+let symbolizer = Service.(begin
+    provide symbolizer "edu.cmu.ece.bap/image/symtab"
+      ~desc:"extracts symbol names from the image symtab"
+      ~require:[
+        product required loader;
+      ]
+  end)
+
 module type S = sig
   type t
-  val empty : t
   val of_image : image -> t
-  val service : Bap_service.service
   module Factory : Bap_disasm_source.Factory with type t = t
 end
 
-let internal name service =
-  Bap_service.(provide service name ~require:nothing)
-
-let brancher = internal "brancher" Brancher.service
-let symbolizer = internal "symbolizer" Symbolizer.service
-let rooter = internal "rooter" Rooter.service
-
-let provide (service_name) x =
-  let module S = (val x : S) in
-  let source =
-    Stream.map Project.Info.img ~f:(fun img -> Ok (S.of_image img)) in
-  S.Factory.register name source
+let register_source (module S : S) =
+  let of_image img = Ok (S.of_image img) in
+  Stream.map Project.Info.img ~f:of_image |>
+  S.Factory.register name
 
 let () =
-  provide brancher (module Brancher);
-  provide rooter (module Rooter);
-  provide symbolizer (module Symbolizer)
+  register_source (module Brancher);
+  register_source (module Rooter);
+  register_source (module Symbolizer)

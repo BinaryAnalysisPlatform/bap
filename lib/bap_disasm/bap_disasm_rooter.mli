@@ -17,6 +17,4 @@ val roots : t -> addr seq
 
 val union : t -> t -> t
 
-val service : Bap_service.service
-
 module Factory : Factory with type t = t

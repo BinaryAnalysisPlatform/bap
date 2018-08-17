@@ -66,7 +66,7 @@ Library llvm_plugin
   Build$:          flag(everything) || flag(llvm)
   FindlibName:     bap-plugin-llvm
   InternalModules: Llvm_main
-  BuildDepends:    bap, bap-llvm, bap-service
+  BuildDepends:    bap, bap-llvm
   XMETAExtraLines: tags="disassembler, llvm, loader, elf, macho, coff"
 
 Library legacy_llvm_plugin

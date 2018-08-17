@@ -17,6 +17,4 @@ val resolve : t -> addr -> string
 
 val chain : t list -> t
 
-val service : Bap_service.service
-
 module Factory : Factory with type t = t

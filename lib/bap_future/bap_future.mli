@@ -369,6 +369,8 @@ module Std : sig
     type 'a t = 'a stream
     type id
 
+
+    (** Implements a variadic merging *)
     module Variadic : Variadic.S with type 'a arg = 'a t
 
 
@@ -460,7 +462,10 @@ module Std : sig
     val unsubscribe : 'a t -> id -> unit
 
     (** [wait xs] a polite way to notify a producer to slow down.
-        Note: producer is not required to obey.   *)
+        Note: producer is not required to obey.
+        Every time this function is called an upstream provider will
+        be notified with the [on_wait] callback.
+   *)
     val wait : 'a t -> unit
 
     (** {2 Publisher interface}  *)
@@ -518,7 +523,18 @@ module Std : sig
     val either : 'a t -> 'b t -> ('a,'b) Either.t t
 
     (** [merge xs ys f] merges streams [xs] and [ys] using function
-        [f]. *)
+        [f].
+
+        The result stream will have the form [{f x1 y1; f x2 y2; ...}],
+        and both streams will be processed synchronously, i.e., if one
+        of the streams produces items faster than another then the
+        output would be delayed until the second stream produces its
+        data. The pushback notification will be issued in case of a
+        significant disbalance in the rate of produce of two streams.
+
+        For a variadic [merge] function (i.e., that accepts an
+        arbitrary number of arguments) use the [Variadic] module.
+     *)
     val merge : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
 
     (** [apply fs xs] apply stream of functions [fs] to a stream of
@@ -537,6 +553,34 @@ module Std : sig
         mandate the ordering of elemenets in the output stream, and is
         undefined. See [concat] for more information.*)
     val concat_merge : 'a t list -> f:('a -> 'a -> 'a) -> 'a t
+
+
+    (** [all streams] multiplexes a list of streams into
+        a stream of lists.
+
+        The returned stream produces a new element every
+        time all input [streams] produce a value. The order
+        of the elements in the produced list is the same as the order
+        of the producers, i.e., the first element is produced by the
+        first stream in the input, the second by the second, etc.
+
+        If input streams produce values at different rates, then the
+        fast going streams would be kindly asked to reduce their rate
+        via the [wait] notification.
+     *)
+    val all : 'a t list -> 'a list t
+
+    (** [join streams] returns a stream that will produce values of its
+        consecutive substreams.
+        The returned list will produce elements from the first stream,
+        then, once, the second stream is produced, it will produce,
+        elements from it, and so on.
+
+        The [join] operation will _not_ produce all elements from the first
+        stream, then from the second, and so. Thus, it could join infinite
+        streams into one finite one.
+     *)
+    val join : 'a t t -> 'a t
 
     (** [split xs ~f] returns a pair of streams, where the first stream
         contains [fst (f x)] for each [x] in [xs] and the second stream

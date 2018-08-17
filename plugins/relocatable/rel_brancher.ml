@@ -99,17 +99,16 @@ let create arch spec =
     error "%a" Error.pp er;
     Ok b
 
-let rel_brancher = Provider.declare "relocatable"
-    ~desc:"Provides a brancher that supports relocations"
-    Brancher.service
-
-let () =
-  let digest = Data.Cache.Digest.to_string @@
-    Data.Cache.digest ~namespace:"brancher" "relocatable-brancher" in
-  Product.provide ~digest rel_brancher;
-  info "product issued"
-
 let init () =
   let open Project.Info in
   Stream.Variadic.(apply (args arch $ spec) ~f:create) |>
-  Brancher.Factory.provide rel_brancher
+  Brancher.Factory.register name
+
+
+let rel_brancher = Service.(begin
+    provide brancher "edu.cmu.ece.bap.brancher"
+      ~require:[
+        product required loader;
+      ]
+      ~desc:"extracts branch destinations from the relocation table"
+  end)

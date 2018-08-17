@@ -5,7 +5,6 @@ open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
-open Bap_service
 
 module Std : sig
   (** {2 Overview}
@@ -5292,8 +5291,6 @@ module Std : sig
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
     [@@deprecated "[since 2017-07] use register_loader instead"]
 
-    (** [loader] a service for delivering image loaders  *)
-    val loader : service
 
     (** {2 Internals}
 
@@ -6580,8 +6577,6 @@ module Std : sig
     val lift : lifter
   end
 
-  (** [lifter] a service for delivering lifters *)
-  val lifter : service
 
   (** [target_of_arch arch] returns a module packed into value, that
       abstracts target architecture. The returned module has type
@@ -7833,9 +7828,6 @@ module Std : sig
         information from the image to find symbol names. *)
     val of_image : image -> t
 
-    (** [service] a service for delivering symbolizers.  *)
-    val service : service
-
     (** A factory of symbolizers. Use it register and create
         symbolizers.  *)
     module Factory : Source.Factory.S with type t = t
@@ -7864,9 +7856,6 @@ module Std : sig
 
     (** [union r1 r2] joins roots from rooters [r1] and [r2]  *)
     val union : t -> t -> t
-
-    (** [service] a service for delivering rooters *)
-    val service : service
 
     (** [empty] is a rooter that knows nothing.  *)
     val empty : t
@@ -7901,9 +7890,6 @@ module Std : sig
 
     (** [of_image img] create a brancher from the image. *)
     val of_image : image -> t
-
-    (** [service] a service for delivering branchers *)
-    val service : service
 
     (** [empty] is a brancher that knows nothing.  *)
     val empty : t
@@ -7949,9 +7935,6 @@ module Std : sig
     (** [run reconstructor cfg] reconstructs a symbol table from a
         given cfg  *)
     val run : t -> cfg -> symtab
-
-    (** [service] a service for delivering reconstructors *)
-    val service : service
 
     (** a factory of reconstructors  *)
     module Factory : Source.Factory.S with type t = t
@@ -8458,6 +8441,258 @@ module Std : sig
     (**/**)
     val restore_state : t -> unit
     (**/**)
+  end
+
+  module Service : sig
+    type t
+    type service = t
+    type provider
+    type product
+
+    type inputs
+    type success
+    type failure
+
+    (** [declare ?desc name] declares a new service with the specified
+    name and description.
+
+    The service name should be globally unique and the program will
+    terminate if it is not the case. The service [name] should be a
+    valid identifier, which should be a non-empty sequence of
+    alphanumeric characters, '/', '_', '.', or '-'.
+
+    It is recommended to follow the Java package notation, e.g.,
+    <reversed-domain/<service-name>, with all lowercase symbols.
+
+    Example, [edu.cmu.ece.bap.std/rooter].
+
+    Note, the [edu.cmu.ece.bap.std] namespace contains BAP standard
+    services, with guaranteed availability. Additional namespaces are:
+
+    - [legacy] for deprecated services that might be discontinued in the
+    future releases;
+    - [experimental] for the newly introduced services that will
+    either mature to the standard services, changed or removed in the
+    future releases.
+
+    The rest of the BAP libraries follow the same scheme, e.g., the
+    Primus services will be [edu.cmu.ece.bap.primus.std] for Primus
+    standard services, e.g., [edu.cmu.ece.bap.primus.std/loader].
+
+    The main purpose of the service declaration is to declare the name
+    of the service and make it available to other possible providers
+    and consumers.
+     *)
+    val declare : ?desc:string -> string -> service
+
+
+    (** [provide ?desc service name dependencies] declares a provider
+        of the specified service along with its dependencies. The provider
+        name should be unique, and an optional description might be provided
+        to help the users make the right selection of a provider for the
+        given service.
+
+        The provider name shall be a valid identifier that follows the
+        same rules as the service name, see [declare] for more
+        information. The identifier should be unique in the namespace of
+        the service that it is providing. I.e., its fine to reuse the same
+        name of a provider for different services.
+
+        If the provided [service] has cyclic requirements (i.e., the
+        service requirements directly or indirectly requires the provided
+        service) then the product distribution cycle will terminate with
+        an error.
+     *)
+    val provide : ?desc:string -> service -> string -> product list -> provider
+
+
+    (** [require requirements] establishes [requirements] without
+        specifying a service or a provider.
+
+        It is common to write an analysis that although provides some
+        service (otherwise why to write it at all), this service is
+        intented to be used by only one person, namely the author of
+        analysis. However, the analysis might still require some other
+        services thus the Service facility woudld be necessary. Thus
+        In that case, instead of creating a dummy service along
+        with a dummy provider, a user can just specify the set of
+        requirements.
+
+        Note: this function will create a unique service and provider pair,
+        that might be observable in case if the service facility would
+        unable to satisfy the requirements and terminate the program with
+        an error. The function will do its best to provide a recognizable
+        an readable name (by leveraging the plugin subsystem), but may
+        fallback just to a random identifier.
+
+        Since an anonymous provider could not be selected or deselected
+        the [require] function returns directly the inputs future, that
+        will be determined to the inputs of the analysis while they are
+        ready.
+     *)
+    val require : product list -> inputs stream
+
+    (** [no_deps] an empty list that is provided here for
+        readability, e.g.,
+        [provide grooming "com.ivg.groomer" no_deps]
+     *)
+    val no_deps : product list
+
+
+    (** [required service] denotes a strict dependency on a product
+        from the specified [service].
+
+        If a product could not be obtained, then the provider that
+        has the required dependency on it will never receive its inputs,
+        and will not be activated. The product distribution cycle will
+        terminate with an error, if such provider was requested.
+     *)
+    val required : service -> product
+
+
+    (** [optional service] denotes an optional dependency on a product
+        from the specified [service].
+
+        If the [service] is provided, then its products will be obtained,
+        and reflected in the provider inputs. Otherwise, the dependency
+        is silently ignored.
+     *)
+    val optional : service -> product
+
+    (** [parameter p] denotes a dependency on a configuration parameter [p].
+
+        Every change in the input parameter value will be result in change
+        of the provider inputs.
+
+        Note, parameter values are compared wrt to their definition, e.g.,
+        a file parameter will monitor the change of file content, the
+        directory parameter will recursively look into its content, and so on.
+    *)
+    val parameter : 'a -> product
+
+    (** [binary] denotes, that a provider depends on the input binary.
+
+       Only the content of the binary is taken into account, the file
+       name is ignored.
+
+       However, if the binary is not a container and is interpreted as
+       a blob, then if its interpreation is changed (i.e., the
+       architecture) then the output product is also changed.
+
+     *)
+    val binary : product
+
+
+
+    (** [undefined] is a product that is never the same.
+
+    A provider that requires some [undefined] product will be always
+    provided with inputs that are different from any previous inputs.
+
+    The [undefined] product is used to over approximate an impure
+    behavior, when a provider uses some inputs that are not
+    representable with the service requirements specification. For
+    example, if a provider communicates with external programs that
+    are impure on themselves or if generates essentially true random
+    outputs.
+
+    The [undefined] product is always provided.
+     *)
+    val undefined : product
+
+
+    (** returns a list of providers for the given service *)
+    val providers : service -> provider list
+
+
+    (** [inputs provider] provides a future description of the [provider]
+    inputs.
+
+    A provider, is expected to generate the same output product for
+    the same inputs.
+
+    The product distribution system together with the caching system,
+    might consider not to invoke a provider if its output is already
+    provided for the given inputs.
+     *)
+    val inputs : provider -> inputs stream
+
+
+    (** [digest inputs] returns a digest of the inputs.
+
+    The digest is computed on all inputs, thus if any of the inputs
+    changes the digest will change.
+
+     *)
+    val digest : inputs -> digest
+
+
+    (** [success_or_die outcome] ensures that the outcome is success
+    otherwise terminates the program.
+     *)
+    val success_or_die : (success, failure) result -> success
+
+    (** [die_on_failure outcome] terminates the program if the outcome
+    is not successful otherwise ignores the result.
+
+    An error message is printed into the standard error channel if
+    before the program is terminated.
+     *)
+    val die_on_failure : (success, failure) result -> unit
+
+    (** Distribute products.
+
+    Example:
+    {[
+      die_on_failure @@ run ()
+    ]}
+
+     *)
+    val run : provider list -> (success, failure) result
+
+    (** The [edu.cmu.ece.bap.std/loader] service is used to parse binaries
+        an various formats and extract meta information that is necessary for
+        loading, disassembling, and relocating executable content.
+
+        Providers of this service are injected via the [register_loader]
+        interface.
+
+        This service can have multiple providers. Facts from all providers are
+        merged if they do not contradict. In case of a contradiction between
+        two loaders, the loader that provides more informational content is taken,
+        while the information from the other loader is rejected.
+     *)
+    val loader : service
+
+
+    (** The [edu.cmu.ece.bap.legacy/backend] service is used to parse binaries
+        and represent them using the [image] abstracton.
+
+        It is deprecated in favor of the [loader] service. However, for
+        compatibility any provider of this service will automatically be
+        translated into the provider of the [loader] service.
+
+     *)
+    val backend : service
+    [@@deprecated "[since 2018-09] use the [loader] service instead"]
+
+    (** [edu.cmu.ece.bap.std/lifter] provides instruction semantics.*)
+    val lifter : service
+
+    (** [edu.cmu.ece.bap.std/symbolizer] provides symbolic names to program locations.  *)
+    val symbolizer : service
+
+    (** [edu.cmu.ece.bap.std/rooter] searches for function starts in binary code. *)
+    val rooter : service
+
+    (** [edu.cmu.ece.bap.std/brancher] computes potential destination for branches. *)
+    val brancher : service
+
+    (** [edu.cmu.ece.bap.std/reconstructor] reconstructs function boundaries. *)
+    val reconstructor : service
+
+    (** [edu.cmu.ece.bap.std/disassembler] decodes bytes into assembly instructions.  *)
+    val disassembler : service
   end
 
   (** A self reflection.

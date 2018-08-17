@@ -346,6 +346,40 @@ module Std = struct
       link s2 s (step Either.second);
       s
 
+    let all inputs =
+      let capacity = 2
+      and push_back_threshold = 2 in
+      let inputs = Array.of_list_rev inputs in
+      let queues = Array.init (Array.length inputs) ~f:(fun _ ->
+          Queue.create ~capacity ()) in
+      let output,Signal publish = create () in
+      let push_back () =
+        Array.iteri queues ~f:(fun channel queue ->
+            if Queue.length queue > push_back_threshold
+            then wait inputs.(channel)) in
+      let rec flush () =
+        let not_ready = Array.exists queues ~f:Queue.is_empty in
+        if not_ready then push_back () else push_forward ()
+      and push_forward () =
+        publish @@
+        Array.fold queues ~init:[] ~f:(fun xs q ->
+            Queue.dequeue_exn q :: xs);
+        flush () in
+      Array.iteri inputs ~f:(fun chan input ->
+          link input output (fun value ->
+              Queue.enqueue queues.(chan) value;
+              flush ()));
+      output
+
+    let join streams =
+      let output, Signal push = create () in
+      let cancel_subscription = ref (fun () -> ()) in
+      link streams output (fun newstream ->
+          !cancel_subscription ();
+          let id = subscribe newstream push in
+          cancel_subscription := (fun () -> unsubscribe newstream id));
+      output
+
     let once s =
       let s',Signal publish = create () in
       let k = ref None in

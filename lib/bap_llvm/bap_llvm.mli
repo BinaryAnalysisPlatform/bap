@@ -10,7 +10,6 @@ open Core_kernel.Std
 module Std : sig
   type x86_syntax = [`att | `intel] [@@deriving sexp]
 
-
   (** [llvm_version] *)
   val llvm_version : string
 
