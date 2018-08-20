@@ -58,50 +58,54 @@ let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
       only once, then it is never redifined. Enough for reaping the
       low hanging fruits.
 
-   Note, the input is not required to be in SSA.
+   Note, the input is required to be in SSA.
 *)
-
-let defined_once sub =
-  fst @@
-  (object inherit [Var.Set.t * Var.Set.t] Term.visitor
-    method! enter_def t (once, many) =
-      let v = Def.lhs t in
-      if Var.is_virtual v then
-        if Set.mem many v then once, many
-        else
-        if Set.mem once v then Set.remove once v, Set.add many v
-        else Set.add once v, many
-      else once,many
-  end)#visit_sub sub (Var.Set.empty, Var.Set.empty)
 
 type sub_extended = {
   body : sub term;
-  defs : Var.Set.t;
   consts : exp Var.Map.t;
 }
 
-let of_sub s = { body = s; defs = defined_once s; consts = Var.Map.empty }
+type subst = exp Var.Map.t [@@deriving bin_io, sexp, compare]
+
+type data = {
+  deads : Tid.Set.t;
+  substs : subst Tid.Map.t
+} [@@deriving bin_io, sexp, compare]
+
+
+let of_sub s = { body = s; consts = Var.Map.empty }
 
 let update_consts consts vars =
   Map.fold vars ~init:consts
     ~f:(fun ~key:v ~data:e consts -> Map.add consts (Var.base v) e)
 
-let propagate_consts sub =
+let substitute sub vars =
+  let subst exp =
+    Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
+        Exp.substitute Bil.(var pat) rep) in
+  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
+      subst exp |> Exp.fold_consts))
+
+let propagate_consts use_real sub =
   let vars = (object inherit [exp Var.Map.t] Term.visitor
-      method! enter_def t vars =
-        let v = Def.lhs t in
-        if Set.mem sub.defs (Var.base v) then
-          match Def.rhs t with
-          | Bil.Unknown _ | Bil.Int _ as exp ->
-            Map.add vars ~key:v ~data:exp
-          | _ -> vars
-        else vars
-    end)#visit_sub sub.body Var.Map.empty in
-  { sub with
-    body =
-      Term.map blk_t sub.body ~f:(Blk.map_exp ~f:(fun exp ->
-          Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-              Exp.substitute Bil.(var pat) rep)));
+
+    method! enter_phi t vars =
+      let lhs = Var.base (Phi.lhs t) in
+      Map.filteri vars ~f:(fun ~key:v ~data:_ ->
+          not (Var.equal (Var.base v) lhs))
+
+    method! enter_def t vars =
+      let v = Def.lhs t in
+      if Var.is_virtual v || use_real
+      then
+        match Def.rhs t with
+        | Bil.Unknown _ | Bil.Int _ as exp ->
+          Map.add vars ~key:v ~data:exp
+        | _ -> vars
+      else vars
+  end)#visit_sub sub.body Var.Map.empty in
+  { body = substitute sub.body vars;
     consts = update_consts sub.consts vars; }
 
 let clean_sub sub dead =
@@ -111,59 +115,63 @@ let clean dead sub = { sub with body = clean_sub sub.body dead }
 let free_vars sub = free_vars sub.body
 let compute_dead free sub = compute_dead free sub.body
 
-let rec run dead subs =
-  report_progress ~note:"propagate consts" ();
-  let subs = List.rev_map subs ~f:propagate_consts in
-  report_progress ~note:"free-vars" ();
-  let free = union ~init:Var.Set.empty ~f:free_vars subs in
-  report_progress ~note:"dead-vars" ();
-  let dead' = union ~init:dead ~f:(compute_dead free) subs in
-  report_progress ~note:"clean" ();
-  if Set.length dead' > Set.length dead then
-    run dead' (List.rev_map subs ~f:(clean dead'))
-  else dead', subs
-
 let remove_deads deads prog =
   Term.map sub_t prog
     ~f:(Term.map blk_t
           ~f:(Term.filter def_t ~f:(is_alive deads)))
 
-let substitute' sub vars =
-  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
-      Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-          Exp.substitute Bil.(var pat) rep)))
-
-let substitute consts prog =
-  Term.map sub_t prog
-    ~f:(fun sub ->
-        match Map.find consts (Term.tid sub) with
-        | None -> sub
-        | Some vars -> substitute' sub vars)
-
 let collect_consts subs =
   List.fold subs ~init:Tid.Map.empty
     ~f:(fun all s -> Map.add all (Term.tid s.body) s.consts)
 
-let update prog (deads,consts) =
+let update prog {deads; substs } =
   report_progress ~note:"apply changes" ();
-  substitute consts prog |> remove_deads deads
+  Term.map sub_t prog
+    ~f:(fun sub ->
+        match Map.find substs (Term.tid sub) with
+        | None -> sub
+        | Some vars -> substitute sub vars) |>
+  remove_deads deads
 
-let process prog =
+let process prog use_real =
+  let rec run dead subs =
+    report_progress ~note:"propagate consts" ();
+    let subs = List.rev_map subs ~f:(propagate_consts use_real) in
+    report_progress ~note:"free-vars" ();
+    let free = union ~init:Var.Set.empty ~f:free_vars subs in
+    report_progress ~note:"dead-vars" ();
+    let dead' = union ~init:dead ~f:(compute_dead free) subs in
+    report_progress ~note:"clean" ();
+    if Set.length dead' > Set.length dead then
+      run dead' (List.rev_map subs ~f:(clean dead'))
+    else dead', subs in
   let subs = Term.enum sub_t prog |> Seq.map ~f:of_sub |> Seq.to_list_rev in
   report_progress ~note:"ssa form" ();
   let subs = List.rev_map ~f:(fun s -> {s with body = Sub.ssa s.body}) subs in
-  let dead, subs = run Tid.Set.empty subs in
-  let consts = collect_consts subs in
-  let prog = update prog (dead, consts) in
-  prog, (dead, consts)
+  let deads, subs = run Tid.Set.empty subs in
+  let substs = collect_consts subs in
+  let data = { deads; substs; } in
+  let prog = update prog data in
+  prog, data
+
 
 module Dead_code_data = struct
   include Regular.Make(struct
-      type nonrec t = Tid.Set.t * (exp Var.Map.t) Tid.Map.t [@@deriving bin_io, sexp, compare]
+      type nonrec t = data [@@deriving bin_io, sexp, compare]
       let version = version
       let module_name = None
       let hash = Hashtbl.hash
-      let pp fmt (t,_) = Set.iter t ~f:(Format.fprintf fmt "%a" Tid.pp)
+      let pp fmt t =
+        Format.fprintf fmt "dead tids: ";
+        Set.iter t.deads ~f:(Format.fprintf fmt "%a " Tid.pp);
+        Format.pp_print_newline fmt ();
+        Format.fprintf fmt "substitutions: ";
+        Map.iteri t.substs ~f:(fun ~key:tid ~data:subst ->
+            if not (Map.is_empty subst) then
+              let () = Format.fprintf fmt "%s: " (Tid.name tid) in
+              let () = Map.iteri subst ~f:(fun ~key:v ~data:e ->
+                  Format.fprintf fmt "(%a %a) " Var.pp v Exp.pp e) in
+              Format.pp_print_newline fmt ());
     end)
 end
 
@@ -178,38 +186,34 @@ let digest proj =
     (Project.program proj)
     (Digest.create ~namespace:"dead_code_elimination")
 
-let run proj =
+let run use_real proj =
   let digest = digest proj in
   let prog =
     match Dead_code_data.Cache.load digest with
     | Some x -> update (Project.program proj) x
     | None ->
-      let prog, res = process (Project.program proj) in
+      let prog, res = process (Project.program proj) use_real in
       Dead_code_data.Cache.save digest res;
       prog in
   Project.with_program proj prog
 
-
-let () = Config.when_ready (fun _ ->
-    Project.register_pass ~deps:["api"] ~autorun:true run)
-;;
-
-Config.manpage [
-  `S "SYNOPSIS";
-  `Pre "
+let () =
+  Config.manpage [
+    `S "SYNOPSIS";
+    `Pre "
     $(b,--no-$mname)
 ";
-  `S "DESCRIPTION";
+    `S "DESCRIPTION";
 
-  `P "An autorun pass that conservatively removes dead code. The
+    `P "An autorun pass that conservatively removes dead code. The
   removed dead code is usually produced by a lifter, though it might
   be possible that a binary indeed contains a dead code. The algorithm
   doesn't remove variables that are stored in memory, only registers
   are considered";
 
-  `S "ALGORITHM";
+    `S "ALGORITHM";
 
-  `P "To make analysis inter procedural, we first compute an
+    `P "To make analysis inter procedural, we first compute an
   over-approximation of a set of variables that are used to pass data
   between functions. This is just a set of all free variables in all
   functions. Variables that belong to this set will never be
@@ -223,9 +227,15 @@ Config.manpage [
   used. Internally, we translate a program into the SSA form, though
   it will not be seen outside";
 
-  `S "DEPENDENCIES";
-  `P "$(b,bap-plugin-api)(1)";
+    `S "DEPENDENCIES";
+    `P "$(b,bap-plugin-api)(1)";
 
-  `S "SEE ALSO";
-  `P "$(b,bap-plugin-api)(1), $(b,bap-plugin-ssa)(1)";
-]
+    `S "SEE ALSO";
+    `P "$(b,bap-plugin-api)(1), $(b,bap-plugin-ssa)(1)";
+  ];
+  let use_real =
+    let doc = "Propagates consts in registers" in
+    Config.flag ~doc "use-real" in
+
+  Config.when_ready (fun {Config.get} ->
+      Project.register_pass ~deps:["api"] ~autorun:true (run (get use_real)))
