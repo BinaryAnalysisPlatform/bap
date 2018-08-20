@@ -4,9 +4,8 @@ open Regular.Std
 open Format
 include Self()
 
-let union ~init ~f xs =
-  init :: List.rev_map ~f xs |>
-  Set.union_list ~comparator:(Set.comparator init)
+let union ~init ~f =
+  List.fold ~init ~f:(fun xs x -> Set.union xs (f x))
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -34,12 +33,16 @@ let compute_dead protected sub =
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
-    method! enter_def t dead =
-      let v = Def.lhs t in
-      if Set.mem protected (Var.base v) || live v
-      then dead
-      else (Set.add dead (Term.tid t))
-  end)#visit_sub sub Tid.Set.empty
+      method! enter_def t dead =
+        let v = Def.lhs t in
+        if Set.mem protected (Var.base v) || live v
+        then dead
+        else (Set.add dead (Term.tid t))
+    end)#visit_sub sub Tid.Set.empty
+
+let is_alive dead t = not (Set.mem dead (Term.tid t))
+let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
+let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
 
 (* a simple constant propagation, that will propagate constant
    expressions from virtual variables that are assigned only once to
@@ -57,75 +60,60 @@ let compute_dead protected sub =
 
    Note, the input is not required to be in SSA.
 *)
+
+let defined_once sub =
+  fst @@
+  (object inherit [Var.Set.t * Var.Set.t] Term.visitor
+    method! enter_def t (once, many) =
+      let v = Def.lhs t in
+      if Var.is_virtual v then
+        if Set.mem many v then once, many
+        else
+        if Set.mem once v then Set.remove once v, Set.add many v
+        else Set.add once v, many
+      else once,many
+  end)#visit_sub sub (Var.Set.empty, Var.Set.empty)
+
+type sub_extended = {
+  body : sub term;
+  defs : Var.Set.t;
+  consts : exp Var.Map.t;
+}
+
+let of_sub s = { body = s; defs = defined_once s; consts = Var.Map.empty }
+
+let update_consts consts vars =
+  Map.fold vars ~init:consts
+    ~f:(fun ~key:v ~data:e consts -> Map.add consts (Var.base v) e)
+
 let propagate_consts sub =
   let vars = (object inherit [exp Var.Map.t] Term.visitor
-    method! enter_def t vars =
-      let v = Def.lhs t in
-      if Var.is_virtual v
-      then if Map.mem vars v
-        then Map.remove vars v
-        else match Def.rhs t with
+      method! enter_def t vars =
+        let v = Def.lhs t in
+        if Set.mem sub.defs (Var.base v) then
+          match Def.rhs t with
           | Bil.Unknown _ | Bil.Int _ as exp ->
             Map.add vars ~key:v ~data:exp
           | _ -> vars
-      else vars
-  end)#visit_sub sub Var.Map.empty in
-  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
-      Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-          Exp.substitute Bil.(var pat) rep))), vars
+        else vars
+    end)#visit_sub sub.body Var.Map.empty in
+  { sub with
+    body =
+      Term.map blk_t sub.body ~f:(Blk.map_exp ~f:(fun exp ->
+          Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
+              Exp.substitute Bil.(var pat) rep)));
+    consts = update_consts sub.consts vars; }
 
-module Consts = struct
-
-  type t = (exp Var.Map.t) Tid.Map.t
-
-  let empty = Tid.Map.empty
-
-  let update t tid vars =
-    Map.update t tid ~f:(function
-        | None -> vars
-        | Some vars' ->
-          Map.fold vars ~init:vars'
-            ~f:(fun ~key:v ~data:e vars' -> Map.add vars' v e))
-
-  let find t tid =
-    match Map.find t tid with
-    | None -> Var.Map.empty
-    | Some vars -> vars
-
-  let apply_sub sub vars =
-    Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
-        Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-            Exp.substitute Bil.(var pat) rep)))
-
-  let apply t prog =
-    Term.map sub_t prog
-      ~f:(fun sub ->
-          match Map.find t (Term.tid sub) with
-          | None -> sub
-          | Some vars -> apply_sub sub vars)
-end
-
-let propagate_consts subs =
-  let rec run (subs, consts, ready) =
-    List.fold subs
-      ~init:([], consts, ready) ~f:(fun (subs, consts, ready) sub ->
-          let sub', vars = propagate_consts sub in
-          let consts = Consts.update consts (Term.tid sub) vars in
-          if Sub.equal sub sub' then
-            subs, consts, sub :: ready
-          else sub :: subs, consts, ready) |> function
-    | [], consts, ready -> consts, ready
-    | x -> run x in
-  run (subs, Consts.empty, [])
-
-let is_alive dead t = not (Set.mem dead (Term.tid t))
-let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
-let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
-
-let clean dead sub =
+let clean_sub sub dead =
   Term.map blk_t sub ~f:(fun b -> live_def dead b |> live_phi dead)
 
+let clean dead sub = { sub with body = clean_sub sub.body dead }
+let free_vars sub = free_vars sub.body
+let compute_dead free sub = compute_dead free sub.body
+
 let rec run dead subs =
+  report_progress ~note:"propagate consts" ();
+  let subs = List.rev_map subs ~f:propagate_consts in
   report_progress ~note:"free-vars" ();
   let free = union ~init:Var.Set.empty ~f:free_vars subs in
   report_progress ~note:"dead-vars" ();
@@ -133,26 +121,41 @@ let rec run dead subs =
   report_progress ~note:"clean" ();
   if Set.length dead' > Set.length dead then
     run dead' (List.rev_map subs ~f:(clean dead'))
-  else dead
+  else dead', subs
 
-let apply_deads deads prog =
+let remove_deads deads prog =
   Term.map sub_t prog
     ~f:(Term.map blk_t
           ~f:(Term.filter def_t ~f:(is_alive deads)))
 
-let apply prog (deads,consts) =
+let substitute' sub vars =
+  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
+      Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
+          Exp.substitute Bil.(var pat) rep)))
+
+let substitute consts prog =
+  Term.map sub_t prog
+    ~f:(fun sub ->
+        match Map.find consts (Term.tid sub) with
+        | None -> sub
+        | Some vars -> substitute' sub vars)
+
+let collect_consts subs =
+  List.fold subs ~init:Tid.Map.empty
+    ~f:(fun all s -> Map.add all (Term.tid s.body) s.consts)
+
+let update prog (deads,consts) =
   report_progress ~note:"apply changes" ();
-  Consts.apply consts prog |> apply_deads deads
+  substitute consts prog |> remove_deads deads
 
 let process prog =
-  let subs = Term.enum sub_t prog |> Seq.to_list_rev in
-  report_progress ~note:"propagate consts" ();
-  let consts, subs = propagate_consts subs in
+  let subs = Term.enum sub_t prog |> Seq.map ~f:of_sub |> Seq.to_list_rev in
   report_progress ~note:"ssa form" ();
-  let subs = List.rev_map ~f:Sub.ssa subs in
-  let deads = run Tid.Set.empty subs in
-  let prog = apply prog (deads, consts) in
-  prog, (deads, consts)
+  let subs = List.rev_map ~f:(fun s -> {s with body = Sub.ssa s.body}) subs in
+  let dead, subs = run Tid.Set.empty subs in
+  let consts = collect_consts subs in
+  let prog = update prog (dead, consts) in
+  prog, (dead, consts)
 
 module Dead_code_data = struct
   include Regular.Make(struct
@@ -179,7 +182,7 @@ let run proj =
   let digest = digest proj in
   let prog =
     match Dead_code_data.Cache.load digest with
-    | Some x -> apply (Project.program proj) x
+    | Some x -> update (Project.program proj) x
     | None ->
       let prog, res = process (Project.program proj) in
       Dead_code_data.Cache.save digest res;
