@@ -22,7 +22,6 @@ Library bap
   InternalModules: Bap_event,
                    Bap_log,
                    Bap_project,
-                   Bap_param,
                    Bap_self,
                    Bap_synthetic_symbolizer,
                    Bap_service,

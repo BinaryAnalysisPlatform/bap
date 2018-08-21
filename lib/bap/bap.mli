@@ -8443,6 +8443,19 @@ module Std : sig
     (**/**)
   end
 
+  (** An abstraction of a program parameter.
+
+      A parameter defines some source of external information that is
+      used by an analysis. Usually it denotes a command line parameter,
+      however other ways to specify a parameter exist.
+
+      Parameters are specified (created) via the [Config] module that
+      is produced by application of the [Self] functor. Besides extracting
+      their values, parameter are used in the [Service] facility to
+      specify dependencies of service providers, which enables transparent
+      caching. *)
+  type 'a param
+
   module Service : sig
     type t
     type service = t
@@ -8568,7 +8581,7 @@ module Std : sig
         a file parameter will monitor the change of file content, the
         directory parameter will recursively look into its content, and so on.
     *)
-    val parameter : 'a -> product
+    val parameter : 'a param -> product
 
     (** [binary] denotes, that a provider depends on the input binary.
 
@@ -8581,8 +8594,6 @@ module Std : sig
 
      *)
     val binary : product
-
-
 
     (** [undefined] is a product that is never the same.
 
@@ -8857,9 +8868,6 @@ module Std : sig
       (** A directory for bap specific configuration files  *)
       val confdir : string
 
-      (** An abstract parameter type that can be later read using a reader *)
-      type 'a param
-
       (** Parse a string to an 'a *)
       type 'a parser = string -> [ `Ok of 'a | `Error of string ]
 
@@ -8867,7 +8875,30 @@ module Std : sig
           value for the ['a] type. *)
       type 'a converter
 
-      val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+      (** [converter parser printer digest default] creates a
+          converter for the datatype with the given [default] value and a
+          representation specified by the (parser,printer,digest) tripple.
+
+          The [parser] and [printer] define the textual representation,
+          and [digest] defines a perfect hash of value content.
+
+          The [digest] parameter defaults to a trivial digest function
+          which assumes that the data representation is self contained,
+          i.e., different values of representation impose different
+          informational content. That assumption is not true for filenames
+          (files with different names can have the same content, and vice
+           verse - files with the same name could have different content).
+          In the latter case, a correct [digest] function shall be provided.
+
+          Note, the [converter] function is rarely used as a solid set of
+          predefined converters and converter combinators covers most of
+          the use cases.
+      *)
+      val converter :
+        ?digest:('a -> digest) ->
+        'a parser ->
+        'a printer ->
+        'a -> 'a converter
 
       (** Default deprecation warning message, for easy deprecation of
           parameters. *)

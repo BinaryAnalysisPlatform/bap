@@ -46,10 +46,11 @@ module Create() : sig
     type 'a printer = Format.formatter -> 'a -> unit
     type 'a converter
 
-    val converter : 'a parser -> 'a printer -> 'a -> 'a converter
+    val converter :
+      ?digest:('a -> digest) ->
+      'a parser -> 'a printer -> 'a -> 'a converter
 
     val deprecated : string
-
 
     val param :
       'a converter -> ?deprecated:string -> ?default:'a -> ?as_flag:'a ->
