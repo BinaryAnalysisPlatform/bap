@@ -2,16 +2,20 @@ open Format
 open Core_kernel.Std
 open Bap_future.Std
 open Regular.Std
-
+open Bap_types.Std
 
 type 'a param
 type error
 
-val run : string array -> (unit,error) result
+val run :
+  ?options:(string * string) list ->
+  ?argv:string array -> unit ->
+  (unit,error) result
 
 module Param : sig
   val values : 'a param -> 'a stream
   val digest : 'a param -> 'a -> digest
+  val current : 'a param -> 'a
 end
 
 module Create() : sig
@@ -44,7 +48,13 @@ module Create() : sig
 
     type 'a parser = string -> [ `Ok of 'a | `Error of string ]
     type 'a printer = Format.formatter -> 'a -> unit
+    type nonrec 'a param = 'a param
     type 'a converter
+
+    val input : [
+      | `Path of string
+      | `Data of Bigstring.t
+    ] param
 
     val converter :
       ?digest:('a -> digest) ->
@@ -104,7 +114,6 @@ module Create() : sig
     val t4 : ?sep:char -> 'a converter -> 'b converter -> 'c converter ->
       'd converter -> ('a * 'b * 'c * 'd) converter
     val some : ?none:string -> 'a converter -> 'a option converter
-
   end
 
 end

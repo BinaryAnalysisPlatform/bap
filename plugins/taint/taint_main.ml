@@ -7,7 +7,7 @@ type strain =
   | Addr of int64
   | Tid of string
   | Var of string
-  [@@deriving variants]
+[@@deriving variants]
 
 let grammar = {|
     strain ::= <tid>
@@ -29,10 +29,10 @@ module Strain = struct
   let is_pref p = String.is_prefix ~prefix:p
   let is_addr x = is_pref "0x" x
   let is_term x = is_pref "%" x
-  let is_var  x = try Char.is_alpha x.[0] with exn -> false
+  let is_var  x = try Char.is_alpha x.[0] with _exn -> false
   let word s =
     try Ok (Int64.of_string s)
-    with exn -> expect "0x<hex-digits>" ~got:s
+    with _exn -> expect "0x<hex-digits>" ~got:s
 
   let var  s = Ok (Var s)
   let term s = Ok (Tid s)

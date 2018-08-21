@@ -8583,18 +8583,6 @@ module Std : sig
     *)
     val parameter : 'a param -> product
 
-    (** [binary] denotes, that a provider depends on the input binary.
-
-       Only the content of the binary is taken into account, the file
-       name is ignored.
-
-       However, if the binary is not a container and is interpreted as
-       a blob, then if its interpreation is changed (i.e., the
-       architecture) then the output product is also changed.
-
-     *)
-    val binary : product
-
     (** [undefined] is a product that is never the same.
 
     A provider that requires some [undefined] product will be always
@@ -8659,7 +8647,12 @@ module Std : sig
     ]}
 
      *)
-    val run : provider list -> (success, failure) result
+    val run :
+      ?providers:provider list ->
+      ?options:(string * string) list ->
+      ?argv:string array ->
+      unit ->
+      (success, failure) result
 
     (** The [edu.cmu.ece.bap.std/loader] service is used to parse binaries
         an various formats and extract meta information that is necessary for
@@ -8867,6 +8860,13 @@ module Std : sig
 
       (** A directory for bap specific configuration files  *)
       val confdir : string
+
+      type nonrec 'a param = 'a param
+
+
+      val input : [
+          | `Data of Bigstring.t
+          | `Path of string] param
 
       (** Parse a string to an 'a *)
       type 'a parser = string -> [ `Ok of 'a | `Error of string ]

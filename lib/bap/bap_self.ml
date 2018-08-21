@@ -32,6 +32,7 @@ module Param = struct
   open Future.Syntax
   let values p = p.value
   let digest p = p.converter.digest
+  let current p = p.current
 end
 
 let main_grammar = ref Term.(const ())
@@ -69,7 +70,11 @@ let is_host_program () =
 
 type error = Failed
 
-let run argv =
+let run ?(options=[]) ?(argv=Sys.argv) () =
+  let extra_args =
+    Array.of_list @@ List.map options ~f:(fun (key,value) ->
+        sprintf "--%s=%s" key value) in
+  let argv = Array.append argv extra_args in
   match Term.eval ~argv (!main_grammar, !term_info) with
   | `Error _ -> Error Failed
   | `Ok () -> Ok (Signal.send start ())
@@ -78,6 +83,67 @@ let run argv =
 module type Namespace = sig
   val name : string
 end
+
+
+module Input = struct
+  (* a crude and slow implementation, we will fix it later *)
+  module IO = struct
+    let read_stdin () =
+      try
+        Result.return @@
+        Bigstring.of_string @@
+        In_channel.(input_all stdin)
+      with Sys_error msg -> Error (`Msg msg)
+
+    let digest input =
+      Data.Cache.digest ~namespace:"input" "%s" @@
+      match input with
+      | `Data data -> Bigstring.to_string data
+      | `Path path -> Digest.file path
+  end
+
+  let parse_spec = function
+    | "-" -> Result.(IO.read_stdin () >>| fun x -> `Data x)
+    | path when Sys.file_exists path -> Ok (`Path path)
+    | path ->
+      let msg = "non existent or unreadable path - " ^ path in
+      Error (`Msg msg)
+
+  let print_spec ppf = function
+    | `Path p -> fprintf ppf "%s" p
+    | `Data _ -> fprintf ppf "-"
+
+  let arg_converter = Arg.conv (parse_spec, print_spec)
+  let default = `Path "a.out"
+
+  let old_parser_interface parser x = match parser x with
+    | Ok x -> `Ok x
+    | Error (`Msg x) -> `Error x
+
+  let param =
+    let value,ready = Stream.create () in
+    let converter = {
+      parser = old_parser_interface parse_spec;
+      printer = print_spec;
+      default;
+      digest = IO.digest;
+    } in
+    let doc = "a path to input or $(b,-) if it should be read
+      from the standard input" in
+    let param = {
+      ready; value; converter;
+      current = default;
+      ident = "input";
+      space = "bap";
+      descr = doc;
+    } in
+    let term = Arg.(required & pos 0 (some arg_converter) None &
+                    info [] ~doc ~docv:"FILE") in
+    register param ident term;
+    param
+end
+
+
 
 module Converter(Current : Namespace) = struct
   let namespace = Current.name
@@ -112,6 +178,7 @@ module Converter(Current : Namespace) = struct
 
   let of_arg (parser,printer) default digest : 'a t =
     create parser printer ~digest default
+
 
 
   module Converters = struct
@@ -219,6 +286,7 @@ module Converter(Current : Namespace) = struct
                         (digestf "Some")
                         (x.digest thing)
 
+
   end
 
 end
@@ -286,7 +354,6 @@ module Create() = struct
   let warning_formatter = make_formatter warning
   let error_formatter = make_formatter error
 
-
   module Config = struct
     let namespace = name
     include Bap_config
@@ -294,8 +361,9 @@ module Create() = struct
       let name = namespace
     end
 
+    type nonrec 'a param = 'a param
+    let input = Input.param
     module Converter = Converter(Namespace)
-
 
     (* Discourage access to directories of other plugins *)
     let confdir =
@@ -418,6 +486,9 @@ module Create() = struct
       register result (fun x -> param || x) t;
       result
 
+
+
+
     let term_info = ref (Term.info ~doc namespace)
 
     type manpage_block = [
@@ -467,6 +538,7 @@ module Create() = struct
       f {get = (fun p -> p.current)}
 
     let doc_enum = Arg.doc_alts_enum
+
     include Converter.Converters
   end
 end

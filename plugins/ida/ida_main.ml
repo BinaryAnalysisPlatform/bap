@@ -55,7 +55,7 @@ let extract path arch =
 let provider service = Bap.Std.Service.(begin
     provide service "ida" ~desc:"extracts data using IDA Pro"
       ~require:[
-        product required loader;
+        required loader;
       ]
   end)
 

@@ -7,11 +7,14 @@ open Bap_bundle.Std
 type t = Service of string
 type service = t
 type success = Success
-type failure = Unsat of {
-    kind : string;
-    name : string;
-    problem : string;
-  }
+type failure =
+  | Unsat of {
+      kind : string;
+      name : string;
+      problem : string;
+    }
+
+  | Spec of Bap_self.error
 
 type outcome = (success, failure) result
 type 'a maybe = Defined of 'a | Undefined
@@ -41,13 +44,20 @@ let declared = Future.ignore_m (Stream.hd starts)
 
 let fails,fail = Stream.create ()
 
-let run selection =
+let run ?providers:selection ?options ?argv () =
+  let selection = match selection with
+    | None -> !providers
+    | Some selection -> selection in
   let failed = Stream.hd fails in
   Signal.send start selection;
   Signal.send finish ();
   match Future.peek failed with
-  | None -> Ok Success
   | Some failure -> Error failure
+  | None -> match Bap_self.run ?options ?argv () with
+    | Ok _ -> Ok Success
+    | Error err -> Error (Spec err)
+
+
 
 let inputs provider = provider.product.inputs
 let digest =
@@ -197,11 +207,17 @@ let content path = {
         None)
 }
 
-
-
 let undefined : product = {
   inputs = Stream.map starts ~f:(fun _ -> {digest = Undefined})
 }
+
+(* inputs witnesses that run was run, due to the lack
+   of linearity in the type system we can't prevent users from
+   reusing the same witness multiple times, however in the future
+   we may equip [inputs] with a unique run id and check that correct
+   inputs are applied to correct versions of a
+*)
+let get _ p = Bap_self.Param.current p
 
 (* it should be Info.file, but let's wait while we determine module dependencies *)
 let binary = undefined
@@ -210,10 +226,14 @@ let binary = undefined
 let parameter _ = undefined
 let arch = undefined
 
-let pp_failure ppf (Unsat {kind; name; problem}) =
-  Format.fprintf ppf
-    "Failed to satisfy all service requests. The %s %s %s."
-    kind name problem
+let pp_failure ppf = function
+  | Unsat {kind; name; problem} ->
+    Format.fprintf ppf
+      "Failed to satisfy all service requests. The %s %s %s."
+      kind name problem
+  | Spec _error ->
+    Format.fprintf ppf
+      "Failed to parse parameter specification... TBD"
 
 let success_or_die = function
   | Ok Success -> Success

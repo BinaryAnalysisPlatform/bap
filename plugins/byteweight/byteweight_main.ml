@@ -33,10 +33,11 @@ let create_finder path length threshold arch  =
     let bw = Binable.of_string (module BW) data in
     Ok (BW.find bw ~length ~threshold)
 
-let byteweight =
-  Service.(provide rooter "byteweight"
-             ~desc:"finds roots using Byteweight"
-             ~require:nothing)
+let byteweight = Service.(provide rooter "byteweight"
+                            ~desc:"finds roots using Byteweight" [
+                            required loader;
+                            parameter Config.input;
+                          ])
 
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in
