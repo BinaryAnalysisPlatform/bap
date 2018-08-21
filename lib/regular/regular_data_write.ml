@@ -40,12 +40,12 @@ let blit_via_copy size copy ~dst x pos =
 
 let bytes_via_copy size copy x =
   let buf = Bytes.create (size x) in
-  copy buf x;
+  let _ = copy buf x in
   buf
 
 let bigstring_via_blit size blit x =
   let buf = Bigstring.create (size x) in
-  blit buf x;
+  let _ = blit buf x in
   buf
 
 let pp_bytes f x = Format.asprintf "%a" f x
