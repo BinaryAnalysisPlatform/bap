@@ -19,9 +19,10 @@ type 'a converter= {
 }
 
 type 'a param = {
-  ready : 'a promise;
-  value : 'a future;
+  ready : 'a signal;
+  value : 'a stream;
   converter : 'a converter;
+  current : 'a;
   ident : string;
   space : string;
   descr : string;
@@ -29,8 +30,8 @@ type 'a param = {
 
 module Param = struct
   open Future.Syntax
-  let value p = p.value
-  let digest p = p.value >>| p.converter.digest
+  let values p = p.value
+  let digest p = p.converter.digest
 end
 
 let main_grammar = ref Term.(const ())
@@ -38,12 +39,14 @@ let grammars = String.Table.create ()
 let manpages = String.Table.create ()
 
 let newparam ~namespace ~doc converter ident =
-  let value,ready = Future.create () in
-  {value; ready; ident; descr=doc; space=namespace; converter}
+  let value,ready = Stream.create () in {
+    value; ready; ident; descr=doc; space=namespace; converter;
+    current=converter.default
+  }
 
 let register param value term =
   main_grammar := Term.(const (fun x () ->
-      Promise.fulfill param.ready (value x)) $ term $ (!main_grammar));
+      Signal.send param.ready (value x)) $ term $ (!main_grammar));
   Hashtbl.update grammars param.space ~f:(function
       | None -> Term.(const ignore $ term)
       | Some t -> Term.(const (fun _ _ -> ()) $ term $ t))
@@ -52,7 +55,7 @@ let register param value term =
 let register_manpage info =
   Hashtbl.set manpages ~key:(Term.name info) ~data:info
 
-let evaluated,evaluate = Future.create ()
+let cycles,start = Stream.create ()
 
 let term_info = ref (Term.info ~doc:"" ~man:[] "main")
 
@@ -64,12 +67,12 @@ let current_name () =
 let is_host_program () =
   Bundle.is_host @@ main_bundle ()
 
-type error = unit
+type error = Failed
 
 let run argv =
   match Term.eval ~argv (!main_grammar, !term_info) with
-  | `Error _ -> Error ()
-  | `Ok () -> Ok (Promise.fulfill evaluate ())
+  | `Error _ -> Error Failed
+  | `Ok () -> Ok (Signal.send start ())
   | `Version | `Help -> exit 0
 
 module type Namespace = sig
@@ -456,12 +459,12 @@ module Create() = struct
       let man = (man :> Manpage.block list) in
       register_manpage (Term.info ~doc ~man namespace)
 
-    let determined (p:'a param) : 'a future = p.value
+    let determined (p:'a param) : 'a future = Stream.hd p.value
 
     type reader = {get : 'a. 'a param -> 'a}
     let when_ready f : unit =
-      Future.upon evaluated @@ fun () ->
-      (f {get = (fun p -> Future.peek_exn p.value)})
+      Stream.observe cycles @@ fun () ->
+      f {get = (fun p -> p.current)}
 
     let doc_enum = Arg.doc_alts_enum
     include Converter.Converters

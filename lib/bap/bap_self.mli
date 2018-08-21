@@ -10,8 +10,8 @@ type error
 val run : string array -> (unit,error) result
 
 module Param : sig
-  val value : 'a param -> 'a future
-  val digest : 'a param -> digest future
+  val values : 'a param -> 'a stream
+  val digest : 'a param -> 'a -> digest
 end
 
 module Create() : sig
