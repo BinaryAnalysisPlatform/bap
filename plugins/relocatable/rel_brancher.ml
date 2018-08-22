@@ -107,8 +107,8 @@ let init () =
 
 let rel_brancher = Service.(begin
     provide brancher "edu.cmu.ece.bap.brancher"
-      ~require:[
-        product required loader;
-      ]
-      ~desc:"extracts branch destinations from the relocation table"
+      ~desc:"extracts branch destinations from the relocation table" [
+      required loader;
+      parameter Config.input;
+    ]
   end)

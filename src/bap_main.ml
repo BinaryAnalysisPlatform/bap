@@ -59,12 +59,12 @@ let print_formats_and_exit () =
   exit 0
 
 let inputs = Service.(require [
-    product required symbolizer;
-    product required rooter;
-    product required reconstructor;
-    product required loader;
-    product required lifter;
-    binary;
+    required symbolizer;
+    required rooter;
+    required reconstructor;
+    required loader;
+    required lifter;
+    parameter Config.input;
   ])
 
 
@@ -140,7 +140,7 @@ let do_work cmdline inputs =
 let main cmdline =
   Future.upon (Stream.hd inputs) (do_work cmdline);
   Service.die_on_failure @@
-  Service.run []
+  Service.run ()
 
 
 let program_info =

@@ -48,18 +48,18 @@ let () =
     Config.(flag "version" ~doc) in
 
   let _disassembler = Service.(begin
-      provide disassembler provider_name
-        ~require:[
-          cmdline x86_syntax;
-        ]
+      provide disassembler provider_name [
+        parameter x86_syntax;
+        parameter Config.input;
+      ]
         ~desc:"an LLVM based disassembler"
     end) in
 
   let _loader = Service.(begin
-      provide loader provider_name
-        ~require:[
-          cmdline base_addr;
-        ]
+      provide loader provider_name [
+        parameter base_addr;
+        parameter Config.input;
+      ]
         ~desc:"an LLVM based program parser"
     end) in
 

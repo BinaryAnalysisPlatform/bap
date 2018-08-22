@@ -93,11 +93,10 @@ let run_objdump arch file _inputs =
 
 
 let objdump = Service.(begin
-    provide symbolizer "edu.cmu.ece.bap/objdump"
-      ~require:[
-        binary;
-      ]
-      ~desc:"extracts names from the objdump output"
+    provide symbolizer "edu.cmu.ece.bap/objdump" [
+      parameter Config.input;
+    ]
+      ~desc:"extracts names from objdump output"
   end)
 
 

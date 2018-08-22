@@ -9,7 +9,9 @@ type error
 
 val run :
   ?options:(string * string) list ->
-  ?argv:string array -> unit ->
+  ?argv:string array ->
+  ?input:[`Data of Bigstring.t | `Path of string] ->
+  unit ->
   (unit,error) result
 
 module Param : sig

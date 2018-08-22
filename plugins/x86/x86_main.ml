@@ -1,5 +1,6 @@
 open Core_kernel.Std
 open Bap.Std
+open Bap_future.Std
 open Bap_service
 open X86_target
 include Self()
@@ -42,8 +43,8 @@ let abi = Service.(provide abi "edu.cmu.ece.bap/x86" [
   ])
 
 
-let register_lifter (!!)  =
-  let ia32, amd64 = match !!kind with
+let register_lifter kind  =
+  let ia32, amd64 = match kind with
     | Legacy -> (module IA32L : Target), (module AMD64L : Target)
     | Modern -> (module IA32 : Target), (module AMD64 : Target)
     | Merge -> (module IA32M : Target), (module AMD64M : Target) in
@@ -56,9 +57,10 @@ let register_abi (!!) =
       | `x86_64 -> !!x64_abi) ()
 
 let () =
-  let read = Future.peek_exn in
-  Stream.watch lifter (fun )
-    Config.when_ready (fun {Config.get=(!)} -> main !kind !x32 !x64)
+  Stream.observe (Service.inputs lifter) (fun inputs ->
+      register_lifter (Service.get inputs kind));
+  Stream.observe (Service.inputs abi) (fun inputs ->
+      register_abi (Service.get inputs))
 
 ;;
 Config.manpage [

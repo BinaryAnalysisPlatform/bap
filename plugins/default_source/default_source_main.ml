@@ -7,27 +7,26 @@ include Self ()
 
 let brancher = Service.(begin
     provide brancher "edu.cmu.ece.bap/image/semantic-insn"
-      ~desc:"computes destinations based on BIL semantics of a single instruction"
-      ~require:[
-        product required loader;
-        product required lifter;
-      ]
+      ~desc:"computes destinations based on BIL semantics of a single instruction" [
+      required loader;
+      required lifter;
+    ]
   end)
 
 let rooter = Service.(begin
     provide rooter "edu.cmu.ece.bap/image/symtab"
-      ~desc:"extracts functions starts from the image symtab"
-      ~require:[
-        product required loader;
-      ]
+      ~desc:"extracts functions starts from the image symtab" [
+      required loader;
+      parameter Config.input;
+    ]
   end)
 
 let symbolizer = Service.(begin
     provide symbolizer "edu.cmu.ece.bap/image/symtab"
-      ~desc:"extracts symbol names from the image symtab"
-      ~require:[
-        product required loader;
-      ]
+      ~desc:"extracts symbol names from the image symtab" [
+      required loader;
+      parameter Config.input;
+    ]
   end)
 
 module type S = sig

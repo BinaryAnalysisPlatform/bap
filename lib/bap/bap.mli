@@ -8626,6 +8626,9 @@ module Std : sig
     val digest : inputs -> digest
 
 
+    val get : inputs -> 'a param -> 'a
+
+
     (** [success_or_die outcome] ensures that the outcome is success
     otherwise terminates the program.
      *)
@@ -8651,6 +8654,7 @@ module Std : sig
       ?providers:provider list ->
       ?options:(string * string) list ->
       ?argv:string array ->
+      ?input:[`Data of Bigstring.t | `Path of string] ->
       unit ->
       (success, failure) result
 
@@ -8697,6 +8701,9 @@ module Std : sig
 
     (** [edu.cmu.ece.bap.std/disassembler] decodes bytes into assembly instructions.  *)
     val disassembler : service
+
+    (** [edu.cmu.ece.bap.sta/abi] provides ABI specific information. *)
+    val abi : service
   end
 
   (** A self reflection.

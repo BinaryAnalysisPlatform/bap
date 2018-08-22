@@ -44,7 +44,7 @@ let declared = Future.ignore_m (Stream.hd starts)
 
 let fails,fail = Stream.create ()
 
-let run ?providers:selection ?options ?argv () =
+let run ?providers:selection ?options ?argv ?input () =
   let selection = match selection with
     | None -> !providers
     | Some selection -> selection in
@@ -53,7 +53,7 @@ let run ?providers:selection ?options ?argv () =
   Signal.send finish ();
   match Future.peek failed with
   | Some failure -> Error failure
-  | None -> match Bap_self.run ?options ?argv () with
+  | None -> match Bap_self.run ?options ?argv ?input () with
     | Ok _ -> Ok Success
     | Error err -> Error (Spec err)
 
@@ -223,7 +223,12 @@ let get _ p = Bap_self.Param.current p
 let binary = undefined
 
 (* that's a stub...*)
-let parameter _ = undefined
+let parameter p =
+  let inputs = Bap_self.Param.values p |>
+               Stream.map ~f:(fun x ->
+                   {digest = Defined (Bap_self.Param.digest p x)}) in
+  {inputs}
+
 let arch = undefined
 
 let pp_failure ppf = function

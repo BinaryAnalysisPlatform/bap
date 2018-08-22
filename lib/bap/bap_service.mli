@@ -30,6 +30,7 @@ val run :
   ?providers:provider list ->
   ?options:(string * string) list ->
   ?argv:string array ->
+  ?input:[`Data of Bigstring.t | `Path of string] ->
   unit -> (success, failure) result
 
 (**

@@ -53,10 +53,10 @@ let extract path arch =
   Seq.of_list
 
 let provider service = Bap.Std.Service.(begin
-    provide service "ida" ~desc:"extracts data using IDA Pro"
-      ~require:[
-        required loader;
-      ]
+    provide service "ida" ~desc:"extracts data using IDA Pro" [
+      parameter Config.input;
+      required loader;
+    ]
   end)
 
 let register_source name (module T : Target) =

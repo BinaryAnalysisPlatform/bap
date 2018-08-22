@@ -22,7 +22,7 @@ type 'a param = {
   ready : 'a signal;
   value : 'a stream;
   converter : 'a converter;
-  current : 'a;
+  mutable current : 'a;
   ident : string;
   space : string;
   descr : string;
@@ -39,11 +39,17 @@ let main_grammar = ref Term.(const ())
 let grammars = String.Table.create ()
 let manpages = String.Table.create ()
 
+let connect_param_signals param =
+  Stream.observe param.value (fun x -> param.current <- x)
+
 let newparam ~namespace ~doc converter ident =
-  let value,ready = Stream.create () in {
+  let value,ready = Stream.create () in
+  let param = {
     value; ready; ident; descr=doc; space=namespace; converter;
     current=converter.default
-  }
+  } in
+  connect_param_signals param;
+  param
 
 let register param value term =
   main_grammar := Term.(const (fun x () ->
@@ -70,15 +76,6 @@ let is_host_program () =
 
 type error = Failed
 
-let run ?(options=[]) ?(argv=Sys.argv) () =
-  let extra_args =
-    Array.of_list @@ List.map options ~f:(fun (key,value) ->
-        sprintf "--%s=%s" key value) in
-  let argv = Array.append argv extra_args in
-  match Term.eval ~argv (!main_grammar, !term_info) with
-  | `Error _ -> Error Failed
-  | `Ok () -> Ok (Signal.send start ())
-  | `Version | `Help -> exit 0
 
 module type Namespace = sig
   val name : string
@@ -137,11 +134,24 @@ module Input = struct
       space = "bap";
       descr = doc;
     } in
-    let term = Arg.(required & pos 0 (some arg_converter) None &
+    let term = Arg.(value & pos 0 arg_converter default &
                     info [] ~doc ~docv:"FILE") in
     register param ident term;
+    connect_param_signals param;
     param
 end
+
+
+let run ?(options=[]) ?(argv=Sys.argv) ?input () =
+  Option.iter input ~f:(Signal.send Input.param.ready);
+  let extra_args =
+    Array.of_list @@ List.map options ~f:(fun (key,value) ->
+        sprintf "--%s=%s" key value) in
+  let argv = Array.append argv extra_args in
+  match Term.eval ~argv (!main_grammar, !term_info) with
+  | `Error _ -> Error Failed
+  | `Ok () -> Ok (Signal.send start ())
+  | `Version | `Help -> exit 0
 
 
 

@@ -28,10 +28,9 @@ let input_filename = Config.(begin
   end)
 
 let provide service = Service.(begin
-    provide service "edu.cmu.ece.bap/file"
-      ~require:[
-        cmdline input_filename;
-      ]
+    provide service "edu.cmu.ece.bap/file" [
+      parameter input_filename;
+    ]
       ~desc:"reads information from an external file"
   end)
 
