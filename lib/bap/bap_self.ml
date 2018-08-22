@@ -318,7 +318,7 @@ module Create() = struct
   let version = Manifest.version manifest
   let doc = Manifest.desc manifest
   let is_host_program = is_host_program ()
-  let argv = [||]
+  let argv = Sys.argv
 
   let has_verbose =
     Array.exists ~f:(function "--verbose" | _ -> false)
