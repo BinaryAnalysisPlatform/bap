@@ -142,6 +142,9 @@ void    *memccpy(void *restrict dst, const void *restrict src, int stop, size_t 
 void    *memchr(const void *s, int c, size_t n)
     __attribute__((pure,nonnull(1),storage(1,3)));
 
+void *memrchr(const void *s, int c, size_t n)
+    __attribute__((pure,nonnull(1),storage(1,3)));
+
 int      memcmp(const void *s1, const void *s2, size_t n)
     __attribute__((pure, nonnull(1,2), storage(1,3), storage(2,3)));
 
@@ -390,3 +393,17 @@ int          ttyname_r(int, char *, size_t);
 int          unlink(const char *name);
 int          unlinkat(int fd, const char *name, int flags);
 ssize_t      write(int, const void *, size_t) __attribute__((warn_unused_result));
+
+FILE *popen(const char *cmd, const char *type)
+    __attribute__((warn_unused_result));
+
+
+int posix_spawn(pid_t *pid, const char *path,
+                const void *file_actions,
+                const void *attrp,
+                char *const argv[], char *const envp[]);
+
+int posix_spawnp(pid_t *pid, const char *file,
+                 const void *file_actions,
+                 const void *attrp,
+                 char *const argv[], char *const envp[]);

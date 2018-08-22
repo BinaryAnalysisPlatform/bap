@@ -3653,8 +3653,8 @@ module Std : sig
     *)
     val is_referenced : var -> t -> bool
 
-    (** [normalize ?normalize_exp xs] produces a normalized BIL program
-        with the same[^1] semantics but in the BIL normalized
+    (** [normalize ?keep_ites ?normalize_exp xs] produces a normalized BIL
+        program with the same[^1] semantics but in the BIL normalized
         form (BNF). There are two normalized forms, both described
         below. The first form (BNF1) is more readable, the second form
         (BNF2) is more strict, but sometimes yields a code, that is hard
@@ -3721,8 +3721,12 @@ module Std : sig
         @param normalize_exp (defaults to [false]) if set to [true] then
         the returned program will be in BNF2.
 
+        @param keep_ites (defaults to [false]) if set to [true] then
+        the returned program will preserve ite expressions.
+
         @since 1.3 *)
-    val normalize : ?normalize_exp:bool -> stmt list -> stmt list
+    val normalize : ?keep_ites:bool -> ?normalize_exp:bool
+       -> stmt list -> stmt list
 
     (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
         simplifies [if] and [while] expressions with statically known

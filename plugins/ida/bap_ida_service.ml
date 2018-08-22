@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open Bap_ida.Std
 
+include Self ()
+
 type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
 
 type ida = {
@@ -12,7 +14,7 @@ type ida = {
   debug : int;
 } [@@deriving sexp]
 
-module Config = struct
+module Ida_config = struct
   type t = {
     ida_path : string;
     ida_kind : ida_kind option;
@@ -20,7 +22,7 @@ module Config = struct
     debug  : int;
   }
 end
-type config = Config.t
+type config = Ida_config.t
 
 type 'a command = 'a Command.t
 
@@ -79,8 +81,25 @@ let setup_headless_env path =
       if old_path <> "" then Unix.putenv var old_path
     with _ -> ()
 
+let cleanup_minidump () =
+  let is_dump x = Filename.check_suffix x ".dmp" in
+  let dump_path = "/tmp/ida" in
+  if Sys.file_exists dump_path && Sys.is_directory dump_path then
+    FileUtil.ls dump_path  |>
+    List.filter ~f:is_dump |> function
+    | [] -> ()
+    | files ->
+      info "ida minidump is not empty";
+      let lock = sprintf "%s/lock" dump_path in
+      let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o666 in
+      Unix.lockf lock Unix.F_LOCK 0;
+      protect ~f:(fun () ->
+          List.iter files ~f:Sys.remove)
+        ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0)
+
 (* ida works fine only if everything is in the same folder  *)
 let run (t:ida) cmd =
+  cleanup_minidump ();
   let cwd = Unix.getcwd () in
   let clean = match t.curses with
     | Some path -> setup_headless_env path
@@ -90,14 +109,13 @@ let run (t:ida) cmd =
   try cmd (); cleanup ()
   with exn -> cleanup (); raise exn
 
-
 let check_path path = match Bap_ida_check.check_path path with
   | Ok () -> ()
   | Error e ->
     eprintf "failed to check ida path: %s." (Error.to_string_hum e);
     exit 1
 
-let create {Config.ida_path; ida_kind; debug; curses} target =
+let create {Ida_config.ida_path; ida_kind; debug; curses} target =
   if not (Sys.file_exists target)
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
@@ -160,7 +178,7 @@ let register ida_path ida_kind is_headless : unit =
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _ -> 0 in
   let config = {
-    Config.ida_path;
+    Ida_config.ida_path;
     ida_kind;
     curses;
     debug

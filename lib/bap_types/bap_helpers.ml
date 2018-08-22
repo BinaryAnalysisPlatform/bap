@@ -228,7 +228,7 @@ module Type = struct
     | Type.Imm _,_,_ -> Type_error.expect_mem ()
     | Type.Mem (s,_) as t, Type.Imm s', Type.Imm u ->
       let s = Size.in_bits s in
-      if s < s'
+      if s <> s'
       then Type_error.expect (Type.Imm s) ~got:(Type.Imm s')
       else if is_error (Size.of_int u)
       then Type_error.wrong_cast ()
@@ -680,6 +680,7 @@ module Normalize = struct
       | Var v -> Var.typ v
       | Store (m,_,_,_,_) -> infer m
       | Ite (_,x,y) -> both x y
+      | Unknown (_,t) -> t
       | _ -> invalid_arg "type error"
     and both x y =
       match infer x, infer y with
@@ -1091,8 +1092,9 @@ module Normalize = struct
           hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
     end) bil
 
-  let bil ?normalize_exp:(ne=false) xs =
+  let bil ?(keep_ites=false) ?normalize_exp:(ne=false) xs =
     let normalize_exp = if ne then normalize_exp else ident in
+    let split_ite = if keep_ites then ident else split_ite in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>

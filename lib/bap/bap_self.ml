@@ -184,15 +184,17 @@ module Converter(Current : Namespace) = struct
   let to_arg conv : 'a Arg.converter = conv.parser, conv.printer
   let default conv = conv.default
 
+  let warn_if msg name is_used = match msg with
+    | Some msg when is_used ->
+      eprintf "WARNING: `--%s-%s' is deprecated -- %s\n"
+        namespace name msg
+    | _ -> ()
+
   let deprecation_wrap ~converter ?deprecated ~name =
-    let warn_if_deprecated () =
-      match deprecated with
-      | Some msg ->
-        eprintf "WARNING: %S option of plugin %S is deprecated. %s\n"
-          name namespace msg
-      | None -> () in
-    {converter with parser=(fun s -> warn_if_deprecated ();
-                             converter.parser s)}
+    {converter with
+     parser=(fun s -> warn_if deprecated name true;
+              converter.parser s)}
+
 
   let of_arg (parser,printer) default digest : 'a t =
     create parser printer ~digest default
@@ -460,11 +462,15 @@ module Create() = struct
       let result = newparam ~namespace ~doc converter name in
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default ~name in
+      let check x = match as_flag with
+        | None -> x
+        | Some y ->
+          Converter.warn_if deprecated name (phys_equal x y); x in
       let t =
         Arg.(value
              @@ opt ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
-      register result ident t;
+      register result check t;
       result
 
     let param_all (type a)
@@ -485,7 +491,12 @@ module Create() = struct
         Arg.(value
              @@ opt_all ?vopt:as_flag converter param
              @@ info (name::synonyms) ~doc ~docv) in
-      register result ident t;
+      let check value = match value, as_flag with
+        | [x], Some y ->
+          Converter.warn_if deprecated name (phys_equal x y);
+          value
+        | _ -> value in
+      register result check t;
       result
 
     let digest_bool = Data.Cache.digest ~namespace:name "%b"
@@ -501,7 +512,8 @@ module Create() = struct
       let converter = Converter.to_arg converter in
       let param = get_param ~converter ~default:false ~name in
       let t = Arg.(value @@ flag @@ info (name::synonyms) ~doc ~docv) in
-      register result (fun x -> param || x) t;
+      let check x = Converter.warn_if deprecated name x; x in
+      register result (fun x -> check (param || x)) t;
       result
 
 

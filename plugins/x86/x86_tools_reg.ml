@@ -54,6 +54,23 @@ module Make(CPU : X86CPU) : RR = struct
     | `CS -> X86_env.cs | `DS -> X86_env.ds
     | `ES -> X86_env.es | `FS -> X86_env.fs
     | `GS -> X86_env.gs | `SS -> X86_env.ss
+    | `XMM0 | `YMM0 -> CPU.ymms.(0)
+    | `XMM1 | `YMM1 -> CPU.ymms.(1)
+    | `XMM2 | `YMM2 -> CPU.ymms.(2)
+    | `XMM3 | `YMM3 -> CPU.ymms.(3)
+    | `XMM4 | `YMM4 -> CPU.ymms.(4)
+    | `XMM5 | `YMM5 -> CPU.ymms.(5)
+    | `XMM6 | `YMM6 -> CPU.ymms.(6)
+    | `XMM7 | `YMM7 -> CPU.ymms.(7)
+    | `XMM8 | `YMM8 -> CPU.ymms.(8)
+    | `XMM9 | `YMM9 -> CPU.ymms.(9)
+    | `XMM10 | `YMM10 -> CPU.ymms.(10)
+    | `XMM11 | `YMM11 -> CPU.ymms.(11)
+    | `XMM12 | `YMM12 -> CPU.ymms.(12)
+    | `XMM13 | `YMM13 -> CPU.ymms.(13)
+    | `XMM14 | `YMM14 -> CPU.ymms.(14)
+    | `XMM15 | `YMM15 -> CPU.ymms.(15)
+
 
   let var t =
     if CPU.avaliable t then var_all t
@@ -67,10 +84,11 @@ module Make(CPU : X86CPU) : RR = struct
     let v = bvar r in
     match r, CPU.arch with
     | #Reg.r8h, _ -> Bil.(extract ~hi:15 ~lo:8 v)
-    | (#Reg.r8l as r1), _ | (#Reg.r16 as r1), _ | (#Reg.r32 as r1), `x86_64 ->
+    | (#Reg.r8l as r1), _ | (#Reg.r16 as r1), _ | (#Reg.r32 as r1), `x86_64
+    | (#Reg.r128 as r1), _  ->
       Bil.(cast low (bitwidth r1) v)
     | #Reg.r32, `x86 | #Reg.r64, _ | #Reg.segment_base, _
-    | #Reg.segment, _ -> v
+    | #Reg.segment, _ | #Reg.r256, _ -> v
 
   let set r e =
     let open X86_asm in
@@ -81,13 +99,15 @@ module Make(CPU : X86CPU) : RR = struct
       | #Reg.r8h, _ ->
         let hp = bitsize - 16 in
         Bil.((cast high hp v) ^ e ^ (cast low 8 v))
-      | (#Reg.r8l as r1), _ | (#Reg.r16 as r1), _ ->
+      | (#Reg.r8l as r1), _ | (#Reg.r16 as r1), _
+      | (#Reg.r128 as r1), _ ->
         let hp = bitsize - bitwidth r1 in
         Bil.((cast high hp v) ^ e)
       | #Reg.r32, `x86_64 -> Bil.(cast unsigned bitsize e)
       | #Reg.r32, `x86 | #Reg.r64, `x86_64 | #Reg.segment_base, _
-      | #Reg.segment, _ -> e
+      | #Reg.segment, _ | #Reg.r256, _ -> e
       | #Reg.r64, `x86 -> Error.failwiths "invalid reg"
-                            r X86_asm.sexp_of_reg in
+                            r X86_asm.sexp_of_reg
+    in
     Bil.(lhs := rhs)
 end

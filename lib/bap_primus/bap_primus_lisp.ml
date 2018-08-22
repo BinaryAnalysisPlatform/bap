@@ -385,7 +385,7 @@ module Interpreter(Machine : Machine) = struct
           | None -> Eval.get v
           | Some p ->
             eval (Lisp.Def.Para.default p) >>= fun x ->
-            Env.set v x >>| fun () -> x
+            Eval.set v x >>| fun () -> x
     and app n args =
       Machine.List.map args ~f:eval >>= fun args -> match n with
       | Static _ -> assert false

@@ -185,6 +185,11 @@ module Std : sig
          and type comparator_witness = Primus.Value.comparator_witness
     end
 
+
+    (** (attached (r,o,v) occurs when the relation [r] is established
+        between [o] and [v] *)
+    val attached : (Rel.t * Object.t * Primus.value) Primus.observation
+
     (** Taint tracker control module.
 
         This interface is machine specific, and thus is a functor. It

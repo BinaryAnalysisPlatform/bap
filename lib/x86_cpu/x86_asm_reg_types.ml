@@ -1,3 +1,5 @@
+(** Basic register types of all supported X86 registers. *)
+
 (** 8-bit low byte GPR registers *)
 type r8l = [
   | `AL | `BL | `CL | `DL
@@ -36,6 +38,45 @@ type r64 = [
   | `R12 | `R13 | `R14 | `R15
 ] [@@deriving sexp]
 
+(** SSE register types *)
+type r128 = [
+  | `XMM0
+  | `XMM1
+  | `XMM2
+  | `XMM3
+  | `XMM4
+  | `XMM5
+  | `XMM6
+  | `XMM7
+  | `XMM8
+  | `XMM9
+  | `XMM10
+  | `XMM11
+  | `XMM12
+  | `XMM13
+  | `XMM14
+  | `XMM15
+] [@@deriving sexp]
+
+type r256 = [
+  | `YMM0
+  | `YMM1
+  | `YMM2
+  | `YMM3
+  | `YMM4
+  | `YMM5
+  | `YMM6
+  | `YMM7
+  | `YMM8
+  | `YMM9
+  | `YMM10
+  | `YMM11
+  | `YMM12
+  | `YMM13
+  | `YMM14
+  | `YMM15
+] [@@deriving sexp]
+
 type ip = [
   | `IP
   | `EIP
@@ -61,6 +102,8 @@ type gpr = [
   | r16
   | r32
   | r64
+  | r128
+  | r256
 ] [@@deriving sexp]
 
 type t = [

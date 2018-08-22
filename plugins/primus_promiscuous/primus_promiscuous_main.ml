@@ -21,8 +21,8 @@ include Self()
    {v C1 \/ C2 \/ ... \/ Cm v}.
 
    The infeasible interpreter is a non-deterministic interperter, that
-   for every block B that is terminated with m jumps, will fork m
-   context after a last definition, so that under the n-th context
+   for every block B that is terminated with m jumps, will fork m-1
+   context after the last definition, so that under the n-th context
    the Dn destination will be taken by the interpreter.
 
    For the Dm-th destination to be taken, the following condition must
@@ -76,6 +76,18 @@ let assumptions blk =
         | Bil.Int _ -> assns, (neg assns) :: assms
         | _ -> failwith "Not in TCF") |> snd
 
+
+module TrapPageFault(Machine : Primus.Machine.S) = struct
+  module Code = Primus.Linker.Make(Machine)
+  let exec =
+    Code.unlink (`symbol Primus.Interpreter.pagefault_handler)
+end
+
+module DoNothing(Machine : Primus.Machine.S) = struct
+  let exec = Machine.return ()
+end
+
+
 module Main(Machine : Primus.Machine.S) = struct
   open Machine.Syntax
   module Eval = Primus.Interpreter.Make(Machine)
@@ -85,8 +97,11 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let assume assns =
     Machine.List.iter assns ~f:(fun assn ->
-        Eval.const (Word.of_bool assn.res) >>=
-        Env.set assn.var)
+        Eval.const (Word.of_bool assn.res) >>= fun r ->
+        Eval.get assn.var >>= fun r' ->
+        let op = if assn.res then Bil.OR else Bil.AND in
+        Eval.binop op r r' >>=
+        Eval.set assn.var)
 
   let unsat_assumptions blk =
     Machine.List.map (assumptions blk)
@@ -154,20 +169,30 @@ module Main(Machine : Primus.Machine.S) = struct
     | _ -> Machine.return ()
 
 
-  let map addr =
-    Mem.allocate ~generator:Primus.Generator.Random.Seeded.byte addr 1
+  let default_page_size = 4096
+  let default_generator = Primus.Generator.Random.Seeded.byte
 
-  let make_loadable value =
-    let addr = Primus.Value.to_word value in
-    Mem.is_mapped addr >>= function
-    | false -> map addr
-    | true -> Machine.return ()
+  let map_page already_mapped addr =
+    let rec map len =
+      let last = Addr.nsucc addr (len - 1) in
+      already_mapped last >>= function
+      | true -> map (len / 2)
+      | false ->
+        Mem.allocate ~generator:default_generator addr len in
+    map default_page_size
 
-  let make_writable value =
-    let addr = Primus.Value.to_word value in
-    Mem.is_writable addr >>= function
-    | false -> map addr
-    | true -> Machine.return ()
+  let trap () =
+    Linker.link ~name:Primus.Interpreter.pagefault_handler
+      (module TrapPageFault)
+
+  let pagefault x =
+    Mem.is_mapped x >>= function
+    | false -> map_page Mem.is_mapped x >>= trap
+    | true ->
+      Mem.is_writable x >>= function
+      | false -> map_page Mem.is_writable x >>= trap
+      | true -> Machine.return ()
+
 
   let mark_visited blk =
     Machine.Global.update state ~f:(fun t -> {
@@ -187,10 +212,19 @@ module Main(Machine : Primus.Machine.S) = struct
     Machine.Seq.iter ~f:(fun var ->
         Env.add var (Primus.Generator.static 0))
 
+  let ignore_division_by_zero =
+    Linker.link ~name:Primus.Interpreter.division_by_zero_handler
+      (module DoNothing)
+
+  let ignore_unresolved_names =
+    Linker.link ~name:Primus.Linker.unresolved_handler
+      (module DoNothing)
+
   let init () = Machine.sequence [
       setup_vars;
-      Primus.Interpreter.loading >>> make_loadable;
-      Primus.Interpreter.storing >>> make_writable;
+      ignore_division_by_zero;
+      ignore_unresolved_names;
+      Primus.Interpreter.pagefault >>> pagefault;
       Primus.Interpreter.leave_pos >>> step;
       Primus.Interpreter.leave_blk >>> mark_visited;
     ]

@@ -4,6 +4,7 @@ open Bap_plugins.Std
 
 let suite = "X86" >::: [
     Test_pshufb.suite;
+    Test_pcmp.suite;
   ]
 
 let load_plugins () =
