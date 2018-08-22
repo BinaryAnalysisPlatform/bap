@@ -10,5 +10,5 @@ Library dead_code_elimination_plugin
   FindlibName: bap-plugin-dead_code_elimination
   CompiledObject: best
   BuildDepends: bap
-  InternalModules: Dead_code_elimination_main
+  InternalModules: Dead_code_elimination_main, Dead_code_diff
   XMETAExtraLines: tags="pass,analysis,optimization"

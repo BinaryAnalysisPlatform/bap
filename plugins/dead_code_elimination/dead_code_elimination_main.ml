@@ -4,8 +4,23 @@ open Regular.Std
 open Format
 include Self()
 
-let union ~init ~f =
-  List.fold ~init ~f:(fun xs x -> Set.union xs (f x))
+module Diff = Dead_code_diff
+
+
+type level =
+  | Global
+  | Virtual
+  | Flags [@@deriving bin_io, sexp, compare]
+
+let level_of_string s = level_of_sexp (Sexp.of_string s)
+let level_to_string x = Sexp.to_string (sexp_of_level x)
+let level_equal x y = compare_level x y = 0
+let mem levels x = List.mem levels ~equal:level_equal x
+
+let check_level is_flag levels var =
+  mem levels Global ||
+  (Var.is_virtual var && mem levels Virtual) ||
+  (is_flag var && mem levels Flags)
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -23,185 +38,143 @@ end
 let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
-let free_vars sub =
-  Seq.fold ~init:(Sub.free_vars sub) (Term.enum arg_t sub)
-    ~f:(fun free arg ->
-        Set.union free (Exp.free_vars (Arg.rhs arg)))
-
-let compute_dead protected sub =
+let compute_dead checked protected sub =
   let defs,uses = computed_def_use sub in
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
-      method! enter_def t dead =
-        let v = Def.lhs t in
-        if Set.mem protected (Var.base v) || live v
-        then dead
-        else (Set.add dead (Term.tid t))
-    end)#visit_sub sub Tid.Set.empty
+    method! enter_def t dead =
+      let v = Def.lhs t in
+      if Set.mem protected (Var.base v) || live v || not (checked v)
+      then dead
+      else Set.add dead (Term.tid t)
+  end)#visit_sub sub Tid.Set.empty
 
 let is_alive dead t = not (Set.mem dead (Term.tid t))
-let live_def dead blk = Term.filter def_t ~f:(is_alive dead) blk
 let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
 
-(* a simple constant propagation, that will propagate constant
-   expressions from virtual variables that are assigned only once to
-   the point of usage (if any).
-
-   1. we propagate only virtuals since they are not used/clobbered by
-      function calls. We can't touch real registers, as we don't know
-      the calling convention. And even if we know, a malicious program
-      may easily break it.
-
-   2. instead of a full-fledges reaching definition analysis we are
-      relying on a simple over-approximation: if a variable is defined
-      only once, then it is never redifined. Enough for reaping the
-      low hanging fruits.
-
-   Note, the input is required to be in SSA.
-*)
-
-type sub_extended = {
-  body : sub term;
-  consts : exp Var.Map.t;
-}
-
-type subst = exp Var.Map.t [@@deriving bin_io, sexp, compare]
-
-type data = {
-  deads : Tid.Set.t;
-  substs : subst Tid.Map.t
-} [@@deriving bin_io, sexp, compare]
-
-
-let of_sub s = { body = s; consts = Var.Map.empty }
-
-let update_consts consts vars =
-  Map.fold vars ~init:consts
-    ~f:(fun ~key:v ~data:e consts -> Map.add consts (Var.base v) e)
+let live_def checked dead blk =
+  Term.filter def_t blk ~f:(fun d ->
+      if checked (Def.lhs d) then is_alive dead d
+      else true)
 
 let substitute sub vars =
-  let subst exp =
-    Map.fold vars ~init:exp ~f:(fun ~key:pat ~data:rep ->
-        Exp.substitute Bil.(var pat) rep) in
-  Term.map blk_t sub ~f:(Blk.map_exp ~f:(fun exp ->
-      subst exp |> Exp.fold_consts))
+  (object
+    inherit Term.mapper as super
+    method! map_var v =
+      match Map.find vars v with
+      | None -> Bil.var v
+      | Some e -> e
+    method! map_exp e = Exp.fold_consts (super#map_exp e)
+  end)#map_sub sub
 
-let propagate_consts use_real sub =
-  let vars = (object inherit [exp Var.Map.t] Term.visitor
-
-    method! enter_phi t vars =
-      let lhs = Var.base (Phi.lhs t) in
-      Map.filteri vars ~f:(fun ~key:v ~data:_ ->
-          not (Var.equal (Var.base v) lhs))
-
+(* A simple constant propagation. Note, the input is required to be in SSA. *)
+let propagate_consts checked sub =
+  let vars = (object
+    inherit [exp Var.Map.t] Term.visitor
     method! enter_def t vars =
       let v = Def.lhs t in
-      if Var.is_virtual v || use_real
-      then
+      if checked v then
         match Def.rhs t with
         | Bil.Unknown _ | Bil.Int _ as exp ->
           Map.add vars ~key:v ~data:exp
         | _ -> vars
       else vars
-  end)#visit_sub sub.body Var.Map.empty in
-  { body = substitute sub.body vars;
-    consts = update_consts sub.consts vars; }
+  end)#visit_sub sub Var.Map.empty in
+  substitute sub vars
 
-let clean_sub sub dead =
-  Term.map blk_t sub ~f:(fun b -> live_def dead b |> live_phi dead)
+let clean checked dead sub =
+  Term.map blk_t sub ~f:(fun b -> live_def checked dead b |> live_phi dead)
 
-let clean dead sub = { sub with body = clean_sub sub.body dead }
-let free_vars sub = free_vars sub.body
-let compute_dead free sub = compute_dead free sub.body
+let return_from_ssa sub =
+  let drop_index t = (object
+    inherit Term.mapper
+    method! map_sym var = Var.base var
+  end)#map_sub t in
+  Term.map blk_t sub ~f:(Term.filter phi_t ~f:(fun _ -> false)) |>
+  drop_index
 
-let remove_deads deads prog =
-  Term.map sub_t prog
-    ~f:(Term.map blk_t
-          ~f:(Term.filter def_t ~f:(is_alive deads)))
+let is_flag arch =
+  let module T = (val (target_of_arch arch)) in
+  T.CPU.is_flag
 
-let collect_consts subs =
-  List.fold subs ~init:Tid.Map.empty
-    ~f:(fun all s -> Map.add all (Term.tid s.body) s.consts)
+let free_vars prog =
+  report_progress ~note:"free-vars" ();
+  Term.enum sub_t prog |>
+  Seq.fold ~init:Var.Set.empty ~f:(fun free sub ->
+      let free = Set.union free (Sub.free_vars sub) in
+      Seq.fold ~init:free (Term.enum arg_t sub)
+        ~f:(fun free arg ->
+            Set.union free (Exp.free_vars (Arg.rhs arg))))
 
-let update prog {deads; substs } =
-  report_progress ~note:"apply changes" ();
-  Term.map sub_t prog
-    ~f:(fun sub ->
-        match Map.find substs (Term.tid sub) with
-        | None -> sub
-        | Some vars -> substitute sub vars) |>
-  remove_deads deads
+let union ~init ~f = List.fold ~init ~f:(fun xs x -> Set.union xs (f x))
 
-let process prog use_real =
-  let rec run dead subs =
+let process arch prog levels =
+  let checked = check_level (is_flag arch) levels in
+  let free = free_vars prog in
+  let rec run subs =
     report_progress ~note:"propagate consts" ();
-    let subs = List.rev_map subs ~f:(propagate_consts use_real) in
-    report_progress ~note:"free-vars" ();
-    let free = union ~init:Var.Set.empty ~f:free_vars subs in
+    let subs = List.rev_map subs ~f:(propagate_consts checked) in
     report_progress ~note:"dead-vars" ();
-    let dead' = union ~init:dead ~f:(compute_dead free) subs in
+    let dead = union ~init:Tid.Set.empty ~f:(compute_dead checked free) subs in
     report_progress ~note:"clean" ();
-    if Set.length dead' > Set.length dead then
-      run dead' (List.rev_map subs ~f:(clean dead'))
-    else dead', subs in
-  let subs = Term.enum sub_t prog |> Seq.map ~f:of_sub |> Seq.to_list_rev in
+    if Set.is_empty dead then subs
+    else run (List.rev_map subs ~f:(clean checked dead)) in
+  let subs = Term.enum sub_t prog |> Seq.to_list_rev in
   report_progress ~note:"ssa form" ();
-  let subs = List.rev_map ~f:(fun s -> {s with body = Sub.ssa s.body}) subs in
-  let deads, subs = run Tid.Set.empty subs in
-  let substs = collect_consts subs in
-  let data = { deads; substs; } in
-  let prog = update prog data in
-  prog, data
+  let subs = List.rev_map ~f:Sub.ssa subs in
+  let subs = run subs in
+  let subs = List.rev_map ~f:return_from_ssa subs in
+  report_progress ~note:"calculating diff" ();
+  let diff = Diff.create prog subs in
+  report_progress ~note:"apply diff" ();
+  Diff.apply prog diff, diff
 
-
-module Dead_code_data = struct
-  include Regular.Make(struct
-      type nonrec t = data [@@deriving bin_io, sexp, compare]
-      let version = version
-      let module_name = None
-      let hash = Hashtbl.hash
-      let pp fmt t =
-        Format.fprintf fmt "dead tids: ";
-        Set.iter t.deads ~f:(Format.fprintf fmt "%a " Tid.pp);
-        Format.pp_print_newline fmt ();
-        Format.fprintf fmt "substitutions: ";
-        Map.iteri t.substs ~f:(fun ~key:tid ~data:subst ->
-            if not (Map.is_empty subst) then
-              let () = Format.fprintf fmt "%s: " (Tid.name tid) in
-              let () = Map.iteri subst ~f:(fun ~key:v ~data:e ->
-                  Format.fprintf fmt "(%a %a) " Var.pp v Exp.pp e) in
-              Format.pp_print_newline fmt ());
-    end)
-end
-
-let digest proj =
+let digest proj levels =
   let module Digest = Data.Cache.Digest in
-  (object
-    inherit [Digest.t] Term.visitor
-    method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
-    method! enter_def t dst = Digest.add dst "%a" Def.pp t
-    method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
-  end)#run
-    (Project.program proj)
-    (Digest.create ~namespace:"dead_code_elimination")
+  let digest =
+    (object
+      inherit [Digest.t] Term.visitor
+      method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
+      method! enter_def t dst = Digest.add dst "%a" Def.pp t
+      method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
+    end)#run
+      (Project.program proj)
+      (Digest.create ~namespace:"dead_code_elimination") in
+  List.fold ~init:digest levels
+    ~f:(fun digest lvl -> Digest.add digest "%s" (level_to_string lvl))
 
-let run use_real proj =
-  let digest = digest proj in
+let run levels proj =
+  let digest = digest proj levels in
+  let arch = Project.arch proj in
   let prog =
-    match Dead_code_data.Cache.load digest with
-    | Some x -> update (Project.program proj) x
+    match Diff.Cache.load digest with
+    | Some diff ->
+      Diff.apply (Project.program proj) diff
     | None ->
-      let prog, res = process (Project.program proj) use_real in
-      Dead_code_data.Cache.save digest res;
+      let prog, res = process arch (Project.program proj) levels in
+      Diff.Cache.save digest res;
       prog in
   Project.with_program proj prog
+
+module Levels = struct
+  let printer fmt t = Format.fprintf fmt "%s" (level_to_string t)
+
+  let fail = sprintf
+      "unknown value %s, possible values are: flags | global | virtual"
+
+  let parser s =
+    try `Ok (level_of_string s)
+    with (Failure _) -> `Error (fail s)
+
+  let t = Config.list (Config.converter parser printer Virtual)
+end
 
 let () =
   Config.manpage [
     `S "SYNOPSIS";
     `Pre "
-    $(b,--no-$mname)
+     $(b,--)$(mname)
 ";
     `S "DESCRIPTION";
 
@@ -233,9 +206,13 @@ let () =
     `S "SEE ALSO";
     `P "$(b,bap-plugin-api)(1), $(b,bap-plugin-ssa)(1)";
   ];
-  let use_real =
-    let doc = "Propagates consts in registers" in
-    Config.flag ~doc "use-real" in
+  let level =
+    let doc =
+      "A list of comma separated values that defines a level of optimization,
+       i.e. what variables are considered in the analysis. Possible variants are:
+       $(b,virtual), $(b,flags) for virual variables and flags, and
+       $(b,global) for all variables. The default value is $(b, virtual,flags)" in
+    Config.(param Levels.t ~default:[Virtual; Flags] ~doc "level") in
 
-  Config.when_ready (fun {Config.get} ->
-      Project.register_pass ~deps:["api"] ~autorun:true (run (get use_real)))
+  Config.when_ready (fun {Config.get=(!)} ->
+      Project.register_pass ~deps:["api"] ~autorun:true (run !level))
