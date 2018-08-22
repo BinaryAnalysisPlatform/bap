@@ -147,6 +147,8 @@ let run ?(options=[]) ?(argv=Sys.argv) ?input () =
   let extra_args =
     Array.of_list @@ List.map options ~f:(fun (key,value) ->
         sprintf "--%s=%s" key value) in
+  let argv = if Array.length argv = 0
+    then [| current_name () |] else argv in
   let argv = Array.append argv extra_args in
   match Term.eval ~argv (!main_grammar, !term_info) with
   | `Error _ -> Error Failed
