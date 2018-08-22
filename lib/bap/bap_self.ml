@@ -111,30 +111,36 @@ module Input = struct
     | `Data _ -> fprintf ppf "-"
 
   let arg_converter = Arg.conv (parse_spec, print_spec)
+  let opt_converter = Arg.some arg_converter
   let default = `Path "a.out"
 
   let old_parser_interface parser x = match parser x with
     | Ok x -> `Ok x
     | Error (`Msg x) -> `Error x
 
+  let opt_digest = function
+    | None -> Data.Cache.digest ~namespace:"main" "no-input"
+    | Some input -> IO.digest input
+
+
   let param =
     let value,ready = Stream.create () in
     let converter = {
-      parser = old_parser_interface parse_spec;
-      printer = print_spec;
-      default;
-      digest = IO.digest;
+      parser = (fst opt_converter);
+      printer = (snd opt_converter);
+      default = None;
+      digest = opt_digest;
     } in
     let doc = "a path to input or $(b,-) if it should be read
       from the standard input" in
     let param = {
       ready; value; converter;
-      current = default;
+      current = None;
       ident = "input";
       space = "bap";
       descr = doc;
     } in
-    let term = Arg.(value & pos 0 arg_converter default &
+    let term = Arg.(value & pos 0 (some arg_converter) None &
                     info [] ~doc ~docv:"FILE") in
     register param ident term;
     connect_param_signals param;
@@ -143,7 +149,7 @@ end
 
 
 let run ?(options=[]) ?(argv=Sys.argv) ?input () =
-  Option.iter input ~f:(Signal.send Input.param.ready);
+  Signal.send Input.param.ready input;
   let extra_args =
     Array.of_list @@ List.map options ~f:(fun (key,value) ->
         sprintf "--%s=%s" key value) in

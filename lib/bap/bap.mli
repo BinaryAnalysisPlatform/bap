@@ -8873,7 +8873,8 @@ module Std : sig
 
       val input : [
           | `Data of Bigstring.t
-          | `Path of string] param
+          | `Path of string
+        ] option param
 
       (** Parse a string to an 'a *)
       type 'a parser = string -> [ `Ok of 'a | `Error of string ]

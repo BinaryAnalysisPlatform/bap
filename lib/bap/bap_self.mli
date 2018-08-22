@@ -56,7 +56,7 @@ module Create() : sig
     val input : [
       | `Path of string
       | `Data of Bigstring.t
-    ] param
+    ] option param
 
     val converter :
       ?digest:('a -> digest) ->
