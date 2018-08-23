@@ -6,21 +6,15 @@ include Self()
 
 module Diff = Dead_code_diff
 
+type level = int
 
-type level =
-  | Global
-  | Virtual
-  | Flags [@@deriving bin_io, sexp, compare]
+let touch_physical_registers level = level > 2
+let touch_flags level = level > 1
 
-let level_of_string s = level_of_sexp (Sexp.of_string s)
-let level_to_string x = Sexp.to_string (sexp_of_level x)
-let level_equal x y = compare_level x y = 0
-let mem levels x = List.mem levels ~equal:level_equal x
-
-let check_level is_flag levels var =
-  mem levels Global ||
-  (Var.is_virtual var && mem levels Virtual) ||
-  (is_flag var && mem levels Flags)
+let is_optimization_allowed is_flag level var =
+  touch_physical_registers level ||
+  Var.is_virtual var ||
+  (is_flag var && touch_flags level)
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -38,14 +32,14 @@ end
 let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
-let compute_dead checked protected sub =
+let compute_dead can_touch protected sub =
   let defs,uses = computed_def_use sub in
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
     method! enter_def t dead =
       let v = Def.lhs t in
-      if Set.mem protected (Var.base v) || live v || not (checked v)
+      if not (can_touch v) || Set.mem protected (Var.base v) || live v
       then dead
       else Set.add dead (Term.tid t)
   end)#visit_sub sub Tid.Set.empty
@@ -53,46 +47,43 @@ let compute_dead checked protected sub =
 let is_alive dead t = not (Set.mem dead (Term.tid t))
 let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
 
-let live_def checked dead blk =
+let live_def can_touch dead blk =
   Term.filter def_t blk ~f:(fun d ->
-      if checked (Def.lhs d) then is_alive dead d
-      else true)
+      not (can_touch (Def.lhs d)) || is_alive dead d)
 
-let substitute sub vars =
-  (object
-    inherit Term.mapper as super
-    method! map_var v =
-      match Map.find vars v with
+let rec substitute vars exp =
+  let substituter = object
+    inherit Exp.mapper as super
+    method! map_let var ~exp ~body =
+      let exp = super#map_exp exp in
+      let body = substitute (Map.remove vars var) body in
+      Bil.let_ var exp body
+    method! map_var v = match Map.find vars v with
       | None -> Bil.var v
       | Some e -> e
-    method! map_exp e = Exp.fold_consts (super#map_exp e)
-  end)#map_sub sub
+  end in
+  substituter#map_exp exp |> Exp.fold_consts
+
+let substitute sub vars =
+  Term.map blk_t sub ~f:(Blk.map_exp ~skip:[`phi] ~f:(substitute vars))
 
 (* A simple constant propagation. Note, the input is required to be in SSA. *)
-let propagate_consts checked sub =
-  let vars = (object
-    inherit [exp Var.Map.t] Term.visitor
-    method! enter_def t vars =
-      let v = Def.lhs t in
-      if checked v then
-        match Def.rhs t with
-        | Bil.Unknown _ | Bil.Int _ as exp ->
-          Map.add vars ~key:v ~data:exp
-        | _ -> vars
-      else vars
-  end)#visit_sub sub Var.Map.empty in
-  substitute sub vars
+let propagate_consts can_touch sub =
+  Seq.fold (Term.enum blk_t sub) ~init:Var.Map.empty
+    ~f:(fun vars b ->
+        Seq.fold (Term.enum def_t b) ~init:vars
+          ~f:(fun vars d ->
+              let v = Def.lhs d in
+              if can_touch v then
+                match Def.rhs d with
+                | Bil.Unknown _ | Bil.Int _ as exp ->
+                  Map.add vars ~key:v ~data:exp
+                | _ -> vars
+              else vars)) |>
+  substitute sub
 
-let clean checked dead sub =
-  Term.map blk_t sub ~f:(fun b -> live_def checked dead b |> live_phi dead)
-
-let return_from_ssa sub =
-  let drop_index t = (object
-    inherit Term.mapper
-    method! map_sym var = Var.base var
-  end)#map_sub t in
-  Term.map blk_t sub ~f:(Term.filter phi_t ~f:(fun _ -> false)) |>
-  drop_index
+let clean can_touch dead sub =
+  Term.map blk_t sub ~f:(fun b -> live_def can_touch dead b |> live_phi dead)
 
 let is_flag arch =
   let module T = (val (target_of_arch arch)) in
@@ -100,75 +91,52 @@ let is_flag arch =
 
 let free_vars prog =
   report_progress ~note:"free-vars" ();
-  Term.enum sub_t prog |>
-  Seq.fold ~init:Var.Set.empty ~f:(fun free sub ->
-      let free = Set.union free (Sub.free_vars sub) in
-      Seq.fold ~init:free (Term.enum arg_t sub)
-        ~f:(fun free arg ->
-            Set.union free (Exp.free_vars (Arg.rhs arg))))
+  let (++) = Set.union in
+  let collect cls t ~f =
+    Seq.fold (Term.enum cls t) ~init:Var.Set.empty
+      ~f:(fun acc x -> acc ++ f x) in
+  let sub_free sub = Sub.free_vars sub |> Set.filter ~f:Var.is_physical in
+  let sub_args sub =
+    collect arg_t sub ~f:(fun arg -> Exp.free_vars (Arg.rhs arg)) in
+  collect sub_t prog ~f:(fun sub -> sub_args sub ++ sub_free sub)
 
-let union ~init ~f = List.fold ~init ~f:(fun xs x -> Set.union xs (f x))
+let process_sub free can_touch sub =
+  let rec loop s =
+    let s = propagate_consts can_touch s in
+    let dead = compute_dead can_touch free s in
+    if Set.is_empty dead then s
+    else loop (clean can_touch dead s) in
+  let sub' = loop (Sub.ssa sub) in
+  Diff.diff_of_sub sub sub'
 
-let process arch prog levels =
-  let checked = check_level (is_flag arch) levels in
-  let free = free_vars prog in
-  let rec run subs =
-    report_progress ~note:"propagate consts" ();
-    let subs = List.rev_map subs ~f:(propagate_consts checked) in
-    report_progress ~note:"dead-vars" ();
-    let dead = union ~init:Tid.Set.empty ~f:(compute_dead checked free) subs in
-    report_progress ~note:"clean" ();
-    if Set.is_empty dead then subs
-    else run (List.rev_map subs ~f:(clean checked dead)) in
-  let subs = Term.enum sub_t prog |> Seq.to_list_rev in
-  report_progress ~note:"ssa form" ();
-  let subs = List.rev_map ~f:Sub.ssa subs in
-  let subs = run subs in
-  let subs = List.rev_map ~f:return_from_ssa subs in
-  report_progress ~note:"calculating diff" ();
-  let diff = Diff.create prog subs in
-  report_progress ~note:"apply diff" ();
-  Diff.apply prog diff, diff
+module Digest = Data.Cache.Digest
 
-let digest proj levels =
-  let module Digest = Data.Cache.Digest in
+let digest_of_sub sub level =
   let digest =
     (object
       inherit [Digest.t] Term.visitor
       method! enter_arg t dst = Digest.add dst "%a" Arg.pp t
       method! enter_def t dst = Digest.add dst "%a" Def.pp t
       method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
-    end)#run
-      (Project.program proj)
+    end)#visit_sub sub
       (Digest.create ~namespace:"dead_code_elimination") in
-  List.fold ~init:digest levels
-    ~f:(fun digest lvl -> Digest.add digest "%s" (level_to_string lvl))
+  Digest.add digest "%s" (string_of_int level)
 
-let run levels proj =
-  let digest = digest proj levels in
+let run level proj =
   let arch = Project.arch proj in
-  let prog =
-    match Diff.Cache.load digest with
-    | Some diff ->
-      Diff.apply (Project.program proj) diff
-    | None ->
-      let prog, res = process arch (Project.program proj) levels in
-      Diff.Cache.save digest res;
-      prog in
-  Project.with_program proj prog
-
-module Levels = struct
-  let printer fmt t = Format.fprintf fmt "%s" (level_to_string t)
-
-  let fail = sprintf
-      "unknown value %s, possible values are: flags | global | virtual"
-
-  let parser s =
-    try `Ok (level_of_string s)
-    with (Failure _) -> `Error (fail s)
-
-  let t = Config.list (Config.converter parser printer Virtual)
-end
+  let can_touch = is_optimization_allowed (is_flag arch) level in
+  let prog = Project.program proj in
+  let free = free_vars prog in
+  Project.with_program proj @@
+  Term.map sub_t prog ~f:(fun sub ->
+      let digest = digest_of_sub sub level in
+      let diff = match Diff.Cache.load digest with
+        | Some diff -> diff
+        | None ->
+          let diff = process_sub free can_touch sub in
+          Diff.Cache.save digest diff;
+          diff in
+      Diff.apply sub diff)
 
 let () =
   Config.manpage [
@@ -208,11 +176,11 @@ let () =
   ];
   let level =
     let doc =
-      "A list of comma separated values that defines a level of optimization,
-       i.e. what variables are considered in the analysis. Possible variants are:
-       $(b,virtual), $(b,flags) for virual variables and flags, and
-       $(b,global) for all variables. The default value is $(b, virtual,flags)" in
-    Config.(param Levels.t ~default:[Virtual; Flags] ~doc "level") in
+      "An integer that a level of optimization, i.e. what variables
+       are considered in analysis:
+       $(b,1) for virtual variables only, $(b,2) for virtual variables
+       and flags and $(b,3) for all physical and virtual." in
+    Config.(param int ~default:2 ~doc "level") in
 
   Config.when_ready (fun {Config.get=(!)} ->
       Project.register_pass ~deps:["api"] ~autorun:true (run !level))

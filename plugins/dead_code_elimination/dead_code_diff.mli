@@ -4,10 +4,8 @@ open Regular.Std
 
 type t
 
-(** [create prg subs] creates diff of subroutines of the program [prg] and [subs] *)
-val create : program term -> sub term list -> t
+val diff_of_sub : sub term -> sub term -> t
 
-(** [apply prg diff] applies diff to [prg]  *)
-val apply : program term -> t -> program term
+val apply : sub term -> t -> sub term
 
-include Regular.S with type t := t
+include Data.S with type t := t

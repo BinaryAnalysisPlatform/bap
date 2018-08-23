@@ -3,111 +3,90 @@ open Bap.Std
 open Regular.Std
 include Self()
 
-type jmp_diff = Target of exp | Cond of exp
-[@@deriving bin_io, sexp, compare]
-
-type t = {
-  dead : Tid.Set.t;
-  defs : exp Tid.Map.t;
-  jmps : jmp_diff list Tid.Map.t;
+type jmp_change = {
+  cond : exp;
+  kind : jmp_kind;
 } [@@deriving bin_io, sexp, compare]
 
-type diff = t
-type snap = [`Def of def term | `Jmp of jmp term] Tid.Table.t
+type change = Rhs of exp | Jmp of jmp_change
+[@@deriving bin_io, sexp, compare]
 
-let empty = {dead = Tid.Set.empty; defs = Tid.Map.empty; jmps = Tid.Map.empty}
+type diff = Update of change | Kill [@@deriving bin_io, sexp, compare]
+type t = diff Tid.Map.t  [@@deriving bin_io, sexp, compare]
 
-let empty_snap : snap = Tid.Table.create ()
+let empty = Tid.Map.empty
 
-let snapshot snap sub =
-  (object
-    inherit [unit] Term.visitor
-    method! enter_def def () =
-      Hashtbl.add_exn snap (Term.tid def) (`Def def)
-    method! enter_jmp jmp () =
-      Hashtbl.add_exn snap (Term.tid jmp) (`Jmp jmp)
-  end)#visit_sub sub ();
-  snap
+let drop_index = (object
+  inherit Exp.mapper
+  method! map_sym var = Var.base var
+end)#map_exp
 
-let snapshot = List.fold ~init:empty_snap ~f:snapshot
+let changes_in_def d1 d2 =
+  let different = not (phys_equal d1 d2) && Exp.(Def.rhs d1 <> Def.rhs d2) in
+  if different then
+    let d2 = Def.map_exp ~f:drop_index d2 in
+    Some (Term.tid d1, Update (Rhs (Def.rhs d2)))
+  else None
 
-let create prog subs =
-  let snap = snapshot subs in
-  let find_jmp' tid = match Hashtbl.find snap tid with
-    | Some (`Jmp j) -> j
+let changes_in_jmp j1 j2 =
+  let different = not (phys_equal j1 j2) && Jmp.(j1 <> j2) in
+  if different then
+    let j2 = Jmp.map_exp j2 ~f:drop_index in
+    let update = Update (Jmp {kind=Jmp.kind j2; cond=Jmp.cond j2}) in
+    Some (Term.tid j2, update)
+  else None
+
+let elts ~add elts = Seq.fold ~init:empty elts ~f:add
+
+let add_blk_elt acc elt = match elt with
+  | `Def def -> Map.add acc (Term.tid def) elt
+  | `Jmp jmp -> Map.add acc (Term.tid jmp) elt
+  | _ -> acc
+
+let add_elt acc t = Map.add acc (Term.tid t) t
+let blk_elts b = elts ~add:add_blk_elt (Blk.elts b)
+let sub_elts s = elts ~add:add_elt (Term.enum blk_t s)
+
+let diff_of_blk b1 b2 =
+  let add_changes xs diff = match xs with
+    | None -> diff
+    | Some (tid,changes) -> Map.add diff tid changes in
+  let kill d = Some (Term.tid d, Kill) in
+  let (++) = add_changes in
+  let was = blk_elts b1 and now = blk_elts b2 in
+  Map.fold2 was now ~init:empty ~f:(fun ~key:_ ~data acc -> match data with
+      | `Both (`Def d1, `Def d2) -> changes_in_def d1 d2 ++ acc
+      | `Both (`Jmp j1, `Jmp j2) -> changes_in_jmp j1 j2 ++ acc
+      | `Left (`Def d) -> kill d ++ acc
+      | _ -> acc)
+
+let diff_of_sub s1 s2 =
+  let add ~key ~data acc = Map.add ~key ~data acc in
+  let was = sub_elts s1 and now = sub_elts s2 in
+  Map.fold2 was now ~init:empty ~f:(fun ~key:_ ~data acc ->
+      match data with
+      | `Both (b1, b2) -> diff_of_blk b1 b2 |> Map.fold ~init:acc ~f:add
+      | _ -> acc)
+
+let apply sub diff =
+  let apply_to_def d =
+    match Map.find diff (Term.tid d) with
+    | None -> Some d
+    | Some Kill -> None
+    | Some (Update (Rhs e)) -> Some (Def.with_rhs d e)
     | _ -> assert false in
-  let indirect_target jmp = match Jmp.kind jmp with
-    | Ret _ | Int _ | Goto (Direct _) -> None
-    | Goto (Indirect a) -> Some a
-    | Call c -> match Call.target c with
-      | Indirect a -> Some a
-      | _ -> None in
-  (object
-    inherit [diff] Term.visitor
+  let apply_to_jmp j =
+    match Map.find diff (Term.tid j) with
+    | None -> j
+    | Some (Update (Jmp {cond; kind})) ->
+      let j = Jmp.with_cond j cond in
+      Jmp.with_kind j kind
+    | _ -> assert false in
+  Term.map blk_t sub ~f:(fun b ->
+      Term.filter_map def_t b ~f:apply_to_def |>
+      Term.map jmp_t ~f:apply_to_jmp)
 
-    method! enter_def d ({dead;defs} as diff) =
-      let tid = Term.tid d in
-      match Hashtbl.find snap tid with
-      | None -> {diff with dead = Set.add dead tid }
-      | Some (`Def d') ->
-        if Exp.equal (Def.rhs d) (Def.rhs d')
-        then diff
-        else {diff with defs = Map.add defs tid (Def.rhs d')}
-      | _ -> assert false
-
-    method! enter_jmp jmp ({jmps} as diff) =
-      let tid = Term.tid jmp in
-      let jmp' = find_jmp' tid in
-      let jmp_diffs =
-        match indirect_target jmp, indirect_target jmp' with
-        | Some a, Some a' ->
-          if Exp.equal a a' then []
-          else [Target a']
-        | _ -> [] in
-      let jmp_diffs =
-        if Exp.equal (Jmp.cond jmp) (Jmp.cond jmp') then jmp_diffs
-        else Cond (Jmp.cond jmp') :: jmp_diffs in
-      match jmp_diffs with
-      | [] -> diff
-      | jmp_diffs -> {diff with jmps = Map.add jmps tid jmp_diffs}
-  end)#run prog empty
-
-let apply prog {dead; defs; jmps} =
-  let replace_indirect jmp x =
-    let kind = match Jmp.kind jmp with
-      | Ret _ | Int _ | Goto (Direct _) as kind -> kind
-      | Goto (Indirect _) -> Goto (Indirect x)
-      | Call c as kind -> match Call.target c with
-        | Indirect _ -> Call (Call.with_target c (Indirect x))
-        | _ -> kind in
-    Jmp.with_kind jmp kind in
-  Term.map sub_t prog ~f:(Term.map blk_t ~f:(fun blk ->
-      Term.filter_map def_t blk ~f:(fun def ->
-          let tid = Term.tid def in
-          if Set.mem dead tid then None
-          else match Map.find defs tid with
-            | None -> Some def
-            | Some rhs -> Some (Def.with_rhs def rhs)) |>
-      Term.map jmp_t ~f:(fun jmp ->
-          match Map.find jmps (Term.tid jmp) with
-          | None -> jmp
-          | Some diffs ->
-            List.fold diffs ~init:jmp ~f:(fun jmp -> function
-                | Target t -> replace_indirect jmp t
-                | Cond c -> Jmp.with_cond jmp c))))
-
-include Regular.Make(struct
-    type nonrec t = t [@@deriving bin_io, sexp, compare]
-    let version = version
-    let module_name = None
-    let hash = Hashtbl.hash
-    let pp fmt t =
-      Format.fprintf fmt "dead tids: ";
-      Set.iter t.dead ~f:(Format.fprintf fmt "%a " Tid.pp);
-      Format.pp_print_newline fmt ();
-      if not (Map.is_empty t.defs) then
-        let () = Format.fprintf fmt "substitutions: " in
-        Map.iteri t.defs ~f:(fun ~key:tid ~data:exp ->
-            Format.fprintf fmt "(%a %a) " Tid.pp tid Exp.pp exp);
-        Format.pp_print_newline fmt ()
+include Data.Make(struct
+    type nonrec t = t
+    let version = "0.1"
   end)
