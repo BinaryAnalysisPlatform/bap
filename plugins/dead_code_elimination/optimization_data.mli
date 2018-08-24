@@ -4,7 +4,9 @@ open Regular.Std
 
 type t
 
-val diff_of_sub : sub term -> sub term -> t
+val mark_updated : 'a term -> 'a term
+
+val create : deads:Tid.Set.t -> sub term -> t
 
 val apply : sub term -> t -> sub term
 

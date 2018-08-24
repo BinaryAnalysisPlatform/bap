@@ -1165,6 +1165,17 @@ module Ir_blk = struct
     }
   }
 
+  let map_elts ?phi ?def ?jmp blk =
+    let map get ~f = match f with
+      | None -> get blk.self
+      | Some f -> Array.map (get blk.self) ~f in {
+      blk with self = {
+        phis = map phis ~f:phi;
+        defs = map defs ~f:def;
+        jmps = map jmps ~f:jmp
+      }
+    }
+
   let substitute ?skip blk x y =
     map_exp ?skip  blk ~f:(Exp.substitute x y)
 
