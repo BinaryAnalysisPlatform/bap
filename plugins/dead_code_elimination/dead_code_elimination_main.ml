@@ -4,17 +4,19 @@ open Regular.Std
 open Format
 include Self()
 
+module Digest = Data.Cache.Digest
 module O = Optimization_data
 
 type level = int
 
-let touch_physical_registers level = level > 2
-let touch_flags level = level > 1
+let can_touch_physicals level = level > 2
+let can_touch_flags level = level > 1
+
+let (>=>) x y = if x then y else true
 
 let is_optimization_allowed is_flag level var =
-  touch_physical_registers level ||
-  Var.is_virtual var ||
-  (is_flag var && touch_flags level)
+  (Var.is_physical var >=> can_touch_physicals level) &&
+  (is_flag var >=> can_touch_flags level)
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -121,8 +123,6 @@ let process_sub free can_touch sub =
     else loop dead (clean can_touch dead' s) in
   let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
   O.create dead sub'
-
-module Digest = Data.Cache.Digest
 
 let digest_of_sub sub level =
   let digest =
