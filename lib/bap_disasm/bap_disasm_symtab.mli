@@ -20,3 +20,6 @@ val dominators : t -> mem -> fn list
 val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
 val span : fn -> unit memmap
+
+val add_callee : t -> addr -> string -> t
+val find_callee : t -> addr -> string option

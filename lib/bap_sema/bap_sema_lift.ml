@@ -233,15 +233,51 @@ let lift_sub entry cfg =
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
+let create_synthetic name =
+  let sub = Ir_sub.create ~name () in
+  Tid.set_name (Term.tid sub) name;
+  Term.(set_attr sub synthetic ())
+
+let find_externals symtab sub =
+  let fold cls t ~f ~init = Term.to_sequence cls t |> Seq.fold ~f ~init in
+  let symbol_exists name = Option.is_some (Symtab.find_by_name symtab name) in
+  let is_indirect_call jmp = match Ir_jmp.kind jmp with
+    | Ret _ | Int _ | Goto _ -> false
+    | Call call -> match Call.target call with
+      | Indirect (Bil.Int _) -> true
+      | _ -> false in
+  let is_external jmp name = not (symbol_exists name) && is_indirect_call jmp in
+  let external_call jmp =
+    Option.(Term.get_attr jmp address >>= fun addr ->
+            Symtab.find_callee symtab addr >>= fun name ->
+            some_if (is_external jmp name) (addr,name)) in
+  fold blk_t sub ~init:[] ~f:(fun acc blk ->
+      fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
+          match external_call jmp with
+          | Some x -> x :: acc
+          | _ -> acc))
+
+let update_externals exts addrs symtab sub =
+  find_externals symtab sub |>
+  List.iter ~f:(fun (addr, name) ->
+      let sub = Hashtbl.find_or_add exts name
+          ~default:(fun () -> create_synthetic name) in
+      Hashtbl.update addrs addr ~f:(function
+          | None -> Term.tid sub
+          | Some x -> x))
+
 let program symtab =
   let b = Ir_program.Builder.create () in
   let addrs = Addr.Table.create () in
+  let externals = String.Table.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let sub = lift_sub entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
-      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
+      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
+      update_externals externals addrs symtab sub);
+  Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
   let program = Ir_program.Builder.result b in
   Term.map sub_t program
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
