@@ -26,7 +26,6 @@ let terminator_addr blk =
   Memory.min_addr
 
 let is_fall e = Cfg.Edge.label e = `Fall
-let has_call blk = Insn.(is call) (Block.terminator blk)
 
 let callee_of_edge e =
   if is_fall e then None
@@ -42,32 +41,35 @@ let add_if_root entries roots blk =
   else entries
 
 let fold_callees blk cfg ~init ~f =
-  let outputs = Cfg.Node.outputs blk cfg in
-  Seq.filter_map outputs ~f:callee_of_edge |>
+  Cfg.Node.outputs blk cfg |>
+  Seq.filter_map ~f:callee_of_edge |>
   Seq.fold ~init ~f
 
-let add_entries roots cfg entries blk =
-  let entries =
-    if Set.mem roots (Block.addr blk) then
-      Set.add entries blk
-    else entries in
+let add_entries entries cfg blk =
   fold_callees blk cfg ~init:entries ~f:Set.add
 
 let add_callees syms name cfg blk =
   let call_addr = terminator_addr blk in
   if has_fall_only blk cfg then
+    let () = printf "add callee ext: %s %s\n" (Word.to_string call_addr)
+        (name call_addr) in
     Symtab.add_callee syms call_addr (name call_addr)
   else
     fold_callees blk cfg ~init:syms ~f:(fun syms c ->
+        printf "add callee: %s %s\n" (Word.to_string call_addr)
+          (name (Block.addr c));
         Symtab.add_callee syms call_addr (name (Block.addr c)))
 
 let collect name cfg roots =
   Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
-    ~f:(fun ((entries,syms) as acc) blk ->
-        if has_call blk then
-          add_entries roots cfg entries blk,
+    ~f:(fun (entries,syms) blk ->
+        let entries =
+          if Set.mem roots (Block.addr blk) then Set.add entries blk
+          else entries in
+        if Insn.(is call) (Block.terminator blk) then
+          add_entries entries cfg blk,
           add_callees syms name cfg blk
-        else acc)
+        else entries,syms)
 
 let reconstruct name roots prog =
   let roots = Addr.Set.of_list roots in

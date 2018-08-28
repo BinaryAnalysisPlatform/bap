@@ -18,10 +18,7 @@ exception Pass_not_found of string [@@deriving sexp]
 let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
 
-let brancher o =
-  match find_source (module Brancher.Factory) brancher o with
-  | Some _ as b -> b
-  | None -> Brancher.Factory.find "relocatable"
+let brancher = find_source (module Brancher.Factory) brancher
 
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor

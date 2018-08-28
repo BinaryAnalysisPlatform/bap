@@ -254,7 +254,9 @@ let find_externals symtab sub =
   fold blk_t sub ~init:[] ~f:(fun acc blk ->
       fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
           match external_call jmp with
-          | Some x -> x :: acc
+          | Some x ->
+            printf "lift: external call at %s\n" (Word.to_string (fst x));
+            x :: acc
           | _ -> acc))
 
 let update_externals exts addrs symtab sub =
