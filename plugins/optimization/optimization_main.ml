@@ -132,7 +132,7 @@ let digest_of_sub sub level =
       method! enter_def t dst = Digest.add dst "%a" Def.pp t
       method! enter_jmp t dst = Digest.add dst "%a" Jmp.pp t
     end)#visit_sub sub
-      (Digest.create ~namespace:"dead_code_elimination") in
+      (Digest.create ~namespace:"optimization") in
   let digest = Digest.add digest "%s" (Sub.name sub) in
   Digest.add digest "%s" (string_of_int level)
 
