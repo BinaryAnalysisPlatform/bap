@@ -12,11 +12,10 @@ type level = int
 let can_touch_physicals level = level > 2
 let can_touch_flags level = level > 1
 
-let (>=>) x y = if x then y else true
-
 let is_optimization_allowed is_flag level var =
-  (Var.is_physical var >=> can_touch_physicals level) &&
-  (is_flag var >=> can_touch_flags level)
+  (Var.is_physical var && can_touch_physicals level) ||
+  (is_flag var && can_touch_flags level) ||
+  Var.is_virtual var
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
