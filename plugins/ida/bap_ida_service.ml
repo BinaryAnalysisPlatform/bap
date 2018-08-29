@@ -95,7 +95,7 @@ let cleanup_minidump () =
       Unix.lockf lock Unix.F_LOCK 0;
       protect ~f:(fun () ->
           List.iter files ~f:Sys.remove)
-        ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0; Unix.close lock)
+        ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0)
 
 (* ida works fine only if everything is in the same folder  *)
 let run (t:ida) cmd =

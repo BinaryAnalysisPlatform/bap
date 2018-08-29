@@ -7240,8 +7240,9 @@ module Std : sig
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> f:(exp -> exp) -> t
 
-    (** [map_elt ?phi ?def ?jmp blk] applies specified functions to every
-        corresponded subterm of [blk]. *)
+    (** [map_elt ?phi ?def ?jmp blk] applies provided functions to the
+        terms of corresponding classes. All functions default to the
+        identity function. *)
     val map_elts :
       ?phi:(phi term -> phi term) ->
       ?def:(def term -> def term) ->

@@ -9,13 +9,18 @@ module O = Optimization_data
 
 type level = int
 
-let can_touch_physicals level = level > 2
-let can_touch_flags level = level > 1
+type cls = Phys | Virt | Flag
+
+let classify is_flag var =
+  if is_flag var then Flag
+  else if Var.is_physical var then Phys
+  else Virt
 
 let is_optimization_allowed is_flag level var =
-  (Var.is_physical var && can_touch_physicals level) ||
-  (is_flag var && can_touch_flags level) ||
-  Var.is_virtual var
+  match classify is_flag var with
+  | Virt -> level > 0
+  | Flag -> level > 1
+  | Phys -> level > 2
 
 let def_use_collector = object
   inherit [Var.Set.t * Var.Set.t] Term.visitor
@@ -110,7 +115,8 @@ let free_vars prog =
       ~f:(fun acc x -> acc ++ f x) in
   let sub_free sub = Sub.free_vars sub |> Set.filter ~f:Var.is_physical in
   let sub_args sub =
-    collect arg_t sub ~f:(fun arg -> Exp.free_vars (Arg.rhs arg)) in
+    collect arg_t sub ~f:(fun arg ->
+        Set.add (Exp.free_vars (Arg.rhs arg)) (Arg.lhs arg)) in
   collect sub_t prog ~f:(fun sub -> sub_args sub ++ sub_free sub)
 
 let process_sub free can_touch sub =
@@ -167,19 +173,21 @@ let () =
 
     `S "ALGORITHM";
 
-    `P "To make analysis inter procedural, we first compute an
-  over-approximation of a set of variables that are used to pass data
-  between functions. This is just a set of all free variables in all
-  functions. Variables that belong to this set will never be
-  removed. Thus if a function $(b,f) uses a variable $(b,x), then we
-  consider, that any other function may somehow call this function
-  $(b,f), so we assume that it is used implicitly. External functions
-  must obey the ABI, thus a set of all variables used to pass
-  arguments to external functions is also added to the protected
-  set. Once the protected set is computed, we compute def/use sets for
-  each subroutine and remove all definitions that are not
-  used. Internally, we translate a program into the SSA form, though
-  it will not be seen outside";
+    `P "Applies constant folding, dead code elimination, and constant
+  propagation in a loop until the fixed point is reached. The
+  algorithm is interprocedural, however it is not call graph
+  sensitive, as instead of considering the call graph we use an over
+  approximation that any function can call any other, thus any
+  variables that occurs free in any function is considered to be
+  non-constant. The algorithm is, however, flow sensitive on the
+  control flow graph level and uses the SSA form to encode data
+  facts. Since, it is not always safe to rely on the control flow
+  integrity and CFG precision, by default we optimize only flags and
+  virtual variables under a presumption that those two kind of data
+  points rarely used non-locally.
+
+  See the $(b,--optimization-level) parameter for the list of
+  available optimization levels and their consequences.";
 
     `S "DEPENDENCIES";
     `P "$(b,bap-plugin-api)(1)";

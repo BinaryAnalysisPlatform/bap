@@ -103,7 +103,7 @@ module Index = struct
         remove_files index' index;
         Sexp.save_hum file (sexp_of_index index);
         data)
-      ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0; Unix.close lock)
+      ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0)
 
 
   let update ~f = with_index ~f:(fun dir idx -> f dir idx,())
