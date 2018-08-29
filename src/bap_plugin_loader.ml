@@ -142,12 +142,19 @@ let autoload_plugins ~argv ~env ~library ~verbose ~exclude =
 (* we don't want to fail the whole platform if some
    plugin has failed, we will just emit an error message.  *)
 
+let warn_on_dead_code_elimination name =
+  if name = "dead-code-elimination" then
+    eprintf
+      "WARNING: dead-code-elimination plugin does no longer exist, \
+       use plugin 'optimization' instead\n"
+
 let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
   let verbose = get_opt argv verbose ~default:false in
   let plugins = get_opt argv load ~default:[] in
   let exclude = get_opt argv disable_plugin ~default:[] in
   let exclude = exclude @ excluded argv in
+  List.iter exclude ~f:warn_on_dead_code_elimination;
   let plugins = List.filter_map plugins ~f:(open_plugin ~verbose) in
   let known_plugins = Plugins.list ~env ~library () @ plugins in
   let () = match get_print_ops () with
