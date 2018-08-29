@@ -19,9 +19,18 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
+(* [is_start roots cfg blk] returns true if [blk] is a function start.
+   Block can be a function start in the next cases:
+   - block address is in a set of [roots]
+   - block doesn't have any input edges in [cfg].
+   The later is extremly important in case of pure code input. *)
+let is_start roots cfg blk =
+  Set.mem roots (Block.addr blk) ||
+  Cfg.Node.degree ~dir:`In blk cfg = 0
+
 let entries_of_block cfg roots entries blk =
   let entries =
-    if Set.mem roots (Block.addr blk) then Set.add entries blk
+    if is_start roots cfg blk then Set.add entries blk
     else entries in
   let term = Block.terminator blk in
   if Insn.(is call) term then
