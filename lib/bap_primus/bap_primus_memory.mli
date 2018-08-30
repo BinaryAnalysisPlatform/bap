@@ -3,7 +3,7 @@ open Bap_primus_types
 
 module Generator = Bap_primus_generator
 
-type exn += Segmentation_fault of addr
+type exn += Pagefault of addr
 
 module Make(Machine : Machine) : sig
 

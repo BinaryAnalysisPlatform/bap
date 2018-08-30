@@ -19,47 +19,66 @@ type reconstructor = t
 let create f = Reconstructor f
 let run (Reconstructor f) = f
 
-let roots_of_blk roots cfg blk =
-  let addr = Block.addr blk in
+(* [is_start roots cfg blk] returns true if [blk] is a function start.
+
+   A block is considered to be a function start if one of the
+   following is true:
+   - the block address belongs to the provided set of roots;
+   - the block has no incoming edges
+
+   In general, all blocks should be reachable from the set of roots,
+   thus a block without incoming edges should belong to the set of
+   roots, so it might be tempting to say that the second clause is
+   redundant.
+
+   However, our implementation of the recursive descent disassembler
+   can generate blocks that are not reachable from the initial set of
+   roots. This can happen only if the set of roots is empty, which is
+   treated as a special case, that instructs the disassembler to treat
+   the first byte of the provided input as a root.
+
+   Beyond being a questionable design decision, this behavior is
+   actually just an example of a more general problem. The
+   reconstructor and disassemblers could be called with different sets
+   of roots. So, in general, we can't rely on the set of roots passed
+   to the reconstructor for functions start classification.*)
+let is_start roots cfg blk =
+  Set.mem roots (Block.addr blk) ||
+  Cfg.Node.degree ~dir:`In blk cfg = 0
+
+let entries_of_block cfg roots entries blk =
+  let entries =
+    if is_start roots cfg blk then Set.add entries blk
+    else entries in
   let term = Block.terminator blk in
-  let init =
-    if Set.mem roots addr || Seq.is_empty (Cfg.Node.inputs blk cfg)
-    then [blk]
-    else [] in
   if Insn.(is call) term then
-    Seq.fold ~init (Cfg.Node.outputs blk cfg)
-      ~f:(fun rs e ->
-          if Cfg.Edge.label e <> `Fall then Cfg.Edge.dst e :: rs
-          else rs)
-  else init
+    Seq.fold ~init:entries (Cfg.Node.outputs blk cfg)
+      ~f:(fun entries e ->
+          if Cfg.Edge.label e <> `Fall then
+            Set.add entries (Cfg.Edge.dst e)
+          else entries)
+  else entries
 
-let find_calls cfg roots =
-  let roots = List.fold ~init:Addr.Set.empty ~f:Set.add roots in
-  Graphlib.depth_first_search (module Cfg)
-    cfg ~init:Block.Set.empty
-    ~enter_node:(fun _ blk all ->
-        roots_of_blk roots cfg blk |>
-        List.fold ~init:all ~f:Set.add)
+let collect_entries cfg roots =
+  let roots = Addr.Set.of_list roots in
+  Seq.fold (Cfg.nodes cfg) ~init:Block.Set.empty
+    ~f:(entries_of_block cfg roots)
 
-let reconstruct name roots cfg =
-  let roots = find_calls cfg roots in
-  let filtered = Set.fold roots ~init:cfg
-      ~f:(fun g root ->
-          let inputs = Cfg.Node.inputs root cfg in
-          Seq.fold inputs ~init:g ~f:(fun g e -> Cfg.Edge.remove e g)) in
-  Set.fold roots ~init:Symtab.empty
-    ~f:(fun syms entry ->
-        let name = name (Block.addr entry) in
-        let cfg : cfg =
-          with_return (fun {return} ->
-              Graphlib.depth_first_search (module Cfg)
-                filtered ~start:entry ~init:Cfg.empty
-                ~enter_edge:(fun _ -> Cfg.Edge.insert)
-                ~start_tree:(fun n t ->
-                    if Block.equal n entry
-                    then Cfg.Node.insert n t
-                    else return t)) in
-        Symtab.add_symbol syms (name,entry,cfg))
+let reconstruct name roots prog =
+  let entries = collect_entries prog roots in
+  let is_call e = Set.mem entries (Cfg.Edge.dst e) in
+  let rec add cfg node =
+    let cfg = Cfg.Node.insert node cfg in
+    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg ~f:(fun cfg edge ->
+        if is_call edge then cfg
+        else
+          let cfg' = Cfg.Edge.insert edge cfg in
+          if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
+          else add cfg' (Cfg.Edge.dst edge)) in
+  Set.fold entries ~init:Symtab.empty ~f:(fun tab entry ->
+      let name = name (Block.addr entry) in
+      let cfg = add Cfg.empty entry in
+      Symtab.add_symbol tab (name,entry,cfg))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =

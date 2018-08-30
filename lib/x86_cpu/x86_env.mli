@@ -148,9 +148,9 @@ module type ModeVars = sig
       Due to a legacy issues r.(0) -> r8, r.(1) -> r8, ... *)
   val r : var array
 
-  [@@deprecated "[since 2018-01] user `r` instead"]
-  (** Legacy version of the `r` array, use `r` instead. *)
+  (** Legacy version of the `r` array. *)
   val nums : var array
+  [@@deprecated "[since 2018-01] use `r` instead"]
 
   (** array of YMM registers  *)
   val ymms: var array

@@ -8,6 +8,8 @@ let width = function
   | #r16 | `IP -> `r16
   | #r32 | `EIP -> `r32
   | #r64 | `RIP -> `r64
+  | #r128 -> `r128
+  | #r256 -> `r256
 
 
 let bitwidth r = width r |> Size.in_bits

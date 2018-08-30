@@ -56,20 +56,18 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let remove t (name,entry,_) : t = {
-  names = Map.remove t.names name;
-  addrs = Map.remove t.addrs (Block.addr entry);
-  memory = filter_mem t.memory name entry;
-}
-
-let filter t ((name,entry,_ ) as fn) =
-  if Map.mem t.names name || Map.mem t.addrs (Block.addr entry) then
-    remove t fn
+let remove t (name,entry,_) : t =
+  if Map.mem t.addrs (Block.addr entry) then
+    {
+      names = Map.remove t.names name;
+      addrs = Map.remove t.addrs (Block.addr entry);
+      memory = filter_mem t.memory name entry;
+    }
   else t
 
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
-  let t = filter t data in
+  let t = remove t data in
   {
     addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
     names = Map.add t.names ~key:name ~data;

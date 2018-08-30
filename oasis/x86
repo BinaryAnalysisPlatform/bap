@@ -10,6 +10,10 @@ Library "bap-x86-cpu"
  BuildDepends:     bap
  Modules:          X86_cpu,
                    X86_env,
+                   X86_asm,
+                   X86_asm_reg,
+                   X86_asm_reg_types,
+                   X86_llvm_env,
                    X86_types
 
 Library x86_plugin
@@ -20,9 +24,6 @@ Library x86_plugin
  BuildDepends:     bap, bap-abi, bap-c, bap-x86-cpu, bap-llvm
  Modules:          X86_backend, X86_prefix
  InternalModules:  X86_abi,
-                   X86_asm,
-                   X86_asm_reg,
-                   X86_asm_reg_types,
                    X86_btx,
                    X86_cdq,
                    X86_cmpxchg,
