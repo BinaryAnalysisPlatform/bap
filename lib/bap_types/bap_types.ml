@@ -104,7 +104,7 @@ module Std = struct
     type error = Bap_type_error.t
     [@@deriving bin_io, compare, sexp]
     module Error = Bap_type_error
-    include Bap_type_infer
+    include Bap_helpers.Type
   end
 
   (** This module exports first-class type definitions,
