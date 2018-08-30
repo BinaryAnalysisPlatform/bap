@@ -6596,10 +6596,8 @@ module Std : sig
   (** bil analysis *)
   type bass
 
-  val register_memo : (addr -> word -> bil option) -> unit
-
-  (** [register_bass cat bass] register a new [bass] with a [name] *)
-  val register_bass : string -> (addr -> word -> bil -> bil Or_error.t) -> unit
+  (** [register_bass name bass] register a new [bass] with a [name] *)
+  val register_bass : string -> (bil -> bil) -> unit
 
   (** Term identifier  *)
   module Tid : sig

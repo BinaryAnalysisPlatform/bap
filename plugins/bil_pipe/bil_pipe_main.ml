@@ -20,31 +20,26 @@ let print fmt s =
 let switcher ?(default=true) =
   Config.(param (converter parse print default) ~default)
 
-let mk f = fun _ _ bil -> f bil
-let simpl = mk Bil.fold_consts
-let norml = mk Stmt.normalize
-let propg = mk propagate_consts
-let renum = mk renum
+let simpl = Bil.fold_consts
+let norml = Stmt.normalize ~keep_ites:false ~normalize_exp:false
+let propg = propagate_consts
 
 let process pipe =
   let pipe = List.filter_map pipe
       ~f:(fun (test, f) -> Option.some_if test f) in
-  fun addr code bil ->
+  fun bil ->
     let rec run bil = function
       | [] -> bil
       | f :: fs ->
-        run (f addr code bil) fs in
-    Ok (run bil pipe)
+        run (f bil) fs in
+    run bil pipe
 
-let run if_norml if_simpl if_propg if_memo =
-  if if_memo then register_memo find;
+let run if_norml if_simpl if_propg =
   register_bass "internal" @@
   process [
     if_simpl,simpl;
     if_norml,norml;
     if_propg,propg;
-    if_memo, renum;
-    if_memo, save;
   ]
 
 let () =
@@ -64,5 +59,4 @@ Memoization
   let simpl = switcher "simpl" ~doc:"Applies expressions simplification." in
   let norm = switcher "norm" ~doc:"Produces a normalized BIL program" in
   let prop = switcher "prop" ~doc:"Const propagation" in
-  let memo = switcher "memo" ~doc:"Bil memoization" in
-  Config.when_ready (fun {Config.get=(!)} -> run !norm !simpl !prop !memo)
+  Config.when_ready (fun {Config.get=(!)} -> run !norm !simpl !prop)

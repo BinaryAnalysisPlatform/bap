@@ -53,40 +53,22 @@ let type_check bil = match Type.check bil with
     Error err
   | Ok () -> Ok bil
 
-type memo = addr -> word -> bil option
-type bass = addr -> word -> bil -> bil Or_error.t
+type bass = bil -> bil
 
-let memo = ref (fun _ _ -> None)
 let basses : bass String.Table.t = String.Table.create ()
 
-let register_memo memo' = memo := memo'
 let register_bass name bass = Hashtbl.update basses name (fun _ -> bass)
-let bass_list () = Hashtbl.to_alist basses |> List.map ~f:snd
-
-let apply_analysis addr code bil =
-  let open Or_error in
-  let bs = bass_list () in
-  List.fold bs ~init:(type_check bil)
-    ~f:(fun bil f -> bil >>= f addr code) >>= type_check
-
-let get_opcode mem =
-  Memory.fold mem ~init:None ~f:(fun b -> function
-      | None -> Some b
-      | Some bs -> Some (Word.concat bs b)) |> function
-  | None -> Error (Error.of_string "failed to read from memory")
-  | Some x -> Ok x
+let bass_list () = Hashtbl.data basses
 
 module Make(T : Target) = struct
   include T
 
-  let lift memory insn =
-    let addr = Memory.min_addr memory in
-    match get_opcode memory with
+  let lift mem insn = match T.lift mem insn with
     | Error _ as e -> e
-    | Ok code -> match !memo addr code with
-      | Some bil -> Ok bil
-      | None ->
-        Or_error.(T.lift memory insn >>= apply_analysis addr code)
+    | Ok bil ->
+      let bil =
+        List.fold (bass_list ()) ~init:bil ~f:(fun bil f -> f bil) in
+      type_check bil
 end
 
 let register_target arch (module Target : Target) =
