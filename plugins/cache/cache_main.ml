@@ -80,13 +80,58 @@ module Index = struct
     then clean (evict_entry idx)
     else idx
 
-  let remove_entry e =
-    Sys.remove e.path
+  let remove_entry e = Sys.remove e.path
 
   let remove_files old_index new_index =
     Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
         if not (Map.mem new_index.entries key)
         then remove_entry e)
+
+  module T = struct
+    type t = index [@@deriving bin_io]
+  end
+
+  let from_file : type t.
+    (module Binable.S with type t = t) -> string -> t = fun b file ->
+    let module T = (val b) in
+    let fd = Unix.(openfile file [O_RDONLY] 0o400) in
+    try
+      let data = Bigstring.map_file ~shared:false fd (-1) in
+      let pos_ref = ref 0 in
+      let t = T.bin_read_t data ~pos_ref in
+      Unix.close fd;
+      t
+    with e -> Unix.close fd; raise e
+
+  let open_temp () =
+    let tmp =
+      Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
+    try tmp, Unix.(openfile tmp [O_RDWR] 0o600)
+    with e -> Sys.remove tmp; raise e
+
+  let to_file : type t.
+    (module Binable.S with type t = t) -> string -> t -> unit =
+    fun b file data ->
+      let module T = (val b) in
+      let tmp,fd = open_temp () in
+      let size = T.bin_size_t data in
+      let () =
+        try
+          let buf = Bigstring.map_file ~shared:true fd size in
+          let _ = T.bin_write_t buf ~pos:0 data in
+          Unix.close fd
+        with e -> Unix.close fd; Sys.remove tmp; raise e in
+      Sys.rename tmp file
+
+  let index_of_file file =
+    try from_file (module T) file
+    with e ->
+      warning "read index: %s" (Exn.to_string e);
+      empty
+
+  let index_to_file file index =
+    try to_file (module T) file index
+    with e -> warning "store index: %s" (Exn.to_string e)
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -95,16 +140,15 @@ module Index = struct
     let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
     Unix.lockf lock Unix.F_LOCK 0;
     protect ~f:(fun () ->
-        let init = try Sexp.load_sexp file |> index_of_sexp with
-          | _ -> empty in
+        let init = index_of_file file in
         let index',data = f cache_dir init in
         remove_files init index';
         let index = clean index' in
         remove_files index' index;
-        Sexp.save_hum file (sexp_of_index index);
+        index_to_file file index;
         data)
-      ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0)
-
+      ~finally:(fun () ->
+          Unix.(lockf lock F_ULOCK 0; close lock))
 
   let update ~f = with_index ~f:(fun dir idx -> f dir idx,())
 
@@ -155,12 +199,8 @@ let create reader writer =
         let ctime = Unix.time () in
         let path,ch = Filename.open_temp_file ~temp_dir:cache_dir
             "entry" ".cache" in
-        info "caching to %s" path;
-        report_progress ~note:"serializing" ();
         Data.Write.to_channel writer ch proj;
-        report_progress ~note:"flushing" ();
         Out_channel.close ch;
-        report_progress ~note:"reindexing" ();
         {
           index with
           entries = Map.add index.entries ~key:id ~data:{
@@ -181,10 +221,11 @@ let create reader writer =
   Data.Cache.create ~load ~save
 
 
-let main clean size info dir =
+let main clean size show_info dir =
   set_dir dir;
   if clean then cleanup ();
-  if info then print_info ();
+  if show_info then print_info ();
+  info "caching to %s" (Index.cache_dir ());
   Option.iter size ~f:set_size;
   Data.Cache.Service.provide {Data.Cache.create}
 

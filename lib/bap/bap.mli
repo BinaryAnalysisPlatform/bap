@@ -7248,6 +7248,14 @@ module Std : sig
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> f:(exp -> exp) -> t
 
+    (** [map_elt ?phi ?def ?jmp blk] applies provided functions to the
+        terms of corresponding classes. All functions default to the
+        identity function. *)
+    val map_elts :
+      ?phi:(phi term -> phi term) ->
+      ?def:(def term -> def term) ->
+      ?jmp:(jmp term -> jmp term) -> blk term -> blk term
+
     (** [substitute ?skip blk x y] substitutes each occurrence of
         expression [x] with expression [y] in block [blk]. The
         substitution is performed deeply. If [skip] parameter is
