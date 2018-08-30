@@ -86,11 +86,7 @@ end
 
 let fixup rel_info mem target =
   match Rel_info.find_internal rel_info mem with
-  | Some x as a ->
-    printf "found fixpup %s --> %s\n"
-      (Addr.to_string (Memory.min_addr mem))
-      (Addr.to_string x);
-      a
+  | Some _ as a -> a
   | None ->
     if Rel_info.exists_external rel_info mem then None
     else Some target

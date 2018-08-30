@@ -238,53 +238,69 @@ let create_synthetic name =
   Tid.set_name (Term.tid sub) name;
   Term.(set_attr sub synthetic ())
 
+let is_indirect_call jmp = match Ir_jmp.kind jmp with
+  | Ret _ | Int _ | Goto _ -> false
+  | Call call -> match Call.target call with
+    | Indirect (Bil.Int _) -> true
+    | _ -> false
+
+let find_indirect_callee symtab jmp =
+  if is_indirect_call jmp then
+    Option.(Term.get_attr jmp address >>= fun addr ->
+            Symtab.find_callee symtab addr)
+  else None
+
 let find_externals symtab sub =
   let fold cls t ~f ~init = Term.to_sequence cls t |> Seq.fold ~f ~init in
   let symbol_exists name = Option.is_some (Symtab.find_by_name symtab name) in
-  let is_indirect_call jmp = match Ir_jmp.kind jmp with
-    | Ret _ | Int _ | Goto _ -> false
-    | Call call -> match Call.target call with
-      | Indirect (Bil.Int _) -> true
-      | _ -> false in
-  let is_external jmp name = not (symbol_exists name) && is_indirect_call jmp in
-  let external_call jmp =
-    Option.(Term.get_attr jmp address >>= fun addr ->
-            Symtab.find_callee symtab addr >>= fun name ->
-            some_if (is_external jmp name) (addr,name)) in
+  let is_unknown name = not (symbol_exists name) in
   fold blk_t sub ~init:[] ~f:(fun acc blk ->
       fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
-          match external_call jmp with
-          | Some x ->
-            printf "lift: external call at %s\n" (Word.to_string (fst x));
-            x :: acc
+          match find_indirect_callee symtab jmp with
+          | Some name when is_unknown name -> name :: acc
           | _ -> acc))
 
-let update_externals exts addrs symtab sub =
+let update_externals exts symtab sub =
   find_externals symtab sub |>
-  List.iter ~f:(fun (addr, name) ->
-      let sub = Hashtbl.find_or_add exts name
-          ~default:(fun () -> create_synthetic name) in
-      Hashtbl.update addrs addr ~f:(function
-          | None -> Term.tid sub
+  List.iter ~f:(fun name ->
+      Hashtbl.update exts name ~f:(function
+          | None -> create_synthetic name
           | Some x -> x))
+
+let resolve_indirect_jmp symtab exts jmp =
+  let update_target tar =
+    match Ir_jmp.kind jmp with
+    | Call c -> Ir_jmp.with_kind jmp (Call (Call.with_target c tar))
+    | _ -> jmp in
+  match find_indirect_callee symtab jmp with
+  | None -> jmp
+  | Some name ->
+    match Symtab.find_by_name symtab name with
+    | Some (_,b,_) -> update_target (Indirect (Int (Block.addr b)))
+    | None ->
+      match Hashtbl.find exts name with
+      | Some s -> update_target (Direct (Term.tid s))
+      | None -> jmp
 
 let program symtab =
   let b = Ir_program.Builder.create () in
   let addrs = Addr.Table.create () in
-  let externals = String.Table.create () in
+  let exts = String.Table.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let sub = lift_sub entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
-      update_externals externals addrs symtab sub);
-  Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
+      update_externals exts symtab sub);
+  Hashtbl.iter exts ~f:(Ir_program.Builder.add_sub b);
   let program = Ir_program.Builder.result b in
   Term.map sub_t program
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
-          ~f:(resolve_jmp  ~local:false addrs)))
+          ~f:(fun j ->
+              let j = resolve_indirect_jmp symtab exts j in
+              resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub
 

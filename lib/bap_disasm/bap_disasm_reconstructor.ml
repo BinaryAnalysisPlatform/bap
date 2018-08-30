@@ -51,13 +51,9 @@ let add_entries entries cfg blk =
 let add_callees syms name cfg blk =
   let call_addr = terminator_addr blk in
   if has_fall_only blk cfg then
-    let () = printf "add callee ext: %s %s\n" (Word.to_string call_addr)
-        (name call_addr) in
     Symtab.add_callee syms call_addr (name call_addr)
   else
     fold_callees blk cfg ~init:syms ~f:(fun syms c ->
-        printf "add callee: %s %s\n" (Word.to_string call_addr)
-          (name (Block.addr c));
         Symtab.add_callee syms call_addr (name (Block.addr c)))
 
 let collect name cfg roots =
