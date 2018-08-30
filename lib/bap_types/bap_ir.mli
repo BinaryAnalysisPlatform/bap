@@ -241,6 +241,10 @@ module Ir_blk : sig
   val map_exp :
     ?skip:[`phi | `def | `jmp] list ->
     t -> f:(exp -> exp) -> t
+  val map_elts :
+    ?phi:(phi term -> phi term) ->
+    ?def:(def term -> def term) ->
+    ?jmp:(jmp term -> jmp term) -> blk term -> blk term
   val substitute :
     ?skip:[`phi | `def | `jmp] list ->
     t -> exp -> exp -> t
