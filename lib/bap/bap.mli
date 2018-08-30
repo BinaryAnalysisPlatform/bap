@@ -7898,20 +7898,17 @@ module Std : sig
     (** [create f] creates a reconstructor from a given function [f]  *)
     val create : (cfg -> symtab) -> t
 
-    (** [default name roots] builds a reconstructor from given a
+    (** [default name roots] builds a reconstructor from a given
         function, that maps addresses to function names (see
         {!Symbolizer}) and a list of known function starts. The
-        reconstructor will extend the list of function start with
-        destinations of call instructions found in the CFG, and then
-        for each function start build a function using the following
-        definition of a function:
+        reconstructor will extend the list of function starts with
+        destinations of call instructions found in the CFG. Also,
+        the reconstructor treats every node without input edges as
+        a function start. For each function start builds a function
+        using the following definition of a function:
 
          Function is built from the entry block and every block that
-         is reachable from it without using calls, if the block
-         address is greater than the entry block address and less
-         than the address of entry block of the next symbol.
-
-        Note: this is an approximation, that works fine for most cases.  *)
+         is reachable from it without using calls. *)
     val default : (word -> string) -> word list -> t
 
 
