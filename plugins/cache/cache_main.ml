@@ -80,13 +80,44 @@ module Index = struct
     then clean (evict_entry idx)
     else idx
 
-  let remove_entry e =
-    Sys.remove e.path
+  let remove_entry e = Sys.remove e.path
 
   let remove_files old_index new_index =
     Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
         if not (Map.mem new_index.entries key)
         then remove_entry e)
+
+  module T = struct
+    type t = index [@@deriving bin_io]
+  end
+
+  let from_file :
+    (module Binable.S with type t = 'a) -> string -> 'a = fun b file ->
+    let of_bigstring = Binable.of_bigstring b in
+    let fd = Unix.(openfile file [O_RDONLY] 0o400) in
+    try
+      let size = Unix.((fstat fd).st_size) in
+      let data = Bigstring.map_file ~shared:false fd size in
+      let index = of_bigstring data in
+      Unix.close fd;
+      index
+    with _ -> Unix.close fd; empty
+
+  let to_file :
+    (module Binable.S with type t = 'a) -> string -> 'a -> unit =
+    fun b file index ->
+      let tmp =
+        Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
+      let fd = Unix.(openfile tmp [O_RDWR; O_CREAT] 0o666) in
+      let to_bigstring = Binable.to_bigstring b in
+      let size = bin_size_index index in
+      let () =
+        try
+          let data = Bigstring.map_file ~shared:true fd size in
+          Bigstring.blito ~src:(to_bigstring index) ~dst:data ();
+          Unix.close fd
+        with _ -> Unix.close fd in
+      Sys.rename tmp file
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -95,15 +126,15 @@ module Index = struct
     let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
     Unix.lockf lock Unix.F_LOCK 0;
     protect ~f:(fun () ->
-        let init = try Sexp.load_sexp file |> index_of_sexp with
-          | _ -> empty in
+        let init = try from_file (module T) file with _ -> empty in
         let index',data = f cache_dir init in
         remove_files init index';
         let index = clean index' in
         remove_files index' index;
-        Sexp.save_hum file (sexp_of_index index);
+        let () = try to_file (module T) file index; with _ -> () in
         data)
-      ~finally:(fun () -> Unix.lockf lock Unix.F_ULOCK 0)
+      ~finally:(fun () ->
+          Unix.(lockf lock F_ULOCK 0; close lock))
 
 
   let update ~f = with_index ~f:(fun dir idx -> f dir idx,())
