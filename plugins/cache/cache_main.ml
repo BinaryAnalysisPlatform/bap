@@ -91,33 +91,43 @@ module Index = struct
     type t = index [@@deriving bin_io]
   end
 
-  let from_file :
-    (module Binable.S with type t = 'a) -> string -> 'a = fun b file ->
-    let of_bigstring = Binable.of_bigstring b in
+  let from_file : type t.
+    (module Binable.S with type t = t) -> string -> t = fun b file ->
+    let module T = (val b) in
     let fd = Unix.(openfile file [O_RDONLY] 0o400) in
     try
-      let size = Unix.((fstat fd).st_size) in
-      let data = Bigstring.map_file ~shared:false fd size in
-      let index = of_bigstring data in
+      let data = Bigstring.map_file ~shared:false fd (-1) in
+      let pos_ref = ref 0 in
+      let t = T.bin_read_t data ~pos_ref in
       Unix.close fd;
-      index
-    with _ -> Unix.close fd; empty
+      t
+    with e -> Unix.close fd; raise e
 
-  let to_file :
-    (module Binable.S with type t = 'a) -> string -> 'a -> unit =
-    fun b file index ->
+  let to_file : type t.
+    (module Binable.S with type t = t) -> string -> t -> unit =
+    fun b file data ->
+      let module T = (val b) in
       let tmp =
         Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
-      let fd = Unix.(openfile tmp [O_RDWR; O_CREAT] 0o666) in
-      let to_bigstring = Binable.to_bigstring b in
-      let size = bin_size_index index in
+      let fd = Unix.(openfile tmp [O_RDWR; O_CREAT] 0o600) in
+      let size = T.bin_size_t data in
       let () =
         try
-          let data = Bigstring.map_file ~shared:true fd size in
-          Bigstring.blito ~src:(to_bigstring index) ~dst:data ();
+          let buf = Bigstring.map_file ~shared:true fd size in
+          let _ = T.bin_write_t buf ~pos:0 data in
           Unix.close fd
-        with _ -> Unix.close fd in
+        with e -> Unix.close fd; raise e in
       Sys.rename tmp file
+
+  let index_of_file file =
+    try from_file (module T) file
+    with e ->
+      warning "read index: %s" (Exn.to_string e);
+      empty
+
+  let index_to_file file index =
+    try to_file (module T) file index
+    with e -> warning "store index: %s" (Exn.to_string e)
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -126,16 +136,15 @@ module Index = struct
     let lock = Unix.openfile lock Unix.[O_RDWR; O_CREAT] 0o640 in
     Unix.lockf lock Unix.F_LOCK 0;
     protect ~f:(fun () ->
-        let init = try from_file (module T) file with _ -> empty in
+        let init = index_of_file file in
         let index',data = f cache_dir init in
         remove_files init index';
         let index = clean index' in
         remove_files index' index;
-        let () = try to_file (module T) file index; with _ -> () in
+        index_to_file file index;
         data)
       ~finally:(fun () ->
           Unix.(lockf lock F_ULOCK 0; close lock))
-
 
   let update ~f = with_index ~f:(fun dir idx -> f dir idx,())
 
@@ -186,12 +195,8 @@ let create reader writer =
         let ctime = Unix.time () in
         let path,ch = Filename.open_temp_file ~temp_dir:cache_dir
             "entry" ".cache" in
-        info "caching to %s" path;
-        report_progress ~note:"serializing" ();
         Data.Write.to_channel writer ch proj;
-        report_progress ~note:"flushing" ();
         Out_channel.close ch;
-        report_progress ~note:"reindexing" ();
         {
           index with
           entries = Map.add index.entries ~key:id ~data:{
@@ -212,10 +217,11 @@ let create reader writer =
   Data.Cache.create ~load ~save
 
 
-let main clean size info dir =
+let main clean size show_info dir =
   set_dir dir;
   if clean then cleanup ();
-  if info then print_info ();
+  if show_info then print_info ();
+  info "caching to %s" (Index.cache_dir ());
   Option.iter size ~f:set_size;
   Data.Cache.Service.provide {Data.Cache.create}
 
