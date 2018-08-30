@@ -103,20 +103,24 @@ module Index = struct
       t
     with e -> Unix.close fd; raise e
 
+  let open_temp () =
+    let tmp =
+      Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
+    try tmp, Unix.(openfile tmp [O_RDWR] 0o600)
+    with e -> Sys.remove tmp; raise e
+
   let to_file : type t.
     (module Binable.S with type t = t) -> string -> t -> unit =
     fun b file data ->
       let module T = (val b) in
-      let tmp =
-        Filename.temp_file ~temp_dir:(cache_dir ()) "tmp" "index" in
-      let fd = Unix.(openfile tmp [O_RDWR; O_CREAT] 0o600) in
+      let tmp,fd = open_temp () in
       let size = T.bin_size_t data in
       let () =
         try
           let buf = Bigstring.map_file ~shared:true fd size in
           let _ = T.bin_write_t buf ~pos:0 data in
           Unix.close fd
-        with e -> Unix.close fd; raise e in
+        with e -> Unix.close fd; Sys.remove tmp; raise e in
       Sys.rename tmp file
 
   let index_of_file file =
