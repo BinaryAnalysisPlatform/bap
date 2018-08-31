@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Regular.Std
-open Bap.Std
 
 type e_class =
   | ELFCLASS32

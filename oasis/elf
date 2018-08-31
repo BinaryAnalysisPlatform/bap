@@ -5,9 +5,9 @@ Flag elf
 
 Library elf
   Path:          lib/bap_elf
-  Build$:        flag(elf)
+  Build$:        flag(everything) || flag(elf)
   FindlibName:   bap-elf
-  BuildDepends:  bap, bitstring, bitstring.ppx, ppx_deriving
+  BuildDepends:  bitstring, bitstring.ppx
   Modules: Bap_elf
   InternalModules:
                  Elf_parse,
