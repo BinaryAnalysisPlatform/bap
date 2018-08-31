@@ -64,15 +64,16 @@ module Rel_info = struct
     | Ok rels, Ok exts -> {rels; exts}
     | Error e, _  | _, Error e -> Error.raise e
 
-  let is_external {exts} mem =
+  let span mem =
     let start = Memory.min_addr mem in
     let len = Memory.length mem in
-    Seq.exists ~f:(Set.mem exts) @@ Seq.init len ~f:(Addr.nsucc start)
+    Seq.init len ~f:(Addr.nsucc start)
+
+  let is_external {exts} mem =
+    Seq.exists ~f:(Set.mem exts) (span mem)
 
   let find_internal {rels} mem =
-    let start = Memory.min_addr mem in
-    let len = Memory.length mem in
-    Seq.find_map ~f:(Map.find rels) @@ Seq.init len ~f:(Addr.nsucc start)
+    Seq.find_map ~f:(Map.find rels) (span mem)
 
 end
 
