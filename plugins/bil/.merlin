@@ -1,4 +1,6 @@
-B ../../_build/plugins/bil_pipe
+B ../../_build/plugins/bil
 S .
+
+PKG bap
 
 REC

@@ -9,5 +9,6 @@ Library bil_pipe_plugin
   FindlibName:      bap-plugin-bil_pipe
   BuildDepends:     bap
   XMETAExtraLines:  tags="bil,analysis"
-  InternalModules:  Bil_pipe_main,
+  InternalModules:  Bil_memo,
+                    Bil_pipe_main,
                     Bil_const_propagation
