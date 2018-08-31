@@ -19,7 +19,6 @@ let find_source (type t) (module F : Source.Factory.S with type t = t)
     field o = Option.(field o >>= F.find)
 
 let brancher = find_source (module Brancher.Factory) brancher
-
 let reconstructor =
   find_source (module Reconstructor.Factory) reconstructor
 
