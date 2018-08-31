@@ -221,7 +221,7 @@ let lift_sub entry cfg =
     let blks = blk cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-    acc @ blks in
+     acc @ blks in
   let blocks = Graphlib.reverse_postorder_traverse
       (module Cfg) ~start:entry cfg in
   let blks = Seq.fold blocks ~init:[] ~f:recons in
@@ -244,11 +244,10 @@ let is_indirect_call jmp = match Ir_jmp.kind jmp with
     | Indirect (Bil.Int _) -> true
     | _ -> false
 
-let find_indirect_callee symtab jmp =
-  if is_indirect_call jmp then
-    Option.(Term.get_attr jmp address >>= fun addr ->
-            Symtab.find_callee symtab addr)
-  else None
+let find_call_name symtab blk =
+  match Term.get_attr blk address with
+  | None -> None
+  | Some a -> Symtab.find_call_name symtab a
 
 let find_externals symtab sub =
   let fold cls t ~f ~init = Term.to_sequence cls t |> Seq.fold ~f ~init in
@@ -256,9 +255,11 @@ let find_externals symtab sub =
   let is_unknown name = not (symbol_exists name) in
   fold blk_t sub ~init:[] ~f:(fun acc blk ->
       fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
-          match find_indirect_callee symtab jmp with
-          | Some name when is_unknown name -> name :: acc
-          | _ -> acc))
+          if is_indirect_call jmp then
+            match find_call_name symtab blk with
+            | Some name when is_unknown name -> name :: acc
+            | _ -> acc
+          else acc))
 
 let update_externals exts symtab sub =
   find_externals symtab sub |>
@@ -267,12 +268,12 @@ let update_externals exts symtab sub =
           | None -> create_synthetic name
           | Some x -> x))
 
-let resolve_indirect_jmp symtab exts jmp =
+let resolve_indirect symtab exts blk jmp =
   let update_target tar =
     match Ir_jmp.kind jmp with
     | Call c -> Ir_jmp.with_kind jmp (Call (Call.with_target c tar))
     | _ -> jmp in
-  match find_indirect_callee symtab jmp with
+  match find_call_name symtab blk with
   | None -> jmp
   | Some name ->
     match Symtab.find_by_name symtab name with
@@ -299,7 +300,9 @@ let program symtab =
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
           ~f:(fun j ->
-              let j = resolve_indirect_jmp symtab exts j in
+              let j = if is_indirect_call j then
+                  resolve_indirect symtab exts blk j
+                else j in
               resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub

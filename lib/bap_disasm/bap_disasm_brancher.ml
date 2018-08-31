@@ -62,25 +62,17 @@ module Rel_info = struct
   let of_spec spec =
     match relocations spec, external_symbols spec with
     | Ok rels, Ok exts -> {rels; exts}
-    | Ok rels, Error _ -> {rels; exts = Addr.Set.empty}
-    | Error _, Ok exts -> {rels = Addr.Map.empty; exts}
-    | _ -> empty
+    | Error e, _  | _, Error e -> Error.raise e
 
-  let find mem get =
-    let max_addr = Memory.max_addr mem in
-    let rec run addr =
-      if Addr.(addr > max_addr) then None
-      else
-        match get addr with
-        | None -> run (Addr.succ addr)
-        | Some value -> Some value in
-    run (Memory.min_addr mem)
+  let is_external {exts} mem =
+    let start = Memory.min_addr mem in
+    let len = Memory.length mem in
+    Seq.exists ~f:(Set.mem exts) @@ Seq.init len ~f:(Addr.nsucc start)
 
-  let exists_external t mem =
-    Option.is_some @@
-    find mem (fun x -> if Set.mem t.exts x then Some x else None)
-
-  let find_internal t mem = find mem (Map.find t.rels)
+  let find_internal {rels} mem =
+    let start = Memory.min_addr mem in
+    let len = Memory.length mem in
+    Seq.find_map ~f:(Map.find rels) @@ Seq.init len ~f:(Addr.nsucc start)
 
 end
 
@@ -88,7 +80,7 @@ let fixup rel_info mem target =
   match Rel_info.find_internal rel_info mem with
   | Some _ as a -> a
   | None ->
-    if Rel_info.exists_external rel_info mem then None
+    if Rel_info.is_external rel_info mem then None
     else Some target
 
 let resolve_jumps rel_info mem dests =

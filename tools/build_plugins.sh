@@ -4,7 +4,6 @@ set -ue
 
 . $(dirname $0)/bap_config
 
-MAX_JOBS=16
 
 build_plugin() {
     plugin=bap_plugin_$1
@@ -30,10 +29,6 @@ build_plugin() {
     rm -rf $TMPDIR
 }
 
-waitforjobs() {
-    while test $(jobs -p | wc -w) -ge "$1"; do wait -n; done
-}
-
 cd plugins
 
 for plugin in `ls`; do
@@ -53,7 +48,6 @@ for plugin in `ls`; do
             echo "Building $plugin as it wasn't built yet"
             build_plugin $plugin &
         fi
-        waitforjobs $MAX_JOBS
     else
         echo "Not building $plugin as it wasn't selected"
     fi

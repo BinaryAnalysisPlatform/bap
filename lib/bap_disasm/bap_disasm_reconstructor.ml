@@ -66,30 +66,30 @@ let terminator_addr blk =
   fst |>
   Memory.min_addr
 
-let maybe_external blk cfg =
+let is_unresolved blk cfg =
   let deg = Cfg.Node.degree ~dir:`Out blk cfg in
   deg = 0 ||
   (deg = 1 && is_fall (Seq.hd_exn (Cfg.Node.outputs blk cfg)))
 
-let add_callees syms name cfg blk =
+let add_callnames syms name cfg blk =
   if is_call blk then
     let call_addr = terminator_addr blk in
-    if maybe_external blk cfg then
-      Symtab.add_callee syms call_addr (name call_addr)
+    if is_unresolved blk cfg then
+      Symtab.add_call_name syms blk (name call_addr)
     else
       Seq.fold ~init:syms (Cfg.Node.outputs blk cfg)
         ~f:(fun syms e ->
             if is_fall e then syms
             else
               Cfg.Edge.dst e |> Block.addr |> name |>
-              Symtab.add_callee syms call_addr)
+              Symtab.add_call_name syms blk)
   else syms
 
 let collect name cfg roots =
   Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
     ~f:(fun (entries,syms) blk ->
         Set.union entries (entries_of_block cfg roots blk),
-        add_callees syms name cfg blk)
+        add_callnames syms name cfg blk)
 
 let reconstruct name roots prog =
   let roots = Addr.Set.of_list roots in

@@ -30,21 +30,16 @@ module Rel = struct
            Addr.of_int64 ~width addr, data))
 end
 
-let find min_addr max_addr exts =
-  let rec run addr =
-    if Addr.(addr > max_addr) then None
-    else
-      match Map.find exts addr with
-      | None -> run (Addr.succ addr)
-      | Some value -> Some value in
-  run min_addr
+let find start len exts =
+  Seq.find_map ~f:(Map.find exts) @@ Seq.init len ~f:(Addr.nsucc start)
 
 let create cfg exts =
   let insns = Disasm.create cfg |> Disasm.insns in
   Seq.fold insns ~init:Addr.Map.empty
     ~f:(fun calls (m,_) ->
-        let min,max = Memory.(min_addr m, max_addr m) in
-        match find min max exts with
+        let min = Memory.min_addr m in
+        let len = Memory.length m in
+        match find min len exts with
         | None -> calls
         | Some name -> Map.add calls min name)
 

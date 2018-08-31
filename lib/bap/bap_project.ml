@@ -556,7 +556,8 @@ end
 let register x =
   let module S = (val x : S) in
   let stream =
-    Stream.map Info.img ~f:(fun img -> Ok (S.of_image img)) in
+    Stream.map Info.img ~f:(fun img ->
+        Or_error.try_with (fun () -> S.of_image img)) in
   S.Factory.register "internal" stream
 
 let () =

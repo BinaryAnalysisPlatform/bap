@@ -29,7 +29,7 @@ type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callees : string Addr.Map.t;
+  callnames : string Addr.Map.t;
 } [@@deriving sexp_of]
 
 
@@ -47,7 +47,7 @@ let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
   memory = Memmap.empty;
-  callees = Addr.Map.empty;
+  callnames = Addr.Map.empty;
 }
 
 let merge m1 m2 =
@@ -58,7 +58,7 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callees name =
+let filter_callnames name =
   Map.filter ~f:( fun name' -> String.(name <> name'))
 
 let remove t (name,entry,_) : t =
@@ -67,7 +67,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callees = filter_callees name t.callees
+      callnames = filter_callnames name t.callnames
     }
   else t
 
@@ -96,7 +96,7 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_callee t addr name =
-  { t with callees = Map.add t.callees addr name }
+let add_call_name t b name =
+  { t with callnames = Map.add t.callnames (Block.addr b) name }
 
-let find_callee t addr = Map.find t.callees addr
+let find_call_name t addr = Map.find t.callnames addr
