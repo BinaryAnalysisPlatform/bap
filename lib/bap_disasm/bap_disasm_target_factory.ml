@@ -53,12 +53,12 @@ let type_check bil = match Type.check bil with
     Error err
   | Ok () -> Ok bil
 
-type bass = bil -> bil
+type bil_transform = bil -> bil
 
-let basses : bass String.Table.t = String.Table.create ()
+let trans : bil_transform String.Table.t = String.Table.create ()
 
-let register_bass name bass = Hashtbl.update basses name (fun _ -> bass)
-let bass_list () = Hashtbl.data basses
+let provide_bil_transformation name f = Hashtbl.update trans name (fun _ -> f)
+let trans_list () = Hashtbl.data trans
 
 module Make(T : Target) = struct
   include T
@@ -67,7 +67,7 @@ module Make(T : Target) = struct
     | Error _ as e -> e
     | Ok bil ->
       let bil =
-        List.fold (bass_list ()) ~init:bil ~f:(fun bil f -> f bil) in
+        List.fold (trans_list ()) ~init:bil ~f:(fun bil f -> f bil) in
       type_check bil
 end
 

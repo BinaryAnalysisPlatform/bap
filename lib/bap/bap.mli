@@ -6593,11 +6593,10 @@ module Std : sig
       target.  *)
   val register_target : arch -> (module Target) -> unit
 
-  (** bil analysis *)
-  type bass
-
-  (** [register_bass name bass] register a new [bass] with a [name] *)
-  val register_bass : string -> (bil -> bil) -> unit
+  (** [provide_bil_transformation name f] register a new function [f] with a [name]
+      that will be applied to [bil] once instruction lifted and (optionaly)
+      after other trnasformations. *)
+  val provide_bil_transformation : string -> (bil -> bil) -> unit
 
   (** Term identifier  *)
   module Tid : sig
