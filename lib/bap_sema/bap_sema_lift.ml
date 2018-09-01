@@ -238,11 +238,14 @@ let create_synthetic name =
   Tid.set_name (Term.tid sub) name;
   Term.(set_attr sub synthetic ())
 
-let is_indirect_call jmp = match Ir_jmp.kind jmp with
-  | Ret _ | Int _ | Goto _ -> false
+let indirect_target jmp =
+  match Ir_jmp.kind jmp with
+  | Ret _ | Int _ | Goto _ -> None
   | Call call -> match Call.target call with
-    | Indirect (Bil.Int _) -> true
-    | _ -> false
+    | Indirect (Bil.Int a) -> Some a
+    | _ -> None
+
+let is_indirect_call jmp = Option.is_some (indirect_target jmp)
 
 let find_call_name symtab blk =
   match Term.get_attr blk address with
@@ -251,15 +254,19 @@ let find_call_name symtab blk =
 
 let find_externals symtab sub =
   let fold cls t ~f ~init = Term.to_sequence cls t |> Seq.fold ~f ~init in
-  let symbol_exists name = Option.is_some (Symtab.find_by_name symtab name) in
+  let symbol_exists name =
+    Option.is_some (Symtab.find_by_name symtab name) in
+  let is_known a = Option.is_some (Symtab.find_by_start symtab a) in
   let is_unknown name = not (symbol_exists name) in
   fold blk_t sub ~init:[] ~f:(fun acc blk ->
       fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
-          if is_indirect_call jmp then
+          match indirect_target jmp with
+          | None -> acc
+          | Some a when is_known a -> acc
+          | _ ->
             match find_call_name symtab blk with
             | Some name when is_unknown name -> name :: acc
-            | _ -> acc
-          else acc))
+            | _ -> acc))
 
 let update_externals exts symtab sub =
   find_externals symtab sub |>
@@ -300,9 +307,10 @@ let program symtab =
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
           ~f:(fun j ->
-              let j = if is_indirect_call j then
-                  resolve_indirect symtab exts blk j
-                else j in
+              let j = match indirect_target j with
+                | None -> j
+                | Some a when Hashtbl.mem addrs a -> j
+                | _ -> resolve_indirect symtab exts blk j in
               resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub
