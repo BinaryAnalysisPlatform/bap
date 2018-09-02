@@ -247,33 +247,35 @@ let indirect_target jmp =
 
 let is_indirect_call jmp = Option.is_some (indirect_target jmp)
 
-let find_call_name symtab blk =
-  match Term.get_attr blk address with
-  | None -> None
-  | Some a -> Symtab.find_call_name symtab a
+let with_address t ~f ~default =
+  match Term.get_attr t address with
+  | None -> default
+  | Some a -> f a
 
-let find_externals symtab sub =
-  let fold cls t ~f ~init = Term.to_sequence cls t |> Seq.fold ~f ~init in
+let find_call_name symtab blk =
+  with_address blk ~default:None ~f:(Symtab.find_call_name symtab)
+
+let update_unresolved symtab unresolved exts sub =
+  let iter cls t ~f = Term.to_sequence cls t |> Seq.iter ~f in
   let symbol_exists name =
     Option.is_some (Symtab.find_by_name symtab name) in
   let is_known a = Option.is_some (Symtab.find_by_start symtab a) in
   let is_unknown name = not (symbol_exists name) in
-  fold blk_t sub ~init:[] ~f:(fun acc blk ->
-      fold jmp_t blk ~init:acc ~f:(fun acc jmp ->
+  let add_external name =
+    Hashtbl.update exts name ~f:(function
+        | None -> create_synthetic name
+        | Some x -> x) in
+  iter blk_t sub ~f:(fun blk ->
+      iter jmp_t blk ~f:(fun jmp ->
           match indirect_target jmp with
-          | None -> acc
-          | Some a when is_known a -> acc
+          | None -> ()
+          | Some a when is_known a -> ()
           | _ ->
-            match find_call_name symtab blk with
-            | Some name when is_unknown name -> name :: acc
-            | _ -> acc))
-
-let update_externals exts symtab sub =
-  find_externals symtab sub |>
-  List.iter ~f:(fun name ->
-      Hashtbl.update exts name ~f:(function
-          | None -> create_synthetic name
-          | Some x -> x))
+            with_address blk ~default:() ~f:(fun addr ->
+                Hash_set.add unresolved addr;
+                match Symtab.find_call_name symtab addr with
+                | Some name when is_unknown name -> add_external name
+                | _ -> ())))
 
 let resolve_indirect symtab exts blk jmp =
   let update_target tar =
@@ -293,24 +295,27 @@ let resolve_indirect symtab exts blk jmp =
 let program symtab =
   let b = Ir_program.Builder.create () in
   let addrs = Addr.Table.create () in
-  let exts = String.Table.create () in
+  let externals = String.Table.create () in
+  let unresolved = Addr.Hash_set.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let sub = lift_sub entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
-      update_externals exts symtab sub);
-  Hashtbl.iter exts ~f:(Ir_program.Builder.add_sub b);
+      update_unresolved symtab unresolved externals sub);
+  Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
   let program = Ir_program.Builder.result b in
+  let has_unresolved blk =
+    with_address blk ~default:false ~f:(Hash_set.mem unresolved) in
   Term.map sub_t program
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
           ~f:(fun j ->
-              let j = match indirect_target j with
-                | None -> j
-                | Some a when Hashtbl.mem addrs a -> j
-                | _ -> resolve_indirect symtab exts blk j in
+              let j =
+                if is_indirect_call j && has_unresolved blk then
+                  resolve_indirect symtab externals blk j
+                else j in
               resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub
