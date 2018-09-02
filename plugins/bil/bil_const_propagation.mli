@@ -1,3 +1,3 @@
 open Bap.Std
 
-val propagate_consts: bil -> bil
+val run: bil -> bil

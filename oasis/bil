@@ -1,14 +1,13 @@
-Flag bil_pipe
- Description: Build bil-pipe plugin
+Flag bil
+ Description: Build bil plugin
  Default: false
 
-Library bil_pipe_plugin
-  XMETADescription: Provides bil analysis
-  Path:             plugins/bil_pipe
-  Build$:           flag(everything) || flag(bil_pipe)
-  FindlibName:      bap-plugin-bil_pipe
+Library bil_plugin
+  XMETADescription: Provides bil optimizations
+  Path:             plugins/bil
+  Build$:           flag(everything) || flag(bil)
+  FindlibName:      bap-plugin-bil
   BuildDepends:     bap
   XMETAExtraLines:  tags="bil,analysis"
-  InternalModules:  Bil_memo,
-                    Bil_pipe_main,
+  InternalModules:  Bil_main,
                     Bil_const_propagation

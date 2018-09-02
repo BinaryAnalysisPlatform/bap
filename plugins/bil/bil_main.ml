@@ -1,6 +1,6 @@
 open Core_kernel
 open Bap.Std
-open Bil_const_propagation
+
 include Self ()
 
 module Memo = struct
@@ -20,7 +20,6 @@ module Memo = struct
       Hashtbl.remove bils d;
       incr min
 
-  (* todo: add in actual *)
   let add digest bil =
     Hashtbl.set bils digest bil;
     Hashtbl.set actual !pnt digest;
@@ -30,17 +29,29 @@ module Memo = struct
   let find = Hashtbl.find bils
 end
 
-
-let simpl = Bil.fold_consts
-let norml = Stmt.normalize ~keep_ites:false ~normalize_exp:false
-let propg = opropagate_consts
+let eliminate_dead_code bil =
+  let open Bil.Types in
+  let free = Bil.free_vars bil in
+  let is_dead v = Var.is_virtual v && not (Set.mem free v) in
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | st :: bil ->
+      match st with
+      | Move (var, Int _) when is_dead var -> loop acc bil
+      | If (cond, yes, no) ->
+	let yes = loop [] yes in
+	let no  = loop [] no in
+	loop (If (cond, yes, no) :: acc) bil
+      | While (cond,body) ->
+        let body = loop [] body in
+        loop (While (cond,body) :: acc) bil
+      | st -> loop (st :: acc) bil in
+  loop [] bil
 
 let apply bil =
   List.fold ~init:bil ~f:(fun bil f -> f bil)
 
 let process pipe =
-  let pipe = List.filter_map pipe
-      ~f:(fun (test, f) -> Option.some_if test f) in
   fun bil ->
     let digest = Memo.digest_of_bil bil in
     match Memo.find digest with
@@ -51,11 +62,22 @@ let process pipe =
         Memo.add digest bil';
       bil'
 
-let run if_norml if_simpl =
+let norml level =
+  if level = 0 then ident
+  else
+    Stmt.normalize ~keep_ites:false ~normalize_exp:false
+
+let simpl level =
+  if level = 0 then ident
+  else
+    Bil.fixpoint
+      (fun bil -> Bil.fold_consts bil |> Bil_const_propagation.run |> eliminate_dead_code)
+
+let run norml_level simpl_level =
   provide_bil_transformation "internal" @@
   process [
-    if_simpl,simpl;
-    if_norml,norml;
+    norml norml_level;
+    simpl simpl_level;
   ]
 
 let () =

@@ -15,7 +15,7 @@ module Propagate(SM : Monad.State.S2) = struct
   let find = Map.find
   let update = Map.add
 
-  class e = object(self)
+  class expi = object(self)
 
     method update const var : unit r =
       SM.get () >>= fun ctxt ->
@@ -28,12 +28,12 @@ module Propagate(SM : Monad.State.S2) = struct
       | _ -> SM.return (Var v)
 
     method eval_load ~mem ~addr e s =
-      self#eval_exp mem >>= fun mem ->
+      self#eval_exp mem  >>= fun mem ->
       self#eval_exp addr >>= fun addr ->
       SM.return (Bil.load mem addr e s)
 
     method eval_store ~mem ~addr data e s =
-      self#eval_exp mem >>= fun mem ->
+      self#eval_exp mem  >>= fun mem ->
       self#eval_exp addr >>= fun addr ->
       self#eval_exp data >>= fun data ->
       SM.return (Bil.store mem addr data e s)
@@ -100,7 +100,7 @@ module Propagate(SM : Monad.State.S2) = struct
 
   end
 
-  let meet =
+  let join =
     Map.merge ~f:(fun ~key:_ -> function
         | `Both (Def w1, Def w2) ->
           if Word.equal w1 w2 then Some (Def w1)
@@ -109,16 +109,16 @@ module Propagate(SM : Monad.State.S2) = struct
 
   let defs bil =
     (object
-      inherit [Var.Set.t] Stmt.visitor
-      method! enter_move v _ defs = Set.add defs v
-    end)#run bil Var.Set.empty |> Set.to_list
+      inherit [var list] Stmt.visitor
+      method! enter_move v _ defs = v :: defs
+    end)#run bil []
 
-  let has_jmps bil =
+  let has_unconditional_jmps bil =
     List.exists bil
       ~f:(function | Jmp _ -> true | _ -> false)
 
-  class t = object(self)
-    inherit e
+  class bili = object(self)
+    inherit expi
 
     method eval_stmt (s : stmt) : stmt r =
       match s with
@@ -152,8 +152,10 @@ module Propagate(SM : Monad.State.S2) = struct
       SM.put ctxt >>= fun () ->
       self#eval no >>= fun no ->
       SM.get () >>= fun ctxt_no ->
-      let ctxt = match has_jmps yes, has_jmps no with
-        | false, false -> meet ctxt_yes ctxt_no
+      let ctxt = match
+          has_unconditional_jmps yes,
+          has_unconditional_jmps no with
+        | false, false -> join ctxt_yes ctxt_no
         | true, true -> ctxt
         | false, _ -> ctxt_yes
         | _ -> ctxt_no in
@@ -166,8 +168,8 @@ module Propagate(SM : Monad.State.S2) = struct
       self#eval_exp cond >>= fun cond ->
       self#eval body >>= fun body ->
       SM.get () >>= fun ctxt' ->
-      let ctxt = if has_jmps body then ctxt
-        else meet ctxt ctxt' in
+      let ctxt = if has_unconditional_jmps body then ctxt
+        else join ctxt ctxt' in
       SM.put ctxt >>= fun () ->
       SM.return (Bil.while_ cond body)
 
@@ -177,60 +179,6 @@ module Propagate(SM : Monad.State.S2) = struct
   end
 end
 
-module Dead_code = struct
-
-  let is_used var bil =
-    let (||) x y = match x, y with
-      | Some r1, Some r2 -> Some (r1 || r2)
-      | Some _, None | None, Some _ -> Some true
-      | None, None -> None in
-    let is_in_free s = Set.mem (Stmt.free_vars s) var in
-    let defined = Var.equal var in
-    let rec used_in = function
-      | [] -> None
-      | s :: bil -> match s with
-        | If (_, yes, no) ->
-          let r = used_in yes || used_in no in
-          if Option.is_some r then r
-          else used_in bil
-        | While (_, body) -> used_in body || used_in bil
-        | Move (var',_) when defined var' -> Some false
-        | s when is_in_free s -> Some true
-        | _ -> used_in bil in
-    match used_in bil with
-    | None -> false
-    | Some x -> x
-
-  let eliminate bil =
-    let decr = function
-      | [] -> []
-      | _ :: scope -> scope in
-    let rec loop acc scope = function
-      | [] -> List.rev acc
-      | st :: bil ->
-        let scope = decr scope in
-        match st with
-        | Move (v, Int _) when Var.is_virtual v ->
-	  if is_used v scope then loop (st :: acc) scope bil
-	  else loop acc scope bil
-        | If (cond, yes, no) ->
-	  let yes = loop [] (yes @ scope) yes in
-	  let no  = loop [] (no @ scope) no in
-	  loop (If (cond, yes, no) :: acc) scope bil
-        | While (cond,body) ->
-          let body = loop [] (body @ bil) body in
-          loop (While (cond,body) :: acc) scope bil
-        | st -> loop (st :: acc) scope bil in
-    loop [] bil bil
-
-end
-
 module P = Propagate(Monad.State)
 
-let propagate_consts xs = Monad.State.eval ((new P.t)#eval xs) P.new_ctxt
-let eliminate_dead_code = Dead_code.eliminate
-
-let propagate_consts bil =
-  let f bil =
-    Bil.fold_consts bil |> propagate_consts |> eliminate_dead_code in
-  Bil.fixpoint f bil
+let run bil = Monad.State.eval ((new P.bili)#eval bil) P.new_ctxt
