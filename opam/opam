@@ -110,7 +110,6 @@ install: [
   ["ocamlfind" "remove" "ogre"]
   ["ocamlfind" "remove" "bare"]
   [make "reinstall"]
-  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.4.0/sigs.zip"]
   ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
 ]
 
@@ -235,6 +234,7 @@ depends: [
     "piqi" {>= "0.7.4"}
     "conf-bap-llvm" {>= "1.1"}
     "parsexp"
+    "bap-signatures"
 ]
 
 
