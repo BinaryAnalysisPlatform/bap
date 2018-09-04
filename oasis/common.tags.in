@@ -3,6 +3,6 @@
 true: short_paths
 true: bin_annot
 true: debug
-<**/*>: predicate(ppx_driver)
-<**/*>: pp(ppx-jane -dump-ast -inline-test-drop)
+not <**/bap_elf/*>: predicate(ppx_driver)
+not <**/bap_elf/*>: pp(ppx-jane -dump-ast -inline-test-drop)
 true: warn(+a-4-6-7-9-27-29-32..42-44-45-48-50-60)
