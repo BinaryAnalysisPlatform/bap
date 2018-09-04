@@ -54,20 +54,14 @@ let init () =
   Symbolizer.Factory.register "relocatable"
 
 let () =
-  init ();
   Config.manpage [
-    `S "SYNOPSIS";
     `S "DESCRIPTION";
-    `P "Provides a symbolizer for external symbols in relocatable files.";
-    `P "Relocatable symbolizer provides correct addresses of a calling
-        side of external functions. Usually, relocations contains
-        address where fixup should be done, and this address
-        doesn't match with an address of any instruction, because it
-        points somewhere to the middle of the instruction bytes, after
-        prefixes, opcodes and etc. Relocatable symbolizer uses OGRE
-        to query relocations and disassembled instructions to find
-        an instruction address of external function calls.";
+    `P "Extracts symbol information from the program relocations.";
+
+    `P "The relocation symbolizer leverages the relocation information stored in files
+        to extract symbol names. Since a relocation references an external symbol which
+        doesn't have an address we use an address of a callsite.";
     `S "SEE ALSO";
     `P "$(b,bap-plugin-llvm)(1) code";
   ];
-  Config.when_ready (fun _ -> ())
+  Config.when_ready (fun _ -> init ())
