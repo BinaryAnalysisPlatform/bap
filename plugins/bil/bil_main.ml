@@ -68,9 +68,6 @@ let () =
 and
 $(b,bap) exe --$(mname)$(b,-passes)=bar,foo
 may produce different results";
-
-      `S "SEE ALSO";
-      `P "$(b,bap.mli)"
     ] in
   let passes =
     let doc =

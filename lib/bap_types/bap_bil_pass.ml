@@ -14,7 +14,7 @@ let selected_passes () =
   List.map !selected ~f:(Hashtbl.find_exn passes)
 let passes () = Hashtbl.keys passes
 
-module Printable = Printable.Make(struct
+module Pass_pp = Printable.Make(struct
     type nonrec t = t
     let module_name = Some "Bap.Std.Bil.Pass"
     let pp fmt name = Format.fprintf fmt "%s" name

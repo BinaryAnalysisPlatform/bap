@@ -11,4 +11,4 @@ val select_passes : pass list -> unit
 
 val selected_passes : unit -> (bil -> bil) list
 
-module Printable : Printable.S with type t := pass
+module Pass_pp : Printable.S with type t := pass

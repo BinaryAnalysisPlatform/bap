@@ -96,7 +96,7 @@ module Std = struct
     type vars = (var,var_compare) Set.t
     type result = Result.t
     include Bap_bil_pass
-    module Pass = Bap_bil_pass.Printable
+    module Pass = Bap_bil_pass.Pass_pp
   end
 
   (** Types of BIL expressions  *)
