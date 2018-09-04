@@ -4,18 +4,19 @@ open Regular.Std
 
 include Self ()
 
-let collect_def_use bil =
-  (object
-    inherit [Var.Set.t * Var.Set.t] Stmt.visitor
-    method! enter_move var _ (def, used) = Set.add def var, used
-    method! enter_stmt s (def, used) =
-      def, Set.union used (Stmt.free_vars s)
-  end)#run bil (Var.Set.empty, Var.Set.empty)
+let collect_dead bil =
+  let defs, used =
+    (object
+      inherit [Var.Set.t * Var.Set.t] Stmt.visitor
+      method! enter_move var _ (defs, used) = Set.add defs var, used
+      method! enter_stmt s (defs, used) =
+        defs, Set.union used (Stmt.free_vars s)
+    end)#run bil (Var.Set.empty, Var.Set.empty) in
+  Set.diff defs used
 
 let eliminate_dead_code bil =
   let open Bil.Types in
-  let def, used = collect_def_use bil in
-  let dead = Set.diff def used in
+  let dead = collect_dead bil  in
   let is_dead var = Var.is_virtual var && Set.mem dead var in
   let rec loop acc = function
     | [] -> List.rev acc
