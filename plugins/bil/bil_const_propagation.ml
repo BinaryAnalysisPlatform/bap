@@ -15,7 +15,7 @@ module Propagate(SM : Monad.State.S2) = struct
   let find = Map.find
   let update = Map.add
 
-  class expi = object(self)
+  class exp_propagator = object(self)
 
     method update const var : unit r =
       SM.get () >>= fun ctxt ->
@@ -117,8 +117,8 @@ module Propagate(SM : Monad.State.S2) = struct
     List.exists bil
       ~f:(function | Jmp _ -> true | _ -> false)
 
-  class bili = object(self)
-    inherit expi
+  class bil_propagator = object(self)
+    inherit exp_propagator
 
     method eval_stmt (s : stmt) : stmt r =
       match s with
@@ -181,4 +181,4 @@ end
 
 module P = Propagate(Monad.State)
 
-let run bil = Monad.State.eval ((new P.bili)#eval bil) P.new_ctxt
+let run bil = Monad.State.eval ((new P.bil_propagator)#eval bil) P.new_ctxt

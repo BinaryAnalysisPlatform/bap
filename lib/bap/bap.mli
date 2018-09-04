@@ -2407,6 +2407,27 @@ module Std : sig
       module Normalized : Trie.S with type key = normalized_bil
       include Trie.S with type key = stmt list
     end
+
+    type pass
+
+    (** [register_pass name pass] provides a pass to the BIL transformation pipeline.
+     The BIL transformation pipeline is applied after the lifting procedure, i.e., it is embedded into
+     each [lift] function of all Target modules. (You can selectively register_passes based on architecture
+     by subscribing to the [Project.Info.arch] variable). All passes that  were in the selection provided to
+     the [select_passes] are applied in the order of the selection until the fixed point is reached or a loop
+     is detected.
+     By default, no passes are selected. The [bil] plugin provides a user interface for passes selection,
+     as well as some useful passes.  *)
+    val register_pass : string -> (t -> t) -> unit
+
+    (** [select_passes passes] select the [passes] for the BIL transformation pipeline.
+     See {!register_pass} for more information about the BIL transformation pipeline *)
+    val select_passes : pass list -> unit
+
+    (** [passes ()] returns all currently registered passes. *)
+    val passes : unit -> pass list
+
+    module Pass : Printable.S with type t := pass
   end
 
   type typ   = Bil.typ     [@@deriving bin_io, compare, sexp]
@@ -6592,11 +6613,6 @@ module Std : sig
       already exists, then it will be superseeded by the new
       target.  *)
   val register_target : arch -> (module Target) -> unit
-
-  (** [provide_bil_transformation name f] register a new function [f] with a [name]
-      that will be applied to [bil] once instruction lifted and (optionaly)
-      after other trnasformations. *)
-  val provide_bil_transformation : string -> (bil -> bil) -> unit
 
   (** Term identifier  *)
   module Tid : sig

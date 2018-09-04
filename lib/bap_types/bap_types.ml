@@ -95,6 +95,8 @@ module Std = struct
     type var_compare = Var.comparator_witness
     type vars = (var,var_compare) Set.t
     type result = Result.t
+    include Bap_bil_pass
+    module Pass = Bap_bil_pass.Printable
   end
 
   (** Types of BIL expressions  *)

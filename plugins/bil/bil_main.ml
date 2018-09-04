@@ -4,21 +4,19 @@ open Regular.Std
 
 include Self ()
 
-(* variable is considred dead if it's a virtual and equal to const and
-   assigned only once. Assuming const propagation was ran before *)
+let collect_def_use bil =
+  (object
+    inherit [Var.Set.t * Var.Set.t] Stmt.visitor
+    method! enter_move var _ (def, used) = Set.add def var, used
+    method! enter_stmt s (def, used) =
+      def, Set.union used (Stmt.free_vars s)
+  end)#run bil (Var.Set.empty, Var.Set.empty)
+
 let eliminate_dead_code bil =
   let open Bil.Types in
-  let assigned_once =
-    fst @@
-    ((object
-      inherit [Var.Set.t * Var.Set.t] Stmt.visitor
-      method! enter_move var _ (once, many) =
-        if Set.mem once var then
-          Set.remove once var, Set.add many var
-        else if Set.mem many var then once,many
-        else Set.add once var, many
-    end)#run bil (Var.Set.empty, Var.Set.empty)) in
-  let is_dead v = Var.is_virtual v && Set.mem assigned_once v in
+  let def, used = collect_def_use bil in
+  let dead = Set.diff def used in
+  let is_dead var = Var.is_virtual var && Set.mem dead var in
   let rec loop acc = function
     | [] -> List.rev acc
     | st :: bil ->
@@ -34,44 +32,49 @@ let eliminate_dead_code bil =
       | st -> loop (st :: acc) bil in
   loop [] bil
 
-let apply bil =
-  List.fold ~init:bil ~f:(fun bil f -> f bil)
+let () =
+  Bil.register_pass "normalization" @@
+  Stmt.normalize ~keep_ites:false ~normalize_exp:false
 
-let norml level =
-  if level = 0 then ident
-  else
-    Stmt.normalize ~keep_ites:false ~normalize_exp:false
+let () =
+  Bil.register_pass "optimization" @@
+  Bil.fixpoint
+    (fun bil -> Bil.fold_consts bil |> Bil_const_propagation.run |> eliminate_dead_code)
 
-let simpl level =
-  if level = 0 then ident
-  else
-    Bil.fixpoint
-      (fun bil -> Bil.fold_consts bil |> Bil_const_propagation.run |> eliminate_dead_code)
-
-let run norml_level simpl_level =
-  provide_bil_transformation "internal" @@
-  fun bil -> apply bil [
-    norml norml_level;
-    simpl simpl_level;
-  ]
+let run passes =
+  let passes = ["normalization"; "optimization"] @ passes in
+  let is_selected p =
+    List.mem passes ~equal:String.equal (Bil.Pass.to_string p) in
+  let all = Bil.passes () in
+  List.filter all ~f:is_selected |>
+  Bil.select_passes
 
 let () =
   let () = Config.manpage [
       `S "DESCRIPTION";
-      `P "Applies analysises to a instruction bil code" ;
-      `Pre "
-The following bil analysises are in default pipeline:
-Constant Folding and Simplification
-Bil Normalization
-Constant Propagation
-";
+      `P "Establishes a pipeline of BIL analysis";
+      `P "The pipeline is a list of transformations, applicable to
+        a BIL code. And a BIL code of any instruction is an
+        output of this pipeline, i.e. a result of the last
+        applied transformation.
+        By default, pipeline begins with BIL normalization and
+        few optimizations, that include constant folding,
+        constant propagation and dead code elimination.
+        New analysis could be added with $(b,Bil.register_pass)
+        and selected later by $(b,-passes) option. Note, that the order
+        does matter, so";
+      `Pre
+"$(b,bap) exe --$(mname)$(b,-passes)=foo,bar
+and
+$(b,bap) exe --$(mname)$(b,-passes)=bar,foo
+may produce different results";
+
       `S "SEE ALSO";
       `P "$(b,bap.mli)"
     ] in
-  let simpl =
-    let doc = "Applies expressions simplification." in
-    Config.(param int ~default:1 "simplification" ~doc) in
-  let norm =
-    let doc = "Produces a normalized BIL program" in
-    Config.(param int ~default:1 "normalization" ~doc) in
-  Config.when_ready (fun {Config.get=(!)} -> run !norm !simpl)
+  let passes =
+    let doc =
+      "Selects the list and the order of analyses to be applied during
+       the lifing to BIL code." in
+    Config.(param (list string) ~default:[] ~doc "passes") in
+  Config.when_ready (fun {Config.get=(!)} -> run !passes)
