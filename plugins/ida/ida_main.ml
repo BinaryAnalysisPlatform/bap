@@ -136,93 +136,84 @@ let loader path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
-let int64_to_word arch = 
-  let addr_size = Arch.addr_size arch in 
-  (Word.of_int64 ~width:(Size.in_bits addr_size)) 
+(* The ida service named brancher provides data as a list of
+ * 3-tuples of the form (addr, jump of normal flow (fall) type,
+ * jumps of other types) *)
+type brancher_info = (int64 * int64 option * int64 list) list
+[@@deriving sexp]
 
-(* copied from lib/bap_disasm/bap_disasm_brancher.ml *)
-let kind_of_dests = function 
-  | xs when List.for_all xs ~f:(fun (_,x) -> x = `Fall) -> `Fall 
-  | xs -> if List.exists  xs ~f:(fun (_,x) -> x = `Jump) 
-    then `Jump 
-    else `Cond 
+module IdaBrancher : sig
+  type t
+  val of_brancher_info : arch -> brancher_info -> t
+  val resolve : t -> mem -> Disasm_expert.Basic.full_insn -> Brancher.dests
+  include Data.S with type t := t
+end = struct
+  type t = Brancher.dests Addr.Table.t
 
-let print_addr_with_dests addr dests = 
-  Format.printf "%x: %a\n" 
-    (Int64.to_int_exn addr) 
-    Sexp.pp (Brancher.sexp_of_dests dests) 
+  include Data.Make(struct
+      type nonrec t = t
+      let version = "0.1"
+    end)
 
-(* brancher_info is a list of 3-tuples of the form 
- * (addr, jump of normal flow (fall) type, jumps of other types) *) 
-type brancher_info = (int64 * int64 option * int64 list) list 
-[@@deriving sexp] 
+  let int64_to_word arch =
+    let addr_size = Arch.addr_size arch in
+    (Word.of_int64 ~width:(Size.in_bits addr_size))
 
-module BrancherInfo = Data.Make(struct 
-    type t = brancher_info 
-    let version = "0.1" 
-  end) 
+  let of_brancher_info arch bf : t =
+    let (!) = (int64_to_word arch) in
+    let normal_flow_to_dests = function
+      | Some fall -> [Some !fall, `Fall]
+      | None -> []
+    in
+    let other_flows_to_dests flows =
+      List.fold flows ~init:[] ~f:(fun acc addr ->
+          (Some !addr, `Jump)::acc)
+    in
+    let helper tab (addr,normal_flow,other_flows) =
+      Addr.Table.add_exn tab ~key:!addr
+        ~data:((normal_flow_to_dests normal_flow)
+               @ (other_flows_to_dests other_flows));
+      tab
+    in
+    List.fold bf
+      ~init:(Addr.Table.create ())
+      ~f:helper
 
-let read_brancher_info name = 
-  In_channel.with_file name ~f:(fun ch -> 
-      Sexp.input_sexp ch |> brancher_info_of_sexp) 
+  let resolve t mem _ =
+    match
+      Addr.Table.find t (Memory.min_addr mem)
+    with
+    | Some dests -> dests
+    | None -> []
+end
 
-let load_brancher_info = 
-  Command.create 
-    `python 
-    ~script:(request "brancher") 
-    ~parser:read_brancher_info 
+let read_brancher_info arch name =
+  In_channel.with_file name ~f:(fun ch ->
+      Sexp.input_sexp ch |> brancher_info_of_sexp
+      |> (IdaBrancher.of_brancher_info arch))
 
-let handle_normal_flow flow arch = 
-  let (!) = (int64_to_word arch) in 
-  match flow with 
-  | Some fall -> [Some !fall, `Fall] 
-  | None -> [] 
+let load_brancher_info arch =
+  Command.create
+    `python
+    ~script:(request "brancher")
+    ~parser:(read_brancher_info arch)
 
-let handle_other_flows flows default_dests arch = 
-  let (!) = (int64_to_word arch) in 
-  let helper acc dest_addr = 
-    let default_edge = ListLabels.assoc_opt 
-        (Some !dest_addr) 
-        default_dests 
-    in 
-    match default_edge with 
-    (* If dest_addr is also found by the default BIL brancher, 
-     * we reuse the edge type *) 
-    | Some kind -> (Some !dest_addr, kind)::acc 
-    (* Else we use a heuristic to guess the edge type *) 
-    | None -> (Some !dest_addr, (kind_of_dests default_dests))::acc 
-  in 
-  List.fold flows ~init:[] ~f:helper 
+let get_resolve_fun file arch =
+  let id = Data.Cache.digest ~namespace:"ida-brancher" "%s"
+      (Digest.file file) in
+  let brancher = match IdaBrancher.Cache.load id with
+    | Some i -> i
+    | None ->
+      let i = Ida.with_file file (load_brancher_info arch) in
+      IdaBrancher.Cache.save id i;
+      i in
+  (IdaBrancher.resolve brancher)
 
-let get_resolve_fun file arch = 
-  let id = Data.Cache.digest ~namespace:"ida-brancher" "%s" 
-      (Digest.file file) in 
-  let info = match BrancherInfo.Cache.load id with 
-    | Some i -> i 
-    | None -> 
-      let i = Ida.with_file file load_brancher_info in 
-      BrancherInfo.Cache.save id i; 
-      i in 
-  let resolve mem insn = 
-    let addr = Word.to_int64_exn (Memory.min_addr mem) in 
-    let b = List.find 
-        info 
-        ~f:(fun (a,_,_) -> a = addr) in 
-    match b with 
-    | Some (_,normal_flow,other_flows) -> 
-      let default_brancher = Brancher.of_bil arch in 
-      let default_dests = Brancher.resolve default_brancher mem insn in 
-      (handle_normal_flow normal_flow arch) 
-      @ (handle_other_flows other_flows default_dests arch) 
-    | None -> 
-      [] in 
-  resolve 
-
-let register_brancher_source () = 
-  let source = 
-    let create_brancher file arch = Or_error.try_with (fun () -> 
-        Brancher.create (get_resolve_fun file arch)) in 
-    Project.Info.(Stream.merge file arch ~f:create_brancher) in 
+let register_brancher_source () =
+  let source =
+    let create_brancher file arch = Or_error.try_with (fun () ->
+        Brancher.create (get_resolve_fun file arch)) in
+    Project.Info.(Stream.merge file arch ~f:create_brancher) in
   Brancher.Factory.register name source
 
 let checked ida_path is_headless =
