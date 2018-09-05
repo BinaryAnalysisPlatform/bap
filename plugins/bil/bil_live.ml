@@ -22,7 +22,8 @@ let run bil =
             if is_dead var live then bil, live
             else s :: bil, free e ++ (live -- var)
           | While (cond, body) ->
-            let body, live' = loop live body in
+            let live' = List.fold body ~init:live
+                ~f:(fun live s -> live ++ Stmt.free_vars s) in
             let live = free cond ++ live' in
-            Bil.while_ cond body :: bil, live) in
+            s :: bil, live) in
   fst (loop Var.Set.empty bil)
