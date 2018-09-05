@@ -557,8 +557,10 @@ let fix compare f x  =
     else
       let fast' = f fast in
       if compare fast' fast = 0 then fast
-      else loop (f slow) (f fast) in
-  loop x (f x)
+      else loop (f slow) (f fast') in
+  let slow = x and fast = f x in
+  if compare slow fast = 0 then fast
+  else loop slow fast
 
 let fixpoint = fix compare_bil
 
@@ -710,6 +712,8 @@ module Normalize = struct
 
   *)
   let expand_store m a x e s =
+    if s = `r8 then Exp.Store (m,a,x,e,s)
+    else
     let (++) = make_succ m in
     let n = Size.in_bytes s in
     let nth i = if e = BigEndian then nth (n-i-1) else nth i in

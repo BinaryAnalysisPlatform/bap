@@ -53,16 +53,17 @@ let type_check bil = match Type.check bil with
     Error err
   | Ok () -> Ok bil
 
+let apply_passes bil =
+  let f bil =
+    List.fold ~init:bil (Bil.selected_passes ()) ~f:(fun bil f -> f bil) in
+  Or_error.(type_check bil >>| Bil.fixpoint f >>= type_check)
+
 module Make(T : Target) = struct
   include T
 
   let lift mem insn = match T.lift mem insn with
     | Error _ as e -> e
-    | Ok bil ->
-      let bil =
-        List.fold (Bil.selected_passes ())
-          ~init:bil ~f:(fun bil f -> f bil) in
-      type_check bil
+    | Ok bil -> apply_passes bil
 end
 
 let register_target arch (module Target : Target) =

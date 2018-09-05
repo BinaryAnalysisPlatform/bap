@@ -2410,16 +2410,16 @@ module Std : sig
 
     type pass
 
-    (** [register_pass name pass] provides a pass to the BIL transformation pipeline.
+    (** [register_pass name desc pass] provides a pass to the BIL transformation pipeline.
         The BIL transformation pipeline is applied after the lifting procedure,
-        i.e. it is embedded into each [lift] function of all Target modules.
-        (You can selectively register_passes based on architecture by subscribing
+        i.e., it is embedded into each [lift] function of all Target modules.
+        (You can selectively register passes based on architecture by subscribing
         to the [Project.Info.arch] variable). All passes that  were in the selection
         provided to the [select_passes] are applied in the order of the selection
         until the fixed point is reached or a loop is detected. By default, no passes
         are selected. The [bil] plugin provides a user interface for passes selection,
         as well as some useful passes.  *)
-    val register_pass : string -> (t -> t) -> unit
+    val register_pass : string -> desc:string -> (t -> t) -> unit
 
     (** [select_passes passes] select the [passes] for the BIL transformation pipeline.
      See {!register_pass} for more information about the BIL transformation pipeline *)
@@ -2427,6 +2427,9 @@ module Std : sig
 
     (** [passes ()] returns all currently registered passes. *)
     val passes : unit -> pass list
+
+    (** [pass_name p] returns the name of the given pass. *)
+    val pass_name : pass -> string
 
     module Pass : Printable.S with type t := pass
   end

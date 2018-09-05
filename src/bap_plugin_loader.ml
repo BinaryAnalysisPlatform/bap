@@ -146,7 +146,7 @@ let warn_on_dead_code_elimination name =
   if name = "dead-code-elimination" then
     eprintf
       "WARNING: dead-code-elimination plugin does no longer exist, \
-       use plugin 'optimization' instead\n"
+       use plugin 'optimization' instead\n%!"
 
 let run_and_get_passes env argv =
   let library = get_opt argv load_path ~default:[] in
