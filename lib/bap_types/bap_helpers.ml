@@ -714,14 +714,14 @@ module Normalize = struct
   let expand_store m a x e s =
     if s = `r8 then Exp.Store (m,a,x,e,s)
     else
-    let (++) = make_succ m in
-    let n = Size.in_bytes s in
-    let nth i = if e = BigEndian then nth (n-i-1) else nth i in
-    let rec expand i =
-      if i >= 0
-      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
-      else m in
-    expand (n-1)
+      let (++) = make_succ m in
+      let n = Size.in_bytes s in
+      let nth i = if e = BigEndian then nth (n-i-1) else nth i in
+      let rec expand i =
+        if i >= 0
+        then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
+        else m in
+      expand (n-1)
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
      x[a+n-1]
@@ -1096,9 +1096,8 @@ module Normalize = struct
           hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
     end) bil
 
-  let bil ?(keep_ites=false) ?normalize_exp:(ne=false) xs =
+  let bil ?normalize_exp:(ne=false) xs =
     let normalize_exp = if ne then normalize_exp else ident in
-    let split_ite = if keep_ites then ident else split_ite in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>
@@ -1108,8 +1107,7 @@ module Normalize = struct
           | If (c,xs,ys) -> If (normalize_exp c, run xs, run ys)
           | While (c,xs) -> While (normalize_exp c, run xs)
           | Special _  | CpuExn _ as s -> s) |>
-      hoist_stores |>
-      split_ite in
+      hoist_stores in
     run xs
 end
 

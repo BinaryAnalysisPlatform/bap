@@ -2202,6 +2202,13 @@ module Std : sig
         cycle. *)
     val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
 
+    (** [propagate_consts bil] evaluates constants in [bil] and substitutes them. *)
+    val propagate_consts : stmt list -> stmt list
+
+    (** [prune_dead bil] evaluates dead virtual variables and remove them from [bil].
+        while loops are not touched. *)
+    val prune_dead : stmt list -> stmt list
+
     (** Maps BIL operators to bitvectors.
         @since 1.3
     *)
@@ -2410,7 +2417,7 @@ module Std : sig
 
     type pass
 
-    (** [register_pass name desc pass] provides a pass to the BIL transformation pipeline.
+    (** [register_pass ~desc name pass] provides a pass to the BIL transformation pipeline.
         The BIL transformation pipeline is applied after the lifting procedure,
         i.e., it is embedded into each [lift] function of all Target modules.
         (You can selectively register passes based on architecture by subscribing
@@ -2419,7 +2426,7 @@ module Std : sig
         until the fixed point is reached or a loop is detected. By default, no passes
         are selected. The [bil] plugin provides a user interface for passes selection,
         as well as some useful passes.  *)
-    val register_pass : string -> desc:string -> (t -> t) -> unit
+    val register_pass : ?desc:string -> string -> (t -> t) -> pass
 
     (** [select_passes passes] select the [passes] for the BIL transformation pipeline.
      See {!register_pass} for more information about the BIL transformation pipeline *)
@@ -2428,10 +2435,11 @@ module Std : sig
     (** [passes ()] returns all currently registered passes. *)
     val passes : unit -> pass list
 
-    (** [pass_name p] returns the name of the given pass. *)
-    val pass_name : pass -> string
-
-    module Pass : Printable.S with type t := pass
+    module Pass : sig
+      (** [name p] returns the name of the given pass. *)
+      val name : pass -> string
+      include Printable.S with type t := pass
+    end
   end
 
   type typ   = Bil.typ     [@@deriving bin_io, compare, sexp]
@@ -3678,7 +3686,7 @@ module Std : sig
     *)
     val is_referenced : var -> t -> bool
 
-    (** [normalize ?keep_ites ?normalize_exp xs] produces a normalized BIL
+    (** [normalize ?normalize_exp xs] produces a normalized BIL
         program with the same[^1] semantics but in the BIL normalized
         form (BNF). There are two normalized forms, both described
         below. The first form (BNF1) is more readable, the second form
@@ -3690,8 +3698,6 @@ module Std : sig
 
         The BIL First Normalized Form (BNF1) is a subset of the BIL
         language, where expressions have the following properties:
-
-        - No if-then-else expressions.
 
         - Memory load expressions can be only applied to a memory. This
         effectively disallows creation of temporary memory regions,
@@ -3724,7 +3730,6 @@ module Std : sig
        x[a,be]:n => x[a] @ ... @ x[a+n-1]
        m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
        m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
-       ... ite c ? x : y ... => if c \{ ... x ... } \{ ... y ... }
        (x[a] <- b)[c] => m := x[a] <- b; m[c]
       v}
 
@@ -3746,12 +3751,8 @@ module Std : sig
         @param normalize_exp (defaults to [false]) if set to [true] then
         the returned program will be in BNF2.
 
-        @param keep_ites (defaults to [false]) if set to [true] then
-        the returned program will preserve ite expressions.
-
         @since 1.3 *)
-    val normalize : ?keep_ites:bool -> ?normalize_exp:bool
-       -> stmt list -> stmt list
+    val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
     (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
         simplifies [if] and [while] expressions with statically known

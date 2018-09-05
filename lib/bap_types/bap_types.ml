@@ -97,6 +97,7 @@ module Std = struct
     type result = Result.t
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
+    include Bap_bil_optimizations
   end
 
   (** Types of BIL expressions  *)

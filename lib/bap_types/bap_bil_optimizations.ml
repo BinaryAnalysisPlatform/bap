@@ -1,11 +1,21 @@
 open Core_kernel
-open Bap.Std
-open Bil.Types
 open Monads.Std
+open Bap_common
+open Bap_bil
+open Bap_visitor
+
+open Bap_bil.Stmt
+open Bap_stmt.Stmt
+
+module Word = Bitvector
+module Var = Bap_var
 
 module Propagate(SM : Monad.State.S2) = struct
-
   open SM.Syntax
+
+  open Bap_bil.Exp
+  open Bap_exp.Exp
+  open Bap_exp.Binop
 
   type const = Def of word | Top
   type ctxt = const Var.Map.t
@@ -17,9 +27,9 @@ module Propagate(SM : Monad.State.S2) = struct
 
   class exp_propagator = object(self)
 
-    method update const var : unit r =
+    method update const v : unit r =
       SM.get () >>= fun ctxt ->
-      SM.put (update ctxt var const)
+      SM.put (update ctxt v const)
 
     method eval_var v : exp r =
       SM.get () >>= fun ctxt ->
@@ -30,24 +40,24 @@ module Propagate(SM : Monad.State.S2) = struct
     method eval_load ~mem ~addr e s =
       self#eval_exp mem  >>= fun mem ->
       self#eval_exp addr >>= fun addr ->
-      SM.return (Bil.load mem addr e s)
+      SM.return (load mem addr e s)
 
     method eval_store ~mem ~addr data e s =
       self#eval_exp mem  >>= fun mem ->
       self#eval_exp addr >>= fun addr ->
       self#eval_exp data >>= fun data ->
-      SM.return (Bil.store mem addr data e s)
+      SM.return (store mem addr data e s)
 
     method eval_unop op e =
       self#eval_exp e >>= fun e ->
-      SM.return (Bil.unop op e)
+      SM.return (unop op e)
 
     method eval_binop op x y =
       self#eval_exp x >>= fun x ->
       self#eval_exp y >>= fun y ->
-      SM.return (Bil.binop op x y)
+      SM.return (binop op x y)
 
-    method eval_int x = SM.return (Int x)
+    method eval_int x : exp r  = SM.return (Int x)
 
     method private update_var v e =
       match e with
@@ -62,26 +72,26 @@ module Propagate(SM : Monad.State.S2) = struct
       SM.put ctxt >>= fun () ->
       match y with
       | Int _ as e -> SM.return e
-      | _ -> SM.return (Bil.let_ v x y)
+      | _ -> SM.return (let_ v x y)
 
     method eval_cast c s e =
       self#eval_exp e >>= fun e ->
-      SM.return (Bil.cast c s e)
+      SM.return (cast c s e)
 
     method eval_ite ~cond ~yes ~no =
       self#eval_exp cond >>= fun cond ->
       self#eval_exp yes >>= fun yes ->
       self#eval_exp no  >>= fun no ->
-      SM.return (Bil.ite cond yes no)
+      SM.return (ite cond yes no)
 
     method eval_extract hi lo e =
       self#eval_exp e >>= fun e ->
-      SM.return (Bil.extract hi lo e)
+      SM.return (extract hi lo e)
 
     method eval_concat x y =
       self#eval_exp x >>= fun x ->
       self#eval_exp y >>= fun y ->
-      SM.return (Bil.concat x y)
+      SM.return (concat x y)
 
     method eval_exp e =
       match e with
@@ -109,7 +119,7 @@ module Propagate(SM : Monad.State.S2) = struct
 
   let defs bil =
     (object
-      inherit [var list] Stmt.visitor
+      inherit [Var.t list] bil_visitor
       method! enter_move v _ defs = v :: defs
     end)#run bil []
 
@@ -138,11 +148,11 @@ module Propagate(SM : Monad.State.S2) = struct
       match e with
       | Int w ->
         self#update (Def w) v >>= fun () ->
-        SM.return (Bil.move v e)
+        SM.return (move v e)
       | e ->
         self#eval_exp e >>= fun e ->
         self#update Top v >>= fun () ->
-        SM.return (Bil.move v e)
+        SM.return (move v e)
 
     method eval_if cond yes no =
       SM.get () >>= fun ctxt ->
@@ -160,7 +170,7 @@ module Propagate(SM : Monad.State.S2) = struct
         | false, _ -> ctxt_yes
         | _ -> ctxt_no in
       SM.put ctxt >>= fun () ->
-      SM.return (Bil.if_ cond yes no)
+      SM.return (if_ cond yes no)
 
     method eval_while cond body =
       SM.get () >>= fun ctxt ->
@@ -171,14 +181,43 @@ module Propagate(SM : Monad.State.S2) = struct
       let ctxt = if has_unconditional_jmps body then ctxt
         else join ctxt ctxt' in
       SM.put ctxt >>= fun () ->
-      SM.return (Bil.while_ cond body)
+      SM.return (while_ cond body)
 
     method eval_jmp e : stmt r =
       self#eval_exp e >>= fun e ->
-      SM.return (Bil.jmp e)
+      SM.return (jmp e)
   end
 end
 
 module P = Propagate(Monad.State)
 
-let run bil = Monad.State.eval ((new P.bil_propagator)#eval bil) P.new_ctxt
+let propagate_consts bil = Monad.State.eval ((new P.bil_propagator)#eval bil) P.new_ctxt
+
+module Exp_helpers = Bap_helpers.Exp
+module Stmt_helpers = Bap_helpers.Stmt
+
+let prune_dead bil =
+  let (--) = Set.remove in
+  let (++) = Set.union in
+  let free = Exp_helpers.free_vars in
+  let is_dead var live =
+    Var.is_virtual var && not (Set.mem live var) in
+  let rec loop init bil =
+    List.fold (List.rev bil) ~init:([], init)
+      ~f:(fun (bil, live) s -> match s with
+          | Special _ | CpuExn _ -> s :: bil, live
+          | Jmp e -> s :: bil, free e ++ live
+          | If (cond, yes, no) ->
+            let yes, live' = loop live yes in
+            let no, live'' = loop live no in
+            let live = free cond ++ live' ++ live'' in
+            if_ cond yes no :: bil, live
+          | Move (var,e) ->
+            if is_dead var live then bil, live
+            else s :: bil, free e ++ (live -- var)
+          | While (cond, body) ->
+            let live' = List.fold body ~init:live
+                ~f:(fun live s -> live ++ Stmt_helpers.free_vars s) in
+            let live = free cond ++ live' in
+            s :: bil, live) in
+  fst (loop Var.Set.empty bil)
