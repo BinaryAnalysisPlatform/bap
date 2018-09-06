@@ -712,16 +712,15 @@ module Normalize = struct
 
   *)
   let expand_store m a x e s =
+    let (++) = make_succ m in
+    let n = Size.in_bytes s in
+    let nth i = if e = BigEndian then nth (n-i-1) else nth i in
+    let rec expand i =
+      if i >= 0
+      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
+      else m in
     if s = `r8 then Exp.Store (m,a,x,e,s)
-    else
-      let (++) = make_succ m in
-      let n = Size.in_bytes s in
-      let nth i = if e = BigEndian then nth (n-i-1) else nth i in
-      let rec expand i =
-        if i >= 0
-        then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
-        else m in
-      expand (n-1)
+    else expand (n-1)
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
      x[a+n-1]
@@ -743,7 +742,8 @@ module Normalize = struct
       if i > 1
       then cat (load a) (expand (a++1) (i-1))
       else load a in
-    expand a (Size.in_bytes s)
+    if s = `r8 then load a
+    else expand a (Size.in_bytes s)
 
   let expand_memory = map_exp @@ object
       inherit exp_mapper as super

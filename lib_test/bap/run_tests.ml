@@ -5,6 +5,7 @@ open OUnit2
 
 let suite () =
   "BAP" >::: [
+    Test_optimizations.suite ();
     Test_trie.suite ();
     Test_bitvector.suite ();
     Test_bili.suite ();

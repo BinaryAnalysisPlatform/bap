@@ -70,9 +70,9 @@ let () =
         argument."
     ] in
   let norml =
-    let doc = "Specifies Bil normalization level.
-      Normalization process doesn't change a semantics of Bil program,
-      but applies some transformations to simplify it.
+    let doc = "Specifies the BIL normalization level.
+      The normalization process doesn't change the semantics of
+      a BIL program, but applies some transformations to simplify it.
       There are two BIL normal forms (bnf): bnf1 and bnf2, both
       of which are described in details in $(b,bap.mli).
       Briefly, $(b,bnf1) produce the BIL code  with load expressions
