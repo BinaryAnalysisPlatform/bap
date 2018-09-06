@@ -23,8 +23,8 @@ let consts_propagation =
   Bil.register_pass "constant-propagation" ~desc:"constant-propagation" Bil.propagate_consts
 
 let prune_dead =
-  Bil.register_pass "prune-dead"
-    ~desc:"dead code elimination for virtual variables" Bil.prune_dead
+  Bil.register_pass "prune-dead-virtuals"
+    ~desc:"dead code elimination for virtual variables" Bil.prune_dead_virtuals
 
 let o1 = [fold_consts; consts_propagation; prune_dead]
 
@@ -67,25 +67,27 @@ let () =
       `P "A new pass could be registered via the $(b,Bil.register_pass)
         function. It won't be automatically selected, so it should be
         specified explicitly via the $(b,--bil-passes) command line
-        argument."
+        argument.";
+
+      `S "SEE ALSO";
+      `P "$(b,bap)(3)";
     ] in
   let norml =
     let doc = "Specifies the BIL normalization level.
       The normalization process doesn't change the semantics of
       a BIL program, but applies some transformations to simplify it.
       There are two BIL normal forms (bnf): bnf1 and bnf2, both
-      of which are described in details in $(b,bap.mli).
+      of which are described in details in $(b,bap)(3).
       Briefly, $(b,bnf1) produce the BIL code  with load expressions
       that applied to a memory only. And $(b,bnf2) also adds some
       more restrictions like absence of let-expressions and makes
       load/store operations sizes equal to one byte.
-      So, there are next possible complementations for
-      normalization level:
-      $(b,0) - disables normalization; $(b,1) - produce Bil in bnf1;
-      $(b,2) - produce Bil in bnf2" in
+      So, there are next possible options for normalization level:
+      $(b,0) - disables normalization; $(b,1) - produce BIL in bnf1;
+      $(b,2) - produce BIL in bnf2" in
     Config.(param (enum normalizations) ~default:[bnf1] ~doc "normalization") in
   let optim =
-    let doc = "Specifies a level of optimization.\n
+    let doc = "Specifies the optimization level.\n
       Level $(b,0) disables optimization,  and level $(b,1) performs
       regular program simplifications, i.e., applies constant folding,
       propagation, and elimination of dead temporary (aka virtual) variables." in

@@ -5,28 +5,38 @@ open Bap.Std
 let width = 8
 let typ = Type.imm width
 let int x = Bil.int (Word.of_int ~width x)
-let physical name = Var.create name typ
-let virtual_ name = Var.create ~is_virtual:true name typ
+
+let all_vars = Var.Hash_set.create ()
+let add_var v = Hash_set.add all_vars v; v
+let physical name = add_var (Var.create name typ)
+let virtual_ name = add_var (Var.create ~is_virtual:true name typ)
 
 let true_ = Bil.int Word.b1
 let zero = int 0
 let one = int 1
 let two = int 2
 let four = int 4
+let five = int 5
 let eight = int 8
 let x42 = int 42
+let not_known = Bil.unknown "unknown" typ
 
-let error_of_bil input got =
-  sprintf "something went wrong for\n%s\ngot\n%s\n"
-    (Bil.to_string input) (Bil.to_string got)
 
-let alive_anyway = physical "alive_anyway"
+let error_of_bil input got expected =
+  let s =
+    sprintf "something went wrong for\n%s\ngot\n%s\n"
+      (Bil.to_string input) (Bil.to_string got) in
+  match expected with
+  | None -> s
+  | Some e ->
+    sprintf "%sexpected\n%s\n" s (Bil.to_string e)
+
+let always_alive = physical "always_alive"
 let will_survive = virtual_ "will_survive"
-let will_be_dead = virtual_ "will_be_dead"
-let could_be_dead = will_be_dead
+let could_be_dead = virtual_ "could_be_dead"
+let v = virtual_ "v"
 let v1 = virtual_ "v1"
 let v2 = virtual_ "v2"
-let v3 = virtual_ "v3"
 let x = physical "x"
 let y = physical "y"
 let z = physical "z"
@@ -35,78 +45,106 @@ let full_pipeline bil =
   Bil.fixpoint (fun b ->
        Bil.fold_consts b |>
        Bil.propagate_consts |>
-       Bil.prune_dead) bil
+       Bil.prune_dead_virtuals) bil
+
+let random =
+  let () = Random.self_init () in
+  let len = 1000 in
+  let xs = List.init len ~f:(fun _ -> Random.int 100 |> int) in
+  fun () -> List.nth_exn xs (Random.int len)
+
+let eval bil bil' =
+  let init = Hash_set.fold all_vars ~init:[] ~f:(fun bil v ->
+      Bil.(v := random ()) :: bil ) in
+  let c1 = Stmt.eval (init @ bil)  (new Bili.context) in
+  let c2 = Stmt.eval (init @ bil') (new Bili.context) in
+  Hash_set.iter all_vars ~f:(fun v ->
+      if Var.is_physical v then
+        let res =
+          match c1#lookup v, c2#lookup v with
+          | None, None -> true
+          | None, Some _ | Some _, None -> false
+          | Some r1, Some r2 ->
+            match Bil.Result.value r1, Bil.Result.value r2 with
+            | Bil.Imm w1, Bil.Imm w2 -> Word.equal w1 w2
+            | Bil.Bot, Bil.Bot
+            | Bil.Mem _, Bil.Mem _ -> true
+            | _ -> false in
+        assert_bool ("random: " ^ error_of_bil bil bil' None) res)
 
 let check f bil expected (_ : test_ctxt) =
   let bil' = f bil in
-  assert_bool (error_of_bil bil bil') (Bil.compare expected bil' = 0)
+  eval bil bil';
+  assert_bool (error_of_bil bil bil' (Some expected))
+    (Bil.compare expected bil' = 0)
 
-let (==>) = check Bil.prune_dead
+let (==>) = check Bil.prune_dead_virtuals
+
 
 let preserve_physical =
-  let bil = Bil.[ alive_anyway := zero; ] in
+  let bil = Bil.[ always_alive := zero; ] in
   bil ==> bil
 
 let kill_virtual =
   Bil.[
-    alive_anyway := zero;
-    will_be_dead := var alive_anyway + one;
-    alive_anyway := one;
+    always_alive := zero;
+    could_be_dead := var always_alive + one;
+    always_alive := one;
   ] ==> Bil.[
-    alive_anyway := zero;
-    alive_anyway := one;
+    always_alive := zero;
+    always_alive := one;
   ]
 
 let preserve_physical_anyway =
   Bil.[
-    alive_anyway := zero;
-    alive_anyway := one;
-    will_be_dead := var alive_anyway + one;
+    always_alive := zero;
+    always_alive := one;
+    could_be_dead := var always_alive + one;
   ] ==> Bil.[
-    alive_anyway := zero;
-    alive_anyway := one;
+    always_alive := zero;
+    always_alive := one;
   ]
 
 let trivial_dead_1 =
   Bil.[
-    alive_anyway := one;
-    will_be_dead := two;
-  ] ==> Bil.[ alive_anyway := one; ]
+    always_alive := one;
+    could_be_dead := two;
+  ] ==> Bil.[ always_alive := one; ]
 
 let trivial_dead_2 =
   Bil.[
-    will_be_dead := one;
-    alive_anyway := two;
-  ] ==> Bil.[ alive_anyway := two; ]
+    could_be_dead := one;
+    always_alive := two;
+  ] ==> Bil.[ always_alive := two; ]
 
 let trivial_dead_3 =
   Bil.[
     will_survive := one;
-    alive_anyway := var will_survive + two;
-    will_be_dead := lnot (var alive_anyway);
+    always_alive := var will_survive + two;
+    could_be_dead := lnot (var always_alive);
   ] ==> Bil.[
       will_survive := one;
-      alive_anyway := var will_survive + two;
+      always_alive := var will_survive + two;
     ]
 
 let trivial_dead_4 =
   Bil.[
     will_survive := one;
-    will_be_dead := lnot (var alive_anyway);
-    alive_anyway := var will_survive + two;
+    could_be_dead := lnot (var always_alive);
+    always_alive := var will_survive + two;
   ] ==> Bil.[
       will_survive := one;
-      alive_anyway := var will_survive + two;
+      always_alive := var will_survive + two;
     ]
 
 let assigned_twice =
   Bil.[
     could_be_dead := one;
-    alive_anyway := var could_be_dead + two;
-    will_be_dead := lnot (var alive_anyway)
+    always_alive := var could_be_dead + two;
+    could_be_dead := lnot (var always_alive)
   ] ==> Bil.[
       could_be_dead := one;
-      alive_anyway := var could_be_dead + two;
+      always_alive := var could_be_dead + two;
     ]
 
 let survive_anyway_1 =
@@ -142,79 +180,81 @@ let survive_anyway_3 =
     ] in
   bil ==> bil
 
-let contains_conditions =
+let includes_conditions =
   Bil.[
     will_survive := x42;
     if_ (var will_survive > zero) [
-      will_be_dead := one;
+      could_be_dead := one;
     ] [
-      will_be_dead := two;
+      could_be_dead := two;
     ];
     could_be_dead := one;
-    alive_anyway := var could_be_dead;
-    will_be_dead := lnot (var alive_anyway);
+    always_alive := var could_be_dead;
+    could_be_dead := lnot (var always_alive);
   ] ==> Bil.[
       will_survive := x42;
       if_ (var will_survive > zero) [] [];
       could_be_dead := one;
-      alive_anyway := var could_be_dead;
+      always_alive := var could_be_dead;
     ]
 
 let preserves_special =
   Bil.[
-    will_be_dead := one;
+    could_be_dead := one;
     special "I will survive!";
   ] ==> Bil.[special "I will survive!";]
 
 let preserves_cpuexn =
   Bil.[
-    will_be_dead := one;
+    could_be_dead := one;
     cpuexn 42;
   ] ==> Bil.[cpuexn 42;]
 
 
 let preserves_loop_1 =
   let bil = Bil.[
-      will_survive := x42;
-      while_ (var will_survive > zero) [
-        will_survive := one
+      will_survive := one;
+      while_ (var will_survive < four) [
+        will_survive := five
       ]
     ] in
   bil ==> bil
 
 let preserves_loop_2 =
   Bil.[
-    will_survive := x42;
-    while_ (var will_survive > zero) [
-      could_be_dead := one
+    will_survive := two;
+    while_ (var will_survive < four) [
+      could_be_dead := one;
+      will_survive := five;
     ];
-    will_be_dead := two
+    could_be_dead := two
   ] ==> Bil.[
-      will_survive := x42;
-      while_ (var will_survive > zero) [
-        could_be_dead := one
+      will_survive := two;
+      while_ (var will_survive < four) [
+        could_be_dead := one;
+        will_survive := five;
       ];
     ]
 
 let preserves_loop_3 =
   let bil = Bil.[
     v1 := zero;
-    v2 := four;
-    while_ (var v2 > zero) [
+    v := four;
+    while_ (var v > zero) [
       y := var v1 + one;
       v1 := one;
-      v2 := var v2 - one;
+      v := var v - one;
     ] ] in
   bil ==> bil
 
 let deep_nesting =
   let bil = Bil.[
-    alive_anyway := one;
-    will_survive := x42;
-    alive_anyway := two;
+    always_alive := one;
+    will_survive := two;
+    always_alive := four;
     if_ (var will_survive > zero) [
-      while_ (var will_survive > zero) [
-        if_ (var alive_anyway > zero) [
+      while_ (var will_survive = two) [
+        if_ (var always_alive > zero) [
           will_survive := one
         ] [
           could_be_dead := x42
@@ -233,9 +273,9 @@ let with_jmp =
 
 let with_conditional_jmp_1 =
   let bil = Bil.[
-      alive_anyway := one;
+      always_alive := one;
       will_survive := x42;
-      if_ (var alive_anyway > zero) [
+      if_ (var always_alive > zero) [
         jmp (var will_survive)
       ] [];
     ] in
@@ -243,9 +283,9 @@ let with_conditional_jmp_1 =
 
 let with_conditional_jmp_2 =
   let bil = Bil.[
-      alive_anyway := one;
+      always_alive := one;
       will_survive := x42;
-      if_ (var alive_anyway > zero)
+      if_ (var always_alive > zero)
         [] [
         jmp (var will_survive)
       ];
@@ -259,10 +299,10 @@ let ($==>) = check Bil.propagate_consts
 
 let trivial_propagate_1 =
   Bil.[
-    v1 := x42;
-    x := var v1 + one
+    v := x42;
+    x := var v + one
   ] $==> Bil.[
-    v1 := x42;
+    v := x42;
     x := x42 + one
   ]
 
@@ -293,6 +333,15 @@ let trivial_propagate_4 =
       x := x42;
       jmp (var y);
       z := x42;
+    ]
+
+let trivial_propagate_5 =
+  Bil.[
+    x := not_known;
+    z := var x;
+  ] $==> Bil.[
+      x := not_known;
+      z := not_known;
     ]
 
 let merging_cond_branches_1 =
@@ -335,7 +384,7 @@ let merging_cond_branches_2 =
 
 let dont_merge_cond_branches_1 = Bil.[
     x := one;
-    if_ (var x > zero) [
+    if_ (var x < zero) [
       y := two;
       jmp (var y);
     ] [
@@ -344,7 +393,7 @@ let dont_merge_cond_branches_1 = Bil.[
     z := var y;
   ] $==> Bil.[
     x := one;
-    if_ (one > zero) [
+    if_ (one < zero) [
       y := two;
       jmp two;
     ] [
@@ -376,7 +425,7 @@ let dont_merge_cond_branches_2 = Bil.[
 let dont_merge_cond_branches_3 = Bil.[
     x := one;
     y := two;
-    while_ (var x > zero) [
+    while_ (var x < zero) [
       y := one;
       jmp (var y);
     ];
@@ -384,7 +433,7 @@ let dont_merge_cond_branches_3 = Bil.[
   ] $==> Bil.[
     x := one;
     y := two;
-    while_ (one > zero) [
+    while_ (one < zero) [
       y := one;
       jmp one;
     ];
@@ -416,9 +465,9 @@ let merging_cond_branches_3 = Bil.[
 let merging_cond_branches_4 = Bil.[
     x := one;
     y := two;
-    while_ (var x > zero) [
+    while_ (var x < zero) [
       y := one;
-      if_ (var y > zero) [
+      if_ (var y < zero) [
         jmp (var y);
       ] [];
     ];
@@ -426,9 +475,9 @@ let merging_cond_branches_4 = Bil.[
   ] $==> Bil.[
     x := one;
     y := two;
-    while_ (one > zero) [
+    while_ (one < zero) [
       y := one;
-      if_ (one > zero) [
+      if_ (one < zero) [
         jmp one;
       ] [];
     ];
@@ -438,10 +487,10 @@ let merging_cond_branches_4 = Bil.[
 
 let propagate_in_while_1 =
   let bil = Bil.[
-      x := x42;
-      while_ (var x > zero) [
+      x := four;
+      while_ (var x < five) [
         y := var x + one;
-        x := one;
+        x := x42;
       ];
     ] in
   bil $==> bil
@@ -449,7 +498,7 @@ let propagate_in_while_1 =
 let propagate_in_while_2 =
   let bil = Bil.[
       x := x42;
-      while_ (var x > zero) [
+      while_ (var x > two) [
         y := var x + one;
         x := one;
         z := var x + two;
@@ -457,7 +506,7 @@ let propagate_in_while_2 =
     ] in
   bil $==>  Bil.[
       x := x42;
-      while_ (var x > zero) [
+      while_ (var x > two) [
         y := var x + one;
         x := one;
         z := one + two;
@@ -467,7 +516,7 @@ let propagate_in_while_2 =
 let propagate_in_while_3 =
   let bil = Bil.[
       x := x42;
-      while_ (var z > zero) [
+      while_ (var z < four) [
         if_ (var z > one) [
           y := one;
         ] [
@@ -482,7 +531,7 @@ let propagate_in_while_3 =
     ] in
   bil $==> Bil.[
       x := x42;
-      while_ (var z > zero) [
+      while_ (var z < four) [
         if_ (var z > one) [
           y := one;
         ] [
@@ -496,16 +545,14 @@ let propagate_in_while_3 =
       ];
     ]
 
-
-
 let (=>) = check full_pipeline
 
 let all_together_trivial = Bil.[
-    v1 := one;
-    v1 := var v1 + one;
-    v1 := var v1 + one;
-    v1 := var v1 + one;
-    x := var v1;
+    v := one;
+    v := var v + one;
+    v := var v + one;
+    v := var v + one;
+    x := var v;
   ] => Bil.[
     x := four;
   ]
@@ -520,8 +567,8 @@ let vars_not_dead = Bil.[
 
 let with_computable_cond = Bil.[
     x := one;
-    v1 := var x + one;
-    y := var v1 * two;
+    v := var x + one;
+    y := var v * two;
     if_ (var y < two) [
       z := one;
     ] [
@@ -537,8 +584,8 @@ let with_computable_cond = Bil.[
 
 let dead_unused_with_cond = Bil.[
     x := one;
-    v1 := one;
-    if_ (var v1 > zero) [v1 := four] [ v1 := two];
+    v := one;
+    if_ (var v > zero) [v := four] [ v := two];
     z := var x;
   ] => Bil.[
     x := one;
@@ -579,18 +626,18 @@ let with_various_input input expected _ctxt =
   assert_bool error Exp.(z_value = expected)
 
 let all_together = Bil.[
-    v1 := two;
-    v2 := four + var v1;
-    if_ (var v2 > zero ) [
-      v3 := var v2 + one;
-      x := var v3 + one;
+    v := two;
+    v1 := four + var v;
+    if_ (var v1 > zero ) [
+      v2 := var v1 + one;
+      x := var v2 + one;
     ] [
-      v3 := var v2 + two;
-      x := var v3;
+      v2 := var v1 + two;
+      x := var v2;
     ];
-    v3 := four;
-    y := var x - var v3;
-    if_ (var y > zero) [
+    v2 := four;
+    y := var x - var v2;
+    if_ (var y < zero) [
       z := four;
       jmp (var z + two - var y)
     ] [
@@ -600,10 +647,10 @@ let all_together = Bil.[
   ] => Bil.[
     x := eight;
     y := four;
-    z := four;
-    jmp two;
+    z := two;
     x := two;
   ]
+
 
 let suite () =
   "Bil_optimizations" >::: [
@@ -618,7 +665,7 @@ let suite () =
     "survive anyway 1"        >:: survive_anyway_1;
     "survive anyway 2"        >:: survive_anyway_2;
     "survive anyway 3"        >:: survive_anyway_3;
-    "conditional"             >:: contains_conditions;
+    "conditional"             >:: includes_conditions;
     "preserves special"       >:: preserves_special;
     "preserves cpuexn"        >:: preserves_cpuexn;
     "preserves loop 1"        >:: preserves_loop_1;
@@ -633,13 +680,14 @@ let suite () =
     "trivial propagate 2"     >:: trivial_propagate_2;
     "trivial propagate 3"     >:: trivial_propagate_3;
     "trivial propagate 4"     >:: trivial_propagate_4;
+    "trivial propagate 5"     >:: trivial_propagate_5;
     "propagate in if/else 1"  >:: merging_cond_branches_1;
     "propagate in if/else 2"  >:: merging_cond_branches_2;
     "propagate, cond_jmps 1"  >:: dont_merge_cond_branches_1;
     "propagate, cond_jmps 2"  >:: dont_merge_cond_branches_2;
     "propagate, cond_jmps 3"  >:: dont_merge_cond_branches_3;
     "propagate in if/else 3"  >:: merging_cond_branches_3;
-    "propagate in while 4"    >:: merging_cond_branches_4;
+    "merging cond branches"   >:: merging_cond_branches_4;
     "propagate in loop 1"     >:: propagate_in_while_1;
     "propagate in loop 2"     >:: propagate_in_while_2;
     "propagate in loop 3"     >:: propagate_in_while_3;
@@ -650,6 +698,6 @@ let suite () =
     "dead unused with cond"   >:: dead_unused_with_cond;
     "different input: x = 1"  >:: with_various_input one two;
     "different input: x = 4"  >:: with_various_input four (Bil.var y);
-    "different input: x = v"  >:: with_various_input (Bil.var v1) (Bil.var y);
+    "different input: x = v"  >:: with_various_input (Bil.var v) (Bil.var y);
     "all together"            >:: all_together;
   ]

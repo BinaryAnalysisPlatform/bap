@@ -2202,12 +2202,20 @@ module Std : sig
         cycle. *)
     val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
 
-    (** [propagate_consts bil] evaluates constants in [bil] and substitutes them. *)
+    (** [propagate_consts bil] propagates consts from their reaching definitions.
+        The implementation computes reaching definition using inference style analysis,
+        overapproximates while cycles (doesn't compute the meet-over-paths solution),
+        and ignores memory locations.
+        @since 1.5 *)
     val propagate_consts : stmt list -> stmt list
 
-    (** [prune_dead bil] evaluates dead virtual variables and remove them from [bil].
-        while loops are not touched. *)
-    val prune_dead : stmt list -> stmt list
+    (** [prune_dead_virtuals bil] removes definitions of virtual variables that are
+        not live in the provided [bil] program. We assume that virtual variables are used
+        to represent temporaries, thus their removal is safe. The analysis over-approximates
+        the while loops, and won't remove any definition that occurs in a while loop body,
+        or which depends on it. The analysis doesn't track memory locations.
+        @since 1.5 *)
+    val prune_dead_virtuals : stmt list -> stmt list
 
     (** Maps BIL operators to bitvectors.
         @since 1.3
@@ -2425,16 +2433,22 @@ module Std : sig
         provided to the [select_passes] are applied in the order of the selection
         until the fixed point is reached or a loop is detected. By default, no passes
         are selected. The [bil] plugin provides a user interface for passes selection,
-        as well as some useful passes.  *)
+        as well as some useful passes.
+        @since 1.5 *)
     val register_pass : ?desc:string -> string -> (t -> t) -> pass
 
     (** [select_passes passes] select the [passes] for the BIL transformation pipeline.
-     See {!register_pass} for more information about the BIL transformation pipeline *)
+        See {!register_pass} for more information about the BIL transformation pipeline.
+        @since 1.5
+    *)
     val select_passes : pass list -> unit
 
-    (** [passes ()] returns all currently registered passes. *)
+    (** [passes ()] returns all currently registered passes.
+        @since 1.5 *)
     val passes : unit -> pass list
 
+    (** A BIL analysis pass
+        @since 1.5 *)
     module Pass : sig
       (** [name p] returns the name of the given pass. *)
       val name : pass -> string
