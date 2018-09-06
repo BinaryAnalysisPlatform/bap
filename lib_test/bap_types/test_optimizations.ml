@@ -19,8 +19,7 @@ let four = int 4
 let five = int 5
 let eight = int 8
 let x42 = int 42
-let not_known = Bil.unknown "unknown" typ
-
+let undefined = Bil.unknown "undefined" typ
 
 let error_of_bil input got expected =
   let s =
@@ -79,7 +78,6 @@ let check f bil expected (_ : test_ctxt) =
     (Bil.compare expected bil' = 0)
 
 let (==>) = check Bil.prune_dead_virtuals
-
 
 let preserve_physical =
   let bil = Bil.[ always_alive := zero; ] in
@@ -227,7 +225,7 @@ let preserves_loop_2 =
       could_be_dead := one;
       will_survive := five;
     ];
-    could_be_dead := two
+    could_be_dead := two;
   ] ==> Bil.[
       will_survive := two;
       while_ (var will_survive < four) [
@@ -337,12 +335,32 @@ let trivial_propagate_4 =
 
 let trivial_propagate_5 =
   Bil.[
-    x := not_known;
+    x := undefined;
     z := var x;
   ] $==> Bil.[
-      x := not_known;
-      z := not_known;
+      x := undefined;
+      z := undefined;
     ]
+
+let trivial_propagate_6 =
+  Bil.[
+    x := one;
+    if_ (var x < zero) [
+      y := undefined;
+    ] [
+      y := undefined;
+    ];
+    z := var y;
+  ] $==> Bil.[
+      x := one;
+      if_ (one < zero) [
+        y := undefined;
+      ] [
+        y := undefined;
+      ];
+      z := undefined;
+    ]
+
 
 let merging_cond_branches_1 =
   Bil.[
@@ -484,7 +502,6 @@ let merging_cond_branches_4 = Bil.[
     z := var y;
   ]
 
-
 let propagate_in_while_1 =
   let bil = Bil.[
       x := four;
@@ -516,13 +533,14 @@ let propagate_in_while_2 =
 let propagate_in_while_3 =
   let bil = Bil.[
       x := x42;
-      while_ (var z < four) [
+      while_ (var z > four) [
         if_ (var z > one) [
           y := one;
         ] [
           y := one;
         ];
         if_ (var x + var y > one) [ (* the only that could be computed  *)
+          y := zero;
         ] [
           y := two
         ];
@@ -531,13 +549,14 @@ let propagate_in_while_3 =
     ] in
   bil $==> Bil.[
       x := x42;
-      while_ (var z < four) [
+      while_ (var z > four) [
         if_ (var z > one) [
           y := one;
         ] [
           y := one;
         ];
         if_ (x42 + one > one) [
+          y := zero;
         ] [
           y := two
         ];
@@ -681,6 +700,7 @@ let suite () =
     "trivial propagate 3"     >:: trivial_propagate_3;
     "trivial propagate 4"     >:: trivial_propagate_4;
     "trivial propagate 5"     >:: trivial_propagate_5;
+    "trivial propagate 6"     >:: trivial_propagate_6;
     "propagate in if/else 1"  >:: merging_cond_branches_1;
     "propagate in if/else 2"  >:: merging_cond_branches_2;
     "propagate, cond_jmps 1"  >:: dont_merge_cond_branches_1;
