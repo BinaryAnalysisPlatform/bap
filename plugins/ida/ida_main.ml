@@ -136,6 +136,86 @@ let loader path =
             else code, Memmap.add data mem sec) in
   Project.Input.create arch path ~code ~data
 
+(* The ida service named brancher provides data as a list of
+ * 3-tuples of the form (addr, jump of normal flow (fall) type,
+ * jumps of other types) *)
+type brancher_info = (int64 * int64 option * int64 list) list
+[@@deriving sexp]
+
+module IdaBrancher : sig
+  type t
+  val of_brancher_info : arch -> brancher_info -> t
+  val resolve : t -> mem -> Disasm_expert.Basic.full_insn -> Brancher.dests
+  include Data.S with type t := t
+end = struct
+  type t = Brancher.dests Addr.Table.t
+
+  include Data.Make(struct
+      type nonrec t = t
+      let version = "0.1"
+    end)
+
+  let int64_to_word arch =
+    let addr_size = Arch.addr_size arch in
+    (Word.of_int64 ~width:(Size.in_bits addr_size))
+
+  let of_brancher_info arch bf : t =
+    let (!) = (int64_to_word arch) in
+    let normal_flow_to_dests = function
+      | Some fall -> [Some !fall, `Fall]
+      | None -> []
+    in
+    let other_flows_to_dests flows =
+      List.fold flows ~init:[] ~f:(fun acc addr ->
+          (Some !addr, `Jump)::acc)
+    in
+    let helper tab (addr,normal_flow,other_flows) =
+      Addr.Table.add_exn tab ~key:!addr
+        ~data:((normal_flow_to_dests normal_flow)
+               @ (other_flows_to_dests other_flows));
+      tab
+    in
+    List.fold bf
+      ~init:(Addr.Table.create ())
+      ~f:helper
+
+  let resolve t mem _ =
+    match
+      Addr.Table.find t (Memory.min_addr mem)
+    with
+    | Some dests -> dests
+    | None -> []
+end
+
+let read_brancher_info arch name =
+  In_channel.with_file name ~f:(fun ch ->
+      Sexp.input_sexp ch |> brancher_info_of_sexp
+      |> (IdaBrancher.of_brancher_info arch))
+
+let load_brancher_info arch =
+  Command.create
+    `python
+    ~script:(request "brancher")
+    ~parser:(read_brancher_info arch)
+
+let get_resolve_fun file arch =
+  let id = Data.Cache.digest ~namespace:"ida-brancher" "%s"
+      (Digest.file file) in
+  let brancher = match IdaBrancher.Cache.load id with
+    | Some i -> i
+    | None ->
+      let i = Ida.with_file file (load_brancher_info arch) in
+      IdaBrancher.Cache.save id i;
+      i in
+  (IdaBrancher.resolve brancher)
+
+let register_brancher_source () =
+  let source =
+    let create_brancher file arch = Or_error.try_with (fun () ->
+        Brancher.create (get_resolve_fun file arch)) in
+    Project.Info.(Stream.merge file arch ~f:create_brancher) in
+  Brancher.Factory.register name source
+
 let checked ida_path is_headless =
   Bap_ida_check.(check_headless is_headless >>= fun () -> check_path ida_path)
 
@@ -143,6 +223,7 @@ let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
   register_source (module Reconstructor);
+  register_brancher_source ();
   Project.Input.register_loader name loader
 
 type headless = bool option
