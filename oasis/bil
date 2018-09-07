@@ -1,0 +1,12 @@
+Flag bil
+ Description: Build bil plugin
+ Default: false
+
+Library bil_plugin
+  XMETADescription: Provides bil optimizations
+  Path:             plugins/bil
+  Build$:           flag(everything) || flag(bil)
+  FindlibName:      bap-plugin-bil
+  BuildDepends:     bap
+  XMETAExtraLines:  tags="bil,analysis"
+  InternalModules:  Bil_main

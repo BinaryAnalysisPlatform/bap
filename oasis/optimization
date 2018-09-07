@@ -1,0 +1,13 @@
+Flag optimization
+  Description: Build the optimization plugin
+  Default: false
+
+Library optimization_plugin
+  Build$: flag(everything) || flag(optimization)
+  XMETADescription: automatically removes dead code and propagates consts
+  Path: plugins/optimization
+  FindlibName: bap-plugin-optimization
+  CompiledObject: best
+  BuildDepends: bap
+  InternalModules: Optimization_main, Optimization_data
+  XMETAExtraLines: tags="pass,analysis,optimization"

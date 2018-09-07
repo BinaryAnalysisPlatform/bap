@@ -2202,6 +2202,21 @@ module Std : sig
         cycle. *)
     val fixpoint : (stmt list -> stmt list) -> (stmt list -> stmt list)
 
+    (** [propagate_consts bil] propagates consts from their reaching definitions.
+        The implementation computes reaching definition using inference style analysis,
+        overapproximates while cycles (doesn't compute the meet-over-paths solution),
+        and ignores memory locations.
+        @since 1.5 *)
+    val propagate_consts : stmt list -> stmt list
+
+    (** [prune_dead_virtuals bil] removes definitions of virtual variables that are
+        not live in the provided [bil] program. We assume that virtual variables are used
+        to represent temporaries, thus their removal is safe. The analysis over-approximates
+        the while loops, and won't remove any definition that occurs in a while loop body,
+        or which depends on it. The analysis doesn't track memory locations.
+        @since 1.5 *)
+    val prune_dead_virtuals : stmt list -> stmt list
+
     (** Maps BIL operators to bitvectors.
         @since 1.3
     *)
@@ -2406,6 +2421,38 @@ module Std : sig
 
       module Normalized : Trie.S with type key = normalized_bil
       include Trie.S with type key = stmt list
+    end
+
+    type pass
+
+    (** [register_pass ~desc name pass] provides a pass to the BIL transformation pipeline.
+        The BIL transformation pipeline is applied after the lifting procedure,
+        i.e., it is embedded into each [lift] function of all Target modules.
+        (You can selectively register passes based on architecture by subscribing
+        to the [Project.Info.arch] variable). All passes that  were in the selection
+        provided to the [select_passes] are applied in the order of the selection
+        until the fixed point is reached or a loop is detected. By default, no passes
+        are selected. The [bil] plugin provides a user interface for passes selection,
+        as well as some useful passes.
+        @since 1.5 *)
+    val register_pass : ?desc:string -> string -> (t -> t) -> pass
+
+    (** [select_passes passes] select the [passes] for the BIL transformation pipeline.
+        See {!register_pass} for more information about the BIL transformation pipeline.
+        @since 1.5
+    *)
+    val select_passes : pass list -> unit
+
+    (** [passes ()] returns all currently registered passes.
+        @since 1.5 *)
+    val passes : unit -> pass list
+
+    (** A BIL analysis pass
+        @since 1.5 *)
+    module Pass : sig
+      (** [name p] returns the name of the given pass. *)
+      val name : pass -> string
+      include Printable.S with type t := pass
     end
   end
 
@@ -3413,7 +3460,7 @@ module Std : sig
         wouldn't be applied, consider passing [~ignore:[Eff.reads]]
         if you want such expressions to be reduced.
 
-        - double complement reduction: an even amount of complement
+        - double complement reduction: an odd amount of complement
         operations (one and two) are reduced to one complement of
         the same sort, e.g., [~~~1 -> ~1]
 
@@ -3653,7 +3700,7 @@ module Std : sig
     *)
     val is_referenced : var -> t -> bool
 
-    (** [normalize ?keep_ites ?normalize_exp xs] produces a normalized BIL
+    (** [normalize ?normalize_exp xs] produces a normalized BIL
         program with the same[^1] semantics but in the BIL normalized
         form (BNF). There are two normalized forms, both described
         below. The first form (BNF1) is more readable, the second form
@@ -3665,8 +3712,6 @@ module Std : sig
 
         The BIL First Normalized Form (BNF1) is a subset of the BIL
         language, where expressions have the following properties:
-
-        - No if-then-else expressions.
 
         - Memory load expressions can be only applied to a memory. This
         effectively disallows creation of temporary memory regions,
@@ -3699,7 +3744,6 @@ module Std : sig
        x[a,be]:n => x[a] @ ... @ x[a+n-1]
        m[a,el]:n <- x => (...((m[a] <- x<0>)[a+1] <- x<1>)...)[a+n-1] <- x<n-1>
        m[a,be]:n <- x => (...((m[a] <- x<n-1>)[a+1] <- x<n>)...)[a+n-1] <- x<0>
-       ... ite c ? x : y ... => if c \{ ... x ... } \{ ... y ... }
        (x[a] <- b)[c] => m := x[a] <- b; m[c]
       v}
 
@@ -3721,12 +3765,8 @@ module Std : sig
         @param normalize_exp (defaults to [false]) if set to [true] then
         the returned program will be in BNF2.
 
-        @param keep_ites (defaults to [false]) if set to [true] then
-        the returned program will preserve ite expressions.
-
         @since 1.3 *)
-    val normalize : ?keep_ites:bool -> ?normalize_exp:bool
-       -> stmt list -> stmt list
+    val normalize : ?normalize_exp:bool -> stmt list -> stmt list
 
     (** [simpl ?ignore xs] recursively applies [Exp.simpl] and also
         simplifies [if] and [while] expressions with statically known
@@ -7239,6 +7279,14 @@ module Std : sig
     val map_exp :
       ?skip:[`phi | `def | `jmp] list -> (** defaults to [[]]  *)
       t -> f:(exp -> exp) -> t
+
+    (** [map_elt ?phi ?def ?jmp blk] applies provided functions to the
+        terms of corresponding classes. All functions default to the
+        identity function. *)
+    val map_elts :
+      ?phi:(phi term -> phi term) ->
+      ?def:(def term -> def term) ->
+      ?jmp:(jmp term -> jmp term) -> blk term -> blk term
 
     (** [substitute ?skip blk x y] substitutes each occurrence of
         expression [x] with expression [y] in block [blk]. The

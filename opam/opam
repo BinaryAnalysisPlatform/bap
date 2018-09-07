@@ -43,8 +43,9 @@ install: [
   ["ocamlfind" "remove" "bap-plugin-arm"]
   ["ocamlfind" "remove" "bap-plugin-api"]
   ["ocamlfind" "remove" "bap-plugin-ssa"]
-  ["ocamlfind" "remove" "bap-plugin-dead_code_elimination"]
+  ["ocamlfind" "remove" "bap-plugin-optimization"]
   ["ocamlfind" "remove" "bap-plugin-beagle"]
+  ["ocamlfind" "remove" "bap-plugin-bil"]
   ["ocamlfind" "remove" "bap-plugin-byteweight"]
   ["ocamlfind" "remove" "bap-plugin-cache"]
   ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
@@ -109,7 +110,6 @@ install: [
   ["ocamlfind" "remove" "ogre"]
   ["ocamlfind" "remove" "bare"]
   [make "reinstall"]
-  ["bap-byteweight" "update" "--url=https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.4.0/sigs.zip"]
   ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
 ]
 
@@ -129,8 +129,9 @@ remove: [
   ["ocamlfind" "remove" "bap-plugin-arm"]
   ["ocamlfind" "remove" "bap-plugin-api"]
   ["ocamlfind" "remove" "bap-plugin-ssa"]
-  ["ocamlfind" "remove" "bap-plugin-dead_code_elimination"]
+  ["ocamlfind" "remove" "bap-plugin-optimization"]
   ["ocamlfind" "remove" "bap-plugin-beagle"]
+  ["ocamlfind" "remove" "bap-plugin-bil"]
   ["ocamlfind" "remove" "bap-plugin-byteweight"]
   ["ocamlfind" "remove" "bap-plugin-cache"]
   ["ocamlfind" "remove" "bap-plugin-dump_symbols"]
@@ -233,6 +234,7 @@ depends: [
     "piqi" {>= "0.7.4"}
     "conf-bap-llvm" {>= "1.1"}
     "parsexp"
+    "bap-signatures"
 ]
 
 
