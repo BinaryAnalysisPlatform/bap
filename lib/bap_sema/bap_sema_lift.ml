@@ -62,11 +62,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
     else if Insn.(is call) insn
     then
       Ir_jmp.create_call ?cond (Call.create ?return ~target ())
-    else
-      match exp with (** we consider any 0x0 destination as a call to external *)
-      | Bil.Int a when Addr.is_zero a ->
-        Ir_jmp.create_call ?cond (Call.create ?return ~target ())
-      | _ -> Ir_jmp.create_goto ?cond target in
+    else Ir_jmp.create_goto ?cond target in
   let jump ?cond exp = Instr (`Jmp ~@(jump ?cond exp)) in
   let cpuexn ?cond n =
     let landing = Tid.create () in
@@ -90,7 +86,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
   let rec linearize = function
     | Bil.Move (lhs,rhs) ->
       [Instr (`Def ~@(Ir_def.create lhs rhs))]
-    | Bil.If (cond, [],[]) -> []
+    | Bil.If (_, [],[]) -> []
     | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
     | Bil.If (cond,yes,[]) ->
       let yes_label = Tid.create () in
@@ -146,8 +142,8 @@ let has_jump_under_condition bil =
       let enter_control ifs = if ifs = 0 then ifs else return true in
       Bil.fold (object
         inherit [int] Stmt.visitor
-        method! enter_if ~cond ~yes:_ ~no:_ x = x + 1
-        method! leave_if ~cond ~yes:_ ~no:_ x = x - 1
+        method! enter_if ~cond:_ ~yes:_ ~no:_ x = x + 1
+        method! leave_if ~cond:_ ~yes:_ ~no:_ x = x - 1
         method! enter_jmp _ ifs    = enter_control ifs
         method! enter_cpuexn _ ifs = enter_control ifs
       end) ~init:0 bil |> fun (_ : int) -> false)
@@ -174,16 +170,6 @@ let blk cfg block : blk term list =
   List.rev (b::bs) |> function
   | [] -> assert false
   | b::bs -> Term.set_attr b address (Block.addr block) :: bs
-
-(* extracts resolved calls from the blk *)
-let call_of_blk blk =
-  Term.to_sequence jmp_t blk |>
-  Seq.find_map ~f:(fun jmp -> match Ir_jmp.kind jmp with
-      | Int _ | Goto _ | Ret _ -> None
-      | Call call -> match Call.target call with
-        | Direct _ -> None
-        | Indirect (Bil.Int addr) -> Some addr
-        | Indirect _ -> None)
 
 let resolve_jmp ~local addrs jmp =
   let update_kind jmp addr make_kind =
@@ -213,7 +199,7 @@ let resolve_jmp ~local addrs jmp =
     | Some (Indirect (Bil.Int addr)) when Hashtbl.mem addrs addr ->
       update_kind jmp addr
         (fun id -> Call (Call.with_return call (Direct id)))
-    | Some (Indirect (Bil.Int addr)) ->
+    | Some (Indirect (Bil.Int _)) ->
       Ir_jmp.with_kind jmp @@ Call (Call.with_noreturn call)
     | _ -> jmp
 
@@ -235,7 +221,7 @@ let lift_sub entry cfg =
     let blks = blk cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-    acc @ blks in
+     acc @ blks in
   let blocks = Graphlib.reverse_postorder_traverse
       (module Cfg) ~start:entry cfg in
   let blks = Seq.fold blocks ~init:[] ~f:recons in
@@ -247,61 +233,90 @@ let lift_sub entry cfg =
   let sub = Ir_sub.Builder.result sub in
   Term.set_attr sub address (Block.addr entry)
 
-let synthetic_sub () =
-  let s = Ir_sub.create () in
-  Term.(set_attr s synthetic ())
+let create_synthetic name =
+  let sub = Ir_sub.create ~name () in
+  Tid.set_name (Term.tid sub) name;
+  Term.(set_attr sub synthetic ())
 
+let indirect_target jmp =
+  match Ir_jmp.kind jmp with
+  | Ret _ | Int _ | Goto _ -> None
+  | Call call -> match Call.target call with
+    | Indirect (Bil.Int a) -> Some a
+    | _ -> None
 
-(** at this moment all null jumps remained in a program denotes
-    external calls. And for each null we create a synthetic subroutine *)
-class null_jump_mapper = object(self)
-  inherit Term.mapper
+let is_indirect_call jmp = Option.is_some (indirect_target jmp)
 
-  val mutable subs : sub term list = []
+let with_address t ~f ~default =
+  match Term.get_attr t address with
+  | None -> default
+  | Some a -> f a
 
-  method synthetic = subs
+let find_call_name symtab blk =
+  with_address blk ~default:None ~f:(Symtab.find_call_name symtab)
 
-  method private add_synthetic =
-    let sub = Ir_sub.create () in
-    let sub = Term.(set_attr sub synthetic ()) in
-    subs <- sub :: subs;
-    sub
+let update_unresolved symtab unresolved exts sub =
+  let iter cls t ~f = Term.to_sequence cls t |> Seq.iter ~f in
+  let symbol_exists name =
+    Option.is_some (Symtab.find_by_name symtab name) in
+  let is_known a = Option.is_some (Symtab.find_by_start symtab a) in
+  let is_unknown name = not (symbol_exists name) in
+  let add_external name =
+    Hashtbl.update exts name ~f:(function
+        | None -> create_synthetic name
+        | Some x -> x) in
+  iter blk_t sub ~f:(fun blk ->
+      iter jmp_t blk ~f:(fun jmp ->
+          match indirect_target jmp with
+          | None -> ()
+          | Some a when is_known a -> ()
+          | _ ->
+            with_address blk ~default:() ~f:(fun addr ->
+                Hash_set.add unresolved addr;
+                match Symtab.find_call_name symtab addr with
+                | Some name when is_unknown name -> add_external name
+                | _ -> ())))
 
-  method! map_jmp jmp = match Ir_jmp.kind jmp with
-    | Call call ->
-      begin
-        match Call.target call with
-        | Indirect (Bil.Int addr) when Addr.is_zero addr ->
-          let sub = self#add_synthetic in
-          let call = Call.with_target call (Direct (Term.tid sub)) in
-          Ir_jmp.with_kind jmp (Call call)
-        | _ -> jmp
-      end
-    | _ -> jmp
-end
-
-let resolve_null_jumps s =
-  let mapper = new null_jump_mapper in
-  let s = mapper#map_term sub_t s in
-  s, mapper#synthetic
+let resolve_indirect symtab exts blk jmp =
+  let update_target tar =
+    match Ir_jmp.kind jmp with
+    | Call c -> Ir_jmp.with_kind jmp (Call (Call.with_target c tar))
+    | _ -> jmp in
+  match find_call_name symtab blk with
+  | None -> jmp
+  | Some name ->
+    match Symtab.find_by_name symtab name with
+    | Some (_,b,_) -> update_target (Indirect (Int (Block.addr b)))
+    | None ->
+      match Hashtbl.find exts name with
+      | Some s -> update_target (Direct (Term.tid s))
+      | None -> jmp
 
 let program symtab =
   let b = Ir_program.Builder.create () in
   let addrs = Addr.Table.create () in
+  let externals = String.Table.create () in
+  let unresolved = Addr.Hash_set.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
       let sub = lift_sub entry cfg in
-      let sub,subs = resolve_null_jumps sub in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
-      List.iter ~f:(Ir_program.Builder.add_sub b) subs;
       Tid.set_name (Term.tid sub) name;
-      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub));
+      Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
+      update_unresolved symtab unresolved externals sub);
+  Hashtbl.iter externals ~f:(Ir_program.Builder.add_sub b);
   let program = Ir_program.Builder.result b in
+  let has_unresolved blk =
+    with_address blk ~default:false ~f:(Hash_set.mem unresolved) in
   Term.map sub_t program
     ~f:(fun sub -> Term.map blk_t sub ~f:(fun blk ->
         Term.map jmp_t (remove_false_jmps blk)
-          ~f:(resolve_jmp ~local:false addrs)))
-
+          ~f:(fun j ->
+              let j =
+                if is_indirect_call j && has_unresolved blk then
+                  resolve_indirect symtab externals blk j
+                else j in
+              resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub
 

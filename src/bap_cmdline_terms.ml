@@ -25,7 +25,8 @@ let logdir : string option Term.t =
 
 let brancher () : string option Term.t =
   match enum_processors (module Brancher) with
-  | [] | [_] -> Term.const None
+  | [] -> Term.const None
+  | [x,_] -> Term.const (Some x)
   | names ->
     let doc = sprintf "Use specified brancher, should be %s" @@
       Arg.doc_alts_enum names in

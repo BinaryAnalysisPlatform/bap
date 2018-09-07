@@ -242,17 +242,6 @@ let union_memory m1 m2 =
   Memmap.to_sequence m2 |> Seq.fold ~init:m1 ~f:(fun m1 (mem,v) ->
       Memmap.add m1 mem v)
 
-let symbolize_synthetic prog insns spec =
-  if MVar.is_updated spec then
-    match MVar.read spec with
-    | None -> prog
-    | Some spec ->
-      let p =
-        Bap_synthetic_symbolizer.resolve spec insns prog in
-      Signal.send Info.got_program p;
-      p
-  else prog
-
 let create_exn
     ?disassembler:backend
     ?brancher
@@ -270,7 +259,6 @@ let create_exn
   let cfg     = MVar.create ~compare:Cfg.compare Cfg.empty in
   let symtab  = MVar.create ~compare:Symtab.compare Symtab.empty in
   let program = MVar.create ~compare:Program.compare (Program.create ()) in
-  let spec = MVar.from_source (Stream.map ~f:(fun s -> Ok s) Info.spec) in
   let task = "loading" in
   report_progress ~task ~stage:0 ~total:5 ~note:"reading" ();
   let {Input.arch; data; code; file; finish} = read () in
@@ -329,8 +317,6 @@ let create_exn
     else
       let disasm = Disasm.create g in
       let program = MVar.read program in
-      let program =
-        symbolize_synthetic program (Disasm.insns disasm) spec in
       report_progress ~task ~stage:4 ~note:"finishing" ();
       finish {
         disasm;
@@ -512,7 +498,7 @@ module Pass = struct
   type error =
     | Unsat_dep of pass * string
     | Runtime_error of pass * exn
-    [@@deriving variants, sexp_of]
+  [@@deriving variants, sexp_of]
 
   let find name : pass option =
     DList.find passes ~f:(fun p -> p.name = name)
@@ -570,7 +556,8 @@ end
 let register x =
   let module S = (val x : S) in
   let stream =
-    Stream.map Info.img ~f:(fun img -> Ok (S.of_image img)) in
+    Stream.map Info.img ~f:(fun img ->
+        Or_error.try_with (fun () -> S.of_image img)) in
   S.Factory.register "internal" stream
 
 let () =

@@ -29,6 +29,7 @@ type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
+  callnames : string Addr.Map.t;
 } [@@deriving sexp_of]
 
 
@@ -46,6 +47,7 @@ let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
   memory = Memmap.empty;
+  callnames = Addr.Map.empty;
 }
 
 let merge m1 m2 =
@@ -56,19 +58,23 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
+let filter_callnames name =
+  Map.filter ~f:( fun name' -> String.(name <> name'))
+
 let remove t (name,entry,_) : t =
   if Map.mem t.addrs (Block.addr entry) then
     {
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
+      callnames = filter_callnames name t.callnames
     }
   else t
 
 let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
   let t = remove t data in
-  {
+  { t with
     addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
     names = Map.add t.names ~key:name ~data;
     memory = merge t.memory (span data);
@@ -89,3 +95,8 @@ let to_sequence t =
 let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
+
+let add_call_name t b name =
+  { t with callnames = Map.add t.callnames (Block.addr b) name }
+
+let find_call_name t addr = Map.find t.callnames addr

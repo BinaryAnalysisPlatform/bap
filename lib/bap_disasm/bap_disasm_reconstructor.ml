@@ -46,39 +46,68 @@ let is_start roots cfg blk =
   Set.mem roots (Block.addr blk) ||
   Cfg.Node.degree ~dir:`In blk cfg = 0
 
-let entries_of_block cfg roots entries blk =
+let is_fall e = Cfg.Edge.label e = `Fall
+let is_call b = Insn.(is call) (Block.terminator b)
+
+let entries_of_block cfg roots blk =
   let entries =
-    if is_start roots cfg blk then Set.add entries blk
-    else entries in
-  let term = Block.terminator blk in
-  if Insn.(is call) term then
+    if is_start roots cfg blk then Block.Set.singleton blk
+    else Block.Set.empty in
+  if is_call blk then
     Seq.fold ~init:entries (Cfg.Node.outputs blk cfg)
       ~f:(fun entries e ->
-          if Cfg.Edge.label e <> `Fall then
-            Set.add entries (Cfg.Edge.dst e)
-          else entries)
+          if is_fall e then entries
+          else Set.add entries (Cfg.Edge.dst e))
   else entries
 
-let collect_entries cfg roots =
-  let roots = Addr.Set.of_list roots in
-  Seq.fold (Cfg.nodes cfg) ~init:Block.Set.empty
-    ~f:(entries_of_block cfg roots)
+let terminator_addr blk =
+  List.rev (Block.insns blk) |>
+  List.hd_exn |>
+  fst |>
+  Memory.min_addr
+
+let is_unresolved blk cfg =
+  let deg = Cfg.Node.degree ~dir:`Out blk cfg in
+  deg = 0 ||
+  (deg = 1 && is_fall (Seq.hd_exn (Cfg.Node.outputs blk cfg)))
+
+let add_callnames syms name cfg blk =
+  if is_call blk then
+    let call_addr = terminator_addr blk in
+    if is_unresolved blk cfg then
+      Symtab.add_call_name syms blk (name call_addr)
+    else
+      Seq.fold ~init:syms (Cfg.Node.outputs blk cfg)
+        ~f:(fun syms e ->
+            if is_fall e then syms
+            else
+              Cfg.Edge.dst e |> Block.addr |> name |>
+              Symtab.add_call_name syms blk)
+  else syms
+
+let collect name cfg roots =
+  Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
+    ~f:(fun (entries,syms) blk ->
+        Set.union entries (entries_of_block cfg roots blk),
+        add_callnames syms name cfg blk)
 
 let reconstruct name roots prog =
-  let entries = collect_entries prog roots in
+  let roots = Addr.Set.of_list roots in
+  let entries,syms = collect name prog roots in
   let is_call e = Set.mem entries (Cfg.Edge.dst e) in
   let rec add cfg node =
     let cfg = Cfg.Node.insert node cfg in
-    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg ~f:(fun cfg edge ->
-        if is_call edge then cfg
-        else
-          let cfg' = Cfg.Edge.insert edge cfg in
-          if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
-          else add cfg' (Cfg.Edge.dst edge)) in
-  Set.fold entries ~init:Symtab.empty ~f:(fun tab entry ->
+    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg
+      ~f:(fun cfg edge ->
+          if is_call edge then cfg
+          else
+            let cfg' = Cfg.Edge.insert edge cfg in
+            if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
+            else add cfg' (Cfg.Edge.dst edge)) in
+  Set.fold entries ~init:syms ~f:(fun syms entry ->
       let name = name (Block.addr entry) in
       let cfg = add Cfg.empty entry in
-      Symtab.add_symbol tab (name,entry,cfg))
+      Symtab.add_symbol syms (name,entry,cfg))
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =
