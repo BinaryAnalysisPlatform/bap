@@ -30,7 +30,7 @@ let brancher () : string option Term.t =
   | names ->
     let doc = sprintf "Use specified brancher, should be %s" @@
       Arg.doc_alts_enum names in
-    Arg.(value & opt (some (enum names)) None & info ["brancher"] ~doc)
+    Arg.(value & opt (some (enum names)) (Some "internal") & info ["brancher"] ~doc)
 
 let symbolizers () : string list Term.t =
   match enum_processors (module Symbolizer) with
