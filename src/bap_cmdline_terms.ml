@@ -261,7 +261,7 @@ let recipe_doc = [
 
   `Pre {|
     (parameter depth 128 "maximum depth of analysis")
-    (option analysis-depth $depth)
+    (option analysis-depth \$depth)
    |};
 
   `P "
@@ -298,7 +298,7 @@ let recipe =
 
   The valid representations of a recipe is either the recipe file
   itself (i.e., a file consisting of a list of s-expressions), a
-  directory with a valid $(recipe.scm) file, or zip file, that
+  directory with a valid $(b,recipe.scm) file, or zip file, that
   contains a valid recipe directory. See the $(b,RECIPES) section for
   more information.
 

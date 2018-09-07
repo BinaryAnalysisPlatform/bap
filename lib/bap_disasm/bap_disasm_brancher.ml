@@ -32,17 +32,8 @@ let kind_of_branches t f =
   | `Fall,`Fall -> `Fall
   | _           -> `Cond
 
-let has_jumps =
-  Bil.exists
-    (object
-      inherit [unit] Stmt.finder
-      method! enter_jmp _ r = r.return (Some ())
-    end)
-
 let rec dests_of_bil bil : dests =
-  if has_jumps bil then
-    Bil.fold_consts bil |> List.concat_map ~f:dests_of_stmt
-  else []
+  List.concat_map ~f:dests_of_stmt bil
 and dests_of_stmt = function
   | Bil.Jmp (Bil.Int addr) -> [Some addr,`Jump]
   | Bil.Jmp (_) -> [None, `Jump]

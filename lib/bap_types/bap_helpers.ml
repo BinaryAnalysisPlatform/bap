@@ -557,8 +557,10 @@ let fix compare f x  =
     else
       let fast' = f fast in
       if compare fast' fast = 0 then fast
-      else loop (f slow) (f fast) in
-  loop x (f x)
+      else loop (f slow) (f fast') in
+  let slow = x and fast = f x in
+  if compare slow fast = 0 then fast
+  else loop slow fast
 
 let fixpoint = fix compare_bil
 
@@ -717,7 +719,8 @@ module Normalize = struct
       if i >= 0
       then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
       else m in
-    expand (n-1)
+    if s = `r8 then Exp.Store (m,a,x,e,s)
+    else expand (n-1)
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
      x[a+n-1]
@@ -739,7 +742,8 @@ module Normalize = struct
       if i > 1
       then cat (load a) (expand (a++1) (i-1))
       else load a in
-    expand a (Size.in_bytes s)
+    if s = `r8 then load a
+    else expand a (Size.in_bytes s)
 
   let expand_memory = map_exp @@ object
       inherit exp_mapper as super
@@ -1092,9 +1096,8 @@ module Normalize = struct
           hoist_stores (Move (v,store) :: substitute store (Var v) [stmt])
     end) bil
 
-  let bil ?(keep_ites=false) ?normalize_exp:(ne=false) xs =
+  let bil ?normalize_exp:(ne=false) xs =
     let normalize_exp = if ne then normalize_exp else ident in
-    let split_ite = if keep_ites then ident else split_ite in
     let rec run xs =
       List.concat_map ~f:hoist_non_generative_expressions xs |>
       normalize_conditionals |>
@@ -1104,8 +1107,7 @@ module Normalize = struct
           | If (c,xs,ys) -> If (normalize_exp c, run xs, run ys)
           | While (c,xs) -> While (normalize_exp c, run xs)
           | Special _  | CpuExn _ as s -> s) |>
-      hoist_stores |>
-      split_ite in
+      hoist_stores in
     run xs
 end
 
