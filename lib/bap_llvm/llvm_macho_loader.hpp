@@ -22,6 +22,19 @@
 #include <llvm/Object/SymbolSize.h>
 #endif
 
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
+#include <llvm/Support/SwapByteOrder.h>
+namespace llvm { namespace sys {
+void swapByteOrder(uint64_t &x) { SwapByteOrder(x); };
+}
+
+namespace MachO {
+void swapStruct(MachO::any_relocation_info &reloc) {
+    sys::SwapByteOrder(reloc.r_word0);
+    sys::SwapByteOrder(reloc.r_word1);
+}}}
+#endif
+
 namespace loader {
 namespace macho_loader {
 
@@ -475,8 +488,8 @@ symbol_iterator get_symbol(const macho &obj, std::size_t index) {
 #elif LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 4
 
 std::size_t command_count(const macho &obj) {
-    if (obj.is64Bit())  return obj.getHeader64().ncmds;
-    else obj.getHeader().ncmds;
+    if (obj.is64Bit()) return obj.getHeader64().ncmds;
+    else return obj.getHeader().ncmds;
 }
 
 commands macho_commands(const macho &obj) {
