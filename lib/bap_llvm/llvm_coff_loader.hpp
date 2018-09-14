@@ -322,7 +322,9 @@ error_or<pe32plus_header> get_pe32plus_header(const coff_obj &obj) {
 
 // symbol address for 3.4 is already relative, i.e. doesn't include image base
 error_or<int64_t> symbol_relative_address(const coff_obj &obj, const SymbolRef &sym) {
-    return symbol_address(obj, sym);
+    auto addr = symbol_address(obj, sym);
+    if (!addr) return addr;
+    else return success(int64_t(*addr));
 }
 
 bool is_relocatable(const coff_obj &obj) {
