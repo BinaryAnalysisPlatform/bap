@@ -1,0 +1,3 @@
+PKG bap
+PKG bap-primus
+FLG -short-paths,-open Bap.Std,-open Bap_primus.Std

@@ -1,0 +1,15 @@
+Flag constant_tracker
+  Description: Build the constant tracking analysis
+  Default: false
+
+
+Library constant_tracker_plugin
+  Build$:       flag(everything) || flag(constant_tracker)
+  Path:         plugins/constant_tracker
+  BuildDepends: bap-primus
+  FindlibName:     bap-plugin-constant_tracker
+  CompiledObject:  best
+  InternalModules: Constant_tracker_main
+  XMETADescription: Constant Tracking Analysis based on Primus
+  DataFiles:        lisp/*.lisp ($constant_tracker_lisp_path)
+  XMETAExtraLines:  tags="primus, lisp, analysis"
