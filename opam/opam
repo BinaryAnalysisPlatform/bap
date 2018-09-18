@@ -1,5 +1,4 @@
-opam-version: "1.2"
-name: "bap"
+opam-version: "2.0"
 version: "master"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
@@ -212,66 +211,53 @@ remove: [
 ]
 
 depends: [
-    "base-unix"
-    "bitstring"
-    "camlzip"
-    "cmdliner" {>= "1.0" & < "2.0"}
-    "ppx_jane"    {>= "v0.9" & < "v0.10"}
-    "core_kernel" {>= "v0.9" & < "v0.10"}
-    "ezjsonm"
-    "faillib"
-    "fileutils"
-    "FrontC"
-    "oasis" {build & = "0.4.10"}
-    "ounit" {build}
-    "ocamlgraph" {>= "1.8.6"}
-    "ocamlfind" {>= "1.5.6" & < "2.0"}
-    "ocurl" {= "0.7.7"}
-    "optcomp"
-    "re"
-    "uri" {>= "1.9.0"}
-    "utop"
-    "zarith"
-    "uuidm"
-    "piqi" {>= "0.7.4"}
-    "conf-bap-llvm" {>= "1.1"}
-    "parsexp"
-    "bap-signatures"
+  "ocaml" {>= "4.02.3"}
+  "base-unix"
+  "bitstring"
+  "camlzip"
+  "cmdliner" {>= "1.0" & < "2.0"}
+  "ppx_jane" {>= "v0.9" & < "v0.10"}
+  "core_kernel" {>= "v0.9" & < "v0.10"}
+  "ezjsonm"
+  "faillib"
+  "fileutils"
+  "FrontC"
+  "oasis" {build & = "0.4.10"}
+  "ounit" {build}
+  "ocamlgraph" {>= "1.8.6"}
+  "ocamlfind" {>= "1.5.6" & < "2.0"}
+  "ocurl" {= "0.7.7"}
+  "optcomp"
+  "re"
+  "uri" {>= "1.9.0"}
+  "utop"
+  "zarith"
+  "uuidm"
+  "piqi" {>= "0.7.4"}
+  "conf-bap-llvm" {>= "1.1"}
+  "parsexp"
+  "bap-signatures"
 ]
-
-
 depexts: [
-    [["ubuntu"] [
-        "libgmp-dev"
-        "libzip-dev"
-        "libcurl4-gnutls-dev"
-        "llvm-3.8-dev"
-        "time"
-        "clang"
-        "llvm"
-        "m4"
-        "dejagnu"
-     ]]
-     [["osx" "macports"] [
-        "gmp"
-        "llvm-3.8"
-        "graphviz"
-        "curl"
-        "libzip"
-     ]]
-     [["osx" "homebrew"] [
-        "gmp"
-        "homebrew/versions/llvm38"
-        "graphviz"
-        "curl"
-        "libzip"
-        "dejagnu"
-    ]]
+  [
+    "libgmp-dev"
+    "libzip-dev"
+    "libcurl4-gnutls-dev"
+    "llvm-3.8-dev"
+    "time"
+    "clang"
+    "llvm"
+    "m4"
+    "dejagnu"
+  ] {os-distribution = "ubuntu"}
+  ["gmp" "llvm-3.8" "graphviz" "curl" "libzip"]
+    {os = "macos" & os-distribution = "macports"}
+  ["gmp" "homebrew/versions/llvm38" "graphviz" "curl" "libzip" "dejagnu"]
+    {os = "macos" & os-distribution = "homebrew"}
 ]
-
 depopts: [
    "conf-ida"
    "conf-binutils"
 ]
 
-available: [ocaml-version >= "4.02.3"]
+flags: light-uninstall
