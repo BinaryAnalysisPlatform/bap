@@ -1,5 +1,5 @@
 Flag primus_test
-  Description: Build Primus Lisp Library
+  Description: Build Primus Lisp Program Testing Framework
   Default: false
 
 

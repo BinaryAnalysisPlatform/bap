@@ -59,7 +59,7 @@
                    'memcheck/site/use-after-release))
 
 (defun memcheck/report-double-release (ptr)
-  (memcheck/register ptr 'memcheck/site/double-release ptr)
+  (memcheck/register ptr 'memcheck/site/double-release)
   (report-incident 'memcheck-double-release ptr
                    'memcheck/site/acquire
                    'memcheck/site/release
