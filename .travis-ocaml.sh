@@ -166,7 +166,7 @@ export OPAMYES=1
 
 case $OPAM_INIT in
   true)
-      opam init -a "$BASE_REMOTE" --comp="$OPAM_SWITCH"
+      opam init --comp="$OPAM_SWITCH"
       eval $(opam config env)
       ;;
 esac
