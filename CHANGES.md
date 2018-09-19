@@ -3,40 +3,40 @@
 
 ### Features
 
-#872 Constant tracking analysis
-#871 Information sensitivity analysis
-#868 IDA Pro brancher.
-#866 Bap-elf compilation for ocaml >= 4.04.1
-#857 Optimization pass
-#855 Better reconstructor, symtab, and brancher performance
-#840 Traps for memory and division operations in Primus
-#833 Support for x86 CDQ, CDQE, CQO, CWD, CWDE, CBW opcodes
-#830 BIL passes
-#821 Interface for binable interval trees
-#815 Recipes enhancements
-#813 Mangling of duplicated subroutines
-#799 Macho loader enhancements
-#798 Primus Lisp enhancements
-#795 Llvm 6.0 compatibility
+- #872 Constant tracking analysis
+- #871 Information sensitivity analysis
+- #868 IDA Pro brancher.
+- #866 Bap-elf compilation for ocaml >= 4.04.1
+- #857 Optimization pass
+- #855 Better reconstructor, symtab, and brancher performance
+- #840 Traps for memory and division operations in Primus
+- #833 Support for x86 CDQ, CDQE, CQO, CWD, CWDE, CBW opcodes
+- #830 BIL passes
+- #821 Interface for binable interval trees
+- #815 Recipes enhancements
+- #813 Mangling of duplicated subroutines
+- #799 Macho loader enhancements
+- #798 Primus Lisp enhancements
+- #795 Llvm 6.0 compatibility
 
 
 ### Bug fixes
 
-#863 Fixes calls search in reconstructor
-#856 Fixes the bug that was producing unreachable blocks
-#853 Cleans /tmp/ida every time ida is called
-#847 Fixes type inference
-#841 Several Primus fixes
-#836 Fixes packed x86 instructions
-#832 Fixes function names in docstrings
-#827 Fixes compilations issue on 32 bit machine
-#817 Hardens IDA plugin
-#804 Removes duplicated sections in disassemble output
-#796 Fixes paths comprehension in api plugin
-#792 Restores the section view
-#791 Produces correct callgraphs if there are no calls in a program
-#789 Fixes BIL normalization procedure
-#733 Fixed bugs in x86 shift instructions
+- #863 Fixes calls search in reconstructor
+- #856 Fixes the bug that was producing unreachable blocks
+- #853 Cleans /tmp/ida every time ida is called
+- #847 Fixes type inference
+- #841 Several Primus fixes
+- #836 Fixes packed x86 instructions
+- #832 Fixes function names in docstrings
+- #827 Fixes compilations issue on 32 bit machine
+- #817 Hardens IDA plugin
+- #804 Removes duplicated sections in disassemble output
+- #796 Fixes paths comprehension in api plugin
+- #792 Restores the section view
+- #791 Produces correct callgraphs if there are no calls in a program
+- #789 Fixes BIL normalization procedure
+- #733 Fixed bugs in x86 shift instructions
 
 1.4.0
 =====
