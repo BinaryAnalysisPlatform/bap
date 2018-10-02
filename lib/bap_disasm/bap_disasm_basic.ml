@@ -339,11 +339,9 @@ let compare_full_insn i1 i2 =
 
 type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
-module Pred = struct
-  include Comparable.Make(struct
-      type t = pred [@@deriving compare, sexp]
-    end)
-end
+module Pred = Comparable.Make(struct
+    type t = pred [@@deriving compare, sexp]
+end)
 
 module Preds = Pred.Set
 type preds = Preds.t [@@deriving compare, sexp]
