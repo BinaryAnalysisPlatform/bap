@@ -62,7 +62,8 @@ module Make (CPU : X86CPU) (RR : RR) (IM : IM) : MM = struct
       | #Reg.r32, `x86
       | #Reg.r64, _
       | #Reg.segment_base, _ -> RR.get reg
-      | #Reg.segment, _ -> Error.failwiths "invalid address register" reg RR.sexp_of_t
+      | (#Reg.segment | #Reg.r128 | #Reg.r256), _ ->
+        Error.failwiths "invalid address register" reg RR.sexp_of_t
 
     let make_scale scale =
       let shift = match scale with
