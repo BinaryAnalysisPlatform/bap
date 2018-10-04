@@ -80,7 +80,10 @@ module Index = struct
     then clean (evict_entry idx)
     else idx
 
-  let remove_entry e = Sys.remove e.path
+  let remove_entry e =
+    try Sys.remove e.path
+    with e ->
+      warning "can't remove entry: %s" (Exn.to_string e)
 
   let remove_files old_index new_index =
     Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
