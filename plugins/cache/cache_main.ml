@@ -23,8 +23,26 @@ type index = {
 
 let (/) = Filename.concat
 
+module Index_file = struct
+  let index_version = 2
+  let index_basename = "index"
+  let versioned_name = sprintf "%s.v" index_basename
+  let index_file = sprintf "%s%d" versioned_name index_version
+  let get_version path =
+    let file = Filename.basename path in
+    match String.chop_prefix file versioned_name with
+    | None -> Ok 1
+    | Some v ->
+      try Ok (int_of_string v)
+      with _ -> Error (Error.of_string (sprintf "unknown version %s" v))
+
+  let is_index path =
+    String.is_prefix ~prefix:index_basename (Filename.basename path)
+end
+
 module Index = struct
-  let index_file = "index"
+  include Index_file
+
   let lock_file = "lock"
   let default_config = {
     max_size = 5_000_000_000L;
@@ -82,8 +100,8 @@ module Index = struct
 
   let remove_entry e =
     try Sys.remove e.path
-    with e ->
-      warning "can't remove entry: %s" (Exn.to_string e)
+    with exn ->
+      warning "unable to remove entry: %s" (Exn.to_string exn)
 
   let remove_files old_index new_index =
     Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
@@ -134,7 +152,8 @@ module Index = struct
 
   let index_to_file file index =
     try to_file (module T) file index
-    with e -> warning "store index: %s" (Exn.to_string e)
+    with e ->
+      warning "store index: %s" (Exn.to_string e)
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -170,6 +189,31 @@ module Index = struct
           let entry,res = f entry in
           update_entry idx src entry,res)
 
+  let upgrade_old_index file version =
+    let () = match version with
+      | 1 ->
+        let old =
+          try Sexp.load_sexp file |> index_of_sexp
+          with _ -> empty in
+        index_to_file (cache_dir () / index_file) old;
+      | x ->
+        warning
+          "can't update index version from %d to %d" x index_version in
+    Sys.remove file
+
+  let get_index () =
+    FileUtil.ls (cache_dir ()) |> List.find ~f:is_index
+
+  let verify () =
+    match get_index () with
+    | None -> ()
+    | Some file -> match get_version file with
+      | Ok ver when Int.(ver = index_version) -> ()
+      | Ok ver when Int.(ver < index_version) -> upgrade_old_index file ver
+      | Ok ver ->
+        error "unsupported index version %d, current is %d" ver index_version
+      | Error er ->
+        error "unknown index version: %s" (Error.to_string_hum er)
 end
 
 let size file =
@@ -225,6 +269,7 @@ let create reader writer =
 
 
 let main clean size show_info dir =
+  Index.verify ();
   set_dir dir;
   if clean then cleanup ();
   if show_info then print_info ();
