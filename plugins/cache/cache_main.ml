@@ -25,19 +25,19 @@ let (/) = Filename.concat
 
 module Index_file = struct
   let index_version = 2
-  let index_basename = "index"
-  let versioned_name = sprintf "%s.v" index_basename
-  let index_file = sprintf "%s%d" versioned_name index_version
+  let index_file = sprintf "index.%d" index_version
+
+  let is_index path =
+    String.is_prefix ~prefix:"index" (Filename.basename path)
+
   let get_version path =
     let file = Filename.basename path in
-    match String.chop_prefix file versioned_name with
+    match String.chop_prefix file "index." with
     | None -> Ok 1
     | Some v ->
       try Ok (int_of_string v)
-      with _ -> Error (Error.of_string (sprintf "unknown version %s" v))
-
-  let is_index path =
-    String.is_prefix ~prefix:index_basename (Filename.basename path)
+      with _ ->
+        Error (Error.of_string (sprintf "unknown version %s" v))
 end
 
 module Index = struct
@@ -152,8 +152,7 @@ module Index = struct
 
   let index_to_file file index =
     try to_file (module T) file index
-    with e ->
-      warning "store index: %s" (Exn.to_string e)
+    with e -> warning "store index: %s" (Exn.to_string e)
 
   let with_index ~f =
     let cache_dir = cache_dir () in
@@ -194,18 +193,18 @@ module Index = struct
       | 1 ->
         let old =
           try Sexp.load_sexp file |> index_of_sexp
-          with _ -> empty in
+          with exn ->
+            warning "can't load index: %s" (Exn.to_string exn);
+            empty in
         index_to_file (cache_dir () / index_file) old;
       | x ->
         warning
           "can't update index version from %d to %d" x index_version in
     Sys.remove file
 
-  let get_index () =
-    FileUtil.ls (cache_dir ()) |> List.find ~f:is_index
-
-  let verify () =
-    match get_index () with
+  let upgrade () =
+    FileUtil.ls (cache_dir ()) |>
+    List.find ~f:is_index |> function
     | None -> ()
     | Some file -> match get_version file with
       | Ok ver when Int.(ver = index_version) -> ()
@@ -269,7 +268,7 @@ let create reader writer =
 
 
 let main clean size show_info dir =
-  Index.verify ();
+  Index.upgrade ();
   set_dir dir;
   if clean then cleanup ();
   if show_info then print_info ();
