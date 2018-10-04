@@ -23,7 +23,7 @@ type index = {
 
 let (/) = Filename.concat
 
-module Index_file = struct
+module Index = struct
   let index_version = 2
   let index_file = sprintf "index.%d" index_version
 
@@ -38,10 +38,6 @@ module Index_file = struct
       try Ok (int_of_string v)
       with _ ->
         Error (Error.of_string (sprintf "unknown version %s" v))
-end
-
-module Index = struct
-  include Index_file
 
   let lock_file = "lock"
   let default_config = {
@@ -188,7 +184,7 @@ module Index = struct
           let entry,res = f entry in
           update_entry idx src entry,res)
 
-  let upgrade_old_index file version =
+  let upgrade_index file version =
     let () = match version with
       | 1 ->
         let old =
@@ -208,9 +204,7 @@ module Index = struct
     | None -> ()
     | Some file -> match get_version file with
       | Ok ver when Int.(ver = index_version) -> ()
-      | Ok ver when Int.(ver < index_version) -> upgrade_old_index file ver
-      | Ok ver ->
-        error "unsupported index version %d, current is %d" ver index_version
+      | Ok ver -> upgrade_index file ver
       | Error er ->
         error "unknown index version: %s" (Error.to_string_hum er)
 end
