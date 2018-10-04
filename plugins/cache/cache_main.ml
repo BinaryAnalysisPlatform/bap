@@ -24,7 +24,21 @@ type index = {
 let (/) = Filename.concat
 
 module Index = struct
-  let index_file = "index"
+  let index_version = 2
+  let index_file = sprintf "index.%d" index_version
+
+  let is_index path =
+    String.is_prefix ~prefix:"index" (Filename.basename path)
+
+  let get_version path =
+    let file = Filename.basename path in
+    match String.chop_prefix file "index." with
+    | None -> Ok 1
+    | Some v ->
+      try Ok (int_of_string v)
+      with _ ->
+        Error (Error.of_string (sprintf "unknown version %s" v))
+
   let lock_file = "lock"
   let default_config = {
     max_size = 5_000_000_000L;
@@ -80,7 +94,10 @@ module Index = struct
     then clean (evict_entry idx)
     else idx
 
-  let remove_entry e = Sys.remove e.path
+  let remove_entry e =
+    try Sys.remove e.path
+    with exn ->
+      warning "unable to remove entry: %s" (Exn.to_string exn)
 
   let remove_files old_index new_index =
     Map.iteri old_index.entries ~f:(fun ~key ~data:e ->
@@ -167,6 +184,29 @@ module Index = struct
           let entry,res = f entry in
           update_entry idx src entry,res)
 
+  let upgrade_index file version =
+    let () = match version with
+      | 1 ->
+        let old =
+          try Sexp.load_sexp file |> index_of_sexp
+          with exn ->
+            warning "can't load index: %s" (Exn.to_string exn);
+            empty in
+        index_to_file (cache_dir () / index_file) old;
+      | x ->
+        warning
+          "can't update index version from %d to %d" x index_version in
+    Sys.remove file
+
+  let upgrade () =
+    FileUtil.ls (cache_dir ()) |>
+    List.find ~f:is_index |> function
+    | None -> ()
+    | Some file -> match get_version file with
+      | Ok ver when Int.(ver = index_version) -> ()
+      | Ok ver -> upgrade_index file ver
+      | Error er ->
+        error "unknown index version: %s" (Error.to_string_hum er)
 end
 
 let size file =
@@ -222,6 +262,7 @@ let create reader writer =
 
 
 let main clean size show_info dir =
+  Index.upgrade ();
   set_dir dir;
   if clean then cleanup ();
   if show_info then print_info ();
