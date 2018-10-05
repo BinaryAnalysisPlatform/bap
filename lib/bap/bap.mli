@@ -618,7 +618,9 @@ module Std : sig
     module Make(T : Base) : S with type t = T.t
   end
 
-  (**/**)
+  (** Legacy
+      @deprecated Definitions in this module are deprecated
+   **)
   module Legacy : sig
     module Monad : sig
       open Core_kernel.Std
@@ -2242,7 +2244,7 @@ module Std : sig
     end
 
     (** Result of a computation.
-        @deprecated  Use the Primus Framework.
+        @deprecated Use the Primus Framework.
     *)
     type result
     [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
@@ -2258,7 +2260,6 @@ module Std : sig
         Bili.
 
         @deprecated  Use the Primus Framework.
-
     *)
     class type storage = object('s)
 
@@ -2270,7 +2271,9 @@ module Std : sig
     end
     [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
-    (** Predefined storage classes  *)
+    (** Predefined storage classes
+        @deprecated Use the Primus Framework
+    *)
     module Storage : sig
 
       (** linear storage literally implements operational
@@ -3063,7 +3066,9 @@ module Std : sig
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
   end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
-  (** Expression {{!Expi}interpreter}  *)
+  (** Expression {{!Expi}interpreter}
+      @deprecated Use the Primus Framework
+  *)
   class ['a] expi : ['a] Expi.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -3086,6 +3091,8 @@ module Std : sig
       ctxt#bindings |> Seq.to_list;;
       - : (var * Bil.result) list = [(x, [0x1] false)]
     v}
+
+      @deprecated Use the Primus Framework
   *)
   module Bili : sig
 
@@ -3126,7 +3133,9 @@ module Std : sig
   end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
 
-  (** BIL {{!Bili}interpreter} *)
+  (** BIL {{!Bili}interpreter}
+      @deprecated Use the Primus Framework
+   *)
   class ['a] bili : ['a] Bili.t
   [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
@@ -4502,8 +4511,11 @@ module Std : sig
   end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
 
-  (** BIR {{!Biri}interpreter}  *)
+  (** BIR {{!Biri}interpreter}
+      @deprecated Use the Primus Framework
+   *)
   class ['a] biri : ['a] Biri.t
+  [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
   (** {3 Some predefined tags} *)
 
@@ -5097,8 +5109,10 @@ module Std : sig
 
       This interface must be implemented by a backend plugin, and
       registered with [Image.register] function in order to be
-      accessible for loading images.*)
+      accessible for loading images.
 
+      @deprecated Use new Ogre-powered loader interface
+   *)
   module Backend : sig
 
     (** memory access permissions  *)
@@ -5148,7 +5162,7 @@ module Std : sig
 
     (** the actual interface to be implemented  *)
     type t = Bigstring.t -> Img.t option
-  end [@@deprecated "[since 2017-08] Use new loader Ogre-powered loader interface"]
+  end [@@deprecated "[since 2017-08] Use new Ogre-powered loader interface"]
 
   (** Binary Image.  *)
   module Image : sig
@@ -5323,7 +5337,9 @@ module Std : sig
     val available_backends : unit -> string list
 
     (** [register_backend ~name backend] tries to register [backend] under
-        the specified [name]. *)
+        the specified [name].
+        @deprecated use register_loader instead
+    *)
     val register_backend : name:string -> Backend.t -> [ `Ok | `Duplicate ]
     [@@deprecated "[since 2017-07] use register_loader instead"]
 
@@ -7705,8 +7721,12 @@ module Std : sig
       We represent a taint with a term identifier, to designate that a
       taint was produced by a term with the given id. A taint set is
       usually associated with each variable of a given term. This set
-      defines a set of taints with which a variable is tainted.*)
+      defines a set of taints with which a variable is tainted.
+
+      @deprecated use the Bap Taint Framework
+  *)
   module Taint : sig
+
     type t = tid
 
     type set = Tid.Set.t [@@deriving bin_io, compare, sexp]
