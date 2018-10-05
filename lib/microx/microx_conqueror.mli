@@ -17,6 +17,7 @@ class context :
   ?max_steps:int ->
   ?max_loop:int ->
   program term -> object('s)
+    [@@@warning "-D"]
     inherit Biri.context
 
     method visited : int Tid.Map.t

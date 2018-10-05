@@ -34,12 +34,13 @@ let printer = function
 let assert_exp value exp ctxt =
   assert_equal ~ctxt ~printer value (Exp.eval exp)
 
-let assert_prg value prg ctxt =
+let assert_prg  value prg ctxt =
   let open Monad.State.Monad_infix in
   let bili = new bili in
   assert_equal ~ctxt ~printer value @@
   let res = bili#eval prg >>= fun () -> bili#lookup r >>| Bil.Result.value in
   Monad.State.eval res (new Bili.context)
+[@@warning "-D"]
 
 let suite () =
   "Bili" >::: [

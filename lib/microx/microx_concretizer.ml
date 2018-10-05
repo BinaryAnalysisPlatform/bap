@@ -5,6 +5,8 @@ open Monads.Std
 module SM = Monad.State
 open SM.Monad_infix
 
+[@@@warning "-D"]
+
 type policy = [`Random | `Fixed of int64 | `Interval of int64 * int64 ]
   [@@deriving sexp_of]
 
@@ -22,8 +24,10 @@ class ['a] main
     ?random_seed
     ?(reg_policy=`Random)
     ?(mem_policy=`Random) () =
+
   object(self)
     inherit ['a] expi as super
+
     initializer Option.iter random_seed ~f:Random.init
 
     method! eval_unknown _ t = self#emit reg_policy t

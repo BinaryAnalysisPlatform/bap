@@ -1,5 +1,7 @@
 open Bap.Std
 
+[@@@warning "-D"]
+
 type policy = [
   | `Random
   | `Fixed of int64 | `Interval of int64 * int64 ]

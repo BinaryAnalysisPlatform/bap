@@ -1,8 +1,9 @@
 open Core_kernel.Std
 open Bap.Std
 open Monads.Std
-
 open Bap_llvm_binary
+
+[@@@warning "-D"]
 
 let make_addr arch addr =
   match Arch.addr_size arch with

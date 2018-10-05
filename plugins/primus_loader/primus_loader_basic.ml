@@ -56,6 +56,7 @@ module Make(Param : Param)(Machine : Primus.Machine.S)  = struct
   let rec is set = function
     | Backend.Or (p1,p2) -> is set p1 || is set p2
     | bit -> bit = set
+  [@@warning "-D"]
 
   let segmentations =
     let open Image.Scheme in

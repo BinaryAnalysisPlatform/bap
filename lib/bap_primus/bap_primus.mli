@@ -6,7 +6,6 @@ open Bap_future.Std
 open Bap_strings.Std
 
 module Std : sig
-
   (** Primus - The Microexecution Framework.
 
 
@@ -57,6 +56,8 @@ module Std : sig
       it can modify other components (depending on their interface).
 
   *)
+  [@@@warning "-D"]
+
   module Primus : sig
     (** Machine Exception.
 

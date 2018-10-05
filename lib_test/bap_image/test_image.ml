@@ -2,8 +2,9 @@ open Core_kernel.Std
 open OUnit2
 open Or_error
 open Word_size
-
 open Bap.Std
+
+[@@@warning "-D"]
 open Backend
 
 let ident = Int64.of_int
@@ -90,6 +91,7 @@ let () = List.iter ~f:(fun (name,backend) ->
     | `Ok -> ()
     | `Duplicate -> failwith name)
     backends
+[@@warning "-D"]
 
 let print_list r =
   let sexp_of_addr_list = sexp_of_list sexp_of_addr in

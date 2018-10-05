@@ -2,6 +2,8 @@ open Core_kernel
 open OUnit2
 open Bap.Std
 
+[@@@warning "-D"]
+
 let width = 8
 let typ = Type.imm width
 let int x = Bil.int (Word.of_int ~width x)

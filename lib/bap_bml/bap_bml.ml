@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 
+[@@@warning "-D"]
 
 exception Parse_error of string
 

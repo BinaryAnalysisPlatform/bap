@@ -7,6 +7,8 @@ open Graphlib.Std
 open Bap_future.Std
 
 module Std : sig
+  [@@@warning "-D"]
+
   (** {2 Overview}
 
       {3 Layered Architecture}
@@ -618,10 +620,7 @@ module Std : sig
 
   (**/**)
   module Legacy : sig
-    [@@@deprecated "[since 2018-03] Definitions in this module are deprecated"]
     module Monad : sig
-      [@@@deprecated
-        "[since 2018-03] The module is deprecated in favor of new monads library"]
       open Core_kernel.Std
       module type Basic = Monad.Basic
       module type Basic2 = Monad.Basic2
@@ -665,7 +664,10 @@ module Std : sig
         end
       end
     end
+    [@@deprecated
+      "[since 2018-03] The module is deprecated in favor of new monads library"]
   end
+  [@@deprecated "[since 2018-03] Definitions in this module are deprecated"]
 
   (**/**)
 
@@ -2270,8 +2272,6 @@ module Std : sig
 
     (** Predefined storage classes  *)
     module Storage : sig
-      [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-      [@@@warning "-D"]
 
       (** linear storage literally implements operational
           semantics, but has O(N) lookup and uses space
@@ -2285,6 +2285,8 @@ module Std : sig
           update method. *)
       class sparse : storage
     end
+    [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
+
 
     (** Value of a result.
         We slightly diverge from an operational semantics by allowing
@@ -2342,8 +2344,6 @@ module Std : sig
         @deprecated  Use the Primus Framework
     *)
     module Result : sig
-      [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-      [@@@warning "-D"]
 
       (** result identifier  *)
       type id
@@ -2389,6 +2389,7 @@ module Std : sig
       module Value : Printable.S with type t = value
       include Printable.S with type t := t
     end
+    [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
     (** Tries on BIL.
 
@@ -2694,8 +2695,6 @@ module Std : sig
       @deprecated  Use the Primus Framework
   *)
   module Context : sig
-    [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-    [@@@warning "-D"]
 
     class t : object('s)
 
@@ -2711,7 +2710,7 @@ module Std : sig
           for debugging and introspection.  *)
       method bindings : (var * Bil.result) seq
     end
-  end
+  end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
   module Type_error : module type of Type.Error with type t = Type.Error.t
 
@@ -2862,8 +2861,6 @@ module Std : sig
       @deprecated  Use the Primus Framework
   *)
   module Expi : sig
-    [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-    [@@@warning "-D"]
 
     open Bil.Result
     (**
@@ -3064,7 +3061,7 @@ module Std : sig
       with type ('a,'e) state = ('a,'e) M.t
 
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
-  end
+  end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
 
   (** Expression {{!Expi}interpreter}  *)
   class ['a] expi : ['a] Expi.t
@@ -3091,8 +3088,6 @@ module Std : sig
     v}
   *)
   module Bili : sig
-    [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-    [@@@warning "-D"]
 
     open Bil.Result
 
@@ -3128,7 +3123,8 @@ module Std : sig
 
     module Make(M : Monad.State.S2) : S with type ('a,'e) state = ('a,'e) M.t
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
-  end
+  end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
+
 
   (** BIL {{!Bili}interpreter} *)
   class ['a] bili : ['a] Bili.t
@@ -3507,7 +3503,6 @@ module Std : sig
 
     (** [eval x] evaluate expression [x] to a value.  *)
     val eval : t -> Bil.value
-    [@@warning "-D"]
 
     include Regular.S with type t := t
     val pp_adt : t printer
@@ -4377,9 +4372,6 @@ module Std : sig
       @deprecated  Use the Primus Framework.
   *)
   module Biri : sig
-    [@@@deprecated "[since 2018-03] in favor of the Primus Framework"]
-    [@@@warning "-D"]
-
     open Bil.Result
 
     (** Biri evaluates terms in the context of a whole program (since
@@ -4507,7 +4499,8 @@ module Std : sig
       S with type ('a,'e) state = ('a,'e) M.t
 
     include S with type ('a,'e) state = ('a,'e) Monad.State.t
-  end
+  end [@@deprecated "[since 2018-03] in favor of the Primus Framework"]
+
 
   (** BIR {{!Biri}interpreter}  *)
   class ['a] biri : ['a] Biri.t
@@ -5107,7 +5100,6 @@ module Std : sig
       accessible for loading images.*)
 
   module Backend : sig
-    [@@@deprecated "[since 2017-08] Use new loader Ogre-powered loader interface"]
 
     (** memory access permissions  *)
     type perm = R | W | X | Or of perm * perm
@@ -5156,7 +5148,7 @@ module Std : sig
 
     (** the actual interface to be implemented  *)
     type t = Bigstring.t -> Img.t option
-  end
+  end [@@deprecated "[since 2017-08] Use new loader Ogre-powered loader interface"]
 
   (** Binary Image.  *)
   module Image : sig
@@ -7715,8 +7707,6 @@ module Std : sig
       usually associated with each variable of a given term. This set
       defines a set of taints with which a variable is tainted.*)
   module Taint : sig
-    [@@@deprecated "[since 2018-03] use the Bap Taint Framework instead"]
-    [@@@warning "-D"]
     type t = tid
 
     type set = Tid.Set.t [@@deriving bin_io, compare, sexp]
@@ -7843,7 +7833,7 @@ module Std : sig
     val pp_map : map printer
 
     module Map : Regular.S with type t = map
-  end
+  end [@@deprecated "[since 2018-03] use the Bap Taint Framework instead"]
 
   type 'a source = 'a Source.t
 

@@ -32,6 +32,8 @@ let merge_visited = Map.merge ~f:(fun ~key -> function
 class context
     ?(max_steps=Int.max_value)
     ?(max_loop= min 10 (max_steps / 10)) p  = object(self : 's)
+    [@@@warning "-D"]
+
   inherit Biri.context p
 
   val blk : blk term option = None
@@ -117,6 +119,7 @@ end
 class ['a] main ?(deterministic=false) p =
   object(self)
     constraint 'a = #context
+    [@@@warning "-D"]
     inherit ['a] Biri.t as super
 
     method! enter_term cls t =

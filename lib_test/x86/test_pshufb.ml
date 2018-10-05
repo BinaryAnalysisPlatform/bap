@@ -120,6 +120,7 @@ let test_rr (mask, expected) ctxt =
     match Bil.Result.value r with
     | Bil.Imm word -> Word.equal word expected
     | _ -> false
+[@@warning "-D"]
 
 class exn_visitor = object
   inherit [bool] Stmt.visitor

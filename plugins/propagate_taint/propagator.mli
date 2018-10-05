@@ -1,6 +1,8 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap.Std
+
+[@@@warning "-D"]
 open Microx.Std
 
 exception Entry_point_not_found

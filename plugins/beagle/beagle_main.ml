@@ -7,6 +7,8 @@ open Bap_strings.Std
 open Bap_future.Std
 open Format
 
+[@@@warning "-D"]
+
 module type Alphabet = Strings.Unscrambler.Alphabet
 
 include Self()
