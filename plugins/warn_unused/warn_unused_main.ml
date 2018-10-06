@@ -3,6 +3,8 @@ open Bap.Std
 include Self()
 open Format
 
+[@@@warning "-D"]
+
 let taint prog = (object(self)
   inherit Term.mapper as super
   method! map_def def =

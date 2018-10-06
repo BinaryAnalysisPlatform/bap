@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Bap.Std
 open OUnit2
 
+[@@@warning "-D"]
+
 module Dis = Disasm_expert.Basic
 
 module type Bitwidth = sig

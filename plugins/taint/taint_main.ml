@@ -3,6 +3,8 @@ open Bap.Std
 include Self()
 open Format
 
+[@@@warning "-D"]
+
 type strain =
   | Addr of int64
   | Tid of string

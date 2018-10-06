@@ -2,6 +2,8 @@ open Core_kernel.Std
 open Regular.Std
 open Graphlib.Std
 open Bap.Std
+
+[@@@warning "-D"]
 open Microx.Std
 open Format
 include Self()

@@ -41,6 +41,7 @@ val check_gpr : ?addr:addr -> bil -> string -> var -> addr -> arch -> test_ctxt 
     of [init_bil] and code, obtained from lifting [bytes].
     [addr] is an instruction address, 0 by default. *)
 val eval : ?addr:addr -> bil -> string -> arch -> Bili.context
+[@@warning "-D"]
 
 (** [check_mem init bytes mem ~addr size expected ?endian arch ctxt] -
     tests if a word of [size] at [addr] in memory [mem] is equal to [expected].
@@ -50,6 +51,7 @@ val check_mem : bil -> string -> var -> addr:addr -> size:size -> addr -> ?endia
 
 (** [lookup_var context var] - returns a word, bound to [var] in [context] *)
 val lookup_var : Bili.context -> var -> word option
+[@@warning "-D"]
 
 (** [make_bytes ws] - return a string of bytes, that obtained from
     concatenaion of [ws] *)
