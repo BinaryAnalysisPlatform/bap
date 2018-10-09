@@ -63,7 +63,7 @@ error_or<std::string> elf_section_name(const ELFFile<T> &elf, const typename ELF
 
 // template functions
 
-#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
+#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8
 
 template <typename T>
 std::vector<typename ELFFile<T>::Elf_Phdr> elf_program_headers(const ELFFile<T> &elf) {
