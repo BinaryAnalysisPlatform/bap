@@ -3,6 +3,7 @@
 
 ### Features
 
+- #887 Llvm 7.0 compatibility
 - #872 Constant tracking analysis
 - #871 Information sensitivity analysis
 - #868 IDA Pro brancher.

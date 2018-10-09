@@ -6,7 +6,7 @@
 #include <iomanip>
 #include <limits>
 
-#if LLVM_VERSION_MAJOR >= 5 && LLVM_VERSION_MAJOR < 7
+#if LLVM_VERSION_MAJOR >= 5 && LLVM_VERSION_MAJOR < 8
 #include <llvm/BinaryFormat/MachO.h>
 #else
 #include <llvm/Support/MachO.h>
@@ -461,7 +461,7 @@ void dynamic_relocations(const macho &obj, command_info &info, ogre_doc &s) {
 }
 
 #if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8 \
-    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
+    || LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8
 
 commands macho_commands(const macho &obj) {
     commands cmds;

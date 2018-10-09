@@ -16,7 +16,7 @@ int64_t relative_address(uint64_t base, uint64_t abs) {
     return (abs - base);
 }
 
-#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7
+#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8
 
 template <typename T>
 std::string error_message(Expected<T> &e) {
@@ -44,7 +44,7 @@ error_or<SymbolRef::Type> symbol_type(const SymbolRef &s) {
 #endif
 
 // 4.0 or 3.8
-#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 7          \
+#if LLVM_VERSION_MAJOR >= 4 && LLVM_VERSION_MAJOR < 8          \
     || LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR == 8
 
 const char* get_raw_data(const ObjectFile &obj) {
