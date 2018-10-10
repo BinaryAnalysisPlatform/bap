@@ -282,11 +282,11 @@ let print_recipes_and_exit () =
   List.iter recipe_paths ~f:(fun dir ->
       if Sys.file_exists dir &&
          Sys.is_directory dir
-      then Array.iter (Sys.readdir dir) ~f:(fun file ->
-          let file = dir / file in
+      then Array.iter (Sys.readdir dir) ~f:(fun entry ->
+          let file = dir / entry in
           if Filename.check_suffix file ".recipe"
           then
-            let name = Filename.chop_suffix file ".recipe" in
+            let name = Filename.chop_suffix entry ".recipe" in
             match Recipe.load ~paths:recipe_paths name with
             | Ok r ->
               printf "%-32s %s\n" (Filename.basename name)
