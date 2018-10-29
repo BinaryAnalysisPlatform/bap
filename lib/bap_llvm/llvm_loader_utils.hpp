@@ -12,19 +12,20 @@ namespace loader {
 
 using namespace llvm;
 
-bool str_mem(const std::string &s, char x) {
-    return (s.find(x) != std::string::npos);
+std::string escape(const std::string &src) {
+    std::stringstream dst;
+    for (auto it = src.begin(); it != src.end (); ++it) {
+        if (isalpha(*it) || isdigit(*it)) dst << *it;
+        else
+            dst << "\\x" << std::hex << int(*it) ;
+    }
+    return dst.str();
 }
 
-bool str_mem_any(const std::string &s, const std::string &p) {
-    return std::any_of(s.begin(), s.end(), [=](const char &x)
-                       {return str_mem(p,x);});
-}
-
-std::string smart_quoted(const std::string &s) {
-    std::string p = "() /\\";
-    if (str_mem_any(s, p) || s == "") return "\"" + s + "\"";
-    else return s;
+std::string quote(const std::string &s) {
+    std::stringstream x;
+    x << "\"" << escape(s) << "\"";
+    return x.str();
 }
 
 
@@ -66,7 +67,7 @@ struct ogre_doc {
     }
 
     friend ogre_doc & operator<<(ogre_doc &d, const std::string &t) {
-        if (d.s_) *d.s_ << " " << smart_quoted(t);
+        if (d.s_) *d.s_ << " " << quote(t);
         return d;
     }
 
