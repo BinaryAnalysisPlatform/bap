@@ -12,21 +12,16 @@ namespace loader {
 
 using namespace llvm;
 
-bool str_mem(const std::string &s, char x) {
-    return (s.find(x) != std::string::npos);
+std::string escape(const std::string &src) {
+    std::stringstream dst;
+    for (auto it = src.begin(); it != src.end (); ++it) {
+        if (isalpha(*it) || isdigit(*it))
+            dst << *it;
+        else
+            dst << "\\x" << std::hex << int(*it) ;
+    }
+    return dst.str();
 }
-
-bool str_mem_any(const std::string &s, const std::string &p) {
-    return std::any_of(s.begin(), s.end(), [=](const char &x)
-                       {return str_mem(p,x);});
-}
-
-std::string smart_quoted(const std::string &s) {
-    std::string p = "() /\\";
-    if (str_mem_any(s, p) || s == "") return "\"" + s + "\"";
-    else return s;
-}
-
 
 // ogre doc
 // makes it easy to brew an ogre document.
@@ -35,8 +30,9 @@ std::string smart_quoted(const std::string &s) {
 // doc.entry("entry-name") << 42 << false;
 // ...
 // This return a doc with (entry-name 42 false) content.
-// All strings that contain slashes, parentheses or spaces
-// will be quoted. Entry name itself doesn't quoted
+// All strings are quoted. Also, all characters except
+// digits and letters are replaced by their's ascii codes.
+// Entry name itself doesn't quoted.
 // Also possible to add a raw entry, i.e data will be
 // added as it is:
 // ...
@@ -66,7 +62,7 @@ struct ogre_doc {
     }
 
     friend ogre_doc & operator<<(ogre_doc &d, const std::string &t) {
-        if (d.s_) *d.s_ << " " << smart_quoted(t);
+        if (d.s_) *d.s_ << " " << "\"" << escape(t) << "\"";
         return d;
     }
 
