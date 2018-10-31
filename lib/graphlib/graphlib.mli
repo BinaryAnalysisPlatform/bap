@@ -491,6 +491,27 @@ module Std : sig
 
     type 'a t = 'a partition
 
+    (** [trivial s] creates the trivial partition with a single
+       equivalence class containing every member of [s] *)
+    val trivial : ('a, 'b) Set.t -> 'a t
+
+    (** [discrete s] returns the partition with one class per element of [s] *)
+    val discrete : ('a, 'b) Set.t -> 'a t
+
+    (** [refine p ~rel ~comp] takes a partition [p], and refines it
+       according to the equivalence relation [r], so that the
+       resulting partition corresponds to the classes of [r], assuming
+       that those classes are finer that the original [p].
+
+       Takes an additional [comp] argument to compare for equality
+       within the equivalence classes.  *)
+    val refine : 'a t -> rel:('a -> 'a -> int) -> comp:('a -> 'a -> int) -> 'a t
+
+    (** [merge p x y] returns the partition p with the classes of [x]
+       and [y] merged.  Returns [p] unchanged if either [x] or [y] are
+       not part of any equivalence class.  *)
+    val merge : 'a t -> 'a -> 'a -> 'a t
+      
     (** [groups p] returns all partition cells of a partitioning [p] *)
     val groups : 'a t -> 'a group seq
 
