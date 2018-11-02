@@ -208,7 +208,7 @@ module Partition : sig
   type 'a t = 'a partition
   val trivial : ('a, 'b) Set.t -> 'a t
   val discrete : ('a, 'b) Set.t -> 'a t
-  val refine : 'a t -> rel:('a -> 'a -> int) -> comp:('a -> 'a -> int) -> 'a t
+  val refine : 'a t -> equiv:('a -> 'a -> bool) -> cmp:('a -> 'a -> int) -> 'a t
   val merge : 'a t -> 'a -> 'a -> 'a t
   val groups : 'a t -> 'a group Sequence.t
   val group : 'a t -> 'a -> 'a group option

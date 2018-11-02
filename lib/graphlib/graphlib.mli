@@ -505,7 +505,7 @@ module Std : sig
 
        Takes an additional [comp] argument to compare for equality
        within the equivalence classes.  *)
-    val refine : 'a t -> rel:('a -> 'a -> int) -> comp:('a -> 'a -> int) -> 'a t
+    val refine : 'a t -> equiv:('a -> 'a -> bool) -> cmp:('a -> 'a -> int) -> 'a t
 
     (** [merge p x y] returns the partition p with the classes of [x]
        and [y] merged.  Returns [p] unchanged if either [x] or [y] are

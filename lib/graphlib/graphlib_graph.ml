@@ -210,7 +210,11 @@ module Partition = struct
     (* Produces a sorted array per the spec *)
     let roots = Set.to_array elts in
     let groups = elts |> Set.to_array |>
-                   Array.map ~f:(fun x -> x |> Set.singleton ~comparator |> create_set)
+                   Array.map ~f:(fun x ->
+                       object
+                         method enum = Seq.return x
+                         method mem y = compare x y = 0
+                       end)
     in
     let find x = Array.binary_search roots ~compare `First_equal_to x in
     {roots; groups; find}
@@ -219,44 +223,39 @@ module Partition = struct
      elements related by the congruence.
      Takes in a comparison function to test for membership in each class.
    *)
-  let refine t ~rel ~comp =
+  let refine (type elt) t ~equiv ~cmp =
+    let module T = Comparator.Make(struct
+                       type t = elt
+                       let compare = cmp
+                       let sexp_of_t = sexp_of_opaque
+                     end) in
+    let comparator = T.comparator in
     let refine_group g =
-      let s = g#enum in
-      let rec insert x seqs =
-        match seqs with
-        | [] -> [Seq.return x]
-        | s::ss ->
-           let y = Seq.hd_exn s in
-           if rel x y = 0 then
-             Seq.cons x s :: ss
-           else s :: (insert x ss)
-      in
-      let new_enums = Seq.fold s ~init:[] ~f:(fun seqs x ->
-                         insert x seqs)
-      in
-      let mk_set s =
-      object
-        method enum = s
-        method mem x = Seq.mem s x (fun x y -> comp x y = 0)
-      end
-      in
-      List.map new_enums ~f:mk_set
-    in
+      let rec insert elt output input = match input with
+        | [] -> Set.singleton ~comparator elt :: output
+        | group :: input ->
+           if equiv (Set.choose_exn group) elt
+           then List.rev_append ((Set.add group elt) :: output) input
+           else insert elt (group::output) input in
+      Seq.fold g#enum ~init:[] ~f:(fun groups elt ->
+          insert elt [] groups) |> List.rev_map ~f:create_set in
     let groups_list = Array.fold t.groups ~init:[] ~f:(fun seqs g -> refine_group g @ seqs) in
     let groups = Array.of_list groups_list in
     Array.sort groups ~cmp:(fun s1 s2 ->
         let h1 = Seq.hd_exn s1#enum in
         let h2 = Seq.hd_exn s2#enum in
-        comp h1 h2);
+        cmp h1 h2);
     let roots = Array.map ~f:(fun s -> Seq.hd_exn s#enum) groups in
-    let find x = Array.binary_search roots ~compare:comp `First_equal_to x in
+    let find x = Array.binary_search roots ~compare:cmp `First_equal_to x in
     {roots; groups; find}
     
   (* Take two elements and combine their classes if both have a class, 
      do nothing otherwise *)
   let merge t x y =
     (* Assuming i < j,
-       create a new array a', identical to a execept that
+       create a new array a', such that
+       Array.length a' = Array.length a - 1 and
+       a'[k] = a[k] when k < i
        a'[i] = x
        a'[j] = a[j+1]
        a'[j+1] = a[j+2]
@@ -270,35 +269,36 @@ module Partition = struct
                      else if n < j then a.(n)
                      else a.(n+1))
     in
-    let e_x, e_y = t.find x, t.find y in
-    if equiv t x y || Option.is_none e_x || Option.is_none e_y then t
+    if equiv t x y then t
     else
-      let i_x, i_y = Option.value_exn e_x, Option.value_exn e_y in
-      let g_x, g_y = t.groups.(i_x), t.groups.(i_y) in
-      let u_g = object
-          method enum =
-            let s_x, s_y = g_x#enum, g_y#enum in
-            Seq.append s_x s_y
-          method mem x = g_x#mem x || g_y#mem x
-        end
-      in
-      (* min biased root *)
-      let i = Int.min i_x i_y in
-      let j = Int.max i_x i_y in
-      let u_root = t.roots.(i) in
-      let roots = array_replace t.roots i j u_root in
-      let groups = array_replace t.groups i j u_g in
-      let find x = Option.Monad_infix.(
-          t.find x >>|
-            (* By cases: if n < i or i < n < j then it is in one one
-               of the original classes, otherwise n = i, then one
-               should return i (as the class still contains these
-               elements) or n = j, in wich case these elements are now
-               in class i, or n > j, in which case we must left-shift them *)
-            fun n -> if n < j then n
-                     else if n = j then i
-                     else n - 1) in
-      {roots; groups; find}
+      match t.find x, t.find y with
+      | None, _ | _,None -> t
+      | Some i_x, Some i_y ->
+         let g_x, g_y = t.groups.(i_x), t.groups.(i_y) in
+         let u_g = object
+             method enum =
+               let s_x, s_y = g_x#enum, g_y#enum in
+               Seq.append s_x s_y
+             method mem x = g_x#mem x || g_y#mem x
+           end
+         in
+         (* min biased root *)
+         let i = Int.min i_x i_y in
+         let j = Int.max i_x i_y in
+         let u_root = t.roots.(i) in
+         let roots = array_replace t.roots i j u_root in
+         let groups = array_replace t.groups i j u_g in
+         let find x = Option.Monad_infix.(
+             t.find x >>|
+               (* By cases: if n < i or i < n < j then it is in one one
+                  of the original classes, otherwise n = i, then one
+                  should return i (as the class still contains these
+                  elements) or n = j, in wich case these elements are now
+                  in class i, or n > j, in which case we must left-shift them *)
+               fun n -> if n < j then n
+                        else if n = j then i
+                        else n - 1) in
+         {roots; groups; find}
       
   let nth_group t n = Group.create t.roots.(n) t.groups.(n) n
   let groups t = Seq.(range 0 (Array.length t.roots) >>| nth_group t)
