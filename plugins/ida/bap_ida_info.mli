@@ -14,3 +14,6 @@ val find_ida : t -> mode option -> string -> string
 val is_headless : t -> bool
 
 val check : t -> unit Or_error.t
+
+(** [require_ncurses ida] returns true if [ida] need ncureses lib to operate*)
+val require_ncurses : t -> bool

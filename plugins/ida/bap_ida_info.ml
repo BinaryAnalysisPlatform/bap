@@ -1,14 +1,16 @@
 open Core_kernel
 
-type v6 = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate]
-type v7 = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerate]
-type ida_kind = [ v6 | v7 ] [@@deriving sexp]
+type version = V6 | V7 [@@deriving sexp]
+type v6_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate]
+type v7_kind = [ `idat | `idat64 | `ida  | `ida64  ] [@@deriving sexp, enumerate]
+type ida_kind = [ v6_kind | v7_kind ] [@@deriving sexp]
 
 type ida = {
     headless  : ida_kind;
     graphical : ida_kind;
     headless64  : ida_kind;
     graphical64 : ida_kind;
+    version : version;
   } [@@deriving sexp]
 
 type t = {
@@ -40,7 +42,7 @@ module Check = struct
                  ida.graphical64; ida.headless64;] in
     let is_of kinds = List.mem (kinds :> ida_kind list) ~equal:(=) in
     let check version = List.for_all files ~f:(is_of version) in
-    let checked = check all_of_v6 || check all_of_v7 in
+    let checked = check all_of_v6_kind || check all_of_v7_kind in
     require checked "Ida files must stick to either 6th or 7th version"
 
   let run {path; ida;} =
@@ -77,12 +79,16 @@ let create_ida path =
          let mode = match mode with | `m32 -> 32 | `m64 -> 64 in
          Or_error.errorf
            "Can't detect %s ida for %d mode" headless mode in
+  let version_of_headless = function
+    | `idal -> V6
+    | _ -> V7 in
   Or_error.(
     find_kind ~is_headless:true  `m32 >>= fun headless ->
     find_kind ~is_headless:false `m32 >>= fun graphical ->
     find_kind ~is_headless:true  `m64 >>= fun headless64 ->
     find_kind ~is_headless:false `m64 >>= fun graphical64 ->
-    Ok { headless; graphical; headless64; graphical64 })
+    let version = version_of_headless headless in
+    Ok { headless; graphical; headless64; graphical64; version })
 
 let create path is_headless =
   let open Check in
@@ -94,13 +100,18 @@ let create path is_headless =
     check info >>= fun () ->
     Ok info)
 
-let ida32 info =
-  if info.is_headless then info.ida.headless
-  else info.ida.graphical
+(* Note, we always launch headless ida in case of IDA Pro 7 *)
+let ida32 info = match info.ida.version with
+  | V7 -> info.ida.headless
+  | V6 ->
+     if info.is_headless then info.ida.headless
+     else info.ida.graphical
 
-let ida64 info =
-  if info.is_headless then info.ida.headless64
-  else info.ida.graphical64
+let ida64 info = match info.ida.version with
+  | V7 -> info.ida.headless64
+  | V6 ->
+     if info.is_headless then info.ida.headless64
+     else info.ida.graphical64
 
 let ida_of_suffix info filename =
   let ext = FilePath.replace_extension in
@@ -119,10 +130,13 @@ let find_ida info mode target =
       | None ->
          match ida_of_suffix info target with
          | Some ida -> ida
-         | None -> info.ida.graphical64 in
+         | None -> ida64 info in
     let s = Sexp.to_string (sexp_of_ida_kind kind) in
     let ida = Filename.concat info.path s in
     Filename.quote ida
 
 let is_headless t = t.is_headless
 let path t = t.path
+
+let require_ncurses t =
+  Sys.os_type = "Unix" && t.is_headless && t.ida.version = V6
