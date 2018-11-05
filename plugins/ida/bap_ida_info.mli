@@ -7,7 +7,8 @@ type t
 (** [create path is_headless] *)
 val create : string -> bool -> t Or_error.t
 
-(** [find_ida info mode target] *)
+(** [find_ida info mode target] - returns a full path
+    to ida executable depending on [mode] and [target] name *)
 val find_ida : t -> mode option -> string -> string
 
 val is_headless : t -> bool

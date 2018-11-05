@@ -1,9 +1,3 @@
-(*  At the moment of writing, we have only two supprted version of IDA
- *  PRO: 6.9 and 7.1. And the only observable difference for us is
- *  a naming of executable files. Also, given that IDA version won't be
- *  change so fast we won't rely on IDA versions and will search for all
- *  possible files, for borh versions. *)
-
 open Core_kernel
 
 type v6 = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp, enumerate]
@@ -29,11 +23,13 @@ let (/) = Filename.concat
 
 let string_of_kind k = Sexp.to_string (sexp_of_ida_kind k)
 
+let exists_kind path kind =
+  Sys.file_exists (path / string_of_kind kind)
+
 module Check = struct
 
   let require check req =
-    if check
-    then Ok ()
+    if check then Ok ()
     else Or_error.errorf "IDA configuration failure: %s" req
 
   let check_headless is_headless =
@@ -42,61 +38,59 @@ module Check = struct
   let check_integrity ida =
     let files = [ida.graphical; ida.headless;
                  ida.graphical64; ida.headless64;] in
-    let is_of xs x = List.mem (xs :> ida_kind list) x ~equal:(=) in
-    let check x = List.for_all files ~f:(is_of x) in
+    let is_of kinds = List.mem (kinds :> ida_kind list) ~equal:(=) in
+    let check version = List.for_all files ~f:(is_of version) in
     let checked = check all_of_v6 || check all_of_v7 in
-    require checked "Ida files must stick to either of 6 or 7 version"
+    require checked "Ida files must stick to either 6th or 7th version"
 
   let run {path; ida;} =
     let exists = Sys.file_exists in
-    let exists_sub sub = exists (path / string_of_kind sub) in
     let is_dir = Sys.is_directory in
+    let exists_kind = exists_kind path in
     let msg_of_kind kind =
       sprintf "%s must exist" (string_of_kind kind) in
     Result.all_ignore [
         require (exists path) "path must exist";
         require (is_dir path) "path must be a folder";
-        require (exists_sub ida.graphical)   @@ msg_of_kind ida.graphical;
-        require (exists_sub ida.headless)    @@ msg_of_kind ida.headless;
-        require (exists_sub ida.graphical64) @@ msg_of_kind ida.graphical64;
-        require (exists_sub ida.headless64)  @@ msg_of_kind ida.headless64;
+        require (exists_kind ida.graphical)   @@ msg_of_kind ida.graphical;
+        require (exists_kind ida.headless)    @@ msg_of_kind ida.headless;
+        require (exists_kind ida.graphical64) @@ msg_of_kind ida.graphical64;
+        require (exists_kind ida.headless64)  @@ msg_of_kind ida.headless64;
         require (exists (path / "plugins" / "plugin_loader_bap.py"))
           "bap-ida-python must be installed" ]
 end
 
 let check = Check.run
 
-let ida_exists path kind =
-  Sys.file_exists (path / string_of_kind kind)
-
 let create_ida path =
-  let get mode is_headless =
+  let find_kind ~is_headless mode =
     let kinds = match mode with
       | `m32 when is_headless -> [`idal; `idat]
       | `m64 when is_headless -> [`idal64; `idat64]
       | `m32 -> [`idaq; `ida]
       | `m64 -> [`idaq64; `ida64] in
-    List.find ~f:(fun k -> ida_exists path k) kinds |>
+    List.find ~f:(exists_kind path) kinds |>
       function
       | Some k -> Ok k
       | None ->
          let headless = if is_headless then "headless" else "" in
          let mode = match mode with | `m32 -> 32 | `m64 -> 64 in
-         Or_error.errorf "Can't detect %s ida for %d mode" headless mode in
+         Or_error.errorf
+           "Can't detect %s ida for %d mode" headless mode in
   Or_error.(
-    get `m32 true  >>= fun headless ->
-    get `m32 false >>= fun graphical ->
-    get `m64 true  >>= fun headless64 ->
-    get `m64 false >>= fun graphical64 ->
+    find_kind ~is_headless:true  `m32 >>= fun headless ->
+    find_kind ~is_headless:false `m32 >>= fun graphical ->
+    find_kind ~is_headless:true  `m64 >>= fun headless64 ->
+    find_kind ~is_headless:false `m64 >>= fun graphical64 ->
     Ok { headless; graphical; headless64; graphical64 })
 
 let create path is_headless =
   let open Check in
   Or_error.(
+    check_headless is_headless >>= fun () ->
     create_ida path >>= fun ida ->
     check_integrity ida >>= fun () ->
     let info = {ida; path; is_headless} in
-    check_headless is_headless >>= fun () ->
     check info >>= fun () ->
     Ok info)
 
