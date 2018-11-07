@@ -23,7 +23,7 @@ value bap_llvm_load_stub(value arg) {
     CAMLlocal1(result);
     const struct caml_ba_array* array = Caml_ba_array_val(arg);
     if ((!array->dim[0]) || (array->num_dims != 1))
-        failn(3);
+        failn(1);
     const struct bap_llvm_loader *loader =
         bap_llvm_loader_create((const char*)(array->data), array->dim[0]);
     if (bap_llvm_file_not_supported(loader))

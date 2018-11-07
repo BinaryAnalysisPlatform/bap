@@ -18,8 +18,8 @@ let check file =
   let exists =
     "file not found", Exists in
   let is_file =
-    "must be a regular file or symlink",
-    Or (Is_file, Is_link) in
+    "must be a regular file",
+    Is_file in
   let not_empty =
     "file is empty",
     Size_not_null in

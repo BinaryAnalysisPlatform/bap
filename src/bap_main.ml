@@ -343,7 +343,7 @@ let load_recipe () =
 let nice_pp_error fmt er =
   let module R = Info.Internal_repr in
   let rec pp_sexp fmt = function
-    | Sexp.Atom x -> Format.pp_print_string fmt x
+    | Sexp.Atom x -> Format.fprintf fmt "%s\n" x
     | Sexp.List xs -> List.iter ~f:(pp_sexp fmt) xs in
   let rec pp fmt r =
     let open R in
