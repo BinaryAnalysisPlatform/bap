@@ -350,7 +350,7 @@ let nice_pp_error fmt er =
     match r with
     | With_backtrace (r, backtrace) ->
        Format.fprintf fmt "%a\n" pp r;
-       Format.fprintf fmt "Backtrace:\n%s" backtrace
+       Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
     | String s -> Format.fprintf fmt "%s" s
     | r -> pp_sexp fmt (R.sexp_of_t r) in
   Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
