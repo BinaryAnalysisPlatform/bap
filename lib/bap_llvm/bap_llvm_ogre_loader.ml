@@ -107,10 +107,7 @@ module Loader = struct
       to_image_doc doc
     with Llvm_loader_fail n -> match n with
       | 1 -> Or_error.error_string "File corrupted"
-      | 2 ->
-         Or_error.error_string
-"File format is not supported: expected executable, library or \
-kernel module"
+      | 2 -> Or_error.error_string "File format is not supported"
       | n -> Or_error.errorf "fail with unexpected error code %d" n
 
   let map_file path =
