@@ -108,6 +108,7 @@ module Loader = struct
     with Llvm_loader_fail n -> match n with
       | 1 -> Or_error.error_string "File corrupted"
       | 2 -> Or_error.error_string "File format is not supported"
+      | 3 -> Or_error.error_string "File is empty"
       | n -> Or_error.errorf "fail with unexpected error code %d" n
 
   let map_file path =
