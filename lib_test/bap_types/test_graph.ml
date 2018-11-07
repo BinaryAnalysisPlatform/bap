@@ -564,7 +564,13 @@ end
 
 module Test_int100 = Construction(Int100)
 
+module Test_partition = struct
 
+  let suite () = [
+      
+      "Merge invariant" >:: assert false
+    ]
+end
 
 let suite () =
   "Graph" >::: [
@@ -573,5 +579,6 @@ let suite () =
         let module Test = Test_algo(G) in
         Test.suite (sprintf "%d" n));
     "Construction" >::: [Test_int100.suite];
-    "IR" >::: Test_IR.suite ()
+    "IR" >::: Test_IR.suite ();
+    "Partition" >::: Test_partition.suite ()
   ]
