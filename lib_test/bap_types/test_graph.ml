@@ -605,7 +605,7 @@ module Test_partition = struct
     "Trivial invariant" >:: trivial (P.trivial s);
     "Discrete invariant" >:: discrete (P.discrete s);
     "Union invariant" >:: union (P.union (P.discrete s) 1 2) 1 2;
-    "Refine invariant" >:: refine (P.refine (P.discrete s) equiv cmp) equiv
+    "Refine invariant" >:: refine (P.refine (P.trivial s) equiv cmp) equiv
   ]
 end
 
