@@ -44,7 +44,7 @@ let code_of_failure = function
   | Ida_python_missed-> 5
 
 let string_of_failure = function
-  | Ida_not_exists -> "IDA path not exists"
+  | Ida_not_exists -> "IDA path does not exists"
   | Non_dir_path -> "IDA path is not a directory"
   | File_not_found k -> k ^ " must exist"
   | Unexpected_kind -> "can't infer IDA version. Check IDA installation"
