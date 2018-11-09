@@ -597,7 +597,7 @@ module Test_partition = struct
              let x = Group.top g in
              Seq.for_all (Group.enum g) ~f:(fun y -> equiv x y)))
 
-  let equiv x y = x - y mod 2 = 0
+  let equiv x y = (x - y) mod 2 = 0
 
   let cmp x y = x - y
 
