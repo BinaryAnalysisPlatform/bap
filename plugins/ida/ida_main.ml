@@ -9,6 +9,8 @@ open Result.Monad_infix
 
 include Self()
 
+module Info = Bap_ida_info
+
 module Symbols = Data.Make(struct
     type t = (string * int64 * int64) list
     let version = "1.0.0"
@@ -219,9 +221,6 @@ let register_brancher_source () =
     Project.Info.(Stream.merge file arch ~f:create_brancher) in
   Brancher.Factory.register name source
 
-let checked ida_path is_headless =
-  Bap_ida_check.(check_headless is_headless >>= fun () -> check_path ida_path)
-
 let main () =
   register_source (module Rooter);
   register_source (module Symbolizer);
@@ -230,15 +229,7 @@ let main () =
   Project.Input.register_loader name loader
 
 type headless = bool option
-type mode = [ `m32 | `m64 ] option
-
-let ida_mode is_headless mode =
-  let map = function
-    | `m32 when is_headless -> `idal
-    | `m64 when is_headless -> `idal64
-    | `m32 -> `idaq
-    | `m64 -> `idaq64 in
-  Option.value_map mode ~default:None ~f:(fun x -> Some (map x))
+type mode = Info.mode option
 
 let bool_of_headless = function
   | Some x -> x
@@ -306,11 +297,9 @@ module Cmdline = struct
       Config.(param Mode.t "mode" ~default:None ~doc) in
     Config.when_ready (fun {Config.get=(!)} ->
         let is_headless = bool_of_headless !headless in
-        let ida_mode = ida_mode is_headless !mode in
         let ida_path = find_path !path in
-        match checked ida_path is_headless with
-        | Ok () ->
-          Bap_ida_service.register ida_path ida_mode is_headless; main ()
+        match Info.create ida_path is_headless with
+        | Ok info -> Bap_ida_service.register info !mode; main ()
         | Error e ->
-          error "%S. Service not registered." (Error.to_string_hum e))
+           error "%S. Service not registered." (Error.to_string_hum e))
 end

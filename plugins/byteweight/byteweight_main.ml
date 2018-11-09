@@ -32,6 +32,9 @@ let create_finder path length threshold arch  =
     let bw = Binable.of_string (module BW) data in
     Ok (BW.find bw ~length ~threshold)
 
+let sigs_exists path =
+  Sys.file_exists (Option.value ~default:Sigs.default_path path)
+
 let main path length threshold =
   let finder arch = create_finder path length threshold arch in
   let find finder mem =
@@ -51,7 +54,12 @@ let main path length threshold =
   let rooter =
     let open Project.Info in
     Stream.Variadic.(apply (args arch $ code) ~f:find_roots) in
-  Rooter.Factory.register name rooter
+  if sigs_exists path then
+    Rooter.Factory.register name rooter
+  else
+    let () = warning "signature database is not available" in
+    info "advice - use `bap-byteweight` to install signatures"
+
 
 let () =
   let () = Config.manpage [

@@ -4,7 +4,7 @@ open Bap.Std
 
 include Self ()
 
-type ida_kind = [ `idal | `idal64 | `idaq | `idaq64 ] [@@deriving sexp]
+module Info = Bap_ida_info
 
 type ida = {
   ida : string;
@@ -16,8 +16,7 @@ type ida = {
 
 module Ida_config = struct
   type t = {
-    ida_path : string;
-    ida_kind : ida_kind option;
+    ida_info : Info.t;
     curses : string option;
     debug  : int;
   }
@@ -28,21 +27,7 @@ type 'a command = 'a Command.t
 
 let ext = FilePath.replace_extension
 
-let ida_of_suffix filename =
-  let exists suf = Sys.file_exists (ext filename suf) in
-  if exists "i64" then  Some `idaq64
-  else if exists "idb" then Some `idaq
-  else None
-
-let find_ida target path kind =
-  let kind = match kind with
-    | Some kind -> kind
-    | None -> match ida_of_suffix target with
-      | Some ida -> ida
-      | None -> `idaq64 in
-  let s = Sexp.to_string (sexp_of_ida_kind kind) in
-  let ida = Filename.concat path s in
-  Filename.quote ida
+let (/) = Filename.concat
 
 let run cmd =
   let inp = Unix.open_process_in cmd in
@@ -111,18 +96,18 @@ let run (t:ida) cmd =
   try cmd (); cleanup ()
   with exn -> cleanup (); raise exn
 
-let check_path path = match Bap_ida_check.check_path path with
+let check_path info = match Info.check info with
   | Ok () -> ()
   | Error e ->
     eprintf "failed to check ida path: %s." (Error.to_string_hum e);
     exit 1
 
-let create {Ida_config.ida_path; ida_kind; debug; curses} target =
+let create {Ida_config.ida_info; debug; curses} target mode =
   if not (Sys.file_exists target)
   then invalid_argf "Can't find target executable" ();
   let exe = Filename.temp_file "bap_" "_ida" in
   FileUtil.cp [target] exe;
-  let ida = find_ida target ida_path ida_kind in
+  let ida = Info.find_ida ida_info mode target in
   let idb = idb ida in
   let self = {
     ida;
@@ -136,7 +121,7 @@ let create {Ida_config.ida_path; ida_kind; debug; curses} target =
     if Sys.file_exists (asm target) then
       FileUtil.cp [asm target] (asm exe);
   ) else (
-    check_path ida_path;
+    check_path ida_info;
     run self @@ shell "%s -A -B %s" self.ida self.exe;
   );
   self
@@ -174,19 +159,18 @@ let find_curses () =
       | [_;path] -> Some (String.strip path)
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
 
-let register ida_path ida_kind is_headless : unit =
-  let curses = if Sys.os_type = "Unix" && is_headless
-    then find_curses () else None in
+let register ida_info mode : unit =
+  let curses = if Info.require_ncurses ida_info then find_curses ()
+               else None in
   let debug =
     try Int.of_string (Sys.getenv "BAP_IDA_DEBUG") with _exn -> 0 in
   let config = {
-    Ida_config.ida_path;
-    ida_kind;
+    Ida_config.ida_info;
     curses;
     debug
   } in
   let create (target:string) : Service.t =
-    let self = create config target in
+    let self = create config target mode in
     let exec cmd = exec self cmd in
     let close () = close self in
     Service.{ exec; close } in
