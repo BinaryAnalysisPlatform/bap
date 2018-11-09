@@ -564,7 +564,50 @@ end
 
 module Test_int100 = Construction(Int100)
 
+module Test_partition = struct
 
+  module P = Partition
+
+  let add x s = Set.add s x
+
+  let s = Set.empty Int.comparator
+          |> add 0
+          |> add 1
+          |> add 2
+          |> add 3
+          |> add 4
+          |> add 5
+          |> add 6
+          |> add 7
+          |> add 8
+          |> add 9
+          |> add 10
+
+  let n = Set.length s
+
+  let trivial p _ = assert_bool "failed" (P.number_of_groups p = 1)
+
+  let discrete p _ = assert_bool "failed" (P.number_of_groups p = n)
+
+  let union p x y _ = assert_bool "failed" (P.equiv p x y)
+
+  let refine p equiv _ = assert_bool "failed"
+      (Seq.for_all (P.groups p)
+         ~f:(fun g ->
+             let x = Group.top g in
+             Seq.for_all (Group.enum g) ~f:(fun y -> equiv x y)))
+
+  let equiv x y = (x - y) mod 2 = 0
+
+  let cmp x y = x - y
+
+  let suite () = [
+    "Trivial invariant" >:: trivial (P.trivial s);
+    "Discrete invariant" >:: discrete (P.discrete s);
+    "Union invariant" >:: union (P.union (P.discrete s) 1 2) 1 2;
+    "Refine invariant" >:: refine (P.refine (P.trivial s) equiv cmp) equiv
+  ]
+end
 
 let suite () =
   "Graph" >::: [
@@ -573,5 +616,6 @@ let suite () =
         let module Test = Test_algo(G) in
         Test.suite (sprintf "%d" n));
     "Construction" >::: [Test_int100.suite];
-    "IR" >::: Test_IR.suite ()
+    "IR" >::: Test_IR.suite ();
+    "Partition" >::: Test_partition.suite ()
   ]

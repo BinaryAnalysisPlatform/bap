@@ -186,10 +186,123 @@ module Partition = struct
     let find x = Option.Monad_infix.(Hashtbl.find comps x >>= find_root) in
     {roots; groups; find}
 
+  let equiv t x y = Option.equal Equiv.equal (t.find x) (t.find y)
+
+  (* The trivial partition with a single class, or zero if elts is empty *)
+  let trivial elts =
+    let head = Set.choose elts in
+    match head with
+    | None ->
+      let roots = [||] in
+      let groups = [||] in
+      let find _ = None in
+      {roots; groups; find}
+    | Some h ->
+      let roots = Array.create ~len:1 h in
+      let groups = Array.create ~len:1 (create_set elts) in
+      let find x = if Set.mem elts x then Some 0 else None in
+      {roots; groups; find}
+
+  (* The discrete partition with one class per element *)
+  let discrete elts =
+    let comparator = Set.comparator elts in
+    let {Comparator.compare} = comparator in
+    (* Produces a sorted array per the spec *)
+    let roots = Set.to_array elts in
+    let groups = elts |> Set.to_array |>
+                 Array.map ~f:(fun x ->
+                     object
+                       method enum = Seq.return x
+                       method mem y = compare x y = 0
+                     end)
+    in
+    let find x = Array.binary_search roots ~compare `First_equal_to x in
+    {roots; groups; find}
+
+  (* Takes a partition and a congruence and splits each equivalence class into
+     elements related by the congruence.
+     Takes in a comparison function to test for membership in each class.
+  *)
+  let refine (type elt) t ~equiv ~cmp =
+    let module T = Comparator.Make(struct
+        type t = elt
+        let compare = cmp
+        let sexp_of_t = sexp_of_opaque
+      end) in
+    let comparator = T.comparator in
+    let refine_group g =
+      let rec insert elt output input = match input with
+        | [] -> Set.singleton ~comparator elt :: output
+        | group :: input ->
+          if equiv (Set.choose_exn group) elt
+          then List.rev_append ((Set.add group elt) :: output) input
+          else insert elt (group::output) input in
+      Seq.fold g#enum ~init:[] ~f:(fun groups elt ->
+          insert elt [] groups) |> List.rev_map ~f:create_set in
+    let groups_list = Array.fold t.groups ~init:[] ~f:(fun seqs g -> refine_group g @ seqs) in
+    let groups = Array.of_list groups_list in
+    Array.sort groups ~cmp:(fun s1 s2 ->
+        let h1 = Seq.hd_exn s1#enum in
+        let h2 = Seq.hd_exn s2#enum in
+        cmp h1 h2);
+    let roots = Array.map ~f:(fun s -> Seq.hd_exn s#enum) groups in
+    let find x = Array.binary_search roots ~compare:cmp `First_equal_to x in
+    {roots; groups; find}
+
+  (* Take two elements and combine their classes if both have a class, 
+     do nothing otherwise *)
+  let union t x y =
+    (* Assuming i < j,
+       create a new array a', such that
+       Array.length a' = Array.length a - 1 and
+       a'[k] = a[k] when k < i
+       a'[i] = x
+       a'[j] = a[j+1]
+       a'[j+1] = a[j+2]
+       ...
+    *)
+    let array_replace a i j x =
+      assert (i < j && Array.length a > 0);
+      Array.init (Array.length a - 1)
+        ~f:(fun n -> if n < i then a.(n)
+             else if n = i then x
+             else if n < j then a.(n)
+             else a.(n+1))
+    in
+    if equiv t x y then t
+    else
+      match t.find x, t.find y with
+      | None, _ | _,None -> t
+      | Some i_x, Some i_y ->
+        let g_x, g_y = t.groups.(i_x), t.groups.(i_y) in
+        let u_g = object
+          method enum =
+            let s_x, s_y = g_x#enum, g_y#enum in
+            Seq.append s_x s_y
+          method mem x = g_x#mem x || g_y#mem x
+        end
+        in
+        (* min biased root *)
+        let i = Int.min i_x i_y in
+        let j = Int.max i_x i_y in
+        let u_root = t.roots.(i) in
+        let roots = array_replace t.roots i j u_root in
+        let groups = array_replace t.groups i j u_g in
+        let find x = Option.Monad_infix.(
+            t.find x >>|
+            (* By cases: if n < i or i < n < j then it is in one one
+               of the original classes, otherwise n = i, then one
+               should return i (as the class still contains these
+               elements) or n = j, in wich case these elements are now
+               in class i, or n > j, in which case we must left-shift them *)
+            fun n -> if n < j then n
+            else if n = j then i
+            else n - 1) in
+        {roots; groups; find}
+
   let nth_group t n = Group.create t.roots.(n) t.groups.(n) n
   let groups t = Seq.(range 0 (Array.length t.roots) >>| nth_group t)
   let group t x = Option.(t.find x >>| nth_group t)
-  let equiv t x y = Option.equal Equiv.equal (t.find x) (t.find y)
   let number_of_groups t = Array.length t.roots
   let of_equiv t i =
     if i >= 0 && i < Array.length t.roots
