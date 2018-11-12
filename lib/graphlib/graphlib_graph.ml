@@ -236,15 +236,17 @@ module Partition = struct
      Takes in a comparison function to test for membership in each class.
   *)
   let refine (type elt) t ~equiv ~cmp =
-    let module T = Comparator.Make(struct
-        type t = elt
-        let compare = cmp
-        let sexp_of_t = sexp_of_opaque
-      end) in
-    let comparator = T.comparator in
+    let module T = struct
+      type t = elt
+      include Comparator.Make(struct
+          type t = elt
+          let compare = cmp
+          let sexp_of_t = sexp_of_opaque
+        end)
+    end in
     let refine_group g =
       let rec insert elt output input = match input with
-        | [] -> Set.singleton ~comparator elt :: output
+        | [] -> Set.singleton (module T) elt :: output
         | group :: input ->
           if equiv (Set.choose_exn group) elt
           then List.rev_append ((Set.add group elt) :: output) input
@@ -253,7 +255,7 @@ module Partition = struct
           insert elt [] groups) |> List.rev_map ~f:create_set in
     let groups_list = Array.fold t.groups ~init:[] ~f:(fun seqs g -> refine_group g @ seqs) in
     let groups = Array.of_list groups_list in
-    Array.sort groups ~cmp:(fun s1 s2 ->
+    Array.sort groups ~compare:(fun s1 s2 ->
         let h1 = Seq.hd_exn s1#enum in
         let h2 = Seq.hd_exn s2#enum in
         cmp h1 h2);
@@ -261,7 +263,7 @@ module Partition = struct
     let find x = Array.binary_search roots ~compare:cmp `First_equal_to x in
     {roots; groups; find}
 
-  (* Take two elements and combine their classes if both have a class, 
+  (* Take two elements and combine their classes if both have a class,
      do nothing otherwise *)
   let union t x y =
     (* Assuming i < j,
