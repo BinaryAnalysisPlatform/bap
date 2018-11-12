@@ -570,7 +570,7 @@ module Test_partition = struct
 
   let add x s = Set.add s x
 
-  let s = Set.empty Int.comparator
+  let s = Set.empty (module Int)
           |> add 0
           |> add 1
           |> add 2
