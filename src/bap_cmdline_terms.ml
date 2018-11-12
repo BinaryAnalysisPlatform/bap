@@ -13,9 +13,26 @@ end
 let enum_processors (module T : With_factory) =
   T.Factory.list () |> List.map ~f:(fun x -> x,x)
 
+let check file =
+  let open FileUtil in
+  let exists =
+    "file not found", Exists in
+  let is_file =
+    "must be a regular file",
+    Is_file in
+  let not_empty =
+    "file is empty",
+    Size_not_null in
+  let test_fail (_,t) = not (FileUtil.test t file) in
+  match List.find ~f:test_fail [exists; is_file; not_empty] with
+  | None -> `Ok file
+  | Some (m,_) -> `Error (sprintf "%s: %s" file m)
+
+let suitable_file = check, Format.pp_print_string
+
 let filename : string Term.t =
   let doc = "Input filename." in
-  Arg.(required & pos 0 (some non_dir_file) None &
+  Arg.(required & pos 0 (some suitable_file) None &
        info [] ~doc ~docv:"FILE")
 
 let logdir : string option Term.t =

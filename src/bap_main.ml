@@ -340,6 +340,20 @@ let load_recipe () =
   | _,`Ok (Some r) -> eval_recipe r
   | _ -> Sys.argv
 
+let nice_pp_error fmt er =
+  let module R = Info.Internal_repr in
+  let rec pp_sexp fmt = function
+    | Sexp.Atom x -> Format.fprintf fmt "%s\n" x
+    | Sexp.List xs -> List.iter ~f:(pp_sexp fmt) xs in
+  let rec pp fmt r =
+    let open R in
+    match r with
+    | With_backtrace (r, backtrace) ->
+       Format.fprintf fmt "%a\n" pp r;
+       Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
+    | String s -> Format.fprintf fmt "%s" s
+    | r -> pp_sexp fmt (R.sexp_of_t r) in
+  Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
 
 let () =
   let () =
@@ -360,7 +374,7 @@ let () =
   | Bap_plugin_loader.Plugin_not_found name ->
     error "Can't find a plugin bundle `%s'" name
   | Failed_to_create_project err ->
-    error "Failed to create a project: %a" Error.pp err
+    error "Failed to create a project: %a" nice_pp_error err
   | Project.Pass.Failed (Project.Pass.Unsat_dep (p,n)) ->
     error "Dependency `%s' of pass `%s' is not loaded"
       n (Project.Pass.name p)
