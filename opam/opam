@@ -228,7 +228,7 @@ depends: [
     "ocurl" {>= "0.7.7"}
     "re"
     "uri" {>= "1.9.0"}
-    "utop" {= "1.19.3"}
+    "utop"
     "zarith"
     "uuidm"
     "piqi" {>= "0.7.4"}
