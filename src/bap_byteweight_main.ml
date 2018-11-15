@@ -48,7 +48,7 @@ let train_on_file meth length db path : (unit,'a) Result.t =
 let matching =
   let open FileUtil in
   let ignored =
-    List.map ignored ~f:Re_posix.re |> Re.alt |> Re.compile in
+    List.map ignored ~f:Re.Posix.re |> Re.alt |> Re.compile in
   let matches s = Re.execp ignored s in
   let ignored = Custom matches in
   FileUtil.(And (Is_file, Not ignored))

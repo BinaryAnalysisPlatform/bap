@@ -24,7 +24,7 @@ let objdump_cmds =
 let func_start_re = "([0-9A-Fa-f^\\s]+) <(.*)>:"
 
 let re r =
-  Re_pcre.re r |> Re.compile |> Re.execp
+  Re.Pcre.re r |> Re.compile |> Re.execp
 
 let objdump_strip  =
   String.strip ~drop:(function '<' | '>' | ':' | ' ' -> true | _ -> false)

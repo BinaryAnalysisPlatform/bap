@@ -47,7 +47,7 @@ module Digest = struct
 
   let add buf fmt = format ("%s"^^fmt) buf
   let add_sexp d sexp_of x = add d "%a" Sexp.pp (sexp_of x)
-  let add_file d name = add d "%s" (Md5.file name |> Md5.to_hex)
+  let add_file d name = add d "%s" (Caml.Digest.(file name |> to_hex))
   let create ~namespace = make namespace
 end
 

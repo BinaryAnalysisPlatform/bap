@@ -75,7 +75,7 @@ module Check = struct
 
   let run {path; ida} =
     let require_kind = require_kind path in
-    Result.all_ignore [
+    Result.all_unit [
         require_ida path;
         require_ida_python path;
         require_kind ida.graphical;
