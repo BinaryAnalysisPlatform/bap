@@ -70,10 +70,10 @@ module Plugin_rules = struct
       let arch,preds = Fl.package_property_2 preds pkg "archive" in
       let base = Fl.package_directory pkg in
       if dynamic && not (List.mem ~equal:Polymorphic_compare.equal preds (`Pred "plugin"))
-      then raise Not_found;
+      then raise Caml.Not_found;
       String.split ~on:' ' arch |>
       List.map ~f:(Fl.resolve_path ~base)
-    with Not_found -> []
+    with Caml.Not_found -> []
 
   let externals pkgs =
     let interns = interns () in

@@ -23,7 +23,7 @@ let entry ?(comp="default") ~mode arch =
 
 let default_path =
   try Sys.getenv "BAP_SIGFILE"
-  with Not_found -> Config.datadir / "sigs.zip"
+  with Caml.Not_found -> Config.datadir / "sigs.zip"
 
 let load_exn ?comp ?path ~mode arch =
   let path = Option.value path ~default:default_path in
@@ -35,7 +35,7 @@ let load_exn ?comp ?path ~mode arch =
   let r = try
       let entry = Zip.find_entry zip entry_path in
       Ok (Zip.read_entry zip entry)
-    with Not_found -> fail (`No_entry entry_path)
+    with Caml.Not_found -> fail (`No_entry entry_path)
        | Zip.Error (_,ent,err) -> zip_error ent err in
   Zip.close_in zip;
   r

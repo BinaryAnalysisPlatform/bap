@@ -103,7 +103,7 @@ module Plugin = struct
 
 
   let is_debugging () =
-    try Sys.getenv "BAP_DEBUG" <> "0" with Not_found -> false
+    try Sys.getenv "BAP_DEBUG" <> "0" with Caml.Not_found -> false
 
   let do_if_not_debugging f x =
     if is_debugging () then () else f x
@@ -228,7 +228,7 @@ end
 module Plugins = struct
   let paths_of_env () =
     try Sys.getenv "BAP_PLUGIN_PATH" |> String.split ~on:':'
-    with Not_found -> []
+    with Caml.Not_found -> []
 
   let plugin_paths library =
     [library; paths_of_env (); [Bap_config.plugindir]] |> List.concat |>

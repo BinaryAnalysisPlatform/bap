@@ -13,7 +13,7 @@ let try_with_default ~default f = match try_with f with
 
 let getenv v =
   try Some (Sys.getenv v)
-  with Not_found -> None
+  with Caml.Not_found -> None
 
 module Path = FilePath.DefaultPath.Abstract
 type path = Path.filename

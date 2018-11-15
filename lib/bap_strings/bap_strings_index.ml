@@ -37,13 +37,15 @@ module Persistent = struct
       keys = String.Map.empty;
     }
 
-    let string {strings} key = 
-      try Map.find_exn strings key 
-      with Not_found -> ""
+    let string {strings} key =
+      match Map.find strings key with
+      | Some x -> x
+      | None -> ""
 
-    let key {keys} str = 
-      try Map.find_exn keys str 
-      with Not_found -> Key.null
+    let key {keys} str =
+      match Map.find keys str with
+      | Some x -> x
+      | None -> Key.null
 
     let register idx str = 
       if Map.mem idx.keys str then idx

@@ -402,7 +402,7 @@ module To_ocamlgraph(G : Graph) = struct
 
   let find_edge g x y = match G.Node.edge x y g with
     | Some e -> e
-    | None -> raise Not_found
+    | None -> raise Caml.Not_found
 
   let find_all_edges g x y = G.Node.edge x y g |> function
     | None -> []
@@ -482,7 +482,7 @@ module Of_ocamlgraph(G : Graph.Sig.P) = struct
     let remove n g = G.remove_vertex g n
     let has_edge x y g = G.mem_edge g x y
     let edge x y g =
-      try Some (G.find_edge g x y) with Not_found -> None
+      try Some (G.find_edge g x y) with Caml.Not_found -> None
 
     let degree ?dir n g =
       try match dir with
@@ -853,7 +853,7 @@ let idom (type t) (type n) (type e)
                 if doms.(pn) < 0 then new_idom
                 else if new_idom < 0 then pn
                 else intersect new_idom pn
-              with Not_found -> new_idom ) in
+              with Caml.Not_found -> new_idom ) in
         let changed' = doms.(i) <> new_idom in
         if changed' then doms.(i) <- new_idom;
         changed' || changed) && loop () in
@@ -862,7 +862,7 @@ let idom (type t) (type n) (type e)
       try
         let i = pnum n in
         if i <> len - 1 then Some node.(doms.(i)) else None
-      with Not_found ->
+      with Caml.Not_found ->
         if G.Node.mem n g
         then Some node.(len - 1) else None)
 

@@ -359,7 +359,7 @@ let () =
   let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
-    with Not_found -> () in
+    with Caml.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
   let argv = load_recipe () in
   Log.start ?logdir:(get_logdir argv)();

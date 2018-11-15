@@ -120,7 +120,7 @@ let index ?equal vec x : int option =
 
 let index_exn ?equal vec x : int =
   let n = index_with ~default:(-1) ?equal vec x in
-  if n < 0 then raise Not_found else n
+  if n < 0 then invalid_arg "index out of bounds" else n
 
 module C = Container.Make(struct
     type nonrec 'a t = 'a t

@@ -58,7 +58,7 @@ let setup_headless_env path =
   let old_path,new_path =
     try
       Unix.getenv var, lib ^ ":" ^ Unix.getenv var
-    with Not_found -> "", lib in
+    with Caml.Not_found -> "", lib in
   Unix.putenv var new_path;
   fun () ->
     try
