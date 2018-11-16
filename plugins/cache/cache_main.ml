@@ -121,6 +121,7 @@ module Index = struct
       Unix.close fd;
       t
     with e -> Unix.close fd; raise e
+  [@@warning "-D"]
 
   let open_temp () =
     let tmp =
@@ -143,6 +144,7 @@ module Index = struct
           Unix.close fd
         with e -> Unix.close fd; Sys.remove tmp; raise e in
       Sys.rename tmp file
+  [@@warning "-D"]
 
   let index_of_file file =
     try from_file (module T) file

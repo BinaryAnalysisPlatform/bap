@@ -114,6 +114,7 @@ let mapfile path : Bigstring.t =
       fd Bigarray.char Bigarray.c_layout false [|size|] in
   Unix.close fd;
   Bigarray.array1_of_genarray data
+[@@warning "-D"]
 
 let loader path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"

@@ -122,6 +122,7 @@ module Loader = struct
     with exn ->
       Unix.close fd;
       Or_error.errorf "unable to process file %s" path
+  [@@warning "-D"]
 
   let from_file path =
     Or_error.(map_file path >>= from_data)

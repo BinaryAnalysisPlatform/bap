@@ -2,6 +2,8 @@ open Core_kernel
 open Bap.Std
 open Monads.Std
 
+[@@@warning "-D"]
+
 module SM = Monad.State
 open SM.Monad_infix
 open Format

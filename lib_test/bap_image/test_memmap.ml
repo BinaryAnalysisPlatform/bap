@@ -155,7 +155,7 @@ let intersections cons size ctxt =
       let expect = collect mem in
       let got = Memmap.intersections map mem |> Seq.map ~f:snd
                 |> Seq.to_list
-                |> sort_ints |> List.dedup ~compare:Int.compare in
+                |> sort_ints |> List.dedup_and_sort ~compare:Int.compare in
       assert_equal ~printer ~ctxt ~cmp:(List.equal ~equal:Int.equal) expect got)
 
 let suite () = "Memmap" >::: [
