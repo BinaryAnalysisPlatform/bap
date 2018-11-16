@@ -14,7 +14,6 @@ XOCamlbuildExtraArgs:
      -j 2
      -use-ocamlfind
      -classic-display
-     -cflag -unsafe-string
      -plugin-tags "'package(findlib),package(core_kernel)'"
 
 BuildDepends: ppx_jane, core_kernel (>= v0.11 && < v0.12)
