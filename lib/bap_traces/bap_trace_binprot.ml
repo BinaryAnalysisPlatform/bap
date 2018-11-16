@@ -17,11 +17,11 @@ module Proto = struct
   let supports: 'a tag -> bool = fun _ -> true
 
   let read_from_channel chan buf ~pos ~len =
-    let s = String.create len in
+    let s = Bytes.create len in
     match In_channel.really_input chan ~buf:s ~pos:0 ~len with
     | None -> raise End_of_file
     | Some () ->
-      Bigstring.From_string.blito ~src:s ~dst:buf ~dst_pos:pos ()
+      Bigstring.From_bytes.blito ~src:s ~dst:buf ~dst_pos:pos ()
 
   let read reader ch =
     try

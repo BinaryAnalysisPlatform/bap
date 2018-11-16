@@ -5,9 +5,9 @@ module Seq = Sequence
 type data = {len: int; chars: char list}
 
 let make_string {len; chars} =
-  let bytes = String.create len in
-  List.iteri chars ~f:(fun i c -> bytes.[len-i-1] <- c);
-  bytes
+  let bytes = Bytes.create len in
+  List.iteri chars ~f:(fun i c -> Bytes.set bytes (len-i-1) c);
+  Bytes.to_string bytes
 
 let is_printable ch = Char.(is_print ch || is_whitespace ch)
 

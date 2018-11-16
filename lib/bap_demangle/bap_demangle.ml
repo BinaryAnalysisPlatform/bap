@@ -15,11 +15,13 @@ let demangle_internal str =
     lfindi str ~pos:s1_p0 ~f:(fun _ c -> not (Char.is_digit c))
     >>= fun s1_p1 ->
     let len = (s1_p1 - s1_p0) in
+    let str = Bytes.of_string str in
     let n = Substring.create ~pos:s1_p0 ~len str |>
             Substring.to_string |> Int.of_string in
     pos_ref := s1_p0 + len;
     Some n in
   let extract_name pos_ref =
+    let str = Bytes.of_string str in
     extract_number pos_ref >>= fun len ->
     let name = Substring.create ~pos:!pos_ref ~len str |>
                Substring.to_string in

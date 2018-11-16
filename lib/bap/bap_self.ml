@@ -73,7 +73,7 @@ module Create() = struct
 
   let make_formatter (f : ('a, formatter, unit) format -> 'a) =
     let buf = Buffer.create 512 in
-    let output = Buffer.add_subbytes buf in
+    let output = Buffer.add_substring buf in
     let flush () =
       f "%s" (Buffer.contents buf);
       Buffer.clear buf in

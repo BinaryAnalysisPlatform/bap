@@ -74,8 +74,9 @@ let read ~expect buffer t ctxt =
 
 let write ~expect value t ctxt =
   let leb = t.enc value in
-  let buf = String.create (Leb128.size leb) in
+  let buf = Bytes.create (Leb128.size leb) in
   Leb128.write leb buf ~pos:0;
+  let buf = Bytes.to_string buf in
   assert_equal ~ctxt ~printer:ident buf expect
 
 let size ~expect value t ctxt =

@@ -59,12 +59,36 @@ module T = struct
 end
 
 module B = Make(T)
-module S = Make(String)
+module Blit_bytes = Blit.Make(B)
 
 include T
-include Blit.Make(B)
-module To_string = Blit.Make_distinct (B)(S)
-module From_string = Blit.Make_distinct (S)(B)
+include Blit_bytes
+
+module To_string = struct
+  let blit = Blit_bytes.blit
+  let blito = Blit_bytes.blito
+  let unsafe_blit = Blit_bytes.unsafe_blit
+  let sub t ~pos ~len = sub_string t pos len
+
+  let subo ?(pos=0) ?len src =
+    let len = match len with
+      | None -> Bytes.length src - pos
+      | Some len -> len in
+    sub src ~pos ~len
+end
+
+module From_string =
+  Blit.Make_distinct
+    (struct
+      type t = string
+      let length = String.length
+    end) (struct
+      type nonrec t = t
+      let create ~len = create len
+      let length = length
+      let unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len =
+        Std_bytes.blit_string src src_pos dst dst_pos len
+    end)
 
 let create = Std_bytes.create
 let length = Std_bytes.length
@@ -88,6 +112,10 @@ let find_map t  = apply t String.find_map
 let sum m t ~f  = apply t (fun s -> String.sum m s ~f)
 let is_empty t  = apply t String.is_empty
 let mem t elt = String.mem (convert t) elt
+let lowercase = lowercase_ascii
+let uppercase = uppercase_ascii
+let capitalize = capitalize_ascii
+let uncapitalize = uncapitalize_ascii
 
 include Identifiable.Make_and_derive_hash_fold_t(struct
     type t = T.t [@@deriving bin_io, compare, sexp]

@@ -29,7 +29,7 @@ let train_on_file meth length db path : (unit,'a) Result.t =
   let bw = if not (Sys.file_exists db) then Ok (BW.create ())
     else match Sigs.load ~mode:"bytes" ~path:db arch with
       | Ok s -> if meth = `update
-        then Ok (Binable.of_string (module BW) s)
+        then Ok (Binable.of_string (module BW) (Bytes.to_string s))
         else Ok (BW.create ())
       | Error _ when meth = `rewrite -> Ok (BW.create ())
       | Error e ->
@@ -40,7 +40,7 @@ let train_on_file meth length db path : (unit,'a) Result.t =
       if Image.Segment.is_executable sec then
         BW.train bw ~max_length:length test mem);
   let data = Binable.to_string (module BW) bw in
-  Sigs.save ~mode:"bytes" ~path:db arch data |>
+  Sigs.save ~mode:"bytes" ~path:db arch (Bytes.of_string data) |>
   Result.map_error ~f:(fun e ->
       Error.createf "signatures are not updated: %s" @@
       Sigs.string_of_error e)
@@ -83,7 +83,7 @@ let create_bw img path =
   Result.map_error ~f:(fun e ->
       Error.createf "failed to read signatures from a database: %s"
         (Sigs.string_of_error e)) >>| fun data ->
-  Binable.of_string (module BW) data
+  Binable.of_string (module BW) (Bytes.to_string data)
 
 let find threshold length comp path input =
   Image.create input >>= fun (img,_warns) ->

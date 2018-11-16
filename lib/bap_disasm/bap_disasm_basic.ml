@@ -65,10 +65,10 @@ module Table = struct
           | None -> "ERROR"
           | Some fin ->
             let len = fin - pos in
-            let dst = String.create len in
-            Bigstring.To_string.blit
+            let dst = Bytes.create len in
+            Bigstring.To_bytes.blit
               ~src:t.data ~src_pos:pos ~dst ~dst_pos:0 ~len;
-            dst)
+            Bytes.to_string dst)
 end
 
 type dis = {
@@ -295,9 +295,9 @@ module Insn = struct
       Table.lookup dis.insn_table off in
     let asm =
       if asm then
-        let data = String.create (C.insn_asm_size !!dis ~insn) in
+        let data = Bytes.create (C.insn_asm_size !!dis ~insn) in
         C.insn_asm_copy !!dis ~insn data;
-        data
+        Bytes.to_string data
       else "" in
     let kinds =
       if kinds then

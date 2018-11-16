@@ -15,7 +15,7 @@ val create :
   ?of_lexbuf      : (lexbuf -> 'a) ->
   ?of_scanbuf     : (scanbuf -> 'a) ->
   ?of_bigstring   : (bigstring -> 'a) ->
-  ?of_bytes        : (bytes -> 'a) ->
+  ?of_bytes       : (bytes -> 'a) ->
   unit -> 'a t
 
 val of_bytes : 'a t -> bytes -> 'a
