@@ -20,13 +20,11 @@ module Dict = Univ_map.Make(struct
 
 module Key = Type_equal.Id
 
-type ('a,'r) domain = {
+type 'a domain = {
   key : 'a Key.t;
   typ : 'a tinfo;
-  mutable promises : 'r list;
 }
 
-type ('a,'b) data = ('a,'b) domain
 
 type t = Dict.t
 type semantics = t
@@ -38,20 +36,16 @@ let declare (type t) ~name
     typeid = name;
     domain = (module T);
   };
-  promises = [];
 }
 
 let empty = Dict.empty
-
-let promise s p = s.promises <- p :: s.promises
-let promises s = s.promises
 let domain s = s.typ.domain
 
-let put : type s. (s,_) domain -> t -> s -> t =
+let put : type s. s domain -> t -> s -> t =
   fun {key; typ=tinfo} data value ->
     Dict.set data key {value; tinfo}
 
-let get : type s. (s,_) domain -> t -> s =
+let get : type s. s domain -> t -> s =
   fun {key; typ = {domain = (module T)}} data ->
     match Dict.find data key with
     | None -> T.empty

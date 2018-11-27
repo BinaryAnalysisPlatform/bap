@@ -42,7 +42,25 @@ end
 
 open Knowledge.Syntax
 
-let declare = Semantics.declare
+type 'a promise = {
+  get : label -> 'a Knowledge.t;
+  pid : pid;
+}
+
+type 'a content = {
+  domain : 'a Semantics.domain;
+  name : string;
+  info : string;
+  mutable promises : 'a promise list;
+}
+
+let registry = String.Table.create ()
+
+let declare ~name ~desc domain =
+  if Hashtbl.mem registry name
+  then invalid_argf "Content name is not uniqiue: %S" name ();
+  Hashtbl.set registry ~key:name ~data:desc;
+  { domain; name; info=desc; promises = []}
 
 let get () = Knowledge.lift (State.get ())
 let put s = Knowledge.lift (State.put s)
@@ -54,20 +72,16 @@ let provide tag id info =
   update @@ fun s -> {
     s with
     data = Map.update s.data id ~f:(function
-        | None -> Semantics.put tag Semantics.empty info
-        | Some sema -> Semantics.put tag sema info)
+        | None -> Semantics.put tag.domain Semantics.empty info
+        | Some sema -> Semantics.put tag.domain sema info)
   }
 
-type 'a promise = {
-  get : label -> 'a Knowledge.t;
-  pid : pid;
-}
 
 let promises = ref Pid.zero
 let promise tag get =
   Pid.incr promises;
   let pid = !promises in
-  Semantics.promise tag {get; pid}
+  tag.promises <- {get;pid} :: tag.promises
 
 let is_active reqs pid id = match Map.find reqs pid with
   | None -> false
@@ -85,8 +99,8 @@ let deactivate req pid id = Map.change req pid ~f:(function
 
 let collect (type t) tag id =
   let module Domain =
-    (val Semantics.domain tag : Domain.S with type t = t) in
-  Semantics.promises tag |>
+    (val Semantics.domain tag.domain : Domain.S with type t = t) in
+  tag.promises |>
   Knowledge.List.fold ~init:Domain.empty ~f:(fun curr req ->
       get () >>= fun s ->
       if is_active s.reqs req.pid id
@@ -102,13 +116,12 @@ let collect (type t) tag id =
   let sema = Map.find data id |> function
     | None -> Semantics.empty
     | Some sema -> sema in
-  Semantics.get tag sema
+  Semantics.get tag.domain sema
 
 include Knowledge
 type 'a knowledge = 'a t
-type 'a data = ('a,'a promise) Semantics.data
-
-let declare = Semantics.declare
+type 'a domain = 'a Semantics.domain
+let domain x = x.domain
 
 let run x s = match State.run x s with
   | Ok x,s -> Ok (x,s)

@@ -3,19 +3,24 @@ open Monads.Std
 
 type 'a knowledge
 type semantics
-type 'a data
+type 'a content
+type 'a domain
 type label
 type state
 type conflict = ..
 
 type 'a t = 'a knowledge
 
-val collect : 'a data -> label -> 'a t
-val provide : 'a data -> label -> 'a -> unit t
-val promise : 'a data -> (label -> 'a t) -> unit
+val collect : 'a content -> label -> 'a t
+val provide : 'a content -> label -> 'a -> unit t
+val promise : 'a content -> (label -> 'a t) -> unit
 
 val run : 'a t -> state -> ('a * state, conflict) result
 val empty : state
+
+val domain : 'a content -> 'a domain
+val declare : name:string -> desc:string -> 'a domain -> 'a content
+
 
 include Monad.S with type 'a t := 'a t
 include Monad.Fail.S with type 'a t := 'a t
@@ -97,15 +102,14 @@ module Domain : sig
 end
 
 
-val declare : name:string -> (module Domain.S with type t = 'a) -> 'a data
-
-
 module Semantics : sig
   type t = semantics
 
+  val declare : name:string -> (module Domain.S with type t = 'a) -> 'a domain
+
   val empty : t
-  val get : 'a data -> t -> 'a
-  val put : 'a data -> t -> 'a -> t
+  val get : 'a domain -> t -> 'a
+  val put : 'a domain -> t -> 'a -> t
 
   include Domain.S with type t := t
 
@@ -113,8 +117,8 @@ module Semantics : sig
     type 'a t                      (* semantic value *)
 
     val empty : 'a Sort.t -> 'a t
-    val get : 'b data -> 'a t -> 'b
-    val put : 'b data -> 'a t -> 'b -> 'a t
+    val get : 'b domain -> 'a t -> 'b
+    val put : 'b domain -> 'a t -> 'b -> 'a t
     val kind : 'a t -> 'a Sort.t
     val partial : 'a t -> 'a t -> Domain.Order.partial
     val merge : 'a t -> 'a t -> 'a t
