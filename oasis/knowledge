@@ -1,0 +1,16 @@
+Flag knowledge
+  Description: Build the knowledge library
+  Default: false
+
+Library knowledge
+  Build$: flag(everything) || flag(knowledge)
+  Path: lib/knowledge
+  FindlibName: knowledge
+  CompiledObject: best
+  BuildDepends: core_kernel, monads, regular
+  Modules: Knowledge
+  InternalModules:
+        Knowledge_domain,
+        Knowledge_domain_type,
+        Knowledge_label,
+        Knowledge_semantics
