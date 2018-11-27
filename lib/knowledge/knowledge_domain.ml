@@ -1,9 +1,9 @@
 open Core_kernel
-open Monads.Std
 open Format
 
 module type S  = Knowledge_domain_type.S
 module Order = Knowledge_domain_type.Order
+
 
 module Chain = struct
   module type T = Knowledge_domain_type.Chain

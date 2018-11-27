@@ -6,7 +6,6 @@ module Label = Knowledge_label
 module Semantics = Knowledge_semantics
 
 type semantics = Semantics.t
-type 'a domain = 'a Semantics.domain
 type label = Label.t
 type conflict = ..
 
@@ -43,15 +42,21 @@ let gets f = Knowledge.lift (State.gets f)
 let update f = Knowledge.lift (State.update f)
 
 
-let provide : type a. a domain -> label -> a -> _ =
-  fun tag id info ->
-    update @@ fun {data} -> {
-      data = Map.update data id ~f:(function
-          | None -> Semantics.put tag Semantics.empty info
-          | Some sema -> Semantics.put tag sema info)
-    }
+let provide tag id info =
+  update @@ fun {data} -> {
+    data = Map.update data id ~f:(function
+        | None -> Semantics.put tag Semantics.empty info
+        | Some sema -> Semantics.put tag sema info)
+  }
 
-let collect tag id=
+let promise tag p =
+  Semantics.promise tag p
+
+let collect tag id =
+  (* we can memoize here, but let's it do later *)
+  Knowledge.List.iter (Semantics.promises tag) ~f:(fun p ->
+      p id >>= fun info ->
+      provide tag id info) >>= fun () ->
   gets @@ fun {data} ->
   let sema = Map.find data id |> function
     | None -> Semantics.empty
@@ -60,6 +65,9 @@ let collect tag id=
 
 include Knowledge
 type 'a knowledge = 'a t
+type 'a data = ('a,Label.t -> 'a t) Semantics.data
+
+let declare = Semantics.declare
 
 let run x s = match State.run x s with
   | Ok x,s -> Ok (x,s)

@@ -1,8 +1,8 @@
 open Core_kernel
 
 module type S = Knowledge_domain_type.S
-
 module Order = Knowledge_domain_type.Order
+
 
 module Chain : sig
   module type T = Knowledge_domain_type.Chain
