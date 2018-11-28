@@ -205,7 +205,7 @@ module type Trans = sig
   val sinpi    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val cospi    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val atanpi   : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
-  val atan2pi  : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
+  val atan2pi  : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
   val asin     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val acos     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val atan     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t

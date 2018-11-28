@@ -8,7 +8,7 @@ open Knowledge.Syntax
 let bool = Bool.t
 let sort x = x >>| Value.sort
 
-module Theory : Core = struct
+module Core : Core = struct
   type 'a t = 'a Knowledge.t
   let empty x = Knowledge.return @@ Value.empty x
   let data  = Knowledge.return @@ Eff.empty Effect.data
@@ -148,7 +148,7 @@ module Theory : Core = struct
   let sinpi _ x  = sort x >>= empty
   let cospi _ x  = sort x >>= empty
   let atanpi _ x  = sort x >>= empty
-  let atan2pi _ x  = sort x >>= empty
+  let atan2pi _ x _  = sort x >>= empty
   let asin _ x  = sort x >>= empty
   let acos _ x  = sort x >>= empty
   let atan _ x  = sort x >>= empty

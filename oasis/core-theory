@@ -10,6 +10,7 @@ Library bap_core_theory
   BuildDepends: bap, bap-knowledge, core_kernel
   Modules: Bap_core_theory
   InternalModules:
+        Bap_core_theory_basic,
         Bap_core_theory_definition,
         Bap_core_theory_effect,
         Bap_core_theory_eff,

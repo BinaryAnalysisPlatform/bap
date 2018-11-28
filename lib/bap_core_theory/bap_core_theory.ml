@@ -41,5 +41,14 @@ module Theory = struct
   module type Float = Bap_core_theory_definition.Float
   module type Trans = Bap_core_theory_definition.Trans
   module type Core = Bap_core_theory_definition.Core
-  module Empty : Core = Bap_core_theory_empty.Theory
+
+  module Basic = struct
+    module Empty : Basic = Bap_core_theory_empty.Core
+    module Make = Bap_core_theory_basic.Make
+  end
+
+  module Core = struct
+    module Empty : Core = Bap_core_theory_empty.Core
+  end
+
 end
