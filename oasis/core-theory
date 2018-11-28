@@ -13,6 +13,7 @@ Library bap_core_theory
         Bap_core_theory_definition,
         Bap_core_theory_effect,
         Bap_core_theory_eff,
+        Bap_core_theory_empty,
         Bap_core_theory_sort,
         Bap_core_theory_syntax,
         Bap_core_theory_value,

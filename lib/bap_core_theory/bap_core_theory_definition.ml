@@ -186,7 +186,7 @@ module type Float = sig
   val hypot    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
 end
 
-module type Transcendental = sig
+module type Trans = sig
   val exp      : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val expm1    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val exp2     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
@@ -209,7 +209,7 @@ module type Transcendental = sig
   val asin     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val acos     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val atan     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
-  val atan2    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
+  val atan2    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
   val sinh     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val cosh     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val tanh     : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
@@ -223,5 +223,5 @@ end
 module type Core = sig
   include Basic
   include Float
-  include Transcendental
+  include Trans
 end
