@@ -1,6 +1,6 @@
 open Core_kernel
 
-module Domain = Knowledge_domain
+module Domain = Bap_knowledge_domain
 
 type t
 type semantics = t

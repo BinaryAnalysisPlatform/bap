@@ -5,12 +5,12 @@ Flag knowledge
 Library knowledge
   Build$: flag(everything) || flag(knowledge)
   Path: lib/knowledge
-  FindlibName: knowledge
+  FindlibName: bap-knowledge
   CompiledObject: best
   BuildDepends: core_kernel, monads, regular
-  Modules: Knowledge
+  Modules: Bap_knowledge
   InternalModules:
-        Knowledge_domain,
-        Knowledge_domain_type,
-        Knowledge_label,
-        Knowledge_semantics
+        Bap_knowledge_domain,
+        Bap_knowledge_domain_type,
+        Bap_knowledge_label,
+        Bap_knowledge_semantics

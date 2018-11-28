@@ -1,7 +1,7 @@
 open Core_kernel
 
-module Domain = Knowledge_domain
-module Label = Knowledge_label
+module Domain = Bap_knowledge_domain
+module Label = Bap_knowledge_label
 
 type 'a tinfo = {
   domain : (module Domain.S with type t = 'a);

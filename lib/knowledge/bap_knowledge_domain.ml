@@ -1,12 +1,12 @@
 open Core_kernel
 open Format
 
-module type S  = Knowledge_domain_type.S
-module Order = Knowledge_domain_type.Order
+module type S  = Bap_knowledge_domain_type.S
+module Order = Bap_knowledge_domain_type.Order
 
 
 module Chain = struct
-  module type T = Knowledge_domain_type.Chain
+  module type T = Bap_knowledge_domain_type.Chain
   module Make(T : T) : S with type t = T.t = struct
     include T
     let partial x y : Order.partial = match compare x y with
@@ -17,7 +17,7 @@ module Chain = struct
 end
 
 module Map = struct
-  module type Eq = Knowledge_domain_type.Eq
+  module type Eq = Bap_knowledge_domain_type.Eq
 
   module Make(K : Comparable.S)(V : Eq) = struct
     type t = V.t K.Map.t
@@ -56,8 +56,8 @@ end = struct
   include Int63
 end
 
-module Label : S with type t = Knowledge_label.t = Chain.Make(struct
-    include Knowledge_label
+module Label : S with type t = Bap_knowledge_label.t = Chain.Make(struct
+    include Bap_knowledge_label
     let empty = root
-    let inspect lbl = Sexp.Atom (asprintf "%a" Knowledge_label.pp lbl)
+    let inspect lbl = Sexp.Atom (asprintf "%a" Bap_knowledge_label.pp lbl)
   end)

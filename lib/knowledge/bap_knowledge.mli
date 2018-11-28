@@ -9,22 +9,26 @@ type label
 type state
 type conflict = ..
 
-type 'a t = 'a knowledge
+module Knowledge : sig
 
-val collect : 'a content -> label -> 'a t
-val provide : 'a content -> label -> 'a -> unit t
-val promise : 'a content -> (label -> 'a t) -> unit
+  type 'a t = 'a knowledge
 
-val run : 'a t -> state -> ('a * state, conflict) result
-val empty : state
+  val collect : 'a content -> label -> 'a t
+  val provide : 'a content -> label -> 'a -> unit t
+  val promise : 'a content -> (label -> 'a t) -> unit
 
-val domain : 'a content -> 'a domain
-val declare : name:string -> desc:string -> 'a domain -> 'a content
+  val run : 'a t -> state -> ('a * state, conflict) result
+  val empty : state
+
+  val domain : 'a content -> 'a domain
+  val declare : name:string -> desc:string -> 'a domain -> 'a content
 
 
-include Monad.S with type 'a t := 'a t
-include Monad.Fail.S with type 'a t := 'a t
-                      and type 'a error = conflict
+  include Monad.S with type 'a t := 'a t
+  include Monad.Fail.S with type 'a t := 'a t
+                        and type 'a error = conflict
+
+end
 
 module Label : sig
   type t = label
