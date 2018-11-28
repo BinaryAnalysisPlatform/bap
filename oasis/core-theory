@@ -1,0 +1,19 @@
+Flag core_theory
+  Description: Build the bap-core-theory library
+  Default: false
+
+Library bap_core_theory
+  Build$: flag(everything) || flag(core_theory)
+  Path: lib/bap_core_theory
+  FindlibName: bap-core-theory
+  CompiledObject: best
+  BuildDepends: bap, bap-knowledge, core_kernel
+  Modules: Bap_core_theory
+  InternalModules:
+        Bap_core_theory_definition,
+        Bap_core_theory_effect,
+        Bap_core_theory_eff,
+        Bap_core_theory_sort,
+        Bap_core_theory_syntax,
+        Bap_core_theory_value,
+        Bap_core_theory_var
