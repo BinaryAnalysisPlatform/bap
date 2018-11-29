@@ -117,7 +117,7 @@ module Core : Core = struct
   let fmodulo _ x _ = sort x >>= empty
   let fmad _ x _ _ = sort x >>= empty
   let fround _ x = sort x >>= empty
-  let fconvert _ s _ = empty s
+  let fconvert s _ _ = empty s
   let fsucc x = sort x >>= empty
   let fpred x = sort x >>= empty
   let forder _ _ = empty bool

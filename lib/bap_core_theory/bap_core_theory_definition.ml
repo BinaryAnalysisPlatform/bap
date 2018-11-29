@@ -168,7 +168,7 @@ module type Fbasic = sig
   val fmad    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
 
   val fround   : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
-  val fconvert : rmode value t -> ('e,'k) float sort -> (_,_) float value t -> ('e,'k) float value t
+  val fconvert : ('e,'k) float sort ->  rmode value t -> (_,_) float value t -> ('e,'k) float value t
 
   val fsucc  : ('e,'k) float value t -> ('e,'k) float value t
   val fpred  : ('e,'k) float value t -> ('e,'k) float value t

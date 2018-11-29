@@ -167,7 +167,7 @@ module Theory : sig
     val fmad    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
 
     val fround   : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
-    val fconvert : rmode value t -> ('e,'k) float sort -> (_,_) float value t -> ('e,'k) float value t
+    val fconvert : ('e,'k) float sort -> rmode value t -> (_,_) float value t -> ('e,'k) float value t
 
     val fsucc  : ('e,'k) float value t -> ('e,'k) float value t
     val fpred  : ('e,'k) float value t -> ('e,'k) float value t
@@ -232,9 +232,9 @@ module Theory : sig
     module Empty : Core
   end
 
-  module Manager : Basic
+  module Manager : Core
 
-  val register : ?desc:string -> name:string -> (module Basic) -> unit
+  val register : ?desc:string -> name:string -> (module Core) -> unit
 end
 
 module Sort : sig

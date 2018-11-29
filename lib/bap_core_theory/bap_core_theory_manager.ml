@@ -16,7 +16,7 @@ type 'a t = {
   proc : 'a;
 }
 
-type provider = (module Basic)
+type provider = (module Core)
 
 let providers : provider t list ref = ref []
 let register ?(desc="") ~name x =
@@ -98,7 +98,7 @@ let eff1 x sort f = lift1 neweff Eff.merge x sort f
 let eff2 x y sort f = lift2 neweff Eff.merge x y sort f
 let eff3 x y z sort f = lift3 neweff Eff.merge x y z sort f
 
-module Theory : Basic = struct
+module Theory : Core = struct
   type 'a t = 'a Knowledge.t
 
   let var v = val0 (Var.sort v) @@ fun (module P) -> P.var v
@@ -115,6 +115,7 @@ module Theory : Basic = struct
   let neg x = val1 x sort @@ fun (module P) -> P.neg
   let not x = val1 x sort @@ fun (module P) -> P.not
 
+  let uop x f = val1 x sort f
   let aop x y f = val2 x y (fun x _ -> sort x) f
   let add x y = aop x y @@ fun (module P) -> P.add
   let sub x y = aop x y @@ fun (module P) -> P.sub
@@ -234,4 +235,101 @@ module Theory : Basic = struct
   let sge x y = lop x y @@ fun (module P) -> P.sge
   let uge x y = lop x y @@ fun (module P) -> P.uge
 
+  let finite s x y z = val3 x y z (fun _ _ _ -> !!s) @@ fun (module P) ->
+    P.finite s
+
+  let rmode s = val0 s @@ fun (module P) -> P.rmode s
+  let pinf s = val0 s @@ fun (module P) -> P.pinf s
+  let ninf s = val0 s @@ fun (module P) -> P.ninf s
+  let snan s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.snan s
+  let qnan s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.qnan s
+
+  let exps x = sort x >>| Floats.exps
+  let sigs x = sort x >>| Floats.sigs
+
+  let exponent x = val1 x exps @@ fun (module P) -> P.exponent
+  let significand x = val1 x sigs @@ fun (module P) -> P.significand
+
+  let fsign x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.fsign
+  let is_finite x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_finite
+  let is_fzero x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fzero
+  let is_pinf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_pinf
+  let is_ninf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_ninf
+  let is_snan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_snan
+  let is_qnan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_qnan
+
+  let cast_float s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
+    P.cast_float s
+
+  let cast_sfloat s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
+    P.cast_sfloat s
+
+  let cast_int s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
+    P.cast_int s
+
+  let fneg x = uop x @@ fun (module P) -> P.fneg
+  let fabs x = uop x @@ fun (module P) -> P.fabs
+
+  let faop m x y f = val3 m x y (fun _ x _ -> sort x) f
+  let fadd m x y = faop m x y @@ fun (module P) -> P.fadd
+  let fsub m x y = faop m x y @@ fun (module P) -> P.fsub
+  let fmul m x y = faop m x y @@ fun (module P) -> P.fmul
+  let fdiv m x y = faop m x y @@ fun (module P) -> P.fdiv
+  let sqrt m x y = faop m x y @@ fun (module P) -> P.sqrt
+  let fmodulo m x y = faop m x y @@ fun (module P) -> P.fmodulo
+
+  let fmad m x y z = val4 m x y z (fun _ x _ _ -> sort x) @@ fun (module P) ->
+    P.fmad
+
+  let fround m x = val2 m x (fun _ x -> sort x) @@ fun (module P) ->
+    P.fround
+  let fconvert s x y = val2 x y (fun _ _ -> !!s) @@ fun (module P) ->
+    P.fconvert s
+
+  let fsucc x = uop x @@ fun (module P) -> P.fsucc
+  let fpred x = uop x @@ fun (module P) -> P.fpred
+
+  let forder x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) -> P.forder
+
+  let pow m x y = faop m x y @@ fun (module P) -> P.pow
+  let powr m x y = faop m x y @@ fun (module P) -> P.powr
+
+
+  let compound m x y = faop m x y @@ fun (module P) -> P.compound
+  let rootn m x y = faop m x y @@ fun (module P) -> P.rootn
+  let pownn m x y = faop m x y @@ fun (module P) -> P.pownn
+
+  let fuop m x f = val2 m x (fun _ x -> sort x) f
+  let rsqrt m x = fuop m x @@ fun (module P) -> P.rsqrt
+  let hypot m x y = faop m x y @@ fun (module P) -> P.hypot
+
+  let exp m x = fuop m x @@ fun (module P) -> P.exp
+  let expm1 m x = fuop m x @@ fun (module P) -> P.expm1
+  let exp2 m x = fuop m x @@ fun (module P) -> P.exp2
+  let exp2m1 m x = fuop m x @@ fun (module P) -> P.exp2m1
+  let exp10 m x = fuop m x @@ fun (module P) -> P.exp10
+  let exp10m1 m x = fuop m x @@ fun (module P) -> P.exp10m1
+  let log m x = fuop m x @@ fun (module P) -> P.log
+  let log2 m x = fuop m x @@ fun (module P) -> P.log2
+  let log10 m x = fuop m x @@ fun (module P) -> P.log10
+  let logp1 m x = fuop m x @@ fun (module P) -> P.logp1
+  let log2p1 m x = fuop m x @@ fun (module P) -> P.log2p1
+  let log10p1 m x = fuop m x @@ fun (module P) -> P.log10p1
+  let sin m x = fuop m x @@ fun (module P) -> P.sin
+  let cos m x = fuop m x @@ fun (module P) -> P.cos
+  let tan m x = fuop m x @@ fun (module P) -> P.tan
+  let sinpi m x = fuop m x @@ fun (module P) -> P.sinpi
+  let cospi m x = fuop m x @@ fun (module P) -> P.cospi
+  let atanpi m x = fuop m x @@ fun (module P) -> P.atanpi
+  let atan2pi m x y = faop m x y @@ fun (module P) -> P.atan2pi
+  let asin m x = fuop m x @@ fun (module P) -> P.asin
+  let acos m x = fuop m x @@ fun (module P) -> P.acos
+  let atan m x = fuop m x @@ fun (module P) -> P.atan
+  let atan2 m x y = faop m x y @@ fun (module P) -> P.atan2
+  let sinh m x = fuop m x @@ fun (module P) -> P.sinh
+  let cosh m x = fuop m x @@ fun (module P) -> P.cosh
+  let tanh m x = fuop m x @@ fun (module P) -> P.tanh
+  let asinh m x = fuop m x @@ fun (module P) -> P.asinh
+  let acosh m x = fuop m x @@ fun (module P) -> P.acosh
+  let atanh m x = fuop m x @@ fun (module P) -> P.atanh
 end
