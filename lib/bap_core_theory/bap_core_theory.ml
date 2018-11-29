@@ -56,3 +56,6 @@ module Theory = struct
   module Manager = Bap_core_theory_manager.Theory
   let register = Bap_core_theory_manager.register
 end
+
+module Grammar = Bap_core_theory_grammar_definition
+module Parser = Bap_core_theory_parser
