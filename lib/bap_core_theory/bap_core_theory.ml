@@ -47,11 +47,12 @@ module Theory = struct
   module Basic = struct
     module Empty : Basic = Bap_core_theory_empty.Core
     module Make = Bap_core_theory_basic.Make
-    (* module Main = Bap_core_theory_basic.Main *)
   end
 
   module Core = struct
     module Empty : Core = Bap_core_theory_empty.Core
   end
 
+  module Manager = Bap_core_theory_manager.Theory
+  let register = Bap_core_theory_manager.register
 end

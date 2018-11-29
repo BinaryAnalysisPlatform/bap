@@ -232,6 +232,9 @@ module Theory : sig
     module Empty : Core
   end
 
+  module Manager : Basic
+
+  val register : ?desc:string -> name:string -> (module Basic) -> unit
 end
 
 module Sort : sig

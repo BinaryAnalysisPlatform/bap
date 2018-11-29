@@ -1,10 +1,14 @@
-open Bap_knowledge
+open Core_kernel
 open Bap.Std
+open Bap_knowledge
 
 open Bap_core_theory_definition
 open Bap_core_theory_sort
 
+open Knowledge.Syntax
+
 let size = Bits.size
+let sort x = x >>| Value.sort
 
 module Mask = struct
 
@@ -50,13 +54,11 @@ module Mask = struct
 end
 
 module Make(L : Minimal) = struct
-  open Knowledge.Syntax
   open L
   module BitLogic = struct
     let (&&) = and_ and (||) = or_ and not = inv
   end
 
-  let sort x = x >>| Value.sort
 
   include struct
     open BitLogic
