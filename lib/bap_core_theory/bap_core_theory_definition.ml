@@ -130,7 +130,7 @@ module type Basic = sig
 end
 
 module type Fbasic = sig
-  val finite : ('e,'k) float sort -> bit t ->
+  val finite : ('e,'k) float sort -> bit value t ->
     'e bitv value t -> 'k bitv value t ->
     ('e,'k) float value t
 
