@@ -105,5 +105,6 @@ let () =
       if !list_passes then print_passes ()
       else begin
         Bil.select_passes (!norml @ !optim @ !passes);
-        Bil_semantics.init ()
+        Bil_semantics.init ();
+        Bil_lifter.init ()
       end)
