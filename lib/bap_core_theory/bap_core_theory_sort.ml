@@ -132,31 +132,7 @@ end
 
 module Rmode = struct
   type t = Rmode
-  type mode = RNE | RNA | RTP | RTN | RTZ
-  let string_of_mode = function
-    | RNE -> "RNE"
-    | RNA -> "RNA"
-    | RTP -> "RTP"
-    | RTN -> "RTN"
-    | RTZ -> "RTZ"
-
-  let define mode =
-    let m = Sort.(Cons (string_of_mode mode, [])) in
-    Sort.(define (Cons ("RoundingMode", [Sort m])) Rmode)
-
-  let rne = define RNE
-  let rna = define RNA
-  let rtp = define RTP
-  let rtn = define RTN
-  let rtz = define RTZ
-
-  let describe s = match Sort.exp s with
-    | Cons ("RoundingMode", [Sort (Cons ("RNE", []))]) -> RNE
-    | Cons ("RoundingMode", [Sort (Cons ("RNA", []))]) -> RNA
-    | Cons ("RoundingMode", [Sort (Cons ("RTP", []))]) -> RTP
-    | Cons ("RoundingMode", [Sort (Cons ("RTN", []))]) -> RTN
-    | Cons ("RoundingMode", [Sort (Cons ("RTZ", []))]) -> RTZ
-    | _ -> assert false
+  let t = Sort.(define (Cons ("RoundingMode", [])) Rmode)
 end
 
 type bit = Bool.t

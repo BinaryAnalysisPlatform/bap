@@ -238,7 +238,13 @@ module Theory : Core = struct
   let finite s x y z = val3 x y z (fun _ _ _ -> !!s) @@ fun (module P) ->
     P.finite s
 
-  let rmode s = val0 s @@ fun (module P) -> P.rmode s
+  let rne = val0 Rmode.t @@ fun (module P) -> P.rne
+  let rna = val0 Rmode.t @@ fun (module P) -> P.rne
+  let rtp = val0 Rmode.t @@ fun (module P) -> P.rne
+  let rtn = val0 Rmode.t @@ fun (module P) -> P.rne
+  let rtz = val0 Rmode.t @@ fun (module P) -> P.rne
+  let requal x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) ->
+    P.requal
   let pinf s = val0 s @@ fun (module P) -> P.pinf s
   let ninf s = val0 s @@ fun (module P) -> P.ninf s
   let snan s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.snan s

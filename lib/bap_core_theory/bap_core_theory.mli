@@ -133,7 +133,13 @@ module Theory : sig
       'e bitv value t -> 'k bitv value t ->
       ('e,'k) float value t
 
-    val rmode : rmode sort -> rmode value t
+
+    val rne : rmode value t
+    val rna : rmode value t
+    val rtp : rmode value t
+    val rtn : rmode value t
+    val rtz : rmode value t
+    val requal : rmode value t -> rmode value t -> bit value t
 
     val pinf : ('e,'k) float sort -> ('e,'k) float value t
     val ninf : ('e,'k) float sort -> ('e,'k) float value t
@@ -302,15 +308,8 @@ module Floats : sig
 end
 
 module Rmode : sig
-  type mode = RNE | RNA | RTP | RTN | RTZ
   type t = rmode
-  val rne : t sort
-  val rna : t sort
-  val rtp : t sort
-  val rtn : t sort
-  val rtz : t sort
-
-  val describe : t sort -> mode
+  val t : t sort
 end
 
 module Var : sig

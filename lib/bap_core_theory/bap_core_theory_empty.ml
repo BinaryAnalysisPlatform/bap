@@ -90,7 +90,12 @@ module Core : Core = struct
   let uge _ _ = empty bool
 
   let finite s _ _ _ = empty s
-  let rmode s = empty s
+  let rne = empty Rmode.t
+  let rna = empty Rmode.t
+  let rtp = empty Rmode.t
+  let rtn = empty Rmode.t
+  let rtz = empty Rmode.t
+  let requal _ _  = empty bool
   let pinf s = empty s
   let ninf s = empty s
   let snan s _  = empty s
