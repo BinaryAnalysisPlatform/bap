@@ -101,6 +101,9 @@ let () =
        the lifing to BIL code." in
     Config.(param (list pass) ~default:[] ~doc "passes") in
   Config.when_ready (fun {Config.get=(!)} ->
+
       if !list_passes then print_passes ()
-      else
-        Bil.select_passes (!norml @ !optim @ !passes))
+      else begin
+        Bil.select_passes (!norml @ !optim @ !passes);
+        Bil_semantics.init ()
+      end)

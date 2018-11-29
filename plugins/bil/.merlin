@@ -1,6 +1,4 @@
-B ../../_build/plugins/bil
-S .
-
-PKG bap
-
 REC
+B ../../_build/plugins/bil
+B ../../_build/lib/knowledge
+B ../../_build/lib/bap_core_theory
