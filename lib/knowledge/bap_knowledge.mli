@@ -21,7 +21,7 @@ module Knowledge : sig
   val empty : state
 
   val domain : 'a content -> 'a domain
-  val declare : name:string -> desc:string -> 'a domain -> 'a content
+  val declare : ?public:bool -> ?desc:string -> name:string -> 'a domain -> 'a content
 
 
   include Monad.S with type 'a t := 'a t
@@ -34,6 +34,9 @@ module Label : sig
   type t = label
   val root : t
   include Identifiable.S with type t := t
+  module Generator : sig
+    val fresh : label knowledge
+  end
 end
 
 module Domain : sig
