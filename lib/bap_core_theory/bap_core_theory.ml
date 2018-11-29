@@ -10,6 +10,7 @@ module Rmode = Bap_core_theory_sort.Rmode
 module Value = Bap_core_theory_value
 module Eff = Bap_core_theory_eff
 module Var = Bap_core_theory_var
+module Link = Bap_core_theory_link
 
 
 

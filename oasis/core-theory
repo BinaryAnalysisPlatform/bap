@@ -15,6 +15,7 @@ Library bap_core_theory
         Bap_core_theory_eff,
         Bap_core_theory_empty,
         Bap_core_theory_kind,
+        Bap_core_theory_link,
         Bap_core_theory_sort,
         Bap_core_theory_value,
         Bap_core_theory_var

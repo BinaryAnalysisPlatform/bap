@@ -343,3 +343,32 @@ module Eff : sig
   val merge : 'a t -> 'a t -> 'a t
   val semantics : 'a t -> semantics
 end
+
+
+module Link : sig
+  type t
+
+  type 'a field
+
+  val addr : word field
+  val name : string field
+  val ivec : int field
+
+
+  val empty : t
+  val update : 'a field -> label -> 'a -> t -> t
+  val lookup : 'a field -> label -> t -> 'a option
+
+  val link : 'a field -> 'a -> label Knowledge.t
+  val resolve : 'a field -> label -> 'a option Knowledge.t
+
+  module Syntax : sig
+    val link_addr : word -> label Knowledge.t
+    val link_name : string -> label Knowledge.t
+    val link_ivec : int -> label Knowledge.t
+
+    val resolve_addr : label -> word option Knowledge.t
+    val resolve_name : label -> string option Knowledge.t
+    val resolve_ivec : label -> int option Knowledge.t
+  end
+end
