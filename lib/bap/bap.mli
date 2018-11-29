@@ -5,6 +5,7 @@ open Monads.Std
 open Regular.Std
 open Graphlib.Std
 open Bap_future.Std
+open Bap_knowledge
 
 module Std : sig
   [@@@warning "-D"]
@@ -1883,6 +1884,14 @@ module Std : sig
 
     include Printable.S with type t := t
     include Data.S      with type t := t
+
+    module Domain : sig
+      val bil : t domain
+      val exp : exp option domain
+
+      module Bil : Domain.S
+      module Exp : Domain.S
+    end
 
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : binop printer

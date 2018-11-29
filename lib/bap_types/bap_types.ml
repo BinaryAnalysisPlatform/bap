@@ -8,6 +8,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_common
+open Bap_knowledge
 
 (** This module is included into [Bap.Std], you need to open it
     specifically if you're developing inside BAP *)
@@ -98,6 +99,31 @@ module Std = struct
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
     include Bap_bil_optimizations
+    module Domain = struct
+      module Exp = struct
+        type t = exp option [@@deriving compare, sexp_of]
+        let inspect = sexp_of_t
+        let partial x y : Domain.Order.partial = match x,y with
+          | None,None -> EQ
+          | None,_ -> LE
+          | _,None -> GE
+          | _ -> NC
+        let empty = None
+      end
+
+      module Bil = struct
+        type t = stmt list [@@deriving compare, sexp_of]
+        let inspect = sexp_of_t
+        let partial x y : Domain.Order.partial = match x,y with
+          | [],[] -> EQ
+          | [],_ -> LE
+          | _,[] -> GE
+          | _ -> NC
+        let empty = []
+      end
+      let exp = Semantics.declare ~name:"bil-exp" (module Exp)
+      let bil = Semantics.declare ~name:"bil-stmt" (module Bil)
+    end
   end
 
   (** Types of BIL expressions  *)
@@ -238,7 +264,6 @@ module Std = struct
   type 'a seq = 'a Seq.t [@@deriving bin_io, compare, sexp]
 
   module Callgraph = Bap_ir_callgraph
-
 
 
 end

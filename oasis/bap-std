@@ -16,6 +16,7 @@ Library bap
                    bap.types,
                    bap-future,
                    cmdliner,
+                   bap-knowledge,
                    regular
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
@@ -27,7 +28,7 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre
+  BuildDepends:    monads, zarith, uuidm, bap.config, regular, graphlib, ogre, bap-knowledge
 
   InternalModules:
                    Bap_addr,

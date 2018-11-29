@@ -5,32 +5,9 @@ open Bap_core_theory
 
 [@@@warning "-40"]
 
-module Domain = struct
-  module Exp = struct
-    type t = Bil.exp option [@@deriving compare, sexp_of]
-    let inspect = sexp_of_t
-    let partial x y : Domain.Order.partial = match x,y with
-      | None,None -> EQ
-      | None,_ -> LE
-      | _,None -> GE
-      | _ -> NC
-    let empty = None
-  end
 
-  module Bil = struct
-    type t = bil [@@deriving compare, sexp_of]
-    let inspect = sexp_of_t
-    let partial x y : Domain.Order.partial = match x,y with
-      | [],[] -> EQ
-      | [],_ -> LE
-      | _,[] -> GE
-      | _ -> NC
-    let empty = []
-  end
-end
-
-let exp = Semantics.declare ~name:"bil-exp" (module Domain.Exp)
-let stmt = Semantics.declare ~name:"bil-stmt" (module Domain.Bil)
+let exp = Bil.Domain.exp
+let stmt = Bil.Domain.bil
 
 let values = exp
 let effects = stmt

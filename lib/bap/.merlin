@@ -6,5 +6,6 @@ B ../../_build/lib/bap_image
 B ../../_build/lib/bap_disasm
 B ../../_build/lib/bap_sema
 B ../../_build/lib/bap_bundle
+B ../../_build/lib/knowledge
 
 REC
