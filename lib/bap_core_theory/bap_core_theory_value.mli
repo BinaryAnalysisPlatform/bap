@@ -3,6 +3,7 @@ open Bap_core_theory_sort
 
 type 'a t                      (* semantic value *)
 
+val create : 'a sort -> semantics -> 'a t
 val empty : 'a sort -> 'a t
 val get : 'b domain -> 'a t -> 'b
 val put : 'b domain -> 'a t -> 'b -> 'a t

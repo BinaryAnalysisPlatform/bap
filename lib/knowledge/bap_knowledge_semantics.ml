@@ -86,6 +86,7 @@ module Sorted(Eq : T1) = struct
     sort : 'a s;
     data : semantics;
   }
+  let create sort data = {sort; data}
   let empty sort = {sort; data = empty}
   let put domain v value = {v with data = put domain v.data value}
   let get domain v = get domain v.data

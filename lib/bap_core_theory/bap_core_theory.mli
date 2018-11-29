@@ -300,6 +300,7 @@ end
 module Value : sig
   type 'a t = 'a value
 
+  val create : 'a sort -> semantics -> 'a t
   val empty : 'a sort -> 'a t
   val get : 'b domain -> 'a t -> 'b
   val put : 'b domain -> 'a t -> 'b -> 'a t
@@ -312,7 +313,7 @@ end
 
 module Eff : sig
   type 'a t = 'a eff
-
+  val create : 'a Effect.t -> semantics -> 'a t
   val empty : 'a Effect.t -> 'a t
   val get : 'b domain -> 'a t -> 'b
   val put : 'b domain -> 'a t -> 'b -> 'a t

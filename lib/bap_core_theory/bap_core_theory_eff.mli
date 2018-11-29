@@ -4,6 +4,7 @@ module Effect = Bap_core_theory_effect
 
 type 'a t
 
+val create : 'a Effect.t -> semantics -> 'a t
 val empty : 'a Effect.t -> 'a t
 val get : 'b domain -> 'a t -> 'b
 val put : 'b domain -> 'a t -> 'b -> 'a t

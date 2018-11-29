@@ -120,6 +120,7 @@ module Semantics : sig
   module Sorted(Sort : T1) : sig
     type 'a t                      (* semantic value *)
 
+    val create : 'a Sort.t -> semantics -> 'a t
     val empty : 'a Sort.t -> 'a t
     val get : 'b domain -> 'a t -> 'b
     val put : 'b domain -> 'a t -> 'b -> 'a t
