@@ -4,6 +4,7 @@ open Caml.Format
 open Bap_knowledge
 
 type 'a sort
+type 'a kind
 type bit
 type 'a bitv
 type ('a,'b) mem
@@ -224,6 +225,7 @@ module Theory : sig
 
   module Basic : sig
     module Make(S : Minimal) : Basic
+    module Empty : Basic
   end
 
   module Core : sig
@@ -253,8 +255,8 @@ module Sort : sig
   val compare : 'a t -> 'a t -> int
 end
 
-module Effect : sig
-  type 'a t
+module Kind : sig
+  type 'a t = 'a kind
 
   val data : data t
   val ctrl : ctrl t
@@ -289,6 +291,25 @@ module Mems : sig
   val cast : _ sort -> ('a,'b) mem sort option
 end
 
+module Floats : sig
+  type ('e,'s) t = ('e,'s) float
+  val define : 'e bitv sort -> 's bitv sort -> ('e,'s) t sort
+  val exps : ('e,'s) t sort -> 'e bitv sort
+  val sigs : ('e,'s) t sort -> 's bitv sort
+end
+
+module Rmode : sig
+  type mode = RNE | RNA | RTP | RTN | RTZ
+  type t = rmode
+  val rne : t sort
+  val rna : t sort
+  val rtp : t sort
+  val rtn : t sort
+  val rtz : t sort
+
+  val describe : t sort -> mode
+end
+
 module Var : sig
   type 'a t = 'a var
 
@@ -313,32 +334,12 @@ end
 
 module Eff : sig
   type 'a t = 'a eff
-  val create : 'a Effect.t -> semantics -> 'a t
-  val empty : 'a Effect.t -> 'a t
+  val create : 'a kind -> semantics -> 'a t
+  val empty : 'a kind -> 'a t
   val get : 'b domain -> 'a t -> 'b
   val put : 'b domain -> 'a t -> 'b -> 'a t
-  val kind : 'a t -> 'a Effect.t
+  val kind : 'a t -> 'a kind
   val partial : 'a t -> 'a t -> Domain.Order.partial
   val merge : 'a t -> 'a t -> 'a t
   val semantics : 'a t -> semantics
-end
-
-
-module Floats : sig
-  type ('e,'s) t = ('e,'s) float
-  val define : 'e bitv sort -> 's bitv sort -> ('e,'s) t sort
-  val exps : ('e,'s) t sort -> 'e bitv sort
-  val sigs : ('e,'s) t sort -> 's bitv sort
-end
-
-module Rmode : sig
-  type mode = RNE | RNA | RTP | RTN | RTZ
-  type t = rmode
-  val rne : t sort
-  val rna : t sort
-  val rtp : t sort
-  val rtn : t sort
-  val rtz : t sort
-
-  val describe : t sort -> mode
 end

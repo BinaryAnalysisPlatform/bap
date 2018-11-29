@@ -11,9 +11,9 @@ let sort x = x >>| Value.sort
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
   let empty x = Knowledge.return @@ Value.empty x
-  let data  = Knowledge.return @@ Eff.empty Effect.data
-  let ctrl  = Knowledge.return @@ Eff.empty Effect.ctrl
-  let unit  = Knowledge.return @@ Eff.empty Effect.unit
+  let data  = Knowledge.return @@ Eff.empty Kind.data
+  let ctrl  = Knowledge.return @@ Eff.empty Kind.ctrl
+  let unit  = Knowledge.return @@ Eff.empty Kind.unit
 
   let var v = empty (Var.sort v)
   let int s _ = empty s

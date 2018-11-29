@@ -1,7 +1,7 @@
 open Bap_knowledge
 
 module Sort   = Bap_core_theory_sort.Sort
-module Effect = Bap_core_theory_effect
+module Kind = Bap_core_theory_kind
 module Bool = Bap_core_theory_sort.Bool
 module Bits = Bap_core_theory_sort.Bits
 module Mems = Bap_core_theory_sort.Mems
@@ -15,13 +15,14 @@ module Var = Bap_core_theory_var
 
 type 'a var = 'a Var.t
 type 'a sort = 'a Sort.t
+type 'a kind = 'a Kind.t
 type 'a value = 'a Value.t
 type 'a eff = 'a Eff.t
 type 'a bitv = 'a Bits.t
 type ('a,'b) mem = ('a,'b) Mems.t
 type bit = Bool.t
-type data = Effect.data = private Data_Effect
-type ctrl = Effect.ctrl = private Ctrl_Effect
+type data = Kind.data = private Data_Effect
+type ctrl = Kind.ctrl = private Ctrl_Effect
 type rmode = Rmode.t
 type ('e,'s) float = ('e,'s) Floats.t
 type word = Bap.Std.Bitvector.t (* we will extract bitvector from BAP later *)
@@ -45,6 +46,7 @@ module Theory = struct
   module Basic = struct
     module Empty : Basic = Bap_core_theory_empty.Core
     module Make = Bap_core_theory_basic.Make
+    (* module Main = Bap_core_theory_basic.Main *)
   end
 
   module Core = struct

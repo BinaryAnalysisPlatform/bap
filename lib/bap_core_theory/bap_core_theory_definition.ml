@@ -5,7 +5,7 @@ open Bap_core_theory_sort
 
 module Var = Bap_core_theory_var
 module Eff = Bap_core_theory_eff
-module Effect = Bap_core_theory_effect
+module Kind = Bap_core_theory_kind
 module Value = Bap_core_theory_value
 
 
@@ -13,8 +13,8 @@ type 'a t = 'a knowledge
 type 'a var = 'a Var.t
 type 'a value = 'a Value.t
 type 'a eff = 'a Eff.t
-type data = Effect.data
-type ctrl = Effect.ctrl
+type data = Kind.data
+type ctrl = Kind.ctrl
 type ('e,'k) float = ('e,'k) Floats.t
 type rmode = Rmode.t
 
