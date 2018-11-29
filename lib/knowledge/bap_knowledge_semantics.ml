@@ -3,9 +3,12 @@ open Core_kernel
 module Domain = Bap_knowledge_domain
 module Label = Bap_knowledge_label
 
+type 'a serializer = (module Binable.S with type t = 'a)
+
 type 'a tinfo = {
   domain : (module Domain.S with type t = 'a);
   typeid : string;
+  serops : 'a serializer;
 }
 
 type 'a value = {
@@ -29,14 +32,48 @@ type 'a domain = {
 type t = Dict.t
 type semantics = t
 
-let declare (type t) ~name
-    (module T : Domain.S with type t = t) = {
-  key = Key.create ~name (fun _ -> Sexp.Atom name);
-  typ = {
-    typeid = name;
-    domain = (module T);
-  };
-}
+let parsers = String.Table.create ()
+
+let store_parser (type a)
+    (module S : Binable.S with type t = a) {key; typ} =
+  let name = Key.name key in
+  if Hashtbl.mem parsers name
+  then invalid_argf "A serializable semantics must have a unique name.
+      The following semantics data type is not unique: %s" name ();
+  let parser data =
+    let value = Binable.of_string (module S) data in
+    Dict.Packed.T (key, {value; tinfo=typ}) in
+  Hashtbl.set parsers ~key:name ~data:parser
+
+let empty_serializer (type a) (module D : Domain.S with type t = a) =
+  let module S = struct
+    type t = a
+    include Binable.Of_binable(Unit)(struct
+        type t = a
+        let to_binable _ = ()
+        let of_binable () = D.empty
+      end)
+  end  in
+  (module S : Binable.S with type t = a)
+
+let declare (type t) ?serializer
+    ~name
+    (module T : Domain.S with type t = t) =
+  let serops = match serializer with
+    | None -> empty_serializer (module T)
+    | Some s -> s in
+  let domain = {
+    key = Key.create ~name (fun _ -> Sexp.Atom name);
+    typ = {
+      typeid = name;
+      domain = (module T);
+      serops;
+    };
+  } in
+  if Option.is_some serializer
+  then store_parser serops domain;
+  domain
+
 
 let empty = Dict.empty
 let domain s = s.typ.domain
@@ -71,6 +108,12 @@ let partial : t -> t -> Domain.Order.partial = fun x y ->
   | false,true  -> GE
   | false,false -> NC
 
+
+let compare x y = match partial x y with
+  | EQ -> 0
+  | GE -> 1
+  | _ -> -1
+
 let inspect x =
   Sexp.List (Dict.to_alist x |> List.map ~f:(function
       | Dict.Packed.T (_,{value; tinfo={domain=(module V); typeid}}) ->
@@ -78,6 +121,10 @@ let inspect x =
           Sexp.Atom typeid;
           V.inspect value
         ]))
+
+let sexp_of_t = inspect
+let t_of_sexp _ = empty
+
 
 
 module Sorted(Eq : T1) = struct
@@ -95,3 +142,33 @@ module Sorted(Eq : T1) = struct
   let kind v = v.sort
   let semantics x = x.data
 end
+
+module Repr = struct
+  type entry = {
+    name : string;
+    data : string;
+  } [@@deriving bin_io]
+
+  type t = entry list [@@deriving bin_io]
+end
+
+include Binable.Of_binable(Repr)(struct
+    type t = semantics
+    let to_binable s =
+      Dict.to_alist s |>
+      List.rev_map ~f:(fun (Dict.Packed.T (k,{
+          value=x;
+          tinfo={serops}
+        })) -> Repr.{
+          name = Key.name k;
+          data = Binable.to_string serops x;
+        })
+
+    let of_binable entries =
+      List.fold entries ~init:empty ~f:(fun s {Repr.name; data} ->
+          match Hashtbl.find parsers name with
+          | None -> s
+          | Some parse ->
+            let Dict.Packed.T (key,data) = parse data in
+            Dict.set s key data)
+  end)

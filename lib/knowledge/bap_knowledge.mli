@@ -2,7 +2,7 @@ open Core_kernel
 open Monads.Std
 
 type 'a knowledge
-type semantics
+type semantics [@@deriving bin_io, compare, sexp]
 type 'a content
 type 'a domain
 type label
@@ -112,7 +112,9 @@ end
 module Semantics : sig
   type t = semantics
 
-  val declare : name:string -> (module Domain.S with type t = 'a) -> 'a domain
+  val declare :
+    ?serializer:(module Binable.S with type t = 'a) ->
+    name:string -> (module Domain.S with type t = 'a) -> 'a domain
 
   val empty : t
   val get : 'a domain -> t -> 'a

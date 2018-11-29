@@ -5,7 +5,7 @@ module Domain = Bap_knowledge_domain
 module L = Bap_knowledge_label
 module Semantics = Bap_knowledge_semantics
 
-type semantics = Semantics.t
+type semantics = Semantics.t [@@deriving bin_io, compare, sexp]
 type label = L.t
 type conflict = ..
 
@@ -149,9 +149,4 @@ module Label = struct
       Knowledge.provide labels L.root next >>| fun () ->
       next
   end
-
-
-
-
-
 end

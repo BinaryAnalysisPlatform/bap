@@ -2,11 +2,13 @@ open Core_kernel
 
 module Domain = Bap_knowledge_domain
 
-type t
+type t [@@deriving bin_io, compare, sexp]
 type semantics = t
 type 'a domain
 
-val declare : name:string ->
+val declare :
+  ?serializer:(module Binable.S with type t = 'a) ->
+  name:string ->
   (module Domain.S with type t = 'a) -> 'a domain
 
 val empty : t
