@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_knowledge
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
@@ -46,11 +47,13 @@ module Props = struct
   include Binable.Of_stringable(Bits)
 end
 
+
 type t = {
   code : int;
   name : string;
+  sema : semantics; (* we keep both sema and bil cause the former *)
+  bil  : bil;       (* won't survive marshalizing, will fix it later *)
   asm  : string;
-  bil  : bil;
   ops  : Op.t array;
   props : Props.t;
 } [@@deriving bin_io, fields, compare, sexp]
@@ -109,11 +112,16 @@ let of_basic ?bil insn =
   {
     code = Insn.code insn;
     name = Insn.name insn;
+    sema = Semantics.empty;
     asm  = normalize_asm (Insn.asm insn);
-    bil  = Option.value bil ~default:[Bil.special "Unknown Semantics"];
+    bil  = Option.value bil ~default:[Bil.special "unknown"];
     ops  = Insn.ops insn;
     props;
   }
+
+let semantics insn = insn.sema
+let with_semantics insn s = {insn with sema = s}
+
 
 let is flag t = Props.has t.props flag
 let may = is
@@ -194,3 +202,14 @@ let () =
   Data.Write.create ~pp:pp_asm () |>
   add_writer ~desc:"Target assembly language" ~ver:"1.0" "asm";
   set_default_printer "asm"
+
+module Semantics = struct
+  module Domain = struct
+    let t = Semantics.declare "insn-semantics" (module Semantics)
+  end
+  let t = Knowledge.declare
+      ~public:true
+      ~desc:"instruction semantics"
+      ~name:"edu.cmu.ece.bap/insn-semantics"
+      Domain.t
+end

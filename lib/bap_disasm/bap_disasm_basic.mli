@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_types.Std
+open Bap_knowledge
 
 type mem = Bap_memory.t [@@deriving sexp_of]
 type kind = Bap_insn_kind.t [@@deriving compare, sexp]
@@ -119,3 +120,5 @@ module Trie : sig
 end
 
 val available_backends : unit -> string list
+
+val decoder : (mem * full_insn) option content

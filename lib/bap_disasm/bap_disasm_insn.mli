@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_knowledge
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
@@ -34,6 +35,18 @@ val must    : must property -> t -> t
 val mustn't : must property -> t -> t
 val should    : may  property -> t -> t
 val shouldn't : may  property -> t -> t
+
+
+module Semantics : sig
+  val t : semantics content
+
+  module Domain : sig
+    val t : semantics domain
+  end
+end
+
+val semantics : t -> semantics
+val with_semantics : t -> semantics -> t
 
 val pp_adt : Format.formatter -> t -> unit
 module Trie : sig

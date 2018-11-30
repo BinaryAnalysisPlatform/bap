@@ -5756,6 +5756,8 @@ module Std : sig
       (** abbreviate an instruction with full information.  *)
       type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 
+      val decoder : (mem * full_insn) option content
+
       (** Disassembler.
 
           The ['a] and ['k] type variables specify disassembler modes
@@ -5970,6 +5972,7 @@ module Std : sig
 
         (** [ops insn] gives an access to [insn]'s operands.   *)
         val ops  : ('a,'k) t -> op array
+
       end
 
       (** Trie maps over instructions  *)
@@ -6071,6 +6074,15 @@ module Std : sig
 
     type t = insn [@@deriving bin_io, compare, sexp]
 
+    module Semantics : sig
+      val t : semantics content
+
+      module Domain : sig
+        val t : semantics domain
+      end
+    end
+
+
     (** {3 Creating}
         The following functions will create [insn] instances from a lower
         level representation.
@@ -6157,6 +6169,8 @@ module Std : sig
 
     (** [must property insn] postulate that [insn] shouldn't have the [property]  *)
     val shouldn't : may  property -> t -> t
+
+    val semantics : t -> semantics
 
     (** [pp_adt] prints instruction in ADT format, suitable for reading
         by evaluating in many languages, e.g. Python, Js, etc *)

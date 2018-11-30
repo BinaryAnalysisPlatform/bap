@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Bap_types.Std
+open Bap_knowledge
 open Or_error
 
 module Kind = Bap_insn_kind
@@ -103,7 +104,7 @@ module Reg = struct
 
   module T = struct
     type t = reg
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Reg"
     let version = "1.0.0"
@@ -146,7 +147,7 @@ module Imm = struct
 
   module T = struct
     type t = imm
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
     let module_name = Some "Bap.Std.Imm"
     let version = "1.0.0"
     let pp fmt t =
@@ -176,7 +177,7 @@ module Fmm = struct
 
   module T = struct
     type t = fmm
-      [@@deriving bin_io, sexp, compare]
+    [@@deriving bin_io, sexp, compare]
 
     let module_name = Some "Bap.Std.Fmm"
     let version = "1.0.0"
@@ -194,7 +195,7 @@ module Op = struct
       | Reg of reg
       | Imm of imm
       | Fmm of fmm
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
 
     let pr fmt = Format.fprintf fmt
     let pp fmt = function
@@ -245,7 +246,7 @@ module Op = struct
 end
 
 type op = Op.t
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 let cpred_of_pred : pred -> C.pred = function
   | `Valid -> C.Is_true
@@ -341,7 +342,7 @@ type (+'a,+'k) insns = (mem * ('a,'k) insn option) list
 
 module Pred = Comparable.Make(struct
     type t = pred [@@deriving compare, sexp]
-end)
+  end)
 
 module Preds = Pred.Set
 type preds = Preds.t [@@deriving compare, sexp]
@@ -579,3 +580,33 @@ module Trie = struct
   module Normalized = Trie.Make(Normalized_key)
   include (Trie.Make(Key) : Trie with type key := key)
 end
+
+
+
+module Domain = struct
+  type t = (mem * full_insn) option
+
+  let empty = None
+  let partial x y : Domain.Order.partial = match x,y with
+    | None,None -> EQ
+    | None,_ -> LE
+    | _,None -> GE
+    | Some (x,_), Some (y,_) ->
+      if Addr.equal (Mem.min_addr x) (Mem.min_addr y)
+      then EQ
+      else NC
+  let inspect = function
+    | None -> Sexp.List []
+    | Some (m,x) -> Sexp.List [
+        Atom (Addr.string_of_value (Mem.min_addr m));
+        Insn.sexp_of_t x;
+      ]
+end
+
+let insn = Semantics.declare ~name:"decoded-insn" (module Domain)
+
+let decoder = Knowledge.declare
+    ~public:true
+    ~desc:"instruction decoder"
+    ~name:"edu.cmu.ece.bap/basic-decoder"
+    insn

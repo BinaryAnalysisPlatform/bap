@@ -1,9 +1,14 @@
 open Core_kernel
 open Bap.Std
+open Bap_future.Std
 open Bap_knowledge
 open Bap_core_theory
 
+open Knowledge.Syntax
+open Link.Syntax
+
 open Parser
+include Self()
 
 module Grammar = struct
   type exp = Bil.exp
@@ -66,7 +71,7 @@ module Grammar = struct
     fun (module S) -> function
       | Unknown (_,Mem (k,v)) ->
         S.unknown (Size.in_bits k) (Size.in_bits v)
-      | Store (m,k,v,e,s) ->
+      | Store (m,k,v,e,_) ->
         S.store_word (is_big e) m k v
       | Var v  -> with_mem_types v (S.var (Var.name v))
       | Let (v,x,y) -> S.let_ (Var.name v) x y
@@ -100,13 +105,13 @@ module Grammar = struct
       | Let (x,y,z) -> S.let_ (Var.name x) y z
       | Ite (x,y,z) -> S.ite x y z
       | Extract (hi,lo,x) -> S.extract hi lo x
+      | Unknown (_,_) -> S.unknown ()
 
       (* the rest is ill-formed *)
       | UnOp (NEG,_)
       | Cast ((SIGNED|UNSIGNED),_,_)
       | Load (_,_,_,_)
       | Store (_,_,_,_,_)
-      | Unknown (_,_)
       | Concat (_,_) -> assert false
       | BinOp ((PLUS|MINUS|TIMES|DIVIDE|SDIVIDE|
                 MOD|SMOD|LSHIFT|RSHIFT|ARSHIFT),_,_)
@@ -143,4 +148,20 @@ end
 
 module Parser = Parser.Make(Theory.Manager)
 
-let init () = ()
+let provide_lifter arch =
+  info "providing a lifter for arch %a" Arch.pp arch;
+  let module Target = (val target_of_arch arch) in
+  let lifter label =
+    Knowledge.collect Disasm_expert.Basic.decoder label >>= function
+    | None -> Knowledge.return Semantics.empty
+    | Some (mem,insn) ->
+      match Target.lift mem insn with
+      | Error _ -> Knowledge.return Semantics.empty
+      | Ok bil ->
+        Parser.run Grammar.t bil >>| fun eff ->
+        Eff.semantics eff in
+  Knowledge.promise Insn.Semantics.t lifter
+
+
+let init () =
+  Stream.observe Project.Info.arch provide_lifter

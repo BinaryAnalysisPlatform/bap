@@ -235,7 +235,7 @@ module Basic : Theory.Basic = struct
       let src = bitv_exp src in
       let fill = bool_exp fill in
       let diff = size res - size sort in
-      let cast kind = exp res Bil.(Cast (kind,diff,src)) in
+      let cast kind = exp res Bil.(Cast (kind,size res,src)) in
       match compare diff 0,fill with
       | 0,_ -> exp res src
       | 1, Bil.Int b ->
