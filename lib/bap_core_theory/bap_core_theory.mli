@@ -318,6 +318,10 @@ module Var : sig
   val create : 'a sort -> string -> 'a var
   val name : 'a var -> string
   val sort : 'a var -> 'a sort
+
+  module Generator : sig
+    val fresh : 'a sort -> 'a t knowledge
+  end
 end
 
 module Value : sig
