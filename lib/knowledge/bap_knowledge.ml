@@ -104,8 +104,12 @@ module Knowledge = struct
   let collect (type t) tag id =
     let module Domain =
       (val Semantics.domain tag.domain : Domain.S with type t = t) in
+    get () >>= fun {data} ->
+    let init = Map.find data id |> function
+      | None -> Domain.empty
+      | Some sema -> Semantics.get tag.domain sema in
     tag.promises |>
-    Knowledge.List.fold ~init:Domain.empty ~f:(fun curr req ->
+    Knowledge.List.fold ~init ~f:(fun curr req ->
         get () >>= fun s ->
         if is_active s.reqs req.pid id
         then Knowledge.return curr
@@ -115,12 +119,8 @@ module Knowledge = struct
           match Domain.partial curr next with
           | GE -> Knowledge.return curr
           | LE | EQ | NC -> Knowledge.return next) >>= fun max ->
-    provide tag id max >>= fun () ->
-    gets @@ fun {data} ->
-    let sema = Map.find data id |> function
-      | None -> Semantics.empty
-      | Some sema -> sema in
-    Semantics.get tag.domain sema
+    provide tag id max >>| fun () -> max
+
 
   include Knowledge
   let domain x = x.domain
