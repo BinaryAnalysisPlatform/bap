@@ -29,6 +29,7 @@ B _build/lib/bap_primus
 B _build/lib/bap_llvm
 B _build/lib/regular
 B _build/lib/text_tags
+B _build/lib/knowledge
 
 S lib/bap
 S lib/bap_abi

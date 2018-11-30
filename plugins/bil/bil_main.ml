@@ -106,5 +106,6 @@ let () =
       else begin
         Bil.select_passes (!norml @ !optim @ !passes);
         Bil_semantics.init ();
-        Bil_lifter.init ()
+        Bil_lifter.init ();
+        Bil_ir.init()
       end)

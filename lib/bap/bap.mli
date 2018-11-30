@@ -6076,9 +6076,11 @@ module Std : sig
 
     module Semantics : sig
       val t : semantics content
+      val bir : blk term list content
 
       module Domain : sig
         val t : semantics domain
+        val bir : blk term list domain
       end
     end
 

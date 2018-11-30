@@ -159,7 +159,10 @@ let provide_lifter arch =
       | Error _ -> Knowledge.return Semantics.empty
       | Ok bil ->
         Parser.run Grammar.t bil >>| fun eff ->
-        Eff.semantics eff in
+        let graph = Eff.get Bil_ir.t eff in
+        let bir = Bil_ir.reify graph in
+        let sema = Eff.semantics eff in
+        Semantics.put Insn.Semantics.Domain.bir sema bir in
   Knowledge.promise Insn.Semantics.t lifter
 
 

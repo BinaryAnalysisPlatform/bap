@@ -5,7 +5,10 @@ open Bap_image_std
 open Bap_disasm_std
 open Bap_ir
 open Format
-
+module IRLabel = Label
+open Bap_knowledge
+module L = Label
+module Label = IRLabel
 
 (* A note about lifting call instructions.
 
@@ -137,6 +140,66 @@ let lift_insn ?addr fall init insn =
             | Instr elt ->
               Ir_blk.Builder.add_elt b elt; bs,b))
 
+
+
+module IrBuilder = struct
+
+  let def_only blk = Term.length jmp_t blk = 0
+
+  (* concat two def-only blocks *)
+  let append_def_only b1 b2 =
+    let b = Ir_blk.Builder.init ~same_tid:true ~copy_defs:true b1 in
+    Term.enum def_t b2 |> Seq.iter ~f:(Ir_blk.Builder.add_def b);
+    Term.enum jmp_t b2 |> Seq.iter ~f:(Ir_blk.Builder.add_jmp b);
+    Ir_blk.Builder.result b
+
+  let append xs ys = match xs, ys with
+    | [],xs | xs,[] -> xs
+    | x :: xs, y :: ys when def_only x ->
+      List.rev_append ys (append_def_only x y :: xs)
+    | xs, ys -> List.rev_append ys xs
+
+  let ir_of_insn insn =
+    Semantics.get Insn.Semantics.Domain.bir @@
+    Insn.semantics insn
+
+  let lift_insn insn blks = append blks @@ ir_of_insn insn
+
+  let with_first_blk_addressed addr = function
+    | [] -> []
+    | b :: bs -> Term.set_attr b address addr :: bs
+
+
+  let pp_bir ppf blks =
+    Format.pp_print_list Ir_blk.pp ppf blks
+
+  let turn_into_call return b =
+    Term.map jmp_t b ~f:(fun jmp ->
+        Ir_jmp.with_kind jmp @@
+        match Ir_jmp.kind jmp with
+        | Goto target -> Call (Call.create ~return ~target ())
+        | k -> k)
+
+  (* TODO, add attributes to all terms *)
+  let blk cfg block : blk term list =
+    let blks =
+      Block.insns block |>
+      List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (_mem,insn) ->
+          lift_insn insn blks) in
+    let addr = Block.addr block in
+    with_first_blk_addressed addr @@
+    match label_of_fall cfg block with
+    | None -> List.rev blks
+    | Some dst -> match blks with
+      | [] -> []                 (* assert false? *)
+      | x :: xs ->
+        if Insn.(is call) (Block.terminator block)
+        then List.rev (turn_into_call dst x :: xs)
+        else
+          let fall = Ir_jmp.create_goto dst in
+          List.rev (Term.append jmp_t x fall :: xs)
+end
+
 let has_jump_under_condition bil =
   with_return (fun {return} ->
       let enter_control ifs = if ifs = 0 then ifs else return true in
@@ -152,24 +215,26 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-let blk cfg block : blk term list =
-  let fall_label = label_of_fall cfg block in
-  List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
-    ~f:(fun init (mem,insn) ->
-        let addr = Memory.min_addr mem in
-        lift_insn ~addr fall_label init insn) |>
-  fun (bs,b) ->
-  let fall =
-    let jmp = Block.terminator block in
-    if Insn.(is call) jmp && not (is_conditional_jump jmp)
-    then None else match fall_label with
-      | None -> None
-      | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
-  Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
-  let b = Ir_blk.Builder.result b in
-  List.rev (b::bs) |> function
-  | [] -> assert false
-  | b::bs -> Term.set_attr b address (Block.addr block) :: bs
+(* let blk cfg block : blk term list =
+ *   let fall_label = label_of_fall cfg block in
+ *   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
+ *     ~f:(fun init (mem,insn) ->
+ *         let addr = Memory.min_addr mem in
+ *         lift_insn ~addr fall_label init insn) |>
+ *   fun (bs,b) ->
+ *   let fall =
+ *     let jmp = Block.terminator block in
+ *     if Insn.(is call) jmp && not (is_conditional_jump jmp)
+ *     then None else match fall_label with
+ *       | None -> None
+ *       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
+ *   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
+ *   let b = Ir_blk.Builder.result b in
+ *   List.rev (b::bs) |> function
+ *   | [] -> assert false
+ *   | b::bs -> Term.set_attr b address (Block.addr block) :: bs *)
+
+let blk = IrBuilder.blk
 
 let resolve_jmp ~local addrs jmp =
   let update_kind jmp addr make_kind =
@@ -221,7 +286,7 @@ let lift_sub entry cfg =
     let blks = blk cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
-     acc @ blks in
+    acc @ blks in
   let blocks = Graphlib.reverse_postorder_traverse
       (module Cfg) ~start:entry cfg in
   let blks = Seq.fold blocks ~init:[] ~f:recons in
@@ -320,6 +385,10 @@ let program symtab =
 
 let sub = lift_sub
 
+(* let insn insn =
+ *   lift_insn None ([], Ir_blk.Builder.create ()) insn |>
+ *   function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs) *)
+
+
 let insn insn =
-  lift_insn None ([], Ir_blk.Builder.create ()) insn |>
-  function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs)
+  List.rev @@ IrBuilder.lift_insn insn [Ir_blk.create ()]

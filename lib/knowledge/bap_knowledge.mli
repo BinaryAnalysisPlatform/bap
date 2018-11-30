@@ -110,7 +110,7 @@ end
 
 
 module Semantics : sig
-  type t = semantics
+  type t = semantics [@@deriving bin_io, compare, sexp]
 
   val declare :
     ?serializer:(module Binable.S with type t = 'a) ->

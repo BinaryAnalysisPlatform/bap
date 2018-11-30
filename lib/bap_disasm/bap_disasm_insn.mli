@@ -3,6 +3,7 @@ open Bap_knowledge
 open Regular.Std
 open Bap_types.Std
 open Bap_disasm_types
+open Bap_ir
 
 type t [@@deriving bin_io, compare, sexp]
 type op = Op.t [@@deriving bin_io, compare, sexp]
@@ -39,9 +40,11 @@ val shouldn't : may  property -> t -> t
 
 module Semantics : sig
   val t : semantics content
+  val bir : blk term list content
 
   module Domain : sig
     val t : semantics domain
+    val bir : blk term list domain
   end
 end
 

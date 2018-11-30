@@ -220,7 +220,7 @@ module Make(S : Core) = struct
   and stmts : type e s.
     (string * string) list ->
     (e,s) parser -> s list -> unit eff t = fun ctxt self -> function
-    | [] -> Label.Generator.fresh >>= fun lbl -> blk lbl pass skip
+    | [] -> Knowledge.return Label.root >>= fun lbl -> blk lbl pass skip
     | x :: xs ->
       self.stmt (module struct
         type nonrec t = unit eff t
@@ -229,26 +229,24 @@ module Make(S : Core) = struct
 
         let next = stmts ctxt self
 
+        let unlabeled = Label.root
+
         let bind exp body =
           sort exp >>= fun s ->
           Var.Generator.fresh s >>= fun v ->
-          Label.Generator.fresh >>= fun lbl ->
-          let b1 = (blk lbl (set v exp) skip) in
+          let b1 = (blk unlabeled (set v exp) skip) in
           seq b1 (body v)
 
         let special _ =
-          Label.Generator.fresh >>= fun label ->
-          seq (blk label pass skip) (next xs)
+          seq (blk unlabeled pass skip) (next xs)
 
         let cpuexn n =
           link_ivec n >>= fun lbl ->
-          Label.Generator.fresh >>= fun id ->
-          seq (blk id pass (goto lbl)) (next xs)
+          seq (blk unlabeled pass (goto lbl)) (next xs)
 
         let while_ cnd ys =
-          Label.Generator.fresh >>= fun id ->
           seq
-            (blk id (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
+            (blk unlabeled (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
             (next xs)
 
         let if_ cnd yes nay =
@@ -259,16 +257,18 @@ module Make(S : Core) = struct
             (next xs)
 
 
-        let jmp exp =
-          Label.Generator.fresh >>= fun id ->
-          seq (blk id pass (jmp (expw ctxt self exp))) (next xs)
-
         let goto addr =
-          Label.Generator.fresh >>= fun id ->
-          link_addr addr >>= fun lbl ->
-          seq (blk id pass (goto lbl)) (next xs)
+          let addr = int (bits (Word.bitwidth addr)) addr in
+          seq (blk unlabeled pass (jmp addr)) (next xs)
 
-        let move eff = Label.Generator.fresh >>= fun id -> seq (blk id eff skip) (next xs)
+        let jmp exp =
+          seq (blk unlabeled pass (jmp (expw ctxt self exp))) (next xs)
+
+        (* let goto addr =
+         *   link_addr addr >>= fun lbl ->
+         *   seq (blk unlabeled pass (goto lbl)) (next xs) *)
+
+        let move eff = seq (blk unlabeled eff skip) (next xs)
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)

@@ -205,11 +205,39 @@ let () =
 
 module Semantics = struct
   module Domain = struct
-    let t = Semantics.declare "insn-semantics" (module Semantics)
+    let t = Semantics.declare
+        ~serializer:(module Semantics)
+        ~name:"insn-semantics" (module Semantics)
+    module IR = struct
+      open Bap_ir
+      type t = blk term list [@@deriving bin_io]
+
+      let empty = []
+
+      let partial x y : Domain.Order.partial = match x,y with
+        | [],[] -> EQ
+        | [],_ -> LE
+        | _,[] -> GE
+        | _ -> NC
+
+      let inspect blks =
+        let names = List.map blks ~f:(fun b ->
+            Sexp.Atom (Term.name b)) in
+        Sexp.List names
+    end
+    let bir = Semantics.declare
+        ~serializer:(module IR)
+        ~name:"insn-ir" (module IR)
   end
   let t = Knowledge.declare
       ~public:true
       ~desc:"instruction semantics"
       ~name:"edu.cmu.ece.bap/insn-semantics"
       Domain.t
+
+  let bir = Knowledge.declare
+      ~public:true
+      ~desc:"IR representation of an instruction"
+      ~name:"edu.cmu.ece.bap/insn-bir"
+      Domain.bir
 end
