@@ -4,6 +4,7 @@ open Bap_types.Std
 open Graphlib.Std
 open Bil.Types
 open Or_error
+open Bap_knowledge
 open Bap_image_std
 
 module Targets = Bap_disasm_target_factory
@@ -37,7 +38,7 @@ type error = [
   | `Failed_to_lift of mem * full_insn * Error.t
 ] [@@deriving sexp_of]
 
-type maybe_insn = full_insn option * bil option [@@deriving sexp_of]
+type maybe_insn = full_insn option * semantics [@@deriving sexp_of]
 type decoded = mem * maybe_insn [@@deriving sexp_of]
 
 type dests = Brancher.dests
@@ -115,7 +116,7 @@ module Span : Span = struct
   let rng_max (_,a1) a2 = Addr.max a1 a2
 
   (** @pre: x <= p *)
-  let intersects (x,y) (p,q) = p <= y
+  let intersects (_,y) (p,_) = p <= y
   (** [merge x y] if [intersects x y]  *)
   let merge (x,p) (_,q) : range = (x, Addr.max p q)
 
@@ -180,7 +181,7 @@ type stage1 = {
   inits : Addr.Set.t;
   dests : dests Addr.Table.t;
   errors : (addr * error) list;
-  lift : lifter;
+  lift : mem -> full_insn -> semantics Or_error.t;
 }
 
 type stage2 = {
@@ -211,22 +212,26 @@ let rec has_jump = function
   | [] -> false
   | Bil.Jmp _ :: _ | Bil.CpuExn _ :: _ -> true
   | Bil.If (_,y,n) :: xs -> has_jump y || has_jump n || has_jump xs
-  | Bil.While (y,b) :: xs -> has_jump b || has_jump xs
+  | Bil.While (_,b) :: xs -> has_jump b || has_jump xs
   | _ :: xs -> has_jump xs
 
 let ok_nil = function
   | Ok xs -> xs
   | Error _ -> []
 
+let to_bil s = match s with
+  | Ok s -> Ok (Semantics.get Bil.Domain.bil s)
+  | Error err -> Error err
+
 let is_barrier s mem insn =
   Dis.Insn.is insn `May_affect_control_flow ||
-  has_jump (ok_nil (s.lift mem insn))
+  has_jump (ok_nil (to_bil (s.lift mem insn)))
 
 let update s mem insn dests : stage1 =
   let s = {s with valid = Set.add s.valid (Memory.min_addr mem)} in
   if is_barrier s mem insn then
     let dests = List.map dests ~f:(fun d -> match d with
-        | Some addr,kind when Memory.contains s.base addr -> d
+        | Some addr,_ when Memory.contains s.base addr -> d
         | _,kind -> None, kind) in
     update_dests s dests mem;
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
@@ -292,7 +297,7 @@ let create_indexes (dests : dests Addr.Table.t) =
           Addrs.add_multi succs ~key:src ~data:dest;
           match dest with
           | None,_ -> ()
-          | Some dst,kind ->
+          | Some dst,_ ->
             Addrs.add_multi leads ~key:dst ~data:src;
             Addrs.add_multi terms ~key:src ~data:dst));
   leads, terms, succs
@@ -347,15 +352,16 @@ let stage2 dis stage1 =
   | Some addr -> loop addr addr >>= fun () ->
     let dis = Dis.store_asm dis in
     let dis = Dis.store_kinds dis in
+    let empty = Semantics.empty in
     let disasm mem =
       Dis.run dis mem
         ~init:[] ~return:ident ~stopped:(fun s _ ->
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
-          | mem, None -> mem,(None,None)
+          | mem, None -> mem,(None,empty)
           | mem, (Some ins as insn) -> match stage1.lift mem ins with
-            | Ok bil -> mem,(insn,Some bil)
-            | _ -> mem, (insn, None)) in
+            | Ok sema -> mem,(insn,sema)
+            | _ -> mem, (insn, empty)) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
@@ -377,8 +383,11 @@ let stage3 s2 =
   Addrs.iteri s2.addrs ~f:(fun ~key:addr ~data:mem ->
       s2.disasm mem |> List.filter_map ~f:(function
           | mem,(None,_) -> None
-          | mem,(Some insn,bil) ->
-            Some (mem, Insn.of_basic ?bil insn)) |> function
+          | mem,(Some insn,sema) ->
+            let bil = Semantics.get Bil.Domain.bil sema in
+            let insn =
+              Insn.with_semantics (Insn.of_basic ~bil insn) sema in
+            Some (mem, insn)) |> function
       | [] -> ()
       | insns ->
         let node = Block.create mem insns in
@@ -397,11 +406,20 @@ let stage3 s2 =
                   Cfg.Edge.insert edge cfg)) in
   return {cfg; failures = s2.stage1.errors}
 
+
+
+let lifter mem insn =
+  let open Knowledge.Syntax in
+  let bil =
+    Knowledge.provide Dis.decoder Label.root (Some (mem,insn)) >>= fun () ->
+    Knowledge.collect Insn.Semantics.t Label.root in
+  match Knowledge.run bil Knowledge.empty with
+  | Ok (bil,_) -> Ok bil
+  | Error _ -> errorf "conflict"
+
 let run ?(backend="llvm") ?brancher ?rooter arch mem =
   let b = Option.value brancher ~default:(Brancher.of_bil arch) in
   let brancher = Brancher.resolve b in
-  let module Target = (val Targets.target_of_arch arch) in
-  let lifter = Target.lift in
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
       stage1 ?rooter lifter brancher dis mem >>= stage2 dis >>= stage3)
 

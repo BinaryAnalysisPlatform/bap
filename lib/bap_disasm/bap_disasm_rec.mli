@@ -3,7 +3,7 @@
 open Core_kernel.Std
 open Bap_types.Std
 open Graphlib.Std
-
+open Bap_knowledge
 open Image_internal_std
 open Bap_disasm_basic
 open Bap_disasm_brancher
