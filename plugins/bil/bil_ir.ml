@@ -97,7 +97,8 @@ module BIR = struct
       (* alternatively we can look into the sort *)
       let typ = Type.infer_exn exp in
       let var = Var.create name typ in
-      Blk.Builder.add_def b (Def.create var exp)
+      let def = Def.create var exp in
+      Blk.Builder.add_def b (Term.with_semantics def sema)
 
   let reify_cnd = function
     | None -> Bil.int Word.b1
@@ -105,12 +106,12 @@ module BIR = struct
       | None -> Bil.unknown "unrepresentable" bool_t
       | Some x -> x
 
-
   let add_indirect b cond dst = match Semantics.get Bil.Domain.exp dst with
     | None -> ()
     | Some exp ->
+      let jmp = Jmp.create_goto ~cond (Indirect exp) in
       Blk.Builder.add_jmp b @@
-      Jmp.create_goto ~cond (Indirect exp)
+      Term.with_semantics jmp dst
 
   (* later we will use the obtained knowledge to decide,
      which is call, and which is not, but so far, just

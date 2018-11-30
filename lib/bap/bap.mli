@@ -6898,6 +6898,10 @@ module Std : sig
     (** [del_attr term attr] deletes attribute [attr] from [term]  *)
     val del_attr : 'a t -> 'b tag -> 'a t
 
+    val semantics : 'a t -> semantics
+    val with_semantics : 'a t -> semantics -> 'a t
+
+
     (** {Predefined attributes}  *)
 
     (** a term was artificially produced from a term with a given tid.   *)

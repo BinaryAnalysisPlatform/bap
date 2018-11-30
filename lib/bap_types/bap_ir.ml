@@ -2,6 +2,7 @@ open Core_kernel.Std
 open Regular.Std
 open Bap_common
 open Bap_bil
+open Bap_knowledge
 
 module Value = Bap_value
 module Dict = Value.Dict
@@ -101,23 +102,24 @@ type tid = Tid.t [@@deriving bin_io, compare, sexp]
 type 'a term = {
   tid : tid;
   self : 'a;
+  sema : semantics;
   dict : dict;
 } [@@deriving bin_io, compare, fields, sexp]
 
 type label =
   | Direct of tid
   | Indirect of exp
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type call = {target : label; return : label option}
-  [@@deriving bin_io, compare, fields, sexp]
+[@@deriving bin_io, compare, fields, sexp]
 
 type jmp_kind =
   | Call of call
   | Goto of label
   | Ret  of label
   | Int  of int * tid
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 
 type intent = In | Out | Both [@@deriving bin_io, compare, sexp]
@@ -257,10 +259,12 @@ module Leaf = struct
     tid;
     self = (lhs,rhs);
     dict = Value.Dict.empty;
+    sema = Semantics.empty;
   }
 
   let make tid exp dst = {
-    tid; self = (exp,dst); dict = Value.Dict.empty
+    tid; self = (exp,dst); dict = Value.Dict.empty;
+    sema = Semantics.empty;
   }
 
   let lhs {self=(x,_)} = x
@@ -311,7 +315,11 @@ let cls typ par nil field = {
 
 
 let hash_of_term t = Tid.hash (tid t)
-let make_term tid self : 'a term = {tid; self; dict = Dict.empty}
+let make_term tid self : 'a term = {
+  tid; self; dict = Dict.empty;
+  sema = Semantics.empty;
+
+}
 
 let nil_top = make_term Tid.nil (Program.empty ())
 
@@ -773,6 +781,10 @@ module Term = struct
   let has_attr t tag = get_attr t tag <> None
   let with_attrs t dict = {t with dict}
 
+  let semantics t = t.sema
+
+  let with_semantics t sema = {t with sema}
+
   let length t p = Array.length (t.get p.self)
 
   let origin = Bap_value.Tag.register (module Tid)
@@ -1075,6 +1087,7 @@ module Ir_blk = struct
     let result (b : t) : blk term = {
       tid = b.b_tid;
       dict = Dict.empty;
+      sema = Semantics.empty;
       self = {
         defs = of_vec b.b_defs;
         phis = of_vec b.b_phis;
@@ -1086,6 +1099,7 @@ module Ir_blk = struct
   let create ?(tid=Tid.create ()) () : blk term = {
     tid;
     dict = Dict.empty;
+    sema = Semantics.empty;
     self = {
       phis = [| |] ;
       defs = [| |] ;
@@ -1100,6 +1114,7 @@ module Ir_blk = struct
     {
       tid = blk.tid;
       dict = Dict.empty;
+      sema = Semantics.empty;
       self = {
         phis = blk.self.phis;
         defs = Array.subo blk.self.defs ~len:i;
@@ -1108,6 +1123,7 @@ module Ir_blk = struct
     }, {
       tid = next_blk;
       dict = Dict.empty;
+      sema = Semantics.empty;
       self = {
         phis = [| |] ;
         defs = Array.subo blk.self.defs ~pos:i;
@@ -1272,7 +1288,7 @@ module Ir_sub = struct
 
   module Args = struct
     type t = (arg term, arg term * arg term) Either.t
-      [@@deriving bin_io, compare, sexp]
+    [@@deriving bin_io, compare, sexp]
     let pp ppf = function
       | First x -> Format.fprintf ppf "(%s)" (Ir_arg.name x)
       | Second (x,y) ->

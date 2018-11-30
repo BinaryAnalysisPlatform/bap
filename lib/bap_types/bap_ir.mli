@@ -4,6 +4,7 @@ open Bap_common
 open Bap_bil
 open Bap_value
 open Bap_visitor
+open Bap_knowledge
 
 type 'a term [@@deriving bin_io, compare, sexp]
 type program [@@deriving bin_io, compare, sexp]
@@ -21,20 +22,20 @@ type call [@@deriving bin_io, compare, sexp]
 type label =
   | Direct of tid
   | Indirect of exp
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type jmp_kind =
   | Call of call
   | Goto of label
   | Ret  of label
   | Int  of int * tid
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type intent =
   | In
   | Out
   | Both
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 type ('a,'b) cls
 
@@ -93,6 +94,9 @@ module Term : sig
   val del_attr : 'a t -> 'b tag -> 'a t
   val has_attr : 'a t -> 'b tag -> bool
   val with_attrs : 'a t -> Dict.t -> 'a t
+
+  val semantics : 'a t -> semantics
+  val with_semantics : 'a t -> semantics -> 'a t
 
   val origin : tid tag
   val synthetic : unit tag
