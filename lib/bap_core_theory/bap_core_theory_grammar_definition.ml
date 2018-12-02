@@ -3,6 +3,7 @@ type word = Bap.Std.word
 module type Bitv = sig
   type t
   type exp
+  type rmode
 
   val unsigned : int -> exp -> t
   val signed : int -> exp -> t
@@ -39,6 +40,9 @@ module type Bitv = sig
   val let_ : string -> exp -> exp -> t
   val append : exp -> exp -> t
   val concat : exp list -> t
+
+  val cast_int : int -> rmode -> exp -> t
+  val cast_sint : int -> rmode -> exp -> t
 end
 
 module type Bool = sig
@@ -64,6 +68,15 @@ module type Bool = sig
   val logand : exp -> exp -> t
   val logor: exp -> exp -> t
   val logxor : exp -> exp -> t
+
+  val is_snan : exp -> t
+  val is_qnan : exp -> t
+  val is_pinf : exp -> t
+  val is_ninf : exp -> t
+
+  val fle  : exp -> exp -> t
+  val flt  : exp -> exp -> t
+  val feq  : exp -> exp -> t
 end
 
 
@@ -87,19 +100,26 @@ end
 module type Stmt = sig
   type t
   type exp
+  type rmode
   type stmt
 
   val set_mem : string -> int -> int -> exp -> t
   val set_reg : string -> int -> exp -> t
   val set_bit : string -> exp -> t
+  val set_float : string -> int -> int -> exp -> t
+  val set_rmode : string -> rmode -> t
 
   val tmp_mem : string -> exp -> t
   val tmp_reg : string -> exp -> t
   val tmp_bit : string -> exp -> t
+  val tmp_float : string -> exp -> t
+  val tmp_rmode : string -> rmode -> t
 
   val let_mem : string -> exp -> stmt -> t
   val let_reg : string -> exp -> stmt -> t
   val let_bit : string -> exp -> stmt -> t
+  val let_float : string -> exp -> stmt -> t
+  val let_rmode : string -> rmode -> stmt -> t
 
   val jmp : exp -> t
   val goto :  word -> t
@@ -110,4 +130,48 @@ module type Stmt = sig
   val if_ : exp -> stmt list -> stmt list -> t
 
   val seq : stmt list -> t
+end
+
+module type Float = sig
+  type t
+  type exp
+  type rmode
+
+  val var : int -> int -> string -> t
+  val unk : int -> int -> t
+
+  val finite : int -> int -> exp -> exp -> exp -> t
+  val pinf : int -> int -> t
+  val ninf : int -> int -> t
+  val snan : int -> int -> exp -> t
+  val qnan : int -> int -> exp -> t
+
+  val fadd : rmode -> exp -> exp -> t
+  val fsub : rmode -> exp -> exp -> t
+  val fmul : rmode -> exp -> exp -> t
+  val fdiv : rmode -> exp -> exp -> t
+  val frem : rmode -> exp -> exp -> t
+  val fmin : exp -> exp -> t
+  val fmax : exp -> exp -> t
+
+  val fabs : exp -> t
+  val fneg : exp -> t
+  val fsqrt : rmode -> exp -> t
+  val fround : rmode -> exp -> t
+
+  val cast_float : int -> int -> rmode -> exp -> t
+  val cast_sfloat : int -> int -> rmode -> exp -> t
+
+  val convert : int -> int -> rmode -> exp -> t
+end
+
+module type Rmode = sig
+  type t
+  type exp
+
+  val rne : t
+  val rtz : t
+  val rtp : t
+  val rtn : t
+  val rna : t
 end

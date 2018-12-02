@@ -273,6 +273,9 @@ module Theory : Core = struct
   let cast_int s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
     P.cast_int s
 
+  let cast_sint s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
+    P.cast_sint s
+
   let fneg x = uop x @@ fun (module P) -> P.fneg
   let fabs x = uop x @@ fun (module P) -> P.fabs
 
@@ -281,7 +284,6 @@ module Theory : Core = struct
   let fsub m x y = faop m x y @@ fun (module P) -> P.fsub
   let fmul m x y = faop m x y @@ fun (module P) -> P.fmul
   let fdiv m x y = faop m x y @@ fun (module P) -> P.fdiv
-  let sqrt m x y = faop m x y @@ fun (module P) -> P.sqrt
   let fmodulo m x y = faop m x y @@ fun (module P) -> P.fmodulo
 
   let fmad m x y z = val4 m x y z (fun _ x _ _ -> sort x) @@ fun (module P) ->
@@ -306,6 +308,7 @@ module Theory : Core = struct
   let pownn m x y = faop m x y @@ fun (module P) -> P.pownn
 
   let fuop m x f = val2 m x (fun _ x -> sort x) f
+  let fsqrt m x = fuop m x @@ fun (module P) -> P.fsqrt
   let rsqrt m x = fuop m x @@ fun (module P) -> P.rsqrt
   let hypot m x y = faop m x y @@ fun (module P) -> P.hypot
 

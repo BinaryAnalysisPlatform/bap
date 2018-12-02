@@ -23,16 +23,27 @@ type ('a,'e,'s) stmt_parser =
                         and type stmt = 's) ->
   's -> 'a
 
+type ('a,'e) float_parser =
+  (module Grammar.Float with type t = 'a
+                         and type exp = 'e) ->
+  'e -> 'a
 
-type ('e,'s) t = {
+type ('a,'e) rmode_parser =
+  (module Grammar.Rmode with type t = 'a
+                         and type exp = 'e) ->
+  'e -> 'a
+
+type ('e,'r,'s) t = {
   bitv : 'a. ('a,'e) bitv_parser;
   bool : 'a. ('a,'e) bool_parser;
   mem  : 'a. ('a,'e) mem_parser;
   stmt : 'a. ('a,'e,'s) stmt_parser;
+  float : 'a . ('a,'e) float_parser;
+  rmode : 'a . ('a,'r) rmode_parser;
 }
 
-type ('e,'s) parser = ('e,'s) t
+type ('e,'r,'s) parser = ('e,'r,'s) t
 
 module Make(S : Core) : sig
-  val run : ('e,'s) parser -> 's list -> unit eff knowledge
+  val run : ('e,'r,'s) parser -> 's list -> unit eff knowledge
 end

@@ -160,6 +160,7 @@ module type Fbasic = sig
   val cast_float  : ('e,'k) float sort  -> rmode value t -> 'a bitv value t -> ('e,'k) float value t
   val cast_sfloat : ('e,'k) float sort -> rmode value t -> 'a bitv value t -> ('e,'k) float value t
   val cast_int    : 'a bitv sort -> rmode value t -> ('e,'k) float value t -> 'a bitv value t
+  val cast_sint   : 'a bitv sort -> rmode value t -> ('e,'k) float value t -> 'a bitv value t
 
   val fneg    : ('e,'k) float value t -> ('e,'k) float value t
   val fabs    : ('e,'k) float value t -> ('e,'k) float value t
@@ -168,7 +169,7 @@ module type Fbasic = sig
   val fsub    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
   val fmul    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
   val fdiv    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
-  val sqrt       : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
+  val fsqrt   : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
   val fmodulo : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
   val fmad    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
 

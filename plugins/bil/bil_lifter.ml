@@ -86,6 +86,9 @@ module Grammar = struct
       | Extract (_,_,_)
       | Concat (_,_) -> assert false
 
+  let float _ _ = assert false
+  let rmode _ _ = assert false
+
   let bool : type t. (t,exp) bool_parser =
     fun (module S) -> function
       | Var x -> S.var (Var.name x)
@@ -143,7 +146,8 @@ module Grammar = struct
       | If (c,xs,ys) -> S.if_ c xs ys
       | CpuExn n -> S.cpuexn n
 
-  let t = {bitv; mem; stmt; bool}
+
+  let t = {bitv; mem; stmt; bool; float; rmode}
 end
 
 module Parser = Parser.Make(Theory.Manager)

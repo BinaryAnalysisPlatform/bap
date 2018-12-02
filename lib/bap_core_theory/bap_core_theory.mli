@@ -160,6 +160,7 @@ module Theory : sig
     val cast_float  : ('e,'k) float sort  -> rmode value t -> 'a bitv value t -> ('e,'k) float value t
     val cast_sfloat : ('e,'k) float sort -> rmode value t -> 'a bitv value t -> ('e,'k) float value t
     val cast_int    : 'a bitv sort -> rmode value t -> ('e,'k) float value t -> 'a bitv value t
+    val cast_sint    : 'a bitv sort -> rmode value t -> ('e,'k) float value t -> 'a bitv value t
 
     val fneg    : ('e,'k) float value t -> ('e,'k) float value t
     val fabs    : ('e,'k) float value t -> ('e,'k) float value t
@@ -168,7 +169,7 @@ module Theory : sig
     val fsub    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
     val fmul    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
     val fdiv    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
-    val sqrt       : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
+    val fsqrt   : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t
     val fmodulo : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
     val fmad    : rmode value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t -> ('e,'k) float value t
 
@@ -383,6 +384,7 @@ module Grammar : sig
   module type Bitv = sig
     type t
     type exp
+    type rmode
 
     val unsigned : int -> exp -> t
     val signed : int -> exp -> t
@@ -419,6 +421,9 @@ module Grammar : sig
     val let_ : string -> exp -> exp -> t
     val append : exp -> exp -> t
     val concat : exp list -> t
+
+    val cast_int : int -> rmode -> exp -> t
+    val cast_sint : int -> rmode -> exp -> t
   end
 
   module type Bool = sig
@@ -444,6 +449,15 @@ module Grammar : sig
     val logand : exp -> exp -> t
     val logor: exp -> exp -> t
     val logxor : exp -> exp -> t
+
+    val is_snan : exp -> t
+    val is_qnan : exp -> t
+    val is_pinf : exp -> t
+    val is_ninf : exp -> t
+
+    val fle  : exp -> exp -> t
+    val flt  : exp -> exp -> t
+    val feq  : exp -> exp -> t
   end
 
 
@@ -467,19 +481,26 @@ module Grammar : sig
   module type Stmt = sig
     type t
     type exp
+    type rmode
     type stmt
 
     val set_mem : string -> int -> int -> exp -> t
     val set_reg : string -> int -> exp -> t
     val set_bit : string -> exp -> t
+    val set_float : string -> int -> int -> exp -> t
+    val set_rmode : string -> rmode -> t
 
     val tmp_mem : string -> exp -> t
     val tmp_reg : string -> exp -> t
     val tmp_bit : string -> exp -> t
+    val tmp_float : string -> exp -> t
+    val tmp_rmode : string -> rmode -> t
 
     val let_mem : string -> exp -> stmt -> t
     val let_reg : string -> exp -> stmt -> t
     val let_bit : string -> exp -> stmt -> t
+    val let_float : string -> exp -> stmt -> t
+    val let_rmode : string -> rmode -> stmt -> t
 
     val jmp : exp -> t
     val goto :  word -> t
@@ -493,6 +514,49 @@ module Grammar : sig
   end
 
 
+  module type Float = sig
+    type t
+    type exp
+    type rmode
+
+    val var : int -> int -> string -> t
+    val unk : int -> int -> t
+
+    val finite : int -> int -> exp -> exp -> exp -> t
+    val pinf : int -> int -> t
+    val ninf : int -> int -> t
+    val snan : int -> int -> exp -> t
+    val qnan : int -> int -> exp -> t
+
+    val fadd : rmode -> exp -> exp -> t
+    val fsub : rmode -> exp -> exp -> t
+    val fmul : rmode -> exp -> exp -> t
+    val fdiv : rmode -> exp -> exp -> t
+    val frem : rmode -> exp -> exp -> t
+    val fmin : exp -> exp -> t
+    val fmax : exp -> exp -> t
+
+    val fabs : exp -> t
+    val fneg : exp -> t
+    val fsqrt : rmode -> exp -> t
+    val fround : rmode -> exp -> t
+
+    val cast_float : int -> int -> rmode -> exp -> t
+    val cast_sfloat : int -> int -> rmode -> exp -> t
+
+    val convert : int -> int -> rmode -> exp -> t
+  end
+
+  module type Rmode = sig
+    type t
+    type exp
+
+    val rne : t
+    val rtz : t
+    val rtp : t
+    val rtn : t
+    val rna : t
+  end
 end
 
 module Parser : sig
@@ -517,17 +581,28 @@ module Parser : sig
                           and type stmt = 's) ->
     's -> 'a
 
+  type ('a,'e) float_parser =
+    (module Grammar.Float with type t = 'a
+                           and type exp = 'e) ->
+    'e -> 'a
 
-  type ('e,'s) t = {
+  type ('a,'e) rmode_parser =
+    (module Grammar.Rmode with type t = 'a
+                           and type exp = 'e) ->
+    'e -> 'a
+
+  type ('e,'r,'s) t = {
     bitv : 'a. ('a,'e) bitv_parser;
     bool : 'a. ('a,'e) bool_parser;
     mem  : 'a. ('a,'e) mem_parser;
     stmt : 'a. ('a,'e,'s) stmt_parser;
+    float : 'a . ('a,'e) float_parser;
+    rmode : 'a . ('a,'r) rmode_parser;
   }
 
-  type ('e,'s) parser = ('e,'s) t
+  type ('e,'r,'s) parser = ('e,'r,'s) t
 
   module Make(S : Theory.Core) : sig
-    val run : ('e,'s) parser -> 's list -> unit eff knowledge
+    val run : ('e,'r,'s) parser -> 's list -> unit eff knowledge
   end
 end

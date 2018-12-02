@@ -112,13 +112,14 @@ module Core : Core = struct
   let cast_float s _ _ = empty s
   let cast_sfloat s _ _ = empty s
   let cast_int s _ _ = empty s
+  let cast_sint s _ _ = empty s
   let fneg x = sort x >>= empty
   let fabs x = sort x >>= empty
   let fadd _ x _ = sort x >>= empty
   let fsub _ x _ = sort x >>= empty
   let fmul _ x _ = sort x >>= empty
   let fdiv _ x _ = sort x >>= empty
-  let sqrt _ x _ = sort x >>= empty
+  let fsqrt _ x = sort x >>= empty
   let fmodulo _ x _ = sort x >>= empty
   let fmad _ x _ _ = sort x >>= empty
   let fround _ x = sort x >>= empty

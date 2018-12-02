@@ -32,15 +32,26 @@ type ('a,'e,'s) stmt_parser =
                         and type stmt = 's) ->
   's -> 'a
 
+type ('a,'e) float_parser =
+  (module Grammar.Float with type t = 'a
+                         and type exp = 'e) ->
+  'e -> 'a
 
-type ('e,'s) t = {
+type ('a,'e) rmode_parser =
+  (module Grammar.Rmode with type t = 'a
+                         and type exp = 'e) ->
+  'e -> 'a
+
+type ('e,'r,'s) t = {
   bitv : 'a. ('a,'e) bitv_parser;
   bool : 'a. ('a,'e) bool_parser;
   mem  : 'a. ('a,'e) mem_parser;
   stmt : 'a. ('a,'e,'s) stmt_parser;
+  float : 'a . ('a,'e) float_parser;
+  rmode : 'a . ('a,'r) rmode_parser;
 }
 
-type ('e,'s) parser = ('e,'s) t
+type ('e,'r,'s) parser = ('e,'r,'s) t
 
 let bits = Bits.define
 let sort x = x >>| Value.sort
@@ -63,17 +74,20 @@ module Make(S : Core) = struct
     | None -> v
     | Some r -> r
 
-  let rec expw : type s b e.
+  let rec expw : type s b e r.
     (string * string) list ->
-    (e,b) parser -> e -> s bitv value t =
+    (e,r,b) parser -> e -> s bitv value t =
     fun ctxt self -> self.bitv (module struct
         type nonrec t = s bitv value t
         type exp = e
+        type rmode = r
 
         let run = expw
         let expw s = run ctxt self s
         let expm s = expm ctxt self s
         let expb s = expb ctxt self s
+        let expr s = expr ctxt self s
+        let expf s = expf ctxt self s
 
         let load_word sz dir mem key =
           loadw (bits sz) (expb dir) (expm mem) (expw key)
@@ -129,10 +143,13 @@ module Make(S : Core) = struct
           extract (bits sz) (expw hi) (expw lo) (expw x)
         let neg x = neg (expw x)
         let not x = not (expw x)
+
+        let cast_int s m w = cast_int (bits s) (expr m) (expf w)
+        let cast_sint s m w = cast_sint (bits s) (expr m) (expf w)
       end)
-  and expm : type k x b e.
+  and expm : type k x b e r.
     (string * string) list ->
-    (e,b) parser -> e -> (k,x) mem value t =
+    (e,r,b) parser -> e -> (k,x) mem value t =
     fun ctxt self -> self.mem (module struct
         open Knowledge.Syntax
         type nonrec t = (k, x) mem value t
@@ -158,9 +175,9 @@ module Make(S : Core) = struct
         let unknown ks vs = unk (Mems.define (bits ks) (bits vs))
       end)
 
-  and expb : type s b e.
+  and expb : type s b e r.
     (string * string) list ->
-    (e,b) parser -> e -> bit value t =
+    (e,r,b) parser -> e -> bit value t =
     fun ctxt self -> self.bool (module struct
         open Knowledge.Syntax
         type nonrec t = bit value t
@@ -169,6 +186,7 @@ module Make(S : Core) = struct
         let run = expb
         let expw s = expw ctxt self s
         let expm s = expm ctxt self s
+        let expf s = expf ctxt self s
         let expb s = run ctxt self s
 
         let var v = var (Var.create bool (rename ctxt v))
@@ -208,24 +226,108 @@ module Make(S : Core) = struct
           if hi = lo
           then lsb (extract (bits 1) (of_int xs hi) (of_int xs lo) x)
           else invalid_arg "type error"
+
+        let is_snan x = is_snan (expf x)
+        let is_qnan x = is_qnan (expf x)
+        let is_pinf x = is_pinf (expf x)
+        let is_ninf x = is_ninf (expf x)
+
+        let fless = forder
+        let feq x y = and_ (inv (fless x y)) (inv (fless y x))
+
+        let fle x y =
+          let x = expf x and y = expf y in
+          or_ (fless x y) (feq x y)
+
+
+        let flt x y = fless (expf x) (expf y)
+        let feq x y = feq (expf x) (expf y)
+
+      end)
+  and expf : type a k b e r.
+    (string * string) list ->
+    (e,r,b) parser -> e -> (a,k) float value t =
+    fun ctxt self -> self.float (module struct
+        type nonrec t = (a,k) float value t
+        type exp = e
+        type rmode = r
+
+        let run = expf
+        let expw s = expw ctxt self s
+        let expm s = expm ctxt self s
+        let expr s = expr ctxt self s
+        let expb s = expb ctxt self s
+        let expf s = run ctxt self s
+
+        let floats es ks  = Floats.define (bits es) (bits ks)
+
+        let var es ks name = var (Var.create (floats es ks) name)
+        let unk es ks = unk (floats es ks)
+
+        let finite es ks s e k =
+          finite (floats es ks) (expb s) (expw e) (expw k)
+
+        let pinf es ks = pinf (floats es ks)
+        let ninf es ks = ninf (floats es ks)
+        let snan es ks p = snan (floats es ks) (expw p)
+        let qnan es ks p = qnan (floats es ks) (expw p)
+
+        let fadd m x y = fadd (expr m) (expf x) (expf y)
+        let fsub m x y = fsub (expr m) (expf x) (expf y)
+        let fmul m x y = fmul (expr m) (expf x) (expf y)
+        let fdiv m x y = fdiv (expr m) (expf x) (expf y)
+        let frem m x y = fmodulo (expr m) (expf x) (expf y)
+        let fmin x y =
+          let x = expf x and y = expf y in
+          ite (forder x y) x y
+        let fmax x y =
+          let x = expf x and y = expf y in
+          ite (forder x y) y x
+
+        let fabs x = fabs (expf x)
+        let fneg x = fneg (expf x)
+        let fsqrt m x = fsqrt (expr m) (expf x)
+        let fround m x = fround (expr m) (expf x)
+
+        let cast_float es ks m x =
+          cast_float (floats es ks) (expr m) (expw x)
+
+        let cast_sfloat es ks m x =
+          cast_sfloat (floats es ks) (expr m) (expw x)
+
+        let convert es ks m x =
+          fconvert (floats es ks) (expr m) (expf x)
+      end)
+  and expr : type b e r.
+    (string * string) list ->
+    (e,r,b) parser -> r -> rmode value t =
+    fun _ctxt self -> self.rmode (module struct
+        type nonrec t = rmode value t
+        type exp = r
+        let rne = rne
+        let rtz = rtz
+        let rtp = rtp
+        let rtn = rtn
+        let rtz = rtz
+        let rna = rna
       end)
 
-
-  let rec run : type e s. (e,s) parser -> s list -> unit eff t =
+  let rec run : type e s r. (e,r,s) parser -> s list -> unit eff t =
     fun parser code -> bil [] parser code
 
-  and bil : type e s. (string * string) list -> (e,s) parser -> s list -> unit eff t =
+  and bil : type e s r. (string * string) list -> (e,r,s) parser -> s list -> unit eff t =
     fun ctxt parser xs -> stmts ctxt parser xs
 
-  and stmts : type e s.
+  and stmts : type e s r.
     (string * string) list ->
-    (e,s) parser -> s list -> unit eff t = fun ctxt self -> function
+    (e,r,s) parser -> s list -> unit eff t = fun ctxt self -> function
     | [] -> Knowledge.return Label.root >>= fun lbl -> blk lbl pass skip
     | x :: xs ->
       self.stmt (module struct
         type nonrec t = unit eff t
         type exp = e
         type stmt = s
+        type rmode = r
 
         let next = stmts ctxt self
 
@@ -272,10 +374,14 @@ module Make(S : Core) = struct
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
+        let set_float var ks vs exp = move (set_float ctxt self var ks vs exp)
+        let set_rmode var exp = move (set_rmode ctxt self var exp)
         let push var r = stmts ((var, Var.name r) :: ctxt) self xs
         let tmp_bit var exp = bind (expb ctxt self exp) (push var)
         let tmp_reg var exp = bind (expw ctxt self exp) (push var)
         let tmp_mem var exp = bind (expm ctxt self exp) (push var)
+        let tmp_float var exp = bind (expf ctxt self exp) (push var)
+        let tmp_rmode var exp = bind (expr ctxt self exp) (push var)
         let let_gen t var exp body =
           seq (bind (t ctxt self exp)
                  (fun r -> stmts ((var, Var.name r) :: ctxt) self [body]))
@@ -284,36 +390,50 @@ module Make(S : Core) = struct
         let let_bit = let_gen expb
         let let_reg = let_gen expw
         let let_mem = let_gen expm
+        let let_float = let_gen expf
+        let let_rmode = let_gen expr
 
         let seq ys = seq (next ys) (next xs)
       end) x
 
-  and set_bit : type e s.
+  and set_bit : type e s r.
     (string * string) list ->
-    (e,s) parser -> string -> e -> data eff t =
+    (e,r,s) parser -> string -> e -> data eff t =
     fun ctxt self v x -> set (Var.create bool v) (expb ctxt self x)
 
-  and set_reg : type e s.
+  and set_reg : type e s r.
     (string * string) list ->
-    (e,s) parser -> string -> int -> e -> data eff t =
+    (e,r,s) parser -> string -> int -> e -> data eff t =
     fun ctxt self v s x ->
       set (Var.create (bits s) v) (expw ctxt self x)
 
-  and set_mem : type e s.
+  and set_mem : type e s r.
     (string * string) list ->
-    (e,s) parser -> string -> int -> int -> e -> data eff t =
+    (e,r,s) parser -> string -> int -> int -> e -> data eff t =
     fun ctxt self v ks vs x ->
       set (Var.create (Mems.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
-  and stmtd : type e s.
+  and set_float : type e s r.
     (string * string) list ->
-    (e,s) parser -> s list -> data eff t = fun ctxt self -> function
+    (e,r,s) parser -> string -> int -> int -> e -> data eff t =
+    fun ctxt self v es ks x ->
+      set (Var.create (Floats.define (bits es) (bits ks)) v) (expf ctxt self x)
+
+  and set_rmode : type e s r.
+    (string * string) list ->
+    (e,r,s) parser -> string -> r -> data eff t =
+    fun ctxt self v x -> set (Var.create Rmode.t v) (expr ctxt self x)
+
+  and stmtd : type e s r.
+    (string * string) list ->
+    (e,r,s) parser -> s list -> data eff t = fun ctxt self -> function
     | [] -> pass
     | x :: xs ->
       self.stmt (module struct
         type nonrec t = data eff t
         type exp = e
         type stmt = s
+        type rmode = r
 
         let next = stmtd ctxt self
 
@@ -345,11 +465,15 @@ module Make(S : Core) = struct
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
+        let set_float var ks vs exp = move (set_float ctxt self var ks vs exp)
+        let set_rmode var exp = move (set_rmode ctxt self var exp)
 
         let push var r = stmtd ((var, Var.name r) :: ctxt) self xs
         let tmp_bit var exp = bind (expb ctxt self exp) (push var)
         let tmp_reg var exp = bind (expw ctxt self exp) (push var)
         let tmp_mem var exp = bind (expm ctxt self exp) (push var)
+        let tmp_float var exp = bind (expf ctxt self exp) (push var)
+        let tmp_rmode var exp = bind (expr ctxt self exp) (push var)
 
         let let_gen t var exp body =
           seq (bind (t ctxt self exp)
@@ -359,6 +483,8 @@ module Make(S : Core) = struct
         let let_bit = let_gen expb
         let let_reg = let_gen expw
         let let_mem = let_gen expm
+        let let_float = let_gen expf
+        let let_rmode = let_gen expr
 
         let seq ys = seq (next ys) (next xs)
       end) x
