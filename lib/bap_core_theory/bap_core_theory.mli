@@ -560,12 +560,13 @@ module Grammar : sig
 end
 
 module Parser : sig
-  type ('a,'e) bitv_parser =
+  type ('a,'e,'r) bitv_parser =
     (module Grammar.Bitv with type t = 'a
-                          and type exp = 'e) ->
+                          and type exp = 'e
+                          and type rmode = 'r) ->
     'e -> 'a
 
-  type ('a,'e) bool_parser =
+  type ('a,'e,'r) bool_parser =
     (module Grammar.Bool with type t = 'a
                           and type exp = 'e) ->
     'e -> 'a
@@ -575,15 +576,17 @@ module Parser : sig
                          and type exp = 'e) ->
     'e -> 'a
 
-  type ('a,'e,'s) stmt_parser =
+  type ('a,'e,'r,'s) stmt_parser =
     (module Grammar.Stmt with type t = 'a
                           and type exp = 'e
-                          and type stmt = 's) ->
+                          and type stmt = 's
+                          and type rmode = 'r) ->
     's -> 'a
 
-  type ('a,'e) float_parser =
+  type ('a,'e,'r) float_parser =
     (module Grammar.Float with type t = 'a
-                           and type exp = 'e) ->
+                           and type exp = 'e
+                           and type rmode = 'r) ->
     'e -> 'a
 
   type ('a,'e) rmode_parser =
@@ -592,11 +595,11 @@ module Parser : sig
     'e -> 'a
 
   type ('e,'r,'s) t = {
-    bitv : 'a. ('a,'e) bitv_parser;
-    bool : 'a. ('a,'e) bool_parser;
+    bitv : 'a. ('a,'e,'r) bitv_parser;
+    bool : 'a. ('a,'e,'r) bool_parser;
     mem  : 'a. ('a,'e) mem_parser;
-    stmt : 'a. ('a,'e,'s) stmt_parser;
-    float : 'a . ('a,'e) float_parser;
+    stmt : 'a. ('a,'e,'r,'s) stmt_parser;
+    float : 'a . ('a,'e,'r) float_parser;
     rmode : 'a . ('a,'r) rmode_parser;
   }
 

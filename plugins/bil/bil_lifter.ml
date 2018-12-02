@@ -27,7 +27,7 @@ module Grammar = struct
     Bil.int @@
     if e = BigEndian then Word.b1 else Word.b0
 
-  let bitv : type t. (t,exp) bitv_parser =
+  let bitv : type t r. (t,exp,r) bitv_parser =
     fun (module S) -> function
       | Cast (HIGH,n,x) -> S.high n x
       | Cast (LOW,n,x) -> S.low n x
@@ -89,7 +89,7 @@ module Grammar = struct
   let float _ _ = assert false
   let rmode _ _ = assert false
 
-  let bool : type t. (t,exp) bool_parser =
+  let bool : type t r. (t,exp,r) bool_parser =
     fun (module S) -> function
       | Var x -> S.var (Var.name x)
       | Int x -> S.int x
@@ -122,7 +122,7 @@ module Grammar = struct
         -> assert false
 
 
-  let stmt : type t. (t,exp,stmt) stmt_parser =
+  let stmt : type t r. (t,exp,r,stmt) stmt_parser =
     fun (module S) ->
       let set v x =
         let n = Var.name v in
