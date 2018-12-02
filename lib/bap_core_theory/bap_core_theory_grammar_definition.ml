@@ -60,9 +60,9 @@ module type Bool = sig
   val ite : exp -> exp -> exp -> t
   val let_ : string -> exp -> exp -> t
 
-  val high : int -> exp -> t
-  val low : int -> exp -> t
-  val extract : int -> int -> exp -> t
+  val high : exp -> t
+  val low : exp -> t
+  val extract : int -> exp -> t
 
   val not : exp -> t
   val logand : exp -> exp -> t

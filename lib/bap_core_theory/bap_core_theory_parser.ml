@@ -212,20 +212,13 @@ module Make(S : Core) = struct
 
         let int x = if Word.is_zero x then b0 else b1
 
-        let high n x =
-          if n = 1 then lsb (high (bits 1) (expw x))
-          else invalid_arg "type error"
+        let high x = lsb (high (bits 1) (expw x))
+        let low x = lsb (low (bits 1) (expw x))
 
-        let low n x =
-          if n = 1 then lsb (low (bits 1) (expw x))
-          else invalid_arg "type error"
-
-        let extract hi lo x =
+        let extract n x =
           let x = expw x in
           sort x >>= fun xs ->
-          if hi = lo
-          then lsb (extract (bits 1) (of_int xs hi) (of_int xs lo) x)
-          else invalid_arg "type error"
+          lsb (extract (bits 1) (of_int xs n) (of_int xs n) x)
 
         let is_snan x = is_snan (expf x)
         let is_qnan x = is_qnan (expf x)

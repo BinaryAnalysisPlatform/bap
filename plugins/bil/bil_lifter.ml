@@ -93,8 +93,8 @@ module Grammar = struct
     fun (module S) -> function
       | Var x -> S.var (Var.name x)
       | Int x -> S.int x
-      | Cast (HIGH,n,x) -> S.high n x
-      | Cast (LOW,n,x) -> S.low n x
+      | Cast (HIGH,1,x) -> S.high x
+      | Cast (LOW,1,x) -> S.low x
       | BinOp (EQ,x,y) -> S.eq x y
       | BinOp (NEQ,x,y) -> S.neq x y
       | BinOp (LT,x,y) -> S.lt x y
@@ -107,12 +107,13 @@ module Grammar = struct
       | UnOp (NOT,x) -> S.not x
       | Let (x,y,z) -> S.let_ (Var.name x) y z
       | Ite (x,y,z) -> S.ite x y z
-      | Extract (hi,lo,x) -> S.extract hi lo x
+      | Extract (hi,lo,x) when hi = lo -> S.extract hi x
       | Unknown (_,_) -> S.unknown ()
 
       (* the rest is ill-formed *)
+      | Extract _
       | UnOp (NEG,_)
-      | Cast ((SIGNED|UNSIGNED),_,_)
+      | Cast (_,_,_)
       | Load (_,_,_,_)
       | Store (_,_,_,_,_)
       | Concat (_,_) -> assert false
