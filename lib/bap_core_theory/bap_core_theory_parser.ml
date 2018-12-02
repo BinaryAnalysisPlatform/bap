@@ -223,10 +223,37 @@ module Make(S : Core) = struct
           sort x >>= fun xs ->
           lsb (extract (bits 1) (of_int xs n) (of_int xs n) x)
 
+
+        let is_fzero x =
+          and_
+            (is_zero (exponent x))
+            (is_zero (significand x))
+
+        let is_fneg x = or_ (fsign x) (is_ninf x)
+        let is_fpos x =
+          let x = expf x in
+          and_ (inv (is_fneg x)) (inv (is_fzero x))
+
+        let is_fneg x = is_fneg (expf x)
+        let is_fzero x = is_fzero (expf x)
+
+        let is_fneg x =
+          let x = expf x in
+          or_ (fsign x) (is_ninf x)
+
+        let is_nan x =
+          let x = expf x in
+          or_ (is_qnan x) (is_snan x)
+
+        let is_inf x =
+          let x = expf x in
+          or_ (is_pinf x) (is_ninf x)
+
         let is_snan x = is_snan (expf x)
         let is_qnan x = is_qnan (expf x)
         let is_pinf x = is_pinf (expf x)
         let is_ninf x = is_ninf (expf x)
+
 
         let fless = forder
         let feq x y = and_ (inv (fless x y)) (inv (fless y x))
@@ -238,6 +265,7 @@ module Make(S : Core) = struct
 
         let flt x y = fless (expf x) (expf y)
         let feq x y = feq (expf x) (expf y)
+
 
       end)
   and expf : type a k b e r.

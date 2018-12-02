@@ -74,6 +74,12 @@ module type Bool = sig
   val is_pinf : exp -> t
   val is_ninf : exp -> t
 
+  val is_inf : exp -> t
+  val is_nan : exp -> t
+  val is_fzero : exp -> t
+  val is_fpos : exp -> t
+  val is_fneg : exp -> t
+
   val fle  : exp -> exp -> t
   val flt  : exp -> exp -> t
   val feq  : exp -> exp -> t
