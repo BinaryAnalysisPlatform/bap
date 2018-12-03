@@ -14,7 +14,11 @@ type def = {
   sema : semantics;
 }
 
-type dst = Direct of Label.t | Indirect of semantics
+type known = Label of Label.t | Addr of Addr.t | CpuExn of int
+
+type dst =
+  | Direct of known
+  | Indirect of semantics
 
 type jmp = {
   cnd : bit value option;
@@ -46,10 +50,14 @@ module Graph = struct
       Option.iter cnd ~f:(fun bit ->
           fprintf ppf "when %a " pp_sema (Value.semantics bit)) in
     match dst with
-    | Direct dst ->
-      fprintf ppf "  %tgoto L%a@\n" pp_cnd Label.pp dst
     | Indirect dst ->
       fprintf ppf "  %tjump %a@\n" pp_cnd pp_sema dst
+    | Direct (Label dst) ->
+      fprintf ppf "  %tgoto L%a@\n" pp_cnd Label.pp dst
+    | Direct (Addr dst) ->
+      fprintf ppf "  %tgoto L%a@\n" pp_cnd Addr.pp dst
+    | Direct (CpuExn dst) ->
+      fprintf ppf "  %tgoto L%a@\n" pp_cnd Int.pp dst
 
 
   let pp_def pp_sema ppf {name; sema} =
@@ -117,8 +125,15 @@ module BIR = struct
      which is call, and which is not, but so far, just
      let's create a goto *)
   let add_direct labels b cond lbl =
-    Blk.Builder.add_jmp b @@
-    Jmp.create_goto ~cond (Direct (tid_of_label labels lbl))
+    Blk.Builder.add_jmp b @@ match lbl with
+    | Label lbl ->
+      Jmp.create_goto ~cond (Direct (tid_of_label labels lbl))
+    | Addr addr ->
+      Jmp.create_goto ~cond (Indirect Bil.(int addr))
+    | CpuExn n ->
+      let fall = Tid.create () in
+      Jmp.create_int ~cond n fall
+
 
   let add_jmp labels b {cnd; dst} =
     let cnd = reify_cnd cnd in
@@ -221,13 +236,13 @@ module IR = struct
         blks = [{
             name = head;
             defs = [];
-            jmps = [{cnd = Some cnd; dst = Direct head}]
+            jmps = [{cnd = Some cnd; dst = Direct (Label head)}]
           }]}
     | {entry=loop; blks=b::blks} ->
       fresh >>= fun head ->
       fresh >>= fun tail ->
-      let goto_tail = {cnd = None; dst = Direct tail} in
-      let goto_loop = {cnd = Some cnd; dst = Direct loop} in
+      let goto_tail = {cnd = None; dst = Direct (Label tail)} in
+      let goto_loop = {cnd = Some cnd; dst = Direct (Label loop)} in
       data {
         entry = head;
         blks = blk tail ++ goto_loop ::
@@ -236,8 +251,8 @@ module IR = struct
                blks
       }
 
-  let jump cnd dst = {cnd = Some cnd; dst = Direct dst}
-  let fall dst = {cnd = None; dst = Direct dst}
+  let jump cnd dst = {cnd = Some cnd; dst = Direct (Label dst)}
+  let fall dst = {cnd = None; dst = Direct (Label dst)}
 
 
   let branch cnd yes nay =
@@ -294,8 +309,18 @@ module IR = struct
     }
 
 
+  let resolve_dst dst =
+    resolve_addr dst >>= function
+    | Some known -> Knowledge.return (Addr known)
+    | None ->
+      resolve_ivec dst >>= function
+      | Some known -> Knowledge.return (CpuExn known)
+      | None -> Knowledge.return (Label dst)
+
+
   let goto dst =
     fresh >>= fun entry ->
+    resolve_dst dst >>= fun dst ->
     ctrl {
       entry;
       blks = [blk entry ++ {dst=Direct dst; cnd=None}]

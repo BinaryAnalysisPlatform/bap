@@ -180,15 +180,39 @@ module IrBuilder = struct
         | Goto target -> Call (Call.create ~return ~target ())
         | k -> k)
 
+  let landing_pad return jmp =
+    match Ir_jmp.kind jmp with
+    | Int (_,pad) ->
+      let pad = Ir_blk.create ~tid:pad () in
+      let pad = match return with
+        | None -> pad
+        | Some dst ->
+          Term.append jmp_t pad (Ir_jmp.create_goto dst) in
+      Some pad
+    | _ -> None
+
+  let with_landing_pads return bs = match bs with
+    | [] -> []
+    | b :: bs as blks ->
+      let pads = List.fold ~init:[] blks ~f:(fun pads b ->
+          Term.enum jmp_t b |>
+          Seq.fold ~init:pads ~f:(fun pads jmp ->
+              match landing_pad return jmp with
+              | Some pad -> pad :: pads
+              | None -> pads)) in
+      b :: List.rev_append pads bs
+
   (* TODO, add attributes to all terms *)
   let blk cfg block : blk term list =
     let blks =
       Block.insns block |>
       List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (_mem,insn) ->
           lift_insn insn blks) in
+    let fall = label_of_fall cfg block in
+    let blks = with_landing_pads fall blks in
     let addr = Block.addr block in
     with_first_blk_addressed addr @@
-    match label_of_fall cfg block with
+    match fall with
     | None -> List.rev blks
     | Some dst -> match blks with
       | [] -> []                 (* assert false? *)
