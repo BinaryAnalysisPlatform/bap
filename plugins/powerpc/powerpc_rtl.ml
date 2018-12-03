@@ -53,6 +53,7 @@ let rec bil_exp = function
   | Concat (x, y) -> Bil.(bil_exp x ^ bil_exp y)
   | Binop (op, x, y) -> Bil.binop op (bil_exp x) (bil_exp y)
   | Extract (hi, lo, x) -> Bil.extract hi lo (bil_exp x)
+  | Cast (_, 1, x) -> Bil.(cast low 1 (bil_exp x))
   | Cast (Signed, width, x) -> Bil.(cast signed width (bil_exp x))
   | Cast (Unsigned, width, x) -> Bil.(cast unsigned width (bil_exp x))
   | Unop (op, x) -> Bil.unop op (bil_exp x)
@@ -73,15 +74,16 @@ let var_of_exp e = match e.body with
 module Exp = struct
 
   let cast x width sign =
-    let nothing_to_cast =
-      (x.sign = sign && x.width = width) ||
-      (x.width = width && width = 1) in
-    if nothing_to_cast then x
-    else
-    if x.width = 1 then
-      {width; sign; body = Cast (x.sign, width, x.body)}
-    else
-      {width; sign; body = Cast (sign, width, x.body)}
+    let same_sign = x.sign = sign
+    and same_size = x.width = width in
+    match same_sign, same_size with
+    | true,true -> x               (* nothing is changed *)
+    | false,true -> {x with sign}  (* size is preserved - no BIL cast *)
+    | true,false                  (* size is changed, *)
+    | false,false ->               (* possibly with sign *)
+      if x.width = 1
+      then {width; sign; body = Cast (x.sign, width, x.body)}
+      else {width; sign; body = Cast (sign, width, x.body)}
 
   let cast_width x width = cast x width x.sign
 
@@ -108,12 +110,13 @@ module Exp = struct
     let sign = derive_sign lhs.sign rhs.sign in
     binop_with_signedness sign op lhs rhs
 
+  let logop_with_cast op lhs rhs =
+    {(binop_with_cast op lhs rhs) with width = 1}
+
   let concat lhs rhs =
     let width = lhs.width + rhs.width in
     let body = Concat (lhs.body, rhs.body) in
     { sign = Unsigned; width; body; }
-
-  let bit_result x = cast_width x 1
 
   let derive_op x y op_u op_s =
     match derive_sign x.sign y.sign with
@@ -124,21 +127,22 @@ module Exp = struct
   let minus = binop_with_cast Bil.minus
   let times = binop_with_cast Bil.times
 
+
   let lt x y  =
     let op = derive_op x y Bil.lt Bil.slt in
-    bit_result (binop_with_cast op x y)
+    logop_with_cast op x y
 
   let gt x y  =
     let op = derive_op x y Bil.lt Bil.slt in
-    bit_result (binop_with_cast op y x)
+    logop_with_cast op y x
 
   let le x y  =
     let op = derive_op x y Bil.le Bil.sle in
-    bit_result (binop_with_cast op x y)
+    logop_with_cast op x y
 
   let ge x y  =
     let op = derive_op x y Bil.le Bil.sle in
-    bit_result (binop_with_cast op y x)
+    logop_with_cast op y x
 
   let divide x y  =
     let op = derive_op x y Bil.divide Bil.sdivide in
@@ -148,8 +152,8 @@ module Exp = struct
     let op = derive_op x y Bil.modulo Bil.smodulo in
     binop_with_cast op x y
 
-  let eq x y  = bit_result (binop_with_cast Bil.eq x y)
-  let neq x y = bit_result (binop_with_cast Bil.neq x y)
+  let eq x y  = logop_with_cast Bil.eq x y
+  let neq x y =  logop_with_cast Bil.neq x y
 
   let lshift = binop_with_cast Bil.lshift
   let rshift x y =
