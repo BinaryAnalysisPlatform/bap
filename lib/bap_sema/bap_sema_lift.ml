@@ -202,16 +202,26 @@ module IrBuilder = struct
               | None -> pads)) in
       b :: List.rev_append pads bs
 
-  (* TODO, add attributes to all terms *)
+  let set_attributes mem insn blks =
+    let addr = Memory.min_addr mem in
+    let set tag x t = Term.set_attr t tag x in
+    let set_attributes k b =
+      Term.map k b ~f:(fun t ->
+          set address addr t |>
+          set Disasm.insn insn) in
+    List.map blks ~f:(fun blk ->
+        set_attributes jmp_t blk |>
+        set_attributes def_t)
+
+
   let blk cfg block : blk term list =
+    let fall = label_of_fall cfg block in
     let blks =
       Block.insns block |>
-      List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (_mem,insn) ->
+      List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (mem,insn) ->
+          set_attributes mem insn @@
+          with_landing_pads fall @@
           lift_insn insn blks) in
-    let fall = label_of_fall cfg block in
-    let blks = with_landing_pads fall blks in
-    let addr = Block.addr block in
-    with_first_blk_addressed addr @@
     match fall with
     | None -> List.rev blks
     | Some dst -> match blks with
