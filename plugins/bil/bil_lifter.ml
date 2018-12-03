@@ -10,7 +10,11 @@ open Link.Syntax
 open Parser
 include Self()
 
-module Grammar = struct
+module BilParser = struct
+  type context = [`Bitv | `Bool | `Mem ]
+  exception Error of exp * context
+  let fail exp ctx = raise (Error (exp,ctx))
+
   type exp = Bil.exp
   module Var = Bap.Std.Var
   let rec uncat acc : exp -> exp list = function
@@ -20,7 +24,7 @@ module Grammar = struct
 
   let bits_of_var v = match Var.typ v with
     | Imm x -> x
-    | _ -> invalid_arg "expects a bitvector"
+    | _ -> fail (Var v) `Bitv
 
   let byte x = Bil.int (Word.of_int ~width:8 x)
   let is_big e =
@@ -58,14 +62,17 @@ module Grammar = struct
         let s = max 0 (hi-lo+1) in
         S.extract s (byte hi) (byte lo) x
       | Concat (_,_) as cat -> S.concat (uncat [] cat)
+      | Unknown (_, Imm s) -> S.unknown s
+
       (* ill-formed expressions *)
       | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _)
       | Store (_, _, _, _, _)
-      | Unknown (_, _) -> assert false
+      | Unknown (_, Mem _) as exp -> fail exp `Bitv
+
 
   let with_mem_types v f = match Var.typ v with
     | Mem (ks,vs) -> f (Size.in_bits ks) (Size.in_bits vs)
-    | _ -> assert false
+    | _ -> fail (Var v) `Mem
 
   let mem : type t. (t,exp) mem_parser =
     fun (module S) -> function
@@ -84,7 +91,7 @@ module Grammar = struct
       | Int _
       | Cast (_,_,_)
       | Extract (_,_,_)
-      | Concat (_,_) -> assert false
+      | Concat (_,_) as exp -> fail exp `Mem
 
   let float _ _ = assert false
   let rmode _ _ = assert false
@@ -109,17 +116,15 @@ module Grammar = struct
       | Ite (x,y,z) -> S.ite x y z
       | Extract (hi,lo,x) when hi = lo -> S.extract hi x
       | Unknown (_,_) -> S.unknown ()
-
-      (* the rest is ill-formed *)
       | Extract _
       | UnOp (NEG,_)
       | Cast (_,_,_)
       | Load (_,_,_,_)
       | Store (_,_,_,_,_)
-      | Concat (_,_) -> assert false
+      | Concat (_,_)
       | BinOp ((PLUS|MINUS|TIMES|DIVIDE|SDIVIDE|
-                MOD|SMOD|LSHIFT|RSHIFT|ARSHIFT),_,_)
-        -> assert false
+                MOD|SMOD|LSHIFT|RSHIFT|ARSHIFT),_,_) as exp
+        -> fail exp `Bool
 
 
   let stmt : type t r. (t,exp,r,stmt) stmt_parser =
@@ -163,7 +168,7 @@ let provide_lifter arch =
       match Target.lift mem insn with
       | Error _ -> Knowledge.return Semantics.empty
       | Ok bil ->
-        Parser.run Grammar.t bil >>| fun eff ->
+        Parser.run BilParser.t bil >>| fun eff ->
         let graph = Eff.get Bil_ir.t eff in
         let bir = Bil_ir.reify graph in
         let sema = Eff.semantics eff in
