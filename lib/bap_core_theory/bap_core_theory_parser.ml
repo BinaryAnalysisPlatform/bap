@@ -382,16 +382,12 @@ module Make(S : Core) = struct
                (bil ctxt self nay))
             (next xs)
 
-        let goto addr =
-          let addr = int (bits (Word.bitwidth addr)) addr in
-          seq (blk unlabeled pass (jmp addr)) (next xs)
-
         let jmp exp =
           seq (blk unlabeled pass (jmp (expw ctxt self exp))) (next xs)
 
-        (* let goto addr =
-         *   link_addr addr >>= fun lbl ->
-         *   seq (blk unlabeled pass (goto lbl)) (next xs) *)
+        let goto addr =
+          link_addr addr >>= fun lbl ->
+          seq (blk unlabeled pass (goto lbl)) (next xs)
 
         let move eff = seq (blk unlabeled eff skip) (next xs)
         let set_bit var exp = move (set_bit ctxt self var exp)
