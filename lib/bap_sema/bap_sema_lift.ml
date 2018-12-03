@@ -34,9 +34,6 @@ module Label = IRLabel
    speculation.
 *)
 
-type linear =
-  | Label of tid
-  | Instr of Ir_blk.elt
 
 
 let fall_of_block cfg block =
@@ -48,99 +45,6 @@ let fall_of_block cfg block =
 let label_of_fall cfg block =
   Option.map (fall_of_block cfg block) ~f:(fun blk ->
       Label.indirect Bil.(int (Block.addr blk)))
-
-let annotate_insn term insn = Term.set_attr term Disasm.insn insn
-let annotate_addr term addr = Term.set_attr term address addr
-
-let linear_of_stmt ?addr return insn stmt : linear list =
-  let (~@) t = match addr with
-    | None -> t
-    | Some addr -> annotate_addr (annotate_insn t insn) addr in
-  let goto ?cond id =
-    `Jmp ~@(Ir_jmp.create_goto ?cond (Label.direct id)) in
-  let jump ?cond exp =
-    let target = Label.indirect exp in
-    if Insn.(is return) insn
-    then Ir_jmp.create_ret ?cond target
-    else if Insn.(is call) insn
-    then
-      Ir_jmp.create_call ?cond (Call.create ?return ~target ())
-    else Ir_jmp.create_goto ?cond target in
-  let jump ?cond exp = Instr (`Jmp ~@(jump ?cond exp)) in
-  let cpuexn ?cond n =
-    let landing = Tid.create () in
-    let takeoff = Tid.create () in
-    let exn = `Jmp ~@(Ir_jmp.create_int ?cond n landing) in
-    match return with
-    | None -> [
-        Instr exn;
-        Label landing;
-        (* No code was found that follows the interrupt,
-           so this is a no-return interrupt *)
-      ]
-    | Some lab -> [
-        Instr (goto takeoff);
-        Label landing;
-        Instr (`Jmp ~@(Ir_jmp.create_goto lab));
-        Label takeoff;
-        Instr exn;
-      ] in
-
-  let rec linearize = function
-    | Bil.Move (lhs,rhs) ->
-      [Instr (`Def ~@(Ir_def.create lhs rhs))]
-    | Bil.If (_, [],[]) -> []
-    | Bil.If (cond,[],no) -> linearize Bil.(If (lnot cond, no,[]))
-    | Bil.If (cond,yes,[]) ->
-      let yes_label = Tid.create () in
-      let tail = Tid.create () in
-      Instr (goto ~cond yes_label) ::
-      Instr (goto tail) ::
-      Label yes_label ::
-      List.concat_map yes ~f:linearize @
-      Instr (goto tail) ::
-      Label tail :: []
-    | Bil.If (cond,yes,no) ->
-      let yes_label = Tid.create () in
-      let no_label = Tid.create () in
-      let tail = Tid.create () in
-      Instr (goto ~cond yes_label) ::
-      Instr (goto no_label) ::
-      Label yes_label ::
-      List.concat_map yes ~f:linearize @
-      Instr (goto tail) ::
-      Label no_label ::
-      List.concat_map no ~f:linearize @
-      Instr (goto tail) ::
-      Label tail :: []
-    | Bil.Jmp exp -> [jump exp]
-    | Bil.CpuExn n -> cpuexn n
-    | Bil.Special _ -> []
-    | Bil.While (cond,body) ->
-      let header = Tid.create () in
-      let tail = Tid.create () in
-      let finish = Tid.create () in
-      Instr (goto tail) ::
-      Label header ::
-      List.concat_map body ~f:linearize @
-      Instr (goto tail) ::
-      Label tail ::
-      Instr (goto ~cond header) ::
-      Instr (goto finish) ::
-      Label finish :: [] in
-  linearize stmt
-
-let lift_insn ?addr fall init insn =
-  List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
-      List.fold (linear_of_stmt ?addr fall insn stmt) ~init
-        ~f:(fun (bs,b) -> function
-            | Label lab ->
-              Ir_blk.Builder.result b :: bs,
-              Ir_blk.Builder.create ~tid:lab ()
-            | Instr elt ->
-              Ir_blk.Builder.add_elt b elt; bs,b))
-
-
 
 module IrBuilder = struct
 
@@ -163,7 +67,21 @@ module IrBuilder = struct
     Semantics.get Insn.Semantics.Domain.bir @@
     Insn.semantics insn
 
-  let lift_insn insn blks = append blks @@ ir_of_insn insn
+  let set_attributes ?mem insn blks =
+    let addr = Option.map ~f:Memory.min_addr mem in
+    let set_attributes k b =
+      Term.map k b ~f:(fun t ->
+          let t = Term.set_attr t Disasm.insn insn in
+          Option.value_map addr ~f:(Term.set_attr t address)
+            ~default:t) in
+    List.map blks ~f:(fun blk ->
+        set_attributes jmp_t blk |>
+        set_attributes def_t)
+
+
+  let lift_insn ?mem insn blks =
+    append blks @@
+    set_attributes ?mem insn (ir_of_insn insn)
 
   let with_first_blk_addressed addr = function
     | [] -> []
@@ -202,26 +120,14 @@ module IrBuilder = struct
               | None -> pads)) in
       b :: List.rev_append pads bs
 
-  let set_attributes mem insn blks =
-    let addr = Memory.min_addr mem in
-    let set tag x t = Term.set_attr t tag x in
-    let set_attributes k b =
-      Term.map k b ~f:(fun t ->
-          set address addr t |>
-          set Disasm.insn insn) in
-    List.map blks ~f:(fun blk ->
-        set_attributes jmp_t blk |>
-        set_attributes def_t)
-
-
   let blk cfg block : blk term list =
     let fall = label_of_fall cfg block in
     let blks =
       Block.insns block |>
       List.fold  ~init:[Ir_blk.create ()] ~f:(fun blks (mem,insn) ->
-          set_attributes mem insn @@
-          with_landing_pads fall @@
-          lift_insn insn blks) in
+          lift_insn ~mem insn blks) in
+    let blks = with_landing_pads fall blks in
+    with_first_blk_addressed (Block.addr block) @@
     match fall with
     | None -> List.rev blks
     | Some dst -> match blks with
@@ -249,24 +155,6 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-(* let blk cfg block : blk term list =
- *   let fall_label = label_of_fall cfg block in
- *   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
- *     ~f:(fun init (mem,insn) ->
- *         let addr = Memory.min_addr mem in
- *         lift_insn ~addr fall_label init insn) |>
- *   fun (bs,b) ->
- *   let fall =
- *     let jmp = Block.terminator block in
- *     if Insn.(is call) jmp && not (is_conditional_jump jmp)
- *     then None else match fall_label with
- *       | None -> None
- *       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
- *   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
- *   let b = Ir_blk.Builder.result b in
- *   List.rev (b::bs) |> function
- *   | [] -> assert false
- *   | b::bs -> Term.set_attr b address (Block.addr block) :: bs *)
 
 let blk = IrBuilder.blk
 
@@ -311,7 +199,6 @@ let remove_false_jmps blk =
     Term.after jmp_t blk (Term.tid last) |> Seq.map ~f:Term.tid |>
     Seq.fold ~init:blk ~f:(Term.remove jmp_t)
 
-let unbound _ = true
 
 let lift_sub entry cfg =
   let addrs = Addr.Table.create () in
@@ -418,11 +305,6 @@ let program symtab =
               resolve_jmp ~local:false addrs j)))
 
 let sub = lift_sub
-
-(* let insn insn =
- *   lift_insn None ([], Ir_blk.Builder.create ()) insn |>
- *   function (bs,b) -> List.rev (Ir_blk.Builder.result b :: bs) *)
-
 
 let insn insn =
   List.rev @@ IrBuilder.lift_insn insn [Ir_blk.create ()]
