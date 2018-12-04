@@ -3,6 +3,7 @@ open Format
 open Bap.Std
 open Bap_plugins.Std
 open Mc_options
+open Bap_knowledge
 include Self()
 
 exception Bad_user_input
@@ -17,7 +18,7 @@ module Program(Conf : Mc_options.Provider) = struct
   open Conf
   module Dis = Disasm_expert.Basic
 
-  let bad_insn addr state mem start =
+  let bad_insn addr state _ start =
     let stop = Addr.(Dis.addr state - addr |> to_int |> ok_exn) in
     raise (Bad_insn (Dis.memory state, start, stop))
 
@@ -49,7 +50,7 @@ module Program(Conf : Mc_options.Provider) = struct
       | "" | "\n" -> exit 0
       | "\\x" -> to_binary input
       | "0x" ->  to_binary ~map:escape_0x input
-      | x -> to_binary ~map:prepend_slash_x input
+      | _ -> to_binary ~map:prepend_slash_x input
 
   let create_memory arch s addr =
     let endian = Arch.endian arch in
@@ -63,6 +64,15 @@ module Program(Conf : Mc_options.Provider) = struct
     List.map ~f:sexp_of_kind |>
     List.iter ~f:(printf "%a@." Sexp.pp)
 
+  let lift arch mem insn =
+    let open Knowledge.Syntax in
+    let sema =
+      Knowledge.provide Dis.decoder Label.root (Some (arch,mem,insn)) >>= fun () ->
+      Knowledge.collect Insn.Semantics.t Label.root in
+    match Knowledge.run sema Knowledge.empty with
+    | Ok (sema,_) -> sema
+    | Error _ -> Semantics.empty
+
   let print_insn_size should_print mem =
     if should_print then
       let len = Memory.length mem in
@@ -74,30 +84,29 @@ module Program(Conf : Mc_options.Provider) = struct
         Insn.with_printer fmt (fun () ->
             printf "%a@." Insn.pp insn))
 
-  let bil_of_insn lift mem insn =
-    match lift mem insn with
-    | Ok bil -> bil
-    | Error e -> [Bil.special @@ sprintf "Lifter: %s" @@
-                  Error.to_string_hum e]
+  let bil_of_sema sema = Semantics.get Bil.Domain.bil sema
 
   let print_bil lift mem insn =
-    let bil = bil_of_insn lift mem in
+    let bil = bil_of_sema @@ lift mem insn in
     List.iter options.bil_formats ~f:(fun fmt ->
-        printf "%s@." (Bil.to_bytes ~fmt (bil insn)))
+        printf "%s@." (Bil.to_bytes ~fmt bil))
 
   let print_bir lift mem insn =
-    let bil = bil_of_insn lift mem insn in
-    let bs = Blk.from_insn (Insn.of_basic ~bil insn) in
+    let sema = lift mem insn in
+    let bil = bil_of_sema @@ sema in
+    let insn = Insn.with_semantics (Insn.of_basic ~bil insn) sema in
+    let bs = Blk.from_insn insn in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
           (List.map bs ~f:(Blk.to_bytes ~fmt)))
 
+
   let print arch mem insn =
-    let module Target = (val target_of_arch arch) in
+    let lift = lift arch in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
-    print_bil Target.lift mem insn;
-    print_bir Target.lift mem insn;
+    print_bil lift mem insn;
+    print_bir lift mem insn;
     if options.show_kinds then print_kinds insn
 
   let main () =

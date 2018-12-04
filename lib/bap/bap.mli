@@ -6172,6 +6172,8 @@ module Std : sig
     (** [must property insn] postulate that [insn] shouldn't have the [property]  *)
     val shouldn't : may  property -> t -> t
 
+    val with_semantics : t -> semantics -> t
+
     val semantics : t -> semantics
 
     (** [pp_adt] prints instruction in ADT format, suitable for reading
