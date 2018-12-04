@@ -177,18 +177,23 @@ module IR = struct
 
 
   let def = (fun x -> x.defs), (fun x d -> {x with defs = d})
-  let jmp = (fun x -> x.jmps), (fun x d -> {x with jmps = d})
+  let jmp = (fun x -> x.jmps), (fun x d -> match x.jmps with
+      | {cnd = None} :: _ -> x
+      | _ -> {x with jmps = d})
+
   let push_to_blk (get,put) blk elt =
     put blk @@ elt :: get blk
 
 
-  let push fld elt cfg = match cfg with
+  let push fld elt cfg : cfg = match cfg with
     | {blks=[]} -> assert false  (* the precondition - we have a block *)
     | {blks=blk::blks} -> {
         cfg with blks = push_to_blk fld blk elt :: blks
       }
   let fresh = Label.Generator.fresh
+
   let (++) b j = push_to_blk jmp b j
+
   let reify x = Eff.get graph x
 
   let ret kind cfg = !!(Eff.put graph (Eff.empty kind) cfg)
