@@ -264,6 +264,10 @@ module IR = struct
     let return = ret (Eff.kind yes) in
     let jump = jump cnd in
     match reify yes, reify nay with
+    | {entry; blks=[{defs=[]; jmps=[j]} as blk]},{blks=[]} -> return {
+        entry;
+        blks = [{blk with defs=[]; jmps=[{j with cnd = Some cnd}]}]
+      }
     | {entry=lhs; blks=b::blks},{blks=[]} -> return {
         entry = head;
         blks =
