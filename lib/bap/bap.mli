@@ -5756,7 +5756,7 @@ module Std : sig
       (** abbreviate an instruction with full information.  *)
       type full_insn = (asm,kinds) insn [@@deriving compare, sexp_of]
 
-      val decoder : (mem * full_insn) option content
+      val decoder : (arch * mem * full_insn) option content
 
       (** Disassembler.
 

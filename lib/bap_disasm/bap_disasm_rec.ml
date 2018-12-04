@@ -408,20 +408,20 @@ let stage3 s2 =
 
 
 
-let lifter mem insn =
+let lifter arch mem insn =
   let open Knowledge.Syntax in
-  let bil =
-    Knowledge.provide Dis.decoder Label.root (Some (mem,insn)) >>= fun () ->
+  let sema =
+    Knowledge.provide Dis.decoder Label.root (Some (arch,mem,insn)) >>= fun () ->
     Knowledge.collect Insn.Semantics.t Label.root in
-  match Knowledge.run bil Knowledge.empty with
-  | Ok (bil,_) -> Ok bil
+  match Knowledge.run sema Knowledge.empty with
+  | Ok (sema,_) -> Ok sema
   | Error _ -> errorf "conflict"
 
 let run ?(backend="llvm") ?brancher ?rooter arch mem =
   let b = Option.value brancher ~default:(Brancher.of_bil arch) in
   let brancher = Brancher.resolve b in
   Dis.with_disasm ~backend (Arch.to_string arch) ~f:(fun dis ->
-      stage1 ?rooter lifter brancher dis mem >>= stage2 dis >>= stage3)
+      stage1 ?rooter (lifter arch) brancher dis mem >>= stage2 dis >>= stage3)
 
 let cfg t = t.cfg
 let errors s = List.map s.failures ~f:snd

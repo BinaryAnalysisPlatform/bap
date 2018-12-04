@@ -584,20 +584,20 @@ end
 
 
 module Domain = struct
-  type t = (mem * full_insn) option
+  type t = (arch * mem * full_insn) option
 
   let empty = None
   let partial x y : Domain.Order.partial = match x,y with
     | None,None -> EQ
     | None,_ -> LE
     | _,None -> GE
-    | Some (x,_), Some (y,_) ->
+    | Some (_,x,_), Some (_,y,_) ->
       if Addr.equal (Mem.min_addr x) (Mem.min_addr y)
       then EQ
       else NC
   let inspect = function
     | None -> Sexp.List []
-    | Some (m,x) -> Sexp.List [
+    | Some (_,m,x) -> Sexp.List [
         Atom (Addr.string_of_value (Mem.min_addr m));
         Insn.sexp_of_t x;
       ]

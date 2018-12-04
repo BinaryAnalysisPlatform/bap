@@ -121,4 +121,4 @@ end
 
 val available_backends : unit -> string list
 
-val decoder : (mem * full_insn) option content
+val decoder : (arch * mem * full_insn) option content

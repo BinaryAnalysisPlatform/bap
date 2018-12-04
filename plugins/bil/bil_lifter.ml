@@ -158,13 +158,13 @@ end
 
 module Parser = Parser.Make(Theory.Manager)
 
-let provide_lifter arch =
-  info "providing a lifter for arch %a" Arch.pp arch;
-  let module Target = (val target_of_arch arch) in
+let provide_lifter () =
+  info "providing a lifter for all BIL lifters";
   let lifter label =
     Knowledge.collect Disasm_expert.Basic.decoder label >>= function
     | None -> Knowledge.return Semantics.empty
-    | Some (mem,insn) ->
+    | Some (arch,mem,insn) ->
+      let module Target = (val target_of_arch arch) in
       match Target.lift mem insn with
       | Error _ -> Knowledge.return Semantics.empty
       | Ok bil ->
@@ -176,5 +176,4 @@ let provide_lifter arch =
   Knowledge.promise Insn.Semantics.t lifter
 
 
-let init () =
-  Stream.observe Project.Info.arch provide_lifter
+let init () = provide_lifter ()
