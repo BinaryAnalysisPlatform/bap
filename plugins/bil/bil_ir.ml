@@ -397,6 +397,8 @@ end
 
 let reify = BIR.reify
 
+let pp = Graph.pp_bil
+
 let init () =
   Theory.register
     ~desc:"CFG generator"
