@@ -10,8 +10,13 @@ type 'a t = {
   temp : bool;
 }
 
-let valid_char = function
-  | 'A'..'Z' | 'a'..'z' | '_' | '\''  -> true
+let valid_first_char = function
+  | 'A'..'Z' | 'a'..'z' | '_' -> true
+  | _ -> false
+
+let valid_char c =
+  valid_first_char c || match c with
+  | '0' .. '9' | '\'' -> true
   | _ -> false
 
 let non_empty name =
@@ -19,6 +24,9 @@ let non_empty name =
   then invalid_arg "Invalid var literal: a variable can't be empty"
 
 let all_chars_valid name =
+  if not (valid_first_char name.[0])
+  then invalid_argf
+      "Invalid var liter: a variable can't start from %c" name.[0] ();
   match String.find name ~f:(Fn.non valid_char) with
   | None -> ()
   | Some c ->
