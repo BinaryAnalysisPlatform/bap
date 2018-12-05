@@ -22,7 +22,7 @@ module Basic : Theory.Basic = struct
 
     module V = Bap.Std.Var
 
-    let simpl = ident       (* to think... is it fine? *)
+    let simpl = ident
     let ret = Knowledge.return
 
     let v s e = Value.put exp (Value.empty s) e
@@ -78,7 +78,9 @@ module Basic : Theory.Basic = struct
     let reify_to_var r =
       match type_of_sort (Var.sort r) with
       | None -> None
-      | Some t -> Some (V.create (Var.name r) t)
+      | Some t ->
+        let is_virtual = Var.is_virtual r in
+        Some (V.create ~is_virtual (Var.name r) t)
 
     let var r =
       let s = Var.sort r in

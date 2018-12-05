@@ -319,6 +319,7 @@ module Var : sig
   val create : 'a sort -> string -> 'a var
   val name : 'a var -> string
   val sort : 'a var -> 'a sort
+  val is_virtual : 'a var -> bool
 
   module Generator : sig
     val fresh : 'a sort -> 'a t knowledge
