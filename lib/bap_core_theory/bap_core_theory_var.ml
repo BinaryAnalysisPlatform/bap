@@ -38,8 +38,9 @@ let validate_variable name =
   all_chars_valid name
 
 let create sort name =
-  validate_variable name;
-  {sort; name; temp=false}
+  (* validate_variable name; *)
+  non_empty name;
+  {sort; name; temp=name.[0] = '$'}
 
 let name v = v.name
 let sort v = v.sort
