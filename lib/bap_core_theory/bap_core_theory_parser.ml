@@ -308,6 +308,7 @@ module Make(S : Core) = struct
           let x = expf x and y = expf y in
           ite (forder x y) y x
 
+        let ite c x y = ite (expb c) (expf x) (expf y)
         let fabs x = fabs (expf x)
         let fneg x = fneg (expf x)
         let fsqrt m x = fsqrt (expr m) (expf x)

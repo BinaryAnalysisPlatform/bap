@@ -528,6 +528,7 @@ module Grammar : sig
 
     val var : int -> int -> string -> t
     val unk : int -> int -> t
+    val ite : exp -> exp -> exp -> t
 
     val finite : int -> int -> exp -> exp -> exp -> t
     val pinf : int -> int -> t
