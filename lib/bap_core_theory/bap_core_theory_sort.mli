@@ -5,7 +5,7 @@ type bit
 type 'a bitv
 type ('a,'b) mem
 type 'a sort
-type ('e,'s) float
+type 'f float
 type rmode
 
 module Sort : sig
@@ -55,10 +55,19 @@ module Mems : sig
 end
 
 module Floats : sig
-  type ('e,'s) t = ('e,'s) float
-  val define : 'e bitv sort -> 's bitv sort -> ('e,'s) t sort
-  val exps : ('e,'s) t sort -> 'e bitv sort
-  val sigs : ('e,'s) t sort -> 's bitv sort
+  type 'f t = 'f float
+  type ('r,'s) format
+
+  val define : ('r,'s) format -> ('r,'s) format float sort
+  val format : ('r,'s) format float sort -> ('r,'s) format
+  val size : ('r,'s) format float sort -> 's bitv sort
+
+  module Format : sig
+    type ('r,'s) t = ('r,'s) format
+    val define : Sort.exp -> 'r -> 's bitv sort -> ('r,'s) format
+    val exp : ('r,'s) format -> Sort.exp
+    val bits : ('r,'s) format -> 's bitv sort
+  end
 end
 
 module Rmode : sig

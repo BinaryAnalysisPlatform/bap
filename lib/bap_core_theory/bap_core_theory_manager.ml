@@ -235,8 +235,6 @@ module Theory : Core = struct
   let sge x y = lop x y @@ fun (module P) -> P.sge
   let uge x y = lop x y @@ fun (module P) -> P.uge
 
-  let finite s x y z = val3 x y z (fun _ _ _ -> !!s) @@ fun (module P) ->
-    P.finite s
 
   let rne = val0 Rmode.t @@ fun (module P) -> P.rne
   let rna = val0 Rmode.t @@ fun (module P) -> P.rne
@@ -245,24 +243,17 @@ module Theory : Core = struct
   let rtz = val0 Rmode.t @@ fun (module P) -> P.rne
   let requal x y = val2 x y (fun _ _ -> !!bool) @@ fun (module P) ->
     P.requal
-  let pinf s = val0 s @@ fun (module P) -> P.pinf s
-  let ninf s = val0 s @@ fun (module P) -> P.ninf s
-  let snan s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.snan s
-  let qnan s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.qnan s
 
-  let exps x = sort x >>| Floats.exps
-  let sigs x = sort x >>| Floats.sigs
+  let float s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.float s
+  let fbits x = val1 x (fun x -> sort x >>| Floats.size) @@ fun (module P) ->
+    P.fbits
 
-  let exponent x = val1 x exps @@ fun (module P) -> P.exponent
-  let significand x = val1 x sigs @@ fun (module P) -> P.significand
-
-  let fsign x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.fsign
   let is_finite x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_finite
   let is_fzero x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fzero
-  let is_pinf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_pinf
-  let is_ninf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_ninf
-  let is_snan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_snan
-  let is_qnan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_qnan
+  let is_fneg x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fneg
+  let is_fpos x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_fpos
+  let is_nan x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_nan
+  let is_inf x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_inf
 
   let cast_float s m x = val2 m x (fun _ _ -> !!s) @@ fun (module P) ->
     P.cast_float s

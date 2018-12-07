@@ -113,20 +113,26 @@ module Mems = struct
 end
 
 module Floats = struct
-  type ('e,'s) t = Floats : ('e,'s) t
+  type 'f t = Floats : 'f t
 
-  let define es ss =
-    Sort.(define (Cons ("Floats", [Sort (exp es); Sort (exp ss)])) Floats)
+  module Format = struct
+    type (_,_) t = Sort.exp * int
+    let define exp _ bits = exp, Bits.size bits
+    let exp (x,_) = x
+    let bits (_,x) = Bits.define x
+  end
 
-  let bits e1 = Option.value_exn (Bits.parse e1)
+  type ('f,'s) format = ('f,'s) Format.t
 
-  let sigs x = match Sort.exp x with
-    | Sort.Cons ("Floats", [_; Sort e]) -> bits e
+  let define (fmt,sz) =
+    Sort.(define (Cons ("Floats", [Sort fmt; Index sz])) Floats)
+
+  let format x = match Sort.exp x with
+    | Sort.Cons ("Floats", [Sort fmt; Index sz]) -> fmt, sz
     | _ -> assert false
 
-  let exps x = match Sort.exp x with
-    | Sort.Cons ("Floats", [Sort e; _]) -> bits e
-    | _ -> assert false
+  let size x = Format.bits (format x)
+
 end
 
 
@@ -138,5 +144,5 @@ end
 type bit = Bool.t
 type 'a bitv = 'a Bits.t
 type ('a,'b) mem = ('a,'b) Mems.t
-type ('a,'b) float = ('a,'b) Floats.t
+type 'f float = 'f Floats.t
 type rmode = Rmode.t

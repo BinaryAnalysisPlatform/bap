@@ -1,4 +1,8 @@
+open Bap_core_theory_sort
 type word = Bap.Std.word
+
+module IEEE754 = Bap_core_theory_IEEE754
+type ieee754 = IEEE754.parameters
 
 module type Bitv = sig
   type t
@@ -69,11 +73,6 @@ module type Bool = sig
   val logor: exp -> exp -> t
   val logxor : exp -> exp -> t
 
-  val is_snan : exp -> t
-  val is_qnan : exp -> t
-  val is_pinf : exp -> t
-  val is_ninf : exp -> t
-
   val is_inf : exp -> t
   val is_nan : exp -> t
   val is_fzero : exp -> t
@@ -112,7 +111,7 @@ module type Stmt = sig
   val set_mem : string -> int -> int -> exp -> t
   val set_reg : string -> int -> exp -> t
   val set_bit : string -> exp -> t
-  val set_float : string -> int -> int -> exp -> t
+  val set_ieee754 : string -> ieee754 -> exp -> t
   val set_rmode : string -> rmode -> t
 
   val tmp_mem : string -> exp -> t
@@ -143,15 +142,14 @@ module type Float = sig
   type exp
   type rmode
 
-  val var : int -> int -> string -> t
-  val unk : int -> int -> t
-  val ite : exp -> exp -> exp -> t
+  val ieee754 : ieee754 -> exp -> t
+  val ieee754_var : ieee754 -> string -> t
+  val ieee754_unk : ieee754 -> t
+  val ieee754_cast : ieee754 -> rmode -> exp -> t
+  val ieee754_cast_signed : ieee754 -> rmode -> exp -> t
+  val ieee754_convert : ieee754 -> rmode -> exp -> t
 
-  val finite : int -> int -> exp -> exp -> exp -> t
-  val pinf : int -> int -> t
-  val ninf : int -> int -> t
-  val snan : int -> int -> exp -> t
-  val qnan : int -> int -> exp -> t
+  val ite : exp -> exp -> exp -> t
 
   val fadd : rmode -> exp -> exp -> t
   val fsub : rmode -> exp -> exp -> t
@@ -165,11 +163,6 @@ module type Float = sig
   val fneg : exp -> t
   val fsqrt : rmode -> exp -> t
   val fround : rmode -> exp -> t
-
-  val cast_float : int -> int -> rmode -> exp -> t
-  val cast_sfloat : int -> int -> rmode -> exp -> t
-
-  val convert : int -> int -> rmode -> exp -> t
 end
 
 module type Rmode = sig

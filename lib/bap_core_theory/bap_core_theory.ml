@@ -25,7 +25,8 @@ type bit = Bool.t
 type data = Kind.data = private Data_Effect
 type ctrl = Kind.ctrl = private Ctrl_Effect
 type rmode = Rmode.t
-type ('e,'s) float = ('e,'s) Floats.t
+type 'f float = 'f Floats.t
+type ('r,'s) format = ('r,'s) Floats.Format.t
 type word = Bap.Std.Bitvector.t (* we will extract bitvector from BAP later *)
 
 type 'a t = 'a knowledge
@@ -56,6 +57,8 @@ module Theory = struct
   module Manager = Bap_core_theory_manager.Theory
   let register = Bap_core_theory_manager.register
 end
+
+module IEEE754 = Bap_core_theory_IEEE754
 
 module Grammar = Bap_core_theory_grammar_definition
 module Parser = Bap_core_theory_parser

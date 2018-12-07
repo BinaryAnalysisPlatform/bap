@@ -89,26 +89,22 @@ module Core : Core = struct
   let sge _ _ = empty bool
   let uge _ _ = empty bool
 
-  let finite s _ _ _ = empty s
   let rne = empty Rmode.t
   let rna = empty Rmode.t
   let rtp = empty Rmode.t
   let rtn = empty Rmode.t
   let rtz = empty Rmode.t
   let requal _ _  = empty bool
-  let pinf s = empty s
-  let ninf s = empty s
-  let snan s _  = empty s
-  let qnan s _ = empty s
-  let exponent x = sort x >>| Floats.exps >>= empty
-  let significand x = sort x >>| Floats.sigs >>= empty
-  let fsign _ = empty bool
+
+  let float s _ = empty s
+  let fbits x = sort x >>| Floats.size >>= empty
+
   let is_finite _ = empty bool
   let is_fzero _ = empty bool
-  let is_pinf _ = empty bool
-  let is_ninf _ = empty bool
-  let is_snan _ = empty bool
-  let is_qnan _ = empty bool
+  let is_fneg _ = empty bool
+  let is_fpos _ = empty bool
+  let is_nan _ = empty bool
+  let is_inf _ = empty bool
   let cast_float s _ _ = empty s
   let cast_sfloat s _ _ = empty s
   let cast_int s _ _ = empty s

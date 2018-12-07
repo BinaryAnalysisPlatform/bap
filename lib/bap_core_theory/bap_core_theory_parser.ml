@@ -7,6 +7,7 @@ open Bap_core_theory_sort
 module Value = Bap_core_theory_value
 module Grammar = Bap_core_theory_grammar_definition
 module Link = Bap_core_theory_link
+module IEEE754 = Bap_core_theory_IEEE754
 
 open Knowledge.Syntax
 open Link.Syntax
@@ -223,38 +224,6 @@ module Make(S : Core) = struct
           sort x >>= fun xs ->
           lsb (extract (bits 1) (of_int xs n) (of_int xs n) x)
 
-
-        let is_fzero x =
-          and_
-            (is_zero (exponent x))
-            (is_zero (significand x))
-
-        let is_fneg x = or_ (fsign x) (is_ninf x)
-        let is_fpos x =
-          let x = expf x in
-          and_ (inv (is_fneg x)) (inv (is_fzero x))
-
-        let is_fneg x = is_fneg (expf x)
-        let is_fzero x = is_fzero (expf x)
-
-        let is_fneg x =
-          let x = expf x in
-          or_ (fsign x) (is_ninf x)
-
-        let is_nan x =
-          let x = expf x in
-          or_ (is_qnan x) (is_snan x)
-
-        let is_inf x =
-          let x = expf x in
-          or_ (is_pinf x) (is_ninf x)
-
-        let is_snan x = is_snan (expf x)
-        let is_qnan x = is_qnan (expf x)
-        let is_pinf x = is_pinf (expf x)
-        let is_ninf x = is_ninf (expf x)
-
-
         let fless = forder
         let feq x y = and_ (inv (fless x y)) (inv (fless y x))
 
@@ -262,17 +231,20 @@ module Make(S : Core) = struct
           let x = expf x and y = expf y in
           or_ (fless x y) (feq x y)
 
-
         let flt x y = fless (expf x) (expf y)
         let feq x y = feq (expf x) (expf y)
 
-
+        let is_fneg x = is_fneg (expf x)
+        let is_fpos x = is_fpos (expf x)
+        let is_fzero x = is_fzero (expf x)
+        let is_nan x = is_nan (expf x)
+        let is_inf x = is_inf (expf x)
       end)
-  and expf : type a k b e r.
+  and expf : type s b e r k n i g a.
     (string * string) list ->
-    (e,r,b) parser -> e -> (a,k) float value t =
+    (e,r,b) parser -> e -> ((i, g, a) IEEE754.t, s) format float value t =
     fun ctxt self -> self.float (module struct
-        type nonrec t = (a,k) float value t
+        type nonrec t = ((i, g, a) IEEE754.t, s) format float value t
         type exp = e
         type rmode = r
 
@@ -283,18 +255,10 @@ module Make(S : Core) = struct
         let expb s = expb ctxt self s
         let expf s = run ctxt self s
 
-        let floats es ks  = Floats.define (bits es) (bits ks)
-
-        let var es ks name = var (Var.create (floats es ks) name)
-        let unk es ks = unk (floats es ks)
-
-        let finite es ks s e k =
-          finite (floats es ks) (expb s) (expw e) (expw k)
-
-        let pinf es ks = pinf (floats es ks)
-        let ninf es ks = ninf (floats es ks)
-        let snan es ks p = snan (floats es ks) (expw p)
-        let qnan es ks p = qnan (floats es ks) (expw p)
+        let floats s = IEEE754.Sort.define s
+        let ieee754 s x : t  = float (floats s) (expw x)
+        let ieee754_var s name : t = var (Var.create (floats s) name)
+        let ieee754_unk s = unk (floats s)
 
         let fadd m x y = fadd (expr m) (expf x) (expf y)
         let fsub m x y = fsub (expr m) (expf x) (expf y)
@@ -314,14 +278,14 @@ module Make(S : Core) = struct
         let fsqrt m x = fsqrt (expr m) (expf x)
         let fround m x = fround (expr m) (expf x)
 
-        let cast_float es ks m x =
-          cast_float (floats es ks) (expr m) (expw x)
+        let ieee754_cast s m x =
+          cast_float (floats s) (expr m) (expw x)
 
-        let cast_sfloat es ks m x =
-          cast_sfloat (floats es ks) (expr m) (expw x)
+        let ieee754_cast_signed s m x =
+          cast_sfloat (floats s) (expr m) (expw x)
 
-        let convert es ks m x =
-          fconvert (floats es ks) (expr m) (expf x)
+        let ieee754_convert s m x =
+          fconvert (floats s) (expr m) (expf x)
       end)
   and expr : type b e r.
     (string * string) list ->
@@ -394,7 +358,7 @@ module Make(S : Core) = struct
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
-        let set_float var ks vs exp = move (set_float ctxt self var ks vs exp)
+        let set_ieee754 var s exp = move (set_ieee754 ctxt self var s exp)
         let set_rmode var exp = move (set_rmode ctxt self var exp)
         let push var r = stmts ((var, Var.name r) :: ctxt) self xs
         let tmp_bit var exp = bind (expb ctxt self exp) (push var)
@@ -433,11 +397,10 @@ module Make(S : Core) = struct
     fun ctxt self v ks vs x ->
       set (Var.create (Mems.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
-  and set_float : type e s r.
+  and set_ieee754 : type e s r.
     (string * string) list ->
-    (e,r,s) parser -> string -> int -> int -> e -> data eff t =
-    fun ctxt self v es ks x ->
-      set (Var.create (Floats.define (bits es) (bits ks)) v) (expf ctxt self x)
+    (e,r,s) parser -> string -> IEEE754.parameters -> e -> data eff t =
+    fun ctxt self v fs x -> set (Var.create (IEEE754.Sort.define fs) v) (expf ctxt self x)
 
   and set_rmode : type e s r.
     (string * string) list ->
@@ -485,7 +448,7 @@ module Make(S : Core) = struct
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
-        let set_float var ks vs exp = move (set_float ctxt self var ks vs exp)
+        let set_ieee754 var s exp = move (set_ieee754 ctxt self var s exp)
         let set_rmode var exp = move (set_rmode ctxt self var exp)
 
         let push var r = stmtd ((var, Var.name r) :: ctxt) self xs
