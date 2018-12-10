@@ -103,8 +103,8 @@ module Sort = struct
     Bits.define w
 
   let sigs e =
-    let {t} = spec e in
-    Bits.define t
+    let {p} = spec e in
+    Bits.define p
 
   let bits e =
     let {k} = spec e in
