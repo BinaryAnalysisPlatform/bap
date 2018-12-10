@@ -1,5 +1,4 @@
 open Bap_core_theory_sort
-open Bap_core_theory_IEEE754_format
 open Floats
 
 type ('a,'e,'t) t
