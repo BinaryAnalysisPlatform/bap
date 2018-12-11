@@ -38,15 +38,6 @@ end
 let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
-let protect dead protected =
-  Set.to_sequence dead ~order:`Decreasing |>
-  Seq.fold ~init:(Var.Set.empty,protected)
-    ~f:(fun (dead,protectors) var ->
-        if Set.mem protectors (Var.base var)
-        then (dead,Set.remove protectors (Var.base var))
-        else (Set.add dead var,protectors)) |>
-  fst
-
 let compute_dead can_touch protected sub =
   let defs,uses = computed_def_use sub in
   let dead = Set.diff defs uses in
