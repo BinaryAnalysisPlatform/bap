@@ -47,6 +47,7 @@ module type Bitv = sig
 
   val cast_int : int -> rmode -> exp -> t
   val cast_sint : int -> rmode -> exp -> t
+  val fbits : exp -> t
 end
 
 module type Bool = sig

@@ -150,6 +150,8 @@ module Make(S : Core) = struct
 
         let cast_int s m w = cast_int (bits s) (expr m) (expf w)
         let cast_sint s m w = cast_sint (bits s) (expr m) (expf w)
+
+        let fbits x = fbits (expf x)
       end)
   and expm : type k x b e r.
     (string * string) list ->

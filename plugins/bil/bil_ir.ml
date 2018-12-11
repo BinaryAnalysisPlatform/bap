@@ -76,12 +76,11 @@ module Graph = struct
     | None -> fprintf ppf "<undefined>"
     | Some exp -> Exp.pp ppf exp
 
-
   let pp_bil = pp pp_bil_sema
 
   let inspect = function
     | {blks=[]} -> Sexp.List []
-    | cfg -> Sexp.Atom (asprintf "%a" pp_bil cfg)
+    | cfg -> Sexp.Atom (asprintf "%a" (pp Semantics.pp) cfg)
 end
 
 let graph = Semantics.declare
