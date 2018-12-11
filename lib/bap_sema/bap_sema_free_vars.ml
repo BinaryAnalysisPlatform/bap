@@ -23,9 +23,9 @@ let defined_by_blk b =
 let free_vars_of_dom_tree dom root =
   let rec bfs (vars,kill) root =
     let cs = Tree.children dom root in
-    let kill = kill ++ defined_by_blk (blk root) in
     let vars = vars ++ Seq.fold cs ~init:Var.Set.empty ~f:(fun vars c ->
         Ir_blk.free_vars (blk c) -- kill ++ vars) in
+    let kill = kill ++ defined_by_blk (blk root) in
     Seq.fold cs ~init:(vars,kill) ~f:bfs in
   fst @@ bfs (Var.Set.empty,Var.Set.empty) root
 
