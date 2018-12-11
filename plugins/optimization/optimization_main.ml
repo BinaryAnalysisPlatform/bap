@@ -130,8 +130,7 @@ let process_sub free can_touch sub =
     let dead = Set.union dead dead' in
     if Set.is_empty dead' then s, dead
     else loop dead (clean can_touch dead' s) in
-  let ssa = Sub.ssa sub in
-  let sub', dead = loop Tid.Set.empty ssa in
+  let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
   O.create dead sub'
 
 let digest_of_sub sub level =
