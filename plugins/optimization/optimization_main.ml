@@ -47,17 +47,21 @@ let protect dead protected =
         else (Set.add dead var,protectors)) |>
   fst
 
-let compute_dead can_touch free sub =
+let compute_dead can_touch protected sub =
   let defs,uses = computed_def_use sub in
-  let dead = protect (Set.diff defs uses) free in
+  let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
-  (object inherit [Tid.Set.t] Term.visitor
-    method! enter_def t dead =
-      let v = Def.lhs t in
-      if not (can_touch v) || live v
-      then dead
-      else Set.add dead (Term.tid t)
-  end)#visit_sub sub Tid.Set.empty
+  Term.enum blk_t sub |>
+  Seq.fold ~init:Tid.Set.empty ~f:(fun dead blk ->
+      Term.enum ~rev:true def_t blk |>
+      Seq.fold ~init:(protected,dead) ~f:(fun (protected,dead) def ->
+          let v = Def.lhs def in
+          if not (can_touch v) || live v
+          then (protected,dead)
+          else if Set.mem protected (Var.base v)
+          then Set.remove protected (Var.base v), dead
+          else protected, Set.add dead (Term.tid def)) |>
+      snd)
 
 let is_alive dead t = not (Set.mem dead (Term.tid t))
 let live_phi dead blk = Term.filter phi_t ~f:(is_alive dead) blk
