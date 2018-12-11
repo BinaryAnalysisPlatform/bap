@@ -41,7 +41,6 @@ type t = cfg
 module Graph = struct
   type t = cfg
   let partial _ _ = Domain.Order.NC
-  let inspect _ = Sexp.Atom "graph"
   let empty = {blks=[]; entry = Label.root}
 
 
@@ -79,6 +78,10 @@ module Graph = struct
 
 
   let pp_bil = pp pp_bil_sema
+
+  let inspect = function
+    | {blks=[]} -> Sexp.List []
+    | cfg -> Sexp.Atom (asprintf "%a" pp_bil cfg)
 end
 
 let graph = Semantics.declare

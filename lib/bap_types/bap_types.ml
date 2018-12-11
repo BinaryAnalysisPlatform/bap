@@ -102,7 +102,9 @@ module Std = struct
     module Domain = struct
       module Exp = struct
         type t = exp option [@@deriving compare, sexp_of]
-        let inspect = sexp_of_t
+        let inspect = function
+          | None -> Sexp.List []
+          | Some exp -> Sexp.Atom (Bap_exp.to_string exp)
         let partial x y : Domain.Order.partial = match x,y with
           | None,None -> EQ
           | None,_ -> LE
@@ -113,7 +115,9 @@ module Std = struct
 
       module Bil = struct
         type t = stmt list [@@deriving compare, sexp_of]
-        let inspect = sexp_of_t
+        let inspect = function
+          | [] -> Sexp.List []
+          | bil -> Sexp.Atom (to_string bil)
         let partial x y : Domain.Order.partial = match x,y with
           | [],[] -> EQ
           | [],_ -> LE

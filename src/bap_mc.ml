@@ -79,35 +79,41 @@ module Program(Conf : Mc_options.Provider) = struct
       printf "%#x@\n" len
 
   let print_insn insn_formats insn =
-    let insn = Insn.of_basic insn in
     List.iter insn_formats ~f:(fun fmt ->
         Insn.with_printer fmt (fun () ->
             printf "%a@." Insn.pp insn))
 
   let bil_of_sema sema = Semantics.get Bil.Domain.bil sema
 
-  let print_bil lift mem insn =
-    let bil = bil_of_sema @@ lift mem insn in
+  let print_bil insn =
+    let bil = Insn.bil insn in
     List.iter options.bil_formats ~f:(fun fmt ->
         printf "%s@." (Bil.to_bytes ~fmt bil))
 
-  let print_bir lift mem insn =
-    let sema = lift mem insn in
-    let bil = bil_of_sema @@ sema in
-    let insn = Insn.with_semantics (Insn.of_basic ~bil insn) sema in
+  let print_bir insn =
     let bs = Blk.from_insn insn in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
           (List.map bs ~f:(Blk.to_bytes ~fmt)))
 
+  let print_sema insn =
+    let sema = Insn.semantics insn in
+    Option.iter options.semantics ~f:(function
+        | [] -> printf "%a@\n" Semantics.pp sema
+        | cs ->
+          let pp = Semantics.pp_domains cs in
+          printf "%a@\n" pp sema )
 
-  let print arch mem insn =
-    let lift = lift arch in
+  let print arch mem code =
+    let sema = lift arch mem code in
+    let bil = bil_of_sema sema in
+    let insn = Insn.with_semantics (Insn.of_basic ~bil code) sema in
     print_insn_size options.show_insn_size mem;
     print_insn options.insn_formats insn;
-    print_bil lift mem insn;
-    print_bir lift mem insn;
-    if options.show_kinds then print_kinds insn
+    print_bil insn;
+    print_bir insn;
+    print_sema insn;
+    if options.show_kinds then print_kinds code
 
   let main () =
     let arch = match Arch.of_string options.arch with
@@ -197,6 +203,13 @@ module Cmdline = struct
     Arg.(value & opt_all ~vopt:"pretty" string [] &
          info ["show-bir"] ~doc)
 
+  let semantics =
+    let doc =
+      "Show instruction semantics. If an option value is specified,
+      then outputs only the semantics with the given name." in
+    Arg.(value & opt ~vopt:(Some []) (some (list string)) None &
+         info ["show-semantics"] ~doc)
+
   let addr =
     let doc = "Specify an address of first byte" in
     Arg.(value & opt  string "0x0" &  info ["addr"] ~doc)
@@ -205,8 +218,8 @@ module Cmdline = struct
     let doc = "Stop after the first instruction is decoded" in
     Arg.(value & flag & info ["only-one"] ~doc)
 
-  let create a b c d e f g h i j =
-    Mc_options.Fields.create a b c d e f g h i j
+  let create a b c d e f g h i j k =
+    Mc_options.Fields.create a b c d e f g h i j k
 
   let src =
     let doc = "String to disassemble. If not specified read stdin" in
@@ -240,7 +253,7 @@ module Cmdline = struct
         `S "SEE ALSO";
         `P "$(b,bap)(1), $(b,bap-llvm)(1), $(b,llvm-mc)(1)"] in
     Term.(const create $(disassembler ()) $src $addr $only_one $arch $show_insn_size
-          $insn_formats $bil_formats $bir_formats $show_kinds),
+          $insn_formats $semantics $bil_formats $bir_formats $show_kinds),
     Term.info "bap-mc" ~doc ~man ~version:Config.version
 
   let exitf n =

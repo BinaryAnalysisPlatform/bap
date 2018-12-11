@@ -33,6 +33,7 @@ type t = Dict.t
 type semantics = t
 
 let parsers = String.Table.create ()
+let domains = ref []
 
 let store_parser (type a)
     (module S : Binable.S with type t = a) {key; typ} =
@@ -56,6 +57,9 @@ let empty_serializer (type a) (module D : Domain.S with type t = a) =
   end  in
   (module S : Binable.S with type t = a)
 
+
+
+
 let declare (type t) ?serializer
     ~name
     (module T : Domain.S with type t = t) =
@@ -72,6 +76,7 @@ let declare (type t) ?serializer
   } in
   if Option.is_some serializer
   then store_parser serops domain;
+  domains := name :: !domains;
   domain
 
 
@@ -172,3 +177,32 @@ include Binable.Of_binable(Repr)(struct
             let Dict.Packed.T (key,data) = parse data in
             Dict.set s key data)
   end)
+
+
+let domains () = !domains
+
+
+open Format
+let pp_sep ppf () = pp_print_break ppf 1 2
+
+let rec pp_sexp ppf = function
+  | Sexp.Atom x -> fprintf ppf "%a" pp_print_text x
+  | Sexp.List xs ->
+    fprintf ppf "@[<2>(%a)@]"
+      (pp_print_list ~pp_sep pp_sexp)  xs
+
+
+let pp ppf x = pp_sexp ppf (inspect x)
+
+let pp_domains constraints ppf x =
+  let constraints = String.Set.of_list constraints in
+  let single = Set.length constraints = 1 in
+  match inspect x with
+  | Atom _ -> assert false
+  | List domains -> List.iter domains ~f:(function
+      | Sexp.List [Sexp.Atom name; data] as pair ->
+        if Set.mem constraints name
+        then fprintf ppf "@[<2>%a@]" pp_sexp
+            (if single then data else pair);
+        fprintf ppf "@\n"
+      | _ -> assert false)

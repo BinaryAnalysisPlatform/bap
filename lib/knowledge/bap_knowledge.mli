@@ -134,4 +134,8 @@ module Semantics : sig
     val merge : 'a t -> 'a t -> 'a t
     val semantics : 'a t -> semantics
   end
+
+  val domains : unit -> string list
+  val pp : Format.formatter -> t -> unit
+  val pp_domains : string list -> Format.formatter -> t -> unit
 end
