@@ -38,14 +38,23 @@ end
 let computed_def_use sub =
   def_use_collector#visit_sub sub (Var.Set.empty,Var.Set.empty)
 
-let compute_dead can_touch protected sub =
+let protect dead protected =
+  Set.to_sequence dead ~order:`Decreasing |>
+  Seq.fold ~init:(Var.Set.empty,protected)
+    ~f:(fun (dead,protectors) var ->
+        if Set.mem protectors (Var.base var)
+        then (dead,Set.remove protectors (Var.base var))
+        else (Set.add dead var,protectors)) |>
+  fst
+
+let compute_dead can_touch free sub =
   let defs,uses = computed_def_use sub in
-  let dead = Set.diff defs uses in
+  let dead = protect (Set.diff defs uses) free in
   let live v = not (Set.mem dead v) in
   (object inherit [Tid.Set.t] Term.visitor
     method! enter_def t dead =
       let v = Def.lhs t in
-      if not (can_touch v) || Set.mem protected (Var.base v) || live v
+      if not (can_touch v) || live v
       then dead
       else Set.add dead (Term.tid t)
   end)#visit_sub sub Tid.Set.empty
@@ -126,7 +135,9 @@ let process_sub free can_touch sub =
     let dead = Set.union dead dead' in
     if Set.is_empty dead' then s, dead
     else loop dead (clean can_touch dead' s) in
-  let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
+  info "turning %s into the SSA form%!" (Sub.name sub);
+  let ssa = Sub.ssa sub in
+  let sub', dead = loop Tid.Set.empty ssa in
   O.create dead sub'
 
 let digest_of_sub sub level =
