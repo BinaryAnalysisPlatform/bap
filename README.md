@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/BinaryAnalysisPlatform/bap/blob/master/LICENSE)
 [![Join the chat at https://gitter.im/BinaryAnalysisPlatform/bap](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/BinaryAnalysisPlatform/bap?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![docs](https://img.shields.io/badge/doc-1.4.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.4.0/argot_index.html)
+[![docs](https://img.shields.io/badge/doc-1.5.0-green.svg)](http://binaryanalysisplatform.github.io/bap/api/v1.5.0/argot_index.html)
 [![docs](https://img.shields.io/badge/doc-master-green.svg)](http://binaryanalysisplatform.github.io/bap/api/master/argot_index.html)
 [![Build Status](https://travis-ci.org/BinaryAnalysisPlatform/bap.svg?branch=master)](https://travis-ci.org/BinaryAnalysisPlatform/bap)
 [![pip](https://img.shields.io/badge/pip-1.3.0-green.svg)](https://pypi.python.org/pypi/bap/)
@@ -44,8 +44,8 @@ derivatives. For other distributions we provide tgz archives. To
 install bap on a Debian derivative:
 
 ```bash
-wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.4.0/{bap,libbap,libbap-dev}_1.4.0.deb
-sudo dpkg -i {bap,libbap,libbap-dev}_1.4.0.deb
+wget https://github.com/BinaryAnalysisPlatform/bap/releases/download/v1.5.0/{bap,libbap,libbap-dev}_1.5.0.deb
+sudo dpkg -i {bap,libbap,libbap-dev}_1.5.0.deb
 ```
 
 ## From sources
