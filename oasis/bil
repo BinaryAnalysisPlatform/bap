@@ -9,4 +9,4 @@ Library bil_plugin
   FindlibName:      bap-plugin-bil
   BuildDepends:     bap, bap-core-theory, bap-knowledge
   XMETAExtraLines:  tags="bil,analysis,semantics"
-  InternalModules:  Bil_main, Bil_lifter, Bil_semantics, Bil_ir
+  InternalModules:  Bil_main, Bil_lifter, Bil_semantics, Bil_ir, Bil_float
