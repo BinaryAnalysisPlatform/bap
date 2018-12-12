@@ -6900,9 +6900,6 @@ module Std : sig
     (** [del_attr term attr] deletes attribute [attr] from [term]  *)
     val del_attr : 'a t -> 'b tag -> 'a t
 
-    val semantics : 'a t -> semantics
-    val with_semantics : 'a t -> semantics -> 'a t
-
 
     (** {Predefined attributes}  *)
 
@@ -7433,6 +7430,12 @@ module Std : sig
 
     type t = def term
 
+    module Semantics : sig
+      val create : ?tid:tid -> var -> semantics -> t
+      val with_rhs : t -> semantics -> t
+      val rhs : t -> semantics
+    end
+
     (** [create ?tid x exp] creates definition [x := exp]  *)
     val create : ?tid:tid -> var -> exp -> t
 
@@ -7487,6 +7490,12 @@ module Std : sig
    *)
 
     type t = jmp term
+
+    module Semantics : sig
+      val jump : ?tid:tid -> ?cond:semantics -> typ -> semantics -> t
+      val cond : t -> semantics option
+      val dest : t -> semantics option
+    end
 
     (** [create ?cond kind] creates a jump of a given kind  *)
     val create : ?tid:tid -> ?cond:exp -> jmp_kind -> t

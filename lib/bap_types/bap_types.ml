@@ -99,35 +99,9 @@ module Std = struct
     include Bap_bil_pass
     module Pass = Bap_bil_pass.Pass_pp
     include Bap_bil_optimizations
-    module Domain = struct
-      module Exp = struct
-        type t = exp option [@@deriving compare, sexp_of]
-        let inspect = function
-          | None -> Sexp.List []
-          | Some exp -> Sexp.Atom (Bap_exp.to_string exp)
-        let partial x y : Domain.Order.partial = match x,y with
-          | None,None -> EQ
-          | None,_ -> LE
-          | _,None -> GE
-          | _ -> NC
-        let empty = None
-      end
-
-      module Bil = struct
-        type t = stmt list [@@deriving compare, sexp_of]
-        let inspect = function
-          | [] -> Sexp.List []
-          | bil -> Sexp.Atom (to_string bil)
-        let partial x y : Domain.Order.partial = match x,y with
-          | [],[] -> EQ
-          | [],_ -> LE
-          | _,[] -> GE
-          | _ -> NC
-        let empty = []
-      end
-      let exp = Semantics.declare ~name:"bil-exp" (module Exp)
-      let bil = Semantics.declare ~name:"bil-stmt" (module Bil)
-    end
+    module Domain = Bap_types_domain
+    let exp = Domain.exp
+    let bil = Domain.bil
   end
 
   (** Types of BIL expressions  *)

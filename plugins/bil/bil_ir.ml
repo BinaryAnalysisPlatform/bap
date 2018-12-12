@@ -76,11 +76,13 @@ module Graph = struct
     | None -> fprintf ppf "<undefined>"
     | Some exp -> Exp.pp ppf exp
 
+
   let pp_bil = pp pp_bil_sema
 
   let inspect = function
     | {blks=[]} -> Sexp.List []
-    | cfg -> Sexp.Atom (asprintf "%a" (pp Semantics.pp) cfg)
+    | cfg -> Sexp.Atom (asprintf "%a" pp_bil cfg)
+
 end
 
 let graph = Semantics.declare
@@ -107,26 +109,27 @@ module BIR = struct
       (* alternatively we can look into the sort *)
       let typ = Type.infer_exn exp in
       let var = Var.create name typ in
-      let def = Def.create var exp in
-      Blk.Builder.add_def b (Term.with_semantics def sema)
+      let def = Def.Semantics.create var sema in
+      Blk.Builder.add_def b def
 
   let reify_cnd = function
     | None -> Bil.int Word.b1
-    | Some s -> match Value.get Bil.Domain.exp s with
+    | Some s -> match Semantics.get Bil.Domain.exp s with
       | None -> Bil.unknown "unrepresentable" bool_t
       | Some x -> x
 
   let add_indirect b cond dst = match Semantics.get Bil.Domain.exp dst with
     | None -> ()
     | Some exp ->
-      let jmp = Jmp.create_goto ~cond (Indirect exp) in
-      Blk.Builder.add_jmp b @@
-      Term.with_semantics jmp dst
+      let typ = Type.infer_exn exp in
+      let jmp = Jmp.Semantics.jump ?cond typ dst in
+      Blk.Builder.add_jmp b jmp
 
   (* later we will use the obtained knowledge to decide,
      which is call, and which is not, but so far, just
      let's create a goto *)
   let add_direct labels b cond lbl =
+    let cond = reify_cnd cond in
     Blk.Builder.add_jmp b @@ match lbl with
     | Label lbl ->
       Jmp.create_goto ~cond (Direct (tid_of_label labels lbl))
@@ -138,7 +141,7 @@ module BIR = struct
 
 
   let add_jmp labels b {cnd; dst} =
-    let cnd = reify_cnd cnd in
+    let cnd = Option.map cnd ~f:Value.semantics in
     match dst with
     | Indirect x -> add_indirect b cnd x
     | Direct lbl -> add_direct labels b cnd lbl

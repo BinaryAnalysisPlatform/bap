@@ -95,9 +95,6 @@ module Term : sig
   val has_attr : 'a t -> 'b tag -> bool
   val with_attrs : 'a t -> Dict.t -> 'a t
 
-  val semantics : 'a t -> semantics
-  val with_semantics : 'a t -> semantics -> 'a t
-
   val origin : tid tag
   val synthetic : unit tag
   val live : unit tag
@@ -285,6 +282,13 @@ end
 
 module Ir_def : sig
   type t = def term
+
+  module Semantics : sig
+    val create : ?tid:tid -> var -> semantics -> t
+    val with_rhs : t -> semantics -> t
+    val rhs : t -> semantics
+  end
+
   val create : ?tid:tid -> var -> exp -> t
   val lhs : t -> var
   val rhs : t -> exp
@@ -293,11 +297,21 @@ module Ir_def : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+
+
   include Regular.S with type t := t
+  module V1 : Data.S with type t = def term
 end
 
 module Ir_jmp : sig
   type t = jmp term
+
+  module Semantics : sig
+    val jump : ?tid:tid -> ?cond:semantics -> typ -> semantics -> t
+    val cond : t -> semantics option
+    val dest : t -> semantics option
+  end
+
   val create      : ?tid:tid -> ?cond:exp -> jmp_kind -> t
   val create_call : ?tid:tid -> ?cond:exp -> call -> t
   val create_goto : ?tid:tid -> ?cond:exp -> label -> t
@@ -348,6 +362,8 @@ module Ir_arg : sig
   val nonnull : unit tag
 
   include Regular.S with type t := t
+
+  module V1 : Data.S with type t = arg term
 end
 
 module Call : sig

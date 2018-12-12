@@ -70,6 +70,7 @@ Library types
                    Bap_trie_intf,
                    Bap_type,
                    Bap_types,
+                   Bap_types_domain,
                    Bap_type_error,
                    Bap_value,
                    Bap_var,
