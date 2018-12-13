@@ -455,9 +455,9 @@ module FPEmulator = struct
         float xs (op s rm !!x !!y)
 
   let fadd rm = fop FBil.fadd rm
-  let fsub rm = fop FBil.fadd rm
-  let fmul rm = fop FBil.fadd rm
-  let fdiv rm = fop FBil.fadd rm
+  let fsub rm = fop FBil.fsub rm
+  let fmul rm = fop FBil.fmul rm
+  let fdiv rm = fop FBil.fdiv rm
 end
 
 module BIL_FP = struct
