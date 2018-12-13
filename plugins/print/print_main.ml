@@ -79,9 +79,12 @@ let extract_program subs secs proj =
       should_print subs (Sub.name sub) &&
       should_print secs (sec_name mem bir sub))
 
-let print_bir subs secs ppf proj =
+let print_bir subs secs sema ppf proj =
+  let pp = match sema with
+    | None -> Program.pp
+    | Some cs -> Program.pp_domains cs in
   Text_tags.with_mode ppf "attr" ~f:(fun () ->
-      Program.pp ppf (extract_program subs secs proj))
+      pp ppf (extract_program subs secs proj))
 
 module Adt = struct
   let pr ch = Format.fprintf ch
@@ -273,13 +276,13 @@ let pp_insn fmt ppf (mem,insn) =
   Insn.Io.print ~fmt ppf insn;
   fprintf ppf "@\n"
 
-let main attrs ansi_colors demangle symbol_fmts subs secs =
+let main attrs ansi_colors demangle symbol_fmts subs secs doms =
   let ver = version in
   let pp_syms =
     Data.Write.create ~pp:(print_symbols subs secs demangle symbol_fmts) () in
   Project.add_writer
     ~desc:"print symbol table" ~ver "symbols" pp_syms;
-  let pp_bir = Data.Write.create ~pp:(print_bir subs secs) () in
+  let pp_bir = Data.Write.create ~pp:(print_bir subs secs doms) () in
   let pp_adt = Data.Write.create ~pp:Adt.pp_project () in
 
   List.iter attrs ~f:Text_tags.Attr.show;
@@ -381,5 +384,14 @@ let () =
   let secs : string list Config.param =
     let doc = "Only display information for section $(docv)" in
     Config.(param_all string "section" ~docv:"NAME" ~doc) in
+  let semantics : string list option Config.param =
+    let doc =
+      "Display the $(docv) semantics of the program. If used without
+       an argument then all semantic values associated with terms will
+       be printed. Otherwise only the selected (if present) will be
+       printed." in
+    Config.(param (some (list string)) ~as_flag:(Some [])
+              ~doc ~docv:"SEMANTICS-LIST" "semantics") in
   Config.when_ready (fun {Config.get=(!)} ->
-      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs)
+      main !bir_attr !ansi_colors !demangle !print_symbols !subs !secs
+        !semantics)
