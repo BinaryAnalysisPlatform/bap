@@ -409,3 +409,5 @@ let init () =
     ~desc:"CFG generator"
     ~name:"cfg"
     (module IR)
+
+module Theory = IR

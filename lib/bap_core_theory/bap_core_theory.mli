@@ -422,7 +422,6 @@ end
 
 module Grammar : sig
   type ieee754 = IEEE754.parameters
-
   module type Bitv = sig
     type t
     type exp
@@ -460,7 +459,12 @@ module Grammar : sig
     val int : word -> t
     val unknown : int -> t
     val ite : exp -> exp -> exp -> t
-    val let_ : string -> exp -> exp -> t
+
+    val let_bit : string -> exp -> exp -> t
+    val let_reg : string -> exp -> exp -> t
+    val let_mem : string -> exp -> exp -> t
+    val let_float : string -> exp -> exp -> t
+
     val append : exp -> exp -> t
     val concat : exp list -> t
 
@@ -482,7 +486,10 @@ module Grammar : sig
     val int : word -> t
     val unknown : unit -> t
     val ite : exp -> exp -> exp -> t
-    val let_ : string -> exp -> exp -> t
+    val let_bit : string -> exp -> exp -> t
+    val let_reg : string -> exp -> exp -> t
+    val let_mem : string -> exp -> exp -> t
+    val let_float : string -> exp -> exp -> t
 
     val high : exp -> t
     val low : exp -> t
@@ -518,9 +525,11 @@ module Grammar : sig
     val var : string -> int -> int -> t
     val unknown : int -> int -> t
     val ite : exp -> exp -> exp -> t
-    val let_ : string -> exp -> exp -> t
+    val let_bit : string -> exp -> exp -> t
+    val let_reg : string -> exp -> exp -> t
+    val let_mem : string -> exp -> exp -> t
+    val let_float : string -> exp -> exp -> t
   end
-
 
   module type Stmt = sig
     type t
@@ -557,7 +566,6 @@ module Grammar : sig
     val seq : stmt list -> t
   end
 
-
   module type Float = sig
     type t
     type exp
@@ -585,6 +593,10 @@ module Grammar : sig
     val fsqrt : rmode -> exp -> t
     val fround : rmode -> exp -> t
 
+    val let_bit : string -> exp -> exp -> t
+    val let_reg : string -> exp -> exp -> t
+    val let_mem : string -> exp -> exp -> t
+    val let_float : string -> exp -> exp -> t
   end
 
   module type Rmode = sig

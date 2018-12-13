@@ -136,8 +136,26 @@ module Make(S : Core) = struct
               s + Bits.size sx) >>= fun sz ->
           concat (bits sz) xs
 
-        let let_ v x y =
+        let let_bit v x y =
+          let x = expb x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_reg v x y =
           let x = expw x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_mem v x y =
+          let x = expm x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_float v x y =
+          let x = expf x in
           sort x >>= fun s ->
           Var.Generator.fresh s >>= fun r ->
           let_ r x (run ((v,Var.name r)::ctxt) self y)
@@ -165,6 +183,7 @@ module Make(S : Core) = struct
         let expw s = expw ctxt self s
         let expm s = expm ctxt self s
         let expb s = expb ctxt self s
+        let expf s = expf ctxt self s
 
         let store m k x = store (expm m) (expw k) (expw x)
         let store_word d m k x =
@@ -173,11 +192,31 @@ module Make(S : Core) = struct
           let s = Mems.define (bits ks) (bits vs) in
           var (Var.create s (rename ctxt v))
         let ite c x y = ite (expb c) (expm x) (expm y)
-        let let_ v x y =
+
+        let let_bit v x y =
+          let x = expb x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_reg v x y =
+          let x = expw x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_mem v x y =
           let x = expm x in
           sort x >>= fun s ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x @@ run ((v,Var.name r)::ctxt) self y
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_float v x y =
+          let x = expf x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
         let unknown ks vs = unk (Mems.define (bits ks) (bits vs))
       end)
 
@@ -208,11 +247,31 @@ module Make(S : Core) = struct
           and_ (or_ x y) (inv (and_ x y))
         let eq x y = eq (expw x) (expw y)
         let neq x y = neq (expw x) (expw y)
-        let let_ v x y =
+
+        let let_bit v x y =
           let x = expb x in
           sort x >>= fun s ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x @@ run ((v,Var.name r)::ctxt) self y
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_reg v x y =
+          let x = expw x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_mem v x y =
+          let x = expm x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_float v x y =
+          let x = expf x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
         let not x = inv (expb x)
         let unknown _ = (unk bool)
 
@@ -288,6 +347,30 @@ module Make(S : Core) = struct
 
         let ieee754_convert s m x =
           fconvert (floats s) (expr m) (expf x)
+
+        let let_bit v x y =
+          let x = expb x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_reg v x y =
+          let x = expw x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_mem v x y =
+          let x = expm x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
+
+        let let_float v x y =
+          let x = expf x in
+          sort x >>= fun s ->
+          Var.Generator.fresh s >>= fun r ->
+          let_ r x (run ((v,Var.name r)::ctxt) self y)
       end)
   and expr : type b e r.
     (string * string) list ->

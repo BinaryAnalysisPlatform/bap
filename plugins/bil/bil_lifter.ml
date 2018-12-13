@@ -11,8 +11,8 @@ open Parser
 include Self()
 
 module BilParser = struct
-  type context = [`Bitv | `Bool | `Mem ]
-  exception Error of exp * context
+  type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
+  exception Error of exp * context [@@deriving sexp]
   let fail exp ctx = raise (Error (exp,ctx))
 
   type exp = Bil.exp
@@ -30,6 +30,18 @@ module BilParser = struct
   let is_big e =
     Bil.int @@
     if e = BigEndian then Word.b1 else Word.b0
+
+  let is_reg v = match Var.typ v with
+    | Type.Imm 1 | Type.Mem _ -> false
+    | _ -> true
+
+  let is_bit v = match Var.typ v with
+    | Type.Imm 1 -> true
+    | _ -> false
+
+  let is_mem v = match Var.typ v with
+    | Type.Mem _ -> true
+    | _ -> false
 
   let bitv : type t r. (t,exp,r) bitv_parser =
     fun (module S) -> function
@@ -56,7 +68,9 @@ module BilParser = struct
         S.load_word (Size.in_bits s) (is_big e) m k
       | Var v -> S.var (Var.name v) (bits_of_var v)
       | Int x -> S.int x
-      | Let (x,y,z) -> S.let_ (Var.name x) y z
+      | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
+      | Let (v,y,z) when is_reg v -> S.let_reg (Var.name v) y z
+      | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
       | Ite (x,y,z) -> S.ite x y z
       | Extract (hi,lo,x) ->
         let s = max 0 (hi-lo+1) in
@@ -65,6 +79,7 @@ module BilParser = struct
       | Unknown (_, Imm s) -> S.unknown s
 
       (* ill-formed expressions *)
+      | Let _
       | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _)
       | Store (_, _, _, _, _)
       | Unknown (_, Mem _) as exp -> fail exp `Bitv
@@ -81,9 +96,12 @@ module BilParser = struct
       | Store (m,k,v,e,_) ->
         S.store_word (is_big e) m k v
       | Var v  -> with_mem_types v (S.var (Var.name v))
-      | Let (v,x,y) -> S.let_ (Var.name v) x y
+      | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
+      | Let (v,y,z) when is_reg v -> S.let_reg (Var.name v) y z
+      | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
       | Ite (c,x,y) ->  S.ite c x y
       (* the rest is ill-formed *)
+      | Let _
       | Unknown (_,_)
       | Load (_,_,_,_)
       | BinOp (_,_,_)
@@ -112,10 +130,13 @@ module BilParser = struct
       | BinOp (AND,x,y) -> S.logand x y
       | BinOp (XOR,x,y) -> S.logxor x y
       | UnOp (NOT,x) -> S.not x
-      | Let (x,y,z) -> S.let_ (Var.name x) y z
+      | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
+      | Let (v,y,z) when is_reg v -> S.let_reg (Var.name v) y z
+      | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
       | Ite (x,y,z) -> S.ite x y z
       | Extract (hi,lo,x) when hi = lo -> S.extract hi x
       | Unknown (_,_) -> S.unknown ()
+      | Let _
       | Extract _
       | UnOp (NEG,_)
       | Cast (_,_,_)
@@ -156,7 +177,7 @@ module BilParser = struct
   let t = {bitv; mem; stmt; bool; float; rmode}
 end
 
-module Parser = Parser.Make(Theory.Manager)
+module Lifter = Parser.Make(Theory.Manager)
 
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
@@ -166,13 +187,22 @@ let provide_lifter () =
     | Some (arch,mem,insn) ->
       let module Target = (val target_of_arch arch) in
       match Target.lift mem insn with
-      | Error _ -> Knowledge.return Semantics.empty
       | Ok bil ->
-        Parser.run BilParser.t bil >>| fun eff ->
+        Lifter.run BilParser.t bil >>| fun eff ->
         let graph = Eff.get Bil_ir.t eff in
         let bir = Bil_ir.reify graph in
         let sema = Eff.semantics eff in
-        Semantics.put Insn.Semantics.Domain.bir sema bir in
+        Semantics.put Insn.Semantics.Domain.bir sema bir
+      | Error _ ->
+        Knowledge.collect Insn.Semantics.t label >>= fun sema ->
+        match Semantics.get Bil.Domain.bil sema with
+        | [] -> Knowledge.return sema
+        | bil ->
+          Lifter.run BilParser.t bil >>| fun eff ->
+          let graph = Eff.get Bil_ir.t eff in
+          let bir = Bil_ir.reify graph in
+          let sema = Eff.semantics eff in
+          Semantics.put Insn.Semantics.Domain.bir sema bir in
   Knowledge.promise Insn.Semantics.t lifter
 
 

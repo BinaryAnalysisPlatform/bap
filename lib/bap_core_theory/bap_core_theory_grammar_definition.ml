@@ -41,7 +41,12 @@ module type Bitv = sig
   val int : word -> t
   val unknown : int -> t
   val ite : exp -> exp -> exp -> t
-  val let_ : string -> exp -> exp -> t
+
+  val let_bit : string -> exp -> exp -> t
+  val let_reg : string -> exp -> exp -> t
+  val let_mem : string -> exp -> exp -> t
+  val let_float : string -> exp -> exp -> t
+
   val append : exp -> exp -> t
   val concat : exp list -> t
 
@@ -63,7 +68,10 @@ module type Bool = sig
   val int : word -> t
   val unknown : unit -> t
   val ite : exp -> exp -> exp -> t
-  val let_ : string -> exp -> exp -> t
+  val let_bit : string -> exp -> exp -> t
+  val let_reg : string -> exp -> exp -> t
+  val let_mem : string -> exp -> exp -> t
+  val let_float : string -> exp -> exp -> t
 
   val high : exp -> t
   val low : exp -> t
@@ -99,9 +107,11 @@ module type Mem = sig
   val var : string -> int -> int -> t
   val unknown : int -> int -> t
   val ite : exp -> exp -> exp -> t
-  val let_ : string -> exp -> exp -> t
+  val let_bit : string -> exp -> exp -> t
+  val let_reg : string -> exp -> exp -> t
+  val let_mem : string -> exp -> exp -> t
+  val let_float : string -> exp -> exp -> t
 end
-
 
 module type Stmt = sig
   type t
@@ -164,6 +174,11 @@ module type Float = sig
   val fneg : exp -> t
   val fsqrt : rmode -> exp -> t
   val fround : rmode -> exp -> t
+
+  val let_bit : string -> exp -> exp -> t
+  val let_reg : string -> exp -> exp -> t
+  val let_mem : string -> exp -> exp -> t
+  val let_float : string -> exp -> exp -> t
 end
 
 module type Rmode = sig
