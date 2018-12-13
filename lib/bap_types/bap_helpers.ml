@@ -419,7 +419,7 @@ module Eff = struct
     | UnOp (_,x)
     | Cast (_,_,x)
     | Extract (_,_,x) -> eff x
-    | Let (_,_,_) -> assert false (* must be let-normalized *)
+    | Let (_,x,y) -> all [eff x; eff y]
   and div y = match Nz.bits y with
     | Nz.Maybe | Nz.Empty -> raise
     | _ -> none
