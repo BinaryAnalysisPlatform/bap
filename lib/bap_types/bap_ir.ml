@@ -516,22 +516,27 @@ module Ir_arg = struct
     include Regular.Make(Data)
   end
 
+  let pp_self pp_exp ppf (var,exp,intent) =
+    Format.fprintf ppf "%s :: %s%a = %a"
+      (Var.name var)
+      (string_of_intent intent)
+      Bap_type.pp (Var.typ var)
+      pp_exp exp
+
+  let pp ppf ({self=(var,_,_)} as t) = term_pp (pp_self (fun ppf exp ->
+      let exp = Sema.to_bil var exp in
+      Bap_exp.pp ppf exp)) ppf t
+
+  let pp_domains domains = term_pp (pp_self (Semantics.pp_domains domains))
+
+
   module V2 = struct
     type t = arg term [@@deriving bin_io, compare, sexp]
     let module_name = Some "Bap.Std.Arg"
     let version = "2.0.0"
 
     let hash = hash_of_term
-
-    let pp_self ppf (var,exp,intent) =
-      let exp = Sema.to_bil var exp in
-      Format.fprintf ppf "%s :: %s%a = %a"
-        (Var.name var)
-        (string_of_intent intent)
-        Bap_type.pp (Var.typ var)
-        Bap_exp.pp exp
-
-    let pp = term_pp pp_self
+    let pp = pp
   end
   include Regular.Make(V2)
 end
@@ -595,25 +600,24 @@ module Ir_def = struct
     include Regular.Make(Data)
   end
 
+  let pp_self ppf ((lhs,_) as self) =
+    Format.fprintf ppf
+      "%a := %a" Var.pp lhs Bap_exp.pp (bil_exp self)
+
+
+  let pp_self_domains domains ppf (lhs,rhs) =
+    Format.fprintf ppf
+      "%a := %a" Var.pp lhs (Semantics.pp_domains domains) rhs
+
+  let pp = term_pp pp_self
+  let pp_domains ds = term_pp (pp_self_domains ds)
+
   module V2 = struct
     type t = def term [@@deriving bin_io, compare, sexp]
     let module_name = Some "Bap.Std.Def"
     let version = "2.0.0"
-
     let hash = hash_of_term
-
-
-    let pp_self ppf ((lhs,_) as self) =
-      Format.fprintf ppf
-        "%a := %a" Var.pp lhs Bap_exp.pp (bil_exp self)
-
-
-    let pp_self_domains domains ppf (lhs,rhs) =
-      Format.fprintf ppf
-        "%a := %a" Var.pp lhs (Semantics.pp_domains domains) rhs
-
-    let pp = term_pp pp_self
-    let pp_domains ds = term_pp (pp_self_domains ds)
+    let pp = pp
   end
   include Regular.Make(V2)
   module Semantics = Leaf
@@ -671,7 +675,17 @@ module Ir_phi = struct
            let exp = Sema.to_bil lhs exp in
            Format.asprintf "[%a, %%%a]" Bap_exp.pp exp Tid.pp id)
          (Map.to_alist rhs))
+
+  let pp_self_domains ds ppf (lhs,rhs) =
+    Format.fprintf ppf "%a := phi(%s)"
+      Var.pp lhs
+      (String.concat ~sep:", " @@
+       List.map ~f:(fun (id,exp) ->
+           Format.asprintf "[%a, %%%a]" (Semantics.pp_domains ds) exp Tid.pp id)
+         (Map.to_alist rhs))
+
   let pp = term_pp pp_self
+  let pp_domains ds = term_pp (pp_self_domains ds)
 
   module V1 : Data.S with type t = phi term = struct
     type t = phi term
@@ -853,19 +867,19 @@ module Ir_jmp = struct
     include Regular.Make(Data)
   end
 
+  let pp_self ppf (lhs,(_,rhs)) =
+    Format.fprintf ppf "%a%a" pp_cond (cond_of_sema lhs) pp_dst rhs
+
+  let pp = term_pp pp_self
+  let pp_domains _ = pp
+
+
   module V2 = struct
     type t = jmp term [@@deriving bin_io, compare, sexp]
     let module_name = Some "Bap.Std.Jmp"
     let version = "2.0.0"
-
     let hash = hash_of_term
-
-
-
-    let pp_self ppf (lhs,(_,rhs)) =
-      Format.fprintf ppf "%a%a" pp_cond (cond_of_sema lhs) pp_dst rhs
-
-    let pp = term_pp pp_self
+    let pp = pp
   end
 
   module Semantics = struct
@@ -1454,21 +1468,27 @@ module Ir_blk = struct
     dominator = id ||
     Term.(after def_t b dominator |> Seq.exists ~f:(fun x -> x.tid = id))
 
+  let pp_self ppf self =
+    Format.fprintf ppf "@[@.%a%a%a@]"
+      (Array.pp Ir_phi.pp) self.phis
+      (Array.pp Ir_def.pp) self.defs
+      (Array.pp Ir_jmp.pp) self.jmps
+
+  let pp_self_domains ds ppf self =
+    Format.fprintf ppf "@[@.%a%a%a@]"
+      (Array.pp (Ir_phi.pp_domains ds)) self.phis
+      (Array.pp (Ir_def.pp_domains ds)) self.defs
+      (Array.pp (Ir_jmp.pp_domains ds)) self.jmps
+
+  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp = term_pp pp_self
+
   include Regular.Make(struct
       type t = blk term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Blk"
       let version = "1.0.0"
-
       let hash = hash_of_term
-
-      let pp_self ppf self =
-        Format.fprintf ppf "@[@.%a%a%a@]"
-          (Array.pp Ir_phi.pp) self.phis
-          (Array.pp Ir_def.pp) self.defs
-          (Array.pp Ir_jmp.pp) self.jmps
-
-      let pp = term_pp pp_self
-
+      let pp = pp
     end)
 end
 
@@ -1580,22 +1600,42 @@ module Ir_sub = struct
         | None -> Format.asprintf "sub_%a" Tid.pp tid in
       make_term tid {name; args; blks}
   end
+  let pp_self ppf self =
+    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+      self.name
+      (String.concat ~sep:", " @@
+       Array.to_list @@
+       Array.map self.args ~f:Ir_arg.name)
+      (Array.pp Ir_arg.pp) self.args
+      (Array.pp Ir_blk.pp) self.blks
+
+  let pp_self ppf self =
+    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+      self.name
+      (String.concat ~sep:", " @@
+       Array.to_list @@
+       Array.map self.args ~f:Ir_arg.name)
+      (Array.pp Ir_arg.pp) self.args
+      (Array.pp Ir_blk.pp) self.blks
+
+  let pp_self_domains ds ppf self =
+    Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
+      self.name
+      (String.concat ~sep:", " @@
+       Array.to_list @@
+       Array.map self.args ~f:Ir_arg.name)
+      (Array.pp (Ir_arg.pp_domains ds)) self.args
+      (Array.pp (Ir_blk.pp_domains ds)) self.blks
+
+  let pp = term_pp pp_self
+  let pp_domains ds = term_pp (pp_self_domains ds)
+
   include Regular.Make(struct
       type t = sub term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Sub"
       let version = "1.0.0"
-
+      let pp = pp
       let hash = hash_of_term
-      let pp_self ppf self =
-        Format.fprintf ppf "@[<v>sub %s(%s)@.%a%a@]"
-          self.name
-          (String.concat ~sep:", " @@
-           Array.to_list @@
-           Array.map self.args ~f:Ir_arg.name)
-          (Array.pp Ir_arg.pp) self.args
-          (Array.pp Ir_blk.pp) self.blks
-
-      let pp = term_pp pp_self
     end)
 end
 
@@ -1706,15 +1746,22 @@ module Ir_program = struct
 
   end
 
+  let pp_self ppf self =
+    Format.fprintf ppf "@[<v>program@.%a@]"
+      (Array.pp Ir_sub.pp) self.subs
+
+  let pp_self_domains ds ppf self =
+    Format.fprintf ppf "@[<v>program@.%a@]"
+      (Array.pp (Ir_sub.pp_domains ds)) self.subs
+
+  let pp_domains ds = term_pp (pp_self_domains ds)
+  let pp = term_pp pp_self
+
   include Regular.Make(struct
       type t = program term [@@deriving bin_io, compare, sexp]
       let module_name = Some "Bap.Std.Program"
       let version = "1.0.0"
-
+      let pp = pp
       let hash = hash_of_term
-      let pp_self ppf self =
-        Format.fprintf ppf "@[<v>program@.%a@]"
-          (Array.pp Ir_sub.pp) self.subs
-      let pp = term_pp pp_self
     end)
 end

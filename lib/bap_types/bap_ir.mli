@@ -194,7 +194,7 @@ module Ir_program : sig
     val add_sub : t -> sub term -> unit
     val result : t -> program term
   end
-
+  val pp_domains : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -222,6 +222,7 @@ module Ir_sub : sig
   val returns_twice : unit tag
   val nothrow : unit tag
   val entry_point : unit tag
+  val pp_domains : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -277,6 +278,7 @@ module Ir_blk : sig
     val add_elt : t -> elt -> unit
     val result  : t -> blk term
   end
+  val pp_domains : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -297,7 +299,7 @@ module Ir_def : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
-
+  val pp_domains : string list -> Format.formatter -> t -> unit
 
   include Regular.S with type t := t
   module V1 : Data.S with type t = def term
@@ -325,6 +327,7 @@ module Ir_jmp : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+  val pp_domains : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -342,6 +345,7 @@ module Ir_phi : sig
   val map_exp : t -> f:(exp -> exp) -> t
   val substitute : t -> exp -> exp -> t
   val free_vars : t -> Bap_var.Set.t
+  val pp_domains : string list -> Format.formatter -> t -> unit
   include Regular.S with type t := t
 end
 
@@ -360,6 +364,7 @@ module Ir_arg : sig
   val warn_unused : unit tag
   val restricted : unit tag
   val nonnull : unit tag
+  val pp_domains : string list -> Format.formatter -> t -> unit
 
   include Regular.S with type t := t
 

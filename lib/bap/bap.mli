@@ -7080,7 +7080,7 @@ module Std : sig
       (** fixes the result  *)
       val result : t -> program term
     end
-
+    val pp_domains : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7210,7 +7210,7 @@ module Std : sig
       (** returns current result  *)
       val result : t -> sub term
     end
-
+    val pp_domains : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7415,7 +7415,7 @@ module Std : sig
       (** returns current result  *)
       val result  : t -> blk term
     end
-
+    val pp_domains : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7463,6 +7463,8 @@ module Std : sig
         on the right hand side of definition [def]. See {!Exp.free_vars}
         for more information.  *)
     val free_vars : t -> Var.Set.t
+
+    val pp_domains : string list -> Format.formatter -> t -> unit
 
     include Regular.S with type t := t
   end
@@ -7542,6 +7544,7 @@ module Std : sig
     (** updated jump's kind  *)
     val with_kind : t -> jmp_kind -> t
 
+    val pp_domains : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
@@ -7609,6 +7612,7 @@ module Std : sig
     (** [remove def id] removes definition with a given [id]  *)
     val remove : t -> tid -> t
 
+    val pp_domains : string list -> Format.formatter -> t -> unit
     include Regular.S with type t := t
   end
 
