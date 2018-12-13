@@ -405,12 +405,68 @@ module Basic : Theory.Basic = struct
         ctrl Bil.[Special dst]
 end
 
+
 module BIL : Theory.Core = struct
   include Theory.Core.Empty
   include Basic
 end
 
+module FBil = Bil_float.Make(Basic)
+
+module FPEmulator = struct
+  open Knowledge.Syntax
+  type 'a t = 'a knowledge
+  type 'a float = 'a Bap_core_theory.float
+  type 'a value = 'a Bap_core_theory.value
+
+  let supported = IEEE754.[
+      binary16;
+      binary32;
+      binary64;
+      binary80;
+      binary128;
+    ]
+
+  let ieee754_of_sort s =
+    List.find supported ~f:(fun p ->
+        Sort.same s (IEEE754.Sort.define p))
+
+  let resort s v = Value.create s (Value.semantics v)
+
+  let fbits x =
+    x >>| fun x -> resort (Floats.size (Value.sort x)) x
+
+  let float s x =
+    x >>| fun x -> resort s x
+
+  let fop : type f.
+    _ ->
+    rmode value t -> f float value t -> f float value t -> f float value t =
+    fun op rm x y ->
+      x >>= fun x ->
+      y >>= fun y ->
+      let xs = Value.sort x in
+      match ieee754_of_sort xs with
+      | None -> BIL.unk xs
+      | Some ({IEEE754.k} as p) ->
+        let bs = Bits.define k in
+        let x = resort bs x and y = resort bs y in
+        let s = IEEE754.Sort.define p in
+        float xs (op s rm !!x !!y)
+
+  let fadd rm = fop FBil.fadd rm
+  let fsub rm = fop FBil.fadd rm
+  let fmul rm = fop FBil.fadd rm
+  let fdiv rm = fop FBil.fadd rm
+end
+
+module BIL_FP = struct
+  include BIL
+  include FPEmulator
+end
+
+
 let init () = Theory.register
     ~desc:"denotes programs in terms of BIL expressions and statements"
     ~name:"bil"
-    (module BIL)
+    (module BIL_FP)

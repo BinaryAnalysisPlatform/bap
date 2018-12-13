@@ -53,7 +53,7 @@ module Rounding = struct
   let get rm =
     rm >>= fun r ->
     match Value.get rounding r with
-    | None -> !! None
+    | None -> !! (Some Nearest_even)
     | Some r -> !! (Some r)
 end
 
@@ -186,8 +186,8 @@ module Make(B : Theory.Basic) = struct
 
   let unpack fsort x f =
     exponent fsort x >=> fun expn ->
-    significand fsort expn x >=> fun coef ->
-    f (fsign x) expn coef
+      significand fsort expn x >=> fun coef ->
+        f (fsign x) expn coef
 
   let is_inf fsort x =
     unpack fsort x @@ fun _ expn coef ->
@@ -241,7 +241,7 @@ module Make(B : Theory.Basic) = struct
       | Some Negative_inf -> sign
       | Some Nearest_away -> loss >= half
       | Some Nearest_even ->
-         or_ (loss > half) (and_ (loss = half) (lsb coef))
+        or_ (loss > half) (and_ (loss = half) (lsb coef))
       | _ -> b0 in
     let is_needed = and_ (non_zero lost_bits) is_needed in
     let all_ones = not (zero sigs) in
@@ -295,7 +295,7 @@ module Make(B : Theory.Basic) = struct
     sort coef >>= fun sigs ->
     let min_expn = min_exponent exps in
     clz coef >=> fun clz ->
-    min clz (unsigned sigs (abs (expn - min_expn)))
+      min clz (unsigned sigs (abs (expn - min_expn)))
 
   (* TODO: consider test coef for zero to prevent expn change *)
   let safe_align_left expn coef =
@@ -321,7 +321,7 @@ module Make(B : Theory.Basic) = struct
   let minimize_exponent = safe_align_left
   let norm = safe_align_left
 
-   (* returns result sign *)
+  (* returns result sign *)
   let xor_sign s s' = B.(and_ (or_ s s') (inv (and_ s s')))
 
   (** [combine_loss more_significant less_significant length_of_less ] *)
@@ -338,24 +338,24 @@ module Make(B : Theory.Basic) = struct
     sort xcoef >>= fun xec ->
     let lost_bits = abs (xexpn - yexpn) in
     ite (xexpn > yexpn) xcoef (xcoef lsr lost_bits) >=> fun xcoef ->
-    ite (yexpn > xexpn) ycoef (ycoef lsr lost_bits) >=> fun ycoef ->
-    xcoef + ycoef >=> fun coef ->
-    max xexpn yexpn >=> fun expn ->
-    ite (coef >= xcoef) expn (succ expn) >=> fun expn ->
-    match_ [
-          (xexpn = yexpn) --> zero sigs;
-          (xexpn > yexpn) --> extract_last ycoef lost_bits;
-      ] ~default:(extract_last xcoef lost_bits) >=> fun loss ->
-    extract_last coef (one sigs) >=> fun loss' ->
-    coef >= xcoef >=> fun no_overflow ->
-    ite no_overflow lost_bits (succ lost_bits) >=> fun lost_bits ->
-    ite no_overflow loss (combine_loss loss' loss lost_bits) >=> fun loss ->
-    ite no_overflow coef (coef lsr one sigs) >=> fun coef ->
-    one sigs lsl (of_int sigs Caml.(Bits.size sigs - 1)) >=> fun leading_one ->
-    ite no_overflow coef (coef lor leading_one) >=> fun coef ->
-    round rm sign coef loss lost_bits >=> fun coef ->
-    norm expn coef >>= fun (expn,coef) ->
-    pack fsort sign expn coef
+      ite (yexpn > xexpn) ycoef (ycoef lsr lost_bits) >=> fun ycoef ->
+        xcoef + ycoef >=> fun coef ->
+          max xexpn yexpn >=> fun expn ->
+            ite (coef >= xcoef) expn (succ expn) >=> fun expn ->
+              match_ [
+                (xexpn = yexpn) --> zero sigs;
+                (xexpn > yexpn) --> extract_last ycoef lost_bits;
+              ] ~default:(extract_last xcoef lost_bits) >=> fun loss ->
+                extract_last coef (one sigs) >=> fun loss' ->
+                  coef >= xcoef >=> fun no_overflow ->
+                    ite no_overflow lost_bits (succ lost_bits) >=> fun lost_bits ->
+                      ite no_overflow loss (combine_loss loss' loss lost_bits) >=> fun loss ->
+                        ite no_overflow coef (coef lsr one sigs) >=> fun coef ->
+                          one sigs lsl (of_int sigs Caml.(Bits.size sigs - 1)) >=> fun leading_one ->
+                            ite no_overflow coef (coef lor leading_one) >=> fun coef ->
+                              round rm sign coef loss lost_bits >=> fun coef ->
+                                norm expn coef >>= fun (expn,coef) ->
+                                pack fsort sign expn coef
 
   let extend bitv ~addend  =
     sort bitv >>= fun sort ->
@@ -370,10 +370,10 @@ module Make(B : Theory.Basic) = struct
       let mask = not (ones sort lsl lost_bits) in
       mask land (not loss) in
     match_ [
-        is_zero lost_bits --> zero sort;
-        is_zero loss --> loss;
-        (loss = half) --> loss;
-      ] ~default:inverted
+      is_zero lost_bits --> zero sort;
+      is_zero loss --> loss;
+      (loss = half) --> loss;
+    ] ~default:inverted
 
   let match_cmp x y ~on_eql ~on_gt ~on_lt =
     let open B in
@@ -389,41 +389,41 @@ module Make(B : Theory.Basic) = struct
     unpack fsort x @@ fun xsign xexpn xcoef ->
     unpack fsort y @@ fun _     yexpn ycoef ->
     extend xcoef ~addend:1 >=> fun xcoef ->
-    extend ycoef ~addend:1 >=> fun ycoef ->
-    sort xcoef >>= fun sigs' ->
-    abs (xexpn - yexpn) >=> fun diff ->
-    ite (is_zero diff) diff (diff - one exps) >=> fun lost_bits ->
-    match_ [
-        (xexpn > yexpn) --> extract_last ycoef lost_bits;
-        (xexpn < yexpn) --> extract_last xcoef lost_bits;
-      ] ~default:(zero sigs') >=> fun loss ->
-    invert_loss loss lost_bits >=> fun loss ->
-    or_ (xexpn < yexpn) (and_ (xexpn = yexpn) (xcoef < ycoef)) >=> fun swap ->
-    ite swap (inv xsign) xsign >=> fun sign ->
-    match_ [
-        (xexpn > yexpn) --> xcoef lsl one sigs';
-        (xexpn < yexpn) --> xcoef lsr lost_bits;
-      ] ~default:xcoef >=> fun xcoef ->
-    match_ [
-        (yexpn > xexpn) --> ycoef lsl one sigs';
-        (yexpn < xexpn) --> ycoef lsr lost_bits;
-      ] ~default:ycoef >=> fun ycoef ->
-    ite (is_zero loss) (zero sigs') (one sigs') >=> fun borrow ->
-    ite swap (ycoef - xcoef - borrow) (xcoef - ycoef - borrow) >=> fun coef ->
-    msb coef >=> fun msbc ->
-    max xexpn yexpn >=> fun expn ->
-    ite (xexpn = yexpn) expn (expn - one exps) >=> fun expn ->
-    ite (is_zero coef) min_expn (ite msbc (succ expn) expn) >=> fun expn ->
-    ite msbc (extract_last coef (one sigs')) (zero sigs') >=> fun loss' ->
-    ite msbc (combine_loss loss' loss lost_bits) loss >=> fun loss ->
-    ite msbc (succ lost_bits) lost_bits >=> fun lost_bits ->
-    ite msbc (coef lsr one sigs') coef >=> fun coef ->
-    unsigned sigs coef >=> fun coef ->
-    round rm sign coef loss lost_bits >=> fun coef ->
-    norm expn coef >>= fun (expn,coef) ->
-    pack fsort sign expn coef
+      extend ycoef ~addend:1 >=> fun ycoef ->
+        sort xcoef >>= fun sigs' ->
+        abs (xexpn - yexpn) >=> fun diff ->
+          ite (is_zero diff) diff (diff - one exps) >=> fun lost_bits ->
+            match_ [
+              (xexpn > yexpn) --> extract_last ycoef lost_bits;
+              (xexpn < yexpn) --> extract_last xcoef lost_bits;
+            ] ~default:(zero sigs') >=> fun loss ->
+              invert_loss loss lost_bits >=> fun loss ->
+                or_ (xexpn < yexpn) (and_ (xexpn = yexpn) (xcoef < ycoef)) >=> fun swap ->
+                  ite swap (inv xsign) xsign >=> fun sign ->
+                    match_ [
+                      (xexpn > yexpn) --> xcoef lsl one sigs';
+                      (xexpn < yexpn) --> xcoef lsr lost_bits;
+                    ] ~default:xcoef >=> fun xcoef ->
+                      match_ [
+                        (yexpn > xexpn) --> ycoef lsl one sigs';
+                        (yexpn < xexpn) --> ycoef lsr lost_bits;
+                      ] ~default:ycoef >=> fun ycoef ->
+                        ite (is_zero loss) (zero sigs') (one sigs') >=> fun borrow ->
+                          ite swap (ycoef - xcoef - borrow) (xcoef - ycoef - borrow) >=> fun coef ->
+                            msb coef >=> fun msbc ->
+                              max xexpn yexpn >=> fun expn ->
+                                ite (xexpn = yexpn) expn (expn - one exps) >=> fun expn ->
+                                  ite (is_zero coef) min_expn (ite msbc (succ expn) expn) >=> fun expn ->
+                                    ite msbc (extract_last coef (one sigs')) (zero sigs') >=> fun loss' ->
+                                      ite msbc (combine_loss loss' loss lost_bits) loss >=> fun loss ->
+                                        ite msbc (succ lost_bits) lost_bits >=> fun lost_bits ->
+                                          ite msbc (coef lsr one sigs') coef >=> fun coef ->
+                                            unsigned sigs coef >=> fun coef ->
+                                              round rm sign coef loss lost_bits >=> fun coef ->
+                                                norm expn coef >>= fun (expn,coef) ->
+                                                pack fsort sign expn coef
 
-let add_or_sub ~is_sub fsort rm x y =
+  let add_or_sub ~is_sub fsort rm x y =
     let ( lxor ) = xor_sign in
     let s1 = is_sub in
     let s2 = fsign x in
@@ -444,26 +444,26 @@ let add_or_sub ~is_sub fsort rm x y =
     unpack fsort x @@ fun xsign xexpn xcoef ->
     unpack fsort y @@ fun ysign yexpn ycoef ->
     double xexpn >=> fun xexpn ->
-    double yexpn >=> fun yexpn ->
-    double xcoef >=> fun xcoef ->
-    double ycoef >=> fun ycoef ->
-    sort xexpn >>= fun exps' ->
-    sort xcoef >>= fun sigs' ->
-    xexpn + yexpn - of_int exps' (bias fsort) >=> fun expn ->
-    xcoef * ycoef >=> fun coef ->
-    xor_sign xsign ysign >=> fun sign ->
-    clz coef >=> fun clz ->
-    of_int sigs' (precision fsort) >=> fun prec ->
-    ite (clz >= prec) (zero sigs') (prec - clz) >=> fun shift ->
-    extract_last coef shift >=> fun loss ->
-    coef lsr shift >=> fun coef ->
-    round rm sign coef loss shift >=> fun coef ->
-    unsigned sigs coef >=> fun coef ->
-    unsigned exps expn >=> fun expn ->
-    min_exponent exps >=> fun min ->
-    ite (is_zero coef) min expn >=> fun expn ->
-    norm expn coef >>= fun (expn,coef) ->
-    pack fsort sign expn coef
+      double yexpn >=> fun yexpn ->
+        double xcoef >=> fun xcoef ->
+          double ycoef >=> fun ycoef ->
+            sort xexpn >>= fun exps' ->
+            sort xcoef >>= fun sigs' ->
+            xexpn + yexpn - of_int exps' (bias fsort) >=> fun expn ->
+              xcoef * ycoef >=> fun coef ->
+                xor_sign xsign ysign >=> fun sign ->
+                  clz coef >=> fun clz ->
+                    of_int sigs' (precision fsort) >=> fun prec ->
+                      ite (clz >= prec) (zero sigs') (prec - clz) >=> fun shift ->
+                        extract_last coef shift >=> fun loss ->
+                          coef lsr shift >=> fun coef ->
+                            round rm sign coef loss shift >=> fun coef ->
+                              unsigned sigs coef >=> fun coef ->
+                                unsigned exps expn >=> fun expn ->
+                                  min_exponent exps >=> fun min ->
+                                    ite (is_zero coef) min expn >=> fun expn ->
+                                      norm expn coef >>= fun (expn,coef) ->
+                                      pack fsort sign expn coef
 
   let mask_bit sort i =
     let uno = B.one sort in
@@ -476,18 +476,18 @@ let add_or_sub ~is_sub fsort rm x y =
     let rec loop i bits nomin =
       if Caml.(i < 0) then
         List.fold bits ~f:(lor) ~init:(zero sort) >=> fun coef ->
-        let loss = match_ [
-            (nomin > denom) --> Lost.alot sort;
-            (nomin = denom) --> Lost.half sort;
-            (nomin = zero sort) --> Lost.zero sort;
-         ] ~default:(Lost.afew sort) in
-        round rm sign coef loss (Lost.bits sort)
+          let loss = match_ [
+              (nomin > denom) --> Lost.alot sort;
+              (nomin = denom) --> Lost.half sort;
+              (nomin = zero sort) --> Lost.zero sort;
+            ] ~default:(Lost.afew sort) in
+          round rm sign coef loss (Lost.bits sort)
       else
         let next_nomin = ite (nomin > denom) (nomin - denom) nomin in
         let bit = ite (nomin > denom) (mask_bit sort i) (zero sort) in
         let bits = bit :: bits in
         bind next_nomin (fun next_nomin ->
-          loop Caml.(i - 1) bits (next_nomin lsl one sort)) in
+            loop Caml.(i - 1) bits (next_nomin lsl one sort)) in
     loop Caml.(prec - 1) [] nomin
 
   let fdiv fsort rm x y =
@@ -497,15 +497,15 @@ let add_or_sub ~is_sub fsort rm x y =
     unpack fsort x @@ fun xsign xexpn xcoef ->
     unpack fsort y @@ fun ysign yexpn ycoef ->
     extend xcoef ~addend:1 >=> fun xcoef ->
-    extend ycoef ~addend:1 >=> fun ycoef ->
-    sort xcoef >>= fun sigs' ->
-    xor_sign xsign ysign >=> fun sign ->
-    ite (xcoef < ycoef) (xcoef lsl one sigs') xcoef >=> fun nomin ->
-    long_division prec rm sign nomin ycoef >=> fun coef ->
-    unsigned sigs coef >=> fun coef ->
-    ite (xcoef < ycoef) (one exps) (zero exps) >=> fun dexpn ->
-    xexpn - yexpn - dexpn + of_int exps (bias fsort) >=> fun expn ->
-    norm expn coef >>= fun (expn,coef) ->
-    pack fsort sign expn coef
+      extend ycoef ~addend:1 >=> fun ycoef ->
+        sort xcoef >>= fun sigs' ->
+        xor_sign xsign ysign >=> fun sign ->
+          ite (xcoef < ycoef) (xcoef lsl one sigs') xcoef >=> fun nomin ->
+            long_division prec rm sign nomin ycoef >=> fun coef ->
+              unsigned sigs coef >=> fun coef ->
+                ite (xcoef < ycoef) (one exps) (zero exps) >=> fun dexpn ->
+                  xexpn - yexpn - dexpn + of_int exps (bias fsort) >=> fun expn ->
+                    norm expn coef >>= fun (expn,coef) ->
+                    pack fsort sign expn coef
 
 end
