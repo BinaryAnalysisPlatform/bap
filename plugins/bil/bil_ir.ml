@@ -10,6 +10,7 @@ open Link.Syntax
 
 type def = {
   name : string;
+  virt : bool;
   sort : Sort.exp;
   sema : semantics;
 }
@@ -102,13 +103,13 @@ module BIR = struct
 
   let init_labels () = Label.Table.create ()
 
-  let add_def b {name; sema} =
+  let add_def b {name; sema; virt} =
     match Semantics.get Bil.Domain.exp sema with
     | None -> ()
     | Some exp ->
       (* alternatively we can look into the sort *)
       let typ = Type.infer_exn exp in
-      let var = Var.create name typ in
+      let var = Var.create ~is_virtual:virt name typ in
       let def = Def.Semantics.create var sema in
       Blk.Builder.add_def b def
 
@@ -213,6 +214,7 @@ module IR = struct
       blks = [{name=entry; jmps=[]; defs=[{
           name = Var.name v;
           sort = Sort.exp (Var.sort v);
+          virt = Var.is_virtual v;
           sema = Value.semantics x;
         }]}]
     }
