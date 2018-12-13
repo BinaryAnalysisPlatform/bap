@@ -334,7 +334,7 @@ module Make (Machine : Machine) = struct
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
-      (* | Bil.Let (v,x,y) -> eval_let v x y *)
+      | Bil.Let (v,x,y) -> eval_let v x y
       | exp ->
         invalid_argf "precondition failed: denormalized exp: %s"
           (Exp.to_string exp) () in
