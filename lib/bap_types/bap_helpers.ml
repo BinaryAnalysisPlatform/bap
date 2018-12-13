@@ -701,6 +701,8 @@ module Normalize = struct
     let sum a n = Exp.BinOp (Binop.PLUS, a,int n) in
     sum
 
+
+
   (* rewrite_store_little
      Store(m,a,x,e,s) =>
      Store(..(Store(Store(m,a,x[0],e,1),a+1,x[1],e,1))..,a+s-1,x[s-1],e,1)
@@ -724,9 +726,6 @@ module Normalize = struct
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
      x[a+n-1]
-
-     This operation duplicates the address expression, this may break
-     semantics if this expression is non-generative.
 
      Special care should be taken if the expression contains store
      operations, that has an effect that may interfere with the result
@@ -758,7 +757,7 @@ module Normalize = struct
         expand_store mem addr x e s
     end
 
-  (* ensures: no-lets, one-byte-stores, one-byte-loads.
+  (* ensures: one-byte-stores, one-byte-loads.
      This is the first step of normalization. The full normalization,
      e.g., remove ite and hoisting storages can be only done on the
      BIL level.
@@ -770,7 +769,7 @@ module Normalize = struct
        - generative-let-value
 
   *)
-  let normalize_exp x = expand_memory (reduce_let x)
+  let normalize_exp x = expand_memory x
 
   type assume = Assume of (exp * bool)
 

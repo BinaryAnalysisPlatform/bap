@@ -141,10 +141,10 @@ let sexp_of_concat ((x,y),r) = results r @@ sexps [
   ]
 
 let sexp_of_ite ((cond, yes, no), r) = results r @@ sexps [
-  string_of_value cond;
-  string_of_value yes;
-  string_of_value no;
-]
+    string_of_value cond;
+    string_of_value yes;
+    string_of_value no;
+  ]
 
 let binop,on_binop =
   Observation.provide ~inspect:sexp_of_binop "binop"
@@ -316,6 +316,11 @@ module Make (Machine : Machine) = struct
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
     !!on_ite ((cond, yes, no), r) >>| fun () -> r
 
+  let remember v =
+    Env.has v >>= function
+    | true -> Env.get v >>| Option.some
+    | false -> Machine.return None
+
   let rec eval_exp x =
     let eval = function
       | Bil.Load (Bil.Var _, a,_,`r8) -> eval_load a
@@ -329,12 +334,21 @@ module Make (Machine : Machine) = struct
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
+      (* | Bil.Let (v,x,y) -> eval_let v x y *)
       | exp ->
         invalid_argf "precondition failed: denormalized exp: %s"
           (Exp.to_string exp) () in
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
+  and eval_let v x y =
+    remember v >>= fun prev ->
+    eval_exp x >>= fun x ->
+    Env.set v x >>= fun () ->
+    eval_exp y >>= fun r ->
+    match prev with
+    | None -> Machine.return r
+    | Some x -> Env.set v x >>| fun () -> r
   and eval_load a = eval_exp a >>= load_byte
   and eval_ite cond yes no =
     eval_exp yes >>= fun yes ->
