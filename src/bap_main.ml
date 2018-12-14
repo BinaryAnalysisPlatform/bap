@@ -122,26 +122,20 @@ let main o =
     Project.create input ~disassembler:o.disassembler
       ?brancher ?rooter ?symbolizer ?reconstructor  |> function
     | Error err -> raise (Failed_to_create_project err)
-    | Ok project ->
-      Project.Cache.save (digest o) project;
-      project in
+    | Ok project -> project in
   let proj_of_file ?ver ?fmt file =
     In_channel.with_file file
       ~f:(fun ch -> Project.Io.load ?fmt ?ver ch) in
-  let project = match Project.Cache.load (digest o) with
-    | Some proj ->
-      Project.restore_state proj;
-      proj
-    | None -> match o.source with
-      | `Project ->
-        let fmt,ver = extract_format o.filename in
-        proj_of_file ?fmt ?ver o.filename
-      | `Memory arch ->
-        proj_of_input @@
-        Project.Input.binary arch ~filename:o.filename
-      | `Binary ->
-        proj_of_input @@
-        Project.Input.file ~loader:o.loader ~filename: o.filename in
+  let project = match o.source with
+    | `Project ->
+      let fmt,ver = extract_format o.filename in
+      proj_of_file ?fmt ?ver o.filename
+    | `Memory arch ->
+      proj_of_input @@
+      Project.Input.binary arch ~filename:o.filename
+    | `Binary ->
+      proj_of_input @@
+      Project.Input.file ~loader:o.loader ~filename: o.filename in
   process o project
 
 let program_info =
@@ -349,8 +343,8 @@ let nice_pp_error fmt er =
     let open R in
     match r with
     | With_backtrace (r, backtrace) ->
-       Format.fprintf fmt "%a\n" pp r;
-       Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
+      Format.fprintf fmt "%a\n" pp r;
+      Format.fprintf fmt "Backtrace:\n%s" @@ String.strip backtrace
     | String s -> Format.fprintf fmt "%s" s
     | r -> pp_sexp fmt (R.sexp_of_t r) in
   Format.fprintf fmt "%a" pp (R.of_info (Error.to_info er))
