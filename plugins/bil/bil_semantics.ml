@@ -439,9 +439,10 @@ module FPEmulator = struct
   let float s x =
     x >>| fun x -> resort s x
 
+
   let fop : type f.
     _ ->
-    rmode value t -> f float value t -> f float value t -> f float value t =
+    _ -> f float value t -> f float value t -> f float value t =
     fun op rm x y ->
       x >>= fun x ->
       y >>= fun y ->
@@ -458,6 +459,62 @@ module FPEmulator = struct
   let fsub rm = fop FBil.fsub rm
   let fmul rm = fop FBil.fmul rm
   let fdiv rm = fop FBil.fdiv rm
+
+  open BIL
+
+  let small s x = int s (Word.of_int ~width:(Bits.size s) x)
+
+  let classify {IEEE754.w; t} v ~fin ~inf ~nan =
+    let ws = Bits.define w and fs = Bits.define t in
+    let expn = extract ws (small ws (t+w-1)) (small ws t) v in
+    let frac = extract fs (small fs (t-1)) (small fs 0) v in
+    let ones = small ws ~-1 in
+    let zero = small fs 0 in
+    let is_fin = inv (eq expn ones) in
+    let is_sub = eq expn (small ws 0) in
+    let is_pos = msb v in
+    ite is_fin
+      (fin ~is_sub)
+      (ite (eq frac zero) (inf ~is_pos)
+         (nan ~is_tss:(msb frac)))
+
+
+  let tmp x f =
+    x >>= fun x ->
+    Var.Generator.fresh (Value.sort x) >>= fun v ->
+    let_ v !!x (f (var v))
+
+
+  let forder x y =
+    x >>= fun x ->
+    y >>= fun y ->
+    let xs = Value.sort x in
+    match ieee754_of_sort xs with
+    | None -> BIL.unk bool
+    | Some ({IEEE754.k; w; t}) ->
+      let bs = Bits.define k and ms = Bits.define (k-1)in
+      let x = resort bs x and y = resort bs y in
+      let ws = Bits.define w and fs = Bits.define t in
+      let ones = small ws ~-1 in
+      let zero = small fs 0 in
+      let expn v = extract ws (small ws (t+w-1)) (small ws t) v in
+      let frac v = extract fs (small fs (t-1)) (small fs 0) v in
+      let magn v = extract ms (small ms (k-2)) (small ms 0) v in
+      let not_nan v = or_ (neq (expn v) ones) (neq (frac v) zero) in
+      tmp (magn !!x) @@ fun mx ->
+      tmp (magn !!y) @@ fun my ->
+      tmp (msb !!x) @@ fun x_is_neg ->
+      tmp (msb !!y) @@ fun y_is_neg ->
+      let x_is_pos = inv x_is_neg and y_is_pos = inv y_is_neg in
+      List.reduce_exn ~f:and_ [
+        not_nan !!x;
+        not_nan !!y;
+        inv (and_ (is_zero mx) (is_zero my));
+        inv (and_ x_is_pos y_is_neg);
+        or_
+          (and_ x_is_neg y_is_pos)
+          (ite x_is_neg (ult my mx) (ult mx my))
+      ]
 end
 
 module BIL_FP = struct
