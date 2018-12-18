@@ -201,7 +201,6 @@ let provide_lifter () =
           Lifter.run BilParser.t bil >>| fun eff ->
           let graph = Eff.get Bil_ir.t eff in
           let bir = Bil_ir.reify graph in
-          let sema = Eff.semantics eff in
           Semantics.put Insn.Semantics.Domain.bir sema bir in
   Knowledge.promise Insn.Semantics.t lifter
 
