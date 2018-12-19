@@ -61,6 +61,8 @@ let bits = Bits.define
 let sort x = x >>| Value.sort
 let bool = Bool.t
 
+type conflict += Error
+
 module Make(S : Core) = struct
   open S
   open Knowledge.Syntax
@@ -92,6 +94,8 @@ module Make(S : Core) = struct
         let expb s = expb ctxt self s
         let expr s = expr ctxt self s
         let expf s = expf ctxt self s
+
+        let error = Knowledge.fail Error
 
         let load_word sz dir mem key =
           loadw (bits sz) (expb dir) (expm mem) (expw key)
@@ -185,6 +189,8 @@ module Make(S : Core) = struct
         let expb s = expb ctxt self s
         let expf s = expf ctxt self s
 
+        let error = Knowledge.fail Error
+
         let store m k x = store (expm m) (expw k) (expw x)
         let store_word d m k x =
           storew (expb d) (expm m) (expw k) (expw x)
@@ -233,6 +239,8 @@ module Make(S : Core) = struct
         let expm s = expm ctxt self s
         let expf s = expf ctxt self s
         let expb s = run ctxt self s
+
+        let error = Knowledge.fail Error
 
         let var v = var (Var.create bool (rename ctxt v))
         let ite c x y = ite (expb c) (expb x) (expb y)
@@ -316,6 +324,8 @@ module Make(S : Core) = struct
         let expb s = expb ctxt self s
         let expf s = run ctxt self s
 
+        let error = Knowledge.fail Error
+
         let floats s = IEEE754.Sort.define s
         let ieee754 s x : t  = float (floats s) (expw x)
         let ieee754_var s name : t = var (Var.create (floats s) name)
@@ -378,6 +388,7 @@ module Make(S : Core) = struct
     fun _ctxt self -> self.rmode (module struct
         type nonrec t = rmode value t
         type exp = r
+        let error = Knowledge.fail Error
         let rne = rne
         let rtz = rtz
         let rtp = rtp
@@ -412,6 +423,8 @@ module Make(S : Core) = struct
           Var.Generator.fresh s >>= fun v ->
           let b1 = (blk unlabeled (set v exp) skip) in
           seq b1 (body v)
+
+        let error = Knowledge.fail Error
 
         let special _ =
           seq (blk unlabeled pass skip) (next xs)
@@ -509,6 +522,8 @@ module Make(S : Core) = struct
           sort exp >>= fun s ->
           Var.Generator.fresh s >>= fun v ->
           seq (set v exp) (body v)
+
+        let error = Knowledge.fail Error
 
         let special _ = seq pass (next xs)
         let cpuexn _ = assert false

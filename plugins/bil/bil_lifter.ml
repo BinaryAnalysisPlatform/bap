@@ -12,8 +12,9 @@ include Self()
 
 module BilParser = struct
   type context = [`Bitv | `Bool | `Mem ] [@@deriving sexp]
-  exception Error of exp * context [@@deriving sexp]
-  let fail exp ctx = raise (Error (exp,ctx))
+  let fail exp ctx =
+    error "ill-formed expression in %a ctxt: %a"
+      Sexp.pp (sexp_of_context ctx) Exp.pp exp
 
   type exp = Bil.exp
   module Var = Bap.Std.Var
@@ -24,7 +25,7 @@ module BilParser = struct
 
   let bits_of_var v = match Var.typ v with
     | Imm x -> x
-    | _ -> fail (Var v) `Bitv
+    | _ -> failwith "not a bitv var"
 
   let byte x = Bil.int (Word.of_int ~width:8 x)
   let is_big e =
@@ -82,12 +83,9 @@ module BilParser = struct
       | Let _
       | BinOp ((EQ|NEQ|LT|LE|SLT|SLE), _, _)
       | Store (_, _, _, _, _)
-      | Unknown (_, Mem _) as exp -> fail exp `Bitv
+      | Unknown (_, Mem _) as exp -> fail exp `Bitv; S.error
 
 
-  let with_mem_types v f = match Var.typ v with
-    | Mem (ks,vs) -> f (Size.in_bits ks) (Size.in_bits vs)
-    | _ -> fail (Var v) `Mem
 
   let mem : type t. (t,exp) mem_parser =
     fun (module S) -> function
@@ -95,7 +93,11 @@ module BilParser = struct
         S.unknown (Size.in_bits k) (Size.in_bits v)
       | Store (m,k,v,e,_) ->
         S.store_word (is_big e) m k v
-      | Var v  -> with_mem_types v (S.var (Var.name v))
+      | Var v  ->
+        let with_mem_types v f = match Var.typ v with
+          | Mem (ks,vs) -> f (Size.in_bits ks) (Size.in_bits vs)
+          | _ -> fail (Var v) `Mem; S.error in
+        with_mem_types v (S.var (Var.name v))
       | Let (v,y,z) when is_bit v -> S.let_bit (Var.name v) y z
       | Let (v,y,z) when is_reg v -> S.let_reg (Var.name v) y z
       | Let (v,y,z) when is_mem v -> S.let_mem (Var.name v) y z
@@ -109,7 +111,7 @@ module BilParser = struct
       | Int _
       | Cast (_,_,_)
       | Extract (_,_,_)
-      | Concat (_,_) as exp -> fail exp `Mem
+      | Concat (_,_) as exp -> fail exp `Mem; S.error
 
   let float _ _ = assert false
   let rmode _ _ = assert false
@@ -145,7 +147,7 @@ module BilParser = struct
       | Concat (_,_)
       | BinOp ((PLUS|MINUS|TIMES|DIVIDE|SDIVIDE|
                 MOD|SMOD|LSHIFT|RSHIFT|ARSHIFT),_,_) as exp
-        -> fail exp `Bool
+        -> fail exp `Bool; S.error
 
 
   let stmt : type t r. (t,exp,r,stmt) stmt_parser =

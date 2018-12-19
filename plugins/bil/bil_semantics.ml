@@ -22,7 +22,7 @@ module Basic : Theory.Basic = struct
 
     module V = Bap.Std.Var
 
-    let simpl = ident
+    let simpl = Exp.simpl ~ignore:[Bap.Std.Eff.read]
     let ret = Knowledge.return
 
     let v s e = Value.put exp (Value.empty s) e
@@ -37,7 +37,14 @@ module Basic : Theory.Basic = struct
           Some (Bil.unknown "bits" (Type.imm (Bits.size b))) %: s
         | None -> None %: s
 
-    let eff k d = ret @@ Eff.put stmt (Eff.empty k) d
+    let optimize =
+      Bil.fixpoint @@
+      List.reduce_exn ~f:Fn.compose Bil.[
+          fold_consts;
+          propagate_consts;
+        ]
+
+    let eff k d = ret @@ Eff.put stmt (Eff.empty k) (optimize d)
     let data = eff Kind.data
     let ctrl = eff Kind.ctrl
 

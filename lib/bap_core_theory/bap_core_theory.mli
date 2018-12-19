@@ -427,6 +427,8 @@ module Grammar : sig
     type exp
     type rmode
 
+    val error : t
+
     val unsigned : int -> exp -> t
     val signed : int -> exp -> t
     val high : int -> exp -> t
@@ -476,6 +478,9 @@ module Grammar : sig
   module type Bool = sig
     type t
     type exp
+
+    val error : t
+
     val eq : exp -> exp -> t
     val neq : exp -> exp -> t
     val lt : exp -> exp -> t
@@ -516,6 +521,8 @@ module Grammar : sig
     type t
     type exp
 
+    val error : t
+
     (** [store mem key data] *)
     val store : exp -> exp -> exp -> t
 
@@ -536,6 +543,8 @@ module Grammar : sig
     type exp
     type rmode
     type stmt
+
+    val error : t
 
     val set_mem : string -> int -> int -> exp -> t
     val set_reg : string -> int -> exp -> t
@@ -571,6 +580,8 @@ module Grammar : sig
     type exp
     type rmode
 
+    val error : t
+
     val ieee754 : ieee754 -> exp -> t
     val ieee754_var : ieee754 -> string -> t
     val ieee754_unk : ieee754 -> t
@@ -602,6 +613,8 @@ module Grammar : sig
   module type Rmode = sig
     type t
     type exp
+
+    val error : t
 
     val rne : t
     val rtz : t
