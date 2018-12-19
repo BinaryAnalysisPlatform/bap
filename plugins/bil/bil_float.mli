@@ -7,6 +7,11 @@ type ('b, 'e, 't, 's) binop =
   ((('b,'e,'t) IEEE754.t,'s) format float sort ->
    rmode value t -> 's bitv value t -> 's bitv value t -> 's bitv value t)
 
+type ('b, 'e, 't, 's) unop =
+  ((('b,'e,'t) IEEE754.t,'s) format float sort ->
+   rmode value t -> 's bitv value t -> 's bitv value t)
+
+
 
 module Make(B : Theory.Basic) : sig
 
@@ -21,6 +26,8 @@ module Make(B : Theory.Basic) : sig
   val fmul : ('b, 'e, 't, 's) binop
   val fdiv : ('b, 'e, 't, 's) binop
 
+  val fsqrt  : ('b, 'e, 't, 's) unop
+
   val cast_float : (('a, 'b, 'c) IEEE754.t, 'd) format float sort ->
                    rmode value t -> 'e bitv value t -> 'd bitv value t
 
@@ -29,6 +36,5 @@ module Make(B : Theory.Basic) : sig
 
   val cast_int :  (('a, 'b, 'c) IEEE754.t, 'd) format float sort -> 'e bitv sort ->
                  'd bitv value t -> 'e bitv value t
-
 
 end
