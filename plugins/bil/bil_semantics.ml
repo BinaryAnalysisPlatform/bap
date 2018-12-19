@@ -485,6 +485,15 @@ module FPEmulator = struct
     let_ v !!x (f (var v))
 
 
+  let make_cast_float cast s m v =
+    match ieee754_of_sort s with
+    | None -> BIL.unk s
+    | Some p ->
+      cast (IEEE754.Sort.define p) m v >>| resort s
+
+  let cast_float s m v = make_cast_float FBil.cast_float s m v
+  let cast_sfloat s m v = make_cast_float FBil.cast_float_signed s m v
+
   let forder x y =
     x >>= fun x ->
     y >>= fun y ->
