@@ -64,8 +64,13 @@ module IrBuilder = struct
     | xs, ys -> List.rev_append ys xs
 
   let ir_of_insn insn =
-    Semantics.get Insn.Semantics.Domain.bir @@
-    Insn.semantics insn
+    let open Knowledge.Syntax in
+    let request =
+      Knowledge.provide Bil.semantics L.root (Insn.bil insn) >>= fun () ->
+      Knowledge.collect Insn.Semantics.bir L.root in
+    match Knowledge.run request Knowledge.empty with
+    | Ok (blks,_) -> blks
+    | Error _ -> []
 
   let set_attributes ?mem insn blks =
     let addr = Option.map ~f:Memory.min_addr mem in

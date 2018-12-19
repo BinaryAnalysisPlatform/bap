@@ -21,7 +21,7 @@ type provider = (module Core)
 let providers : provider t list ref = ref []
 let register ?(desc="") ~name x =
   let provider = {name; desc; proc = x} in
-  providers := provider :: !providers
+  providers := !providers @ [provider]
 
 let bool = Bool.t
 

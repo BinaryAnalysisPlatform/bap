@@ -102,6 +102,7 @@ module Std = struct
     module Domain = Bap_types_domain
     let exp = Domain.exp
     let bil = Domain.bil
+    let semantics = Domain.semantics
   end
 
   (** Types of BIL expressions  *)

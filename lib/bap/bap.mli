@@ -1885,6 +1885,7 @@ module Std : sig
     include Printable.S with type t := t
     include Data.S      with type t := t
 
+    val semantics : t content
     module Domain : sig
       val bil : t domain
       val exp : exp option domain

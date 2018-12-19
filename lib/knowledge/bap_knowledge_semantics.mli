@@ -12,8 +12,10 @@ val declare :
   (module Domain.S with type t = 'a) -> 'a domain
 
 val empty : t
+val create : 'a domain -> 'a -> t
 val get : 'a domain -> t -> 'a
 val put : 'a domain -> t -> 'a -> t
+val merge : t -> t -> t
 val domain : 'a domain -> (module Domain.S with type t = 'a)
 
 include Domain.S with type t := t

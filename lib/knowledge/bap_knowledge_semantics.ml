@@ -87,17 +87,26 @@ let put : type s. s domain -> t -> s -> t =
   fun {key; typ=tinfo} data value ->
     Dict.set data key {value; tinfo}
 
+let create d x = put d empty x
+
 let get : type s. s domain -> t -> s =
   fun {key; typ = {domain = (module T)}} data ->
     match Dict.find data key with
     | None -> T.empty
     | Some x -> x.value
 
+let merge_value : type a. a value -> a value -> a value =
+  fun {value=x; tinfo={domain=(module D)}} ({value=y} as r) ->
+    match D.partial x y with
+    | LE | EQ | NC -> r
+    | GE -> {r with value=x}
+
 let merge : t -> t -> t = fun x y ->
   Dict.to_alist x |>
   List.fold ~init:y ~f:(fun v (Dict.Packed.T (k,x)) ->
-      if Dict.mem v k then v
-      else Dict.set v k x)
+      Dict.update v k ~f:(function
+          | None -> x
+          | Some y -> merge_value y x))
 
 let (<:=) x y =
   Dict.to_alist x |> List.for_all ~f:(function
@@ -204,5 +213,5 @@ let pp_domains constraints ppf x =
         if Set.mem constraints name
         then fprintf ppf "@[<2>%a@]" pp_sexp
             (if single then data else pair);
-        fprintf ppf "@\n"
+        fprintf ppf "@\n";
       | _ -> assert false)

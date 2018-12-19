@@ -179,30 +179,33 @@ end
 
 module Lifter = Parser.Make(Theory.Manager)
 
+let provide_bir () =
+  let lifter label =
+    Knowledge.collect Bil.semantics label >>= fun bil ->
+    Lifter.run BilParser.t bil >>| fun eff ->
+    let graph = Eff.get Bil_ir.t eff in
+    Bil_ir.reify graph in
+  Knowledge.promise Insn.Semantics.bir lifter
+
+
 let provide_lifter () =
   info "providing a lifter for all BIL lifters";
   let lifter label =
+    Knowledge.collect Insn.Semantics.t label >>= fun sema ->
     Knowledge.collect Disasm_expert.Basic.decoder label >>= function
-    | None -> Knowledge.return Semantics.empty
+    | None -> Knowledge.return sema
     | Some (arch,mem,insn) ->
       let module Target = (val target_of_arch arch) in
       match Target.lift mem insn with
       | Ok bil ->
-        Lifter.run BilParser.t bil >>| fun eff ->
-        let graph = Eff.get Bil_ir.t eff in
-        let bir = Bil_ir.reify graph in
-        let sema = Eff.semantics eff in
-        Semantics.put Insn.Semantics.Domain.bir sema bir
-      | Error _ ->
-        Knowledge.collect Insn.Semantics.t label >>= fun sema ->
-        match Semantics.get Bil.Domain.bil sema with
-        | [] -> Knowledge.return sema
-        | bil ->
-          Lifter.run BilParser.t bil >>| fun eff ->
-          let graph = Eff.get Bil_ir.t eff in
-          let bir = Bil_ir.reify graph in
-          Semantics.put Insn.Semantics.Domain.bir sema bir in
+        info "decoded the instruction providing bil and bir";
+        Lifter.run BilParser.t bil >>|
+        Eff.semantics >>|
+        Semantics.merge sema
+      | Error _ -> Knowledge.return sema in
   Knowledge.promise Insn.Semantics.t lifter
 
 
-let init () = provide_lifter ()
+let init () =
+  provide_lifter ();
+  provide_bir ()
