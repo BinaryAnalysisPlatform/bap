@@ -40,7 +40,7 @@ module Rounding = struct
       | _,None -> GE
       | _ -> NC
 
-    let inspect _t = failwith "unimplemented"
+    let inspect t = failwith "unimplemented"
   end
 
   let rounding = Semantics.declare ~name:"rounding" (module Rounding_domain)
@@ -225,7 +225,16 @@ module Make(B : Theory.Basic) = struct
     ite sign ((append s (one bit) (zero s')) lor bitv)
       ((append s (zero bit) (ones s')) land bitv)
 
-  let fzero fsort = B.zero (IEEE754.Sort.bits fsort)
+  let fzero fsort sign =
+    let open B in
+    let bits = IEEE754.Sort.bits fsort in
+    zero bits >=> fun bitv ->
+    ite sign (
+        ones bits >=> fun ones ->
+        not (ones lsr one bits) >=> fun one ->
+        one lor bitv)
+      bitv
+
   let fone fsort =
     let open IEEE754 in
     let {bias; t} = Sort.spec fsort in
@@ -255,12 +264,12 @@ module Make(B : Theory.Basic) = struct
 
   let is_qnan fsort x =
     let open B in
-    unpack_raw fsort x @@ fun _sign expn coef ->
+    unpack_raw fsort x @@ fun sign expn coef ->
     is_all_ones expn && non_zero coef && msb coef
 
   let is_snan fsort x =
     let open B in
-    unpack_raw fsort x @@ fun _sign expn coef ->
+    unpack_raw fsort x @@ fun sign expn coef ->
     is_all_ones expn && non_zero coef && inv (msb coef)
 
   let is_nan fsort x =
@@ -453,37 +462,43 @@ module Make(B : Theory.Basic) = struct
 
   let xor s s' = B.(and_ (or_ s s') (inv (and_ s s')))
 
-  (** [combine_loss more_significant less_significant length_of_less ] *)
-  let combine_loss more less length_of_less =
-    let more = B.(more lsl length_of_less) in
-    B.(more lor less)
+  let test_pack fsort sign expn coef =
+    let open IEEE754 in
+    let open B in
+    let bits = Sort.bits fsort in
+    let _sign = ite sign (one bits) (zero bits) in
+    B.unsigned bits coef
 
   (* TODO: handle rounding overflow *)
   let fadd_finite fsort rm x y =
     let open B in
-    let _exps,sigs = floats fsort in
+    let exps,sigs = floats fsort in
     unpack fsort x @@ fun sign xexpn xcoef ->
     unpack fsort y @@ fun _ yexpn ycoef ->
     sort xexpn >>= fun xes ->
     sort xcoef >>= fun xec ->
     ite (xexpn > yexpn) (xexpn - yexpn) (yexpn - xexpn) >=> fun lost_bits ->
+    match_ [
+        (xexpn = yexpn) --> zero sigs;
+        (xexpn > yexpn) --> extract_last ycoef lost_bits;
+      ] ~default:(extract_last xcoef lost_bits) >=> fun loss ->
     ite (xexpn > yexpn) xcoef (xcoef lsr lost_bits) >=> fun xcoef ->
     ite (yexpn > xexpn) ycoef (ycoef lsr lost_bits) >=> fun ycoef ->
     xcoef + ycoef >=> fun coef ->
     max xexpn yexpn >=> fun expn ->
     ite (coef >= xcoef) expn (succ expn) >=> fun expn ->
-    match_ [
-          (xexpn = yexpn) --> zero sigs;
-          (xexpn > yexpn) --> extract_last ycoef lost_bits;
-      ] ~default:(extract_last xcoef lost_bits) >=> fun loss ->
-    extract_last coef (one sigs) >=> fun loss' ->
+    guardbit_of_loss loss lost_bits >=> fun guard' ->
+    roundbit_of_loss loss lost_bits >=> fun round' ->
+    stickybit_of_loss loss lost_bits >=> fun sticky' ->
     coef < xcoef >=> fun coef_overflow ->
-    ite coef_overflow (succ lost_bits) lost_bits >=> fun lost_bits ->
-    ite coef_overflow (combine_loss loss' loss lost_bits) loss >=> fun loss ->
+    ite coef_overflow (lsb coef) guard' >=> fun guard ->
+    ite coef_overflow guard' round' >=> fun round ->
+    ite coef_overflow (round' || sticky') sticky' >=> fun sticky ->
     ite coef_overflow (coef lsr one sigs) coef >=> fun coef ->
     one sigs lsl (of_int sigs Caml.(Bits.size sigs - 1)) >=> fun leading_one ->
     ite coef_overflow (coef lor leading_one) coef >=> fun coef ->
-    round rm sign coef loss lost_bits @@ fun coef is_overflow ->
+    is_round_up rm sign coef guard round sticky >=> fun up ->
+    ite up (succ coef) coef >=> fun coef ->
     norm expn coef @@ fun expn coef ->
     pack fsort sign expn coef
 
@@ -503,7 +518,7 @@ module Make(B : Theory.Basic) = struct
     sort loss >>= fun sort ->
     let half = half_of_loss loss lost_bits in
     let inverted =
-      let mask = not (ones sort lsl lost_bits) in
+      not (ones sort lsl lost_bits) >=> fun mask ->
       mask land (not loss) in
     match_ [
         is_zero lost_bits --> zero sort;
@@ -656,7 +671,7 @@ module Make(B : Theory.Basic) = struct
     norm expn coef @@ fun expn coef ->
 
     match_ [
-       is_underflow --> fzero fsort;
+       is_underflow --> fzero fsort sign;
        is_overflow  --> inf fsort sign;
       ] ~default:(pack fsort sign expn coef)
 
@@ -738,12 +753,16 @@ module Make(B : Theory.Basic) = struct
     unsigned sigs coef >=> fun coef ->
     of_int exps (bias fsort) >=> fun bias ->
     de + from_rnd - dexpn' >=> fun dexpn ->
+    xexpn < yexpn >=> fun is_underflow ->
     xexpn - yexpn >=> fun expn ->
-    and_ (xexpn > yexpn) (expn > dexpn + bias) >=> fun is_overflow ->
+    ((xexpn > yexpn) && (expn > dexpn + bias)) >=> fun is_overflow ->
     expn + dexpn + bias  >=> fun expn ->
-    ite is_overflow (inf fsort sign)
-      (norm expn coef @@ fun expn coef ->
-       pack fsort sign expn coef)
+    match_ [
+       is_underflow --> fzero fsort sign;
+       is_overflow  --> inf fsort sign;
+      ] ~default:(
+        norm expn coef @@ fun expn coef ->
+        pack fsort sign expn coef)
 
   let fdiv_special fsort x y =
     let open B in
@@ -778,14 +797,7 @@ module Make(B : Theory.Basic) = struct
       else run x' ( n + 1) in
     run init 0
 
-  let test_pack fsort sign expn coef =
-    let open IEEE754 in
-    let open B in
-    let bits = Sort.bits fsort in
-    let _sign = ite sign (B.one bits) (B.zero bits) in
-    B.unsigned bits coef
-
-  let gen_cast_float fsort sign bitv =
+  let gen_cast_float fsort rmode sign bitv =
     let open IEEE754 in
     let open B in
     sort bitv >>= fun inps ->
@@ -814,13 +826,13 @@ module Make(B : Theory.Basic) = struct
      norm expn coef @@ fun expn coef ->
      pack fsort sign expn coef)
 
-  let cast_float fsort bitv = gen_cast_float fsort B.b0 bitv
+  let cast_float fsort rmode bitv = gen_cast_float fsort rmode B.b0 bitv
 
-  let cast_float_signed fsort bitv =
+  let cast_float_signed fsort rmode bitv =
     let open B in
     let sign = msb bitv in
     let bitv = ite sign (neg bitv) bitv in
-    gen_cast_float fsort sign bitv
+    gen_cast_float fsort rmode sign bitv
 
   let cast_int fsort outs bitv =
     let open B in
