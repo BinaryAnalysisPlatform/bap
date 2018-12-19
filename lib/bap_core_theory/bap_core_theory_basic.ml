@@ -164,9 +164,9 @@ module Make(L : Minimal) = struct
 
   let extract s hi lo x =
     let n = succ (sub hi lo) in
-    sort x >>= fun t ->
+    x >>= fun x ->
+    let t = Value.sort x in
     let mask = lshift (not (zero t)) n in
-    cast s b0 (logand mask (shiftr b0 x lo))
-
+    cast s b0 (logand (not mask) (shiftr b0 !!x lo))
   include L
 end
