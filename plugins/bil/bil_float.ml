@@ -320,6 +320,11 @@ module Make(B : Theory.Basic) = struct
 
   let is_special fsort x = unpack fsort x @@ fun _ expn _ -> B.is_all_ones expn
   let is_finite fsort x = B.inv (is_special fsort x)
+  let is_finite_nonzero fsort x =
+    let open B in
+    unpack_raw fsort x @@ fun _ expn coef ->
+    inv (is_all_ones expn) >=> fun ok_expn ->
+    ok_expn && (non_zero expn || non_zero coef)
 
   let is_norml fsort x = unpack_raw fsort x @@ fun _ e _ -> B.non_zero e
   let is_subnormal fsort x =
@@ -375,9 +380,9 @@ module Make(B : Theory.Basic) = struct
     let open B in
     sort lost_bits >>= fun sort ->
     of_int sort 3 >=> fun minbits ->
-    (lost_bits > minbits) >=> fun is_valid ->
-    ite is_valid (pred (pred (pred lost_bits))) (zero sort) >=> fun pos ->
-    ite is_valid (non_zero (extract_last loss pos)) b0
+    (lost_bits >= minbits) >=> fun is_valid ->
+    ite is_valid (pred (pred lost_bits)) (zero sort) >=> fun n ->
+    ite is_valid (non_zero (extract_last loss n)) b0
 
   (* the result of rounding must be checked because in the corner case
      when input is 111...1 it could return 000..0, that means that
@@ -467,7 +472,7 @@ module Make(B : Theory.Basic) = struct
     let open B in
     let bits = Sort.bits fsort in
     let _sign = ite sign (one bits) (zero bits) in
-    B.unsigned bits coef
+    B.unsigned bits _sign
 
   (* TODO: handle rounding overflow *)
   let fadd_finite fsort rm x y =
@@ -507,32 +512,12 @@ module Make(B : Theory.Basic) = struct
     let sort' = Bits.define (Bits.size sort + addend) in
     B.unsigned sort' bitv
 
-  let half_of_loss loss lost_bits =
+  let test_pack fsort sign expn coef =
+    let open IEEE754 in
     let open B in
-    sort loss >>= fun vsort ->
-    unsigned vsort lost_bits >=> fun lost_bits ->
-    ite (is_zero lost_bits) (zero vsort) (pred lost_bits) >=> fun n ->
-    one vsort lsl n
-
-  let invert_loss loss lost_bits =
-    let open B in
-    sort loss >>= fun sort ->
-    let half = half_of_loss loss lost_bits in
-    let inverted =
-      not (ones sort lsl lost_bits) >=> fun mask ->
-      mask land (not loss) in
-    match_ [
-        is_zero lost_bits --> zero sort;
-        is_zero loss --> loss;
-        (loss = half) --> loss;
-      ] ~default:inverted
-
-  let match_cmp x y ~on_eql ~on_gt ~on_lt =
-    let open B in
-    match_ [
-      (x =  y) --> on_eql;
-      (x >$ y) --> on_gt;
-      ] ~default:on_lt
+    let bits = Sort.bits fsort in
+    let _sign = ite sign (one bits) (zero bits) in
+    unsigned bits _sign
 
   (* TODO: handle rounding overflow
      TODO: refactoring needed *)
@@ -551,7 +536,6 @@ module Make(B : Theory.Basic) = struct
         (xexpn > yexpn) --> extract_last ycoef lost_bits;
         (xexpn < yexpn) --> extract_last xcoef lost_bits;
       ] ~default:(zero sigs') >=> fun loss ->
-    invert_loss loss lost_bits >=> fun loss ->
     or_ (xexpn < yexpn) (and_ (xexpn = yexpn) (xcoef < ycoef)) >=> fun swap ->
     ite swap (inv xsign) xsign >=> fun sign ->
     match_ [
@@ -571,11 +555,12 @@ module Make(B : Theory.Basic) = struct
     guardbit_of_loss loss lost_bits >=> fun guard' ->
     roundbit_of_loss loss lost_bits >=> fun round' ->
     stickybit_of_loss loss lost_bits >=> fun sticky' ->
+    ite (round' || sticky') (inv guard') guard' >=> fun guard' ->
     ite msbc (lsb coef) guard' >=> fun guard ->
-    ite msbc guard round' >=> fun round ->
-    ite msbc (round || sticky')  sticky' >=> fun sticky ->
-    is_round_up rm sign coef guard round sticky >=> fun up ->
+    ite msbc guard' round' >=> fun round ->
+    ite msbc (round' || sticky')  sticky' >=> fun sticky ->
     ite msbc (coef lsr one sigs') coef >=> fun coef ->
+    is_round_up rm sign coef guard round sticky >=> fun up ->
     unsigned sigs coef >=> fun coef ->
     ite up (succ coef) coef >=> fun coef ->
     norm expn coef @@ fun expn coef ->
@@ -623,6 +608,15 @@ module Make(B : Theory.Basic) = struct
     coef lsl clz >=> fun coef ->
     f coef clz
 
+
+  let test_pack fsort sign expn coef =
+    let open IEEE754 in
+    let open B in
+    let bits = Sort.bits fsort in
+    let _sign = ite sign (one bits) (zero bits) in
+    unsigned bits _sign
+
+
   (* TODO: handle rounding overflow *)
   (* TODO: finish with comments *)
   (* TODO: refactor it (probably cover with more tests before) *)
@@ -656,7 +650,7 @@ module Make(B : Theory.Basic) = struct
     ite coef_overflowed (succ expn) expn >=> fun expn ->
     of_int exps' (bias fsort) >=> fun bias ->
     bias + unsigned exps' dnorm >=> fun dexpn ->
-    ite (dexpn >$ expn) (dexpn - expn + one exps') (zero exps') >=> fun underflow ->
+    ite (dexpn >$ expn) (dexpn - expn + min_exponent exps') (zero exps') >=> fun underflow ->
     underflow > of_int exps' precision >=> fun is_underflow ->
     expn - dexpn + underflow >=> fun expn ->
     expn > unsigned exps' maxe >=> fun is_overflow ->
@@ -670,12 +664,10 @@ module Make(B : Theory.Basic) = struct
     round rm sign coef loss prec @@ fun coef rnd_overflow ->
     low (exps fsort) expn >=> fun expn ->
     norm expn coef @@ fun expn coef ->
-
     match_ [
        is_underflow --> fzero fsort sign;
        is_overflow  --> inf fsort sign;
       ] ~default:(pack fsort sign expn coef)
-
 
   let fmul_special fsort x y =
     let open B in
@@ -743,7 +735,6 @@ module Make(B : Theory.Basic) = struct
     normalize_coef xcoef @@ fun nomin dx ->
     normalize_coef ycoef @@ fun denom dy ->
     dy - dx >=> fun de ->
-    (* signed exps dea >=> fun dea -> *)
     extend nomin ~addend:1 >=> fun nomin ->
     extend denom ~addend:1 >=> fun denom ->
     norm_nominator exps nomin denom @@ fun nomin dexpn' ->
@@ -754,13 +745,19 @@ module Make(B : Theory.Basic) = struct
     unsigned sigs coef >=> fun coef ->
     of_int exps (bias fsort) >=> fun bias ->
     from_rnd - dexpn' + unsigned exps de >=> fun dexpn ->
-    (* xexpn < yexpn >=> fun is_underflow -> *)
     xexpn - yexpn >=> fun expn ->
-    ((xexpn > yexpn) && (expn > dexpn + bias)) >=> fun is_overflow ->
+    ((xexpn < yexpn) && (yexpn - xexpn > dexpn + bias - min_exponent exps)) >=> fun underflowed ->
+    ((xexpn > yexpn) && (expn > max_exponent exps - (dexpn + bias))) >=> fun is_overflow ->
+    ((xexpn < yexpn) && (yexpn - xexpn > of_int exps prec + dexpn + bias - min_exponent exps)) >=> fun is_underflow ->
     expn + dexpn + bias  >=> fun expn ->
+    ite underflowed (abs expn + min_exponent exps) expn >=> fun shift ->
+    ite underflowed (extract_last coef shift) (zero sigs) >=> fun loss ->
+    ite underflowed (coef lsr shift) coef >=> fun coef ->
+    round rm sign coef loss shift @@ fun coef _ ->
+    ite underflowed (min_exponent exps) expn >=> fun expn ->
     match_ [
         is_overflow  --> inf fsort sign;
-        (* is_underflow --> fzero fsort sign; *)
+        is_underflow --> fzero fsort sign;
       ] ~default:(
         norm expn coef @@ fun expn coef ->
         pack fsort sign expn coef)
@@ -772,8 +769,13 @@ module Make(B : Theory.Basic) = struct
     fsign x >=> fun xsign ->
     fsign y >=> fun ysign ->
     (xinf && yinf) >=> fun is_inf ->
+    inv (xinf || xsnan || xsnan) >=> fun is_finx ->
+    inv (yinf || ysnan || ysnan) >=> fun is_finy ->
+    xor xsign ysign >=> fun sign ->
     match_ [
       (is_zero x && is_zero y) --> qnan fsort;
+      (is_zero x && is_finy) --> fzero fsort sign;
+      (is_zero y && is_finx) --> inf fsort sign;
       (xinf && yinf) --> qnan fsort;
       is_inf --> with_sign (xor xsign ysign) x;
       (xsnan || xqnan) --> transform_to_quite fsort x
@@ -781,11 +783,11 @@ module Make(B : Theory.Basic) = struct
 
   let fdiv fsort rm x y =
     let open B in
-    ite (is_finite fsort x && is_finite fsort y)
+    ite (is_finite_nonzero fsort x && is_finite_nonzero fsort y)
       (fdiv_finite fsort rm x y)
       (fdiv_special fsort x y)
 
-(* Newton-Raphson algorithm. Need a good choice of a starting seed  *)
+(* newton-Raphson algorithm. Need a good choice of a starting seed  *)
   let fsqrt fsort rm x =
     let two = fadd_finite fsort rm (fone fsort) (fone fsort) in
     let init = fdiv_finite fsort rm x two in
