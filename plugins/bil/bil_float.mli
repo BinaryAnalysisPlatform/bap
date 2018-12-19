@@ -21,4 +21,14 @@ module Make(B : Theory.Basic) : sig
   val fmul : ('b, 'e, 't, 's) binop
   val fdiv : ('b, 'e, 't, 's) binop
 
+  val cast_float : (('a, 'b, 'c) IEEE754.t, 'd) format float sort ->
+                   'e bitv value t -> 'd bitv value t
+
+  val cast_float_signed : (('a, 'b, 'c) IEEE754.t, 'd) format float sort ->
+                   'e bitv value t -> 'd bitv value t
+
+  val cast_int :  (('a, 'b, 'c) IEEE754.t, 'd) format float sort -> 'e bitv sort ->
+                 'd bitv value t -> 'e bitv value t
+
+
 end
