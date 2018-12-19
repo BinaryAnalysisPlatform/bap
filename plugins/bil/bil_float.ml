@@ -180,10 +180,7 @@ module Make(B : Theory.Basic) = struct
   let pack fsort sign expn coef =
     let open B in
     let {IEEE754.p; t} = IEEE754.Sort.spec fsort in
-
-    ite (and_ (inv (msb coef)) (is_one expn)) (pred expn) expn
-    >=> fun expn ->
-
+    ite ((inv (msb coef)) && (is_one expn)) (pred expn) expn >=> fun expn ->
     if Caml.(p = t) then pack_raw fsort sign expn coef
     else
       B.low (Bits.define t) coef >=> fun coef ->
@@ -381,7 +378,7 @@ module Make(B : Theory.Basic) = struct
 
   (* the result of rounding must be checked because in the corner case
      when input is 111...1 it could return 000..0, that means that
-     exponent must be incremented and msb set to 1 *)
+     exponent must be incremented and msb of coef set to 1 *)
   let round rm sign coef loss lost_bits f =
     let open Rmode in
     let open B in
@@ -510,6 +507,7 @@ module Make(B : Theory.Basic) = struct
   let half_of_loss loss lost_bits =
     let open B in
     sort loss >>= fun vsort ->
+    unsigned vsort lost_bits >=> fun lost_bits ->
     ite (is_zero lost_bits) (zero vsort) (pred lost_bits) >=> fun n ->
     one vsort lsl n
 
@@ -753,12 +751,11 @@ module Make(B : Theory.Basic) = struct
     unsigned sigs coef >=> fun coef ->
     of_int exps (bias fsort) >=> fun bias ->
     de + from_rnd - dexpn' >=> fun dexpn ->
-    xexpn < yexpn >=> fun is_underflow ->
+    (* xexpn < yexpn >=> fun is_underflow -> *)
     xexpn - yexpn >=> fun expn ->
     ((xexpn > yexpn) && (expn > dexpn + bias)) >=> fun is_overflow ->
     expn + dexpn + bias  >=> fun expn ->
     match_ [
-       is_underflow --> fzero fsort sign;
        is_overflow  --> inf fsort sign;
       ] ~default:(
         norm expn coef @@ fun expn coef ->
