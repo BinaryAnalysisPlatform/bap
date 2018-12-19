@@ -42,10 +42,10 @@ open Format
     interpretation.
 
     Removing the sign will get us extra memory and CPU efficiency.
- *)
+*)
 
 type endian = LittleEndian | BigEndian
-  [@@deriving bin_io, compare, sexp]
+[@@deriving bin_io, compare, sexp]
 
 
 module Bignum = struct
@@ -329,7 +329,10 @@ module Unsafe = struct
     let rem = sign_disp ~signed:srem ~unsigned:urem
     let modulo  = rem
 
-    let shift dir x n = create (dir (z x) (Z.to_int (z n))) (bitwidth x)
+    let shift dir x n =
+      let w = bitwidth x in
+      let n = Z.min (z n) (Z.of_int w) in
+      create (dir (z x) (Z.to_int n)) (bitwidth x)
     let lshift = shift Bignum.shift_left
     let rshift = shift Bignum.shift_right
     let arshift x y = shift Bignum.shift_right (signed x) y
