@@ -58,10 +58,11 @@ type ('e,'r,'s) t = {
 type ('e,'r,'s) parser = ('e,'r,'s) t
 
 let bits = Bits.define
-let sort x = x >>| Value.sort
 let bool = Bool.t
 
 type conflict += Error
+
+let (>>->) x f = x >>= fun x -> f (Value.sort x) x
 
 module Make(S : Core) = struct
   open S
@@ -126,43 +127,38 @@ module Make(S : Core) = struct
         let low w x = low (bits w) (expw x)
         let append x y =
           let x = expw x and y = expw y in
-          sort x >>= fun sx ->
-          sort y >>= fun sy ->
-          append (join sx sy) x y
+          x >>-> fun sx x ->
+          y >>-> fun sy y ->
+          append (join sx sy) !!x !!y
 
         let cast rs bit x =
           cast (bits rs) (expb bit) (expw x)
 
         let concat xs =
-          let xs = List.map ~f:expw xs in
-          Knowledge.List.fold ~init:0 xs ~f:(fun s x ->
-              sort x >>| fun sx ->
-              s + Bits.size sx) >>= fun sz ->
-          concat (bits sz) xs
+          Knowledge.List.fold ~init:([],0) xs ~f:(fun (xs,s) x ->
+              expw x >>| fun x ->
+              !!x::xs, s + Bits.size (Value.sort x)) >>= fun (xs,sz) ->
+          concat (bits sz) (List.rev xs)
 
         let let_bit v x y =
-          let x = expb x in
-          sort x >>= fun s ->
+          expb x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_reg v x y =
-          let x = expw x in
-          sort x >>= fun s ->
+          expw x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_mem v x y =
-          let x = expm x in
-          sort x >>= fun s ->
+          expm x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_float v x y =
-          let x = expf x in
-          sort x >>= fun s ->
+          expf x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let unknown w = unk (bits w)
         let extract sz hi lo x =
@@ -200,28 +196,24 @@ module Make(S : Core) = struct
         let ite c x y = ite (expb c) (expm x) (expm y)
 
         let let_bit v x y =
-          let x = expb x in
-          sort x >>= fun s ->
+          expb x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_reg v x y =
-          let x = expw x in
-          sort x >>= fun s ->
+          expw x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_mem v x y =
-          let x = expm x in
-          sort x >>= fun s ->
+          expm x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_float v x y =
-          let x = expf x in
-          sort x >>= fun s ->
+          expm x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let unknown ks vs = unk (Mems.define (bits ks) (bits vs))
       end)
@@ -257,28 +249,24 @@ module Make(S : Core) = struct
         let neq x y = neq (expw x) (expw y)
 
         let let_bit v x y =
-          let x = expb x in
-          sort x >>= fun s ->
+          expb x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_reg v x y =
-          let x = expw x in
-          sort x >>= fun s ->
+          expw x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_mem v x y =
-          let x = expm x in
-          sort x >>= fun s ->
+          expm x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_float v x y =
-          let x = expf x in
-          sort x >>= fun s ->
+          expf x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let not x = inv (expb x)
         let unknown _ = (unk bool)
@@ -289,9 +277,8 @@ module Make(S : Core) = struct
         let low x = lsb (low (bits 1) (expw x))
 
         let extract n x =
-          let x = expw x in
-          sort x >>= fun xs ->
-          lsb (extract (bits 1) (of_int xs n) (of_int xs n) x)
+          expw x >>-> fun xs x ->
+          lsb (extract (bits 1) (of_int xs n) (of_int xs n) !!x)
 
         let fless = forder
         let feq x y = and_ (inv (fless x y)) (inv (fless y x))
@@ -359,28 +346,24 @@ module Make(S : Core) = struct
           fconvert (floats s) (expr m) (expf x)
 
         let let_bit v x y =
-          let x = expb x in
-          sort x >>= fun s ->
+          expb x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_reg v x y =
-          let x = expw x in
-          sort x >>= fun s ->
+          expw x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_mem v x y =
-          let x = expm x in
-          sort x >>= fun s ->
+          expm x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
 
         let let_float v x y =
-          let x = expf x in
-          sort x >>= fun s ->
+          expf x >>-> fun s x ->
           Var.Generator.fresh s >>= fun r ->
-          let_ r x (run ((v,Var.name r)::ctxt) self y)
+          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
       end)
   and expr : type b e r.
     (string * string) list ->
@@ -419,9 +402,9 @@ module Make(S : Core) = struct
         let unlabeled = Label.root
 
         let bind exp body =
-          sort exp >>= fun s ->
+          exp >>-> fun s exp ->
           Var.Generator.fresh s >>= fun v ->
-          let b1 = (blk unlabeled (set v exp) skip) in
+          let b1 = (blk unlabeled (set v !!exp) skip) in
           seq b1 (body v)
 
         let error = Knowledge.fail Error
@@ -519,9 +502,9 @@ module Make(S : Core) = struct
         let next = stmtd ctxt self
 
         let bind exp body =
-          sort exp >>= fun s ->
+          exp >>-> fun s exp ->
           Var.Generator.fresh s >>= fun v ->
-          seq (set v exp) (body v)
+          seq (set v !!exp) (body v)
 
         let error = Knowledge.fail Error
 
