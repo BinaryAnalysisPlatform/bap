@@ -23,8 +23,9 @@ module Simpl = struct
 
   let zero width = Bil.Int (Word.zero width)
   let ones width = Bil.Int (Word.ones width)
+  let app2 = Bil.Apply.binop
 
-  let rec subst v x y =
+  let subst v x y =
     let rec (!): exp -> exp = function
       | Var v' when Bap.Std.Var.equal v v' -> x
       | Unknown (_,_)
@@ -67,12 +68,18 @@ module Simpl = struct
       let is0 = int is0 and is1 = int is1 and ism1 = int ism1 in
       let (=) x y = compare_exp x y = 0 in
       match op, x, y with
-      | op, Int x, Int y -> Int (Bil.Apply.binop op x y)
+      | op, Int x, Int y -> Int (app2 op x y)
+      | PLUS,BinOp(PLUS,x,Int y),Int z
+      | PLUS,BinOp(PLUS,Int y,x),Int z ->
+        BinOp(PLUS,x,Int (app2 PLUS y z))
+
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
       | MINUS,x,y when is0 y -> x
       | MINUS,x,y when x = y -> zero width
+      | MINUS,BinOp(MINUS,x,Int y), Int z ->
+        BinOp(MINUS,x,Int (app2 PLUS y z))
       | TIMES,x,_ when is0 x -> x
       | TIMES,_,y when is0 y -> y
       | TIMES,x,y when is1 x -> y
@@ -519,6 +526,12 @@ module Basic : Theory.Basic = struct
           | Some name -> sprintf "(call %s)" name
           | None -> (Format.asprintf "(goto %a)" Label.pp lbl) in
         ctrl Bil.[Special dst]
+
+  let slt x y =
+    x >>= fun x ->
+    y >>= fun y ->
+    and_ (sle !!x !!y) (inv (sle !!y !!x))
+
 end
 
 
