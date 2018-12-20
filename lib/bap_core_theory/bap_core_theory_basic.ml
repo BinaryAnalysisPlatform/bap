@@ -8,7 +8,7 @@ open Bap_core_theory_sort
 open Knowledge.Syntax
 
 let size = Bits.size
-let sort x = x >>| Value.sort
+let (>>->) x f = x >>= fun x -> f (Value.sort x) x
 
 module Mask = struct
 
@@ -85,28 +85,24 @@ module Make(L : Minimal) = struct
   let zero s = int s (Word.zero (size s))
 
   let is_zero x =
-    x >>= fun x ->
-    sort !!x >>= fun s ->
+    x >>-> fun s x ->
     eq !!x (zero s)
 
   let non_zero x = inv (is_zero x)
 
   let nsucc x n =
-    x >>= fun x ->
-    sort !!x >>= fun s ->
+    x >>-> fun s x ->
     add !!x (small s n)
 
   let npred x n =
-    x >>= fun x ->
-    sort !!x >>= fun s ->
+    x >>-> fun s x ->
     sub !!x (small s n)
 
   let succ x = nsucc x 1
   let pred x = npred x 1
 
   let high s x =
-    x >>= fun x ->
-    sort !!x >>= fun t ->
+    x >>-> fun t x ->
     let n = min (size t) (max 0 (size t - size s)) in
     cast s b0 (shiftr b0 !!x (small t n))
 
@@ -117,16 +113,15 @@ module Make(L : Minimal) = struct
   module Mask = Mask.Lift(L)
 
   let bind exp body =
-    exp >>= fun exp ->
-    sort !!exp >>= fun s ->
+    exp >>-> fun s exp ->
     Var.Generator.fresh s >>= fun v ->
     let_ v !!exp (body v)
 
   let loadw out dir mem key =
     dir >>= fun dir ->
-    mem >>= fun mem ->
+    mem >>-> fun ms mem ->
     key >>= fun key ->
-    sort !!mem >>| Mems.vals >>= fun vs ->
+    let vs = Mems.vals ms in
     let chunk_size = size vs in
     let needed = size out in
     let rec loop chunks loaded =
@@ -141,14 +136,15 @@ module Make(L : Minimal) = struct
     loop [] 0
 
   let storew dir mem key data =
-    sort data >>= fun data_t ->
-    sort mem >>| Mems.vals >>= fun chunks ->
+    data >>-> fun data_t data ->
+    mem  >>-> fun mem_t mem ->
+    let chunks = Mems.vals mem_t in
     let needed = size data_t and chunk_len = size chunks in
     let nth stored =
       let shift_amount = ite dir
           (small data_t stored)
           (small data_t (needed - stored)) in
-      cast chunks b0 (shiftr b0 data shift_amount) in
+      cast chunks b0 (shiftr b0 !!data shift_amount) in
     let rec loop key stored mem =
       if stored < needed then
         loop
@@ -156,7 +152,7 @@ module Make(L : Minimal) = struct
           (stored + chunk_len)
           (store mem key (nth stored))
       else mem in
-    loop key 0 mem
+    loop key 0 !!mem
 
   let arshift x y = shiftr (msb x) x y
   let rshift x y  = shiftr b0 x y
