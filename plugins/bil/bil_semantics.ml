@@ -14,7 +14,10 @@ let effects = stmt
 let bool = Bool.t
 let bits = Bits.define
 
-
+(* we need to recurse intelligently, only if optimization
+   occured, that might open a new optimization opportunity,
+   and continue recursion only if we have progress.
+*)
 module Simpl = struct
   open Bil.Types
 
@@ -286,6 +289,25 @@ module Basic : Theory.Basic = struct
     let slt x y = lo2 Bil.(<$) x y
     let ult x y = lo2 Bil.(<) x y
 
+    let sgt x y = slt y x
+    let ugt x y = ult y x
+    let sge x y = sle y x
+    let uge x y = ule y x
+
+    let size = Bits.size
+    let small s x = Bil.Int (Word.of_int ~width:(size s) x)
+    let mk_zero s = Bil.Int (Word.zero (size s))
+
+    let is_zero x =
+      x >>= fun x ->
+      let s = Value.sort x in
+      bit @@ Bil.(bitv_exp x = mk_zero s)
+
+    let non_zero x =
+      x >>= fun x ->
+      let s = Value.sort x in
+      bit @@ Bil.(bitv_exp x <> mk_zero s)
+
     let shiftr b x y =
       b >>-> fun _s b ->
       x >>-> fun xs x ->
@@ -526,12 +548,6 @@ module Basic : Theory.Basic = struct
           | Some name -> sprintf "(call %s)" name
           | None -> (Format.asprintf "(goto %a)" Label.pp lbl) in
         ctrl Bil.[Special dst]
-
-  let slt x y =
-    x >>= fun x ->
-    y >>= fun y ->
-    and_ (sle !!x !!y) (inv (sle !!y !!x))
-
 end
 
 
