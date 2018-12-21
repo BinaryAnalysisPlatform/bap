@@ -61,7 +61,7 @@ module Simpl = struct
       | x -> Extract (hi,lo,x)
 
     and unop op x = match x with
-      | UnOp(op,Int x) -> Int (Bil.Apply.unop op x)
+      | Int x -> Int (Bil.Apply.unop op x)
       | UnOp(op',x) when op = op' -> x
       | x -> UnOp(op, x)
 
@@ -91,7 +91,7 @@ module Simpl = struct
       | (MOD|SMOD),_,y when is1 y -> zero width
       | (LSHIFT|RSHIFT|ARSHIFT),x,y when is0 y -> x
       | (LSHIFT|RSHIFT|ARSHIFT),x,_ when is0 x -> x
-      | (LSHIFT|RSHIFT|ARSHIFT),x,_ when ism1 x -> x
+      | ARSHIFT,x,_ when ism1 x -> x
       | AND,x,_ when is0 x -> x
       | AND,_,y when is0 y -> y
       | AND,x,y when ism1 x -> y
