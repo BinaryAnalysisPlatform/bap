@@ -151,7 +151,7 @@ module Basic : Theory.Basic = struct
     let mem s v = ret @@ Some v %: s
     let vec s v = ret @@ Some (simpl (Bits.size s) v) %: s
 
-    let gen s v = ret @@ match Bits.cast s with
+    let gen s v = ret @@ match Bool.cast s with
       | Some _ -> Some (simpl 1 v) %: s
       | None -> match Bits.cast s with
         | None -> Some v %:s
