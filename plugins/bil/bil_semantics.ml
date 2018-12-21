@@ -331,9 +331,14 @@ module Basic : Theory.Basic = struct
         vec xs @@
         if Exp.equal b (Bil.int Word.b0) then Bil.(x lsl y)
         else
+          let simpl = simpl (Bits.size xs) in
           let ones = Word.ones (Bits.size xs) in
-          let mask = Bil.(lnot (int ones lsl y)) in
-          Bil.(ite b ((x lsl y) lor mask) (x lsl y))
+          let shifted = simpl Bil.(int ones lsl y)  in
+          let mask = simpl Bil.(lnot shifted) in
+          let lhs = simpl Bil.(x lsl y) in
+          let yes = simpl Bil.(lhs lor mask) in
+          let nay = simpl Bil.(x lsl y)  in
+          Bil.(ite b yes nay)
       | _ -> unk xs
 
     let app_bop lift op x y = lift (Bil.binop op) x y
