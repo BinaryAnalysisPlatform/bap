@@ -14,6 +14,36 @@ let effects = stmt
 let bool = Bool.t
 let bits = Bits.define
 
+
+module Constant = struct
+  type var = Bap.Std.var
+  open Knowledge.Syntax
+  module Stack = struct
+    type t = word list [@@deriving compare]
+    let equal x y = compare x y = 0
+  end
+  module Domain = Domain.Map.Make(Bap.Std.Var)(Stack)
+  let domain = Semantics.declare ~name:"bil-constants" (module Domain)
+  let t = Knowledge.declare ~name:"bil-constants" domain
+  let push v x =
+    Knowledge.collect t Label.root >>= fun consts ->
+    Knowledge.provide t Label.root @@ Map.update consts v ~f:(function
+        | None -> [x]
+        | Some xs -> x::xs)
+
+  let pop v =
+    Knowledge.collect t Label.root >>= fun consts ->
+    Knowledge.provide t Label.root @@ Map.change consts v ~f:(function
+        | None | Some [] | Some [_] -> None
+        | Some (_::xs) -> Some xs)
+
+  let get v =
+    Knowledge.collect t Label.root >>| fun consts ->
+    match Map.find consts v with
+    | Some (x::_) -> Some x
+    | _ -> None
+end
+
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
    and continue recursion only if we have progress.
@@ -27,25 +57,6 @@ module Simpl = struct
   let zero width = Bil.Int (Word.zero width)
   let ones width = Bil.Int (Word.ones width)
   let app2 = Bil.Apply.binop
-
-  let subst v x y =
-    let rec (!): exp -> exp = function
-      | Var v' when Bap.Std.Var.equal v v' -> x
-      | Unknown (_,_)
-      | Var _
-      | Int _ as x -> x
-      | Load (x,y,e,s) -> Load (!x, !y, e, s)
-      | Store (x,y,z,e,s) -> Store (!x,!y,!z,e,s)
-      | BinOp (op,x,y) -> BinOp(op,!x,!y)
-      | UnOp (op,x) -> UnOp(op,!x)
-      | Cast (t,n,x) -> Cast (t,n,!x)
-      | Let (v',_,_) as x when Bap.Std.Var.equal v' v -> x
-      | Let (v,x,y) -> Let (v,!x,!y)
-      | Ite (c,x,y) -> Ite (!c,!x,!y)
-      | Extract (h,l,x) -> Extract (h,l,!x)
-      | Concat (x,y) -> Concat (!x,!y) in
-    !y
-
 
   let exp width =
     let concat x y = match x, y with
@@ -113,21 +124,16 @@ module Simpl = struct
       | Int c -> if Word.(c = b1) then x else y
       | _ -> Ite(c,x,y) in
 
-    let rec run : exp -> exp = function
+    let run : exp -> exp = function
       | BinOp (op,x,y) -> binop op x y
       | UnOp (op,x) -> unop op x
       | Cast (t,s,x) -> cast t s x
-      | Let (v,x,y) -> let_ v x y
       | Ite (x,y,z) -> ite_ x y z
       | Extract (h,l,x) -> extract h l x
       | Concat (x,y) -> concat x y
+      | Let _
       | Var _ | Int _  | Unknown (_,_)
-      | Load _ | Store _ as x -> x
-    and let_ v x y = match x with
-      | Int _ | Var _ as z -> run (subst v z y)
-      | _ -> match y with
-        | Int _  | Unknown (_,_) as y -> y
-        | _ -> Let(v,x,y) in
+      | Load _ | Store _ as x -> x in
     run
 end
 
@@ -211,7 +217,9 @@ module Basic : Theory.Basic = struct
       let s = Var.sort r in
       match reify_to_var r with
       | None -> unk s
-      | Some v -> exp s (Var v)
+      | Some v -> Constant.get v >>= function
+        | None -> exp s (Var v)
+        | Some x -> exp s (Int x)
 
     let b0 = bit Bil.(int Word.b0)
     let b1 = bit Bil.(int Word.b1)
@@ -462,11 +470,19 @@ module Basic : Theory.Basic = struct
       eff Kind.unit (x @ y)
 
     let let_ var rhs body =
-      rhs >>-> fun _ rhs ->
-      body >>-> fun sort body ->
-      match reify_to_var var, rhs, body with
-      | None,_,_| _,None,_ | _,_,None -> unk sort
-      | Some var, Some rhs, Some body -> gen sort @@ Let (var,rhs,body)
+      match reify_to_var var with
+      | None -> body >>-> fun sort _ -> unk sort
+      | Some v -> rhs >>-> fun _ rhs -> match rhs with
+        | Some (Int x) ->
+          Constant.push v x >>= fun () ->
+          body >>= fun r ->
+          Constant.pop v >>| fun () ->
+          r
+        | None -> body >>-> fun sort _ -> unk sort
+        | Some rhs ->
+          body >>-> fun sort body -> match body with
+          | Some body -> gen sort @@ Let (v,rhs,body)
+          | None -> unk sort
 
     let set var rhs =
       rhs >>-> fun _ rhs ->
