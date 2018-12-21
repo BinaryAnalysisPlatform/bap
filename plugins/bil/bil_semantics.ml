@@ -87,6 +87,7 @@ module Simpl = struct
       | PLUS,BinOp(PLUS,Int y,x),Int z ->
         BinOp(PLUS,x,Int (app2 PLUS y z))
 
+
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
       | MINUS,x,y when is0 x -> UnOp(NEG,y)
@@ -94,6 +95,10 @@ module Simpl = struct
       | MINUS,x,y when x = y -> zero width
       | MINUS,BinOp(MINUS,x,Int y), Int z ->
         BinOp(MINUS,x,Int (app2 PLUS y z))
+      | MINUS,BinOp(PLUS,x,Int c1),Int c2
+      | MINUS,BinOp(PLUS,Int c1,x),Int c2 ->
+        BinOp(PLUS,x,Int (app2 MINUS c1 c2))
+
       | TIMES,x,_ when is0 x -> x
       | TIMES,_,y when is0 y -> y
       | TIMES,x,y when is1 x -> y
