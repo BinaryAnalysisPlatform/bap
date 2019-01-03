@@ -432,6 +432,15 @@ module Eff = struct
   let raises t = Set.mem t Raises
   let of_list : t list -> t = Set.Poly.union_list
 end
+
+class rewriter x y = object
+  inherit bil_mapper as super
+  method! map_exp z =
+    let z = super#map_exp z in
+    if Bap_exp.(z = x) then y else z
+end
+
+
 module Simpl = struct
   open Bap_bil
   open Binop
@@ -444,7 +453,9 @@ module Simpl = struct
   let zero width = Int (Word.zero width)
   let ones width = Int (Word.ones width)
   let nothing _ = false
-
+  let subst x y =
+    let r = new rewriter (Var x) y in
+    r#map_exp
 
   (* requires: let-free, simplifications(
         constant-folding,
@@ -466,10 +477,13 @@ module Simpl = struct
       | UnOp (op,x) -> unop op x
       | Var _ | Int _  | Unknown (_,_) as const -> const
       | Cast (t,s,x) -> cast t s x
-      | Let (v,x,y) -> Let (v, exp x, exp y)
+      | Let (v,x,y) -> let_ v x y
       | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
       | Extract (h,l,x) -> extract h l x
       | Concat (x,y) -> concat x y
+    and let_ v x y = match exp x with
+      | Int _ | Unknown _ as r -> exp (subst v r y)
+      | r -> Let(v,r,exp y)
     and concat x y = match exp x, exp y with
       | Int x, Int y -> Int (Word.concat x y)
       | x,y -> Concat (x,y)
@@ -564,12 +578,6 @@ let fix compare f x  =
 
 let fixpoint = fix compare_bil
 
-class rewriter x y = object
-  inherit bil_mapper as super
-  method! map_exp z =
-    let z = super#map_exp z in
-    if Bap_exp.(z = x) then y else z
-end
 
 
 let substitute x y = (new rewriter x y)#run
