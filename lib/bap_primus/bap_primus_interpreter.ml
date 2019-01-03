@@ -172,9 +172,15 @@ let sexp_of_name = function
   | `tid tid -> Sexp.Atom (Tid.name tid)
   | `addr addr -> Sexp.Atom (Addr.string_of_value addr)
 
+type scope = {
+  stack : (var * value) list;
+  bound : int Var.Map.t;
+}
+
 type state = {
   addr : addr;
   curr : pos;
+  lets : scope; (* lexical context *)
 }
 
 let sexp_of_state {curr} =
@@ -183,6 +189,11 @@ let sexp_of_state {curr} =
 let null proj =
   let size = Arch.addr_size (Project.arch proj) in
   Addr.zero (Size.in_bits size)
+
+let empty_scope = {
+  stack = [];
+  bound = Var.Map.empty;
+}
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
@@ -193,6 +204,7 @@ let state = Bap_primus_machine.State.declare
        Pos.{
          addr = null proj;
          curr = Top {me=prog; up=Nil};
+         lets = empty_scope;
        })
 
 type exn += Halt
@@ -247,10 +259,12 @@ module Make (Machine : Machine) = struct
     Env.set v x >>= fun () ->
     !!on_written (v,x)
 
+
   let get v =
     !!on_reading v >>= fun () ->
     Env.get v >>= fun r ->
     !!on_read (v,r) >>| fun () -> r
+
 
 
   let call_when_provided name =
@@ -316,10 +330,30 @@ module Make (Machine : Machine) = struct
     value (if Word.is_one cond.value then yes.value else no.value) >>= fun r ->
     !!on_ite ((cond, yes, no), r) >>| fun () -> r
 
-  let remember v =
-    Env.has v >>= function
-    | true -> Env.get v >>| Option.some
-    | false -> Machine.return None
+
+  let get_lexical scope v =
+    List.Assoc.find_exn scope ~equal:Var.equal v
+
+  let update_lexical f =
+    Machine.Local.update state ~f:(fun s -> {
+          s with lets = f s.lets
+        })
+
+  let push_lexical v x = update_lexical @@ fun s -> {
+      stack = (v,x) :: s.stack;
+      bound = Map.update s.bound v ~f:(function
+          | None -> 1
+          | Some n -> n + 1)
+    }
+
+  let pop_lexical v = update_lexical @@ fun s -> {
+      stack = List.tl_exn s.stack;
+      bound = Map.change s.bound v ~f:(function
+          | None -> None
+          | Some 1 -> None
+          | Some n -> Some (n-1))
+    }
+
 
   let rec eval_exp x =
     let eval = function
@@ -342,13 +376,10 @@ module Make (Machine : Machine) = struct
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
   and eval_let v x y =
-    remember v >>= fun prev ->
     eval_exp x >>= fun x ->
-    set v x >>= fun () ->
+    push_lexical v x >>= fun () ->
     eval_exp y >>= fun r ->
-    match prev with
-    | None -> Machine.return r
-    | Some x -> Env.set v x >>| fun () -> r
+    pop_lexical v >>| fun () ->  r
   and eval_load a = eval_exp a >>= load_byte
   and eval_ite cond yes no =
     eval_exp yes >>= fun yes ->
@@ -367,7 +398,11 @@ module Make (Machine : Machine) = struct
   and eval_unop op x =
     eval_exp x >>= fun x ->
     unop op x
-  and eval_var = get
+  and eval_var v =
+    Machine.Local.get state >>= fun {lets} ->
+    if Map.mem lets.bound v
+    then Machine.return (get_lexical lets.stack v)
+    else get v
   and eval_int = const
   and eval_cast t s x =
     eval_exp x >>= fun x ->
