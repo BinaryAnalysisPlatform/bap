@@ -140,7 +140,12 @@ module Make2(State : Monad.S2) = struct
       with exn -> None
 
     method eval_let var u body =
-      self#eval_exp (Exp.Let (var,u,body))
+      self#eval_exp u >>= fun u ->
+      self#lookup var >>= fun w ->
+      self#update var u >>= fun () ->
+      self#eval_exp body >>= fun r ->
+      self#update var w >>= fun () ->
+      State.return r
 
     method eval_unknown _ _ = self#bot
 
