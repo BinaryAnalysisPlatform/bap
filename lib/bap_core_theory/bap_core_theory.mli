@@ -354,15 +354,19 @@ end
 
 module Var : sig
   type 'a t = 'a var
+  type ident [@@deriving bin_io, compare, sexp]
 
-  val create : 'a sort -> string -> 'a var
-  val name : 'a var -> string
-  val sort : 'a var -> 'a sort
-  val is_virtual : 'a var -> bool
+  val define : 'a sort -> string -> 'a t
+  val create : 'a sort -> ident -> 'a t
 
-  module Generator : sig
-    val fresh : 'a sort -> 'a t knowledge
-  end
+  val ident : 'a t -> ident
+  val name : 'a t -> string
+  val sort : 'a t -> 'a sort
+  val is_virtual : 'a t -> bool
+  val is_mutable : 'a t -> bool
+  val fresh : 'a sort -> 'a t knowledge
+  val scoped : 'a sort -> ('a t -> 'b value knowledge) -> 'b value knowledge
+  module Ident : Identifiable with type t := ident
 end
 
 module Value : sig

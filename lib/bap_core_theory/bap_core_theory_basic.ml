@@ -114,7 +114,7 @@ module Make(L : Minimal) = struct
 
   let bind exp body =
     exp >>-> fun s exp ->
-    Var.Generator.fresh s >>= fun v ->
+    Var.scoped s @@ fun v ->
     let_ v !!exp (body v)
 
   let loadw out dir mem key =

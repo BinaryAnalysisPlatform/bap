@@ -668,7 +668,7 @@ module FPEmulator = struct
 
   let tmp x f =
     x >>= fun x ->
-    Var.Generator.fresh (Value.sort x) >>= fun v ->
+    Var.scoped (Value.sort x) @@ fun v ->
     let_ v !!x (f (var v))
 
 

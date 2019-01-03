@@ -76,13 +76,15 @@ module Make(S : Core) = struct
   let is_big e = if e = BigEndian then b1 else b0
 
 
-  let rename ctxt v =
+  type context = (string * Var.ident) list
+  let rename (ctxt : context) v =
     match List.Assoc.find ~equal:String.equal ctxt v with
-    | None -> v
+    | None -> Var.Ident.of_string v
     | Some r -> r
 
+
   let rec expw : type s b e r.
-    (string * string) list ->
+    context ->
     (e,r,b) parser -> e -> s bitv value t =
     fun ctxt self -> self.bitv (module struct
         type nonrec t = s bitv value t
@@ -142,23 +144,23 @@ module Make(S : Core) = struct
 
         let let_bit v x y =
           expb x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_reg v x y =
           expw x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_mem v x y =
           expm x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_float v x y =
           expf x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let unknown w = unk (bits w)
         let extract sz hi lo x =
@@ -172,7 +174,7 @@ module Make(S : Core) = struct
         let fbits x = fbits (expf x)
       end)
   and expm : type k x b e r.
-    (string * string) list ->
+    context ->
     (e,r,b) parser -> e -> (k,x) mem value t =
     fun ctxt self -> self.mem (module struct
         open Knowledge.Syntax
@@ -197,29 +199,29 @@ module Make(S : Core) = struct
 
         let let_bit v x y =
           expb x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_reg v x y =
           expw x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_mem v x y =
           expm x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_float v x y =
           expm x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let unknown ks vs = unk (Mems.define (bits ks) (bits vs))
       end)
 
   and expb : type s b e r.
-    (string * string) list ->
+    context ->
     (e,r,b) parser -> e -> bit value t =
     fun ctxt self -> self.bool (module struct
         open Knowledge.Syntax
@@ -250,23 +252,23 @@ module Make(S : Core) = struct
 
         let let_bit v x y =
           expb x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_reg v x y =
           expw x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_mem v x y =
           expm x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_float v x y =
           expf x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let not x = inv (expb x)
         let unknown _ = (unk bool)
@@ -297,7 +299,7 @@ module Make(S : Core) = struct
         let is_inf x = is_inf (expf x)
       end)
   and expf : type s b e r k n i g a.
-    (string * string) list ->
+    context ->
     (e,r,b) parser -> e -> ((i, g, a) IEEE754.t, s) format float value t =
     fun ctxt self -> self.float (module struct
         type nonrec t = ((i, g, a) IEEE754.t, s) format float value t
@@ -315,7 +317,7 @@ module Make(S : Core) = struct
 
         let floats s = IEEE754.Sort.define s
         let ieee754 s x : t  = float (floats s) (expw x)
-        let ieee754_var s name : t = var (Var.create (floats s) name)
+        let ieee754_var s name : t = var (Var.define (floats s) name)
         let ieee754_unk s = unk (floats s)
 
         let fadd m x y = fadd (expr m) (expf x) (expf y)
@@ -347,26 +349,26 @@ module Make(S : Core) = struct
 
         let let_bit v x y =
           expb x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_reg v x y =
           expw x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_mem v x y =
           expm x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
         let let_float v x y =
           expf x >>-> fun s x ->
-          Var.Generator.fresh s >>= fun r ->
-          let_ r !!x (run ((v,Var.name r)::ctxt) self y)
+          Var.scoped s @@ fun r ->
+          let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
       end)
   and expr : type b e r.
-    (string * string) list ->
+    context ->
     (e,r,b) parser -> r -> rmode value t =
     fun _ctxt self -> self.rmode (module struct
         type nonrec t = rmode value t
@@ -383,11 +385,11 @@ module Make(S : Core) = struct
   let rec run : type e s r. (e,r,s) parser -> s list -> unit eff t =
     fun parser code -> bil [] parser code
 
-  and bil : type e s r. (string * string) list -> (e,r,s) parser -> s list -> unit eff t =
+  and bil : type e s r. context -> (e,r,s) parser -> s list -> unit eff t =
     fun ctxt parser xs -> stmts ctxt parser xs
 
   and stmts : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> s list -> unit eff t = fun ctxt self -> function
     | [] -> Knowledge.return Label.root >>= fun lbl -> blk lbl pass skip
     | x :: xs ->
@@ -403,7 +405,7 @@ module Make(S : Core) = struct
 
         let bind exp body =
           exp >>-> fun s exp ->
-          Var.Generator.fresh s >>= fun v ->
+          Var.fresh s >>= fun v ->
           let b1 = (blk unlabeled (set v !!exp) skip) in
           seq b1 (body v)
 
@@ -441,7 +443,7 @@ module Make(S : Core) = struct
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
         let set_ieee754 var s exp = move (set_ieee754 ctxt self var s exp)
         let set_rmode var exp = move (set_rmode ctxt self var exp)
-        let push var r = stmts ((var, Var.name r) :: ctxt) self xs
+        let push var r = stmts ((var, Var.ident r) :: ctxt) self xs
         let tmp_bit var exp = bind (expb ctxt self exp) (push var)
         let tmp_reg var exp = bind (expw ctxt self exp) (push var)
         let tmp_mem var exp = bind (expm ctxt self exp) (push var)
@@ -449,7 +451,7 @@ module Make(S : Core) = struct
         let tmp_rmode var exp = bind (expr ctxt self exp) (push var)
         let let_gen t var exp body =
           seq (bind (t ctxt self exp)
-                 (fun r -> stmts ((var, Var.name r) :: ctxt) self [body]))
+                 (fun r -> stmts ((var, Var.ident r) :: ctxt) self [body]))
             (next xs)
 
         let let_bit = let_gen expb
@@ -462,34 +464,34 @@ module Make(S : Core) = struct
       end) x
 
   and set_bit : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> string -> e -> data eff t =
-    fun ctxt self v x -> set (Var.create bool v) (expb ctxt self x)
+    fun ctxt self v x -> set (Var.define bool v) (expb ctxt self x)
 
   and set_reg : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> string -> int -> e -> data eff t =
     fun ctxt self v s x ->
-      set (Var.create (bits s) v) (expw ctxt self x)
+      set (Var.define (bits s) v) (expw ctxt self x)
 
   and set_mem : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> string -> int -> int -> e -> data eff t =
     fun ctxt self v ks vs x ->
-      set (Var.create (Mems.define (bits ks) (bits vs)) v) (expm ctxt self x)
+      set (Var.define (Mems.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
   and set_ieee754 : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> string -> IEEE754.parameters -> e -> data eff t =
-    fun ctxt self v fs x -> set (Var.create (IEEE754.Sort.define fs) v) (expf ctxt self x)
+    fun ctxt self v fs x -> set (Var.define (IEEE754.Sort.define fs) v) (expf ctxt self x)
 
   and set_rmode : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> string -> r -> data eff t =
-    fun ctxt self v x -> set (Var.create Rmode.t v) (expr ctxt self x)
+    fun ctxt self v x -> set (Var.define Rmode.t v) (expr ctxt self x)
 
   and stmtd : type e s r.
-    (string * string) list ->
+    context ->
     (e,r,s) parser -> s list -> data eff t = fun ctxt self -> function
     | [] -> pass
     | x :: xs ->
@@ -503,7 +505,7 @@ module Make(S : Core) = struct
 
         let bind exp body =
           exp >>-> fun s exp ->
-          Var.Generator.fresh s >>= fun v ->
+          Var.fresh s >>= fun v ->
           seq (set v !!exp) (body v)
 
         let error = Knowledge.fail Error
@@ -534,7 +536,7 @@ module Make(S : Core) = struct
         let set_ieee754 var s exp = move (set_ieee754 ctxt self var s exp)
         let set_rmode var exp = move (set_rmode ctxt self var exp)
 
-        let push var r = stmtd ((var, Var.name r) :: ctxt) self xs
+        let push var r = stmtd ((var, Var.ident r) :: ctxt) self xs
         let tmp_bit var exp = bind (expb ctxt self exp) (push var)
         let tmp_reg var exp = bind (expw ctxt self exp) (push var)
         let tmp_mem var exp = bind (expm ctxt self exp) (push var)
@@ -543,7 +545,7 @@ module Make(S : Core) = struct
 
         let let_gen t var exp body =
           seq (bind (t ctxt self exp)
-                 (fun r -> stmtd ((var, Var.name r) :: ctxt) self [body]))
+                 (fun r -> stmtd ((var, Var.ident r) :: ctxt) self [body]))
             (next xs)
 
         let let_bit = let_gen expb

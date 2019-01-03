@@ -143,7 +143,7 @@ module Make(B : Theory.Basic) = struct
   let bind a body =
     a >>= fun a ->
     let sort = Value.sort a in
-    Var.Generator.fresh sort >>= fun v ->
+    Var.scoped sort @@ fun v ->
     B.let_ v !!a (body (B.var v))
 
   let (>>>=) = bind
