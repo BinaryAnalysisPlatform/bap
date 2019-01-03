@@ -344,7 +344,7 @@ module Make (Machine : Machine) = struct
   and eval_let v x y =
     remember v >>= fun prev ->
     eval_exp x >>= fun x ->
-    Env.set v x >>= fun () ->
+    set v x >>= fun () ->
     eval_exp y >>= fun r ->
     match prev with
     | None -> Machine.return r
