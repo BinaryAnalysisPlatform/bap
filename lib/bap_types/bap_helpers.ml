@@ -478,9 +478,12 @@ module Simpl = struct
       | Var _ | Int _  | Unknown (_,_) as const -> const
       | Cast (t,s,x) -> cast t s x
       | Let (v,x,y) -> let_ v x y
-      | Ite (x,y,z) -> Ite (exp x, exp y, exp z)
+      | Ite (x,y,z) -> ite_ x y z
       | Extract (h,l,x) -> extract h l x
       | Concat (x,y) -> concat x y
+    and ite_ c x y = match exp c, exp x, exp y with
+      | Int c,x,y -> if Bitvector.(c = b1) then x else y
+      | c,x,y -> Ite (c,x,y)
     and let_ v x y = match exp x with
       | Int _ | Unknown _ as r -> exp (subst v r y)
       | r -> Let(v,r,exp y)
@@ -489,7 +492,7 @@ module Simpl = struct
       | x,y -> Concat (x,y)
     and cast t s x = match exp x with
       | Int w -> Int (Apply.cast t s w)
-      | _ -> Cast (t,s,x)
+      | x -> Cast (t,s,x)
     and extract hi lo x = match exp x with
       | Int w -> Int (Bitvector.extract_exn ~hi ~lo w)
       | x -> Extract (hi,lo,x)
