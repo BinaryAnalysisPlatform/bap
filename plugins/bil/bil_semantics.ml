@@ -14,36 +14,6 @@ let effects = stmt
 let bool = Bool.t
 let bits = Bits.define
 
-
-module Constant = struct
-  type var = Bap.Std.var
-  open Knowledge.Syntax
-  module Stack = struct
-    type t = word list [@@deriving compare]
-    let equal x y = compare x y = 0
-  end
-  module Domain = Domain.Map.Make(Bap.Std.Var)(Stack)
-  let domain = Semantics.declare ~name:"bil-constants" (module Domain)
-  let t = Knowledge.declare ~name:"bil-constants" domain
-  let push v x =
-    Knowledge.collect t Label.root >>= fun consts ->
-    Knowledge.provide t Label.root @@ Map.update consts v ~f:(function
-        | None -> [x]
-        | Some xs -> x::xs)
-
-  let pop v =
-    Knowledge.collect t Label.root >>= fun consts ->
-    Knowledge.provide t Label.root @@ Map.change consts v ~f:(function
-        | None | Some [] | Some [_] -> None
-        | Some (_::xs) -> Some xs)
-
-  let get v =
-    Knowledge.collect t Label.root >>| fun consts ->
-    match Map.find consts v with
-    | Some (x::_) -> Some x
-    | _ -> None
-end
-
 (* we need to recurse intelligently, only if optimization
    occured, that might open a new optimization opportunity,
    and continue recursion only if we have progress.
@@ -86,7 +56,6 @@ module Simpl = struct
       | PLUS,BinOp(PLUS,x,Int y),Int z
       | PLUS,BinOp(PLUS,Int y,x),Int z ->
         BinOp(PLUS,x,Int (app2 PLUS y z))
-
 
       | PLUS,x,y  when is0 x -> y
       | PLUS,x,y  when is0 y -> x
@@ -180,7 +149,7 @@ module Basic : Theory.Basic = struct
     let ctrl = eff Kind.ctrl
 
     (* Bitvectors and booleans are always expressible in Bil.exp.
-       Some memories might not be expressible (we size of an address
+       Some memories might not be expressible (the size of an address
        part shall be 32 or 64, while the size of value should be
        8,16,32, or 64. Everything else is not expressible.
 
@@ -222,9 +191,7 @@ module Basic : Theory.Basic = struct
       let s = Var.sort r in
       match reify_to_var r with
       | None -> unk s
-      | Some v -> Constant.get v >>= function
-        | None -> exp s (Var v)
-        | Some x -> exp s (Int x)
+      | Some v -> exp s (Var v)
 
     let b0 = bit Bil.(int Word.b0)
     let b1 = bit Bil.(int Word.b1)
@@ -474,20 +441,19 @@ module Basic : Theory.Basic = struct
       y >>:= fun y ->
       eff Kind.unit (x @ y)
 
+    let recursive_simpl = Exp.simpl ~ignore:Bap.Std.Eff.[load;store;read]
+
     let let_ var rhs body =
       match reify_to_var var with
       | None -> body >>-> fun sort _ -> unk sort
-      | Some v -> rhs >>-> fun _ rhs -> match rhs with
-        | Some (Int x) ->
-          Constant.push v x >>= fun () ->
-          body >>= fun r ->
-          Constant.pop v >>| fun () ->
-          r
-        | None -> body >>-> fun sort _ -> unk sort
-        | Some rhs ->
-          body >>-> fun sort body -> match body with
-          | Some body -> gen sort @@ Let (v,rhs,body)
-          | None -> unk sort
+      | Some v ->
+        rhs >>-> fun _ rhs ->
+        body >>-> fun bs body ->
+        match rhs, body with
+        | Some ((Int _) as rhs), Some body ->
+          exp bs @@ recursive_simpl @@ Let (v,rhs,body)
+        | Some rhs, Some body -> gen bs @@ Let (v,rhs,body)
+        | _,_ -> unk bs
 
     let set var rhs =
       rhs >>-> fun _ rhs ->
