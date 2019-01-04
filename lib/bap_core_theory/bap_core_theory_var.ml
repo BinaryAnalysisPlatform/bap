@@ -59,7 +59,7 @@ let name v = Format.asprintf "%a" pp_ident v.ident
 let ident v = v.ident
 
 let sort v = v.sort
-let is_virtual v = match v.ident with Var _ -> true | _ -> false
+let is_virtual v = match v.ident with Var _ -> true | Reg _ -> false
 let is_mutable v = match v.ident with Var {mut} -> mut | _ -> true
 
 module Counter() : sig
