@@ -414,18 +414,18 @@ module Basic : Theory.Basic = struct
       mem >>-> fun sort mem ->
       key >>-> fun _ key ->
       let vals = Mems.vals sort in
-      match mem,key with
-      | Some mem, Some key when Bits.size vals = 8 ->
-        exp vals Bil.(load mem key BigEndian `r8)
+      match mem, key, Size.of_int_opt (Bits.size vals) with
+      | Some mem, Some key, Some sz ->
+        exp vals Bil.(load mem key BigEndian sz)
       | _ -> unk vals
 
     let store m k d =
       m >>-> fun ms m ->
       k >>-> fun _ k ->
       d >>-> fun ds d ->
-      match m, k, d, size (Mems.vals ms), size ds with
-      | Some m, Some k, Some d, 8, 8 ->
-        exp ms Bil.(store ~mem:m ~addr:k d BigEndian `r8)
+      match m, k, d, Size.of_int_opt (size ds) with
+      | Some m, Some k, Some d, Some rs ->
+        exp ms Bil.(store ~mem:m ~addr:k d BigEndian rs)
       | _ -> unk ms
 
     let pass = data []
