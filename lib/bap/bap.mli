@@ -4694,8 +4694,19 @@ module Std : sig
     (** returns the order of bytes in a word  *)
     val endian : t -> endian
 
-    (** [get word_size mem addr] reads memory value from the specified
-        address. [word_size] default to [`r8] *)
+    (** [get ?disp ?index ?scale ?addr mem] reads a [scale] sized word from [mem].
+
+        Parameters mimic the reference syntax in the gas assembler,
+        e.g., [dis(base,index,scale)] denotes address at [base + index * scale + dis].
+
+        The size of the returned word is equal to [scale], bytes are read in
+        the [endian mem] order.
+
+
+        @param disp is the base offset and defaults to [0]
+        @param index defaults to [0]
+        @param scale defaults to [`r8]
+     *)
     val get : ?disp:int -> ?index:int -> ?scale:size -> ?addr:addr -> t -> word Or_error.t
 
     (** [m^n] dereferences a byte at address [n]  *)
