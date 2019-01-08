@@ -38,7 +38,7 @@ module Rounding = struct
       | _,None -> GE
       | _ -> NC
 
-    let inspect t = failwith "unimplemented"
+    let inspect _ = failwith "unimplemented"
   end
 
   let rounding = Semantics.declare ~name:"rounding" (module Rounding_domain)
@@ -259,17 +259,17 @@ module Make(B : Theory.Basic) = struct
 
   let is_qnan fsort x =
     let open B in
-    unpack_raw fsort x @@ fun sign expn coef ->
+    unpack_raw fsort x @@ fun _sign expn coef ->
     is_all_ones expn && non_zero coef && msb coef
 
   let is_snan fsort x =
     let open B in
-    unpack_raw fsort x @@ fun sign expn coef ->
+    unpack_raw fsort x @@ fun _sign expn coef ->
     is_all_ones expn && non_zero coef && inv (msb coef)
 
   let is_nan fsort x =
     let open B in
-    unpack_raw fsort x @@ fun sign expn coef ->
+    unpack_raw fsort x @@ fun _sign expn coef ->
     is_all_ones expn && non_zero coef
 
   let qnan fsort =
@@ -309,7 +309,7 @@ module Make(B : Theory.Basic) = struct
 
   let with_special fsort x f =
     let open B in
-    unpack_raw fsort x @@ fun sign expn coef ->
+    unpack_raw fsort x @@ fun _sign expn coef ->
     is_all_ones expn >>>= fun is_special ->
     (is_special && is_zero coef) >>>= fun is_inf ->
     (is_special && non_zero coef && inv (msb coef)) >>>= fun is_snan ->
@@ -350,9 +350,11 @@ module Make(B : Theory.Basic) = struct
 
   let extract_last x n =
     let open B in
-    x >>-> fun sort x ->
-    let mask = not (ones sort lsl n)  in
-    !!x land mask
+    x >>-> fun xsort x ->
+    n >>-> fun nsort n ->
+    let mask = ones xsort lsl !!n in
+    let size = Bits.size xsort |> B.of_int nsort in
+    ite (!!n = size) !!x (!!x land (not mask))
 
   let is_round_up rm sign last guard round sticky =
     let open B in
@@ -384,18 +386,10 @@ module Make(B : Theory.Basic) = struct
     and_ (non_zero coef) (is_zero coef') >>>= fun is_overflow ->
     f coef' is_overflow
 
-  let guardbits' overflow last loss lost_bits f =
-    let open B in
-    guardbits loss lost_bits @@ fun guard' round' sticky' ->
-    ite overflow last guard' >>>= fun guard ->
-    ite overflow guard' round' >>>= fun round ->
-    ite overflow (round' || sticky') sticky' >>>= fun sticky ->
-    f guard round sticky
-
   (* maximum possible exponent that fits in [n - 1] bits. (one for sign)
      and one for special numbers like inf or nan *)
   let max_exponent' n = int_of_float (2.0 ** (float_of_int n )) - 2
-  let min_exponent' n = 1
+  let min_exponent' _n = 1
   let max_exponent  n = B.of_int n (Bits.size n |> max_exponent')
   let min_exponent  n = B.of_int n (Bits.size n |> min_exponent')
 
@@ -444,7 +438,7 @@ module Make(B : Theory.Basic) = struct
   let norm_finite expn coef f =
     let open B in
     expn >>-> fun exps expn ->
-    coef >>-> fun sigs coef ->
+    coef >>-> fun _sigs coef ->
     possible_lshift !!expn !!coef >>>= fun shift ->
     unsigned exps shift >>>= fun dexpn ->
     !!coef lsl shift >>>= fun coef ->
@@ -453,7 +447,7 @@ module Make(B : Theory.Basic) = struct
 
   let norm expn coef f =
     let open B in
-    expn >>-> fun exps expn ->
+    expn >>-> fun _exps expn ->
     ite (is_all_ones !!expn) (f !!expn coef)
       (norm_finite !!expn coef f)
 
@@ -468,6 +462,14 @@ module Make(B : Theory.Basic) = struct
   let leading_one sort =
     B.(one sort lsl (of_int sort Caml.(Bits.size sort - 1)))
 
+  let guardbits' overflow last loss lost_bits f =
+    let open B in
+    guardbits loss lost_bits @@ fun guard' round' sticky' ->
+    ite overflow last guard' >>>= fun guard ->
+    ite overflow guard' round' >>>= fun round ->
+    ite overflow (round' || sticky') sticky' >>>= fun sticky ->
+    f guard round sticky
+
   let fadd_finite fsort rm x y =
     let open B in
     let exps, sigs = floats fsort in
@@ -478,7 +480,7 @@ module Make(B : Theory.Basic) = struct
       (xexpn = yexpn) --> zero sigs;
       (xexpn > yexpn) --> extract_last ycoef lost_bits;
       (xexpn < yexpn) --> extract_last xcoef lost_bits;
-    ] >>>= fun loss ->
+      ] >>>= fun loss ->
     ite (xexpn > yexpn) xcoef (xcoef lsr lost_bits) >>>= fun xcoef ->
     ite (yexpn > xexpn) ycoef (ycoef lsr lost_bits) >>>= fun ycoef ->
     xcoef + ycoef >>>= fun sum ->
@@ -491,7 +493,7 @@ module Make(B : Theory.Basic) = struct
     ite up (succ coef) coef >>>= fun coef' ->
     (is_zero coef' && non_zero coef) >>>= fun rnd_overflow ->
     ite rnd_overflow (leading_one sigs) coef' >>>= fun coef ->
-    ite rnd_overflow (succ expn) expn >>>= fun expn' ->
+    ite rnd_overflow (succ expn) expn >>>= fun _expn' ->
     ite (expn > max_exponent exps) (zero sigs) coef >>>= fun coef ->
     norm expn coef @@ fun expn coef ->
     pack fsort xsign expn coef
@@ -528,7 +530,7 @@ module Make(B : Theory.Basic) = struct
     let open B in
     let exps, sigs = floats fsort in
     unpack fsort x @@ fun xsign xexpn xcoef ->
-    unpack fsort y @@ fun ysign yexpn ycoef ->
+    unpack fsort y @@ fun _ysign yexpn ycoef ->
     extend xcoef ~addend:1 @@ fun xcoef sigs' ->
     extend ycoef ~addend:1 @@ fun ycoef _ ->
     or_ (xexpn < yexpn) (and_ (xexpn = yexpn) (xcoef < ycoef)) >>>= fun swap ->
@@ -540,7 +542,11 @@ module Make(B : Theory.Basic) = struct
     max xexpn yexpn >>>= fun expn ->
     ite (xexpn = yexpn) expn (expn - one exps) >>>= fun expn ->
     ite (is_zero coef) (min_exponent exps) (ite msbc (succ expn) expn) >>>= fun expn ->
-    guardbits' msbc (lsb coef) loss lost_bits @@ fun guard round sticky ->
+    guardbits loss lost_bits @@ fun guard' round' sticky' ->
+    ite (round' || sticky') (inv guard') guard' >>>= fun guard' ->
+    ite msbc (lsb coef) guard' >>>= fun guard ->
+    ite msbc guard' round' >>>= fun round ->
+    ite msbc (round' || sticky') sticky' >>>= fun sticky ->
     ite msbc (coef lsr one sigs') coef >>>= fun coef ->
     is_round_up rm sign (lsb coef) guard round sticky >>>= fun up ->
     unsigned sigs coef >>>= fun coef ->
@@ -589,7 +595,7 @@ module Make(B : Theory.Basic) = struct
 
   let normalize_coef coef f =
     let open B in
-    coef >>-> fun sort coef ->
+    coef >>-> fun _sort coef ->
     clz !!coef >>>= fun clz ->
     !!coef lsl clz >>>= fun coef ->
     f coef clz
@@ -651,7 +657,7 @@ module Make(B : Theory.Basic) = struct
   let fmul_special fsort x y =
     let open B in
     with_special fsort x @@ fun ~is_inf:xinf ~is_snan:xsnan ~is_qnan:xqnan ->
-    with_special fsort y @@ fun ~is_inf:yinf ~is_snan:ysnan ~is_qnan:yqnan ->
+    with_special fsort y @@ fun ~is_inf:yinf ~is_snan:_ysnan ~is_qnan:_yqnan ->
     fsign x >>>= fun xsign ->
     fsign y >>>= fun ysign ->
     (xinf && yinf) >>>= fun is_inf ->
@@ -673,24 +679,22 @@ module Make(B : Theory.Basic) = struct
     let shf = B.of_int sort i in
     B.(uno lsl shf)
 
-  (* pre: nominator > denominator
-     the msb of result can be 1 only (and only) in rare
-     case of applying rounding to 01111..11. And we need to
-     to check msb manually, since round function itself
-     will not help us.  *)
-  let long_division prec rm sign nomin denom =
+  (* pre: nominator > denominator  *)
+  let long_division prec nomin denom f =
     let open B in
+    let lost_alot = b1, b1, b0 in
+    let lost_half = b1, b0, b0 in
+    let lost_zero = b0, b0, b0 in
+    let lost_afew = b0, b0, b1 in
     nomin >>-> fun sort nomin ->
     let rec loop i bits nomin =
       if Caml.(i < 0) then
         List.fold bits ~f:(lor) ~init:(zero sort) >>>= fun coef ->
         match_ [
-          (nomin > denom) --> Lost.alot sort;
-          (nomin = denom) --> Lost.half sort;
-          (nomin = zero sort) --> Lost.zero sort;
-        ] ~default:(Lost.afew sort) >>>= fun loss ->
-        round rm sign coef loss (Lost.bits sort) @@ fun coef _ ->
-        coef
+          (nomin > denom) --> f coef lost_alot;
+          (nomin = denom) --> f coef lost_half;
+          (nomin = zero sort) --> f coef lost_zero;
+        ] ~default:(f coef lost_afew)
       else
         ite (nomin > denom) (mask_bit sort i) (zero sort) >>>= fun bit ->
         ite (nomin > denom) (nomin - denom) nomin >>>= fun next_nomin ->
@@ -719,22 +723,24 @@ module Make(B : Theory.Basic) = struct
     extend nomin ~addend:1 @@ fun nomin sigs' ->
     extend denom ~addend:1 @@ fun denom _ ->
     norm_nominator exps sigs' nomin denom @@ fun nomin dexpn' ->
-    long_division prec rm sign nomin denom >>>= fun coef ->
-    msb coef >>>= fun coef_overflow ->
-    ite coef_overflow (coef lsr one sigs) coef >>>= fun coef ->
-    ite coef_overflow (one exps) (zero exps) >>>= fun from_rnd ->
+    long_division prec nomin denom @@ fun coef (guard', round', sticky') ->
     unsigned sigs coef >>>= fun coef ->
     of_int exps (bias fsort) >>>= fun bias ->
-    from_rnd - dexpn' + unsigned exps de >>>= fun dexpn ->
+    unsigned exps de - dexpn' >>>= fun dexpn ->
     xexpn - yexpn >>>= fun expn ->
     ((xexpn < yexpn) && (yexpn - xexpn > dexpn + bias - mine)) >>>= fun underflowed ->
     ((xexpn < yexpn) && (yexpn - xexpn > prec' + dexpn + bias - mine)) >>>= fun is_underflow ->
     ((xexpn > yexpn) && (expn > maxe - dexpn - bias)) >>>= fun is_overflow ->
     expn + dexpn + bias >>>= fun expn ->
-    ite underflowed (abs expn + mine) expn >>>= fun shift ->
-    ite underflowed (extract_last coef shift) (zero sigs) >>>= fun loss ->
-    ite underflowed (coef lsr shift) coef >>>= fun coef ->
-    round rm sign coef loss shift @@ fun coef _ ->
+    ite underflowed (abs expn + mine) (zero exps) >>>= fun fix_underflow ->
+    ite underflowed (extract_last coef fix_underflow) (zero sigs) >>>= fun loss ->
+    guardbits loss fix_underflow @@ fun guard round sticky ->
+    ite underflowed guard guard' >>>= fun guard ->
+    ite underflowed round round' >>>= fun round ->
+    ite underflowed (sticky || round' || sticky') sticky' >>>= fun sticky ->
+    ite underflowed (coef lsr fix_underflow) coef >>>= fun coef ->
+    is_round_up rm sign (lsb coef) guard round sticky >>>= fun up ->
+    ite up (succ coef) coef >>>= fun coef ->
     ite underflowed mine expn >>>= fun expn ->
     ite is_underflow (zero exps) expn >>>= fun expn ->
     ite is_overflow  (ones exps) expn >>>= fun expn ->
@@ -744,7 +750,7 @@ module Make(B : Theory.Basic) = struct
   let fdiv_special fsort x y =
     let open B in
     with_special fsort x @@ fun ~is_inf:xinf ~is_snan:xsnan ~is_qnan:xqnan ->
-    with_special fsort y @@ fun ~is_inf:yinf ~is_snan:ysnan ~is_qnan:yqnan ->
+    with_special fsort y @@ fun ~is_inf:yinf ~is_snan:ysnan ~is_qnan:_yqnan ->
     fsign x >>>= fun xsign ->
     fsign y >>>= fun ysign ->
     (xinf && yinf) >>>= fun is_inf ->
@@ -766,19 +772,92 @@ module Make(B : Theory.Basic) = struct
       (fdiv_finite fsort rm x y)
       (fdiv_special fsort x y)
 
-  let fsqrt fsort rm x =
-    fadd_finite fsort rm (fone fsort) (fone fsort) >>>= fun two ->
-    fdiv_finite fsort rm x two >>>= fun init ->
-    let max = precision fsort in
-    let rec run x0 n =
-      fdiv_finite fsort rm x x0 >>>= fun a1 ->
-      fadd_finite fsort rm x0 a1 >>>= fun a2 ->
-      fdiv_finite fsort rm a2 two >>>= fun x' ->
-      if n > max then x0
-      else run x' (n + 1) in
-    run init 0
 
-  let gen_cast_float fsort rmode sign bitv =
+  let newton_raphson_iteration fsort rm init x =
+    fadd_finite fsort rm (fone fsort) (fone fsort) >>>= fun two ->
+    fdiv_finite fsort rm x init >>>= fun a1 ->
+    fadd_finite fsort rm init a1 >>>= fun a2 ->
+    fdiv_finite fsort rm a2 two
+
+  let newton_raphson_improvement fsort rm x result =
+    fadd_finite fsort rm (fone fsort) (fone fsort) >>>= fun two ->
+    fdiv_finite fsort rm x result >>>= fun a1 ->
+    fsub_finite fsort rm result a1 >>>= fun a2 ->
+    fdiv_finite fsort rm a2 two >>>= fun result' ->
+    fsub_finite fsort rm result result'
+
+  let newton_raphson fsort rm guess x =
+    newton_raphson_iteration fsort rm guess x >>>= fun y ->
+    newton_raphson_iteration fsort rm y x >>>= fun y ->
+    newton_raphson_iteration fsort rm y x >>>= fun result ->
+    newton_raphson_improvement fsort rm x result
+
+  let t1 = [
+      0;     1024;  3062;  5746;  9193;  13348; 18162; 23592;
+      29598; 36145; 43202; 50740; 58733; 67158; 75992; 85215;
+      83599; 71378; 60428; 50647; 41945; 34246; 27478; 21581;
+      16499; 12183; 8588;  5674;  3403;  1742;  661;   130;  ]
+
+  let t2 = [
+      0x1500;  0x2ef8;  0x4d67;  0x6b02;  0x87be;  0xa395;  0xbe7a;  0xd866;
+      0xf14a;  0x1091b; 0x11fcd; 0x13552; 0x14999; 0x15c98; 0x16e34; 0x17e5f;
+      0x18d03; 0x19a01; 0x1a545; 0x1ae8a; 0x1b5c4; 0x1bb01; 0x1bfde; 0x1c28d;
+      0x1c2de; 0x1c0db; 0x1ba73; 0x1b11c; 0x1a4b5; 0x1953d; 0x18266; 0x16be0;
+      0x1683e; 0x179d8; 0x18a4d; 0x19992; 0x1a789; 0x1b445; 0x1bf61; 0x1c989;
+      0x1d16d; 0x1d77b; 0x1dddf; 0x1e2ad; 0x1e5bf; 0x1e6e8; 0x1e654; 0x1e3cd;
+      0x1df2a; 0x1d635; 0x1cb16; 0x1be2c; 0x1ae4e; 0x19bde; 0x1868e; 0x16e2e;
+      0x1527f; 0x1334a; 0x11051; 0xe951;  0xbe01;  0x8e0d;  0x5924;  0x1edd;  ]
+
+  let get tab index =
+    index >>-> fun sort index ->
+    let of_int = B.of_int sort in
+    let rec find from to_ =
+      if Int.(from + 1 = to_) then List.nth_exn tab from |> of_int
+      else
+        let middle = from + (to_ - from) / 2 in
+        B.(ite (!!index >= of_int sort middle) (find middle to_)
+          (find from middle)) in
+    find 0 (List.length tab)
+
+  let fsqrt fsort rm x =
+    let open B in
+    let bits = IEEE754.Sort.bits fsort in
+    x lsr of_int bits 33 >>>= fun x0 ->
+    x0 + of_int bits 0x1ff80000 >>>= fun k ->
+    of_int bits 31 land (k lsr of_int bits 15) >>>= fun index ->
+    get t1 index >>>= fun t1 ->
+    k - t1 >>>= fun y0 ->
+    y0 lsl of_int bits 32 >>>= fun y ->
+    newton_raphson fsort rm y x
+
+  let reciproot_iteration fsort x y =
+    let one = fone fsort in
+    let two = fadd fsort rne one one in
+    let three = fadd fsort rne one two in
+    fdiv fsort rne three two >>>= fun a15 ->
+    fdiv fsort rne one two >>>= fun a05 ->
+    fmul fsort rne y y >>>= fun y2 ->
+    fmul fsort rne x y2 >>>= fun xy2 ->
+    fmul fsort rne xy2 a05 >>>= fun z ->
+    fsub fsort rne a15 z >>>= fun z ->
+    fmul fsort rne z y
+
+  let _fsqrt fsort rm x =
+    let open B in
+    let bits = IEEE754.Sort.bits fsort in
+    x lsr of_int bits 33 >>>= fun x0 ->
+    of_int bits 0x5fe80000 - x0 >>>= fun k ->
+    of_int bits 63 land (k lsr of_int bits 14) >>>= fun index ->
+    get t2 index >>>= fun t2 ->
+    k - t2 >>>= fun y0 ->
+    y0 lsl of_int bits 32 >>>= fun y ->
+    reciproot_iteration fsort x y >>>= fun y ->
+    reciproot_iteration fsort x y >>>= fun y ->
+    reciproot_iteration fsort x y >>>= fun y ->
+    reciproot_iteration fsort x y >>>= fun y ->
+    fmul fsort rm x y
+
+  let gen_cast_float fsort _rmode sign bitv =
     let open IEEE754 in
     let open B in
     let {p;bias} = Sort.spec fsort in

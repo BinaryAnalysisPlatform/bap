@@ -13,6 +13,40 @@ module G = Bil_float.Make(Theory.Manager)
 
 let () = Plugins.run ~provides:["bil"] ()
 
+
+let enum_bits w =
+  let bits = Word.(enum_bits w BigEndian) in
+  let b_len = Seq.length bits in
+  let w_len = Word.bitwidth w in
+  if b_len > w_len then
+    Seq.drop bits (b_len - w_len)
+  else bits
+
+let float_bits x =
+  let w = Word.of_int64 (Int64.bits_of_float x) in
+  let bits = enum_bits w in
+  let (@@) = sprintf "%s%d" in
+  Seq.foldi bits ~init:"" ~f:(fun i acc x ->
+      let a =
+        if i = 1 || i = 12 then "_"
+        else "" in
+      let s = sprintf "%s%s" acc a in
+      if x then s @@ 1
+      else s @@ 0)
+
+let deconstruct x =
+  let wi = Word.to_int_exn in
+  let y = Int64.bits_of_float x in
+  let w = Word.of_int64 y in
+  let expn = Word.extract_exn ~hi:62 ~lo:52 w in
+  let bias = Word.of_int ~width:11 1023 in
+  let expn' = Word.(signed (expn - bias)) in
+  let frac = Word.extract_exn ~hi:51 w in
+  printf "ocaml %f: bits %s, 0x%LX\n" x (float_bits x) y;
+  printf "ocaml %f: biased/unbiased expn %d/%d, coef 0x%x\n"
+    x (wi expn) (wi expn') (wi frac)
+
+
 type bits11
 type bits53
 type bits64
@@ -22,6 +56,10 @@ type binop = [
   | `Sub
   | `Mul
   | `Div
+] [@@deriving sexp]
+
+type unop = [
+  | `Sqrt
 ] [@@deriving sexp]
 
 type cast_int = [
@@ -65,12 +103,21 @@ let exp x =
 
 let eval ?(name="") ~expected test _ctxt =
   let open Machine.Syntax in
+  let float_bits w =
+    let x = Word.signed w |> Word.to_int64_exn in
+    float_bits (Int64.float_of_bits x) in
   match exp test with
   | None -> assert false
   | Some e ->
      let check =
        Eval.exp e >>| fun r ->
-       assert_bool name Word.(Primus.Value.to_word r = expected) in
+       let r = Primus.Value.to_word r in
+       let equal = Word.(r = expected) in
+       if not equal then
+         let () = printf "\n FAIL %s\n" name in
+         let () = printf "expected: %s\n" (float_bits expected) in
+         printf "got     : %s\n" (float_bits r);
+       assert_bool name equal in
      match Main.run proj check with
      | Primus.Normal,_ -> ()
      | _ -> raise (Failure "Something went wrong")
@@ -80,9 +127,7 @@ let sigs : bits53 bitv sort = Bits.define 53
 let bitv : bits64 bitv sort = Bits.define 64
 let fsort : ((int,bits11,bits53) IEEE754.ieee754,'s) format float sort = IEEE754.(Sort.define binary64)
 
-let knowledge_of_word sort w =
-  let v = Value.create sort Semantics.empty in
-  Knowledge.return (Value.put Bil.Domain.exp v (Some (Bil.int w)))
+let knowledge_of_word sort w = Theory.Manager.int sort w
 
 let knowledge_of_float x = knowledge_of_word bitv (word_of_float x)
 
@@ -91,7 +136,8 @@ let gfloat_of_int x =
   knowledge_of_word bitv bits
 
 let binop op x y ctxt =
-  let name = sprintf "%g %s %g\n" x (test_name op) y in
+  let bits = Int64.bits_of_float in
+  let name = sprintf "%Lx %s %Lx\n" (bits x) (test_name op) (bits y) in
   let real, op = match op with
     | `Add -> x +. y, G.fadd
     | `Sub -> x -. y, G.fsub
@@ -113,6 +159,19 @@ let cast_float x ctxt =
   let name = sprintf "%s %g\n" (test_name `Of_float) x in
   let expected = Word.of_int ~width:64 (int_of_float x) in
   let test = G.cast_int fsort bitv (knowledge_of_float x) in
+  eval ~name ~expected test ctxt
+
+let sqrt_exp x ctxt =
+  let name = sprintf "sqrt %g\n" x in
+  let expected = Float.sqrt x |> word_of_float in
+  let x = Theory.Manager.var (Var.define bitv "x") in
+  let test = G.fsqrt fsort G.rne x in
+  eval ~name ~expected test ctxt
+
+let sqrt_ x ctxt =
+  let name = sprintf "sqrt %g %Lx\n" x (Int64.bits_of_float x) in
+  let expected = Float.sqrt x |> word_of_float in
+  let test = G.fsqrt fsort G.rne (knowledge_of_float x) in
   eval ~name ~expected test ctxt
 
 let ( + ) = binop `Add
@@ -141,6 +200,8 @@ let biggest_subnormal = make_float 0 0 0xFFFF_FFFF_FFFF_F
 let smallest_normal = Float.(biggest_subnormal + smallest_nonzero)
 let biggest_normal = make_float 0 2046 0xFFFF_FFFF_FFFF_F
 
+let () = Random.self_init ()
+
 let random = Random.int
 let random_elt xs = List.nth_exn xs @@ random (List.length xs)
 
@@ -162,19 +223,23 @@ let random_float () =
     let x = Random.int 42 in
     let y = Int64.of_int x in
     Random.float (Int64.float_of_bits y) in
-  let f = random_elt [make; make; small; make; make; small; make] in
-  f ()
+  random_elt [make (); make (); small (); make (); make (); small (); make ()]
 
-let random_floats ~times =
+let random_floats ~times ops =
   List.init times ~f:(fun i ->
-      let f (ctxt : test_ctxt) =
-        let op = random_elt [`Add; `Sub; `Mul; `Div] in
-        let x = random_float () in
-        let y = random_float () in
-        binop op x y ctxt in
+      let f =
+        match random_elt ops with
+        | `Sqrt ->
+           let x = Float.abs @@ random_float () in
+           fun (ctxt : test_ctxt) -> sqrt_ x ctxt
+        | `Add | `Sub | `Mul | `Div as op ->
+           let x = random_float () in
+           let y = random_float () in
+           fun ctxt -> binop op x y ctxt in
       (sprintf "random%d" i) >:: f)
 
-let of_int64 = Int64.float_of_bits
+
+let of_bits = Int64.float_of_bits
 
 let suite () =
 
@@ -301,7 +366,11 @@ let suite () =
       "biggest subnormal * small" >:: biggest_subnormal * smallest_nonzero;
       "biggest subnormal * biggest subnormal" >:: biggest_subnormal *  biggest_subnormal;
       "biggest normal * biggest normal" >:: biggest_normal *  biggest_normal;
-      "test with underflow" >:: of_int64 974381688320862858L * of_int64 (-5590604654947855237L);
+      "test with underflow" >:: of_bits 974381688320862858L * of_bits (-5590604654947855237L);
+      "test1" >:: of_bits 0xec9059c2619517d5L + of_bits 0x6c52387cdb6aefadL;
+      "test2" >:: of_bits 0xa10d89faaef35527L - of_bits 0xa130e0fee63e0e6fL;
+      "test3" >:: of_bits 0x400199999999999aL - of_bits 0x4004cccccccccccdL;
+      "test4" >:: of_bits 0x7fefffffffffffffL - of_bits 0xfffffffffffffL;
 
       (* div *)
       "2.0 / 0.5"   >:: 2.0 / 0.5;
@@ -330,6 +399,35 @@ let suite () =
       "biggest_normal / biggest_subnorm"  >:: biggest_normal / biggest_subnormal;
       "biggest_normal / smallest_normal"  >:: biggest_normal / smallest_normal;
 
-] @ random_floats ~times:500
+] @ random_floats ~times:50000 [`Add; `Sub; `Mul; `Div]
+
+let _suite () =
+
+  "Gfloat" >::: [
+      "test1" >:: of_bits 0xec9059c2619517d5L + of_bits 0x6c52387cdb6aefadL;
+      "test2" >:: of_bits 0xcf55560fac913244L + of_bits 0xcc0c60b10442b9bfL;
+      "test3" >:: of_bits 0x95a1b73736807a27L + of_bits 0x92587d2dcebfa014L;
+      "test4" >:: of_bits 0x290dc46c1cff15fdL + of_bits 0x2c5ae8bbac4b6065L;
+      "test5" >:: of_bits 0xa10d89faaef35527L - of_bits 0xa130e0fee63e0e6fL;
+      "test6" >:: of_bits 0x400199999999999aL - of_bits 0x4004cccccccccccdL;
+      "test7" >:: of_bits 0x7fefffffffffffffL - of_bits 0xfffffffffffffL;
+      "test8" >:: of_bits 0x419d60550ceff6d3L - of_bits 0x40ebb6a1cf626f04L;
+      "test9"  >:: of_bits 0x1068a846325c1af9L - of_bits 0x8d1317a5d5fcc64aL;
+      "test10" >:: of_bits 0x23a935d41c3874ffL - of_bits 0xa6f2c3867f5ab404L;
+      "test11" >:: of_bits 0xc311e2fd9d831929L - of_bits 0x46680df05fa67db8L;
+      "test12" >:: of_bits 0x9f1eb84311212bc5L - of_bits 0x2262d23b1d5380d0L;
+
+      "test13" >:: of_bits 0x3L / of_bits 0x4009dbbfb8e40a2aL;
+      "test14" >:: of_bits 0x20L / of_bits 0xbd5ce754a116cb3aL;
+      "test15" >:: of_bits 0xdL / of_bits 0x3cfff734e5abf313L;
+      "test16" >:: of_bits 0x7L / of_bits 0x401f19b00a01a8dcL;
+      "test17" >:: of_bits 0x838fa41971b1d4abL / of_bits 0xc39274e6f88b913bL;
+      "test18" >:: of_bits 0x7L / of_bits 0x3d0e5becc4792655L;
+      "test19" >:: of_bits 0x1L / of_bits 0xbff1b827c706d47cL;
+      "test20" >:: of_bits 0x61f141df4f4486fL / of_bits 0x461865ee4b18b233L;
+      "test21" >:: of_bits 0xe9d4c54247f233L / of_bits 0xc0db8ed1f3ba2817L;
+    ]
+
+let _suite () = "Gfloat" >::: random_floats ~times:10 [`Sqrt]
 
 let () = run_test_tt_main (suite ())
