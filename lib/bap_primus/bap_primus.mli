@@ -1361,6 +1361,11 @@ module Std : sig
         (** [next iter] switches the internal state of [iter] to the
             next state and returns the current value *)
         val next : t -> int Machine.t
+
+
+        (** [word iter bitwidth] constructs a word of the given [bitwidth],
+            with bytes obtained from consequitive calls to [next].*)
+        val word : t -> int -> word Machine.t
       end
     end
 
