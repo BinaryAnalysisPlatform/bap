@@ -201,7 +201,7 @@ module Make(Machine : Machine) = struct
   (* we can't use Bap.Std.Memory here as we need arbitrary lengths *)
   let read_word mem base size =
     let start,next = match Memory.endian mem with
-      | LittleEndian -> Addr.(succ @@ base ++ size), Addr.pred
+      | LittleEndian -> Addr.nsucc base (size/8-1), Addr.pred
       | BigEndian -> base, Addr.succ in
     let rec read addr left =
       let data = ok_exn @@ Memory.get ~addr mem in
