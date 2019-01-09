@@ -15,10 +15,6 @@ let reg32 reg = make_register reg reg32_t
 let spsr = reg32 `SPSR
 let cpsr = reg32 `CPSR
 
-
-(* Memory definition *)
-(* let mem = new_var "mem32" (TMem (Reg 32, Reg 8)) *)
-
 (* Arithmetic flags, individually *)
 let nf = "NF" %: bool_t
 let zf = "ZF" %: bool_t
@@ -85,4 +81,4 @@ let of_reg : reg -> var = function
   | #ccr_reg as reg -> var_of_ccr reg
 
 let new_var name = Var.create name reg32_t
-let mem = Var.create "mem" (mem32_t `r32)
+let mem = Var.create "mem" (mem32_t `r8)
