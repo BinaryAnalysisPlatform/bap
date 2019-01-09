@@ -20,8 +20,9 @@ open Primus
 
 open Bap_primus_sexp
 
-let switch_memory,memory_switched =
-  Observation.provide ~inspect:(sexp_of_option sexp_of_var) "switch-memory"
+let memory_switch,switching_memory =
+  let inspect = Primus.Memory.Descriptor.sexp_of_t in
+  Observation.provide ~inspect "memory-switch"
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
@@ -382,7 +383,14 @@ module Make (Machine : Machine) = struct
     | x -> failwithf "expression `%a' is no a storage" Exp.pps x ()
 
 
-  let switch_memory m = Memory.switch (memory_of_storage m)
+  let switch_memory m =
+    let m = memory_of_storage m in
+    Memory.memory >>= fun m' ->
+    if Primus.Memory.Descriptor.equal m m'
+    then Machine.return ()
+    else
+      !!switching_memory m >>= fun () ->
+      Memory.switch m
 
 
   let rec eval_exp x =
