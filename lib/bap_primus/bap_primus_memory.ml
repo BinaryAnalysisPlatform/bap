@@ -108,15 +108,26 @@ let inspect_memory {curr; mems} = Sexp.List [
     Descriptor.Map.sexp_of_t inspect_state mems;
   ]
 
+
+let virtual_memory arch =
+  let module Target = (val target_of_arch arch) in
+  let mem = Target.CPU.mem in
+  match Var.typ mem with
+  | Type.Imm _ as t ->
+    invalid_argf "The CPU.mem variable %a:%a is not a storage"
+      Var.pps mem Type.pps t ()
+  | Type.Mem (ks,vs) ->
+    let ks = Size.in_bits ks and vs = Size.in_bits vs in
+    Descriptor.create ks vs (Var.name mem)
+
+
 let state = Bap_primus_machine.State.declare
     ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
     ~inspect:inspect_memory
-    ~name:"memory"
-    (fun p ->
-       let addr_size = Size.in_bits (Arch.addr_size (Project.arch p)) in {
-         mems = Descriptor.Map.empty;
-         curr = Descriptor.unknown addr_size 8;
-       })
+    ~name:"memory" @@ fun p -> {
+    mems = Descriptor.Map.empty;
+    curr = virtual_memory (Project.arch p);
+  }
 
 let inside {base;len} addr =
   let high = Word.(base ++ len) in
