@@ -687,23 +687,18 @@ module Normalize = struct
 
   (* we don't need a full-fledged type inference here.
      requires: well-typed exp *)
-  let infer_addr_size exp =
-    let open Exp in
-    let rec infer = function
+  let infer_storage_type exp =
+    let rec infer : exp -> typ = function
       | Var v -> Var.typ v
-      | Store (m,_,_,_,_) -> infer m
-      | Ite (_,x,y) -> both x y
       | Unknown (_,t) -> t
-      | _ -> invalid_arg "type error"
-    and both x y =
-      match infer x, infer y with
-      | t1,t2 when Type.(t1 = t2) -> t1
+      | Store (m,_,_,_,_) | Ite (_,m,_) | Let (_,_,m) -> infer m
       | _ -> invalid_arg "type error" in
     match infer exp with
-    | Type.Mem (s,_) -> s
     | Type.Imm _ -> invalid_arg "type error"
+    | Type.Mem (ks,vs) -> ks,vs
 
-
+  let infer_addr_size x = fst (infer_storage_type x)
+  let infer_value_size x = snd (infer_storage_type x)
 
   let make_succ m =
     let int n =
@@ -711,7 +706,6 @@ module Normalize = struct
       Exp.Int (Word.of_int ~width:(Size.in_bits size) n) in
     let sum a n = Exp.BinOp (Binop.PLUS, a,int n) in
     sum
-
 
 
   (* rewrite_store_little
@@ -725,14 +719,15 @@ module Normalize = struct
 
   *)
   let expand_store m a x e s =
+    let vs = infer_value_size m in
     let (++) = make_succ m in
     let n = Size.in_bytes s in
     let nth i = if e = BigEndian then nth (n-i-1) else nth i in
     let rec expand i =
       if i >= 0
-      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,`r8)
+      then Exp.Store(expand (i-1),(a++i),nth i x,LittleEndian,vs)
       else m in
-    if s = `r8 then Exp.Store (m,a,x,e,s)
+    if Size.equal vs s then Exp.Store (m,a,x,e,s)
     else expand (n-1)
 
   (* x[a,el]:n => x[a+n-1] @ ... @ x[a] x[a,be]:n => x[a] @ ... @
@@ -743,16 +738,17 @@ module Normalize = struct
      of the load operation.
   *)
   let expand_load m a e s =
+    let vs = infer_value_size m in
     let (++) = make_succ m in
     let cat x y = if e = LittleEndian
       then Exp.Concat (y,x)
       else Exp.Concat (x,y) in
-    let load a = Exp.Load (m,a,e,`r8) in
+    let load a = Exp.Load (m,a,e,vs) in
     let rec expand a i =
       if i > 1
       then cat (load a) (expand (a++1) (i-1))
       else load a in
-    if s = `r8 then load a
+    if Size.equal vs s then load a
     else expand a (Size.in_bytes s)
 
   let expand_memory = map_exp @@ object

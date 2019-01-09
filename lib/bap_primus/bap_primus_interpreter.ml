@@ -5,11 +5,24 @@ open Bap_c.Std
 open Format
 open Bap_primus_types
 
-module Observation = Bap_primus_observation
-module State = Bap_primus_state
-module Linker = Bap_primus_linker
+module Primus = struct
+  module Env = Bap_primus_env
+  module Linker = Bap_primus_linker
+  module Machine = Bap_primus_machine
+  module Memory = Bap_primus_memory
+  module Observation = Bap_primus_observation
+  module State = Bap_primus_state
+  module Value = Bap_primus_value
+end
+
+open Primus
+
 
 open Bap_primus_sexp
+
+let memory_switch,switching_memory =
+  let inspect = Primus.Memory.Descriptor.sexp_of_t in
+  Observation.provide ~inspect "memory-switch"
 
 let enter_term, term_entered =
   Observation.provide ~inspect:sexp_of_tid "enter-term"
@@ -195,7 +208,7 @@ let empty_scope = {
   bound = Var.Map.empty;
 }
 
-let state = Bap_primus_machine.State.declare
+let state = Primus.Machine.State.declare
     ~uuid:"14a17161-173b-46da-9e95-7819104cc220"
     ~name:"interpreter"
     ~inspect:sexp_of_state
@@ -231,10 +244,10 @@ module Make (Machine : Machine) = struct
   open Machine.Syntax
 
   module Eval = Eval.Make(Machine)
-  module Memory = Bap_primus_memory.Make(Machine)
-  module Env = Bap_primus_env.Make(Machine)
+  module Memory = Primus.Memory.Make(Machine)
+  module Env = Primus.Env.Make(Machine)
   module Code = Linker.Make(Machine)
-  module Value = Bap_primus_value.Make(Machine)
+  module Value = Primus.Value.Make(Machine)
 
   type 'a m = 'a Machine.t
 
@@ -354,11 +367,36 @@ module Make (Machine : Machine) = struct
           | Some n -> Some (n-1))
     }
 
+  let memory typ name = match typ with
+    | Type.Imm _ as t -> failwithf "type error - load from %s:%a"
+                           name Type.pps t ()
+    | Type.Mem (ks,vs) ->
+      let ks = Size.in_bits ks and vs = Size.in_bits vs in
+      Primus.Memory.Descriptor.create ks vs name
+
+  let rec memory_of_storage : exp -> _ = function
+    | Var v -> memory (Var.typ v) (Var.name v)
+    | Unknown (_,typ) -> memory typ "unknown"
+    | Store (s,_,_,_,_)
+    | Ite (_,s,_)
+    | Let (_,_,s) -> memory_of_storage s
+    | x -> failwithf "expression `%a' is no a storage" Exp.pps x ()
+
+
+  let switch_memory m =
+    let m = memory_of_storage m in
+    Memory.memory >>= fun m' ->
+    if Primus.Memory.Descriptor.equal m m'
+    then Machine.return ()
+    else
+      !!switching_memory m >>= fun () ->
+      Memory.switch m
+
 
   let rec eval_exp x =
     let eval = function
-      | Bil.Load (Bil.Var _, a,_,`r8) -> eval_load a
-      | Bil.Store (m,a,x,_,`r8) -> eval_store m a x
+      | Bil.Load (m,a,_,_) -> eval_load m a
+      | Bil.Store (m,a,x,_,_) -> eval_store m a x
       | Bil.BinOp (op, x, y) -> eval_binop op x y
       | Bil.UnOp (op,x) -> eval_unop op x
       | Bil.Var v -> eval_var v
@@ -368,10 +406,7 @@ module Make (Machine : Machine) = struct
       | Bil.Extract (hi,lo,x) -> eval_extract hi lo x
       | Bil.Concat (x,y) -> eval_concat x y
       | Bil.Ite (cond, yes, no) -> eval_ite cond yes no
-      | Bil.Let (v,x,y) -> eval_let v x y
-      | exp ->
-        invalid_argf "precondition failed: denormalized exp: %s"
-          (Exp.to_string exp) () in
+      | Bil.Let (v,x,y) -> eval_let v x y in
     !!exp_entered x >>= fun () ->
     eval x >>= fun r ->
     !!exp_left x >>| fun () -> r
@@ -380,16 +415,21 @@ module Make (Machine : Machine) = struct
     push_lexical v x >>= fun () ->
     eval_exp y >>= fun r ->
     pop_lexical v >>| fun () ->  r
-  and eval_load a = eval_exp a >>= load_byte
   and eval_ite cond yes no =
     eval_exp yes >>= fun yes ->
     eval_exp no >>= fun no ->
     eval_exp cond >>= fun cond ->
     ite cond yes no
-  and eval_store m a x =
+  and eval_load m a =
+    eval_exp a >>= fun a ->
+    switch_memory m >>= fun () ->
     eval_storage m >>= fun () ->
+    load_byte a
+  and eval_store m a x =
     eval_exp a >>= fun a ->
     eval_exp x >>= fun x ->
+    switch_memory m >>= fun () ->
+    eval_storage m >>= fun () ->
     store_byte a x >>| fun () -> a
   and eval_binop op x y =
     eval_exp x >>= fun x ->

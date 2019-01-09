@@ -26,4 +26,5 @@ end
 
 module Make( Machine : Machine) : sig
   val next : t -> int Machine.t
+  val word : t -> int -> word Machine.t
 end
