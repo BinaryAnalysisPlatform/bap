@@ -147,13 +147,54 @@ module BIR = struct
     | Indirect x -> add_indirect b cnd x
     | Direct lbl -> add_direct labels b cnd lbl
 
+  module Expressible = struct
+    let check f x = Option.is_some (f Bil.Domain.exp x)
 
+    let def {sema} = check Semantics.get sema
+
+    let cnd = function
+      | None -> true
+      | Some v -> check Value.get v
+
+    let dst = function
+      | Direct _ -> true
+      | Indirect s -> check Semantics.get s
+
+    let jmp t = dst t.dst
+  end
+
+  let add_term is_expressible add (blks,b) t =
+    match is_expressible t with
+    | true -> add b t; (blks,b)
+    | false ->
+      let empty = Blk.create () in
+      let tid = Tid.create () in
+      let b' = Blk.Builder.create ~tid () in
+      let j1 = Jmp.create_goto (Direct (Term.tid empty)) in
+      let j2 = Jmp.create_goto (Direct tid) in
+      Blk.Builder.add_jmp b j1;
+      let empty = Term.append jmp_t empty j2 in
+      empty :: Blk.Builder.result b :: blks, b'
+
+  let add_terms terms expressible add (blks,b) =
+    List.fold ~init:(blks,b) (List.rev terms)
+      ~f:(add_term expressible add)
+
+  (* creates a tid block from the IR block,
+     expands non-representable terms into empty blocks.
+     postconditions:
+     - the list is not empty;
+     - the first element of the list, is the entry
+  *)
   let make_blk labels {name; defs; jmps} =
     let tid = tid_of_label labels name in
     let b = Blk.Builder.create ~tid () in
-    List.iter (List.rev defs) ~f:(add_def b);
-    List.iter (List.rev jmps) ~f:(add_jmp labels b);
-    Blk.Builder.result b
+    ([],b) |>
+    add_terms defs Expressible.def add_def |>
+    add_terms jmps Expressible.jmp (add_jmp labels) |> fun (blks,b) ->
+    Blk.Builder.result b :: blks |>
+    List.rev
+
 
   (* postconditions:
      - the list is not empty
@@ -164,10 +205,12 @@ module BIR = struct
     let labels = init_labels () in
     let start = tid_of_label labels entry in
     List.fold blks ~init:(None,[]) ~f:(fun (s,blks) b ->
-        let blk = make_blk labels b in
-        if Tid.equal start (Term.tid blk)
-        then (Some blk, blks)
-        else (s, blk::blks)) |> function
+        match make_blk labels b with
+        | [] -> assert false
+        | blk::blks' ->
+          if Tid.equal start (Term.tid blk)
+          then (Some blk, List.rev_append blks' blks)
+          else (s, List.rev_append (blk::blks') blks)) |> function
     | None,[] -> []
     | None,_ -> failwith "No entry in IR builder"
     | Some x, xs -> x :: xs
