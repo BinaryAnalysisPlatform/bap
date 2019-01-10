@@ -200,7 +200,6 @@ let provide_lifter () =
       let module Target = (val target_of_arch arch) in
       match Target.lift mem insn with
       | Ok bil ->
-        info "decoded the instruction providing bil and bir";
         Lifter.run BilParser.t bil >>|
         Eff.semantics >>|
         Semantics.merge sema
