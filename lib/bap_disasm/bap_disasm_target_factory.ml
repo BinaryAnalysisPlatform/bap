@@ -3,14 +3,15 @@ open Bap_types.Std
 open Bap_image_std
 include Bap_disasm_target_intf
 
-let create_stub_target () =
+let create_stub_target arch =
   let module Lifter = struct
     let lift _ _ = Or_error.error_string "not implemented"
+    let addr_size = Arch.addr_size arch
 
     module CPU = struct
       let gpr = Var.Set.empty
-      let nil = Var.create "nil" reg8_t
-      let mem = nil
+      let nil = Var.create "nil" (Type.imm (Size.in_bits addr_size))
+      let mem = Var.create "mem" (Type.mem addr_size `r8)
       let pc = nil
       let sp = nil
       let sp = nil
@@ -40,7 +41,7 @@ let target_of_arch =
   let get arch = match Hashtbl.find targets arch with
     | Some target -> target
     | None ->
-      let target = create_stub_target () in
+      let target = create_stub_target arch in
       Hashtbl.set targets ~key:arch ~data:target;
       target in
   get
