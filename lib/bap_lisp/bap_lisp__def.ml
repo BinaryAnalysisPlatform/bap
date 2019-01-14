@@ -42,18 +42,9 @@ type para = {
   default : ast;
 }
 
-type 'a primitive = (value list -> 'a)
 
-
-module type Closure = functor(Machine : Machine) -> sig
-  val run : value list -> value Machine.t
-end
-
-type closure = (module Closure)
-
-type prim = {
-  lambda : closure;
-  types : Type.signature option;
+type primitive = {
+  types : Type.signature;
 }
 
 type 'a spec = {meta : meta; code : 'a}
@@ -175,47 +166,15 @@ module Subst = struct
 
 end
 
-
 module Primitive = struct
-  type nonrec 'a t = 'a primitive t
-  let create ?(docs="") name code = {
+  let create ?(docs="") name types = {
     data = {
       meta = {name;docs; attrs=Attribute.Set.empty};
-      code;
+      code={types};
     };
     id = Id.null;
     eq = Eq.null;
   }
-
-  let body p = p.data.code
-end
-
-
-module type Primitives = functor (Machine : Machine) ->  sig
-  val defs : unit -> value Machine.t Primitive.t list
-end
-
-type primitives = (module Primitives)
-
-module Closure = struct
-  let of_primitive prim lambda =
-    {prim with data={prim.data with code={
-         lambda;
-         types=None;
-       }}}
-
-  let create ?types ?(docs="") name lambda = {
-    data = {
-      meta = {name;docs; attrs=Attribute.Set.empty};
-      code = {
-        types;
-        lambda;
-      };
-    };
-    id = Id.null;
-    eq = Eq.null;
-  }
-  let body p = p.data.code.lambda
 
   let signature p = p.data.code.types
 end

@@ -5,7 +5,6 @@ open Bap_lisp__types
 module Attribute = Bap_lisp__attribute
 module Context = Bap_lisp__context
 module Def = Bap_lisp__def
-module Value = Bap_primus_value
 module Loc = Bap_lisp__loc
 module Program = Bap_lisp__program
 

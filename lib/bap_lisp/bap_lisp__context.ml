@@ -29,14 +29,6 @@ let endian proj = Project.arch proj |>
                   | BigEndian -> "big"
 let features = Feature.Set.of_list
 
-let of_project proj = Name.Map.of_alist_exn [
-    "arch", features @@ [
-      Arch.to_string (Project.arch proj);
-    ] @ attr proj Bap_abi.name;
-    "abi", features @@ attr proj Bap_abi.name;
-    "endian", features [endian proj]
-  ]
-
 let merge xs ys : t = Map.merge xs ys ~f:(fun ~key:_ -> function
     | `Left v | `Right v -> Some v
     | `Both (x,y) -> Some (Feature.Set.union x y) )

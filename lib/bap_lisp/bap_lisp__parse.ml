@@ -83,7 +83,7 @@ module Parse = struct
   let fails err s = raise (Parse_error (err,s))
   let fail err s = fails err [s]
   let bad_form op got = fail (Bad_form op) got
-  let nil = {exp=0L; typ=Type.word 1}
+  let nil = {exp=Bap.Std.Word.b0; typ=Type.word 1}
 
 
   let expand prog cs =
@@ -612,12 +612,12 @@ module Load = struct
     List.fold ~init:String.Map.empty ~f:(fun fs f ->
         Map.add fs ~key:f ~data:Cmdline)
 
-  let features ?(paths=[Filename.current_dir_name]) proj fs =
+  let features ?(paths=[Filename.current_dir_name]) ctxt fs =
     let source =
       load_trees paths Source.empty (features_of_list fs) |>
       transitive_closure paths in
     try
-      Parse.source (Context.of_project proj) source
+      Parse.source ctxt source
     with Parse_error (err,trees) ->
       raise (Fail (Parse_error (err, loc source trees)))
 end
@@ -626,11 +626,22 @@ let program ?paths proj features =
   try Ok (Load.features ?paths proj features)
   with Fail e -> Error e
 
+let string_of_typ_error = function
+  | Type.Empty -> "empty string can't be used as type expression"
+  | Type.Not_sexp -> "type expression is not a well-formed sexp"
+  | Type.Bad_sort -> "the sort definition is not recognized, expects:
+sort ::=
+    | <type-name> (? starting with a lowercase letter ?)
+    | <Type-Constr> (? starting with the upper case letter ?)
+    | (<Type-Constr <sort-param>)
+sort-param ::= <number> | <sort>
+"
+
 let string_of_var_error = function
   | Var.Empty -> "empty string can't be used as a variable name"
   | Var.Not_a_var -> "not a valid identifier"
-  | Var.Bad_type -> "variable type should be a decimal number"
   | Var.Bad_format -> "variable name contains extra `:' symbol"
+  | Var.Bad_type e -> string_of_typ_error e
 
 let string_of_word_error = function
   | Word.Empty -> "an empty string"
@@ -638,7 +649,7 @@ let string_of_word_error = function
   | Word.Bad_literal ->
     "must start with a digit and contain no more than one `:' symbol"
   | Word.Unclosed -> "unmatching single quote in a character literal"
-  | Word.Bad_type -> "the type annotation should be a decimal number"
+  | Word.Bad_type e -> string_of_typ_error e
 
 let string_of_form_syntax = function
   | "if" -> "(if <exp> <exp> <exp> ...)"

@@ -54,7 +54,7 @@ let describe prog item =
       Lisp.Def.name x, Lisp.Def.docs x) |> normalize
 
 
-let index p signals = Lisp.Program.Items.[
+let generate_index p (* signals *) = Lisp.Program.Items.[
     "Macros", describe p macro;
     "Substitutions", describe p subst;
     "Constants", describe p const;
@@ -62,12 +62,5 @@ let index p signals = Lisp.Program.Items.[
     "Methods", describe p meth;
     "Parameters", describe p para;
     "Primitives", describe p primitive;
-    "Signals", normalize signals;
+    (* "Signals", normalize signals; *)
   ]
-
-module Make(Machine : Machine) = struct
-  open Machine.Syntax
-  let generate_index : index Machine.t =
-    Machine.Local.get state >>| fun s ->
-    index s.program s.reflections
-end

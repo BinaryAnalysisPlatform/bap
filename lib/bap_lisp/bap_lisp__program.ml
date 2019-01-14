@@ -2,6 +2,7 @@ open Core_kernel
 open Graphlib.Std
 open Regular.Std
 open Monads.Std
+open Bap_core_theory
 open Bap_lisp__types
 open Format
 
@@ -17,7 +18,7 @@ module Def = Bap_lisp__def
 type t = {
   context : Lisp.Context.t;
   sources : Source.t;
-  codes : Def.prim Def.t list;
+  primits : Def.primitive Def.t list;
   macros : Def.macro Def.t list;
   substs : Def.subst Def.t list;
   consts : Def.const Def.t list;
@@ -31,7 +32,7 @@ type program = t
 let empty = {
   context = Lisp.Context.empty;
   sources = Source.empty;
-  codes = [];
+  primits = [];
   defs = [];
   mets = [];
   pars = [];
@@ -49,7 +50,7 @@ module Items = struct
   let func = Fields.defs
   let meth = Fields.mets
   let para = Fields.pars
-  let primitive = Fields.codes
+  let primitive = Fields.primits
 end
 
 let add p (fld : 'a item) x =
@@ -146,7 +147,7 @@ let pp_term pp_exp ppf = function
     fprintf ppf "%a" pp_exp exp
   | {data={exp; typ}} ->
     fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Int64.pp
+let pp_word = pp_term Word.pp
 let pp_var = pp_term String.pp
 
 let rec concat_prog =
@@ -402,7 +403,7 @@ module Typing = struct
      runtime representation (modulo bitwidth).  *)
   type tval =
     | Tsym
-    | Grnd of int
+    | Grnd of Sort.exp
   [@@deriving compare, sexp_of]
 
   module Tval = Comparable.Make_plain(struct
@@ -582,7 +583,7 @@ module Typing = struct
 
   type t = {
     ctxt : Lisp.Context.t;
-    globs : int String.Map.t;
+    globs : Sort.exp String.Map.t;
     prims : signature String.Map.t;
     funcs : Def.func Def.t list;
   }
@@ -599,7 +600,7 @@ module Typing = struct
 
   let pp_tval ppf = function
     | Tsym -> fprintf ppf "sym"
-    | Grnd n -> fprintf ppf "%d" n
+    | Grnd s -> fprintf ppf "%a" Sort.pp_exp s
 
   let pp_plus ppf () = pp_print_char ppf '+'
   let pp_tvals ppf tvals =
@@ -730,7 +731,7 @@ module Typing = struct
         infer vs c ++
         infer vs x
       | {data=Msg (_,xs); id} ->
-        Gamma.constr id (Type 1) ++
+        Gamma.constr id (Type (Sort.exp (Bool.t))) ++
         reduce vs xs
       | {data=Err _} -> ident
       | {data=App (Static _,_)} -> ident
@@ -758,16 +759,14 @@ module Typing = struct
 
   let make_globs =
     Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
-        match Var.typ v with
-        | Type.Imm x ->
-          Map.add vars ~key:(Var.name v) ~data:x
-        | Type.Mem _ -> vars)
+        let data = Sort.exp (Var.sort v) in
+        Map.add vars ~key:(Var.name v) ~data)
 
-  let make_prims {codes} =
-    List.fold codes ~init:String.Map.empty ~f:(fun ps p ->
-        match Def.Closure.signature p with
-        | None -> ps
-        | Some types -> Map.add ps ~key:(Def.name p) ~data:types)
+  let make_prims {primits} =
+    List.fold primits ~init:String.Map.empty ~f:(fun ps p ->
+        Map.add ps
+          ~key:(Def.name p)
+          ~data:(Def.Primitive.signature p))
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 

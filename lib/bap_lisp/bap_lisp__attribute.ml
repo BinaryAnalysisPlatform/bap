@@ -1,7 +1,7 @@
 open Core_kernel.Std
 open Bap.Std
 
-open Bap_primus_lisp_types
+open Bap_lisp__types
 
 type attrs = Univ_map.t
 type set = attrs

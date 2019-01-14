@@ -3,9 +3,6 @@ open Bap_lisp__types
 module Attribute = Bap_lisp__attribute
 module Type = Bap_lisp__type
 
-module type Closure = functor(Machine : Machine) -> sig
-  val run : value list -> value Machine.t
-end
 
 
 type 'a spec
@@ -15,9 +12,7 @@ type meth
 type macro
 type subst
 type const
-type prim
-type closure = (module Closure)
-type 'a primitive
+type primitive
 type para
 
 type attrs = Attribute.set
@@ -74,20 +69,6 @@ module Subst : sig
 end
 
 module Primitive : sig
-  type nonrec 'a t = 'a primitive t
-  val create : ?docs:string -> string -> (value list -> 'a) -> 'a t
-  val body : 'a t -> (value list -> 'a)
+  val create : ?docs:string -> string -> Type.signature -> primitive t
+  val signature : primitive t -> Type.signature
 end
-
-module Closure : sig
-  val of_primitive : 'a Primitive.t -> closure -> prim t
-  val create : ?types:Type.signature -> ?docs:string -> string -> closure -> prim t
-  val signature : prim t -> Type.signature option
-  val body : prim t -> closure
-end
-
-module type Primitives = functor (Machine : Machine) ->  sig
-  val defs : unit -> value Machine.t Primitive.t list
-end
-
-type primitives = (module Primitives)

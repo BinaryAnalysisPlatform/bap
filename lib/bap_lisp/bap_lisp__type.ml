@@ -1,7 +1,6 @@
 open Core_kernel
+open Bap_core_theory
 open Bap_lisp__types
-
-module Value = Bap_primus_value
 module Context = Bap_lisp__context
 type context = Context.t
 
@@ -12,18 +11,36 @@ type signature = {
 }
 
 let symbol_size = 63
-let word n = Type n
+let bool = Type (Sort.exp Bool.t)
+let word n = Type (Sort.exp (Bits.define n))
 let sym = Symbol
 let var n = Name n
-let read_exn s = word (int_of_string (String.strip s))
 
-let read s = Option.try_with (fun () -> read_exn s)
+type read_error = Empty | Not_sexp | Bad_sort
+
+let rec parse_sort : Sexp.t -> (Sort.exp,read_error) result = function
+  | Atom "Bool" -> Ok Bool
+  | Atom s -> Ok (Cons (s,[]))
+  | List (Atom name :: ps) ->
+    Result.map (parse_params ps) ~f:(fun ps -> Sort.Cons (name,ps))
+  | List _ -> Error Bad_sort
+and parse_params ps = Result.all (List.map ps ~f:parse_param)
+and parse_param = function
+  | Atom x when Char.is_digit x.[0] -> Ok (Index (int_of_string x))
+  | x -> Result.map (parse_sort x) ~f:(fun x -> Sort.Sort x)
+
+
+let read s =
+  if String.length s < 1 then Error Empty
+  else
+  if Char.is_lowercase s.[0]
+  then Ok (Name s)
+  else match Sexp.of_string s with
+    | exception _ -> Error Not_sexp
+    | s -> Result.map (parse_sort s) ~f:(fun s -> Type s)
+
 let any = Any
 
-let mem t x = match t with
-  | Any | Name _ -> true
-  | Symbol -> x = symbol_size
-  | Type t -> t = x
 
 let signature ?rest args ret = {
   ret;
@@ -32,13 +49,10 @@ let signature ?rest args ret = {
 }
 
 module Check = struct
-  let value typ w =
-    mem typ (Word.bitwidth (Value.to_word w))
-
-  let arg typ arg =
-    match Var.typ (Arg.lhs arg) with
-    | Type.Imm s -> mem typ s
-    | _ -> false
+  let sort typ s = match typ with
+    | Any | Name _ -> true
+    | Symbol -> false
+    | Type s' -> Sort.compare_exp (Sort.exp s) s' = 0
 end
 
 module Spec = struct
@@ -94,7 +108,7 @@ end
 let pp ppf t = match t with
   | Any | Symbol -> ()
   | Name s -> Format.fprintf ppf "%s" s
-  | Type t -> Format.fprintf ppf "%d" t
+  | Type t -> Format.fprintf ppf "%a" Sort.pp_exp t
 
 
 include Comparable.Make(struct

@@ -10,7 +10,8 @@ let to_string = function
 
 let sexp_of_var v = Sexp.Atom (to_string v)
 
-type read_error = Empty | Not_a_var | Bad_type | Bad_format
+type read_error = Empty | Not_a_var | Bad_format
+                | Bad_type of Type.read_error
 
 let read id eq = function
   | "" -> Error Empty
@@ -21,8 +22,8 @@ let read id eq = function
     | _::_::_::_ -> Error Bad_format
     | [x] -> Ok {data={exp=x; typ=Any}; id; eq}
     | [x;sz] -> match Type.read sz with
-      | None -> Error Bad_type
-      | Some typ -> Ok {data={exp=x; typ}; id; eq}
+      | Error e -> Error (Bad_type e)
+      | Ok typ -> Ok {data={exp=x; typ}; id; eq}
 
 include Comparable.Make_plain(struct
     type t = var [@@deriving compare,sexp_of]

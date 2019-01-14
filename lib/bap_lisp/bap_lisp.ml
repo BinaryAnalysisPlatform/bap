@@ -4,9 +4,9 @@ module Lisp = struct
   module Var = Bap_lisp__var
   module Load = Bap_lisp__parse
   module Resolve = Bap_lisp__resolve
-  module State = Bap_primus_state
   module Check = Bap_lisp__type.Check
   module Context = Bap_lisp__context
   module Program = Bap_lisp__program
   module Type = Bap_lisp__type
+  module Doc = Bap_lisp__doc
 end

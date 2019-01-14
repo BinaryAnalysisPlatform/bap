@@ -1,5 +1,5 @@
-open Bap.Std
-
+open Core_kernel
+open Bap_core_theory
 open Bap_lisp__types
 module Def = Bap_lisp__def
 module Context = Bap_lisp__context
@@ -24,12 +24,12 @@ module Items : sig
   val func  : Def.func  item
   val meth  : Def.meth  item
   val para  : Def.para item
-  val primitive  : Def.prim item
+  val primitive  : Def.primitive item
 end
 
 module Type : sig
   type error
-  val check : Var.t seq -> program -> error list
+  val check : 'a Var.t Sequence.t -> program -> error list
   val pp_error : Format.formatter -> error -> unit
 end
 

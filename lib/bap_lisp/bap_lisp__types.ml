@@ -1,5 +1,7 @@
 open Core_kernel.Std
+open Bap_core_theory
 
+module Word = Bap.Std.Word
 module Index = Bap_lisp__index
 module Loc = Bap_lisp__loc
 module Source = Bap_lisp__source
@@ -18,9 +20,9 @@ type typ =
   | Any
   | Symbol
   | Name of string
-  | Type of int [@@deriving sexp, compare]
+  | Type of Sort.exp [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
-type word = int64 term indexed [@@deriving compare]
+type word = Word.t term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
 type sym = string indexed [@@deriving compare]
 type loc = Loc.t
