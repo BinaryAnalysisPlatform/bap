@@ -299,6 +299,46 @@ let create_indexes (dests : dests Addr.Table.t) =
 
 let filter_valid s = {s with inits = Set.inter s.inits s.valid}
 
+let itefy_destinations origin dests =
+  let dests = List.filter ~f:(fun a -> Addr.(a <> origin)) dests in
+  let jmp x = [ Bil.(jmp (int x)) ] in
+  let undecided x y =
+    [ Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) x y ] in
+  let rec loop = function
+    | [] -> []
+    | hd :: [] -> jmp hd
+    | hd :: tl -> match loop tl with
+      | [] -> jmp hd
+      | tl -> undecided (jmp hd) tl in
+  match loop dests with
+  | [] -> jmp origin
+  | dests -> undecided (jmp origin) dests
+
+let make_switch x dests =
+  let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
+  let default = Bil.jmp x in
+  List.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
+
+let ensure_destinations bil dests =
+  let dests =
+    List.filter_map dests ~f:(fun (addr,edge) ->
+        if edge = `Fall then None else addr) in
+  let is_diverged =
+    let is_known = List.mem dests ~equal:Addr.equal in
+    Bil.exists
+      (object inherit [unit] Stmt.finder
+        method! visit_jmp e search = match e with
+          | Int w when is_known w -> search
+          | _ -> search.return (Some ())
+      end) bil in
+  if is_diverged then
+    (object inherit Stmt.mapper
+      method! map_jmp = function
+        | Int a -> itefy_destinations a dests
+        | x -> make_switch x dests
+    end)#run bil
+  else bil
+
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
   let leads, terms, kinds = create_indexes stage1.dests in
@@ -353,8 +393,16 @@ let stage2 dis stage1 =
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
           | mem, None -> mem,(None,None)
-          | mem, (Some ins as insn) -> match stage1.lift mem ins with
-            | Ok bil -> mem,(insn,Some bil)
+          | mem, (Some ins as insn) ->
+            match stage1.lift mem ins with
+            | Ok bil ->
+              let bil =
+                if has_jump bil then
+                  Addrs.find stage1.dests (Memory.max_addr mem) |>
+                  Option.value ~default:[] |>
+                  ensure_destinations bil
+                else bil in
+              mem,(insn,Some bil)
             | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
 
