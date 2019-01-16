@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Bap.Std
 open Monads.Std
 open Bap_primus_types
 open Format
@@ -37,7 +36,7 @@ let switch,switched =
 
 module Make(M : Monad.S) = struct
   module PE = struct
-    type t = (project, exn) Monad.Result.result
+    type t = (env, exn) Monad.Result.result
   end
   module SM = struct
     include Monad.State.Multi.T2(M)
@@ -50,7 +49,7 @@ module Make(M : Monad.S) = struct
     args    : string array;
     envp    : string array;
     curr    : unit -> unit t;
-    proj    : project;
+    proj    : env;
     local   : State.Bag.t;
     global  : State.Bag.t;
     deathrow : id list;

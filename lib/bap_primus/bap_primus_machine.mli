@@ -1,5 +1,4 @@
-open Core_kernel.Std
-open Bap.Std
+open Core_kernel
 open Monads.Std
 open Bap_primus_types
 

@@ -1,14 +1,19 @@
 open Core_kernel.Std
-open Bap.Std
 open Monads.Std
+
+open Bap_knowledge
+open Bap_core_theory
 
 open Bap_primus_generator_types
 
 module Exn = Bap_primus_exn
-module Pos = Bap_primus_pos
 
+module Word = Bap.Std.Word
+type word = Bap.Std.word [@@deriving bin_io, compare, sexp]
+type addr = word [@@deriving bin_io, compare, sexp]
+
+type env = state
 type exn = Exn.t = ..
-type pos = Pos.t [@@deriving sexp_of]
 type 'a observation = 'a Bap_primus_observation.t
 type provider = Bap_primus_observation.provider
 type 'a statement = 'a Bap_primus_observation.statement
@@ -16,9 +21,6 @@ type 'a state = 'a Bap_primus_state.t
 type exit_status =
   | Normal
   | Exn of exn
-
-type 'a effect =
-  project -> string array -> string array -> 'a
 
 module type State = sig
   type 'a m
@@ -53,10 +55,10 @@ module type Machine = sig
 
   include Monad.State.Multi.S with type 'a t := 'a t
                                and type 'a m := 'a m
-                               and type env := project
+                               and type env := env
                                and type id := id
                                and module Syntax := Syntax
-                               and type 'a e = (exit_status * project) m effect
+                               and type 'a e = ('a * env, exn) result m
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
   module Global : State with type 'a m := 'a t
@@ -65,9 +67,6 @@ module type Machine = sig
   val raise : exn -> 'a t
   val catch : 'a t -> (exn -> 'a t) -> 'a t
 
-  val project : project t
-  val program : program term t
-  val arch : arch t
   val args : string array t
   val envp : string array t
 end
