@@ -1,14 +1,10 @@
-open Bap.Std
 open Regular.Std
+open Bap_core_theory
+
 open Bap_primus_types
 
-
-type name = [
-  | `tid of tid
-  | `addr of addr
-  | `symbol of string
-] [@@deriving bin_io, compare, sexp]
-
+module Machine = Bap_primus_machine
+type name = Link.t
 type exn += Unbound_name of name
 
 val exec : name observation
@@ -23,32 +19,12 @@ module Trace : sig
   val return : (string * value list) observation
   val call_returned : (string * value list) statement
 end
-module type Code = functor (Machine : Machine) -> sig
-  val exec : unit Machine.t
-end
 
-type code = (module Code)
+type 'a m = 'a Machine.t
 
+val link : name -> unit m -> unit m
 
-module Name : Regular.S with type t = name
-
-module Make(Machine : Machine) : sig
-  type 'a m = 'a Machine.t
-
-  val link :
-    ?addr:addr ->
-    ?name:string ->
-    ?tid:tid ->
-    code -> unit m
-
-  val lookup : name -> code option m
-  val unlink : name -> unit m
-
-  val exec : name -> unit m
-
-  val is_linked : name -> bool m
-
-  val resolve_addr : name -> addr option m
-  val resolve_symbol : name -> string option m
-  val resolve_tid : name -> tid option m
-end
+val lookup : name -> unit m option m
+val unlink : name -> unit m
+val exec : name -> unit m
+val is_linked : name -> bool m

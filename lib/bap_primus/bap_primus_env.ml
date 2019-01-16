@@ -1,4 +1,5 @@
 open Core_kernel.Std
+open Bap_knowledge
 open Bap_core_theory
 
 open Bap_primus_types
@@ -7,8 +8,11 @@ open Bap_primus_sexp
 
 module Observation = Bap_primus_observation
 module Generator = Bap_primus_generator
+module Machine = Bap_primus_machine
+module Value = Bap_primus_value
 module Seq = Sequence
 
+open Machine.Syntax
 
 type exn += Undefined_var of Var.ident
 
@@ -46,10 +50,10 @@ let sexp_of_env {values; random} = Sexp.List [
 let state = Bap_primus_machine.State.declare
     ~inspect:sexp_of_env
     ~uuid:"44b24ea4-48fa-47e8-927e-f7ba65202743"
-    ~name:"environment" (fun _ -> {
-          values = Var.Ident.Map.empty;
-          random = Var.Ident.Map.empty;
-        })
+    ~name:"environment" @@ Knowledge.return {
+    values = Var.Ident.Map.empty;
+    random = Var.Ident.Map.empty;
+  }
 
 let inspect_environment {values;random} =
   let keys =
@@ -72,42 +76,33 @@ let inspect_environment {values;random} =
 
 
 
-module Make(Machine : Machine) = struct
-  open Machine.Syntax
 
-  module Generator = Bap_primus_generator.Make(Machine)
-  module Value = Bap_primus_value.Make(Machine)
+let add var policy =
+  Machine.Local.update state ~f:(fun s -> {
+        s with random = Map.add s.random ~key:var ~data:policy
+      })
 
-  let add var policy =
-    Machine.Local.update state ~f:(fun s -> {
-          s with random = Map.add s.random ~key:var ~data:policy
-        })
+let set var x =
+  Machine.Local.update state ~f:(fun s -> {
+        s with values = Map.add s.values ~key:var ~data:x
+      })
 
-  let set var x =
-    Machine.Local.update state ~f:(fun s -> {
-          s with values = Map.add s.values ~key:var ~data:x
-        })
+let null s = Value.zero s
 
-  let null s = Value.zero s
+let get var =
+  Machine.Local.get state >>= fun t ->
+  match Map.find t.values var with
+  | Some res -> Machine.return res
+  | None -> match Map.find t.random var with
+    | None -> Machine.raise (Undefined_var var)
+    | Some gen -> Generator.next gen >>= Value.of_word
 
-  let get var =
-    Machine.Local.get state >>= fun t ->
-    match Map.find t.values var with
-    | Some res -> Machine.return res
-    | None -> match Var.typ var with
-      | Type.Mem (_,_) -> null
-      | Type.Imm width -> match Map.find t.random var with
-        | None -> Machine.raise (Undefined_var var)
-        | Some gen -> Generator.word gen width >>= Value.of_word
+let has var =
+  Machine.Local.get state >>| fun t ->
+  Map.mem t.values var || Map.mem t.random var
 
-  let has var =
-    Machine.Local.get state >>| fun t ->
-    Map.mem t.values var || Map.mem t.random var
+let keys dic = Map.to_sequence dic |> Seq.map ~f:fst
 
-  let keys dic = Map.to_sequence dic |> Seq.map ~f:fst
-
-  let all =
-    Machine.Local.get state >>| fun {values; random} ->
-    Seq.append (keys values) (keys random)
-
-end
+let all =
+  Machine.Local.get state >>| fun {values; random} ->
+  Seq.append (keys values) (keys random)

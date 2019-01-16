@@ -1,11 +1,15 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
-open Bap.Std
 open Bap_strings.Std
 open Format
+
+open Bap_knowledge
+open Bap_core_theory
+
 open Bap_primus_types
 
 module Observation = Bap_primus_observation
+module Machine = Bap_primus_machine
 
 
 module Id = struct
@@ -42,13 +46,13 @@ end
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"873f2ba6-9adc-45bb-8ed1-a0f57337ca80"
-    ~name:"value"
-    (fun _ -> Int63.one)
+    ~name:"value" @@
+  Knowledge.return Int63.one
 
 let symbols = Bap_primus_machine.State.declare
     ~uuid:"2d2293e9-4c42-4b82-90a7-7e8e74fd01ed"
-    ~name:"symbols"
-    (fun _ -> Index.empty)
+    ~name:"symbols" @@
+  Knowledge.return Index.empty
 
 let to_word x = x.value
 let id x = x.id
@@ -112,7 +116,7 @@ module Make(Machine : Machine) = struct
   let bitwidth = proj Word.bitwidth
   let extract ?hi ?lo {value} =
     match Word.extract ?hi ?lo value with
-    | Error err -> invalid_arg "Primus.Value.extract: not well typed"
+    | Error _ -> invalid_arg "Primus.Value.extract: not well typed"
     | Ok x -> of_word x
   let concat = lift2 Word.concat
   let succ = lift1 Word.succ

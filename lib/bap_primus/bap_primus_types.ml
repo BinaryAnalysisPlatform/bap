@@ -12,7 +12,7 @@ module Word = Bap.Std.Word
 type word = Bap.Std.word [@@deriving bin_io, compare, sexp]
 type addr = word [@@deriving bin_io, compare, sexp]
 
-type env = state
+type knowledge = state
 type exn = Exn.t = ..
 type 'a observation = 'a Bap_primus_observation.t
 type provider = Bap_primus_observation.provider
@@ -38,9 +38,26 @@ type value = {
 
 type id = Monad.State.Multi.id
 
+
+type 'a service = {
+  init : 'a;
+  name : string;
+  desc : string;
+}
+
 module type Machine = sig
   type 'a t
   type 'a m
+
+  val collect : 'a content -> label -> 'a t
+  val provide : 'a content -> label -> 'a -> unit t
+  val conflict : conflict -> 'a t
+  val knowledge : 'a Knowledge.t -> 'a t
+
+  val raise : exn -> 'a t
+  val catch : 'a t -> (exn -> 'a t) -> 'a t
+
+  val die : id -> unit t
 
   module Observation : sig
     val observe : 'a observation -> ('a -> unit t) -> unit t
@@ -55,24 +72,16 @@ module type Machine = sig
 
   include Monad.State.Multi.S with type 'a t := 'a t
                                and type 'a m := 'a m
-                               and type env := env
                                and type id := id
                                and module Syntax := Syntax
-                               and type 'a e = ('a * env, exn) result m
+                               and type 'a e =
+                                     'a t service list ->
+                                     knowledge ->
+                                     (exit_status * knowledge, conflict) result
+
   module Local  : State with type 'a m := 'a t
                          and type 'a t := 'a state
   module Global : State with type 'a m := 'a t
                          and type 'a t := 'a state
 
-  val raise : exn -> 'a t
-  val catch : 'a t -> (exn -> 'a t) -> 'a t
-
-  val args : string array t
-  val envp : string array t
 end
-
-module type Component = functor (Machine : Machine) -> sig
-  val init : unit -> unit Machine.t
-end
-
-type component = (module Component)

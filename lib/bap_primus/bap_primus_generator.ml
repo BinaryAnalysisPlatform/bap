@@ -1,7 +1,9 @@
 open Core_kernel.Std
-open Bap.Std
-
+open Bap_knowledge
 open Bap_primus_types
+module Machine = Bap_primus_machine
+
+open Machine.Syntax
 
 type descr = {
   width : int;
@@ -15,12 +17,10 @@ type state = {
 
 let generators = Bap_primus_machine.State.declare
     ~name:"rng-states"
-    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3"
-    (fun _ ->  {states = Int.Map.empty})
+    ~uuid:"7e81d5ae-46a2-42ff-918f-96c0c2dc95e3" @@
+  Knowledge.return {states = Int.Map.empty}
 
-module type Generator = functor (M : Machine) -> sig
-  val next : word M.t
-end
+
 
 type t =
   | Static of word
@@ -30,7 +30,7 @@ type t =
       seed :  word;
     }
   | Custom of {
-      make : (module Generator);
+      next : word Machine.t;
       descr : descr;
     }
 
@@ -57,8 +57,8 @@ end = struct
 end
 
 let static value = Static value
-let custom ~min ~max width make = Custom {
-    make;
+let custom ~min ~max width next = Custom {
+    next;
     descr = {min; max; width}
   }
 
@@ -89,25 +89,20 @@ let random_word ~state ~width =
       {value = Word.concat value next.value; state} in
   loop width (Word.extract_exn ~hi:(LCG.size-1) state)
 
-module Make(Machine : Machine) = struct
-  open Machine.Syntax
-  let rec next = function
-    | Static word -> Machine.return word
-    | Custom {make = (module Make)} ->
-      let module Generator = Make(Machine) in
-      Generator.next
-    | Random {seed; ident; descr={width; min=x; max=y}} ->
-      Machine.Local.get generators >>= fun {states} ->
-      let state = if ident = 0
-        then seed
-        else Map.find_exn states ident in
-      let {value; state} = random_word ~state ~width in
-      let value = Word.(x + value mod succ (y - x)) in
-      let ident = if ident <> 0 then ident
-        else match Map.max_elt states with
-          | None -> 1
-          | Some (k,_) -> k+1 in
-      let states = Map.add states ~key:ident ~data:state in
-      Machine.Local.put generators {states} >>| fun () ->
-      value
-end
+let rec next = function
+  | Static word -> Machine.return word
+  | Custom {next} -> next
+  | Random {seed; ident; descr={width; min=x; max=y}} ->
+    Machine.Local.get generators >>= fun {states} ->
+    let state = if ident = 0
+      then seed
+      else Map.find_exn states ident in
+    let {value; state} = random_word ~state ~width in
+    let value = Word.(x + value mod succ (y - x)) in
+    let ident = if ident <> 0 then ident
+      else match Map.max_elt states with
+        | None -> 1
+        | Some (k,_) -> k+1 in
+    let states = Map.add states ~key:ident ~data:state in
+    Machine.Local.put generators {states} >>| fun () ->
+    value

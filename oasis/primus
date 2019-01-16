@@ -18,7 +18,6 @@ Library bap_primus
            Bap_primus_iterator,
            Bap_primus_linker,
            Bap_primus_machine,
-           Bap_primus_main,
            Bap_primus_memory,
            Bap_primus_observation,
            Bap_primus_random,

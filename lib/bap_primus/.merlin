@@ -5,3 +5,4 @@ B ../../_build/lib/bap_abi
 B ../../_build/lib/bap_strings
 B ../../_build/lib/bap_core_theory
 B ../../_build/lib/bap_knowledge
+PKG uuidm
