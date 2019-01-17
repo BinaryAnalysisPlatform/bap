@@ -75,7 +75,7 @@ module type Machine = sig
                                and type id := id
                                and module Syntax := Syntax
                                and type 'a e =
-                                     'a t service list ->
+                                     unit t service list ->
                                      knowledge ->
                                      (exit_status * knowledge, conflict) result
 

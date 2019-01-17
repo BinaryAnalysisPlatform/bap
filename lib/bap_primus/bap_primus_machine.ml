@@ -32,7 +32,6 @@ let switch,switched =
     "machine-switch"
 
 module PE = struct
-  (* note [env] is Bap_knowledge.state *)
   type t = (unit, exn) Monad.Result.result
 end
 
@@ -54,7 +53,7 @@ and state = {
 type 'a c = 'a t
 type 'a m = 'a Knowledge.t
 type 'a e =
-  'a t service list ->
+  unit t service list ->
   knowledge ->
   (exit_status * knowledge, conflict) result
 
@@ -160,7 +159,7 @@ module Global = Make_state(struct
 
 let get () = CM.return ()
 let put () = CM.return ()
-let gets f = f ()
+let gets f = CM.return (f ())
 let update _ = CM.return ()
 let modify m _f = m
 
@@ -254,7 +253,7 @@ let finished,finish =
 let init,inited =
   Bap_primus_observation.provide ~inspect:sexp_of_unit "init"
 
-let init cs m =
+let with_components cs m : 'a t =
   let open CM.Syntax in
   CM.List.iter cs ~f:(fun {init} -> init) >>= fun () ->
   Observation.make inited () >>= fun () ->
@@ -264,18 +263,18 @@ let init cs m =
   Observation.make finish () >>= fun () ->
   return x
 
-let run : 'a t -> _ =
-  fun m cs env ->
+let run : type a. a t -> a e =
+  fun m cs k ->
     let res = Knowledge.run
         (SM.run
-           (C.run (init cs m) (function
-                | Ok () -> SM.return (Ok ())
+           (C.run (with_components cs m) (function
+                | Ok _ -> SM.return (Ok ())
                 | Error err -> SM.return (Error err)))
            empty)
-        env in
+        k in
     match res with
-    | Ok ((Ok (),_),env) -> Ok (Normal,env)
-    | Ok ((Error e,_),env) -> Ok (Exn e, env)
+    | Ok ((Ok (),_),k) -> Ok (Normal,k)
+    | Ok ((Error e,_),k) -> Ok (Exn e, k)
     | Error c        -> Error c
 
 module Syntax = struct

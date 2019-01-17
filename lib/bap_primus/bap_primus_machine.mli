@@ -21,9 +21,5 @@ module Component : sig
   val list : unit -> t list
 end
 
-(** [init] event occurs just after all components have been
-      initialized, and before the execution starts*)
 val init : unit observation
-
-(** The [finished] event occurs when the machine terminates.   *)
 val finished : unit observation
