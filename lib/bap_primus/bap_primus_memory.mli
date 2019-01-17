@@ -40,6 +40,7 @@ val allocate :
 val map :
   ?readonly:bool ->
   ?executable:bool ->
+  ?little:bool ->
   addr -> Bigstring.t -> unit Machine.t
 
 val is_mapped : addr -> bool Machine.t
