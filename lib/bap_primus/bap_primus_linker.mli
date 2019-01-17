@@ -1,17 +1,17 @@
 open Regular.Std
 open Bap_core_theory
+open Bap_knowledge
 
 open Bap_primus_types
 
 module Machine = Bap_primus_machine
-type name = Link.t
-type exn += Unbound_name of name
+type exn += Unbound_name of Label.t
 
-val exec : name observation
-val will_exec : name statement
-val unresolved : name observation
+val exec : Label.t observation
+val will_exec : Label.t statement
+val unresolved : Label.t observation
 
-val unresolved_handler : string
+val unresolved_handler : Label.t Machine.t
 
 module Trace : sig
   val call : (string * value list) observation
@@ -20,11 +20,8 @@ module Trace : sig
   val call_returned : (string * value list) statement
 end
 
-type 'a m = 'a Machine.t
-
-val link : name -> unit m -> unit m
-
-val lookup : name -> unit m option m
-val unlink : name -> unit m
-val exec : name -> unit m
-val is_linked : name -> bool m
+val link : Label.t -> unit Machine.t -> unit Machine.t
+val lookup : Label.t -> unit Machine.t option Machine.t
+val unlink : Label.t -> unit Machine.t
+val exec : Label.t -> unit Machine.t
+val is_linked : Label.t -> bool Machine.t

@@ -624,13 +624,10 @@ module Primus : sig
 
   (** Machine Linker.
 
-        The Linker dynamically extends program with the new code.
-
-        The code is represented as a functor that performs a
-        computation using a provided machine.*)
+      Linker associates program Labels with code fragments. In other words,
+      it maintains a [name -> code] mapping.
+  *)
   module Linker : sig
-
-    type name = Link.t
 
     (** Call tracing.
 
@@ -691,25 +688,21 @@ module Primus : sig
     end
 
     (** The Linker error  *)
-    type exn += Unbound_name of name
+    type exn += Unbound_name of Label.t
 
 
     (** occurs before a piece of code is executed *)
-    val exec : name observation
+    val exec : Label.t observation
 
     (** occurs when an unresolved name is called, just before the
             unresolved trap is signaled. Could be used to install the
             trap handler.
 
             @since 1.5 *)
-    val unresolved : name observation
+    val unresolved : Label.t observation
 
-    (** [unresolved_handler] is called instead of an unbound name.
-
-          @since 1.5
-
-     *)
-    val unresolved_handler : string
+    (** [unresolved_handler] is called instead of an unbound name.*)
+    val unresolved_handler : Label.t Machine.t
 
 
     (** [Make(Machine)] parametrize the [Linker] with the [Machine].
@@ -722,37 +715,30 @@ module Primus : sig
           multiple instances of components, as they needed. The
           functor instatiation is totaly side-effect free.*)
 
-    type 'a m = 'a machine
+    (** [link name code] associates [name] with the machine [code].
+        Any previous bindings are removed.*)
+    val link : Label.t -> unit machine -> unit machine
 
-    (** [link ~addr ~name ~tid code] links the given [code]
-            fragment into the Machine. The code can be invoked by one
-            of the provided identifier. If no idetifiers were
-            provided, then apparently code will not be ever invoked. If
-            an identifier was alread bound to some other code
-            fragment, then the old binding will be substituted by the new
-            one.  *)
-    val link : name -> unit m -> unit m
+    (** [unlink name] removes code linked with the provided [name].*)
+    val unlink : Label.t -> unit machine
 
-    (** [unlink name] removes code linked with the provided [name].
-
-            Also, removes all aliases of the given [name]. *)
-    val unlink : name -> unit m
-
-    (** [lookup name] returns code linked with the given [name].  *)
-    val lookup : name -> unit m option m
+    (** [lookup name] returns code associated with the given [name].  *)
+    val lookup : Label.t -> unit machine option machine
 
     (** [exec name] executes a code fragment associated with the
-            given name. Terminates the computation with the
-            [Linker.Unbound_name name] condition, if the [name] is not
-            associated with any code fragment.  *)
-    val exec : name -> unit m
+        given name. If no code is associated with the provided code,
+        then the [unresolved] observation is made and the second attempt
+        is made. If it also fails (i.e., there is still no code associated
+        with the given name) then the code linked with [unresolved_handler]
+        is called. Finally, if the [unresolved_handler] is also not provided,
+        the machine exception [Unbound_name name] is raised.
+    *)
+    val exec : Label.t -> unit machine
 
 
     (** [is_linked name] computes to [true] if the [name] is
-            associated with some code.
-
-            @since 1.5.0 *)
-    val is_linked : name -> bool m
+        associated with some code. *)
+    val is_linked : Label.t -> bool machine
   end
 
 
