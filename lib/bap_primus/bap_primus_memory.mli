@@ -30,17 +30,17 @@ val add_text : addr -> Bigstring.t -> unit Machine.t
 val add_data : addr -> Bigstring.t -> unit Machine.t
 
 val allocate :
-  ?readonly:bool ->
   ?executable:bool ->
+  ?readonly:bool ->
   ?init:(addr -> word Machine.t) ->
   ?generator:Generator.t ->
   addr -> int -> unit Machine.t
 
 
 val map :
-  ?readonly:bool ->
   ?executable:bool ->
-  ?little:bool ->
+  ?readonly:bool ->
+  ?reversed:bool ->
   addr -> Bigstring.t -> unit Machine.t
 
 val is_mapped : addr -> bool Machine.t

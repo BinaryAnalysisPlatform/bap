@@ -900,8 +900,8 @@ module Primus : sig
             execute non-executable segment will generate a
             segmentation fault. (TODO: provide more fine-granular traps).*)
     val allocate :
-      ?readonly:bool ->
       ?executable:bool ->
+      ?readonly:bool ->
       ?init:(addr -> word Machine.t) ->
       ?generator:Generator.t ->
       addr -> int -> unit Machine.t
@@ -910,8 +910,9 @@ module Primus : sig
     (** [map mem] maps a memory chunk [mem] to a segment with the
             given permissions. See also {!add_text} and {!add_data}. *)
     val map :
-      ?readonly:bool ->
       ?executable:bool ->
+      ?readonly:bool ->
+      ?reversed:bool ->
       addr -> Bigstring.t -> unit Machine.t
 
 

@@ -30,7 +30,7 @@ let () = Exn.add_printer (function
 
 type region =
   | Dynamic of {base : addr; len : int; value : Generator.t }
-  | Static  of {base : addr; data : Bigstring.t; little : bool}
+  | Static  of {base : addr; data : Bigstring.t; reversed : bool}
 
 type perms = {readonly : bool; executable : bool}
 type layer = {mem : region; perms : perms}
@@ -155,7 +155,7 @@ let memory =
   descriptor s.curr
 
 let switch curr =
-  Machine.Local.update state ~f:(fun s -> {s with curr})
+  Machine.Local.update state ~f:(fun s -> {s with curr=Some curr})
 
 
 let get_curr =
@@ -234,8 +234,8 @@ let read addr {values;layers} = match find_layer addr layers with
       match layer.mem with
       | Dynamic {value} ->
         Generator.next value >>= Value.of_word
-      | Static {base; data; little} ->
-        Value.of_word (read_word base data little addr size)
+      | Static {base; data; reversed} ->
+        Value.of_word (read_word base data reversed addr size)
 
 let write addr value {values;layers} =
   match find_layer addr layers with
@@ -259,8 +259,8 @@ let initialize values base len f =
 
 
 let allocate
-    ?(readonly=false)
     ?(executable=false)
+    ?(readonly=false)
     ?init
     ?generator
     base len =
@@ -278,9 +278,13 @@ let allocate
     initialize s.values base len f >>= fun values ->
     put_curr {s with values}
 
-let map ?(readonly=false) ?(executable=false) ?(little=false) base data =
+let map
+    ?(executable=false)
+    ?(readonly=false)
+    ?(reversed=false)
+    base data =
   update state @@ add_layer {
-    mem=Static {data; base; little};
+    mem=Static {data; base; reversed};
     perms={readonly; executable}
   }
 let add_text mem = map mem ~readonly:true  ~executable:true
