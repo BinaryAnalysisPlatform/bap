@@ -49,6 +49,11 @@ module Background = struct
   let pp ppf c = Format.fprintf ppf "%s" @@ to_ascii c
 end
 
+module Succs = struct
+  type t = Bap_bitvector.t list [@@deriving bin_io, compare, sexp]
+  let pp ppf dsts = Format.fprintf ppf "%a" Sexp.pp (sexp_of_t dsts)
+end
+
 type color = Color.t [@@deriving bin_io, compare, sexp_poly]
 
 let comment = register (module String)
@@ -90,3 +95,7 @@ let foreground = register (module Foreground)
 let background = register (module Background)
     ~name:"background"
     ~uuid:"9a80a9cc-4106-48fc-abf3-55d7b333e734"
+
+let succs = register (module Succs)
+    ~name:"block successors"
+    ~uuid:"d2680f6c-19ef-11e9-ab14-d663bd873d93"
