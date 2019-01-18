@@ -1,0 +1,11 @@
+Flag bitvector
+  Description: Build the bitvector library
+  Default: false
+
+Library bitvector
+  Build$: flag(everything) || flag(bitvector)
+  Path: lib/bitvector
+  FindlibName: bitvector
+  CompiledObject: best
+  BuildDepends: zarith
+  Modules: Bitvector
