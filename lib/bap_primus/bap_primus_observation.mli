@@ -1,5 +1,4 @@
 open Core_kernel.Std
-open Bap.Std
 open Bap_future.Std
 
 type 'a t
@@ -18,7 +17,7 @@ val add_watcher : 'e observations -> provider -> (Sexp.t -> 'e) -> 'e observatio
 
 val notify :
   'e observations ->
-  'a statement -> 'a -> 'e seq
+  'a statement -> 'a -> 'e Sequence.t
 
 val empty : 'e observations
 

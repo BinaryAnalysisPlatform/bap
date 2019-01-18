@@ -10,66 +10,55 @@ open Bap_core_theory
 (** Primus - The Microexecution Framework.
 
 
-Primus is a microexecution framework that can be used to build
-CPU and full system emulators, symbolic executers, static
-fuzzers, policy checkers, tracers, quickcheck-like test suites,
-etc.
+Primus is a microexecution framework that can be used to build CPU and
+full system emulators, symbolic executers, static fuzzers, policy
+checkers, tracers, quickcheck-like test suites, etc.
 
 The underlying idea is quite simple - Primus interprets a lifted
-program. The interpreter provides a set of extension points
-through which it is possible to observe what is happening inside
-the interpreter, and even to change the interpreter
-behavior. This extension points are called "observations" in
-Primus parlance. A simple publish/subscriber architecture is
-used to watch for the interpreter events, where subscribers are
-allowed to arbitrary change the interpreter state.
+program. The interpreter provides a set of extension points through
+which it is possible to observe what is happening inside the
+interpreter, and even to change the interpreter behavior. This
+extension points are called "observations" in Primus parlance. A
+simple publish/subscriber architecture is used to watch for the
+interpreter events, where subscribers are allowed to arbitrary change
+the interpreter state.
 
-A novel idea is that the interpreter is non-deterministic
-in the same sense as a non-deterministic Turing machine. That
-means that any computation may have more than one result. Every
-time there is a non-determinism in the computation the machine
-state is cloned. Different scheduling policies mixed with
-different non-deterministic startegies provide an analyst a vast
-selection of avenues to investigate.
+A novel idea is that the interpreter is non-deterministic in the same
+sense as a non-deterministic Turing machine. That means that any
+computation may have more than one result. Every time there is a
+non-determinism in the computation the machine state is
+cloned. Different scheduling policies mixed with different
+non-deterministic startegies provide an analyst a vast selection of
+avenues to investigate.
 
-Primus is build around an idea of a component base linearly
-extensible interpreter. That means, that an analysis can be
-built from basic building blocks, with minimal coupling between
-them. The central component is the Interpreter itself. It
-evaluates a program and interacts with three other components:
- - Linker
- - Env
- - Memory
+Primus is build around an idea of a component base linearly extensible
+interpreter. That means, that an analysis can be built from basic
+building blocks, with minimal coupling between them. The central
+component is the Machine itself. It evaluates a program and
+interacts with three other components:
+     - Linker
+     - Env
+     - Memory
 
 The Linker is responsible for linking code into the program
-abstraction. The [Env] component defines the environment
-behavior, i.e., variables. Finally, the [Memory] component is
-responsible for the memory representation.
+abstraction. The [Env] component defines the environment behavior,
+i.e., variables. Finally, the [Memory] component is responsible for
+the memory representation.
 
-Primus framework is implemented as a monad transformer that
-wraps any monad into the [Machine] monad. The [Machine] monad
-denotes a computation, and is implemented as a composition of
-state, exception, and continuation passing monad.
-
-Each user component is a functor that is parametrized by a
-Machine monad. It is require to provide only one function -
-[init]. Usually, this function subscribes to observations, but
-it can modify other components (depending on their interface).
 
  *)
 
 module Primus : sig
-
   type 'a machine
 
   type component
 
   type knowledge = state
 
-  (** machine Exception.
+  (** The Machine Exception.
 
-        The exn type is an extensible variant, and components
-        usually register their own error constructors. *)
+      The exn type is an extensible variant, and components
+      usually register their own error constructors. *)
   type exn = ..
 
   (** [an observation] of a value of type [an].*)
@@ -97,33 +86,34 @@ module Primus : sig
 
   (** Machine Observation.
 
-        The Primus Framework is built on top of the Machine
-        observation. The Machine components make their own
-        observations, based on observation made by other components.
+      The Primus Framework is built on top of the Machine
+      observation. The Machine components make their own
+      observations, based on observation made by other components.
 
-        A value of type ['a observation] is a first-class
-        representation of an event of type ['a]. While machine
-        components are functors, the values of type observation should
-        not depenend on the type of the functor.*)
+      A value of type ['a observation] is a first-class
+      representation of an event of type ['a]. While machine
+      components are functors, the values of type observation should
+      not depenend on the type of the functor.*)
   module Observation : sig
 
     (** An observation provider.
-          A provider facilitates introspection of the Primus Machine,
-          for the sake of debugging and dumping the effects. The
-          provider shoud not (and can't be) used for affecting the
-          behavior of a machine, or for the analysis, as its main
-          purpose is debugging, logging, and tracing the execution.*)
+
+        A provider facilitates introspection of the Primus Machine,
+        for the sake of debugging and dumping the effects. The
+        provider shoud not (and can't be) used for affecting the
+        behavior of a machine, or for the analysis, as its main
+        purpose is debugging, logging, and tracing the execution.*)
     type provider
 
 
     (** [provide ?inspect name] returns a pair of two handlers. The
-          first element is used to observe values, the second is used
-          to provide values for the observation.
+        first element is used to observe values, the second is used
+        to provide values for the observation.
 
-          The [inspect] function may provide a sexp representation of
-          an observed value, that will be used for introspection and
-          pretty-printing (it is not required, and if it is provided, it
-          is not necessary to disclose everything *)
+        The [inspect] function may provide a sexp representation of
+        an observed value, that will be used for introspection and
+        pretty-printing (it is not required, and if it is provided, it
+        is not necessary to disclose everything *)
     val provide : ?inspect:('a -> Sexp.t) -> string -> 'a observation * 'a statement
 
 
@@ -132,7 +122,7 @@ module Primus : sig
 
 
     (** [inspect observation value] returns a sexp representation of
-          an observed [value] *)
+        an observed [value] *)
     val inspect : 'a observation -> 'a -> Sexp.t
 
     (** enumerate all currently available observation providers  *)
@@ -141,8 +131,8 @@ module Primus : sig
 
     (** Data interface to the provider.
 
-          This interface provides access to the data stream of all
-          providers expresses as a stream of s-expressions.
+        This interface provides access to the data stream of all
+        providers expresses as a stream of s-expressions.
      *)
     module Provider : sig
       type t = provider
@@ -163,22 +153,22 @@ module Primus : sig
 
   (** Primus Machine.
 
-        The Machine is the core of Primus Framework.  The Machine
-        behavior is extended/changed with Machine Components. A
-        component is a functor that takes a machine instance, and
-        registers reactions to different events, that can happen
-        during the machine evaluation. Events can be obtained from the
-        observations made by the core components of the Machine, such
-        as the Interpreter, or by other components, if their
-        implementors provide any observations.
+      The Machine is the core of Primus Framework.  The Machine
+      behavior is extended/changed with Machine Components. A
+      component is a functor that takes a machine instance, and
+      registers reactions to different events, that can happen
+      during the machine evaluation. Events can be obtained from the
+      observations made by the core components of the Machine, such
+      as the Interpreter, or by other components, if their
+      implementors provide any observations.
 
-        A machine is usually instantiated and ran only once. For
-        example, the [run] analysis creates a machine parameterized by
-        the static model of a binary and runs a machine from the
-        specified entry point, until it terminates.
+      A machine is usually instantiated and ran only once. For
+      example, the [run] analysis creates a machine parameterized by
+      the static model of a binary and runs a machine from the
+      specified entry point, until it terminates.
 
-        The user analysis is usually written in a form of a component,
-        and is registered with the [register_component] function.*)
+      The user analysis is usually written in a form of a component,
+      and is registered with the [register_component] function.*)
   module Machine : sig
     (** the machine computation  *)
     type 'a t = 'a machine
@@ -188,27 +178,26 @@ module Primus : sig
 
 
     (** [init] event occurs just after all components have been
-          initialized, and before the execution starts*)
+        initialized, and before the execution starts*)
     val init : unit observation
 
     (** The [finished] event occurs when the machine terminates.   *)
     val finished : unit observation
 
     (** [exn_raised exn] occurs every time an abnormal control flow
-          is initiated *)
+        is initiated *)
     val exn_raised : exn observation
 
 
     (** [raise exn] raises the machine exception [exn], intiating
-            an abonormal control flow *)
+        an abonormal control flow *)
     val raise : exn -> 'a t
 
 
     (** [catch x f] creates a computation that is equal to [x] if
-            it terminates normally, and to [f e] if [x] terminates
-            abnormally with the exception [e]. *)
+        it terminates normally, and to [f e] if [x] terminates
+        abnormally with the exception [e]. *)
     val catch : 'a t -> (exn -> 'a t) -> 'a t
-
 
 
     val collect : 'a content -> label -> 'a t
@@ -418,8 +407,8 @@ module Primus : sig
     val of_word : word -> t machine
 
     (** [of_string s] computes a fresh new value from a textual
-            representation of a machine word [x]. See {!Bap.Std.Word}
-            module for more details.  *)
+        representation of a machine word [x]. See {!Bap.Std.Word}
+        module for more details.  *)
     val of_string : string -> t machine
 
     (** [of_bool x] creates a fresh new value from the boolean [x].  *)

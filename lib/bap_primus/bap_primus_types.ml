@@ -4,8 +4,6 @@ open Monads.Std
 open Bap_knowledge
 open Bap_core_theory
 
-open Bap_primus_generator_types
-
 module Exn = Bap_primus_exn
 
 module Word = Bap.Std.Word

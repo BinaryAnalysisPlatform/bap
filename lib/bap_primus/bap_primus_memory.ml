@@ -8,8 +8,6 @@ open Bap_primus_types
 module Seq = Sequence
 
 module Observation = Bap_primus_observation
-module Iterator = Bap_primus_iterator
-module Random  = Bap_primus_random
 module Generator = Bap_primus_generator
 module Machine = Bap_primus_machine
 module Value = Bap_primus_value

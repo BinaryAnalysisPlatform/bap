@@ -1,6 +1,5 @@
 open Core_kernel.Std
 open Regular.Std
-open Bap.Std
 open Bap_strings.Std
 
 open Bap_primus_types

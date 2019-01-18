@@ -1,6 +1,7 @@
-open Core_kernel.Std
-open Bap.Std
+open Core_kernel
 open Bap_future.Std
+
+module Seq = Sequence
 
 type 'a observation = 'a Univ_map.Key.t
 type 'a statement = 'a observation
