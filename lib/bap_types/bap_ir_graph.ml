@@ -1,6 +1,7 @@
 open Core_kernel.Std
 open Regular.Std
 open Graphlib.Std
+open Bap_types.Std
 open Option.Monad_infix
 
 open Bap_bil
@@ -36,9 +37,13 @@ end
 (* internal representation of a graph:
    sub is the program itself
    preds is a mapping from a node to its predcessors,
-   that is used to speed up backward processing.*)
+   that is used to speed up backward processing.
+   similarly, succs is a mapping from a node to its
+   successors.
+*)
 type t = {
   preds : Pred.t;
+  succs : Pred.t;
   sub  : sub term;
 } [@@deriving bin_io, compare, sexp]
 
@@ -79,7 +84,7 @@ type difference_kind =
   | Target_change of tid * tid
   | New_jmp of tid
   | Del_jmp of tid
-  [@@deriving variants, sexp]
+[@@deriving variants, sexp]
 
 let jmp_set b = Term.enum jmp_t b |> Seq.map ~f:Term.tid |>
                 Seq.fold ~init:Tid.Set.empty ~f:Set.add
@@ -113,6 +118,63 @@ let control_flow_difference bx by =
 let blocks_of_tids sub ts =
   Set.to_sequence ts |> Seq.map ~f:(Term.find_exn blk_t sub)
 
+let empty = {
+  sub = Sub.create ();
+  preds = Tid.Map.empty;
+  succs = Tid.Map.empty;
+}
+
+let create ?tid ?name () = {
+  empty with
+  sub = Sub.create ?tid ?name ();
+}
+
+let number_of_edges t =
+  Seq.(Map.to_sequence t.preds >>| snd |>
+       sum (module Int) ~f:Set.length)
+
+let number_of_nodes t = Term.length blk_t t.sub
+
+let succ_tid_of_addr sub addr =
+  Term.enum blk_t sub |>
+  Seq.find ~f:(fun blk ->
+      match Term.get_attr blk address with
+      | Some x -> addr = x
+      | None -> false) >>|
+  fun blk -> Term.tid blk
+
+let preds_of_sub ?(rev=false) sub : Tid.Set.t Tid.Map.t =
+  let update_pred map src dst =
+    let (src, dst) = if rev then (dst, src) else (src, dst) in
+    let map = Pred.insert src map in
+    Pred.update src dst map in
+  Term.enum blk_t sub |>
+  Seq.fold ~init:Tid.Map.empty ~f:(fun ins src ->
+      let src_id = Term.tid src in
+      let ins = Map.change ins src_id (function
+          | None -> Some Tid.Set.empty
+          | other -> other) in
+      let ins = match Term.get_attr src succs with
+        | None -> ins
+        | Some addrs ->
+          List.fold addrs ~init:ins ~f:(fun ins addr ->
+              match succ_tid_of_addr sub addr with
+              | None -> ins
+              | Some dst_id -> update_pred ins src_id dst_id) in
+      Term.enum jmp_t src |>
+      Seq.fold ~init:ins ~f:(fun ins jmp ->
+          match succ_tid_of_jmp jmp with
+          | None -> ins
+          | Some dst_id -> update_pred ins src_id dst_id))
+
+let of_sub sub = {
+  preds = preds_of_sub sub;
+  succs = preds_of_sub ~rev:true sub;
+  sub;
+}
+
+let to_sub t = t.sub
+
 module Node = struct
   type label = node
   type graph = t
@@ -143,12 +205,21 @@ module Node = struct
               match succ_tid_of_jmp jmp with
               | None -> None
               | Some tid when tid <> Term.tid dst -> None
-              | Some tid -> Some {src; pos; dst}))
+              | Some _ -> Some {src; pos; dst}))
 
-  let outputs src t : edge seq =
+  let outputs_from_jmps src t : edge seq =
     Term.enum jmp_t src |> Seq.filter_mapi ~f:(fun pos jmp ->
         succ_of_jmp t.sub jmp >>= fun dst ->
         if mem src t && mem dst t then Some {src; pos; dst} else None)
+
+  let outputs src t : edge seq =
+    let os = outputs_from_jmps src t in
+    if Seq.is_empty os then
+      match Map.find t.succs (Term.tid src) with
+      | None -> os
+      | Some ss -> blocks_of_tids t.sub ss |> Seq.map ~f:(fun dst ->
+          {src; pos=0; dst})
+    else os
 
   let in_degree blk t = match Map.find t.preds (Term.tid blk) with
     | None -> 0
@@ -178,17 +249,11 @@ module Node = struct
             Pred.remove bid tx |>
             Pred.update bid ty |> fun preds -> {t with preds})
 
-  let update_preds sub preds =
-    Term.enum blk_t sub  |> Seq.fold ~init:preds ~f:(fun preds blk ->
-        succs_of_blk blk |> Seq.fold ~init:preds ~f:(fun preds dst ->
-            Pred.update (Term.tid blk) dst preds))
-
   let do_insert blk t =
     let sub = if Sub.(t.sub = empty_sub)
       then Sub.create () else t.sub in
     let sub = Term.append blk_t sub blk in
-    let preds = Pred.insert (Term.tid blk) t.preds in
-    {preds = update_preds sub preds; sub}
+    of_sub sub
 
   let insert blk t : graph =
     if mem blk t then t
@@ -196,8 +261,9 @@ module Node = struct
 
   let remove blk t =
     let id = Term.tid blk in
-    { sub = Term.remove blk_t t.sub id;
-      preds = Map.remove t.preds id |> Pred.remove_all id}
+    { sub = Term.remove blk_t t.sub id
+    ; preds = Map.remove t.preds id |> Pred.remove_all id
+    ; succs = Map.remove t.succs id |> Pred.remove_all id }
 
   let edge src dst t : edge option =
     inputs dst t |> Seq.find ~f:(fun e -> Term.same e.src src)
@@ -336,49 +402,10 @@ module Edge = struct
     end)
 end
 
-let empty = {
-  sub = Sub.create ();
-  preds = Tid.Map.empty;
-}
-
-let create ?tid ?name () = {
-  empty with
-  sub = Sub.create ?tid ?name ();
-}
-
 let nodes t = Term.enum blk_t t.sub
 
 let edges t =
   nodes t |> Seq.concat_map ~f:(fun src -> Node.outputs src t)
-
-let number_of_edges t =
-  Seq.(Map.to_sequence t.preds >>| snd |>
-       sum (module Int) ~f:Set.length)
-
-
-let number_of_nodes t = Term.length blk_t t.sub
-
-let preds_of_sub sub : Tid.Set.t Tid.Map.t =
-  Term.enum blk_t sub |>
-  Seq.fold ~init:Tid.Map.empty ~f:(fun ins src ->
-      let src_id = Term.tid src in
-      let ins = Map.change ins src_id (function
-          | None -> Some Tid.Set.empty
-          | other -> other) in
-      Term.enum jmp_t src |>
-      Seq.fold ~init:ins ~f:(fun ins jmp ->
-          match succ_tid_of_jmp jmp with
-          | None -> ins
-          | Some tid -> Map.change ins tid (function
-              | None -> Some (Tid.Set.singleton src_id)
-              | Some set -> Some (Set.add set src_id))))
-
-let of_sub sub = {
-  preds = preds_of_sub sub;
-  sub;
-}
-
-let to_sub t = t.sub
 
 let compare x y = Sub.compare x.sub y.sub
 

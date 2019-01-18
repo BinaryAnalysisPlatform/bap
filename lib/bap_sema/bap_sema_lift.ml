@@ -46,6 +46,15 @@ let label_of_fall cfg block =
   Option.map (fall_of_block cfg block) ~f:(fun blk ->
       Label.indirect Bil.(int (Block.addr blk)))
 
+let jmps_of_blk cfg block =
+  Seq.filter_map (Cfg.Node.outputs block cfg) ~f:(fun e ->
+      match Cfg.Edge.label e with
+      | `Fall -> None
+      | `Jump | `Cond -> Some (Cfg.Edge.dst e))
+
+let addrs_of_jmps cfg block =
+  Seq.map (jmps_of_blk cfg block) ~f:(fun blk -> Block.addr blk)
+
 let annotate_insn term insn = Term.set_attr term Disasm.insn insn
 let annotate_addr term addr = Term.set_attr term address addr
 
@@ -154,6 +163,7 @@ let is_conditional_jump jmp =
 
 let blk cfg block : blk term list =
   let fall_label = label_of_fall cfg block in
+  let addrs = Sequence.to_list (addrs_of_jmps cfg block) in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
@@ -167,6 +177,7 @@ let blk cfg block : blk term list =
       | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
+  let b = Term.set_attr b succs addrs in
   List.rev (b::bs) |> function
   | [] -> assert false
   | b::bs -> Term.set_attr b address (Block.addr block) :: bs
