@@ -138,16 +138,15 @@ let number_of_nodes t = Term.length blk_t t.sub
 let succ_tid_of_addr sub addr =
   Term.enum blk_t sub |>
   Seq.find ~f:(fun blk ->
-      match Term.get_attr blk address with
-      | Some x -> addr = x
-      | None -> false) >>|
-  fun blk -> Term.tid blk
+      (Term.get_attr blk address) = Some addr) >>|
+  Term.tid
 
 let preds_of_sub ?(rev=false) sub : Tid.Set.t Tid.Map.t =
   let update_pred map src dst =
     let (src, dst) = if rev then (dst, src) else (src, dst) in
-    let map = Pred.insert src map in
-    Pred.update src dst map in
+    Map.change map dst (function
+        | None -> Some (Tid.Set.singleton src)
+        | Some xs -> Some (Set.add xs src)) in
   Term.enum blk_t sub |>
   Seq.fold ~init:Tid.Map.empty ~f:(fun ins src ->
       let src_id = Term.tid src in
