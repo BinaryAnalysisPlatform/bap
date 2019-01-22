@@ -4,3 +4,6 @@ B ../../_build/lib/knowledge
 B ../../_build/lib/bap_core_theory
 FLG -open Bap_core_theory
 PKG oUnit
+
+S .
+B _build
