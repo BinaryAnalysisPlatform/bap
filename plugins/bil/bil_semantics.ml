@@ -170,15 +170,18 @@ module Basic : Theory.Basic = struct
       | Some b -> Some (Type.imm (Bits.size b))
       | None -> Bool.cast s |> function
         | Some _ -> Some bool_t
-        | None -> Mems.cast s |> function
-          | None -> None
-          | Some ms ->
-            let ks = Mems.keys ms and vs = Mems.vals ms in
-            let ks = Size.addr_of_int_opt (Bits.size ks) in
-            let vs = Size.of_int_opt (Bits.size vs) in
-            match ks, vs with
-            | Some ks, Some vs -> Some (Type.mem ks vs)
-            | _ -> None
+        | None ->
+          Floats.cast s |> function
+          | Some s -> Some (Type.imm (Bits.size (Floats.size s)))
+          | None -> Mems.cast s |> function
+            | None -> None
+            | Some ms ->
+              let ks = Mems.keys ms and vs = Mems.vals ms in
+              let ks = Size.addr_of_int_opt (Bits.size ks) in
+              let vs = Size.of_int_opt (Bits.size vs) in
+              match ks, vs with
+              | Some ks, Some vs -> Some (Type.mem ks vs)
+              | _ -> None
 
     let reify_to_var r =
       match type_of_sort (Var.sort r) with
