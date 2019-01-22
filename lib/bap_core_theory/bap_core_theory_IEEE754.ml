@@ -82,6 +82,12 @@ let decimal32 = decimal 32
 let decimal64 = decimal 64
 let decimal128 = decimal 128
 
+let binary = function
+  | 16 -> binary16
+  | 32 -> binary32
+  | 80 -> binary80
+  | k -> binary k
+
 module Sort = struct
   let format {base; k} =
     let base = if base = 2 then "Binary" else "Decimal" in
@@ -115,6 +121,7 @@ let binary = function
   | 0  -> None
   | 16 -> Some binary16
   | 32 -> Some binary32
+  | 80 -> Some binary80
   | n when n mod 32 = 0 -> Some (binary n)
   | _ -> None
 
