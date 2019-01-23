@@ -299,7 +299,7 @@ let create_indexes (dests : dests Addr.Table.t) =
 
 let filter_valid s = {s with inits = Set.inter s.inits s.valid}
 
-let itefy_destinations origin dests =
+let join_destinations origin dests =
   let dests = List.filter ~f:(fun a -> Addr.(a <> origin)) dests in
   let jmp x = [ Bil.(jmp (int x)) ] in
   let undecided x y =
@@ -334,8 +334,8 @@ let ensure_destinations bil dests =
   if is_diverged then
     (object inherit Stmt.mapper
       method! map_jmp = function
-        | Int a -> itefy_destinations a dests
-        | x -> make_switch x dests
+        | Int addr -> join_destinations addr dests
+        | indirect -> make_switch indirect dests
     end)#run bil
   else bil
 
