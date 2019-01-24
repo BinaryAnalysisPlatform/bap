@@ -326,19 +326,18 @@ let dests_of_bil bil =
 let add_destinations bil = function
   | [] -> bil
   | dests ->
-     let dests = Addr.Set.of_list dests in
-     if has_jump bil then
-       let dests_of_bil = dests_of_bil bil in
-       let jmps_are_differ = not (Set.is_subset dests ~of_:dests_of_bil) in
-       let all = Set.union dests dests_of_bil in
-       if jmps_are_differ then
+     let d = dests_of_bil bil in
+     let d' = Addr.Set.of_list dests in
+     let new_ = Set.diff d' d in
+     if Set.is_empty new_ then bil
+     else
+       if has_jump bil then
          (object inherit Stmt.mapper
             method! map_jmp = function
-              | Int _    -> join_destinations all
-              | indirect -> make_switch indirect all
+              | Int addr    -> join_destinations (Set.add new_ addr)
+              | indirect -> make_switch indirect new_
           end)#run bil
-       else bil
-     else bil @ join_destinations dests
+       else bil @ join_destinations new_
 
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
@@ -391,20 +390,20 @@ let stage2 dis stage1 =
     let disasm mem =
       Dis.run dis mem
         ~init:[] ~return:ident ~stopped:(fun s _ ->
-            Dis.stop s (Dis.insns s)) |>
+          Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
           | mem, None -> mem,(None,None)
           | mem, (Some ins as insn) ->
-            match stage1.lift mem ins with
-            | Ok bil ->
-              let dests =
-                Addrs.find stage1.dests (Memory.max_addr mem) |>
-                Option.value ~default:[] |>
-                List.filter_map ~f:(function
-                    | a, (`Cond | `Jump) -> a
-                    | _ -> None) in
+             let dests =
+               Addrs.find stage1.dests (Memory.max_addr mem) |>
+                 Option.value ~default:[] |>
+                 List.filter_map ~f:(function
+                     | a, (`Cond | `Jump) -> a
+                     | _ -> None) in
+             match stage1.lift mem ins with
+             | Ok bil ->
               mem,(insn,Some (add_destinations bil dests))
-            | _ -> mem, (insn, None)) in
+            | _ -> mem, (insn, Some (add_destinations bil dests))) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
