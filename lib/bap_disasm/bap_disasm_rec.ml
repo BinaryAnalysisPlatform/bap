@@ -299,45 +299,43 @@ let create_indexes (dests : dests Addr.Table.t) =
 
 let filter_valid s = {s with inits = Set.inter s.inits s.valid}
 
-let join_destinations origin dests =
-  let dests = List.filter ~f:(fun a -> Addr.(a <> origin)) dests in
+let join_destinations dests =
   let jmp x = [ Bil.(jmp (int x)) ] in
   let undecided x y =
     [ Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) x y ] in
-  let rec loop = function
+  let rec join = function
     | [] -> []
     | hd :: [] -> jmp hd
-    | hd :: tl -> match loop tl with
+    | hd :: tl -> match join tl with
       | [] -> jmp hd
       | tl -> undecided (jmp hd) tl in
-  match loop dests with
-  | [] -> jmp origin
-  | dests -> undecided (jmp origin) dests
+  join (Set.to_list dests)
 
 let make_switch x dests =
   let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
   let default = Bil.jmp x in
-  List.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
+  Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
 
-let ensure_destinations bil dests =
-  let dests =
-    List.filter_map dests ~f:(fun (addr,edge) ->
-        if edge = `Fall then None else addr) in
-  let is_diverged =
-    let is_known = List.mem dests ~equal:Addr.equal in
-    Bil.exists
-      (object inherit [unit] Stmt.finder
-        method! visit_jmp e search = match e with
-          | Int w when is_known w -> search
-          | _ -> search.return (Some ())
-      end) bil in
-  if is_diverged then
-    (object inherit Stmt.mapper
-      method! map_jmp = function
-        | Int addr -> join_destinations addr dests
-        | indirect -> make_switch indirect dests
-    end)#run bil
-  else bil
+let ensure_destinations bil = function
+  | [] -> bil
+  | dests ->
+     let dests = Addr.Set.of_list dests in
+     let is_diverged =
+       Bil.exists
+         (object inherit [unit] Stmt.finder
+            method! visit_jmp e search = match e with
+              | Int w when Set.mem dests w -> search
+              | _ -> search.return (Some ())
+          end) bil in
+     if is_diverged then
+       if has_jump bil then
+         (object inherit Stmt.mapper
+            method! map_jmp = function
+              | Int addr -> join_destinations (Set.add dests addr)
+              | indirect -> make_switch indirect dests
+          end)#run bil
+       else bil @ join_destinations dests
+     else bil
 
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
@@ -396,12 +394,13 @@ let stage2 dis stage1 =
           | mem, (Some ins as insn) ->
             match stage1.lift mem ins with
             | Ok bil ->
-              let bil =
-                if has_jump bil then
-                  Addrs.find stage1.dests (Memory.max_addr mem) |>
-                  Option.value ~default:[] |>
-                  ensure_destinations bil
-                else bil in
+              let dests =
+                Addrs.find stage1.dests (Memory.max_addr mem) |>
+                Option.value ~default:[] |>
+                List.filter_map ~f:(function
+                    | a, (`Cond | `Jump) -> a
+                    | _ -> None) in
+              let bil = ensure_destinations bil dests in
               mem,(insn,Some bil)
             | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
