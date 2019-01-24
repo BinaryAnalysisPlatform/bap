@@ -400,8 +400,7 @@ let stage2 dis stage1 =
                 List.filter_map ~f:(function
                     | a, (`Cond | `Jump) -> a
                     | _ -> None) in
-              let bil = ensure_destinations bil dests in
-              mem,(insn,Some bil)
+              mem,(insn,Some (ensure_destinations bil dests))
             | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
 
