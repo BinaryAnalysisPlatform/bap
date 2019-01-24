@@ -316,26 +316,27 @@ let make_switch x dests =
   let default = Bil.jmp x in
   Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
 
-let ensure_destinations bil = function
+let dests_of_bil bil =
+  (object inherit [Addr.Set.t] Stmt.visitor
+     method! visit_jmp e dests = match e with
+       | Int w -> Set.add dests w
+       | _ -> dests
+   end)#run bil Addr.Set.empty
+
+let add_destinations bil = function
   | [] -> bil
   | dests ->
      let dests = Addr.Set.of_list dests in
-     let is_diverged =
-       Bil.exists
-         (object inherit [unit] Stmt.finder
-            method! visit_jmp e search = match e with
-              | Int w when Set.mem dests w -> search
-              | _ -> search.return (Some ())
-          end) bil in
-     if is_diverged then
-       if has_jump bil then
-         (object inherit Stmt.mapper
-            method! map_jmp = function
-              | Int addr -> join_destinations (Set.add dests addr)
-              | indirect -> make_switch indirect dests
+     let dests_of_bil = dests_of_bil bil in
+     let jmps_are_differ = not (Set.is_subset dests ~of_:dests_of_bil) in
+     let all = Set.union dests dests_of_bil in
+     if jmps_are_differ then
+       (object inherit Stmt.mapper
+          method! map_jmp = function
+            | Int _    -> join_destinations all
+            | indirect -> make_switch indirect all
           end)#run bil
-       else bil @ join_destinations dests
-     else bil
+     else bil @ join_destinations all
 
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
@@ -400,7 +401,14 @@ let stage2 dis stage1 =
                 List.filter_map ~f:(function
                     | a, (`Cond | `Jump) -> a
                     | _ -> None) in
-              mem,(insn,Some (ensure_destinations bil dests))
+
+              let bil' = add_destinations bil dests in
+              let s1 = Bil.to_string bil in
+              let s2 = Bil.to_string bil' in
+              if String.(s1 <> s2) then
+                printf "%s\n%s\n\n" s1 s2;
+
+              mem,(insn,Some (add_destinations bil dests))
             | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
 
