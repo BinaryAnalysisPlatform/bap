@@ -327,16 +327,18 @@ let add_destinations bil = function
   | [] -> bil
   | dests ->
      let dests = Addr.Set.of_list dests in
-     let dests_of_bil = dests_of_bil bil in
-     let jmps_are_differ = not (Set.is_subset dests ~of_:dests_of_bil) in
-     let all = Set.union dests dests_of_bil in
-     if jmps_are_differ then
-       (object inherit Stmt.mapper
-          method! map_jmp = function
-            | Int _    -> join_destinations all
-            | indirect -> make_switch indirect all
+     if has_jump bil then
+       let dests_of_bil = dests_of_bil bil in
+       let jmps_are_differ = not (Set.is_subset dests ~of_:dests_of_bil) in
+       let all = Set.union dests dests_of_bil in
+       if jmps_are_differ then
+         (object inherit Stmt.mapper
+            method! map_jmp = function
+              | Int _    -> join_destinations all
+              | indirect -> make_switch indirect all
           end)#run bil
-     else bil @ join_destinations all
+       else bil
+     else bil @ join_destinations dests
 
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
@@ -401,13 +403,6 @@ let stage2 dis stage1 =
                 List.filter_map ~f:(function
                     | a, (`Cond | `Jump) -> a
                     | _ -> None) in
-
-              let bil' = add_destinations bil dests in
-              let s1 = Bil.to_string bil in
-              let s2 = Bil.to_string bil' in
-              if String.(s1 <> s2) then
-                printf "%s\n%s\n\n" s1 s2;
-
               mem,(insn,Some (add_destinations bil dests))
             | _ -> mem, (insn, None)) in
     return {stage1; addrs; succs; preds; disasm}
