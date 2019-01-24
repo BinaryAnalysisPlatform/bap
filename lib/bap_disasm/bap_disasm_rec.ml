@@ -334,7 +334,7 @@ let add_destinations bil = function
        if has_jump bil then
          (object inherit Stmt.mapper
             method! map_jmp = function
-              | Int addr    -> join_destinations (Set.add new_ addr)
+              | Int addr -> join_destinations (Set.add new_ addr)
               | indirect -> make_switch indirect new_
           end)#run bil
        else bil @ join_destinations new_
