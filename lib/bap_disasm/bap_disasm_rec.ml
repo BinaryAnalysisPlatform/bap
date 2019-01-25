@@ -328,16 +328,16 @@ let add_destinations bil = function
   | dests ->
     let d = dests_of_bil bil in
     let d' = Addr.Set.of_list dests in
-    let new_ = Set.diff d' d in
-    if Set.is_empty new_ then bil
+    let n = Set.diff d' d in
+    if Set.is_empty n then bil
     else
     if has_jump bil then
       (object inherit Stmt.mapper
         method! map_jmp = function
-          | Int addr -> join_destinations (Set.add new_ addr)
-          | indirect -> make_switch indirect new_
+          | Int addr -> join_destinations (Set.add n addr)
+          | indirect -> make_switch indirect n
       end)#run bil
-    else bil @ join_destinations new_
+    else bil @ join_destinations n
 
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
