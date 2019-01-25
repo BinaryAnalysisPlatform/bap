@@ -299,17 +299,14 @@ let create_indexes (dests : dests Addr.Table.t) =
 
 let filter_valid s = {s with inits = Set.inter s.inits s.valid}
 
-let join_destinations dests =
+let join_destinations ?default dests =
   let jmp x = [ Bil.(jmp (int x)) ] in
-  let undecided x y =
-    [ Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) x y ] in
-  let rec join = function
-    | [] -> []
-    | hd :: [] -> jmp hd
-    | hd :: tl -> match join tl with
-      | [] -> jmp hd
-      | tl -> undecided (jmp hd) tl in
-  join (Set.to_list dests)
+  let undecided x =
+    Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) (jmp x) [] in
+  let init = match default with
+    | None -> []
+    | Some x -> jmp x in
+  Set.fold dests ~init ~f:(fun bil x -> undecided x :: bil)
 
 let make_switch x dests =
   let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
@@ -334,7 +331,7 @@ let add_destinations bil = function
     if has_jump bil then
       (object inherit Stmt.mapper
         method! map_jmp = function
-          | Int addr -> join_destinations (Set.add n addr)
+          | Int addr -> join_destinations ~default:addr n
           | indirect -> make_switch indirect n
       end)#run bil
     else bil @ join_destinations n
@@ -400,9 +397,10 @@ let stage2 dis stage1 =
               List.filter_map ~f:(function
                   | a, (`Cond | `Jump) -> a
                   | _ -> None) in
-            match stage1.lift mem ins with
-            | Ok bil -> mem,(insn,Some (add_destinations bil dests))
-            | _      -> mem, (insn, Some (add_destinations [] dests))) in
+            let bil = match stage1.lift mem ins with
+              | Ok bil -> bil
+              | _ -> [] in
+            mem, (insn, Some (add_destinations bil dests))) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =
