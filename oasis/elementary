@@ -1,0 +1,11 @@
+Flag elementary
+  Description: Build the bap-elementary library
+  Default: false
+
+Library bap_elementary
+  Build$: flag(everything) || flag(elementary)
+  Path: lib/bap_elementary
+  FindlibName: bap-elementary
+  CompiledObject: best
+  BuildDepends: bap, bap-knowledge, bap-core-theory, core_kernel
+  Modules: Bap_elementary
