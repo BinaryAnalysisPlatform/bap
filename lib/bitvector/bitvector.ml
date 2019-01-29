@@ -150,7 +150,7 @@ let lnot x m = norm m @@ Z.lognot x [@@inline]
 let neg x m = norm m @@ Z.neg x [@@inline]
 let nth x n _ = Z.testbit x n [@@inline]
 let msb x {w} = Z.testbit x (w - 1) [@@inline]
-let lsb x _ = nth x 0 [@@inline]
+let lsb x _ = Z.testbit x 0 [@@inline]
 let abs x m = if msb x m then neg x m else x [@@inline]
 let add x y m = norm m @@ Z.add x y [@@inline]
 let sub x y m = norm m @@ Z.sub x y [@@inline]
@@ -234,6 +234,14 @@ let rshift x y m =
   else norm m @@ Z.shift_right x (to_int_fast y m.w)
 [@@inline]
 
+let arshift x y m =
+  let msb = msb x m in
+  if Z.(geq y (of_int m.w))
+  then if msb then ones m else zero
+  else norm m @@
+    Z.shift_right (Z.signed_extract x 0 m.w) (to_int_fast y m.w)
+[@@inline]
+
 let gcd x y m =
   if Z.(equal x zero) then y else
   if Z.(equal y zero) then x else
@@ -259,11 +267,31 @@ let signed_compare x y m = match msb x m, msb y m with
   | false,true -> 1
 [@@inline]
 
+module Syntax = struct
+  let (!!) x m = int x m [@@inline]
+  let (~-) x m = neg x m [@@inline]
+  let (~~) x m = lnot x m [@@inline]
+  let (+) x y m = add x y m [@@inline]
+  let (-) x y m = sub x y m [@@inline]
+  let ( * ) x y m = mul x y m [@@inline]
+  let (/) x y m = div x y m [@@inline]
+  let (/$) x y m = sdiv x y m [@@inline]
+  let (%) x y m = rem x y m [@@inline]
+  let (%$) x y m = smod x y m [@@inline]
+  let (%^) x y m = srem x y m [@@inline]
+  let (land) x y m = logand x y m [@@inline]
+  let (lor) x y m = logor x y m [@@inline]
+  let (lxor) x y m = logxor x y m [@@inline]
+  let (lsl) x y m = lshift x y m [@@inline]
+  let (lsr) x y m = rshift x y m [@@inline]
+  let (asr) x y m = arshift x y m [@@inline]
+  let (++) x n m = nsucc x n m [@@inline]
+  let (--) x n m = npred x n m [@@inline]
+end
+
 module type S = sig
   type 'a m
   val bool : bool -> t
-
-
   val int : int -> t m
   val int32 : int32 -> t m
   val int64 : int64 -> t m
@@ -325,12 +353,6 @@ module type Modulus = sig
   val modulus : modulus
 end
 
-module Make(W : Modulus) = struct
-  include W
-
-
-end [@@inline]
-
 let to_string = Z.format "%#x"
 let of_string x =
   let r = Z.of_string x in
@@ -358,7 +380,87 @@ let to_int32 x = if fits_int32 x then Z.to_int32 x
 let to_int64 x = if fits_int64 x then Z.to_int64 x
   else doesn't_fit "int64" x
 
+let to_bigint x = x [@@inline]
+
 let of_binary = Z.of_bits
 let to_binary = Z.to_bits
 let pp ppf x =
   Format.fprintf ppf "%s" (to_string x)
+
+module Make(M : Modulus) : S with type 'a m = 'a = struct
+  type 'a m = 'a
+  let m = M.modulus
+
+  let bool x = bool x [@@inline]
+  let int x = int x mod m [@@inline]
+  let int32 x = int32 x mod m [@@inline]
+  let int64 x = int64 x mod m [@@inline]
+  let bigint x = bigint x mod m [@@inline]
+  let zero = zero
+  let one = one
+  let ones = ones mod m
+  let succ x = succ x mod m [@@inline]
+  let nsucc x n = nsucc x n mod m [@@inline]
+  let pred x = pred x mod m [@@inline]
+  let npred x n = npred x n mod m [@@inline]
+  let neg x = neg x mod m [@@inline]
+  let lnot x = lnot x mod m [@@inline]
+  let abs x = abs x mod m [@@inline]
+  let add x y = add x y mod m [@@inline]
+  let sub x y = sub x y mod m [@@inline]
+  let mul x y = mul x y mod m [@@inline]
+  let div x y = div x y mod m [@@inline]
+  let sdiv x y = sdiv x y mod m [@@inline]
+  let rem x y = rem x y mod m [@@inline]
+  let srem x y = srem x y mod m [@@inline]
+  let smod x y = smod x y mod m [@@inline]
+  let nth x y = nth x y mod m [@@inline]
+  let msb x = msb x mod m [@@inline]
+  let lsb x = lsb x mod m [@@inline]
+  let logand x y = logand x y mod m [@@inline]
+  let logor  x y = logor  x y mod m [@@inline]
+  let logxor x y = logxor x y mod m [@@inline]
+  let lshift x y = lshift x y mod m [@@inline]
+  let rshift x y = rshift x y mod m [@@inline]
+  let arshift x y = arshift x y mod m [@@inline]
+  let gcd x y = gcd x y mod m [@@inline]
+  let lcm x y = lcm x y mod m [@@inline]
+  let gcdext x y = gcdext x y mod m [@@inline]
+
+  let (!$) x = of_string x [@@inline]
+  let (!!) x = int x [@@inline]
+  let (~-) x = neg x [@@inline]
+  let (~~) x = lnot x [@@inline]
+  let (+) x y = add x y [@@inline]
+  let (-) x y = sub x y [@@inline]
+  let ( * ) x y = mul x y [@@inline]
+  let (/) x y = div x y [@@inline]
+  let (/$) x y = sdiv x y [@@inline]
+  let (%) x y = rem x y [@@inline]
+  let (%$) x y = smod x y [@@inline]
+  let (%^) x y = srem x y [@@inline]
+  let (land) x y = logand x y [@@inline]
+  let (lor) x y = logor x y [@@inline]
+  let (lxor) x y = logxor x y [@@inline]
+  let (lsl) x y = lshift x y [@@inline]
+  let (lsr) x y = rshift x y [@@inline]
+  let (asr) x y = arshift x y [@@inline]
+  let (++) x n = nsucc x n [@@inline]
+  let (--) x n = npred x n [@@inline]
+end [@@inline]
+
+module M1 = Make(struct
+    let modulus = m1
+  end)
+
+module M8 = Make(struct
+    let modulus = m8
+  end)
+
+module M32 = Make(struct
+    let modulus = m32
+  end)
+
+module M64 = Make(struct
+    let modulus = m64
+  end)

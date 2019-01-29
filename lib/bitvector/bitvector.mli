@@ -48,7 +48,7 @@ module type S = sig
   type 'a m
 
   (** [bool x] returns [one] if [x] and [zero] otherwise.   *)
-  val bool : bool -> t m
+  val bool : bool -> t
 
   (** [int n mod m] is [n] modulo [m]. *)
   val int : int -> t m
@@ -375,10 +375,9 @@ val of_string : string -> t
 (** [fits_int x] is [true] if [x] could be represented with the OCaml
     [int] type.
 
-    Note: it is not always true that [fits_int (of_int x)], since
-    depending on the [width] parameter the negative numbers might
-    not fit into the OCaml representation. For positive numbers it
-    is true, however.
+    Note: it is not always true that [fits_int (int x mod m)], since
+    depending on [m] a negative number might not fit into the OCaml
+    representation. For positive numbers it is true, however.
 *)
 val fits_int : t -> bool
 
@@ -394,10 +393,9 @@ val to_int : t -> int
 (** [fits_int32 x] is [true] if [x] could be represented with the OCaml
     [int] type.
 
-    Note: it is not always true that [fits_int (of_int x)], since
-    depending on the [width] parameter the negative numbers might
-    not fit back into the [int32] representation. For positive numbers it
-    is true, however.
+    Note: it is not always true that [fits_int32 (int32 x mod m)],
+    since depending on [m] the negative [x] may not fit back into the
+    [int32] representation. For positive numbers it is true, however.
 *)
 val fits_int32 : t -> bool
 
@@ -406,23 +404,14 @@ val fits_int32 : t -> bool
 
     The function is undefined if [not (fits_int32 x)].
 *)
-val to_int32 : t -> int
-
-
-(** [of_int64 ~width n] returns a bitvector representing integer [n].
-
-    The [width] parameter defaults to [64] and denotes the size
-    of the returned bitvector.
-*)
-val of_int64 : int64 -> t m
+val to_int32 : t -> int32
 
 (** [fits_int64 x] is [true] if [x] could be represented with the OCaml
     [int] type.
 
-    Note: it is not always true that [fits_int (of_int x)], since
-    depending on the [width] parameter the negative numbers might
-    not fit back into the [int64] representation. For positive numbers it
-    is true, however.
+    Note: it is not always true that [fits_int64 (int64 x mod m)],
+    since depending on [m] the negative [x] might not fit back into the
+    [int64] representation. For positive numbers it is true, however.
 *)
 val fits_int64 : t -> bool
 
@@ -431,7 +420,7 @@ val fits_int64 : t -> bool
 
     The function is undefined if [not (fits_int64 x)].
 *)
-val to_int64 : t -> int
+val to_int64 : t -> int64
 
 
 (** [to_bigint x] returns a natural number that corresponds to [x].
