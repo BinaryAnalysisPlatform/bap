@@ -33,7 +33,7 @@ module Elementary (Theory : Theory.Core) : sig
   (** [tabulate op ~rank ~size x rmode] defines a subset of
       functions that can be created by [approximate], s.t.
       each value in a table is a concatenation of coefficients
-      (from one with the most rank to one with the least),
+      (from one with the least rank to one with the most),
       and each key is first [size] bits of floating point value.
 
       @param op is a name of floating point operation to approximate. *)
