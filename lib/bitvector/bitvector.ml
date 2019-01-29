@@ -1,291 +1,364 @@
-open Format
-(*
-   We store the bitwidth and sign in the bitvector itself.
-   Thus, bitvector is Z.t. We will use several bits of the word
-   for meta data. To be able to store 32 bit words on a 64 bit platform we need to
-   leave enough space in a 63 bit word for the payload. Ideally, we
-   would like to have a support for an arbitrary bitwidth, but we can
-   limit it to 2^14=32 (2 kB), spend one bit for sign (that can be
-   removed later), thus we will have 48 bits for the payload.
+type t = Z.t
 
+(* Invariant: a bitvector is always normed.
 
-     small:
-     +-----------+------+---+
-     |  payload  | size | s |
-     +-----------+------+---+
-      size+15  15 14       0
+   A normed bitvector is always treated by Z as non-negative:
+   - Z.sign (norm w x) >= 0
 
+   We have to enforce this invariant since in Z negative numbers are
+   not equal to their two complement forms, in other words,
+   Z.(-1 != 0xFFFFF..FF).
 
-    Given this scheme, all values smaller than 0x100_000_000_0000 will
-    have the same representation as OCaml int.
+   This makes sense, since in Z a number has an arbitrary length and
+   thus the number of ones in the two complement form is essentially
+   unlimited, thus any fixed length bitvector of all ones is not equal
+   to any negative number. Thus in order to implement canonical
+   comparison function we need to parametrize it with the length of
+   the length of the bitvector, which in fact prevents us from having
+   one single type for bivector sets, maps, and any regular or
+   comparable interface in general. Another problem with
+   non-normalized bitvectors is serialization. The [to_bits] function
+   doesn't preserve the sign, the default marshaling function is not
+   portable between OCaml runtimes with different word sizes, and last
+   but not least, the same problem with non-canonical representation
+   perists = 0xFFFF_FFFF is not equal to -1, or even more, 0xDEADBEEF
+   is not equal to -559038737.
 
-    The performance overhead is minimal, especially since no
-    allocations are done anymore.
+   The are two ramifications of enforcing the normalized canonical
+   representation:
 
-    Speaking of the sign. I would propose to remove it from the
-    bitvector, as sign is not a property of a bitvector, it is its
-    interpretation.
+   - some extra performance cost due to occasional calls to normalize
+   (it is usually just one instruction - logand)
 
-    Removing the sign will get us extra memory and CPU efficiency.
+   - values with more than 62 significand bits will be stored in a
+     boxed notation (we loose 1 bit wrt to the non-normalized)
+     representation.
+
 *)
-module Bignum = Z
-type t = Bignum.t
 
-type endian = LittleEndian | BigEndian
-
-let metasize = 15
-let lenoff   = 1
-let lensize  = metasize - 1
-let maxlen   = 1 lsl lensize
-
-let meta x = Z.extract x 0 (metasize - 1)
-let is_signed = Z.is_odd
-let bitwidth x = Z.extract x lenoff lensize |> Z.to_int
-
-let z x =
-  let w = bitwidth x in
-  if is_signed x
-  then Z.signed_extract x metasize w
-  else Z.extract x metasize w
-
-let signed x = Z.(x lor one)
-
-let with_z x v =
-  let w = bitwidth x in
-  let v = Z.(extract v 0 w lsl metasize) in
-  Z.(v lor meta x)
-
-let create z w =
-  if w > maxlen
-  then invalid_arg @@
-    "Bitvector.create: Overflow, the maximum number of bits is "
-    ^ string_of_int maxlen ;
-  if w <= 0
-  then invalid_arg "A nonpositive width is specified (%s,%d)";
-  let meta = Z.(of_int w lsl 1) in
-  let z = Z.(extract z 0 w lsl metasize) in
-  Z.(z lor meta)
-
-let unsigned x = create (z x) (bitwidth x)
-let hash x = Z.hash (z x)
-let bits_of_z x = Z.to_bits (z x)
-let unop op t = op (z t)
-let binop op t1 t2 = op (z t1) (z t2)
-let lift1 op t = create (unop op t) (bitwidth t)
-let lift2 op t1 t2 = create (binop op t1 t2) (bitwidth t1)
-
-let lift2_triple op t1 t2 : t * t * t =
-  let (a, b, c) = binop op t1 t2 in
-  let w = bitwidth t1 in
-  create a w, create b w, create c w
-
-let pp_generic
-    ?(case:[`lower|`upper]=`upper)
-    ?(prefix:[`auto|`base|`none|`this of string]=`auto)
-    ?(suffix:[`full|`none|`size]=`none)
-    ?(format:[`hex|`dec|`oct|`bin]=`hex) ppf x =
-  let width = bitwidth x in
-  let is_signed = is_signed x in
-  let is_negative = Z.compare (z x) Z.zero < 0 in
-  let x = Z.abs (z x) in
-  let word = Z.of_int in
-  let int  = Z.to_int in
-  let base = match format with
-    | `dec -> word 10
-    | `hex -> word 0x10
-    | `oct -> word 0o10
-    | `bin -> word 0b10 in
-  let pp_prefix ppf = match format with
-    | `dec -> ()
-    | `hex -> fprintf ppf "0x"
-    | `oct -> fprintf ppf "0o"
-    | `bin -> fprintf ppf "0b" in
-  if is_negative then fprintf ppf "-";
-  let () = match prefix with
-    | `none -> ()
-    | `this x -> fprintf ppf "%s" x
-    | `base -> pp_prefix ppf
-    | `auto ->
-      if Z.compare x (Z.min (word 10) base) >= 0
-      then pp_prefix ppf in
-  let fmt = format_of_string @@ match format, case with
-    | `hex,`upper -> "%X"
-    | `hex,`lower -> "%x"
-    | _ -> "%d" in
-  let rec print x =
-    let d = int Z.(x mod base) in
-    if x >= base
-    then print Z.(x / base);
-    fprintf ppf fmt d in
-  print x;
-  match suffix with
-  | `full -> fprintf ppf ":%d%c" width (if is_signed then 's' else 'u')
-  | `size -> fprintf ppf ":%d" width
-  | `none -> ()
-
-let compare l r =
-  let s = compare (bitwidth l) (bitwidth r) in
-  if s <> 0 then s
-  else match is_signed l, is_signed r with
-    | true,true | false,false -> Bignum.compare (z l) (z r)
-    | true,false -> Bignum.compare (z l) (z (signed r))
-    | false,true -> Bignum.compare (z (signed l)) (z r)
-
-let pp_full ppf = pp_generic ~suffix:`full ppf
-let pp = pp_full
-
-let to_string x =
-  let z = z x in
-  match bitwidth x with
-  | 1 -> if Z.equal z Z.zero then "false" else "true"
-  | _ -> asprintf "%a" pp_full x
-
-let is_digit = function
-  | '0'..'9' -> true
-  | _ -> false
-
-let of_suffixed stem suffix =
-  let z = Bignum.of_string stem in
-  let sl = String.length suffix in
-  if sl = 0
-  then invalid_arg "Bitvector.of_string: an empty suffix";
-  let chop x = String.sub x 0 (sl - 1) in
-  match suffix.[sl-1] with
-  | 's' -> create z (int_of_string (chop suffix)) |> signed
-  | 'u' -> create z (int_of_string (chop suffix))
-  | x when is_digit x -> create z (int_of_string suffix)
-  | _ -> invalid_arg "Bitvector.of_string: invalid prefix format"
+type modulus = {
+  w : int;                      (* bitwidth *)
+  m : Z.t;                      (* modulus: 2^w-1 *)
+}
 
 
-let of_string = function
-  | "false" -> create Bignum.zero 1
-  | "true"  -> create Bignum.one  1
-  | s -> match String.split_on_char ':' s with
-    | [z; n] -> of_suffixed z n
-    | _ -> failwith ("Bitvector.of_string: " ^ s)
-
-let extract ?hi ?(lo=0) t =
-  let n = bitwidth t in
-  let z = z t in
-  let hi = match hi with
-    | Some hi -> hi
-    | None -> n - 1 in
-  let len = hi-lo+1 in
-  if len <= 0
-  then failwith ("Bitvector.extract: len is negative: " ^ string_of_int len);
-  create (Z.extract z lo len) len
+type 'a m = modulus -> 'a
 
 
-module Cons = struct
-  let b0 = create (Bignum.of_int 0) 1
-  let b1 = create (Bignum.of_int 1) 1
-  let of_bool v = if v then b1 else b0
-  let of_int32 ?(width=32) n = create (Bignum.of_int32 n) width
-  let of_int64 ?(width=64) n = create (Bignum.of_int64 n) width
-  let of_int ~width v = create (Bignum.of_int v) width
-  let ones  n = of_int (-1) ~width:n
-  let zeros n = of_int (0)  ~width:n
-  let zero  n = of_int 0    ~width:n
-  let one   n = of_int 1    ~width:n
+(* we predicate the normalization, to prevent extra allocations
+   in cases when the bitvector has the boxed representation, so
+   that in cases when `x = norm x` we do not create a fresh new
+   value with the same contents.
+
+   The normalization is required for negative numbers, since Z
+   represent them non canonically.
+
+   Specialized versions may use a different normalization procedure,
+   this is the general case that shall work with all range of widths.
+*)
+let norm {m; w} x =
+  if Z.sign x < 0 || Z.geq x m
+  then Z.(x land m)
+  else x
+[@@inline]
+
+
+(* defining extrenal as the apply primitive will enable
+   inlining (with any other operator definition the vanilla
+   version of OCaml will create a closure)
+*)
+external (mod) : 'a m -> modulus -> 'a = "%apply"
+
+let modulus w = {
+  m = Z.(one lsl w - one);
+  w;
+}
+
+let m1 = modulus 1
+let m8 = modulus 8
+let m32 = modulus 32
+let m64 = modulus 64
+
+
+let compare = Z.compare
+let hash = Z.hash
+
+let one = Z.one
+let zero = Z.zero
+let ones m = norm m @@ Z.minus_one
+let bool x = if x then one else zero
+let int x m = norm m @@ Z.of_int x [@@inline]
+let int32 x m = norm m @@ Z.of_int32 x [@@inline]
+let int64 x m = norm m @@ Z.of_int64 x [@@inline]
+let bigint x m  = norm m @@ x [@@inline]
+
+let append w1 w2 x y =
+  let w = w1 + w2 in
+  let ymask = Z.(one lsl w2 - one) in
+  let zmask = Z.(one lsl w - one) in
+  let ypart = Z.(y land ymask) in
+  let xpart = Z.(x lsl w2) in
+  Z.(xpart lor ypart land zmask)
+[@@inline]
+
+let extract ~hi ~lo x =
+  Z.extract x lo (hi - lo + 1)
+[@@inline]
+
+let setbit x n = Z.(x lor (one lsl n)) [@@inline]
+
+let select bits x =
+  let rec loop n y = function
+    | [] -> y
+    | v :: vs ->
+      let y = if Z.testbit x v
+        then setbit y n
+        else y in
+      loop (n+1) y vs in
+  loop 0 zero bits
+
+let repeat m ~times:n x =
+  let mask = Z.(one lsl m - one) in
+  let x = Z.(x land mask) in
+  let rec loop i y =
+    if i < n
+    then
+      let off = i * m in
+      let stamp = Z.(x lsl off) in
+      loop (i+1) Z.(y lor stamp)
+    else y in
+  loop 0 zero
+
+let concat m xs =
+  let mask = Z.(one lsl m - one) in
+  List.fold_left (fun y x ->
+      let x = Z.(x land mask) in
+      Z.(y lsl m lor x)) zero xs
+
+(* we can't use higher functions such as op1 and op2,
+   to lift Z operations to bitv since this will prevent
+   inlining and will introduce extra indirect calls, so
+   we have to make it in a verbose method. Flambda, where
+   are you?
+*)
+
+let succ x m = norm m @@ Z.succ x [@@inline]
+let pred x m = norm m @@ Z.pred x [@@inline]
+let nsucc x n m = norm m @@ Z.(x + of_int n) [@@inline]
+let npred x n m = norm m @@ Z.(x - of_int n) [@@inline]
+let lnot x m = norm m @@ Z.lognot x [@@inline]
+let neg x m = norm m @@ Z.neg x [@@inline]
+let nth x n _ = Z.testbit x n [@@inline]
+let msb x {w} = Z.testbit x (w - 1) [@@inline]
+let lsb x _ = nth x 0 [@@inline]
+let abs x m = if msb x m then neg x m else x [@@inline]
+let add x y m = norm m @@ Z.add x y [@@inline]
+let sub x y m = norm m @@ Z.sub x y [@@inline]
+let mul x y m = norm m @@ Z.mul x y [@@inline]
+let div x y m = if Z.(y = zero)
+  then ones m
+  else norm m @@ Z.div x y
+[@@inline]
+
+let sdiv x y m = match msb x m, msb y m with
+  | false, false -> div x y m
+  | true, false -> neg (div (neg x m) y m) m
+  | false, true -> neg (div x (neg y m) m) m
+  | true, true  -> div (neg x m) (neg y m) m
+[@@inline]
+
+let rem x y m =
+  if Z.(y = zero)
+  then x
+  else norm m @@ Z.rem x y
+[@@inline]
+
+(* 2's complement signed remainder (sign follows dividend) *)
+let srem x y m = match msb x m, msb y m with
+  | false,false -> rem x y m
+  | true,false -> neg (rem (neg x m) y m) m
+  | false,true -> neg (rem x (neg y m) m) m
+  | true,true -> neg (rem (neg x m) (neg y m) m) m
+[@@inline]
+
+(* 2's complement signed remained (sign follows the divisor) *)
+let smod s t m =
+  let u = rem s t m in
+  if Z.(u = zero) then u
+  else match msb s m, msb t m with
+    | false,false -> u
+    | true,false -> add (neg u m) t m
+    | false,true -> add u t m
+    | true,true -> neg u m
+[@@inline]
+
+let logand x y m = norm m @@ Z.logand x y [@@inline]
+let logor x y m = norm m @@ Z.logor x y [@@inline]
+let logxor x y m = norm m @@ Z.logxor x y [@@inline]
+
+
+(* extracts no more than [m] bits from [x].
+   The [Z.to_int] function may allocate since it throws
+   an exception in case of the overflow. So we have to
+   pay with the GC check after each call to [Z.to_int],
+   so instead of no-op we have a call, and a couple of
+   blocks with a dozen of instructions.
+
+   The implementation below is safe and doens't rely on
+   whether the FAST_PATH or NATINT options are enabled
+   in zarith. It first looks whether [x] is actually an
+   [int] and then casts it to the [int] type, otherwise
+   it extracts the low (min m Sys.int_size) bits and
+   cast them to_int using the slow Z.to_int, so that in
+   case if zarith is not using NATINT representation,
+   we will still be on the safe side.
+
+   Note: this function is pure optimization, so in case
+   if you're not sure, it could be replaced with its
+   else branch.
+*)
+let to_int_fast x m : int =
+  if Obj.is_int (Obj.repr x) then Obj.magic x
+  else Z.to_int @@ Z.signed_extract x 0 (min m Sys.int_size)
+[@@inline]
+
+let lshift x y m =
+  if Z.(geq y (of_int m.w))
+  then zero
+  else norm m @@ Z.shift_left x (to_int_fast y m.w)
+[@@inline]
+
+let rshift x y m =
+  if Z.(geq y (of_int m.w))
+  then zero
+  else norm m @@ Z.shift_right x (to_int_fast y m.w)
+[@@inline]
+
+let gcd x y m =
+  if Z.(equal x zero) then y else
+  if Z.(equal y zero) then x else
+    norm m @@ Z.gcd x y
+[@@inline]
+
+let lcm x y m =
+  if Z.(equal x zero) || Z.(equal y zero) then zero
+  else norm m @@ Z.lcm x y
+[@@inline]
+
+let gcdext x y m =
+  if Z.(equal x zero) then (y,zero,one) else
+  if Z.(equal y zero) then (x,one,zero) else
+    let (g,a,b) = Z.gcdext x y in
+    (norm m g, norm m a, norm m b)
+[@@inline]
+
+let signed_compare x y m = match msb x m, msb y m with
+  | true, true -> compare y x
+  | false,false -> compare x y
+  | true,false -> -1
+  | false,true -> 1
+[@@inline]
+
+module type S = sig
+  type 'a m
+  val bool : bool -> t
+
+
+  val int : int -> t m
+  val int32 : int32 -> t m
+  val int64 : int64 -> t m
+  val bigint : Z.t -> t m
+  val zero : t
+  val one : t
+  val ones : t m
+  val succ : t -> t m
+  val nsucc : t -> int -> t m
+  val pred : t -> t m
+  val npred : t -> int -> t m
+  val neg : t -> t m
+  val lnot : t -> t m
+  val abs  : t -> t m
+  val add     : t -> t -> t m
+  val sub     : t -> t -> t m
+  val mul     : t -> t -> t m
+  val div : t -> t -> t m
+  val sdiv : t -> t -> t m
+  val rem : t -> t -> t m
+  val srem : t -> t -> t m
+  val smod : t -> t -> t m
+  val nth : t -> int -> bool m
+  val msb : t -> bool m
+  val lsb : t -> bool m
+  val logand  : t -> t -> t m
+  val logor   : t -> t -> t m
+  val logxor  : t -> t -> t m
+  val lshift  : t -> t -> t m
+  val rshift  : t -> t -> t m
+  val arshift : t -> t -> t m
+  val gcd    : t -> t -> t m
+  val lcm    : t -> t -> t m
+  val gcdext : t -> t -> (t * t * t) m
+
+  val (!$) : string -> t
+  val (!!) : int -> t m
+  val (~-) : t -> t m
+  val (~~) : t -> t m
+  val ( + )  : t -> t -> t m
+  val ( - )  : t -> t -> t m
+  val ( * )  : t -> t -> t m
+  val ( / )  : t -> t -> t m
+  val ( /$ )  : t -> t -> t m
+  val (%)  : t -> t -> t m
+  val (%$) : t -> t -> t m
+  val (%^) : t -> t -> t m
+  val (land) : t -> t -> t m
+  val (lor)  : t -> t -> t m
+  val (lxor) : t -> t -> t m
+  val (lsl)  : t -> t -> t m
+  val (lsr)  : t -> t -> t m
+  val (asr)  : t -> t -> t m
+  val (++) : t -> int -> t m
+  val (--) : t -> int -> t m
 end
-include Cons
 
-let to_int = unop Bignum.to_int
-let to_int32 = unop Bignum.to_int32
-let to_int64 = unop Bignum.to_int64
-
-let reversed_string s = match String.length s with
-  | 0 | 1 -> s
-  | n -> String.init n (fun p -> s.[n - p - 1])
-
-let of_binary ?width endian num  =
-  let num = match endian with
-    | LittleEndian -> num
-    | BigEndian -> reversed_string num in
-  let w = match width with
-    | Some w -> w
-    | None -> String.length num * 8 in
-  create (Bignum.of_bits num) w
-
-let nsucc t n = with_z t Bignum.(z t + of_int n)
-let npred t n = with_z t Bignum.(z t - of_int n)
-
-let (++) t n = nsucc t n
-let (--) t n = npred t n
-let succ n = n ++ 1
-let pred n = n -- 1
-
-let gcd    = lift2 Bignum.gcd
-let lcm    = lift2 Bignum.lcm
-let gcdext = lift2_triple Bignum.gcdext
-
-let concat x y =
-  let w = bitwidth x + bitwidth y in
-  let x = Bignum.(z x lsl bitwidth y) in
-  let z = Bignum.(x lor z y) in
-  create z w
-
-let (@.) = concat
-
-let succ = lift1 Bignum.succ
-let pred = lift1 Bignum.pred
-let abs  = lift1 Bignum.abs
-let neg  = lift1 Bignum.neg
-let lnot = lift1 Bignum.lognot
-let logand = lift2 Bignum.logand
-let logor  = lift2 Bignum.logor
-let logxor = lift2 Bignum.logxor
-let add    = lift2 Bignum.add
-let sub    = lift2 Bignum.sub
-let mul    = lift2 Bignum.mul
-let sdiv   = lift2 Bignum.div
-let udiv   = lift2 Bignum.ediv
-let srem   = lift2 Bignum.rem
-let urem   = lift2 Bignum.erem
-
-let sign_disp ~signed ~unsigned x y =
-  let op = if is_signed x || is_signed y then signed else unsigned in
-  op x y
-
-let div = sign_disp ~signed:sdiv ~unsigned:udiv
-let rem = sign_disp ~signed:srem ~unsigned:urem
-let modulo  = rem
-
-let shift dir x n = create (dir (z x) (Z.to_int (z n))) (bitwidth x)
-let lshift = shift Bignum.shift_left
-let rshift = shift Bignum.shift_right
-let arshift x y = shift Bignum.shift_right (signed x) y
-let is_zero = unop Bignum.(equal zero)
-let is_one = unop Bignum.(equal one)
-
-
-module Syntax = struct
-  let ( + ) = add
-  let ( - ) = sub
-  let ( * ) = mul
-  let ( / ) = div
-  let ( ~-) = neg
-  let (mod) = modulo
-  let (land) = logand
-  let (lor) = logor
-  let (lxor) = logxor
-  let (lsl) = lshift
-  let (lsr) = rshift
-  let (asr) = arshift
+module type Modulus = sig
+  val modulus : modulus
 end
 
+module Make(W : Modulus) = struct
+  include W
 
-let pp_hex ppf = pp_generic ppf
-let pp_dec ppf = pp_generic ~format:`dec ppf
-let pp_oct ppf = pp_generic ~format:`oct ppf
-let pp_bin ppf = pp_generic ~format:`bin ppf
 
-let pp_hex_full ppf = pp_generic ~suffix:`full ppf
-let pp_dec_full ppf = pp_generic ~format:`dec ~suffix:`full ppf
-let pp_oct_full ppf = pp_generic ~format:`oct ~suffix:`full ppf
-let pp_bin_full ppf = pp_generic ~format:`bin ~suffix:`full ppf
+end [@@inline]
 
-let string_of_value ?(hex=true) x =
-  if hex
-  then asprintf "%a" (fun p -> pp_generic ~prefix:`none ~case:`lower p) x
-  else asprintf "%a" (fun p -> pp_generic ~format:`dec p) x
+let to_string = Z.format "%#x"
+let of_string x =
+  let r = Z.of_string x in
+  if Z.sign r < 0
+  then invalid_arg
+      (x ^ " - invalid string representation, sign is not expected")
+  else r
+
+let (!$) x = of_string x [@@inline]
+let (!!) x m = int x m [@@inline]
+
+let fits_int = Z.fits_int
+let fits_int32 = Z.fits_int32
+let fits_int64 = Z.fits_int64
+
+let doesn't_fit r x =
+  failwith (to_string x ^ " doesn't the " ^ r ^ " type")
+
+let to_int x = if fits_int x then Z.to_int x
+  else doesn't_fit "int" x
+
+let to_int32 x = if fits_int32 x then Z.to_int32 x
+  else doesn't_fit "int32" x
+
+let to_int64 x = if fits_int64 x then Z.to_int64 x
+  else doesn't_fit "int64" x
+
+let of_binary = Z.of_bits
+let to_binary = Z.to_bits
+let pp ppf x =
+  Format.fprintf ppf "%s" (to_string x)
