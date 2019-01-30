@@ -1,32 +1,60 @@
-opam-version: "1.2"
+opam-version: "2.0"
 name: "bap"
 version: "master"
 maintainer: "Ivan Gotovchits <ivg@ieee.org>"
 authors: "BAP Team"
+license: "MIT"
 homepage: "https://github.com/BinaryAnalysisPlatform/bap/"
 bug-reports: "https://github.com/BinaryAnalysisPlatform/bap/issues"
-dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
-license: "MIT"
+depends: [
+  "ocaml" {>= "4.04.1"}
+  "base-unix"
+  "bitstring"
+  "camlzip"
+  "cmdliner" {>= "1.0" & < "2.0"}
+  "ppx_jane" {>= "v0.11" & < "v0.12"}
+  "core_kernel" {>= "v0.11" & < "v0.12"}
+  "ezjsonm"
+  "fileutils"
+  "FrontC"
+  "oasis" {build & >= "0.4.10"}
+  "ounit" {build}
+  "ocamlgraph" {>= "1.8.6"}
+  "ocamlfind" {>= "1.5.6" & < "2.0"}
+  "ocurl" {>= "0.7.7"}
+  "re"
+  "uri" {>= "1.9.0"}
+  "utop"
+  "zarith"
+  "uuidm"
+  "piqi" {>= "0.7.4"}
+  "conf-bap-llvm" {>= "1.1"}
+  "parsexp"
+  "bap-signatures"
+]
+depopts: ["conf-ida" "conf-binutils"]
+flags: light-uninstall
 build: [
-  ["./configure"
-  "--prefix=%{prefix}%"
-  "--with-cxx=`which clang++`"
-  "--with-llvm-version=%{conf-bap-llvm:package-version}%" {conf-bap-llvm:installed}
-  "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
-  "--mandir=%{man}%"
-  "--enable-everything"
-  "--enable-tests"
-  "--%{conf-ida:enable}%-ida"
-  "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
-  "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
-  "--%{conf-ida:enable}%-fsi-benchmark"
-  "--%{conf-binutils:enable}%-objdump"
-  "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
-  "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
+  [
+    "./configure"
+    "--prefix=%{prefix}%"
+    "--with-cxx=`which clang++`"
+    "--with-llvm-version=%{conf-bap-llvm:package-version}%"
+      {conf-bap-llvm:installed}
+    "--with-llvm-config=%{conf-bap-llvm:config}%" {conf-bap-llvm:installed}
+    "--mandir=%{man}%"
+    "--enable-everything"
+    "--enable-tests"
+    "--%{conf-ida:enable}%-ida"
+    "--ida-path=%{conf-ida:path}%" {conf-ida:installed}
+    "--ida-headless=%{conf-ida:headless}%" {conf-ida:installed}
+    "--%{conf-ida:enable}%-fsi-benchmark"
+    "--%{conf-binutils:enable}%-objdump"
+    "--objdump-path=%{conf-binutils:objdump}%" {conf-binutils:installed}
+    "--objdump-targets=%{conf-binutils:targets}%" {conf-binutils:installed}
   ]
   [make]
 ]
-
 install: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
@@ -113,7 +141,6 @@ install: [
   [make "reinstall"]
   ["cp" "run_tests.native" "%{bin}%/bap_run_tests"]
 ]
-
 remove: [
   ["ocamlfind" "remove" "bap"]
   ["ocamlfind" "remove" "bap-arm"]
@@ -210,77 +237,35 @@ remove: [
   ["rm" "-f" "%{bin}%/baptop"]
   ["rm" "-f" "%{bin}%/bap_run_tests"]
 ]
-
-depends: [
-    "base-unix"
-    "bitstring"
-    "camlzip"
-    "cmdliner" {>= "1.0" & < "2.0"}
-    "ppx_jane"    {>= "v0.11" & < "v0.12"}
-    "core_kernel" {>= "v0.11" & < "v0.12"}
-    "ezjsonm"
-    "fileutils"
-    "FrontC"
-    "oasis" {build & >= "0.4.10"}
-    "ounit" {build}
-    "ocamlgraph" {>= "1.8.6"}
-    "ocamlfind" {>= "1.5.6" & < "2.0"}
-    "ocurl" {>= "0.7.7"}
-    "re"
-    "uri" {>= "1.9.0"}
-    "utop"
-    "zarith"
-    "uuidm"
-    "piqi" {>= "0.7.4"}
-    "conf-bap-llvm" {>= "1.1"}
-    "parsexp"
-    "bap-signatures"
-]
-
-
 depexts: [
-    [["ubuntu"] [
-        "libgmp-dev"
-        "libzip-dev"
-        "libcurl4-gnutls-dev"
-        "llvm-3.8-dev"
-        "time"
-        "clang"
-        "llvm"
-        "m4"
-        "dejagnu"
-     ]]
-     [["archlinux"] [
-        "clang"
-        "curl"
-        "dejagnu"
-        "gmp"
-        "libzip"
-        "llvm38-libs"
-        "llvm-libs38"
-        "m4"
-        "time"
-     ]]
-     [["osx" "macports"] [
-        "gmp"
-        "llvm-3.8"
-        "graphviz"
-        "curl"
-        "libzip"
-     ]]
-     [["osx" "homebrew"] [
-        "gmp"
-        "homebrew/versions/llvm38"
-        "graphviz"
-        "curl"
-        "libzip"
-        "dejagnu"
-    ]]
+  [
+    "libgmp-dev"
+    "libzip-dev"
+    "libcurl4-gnutls-dev"
+    "llvm-3.8-dev"
+    "time"
+    "clang"
+    "llvm"
+    "m4"
+    "dejagnu"
+  ] {os-distribution = "ubuntu"}
+  [
+    "clang"
+    "curl"
+    "dejagnu"
+    "gmp"
+    "libzip"
+    "llvm38-libs"
+    "llvm-libs38"
+    "m4"
+    "time"
+  ] {os-distribution = "archlinux"}
+  ["gmp" "llvm-3.8" "graphviz" "curl" "libzip"]
+    {os = "macos" & os-distribution = "macports"}
+  ["gmp" "homebrew/versions/llvm38" "graphviz" "curl" "libzip" "dejagnu"]
+    {os = "macos" & os-distribution = "homebrew"}
 ]
+dev-repo: "git://github.com/BinaryAnalysisPlatform/bap/"
 
-depopts: [
-   "conf-ida"
-   "conf-binutils"
-]
-
-available: [ocaml-version >= "4.04.1"]
+synopsis: "Binary Analysis Platform"
+description: "Binary Analysis Platform"
