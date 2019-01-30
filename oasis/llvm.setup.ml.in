@@ -1,6 +1,4 @@
-let strip_patch ver =
-  if String.length ver <> 5 then ver
-  else String.sub ver 0 3
+let strip_patch ver = String.sub ver 0 3
 
 
 let llvm var () : unit =

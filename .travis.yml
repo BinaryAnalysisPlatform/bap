@@ -32,9 +32,9 @@ addons:
 
 cache:
   directories:
-  - $HOME/.opam
   - $HOME/save_opam
-  before_cache:
+
+before_cache:
   - rm -rf $HOME/.opam/log
 
 env:
