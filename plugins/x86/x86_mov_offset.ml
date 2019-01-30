@@ -194,6 +194,7 @@ module T = Make(Ver_common)
 module Self = Self ()
 
 let () =
+  let llvm_version = String.sub llvm_version 0 3 in
   if llvm_version = "3.4" then T_34.register ()
   else
   if List.mem ["3.8";"4.0";"5.0";"6.0";"7.0"] llvm_version ~equal:String.equal
