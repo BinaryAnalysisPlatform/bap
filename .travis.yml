@@ -34,9 +34,6 @@ cache:
   directories:
   - $HOME/save_opam
 
-before_cache:
-  - rm -rf $HOME/.opam/log
-
 env:
   - OCAML_VERSION=4.04.1
   - OCAML_VERSION=4.05
