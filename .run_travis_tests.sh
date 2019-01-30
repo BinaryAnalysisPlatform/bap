@@ -1,12 +1,11 @@
 TASK=$1
 
-eval `opam config env`
+mkdir -p $HOME/.opam/
 
-comp=`opam config var switch`
+comp=`ls $HOME/save_opam`
 
-cp -r $HOME/save_opam/bin/* $HOME/.opam/$comp/bin/
-cp -r $HOME/save_opam/share/* $HOME/.opam/$comp/share/
-cp -r $HOME/save_opam/lib/* $HOME/.opam/$comp/lib/
+cp -r $HOME/save_opam/$comp $HOME/.opam/
+export PATH=$HOME/.opam/$comp/bin:$PATH
 
 bap --version
 
