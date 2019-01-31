@@ -1,19 +1,19 @@
 open Core_kernel
-open Bap.Std
+open Bitvec_order.Comparators
 
 open Bap_knowledge
 
 type info = {
   name : string option;
   ivec : int option;
-  addr : addr option;
+  addr : Bitvec.t option;
 } [@@deriving compare]
 
 type links = {
-  links  : info Label.Map.t;
-  names  : label String.Map.t;
-  addrs  : label Addr.Map.t;
-  ivecs  : label Int.Map.t;
+  links  : info  Map.M(Label).t;
+  names  : label Map.M(String).t;
+  addrs  : label Map.M(Bitvec_order).t;
+  ivecs  : label Map.M(Int).t;
 }
 
 type t = links
@@ -31,10 +31,10 @@ module Domain = struct
 
 
   let empty = {
-    links = Label.Map.empty;
-    names = String.Map.empty;
-    addrs = Addr.Map.empty;
-    ivecs = Int.Map.empty;
+    links = Map.empty (module Label);
+    names = Map.empty (module String);
+    addrs = Map.empty (module Bitvec_order);
+    ivecs = Map.empty (module Int);
   }
 
   let partial _ _ = Domain.Order.NC

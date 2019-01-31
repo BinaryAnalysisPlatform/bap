@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 open Bap_knowledge
 
 open Bap_core_theory_definition
@@ -10,48 +9,6 @@ open Knowledge.Syntax
 let size = Bits.size
 let (>>->) x f = x >>= fun x -> f (Value.sort x) x
 
-module Mask = struct
-
-  module Set = struct
-    (** [high s n] a bitvector of size [s] with [n] high bits set [1].  *)
-    let high width n =
-      let n = Word.of_int ~width n in
-      Word.(lnot (ones width lsr n))
-
-    (** [low s n] a bitvector of size s with [n] low bits set to [1]  *)
-    let low width n =
-      let n = Word.of_int ~width n in
-      Word.(lnot (ones width lsl n))
-
-
-    (** [on s hi lo] a mask of size [s] with all bits between [hi] and
-        [lo] (both inclusive) set to 1.  *)
-    let bits width hi lo =
-      let n = (max 0 (hi-lo+1)) in
-      Word.(low width n lsl (of_int ~width lo))
-  end
-
-  module Unset = struct
-    let high m n = Word.lnot (Set.high m n)
-    let low m n = Word.lnot (Set.low m n)
-    let bits s m n = Word.lnot (Set.bits s m n)
-  end
-
-
-  module Lift(L : Minimal) = struct
-    open L
-    module Set = struct
-      let high s n   = int s @@ Set.high (Bits.size s) n
-      let low s n    = int s @@ Set.low (Bits.size s) n
-      let bits s m n = int s @@ Set.bits (Bits.size s) m n
-    end
-    module Unset = struct
-      let high s n   = int s @@ Unset.high (Bits.size s) n
-      let low s n    = int s @@ Unset.low (Bits.size s) n
-      let bits s m n = int s @@ Unset.bits (Bits.size s) m n
-    end
-  end
-end
 
 module Make(L : Minimal) = struct
   open L
@@ -81,8 +38,8 @@ module Make(L : Minimal) = struct
     let uge x y = ule y x
   end
 
-  let small s x = int s (Word.of_int ~width:(size s) x)
-  let zero s = int s (Word.zero (size s))
+  let small s x = int s Bitvec.(int x mod modulus (size s))
+  let zero s = int s Bitvec.zero
 
   let is_zero x =
     x >>-> fun s x ->
@@ -110,7 +67,6 @@ module Make(L : Minimal) = struct
   let signed s x = cast s (msb x) x
   let unsigned s x = cast s b0 x
 
-  module Mask = Mask.Lift(L)
 
   let bind exp body =
     exp >>-> fun s exp ->

@@ -1,5 +1,5 @@
 open Bap_core_theory_sort
-type word = Bap.Std.word
+type word = Bitvec.t
 
 module IEEE754 = Bap_core_theory_IEEE754
 type ieee754 = IEEE754.parameters
@@ -40,7 +40,7 @@ module type Bitv = sig
 
 
   val var : string -> int -> t
-  val int : word -> t
+  val int : word -> int -> t
   val unknown : int -> t
   val ite : exp -> exp -> exp -> t
 

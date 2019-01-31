@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 open Bap_knowledge
 open Bap_core_theory_definition
 open Bap_core_theory_sort
@@ -70,10 +69,11 @@ module Make(S : Core) = struct
 
   type 'a t = 'a knowledge
 
-  let of_word w = int (bits (Word.bitwidth w)) w
-  let of_int s x = int s (Word.of_int x ~width:(Bits.size s))
+  let of_word w s = int (bits s) w
+  let of_int s x =
+    let m = Bitvec.modulus (Bits.size s) in
+    int s Bitvec.(int x mod m)
   let join s1 s2 = bits (Bits.size s1 + Bits.size s2)
-  let is_big e = if e = BigEndian then b1 else b0
 
 
   type context = (string * Var.ident) list
@@ -120,7 +120,7 @@ module Make(S : Core) = struct
         let logxor x y = logxor (expw x) (expw y)
         let var n sz = var (Var.create (bits sz) (rename ctxt n))
 
-        let int x = of_word x
+        let int x s = of_word x s
         let ite c x y = ite (expb c) (expw x) (expw y)
         let signed w x =
           let x = expw x in cast (bits w) (msb x) x
@@ -273,7 +273,7 @@ module Make(S : Core) = struct
         let not x = inv (expb x)
         let unknown _ = (unk bool)
 
-        let int x = if Word.is_zero x then b0 else b1
+        let int x = if Bitvec.(x = zero) then b0 else b1
 
         let high x = lsb (high (bits 1) (expw x))
         let low x = lsb (low (bits 1) (expw x))

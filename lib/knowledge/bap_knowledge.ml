@@ -19,15 +19,15 @@ type pid = Pid.t
 module Knowledge = struct
   module Base = struct
     type t = {
-      data : semantics L.Map.t;
-      reqs : L.Set.t Pid.Map.t;
+      data : semantics Map.M(L).t;
+      reqs : Set.M(L).t Map.M(Pid).t;
     }
   end
 
   type state = Base.t
   let empty : Base.t = {
-    data = L.Map.empty;
-    reqs = Pid.Map.empty;
+    data = Map.empty (module L);
+    reqs = Map.empty (module Pid);
   }
 
   module State = struct
@@ -92,7 +92,7 @@ module Knowledge = struct
     | Some ids -> Set.mem ids id
 
   let activate reqs pid id = Map.update reqs pid ~f:(function
-      | None -> L.Set.singleton id
+      | None -> Set.singleton (module L) id
       | Some ids -> Set.add ids id)
 
   let deactivate req pid id = Map.change req pid ~f:(function

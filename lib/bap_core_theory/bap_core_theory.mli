@@ -16,7 +16,7 @@ type ('r,'s) format
 type rmode
 type 'a value
 type 'a eff
-type word = Bap.Std.Bitvector.t (* we will extract bitvector from BAP later *)
+type word = Bitvec.t
 
 module Theory : sig
   type 'a t = 'a knowledge
@@ -464,7 +464,7 @@ module Grammar : sig
 
 
     val var : string -> int -> t
-    val int : word -> t
+    val int : word -> int -> t
     val unknown : int -> t
     val ite : exp -> exp -> exp -> t
 

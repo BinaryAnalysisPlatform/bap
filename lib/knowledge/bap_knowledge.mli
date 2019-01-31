@@ -33,7 +33,9 @@ end
 module Label : sig
   type t = label
   val root : t
-  include Identifiable.S with type t := t
+
+  include Base.Comparable.S with type t := label
+
   module Generator : sig
     val fresh : label knowledge
   end
@@ -71,7 +73,7 @@ module Domain : sig
 
     (** [inspect x] returns an overview of information stored in [x],
         for introspection purposes.  *)
-    val inspect : t -> Sexp.t
+    val inspect : t -> Base.Sexp.t
   end
 
 
@@ -81,15 +83,15 @@ module Domain : sig
       val equal : t -> t -> bool
     end
 
-    module Make(K : Comparable.S)(V : Eq) :
-      S with type t = V.t K.Map.t
+    module Make(K : Base.Comparator.S)(V : Eq) :
+      S with type t = V.t Base.Map.M(K).t
   end
 
   module Chain : sig
     module type T = sig
       type t
       val empty : t
-      val inspect : t -> Sexp.t
+      val inspect : t -> Base.Sexp.t
       val compare : t -> t -> int
     end
 
@@ -102,7 +104,7 @@ module Domain : sig
     val succ : t -> t
     val pp : Format.formatter -> t -> unit
     include S with type t := t
-    include Comparable.S with type t := t
+    include Base.Comparable.S with type t := t
   end
 
   module Label : S with type t = label

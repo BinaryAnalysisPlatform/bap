@@ -27,7 +27,7 @@ type ctrl = Kind.ctrl = private Ctrl_Effect
 type rmode = Rmode.t
 type 'f float = 'f Floats.t
 type ('r,'s) format = ('r,'s) Floats.Format.t
-type word = Bap.Std.Bitvector.t (* we will extract bitvector from BAP later *)
+type word = Bitvec.t
 
 type 'a t = 'a knowledge
 

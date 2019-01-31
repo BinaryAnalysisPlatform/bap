@@ -12,7 +12,7 @@ end
 module Map : sig
   module type Eq = Bap_knowledge_domain_type.Eq
 
-  module Make(K : Comparable.S)(V : Eq) : S with type t = V.t K.Map.t
+  module Make(K : Comparator.S)(V : Eq) : S with type t = V.t Map.M(K).t
 end
 
 module Counter : sig
@@ -21,7 +21,7 @@ module Counter : sig
   val succ : t -> t
   val pp : Format.formatter -> t -> unit
   include S with type t := t
-  include Comparable.S with type t := t
+  include Base.Comparable.S with type t := t
 end
 
 module Label : S with type t = Bap_knowledge_label.t

@@ -1,4 +1,3 @@
-open Bap.Std
 open Bap_knowledge
 
 open Bap_core_theory_sort
@@ -18,6 +17,7 @@ type ctrl = Kind.ctrl
 type 'f float = 'f Floats.t
 type ('r,'s) format = ('r,'s) Floats.format
 type rmode = Rmode.t
+type word = Bitvec.t
 
 module type Init = sig
   val var : 'a var -> 'a value t

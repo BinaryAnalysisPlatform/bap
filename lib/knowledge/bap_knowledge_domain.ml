@@ -19,13 +19,13 @@ end
 module Map = struct
   module type Eq = Bap_knowledge_domain_type.Eq
 
-  module Make(K : Comparable.S)(V : Eq) = struct
-    type t = V.t K.Map.t
+  module Make(K : Comparator.S)(V : Eq) = struct
+    type t = V.t Map.M(K).t
 
-    let empty = K.Map.empty
+    let empty = Map.empty (module K)
 
     let inspect xs =
-      Sexp.List (Map.keys xs |> List.map ~f:(K.Map.Key.sexp_of_t))
+      Sexp.List (Map.keys xs |> List.map ~f:K.comparator.sexp_of_t)
 
     let partial x y =
       Map.symmetric_diff x y ~data_equal:V.equal |>
@@ -45,7 +45,7 @@ module Counter : sig
   val succ : t -> t
   val pp : Format.formatter -> t -> unit
   include S with type t := t
-  include Comparable.S with type t := t
+  include Base.Comparable.S with type t := t
 end = struct
   let empty = Int63.zero
   let inspect = Int63.sexp_of_t
