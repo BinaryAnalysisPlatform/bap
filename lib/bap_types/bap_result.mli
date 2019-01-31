@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Monads.Std
 open Regular.Std
 open Bap_common

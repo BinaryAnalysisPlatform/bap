@@ -1,5 +1,5 @@
 open Format
-open Core_kernel.Std
+open Core_kernel
 open Bap_future.Std
 
 module Create() : sig

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Monads.Std
 open Bap_c_type_mapper_intf

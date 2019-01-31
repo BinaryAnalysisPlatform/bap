@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Format
 
@@ -42,24 +42,26 @@ let create_scheme ~next init = init,next
 
 
 let by_given_order (type a) (init,next) compare nodes =
-  let module T = Comparator.Make(struct
+  let module T : Comparator.S with type t = a = struct
+    type t = a
+    include Comparator.Make(struct
       type t = a
       let compare = compare
       let sexp_of_t = sexp_of_opaque
-    end) in
-  let comparator = T.comparator in
-  Seq.fold nodes ~init:(Map.empty ~comparator,init) ~f:(fun (names,name) node ->
-      Map.add names ~key:node ~data:name, next name) |> fst |>
+    end) end in
+  Seq.fold nodes ~init:(Map.empty (module T),init) ~f:(fun (names,name) node ->
+      Map.set names ~key:node ~data:name, next name) |> fst |>
   Map.find_exn
 
 let by_natural_order (type a) variant compare nodes =
-  let module T = Comparator.Make(struct
+  let module T : Comparator.S with type t = a = struct
+    type t = a
+    include Comparator.Make(struct
       type t = a
       let compare = compare
       let sexp_of_t = sexp_of_opaque
-    end) in
-  let comparator = T.comparator in
-  Seq.fold nodes ~init:(Set.empty ~comparator) ~f:Set.add |>
+    end) end in
+  Seq.fold nodes ~init:(Set.empty (module T)) ~f:Set.add |>
   Set.to_sequence |> by_given_order variant compare
 
 module Dot = struct

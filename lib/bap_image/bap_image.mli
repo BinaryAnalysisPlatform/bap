@@ -1,6 +1,6 @@
 (** A loadable memory image of an executable.  *)
 
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_types.Std
 

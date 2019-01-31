@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open OUnit2
 
@@ -19,12 +19,12 @@ let make_regs typ ?alias prefix range =
   List.fold ~init:String.Map.empty ~f:(fun regs i ->
       let var = make_var_i typ prefix i in
       let name = Var.name var in
-      let regs = Map.add regs name var in
+      let regs = Map.set regs name var in
       match alias with
       | None -> regs
       | Some a ->
         let name = make_name a i in
-        Map.add regs name var) range
+        Map.set regs name var) range
 
 let flag name = Var.create name (Type.imm 1)
 
@@ -80,13 +80,13 @@ module Make(B : Bitwidth) = struct
     let _, bits =
       List.fold (List.rev cr_bits) ~init:(0,Int.Map.empty)
         ~f:(fun (num, bits) bit ->
-            num + 1, Map.add bits ~key:num ~data:bit) in
+            num + 1, Map.set bits ~key:num ~data:bit) in
     bits
 
   let crn =
     Int.Map.fold cri ~init:String.Map.empty
       ~f:(fun ~key:_ ~data:var acc ->
-          Map.add acc (Var.name var) var)
+          Map.set acc (Var.name var) var)
 
   let fields = [
     "CR0", 0, (cr28, cr29, cr30, cr31);
@@ -101,11 +101,11 @@ module Make(B : Bitwidth) = struct
 
   let cr_fields =
     List.fold fields ~init:String.Map.empty ~f:(fun fs (name, _, fd) ->
-        Map.add fs name fd)
+        Map.set fs name fd)
 
   let cri_fields =
     List.fold fields ~init:Int.Map.empty ~f:(fun fs (_, index, fd) ->
-        Map.add fs index fd)
+        Map.set fs index fd)
 
   (** fixed precision flags  *)
   let so = flag "SO" (** summary overflow *)

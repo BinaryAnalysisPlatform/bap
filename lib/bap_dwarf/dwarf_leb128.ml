@@ -1,5 +1,5 @@
 (** The implementation can work with numbers of arbitrary length. *)
-open Core_kernel.Std
+open Core_kernel
 
 module Bits = struct
   open Binary_packing
@@ -51,8 +51,8 @@ module Cursor = struct
 end
 
 (** [pack7] returns a sequence of 7-bit packs  *)
-let pack7 ~negative (s : string) =
-  let n = String.length s in
+let pack7 ~negative (s : Bytes.t) =
+  let n = Bytes.length s in
   Sequence.unfold ~init:(Cursor.init n) ~f:(fun cur ->
       let bit0 = Cursor.bit0 cur in
       if cur.bit >= n * 8 then None
@@ -96,7 +96,7 @@ let decode (leb : t) buf ~off ~len : unit =
           Cursor.next cur) in
   if leb.negative then begin
     for i = m to len - 1 do
-      buf.[i] <- '\255';
+      Bytes.set buf i '\255';
     done;
   end
 
@@ -106,6 +106,7 @@ let encode ~negative bits : t =
 
 
 let read_exn ?(signed=false) bits ~pos_ref =
+  let bits = Bytes.of_string bits in
   let s = Sequence.unfold ~init:(`Continue) ~f:(function
       | `Stop -> None
       | `Continue ->
@@ -131,9 +132,9 @@ let write t bits ~pos : unit =
 
 type 'a repr = {
   size : int;
-  read : string -> 'a option;
+  read : Bytes.t -> 'a option;
   is_negative: 'a -> bool;
-  write: string -> 'a -> unit;
+  write: Bytes.t -> 'a -> unit;
 }
 
 let int =
@@ -171,17 +172,17 @@ let int64 = {
 }
 
 let decoder (repr : 'a repr) x : 'a Or_error.t =
-  let bits = String.make repr.size '\000' in
+  let bits = Bytes.make repr.size '\000' in
   decode x bits ~off:0 ~len:repr.size;
-  match if String.length bits > repr.size
+  match if Bytes.length bits > repr.size
     then None else repr.read bits
   with
   | Some n -> Ok n
   | None -> Or_error.errorf "number doesn't fit: %d -> %d"
-              (String.length bits) repr.size
+              (Bytes.length bits) repr.size
 
 let encoder (repr : 'a repr) ?(signed=false) x : t =
-  let bits = String.make repr.size '\000' in
+  let bits = Bytes.make repr.size '\000' in
   repr.write bits x;
   encode ~negative:(signed && repr.is_negative x) bits
 

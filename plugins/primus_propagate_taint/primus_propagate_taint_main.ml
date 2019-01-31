@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Monads.Std
 open Bap_primus.Std
@@ -51,7 +51,7 @@ module Intro(Machine : Primus.Machine.S) = struct
   let connect tid taint =
     Machine.Local.update mapper ~f:(fun m -> {
           m with
-          tids = Map.add m.tids ~key:taint ~data:tid
+          tids = Map.set m.tids ~key:taint ~data:tid
         })
 
   let translation = [

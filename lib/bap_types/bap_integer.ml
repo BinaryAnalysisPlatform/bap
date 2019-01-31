@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_integer_intf
 
 module type Base = Base

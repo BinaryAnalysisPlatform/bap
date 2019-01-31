@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Option.Monad_infix
 
 module Seq = Sequence

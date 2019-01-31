@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 open X86_types
@@ -122,6 +122,8 @@ module type ModeVars = sig
   (* r8 -> r15 *)
   val r : var array
   val nums : var array
+  [@@deprecated "[since 2018-01] use `r` instead"]
+
   val ymms : var array
 end
 

@@ -8,7 +8,7 @@
     Underneath the hood it is implemented using augumented AVL tree,
     so that all operations are logarithmic.
 *)
-open Core_kernel.Std
+open Core_kernel
 open Bap_types.Std
 
 type mem = Bap_memory.t

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 module Dict = Univ_map
@@ -62,7 +62,7 @@ module Bag = struct
   let set t state data =
     check_invariant t state;
     {
-      uids = Map.add t.uids ~key:state.uuid
+      uids = Map.set t.uids ~key:state.uuid
           ~data:(Key.hash state.key);
       dict = Dict.set t.dict state.key data;
     }

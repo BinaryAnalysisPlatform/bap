@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 open Bap.Std
 open Bap_plugins.Std
@@ -83,14 +83,14 @@ module Program(Conf : Mc_options.Provider) = struct
   let print_bil lift mem insn =
     let bil = bil_of_insn lift mem in
     List.iter options.bil_formats ~f:(fun fmt ->
-        printf "%s@." (Bil.to_bytes ~fmt (bil insn)))
+        printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt (bil insn)))
 
   let print_bir lift mem insn =
     let bil = bil_of_insn lift mem insn in
     let bs = Blk.from_insn (Insn.of_basic ~bil insn) in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
-          (List.map bs ~f:(Blk.to_bytes ~fmt)))
+          (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
 
   let print arch mem insn =
     let module Target = (val target_of_arch arch) in
@@ -275,9 +275,10 @@ let _main : unit =
   | Create_mem err ->
     exitf 65 "Unable to create a memory: %a" Error.pp err
   | Bad_insn (mem,boff,stop)->
-    let dump = Memory.hexdump mem in
+    let dump = Memory.hexdump mem |> Bytes.of_string in
     let line = boff / 16 in
     let pos off = line * 77 + (off mod 16) * 3 + 9 in
-    dump.[pos boff] <- '(';
-    dump.[pos stop] <- ')';
-    exitf 66 "Invalid instruction at offset %d:\n%s" boff dump
+    Bytes.set dump (pos boff) '(';
+    Bytes.set dump (pos stop) ')';
+    exitf 66 "Invalid instruction at offset %d:\n%s"
+      boff (Bytes.to_string dump)

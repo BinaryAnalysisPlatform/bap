@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Regular.Std
 open Format
@@ -91,7 +91,7 @@ let () = Exn.add_printer (function
 let add_code code codes =
   let max_key = Option.(Map.max_elt codes >>| fst >>| Int.succ) in
   let key = Option.value ~default:1 max_key in
-  key, Map.add codes ~key ~data:code
+  key, Map.set codes ~key ~data:code
 
 let id_of_name name s = match name with
   | `symbol name -> Map.find s.names name
@@ -153,11 +153,11 @@ module Make(Machine : Machine) = struct
         let key,codes = add_code code s.codes in
         let update table value = match value with
           | None -> table
-          | Some v -> Map.add table ~key:v ~data:key in
+          | Some v -> Map.set table ~key:v ~data:key in
         let terms = update s.terms tid in
         let names = update s.names name in
         let addrs = update s.addrs addr in
-        let alias = Map.add s.alias ~key ~data:{
+        let alias = Map.set s.alias ~key ~data:{
             term=tid;
             name;
             addr

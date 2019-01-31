@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_types.Std
 open Bap_image_std
 open Bap_disasm_std

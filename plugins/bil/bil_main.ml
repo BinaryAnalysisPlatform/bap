@@ -33,7 +33,7 @@ let optimizations =
     "1", o1; ]
 
 let print_passes () =
-  Bil.passes () |> List.map ~f:Bil.Pass.to_string |> List.sort ~cmp:String.compare |>
+  Bil.passes () |> List.map ~f:Bil.Pass.to_string |> List.sort ~compare:String.compare |>
   List.iter ~f:(printf "%s\n");
   exit 0
 

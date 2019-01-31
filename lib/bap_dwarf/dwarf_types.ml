@@ -1,5 +1,5 @@
 (** Basic type declarations for DWARF format.  *)
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 type leb128 = Dwarf_leb128.t [@@deriving bin_io, compare, sexp]

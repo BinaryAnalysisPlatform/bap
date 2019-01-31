@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Elf_types
 open Elf_internal_utils
 open Or_error

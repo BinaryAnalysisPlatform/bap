@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_ida.Std
 open Bap.Std
 
@@ -58,7 +58,7 @@ let setup_headless_env path =
   let old_path,new_path =
     try
       Unix.getenv var, lib ^ ":" ^ Unix.getenv var
-    with Not_found -> "", lib in
+    with Caml.Not_found -> "", lib in
   Unix.putenv var new_path;
   fun () ->
     try
@@ -158,6 +158,7 @@ let find_curses () =
       match String.split ~on:'>' s with
       | [_;path] -> Some (String.strip path)
       | _ -> None) |> List.filter ~f:Sys.file_exists |> List.hd
+[@@warning "-D"]
 
 let register ida_info mode : unit =
   let curses = if Info.require_ncurses ida_info then find_curses ()

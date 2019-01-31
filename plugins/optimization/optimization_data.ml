@@ -30,11 +30,11 @@ let updates_of_sub sub =
   let fold t cls init ~f = Seq.fold (Term.enum cls t) ~init ~f in
   let update_rhs updates d =
     let rhs = drop_index (Def.rhs d) in
-    Map.add updates (Term.tid d) (Rhs rhs) in
+    Map.set updates (Term.tid d) (Rhs rhs) in
   let update_jmp updates j =
     let j = Jmp.map_exp ~f:drop_index j in
     let data = Jmp {cond = Jmp.cond j; kind = Jmp.kind j} in
-    Map.add updates (Term.tid j) data in
+    Map.set updates (Term.tid j) data in
   let add_if add updates t =
     if is_updated t then add updates t else updates in
   fold sub blk_t Tid.Map.empty ~f:(fun updates b ->

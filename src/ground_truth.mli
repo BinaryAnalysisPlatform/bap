@@ -1,5 +1,5 @@
 open Bap.Std
-open Core_kernel.Std
+open Core_kernel
 
 (** [from_unstripped_bin bin] returns the function start address sequence
     from the symbols in unstripped binary [bin] *)

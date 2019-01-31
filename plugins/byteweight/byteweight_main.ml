@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Format
 open Bap_future.Std
@@ -29,7 +29,7 @@ let create_finder path length threshold arch  =
     error "signature loading was prevented by a system error: %s" err;
     Or_error.errorf "system error"
   | Ok data ->
-    let bw = Binable.of_string (module BW) data in
+    let bw = Binable.of_string (module BW) (Bytes.to_string data) in
     Ok (BW.find bw ~length ~threshold)
 
 let sigs_exists path =

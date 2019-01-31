@@ -150,8 +150,8 @@ let pp_term pp_exp ppf = function
 let pp_word = pp_term Int64.pp
 let pp_var = pp_term String.pp
 
-let rec concat_prog =
-  List.concat_map ~f:(function
+let rec concat_prog p =
+  List.concat_map p ~f:(function
       | {data=Seq xs} -> concat_prog xs
       | x -> [x])
 
@@ -264,8 +264,8 @@ module Use = struct
         let vs = vars bound body in
         let cs = calls body in
         {
-          calls = Map.add s.calls ~key:def.id ~data:cs;
-          vars = Map.add s.vars ~key:def.id ~data:vs;
+          calls = Map.set s.calls ~key:def.id ~data:cs;
+          vars = Map.set s.vars ~key:def.id ~data:vs;
         })
 end
 
@@ -359,7 +359,7 @@ module Reindex = struct
         rename v >>= fun v ->
         map x >>| fun x ->
         {t with data = Set (v,x)}
-    and map_all = State.List.map ~f:map in
+    and map_all xs = State.List.map xs ~f:map in
     map (get def) >>| set def
 
   let reindex_all p =
@@ -501,10 +501,10 @@ module Typing = struct
 
 
     let add_var id t g =
-      {g with vars = Map.add g.vars ~key:id ~data:t}
+      {g with vars = Map.set g.vars ~key:id ~data:t}
 
     let add_val t v g =
-      {g with vals = Map.add g.vals ~key:t ~data:v}
+      {g with vals = Map.set g.vals ~key:t ~data:v}
 
     let unify t1 t2 g =
       let t = Tvar.min t1 t2 in
@@ -537,8 +537,8 @@ module Typing = struct
       | None -> g
       | Some vs -> match Map.find g.vars id with
         | None -> {
-            vars = Map.add g.vars ~key:id ~data:(Tvar id);
-            vals = Map.add g.vals ~key:(Tvar id) ~data:vs;
+            vars = Map.set g.vars ~key:id ~data:(Tvar id);
+            vals = Map.set g.vals ~key:(Tvar id) ~data:vs;
           }
         | Some v -> {
             g with vals = Map.update g.vals v ~f:(function
@@ -674,7 +674,7 @@ module Typing = struct
 
 
   let push vars {data; id} =
-    Map.add vars ~key:data.exp ~data:id
+    Map.set vars ~key:data.exp ~data:id
 
   let varclass vars v = match Map.find vars v.data.exp with
     | None -> v.id
@@ -761,14 +761,14 @@ module Typing = struct
     Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
         match Var.typ v with
         | Type.Imm x ->
-          Map.add vars ~key:(Var.name v) ~data:x
+          Map.set vars ~key:(Var.name v) ~data:x
         | Type.Mem _ -> vars)
 
   let make_prims {codes} =
     List.fold codes ~init:String.Map.empty ~f:(fun ps p ->
         match Def.Closure.signature p with
         | None -> ps
-        | Some types -> Map.add ps ~key:(Def.name p) ~data:types)
+        | Some types -> Map.set ps ~key:(Def.name p) ~data:types)
 
   let gamma_equal g1 g2 = Gamma.compare g1 g2 = 0
 
@@ -800,7 +800,7 @@ module Typing = struct
             | None -> errs
             | Some ts ->
               if Set.is_empty ts
-              then Map.add errs ~key:(Source.loc p.sources exp) ~data:exp
+              then Map.set errs ~key:(Source.loc p.sources exp) ~data:exp
               else errs
           else errs) |>
       Map.to_alist

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Format
 
@@ -121,7 +121,7 @@ module Make(Machine : Machine) = struct
     | Some {perms={readonly=true}} -> pagefault addr
     | Some _ -> Machine.return {
         layers;
-        values = Map.add values ~key:addr ~data:value;
+        values = Map.set values ~key:addr ~data:value;
       }
 
   let add_layer layer t = {t with layers = layer :: t.layers}

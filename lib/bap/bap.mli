@@ -1,6 +1,6 @@
 (** BAP Standard Library  *)
 
-open Core_kernel.Std
+open Core_kernel
 open Monads.Std
 open Regular.Std
 open Graphlib.Std
@@ -457,7 +457,7 @@ module Std : sig
       The following plugin prints all sections in a file:
 
       {[
-        open Core_kernel.Std
+        open Core_kernel
         open Bap.Std
         open Format
 
@@ -623,7 +623,7 @@ module Std : sig
    **)
   module Legacy : sig
     module Monad : sig
-      open Core_kernel.Std
+      open Core_kernel
       module type Basic = Monad.Basic
       module type Basic2 = Monad.Basic2
       module type Infix = Monad.Infix

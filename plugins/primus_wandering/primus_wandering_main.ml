@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Monads.Std
 open Bap_future.Std
@@ -56,7 +56,7 @@ module Make
     else
       Machine.forks () >>| fun fs -> {
         pending = Seq.foldi fs ~init:Int.Map.empty ~f:(fun i cs id ->
-            Map.add cs ~key:i ~data:id);
+            Map.set cs ~key:i ~data:id);
       }
 
   let schedule t = reschedule attempts t

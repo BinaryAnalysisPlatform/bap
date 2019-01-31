@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_future.Std
 open Bap.Std
@@ -24,6 +24,8 @@ module type Target = sig
   end
 end
 
+let digest = Caml.Digest.file
+
 let request =
   sprintf "
 from bap.utils import ida
@@ -41,7 +43,7 @@ let get_symbols =
 
 let extract path arch =
   let id =
-    Data.Cache.digest ~namespace:"ida" "%s" (Digest.file path) in
+    Data.Cache.digest ~namespace:"ida" "%s" (digest path) in
   let syms = match Symbols.Cache.load id with
     | Some syms -> syms
     | None -> match Ida.(with_file path get_symbols) with
@@ -107,13 +109,16 @@ let load_image = Command.create `python
 let mapfile path : Bigstring.t =
   let fd = Unix.(openfile path [O_RDONLY] 0o400) in
   let size = Unix.((fstat fd).st_size) in
-  let data = Bigstring.map_file ~shared:false fd size in
+  let data =
+    Bigarray.Genarray.map_file
+      fd Bigarray.char Bigarray.c_layout false [|size|] in
   Unix.close fd;
-  data
+  Bigarray.array1_of_genarray data
+[@@warning "-D"]
 
 let loader path =
   let id = Data.Cache.digest ~namespace:"ida-loader" "%s"
-      (Digest.file path) in
+      (digest path) in
   let (proc,size,sections) = match Img.Cache.load id with
     | Some img -> img
     | None ->
@@ -202,7 +207,7 @@ let load_brancher_info arch =
 
 let get_resolve_fun file arch =
   let id = Data.Cache.digest ~namespace:"ida-brancher" "%s"
-      (Digest.file file) in
+      (digest file) in
   let brancher = match IdaBrancher.Cache.load id with
     | Some i -> i
     | None ->

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_primus_generator_types
 
 module type Base = Iterator.Base

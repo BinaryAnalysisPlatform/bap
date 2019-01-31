@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module Legacy = struct
   include Bap_monad_types

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_bundle.Std
 open Bap_future.Std
 open Bap_plugins.Std
@@ -53,7 +53,7 @@ module Create() = struct
     else filter_args name
 
   let has_var v = match Sys.getenv ("BAP_" ^ String.uppercase v) with
-    | exception Not_found -> false
+    | exception Caml.Not_found -> false
     | "false" | "0" -> false
     | _ -> true
 
@@ -73,7 +73,7 @@ module Create() = struct
 
   let make_formatter (f : ('a, formatter, unit) format -> 'a) =
     let buf = Buffer.create 512 in
-    let output = Buffer.add_subbytes buf in
+    let output = Buffer.add_substring buf in
     let flush () =
       f "%s" (Buffer.contents buf);
       Buffer.clear buf in
@@ -163,7 +163,7 @@ module Create() = struct
       let name = "BAP_" ^ String.uppercase (plugin_name ^ "_" ^ name) in
       try
         Some (Sys.getenv name)
-      with Not_found -> None
+      with Caml.Not_found -> None
 
     let get_param ~(converter) ~default ~name =
       let value = default in

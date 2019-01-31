@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Bap_c_data
 open Bap_c_type
@@ -93,7 +93,7 @@ class base (m : model) = object(self)
     fun {Spec.t={Compound.fields}} ->
       List.map fields ~f:(fun (_,t) -> self#bits t) |> Option.all |> function
       | None -> None
-      | Some ss -> List.max_elt ~cmp:Int.compare ss |> function
+      | Some ss -> List.max_elt ~compare:Int.compare ss |> function
         | None -> None
         | Some s -> Some s
 

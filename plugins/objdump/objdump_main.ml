@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_future.Std
 open Bap.Std
 open Regular.Std
@@ -25,6 +25,7 @@ let func_start_re = "([0-9A-Fa-f^\\s]+) <(.*)>:"
 
 let re r =
   Re_pcre.re r |> Re.compile |> Re.execp
+[@@warning "-D"]
 
 let objdump_strip  =
   String.strip ~drop:(function '<' | '>' | ':' | ' ' -> true | _ -> false)

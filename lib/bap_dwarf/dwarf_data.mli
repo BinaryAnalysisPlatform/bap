@@ -1,5 +1,5 @@
 (** Representation for Dwarf Data. *)
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 open Dwarf_types

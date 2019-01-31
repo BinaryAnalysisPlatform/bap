@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_types.Std
 open Image_internal_std
@@ -75,8 +75,8 @@ let add_symbol t (name,entry,cfg) : t =
   let data = name,entry,cfg in
   let t = remove t data in
   { t with
-    addrs = Map.add t.addrs ~key:(Block.addr entry) ~data;
-    names = Map.add t.names ~key:name ~data;
+    addrs = Map.set t.addrs ~key:(Block.addr entry) ~data;
+    names = Map.set t.names ~key:name ~data;
     memory = merge t.memory (span data);
   }
 
@@ -97,6 +97,6 @@ let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
 let add_call_name t b name =
-  { t with callnames = Map.add t.callnames (Block.addr b) name }
+  { t with callnames = Map.set t.callnames (Block.addr b) name }
 
 let find_call_name t addr = Map.find t.callnames addr

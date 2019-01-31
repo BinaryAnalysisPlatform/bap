@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module Std = struct
   type 'a printer = Format.formatter -> 'a -> unit

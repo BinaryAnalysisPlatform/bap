@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 
 module type Key = sig 
@@ -37,13 +37,15 @@ module Persistent = struct
       keys = String.Map.empty;
     }
 
-    let string {strings} key = 
-      try Map.find_exn strings key 
-      with Not_found -> ""
+    let string {strings} key =
+      match Map.find strings key with
+      | Some x -> x
+      | None -> ""
 
-    let key {keys} str = 
-      try Map.find_exn keys str 
-      with Not_found -> Key.null
+    let key {keys} str =
+      match Map.find keys str with
+      | Some x -> x
+      | None -> Key.null
 
     let register idx str = 
       if Map.mem idx.keys str then idx
@@ -52,8 +54,8 @@ module Persistent = struct
           | None -> Key.null 
           | Some (k,_) -> k in
         {
-          strings = Map.add idx.strings ~key ~data:str;
-          keys = Map.add idx.keys ~key:str ~data:key
+          strings = Map.set idx.strings ~key ~data:str;
+          keys = Map.set idx.keys ~key:str ~data:key
         } 
 
     let registered {keys} str = Map.mem keys str
