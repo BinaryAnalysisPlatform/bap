@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 
 open Bap_lisp__types
 
@@ -19,14 +18,6 @@ let expect_atom = fail Expect_atom
 let expect_list = fail Expect_list
 
 
-let attr proj attr = match Project.get proj attr with
-  | Some x -> [x]
-  | None -> []
-
-let endian proj = Project.arch proj |>
-                  Arch.endian |> function
-                  | LittleEndian -> "little"
-                  | BigEndian -> "big"
 let features = Feature.Set.of_list
 
 let merge xs ys : t = Map.merge xs ys ~f:(fun ~key:_ -> function

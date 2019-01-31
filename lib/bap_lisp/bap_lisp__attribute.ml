@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 
 open Bap_lisp__types
 

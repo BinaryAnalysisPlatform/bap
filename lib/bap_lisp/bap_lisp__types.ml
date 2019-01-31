@@ -1,7 +1,6 @@
-open Core_kernel
+open Core_kernel.Std
 open Bap_core_theory
 
-module Word = Bap.Std.Word
 module Index = Bap_lisp__index
 module Loc = Bap_lisp__loc
 module Source = Bap_lisp__source
@@ -22,7 +21,7 @@ type typ =
   | Name of string
   | Type of Sort.exp [@@deriving sexp, compare]
 type 'a term = {exp : 'a; typ : typ} [@@deriving compare]
-type word = Word.t term indexed [@@deriving compare]
+type word = Bitvec.t term indexed [@@deriving compare]
 type var = string term indexed [@@deriving compare]
 type sym = string indexed [@@deriving compare]
 type loc = Loc.t
@@ -39,7 +38,7 @@ type token = Source.token =
 
 type ast = exp indexed
 and exp =
-  | Int of word
+  | Int of Bitvec.t
   | Var of var
   | Sym of sym
   | Ite of ast * ast * ast
