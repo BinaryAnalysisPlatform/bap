@@ -2,7 +2,7 @@ module Plugin_rules = struct
   module Fl = Findlib
 
   open Ocamlbuild_plugin
-  open Core_kernel.Std
+  open Core_kernel
   module Ocamlbuild = Ocamlbuild_pack
 
 
@@ -15,7 +15,7 @@ module Plugin_rules = struct
 
   let default_predicates = [
     "custom_ppx";
-    "ppx_driver";
+    "ppxlib";
   ]
 
   let default_tags = [
@@ -48,7 +48,6 @@ module Plugin_rules = struct
     Fl.package_deep_ancestors predicates pkgs
 
   let set_default_options () : unit =
-    Command.jobs := 4;
     Options.(begin
         use_ocamlfind := true;
         ocaml_pkgs := packages;
@@ -71,10 +70,10 @@ module Plugin_rules = struct
       let arch,preds = Fl.package_property_2 preds pkg "archive" in
       let base = Fl.package_directory pkg in
       if dynamic && not (List.mem ~equal:Polymorphic_compare.equal preds (`Pred "plugin"))
-      then raise Not_found;
+      then raise Caml.Not_found;
       String.split ~on:' ' arch |>
       List.map ~f:(Fl.resolve_path ~base)
-    with Not_found -> []
+    with Caml.Not_found -> []
 
   let externals pkgs =
     let interns = interns () in

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular_data_types
 
 type bytes = Regular_bytes.t
@@ -12,14 +12,16 @@ type 'a t = {
 let not_sufficient () =
   invalid_arg "Readable class definition is not complete"
 
+let bytes_of_string = Bytes.of_string
+
 module Bytes = struct
-  let of_lexbuf  f s = f (Lexing.from_string s)
-  let of_scanbuf f s = f (Scanf.Scanning.from_string s)
-  let of_bigstring f s = f (Bigstring.of_string s)
+  let of_lexbuf  f s = f (Lexing.from_string (Bytes.to_string s))
+  let of_scanbuf f s = f (Scanf.Scanning.from_string (Bytes.to_string s))
+  let of_bigstring f s = f (Bigstring.of_bytes s)
 end
 
 module Channel = struct
-  let of_bytes f c = In_channel.input_all c |> f
+  let of_bytes f c = In_channel.input_all c |> bytes_of_string |> f
   let of_scanbuf f c = f (Scanf.Scanning.from_channel c)
   let of_lexbuf f c = f (Lexing.from_channel c)
 end
@@ -42,6 +44,6 @@ let create
     | _,Some f,_ -> Channel.of_scanbuf f
     | _,_,Some f -> Channel.of_lexbuf f in
   let of_bigstring = match fB with
-    | None -> fun b -> of_bytes (Bigstring.to_string b)
+    | None -> fun b -> of_bytes (Bigstring.to_bytes b)
     | Some f -> f in
   {of_bytes; of_bigstring; of_channel}

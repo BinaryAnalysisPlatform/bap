@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module Doc = struct
   type t = Ogre.Doc.t [@@deriving compare]

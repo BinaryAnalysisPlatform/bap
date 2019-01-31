@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_types.Std
 open Graphlib.Std
@@ -304,6 +304,43 @@ let create_indexes (dests : dests Addr.Table.t) =
 
 let filter_valid s = {s with inits = Set.inter s.inits s.valid}
 
+let join_destinations ?default dests =
+  let jmp x = [ Bil.(jmp (int x)) ] in
+  let undecided x =
+    Bil.if_ (Bil.unknown "destination" (Type.Imm 1)) (jmp x) [] in
+  let init = match default with
+    | None -> []
+    | Some x -> jmp x in
+  Set.fold dests ~init ~f:(fun bil x -> undecided x :: bil)
+
+let make_switch x dests =
+  let case addr = Bil.(if_ (x = int addr) [jmp (int addr)] []) in
+  let default = Bil.jmp x in
+  Set.fold dests ~init:[default] ~f:(fun ds a -> case a :: ds)
+
+let dests_of_bil bil =
+  (object inherit [Addr.Set.t] Stmt.visitor
+    method! visit_jmp e dests = match e with
+      | Int w -> Set.add dests w
+      | _ -> dests
+  end)#run bil Addr.Set.empty
+
+let add_destinations bil = function
+  | [] -> bil
+  | dests ->
+    let d = dests_of_bil bil in
+    let d' = Addr.Set.of_list dests in
+    let n = Set.diff d' d in
+    if Set.is_empty n then bil
+    else
+    if has_jump bil then
+      (object inherit Stmt.mapper
+        method! map_jmp = function
+          | Int addr -> join_destinations ~default:addr n
+          | indirect -> make_switch indirect n
+      end)#run bil
+    else bil @ join_destinations n
+
 let stage2 dis stage1 =
   let stage1 = filter_valid stage1 in
   let leads, terms, kinds = create_indexes stage1.dests in
@@ -359,9 +396,18 @@ let stage2 dis stage1 =
             Dis.stop s (Dis.insns s)) |>
       List.map ~f:(function
           | mem, None -> mem,(None,empty)
-          | mem, (Some ins as insn) -> match stage1.lift mem ins with
-            | Ok sema -> mem,(insn,sema)
-            | _ -> mem, (insn, empty)) in
+          | mem, (Some ins as insn) ->
+            let dests =
+              Addrs.find stage1.dests (Memory.max_addr mem) |>
+              Option.value ~default:[] |>
+              List.filter_map ~f:(function
+                  | a, (`Cond | `Jump) -> a
+                  | _ -> None) in
+            let bil,sema = match stage1.lift mem ins with
+              | Ok sema -> Semantics.get Bil.Domain.bil sema,sema
+              | _ -> [],empty in
+            let bil = add_destinations bil dests in
+            mem, (insn, Semantics.put Bil.Domain.bil sema bil)) in
     return {stage1; addrs; succs; preds; disasm}
 
 let stage3 s2 =

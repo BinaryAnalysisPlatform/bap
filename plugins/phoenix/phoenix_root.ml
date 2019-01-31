@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 exception Target_directory_is_a_file
 

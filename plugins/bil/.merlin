@@ -7,3 +7,4 @@ PKG oUnit
 
 S .
 B _build
+FLG -short-paths

@@ -1,6 +1,6 @@
 [@@@deprecated "[since 2017-04] use new monads library instead"]
 
-open Core_kernel.Std
+open Core_kernel
 open Bap_monad_types
 
 module type Basic = Monad.Basic

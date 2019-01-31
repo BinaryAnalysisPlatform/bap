@@ -3,7 +3,7 @@
     In this module basic types are defined, and it can be considered
     as an internal [Std] module, that should be included most modules,
     internal to the library. *)
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 
 (** {2 Basic modules}

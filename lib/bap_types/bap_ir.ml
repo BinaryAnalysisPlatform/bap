@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap_common
 open Bap_bil
@@ -184,7 +184,7 @@ end = struct
       match Array.find olds ~f:(fun s -> Tid.equal s.tid tid) with
       | Some s -> String.(name <> s.self.name)
       | None -> true in
-    let keep_name tids name tid = Map.add tids ~key:name ~data:tid in
+    let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
     let tids = Array.fold news ~init:String.Map.empty ~f:(fun tids sub ->
         match Map.find tids sub.self.name with
         | None -> keep_name tids sub.self.name sub.tid
@@ -642,7 +642,7 @@ module Ir_phi = struct
 
   let update (phi : phi term) tid exp : phi term =
     let exp = Sema.create exp in
-    with_rhs phi (Map.add (rhs phi) ~key:tid ~data:exp)
+    with_rhs phi (Map.set (rhs phi) ~key:tid ~data:exp)
 
   let remove phi tid : phi term =
     with_rhs phi (Map.remove (rhs phi) tid)

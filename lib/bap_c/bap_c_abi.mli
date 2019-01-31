@@ -4,7 +4,7 @@
     modules for C language.
 *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Bap_c_type
 

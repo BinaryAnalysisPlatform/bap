@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Monads.Std
 open Or_error
@@ -113,13 +113,16 @@ module Loader = struct
   let map_file path =
     let fd = Unix.(openfile path [O_RDONLY] 0o400) in
     try
-      let size = Unix.((fstat fd).st_size) in
-      let data = Bigstring.map_file ~shared:false fd size in
+      let data =
+        (* Unix.map_file in 4.06; using the old location for compatibility *)
+        Bigarray.Genarray.map_file
+          fd Bigarray.char Bigarray.c_layout false [|-1|] in
       Unix.close fd;
-      Ok data
+      Ok (Bigarray.array1_of_genarray data)
     with exn ->
       Unix.close fd;
       Or_error.errorf "unable to process file %s" path
+  [@@warning "-D"]
 
   let from_file path =
     Or_error.(map_file path >>= from_data)

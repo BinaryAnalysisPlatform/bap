@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Format
 
@@ -170,7 +170,7 @@ module Make(Machine : Machine) = struct
     Machine.Local.get state >>= fun {curr; mems} ->
     Machine.Local.put state {
       curr;
-      mems = Map.add mems ~key:curr ~data:mem
+      mems = Map.set mems ~key:curr ~data:mem
     }
 
   let update state f =
@@ -179,7 +179,7 @@ module Make(Machine : Machine) = struct
     | None -> Machine.return ()
     | Some m -> Machine.Local.put state {
         s with
-        mems = Map.add s.mems ~key:s.curr ~data:(f m)
+        mems = Map.set s.mems ~key:s.curr ~data:(f m)
       }
 
   let pagefault addr = Machine.raise (Pagefault addr)
@@ -239,7 +239,7 @@ module Make(Machine : Machine) = struct
     | Some {perms={readonly=true}} -> pagefault addr
     | Some _ -> Machine.return {
         layers;
-        values = Map.add values ~key:addr ~data:value;
+        values = Map.set values ~key:addr ~data:value;
       }
 
   let add_layer layer t = {t with layers = layer :: t.layers}
@@ -250,7 +250,7 @@ module Make(Machine : Machine) = struct
         let addr = Addr.(base ++ i) in
         f addr >>= fun data ->
         Value.of_word data >>| fun data ->
-        Map.add values ~key:addr ~data)
+        Map.set values ~key:addr ~data)
 
 
 

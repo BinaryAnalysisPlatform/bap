@@ -8,7 +8,7 @@
 
 *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap_plugins.Std
 
 
@@ -238,7 +238,7 @@ let by_plugin_name p1 p2 =
   String.compare (Plugin.name p1) (Plugin.name p2)
 
 let plugins =
-  Plugins.list () |> List.sort ~cmp:by_plugin_name |>
+  Plugins.list () |> List.sort ~compare:by_plugin_name |>
   List.map ~f:(fun p ->
       Plugin.name p, Plugin.desc p) |>
   render plugin

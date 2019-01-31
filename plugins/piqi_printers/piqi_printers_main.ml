@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 include Self()
@@ -22,9 +22,13 @@ module Bil = struct
   open Bil_piqi
   open Bir_piqi
 
-  let writer f fmt = Data.Write.create ~to_bytes:(f fmt) ()
+  let writer f fmt =
+    let to_bytes s = f fmt s |> Bytes.of_string in
+    Data.Write.create ~to_bytes ()
 
-  let reader f fmt = Data.Read.create ~of_bytes:(f fmt) ()
+  let reader f fmt =
+    let of_bytes b = f fmt (Bytes.to_string b) in
+    Data.Read.create ~of_bytes ()
 
   let ver = "0.1"
   let desc_of_type = function

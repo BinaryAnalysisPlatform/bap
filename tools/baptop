@@ -1,2 +1,2 @@
 #!/bin/sh
-exec utop -ppx ppx-bap -short-paths -require "bap.top" "$@"
+exec utop-full -ppx ppx-bap -short-paths -require "ppx_jane,bap.top" "$@"

@@ -14,7 +14,7 @@
    find ../x86_64-binaries/elf/ -type f -name "gcc_*O0*" -exec \
    ./run_tests.native -only-test BAP:9:Image:0:llvm_loader -loader-binary '{}' \;
 *)
-open Core_kernel.Std
+open Core_kernel
 open OUnit2
 open Or_error
 open Bap_types.Std

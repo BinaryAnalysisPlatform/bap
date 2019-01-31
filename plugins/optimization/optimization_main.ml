@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Regular.Std
 open Format
@@ -99,7 +99,7 @@ let propagate_consts can_touch sub =
               if can_touch v then
                 match Def.rhs d with
                 | Bil.Unknown _ | Bil.Int _ as exp ->
-                  Map.add vars ~key:v ~data:exp
+                  Map.set vars ~key:v ~data:exp
                 | _ -> vars
               else vars)) |>
   substitute sub

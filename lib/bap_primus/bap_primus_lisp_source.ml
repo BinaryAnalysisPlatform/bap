@@ -56,11 +56,11 @@ let hashcons p sexp =
   | Some eq -> p,eq
   | None ->
     let p = nexteq p in
-    {p with hashed = Map.add p.hashed ~key:sexp ~data:p.lasteq},
+    {p with hashed = Map.set p.hashed ~key:sexp ~data:p.lasteq},
     p.lasteq
 
 let unify p eq =
-  {p with equivs = Map.add p.equivs ~key:p.lastid ~data:eq}
+  {p with equivs = Map.set p.equivs ~key:p.lastid ~data:eq}
 
 
 let nopos = Parsexp.Positions.beginning_of_file
@@ -77,7 +77,7 @@ let getrange pos parents child = match pos with
     | Some range -> range
 
 let add_range p data =
-  {p with ranges = Map.add p.ranges ~key:p.lastid ~data}
+  {p with ranges = Map.set p.ranges ~key:p.lastid ~data}
 
 let of_cst p sexps =
   let newterm p r s =
@@ -128,7 +128,7 @@ let of_sexps ?pos p sexps =
 
 let add_origin origins origin trees =
   let rec add origins token =
-    let origins = Map.add origins ~key:token.id ~data:origin in
+    let origins = Map.set origins ~key:token.id ~data:origin in
     match token.data with
     | Atom _ -> origins
     | List tokens -> List.fold tokens ~init:origins ~f:add in
@@ -144,7 +144,7 @@ let load p filename =
     Ok {
       p with
       origin;
-      source = Map.add p.source ~key:filename ~data:tree
+      source = Map.set p.source ~key:filename ~data:tree
     }
 
 let find p filename = Map.find p.source filename
@@ -175,7 +175,7 @@ let derived p ~from id =
   } else {
     p with
     lastid = Id.max id p.lastid;
-    rclass = Map.add p.rclass ~key:id ~data:from;
+    rclass = Map.set p.rclass ~key:id ~data:from;
   }
 
 let pp_error ppf (Bad_sexp (filename,err)) =

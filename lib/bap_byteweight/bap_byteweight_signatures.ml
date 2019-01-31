@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 include Self()
@@ -23,7 +23,7 @@ let entry ?(comp="default") ~mode arch =
 
 let default_path =
   try Sys.getenv "BAP_SIGFILE"
-  with Not_found -> Config.datadir / "sigs.zip"
+  with Caml.Not_found -> Config.datadir / "sigs.zip"
 
 let load_exn ?comp ?path ~mode arch =
   let path = Option.value path ~default:default_path in
@@ -34,8 +34,8 @@ let load_exn ?comp ?path ~mode arch =
   let entry_path = entry ?comp ~mode arch in
   let r = try
       let entry = Zip.find_entry zip entry_path in
-      Ok (Zip.read_entry zip entry)
-    with Not_found -> fail (`No_entry entry_path)
+      Ok (Zip.read_entry zip entry |> Bytes.of_string)
+    with Caml.Not_found -> fail (`No_entry entry_path)
        | Zip.Error (_,ent,err) -> zip_error ent err in
   Zip.close_in zip;
   r
@@ -47,6 +47,7 @@ let load ?comp ?path ~mode arch =
 (* for some reason Zip truncates the output file, and doesn't provide
    us an option to append anything to for it. *)
 let save_exn ?comp ~mode ~path arch data =
+  let data = Bytes.to_string data in
   let old = try
       if Sys.file_exists path then
         let zip = Zip.open_in path in

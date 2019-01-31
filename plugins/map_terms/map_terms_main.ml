@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 open Bap_bml
@@ -68,8 +68,12 @@ module Scheme = struct
     | Sexp.List [preds; marks] -> parse_marker preds marks
     | _ -> Error {|expect "("<preds> <marks>")"|}
 
-  let sexp_error {Sexp.location; err_msg} =
-    Error (sprintf "Syntax error: %s - %s" location err_msg)
+  let sexp_error (err : Sexp.parse_error) =
+    let line, col = match err.parse_state with
+      | `Annot {parse_pos} -> parse_pos.text_line, parse_pos.text_char
+      | `Sexp {parse_pos} -> parse_pos.text_line, parse_pos.text_char
+    in
+    Error (sprintf "Syntax error: line %d, column %d - %s" line col err.err_msg)
 
   let parse_string s =
     try parse (Sexp.of_string s)

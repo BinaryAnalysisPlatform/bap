@@ -1,6 +1,6 @@
 (** Recursive Descent Disassembler  *)
 
-open Core_kernel.Std
+open Core_kernel
 open Bap_types.Std
 open Graphlib.Std
 open Bap_knowledge

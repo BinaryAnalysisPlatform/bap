@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_plugins.Std
 open Bap_future.Std
 open Regular.Std
@@ -76,7 +76,7 @@ let args filename argv =
 
 let digest o =
   Data.Cache.digest ~namespace:"project" "%s%s"
-    (Digest.file o.filename)
+    (Caml.Digest.(file o.filename |> to_hex))
     (args o.filename Sys.argv)
 
 let run_passes base init = List.foldi ~init ~f:(fun i proj pass ->
@@ -353,7 +353,7 @@ let () =
   let () =
     try if Sys.getenv "BAP_DEBUG" <> "0" then
         Printexc.record_backtrace true
-    with Not_found -> () in
+    with Caml.Not_found -> () in
   Sys.(set_signal sigint (Signal_handle exit));
   let argv = load_recipe () in
   Log.start ?logdir:(get_logdir argv)();
@@ -385,4 +385,4 @@ let () =
   | exn ->
     error "Failed with an unexpected exception: %a\nBacktrace:\n%s"
       Exn.pp exn
-    @@ Exn.backtrace ()
+    @@ Exn.to_string exn

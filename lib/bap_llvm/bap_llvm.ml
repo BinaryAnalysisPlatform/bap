@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 let strip_version ver =
   if String.length ver <> 5 then ver

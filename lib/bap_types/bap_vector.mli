@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 
 type 'a t [@@deriving bin_io, compare, sexp]

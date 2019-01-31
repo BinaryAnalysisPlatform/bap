@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Phoenix_options
@@ -90,7 +90,7 @@ module Make(Env : sig
       let pp_blk_bil = pp_blk bil_of_block pp_bil in
       let pp_blk_asm = pp_blk Block.insns pp_insns in
       let pr = asprintf in
-      List.sort ~cmp:label_order options.cfg_format |>
+      List.sort ~compare:label_order options.cfg_format |>
       List.map ~f:(function
           | `with_name -> pr "«%s»\\n" name
           | `with_asm  -> pr "@[<v>%a@]@?" pp_blk_asm blk |> escape_label

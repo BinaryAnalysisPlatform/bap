@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Or_error
 
 open Bap.Std
@@ -57,6 +57,7 @@ module Fn = struct
   include T
   include Identifiable.Make(struct
       include T
+      include Hashable.Make_and_derive_hash_fold_t(T)
       include Sexpable.To_stringable(T)
     end)
 end
@@ -73,7 +74,7 @@ type spec = {
 
 let fn_of_values vs : (string * fn) Or_error.t =
   let open Value in
-  match List.sort ~cmp:Value.compare vs with
+  match List.sort ~compare:Value.compare vs with
   | Id name :: Lo pc_lo :: Hi pc_hi :: _ ->
     Fn.create ~pc_hi ~pc_lo () >>| fun fn -> name,fn
   | Id name :: Lo pc_lo :: _ ->

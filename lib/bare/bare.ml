@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 
 (* Algorithm description.
@@ -80,7 +80,7 @@ module Rule = struct
   let vars_of_sexp ~get_pos init xs =
     sexp_fold_atoms ~get_pos ~init xs ~f:(fun atoms loc atom ->
           if is_variable atom
-          then Map.add atoms ~key:atom ~data:loc
+          then Map.set atoms ~key:atom ~data:loc
           else atoms)
 
   let collect_free_vars ~get_pos xs =
@@ -193,7 +193,7 @@ module Rule = struct
         | Some bs -> match Map.find bs key with
           | Some data' when Sexp.equal data data' -> Some bs
           | Some _ -> None
-          | None -> Some (Map.add bs ~key ~data))
+          | None -> Some (Map.set bs ~key ~data))
 
   let rec bindings lhs rhs = match lhs,rhs with
     | Sexp.Atom x, Sexp.Atom y when x = y -> Some empty

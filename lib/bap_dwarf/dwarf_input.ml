@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Word_size
 open Or_error
 open Binary_packing
@@ -14,10 +14,10 @@ let read_cstring src ~pos_ref : string t =
   | None -> Or_error.errorf "String was not null-termintated"
   | Some pos ->  (* assuming that String module can't return bad pos *)
     let len = pos - !pos_ref in
-    let dst = String.create len in
-    String.blit ~src ~src_pos:!pos_ref ~dst ~dst_pos:0 ~len;
+    let dst = Bytes.create len in
+    Bytes.From_string.blit ~src ~src_pos:!pos_ref ~dst ~dst_pos:0 ~len;
     pos_ref := (pos + 1); (* move over the null byte  *)
-    return dst
+    return (Bytes.to_string dst)
 
 let read_leb128 inj str ~pos_ref =
   Leb128.read ~signed:false str ~pos_ref >>=
@@ -79,22 +79,24 @@ let of_endian = function
   | LittleEndian -> `Little_endian
   | BigEndian -> `Big_endian
 
+let of_string = Bytes.of_string
+let get_uint8             ~buf = unpack_unsigned_8 ~buf:(of_string buf)
+let get_int16 ~byte_order ~buf = unpack_signed_16 ~byte_order ~buf:(of_string buf)
+let get_int32 ~byte_order ~buf = unpack_signed_32 ~byte_order ~buf:(of_string buf)
+let get_int64 ~byte_order ~buf = unpack_signed_64 ~byte_order ~buf:(of_string buf)
+
 (** [make_reader inj endian size] will read a word of [size], with
     byte order specified with [ending] and then it will try to inject
     it into ['a] type using [inj] function. *)
 let make_reader (inj : 'a inj) endian size : 'a reader =
   let byte_order = of_endian endian in
-  let get_int64 = unpack_signed_64 ~byte_order in
-  let get_int32 = unpack_signed_32 ~byte_order in
   match size with
-  | W64 -> read_as inj.of_int64 get_int64 ~size:8
-  | W32 -> read_as inj.of_int32 get_int32 ~size:4
+  | W64 -> read_as inj.of_int64 (get_int64 ~byte_order) ~size:8
+  | W32 -> read_as inj.of_int32 (get_int32 ~byte_order) ~size:4
 
 let read_int16 endian : int reader =
   let byte_order = of_endian endian in
-  read_word (unpack_signed_16 ~byte_order) ~size:2
-
-
+  read_word (get_int16 ~byte_order) ~size:2
 
 (* right now we do not need a form, but form some attributes
    reading and representation do depend on form. *)
@@ -162,7 +164,7 @@ let unit_size endian str ~pos_ref =
 let offset = read_int
 
 let char : int reader =
-  read_word unpack_unsigned_8 ~size:1
+  read_word get_uint8 ~size:1
 
 let skip ~bytes str ~pos_ref =
   let rec loop n =
@@ -219,7 +221,7 @@ let block lenspec endian src ~pos_ref =
     (Int64.to_int len) >>= fun len ->
   Int.validate_bound len ~min:(Excl 0) ~max:(Incl (String.max_length))
   |> Validate.result >>= fun () ->
-  let dst = String.create len in
-  String.blit ~src ~src_pos:!pos_ref ~dst ~dst_pos:0 ~len;
+  let dst = Bytes.create len in
+  Bytes.From_string.blit ~src ~src_pos:!pos_ref ~dst ~dst_pos:0 ~len;
   pos_ref := !pos_ref + len;
-  return dst
+  return (Bytes.to_string dst)

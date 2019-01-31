@@ -8,6 +8,9 @@
 
 #include "disasm.h"
 
+#ifndef Bytes_val
+#define Bytes_val String_val
+#endif
 
 /* noalloc */
 value bap_disasm_create_stub(value backend,
@@ -161,7 +164,7 @@ value bap_disasm_insn_asm_size_stub(value d, value i) {
 
 /* noalloc */
 value bap_disasm_insn_asm_copy_stub(value d, value i, value data) {
-    bap_disasm_insn_asm_copy(Int_val(d), Int_val(i), String_val(data));
+    bap_disasm_insn_asm_copy(Int_val(d), Int_val(i), Bytes_val(data));
     return Val_unit;
 }
 

@@ -1,7 +1,7 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
-
+[@@@warning "-D"]
 (** execution context.
 
     The context defines the state of execution.

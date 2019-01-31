@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 open Format
@@ -48,7 +48,7 @@ module Index = struct
     entries = Data.Cache.Digest.Map.empty;
   }
   let perm = 0o770
-  let getenv opt = try Some (Sys.getenv opt) with Not_found -> None
+  let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None
 
   let rec mkdir path =
     let par = Filename.dirname path in
@@ -82,7 +82,7 @@ module Index = struct
 
   let evict_entry idx =
     Map.to_sequence idx.entries |>
-    Seq.min_elt ~cmp:(fun (_,e1) (_,e2) ->
+    Seq.min_elt ~compare:(fun (_,e1) (_,e2) ->
         Float.compare (freq e1) (freq e2))
     |> function
     | None -> idx
@@ -113,12 +113,15 @@ module Index = struct
     let module T = (val b) in
     let fd = Unix.(openfile file [O_RDONLY] 0o400) in
     try
-      let data = Bigstring.map_file ~shared:false fd (-1) in
+      let data =
+        Bigarray.Genarray.map_file
+          fd Bigarray.char Bigarray.c_layout false [|-1|] in
       let pos_ref = ref 0 in
-      let t = T.bin_read_t data ~pos_ref in
+      let t = T.bin_read_t (Bigarray.array1_of_genarray data) ~pos_ref in
       Unix.close fd;
       t
     with e -> Unix.close fd; raise e
+  [@@warning "-D"]
 
   let open_temp () =
     let tmp =
@@ -134,11 +137,14 @@ module Index = struct
       let size = T.bin_size_t data in
       let () =
         try
-          let buf = Bigstring.map_file ~shared:true fd size in
-          let _ = T.bin_write_t buf ~pos:0 data in
+          let buf =
+            Bigarray.Genarray.map_file
+              fd Bigarray.char Bigarray.c_layout true [|size|] in
+          let _ = T.bin_write_t (Bigarray.array1_of_genarray buf) ~pos:0 data in
           Unix.close fd
         with e -> Unix.close fd; Sys.remove tmp; raise e in
       Sys.rename tmp file
+  [@@warning "-D"]
 
   let index_of_file file =
     try from_file (module T) file
@@ -243,7 +249,7 @@ let create reader writer =
         Out_channel.close ch;
         {
           index with
-          entries = Map.add index.entries ~key:id ~data:{
+          entries = Map.set index.entries ~key:id ~data:{
               size = size path; path; atime = ctime; ctime; hits = 1
             }
         }) in

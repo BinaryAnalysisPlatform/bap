@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 type mov_rr_ia32 = [
   | `MOV8rr

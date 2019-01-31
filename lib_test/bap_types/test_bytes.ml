@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Regular.Std
 open OUnit2
@@ -30,8 +30,9 @@ let binp ctxt =
   assert_equal ~ctxt b b'
 
 let as_string ctxt =
-  let b = Bytes.copy test_string in
-  assert_equal ~ctxt b test_string
+  let test_bytes = Bytes.of_string test_string in
+  let b = Bytes.copy test_bytes in
+  assert_equal ~ctxt b test_bytes
 
 let suite =
   "Bytes" >::: [

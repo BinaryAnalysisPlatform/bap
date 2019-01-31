@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 
 type mode = string
@@ -121,8 +121,8 @@ module Attr = struct
     try Option.some @@ match name_of_attr tag with
       | "foreground" -> foreground tag
       | "background" -> background tag
-      | _ -> raise Not_found
-    with exn -> None
+      | _ -> invalid_arg "Expected foreground | background"
+    with _ -> None
 
   let need_to_print tag =
     Hash_set.mem attrs (name_of_attr tag)

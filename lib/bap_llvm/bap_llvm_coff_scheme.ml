@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Ogre.Type
 open Bap_llvm_ogre_types.Scheme
 

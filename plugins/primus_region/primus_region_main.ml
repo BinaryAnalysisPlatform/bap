@@ -80,7 +80,7 @@ module Move(Machine : Primus.Machine.S) = struct
             Regions.add reg' r (),
             n + 1) in
       let regions = 
-        Map.add (Map.add regions ~key:src ~data:reg) ~key:dst ~data:reg' in
+        Map.set (Map.set regions ~key:src ~data:reg) ~key:dst ~data:reg' in
       Machine.Local.put state {regions} >>= fun () -> 
       Value.of_bool (n > 0)
 end

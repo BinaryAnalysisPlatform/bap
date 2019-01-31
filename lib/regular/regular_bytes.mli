@@ -1,12 +1,22 @@
-open Core_kernel.Std
+open Core_kernel
 
 type t = Bytes.t [@@deriving bin_io, compare, sexp]
 
 include Container.S0   with type t := t with type elt := char
 include Blit.S         with type t := t
 include Identifiable.S with type t := t
-module To_string   : Blit.S_distinct with type src := t with type dst := string
 module From_string : Blit.S_distinct with type src := string with type dst := t
+
+module To_string  : sig
+  val blit : (t, t) Blit.blit
+
+  val blito : (t, t) Blit.blito
+
+  val unsafe_blit : (t, t) Blit.blit
+
+  val sub : (t, string) Blit.sub
+  val subo : (t, string) Blit.subo
+end
 
 val create : int -> t
 val make : int -> char -> t

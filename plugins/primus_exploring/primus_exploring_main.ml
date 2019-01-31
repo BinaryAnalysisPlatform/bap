@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Monads.Std
 open Bap_primus.Std
@@ -35,7 +35,7 @@ module Scheduler(Machine : Primus.Machine.S) = struct
   let enqueue level t id  =
     let add ?(level=0) tid = {
       pending = Fqueue.enqueue t.pending id;
-      explored = Map.add t.explored ~key:tid ~data:level
+      explored = Map.set t.explored ~key:tid ~data:level
     } in
     Machine.switch id >>= fun () ->
     Eval.pos >>| Primus.Pos.tid >>| fun tid ->

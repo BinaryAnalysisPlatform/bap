@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 
 type stage = Working | Accepted | Finished
@@ -127,12 +127,12 @@ let rev_zip_skip skip xs ys =
 let result {data; chars; cut} = rev_zip_skip cut data chars
 
 let chars {chars; cut; len} =
-  let data = String.create (len - cut) in
-  let len = String.length data in
+  let data = Bytes.create (len - cut) in
+  let len = Bytes.length data in
   List.iteri chars ~f:(fun i c ->
       if i >= cut
-      then data.[(len - 1) - (i - cut)] <- c);
-  data
+      then Bytes.set data ((len - 1) - (i - cut))  c);
+  Bytes.to_string data
 
 let data ?(rev=false) {data; cut} =
   if rev then List.drop data cut

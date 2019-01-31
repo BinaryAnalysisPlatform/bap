@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Monads.Std
 open Bap_common
 open Bap_bil
@@ -562,7 +562,7 @@ module Simpl = struct
     and while_  c ss = match exp c with
       | Int x when Word.is_zero x -> []
       | c -> [While (c, bil ss)]
-    and bil = List.concat_map ~f:stmt in
+    and bil stmts = List.concat_map stmts ~f:stmt in
     bil
 
   let stmt ?ignore x = bil ?ignore [x]
@@ -802,7 +802,7 @@ module Normalize = struct
       | Jmp x -> Jmp (exp x)
       | If (c,xs,ys) -> If (exp c, map xs, map ys)
       | While (c,xs) -> While (exp c, map xs)
-    and map = List.map ~f:apply in
+    and map stmts = List.map stmts ~f:apply in
     apply stmt
 
   let with_true v x = assume (Assume (v,true)) x
@@ -914,7 +914,7 @@ module Normalize = struct
         If (c,stmts xs, stmts ys)
       | While (c,xs) -> exp c >>| fun c ->
         While (c,stmts xs)
-    and stmts = List.concat_map ~f:stmt in
+    and stmts xs = List.concat_map xs ~f:stmt in
     stmt
 
 
