@@ -7,7 +7,7 @@ Library knowledge
   Path: lib/knowledge
   FindlibName: bap-knowledge
   CompiledObject: best
-  BuildDepends: core_kernel, monads, regular
+  BuildDepends: core_kernel, monads
   Modules: Bap_knowledge
   InternalModules:
         Bap_knowledge_domain,

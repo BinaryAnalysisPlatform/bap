@@ -17,7 +17,9 @@ Library bap
                    bap-future,
                    cmdliner,
                    bap-knowledge,
-                   regular
+                   regular,
+                   core_kernel,
+                   ppx_jane
   Modules:         Bap
   InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 
@@ -192,7 +194,7 @@ Library bundle
   Path:          lib/bap_bundle
   FindlibParent: bap
   FindlibName:   bundle
-  BuildDepends:  uri, camlzip, unix, bap.config
+  BuildDepends:  uri, camlzip, unix, bap.config, core_kernel, ppx_jane
   Modules:       Bap_bundle
 
 
@@ -202,7 +204,7 @@ Executable "bapbuild"
   MainIs:         bapbuild.ml
   Install:        true
   CompiledObject: best
-  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs
+  BuildDepends:   core_kernel, ocamlbuild, bap-build, compiler-libs, ppx_jane
 
 Executable "bapbundle"
   Build$:          flag(everything) || flag(bap_std)

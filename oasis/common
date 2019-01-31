@@ -14,10 +14,7 @@ XOCamlbuildExtraArgs:
      -j 2
      -use-ocamlfind
      -classic-display
-     -plugin-tags "'package(findlib),package(core_kernel)'"
-
-BuildDepends: ppx_jane, core_kernel (>= v0.11 && < v0.12)
-
+     -plugin-tags "'package(findlib)'"
 
 PreConfCommand: $rm setup.data
 PostDistcleanCommand: $rm  _tags myocamlbuild.ml setup.ml setup.data
