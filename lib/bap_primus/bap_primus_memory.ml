@@ -168,7 +168,7 @@ let put_curr mem =
   descriptor s.curr >>= fun curr ->
   Machine.Local.put state {
     s with
-    mems = Map.add s.mems ~key:curr ~data:mem
+    mems = Map.set s.mems ~key:curr ~data:mem
   }
 
 let update state f =
@@ -178,7 +178,7 @@ let update state f =
   | None -> Machine.return ()
   | Some m -> Machine.Local.put state {
       s with
-      mems = Map.add s.mems ~key:curr ~data:(f m)
+      mems = Map.set s.mems ~key:curr ~data:(f m)
     }
 
 let pagefault addr = Machine.raise (Pagefault addr)
@@ -241,7 +241,7 @@ let write addr value {values;layers} =
   | Some {perms={readonly=true}} -> pagefault addr
   | Some _ -> Machine.return {
       layers;
-      values = Map.add values ~key:addr ~data:value;
+      values = Map.set values ~key:addr ~data:value;
     }
 
 let add_layer layer t = {t with layers = layer :: t.layers}
@@ -252,7 +252,7 @@ let initialize values base len f =
       let addr = Word.(base ++ i) in
       f addr >>= fun data ->
       Value.of_word data >>| fun data ->
-      Map.add values ~key:addr ~data)
+      Map.set values ~key:addr ~data)
 
 
 

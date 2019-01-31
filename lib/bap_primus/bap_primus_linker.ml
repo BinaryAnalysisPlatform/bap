@@ -98,7 +98,7 @@ let fail name =
 
 let link name code =
   Machine.Local.update state ~f:(fun s -> {
-        s with codes = Map.add s.codes ~key:name ~data:code
+        s with codes = Map.set s.codes ~key:name ~data:code
       })
 
 let unlink name =

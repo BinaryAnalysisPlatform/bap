@@ -79,12 +79,12 @@ let inspect_environment {values;random} =
 
 let add var policy =
   Machine.Local.update state ~f:(fun s -> {
-        s with random = Map.add s.random ~key:var ~data:policy
+        s with random = Map.set s.random ~key:var ~data:policy
       })
 
 let set var x =
   Machine.Local.update state ~f:(fun s -> {
-        s with values = Map.add s.values ~key:var ~data:x
+        s with values = Map.set s.values ~key:var ~data:x
       })
 
 let null s = Value.zero s

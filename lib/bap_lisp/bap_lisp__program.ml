@@ -264,8 +264,8 @@ module Use = struct
         let vs = vars bound body in
         let cs = calls body in
         {
-          calls = Map.add s.calls ~key:def.id ~data:cs;
-          vars = Map.add s.vars ~key:def.id ~data:vs;
+          calls = Map.set s.calls ~key:def.id ~data:cs;
+          vars = Map.set s.vars ~key:def.id ~data:vs;
         })
 end
 
@@ -501,10 +501,10 @@ module Typing = struct
 
 
     let add_var id t g =
-      {g with vars = Map.add g.vars ~key:id ~data:t}
+      {g with vars = Map.set g.vars ~key:id ~data:t}
 
     let add_val t v g =
-      {g with vals = Map.add g.vals ~key:t ~data:v}
+      {g with vals = Map.set g.vals ~key:t ~data:v}
 
     let unify t1 t2 g =
       let t = Tvar.min t1 t2 in
@@ -537,8 +537,8 @@ module Typing = struct
       | None -> g
       | Some vs -> match Map.find g.vars id with
         | None -> {
-            vars = Map.add g.vars ~key:id ~data:(Tvar id);
-            vals = Map.add g.vals ~key:(Tvar id) ~data:vs;
+            vars = Map.set g.vars ~key:id ~data:(Tvar id);
+            vals = Map.set g.vals ~key:(Tvar id) ~data:vs;
           }
         | Some v -> {
             g with vals = Map.update g.vals v ~f:(function
@@ -674,7 +674,7 @@ module Typing = struct
 
 
   let push vars {data; id} =
-    Map.add vars ~key:data.exp ~data:id
+    Map.set vars ~key:data.exp ~data:id
 
   let varclass vars v = match Map.find vars v.data.exp with
     | None -> v.id
@@ -760,11 +760,11 @@ module Typing = struct
   let make_globs =
     Seq.fold ~init:String.Map.empty ~f:(fun vars v ->
         let data = Sort.exp (Var.sort v) in
-        Map.add vars ~key:(Var.name v) ~data)
+        Map.set vars ~key:(Var.name v) ~data)
 
   let make_prims {primits} =
     List.fold primits ~init:String.Map.empty ~f:(fun ps p ->
-        Map.add ps
+        Map.set ps
           ~key:(Def.name p)
           ~data:(Def.Primitive.signature p))
 
@@ -798,7 +798,7 @@ module Typing = struct
             | None -> errs
             | Some ts ->
               if Set.is_empty ts
-              then Map.add errs ~key:(Source.loc p.sources exp) ~data:exp
+              then Map.set errs ~key:(Source.loc p.sources exp) ~data:exp
               else errs
           else errs) |>
       Map.to_alist

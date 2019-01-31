@@ -13,6 +13,7 @@ B _build
 B _build/lib/bap
 B _build/lib/bap_abi
 B _build/lib/bap_api
+B _build/lib/bitvec
 B _build/lib/bap_bundle
 B _build/lib/bap_c
 B _build/lib/bap_config

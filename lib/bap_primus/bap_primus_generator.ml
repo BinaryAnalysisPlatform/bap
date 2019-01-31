@@ -104,6 +104,6 @@ let rec next = function
       else match Map.max_elt states with
         | None -> 1
         | Some (k,_) -> k+1 in
-    let states = Map.add states ~key:ident ~data:state in
+    let states = Map.set states ~key:ident ~data:state in
     Machine.Local.put generators {states} >>| fun () ->
     value
