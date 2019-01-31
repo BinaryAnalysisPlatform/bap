@@ -56,7 +56,7 @@ type 'a m = modulus -> 'a
    Specialized versions may use a different normalization procedure,
    this is the general case that shall work with all range of widths.
 *)
-let norm {m; w} x =
+let norm {m} x =
   if Z.sign x < 0 || Z.geq x m
   then Z.(x land m)
   else x
@@ -464,3 +464,12 @@ module M32 = Make(struct
 module M64 = Make(struct
     let modulus = m64
   end)
+
+include Syntax
+let equal x y = compare x y = 0 [@@inline]
+let (<) x y = compare x y < 0 [@@inline]
+let (>) x y = compare x y > 0 [@@inline]
+let (<=) x y = compare x y <= 0 [@@inline]
+let (>=) x y = compare x y >= 0 [@@inline]
+let (=) x y = compare x y = 0 [@@inline]
+let (<>) x y = compare x y <> 0 [@@inline]

@@ -336,9 +336,32 @@ end
 val compare : t -> t -> int
 
 
+(** [equal x y] is true if [x] and [y] represent the same integers *)
+val equal : t -> t -> bool
+
+
+val (<) : t -> t -> bool          (** [x < y] iff [compare x y = -1]  *)
+val (>) : t -> t -> bool          (** [x > y] iff [compare x y =  1]  *)
+val (=) : t -> t -> bool          (** [x = y] iff [compare x y =  0]  *)
+val (<>) : t -> t -> bool          (** [x <> y] iff [compare x y <> 0]  *)
+val (<=) : t -> t -> bool          (** [x <= y] iff [compare x y <= 0]  *)
+val (>=) : t -> t -> bool          (** [x >= y] iff [compare x y >= 0]  *)
+
 (** [hash x] returns such [z] that forall [y] s.t. [x=y], [hash y = z] *)
 val hash : t -> int
 
+
+(** [pp ppf x] is a pretty printer for the bitvectors.
+
+    Could be used standalone or as an argument to the [%a] format
+    specificator, e.g.,
+
+    {[
+      Format.fprintf "0xBEEF != %a" Bitvec.pp !$"0xBEAF"
+    ]}
+
+*)
+val pp : Format.formatter -> t -> unit
 
 (** [to_binary x] returns a canonical binary representation of [x] *)
 val to_binary : t -> string
@@ -469,6 +492,8 @@ val repeat : int -> times:int -> t -> t
     if [xs] is empty.
 *)
 val concat : int -> t list -> t
+
+include S with type 'a m := 'a m
 
 module type Modulus = sig
   val modulus : modulus

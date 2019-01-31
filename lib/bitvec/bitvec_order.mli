@@ -83,7 +83,7 @@
 
     {[Set.empty Bitvec_order.Natural.comparator]}
 *)
-type t = Bitvec.t [@@deriving compare, sexp]
+type t = Bitvec.t
 
 
 (** type index for the increasing order  *)
