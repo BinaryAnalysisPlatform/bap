@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Bap.Std
 
@@ -167,7 +167,7 @@ module Std : sig
         encoding.  *)
     val size: t -> int
     val read: ?signed:bool -> string -> pos_ref:int ref -> t Or_error.t
-    val write: t -> string -> pos:int -> unit
+    val write: t -> bytes -> pos:int -> unit
 
     val to_int:   int   decoder
     val to_int32: int32 decoder

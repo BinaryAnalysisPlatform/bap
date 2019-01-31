@@ -1,4 +1,4 @@
-open! Core_kernel.Std
+open! Core_kernel
 open Bap.Std
 open Bap_c.Std
 include Self()
@@ -166,8 +166,8 @@ let ctype gamma {lookup} t =
         | CONSTANT (CONST_INT x) ->
           name, Option.try_with (fun () -> Int64.of_string x)
         | _ -> name, None)
-  and fields =
-    List.map ~f:(fun (name,t,a) ->
+  and fields xs =
+    List.map xs ~f:(fun (name,t,a) ->
         name, with_attrs (gnu_attrs a) @@ ctype t) in
   ctype t
 

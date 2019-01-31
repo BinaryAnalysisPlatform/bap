@@ -1,10 +1,10 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_future.Std
 open Bap_plugins.Std
 open Format
 
 let perm = 0o770
-let getenv opt = try Some (Sys.getenv opt) with Not_found -> None
+let getenv opt = try Some (Sys.getenv opt) with Caml.Not_found -> None
 
 let rec mkdir path =
   let par = Filename.dirname path in

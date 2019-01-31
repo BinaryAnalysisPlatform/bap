@@ -59,7 +59,7 @@ let update (Link field) link item s =
   let links = Map.update s.links link ~f:(function
       | None -> field#put item noinfo
       | Some info -> field#put item info) in
-  let infos = Map.add (field#get s) ~key:item ~data:link in
+  let infos = Map.set (field#get s) ~key:item ~data:link in
   field#set infos {s with links}
 
 let lookup (Link field) link s = match Map.find s.links link with

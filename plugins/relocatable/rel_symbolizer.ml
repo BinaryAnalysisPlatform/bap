@@ -13,7 +13,7 @@ module Rel = struct
 
   let of_aseq s =
     Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-        Map.add m ~key ~data)
+        Map.set m ~key ~data)
 
   let arch_width =
     Fact.require arch >>= fun a ->
@@ -41,7 +41,7 @@ let create cfg exts =
         let len = Memory.length m in
         match find min len exts with
         | None -> calls
-        | Some name -> Map.add calls min name)
+        | Some name -> Map.set calls min name)
 
 let init () =
   let open Project.Info in

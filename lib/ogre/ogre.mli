@@ -60,7 +60,7 @@
     to Ogre's field.
 *)
 
-open Core_kernel.Std
+open Core_kernel
 open Monads.Std
 open Format
 

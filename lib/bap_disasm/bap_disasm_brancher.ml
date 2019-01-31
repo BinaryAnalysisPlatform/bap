@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_types.Std
 open Bap_image_std
 open Monads.Std
@@ -31,7 +31,7 @@ module Rel_info = struct
 
     let of_aseq s =
       Seq.fold s ~init:Addr.Map.empty ~f:(fun m (key,data) ->
-          Map.add m ~key ~data)
+          Map.set m ~key ~data)
 
     let arch_width =
       Fact.require arch >>= fun a ->

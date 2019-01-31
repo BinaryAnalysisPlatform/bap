@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Mips_rtl
 
@@ -37,22 +37,22 @@ let make_regs_list typ prefix size =
 
 let reglist_to_map regs =
   List.fold ~init:String.Map.empty ~f:(fun regs var ->
-      String.Map.add regs (Var.name var) var) regs
+      String.Map.set regs (Var.name var) var) regs
 
 let make_regs typ ?alias prefix range =
   List.fold ~init:String.Map.empty ~f:(fun regs i ->
       let var = make_var_i typ prefix i in
       let name = Var.name var in
-      let regs = String.Map.add regs name var in
+      let regs = String.Map.set regs name var in
       match alias with
       | None -> regs
       | Some a ->
         let name = make_name a i in
-        String.Map.add regs name var) range
+        String.Map.set regs name var) range
 
 let make_regs_i typ prefix range =
   List.fold ~init:Int.Map.empty ~f:(fun regs i ->
-      Int.Map.add regs i (make_var_i typ prefix i)) range
+      Int.Map.set regs i (make_var_i typ prefix i)) range
 
 let make_reg typ name = Var.create name typ
 let flag name = Var.create name (Type.imm 1)
@@ -140,10 +140,10 @@ module Make_MIPS(S: Spec) : MIPS = struct
         let names =
           if gpr_bitwidth = 64 then (name ^ "_64") :: names
           else names in
-        List.fold names ~init ~f:(fun regs name -> Map.add regs name reg))
+        List.fold names ~init ~f:(fun regs name -> Map.set regs name reg))
 
   let gpri = List.foldi ~init:Int.Map.empty ~f:(fun n regs (reg,_) ->
-      Map.add regs n reg) gprs
+      Map.set regs n reg) gprs
 
   let hi = make_reg (Type.imm gpr_bitwidth) "HI"
   let lo = make_reg (Type.imm gpr_bitwidth) "LO"

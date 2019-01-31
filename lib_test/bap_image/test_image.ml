@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open OUnit2
 open Or_error
 open Word_size
@@ -19,18 +19,18 @@ let create_segment
     ?(perm=(Or (R,X)))
     ~off ?size ?data asize : Segment.t =
   let (size, data) = match size, data with
-    | None, None ->  4, String.create 4
-    | Some size, None -> size, String.create size
-    | None, Some data -> String.length data, data
+    | None, None ->  4, Bytes.create 4
+    | Some size, None -> size, Bytes.create size
+    | None, Some data -> Bytes.length data, data
     | Some size, Some data -> size,data in
   let addr = create_addr asize (Int64.of_int addr) in
   let location = Location.Fields.create ~addr ~len:size in
   Segment.Fields.create ~name ~location ~perm ~off
 
 
-let create_file () = String.create 0x1000
+let create_file () = Bytes.create 0x1000
 
-let files = String.Table.create ()
+let files : Bytes.t String.Table.t = String.Table.create ()
 
 
 let data ?(base=0) ?(gap=0) f ss asize name =
@@ -38,18 +38,18 @@ let data ?(base=0) ?(gap=0) f ss asize name =
   List.map ss ~f:(fun data ->
       let data = f data in
       let addr = !addr_ref in
-      let len = String.length data in
+      let len = Bytes.length data in
       let dst = String.Table.find_or_add files name
           ~default:create_file in
       let off = addr - base in
-      String.blit
+      Bytes.blit
         ~src:data ~src_pos:0
         ~dst      ~dst_pos:off ~len;
       addr_ref := !addr_ref + len + gap;
       create_segment ~off ~addr ~data asize)
 
-let seq (n,m) : string =
-  String.init (m-n+1) ~f:(fun i -> Option.value_exn (Char.of_int (i+n)))
+let seq (n,m) : Bytes.t =
+  Bytes.init (m-n+1) ~f:(fun i -> Option.value_exn (Char.of_int (i+n)))
 
 let nonempty = function
   | [] -> invalid_arg "list should be non empty"
@@ -99,7 +99,7 @@ let print_list r =
   Or_error.sexp_of_t sexp_of_addr_list r
 
 let to_list ~word_size backend ~expect ctxt =
-  let data = String.Table.find_exn files backend in
+  let data = String.Table.find_exn files backend |> Bytes.to_string in
   let r = Image.of_string ~backend data >>| fun (img,warns) ->
     assert_bool "to_list: no warning" (warns = []);
     Table.to_sequence (Image.words img word_size) |>
@@ -110,6 +110,7 @@ let to_list ~word_size backend ~expect ctxt =
 
 let check ?(base=0) backend ~f ctxt =
   let data = String.Table.find_exn files backend in
+  let data = Bytes.to_string data in
   let r = Image.of_string ~backend data
     >>= fun (img,warns) ->
     assert_bool "check: no warning" (warns = []);

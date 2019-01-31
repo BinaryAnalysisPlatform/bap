@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 
 open X86_types
@@ -9,7 +9,7 @@ let tmp ?(name="v") ty =
 
 let index_ofq elt lst =
   match List.findi lst ~f:(fun _ e -> e = elt) with
-  | None -> raise Not_found
+  | None -> raise Caml.Not_found
   | Some (i,_) -> i
 
 let concat_explist elist =

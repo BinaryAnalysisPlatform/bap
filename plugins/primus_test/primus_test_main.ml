@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Bap_primus.Std
 open Monads.Std
@@ -94,7 +94,7 @@ module Location = struct
       next incidents >>= fun key ->
       let trace = {backtrace = push {addr; mach} backtrace} in
       Machine.Global.put state {
-        incidents = Map.add incidents ~key ~data:trace
+        incidents = Map.set incidents ~key ~data:trace
       } >>= fun () ->
       Machine.Observation.make report_location (key,trace) >>| fun () ->
       key

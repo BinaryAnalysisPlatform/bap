@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Result
 open Bap_bundle.Std
 open Bap.Std
@@ -13,7 +13,7 @@ let try_with_default ~default f = match try_with f with
 
 let getenv v =
   try Some (Sys.getenv v)
-  with Not_found -> None
+  with Caml.Not_found -> None
 
 module Path = FilePath.DefaultPath.Abstract
 type path = Path.filename
@@ -272,7 +272,7 @@ let show_all_apis paths =
       close_box ();
       print_newline () in
   let apis = api_of_paths paths |>
-             List.sort ~cmp:(fun x y -> String.compare x.desc.lang y.desc.lang) in
+             List.sort ~compare:(fun x y -> String.compare x.desc.lang y.desc.lang) in
   List.iter ~f:print_lang (List.group ~break:(fun x y -> x.desc.lang <> y.desc.lang) apis);
   printf "Total number of available API: %d\n" (List.length apis)
 

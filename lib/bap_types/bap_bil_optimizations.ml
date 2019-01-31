@@ -51,7 +51,7 @@ module Propagate(SM : Monad.State.S2) = struct
 
   let new_ctxt = Var.Map.empty
   let find = Map.find
-  let update = Map.add
+  let update = Map.set
 
   class exp_propagator = object(self)
 

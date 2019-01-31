@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Format
 open Bap.Std
 open Bap_plugins.Std
@@ -88,13 +88,13 @@ module Program(Conf : Mc_options.Provider) = struct
   let print_bil insn =
     let bil = Insn.bil insn in
     List.iter options.bil_formats ~f:(fun fmt ->
-        printf "%s@." (Bil.to_bytes ~fmt bil))
+    printf "%s@." (Bytes.to_string @@ Bil.to_bytes ~fmt bil))
 
   let print_bir insn =
     let bs = Blk.from_insn insn in
     List.iter options.bir_formats ~f:(fun fmt ->
         printf "%s" @@ String.concat ~sep:"\n"
-          (List.map bs ~f:(Blk.to_bytes ~fmt)))
+          (List.map bs ~f:(fun b -> Bytes.to_string @@ Blk.to_bytes ~fmt b)))
 
   let print_sema insn =
     let sema = Insn.semantics insn in
@@ -297,9 +297,10 @@ let _main : unit =
   | Create_mem err ->
     exitf 65 "Unable to create a memory: %a" Error.pp err
   | Bad_insn (mem,boff,stop)->
-    let dump = Memory.hexdump mem in
+    let dump = Memory.hexdump mem |> Bytes.of_string in
     let line = boff / 16 in
     let pos off = line * 77 + (off mod 16) * 3 + 9 in
-    dump.[pos boff] <- '(';
-    dump.[pos stop] <- ')';
-    exitf 66 "Invalid instruction at offset %d:\n%s" boff dump
+    Bytes.set dump (pos boff) '(';
+    Bytes.set dump (pos stop) ')';
+    exitf 66 "Invalid instruction at offset %d:\n%s"
+      boff (Bytes.to_string dump)

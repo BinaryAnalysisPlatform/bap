@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 module type S = sig
   type t

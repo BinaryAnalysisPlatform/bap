@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open OUnit2
 
 module Dwarf = Bap_dwarf.Std

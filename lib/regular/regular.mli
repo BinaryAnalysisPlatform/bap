@@ -1,6 +1,6 @@
 (** Regular Library.   *)
 
-open Core_kernel.Std
+open Core_kernel
 
 (** Interface that should support any regular data type.
 
@@ -580,7 +580,7 @@ module Std : sig
         ?dump  : (Out_channel.t -> 'a -> unit) ->
         ?pp    : (Format.formatter -> 'a -> unit) ->
         ?size  : ('a -> int) ->
-        ?blit_to_string:('a,string) copy ->
+        ?blit_to_string:('a,bytes) copy ->
         ?blit_to_bigstring:('a,bigstring) copy ->
         unit -> 'a t
 
@@ -609,8 +609,14 @@ module Std : sig
           representation of the [value] into existing string [buf],
           starting from the given position. It is undefined behavior,
           if the [value] doesn't fit into the string [buf] *)
-      val blit_to_string : 'a t -> string -> 'a -> int -> unit
+      val blit_to_string : 'a t -> bytes -> 'a -> int -> unit
+      [@@deprecated "[since 2018-11] use the blit_to_bytes instead"]
 
+      (** [blit_to_bytes writeable buf value pos] copies a serialized
+          representation of the [value] into existing buffer [buf],
+          starting from the given position. It is undefined behavior,
+          if the [value] doesn't fit into the [buf] *)
+      val blit_to_bytes : 'a t -> bytes -> 'a -> int -> unit
 
       (** [blit_to_bigstring writeable buf value pos] copies a
           serialized representation of the [value] into existing
@@ -817,17 +823,27 @@ module Std : sig
       any specific support for the serialization).*)
   module Bytes : sig
 
-
     (** bytes  *)
     type t = Bytes.t [@@deriving bin_io, compare, sexp]
 
     include Container.S0   with type t := t with type elt := char
     include Blit.S         with type t := t
     include Identifiable.S with type t := t
-    module To_string   : Blit.S_distinct with type src := t with type dst := string
     module From_string : Blit.S_distinct with type src := string with type dst := t
 
+    module To_string  : sig
+      val blit : (t, t) Blit.blit
+      [@@deprecated "[since 2018-11] use the Bytes.blit instead"]
 
+      val blito : (t, t) Blit.blito
+      [@@deprecated "[since 2018-11] use the Bytes.blito instead"]
+
+      val unsafe_blit : (t, t) Blit.blit
+      [@@deprecated "[since 2018-11] use the Bytes.unsafe_blit instead"]
+
+      val sub : (t, string) Blit.sub
+      val subo : (t, string) Blit.subo
+    end
 
     (** [create n] returns a new byte sequence of length [n]. The
         sequence is uninitialized and contains arbitrary bytes.

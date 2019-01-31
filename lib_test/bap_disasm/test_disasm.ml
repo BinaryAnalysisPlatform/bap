@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap.Std
 open Result
 open OUnit2
@@ -290,7 +290,7 @@ let build_graph dis : graph =
       (blk_num blk, Seq.to_list preds, Seq.to_list dests) :: graph)
 
 let structure cfg ctxt =
-  let sort x = List.sort ~cmp:Polymorphic_compare.compare x in
+  let sort x = List.sort ~compare:Polymorphic_compare.compare x in
   let deepsort graph =
     List.map graph ~f:(fun (id,preds,succs) ->
         id, sort preds, sort succs) |> sort in

@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular_data_types
 open Regular_data_intf
 
@@ -6,24 +6,24 @@ module Read = Regular_data_read
 module Write = Regular_data_write
 
 let sexp_reader (type t) (module T : Sexpable with type t = t) =
-  let of_bytes str = T.t_of_sexp (Sexp.of_string str) in
+  let of_bytes str = T.t_of_sexp (Sexp.of_string (Bytes.to_string str)) in
   let of_bigstring str = T.t_of_sexp (Sexp.of_bigstring str) in
   let of_channel ch = T.t_of_sexp (Sexp.input_sexp ch) in
   Read.create ~of_channel ~of_bigstring ~of_bytes ()
 
 let sexp_writer (type t) (module T : Sexpable with type t = t) =
-  let to_bytes x = Sexp.to_string (T.sexp_of_t x) in
+  let to_bytes x = Bytes.of_string @@ Sexp.to_string (T.sexp_of_t x) in
   let size x = snd (Sexp.size (T.sexp_of_t x)) in
   let dump ch x = Sexp.output ch (T.sexp_of_t x) in
   Write.create ~size ~to_bytes ~dump ()
 
 let bin_reader (type t) (module T : Binable with type t = t) =
-  let of_bytes = Binable.of_string (module T) in
+  let of_bytes bs = Binable.of_string (module T) (Bytes.to_string bs) in
   let of_bigstring = Binable.of_bigstring (module T) in
   Read.create ~of_bytes ~of_bigstring ()
 
 let bin_writer (type t) (module T : Binable with type t = t) =
-  let to_bytes = Binable.to_string (module T) in
+  let to_bytes x = Binable.to_string (module T) x |> Bytes.of_string in
   let to_bigstring = Binable.to_bigstring (module T) in
   let size = T.bin_size_t in
   let blit_to_bigstring buf x pos =
@@ -35,7 +35,7 @@ let bin_writer (type t) (module T : Binable with type t = t) =
 let marshal_reader (type t) (module T : T with type t = t) =
   Read.create
     ~of_channel:Marshal.from_channel
-    ~of_bytes:(fun s -> Marshal.from_string s 0) ()
+    ~of_bytes:(fun s -> Marshal.from_bytes s 0) ()
 
 let marshal_writer (type t) (module T : T with type t = t) =
   let flags = Marshal.[Closures] in
@@ -97,7 +97,7 @@ module Make(T : Versioned) = struct
   let set (table : 'a table) ~ver name cls : unit =
     Id.Table.change table name (function
         | None -> Some (Ver.Map.singleton ver cls)
-        | Some vs -> Some (Ver.Map.add vs ver cls))
+        | Some vs -> Some (Ver.Map.set vs ver cls))
 
   let find_with_ver (table : 'a table) ?ver name : (string * 'a) option =
     match Hashtbl.find table name with

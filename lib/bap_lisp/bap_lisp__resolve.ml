@@ -100,7 +100,7 @@ let stage4 = function
 let overload_macro code (s3) =
   List.filter_map s3 ~f:(fun def ->
       Option.(Def.Macro.bind def code >>| fun (n,bs) -> n,def,bs)) |>
-  List.sort ~cmp:(fun (n,_,_) (m,_,_) -> Int.ascending n m) |> function
+  List.sort ~compare:(fun (n,_,_) (m,_,_) -> Int.ascending n m) |> function
   | [] -> []
   | ((n,_,_) as c) :: cs -> List.filter_map (c::cs) ~f:(fun (m,d,bs) ->
       Option.some_if (n = m) (d,bs))

@@ -1,5 +1,6 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_knowledge
+
 open Bap_primus_types
 module Machine = Bap_primus_machine
 

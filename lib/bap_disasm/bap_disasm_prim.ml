@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 (**/**)
 
@@ -112,7 +112,7 @@ external insn_offset : t -> insn:int -> int =
 external insn_asm_size : t -> insn:int -> int =
   "bap_disasm_insn_asm_size_stub" "noalloc"
 
-external insn_asm_copy : t -> insn:int -> string -> unit =
+external insn_asm_copy : t -> insn:int -> Bytes.t -> unit =
   "bap_disasm_insn_asm_copy_stub" "noalloc"
 
 external insn_satisfies : t -> insn:int -> pred -> bool =

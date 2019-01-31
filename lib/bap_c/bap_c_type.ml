@@ -10,7 +10,7 @@
     to attach attributes of the form [attr(args)] to C type
     declarations.
 *)
-open Core_kernel.Std
+open Core_kernel
 
 type char =
   [ `schar | `char | `uchar]

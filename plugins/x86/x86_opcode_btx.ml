@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 
 (** BT *)
 type bt_rr_ia32 = [

@@ -133,6 +133,12 @@ module Floats = struct
 
   let size x = Format.bits (format x)
 
+  let parse = function
+    | Sort.Cons ("Floats", [Sort fmt; Index sz]) -> Some (define (fmt, sz))
+    | _ -> None
+
+  let cast s = parse (Sort.exp s)
+
 end
 
 

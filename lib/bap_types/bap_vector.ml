@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Regular.Std
 open Format
 
@@ -51,16 +51,15 @@ let nth vec n =
 
 
 include struct
-  open Container_intf.Continue_or_stop
-  open Container_intf.Finished_or_stopped_early
+  open Container.Continue_or_stop
 
-  let fold_until vec ~init ~f =
+  let fold_until vec ~init ~f ~finish =
     let rec loop i init =
       if i < vec.size
       then match f init (Array.unsafe_get vec.data i) with
-        | Stop x -> Stopped_early x
+        | Stop x -> x
         | Continue r -> loop (i+1) r
-      else Finished init in
+      else finish init in
     loop 0 init
 
   let fold_result vec ~init ~f =
@@ -121,7 +120,7 @@ let index ?equal vec x : int option =
 
 let index_exn ?equal vec x : int =
   let n = index_with ~default:(-1) ?equal vec x in
-  if n < 0 then raise Not_found else n
+  if n < 0 then invalid_arg "index out of bounds" else n
 
 module C = Container.Make(struct
     type nonrec 'a t = 'a t
