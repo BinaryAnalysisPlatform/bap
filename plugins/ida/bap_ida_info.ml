@@ -183,8 +183,7 @@ let find_ida info mode target =
          | Some ida -> ida
          | None -> ida64 info in
     let s = Sexp.to_string (sexp_of_ida_kind kind) in
-    let ida = Filename.concat info.path s in
-    Filename.quote ida
+    Filename.concat info.path s
 
 let is_headless t = t.is_headless
 let path t = t.path
