@@ -8,7 +8,7 @@ open Bap_primus_types
 module Primus = struct
   module Env = Bap_primus_env
   module Linker = Bap_primus_linker
-  module Machine = Bap_primus_machine
+  module Machine = Bap_primus_
   module Memory = Bap_primus_memory
   module Observation = Bap_primus_observation
   module State = Bap_primus_state

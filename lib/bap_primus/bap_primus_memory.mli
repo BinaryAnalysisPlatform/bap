@@ -1,4 +1,5 @@
-open Core_kernel
+open Base
+open Bigarray
 open Bap_primus_types
 
 module Generator = Bap_primus_generator
@@ -6,6 +7,9 @@ module Machine = Bap_primus_machine
 
 type exn += Pagefault of addr
 type memory
+
+type data = (char, int8_unsigned_elt, c_layout) Array1.t
+
 
 module Descriptor : sig
   type t = memory [@@deriving compare, sexp_of]
@@ -26,8 +30,8 @@ val store : addr -> word -> unit Machine.t
 val get : addr -> value Machine.t
 val set : addr -> value -> unit Machine.t
 
-val add_text : addr -> Bigstring.t -> unit Machine.t
-val add_data : addr -> Bigstring.t -> unit Machine.t
+val add_text : addr -> data -> unit Machine.t
+val add_data : addr -> data -> unit Machine.t
 
 val allocate :
   ?executable:bool ->
@@ -41,7 +45,7 @@ val map :
   ?executable:bool ->
   ?readonly:bool ->
   ?reversed:bool ->
-  addr -> Bigstring.t -> unit Machine.t
+  addr -> data -> unit Machine.t
 
 val is_mapped : addr -> bool Machine.t
 

@@ -1,14 +1,15 @@
 open Core_kernel
-open Bap.Std
-open Bap_primus.Std
+open Bap_primus
 open Monads.Std
 open Bap_strings.Std
+open Bap_knowledge
 
 
 module Vid = Primus.Value.Id
 type vid = Vid.t
 
 type value = Primus.value
+module Machine = Primus.Machine
 
 
 module type Value = sig
@@ -21,11 +22,11 @@ end
 module type comparable_with_value =
   Comparable.S_plain with type comparator_witness = Primus.Value.comparator_witness
 
-module Ident(Machine : Primus.Machine.S) = struct
+module Ident = struct
   type t = value
-  type 'a m = 'a Machine.t
-  let to_value = Machine.return
-  let of_value = Machine.return
+  type 'a m = 'a Primus.machine
+  let to_value = Primus.Machine.return
+  let of_value = Primus.Machine.return
 end
 
 (* registry of all ever created objects *)
@@ -35,40 +36,37 @@ type kinds = {
 
 let kinds = Primus.Machine.State.declare
     ~name:"tainter-object-kinds"
-    ~uuid:"a97f9cf6-541a-4127-9eb6-6c24f67ed8b9"
-    (fun _ -> {objects = Primus.Value.Map.empty})
+    ~uuid:"a97f9cf6-541a-4127-9eb6-6c24f67ed8b9" @@
+  Knowledge.return {objects = Primus.Value.Map.empty}
 
 module Object = struct
   type Primus.exn += Bad_object of Primus.value
 
-  module Make(Machine : Primus.Machine.S) = struct
-    module Value = Primus.Value.Make(Machine)
+  open Primus.Machine.Syntax
+  module Value = Primus.Value
 
-    open Machine.Syntax
+  let next_key {objects} =
+    match Map.max_elt objects with
+    | None -> Value.of_int 1 ~width:63
+    | Some (k,_) -> Value.succ k
 
-    let next_key {objects} =
-      match Map.max_elt objects with
-      | None -> Value.of_int 1 ~width:63
-      | Some (k,_) -> Value.succ k
+  let create kind =
+    Machine.Local.get kinds >>= fun s ->
+    next_key s >>= fun key ->
+    Machine.Local.put kinds {
+      objects = Map.set s.objects ~key ~data:kind
+    } >>| fun () -> key
 
-    let create kind =
-      Machine.Local.get kinds >>= fun s ->
-      next_key s >>= fun key ->
-      Machine.Local.put kinds {
-        objects = Map.set s.objects ~key ~data:kind
-      } >>| fun () -> key
-
-    let kind v =
-      Machine.Local.get kinds >>= fun {objects} ->
-      match Map.find objects v with
-      | None -> Machine.raise (Bad_object v)
-      | Some x -> Machine.return x
-    include Ident(Machine)
-  end
-  include (Primus.Value : comparable_with_value with type t = value)
+  let kind v =
+    Machine.Local.get kinds >>= fun {objects} ->
+    match Map.find objects v with
+    | None -> Machine.raise (Bad_object v)
+    | Some x -> Machine.return x
+  include Ident
+  include (Primus.Value : comparable_with_value with type t := value)
 
   let to_string x =
-    Format.asprintf "%a" Word.pp_dec (Primus.Value.to_word x)
+    Format.asprintf "%a" Bitvec.pp (Primus.Value.to_word x)
 
   let sexp_of_t x = Sexp.Atom (to_string x)
 end

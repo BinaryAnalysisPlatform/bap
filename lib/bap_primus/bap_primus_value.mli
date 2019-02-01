@@ -1,43 +1,40 @@
-open Core_kernel
-open Regular.Std
 open Bap_strings.Std
 
 open Bap_primus_types
 module Machine = Bap_primus_machine
 
 type id [@@deriving bin_io, compare, sexp]
-module Id : Regular.S with type t = id
+module Id : Base.Comparable.S with type t = id
 
 type t = value [@@deriving bin_io, compare, sexp]
+
+val to_string : t -> string
+val of_string : string -> t
+val pp : Format.formatter -> t -> unit
 
 module Index : sig
   val key_width : int
   include Strings.Index.Persistent.S with type key := t
 end
 
-type 'a m = 'a Machine.t
+
+type 'a m = Bitvec.modulus -> 'a Machine.t
+
+external (mod) : ('a -> 'b) -> 'a -> 'b = "%apply"
+
 val id : t -> id
 val to_word : t -> word
-val of_word : word -> t m
-val of_string : string -> t m
-val of_bool : bool -> t m
-val of_int : width:int -> int -> t m
-val of_int32 : ?width:int -> int32 -> t m
-val of_int64 : ?width:int -> int64 -> t m
-val b0 : t m
-val b1 : t m
-val one : int -> t m
-val zero : int -> t m
+val of_word : word -> t Machine.t
+val of_string : string -> t Machine.t
+val bool : bool -> t Machine.t
+val one : t Machine.t
+val zero : t Machine.t
+val int : int -> t m
+val int32 : int32 -> t m
+val int64 : int64 -> t m
 val signed : t -> t m
-val is_zero : t -> bool
-val is_one : t -> bool
-val is_positive : t -> bool
-val is_negative : t -> bool
-val is_non_positive : t -> bool
-val is_non_negative : t -> bool
-val bitwidth : t -> int
-val extract : ?hi:int -> ?lo:int -> t -> t m
-val concat : t -> t -> t m
+val extract : hi:int -> lo:int -> t -> t m
+val append : int -> int -> t -> t -> t m
 val succ : t -> t m
 val pred : t -> t m
 val nsucc : t -> int -> t m
@@ -48,7 +45,10 @@ val add : t -> t -> t m
 val sub : t -> t -> t m
 val mul : t -> t -> t m
 val div : t -> t -> t m
-val modulo : t -> t -> t m
+val sdiv : t -> t -> t m
+val rem : t -> t -> t m
+val srem : t -> t -> t m
+val smod : t -> t -> t m
 val lnot : t -> t m
 val logand : t -> t -> t m
 val logor : t -> t -> t m
@@ -63,7 +63,9 @@ module Syntax : sig
   val ( - ) : t -> t -> t m
   val ( * ) : t -> t -> t m
   val ( / ) : t -> t -> t m
-  val (mod) : t -> t -> t m
+  val ( % ) : t -> t -> t m
+  val ( %$ ) : t -> t -> t m
+  val ( %^ ) : t -> t -> t m
   val (lor) : t -> t -> t m
   val (lsl) : t -> t -> t m
   val (lsr) : t -> t -> t m
@@ -77,4 +79,4 @@ module Symbol : sig
   val of_value : t -> string m
 end
 
-include Regular.S with type t := t
+include Base.Comparable.S with type t := t

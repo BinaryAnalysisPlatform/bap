@@ -8,7 +8,8 @@ Library bap_lisp
   Path: lib/bap_lisp
   FindlibName: bap-lisp
   CompiledObject: best
-  BuildDepends: parsexp, bap-strings, bap-knowledge, bap-core-theory
+  BuildDepends: parsexp, bap-strings, bap-knowledge, bap-core-theory,
+                graphlib, ppx_jane, core_kernel
   Modules: Bap_lisp
   InternalModules:
            Bap_lisp,

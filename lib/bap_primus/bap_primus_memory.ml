@@ -1,5 +1,6 @@
-open Core_kernel
-open Format
+open Base
+open Bigarray
+open Caml.Format
 
 open Bap_knowledge
 open Bap_core_theory
@@ -18,34 +19,37 @@ open Machine.Syntax
 type exn += Pagefault of addr
 type exn += Uninitialized
 
+type data = (char, int8_unsigned_elt, c_layout) Array1.t
+
+
 let () = Exn.add_printer (function
     | Pagefault here ->
       Some (asprintf "Page fault at %a"
-              Word.pp_hex here)
+              Bitvec.pp here)
     | Uninitialized ->
-      Some (asprintf "Memory system is not initialized")
+      Some (asprintf "The memory system is not initialized")
     | _ -> None)
 
 type region =
   | Dynamic of {base : addr; len : int; value : Generator.t }
-  | Static  of {base : addr; data : Bigstring.t; reversed : bool}
+  | Static  of {base : addr; data : data; reversed : bool}
 
 type perms = {readonly : bool; executable : bool}
 type layer = {mem : region; perms : perms}
 
 type memory = {
   name : string;
-  addr : int;
-  size : int;
-} [@@deriving bin_io, sexp]
+  addr_size : int;
+  data_size : int;
+} [@@deriving sexp]
 
 let compare_memory {name=x} {name=y} = String.compare x y
 
 module Descriptor = struct
-  type t = memory [@@deriving bin_io, compare, sexp]
+  type t = memory [@@deriving compare, sexp]
   let create ~addr_size ~data_size name = {
-    addr = addr_size;
-    size = data_size;
+    addr_size;
+    data_size;
     name
   }
 
@@ -56,23 +60,23 @@ module Descriptor = struct
 
 
   include Comparable.Make(struct
-      type t = memory [@@deriving bin_io, compare, sexp]
+      type t = memory [@@deriving compare, sexp]
     end)
 end
 
 type state = {
-  values : value Word.Map.t;
+  values : value Map.M(Word).t;
   layers : layer list;
 }
 
 type t = {
   curr : Descriptor.t option;
-  mems : state Descriptor.Map.t
+  mems : state Map.M(Descriptor).t
 }
 
-let zero = Word.of_int ~width:8 0
+let zero = Bitvec.zero
 
-let sexp_of_word w = Sexp.Atom (asprintf "%a" Word.pp_hex w)
+let sexp_of_word = Bitvec_sexp.sexp_of_t
 
 let sexp_of_region = function
   | Dynamic {base; len; value} -> Sexp.List [
@@ -83,7 +87,7 @@ let sexp_of_region = function
   | Static {base; data} -> Sexp.List [
       Sexp.Atom "static";
       sexp_of_word base;
-      sexp_of_int (Bigstring.length data);
+      sexp_of_int (Array1.dim data);
     ]
 
 let sexp_of_layer {mem; perms={readonly; executable}} =
@@ -112,33 +116,32 @@ let inspect_curr = function
 
 let inspect_memory {curr; mems} = Sexp.List [
     inspect_curr curr;
-    Descriptor.Map.sexp_of_t inspect_state mems;
+    [%sexp_of: Map.M(Descriptor).t] inspect_state mems;
   ]
 
 let state = Bap_primus_machine.State.declare
     ~uuid:"4b94186d-3ae9-48e0-8a93-8c83c747bdbb"
     ~inspect:inspect_memory
     ~name:"memory" @@ Knowledge.return {
-    mems = Descriptor.Map.empty;
+    mems = Map.empty (module Descriptor);
     curr = None;
   }
 
 let base (Static {base} | Dynamic {base}) = base
 let length = function
-  | Static {data} -> Bigstring.length data
+  | Static {data} -> Array1.dim data
   | Dynamic {len} -> len
 
-let contains addr {mem} =
+let contains addr size {mem} =
+  let m = Bitvec.modulus size in
   let base = base mem in
-  let high = Word.(base ++ length mem) in
-  Word.(addr >= base) && Word.(addr < high)
+  let high = Bitvec.((base ++ length mem) mod m) in
+  Bitvec.(addr >= base) && Bitvec.(addr < high)
 
-let find_layer addr = List.find ~f:(contains addr)
-
-let is_mapped addr {layers} = Option.is_some (find_layer addr layers)
+let find_layer addr size = List.find ~f:(contains addr size)
 
 let empty_state = {
-  values = Word.Map.empty;
+  values = Map.empty (module Bitvec_order);
   layers = [];
 }
 let (!!) = Machine.Observation.make
@@ -156,12 +159,14 @@ let switch curr =
   Machine.Local.update state ~f:(fun s -> {s with curr=Some curr})
 
 
-let get_curr =
+let with_curr f =
   Machine.Local.get state >>= fun {curr; mems} ->
-  descriptor curr >>| fun curr ->
+  descriptor curr >>= fun curr ->
   match Map.find mems curr with
-  | None -> empty_state
-  | Some s -> s
+  | None -> f curr empty_state
+  | Some s -> f curr s
+
+let get_curr = with_curr (fun _ c -> Machine.return c)
 
 let put_curr mem =
   Machine.Local.get state >>= fun s ->
@@ -183,60 +188,67 @@ let update state f =
 
 let pagefault addr = Machine.raise (Pagefault addr)
 
-let read_small ~base ~data addr size =
+let bitvec_of_data ~pos ~len (data : data) =
+  Bitvec.concat 8 @@
+  List.init len ~f:(fun i ->
+      let x = Char.to_int data.{pos + i} in
+      Bitvec.(int x mod m8))
+
+let read_small ~base ~data ~addr_size addr size =
   assert (size < 8 && size > 0);
-  let addr_size = Word.bitwidth addr in
   (* to address {n 2^m} bits we need {m+log(m)} addr space,
      since {n < 8} (it is the word size in bits), we just add 3.*)
   let width = addr_size + 3 in
-  let addr = Word.extract_exn ~hi:(width-1) addr in
-  let off = Word.(addr - base) in
-  let off_in_bits = Word.(off * Word.of_int ~width size) in
-  let full_bytes = Word.(off_in_bits / Word.of_int ~width 8) in
+  let m = Bitvec.modulus (width + 3) in
+  let addr = Bitvec.extract ~hi:(width-1) ~lo:0 addr in
+  let off = Bitvec.((addr - base) mod m) in
+  let b8 = Bitvec.(int 8 mod m) in
+  let off_in_bits = Bitvec.(off * (int size mod m) mod m) in
+  let full_bytes = Bitvec.((off_in_bits / b8) mod m) in
   let bit_off =
-    Word.to_int_exn @@
-    Word.(off_in_bits - full_bytes * Word.of_int ~width 8) in
-  let leftover = Bigstring.length data - Word.to_int_exn full_bytes in
+    Bitvec.to_int @@
+    Bitvec.((off_in_bits - (full_bytes * b8) mod m) mod m) in
+  let leftover = Array1.dim data - Bitvec.to_int full_bytes in
   let len = min leftover 2 in
-  let full_bytes = Word.extract_exn ~hi:(addr_size-1) full_bytes in
-  let pos = Word.to_int_exn full_bytes in
-  let data = Bigstring.to_string (Bigstring.sub_shared data ~pos ~len) in
-  let vec = Word.of_binary ~width:(len * 8) BigEndian data in
+  let full_bytes = Bitvec.extract ~hi:(addr_size-1) ~lo:0 full_bytes in
+  let pos = Bitvec.to_int full_bytes in
+  let vec = bitvec_of_data ~pos ~len data in
   let hi = len * 8 - bit_off - 1 in
   let lo = hi - size + 1 in
-  Word.extract_exn ~hi ~lo vec
+  Bitvec.extract ~hi ~lo vec
 
 
-let word_of_char x =
-  Word.of_int ~width:8 (Char.to_int x)
+let word_of_char x = Bitvec.(int (Char.to_int x) mod m8)
 
-let read_word base data little addr size =
-  let off = Word.(to_int_exn (addr - base)) in
+let read_word base data addr_size little addr size =
+  let m = Bitvec.modulus addr_size in
+  let off = Bitvec.(to_int @@ (addr - base) mod m) in
   let start,next = if little
-    then off + size/8 - 1, pred
-    else off, succ in
+    then off + size/8 - 1, Int.pred
+    else off, Int.succ in
   let rec read pos left =
-    let data = word_of_char (Bigstring.get data pos) in
+    let data = word_of_char data.{pos} in
     if left <= 8
-    then Word.extract_exn ~lo:(8-left) data
-    else Word.concat data @@ read (next pos) (left - 8) in
+    then Bitvec.extract ~lo:(8-left) ~hi:0 data
+    else Bitvec.append 8 (left - 8) data @@
+      read (next pos) (left - 8) in
   if size >= 8 then read start size
-  else read_small ~base ~data addr size
+  else read_small ~base ~data ~addr_size addr size
 
-let read addr {values;layers} = match find_layer addr layers with
+let read addr {addr_size; data_size} {values;layers} =
+  match find_layer addr addr_size layers with
   | None -> pagefault addr
   | Some layer -> match Map.find values addr with
     | Some v -> Machine.return v
-    | None ->
-      memory >>= fun {size} ->
-      match layer.mem with
+    | None -> match layer.mem with
       | Dynamic {value} ->
         Generator.next value >>= Value.of_word
       | Static {base; data; reversed} ->
-        Value.of_word (read_word base data reversed addr size)
+        Value.of_word @@
+        read_word base data addr_size reversed addr data_size
 
-let write addr value {values;layers} =
-  match find_layer addr layers with
+let write addr value {addr_size} {values;layers} =
+  match find_layer addr addr_size layers with
   | None -> pagefault addr
   | Some {perms={readonly=true}} -> pagefault addr
   | Some _ -> Machine.return {
@@ -247,9 +259,10 @@ let write addr value {values;layers} =
 let add_layer layer t = {t with layers = layer :: t.layers}
 let (++) = add_layer
 
-let initialize values base len f =
+let initialize addr_size values base len f =
+  let m = Bitvec.modulus addr_size in
   Machine.Seq.fold (Seq.range 0 len) ~init:values ~f:(fun values i ->
-      let addr = Word.(base ++ i) in
+      let addr = Bitvec.((base ++ i) mod m) in
       f addr >>= fun data ->
       Value.of_word data >>| fun data ->
       Map.set values ~key:addr ~data)
@@ -262,7 +275,7 @@ let allocate
     ?init
     ?generator
     base len =
-  memory >>= fun {size} ->
+  memory >>= fun {addr_size; data_size=size} ->
   let value = match generator with
     | None -> Generator.random size
     | Some other -> other in
@@ -273,7 +286,7 @@ let allocate
   match init with
   | None -> put_curr s
   | Some f ->
-    initialize s.values base len f >>= fun values ->
+    initialize addr_size s.values base len f >>= fun values ->
     put_curr {s with values}
 
 let map
@@ -288,21 +301,22 @@ let map
 let add_text mem = map mem ~readonly:true  ~executable:true
 let add_data mem = map mem ~readonly:false ~executable:false
 
-let get addr = get_curr >>= read addr
+let get addr = with_curr @@ read addr
 
 let set addr value =
-  get_curr >>=
-  write addr value >>=
-  put_curr
+  with_curr (write addr value) >>= put_curr
 
 let load addr = get addr >>| Value.to_word
 let store addr value = Value.of_word value >>= set addr
 
-let is_mapped addr =
-  get_curr >>| is_mapped addr
+let is_mapped addr = with_curr @@ fun {addr_size=size} {layers} ->
+  Machine.return @@
+  Option.is_some (find_layer addr size layers)
 
 let is_writable addr =
-  get_curr >>| fun {layers} ->
-  find_layer addr layers |>
-  function Some {perms={readonly}} -> not readonly
-         | None -> false
+  with_curr @@ fun {addr_size} {layers} ->
+  Machine.return @@begin
+    find_layer addr addr_size layers |>
+    function Some {perms={readonly}} -> not readonly
+           | None -> false
+  end

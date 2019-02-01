@@ -1,5 +1,4 @@
 open Core_kernel
-open Regular.Std
 open Bap_strings.Std
 open Format
 
@@ -13,34 +12,29 @@ module Machine = Bap_primus_machine
 open Machine.Syntax
 
 
-module Id = struct
-  type t = Int63.t
-  include Regular.Make(struct
-      include Int63
-      let version = "1.0.0"
-      let module_name = Some "Bap_primus.Std.Value.Id"
-    end)
-end
+module Id = Int63
 
 type id = Id.t [@@deriving bin_io, compare, sexp]
 
 
 let compare_value x y = Word.compare x.value y.value
 type t = value [@@deriving bin_io, compare]
-type 'a m = 'a Machine.t
 
 module Index = struct
   let key_width = 63
+  include Bitvec.Make(struct
+      let modulus = Bitvec.modulus key_width
+    end)
   include Strings.Index.Persistent.Make(struct
       type t = value
       let compare = compare_value
       let null = {
         id = Int63.zero;
-        value = Word.zero key_width
+        value = zero
       }
       let succ s = {
         s with
-        value = Word.succ s.value
+        value = succ s.value
       }
     end)
 end
@@ -58,77 +52,59 @@ let symbols = Bap_primus_machine.State.declare
 let to_word x = x.value
 let id x = x.id
 
-module Reg = Regular.Make(struct
-    type t = value [@@deriving bin_io, compare]
-    let pp ppf {id; value} =
-      fprintf ppf "%a#%a" Word.pp_hex_full value Id.pp id
-    let sexp_of_t x = Sexp.Atom (asprintf "%a" pp x)
-    let t_of_sexp = function
-      | Sexp.List _ -> failwith "value_of_sexp: expected atom"
-      | Sexp.Atom s -> match String.split ~on:'#' s with
-        | [w;id] -> {
-            value=Word.of_string w;
-            id = Int63.of_string id;
-          }
-        | _ -> failwithf "value: expected <word>#<id> got %s" s ()
-    let hash {id} = Int63.hash id
-    let pp = pp
-    let module_name = Some "Bap_primus.Std.Value"
-    let version = "2.0.0"
-  end)
-
 let of_word value =
   Machine.Global.get state >>= fun id ->
   Machine.Global.put state (Int63.succ id) >>| fun () ->
   {id;value}
 
-let inj f x = of_word (f x)
+type 'a m = Bitvec.modulus -> 'a Machine.t
+
+external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
+
+
+let inj f x m = of_word Bitvec.(f x mod m)
 let proj f {value} = f value
 let lift f {value} = of_word (f value)
-let lift1 f {value=x} = of_word (f x)
-let lift2 f {value=x} {value=y} = of_word (f x y)
-let of_string  = inj Word.of_string
-let of_bool = inj Word.of_bool
-let of_int ~width  = inj (Word.of_int ~width)
-let of_int32 ?width = inj (Word.of_int32 ?width)
-let of_int64 ?width = inj (Word.of_int64 ?width)
-let b0 = of_word Word.b0
-let b1 = of_word Word.b1
-let one = inj Word.one
-let zero = inj Word.zero
-let ones = inj Word.ones
-let signed = lift1 Word.signed
-let is_zero = proj Word.is_zero
-let is_one = proj Word.is_one
-let is_positive = proj Word.is_positive
-let is_negative = proj Word.is_negative
-let is_non_positive = proj Word.is_non_positive
-let is_non_negative = proj Word.is_non_negative
+let lift1 f {value=x} m = of_word Bitvec.(f x mod m)
+let lift2 f {value=x} {value=y} m = of_word Bitvec.(f x y mod m)
+let of_string x = of_word @@ Bitvec.of_string x
+let of_bool x = of_word @@ Bitvec.bool x
+let int = inj Bitvec.int
+let int32 = inj Bitvec.int32
+let int64 = inj Bitvec.int64
+let bigint = inj Bitvec.bigint
 
-let bitwidth = proj Word.bitwidth
-let extract ?hi ?lo {value} =
-  match Word.extract ?hi ?lo value with
-  | Error _ -> invalid_arg "Primus.Value.extract: not well typed"
-  | Ok x -> of_word x
-let concat = lift2 Word.concat
-let succ = lift1 Word.succ
-let pred = lift1 Word.pred
-let nsucc {value=x} n = of_word (Word.nsucc x n)
-let npred {value=x} n = of_word (Word.npred x n)
-let abs = lift1 Word.abs
-let neg = lift1 Word.neg
-let add = lift2 Word.add
-let sub = lift2 Word.sub
-let mul = lift2 Word.mul
-let div = lift2 Word.div
-let modulo = lift2 Word.modulo
-let lnot {value=x} = of_word (Word.lnot x)
-let logand = lift2 Word.logand
-let logor = lift2 Word.logor
-let logxor = lift2 Word.logxor
-let lshift = lift2 Word.lshift
-let rshift = lift2 Word.rshift
-let arshift = lift2 Word.arshift
+let zero = of_word Bitvec.zero
+let one = of_word Bitvec.one
+let ones m = of_word Bitvec.(Bitvec.ones mod m)
+let extract ~hi ~lo {value} = of_word Bitvec.(extract ~hi ~lo value)
+let append w1 w2 x y = of_word Bitvec.(append w1 w2 x y)
+let succ = lift1 Bitvec.succ
+let pred = lift1 Bitvec.pred
+let nsucc {value=x} n m = of_word Bitvec.(nsucc x n mod m)
+let npred {value=x} n m = of_word Bitvec.(npred x n mod m)
+let abs = lift1 Bitvec.abs
+let neg = lift1 Bitvec.neg
+
+let add = lift2 Bitvec.add
+let sub = lift2 Bitvec.sub
+let mul = lift2 Bitvec.mul
+let div = lift2 Bitvec.div
+let sdiv = lift2 Bitvec.sdiv
+let rem = lift2 Bitvec.rem
+let srem = lift2 Bitvec.srem
+let smod = lift2 Bitvec.smod
+let nth {value=x} n m = of_word Bitvec.(bool (nth x n mod m))
+let lsb {value=x} m = of_word Bitvec.(bool (lsb x mod m))
+let msb {value=x} m = of_word Bitvec.(bool (msb x mod m))
+
+let lnot = lift1 Bitvec.lnot
+let logand = lift2 Bitvec.logand
+let logor = lift2 Bitvec.logor
+let logxor = lift2 Bitvec.logxor
+let lshift = lift2 Bitvec.lshift
+let rshift = lift2 Bitvec.rshift
+let arshift = lift2 Bitvec.arshift
 
 module Symbol = struct
   let to_value sym =
@@ -148,7 +124,10 @@ module Syntax = struct
   let (-) = sub
   let ( * ) = mul
   let (/) = div
-  let (mod) = modulo
+  let (/$) = sdiv
+  let (%) = rem
+  let (%$) = smod
+  let (%^) = srem
   let (land) = logand
   let (lor) = logor
   let (lxor) = logxor
@@ -157,4 +136,23 @@ module Syntax = struct
   let (asr) = arshift
 end
 
-include Reg
+let pp ppf {value; id} =
+  Format.fprintf ppf "%a:%a" Bitvec.pp value Id.pp id
+
+
+let to_string x = Format.asprintf "%a" pp x
+let of_string s = match String.split ~on:'#' s with
+  | [w;id] -> {
+      value=Bitvec.of_string w;
+      id = Int63.of_string id;
+    }
+  | _ -> failwithf "value: expected <word>#<id> got %s" s ()
+
+
+include Base.Comparable.Make(struct
+    type t = value [@@deriving compare]
+    let sexp_of_t x = Sexp.Atom (to_string x)
+    let t_of_sexp = function
+      | Sexp.List _ -> failwith "value_of_sexp: expected atom"
+      | Sexp.Atom s -> of_string s
+  end)

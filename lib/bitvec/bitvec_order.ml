@@ -4,16 +4,13 @@ type ('a,'b) comparator_t = ('a,'b) Base.Comparator.t
 type ('a,'b) comparator = (module Base.Comparator.S
                             with type t = 'a
                              and type comparator_witness = 'b)
-
-let sexp_of_t x = Sexp.Atom (Bitvec.to_string x)
-let t_of_sexp = function
-  | Sexp.List _ -> failwith "bitvec_of_sexp: expects atom"
-  | Sexp.Atom x -> Bitvec.of_string x
+include Bitvec_sexp.Functions
 
 module Ascending = struct
   type t = Bitvec.t
   include Base.Comparator.Make(struct
       type t = Bitvec.t
+      include Bitvec_sexp.Functions
       let compare x y = Bitvec.compare x y [@@inline]
       let sexp_of_t = sexp_of_t
     end)
@@ -23,6 +20,7 @@ module Descending = struct
   type t = Bitvec.t
   include Base.Comparator.Make(struct
       type t = Bitvec.t
+      include Bitvec_sexp.Functions
       let compare x y = Bitvec.compare y x [@@inline]
       let sexp_of_t = sexp_of_t
     end)

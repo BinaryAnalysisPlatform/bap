@@ -9,13 +9,13 @@ type read_error = Empty | Not_an_int | Unclosed | Bad_literal
                 | Bad_type of Type.read_error
 
 let char_of_string s =
-  try Ok Char.(Word.of_int ~width:8 @@ to_int @@ of_string s)
+  try Ok Char.(Bitvec.M8.int @@ to_int @@ of_string s)
   with _ -> Error Bad_literal
 
 let read_char str = char_of_string (String.subo ~pos:1 str)
 
 let read_int str =
-  try Ok (Word.of_string (String.strip str))
+  try Ok (Bitvec.of_string (String.strip str))
   with _ -> Error Bad_literal
 
 let char id eq s =
@@ -75,5 +75,5 @@ let read id eq x =
     | _ -> Error Bad_literal
   else Error Not_an_int
 
-let sexp_of_word {data={exp}} = Word.sexp_of_t exp
+let sexp_of_word {data={exp}} = Sexp.Atom (Bitvec.to_string exp)
 let sexp_of_t = sexp_of_word

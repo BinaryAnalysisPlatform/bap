@@ -6,9 +6,13 @@ open Bap_core_theory
 
 module Exn = Bap_primus_exn
 
-module Word = Bap.Std.Word
-type word = Bap.Std.word [@@deriving bin_io, compare, sexp]
-type addr = word [@@deriving bin_io, compare, sexp]
+module Word = struct
+  include Bitvec_order
+  include Bitvec_binprot.Functions
+  include Bitvec_sexp.Functions
+end
+type word = Word.t [@@deriving bin_io, compare, sexp]
+type addr = Word.t [@@deriving bin_io, compare, sexp]
 
 type knowledge = state
 type exn = Exn.t = ..

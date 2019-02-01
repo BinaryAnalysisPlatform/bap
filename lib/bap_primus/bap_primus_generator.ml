@@ -3,6 +3,7 @@ open Bap_knowledge
 
 open Bap_primus_types
 module Machine = Bap_primus_machine
+module Word = Bitvec.M64
 
 open Machine.Syntax
 
@@ -50,11 +51,11 @@ module LCG : sig
   val next : word -> word
   val seed : word
 end = struct
-  let a = Word.of_int64 2862933555777941757L
-  let c = Word.of_int64 3037000493L
+  let a = Word.int64 2862933555777941757L
+  let c = Word.int64 3037000493L
   let next x = Word.(a * x + c)
   let size = 64
-  let seed = Word.of_int64 42L
+  let seed = Word.int64 42L
 end
 
 let static value = Static value
@@ -67,8 +68,8 @@ let random ?min ?max ?(seed=LCG.seed) width = Random {
     ident = 0;
     seed;
     descr = {
-      min = Option.value min ~default:(Word.zero width);
-      max = Option.value max ~default:(Word.ones width);
+      min = Option.value min ~default:Word.zero;
+      max = Option.value max ~default:Bitvec.(ones mod modulus width);
       width;
     }
   }
@@ -83,12 +84,14 @@ let random_word ~state ~width =
   let rec loop left state =
     let state = LCG.next state in
     let width = min LCG.size left in
-    let value = Word.extract_exn ~hi:(width-1) state in
+    let value = Bitvec.extract ~hi:(width-1) ~lo:0 state in
     if left = width then {value; state}
     else
-      let next = loop (left - width) state in
-      {value = Word.concat value next.value; state} in
-  loop width (Word.extract_exn ~hi:(LCG.size-1) state)
+      let next = loop (left - width) state in {
+        value = Bitvec.append width (left - width) value next.value;
+        state
+      } in
+  loop width (Bitvec.extract ~hi:(LCG.size-1) ~lo:0 state)
 
 let rec next = function
   | Static word -> Machine.return word
@@ -99,7 +102,9 @@ let rec next = function
       then seed
       else Map.find_exn states ident in
     let {value; state} = random_word ~state ~width in
-    let value = Word.(x + value mod succ (y - x)) in
+    let m = Bitvec.modulus width in
+    let range = Bitvec.(succ ((y - x) mod m) mod m) in
+    let value = Bitvec.(((x + value) mod m % range) mod m) in
     let ident = if ident <> 0 then ident
       else match Map.max_elt states with
         | None -> 1

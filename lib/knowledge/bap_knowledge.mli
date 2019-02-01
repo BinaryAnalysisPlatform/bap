@@ -34,6 +34,8 @@ module Label : sig
   type t = label
   val root : t
 
+  val to_string : t -> string
+
   include Base.Comparable.S with type t := label
 
   module Generator : sig

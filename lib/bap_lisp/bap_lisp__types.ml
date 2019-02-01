@@ -1,4 +1,4 @@
-open Core_kernel.Std
+open Core_kernel
 open Bap_core_theory
 
 module Index = Bap_lisp__index
@@ -38,7 +38,7 @@ type token = Source.token =
 
 type ast = exp indexed
 and exp =
-  | Int of Bitvec.t
+  | Int of word
   | Var of var
   | Sym of sym
   | Ite of ast * ast * ast

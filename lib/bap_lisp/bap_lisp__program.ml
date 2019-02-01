@@ -147,7 +147,7 @@ let pp_term pp_exp ppf = function
     fprintf ppf "%a" pp_exp exp
   | {data={exp; typ}} ->
     fprintf ppf "%a:%a" pp_exp exp Lisp.Type.pp typ
-let pp_word = pp_term Word.pp
+let pp_word = pp_term Bitvec.pp
 let pp_var = pp_term String.pp
 
 let rec concat_prog =

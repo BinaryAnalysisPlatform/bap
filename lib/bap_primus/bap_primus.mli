@@ -1,5 +1,3 @@
-open Core_kernel
-open Regular.Std
 open Monads.Std
 open Bap_future.Std
 open Bap_strings.Std
@@ -71,7 +69,7 @@ module Primus : sig
   type value [@@deriving bin_io, compare, sexp]
 
 
-  type word = Bap.Std.word
+  type word = Bitvec.t
   type addr = word
 
   (** Machine exit status.
@@ -114,7 +112,7 @@ module Primus : sig
         an observed value, that will be used for introspection and
         pretty-printing (it is not required, and if it is provided, it
         is not necessary to disclose everything *)
-    val provide : ?inspect:('a -> Sexp.t) -> string -> 'a observation * 'a statement
+    val provide : ?inspect:('a -> Base.Sexp.t) -> string -> 'a observation * 'a statement
 
 
     (** [name observation] is a name of the observed attribute.  *)
@@ -123,7 +121,7 @@ module Primus : sig
 
     (** [inspect observation value] returns a sexp representation of
         an observed [value] *)
-    val inspect : 'a observation -> 'a -> Sexp.t
+    val inspect : 'a observation -> 'a -> Base.Sexp.t
 
     (** enumerate all currently available observation providers  *)
     val list_providers : unit -> provider list
@@ -147,7 +145,7 @@ module Primus : sig
       val triggers : t -> unit stream
 
       (** a data stream from this observation *)
-      val data : t -> Sexp.t stream
+      val data : t -> Base.Sexp.t stream
     end
   end
 
@@ -259,14 +257,14 @@ module Primus : sig
             new [uuid] can be obtained in the Linux system is provided
             by the [uuidgen] command.*)
       val declare :
-        ?inspect:('a -> Sexp.t) ->
+        ?inspect:('a -> Base.Sexp.t) ->
         uuid:uuid ->
         name:string ->
         'a Knowledge.t -> 'a t
 
 
       (** [inspect state value] introspects given [value] of the state.  *)
-      val inspect : 'a t -> 'a -> Sexp.t
+      val inspect : 'a t -> 'a -> Base.Sexp.t
 
 
       (** [name state] a state name that was given during the construction.  *)
@@ -311,7 +309,7 @@ module Primus : sig
       val observe : 'a observation -> ('a -> unit t) -> unit t
 
 
-      val watch : Observation.provider -> (Sexp.t -> unit t) -> unit t
+      val watch : Observation.provider -> (Base.Sexp.t -> unit t) -> unit t
 
       (** [make observation event] make an [observation] of the
               given [event].  *)
@@ -383,7 +381,7 @@ module Primus : sig
    *)
   module Value : sig
     type id [@@deriving bin_io, compare, sexp]
-    module Id : Regular.S with type t = id
+    module Id : Base.Comparable.S with type t = id
 
     type t = value [@@deriving bin_io, compare, sexp]
 
@@ -410,6 +408,19 @@ module Primus : sig
         representation of a machine word [x]. See {!Bap.Std.Word}
         module for more details.  *)
     val of_string : string -> t machine
+
+
+    (** {3 Bitvector operations lifted into Machine}  *)
+
+
+
+    (** Abstract operation modulo m.  *)
+    type 'a m
+
+
+    (** provides modulus for an operation  *)
+    external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
+
 
     (** [of_bool x] creates a fresh new value from the boolean [x].  *)
     val of_bool : bool -> t machine
@@ -606,7 +617,7 @@ module Primus : sig
       include Strings.Index.Persistent.S with type key := value
     end
 
-    include Regular.S with type t := t
+    include Base.Comparable.S with type t := t
 
   end
 
@@ -772,7 +783,7 @@ module Primus : sig
     (** [all] is a sequence of all variables defined in the
             environment. Note, the word _defined_ doesn't mean
             initialized.   *)
-    val all : Var.ident seq Machine.t
+    val all : Var.ident Base.Sequence.t Machine.t
   end
 
 
@@ -791,10 +802,14 @@ module Primus : sig
         implemented via the [pagefault] handlers.
    *)
   module Memory : sig
+    open Bigarray
 
 
     (** abstract memory descriptor, see [Descriptor.t]  *)
     type memory
+
+
+    type data = (char, int8_unsigned_elt, c_layout) Array1.t
 
     (** Abstract memory descriptor.
 
@@ -821,7 +836,7 @@ module Primus : sig
       (** [name memory] returns [memory] identifier. *)
       val name : memory -> string
 
-      include Comparable.S with type t := t
+      include Base.Comparable.S with type t := t
     end
 
     (** occurs when a memory operation for the given addr cannot be satisfied. *)
@@ -871,11 +886,11 @@ module Primus : sig
 
     (** [add_text mem] maps a memory chunk [mem] as executable and
             readonly segment of machine memory.*)
-    val add_text : addr -> Bigstring.t -> unit Machine.t
+    val add_text : addr -> data -> unit Machine.t
 
     (** [add_data] maps a memory chunk [mem] as writable and
             nonexecutable segment of machine memory.  *)
-    val add_data : addr -> Bigstring.t -> unit Machine.t
+    val add_data : addr -> data -> unit Machine.t
 
 
     (** [allocate addr size] allocates a segment of the specified
@@ -902,7 +917,7 @@ module Primus : sig
       ?executable:bool ->
       ?readonly:bool ->
       ?reversed:bool ->
-      addr -> Bigstring.t -> unit Machine.t
+      addr -> data -> unit Machine.t
 
 
     (** [is_mapped addr] a computation that evaluates to true,

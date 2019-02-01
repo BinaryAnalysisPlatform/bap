@@ -31,7 +31,7 @@ let sexp_of_values values =
       Sexp.List [
         Sexp.Atom "set-var";
         Sexp.Atom (Var.Ident.to_string v);
-        Sexp.Atom (asprintf "%a" Word.pp_hex value)
+        Sexp.Atom (Bitvec.to_string value)
       ]) |> Seq.to_list_rev)
 
 let sexp_of_random map =

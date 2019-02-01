@@ -14,12 +14,12 @@ type exn += Unbound_name of Label.t
 
 
 type t = {
-  codes : unit Machine.t Label.Map.t;
+  codes : unit Machine.t Map.M(Label).t;
   unresolved : label;
 }
 
 let empty unresolved = {
-  codes = Label.Map.empty;
+  codes = Map.empty (module Label);
   unresolved;
 }
 
@@ -31,7 +31,7 @@ include struct
 
   let string_of_name = Label.to_string
   let sexp_of_name n = Sexp.Atom (string_of_name n)
-  let sexp_of_value {value=x} = Atom (asprintf "%a" Word.pp_hex x)
+  let sexp_of_value {value=x} = Atom (Bitvec.to_string x)
   let sexp_of_args = List.map ~f:sexp_of_value
   let sexp_of_call (dst,args) =
     List (Atom dst :: sexp_of_args args)

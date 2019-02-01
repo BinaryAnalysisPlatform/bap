@@ -6,8 +6,8 @@ open Bap_primus_types
 let sexp_of_var v = Sexp.Atom (Var.name v)
 
 
-let string_of_byte w = sprintf "%02x" @@ ok_exn (Word.to_int w)
-let string_of_word w = asprintf "%a" Word.pp_hex_full w
+let string_of_byte w = sprintf "%02x" @@ (Bitvec.to_int w)
+let string_of_word w = Bitvec.to_string w
 let sexp_of_word w = Sexp.Atom (string_of_word w)
 let string_of_value = Bap_primus_value.to_string
 let sexp_of_value = Bap_primus_value.sexp_of_t

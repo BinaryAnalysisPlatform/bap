@@ -86,6 +86,10 @@
 type t = Bitvec.t
 
 
+(** [compare x y] orders [x] and [y] in the natural order.  *)
+val compare : t -> t -> int
+
+
 (** type index for the increasing order  *)
 type ascending
 
