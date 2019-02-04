@@ -109,6 +109,7 @@ let create {Ida_config.ida_info; debug; curses} target mode =
   FileUtil.cp [target] exe;
   let ida = Info.find_ida ida_info mode target in
   let idb = idb ida in
+  let ida = Filename.quote ida in
   let self = {
     ida;
     exe;
