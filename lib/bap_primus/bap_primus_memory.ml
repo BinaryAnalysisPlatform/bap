@@ -242,9 +242,9 @@ let read addr {addr_size; data_size} {values;layers} =
     | Some v -> Machine.return v
     | None -> match layer.mem with
       | Dynamic {value} ->
-        Generator.next value >>= Value.of_word
+        Generator.next value >>= Value.word
       | Static {base; data; reversed} ->
-        Value.of_word @@
+        Value.word @@
         read_word base data addr_size reversed addr data_size
 
 let write addr value {addr_size} {values;layers} =
@@ -264,7 +264,7 @@ let initialize addr_size values base len f =
   Machine.Seq.fold (Seq.range 0 len) ~init:values ~f:(fun values i ->
       let addr = Bitvec.((base ++ i) mod m) in
       f addr >>= fun data ->
-      Value.of_word data >>| fun data ->
+      Value.word data >>| fun data ->
       Map.set values ~key:addr ~data)
 
 
@@ -307,7 +307,7 @@ let set addr value =
   with_curr (write addr value) >>= put_curr
 
 let load addr = get addr >>| Value.to_word
-let store addr value = Value.of_word value >>= set addr
+let store addr value = Value.word value >>= set addr
 
 let is_mapped addr = with_curr @@ fun {addr_size=size} {layers} ->
   Machine.return @@

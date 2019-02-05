@@ -57,9 +57,11 @@ let of_word value =
   Machine.Global.put state (Int63.succ id) >>| fun () ->
   {id;value}
 
+let word = of_word
+
 type 'a m = Bitvec.modulus -> 'a Machine.t
 
-external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
+external (mod) : ('a -> 'b) -> 'a -> 'b = "%apply"
 
 
 let inj f x m = of_word Bitvec.(f x mod m)
@@ -67,8 +69,8 @@ let proj f {value} = f value
 let lift f {value} = of_word (f value)
 let lift1 f {value=x} m = of_word Bitvec.(f x mod m)
 let lift2 f {value=x} {value=y} m = of_word Bitvec.(f x y mod m)
-let of_string x = of_word @@ Bitvec.of_string x
-let of_bool x = of_word @@ Bitvec.bool x
+let string x = of_word @@ Bitvec.of_string x
+let bool x = of_word @@ Bitvec.bool x
 let int = inj Bitvec.int
 let int32 = inj Bitvec.int32
 let int64 = inj Bitvec.int64
@@ -78,7 +80,8 @@ let zero = of_word Bitvec.zero
 let one = of_word Bitvec.one
 let ones m = of_word Bitvec.(Bitvec.ones mod m)
 let extract ~hi ~lo {value} = of_word Bitvec.(extract ~hi ~lo value)
-let append w1 w2 x y = of_word Bitvec.(append w1 w2 x y)
+let append w1 w2 x y =
+  of_word Bitvec.(append w1 w2 x.value y.value)
 let succ = lift1 Bitvec.succ
 let pred = lift1 Bitvec.pred
 let nsucc {value=x} n m = of_word Bitvec.(nsucc x n mod m)
@@ -150,10 +153,16 @@ let of_string s = match String.split ~on:'#' s with
   | _ -> failwithf "value: expected <word>#<id> got %s" s ()
 
 
+module Sexpabale = struct
+  let sexp_of_t x = Sexp.Atom (to_string x)
+  let t_of_sexp = function
+    | Sexp.List _ -> failwith "value_of_sexp: expected atom"
+    | Sexp.Atom s -> of_string s
+end
+
 include Base.Comparable.Make(struct
     type t = value [@@deriving compare]
-    let sexp_of_t x = Sexp.Atom (to_string x)
-    let t_of_sexp = function
-      | Sexp.List _ -> failwith "value_of_sexp: expected atom"
-      | Sexp.Atom s -> of_string s
+    include Sexpabale
   end)
+
+include Sexpabale

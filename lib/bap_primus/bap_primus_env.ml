@@ -87,7 +87,7 @@ let set var x =
         s with values = Map.set s.values ~key:var ~data:x
       })
 
-let null s = Value.zero s
+let null = Value.zero
 
 let get var =
   Machine.Local.get state >>= fun t ->
@@ -95,7 +95,7 @@ let get var =
   | Some res -> Machine.return res
   | None -> match Map.find t.random var with
     | None -> Machine.raise (Undefined_var var)
-    | Some gen -> Generator.next gen >>= Value.of_word
+    | Some gen -> Generator.next gen >>= Value.word
 
 let has var =
   Machine.Local.get state >>| fun t ->

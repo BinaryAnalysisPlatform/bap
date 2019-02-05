@@ -21,7 +21,7 @@ end
 
 type 'a m = Bitvec.modulus -> 'a Machine.t
 
-external (mod) : ('a -> 'b) -> 'a -> 'b = "%apply"
+external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
 
 val id : t -> id
 val word : word -> t Machine.t
@@ -32,7 +32,6 @@ val zero : t Machine.t
 val int : int -> t m
 val int32 : int32 -> t m
 val int64 : int64 -> t m
-val signed : t -> t m
 val extract : hi:int -> lo:int -> t -> t Machine.t
 val append : int -> int -> t -> t -> t Machine.t
 val succ : t -> t m
