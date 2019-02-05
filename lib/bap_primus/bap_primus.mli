@@ -401,13 +401,18 @@ module Primus : sig
             usually necessary. *)
     val to_word : t -> word
 
-    (** [of_word x] computes a fresh new value from [x]  *)
-    val of_word : word -> t machine
 
-    (** [of_string s] computes a fresh new value from a textual
-        representation of a machine word [x]. See {!Bap.Std.Word}
-        module for more details.  *)
-    val of_string : string -> t machine
+
+    (** [to_string x] is the textual representation of [x].
+
+        The returned value could be fed to the [of_string] function
+        and [of_string (to_string x) = x]
+     *)
+    val to_string : t -> string
+
+
+    (** [of_string x] parses a value from its string representation.   *)
+    val of_string : string -> t
 
 
     (** {3 Bitvector operations lifted into Machine}  *)
@@ -421,157 +426,147 @@ module Primus : sig
     (** provides modulus for an operation  *)
     external (mod) : 'a m -> Bitvec.modulus -> 'a Machine.t = "%apply"
 
+    (** [word x] computes a fresh new value from [x]  *)
+    val word : word -> t machine
 
     (** [of_bool x] creates a fresh new value from the boolean [x].  *)
-    val of_bool : bool -> t machine
+    val bool : bool -> t machine
 
-    (** [of_int ~width x] creates a fresh new value of the given
-            [width] from the integer [x] *)
-    val of_int : width:int -> int -> t machine
+    (** [of_int x mod m] is [x] modulo [m] with a fresh new id. *)
+    val int : int -> t m
 
-    (** [of_int32 x] creates a fresh new value from [x]  *)
-    val of_int32 : ?width:int -> int32 -> t machine
+    (** [int32 x mod m] is [x] modulo [m] with a fresh new id *)
+    val int32 : int32 -> t m
 
-    (** [of_int64 x] creates a fresh new value from [x]  *)
-    val of_int64 : ?width:int -> int64 -> t machine
+    (** [int64 x] creates a fresh new value from [x]  *)
+    val int64 : int64 -> t m
 
-    (** a fresh new [false] computation  *)
-    val b0 : t machine
+    (** [string s] computes a fresh new value from a textual
+        representation of a machine word [x]. See {!Bitvec.of_string}
+        module for more details.  *)
+    val string : string -> t Machine.t
 
-    (** a fresh new [true] computation  *)
-    val b1 : t machine
+    (** [one] is [1] with a fresh new id   *)
+    val one : t machine
 
-    (** [one x] same as [of_word @@ one x]  *)
-    val one : int -> t machine
-
-    (** [zero x] same as [of_word @@ zero x]  *)
-    val zero : int -> t machine
-
-    (** [signed x] same as [of_word @@ signed x]  *)
-    val signed : t -> t machine
-
-    (** [is_zero] is [lift1 Word.is_zero]  *)
-    val is_zero : t -> bool
-
-    (** [is_one] is [lift1 Word.is_one]  *)
-    val is_one : t -> bool
-
-    (** [is_positive] is [lift1 Word.is_positive]  *)
-    val is_positive : t -> bool
-
-    (** [is_negative] is [lift1 Word.is_negative]  *)
-    val is_negative : t -> bool
-
-    (** [is_non_positive] is [lift1 Word.is_non_positive]  *)
-    val is_non_positive : t -> bool
-
-    (** [is_non_negative] is [lift1 Word.is_non_negative]  *)
-    val is_non_negative : t -> bool
-
-    (** [bitwidth] is [lift1 Word.bitwidth]  *)
-    val bitwidth : t -> int
+    (** [zero] is [0] with a fresh new id  *)
+    val zero : t machine
 
 
-    (** [extracts ?hi ?lo] is [lift1 (Word.extract ?hi ?lo)]  *)
-    val extract : ?hi:int -> ?lo:int -> t -> t machine
+    (** [extracts ~hi ~lo x] computes an extraction [[hi:lo]] of [x] *)
+    val extract : hi:int -> lo:int -> t -> t machine
 
-    (** [concat] is [lift2 Word.concat]  *)
-    val concat : t -> t -> t machine
+    (** [append w1 w2 x y] computes a concatenation of [x] and [y]  *)
+    val append : int -> int -> t -> t -> t machine
 
-    (** [succ] is [lift1 Word.succ]  *)
-    val succ : t -> t machine
+    (** [succ x mod m] is the successor of [x] modulo [m]  *)
+    val succ : t -> t m
 
-    (** [pred] is [lift1 Word.pred]  *)
-    val pred : t -> t machine
+    (** [pred x mod m] is the predecessor of [x] modulo [m]  *)
+    val pred : t -> t m
 
-    (** [nsucc] see {!Word.nsucc}  *)
-    val nsucc : t -> int -> t machine
+    (** [nsucc n x mod m] is the [n]th successor of [x] modulo [m] *)
+    val nsucc : t -> int -> t m
 
-    (** [npred] see {!Word.npred}  *)
-    val npred : t -> int -> t machine
+    (** [npred n x mod m] is the [n]the predecessor of [x] modulo [m]  *)
+    val npred : t -> int -> t m
 
+    (** see {!Bitvec.abs}  *)
+    val abs : t -> t m
 
-    (** see {!Word.abs}  *)
-    val abs : t -> t machine
+    (** see {!Bitvec.neg}  *)
+    val neg : t -> t m
 
-    (** see {!Word.neg}  *)
-    val neg : t -> t machine
+    (** see {!Bitvec.add}  *)
+    val add : t -> t -> t m
 
-    (** see {!Word.add}  *)
-    val add : t -> t -> t machine
+    (** see {!Bitvec.sub}  *)
+    val sub : t -> t -> t m
 
-    (** see {!Word.sub}  *)
-    val sub : t -> t -> t machine
+    (** see {!Bitvec.mul}  *)
+    val mul : t -> t -> t m
 
-    (** see {!Word.mul}  *)
-    val mul : t -> t -> t machine
+    (** see {!Bitvec.div}  *)
+    val div : t -> t -> t m
 
-    (** see {!Word.div}  *)
-    val div : t -> t -> t machine
+    (** see {!Bitvec.sdiv}  *)
+    val sdiv : t -> t -> t m
 
-    (** see {!Word.modulo}  *)
-    val modulo : t -> t -> t machine
+    (** see {!Bitvec.rem}  *)
+    val rem : t -> t -> t m
 
-    (** see {!Word.lnot}  *)
-    val lnot : t -> t machine
+    (** see {!Bitvec.srem}  *)
+    val srem : t -> t -> t m
 
-    (** see {!Word.logand}  *)
-    val logand : t -> t -> t machine
+    (** see {!Bitvec.smod}  *)
+    val smod : t -> t -> t m
 
-    (** see {!Word.logor}  *)
-    val logor : t -> t -> t machine
+    (** see {!Bitvec.lnot}  *)
+    val lnot : t -> t m
 
-    (** see {!Word.logxor}  *)
-    val logxor : t -> t -> t machine
+    (** see {!Bitvec.logand}  *)
+    val logand : t -> t -> t m
 
-    (** see {!Word.lshift}  *)
-    val lshift : t -> t -> t machine
+    (** see {!Bitvec.logor}  *)
+    val logor : t -> t -> t m
 
-    (** see {!Word.rshift}  *)
-    val rshift : t -> t -> t machine
+    (** see {!Bitvec.logxor}  *)
+    val logxor : t -> t -> t m
 
-    (** see {!Word.arshift}  *)
-    val arshift : t -> t -> t machine
+    (** see {!Bitvec.lshift}  *)
+    val lshift : t -> t -> t m
+
+    (** see {!Bitvec.rshift}  *)
+    val rshift : t -> t -> t m
+
+    (** see {!Bitvec.arshift}  *)
+    val arshift : t -> t -> t m
 
 
     (** Int-like syntax.  *)
     module Syntax : sig
 
-      (** see {!Word.(~-)}  *)
-      val ( ~-) : t -> t machine
+      (** see {!Bitvec.(~-)}  *)
+      val ( ~-) : t -> t m
 
-      (** see {!Word.(+)}  *)
-      val ( + ) : t -> t -> t machine
+      (** see {!Bitvec.(+)}  *)
+      val ( + ) : t -> t -> t m
 
-      (** see {!Word.(-)}  *)
-      val ( - ) : t -> t -> t machine
+      (** see {!Bitvec.(-)}  *)
+      val ( - ) : t -> t -> t m
 
-      (** see {!Word.( * )}  *)
-      val ( * ) : t -> t -> t machine
+      (** see {!Bitvec.( * )}  *)
+      val ( * ) : t -> t -> t m
 
-      (** see {!Word.(/)}  *)
-      val ( / ) : t -> t -> t machine
+      (** see {!Bitvec.(/)}  *)
+      val ( / ) : t -> t -> t m
 
-      (** see {!Word.(mod)}  *)
-      val (mod) : t -> t -> t machine
+      (** see {!Bitvec.(rem)}  *)
+      val (%) : t -> t -> t m
 
-      (** see {!Word.(lor)}  *)
-      val (lor) : t -> t -> t machine
+      (** see {!Bitvec.(smod)}  *)
+      val (%$) : t -> t -> t m
 
-      (** see {!Word.(lsl)}  *)
-      val (lsl) : t -> t -> t machine
+      (** see {!Bitvec.(srem)}  *)
+      val (%^) : t -> t -> t m
 
-      (** see {!Word.(lsr)}  *)
-      val (lsr) : t -> t -> t machine
+      (** see {!Bitvec.(lor)}  *)
+      val (lor) : t -> t -> t m
 
-      (** see {!Word.(asr)}  *)
-      val (asr) : t -> t -> t machine
+      (** see {!Bitvec.(lsl)}  *)
+      val (lsl) : t -> t -> t m
 
-      (** see {!Word.(lxor)}  *)
-      val (lxor) : t -> t -> t machine
+      (** see {!Bitvec.(lsr)}  *)
+      val (lsr) : t -> t -> t m
 
-      (** see {!Word.(land)}  *)
-      val (land) : t -> t -> t machine
+      (** see {!Bitvec.(asr)}  *)
+      val (asr) : t -> t -> t m
+
+      (** see {!Bitvec.(lxor)}  *)
+      val (lxor) : t -> t -> t m
+
+      (** see {!Bitvec.(land)}  *)
+      val (land) : t -> t -> t m
 
     end
       (** Symbol Value Isomorphism.

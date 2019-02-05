@@ -136,11 +136,12 @@ module Syntax = struct
   let (asr) = arshift
 end
 
-let pp ppf {value; id} =
-  Format.fprintf ppf "%a:%a" Bitvec.pp value Id.pp id
+let pp ppf {value} =
+  Format.fprintf ppf "%a" Bitvec.pp value
 
 
-let to_string x = Format.asprintf "%a" pp x
+let to_string x =
+  Format.asprintf "%a#%a" Bitvec.pp x.value Id.pp x.id
 let of_string s = match String.split ~on:'#' s with
   | [w;id] -> {
       value=Bitvec.of_string w;

@@ -11,6 +11,7 @@ type t = value [@@deriving bin_io, compare, sexp]
 val to_string : t -> string
 val of_string : string -> t
 val pp : Format.formatter -> t -> unit
+val to_word : t -> word
 
 module Index : sig
   val key_width : int
@@ -23,9 +24,8 @@ type 'a m = Bitvec.modulus -> 'a Machine.t
 external (mod) : ('a -> 'b) -> 'a -> 'b = "%apply"
 
 val id : t -> id
-val to_word : t -> word
-val of_word : word -> t Machine.t
-val of_string : string -> t Machine.t
+val word : word -> t Machine.t
+val string : string -> t Machine.t
 val bool : bool -> t Machine.t
 val one : t Machine.t
 val zero : t Machine.t
@@ -33,8 +33,8 @@ val int : int -> t m
 val int32 : int32 -> t m
 val int64 : int64 -> t m
 val signed : t -> t m
-val extract : hi:int -> lo:int -> t -> t m
-val append : int -> int -> t -> t -> t m
+val extract : hi:int -> lo:int -> t -> t Machine.t
+val append : int -> int -> t -> t -> t Machine.t
 val succ : t -> t m
 val pred : t -> t m
 val nsucc : t -> int -> t m
@@ -75,8 +75,8 @@ module Syntax : sig
 end
 
 module Symbol : sig
-  val to_value : string -> t m
-  val of_value : t -> string m
+  val to_value : string -> t Machine.t
+  val of_value : t -> string Machine.t
 end
 
 include Base.Comparable.S with type t := t
