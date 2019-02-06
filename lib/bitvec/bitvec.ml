@@ -36,10 +36,7 @@ type t = Z.t
 
 *)
 
-type modulus = {
-  w : int;                      (* bitwidth *)
-  m : Z.t;                      (* modulus: 2^w-1 *)
-}
+type modulus = {m : Z.t} [@@unboxed]
 
 
 type 'a m = modulus -> 'a
@@ -71,7 +68,6 @@ external (mod) : 'a m -> modulus -> 'a = "%apply"
 
 let modulus w = {
   m = Z.(one lsl w - one);
-  w;
 }
 
 let m1 = modulus 1
@@ -149,8 +145,8 @@ let npred x n m = norm m @@ Z.(x - of_int n) [@@inline]
 let lnot x m = norm m @@ Z.lognot x [@@inline]
 let neg x m = norm m @@ Z.neg x [@@inline]
 let nth x n _ = Z.testbit x n [@@inline]
-let msb x {w} = Z.testbit x (w - 1) [@@inline]
-let lsb x _ = Z.testbit x 0 [@@inline]
+let msb x m = Z.(equal m.m (norm m x lor (m.m asr 1))) [@@inline]
+let lsb x _ = Z.is_odd x [@@inline]
 let abs x m = if msb x m then neg x m else x [@@inline]
 let add x y m = norm m @@ Z.add x y [@@inline]
 let sub x y m = norm m @@ Z.sub x y [@@inline]
@@ -222,24 +218,35 @@ let to_int_fast x m : int =
   else Z.to_int @@ Z.signed_extract x 0 (min m Sys.int_size)
 [@@inline]
 
-let lshift x y m =
-  if Z.(geq y (of_int m.w))
-  then zero
-  else norm m @@ Z.shift_left x (to_int_fast y m.w)
+let shift n {m} ~overshift ~in_bounds =
+  let w = Z.numbits m in
+  if Z.(lt n (of_int w))
+  then in_bounds w (to_int_fast n w)
+  else overshift
 [@@inline]
 
-let rshift x y m =
-  if Z.(geq y (of_int m.w))
-  then zero
-  else norm m @@ Z.shift_right x (to_int_fast y m.w)
+let lshift x n m = shift n m
+    ~overshift:zero
+    ~in_bounds:(fun _ n -> norm m @@ Z.shift_left x n)
 [@@inline]
 
-let arshift x y m =
+let rshift x n m = shift n m
+    ~overshift:zero
+    ~in_bounds:(fun _ n -> norm m @@ Z.shift_right x n)
+[@@inline]
+
+let arshift x n m =
   let msb = msb x m in
-  if Z.(geq y (of_int m.w))
-  then if msb then ones m else zero
-  else norm m @@
-    Z.shift_right (Z.signed_extract x 0 m.w) (to_int_fast y m.w)
+  shift n m
+    ~in_bounds:(fun w n ->
+        let x = Z.(x asr n) in
+        norm m @@ if msb
+        then
+          let n = w - n in
+          let y = ones mod m in
+          Z.(y lsl n lor x)
+        else x)
+    ~overshift:(if msb then ones m else zero)
 [@@inline]
 
 let gcd x y m =
