@@ -33,7 +33,6 @@ type t = Z.t
    - values with more than 62 significand bits will be stored in a
      boxed notation (we loose 1 bit wrt to the non-normalized)
      representation.
-
 *)
 
 type modulus = {m : Z.t} [@@unboxed]

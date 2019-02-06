@@ -4,44 +4,28 @@ open Or_error
 open Format
 
 
-(* current representation has a very big overhead,
-   depending on a size of a payload it is minumum five words,
-   For example, although Zarith stores a 32bit word on a 64 bit
-   machine in one word and represent it as an unboxed int, we still
-   take four more words on top of that, as bitvector is represented as
-   a pointer (1) to a boxed value that contains (3) fields, plus the
-   header (1), that gives us 5 words (40 bytes), to store 4 bytes of
-   payload.
+(* The bap_bitvector module is provided as a shim for the new and much
+   more efficient bitvec library. The sole purpose of this library is
+   to provide compatiblity with the legacy interace where bitvector
+   was bearing its width and signedness property, and operations on
+   bitvectors were defined by its runtime representation.
 
-   We have the following representation in mind, that will minimize
-   the overhead. We will store an extra information, attached to a
-   word in the word itself. Thus, bitvector will become a Z.t. We will
-   use several bits of the word for meta data.
-   To be able to store 32 bit words on a 64 bit platform we need to
-   leave enough space in a 63 bit word for the payload. Ideally, we
-   would like to have a support for an arbitrary bitwidth, but we can
-   limit it to 2^14=32 (2 kB), spend one bit for sign (that can be
-   removed later), thus we will have 48 bits for the payload.
+   Since the shift to the new semantics representation, we no longer
+   need to store widths and signedness inside the bitvector, as those
+   properties are now totally defined by the typing context.
+
+   The implementation of the shim uses Bitv.t as the representation,
+   however we borrown the least 15 bits for storing bitwidth and the
+   signedness flag. This is basically the same representation as we
+   had for BAP 1.x, except that we used Z.t directly, and now we are
+   using Bitvec.t instead (which is also Z.t underneath the hood).
 
 
-     small:
+   word format:
      +-----------+------+---+
      |  payload  | size | s |
      +-----------+------+---+
       size+15  15 14       0
-
-
-    Given this scheme, all values smaller than 0x100_000_000_0000 will
-    have the same representation as OCaml int.
-
-    The performance overhead is minimal, especially since no
-    allocations are done anymore.
-
-    Speaking of the sign. I would propose to remove it from the
-    bitvector, as sign is not a property of a bitvector, it is its
-    interpretation.
-
-    Removing the sign will get us extra memory and CPU efficiency.
 *)
 
 type endian = LittleEndian | BigEndian
@@ -85,49 +69,48 @@ module Make(Size : Compare) = struct
   let lenoff   = 1
   let lensize  = metasize - 1
   let maxlen   = 1 lsl lensize
+  let metamask = Z.(one lsl metasize - one)
 
-  let meta x = Z.extract x 0 (metasize - 1)
-  let is_signed = Z.is_odd
-  let bitwidth x = Z.extract x lenoff lensize |> Z.to_int
+  let meta x = Z.(x land metamask) [@@inline]
+  let z x = Z.(x asr metasize) [@@inline]
+  let bitwidth x = Z.(to_int (meta x asr 1)) [@@inline]
+  let payload x =
+    let m = Bitvec.modulus (bitwidth x) in
+    Bitvec.(bigint x mod m)
 
-  let z x =
+  let is_signed x = Z.(is_odd x) [@@inline]
+  let signed x = Z.(x lor one) [@@inline]
+
+  let pack x w =
+    let meta = Z.of_int (w lsl 1) in
+    Z.(x lsl metasize lor meta)
+  [@@inlined]
+
+  let (%:) x w = pack (Bitvec.to_bigint x) w
+
+  let lift1 x f =
     let w = bitwidth x in
-    if is_signed x
-    then Z.signed_extract x metasize w
-    else Z.extract x metasize w
+    let x = payload x in
+    pack Bitvec.(to_bigint (f x mod modulus w)) w
+  [@@inline]
 
-  let signed x = Z.(x lor one)
-
-  let with_z x v =
+  let lift2 x y f =
     let w = bitwidth x in
-    let v = Z.(extract v 0 w lsl metasize) in
-    Z.(v lor meta x)
+    let x = payload x and y = payload y in
+    pack Bitvec.(to_bigint (f x y mod modulus w)) w
+  [@@inline]
 
-  let create z w =
-    if w > maxlen
-    then invalid_argf
-        "Bitvector overflow: maximum allowed with is %d bits"
-        maxlen ();
-    if w <= 0
-    then invalid_argf
-        "A nonpositive width is specified (%s,%d)"
-        (Z.to_string z) w ();
-    let meta = Z.(of_int w lsl 1) in
-    let z = Z.(extract z 0 w lsl metasize) in
-    Z.(z lor meta)
+  let lift3 x y z f =
+    let w = bitwidth x in
+    let x = payload x and y = payload y and z = payload z in
+    pack Bitvec.(to_bigint (f x y z mod modulus w)) w
+  [@@inline]
 
-  let unsigned x = create (z x) (bitwidth x)
-  let hash x = Z.hash (z x)
+  let unsigned x = pack (z x) (bitwidth x)
+  let hash x = Z.hash x
   let bits_of_z x = Z.to_bits (z x)
   let unop op t = op (z t)
   let binop op t1 t2 = op (z t1) (z t2)
-  let lift1 op t = create (unop op t) (bitwidth t)
-  let lift2 op t1 t2 = create (binop op t1 t2) (bitwidth t1)
-
-  let lift2_triple op t1 t2 : t * t * t =
-    let (a, b, c) = binop op t1 t2 in
-    let w = bitwidth t1 in
-    create a w, create b w, create c w
 
   let pp_generic
       ?(case:[`lower|`upper]=`upper)
@@ -188,7 +171,7 @@ module Make(Size : Compare) = struct
     let z = z x in
     match bitwidth x with
     | 1 -> if Z.equal z Z.zero then "false" else "true"
-    | n -> asprintf "%a" pp_full x
+    | _ -> asprintf "%a" pp_full x
 
   let of_suffixed stem suffix =
     let z = Bignum.of_string stem in
@@ -197,14 +180,14 @@ module Make(Size : Compare) = struct
     then invalid_arg "Bitvector.of_string: an empty suffix";
     let chop x = String.subo ~len:(sl - 1) x in
     match suffix.[sl-1] with
-    | 's' -> create z (Int.of_string (chop suffix)) |> signed
-    | 'u' -> create z (Int.of_string (chop suffix))
-    | x when Char.is_digit x -> create z (Int.of_string suffix)
+    | 's' -> pack z (Int.of_string (chop suffix)) |> signed
+    | 'u' -> pack z (Int.of_string (chop suffix))
+    | x when Char.is_digit x -> pack z (Int.of_string suffix)
     | _ -> invalid_arg "Bitvector.of_string: invalid prefix format"
 
   let of_string = function
-    | "false" -> create Bignum.zero 1
-    | "true"  -> create Bignum.one  1
+    | "false" -> pack Z.zero 1
+    | "true"  -> pack Z.one  1
     | s -> match String.split ~on:':' s with
       | [z; n] -> of_suffixed z n
       | _ -> failwithf "Bitvector.of_string: '%s'" s ()
@@ -218,7 +201,7 @@ module Make(Size : Compare) = struct
     let len = hi-lo+1 in
     if len <= 0
     then failwithf "Bitvector.extract: len %d is negative" len ();
-    create (Z.extract z lo len) len
+    pack (Z.extract z lo len) len
 
   let sexp_of_t t = Sexp.Atom (to_string t)
   let t_of_sexp = function
@@ -243,12 +226,12 @@ module T = Make(Size_poly)
 include T
 
 module Cons = struct
-  let b0 = create (Bignum.of_int 0) 1
-  let b1 = create (Bignum.of_int 1) 1
+  let b0 = pack (Bignum.of_int 0) 1
+  let b1 = pack (Bignum.of_int 1) 1
   let of_bool v = if v then b1 else b0
-  let of_int32 ?(width=32) n = create (Bignum.of_int32 n) width
-  let of_int64 ?(width=64) n = create (Bignum.of_int64 n) width
-  let of_int ~width v = create (Bignum.of_int v) width
+  let of_int32 ?(width=32) n = pack (Bignum.of_int32 n) width
+  let of_int64 ?(width=64) n = pack (Bignum.of_int64 n) width
+  let of_int ~width v = pack (Bignum.of_int v) width
   let ones  n = of_int (-1) ~width:n
   let zeros n = of_int (0)  ~width:n
   let zero  n = of_int 0    ~width:n
@@ -271,19 +254,26 @@ let of_binary ?width endian num  =
     | LittleEndian -> num
     | BigEndian -> String.rev num in
   let w = Option.value width ~default:(String.length num * 8) in
-  create (Bignum.of_bits num) w
+  pack (Bignum.of_bits num) w
 
-let nsucc t n = with_z t Bignum.(z t + of_int n)
-let npred t n = with_z t Bignum.(z t - of_int n)
+let nsucc t n = lift1 t @@ fun t -> Bitvec.(nsucc t n)
+let npred t n = lift1 t @@ fun t -> Bitvec.(npred t n)
 
 let (++) t n = nsucc t n
 let (--) t n = npred t n
 let succ n = n ++ 1
 let pred n = n -- 1
 
-let gcd_exn    = lift2 Bignum.gcd
-let lcm_exn    = lift2 Bignum.lcm
-let gcdext_exn = lift2_triple Bignum.gcdext
+let gcd_exn x y = lift2 x y Bitvec.gcd
+let lcm_exn x y = lift2 x y Bitvec.lcm
+let gcdext_exn x y =
+  let w = bitwidth x in
+  let m = Bitvec.modulus w in
+  let x = payload x and y = payload y in
+  let (g,a,b) = Bitvec.(gcdext x y mod m) in
+  g %: w,
+  a %: w,
+  b %: w
 
 let gcd a b = Or_error.try_with (fun () ->
     gcd_exn a b)
@@ -293,49 +283,47 @@ let gcdext a b = Or_error.try_with (fun () ->
     gcdext_exn a b)
 
 let concat x y =
-  let w = bitwidth x + bitwidth y in
-  let x = Bignum.(z x lsl bitwidth y) in
-  let z = Bignum.(x lor z y) in
-  create z w
+  let w1 = bitwidth x and w2 = bitwidth y in
+  let x = payload x and y = payload y in
+  Bitvec.append w1 w2 x y %: (w1+w2)
 
 let (@.) = concat
 
 module Unsafe = struct
   module Base = struct
     type t = T.t
-    let one = create Z.one 1
-    let zero = create Z.zero 1
-    let succ = lift1 Bignum.succ
-    let pred = lift1 Bignum.pred
-    let abs  = lift1 Bignum.abs
-    let neg  = lift1 Bignum.neg
-    let lnot = lift1 Bignum.lognot
-    let logand = lift2 Bignum.logand
-    let logor  = lift2 Bignum.logor
-    let logxor = lift2 Bignum.logxor
-    let add    = lift2 Bignum.add
-    let sub    = lift2 Bignum.sub
-    let mul    = lift2 Bignum.mul
-    let sdiv   = lift2 Bignum.div
-    let udiv   = lift2 Bignum.ediv
-    let srem   = lift2 Bignum.rem
-    let urem   = lift2 Bignum.erem
+    let one = Bitvec.one %: 1
+    let zero = Bitvec.zero %: 1
+    let succ = succ
+    let pred = pred
+    let abs x = lift1 x Bitvec.abs [@@inline]
+    let neg  x = lift1 x Bitvec.neg [@@inline]
+    let lnot x = lift1 x Bitvec.lnot [@@inline]
+    let logand x y = lift2 x y Bitvec.logand [@@inline]
+    let logor  x y = lift2 x y Bitvec.logor [@@inline]
+    let logxor x y = lift2 x y Bitvec.logxor [@@inline]
+    let add    x y = lift2 x y Bitvec.add [@@inline]
+    let sub    x y = lift2 x y Bitvec.sub [@@inline]
+    let mul    x y = lift2 x y Bitvec.mul [@@inline]
+    let sdiv   x y = lift2 x y Bitvec.sdiv [@@inline]
+    let udiv   x y = lift2 x y Bitvec.div [@@inline]
+    let srem   x y = lift2 x y Bitvec.srem [@@inline]
+    let urem   x y = lift2 x y Bitvec.rem [@@inline]
+    let lshift x y = lift2 x y Bitvec.lshift [@@inline]
+    let rshift x y = lift2 x y Bitvec.rshift [@@inline]
+    let arshift x y = lift2 x y Bitvec.arshift [@@inline]
 
-    let sign_disp ~signed ~unsigned x y =
-      let op = if is_signed x || is_signed y then signed else unsigned in
-      op x y
+    let div x y = match is_signed x, is_signed y with
+      | true,_|_,true -> sdiv x y
+      | _ -> udiv x y
+    [@@inline]
 
-    let div = sign_disp ~signed:sdiv ~unsigned:udiv
-    let rem = sign_disp ~signed:srem ~unsigned:urem
-    let modulo  = rem
+    let rem x y = match is_signed x, is_signed y with
+      | true,_|_,true -> srem x y
+      | _ -> urem x y
+    [@@inline]
 
-    let shift dir x n =
-      let w = bitwidth x in
-      let n = Z.min (z n) (Z.of_int w) in
-      create (dir (z x) (Z.to_int n)) (bitwidth x)
-    let lshift = shift Bignum.shift_left
-    let rshift = shift Bignum.shift_right
-    let arshift x y = shift Bignum.shift_right (signed x) y
+    let modulo x y = rem x y [@@inline]
   end
   include Base
   include (Bap_integer.Make(Base) : Bap_integer.S with type t := t)
@@ -343,25 +331,29 @@ end
 
 module Safe = struct
   include Or_error.Monad_infix
-
-  type m = t Or_error.t
-
   let (!$) v = Ok v
 
-  let validate_equal (n,m) : Validate.t =
-    if m = n then Validate.pass
-    else Validate.failf "expected width %d, but got %d" m n
 
-  let lift m t : m =
-    validate_equal (m, bitwidth t) |> Validate.result >>|
-    fun () -> t
+  let badwidth m x =
+    Or_error.errorf "Word - wrong width, expects %d got %d" m x
 
-  let lift1 op x : m = x >>| lift1 op
+  let lift m x =
+    let w = bitwidth x in
+    if m = w then Ok x else badwidth m w
 
-  let lift2 op (x : m) (y : m) : m =
-    x >>= fun x -> y >>= fun y ->
-    let v = validate_equal (bitwidth x, bitwidth y) in
-    Validate.result v >>| fun () -> op x y
+  let lift1 op x = match x with
+    | Ok x -> Ok (op x)
+    | Error _ as e  -> e
+
+  let lift2 op x y = match x, y with
+    | Ok x, Ok y ->
+      let w1 = bitwidth x and w2 = bitwidth y in
+      if w1 = w2 then Ok (op x y) else badwidth w1 w2
+    | (Error _ as e),_ | _, (Error _ as e) -> e
+
+  let lift2h op x y = match x, y with
+    | Ok x, Ok y -> Ok (op x y)
+    | (Error _ as e),_ | _, (Error _ as e) -> e
 
   let int = lift
   let i1  = lift 1
@@ -375,16 +367,14 @@ module Safe = struct
     | Word_size.W32 -> i32
 
   module Base = struct
-    type t = m
-    let one = i1 (one 1)
-    let zero = i1 (zero 1)
-    let succ = lift1 Bignum.succ
-    let pred = lift1 Bignum.pred
-    let abs  = lift1 Bignum.abs
-    let neg  = lift1 Bignum.neg
-
-    let lnot = lift1 Bignum.lognot
-
+    type nonrec t = t Or_error.t
+    let one = i1 Unsafe.one
+    let zero = i1 Unsafe.zero
+    let succ = lift1 Unsafe.succ
+    let pred = lift1 Unsafe.pred
+    let abs  = lift1 Unsafe.abs
+    let neg  = lift1 Unsafe.neg
+    let lnot = lift1 Unsafe.lnot
     let logand = lift2 Unsafe.logand
     let logor  = lift2 Unsafe.logor
     let logxor = lift2 Unsafe.logxor
@@ -395,27 +385,13 @@ module Safe = struct
     let udiv   = lift2 Unsafe.udiv
     let srem   = lift2 Unsafe.rem
     let urem   = lift2 Unsafe.urem
-
-    let sign_disp ~signed ~unsigned x y =
-      x >>= fun x -> y >>= fun y ->
-      let op = if is_signed x || is_signed y then signed else unsigned in
-      op !$x !$y
-
-    let div = sign_disp ~signed:sdiv ~unsigned:udiv
-    let rem = sign_disp ~signed:srem ~unsigned:urem
-    let modulo  = rem
-
-    let shift dir (x : m) (y : m) : m =
-      x >>= fun x -> y >>= fun y ->
-      if unop Bignum.fits_int y
-      then Ok (dir x y)
-      else Or_error.errorf
-          "cannot perform shift, because rhs doesn't fit int: %s" @@
-        to_string y
-
-    let lshift = shift Unsafe.lshift
-    let rshift = shift Unsafe.rshift
-    let arshift = shift Unsafe.arshift
+    let sdiv   = lift2 Unsafe.sdiv
+    let div   = lift2 Unsafe.div
+    let rem   = lift2 Unsafe.rem
+    let lshift = lift2h Unsafe.lshift
+    let rshift = lift2h Unsafe.rshift
+    let arshift = lift2h Unsafe.arshift
+    let modulo = rem
   end
   include Bap_integer.Make(Base)
 end
@@ -609,7 +585,7 @@ module Stable = struct
     let compare = compare
 
     let of_legacy {V1.z; w; signed=s} =
-      let x = create z w in
+      let x = pack z w in
       if s then signed x else x
 
     let to_legacy x = V1.{
