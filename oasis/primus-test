@@ -6,7 +6,7 @@ Flag primus_test
 Library primus_test_library_plugin
   Build$:       flag(everything) || flag(primus_test)
   Path:         plugins/primus_test
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bap, core_kernel
   FindlibName:     bap-plugin-primus_test
   CompiledObject:  best
   InternalModules: Primus_test_main

@@ -2,7 +2,6 @@ Flag primus_support
   Description: build supporting components for Primus
   Default: false
 
-
 Library primus_loader_plugin
   Path: plugins/primus_loader
   Build$: flag(everything) || flag(primus_support)
@@ -69,7 +68,7 @@ Library primus_print_plugin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_print
   CompiledObject: best
-  BuildDepends: bap-primus, bare
+  BuildDepends: bap-primus, bare, bap
   XMETADescription: prints Primus states and observations
   Modules: Primus_print_main
   XMETAExtraLines: tags="primus, printer"
@@ -79,7 +78,7 @@ Library primus_mark_visited_plugin
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_mark_visited
   CompiledObject: best
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bap
   XMETADescription: marks terms that were visited by Primus
   Modules: Primus_mark_visited_main
   XMETAExtraLines: tags="primus"
@@ -90,7 +89,7 @@ Library primus_limit
   Build$: flag(everything) || flag(primus_support)
   FindlibName: bap-plugin-primus_limit
   CompiledObject: best
-  BuildDepends: bap-primus
+  BuildDepends: bap-primus, bap
   XMETADescription: ensures termination by limiting Primus machines
   Modules: Primus_limit_main
   XMETAExtraLines: tags="primus"
