@@ -1,0 +1,11 @@
+Flag bitvec_order
+  Description: Provides comparators for use with JS Core
+  Default: false
+
+Library bitvec_order
+  Build$: flag(everything) || flag(bitvec_order)
+  Path: lib/bitvec_order
+  FindlibName: bitvec-order
+  CompiledObject: best
+  BuildDepends: base, bitvec, bitvec-sexp
+  Modules: Bitvec_order

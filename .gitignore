@@ -40,3 +40,4 @@ _oasis
 /plugins/primus_greedy/.merlin
 /plugins/primus_lisp/primus_lisp_config.ml
 /setup.exe
+/tools/bap_config

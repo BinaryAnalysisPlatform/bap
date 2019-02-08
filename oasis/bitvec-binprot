@@ -1,0 +1,11 @@
+Flag bitvec_binprot
+  Description: Enables support for Core's Binprot protocol
+  Default: false
+
+Library bitvec_binprot
+  Build$: flag(everything) || flag(bitvec_binprot)
+  Path: lib/bitvec_binprot
+  FindlibName: bitvec-binprot
+  CompiledObject: best
+  BuildDepends: bitvec, bin_prot, ppx_jane
+  Modules: Bitvec_binprot

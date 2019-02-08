@@ -30,7 +30,14 @@ Library types
   FindlibParent:   bap
   FindlibName:     types
   CompiledObject:  best
-  BuildDepends:    monads, zarith, bitvec, uuidm, bap.config, regular, graphlib, ogre, bap-knowledge
+  BuildDepends:    monads, zarith,
+                   bitvec, bitvec-order, bitvec-binprot, bitvec-sexp,
+                   uuidm,
+                   bap.config,
+                   regular,
+                   graphlib,
+                   ogre,
+                   bap-knowledge
 
   InternalModules:
                    Bap_addr,

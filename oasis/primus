@@ -10,7 +10,8 @@ Library bap_primus
   CompiledObject: best
   BuildDepends: regular, uuidm,
                 bap-future, parsexp, bap-strings,
-                bap-core-theory, bap-knowledge
+                bap-core-theory, bap-knowledge,
+                bitvec, bitvec-order, bitvec-sexp, bitvec-binprot
   Modules: Bap_primus
   InternalModules:
            Bap_primus_env,
