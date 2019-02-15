@@ -883,7 +883,7 @@ module ToIR = struct
            - if it was the other way round, you want to extend it anyway.
          * (I may be remembering things wrongly) *)
         [assn t r Bil.(Cast (LOW, !!t, a))]
-      | Call(o1, ra) when pref = [] ->
+      | Call(o1, ra)  ->
         (* If o1 is an immediate, we should syntactically have Jump(imm)
            so that the CFG algorithm knows where the jump goes.  Otherwise
            it will point to BB_Indirect.
@@ -1536,7 +1536,6 @@ module ToIR = struct
       | Sysenter | Syscall -> [Bil.Special "syscall"]
       (* Match everything exhaustively *)
       | Leave _ ->  unimplemented "to_ir: Leave"
-      | Call _ ->  unimplemented "to_ir: Call"
       | Lea _ ->  unimplemented "to_ir: Lea"
       | Movs _ ->  unimplemented "to_ir: Movs"
       | Cmps _ ->  unimplemented "to_ir: Cmps"
