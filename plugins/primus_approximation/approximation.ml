@@ -65,7 +65,7 @@ end
   let size_of_var var =
     let size = Bap.Std.Var.typ var in
     match size with
-    | Imm size -> size
+    | Type.Imm size -> size
     | _ -> assert false
 
   let exp x =
@@ -95,6 +95,7 @@ module Approximate(Machine : Primus.Machine.S) = struct
   let int_of_value x =
     Primus.Value.to_word x |> Word.to_int_exn
 
+  [@@@warning "-P"]
   let run [name; size; x;] =
     let open Machine.Syntax in
     let size = int_of_value size in
