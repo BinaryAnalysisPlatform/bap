@@ -18,14 +18,9 @@ let table = Hashtbl.of_alist_exn (module String) [
                 "cos", floats [|0.0 ; 1.0|];
               ]
 
-let knowledge_of_word sort w = CT.int sort w
 
-let exp x =
-  let open Knowledge.Syntax in
-  let x = x >>| Value.semantics in
-  match Knowledge.run x Knowledge.empty with
-  | Error _ -> assert false
-  | Ok (s,_) -> Semantics.get Bil.Domain.exp s
+
+let knowledge_of_word sort w = CT.int sort w
 
 module Horner
 : sig
@@ -48,6 +43,101 @@ end
     x >>= fun x ->
     f (Value.sort x) x
 
+  let fone fs =
+    let bs = Floats.size fs in
+    let one = Word.ones (Bits.size bs) in
+    float fs (int bs  one)
+
+  let fzero fs =
+    let bs = Floats.size fs in
+    let zero = Word.zero (Bits.size bs) in
+    float fs (int bs zero)
+
+  let fadd1 rm x =
+    x >>-> fun s x ->
+           fadd rm !!x (fone s)
+
+  let fceil rm x =
+    fround rm x >>>= fun ix ->
+    ite (is_fzero (fsub rm x (var ix))) x (fadd1 rm (var ix))
+
+  let fmod r x y =
+    let d = fdiv r x y in
+    let c = fceil r d in
+    fsub r x (fmul r y c)
+
+  let make_float_value fsort x =
+    let core_theory_i = CT.int (IEEE754.Sort.bits fsort) x in
+    CT.float fsort core_theory_i
+
+  let pi_mul_2 fsort =
+    let wf = word_of_float (2.0*.3.14159265358979323846) in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let pi_div_2 fsort =
+    let wf = word_of_float (3.14159265358979323846/.2.0) in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let pi fsort =
+    let wf = word_of_float 3.14159265358979323846 in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let sign fsort =
+    let wf = word_of_float 1.0 in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let sign_negative fsort =
+    let wf = word_of_float (-1.0) in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let reduce_to_pos_angle rm x =
+    x >>-> fun s _ ->
+    pi_mul_2 s >>>= fun pi_2 ->
+    ite (is_fneg x) (fsub rm (var pi_2) x) x
+
+  (* Sine is an odd function. *)
+  let odd_function_reduce rm x =
+    x >>-> fun sort _ ->
+    pi sort >>>= fun p ->
+    ite (is_fpos (fsub rm x (var p))) (fsub rm x (var p)) x
+
+  (* Sine is an odd function. There is redundate checks. Need to fix by merging
+  this function with odd_function_reduce *)
+  let odd_function_sign rm x =
+    x >>-> fun sort _ ->
+    sign sort >>>= fun s ->
+    pi sort >>>= fun p ->
+    ite (is_fpos (fsub rm x (var p))) (sign_negative sort) (var s)
+
+  let sin_range_reduce rm x =
+    x >>-> fun sort _ ->
+           pi_mul_2 sort >>>= fun pi2 ->
+           fmod rm x (var pi2) >>>= fun n ->
+           reduce_to_pos_angle rm (var n) >>>= fun pn ->
+           odd_function_reduce rm (var pn) >>>= fun reduced_n ->
+           var reduced_n
+
+  let sin_determine_sign rm x =
+    x >>-> fun sort _ ->
+           pi_mul_2 sort >>>= fun pi2 ->
+           fmod rm x (var pi2) >>>= fun n ->
+           reduce_to_pos_angle rm (var n) >>>= fun pn ->
+           odd_function_sign rm (var pn) >>>= fun current_sign ->
+           var current_sign
+
+  let sin_range_reduce rm x =
+    x >>-> fun sort _ ->
+           pi_mul_2 sort >>>= fun pi2 ->
+           fmod rm x (var pi2) >>>= fun n ->
+           reduce_to_pos_angle rm (var n) >>>= fun pn ->
+           odd_function_reduce rm (var pn) >>>= fun reduced_n ->
+           var reduced_n
+
   let approximate ~coefs x  =
     let rank = Array.length coefs - 1 in
     let rec sum i y =
@@ -57,10 +147,6 @@ end
         sum (i - 1) (var y)
       else y in
     sum (rank-1) coefs.(rank)
-
-  let make_float_value fsort x =
-    let core_theory_i = CT.int (IEEE754.Sort.bits fsort) x in
-    CT.float fsort core_theory_i
 
   let size_of_var var =
     let size = Bap.Std.Var.typ var in
@@ -85,6 +171,10 @@ end
     let formula = approximate c CT.(var v) in
     exp formula
 end
+
+
+
+
 
 
 module Approximate(Machine : Primus.Machine.S) = struct
