@@ -1,16 +1,50 @@
-FROM ocaml/opam:debian
+FROM debian:stretch
 MAINTAINER Ivan Gotovchits <ivg@ieee.org>
-RUN sudo apt-get -y update && sudo apt-get -y install \
-    llvm-3.8-dev \
+
+RUN apt-get -y update
+RUN apt-get -y install \
+    build-essential \
+    curl \
     git \
-    libcurl4-gnutls-dev \
-    libgmp-dev \
-    zlib1g-dev \
-    binutils-multiarch \
-    clang
-RUN opam init --auto-setup --comp=4.05.0 --yes
+    libx11-dev \
+    m4 \
+    pkg-config \
+    python-pip \
+    software-properties-common \
+    sudo \
+    unzip \
+    wget \
+    libcap-dev \
+    gcc \
+    make
+
+
+RUN useradd -m bap && echo "bap:bap" | chpasswd && adduser bap sudo
+RUN sed -i.bkp -e \
+      's/%sudo\s\+ALL=(ALL\(:ALL\)\?)\s\+ALL/%sudo ALL=NOPASSWD:ALL/g' \
+      /etc/sudoers
+USER bap
+WORKDIR /home/bap
+
+RUN wget https://github.com/projectatomic/bubblewrap/releases/download/v0.3.1/bubblewrap-0.3.1.tar.xz
+RUN tar xvf bubblewrap-0.3.1.tar.xz
+WORKDIR /home/bap/bubblewrap-0.3.1/
+RUN ./configure
+RUN make && sudo make install
+RUN bwrap --version
+WORKDIR /home/bap
+RUN rm -r bubblewrap-0.3.1 bubblewrap-0.3.1.tar.xz
+
+RUN wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh
+RUN echo "" | sh ./install.sh
+RUN opam --version
+
+RUN opam init --yes --compiler=4.05.0 --disable-sandboxing
+RUN eval $(opam env)
 RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
-RUN LLVM_CONFIG=llvm-config-3.8 opam install conf-bap-llvm --yes
-RUN OPAMJOBS=16 opam install bap --yes
-RUN sudo apt-get install python-pip --yes
+RUN opam update
+RUN opam install depext --yes
+RUN OPAMJOBS=1 opam depext --install bap --yes
 RUN sudo pip install bap
+
+ENTRYPOINT ["opam", "config", "exec", "--"]

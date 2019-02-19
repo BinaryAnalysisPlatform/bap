@@ -7,19 +7,25 @@ Vagrant.configure(2) do |config|
       vb.memory = "4096"
   end
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
-sudo apt-get -y update && sudo apt-get -y install \
-    llvm-3.8-dev \
-    git \
-    libcurl4-gnutls-dev \
-    libgmp-dev \
-    zlib1g-dev \
-    binutils-multiarch \
-    clang \
-    time
-opam init --auto-setup --comp=4.05.0 --yes
-eval `opam config env`
-LLVM_CONFIG=llvm-config-3.8 opam install conf-bap-llvm --yes
-opam install bap --yes
+sudo apt-get update
+sudo apt-get install curl make git m4 libcap-dev gcc unzip --yes
+
+wget https://github.com/projectatomic/bubblewrap/releases/download/v0.3.1/bubblewrap-0.3.1.tar.xz
+tar xvf bubblewrap-0.3.1.tar.xz
+cd bubblewrap-0.3.1
+./configure && make && sudo make install
+cd ../
+
+echo "" | sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
+
+sudo sysctl kernel.unprivileged_userns_clone=1
+
+yes | opam init --compiler=4.05.0
+eval $(opam env)
+
+opam install depext --yes
+opam depext bap  -i --yes
+
 sudo apt-get install python-pip --yes
 sudo pip install bap
 SHELL

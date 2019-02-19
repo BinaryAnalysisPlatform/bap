@@ -8,11 +8,21 @@ Vagrant.configure(2) do |config|
   end
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
 sudo apt-get update
-sudo apt-get --yes install opam
-opam init --auto-setup --comp=4.05.0 --yes
-opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#bap-1.4
-eval `opam config env`
-opam depext bap --install --yes
+sudo apt-get install make git m4 libcap-dev gcc unzip --yes
+
+wget https://github.com/projectatomic/bubblewrap/releases/download/v0.3.1/bubblewrap-0.3.1.tar.xz
+tar xvf bubblewrap-0.3.1.tar.xz
+cd bubblewrap-0.3.1
+./configure && make && sudo make install
+cd ../
+
+echo "" | sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
+yes | opam init --compiler=4.05.0
+eval $(opam env)
+
+opam install depext --yes
+opam depext bap  -i --yes
+
 sudo apt-get install python-pip --yes
 sudo pip install bap
 SHELL
