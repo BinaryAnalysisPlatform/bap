@@ -90,7 +90,7 @@ end
 
   let fone fs =
     let bs = Floats.size fs in
-    let one = Word.ones (Bits.size bs) in
+    let one = Word.one (Bits.size bs) in
     float fs (int bs  one)
 
   let fzero fs =
@@ -104,7 +104,7 @@ end
 
   let fceil rm x =
     fround rm x >>>= fun ix ->
-    ite (is_fzero (fsub rm x (var ix))) x (fadd1 rm (var ix))
+    ite (is_fpos (fsub rm x (var ix))) x (fadd1 rm (var ix))
 
   let fmod r x y =
     let d = fdiv r x y in
