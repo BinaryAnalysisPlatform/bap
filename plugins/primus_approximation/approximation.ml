@@ -52,7 +52,7 @@ let make_float_value fsort x =
   let core_theory_i = CT.int (IEEE754.Sort.bits fsort) x in
   CT.float fsort core_theory_i
 
-module Reduction_Constants = struct
+module Reduction_Constant = struct
 
   let pi_float = 3.141592653589793115997963468544185161590576171875
 
@@ -97,7 +97,7 @@ module Range_Reduction = struct
 
   let fadd1 rm x =
     x >>-> fun sort x ->
-    fadd rm !!x (Reduction_Constants.fone sort)
+    fadd rm !!x (Reduction_Constant.fone sort)
 
   let fceil rm x =
     fround rm x >>>= fun ix ->
@@ -108,26 +108,25 @@ module Range_Reduction = struct
     let c = fceil r d in
     fsub r x (fmul r y c)
 
-  let reduce_to_pos_angle rm x =
+  let to_pos_angle rm x =
     x >>-> fun sort x ->
-    Reduction_Constants.pi_mul_2 sort >>>= fun pi_2 ->
+    Reduction_Constant.pi_mul_2 sort >>>= fun pi_2 ->
     ite (is_fneg !!x) (fsub rm (var pi_2) !!x) !!x
 
   (* Sine is an odd function. *)
-  let odd_function_reduce rm x =
+  let odd_function rm x =
     x >>-> fun sort x ->
-    Reduction_Constants.pi sort >>>= fun p ->
+    Reduction_Constant.pi sort >>>= fun p ->
     ite (is_fpos (fsub rm !!x (var p))) (fsub rm !!x (var p)) !!x
 
-  (* Sine is an odd function. There is redundate checks. Need to fix by merging
-  this function with odd_function_reduce *)
+  (* Sine is an odd function. This is a redundate ite with odd_function_reduce.
+     Fix by merging this function with odd_function *)
   let odd_function_sign rm x =
     x >>-> fun sort x ->
-    Reduction_Constants.sign sort >>>= fun s ->
-    Reduction_Constants.pi sort >>>= fun p ->
-    ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constants.sign_negative sort) (var s)
+    Reduction_Constant.sign sort >>>= fun s ->
+    Reduction_Constant.pi sort >>>= fun p ->
+    ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constant.sign_negative sort) (var s)
   end
-
 
 module Range_Reconstruction = struct
   let sign_flip rm sign x =
@@ -139,10 +138,10 @@ module Sin = struct
 
   let range_reduce rm x return =
    x >>-> fun sort x ->
-   Reduction_Constants.pi_mul_2 sort >>>= fun pi2 ->
+   Reduction_Constant.pi_mul_2 sort >>>= fun pi2 ->
    Range_Reduction.fmod rm !!x (var pi2) >>>= fun n ->
-   Range_Reduction.reduce_to_pos_angle rm (var n) >>>= fun pn ->
-   Range_Reduction.odd_function_reduce rm (var pn) >>>= fun reduced_n ->
+   Range_Reduction.to_pos_angle rm (var n) >>>= fun pn ->
+   Range_Reduction.odd_function rm (var pn) >>>= fun reduced_n ->
    Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
    return (var reduced_n) (var current_sign)
 
@@ -187,7 +186,7 @@ module Horner
     let formula = match func with
       | Sin -> Sin.build CT.(var v) c polynomial_evaluaton
       | Cos ->
-         let shifted_var = CT.(fadd rne (var v) (Reduction_Constants.pi_div_2 fsort)) in
+         let shifted_var = CT.(fadd rne (var v) (Reduction_Constant.pi_div_2 fsort)) in
          Sin.build shifted_var c polynomial_evaluaton in
     exp formula
 end
