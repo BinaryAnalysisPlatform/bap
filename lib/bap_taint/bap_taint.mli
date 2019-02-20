@@ -56,7 +56,6 @@
 
 
 open Core_kernel
-open Bap.Std
 open Bap_primus
 
 module Std : sig
@@ -173,7 +172,7 @@ module Std : sig
 
       include Value with type t := t
                      and type 'a m := 'a Primus.machine
-      include Comparable.S_plain
+      include Base.Comparable.S
         with type t := t
          and type comparator_witness = Primus.Value.comparator_witness
     end
@@ -223,7 +222,7 @@ module Std : sig
           - forall u,s,x, pre(T(u,s,x)) -> T(u,s,x);
           - forall u,s,x, T(v,s,x) -> pre(T(v,s,x)) \// s = r /\\ v = u.
       *)
-      val attach : Primus.value -> Rel.t -> Object.Set.t -> unit Primus.machine
+      val attach : Primus.value -> Rel.t -> Set.M(Object).t -> unit Primus.machine
 
 
       (** [lookup v r] returns a set [xs] of objects that are related
@@ -234,7 +233,7 @@ module Std : sig
           - x in xs iff T(v,r,x);
           - forall u,s,y, Pre(T(u,s,y)) iff T(u,s,y);
       *)
-      val lookup : Primus.value -> Rel.t -> Object.Set.t Primus.machine
+      val lookup : Primus.value -> Rel.t -> Set.M(Object).t Primus.machine
 
       (** [detach v r xs] removes all relations of type [r] between
           the value [v] and elements of the set of objects
@@ -245,7 +244,7 @@ module Std : sig
           - forall x, x in xs -> not (T(v,r,x));
           - forall u,s,y, v <> u \// s <> r, pre(T(u,s,y)) -> T(u,s,y)
       *)
-      val detach : Primus.value -> Rel.t -> Object.Set.t -> unit Primus.machine
+      val detach : Primus.value -> Rel.t -> Set.M(Object).t -> unit Primus.machine
 
 
       (** {3 High-level interface}

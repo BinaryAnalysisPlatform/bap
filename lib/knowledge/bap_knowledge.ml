@@ -36,7 +36,7 @@ module Knowledge = struct
   end
 
   module Knowledge = struct
-    type 'a t = ('a,conflict) result State.t
+    type 'a t = ('a,conflict) Result.t State.t
     include Monad.Result.Make(Conflict)(State)
   end
 
@@ -54,7 +54,7 @@ module Knowledge = struct
     mutable promises : 'a promise list;
   }
 
-  let registry = String.Table.create ()
+  let registry = Hashtbl.create (module String)
 
   let register_public_service name desc =
     if Hashtbl.mem registry name
@@ -135,6 +135,8 @@ type 'a knowledge = 'a Knowledge.t
 type 'a domain = 'a Semantics.domain
 type 'a content = 'a Knowledge.content
 
+module Ident = struct
+end
 
 module Label = struct
   include L

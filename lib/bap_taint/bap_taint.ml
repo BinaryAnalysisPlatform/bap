@@ -4,13 +4,13 @@ open Monads.Std
 open Bap_strings.Std
 open Bap_knowledge
 
+module Seq = Sequence
 
 module Vid = Primus.Value.Id
 type vid = Vid.t
 
 type value = Primus.value
 module Machine = Primus.Machine
-
 
 module type Value = sig
   type t
@@ -20,7 +20,8 @@ module type Value = sig
 end
 
 module type comparable_with_value =
-  Comparable.S_plain with type comparator_witness = Primus.Value.comparator_witness
+  Base.Comparable.S with type
+  comparator_witness = Primus.Value.comparator_witness
 
 module Ident = struct
   type t = value
@@ -31,13 +32,15 @@ end
 
 (* registry of all ever created objects *)
 type kinds = {
-  objects : value Primus.Value.Map.t;
+  objects : value Map.M(Primus.Value).t;
 }
 
 let kinds = Primus.Machine.State.declare
     ~name:"tainter-object-kinds"
     ~uuid:"a97f9cf6-541a-4127-9eb6-6c24f67ed8b9" @@
-  Knowledge.return {objects = Primus.Value.Map.empty}
+  Knowledge.return {objects = Map.empty (module Primus.Value)}
+
+let m63 = Bitvec.modulus 63
 
 module Object = struct
   type Primus.exn += Bad_object of Primus.value
@@ -45,10 +48,11 @@ module Object = struct
   open Primus.Machine.Syntax
   module Value = Primus.Value
 
+
   let next_key {objects} =
     match Map.max_elt objects with
-    | None -> Value.of_int 1 ~width:63
-    | Some (k,_) -> Value.succ k
+    | None -> Value.one
+    | Some (k,_) -> Value.(succ k mod m63)
 
   let create kind =
     Machine.Local.get kinds >>= fun s ->
@@ -71,7 +75,7 @@ module Object = struct
   let sexp_of_t x = Sexp.Atom (to_string x)
 end
 
-type objects = Object.Set.t
+type objects = Set.M(Object).t
 
 (* state of the taint engine.
  *
@@ -97,8 +101,8 @@ type objects = Object.Set.t
  * garbage collection problem.
 *)
 type tainter = {
-  direct : objects Vid.Map.t;
-  indirect : objects Primus.Value.Map.t;
+  direct : objects Map.M(Vid).t;
+  indirect : objects Map.M(Primus.Value).t;
 } [@@deriving fields]
 
 type relation_kind = Direct | Indirect [@@deriving sexp_of]
@@ -125,20 +129,20 @@ type gc_local = {
 }
 
 let empty_tainter = {
-  direct = Vid.Map.empty;
-  indirect = Primus.Value.Map.empty;
+  direct = Map.empty (module Vid);
+  indirect = Map.empty (module Primus.Value);
 }
 
 let tainter = Primus.Machine.State.declare
     ~name:"primus-tainter"
-    ~uuid:"2d4a4208-f918-4cf7-8e1b-5d8400a106d3"
-    (fun _ -> empty_tainter)
+    ~uuid:"2d4a4208-f918-4cf7-8e1b-5d8400a106d3" @@
+  Knowledge.return empty_tainter
 
 
 let gc = Primus.Machine.State.declare
     ~name:"primus-taint-gc"
-    ~uuid:"2357826e-d5b7-40a3-8f90-0cfd7b48eadc"
-    (fun _ -> {old = empty_tainter})
+    ~uuid:"2357826e-d5b7-40a3-8f90-0cfd7b48eadc" @@
+  Knowledge.return {old = empty_tainter}
 
 let vid = Primus.Value.id
 
@@ -155,12 +159,8 @@ let direct = Rel {
 
 module Kind = struct
   type t = value
-  module Make(Machine : Primus.Machine.S) = struct
-    module Value = Primus.Value.Make(Machine)
-    let create = Value.Symbol.to_value
-    let name = Value.Symbol.of_value
-    include Ident(Machine)
-  end
+  let create = Primus.Value.Symbol.to_value
+  let name = Primus.Value.Symbol.of_value
   include (Primus.Value : comparable_with_value with type t := t)
 end
 
@@ -183,153 +183,152 @@ module Taint = struct
   let attached,attach =
     Primus.Observation.provide ~inspect "taint-attached"
 
-  module Make(Machine : Primus.Machine.S) = struct
-    module Value = Primus.Value.Make(Machine)
-    module Taint = Object.Make(Machine)
+  module Value = Primus.Value
+  module Taint = Object
 
-    open Machine.Syntax
-
-
-    let change v (Rel {field; key}) ~f =
-      Machine.Local.update tainter ~f:(fun t ->
-          Field.fset field t @@
-          Map.change (Field.get field t) (key v) ~f)
-
-    let attach v r ts = change v r ~f:(function
-        | None -> Some ts
-        | Some ts' -> Some (Set.union ts ts')) >>= fun () ->
-      Set.to_sequence ts |>
-      Machine.Seq.iter ~f:(fun o ->
-          Machine.Observation.make attach (r,o,v))
+  open Machine.Syntax
 
 
-    let detach v r ts = change v r ~f:(function
+  let change v (Rel {field; key}) ~f =
+    Machine.Local.update tainter ~f:(fun t ->
+        Field.fset field t @@
+        Map.change (Field.get field t) (key v) ~f)
+
+  let attach v r ts = change v r ~f:(function
+      | None -> Some ts
+      | Some ts' -> Some (Set.union ts ts')) >>= fun () ->
+    Set.to_sequence ts |>
+    Machine.Seq.iter ~f:(fun o ->
+        Machine.Observation.make attach (r,o,v))
+
+
+  let detach v r ts = change v r ~f:(function
+      | None -> None
+      | Some ts' ->
+        let ts = Set.diff ts' ts in
+        if Set.is_empty ts then None else Some ts)
+
+  let lookup v (Rel {field; key}) =
+    Machine.Local.get tainter >>| fun t ->
+    match Map.find (Field.get field t) (key v) with
+    | None -> Set.empty (module Object)
+    | Some s -> s
+
+
+  let int_of_value v =
+    let x = Value.to_word v in
+    if Bitvec.fits_int x
+    then Machine.return (Bitvec.to_int x)
+    else Machine.raise (Bad_cast v)
+
+  let new_direct value kind =
+    Taint.create kind >>= fun taint ->
+    Machine.Local.update tainter ~f:(fun s -> {
+          s with
+          direct = Map.update s.direct
+              (Primus.Value.id value) ~f:(function
+                  | None -> Set.singleton (module Object) taint
+                  | Some taints -> Set.add taints taint)
+        }) >>| fun () -> taint
+
+  let new_indirect ~addr ~len kind  =
+    Taint.create kind >>= fun taint ->
+    int_of_value len >>= fun len ->
+    Machine.Local.get tainter >>= fun s ->
+    Seq.range 0 len |>
+    Machine.Seq.fold ~init:s.indirect ~f:(fun indirect off ->
+        Value.(nsucc addr off mod m63) >>| fun addr ->
+        Map.update indirect addr ~f:(function
+            | None -> Set.singleton (module Object) taint
+            | Some taints -> Set.add taints taint)) >>= fun indirect ->
+    Machine.Local.put tainter {s with indirect} >>| fun () ->
+    taint
+
+  exception Bad_object of Primus.value
+
+  let objects_of_kind {objects} k ts =
+    Set.filter ts ~f:(fun v ->
+        match Map.find objects v with
+        | None -> false
+        | Some k' -> Kind.(k = k'))
+
+  let sanitize v r k =
+    Machine.Local.get kinds >>= fun kinds ->
+    change v r ~f:(function
         | None -> None
-        | Some ts' ->
-          let ts = Set.diff ts' ts in
+        | Some ts ->
+          let ts = objects_of_kind kinds k ts in
           if Set.is_empty ts then None else Some ts)
-
-    let lookup v (Rel {field; key}) =
-      Machine.Local.get tainter >>| fun t ->
-      match Map.find (Field.get field t) (key v) with
-      | None -> Object.Set.empty
-      | Some s -> s
-
-
-    let int_of_value x =
-      match Word.to_int (Value.to_word x) with
-      | Error _ -> Machine.raise (Bad_cast x)
-      | Ok x -> Machine.return x
-
-    let new_direct value kind =
-      Taint.create kind >>= fun taint ->
-      Machine.Local.update tainter ~f:(fun s -> {
-            s with
-            direct = Map.update s.direct
-                (Primus.Value.id value) ~f:(function
-                    | None -> Object.Set.singleton taint
-                    | Some taints -> Set.add taints taint)
-          }) >>| fun () -> taint
-
-    let new_indirect ~addr ~len kind  =
-      Taint.create kind >>= fun taint ->
-      int_of_value len >>= fun len ->
-      Machine.Local.get tainter >>= fun s ->
-      Seq.range 0 len |>
-      Machine.Seq.fold ~init:s.indirect ~f:(fun indirect off ->
-          Value.nsucc addr off >>| fun addr ->
-          Map.update indirect addr ~f:(function
-              | None -> Object.Set.singleton taint
-              | Some taints -> Set.add taints taint)) >>= fun indirect ->
-      Machine.Local.put tainter {s with indirect} >>| fun () ->
-      taint
-
-    exception Bad_object of Primus.value
-
-    let objects_of_kind {objects} k ts =
-      Set.filter ts ~f:(fun v ->
-          match Map.find objects v with
-          | None -> false
-          | Some k' -> Kind.(k = k'))
-
-    let sanitize v r k =
-      Machine.Local.get kinds >>= fun kinds ->
-      change v r ~f:(function
-          | None -> None
-          | Some ts ->
-            let ts = objects_of_kind kinds k ts in
-            if Set.is_empty ts then None else Some ts)
-  end
 end
 
 module Propagation = struct
 
   type policies = {
-    servers : Primus.value Kind.Map.t;
+    servers : Primus.value Map.M(Kind).t;
     default : Primus.value option;
   }
 
   let policies = Primus.Machine.State.declare
       ~name:"taint-policies"
-      ~uuid:"4c370c33-ef1b-4e10-be27-ee751a4d6cf3"
-      (fun _ -> {
-           servers = Kind.Map.empty;
-           default = None;
-         })
+      ~uuid:"4c370c33-ef1b-4e10-be27-ee751a4d6cf3" @@
+    Knowledge.return {
+      servers = Map.empty (module Kind);
+      default = None;
+    }
 
   module Policy = struct
-    type t = value
-    module Make(Machine : Primus.Machine.S) = struct
-      open Machine.Syntax
+    module Tracker = Taint
+    module Machine = Primus.Machine
+    open Machine.Syntax
 
-      module Tracker = Taint.Make(Machine)
 
-      let select p k =
-        Machine.Local.update policies ~f:(fun s -> {
-              servers = Map.set s.servers ~key:k ~data:p;
-              default = Option.first_some s.default (Some p);
-            })
 
-      let set_default p = Machine.Local.update policies ~f:(fun s ->
-          {s with default = Some p})
+    let select p k =
+      Machine.Local.update policies ~f:(fun s -> {
+            servers = Map.set s.servers ~key:k ~data:p;
+            default = Option.first_some s.default (Some p);
+          })
 
-      let has_selected ~policy:p ~kind:k {servers; default} =
-        match Map.find servers k with
+    let set_default p = Machine.Local.update policies ~f:(fun s ->
+        {s with default = Some p})
+
+    let has_selected ~policy:p ~kind:k {servers; default} =
+      match Map.find servers k with
+      | Some p' -> Primus.Value.equal p p'
+      | None -> match default with
+        | None -> false
         | Some p' -> Primus.Value.equal p p'
-        | None -> match default with
+
+    let selected policy kind =
+      Machine.Local.get policies >>|
+      has_selected ~policy ~kind
+
+    let select_objects {objects} policies ~policy ts =
+      Set.filter ts ~f:(fun v ->
+          match Map.find objects v with
           | None -> false
-          | Some p' -> Primus.Value.equal p p'
+          | Some kind -> has_selected policies ~policy ~kind)
 
-      let selected policy kind =
-        Machine.Local.get policies >>|
-        has_selected ~policy ~kind
+    let collect_taints p (Rel ms) srcs s =
+      Machine.Local.get kinds >>= fun kinds ->
+      Machine.Local.get policies >>| fun policies ->
+      let filter = select_objects kinds policies ~policy:p in
+      let init = Set.empty (module Object) in
+      List.fold srcs ~init ~f:(fun objs src ->
+          match Map.find (Field.get ms.field s) (ms.key src) with
+          | None -> objs
+          | Some objs' -> Set.union (filter objs') objs)
 
-      let select_objects {objects} policies ~policy ts =
-        Set.filter ts ~f:(fun v ->
-            match Map.find objects v with
-            | None -> false
-            | Some kind -> has_selected policies ~policy ~kind)
+    let append_taints m key ts =
+      Map.update m key ~f:(function
+          | None -> ts
+          | Some ts' -> Set.union ts ts')
 
-      let collect_taints p (Rel ms) srcs s =
-        Machine.Local.get kinds >>= fun kinds ->
-        Machine.Local.get policies >>| fun policies ->
-        let filter = select_objects kinds policies ~policy:p in
-        List.fold srcs ~init:Object.Set.empty ~f:(fun objs src ->
-            match Map.find (Field.get ms.field s) (ms.key src) with
-            | None -> objs
-            | Some objs' -> Set.union (filter objs') objs)
-
-      let append_taints m key ts =
-        Map.update m key ~f:(function
-            | None -> ts
-            | Some ts' -> Set.union ts ts')
-
-      let propagate p ms md srcs dst =
-        Machine.Local.get tainter >>= fun s ->
-        collect_taints p ms srcs s >>= fun taints ->
-        Tracker.attach dst md taints
-      include Ident(Machine)
-    end
+    let propagate p ms md srcs dst =
+      Machine.Local.get tainter >>= fun s ->
+      collect_taints p ms srcs s >>= fun taints ->
+      Tracker.attach dst md taints
+    include Ident
   end
 end
 
@@ -351,6 +350,10 @@ end
 
 *)
 module Gc = struct
+  module Machine = Primus.Machine
+  open Machine.Syntax
+  module Env = Primus.Env
+  module Value = Primus.Value
 
   let sexp_of_finish (t,live) = Sexp.List [
       Primus.sexp_of_value t;
@@ -362,54 +365,50 @@ module Gc = struct
     Primus.Observation.provide
       ~inspect:sexp_of_finish "taint-finalize"
 
-  module Conservative(Machine : Primus.Machine.S) = struct
-    open Machine.Syntax
-    module Env = Primus.Env.Make(Machine)
-    module Value = Primus.Value.Make(Machine)
 
-    let finish ~live t =
-      Machine.Observation.make taint_finished (t,live)
+  let finish ~live t =
+    Machine.Observation.make taint_finished (t,live)
 
-    (* removes directly dead taints *)
-    let collect_direct =
-      Machine.Local.get tainter >>= fun s ->
-      Env.all >>= fun vars ->
-      Machine.Seq.fold vars ~init:Vid.Set.empty ~f:(fun live var ->
-          Env.get var >>| fun v ->
-          Set.add live (Value.id v)) >>= fun live ->
-      Machine.Local.put tainter {
-        s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
-      }
+  (* removes directly dead taints *)
+  let collect_direct =
+    let init = Set.empty (module Vid) in
+    Machine.Local.get tainter >>= fun s ->
+    Env.all >>= fun vars ->
+    Machine.Seq.fold vars ~init ~f:(fun live var ->
+        Env.get var >>| fun v ->
+        Set.add live (Value.id v)) >>= fun live ->
+    Machine.Local.put tainter {
+      s with direct = Map.filter_keys s.direct ~f:(Set.mem live)
+    }
 
-    (* a set of live tainted objects *)
-    let objects {direct; indirect} : objects =
-      let to_set m : objects =
-        Map.to_sequence m |>
-        Seq.map ~f:snd |>
-        Seq.fold ~init:Object.Set.empty ~f:Set.union in
-      Set.union (to_set direct) (to_set indirect)
+  (* a set of live tainted objects *)
+  let objects {direct; indirect} : objects =
+    let init = Set.empty (module Object) in
+    let to_set m : objects =
+      Map.to_sequence m |>
+      Seq.map ~f:snd |>
+      Seq.fold ~init ~f:Set.union in
+    Set.union (to_set direct) (to_set indirect)
 
-    let main _ =
-      Machine.Local.get gc >>= fun {old} ->
-      collect_direct >>= fun () ->
-      Machine.Local.get tainter >>= fun cur ->
-      let dead = Set.diff (objects old) (objects cur) in
-      Set.to_sequence dead |> Machine.Seq.iter
-        ~f:(finish ~live:false) >>= fun () ->
-      Machine.Local.put gc {old = cur}
+  let main _ =
+    Machine.Local.get gc >>= fun {old} ->
+    collect_direct >>= fun () ->
+    Machine.Local.get tainter >>= fun cur ->
+    let dead = Set.diff (objects old) (objects cur) in
+    Set.to_sequence dead |> Machine.Seq.iter
+      ~f:(finish ~live:false) >>= fun () ->
+    Machine.Local.put gc {old = cur}
 
-    let finalize () =
-      Machine.Local.get tainter >>= fun cur ->
-      Set.to_sequence (objects cur) |>
-      Machine.Seq.iter ~f:(finish ~live:true)
+  let finalize () =
+    Machine.Local.get tainter >>= fun cur ->
+    Set.to_sequence (objects cur) |>
+    Machine.Seq.iter ~f:(finish ~live:true)
 
-    let init () = Machine.sequence Primus.Interpreter.[
-        leave_blk >>> main;
-        Primus.Machine.finished >>> finalize;
-      ]
+  let init () = Machine.sequence [
+      Primus.Machine.effect >>> main;
+      Primus.Machine.finished >>> finalize;
+    ]
 
-
-  end
 end
 
 

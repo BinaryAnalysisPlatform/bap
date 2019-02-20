@@ -3,7 +3,6 @@ open Bap_future.Std
 open Bap_strings.Std
 
 open Bap_knowledge
-open Bap_core_theory
 
 (** Primus - The Microexecution Framework.
 

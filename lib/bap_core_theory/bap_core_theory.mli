@@ -321,7 +321,7 @@ end
 module IEEE754 : sig
   type ('a,'e,'t) t
   type ('a,'e,'t) ieee754 = ('a,'e,'t) t
-
+  (*  see IEEE754 3.6 *)
   type parameters = private {
     base : int;
     bias : int;

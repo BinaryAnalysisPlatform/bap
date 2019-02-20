@@ -375,7 +375,7 @@ let fits_int32 = Z.fits_int32
 let fits_int64 = Z.fits_int64
 
 let doesn't_fit r x =
-  failwith (to_string x ^ " doesn't the " ^ r ^ " type")
+  failwith (to_string x ^ " doesn't fit the " ^ r ^ " type")
 
 let to_int x = if fits_int x then Z.to_int x
   else doesn't_fit "int" x
