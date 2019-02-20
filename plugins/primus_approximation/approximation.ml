@@ -104,8 +104,16 @@ module Range_Reduction = struct
     fround rm x >>>= fun ix ->
     ite (is_fpos (fsub rm x (var ix))) x (fadd1 rm (var ix))
 
+  let fast_and_dirty_ceil rm x =
+    x >>-> fun s x ->
+    let ix = cast_int (Floats.size s) rm !!x in
+    let a = cast_float s rm ix in
+    let b = cast_float s rm (succ ix) in
+    ite (eq (fbits !!x) (fbits a)) !!x b
+
   let fmod r x y =
     let d = fdiv r x y in
+    let fceil = fast_and_dirty_ceil in
     let c = fceil r d in
     fsub r x (fmul r y c)
 
