@@ -49,9 +49,10 @@ module SysV = struct
     | Arg 5 -> var r.(1)
     | Arg n -> stack Int.(n-6)
 
-  let arg = function
-    | `Basic {C.Type.Spec.t=`double} -> flt
-    | _ -> int
+  let arg t width =
+    match t with
+    | `Basic {C.Type.Spec.t=(`float|`double)} -> flt width
+    | _ -> int 64
 
   let size = object
     inherit C.Size.base `LP64
