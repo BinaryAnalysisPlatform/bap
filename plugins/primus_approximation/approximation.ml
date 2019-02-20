@@ -96,9 +96,8 @@ module Range_Reduction = struct
   open CT
 
   let fadd1 rm x =
-    x >>= fun y ->
-    let sort = Value.sort y in
-    fadd rm x (Reduction_Constants.fone sort)
+    x >>-> fun sort x ->
+    fadd rm !!x (Reduction_Constants.fone sort)
 
   let fceil rm x =
     fround rm x >>>= fun ix ->
@@ -110,48 +109,46 @@ module Range_Reduction = struct
     fsub r x (fmul r y c)
 
   let reduce_to_pos_angle rm x =
-    x >>= fun y ->
-    let sort = Value.sort y in
+    x >>-> fun sort x ->
     Reduction_Constants.pi_mul_2 sort >>>= fun pi_2 ->
-    ite (is_fneg x) (fsub rm (var pi_2) x) x
+    ite (is_fneg !!x) (fsub rm (var pi_2) !!x) !!x
 
   (* Sine is an odd function. *)
   let odd_function_reduce rm x =
-    x >>= fun y ->
-    let sort = Value.sort y in
+    x >>-> fun sort x ->
     Reduction_Constants.pi sort >>>= fun p ->
-    ite (is_fpos (fsub rm x (var p))) (fsub rm x (var p)) x
+    ite (is_fpos (fsub rm !!x (var p))) (fsub rm !!x (var p)) !!x
 
   (* Sine is an odd function. There is redundate checks. Need to fix by merging
   this function with odd_function_reduce *)
   let odd_function_sign rm x =
-    x >>= fun y ->
-    let sort = Value.sort y in
+    x >>-> fun sort x ->
     Reduction_Constants.sign sort >>>= fun s ->
     Reduction_Constants.pi sort >>>= fun p ->
-    ite (is_fpos (fsub rm x (var p))) (Reduction_Constants.sign_negative sort) (var s)
-
-  let sin_range_reduce rm x return =
-    x >>= fun y ->
-    Reduction_Constants.pi_mul_2 (Value.sort y) >>>= fun pi2 ->
-    fmod rm x (var pi2) >>>= fun n ->
-    reduce_to_pos_angle rm (var n) >>>= fun pn ->
-    odd_function_reduce rm (var pn) >>>= fun reduced_n ->
-    odd_function_sign rm (var pn) >>>= fun current_sign ->
-    return (var reduced_n) (var current_sign)
+    ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constants.sign_negative sort) (var s)
   end
 
 
 module Range_Reconstruction = struct
-  let sin_range_recons rm sign x =
+  let sign_flip rm sign x =
     CT.fmul rm sign x
 end
 
 module Sin = struct
   open CT
+
+  let range_reduce rm x return =
+   x >>-> fun sort x ->
+   Reduction_Constants.pi_mul_2 sort >>>= fun pi2 ->
+   Range_Reduction.fmod rm !!x (var pi2) >>>= fun n ->
+   Range_Reduction.reduce_to_pos_angle rm (var n) >>>= fun pn ->
+   Range_Reduction.odd_function_reduce rm (var pn) >>>= fun reduced_n ->
+   Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
+   return (var reduced_n) (var current_sign)
+
   let build ?rm:(rm=rne) x c poly_eval  =
-    Range_Reduction.sin_range_reduce rm x @@ fun n sign ->
-    Range_Reconstruction.sin_range_recons rm sign (poly_eval c n)
+   range_reduce rm x @@ fun n sign ->
+   Range_Reconstruction.sign_flip rm sign (poly_eval c n)
 end
 
 module Horner
