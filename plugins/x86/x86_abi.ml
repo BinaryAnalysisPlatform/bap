@@ -16,7 +16,7 @@ module type abi = sig
   val arch : Arch.x86
   val name : string
   val size : C.Size.base
-  val arg  : C.Type.t -> pos -> exp
+  val arg  : C.Type.t -> int -> pos -> exp
   val demangle : string -> string
   val autodetect : project -> bool
 end
@@ -31,14 +31,14 @@ module SysV = struct
   let stack n = Stack.create arch n
 
 
-  let xmm r =  Bil.(cast low 64 (var ymms.(r)))
+  let xmm r width =  Bil.(cast low width (var ymms.(r)))
 
-  let flt = function
-    | Ret_0 -> xmm 0
-    | Ret_1 -> xmm 1
-    | Arg n -> xmm n
+  let flt width = function
+    | Ret_0 -> xmm 0 width
+    | Ret_1 -> xmm 1 width
+    | Arg n -> if Int.(n < 8) then (xmm n width) else stack Int.(n-8)
 
-  let int = function
+  let int _ = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rdi
@@ -66,7 +66,7 @@ module CDECL = struct
   let name = "cdecl"
   let arch = `x86
   let stack n = Stack.create arch n
-  let arg _ = function
+  let arg _ _ = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg n -> stack Int.(n+1)
@@ -103,7 +103,7 @@ end
 module MS_64 = struct
   include SysV
   let name = "ms"
-  let arg _ = function
+  let arg _ _ = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rcx
@@ -124,10 +124,10 @@ end
 module FASTCALL = struct
   include CDECL
   let name = "fastcall"
-  let arg t = function
+  let arg w t = function
     | Arg 0 -> var rcx
     | Arg 1 -> var rdx
-    | other -> arg t other
+    | other -> arg w t other
 end
 
 module WATCOM_STACK = struct
@@ -142,13 +142,13 @@ end
 module WATCOM_REGS = struct
   include WATCOM_STACK
   let name = "watcom-regs"
-  let arg t = function
+  let arg w t = function
     | Arg 0 -> var rax
     | Arg 1 -> var rdx
     | Arg 2 -> var rbx
     | Arg 3 -> var rcx
     | Arg n -> stack Int.(n-4)
-    | ret -> arg t ret
+    | ret -> arg w t ret
 end
 
 exception Unsupported
@@ -164,9 +164,9 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
       | Some _ ->
         let data = C.Abi.data Abi.size return in
         if width > word && width <= word * 2
-        then Some (data, Bil.(Abi.arg return Ret_0 ^ Abi.arg return  Ret_1))
+        then Some (data, Bil.(Abi.arg return width Ret_0 ^ Abi.arg return width Ret_1))
         else if width <= word
-        then Some (data, Abi.arg return  Ret_0)
+        then Some (data, Abi.arg return width Ret_0)
         else
           (warning "size of return object doesn't fit into double word\n";
            raise Unsupported) in
@@ -177,13 +177,11 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
         raise Unsupported
       | Some size -> match Size.of_int_opt size with
         | Some _ when size <= word ->
-          C.Abi.data Abi.size t, Abi.arg t (Arg i)
+          C.Abi.data Abi.size t, Abi.arg t size (Arg i)
         | _ ->
           warning "argument %d doesn't fit into word" i;
           raise Unsupported) in
   C.Abi.{return; params; hidden=[]}
-
-
 
 let supported () : (module abi) list = [
   (module SysV);
