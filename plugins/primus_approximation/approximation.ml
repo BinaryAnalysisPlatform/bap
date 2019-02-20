@@ -55,15 +55,23 @@ let (>>->) x f =
 
 module Reduction_Constant = struct
 
-  let pi_float = 3.141592653589793115997963468544185161590576171875
+  let pi_float = 4. *. Float.atan 1.
+  let half_pi = 2. *. Float.atan 1.
+  let pi2 = 8. *. Float.atan 1.
+  let one_over_pi2 = 1. /. pi2
 
   let pi_mul_2 fsort =
-    let wf = word_of_float (2.0*.pi_float) in
+    let wf = word_of_float pi2 in
+    let float_create = make_float_value fsort in
+    float_create wf
+
+  let one_over_2pi fsort =
+    let wf = word_of_float one_over_pi2 in
     let float_create = make_float_value fsort in
     float_create wf
 
   let pi_div_2 fsort =
-    let wf = word_of_float (pi_float/.2.0) in
+    let wf = word_of_float half_pi in
     let float_create = make_float_value fsort in
     float_create wf
 
@@ -111,10 +119,15 @@ module Range_Reduction = struct
     let b = cast_float s rm (succ ix) in
     ite (eq (fbits !!x) (fbits a)) !!x b
 
+  let fast_and_dirty_floor rm x =
+    x >>-> fun s x ->
+    cast_float s rm @@
+    cast_int (Floats.size s) rm !!x
+
   let fmod r x y =
-    let d = fdiv r x y in
-    let fceil = fast_and_dirty_ceil in
-    let c = fceil r d in
+    let d = fmul r x y in
+    let floor = fast_and_dirty_floor in
+    let c = floor r d in
     fsub r x (fmul r y c)
 
   let to_pos_angle rm x =
@@ -147,8 +160,8 @@ module Sin = struct
 
   let range_reduce rm x return =
    x >>-> fun sort x ->
-   Reduction_Constant.pi_mul_2 sort >>>= fun pi2 ->
-   Range_Reduction.fmod rm !!x (var pi2) >>>= fun n ->
+   Reduction_Constant.one_over_2pi sort >>>= fun one_over_2pi ->
+   Range_Reduction.fmod rm !!x (var one_over_2pi) >>>= fun n ->
    Range_Reduction.to_pos_angle rm (var n) >>>= fun pn ->
    Range_Reduction.odd_function rm (var pn) >>>= fun reduced_n ->
    Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
