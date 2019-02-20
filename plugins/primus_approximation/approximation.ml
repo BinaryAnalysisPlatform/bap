@@ -54,20 +54,20 @@ let make_float_value fsort x =
 
 module Reduction_Constants = struct
 
-  let pi = 3.141592653589793115997963468544185161590576171875
+  let pi_float = 3.141592653589793115997963468544185161590576171875
 
   let pi_mul_2 fsort =
-    let wf = word_of_float (2.0*.pi) in
+    let wf = word_of_float (2.0*.pi_float) in
     let float_create = make_float_value fsort in
     float_create wf
 
   let pi_div_2 fsort =
-    let wf = word_of_float (pi/.2.0) in
+    let wf = word_of_float (pi_float/.2.0) in
     let float_create = make_float_value fsort in
     float_create wf
 
   let pi fsort =
-    let wf = word_of_float pi in
+    let wf = word_of_float pi_float in
     let float_create = make_float_value fsort in
     float_create wf
 
@@ -186,11 +186,12 @@ module Horner
     let float_create = make_float_value fsort in
     let c = Array.map ~f:float_create coefs in
     let v = Var.define fsort "v" in
+    let polynomial_evaluaton = (fun c n -> approximate c n) in
     let formula = match func with
-      | Sin -> Sin.build CT.(var v) c (fun c n -> approximate c n)
+      | Sin -> Sin.build CT.(var v) c polynomial_evaluaton
       | Cos ->
          let shifted_var = CT.(fadd rne (var v) (Reduction_Constants.pi_div_2 fsort)) in
-         Sin.build shifted_var c (fun c n -> approximate c n) in
+         Sin.build shifted_var c polynomial_evaluaton in
     exp formula
 end
 
