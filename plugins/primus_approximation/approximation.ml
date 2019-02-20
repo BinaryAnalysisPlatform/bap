@@ -14,8 +14,8 @@ module CT = Theory.Manager
 let word_of_float x = Word.of_int64 (Int64.bits_of_float x)
 let floats = Array.map ~f:word_of_float
 
-(* Remez's coefficients for sin over 0 to pi. Cos is implmented using cos(x) =
- * sin(x + pi/2) *)
+(* Remez's coefficients for sin over 0 to pi.
+   Cos is implmented as sin(x + pi/2) *)
 let table = Hashtbl.of_alist_exn (module String) [
                 "sin", floats [| -2.1872506537704514e-10; 1.0000000200128274;
                                  -3.0302439009453449e-7; -1.6666487069033565e-1;
@@ -30,6 +30,16 @@ type op = Sin | Cos [@@deriving sexp]
 let parse_op : string -> op option = fun s ->
   Option.try_with (fun () -> op_of_sexp (Sexp.of_string s))
 
+let size_of_var var =
+  let size = Bap.Std.Var.typ var in
+  match size with
+  | Type.Imm size -> size
+  | _ -> assert false
+
+let make_float_value fsort x =
+  let core_theory_i = CT.int (IEEE754.Sort.bits fsort) x in
+  CT.float fsort core_theory_i
+
 let with_fresh_var exp body =
   exp >>= fun a ->
   let sort = Value.sort a in
@@ -42,15 +52,6 @@ let (>>->) x f =
   x >>= fun x ->
   f (Value.sort x) x
 
-let size_of_var var =
-  let size = Bap.Std.Var.typ var in
-  match size with
-  | Type.Imm size -> size
-  | _ -> assert false
-
-let make_float_value fsort x =
-  let core_theory_i = CT.int (IEEE754.Sort.bits fsort) x in
-  CT.float fsort core_theory_i
 
 module Reduction_Constant = struct
 
@@ -157,7 +158,6 @@ module Horner
   end
   =  struct
   open CT
-  let bits fsort = Floats.(Format.bits (format fsort))
 
   let exp x =
     let open Knowledge.Syntax in
