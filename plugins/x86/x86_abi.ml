@@ -16,7 +16,7 @@ module type abi = sig
   val arch : Arch.x86
   val name : string
   val size : C.Size.base
-  val arg  : C.Type.t -> pos -> exp
+  val arg  : pos -> exp
   val demangle : string -> string
   val autodetect : project -> bool
 end
@@ -29,16 +29,7 @@ module SysV = struct
   let name = "sysv"
   let arch = `x86_64
   let stack n = Stack.create arch n
-
-
-  let xmm r =  Bil.(cast low 64 (var ymms.(r)))
-
-  let flt = function
-    | Ret_0 -> xmm 0
-    | Ret_1 -> xmm 1
-    | Arg n -> xmm n
-
-  let int = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rdi
@@ -48,10 +39,6 @@ module SysV = struct
     | Arg 4 -> var r.(0)
     | Arg 5 -> var r.(1)
     | Arg n -> stack Int.(n-6)
-
-  let arg = function
-    | `Basic {C.Type.Spec.t=`double} -> flt
-    | _ -> int
 
   let size = object
     inherit C.Size.base `LP64
@@ -66,7 +53,7 @@ module CDECL = struct
   let name = "cdecl"
   let arch = `x86
   let stack n = Stack.create arch n
-  let arg _ = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg n -> stack Int.(n+1)
@@ -103,7 +90,7 @@ end
 module MS_64 = struct
   include SysV
   let name = "ms"
-  let arg _ = function
+  let arg = function
     | Ret_0 -> var rax
     | Ret_1 -> var rdx
     | Arg 0 -> var rcx
@@ -124,10 +111,10 @@ end
 module FASTCALL = struct
   include CDECL
   let name = "fastcall"
-  let arg t = function
+  let arg = function
     | Arg 0 -> var rcx
     | Arg 1 -> var rdx
-    | other -> arg t other
+    | other -> arg other
 end
 
 module WATCOM_STACK = struct
@@ -142,13 +129,13 @@ end
 module WATCOM_REGS = struct
   include WATCOM_STACK
   let name = "watcom-regs"
-  let arg t = function
+  let arg = function
     | Arg 0 -> var rax
     | Arg 1 -> var rdx
     | Arg 2 -> var rbx
     | Arg 3 -> var rcx
     | Arg n -> stack Int.(n-4)
-    | ret -> arg t ret
+    | ret -> arg ret
 end
 
 exception Unsupported
@@ -161,23 +148,23 @@ let supported_api (module Abi : abi) {C.Type.Proto.return; args} =
       | None ->
         warning "size of return object doesn't fit into word sizes";
         raise Unsupported
-      | Some _ ->
+      | Some sz ->
         let data = C.Abi.data Abi.size return in
         if width > word && width <= word * 2
-        then Some (data, Bil.(Abi.arg return Ret_0 ^ Abi.arg return  Ret_1))
+        then Some (data, Bil.(Abi.arg Ret_0 ^ Abi.arg Ret_1))
         else if width <= word
-        then Some (data, Abi.arg return  Ret_0)
+        then Some (data, Abi.arg Ret_0)
         else
           (warning "size of return object doesn't fit into double word\n";
            raise Unsupported) in
-  let params = List.mapi args ~f:(fun i (_,t) ->
+  let params = List.mapi args ~f:(fun i (n,t) ->
       match Abi.size#bits t with
       | None ->
         warning "size of %a parameter is unknown" C.Type.pp t;
         raise Unsupported
       | Some size -> match Size.of_int_opt size with
-        | Some _ when size <= word ->
-          C.Abi.data Abi.size t, Abi.arg t (Arg i)
+        | Some sz when size <= word ->
+          C.Abi.data Abi.size t, Abi.arg (Arg i)
         | _ ->
           warning "argument %d doesn't fit into word" i;
           raise Unsupported) in

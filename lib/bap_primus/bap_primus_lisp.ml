@@ -498,23 +498,21 @@ module Make(Machine : Machine) = struct
             (fun msg -> fun () -> Machine.raise (Runtime_error msg)) ppf
 
         let eval_args = Machine.List.map bs ~f:(fun (var,arg) ->
-            Eval.exp (Arg.rhs arg) >>| fun w -> (var ,w))
-
-        let size_of_reg r = match Var.typ r with
-          | Imm x -> x
-          | _ -> assert false
+            let open Bil.Types in
+            match Arg.rhs arg with
+            | Var v -> Eval.get v >>| fun w -> (var,w)
+            | Load (_,BinOp(op, Var sp, Int off),e,s) ->
+              Eval.get sp >>= fun sp ->
+              Eval.const off >>= fun off ->
+              Eval.binop op sp off >>= fun addr ->
+              Eval.load addr e s >>| fun w -> (var,w)
+            | _ -> failf "unsupported argument passing semantics" ())
 
         let eval_ret r = match ret with
           | None -> Machine.return ()
           | Some v -> match Arg.rhs v with
             | Bil.Var reg -> Eval.set reg r
-            | Bil.(Cast (LOW, rsize, Var reg)) ->
-            let vsize = size_of_reg reg in
-            Eval.get reg >>= fun lhs ->
-            Eval.extract ~hi:(vsize-1) ~lo:rsize lhs >>= fun high ->
-            Eval.concat high r >>= fun r ->
-            Eval.set reg r
-          | e -> failf "unknown return semantics: %a" Exp.pps e ()
+            | e -> failf "unknown return semantics: %a" Exp.pps e ()
 
         let exec =
           eval_args >>= fun bs ->
@@ -692,6 +690,7 @@ module Doc = struct
         else if x = y then x
         else sprintf "%s\nOR\n%s" x y) |>
     Map.to_alist
+
 
   let describe prog item =
     Lisp.Program.get prog item |> List.map ~f:(fun x ->
