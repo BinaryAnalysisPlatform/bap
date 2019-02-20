@@ -104,12 +104,18 @@ end
 module Range_Reduction = struct
   open CT
 
+  let fast_and_dirty_is_neg x = msb (fbits x)
+
+  let fast_and_dirty_is_fpos x =
+    and_ (inv (msb (fbits x))) (non_zero (fbits x))
+
   let fadd1 rm x =
     x >>-> fun sort x ->
     fadd rm !!x (Reduction_Constant.fone sort)
 
   let fceil rm x =
     fround rm x >>>= fun ix ->
+    let is_fpos = fast_and_dirty_is_fpos in
     ite (is_fpos (fsub rm x (var ix))) x (fadd1 rm (var ix))
 
   let fast_and_dirty_ceil rm x =
@@ -133,12 +139,14 @@ module Range_Reduction = struct
   let to_pos_angle rm x =
     x >>-> fun sort x ->
     Reduction_Constant.pi_mul_2 sort >>>= fun pi_2 ->
+    let is_fneg = fast_and_dirty_is_neg in
     ite (is_fneg !!x) (fsub rm (var pi_2) !!x) !!x
 
   (* Sine is an odd function. *)
   let odd_function rm x =
     x >>-> fun sort x ->
     Reduction_Constant.pi sort >>>= fun p ->
+    let is_fpos = fast_and_dirty_is_fpos in
     ite (is_fpos (fsub rm !!x (var p))) (fsub rm !!x (var p)) !!x
 
   (* Sine is an odd function. This is a redundate ite with odd_function_reduce.
@@ -147,6 +155,7 @@ module Range_Reduction = struct
     x >>-> fun sort x ->
     Reduction_Constant.sign sort >>>= fun s ->
     Reduction_Constant.pi sort >>>= fun p ->
+    let is_fpos = fast_and_dirty_is_fpos in
     ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constant.sign_negative sort) (var s)
   end
 
@@ -242,6 +251,7 @@ module Approximate(Machine : Primus.Machine.S) = struct
     | None -> assert false
     | Some e ->
        Eval.set vx x >>= fun () ->
+       (* printf "%a\n" Exp.ppo e; *)
        Eval.exp e
 end
 
