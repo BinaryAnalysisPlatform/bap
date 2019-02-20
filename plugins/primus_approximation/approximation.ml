@@ -17,14 +17,14 @@ let floats = Array.map ~f:word_of_float
 (* Remez's coefficients for sin over 0 to pi.
    Cos is implmented as sin(x + pi/2) *)
 let table = Hashtbl.of_alist_exn (module String) [
-                "sin", floats [| -2.1872506537704514e-10; 1.0000000200128274;
-                                 -3.0302439009453449e-7; -1.6666487069033565e-1;
-                                 -5.4940340462839474e-6; 8.3432342039387503e-3;
-                                 -1.1282260464920005e-5; -1.8998652204112551e-4;
-                                 -4.1639895115337191e-6; 4.0918788476303817e-6;
-                                 -2.6049442541122577e-7;
-                              |];
-              ]
+    "sin", floats [| -2.1872506537704514e-10; 1.0000000200128274;
+                     -3.0302439009453449e-7; -1.6666487069033565e-1;
+                     -5.4940340462839474e-6; 8.3432342039387503e-3;
+                     -1.1282260464920005e-5; -1.8998652204112551e-4;
+                     -4.1639895115337191e-6; 4.0918788476303817e-6;
+                     -2.6049442541122577e-7;
+                  |];
+  ]
 
 type op = Sin | Cos [@@deriving sexp]
 let parse_op : string -> op option = fun s ->
@@ -157,7 +157,7 @@ module Range_Reduction = struct
     Reduction_Constant.pi sort >>>= fun p ->
     let is_fpos = fast_and_dirty_is_fpos in
     ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constant.sign_negative sort) (var s)
-  end
+end
 
 module Range_Reconstruction = struct
   let sign_flip rm sign x =
@@ -168,25 +168,25 @@ module Sin = struct
   open CT
 
   let range_reduce rm x return =
-   x >>-> fun sort x ->
-   Reduction_Constant.one_over_2pi sort >>>= fun one_over_2pi ->
-   Range_Reduction.fmod rm !!x (var one_over_2pi) >>>= fun n ->
-   Range_Reduction.to_pos_angle rm (var n) >>>= fun pn ->
-   Range_Reduction.odd_function rm (var pn) >>>= fun reduced_n ->
-   Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
-   return (var reduced_n) (var current_sign)
+    x >>-> fun sort x ->
+    Reduction_Constant.one_over_2pi sort >>>= fun one_over_2pi ->
+    Range_Reduction.fmod rm !!x (var one_over_2pi) >>>= fun n ->
+    Range_Reduction.to_pos_angle rm (var n) >>>= fun pn ->
+    Range_Reduction.odd_function rm (var pn) >>>= fun reduced_n ->
+    Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
+    return (var reduced_n) (var current_sign)
 
   let build ?rm:(rm=rne) x c poly_eval  =
-   range_reduce rm x @@ fun n sign ->
-   Range_Reconstruction.sign_flip rm sign (poly_eval c n)
+    range_reduce rm x @@ fun n sign ->
+    Range_Reconstruction.sign_flip rm sign (poly_eval c n)
 end
 
 module Horner
- : sig
+  : sig
     (* [run op v coef] computes an approximation of [op] using coef with variable v *)
     val build : op -> Bap.Std.Var.t -> word array -> exp option
   end
-  =  struct
+=  struct
   open CT
 
   let exp x =
@@ -216,8 +216,8 @@ module Horner
     let formula = match func with
       | Sin -> Sin.build CT.(var v) c polynomial_evaluaton
       | Cos ->
-         let shifted_var = CT.(fadd rne (var v) (Reduction_Constant.pi_div_2 fsort)) in
-         Sin.build shifted_var c polynomial_evaluaton in
+        let shifted_var = CT.(fadd rne (var v) (Reduction_Constant.pi_div_2 fsort)) in
+        Sin.build shifted_var c polynomial_evaluaton in
     exp formula
 end
 
@@ -250,9 +250,9 @@ module Approximate(Machine : Primus.Machine.S) = struct
     match exp with
     | None -> assert false
     | Some e ->
-       Eval.set vx x >>= fun () ->
-       (* printf "%a\n" Exp.ppo e; *)
-       Eval.exp e
+      Eval.set vx x >>= fun () ->
+      printf "%a\n" Exp.ppo e;
+      Eval.exp e
 end
 
 module Main(Machine : Primus.Machine.S) = struct
@@ -264,8 +264,8 @@ module Main(Machine : Primus.Machine.S) = struct
 
   let init () =
     Machine.sequence [
-        def "approximate" (tuple [sym; int; int] @-> int) (module Approximate);
-      ]
+      def "approximate" (tuple [sym; int; int] @-> int) (module Approximate);
+    ]
 end
 
 let main () =
