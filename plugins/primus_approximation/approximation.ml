@@ -80,16 +80,6 @@ module Reduction_Constant = struct
     let float_create = make_float_value fsort in
     float_create wf
 
-  let sign fsort =
-    let wf = word_of_float 1.0 in
-    let float_create = make_float_value fsort in
-    float_create wf
-
-  let sign_negative fsort =
-    let wf = word_of_float (-1.0) in
-    let float_create = make_float_value fsort in
-    float_create wf
-
   let fone fs =
     let bs = Floats.size fs in
     let one = Word.one (Bits.size bs) in
@@ -109,15 +99,6 @@ module Range_Reduction = struct
   let fast_and_dirty_is_fpos x =
     and_ (inv (msb (fbits x))) (non_zero (fbits x))
 
-  let fadd1 rm x =
-    x >>-> fun sort x ->
-    fadd rm !!x (Reduction_Constant.fone sort)
-
-  let fceil rm x =
-    fround rm x >>>= fun ix ->
-    let is_fpos = fast_and_dirty_is_fpos in
-    ite (is_fpos (fsub rm x (var ix))) x (fadd1 rm (var ix))
-
   let fast_and_dirty_ceil rm x =
     x >>-> fun s x ->
     let ix = cast_int (Floats.size s) rm !!x in
@@ -130,33 +111,28 @@ module Range_Reduction = struct
     cast_float s rm @@
     cast_int (Floats.size s) rm !!x
 
+  let floor = fast_and_dirty_floor
+  let is_fpos = fast_and_dirty_is_fpos
+  let is_fneg = fast_and_dirty_is_neg
+
   let fmod r x y =
-    let d = fmul r x y in
-    let floor = fast_and_dirty_floor in
-    let c = floor r d in
-    fsub r x (fmul r y c)
+    fmul r x y >>>= fun d ->
+    floor r (var d) >>>= fun c ->
+    fmul r y (var c) >>>= fun z ->
+    fsub r x (var z)
 
   let to_pos_angle rm x =
     x >>-> fun sort x ->
     Reduction_Constant.pi_mul_2 sort >>>= fun pi_2 ->
-    let is_fneg = fast_and_dirty_is_neg in
     ite (is_fneg !!x) (fsub rm (var pi_2) !!x) !!x
 
   (* Sine is an odd function. *)
-  let odd_function rm x =
+  let odd_function rm x return =
     x >>-> fun sort x ->
-    Reduction_Constant.pi sort >>>= fun p ->
-    let is_fpos = fast_and_dirty_is_fpos in
-    ite (is_fpos (fsub rm !!x (var p))) (fsub rm !!x (var p)) !!x
-
-  (* Sine is an odd function. This is a redundate ite with odd_function_reduce.
-     Fix by merging this function with odd_function *)
-  let odd_function_sign rm x =
-    x >>-> fun sort x ->
-    Reduction_Constant.sign sort >>>= fun s ->
-    Reduction_Constant.pi sort >>>= fun p ->
-    let is_fpos = fast_and_dirty_is_fpos in
-    ite (is_fpos (fsub rm !!x (var p))) (Reduction_Constant.sign_negative sort) (var s)
+    fsub rm !!x (Reduction_Constant.pi sort) >>>= fun x_m_pi ->
+    is_fpos (var x_m_pi) >>>= fun is_pos ->
+    ite (var is_pos) (var x_m_pi) !!x >>>= fun reduced ->
+    return (var reduced) (var is_pos)
 end
 
 module Range_Reconstruction = struct
@@ -172,13 +148,23 @@ module Sin = struct
     Reduction_Constant.one_over_2pi sort >>>= fun one_over_2pi ->
     Range_Reduction.fmod rm !!x (var one_over_2pi) >>>= fun n ->
     Range_Reduction.to_pos_angle rm (var n) >>>= fun pn ->
-    Range_Reduction.odd_function rm (var pn) >>>= fun reduced_n ->
-    Range_Reduction.odd_function_sign rm (var pn) >>>= fun current_sign ->
-    return (var reduced_n) (var current_sign)
+    Range_Reduction.odd_function rm (var pn) return
+
+
+  let fast_and_dirty_fneg x =
+    x >>-> fun s x ->
+    let is = Floats.size s in
+    let width = Bits.size is in
+    let bit_p = Word.of_int ~width (width - 1) in
+    let mask = Word.(one width lsl bit_p) in
+    float s (logxor (fbits !!x) (int is mask))
+
+  let fneg = fast_and_dirty_fneg
 
   let build ?rm:(rm=rne) x c poly_eval  =
-    range_reduce rm x @@ fun n sign ->
-    Range_Reconstruction.sign_flip rm sign (poly_eval c n)
+    range_reduce rm x @@ fun n needs_corr ->
+    poly_eval c n >>>= fun p ->
+    ite needs_corr (fneg (var p)) (var p)
 end
 
 module Horner
