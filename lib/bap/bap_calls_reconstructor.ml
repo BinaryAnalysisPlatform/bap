@@ -5,8 +5,9 @@ open Bap_sema.Std
 
 module Cfg = Graphs.Cfg
 
+let (>>=) = Option.bind
+
 let fall_source symtab cfg s =
-  let (>>=) = Option.bind in
   Term.get_attr s address >>= fun addr ->
   Symtab.find_by_start symtab addr >>= fun (_,entry,_) ->
   Seq.find_map (Cfg.Node.inputs entry cfg) ~f:(fun e ->
@@ -25,6 +26,10 @@ let call_of_jmp j =
   match Jmp.kind j with
   | Goto _ | Int _ | Ret _ -> None
   | Call call -> Some call
+
+let call_target j =
+  call_of_jmp j >>= fun call ->
+  Some (Call.target call)
 
 let update_return blk return_tid =
   Term.map jmp_t blk ~f:(fun jmp ->
@@ -47,34 +52,26 @@ let call_exists b tid =
   Seq.exists (Blk.elts b)
     ~f:(function
         | `Def _ | `Phi _ -> false
-        | `Jmp j -> match call_of_jmp j with
-          | None -> false
-          | Some call ->
-            match Call.target call with
-            | Direct tid' -> Tid.(tid' = tid)
-            | _ -> false)
+        | `Jmp j -> match call_target j with
+          | Some (Direct tid') -> Tid.(tid' = tid)
+          | _ -> false)
 
 module Bld = Sub.Builder
 
 let rebuild_sub s calls =
   let bld = Bld.create ~name:(Sub.name s) ~tid:(Term.tid s) () in
-  let add = Bld.add_blk bld in
   Seq.iter (Term.to_sequence blk_t s)
-    ~f:(fun b ->
-        match Map.find calls (Term.tid b) with
-        | None -> add b
-        | Some call ->
-          add (update_return b (Term.tid call));
-          add call);
+    ~f:(fun blk ->
+        let elts = match Map.find calls (Term.tid blk) with
+          | Some call -> [update_return blk (Term.tid call); call ]
+          | None -> [blk] in
+        List.iter elts ~f:(Bld.add_blk bld));
   let attrs = Term.attrs s in
   let s = Bld.result bld in
   Term.with_attrs s attrs
 
 let update_sub falls s =
-  let find_fall b =
-    Option.(
-      Term.get_attr b address >>= fun addr ->
-      Map.find falls addr) in
+  let find_fall b = Term.get_attr b address >>= Map.find falls in
   let calls =
     Seq.fold (Term.to_sequence blk_t s) ~init:Tid.Map.empty
       ~f:(fun calls b ->
