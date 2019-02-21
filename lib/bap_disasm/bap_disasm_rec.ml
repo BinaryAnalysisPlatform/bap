@@ -220,7 +220,8 @@ let ok_nil = function
 
 let is_barrier s mem insn =
   Dis.Insn.is insn `May_affect_control_flow ||
-  has_jump (ok_nil (s.lift mem insn))
+  has_jump (ok_nil (s.lift mem insn)) ||
+  Set.mem s.inits (Addr.succ (Memory.max_addr mem))
 
 let update s mem insn dests : stage1 =
   let s = {s with valid = Set.add s.valid (Memory.min_addr mem)} in
