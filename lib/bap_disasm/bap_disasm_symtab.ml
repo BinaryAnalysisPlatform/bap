@@ -25,11 +25,14 @@ module Fn = Opaque.Make(struct
     let hash x = String.hash (fst3 x)
   end)
 
+type callee = addr option * string option
+[@@deriving sexp_of]
+
 type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callnames : string Addr.Map.t;
+  callees : callee Addr.Map.t;
 } [@@deriving sexp_of]
 
 
@@ -47,7 +50,7 @@ let empty = {
   addrs = Addr.Map.empty;
   names = String.Map.empty;
   memory = Memmap.empty;
-  callnames = Addr.Map.empty;
+  callees = Addr.Map.empty;
 }
 
 let merge m1 m2 =
@@ -58,8 +61,12 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callnames name =
-  Map.filter ~f:( fun name' -> String.(name <> name'))
+let filter_callees name addr =
+  Map.filter ~f:(function
+      | Some a, Some n -> Addr.(addr <> a) && String.(name <> n)
+      | Some a, _ -> Addr.(addr <> a)
+      | _, Some n -> String.(name <> n)
+      | _ -> true)
 
 let remove t (name,entry,_) : t =
   if Map.mem t.addrs (Block.addr entry) then
@@ -67,7 +74,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callnames = filter_callnames name t.callnames
+      callees = filter_callees name (Block.addr entry) t.callees;
     }
   else t
 
@@ -96,7 +103,18 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_call_name t b name =
-  { t with callnames = Map.set t.callnames (Block.addr b) name }
+let update_callee t b addr name =
+  let set ~default update =
+    if Option.is_some update then update else default in
+  { t with
+    callees =
+      Map.update t.callees (Block.addr b)
+        ~f:(function
+            | None -> addr, name
+            | Some (a,n) -> set ~default:a addr, set ~default:n name)}
 
-let find_call_name t addr = Map.find t.callnames addr
+let add_call_name t b name = update_callee t b None (Some name)
+let add_call_addr t b addr = update_callee t b (Some addr) None
+let get t addr ~f = Option.map ~f (Map.find t.callees addr)
+let find_call_addr t addr = get t addr ~f:fst
+let find_call_name t addr = get t addr ~f:snd

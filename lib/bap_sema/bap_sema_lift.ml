@@ -127,6 +127,7 @@ let linear_of_stmt ?addr return insn stmt : linear list =
       Label finish :: [] in
   linearize stmt
 
+
 let lift_insn ?addr fall init insn =
   List.fold (Insn.bil insn) ~init ~f:(fun init stmt ->
       List.fold (linear_of_stmt ?addr fall insn stmt) ~init
@@ -152,8 +153,21 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
-let blk cfg block : blk term list =
-  let fall_label = label_of_fall cfg block in
+let fall_of_symtab symtab block =
+  Option.(
+    symtab >>= fun symtab ->
+    Symtab.find_call_addr symtab (Block.addr block) >>= fun addr ->
+    let bldr = Ir_blk.Builder.create () in
+    let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
+    let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
+    Some (Ir_blk.Builder.result bldr))
+
+let blk ?symtab cfg block : blk term list =
+  let fall_to_fn = fall_of_symtab symtab block in
+  let fall_label =
+    match label_of_fall cfg block, fall_to_fn with
+    | None, Some b -> Some (Label.direct (Term.tid b))
+    | fall_label,_ -> fall_label in
   List.fold (Block.insns block) ~init:([],Ir_blk.Builder.create ())
     ~f:(fun init (mem,insn) ->
         let addr = Memory.min_addr mem in
@@ -163,11 +177,18 @@ let blk cfg block : blk term list =
     let jmp = Block.terminator block in
     if Insn.(is call) jmp && not (is_conditional_jump jmp)
     then None else match fall_label with
-      | None -> None
-      | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
+     | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst))
+     | None ->
+        match fall_to_fn with
+        | None -> None
+        | Some b ->
+           Some (`Jmp (Ir_jmp.create_goto (Label.direct (Term.tid b)))) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
-  List.rev (b::bs) |> function
+  let blocks = match fall_to_fn with
+    | None -> b :: bs
+    | Some b' -> b' :: b :: bs in
+  List.rev blocks |> function
   | [] -> assert false
   | b::bs -> Term.set_attr b address (Block.addr block) :: bs
 
@@ -214,11 +235,11 @@ let remove_false_jmps blk =
 
 let unbound _ = true
 
-let lift_sub entry cfg =
+let lift_sub ?symtab entry cfg =
   let addrs = Addr.Table.create () in
   let recons acc b =
     let addr = Block.addr b in
-    let blks = blk cfg b in
+    let blks = blk ?symtab cfg b in
     Option.iter (List.hd blks) ~f:(fun blk ->
         Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid blk));
      acc @ blks in
@@ -299,7 +320,7 @@ let program symtab =
   let unresolved = Addr.Hash_set.create () in
   Seq.iter (Symtab.to_sequence symtab) ~f:(fun (name,entry,cfg) ->
       let addr = Block.addr entry in
-      let sub = lift_sub entry cfg in
+      let sub = lift_sub ~symtab entry cfg in
       Ir_program.Builder.add_sub b (Ir_sub.with_name sub name);
       Tid.set_name (Term.tid sub) name;
       Hashtbl.add_exn addrs ~key:addr ~data:(Term.tid sub);
@@ -318,7 +339,8 @@ let program symtab =
                 else j in
               resolve_jmp ~local:false addrs j)))
 
-let sub = lift_sub
+let sub = lift_sub ?symtab:None
+let blk = blk ?symtab:None
 
 let insn insn =
   lift_insn None ([], Ir_blk.Builder.create ()) insn |>

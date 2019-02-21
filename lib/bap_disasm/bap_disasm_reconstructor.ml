@@ -85,11 +85,21 @@ let add_callnames syms name cfg blk =
               Symtab.add_call_name syms blk)
   else syms
 
+let add_call_addrs syms cfg entries =
+  Set.fold entries ~init:syms ~f:(fun syms b ->
+      Seq.fold (Cfg.Node.inputs b cfg) ~init:syms
+        ~f:(fun syms e ->
+          match Cfg.Edge.label e with
+          | `Fall ->
+             Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
+          | _ -> syms))
+
 let collect name cfg roots =
   Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
-    ~f:(fun (entries,syms) blk ->
-        Set.union entries (entries_of_block cfg roots blk),
-        add_callnames syms name cfg blk)
+    ~f:(fun (entries, syms) blk ->
+      let entries' = entries_of_block cfg roots blk in
+      let syms = add_call_addrs syms cfg entries in
+      Set.union entries entries', add_callnames syms name cfg blk)
 
 let reconstruct name roots prog =
   let roots = Addr.Set.of_list roots in

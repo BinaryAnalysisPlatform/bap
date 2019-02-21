@@ -21,8 +21,14 @@ val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
 val span : fn -> unit memmap
 
-(* remembers a call to a function from the given block *)
+(* remembers a call to a function [name] from the given block *)
 val add_call_name : t -> block -> string -> t
+
+(* remembers a call to a function at [addr] from the given block *)
+val add_call_addr : t -> block -> addr -> t
 
 (* finds if there are any calls from the given block *)
 val find_call_name : t -> addr -> string option
+
+(* finds if there are any calls from the given block *)
+val find_call_addr : t -> addr -> addr option
