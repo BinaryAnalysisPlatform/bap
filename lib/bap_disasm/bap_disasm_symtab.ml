@@ -115,6 +115,11 @@ let update_callee t b addr name =
 
 let add_call_name t b name = update_callee t b None (Some name)
 let add_call_addr t b addr = update_callee t b (Some addr) None
-let get t addr ~f = Option.map ~f (Map.find t.callees addr)
+
+let get t addr ~f =
+  match Map.find t.callees addr with
+  | None -> None
+  | Some x -> f x
+
 let find_call_addr t addr = get t addr ~f:fst
 let find_call_name t addr = get t addr ~f:snd
