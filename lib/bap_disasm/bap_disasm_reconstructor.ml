@@ -89,35 +89,113 @@ let add_call_addrs syms cfg entries =
   Set.fold entries ~init:syms ~f:(fun syms b ->
       Seq.fold (Cfg.Node.inputs b cfg) ~init:syms
         ~f:(fun syms e ->
-          match Cfg.Edge.label e with
-          | `Fall ->
-             Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
-          | _ -> syms))
+            match Cfg.Edge.label e with
+            | `Fall ->
+              Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
+            | _ -> syms))
 
 let collect name cfg roots =
   Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
     ~f:(fun (entries, syms) blk ->
-      let entries' = entries_of_block cfg roots blk in
-      let syms = add_call_addrs syms cfg entries in
-      Set.union entries entries', add_callnames syms name cfg blk)
+        let entries' = entries_of_block cfg roots blk in
+        let syms = add_call_addrs syms cfg entries in
+        Set.union entries entries', add_callnames syms name cfg blk)
+
+let edge_to_string e =
+  let bs = Block.to_string in
+  let label = Sexp.to_string (Block.sexp_of_edge (Cfg.Edge.label e)) in
+  let src = bs @@ Cfg.Edge.src e in
+  let dst = bs @@ Cfg.Edge.dst e in
+  sprintf "[%s - %s(%s)]" src dst label
+
+let remove_by_start symtab start =
+  match Symtab.find_by_start symtab (Block.addr start) with
+  | None -> symtab
+  | Some ((name,_,_) as fn) ->
+     printf "remove %s at %s from symtab\n"
+       name (Block.to_string start);
+
+     Symtab.remove symtab fn
+
+let add_sym name syms cfg entry =
+  Symtab.add_symbol syms (name (Block.addr entry),entry,cfg)
+
+
+type info = {
+    roots : Block.Set.t;
+    wrong : Block.Set.t;
+    visited : block Addr.Map.t;
+  }
+
+let empty_info =
+  { visited=Addr.Map.empty;
+    roots=Block.Set.empty;
+    wrong=Block.Set.empty }
+
+let visit n e i  = {i with visited = Map.set i.visited (Block.addr n) e}
+let wrong n i = {i with wrong = Set.add i.wrong n}
+let root  n i = {i with roots = Set.add i.roots n}
+
+let sub_cfg info entries prog entry =
+  let is_call e = Set.mem entries (Cfg.Edge.dst e) in
+  let visit node info = Option.map info ~f:(visit node entry) in
+  let wrong node info = Option.map info ~f:(wrong node) in
+  let root  node info = Option.map info ~f:(root  node) in
+  let visited n = function
+    | None -> None
+    | Some i -> Map.find i.visited (Block.addr n) in
+  let insert_edge cfg info edge =
+    match visited (Cfg.Edge.dst edge) info with
+    | Some entry' when Block.(entry <> entry') ->
+       printf
+         "block %s was seen while loop in %s, so it didn't insert in %s\n"
+         (Block.to_string (Cfg.Edge.dst edge))
+         (Block.to_string entry')
+         (Block.to_string entry);
+       None, wrong entry' info |> root (Cfg.Edge.dst edge)
+    | _ ->
+       printf
+         "INSERT block %s while loop in %s\n"
+         (Block.to_string (Cfg.Edge.dst edge)) (Block.to_string entry);
+       Some (Cfg.Edge.insert edge cfg), info in
+  let rec loop cfg info node =
+      let info = visit node info in
+      Seq.fold (Cfg.Node.outputs node prog)
+        ~init:(cfg, info)
+        ~f:(fun (cfg, info) edge ->
+            if is_call edge then cfg,info
+            else
+              match insert_edge cfg info edge with
+              | None, info -> cfg,info
+              | Some cfg', info ->
+              if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg',info
+              else loop cfg' info (Cfg.Edge.dst edge)) in
+  loop (Cfg.Node.insert entry Cfg.empty) info entry
+
+let sub_cfg' a b c = fst @@ sub_cfg None a b c
 
 let reconstruct name roots prog =
   let roots = Addr.Set.of_list roots in
   let entries,syms = collect name prog roots in
-  let is_call e = Set.mem entries (Cfg.Edge.dst e) in
-  let rec add cfg node =
-    let cfg = Cfg.Node.insert node cfg in
-    Seq.fold (Cfg.Node.outputs node prog) ~init:cfg
-      ~f:(fun cfg edge ->
-          if is_call edge then cfg
-          else
-            let cfg' = Cfg.Edge.insert edge cfg in
-            if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg'
-            else add cfg' (Cfg.Edge.dst edge)) in
-  Set.fold entries ~init:syms ~f:(fun syms entry ->
-      let name = name (Block.addr entry) in
-      let cfg = add Cfg.empty entry in
-      Symtab.add_symbol syms (name,entry,cfg))
+  let syms, info =
+    Set.fold entries ~init:(syms, Some empty_info)
+      ~f:(fun (syms,info) entry ->
+        let cfg,info = sub_cfg info entries prog entry in
+        add_sym name syms cfg entry, info) in
+  match info with
+  | None -> syms
+  | Some {wrong;roots} ->
+     printf "new rooots: \n";
+     Set.iter roots ~f:(fun b -> printf "%s\n" (Block.to_string b));
+     printf "\n\nwrong: \n";
+     Set.iter wrong ~f:(fun b -> printf "%s\n" (Block.to_string b));
+     printf "\n\n";
+     let syms = Set.fold wrong ~init:syms ~f:remove_by_start in
+     let entries = Set.union entries roots in
+     Set.fold (Set.union roots wrong) ~init:syms
+       ~f:(fun syms start ->
+         let cfg = sub_cfg' entries prog start in
+         add_sym name syms cfg start)
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =
