@@ -101,67 +101,8 @@ let collect name cfg roots =
         let syms = add_call_addrs syms cfg entries' in
         Set.union entries entries', add_callnames syms name cfg blk)
 
-let remove_by_start symtab start =
-  match Symtab.find_by_start symtab (Block.addr start) with
-  | None -> symtab
-  | Some fn -> Symtab.remove symtab fn
-
-type info = {
-    invalid : Block.Set.t;
-    visited : block Addr.Map.t;
-    discovered : Block.Set.t;
-  }
-
-let empty_info =
-  { visited = Addr.Map.empty;
-    invalid = Block.Set.empty;
-    discovered = Block.Set.empty; }
-
-let visit n e i = {i with visited = Map.set i.visited (Block.addr n) e}
-let invalidate n i = {i with invalid = Set.add i.invalid n}
-let discover n i = {i with discovered = Set.add i.discovered n}
-
-let sub_cfg info roots prog start =
-  let is_call e = Set.mem roots (Cfg.Edge.dst e) in
-  let find_start n i = Map.find i.visited (Block.addr n) in
-  let insert_edge cfg info edge =
-    match find_start (Cfg.Edge.dst edge) info with
-    | Some start' when Block.(start <> start') ->
-       None, invalidate start' info |> discover (Cfg.Edge.dst edge)
-    | _ -> Some (Cfg.Edge.insert edge cfg), info in
-  let rec loop cfg info node =
-    let info = visit node start info in
-    Seq.fold (Cfg.Node.outputs node prog)
-      ~init:(cfg, info)
-      ~f:(fun (cfg, info) edge ->
-          if is_call edge then cfg,info
-          else
-            match insert_edge cfg info edge with
-            | None, info -> cfg,info
-            | Some cfg', info ->
-              if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg',info
-              else loop cfg' info (Cfg.Edge.dst edge)) in
-  loop (Cfg.Node.insert start Cfg.empty) info start
-
-let add_sym name syms cfg entry =
+let add_symbol name syms cfg entry =
   Symtab.add_symbol syms (name (Block.addr entry),entry,cfg)
-
-let reconstruct name roots prog =
-  let rec loop entries syms info =
-    let syms, info =
-      Set.fold info.discovered ~init:(syms,info)
-        ~f:(fun (syms,info) entry ->
-          let cfg,info = sub_cfg info entries prog entry in
-          add_sym name syms cfg entry, info) in
-    if Set.is_empty info.invalid then syms
-    else
-      let syms = Set.fold info.invalid ~init:syms ~f:remove_by_start in
-      let roots = Set.union info.invalid info.discovered in
-      let info = {empty_info with discovered=roots} in
-      loop (Set.union entries roots) syms info in
-  let roots = Addr.Set.of_list roots in
-  let roots,syms = collect name prog roots in
-  loop roots syms { empty_info with discovered=roots}
 
 let reachable cfg start =
   let rec loop nodes node =
@@ -189,27 +130,29 @@ let slice roots prog start =
   loop cfg Cfg.Edge.Set.empty start
 
 let reconstruct name initial_roots prog =
+  let (--) = Set.diff in
+  let remove_node cfg n = Cfg.Node.remove n cfg in
+  let edges_of_seq s = Cfg.Edge.Set.of_list (Seq.to_list s) in
+  let inputs node = edges_of_seq (Cfg.Node.inputs node prog) in
   let rec loop known_roots syms = function
     | [] -> syms,known_roots
     | root :: roots ->
-       let cfg,edges' = slice known_roots prog root in
-       let edges = Cfg.Edge.Set.of_list (Seq.to_list (Cfg.edges cfg)) in
-       let side_calls = Set.diff edges' edges in
+       let cfg, all_inputs = slice known_roots prog root in
+       let all_edges = edges_of_seq (Cfg.edges cfg) in
+       let calls = all_inputs -- all_edges -- inputs root in
        let discovered =
-         Set.fold side_calls ~init:Block.Set.empty ~f:(fun bs e -> Set.add bs (Cfg.Edge.dst e)) in
-       let discovered = Set.remove discovered root in
+         Set.fold calls ~init:Block.Set.empty ~f:(fun bs e ->
+             Set.add bs (Cfg.Edge.dst e)) in
        let cfg =
-         Set.fold discovered ~init:cfg  ~f:(fun cfg r ->
-             reachable cfg r |>
-             Set.fold ~init:cfg ~f:(fun cfg n -> Cfg.Node.remove n cfg)) in
-       let known_roots = Set.union known_roots discovered in
-       let syms = add_sym name syms cfg root in
-       let syms,known' = loop known_roots syms (Set.to_list discovered) in
-       loop (Set.union known' known_roots) syms roots in
+         Set.fold discovered ~init:cfg ~f:(fun cfg r ->
+             Set.fold (reachable cfg r) ~init:cfg ~f:remove_node) in
+       let known = Set.union known_roots discovered in
+       let syms = add_symbol name syms cfg root in
+       let syms,known = loop known syms (Set.to_list discovered) in
+       loop known syms roots in
   let initial_roots = Addr.Set.of_list initial_roots in
   let roots,syms = collect name prog initial_roots in
   fst @@ loop roots syms (Set.to_list roots)
-
 
 let of_blocks syms =
   let reconstruct (cfg : cfg) =
