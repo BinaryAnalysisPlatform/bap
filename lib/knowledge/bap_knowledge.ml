@@ -7,81 +7,76 @@ end
 
 module Id = Int63
 
+let user_package = "user-knowledge"
+let package = "knowledge"
+
 module Domain = struct
   type 'a t = {
-    serialize : (module Binable.S with type t = 'a) option;
     inspect : 'a -> Sexp.t;
     empty : 'a;
     order : 'a -> 'a -> Order.partial;
     name : string;
   }
-
-  let empty_serializer (type a) empty =
-    let module S = struct
-      type t = a
-      include Binable.Of_binable(Unit)(struct
-          type t = a
-          let to_binable _ = ()
-          let of_binable () = empty
-        end)
-    end  in
-    (module S : Binable.S with type t = a)
-
 end
 
 type 'a obj = Id.t
 type 'a ord = Id.comparator_witness
 
+type fname = {
+  package : string;
+  name : string;
+}
+
+module Registry = struct
+  let packages = Hash_set.create (module String) ()
+  let classes = Hashtbl.create (module String)
+  let slots = Hashtbl.create (module String)
+
+  let add_package name = Hash_set.add packages name
+
+  let is_present ~package namespace name =
+    match Hashtbl.find namespace package with
+    | None -> false
+    | Some names -> Map.mem names name
+
+  let register kind namespace ?desc ?(package=user_package) name =
+    add_package package;
+    if is_present ~package namespace name
+    then failwithf
+        "Failed to declare new %s, there is already a %s \
+         named `%s' in package `%s'" kind kind name package ();
+    Hashtbl.update namespace package ~f:(function
+        | None -> Map.singleton (module String) name desc
+        | Some names -> Map.add_exn names ~key:name ~data:desc);
+    {package; name}
+
+  let add_class = register "class" classes
+  let add_slot  = register "slot"  slots
+end
+
+let string_of_fname {package; name} =
+  package ^ ":" ^ name
+
 module Class = struct
   type +'a t = {
     id : Id.t;
-    name : string;
+    name : fname;
   }
 
+  let classes = ref Id.zero
 
-  type info = {
-    desc : string option;
-    slots : (string * string option) Hashtbl.M(String).t;
-  }
+  let newclass ?desc ?package name =
+    Id.incr classes;
+    {
+      id = !classes;
+      name = Registry.add_class ?desc ?package name;
+    }
 
-  let classes = ref Int63.zero
+  let declare ?desc ?package name =
+    newclass ?desc ?package name
 
-  let info desc = {
-    desc;
-    slots = Hashtbl.create (module String);
-  }
-
-  let public_classes = Hashtbl.create (module String)
-
-  let register_class ?desc name =
-    match Hashtbl.add public_classes ~key:name ~data:(info desc) with
-    | `Ok -> ()
-    | `Duplicate -> invalid_argf "Failed to register public class %s\
-                                  - the name is not unique" name ()
-
-  let register_slot ?desc cls name =
-    let {slots} = Hashtbl.find_exn public_classes cls.name in
-    match Hashtbl.add slots ~key:name ~data:(name,desc) with
-    | `Ok -> ()
-    | `Duplicate ->
-      invalid_argf "Failed to register slot %s of class %s - \
-                    the slot name is not unique, but made public"
-        name cls.name ()
-
-  let newclass name =
-    Int63.incr classes;
-    {id = !classes; name}
-
-  let declare ?(public=false) ?desc name =
-    if public then register_class ?desc name;
-    newclass name
-
-  let derived ?desc name parent =
-    let name = parent.name ^ "/" ^ name in
-    if Hashtbl.mem public_classes parent.name
-    then register_class ?desc name;
-    newclass name
-
+  let derived ?desc ?package name _parent =
+    newclass ?desc ?package name
 
   let comparator : type a. a t ->
     (module Comparator.S
@@ -99,7 +94,58 @@ module Object = struct
   type +'a t = Id.t
 end
 
-module Record = Univ_map
+module Record = struct
+  module Dict = Univ_map
+  module Repr = struct
+    type entry = {
+      name : string;
+      data : string;
+    } [@@deriving bin_io]
+
+    type t = entry list [@@deriving bin_io]
+  end
+
+  type slot_io = {
+    reader : string -> Dict.Packed.t;
+    writer : Dict.Packed.t -> string;
+  }
+
+  let io : slot_io Hashtbl.M(String).t =
+    Hashtbl.create (module String)
+
+  let register_parser (type p)
+      (key : p Dict.Key.t)
+      (module P : Binable.S with type t = p) =
+    let slot = Dict.Key.name key in
+    let writer (Dict.Packed.T (k,x)) =
+      match Type_equal.Id.same_witness k key with
+      | Some Type_equal.T -> Binable.to_string (module P) x
+      | None -> assert false in
+    let reader s =
+      Dict.Packed.T (key,Binable.of_string (module P) s) in
+    Hashtbl.add_exn io ~key:slot ~data:{reader;writer}
+
+  include Binable.Of_binable(Repr)(struct
+      type t = Dict.t
+      let to_binable s =
+        Dict.to_alist s |>
+        List.rev_filter_map ~f:(fun (Dict.Packed.T(k,_) as x) ->
+            let name = Dict.Key.name k in
+            match Hashtbl.find io name with
+            | None -> None
+            | Some {writer=to_string} ->
+              Some Repr.{name; data = to_string x;})
+
+      let of_binable entries =
+        List.fold entries ~init:Dict.empty ~f:(fun s {Repr.name; data} ->
+            match Hashtbl.find io name with
+            | None -> s
+            | Some {reader=parse} ->
+              let Dict.Packed.T (key,data) = parse data in
+              Dict.set s key data)
+    end)
+  include Dict
+end
 
 module Knowledge = struct
   type 'a value = Record.t
@@ -161,8 +207,11 @@ module Knowledge = struct
       mutable promises : 'p promise list;
     }
 
-    let declare ?desc cls name (dom : 'a Domain.t) =
+    let declare ?desc ?serializer ?package cls name (dom : 'a Domain.t) =
+      let slot = Registry.add_slot ?desc ?package name in
+      let name = string_of_fname slot in
       let key = Type_equal.Id.create ~name dom.inspect in
+      Option.iter serializer (Record.register_parser key);
       {cls; dom; key; name; desc; promises = []}
   end
 

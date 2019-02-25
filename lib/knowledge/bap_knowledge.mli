@@ -29,10 +29,13 @@ module Knowledge : sig
                         and type 'a error = conflict
 
   module Class : sig
-    val declare : ?public:bool -> ?desc:string -> string -> 'a cls
-    val derived : ?desc:string -> string -> 'a cls -> ('b -> 'a) cls
+    val declare : ?desc:string -> ?package:string -> string -> 'a cls
+    val derived : ?desc:string -> ?package:string -> string -> 'a cls -> ('b -> 'a) cls
     val parent : (_ -> 'a) cls -> 'a cls
 
+    val name : 'a cls -> string
+    val package : 'a cls -> string
+    val fqname : 'a cls -> string
 
     type 'a ord
     val comparator : 'a cls -> (module Base.Comparable.S
@@ -48,7 +51,7 @@ module Knowledge : sig
 
     (** [scoped scope] pass a fresh new object to [scope].
 
-        The extend of the created object is limited with the extend
+        The extent of the created object is limited with the extent
         of the function [scope].*)
     val scoped : 'a cls -> ('a obj t -> 'b knowledge) -> 'b knowledge
 
@@ -60,7 +63,11 @@ module Knowledge : sig
   end
 
   module Slot : sig
-    val declare : ?desc:string ->
+    val declare :
+      ?desc:string ->
+      ?public:bool ->
+      ?persistent:(module Binable.S with type t = 'p) ->
+      ?package:string ->
       'a cls -> string -> 'p domain -> ('a,'p) slot
 
     val get : ('a,'p) slot -> 'a value -> 'p
@@ -68,7 +75,7 @@ module Knowledge : sig
   end
 
   module Value : sig
-    type 'a t = 'a value [@@deriving bin_io, sexp]
+    type 'a t = 'a value [@@deriving bin_io, compare, sexp]
     val empty : 'a cls -> 'a value
     val merge : 'a value -> 'a value -> 'a value
   end
