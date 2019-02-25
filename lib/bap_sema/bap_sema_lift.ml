@@ -177,12 +177,8 @@ let blk ?symtab cfg block : blk term list =
     let jmp = Block.terminator block in
     if Insn.(is call) jmp && not (is_conditional_jump jmp)
     then None else match fall_label with
-     | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst))
-     | None ->
-        match fall_to_fn with
-        | None -> None
-        | Some b ->
-           Some (`Jmp (Ir_jmp.create_goto (Label.direct (Term.tid b)))) in
+      | None -> None
+      | Some dst -> Some (`Jmp (Ir_jmp.create_goto dst)) in
   Option.iter fall ~f:(Ir_blk.Builder.add_elt b);
   let b = Ir_blk.Builder.result b in
   let blocks = match fall_to_fn with

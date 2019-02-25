@@ -91,7 +91,7 @@ let add_call_addrs syms cfg entries =
         ~f:(fun syms e ->
             match Cfg.Edge.label e with
             | `Fall ->
-               Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
+              Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
             | _ -> syms))
 
 let collect name cfg roots =
@@ -109,15 +109,15 @@ let reachable cfg start =
     Seq.fold (Cfg.Node.outputs node cfg)
       ~init:(Set.add nodes node)
       ~f:(fun nodes edge ->
-        if Set.mem nodes (Cfg.Edge.dst edge) then nodes
-        else loop nodes (Cfg.Edge.dst edge)) in
+          if Set.mem nodes (Cfg.Edge.dst edge) then nodes
+          else loop nodes (Cfg.Edge.dst edge)) in
   loop Block.Set.empty start
 
 let slice roots prog start =
   let is_call e = Set.mem roots (Cfg.Edge.dst e) in
   let rec loop cfg inputs node =
     let inputs = Seq.fold ~init:inputs
-                  (Cfg.Node.inputs node prog) ~f:Set.add in
+        (Cfg.Node.inputs node prog) ~f:Set.add in
     Seq.fold (Cfg.Node.outputs node prog)
       ~init:(cfg, inputs)
       ~f:(fun (cfg, edges) edge ->
@@ -137,19 +137,19 @@ let reconstruct name initial_roots prog =
   let rec loop known_roots syms = function
     | [] -> syms,known_roots
     | root :: roots ->
-       let cfg, all_inputs = slice known_roots prog root in
-       let all_edges = edges_of_seq (Cfg.edges cfg) in
-       let calls = all_inputs -- all_edges -- inputs root in
-       let discovered =
-         Set.fold calls ~init:Block.Set.empty ~f:(fun bs e ->
-             Set.add bs (Cfg.Edge.dst e)) in
-       let cfg =
-         Set.fold discovered ~init:cfg ~f:(fun cfg r ->
-             Set.fold (reachable cfg r) ~init:cfg ~f:remove_node) in
-       let known = Set.union known_roots discovered in
-       let syms = add_symbol name syms cfg root in
-       let syms,known = loop known syms (Set.to_list discovered) in
-       loop known syms roots in
+      let cfg, all_inputs = slice known_roots prog root in
+      let all_edges = edges_of_seq (Cfg.edges cfg) in
+      let calls = all_inputs -- all_edges -- inputs root in
+      let discovered =
+        Set.fold calls ~init:Block.Set.empty ~f:(fun bs e ->
+            Set.add bs (Cfg.Edge.dst e)) in
+      let cfg =
+        Set.fold discovered ~init:cfg ~f:(fun cfg r ->
+            Set.fold (reachable cfg r) ~init:cfg ~f:remove_node) in
+      let known = Set.union known_roots discovered in
+      let syms = add_symbol name syms cfg root in
+      let syms,known = loop known syms (Set.to_list discovered) in
+      loop known syms roots in
   let initial_roots = Addr.Set.of_list initial_roots in
   let roots,syms = collect name prog initial_roots in
   fst @@ loop roots syms (Set.to_list roots)
