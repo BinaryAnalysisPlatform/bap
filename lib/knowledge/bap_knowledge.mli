@@ -33,6 +33,13 @@ module Knowledge : sig
     val derived : ?desc:string -> ?package:string -> string -> 'a cls -> ('b -> 'a) cls
     val parent : (_ -> 'a) cls -> 'a cls
 
+    val property :
+      ?desc:string ->
+      ?persistent:(module Binable.S with type t = 'p) ->
+      ?package:string ->
+      'a cls -> string -> 'p domain -> ('a,'p) slot
+
+
     val name : 'a cls -> string
     val package : 'a cls -> string
     val fqname : 'a cls -> string
@@ -62,22 +69,12 @@ module Knowledge : sig
     val read : 'a cls -> string -> 'a t knowledge
   end
 
-  module Slot : sig
-    val declare :
-      ?desc:string ->
-      ?public:bool ->
-      ?persistent:(module Binable.S with type t = 'p) ->
-      ?package:string ->
-      'a cls -> string -> 'p domain -> ('a,'p) slot
-
-    val get : ('a,'p) slot -> 'a value -> 'p
-    val put : ('a,'p) slot -> 'a value -> 'p -> 'a value
-  end
-
   module Value : sig
     type 'a t = 'a value [@@deriving bin_io, compare, sexp]
     val empty : 'a cls -> 'a value
     val merge : 'a value -> 'a value -> 'a value
+    val get : ('a,'p) slot -> 'a value -> 'p
+    val put : ('a,'p) slot -> 'a value -> 'p -> 'a value
   end
 
   module Order : sig
@@ -109,14 +106,12 @@ module Knowledge : sig
     *)
     val define :
       ?inspect:('a -> Base.Sexp.t) ->
-      ?serialize : (module Binable.S with type t = 'a) ->
       empty:'a ->
       order:('a -> 'a -> Order.partial) -> string -> 'a domain
 
 
     val total :
       ?inspect:('a -> Base.Sexp.t) ->
-      ?serialize : (module Binable.S with type t = 'a) ->
       empty:'a ->
       order:('a -> 'a -> int) ->
       string -> 'a domain
@@ -126,8 +121,11 @@ module Knowledge : sig
       string ->
       ('a,'d,'e) Map.t domain
 
-    val int : int t
-    val int63 : Int63.t
+    val optional :
+      ?inspect:('a -> Base.Sexp.t) ->
+      order:('a -> 'a -> int) ->
+      string -> 'a domain
+
     val string : string domain
   end
 end

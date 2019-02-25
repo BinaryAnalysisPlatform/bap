@@ -17,6 +17,57 @@ module Domain = struct
     order : 'a -> 'a -> Order.partial;
     name : string;
   }
+
+  let define ?(inspect=sexp_of_opaque) ~empty ~order name = {
+    inspect; empty; order; name;
+  }
+
+  let partial_of_total order x y : Order.partial = match order x y with
+    | 0 -> EQ
+    | 1 -> GT
+    | _ -> LT
+
+  let total ?inspect ~empty ~order name =
+    define ?inspect ~empty name ~order:(partial_of_total order)
+
+  let mapping (type k) (type o) ?(equal=(fun _ _ -> true))
+      (module K : Base.Comparable.S with type t = k
+                                     and type comparator_witness = o)
+      name =
+    let empty = Map.empty (module K) in
+    let inspect xs =
+      Sexp.List (Map.keys xs |> List.map ~f:K.comparator.sexp_of_t) in
+    let order x y =
+      Map.symmetric_diff x y ~data_equal:equal |>
+      Sequence.fold ~init:(0,0,0) ~f:(fun (l,m,r) -> function
+          | (_,`Left _)     -> (l+1,m,r)
+          | (_,`Right _)    -> (l,m,r+1)
+          | (_, `Unequal _) -> (l,m+1,r)) |> function
+      | 0,0,0 -> Order.EQ
+      | 0,0,_ -> LT
+      | _,0,0 -> GT
+      | _,_,_ -> NC in
+    define ~inspect ~empty ~order name
+
+  let optional ?inspect ~order name =
+    let inspect = match inspect with
+      | None -> sexp_of_opaque
+      | Some sexp_of_elt -> sexp_of_option sexp_of_elt in
+    let order x y : Order.partial = match x, y with
+      | None,None -> EQ
+      | None,Some _ -> LT
+      | Some _,None -> GT
+      | Some x, Some y -> order x y in
+    let empty = None in
+    define ~inspect ~order ~empty name
+
+  let string = define "string" ~empty:""
+      ~inspect:sexp_of_string ~order:(fun x y ->
+          match String.is_empty x, String.is_empty y with
+          | true, true -> EQ
+          | true,false -> GT
+          | false,true -> LT
+          | false,false -> partial_of_total String.compare x y)
 end
 
 type 'a obj = Id.t
@@ -264,9 +315,9 @@ module Knowledge = struct
         let ids = Set.remove ids id in
         if Set.is_empty ids then None else Some ids)
 
-  let objects : _ slot -> _ = fun slot ->
+  let objects : _ cls -> _ = fun cls ->
     get () >>| fun base ->
-    match Map.find base slot.cls.id with
+    match Map.find base cls.id with
     | None -> Base.empty_class
     | Some objs -> objs
 
@@ -278,13 +329,13 @@ module Knowledge = struct
 
   let collect : type a p. (a,p) slot -> a Object.t -> p Knowledge.t =
     fun slot id ->
-      objects slot >>= fun {Base.data} ->
+      objects slot.cls >>= fun {Base.data} ->
       let init = match Map.find data id with
         | None -> slot.dom.empty
         | Some v -> Value.get slot v in
       slot.promises |>
       Knowledge.List.fold ~init ~f:(fun curr req ->
-          objects slot >>= fun {Base.reqs} ->
+          objects slot.cls >>= fun {Base.reqs} ->
           if is_active reqs req.pid id
           then Knowledge.return curr
           else
@@ -299,7 +350,14 @@ module Knowledge = struct
 
   include Knowledge
 
-  let run x s = match State.run x s with
+  let get_value cls obj = objects cls >>| fun {Base.data} ->
+    match Map.find data obj with
+    | None -> Value.empty cls
+    | Some x -> x
+
+  let run x cls obj s =
+    let x = x >>= fun () -> get_value cls obj in
+    match State.run x s with
     | Ok x,s -> Ok (x,s)
     | Error err,_ -> Error err
 
