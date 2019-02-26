@@ -18,7 +18,7 @@ Library bap
                    cmdliner,
                    regular
   Modules:         Bap
-  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self, Bap_calls_reconstructor
+  InternalModules: Bap_event, Bap_log, Bap_project, Bap_self
 
 
 Library types
