@@ -29,9 +29,16 @@ module Knowledge : sig
                         and type 'a error = conflict
 
   module Class : sig
-    val declare : ?desc:string -> ?package:string -> string -> 'a cls
-    val derived : ?desc:string -> ?package:string -> string -> 'a cls -> ('b -> 'a) cls
-    val parent : (_ -> 'a) cls -> 'a cls
+    type top
+    val declare : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) cls
+    val derived : ?desc:string -> ?package:string -> string -> 'a cls -> 'b -> ('b -> 'a) cls
+    val upcast : (_ -> 'a) cls -> 'a cls
+    val refine : 'a cls -> 'b -> ('b -> 'a) cls
+
+    val same : 'a cls -> 'b cls -> bool
+
+    val equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t option
+    val assert_equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t
 
     val property :
       ?desc:string ->
@@ -42,10 +49,12 @@ module Knowledge : sig
 
     val name : 'a cls -> string
     val package : 'a cls -> string
-    val fqname : 'a cls -> string
+    val fullname : 'a cls -> string
+
+    val data : ('b -> 'a) cls -> 'b
 
     type 'a ord
-    val comparator : 'a cls -> (module Base.Comparable.S
+    val comparator : 'a cls -> (module Base.Comparator.S
                                  with type t = 'a obj
                                   and type comparator_witness = 'a ord)
   end
@@ -67,14 +76,39 @@ module Knowledge : sig
 
     (** [read s] returns an object [x] such that [repr x = s].  *)
     val read : 'a cls -> string -> 'a t knowledge
+
+
+    (** [cast class_equality x] changes the type of an object.
+
+        Provided with an equality of two object types, returns
+        the same object [x] with a new type.
+
+        The type equality of two object types could be obtained
+        through [Class.equal] or [Class.assert_equal]. Note, this
+        function doesn't do any magic, this is just the
+        [Type_equal.conv], lifted into the [Object] module for
+        covenience.
+    *)
+    val cast : ('a obj, 'b obj) Type_equal.t -> 'a obj -> 'b obj
   end
 
   module Value : sig
     type 'a t = 'a value [@@deriving bin_io, compare, sexp]
+    include Type_equal.Injective with type 'a t := 'a t
+
     val empty : 'a cls -> 'a value
-    val merge : 'a value -> 'a value -> 'a value
+    val join : 'a value -> 'a value -> ('a value,conflict) result
+    val merge : ?on_conflict:[
+      `drop_right |
+      `drop_left  |
+      `drop_both
+    ] -> 'a value -> 'a value -> 'a value
+
+    val cls : 'a value -> 'a cls
     val get : ('a,'p) slot -> 'a value -> 'p
     val put : ('a,'p) slot -> 'a value -> 'p -> 'a value
+
+    val clone : 'a cls -> _ value -> 'a value
   end
 
   module Order : sig

@@ -73,7 +73,7 @@ end
 type 'a obj = Id.t
 type 'a ord = Id.comparator_witness
 
-type fname = {
+type fullname = {
   package : string;
   name : string;
 }
@@ -102,32 +102,62 @@ module Registry = struct
     {package; name}
 
   let add_class = register "class" classes
-  let add_slot  = register "slot"  slots
+  let add_slot  = register "property" slots
 end
 
 let string_of_fname {package; name} =
   package ^ ":" ^ name
 
 module Class = struct
-  type +'a t = {
+  type top = TOP
+
+  type _ data =
+    | Top : top data
+    | Derive : 'a data * 'b -> ('b -> 'a) data
+
+
+  type 'a t = {
     id : Id.t;
-    name : fname;
+    name : fullname;
+    data : 'a data;
   }
 
   let classes = ref Id.zero
 
-  let newclass ?desc ?package name =
+  let newclass ?desc ?package name data =
     Id.incr classes;
     {
       id = !classes;
       name = Registry.add_class ?desc ?package name;
+      data;
     }
 
-  let declare ?desc ?package name =
-    newclass ?desc ?package name
+  let declare
+    : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) t =
+    fun ?desc ?package name data ->
+      newclass ?desc ?package name (Derive (Top,data))
 
-  let derived ?desc ?package name _parent =
-    newclass ?desc ?package name
+  let derived
+    : ?desc:string -> ?package:string -> string -> 'a t -> 'b -> ('b -> 'a) t =
+    fun ?desc ?package name parent data ->
+      newclass ?desc ?package name (Derive (parent.data,data))
+
+  let upcast : type a b. (b -> a) t -> a t = fun child -> match child with
+    | {data=Derive (base,_); id; name} -> {id; name; data=base}
+
+  let refine : type a b. a t -> b -> (b -> a) t =
+    fun {id; name; data} data' -> {id; name; data=Derive (data,data')}
+
+  let same x y = Id.equal x.id y.id
+
+  let equal : type a b. a t -> b t -> (a obj,b obj) Type_equal.t option =
+    fun x y -> Option.some_if (same x y) Type_equal.T
+
+  let data : type a b. (b -> a) t -> b = fun {data=Derive (_,data)} -> data
+
+  let name {name={name}} = name
+  let package {name={package}} = package
+  let fullname {name} = string_of_fname name
 
   let comparator : type a. a t ->
     (module Comparator.S
@@ -141,12 +171,9 @@ module Class = struct
     (module R)
 end
 
-module Object = struct
-  type +'a t = Id.t
-end
-
 module Record = struct
   module Dict = Univ_map
+  type  t = Dict.t
   module Repr = struct
     type entry = {
       name : string;
@@ -160,6 +187,13 @@ module Record = struct
     reader : string -> Dict.Packed.t;
     writer : Dict.Packed.t -> string;
   }
+
+  let empty = Dict.empty
+
+  let put key v x = Dict.set v key x
+  let get key {Domain.empty} data = match Dict.find data key with
+    | None -> empty
+    | Some x -> x
 
   let io : slot_io Hashtbl.M(String).t =
     Hashtbl.create (module String)
@@ -195,13 +229,15 @@ module Record = struct
               let Dict.Packed.T (key,data) = parse data in
               Dict.set s key data)
     end)
-  include Dict
 end
 
 module Knowledge = struct
-  type 'a value = Record.t
-  type +'a cls = 'a Class.t
-  type +'a obj = 'a Object.t
+  type 'a value = {
+    cls  : 'a Class.t;
+    data : Record.t
+  }
+  type 'a cls = 'a Class.t
+  type 'a obj = Id.t
   type 'p domain = 'p Domain.t
 
   module Pid = Int63
@@ -268,13 +304,20 @@ module Knowledge = struct
 
   type ('a,'p) slot = ('a,'p) Slot.t
 
+  module Class = struct
+    include Class
+    let property = Slot.declare
+  end
+
   module Value = struct
     type 'a t = 'a value
-    let empty _ = Record.empty
-    let put {Slot.key} v x = Record.set v key x
-    let get {Slot.key; dom} data = match Record.find data key with
-      | None -> dom.empty
-      | Some x -> x
+    let empty cls = {cls; data=Record.empty}
+    let clone cls {data} = {cls;data}
+    let create cls data = {cls; data}
+    let put {Slot.key} v x = {
+      v with data = Record.put key v.data x
+    }
+    let get {Slot.key; dom} {data} = Record.get key dom data
   end
 
   let get () = Knowledge.lift (State.get ())
@@ -282,16 +325,15 @@ module Knowledge = struct
   let gets f = Knowledge.lift (State.gets f)
   let update f = Knowledge.lift (State.update f)
 
-
-  let provide : type a p. (a,p) slot -> a Object.t -> p -> unit Knowledge.t =
+  let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
       update @@ fun s ->
       let {Base.data; reqs} = match Map.find s slot.cls.id with
         | None -> Base.empty_class
         | Some objs -> objs in
       let data = Map.update data obj ~f:(function
-          | None -> Value.(put slot (empty slot.cls) x)
-          | Some v -> Value.put slot v x) in
+          | None -> Record.(put slot.key empty x)
+          | Some v -> Record.put slot.key v x) in
       Map.set s ~key:slot.cls.id ~data:{data; reqs}
 
   let pids = ref Pid.zero
@@ -327,12 +369,12 @@ module Knowledge = struct
         | None -> {Base.empty_class with reqs}
         | Some objs -> {objs with reqs})
 
-  let collect : type a p. (a,p) slot -> a Object.t -> p Knowledge.t =
+  let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
       objects slot.cls >>= fun {Base.data} ->
       let init = match Map.find data id with
         | None -> slot.dom.empty
-        | Some v -> Value.get slot v in
+        | Some v -> Record.get slot.key slot.dom v in
       slot.promises |>
       Knowledge.List.fold ~init ~f:(fun curr req ->
           objects slot.cls >>= fun {Base.reqs} ->
@@ -348,12 +390,64 @@ module Knowledge = struct
       provide slot id max >>| fun () -> max
 
 
+
+  module Object = struct
+    type +'a t = 'a obj
+
+    let with_new_object objs f = match Map.max_elt objs.Base.data with
+      | None -> f Id.one {
+          objs
+          with data = Map.singleton (module Id) Id.one Record.empty
+        }
+      | Some (key,_) ->
+        let key = Id.succ key in
+        f key {
+          objs
+          with data = Map.add_exn objs.data ~key ~data:Record.empty
+        }
+
+
+    let create : 'a cls -> 'a obj Knowledge.t = fun cls ->
+      objects cls >>= fun objs ->
+      with_new_object objs @@ fun obj objs ->
+      update (Map.set ~key:cls.id ~data:objs) >>| fun () ->
+      obj
+
+    let delete {Class.id} obj =
+      update @@ fun base -> Map.change base id ~f:(function
+          | None -> None
+          | Some objs ->
+            let data = Map.remove objs.data obj in
+            if Map.is_empty data then None
+            else Some {objs with data})
+
+    let scoped cls scope =
+      create cls >>= fun obj ->
+      scope  obj >>= fun r ->
+      delete cls obj >>| fun () ->
+      r
+
+    let repr {Class.name={name}} obj =
+      Knowledge.return @@
+      Format.asprintf "#<%s %a>" name Id.pp obj
+
+
+    let read _ input =
+      Knowledge.return @@
+      Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
+      Id.of_string obj
+
+    let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
+      fun Type_equal.T x -> x
+
+  end
+
   include Knowledge
 
   let get_value cls obj = objects cls >>| fun {Base.data} ->
     match Map.find data obj with
     | None -> Value.empty cls
-    | Some x -> x
+    | Some x -> Value.create cls x
 
   let run x cls obj s =
     let x = x >>= fun () -> get_value cls obj in
