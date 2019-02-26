@@ -5,6 +5,12 @@ module Order = struct
   type partial = LT | EQ | GT | NC
 end
 
+type conflict = ..
+
+module Conflict = struct
+  type t = conflict = ..
+end
+
 module Id = Int63
 
 let user_package = "user-knowledge"
@@ -230,12 +236,9 @@ module Record = struct
     | None -> empty
     | Some x -> x
 
+  exception Merge_conflict of string * Sexp.t * Sexp.t
 
-  (* let merge_field :
-   *   fun {value=x; tinfo={domain=(module D)}} ({value=y} as r) ->
-            *     match D.partial x y with
-            *     | LE | EQ | NC -> r
-            *     | GE -> {r with value=x} *)
+  type conflict += Merge of string * Sexp.t * Sexp.t
 
   let merge ~on_conflict x y =
     Dict.to_alist x |>
@@ -247,14 +250,20 @@ module Record = struct
               let pack v = Dict.Packed.T (k,v) in
               let dom = Hashtbl.find_exn domains name in
               match dom.order (pack x) (pack y) with
-              | EQ
-              | LT -> Some x
+              | EQ | LT -> Some x
               | GT -> Some y
               | NC -> match on_conflict with
                 | `drop_both -> None
                 | `drop_left -> Some y
-                | `drop_right -> Some x))
+                | `drop_right -> Some x
+                | `fail ->
+                  let x = dom.inspect (pack x)
+                  and y = dom.inspect (pack y) in
+                  raise (Merge_conflict (name,x,y))))
 
+  let join x y =
+    try Ok (merge ~on_conflict:`fail x y)
+    with Merge_conflict (n,x,y) -> Error (Merge (n,x,y))
 
   let register_persistent (type p)
       (key : p Dict.Key.t)
@@ -323,11 +332,6 @@ module Knowledge = struct
   module Pid = Int63
   type pid = Pid.t
 
-  type conflict = ..
-
-  module Conflict = struct
-    type t = conflict = ..
-  end
 
   module Base = struct
     type objects = {
