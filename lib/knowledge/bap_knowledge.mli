@@ -5,8 +5,8 @@ type 'a knowledge
 module Knowledge : sig
   type 'a t = 'a knowledge
 
-  type +'a cls
-  type +'a obj
+  type 'a cls
+  type 'a obj
   type 'a value
   type ('a,'p) slot
   type 'p domain
@@ -18,11 +18,10 @@ module Knowledge : sig
 
   val collect : ('a,'p) slot -> 'a obj -> 'p t
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
-  val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit t
+  val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
-  val run : unit t -> (state, conflict) result
+  val run : unit t -> 'a cls -> 'a obj -> state -> ('a value * state, conflict) result
 
-  val extract : state -> 'a cls -> 'a obj -> 'a value
 
   include Monad.S with type 'a t := 'a t
   include Monad.Fail.S with type 'a t := 'a t
@@ -30,6 +29,9 @@ module Knowledge : sig
 
   module Class : sig
     type top
+    type 'a t = 'a cls
+    include Type_equal.Injective with type 'a t := 'a t
+
     val declare : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) cls
     val derived : ?desc:string -> ?package:string -> string -> 'a cls -> 'b -> ('b -> 'a) cls
     val upcast : (_ -> 'a) cls -> 'a cls
@@ -53,14 +55,11 @@ module Knowledge : sig
 
     val data : ('b -> 'a) cls -> 'b
 
-    type 'a ord
-    val comparator : 'a cls -> (module Base.Comparator.S
-                                 with type t = 'a obj
-                                  and type comparator_witness = 'a ord)
   end
 
   module Object : sig
     type 'a t = 'a obj
+    type 'a ord
 
     (** [create] is a fresh new object with an idefinite extent.  *)
     val create : 'a cls -> 'a obj t knowledge
@@ -90,10 +89,16 @@ module Knowledge : sig
         covenience.
     *)
     val cast : ('a obj, 'b obj) Type_equal.t -> 'a obj -> 'b obj
+
+    val comparator : 'a cls -> (module Base.Comparator.S
+                                 with type t = 'a obj
+                                  and type comparator_witness = 'a ord)
+
   end
 
   module Value : sig
     type 'a t = 'a value [@@deriving bin_io, compare, sexp]
+    type 'a ord
     include Type_equal.Injective with type 'a t := 'a t
 
     val empty : 'a cls -> 'a value
@@ -109,6 +114,14 @@ module Knowledge : sig
     val put : ('a,'p) slot -> 'a value -> 'p -> 'a value
 
     val clone : 'a cls -> _ value -> 'a value
+
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    val derive : 'a cls -> (module S with type t = 'a t and type comparator_witness = 'a ord)
   end
 
   module Order : sig

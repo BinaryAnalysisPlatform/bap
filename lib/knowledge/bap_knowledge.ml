@@ -71,7 +71,6 @@ module Domain = struct
 end
 
 type 'a obj = Id.t
-type 'a ord = Id.comparator_witness
 
 type fullname = {
   package : string;
@@ -111,7 +110,7 @@ let string_of_fname {package; name} =
 module Class = struct
   type top = TOP
 
-  type _ data =
+  type 'a data =
     | Top : top data
     | Derive : 'a data * 'b -> ('b -> 'a) data
 
@@ -153,22 +152,21 @@ module Class = struct
   let equal : type a b. a t -> b t -> (a obj,b obj) Type_equal.t option =
     fun x y -> Option.some_if (same x y) Type_equal.T
 
+  let assert_equal x y = match equal x y with
+    | Some t -> t
+    | None ->
+      failwithf "assert_equal: wrong assertion, classes of %s and %s \
+                 are different"
+        (string_of_fname x.name)
+        (string_of_fname y.name)
+        ()
+
   let data : type a b. (b -> a) t -> b = fun {data=Derive (_,data)} -> data
 
   let name {name={name}} = name
   let package {name={package}} = package
   let fullname {name} = string_of_fname name
 
-  let comparator : type a. a t ->
-    (module Comparator.S
-      with type t = a obj
-       and type comparator_witness = a ord) = fun _ ->
-    let module R = struct
-      type t = a obj
-      type comparator_witness = Id.comparator_witness
-      let comparator = Id.comparator
-    end in
-    (module R)
 end
 
 module Record = struct
@@ -183,22 +181,82 @@ module Record = struct
     type t = entry list [@@deriving bin_io]
   end
 
+  type univ = Dict.Packed.t
+
+
   type slot_io = {
-    reader : string -> Dict.Packed.t;
-    writer : Dict.Packed.t -> string;
+    reader : string -> univ;
+    writer : univ -> string;
   }
 
+  type slot_domain = {
+    inspect : univ -> Sexp.t;
+    order  : univ -> univ -> Order.partial;
+    empty  : univ;
+  }
+
+  let io : slot_io Hashtbl.M(String).t =
+    Hashtbl.create (module String)
+
+  let domains : slot_domain Hashtbl.M(String).t =
+    Hashtbl.create (module String)
+
   let empty = Dict.empty
+
+  let (<:=) x y =
+    Dict.to_alist x |> List.for_all ~f:(fun (Dict.Packed.T (k,_) as x) ->
+        match Dict.find y k with
+        | None -> false
+        | Some y ->
+          let dom = Hashtbl.find_exn domains (Dict.Key.name k) in
+          match dom.order x (Dict.Packed.T (k,y)) with
+          | LT | EQ -> true
+          | GT | NC -> false)
+
+  let order : t -> t -> Order.partial = fun x y ->
+    match x <:= y, y <:= x with
+    | true,false  -> LT
+    | true,true   -> EQ
+    | false,true  -> GT
+    | false,false -> NC
+
+  let compare x y = match order x y with
+    | EQ -> 0
+    | GT -> 1
+    | _ -> -1
 
   let put key v x = Dict.set v key x
   let get key {Domain.empty} data = match Dict.find data key with
     | None -> empty
     | Some x -> x
 
-  let io : slot_io Hashtbl.M(String).t =
-    Hashtbl.create (module String)
 
-  let register_parser (type p)
+  (* let merge_field :
+   *   fun {value=x; tinfo={domain=(module D)}} ({value=y} as r) ->
+            *     match D.partial x y with
+            *     | LE | EQ | NC -> r
+            *     | GE -> {r with value=x} *)
+
+  let merge ~on_conflict x y =
+    Dict.to_alist x |>
+    List.fold ~init:y ~f:(fun v (Dict.Packed.T (k,x)) ->
+        Dict.change v k ~f:(function
+            | None -> Some x
+            | Some y ->
+              let name = Dict.Key.name k in
+              let pack v = Dict.Packed.T (k,v) in
+              let dom = Hashtbl.find_exn domains name in
+              match dom.order (pack x) (pack y) with
+              | EQ
+              | LT -> Some x
+              | GT -> Some y
+              | NC -> match on_conflict with
+                | `drop_both -> None
+                | `drop_left -> Some y
+                | `drop_right -> Some x))
+
+
+  let register_persistent (type p)
       (key : p Dict.Key.t)
       (module P : Binable.S with type t = p) =
     let slot = Dict.Key.name key in
@@ -229,6 +287,26 @@ module Record = struct
               let Dict.Packed.T (key,data) = parse data in
               Dict.set s key data)
     end)
+
+  let register_domain
+    : type p. p Dict.Key.t -> p Domain.t -> unit =
+    fun key dom ->
+      let name = Dict.Key.name key in
+      let eq = Type_equal.Id.same_witness_exn in
+      let order (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
+        let Type_equal.T = eq kx ky in
+        let Type_equal.T = eq kx key in
+        dom.order x y in
+      let empty = Dict.Packed.T(key, dom.empty) in
+      let inspect (Dict.Packed.T(kx,x)) =
+        let Type_equal.T = eq kx key in
+        dom.inspect x in
+      Hashtbl.add_exn domains ~key:name ~data:{
+        inspect;
+        empty;
+        order;
+      }
+
 end
 
 module Knowledge = struct
@@ -239,6 +317,8 @@ module Knowledge = struct
   type 'a cls = 'a Class.t
   type 'a obj = Id.t
   type 'p domain = 'p Domain.t
+  type 'a ord = Id.comparator_witness
+
 
   module Pid = Int63
   type pid = Pid.t
@@ -294,30 +374,50 @@ module Knowledge = struct
       mutable promises : 'p promise list;
     }
 
-    let declare ?desc ?serializer ?package cls name (dom : 'a Domain.t) =
+    let declare ?desc ?persistent ?package cls name (dom : 'a Domain.t) =
       let slot = Registry.add_slot ?desc ?package name in
       let name = string_of_fname slot in
       let key = Type_equal.Id.create ~name dom.inspect in
-      Option.iter serializer (Record.register_parser key);
+      Option.iter persistent (Record.register_persistent key);
+      Record.register_domain key dom;
       {cls; dom; key; name; desc; promises = []}
   end
 
   type ('a,'p) slot = ('a,'p) Slot.t
 
-  module Class = struct
-    include Class
-    let property = Slot.declare
-  end
-
   module Value = struct
     type 'a t = 'a value
     let empty cls = {cls; data=Record.empty}
     let clone cls {data} = {cls;data}
+    let cls {cls} = cls
     let create cls data = {cls; data}
-    let put {Slot.key} v x = {
-      v with data = Record.put key v.data x
-    }
+    let put {Slot.key} v x = {v with data = Record.put key v.data x}
     let get {Slot.key; dom} {data} = Record.get key dom data
+    let strip
+      : type a b. (a value, b value) Type_equal.t -> (a,b) Type_equal.t =
+      fun T -> T
+  end
+
+  module Class = struct
+    include Class
+    let property = Slot.declare
+
+    let binable
+      : type a. a t -> (module Binable.S with type t = a value) =
+      fun cls ->
+        let module R = struct
+          type t = a value
+          include Binable.Of_binable(Record)(struct
+              type t = a value
+              let to_binable : 'a value -> Record.t = fun {data} -> data
+              let of_binable : Record.t -> 'a value = fun data -> {cls; data}
+            end)
+        end in
+        (module R)
+    let strip
+      : type a b. (a cls, b cls) Type_equal.t -> (a,b) Type_equal.t =
+      fun T -> T
+
   end
 
   let get () = Knowledge.lift (State.get ())
@@ -393,6 +493,7 @@ module Knowledge = struct
 
   module Object = struct
     type +'a t = 'a obj
+    type 'a ord = Id.comparator_witness
 
     let with_new_object objs f = match Map.max_elt objs.Base.data with
       | None -> f Id.one {
@@ -440,7 +541,22 @@ module Knowledge = struct
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
 
+    let comparator : type a. a t ->
+      (module Comparator.S
+        with type t = a obj
+         and type comparator_witness = a ord) = fun _ ->
+      let module R = struct
+        type t = a obj
+        type comparator_witness = Id.comparator_witness
+        let comparator = Id.comparator
+      end in
+      (module R)
+
+
   end
+
+  module Domain = Domain
+  module Order = Order
 
   include Knowledge
 
@@ -456,3 +572,5 @@ module Knowledge = struct
     | Error err,_ -> Error err
 
 end
+
+type 'a knowledge = 'a Knowledge.t
