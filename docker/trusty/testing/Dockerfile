@@ -26,15 +26,6 @@ RUN sed -i.bkp -e \
 USER bap
 WORKDIR /home/bap
 
-RUN wget https://github.com/projectatomic/bubblewrap/releases/download/v0.3.1/bubblewrap-0.3.1.tar.xz
-RUN tar xvf bubblewrap-0.3.1.tar.xz
-WORKDIR /home/bap/bubblewrap-0.3.1/
-RUN ./configure
-RUN make && sudo make install
-RUN bwrap --version
-WORKDIR /home/bap
-RUN rm -r bubblewrap-0.3.1 bubblewrap-0.3.1.tar.xz
-
 RUN wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh
 RUN echo "" | sh ./install.sh
 RUN opam --version
