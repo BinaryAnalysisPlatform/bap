@@ -153,14 +153,27 @@ let is_conditional_jump jmp =
   Insn.(may affect_control_flow) jmp &&
   has_jump_under_condition (Insn.bil jmp)
 
+let has_called block addr =
+  let bils = List.map (Block.insns block) ~f:(fun x -> Insn.bil (snd x)) in
+  let finder =
+    object inherit [unit] Stmt.finder
+      method! enter_jmp e r =
+        match e with
+        | Bil.Int a when Addr.(a = addr) -> r.return (Some ())
+        | _ -> r
+    end in
+  List.exists bils ~f:(Bil.exists finder)
+
 let fall_of_symtab symtab block =
   Option.(
     symtab >>= fun symtab ->
     Symtab.find_fall_addr symtab (Block.addr block) >>= fun addr ->
-    let bldr = Ir_blk.Builder.create () in
-    let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
-    let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
-    Some (Ir_blk.Builder.result bldr))
+    if has_called block addr then None
+    else
+      let bldr = Ir_blk.Builder.create () in
+      let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
+      let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in
+      Some (Ir_blk.Builder.result bldr))
 
 let blk ?symtab cfg block : blk term list =
   let fall_to_fn = fall_of_symtab symtab block in
