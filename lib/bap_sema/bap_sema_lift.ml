@@ -156,7 +156,7 @@ let is_conditional_jump jmp =
 let fall_of_symtab symtab block =
   Option.(
     symtab >>= fun symtab ->
-    Symtab.find_call_addr symtab (Block.addr block) >>= fun addr ->
+    Symtab.find_fall_addr symtab (Block.addr block) >>= fun addr ->
     let bldr = Ir_blk.Builder.create () in
     let call = Call.create ~target:(Label.indirect Bil.(int addr)) () in
     let () = Ir_blk.Builder.add_jmp bldr (Ir_jmp.create_call call) in

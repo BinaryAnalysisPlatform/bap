@@ -25,16 +25,17 @@ module Fn = Opaque.Make(struct
     let hash x = String.hash (fst3 x)
   end)
 
-type callee = addr option * string option
+type callee =
+  | Func of string
+  | Fall of addr
 [@@deriving sexp_of]
 
 type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callees : callee Addr.Map.t;
+  callees : callee list Addr.Map.t;
 } [@@deriving sexp_of]
-
 
 
 let compare t1 t2 =
@@ -74,7 +75,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callees = filter_callees name (Block.addr entry) t.callees;
+      callees = Map.remove t.callees (Block.addr entry);
     }
   else t
 
@@ -103,23 +104,33 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let update_callee t b addr name =
-  let set ~default update =
-    if Option.is_some update then update else default in
-  { t with
-    callees =
-      Map.update t.callees (Block.addr b)
-        ~f:(function
-            | None -> addr, name
-            | Some (a,n) -> set ~default:a addr, set ~default:n name)}
+let add_call_name t b name =
+  let callees =
+    Map.update t.callees (Block.addr b)
+      ~f:(function
+        | None -> [Func name]
+        | Some cs -> Func name :: cs) in
+  {t with callees}
 
-let add_call_name t b name = update_callee t b None (Some name)
-let add_call_addr t b addr = update_callee t b (Some addr) None
+let add_fall_addr t b addr =
+  let callees =
+    Map.update t.callees (Block.addr b)
+      ~f:(function
+        | None -> [Fall addr]
+        | Some cs -> Fall addr :: cs) in
+  {t with callees}
 
-let get t addr ~f =
+let find_map_callee t addr ~f =
   match Map.find t.callees addr with
   | None -> None
-  | Some x -> f x
+  | Some callees -> List.find_map callees ~f
 
-let find_call_addr t addr = get t addr ~f:fst
-let find_call_name t addr = get t addr ~f:snd
+let find_call_name t addr =
+  find_map_callee t addr ~f:(function
+      | Func x -> Some x
+      | _ -> None)
+
+let find_fall_addr t addr =
+  find_map_callee t addr ~f:(function
+      | Fall x -> Some x
+      | _ -> None)

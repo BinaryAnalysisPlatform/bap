@@ -24,11 +24,11 @@ val span : fn -> unit memmap
 (* remembers a call to a function [name] from the given block *)
 val add_call_name : t -> block -> string -> t
 
-(* remembers a call to a function at [addr] from the given block *)
-val add_call_addr : t -> block -> addr -> t
+(* remembers a fall from [addr] to the given block *)
+val add_fall_addr : t -> block -> addr -> t
 
 (* finds if there are any calls from the given block *)
 val find_call_name : t -> addr -> string option
 
-(* finds if there are any calls from the given block *)
-val find_call_addr : t -> addr -> addr option
+(* finds if there are any falls to the given [addr] *)
+val find_fall_addr : t -> addr -> addr option

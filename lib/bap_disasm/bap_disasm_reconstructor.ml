@@ -85,24 +85,11 @@ let add_callnames syms name cfg blk =
               Symtab.add_call_name syms blk)
   else syms
 
-let add_call_addrs syms cfg entries =
-  Set.fold entries ~init:syms ~f:(fun syms b ->
-      Seq.fold (Cfg.Node.inputs b cfg) ~init:syms
-        ~f:(fun syms e ->
-            match Cfg.Edge.label e with
-            | `Fall ->
-              Symtab.add_call_addr syms (Cfg.Edge.src e) (Block.addr b)
-            | _ -> syms))
-
 let collect name cfg roots =
   Seq.fold (Cfg.nodes cfg) ~init:(Block.Set.empty, Symtab.empty)
     ~f:(fun (entries, syms) blk ->
         let entries' = entries_of_block cfg roots blk in
-        let syms = add_call_addrs syms cfg entries' in
         Set.union entries entries', add_callnames syms name cfg blk)
-
-let add_symbol name syms cfg entry =
-  Symtab.add_symbol syms (name (Block.addr entry),entry,cfg)
 
 let reachable cfg start =
   let rec loop nodes node =
@@ -113,42 +100,55 @@ let reachable cfg start =
           else loop nodes (Cfg.Edge.dst edge)) in
   loop Block.Set.empty start
 
-let slice roots prog start =
+let sub roots prog start =
   let is_call e = Set.mem roots (Cfg.Edge.dst e) in
   let rec loop cfg inputs node =
     let inputs = Seq.fold ~init:inputs
         (Cfg.Node.inputs node prog) ~f:Set.add in
     Seq.fold (Cfg.Node.outputs node prog)
       ~init:(cfg, inputs)
-      ~f:(fun (cfg, edges) edge ->
-          if is_call edge then cfg,edges
+      ~f:(fun (cfg, inputs) edge ->
+          if is_call edge then cfg,inputs
           else
             let cfg' = Cfg.Edge.insert edge cfg in
-            if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg',edges
-            else loop cfg' edges (Cfg.Edge.dst edge)) in
-  let cfg = Cfg.empty |> Cfg.Node.insert start in
+            if Cfg.Node.mem (Cfg.Edge.dst edge) cfg then cfg',inputs
+            else loop cfg' inputs (Cfg.Edge.dst edge)) in
+  let cfg = Cfg.Node.insert start Cfg.empty in
   loop cfg Cfg.Edge.Set.empty start
+
+let find_fall =
+  Set.find_map
+    ~f:(fun e ->
+        if Cfg.Edge.label e = `Fall then Some (Cfg.Edge.src e)
+        else None)
+
+let edges_of_seq s = Seq.fold s ~init:Cfg.Edge.Set.empty ~f:Set.add
 
 let reconstruct name initial_roots prog =
   let (--) = Set.diff in
+  let update_symtab syms cfg entry fall_from =
+    let name = name (Block.addr entry) in
+    let syms = Symtab.add_symbol syms (name,entry,cfg) in
+    match fall_from with
+    | None -> syms
+    | Some b -> Symtab.add_fall_addr syms b (Block.addr entry) in
   let remove_node cfg n = Cfg.Node.remove n cfg in
-  let edges_of_seq s = Cfg.Edge.Set.of_list (Seq.to_list s) in
-  let inputs node = edges_of_seq (Cfg.Node.inputs node prog) in
+  let remove_reachable cfg from =
+    Set.fold (reachable cfg from) ~init:cfg ~f:remove_node in
+  let collect_destinations edges =
+    Set.fold edges ~init:Block.Set.empty ~f:(fun bs e ->
+        Set.add bs (Cfg.Edge.dst e)) in
   let rec loop known_roots syms = function
     | [] -> syms,known_roots
     | root :: roots ->
-      let cfg, all_inputs = slice known_roots prog root in
-      let all_edges = edges_of_seq (Cfg.edges cfg) in
-      let calls = all_inputs -- all_edges -- inputs root in
-      let discovered =
-        Set.fold calls ~init:Block.Set.empty ~f:(fun bs e ->
-            Set.add bs (Cfg.Edge.dst e)) in
-      let cfg =
-        Set.fold discovered ~init:cfg ~f:(fun cfg r ->
-            Set.fold (reachable cfg r) ~init:cfg ~f:remove_node) in
-      let known = Set.union known_roots discovered in
-      let syms = add_symbol name syms cfg root in
-      let syms,known = loop known syms (Set.to_list discovered) in
+      let self_inputs = edges_of_seq (Cfg.Node.inputs root prog) in
+      let cfg, inputs = sub known_roots prog root in
+      let edges = edges_of_seq (Cfg.edges cfg) in
+      let calls = collect_destinations (inputs -- edges -- self_inputs) in
+      let cfg   = Set.fold calls ~init:cfg ~f:remove_reachable in
+      let known = Set.union known_roots calls in
+      let syms  = update_symtab syms cfg root (find_fall self_inputs)  in
+      let syms,known = loop known syms (Set.to_list calls) in
       loop known syms roots in
   let initial_roots = Addr.Set.of_list initial_roots in
   let roots,syms = collect name prog initial_roots in
