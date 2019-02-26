@@ -63,11 +63,10 @@ let filter_mem mem name entry =
       not(String.(name = n) || Block.(entry = e)))
 
 let filter_callees name addr =
-  Map.filter ~f:(function
-      | Some a, Some n -> Addr.(addr <> a) && String.(name <> n)
-      | Some a, _ -> Addr.(addr <> a)
-      | _, Some n -> String.(name <> n)
-      | _ -> true)
+  let filter = function
+    | Func name' -> String.(name <> name')
+    | Fall addr' -> Addr.(addr <> addr') in
+  Map.map ~f:(List.filter ~f:filter)
 
 let remove t (name,entry,_) : t =
   if Map.mem t.addrs (Block.addr entry) then
@@ -75,7 +74,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callees = Map.remove t.callees (Block.addr entry);
+      callees = filter_callees name (Block.addr entry) t.callees;
     }
   else t
 
@@ -104,21 +103,11 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_call_name t b name =
-  let callees =
-    Map.update t.callees (Block.addr b)
-      ~f:(function
-        | None -> [Func name]
-        | Some cs -> Func name :: cs) in
-  {t with callees}
+let add_callee t b callee =
+  {t with callees = Map.add_multi t.callees (Block.addr b) callee}
 
-let add_fall_addr t b addr =
-  let callees =
-    Map.update t.callees (Block.addr b)
-      ~f:(function
-        | None -> [Fall addr]
-        | Some cs -> Fall addr :: cs) in
-  {t with callees}
+let add_call_name t b name = add_callee t b (Func name)
+let add_fall_addr t b addr = add_callee t b (Fall addr)
 
 let find_map_callee t addr ~f =
   match Map.find t.callees addr with
