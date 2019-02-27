@@ -37,8 +37,8 @@ module Domain = struct
     define ?inspect ~empty name ~order:(partial_of_total order)
 
   let mapping (type k) (type o) ?(equal=(fun _ _ -> true))
-      (module K : Base.Comparable.S with type t = k
-                                     and type comparator_witness = o)
+      (module K : Comparator.S with type t = k
+                                and type comparator_witness = o)
       name =
     let empty = Map.empty (module K) in
     let inspect xs =
@@ -63,7 +63,7 @@ module Domain = struct
       | None,None -> EQ
       | None,Some _ -> LT
       | Some _,None -> GT
-      | Some x, Some y -> order x y in
+      | Some x, Some y -> partial_of_total order x y in
     let empty = None in
     define ~inspect ~order ~empty name
 
@@ -226,10 +226,6 @@ module Record = struct
     | false,true  -> GT
     | false,false -> NC
 
-  let compare x y = match order x y with
-    | EQ -> 0
-    | GT -> 1
-    | _ -> -1
 
   let put key v x = Dict.set v key x
   let get key {Domain.empty} data = match Dict.find data key with
@@ -316,24 +312,39 @@ module Record = struct
         order;
       }
 
+  let sexp_of_t x =
+    Sexp.List (Dict.to_alist x |> List.map ~f:(function
+          Dict.Packed.T (k,x) ->
+          let name = Dict.Key.name k in
+          let dom = Hashtbl.find_exn domains name in
+          Sexp.List [
+            Atom name;
+            dom.inspect (Dict.Packed.T(k,x));
+          ]))
+
+  let t_of_sexp = opaque_of_sexp
+
+  let inspect = sexp_of_t
 end
 
 module Knowledge = struct
+
   type 'a value = {
     cls  : 'a Class.t;
-    data : Record.t
+    data : Record.t;
+    time : Id.t;
   }
   type 'a cls = 'a Class.t
   type 'a obj = Id.t
   type 'p domain = 'p Domain.t
   type 'a ord = Id.comparator_witness
-
+  type conflict = Conflict.t = ..
 
   module Pid = Int63
   type pid = Pid.t
 
 
-  module Base = struct
+  module Data = struct
     type objects = {
       data : Record.t Map.M(Id).t;
       reqs : Set.M(Id).t Map.M(Pid).t
@@ -346,12 +357,12 @@ module Knowledge = struct
     type t = objects Map.M(Id).t
   end
 
-  type state = Base.t
-  let empty : Base.t = Map.empty (module Id)
+  type state = Data.t
+  let empty : Data.t = Map.empty (module Id)
 
   module State = struct
-    include Monad.State.T1(Base)(Monad.Ident)
-    include Monad.State.Make(Base)(Monad.Ident)
+    include Monad.State.T1(Data)(Monad.Ident)
+    include Monad.State.Make(Data)(Monad.Ident)
   end
 
   module Knowledge = struct
@@ -391,37 +402,101 @@ module Knowledge = struct
 
   module Value = struct
     type 'a t = 'a value
-    let empty cls = {cls; data=Record.empty}
-    let clone cls {data} = {cls;data}
+
+    (* we could use an extension variant or create a new OCaml object
+       instead of incrementing a second, but they are less reliable
+       and heavier *)
+    let next_second =
+      let current = ref Int63.zero in
+      fun () -> Int63.incr current; !current
+
+    let empty cls =
+      {cls; data=Record.empty; time = next_second ()}
+
+    let clone cls {data; time} = {cls; data; time}
     let cls {cls} = cls
-    let create cls data = {cls; data}
-    let put {Slot.key} v x = {v with data = Record.put key v.data x}
+    let create cls data = {cls; data; time = next_second ()}
+    let put {Slot.key} v x = {
+      v with data = Record.put key v.data x;
+             time = next_second ()
+    }
     let get {Slot.key; dom} {data} = Record.get key dom data
     let strip
       : type a b. (a value, b value) Type_equal.t -> (a,b) Type_equal.t =
       fun T -> T
+
+    type strategy = [`drop_left | `drop_right | `drop_both]
+
+    let merge ?(on_conflict=`drop_old) x y =
+      let on_conflict : strategy = match on_conflict with
+        | `drop_old -> if Id.(x.time < y.time)
+          then `drop_left else `drop_right
+        | `drop_new -> if Id.(x.time < y.time)
+          then `drop_right else `drop_left
+        | #strategy as other -> other in
+      {
+        x with time = next_second ();
+               data = Record.merge ~on_conflict x.data y.data
+      }
+
+
+    let join x y = match Record.join x.data y.data with
+      | Ok data -> Ok {x with data; time = next_second ()}
+      | Error c -> Error c
+
+    module type S = sig
+      type t [@@deriving sexp]
+      include Base.Comparable.S with type t := t
+      include Binable.S with type t := t
+    end
+
+    module Comparator = Base.Comparator.Make1(struct
+        type 'a t = 'a value
+        let sexp_of_t = sexp_of_opaque
+        let compare x y = match Record.order x.data y.data with
+          | LT -> -1
+          | EQ -> 0
+          | GT -> 1
+          | NC -> Int63.compare x.time y.time
+      end)
+
+    include Comparator
+
+    type 'a ord = comparator_witness
+
+    let derive
+      : type a. a cls ->
+        (module S with type t = a t and type comparator_witness = a ord) =
+      fun cls ->
+        let module R = struct
+          type t = a value
+          let sexp_of_t x = Record.sexp_of_t x.data
+          let t_of_sexp = opaque_of_sexp
+          include Binable.Of_binable(Record)(struct
+              type t = a value
+              let to_binable : 'a value -> Record.t =
+                fun {data} -> data
+              let of_binable : Record.t -> 'a value =
+                fun data -> {cls; data; time = next_second ()}
+            end)
+          type comparator_witness = Comparator.comparator_witness
+          include Base.Comparable.Make_using_comparator(struct
+              type t = a value
+              let sexp_of_t = sexp_of_t
+              include Comparator
+            end)
+        end in
+        (module R)
+
+
   end
 
   module Class = struct
     include Class
     let property = Slot.declare
-
-    let binable
-      : type a. a t -> (module Binable.S with type t = a value) =
-      fun cls ->
-        let module R = struct
-          type t = a value
-          include Binable.Of_binable(Record)(struct
-              type t = a value
-              let to_binable : 'a value -> Record.t = fun {data} -> data
-              let of_binable : Record.t -> 'a value = fun data -> {cls; data}
-            end)
-        end in
-        (module R)
     let strip
-      : type a b. (a cls, b cls) Type_equal.t -> (a,b) Type_equal.t =
+      : type a b. (a t, b t) Type_equal.t -> (a,b) Type_equal.t =
       fun T -> T
-
   end
 
   let get () = Knowledge.lift (State.get ())
@@ -432,8 +507,8 @@ module Knowledge = struct
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x ->
       update @@ fun s ->
-      let {Base.data; reqs} = match Map.find s slot.cls.id with
-        | None -> Base.empty_class
+      let {Data.reqs; data} = match Map.find s slot.cls.id with
+        | None -> Data.empty_class
         | Some objs -> objs in
       let data = Map.update data obj ~f:(function
           | None -> Record.(put slot.key empty x)
@@ -464,24 +539,24 @@ module Knowledge = struct
   let objects : _ cls -> _ = fun cls ->
     get () >>| fun base ->
     match Map.find base cls.id with
-    | None -> Base.empty_class
+    | None -> Data.empty_class
     | Some objs -> objs
 
   let update_reqs : _ slot -> _ = fun slot reqs ->
     update @@ fun s ->
     Map.update s slot.cls.id ~f:(function
-        | None -> {Base.empty_class with reqs}
+        | None -> {Data.empty_class with reqs}
         | Some objs -> {objs with reqs})
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-      objects slot.cls >>= fun {Base.data} ->
+      objects slot.cls >>= fun {Data.data} ->
       let init = match Map.find data id with
         | None -> slot.dom.empty
         | Some v -> Record.get slot.key slot.dom v in
       slot.promises |>
       Knowledge.List.fold ~init ~f:(fun curr req ->
-          objects slot.cls >>= fun {Base.reqs} ->
+          objects slot.cls >>= fun {Data.reqs} ->
           if is_active reqs req.pid id
           then Knowledge.return curr
           else
@@ -499,7 +574,7 @@ module Knowledge = struct
     type +'a t = 'a obj
     type 'a ord = Id.comparator_witness
 
-    let with_new_object objs f = match Map.max_elt objs.Base.data with
+    let with_new_object objs f = match Map.max_elt objs.Data.data with
       | None -> f Id.one {
           objs
           with data = Map.singleton (module Id) Id.one Record.empty
@@ -545,18 +620,16 @@ module Knowledge = struct
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
 
-    let comparator : type a. a t ->
+    let comparator : type a. a cls ->
       (module Comparator.S
         with type t = a obj
          and type comparator_witness = a ord) = fun _ ->
       let module R = struct
         type t = a obj
-        type comparator_witness = Id.comparator_witness
+        type comparator_witness = a ord
         let comparator = Id.comparator
       end in
       (module R)
-
-
   end
 
   module Domain = Domain
@@ -564,7 +637,7 @@ module Knowledge = struct
 
   include Knowledge
 
-  let get_value cls obj = objects cls >>| fun {Base.data} ->
+  let get_value cls obj = objects cls >>| fun {Data.data} ->
     match Map.find data obj with
     | None -> Value.empty cls
     | Some x -> Value.create cls x

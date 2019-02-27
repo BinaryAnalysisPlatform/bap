@@ -97,16 +97,18 @@ module Knowledge : sig
   end
 
   module Value : sig
-    type 'a t = 'a value [@@deriving bin_io, compare, sexp]
+    type 'a t = 'a value
     type 'a ord
     include Type_equal.Injective with type 'a t := 'a t
 
     val empty : 'a cls -> 'a value
     val join : 'a value -> 'a value -> ('a value,conflict) result
     val merge : ?on_conflict:[
-      `drop_right |
-      `drop_left  |
-      `drop_both
+      | `drop_old
+      | `drop_new
+      | `drop_right
+      | `drop_left
+      | `drop_both
     ] -> 'a value -> 'a value -> 'a value
 
     val cls : 'a value -> 'a cls
@@ -171,7 +173,7 @@ module Knowledge : sig
     val optional :
       ?inspect:('a -> Base.Sexp.t) ->
       order:('a -> 'a -> int) ->
-      string -> 'a domain
+      string -> 'a option domain
 
     val string : string domain
   end
