@@ -92,29 +92,29 @@ module Sort = struct
   let format {base; k} =
     let base = if base = 2 then "Binary" else "Decimal" in
     let exp = Sort.(Cons ("IEEE754", [Sort (Cons (base,[]))])) in
-    Floats.Format.define exp IEEE754 (Bits.define k)
+    Float.Format.define exp IEEE754 (Bitv.define k)
 
-  let define p = Floats.define (format p)
+  let define p = Float.define (format p)
 
   let spec e =
-    let fmt = Floats.format e in
-    let k = Bits.size (Floats.Format.bits fmt) in
-    match Floats.Format.exp fmt with
+    let fmt = Float.format e in
+    let k = Bitv.size (Float.Format.bits fmt) in
+    match Float.Format.exp fmt with
     | Sort.Cons ("IEEE754", [Sort (Cons ("Binary", []))])  -> binary k
     | Sort.Cons ("IEEE754", [Sort (Cons ("Decimal", []))]) -> decimal k
     | _ -> assert false
 
   let exps e =
     let {w} = spec e in
-    Bits.define w
+    Bitv.define w
 
   let sigs e =
     let {p} = spec e in
-    Bits.define p
+    Bitv.define p
 
   let bits e =
     let {k} = spec e in
-    Bits.define k
+    Bitv.define k
 end
 
 let binary = function

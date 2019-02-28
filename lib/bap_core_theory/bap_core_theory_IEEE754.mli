@@ -1,5 +1,4 @@
 open Bap_core_theory_sort
-open Floats
 
 type ('a,'e,'t) t
 type ('a,'e,'t) ieee754 = ('a,'e,'t) t
@@ -27,9 +26,10 @@ val binary : int -> parameters option
 val decimal : int -> parameters option
 
 module Sort : sig
-  val define : parameters -> (('b,'e,'t) ieee754,'s) format float sort
-  val exps : (('b,'e,'t) ieee754,'s) format float sort -> 'e bitv sort
-  val sigs : (('b,'e,'t) ieee754,'s) format float sort -> 't bitv sort
-  val bits : (('b,'e,'t) ieee754,'s) format float sort -> 's bitv sort
-  val spec : (('b,'e,'t) ieee754,'s) format float sort -> parameters
+  open Float
+  val define : parameters -> (('b,'e,'t) ieee754,'s) format Float.t sort
+  val exps : (('b,'e,'t) ieee754,'s) format Float.t sort -> 'e Bitv.t sort
+  val sigs : (('b,'e,'t) ieee754,'s) format Float.t sort -> 't Bitv.t sort
+  val bits : (('b,'e,'t) ieee754,'s) format Float.t sort -> 's Bitv.t sort
+  val spec : (('b,'e,'t) ieee754,'s) format Float.t sort -> parameters
 end

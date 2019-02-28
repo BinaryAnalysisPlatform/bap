@@ -1,7 +1,6 @@
 open Core_kernel
 open Bap_knowledge
 open Bap_core_theory_sort
-module Value = Bap_core_theory_value
 
 type 'a t
 type ident [@@deriving bin_io, compare, sexp]
@@ -15,6 +14,6 @@ val sort : 'a t -> 'a sort
 val is_virtual : 'a t -> bool
 val is_mutable : 'a t -> bool
 val fresh : 'a sort -> 'a t knowledge
-val scoped : 'a sort -> ('a t -> 'b Value.t knowledge) -> 'b Value.t knowledge
+val scoped : 'a sort -> ('a t -> 'b knowledge) -> 'b knowledge
 
 module Ident : Identifiable with type t := ident

@@ -114,7 +114,7 @@ let string_of_fname {package; name} =
   package ^ ":" ^ name
 
 module Class = struct
-  type top = TOP
+  type top = unit
 
   type 'a data =
     | Top : top data

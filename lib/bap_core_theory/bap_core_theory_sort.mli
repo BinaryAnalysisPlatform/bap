@@ -1,16 +1,8 @@
 open Core_kernel
 open Caml.Format
-
-type bit
-type 'a bitv
-type ('a,'b) mem
-type 'a sort
-type 'f float
-type rmode
+open Bap_knowledge
 
 module Sort : sig
-  type 'a t = 'a sort
-
   type exp =
     | Bool
     | Cons of string * param list
@@ -19,60 +11,59 @@ module Sort : sig
     | Index of int
   [@@deriving compare, sexp]
 
+  type 'a definition
+  type 'a t = ('a definition -> unit) Knowledge.Class.t
+
   val define : exp -> 'a -> 'a t
-  val name : 'a t -> string
   val exp : 'a t -> exp
-  val type_equal : 'a t -> 'b t -> ('a t, 'b t) Type_equal.t option
-  val same : 'a t -> 'b t -> bool
   val pp_exp : formatter -> exp -> unit
   val pp : formatter -> 'a t -> unit
-  val compare : 'a t -> 'a t -> int
 end
+
+type 'a sort = 'a Sort.t
 
 module Bool : sig
-  type t = bit
-  val t : bit sort
-  val parse : Sort.exp -> bit sort option
-  val cast : 'a sort -> bit sort option
+  type t
+  val t : t sort
+  val parse : Sort.exp -> t sort option
+  val cast : 'a sort -> t sort option
 end
 
 
-module Bits : sig
-  type 'a t = 'a bitv
-  val define : int -> 'a bitv sort
-  val size : 'a bitv sort -> int
-  val parse : Sort.exp -> 'b bitv sort option
-  val cast : 'a sort -> 'b bitv sort option
+module Bitv : sig
+  type 'a t
+  val define : int -> 'a t sort
+  val size : 'a t sort -> int
+  val parse : Sort.exp -> 'b t sort option
+  val cast : 'a sort -> 'b t sort option
 end
 
-module Mems : sig
-  type ('a,'b) t = ('a,'b) mem
-  val define : 'a bitv sort -> 'b bitv sort -> ('a,'b) mem sort
-  val keys : ('a,'b) mem sort -> 'a bitv sort
-  val vals : ('a,'b) mem sort -> 'b bitv sort
-  val parse : Sort.exp -> ('a,'b) mem sort option
-  val cast : _ sort -> ('a,'b) mem sort option
+module Mem : sig
+  type ('a,'b) t
+  val define : 'a Bitv.t sort -> 'b Bitv.t sort -> ('a,'b) t sort
+  val keys : ('a,'b) t sort -> 'a Bitv.t sort
+  val vals : ('a,'b) t sort -> 'b Bitv.t sort
+  val parse : Sort.exp -> ('a,'b) t sort option
+  val cast : _ sort -> ('a,'b) t sort option
 end
 
-module Floats : sig
-  type 'f t = 'f float
+module Float : sig
+  type 'f t
   type ('r,'s) format
 
-  val define : ('r,'s) format -> ('r,'s) format float sort
-  val format : ('r,'s) format float sort -> ('r,'s) format
-  val size : ('r,'s) format float sort -> 's bitv sort
-  val parse : Sort.exp -> ('r,'s) format float sort option
-  val cast : _ sort -> ('r,'s) format float sort option
+  val define : ('r,'s) format -> ('r,'s) format t sort
+  val format : ('r,'s) format t sort -> ('r,'s) format
+  val size : ('r,'s) format t sort -> 's Bitv.t sort
 
   module Format : sig
     type ('r,'s) t = ('r,'s) format
-    val define : Sort.exp -> 'r -> 's bitv sort -> ('r,'s) format
+    val define : Sort.exp -> 'r -> 's Bitv.t sort -> ('r,'s) format
     val exp : ('r,'s) format -> Sort.exp
-    val bits : ('r,'s) format -> 's bitv sort
+    val bits : ('r,'s) format -> 's Bitv.t sort
   end
 end
 
 module Rmode : sig
-  type t = rmode
+  type t
   val t : t sort
 end

@@ -1,34 +1,53 @@
 open Core_kernel
 open Caml.Format
 
-module Sort : sig
-  type 'a t
+open Bap_knowledge
+module KB = Knowledge
+
+let package = "edu.cmu.ece.bap.core-theory"
+
+module Sort
+  : sig
+    type exp =
+      | Bool
+      | Cons of string * param list
+    and param =
+      | Sort of exp
+      | Index of int
+    [@@deriving bin_io, compare, sexp]
+
+    type 'a definition
+
+    type 'a t = ('a definition -> unit) KB.cls
+
+    val define : exp -> 'a -> 'a t
+
+    val exp : 'a t -> exp
+    val pp_exp : formatter -> exp -> unit
+    val pp : formatter -> 'a t -> unit
+  end
+= struct
   type exp =
     | Bool
     | Cons of string * param list
   and param =
     | Sort of exp
     | Index of int
-  [@@deriving compare, sexp]
+  [@@deriving bin_io, compare, sexp]
 
-  val define : exp -> 'a -> 'a t
-  val name : 'a t -> string
-  val exp : 'a t -> exp
-  val type_equal : 'a t -> 'b t -> ('a t, 'b t) Type_equal.t option
-  val same : 'a t -> 'b t -> bool
-  val pp_exp : formatter -> exp -> unit
-  val pp : formatter -> 'a t -> unit
-  val compare : 'a t -> 'a t -> int
-end = struct
-  type exp =
-    | Bool
-    | Cons of string * param list
-  and param =
-    | Sort of exp
-    | Index of int
-  [@@deriving compare, sexp]
+  type top = Top
+  type 'a definition = exp
+  type 'a t = ('a definition -> unit) Knowledge.cls
 
-  type 'a t = exp
+  let base =
+    KB.Class.upcast @@
+    KB.Class.declare ~package "value"
+      ~desc:"result of a computation"
+      Top
+
+  let define exp _witness : 'a t =
+    KB.Class.refine base exp
+
 
   let rec pp_exp ppf = function
     | Bool -> fprintf ppf "Bool"
@@ -41,17 +60,8 @@ end = struct
     | Sort x -> pp_exp ppf x
     | Index n -> fprintf ppf "%d" n
 
-  let define exp _ = exp
-  let exp x = x
-  let name x = asprintf "%a" pp_exp x
-  let same x y = compare_exp x y = 0
-
-  let type_equal : type a b.
-    a t -> b t -> (a t, b t) Type_equal.t option =
-    fun x y -> if same x y then Some Type_equal.T else None
-
-  let pp  = pp_exp
-  let compare = compare_exp
+  let exp x = KB.Class.(data x)
+  let pp ppf x = pp_exp ppf (exp x)
 end
 
 type 'a sort = 'a Sort.t
@@ -67,32 +77,31 @@ module Bool = struct
   let cast s = parse (Sort.exp s)
 end
 
-module Bits = struct
+module Bitv = struct
   type 'a t = Bitv : 'a t
 
   let define (type s) width =
-    Sort.(define (Cons ("Bits", [Index width])) Bitv)
+    Sort.(define (Cons ("Bitv", [Index width])) Bitv)
 
   let size : 'a t sort -> int = fun s -> match Sort.exp s with
     | Cons (_, [Index width]) -> width
     | _ -> assert false
 
   let parse = function
-    | Sort.Cons ("Bits", [Index width]) -> Some (define width)
+    | Sort.Cons ("Bitv", [Index width]) -> Some (define width)
     | _ -> None
 
   let cast s = parse (Sort.exp s)
-
 end
 
-module Mems = struct
+module Mem = struct
   type ('a,'b) t = Mems : ('a,'b) t
   let define ks vs =
     Sort.(define (Cons (("Memory"),
                         [Sort (exp ks); Sort (exp vs)]))
             Mems)
 
-  let bits e1 = Option.value_exn (Bits.parse e1)
+  let bits e1 = Option.value_exn (Bitv.parse e1)
 
   let keys x = match Sort.exp x with
     | Sort.Cons (_, [Sort e;_]) -> bits e
@@ -104,22 +113,22 @@ module Mems = struct
 
   let parse = function
     | Sort.Cons ("Memory", [Sort e1; Sort e2]) ->
-      Option.(Bits.parse e1 >>= fun s1 ->
-              Bits.parse e2 >>| fun s2 ->
+      Option.(Bitv.parse e1 >>= fun s1 ->
+              Bitv.parse e2 >>| fun s2 ->
               define s1 s2)
     | _ -> None
 
   let cast s = parse (Sort.exp s)
 end
 
-module Floats = struct
+module Float = struct
   type 'f t = Floats : 'f t
 
   module Format = struct
     type (_,_) t = Sort.exp * int
-    let define exp _ bits = exp, Bits.size bits
+    let define exp _ bits = exp, Bitv.size bits
     let exp (x,_) = x
-    let bits (_,x) = Bits.define x
+    let bits (_,x) = Bitv.define x
   end
 
   type ('f,'s) format = ('f,'s) Format.t
@@ -146,9 +155,3 @@ module Rmode = struct
   type t = Rmode
   let t = Sort.(define (Cons ("RoundingMode", [])) Rmode)
 end
-
-type bit = Bool.t
-type 'a bitv = 'a Bits.t
-type ('a,'b) mem = ('a,'b) Mems.t
-type 'f float = 'f Floats.t
-type rmode = Rmode.t

@@ -3,85 +3,89 @@ open Bap_knowledge
 open Bap_core_theory_sort
 
 module Var = Bap_core_theory_var
-module Eff = Bap_core_theory_eff
-module Kind = Bap_core_theory_kind
-module Value = Bap_core_theory_value
+module Effect = Bap_core_theory_effect
 
+type 'a sort = 'a Sort.t
+type 'a effect = 'a Effect.t
 
-type 'a t = 'a knowledge
-type 'a var = 'a Var.t
-type 'a value = 'a Value.t
-type 'a eff = 'a Eff.t
-type data = Kind.data
-type ctrl = Kind.ctrl
-type 'f float = 'f Floats.t
-type ('r,'s) format = ('r,'s) Floats.format
-type rmode = Rmode.t
+type 'a t = 'a Knowledge.value Knowledge.t
+type 'a pure = ('a sort -> unit) t
+type 'a eff = ('a effect -> unit) t
+
+type bool = Bool.t pure
+type 'a bitv = 'a Bitv.t pure
+type ('a,'b) mem = ('a,'b) Mem.t pure
+type 'f float = 'f Float.t pure
+type rmode = Rmode.t pure
+
+type data = Effect.data
+type ctrl = Effect.ctrl
+type full = Effect.full
+
+type ('r,'s) format = ('r,'s) Float.format
+
 type word = Bitvec.t
+type 'a var
+type link
+type label = link Knowledge.Object.t
+
+
 
 module type Init = sig
-  val var : 'a var -> 'a value t
-  val unk : 'a sort -> 'a value t
-  val let_ : 'a var -> 'a value t -> 'b value t -> 'b value t
+  val var : 'a var -> 'a pure t
+  val unk : 'a sort -> 'a pure t
+  val let_ : 'a var -> 'a pure t -> 'b pure t -> 'b pure t
 end
 
 module type Bool = sig
-  val b0 : bit value t
-  val b1 : bit value t
-  val inv : bit value t -> bit value t
-  val and_ : bit value t -> bit value t -> bit value t
-  val or_ : bit value t -> bit value t -> bit value t
+  val b0 : bool
+  val b1 : bool
+  val inv : bool -> bool
+  val and_ : bool -> bool -> bool
+  val or_ : bool -> bool -> bool
 end
-
 
 module type Bitv = sig
-  val int : 'a bitv sort -> word -> 'a bitv value t
-  val msb : 'a bitv value t -> bit value t
-  val lsb : 'a bitv value t -> bit value t
-  val neg  : 'a bitv value t -> 'a bitv value t
-  val not    : 'a bitv value t -> 'a bitv value t
-  val add  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val sub  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val mul  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val div  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val sdiv : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val modulo : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val smodulo : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val logand : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val logor  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val logxor  : 'a bitv value t -> 'a bitv value t -> 'a bitv value t
-  val shiftr : bit value t -> 'a bitv value t -> 'b bitv value t -> 'a bitv value t
-  val shiftl : bit value t -> 'a bitv value t -> 'b bitv value t -> 'a bitv value t
-  val ite : bit value t -> 'a value t -> 'a value t -> 'a value t
-  val sle : 'a bitv value t -> 'a bitv value t -> bit value t
-  val ule : 'a bitv value t -> 'a bitv value t -> bit value t
-  val cast : 'a bitv sort -> bit value t -> 'b bitv value t -> 'a bitv value t
-  val concat : 'a bitv sort -> 'b bitv value t list -> 'a bitv value t
-  val append : 'a bitv sort -> 'b bitv value t -> 'c bitv value t -> 'a bitv value t
+  val int : 'a bitv sort -> word -> 'a bitv
+  val msb : 'a bitv -> bool
+  val lsb : 'a bitv -> bool
+  val neg  : 'a bitv -> 'a bitv
+  val not    : 'a bitv -> 'a bitv
+  val add  : 'a bitv -> 'a bitv -> 'a bitv
+  val sub  : 'a bitv -> 'a bitv -> 'a bitv
+  val mul  : 'a bitv -> 'a bitv -> 'a bitv
+  val div  : 'a bitv -> 'a bitv -> 'a bitv
+  val sdiv : 'a bitv -> 'a bitv -> 'a bitv
+  val modulo : 'a bitv -> 'a bitv -> 'a bitv
+  val smodulo : 'a bitv -> 'a bitv -> 'a bitv
+  val logand : 'a bitv -> 'a bitv -> 'a bitv
+  val logor  : 'a bitv -> 'a bitv -> 'a bitv
+  val logxor  : 'a bitv -> 'a bitv -> 'a bitv
+  val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
+  val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
+  val ite : bool -> 'a -> 'a -> 'a
+  val sle : 'a bitv -> 'a bitv -> bool
+  val ule : 'a bitv -> 'a bitv -> bool
+  val cast : 'a bitv sort -> bool -> 'b bitv -> 'a bitv
+  val concat : 'a bitv sort -> 'b bitv list -> 'a bitv
+  val append : 'a bitv sort -> 'b bitv -> 'c bitv -> 'a bitv
 end
 
-
 module type Memory = sig
-  val load : ('a,'b) mem value t -> 'a bitv value t -> 'b bitv value t
-  val store : ('a,'b) mem value t -> 'a bitv value t -> 'b bitv value t -> ('a,'b) mem value t
+  val load : ('a,'b) mem -> 'a bitv -> 'b bitv
+  val store : ('a,'b) mem -> 'a bitv -> 'b bitv -> ('a,'b) mem
 end
 
 module type Effect = sig
-  val pass : data eff t
-  val skip : ctrl eff t
-  val set : 'a var -> 'a value t -> data eff t
-  val jmp  : _ bitv value t -> ctrl eff t
-  val goto : label -> ctrl eff t
-  val seq : 'a eff t -> 'a eff t -> 'a eff t
-  val blk : label -> data eff t -> ctrl eff t -> unit eff t
-  val repeat : bit value t -> data eff t -> data eff t
-  val branch : bit value t -> 'a eff t -> 'a eff t -> 'a eff t
-  val atomic : data eff t -> data eff t
-  val mfence : data eff t
-  val lfence : data eff t
-  val sfence : data eff t
+  val perform : 'a effect -> 'a eff
+  val set : 'a var -> 'a pure t -> data eff
+  val jmp  : _ bitv -> ctrl eff
+  val goto : label -> ctrl eff
+  val seq : 'a eff -> 'a eff -> 'a eff
+  val blk : label -> data eff -> ctrl eff -> unit eff
+  val repeat : bool -> data eff -> data eff
+  val branch : bool -> 'a eff -> 'a eff -> 'a eff
 end
-
 
 module type Minimal = sig
   include Init
@@ -93,131 +97,118 @@ end
 
 module type Basic = sig
   include Minimal
-  val zero : 'a bitv sort -> 'a bitv value t
-  val is_zero  : 'a bitv value t -> bit value t
-  val non_zero : 'a bitv value t -> bit value t
-
-  val succ : 'a bitv value t -> 'a bitv value t
-  val pred : 'a bitv value t -> 'a bitv value t
-
-  val nsucc : 'a bitv value t -> int -> 'a bitv value t
-  val npred : 'a bitv value t -> int -> 'a bitv value t
-
-
-  val high : 'a bitv sort -> 'b bitv value t -> 'a bitv value t
-  val low  : 'a bitv sort -> 'b bitv value t -> 'a bitv value t
-  val signed : 'a bitv sort -> 'b bitv value t -> 'a bitv value t
-  val unsigned  : 'a bitv sort -> 'b bitv value t -> 'a bitv value t
-  val extract : 'a bitv sort -> 'b bitv value t -> 'b bitv value t -> _ bitv value t -> 'a bitv value t
-  val loadw : 'c bitv sort -> bit value t ->
-    ('a, _) mem value t -> 'a bitv value t -> 'c bitv value t
-
-  val storew : bit value t ->
-    ('a, 'b) mem value t -> 'a bitv value t -> 'c bitv value t ->
-    ('a, 'b) mem value t
-
-  val arshift : 'a bitv value t -> 'b bitv value t -> 'a bitv value t
-  val rshift : 'a bitv value t -> 'b bitv value t -> 'a bitv value t
-  val lshift : 'a bitv value t -> 'b bitv value t -> 'a bitv value t
-
-  val eq  : 'a bitv value t -> 'a bitv value t -> bit value t
-  val neq : 'a bitv value t -> 'a bitv value t -> bit value t
-  val slt : 'a bitv value t -> 'a bitv value t -> bit value t
-  val ult : 'a bitv value t -> 'a bitv value t -> bit value t
-  val sgt : 'a bitv value t -> 'a bitv value t -> bit value t
-  val ugt : 'a bitv value t -> 'a bitv value t -> bit value t
-  val sge : 'a bitv value t -> 'a bitv value t -> bit value t
-  val uge : 'a bitv value t -> 'a bitv value t -> bit value t
+  val zero : 'a bitv sort -> 'a bitv
+  val is_zero  : 'a bitv -> bool
+  val non_zero : 'a bitv -> bool
+  val succ : 'a bitv -> 'a bitv
+  val pred : 'a bitv -> 'a bitv
+  val nsucc : 'a bitv -> int -> 'a bitv
+  val npred : 'a bitv -> int -> 'a bitv
+  val high : 'a bitv sort -> 'b bitv -> 'a bitv
+  val low  : 'a bitv sort -> 'b bitv -> 'a bitv
+  val signed : 'a bitv sort -> 'b bitv -> 'a bitv
+  val unsigned  : 'a bitv sort -> 'b bitv -> 'a bitv
+  val extract : 'a bitv sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
+  val loadw : 'c bitv sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
+  val storew : bool -> ('a, 'b) mem -> 'a bitv -> 'c bitv -> ('a, 'b) mem
+  val arshift : 'a bitv -> 'b bitv -> 'a bitv
+  val rshift : 'a bitv -> 'b bitv -> 'a bitv
+  val lshift : 'a bitv -> 'b bitv -> 'a bitv
+  val eq  : 'a bitv -> 'a bitv -> bool
+  val neq : 'a bitv -> 'a bitv -> bool
+  val slt : 'a bitv -> 'a bitv -> bool
+  val ult : 'a bitv -> 'a bitv -> bool
+  val sgt : 'a bitv -> 'a bitv -> bool
+  val ugt : 'a bitv -> 'a bitv -> bool
+  val sge : 'a bitv -> 'a bitv -> bool
+  val uge : 'a bitv -> 'a bitv -> bool
 end
 
 module type Fbasic = sig
+  val float : ('r,'s) format float sort -> 's bitv -> ('r,'s) format float
+  val fbits : ('r,'s) format float -> 's bitv
 
-  val float : ('r,'s) format float sort -> 's bitv value t -> ('r,'s) format float value t
-  val fbits :  ('r,'s) format float value t -> 's bitv value t
 
-  val is_finite : 'f float value t -> bit value t
-  val is_nan : 'f float value t -> bit value t
-  val is_inf : 'f float value t -> bit value t
-  val is_fzero : 'f float value t -> bit value t
-  val is_fpos : 'f float value t -> bit value t
-  val is_fneg : 'f float value t -> bit value t
+  val is_finite : 'f float -> bool
+  val is_nan : 'f float -> bool
+  val is_inf : 'f float -> bool
+  val is_fzero : 'f float -> bool
+  val is_fpos : 'f float -> bool
+  val is_fneg : 'f float -> bool
 
-  val rne : rmode value t
-  val rna : rmode value t
-  val rtp : rmode value t
-  val rtn : rmode value t
-  val rtz : rmode value t
-  val requal : rmode value t -> rmode value t -> bit value t
+  val rne : rmode
+  val rna : rmode
+  val rtp : rmode
+  val rtn : rmode
+  val rtz : rmode
+  val requal : rmode -> rmode -> bool
 
-  val cast_float  : 'f float sort  -> rmode value t -> 'a bitv value t -> 'f float value t
-  val cast_sfloat : 'f float sort -> rmode value t -> 'a bitv value t -> 'f float value t
-  val cast_int    : 'a bitv sort -> rmode value t -> 'f float value t -> 'a bitv value t
-  val cast_sint   : 'a bitv sort -> rmode value t -> 'f float value t -> 'a bitv value t
+  val cast_float  : 'f float sort  -> rmode -> 'a bitv -> 'f float
+  val cast_sfloat : 'f float sort -> rmode -> 'a bitv -> 'f float
+  val cast_int    : 'a bitv sort -> rmode -> 'f float -> 'a bitv
+  val cast_sint   : 'a bitv sort -> rmode -> 'f float -> 'a bitv
 
-  val fneg    : 'f float value t -> 'f float value t
-  val fabs    : 'f float value t -> 'f float value t
+  val fneg    : 'f float -> 'f float
+  val fabs    : 'f float -> 'f float
 
-  val fadd    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val fsub    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val fmul    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val fdiv    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val fsqrt   : rmode value t -> 'f float value t -> 'f float value t
-  val fmodulo : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val fmad    : rmode value t -> 'f float value t -> 'f float value t ->
-    'f float value t ->
-    'f float value t
+  val fadd    : rmode -> 'f float -> 'f float -> 'f float
+  val fsub    : rmode -> 'f float -> 'f float -> 'f float
+  val fmul    : rmode -> 'f float -> 'f float -> 'f float
+  val fdiv    : rmode -> 'f float -> 'f float -> 'f float
+  val fsqrt   : rmode -> 'f float -> 'f float
+  val fmodulo : rmode -> 'f float -> 'f float -> 'f float
+  val fmad    : rmode -> 'f float -> 'f float -> 'f float -> 'f float
 
-  val fround   : rmode value t -> 'f float value t -> 'f float value t
-  val fconvert : 'f float sort ->  rmode value t -> _ float value t -> 'f float value t
+  val fround   : rmode -> 'f float -> 'f float
+  val fconvert : 'f float sort ->  rmode -> _ float -> 'f float
 
-  val fsucc  : 'f float value t -> 'f float value t
-  val fpred  : 'f float value t -> 'f float value t
-  val forder : 'f float value t -> 'f float value t -> bit value t
+  val fsucc  : 'f float -> 'f float
+  val fpred  : 'f float -> 'f float
+  val forder : 'f float -> 'f float -> bool
 end
 
 module type Float = sig
   include Fbasic
-  val pow      : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val powr     : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val compound : rmode value t -> 'f float value t -> 'a bitv value t -> 'f float value t
-  val rootn    : rmode value t -> 'f float value t -> 'a bitv value t -> 'f float value t
-  val pownn    : rmode value t -> 'f float value t -> 'a bitv value t -> 'f float value t
-  val rsqrt    : rmode value t -> 'f float value t -> 'f float value t
-  val hypot    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
+  val pow      : rmode -> 'f float -> 'f float -> 'f float
+  val powr     : rmode -> 'f float -> 'f float -> 'f float
+  val compound : rmode -> 'f float -> 'a bitv -> 'f float
+  val rootn    : rmode -> 'f float -> 'a bitv -> 'f float
+  val pownn    : rmode -> 'f float -> 'a bitv -> 'f float
+  val rsqrt    : rmode -> 'f float -> 'f float
+  val hypot    : rmode -> 'f float -> 'f float -> 'f float
 end
 
 module type Trans = sig
-  val exp      : rmode value t -> 'f float value t -> 'f float value t
-  val expm1    : rmode value t -> 'f float value t -> 'f float value t
-  val exp2     : rmode value t -> 'f float value t -> 'f float value t
-  val exp2m1   : rmode value t -> 'f float value t -> 'f float value t
-  val exp10    : rmode value t -> 'f float value t -> 'f float value t
-  val exp10m1  : rmode value t -> 'f float value t -> 'f float value t
-  val log      : rmode value t -> 'f float value t -> 'f float value t
-  val log2     : rmode value t -> 'f float value t -> 'f float value t
-  val log10    : rmode value t -> 'f float value t -> 'f float value t
-  val logp1    : rmode value t -> 'f float value t -> 'f float value t
-  val log2p1   : rmode value t -> 'f float value t -> 'f float value t
-  val log10p1  : rmode value t -> 'f float value t -> 'f float value t
-  val sin      : rmode value t -> 'f float value t -> 'f float value t
-  val cos      : rmode value t -> 'f float value t -> 'f float value t
-  val tan      : rmode value t -> 'f float value t -> 'f float value t
-  val sinpi    : rmode value t -> 'f float value t -> 'f float value t
-  val cospi    : rmode value t -> 'f float value t -> 'f float value t
-  val atanpi   : rmode value t -> 'f float value t -> 'f float value t
-  val atan2pi  : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val asin     : rmode value t -> 'f float value t -> 'f float value t
-  val acos     : rmode value t -> 'f float value t -> 'f float value t
-  val atan     : rmode value t -> 'f float value t -> 'f float value t
-  val atan2    : rmode value t -> 'f float value t -> 'f float value t -> 'f float value t
-  val sinh     : rmode value t -> 'f float value t -> 'f float value t
-  val cosh     : rmode value t -> 'f float value t -> 'f float value t
-  val tanh     : rmode value t -> 'f float value t -> 'f float value t
-  val asinh    : rmode value t -> 'f float value t -> 'f float value t
-  val acosh    : rmode value t -> 'f float value t -> 'f float value t
-  val atanh    : rmode value t -> 'f float value t -> 'f float value t
+  val exp      : rmode -> 'f float -> 'f float
+  val expm1    : rmode -> 'f float -> 'f float
+  val exp2     : rmode -> 'f float -> 'f float
+  val exp2m1   : rmode -> 'f float -> 'f float
+  val exp10    : rmode -> 'f float -> 'f float
+  val exp10m1  : rmode -> 'f float -> 'f float
+  val log      : rmode -> 'f float -> 'f float
+  val log2     : rmode -> 'f float -> 'f float
+  val log10    : rmode -> 'f float -> 'f float
+  val logp1    : rmode -> 'f float -> 'f float
+  val log2p1   : rmode -> 'f float -> 'f float
+  val log10p1  : rmode -> 'f float -> 'f float
+  val sin      : rmode -> 'f float -> 'f float
+  val cos      : rmode -> 'f float -> 'f float
+  val tan      : rmode -> 'f float -> 'f float
+  val sinpi    : rmode -> 'f float -> 'f float
+  val cospi    : rmode -> 'f float -> 'f float
+  val atanpi   : rmode -> 'f float -> 'f float
+  val atan2pi  : rmode -> 'f float -> 'f float -> 'f float
+  val asin     : rmode -> 'f float -> 'f float
+  val acos     : rmode -> 'f float -> 'f float
+  val atan     : rmode -> 'f float -> 'f float
+  val atan2    : rmode -> 'f float -> 'f float -> 'f float
+  val sinh     : rmode -> 'f float -> 'f float
+  val cosh     : rmode -> 'f float -> 'f float
+  val tanh     : rmode -> 'f float -> 'f float
+  val asinh    : rmode -> 'f float -> 'f float
+  val acosh    : rmode -> 'f float -> 'f float
+  val atanh    : rmode -> 'f float -> 'f float
 end
-
 
 
 module type Core = sig

@@ -28,8 +28,8 @@ module Knowledge : sig
                         and type 'a error = conflict
 
   module Class : sig
-    type top
     type 'a t = 'a cls
+    type top = unit
     include Type_equal.Injective with type 'a t := 'a t
 
     val declare : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) cls

@@ -13,14 +13,12 @@ Library bap_core_theory
   InternalModules:
         Bap_core_theory_basic,
         Bap_core_theory_definition,
-        Bap_core_theory_eff,
+        Bap_core_theory_effect,
         Bap_core_theory_empty,
         Bap_core_theory_grammar_definition,
         Bap_core_theory_IEEE754,
-        Bap_core_theory_kind,
         Bap_core_theory_link,
         Bap_core_theory_manager,
         Bap_core_theory_parser,
         Bap_core_theory_sort,
-        Bap_core_theory_value,
         Bap_core_theory_var
