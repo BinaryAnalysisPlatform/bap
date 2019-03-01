@@ -4,16 +4,17 @@ open Bap_core_theory_sort
 
 open Knowledge.Syntax
 
+module Value = Knowledge.Value
 
 let bool = Bool.t
-let sort x = x >>| Value.sort
+let sort x = x >>| Value.cls
 
 module Core : Core = struct
   type 'a t = 'a Knowledge.t
   let empty x = Knowledge.return @@ Value.empty x
-  let data  = Knowledge.return @@ Eff.empty Kind.data
-  let ctrl  = Knowledge.return @@ Eff.empty Kind.ctrl
-  let unit  = Knowledge.return @@ Eff.empty Kind.unit
+  let data  = Knowledge.return @@ Value.empty Effect.unknown
+  let ctrl  = Knowledge.return @@ Value.empty Effect.unknown
+  let unit  = Knowledge.return @@ Value.empty Effect.unknown
 
   let var v = empty (Var.sort v)
   let int s _ = empty s
@@ -45,18 +46,20 @@ module Core : Core = struct
   let cast s _ _ = empty s
   let concat s _ = empty s
   let append s _ _ = empty s
-  let load m _ = sort m >>| Mems.vals >>= empty
+  let load m _ = sort m >>| Mem.vals >>= empty
   let store m _ _ = sort m >>= empty
   let pass = data
   let skip = ctrl
+  let perform (eff : 'a effect) = Knowledge.return (Value.empty eff)
+
   let set _ _ = data
   let let_ _ _ x = sort x >>= empty
   let jmp _ = ctrl
   let goto _ = ctrl
-  let seq x _ = x >>| Eff.kind >>| Eff.empty
+  let seq x _ = x >>| Value.cls >>| Value.empty
   let blk _ _ _ = unit
   let repeat _ _ = data
-  let branch _ x _ = x >>| Eff.kind >>| Eff.empty
+  let branch _ x _ = x >>| Value.cls >>| Value.empty
   let atomic _ = data
   let mfence = data
   let lfence = data
@@ -97,7 +100,7 @@ module Core : Core = struct
   let requal _ _  = empty bool
 
   let float s _ = empty s
-  let fbits x = sort x >>| Floats.size >>= empty
+  let fbits x = sort x >>| Float.size >>= empty
 
   let is_finite _ = empty bool
   let is_fzero _ = empty bool

@@ -62,13 +62,13 @@ module Knowledge : sig
     type 'a ord
 
     (** [create] is a fresh new object with an idefinite extent.  *)
-    val create : 'a cls -> 'a obj t knowledge
+    val create : 'a cls -> 'a obj knowledge
 
     (** [scoped scope] pass a fresh new object to [scope].
 
         The extent of the created object is limited with the extent
         of the function [scope].*)
-    val scoped : 'a cls -> ('a obj t -> 'b knowledge) -> 'b knowledge
+    val scoped : 'a cls -> ('a obj -> 'b knowledge) -> 'b knowledge
 
     (** [repr x] returns a textual representation of the object [x] *)
     val repr : 'a cls -> 'a t -> string knowledge

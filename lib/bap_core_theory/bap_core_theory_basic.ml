@@ -6,8 +6,11 @@ open Bap_core_theory_sort
 
 open Knowledge.Syntax
 
-let size = Bits.size
-let (>>->) x f = x >>= fun x -> f (Value.sort x) x
+module Value = Knowledge.Value
+
+let size = Bitv.size
+let (>>->)
+  = fun x f -> x >>= fun x -> f (Value.cls x) x
 
 
 module Make(L : Minimal) = struct
@@ -39,6 +42,7 @@ module Make(L : Minimal) = struct
   end
 
   let small s x = int s Bitvec.(int x mod modulus (size s))
+
   let zero s = int s Bitvec.zero
 
   let is_zero x =
@@ -77,7 +81,7 @@ module Make(L : Minimal) = struct
     dir >>= fun dir ->
     mem >>-> fun ms mem ->
     key >>= fun key ->
-    let vs = Mems.vals ms in
+    let vs = Mem.vals ms in
     let chunk_size = size vs in
     let needed = size out in
     let rec loop chunks loaded =
@@ -94,7 +98,7 @@ module Make(L : Minimal) = struct
   let storew dir mem key data =
     data >>-> fun data_t data ->
     mem  >>-> fun mem_t mem ->
-    let chunks = Mems.vals mem_t in
+    let chunks = Mem.vals mem_t in
     let needed = size data_t and chunk_len = size chunks in
     let nth stored =
       let shift_amount = ite dir
@@ -117,7 +121,7 @@ module Make(L : Minimal) = struct
   let extract s hi lo x =
     let n = succ (sub hi lo) in
     x >>= fun x ->
-    let t = Value.sort x in
+    let t = Value.cls x in
     let mask = lshift (not (zero t)) n in
     cast s b0 (logand (not mask) (shiftr b0 !!x lo))
   include L

@@ -13,6 +13,8 @@ val full : full
 val define : string -> 'a -> 'a t
 val refine : string -> 'a t -> 'a t
 
+val unknown : 'a t
+
 val add : 'a t -> 'a t -> 'a t
 val (+) : 'a t -> 'a t -> 'a t
 val sum : 'a t list -> 'a t

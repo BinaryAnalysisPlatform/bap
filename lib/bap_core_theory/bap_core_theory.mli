@@ -34,8 +34,8 @@ module Theory : sig
     val ctrl : ctrl
     val full : full
 
-    val define : ?desc:string -> ?package:string -> string -> 'a -> 'a t
-    val refine : ?desc:string -> ?package:string -> string -> 'a t -> 'a t
+    val define : string -> 'a -> 'a t
+    val refine : string -> 'a t -> 'a t
 
     val add : 'a t -> 'a t -> 'a t
     val (+) : 'a t -> 'a t -> 'a t
@@ -107,9 +107,30 @@ module Theory : sig
     val t : t sort
   end
 
+  module Var : sig
+    type 'a t
+    type ident [@@deriving bin_io, compare, sexp]
+    type ord
+
+    val define : 'a sort -> string -> 'a t
+    val create : 'a sort -> ident -> 'a t
+
+    val ident : 'a t -> ident
+    val name : 'a t -> string
+    val sort : 'a t -> 'a sort
+    val is_virtual : 'a t -> bool
+    val is_mutable : 'a t -> bool
+    val fresh : 'a sort -> 'a t knowledge
+    val scoped : 'a sort -> ('a t -> 'b knowledge) -> 'b knowledge
+
+    module Ident : Base.Comparable.S with type t = ident
+                                      and type comparator_witness = ord
+  end
+
   type 'a t = 'a Knowledge.value Knowledge.t
-  type 'a pure = ('a sort -> unit) t
-  type 'a eff = ('a effect -> unit) t
+
+  type 'a pure = ('a Sort.definition -> unit) t
+  type 'a eff = ('a Effect.spec -> unit) t
 
   type bool = Bool.t pure
   type 'a bitv = 'a Bitv.t pure
@@ -124,15 +145,16 @@ module Theory : sig
   type ('r,'s) format = ('r,'s) Float.format
 
   type word = Bitvec.t
-  type 'a var
+  type 'a var = 'a Var.t
+
   type link
   type label = link Knowledge.Object.t
 
 
   module type Init = sig
-    val var : 'a var -> 'a pure t
-    val unk : 'a sort -> 'a pure t
-    val let_ : 'a var -> 'a pure t -> 'b pure t -> 'b pure t
+    val var : 'a var -> 'a pure
+    val unk : 'a sort -> 'a pure
+    val let_ : 'a var -> 'a pure -> 'b pure -> 'b pure
   end
 
   module type Bool = sig
@@ -144,7 +166,7 @@ module Theory : sig
   end
 
   module type Bitv = sig
-    val int : 'a bitv sort -> word -> 'a bitv
+    val int : 'a Bitv.t sort -> word -> 'a bitv
     val msb : 'a bitv -> bool
     val lsb : 'a bitv -> bool
     val neg  : 'a bitv -> 'a bitv
@@ -161,12 +183,12 @@ module Theory : sig
     val logxor  : 'a bitv -> 'a bitv -> 'a bitv
     val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
     val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
-    val ite : bool -> 'a -> 'a -> 'a
+    val ite : bool -> 'a bitv -> 'a bitv -> 'a bitv
     val sle : 'a bitv -> 'a bitv -> bool
     val ule : 'a bitv -> 'a bitv -> bool
-    val cast : 'a bitv sort -> bool -> 'b bitv -> 'a bitv
-    val concat : 'a bitv sort -> 'b bitv list -> 'a bitv
-    val append : 'a bitv sort -> 'b bitv -> 'c bitv -> 'a bitv
+    val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
+    val concat : 'a Bitv.t sort -> 'b bitv list -> 'a bitv
+    val append : 'a Bitv.t sort -> 'b bitv -> 'c bitv -> 'a bitv
   end
 
   module type Memory = sig
@@ -176,7 +198,7 @@ module Theory : sig
 
   module type Effect = sig
     val perform : 'a effect -> 'a eff
-    val set : 'a var -> 'a pure t -> data eff
+    val set : 'a var -> 'a sort -> data eff
     val jmp  : _ bitv -> ctrl eff
     val goto : label -> ctrl eff
     val seq : 'a eff -> 'a eff -> 'a eff
@@ -184,6 +206,7 @@ module Theory : sig
     val repeat : bool -> data eff -> data eff
     val branch : bool -> 'a eff -> 'a eff -> 'a eff
   end
+
 
   module type Minimal = sig
     include Init
@@ -195,19 +218,19 @@ module Theory : sig
 
   module type Basic = sig
     include Minimal
-    val zero : 'a bitv sort -> 'a bitv
+    val zero : 'a Bitv.t sort -> 'a bitv
     val is_zero  : 'a bitv -> bool
     val non_zero : 'a bitv -> bool
     val succ : 'a bitv -> 'a bitv
     val pred : 'a bitv -> 'a bitv
     val nsucc : 'a bitv -> int -> 'a bitv
     val npred : 'a bitv -> int -> 'a bitv
-    val high : 'a bitv sort -> 'b bitv -> 'a bitv
-    val low  : 'a bitv sort -> 'b bitv -> 'a bitv
-    val signed : 'a bitv sort -> 'b bitv -> 'a bitv
-    val unsigned  : 'a bitv sort -> 'b bitv -> 'a bitv
-    val extract : 'a bitv sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
-    val loadw : 'c bitv sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
+    val high : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+    val low  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+    val signed : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+    val unsigned  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+    val extract : 'a Bitv.t sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
+    val loadw : 'c Bitv.t sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
     val storew : bool -> ('a, 'b) mem -> 'a bitv -> 'c bitv -> ('a, 'b) mem
     val arshift : 'a bitv -> 'b bitv -> 'a bitv
     val rshift : 'a bitv -> 'b bitv -> 'a bitv
@@ -223,7 +246,7 @@ module Theory : sig
   end
 
   module type Fbasic = sig
-    val float : ('r,'s) format float sort -> 's bitv -> ('r,'s) format float
+    val float : ('r,'s) format Float.t sort -> 's bitv -> ('r,'s) format float
     val fbits : ('r,'s) format float -> 's bitv
 
 
@@ -241,10 +264,10 @@ module Theory : sig
     val rtz : rmode
     val requal : rmode -> rmode -> bool
 
-    val cast_float  : 'f float sort  -> rmode -> 'a bitv -> 'f float
-    val cast_sfloat : 'f float sort -> rmode -> 'a bitv -> 'f float
-    val cast_int    : 'a bitv sort -> rmode -> 'f float -> 'a bitv
-    val cast_sint   : 'a bitv sort -> rmode -> 'f float -> 'a bitv
+    val cast_float  : 'f Float.t sort  -> rmode -> 'a bitv -> 'f float
+    val cast_sfloat : 'f Float.t sort -> rmode -> 'a bitv -> 'f float
+    val cast_int    : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
+    val cast_sint   : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
 
     val fneg    : 'f float -> 'f float
     val fabs    : 'f float -> 'f float
@@ -258,7 +281,7 @@ module Theory : sig
     val fmad    : rmode -> 'f float -> 'f float -> 'f float -> 'f float
 
     val fround   : rmode -> 'f float -> 'f float
-    val fconvert : 'f float sort ->  rmode -> _ float -> 'f float
+    val fconvert : 'f Float.t sort ->  rmode -> _ float -> 'f float
 
     val fsucc  : 'f float -> 'f float
     val fpred  : 'f float -> 'f float
@@ -356,40 +379,21 @@ module Theory : sig
     val decimal : int -> parameters option
 
     module Sort : sig
-      val define : parameters -> (('b,'e,'t) ieee754,'s) format float sort
-      val exps : (('b,'e,'t) ieee754,'s) format float sort -> 'e bitv sort
-      val sigs : (('b,'e,'t) ieee754,'s) format float sort -> 't bitv sort
-      val bits : (('b,'e,'t) ieee754,'s) format float sort -> 's bitv sort
-      val spec : (('b,'e,'t) ieee754,'s) format float sort -> parameters
+      val define : parameters -> (('b,'e,'t) ieee754,'s) format Float.t sort
+      val exps : (('b,'e,'t) ieee754,'s) format Float.t sort -> 'e Bitv.t sort
+      val sigs : (('b,'e,'t) ieee754,'s) format Float.t sort -> 't Bitv.t sort
+      val bits : (('b,'e,'t) ieee754,'s) format Float.t sort -> 's Bitv.t sort
+      val spec : (('b,'e,'t) ieee754,'s) format Float.t sort -> parameters
     end
   end
 
 
-  module Var : sig
-    type 'a t = 'a var
-    type ident [@@deriving bin_io, compare, sexp]
-    type ord
-
-    val define : 'a sort -> string -> 'a t
-    val create : 'a sort -> ident -> 'a t
-
-    val ident : 'a t -> ident
-    val name : 'a t -> string
-    val sort : 'a t -> 'a sort
-    val is_virtual : 'a t -> bool
-    val is_mutable : 'a t -> bool
-    val fresh : 'a sort -> 'a t knowledge
-    val scoped : 'a sort -> ('a t -> 'b knowledge) -> 'b knowledge
-
-    module Ident : Base.Comparable.S with type t = ident
-                                      and type comparator_witness = ord
-  end
 
   module Link : sig
     type t = link
-    val addr : (link,word) Knowledge.slot
-    val name : (link,string) Knowledge.slot
-    val ivec : (link,int) Knowledge.slot
+    val addr : (t -> unit, Bitvec.t option) Knowledge.slot
+    val name : (t -> unit, string option) Knowledge.slot
+    val ivec : (t -> unit, int option) Knowledge.slot
   end
 
   module Grammar : sig
@@ -643,7 +647,7 @@ module Theory : sig
     type ('e,'r,'s) parser = ('e,'r,'s) t
 
     module Make(S : Core) : sig
-      val run : ('e,'r,'s) parser -> 's list -> unit eff knowledge
+      val run : ('e,'r,'s) parser -> 's list -> unit effect knowledge
     end
   end
 end

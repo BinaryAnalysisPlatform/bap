@@ -54,6 +54,8 @@ module Float : sig
   val define : ('r,'s) format -> ('r,'s) format t sort
   val format : ('r,'s) format t sort -> ('r,'s) format
   val size : ('r,'s) format t sort -> 's Bitv.t sort
+  val parse : Sort.exp -> ('r,'s) format t sort option
+  val cast : _ sort -> ('r,'s) format t sort option
 
   module Format : sig
     type ('r,'s) t = ('r,'s) format

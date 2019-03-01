@@ -4,13 +4,15 @@ open Bap_core_theory_sort
 
 module Var = Bap_core_theory_var
 module Effect = Bap_core_theory_effect
+module Link = Bap_core_theory_link
 
 type 'a sort = 'a Sort.t
 type 'a effect = 'a Effect.t
 
 type 'a t = 'a Knowledge.value Knowledge.t
-type 'a pure = ('a sort -> unit) t
-type 'a eff = ('a effect -> unit) t
+
+type 'a pure = ('a Sort.definition -> unit) t
+type 'a eff = ('a Effect.spec -> unit) t
 
 type bool = Bool.t pure
 type 'a bitv = 'a Bitv.t pure
@@ -25,16 +27,16 @@ type full = Effect.full
 type ('r,'s) format = ('r,'s) Float.format
 
 type word = Bitvec.t
-type 'a var
-type link
+type 'a var = 'a Var.t
+type link = Link.t
 type label = link Knowledge.Object.t
 
 
 
 module type Init = sig
-  val var : 'a var -> 'a pure t
-  val unk : 'a sort -> 'a pure t
-  val let_ : 'a var -> 'a pure t -> 'b pure t -> 'b pure t
+  val var : 'a var -> 'a pure
+  val unk : 'a sort -> 'a pure
+  val let_ : 'a var -> 'a pure -> 'b pure -> 'b pure
 end
 
 module type Bool = sig
@@ -46,7 +48,7 @@ module type Bool = sig
 end
 
 module type Bitv = sig
-  val int : 'a bitv sort -> word -> 'a bitv
+  val int : 'a Bitv.t sort -> word -> 'a bitv
   val msb : 'a bitv -> bool
   val lsb : 'a bitv -> bool
   val neg  : 'a bitv -> 'a bitv
@@ -63,12 +65,12 @@ module type Bitv = sig
   val logxor  : 'a bitv -> 'a bitv -> 'a bitv
   val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
   val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
-  val ite : bool -> 'a -> 'a -> 'a
+  val ite : bool -> 'a bitv -> 'a bitv -> 'a bitv
   val sle : 'a bitv -> 'a bitv -> bool
   val ule : 'a bitv -> 'a bitv -> bool
-  val cast : 'a bitv sort -> bool -> 'b bitv -> 'a bitv
-  val concat : 'a bitv sort -> 'b bitv list -> 'a bitv
-  val append : 'a bitv sort -> 'b bitv -> 'c bitv -> 'a bitv
+  val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
+  val concat : 'a Bitv.t sort -> 'b bitv list -> 'a bitv
+  val append : 'a Bitv.t sort -> 'b bitv -> 'c bitv -> 'a bitv
 end
 
 module type Memory = sig
@@ -78,7 +80,7 @@ end
 
 module type Effect = sig
   val perform : 'a effect -> 'a eff
-  val set : 'a var -> 'a pure t -> data eff
+  val set : 'a var -> 'a sort -> data eff
   val jmp  : _ bitv -> ctrl eff
   val goto : label -> ctrl eff
   val seq : 'a eff -> 'a eff -> 'a eff
@@ -97,19 +99,19 @@ end
 
 module type Basic = sig
   include Minimal
-  val zero : 'a bitv sort -> 'a bitv
+  val zero : 'a Bitv.t sort -> 'a bitv
   val is_zero  : 'a bitv -> bool
   val non_zero : 'a bitv -> bool
   val succ : 'a bitv -> 'a bitv
   val pred : 'a bitv -> 'a bitv
   val nsucc : 'a bitv -> int -> 'a bitv
   val npred : 'a bitv -> int -> 'a bitv
-  val high : 'a bitv sort -> 'b bitv -> 'a bitv
-  val low  : 'a bitv sort -> 'b bitv -> 'a bitv
-  val signed : 'a bitv sort -> 'b bitv -> 'a bitv
-  val unsigned  : 'a bitv sort -> 'b bitv -> 'a bitv
-  val extract : 'a bitv sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
-  val loadw : 'c bitv sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
+  val high : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+  val low  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+  val signed : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+  val unsigned  : 'a Bitv.t sort -> 'b bitv -> 'a bitv
+  val extract : 'a Bitv.t sort -> 'b bitv -> 'b bitv -> _ bitv -> 'a bitv
+  val loadw : 'c Bitv.t sort -> bool -> ('a, _) mem -> 'a bitv -> 'c bitv
   val storew : bool -> ('a, 'b) mem -> 'a bitv -> 'c bitv -> ('a, 'b) mem
   val arshift : 'a bitv -> 'b bitv -> 'a bitv
   val rshift : 'a bitv -> 'b bitv -> 'a bitv
@@ -125,7 +127,7 @@ module type Basic = sig
 end
 
 module type Fbasic = sig
-  val float : ('r,'s) format float sort -> 's bitv -> ('r,'s) format float
+  val float : ('r,'s) format Float.t sort -> 's bitv -> ('r,'s) format float
   val fbits : ('r,'s) format float -> 's bitv
 
 
@@ -143,10 +145,10 @@ module type Fbasic = sig
   val rtz : rmode
   val requal : rmode -> rmode -> bool
 
-  val cast_float  : 'f float sort  -> rmode -> 'a bitv -> 'f float
-  val cast_sfloat : 'f float sort -> rmode -> 'a bitv -> 'f float
-  val cast_int    : 'a bitv sort -> rmode -> 'f float -> 'a bitv
-  val cast_sint   : 'a bitv sort -> rmode -> 'f float -> 'a bitv
+  val cast_float  : 'f Float.t sort  -> rmode -> 'a bitv -> 'f float
+  val cast_sfloat : 'f Float.t sort -> rmode -> 'a bitv -> 'f float
+  val cast_int    : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
+  val cast_sint   : 'a Bitv.t sort -> rmode -> 'f float -> 'a bitv
 
   val fneg    : 'f float -> 'f float
   val fabs    : 'f float -> 'f float
@@ -160,7 +162,7 @@ module type Fbasic = sig
   val fmad    : rmode -> 'f float -> 'f float -> 'f float -> 'f float
 
   val fround   : rmode -> 'f float -> 'f float
-  val fconvert : 'f float sort ->  rmode -> _ float -> 'f float
+  val fconvert : 'f Float.t sort ->  rmode -> _ float -> 'f float
 
   val fsucc  : 'f float -> 'f float
   val fpred  : 'f float -> 'f float

@@ -454,7 +454,7 @@ module Simpl = struct
   let ones width = Int (Word.ones width)
   let nothing _ = false
   let subst x y =
-    let r = new rewriter (Var x) y in
+    let r = new substitution x y in
     r#map_exp
 
   (* requires: let-free, simplifications(

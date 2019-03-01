@@ -1,38 +1,42 @@
 open Bap_knowledge
 
-module Sort   = Bap_core_theory_sort.Sort
-module Kind = Bap_core_theory_kind
-module Bool = Bap_core_theory_sort.Bool
-module Bits = Bap_core_theory_sort.Bits
-module Mems = Bap_core_theory_sort.Mems
-module Floats = Bap_core_theory_sort.Floats
-module Rmode = Bap_core_theory_sort.Rmode
-module Value = Bap_core_theory_value
-module Eff = Bap_core_theory_eff
-module Var = Bap_core_theory_var
-module Link = Bap_core_theory_link
 
-
-
-type 'a var = 'a Var.t
-type 'a sort = 'a Sort.t
-type 'a kind = 'a Kind.t
-type 'a value = 'a Value.t
-type 'a eff = 'a Eff.t
-type 'a bitv = 'a Bits.t
-type ('a,'b) mem = ('a,'b) Mems.t
-type bit = Bool.t
-type data = Kind.data = private Data_Effect
-type ctrl = Kind.ctrl = private Ctrl_Effect
-type rmode = Rmode.t
-type 'f float = 'f Floats.t
-type ('r,'s) format = ('r,'s) Floats.Format.t
-type word = Bitvec.t
-
-type 'a t = 'a knowledge
 
 module Theory = struct
-  type 'a t = 'a Knowledge.t
+  module Sort   = Bap_core_theory_sort.Sort
+  module Bool = Bap_core_theory_sort.Bool
+  module Bitv = Bap_core_theory_sort.Bitv
+  module Mem = Bap_core_theory_sort.Mem
+  module Float = Bap_core_theory_sort.Float
+  module Rmode = Bap_core_theory_sort.Rmode
+  module Effect = Bap_core_theory_effect
+  module Var = Bap_core_theory_var
+  module Link = Bap_core_theory_link
+
+  type 'a sort = 'a Sort.t
+  type 'a effect = 'a Effect.t
+
+  type 'a t = 'a Knowledge.value Knowledge.t
+
+  type 'a pure = ('a Sort.definition -> unit) t
+  type 'a eff = ('a Effect.spec -> unit) t
+
+  type bool = Bool.t pure
+  type 'a bitv = 'a Bitv.t pure
+  type ('a,'b) mem = ('a,'b) Mem.t pure
+  type 'f float = 'f Float.t pure
+  type rmode = Rmode.t pure
+
+  type data = Effect.data
+  type ctrl = Effect.ctrl
+  type full = Effect.full
+
+  type ('r,'s) format = ('r,'s) Float.format
+
+  type 'a var = 'a Var.t
+  type word = Bitvec.t
+  type link = Link.t
+  type label = link Knowledge.Object.t
   module type Init = Bap_core_theory_definition.Init
   module type Bool = Bap_core_theory_definition.Bool
   module type Bitv = Bap_core_theory_definition.Bitv
@@ -56,9 +60,10 @@ module Theory = struct
 
   module Manager = Bap_core_theory_manager.Theory
   let register = Bap_core_theory_manager.register
+
+  module IEEE754 = Bap_core_theory_IEEE754
+
+  module Grammar = Bap_core_theory_grammar_definition
+  module Parser = Bap_core_theory_parser
+
 end
-
-module IEEE754 = Bap_core_theory_IEEE754
-
-module Grammar = Bap_core_theory_grammar_definition
-module Parser = Bap_core_theory_parser

@@ -3,6 +3,7 @@ open Bap_knowledge
 open Bap_core_theory_sort
 
 type 'a t
+type ord
 type ident [@@deriving bin_io, compare, sexp]
 
 val define : 'a sort -> string -> 'a t
@@ -16,4 +17,5 @@ val is_mutable : 'a t -> bool
 val fresh : 'a sort -> 'a t knowledge
 val scoped : 'a sort -> ('a t -> 'b knowledge) -> 'b knowledge
 
-module Ident : Identifiable with type t := ident
+module Ident : Base.Comparable.S with type t = ident
+                                  and type comparator_witness = ord

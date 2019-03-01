@@ -6,8 +6,10 @@ open Bap_core_theory_sort
 
 open Knowledge.Syntax
 
-let size = Bits.size
-let sort x = x >>| Value.sort
+module Value = Knowledge.Value
+
+let size = Bitv.size
+let sort x = x >>| Value.cls
 
 type 'a t = {
   name : string;

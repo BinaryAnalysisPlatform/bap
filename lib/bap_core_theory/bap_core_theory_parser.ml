@@ -3,13 +3,12 @@ open Bap_knowledge
 open Bap_core_theory_definition
 open Bap_core_theory_sort
 
-module Value = Bap_core_theory_value
+module Value = Knowledge.Value
 module Grammar = Bap_core_theory_grammar_definition
 module Link = Bap_core_theory_link
 module IEEE754 = Bap_core_theory_IEEE754
 
 open Knowledge.Syntax
-open Link.Syntax
 
 type ('a,'e,'r) bitv_parser =
   (module Grammar.Bitv with type t = 'a
@@ -56,12 +55,12 @@ type ('e,'r,'s) t = {
 
 type ('e,'r,'s) parser = ('e,'r,'s) t
 
-let bits = Bits.define
+let bits = Bitv.define
 let bool = Bool.t
 
-type conflict += Error
+type Knowledge.conflict += Error
 
-let (>>->) x f = x >>= fun x -> f (Value.sort x) x
+let (>>->) x f = x >>= fun x -> f (Value.cls x) x
 
 module Make(S : Core) = struct
   open S
@@ -71,9 +70,9 @@ module Make(S : Core) = struct
 
   let of_word w s = int (bits s) w
   let of_int s x =
-    let m = Bitvec.modulus (Bits.size s) in
+    let m = Bitvec.modulus (Bitv.size s) in
     int s Bitvec.(int x mod m)
-  let join s1 s2 = bits (Bits.size s1 + Bits.size s2)
+  let join s1 s2 = bits (Bitv.size s1 + Bitv.size s2)
 
 
   type context = (string * Var.ident) list
@@ -139,7 +138,7 @@ module Make(S : Core) = struct
         let concat xs =
           Knowledge.List.fold ~init:([],0) xs ~f:(fun (xs,s) x ->
               expw x >>| fun x ->
-              !!x::xs, s + Bits.size (Value.sort x)) >>= fun (xs,sz) ->
+              !!x::xs, s + Bitv.size (Value.sort x)) >>= fun (xs,sz) ->
           concat (bits sz) (List.rev xs)
 
         let let_bit v x y =

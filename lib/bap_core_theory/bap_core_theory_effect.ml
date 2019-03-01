@@ -8,6 +8,7 @@ type data = Data
 type ctrl = Ctrl
 type full = Full
 type 'a t = ('a spec -> unit) Knowledge.Class.t
+type 'a value = ('a spec -> unit) Knowledge.value knowledge
 
 let package = "edu.cmu.ece.bap.core-theory"
 
@@ -18,6 +19,7 @@ let base =
     Effect
 
 let single = Set.singleton (module String)
+
 
 let make name = Knowledge.Class.refine base (single name)
 
@@ -35,9 +37,11 @@ let (+) = add
 
 let refine name other : 'a t = make name + other
 
+let unknown : 'a t = Knowledge.Class.refine base (Set.empty (module String))
+
 let sum xs = List.reduce xs ~f:add |> function
   | Some x -> x
-  | None -> Knowledge.Class.refine base (Set.empty (module String))
+  | None -> unknown
 
 let join xs ys = sum xs + sum ys
 
@@ -55,3 +59,7 @@ let barr = define "barr" Data
 let fall = define "fall" Ctrl
 let jump = define "jump" Ctrl
 let cjmp = define "cjmp" Ctrl
+
+let data = Data
+let ctrl = Ctrl
+let full = Full
