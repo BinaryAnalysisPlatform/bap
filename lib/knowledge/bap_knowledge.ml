@@ -13,8 +13,9 @@ end
 
 module Id = Int63
 
-let user_package = "user-knowledge"
-let package = "knowledge"
+let user_package = "user"
+let keyword_package = "keyword"
+
 
 module Domain = struct
   type 'a t = {
@@ -74,6 +75,8 @@ module Domain = struct
           | true,false -> GT
           | false,true -> LT
           | false,false -> partial_of_total String.compare x y)
+
+  let inspect_obj x = Sexp.Atom (Format.asprintf "#<obj %a>" Id.pp x)
 end
 
 type 'a obj = Id.t
@@ -111,7 +114,9 @@ module Registry = struct
 end
 
 let string_of_fname {package; name} =
-  package ^ ":" ^ name
+  if package = keyword_package || package = user_package
+  then name
+  else package ^ ":" ^ name
 
 module Class = struct
   type top = unit
@@ -346,19 +351,30 @@ module Knowledge = struct
 
   module Data = struct
     type objects = {
-      data : Record.t Map.M(Id).t;
-      reqs : Set.M(Id).t Map.M(Pid).t
-    }
-    let empty_class = {
-      data = Map.empty (module Id);
-      reqs = Map.empty (module Pid);
+      vals : Record.t Map.M(Id).t;
+      reqs : Set.M(Id).t Map.M(Pid).t;
+      objs : Id.t Map.M(String).t Map.M(String).t;
+      syms : fullname Map.M(Id).t;
     }
 
-    type t = objects Map.M(Id).t
+    let empty_class = {
+      vals = Map.empty (module Id);
+      reqs = Map.empty (module Pid);
+      objs = Map.empty (module String);
+      syms = Map.empty (module Id);
+    }
+
+    type t = {
+      classes : objects Map.M(Id).t;
+      package : string;
+    }
   end
 
   type state = Data.t
-  let empty : Data.t = Map.empty (module Id)
+  let empty : Data.t = {
+    package = user_package;
+    classes = Map.empty (module Id);
+  }
 
   module State = struct
     include Monad.State.T1(Data)(Monad.Ident)
@@ -505,15 +521,17 @@ module Knowledge = struct
   let update f = Knowledge.lift (State.update f)
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
-    fun slot obj x ->
-      update @@ fun s ->
-      let {Data.reqs; data} = match Map.find s slot.cls.id with
-        | None -> Data.empty_class
-        | Some objs -> objs in
-      let data = Map.update data obj ~f:(function
-          | None -> Record.(put slot.key empty x)
-          | Some v -> Record.put slot.key v x) in
-      Map.set s ~key:slot.cls.id ~data:{data; reqs}
+    fun slot obj x -> update @@ function {classes} as s ->
+        let {Data.vals} as objs =
+          match Map.find classes slot.cls.id with
+          | None -> Data.empty_class
+          | Some objs -> objs in {
+          s with classes = Map.set classes ~key:slot.cls.id ~data:{
+            objs with vals = Map.update vals obj ~f:(function
+            | None -> Record.(put slot.key empty x)
+            | Some v -> Record.put slot.key v x)
+          }
+        }
 
   let pids = ref Pid.zero
 
@@ -537,21 +555,22 @@ module Knowledge = struct
         if Set.is_empty ids then None else Some ids)
 
   let objects : _ cls -> _ = fun cls ->
-    get () >>| fun base ->
-    match Map.find base cls.id with
+    get () >>| fun {classes} ->
+    match Map.find classes cls.id with
     | None -> Data.empty_class
     | Some objs -> objs
 
   let update_reqs : _ slot -> _ = fun slot reqs ->
-    update @@ fun s ->
-    Map.update s slot.cls.id ~f:(function
+    update @@ function {classes} as s -> {
+        s with classes = Map.update classes slot.cls.id ~f:(function
         | None -> {Data.empty_class with reqs}
         | Some objs -> {objs with reqs})
+      }
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-      objects slot.cls >>= fun {Data.data} ->
-      let init = match Map.find data id with
+      objects slot.cls >>= fun {Data.vals} ->
+      let init = match Map.find vals id with
         | None -> slot.dom.empty
         | Some v -> Record.get slot.key slot.dom v in
       slot.promises |>
@@ -574,32 +593,38 @@ module Knowledge = struct
     type +'a t = 'a obj
     type 'a ord = Id.comparator_witness
 
-    let with_new_object objs f = match Map.max_elt objs.Data.data with
+    let with_new_object objs f = match Map.max_elt objs.Data.vals with
       | None -> f Id.one {
           objs
-          with data = Map.singleton (module Id) Id.one Record.empty
+          with vals = Map.singleton (module Id) Id.one Record.empty
         }
       | Some (key,_) ->
         let key = Id.succ key in
         f key {
           objs
-          with data = Map.add_exn objs.data ~key ~data:Record.empty
+          with vals = Map.add_exn objs.vals ~key ~data:Record.empty
         }
-
 
     let create : 'a cls -> 'a obj Knowledge.t = fun cls ->
       objects cls >>= fun objs ->
       with_new_object objs @@ fun obj objs ->
-      update (Map.set ~key:cls.id ~data:objs) >>| fun () ->
+      update @@begin function {classes} as s -> {
+          s with classes = Map.set classes ~key:cls.id ~data:objs
+        }
+      end >>| fun () ->
       obj
 
     let delete {Class.id} obj =
-      update @@ fun base -> Map.change base id ~f:(function
-          | None -> None
-          | Some objs ->
-            let data = Map.remove objs.data obj in
-            if Map.is_empty data then None
-            else Some {objs with data})
+      update @@ function {classes} as s -> {
+          s with
+          classes = Map.change classes id ~f:(function
+              | None -> None
+              | Some objs ->
+                let vals = Map.remove objs.vals obj in
+                if Map.is_empty vals then None
+                else Some {objs with vals})
+        }
+
 
     let scoped cls scope =
       create cls >>= fun obj ->
@@ -607,18 +632,79 @@ module Knowledge = struct
       delete cls obj >>| fun () ->
       r
 
-    let repr {Class.name={name}} obj =
-      Knowledge.return @@
-      Format.asprintf "#<%s %a>" name Id.pp obj
+    let current = function
+      | Some p -> Knowledge.return p
+      | None -> gets (fun s -> s.package)
+
+    let normalize_name ~package name =
+      if package = keyword_package
+      && not (String.is_prefix ~prefix:":" name)
+      then ":"^name
+      else name
 
 
-    let read _ input =
+    let intern ?public:_ ?desc:_ ?package name {Class.id} =
+      get () >>= fun ({classes} as s) ->
+      let package = Option.value package ~default:s.package in
+      let name = normalize_name ~package name in
+      let objects = match Map.find classes id with
+        | None -> Data.empty_class
+        | Some objs -> objs in
+      let id = match Map.find objects.objs package with
+        | None -> Id.zero
+        | Some names -> match Map.find names name with
+          | None -> Id.zero
+          | Some obj -> obj in
+      if Id.(id <> zero) then Knowledge.return id
+      else with_new_object objects @@ fun obj objects ->
+        let syms = Map.set objects.syms obj {package; name} in
+        let objs = Map.update objects.objs package ~f:(function
+            | None -> Map.singleton (module String) name obj
+            | Some names -> Map.set names name obj) in
+        let objects = {objects with objs; syms} in
+        put {s with classes = Map.set classes id objects;} >>| fun () ->
+        obj
+
+    let uninterned_repr cls obj =
+      Format.asprintf "#<%s %a>" cls Id.pp obj
+
+    let repr {Class.name=cls as fname; id=cid} obj =
+      get () >>= fun {package; classes} ->
+      let cls = if package = cls.package then cls.name
+        else string_of_fname fname in
       Knowledge.return @@
-      Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
-      Id.of_string obj
+      match Map.find classes cid with
+      | None -> uninterned_repr cls obj
+      | Some {syms} -> match Map.find syms obj with
+        | Some fname -> if fname.package = package
+          then fname.name
+          else string_of_fname fname
+        | None -> uninterned_repr cls obj
+
+    (* we keep keywords with leading [:] *)
+    let split_name package s =
+      if String.is_empty s then {package=user_package; name=s}
+      else match String.Escaping.index s ~escape_char:'\\' ':' with
+        | None -> {package; name=s}
+        | Some 0 -> {package=keyword_package; name=s}
+        | Some len -> {
+            package = String.sub s ~pos:0 ~len;
+            name = String.subo s ~pos:(len+1);
+          }
+
+    let read cls input =
+      if String.length input < 2 then
+        Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
+        Knowledge.return (Id.of_string obj)
+      else
+        get () >>= fun {Data.package} ->
+        let {package; name} = split_name package input in
+        intern ~package name cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
+
+    let id x = x
 
     let comparator : type a. a cls ->
       (module Comparator.S
@@ -635,16 +721,27 @@ module Knowledge = struct
   module Domain = Domain
   module Order = Order
 
+  module Symbol = struct
+    let intern = Object.intern
+    let keyword = keyword_package
+    let in_package package f =
+      get () >>= function {Data.package=old_package} as s ->
+        put {s with package} >>= fun () ->
+        f () >>= fun r ->
+        update (fun s -> {s with package = old_package}) >>| fun () ->
+        r
+  end
+
+
   include Knowledge
 
-  let get_value cls obj = objects cls >>| fun {Data.data} ->
-    match Map.find data obj with
+  let get_value cls obj = objects cls >>| fun {Data.vals} ->
+    match Map.find vals obj with
     | None -> Value.empty cls
     | Some x -> Value.create cls x
 
-  let run x cls obj s =
-    let x = x >>= fun () -> get_value cls obj in
-    match State.run x s with
+  let run cls obj s =
+    match State.run (obj >>= get_value cls) s with
     | Ok x,s -> Ok (x,s)
     | Error err,_ -> Error err
 

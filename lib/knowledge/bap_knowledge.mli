@@ -20,12 +20,30 @@ module Knowledge : sig
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
   val promise : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
-  val run : unit t -> 'a cls -> 'a obj -> state -> ('a value * state, conflict) result
+  val run : 'a cls -> 'a obj t -> state -> ('a value * state, conflict) result
+
+  module Syntax : sig
+    include Monad.Syntax.S with type 'a t := 'a t
+
+
+    (* (\** [x-->p] is [collect p x] *\)
+     * val (-->) : 'a obj -> ('a,'p) slot -> 'p t
+     *
+     *
+     * (\** [p >>> f] is [promise p f]  *\)
+     * val (>>>) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
+     *
+     *
+     * (\** [c // s] is [Obj.read c s]  *\)
+     * val (//) : 'a cls -> string -> 'a obj *)
+  end
 
 
   include Monad.S with type 'a t := 'a t
+                   and module Syntax := Syntax
   include Monad.Fail.S with type 'a t := 'a t
                         and type 'a error = conflict
+
 
   module Class : sig
     type 'a t = 'a cls
@@ -90,10 +108,12 @@ module Knowledge : sig
     *)
     val cast : ('a obj, 'b obj) Type_equal.t -> 'a obj -> 'b obj
 
+
+    val id : 'a obj -> Int63.t
+
     val comparator : 'a cls -> (module Base.Comparator.S
                                  with type t = 'a obj
                                   and type comparator_witness = 'a ord)
-
   end
 
   module Value : sig
@@ -124,6 +144,90 @@ module Knowledge : sig
     end
 
     val derive : 'a cls -> (module S with type t = 'a t and type comparator_witness = 'a ord)
+  end
+
+
+  (** A symbol is an object with unique name.
+
+      Sometimes it is necessary to refer to an object by name, so that
+      a chosen name will always identify the same object. Finding or
+      creating an object by name is called "interning" it. A symbol
+      that has a name is called an "interned symbol". However we
+      stretch the boundaries of the symbol idea, by treating all other
+      objects as "uninterned symbols". So that any object could be
+      treated as a symbol.
+
+      To prevent name clashing, that introduce unwanted equalities,
+      we employ the system of packages, where each symbol belongs
+      to a package, called its home package. The large system design
+      is leveraged due to the mechanism of symbol importing, where the
+      same symbol could be referenced from different packages (see
+      [import] and [in_package] functions, for more information).
+
+      {3 Symbol syntax}
+
+      The [read] function enables translation from symbol textual
+      representation into an object.  The symbol syntax is designed to
+      be verstatile so it can allow arbitrary sets of characters, to
+      enable support for modeling different knowledge domains. Only
+      two characters has the special meaning for the symbol reader,
+      the [:] character acts as a separator between the package and
+      the name constituent, and the [\\] symbol escapes any special
+      treatment of a symbol that follows it (including the [\\]
+      itself). When a symbol is read, an absence of the package is
+      treated the same as if the [package] parameter of the [create]
+      function wasn't set, e.g.,
+      [read c "x"] is the same as [create c "x"], while an empty package
+      denotes the [keyword] package, e.g.,
+      [read c ":x"] is the same as [create ~package:keyword c "x"].
+
+
+      {3 Name equality}
+
+      The equality of two names is defined by equality of their
+      byte representation. Hence, symbols which differ in register
+      will be treated differently, e.g., [Foo <> foo].
+  *)
+  module Symbol : sig
+
+    (** [intern ?public ?desc ?package name cls] interns a symbol in
+        a package.
+
+        If a symbol with the given name is already interned in a
+        package, then returns its value, otherwise creates a new
+        object.
+
+        If symbol is [public] then it might be advertised and be
+        accessible during the introspection. It will also be imported
+        by any [use_package] statement, unless explicitly shadowed.
+        It is recommeneded to provide a description string if a symbol
+        is public. Note, a non-public symbol still could be obtained
+        by anyone who knows the name.
+
+        If the function is called in the scope of one or more
+        [in_package pkg<N>], then the [package] parameter defaults to
+        [pkg], otherwise it defaults to ["user"]. See also the
+        [keyword] package for the special package that holds constants
+        and keywords.
+    *)
+    val intern : ?public:bool -> ?desc:string -> ?package:string -> string ->
+      'a cls -> 'a obj knowledge
+
+    (** [keyword = "keyword"] is the special name for the package
+        that contains keywords. Basically, keywords are special kinds
+        of symbols whose meaning is defined by their names and nothing
+        else. *)
+    val keyword : string
+
+    (** [in_package pkg f] makes [pkg] the default package in [f].
+
+        Every reference to an unqualified symbol in the scope of the
+        [f] function will be treated as it is qualified with the
+        package [pkg]. This function will affect both the reader and
+        the pretty printer, thus [in_package "p" @@ Obj.repr buf] will
+        yield something like [#<buf 123>], instead of [#<p:buf 123>].
+    *)
+    val in_package : string -> (unit -> 'a knowledge) -> 'a knowledge
   end
 
   module Order : sig
@@ -176,5 +280,7 @@ module Knowledge : sig
       string -> 'a option domain
 
     val string : string domain
+
+    val obj : 'a cls -> 'a obj domain
   end
 end
