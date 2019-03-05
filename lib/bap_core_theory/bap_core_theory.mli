@@ -651,7 +651,7 @@ module Theory : sig
     type ('e,'r,'s) parser = ('e,'r,'s) t
 
     module Make(S : Core) : sig
-      val run : ('e,'r,'s) parser -> 's list -> unit effect knowledge
+      val run : ('e,'r,'s) parser -> 's list -> unit eff
     end
   end
 end

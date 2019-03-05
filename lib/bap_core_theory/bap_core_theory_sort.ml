@@ -40,7 +40,7 @@ module Sort
   type 'a t = ('a definition -> unit) Knowledge.cls
 
   let base =
-    KB.Class.upcast @@
+    KB.Class.abstract @@
     KB.Class.declare ~package "value"
       ~desc:"result of a computation"
       Top

@@ -81,12 +81,17 @@ module Make(S : Core) = struct
     | None -> Var.Ident.of_string v
     | Some r -> r
 
+  let pass = perform Effect.unknown
+  let skip = perform Effect.unknown
+  let newlabel = Knowledge.Object.create Link.t
+
+
 
   let rec expw : type s b e r.
     context ->
-    (e,r,b) parser -> e -> s bitv value t =
+    (e,r,b) parser -> e -> s bitv =
     fun ctxt self -> self.bitv (module struct
-        type nonrec t = s bitv value t
+        type nonrec t = s bitv
         type exp = e
         type rmode = r
 
@@ -138,7 +143,7 @@ module Make(S : Core) = struct
         let concat xs =
           Knowledge.List.fold ~init:([],0) xs ~f:(fun (xs,s) x ->
               expw x >>| fun x ->
-              !!x::xs, s + Bitv.size (Value.sort x)) >>= fun (xs,sz) ->
+              !!x::xs, s + Bitv.size (Value.cls x)) >>= fun (xs,sz) ->
           concat (bits sz) (List.rev xs)
 
         let let_bit v x y =
@@ -174,10 +179,10 @@ module Make(S : Core) = struct
       end)
   and expm : type k x b e r.
     context ->
-    (e,r,b) parser -> e -> (k,x) mem value t =
+    (e,r,b) parser -> e -> (k,x) mem =
     fun ctxt self -> self.mem (module struct
         open Knowledge.Syntax
-        type nonrec t = (k, x) mem value t
+        type nonrec t = (k, x) mem
         type exp = e
 
         let run = expm
@@ -192,7 +197,7 @@ module Make(S : Core) = struct
         let store_word d m k x =
           storew (expb d) (expm m) (expw k) (expw x)
         let var v ks vs =
-          let s = Mems.define (bits ks) (bits vs) in
+          let s = Mem.define (bits ks) (bits vs) in
           var (Var.create s (rename ctxt v))
         let ite c x y = ite (expb c) (expm x) (expm y)
 
@@ -216,15 +221,15 @@ module Make(S : Core) = struct
           Var.scoped s @@ fun r ->
           let_ r !!x (run ((v,Var.ident r)::ctxt) self y)
 
-        let unknown ks vs = unk (Mems.define (bits ks) (bits vs))
+        let unknown ks vs = unk (Mem.define (bits ks) (bits vs))
       end)
 
   and expb : type s b e r.
     context ->
-    (e,r,b) parser -> e -> bit value t =
+    (e,r,b) parser -> e -> bool =
     fun ctxt self -> self.bool (module struct
         open Knowledge.Syntax
-        type nonrec t = bit value t
+        type nonrec t = bool
         type exp = e
 
         let run = expb
@@ -299,9 +304,9 @@ module Make(S : Core) = struct
       end)
   and expf : type s b e r k n i g a.
     context ->
-    (e,r,b) parser -> e -> ((i, g, a) IEEE754.t, s) format float value t =
+    (e,r,b) parser -> e -> ((i, g, a) IEEE754.t, s) format float =
     fun ctxt self -> self.float (module struct
-        type nonrec t = ((i, g, a) IEEE754.t, s) format float value t
+        type nonrec t = ((i, g, a) IEEE754.t, s) format float
         type exp = e
         type rmode = r
 
@@ -368,9 +373,9 @@ module Make(S : Core) = struct
       end)
   and expr : type b e r.
     context ->
-    (e,r,b) parser -> r -> rmode value t =
+    (e,r,b) parser -> r -> rmode =
     fun _ctxt self -> self.rmode (module struct
-        type nonrec t = rmode value t
+        type nonrec t = rmode
         type exp = r
         let error = Knowledge.fail Error
         let rne = rne
@@ -381,45 +386,48 @@ module Make(S : Core) = struct
         let rna = rna
       end)
 
-  let rec run : type e s r. (e,r,s) parser -> s list -> unit eff t =
+  let rec run : type e s r. (e,r,s) parser -> s list -> unit eff =
     fun parser code -> bil [] parser code
 
-  and bil : type e s r. context -> (e,r,s) parser -> s list -> unit eff t =
+  and bil : type e s r. context -> (e,r,s) parser -> s list -> unit eff =
     fun ctxt parser xs -> stmts ctxt parser xs
 
   and stmts : type e s r.
     context ->
-    (e,r,s) parser -> s list -> unit eff t = fun ctxt self -> function
-    | [] -> Knowledge.return Label.root >>= fun lbl -> blk lbl pass skip
+    (e,r,s) parser -> s list -> unit eff = fun ctxt self -> function
+    | [] -> newlabel >>= fun lbl -> blk lbl pass skip
     | x :: xs ->
       self.stmt (module struct
-        type nonrec t = unit eff t
+        type nonrec t = unit eff
         type exp = e
         type stmt = s
         type rmode = r
 
         let next = stmts ctxt self
 
-        let unlabeled = Label.root
-
         let bind exp body =
           exp >>-> fun s exp ->
           Var.fresh s >>= fun v ->
-          let b1 = (blk unlabeled (set v !!exp) skip) in
+          newlabel >>= fun lbl ->
+          let b1 = blk lbl (set v !!exp) skip in
           seq b1 (body v)
 
         let error = Knowledge.fail Error
 
         let special _ =
-          seq (blk unlabeled pass skip) (next xs)
+          newlabel >>= fun lbl ->
+          seq (blk lbl pass skip) (next xs)
 
         let cpuexn n =
-          link_ivec n >>= fun lbl ->
-          seq (blk unlabeled pass (goto lbl)) (next xs)
+          newlabel >>= fun dst ->
+          Knowledge.provide Link.ivec dst (Some n) >>= fun () ->
+          newlabel >>= fun lbl ->
+          seq (blk lbl pass (goto dst)) (next xs)
 
         let while_ cnd ys =
+          newlabel >>= fun lbl ->
           seq
-            (blk unlabeled (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
+            (blk lbl (repeat (expb ctxt self cnd) (stmtd ctxt self ys)) skip)
             (next xs)
 
         let if_ cnd yes nay =
@@ -430,13 +438,18 @@ module Make(S : Core) = struct
             (next xs)
 
         let jmp exp =
-          seq (blk unlabeled pass (jmp (expw ctxt self exp))) (next xs)
+          newlabel >>= fun lbl ->
+          seq (blk lbl pass (jmp (expw ctxt self exp))) (next xs)
 
         let goto addr =
-          link_addr addr >>= fun lbl ->
-          seq (blk unlabeled pass (goto lbl)) (next xs)
+          newlabel >>= fun lbl ->
+          newlabel >>= fun dst ->
+          Knowledge.provide Link.addr dst (Some addr) >>= fun () ->
+          seq (blk lbl pass (goto dst)) (next xs)
 
-        let move eff = seq (blk unlabeled eff skip) (next xs)
+        let move eff =
+          newlabel >>= fun lbl ->
+          seq (blk lbl eff skip) (next xs)
         let set_bit var exp = move (set_bit ctxt self var exp)
         let set_reg var sz exp = move (set_reg ctxt self var sz exp)
         let set_mem var ks vs exp = move (set_mem ctxt self var ks vs exp)
@@ -464,38 +477,38 @@ module Make(S : Core) = struct
 
   and set_bit : type e s r.
     context ->
-    (e,r,s) parser -> string -> e -> data eff t =
+    (e,r,s) parser -> string -> e -> data eff =
     fun ctxt self v x -> set (Var.define bool v) (expb ctxt self x)
 
   and set_reg : type e s r.
     context ->
-    (e,r,s) parser -> string -> int -> e -> data eff t =
+    (e,r,s) parser -> string -> int -> e -> data eff =
     fun ctxt self v s x ->
       set (Var.define (bits s) v) (expw ctxt self x)
 
   and set_mem : type e s r.
     context ->
-    (e,r,s) parser -> string -> int -> int -> e -> data eff t =
+    (e,r,s) parser -> string -> int -> int -> e -> data eff =
     fun ctxt self v ks vs x ->
-      set (Var.define (Mems.define (bits ks) (bits vs)) v) (expm ctxt self x)
+      set (Var.define (Mem.define (bits ks) (bits vs)) v) (expm ctxt self x)
 
   and set_ieee754 : type e s r.
     context ->
-    (e,r,s) parser -> string -> IEEE754.parameters -> e -> data eff t =
+    (e,r,s) parser -> string -> IEEE754.parameters -> e -> data eff =
     fun ctxt self v fs x -> set (Var.define (IEEE754.Sort.define fs) v) (expf ctxt self x)
 
   and set_rmode : type e s r.
     context ->
-    (e,r,s) parser -> string -> r -> data eff t =
+    (e,r,s) parser -> string -> r -> data eff =
     fun ctxt self v x -> set (Var.define Rmode.t v) (expr ctxt self x)
 
   and stmtd : type e s r.
     context ->
-    (e,r,s) parser -> s list -> data eff t = fun ctxt self -> function
+    (e,r,s) parser -> s list -> data eff = fun ctxt self -> function
     | [] -> pass
     | x :: xs ->
       self.stmt (module struct
-        type nonrec t = data eff t
+        type nonrec t = data eff
         type exp = e
         type stmt = s
         type rmode = r

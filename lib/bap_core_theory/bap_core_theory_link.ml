@@ -4,7 +4,7 @@ open Bap_knowledge
 
 
 
-let package = "edu.cmu.ece.bap.core-theory"
+let package = "core-theory"
 
 type t = Link
 
@@ -23,7 +23,7 @@ let int = Knowledge.Domain.optional "string"
     ~inspect:sexp_of_int
     ~order:Int.compare
 
-
 let addr = Knowledge.Class.property ~package link "link-addr" word
 let name = Knowledge.Class.property ~package link "link-name" string
 let ivec = Knowledge.Class.property ~package link "link-ivec" int
+let t = link
