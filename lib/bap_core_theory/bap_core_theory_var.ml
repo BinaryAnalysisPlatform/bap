@@ -90,9 +90,8 @@ let scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure = fun s f ->
   Knowledge.Object.scoped const @@ fun v ->
   f @@ create s (Var {num = Knowledge.Object.id v; mut=false})
 
-module Id = struct
+module Ident = struct
   type t = ident [@@deriving bin_io, compare, hash, sexp]
-  let module_name = "Bap_core_theory.Var.Ident"
   let of_string x =
     let n = String.length x in
     if n = 0
@@ -107,6 +106,9 @@ module Id = struct
       Reg {name=x}
 
   let to_string x = Format.asprintf "%a" pp_ident x
+  include Base.Comparable.Make(struct
+      type t = ident [@@deriving bin_io, compare, sexp]
+    end)
 
 end
-module Ident = Identifiable.Make(Id)
+type ord = Ident.comparator_witness

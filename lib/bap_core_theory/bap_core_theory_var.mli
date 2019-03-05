@@ -20,7 +20,8 @@ val fresh : 'a sort -> 'a t knowledge
 val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
 
 module Ident : sig
-  include Stringable.S with type t = ident
-  include Base.Comparable.S with type t := ident
+  type t = ident [@@deriving bin_io, compare, sexp]
+  include Stringable.S with type t := t
+  include Base.Comparable.S with type t := t
                              and type comparator_witness = ord
 end
