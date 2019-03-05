@@ -26,16 +26,16 @@ module Knowledge : sig
     include Monad.Syntax.S with type 'a t := 'a t
 
 
-    (* (\** [x-->p] is [collect p x] *\)
-     * val (-->) : 'a obj -> ('a,'p) slot -> 'p t
-     *
-     *
-     * (\** [p >>> f] is [promise p f]  *\)
-     * val (>>>) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
-     *
-     *
-     * (\** [c // s] is [Obj.read c s]  *\)
-     * val (//) : 'a cls -> string -> 'a obj *)
+    (** [x-->p] is [collect p x] *)
+    val (-->) : 'a obj -> ('a,'p) slot -> 'p t
+
+
+    (** [p >>> f] is [promise p f]  *)
+    val (>>>) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
+
+
+    (** [c // s] is [Object.read c s]  *)
+    val (//) : 'a cls -> string -> 'a obj t
   end
 
 
@@ -198,17 +198,21 @@ module Knowledge : sig
         object.
 
         If symbol is [public] then it might be advertised and be
-        accessible during the introspection. It will also be imported
-        by any [use_package] statement, unless explicitly shadowed.
-        It is recommeneded to provide a description string if a symbol
-        is public. Note, a non-public symbol still could be obtained
-        by anyone who knows the name.
+        accessible during the introspection. It is recommeneded to
+        provide a description string if a symbol is public. Note, a
+        non-public symbol still could be obtained by anyone who knows
+        the name.
 
         If the function is called in the scope of one or more
         [in_package pkg<N>], then the [package] parameter defaults to
         [pkg], otherwise it defaults to ["user"]. See also the
         [keyword] package for the special package that holds constants
         and keywords.
+
+        The [desc], [package], and [name] parameters could be
+        arbitrary strings (including empty). Any occurence of the
+        package separator symbol ([:]) will be escaped and won't be
+        treated as a package/name separator.
     *)
     val intern : ?public:bool -> ?desc:string -> ?package:string -> string ->
       'a cls -> 'a obj knowledge
@@ -224,8 +228,8 @@ module Knowledge : sig
         Every reference to an unqualified symbol in the scope of the
         [f] function will be treated as it is qualified with the
         package [pkg]. This function will affect both the reader and
-        the pretty printer, thus [in_package "p" @@ Obj.repr buf] will
-        yield something like [#<buf 123>], instead of [#<p:buf 123>].
+        the pretty printer, thus [in_package "pkg" @@ Obj.repr buf] will
+        yield something like [#<buf 123>], instead of [#<pkg:buf 123>].
     *)
     val in_package : string -> (unit -> 'a knowledge) -> 'a knowledge
   end

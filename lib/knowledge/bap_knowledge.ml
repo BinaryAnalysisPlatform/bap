@@ -75,8 +75,6 @@ module Domain = struct
           | true,false -> GT
           | false,true -> LT
           | false,false -> partial_of_total String.compare x y)
-
-  let inspect_obj x = Sexp.Atom (Format.asprintf "#<obj %a>" Id.pp x)
 end
 
 type 'a obj = Id.t
@@ -117,6 +115,27 @@ let string_of_fname {package; name} =
   if package = keyword_package || package = user_package
   then name
   else package ^ ":" ^ name
+
+let escaped =
+  Staged.unstage @@
+  String.Escaping.escape ~escapeworthy:[':'] ~escape_char:'\\'
+
+(* invariant, keywords are always prefixed with [:] *)
+let normalize_name ~package name =
+  let package = escaped package in
+  if package = keyword_package &&
+     not (String.is_prefix ~prefix:":" name)
+  then ":"^name else name
+
+let split_name package s =
+  if String.is_empty s then {package=user_package; name=s}
+  else match String.Escaping.index s ~escape_char:'\\' ':' with
+    | None -> {package; name=s}
+    | Some 0 -> {package=keyword_package; name=s}
+    | Some len -> {
+        package = String.sub s ~pos:0 ~len;
+        name = String.subo s ~pos:(len+1);
+      }
 
 module Class = struct
   type top = unit
@@ -636,14 +655,7 @@ module Knowledge = struct
       | Some p -> Knowledge.return p
       | None -> gets (fun s -> s.package)
 
-    let normalize_name ~package name =
-      if package = keyword_package
-      && not (String.is_prefix ~prefix:":" name)
-      then ":"^name
-      else name
-
-
-    let intern ?public:_ ?desc:_ ?package name {Class.id} =
+    let do_intern ?public:_ ?desc:_ ?package name {Class.id} =
       get () >>= fun ({classes} as s) ->
       let package = Option.value package ~default:s.package in
       let name = normalize_name ~package name in
@@ -665,6 +677,13 @@ module Knowledge = struct
         put {s with classes = Map.set classes id objects;} >>| fun () ->
         obj
 
+    (* any [:] in names here are never treated as separators,
+       contrary to [read], where they are, and [do_intern] where
+       a leading [:] in a name will be left for keywords *)
+    let intern ?public ?desc ?package name cls =
+      let name = escaped name in
+      do_intern ?public ?desc ?package name cls
+
     let uninterned_repr cls obj =
       Format.asprintf "#<%s %a>" cls Id.pp obj
 
@@ -681,17 +700,6 @@ module Knowledge = struct
           else string_of_fname fname
         | None -> uninterned_repr cls obj
 
-    (* we keep keywords with leading [:] *)
-    let split_name package s =
-      if String.is_empty s then {package=user_package; name=s}
-      else match String.Escaping.index s ~escape_char:'\\' ':' with
-        | None -> {package; name=s}
-        | Some 0 -> {package=keyword_package; name=s}
-        | Some len -> {
-            package = String.sub s ~pos:0 ~len;
-            name = String.subo s ~pos:(len+1);
-          }
-
     let read cls input =
       if String.length input < 2 then
         Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
@@ -699,7 +707,7 @@ module Knowledge = struct
       else
         get () >>= fun {Data.package} ->
         let {package; name} = split_name package input in
-        intern ~package name cls
+        do_intern ~package name cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
@@ -718,12 +726,24 @@ module Knowledge = struct
       (module R)
   end
 
-  module Domain = Domain
+  module Domain = struct
+    include Domain
+
+    let inspect_obj name x =
+      Sexp.Atom (Format.asprintf "#<%s %a>" name Id.pp x)
+
+    let obj {Class.name} =
+      let name = string_of_fname name in
+      total ~inspect:(inspect_obj name) ~empty:Id.zero
+        ~order:Id.compare name
+
+  end
   module Order = Order
 
   module Symbol = struct
     let intern = Object.intern
     let keyword = keyword_package
+
     let in_package package f =
       get () >>= function {Data.package=old_package} as s ->
         put {s with package} >>= fun () ->
@@ -733,7 +753,20 @@ module Knowledge = struct
   end
 
 
-  include Knowledge
+  module Syntax = struct
+    include Knowledge.Syntax
+    let (-->) x p = collect p x
+    let (>>>) p f = promise p f
+    let (//) c s = Object.read c s
+  end
+
+  module type S = sig
+    include Monad.S with type 'a t = 'a knowledge
+                     and module Syntax := Syntax
+    include Monad.Fail.S with type 'a t := 'a knowledge
+                          and type 'a error = conflict
+  end
+  include (Knowledge : S)
 
   let get_value cls obj = objects cls >>| fun {Data.vals} ->
     match Map.find vals obj with
