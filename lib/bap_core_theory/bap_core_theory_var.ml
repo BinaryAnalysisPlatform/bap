@@ -7,12 +7,11 @@ open Knowledge.Syntax
 
 module Value = Knowledge.Value
 
-let package = "edu.cmu.ece.bap.core-theory"
-
+let package = "core-theory"
 
 type ident =
   | Reg of {name : string}
-  | Var of {num : int; mut : bool}
+  | Var of {num : Int63.t; mut : bool}
 [@@deriving bin_io, compare, hash, sexp]
 
 type 'a t = {sort : 'a sort; ident : ident}
@@ -54,7 +53,7 @@ let create sort ident = {sort; ident}
 let pp_ident ppf ident = match ident with
   | Reg {name} -> Format.fprintf ppf "%s" name
   | Var {num; mut} ->
-    Format.fprintf ppf "%s%d" (if mut then "#" else "$") num
+    Format.fprintf ppf "%s%a" (if mut then "#" else "$") Int63.pp num
 
 let name v = Format.asprintf "%a" pp_ident v.ident
 let ident v = v.ident
@@ -69,71 +68,27 @@ let nat1 = Knowledge.Domain.total "nat1"
     ~inspect:sexp_of_int
     ~order:Int.compare
 
-type namespace = NS
+type const = Const
+type mut = Mut
 
-let namespace = Knowledge.Class.declare ~package "var-namespace" NS
-    ~desc:"a unique variable name generator in a given namespace"
+let const = Knowledge.Class.declare ~package "const-var" Const
+    ~desc:"local immutable variables"
 
-let counter = Knowledge.Class.property ~package namespace "current" nat1
+let mut = Knowledge.Class.declare ~package "mut-var" Mut
+    ~desc:"temporary mutable variables"
 
-let incr ns =
-  Knowledge.collect counter ns >>= fun x ->
-  Knowledge.provide counter ns (x + 1) >>| fun () ->
-  x
 
-let make_namespace =
-  Knowledge.Object.create namespace >>| fun ns ->
-  (fun () -> incr ns)
+let fresh s =
+  Knowledge.Object.create mut >>| fun v ->
+  create s (Var {num = Knowledge.Object.id v; mut=true})
 
-module Counter() : sig
-  val read : int knowledge
-  val incr : unit knowledge
-  val decr : unit knowledge
-end = struct
-  let data = Semantics.declare "counter" (module Domain.Chain.Make(struct
-        type t = int [@@deriving compare, sexp]
-        let empty = 0
-        let inspect = sexp_of_t
-      end))
+type 'a pure = ('a Sort.definition -> unit) Knowledge.value knowledge
 
-  let counter = Knowledge.declare
-      ~name:"edu.cmu.ece.bap/fresh-variables"
-      ~desc:"fresh variables generator"
-      data
-  open Knowledge.Syntax
-  let read = Knowledge.collect counter Label.root
-  let incr =
-    Knowledge.collect counter Label.root >>= fun x ->
-    Knowledge.provide counter Label.root (succ x)
-  let decr =
-    Knowledge.collect counter Label.root >>= fun x ->
-    Knowledge.provide counter Label.root (pred x)
-end
-
-module Generator : sig
-  val fresh : 'a sort -> 'a t knowledge
-end = struct
-  module Counter = Counter()
-  let fresh sort =
-    Counter.incr >>= fun () ->
-    Counter.read >>| fun num ->
-    {sort; ident = Var {num; mut=true}}
-end
-
-module Scoped : sig
-  val create : 'a sort -> ('a t -> 'b Value.t knowledge) -> 'b Value.t knowledge
-end = struct
-  module Counter = Counter()
-  let create sort scope =
-    Counter.incr >>= fun () ->
-    Counter.read >>= fun num ->
-    scope {sort; ident = Var {num; mut=false}} >>= fun x ->
-    Counter.decr >>= fun () ->
-    !!x
-end
-
-let fresh = Generator.fresh
-let scoped = Scoped.create
+(* we're ensuring that a variable is immutable by constraining
+   the scope computation to be pure. *)
+let scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure = fun s f ->
+  Knowledge.Object.scoped const @@ fun v ->
+  f @@ create s (Var {num = Knowledge.Object.id v; mut=false})
 
 module Id = struct
   type t = ident [@@deriving bin_io, compare, hash, sexp]
@@ -144,7 +99,7 @@ module Id = struct
     then invalid_arg "a variable identifier can't be empty";
     Scanf.sscanf x "%c%s" @@ function
     | '#' | '$' as c  -> fun s ->
-      let num = try int_of_string s with _ ->
+      let num = try Int63.of_string s with _ ->
         failwithf "`%s' is not a valid temporary value" x () in
       Var {mut = c = '#'; num}
     | _ -> fun _ ->
