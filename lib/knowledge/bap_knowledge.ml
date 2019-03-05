@@ -171,7 +171,7 @@ module Class = struct
     fun ?desc ?package name parent data ->
       newclass ?desc ?package name (Derive (parent.data,data))
 
-  let upcast : type a b. (b -> a) t -> a t = fun child -> match child with
+  let abstract : type a b. (b -> a) t -> a t = fun child -> match child with
     | {data=Derive (base,_); id; name} -> {id; name; data=base}
 
   let refine : type a b. a t -> b -> (b -> a) t =

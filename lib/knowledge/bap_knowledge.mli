@@ -52,7 +52,7 @@ module Knowledge : sig
 
     val declare : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) cls
     val derived : ?desc:string -> ?package:string -> string -> 'a cls -> 'b -> ('b -> 'a) cls
-    val upcast : (_ -> 'a) cls -> 'a cls
+    val abstract : (_ -> 'a) cls -> 'a cls
     val refine : 'a cls -> 'b -> ('b -> 'a) cls
 
     val same : 'a cls -> 'b cls -> bool

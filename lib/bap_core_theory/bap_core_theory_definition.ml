@@ -29,7 +29,7 @@ type ('r,'s) format = ('r,'s) Float.format
 type word = Bitvec.t
 type 'a var = 'a Var.t
 type link = Link.t
-type label = link Knowledge.Object.t
+type label = (link -> unit) Knowledge.Object.t
 
 
 
@@ -65,7 +65,7 @@ module type Bitv = sig
   val logxor  : 'a bitv -> 'a bitv -> 'a bitv
   val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
   val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
-  val ite : bool -> 'a bitv -> 'a bitv -> 'a bitv
+  val ite : bool -> 'a pure -> 'a pure -> 'a pure
   val sle : 'a bitv -> 'a bitv -> bool
   val ule : 'a bitv -> 'a bitv -> bool
   val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
@@ -80,7 +80,7 @@ end
 
 module type Effect = sig
   val perform : 'a effect -> 'a eff
-  val set : 'a var -> 'a sort -> data eff
+  val set : 'a var -> 'a pure -> data eff
   val jmp  : _ bitv -> ctrl eff
   val goto : label -> ctrl eff
   val seq : 'a eff -> 'a eff -> 'a eff

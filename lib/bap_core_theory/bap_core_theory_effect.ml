@@ -10,10 +10,10 @@ type full = Full
 type 'a t = ('a spec -> unit) Knowledge.Class.t
 type 'a value = ('a spec -> unit) Knowledge.value knowledge
 
-let package = "edu.cmu.ece.bap.core-theory"
+let package = "core-theory"
 
 let base =
-  Knowledge.Class.upcast @@
+  Knowledge.Class.abstract @@
   Knowledge.Class.declare ~package "effect"
     ~desc:"denotation of a result of effectful computation"
     Effect

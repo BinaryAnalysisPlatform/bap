@@ -107,6 +107,16 @@ module Theory : sig
     val t : t sort
   end
 
+
+
+  type 'a t = 'a Knowledge.value Knowledge.t
+
+  type 'a pure = ('a Sort.definition -> unit) t
+  type 'a eff = ('a Effect.spec -> unit) t
+
+
+  type ('r,'s) format = ('r,'s) Float.format
+
   module Var : sig
     type 'a t
     type ident [@@deriving bin_io, compare, sexp]
@@ -121,16 +131,11 @@ module Theory : sig
     val is_virtual : 'a t -> bool
     val is_mutable : 'a t -> bool
     val fresh : 'a sort -> 'a t knowledge
-    val scoped : 'a sort -> ('a t -> 'b knowledge) -> 'b knowledge
+    val scoped : 'a sort -> ('a t -> 'b pure) -> 'b pure
 
     module Ident : Base.Comparable.S with type t = ident
                                       and type comparator_witness = ord
   end
-
-  type 'a t = 'a Knowledge.value Knowledge.t
-
-  type 'a pure = ('a Sort.definition -> unit) t
-  type 'a eff = ('a Effect.spec -> unit) t
 
   type bool = Bool.t pure
   type 'a bitv = 'a Bitv.t pure
@@ -142,13 +147,11 @@ module Theory : sig
   type ctrl = Effect.ctrl
   type full = Effect.full
 
-  type ('r,'s) format = ('r,'s) Float.format
-
   type word = Bitvec.t
   type 'a var = 'a Var.t
 
   type link
-  type label = link Knowledge.Object.t
+  type label = (link -> unit) Knowledge.Object.t
 
 
   module type Init = sig
@@ -183,7 +186,7 @@ module Theory : sig
     val logxor  : 'a bitv -> 'a bitv -> 'a bitv
     val shiftr : bool -> 'a bitv -> 'b bitv -> 'a bitv
     val shiftl : bool -> 'a bitv -> 'b bitv -> 'a bitv
-    val ite : bool -> 'a bitv -> 'a bitv -> 'a bitv
+    val ite : bool -> 'a pure -> 'a pure -> 'a pure
     val sle : 'a bitv -> 'a bitv -> bool
     val ule : 'a bitv -> 'a bitv -> bool
     val cast : 'a Bitv.t sort -> bool -> 'b bitv -> 'a bitv
@@ -198,7 +201,7 @@ module Theory : sig
 
   module type Effect = sig
     val perform : 'a effect -> 'a eff
-    val set : 'a var -> 'a sort -> data eff
+    val set : 'a var -> 'a pure -> data eff
     val jmp  : _ bitv -> ctrl eff
     val goto : label -> ctrl eff
     val seq : 'a eff -> 'a eff -> 'a eff
@@ -391,6 +394,7 @@ module Theory : sig
 
   module Link : sig
     type t = link
+    val t : (t -> unit) Knowledge.cls
     val addr : (t -> unit, Bitvec.t option) Knowledge.slot
     val name : (t -> unit, string option) Knowledge.slot
     val ivec : (t -> unit, int option) Knowledge.slot

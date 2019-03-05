@@ -4,7 +4,7 @@ open Caml.Format
 open Bap_knowledge
 module KB = Knowledge
 
-let package = "edu.cmu.ece.bap.core-theory"
+let package = "core-theory"
 
 module Sort
   : sig

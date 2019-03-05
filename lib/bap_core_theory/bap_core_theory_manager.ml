@@ -26,21 +26,12 @@ let register ?(desc="") ~name x =
 
 let bool = Bool.t
 
-module Tid = struct
-  let t = Semantics.declare ~name:"tid" (module Domain.Label)
-end
 
 let ret = Knowledge.return
 
-let newval s =
-  Label.Generator.fresh >>| fun id ->
-  Value.put Tid.t (Value.empty s) id
-
-let neweff s =
-  Label.Generator.fresh >>| fun id ->
-  Eff.put Tid.t (Eff.empty s) id
-
-let effect x = x >>| Eff.kind
+let newval s = Knowledge.return (Value.empty s)
+let neweff s = Knowledge.return (Value.empty s)
+let effect x = x >>| Value.cls
 
 let foreach f init = Knowledge.List.fold !providers ~init ~f
 
@@ -94,10 +85,10 @@ let val1 x sort f = lift1 newval Value.merge x sort f
 let val2 x y sort f = lift2 newval Value.merge x y sort f
 let val3 x y z sort f = lift3 newval Value.merge x y z sort f
 let val4 x y z a sort f = lift4 newval Value.merge x y z a sort f
-let eff0 sort f = lift0 neweff Eff.merge sort f
-let eff1 x sort f = lift1 neweff Eff.merge x sort f
-let eff2 x y sort f = lift2 neweff Eff.merge x y sort f
-let eff3 x y z sort f = lift3 neweff Eff.merge x y z sort f
+let eff0 sort f = lift0 neweff Value.merge sort f
+let eff1 x sort f = lift1 neweff Value.merge x sort f
+let eff2 x y sort f = lift2 neweff Value.merge x y sort f
+let eff3 x y z sort f = lift3 neweff Value.merge x y z sort f
 
 module Theory : Core = struct
   type 'a t = 'a Knowledge.t
@@ -155,41 +146,36 @@ module Theory : Core = struct
   let append s x y = val2 x y (fun _ _ -> !!s) @@
     fun (module P) -> P.append s
 
-  let load m k = val2 m k (fun m _ -> sort m >>| Mems.vals) @@
+  let load m k = val2 m k (fun m _ -> sort m >>| Mem.vals) @@
     fun (module P) -> P.load
 
   let store m k v = val3 m k v (fun m _ _ -> sort m) @@
     fun (module P) -> P.store
 
-  let pass = eff0 Kind.data @@ fun (module P) -> P.pass
-  let skip = eff0 Kind.ctrl @@ fun (module P) -> P.skip
-  let set v x = eff1 x (fun _ -> !!Kind.data) @@ fun (module P) ->
+  let perform s = eff0 s @@ fun (module P) -> P.perform s
+
+  let set v x = eff1 x (fun _ -> !!Effect.unknown) @@ fun (module P) ->
     P.set v
 
   let let_ v x b = val2 x b (fun _ x -> sort x) @@ fun (module P) ->
     P.let_ v
 
-  let jmp d = eff1 d (fun _ -> !!Kind.ctrl) @@ fun (module P) ->
+  let jmp d = eff1 d (fun _ -> !!Effect.unknown) @@ fun (module P) ->
     P.jmp
 
-  let goto d = eff0 Kind.ctrl @@ fun (module P) -> P.goto d
+  let goto d = eff0 Effect.unknown @@ fun (module P) -> P.goto d
 
   let seq x y = eff2 x y (fun x _ -> effect x) @@ fun (module P) ->
     P.seq
-  let blk l x y = eff2 x y (fun _ _ -> !!Kind.unit) @@ fun (module P) ->
+  let blk l x y = eff2 x y (fun _ _ -> !!Effect.unknown) @@ fun (module P) ->
     P.blk l
 
-  let repeat b x = eff2 b x (fun _ _ -> !!Kind.data) @@ fun (module P) ->
+  let repeat b x = eff2 b x (fun _ _ -> !!Effect.unknown) @@ fun (module P) ->
     P.repeat
 
   let branch b x y = eff3 b x y (fun _ x _ -> effect x) @@ fun (module P) ->
     P.branch
 
-  let atomic x = eff1 x (fun _ -> !!Kind.data) @@ fun (module P) ->
-    P.atomic
-  let mfence = eff0 Kind.data @@ fun (module P) -> P.mfence
-  let lfence = eff0 Kind.data @@ fun (module P) -> P.lfence
-  let sfence = eff0 Kind.data @@ fun (module P) -> P.sfence
 
   (* Provider *)
   let zero s = val0 s @@ fun (module P) -> P.zero s
@@ -246,7 +232,7 @@ module Theory : Core = struct
     P.requal
 
   let float s x = val1 x (fun _ -> !!s) @@ fun (module P) -> P.float s
-  let fbits x = val1 x (fun x -> sort x >>| Floats.size) @@ fun (module P) ->
+  let fbits x = val1 x (fun x -> sort x >>| Float.size) @@ fun (module P) ->
     P.fbits
 
   let is_finite x = val1 x (fun _ -> !!bool) @@ fun (module P) -> P.is_finite
