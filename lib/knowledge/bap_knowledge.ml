@@ -120,6 +120,10 @@ let escaped =
   Staged.unstage @@
   String.Escaping.escape ~escapeworthy:[':'] ~escape_char:'\\'
 
+let find_separator s =
+  if String.is_empty s then None
+  else String.Escaping.index s ~escape_char:'\\' ':'
+
 (* invariant, keywords are always prefixed with [:] *)
 let normalize_name ~package name =
   let package = escaped package in
@@ -127,15 +131,13 @@ let normalize_name ~package name =
      not (String.is_prefix ~prefix:":" name)
   then ":"^name else name
 
-let split_name package s =
-  if String.is_empty s then {package=user_package; name=s}
-  else match String.Escaping.index s ~escape_char:'\\' ':' with
-    | None -> {package; name=s}
-    | Some 0 -> {package=keyword_package; name=s}
-    | Some len -> {
-        package = String.sub s ~pos:0 ~len;
-        name = String.subo s ~pos:(len+1);
-      }
+let split_name package s = match find_separator s with
+  | None -> {package; name=s}
+  | Some 0 -> {package=keyword_package; name=s}
+  | Some len -> {
+      package = String.sub s ~pos:0 ~len;
+      name = String.subo s ~pos:(len+1);
+    }
 
 module Class = struct
   type top = unit
@@ -374,7 +376,7 @@ module Knowledge = struct
       reqs : Set.M(Id).t Map.M(Pid).t;
       objs : Id.t Map.M(String).t Map.M(String).t;
       syms : fullname Map.M(Id).t;
-      pubs : Set.M(String).t Map.M(String).t;
+      pubs : Set.M(Id).t Map.M(String).t;
     }
 
     let empty_class = {
@@ -653,9 +655,6 @@ module Knowledge = struct
       delete cls obj >>| fun () ->
       r
 
-    let current = function
-      | Some p -> Knowledge.return p
-      | None -> gets (fun s -> s.package)
 
     let do_intern =
       let is_public ~package name {Data.pubs} =
@@ -663,11 +662,11 @@ module Knowledge = struct
         | None -> false
         | Some pubs -> Set.mem pubs name in
       let unchanged id = Knowledge.return id in
-      let publicize ~package name : Data.objects -> Data.objects =
+      let publicize ~package obj: Data.objects -> Data.objects =
         fun objects -> {
             objects with pubs = Map.update objects.pubs package ~f:(function
-            | None -> Set.singleton (module String) name
-            | Some pubs -> Set.add pubs name)
+            | None -> Set.singleton (module Id) obj
+            | Some pubs -> Set.add pubs obj)
           } in
       let createsym ~public ~package name classes clsid objects s =
         with_new_object objects @@ fun obj objects ->
@@ -677,7 +676,7 @@ module Knowledge = struct
             | Some names -> Map.set names name obj) in
         let objects = {objects with objs; syms} in
         let objects = if public
-          then publicize ~package name objects else objects in
+          then publicize ~package obj objects else objects in
         put {s with classes = Map.set classes clsid objects} >>| fun () ->
         obj in
 
@@ -694,9 +693,9 @@ module Knowledge = struct
           | None -> createsym ~public ~package name classes id objects s
           | Some obj when not public -> unchanged obj
           | Some obj ->
-            if is_public ~package name objects then unchanged obj
+            if is_public ~package obj objects then unchanged obj
             else
-              let objects = publicize ~package name objects in
+              let objects = publicize ~package obj objects in
               put {s with classes = Map.set classes id objects} >>| fun () ->
               obj
 
@@ -722,6 +721,7 @@ module Knowledge = struct
           then fname.name
           else string_of_fname fname
         | None -> uninterned_repr cls obj
+
 
     let read cls input =
       if String.length input < 2 then
@@ -773,6 +773,90 @@ module Knowledge = struct
         f () >>= fun r ->
         update (fun s -> {s with package = old_package}) >>| fun () ->
         r
+
+
+    type conflict += Import of fullname * fullname
+
+    let intern_symbol ~package name obj cls =
+      Knowledge.return Data.{
+          cls
+          with objs = Map.update cls.objs package ~f:(function
+              | None -> Map.singleton (module String) name obj
+              | Some names -> Map.set names name obj)}
+
+
+
+    (* imports names inside a class.
+
+       All names that [needs_import] will be imported
+       into the [package]. If the [package] already had
+       the same name but with different value, then a
+       [strict] import will raise an error, otherwise it
+       will be overwritten with the new value.
+    *)
+    let import_class ~strict ~package ~needs_import
+      : Data.objects -> Data.objects knowledge
+      = fun cls ->
+        Map.to_sequence cls.syms |>
+        Knowledge.Seq.fold ~init:cls ~f:(fun cls (obj,sym) ->
+            if not (needs_import cls sym obj)
+            then Knowledge.return cls
+            else
+              let obj' = match Map.find cls.objs package with
+                | None -> Id.zero
+                | Some names -> match Map.find names sym.name with
+                  | None -> Id.zero
+                  | Some obj' -> obj' in
+              if not strict || Id.(obj' = zero || obj' = obj)
+              then intern_symbol ~package sym.name obj cls
+              else
+                let sym' = Map.find_exn cls.syms obj' in
+                Knowledge.fail (Import (sym,sym')))
+
+    let package_exists package = Map.exists ~f:(fun {Data.objs} ->
+        Map.mem objs package)
+
+    let name_exists {package; name} = Map.exists ~f:(fun {Data.objs} ->
+        match Map.find objs package with
+        | None -> false
+        | Some names -> Map.mem names name)
+
+
+    type conflict += Not_a_package of string
+    type conflict += Not_a_symbol of fullname
+
+    let check_name classes = function
+      | `Pkg name -> if package_exists name classes
+        then Knowledge.return ()
+        else Knowledge.fail (Not_a_package name)
+      | `Sym sym -> if name_exists sym classes
+        then Knowledge.return ()
+        else Knowledge.fail (Not_a_symbol sym)
+
+    let current = function
+      | Some p -> Knowledge.return p
+      | None -> gets (fun s -> s.package)
+
+    let import ?(strict=false) ?package imports : unit knowledge =
+      current package >>| escaped >>= fun package ->
+      get () >>= fun s ->
+      Knowledge.List.fold ~init:s.classes imports ~f:(fun classes name ->
+          let name = match find_separator name with
+            | None -> `Pkg name
+            | Some _ -> `Sym (split_name package name) in
+          let needs_import {Data.pubs} sym obj = match name with
+            | `Sym s -> sym = s
+            | `Pkg p -> match Map.find pubs p with
+              | None -> false
+              | Some pubs -> Set.mem pubs obj in
+          check_name classes name >>= fun () ->
+          Map.to_sequence classes |>
+          Knowledge.Seq.fold ~init:classes
+            ~f:(fun classes (clsid,objects) ->
+                import_class ~strict ~package ~needs_import objects
+                >>| fun objects ->
+                Map.set classes clsid objects))
+      >>= fun classes -> put {s with classes}
   end
 
 

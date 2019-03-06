@@ -232,6 +232,44 @@ module Knowledge : sig
         yield something like [#<buf 123>], instead of [#<pkg:buf 123>].
     *)
     val in_package : string -> (unit -> 'a knowledge) -> 'a knowledge
+
+
+    (** [import ?strict ?package:p names] imports all [names] into [p].
+
+        The [names] elements could be either package names or
+        qualified names. If an element is a package, then all public
+        names from this package are imported into the package [p]. If
+        an element is a qualified symbol then it is imported into [p],
+        even if it is not public in the package from which it is being
+        imported.
+
+        If any of the elements of the [names] list doesn't represent a
+        known package or known symbol, then a conflict is raised,
+        either [Not_a_package] or [Not_a_symbol].
+
+        If [strict] is [true] then no name can change its value during
+        the import. Otherwise, if the name is alredy in present in
+        package [p] with a different value, then it will be
+        overwritten with the new value, i.e., shadowed.
+
+        All names are processed in order, so names imported from
+        packages that are in the beginning of the list could be
+        shadowed by the names that are in the end of the list (unless
+        [strict] is [true], of course). Thus,
+        {[
+          import [x] >>= fun () ->
+          import [y]
+        ]}
+
+        is the same as [import [x;y]].
+
+        Note, all imported names are added as not public.
+
+        If the [package] parameter is not specified, then names are
+        imported into the current package, as set by the [in_package]
+        function.
+    *)
+    val import : ?strict:bool -> ?package:string -> string list -> unit knowledge
   end
 
   module Order : sig
