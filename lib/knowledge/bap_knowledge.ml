@@ -374,6 +374,7 @@ module Knowledge = struct
       reqs : Set.M(Id).t Map.M(Pid).t;
       objs : Id.t Map.M(String).t Map.M(String).t;
       syms : fullname Map.M(Id).t;
+      pubs : Set.M(String).t Map.M(String).t;
     }
 
     let empty_class = {
@@ -381,6 +382,7 @@ module Knowledge = struct
       reqs = Map.empty (module Pid);
       objs = Map.empty (module String);
       syms = Map.empty (module Id);
+      pubs = Map.empty (module String);
     }
 
     type t = {
@@ -655,27 +657,48 @@ module Knowledge = struct
       | Some p -> Knowledge.return p
       | None -> gets (fun s -> s.package)
 
-    let do_intern ?public:_ ?desc:_ ?package name {Class.id} =
-      get () >>= fun ({classes} as s) ->
-      let package = Option.value package ~default:s.package in
-      let name = normalize_name ~package name in
-      let objects = match Map.find classes id with
-        | None -> Data.empty_class
-        | Some objs -> objs in
-      let id = match Map.find objects.objs package with
-        | None -> Id.zero
-        | Some names -> match Map.find names name with
-          | None -> Id.zero
-          | Some obj -> obj in
-      if Id.(id <> zero) then Knowledge.return id
-      else with_new_object objects @@ fun obj objects ->
+    let do_intern =
+      let is_public ~package name {Data.pubs} =
+        match Map.find pubs package with
+        | None -> false
+        | Some pubs -> Set.mem pubs name in
+      let unchanged id = Knowledge.return id in
+      let publicize ~package name : Data.objects -> Data.objects =
+        fun objects -> {
+            objects with pubs = Map.update objects.pubs package ~f:(function
+            | None -> Set.singleton (module String) name
+            | Some pubs -> Set.add pubs name)
+          } in
+      let createsym ~public ~package name classes clsid objects s =
+        with_new_object objects @@ fun obj objects ->
         let syms = Map.set objects.syms obj {package; name} in
         let objs = Map.update objects.objs package ~f:(function
             | None -> Map.singleton (module String) name obj
             | Some names -> Map.set names name obj) in
         let objects = {objects with objs; syms} in
-        put {s with classes = Map.set classes id objects;} >>| fun () ->
-        obj
+        let objects = if public
+          then publicize ~package name objects else objects in
+        put {s with classes = Map.set classes clsid objects} >>| fun () ->
+        obj in
+
+      fun ?(public=false) ?desc:_ ?package name {Class.id} ->
+        get () >>= fun ({classes} as s) ->
+        let package = Option.value package ~default:s.package in
+        let name = normalize_name ~package name in
+        let objects = match Map.find classes id with
+          | None -> Data.empty_class
+          | Some objs -> objs in
+        match Map.find objects.objs package with
+        | None -> createsym ~public ~package name classes id objects s
+        | Some names -> match Map.find names name with
+          | None -> createsym ~public ~package name classes id objects s
+          | Some obj when not public -> unchanged obj
+          | Some obj ->
+            if is_public ~package name objects then unchanged obj
+            else
+              let objects = publicize ~package name objects in
+              put {s with classes = Map.set classes id objects} >>| fun () ->
+              obj
 
     (* any [:] in names here are never treated as separators,
        contrary to [read], where they are, and [do_intern] where
