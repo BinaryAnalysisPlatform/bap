@@ -3,6 +3,10 @@ open Monads.Std
 
 module Order = struct
   type partial = LT | EQ | GT | NC
+  module type S = sig
+    type t
+    val order : t -> t -> partial
+  end
 end
 
 type conflict = ..
@@ -76,6 +80,117 @@ module Domain = struct
           | false,true -> LT
           | false,false -> partial_of_total String.compare x y)
 end
+
+module Persistent = struct
+  type 'a t =
+    | String : string t
+    | Define : {
+        of_string : string -> 'a;
+        to_string : 'a -> string;
+      } -> 'a t
+    | Derive : {
+        of_persistent : 'b -> 'a;
+        to_persistent : 'a -> 'b;
+        persistent : 'b t;
+      } -> 'a t
+
+
+  let string = String
+
+  let define ~to_string ~of_string = Define {
+      to_string;
+      of_string;
+    }
+
+  let derive ~to_persistent ~of_persistent persistent = Derive {
+      to_persistent;
+      of_persistent;
+      persistent;
+    }
+
+  let of_binable
+    : type a. (module Binable.S with type t = a) -> a t =
+    fun r -> Define {
+        to_string = Binable.to_string r;
+        of_string = Binable.of_string r
+      }
+
+  let rec to_string
+    : type a. a t -> a -> string =
+    fun p x -> match p with
+      | String -> x
+      | Define {to_string} -> to_string x
+      | Derive {to_persistent; persistent} ->
+        to_string persistent (to_persistent x)
+
+  let rec of_string
+    : type a. a t -> string -> a =
+    fun p s -> match p with
+      | String -> s
+      | Define {of_string} -> of_string s
+      | Derive {of_persistent; persistent} ->
+        of_persistent (of_string persistent s)
+
+
+
+  module Chunk = struct
+    (* bin_io will pack len+data, and restore it correspondingly *)
+    type t = {data : string} [@@deriving bin_io]
+  end
+
+  module KV = struct
+    type t = {key : string; data : string}
+    [@@deriving bin_io]
+  end
+
+  module Chunks = struct
+    type t = Chunk.t list [@@deriving bin_io]
+  end
+  module KVS = struct
+    type t = KV.t list [@@deriving bin_io]
+  end
+
+  let chunks = of_binable (module Chunks)
+  let kvs = of_binable (module KVS)
+
+  let list p = derive chunks
+      ~to_persistent:(List.rev_map ~f:(fun x ->
+          {Chunk.data = to_string p x}))
+      ~of_persistent:(List.rev_map ~f:(fun {Chunk.data} ->
+          of_string p data))
+
+  let array p = derive chunks
+      ~to_persistent:(Array.fold ~init:[] ~f:(fun xs x ->
+          {Chunk.data = to_string p x} :: xs))
+      ~of_persistent:(Array.of_list_rev_map ~f:(fun {Chunk.data} ->
+          of_string p data))
+
+  let sequence p = derive chunks
+      ~to_persistent:(fun xs ->
+          Sequence.to_list_rev @@
+          Sequence.map xs ~f:(fun x ->
+              {Chunk.data = to_string p x}))
+      ~of_persistent:(fun xs ->
+          Sequence.of_list @@
+          List.rev_map xs ~f:(fun {Chunk.data} ->
+              of_string p data))
+
+  let set c p = derive (list p)
+      ~to_persistent:Set.to_list
+      ~of_persistent:(Set.of_list c)
+
+  let map c pk pd = derive kvs
+      ~to_persistent:(Map.fold ~init:[] ~f:(fun ~key ~data xs -> {
+            KV.key = to_string pk key;
+            KV.data = to_string pd data
+          } :: xs))
+      ~of_persistent:(List.fold ~init:(Map.empty c)
+                        ~f: (fun xs {KV.key;data} ->
+                            let key = of_string pk key
+                            and data = of_string pd data in
+                            Map.add_exn xs ~key ~data))
+end
+
 
 type 'a obj = Id.t
 
@@ -151,33 +266,37 @@ module Class = struct
     id : Id.t;
     name : fullname;
     data : 'a data;
+    level : int;
   }
 
   let classes = ref Id.zero
 
-  let newclass ?desc ?package name data =
+  let newclass ?desc ?package name data level =
     Id.incr classes;
     {
       id = !classes;
       name = Registry.add_class ?desc ?package name;
       data;
+      level;
     }
 
   let declare
     : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) t =
     fun ?desc ?package name data ->
-      newclass ?desc ?package name (Derive (Top,data))
+      newclass ?desc ?package name (Derive (Top,data)) 0
 
   let derived
     : ?desc:string -> ?package:string -> string -> 'a t -> 'b -> ('b -> 'a) t =
     fun ?desc ?package name parent data ->
       newclass ?desc ?package name (Derive (parent.data,data))
+        (parent.level + 1)
 
   let abstract : type a b. (b -> a) t -> a t = fun child -> match child with
-    | {data=Derive (base,_); id; name} -> {id; name; data=base}
+    | {data=Derive (base,_); id; name; level} -> {id; name; data=base; level}
 
   let refine : type a b. a t -> b -> (b -> a) t =
-    fun {id; name; data} data' -> {id; name; data=Derive (data,data')}
+    fun {id; name; data; level} data' ->
+      {id; name; data=Derive (data,data'); level}
 
   let same x y = Id.equal x.id y.id
 
@@ -192,6 +311,14 @@ module Class = struct
         (string_of_fname x.name)
         (string_of_fname y.name)
         ()
+
+  let order x y : Order.partial =
+    if same x y then match Int.compare x.level y.level with
+      | 0 -> EQ
+      | 1 -> GT
+      | _ -> LT
+    else NC
+
 
   let data : type a b. (b -> a) t -> b = fun {data=Derive (_,data)} -> data
 
@@ -289,14 +416,14 @@ module Record = struct
 
   let register_persistent (type p)
       (key : p Dict.Key.t)
-      (module P : Binable.S with type t = p) =
+      (p : p Persistent.t) =
     let slot = Dict.Key.name key in
     let writer (Dict.Packed.T (k,x)) =
       match Type_equal.Id.same_witness k key with
-      | Some Type_equal.T -> Binable.to_string (module P) x
+      | Some Type_equal.T -> Persistent.to_string p x
       | None -> assert false in
     let reader s =
-      Dict.Packed.T (key,Binable.of_string (module P) s) in
+      Dict.Packed.T (key,Persistent.of_string p s) in
     Hashtbl.add_exn io ~key:slot ~data:{reader;writer}
 
   include Binable.Of_binable(Repr)(struct
@@ -363,6 +490,7 @@ module Knowledge = struct
   type 'a cls = 'a Class.t
   type 'a obj = Id.t
   type 'p domain = 'p Domain.t
+  type 'a persistent = 'a Persistent.t
   type 'a ord = Id.comparator_witness
   type conflict = Conflict.t = ..
 
@@ -759,9 +887,9 @@ module Knowledge = struct
       let name = string_of_fname name in
       total ~inspect:(inspect_obj name) ~empty:Id.zero
         ~order:Id.compare name
-
   end
   module Order = Order
+  module Persistent = Persistent
 
   module Symbol = struct
     let intern = Object.intern

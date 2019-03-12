@@ -10,6 +10,7 @@ module Knowledge : sig
   type 'a value
   type ('a,'p) slot
   type 'p domain
+  type 'a persistent
   type state
   type conflict = ..
 
@@ -45,24 +46,192 @@ module Knowledge : sig
                         and type 'a error = conflict
 
 
+  (** Orders knowledge by information content.
+
+      The [Order.partial] is a generalization of the total order,
+      which is used to compare the amount of information in two
+      specifications of knowledge.
+
+  *)
+  module Order : sig
+
+    (** partial ordering for two way comparison.
+
+        The semantics of constructors:
+        - [LT] - strictly less information
+        - [GT] - strictly more information
+        - [EQ] - equal informational content
+        - [NC] - non-comparable entities
+    *)
+    type partial = LT | EQ | GT | NC
+
+
+    module type S = sig
+
+      (** a partially ordered type  *)
+      type t
+
+      (** defines a partial order relationship between two entities.
+
+          Given a partial ordering relation [<=]
+          - [order x y = LT iff x <= y && not (y <= x)]
+          - [order x y = GT iff y <= x && not (x <= y)]
+          - [order x y = EQ iff x <= y && y <= x]
+          - [order x y = NC iff not (x <= y) && not (y <= x)]
+      *)
+      val order : t -> t -> partial
+    end
+  end
+
   module Class : sig
     type 'a t = 'a cls
     type top = unit
     include Type_equal.Injective with type 'a t := 'a t
 
-    val declare : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) cls
+
+    (** [declare ?desc ?package name data] declares a new class with
+        the given [name].
+
+        The [data] parameter could be used to attach some static
+        information about the class instances or to serve as a witness
+        constructor, so that only the module that has the access to
+        [data] could create or refine instances of that class. In the
+        latter case, the [abstract] operation should be used to erase
+        the type of witness from the parameter, so that it couldn't be
+        obtained using the [data] operation.
+
+        {4 Example}
+
+        {[
+          module Bitv : sig
+            (** [bitv m] a class of fixed bitvectors with width [m]  *)
+            val bitv : int -> (int -> top) cls
+          end = struct
+            type bitv = Bitv
+            let t : top cls = abstract @@ declare "bitv" Bitv
+            let bitv m : (int -> top) cls = refine t m
+          end
+        ]}
+    *)
+    val declare : ?desc:string -> ?package:string -> string -> 'a ->
+      ('a -> top) cls
+
+
+
+    (** [derived name base data] derives a subclass.
+
+        Returns a new class which is the same as base, but is more
+        specific.
+
+        {4 Example}
+
+        {[
+          type bitv = Bitv
+          type signed = Signed
+          let t : top cls = abstract@@declare "bitv" Bitv
+          let signed : (signed -> top) cls = derived "signed-bitv" t Signed
+        ]}
+    *)
     val derived : ?desc:string -> ?package:string -> string -> 'a cls -> 'b -> ('b -> 'a) cls
+
+
+    (** [abstract cls] forgets one level of class refinement.
+
+
+        The [abstract] operation drops the lowest level of refinement
+        of the class [cls] and forgets the corresponding static data
+        or construction witness. It is however still the same class,
+        with the same level of specificness, the goal is just to
+        abstract away the repesentation of the type index. Thus
+        following is always true:
+
+        - [same x (abstract x)];
+        - [order x (abstract x) = EQ]
+    *)
     val abstract : (_ -> 'a) cls -> 'a cls
+
+
+    (** [refine cls data] refines class [cls] with [data].
+
+        This operation is dual to [abstract] but it refines the class
+        index back. Since it is essentially a down-casting operation
+        it may violate the type system rules (not of OCaml, but of the
+        Knowledge representation). The [refine] function doesn't check
+        anything, so if you have an instance of the target class a
+        safer version of dowcasting, based on the [equal] witness
+        could be used. See the {!equal} function for more information.
+
+        As well as with the [abstract] function, the [refine]
+        operation doesn't affect the identity of the class nor its
+        specificness, hence the following is always true:
+        - [same x (refine x)]
+        - [order x (refine x)]
+
+    *)
     val refine : 'a cls -> 'b -> ('b -> 'a) cls
 
+
+    (** [same x y] is true if [x] and [y] are the same value,
+        or share the common ancestor. *)
     val same : 'a cls -> 'b cls -> bool
 
+
+    (** [order x y] establishes the specificness of two classes.
+
+        If two classes are derived from the same class, then the class
+        with the most number of deriviations is the most specific. In
+        other words, the longer the deriviation chain of the given
+        class the more specific it is.
+
+        Note, [abstract] and [refine] operations do not affect the
+        class specificness, only the class parameter.
+    *)
+    val order : 'a cls -> 'b cls -> Order.partial
+
+
+    (** [equal x y] constructs a type witness of classes equality.
+
+        The witness could be used to cast objects of the same class,
+        e.g.,
+
+        {[
+          match equal bitv abs with
+          | Some t -> Object.cast t x y
+          | _ -> ...
+        ]}
+
+        Note that the equality is reflexive, so the obtained witness
+        could be used in both direction, for upcasting and downcasting.
+    *)
     val equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t option
+
+
+    (** [assert_equal x y] asserts the equality of two classes.
+
+        Usefull, in the context where the class is known for sure,
+        (e.g., constrained by the module signature), but has to be
+        recreated. The [let T = assert_equal x y] expression,
+        establishes a type equality between objects in the typing
+        context, so there is no need to invoke [Object.cast].
+
+        {[
+          let add : value obj -> value obj -> value obj = fun x y ->
+            let T = assert_equal bitv value in
+            x + y (* where (+) has type [bitv obj -> bitv obj -> bit obj] *)
+        ]}
+    *)
     val assert_equal : 'a cls -> 'b cls -> ('a obj, 'b obj) Type_equal.t
 
+
+
+    (** [property ?desc ?persistent ?package cls name dom] declares
+        a new property of class instances.
+
+        Returns a slot, that is used to acess this property.
+    *)
     val property :
       ?desc:string ->
-      ?persistent:(module Binable.S with type t = 'p) ->
+      ?persistent:'p persistent ->
       ?package:string ->
       'a cls -> string -> 'p domain -> ('a,'p) slot
 
@@ -272,10 +441,6 @@ module Knowledge : sig
     val import : ?strict:bool -> ?package:string -> string list -> unit knowledge
   end
 
-  module Order : sig
-    type partial = LT | EQ | GT | NC
-  end
-
   module Domain : sig
     type 'a t = 'a domain
 
@@ -324,5 +489,33 @@ module Knowledge : sig
     val string : string domain
 
     val obj : 'a cls -> 'a obj domain
+  end
+
+  module Persistent : sig
+    type 'a t = 'a persistent
+
+    val define :
+      to_string:('a -> string) ->
+      of_string:(string -> 'a) ->
+      'a persistent
+
+    val derive :
+      to_persistent:('a -> 'b) ->
+      of_persistent:('b -> 'a) ->
+      'b persistent -> 'a persistent
+
+    val of_binable : (module Binable.S with type t = 'a) -> 'a persistent
+
+    val string : string persistent
+
+    val list : 'a persistent -> 'a list persistent
+    val sequence : 'a persistent -> 'a Sequence.t persistent
+    val array : 'a persistent -> 'a array persistent
+
+    val set : ('a,'c) Set.comparator -> 'a t -> ('a,'c) Set.t persistent
+    val map : ('k,'c) Map.comparator -> 'k t -> 'd t -> ('k,'d,'c) Map.t persistent
+
+
+
   end
 end
