@@ -11,7 +11,6 @@ module Targets = Bap_disasm_target_factory
 module Dis = Bap_disasm_basic
 module Brancher = Bap_disasm_brancher
 module Rooter = Bap_disasm_rooter
-
 module Addrs = Addr.Table
 module Block = Bap_disasm_block
 module Insn = Bap_disasm_insn
@@ -73,9 +72,9 @@ module Visited = struct
   let next t = Map.closest_key t `Greater_than
   let prev t = Map.closest_key t `Less_than
   let min = Map.min_elt
-  let has_start = Map.mem
+  let is_insn = Map.mem
   let mem t a =
-    has_start t a ||
+    is_insn t a ||
     match prev t a with
     | None -> false
     | Some (addr,max_addr) -> Addr.(addr < a && a <= max_addr)
@@ -110,6 +109,7 @@ type stage3 = {
   cfg : Cfg.t;
   failures : (addr * error) list;
 }
+
 type t = stage3
 
 let errored s ty = {s with errors = (s.addr,ty) :: s.errors}
@@ -202,7 +202,7 @@ let next dis s =
     | [] -> Dis.stop dis s
     | r :: roots when not(Memory.contains s.base r) ->
       loop {s with roots}
-    | r :: roots when Visited.has_start s.visited r ->
+    | r :: roots when Visited.is_insn s.visited r ->
       loop {s with roots}
     | addr :: roots ->
       let mem = Memory.view ~from:addr s.base in
@@ -345,7 +345,7 @@ let stage2 dis stage1 =
     Addrs.mem kinds addr ||
     Addrs.mem stage1.dests addr ||
     Set.mem stage1.inits (next max_addr) in
-  let is_visited = Visited.mem stage1.visited in
+  let is_insn = Visited.is_insn stage1.visited in
   let next_visited = Visited.next stage1.visited in
   let create_block start (addr,max_addr) =
     Memory.range stage1.base start max_addr >>= fun blk ->
@@ -368,14 +368,14 @@ let stage2 dis stage1 =
     let rec loop last start curr =
       match find_insn curr with
       | Some max_addr ->
-        if is_edge (curr,max_addr) then Some (start, (curr, max_addr))
-        else loop  (Some max_addr) start (next max_addr)
-      | None ->
-        match next_visited curr with
-        | Some (addr,_) -> loop None addr addr
-        | None when is_visited start && is_visited curr ->
-          Option.map last ~f:(fun last -> start, (curr,last))
-        | None -> None in
+        let insn = curr,max_addr in
+        if is_edge insn then Some (start, insn)
+        else loop (Some insn) start (next max_addr)
+      | None -> match last with
+        | Some last when is_insn start -> Some (start,last)
+        | _ -> match next_visited curr with
+          | Some (addr,_) -> loop None addr addr
+          | None -> None in
     loop None start start in
   let next_unknown s =
     match next_block s with
