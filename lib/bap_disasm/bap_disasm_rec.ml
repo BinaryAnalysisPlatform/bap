@@ -31,7 +31,6 @@ type dst = [
   | `Fall of addr
 ] [@@deriving sexp]
 
-
 type error = [
   | `Failed_to_disasm of mem
   | `Failed_to_lift of mem * full_insn * Error.t
@@ -41,7 +40,6 @@ type maybe_insn = full_insn option * bil option [@@deriving sexp_of]
 type decoded = mem * maybe_insn [@@deriving sexp_of]
 
 type dests = Brancher.dests
-
 
 module Node = struct
   type t = block
@@ -87,7 +85,6 @@ type blk_dest = [
   | `Block of block * edge
   | `Unresolved of jump
 ]
-
 
 type stage1 = {
   base : mem;
@@ -252,7 +249,6 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
     ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
     ~stopped:next >>= update_intersections disasm brancher mem
 
-
 (* performs the initial markup.
 
    Returns three tables: leads, terms, and kinds. Leads is a mapping
@@ -376,7 +372,7 @@ let stage2 dis stage1 =
         else loop  (Some max_addr) start (next max_addr)
       | None ->
         match next_visited curr with
-        | Some (addr,_)-> loop None addr addr
+        | Some (addr,_) -> loop None addr addr
         | None when is_visited start && is_visited curr ->
           Option.map last ~f:(fun last -> start, (curr,last))
         | None -> None in
