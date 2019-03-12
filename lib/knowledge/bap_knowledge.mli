@@ -514,8 +514,24 @@ module Knowledge : sig
 
     val set : ('a,'c) Set.comparator -> 'a t -> ('a,'c) Set.t persistent
     val map : ('k,'c) Map.comparator -> 'k t -> 'd t -> ('k,'d,'c) Map.t persistent
+  end
+
+  module Data : sig
+    type +'a t
+    type 'a ord
+
+    val atom : 'a cls -> 'a obj -> 'a t knowledge
+    val cons : 'a cls -> 'a t -> 'a t -> 'a t knowledge
+
+    val switch : 'a cls -> 'a t ->
+      atom:('a obj -> 'r knowledge) ->
+      cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
 
 
+    val id : 'a obj -> Int63.t
 
+    val comparator : 'a cls -> (module Base.Comparator.S
+                                 with type t = 'a t
+                                  and type comparator_witness = 'a ord)
   end
 end

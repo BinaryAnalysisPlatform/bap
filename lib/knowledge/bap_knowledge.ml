@@ -15,7 +15,42 @@ module Conflict = struct
   type t = conflict = ..
 end
 
-module Id = Int63
+module type Id = sig
+  type t [@@deriving sexp]
+  val zero : t
+  val pp : Format.formatter -> t -> unit
+  val of_string : string -> t
+  include Base.Comparable.S with type t := t
+end
+
+(* static identifiers,
+   they should persist, so we will substitute them with uuid later
+*)
+module type Sid = sig
+  include Id
+  val incr : t ref -> unit
+end
+
+(* temporal identifiers *)
+module type Tid = sig
+  include Id
+
+  val one : t
+  val two : t
+  val succ : t -> t
+  val is_odd : t -> bool
+  val to_int63 : t -> Int63.t
+end
+
+module Oid : Tid = struct
+  include Int63
+  let two = Int63.of_int 2
+  let succ x = succ (succ x)
+  let is_odd x = Int63.(x land one <> zero)
+  let to_int63 x = x
+end
+module Cid : Sid = Int63
+module Pid : Sid = Int63
 
 let user_package = "user"
 let keyword_package = "keyword"
@@ -192,7 +227,7 @@ module Persistent = struct
 end
 
 
-type 'a obj = Id.t
+type 'a obj = Oid.t
 
 type fullname = {
   package : string;
@@ -263,16 +298,16 @@ module Class = struct
 
 
   type 'a t = {
-    id : Id.t;
+    id : Cid.t;
     name : fullname;
     data : 'a data;
     level : int;
   }
 
-  let classes = ref Id.zero
+  let classes = ref Cid.zero
 
   let newclass ?desc ?package name data level =
-    Id.incr classes;
+    Cid.incr classes;
     {
       id = !classes;
       name = Registry.add_class ?desc ?package name;
@@ -298,7 +333,7 @@ module Class = struct
     fun {id; name; data; level} data' ->
       {id; name; data=Derive (data,data'); level}
 
-  let same x y = Id.equal x.id y.id
+  let same x y = Cid.equal x.id y.id
 
   let equal : type a b. a t -> b t -> (a obj,b obj) Type_equal.t option =
     fun x y -> Option.some_if (same x y) Type_equal.T
@@ -485,51 +520,66 @@ module Knowledge = struct
   type 'a value = {
     cls  : 'a Class.t;
     data : Record.t;
-    time : Id.t;
+    time : Int63.t;
   }
   type 'a cls = 'a Class.t
-  type 'a obj = Id.t
+  type 'a obj = Oid.t
   type 'p domain = 'p Domain.t
   type 'a persistent = 'a Persistent.t
-  type 'a ord = Id.comparator_witness
+  type 'a ord = Oid.comparator_witness
   type conflict = Conflict.t = ..
-
-  module Pid = Int63
   type pid = Pid.t
+  type oid = Oid.t [@@deriving compare, sexp]
+
+  type cell = {
+    car : oid;
+    cdr : oid;
+  } [@@deriving compare, sexp]
+
+  module Cell = struct
+    type t = cell
+    include Base.Comparable.Make(struct
+        type t = cell [@@deriving compare, sexp]
+      end)
+  end
 
 
-  module Data = struct
+  module Env = struct
     type objects = {
-      vals : Record.t Map.M(Id).t;
-      reqs : Set.M(Id).t Map.M(Pid).t;
-      objs : Id.t Map.M(String).t Map.M(String).t;
-      syms : fullname Map.M(Id).t;
-      pubs : Set.M(Id).t Map.M(String).t;
+      vals : Record.t Map.M(Oid).t;
+      reqs : Set.M(Oid).t Map.M(Pid).t;
+      objs : Oid.t Map.M(String).t Map.M(String).t;
+      syms : fullname Map.M(Oid).t;
+      pubs : Set.M(Oid).t Map.M(String).t;
+      heap : cell Map.M(Oid).t;
+      data : Oid.t Map.M(Cell).t;
     }
 
     let empty_class = {
-      vals = Map.empty (module Id);
+      vals = Map.empty (module Oid);
       reqs = Map.empty (module Pid);
       objs = Map.empty (module String);
-      syms = Map.empty (module Id);
+      syms = Map.empty (module Oid);
       pubs = Map.empty (module String);
+      heap = Map.empty (module Oid);
+      data = Map.empty (module Cell);
     }
 
     type t = {
-      classes : objects Map.M(Id).t;
+      classes : objects Map.M(Cid).t;
       package : string;
     }
   end
 
-  type state = Data.t
-  let empty : Data.t = {
+  type state = Env.t
+  let empty : Env.t = {
     package = user_package;
-    classes = Map.empty (module Id);
+    classes = Map.empty (module Cid);
   }
 
   module State = struct
-    include Monad.State.T1(Data)(Monad.Ident)
-    include Monad.State.Make(Data)(Monad.Ident)
+    include Monad.State.T1(Env)(Monad.Ident)
+    include Monad.State.Make(Env)(Monad.Ident)
   end
 
   module Knowledge = struct
@@ -543,7 +593,7 @@ module Knowledge = struct
 
   module Slot = struct
     type 'p promise = {
-      get : Id.t -> 'p Knowledge.t;
+      get : Oid.t -> 'p Knowledge.t;
       pid : pid;
     }
 
@@ -596,9 +646,9 @@ module Knowledge = struct
 
     let merge ?(on_conflict=`drop_old) x y =
       let on_conflict : strategy = match on_conflict with
-        | `drop_old -> if Id.(x.time < y.time)
+        | `drop_old -> if Int63.(x.time < y.time)
           then `drop_left else `drop_right
-        | `drop_new -> if Id.(x.time < y.time)
+        | `drop_new -> if Int63.(x.time < y.time)
           then `drop_right else `drop_left
         | #strategy as other -> other in
       {
@@ -673,9 +723,9 @@ module Knowledge = struct
 
   let provide : type a p. (a,p) slot -> a obj -> p -> unit Knowledge.t =
     fun slot obj x -> update @@ function {classes} as s ->
-        let {Data.vals} as objs =
+        let {Env.vals} as objs =
           match Map.find classes slot.cls.id with
-          | None -> Data.empty_class
+          | None -> Env.empty_class
           | Some objs -> objs in {
           s with classes = Map.set classes ~key:slot.cls.id ~data:{
             objs with vals = Map.update vals obj ~f:(function
@@ -696,7 +746,7 @@ module Knowledge = struct
     | Some ids -> Set.mem ids id
 
   let activate reqs pid id = Map.update reqs pid ~f:(function
-      | None -> Set.singleton (module Pid) id
+      | None -> Set.singleton (module Oid) id
       | Some ids -> Set.add ids id)
 
   let deactivate req pid id = Map.change req pid ~f:(function
@@ -708,25 +758,25 @@ module Knowledge = struct
   let objects : _ cls -> _ = fun cls ->
     get () >>| fun {classes} ->
     match Map.find classes cls.id with
-    | None -> Data.empty_class
+    | None -> Env.empty_class
     | Some objs -> objs
 
   let update_reqs : _ slot -> _ = fun slot reqs ->
     update @@ function {classes} as s -> {
         s with classes = Map.update classes slot.cls.id ~f:(function
-        | None -> {Data.empty_class with reqs}
+        | None -> {Env.empty_class with reqs}
         | Some objs -> {objs with reqs})
       }
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-      objects slot.cls >>= fun {Data.vals} ->
+      objects slot.cls >>= fun {Env.vals} ->
       let init = match Map.find vals id with
         | None -> slot.dom.empty
         | Some v -> Record.get slot.key slot.dom v in
       slot.promises |>
       Knowledge.List.fold ~init ~f:(fun curr req ->
-          objects slot.cls >>= fun {Data.reqs} ->
+          objects slot.cls >>= fun {Env.reqs} ->
           if is_active reqs req.pid id
           then Knowledge.return curr
           else
@@ -742,15 +792,15 @@ module Knowledge = struct
 
   module Object = struct
     type +'a t = 'a obj
-    type 'a ord = Id.comparator_witness
+    type 'a ord = Oid.comparator_witness
 
-    let with_new_object objs f = match Map.max_elt objs.Data.vals with
-      | None -> f Id.one {
+    let with_new_object objs f = match Map.max_elt objs.Env.vals with
+      | None -> f Oid.one {
           objs
-          with vals = Map.singleton (module Id) Id.one Record.empty
+          with vals = Map.singleton (module Oid) Oid.one Record.empty
         }
       | Some (key,_) ->
-        let key = Id.succ key in
+        let key = Oid.succ key in
         f key {
           objs
           with vals = Map.add_exn objs.vals ~key ~data:Record.empty
@@ -785,15 +835,15 @@ module Knowledge = struct
 
 
     let do_intern =
-      let is_public ~package name {Data.pubs} =
+      let is_public ~package name {Env.pubs} =
         match Map.find pubs package with
         | None -> false
         | Some pubs -> Set.mem pubs name in
       let unchanged id = Knowledge.return id in
-      let publicize ~package obj: Data.objects -> Data.objects =
+      let publicize ~package obj: Env.objects -> Env.objects =
         fun objects -> {
             objects with pubs = Map.update objects.pubs package ~f:(function
-            | None -> Set.singleton (module Id) obj
+            | None -> Set.singleton (module Oid) obj
             | Some pubs -> Set.add pubs obj)
           } in
       let createsym ~public ~package name classes clsid objects s =
@@ -813,7 +863,7 @@ module Knowledge = struct
         let package = Option.value package ~default:s.package in
         let name = normalize_name ~package name in
         let objects = match Map.find classes id with
-          | None -> Data.empty_class
+          | None -> Env.empty_class
           | Some objs -> objs in
         match Map.find objects.objs package with
         | None -> createsym ~public ~package name classes id objects s
@@ -835,7 +885,7 @@ module Knowledge = struct
       do_intern ?public ?desc ?package name cls
 
     let uninterned_repr cls obj =
-      Format.asprintf "#<%s %a>" cls Id.pp obj
+      Format.asprintf "#<%s %a>" cls Oid.pp obj
 
     let repr {Class.name=cls as fname; id=cid} obj =
       get () >>= fun {package; classes} ->
@@ -854,16 +904,16 @@ module Knowledge = struct
     let read cls input =
       if String.length input < 2 then
         Scanf.sscanf input "#<%s %s>" @@ fun _ obj ->
-        Knowledge.return (Id.of_string obj)
+        Knowledge.return (Oid.of_string obj)
       else
-        get () >>= fun {Data.package} ->
+        get () >>= fun {Env.package} ->
         let {package; name} = split_name package input in
         do_intern ~package name cls
 
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
 
-    let id x = x
+    let id x = Oid.to_int63 x
 
     let comparator : type a. a cls ->
       (module Comparator.S
@@ -872,7 +922,7 @@ module Knowledge = struct
       let module R = struct
         type t = a obj
         type comparator_witness = a ord
-        let comparator = Id.comparator
+        let comparator = Oid.comparator
       end in
       (module R)
   end
@@ -881,12 +931,12 @@ module Knowledge = struct
     include Domain
 
     let inspect_obj name x =
-      Sexp.Atom (Format.asprintf "#<%s %a>" name Id.pp x)
+      Sexp.Atom (Format.asprintf "#<%s %a>" name Oid.pp x)
 
     let obj {Class.name} =
       let name = string_of_fname name in
-      total ~inspect:(inspect_obj name) ~empty:Id.zero
-        ~order:Id.compare name
+      total ~inspect:(inspect_obj name) ~empty:Oid.zero
+        ~order:Oid.compare name
   end
   module Order = Order
   module Persistent = Persistent
@@ -896,7 +946,7 @@ module Knowledge = struct
     let keyword = keyword_package
 
     let in_package package f =
-      get () >>= function {Data.package=old_package} as s ->
+      get () >>= function {Env.package=old_package} as s ->
         put {s with package} >>= fun () ->
         f () >>= fun r ->
         update (fun s -> {s with package = old_package}) >>| fun () ->
@@ -906,7 +956,7 @@ module Knowledge = struct
     type conflict += Import of fullname * fullname
 
     let intern_symbol ~package name obj cls =
-      Knowledge.return Data.{
+      Knowledge.return Env.{
           cls
           with objs = Map.update cls.objs package ~f:(function
               | None -> Map.singleton (module String) name obj
@@ -923,7 +973,7 @@ module Knowledge = struct
        will be overwritten with the new value.
     *)
     let import_class ~strict ~package ~needs_import
-      : Data.objects -> Data.objects knowledge
+      : Env.objects -> Env.objects knowledge
       = fun cls ->
         Map.to_sequence cls.syms |>
         Knowledge.Seq.fold ~init:cls ~f:(fun cls (obj,sym) ->
@@ -931,20 +981,20 @@ module Knowledge = struct
             then Knowledge.return cls
             else
               let obj' = match Map.find cls.objs package with
-                | None -> Id.zero
+                | None -> Oid.zero
                 | Some names -> match Map.find names sym.name with
-                  | None -> Id.zero
+                  | None -> Oid.zero
                   | Some obj' -> obj' in
-              if not strict || Id.(obj' = zero || obj' = obj)
+              if not strict || Oid.(obj' = zero || obj' = obj)
               then intern_symbol ~package sym.name obj cls
               else
                 let sym' = Map.find_exn cls.syms obj' in
                 Knowledge.fail (Import (sym,sym')))
 
-    let package_exists package = Map.exists ~f:(fun {Data.objs} ->
+    let package_exists package = Map.exists ~f:(fun {Env.objs} ->
         Map.mem objs package)
 
-    let name_exists {package; name} = Map.exists ~f:(fun {Data.objs} ->
+    let name_exists {package; name} = Map.exists ~f:(fun {Env.objs} ->
         match Map.find objs package with
         | None -> false
         | Some names -> Map.mem names name)
@@ -972,7 +1022,7 @@ module Knowledge = struct
           let name = match find_separator name with
             | None -> `Pkg name
             | Some _ -> `Sym (split_name package name) in
-          let needs_import {Data.pubs} sym obj = match name with
+          let needs_import {Env.pubs} sym obj = match name with
             | `Sym s -> sym = s
             | `Pkg p -> match Map.find pubs p with
               | None -> false
@@ -987,6 +1037,42 @@ module Knowledge = struct
       >>= fun classes -> put {s with classes}
   end
 
+  module Data = struct
+    type +'a t = 'a obj
+    type 'a ord = Oid.comparator_witness
+
+    let atom _ x = Knowledge.return x
+
+    let add_cell {Class.id} objects oid cell =
+      let {Env.data; heap} = objects in
+      let data = Map.add_exn data ~key:cell ~data:oid in
+      let heap = Map.add_exn heap ~key:oid ~data:cell in
+      update (fun s -> {
+            s with classes = Map.set s.classes id {
+          objects with data; heap
+        }}) >>| fun () ->
+      oid
+
+    let cons cls car cdr =
+      let cell = {car; cdr} in
+      objects cls >>= function {data; heap} as s ->
+      match Map.find data cell with
+      | Some id -> Knowledge.return id
+      | None -> match Map.max_elt heap with
+        | None ->
+          add_cell cls s Oid.two cell
+        | Some (id,_) ->
+          add_cell cls s (Oid.succ id) cell
+
+    let switch cls x ~atom ~cons =
+      if Oid.is_odd x then atom x
+      else objects cls >>= fun {Env.heap} ->
+        let cell = Map.find_exn heap x in
+        cons cell.car cell.cdr
+
+    let id = Object.id
+    let comparator = Object.comparator
+  end
 
   module Syntax = struct
     include Knowledge.Syntax
@@ -1003,7 +1089,7 @@ module Knowledge = struct
   end
   include (Knowledge : S)
 
-  let get_value cls obj = objects cls >>| fun {Data.vals} ->
+  let get_value cls obj = objects cls >>| fun {Env.vals} ->
     match Map.find vals obj with
     | None -> Value.empty cls
     | Some x -> Value.create cls x
