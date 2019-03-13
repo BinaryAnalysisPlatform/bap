@@ -31,24 +31,113 @@ module type Sid = sig
   val incr : t ref -> unit
 end
 
-(* temporal identifiers *)
+(* temporal identifiers
+
+   Identifiers work like pointers in our runtime, and
+   are tagged words. We use 63 bit words, which are
+   represented natively as immediate values in 64-bit
+   OCaml or as boxed values in 32-bit OCaml.
+
+   We add extra tags:
+
+   Numbers:
+     +------------------+---+
+     |     payload      | 1 |
+     +------------------+---+
+      62              1   0
+
+   Atoms:
+     +--------------+---+---+
+     |     payload  | 1 | 0 |
+     +--------------+---+---+
+      62              1   0
+
+
+   Cells:
+     +--------------+---+---+
+     |     payload  | 0 | 0 |
+     +--------------+---+---+
+      62              1   0
+
+
+   So numbers, are tagged with the least significand
+   bit set to 1. Not numbers (aka pointers), always
+   have the lowest bit set to 0, and are either
+   atoms (symbols or objects) with the second bit set,
+   and cells, with the second bit cleared. Finally,
+   we have the null value, which is represented with
+   all zeros, which is neither number, cell, or atom.
+
+   The same arithmetically,
+     numbers = {1 + 2*n}  -- all odd numbers
+     cells = {4 + 4*n}
+     atoms = {6 + 4*n}
+     null = 0
+
+   Those four sets are disjoint.
+
+
+   The chosen representation, allows us to represent
+   the following number of elements per class (since
+   classes partition values into disjoint sets, objects
+   of different classes may have the same values, basically,
+   each class has its own heap):
+
+   numbers: 2^62 values (or [-2305843009213693953, 2305843009213693951]
+   atoms and cells: 2^61 values.
+
+*)
 module type Tid = sig
   include Id
+  val null : t
+  val first_atom : t
+  val first_cell : t
+  val next : t -> t
 
-  val one : t
-  val two : t
-  val succ : t -> t
-  val is_odd : t -> bool
-  val to_int63 : t -> Int63.t
+  val is_null : t -> bool
+  val is_atom : t -> bool
+  val is_cell : t -> bool
+  val is_number : t -> bool
+
+  val fits : int -> bool
+  val of_int : int -> t
+  val fits_int : t -> bool
+  val to_int : t -> int
+
+  val untagged : t -> Int63.t
 end
 
 module Oid : Tid = struct
   include Int63
-  let two = Int63.of_int 2
-  let succ x = succ (succ x)
-  let is_odd x = Int63.(x land one <> zero)
+  let null = zero
+  let first_atom = of_int 6
+  let first_cell = of_int 4
+  let next x = Int63.(x + of_int 4) [@@inline]
+  let is_null x = x = zero
+  let is_number x = x land one <> zero [@@inline]
+  let is_atom x =
+    x land of_int 0b01 = zero &&
+    x land of_int 0b10 <> zero
+  let is_cell x = x land of_int 0b11 = zero
   let to_int63 x = x
+  let min_value = min_value asr 1
+  let max_value = max_value asr 1
+  let fits x =
+    let x = of_int x in
+    x >= min_value && x <= max_value
+  [@@inline]
+  let fits_int x =
+    x >= of_int Int.min_value &&
+    x <= of_int Int.max_value
+  [@@inline]
+  let of_int x = (of_int x lsl 1) + one [@@inline]
+  let to_int x = to_int_trunc (x asr 1) [@@inline]
+  (* ordinal of a value in the given category (atoms, cells, numbers) *)
+  let untagged x =
+    if is_number x then x asr 1 else x asr 2
+  [@@inline]
 end
+
 module Cid : Sid = Int63
 module Pid : Sid = Int63
 
@@ -795,12 +884,12 @@ module Knowledge = struct
     type 'a ord = Oid.comparator_witness
 
     let with_new_object objs f = match Map.max_elt objs.Env.vals with
-      | None -> f Oid.one {
+      | None -> f Oid.first_atom {
           objs
-          with vals = Map.singleton (module Oid) Oid.one Record.empty
+          with vals = Map.singleton (module Oid) Oid.first_atom Record.empty
         }
       | Some (key,_) ->
-        let key = Oid.succ key in
+        let key = Oid.next key in
         f key {
           objs
           with vals = Map.add_exn objs.vals ~key ~data:Record.empty
@@ -913,7 +1002,7 @@ module Knowledge = struct
     let cast : type a b. (a obj, b obj) Type_equal.t -> a obj -> b obj =
       fun Type_equal.T x -> x
 
-    let id x = Oid.to_int63 x
+    let id x = Oid.untagged x
 
     let comparator : type a. a cls ->
       (module Comparator.S
@@ -1037,6 +1126,7 @@ module Knowledge = struct
       >>= fun classes -> put {s with classes}
   end
 
+
   module Data = struct
     type +'a t = 'a obj
     type 'a ord = Oid.comparator_witness
@@ -1060,12 +1150,13 @@ module Knowledge = struct
       | Some id -> Knowledge.return id
       | None -> match Map.max_elt heap with
         | None ->
-          add_cell cls s Oid.two cell
+          add_cell cls s Oid.first_cell cell
         | Some (id,_) ->
-          add_cell cls s (Oid.succ id) cell
+          add_cell cls s (Oid.next id) cell
 
-    let switch cls x ~atom ~cons =
-      if Oid.is_odd x then atom x
+    let case cls x ~null ~atom ~cons =
+      if Oid.is_null x then null else
+      if Oid.is_atom x || Oid.is_number x then atom x
       else objects cls >>= fun {Env.heap} ->
         let cell = Map.find_exn heap x in
         cons cell.car cell.cdr

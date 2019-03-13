@@ -335,8 +335,8 @@ module Knowledge : sig
 
       {3 Symbol syntax}
 
-      The [read] function enables translation from symbol textual
-      representation into an object.  The symbol syntax is designed to
+      The [read] function enables translation of the symbol textual
+      representation to an object.  The symbol syntax is designed to
       be verstatile so it can allow arbitrary sets of characters, to
       enable support for modeling different knowledge domains. Only
       two characters has the special meaning for the symbol reader,
@@ -523,7 +523,8 @@ module Knowledge : sig
     val atom : 'a cls -> 'a obj -> 'a t knowledge
     val cons : 'a cls -> 'a t -> 'a t -> 'a t knowledge
 
-    val switch : 'a cls -> 'a t ->
+    val case : 'a cls -> 'a t ->
+      null:'r knowledge ->
       atom:('a obj -> 'r knowledge) ->
       cons:('a t -> 'a t -> 'r knowledge) -> 'r knowledge
 
