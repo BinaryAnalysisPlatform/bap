@@ -148,7 +148,7 @@ let need_barrier s ((addr,max_addr) as insn) =
 let find_intersections s =
   let update_barriers xs init =
     List.fold xs ~init ~f:(fun bs x ->
-        if need_barrier s x then fst x :: bs else bs) in
+        if need_barrier s x then Set.add bs (fst x) else bs) in
   let find_intersected (addr, max_addr) =
     collect ~dir:Visited.next s addr
       ~stop_on:(fun (a,_) -> Addr.(a > max_addr)) in
@@ -165,11 +165,11 @@ let find_intersections s =
       let barriers = update_barriers insns barriers in
       let barriers =
         if List.exists insns ~f:(is_shared_max insn)
-        then addr :: barriers
+        then Set.add barriers addr
         else barriers in
       let data = List.fold insns ~init:data ~f:add in
       loop barriers data (next max_addr) in
-  loop [] Addr.Map.empty (Visited.min s.visited)
+  loop Addr.Set.empty Addr.Map.empty (Visited.min s.visited)
 
 let rec has_jump = function
   | [] -> false
@@ -216,21 +216,23 @@ let stop_on = [`Valid]
 (* find intersections, i.e. instructions which share bytes, but have different address,
    and update destinations for those of them, which also share max address to
    split a block in such place *)
-let update_intersections disasm brancher mem s =
-  let roots,intersected = find_intersections s in
-  let init = {s with intersected; roots} in
+let update_intersections disasm brancher s =
   let next dis s = match s.roots with
     | [] -> Dis.stop dis s
     | addr :: roots ->
-      let mem = Memory.view ~from:addr s.base in
-      let mem = Result.map_error mem ~f:(fun err -> Error.tag err "next_root") in
-      mem >>= fun mem ->
+      Memory.view ~from:addr s.base >>= fun mem ->
       Dis.jump dis mem {s with roots; addr} in
-  Dis.run disasm mem ~stop_on ~return ~init
-    ~hit:(fun d mem insn s ->
-        let () = update_dests s (brancher mem insn) mem in
-        next d s)
-    ~stopped:next
+  let roots,intersected = find_intersections s in
+  let s = {s with intersected; roots=Set.to_list roots} in
+  match Set.min_elt roots with
+  | None -> Ok s
+  | Some addr ->
+    Memory.view ~from:addr s.base >>= fun mem ->
+    Dis.run disasm mem ~stop_on ~return ~init:s
+      ~hit:(fun d mem insn s ->
+          let () = update_dests s (brancher mem insn) mem in
+          next d s)
+      ~stopped:next
 
 let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
   let roots =
@@ -247,7 +249,7 @@ let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
     ~hit:(fun d mem insn s ->
         next d (update s mem insn (brancher mem insn)))
     ~invalid:(fun d mem s -> next d (errored s (`Failed_to_disasm mem)))
-    ~stopped:next >>= update_intersections disasm brancher mem
+    ~stopped:next >>= update_intersections disasm brancher
 
 (* performs the initial markup.
 
