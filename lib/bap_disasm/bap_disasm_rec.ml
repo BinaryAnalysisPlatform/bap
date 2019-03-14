@@ -114,15 +114,15 @@ type t = stage3
 
 let errored s ty = {s with errors = (s.addr,ty) :: s.errors}
 
-let update_dests s dests mem =
-  let dests = List.map dests ~f:(fun d -> match d with
-      | Some addr,_ when Memory.contains s.base addr -> d
+let update_dests base dests mem ds =
+  let ds = List.map ds ~f:(fun d -> match d with
+      | Some addr,_ when Memory.contains base addr -> d
       | _,kind -> None, kind) in
   let key = Memory.min_addr mem in
-  match dests with
-  | [] -> Addr.Table.add_exn s.dests ~key ~data:[]
-  | dests -> List.iter dests ~f:(fun data ->
-      Addr.Table.add_multi s.dests ~key ~data)
+  match ds with
+  | [] -> Addr.Table.add_exn dests ~key ~data:[]
+  | ds -> List.iter ds ~f:(fun data ->
+      Addr.Table.add_multi dests ~key ~data)
 
 let collect ~dir ~stop_on ?cond s start =
   let add = match cond with
@@ -140,15 +140,7 @@ let exists_visited ~dir ~stop_on ~cond s start  =
 
 let is_shared_max (_,a) (_,a') = Addr.equal a a'
 
-let need_barrier s ((addr,max_addr) as insn) =
-  let exists = exists_visited ~cond:(is_shared_max insn) s addr in
-  exists ~dir:Visited.next ~stop_on:(fun (s,_) -> Addr.(s > max_addr)) ||
-  exists ~dir:Visited.prev ~stop_on:(fun (_,f) -> Addr.(f < addr))
-
 let find_intersections s =
-  let update_barriers xs init =
-    List.fold xs ~init ~f:(fun bs x ->
-        if need_barrier s x then Set.add bs (fst x) else bs) in
   let find_intersected (addr, max_addr) =
     collect ~dir:Visited.next s addr
       ~stop_on:(fun (a,_) -> Addr.(a > max_addr)) in
@@ -158,18 +150,16 @@ let find_intersections s =
     | None -> Visited.next s.visited max_addr
     | Some max' -> Some (next_start, max') in
   let add data (addr,max) = Map.add_multi data max addr in
-  let rec loop barriers data = function
-    | None -> barriers,data
-    | Some ((addr, max_addr) as insn) ->
+  let rec loop data = function
+    | None -> data
+    | Some ((_, max_addr) as insn) ->
       let insns = find_intersected insn in
-      let barriers = update_barriers insns barriers in
-      let barriers =
-        if List.exists insns ~f:(is_shared_max insn)
-        then Set.add barriers addr
-        else barriers in
-      let data = List.fold insns ~init:data ~f:add in
-      loop barriers data (next max_addr) in
-  loop Addr.Set.empty Addr.Map.empty (Visited.min s.visited)
+      let data = match insns with
+        | [] -> data
+        | insns ->
+           List.fold insns ~init:(add data insn) ~f:add in
+      loop data (next max_addr) in
+  loop Addr.Map.empty (Visited.min s.visited)
 
 let rec has_jump = function
   | [] -> false
@@ -189,7 +179,7 @@ let is_barrier s mem insn =
 let update s mem insn dests : stage1 =
   let s = { s with visited = Visited.add s.visited mem } in
   if is_barrier s mem insn then
-    let () = update_dests s dests mem in
+    let () = update_dests s.base s.dests mem dests in
     let roots = List.(filter_map ~f:fst dests |> rev_append s.roots) in
     { s with roots }
   else {
@@ -213,26 +203,75 @@ let next dis s =
 
 let stop_on = [`Valid]
 
-(* find intersections, i.e. instructions which share bytes, but have different address,
-   and update destinations for those of them, which also share max address to
-   split a block in such place *)
+module Dest = struct
+  let rec compare_edge e e' =
+    if e = e' then 0
+    else
+      match e, e' with
+      | `Fall, _ -> -1
+      | `Jump, _ -> 1
+      | _ -> - (compare_edge e' e)
+
+  let compare (d,e) (d',e') =
+    match d, d' with
+    | None,None -> compare_edge e e'
+    | Some _, None -> 1
+    | None, Some _ -> -1
+    | Some d, Some d' ->
+       let x = Word.compare d d' in
+       if x = 0 then compare_edge e e'
+       else x
+
+  module Set = Set.Make(struct
+      type t = Brancher.dest [@@deriving sexp]
+      let compare = compare
+    end)
+
+end
+
+
+let equal_dest (d,e) (d',e') =
+  match d, d' with
+  | None, None -> e = e'
+  | Some _, None | None, Some _ -> false
+  | Some d, Some d' -> Word.(d = d') && e = e'
+
 let update_intersections disasm brancher s =
-  let next dis s = match s.roots with
-    | [] -> Dis.stop dis s
+  let next dis ((roots,dests) as state) = match roots with
+    | [] -> Dis.stop dis state
     | addr :: roots ->
-      Memory.view ~from:addr s.base >>= fun mem ->
-      Dis.jump dis mem {s with roots; addr} in
-  let roots,intersected = find_intersections s in
-  let s = {s with intersected; roots=Set.to_list roots} in
-  match Set.min_elt roots with
-  | None -> Ok s
-  | Some addr ->
-    Memory.view ~from:addr s.base >>= fun mem ->
-    Dis.run disasm mem ~stop_on ~return ~init:s
-      ~hit:(fun d mem insn s ->
-          let () = update_dests s (brancher mem insn) mem in
-          next d s)
-      ~stopped:next
+       Memory.view ~from:addr s.base >>= fun mem ->
+       Dis.jump dis mem (roots, dests) in
+  let is_terminator dests (a,ds) =
+    List.exists dests ~f:(fun (a',ds') ->
+        if Addr.(a = a') then false
+        else Set.inter ds ds' <> Dest.Set.empty) in
+  let s = {s with intersected = find_intersections s} in
+  match Map.data s.intersected |> List.concat with
+  | [] -> Ok s
+  | addr::roots ->
+     let init = roots, Addr.Table.create () in
+     Memory.view ~from:addr s.base >>= fun mem ->
+     Dis.run disasm mem ~stop_on ~return ~init
+       ~hit:(fun d mem insn (roots,dests) ->
+         let ds = brancher mem insn in
+         let () = update_dests s.base dests mem ds in
+         next d (roots, dests))
+       ~stopped:next >>= fun (_,dests) ->
+       Map.iteri s.intersected
+         ~f:(fun ~key:_ ~data:addrs ->
+           match addrs with
+           | [] | [_] -> ()
+           | addrs ->
+             let dests = List.filter_map addrs
+                 ~f:(fun a ->
+                     match Addrs.find dests a with
+                     | None | Some [] -> None
+                     | Some x -> Some (a,Dest.Set.of_list x)) in
+             List.iter dests ~f:(fun x ->
+                 if is_terminator dests x then
+                   Addrs.set s.dests (fst x) (Set.to_list @@ snd x)));
+       return s
 
 let stage1 ?(rooter=Rooter.empty) lift brancher disasm base =
   let roots =
@@ -343,10 +382,10 @@ let stage2 dis stage1 =
   let preds = Addrs.create () in
   let next = Addr.succ in
   let is_edge (addr,max_addr) =
-    Addrs.mem leads (next max_addr) ||
-    Addrs.mem kinds addr ||
-    Addrs.mem stage1.dests addr ||
-    Set.mem stage1.inits (next max_addr) in
+     Addrs.mem leads (next max_addr) ||
+     Addrs.mem kinds addr ||
+     Addrs.mem stage1.dests addr ||
+     Set.mem stage1.inits (next max_addr) in
   let is_insn = Visited.is_insn stage1.visited in
   let next_visited = Visited.next stage1.visited in
   let create_block start (addr,max_addr) =
