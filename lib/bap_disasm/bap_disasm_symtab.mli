@@ -21,14 +21,9 @@ val intersecting : t -> mem -> fn list
 val to_sequence : t -> fn seq
 val span : fn -> unit memmap
 
-(* remembers a call to a function [name] from the given block *)
-val add_call_name : t -> block -> string -> t
+(** [add_call symtab block name edge] remembers a call to a function
+    [name] from the given block with [edge] *)
+val add_call : t -> block -> string -> [`Jump | `Fall ] -> t
 
-(* remembers a fall from [addr] to the given block *)
-val add_fall_addr : t -> block -> addr -> t
-
-(* finds if there are any calls from the given block *)
-val find_call_name : t -> addr -> string option
-
-(* finds if there are any falls to the given [addr] *)
-val find_fall_addr : t -> addr -> addr option
+(** finds if there are any calls from the given block *)
+val enum_calls : t -> addr -> (string * [`Jump | `Fall ]) list

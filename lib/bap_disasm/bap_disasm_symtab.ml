@@ -25,16 +25,14 @@ module Fn = Opaque.Make(struct
     let hash x = String.hash (fst3 x)
   end)
 
-type callee =
-  | Func of string
-  | Fall of addr
+type edge = [`Jump | `Fall]
 [@@deriving sexp_of]
 
 type t = {
   addrs : fn Addr.Map.t;
   names : fn String.Map.t;
   memory : fn Memmap.t;
-  callees : callee list Addr.Map.t;
+  callees : (string * edge) list Addr.Map.t;
 } [@@deriving sexp_of]
 
 
@@ -62,10 +60,8 @@ let filter_mem mem name entry =
   Memmap.filter mem ~f:(fun (n,e,_) ->
       not(String.(name = n) || Block.(entry = e)))
 
-let filter_callees name addr =
-  let filter = function
-    | Func name' -> String.(name <> name')
-    | Fall addr' -> Addr.(addr <> addr') in
+let filter_callees name  =
+  let filter (name',_) = String.(name <> name') in
   Map.map ~f:(List.filter ~f:filter)
 
 let remove t (name,entry,_) : t =
@@ -74,7 +70,7 @@ let remove t (name,entry,_) : t =
       names = Map.remove t.names name;
       addrs = Map.remove t.addrs (Block.addr entry);
       memory = filter_mem t.memory name entry;
-      callees = filter_callees name (Block.addr entry) t.callees;
+      callees = filter_callees name t.callees;
     }
   else t
 
@@ -103,23 +99,10 @@ let name_of_fn = fst
 let entry_of_fn = snd
 let span fn = span fn |> Memmap.map ~f:(fun _ -> ())
 
-let add_callee t b callee =
-  {t with callees = Map.add_multi t.callees (Block.addr b) callee}
+let add_call t b name edge =
+  {t with callees = Map.add_multi t.callees (Block.addr b) (name,edge)}
 
-let add_call_name t b name = add_callee t b (Func name)
-let add_fall_addr t b addr = add_callee t b (Fall addr)
-
-let find_map_callee t addr ~f =
+let enum_calls t addr =
   match Map.find t.callees addr with
-  | None -> None
-  | Some callees -> List.find_map callees ~f
-
-let find_call_name t addr =
-  find_map_callee t addr ~f:(function
-      | Func x -> Some x
-      | _ -> None)
-
-let find_fall_addr t addr =
-  find_map_callee t addr ~f:(function
-      | Fall x -> Some x
-      | _ -> None)
+  | None -> []
+  | Some callees -> callees
