@@ -20,7 +20,7 @@ RUN sudo apt-get -y update && sudo apt-get -y install \
     libncurses5-dev
 
 RUN opam switch 4.05
-RUN eval $(opam env)
+RUN eval "$(opam env)"
 RUN opam repo add bap git://github.com/BinaryAnalysisPlatform/opam-repository#testing
 RUN opam update
 RUN opam install depext --yes
