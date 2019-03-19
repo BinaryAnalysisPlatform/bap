@@ -1,8 +1,7 @@
 FROM ubuntu:trusty
 MAINTAINER Ivan Gotovchits <ivg@ieee.org>
 
-RUN apt-get -y update
-RUN apt-get -y install \
+RUN apt-get -y update && apt-get -y install \
     build-essential \
     curl \
     git \
