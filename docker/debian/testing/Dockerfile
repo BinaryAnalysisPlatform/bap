@@ -26,7 +26,6 @@ RUN opam update
 RUN opam install depext --yes
 RUN OPAMJOBS=1 opam depext --install bap --yes
 RUN sudo pip install bap
-RUN sudo apt-get remove libncurses5-dev --yes
 
 WORKDIR /home/opam
 
