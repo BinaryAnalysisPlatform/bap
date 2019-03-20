@@ -31,8 +31,8 @@ module Knowledge : sig
     val (-->) : 'a obj -> ('a,'p) slot -> 'p t
 
 
-    (** [p >>> f] is [promise p f]  *)
-    val (>>>) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
+    (** [p <-- f] is [promise p f]  *)
+    val (<--) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
 
     (** [c // s] is [Object.read c s]  *)
@@ -456,10 +456,10 @@ module Knowledge : sig
 
         The [order] function defines the partial order for the given
         domain, such that
-          - [partial x y = LT] iff [x<=y && not(y <= x)]
-          - [partial x y = EQ] iff [x <= y && y <= x]
-          - [partial x y = GT] iff [not (x <= y) && (y <= x)]
-          - [partial x y = NC] iff [not (x <= y) && not (y <= x)].
+        - [partial x y = LT] iff [x<=y && not(y <= x)]
+        - [partial x y = EQ] iff [x <= y && y <= x]
+        - [partial x y = GT] iff [not (x <= y) && (y <= x)]
+        - [partial x y = NC] iff [not (x <= y) && not (y <= x)].
 
         The optional [inspect] function enables introspection, and may
         return any representation of the domain value.

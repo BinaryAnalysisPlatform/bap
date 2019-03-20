@@ -41,8 +41,18 @@ end
 module State = struct
   type 'a t = {
     key : 'a Univ_map.Key.t;
-    init : 'a knowledge
+    init : (unit -> unit) Knowledge.obj -> 'a knowledge;
+    inspect : ('a -> Info.t);
   }
+
+  let declare ?(inspect=fun _ -> Info.of_string "<opaque>") ?
+      (name="anonymous") init =
+    let sexp_of_t x = Info.sexp_of_t (inspect x) in
+    let key = Type_equal.Id.create ~name sexp_of_t in
+    {key; init; inspect}
+
+  let inspect x = x.inspect
+  let name x = Type_equal.Id.name x
 end
 
 module Exception : sig
@@ -99,15 +109,10 @@ module Primus = struct
     key : int;
   }
 
-  type component = {
-    desc : string;
-    name : string;
-    init : project Knowledge.obj -> unit t;
-  }
 
   type 'a c = 'a t
   type 'a m = 'a Knowledge.t
-  type 'a e = component list -> project Knowledge.obj -> unit m
+  type 'a e = unit t -> project Knowledge.obj -> unit m
 
 
   module C = Monad.Cont.Make(PE)(struct
@@ -133,7 +138,7 @@ module Primus = struct
   type 'a machine = 'a t
 
 
-  let risen = Observation.declare ~package "machine-exception"
+  let exn_raised = Observation.declare ~package "machine-exception"
       ~inspect:(fun k exn ->
           k (Info.of_string (Exception.to_string exn)))
 
@@ -153,6 +158,7 @@ module Primus = struct
   let liftk x = CM.lift (C.lift (SM.lift x))
   (* lifts state monad to the outer monad *)
   let lifts x = CM.lift (C.lift x)
+  let decide = liftk
 
   let with_global_context (f : (unit -> 'a t)) =
     lifts (SM.current ())       >>= fun id ->
@@ -171,6 +177,7 @@ module Primus = struct
   let set_global global = with_global_context @@ fun () ->
     lifts (SM.update @@ fun s -> {s with global})
 
+  let project = lifts (SM.gets @@ fun s -> s.proj)
 
   module Observation : sig
     type 'f t = 'f observation
@@ -307,7 +314,9 @@ module Primus = struct
       S.get () >>= fun states ->
       match Univ_map.find states key with
       | Some s -> return s
-      | None -> liftk init
+      | None ->
+        project >>= fun proj ->
+        liftk (init proj)
 
     let put {State.key} x =
       S.get () >>= fun states ->
@@ -328,6 +337,8 @@ module Primus = struct
       let get = get_global
       let set = set_global
     end)
+
+  module State = State
 
   let get () = CM.return ()
   let put () = CM.return ()
@@ -408,7 +419,7 @@ module Primus = struct
 
 
   let raise exn =
-    Observation.provide risen ~f:(fun observe ->
+    Observation.provide exn_raised ~f:(fun observe ->
         observe exn) >>= fun () ->
     fail exn
   let catch = catch
@@ -434,37 +445,18 @@ module Primus = struct
 
   let notify obs = Observation.provide obs ~f:(fun go -> go ())
 
-  let eval_components cs proj : 'a t =
-    let open CM.Syntax in
-    let m = CM.List.iter cs ~f:(fun {init} -> init proj) in
-    notify inited >>= fun () ->
-    catch m (fun err ->
-        notify finished >>= fun () ->
-        raise err) >>= fun x ->
-    notify finished >>= fun () ->
-    return x
 
-  let run : type a. a e = fun cs proj ->
+  let run : type a. a e = fun comp proj ->
     let finish = function
       | Ok _ -> SM.return (Ok ())
       | Error err -> SM.return (Error err) in
     let state = empty proj in
     Knowledge.ignore_m @@
-    SM.run (C.run (eval_components cs proj) finish) state
+    SM.run (C.run comp finish) state
 
   module Syntax = struct
     include CM.Syntax
     let (>>>) = Observation.monitor
-  end
-
-  module Component = struct
-    type t = component
-    let components : t list ref = ref []
-    let provide ?(desc="not provided") ~name init =
-      components := {name; desc; init} :: !components
-    let list () = !components
-    let name t = t.name
-    let desc t = t.desc
   end
 
   include (CM : Monad.S with type 'a t := 'a t

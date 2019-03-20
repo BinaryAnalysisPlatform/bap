@@ -36,9 +36,6 @@ module Primus : sig
 
   type project
 
-  type component
-
-
 
   (** Machine identifier type.   *)
   type id = Monad.State.Multi.id
@@ -55,24 +52,24 @@ module Primus : sig
 
   val collect : ('a,'p) slot -> 'a obj -> 'p t
   val provide : ('a,'p) slot -> 'a obj -> 'p -> unit t
-  val conflict : conflict -> 'a t
-
   val project : project obj t
 
   val die : id -> unit t
 
+  val conflict : conflict -> 'a t
 
-  (** [run system project init] runs the Primus system.
 
-      The [system], denoted with a list of Primus components,
-      is evaluated in order. Afterwards the project value is
-      returned.
+  (** [decide fact] make the fact determined in the current machine.
 
-      The [project] parameter is a knowledge object that denotes the
-      current workspace which is used by different components to
-      accumulate the knowledge.
+      This is the [pure] function w.r.t. to the non-determinism, also
+      known as lift, since it lifts the inner knowledge monad into the
+      outer machine monad.
   *)
-  val run : component list -> project obj -> unit knowledge
+  val decide : 'a knowledge -> 'a t
+
+
+  (** [run comp project] runs the Primus system. *)
+  val run : unit t -> project obj -> unit knowledge
 
 
 
@@ -94,12 +91,12 @@ module Primus : sig
             new [uuid] can be obtained in the Linux system is provided
             by the [uuidgen] command.*)
     val declare :
-      ?inspect:('a -> Base.Sexp.t) ->
-      name:string ->
-      'a Knowledge.t -> 'a t
+      ?inspect:('a -> Info.t) ->
+      ?name:string ->
+      (project obj -> 'a Knowledge.t) -> 'a t
 
     (** [inspect state value] introspects given [value] of the state.  *)
-    val inspect : 'a t -> 'a -> Base.Sexp.t
+    val inspect : 'a t -> 'a -> Info.t
 
     (** [name state] a state name that was given during the construction.  *)
     val name : 'a t -> string
@@ -122,15 +119,6 @@ module Primus : sig
 
     (** [update state ~f] updates a state using function [f]. *)
     val update : 'a t -> f:('a -> 'a) -> unit machine
-  end
-
-  module Primitive : sig
-    type 'a t
-
-    val provide : ?desc:string -> ?package:string -> name:string -> 'a -> 'a t
-
-    val invoke : 'a t -> ('a -> 'b machine) -> 'b machine
-
   end
 
   (** Observations interface.
@@ -181,13 +169,7 @@ module Primus : sig
       observation, via [Observation.continue] or [Observation.stop]
       functions.
 
-
-
-
-
   *)
-
-
   module Observation : sig
     type 'f t = 'f observation
     type info = Info.t
@@ -215,14 +197,6 @@ module Primus : sig
     val stop : ctrl -> unit machine
   end
 
-
-  (** [init] event occurs just after all components have been
-        initialized, and before the execution starts*)
-  val init : unit observation
-
-  (** The [finished] event occurs when the machine terminates.   *)
-  val finished : unit observation
-
   (** [exn_raised exn] occurs every time an abnormal control flow
         is initiated *)
   val exn_raised : exn observation
@@ -231,6 +205,13 @@ module Primus : sig
   (** Computation Syntax.*)
   module Syntax : sig
     include Monad.Syntax.S with type 'a t := 'a t
+
+    (** [x-->p] is [collect p x] *)
+    val (-->) : 'a obj -> ('a,'p) slot -> 'p t
+
+
+    (** [p <-- f] is [promise p f]  *)
+    val (<--) : ('a,'p) slot -> ('a obj -> 'p t) -> unit
 
 
     (** [event >>> action] is the same as

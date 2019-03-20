@@ -8,20 +8,5 @@ Library bap_primus
   Path: lib/bap_primus
   FindlibName: bap-primus
   CompiledObject: best
-  BuildDepends: regular, uuidm,
-                bap-future, parsexp, bap-strings,
-                bap-core-theory, bap-knowledge,
-                bitvec, bitvec-order, bitvec-sexp, bitvec-binprot
+  BuildDepends: bap-knowledge, core_kernel
   Modules: Bap_primus
-  InternalModules:
-           Bap_primus_env,
-           Bap_primus_exn,
-           Bap_primus_generator,
-           Bap_primus_linker,
-           Bap_primus_machine,
-           Bap_primus_memory,
-           Bap_primus_observation,
-           Bap_primus_sexp,
-           Bap_primus_state,
-           Bap_primus_types,
-           Bap_primus_value

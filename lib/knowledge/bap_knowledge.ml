@@ -407,20 +407,20 @@ module Class = struct
   let declare
     : ?desc:string -> ?package:string -> string -> 'a -> ('a -> top) t =
     fun ?desc ?package name data ->
-      newclass ?desc ?package name (Derive (Top,data)) 0
+    newclass ?desc ?package name (Derive (Top,data)) 0
 
   let derived
     : ?desc:string -> ?package:string -> string -> 'a t -> 'b -> ('b -> 'a) t =
     fun ?desc ?package name parent data ->
-      newclass ?desc ?package name (Derive (parent.data,data))
-        (parent.level + 1)
+    newclass ?desc ?package name (Derive (parent.data,data))
+      (parent.level + 1)
 
   let abstract : type a b. (b -> a) t -> a t = fun child -> match child with
     | {data=Derive (base,_); id; name; level} -> {id; name; data=base; level}
 
   let refine : type a b. a t -> b -> (b -> a) t =
     fun {id; name; data; level} data' ->
-      {id; name; data=Derive (data,data'); level}
+    {id; name; data=Derive (data,data'); level}
 
   let same x y = Cid.equal x.id y.id
 
@@ -573,21 +573,21 @@ module Record = struct
   let register_domain
     : type p. p Dict.Key.t -> p Domain.t -> unit =
     fun key dom ->
-      let name = Dict.Key.name key in
-      let eq = Type_equal.Id.same_witness_exn in
-      let order (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
-        let Type_equal.T = eq kx ky in
-        let Type_equal.T = eq kx key in
-        dom.order x y in
-      let empty = Dict.Packed.T(key, dom.empty) in
-      let inspect (Dict.Packed.T(kx,x)) =
-        let Type_equal.T = eq kx key in
-        dom.inspect x in
-      Hashtbl.add_exn domains ~key:name ~data:{
-        inspect;
-        empty;
-        order;
-      }
+    let name = Dict.Key.name key in
+    let eq = Type_equal.Id.same_witness_exn in
+    let order (Dict.Packed.T (kx,x)) (Dict.Packed.T (ky,y)) =
+      let Type_equal.T = eq kx ky in
+      let Type_equal.T = eq kx key in
+      dom.order x y in
+    let empty = Dict.Packed.T(key, dom.empty) in
+    let inspect (Dict.Packed.T(kx,x)) =
+      let Type_equal.T = eq kx key in
+      dom.inspect x in
+    Hashtbl.add_exn domains ~key:name ~data:{
+      inspect;
+      empty;
+      order;
+    }
 
   let sexp_of_t x =
     Sexp.List (Dict.to_alist x |> List.map ~f:(function
@@ -774,25 +774,25 @@ module Knowledge = struct
       : type a. a cls ->
         (module S with type t = a t and type comparator_witness = a ord) =
       fun cls ->
-        let module R = struct
-          type t = a value
-          let sexp_of_t x = Record.sexp_of_t x.data
-          let t_of_sexp = opaque_of_sexp
-          include Binable.Of_binable(Record)(struct
-              type t = a value
-              let to_binable : 'a value -> Record.t =
-                fun {data} -> data
-              let of_binable : Record.t -> 'a value =
-                fun data -> {cls; data; time = next_second ()}
-            end)
-          type comparator_witness = Comparator.comparator_witness
-          include Base.Comparable.Make_using_comparator(struct
-              type t = a value
-              let sexp_of_t = sexp_of_t
-              include Comparator
-            end)
-        end in
-        (module R)
+      let module R = struct
+        type t = a value
+        let sexp_of_t x = Record.sexp_of_t x.data
+        let t_of_sexp = opaque_of_sexp
+        include Binable.Of_binable(Record)(struct
+            type t = a value
+            let to_binable : 'a value -> Record.t =
+              fun {data} -> data
+            let of_binable : Record.t -> 'a value =
+              fun data -> {cls; data; time = next_second ()}
+          end)
+        type comparator_witness = Comparator.comparator_witness
+        include Base.Comparable.Make_using_comparator(struct
+            type t = a value
+            let sexp_of_t = sexp_of_t
+            include Comparator
+          end)
+      end in
+      (module R)
 
 
   end
@@ -859,23 +859,23 @@ module Knowledge = struct
 
   let collect : type a p. (a,p) slot -> a obj -> p Knowledge.t =
     fun slot id ->
-      objects slot.cls >>= fun {Env.vals} ->
-      let init = match Map.find vals id with
-        | None -> slot.dom.empty
-        | Some v -> Record.get slot.key slot.dom v in
-      slot.promises |>
-      Knowledge.List.fold ~init ~f:(fun curr req ->
-          objects slot.cls >>= fun {Env.reqs} ->
-          if is_active reqs req.pid id
-          then Knowledge.return curr
-          else
-            update_reqs slot (activate reqs req.pid id) >>= fun () ->
-            req.get id >>= fun next ->
-            update_reqs slot (deactivate reqs req.pid id) >>= fun () ->
-            match slot.dom.order curr next with
-            | GT -> Knowledge.return curr
-            | LT | EQ | NC -> Knowledge.return next) >>= fun max ->
-      provide slot id max >>| fun () -> max
+    objects slot.cls >>= fun {Env.vals} ->
+    let init = match Map.find vals id with
+      | None -> slot.dom.empty
+      | Some v -> Record.get slot.key slot.dom v in
+    slot.promises |>
+    Knowledge.List.fold ~init ~f:(fun curr req ->
+        objects slot.cls >>= fun {Env.reqs} ->
+        if is_active reqs req.pid id
+        then Knowledge.return curr
+        else
+          update_reqs slot (activate reqs req.pid id) >>= fun () ->
+          req.get id >>= fun next ->
+          update_reqs slot (deactivate reqs req.pid id) >>= fun () ->
+          match slot.dom.order curr next with
+          | GT -> Knowledge.return curr
+          | LT | EQ | NC -> Knowledge.return next) >>= fun max ->
+    provide slot id max >>| fun () -> max
 
 
 
@@ -1168,7 +1168,7 @@ module Knowledge = struct
   module Syntax = struct
     include Knowledge.Syntax
     let (-->) x p = collect p x
-    let (>>>) p f = promise p f
+    let (<--) p f = promise p f
     let (//) c s = Object.read c s
   end
 
